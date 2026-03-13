@@ -1,0 +1,1 @@
+"""Dust attenuation models."""

@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "diffsed"
+version = "0.1.0"
+description = "Differentiable SED fitting with IFT star formation history priors"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Suchetha Cooray"},
+]
+dependencies = [
+    "jax>=0.4.20",
+    "jaxlib>=0.4.20",
+    "numpy>=1.24",
+    "matplotlib>=3.7",
+    "dsps>=0.3",
+    "h5py>=3.0",
+]
+
+[project.optional-dependencies]
+nifty = ["nifty8[re]>=8.5"]
+nuts = ["blackjax>=1.0"]
+optax = ["optax>=0.2"]
+filters = ["sedpy>=0.3"]
+all = [
+    "nifty8[re]>=8.5",
+    "blackjax>=1.0",
+    "optax>=0.2",
+    "sedpy>=0.3",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+docs = [
+    "sphinx>=7.0",
+    "sphinx-book-theme>=1.0",
+    "numpydoc>=1.5",
+    "nbsphinx>=0.9",
+    "myst-parser>=2.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
