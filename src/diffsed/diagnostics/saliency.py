@@ -1,0 +1,117 @@
+"""Gradient SEDs / saliency maps: ∂flux(λ)/∂θ across wavelength.
+
+Computes the sensitivity of each wavelength to each physical parameter.
+This tells you:
+- Which wavelength ranges are most informative for each parameter
+- How sensitivity changes with galaxy type or redshift
+- Which spectral features drive the constraints
+
+Only possible because the full pipeline is differentiable.
+"""
+
+import jax
+import jax.numpy as jnp
+
+
+def compute_gradient_sed(forward_model, params, param_name):
+    """Compute ∂SED(λ)/∂θ — the gradient of the SED w.r.t. one parameter.
+
+    Parameters
+    ----------
+    forward_model : ForwardModel
+        Configured forward model.
+    params : dict
+        Parameter values.
+    param_name : str
+        Which parameter to differentiate with respect to.
+
+    Returns
+    -------
+    gradient_sed : array, shape (n_wave,)
+        ∂SED/∂θ at each wavelength.
+    wavelength : array, shape (n_wave,)
+        Rest-frame wavelengths (Angstrom).
+    """
+    def sed_as_fn_of_param(val):
+        p = dict(params)
+        p[param_name] = val
+        return forward_model(p)
+
+    gradient_sed = jax.grad(lambda v: jnp.sum(sed_as_fn_of_param(v)))(
+        params[param_name]
+    )
+    # For a scalar param, grad gives us a scalar — we need the per-wavelength gradient
+    # Use jacobian instead
+    gradient_sed = jax.jacobian(sed_as_fn_of_param)(params[param_name])
+
+    return gradient_sed, forward_model.ssp_data.ssp_wave
+
+
+def compute_all_gradient_seds(forward_model, params, param_names=None):
+    """Compute gradient SEDs for all physical parameters.
+
+    Parameters
+    ----------
+    forward_model : ForwardModel
+        Configured forward model.
+    params : dict
+        Parameter values.
+    param_names : list of str, optional
+        Parameters to compute gradients for.
+
+    Returns
+    -------
+    gradients : dict of {param_name: array (n_wave,)}
+        Gradient SED per parameter.
+    wavelength : array, shape (n_wave,)
+        Rest-frame wavelengths.
+    """
+    if param_names is None:
+        param_names = ["sigma_ps", "tau_ps", "alpha", "beta", "tau_sfh",
+                       "sfr_norm", "log_z", "tau_v1", "tau_v2", "dust_n"]
+
+    gradients = {}
+    for name in param_names:
+        grad_sed, wave = compute_gradient_sed(forward_model, params, name)
+        gradients[name] = grad_sed
+
+    return gradients, wave
+
+
+def compute_photometry_sensitivity(forward_model, params, param_names=None):
+    """Compute ∂flux_band/∂θ for each filter and parameter.
+
+    Returns a matrix showing how sensitive each photometric band
+    is to each parameter — useful for understanding degeneracies
+    and planning filter sets.
+
+    Parameters
+    ----------
+    forward_model : ForwardModel
+        Configured forward model (must have filters set).
+    params : dict
+        Parameter values.
+    param_names : list of str, optional
+        Parameters to include.
+
+    Returns
+    -------
+    sensitivity : array, shape (n_filters, n_params)
+        ∂flux_band/∂θ_param matrix.
+    param_names : list of str
+        Parameter names (columns).
+    """
+    if param_names is None:
+        param_names = ["sigma_ps", "tau_ps", "alpha", "beta", "tau_sfh",
+                       "sfr_norm", "log_z", "tau_v1", "tau_v2", "dust_n"]
+
+    def predict_from_flat(flat):
+        p = dict(params)
+        for i, name in enumerate(param_names):
+            p[name] = flat[i]
+        return forward_model.predict_photometry(p)
+
+    flat = jnp.array([float(params[n]) for n in param_names])
+    jac = jax.jacobian(predict_from_flat)(flat)  # (n_filters, n_params)
+
+    return jac, param_names
