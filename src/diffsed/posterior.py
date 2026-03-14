@@ -281,7 +281,7 @@ class Posterior:
 
         n = len(params) + len(derived)
         if figsize is None:
-            figsize = (2.5 * n, 2.5 * n)
+            figsize = (min(2.0 * n, 14), min(2.0 * n, 14))
 
         fig, axes = plt.subplots(n, n, figsize=figsize)
         if n == 1:
