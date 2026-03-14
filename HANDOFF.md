@@ -73,19 +73,32 @@ model.plot_sfh_posterior(posterior, true_params=true_params)  # SFH with 16-84% 
 - [x] **NB00**: Updated geoVI to n_iterations=15, n_posterior_samples=80. Re-executed.
 - [x] **NB03**: Rewritten with new Model/ParamSpec API + mock_batch benchmarks.
 
+### Session 2 continued
+- [x] **Convergence fix**: Reduced free params 7→5 (fix met_logzsol, dust_tau_diff) for well-determined photometric fits
+- [x] **Star-forming galaxy**: Active SFH params showing recent SF (tau_peak=3 Gyr, peak_sfr=10)
+- [x] **NB05**: Converged NUTS (1/500 div), PPC plots, suppressed geoVI verbosity, KDE corner contours
+- [x] **NB02**: Real SVO filter transmission curves in SED+photometry plot
+- [x] **NB01**: Removed archetype labels, parameter-only labels
+- [x] **Corner plot size**: Capped at 14x14 for readable labels
+- [x] **Paper analysis plan**: 14 figures, 9 analysis scripts at docs/paper_analysis_plan.md
+
 ## What Needs Doing Next
 
-### Notebook Quality
-- [ ] **NB05**: Re-execute with updated geoVI (80+ post-optimization samples); add contour corner plots
+### Notebook Updates (highest priority)
+- [ ] **NB00**: Add spectral fitting comparison — show how posteriors differ between photometry-only vs spectroscopy
+- [ ] **NB04**: Add spectral fitting section (currently photometry-only MAP)
+- [ ] **NB01**: Use star-forming galaxy params for SFH demonstrations (current mean SFH may fall at low lookback)
 
 ### Code Improvements
-- [ ] **Internal param rename**: update low-level function signatures from `sigma_ps` → `psd_sigma` etc. (~20 files, 181 tests — do as focused task)
-- [ ] **More optimizers**: the `optimizer` param in MAP already supports "adam"/"adamw"/"sgd"/custom optax
+- [ ] **Internal param rename**: `sigma_ps` → `psd_sigma` etc. (~20 files, 181 tests)
+- [ ] **Hierarchical inference**: Population-level PSD parameter recovery (Paper I Test 5-7)
 
-### Paper Demonstrations
-- [ ] HMC/NUTS posterior: speed vs Prospector, posterior quality
-- [ ] Fisher forecasting: FIM as function of filter set, S/N, redshift
-- [ ] Gradient SEDs / saliency: dflux/dtheta per wavelength
+### Paper Analysis (see docs/paper_analysis_plan.md)
+- [ ] **Phase 1**: Individual SFH recovery — 100 mocks × 4 PSD regimes × geoVI at z=0.1
+- [ ] **Phase 2**: Population-level PSD recovery — hierarchical inference
+- [ ] **Phase 3**: Computational benchmarks — speed comparison table
+- [ ] **Figure 5**: SFH recovery from photometry (most important paper figure)
+- [ ] **Speed benchmarks**: MAP vs NUTS vs geoVI vs Prospector/dynesty
 
 ## SSP Data
 
