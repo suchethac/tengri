@@ -87,6 +87,11 @@ def gp_from_xi(xi: jnp.ndarray, sqrt_power: jnp.ndarray,
     This is the core function used during inference — the sampler proposes
     xi ~ N(0, I), and this maps it to a correlated GP realization.
 
+    Uses rfft to map real-valued xi to Hermitian-symmetric Fourier
+    coefficients. This preserves the correct variance normalization:
+    E[|rfft(xi)_k|^2] = N, so with sqrt_power = sqrt(P/dx), we get
+    Var[x] = integral P(f) df, as required.
+
     Parameters
     ----------
     xi : array, shape (n_points,)
@@ -102,7 +107,7 @@ def gp_from_xi(xi: jnp.ndarray, sqrt_power: jnp.ndarray,
     array, shape (n_points,)
         GP realization on the log-age grid.
     """
-    xi_hat = xi_to_complex(xi, n_points)
+    xi_hat = jnp.fft.rfft(xi)
     coeffs = sqrt_power * xi_hat
     return jnp.fft.irfft(coeffs, n=n_points)
 

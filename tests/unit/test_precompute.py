@@ -36,8 +36,9 @@ class TestFastPhotometry:
 
         flux = fast_photometry(weights, ssp_phot, dust, scale)
 
-        # Expected: scale * mean over ages for each filter
-        expected = scale * jnp.mean(ssp_phot, axis=0)
+        # Expected: scale * Lsun * weighted_sum over ages for each filter
+        from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+        expected = scale * LSUN_ERG_PER_S * jnp.mean(ssp_phot, axis=0)
         assert_allclose(flux, expected, rtol=1e-10)
 
     def test_dust_reduces_flux(self):

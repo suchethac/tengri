@@ -232,9 +232,10 @@ def fast_photometry(weights: jnp.ndarray,
     array, shape (n_filters,)
         Observed flux density per filter (erg/s/cm^2/Hz).
     """
-    # Weighted sum: (n_age,) @ (n_age, n_filt) element-wise with dust
-    flux = jnp.einsum("i,if,if->f", weights, dust_at_eff, ssp_phot_at_z)
-    return flux_scale * flux
+    # Weighted sum: weights [Msun] * ssp [Lsun/Hz/Msun] * dust -> Lsun/Hz
+    from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+    flux_lsun = jnp.einsum("i,if,if->f", weights, dust_at_eff, ssp_phot_at_z)
+    return flux_scale * flux_lsun * LSUN_ERG_PER_S
 
 
 @jax.jit

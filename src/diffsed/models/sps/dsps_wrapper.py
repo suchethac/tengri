@@ -96,7 +96,11 @@ def compute_csp_weights(sfr_on_ssp_ages: jnp.ndarray,
                         ssp_ages_yr: jnp.ndarray) -> jnp.ndarray:
     """Compute SFH weights (mass formed per SSP age bin).
 
-    Uses trapezoidal bin widths for integration.
+    Returns the stellar mass formed in each age bin (Msun), NOT
+    normalized to sum=1. This way the CSP SED = sum(w_i * SSP_i)
+    is in Lsun/Hz (same as DSPS), not Lsun/Hz/Msun.
+
+    The total stellar mass formed is sum(weights).
 
     Parameters
     ----------
@@ -108,7 +112,7 @@ def compute_csp_weights(sfr_on_ssp_ages: jnp.ndarray,
     Returns
     -------
     array, shape (n_age,)
-        Normalized SFH weights (fraction of total mass per age bin).
+        Mass formed per age bin (Msun). Sum = total mass formed.
     """
     # Trapezoidal half-widths for each age bin
     dt = jnp.concatenate([
@@ -116,9 +120,10 @@ def compute_csp_weights(sfr_on_ssp_ages: jnp.ndarray,
         0.5 * (ssp_ages_yr[2:] - ssp_ages_yr[:-2]),
         jnp.array([ssp_ages_yr[-1] - ssp_ages_yr[-2]]),
     ])
-    mass_formed = sfr_on_ssp_ages * dt
-    total_mass = jnp.sum(mass_formed)
-    return mass_formed / jnp.maximum(total_mass, 1e-30)
+    return sfr_on_ssp_ages * dt
+
+
+LSUN_ERG_PER_S = 3.828e33  # erg/s (IAU 2015)
 
 
 @jax.jit
@@ -127,23 +132,28 @@ def compute_csp_sed(weights: jnp.ndarray,
                     dust_attenuation: jnp.ndarray) -> jnp.ndarray:
     """Compute composite stellar population SED.
 
-    SED = sum_i (weight_i * dust_i * ssp_flux_i)
+    SED = Lsun * sum_i (weight_i * dust_i * ssp_flux_i)
+
+    where weights are in Msun (mass formed per bin) and SSP flux
+    is in Lsun/Hz/Msun. The result is in erg/s/Hz.
 
     Parameters
     ----------
     weights : array, shape (n_age,)
-        Normalized SFH weights.
+        Mass formed per age bin (Msun) from compute_csp_weights.
     ssp_flux_at_met : array, shape (n_age, n_wave)
-        SSP spectra at fixed metallicity.
+        SSP spectra at fixed metallicity (Lsun/Hz/Msun).
     dust_attenuation : array, shape (n_age, n_wave)
         Multiplicative dust transmission per age and wavelength.
 
     Returns
     -------
     array, shape (n_wave,)
-        Composite SED (dust-attenuated, mass-weighted).
+        Composite SED in erg/s/Hz (rest-frame luminosity density).
     """
-    return jnp.einsum("i,iw,iw->w", weights, dust_attenuation, ssp_flux_at_met)
+    # weights [Msun] * ssp [Lsun/Hz/Msun] * dust [dimensionless] -> Lsun/Hz
+    sed_lsun = jnp.einsum("i,iw,iw->w", weights, dust_attenuation, ssp_flux_at_met)
+    return sed_lsun * LSUN_ERG_PER_S  # -> erg/s/Hz
 
 
 @jax.jit

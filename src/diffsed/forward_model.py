@@ -19,8 +19,8 @@ import jax
 import jax.numpy as jnp
 from typing import NamedTuple
 
-from diffsed.models.sfh.psd_models import psd_drw, psd_to_sqrt_power, drw_variance
-from diffsed.models.sfh.gp_sfh import gp_from_xi, xi_to_complex
+from diffsed.models.sfh.psd_models import drw_variance
+from diffsed.models.sfh.gp_sfh import gp_from_xi, compute_sqrt_power_drw
 from diffsed.models.sfh.mean_sfh import double_powerlaw
 from diffsed.models.dust.charlot_fall import charlot_fall
 from diffsed.models.sps.dsps_wrapper import (
@@ -91,7 +91,7 @@ class ForwardModel:
     """
 
     def __init__(self, ssp_data, config=None, filter_waves=None,
-                 filter_trans=None):
+                 filter_trans=None, wave_obs=None):
         if config is None:
             config = ModelConfig()
 
@@ -109,20 +109,19 @@ class ForwardModel:
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0  # Gyr -> yr
         self.ssp_ages_yr = 10.0 ** self.ssp_log_ages_yr
 
-        # FFT frequencies (pre-computed, static)
-        n_freq = config.n_grid // 2 + 1
-        freqs = jnp.fft.rfftfreq(config.n_grid, d=float(self.d_log_age))
-        self.omega = 2.0 * jnp.pi * freqs
-
         # Luminosity distance
         self.dl_cm = luminosity_distance(config.redshift)
 
-        # Filters
+        # Filters and spectroscopic wavelength grid
         self.filter_waves = filter_waves
         self.filter_trans = filter_trans
+        self._wave_obs = wave_obs
 
     def compute_sqrt_power(self, sigma_ps, tau_ps):
         """Pre-compute amplitude operator for given PSD params.
+
+        Uses the Jacobian-corrected DRW PSD on the log-age grid:
+        P_u(q) = P_t(q / (t_ref * ln10)) / (t_ref * ln10)
 
         Parameters
         ----------
@@ -136,8 +135,9 @@ class ForwardModel:
         array, shape (n_freq,)
             sqrt(P(omega) / d_log_age).
         """
-        p_k = psd_drw(self.omega, sigma_ps, tau_ps)
-        return psd_to_sqrt_power(p_k, self.d_log_age)
+        return compute_sqrt_power_drw(
+            self.config.n_grid, float(self.d_log_age), sigma_ps, tau_ps
+        )
 
     def __call__(self, params):
         """Run the full forward model.

@@ -2,7 +2,21 @@
 
 **Last updated:** 2026-03-13
 **Repo:** `~/Projects/diffsed/`
-**Status:** Core package complete. 108 tests passing. Inference backends implemented. Tutorial 1 done. Needs tutorials 2-5, integration tests with real SSP data, and paper figure pipeline.
+**Status:** Core package complete. 108 unit tests passing. Real SSP data downloaded. GP amplitude bug fixed. Tutorial 1 revised with pedagogical figures. Integration tests and Tutorial 2 in progress.
+
+## SSP Data
+
+Real FSPS/MILES SSP templates (15 metallicities × 93 ages × 5994 wavelengths):
+- `data/fsps_prsc_miles_chabrier.h5` — without nebular emission (64 MB)
+- `data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5` — with nebular emission (64 MB)
+- Source: https://halos.as.arizona.edu/suchethacooray/
+
+## Recent Bug Fixes
+
+1. **GP amplitude ~150x too small** — `xi_to_complex()` had wrong variance normalization (E[|ξ̂_k|²] ≈ 1-2 instead of N). Fixed by using `jnp.fft.rfft(xi)` directly in `gp_from_xi()`. Now empirical σ_x matches expected within 10-40% (finite-grid truncation).
+2. **Hartley GP same bug** — Fixed `gp_from_xi_hartley()` to use `inverse_hartley(amplitude * hartley(xi))` instead of `inverse_hartley(amplitude * xi)`.
+3. **ForwardModel missing Jacobian correction** — `compute_sqrt_power()` was evaluating PSD at FFT frequencies without the log-age→physical frequency Jacobian. Fixed to use `compute_sqrt_power_drw()`.
+4. **Tutorial 1 no figures** — Missing `%matplotlib inline`. Also fixed `\o` escape warnings, added 11 pedagogical figures.
 
 ## What Exists
 

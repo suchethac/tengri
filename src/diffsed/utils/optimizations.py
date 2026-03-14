@@ -58,6 +58,10 @@ def gp_from_xi_hartley(xi: jnp.ndarray,
     The amplitude array must be in the full Fourier space (N values),
     not just the positive frequencies.
 
+    The correct sequence: Hartley-transform xi to frequency domain,
+    multiply by amplitude, then inverse-Hartley back. This ensures
+    the GP has the correct variance (matching the rfft-based version).
+
     Parameters
     ----------
     xi : array, shape (N,)
@@ -70,7 +74,7 @@ def gp_from_xi_hartley(xi: jnp.ndarray,
     array, shape (N,)
         GP realization.
     """
-    return inverse_hartley(amplitude * xi)
+    return inverse_hartley(amplitude * hartley(xi))
 
 
 def compute_full_amplitude_drw(n_points: int, d_log_age: float,

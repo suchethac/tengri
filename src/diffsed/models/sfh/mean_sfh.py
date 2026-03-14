@@ -13,25 +13,34 @@ import jax.numpy as jnp
 
 def double_powerlaw(t_lookback: jnp.ndarray, alpha: float, beta: float,
                     tau: float, norm: float) -> jnp.ndarray:
-    """BAGPIPES-style double power law (primary/default).
+    """BAGPIPES-style double power law SFH (Carnall+2018, Behroozi+2013).
 
     SFR(t) = norm / [(t/tau)^alpha + (t/tau)^(-beta)]
 
-    Peaks near t ~ tau. Alpha controls decline (t >> tau),
-    beta controls rise (t << tau).
+    Peaks near t ~ tau.
+
+    In **cosmic time**: alpha controls the falling (declining) phase
+    after peak SFR, beta controls the rising phase before peak.
+
+    In **lookback time** plots (what we show): alpha controls the
+    RIGHT side (early universe, large lookback), beta controls the
+    LEFT side (near present, small lookback).
 
     Parameters
     ----------
     t_lookback : array
         Lookback time (yr).
     alpha : float
-        Falling power-law index (post-peak).
+        Falling slope in cosmic time (SFR decline from peak to present).
+        Larger alpha = steeper decline. Typical range: 0.5-4.
     beta : float
-        Rising power-law index (pre-peak).
+        Rising slope in cosmic time (SFR rise from early times to peak).
+        Larger beta = steeper rise. Typical range: 0.3-3.
     tau : float
-        Turnover timescale (yr).
+        Turnover timescale (yr), approximately when SFR peaks.
     norm : float
-        Peak SFR normalization (Msun/yr).
+        Peak SFR normalization (Msun/yr). NOTE: this is NOT the stellar
+        mass. M* = integral of SFR(t) dt is a derived quantity.
 
     Returns
     -------

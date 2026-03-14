@@ -37,7 +37,6 @@ def luminosity_distance(z: float, h0: float = DEFAULT_H0,
     """
     n_quad = 100
     z_grid = jnp.linspace(0.0, z, n_quad + 1)
-    dz = z / n_quad
 
     ol0 = 1.0 - om0
     e_z = jnp.sqrt(om0 * (1.0 + z_grid) ** 3 + ol0)
