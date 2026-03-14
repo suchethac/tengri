@@ -233,7 +233,8 @@ class Posterior:
     # Plotting
     # -------------------------------------------------------------------
 
-    def plot_corner(self, params=None, truths=None, figsize=None):
+    def plot_corner(self, params=None, truths=None, figsize=None,
+                    color="C0", fig=None, axes=None, label=None):
         """Plot corner (triangle) plot of posterior distributions.
 
         Parameters
@@ -244,6 +245,12 @@ class Posterior:
             True values to mark with dashed lines.
         figsize : tuple, optional
             Figure size.
+        color : str
+            Color for this posterior's contours and histograms.
+        fig, axes : matplotlib Figure, ndarray of Axes, optional
+            If provided, overlay on existing corner plot (for comparing posteriors).
+        label : str, optional
+            Legend label for this posterior.
 
         Returns
         -------
@@ -280,10 +287,10 @@ class Posterior:
                 pass
 
         n = len(params) + len(derived)
-        if figsize is None:
-            figsize = (min(2.0 * n, 14), min(2.0 * n, 14))
-
-        fig, axes = plt.subplots(n, n, figsize=figsize)
+        if fig is None or axes is None:
+            if figsize is None:
+                figsize = (min(2.0 * n, 14), min(2.0 * n, 14))
+            fig, axes = plt.subplots(n, n, figsize=figsize)
         if n == 1:
             axes = np.array([[axes]])
 
@@ -326,13 +333,15 @@ class Posterior:
                 if i == j:
                     # Diagonal: 1D KDE + histogram
                     n_bins = min(20, max(5, len(xi) // 3))
-                    ax.hist(xi, bins=n_bins, color="C0", alpha=0.3,
+                    ax.hist(xi, bins=n_bins, color=color, alpha=0.2,
                             density=True, edgecolor="white", lw=0.5)
                     try:
                         from scipy.stats import gaussian_kde
                         kde = gaussian_kde(xi)
                         x_grid = np.linspace(np.min(xi), np.max(xi), 200)
-                        ax.plot(x_grid, kde(x_grid), color="C0", lw=1.5)
+                        lbl = label if (i == 0 and label) else None
+                        ax.plot(x_grid, kde(x_grid), color=color, lw=1.5,
+                                label=lbl)
                     except (ImportError, np.linalg.LinAlgError):
                         pass  # fall back to histogram only
                     if truths and name_i in truths:
@@ -356,12 +365,12 @@ class Posterior:
                         level_68 = Z_sorted[np.searchsorted(Z_cumsum, 0.68)]
                         level_95 = Z_sorted[np.searchsorted(Z_cumsum, 0.95)]
                         ax.contourf(X, Y, Z, levels=[level_95, level_68, Z.max()],
-                                    colors=["C0"], alpha=[0.15, 0.4])
+                                    colors=[color], alpha=[0.1, 0.3])
                         ax.contour(X, Y, Z, levels=[level_95, level_68],
-                                   colors=["C0"], linewidths=0.8, alpha=0.7)
+                                   colors=[color], linewidths=0.8, alpha=0.7)
                     except (ImportError, np.linalg.LinAlgError):
                         # Fallback to scatter if KDE fails
-                        ax.scatter(xj, xi, s=8, alpha=0.4, color="C0",
+                        ax.scatter(xj, xi, s=8, alpha=0.4, color=color,
                                    edgecolors="none")
                     if truths:
                         if name_j in truths and name_i in truths:
@@ -376,15 +385,17 @@ class Posterior:
 
                 # Labels on edges only
                 if i == n - 1:
-                    ax.set_xlabel(label_map.get(name_j, name_j), fontsize=8)
+                    ax.set_xlabel(label_map.get(name_j, name_j), fontsize=11)
+                    ax.tick_params(axis='x', labelsize=9, rotation=45)
                 else:
                     ax.set_xticklabels([])
                 if j == 0 and i > 0:
-                    ax.set_ylabel(label_map.get(name_i, name_i), fontsize=8)
+                    ax.set_ylabel(label_map.get(name_i, name_i), fontsize=11)
+                    ax.tick_params(axis='y', labelsize=9)
                 else:
                     ax.set_yticklabels([])
 
-                ax.tick_params(labelsize=6)
+                ax.tick_params(labelsize=9)
 
         plt.tight_layout()
         return fig
