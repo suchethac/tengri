@@ -49,6 +49,7 @@ from diffsed.utils.grid import (
     interpolate_to_linear_time,
 )
 from diffsed.utils.cosmology import luminosity_distance
+from diffsed.models.observation.photometry import ab_mag_from_flux
 
 
 # ---------------------------------------------------------------------------
@@ -416,6 +417,41 @@ class Model:
             "sfr_10myr": sfr_10myr,
             "ssfr": ssfr,
         }
+
+    def predict_magnitudes(self, params):
+        """Compute observed AB magnitudes through all filters.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values.
+
+        Returns
+        -------
+        array, shape (n_filters,)
+            AB magnitudes. m_AB = -2.5 log10(f_nu) - 48.6
+            where f_nu is in erg/s/cm^2/Hz.
+        """
+        flux = self.predict_photometry(params)
+        return ab_mag_from_flux(flux)
+
+    def predict_luminosity(self, params):
+        """Compute rest-frame luminosity SED in solar units.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values.
+
+        Returns
+        -------
+        array, shape (n_wave,)
+            Rest-frame luminosity in Lsun/Hz.
+            Multiply by LSUN_CGS (3.828e33 erg/s) to get erg/s/Hz.
+        """
+        LSUN_CGS = 3.828e33  # erg/s (IAU 2015)
+        sed_erg = self.predict_sed(params)  # erg/s/Hz
+        return sed_erg / LSUN_CGS
 
     # -------------------------------------------------------------------
     # Mock generation
