@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-03-14
 **Repo:** `~/Projects/diffsed/`
-**Status:** 289 tests (181 original + 108 new API). 28 commits this session. All 6 notebooks execute. MAP + NUTS + geoVI all working.
+**Status:** 296 tests (181 original + 108 new API + 7 benchmarks). All 6 notebooks execute. MAP + NUTS + geoVI all working. Photometry precomputation gives 21.6x gradient speedup.
 
 ## New High-Level API
 
@@ -59,18 +59,27 @@ model.plot_sfh_posterior(posterior, true_params=true_params)  # SFH with 16-84% 
 5. **DSPS calc_obs_mag** for cosmologically correct magnitudes
 6. **Sigmoid transform fixed** — k=1.0, x0=0 so sampler can reach prior edges
 
+## Done (session 2, 2026-03-14)
+
+### Code
+- [x] **Photometry precomputation**: Zacharegkas+2025 Eq 6-7 integrated into Model.__init__. 21.6x gradient speedup. Auto-activates when redshift fixed + filters present.
+- [x] **Metallicity units fix**: Added log10(Zsun) = -1.848 offset in PARAM_MAP. met_logzsol (solar-relative) now correctly maps to SSP grid's log10(Z) (absolute).
+- [x] **KDE corner plots**: Replaced scatter with 68%/95% KDE contours in posterior.plot_corner().
+- [x] **charlot_fall_at_wavelengths()**: Fast dust evaluation at filter effective wavelengths.
+- [x] **Benchmark tests**: 6 tests in tests/integration/test_precompute_speedup.py.
+
+### Notebooks
+- [x] **NB01**: Replaced excursion plot with GP realizations; added log-time SFH plot.
+- [x] **NB00**: Updated geoVI to n_iterations=15, n_posterior_samples=80. Re-executed.
+- [x] **NB03**: Rewritten with new Model/ParamSpec API + mock_batch benchmarks.
+
 ## What Needs Doing Next
 
-### Notebook Quality (highest priority)
-- [ ] **NB00**: Re-execute with `n_iterations=15, n_posterior_samples=80` for proper posteriors
-- [ ] **NB01**: Add log-time SFH plot below `01_sfh_zoom_recent.png`; replace excursion plot with GP realizations (linear + offset per PSD model)
-- [ ] **NB03**: Rewrite with new Model/ParamSpec API; add wall time benchmarks for `mock_batch()`
+### Notebook Quality
 - [ ] **NB05**: Re-execute with updated geoVI (80+ post-optimization samples); add contour corner plots
 
 ### Code Improvements
-- [ ] **Photometry precomputation** in Model: integrate `precompute_photometry()` into `Model.__init__` when redshift fixed + filters present → 30-50x speedup for fitting
 - [ ] **Internal param rename**: update low-level function signatures from `sigma_ps` → `psd_sigma` etc. (~20 files, 181 tests — do as focused task)
-- [ ] **Corner plot contours**: use KDE or arviz for 2D contours instead of scatter
 - [ ] **More optimizers**: the `optimizer` param in MAP already supports "adam"/"adamw"/"sgd"/custom optax
 
 ### Paper Demonstrations
@@ -103,6 +112,6 @@ optax>=0.2       (MAP — installed)
 ```bash
 cd ~/Projects/diffsed
 source .venv/bin/activate
-pytest tests/ -q   # should show 289 passed
+pytest tests/ -q   # should show 296 passed
 python -c "from diffsed import Model, ParamSpec, Uniform, Fitter, Posterior"
 ```
