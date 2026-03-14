@@ -228,8 +228,30 @@ class Fitter:
 
     def _run_map(self, *, key, init_from=None,
                  n_steps=1000, learning_rate=0.02,
+                 optimizer="adam", early_stopping=True,
+                 patience=200, rtol=1e-5,
                  verbose=True, print_every=200):
-        """MAP optimization via Adam."""
+        """MAP optimization via gradient descent.
+
+        Parameters
+        ----------
+        n_steps : int
+            Maximum number of optimization steps.
+        learning_rate : float
+            Learning rate for the optimizer.
+        optimizer : str or optax optimizer
+            "adam", "sgd", "adamw", or a pre-built optax optimizer.
+        early_stopping : bool
+            Stop if loss doesn't improve by rtol over patience steps.
+        patience : int
+            Number of steps to wait for improvement before stopping.
+        rtol : float
+            Relative tolerance for early stopping.
+        verbose : bool
+            Print progress.
+        print_every : int
+            Print interval.
+        """
         try:
             import optax
         except ImportError:
@@ -244,45 +266,101 @@ class Fitter:
         else:
             init_params = self._initialize_unbounded(key)
 
-        optimizer = optax.adam(learning_rate)
-        opt_state = optimizer.init(init_params)
+        # Build optimizer
+        if isinstance(optimizer, str):
+            opt_builders = {
+                "adam": lambda: optax.adam(learning_rate),
+                "adamw": lambda: optax.adamw(learning_rate),
+                "sgd": lambda: optax.sgd(learning_rate, momentum=0.9),
+            }
+            if optimizer not in opt_builders:
+                raise ValueError(
+                    f"Unknown optimizer '{optimizer}'. "
+                    f"Use {list(opt_builders.keys())} or pass an optax optimizer."
+                )
+            opt = opt_builders[optimizer]()
+            opt_name = optimizer.upper()
+        else:
+            opt = optimizer
+            opt_name = "custom"
+
+        opt_state = opt.init(init_params)
 
         @jax.jit
         def step(params, opt_state):
             loss, grads = jax.value_and_grad(loss_fn)(params)
-            updates, new_opt_state = optimizer.update(grads, opt_state, params)
+            updates, new_opt_state = opt.update(grads, opt_state, params)
             new_params = optax.apply_updates(params, updates)
             return new_params, new_opt_state, loss
 
         params = init_params
         loss_history = []
+        best_loss = float("inf")
+        steps_without_improvement = 0
         t0 = time.time()
 
         for i in range(n_steps):
             params, opt_state, loss_val = step(params, opt_state)
-            loss_history.append(float(loss_val))
+            current_loss = float(loss_val)
+            loss_history.append(current_loss)
+
             if verbose and (i % print_every == 0 or i == n_steps - 1):
                 print(f"  Step {i:5d}/{n_steps}: loss = {loss_val:.4f}")
+
+            # Early stopping
+            if early_stopping:
+                if current_loss < best_loss * (1 - rtol):
+                    best_loss = current_loss
+                    steps_without_improvement = 0
+                else:
+                    steps_without_improvement += 1
+                    if steps_without_improvement >= patience:
+                        if verbose:
+                            print(f"  Early stopping at step {i} "
+                                  f"(no improvement for {patience} steps)")
+                        break
 
         wall_time = time.time() - t0
         best_params = self._to_physical(params)
 
         if verbose:
-            print(f"  MAP complete in {wall_time:.1f}s")
+            print(f"  MAP ({opt_name}) complete in {wall_time:.1f}s, "
+                  f"{len(loss_history)} steps")
 
         return Posterior(
             samples=None,
             params=best_params,
-            method="MAP (Adam)",
+            method=f"MAP ({opt_name})",
             wall_time_s=wall_time,
-            diagnostics={"n_steps": n_steps, "final_loss": loss_history[-1]},
+            diagnostics={
+                "n_steps": len(loss_history),
+                "final_loss": loss_history[-1],
+                "optimizer": opt_name,
+            },
             loss_history=jnp.array(loss_history),
             _model=self.model,
         )
 
     def _run_nuts(self, *, key, init_from=None,
-                  n_warmup=500, n_samples=1000, verbose=True):
-        """NUTS sampling via BlackJAX."""
+                  n_warmup=500, n_samples=1000,
+                  target_accept_rate=0.8, max_num_doublings=10,
+                  verbose=True):
+        """NUTS sampling via BlackJAX.
+
+        Parameters
+        ----------
+        n_warmup : int
+            Warmup/adaptation steps (tunes step size and mass matrix).
+        n_samples : int
+            Post-warmup samples to collect.
+        target_accept_rate : float
+            Target acceptance rate for step size adaptation (0.6-0.9).
+            Higher = smaller steps = fewer divergences but slower mixing.
+        max_num_doublings : int
+            Maximum tree depth for NUTS trajectory (2^max_num_doublings leapfrog steps).
+        verbose : bool
+            Print progress.
+        """
         try:
             import blackjax
         except ImportError:
@@ -318,14 +396,15 @@ class Fitter:
         if verbose:
             n_dim = len(init_flat)
             print(f"NUTS: {n_dim} parameters, {n_warmup} warmup, "
-                  f"{n_samples} samples")
+                  f"{n_samples} samples, target_accept={target_accept_rate}")
 
         t0 = time.time()
 
-        # Window adaptation
+        # Window adaptation with target acceptance rate
         key, warmup_key = jax.random.split(key)
         warmup = blackjax.window_adaptation(
             blackjax.nuts, log_posterior_flat,
+            target_acceptance_rate=target_accept_rate,
         )
         (state, parameters), _ = warmup.run(
             warmup_key, init_flat, num_steps=n_warmup

@@ -94,7 +94,7 @@ class TestMAP:
         fitter = Fitter(model, mock.flux_obs, mock.noise)
         result = fitter.run("map", n_steps=50, verbose=False)
         assert isinstance(result, Posterior)
-        assert result.method == "MAP (Adam)"
+        assert "MAP" in result.method
         assert result.samples is None
         assert result.loss_history is not None
 
