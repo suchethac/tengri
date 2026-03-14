@@ -1,4 +1,4 @@
-"""Inference engine: fit observed data using MAP, NUTS, or geoVI.
+"""Inference engine: fit observed data using MAP, NUTS, Ray Tracing, or geoVI.
 
 The Fitter separates inference strategy from the forward model. It builds
 a loss function from the Model's predictions and the ParamSpec's priors,
@@ -9,6 +9,7 @@ Usage:
 
     fitter = Fitter(model, data, noise)
     result_map = fitter.run("map", n_steps=1500)
+    result_rts = fitter.run("raytrace", init_from=result_map)
     result_nuts = fitter.run("nuts", init_from=result_map, n_warmup=500)
 """
 
@@ -219,12 +220,17 @@ class Fitter:
 
         if method == "map":
             return self._run_map(key=key, init_from=init_from, **kwargs)
+        elif method == "raytrace":
+            return self._run_raytrace(key=key, init_from=init_from, **kwargs)
         elif method == "nuts":
             return self._run_nuts(key=key, init_from=init_from, **kwargs)
         elif method == "geovi":
             return self._run_geovi(key=key, init_from=init_from, **kwargs)
         else:
-            raise ValueError(f"Unknown method: {method}. Use 'map', 'nuts', or 'geovi'.")
+            raise ValueError(
+                f"Unknown method: {method}. "
+                f"Use 'map', 'raytrace', 'nuts', or 'geovi'."
+            )
 
     def _run_map(self, *, key, init_from=None,
                  n_steps=1000, learning_rate=0.02,
@@ -338,6 +344,122 @@ class Fitter:
                 "optimizer": opt_name,
             },
             loss_history=jnp.array(loss_history),
+            _model=self.model,
+        )
+
+    def _run_raytrace(self, *, key, init_from=None,
+                      n_steps=500, n_leapfrog_steps=10,
+                      step_size=None, refresh_rate=0.0,
+                      n_burnin=100, verbose=True):
+        """Ray Tracing Sampler (Behroozi 2025).
+
+        Propagates light rays through a medium where the refractive
+        index n(x) = L(x)^{1/(D-1)}, using Snell's law to bend rays
+        toward high-likelihood regions.
+
+        Parameters
+        ----------
+        n_steps : int
+            Total MCMC steps (including burn-in).
+        n_leapfrog_steps : int
+            Leapfrog integration steps per trajectory.
+        step_size : float, optional
+            Integration step size. Default: 0.03 * sqrt(D).
+        refresh_rate : float
+            Partial momentum refresh rate. 0 = no refresh (pure ray tracing).
+            Higher values add exploration but reduce diffusion.
+        n_burnin : int
+            Number of initial samples to discard as burn-in.
+        verbose : bool
+            Print progress.
+        """
+        from diffsed.raytrace_jax import sample_raytrace
+        from diffsed.posterior import Posterior
+
+        loss_fn = self._build_loss_fn()
+
+        if init_from is not None:
+            init_params = self._unbounded_from_posterior(init_from)
+        else:
+            init_params = self._initialize_unbounded(key)
+
+        # Flatten for the sampler (expects a flat 1D array)
+        init_flat, unravel_fn = ravel_pytree(init_params)
+        D = len(init_flat)
+
+        if step_size is None:
+            step_size = 0.03 * jnp.sqrt(float(D))
+
+        def log_prob_flat(position):
+            params = unravel_fn(position)
+            return -loss_fn(params)
+
+        if verbose:
+            print(f"Ray Tracing: {D} parameters, {n_steps} steps "
+                  f"({n_burnin} burn-in), {n_leapfrog_steps} leapfrog/step, "
+                  f"step_size={float(step_size):.4f}")
+
+        t0 = time.time()
+
+        key, sample_key = jax.random.split(key)
+        chain, log_likelihood, accept_prob = sample_raytrace(
+            key=sample_key,
+            params_init=init_flat,
+            log_prob_fn=log_prob_flat,
+            n_steps=n_steps,
+            n_leapfrog_steps=n_leapfrog_steps,
+            step_size=float(step_size),
+            refresh_rate=float(refresh_rate),
+            metro_check=1,
+            sample_hmc=False,
+        )
+
+        wall_time = time.time() - t0
+
+        # Discard burn-in
+        chain = chain[n_burnin:]
+        log_likelihood = log_likelihood[n_burnin:]
+        accept_prob_post = accept_prob[n_burnin:]
+        n_samples_out = chain.shape[0]
+
+        mean_accept = float(jnp.mean(accept_prob))
+        mean_accept_post = float(jnp.mean(accept_prob_post))
+
+        # Convert to physical parameter space
+        samples_phys = {}
+        for i in range(n_samples_out):
+            sample_u = unravel_fn(chain[i])
+            sample_p = self._to_physical(sample_u)
+            for k, v in sample_p.items():
+                if k not in samples_phys:
+                    samples_phys[k] = []
+                samples_phys[k].append(v)
+
+        samples_phys = {k: jnp.stack(v) for k, v in samples_phys.items()}
+        best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+
+        if verbose:
+            print(f"  Ray Tracing complete in {wall_time:.1f}s. "
+                  f"Acceptance: {mean_accept:.1%} (overall), "
+                  f"{mean_accept_post:.1%} (post burn-in). "
+                  f"Samples: {n_samples_out}")
+
+        return Posterior(
+            samples=samples_phys,
+            params=best_params,
+            method="Ray Tracing (Behroozi 2025)",
+            wall_time_s=wall_time,
+            diagnostics={
+                "n_steps": n_steps,
+                "n_burnin": n_burnin,
+                "n_samples": n_samples_out,
+                "n_leapfrog_steps": n_leapfrog_steps,
+                "step_size": float(step_size),
+                "refresh_rate": float(refresh_rate),
+                "accept_rate": mean_accept,
+                "accept_rate_post_burnin": mean_accept_post,
+            },
+            loss_history=None,
             _model=self.model,
         )
 

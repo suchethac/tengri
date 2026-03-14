@@ -21,9 +21,10 @@ spec = ParamSpec(
 model = Model(spec, load_ssp_data("data/ssp.h5"), filters=load_filter_set([...]))
 mock = model.mock(spec.sample(key), snr=20.0, key=noise_key)
 
-# Fit: MAP → geoVI chaining
+# Fit: MAP → Ray Tracing → geoVI
 fitter = Fitter(model, mock.flux_obs, mock.noise)
 result_map = fitter.run("map", n_steps=2000, learning_rate=0.03)
+result_rts = fitter.run("raytrace", init_from=result_map, n_steps=500)
 posterior = fitter.run("geovi", init_from=result_map, n_iterations=15, n_posterior_samples=80)
 
 # Results
@@ -39,7 +40,8 @@ model.plot_sfh_posterior(posterior, true_params=true_params)  # SFH with 16-84% 
 | `distributions.py` | Uniform, Gaussian, LogUniform, Fixed (JAX-jittable) | 39 |
 | `param_spec.py` | ParamSpec: parameter defs, validation, sampling | 28 |
 | `model.py` | Model: forward model, mock generation, plotting | 24 |
-| `fitter.py` | Fitter: MAP (early stopping, optimizer choice), NUTS (target_accept), geoVI (post-optimization sampling) | 8 |
+| `fitter.py` | Fitter: MAP (early stopping, optimizer choice), NUTS (target_accept), geoVI (post-optimization sampling), Ray Tracing (Snell's law MCMC) | 8 |
+| `raytrace_jax.py` | Ray Tracing Sampler (Behroozi 2025) - Snell's law MCMC | TBD |
 | `posterior.py` | Posterior: summary, resample, plot_corner, to_arviz, to_param_spec | 9 |
 
 ## Inference Performance
@@ -48,6 +50,7 @@ model.plot_sfh_posterior(posterior, true_params=true_params)  # SFH with 16-84% 
 |--------|-------------|-------------------|
 | MAP (Adam) | 3.8s | 4.4s |
 | NUTS (BlackJAX) | ~23min (500 samples, 26 div) | ~2min (50 samples, 0 div) |
+| Ray Tracing (Behroozi 2025) | TBD | TBD |
 | geoVI (NIFTy.re) | ~95s (80+ samples) | ~170s (80+ samples) |
 
 ## Key Design Decisions (this session)
@@ -62,6 +65,7 @@ model.plot_sfh_posterior(posterior, true_params=true_params)  # SFH with 16-84% 
 ## Done (session 2, 2026-03-14)
 
 ### Code
+- [x] **Ray Tracing Sampler**: Integrated Behroozi (2025) ray tracing MCMC (arXiv:2510.25824). New inference method in Fitter: `fitter.run("raytrace")`. Propagates rays through parameter space using Snell's law.
 - [x] **Photometry precomputation**: Zacharegkas+2025 Eq 6-7 integrated into Model.__init__. 21.6x gradient speedup. Auto-activates when redshift fixed + filters present.
 - [x] **Metallicity units fix**: Added log10(Zsun) = -1.848 offset in PARAM_MAP. met_logzsol (solar-relative) now correctly maps to SSP grid's log10(Z) (absolute).
 - [x] **KDE corner plots**: Replaced scatter with 68%/95% KDE contours in posterior.plot_corner().
@@ -98,7 +102,7 @@ model.plot_sfh_posterior(posterior, true_params=true_params)  # SFH with 16-84% 
 - [ ] **Phase 2**: Population-level PSD recovery — hierarchical inference
 - [ ] **Phase 3**: Computational benchmarks — speed comparison table
 - [ ] **Figure 5**: SFH recovery from photometry (most important paper figure)
-- [ ] **Speed benchmarks**: MAP vs NUTS vs geoVI vs Prospector/dynesty
+- [ ] **Speed benchmarks**: MAP vs Ray Tracing vs NUTS vs geoVI vs Prospector/dynesty
 
 ## SSP Data
 

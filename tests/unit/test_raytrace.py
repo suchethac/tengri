@@ -1,0 +1,331 @@
+"""Tests for the Ray Tracing Sampler integration."""
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+jax.config.update("jax_enable_x64", True)
+
+from pathlib import Path
+
+from diffsed.raytrace_jax import sample_raytrace, sample_hamiltonian
+from diffsed.distributions import Uniform, Fixed
+from diffsed.param_spec import ParamSpec
+from diffsed.model import Model
+from diffsed.fitter import Fitter
+from diffsed.posterior import Posterior
+from diffsed.models.sps.dsps_wrapper import load_ssp_data
+from diffsed.models.observation.filters import load_filter_set
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _gaussian_log_prob(mean, cov_inv):
+    """Return a log-probability function for a multivariate Gaussian."""
+    def log_prob(x):
+        diff = x - mean
+        return -0.5 * diff @ cov_inv @ diff
+    return log_prob
+
+
+# ---------------------------------------------------------------------------
+# Pure sampler tests (no Model/Fitter dependency)
+# ---------------------------------------------------------------------------
+
+class TestSampleRaytraceGaussian:
+    """Sample from a 5D Gaussian, verify mean and std are close to truth."""
+
+    def test_sample_raytrace_gaussian(self):
+        D = 5
+        key = jax.random.PRNGKey(0)
+        true_mean = jnp.array([1.0, -0.5, 0.3, 2.0, -1.0])
+        cov_inv = jnp.eye(D) * 4.0  # variance = 0.25, std = 0.5
+
+        log_prob_fn = _gaussian_log_prob(true_mean, cov_inv)
+        step_size = 0.03 * jnp.sqrt(float(D))
+
+        chain, log_likelihood, accept_prob = sample_raytrace(
+            key=key,
+            params_init=true_mean + 0.1,
+            log_prob_fn=log_prob_fn,
+            n_steps=100,
+            n_leapfrog_steps=5,
+            step_size=float(step_size),
+        )
+
+        # Discard burn-in
+        chain_post = chain[20:]
+
+        # Check recovered mean is within ~0.5 of truth for each dim
+        recovered_mean = jnp.mean(chain_post, axis=0)
+        assert jnp.allclose(recovered_mean, true_mean, atol=0.5), (
+            f"Recovered mean {recovered_mean} too far from truth {true_mean}"
+        )
+
+        # Check recovered std is in a reasonable range (true std = 0.5)
+        recovered_std = jnp.std(chain_post, axis=0)
+        assert jnp.all(recovered_std > 0.1), (
+            f"Recovered std {recovered_std} unreasonably small"
+        )
+        assert jnp.all(recovered_std < 2.0), (
+            f"Recovered std {recovered_std} unreasonably large"
+        )
+
+
+class TestSampleRaytraceAcceptance:
+    """Verify acceptance rate is reasonable."""
+
+    def test_sample_raytrace_acceptance(self):
+        D = 5
+        key = jax.random.PRNGKey(1)
+        mean = jnp.zeros(D)
+        cov_inv = jnp.eye(D)
+
+        log_prob_fn = _gaussian_log_prob(mean, cov_inv)
+        step_size = 0.03 * jnp.sqrt(float(D))
+
+        chain, log_likelihood, accept_prob = sample_raytrace(
+            key=key,
+            params_init=jnp.zeros(D),
+            log_prob_fn=log_prob_fn,
+            n_steps=80,
+            n_leapfrog_steps=5,
+            step_size=float(step_size),
+        )
+
+        mean_accept = float(jnp.mean(accept_prob))
+        assert mean_accept > 0.3, (
+            f"Acceptance rate {mean_accept:.2%} is too low (expected >30%)"
+        )
+
+
+class TestSampleRaytraceShapes:
+    """Check chain shape is (n_steps, D)."""
+
+    def test_sample_raytrace_returns_correct_shapes(self):
+        D = 5
+        n_steps = 50
+        key = jax.random.PRNGKey(2)
+        mean = jnp.zeros(D)
+        cov_inv = jnp.eye(D)
+
+        log_prob_fn = _gaussian_log_prob(mean, cov_inv)
+        step_size = 0.03 * jnp.sqrt(float(D))
+
+        chain, log_likelihood, accept_prob = sample_raytrace(
+            key=key,
+            params_init=jnp.zeros(D),
+            log_prob_fn=log_prob_fn,
+            n_steps=n_steps,
+            n_leapfrog_steps=5,
+            step_size=float(step_size),
+        )
+
+        assert chain.shape == (n_steps, D), (
+            f"Chain shape {chain.shape} != expected ({n_steps}, {D})"
+        )
+        assert log_likelihood.shape == (n_steps,), (
+            f"Log-likelihood shape {log_likelihood.shape} != ({n_steps},)"
+        )
+        assert accept_prob.shape == (n_steps,), (
+            f"Accept prob shape {accept_prob.shape} != ({n_steps},)"
+        )
+
+
+class TestRaytraceVsHmcGaussian:
+    """Both samplers should recover similar means on a simple Gaussian."""
+
+    def test_raytrace_vs_hmc_gaussian(self):
+        D = 3
+        true_mean = jnp.array([1.0, 0.0, -1.0])
+        cov_inv = jnp.eye(D) * 2.0  # std = 1/sqrt(2) ~ 0.71
+
+        log_prob_fn = _gaussian_log_prob(true_mean, cov_inv)
+        step_size = 0.03 * jnp.sqrt(float(D))
+        n_steps = 100
+        n_leapfrog = 5
+        burnin = 30
+
+        # Ray tracing
+        key_rt = jax.random.PRNGKey(10)
+        chain_rt, _, _ = sample_raytrace(
+            key=key_rt,
+            params_init=true_mean + 0.05,
+            log_prob_fn=log_prob_fn,
+            n_steps=n_steps,
+            n_leapfrog_steps=n_leapfrog,
+            step_size=float(step_size),
+            sample_hmc=False,
+        )
+        mean_rt = jnp.mean(chain_rt[burnin:], axis=0)
+
+        # HMC
+        key_hmc = jax.random.PRNGKey(20)
+        chain_hmc, _, _ = sample_hamiltonian(
+            key=key_hmc,
+            params_init=true_mean + 0.05,
+            log_prob_fn=log_prob_fn,
+            n_steps=n_steps,
+            n_leapfrog_steps=n_leapfrog,
+            step_size=float(step_size),
+        )
+        mean_hmc = jnp.mean(chain_hmc[burnin:], axis=0)
+
+        # Both should be within 1.0 of the true mean
+        assert jnp.allclose(mean_rt, true_mean, atol=1.0), (
+            f"Ray tracing mean {mean_rt} too far from truth {true_mean}"
+        )
+        assert jnp.allclose(mean_hmc, true_mean, atol=1.0), (
+            f"HMC mean {mean_hmc} too far from truth {true_mean}"
+        )
+
+        # And they should agree with each other within ~1.5
+        assert jnp.allclose(mean_rt, mean_hmc, atol=1.5), (
+            f"Ray tracing mean {mean_rt} and HMC mean {mean_hmc} "
+            f"differ by more than expected"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Fitter integration tests (require SSP data)
+# ---------------------------------------------------------------------------
+
+_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+_SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+_SSP_EXISTS = _SSP_FILE.is_file()
+
+
+@pytest.fixture(scope="module")
+def fitter_setup():
+    """Create a simple Model/Fitter setup for integration tests."""
+    ssp = load_ssp_data(str(_SSP_FILE))
+    filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+
+    spec = ParamSpec(
+        sfh_alpha=Uniform(0.5, 3.0),
+        sfh_beta=Uniform(0.3, 2.0),
+        sfh_tau_peak_gyr=Uniform(0.5, 10.0),
+        sfh_peak_sfr=Uniform(0.1, 50.0),
+        psd_sigma=0.0,
+        psd_tau_myr=100.0,
+        met_logzsol=-0.3,
+        dust_tau_bc=0.3,
+        dust_tau_diff=0.2,
+        dust_slope=-0.7,
+        redshift=0.1,
+        stochastic=False,
+        n_grid=64,
+    )
+    model = Model(spec, ssp, filters=filters)
+
+    true_params = {
+        "sfh_alpha": 1.5, "sfh_beta": 1.0,
+        "sfh_tau_peak_gyr": 5.0, "sfh_peak_sfr": 10.0,
+        "met_logzsol": -0.3,
+        "dust_tau_bc": 0.3, "dust_tau_diff": 0.2, "dust_slope": -0.7,
+        "redshift": 0.1,
+    }
+    mock = model.mock(true_params, snr=20.0, key=jax.random.PRNGKey(0))
+    fitter = Fitter(model, mock.flux_obs, mock.noise)
+    return fitter, model, mock, true_params
+
+
+@pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
+class TestFitterRaytraceMethod:
+    """Integration test: run fitter.run('raytrace') and verify Posterior."""
+
+    def test_fitter_raytrace_method(self, fitter_setup):
+        fitter, model, mock, true_params = fitter_setup
+
+        result = fitter.run(
+            "raytrace",
+            n_steps=60,
+            n_leapfrog_steps=5,
+            n_burnin=10,
+            verbose=False,
+            key=jax.random.PRNGKey(99),
+        )
+
+        # Returns a Posterior
+        assert isinstance(result, Posterior)
+
+        # Method string is set
+        assert "Ray Tracing" in result.method
+
+        # Has samples (not MAP)
+        assert result.samples is not None
+        n_expected = 60 - 10  # n_steps - n_burnin
+        for name in fitter._free_names:
+            assert name in result.samples, f"Missing samples for {name}"
+            assert result.samples[name].shape[0] == n_expected, (
+                f"Expected {n_expected} samples for {name}, "
+                f"got {result.samples[name].shape[0]}"
+            )
+
+        # Has params (posterior mean)
+        assert result.params is not None
+        for name in fitter._free_names:
+            assert name in result.params
+
+        # Diagnostics present
+        assert "accept_rate" in result.diagnostics
+        assert "n_samples" in result.diagnostics
+        assert result.diagnostics["n_samples"] == n_expected
+
+        # Wall time recorded
+        assert result.wall_time_s > 0
+
+        # Samples are in physical (bounded) space
+        for name in fitter._free_names:
+            lo, hi = fitter._bounds[name]
+            samples = result.samples[name]
+            assert jnp.all(samples >= lo), (
+                f"{name} has samples below lower bound {lo}"
+            )
+            assert jnp.all(samples <= hi), (
+                f"{name} has samples above upper bound {hi}"
+            )
+
+
+@pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
+class TestFitterRaytraceInitFromMap:
+    """Test init_from chaining: MAP -> Ray Tracing."""
+
+    def test_fitter_raytrace_init_from_map(self, fitter_setup):
+        fitter, model, mock, true_params = fitter_setup
+
+        # First run MAP
+        map_result = fitter.run(
+            "map",
+            n_steps=200,
+            verbose=False,
+            key=jax.random.PRNGKey(10),
+        )
+        assert isinstance(map_result, Posterior)
+        assert map_result.samples is None  # MAP has no samples
+
+        # Chain into Ray Tracing
+        rt_result = fitter.run(
+            "raytrace",
+            init_from=map_result,
+            n_steps=60,
+            n_leapfrog_steps=5,
+            n_burnin=10,
+            verbose=False,
+            key=jax.random.PRNGKey(11),
+        )
+        assert isinstance(rt_result, Posterior)
+        assert rt_result.samples is not None
+        assert "Ray Tracing" in rt_result.method
+
+        n_expected = 60 - 10
+        assert rt_result.diagnostics["n_samples"] == n_expected
+
+        # Acceptance rate should be reasonable when initialized from MAP
+        assert rt_result.diagnostics["accept_rate"] > 0.1, (
+            f"Accept rate {rt_result.diagnostics['accept_rate']:.2%} "
+            f"unexpectedly low when initialized from MAP"
+        )

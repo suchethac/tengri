@@ -27,6 +27,7 @@ from diffsed.param_spec import ParamSpec
 from diffsed.model import Model
 from diffsed.fitter import Fitter
 from diffsed.posterior import Posterior
+from diffsed.raytrace_jax import sample_raytrace
 from diffsed.models.observation.filters import load_filter_set
 
 __all__ = [
@@ -39,6 +40,8 @@ __all__ = [
     "Gaussian",
     "LogUniform",
     "Fixed",
+    # Samplers
+    "sample_raytrace",
     # Data loading
     "load_ssp_data",
     "load_filter_set",

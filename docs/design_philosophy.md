@@ -9,10 +9,11 @@ diffsed is a fully differentiable galaxy SED fitting code built on JAX. It model
 Every computation in diffsed — from the power spectral density (PSD) of the SFH through stellar population synthesis, dust attenuation, and filter convolution — is implemented as a composition of differentiable JAX functions. This enables:
 
 1. **Gradient-based optimization** (MAP via Adam) in seconds per galaxy
-2. **Hamiltonian Monte Carlo** (NUTS via BlackJAX) for exact posteriors in minutes
-3. **Variational inference** (geoVI via NIFTy.re) for approximate posteriors at scale
-4. **Fisher information analysis** via autodiff Jacobians
-5. **Gradient saliency maps** showing which spectral features constrain which parameters
+2. **Ray tracing MCMC** (Behroozi 2025) for gradient-directed posterior exploration
+3. **Hamiltonian Monte Carlo** (NUTS via BlackJAX) for exact posteriors in minutes
+4. **Variational inference** (geoVI via NIFTy.re) for approximate posteriors at scale
+5. **Fisher information analysis** via autodiff Jacobians
+6. **Gradient saliency maps** showing which spectral features constrain which parameters
 
 ## Architecture: Layered Design
 
@@ -141,6 +142,17 @@ H(ξ|d) = ½ Σ_k ((d_k - m_k(θ))/σ_k)² + ½ ξᵀξ + prior_penalties(θ)
 ```
 
 Minimizing H gives MAP; sampling from exp(-H) gives the full posterior.
+
+## Ray Tracing Sampler
+
+In addition to MAP, NUTS, and geoVI, diffsed integrates the Ray Tracing Sampler of Behroozi (2025, arXiv:2510.25824). This physics-inspired MCMC method propagates "rays" through parameter space using an analogy to Snell's law of refraction:
+
+- **Refractive index:** `n(x) = L(x)^{1/(D-1)}`, where `L(x)` is the likelihood and `D` is the number of parameters. Rays bend toward higher-likelihood regions just as light bends toward denser media.
+- **Resilience to stochastic gradients:** Unlike HMC/NUTS, which rely on energy conservation and can fail when gradients are noisy, ray tracing uses only gradient *direction* (not magnitude) to compute refraction angles. This makes it robust to noisy or approximate likelihoods.
+- **Barrier crossing:** Rays can traverse low-likelihood valleys between modes because refraction (unlike Hamiltonian dynamics) does not conserve an energy that would trap the sampler in a single basin.
+- **Integration into Fitter:** The sampler is available as `fitter.run("raytrace", init_from=result_map, n_steps=500)`. It accepts MAP results as initialization and returns a `Posterior` object compatible with all downstream analysis (summary, corner plots, ArviZ export).
+
+The ray tracing sampler is recommended as an intermediate option between MAP point estimates and full MCMC (NUTS). It provides approximate posterior exploration at a fraction of the NUTS cost, particularly useful for high-dimensional stochastic SFH models where NUTS becomes expensive.
 
 ## Stochastic vs Parametric Mode
 

@@ -80,7 +80,7 @@
 ### Computational Performance (Section 3.4)
 
 **Figure 13: Speed comparison** (`fig_speed`)
-- Wall time: MAP vs NUTS vs geoVI on smooth (5D) and stochastic (137D)
+- Wall time: MAP vs Ray Tracing vs NUTS vs geoVI on smooth (5D) and stochastic (137D)
 - Compare with Prospector/dynesty literature benchmarks
 - Include approximate photometry speedup
 - *Source: NB05 timing table + Zacharegkas+2025 comparison*
@@ -108,7 +108,7 @@
 
 ### Phase 3: Computational Benchmarks
 
-8. **`analysis/08_speed_benchmarks.py`** — Wall time comparison table
+8. **`analysis/08_speed_benchmarks.py`** — Wall time comparison table (include Ray Tracing sampler alongside MAP, NUTS, and geoVI)
 9. **`analysis/09_photometry_approximation.py`** — Accuracy of Zacharegkas+2025 approximation
 
 ---
