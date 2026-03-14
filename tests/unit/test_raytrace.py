@@ -257,7 +257,7 @@ class TestFitterRaytraceMethod:
 
         # Has samples (not MAP)
         assert result.samples is not None
-        n_expected = 60 - 10  # n_steps - n_burnin
+        n_expected = 60  # n_steps (burn-in is separate)
         for name in fitter._free_names:
             assert name in result.samples, f"Missing samples for {name}"
             assert result.samples[name].shape[0] == n_expected, (
@@ -321,7 +321,7 @@ class TestFitterRaytraceInitFromMap:
         assert rt_result.samples is not None
         assert "Ray Tracing" in rt_result.method
 
-        n_expected = 60 - 10
+        n_expected = 60  # n_steps (burn-in is separate)
         assert rt_result.diagnostics["n_samples"] == n_expected
 
         # Acceptance rate should be reasonable when initialized from MAP

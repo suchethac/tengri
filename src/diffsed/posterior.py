@@ -122,6 +122,114 @@ class Posterior:
         return result
 
     # -------------------------------------------------------------------
+    # Autocorrelation and effective sample size
+    # -------------------------------------------------------------------
+
+    @staticmethod
+    def _autocorrelation_1d(x: np.ndarray, max_lag: int = None) -> np.ndarray:
+        """Compute normalized autocorrelation function for a 1D chain.
+
+        Uses FFT for efficiency (O(N log N) instead of O(N * max_lag)).
+        """
+        n = len(x)
+        if max_lag is None:
+            max_lag = n // 2
+        max_lag = min(max_lag, n - 1)
+
+        x = x - np.mean(x)
+        var = np.var(x)
+        if var < 1e-30:
+            return np.zeros(max_lag + 1)
+
+        # FFT-based autocorrelation
+        fft_size = 2 ** int(np.ceil(np.log2(2 * n)))
+        fft_x = np.fft.rfft(x, n=fft_size)
+        acf_full = np.fft.irfft(fft_x * np.conj(fft_x))
+        acf = acf_full[:max_lag + 1] / (var * n)
+        return acf
+
+    def autocorrelation(self, max_lag: int = None) -> dict:
+        """Compute autocorrelation function for each scalar parameter.
+
+        Parameters
+        ----------
+        max_lag : int, optional
+            Maximum lag. Default: n_samples // 2.
+
+        Returns
+        -------
+        dict
+            Keys: parameter names.
+            Values: 1D array of autocorrelation from lag 0 to max_lag.
+        """
+        if self.samples is None:
+            raise ValueError("Autocorrelation requires samples (not MAP)")
+
+        result = {}
+        for name, arr in self.samples.items():
+            if name == "psd_xi":
+                continue
+            if arr.ndim == 1:
+                result[name] = self._autocorrelation_1d(np.array(arr), max_lag)
+        return result
+
+    def effective_sample_size(self) -> dict:
+        """Estimate effective sample size (ESS) for each parameter.
+
+        Uses the initial positive sequence estimator (Geyer 1992):
+        truncate the autocorrelation sum at the first negative pair.
+
+        Returns
+        -------
+        dict
+            Keys: parameter names. Values: ESS (float).
+        """
+        if self.samples is None:
+            raise ValueError("ESS requires samples (not MAP)")
+
+        acfs = self.autocorrelation()
+        result = {}
+
+        for name, acf in acfs.items():
+            n = next(iter(self.samples.values())).shape[0]
+            # Initial positive sequence: sum pairs of consecutive ACF values
+            # and stop when the pair sum goes negative
+            tau = 1.0  # starts at lag 0 (acf[0] = 1)
+            for i in range(1, len(acf) - 1, 2):
+                pair_sum = acf[i] + acf[i + 1] if i + 1 < len(acf) else acf[i]
+                if pair_sum < 0:
+                    break
+                tau += 2.0 * pair_sum
+            result[name] = n / tau
+
+        return result
+
+    def diagnostics_summary(self) -> str:
+        """Print a diagnostics summary including ESS and R-hat proxy."""
+        if self.samples is None:
+            return f"MAP result (no samples): method={self.method}"
+
+        ess = self.effective_sample_size()
+        summary = self.summary()
+
+        lines = [
+            f"Method: {self.method}",
+            f"Samples: {next(iter(self.samples.values())).shape[0]}",
+            f"Wall time: {self.wall_time_s:.1f}s",
+            "",
+            f"{'Parameter':<22s} {'Median':>8s} {'68% CI':>18s} {'ESS':>6s}",
+            "-" * 58,
+        ]
+        for name in sorted(summary.keys()):
+            s = summary[name]
+            if "median" in s:
+                e = ess.get(name, float("nan"))
+                ci = f"[{s['lo_68']:.3f}, {s['hi_68']:.3f}]"
+                lines.append(f"{name:<22s} {s['median']:>8.3f} {ci:>18s} {e:>6.0f}")
+
+        return "\n".join(lines)
+
+    # -------------------------------------------------------------------
     # Resampling
     # -------------------------------------------------------------------
 

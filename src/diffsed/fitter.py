@@ -348,28 +348,33 @@ class Fitter:
         )
 
     def _run_raytrace(self, *, key, init_from=None,
-                      n_steps=500, n_leapfrog_steps=10,
+                      n_burnin=100, n_steps=500,
+                      n_leapfrog_steps=10,
                       step_size=None, refresh_rate=0.0,
-                      n_burnin=100, verbose=True):
+                      verbose=True):
         """Ray Tracing Sampler (Behroozi 2025).
 
         Propagates light rays through a medium where the refractive
         index n(x) = L(x)^{1/(D-1)}, using Snell's law to bend rays
         toward high-likelihood regions.
 
+        The sampling proceeds in two phases:
+        1. **Burn-in**: initial samples are discarded to let the chain
+           forget its starting position and reach the typical set.
+        2. **Sampling**: posterior samples are collected.
+
         Parameters
         ----------
+        n_burnin : int
+            Burn-in steps (discarded).
         n_steps : int
-            Total MCMC steps (including burn-in).
+            Post-burn-in samples to collect.
         n_leapfrog_steps : int
             Leapfrog integration steps per trajectory.
         step_size : float, optional
             Integration step size. Default: 0.03 * sqrt(D).
         refresh_rate : float
             Partial momentum refresh rate. 0 = no refresh (pure ray tracing).
-            Higher values add exploration but reduce diffusion.
-        n_burnin : int
-            Number of initial samples to discard as burn-in.
         verbose : bool
             Print progress.
         """
@@ -394,9 +399,11 @@ class Fitter:
             params = unravel_fn(position)
             return -loss_fn(params)
 
+        total_steps = n_burnin + n_steps
+
         if verbose:
-            print(f"Ray Tracing: {D} parameters, {n_steps} steps "
-                  f"({n_burnin} burn-in), {n_leapfrog_steps} leapfrog/step, "
+            print(f"Ray Tracing: {D} params, {n_burnin} burn-in + "
+                  f"{n_steps} samples, {n_leapfrog_steps} leapfrog/step, "
                   f"step_size={float(step_size):.4f}")
 
         t0 = time.time()
@@ -406,7 +413,7 @@ class Fitter:
             key=sample_key,
             params_init=init_flat,
             log_prob_fn=log_prob_flat,
-            n_steps=n_steps,
+            n_steps=total_steps,
             n_leapfrog_steps=n_leapfrog_steps,
             step_size=float(step_size),
             refresh_rate=float(refresh_rate),
@@ -450,8 +457,8 @@ class Fitter:
             method="Ray Tracing (Behroozi 2025)",
             wall_time_s=wall_time,
             diagnostics={
-                "n_steps": n_steps,
                 "n_burnin": n_burnin,
+                "n_steps": n_steps,
                 "n_samples": n_samples_out,
                 "n_leapfrog_steps": n_leapfrog_steps,
                 "step_size": float(step_size),
@@ -464,17 +471,26 @@ class Fitter:
         )
 
     def _run_nuts(self, *, key, init_from=None,
-                  n_warmup=500, n_samples=1000,
+                  n_warmup=500, n_burnin=0, n_samples=1000,
                   target_accept_rate=0.8, max_num_doublings=10,
                   verbose=True):
         """NUTS sampling via BlackJAX.
+
+        The sampling proceeds in three phases:
+        1. **Warmup**: BlackJAX window adaptation tunes step size
+           and mass matrix.
+        2. **Burn-in**: additional post-warmup steps that are
+           discarded (lets the chain equilibrate at the tuned params).
+        3. **Sampling**: posterior samples are collected.
 
         Parameters
         ----------
         n_warmup : int
             Warmup/adaptation steps (tunes step size and mass matrix).
+        n_burnin : int
+            Additional post-warmup burn-in steps (discarded).
         n_samples : int
-            Post-warmup samples to collect.
+            Post-burn-in samples to collect.
         target_accept_rate : float
             Target acceptance rate for step size adaptation (0.6-0.9).
             Higher = smaller steps = fewer divergences but slower mixing.
@@ -517,7 +533,8 @@ class Fitter:
 
         if verbose:
             n_dim = len(init_flat)
-            print(f"NUTS: {n_dim} parameters, {n_warmup} warmup, "
+            burnin_msg = f", {n_burnin} burn-in" if n_burnin > 0 else ""
+            print(f"NUTS: {n_dim} parameters, {n_warmup} warmup{burnin_msg}, "
                   f"{n_samples} samples, target_accept={target_accept_rate}")
 
         t0 = time.time()
@@ -543,6 +560,15 @@ class Fitter:
         def one_step(state, rng_key):
             state, info = kernel(rng_key, state)
             return state, (state.position, info)
+
+        # Burn-in: run steps but discard
+        if n_burnin > 0:
+            key, burnin_key = jax.random.split(key)
+            burnin_keys = jax.random.split(burnin_key, n_burnin)
+            for sk in burnin_keys:
+                state, _ = one_step(state, sk)
+            if verbose:
+                print(f"  Burn-in complete ({n_burnin} steps discarded)")
 
         key, sample_key = jax.random.split(key)
         sample_keys = jax.random.split(sample_key, n_samples)
@@ -585,6 +611,7 @@ class Fitter:
             wall_time_s=wall_time,
             diagnostics={
                 "n_warmup": n_warmup,
+                "n_burnin": n_burnin,
                 "n_samples": n_samples,
                 "n_divergent": n_divergent,
                 "step_size": float(parameters["step_size"]),
