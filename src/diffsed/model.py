@@ -50,24 +50,35 @@ from diffsed.utils.grid import (
 )
 from diffsed.utils.cosmology import luminosity_distance
 from diffsed.models.observation.photometry import ab_mag_from_flux
+from diffsed.models.sps.precompute import (
+    precompute_photometry,
+    fast_photometry,
+    interpolate_ssp_phot_metallicity,
+)
+from diffsed.models.dust.charlot_fall import charlot_fall_at_wavelengths
 
 
 # ---------------------------------------------------------------------------
-# Parameter name mapping: public → (internal, unit_scale)
+# Parameter name mapping: public → (internal, unit_scale, offset)
+#
+# Conversion: internal = public * scale + offset
 # ---------------------------------------------------------------------------
+
+# Solar metallicity: log10(Zsun) = log10(0.0142) ≈ -1.848 (Asplund 2009)
+LOG10_ZSUN = -1.8477116556169435
 
 PARAM_MAP = {
-    "sfh_alpha":         ("alpha",    1.0),
-    "sfh_beta":          ("beta",     1.0),
-    "sfh_tau_peak_gyr":  ("tau_sfh",  1e9),    # Gyr → yr
-    "sfh_peak_sfr":      ("sfr_norm", 1.0),
-    "psd_sigma":         ("sigma_ps", 1.0),
-    "psd_tau_myr":       ("tau_ps",   1e6),    # Myr → yr
-    "met_logzsol":       ("log_z",    1.0),
-    "dust_tau_bc":       ("tau_v1",   1.0),
-    "dust_tau_diff":     ("tau_v2",   1.0),
-    "dust_slope":        ("dust_n",   1.0),
-    "redshift":          ("redshift", 1.0),
+    "sfh_alpha":         ("alpha",    1.0, 0.0),
+    "sfh_beta":          ("beta",     1.0, 0.0),
+    "sfh_tau_peak_gyr":  ("tau_sfh",  1e9, 0.0),    # Gyr → yr
+    "sfh_peak_sfr":      ("sfr_norm", 1.0, 0.0),
+    "psd_sigma":         ("sigma_ps", 1.0, 0.0),
+    "psd_tau_myr":       ("tau_ps",   1e6, 0.0),    # Myr → yr
+    "met_logzsol":       ("log_z",    1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
+    "dust_tau_bc":       ("tau_v1",   1.0, 0.0),
+    "dust_tau_diff":     ("tau_v2",   1.0, 0.0),
+    "dust_slope":        ("dust_n",   1.0, 0.0),
+    "redshift":          ("redshift", 1.0, 0.0),
 }
 
 
@@ -146,6 +157,18 @@ class Model:
             self._dl_cm_fixed = None
             self._z_fixed = None
 
+        # Photometry precomputation (Zacharegkas+2025 Section 3)
+        # When redshift is fixed and filters are present, precompute
+        # SSP broadband fluxes to eliminate wavelength integrals from
+        # the inference loop. Gives 30-50x speedup.
+        self._precomp = None
+        if (precompute is True and self._z_fixed is not None
+                and self.filter_waves is not None):
+            self._precomp = precompute_photometry(
+                ssp_data, self.filter_waves, self.filter_trans,
+                self._z_fixed, self._dl_cm_fixed,
+            )
+
     # -------------------------------------------------------------------
     # Internal parameter translation
     # -------------------------------------------------------------------
@@ -154,16 +177,17 @@ class Model:
         """Translate public param dict to internal names with unit conversion.
 
         Merges user-provided values with fixed defaults from the spec.
+        Conversion: internal = public * scale + offset
         """
         internal = {}
-        for pub_name, (int_name, scale) in PARAM_MAP.items():
+        for pub_name, (int_name, scale, offset) in PARAM_MAP.items():
             if pub_name in params:
-                internal[int_name] = params[pub_name] * scale
+                internal[int_name] = params[pub_name] * scale + offset
             else:
                 # Fall back to fixed value from spec
                 dist = self.spec.get_distribution(pub_name)
                 if dist.is_fixed:
-                    internal[int_name] = dist.bounds[0] * scale
+                    internal[int_name] = dist.bounds[0] * scale + offset
                 else:
                     raise KeyError(
                         f"Free parameter '{pub_name}' not found in params dict"
@@ -258,6 +282,10 @@ class Model:
     def predict_photometry(self, params):
         """Compute observed photometric flux densities.
 
+        Automatically uses the fast precomputed path (Zacharegkas+2025)
+        when available (redshift fixed + filters present + precompute=True).
+        Falls back to exact wavelength integration otherwise.
+
         Parameters
         ----------
         params : dict
@@ -272,6 +300,11 @@ class Model:
         if self.filter_waves is None:
             raise ValueError("No filters set. Pass filters to Model().")
 
+        # Fast path: precomputed SSP photometry (no wavelength integrals)
+        if self._precomp is not None:
+            return self._predict_photometry_fast(params)
+
+        # Exact path: full wavelength integration per filter
         sed = self.predict_sed(params)
         z = self._get_redshift(params)
         dl_cm = self._get_dl_cm(params)
@@ -283,6 +316,58 @@ class Model:
             )
             fluxes.append(f)
         return jnp.array(fluxes)
+
+    def _predict_photometry_fast(self, params):
+        """Fast photometry using precomputed SSP broadband fluxes.
+
+        Instead of integrating SED × filter × dust over wavelength,
+        evaluates dust at filter effective wavelengths and uses a
+        simple weighted sum. ~30-50x faster than exact computation.
+
+        See Zacharegkas, Hearin & Benson (2025) Section 3, Eq. 6-7.
+        """
+        p = self._get_internal_params(params)
+        precomp = self._precomp
+
+        # 1. Compute SFH weights (same as predict_sed)
+        if self.spec.stochastic and "xi" in p:
+            sqrt_power = compute_sqrt_power_drw(
+                self._n_grid, float(self.d_log_age),
+                p["sigma_ps"], p["tau_ps"]
+            )
+            gp_x = gp_from_xi(p["xi"], sqrt_power, self._n_grid)
+            k0_half = drw_variance(p["sigma_ps"]) / 2.0
+            sfr_mean = double_powerlaw(
+                self.age_yr,
+                alpha=p["alpha"], beta=p["beta"],
+                tau=p["tau_sfh"], norm=p["sfr_norm"],
+            )
+            sfr = sfr_mean * jnp.exp(gp_x - k0_half)
+        else:
+            sfr = double_powerlaw(
+                self.age_yr,
+                alpha=p["alpha"], beta=p["beta"],
+                tau=p["tau_sfh"], norm=p["sfr_norm"],
+            )
+
+        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+        weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
+
+        # 2. Interpolate precomputed SSP photometry to target metallicity
+        ssp_phot_at_z = interpolate_ssp_phot_metallicity(
+            precomp.ssp_phot, self.ssp_data.ssp_lgmet, p["log_z"]
+        )
+
+        # 3. Evaluate dust at filter effective wavelengths (rest-frame)
+        dust_at_eff = charlot_fall_at_wavelengths(
+            precomp.effective_wavelengths_rest,
+            self.ssp_ages_yr,
+            tau_v1=p["tau_v1"], tau_v2=p["tau_v2"], n_slope=p["dust_n"],
+        )
+
+        # 4. Fast photometry: weighted sum (no wavelength integrals)
+        return fast_photometry(weights, ssp_phot_at_z, dust_at_eff,
+                               precomp.flux_scale)
 
     def predict_spectrum(self, params, wave_obs):
         """Compute observed spectrum at given wavelengths.

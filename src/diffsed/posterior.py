@@ -324,18 +324,45 @@ class Posterior:
                     continue
 
                 if i == j:
-                    # Diagonal: 1D histogram
+                    # Diagonal: 1D KDE + histogram
                     n_bins = min(20, max(5, len(xi) // 3))
-                    ax.hist(xi, bins=n_bins, color="C0", alpha=0.7,
+                    ax.hist(xi, bins=n_bins, color="C0", alpha=0.3,
                             density=True, edgecolor="white", lw=0.5)
+                    try:
+                        from scipy.stats import gaussian_kde
+                        kde = gaussian_kde(xi)
+                        x_grid = np.linspace(np.min(xi), np.max(xi), 200)
+                        ax.plot(x_grid, kde(x_grid), color="C0", lw=1.5)
+                    except (ImportError, np.linalg.LinAlgError):
+                        pass  # fall back to histogram only
                     if truths and name_i in truths:
                         tv = truths[name_i]
                         if name_i == "stellar_mass":
                             tv = np.log10(max(tv, 1.0))
                         ax.axvline(tv, color="k", ls="--", lw=1.5)
                 else:
-                    # Off-diagonal: 2D scatter
-                    ax.scatter(xj, xi, s=8, alpha=0.4, color="C0", edgecolors="none")
+                    # Off-diagonal: 2D KDE contours
+                    try:
+                        from scipy.stats import gaussian_kde
+                        xy = np.vstack([xj, xi])
+                        kde = gaussian_kde(xy)
+                        x_grid = np.linspace(np.min(xj), np.max(xj), 80)
+                        y_grid = np.linspace(np.min(xi), np.max(xi), 80)
+                        X, Y = np.meshgrid(x_grid, y_grid)
+                        Z = kde(np.vstack([X.ravel(), Y.ravel()])).reshape(X.shape)
+                        # Contour levels at 68% and 95% credible regions
+                        Z_sorted = np.sort(Z.ravel())[::-1]
+                        Z_cumsum = np.cumsum(Z_sorted) / np.sum(Z_sorted)
+                        level_68 = Z_sorted[np.searchsorted(Z_cumsum, 0.68)]
+                        level_95 = Z_sorted[np.searchsorted(Z_cumsum, 0.95)]
+                        ax.contourf(X, Y, Z, levels=[level_95, level_68, Z.max()],
+                                    colors=["C0"], alpha=[0.15, 0.4])
+                        ax.contour(X, Y, Z, levels=[level_95, level_68],
+                                   colors=["C0"], linewidths=0.8, alpha=0.7)
+                    except (ImportError, np.linalg.LinAlgError):
+                        # Fallback to scatter if KDE fails
+                        ax.scatter(xj, xi, s=8, alpha=0.4, color="C0",
+                                   edgecolors="none")
                     if truths:
                         if name_j in truths and name_i in truths:
                             tj = truths[name_j]

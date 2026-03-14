@@ -19,12 +19,20 @@ class TestParamMap:
             assert name in PARAM_MAP, f"Missing mapping for {name}"
 
     def test_unit_conversion_tau_peak(self):
-        _, scale = PARAM_MAP["sfh_tau_peak_gyr"]
+        _, scale, offset = PARAM_MAP["sfh_tau_peak_gyr"]
         assert scale == 1e9  # Gyr → yr
+        assert offset == 0.0
 
     def test_unit_conversion_psd_tau(self):
-        _, scale = PARAM_MAP["psd_tau_myr"]
+        _, scale, offset = PARAM_MAP["psd_tau_myr"]
         assert scale == 1e6  # Myr → yr
+        assert offset == 0.0
+
+    def test_metallicity_solar_offset(self):
+        _, scale, offset = PARAM_MAP["met_logzsol"]
+        assert scale == 1.0
+        # log10(Zsun) ≈ -1.848 (Asplund 2009)
+        assert abs(offset - (-1.8477116556169435)) < 1e-10
 
 
 class TestModelConstruction:

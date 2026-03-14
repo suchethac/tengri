@@ -56,6 +56,52 @@ def charlot_fall(wavelength: jnp.ndarray, age_grid: jnp.ndarray,
     return jnp.exp(-tau_lambda)
 
 
+def charlot_fall_at_wavelengths(wavelengths: jnp.ndarray, age_grid: jnp.ndarray,
+                                tau_v1: float, tau_v2: float,
+                                n_slope: float = -0.7,
+                                t_birth: float = 1e7,
+                                transition_width: float = 0.3) -> jnp.ndarray:
+    """Evaluate Charlot & Fall dust at specific wavelengths per filter.
+
+    Unlike charlot_fall() which evaluates on the full wavelength grid,
+    this evaluates at a small set of wavelengths (e.g., filter effective
+    wavelengths). Used for approximate photometry (Zacharegkas+2025 Eq. 6).
+
+    Parameters
+    ----------
+    wavelengths : array, shape (n_filters,)
+        Wavelengths at which to evaluate dust (rest-frame Angstrom).
+    age_grid : array, shape (n_ages,)
+        Stellar population ages (yr).
+    tau_v1 : float
+        V-band optical depth of birth cloud.
+    tau_v2 : float
+        V-band optical depth of diffuse ISM.
+    n_slope : float
+        Attenuation curve power-law index. Default -0.7.
+    t_birth : float
+        Birth cloud dispersal age (yr). Default 1e7.
+    transition_width : float
+        Sigmoid width in dex. Default 0.3.
+
+    Returns
+    -------
+    array, shape (n_ages, n_filters)
+        Multiplicative attenuation factor exp(-tau_lambda).
+    """
+    wave_ratio = (wavelengths / 5500.0) ** n_slope  # (n_filters,)
+
+    log_age = jnp.log10(jnp.maximum(age_grid, 1.0))
+    log_t_birth = jnp.log10(t_birth)
+    sigmoid_arg = -(log_age - log_t_birth) / transition_width
+    weight = jax.nn.sigmoid(sigmoid_arg)  # (n_ages,)
+
+    tau_v_eff = weight * tau_v1 + tau_v2  # (n_ages,)
+    tau_lambda = tau_v_eff[:, None] * wave_ratio[None, :]  # (n_ages, n_filters)
+
+    return jnp.exp(-tau_lambda)
+
+
 def charlot_fall_hard(wavelength: jnp.ndarray, age_grid: jnp.ndarray,
                       tau_v1: float, tau_v2: float,
                       n_slope: float = -0.7,
