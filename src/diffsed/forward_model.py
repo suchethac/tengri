@@ -213,6 +213,143 @@ class ForwardModel:
 
         return sed
 
+    def _compute_sfh(self, params):
+        """Run the SFH pipeline and return mean SFR, full SFR, and related arrays.
+
+        Parameters
+        ----------
+        params : dict
+            Model parameters (must contain xi, sigma_ps, tau_ps, alpha,
+            beta, tau_sfh, sfr_norm).
+
+        Returns
+        -------
+        dict with keys:
+            "sfr_mean": mean SFR(t) without GP (Msun/yr), on log-age grid
+            "sfr_full": full SFR(t) including GP (Msun/yr), on log-age grid
+            "sfr_mean_on_ssp": mean SFR interpolated to SSP ages (Msun/yr)
+            "sfr_full_on_ssp": full SFR interpolated to SSP ages (Msun/yr)
+        """
+        sqrt_power = self.compute_sqrt_power(
+            params["sigma_ps"], params["tau_ps"]
+        )
+        gp_x = gp_from_xi(params["xi"], sqrt_power, self.config.n_grid)
+        k0_half = drw_variance(params["sigma_ps"]) / 2.0
+
+        sfr_mean = double_powerlaw(
+            self.age_yr,
+            alpha=params["alpha"],
+            beta=params["beta"],
+            tau=params["tau_sfh"],
+            norm=params["sfr_norm"],
+        )
+        sfr_full = sfr_mean * jnp.exp(gp_x - k0_half)
+
+        sfr_mean_on_ssp = jnp.interp(
+            self.ssp_log_ages_yr, self.log_age_grid, sfr_mean
+        )
+        sfr_full_on_ssp = jnp.interp(
+            self.ssp_log_ages_yr, self.log_age_grid, sfr_full
+        )
+
+        return {
+            "sfr_mean": sfr_mean,
+            "sfr_full": sfr_full,
+            "sfr_mean_on_ssp": sfr_mean_on_ssp,
+            "sfr_full_on_ssp": sfr_full_on_ssp,
+        }
+
+    def compute_stellar_mass(self, params):
+        """Compute total stellar mass formed by integrating the SFH.
+
+        Returns both the mass from the mean SFH (analytic expectation)
+        and from the full SFH (including the GP realization).
+
+        Parameters
+        ----------
+        params : dict
+            Model parameters.
+
+        Returns
+        -------
+        dict with keys:
+            "mstar_mean": mass formed from mean SFH only (Msun)
+            "mstar_total": mass formed from full SFH including GP (Msun)
+        """
+        sfh = self._compute_sfh(params)
+
+        weights_mean = compute_csp_weights(
+            sfh["sfr_mean_on_ssp"], self.ssp_ages_yr
+        )
+        weights_full = compute_csp_weights(
+            sfh["sfr_full_on_ssp"], self.ssp_ages_yr
+        )
+
+        return {
+            "mstar_mean": jnp.sum(weights_mean),
+            "mstar_total": jnp.sum(weights_full),
+        }
+
+    def compute_derived_quantities(self, params):
+        """Compute derived physical quantities from model parameters.
+
+        Parameters
+        ----------
+        params : dict
+            Model parameters.
+
+        Returns
+        -------
+        dict with keys:
+            "mstar_formed": total stellar mass formed (Msun)
+            "mstar_mean": mass from mean SFH only (Msun)
+            "sfr_100myr": SFR averaged over last 100 Myr (Msun/yr)
+            "sfr_10myr": SFR averaged over last 10 Myr (Msun/yr)
+            "ssfr": specific SFR = sfr_100myr / mstar_formed (yr^-1)
+        """
+        sfh = self._compute_sfh(params)
+
+        # Stellar masses
+        weights_mean = compute_csp_weights(
+            sfh["sfr_mean_on_ssp"], self.ssp_ages_yr
+        )
+        weights_full = compute_csp_weights(
+            sfh["sfr_full_on_ssp"], self.ssp_ages_yr
+        )
+        mstar_mean = jnp.sum(weights_mean)
+        mstar_formed = jnp.sum(weights_full)
+
+        # Average SFR over recent time windows using the full SFH on
+        # the log-age grid (finer resolution than SSP grid at young ages)
+        age_yr = self.age_yr  # lookback time in years
+        sfr_full = sfh["sfr_full"]
+
+        # SFR averaged over last 100 Myr: mean SFR where age < 1e8 yr
+        mask_100myr = age_yr <= 1e8
+        sfr_100myr = jnp.where(
+            jnp.sum(mask_100myr) > 0,
+            jnp.sum(sfr_full * mask_100myr) / jnp.maximum(jnp.sum(mask_100myr), 1.0),
+            sfr_full[0],
+        )
+
+        # SFR averaged over last 10 Myr: mean SFR where age < 1e7 yr
+        mask_10myr = age_yr <= 1e7
+        sfr_10myr = jnp.where(
+            jnp.sum(mask_10myr) > 0,
+            jnp.sum(sfr_full * mask_10myr) / jnp.maximum(jnp.sum(mask_10myr), 1.0),
+            sfr_full[0],
+        )
+
+        ssfr = sfr_100myr / jnp.maximum(mstar_formed, 1.0)
+
+        return {
+            "mstar_formed": mstar_formed,
+            "mstar_mean": mstar_mean,
+            "sfr_100myr": sfr_100myr,
+            "sfr_10myr": sfr_10myr,
+            "ssfr": ssfr,
+        }
+
     def predict_photometry(self, params):
         """Run forward model and compute photometry.
 

@@ -1,8 +1,18 @@
 """Log-age grid construction and conversion utilities.
 
-The GP is defined on a uniform grid in u = log10(t_age / yr).
-This gives finer resolution at young ages (where SED sensitivity
-is highest) automatically.
+The GP is defined on a uniform grid in u = log10(t_age / yr),
+where t_age is the stellar population age (= lookback time).
+
+Uniform spacing in log-age automatically gives FINER resolution
+at recent times (low lookback, young ages) and coarser resolution
+at early cosmic times (high lookback, old ages). This matches
+the SED sensitivity: UV-emitting young populations change rapidly
+on ~Myr timescales, while old populations evolve slowly on ~Gyr
+timescales.
+
+Example for 256-point grid:
+  At 10 Myr (recent): ~0.4 Myr between points
+  At 1 Gyr  (old):    ~38 Myr between points
 """
 
 import jax.numpy as jnp
