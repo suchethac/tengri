@@ -136,9 +136,10 @@ def fit_nuts(
     warmup = blackjax.window_adaptation(
         blackjax.nuts,
         log_posterior_flat,
-        num_steps=n_warmup,
     )
-    (state, parameters), warmup_info = warmup.run(warmup_key, init_flat)
+    (state, parameters), warmup_info = warmup.run(
+        warmup_key, init_flat, num_steps=n_warmup
+    )
 
     if verbose:
         print(f"  Warmup complete ({time.time() - t0:.1f}s). "
