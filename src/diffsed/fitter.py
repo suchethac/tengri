@@ -393,8 +393,14 @@ class Fitter:
         )
 
     def _run_geovi(self, *, key, init_from=None,
-                   n_iterations=10, n_samples=6, verbose=True):
-        """Geometric variational inference via NIFTy.re."""
+                   n_iterations=10, n_samples=6,
+                   sample_mode="nonlinear_resample", verbose=True):
+        """Geometric variational inference via NIFTy.re.
+
+        geoVI finds a coordinate transformation where the posterior is
+        approximately Gaussian, then draws samples in that space. Much
+        faster than MCMC for high-dimensional problems.
+        """
         try:
             import nifty8.re as jft
         except ImportError:
@@ -404,8 +410,116 @@ class Fitter:
 
         from diffsed.posterior import Posterior
 
-        # geoVI implementation would go here — for now, raise a clear message
-        raise NotImplementedError(
-            "geoVI integration requires NIFTy.re signal_response setup. "
-            "Use method='map' or method='nuts' for now."
+        model = self.model
+        data = self.data
+        noise = self.noise
+        data_type = self.data_type
+        free_names = self._free_names
+        bounds = self._bounds
+        fixed_values = self._fixed_values
+        spec = self.spec
+        stochastic = spec.stochastic
+
+        # Build signal_response: unbounded primals → predicted observables
+        def signal_response(primals):
+            params = {}
+            for name in free_names:
+                lo, hi = bounds[name]
+                params[name] = to_bounded(primals[name], lo, hi)
+            for name, val in fixed_values.items():
+                params[name] = val
+            if stochastic and "psd_xi" in primals:
+                params["psd_xi"] = primals["psd_xi"]
+
+            if data_type == "photometry":
+                return model.predict_photometry(params)
+            elif data_type == "spectroscopy":
+                return model.predict_spectrum(params, model._wave_obs)
+            elif data_type == "joint":
+                p = model.predict_photometry(params)
+                s = model.predict_spectrum(params, model._wave_obs)
+                return jnp.concatenate([p, s])
+            else:
+                raise ValueError(f"Unknown data_type: {data_type}")
+
+        # Build NIFTy.re domain
+        domain = {}
+        for name in free_names:
+            domain[name] = jft.ShapeWithDtype(())
+        if stochastic:
+            domain["psd_xi"] = jft.ShapeWithDtype((spec.n_grid,))
+
+        nifty_model = jft.Model(signal_response, domain=domain)
+
+        # Gaussian likelihood: N^-1 = diag(1/noise^2)
+        noise_cov_inv = 1.0 / noise ** 2
+        likelihood = jft.Gaussian(data, noise_cov_inv).amend(nifty_model)
+
+        # Initialize
+        if init_from is not None:
+            init_params = self._unbounded_from_posterior(init_from)
+        else:
+            init_params = self._initialize_unbounded(key)
+
+        # Convert to jft.Vector
+        init_pos = jft.Vector(init_params)
+
+        if verbose:
+            n_total = len(free_names) + (spec.n_grid if stochastic else 0)
+            mode = "geoVI" if sample_mode == "nonlinear_resample" else "MGVI"
+            print(f"{mode}: {n_total} params, {len(data)} data points, "
+                  f"{n_iterations} iterations")
+
+        t0 = time.time()
+
+        # Sample schedule: increase samples over iterations
+        delta = max(1, n_samples - 1)
+
+        key, opt_key = jax.random.split(key)
+        samples, state = jft.optimize_kl(
+            likelihood,
+            init_pos,
+            n_total_iterations=n_iterations,
+            n_samples=lambda i: max(1, 1 + int(i * delta / max(n_iterations - 1, 1))),
+            key=opt_key,
+            sample_mode=sample_mode,
+            odir=None,
+        )
+
+        wall_time = time.time() - t0
+
+        # Extract and convert samples to physical space
+        sample_list = list(samples)
+        n_posterior = len(sample_list)
+
+        samples_phys = {}
+        for s in sample_list:
+            # jft.Vector → dict via .tree attribute
+            sample_dict = s.tree if hasattr(s, 'tree') else dict(s)
+            phys = self._to_physical(sample_dict)
+            for k, v in phys.items():
+                if k not in samples_phys:
+                    samples_phys[k] = []
+                samples_phys[k].append(v)
+
+        samples_phys = {k: jnp.stack(v) for k, v in samples_phys.items()}
+        best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+
+        if verbose:
+            mode = "geoVI" if sample_mode == "nonlinear_resample" else "MGVI"
+            print(f"  {mode} complete in {wall_time:.1f}s, "
+                  f"{n_posterior} posterior samples")
+
+        return Posterior(
+            samples=samples_phys,
+            params=best_params,
+            method=f"{'geoVI' if sample_mode == 'nonlinear_resample' else 'MGVI'} (NIFTy.re)",
+            wall_time_s=wall_time,
+            diagnostics={
+                "n_iterations": n_iterations,
+                "n_samples": n_posterior,
+                "sample_mode": sample_mode,
+            },
+            loss_history=None,
+            _model=self.model,
         )
