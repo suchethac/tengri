@@ -1,0 +1,134 @@
+"""Tests for the Fitter class."""
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+jax.config.update("jax_enable_x64", True)
+
+from pathlib import Path
+
+from diffsed.distributions import Uniform, Fixed, Gaussian
+from diffsed.param_spec import ParamSpec
+from diffsed.model import Model
+from diffsed.fitter import Fitter
+from diffsed.posterior import Posterior
+from diffsed.models.sps.dsps_wrapper import load_ssp_data
+from diffsed.models.observation.filters import load_filter_set
+
+
+# ---------------------------------------------------------------------------
+_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+_SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+_SSP_EXISTS = _SSP_FILE.is_file()
+
+pytestmark = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
+
+
+@pytest.fixture(scope="session")
+def model_and_mock():
+    ssp = load_ssp_data(str(_SSP_FILE))
+    filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+
+    spec = ParamSpec(
+        sfh_alpha=Uniform(0.5, 3.0),
+        sfh_beta=Uniform(0.3, 2.0),
+        sfh_tau_peak_gyr=Uniform(0.5, 10.0),
+        sfh_peak_sfr=Uniform(0.1, 50.0),
+        met_logzsol=Uniform(-1.5, 0.2),
+        dust_tau_bc=Uniform(0.0, 3.0),
+        dust_tau_diff=0.3,
+        dust_slope=-0.7,
+        redshift=0.1,
+        stochastic=False,
+    )
+    model = Model(spec, ssp, filters=filters)
+
+    true_params = {
+        "sfh_alpha": 1.2, "sfh_beta": 1.0,
+        "sfh_tau_peak_gyr": 4.0, "sfh_peak_sfr": 8.0,
+        "met_logzsol": -0.3,
+        "dust_tau_bc": 1.0, "dust_tau_diff": 0.3, "dust_slope": -0.7,
+        "redshift": 0.1,
+    }
+    mock = model.mock(true_params, snr=20.0, key=jax.random.PRNGKey(0))
+    return model, mock, true_params
+
+
+class TestFitterConstruction:
+    def test_creates(self, model_and_mock):
+        model, mock, _ = model_and_mock
+        fitter = Fitter(model, mock.flux_obs, mock.noise)
+        assert fitter.data_type == "photometry"
+
+    def test_free_names(self, model_and_mock):
+        model, mock, _ = model_and_mock
+        fitter = Fitter(model, mock.flux_obs, mock.noise)
+        assert "sfh_alpha" in fitter._free_names
+        assert "dust_slope" not in fitter._free_names  # fixed
+
+
+class TestLossFunction:
+    def test_loss_finite(self, model_and_mock):
+        model, mock, _ = model_and_mock
+        fitter = Fitter(model, mock.flux_obs, mock.noise)
+        loss_fn = fitter._build_loss_fn()
+        init = fitter._initialize_unbounded(jax.random.PRNGKey(0))
+        loss = loss_fn(init)
+        assert jnp.isfinite(loss)
+
+    def test_loss_gradient_finite(self, model_and_mock):
+        model, mock, _ = model_and_mock
+        fitter = Fitter(model, mock.flux_obs, mock.noise)
+        loss_fn = fitter._build_loss_fn()
+        init = fitter._initialize_unbounded(jax.random.PRNGKey(0))
+        grad = jax.grad(loss_fn)(init)
+        for name, g in grad.items():
+            assert jnp.all(jnp.isfinite(g)), f"Non-finite gradient for {name}"
+
+
+class TestMAP:
+    def test_returns_posterior(self, model_and_mock):
+        model, mock, _ = model_and_mock
+        fitter = Fitter(model, mock.flux_obs, mock.noise)
+        result = fitter.run("map", n_steps=50, verbose=False)
+        assert isinstance(result, Posterior)
+        assert result.method == "MAP (Adam)"
+        assert result.samples is None
+        assert result.loss_history is not None
+
+    def test_loss_decreases(self, model_and_mock):
+        model, mock, _ = model_and_mock
+        fitter = Fitter(model, mock.flux_obs, mock.noise)
+        result = fitter.run("map", n_steps=200, verbose=False)
+        loss = np.array(result.loss_history)
+        assert loss[-1] < loss[0], "Loss should decrease"
+
+    def test_init_from_posterior(self, model_and_mock):
+        model, mock, _ = model_and_mock
+        fitter = Fitter(model, mock.flux_obs, mock.noise)
+        result1 = fitter.run("map", n_steps=100, verbose=False)
+        result2 = fitter.run("map", n_steps=50, init_from=result1, verbose=False)
+        assert isinstance(result2, Posterior)
+
+
+class TestGaussianPrior:
+    def test_gaussian_prior_applied(self):
+        ssp = load_ssp_data(str(_SSP_FILE))
+        filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+
+        spec = ParamSpec(
+            met_logzsol=Gaussian(-0.3, 0.1, lo=-2.0, hi=0.2),
+            redshift=0.1,
+            stochastic=False,
+        )
+        model = Model(spec, ssp, filters=filters)
+        params = spec.sample(jax.random.PRNGKey(0))
+        mock = model.mock(params, snr=20.0, key=jax.random.PRNGKey(1))
+
+        fitter = Fitter(model, mock.flux_obs, mock.noise)
+        loss_fn = fitter._build_loss_fn()
+        init = fitter._initialize_unbounded(jax.random.PRNGKey(2))
+        loss = loss_fn(init)
+        assert jnp.isfinite(loss)
