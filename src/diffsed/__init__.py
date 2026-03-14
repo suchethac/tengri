@@ -21,7 +21,29 @@ from diffsed.models.dust.charlot_fall import charlot_fall
 from diffsed.models.sps.dsps_wrapper import load_ssp_data, SSPData
 from diffsed.forward_model import ForwardModel, ModelConfig, generate_mock
 
+# --- New high-level API ---
+from diffsed.distributions import Uniform, Gaussian, LogUniform, Fixed
+from diffsed.param_spec import ParamSpec
+from diffsed.model import Model
+from diffsed.fitter import Fitter
+from diffsed.posterior import Posterior
+from diffsed.models.observation.filters import load_filter_set
+
 __all__ = [
+    # High-level API
+    "Model",
+    "ParamSpec",
+    "Fitter",
+    "Posterior",
+    "Uniform",
+    "Gaussian",
+    "LogUniform",
+    "Fixed",
+    # Data loading
+    "load_ssp_data",
+    "load_filter_set",
+    "SSPData",
+    # Low-level (kept for internal use and advanced users)
     "psd_drw",
     "drw_acf",
     "drw_variance",
@@ -34,8 +56,6 @@ __all__ = [
     "delayed_tau",
     "constant_sfh",
     "charlot_fall",
-    "load_ssp_data",
-    "SSPData",
     "ForwardModel",
     "ModelConfig",
     "generate_mock",
