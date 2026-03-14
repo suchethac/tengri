@@ -472,7 +472,7 @@ class Fitter:
         )
 
     def _run_geovi(self, *, key, init_from=None,
-                   n_iterations=10, n_samples=6, n_posterior_samples=50,
+                   n_iterations=10, n_samples=6, n_posterior_samples=100,
                    sample_mode="nonlinear_resample", verbose=True):
         """Geometric variational inference via NIFTy.re.
 

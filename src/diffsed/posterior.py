@@ -255,8 +255,18 @@ class Posterior:
             raise ValueError("Corner plot requires posterior samples (not MAP)")
 
         if params is None:
-            params = [k for k in sorted(self.samples.keys())
-                      if k != "psd_xi" and self.samples[k].ndim == 1]
+            # Exclude psd_xi (high-dimensional) and fixed params (constant values)
+            params = []
+            for k in sorted(self.samples.keys()):
+                if k == "psd_xi":
+                    continue
+                arr = self.samples[k]
+                if arr.ndim != 1:
+                    continue
+                # Skip if all values are identical (fixed parameter)
+                if float(jnp.std(arr)) < 1e-10:
+                    continue
+                params.append(k)
 
         # Add derived quantities if model is available
         derived = {}
