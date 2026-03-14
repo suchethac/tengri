@@ -293,6 +293,9 @@ class Posterior:
             fig, axes = plt.subplots(n, n, figsize=figsize)
         if n == 1:
             axes = np.array([[axes]])
+        # If axes is a flat list (e.g., from fig.axes), reshape to 2D
+        if isinstance(axes, list):
+            axes = np.array(axes).reshape(n, n)
 
         all_names = list(params) + list(derived.keys())
         all_data = {}

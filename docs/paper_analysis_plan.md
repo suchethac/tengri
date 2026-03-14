@@ -7,87 +7,63 @@
 
 ---
 
-## Figure Plan
+## Revised Figure Plan (8 figures)
 
 ### Methods Figures (Section 2)
 
 **Figure 1: Framework overview schematic** (`fig_overview`)
-- Flowchart: ξ → [IFT standardization] → SFH field → [DSPS SPS] → [Dust] → [Photometry/Spectra] → [geoVI inference]
+- Flowchart: ξ → [IFT standardization] → SFH field → [DSPS SPS] → [Dust] → [Photometry/Spectra] → inference
 - Show the modular pipeline with the key equation $\mathcal{H}(\xi|d)$
-- *Status: placeholder in draft*
+- *Status: placeholder in draft — manual diagram*
 
 **Figure 2: PSD → GP → SFH** (`fig_psd_sfh`)
 - 3-panel: P(ω), GP realizations, full SFH (mean × exp(GP))
 - 4 regimes: smooth, moderate, bursty, highly bursty
-- *Source: NB01 figures 01_psd_overview.png, 01_sfh_ensemble_linear.png*
+- *Source: NB01 figures — EXISTS*
 
 **Figure 3: Forward model pipeline** (`fig_forward_model`)
 - SFH → weights → CSP SED → dust → observed photometry
 - Show SED with filter transmission curves overlaid
-- *Source: NB02 figures*
+- *Source: NB02 figures — EXISTS*
 
 ### Recovery Test Figures (Section 3)
 
-**Figure 4: Test matrix** (`fig_test_matrix`)
-- Summary table/schematic of the mock program
-- Axes: redshift (0.1, 2, 6) × data type (phot, spec) × PSD regime
-- *Status: needs creating*
+**Figure 4: Individual SFH recovery** (`fig_sfh_recovery`) — **MOST IMPORTANT**
+- 4×2 grid: PSD regime × (photometry, spectroscopy)
+- SFH in linear time with truth (black) + posterior median + 68% CI
+- Shows how spectroscopy improves recent-time SFH recovery
+- *Script: `analysis/fig04_sfh_recovery.py` — IMPLEMENTED*
 
-**Figure 5: Individual SFH recovery — photometry** (`fig_sfh_recovery_phot`)
-- 2×2 or 3×2 grid: PSD regime × (truth, recovered)
-- SFH in linear time with 16-84% posterior fill
-- Compare PSD prior vs continuity prior
-- *Needs: run geoVI on mock galaxies at z=0.1 with SDSS ugriz*
+**Figure 5: PSD parameter recovery** (`fig_psd_recovery`)
+- 2×2 grid: moderate/bursty × phot/spec
+- 2D KDE contours of (σ_PSD, τ_PSD) posterior with truth marked
+- Shows when PSD params are constrainable
+- *Script: `analysis/fig05_psd_recovery.py` — IMPLEMENTED*
 
-**Figure 6: Individual SFH recovery — spectroscopy** (`fig_sfh_recovery_spec`)
-- Same layout as Fig 5 but with spectral fitting
-- Show improved recent-time SFH recovery
-- *Needs: implement spectral fitting mock + inference*
-
-**Figure 7: PSD parameter recovery (individual)** (`fig_psd_individual`)
-- Corner plot: σ_PSD vs τ_PSD posteriors for single galaxy
-- Show constrainability depends on data type and S/N
-- *Needs: run individual fits with PSD params free*
-
-**Figure 8: 2D PSD recovery map** (`fig_psd_recovery_map`)
-- 4×4 grid in (σ_PSD, τ_PSD) space
-- Each cell: bias and scatter in recovered PSD params
-- Color-coded: green=recoverable, red=unconstrained
-- *Needs: 16×100 mock + fit runs*
-
-**Figure 9: S/N dependence** (`fig_snr_dependence`)
-- SFH recovery quality vs photometric S/N (5, 10, 20, 50, 100)
-- Compare PSD prior vs continuity prior improvement
-- *Source: NB04 SNR comparison, but needs geoVI version*
-
-**Figure 10: Posterior predictive checks** (`fig_ppc`)
-- Photometry + spectrum with posterior spread overlaid on data
-- Show that the model can reproduce the data
-- *Source: NB05 05_posterior_predictive.png*
-
-### Population-Level Figures (Section 4)
-
-**Figure 11: Hierarchical PSD recovery** (`fig_hierarchical_psd`)
-- Posterior on shared (σ_PSD, τ_PSD) from N=500 galaxies
-- Show convergence as N increases (50, 100, 200, 500)
-- *Needs: hierarchical inference implementation*
-
-**Figure 12: Population distinction** (`fig_population_distinction`)
-- Two populations with different PSD settings
-- Show posteriors are well-separated
-- *Needs: hierarchical inference*
+**Figure 6: Posterior predictive checks** (`fig_ppc`)
+- 2-panel: photometric PPC (left) + spectroscopic PPC (right)
+- Green (phot posterior) + red (spec posterior) overlaid on data
+- *Source: NB00/NB05 — EXISTS*
 
 ### Computational Performance (Section 3.4)
 
-**Figure 13: Speed comparison** (`fig_speed`)
-- Wall time: MAP vs Ray Tracing vs NUTS vs geoVI on smooth (5D) and stochastic (137D)
-- Compare with Prospector/dynesty literature benchmarks
-- Include approximate photometry speedup
-- *Source: NB05 timing table + Zacharegkas+2025 comparison*
+**Figure 7: Speed comparison** (`fig_speed`)
+- Grouped bar chart: MAP vs Ray Tracing vs NUTS vs geoVI
+- Smooth (5D) and stochastic (137D) configurations
+- *Script: `analysis/fig07_speed_benchmarks.py` — IMPLEMENTED*
 
-**Figure 14: Scaling with batch size** (`fig_scaling`)
-- GPU-parallel mock generation and fitting
-- *Source: NB03 mock_batch benchmarks*
+**Figure 8: End-to-end gradient sensitivity** (`fig_gradient`)
+- Jacobian heatmap: ∂flux/∂θ for all params × all bands
+- Demonstrates full differentiability and parameter–band coupling
+- *Script: `analysis/fig08_gradient_sensitivity.py` — IMPLEMENTED*
+
+### Deferred to Paper II
+
+- Hierarchical PSD recovery (needs hierarchical inference implementation)
+- Population distinction test
+- 2D PSD recovery map (16×100 mock runs)
+- S/N dependence study
+- Batch scaling benchmarks
 
 ---
 
