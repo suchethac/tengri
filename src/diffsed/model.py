@@ -421,6 +421,9 @@ class Model:
     def predict_magnitudes(self, params):
         """Compute observed AB magnitudes through all filters.
 
+        Uses DSPS's calc_obs_mag for cosmologically correct magnitudes.
+        Falls back to our own computation if DSPS is unavailable.
+
         Parameters
         ----------
         params : dict
@@ -429,11 +432,33 @@ class Model:
         Returns
         -------
         array, shape (n_filters,)
-            AB magnitudes. m_AB = -2.5 log10(f_nu) - 48.6
-            where f_nu is in erg/s/cm^2/Hz.
+            Observed AB magnitudes.
         """
-        flux = self.predict_photometry(params)
-        return ab_mag_from_flux(flux)
+        if self.filter_waves is None:
+            raise ValueError("No filters set.")
+
+        try:
+            from dsps import calc_obs_mag
+            from dsps.cosmology import DEFAULT_COSMOLOGY
+
+            # DSPS expects rest-frame SED in Lsun/Hz
+            sed_lsun = self.predict_luminosity(params)
+            z = self._get_redshift(params)
+            cosmo = DEFAULT_COSMOLOGY
+
+            mags = []
+            for fw, ft in zip(self.filter_waves, self.filter_trans):
+                m = calc_obs_mag(
+                    self.ssp_data.ssp_wave, sed_lsun, fw, ft,
+                    z, cosmo.Om0, cosmo.w0, cosmo.wa, cosmo.h,
+                )
+                mags.append(m)
+            return jnp.array(mags)
+
+        except ImportError:
+            # Fallback: use our own flux → AB mag conversion
+            flux = self.predict_photometry(params)
+            return ab_mag_from_flux(flux)
 
     def predict_luminosity(self, params):
         """Compute rest-frame luminosity SED in solar units.
@@ -447,7 +472,7 @@ class Model:
         -------
         array, shape (n_wave,)
             Rest-frame luminosity in Lsun/Hz.
-            Multiply by LSUN_CGS (3.828e33 erg/s) to get erg/s/Hz.
+            This is the standard unit used by DSPS/FSPS.
         """
         LSUN_CGS = 3.828e33  # erg/s (IAU 2015)
         sed_erg = self.predict_sed(params)  # erg/s/Hz
