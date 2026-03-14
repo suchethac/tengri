@@ -1,8 +1,30 @@
 # diffsed Development Handoff
 
-**Last updated:** 2026-03-13
+**Last updated:** 2026-03-14
 **Repo:** `~/Projects/diffsed/`
-**Status:** 181 tests (unit+integration). 6 notebooks (T00-T05) all executing. Real SSP data + 55 SVO filters. SED units correct (erg/s/Hz). Stellar mass as derived quantity. IFT tutorial in NB01.
+**Status:** 289 tests. New high-level API (Model, ParamSpec, Fitter, Posterior). DSPS calc_obs_mag for magnitudes. NB00 rewritten with new API. NB01-05 still use old API.
+
+## New High-Level API
+
+```python
+from diffsed import Model, ParamSpec, Uniform, Gaussian, Fixed, Fitter
+from diffsed import load_ssp_data, load_filter_set
+
+spec = ParamSpec(
+    sfh_alpha=Uniform(0.5, 3.0), sfh_beta=Uniform(0.3, 2.0),
+    sfh_tau_peak_gyr=Uniform(0.5, 10.0), sfh_peak_sfr=Uniform(0.1, 50.0),
+    met_logzsol=Gaussian(-0.3, 0.2, lo=-2.0, hi=0.2),
+    dust_tau_bc=Uniform(0.0, 3.0), dust_tau_diff=0.3, dust_slope=-0.7,
+    redshift=0.1, stochastic=False,
+)
+model = Model(spec, load_ssp_data("data/ssp.h5"), filters=load_filter_set([...]))
+mock = model.mock(spec.sample(key), snr=20.0, key=noise_key)
+result = model.fit(mock.flux_obs, mock.noise, method="map")
+```
+
+**New modules:** distributions.py, param_spec.py, model.py, fitter.py, posterior.py
+**Design spec:** docs/specs/2026-03-13-paramspec-model-redesign.md
+**Design doc:** docs/design_philosophy.md
 
 ## SSP Data
 
