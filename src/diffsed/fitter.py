@@ -472,13 +472,27 @@ class Fitter:
         )
 
     def _run_geovi(self, *, key, init_from=None,
-                   n_iterations=10, n_samples=6,
+                   n_iterations=10, n_samples=6, n_posterior_samples=50,
                    sample_mode="nonlinear_resample", verbose=True):
         """Geometric variational inference via NIFTy.re.
 
         geoVI finds a coordinate transformation where the posterior is
         approximately Gaussian, then draws samples in that space. Much
         faster than MCMC for high-dimensional problems.
+
+        Parameters
+        ----------
+        n_iterations : int
+            Number of KL minimization iterations (optimization).
+        n_samples : int
+            Samples per iteration during optimization.
+        n_posterior_samples : int
+            Number of posterior samples to draw after convergence.
+            These are cheap to generate once the approximation is found.
+        sample_mode : str
+            "nonlinear_resample" (geoVI) or "linear_resample" (MGVI).
+        verbose : bool
+            Print progress.
         """
         try:
             import nifty8.re as jft
@@ -565,16 +579,45 @@ class Fitter:
             odir=None,
         )
 
+        # Draw additional posterior samples from the converged approximation
+        # The optimize_kl samples are used during optimization; now we draw
+        # fresh samples from the approximate posterior for analysis
+        converged_pos = samples.pos
+        key, draw_key = jax.random.split(key)
+
+        if verbose:
+            print(f"  Drawing {n_posterior_samples} posterior samples...")
+
+        all_sample_dicts = []
+
+        # Include the optimization samples
+        for s in list(samples):
+            sd = s.tree if hasattr(s, 'tree') else dict(s)
+            all_sample_dicts.append(sd)
+
+        # Draw additional samples using draw_linear_residual
+        # (linear approximation around the converged point)
+        for j in range(n_posterior_samples):
+            draw_key, sub_key = jax.random.split(draw_key)
+            try:
+                residual, _ = jft.draw_linear_residual(
+                    likelihood, converged_pos, sub_key,
+                    cg_kwargs={"absdelta": 1e-4, "maxiter": 50},
+                )
+                # Sample = pos + residual
+                sample_tree = residual.tree if hasattr(residual, 'tree') else dict(residual)
+                pos_tree = converged_pos.tree if hasattr(converged_pos, 'tree') else dict(converged_pos)
+                combined = {k: pos_tree[k] + sample_tree[k] for k in pos_tree}
+                all_sample_dicts.append(combined)
+            except Exception:
+                break  # stop if CG fails
+
         wall_time = time.time() - t0
+        n_posterior = len(all_sample_dicts)
 
-        # Extract and convert samples to physical space
-        sample_list = list(samples)
-        n_posterior = len(sample_list)
-
+        # Convert all samples to physical space
         samples_phys = {}
-        for s in sample_list:
-            # jft.Vector → dict via .tree attribute
-            sample_dict = s.tree if hasattr(s, 'tree') else dict(s)
+        for sample_dict in all_sample_dicts:
             phys = self._to_physical(sample_dict)
             for k, v in phys.items():
                 if k not in samples_phys:
