@@ -478,6 +478,85 @@ class Model:
         sed_erg = self.predict_sed(params)  # erg/s/Hz
         return sed_erg / LSUN_CGS
 
+    def plot_sfh_posterior(self, posterior, true_params=None, ax=None,
+                          n_draws=50, color="C0", label="Posterior"):
+        """Plot posterior SFH with percentile fill and sample lines.
+
+        Parameters
+        ----------
+        posterior : Posterior
+            Inference result with samples.
+        true_params : dict, optional
+            True parameter values (for truth overlay).
+        ax : matplotlib Axes, optional
+            Axes to plot on.
+        n_draws : int
+            Number of sample lines to draw.
+        color : str
+            Color for posterior.
+        label : str
+            Label for the posterior mean line.
+
+        Returns
+        -------
+        ax : matplotlib Axes
+        """
+        import matplotlib.pyplot as plt
+
+        if ax is None:
+            _, ax = plt.subplots(figsize=(10, 5))
+
+        if posterior.samples is None:
+            # MAP: just plot the point estimate
+            sfh = self.predict_sfh(posterior.params)
+            ax.plot(sfh["t_gyr"], sfh["sfr_mean"], color=color, lw=2, label=label)
+        else:
+            # Compute SFH for all samples
+            n_total = len(next(iter(posterior.samples.values())))
+            sfh_draws = []
+            for i in range(n_total):
+                s_i = {k: posterior.samples[k][i] for k in posterior.samples}
+                sfh_i = self.predict_sfh(s_i)
+                key = "sfr_full" if self.spec.stochastic else "sfr_mean"
+                sfh_draws.append(sfh_i[key])
+
+            import numpy as np
+            sfh_arr = np.array(sfh_draws)  # (n_samples, n_linear)
+            t_gyr = np.array(self.predict_sfh(posterior.params)["t_gyr"])
+
+            # Percentile fill (16-84%)
+            lo = np.percentile(sfh_arr, 16, axis=0)
+            hi = np.percentile(sfh_arr, 84, axis=0)
+            ax.fill_between(t_gyr, lo, hi, color=color, alpha=0.2)
+
+            # Faint sample lines
+            n_show = min(n_draws, n_total)
+            indices = np.linspace(0, n_total - 1, n_show, dtype=int)
+            for idx in indices:
+                ax.plot(t_gyr, sfh_arr[idx], color=color, alpha=0.1, lw=0.4)
+
+            # Posterior mean
+            sfh_mean = self.predict_sfh(posterior.params)
+            key = "sfr_full" if self.spec.stochastic else "sfr_mean"
+            ax.plot(t_gyr, sfh_mean[key], color=color, lw=2, label=label)
+
+        # Truth overlay
+        if true_params is not None:
+            sfh_true = self.predict_sfh(true_params)
+            key = "sfr_full" if self.spec.stochastic else "sfr_mean"
+            ax.plot(sfh_true["t_gyr"], sfh_true[key], "k-", lw=2.5,
+                    label="Truth", zorder=10)
+            if self.spec.stochastic:
+                ax.plot(sfh_true["t_gyr"], sfh_true["sfr_mean"], "k--",
+                        lw=1, alpha=0.3)
+
+        ax.set_xlabel("Lookback time (Gyr)")
+        ax.set_ylabel(r"SFR (M$_{\odot}$/yr)")
+        ax.set_xlim(0, 13.5)
+        ax.legend(fontsize=9)
+
+        return ax
+
     # -------------------------------------------------------------------
     # Mock generation
     # -------------------------------------------------------------------

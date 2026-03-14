@@ -230,6 +230,129 @@ class Posterior:
         return az.from_dict(posterior=posterior)
 
     # -------------------------------------------------------------------
+    # Plotting
+    # -------------------------------------------------------------------
+
+    def plot_corner(self, params=None, truths=None, figsize=None):
+        """Plot corner (triangle) plot of posterior distributions.
+
+        Parameters
+        ----------
+        params : list of str, optional
+            Parameter names to include. Defaults to all scalar physical params.
+        truths : dict, optional
+            True values to mark with dashed lines.
+        figsize : tuple, optional
+            Figure size.
+
+        Returns
+        -------
+        fig : matplotlib Figure
+        """
+        import matplotlib.pyplot as plt
+
+        if self.samples is None:
+            raise ValueError("Corner plot requires posterior samples (not MAP)")
+
+        if params is None:
+            params = [k for k in sorted(self.samples.keys())
+                      if k != "psd_xi" and self.samples[k].ndim == 1]
+
+        # Add derived quantities if model is available
+        derived = {}
+        if self._model is not None:
+            try:
+                d = self.derived
+                for k in ["stellar_mass", "sfr_100myr"]:
+                    if k in d:
+                        derived[k] = np.array(d[k])
+            except Exception:
+                pass
+
+        n = len(params) + len(derived)
+        if figsize is None:
+            figsize = (2.5 * n, 2.5 * n)
+
+        fig, axes = plt.subplots(n, n, figsize=figsize)
+        if n == 1:
+            axes = np.array([[axes]])
+
+        all_names = list(params) + list(derived.keys())
+        all_data = {}
+        for name in params:
+            all_data[name] = np.array(self.samples[name])
+        all_data.update(derived)
+
+        # Labels
+        label_map = {
+            "sfh_alpha": r"$\alpha$",
+            "sfh_beta": r"$\beta$",
+            "sfh_tau_peak_gyr": r"$\tau_{\rm peak}$ (Gyr)",
+            "sfh_peak_sfr": r"SFR$_{\rm peak}$",
+            "psd_sigma": r"$\sigma_{\rm burst}$",
+            "psd_tau_myr": r"$\tau_{\rm burst}$ (Myr)",
+            "met_logzsol": r"log Z",
+            "dust_tau_bc": r"$\tau_{\rm bc}$",
+            "dust_tau_diff": r"$\tau_{\rm diff}$",
+            "stellar_mass": r"log M$_*$",
+            "sfr_100myr": r"SFR$_{100}$",
+        }
+
+        for i, name_i in enumerate(all_names):
+            xi = all_data[name_i]
+            if name_i == "stellar_mass":
+                xi = np.log10(np.maximum(xi, 1.0))
+
+            for j, name_j in enumerate(all_names):
+                ax = axes[i, j]
+                xj = all_data[name_j]
+                if name_j == "stellar_mass":
+                    xj = np.log10(np.maximum(xj, 1.0))
+
+                if j > i:
+                    ax.set_visible(False)
+                    continue
+
+                if i == j:
+                    # Diagonal: 1D histogram
+                    n_bins = min(20, max(5, len(xi) // 3))
+                    ax.hist(xi, bins=n_bins, color="C0", alpha=0.7,
+                            density=True, edgecolor="white", lw=0.5)
+                    if truths and name_i in truths:
+                        tv = truths[name_i]
+                        if name_i == "stellar_mass":
+                            tv = np.log10(max(tv, 1.0))
+                        ax.axvline(tv, color="k", ls="--", lw=1.5)
+                else:
+                    # Off-diagonal: 2D scatter
+                    ax.scatter(xj, xi, s=8, alpha=0.4, color="C0", edgecolors="none")
+                    if truths:
+                        if name_j in truths and name_i in truths:
+                            tj = truths[name_j]
+                            ti = truths[name_i]
+                            if name_j == "stellar_mass":
+                                tj = np.log10(max(tj, 1.0))
+                            if name_i == "stellar_mass":
+                                ti = np.log10(max(ti, 1.0))
+                            ax.axvline(tj, color="k", ls="--", lw=0.8, alpha=0.5)
+                            ax.axhline(ti, color="k", ls="--", lw=0.8, alpha=0.5)
+
+                # Labels on edges only
+                if i == n - 1:
+                    ax.set_xlabel(label_map.get(name_j, name_j), fontsize=8)
+                else:
+                    ax.set_xticklabels([])
+                if j == 0 and i > 0:
+                    ax.set_ylabel(label_map.get(name_i, name_i), fontsize=8)
+                else:
+                    ax.set_yticklabels([])
+
+                ax.tick_params(labelsize=6)
+
+        plt.tight_layout()
+        return fig
+
+    # -------------------------------------------------------------------
     # Display
     # -------------------------------------------------------------------
 
