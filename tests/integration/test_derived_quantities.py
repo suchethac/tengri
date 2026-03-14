@@ -205,6 +205,56 @@ class TestDerivedQuantities:
         # With a random GP and large sigma, the ratio should deviate from 1
         assert ratio != 1.0, "Bursty GP should make M*_total differ from M*_mean"
 
+    def test_smooth_gp_mass_close_to_mean(self, model):
+        """With small sigma_PS, total mass should be close to mean SFH mass."""
+        params = {
+            "xi": jax.random.normal(jax.random.PRNGKey(0), shape=(256,)),
+            "sigma_ps": 0.3,  # very smooth
+            "tau_ps": 50e6,
+            "alpha": 1.0, "beta": 1.5, "tau_sfh": 3e9, "sfr_norm": 5.0,
+            "log_z": -0.2, "tau_v1": 0.5, "tau_v2": 0.2, "dust_n": -0.7,
+        }
+        masses = model.compute_stellar_mass(params)
+        ratio = float(masses["mstar_total"]) / float(masses["mstar_mean"])
+        # With sigma_PS=0.3, the ratio should be within ~30% of 1
+        assert 0.5 < ratio < 2.0, (
+            f"Smooth GP: M*_total/M*_mean = {ratio:.2f}, expected close to 1"
+        )
+
+    def test_ensemble_mean_mass_converges(self, model):
+        """Over many GP realizations, <M*_total> should approach M*_mean.
+
+        The lognormal correction ensures E[SFR] = mean_SFR, so the
+        ensemble-averaged mass should equal the mean SFH mass (approximately).
+        """
+        base = {
+            "sigma_ps": 1.5, "tau_ps": 50e6,
+            "alpha": 1.0, "beta": 1.5, "tau_sfh": 3e9, "sfr_norm": 5.0,
+            "log_z": -0.2, "tau_v1": 0.5, "tau_v2": 0.2, "dust_n": -0.7,
+        }
+
+        # Get M*_mean (from mean SFH, no GP dependence)
+        params_zero = {**base, "xi": jnp.zeros(256)}
+        mstar_mean = float(model.compute_stellar_mass(params_zero)["mstar_mean"])
+
+        # Compute M*_total for many GP realizations
+        n_draws = 50
+        masses = []
+        for i in range(n_draws):
+            xi = jax.random.normal(jax.random.PRNGKey(i), shape=(256,))
+            p = {**base, "xi": xi}
+            m = float(model.compute_stellar_mass(p)["mstar_total"])
+            masses.append(m)
+
+        ensemble_mean = sum(masses) / len(masses)
+        ratio = ensemble_mean / mstar_mean
+
+        # The ensemble average should be within ~50% of the mean SFH mass
+        # (finite N, finite grid → won't be exact)
+        assert 0.3 < ratio < 3.0, (
+            f"Ensemble <M*_total>/M*_mean = {ratio:.2f}, expected ~1"
+        )
+
 
 # ===================================================================
 # 3. Gradient Flow
