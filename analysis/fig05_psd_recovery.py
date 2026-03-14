@@ -85,11 +85,13 @@ def plot_psd_corner(results_phot, results_spec):
                 Z_cumsum = np.cumsum(Z_sorted) / np.sum(Z_sorted)
                 level_68 = Z_sorted[np.searchsorted(Z_cumsum, 0.68)]
                 level_95 = Z_sorted[np.searchsorted(Z_cumsum, 0.95)]
-                ax.contourf(X, Y, Z, levels=[level_95, level_68, Z.max()],
-                            colors=[color], alpha=[0.1, 0.3])
-                ax.contour(X, Y, Z, levels=[level_95, level_68],
-                           colors=[color], linewidths=0.8, alpha=0.7)
-            except np.linalg.LinAlgError:
+                levels = sorted(set([level_95, level_68, Z.max()]))
+                if len(levels) >= 2:
+                    ax.contourf(X, Y, Z, levels=levels,
+                                colors=[color], alpha=[0.1, 0.3][:len(levels)-1])
+                    ax.contour(X, Y, Z, levels=levels[:-1],
+                               colors=[color], linewidths=0.8, alpha=0.7)
+            except (np.linalg.LinAlgError, ValueError):
                 ax.scatter(sigma_samples, tau_samples, s=5, alpha=0.3,
                            color=color, edgecolors="none")
 
