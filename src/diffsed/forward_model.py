@@ -33,7 +33,10 @@ from diffsed.models.observation.spectroscopy import (
     compute_spectrum,
     chebyshev_calibration,
 )
-from diffsed.utils.grid import make_log_age_grid, log_age_to_age_yr, grid_spacing
+from diffsed.utils.grid import (
+    make_log_age_grid, log_age_to_age_yr, grid_spacing,
+    interpolate_to_linear_time,
+)
 from diffsed.utils.cosmology import luminosity_distance
 
 
@@ -257,6 +260,42 @@ class ForwardModel:
             "sfr_full": sfr_full,
             "sfr_mean_on_ssp": sfr_mean_on_ssp,
             "sfr_full_on_ssp": sfr_full_on_ssp,
+        }
+
+    def predict_sfh_for_plot(self, params, n_linear=1000):
+        """Compute SFH on a uniform linear-time grid for plotting.
+
+        The GP lives on a log-age grid (uniform in log10(t)), which creates
+        a visual artifact when plotted vs linear lookback time: the wiggles
+        appear denser at large lookback time (old ages) where grid points
+        are spaced farther apart in linear time. This method resamples
+        to a uniform linear grid, giving visually honest SFH curves.
+
+        Parameters
+        ----------
+        params : dict
+            Model parameters.
+        n_linear : int
+            Number of points in the output linear grid.
+
+        Returns
+        -------
+        dict with keys:
+            "t_gyr": lookback time in Gyr, shape (n_linear,)
+            "sfr_mean": mean SFH on linear grid (Msun/yr)
+            "sfr_full": full SFH including GP on linear grid (Msun/yr)
+        """
+        sfh = self._compute_sfh(params)
+        t_gyr_mean, sfr_mean_lin = interpolate_to_linear_time(
+            self.log_age_grid, sfh["sfr_mean"], n_linear
+        )
+        t_gyr_full, sfr_full_lin = interpolate_to_linear_time(
+            self.log_age_grid, sfh["sfr_full"], n_linear
+        )
+        return {
+            "t_gyr": t_gyr_mean,
+            "sfr_mean": sfr_mean_lin,
+            "sfr_full": sfr_full_lin,
         }
 
     def compute_stellar_mass(self, params):

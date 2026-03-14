@@ -61,14 +61,14 @@ def log_softplus(x: jnp.ndarray) -> jnp.ndarray:
 def to_bounded(u_param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
     """Map unbounded parameter to (lo, hi) via sigmoid.
 
-    Convenience wrapper with default steepness k=0.1, centered at midpoint.
+    Centered at x0=0 so that u=0 maps to the midpoint of (lo, hi).
+    With k=1.0, u in [-3, +3] covers ~95% of the bounded range,
+    matching the scale of standard-normal latent variables.
     """
-    mid = 0.5 * (lo + hi)
-    return sigmoid(u_param, mid, 0.1, lo, hi)
+    return sigmoid(u_param, 0.0, 1.0, lo, hi)
 
 
 @jax.jit
 def to_unbounded(param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
     """Map bounded parameter from (lo, hi) to R."""
-    mid = 0.5 * (lo + hi)
-    return inverse_sigmoid(param, mid, 0.1, lo, hi)
+    return inverse_sigmoid(param, 0.0, 1.0, lo, hi)

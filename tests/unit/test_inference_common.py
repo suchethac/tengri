@@ -109,7 +109,7 @@ class TestUnboundedToPhysical:
         prior = DEFAULT_PRIOR
         # sigma_ps at u=100 should be near upper bound
         assert float(params_p["sigma_ps"]) > 4.9
-        assert float(params_p["sigma_ps"]) < prior.sigma_ps[1]
+        assert float(params_p["sigma_ps"]) <= prior.sigma_ps[1]
 
         # tau_ps at u=-100 should be near lower bound
         assert float(params_p["tau_ps"]) < 2e6
