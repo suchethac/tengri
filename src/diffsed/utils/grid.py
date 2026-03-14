@@ -58,3 +58,37 @@ def log_age_to_age_gyr(log_age_grid: jnp.ndarray) -> jnp.ndarray:
 def grid_spacing(log_age_grid: jnp.ndarray) -> float:
     """Get uniform spacing of the log-age grid (dex)."""
     return float(log_age_grid[1] - log_age_grid[0])
+
+
+def interpolate_to_linear_time(log_age_grid: jnp.ndarray,
+                                values: jnp.ndarray,
+                                n_linear: int = 1000) -> tuple:
+    """Interpolate a quantity from log-age grid to uniform linear time.
+
+    The GP SFH is defined on a log-age grid. When plotted vs linear
+    lookback time, the uneven point spacing creates visual artifacts
+    (more wiggles at old ages). This function resamples to a uniform
+    linear grid for cleaner plotting.
+
+    Parameters
+    ----------
+    log_age_grid : array, shape (n_grid,)
+        Log10(age/yr) grid.
+    values : array, shape (n_grid,)
+        Values on the log-age grid (e.g., SFR).
+    n_linear : int
+        Number of points in the output linear grid.
+
+    Returns
+    -------
+    t_gyr : array, shape (n_linear,)
+        Uniform lookback time grid in Gyr.
+    values_linear : array, shape (n_linear,)
+        Interpolated values on the linear grid.
+    """
+    age_yr_min = 10.0 ** float(log_age_grid[0])
+    age_yr_max = 10.0 ** float(log_age_grid[-1])
+    t_linear_yr = jnp.linspace(age_yr_min, age_yr_max, n_linear)
+    log_t_linear = jnp.log10(t_linear_yr)
+    values_linear = jnp.interp(log_t_linear, log_age_grid, values)
+    return t_linear_yr / 1e9, values_linear
