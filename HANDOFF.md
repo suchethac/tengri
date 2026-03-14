@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-03-13
 **Repo:** `~/Projects/diffsed/`
-**Status:** Core package complete. 108 unit tests passing. Real SSP data downloaded. GP amplitude bug fixed. Tutorial 1 revised with pedagogical figures. Integration tests and Tutorial 2 in progress.
+**Status:** 181 tests (unit+integration). 6 notebooks (T00-T05) all executing. Real SSP data + 55 SVO filters. SED units correct (erg/s/Hz). Stellar mass as derived quantity. IFT tutorial in NB01.
 
 ## SSP Data
 
