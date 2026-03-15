@@ -89,7 +89,7 @@ cells = [
     )
     model = Model(spec, ssp_data, filters=filters)
 
-    key = jax.random.PRNGKey(42)
+    key = jax.random.PRNGKey(2025)  # seed chosen for well-centered truths
     true_params = spec.sample(key)
     mock = model.mock(true_params, snr=20.0, key=key)
 
@@ -130,18 +130,18 @@ cells = [
     - **geoVI** (Frank et al. 2021) — variational inference on a Riemannian
       manifold.  Approximate but scales to very high $D$.
 
-    Both are primary inference methods in `diffsed`. For low-$D$ validation,
-    NUTS can be run separately (see NB03).
+    All three are inference methods in `diffsed`.  We run them all on the
+    parametric model to cross-validate, then overlay the posteriors.
     '''),
 
     # -----------------------------------------------------------------------
-    # Cell 6 — MAP + RT + geoVI fit
+    # Cell 6 — MAP + RT + geoVI + NUTS fit
     # -----------------------------------------------------------------------
     code(r'''
     fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
     t0 = time.perf_counter()
-    result_map = fitter.run("map", n_steps=1000)
+    result_map = fitter.run("map", n_steps=500)
     t_map = time.perf_counter() - t0
     print(f"MAP finished in {t_map:.1f}s")
 
@@ -156,30 +156,71 @@ cells = [
                               n_iterations=10, n_samples=6)
     t_geovi = time.perf_counter() - t0
     print(f"geoVI finished in {t_geovi:.1f}s")
+
+    t0 = time.perf_counter()
+    result_nuts = fitter.run("nuts", init_from=result_map,
+                             n_warmup=200, n_samples=200)
+    t_nuts = time.perf_counter() - t0
+    print(f"NUTS finished in {t_nuts:.1f}s")
     '''),
 
     # -----------------------------------------------------------------------
-    # Cell 7 — SFH + corner (parametric)
+    # Cell 7 — SFH recovery + derived quantities
     # -----------------------------------------------------------------------
     code(r'''
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
+    import numpy as np
+    # --- SFH recovery: RT + geoVI + NUTS overlaid ---
+    fig, axes = plt.subplots(1, 2, figsize=(14, 4.5))
 
     ax_sfh = axes[0]
     model.plot_sfh_posterior(result_rt, true_params=true_params,
                             color=COLORS["rt"], label="Ray Tracing", ax=ax_sfh)
     model.plot_sfh_posterior(result_geovi, true_params=true_params,
                             color=COLORS["geovi"], label="geoVI", ax=ax_sfh)
+    model.plot_sfh_posterior(result_nuts, true_params=true_params,
+                            color=COLORS["nuts"], label="NUTS", ax=ax_sfh)
     ax_sfh.set_title("SFH Recovery — Parametric")
-    ax_sfh.legend()
+    ax_sfh.legend(fontsize=9)
 
+    # --- Derived quantities ---
+    ax_der = axes[1]
+    # Truth
+    sfh_truth = model.predict_sfh(true_params)
+    derived_truth = model.predict_derived(true_params)
+
+    # Posterior derived for RT
+    derived_rt = result_rt.derived
+    derived_geovi = result_geovi.derived
+
+    qty_names = ["stellar_mass", "sfr_100myr"]
+    qty_labels = [r"$\log M_*/M_\odot$", r"$\log$ SFR$_{100}$"]
+
+    for i, (qty, qlabel) in enumerate(zip(qty_names, qty_labels)):
+        y_offset = i * 2.5
+        # RT posterior
+        vals_rt = np.log10(np.clip(np.array(derived_rt[qty]), 1e-30, None))
+        ax_der.violinplot([vals_rt], positions=[y_offset], vert=False,
+                          showmedians=True, widths=0.8)
+        # Truth
+        truth_val = float(np.log10(np.clip(derived_truth[qty], 1e-30, None)))
+        ax_der.axvline(truth_val, color=COLORS["truth"], lw=2, ls="--")
+        ax_der.text(ax_der.get_xlim()[0], y_offset + 0.6, qlabel, fontsize=10)
+
+    ax_der.set_xlabel("log value")
+    ax_der.set_title("Derived Quantities (RT)")
+    ax_der.set_yticks([])
+
+    plt.tight_layout()
+    plt.show()
+
+    # --- Corner plot: all three samplers overlaid ---
     from _plot_style import plot_corner_comparison
     plot_corner_comparison(
-        [result_rt, result_geovi],
-        ["Ray Tracing", "geoVI"],
-        colors=[COLORS["rt"], COLORS["geovi"]],
+        [result_rt, result_geovi, result_nuts],
+        ["Ray Tracing", "geoVI", "NUTS"],
+        colors=[COLORS["rt"], COLORS["geovi"], COLORS["nuts"]],
         truths=true_params,
     )
-
     plt.show()
     '''),
 

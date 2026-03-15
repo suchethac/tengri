@@ -107,6 +107,10 @@ cells = [
     import matplotlib.pyplot as plt
     from matplotlib import colormaps
 
+    import sys; sys.path.insert(0, ".")
+    from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
+    setup_style()
+
     from diffsed import (
         Model, ParamSpec, Uniform, Fixed, Fitter,
         HierarchicalFitter, HierarchicalResult,
@@ -121,14 +125,15 @@ cells = [
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 
     # Model factory for hierarchical fitting
-    def model_factory():
+    # HierarchicalFitter calls model_factory(psd_sigma, psd_tau_myr)
+    def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         spec = ParamSpec(
             sfh_alpha=Uniform(0.5, 3.0),
             sfh_beta=Uniform(0.5, 3.0),
             sfh_tau_peak_gyr=Uniform(0.5, 13.0),
             sfh_peak_sfr=Uniform(0.1, 100.0),
-            psd_sigma=Uniform(0.1, 4.0),
-            psd_tau_myr=Uniform(1.0, 300.0),
+            psd_sigma=Fixed(psd_sigma),
+            psd_tau_myr=Fixed(psd_tau_myr),
             met_logzsol=Uniform(-2.0, 0.5),
             dust_tau_bc=Uniform(0.0, 2.0),
             dust_tau_diff=Uniform(0.0, 2.0),
@@ -139,7 +144,7 @@ cells = [
         )
         return Model(spec, ssp_data, filters=filters)
 
-    model = model_factory()
+    model = model_factory(1.5, 50.0)
     print(f"Per-galaxy dimensionality: D = {model.spec.n_free} physical + 128 GP latents")
     '''),
 
@@ -161,7 +166,7 @@ cells = [
         # Override PSD params to be shared across the population
         params = {**params, "psd_sigma": TRUE_SIGMA, "psd_tau_myr": TRUE_TAU}
         mock = model.mock(params, snr=20.0, key=jax.random.fold_in(k, 1))
-        galaxies.append({"flux": mock.flux_obs, "noise": mock.noise})
+        galaxies.append({"flux_obs": mock.flux_obs, "noise": mock.noise})
         mock_params_list.append(params)
 
     print(f"Generated {N_GAL} mock galaxies")
@@ -193,7 +198,7 @@ cells = [
     gr_colors = []
     ri_colors = []
     for i in range(N_GAL):
-        flux = np.array(galaxies[i]["flux"])
+        flux = np.array(galaxies[i]["flux_obs"])
         # SDSS bands: u, g, r, i, z → indices 0, 1, 2, 3, 4
         # AB magnitudes: m = -2.5 * log10(flux) + const (const cancels in colors)
         mag = -2.5 * np.log10(np.clip(flux, 1e-30, None))
@@ -237,15 +242,20 @@ cells = [
 
     for i in range(N_GAL):
         k = jax.random.fold_in(key, 1000 + i)
-        fitter_i = Fitter(model, galaxies[i]["flux"], galaxies[i]["noise"],
+        fitter_i = Fitter(model, galaxies[i]["flux_obs"], galaxies[i]["noise"],
                           data_type="photometry")
         result_i = fitter_i.run("map", n_steps=1000, key=k)
         summary_i = result_i.summary()
-        individual_sigmas.append(summary_i["psd_sigma"])
-        individual_taus.append(summary_i["psd_tau_myr"])
+        # summary_i[param] is a dict: {"value": ...} for MAP, {"median": ..., "lo_68": ..., "hi_68": ...} for sampling
+        def _get_val(d):
+            return d.get("median", d.get("value", 0))
+        sig_val = _get_val(summary_i["psd_sigma"])
+        tau_val = _get_val(summary_i["psd_tau_myr"])
+        individual_sigmas.append(sig_val)
+        individual_taus.append(tau_val)
         if i < 3:
-            print(f"Galaxy {i}: sigma={summary_i['psd_sigma'].get('median', summary_i['psd_sigma'].get('value', 0)):.2f}, "
-                  f"tau={summary_i['psd_tau_myr'].get('median', summary_i['psd_tau_myr'].get('value', 0)):.1f} Myr, "
+            print(f"Galaxy {i}: sigma={sig_val:.2f}, "
+                  f"tau={tau_val:.1f} Myr, "
                   f"loss={float(result_i.loss_history[-1]):.2f}")
 
     individual_sigmas = np.array(individual_sigmas)
@@ -393,7 +403,12 @@ cells = [
             ind_samples = result_cfm.individual_samples[idx]
             n_draws = min(50, len(list(ind_samples.values())[0]))
             for k_idx in range(n_draws):
-                draw = {name: float(arr[k_idx]) for name, arr in ind_samples.items()}
+                draw = {}
+                for name, arr in ind_samples.items():
+                    if name == "psd_xi":
+                        draw[name] = arr[k_idx]  # keep as array
+                    else:
+                        draw[name] = float(arr[k_idx])
                 sfh_draw = model.predict_sfh(draw)
                 sfr_draws.append(sfh_draw["sfr_mean"])
             sfr_draws = np.array(sfr_draws)
@@ -549,7 +564,7 @@ cells = [
                       "psd_sigma": config["psd_sigma"],
                       "psd_tau_myr": config["psd_tau_myr"]}
             mock = model.mock(params, snr=20.0, key=jax.random.fold_in(k, 1))
-            gals.append({"flux": mock.flux_obs, "noise": mock.noise})
+            gals.append({"flux_obs": mock.flux_obs, "noise": mock.noise})
             pars.append(params)
         pop_galaxies[pop_name] = gals
         pop_params[pop_name] = pars

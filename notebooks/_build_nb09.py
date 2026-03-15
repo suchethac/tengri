@@ -86,6 +86,10 @@ cells = [
     import matplotlib.pyplot as plt
     import numpy as np
 
+    import sys; sys.path.insert(0, ".")
+    from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
+    setup_style()
+
     from diffsed import (
         Model, ParamSpec, Uniform, Gaussian, LogUniform, LogNormal,
         StudentT, Fixed, Fitter, load_ssp_data, load_filter_set,
@@ -101,10 +105,12 @@ cells = [
     from diffsed.utils.grid import make_log_age_grid
 
     ssp_data = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-    filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    # load_filter_set returns a 3-tuple: (waves, trans, filter_curves)
+    filter_waves, filter_trans, filter_curves = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    filters = (filter_waves, filter_trans, filter_curves)
     print(f"SSP grid: {ssp_data.ssp_lgmet.shape[0]} metallicities, "
           f"{ssp_data.ssp_lg_age_gyr.shape[0]} ages")
-    print(f"Filters: {list(filters.keys())}")
+    print(f"Filters: {[fc.name for fc in filter_curves]}")
     '''),
 
     # -----------------------------------------------------------------------
@@ -500,15 +506,15 @@ cells = [
 
     mock = model.mock(true_params, snr=20.0, key=key)
     fitter = Fitter(model, mock.flux_obs, mock.noise,
-                    data_type="photometry", psd_model=matern_15)
+                    data_type="photometry")
 
     result_map = fitter.run("map", n_steps=500)
     result_rt = fitter.run("raytrace", init_from=result_map,
                            n_burnin=50, n_steps=200, step_size=0.01)
 
     # Corner plot of physical params
-    fig_corner = result_rt.plot_corner(truths=true_params, color="C0",
-                                       label="Matern $\\\\nu$=1.5")
+    fig_corner = safe_corner(result_rt, truths=true_params, color="C0",
+                             label="Matern $\\\\nu$=1.5")
     plt.show()
 
     print("Custom PSD integrates seamlessly -- same loss, same samplers.")
@@ -730,21 +736,22 @@ cells = [
     # -----------------------------------------------------------------------
     code('''
     # Inspect the SDSS filter set
-    print(f"Filter set: {len(filters)} bands")
+    # filter_curves is a list of FilterCurve NamedTuples with .wave, .trans, .name
+    print(f"Filter set: {len(filter_curves)} bands")
     print(f"{'Band':10s}  {'Wave range':>20s}  {'Effective wave':>15s}")
     print("-" * 50)
-    for name, filt in filters.items():
-        wave_lo = float(filt.wave[filt.transmission > 0.01 * filt.transmission.max()].min())
-        wave_hi = float(filt.wave[filt.transmission > 0.01 * filt.transmission.max()].max())
-        print(f"  {name:10s}  {wave_lo:8.0f} -- {wave_hi:6.0f} A  "
-              f"{float(float(jnp.sum(filt.wave * filt.trans) / jnp.sum(filt.trans))):12.0f} A")
+    for filt in filter_curves:
+        wave_lo = float(filt.wave[filt.trans > 0.01 * filt.trans.max()].min())
+        wave_hi = float(filt.wave[filt.trans > 0.01 * filt.trans.max()].max())
+        print(f"  {filt.name:10s}  {wave_lo:8.0f} -- {wave_hi:6.0f} A  "
+              f"{float(jnp.sum(filt.wave * filt.trans) / jnp.sum(filt.trans)):12.0f} A")
 
     # Plot filter curves
     fig, ax = plt.subplots(figsize=(9, 3.5))
     colors_band = ["C4", "C0", "C2", "C1", "C3"]
-    for (name, filt), color in zip(filters.items(), colors_band):
-        ax.fill_between(filt.wave, filt.transmission, alpha=0.3, color=color)
-        ax.plot(filt.wave, filt.transmission, color=color, lw=1.2, label=name)
+    for filt, color in zip(filter_curves, colors_band):
+        ax.fill_between(filt.wave, filt.trans, alpha=0.3, color=color)
+        ax.plot(filt.wave, filt.trans, color=color, lw=1.2, label=filt.name)
 
     ax.set_xlabel("Wavelength [\\u00c5]")
     ax.set_ylabel("Transmission")
@@ -820,9 +827,9 @@ cells = [
                               n_burnin=100, n_steps=300, step_size=0.01)
 
     # PSD parameter recovery
-    fig_psd = rt_free.plot_corner(params=["psd_sigma", "psd_tau_myr"],
-                                  truths=true_free, color="C0",
-                                  label="Ray Tracing")
+    fig_psd = safe_corner(rt_free, params=["psd_sigma", "psd_tau_myr"],
+                          truths=true_free, color="C0",
+                          label="Ray Tracing")
     plt.suptitle("PSD Parameter Recovery (Free $\\\\sigma$, $\\\\tau$)", y=1.02)
     plt.show()
 

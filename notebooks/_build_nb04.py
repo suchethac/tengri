@@ -48,6 +48,10 @@ cells = [
     import matplotlib.pyplot as plt
     import numpy as np
 
+    import sys; sys.path.insert(0, ".")
+    from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
+    setup_style()
+
     from diffsed import (
         Model, ParamSpec, Uniform, Gaussian, LogUniform, Fixed, Fitter,
         load_ssp_data, load_filter_set,
@@ -122,31 +126,28 @@ cells = [
                          data_type="photometry")
 
     t0 = time.perf_counter()
-    result_map_param = fitter_phot.run("map", n_steps=1000)
+    result_map_param = fitter_phot.run("map", n_steps=500)
     print(f"MAP finished in {time.perf_counter() - t0:.1f}s")
 
     t0 = time.perf_counter()
-    result_nuts_phot = fitter_phot.run("nuts", init_from=result_map_param,
-                                       n_warmup=500, n_samples=500)
-    print(f"NUTS finished in {time.perf_counter() - t0:.1f}s")
+    result_rt_phot = fitter_phot.run("raytrace", init_from=result_map_param,
+                                       n_burnin=100, n_steps=300)
+    print(f"RT finished in {time.perf_counter() - t0:.1f}s")
 
     # --- Corner plot + SFH ---
-    try:
-        fig_corner = result_nuts_phot.plot_corner(truths=true_param, color="C0",
-                                              label="NUTS (phot)")
-    except (ValueError, np.linalg.LinAlgError):
-        print("Corner plot skipped (degenerate posterior)")
+    fig_corner = safe_corner(result_rt_phot, truths=true_param, color="C0",
+                             label="RT (phot)")
 
     fig_sfh, ax_sfh = plt.subplots(figsize=(7, 4))
-    model_param.plot_sfh_posterior(result_nuts_phot, true_params=true_param,
-                                  color="C0", label="NUTS", ax=ax_sfh)
+    model_param.plot_sfh_posterior(result_rt_phot, true_params=true_param,
+                                  color="C0", label="Ray Tracing", ax=ax_sfh)
     ax_sfh.set_title("SFH Recovery \\u2014 Parametric (Photometry)")
     ax_sfh.legend()
     plt.tight_layout()
     plt.show()
 
     # --- Check coverage ---
-    samples = result_nuts_phot.samples
+    samples = result_rt_phot.samples
     n_recovered = 0
     for name in spec_param.free_params:
         lo, hi = np.percentile(samples[name], [16, 84])
@@ -169,26 +170,25 @@ cells = [
     key_spec = jax.random.PRNGKey(99)
     spec_obs = spec_true + noise_spec * jax.random.normal(key_spec, spec_true.shape)
 
-    fitter_spec = Fitter(model_param, spec_obs, noise_spec,
-                         model_param._wave_obs = wave_obs
+    model_param._wave_obs = wave_obs
     fitter_spec = Fitter(model_param, spec_obs, noise_spec,
                          data_type="spectroscopy")
 
     t0 = time.perf_counter()
-    result_map_spec = fitter_spec.run("map", n_steps=1000)
+    result_map_spec = fitter_spec.run("map", n_steps=500)
     print(f"MAP (spectroscopy) finished in {time.perf_counter() - t0:.1f}s")
 
     t0 = time.perf_counter()
-    result_nuts_spec = fitter_spec.run("nuts", init_from=result_map_spec,
-                                       n_warmup=500, n_samples=500)
+    result_rt_spec = fitter_spec.run("raytrace", init_from=result_map_spec,
+                                       n_burnin=100, n_steps=300)
     print(f"NUTS (spectroscopy) finished in {time.perf_counter() - t0:.1f}s")
 
-    fig_corner_spec = result_nuts_spec.plot_corner(truths=true_param, color="C1",
-                                                   label="NUTS (spec)")
+    fig_corner_spec = safe_corner(result_rt_spec, truths=true_param, color="C1",
+                                  label="RT (spec)")
 
     fig_sfh_spec, ax_sfh_spec = plt.subplots(figsize=(7, 4))
-    model_param.plot_sfh_posterior(result_nuts_spec, true_params=true_param,
-                                  color="C1", label="NUTS (spec)", ax=ax_sfh_spec)
+    model_param.plot_sfh_posterior(result_rt_spec, true_params=true_param,
+                                  color="C1", label="RT (spec)", ax=ax_sfh_spec)
     ax_sfh_spec.set_title("SFH Recovery \\u2014 Parametric (Spectroscopy)")
     ax_sfh_spec.legend()
     plt.tight_layout()
@@ -214,18 +214,19 @@ cells = [
     # -----------------------------------------------------------------------
     code(r'''
     # Overlay corner plots: photometry (blue) vs spectroscopy (orange)
-    fig_compare = result_nuts_phot.plot_corner(truths=true_param, color="C0",
-                                               label="Photometry")
-    result_nuts_spec.plot_corner(truths=true_param, color="C1",
-                                label="Spectroscopy", fig=fig_compare)
+    fig_compare = safe_corner(result_rt_phot, truths=true_param, color="C0",
+                              label="Photometry")
+    if fig_compare is not None:
+        safe_corner(result_rt_spec, truths=true_param, color="C1",
+                    label="Spectroscopy", fig=fig_compare)
     plt.show()
 
     # --- 68% CI width comparison ---
     print(f"{'Parameter':20s}  {'Phot CI':>10s}  {'Spec CI':>10s}  {'Ratio':>8s}")
     print("-" * 52)
     for name in spec_param.free_params:
-        lo_p, hi_p = np.percentile(result_nuts_phot.samples[name], [16, 84])
-        lo_s, hi_s = np.percentile(result_nuts_spec.samples[name], [16, 84])
+        lo_p, hi_p = np.percentile(result_rt_phot.samples[name], [16, 84])
+        lo_s, hi_s = np.percentile(result_rt_spec.samples[name], [16, 84])
         w_p = hi_p - lo_p
         w_s = hi_s - lo_s
         ratio = w_p / w_s if w_s > 0 else float("inf")
@@ -302,7 +303,7 @@ cells = [
 
     # MAP initialisation
     t0 = time.perf_counter()
-    result_map_stoch = fitter_stoch.run("map", n_steps=1000)
+    result_map_stoch = fitter_stoch.run("map", n_steps=500)
     print(f"MAP finished in {time.perf_counter() - t0:.1f}s")
 
     # Ray Tracing
@@ -336,10 +337,11 @@ cells = [
     plt.show()
 
     # Corner overlay (physical params only)
-    fig_corner_stoch = result_rt.plot_corner(truths=true_stoch, color="C0",
-                                             label="Ray Tracing")
-    result_geovi.plot_corner(truths=true_stoch, color="C1",
-                             label="geoVI", fig=fig_corner_stoch)
+    fig_corner_stoch = safe_corner(result_rt, truths=true_stoch, color="C0",
+                                   label="Ray Tracing")
+    if fig_corner_stoch is not None:
+        safe_corner(result_geovi, truths=true_stoch, color="C1",
+                    label="geoVI", fig=fig_corner_stoch)
     plt.show()
     '''),
 
@@ -368,10 +370,11 @@ cells = [
     psd_names = ["psd_sigma", "psd_tau_myr"]
     psd_truths = {k: true_stoch[k] for k in psd_names}
 
-    fig_psd = result_rt.plot_corner(params=psd_names, truths=psd_truths,
-                                    color="C0", label="Ray Tracing")
-    result_geovi.plot_corner(params=psd_names, truths=psd_truths,
-                             color="C1", label="geoVI", fig=fig_psd)
+    fig_psd = safe_corner(result_rt, params=psd_names, truths=psd_truths,
+                          color="C0", label="Ray Tracing")
+    if fig_psd is not None:
+        safe_corner(result_geovi, params=psd_names, truths=psd_truths,
+                    color="C1", label="geoVI", fig=fig_psd)
     plt.suptitle("PSD Parameter Recovery (Single Galaxy)", y=1.02)
     plt.show()
 
@@ -472,21 +475,21 @@ cells = [
     # Fit with parametric (wrong!) model
     fitter_wrong = Fitter(model_param, mock_bursty.flux_obs, mock_bursty.noise,
                           data_type="photometry")
-    map_wrong = fitter_wrong.run("map", n_steps=1000)
-    nuts_wrong = fitter_wrong.run("nuts", init_from=map_wrong,
-                                  n_warmup=500, n_samples=500)
+    map_wrong = fitter_wrong.run("map", n_steps=500)
+    rt_wrong = fitter_wrong.run("raytrace", init_from=map_wrong,
+                                  n_burnin=100, n_steps=200)
 
     # Fit with stochastic (correct) model
     fitter_right = Fitter(model_stoch, mock_bursty.flux_obs, mock_bursty.noise,
                           data_type="photometry")
-    map_right = fitter_right.run("map", n_steps=1000)
+    map_right = fitter_right.run("map", n_steps=500)
     rt_right = fitter_right.run("raytrace", init_from=map_right,
                                 n_burnin=100, n_steps=300, step_size=0.01)
 
     # Compare SFH recovery
     fig, axes = plt.subplots(1, 2, figsize=(14, 4.5), sharey=True)
 
-    model_param.plot_sfh_posterior(nuts_wrong, true_params=true_bursty,
+    model_param.plot_sfh_posterior(rt_wrong, true_params=true_bursty,
                                   color="C3", label="Parametric (wrong model)",
                                   ax=axes[0])
     axes[0].set_title("Parametric Model \\u2192 Misses Burst")
@@ -502,7 +505,7 @@ cells = [
     plt.show()
 
     # Compare derived quantities
-    derived_wrong = nuts_wrong.derived
+    derived_wrong = rt_wrong.derived
     derived_right = rt_right.derived
     sfh_truth = model_stoch.predict_sfh(true_bursty)
 
@@ -601,7 +604,7 @@ cells = [
                   f"[{lo:9.4g}, {hi:9.4g}]  {covered:>8s}")
 
     # Parametric model
-    derived_summary(result_nuts_phot, model_param, true_param,
+    derived_summary(result_rt_phot, model_param, true_param,
                     "Parametric Model (NUTS, photometry)")
 
     # Stochastic model
