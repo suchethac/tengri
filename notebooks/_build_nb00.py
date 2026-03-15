@@ -116,19 +116,26 @@ cells = [
     '''),
 
     # -----------------------------------------------------------------------
-    # Cell 5 — MAP + NUTS explanation
+    # Cell 5 — MAP + RT + geoVI explanation
     # -----------------------------------------------------------------------
     md('''
-    ### MAP initialisation + NUTS sampling
+    ### MAP initialisation + Ray Tracing + geoVI
 
-    We first run **MAP** (Maximum A Posteriori) to find a good starting point.
-    This takes $\\lesssim 1$ second.  Then we use **NUTS** — the gold-standard
-    gradient-based MCMC sampler — to explore the full posterior.  For a 7-D
-    problem, NUTS converges in $\\sim 30$ seconds.
+    We first run **MAP** (Maximum A Posteriori) to find a good starting point
+    ($\\lesssim 1$ second).  Then we sample the full posterior with two
+    complementary methods:
+
+    - **Ray Tracing** (Behroozi 2025) — exact MCMC via Snell's law optics.
+      Fast, noise-tolerant, works at any dimensionality.
+    - **geoVI** (Frank et al. 2021) — variational inference on a Riemannian
+      manifold.  Approximate but scales to very high $D$.
+
+    Both are primary inference methods in `diffsed`. For low-$D$ validation,
+    NUTS can be run separately (see NB03).
     '''),
 
     # -----------------------------------------------------------------------
-    # Cell 6 — MAP + NUTS fit
+    # Cell 6 — MAP + RT + geoVI fit
     # -----------------------------------------------------------------------
     code(r'''
     fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
@@ -139,10 +146,16 @@ cells = [
     print(f"MAP finished in {t_map:.1f}s")
 
     t0 = time.perf_counter()
-    result_nuts = fitter.run("nuts", init_from=result_map,
-                             n_warmup=500, n_samples=500)
-    t_nuts = time.perf_counter() - t0
-    print(f"NUTS finished in {t_nuts:.1f}s")
+    result_rt = fitter.run("raytrace", init_from=result_map,
+                           n_burnin=100, n_steps=300)
+    t_rt = time.perf_counter() - t0
+    print(f"Ray Tracing finished in {t_rt:.1f}s")
+
+    t0 = time.perf_counter()
+    result_geovi = fitter.run("geovi", init_from=result_map,
+                              n_iterations=10, n_samples=6)
+    t_geovi = time.perf_counter() - t0
+    print(f"geoVI finished in {t_geovi:.1f}s")
     '''),
 
     # -----------------------------------------------------------------------
@@ -152,13 +165,20 @@ cells = [
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 
     ax_sfh = axes[0]
-    model.plot_sfh_posterior(result_nuts, true_params=true_params,
-                            color="C0", label="NUTS", ax=ax_sfh)
+    model.plot_sfh_posterior(result_rt, true_params=true_params,
+                            color=COLORS["rt"], label="Ray Tracing", ax=ax_sfh)
+    model.plot_sfh_posterior(result_geovi, true_params=true_params,
+                            color=COLORS["geovi"], label="geoVI", ax=ax_sfh)
     ax_sfh.set_title("SFH Recovery — Parametric")
     ax_sfh.legend()
 
-    safe_corner(result_nuts, truths=true_params, color=COLORS["nuts"],
-                label="NUTS")
+    from _plot_style import plot_corner_comparison
+    plot_corner_comparison(
+        [result_rt, result_geovi],
+        ["Ray Tracing", "geoVI"],
+        colors=[COLORS["rt"], COLORS["geovi"]],
+        truths=true_params,
+    )
 
     plt.show()
     '''),
