@@ -393,7 +393,13 @@ class Fitter:
         D = len(init_flat)
 
         if step_size is None:
-            step_size = 0.03 * jnp.sqrt(float(D))
+            # Behroozi (2025) recommends 0.03 * sqrt(D), but for
+            # stochastic SFH models the psd_xi variables create a
+            # tighter curvature. Use a smaller default for D > 10.
+            if D <= 10:
+                step_size = 0.03 * jnp.sqrt(float(D))
+            else:
+                step_size = 0.01
 
         def log_prob_flat(position):
             params = unravel_fn(position)
