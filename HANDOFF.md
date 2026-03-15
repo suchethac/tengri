@@ -41,8 +41,9 @@ model.plot_sfh_posterior(posterior, true_params=true_params)  # SFH with 16-84% 
 | `param_spec.py` | ParamSpec: parameter defs, validation, sampling | 28 |
 | `model.py` | Model: forward model, mock generation, plotting | 24 |
 | `fitter.py` | Fitter: MAP (early stopping, optimizer choice), NUTS (target_accept), geoVI (post-optimization sampling), Ray Tracing (Snell's law MCMC) | 8 |
-| `raytrace_jax.py` | Ray Tracing Sampler (Behroozi 2025) - Snell's law MCMC | TBD |
-| `posterior.py` | Posterior: summary, resample, plot_corner, to_arviz, to_param_spec | 9 |
+| `raytrace_jax.py` | Ray Tracing Sampler (Behroozi 2025) - Snell's law MCMC | 6 |
+| `posterior.py` | Posterior: summary, resample, plot_corner, to_arviz, to_param_spec, autocorrelation, ESS | 9 |
+| `hierarchical.py` | HierarchicalFitter: population-level PSD recovery via shared (σ,τ) across N galaxies | TBD |
 
 ## Inference Performance
 
@@ -95,7 +96,7 @@ model.plot_sfh_posterior(posterior, true_params=true_params)  # SFH with 16-84% 
 
 ### Code Improvements
 - [ ] **Internal param rename**: `sigma_ps` → `psd_sigma` etc. (~20 files, 181 tests)
-- [ ] **Hierarchical inference**: Population-level PSD parameter recovery (Paper I Test 5-7)
+- [x] **Hierarchical inference**: `HierarchicalFitter` for population-level PSD parameter recovery (Paper I Tests 5-7). Supports geoVI and Ray Tracing.
 
 ### Paper Analysis (see docs/paper_analysis_plan.md)
 - [ ] **Phase 1**: Individual SFH recovery — 100 mocks × 4 PSD regimes × geoVI at z=0.1

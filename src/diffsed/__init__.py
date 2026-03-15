@@ -28,6 +28,7 @@ from diffsed.model import Model
 from diffsed.fitter import Fitter
 from diffsed.posterior import Posterior
 from diffsed.raytrace_jax import sample_raytrace
+from diffsed.hierarchical import HierarchicalFitter, HierarchicalResult
 from diffsed.models.observation.filters import load_filter_set
 
 __all__ = [
@@ -42,6 +43,9 @@ __all__ = [
     "Fixed",
     # Samplers
     "sample_raytrace",
+    # Hierarchical
+    "HierarchicalFitter",
+    "HierarchicalResult",
     # Data loading
     "load_ssp_data",
     "load_filter_set",
