@@ -423,6 +423,115 @@ This maps directly to the NIFTy CorrelatedFieldMaker convention where `fluctuati
 
 ---
 
+## Custom Transforms and Flexibility
+
+### Any-prior protocol
+
+Users can provide ANY prior by implementing the `Distribution` protocol — just two methods:
+
+```python
+class MyCustomPrior(Distribution):
+    """Example: truncated Cauchy prior."""
+
+    def __init__(self, loc, scale, lo, hi):
+        self.loc, self.scale = loc, scale
+        self.lo, self.hi = lo, hi
+        self.bounds = (lo, hi)
+        self.is_fixed = False
+
+    def unstandardize(self, xi):
+        """ξ ~ N(0,1) → θ in physical space.
+
+        This is the ONLY method needed for inference.
+        Must be JAX-differentiable.
+        """
+        # Cauchy quantile function applied to Gaussian CDF
+        u = jax.nn.sigmoid(xi)  # (0, 1)
+        theta = self.loc + self.scale * jnp.tan(jnp.pi * (u - 0.5))
+        return jnp.clip(theta, self.lo, self.hi)
+
+    def sample(self, key):
+        """Draw from the prior. Used for mock generation."""
+        xi = jax.random.normal(key)
+        return self.unstandardize(xi)
+
+    def log_prob(self, x):
+        """Log probability. Used for diagnostics only (not inference)."""
+        return -jnp.log(self.scale * (1 + ((x - self.loc) / self.scale)**2))
+
+# Usage — works with any Distribution:
+spec = ParamSpec(
+    sfh_alpha=MyCustomPrior(1.5, 0.5, 0.5, 3.0),  # custom prior
+    dust_tau_bc=Uniform(0.0, 2.0),                  # built-in
+    met_logzsol=Gaussian(-0.5, 0.3, lo=-2.0, hi=0.0),  # built-in
+    ...
+)
+```
+
+The key contract: **`unstandardize(xi)` must be a differentiable JAX function** that maps N(0,1) → physical parameter space. That's it. The loss function doesn't need to know what the transform is.
+
+### What about non-standardizable priors?
+
+Some priors can't be exactly represented as transforms of N(0,1). For example:
+- A delta-function mixture (bimodal)
+- A prior with discontinuities
+- A prior known only as samples (empirical)
+
+For these, the user can still provide an approximate `unstandardize` that captures the main features, or use a more flexible approach:
+
+```python
+class EmpiricalPrior(Distribution):
+    """Prior from samples — uses quantile interpolation."""
+
+    def __init__(self, samples, lo, hi):
+        self.quantiles = jnp.sort(jnp.array(samples))
+        self.lo, self.hi = lo, hi
+
+    def unstandardize(self, xi):
+        u = jax.nn.sigmoid(xi)  # map to (0,1)
+        # Linear interpolation through empirical quantiles
+        idx = u * (len(self.quantiles) - 1)
+        idx_lo = jnp.floor(idx).astype(int)
+        frac = idx - idx_lo
+        return self.quantiles[idx_lo] * (1 - frac) + self.quantiles[idx_lo + 1] * frac
+```
+
+### SED model flexibility guarantee
+
+The standardized approach does NOT constrain the SED model in any way:
+
+1. **Any SFH parametrization** — the mean SFH (DPL, delayed-τ, non-parametric bins) is controlled by physical params with arbitrary priors
+2. **Any dust model** — Charlot & Fall, Calzetti, or custom, parametrized however the user wants
+3. **Any PSD model** — DRW, Matérn, broken power law, or user-defined P(ω). The correlated field generation `x = IFFT(√P · ξ)` works with any PSD function
+4. **Any SSP library** — FSPS, BPASS, BC03, ProGeny. Just load different HDF5 templates
+5. **Any observation type** — photometry, spectroscopy, joint. The `data_type` parameter selects the forward model branch
+6. **Free or fixed anything** — any parameter can be free (with any prior) or fixed. PSD params, redshift, metallicity — all treated uniformly
+
+The standardized model is a **wrapper** around the existing Model, not a replacement. It adds the ξ → params mapping on top. The Model's predict_photometry / predict_spectrum / predict_sfh methods are unchanged.
+
+### Composable transforms
+
+For power users, transforms can be composed:
+
+```python
+# Hierarchical: population mean + per-galaxy scatter
+class HierarchicalGaussian(Distribution):
+    """θ_i = μ + σ · ξ_i, where μ and σ are also free."""
+
+    def __init__(self, mu_prior, sigma_prior):
+        self.mu_prior = mu_prior      # Distribution for population mean
+        self.sigma_prior = sigma_prior  # Distribution for population scatter
+
+    def unstandardize(self, xi_dict):
+        mu = self.mu_prior.unstandardize(xi_dict["mu"])
+        sigma = self.sigma_prior.unstandardize(xi_dict["sigma"])
+        return mu + sigma * xi_dict["individual"]
+```
+
+This enables fully hierarchical models where the prior itself has free parameters — going beyond the simple shared-PSD case.
+
+---
+
 ## Why This Is Elegant
 
 1. **One loss function** for everything: individual, hierarchical, any sampler

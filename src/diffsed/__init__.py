@@ -22,7 +22,7 @@ from diffsed.models.sps.dsps_wrapper import load_ssp_data, SSPData
 from diffsed.forward_model import ForwardModel, ModelConfig, generate_mock
 
 # --- New high-level API ---
-from diffsed.distributions import Uniform, Gaussian, LogUniform, Fixed
+from diffsed.distributions import Uniform, Gaussian, LogUniform, LogNormal, StudentT, Fixed
 from diffsed.param_spec import ParamSpec
 from diffsed.model import Model
 from diffsed.fitter import Fitter
@@ -40,6 +40,8 @@ __all__ = [
     "Uniform",
     "Gaussian",
     "LogUniform",
+    "LogNormal",
+    "StudentT",
     "Fixed",
     # Samplers
     "sample_raytrace",
