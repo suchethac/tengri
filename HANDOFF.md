@@ -8,7 +8,24 @@
 
 ## Executive Summary
 
-**What diffsed is:** A fully differentiable galaxy SED fitting code using JAX. Treats the star formation history as an IFT correlated field (GP with PSD-governed correlation structure) on top of a smooth mean SFH. End-to-end differentiable: PSD params → GP latent field → SFH → DSPS SPS → dust → photometry/spectra.
+**What it is:** A fully differentiable galaxy SED fitting code using JAX. Treats the star formation history as an IFT correlated field (GP with PSD-governed correlation structure) on top of a smooth mean SFH. End-to-end differentiable: PSD params → GP latent field → SFH → DSPS SPS → dust → photometry/spectra.
+
+**Code name:** Currently `diffsed` (working name). Final name TBD — will be renamed before public release.
+
+**Locations:**
+- Code: `~/Projects/diffsed/` (this repo)
+- Paper draft: `~/writing-workspace/projects/differentiable_psd_sed_fitting/`
+- SSP data: `~/Projects/diffsed/data/` (not in git, 64 MB HDF5 files)
+
+**Environment:**
+```bash
+cd ~/Projects/diffsed
+source .venv/bin/activate          # Python 3.12 venv
+pytest tests/ -q                    # 302 tests pass
+jupyter lab notebooks/              # 6 tutorial notebooks
+```
+
+**Key dependencies:** JAX ≥0.4.20, DSPS ≥0.3, NIFTy8.re ≥8.5, BlackJAX ≥1.3, optax ≥0.2, h5py, matplotlib, scipy
 
 **What's done:**
 - Complete code with 4 inference methods (MAP, Ray Tracing Sampler, NUTS, geoVI), 302 tests passing

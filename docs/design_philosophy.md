@@ -1,8 +1,15 @@
 # diffsed: Design Philosophy and Architecture
 
+> **Code name:** `diffsed` is a working name. The final public release name is TBD.
+
 ## Overview
 
 diffsed is a fully differentiable galaxy SED fitting code built on JAX. It models star formation histories (SFHs) as continuous correlated random fields using Information Field Theory (IFT), enabling gradient-based inference that is 10-100x faster than traditional gradient-free samplers.
+
+The durable contribution is not any particular SFH parametrization, dust model, or inference algorithm — those are modular and configurable. It is the combination of:
+1. A **correlated-field SFH prior** (PSD → GP → log-SFR fluctuations) that encodes physically motivated temporal correlations
+2. A **fully differentiable forward model** from latent variables through SPS to observed photometry/spectra
+3. A **multi-method inference pipeline** where Ray Tracing and geoVI serve as equal-priority primary samplers, NUTS validates, and MAP initializes
 
 ## Core Principle: End-to-End Differentiability
 
@@ -152,7 +159,18 @@ In addition to MAP, NUTS, and geoVI, diffsed integrates the Ray Tracing Sampler 
 - **Barrier crossing:** Rays can traverse low-likelihood valleys between modes because refraction (unlike Hamiltonian dynamics) does not conserve an energy that would trap the sampler in a single basin.
 - **Integration into Fitter:** The sampler is available as `fitter.run("raytrace", init_from=result_map, n_steps=500)`. It accepts MAP results as initialization and returns a `Posterior` object compatible with all downstream analysis (summary, corner plots, ArviZ export).
 
-The ray tracing sampler is recommended as an intermediate option between MAP point estimates and full MCMC (NUTS). It provides approximate posterior exploration at a fraction of the NUTS cost, particularly useful for high-dimensional stochastic SFH models where NUTS becomes expensive.
+The Ray Tracing Sampler and geoVI are **equal-priority** primary inference methods. Ray Tracing provides exact, asymptotically unbiased posteriors and handles stochastic gradients well; geoVI provides fast approximate posteriors and scales to hierarchical problems with >10^5 parameters. NUTS serves as the gold-standard validation tool for low-dimensional problems.
+
+## Hierarchical PSD Inference
+
+The defining science application is **population-level PSD parameter recovery**: sharing (σ_PSD, τ_PSD) across N galaxies while each galaxy retains its own latent field ξ_i and physical parameters. The total dimensionality is 2 + N × (n_grid + n_phys).
+
+**Current implementation:** `HierarchicalFitter` flattens all parameters and runs RT or geoVI on the joint vector, with per-galaxy MAP initialization.
+
+**Planned improvement:** Use NIFTy's `CorrelatedFieldMaker` to learn PSD hyperparameters jointly inside the generative model, as demonstrated in production IFT applications (Eberle+2025, Roth+2024, Terveer+2026). The PSD shape should be part of the generative model with its own learned hyperparameters, not external flat parameters. Key practices from the literature:
+- 8 samples (4 antithetic pairs) per KL iteration, not 80
+- Convergence criterion: mean squared weighted deviation < 1.05 for 3 consecutive iterations
+- Major/minor cycle scheme for approximate + exact likelihood correction
 
 ## Stochastic vs Parametric Mode
 
