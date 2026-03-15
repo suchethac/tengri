@@ -30,6 +30,9 @@ pytest tests/unit/test_raytrace.py -v
 python analysis/fig04_sfh_recovery.py --n-mocks 3 --method raytrace
 python analysis/fig07_speed_benchmarks.py --n-repeats 2
 
+# Notebook sync (jupytext percent-format .py ↔ .ipynb)
+cd notebooks && jupytext --sync *.py   # regenerate .ipynb from .py
+
 # Compile paper
 cd ~/writing-workspace/projects/differentiable_psd_sed_fitting
 latexmk -pdf 0-ms.tex
@@ -102,7 +105,8 @@ Ray Tracing and geoVI are **equal-priority** primary methods. NUTS validates. MA
 - NIFTy geoVI: use 4-12 samples per KL iteration, not 80 (literature best practice)
 - SSP metallicity grid is `log10(Z)` absolute, not `log10(Z/Zsun)`. Offset: `LOG10_ZSUN = -1.848`
 - Photometry precomputation auto-activates when redshift fixed + filters present (21.6x speedup)
-- Edit `.ipynb` files via Python JSON manipulation, not text editing
+- Notebooks are jupytext `.py` files (percent format) — edit `.py` directly, never `.ipynb`
+- Sync to `.ipynb`: `cd notebooks && jupytext --sync *.py`
 - `timeout` command doesn't exist on macOS — use Python-level timeouts or background tasks
 - Corner plot overlay: `fig.axes` returns a flat list; reshape to 2D with `np.array(axes).reshape(n, n)`
 

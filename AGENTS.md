@@ -180,6 +180,43 @@ All tests use `jax.config.update("jax_enable_x64", True)` for numerical precisio
 6. **Docstrings**: Numpydoc format with Parameters/Returns sections.
 7. **Type hints**: Use `X | None` (PEP 604), not `Optional[X]`. Ruff enforces this (UP007/RUF013).
 
+## Notebooks
+
+Notebooks are **jupytext percent-format `.py` files** in `notebooks/`. These are the source of truth.
+
+### How to edit a notebook
+
+1. Open the `.py` file with Read/Edit tools — it's plain Python with `# %%` cell markers
+2. Make your changes directly
+3. Run `jupytext --sync notebooks/*.py` to regenerate `.ipynb` if needed
+
+### Cell format
+
+```python
+# %% [markdown]
+# # Section Title
+#
+# Some explanation with $\LaTeX$ math.
+
+# %%
+import jax
+import jax.numpy as jnp
+result = jnp.array([1, 2, 3])
+
+# %% [markdown]
+# Another markdown cell.
+
+# %%
+# Another code cell
+print(result)
+```
+
+### DO NOT
+
+- Edit `.ipynb` files directly (they are gitignored and generated)
+- Use the old `_build_nb*.py` / `_nb_helper.py` system (deleted)
+- Create new notebooks as `.ipynb` — always create as `.py` in percent format
+
 ## What's NOT implemented yet
 
 - NIFTy.re inference wrapper (geoVI/MGVI)

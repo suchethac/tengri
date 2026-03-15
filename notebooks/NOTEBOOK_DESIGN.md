@@ -4,20 +4,38 @@
 
 ## Architecture
 
-Each notebook is generated from a Python build script (`_build_nbXX.py`) using `_nb_helper.py`. The build scripts are the **source of truth** — edit them, not the `.ipynb` files directly. Run the build script to regenerate the notebook.
+Each notebook is a **jupytext percent-format `.py` file** in `notebooks/`. These are the source of truth — edit them directly.
 
+### File format
+
+- `# %%` marks code cell boundaries
+- `# %% [markdown]` marks markdown cells (content prefixed with `# `)
+- LaTeX works naturally: `$\alpha$`, `$$\int$$` (no escaping needed)
+- Files are valid Python scripts (can be run with `python notebooks/00_quickstart.py`)
+
+### Workflow
+
+```bash
+# Edit the .py file (in any editor, IDE, or via AI agent)
+vim notebooks/00_quickstart.py
+
+# Open in Jupyter (jupytext presents it as a notebook)
+jupyter lab notebooks/00_quickstart.py
+
+# Generate .ipynb if needed (e.g., for nbconvert/Sphinx)
+jupytext --to ipynb notebooks/00_quickstart.py
+
+# Sync all paired notebooks
+cd notebooks && jupytext --sync *.py
 ```
-_nb_helper.py         — md(), code(), write_notebook() helpers
-_build_nb00.py        — generates 00_quickstart.ipynb
-_build_nb01.py        — generates 01_the_model.ipynb
-...
-```
 
-## String Escaping Rules
+### Rules for agents
 
-- **Markdown cells**: use `md(r'''...''')` with **single backslash** LaTeX: `$\alpha$`, `$\tau$`
-- **Code cells**: use `code(r'''...''')` with **double backslash** in Python strings: `"$\\alpha$"`, `"$\\tau$"`
-- **Never** use `md('''...''')` or `code('''...''')` (non-raw) — `\t`, `\n`, `\b` will be misinterpreted as escape characters
+1. **Edit `.py` files only** — never edit `.ipynb` files
+2. Code cells: delimited by `# %%`
+3. Markdown cells: delimited by `# %% [markdown]`, each line prefixed with `# `
+4. To add a new cell, insert a `# %%` marker
+5. Keep `_plot_style.py` — it provides `setup_style()`, `COLORS`, `safe_corner`
 
 ## API Patterns (diffsed-specific)
 

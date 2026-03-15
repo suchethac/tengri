@@ -31,6 +31,11 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 
+# Jupytext: .py files are source of truth, .ipynb are generated
+notebooks/*.ipynb
+# Keep executed notebooks with pre-computed outputs
+!notebooks/*_executed.ipynb
+
 # Testing
 .pytest_cache/
 htmlcov/

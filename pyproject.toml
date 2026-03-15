@@ -36,6 +36,7 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "ruff>=0.9",
+    "jupytext>=1.16",
 ]
 docs = [
     "sphinx>=7.0",
@@ -89,3 +90,6 @@ docstring-code-format = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+
+[tool.jupytext]
+formats = "ipynb,py:percent"
