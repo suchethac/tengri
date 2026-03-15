@@ -3,7 +3,31 @@
 **Last updated:** 2026-03-14 (session 3)
 **Repo:** `~/Projects/diffsed/`
 **Paper draft:** `~/writing-workspace/projects/differentiable_psd_sed_fitting/`
-**Status:** 302 tests pass. All 6 notebooks execute. 4 inference methods (MAP, Ray Tracing, NUTS, geoVI). Hierarchical PSD inference implemented. Paper draft complete (20 pages, compiles). 5 paper figures generated.
+
+---
+
+## Executive Summary
+
+**What diffsed is:** A fully differentiable galaxy SED fitting code using JAX. Treats the star formation history as an IFT correlated field (GP with PSD-governed correlation structure) on top of a smooth mean SFH. End-to-end differentiable: PSD params → GP latent field → SFH → DSPS SPS → dust → photometry/spectra.
+
+**What's done:**
+- Complete code with 4 inference methods (MAP, Ray Tracing Sampler, NUTS, geoVI), 302 tests passing
+- 6 tutorial notebooks, all executing
+- Paper I draft complete (20 pages, compiles), all sections written
+- 5 of 8 paper figures generated from analysis scripts
+- Hierarchical PSD inference infrastructure implemented
+
+**What the paper needs before submission:**
+1. **Improve hierarchical PSD recovery** — current flat-vector approach is biased. Need to use NIFTy's `CorrelatedFieldMaker` for joint PSD hyperparameter learning (see Eberle+2025, Roth+2024 for patterns)
+2. **Production figure runs** — current figures use 1-3 mocks per regime; need 50-100 for publishable statistics
+3. **Fig 1 schematic** — framework overview diagram (only figure not yet created)
+4. **Wire remaining figures into LaTeX** — Figs 2-3 (from notebooks) need `\includegraphics`
+
+**What Paper II needs (real data):** Apply the same framework to SDSS spectra, intermediate-z photometry, JWST data.
+
+---
+
+**Status:** 302 tests pass. All 6 notebooks execute. 4 inference methods. Hierarchical PSD inference implemented. Paper draft complete (20 pages). 5 paper figures generated.
 
 ---
 
