@@ -120,7 +120,8 @@ class HierarchicalFitter:
         Parameters
         ----------
         method : str
-            "geovi" — uses NIFTy CorrelatedFieldMaker for native PSD learning.
+            "geovi" — geoVI with CorrelatedFieldMaker for native PSD learning.
+            "mgvi" — MGVI (faster per iteration, for very large N).
             "geovi_flat" — flat parameter vector (legacy approach).
             "raytrace" — Ray Tracing on flat vector (fast but needs tuning).
         key : PRNGKey
@@ -132,15 +133,24 @@ class HierarchicalFitter:
 
         if method == "geovi":
             return self._run_geovi_cfm(key=key, **kwargs)
+        elif method == "mgvi":
+            return self._run_geovi_cfm(
+                key=key, sample_mode="linear_resample", **kwargs,
+            )
         elif method == "geovi_flat":
             return self._run_geovi(key=key, **kwargs)
         elif method == "raytrace":
             return self._run_raytrace(key=key, **kwargs)
         else:
-            raise ValueError(f"Unknown method: {method}")
+            raise ValueError(
+                f"Unknown method: {method}. "
+                f"Use 'geovi', 'mgvi', 'geovi_flat', or 'raytrace'."
+            )
 
     def _run_geovi_cfm(self, *, key, n_iterations=20, n_samples=4,
-                       n_posterior_samples=60, verbose=True):
+                       n_posterior_samples=60,
+                       sample_mode="nonlinear_resample",
+                       verbose=True):
         """Hierarchical geoVI using NIFTy's CorrelatedFieldMaker.
 
         This is the proper NIFTy approach: the PSD hyperparameters
@@ -328,13 +338,14 @@ class HierarchicalFitter:
 
         key_opt = keys[-1]
         delta = max(1, n_samples - 1)
+        mode_label = "geoVI" if sample_mode == "nonlinear_resample" else "MGVI"
         samples, state = jft.optimize_kl(
             likelihood,
             init_pos,
             n_total_iterations=n_iterations,
             n_samples=lambda i: max(1, 1 + int(i * delta / max(n_iterations - 1, 1))),
             key=key_opt,
-            sample_mode="nonlinear_resample",
+            sample_mode=sample_mode,
             odir=None,
         )
 

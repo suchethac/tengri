@@ -226,10 +226,15 @@ class Fitter:
             return self._run_nuts(key=key, init_from=init_from, **kwargs)
         elif method == "geovi":
             return self._run_geovi(key=key, init_from=init_from, **kwargs)
+        elif method == "mgvi":
+            return self._run_geovi(
+                key=key, init_from=init_from,
+                sample_mode="linear_resample", **kwargs,
+            )
         else:
             raise ValueError(
                 f"Unknown method: {method}. "
-                f"Use 'map', 'raytrace', 'nuts', or 'geovi'."
+                f"Use 'map', 'raytrace', 'nuts', 'geovi', or 'mgvi'."
             )
 
     def _run_map(self, *, key, init_from=None,

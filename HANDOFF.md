@@ -107,10 +107,11 @@ result.summary()  # posterior on shared (σ_PSD, τ_PSD)
 
 | Method | How it works | When to use | Smooth (5D) | Stochastic (137D) |
 |--------|-------------|-------------|-------------|-------------------|
-| **MAP (Adam)** | Gradient descent on information Hamiltonian | Point estimates, initialization | ~4s | ~4s |
+| **MAP (Adam/AdamW/SGD/custom)** | Gradient descent on information Hamiltonian | Point estimates, initialization | ~4s | ~4s |
 | **Ray Tracing** | Snell's law MCMC, n(x)=L(x)^{1/(D-1)} | Exact MCMC, stochastic-gradient resilient | ~1s (300 samp) | ~10s (300 samp) |
 | **NUTS** | Hamiltonian MC via BlackJAX | Gold-standard validation (low-D only) | ~10s (500 samp) | Too slow |
-| **geoVI** | Geometric VI via NIFTy.re | High-D approximate, hierarchical | ~65s (80 samp) | ~65s (80 samp) |
+| **geoVI** | Geometric VI via NIFTy.re | Non-Gaussian posteriors, moderate D | ~65s (80 samp) | ~65s (80 samp) |
+| **MGVI** | Metric Gaussian VI via NIFTy.re | Very large problems (D>10^5), fastest VI | ~30s (60 samp) | ~30s (60 samp) |
 
 **Key:** Ray Tracing has ~250× more gradient-noise variance tolerance than HMC/NUTS. geoVI scales to >10^5 params for hierarchical. Both are primary methods.
 
