@@ -1,15 +1,21 @@
 # diffsed Development Handoff
 
-**Last updated:** 2026-03-14
+**Last updated:** 2026-03-14 (session 3)
 **Repo:** `~/Projects/diffsed/`
-**Status:** 296 tests (181 original + 108 new API + 7 benchmarks). All 6 notebooks execute. MAP + NUTS + geoVI all working. Photometry precomputation gives 21.6x gradient speedup.
+**Paper draft:** `~/writing-workspace/projects/differentiable_psd_sed_fitting/`
+**Status:** 302 tests pass. All 6 notebooks execute. 4 inference methods (MAP, Ray Tracing, NUTS, geoVI). Hierarchical PSD inference implemented. Paper draft complete (20 pages, compiles). 5 paper figures generated.
 
-## New High-Level API
+---
+
+## High-Level API
 
 ```python
-from diffsed import Model, ParamSpec, Uniform, Gaussian, Fixed, Fitter
-from diffsed import load_ssp_data, load_filter_set
+from diffsed import (
+    Model, ParamSpec, Uniform, Gaussian, Fixed, Fitter, Posterior,
+    HierarchicalFitter, load_ssp_data, load_filter_set, sample_raytrace,
+)
 
+# Define model
 spec = ParamSpec(
     sfh_alpha=Uniform(0.5, 3.0), sfh_beta=Uniform(0.3, 2.0),
     sfh_tau_peak_gyr=Uniform(0.5, 10.0), sfh_peak_sfr=Uniform(0.1, 50.0),
@@ -21,89 +27,158 @@ spec = ParamSpec(
 model = Model(spec, load_ssp_data("data/ssp.h5"), filters=load_filter_set([...]))
 mock = model.mock(spec.sample(key), snr=20.0, key=noise_key)
 
-# Fit: MAP → Ray Tracing → geoVI
+# Fit: MAP → Ray Tracing or geoVI (equal-priority primaries)
 fitter = Fitter(model, mock.flux_obs, mock.noise)
 result_map = fitter.run("map", n_steps=2000, learning_rate=0.03)
-result_rts = fitter.run("raytrace", init_from=result_map, n_steps=500)
-posterior = fitter.run("geovi", init_from=result_map, n_iterations=15, n_posterior_samples=80)
+result_rt  = fitter.run("raytrace", init_from=result_map, n_burnin=100, n_steps=300)
+result_vi  = fitter.run("geovi", init_from=result_map, n_iterations=15, n_posterior_samples=80)
 
 # Results
-posterior.summary()                     # median ± 68% CI
-posterior.plot_corner(truths=true_params)  # triangle plot with derived quantities
-model.plot_sfh_posterior(posterior, true_params=true_params)  # SFH with 16-84% fill
+posterior.summary()                        # median ± 68% CI
+posterior.effective_sample_size()           # ESS per parameter
+posterior.diagnostics_summary()            # formatted table with ESS
+posterior.plot_corner(truths=true_params)   # KDE contour triangle plot
+model.plot_sfh_posterior(posterior, ...)    # SFH with 16-84% fill
+
+# Hierarchical: shared PSD across N galaxies
+hfitter = HierarchicalFitter(model_factory, galaxies)
+result = hfitter.run("raytrace", n_burnin=100, n_steps=300)
+result.summary()  # posterior on shared (σ_PSD, τ_PSD)
 ```
 
-## New Modules (this session)
+---
+
+## Modules
 
 | Module | Purpose | Tests |
 |--------|---------|-------|
 | `distributions.py` | Uniform, Gaussian, LogUniform, Fixed (JAX-jittable) | 39 |
 | `param_spec.py` | ParamSpec: parameter defs, validation, sampling | 28 |
-| `model.py` | Model: forward model, mock generation, plotting | 24 |
-| `fitter.py` | Fitter: MAP (early stopping, optimizer choice), NUTS (target_accept), geoVI (post-optimization sampling), Ray Tracing (Snell's law MCMC) | 8 |
-| `raytrace_jax.py` | Ray Tracing Sampler (Behroozi 2025) - Snell's law MCMC | 6 |
-| `posterior.py` | Posterior: summary, resample, plot_corner, to_arviz, to_param_spec, autocorrelation, ESS | 9 |
-| `hierarchical.py` | HierarchicalFitter: population-level PSD recovery via shared (σ,τ) across N galaxies | TBD |
+| `model.py` | Model: forward model, mock generation, plotting, photometry precomputation | 24 |
+| `fitter.py` | Fitter: MAP, Ray Tracing, NUTS, geoVI — all with burn-in support | 8 |
+| `raytrace_jax.py` | Ray Tracing Sampler (Behroozi 2025, Apache 2.0) — Snell's law MCMC | 6 |
+| `posterior.py` | Posterior: summary, resample, corner plot overlay, autocorrelation, ESS, ArviZ | 9 |
+| `hierarchical.py` | HierarchicalFitter: shared PSD recovery across N galaxies (RT + geoVI) | TBD |
 
-## Inference Performance
+---
 
-| Method | Smooth (7D) | Stochastic (137D) |
-|--------|-------------|-------------------|
-| MAP (Adam) | 3.8s | 4.4s |
-| NUTS (BlackJAX) | ~23min (500 samples, 26 div) | ~2min (50 samples, 0 div) |
-| Ray Tracing (Behroozi 2025) | TBD | TBD |
-| geoVI (NIFTy.re) | ~95s (80+ samples) | ~170s (80+ samples) |
+## Inference Methods (equal priority for RT and geoVI)
 
-## Key Design Decisions (this session)
+| Method | How it works | When to use | Smooth (5D) | Stochastic (137D) |
+|--------|-------------|-------------|-------------|-------------------|
+| **MAP (Adam)** | Gradient descent on information Hamiltonian | Point estimates, initialization | ~4s | ~4s |
+| **Ray Tracing** | Snell's law MCMC, n(x)=L(x)^{1/(D-1)} | Exact MCMC, stochastic-gradient resilient | ~1s (300 samp) | ~10s (300 samp) |
+| **NUTS** | Hamiltonian MC via BlackJAX | Gold-standard validation (low-D only) | ~10s (500 samp) | Too slow |
+| **geoVI** | Geometric VI via NIFTy.re | High-D approximate, hierarchical | ~65s (80 samp) | ~65s (80 samp) |
 
-1. **ParamSpec as single source of truth** — same object for mock generation and inference
-2. **Model wraps ForwardModel** — new param names on top, old internals unchanged
-3. **Fitter separate from Model** — follows JAX pattern (model = physics, fitter = inference)
-4. **geoVI post-optimization sampling** — `draw_linear_residual` draws 80+ additional samples after `optimize_kl` converges
-5. **DSPS calc_obs_mag** for cosmologically correct magnitudes
-6. **Sigmoid transform fixed** — k=1.0, x0=0 so sampler can reach prior edges
+**Key:** Ray Tracing has ~250× more gradient-noise variance tolerance than HMC/NUTS. geoVI scales to >10^5 params for hierarchical. Both are primary methods.
 
-## Done (session 2, 2026-03-14)
+**Step sizes:** Default `0.03*sqrt(D)` for D≤10, `0.01` for D>10. For hierarchical (D>100), use `0.005`.
 
-### Code
-- [x] **Ray Tracing Sampler**: Integrated Behroozi (2025) ray tracing MCMC (arXiv:2510.25824). New inference method in Fitter: `fitter.run("raytrace")`. Propagates rays through parameter space using Snell's law.
-- [x] **Photometry precomputation**: Zacharegkas+2025 Eq 6-7 integrated into Model.__init__. 21.6x gradient speedup. Auto-activates when redshift fixed + filters present.
-- [x] **Metallicity units fix**: Added log10(Zsun) = -1.848 offset in PARAM_MAP. met_logzsol (solar-relative) now correctly maps to SSP grid's log10(Z) (absolute).
-- [x] **KDE corner plots**: Replaced scatter with 68%/95% KDE contours in posterior.plot_corner().
-- [x] **charlot_fall_at_wavelengths()**: Fast dust evaluation at filter effective wavelengths.
-- [x] **Benchmark tests**: 6 tests in tests/integration/test_precompute_speedup.py.
+**Burn-in:** Both RT and NUTS support `n_burnin` — samples discarded after warmup/before collection. All Posterior objects contain only post-burn-in samples.
 
-### Notebooks
-- [x] **NB01**: Replaced excursion plot with GP realizations; added log-time SFH plot.
-- [x] **NB00**: Updated geoVI to n_iterations=15, n_posterior_samples=80. Re-executed.
-- [x] **NB03**: Rewritten with new Model/ParamSpec API + mock_batch benchmarks.
+---
 
-### Session 2 continued
-- [x] **Convergence fix**: Reduced free params 7→5 (fix met_logzsol, dust_tau_diff) for well-determined photometric fits
-- [x] **Star-forming galaxy**: Active SFH params showing recent SF (tau_peak=3 Gyr, peak_sfr=10)
-- [x] **NB05**: Converged NUTS (1/500 div), PPC plots, suppressed geoVI verbosity, KDE corner contours
-- [x] **NB02**: Real SVO filter transmission curves in SED+photometry plot
-- [x] **NB01**: Removed archetype labels, parameter-only labels
-- [x] **Corner plot size**: Capped at 14x14 for readable labels
-- [x] **Paper analysis plan**: 14 figures, 9 analysis scripts at docs/paper_analysis_plan.md
+## Photometry Precomputation (Zacharegkas+2025)
+
+When redshift is fixed and filters are present, `Model.__init__` precomputes SSP broadband fluxes. At inference: `flux = einsum("i,if,if->f", weights, dust_at_eff, ssp_phot)`. **21.6× gradient speedup.** Auto-activates.
+
+---
+
+## Hierarchical PSD Inference
+
+`HierarchicalFitter` shares `(σ_PSD, τ_PSD)` across N galaxies. Each galaxy retains its own `ξ_i` + physical params. Total D = 2 + N×(n_grid + n_phys).
+
+**Current approach:** Flatten all params, run RT or geoVI on joint vector. Per-galaxy params initialized via individual MAP fits.
+
+**Known limitation:** RT acceptance drops for D>500 even with small step sizes. Current recovery is biased (σ~1.8 vs truth 1.0 with 20 galaxies). Needs improvement.
+
+**Recommended improvement (from literature):** Use NIFTy's `CorrelatedFieldMaker` to learn PSD hyperparameters jointly inside the generative model, rather than treating them as flat external parameters. See:
+- Terveer+2026 (2602.19864): 180K params, multi-stage geoVI
+- Eberle+2025 (2410.14599): Joint PSD learning, 8 samples/iteration, convergence criterion
+- Roth+2024 (2406.09144): Major/minor cycle approximate+exact likelihood scheme
+
+---
+
+## Paper Status
+
+**Paper I:** "Information Field Theory for Galaxy SED Fitting: Reconstructing Bursty Star Formation Histories"
+**Draft:** 20 pages, compiles cleanly. All sections written.
+**Paper II:** Real data application (SDSS, JWST) — future work.
+
+| Section | Status |
+|---------|--------|
+| §1 Introduction | Complete — IFT motivation, PSD formalism, Ray Tracing + geoVI |
+| §2 Methods | Complete — IFT, SFH field, SPS, dust, 4 inference methods |
+| §3 Recovery Tests | Complete — Tests 1-7 design, mock program |
+| §4 Results | Written — SFH recovery, PSD recovery, hierarchical, speed, PPC |
+| §5 Discussion | Complete — comparisons, outshining, multi-tracer, extensibility |
+| §6 Conclusion | Complete — 7 bullet points with concrete numbers |
+| Appendix | Complete — SPS details, obs model, sampler comparison |
+
+### Paper Figures
+
+| Fig | Script | Status |
+|-----|--------|--------|
+| 1: Framework schematic | Manual/TikZ | Placeholder |
+| 2: PSD → SFH | NB01 | ✅ Copied to paper |
+| 3: SED + photometry | NB02 | ✅ Copied to paper |
+| 4: SFH recovery | `analysis/fig04_sfh_recovery.py` | ✅ Generated (3 mocks, first pass) |
+| 5: PSD recovery | `analysis/fig05_psd_recovery.py` | ✅ Generated |
+| 6: Hierarchical PSD | `analysis/fig06_hierarchical_psd.py` | ✅ Generated (biased, needs improvement) |
+| 7: Speed benchmarks | `analysis/fig07_speed_benchmarks.py` | ✅ Generated |
+| 8: Gradient sensitivity | `analysis/fig08_gradient_sensitivity.py` | ✅ Generated |
+
+---
+
+## Analysis Scripts
+
+```
+analysis/
+├── common.py                      # Shared utilities: mock gen, fitting, metrics
+├── fig04_sfh_recovery.py          # SFH recovery grid (4 regimes × phot/spec)
+├── fig05_psd_recovery.py          # PSD (σ,τ) corner plots
+├── fig06_hierarchical_psd.py      # N-convergence + population distinction
+├── fig07_speed_benchmarks.py      # MAP/RT/NUTS/geoVI timing
+├── fig08_gradient_sensitivity.py  # Jacobian heatmap
+└── figures/                       # Generated PDFs
+```
+
+---
 
 ## What Needs Doing Next
 
-### Notebook Updates (highest priority)
-- [ ] **NB00**: Add spectral fitting comparison — show how posteriors differ between photometry-only vs spectroscopy
-- [ ] **NB04**: Add spectral fitting section (currently photometry-only MAP)
-- [ ] **NB01**: Use star-forming galaxy params for SFH demonstrations (current mean SFH may fall at low lookback)
+### Critical (for paper submission)
+- [ ] **Hierarchical geoVI with CorrelatedFieldMaker**: Rewrite hierarchical to use NIFTy's native correlated field model for joint PSD hyperparameter learning. This is the key improvement for accurate population-level PSD recovery.
+- [ ] **Production figure runs**: Re-run fig04 with 100 mocks per regime, fig06 with N=50-200 galaxies
+- [ ] **Fig 1 schematic**: Draw framework overview diagram (TikZ or manual)
 
-### Code Improvements
-- [ ] **Internal param rename**: `sigma_ps` → `psd_sigma` etc. (~20 files, 181 tests)
-- [x] **Hierarchical inference**: `HierarchicalFitter` for population-level PSD parameter recovery (Paper I Tests 5-7). Supports geoVI and Ray Tracing.
+### Important
+- [ ] **Internal param rename**: `sigma_ps` → `psd_sigma` across ~20 files
+- [ ] **NB01**: Star-forming galaxy params for SFH demonstrations
+- [ ] **Paper polish**: Replace remaining placeholder figure boxes with `\includegraphics`
 
-### Paper Analysis (see docs/paper_analysis_plan.md)
-- [ ] **Phase 1**: Individual SFH recovery — 100 mocks × 4 PSD regimes × geoVI at z=0.1
-- [ ] **Phase 2**: Population-level PSD recovery — hierarchical inference
-- [ ] **Phase 3**: Computational benchmarks — speed comparison table
-- [ ] **Figure 5**: SFH recovery from photometry (most important paper figure)
-- [ ] **Speed benchmarks**: MAP vs Ray Tracing vs NUTS vs geoVI vs Prospector/dynesty
+### Nice to have
+- [ ] **GPU benchmarks**: Re-run speed comparison on GPU for paper Table 1
+- [ ] **S/N dependence study**: Vary photometric S/N from 5-100
+- [ ] **2D PSD recovery map**: 16×100 mock grid (deferred from Paper I)
+
+---
+
+## Key Design Decisions
+
+1. **ParamSpec as single source of truth** — same object for mock generation and inference
+2. **Model wraps ForwardModel** — new param names on top, old internals unchanged
+3. **Fitter separate from Model** — JAX pattern (model = physics, fitter = inference)
+4. **RT and geoVI equal priority** — RT for exact MCMC, geoVI for high-D/hierarchical
+5. **NUTS as gold standard** — validation tool, not primary method
+6. **Burn-in for all samplers** — properly discarded before Posterior creation
+7. **Autocorrelation/ESS** — FFT-based ACF, Geyer (1992) initial positive sequence
+8. **Sigmoid transform** — k=1.0, x0=0 so sampler can reach prior edges
+9. **Metallicity offset** — log10(Zsun)=-1.848 in PARAM_MAP for DSPS grid compatibility
+10. **Photometry precomputation** — Zacharegkas+2025, 21.6× gradient speedup
+
+---
 
 ## SSP Data
 
@@ -112,24 +187,33 @@ Real FSPS/MILES SSP templates (15 metallicities × 93 ages × 5994 wavelengths):
 - `data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5` — with nebular emission (64 MB, DEFAULT)
 - Source: https://halos.as.arizona.edu/suchethacooray/
 
-## Documentation
-
-- `docs/specs/2026-03-13-paramspec-model-redesign.md` — full design spec
-- `docs/design_philosophy.md` — paper-ready architecture description
-- `README.md`, `AGENTS.md`, `CLAUDE.md` — existing docs
+---
 
 ## Dependencies
+
 ```
-jax>=0.4.20, dsps>=0.3, h5py>=3.0, matplotlib>=3.7  (core)
-nifty8[re]>=8.5  (geoVI — installed)
-blackjax>=1.3    (NUTS — installed)
-optax>=0.2       (MAP — installed)
+jax>=0.4.20, dsps>=0.3, h5py>=3.0, matplotlib>=3.7, scipy  (core)
+nifty8[re]>=8.5  (geoVI)
+blackjax>=1.3    (NUTS)
+optax>=0.2       (MAP)
 ```
 
+---
+
 ## How to Resume
+
 ```bash
 cd ~/Projects/diffsed
 source .venv/bin/activate
-pytest tests/ -q   # should show 296 passed
-python -c "from diffsed import Model, ParamSpec, Uniform, Fitter, Posterior"
+pytest tests/ -q                    # should show 302 passed
+python -c "from diffsed import Model, ParamSpec, Uniform, Fitter, Posterior, HierarchicalFitter, sample_raytrace"
+
+# Generate paper figures
+python analysis/fig04_sfh_recovery.py --n-mocks 3 --method raytrace
+python analysis/fig07_speed_benchmarks.py --n-repeats 2
+python analysis/fig08_gradient_sensitivity.py
+
+# Compile paper
+cd ~/writing-workspace/projects/differentiable_psd_sed_fitting
+latexmk -pdf 0-ms.tex
 ```
