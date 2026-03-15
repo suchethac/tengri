@@ -96,10 +96,10 @@ result.summary()  # posterior on shared (σ_PSD, τ_PSD)
 | `distributions.py` | Uniform, Gaussian, LogUniform, Fixed (JAX-jittable) | 39 |
 | `param_spec.py` | ParamSpec: parameter defs, validation, sampling | 28 |
 | `model.py` | Model: forward model, mock generation, plotting, photometry precomputation | 24 |
-| `fitter.py` | Fitter: MAP, Ray Tracing, NUTS, geoVI — all with burn-in support | 8 |
+| `fitter.py` | Fitter: MAP, Ray Tracing, NUTS, geoVI, MGVI — all with burn-in | 8 |
 | `raytrace_jax.py` | Ray Tracing Sampler (Behroozi 2025, Apache 2.0) — Snell's law MCMC | 6 |
 | `posterior.py` | Posterior: summary, resample, corner plot overlay, autocorrelation, ESS, ArviZ | 9 |
-| `hierarchical.py` | HierarchicalFitter: shared PSD recovery across N galaxies (RT + geoVI) | TBD |
+| `hierarchical.py` | HierarchicalFitter: shared PSD via CorrelatedFieldMaker (geoVI/MGVI/RT) | TBD |
 
 ---
 
@@ -129,16 +129,24 @@ When redshift is fixed and filters are present, `Model.__init__` precomputes SSP
 
 ## Hierarchical PSD Inference
 
-`HierarchicalFitter` shares `(σ_PSD, τ_PSD)` across N galaxies. Each galaxy retains its own `ξ_i` + physical params. Total D = 2 + N×(n_grid + n_phys).
+`HierarchicalFitter` shares PSD hyperparameters across N galaxies. Each galaxy retains its own `ξ_i` + physical params.
 
-**Current approach:** Flatten all params, run RT or geoVI on joint vector. Per-galaxy params initialized via individual MAP fits.
+**Three methods available:**
+- `hfitter.run("geovi")` — **Recommended.** Uses NIFTy's `CorrelatedFieldMaker` to learn PSD hyperparameters (fluctuation amplitude ≈ σ_PSD, spectral slope ≈ τ_PSD) jointly inside the generative model. Follows Edenhofer+2024, Eberle+2025 patterns.
+- `hfitter.run("mgvi")` — Same as geoVI but uses MGVI (faster per iteration, for very large N). Best for D > 10^5.
+- `hfitter.run("raytrace")` — Flat-vector RT with MAP initialization. Works for small N (~5-20), high acceptance (~99%) but mixing limited for large D.
 
-**Known limitation:** RT acceptance drops for D>500 even with small step sizes. Current recovery is biased (σ~1.8 vs truth 1.0 with 20 galaxies). Needs improvement.
+**CorrelatedFieldMaker approach:**
+- PSD shape is part of the generative model, not an external parameter
+- Uses 4-8 samples per KL iteration (not 80) — following literature best practices
+- Per-galaxy params initialized via individual MAP fits
+- Tested: 3 galaxies completes in ~90s with geoVI(CFM)
 
-**Recommended improvement (from literature):** Use NIFTy's `CorrelatedFieldMaker` to learn PSD hyperparameters jointly inside the generative model, rather than treating them as flat external parameters. See:
-- Terveer+2026 (2602.19864): 180K params, multi-stage geoVI
-- Eberle+2025 (2410.14599): Joint PSD learning, 8 samples/iteration, convergence criterion
-- Roth+2024 (2406.09144): Major/minor cycle approximate+exact likelihood scheme
+**Reference IFT applications:**
+- Edenhofer+2024 (2308.01295): 661M DOF dust map, MGVI, 12 samples, GPU
+- Eberle+2025 (2410.14599): eROSITA imaging, geoVI, 8 samples, joint PSD learning
+- Roth+2024 (2406.09144): fast-resolve, major/minor cycle scheme
+- Terveer+2026 (2602.19864): air shower, 180K params, multi-stage geoVI
 
 ---
 
@@ -151,7 +159,7 @@ When redshift is fixed and filters are present, `Model.__init__` precomputes SSP
 | Section | Status |
 |---------|--------|
 | §1 Introduction | Complete — IFT motivation, PSD formalism, Ray Tracing + geoVI |
-| §2 Methods | Complete — IFT, SFH field, SPS, dust, 4 inference methods |
+| §2 Methods | Complete — IFT, SFH field, SPS, dust, 5 inference methods (MAP/RT/NUTS/geoVI/MGVI) |
 | §3 Recovery Tests | Complete — Tests 1-7 design, mock program |
 | §4 Results | Written — SFH recovery, PSD recovery, hierarchical, speed, PPC |
 | §5 Discussion | Complete — comparisons, outshining, multi-tracer, extensibility |
@@ -191,19 +199,20 @@ analysis/
 ## What Needs Doing Next
 
 ### Critical (for paper submission)
-- [ ] **Hierarchical geoVI with CorrelatedFieldMaker**: Rewrite hierarchical to use NIFTy's native correlated field model for joint PSD hyperparameter learning. This is the key improvement for accurate population-level PSD recovery.
-- [ ] **Production figure runs**: Re-run fig04 with 100 mocks per regime, fig06 with N=50-200 galaxies
+- [x] **Hierarchical geoVI with CorrelatedFieldMaker**: DONE — `hfitter.run("geovi")` uses NIFTy CFM natively
+- [ ] **Production figure runs**: Re-run fig04 with 50-100 mocks per regime, fig06 with N=50-200 galaxies using geoVI(CFM)
 - [ ] **Fig 1 schematic**: Draw framework overview diagram (TikZ or manual)
+- [ ] **Wire notebook figures into LaTeX**: Figs 2-3 need `\includegraphics` (PNG files already copied)
+- [ ] **Tune hierarchical recovery**: Current CFM geoVI gives fluctuations=0.89, slope=-0.13 for truth σ=1.5, τ=30 Myr. Needs more iterations or better initialization.
 
 ### Important
-- [ ] **Internal param rename**: `sigma_ps` → `psd_sigma` across ~20 files
-- [ ] **NB01**: Star-forming galaxy params for SFH demonstrations
-- [ ] **Paper polish**: Replace remaining placeholder figure boxes with `\includegraphics`
+- [ ] **Internal param rename**: `sigma_ps` → `psd_sigma` across ~20 files (low-level API)
+- [ ] **Paper compile check**: Recompile after MGVI/CFM updates, verify no broken refs
 
 ### Nice to have
-- [ ] **GPU benchmarks**: Re-run speed comparison on GPU for paper Table 1
+- [ ] **GPU benchmarks**: Re-run speed comparison on GPU
 - [ ] **S/N dependence study**: Vary photometric S/N from 5-100
-- [ ] **2D PSD recovery map**: 16×100 mock grid (deferred from Paper I)
+- [ ] **2D PSD recovery map**: 16×100 mock grid
 
 ---
 
