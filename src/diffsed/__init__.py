@@ -69,3 +69,10 @@ __all__ = [
     "ModelConfig",
     "generate_mock",
 ]
+
+# Plotting utilities
+from diffsed.plotting import (setup_style, plot_sfh, plot_sfh_comparison,
+                               plot_sed_fit, plot_spectrum_fit,
+                               safe_corner, plot_corner_comparison,
+                               diagnostics_table, COLORS, SDSS_WAVE_EFF,
+                               SPECTRAL_FEATURES)

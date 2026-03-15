@@ -41,6 +41,11 @@ cells = [
         Model, ParamSpec, Uniform, Gaussian, LogUniform, Fixed, Fitter,
         load_ssp_data, load_filter_set,
     )
+    
+    # Publication-quality plot style
+    import sys; sys.path.insert(0, ".")
+    from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
+    setup_style()
 
     ssp_data = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
@@ -97,7 +102,7 @@ cells = [
     # -----------------------------------------------------------------------
     code(r'''
     fig, ax = plt.subplots(figsize=(7, 3.5))
-    wave_eff = jnp.array([3551, 4686, 6166, 7480, 8932])  # SDSS ugriz
+    wave_eff = SDSS_WAVE_EFF
     ax.errorbar(wave_eff, mock.flux_obs, yerr=mock.noise,
                 fmt="o", color="k", label="Observed (SNR 20)", zorder=3)
     ax.plot(wave_eff, mock.flux_true, "s", ms=6, mfc="none",
@@ -152,11 +157,8 @@ cells = [
     ax_sfh.set_title("SFH Recovery — Parametric")
     ax_sfh.legend()
 
-    try:
-        fig_corner = result_nuts.plot_corner(truths=true_params, color="C0",
-                                             label="NUTS")
-    except ValueError:
-        print("Corner plot skipped (degenerate posterior in some params)")
+    safe_corner(result_nuts, truths=true_params, color=COLORS["nuts"],
+                label="NUTS")
 
     plt.show()
     '''),
@@ -224,7 +226,7 @@ cells = [
     axes[0].set_ylabel("SFR [M$_\\odot$ yr$^{-1}$]")
     axes[0].set_title("True Bursty SFH")
 
-    wave_eff = jnp.array([3551, 4686, 6166, 7480, 8932])  # SDSS ugriz
+    wave_eff = SDSS_WAVE_EFF
     axes[1].errorbar(wave_eff, mock_stoch.flux_obs, yerr=mock_stoch.noise,
                      fmt="o", color="k", label="Observed", zorder=3)
     axes[1].plot(wave_eff, mock_stoch.flux_true, "s", ms=6, mfc="none",
@@ -328,13 +330,13 @@ cells = [
     # Cell 16 — Corner plot overlay
     # -----------------------------------------------------------------------
     code(r'''
-    try:
-        fig = result_rt.plot_corner(truths=true_params_stoch,
-                                    color="C0", label="Ray Tracing")
-        result_geovi.plot_corner(truths=true_params_stoch,
-                                 color="C1", label="geoVI", fig=fig)
-    except ValueError:
-        print("Corner plot skipped (degenerate posterior in some params)")
+    from _plot_style import plot_corner_comparison
+    plot_corner_comparison(
+        [result_rt, result_geovi],
+        ["Ray Tracing", "geoVI"],
+        colors=[COLORS["rt"], COLORS["geovi"]],
+        truths=true_params_stoch,
+    )
     plt.show()
     '''),
 
