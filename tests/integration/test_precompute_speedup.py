@@ -11,25 +11,26 @@ import time
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import pytest
 
 from diffsed import (
-    Model, ParamSpec, Uniform, Gaussian, Fixed,
-    load_ssp_data, load_filter_set,
+    Gaussian,
+    Model,
+    ParamSpec,
+    Uniform,
+    load_filter_set,
+    load_ssp_data,
 )
 from diffsed.utils.transforms import to_bounded
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
 def ssp_data():
-    return load_ssp_data(
-        "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    )
+    return load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 
 
 @pytest.fixture(scope="module")
@@ -57,6 +58,7 @@ def smooth_spec():
 # ---------------------------------------------------------------------------
 # Accuracy: fast vs exact
 # ---------------------------------------------------------------------------
+
 
 class TestPrecomputeAccuracy:
     """Verify approximate photometry matches exact within tolerance."""
@@ -102,6 +104,7 @@ class TestPrecomputeAccuracy:
 # Speedup benchmark
 # ---------------------------------------------------------------------------
 
+
 class TestPrecomputeSpeedup:
     """Verify meaningful speedup from precomputation."""
 
@@ -118,6 +121,7 @@ class TestPrecomputeSpeedup:
             def loss(p):
                 pred = model.predict_photometry(p)
                 return jnp.sum(((data - pred) / noise) ** 2)
+
             return jax.jit(jax.value_and_grad(loss))
 
         grad_fast = make_loss(model_fast)
@@ -141,13 +145,14 @@ class TestPrecomputeSpeedup:
         speedup = t_exact / t_fast
         assert speedup > 5.0, (
             f"Gradient speedup {speedup:.1f}x < 5x "
-            f"(fast={t_fast*1e3:.2f}ms, exact={t_exact*1e3:.2f}ms)"
+            f"(fast={t_fast * 1e3:.2f}ms, exact={t_exact * 1e3:.2f}ms)"
         )
 
 
 # ---------------------------------------------------------------------------
 # Gradient cleanliness
 # ---------------------------------------------------------------------------
+
 
 class TestGradientCleanliness:
     """Verify gradients are finite and agree with finite differences."""
@@ -186,8 +191,7 @@ class TestGradientCleanliness:
                 f"Gradient for {name} is not finite: {float(grads[name])}"
             )
 
-    def test_autodiff_matches_finite_differences(self, ssp_data, sdss_filters,
-                                                  smooth_spec):
+    def test_autodiff_matches_finite_differences(self, ssp_data, sdss_filters, smooth_spec):
         """Autodiff gradients match finite differences to 4+ digits."""
         model = Model(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
         params = smooth_spec.sample(jax.random.PRNGKey(42))
@@ -211,14 +215,11 @@ class TestGradientCleanliness:
 
             if abs(fd) < 1e-10:
                 # Both should be ~zero
-                assert abs(ad) < 1e-6, (
-                    f"{name}: AD={ad:.6e} but FD≈0"
-                )
+                assert abs(ad) < 1e-6, f"{name}: AD={ad:.6e} but FD≈0"
             else:
                 ratio = ad / fd
                 assert abs(ratio - 1.0) < 1e-3, (
-                    f"{name}: AD/FD ratio = {ratio:.6f}, "
-                    f"AD={ad:.6e}, FD={fd:.6e}"
+                    f"{name}: AD/FD ratio = {ratio:.6f}, AD={ad:.6e}, FD={fd:.6e}"
                 )
 
     def test_stochastic_gradients_finite(self, ssp_data, sdss_filters):

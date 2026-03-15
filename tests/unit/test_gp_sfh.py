@@ -2,19 +2,16 @@
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
 from diffsed.models.sfh.gp_sfh import (
-    gp_from_xi,
-    generate_gp_fourier,
-    generate_gp_batch,
-    xi_to_complex,
     compute_sqrt_power_drw,
+    generate_gp_batch,
+    gp_from_xi,
+    xi_to_complex,
 )
-from diffsed.models.sfh.psd_models import psd_drw, drw_acf, drw_variance, psd_to_sqrt_power
-from diffsed.utils.grid import make_log_age_grid, grid_spacing
+from diffsed.models.sfh.psd_models import psd_to_sqrt_power
 
 jax.config.update("jax_enable_x64", True)
 
@@ -200,8 +197,9 @@ class TestGPPSDRecoverySimple:
 
         # Shape ratio should be ~1 everywhere
         shape_ratio = emp_norm / inp_norm
-        assert_allclose(float(jnp.median(shape_ratio)), 1.0, rtol=0.2,
-                        err_msg="PSD shape recovery failed")
+        assert_allclose(
+            float(jnp.median(shape_ratio)), 1.0, rtol=0.2, err_msg="PSD shape recovery failed"
+        )
 
 
 class TestDRWJacobianCorrection:

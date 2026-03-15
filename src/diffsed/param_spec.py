@@ -35,24 +35,67 @@ from diffsed.distributions import (
     resolve_shorthand,
 )
 
-
 # ---------------------------------------------------------------------------
 # Parameter registry: known parameters with physical bound constraints
 # ---------------------------------------------------------------------------
 
 # (param_name, description, bound_check_fn, bound_error_message)
 _PARAM_REGISTRY = {
-    "sfh_alpha":         ("DPL falling slope",          lambda lo, hi: lo > 0,  "must have lo > 0"),
-    "sfh_beta":          ("DPL rising slope",            lambda lo, hi: lo > 0,  "must have lo > 0"),
-    "sfh_tau_peak_gyr":  ("DPL turnover time (Gyr)",     lambda lo, hi: lo > 0,  "must have lo > 0"),
-    "sfh_peak_sfr":      ("Peak SFR (Msun/yr)",          lambda lo, hi: lo > 0,  "must have lo > 0"),
-    "psd_sigma":         ("PSD amplitude (dex)",          lambda lo, hi: lo >= 0, "must have lo >= 0"),
-    "psd_tau_myr":       ("PSD timescale (Myr)",          lambda lo, hi: lo > 0,  "must have lo > 0"),
-    "met_logzsol":       ("log10(Z/Zsun)",                lambda lo, hi: True,    ""),
-    "dust_tau_bc":       ("Birth cloud optical depth",    lambda lo, hi: lo >= 0, "must have lo >= 0"),
-    "dust_tau_diff":     ("Diffuse ISM optical depth",    lambda lo, hi: lo >= 0, "must have lo >= 0"),
-    "dust_slope":        ("Dust power-law index",         lambda lo, hi: True,    ""),
-    "redshift":          ("Source redshift",               lambda lo, hi: lo >= 0, "must have lo >= 0"),
+    "sfh_alpha": (
+        "DPL falling slope",
+        lambda lo, hi: lo > 0,
+        "must have lo > 0",
+    ),
+    "sfh_beta": (
+        "DPL rising slope",
+        lambda lo, hi: lo > 0,
+        "must have lo > 0",
+    ),
+    "sfh_tau_peak_gyr": (
+        "DPL turnover time (Gyr)",
+        lambda lo, hi: lo > 0,
+        "must have lo > 0",
+    ),
+    "sfh_peak_sfr": (
+        "Peak SFR (Msun/yr)",
+        lambda lo, hi: lo > 0,
+        "must have lo > 0",
+    ),
+    "psd_sigma": (
+        "PSD amplitude (dex)",
+        lambda lo, hi: lo >= 0,
+        "must have lo >= 0",
+    ),
+    "psd_tau_myr": (
+        "PSD timescale (Myr)",
+        lambda lo, hi: lo > 0,
+        "must have lo > 0",
+    ),
+    "met_logzsol": (
+        "log10(Z/Zsun)",
+        lambda lo, hi: True,
+        "",
+    ),
+    "dust_tau_bc": (
+        "Birth cloud optical depth",
+        lambda lo, hi: lo >= 0,
+        "must have lo >= 0",
+    ),
+    "dust_tau_diff": (
+        "Diffuse ISM optical depth",
+        lambda lo, hi: lo >= 0,
+        "must have lo >= 0",
+    ),
+    "dust_slope": (
+        "Dust power-law index",
+        lambda lo, hi: True,
+        "",
+    ),
+    "redshift": (
+        "Source redshift",
+        lambda lo, hi: lo >= 0,
+        "must have lo >= 0",
+    ),
 }
 
 VALID_PARAM_NAMES = frozenset(_PARAM_REGISTRY.keys())
@@ -62,6 +105,7 @@ SETTINGS_KEYS = frozenset({"stochastic", "n_grid", "mean_sfh_type"})
 # ---------------------------------------------------------------------------
 # ParamSpec class
 # ---------------------------------------------------------------------------
+
 
 class ParamSpec:
     """Parameter specification defining model parameters and their priors.
@@ -87,8 +131,7 @@ class ParamSpec:
         for name in kwargs:
             if name not in VALID_PARAM_NAMES:
                 raise ValueError(
-                    f"Unknown parameter '{name}'. "
-                    f"Valid parameters: {sorted(VALID_PARAM_NAMES)}"
+                    f"Unknown parameter '{name}'. Valid parameters: {sorted(VALID_PARAM_NAMES)}"
                 )
 
         # Resolve shorthands and store distributions
@@ -108,24 +151,22 @@ class ParamSpec:
             psd_sigma = self._distributions.get("psd_sigma")
             psd_tau = self._distributions.get("psd_tau_myr")
             if psd_sigma is None or psd_tau is None:
-                raise ValueError(
-                    "stochastic=True requires psd_sigma and psd_tau_myr"
-                )
+                raise ValueError("stochastic=True requires psd_sigma and psd_tau_myr")
 
     def _default_distribution(self, name: str) -> Distribution:
         """Default distributions for parameters not explicitly specified."""
         defaults = {
-            "sfh_alpha":         Uniform(0.1, 5.0),
-            "sfh_beta":          Uniform(0.1, 3.0),
-            "sfh_tau_peak_gyr":  Uniform(0.1, 12.0),
-            "sfh_peak_sfr":      Uniform(0.01, 200.0),
-            "psd_sigma":         Fixed(0.0),
-            "psd_tau_myr":       Fixed(50.0),
-            "met_logzsol":       Uniform(-2.0, 0.2),
-            "dust_tau_bc":       Uniform(0.0, 4.0),
-            "dust_tau_diff":     Uniform(0.0, 3.0),
-            "dust_slope":        Fixed(-0.7),
-            "redshift":          Fixed(0.1),
+            "sfh_alpha": Uniform(0.1, 5.0),
+            "sfh_beta": Uniform(0.1, 3.0),
+            "sfh_tau_peak_gyr": Uniform(0.1, 12.0),
+            "sfh_peak_sfr": Uniform(0.01, 200.0),
+            "psd_sigma": Fixed(0.0),
+            "psd_tau_myr": Fixed(50.0),
+            "met_logzsol": Uniform(-2.0, 0.2),
+            "dust_tau_bc": Uniform(0.0, 4.0),
+            "dust_tau_diff": Uniform(0.0, 3.0),
+            "dust_slope": Fixed(-0.7),
+            "redshift": Fixed(0.1),
         }
         return defaults[name]
 
@@ -262,9 +303,7 @@ class ParamSpec:
             val = float(params[name])
             lo, hi = dist.bounds
             if not dist.is_fixed and (val < lo or val > hi):
-                raise ValueError(
-                    f"Parameter '{name}' = {val} is outside bounds [{lo}, {hi}]"
-                )
+                raise ValueError(f"Parameter '{name}' = {val} is outside bounds [{lo}, {hi}]")
 
     def __repr__(self) -> str:
         lines = ["ParamSpec("]

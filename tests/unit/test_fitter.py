@@ -9,14 +9,13 @@ jax.config.update("jax_enable_x64", True)
 
 from pathlib import Path
 
-from diffsed.distributions import Uniform, Fixed, Gaussian
-from diffsed.param_spec import ParamSpec
-from diffsed.model import Model
+from diffsed.distributions import Gaussian, Uniform
 from diffsed.fitter import Fitter
-from diffsed.posterior import Posterior
-from diffsed.models.sps.dsps_wrapper import load_ssp_data
+from diffsed.model import Model
 from diffsed.models.observation.filters import load_filter_set
-
+from diffsed.models.sps.dsps_wrapper import load_ssp_data
+from diffsed.param_spec import ParamSpec
+from diffsed.posterior import Posterior
 
 # ---------------------------------------------------------------------------
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -46,10 +45,14 @@ def model_and_mock():
     model = Model(spec, ssp, filters=filters)
 
     true_params = {
-        "sfh_alpha": 1.2, "sfh_beta": 1.0,
-        "sfh_tau_peak_gyr": 4.0, "sfh_peak_sfr": 8.0,
+        "sfh_alpha": 1.2,
+        "sfh_beta": 1.0,
+        "sfh_tau_peak_gyr": 4.0,
+        "sfh_peak_sfr": 8.0,
         "met_logzsol": -0.3,
-        "dust_tau_bc": 1.0, "dust_tau_diff": 0.3, "dust_slope": -0.7,
+        "dust_tau_bc": 1.0,
+        "dust_tau_diff": 0.3,
+        "dust_slope": -0.7,
         "redshift": 0.1,
     }
     mock = model.mock(true_params, snr=20.0, key=jax.random.PRNGKey(0))

@@ -8,11 +8,10 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from diffsed.distributions import (
-    Distribution,
-    Uniform,
+    Fixed,
     Gaussian,
     LogUniform,
-    Fixed,
+    Uniform,
     resolve_shorthand,
 )
 

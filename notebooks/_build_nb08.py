@@ -50,6 +50,10 @@ cells = [
     import matplotlib.pyplot as plt
     from matplotlib.patches import FancyArrowPatch
 
+    import sys; sys.path.insert(0, ".")
+    from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
+    setup_style()
+
     # Low-level PSD / GP functions
     from diffsed.models.sfh.psd_models import (
         psd_drw, drw_acf, drw_variance, psd_to_sqrt_power, psd_matern,
@@ -462,7 +466,7 @@ cells = [
     met_idx = int(jnp.argmin(jnp.abs(ssp_data.ssp_lgmet - (-1.85))))
     ssp_flux = ssp_data.ssp_flux[met_idx]  # (n_age, n_wave)
     ssp_wave = ssp_data.ssp_wave
-    ssp_ages_yr = 10.0 ** ssp_data.log_age
+    ssp_ages_yr = 10.0 ** (ssp_data.ssp_lg_age_gyr + 9.0)  # convert log10(age/Gyr) -> yr
 
     # Target wavelengths (Angstrom)
     wave_targets = jnp.array([1500.0, 2500.0, 4000.0, 5500.0, 8000.0, 16000.0])

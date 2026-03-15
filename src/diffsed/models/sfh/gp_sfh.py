@@ -16,8 +16,9 @@ import jax.numpy as jnp
 from jax import random
 
 
-def make_log_age_grid(n_grid: int = 256, log_age_min: float = 6.0,
-                      log_age_max: float = 10.14) -> jnp.ndarray:
+def make_log_age_grid(
+    n_grid: int = 256, log_age_min: float = 6.0, log_age_max: float = 10.14
+) -> jnp.ndarray:
     """Create uniform grid in log10(age/yr).
 
     Default range: 1 Myr to ~13.8 Gyr.
@@ -67,11 +68,11 @@ def xi_to_complex(xi: jnp.ndarray, n_points: int) -> jnp.ndarray:
     xi_imag = jnp.zeros(n_freq)
 
     # Interior frequencies: k = 1, ..., n_freq-2
-    interior_imag = xi[n_freq: 2 * n_freq - 2]
-    xi_imag = xi_imag.at[1: n_freq - 1].set(interior_imag)
+    interior_imag = xi[n_freq : 2 * n_freq - 2]
+    xi_imag = xi_imag.at[1 : n_freq - 1].set(interior_imag)
 
     # For odd n_points, last frequency needs imaginary part
-    is_odd = (n_points % 2 == 1)
+    is_odd = n_points % 2 == 1
     odd_imag_idx = jnp.minimum(2 * n_freq - 2, n_points - 1)
     last_imag = jnp.where(is_odd, xi[odd_imag_idx], 0.0)
     xi_imag = xi_imag.at[n_freq - 1].set(last_imag)
@@ -79,8 +80,7 @@ def xi_to_complex(xi: jnp.ndarray, n_points: int) -> jnp.ndarray:
     return xi_real + 1j * xi_imag
 
 
-def gp_from_xi(xi: jnp.ndarray, sqrt_power: jnp.ndarray,
-               n_points: int) -> jnp.ndarray:
+def gp_from_xi(xi: jnp.ndarray, sqrt_power: jnp.ndarray, n_points: int) -> jnp.ndarray:
     """Deterministic GP realization from standardized latent vector.
 
     Implements the IFT correlated field model: s = IFFT(sqrt(P) * xi_hat).
@@ -112,8 +112,7 @@ def gp_from_xi(xi: jnp.ndarray, sqrt_power: jnp.ndarray,
     return jnp.fft.irfft(coeffs, n=n_points)
 
 
-def generate_gp_fourier(key: jax.Array, sqrt_power: jnp.ndarray,
-                        n_points: int) -> jnp.ndarray:
+def generate_gp_fourier(key: jax.Array, sqrt_power: jnp.ndarray, n_points: int) -> jnp.ndarray:
     """Stochastic GP realization (for mock generation).
 
     Draws xi ~ N(0, I) and applies the correlated field model.
@@ -136,8 +135,9 @@ def generate_gp_fourier(key: jax.Array, sqrt_power: jnp.ndarray,
     return gp_from_xi(xi, sqrt_power, n_points)
 
 
-def generate_gp_batch(key: jax.Array, sqrt_power: jnp.ndarray,
-                      n_points: int, n_realizations: int) -> jnp.ndarray:
+def generate_gp_batch(
+    key: jax.Array, sqrt_power: jnp.ndarray, n_points: int, n_realizations: int
+) -> jnp.ndarray:
     """Batch of GP realizations via vmap.
 
     Parameters
@@ -160,9 +160,9 @@ def generate_gp_batch(key: jax.Array, sqrt_power: jnp.ndarray,
     return jax.vmap(lambda k: generate_gp_fourier(k, sqrt_power, n_points))(keys)
 
 
-def compute_sqrt_power_drw(n_points: int, d_log_age: float,
-                           sigma_ps: float, tau_ps: float,
-                           log_age_ref: float = 8.0) -> jnp.ndarray:
+def compute_sqrt_power_drw(
+    n_points: int, d_log_age: float, sigma_ps: float, tau_ps: float, log_age_ref: float = 8.0
+) -> jnp.ndarray:
     """Pre-compute the DRW amplitude operator for the log-age grid.
 
     Converts the DRW PSD from physical frequency (rad/yr) to log-age
@@ -193,7 +193,7 @@ def compute_sqrt_power_drw(n_points: int, d_log_age: float,
     """
     from diffsed.models.sfh.psd_models import psd_drw, psd_to_sqrt_power
 
-    t_ref = 10.0 ** log_age_ref
+    t_ref = 10.0**log_age_ref
     ln10 = jnp.log(10.0)
 
     # FFT frequencies in log-age space (rad/dex)

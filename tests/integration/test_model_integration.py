@@ -1,6 +1,5 @@
 """Integration tests for the new Model class with real SSP data."""
 
-import os
 from pathlib import Path
 
 import jax
@@ -10,12 +9,11 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed.distributions import Uniform, Gaussian, Fixed
-from diffsed.param_spec import ParamSpec
-from diffsed.model import Model, MockData
-from diffsed.models.sps.dsps_wrapper import load_ssp_data
+from diffsed.distributions import Uniform
+from diffsed.model import MockData, Model
 from diffsed.models.observation.filters import load_filter_set
-
+from diffsed.models.sps.dsps_wrapper import load_ssp_data
+from diffsed.param_spec import ParamSpec
 
 # ---------------------------------------------------------------------------
 # Skip if SSP data not available
@@ -104,6 +102,7 @@ def typical_params():
 # SED Predictions
 # ===================================================================
 
+
 class TestPredictSed:
     def test_shape(self, parametric_model, typical_params):
         sed = parametric_model.predict_sed(typical_params)
@@ -176,6 +175,7 @@ class TestPredictDerived:
 # Stochastic Model
 # ===================================================================
 
+
 class TestStochastic:
     def test_predict_sed_works(self, stochastic_model, stochastic_spec):
         params = stochastic_spec.sample(jax.random.PRNGKey(42))
@@ -195,20 +195,35 @@ class TestStochastic:
 # Equivalence: parametric model with sigma=0 ≈ stochastic model with sigma=0
 # ===================================================================
 
+
 class TestEquivalence:
     def test_zero_sigma_equivalence(self, ssp_data, filters):
         spec_param = ParamSpec(
-            sfh_alpha=1.2, sfh_beta=1.0, sfh_tau_peak_gyr=4.0,
-            sfh_peak_sfr=8.0, met_logzsol=-0.3,
-            dust_tau_bc=1.0, dust_tau_diff=0.3, dust_slope=-0.7,
-            redshift=0.1, stochastic=False,
+            sfh_alpha=1.2,
+            sfh_beta=1.0,
+            sfh_tau_peak_gyr=4.0,
+            sfh_peak_sfr=8.0,
+            met_logzsol=-0.3,
+            dust_tau_bc=1.0,
+            dust_tau_diff=0.3,
+            dust_slope=-0.7,
+            redshift=0.1,
+            stochastic=False,
         )
         spec_stoch = ParamSpec(
-            sfh_alpha=1.2, sfh_beta=1.0, sfh_tau_peak_gyr=4.0,
-            sfh_peak_sfr=8.0, psd_sigma=0.0, psd_tau_myr=50.0,
+            sfh_alpha=1.2,
+            sfh_beta=1.0,
+            sfh_tau_peak_gyr=4.0,
+            sfh_peak_sfr=8.0,
+            psd_sigma=0.0,
+            psd_tau_myr=50.0,
             met_logzsol=-0.3,
-            dust_tau_bc=1.0, dust_tau_diff=0.3, dust_slope=-0.7,
-            redshift=0.1, stochastic=True, n_grid=64,
+            dust_tau_bc=1.0,
+            dust_tau_diff=0.3,
+            dust_slope=-0.7,
+            redshift=0.1,
+            stochastic=True,
+            n_grid=64,
         )
 
         model_p = Model(spec_param, ssp_data, filters=filters)
@@ -222,14 +237,17 @@ class TestEquivalence:
 
         # With sigma=0, GP contribution is zero, so results should match
         np.testing.assert_allclose(
-            np.array(phot_p), np.array(phot_s), rtol=0.02,
-            err_msg="Parametric and stochastic (sigma=0) should give similar photometry"
+            np.array(phot_p),
+            np.array(phot_s),
+            rtol=0.02,
+            err_msg="Parametric and stochastic (sigma=0) should give similar photometry",
         )
 
 
 # ===================================================================
 # Mock Generation
 # ===================================================================
+
 
 class TestMock:
     def test_mock_structure(self, parametric_model, typical_params):
@@ -254,6 +272,7 @@ class TestMock:
 # ===================================================================
 # Gradient Flow
 # ===================================================================
+
 
 class TestGradients:
     def test_photometry_gradient(self, parametric_model, typical_params):

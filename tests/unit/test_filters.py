@@ -1,6 +1,5 @@
 """Tests for photometric filter management (SVO FPS integration)."""
 
-import tempfile
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -17,10 +16,10 @@ from diffsed.models.observation.filters import (
 )
 from diffsed.models.observation.photometry import FilterCurve
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def cache_dir():
@@ -40,14 +39,19 @@ def custom_filter_path(tmp_path):
     wave = np.linspace(5000.0, 7000.0, 50)
     trans = np.exp(-0.5 * ((wave - 6000.0) / 300.0) ** 2)
     filepath = tmp_path / "custom_test.dat"
-    np.savetxt(str(filepath), np.column_stack([wave, trans]),
-               header="wavelength  transmission", fmt="%.6e")
+    np.savetxt(
+        str(filepath),
+        np.column_stack([wave, trans]),
+        header="wavelength  transmission",
+        fmt="%.6e",
+    )
     return str(filepath)
 
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestLoadFilter:
     """Tests for load_filter (single filter by short name)."""

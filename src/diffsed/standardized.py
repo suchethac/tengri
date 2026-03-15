@@ -18,13 +18,11 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Optional, Callable
+from collections.abc import Callable
 
-import jax
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
-from diffsed.distributions import Distribution, Fixed
 from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw
 from diffsed.utils.grid import make_log_age_grid
 
@@ -45,7 +43,7 @@ class StandardizedForwardModel:
         Default: DRW. User can provide Extended Regulator, Flex-PSD, etc.
     """
 
-    def __init__(self, model, psd_model: Optional[Callable] = None):
+    def __init__(self, model, psd_model: Callable | None = None):
         self.model = model
         self.spec = model.spec
 
@@ -78,7 +76,10 @@ class StandardizedForwardModel:
     def _default_drw_sqrt_power(self, sigma, tau_yr, n_grid, log_ages):
         """Default DRW √P computation."""
         return compute_sqrt_power_drw(
-            sigma, tau_yr, n_grid, log_ages,
+            sigma,
+            tau_yr,
+            n_grid,
+            log_ages,
         )
 
     # -------------------------------------------------------------------
@@ -139,25 +140,23 @@ class StandardizedForwardModel:
 
         # Correlated field: build √P from current PSD params, apply to ξ
         if self._stochastic and "psd_xi" in xi:
-            sigma = params.get(
-                "psd_sigma",
-                jnp.asarray(self._fixed_values.get("psd_sigma", 1.0))
-            )
+            sigma = params.get("psd_sigma", jnp.asarray(self._fixed_values.get("psd_sigma", 1.0)))
             tau_myr = params.get(
-                "psd_tau_myr",
-                jnp.asarray(self._fixed_values.get("psd_tau_myr", 50.0))
+                "psd_tau_myr", jnp.asarray(self._fixed_values.get("psd_tau_myr", 50.0))
             )
 
             # Build √P from current PSD params (differentiable!)
             sqrt_power = self._psd_model(
-                sigma, tau_myr * 1e6,  # convert Myr → yr
-                self._n_grid, self._log_ages,
+                sigma,
+                tau_myr * 1e6,  # convert Myr → yr
+                self._n_grid,
+                self._log_ages,
             )
 
             # x(t) = IFFT(√P · ξ_field) — the correlated field
             xi_field = xi["psd_xi"]
             x_field = jnp.fft.irfft(
-                sqrt_power[:len(xi_field) // 2 + 1] * jnp.fft.rfft(xi_field),
+                sqrt_power[: len(xi_field) // 2 + 1] * jnp.fft.rfft(xi_field),
                 n=self._n_grid,
             )
 
@@ -182,9 +181,7 @@ class StandardizedForwardModel:
         xi = {}
         for name in self._free_names:
             if name in params:
-                xi[name] = self._transforms[name].standardize(
-                    jnp.asarray(params[name])
-                )
+                xi[name] = self._transforms[name].standardize(jnp.asarray(params[name]))
             else:
                 xi[name] = jnp.array(0.0)
 
@@ -197,8 +194,7 @@ class StandardizedForwardModel:
     # Forward pass
     # -------------------------------------------------------------------
 
-    def predict(self, xi: dict, data_type: str = "photometry",
-                wave_obs=None) -> jnp.ndarray:
+    def predict(self, xi: dict, data_type: str = "photometry", wave_obs=None) -> jnp.ndarray:
         """Full forward model: ξ → predicted observables.
 
         Parameters
@@ -237,10 +233,14 @@ class StandardizedForwardModel:
 # Loss function builders
 # -------------------------------------------------------------------
 
-def build_standardized_loss(smodel: StandardizedForwardModel,
-                            data: jnp.ndarray, noise: jnp.ndarray,
-                            data_type: str = "photometry",
-                            wave_obs=None) -> Callable:
+
+def build_standardized_loss(
+    smodel: StandardizedForwardModel,
+    data: jnp.ndarray,
+    noise: jnp.ndarray,
+    data_type: str = "photometry",
+    wave_obs=None,
+) -> Callable:
     """Build the unified loss function.
 
     The loss is ALWAYS:
@@ -278,16 +278,16 @@ def build_standardized_loss(smodel: StandardizedForwardModel,
         predicted = smodel.predict(xi, data_type=data_type, wave_obs=wave_obs)
 
         chi2 = jnp.sum(((data - predicted) / noise) ** 2)
-        prior = jnp.sum(xi_flat ** 2)  # ALWAYS just ½ξᵀξ
+        prior = jnp.sum(xi_flat**2)  # ALWAYS just ½ξᵀξ
 
         return 0.5 * chi2 + 0.5 * prior
 
     return loss_fn, unravel_fn
 
 
-def build_hierarchical_loss(smodel: StandardizedForwardModel,
-                            galaxies: list,
-                            shared_names: list = None) -> Callable:
+def build_hierarchical_loss(
+    smodel: StandardizedForwardModel, galaxies: list, shared_names: list | None = None
+) -> Callable:
     """Build hierarchical loss with shared parameters.
 
     Parameters
@@ -308,11 +308,9 @@ def build_hierarchical_loss(smodel: StandardizedForwardModel,
 
     if shared_names is None:
         # Default: share PSD params
-        shared_names = [n for n in smodel._free_names
-                        if n.startswith("psd_") and n != "psd_xi"]
+        shared_names = [n for n in smodel._free_names if n.startswith("psd_") and n != "psd_xi"]
 
-    per_galaxy_names = [n for n in smodel.domain
-                        if n not in shared_names]
+    per_galaxy_names = [n for n in smodel.domain if n not in shared_names]
 
     # Build the flat vector template
     xi_template = {}
@@ -347,11 +345,9 @@ def build_hierarchical_loss(smodel: StandardizedForwardModel,
                 xi_i[name] = xi_all[f"g{i}_{name}"]
 
             predicted = smodel.predict(xi_i, data_type="photometry")
-            total_chi2 += jnp.sum(
-                ((all_data[i] - predicted) / all_noise[i]) ** 2
-            )
+            total_chi2 += jnp.sum(((all_data[i] - predicted) / all_noise[i]) ** 2)
 
-        prior = jnp.sum(xi_flat ** 2)
+        prior = jnp.sum(xi_flat**2)
         return 0.5 * total_chi2 + 0.5 * prior
 
     return loss_fn, unravel_fn

@@ -11,8 +11,9 @@ All functions are pure JAX and JIT-compatible.
 import jax.numpy as jnp
 
 
-def double_powerlaw(t_lookback: jnp.ndarray, alpha: float, beta: float,
-                    tau: float, norm: float) -> jnp.ndarray:
+def double_powerlaw(
+    t_lookback: jnp.ndarray, alpha: float, beta: float, tau: float, norm: float
+) -> jnp.ndarray:
     """BAGPIPES-style double power law SFH (Carnall+2018, Behroozi+2013).
 
     SFR(t) = norm / [(t/tau)^alpha + (t/tau)^(-beta)]
@@ -48,11 +49,10 @@ def double_powerlaw(t_lookback: jnp.ndarray, alpha: float, beta: float,
         SFR at each lookback time (Msun/yr).
     """
     x = t_lookback / tau
-    return norm / (x ** alpha + x ** (-beta))
+    return norm / (x**alpha + x ** (-beta))
 
 
-def delayed_tau(t_lookback: jnp.ndarray, tau: float,
-                norm: float) -> jnp.ndarray:
+def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float) -> jnp.ndarray:
     """Delayed-tau SFH: SFR(t) = norm * t * exp(-t/tau). Peaks at t=tau."""
     return norm * t_lookback * jnp.exp(-t_lookback / tau)
 
@@ -62,7 +62,8 @@ def constant_sfh(t_lookback: jnp.ndarray, norm: float) -> jnp.ndarray:
     return jnp.broadcast_to(norm, jnp.shape(t_lookback))
 
 
-def powerlaw_sfh(t_lookback: jnp.ndarray, alpha: float,
-                 norm: float, t_ref: float = 1e8) -> jnp.ndarray:
+def powerlaw_sfh(
+    t_lookback: jnp.ndarray, alpha: float, norm: float, t_ref: float = 1e8
+) -> jnp.ndarray:
     """Power-law SFH: SFR(t) = norm * (t/t_ref)^alpha."""
     return norm * (t_lookback / t_ref) ** alpha

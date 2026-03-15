@@ -7,7 +7,6 @@ from numpy.testing import assert_allclose
 
 from diffsed.utils.transforms import (
     sigmoid,
-    inverse_sigmoid,
     to_bounded,
     to_unbounded,
 )

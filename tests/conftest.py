@@ -1,13 +1,10 @@
 """Shared test fixtures for diffsed test suite."""
 
 import jax
-import jax.numpy as jnp
-import numpy as np
 import pytest
 
-from diffsed.utils.grid import make_log_age_grid, grid_spacing
-from diffsed.models.sfh.psd_models import psd_drw, psd_to_sqrt_power
 from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw
+from diffsed.utils.grid import grid_spacing, make_log_age_grid
 
 # Enable 64-bit for numerical precision in tests
 jax.config.update("jax_enable_x64", True)
@@ -53,7 +50,8 @@ def drw_params_bursty():
 def sqrt_power_moderate(d_log_age, drw_params_moderate):
     """Pre-computed amplitude operator for moderate regime."""
     return compute_sqrt_power_drw(
-        256, float(d_log_age),
+        256,
+        float(d_log_age),
         drw_params_moderate["sigma_ps"],
         drw_params_moderate["tau_ps"],
     )

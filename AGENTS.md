@@ -131,6 +131,35 @@ grads = jax.grad(loss_fn)(params)
 | `blackjax` (optional) | `import blackjax` | NUTS/HMC sampling |
 | `optax` (optional) | `import optax` | Gradient-based optimization (MAP) |
 
+## Linting and formatting
+
+**Ruff** is the project linter and formatter. Configuration lives in `pyproject.toml` under `[tool.ruff]`.
+
+```bash
+ruff check src/ tests/              # lint — MUST pass with zero errors
+ruff format --check src/ tests/     # format — MUST pass
+ruff check --fix src/ tests/        # auto-fix safe violations
+ruff format src/ tests/             # auto-format all files
+```
+
+**Before writing or modifying any Python code**, ensure your changes pass both `ruff check` and `ruff format --check`. Run these after every code change. Key rules enforced:
+
+- **F**: unused imports/variables (keep imports clean)
+- **E/W**: pycodestyle basics (99-char line limit)
+- **I**: import sorting (stdlib → third-party → first-party `diffsed`)
+- **UP**: Python 3.10+ syntax (use `X | None` not `Optional[X]`)
+- **B**: bugbear patterns (`raise ... from None` in except, no loop-var capture in closures)
+- **SIM**: simplifiable constructs
+- **RUF**: Ruff-specific (sorted `__all__`, no unused unpacked vars)
+
+**Allowed exceptions** (configured in pyproject.toml):
+- `E402` ignored: `jax.config.update()` must run before JAX imports
+- `E741` ignored: single-letter variables (`l`, `I`) common in scientific code
+- Greek letters (σ, ξ, θ) allowed in docstrings/comments
+- `__init__.py` files: `F401` (unused imports) ignored for re-exports
+- `tests/`: `F841` (unused variables) ignored for fixtures
+- `notebooks/`, `analysis/`: relaxed rules for exploratory code
+
 ## Testing
 
 ```bash
@@ -149,6 +178,7 @@ All tests use `jax.config.update("jax_enable_x64", True)` for numerical precisio
 4. **Grid**: 256-point uniform grid in log10(age/yr) from 6.0 to 10.14.
 5. **Naming**: `snake_case` everywhere. PSD params use `sigma_ps`, `tau_ps` (not sigma_PS).
 6. **Docstrings**: Numpydoc format with Parameters/Returns sections.
+7. **Type hints**: Use `X | None` (PEP 604), not `Optional[X]`. Ruff enforces this (UP007/RUF013).
 
 ## What's NOT implemented yet
 

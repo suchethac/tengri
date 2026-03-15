@@ -18,13 +18,11 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from diffsed.distributions import Uniform
 from diffsed.utils.transforms import to_bounded, to_unbounded
 
 
@@ -47,9 +45,10 @@ class HierarchicalResult:
     diagnostics : dict
         Method-specific diagnostics.
     """
+
     shared_samples: dict
     shared_params: dict
-    individual_samples: Optional[list] = None
+    individual_samples: list | None = None
     method: str = ""
     wall_time_s: float = 0.0
     diagnostics: dict = field(default_factory=dict)
@@ -95,10 +94,14 @@ class HierarchicalFitter:
         "photometry" or "spectroscopy".
     """
 
-    def __init__(self, model_factory, galaxies,
-                 psd_sigma_prior=(0.1, 4.0),
-                 psd_tau_prior=(1.0, 300.0),
-                 data_type="photometry"):
+    def __init__(
+        self,
+        model_factory,
+        galaxies,
+        psd_sigma_prior=(0.1, 4.0),
+        psd_tau_prior=(1.0, 300.0),
+        data_type="photometry",
+    ):
         self.model_factory = model_factory
         self.galaxies = galaxies
         self.n_galaxies = len(galaxies)
@@ -107,12 +110,11 @@ class HierarchicalFitter:
         self.data_type = data_type
 
         # Create a template model to get spec info
-        self._template = model_factory(
-            psd_sigma=1.0, psd_tau_myr=50.0
-        )
+        self._template = model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
         self._spec = self._template.spec
-        self._free_names = [n for n in self._spec.free_params
-                            if n not in ("psd_sigma", "psd_tau_myr")]
+        self._free_names = [
+            n for n in self._spec.free_params if n not in ("psd_sigma", "psd_tau_myr")
+        ]
 
     def run(self, method="geovi", *, key=None, **kwargs):
         """Run hierarchical inference.
@@ -135,7 +137,9 @@ class HierarchicalFitter:
             return self._run_geovi_cfm(key=key, **kwargs)
         elif method == "mgvi":
             return self._run_geovi_cfm(
-                key=key, sample_mode="linear_resample", **kwargs,
+                key=key,
+                sample_mode="linear_resample",
+                **kwargs,
             )
         elif method == "geovi_flat":
             return self._run_geovi(key=key, **kwargs)
@@ -143,14 +147,19 @@ class HierarchicalFitter:
             return self._run_raytrace(key=key, **kwargs)
         else:
             raise ValueError(
-                f"Unknown method: {method}. "
-                f"Use 'geovi', 'mgvi', 'geovi_flat', or 'raytrace'."
+                f"Unknown method: {method}. Use 'geovi', 'mgvi', 'geovi_flat', or 'raytrace'."
             )
 
-    def _run_geovi_cfm(self, *, key, n_iterations=20, n_samples=4,
-                       n_posterior_samples=60,
-                       sample_mode="nonlinear_resample",
-                       verbose=True):
+    def _run_geovi_cfm(
+        self,
+        *,
+        key,
+        n_iterations=20,
+        n_samples=4,
+        n_posterior_samples=60,
+        sample_mode="nonlinear_resample",
+        verbose=True,
+    ):
         """Hierarchical geoVI using NIFTy's CorrelatedFieldMaker.
 
         This is the proper NIFTy approach: the PSD hyperparameters
@@ -164,13 +173,10 @@ class HierarchicalFitter:
         try:
             import nifty8.re as jft
         except ImportError:
-            raise ImportError("nifty8.re required: pip install nifty8[re]")
-
-        from diffsed.posterior import Posterior
+            raise ImportError("nifty8.re required: pip install nifty8[re]") from None
 
         n_gal = self.n_galaxies
         spec = self._spec
-        stochastic = spec.stochastic
         n_grid = spec.n_grid
         free_names = self._free_names
 
@@ -184,8 +190,7 @@ class HierarchicalFitter:
         model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
 
         if verbose:
-            print(f"Hierarchical geoVI (CorrelatedFieldMaker): "
-                  f"{n_gal} galaxies, n_grid={n_grid}")
+            print(f"Hierarchical geoVI (CorrelatedFieldMaker): {n_gal} galaxies, n_grid={n_grid}")
             if model._precomp is not None:
                 print("  Photometry precomputation: ACTIVE")
 
@@ -196,9 +201,7 @@ class HierarchicalFitter:
         # PSD hyperparameters (fluctuations, slope) are SHARED across
         # all galaxies — this is the hierarchical coupling.
         cfm = jft.CorrelatedFieldMaker("psd_")
-        cfm.set_amplitude_total_offset(
-            offset_mean=0.0, offset_std=(1e-3, 1e-4)
-        )
+        cfm.set_amplitude_total_offset(offset_mean=0.0, offset_std=(1e-3, 1e-4))
 
         # Log-age grid spacing
         log_age_range = 10.14 - 6.0  # log10(yr)
@@ -209,9 +212,9 @@ class HierarchicalFitter:
         cfm.add_fluctuations(
             shape=(n_grid,),
             distances=(distance,),
-            fluctuations=(1.0, 0.8),       # σ_PSD prior: lognormal(1.0, 0.8)
-            loglogavgslope=(-2.0, 1.0),    # slope prior: N(-2, 1) — DRW = -2
-            flexibility=(0.3, 0.2),        # small non-parametric correction
+            fluctuations=(1.0, 0.8),  # σ_PSD prior: lognormal(1.0, 0.8)
+            loglogavgslope=(-2.0, 1.0),  # slope prior: N(-2, 1) — DRW = -2
+            flexibility=(0.3, 0.2),  # small non-parametric correction
             asperity=None,
             prefix="shared_",
         )
@@ -264,9 +267,7 @@ class HierarchicalFitter:
                 params = {}
                 for name in free_names:
                     lo, hi = bounds[name]
-                    params[name] = to_bounded(
-                        primals[f"g{i}_{name}"], lo, hi
-                    )
+                    params[name] = to_bounded(primals[f"g{i}_{name}"], lo, hi)
                 for name, val in fixed_values.items():
                     if name not in ("psd_sigma", "psd_tau_myr"):
                         params[name] = val
@@ -286,9 +287,7 @@ class HierarchicalFitter:
             return jnp.concatenate(predictions)
 
         nifty_model = jft.Model(signal_response, domain=domain)
-        likelihood = jft.Gaussian(
-            data_concat, noise_inv_concat
-        ).amend(nifty_model)
+        likelihood = jft.Gaussian(data_concat, noise_inv_concat).amend(nifty_model)
 
         # ── Initialize ────────────────────────────────────────
         init = {}
@@ -300,6 +299,7 @@ class HierarchicalFitter:
 
         # Per-galaxy: MAP initialization
         from diffsed import Fitter
+
         keys = jax.random.split(key, n_gal + 1)
 
         if verbose:
@@ -308,8 +308,9 @@ class HierarchicalFitter:
         for i in range(n_gal):
             gal = self.galaxies[i]
             fitter_i = Fitter(model, gal["flux_obs"], gal["noise"])
-            map_i = fitter_i.run("map", n_steps=500, learning_rate=0.03,
-                                 verbose=False, key=keys[i])
+            map_i = fitter_i.run(
+                "map", n_steps=500, learning_rate=0.03, verbose=False, key=keys[i]
+            )
             init_u = fitter_i._unbounded_from_posterior(map_i)
             for name in free_names:
                 init[f"g{i}_{name}"] = init_u.get(name, jnp.array(0.0))
@@ -318,28 +319,29 @@ class HierarchicalFitter:
         init_pos = jft.Vector(init)
 
         if verbose:
-            n_total = sum(
-                np.prod(v.shape) if hasattr(v, 'shape') else 1
-                for v in init.values()
-            )
+            n_total = sum(np.prod(v.shape) if hasattr(v, "shape") else 1 for v in init.values())
             print(f"  Total parameters: {n_total}")
 
         # ── Run optimize_kl ───────────────────────────────────
-        import sys, io, warnings, logging
-        warnings.filterwarnings('ignore')
-        logging.getLogger('nifty8').setLevel(logging.ERROR)
+        import io
+        import logging
+        import sys
+        import warnings
+
+        warnings.filterwarnings("ignore")
+        logging.getLogger("nifty8").setLevel(logging.ERROR)
 
         if verbose:
-            print(f"  Running optimize_kl ({n_iterations} iterations, "
-                  f"{n_samples} samples/iter)...")
+            print(
+                f"  Running optimize_kl ({n_iterations} iterations, {n_samples} samples/iter)..."
+            )
 
         old_stdout = sys.stdout
         sys.stdout = io.StringIO()
 
         key_opt = keys[-1]
         delta = max(1, n_samples - 1)
-        mode_label = "geoVI" if sample_mode == "nonlinear_resample" else "MGVI"
-        samples, state = jft.optimize_kl(
+        samples, _state = jft.optimize_kl(
             likelihood,
             init_pos,
             n_total_iterations=n_iterations,
@@ -360,18 +362,22 @@ class HierarchicalFitter:
 
         all_sample_dicts = []
         for s in list(samples):
-            sd = s.tree if hasattr(s, 'tree') else dict(s)
+            sd = s.tree if hasattr(s, "tree") else dict(s)
             all_sample_dicts.append(sd)
 
-        for j in range(n_posterior_samples):
+        for _j in range(n_posterior_samples):
             key_draw, sub_key = jax.random.split(key_draw)
             try:
                 residual, _ = jft.draw_linear_residual(
-                    likelihood, converged_pos, sub_key,
+                    likelihood,
+                    converged_pos,
+                    sub_key,
                     cg_kwargs={"absdelta": 1e-4, "maxiter": 50},
                 )
-                sample_tree = residual.tree if hasattr(residual, 'tree') else dict(residual)
-                pos_tree = converged_pos.tree if hasattr(converged_pos, 'tree') else dict(converged_pos)
+                sample_tree = residual.tree if hasattr(residual, "tree") else dict(residual)
+                pos_tree = (
+                    converged_pos.tree if hasattr(converged_pos, "tree") else dict(converged_pos)
+                )
                 combined = {k: pos_tree[k] + sample_tree[k] for k in pos_tree}
                 all_sample_dicts.append(combined)
             except Exception:
@@ -384,32 +390,27 @@ class HierarchicalFitter:
         # The CFM encodes fluctuations amplitude and spectral slope.
         # Extract them from the samples.
         shared_samples = {
-            "psd_fluctuations": jnp.array([
-                float(d.get("psd_shared_fluctuations", jnp.nan))
-                for d in all_sample_dicts
-            ]),
-            "psd_loglogavgslope": jnp.array([
-                float(d.get("psd_shared_loglogavgslope", jnp.nan))
-                for d in all_sample_dicts
-            ]),
+            "psd_fluctuations": jnp.array(
+                [float(d.get("psd_shared_fluctuations", jnp.nan)) for d in all_sample_dicts]
+            ),
+            "psd_loglogavgslope": jnp.array(
+                [float(d.get("psd_shared_loglogavgslope", jnp.nan)) for d in all_sample_dicts]
+            ),
         }
 
         # Also compute effective σ_PSD and τ_PSD from the CFM params
         # fluctuations ≈ exp(psd_shared_fluctuations) ≈ σ_PSD
         # loglogavgslope ≈ spectral slope (DRW = -2)
-        shared_samples["psd_sigma_eff"] = jnp.exp(
-            shared_samples["psd_fluctuations"]
-        )
+        shared_samples["psd_sigma_eff"] = jnp.exp(shared_samples["psd_fluctuations"])
 
-        shared_params = {
-            k: float(jnp.mean(v)) for k, v in shared_samples.items()
-        }
+        shared_params = {k: float(jnp.mean(v)) for k, v in shared_samples.items()}
 
         if verbose:
-            print(f"  Hierarchical geoVI (CFM) complete in {wall_time:.1f}s, "
-                  f"{n_post} samples")
-            print(f"  fluctuations = {shared_params.get('psd_fluctuations', '?'):.2f}, "
-                  f"slope = {shared_params.get('psd_loglogavgslope', '?'):.2f}")
+            print(f"  Hierarchical geoVI (CFM) complete in {wall_time:.1f}s, {n_post} samples")
+            print(
+                f"  fluctuations = {shared_params.get('psd_fluctuations', '?'):.2f}, "
+                f"slope = {shared_params.get('psd_loglogavgslope', '?'):.2f}"
+            )
 
         return HierarchicalResult(
             shared_samples=shared_samples,
@@ -424,8 +425,9 @@ class HierarchicalFitter:
             },
         )
 
-    def _run_geovi(self, *, key, n_iterations=25, n_samples=6,
-                   n_posterior_samples=100, verbose=True):
+    def _run_geovi(
+        self, *, key, n_iterations=25, n_samples=6, n_posterior_samples=100, verbose=True
+    ):
         """Hierarchical geoVI via NIFTy.re.
 
         The joint model has:
@@ -436,9 +438,8 @@ class HierarchicalFitter:
             import nifty8.re as jft
         except ImportError:
             raise ImportError(
-                "nifty8.re required for hierarchical geoVI: "
-                "pip install nifty8[re]"
-            )
+                "nifty8.re required for hierarchical geoVI: pip install nifty8[re]"
+            ) from None
 
         n_gal = self.n_galaxies
         spec = self._spec
@@ -457,9 +458,11 @@ class HierarchicalFitter:
         if verbose:
             n_per_gal = len(free_names) + (n_grid if stochastic else 0)
             n_total = 2 + n_gal * n_per_gal
-            print(f"Hierarchical geoVI: {n_gal} galaxies, "
-                  f"{n_per_gal} params/galaxy + 2 shared = "
-                  f"{n_total} total parameters")
+            print(
+                f"Hierarchical geoVI: {n_gal} galaxies, "
+                f"{n_per_gal} params/galaxy + 2 shared = "
+                f"{n_total} total parameters"
+            )
 
         t0 = time.time()
 
@@ -481,7 +484,6 @@ class HierarchicalFitter:
         galaxies = self.galaxies
         sigma_lo, sigma_hi = self.psd_sigma_bounds
         tau_lo, tau_hi = self.psd_tau_bounds
-        model_factory = self.model_factory
         data_type = self.data_type
 
         # Precompute data arrays
@@ -495,7 +497,6 @@ class HierarchicalFitter:
 
         data_concat = jnp.concatenate(all_data)
         noise_inv_concat = jnp.concatenate(all_noise_inv)
-        n_data_per_gal = len(all_data[0])
 
         # Pre-build model once (PSD params will be overridden per-call)
         model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
@@ -522,13 +523,10 @@ class HierarchicalFitter:
             # Use jax.lax.scan for efficient sequential evaluation
             # (vmap not possible because each galaxy has different xi)
             def scan_body(carry, i):
-                predictions = []
                 params = {}
                 for name in free_names:
                     lo, hi = bounds[name]
-                    params[name] = to_bounded(
-                        primals[f"g{i}_{name}"], lo, hi
-                    )
+                    params[name] = to_bounded(primals[f"g{i}_{name}"], lo, hi)
                 for name, val in fixed_values.items():
                     if name not in ("psd_sigma", "psd_tau_myr"):
                         params[name] = val
@@ -545,9 +543,7 @@ class HierarchicalFitter:
                 params = {}
                 for name in free_names:
                     lo, hi = bounds[name]
-                    params[name] = to_bounded(
-                        primals[f"g{i}_{name}"], lo, hi
-                    )
+                    params[name] = to_bounded(primals[f"g{i}_{name}"], lo, hi)
                 for name, val in fixed_values.items():
                     if name not in ("psd_sigma", "psd_tau_myr"):
                         params[name] = val
@@ -562,9 +558,7 @@ class HierarchicalFitter:
         nifty_model = jft.Model(signal_response, domain=domain)
 
         # Gaussian likelihood
-        likelihood = jft.Gaussian(
-            data_concat, noise_inv_concat
-        ).amend(nifty_model)
+        likelihood = jft.Gaussian(data_concat, noise_inv_concat).amend(nifty_model)
 
         # ── Initialize ────────────────────────────────────────
         init = {}
@@ -579,9 +573,7 @@ class HierarchicalFitter:
             for j, name in enumerate(free_names):
                 init[f"g{i}_{name}"] = 0.1 * jax.random.normal(gal_keys[j])
             if stochastic:
-                init[f"g{i}_psd_xi"] = 0.1 * jax.random.normal(
-                    gal_keys[-1], shape=(n_grid,)
-                )
+                init[f"g{i}_psd_xi"] = 0.1 * jax.random.normal(gal_keys[-1], shape=(n_grid,))
 
         init_pos = jft.Vector(init)
 
@@ -589,9 +581,13 @@ class HierarchicalFitter:
         key, opt_key = jax.random.split(keys[-1])
         delta = max(1, n_samples - 1)
 
-        import sys, io, warnings, logging
-        warnings.filterwarnings('ignore')
-        logging.getLogger('nifty8').setLevel(logging.ERROR)
+        import io
+        import logging
+        import sys
+        import warnings
+
+        warnings.filterwarnings("ignore")
+        logging.getLogger("nifty8").setLevel(logging.ERROR)
 
         if verbose:
             print(f"  Running optimize_kl ({n_iterations} iterations)...")
@@ -599,7 +595,7 @@ class HierarchicalFitter:
         old_stdout = sys.stdout
         sys.stdout = io.StringIO()
 
-        samples, state = jft.optimize_kl(
+        samples, _state = jft.optimize_kl(
             likelihood,
             init_pos,
             n_total_iterations=n_iterations,
@@ -622,19 +618,23 @@ class HierarchicalFitter:
 
         # Include optimization samples
         for s in list(samples):
-            sd = s.tree if hasattr(s, 'tree') else dict(s)
+            sd = s.tree if hasattr(s, "tree") else dict(s)
             all_sample_dicts.append(sd)
 
         # Draw additional linear residual samples
-        for j in range(n_posterior_samples):
+        for _j in range(n_posterior_samples):
             draw_key, sub_key = jax.random.split(draw_key)
             try:
                 residual, _ = jft.draw_linear_residual(
-                    likelihood, converged_pos, sub_key,
+                    likelihood,
+                    converged_pos,
+                    sub_key,
                     cg_kwargs={"absdelta": 1e-4, "maxiter": 50},
                 )
-                sample_tree = residual.tree if hasattr(residual, 'tree') else dict(residual)
-                pos_tree = converged_pos.tree if hasattr(converged_pos, 'tree') else dict(converged_pos)
+                sample_tree = residual.tree if hasattr(residual, "tree") else dict(residual)
+                pos_tree = (
+                    converged_pos.tree if hasattr(converged_pos, "tree") else dict(converged_pos)
+                )
                 combined = {k: pos_tree[k] + sample_tree[k] for k in pos_tree}
                 all_sample_dicts.append(combined)
             except Exception:
@@ -645,26 +645,20 @@ class HierarchicalFitter:
 
         # ── Extract shared PSD posteriors ─────────────────────
         shared_samples = {
-            "psd_sigma": jnp.array([
-                float(to_bounded(d["psd_sigma_u"], sigma_lo, sigma_hi))
-                for d in all_sample_dicts
-            ]),
-            "psd_tau_myr": jnp.array([
-                float(to_bounded(d["psd_tau_u"], tau_lo, tau_hi))
-                for d in all_sample_dicts
-            ]),
+            "psd_sigma": jnp.array(
+                [float(to_bounded(d["psd_sigma_u"], sigma_lo, sigma_hi)) for d in all_sample_dicts]
+            ),
+            "psd_tau_myr": jnp.array(
+                [float(to_bounded(d["psd_tau_u"], tau_lo, tau_hi)) for d in all_sample_dicts]
+            ),
         }
 
-        shared_params = {
-            k: float(jnp.mean(v)) for k, v in shared_samples.items()
-        }
+        shared_params = {k: float(jnp.mean(v)) for k, v in shared_samples.items()}
 
         if verbose:
             s = shared_params
-            print(f"  Hierarchical geoVI complete in {wall_time:.1f}s, "
-                  f"{n_post} samples")
-            print(f"  σ_PSD = {s['psd_sigma']:.2f}, "
-                  f"τ_PSD = {s['psd_tau_myr']:.1f} Myr")
+            print(f"  Hierarchical geoVI complete in {wall_time:.1f}s, {n_post} samples")
+            print(f"  σ_PSD = {s['psd_sigma']:.2f}, τ_PSD = {s['psd_tau_myr']:.1f} Myr")
 
         return HierarchicalResult(
             shared_samples=shared_samples,
@@ -678,16 +672,17 @@ class HierarchicalFitter:
             },
         )
 
-    def _run_raytrace(self, *, key, n_burnin=200, n_steps=500,
-                      n_leapfrog_steps=10, step_size=None,
-                      verbose=True):
+    def _run_raytrace(
+        self, *, key, n_burnin=200, n_steps=500, n_leapfrog_steps=10, step_size=None, verbose=True
+    ):
         """Hierarchical Ray Tracing (flat parameter vector).
 
         Flattens all shared + per-galaxy params into one vector and
         runs the Ray Tracing Sampler. Works for moderate N (~10-50 gal).
         """
-        from diffsed.raytrace_jax import sample_raytrace
         from jax.flatten_util import ravel_pytree
+
+        from diffsed.raytrace_jax import sample_raytrace
 
         n_gal = self.n_galaxies
         spec = self._spec
@@ -715,6 +710,7 @@ class HierarchicalFitter:
 
         # Initialize per-galaxy params via individual MAP fits
         from diffsed import Fitter
+
         keys = jax.random.split(key, n_gal + 2)
 
         if verbose:
@@ -723,8 +719,9 @@ class HierarchicalFitter:
         for i in range(n_gal):
             gal = self.galaxies[i]
             fitter_i = Fitter(model, gal["flux_obs"], gal["noise"])
-            map_i = fitter_i.run("map", n_steps=500, learning_rate=0.03,
-                                 verbose=False, key=keys[i])
+            map_i = fitter_i.run(
+                "map", n_steps=500, learning_rate=0.03, verbose=False, key=keys[i]
+            )
             init_u = fitter_i._unbounded_from_posterior(map_i)
             for name in free_names:
                 if name in init_u:
@@ -747,12 +744,8 @@ class HierarchicalFitter:
             step_size = 0.005 if D > 100 else 0.01
 
         # Build data
-        all_data = jnp.concatenate([
-            jnp.asarray(g["flux_obs"]) for g in self.galaxies
-        ])
-        all_noise = jnp.concatenate([
-            jnp.asarray(g["noise"]) for g in self.galaxies
-        ])
+        all_data = jnp.concatenate([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
+        all_noise = jnp.concatenate([jnp.asarray(g["noise"]) for g in self.galaxies])
 
         # Pre-build model once (PSD params will be overridden per-call)
         model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
@@ -778,34 +771,34 @@ class HierarchicalFitter:
                 params["psd_tau_myr"] = psd_tau
                 if stochastic:
                     params["psd_xi"] = p[f"g{i}_psd_xi"]
-                    xi_penalty += jnp.sum(p[f"g{i}_psd_xi"]**2)
+                    xi_penalty += jnp.sum(p[f"g{i}_psd_xi"] ** 2)
 
                 pred = model.predict_photometry(params)
                 predictions.append(pred)
 
             pred_all = jnp.concatenate(predictions)
-            chi2 = jnp.sum(((all_data - pred_all) / all_noise)**2)
+            chi2 = jnp.sum(((all_data - pred_all) / all_noise) ** 2)
 
             # Prior: standard normal on all unbounded params + xi
-            param_penalty = (
-                p["psd_sigma_u"]**2 + p["psd_tau_u"]**2 + xi_penalty
-            )
+            param_penalty = p["psd_sigma_u"] ** 2 + p["psd_tau_u"] ** 2 + xi_penalty
             for i in range(n_gal):
                 for name in free_names:
-                    param_penalty += p[f"g{i}_{name}"]**2
+                    param_penalty += p[f"g{i}_{name}"] ** 2
 
             return -0.5 * chi2 - 0.5 * param_penalty
 
         if verbose:
-            print(f"Hierarchical Ray Tracing: {n_gal} galaxies, "
-                  f"{D} total parameters, "
-                  f"{n_burnin} burn-in + {n_steps} samples")
+            print(
+                f"Hierarchical Ray Tracing: {n_gal} galaxies, "
+                f"{D} total parameters, "
+                f"{n_burnin} burn-in + {n_steps} samples"
+            )
 
         t0 = time.time()
         total_steps = n_burnin + n_steps
 
         key_rt = keys[-1]
-        chain, log_likelihood, accept_prob = sample_raytrace(
+        chain, _log_likelihood, accept_prob = sample_raytrace(
             key=key_rt,
             params_init=init_flat,
             log_prob_fn=log_prob,
@@ -825,18 +818,19 @@ class HierarchicalFitter:
             shared_samples["psd_sigma"].append(
                 float(to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi))
             )
-            shared_samples["psd_tau_myr"].append(
-                float(to_bounded(p["psd_tau_u"], tau_lo, tau_hi))
-            )
+            shared_samples["psd_tau_myr"].append(float(to_bounded(p["psd_tau_u"], tau_lo, tau_hi)))
 
         shared_samples = {k: jnp.array(v) for k, v in shared_samples.items()}
         shared_params = {k: float(jnp.mean(v)) for k, v in shared_samples.items()}
 
         if verbose:
-            print(f"  Complete in {wall_time:.1f}s. "
-                  f"Accept: {float(jnp.mean(accept_prob_post)):.1%}")
-            print(f"  σ_PSD = {shared_params['psd_sigma']:.2f}, "
-                  f"τ_PSD = {shared_params['psd_tau_myr']:.1f} Myr")
+            print(
+                f"  Complete in {wall_time:.1f}s. Accept: {float(jnp.mean(accept_prob_post)):.1%}"
+            )
+            print(
+                f"  σ_PSD = {shared_params['psd_sigma']:.2f}, "
+                f"τ_PSD = {shared_params['psd_tau_myr']:.1f} Myr"
+            )
 
         return HierarchicalResult(
             shared_samples=shared_samples,

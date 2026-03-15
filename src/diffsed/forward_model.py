@@ -15,29 +15,31 @@ The class is a thin stateful wrapper holding pre-computed grids
 and SSP data. The __call__ method is JIT-compatible.
 """
 
-import jax
-import jax.numpy as jnp
 from typing import NamedTuple
 
-from diffsed.models.sfh.psd_models import drw_variance
-from diffsed.models.sfh.gp_sfh import gp_from_xi, compute_sqrt_power_drw
-from diffsed.models.sfh.mean_sfh import double_powerlaw
+import jax
+import jax.numpy as jnp
+
 from diffsed.models.dust.charlot_fall import charlot_fall
-from diffsed.models.sps.dsps_wrapper import (
-    compute_csp_weights,
-    compute_csp_sed,
-    interpolate_metallicity,
-)
 from diffsed.models.observation.photometry import compute_flux_density
 from diffsed.models.observation.spectroscopy import (
     compute_spectrum,
-    chebyshev_calibration,
 )
-from diffsed.utils.grid import (
-    make_log_age_grid, log_age_to_age_yr, grid_spacing,
-    interpolate_to_linear_time,
+from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
+from diffsed.models.sfh.mean_sfh import double_powerlaw
+from diffsed.models.sfh.psd_models import drw_variance
+from diffsed.models.sps.dsps_wrapper import (
+    compute_csp_sed,
+    compute_csp_weights,
+    interpolate_metallicity,
 )
 from diffsed.utils.cosmology import luminosity_distance
+from diffsed.utils.grid import (
+    grid_spacing,
+    interpolate_to_linear_time,
+    log_age_to_age_yr,
+    make_log_age_grid,
+)
 
 
 class ModelConfig(NamedTuple):
@@ -60,6 +62,7 @@ class ModelConfig(NamedTuple):
     dust_type : str
         Dust model ("charlot_fall").
     """
+
     n_grid: int = 256
     log_age_min: float = 6.0
     log_age_max: float = 10.14
@@ -93,8 +96,7 @@ class ForwardModel:
         Filter transmission curves.
     """
 
-    def __init__(self, ssp_data, config=None, filter_waves=None,
-                 filter_trans=None, wave_obs=None):
+    def __init__(self, ssp_data, config=None, filter_waves=None, filter_trans=None, wave_obs=None):
         if config is None:
             config = ModelConfig()
 
@@ -110,7 +112,7 @@ class ForwardModel:
 
         # SSP ages in log10(yr)
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0  # Gyr -> yr
-        self.ssp_ages_yr = 10.0 ** self.ssp_log_ages_yr
+        self.ssp_ages_yr = 10.0**self.ssp_log_ages_yr
 
         # Luminosity distance
         self.dl_cm = luminosity_distance(config.redshift)
@@ -138,9 +140,7 @@ class ForwardModel:
         array, shape (n_freq,)
             sqrt(P(omega) / d_log_age).
         """
-        return compute_sqrt_power_drw(
-            self.config.n_grid, float(self.d_log_age), sigma_ps, tau_ps
-        )
+        return compute_sqrt_power_drw(self.config.n_grid, float(self.d_log_age), sigma_ps, tau_ps)
 
     def __call__(self, params):
         """Run the full forward model.
@@ -169,9 +169,7 @@ class ForwardModel:
             Predicted photometric flux densities if filters are set.
         """
         # --- Step 1: Amplitude operator from PSD params ---
-        sqrt_power = self.compute_sqrt_power(
-            params["sigma_ps"], params["tau_ps"]
-        )
+        sqrt_power = self.compute_sqrt_power(params["sigma_ps"], params["tau_ps"])
 
         # --- Step 2: GP realization from standardized xi ---
         gp_x = gp_from_xi(params["xi"], sqrt_power, self.config.n_grid)
@@ -190,9 +188,7 @@ class ForwardModel:
         sfr = sfr_mean * jnp.exp(gp_x - k0_half)
 
         # --- Step 4: Interpolate SFR to SSP age grid ---
-        sfr_on_ssp = jnp.interp(
-            self.ssp_log_ages_yr, self.log_age_grid, sfr
-        )
+        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
         weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
 
         # --- Step 5: CSP integral with metallicity ---
@@ -233,9 +229,7 @@ class ForwardModel:
             "sfr_mean_on_ssp": mean SFR interpolated to SSP ages (Msun/yr)
             "sfr_full_on_ssp": full SFR interpolated to SSP ages (Msun/yr)
         """
-        sqrt_power = self.compute_sqrt_power(
-            params["sigma_ps"], params["tau_ps"]
-        )
+        sqrt_power = self.compute_sqrt_power(params["sigma_ps"], params["tau_ps"])
         gp_x = gp_from_xi(params["xi"], sqrt_power, self.config.n_grid)
         k0_half = drw_variance(params["sigma_ps"]) / 2.0
 
@@ -248,12 +242,8 @@ class ForwardModel:
         )
         sfr_full = sfr_mean * jnp.exp(gp_x - k0_half)
 
-        sfr_mean_on_ssp = jnp.interp(
-            self.ssp_log_ages_yr, self.log_age_grid, sfr_mean
-        )
-        sfr_full_on_ssp = jnp.interp(
-            self.ssp_log_ages_yr, self.log_age_grid, sfr_full
-        )
+        sfr_mean_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr_mean)
+        sfr_full_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr_full)
 
         return {
             "sfr_mean": sfr_mean,
@@ -289,7 +279,7 @@ class ForwardModel:
         t_gyr_mean, sfr_mean_lin = interpolate_to_linear_time(
             self.log_age_grid, sfh["sfr_mean"], n_linear
         )
-        t_gyr_full, sfr_full_lin = interpolate_to_linear_time(
+        _t_gyr_full, sfr_full_lin = interpolate_to_linear_time(
             self.log_age_grid, sfh["sfr_full"], n_linear
         )
         return {
@@ -317,12 +307,8 @@ class ForwardModel:
         """
         sfh = self._compute_sfh(params)
 
-        weights_mean = compute_csp_weights(
-            sfh["sfr_mean_on_ssp"], self.ssp_ages_yr
-        )
-        weights_full = compute_csp_weights(
-            sfh["sfr_full_on_ssp"], self.ssp_ages_yr
-        )
+        weights_mean = compute_csp_weights(sfh["sfr_mean_on_ssp"], self.ssp_ages_yr)
+        weights_full = compute_csp_weights(sfh["sfr_full_on_ssp"], self.ssp_ages_yr)
 
         return {
             "mstar_mean": jnp.sum(weights_mean),
@@ -349,12 +335,8 @@ class ForwardModel:
         sfh = self._compute_sfh(params)
 
         # Stellar masses
-        weights_mean = compute_csp_weights(
-            sfh["sfr_mean_on_ssp"], self.ssp_ages_yr
-        )
-        weights_full = compute_csp_weights(
-            sfh["sfr_full_on_ssp"], self.ssp_ages_yr
-        )
+        weights_mean = compute_csp_weights(sfh["sfr_mean_on_ssp"], self.ssp_ages_yr)
+        weights_full = compute_csp_weights(sfh["sfr_full_on_ssp"], self.ssp_ages_yr)
         mstar_mean = jnp.sum(weights_mean)
         mstar_formed = jnp.sum(weights_full)
 
@@ -405,8 +387,12 @@ class ForwardModel:
         fluxes = []
         for fw, ft in zip(self.filter_waves, self.filter_trans):
             f = compute_flux_density(
-                sed, self.ssp_data.ssp_wave, fw, ft,
-                self.config.redshift, self.dl_cm,
+                sed,
+                self.ssp_data.ssp_wave,
+                fw,
+                ft,
+                self.config.redshift,
+                self.dl_cm,
             )
             fluxes.append(f)
         return jnp.array(fluxes)
@@ -428,14 +414,18 @@ class ForwardModel:
         """
         sed = self(params)
         return compute_spectrum(
-            sed, self.ssp_data.ssp_wave, wave_obs,
-            self.config.redshift, self.dl_cm,
+            sed,
+            self.ssp_data.ssp_wave,
+            wave_obs,
+            self.config.redshift,
+            self.dl_cm,
         )
 
 
 # ---------------------------------------------------------------------------
 # Likelihood functions
 # ---------------------------------------------------------------------------
+
 
 @jax.jit
 def gaussian_log_likelihood(predicted, observed, noise):
@@ -458,7 +448,7 @@ def gaussian_log_likelihood(predicted, observed, noise):
         Log-likelihood.
     """
     residual = (observed - predicted) / noise
-    return -0.5 * jnp.sum(residual ** 2)
+    return -0.5 * jnp.sum(residual**2)
 
 
 @jax.jit
@@ -467,12 +457,13 @@ def standard_normal_log_prior(xi):
 
     This is the prior that NIFTy assumes for all standardized variables.
     """
-    return -0.5 * jnp.sum(xi ** 2)
+    return -0.5 * jnp.sum(xi**2)
 
 
 # ---------------------------------------------------------------------------
 # Mock generation
 # ---------------------------------------------------------------------------
+
 
 def generate_mock(model, params, key=None, snr=20.0):
     """Generate mock photometry with Gaussian noise.

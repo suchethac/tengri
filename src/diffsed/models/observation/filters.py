@@ -8,10 +8,8 @@ Filters are cached as simple two-column text files (wavelength in Angstrom,
 transmission) under a configurable cache directory.
 """
 
-import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Dict, List, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -20,12 +18,11 @@ import numpy as np
 
 from diffsed.models.observation.photometry import FilterCurve
 
-
 # ---------------------------------------------------------------------------
 # Registry: short name -> SVO Filter Profile Service ID
 # ---------------------------------------------------------------------------
 
-FILTER_REGISTRY: Dict[str, str] = {
+FILTER_REGISTRY: dict[str, str] = {
     # SDSS
     "sdss_u": "SLOAN/SDSS.u",
     "sdss_g": "SLOAN/SDSS.g",
@@ -115,12 +112,13 @@ _VOT_NS = "{http://www.ivoa.net/xml/VOTable/v1.2}"
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _svo_id_to_filename(svo_id: str) -> str:
     """Convert SVO filter ID to a safe filename."""
     return svo_id.replace("/", "_").replace(".", "_") + ".dat"
 
 
-def _parse_votable(xml_bytes: bytes) -> Tuple[np.ndarray, np.ndarray]:
+def _parse_votable(xml_bytes: bytes) -> tuple[np.ndarray, np.ndarray]:
     """Parse SVO VOTable XML and extract wavelength/transmission arrays.
 
     Parameters
@@ -157,8 +155,8 @@ def _parse_votable(xml_bytes: bytes) -> Tuple[np.ndarray, np.ndarray]:
             "The filter ID may be invalid or the service may be unavailable."
         )
 
-    wave_list: List[float] = []
-    trans_list: List[float] = []
+    wave_list: list[float] = []
+    trans_list: list[float] = []
     for row in rows:
         # Try with namespace, then without
         cells = row.findall(f"{_VOT_NS}TD")
@@ -179,11 +177,10 @@ def _parse_votable(xml_bytes: bytes) -> Tuple[np.ndarray, np.ndarray]:
 def _save_filter(filepath: Path, wave: np.ndarray, trans: np.ndarray) -> None:
     """Save filter to a two-column text file."""
     header = "# Wavelength(Angstrom)  Transmission"
-    np.savetxt(str(filepath), np.column_stack([wave, trans]),
-               header=header, fmt="%.6e")
+    np.savetxt(str(filepath), np.column_stack([wave, trans]), header=header, fmt="%.6e")
 
 
-def _load_filter_file(filepath: Path) -> Tuple[np.ndarray, np.ndarray]:
+def _load_filter_file(filepath: Path) -> tuple[np.ndarray, np.ndarray]:
     """Load a two-column filter text file."""
     data = np.loadtxt(str(filepath))
     if data.ndim != 2 or data.shape[1] < 2:
@@ -198,10 +195,11 @@ def _load_filter_file(filepath: Path) -> Tuple[np.ndarray, np.ndarray]:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def download_filter(
     svo_id: str,
     cache_dir: str = _DEFAULT_CACHE_DIR,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Download a single filter from the SVO Filter Profile Service.
 
     If the filter is already cached on disk, it is loaded from the cache
@@ -309,9 +307,9 @@ def load_filter(
 
 
 def load_filter_set(
-    names: List[str],
+    names: list[str],
     cache_dir: str = _DEFAULT_CACHE_DIR,
-) -> Tuple[List[jnp.ndarray], List[jnp.ndarray], List[FilterCurve]]:
+) -> tuple[list[jnp.ndarray], list[jnp.ndarray], list[FilterCurve]]:
     """Load multiple filters by short name.
 
     Parameters
@@ -330,9 +328,9 @@ def load_filter_set(
     filter_curves : list of FilterCurve
         Full FilterCurve objects.
     """
-    filter_waves: List[jnp.ndarray] = []
-    filter_trans: List[jnp.ndarray] = []
-    filter_curves: List[FilterCurve] = []
+    filter_waves: list[jnp.ndarray] = []
+    filter_trans: list[jnp.ndarray] = []
+    filter_curves: list[FilterCurve] = []
 
     for name in names:
         fc = load_filter(name, cache_dir=cache_dir)
@@ -388,7 +386,7 @@ def load_custom_filter(filepath: str) -> FilterCurve:
     )
 
 
-def list_available_filters() -> Dict[str, str]:
+def list_available_filters() -> dict[str, str]:
     """Print and return the filter registry.
 
     For each filter, prints the short name and SVO identifier.

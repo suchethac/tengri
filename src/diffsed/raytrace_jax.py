@@ -39,9 +39,9 @@ import operator as op
 
 import jax
 import jax.numpy as jnp
-from jax.tree_util import tree_map, tree_leaves, tree_reduce
+from jax.tree_util import tree_leaves, tree_map, tree_reduce
 
-__all__ = ["sample_raytrace", "sample_hamiltonian"]
+__all__ = ["sample_hamiltonian", "sample_raytrace"]
 
 
 def random_split_like_tree(rng_key, target=None, treedef=None):
@@ -55,14 +55,13 @@ def normal_like_tree(rng_key, target, mean=0, std=1):
     keys_tree = random_split_like_tree(rng_key, target)
     return tree_map(
         lambda l, k: mean + std * jax.random.normal(k, l.shape, l.dtype),
-        target, keys_tree,
+        target,
+        keys_tree,
     )
 
 
 def ifelse(cond, val_true, val_false):
-    return jax.lax.cond(
-        cond, lambda x: x[0], lambda x: x[1], (val_true, val_false)
-    )
+    return jax.lax.cond(cond, lambda x: x[0], lambda x: x[1], (val_true, val_false))
 
 
 def ScatterV(momentum, refresh_rate, dt, key):
@@ -78,8 +77,8 @@ def ScatterV(momentum, refresh_rate, dt, key):
 # HMC leapfrog variants (for comparison)
 # -------------------------------------------------------------------
 
-def hmc_leapfrog_refresh(params, momentum, log_prob_fn, step_size,
-                         n_steps, refresh_rate, key):
+
+def hmc_leapfrog_refresh(params, momentum, log_prob_fn, step_size, n_steps, refresh_rate, key):
     """HMC leapfrog with partial momentum refresh."""
     kinetic_energy_diff = 0
 
@@ -87,9 +86,7 @@ def hmc_leapfrog_refresh(params, momentum, log_prob_fn, step_size,
         params, momentum, kinetic_energy_diff, key = args
         momentum, key = ScatterV(momentum, refresh_rate, step_size / 2.0, key)
         params = tree_map(lambda p, m: p + 0.5 * m * step_size, params, momentum)
-        momentum_dot = tree_reduce(
-            op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(momentum))
-        )
+        momentum_dot = tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(momentum)))
         grad = jax.grad(log_prob_fn)(params)
         momentum = tree_map(lambda m, g: m + step_size * g, momentum, grad)
         new_momentum_dot = tree_reduce(
@@ -106,12 +103,9 @@ def hmc_leapfrog_refresh(params, momentum, log_prob_fn, step_size,
     return new_params, new_momentum, -kinetic_energy_diff, key
 
 
-def hmc_leapfrog_norefresh(params, momentum, log_prob_fn, step_size,
-                           n_steps, refresh_rate, key):
+def hmc_leapfrog_norefresh(params, momentum, log_prob_fn, step_size, n_steps, refresh_rate, key):
     """HMC leapfrog without momentum refresh."""
-    momentum_dot = tree_reduce(
-        op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(momentum))
-    )
+    momentum_dot = tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(momentum)))
 
     def step(i, args):
         params, momentum = args
@@ -121,9 +115,7 @@ def hmc_leapfrog_norefresh(params, momentum, log_prob_fn, step_size,
         params = tree_map(lambda p, m: p + 0.5 * m * step_size, params, momentum)
         return params, momentum
 
-    new_params, new_momentum = jax.lax.fori_loop(
-        0, n_steps, step, (params, momentum)
-    )
+    new_params, new_momentum = jax.lax.fori_loop(0, n_steps, step, (params, momentum))
     new_momentum_dot = tree_reduce(
         op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(new_momentum))
     )
@@ -134,6 +126,7 @@ def hmc_leapfrog_norefresh(params, momentum, log_prob_fn, step_size,
 # -------------------------------------------------------------------
 # Ray tracing core: UpdateV (Snell's law in parameter space)
 # -------------------------------------------------------------------
+
 
 def UpdateV(momentum, grad, D, step_size):
     """Update velocity direction via Snell's law refraction.
@@ -157,13 +150,9 @@ def UpdateV(momentum, grad, D, step_size):
     tuple
         (new_momentum, delta_ln_L, norm_v, norm_g, theta_i, theta_f, f_v, f_n)
     """
-    norm_v = jnp.sqrt(
-        tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(momentum)))
-    )
+    norm_v = jnp.sqrt(tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(momentum))))
     unit_v = tree_map(lambda m, n: m / n, momentum, norm_v)
-    norm_g = jnp.sqrt(
-        tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(grad)))
-    )
+    norm_g = jnp.sqrt(tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(grad))))
     unit_g = tree_map(lambda g, n: g / n, grad, norm_g)
 
     sub_vec = tree_map(lambda v, g: v - g, unit_v, unit_g)
@@ -189,9 +178,7 @@ def UpdateV(momentum, grad, D, step_size):
     )
     f_n = (jnp.cos(theta_f) - f_v * jnp.cos(theta_i)) * norm_v
 
-    new_momentum = tree_map(
-        lambda m, ug, fv, fn: fv * m + fn * ug, momentum, unit_g, f_v, f_n
-    )
+    new_momentum = tree_map(lambda m, ug, fv, fn: fv * m + fn * ug, momentum, unit_g, f_v, f_n)
 
     delta_ln_L = jax.lax.cond(
         jnp.sin(theta_i) == 0,
@@ -206,8 +193,10 @@ def UpdateV(momentum, grad, D, step_size):
 # Ray tracing leapfrog integrators
 # -------------------------------------------------------------------
 
-def raytracer_leapfrog_refresh(params, momentum, log_prob_fn, step_size,
-                               n_steps, refresh_rate, key):
+
+def raytracer_leapfrog_refresh(
+    params, momentum, log_prob_fn, step_size, n_steps, refresh_rate, key
+):
     """Ray tracing DKD leapfrog with partial momentum refresh."""
     ln_L = 0
 
@@ -216,9 +205,7 @@ def raytracer_leapfrog_refresh(params, momentum, log_prob_fn, step_size,
         momentum, key = ScatterV(momentum, refresh_rate, step_size / 2.0, key)
         params = tree_map(lambda p, m: p + 0.5 * m * step_size, params, momentum)
         grad = jax.grad(log_prob_fn)(params)
-        momentum, delta_ln_L, *_ = UpdateV(
-            momentum, grad, momentum.size, step_size
-        )
+        momentum, delta_ln_L, *_ = UpdateV(momentum, grad, momentum.size, step_size)
         ln_L += delta_ln_L
         params = tree_map(lambda p, m: p + 0.5 * m * step_size, params, momentum)
         momentum, key = ScatterV(momentum, refresh_rate, step_size / 2.0, key)
@@ -230,8 +217,9 @@ def raytracer_leapfrog_refresh(params, momentum, log_prob_fn, step_size,
     return new_params, new_momentum, new_ln_L, key
 
 
-def raytracer_leapfrog_norefresh(params, momentum, log_prob_fn, step_size,
-                                 n_steps, refresh_rate, key):
+def raytracer_leapfrog_norefresh(
+    params, momentum, log_prob_fn, step_size, n_steps, refresh_rate, key
+):
     """Ray tracing DKD leapfrog without momentum refresh."""
     ln_L = 0
 
@@ -239,9 +227,7 @@ def raytracer_leapfrog_norefresh(params, momentum, log_prob_fn, step_size,
         params, momentum, ln_L = args
         params = tree_map(lambda p, m: p + 0.5 * m * step_size, params, momentum)
         grad = jax.grad(log_prob_fn)(params)
-        momentum, delta_ln_L, *_ = UpdateV(
-            momentum, grad, momentum.size, step_size
-        )
+        momentum, delta_ln_L, *_ = UpdateV(momentum, grad, momentum.size, step_size)
         ln_L += delta_ln_L
         params = tree_map(lambda p, m: p + 0.5 * m * step_size, params, momentum)
         return params, momentum, ln_L
@@ -256,19 +242,43 @@ def raytracer_leapfrog_norefresh(params, momentum, log_prob_fn, step_size,
 # Public API
 # -------------------------------------------------------------------
 
-def sample_hamiltonian(key, params_init, log_prob_fn, n_steps,
-                       n_leapfrog_steps, step_size, refresh_rate=0,
-                       metro_check=1, sample_hmc=True):
+
+def sample_hamiltonian(
+    key,
+    params_init,
+    log_prob_fn,
+    n_steps,
+    n_leapfrog_steps,
+    step_size,
+    refresh_rate=0,
+    metro_check=1,
+    sample_hmc=True,
+):
     """HMC sampling (convenience wrapper around sample_raytrace)."""
     return sample_raytrace(
-        key, params_init, log_prob_fn, n_steps, n_leapfrog_steps,
-        step_size, refresh_rate, metro_check, sample_hmc,
+        key,
+        params_init,
+        log_prob_fn,
+        n_steps,
+        n_leapfrog_steps,
+        step_size,
+        refresh_rate,
+        metro_check,
+        sample_hmc,
     )
 
 
-def sample_raytrace(key, params_init, log_prob_fn, n_steps,
-                    n_leapfrog_steps, step_size, refresh_rate=0,
-                    metro_check=1, sample_hmc=False):
+def sample_raytrace(
+    key,
+    params_init,
+    log_prob_fn,
+    n_steps,
+    n_leapfrog_steps,
+    step_size,
+    refresh_rate=0,
+    metro_check=1,
+    sample_hmc=False,
+):
     """Run Ray Tracing Sampler and return the full Markov chain.
 
     Parameters
@@ -318,9 +328,14 @@ def sample_raytrace(key, params_init, log_prob_fn, n_steps,
         momentum = normal_like_tree(normal_key, params)
         delta_ln_L = 0
 
-        new_params, new_momentum, delta_ln_L, key = leapfrog_func(
-            params, momentum, log_prob_fn, step_size,
-            n_leapfrog_steps, refresh_rate, key,
+        new_params, _new_momentum, delta_ln_L, key = leapfrog_func(
+            params,
+            momentum,
+            log_prob_fn,
+            step_size,
+            n_leapfrog_steps,
+            refresh_rate,
+            key,
         )
 
         # Metropolis-Hastings correction
@@ -337,7 +352,10 @@ def sample_raytrace(key, params_init, log_prob_fn, n_steps,
         return (params, key), (params, accept_prob, lnl)
 
     _, (chain, accept_prob, log_likelihood) = jax.lax.scan(
-        ray_step_fn, (params_init, key), xs=None, length=n_steps,
+        ray_step_fn,
+        (params_init, key),
+        xs=None,
+        length=n_steps,
     )
 
     return chain, log_likelihood, accept_prob

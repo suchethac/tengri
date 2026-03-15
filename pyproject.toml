@@ -35,6 +35,7 @@ all = [
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "ruff>=0.9",
 ]
 docs = [
     "sphinx>=7.0",
@@ -46,6 +47,44 @@ docs = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 99
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "F",      # pyflakes — unused imports/vars, redefined names
+    "E", "W", # pycodestyle — basic style
+    "I",      # isort — import sorting
+    "UP",     # pyupgrade — modernize syntax to 3.10+
+    "B",      # flake8-bugbear — common bug patterns
+    "SIM",    # flake8-simplify — simplifiable constructs
+    "RUF",    # Ruff-specific rules
+]
+ignore = [
+    "E402",   # module-import-not-at-top — needed for jax.config before imports
+    "E741",   # ambiguous-variable-name — scientific code uses l, I, O
+    "B905",   # zip-without-explicit-strict — not needed for JAX array ops
+    "SIM108", # use-ternary-operator — readability over brevity in science code
+    "RUF001", # ambiguous-unicode-character-string — Greek letters in math strings
+    "RUF002", # ambiguous-unicode-character-docstring — σ, ξ, θ in docstrings
+    "RUF003", # ambiguous-unicode-character-comment — scientific notation in comments
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]           # re-exports are intentional
+"tests/**" = ["F841"]             # unused variables common in test fixtures
+"analysis/**" = ["F841", "E501"]  # scripts: relaxed
+"notebooks/**" = ["F401", "F841", "E402", "E501"]  # notebooks are exploratory
+
+[tool.ruff.lint.isort]
+known-first-party = ["diffsed"]
+combine-as-imports = true
+
+[tool.ruff.format]
+docstring-code-format = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

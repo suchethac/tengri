@@ -11,11 +11,11 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.sfh.psd_models import psd_drw, drw_variance
-from diffsed.models.sfh.gp_sfh import gp_from_xi, compute_sqrt_power_drw
-from diffsed.models.sfh.mean_sfh import double_powerlaw
 from diffsed.models.dust.charlot_fall import charlot_fall
-from diffsed.utils.grid import make_log_age_grid, grid_spacing, log_age_to_age_yr
+from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
+from diffsed.models.sfh.mean_sfh import double_powerlaw
+from diffsed.models.sfh.psd_models import drw_variance
+from diffsed.utils.grid import grid_spacing, log_age_to_age_yr, make_log_age_grid
 
 jax.config.update("jax_enable_x64", True)
 
@@ -50,8 +50,12 @@ class TestGradientFiniteDifference:
             xi_plus = xi.at[i].add(eps)
             xi_minus = xi.at[i].add(-eps)
             grad_fd_i = (f(xi_plus) - f(xi_minus)) / (2 * eps)
-            assert_allclose(float(grad_auto[i]), float(grad_fd_i), rtol=1e-3,
-                            err_msg=f"Gradient mismatch at xi[{i}]")
+            assert_allclose(
+                float(grad_auto[i]),
+                float(grad_fd_i),
+                rtol=1e-3,
+                err_msg=f"Gradient mismatch at xi[{i}]",
+            )
 
     def test_dust_grad_vs_finite_diff(self):
         """Dust attenuation gradient matches finite differences."""
@@ -113,12 +117,12 @@ class TestGradientDirection:
 
         def f(xi):
             gp = gp_from_xi(xi, sqrt_power, N_GRID)
-            return jnp.sum(gp ** 2)
+            return jnp.sum(gp**2)
 
         grad = jax.grad(f)(xi)
 
         # Gradient should not be all zeros or all tiny
-        grad_rms = float(jnp.sqrt(jnp.mean(grad ** 2)))
+        grad_rms = float(jnp.sqrt(jnp.mean(grad**2)))
         assert grad_rms > 1e-10, f"GP gradient RMS = {grad_rms}, vanishing"
 
         # Gradient should not be exploding

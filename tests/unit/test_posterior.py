@@ -2,7 +2,6 @@
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import pytest
 
 jax.config.update("jax_enable_x64", True)
@@ -82,12 +81,14 @@ class TestToParamSpec:
     def test_map_to_param_spec(self, map_posterior):
         spec = map_posterior.to_param_spec()
         from diffsed.distributions import Fixed
+
         d = spec.get_distribution("sfh_alpha")
         assert isinstance(d, Fixed)
 
     def test_sampling_to_param_spec(self, sampling_posterior):
         spec = sampling_posterior.to_param_spec()
         from diffsed.distributions import Gaussian
+
         d = spec.get_distribution("sfh_alpha")
         assert isinstance(d, Gaussian)
         assert d.mu == pytest.approx(1.2, abs=0.1)

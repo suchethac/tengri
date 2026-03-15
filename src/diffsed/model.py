@@ -28,35 +28,29 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from diffsed.distributions import Fixed
-from diffsed.param_spec import ParamSpec
-
+from diffsed.models.dust.charlot_fall import charlot_fall, charlot_fall_at_wavelengths
+from diffsed.models.observation.photometry import ab_mag_from_flux, compute_flux_density
+from diffsed.models.observation.spectroscopy import compute_spectrum
+from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
 from diffsed.models.sfh.mean_sfh import double_powerlaw
-from diffsed.models.sfh.gp_sfh import gp_from_xi, compute_sqrt_power_drw
 from diffsed.models.sfh.psd_models import drw_variance
-from diffsed.models.dust.charlot_fall import charlot_fall
 from diffsed.models.sps.dsps_wrapper import (
-    compute_csp_weights,
     compute_csp_sed,
+    compute_csp_weights,
     interpolate_metallicity,
 )
-from diffsed.models.observation.photometry import compute_flux_density
-from diffsed.models.observation.spectroscopy import compute_spectrum
-from diffsed.utils.grid import (
-    make_log_age_grid,
-    log_age_to_age_yr,
-    grid_spacing,
-    interpolate_to_linear_time,
-)
-from diffsed.utils.cosmology import luminosity_distance
-from diffsed.models.observation.photometry import ab_mag_from_flux
 from diffsed.models.sps.precompute import (
-    precompute_photometry,
     fast_photometry,
     interpolate_ssp_phot_metallicity,
+    precompute_photometry,
 )
-from diffsed.models.dust.charlot_fall import charlot_fall_at_wavelengths
-
+from diffsed.utils.cosmology import luminosity_distance
+from diffsed.utils.grid import (
+    grid_spacing,
+    interpolate_to_linear_time,
+    log_age_to_age_yr,
+    make_log_age_grid,
+)
 
 # ---------------------------------------------------------------------------
 # Parameter name mapping: public → (internal, unit_scale, offset)
@@ -68,17 +62,17 @@ from diffsed.models.dust.charlot_fall import charlot_fall_at_wavelengths
 LOG10_ZSUN = -1.8477116556169435
 
 PARAM_MAP = {
-    "sfh_alpha":         ("alpha",    1.0, 0.0),
-    "sfh_beta":          ("beta",     1.0, 0.0),
-    "sfh_tau_peak_gyr":  ("tau_sfh",  1e9, 0.0),    # Gyr → yr
-    "sfh_peak_sfr":      ("sfr_norm", 1.0, 0.0),
-    "psd_sigma":         ("sigma_ps", 1.0, 0.0),
-    "psd_tau_myr":       ("tau_ps",   1e6, 0.0),    # Myr → yr
-    "met_logzsol":       ("log_z",    1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
-    "dust_tau_bc":       ("tau_v1",   1.0, 0.0),
-    "dust_tau_diff":     ("tau_v2",   1.0, 0.0),
-    "dust_slope":        ("dust_n",   1.0, 0.0),
-    "redshift":          ("redshift", 1.0, 0.0),
+    "sfh_alpha": ("alpha", 1.0, 0.0),
+    "sfh_beta": ("beta", 1.0, 0.0),
+    "sfh_tau_peak_gyr": ("tau_sfh", 1e9, 0.0),  # Gyr → yr
+    "sfh_peak_sfr": ("sfr_norm", 1.0, 0.0),
+    "psd_sigma": ("sigma_ps", 1.0, 0.0),
+    "psd_tau_myr": ("tau_ps", 1e6, 0.0),  # Myr → yr
+    "met_logzsol": ("log_z", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
+    "dust_tau_bc": ("tau_v1", 1.0, 0.0),
+    "dust_tau_diff": ("tau_v2", 1.0, 0.0),
+    "dust_slope": ("dust_n", 1.0, 0.0),
+    "redshift": ("redshift", 1.0, 0.0),
 }
 
 
@@ -86,17 +80,20 @@ PARAM_MAP = {
 # MockData container
 # ---------------------------------------------------------------------------
 
+
 class MockData(NamedTuple):
     """Container for mock galaxy observations."""
-    flux_true: jnp.ndarray    # noiseless photometry (erg/s/cm²/Hz)
-    flux_obs: jnp.ndarray     # noisy photometry
-    noise: jnp.ndarray        # 1-sigma uncertainties
-    params: dict               # input parameters
+
+    flux_true: jnp.ndarray  # noiseless photometry (erg/s/cm²/Hz)
+    flux_obs: jnp.ndarray  # noisy photometry
+    noise: jnp.ndarray  # 1-sigma uncertainties
+    params: dict  # input parameters
 
 
 # ---------------------------------------------------------------------------
 # Model class
 # ---------------------------------------------------------------------------
+
 
 class Model:
     """Differentiable forward model with clean parameter API.
@@ -139,7 +136,7 @@ class Model:
 
         # SSP grid info
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
-        self.ssp_ages_yr = 10.0 ** self.ssp_log_ages_yr
+        self.ssp_ages_yr = 10.0**self.ssp_log_ages_yr
 
         # Log-age grid for SFH computation
         n_grid = spec.n_grid if spec.stochastic else 256
@@ -162,11 +159,13 @@ class Model:
         # SSP broadband fluxes to eliminate wavelength integrals from
         # the inference loop. Gives 30-50x speedup.
         self._precomp = None
-        if (precompute is True and self._z_fixed is not None
-                and self.filter_waves is not None):
+        if precompute is True and self._z_fixed is not None and self.filter_waves is not None:
             self._precomp = precompute_photometry(
-                ssp_data, self.filter_waves, self.filter_trans,
-                self._z_fixed, self._dl_cm_fixed,
+                ssp_data,
+                self.filter_waves,
+                self.filter_trans,
+                self._z_fixed,
+                self._dl_cm_fixed,
             )
 
     # -------------------------------------------------------------------
@@ -189,9 +188,7 @@ class Model:
                 if dist.is_fixed:
                     internal[int_name] = dist.bounds[0] * scale + offset
                 else:
-                    raise KeyError(
-                        f"Free parameter '{pub_name}' not found in params dict"
-                    )
+                    raise KeyError(f"Free parameter '{pub_name}' not found in params dict")
 
         # Handle psd_xi
         if self.spec.stochastic and "psd_xi" in params:
@@ -236,24 +233,27 @@ class Model:
         if self.spec.stochastic:
             # GP stochastic path
             sqrt_power = compute_sqrt_power_drw(
-                self._n_grid, float(self.d_log_age),
-                p["sigma_ps"], p["tau_ps"]
+                self._n_grid, float(self.d_log_age), p["sigma_ps"], p["tau_ps"]
             )
             gp_x = gp_from_xi(p["xi"], sqrt_power, self._n_grid)
             k0_half = drw_variance(p["sigma_ps"]) / 2.0
 
             sfr_mean = double_powerlaw(
                 self.age_yr,
-                alpha=p["alpha"], beta=p["beta"],
-                tau=p["tau_sfh"], norm=p["sfr_norm"],
+                alpha=p["alpha"],
+                beta=p["beta"],
+                tau=p["tau_sfh"],
+                norm=p["sfr_norm"],
             )
             sfr = sfr_mean * jnp.exp(gp_x - k0_half)
         else:
             # Pure parametric path — no GP
             sfr = double_powerlaw(
                 self.age_yr,
-                alpha=p["alpha"], beta=p["beta"],
-                tau=p["tau_sfh"], norm=p["sfr_norm"],
+                alpha=p["alpha"],
+                beta=p["beta"],
+                tau=p["tau_sfh"],
+                norm=p["sfr_norm"],
             )
 
         # Interpolate SFR to SSP age grid
@@ -312,7 +312,12 @@ class Model:
         fluxes = []
         for fw, ft in zip(self.filter_waves, self.filter_trans):
             f = compute_flux_density(
-                sed, self.ssp_data.ssp_wave, fw, ft, z, dl_cm,
+                sed,
+                self.ssp_data.ssp_wave,
+                fw,
+                ft,
+                z,
+                dl_cm,
             )
             fluxes.append(f)
         return jnp.array(fluxes)
@@ -332,22 +337,25 @@ class Model:
         # 1. Compute SFH weights (same as predict_sed)
         if self.spec.stochastic and "xi" in p:
             sqrt_power = compute_sqrt_power_drw(
-                self._n_grid, float(self.d_log_age),
-                p["sigma_ps"], p["tau_ps"]
+                self._n_grid, float(self.d_log_age), p["sigma_ps"], p["tau_ps"]
             )
             gp_x = gp_from_xi(p["xi"], sqrt_power, self._n_grid)
             k0_half = drw_variance(p["sigma_ps"]) / 2.0
             sfr_mean = double_powerlaw(
                 self.age_yr,
-                alpha=p["alpha"], beta=p["beta"],
-                tau=p["tau_sfh"], norm=p["sfr_norm"],
+                alpha=p["alpha"],
+                beta=p["beta"],
+                tau=p["tau_sfh"],
+                norm=p["sfr_norm"],
             )
             sfr = sfr_mean * jnp.exp(gp_x - k0_half)
         else:
             sfr = double_powerlaw(
                 self.age_yr,
-                alpha=p["alpha"], beta=p["beta"],
-                tau=p["tau_sfh"], norm=p["sfr_norm"],
+                alpha=p["alpha"],
+                beta=p["beta"],
+                tau=p["tau_sfh"],
+                norm=p["sfr_norm"],
             )
 
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
@@ -362,12 +370,13 @@ class Model:
         dust_at_eff = charlot_fall_at_wavelengths(
             precomp.effective_wavelengths_rest,
             self.ssp_ages_yr,
-            tau_v1=p["tau_v1"], tau_v2=p["tau_v2"], n_slope=p["dust_n"],
+            tau_v1=p["tau_v1"],
+            tau_v2=p["tau_v2"],
+            n_slope=p["dust_n"],
         )
 
         # 4. Fast photometry: weighted sum (no wavelength integrals)
-        return fast_photometry(weights, ssp_phot_at_z, dust_at_eff,
-                               precomp.flux_scale)
+        return fast_photometry(weights, ssp_phot_at_z, dust_at_eff, precomp.flux_scale)
 
     def predict_spectrum(self, params, wave_obs):
         """Compute observed spectrum at given wavelengths.
@@ -388,7 +397,11 @@ class Model:
         z = self._get_redshift(params)
         dl_cm = self._get_dl_cm(params)
         return compute_spectrum(
-            sed, self.ssp_data.ssp_wave, wave_obs, z, dl_cm,
+            sed,
+            self.ssp_data.ssp_wave,
+            wave_obs,
+            z,
+            dl_cm,
         )
 
     def predict_sfh(self, params, n_linear=1000):
@@ -412,14 +425,15 @@ class Model:
 
         sfr_mean = double_powerlaw(
             self.age_yr,
-            alpha=p["alpha"], beta=p["beta"],
-            tau=p["tau_sfh"], norm=p["sfr_norm"],
+            alpha=p["alpha"],
+            beta=p["beta"],
+            tau=p["tau_sfh"],
+            norm=p["sfr_norm"],
         )
 
         if self.spec.stochastic and "xi" in p:
             sqrt_power = compute_sqrt_power_drw(
-                self._n_grid, float(self.d_log_age),
-                p["sigma_ps"], p["tau_ps"]
+                self._n_grid, float(self.d_log_age), p["sigma_ps"], p["tau_ps"]
             )
             gp_x = gp_from_xi(p["xi"], sqrt_power, self._n_grid)
             k0_half = drw_variance(p["sigma_ps"]) / 2.0
@@ -430,9 +444,7 @@ class Model:
         t_gyr_mean, sfr_mean_lin = interpolate_to_linear_time(
             self.log_age_grid, sfr_mean, n_linear
         )
-        _, sfr_full_lin = interpolate_to_linear_time(
-            self.log_age_grid, sfr_full, n_linear
-        )
+        _, sfr_full_lin = interpolate_to_linear_time(self.log_age_grid, sfr_full, n_linear)
 
         return {
             "t_gyr": t_gyr_mean,
@@ -460,14 +472,15 @@ class Model:
 
         sfr_mean = double_powerlaw(
             self.age_yr,
-            alpha=p["alpha"], beta=p["beta"],
-            tau=p["tau_sfh"], norm=p["sfr_norm"],
+            alpha=p["alpha"],
+            beta=p["beta"],
+            tau=p["tau_sfh"],
+            norm=p["sfr_norm"],
         )
 
         if self.spec.stochastic and "xi" in p:
             sqrt_power = compute_sqrt_power_drw(
-                self._n_grid, float(self.d_log_age),
-                p["sigma_ps"], p["tau_ps"]
+                self._n_grid, float(self.d_log_age), p["sigma_ps"], p["tau_ps"]
             )
             gp_x = gp_from_xi(p["xi"], sqrt_power, self._n_grid)
             k0_half = drw_variance(p["sigma_ps"]) / 2.0
@@ -534,8 +547,15 @@ class Model:
             mags = []
             for fw, ft in zip(self.filter_waves, self.filter_trans):
                 m = calc_obs_mag(
-                    self.ssp_data.ssp_wave, sed_lsun, fw, ft,
-                    z, cosmo.Om0, cosmo.w0, cosmo.wa, cosmo.h,
+                    self.ssp_data.ssp_wave,
+                    sed_lsun,
+                    fw,
+                    ft,
+                    z,
+                    cosmo.Om0,
+                    cosmo.w0,
+                    cosmo.wa,
+                    cosmo.h,
                 )
                 mags.append(m)
             return jnp.array(mags)
@@ -563,8 +583,9 @@ class Model:
         sed_erg = self.predict_sed(params)  # erg/s/Hz
         return sed_erg / LSUN_CGS
 
-    def plot_sfh_posterior(self, posterior, true_params=None, ax=None,
-                          n_draws=50, color="C0", label="Posterior"):
+    def plot_sfh_posterior(
+        self, posterior, true_params=None, ax=None, n_draws=50, color="C0", label="Posterior"
+    ):
         """Plot posterior SFH with percentile fill and sample lines.
 
         Parameters
@@ -606,6 +627,7 @@ class Model:
                 sfh_draws.append(sfh_i[key])
 
             import numpy as np
+
             sfh_arr = np.array(sfh_draws)  # (n_samples, n_linear)
             t_gyr = np.array(self.predict_sfh(posterior.params)["t_gyr"])
 
@@ -629,11 +651,9 @@ class Model:
         if true_params is not None:
             sfh_true = self.predict_sfh(true_params)
             key = "sfr_full" if self.spec.stochastic else "sfr_mean"
-            ax.plot(sfh_true["t_gyr"], sfh_true[key], "k-", lw=2.5,
-                    label="Truth", zorder=10)
+            ax.plot(sfh_true["t_gyr"], sfh_true[key], "k-", lw=2.5, label="Truth", zorder=10)
             if self.spec.stochastic:
-                ax.plot(sfh_true["t_gyr"], sfh_true["sfr_mean"], "k--",
-                        lw=1, alpha=0.3)
+                ax.plot(sfh_true["t_gyr"], sfh_true["sfr_mean"], "k--", lw=1, alpha=0.3)
 
         ax.set_xlabel("Lookback time (Gyr)")
         ax.set_ylabel(r"SFR (M$_{\odot}$/yr)")
@@ -667,9 +687,7 @@ class Model:
         noise = flux_true / snr
 
         if key is not None:
-            flux_obs = flux_true + noise * jax.random.normal(
-                key, shape=flux_true.shape
-            )
+            flux_obs = flux_true + noise * jax.random.normal(key, shape=flux_true.shape)
         else:
             flux_obs = flux_true
 
@@ -749,5 +767,6 @@ class Model:
             Inference results.
         """
         from diffsed.fitter import Fitter
+
         fitter = Fitter(self, data, noise, data_type=data_type)
         return fitter.run(method, **kwargs)

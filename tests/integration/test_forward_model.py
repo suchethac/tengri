@@ -5,7 +5,6 @@ Tests the full pipeline from physical parameters to observable quantities
 correctness, gradient flow, and consistency between computation paths.
 """
 
-import os
 from pathlib import Path
 
 import jax
@@ -19,25 +18,20 @@ from diffsed.forward_model import (
     ForwardModel,
     ModelConfig,
     generate_mock,
-    gaussian_log_likelihood,
-)
-from diffsed.models.sps.dsps_wrapper import (
-    SSPData,
-    load_ssp_data,
-    compute_csp_weights,
-    compute_csp_sed,
-    interpolate_metallicity,
-)
-from diffsed.models.sps.precompute import (
-    precompute_photometry,
-    fast_photometry,
-    interpolate_ssp_phot_metallicity,
-)
-from diffsed.models.observation.photometry import (
-    compute_flux_density,
-    ab_mag_from_flux,
 )
 from diffsed.models.dust.charlot_fall import charlot_fall
+from diffsed.models.observation.photometry import (
+    ab_mag_from_flux,
+)
+from diffsed.models.sps.dsps_wrapper import (
+    compute_csp_weights,
+    load_ssp_data,
+)
+from diffsed.models.sps.precompute import (
+    fast_photometry,
+    interpolate_ssp_phot_metallicity,
+    precompute_photometry,
+)
 from diffsed.utils.cosmology import luminosity_distance
 
 # ---------------------------------------------------------------------------
@@ -57,6 +51,7 @@ pytestmark = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 # Session-scoped fixtures (loaded once, shared across all tests)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="session")
 def ssp_no_neb():
@@ -140,6 +135,7 @@ def forward_model(ssp_no_neb, default_config, sdss_filters):
 # 1. SSP Loading
 # ===================================================================
 
+
 class TestSSPLoading:
     """Verify SSP template data has correct shapes and physical ranges."""
 
@@ -162,7 +158,7 @@ class TestSSPLoading:
 
     def test_age_range(self, ssp_no_neb):
         # ssp_lg_age_gyr is log10(age/Gyr)
-        age_gyr = 10.0 ** ssp_no_neb.ssp_lg_age_gyr
+        age_gyr = 10.0**ssp_no_neb.ssp_lg_age_gyr
         assert float(age_gyr.min()) < 0.002, "Youngest SSP should be < 2 Myr"
         assert float(age_gyr.max()) > 10.0, "Oldest SSP should be > 10 Gyr"
 
@@ -192,15 +188,21 @@ class TestSSPLoading:
 
     def test_both_ssp_same_grids(self, ssp_no_neb, ssp_with_neb):
         np.testing.assert_allclose(
-            ssp_no_neb.ssp_wave, ssp_with_neb.ssp_wave, rtol=1e-10,
+            ssp_no_neb.ssp_wave,
+            ssp_with_neb.ssp_wave,
+            rtol=1e-10,
             err_msg="Both SSP files should share the same wavelength grid",
         )
         np.testing.assert_allclose(
-            ssp_no_neb.ssp_lg_age_gyr, ssp_with_neb.ssp_lg_age_gyr, rtol=1e-10,
+            ssp_no_neb.ssp_lg_age_gyr,
+            ssp_with_neb.ssp_lg_age_gyr,
+            rtol=1e-10,
             err_msg="Both SSP files should share the same age grid",
         )
         np.testing.assert_allclose(
-            ssp_no_neb.ssp_lgmet, ssp_with_neb.ssp_lgmet, rtol=1e-10,
+            ssp_no_neb.ssp_lgmet,
+            ssp_with_neb.ssp_lgmet,
+            rtol=1e-10,
             err_msg="Both SSP files should share the same metallicity grid",
         )
 
@@ -208,6 +210,7 @@ class TestSSPLoading:
 # ===================================================================
 # 2. Full Forward Model
 # ===================================================================
+
 
 class TestFullForwardModel:
     """Test the full parameter -> SED pipeline with real SSP data."""
@@ -245,6 +248,7 @@ class TestFullForwardModel:
 # ===================================================================
 # 3. Photometry
 # ===================================================================
+
 
 class TestPhotometry:
     """Test photometric predictions with real SSP data and top-hat filters."""
@@ -289,6 +293,7 @@ class TestPhotometry:
 # 4. Spectroscopy
 # ===================================================================
 
+
 class TestSpectroscopy:
     """Test spectroscopic predictions with real SSP data."""
 
@@ -306,8 +311,7 @@ class TestSpectroscopy:
         spec = forward_model.predict_spectrum(fiducial_params, wave_obs)
         assert spec.shape == (500,)
 
-    def test_spectrum_outside_coverage_is_zero(self, forward_model, fiducial_params,
-                                                ssp_no_neb):
+    def test_spectrum_outside_coverage_is_zero(self, forward_model, fiducial_params, ssp_no_neb):
         """Wavelengths far outside SSP coverage should yield zero flux."""
         z = forward_model.config.redshift
         # Rest-frame wavelength beyond SSP maximum
@@ -316,8 +320,9 @@ class TestSpectroscopy:
         spec = forward_model.predict_spectrum(fiducial_params, wave_obs_far)
         assert float(spec[0]) == 0.0, "Flux outside SSP coverage should be zero"
 
-    def test_spectrum_consistency_with_photometry(self, forward_model,
-                                                   fiducial_params, sdss_filters):
+    def test_spectrum_consistency_with_photometry(
+        self, forward_model, fiducial_params, sdss_filters
+    ):
         """Spectrum integrated through a filter should roughly match photometry."""
         sed = forward_model(fiducial_params)
         photo_fluxes = forward_model.predict_photometry(fiducial_params)
@@ -331,11 +336,13 @@ class TestSpectroscopy:
 # 5. Dust Effects
 # ===================================================================
 
+
 class TestDustEffects:
     """Verify that dust attenuation has physically correct wavelength dependence."""
 
-    def test_dust_reduces_blue_more_than_red(self, ssp_no_neb, default_config,
-                                              sdss_filters, fiducial_params):
+    def test_dust_reduces_blue_more_than_red(
+        self, ssp_no_neb, default_config, sdss_filters, fiducial_params
+    ):
         fw, ft = sdss_filters
 
         # No dust
@@ -350,12 +357,11 @@ class TestDustEffects:
         ratio = flux_with_dust / flux_no_dust
 
         # u-band ratio (most attenuated) < z-band ratio (least attenuated)
-        assert float(ratio[0]) < float(ratio[4]), (
-            "Dust should attenuate u-band more than z-band"
-        )
+        assert float(ratio[0]) < float(ratio[4]), "Dust should attenuate u-band more than z-band"
 
-    def test_no_dust_gives_higher_flux(self, ssp_no_neb, default_config,
-                                        sdss_filters, fiducial_params):
+    def test_no_dust_gives_higher_flux(
+        self, ssp_no_neb, default_config, sdss_filters, fiducial_params
+    ):
         fw, ft = sdss_filters
         model = ForwardModel(ssp_no_neb, default_config, fw, ft)
 
@@ -367,8 +373,9 @@ class TestDustEffects:
             "Removing dust should increase flux in all bands"
         )
 
-    def test_more_dust_gives_less_flux(self, ssp_no_neb, default_config,
-                                        sdss_filters, fiducial_params):
+    def test_more_dust_gives_less_flux(
+        self, ssp_no_neb, default_config, sdss_filters, fiducial_params
+    ):
         fw, ft = sdss_filters
         model = ForwardModel(ssp_no_neb, default_config, fw, ft)
 
@@ -387,6 +394,7 @@ class TestDustEffects:
 # 6. Metallicity Effects
 # ===================================================================
 
+
 class TestMetallicityEffects:
     """Verify that metallicity changes the SED shape."""
 
@@ -397,7 +405,7 @@ class TestMetallicityEffects:
 
         # Use metallicities within the grid range
         lgmet = ssp_no_neb.ssp_lgmet
-        z_lo = float(lgmet[1])   # near lower end
+        z_lo = float(lgmet[1])  # near lower end
         z_hi = float(lgmet[-2])  # near upper end
 
         params_low_z = {**fiducial_params, "log_z": z_lo}
@@ -410,12 +418,11 @@ class TestMetallicityEffects:
         # Use sum of absolute differences, normalized
         diff = float(jnp.sum(jnp.abs(sed_low - sed_high)))
         total = float(jnp.sum(sed_low) + jnp.sum(sed_high))
-        assert diff / total > 1e-4, (
-            f"Low-Z and high-Z SEDs should differ"
-        )
+        assert diff / total > 1e-4, "Low-Z and high-Z SEDs should differ"
 
-    def test_metallicity_affects_photometry(self, ssp_no_neb, default_config,
-                                             sdss_filters, fiducial_params):
+    def test_metallicity_affects_photometry(
+        self, ssp_no_neb, default_config, sdss_filters, fiducial_params
+    ):
         fw, ft = sdss_filters
         model = ForwardModel(ssp_no_neb, default_config, fw, ft)
 
@@ -439,6 +446,7 @@ class TestMetallicityEffects:
 # ===================================================================
 # 7. GP Burstiness
 # ===================================================================
+
 
 class TestGPBurstiness:
     """Verify that burstiness parameter sigma_PS affects SFH variability."""
@@ -475,9 +483,7 @@ class TestGPBurstiness:
         # They should differ — use relative difference check
         diff = float(jnp.sum(jnp.abs(sed_smooth - sed_bursty)))
         total = float(jnp.sum(sed_smooth) + jnp.sum(sed_bursty))
-        assert diff / total > 1e-4, (
-            "Smooth and bursty SEDs should differ"
-        )
+        assert diff / total > 1e-4, "Smooth and bursty SEDs should differ"
 
     def test_bursty_sed_has_more_variance_across_realizations(
         self, ssp_no_neb, default_config, sdss_filters
@@ -514,10 +520,12 @@ class TestGPBurstiness:
         flux_bursty = _photometry_for_draws(3.0)
 
         # Coefficient of variation across realizations
-        cv_smooth = float(jnp.std(flux_smooth, axis=0).mean()
-                          / jnp.mean(flux_smooth, axis=0).mean())
-        cv_bursty = float(jnp.std(flux_bursty, axis=0).mean()
-                          / jnp.mean(flux_bursty, axis=0).mean())
+        cv_smooth = float(
+            jnp.std(flux_smooth, axis=0).mean() / jnp.mean(flux_smooth, axis=0).mean()
+        )
+        cv_bursty = float(
+            jnp.std(flux_bursty, axis=0).mean() / jnp.mean(flux_bursty, axis=0).mean()
+        )
 
         assert cv_bursty > cv_smooth, (
             f"Bursty CV ({cv_bursty:.3f}) should exceed smooth CV ({cv_smooth:.3f})"
@@ -527,6 +535,7 @@ class TestGPBurstiness:
 # ===================================================================
 # 8. End-to-End Gradients
 # ===================================================================
+
 
 class TestGradients:
     """Verify that gradients of photometry w.r.t. ALL parameters are finite and non-zero."""
@@ -556,8 +565,15 @@ class TestGradients:
 
         # Check scalar parameters are finite
         scalar_keys = [
-            "sigma_ps", "alpha", "beta", "tau_sfh",
-            "sfr_norm", "log_z", "tau_v1", "tau_v2", "dust_n",
+            "sigma_ps",
+            "alpha",
+            "beta",
+            "tau_sfh",
+            "sfr_norm",
+            "log_z",
+            "tau_v1",
+            "tau_v2",
+            "dust_n",
         ]
         for key in scalar_keys:
             g = grads[key]
@@ -587,18 +603,18 @@ class TestGradients:
         }
 
         for i in range(5):
+
             def flux_band(p, band_idx=i):
                 return forward_model.predict_photometry(p)[band_idx]
 
             g = jax.grad(flux_band)(params)
-            assert jnp.isfinite(g["sfr_norm"]), (
-                f"Band {i}: gradient w.r.t. sfr_norm is not finite"
-            )
+            assert jnp.isfinite(g["sfr_norm"]), f"Band {i}: gradient w.r.t. sfr_norm is not finite"
 
 
 # ===================================================================
 # 9. Mock Generation
 # ===================================================================
+
 
 class TestMockGeneration:
     """Test generate_mock() produces realistic noisy photometry."""
@@ -657,14 +673,18 @@ class TestMockGeneration:
 
         # Scatter should match expected noise (within ~20%)
         noise_ratio = std_obs / expected_noise
-        np.testing.assert_allclose(noise_ratio, 1.0, atol=0.2, err_msg=(
-            "Observed scatter should match expected noise level"
-        ))
+        np.testing.assert_allclose(
+            noise_ratio,
+            1.0,
+            atol=0.2,
+            err_msg=("Observed scatter should match expected noise level"),
+        )
 
 
 # ===================================================================
 # 10. Pre-computation Speedup
 # ===================================================================
+
 
 class TestPrecomputation:
     """Verify precomputed photometry matches direct computation."""
@@ -686,7 +706,7 @@ class TestPrecomputation:
         # Reproduce the forward model steps to get weights
         sed = model(fiducial_params)
         ssp_log_ages_yr = ssp_no_neb.ssp_lg_age_gyr + 9.0
-        ssp_ages_yr = 10.0 ** ssp_log_ages_yr
+        ssp_ages_yr = 10.0**ssp_log_ages_yr
 
         # Interpolate SSP photometry at target metallicity
         ssp_phot_at_z = interpolate_ssp_phot_metallicity(
@@ -703,9 +723,9 @@ class TestPrecomputation:
         )
 
         # Recompute weights
-        from diffsed.models.sfh.psd_models import drw_variance
-        from diffsed.models.sfh.gp_sfh import gp_from_xi, compute_sqrt_power_drw
+        from diffsed.models.sfh.gp_sfh import gp_from_xi
         from diffsed.models.sfh.mean_sfh import double_powerlaw
+        from diffsed.models.sfh.psd_models import drw_variance
 
         sqrt_power = model.compute_sqrt_power(
             fiducial_params["sigma_ps"], fiducial_params["tau_ps"]
@@ -723,17 +743,19 @@ class TestPrecomputation:
         sfr_on_ssp = jnp.interp(ssp_log_ages_yr, model.log_age_grid, sfr)
         weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
 
-        flux_precomp = fast_photometry(weights, ssp_phot_at_z, dust_at_eff,
-                                        precomp.flux_scale)
+        flux_precomp = fast_photometry(weights, ssp_phot_at_z, dust_at_eff, precomp.flux_scale)
 
         # The precomputed path evaluates dust only at effective wavelengths
         # (a single wavelength per band), while the direct path integrates
         # dust across the full filter transmission curve. So they will not
         # match exactly, but should agree to ~10-20% for broadband photometry.
         ratio = flux_precomp / flux_direct
-        np.testing.assert_allclose(ratio, 1.0, atol=0.25, err_msg=(
-            "Precomputed and direct photometry should agree within ~25%"
-        ))
+        np.testing.assert_allclose(
+            ratio,
+            1.0,
+            atol=0.25,
+            err_msg=("Precomputed and direct photometry should agree within ~25%"),
+        )
 
     def test_precomputed_shapes(self, ssp_no_neb, default_config, sdss_filters):
         fw, ft = sdss_filters
@@ -748,8 +770,7 @@ class TestPrecomputation:
         assert precomp.effective_wavelengths_rest.shape == (5,)
         assert precomp.n_filters == 5
 
-    def test_precomputed_effective_wavelengths(self, ssp_no_neb, default_config,
-                                                sdss_filters):
+    def test_precomputed_effective_wavelengths(self, ssp_no_neb, default_config, sdss_filters):
         fw, ft = sdss_filters
         z = default_config.redshift
         dl_cm = luminosity_distance(z)
@@ -758,6 +779,8 @@ class TestPrecomputation:
         # Effective wavelengths should be near the filter centers
         expected_centers = jnp.array([3551.0, 4686.0, 6166.0, 7480.0, 8932.0])
         np.testing.assert_allclose(
-            precomp.effective_wavelengths, expected_centers, rtol=0.02,
+            precomp.effective_wavelengths,
+            expected_centers,
+            rtol=0.02,
             err_msg="Effective wavelengths should be near filter centers",
         )

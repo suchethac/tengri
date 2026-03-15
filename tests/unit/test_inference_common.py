@@ -2,12 +2,11 @@
 
 import jax
 import jax.numpy as jnp
-import pytest
 from numpy.testing import assert_allclose
 
 from diffsed.inference.common import (
-    PriorConfig,
     DEFAULT_PRIOR,
+    PriorConfig,
     initialize_params,
     unbounded_to_physical,
 )
@@ -22,8 +21,18 @@ class TestPriorConfig:
         """Default prior defines bounds for all 10 physical parameters."""
         p = DEFAULT_PRIOR
         assert len(p) == 10
-        for name in ["sigma_ps", "tau_ps", "alpha", "beta", "tau_sfh",
-                      "sfr_norm", "log_z", "tau_v1", "tau_v2", "dust_n"]:
+        for name in [
+            "sigma_ps",
+            "tau_ps",
+            "alpha",
+            "beta",
+            "tau_sfh",
+            "sfr_norm",
+            "log_z",
+            "tau_v1",
+            "tau_v2",
+            "dust_n",
+        ]:
             bounds = getattr(p, name)
             assert bounds[0] < bounds[1], f"{name} bounds inverted"
 
@@ -42,8 +51,19 @@ class TestInitializeParams:
         """Initialization creates all required parameter keys."""
         key = jax.random.PRNGKey(0)
         params = initialize_params(key)
-        required = {"xi", "sigma_ps", "tau_ps", "alpha", "beta",
-                     "tau_sfh", "sfr_norm", "log_z", "tau_v1", "tau_v2", "dust_n"}
+        required = {
+            "xi",
+            "sigma_ps",
+            "tau_ps",
+            "alpha",
+            "beta",
+            "tau_sfh",
+            "sfr_norm",
+            "log_z",
+            "tau_v1",
+            "tau_v2",
+            "dust_n",
+        }
         assert set(params.keys()) == required
 
     def test_xi_shape(self):
@@ -83,8 +103,18 @@ class TestUnboundedToPhysical:
         params_p = unbounded_to_physical(params_u)
 
         prior = DEFAULT_PRIOR
-        for name in ["sigma_ps", "tau_ps", "alpha", "beta", "tau_sfh",
-                      "sfr_norm", "log_z", "tau_v1", "tau_v2", "dust_n"]:
+        for name in [
+            "sigma_ps",
+            "tau_ps",
+            "alpha",
+            "beta",
+            "tau_sfh",
+            "sfr_norm",
+            "log_z",
+            "tau_v1",
+            "tau_v2",
+            "dust_n",
+        ]:
             lo, hi = getattr(prior, name)
             val = float(params_p[name])
             assert lo <= val <= hi, f"{name}={val} outside [{lo}, {hi}]"
@@ -93,8 +123,8 @@ class TestUnboundedToPhysical:
         """Even extreme unbounded values map to within bounds."""
         params_u = {
             "xi": jnp.zeros(256),
-            "sigma_ps": jnp.array(100.0),   # very positive
-            "tau_ps": jnp.array(-100.0),     # very negative
+            "sigma_ps": jnp.array(100.0),  # very positive
+            "tau_ps": jnp.array(-100.0),  # very negative
             "alpha": jnp.array(0.0),
             "beta": jnp.array(0.0),
             "tau_sfh": jnp.array(0.0),

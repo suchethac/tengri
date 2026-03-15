@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import functools
 from dataclasses import dataclass, field
-from typing import Optional
 
 import jax
 import jax.numpy as jnp
@@ -45,12 +44,12 @@ class Posterior:
         Reference to the model (for derived quantities).
     """
 
-    samples: Optional[dict]
+    samples: dict | None
     params: dict
     method: str
     wall_time_s: float
     diagnostics: dict
-    loss_history: Optional[jnp.ndarray] = None
+    loss_history: jnp.ndarray | None = None
     _model: object = field(default=None, repr=False)
 
     # -------------------------------------------------------------------
@@ -126,7 +125,7 @@ class Posterior:
     # -------------------------------------------------------------------
 
     @staticmethod
-    def _autocorrelation_1d(x: np.ndarray, max_lag: int = None) -> np.ndarray:
+    def _autocorrelation_1d(x: np.ndarray, max_lag: int | None = None) -> np.ndarray:
         """Compute normalized autocorrelation function for a 1D chain.
 
         Uses FFT for efficiency (O(N log N) instead of O(N * max_lag)).
@@ -145,10 +144,10 @@ class Posterior:
         fft_size = 2 ** int(np.ceil(np.log2(2 * n)))
         fft_x = np.fft.rfft(x, n=fft_size)
         acf_full = np.fft.irfft(fft_x * np.conj(fft_x))
-        acf = acf_full[:max_lag + 1] / (var * n)
+        acf = acf_full[: max_lag + 1] / (var * n)
         return acf
 
-    def autocorrelation(self, max_lag: int = None) -> dict:
+    def autocorrelation(self, max_lag: int | None = None) -> dict:
         """Compute autocorrelation function for each scalar parameter.
 
         Parameters
@@ -253,8 +252,7 @@ class Posterior:
             # MAP: just return the point estimate
             if n == 1:
                 return dict(self.params)
-            return {k: jnp.broadcast_to(v, (n,) + v.shape)
-                    for k, v in self.params.items()}
+            return {k: jnp.broadcast_to(v, (n, *v.shape)) for k, v in self.params.items()}
 
         n_available = next(iter(self.samples.values())).shape[0]
         indices = jax.random.choice(key, n_available, shape=(n,), replace=True)
@@ -279,8 +277,8 @@ class Posterior:
         -------
         ParamSpec
         """
-        from diffsed.param_spec import ParamSpec
         from diffsed.distributions import Fixed, Gaussian
+        from diffsed.param_spec import ParamSpec
 
         kwargs = {}
 
@@ -321,7 +319,7 @@ class Posterior:
         try:
             import arviz as az
         except ImportError:
-            raise ImportError("arviz required: pip install arviz")
+            raise ImportError("arviz required: pip install arviz") from None
 
         if self.samples is None:
             raise ValueError("Cannot convert MAP result to ArviZ (no samples)")
@@ -341,8 +339,9 @@ class Posterior:
     # Plotting
     # -------------------------------------------------------------------
 
-    def plot_corner(self, params=None, truths=None, figsize=None,
-                    color="C0", fig=None, axes=None, label=None):
+    def plot_corner(
+        self, params=None, truths=None, figsize=None, color="C0", fig=None, axes=None, label=None
+    ):
         """Plot corner (triangle) plot of posterior distributions.
 
         Parameters
@@ -444,15 +443,22 @@ class Posterior:
                 if i == j:
                     # Diagonal: 1D KDE + histogram
                     n_bins = min(20, max(5, len(xi) // 3))
-                    ax.hist(xi, bins=n_bins, color=color, alpha=0.2,
-                            density=True, edgecolor="white", lw=0.5)
+                    ax.hist(
+                        xi,
+                        bins=n_bins,
+                        color=color,
+                        alpha=0.2,
+                        density=True,
+                        edgecolor="white",
+                        lw=0.5,
+                    )
                     try:
                         from scipy.stats import gaussian_kde
+
                         kde = gaussian_kde(xi)
                         x_grid = np.linspace(np.min(xi), np.max(xi), 200)
                         lbl = label if (i == 0 and label) else None
-                        ax.plot(x_grid, kde(x_grid), color=color, lw=1.5,
-                                label=lbl)
+                        ax.plot(x_grid, kde(x_grid), color=color, lw=1.5, label=lbl)
                     except (ImportError, np.linalg.LinAlgError):
                         pass  # fall back to histogram only
                     if truths and name_i in truths:
@@ -464,6 +470,7 @@ class Posterior:
                     # Off-diagonal: 2D KDE contours
                     try:
                         from scipy.stats import gaussian_kde
+
                         xy = np.vstack([xj, xi])
                         kde = gaussian_kde(xy)
                         x_grid = np.linspace(np.min(xj), np.max(xj), 80)
@@ -475,34 +482,45 @@ class Posterior:
                         Z_cumsum = np.cumsum(Z_sorted) / np.sum(Z_sorted)
                         level_68 = Z_sorted[np.searchsorted(Z_cumsum, 0.68)]
                         level_95 = Z_sorted[np.searchsorted(Z_cumsum, 0.95)]
-                        ax.contourf(X, Y, Z, levels=[level_95, level_68, Z.max()],
-                                    colors=[color], alpha=[0.1, 0.3])
-                        ax.contour(X, Y, Z, levels=[level_95, level_68],
-                                   colors=[color], linewidths=0.8, alpha=0.7)
+                        ax.contourf(
+                            X,
+                            Y,
+                            Z,
+                            levels=[level_95, level_68, Z.max()],
+                            colors=[color],
+                            alpha=[0.1, 0.3],
+                        )
+                        ax.contour(
+                            X,
+                            Y,
+                            Z,
+                            levels=[level_95, level_68],
+                            colors=[color],
+                            linewidths=0.8,
+                            alpha=0.7,
+                        )
                     except (ImportError, np.linalg.LinAlgError):
                         # Fallback to scatter if KDE fails
-                        ax.scatter(xj, xi, s=8, alpha=0.4, color=color,
-                                   edgecolors="none")
-                    if truths:
-                        if name_j in truths and name_i in truths:
-                            tj = truths[name_j]
-                            ti = truths[name_i]
-                            if name_j == "stellar_mass":
-                                tj = np.log10(max(tj, 1.0))
-                            if name_i == "stellar_mass":
-                                ti = np.log10(max(ti, 1.0))
-                            ax.axvline(tj, color="k", ls="--", lw=0.8, alpha=0.5)
-                            ax.axhline(ti, color="k", ls="--", lw=0.8, alpha=0.5)
+                        ax.scatter(xj, xi, s=8, alpha=0.4, color=color, edgecolors="none")
+                    if truths and name_j in truths and name_i in truths:
+                        tj = truths[name_j]
+                        ti = truths[name_i]
+                        if name_j == "stellar_mass":
+                            tj = np.log10(max(tj, 1.0))
+                        if name_i == "stellar_mass":
+                            ti = np.log10(max(ti, 1.0))
+                        ax.axvline(tj, color="k", ls="--", lw=0.8, alpha=0.5)
+                        ax.axhline(ti, color="k", ls="--", lw=0.8, alpha=0.5)
 
                 # Labels on edges only
                 if i == n - 1:
                     ax.set_xlabel(label_map.get(name_j, name_j), fontsize=11)
-                    ax.tick_params(axis='x', labelsize=9, rotation=45)
+                    ax.tick_params(axis="x", labelsize=9, rotation=45)
                 else:
                     ax.set_xticklabels([])
                 if j == 0 and i > 0:
                     ax.set_ylabel(label_map.get(name_i, name_i), fontsize=11)
-                    ax.tick_params(axis='y', labelsize=9)
+                    ax.tick_params(axis="y", labelsize=9)
                 else:
                     ax.set_yticklabels([])
 
@@ -518,7 +536,5 @@ class Posterior:
     def __repr__(self) -> str:
         n = "None" if self.samples is None else next(iter(self.samples.values())).shape[0]
         return (
-            f"Posterior(method='{self.method}', "
-            f"n_samples={n}, "
-            f"wall_time={self.wall_time_s:.1f}s)"
+            f"Posterior(method='{self.method}', n_samples={n}, wall_time={self.wall_time_s:.1f}s)"
         )

@@ -25,8 +25,9 @@ import jax
 import jax.numpy as jnp
 
 
-def compute_green_function(ssp_flux_at_z, ssp_wave, filter_wave=None,
-                           filter_trans=None, wave_target=None):
+def compute_green_function(
+    ssp_flux_at_z, ssp_wave, filter_wave=None, filter_trans=None, wave_target=None
+):
     """Compute Green's function G(t_age) for a filter or wavelength.
 
     G(t_age) = flux contribution per unit stellar mass at age t_age.
@@ -62,18 +63,14 @@ def compute_green_function(ssp_flux_at_z, ssp_wave, filter_wave=None,
         greens = jnp.zeros(n_age)
 
         for i in range(n_age):
-            ssp_on_filt = jnp.interp(filter_wave, ssp_wave,
-                                     ssp_flux_at_z[i], left=0.0, right=0.0)
-            num = jnp.trapezoid(ssp_on_filt * filter_trans * filter_wave,
-                                filter_wave)
+            ssp_on_filt = jnp.interp(filter_wave, ssp_wave, ssp_flux_at_z[i], left=0.0, right=0.0)
+            num = jnp.trapezoid(ssp_on_filt * filter_trans * filter_wave, filter_wave)
             greens = greens.at[i].set(num / jnp.maximum(denom, 1e-30))
         return greens
 
     elif wave_target is not None:
         # Monochromatic Green's function
-        return jax.vmap(
-            lambda ssp: jnp.interp(wave_target, ssp_wave, ssp)
-        )(ssp_flux_at_z)
+        return jax.vmap(lambda ssp: jnp.interp(wave_target, ssp_wave, ssp))(ssp_flux_at_z)
 
     else:
         raise ValueError("Provide either (filter_wave, filter_trans) or wave_target")
@@ -139,8 +136,7 @@ def compute_window_function_fourier(window_fn, ssp_ages_yr):
     return power_transfer, omega
 
 
-def compute_time_sensitivity_matrix(ssp_flux_at_z, ssp_wave,
-                                    wavelengths_target):
+def compute_time_sensitivity_matrix(ssp_flux_at_z, ssp_wave, wavelengths_target):
     """Compute sensitivity of multiple wavelengths to different ages.
 
     Returns a matrix G(wavelength, age) showing which wavelengths

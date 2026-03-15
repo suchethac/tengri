@@ -13,15 +13,13 @@ Usage:
 """
 
 import time
-from functools import partial
 
 import jax
 import jax.numpy as jnp
 
 from diffsed.inference.common import (
-    InferenceResult,
-    PriorConfig,
     DEFAULT_PRIOR,
+    InferenceResult,
     build_loss_fn,
     initialize_params,
     unbounded_to_physical,
@@ -76,9 +74,7 @@ def fit_map(
     try:
         import optax
     except ImportError:
-        raise ImportError(
-            "optax required for MAP optimization: pip install optax"
-        )
+        raise ImportError("optax required for MAP optimization: pip install optax") from None
 
     if prior_config is None:
         prior_config = DEFAULT_PRIOR
@@ -89,8 +85,7 @@ def fit_map(
     loss_fn = build_loss_fn(forward_model, data, noise, prior_config, data_type)
 
     if init_params is None:
-        init_params = initialize_params(key, forward_model.config.n_grid,
-                                        prior_config)
+        init_params = initialize_params(key, forward_model.config.n_grid, prior_config)
 
     # Set up Adam optimizer
     optimizer = optax.adam(learning_rate)

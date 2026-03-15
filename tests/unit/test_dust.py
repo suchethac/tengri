@@ -79,6 +79,7 @@ class TestCharlotFall:
 
     def test_has_gradients(self, wavelength, age_grid):
         """Gradients exist for dust parameters."""
+
         def loss(tau_v1, tau_v2):
             return jnp.sum(charlot_fall(wavelength, age_grid, tau_v1, tau_v2))
 

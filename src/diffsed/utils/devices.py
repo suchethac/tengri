@@ -12,13 +12,12 @@ Usage:
 
 import os
 import warnings
-from typing import Optional
 
 
 def setup_jax(
-    platform: Optional[str] = None,
+    platform: str | None = None,
     enable_x64: bool = True,
-    gpu_memory_fraction: Optional[float] = None,
+    gpu_memory_fraction: float | None = None,
     preallocate_gpu: bool = False,
 ):
     """Configure JAX for the current platform. Call once at startup.
@@ -68,6 +67,7 @@ def setup_jax(
 
     # Now import JAX (env vars must be set before import)
     import jax
+
     jax.config.update("jax_enable_x64", enable_x64)
 
 
@@ -123,6 +123,7 @@ def print_device_info():
         print(f"GPU memory:      {info['gpu_memory_mb']:.0f} MB")
 
     import jax
+
     print(f"JAX version:     {jax.__version__}")
 
 
@@ -189,9 +190,8 @@ def check_resources():
     if info["platform"] == "cpu":
         try:
             import subprocess
-            result = subprocess.run(
-                ["nvidia-smi"], capture_output=True, text=True, timeout=5
-            )
+
+            result = subprocess.run(["nvidia-smi"], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 warnings.warn(
                     "GPU detected but JAX is using CPU. "

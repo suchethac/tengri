@@ -1,20 +1,16 @@
 """Unit tests for the Model class."""
 
 import jax
-import jax.numpy as jnp
-import numpy as np
-import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed.distributions import Uniform, Fixed
-from diffsed.param_spec import ParamSpec
-from diffsed.model import Model, PARAM_MAP, MockData
+from diffsed.model import PARAM_MAP
 
 
 class TestParamMap:
     def test_all_params_covered(self):
         from diffsed.param_spec import VALID_PARAM_NAMES
+
         for name in VALID_PARAM_NAMES:
             assert name in PARAM_MAP, f"Missing mapping for {name}"
 
@@ -40,4 +36,5 @@ class TestModelConstruction:
 
     def test_param_map_completeness(self):
         from diffsed.param_spec import VALID_PARAM_NAMES
+
         assert set(PARAM_MAP.keys()) == VALID_PARAM_NAMES

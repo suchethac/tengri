@@ -2,14 +2,12 @@
 
 import jax
 import jax.numpy as jnp
-import pytest
 from numpy.testing import assert_allclose
 
 from diffsed.models.sfh.mean_sfh import (
-    double_powerlaw,
-    delayed_tau,
     constant_sfh,
-    powerlaw_sfh,
+    delayed_tau,
+    double_powerlaw,
 )
 
 jax.config.update("jax_enable_x64", True)
@@ -37,8 +35,7 @@ class TestDoublePowerlaw:
     def test_peak_value_equals_norm(self):
         """At the exact peak (symmetric case), SFR = norm / 2."""
         tau = 1e9
-        sfr_at_tau = double_powerlaw(jnp.array(tau), alpha=1.0, beta=1.0,
-                                     tau=tau, norm=10.0)
+        sfr_at_tau = double_powerlaw(jnp.array(tau), alpha=1.0, beta=1.0, tau=tau, norm=10.0)
         # SFR(tau) = norm / (1^alpha + 1^(-beta)) = norm / 2
         assert_allclose(float(sfr_at_tau), 5.0, rtol=1e-10)
 
@@ -59,9 +56,7 @@ class TestDoublePowerlaw:
     def test_has_gradients(self):
         """Gradients exist for all 4 parameters."""
         t = jnp.logspace(6, 10, 100)
-        grad_fn = jax.grad(
-            lambda a, b, tau, n: jnp.sum(double_powerlaw(t, a, b, tau, n))
-        )
+        grad_fn = jax.grad(lambda a, b, tau, n: jnp.sum(double_powerlaw(t, a, b, tau, n)))
         grads = grad_fn(1.0, 1.0, 1e9, 10.0)
         assert jnp.isfinite(grads)
 

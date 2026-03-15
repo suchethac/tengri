@@ -16,10 +16,10 @@ References
 
 import jax.numpy as jnp
 
-
 # ---------------------------------------------------------------------------
 # Primary: Damped Random Walk
 # ---------------------------------------------------------------------------
+
 
 def psd_drw(omega: jnp.ndarray, sigma_ps: float, tau_ps: float) -> jnp.ndarray:
     """Damped random walk (Lorentzian) power spectral density.
@@ -95,8 +95,8 @@ def psd_to_sqrt_power(psd_values: jnp.ndarray, d_grid: float) -> jnp.ndarray:
 # Alternative PSD models
 # ---------------------------------------------------------------------------
 
-def psd_matern(omega: jnp.ndarray, variance: float,
-               length_scale: float, nu: float) -> jnp.ndarray:
+
+def psd_matern(omega: jnp.ndarray, variance: float, length_scale: float, nu: float) -> jnp.ndarray:
     """Matern PSD in 1D. Setting nu=0.5 recovers DRW."""
     from jax.scipy.special import gammaln
 
@@ -112,14 +112,11 @@ def psd_matern(omega: jnp.ndarray, variance: float,
     return variance * jnp.exp(log_norm + log_spectral)
 
 
-def psd_extended_regulator(f: jnp.ndarray, s_reg: float, tau_in: float,
-                           tau_eq: float, s_dyn: float,
-                           tau_dyn: float) -> jnp.ndarray:
+def psd_extended_regulator(
+    f: jnp.ndarray, s_reg: float, tau_in: float, tau_eq: float, s_dyn: float, tau_dyn: float
+) -> jnp.ndarray:
     """Extended regulator PSD (Tacchella+2020). Uses cyclic frequency f."""
     two_pi_f = 2.0 * jnp.pi * f
-    regulator = s_reg**2 / (
-        (1.0 + (tau_in * two_pi_f) ** 2)
-        * (1.0 + (tau_eq * two_pi_f) ** 2)
-    )
+    regulator = s_reg**2 / ((1.0 + (tau_in * two_pi_f) ** 2) * (1.0 + (tau_eq * two_pi_f) ** 2))
     dynamical = s_dyn**2 / (1.0 + (tau_dyn * two_pi_f) ** 2)
     return regulator + dynamical

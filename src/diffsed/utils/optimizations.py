@@ -12,12 +12,11 @@ Key optimizations:
 
 import jax
 import jax.numpy as jnp
-from functools import partial
-
 
 # ---------------------------------------------------------------------------
 # 1. Hartley transform (from NIFTy.re)
 # ---------------------------------------------------------------------------
+
 
 @jax.jit
 def hartley(x: jnp.ndarray) -> jnp.ndarray:
@@ -50,8 +49,7 @@ def inverse_hartley(x: jnp.ndarray) -> jnp.ndarray:
 
 
 @jax.jit
-def gp_from_xi_hartley(xi: jnp.ndarray,
-                       amplitude: jnp.ndarray) -> jnp.ndarray:
+def gp_from_xi_hartley(xi: jnp.ndarray, amplitude: jnp.ndarray) -> jnp.ndarray:
     """Generate GP realization using Hartley transform (memory-efficient).
 
     Unlike the rfft-based version, this avoids complex arrays entirely.
@@ -77,9 +75,9 @@ def gp_from_xi_hartley(xi: jnp.ndarray,
     return inverse_hartley(amplitude * hartley(xi))
 
 
-def compute_full_amplitude_drw(n_points: int, d_log_age: float,
-                               sigma_ps: float, tau_ps: float,
-                               log_age_ref: float = 8.0) -> jnp.ndarray:
+def compute_full_amplitude_drw(
+    n_points: int, d_log_age: float, sigma_ps: float, tau_ps: float, log_age_ref: float = 8.0
+) -> jnp.ndarray:
     """Compute amplitude operator in full Fourier space for Hartley transform.
 
     Parameters
@@ -100,7 +98,7 @@ def compute_full_amplitude_drw(n_points: int, d_log_age: float,
     """
     from diffsed.models.sfh.psd_models import psd_drw
 
-    t_ref = 10.0 ** log_age_ref
+    t_ref = 10.0**log_age_ref
     ln10 = jnp.log(10.0)
 
     # Full FFT frequencies
@@ -117,6 +115,7 @@ def compute_full_amplitude_drw(n_points: int, d_log_age: float,
 # ---------------------------------------------------------------------------
 # 2. Gradient checkpointing
 # ---------------------------------------------------------------------------
+
 
 def checkpointed_forward_model(model_fn):
     """Wrap a forward model with gradient checkpointing.
@@ -147,12 +146,15 @@ def checkpointed_forward_model(model_fn):
 # 3. Approximate photometry (Zacharegkas+2025 Section 3)
 # ---------------------------------------------------------------------------
 
+
 @jax.jit
-def precompute_ssp_photometry(ssp_flux: jnp.ndarray,
-                              ssp_wave: jnp.ndarray,
-                              filter_wave: jnp.ndarray,
-                              filter_trans: jnp.ndarray,
-                              redshift: float) -> jnp.ndarray:
+def precompute_ssp_photometry(
+    ssp_flux: jnp.ndarray,
+    ssp_wave: jnp.ndarray,
+    filter_wave: jnp.ndarray,
+    filter_trans: jnp.ndarray,
+    redshift: float,
+) -> jnp.ndarray:
     """Pre-compute SSP broadband fluxes for approximate photometry.
 
     c_SSP(tau_age, Z) = int T(lambda|z) * L_SSP(lambda|tau_age, Z) * lambda dlambda
@@ -188,33 +190,32 @@ def precompute_ssp_photometry(ssp_flux: jnp.ndarray,
 
     def _single_age(ssp_spectrum):
         # Interpolate SSP onto filter wavelength grid
-        sed_on_filter = jnp.interp(filter_wave, wave_obs, ssp_spectrum,
-                                   left=0.0, right=0.0)
-        num = jnp.trapezoid(sed_on_filter * filter_trans * filter_wave,
-                            filter_wave)
+        sed_on_filter = jnp.interp(filter_wave, wave_obs, ssp_spectrum, left=0.0, right=0.0)
+        num = jnp.trapezoid(sed_on_filter * filter_trans * filter_wave, filter_wave)
         return num / jnp.maximum(denom, 1e-30)
 
     return jax.vmap(_single_age)(ssp_flux)
 
 
 @jax.jit
-def effective_wavelength(filter_wave: jnp.ndarray,
-                         filter_trans: jnp.ndarray) -> float:
+def effective_wavelength(filter_wave: jnp.ndarray, filter_trans: jnp.ndarray) -> float:
     """Effective wavelength of a filter: lambda_eff = int(T*lam^2 dlam) / int(T*lam dlam).
 
     Zacharegkas+2025 Equation 5.
     """
-    num = jnp.trapezoid(filter_trans * filter_wave ** 2, filter_wave)
+    num = jnp.trapezoid(filter_trans * filter_wave**2, filter_wave)
     denom = jnp.trapezoid(filter_trans * filter_wave, filter_wave)
     return num / jnp.maximum(denom, 1e-30)
 
 
 @jax.jit
-def approximate_photometry(weights: jnp.ndarray,
-                           ssp_phot: jnp.ndarray,
-                           dust_atten_at_eff: jnp.ndarray,
-                           dl_cm: float,
-                           redshift: float) -> float:
+def approximate_photometry(
+    weights: jnp.ndarray,
+    ssp_phot: jnp.ndarray,
+    dust_atten_at_eff: jnp.ndarray,
+    dl_cm: float,
+    redshift: float,
+) -> float:
     """Fast approximate photometry using pre-computed SSP fluxes.
 
     c_gal ≈ F_att(lambda_eff) * sum_i P_SFH(tau_i) * c_SSP(tau_i)
@@ -242,13 +243,14 @@ def approximate_photometry(weights: jnp.ndarray,
     """
     # Weighted sum with dust
     flux_intrinsic = jnp.sum(weights * ssp_phot * dust_atten_at_eff)
-    flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm ** 2)
+    flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm**2)
     return flux_scale * flux_intrinsic
 
 
 # ---------------------------------------------------------------------------
 # 4. Memory-efficient vmap patterns
 # ---------------------------------------------------------------------------
+
 
 def batched_forward(model_fn, params_batch, batch_size=100):
     """Process galaxies in memory-efficient batches.
@@ -275,7 +277,7 @@ def batched_forward(model_fn, params_batch, batch_size=100):
 
     for start in range(0, n_total, batch_size):
         end = min(start + batch_size, n_total)
-        chunk = jax.tree.map(lambda x: x[start:end], params_batch)
+        chunk = jax.tree.map(lambda x, _s=start, _e=end: x[_s:_e], params_batch)
         result = jax.vmap(model_fn)(chunk)
         results.append(result)
 

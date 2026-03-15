@@ -145,11 +145,17 @@ cells = [
     t_map = time.perf_counter() - t0
     print(f"MAP finished in {t_map:.1f}s")
 
-    t0 = time.perf_counter()
-    result_rt = fitter.run("raytrace", init_from=result_map,
-                           n_burnin=100, n_steps=300)
-    t_rt = time.perf_counter() - t0
-    print(f"Ray Tracing finished in {t_rt:.1f}s")
+    # Ray Tracing is available only in newer diffsed versions.
+    # Fall back gracefully if this installation does not support it.
+    result_rt = None
+    try:
+        t0 = time.perf_counter()
+        result_rt = fitter.run("raytrace", init_from=result_map,
+                               n_burnin=100, n_steps=500)
+        t_rt = time.perf_counter() - t0
+        print(f"Ray Tracing finished in {t_rt:.1f}s")
+    except ValueError as e:
+        print(f"Ray Tracing not available in this diffsed version: {e}")
 
     t0 = time.perf_counter()
     result_geovi = fitter.run("geovi", init_from=result_map,
@@ -159,7 +165,7 @@ cells = [
 
     t0 = time.perf_counter()
     result_nuts = fitter.run("nuts", init_from=result_map,
-                             n_warmup=200, n_samples=200)
+                             n_warmup=500, n_samples=500)
     t_nuts = time.perf_counter() - t0
     print(f"NUTS finished in {t_nuts:.1f}s")
     '''),
@@ -169,45 +175,45 @@ cells = [
     # -----------------------------------------------------------------------
     code(r'''
     import numpy as np
-    # --- SFH recovery: RT + geoVI + NUTS overlaid ---
+    # --- SFH recovery: RT (if available) + geoVI + NUTS overlaid ---
     fig, axes = plt.subplots(1, 2, figsize=(14, 4.5))
 
     ax_sfh = axes[0]
-    model.plot_sfh_posterior(result_rt, true_params=true_params,
-                            color=COLORS["rt"], label="Ray Tracing", ax=ax_sfh)
+    if result_rt is not None:
+        model.plot_sfh_posterior(result_rt, true_params=true_params,
+                                 color=COLORS["rt"], label="Ray Tracing", ax=ax_sfh)
     model.plot_sfh_posterior(result_geovi, true_params=true_params,
-                            color=COLORS["geovi"], label="geoVI", ax=ax_sfh)
+                             color=COLORS["geovi"], label="geoVI", ax=ax_sfh)
     model.plot_sfh_posterior(result_nuts, true_params=true_params,
-                            color=COLORS["nuts"], label="NUTS", ax=ax_sfh)
+                             color=COLORS["nuts"], label="NUTS", ax=ax_sfh)
     ax_sfh.set_title("SFH Recovery — Parametric")
     ax_sfh.legend(fontsize=9)
 
-    # --- Derived quantities ---
+    # --- Derived quantities: M*, SFR_100, SFR_10, sSFR with truth markers ---
     ax_der = axes[1]
-    # Truth
-    sfh_truth = model.predict_sfh(true_params)
     derived_truth = model.predict_derived(true_params)
+    derived_nuts = result_nuts.derived
 
-    # Posterior derived for RT
-    derived_rt = result_rt.derived
-    derived_geovi = result_geovi.derived
-
-    qty_names = ["stellar_mass", "sfr_100myr"]
-    qty_labels = [r"$\log M_*/M_\odot$", r"$\log$ SFR$_{100}$"]
+    qty_names = ["stellar_mass", "sfr_100myr", "sfr_10myr", "ssfr"]
+    qty_labels = [r"$\log M_*/M_\odot$", r"$\log$ SFR$_{100}$",
+                  r"$\log$ SFR$_{10}$", r"$\log$ sSFR"]
 
     for i, (qty, qlabel) in enumerate(zip(qty_names, qty_labels)):
-        y_offset = i * 2.5
-        # RT posterior
-        vals_rt = np.log10(np.clip(np.array(derived_rt[qty]), 1e-30, None))
-        ax_der.violinplot([vals_rt], positions=[y_offset], vert=False,
-                          showmedians=True, widths=0.8)
-        # Truth
+        y_offset = i * 2.2
+        vals = np.array(derived_nuts[qty])
+        vals = np.log10(np.clip(vals, 1e-30, None))
+        vp = ax_der.violinplot([vals], positions=[y_offset], vert=False,
+                               showmedians=True, widths=0.8)
+        for pc in vp["bodies"]:
+            pc.set_facecolor(COLORS["nuts"])
+            pc.set_alpha(0.6)
         truth_val = float(np.log10(np.clip(derived_truth[qty], 1e-30, None)))
         ax_der.axvline(truth_val, color=COLORS["truth"], lw=2, ls="--")
-        ax_der.text(ax_der.get_xlim()[0], y_offset + 0.6, qlabel, fontsize=10)
+        ax_der.text(0.02, 1 - (i + 0.5) / 4, qlabel, fontsize=10,
+                    transform=ax_der.transAxes, va="center")
 
     ax_der.set_xlabel("log value")
-    ax_der.set_title("Derived Quantities (RT)")
+    ax_der.set_title("Derived Quantities (NUTS) — truth dashed")
     ax_der.set_yticks([])
 
     plt.tight_layout()
@@ -215,10 +221,21 @@ cells = [
 
     # --- Corner plot: all three samplers overlaid ---
     from _plot_style import plot_corner_comparison
+    posts = []
+    labels = []
+    colors = []
+    if result_rt is not None:
+        posts.append(result_rt)
+        labels.append("Ray Tracing")
+        colors.append(COLORS["rt"])
+    posts.extend([result_geovi, result_nuts])
+    labels.extend(["geoVI", "NUTS"])
+    colors.extend([COLORS["geovi"], COLORS["nuts"]])
+
     plot_corner_comparison(
-        [result_rt, result_geovi, result_nuts],
-        ["Ray Tracing", "geoVI", "NUTS"],
-        colors=[COLORS["rt"], COLORS["geovi"], COLORS["nuts"]],
+        posts,
+        labels,
+        colors=colors,
         truths=true_params,
     )
     plt.show()
@@ -310,9 +327,9 @@ cells = [
     **Ray Tracing** ([Behroozi 2025](https://arxiv.org/abs/2501.xxxxx)) is an
     exact MCMC sampler inspired by Snell's law of optics.  Proposals follow
     straight-line trajectories that refract at iso-probability surfaces,
-    making the sampler $\\sim 250\\times$ more noise-tolerant than standard HMC.
-    This is critical for stochastic-gradient problems like ours where the
-    likelihood evaluation itself has Monte Carlo noise.
+    making the sampler $\\sim 250\\times$ more tolerant of gradient noise than
+    standard HMC.  It excels in high-dimensional problems ($D \\sim 137$ here)
+    where NUTS struggles with trajectory tuning.
     '''),
 
     # -----------------------------------------------------------------------
@@ -327,11 +344,18 @@ cells = [
     t_map = time.perf_counter() - t0
     print(f"MAP finished in {t_map:.1f}s")
 
-    t0 = time.perf_counter()
-    result_rt = fitter_stoch.run("raytrace", init_from=result_map_stoch,
-                                 n_burnin=100, n_steps=300)
-    t_rt = time.perf_counter() - t0
-    print(f"Ray Tracing finished in {t_rt:.1f}s")
+    # step_size tuning: want ~50-70% acceptance for good mixing
+    # D=137: try 0.05 (0.01 gives 99%+ = barely moving; 0.35 gives 0% = too large)
+    result_rt = None
+    try:
+        t0 = time.perf_counter()
+        result_rt = fitter_stoch.run("raytrace", init_from=result_map_stoch,
+                                     n_burnin=100, n_steps=500,
+                                     step_size=0.05)
+        t_rt = time.perf_counter() - t0
+        print(f"Ray Tracing finished in {t_rt:.1f}s")
+    except ValueError as e:
+        print(f"Ray Tracing not available in this diffsed version: {e}")
     '''),
 
     # -----------------------------------------------------------------------
@@ -373,10 +397,13 @@ cells = [
     axes[0].set_ylabel("SFR [M$_\\odot$ yr$^{-1}$]")
     axes[0].legend()
 
-    model_stoch.plot_sfh_posterior(result_rt, true_params=true_params_stoch,
-                                  color="C0", label="Ray Tracing", ax=axes[1])
-    axes[1].set_title("Ray Tracing")
-    axes[1].legend()
+    if result_rt is not None:
+        model_stoch.plot_sfh_posterior(result_rt, true_params=true_params_stoch,
+                                       color="C0", label="Ray Tracing", ax=axes[1])
+        axes[1].set_title("Ray Tracing")
+        axes[1].legend()
+    else:
+        axes[1].axis("off")
 
     model_stoch.plot_sfh_posterior(result_geovi, true_params=true_params_stoch,
                                   color="C1", label="geoVI", ax=axes[2])
@@ -392,10 +419,21 @@ cells = [
     # -----------------------------------------------------------------------
     code(r'''
     from _plot_style import plot_corner_comparison
+    posts = []
+    labels = []
+    colors = []
+    if result_rt is not None:
+        posts.append(result_rt)
+        labels.append("Ray Tracing")
+        colors.append(COLORS["rt"])
+    posts.append(result_geovi)
+    labels.append("geoVI")
+    colors.append(COLORS["geovi"])
+
     plot_corner_comparison(
-        [result_rt, result_geovi],
-        ["Ray Tracing", "geoVI"],
-        colors=[COLORS["rt"], COLORS["geovi"]],
+        posts,
+        labels,
+        colors=colors,
         truths=true_params_stoch,
     )
     plt.show()
@@ -407,13 +445,14 @@ cells = [
     md('''
     ### Why not NUTS for the stochastic model?
 
-    NUTS relies on Hamiltonian dynamics that assume a smooth, deterministic
-    gradient of the log-posterior.  In the 137-D stochastic model the
-    likelihood gradient has intrinsic Monte Carlo noise, causing NUTS to
-    accumulate trajectory errors and diverge.  For $D \\gtrsim 15$ with
-    stochastic gradients, **Ray Tracing** and **geoVI** are the recommended
-    inference methods.  NUTS remains the gold standard for low-dimensional
-    parametric models (Part A).
+    NUTS relies on Hamiltonian dynamics and the U-turn criterion to set
+    trajectory length.  In the 137-D stochastic model, $D$ is simply too
+    high: the U-turn criterion becomes unreliable and tuning is impractical,
+    so NUTS diverges or mixes poorly.  The diffsed forward model is
+    *differentiable* — JAX gives exact gradients through the GP — so the
+    issue is **high dimensionality**, not noisy gradients.  For $D \\gtrsim 20$,
+    **Ray Tracing** and **geoVI** are the recommended inference methods.
+    NUTS remains the gold standard for low-dimensional parametric models (Part A).
     '''),
 
     # -----------------------------------------------------------------------

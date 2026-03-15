@@ -56,6 +56,10 @@ cells = [
     import numpy as np
     import matplotlib.pyplot as plt
 
+    import sys; sys.path.insert(0, ".")
+    from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
+    setup_style()
+
     from diffsed import (
         Model, ParamSpec, Uniform, Fixed, Fitter,
         load_ssp_data, load_filter_set,
@@ -283,13 +287,14 @@ cells = [
                    "psd_sigma", "psd_tau_myr", "met_logzsol",
                    "dust_tau_bc", "dust_tau_diff"]
 
-    fig = result_rt.plot_corner(
+    fig = safe_corner(result_rt,
         params=phys_params,
         truths=true_params,
         color="C3",
         label="Spectroscopy (RT)",
     )
-    fig.suptitle("Spectroscopic posterior — physical parameters", fontsize=14, y=1.02)
+    if fig is not None:
+        fig.suptitle("Spectroscopic posterior — physical parameters", fontsize=14, y=1.02)
     plt.show()
 
     # SFH recovery
@@ -488,21 +493,22 @@ cells = [
 
     # Overlay corner plots: photometry (blue) vs spectroscopy (red)
     # Use the SNR=30 spectroscopic result from the main fit
-    fig = rt_phot.plot_corner(
+    fig = safe_corner(rt_phot,
         params=phys_params,
         truths=true_params,
         color="C0",
         label="Photometry (5-band)",
     )
-    result_rt.plot_corner(
-        params=phys_params,
-        truths=true_params,
-        color="C3",
-        label="Spectroscopy (500 pix)",
-        fig=fig,
-    )
-    fig.suptitle("Photometry vs Spectroscopy — same galaxy, same method",
-                 fontsize=14, y=1.02)
+    if fig is not None:
+        safe_corner(result_rt,
+            params=phys_params,
+            truths=true_params,
+            color="C3",
+            label="Spectroscopy (500 pix)",
+            fig=fig,
+        )
+        fig.suptitle("Photometry vs Spectroscopy — same galaxy, same method",
+                     fontsize=14, y=1.02)
     plt.show()
 
     # Quantify constraint improvement

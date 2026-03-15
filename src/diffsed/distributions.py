@@ -11,10 +11,10 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-
 # ---------------------------------------------------------------------------
 # Base class
 # ---------------------------------------------------------------------------
+
 
 class Distribution:
     """Base class for parameter distributions.
@@ -53,9 +53,7 @@ class Distribution:
         standardized inference — it absorbs the prior into the
         forward model so the loss is always ½χ² + ½ξᵀξ.
         """
-        raise NotImplementedError(
-            f"{type(self).__name__} must implement unstandardize()"
-        )
+        raise NotImplementedError(f"{type(self).__name__} must implement unstandardize()")
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
         """Map physical parameter → standardized latent ξ.
@@ -63,9 +61,7 @@ class Distribution:
         Inverse of unstandardize. Used for initialization from
         physical parameter values (e.g., from a MAP solution).
         """
-        raise NotImplementedError(
-            f"{type(self).__name__} must implement standardize()"
-        )
+        raise NotImplementedError(f"{type(self).__name__} must implement standardize()")
 
     def to_nifty_prior(self):
         """Convert to a NIFTy.re prior transform (optional).
@@ -74,9 +70,9 @@ class Distribution:
         NIFTy's CorrelatedFieldMaker and optimize_kl.
         Returns None if nifty8.re is not installed.
         """
-        try:
-            import nifty8.re as jft
-        except ImportError:
+        import importlib.util
+
+        if importlib.util.find_spec("nifty8") is None:
             return None
         # Default: wrap our unstandardize as a callable
         return self.unstandardize
@@ -85,6 +81,7 @@ class Distribution:
 # ---------------------------------------------------------------------------
 # Concrete distributions
 # ---------------------------------------------------------------------------
+
 
 class Uniform(Distribution):
     """Uniform prior on [lo, hi].
@@ -154,8 +151,9 @@ class Gaussian(Distribution):
         Upper bound (default: +inf).
     """
 
-    def __init__(self, mu: float, sigma: float,
-                 lo: float = float("-inf"), hi: float = float("inf")):
+    def __init__(
+        self, mu: float, sigma: float, lo: float = float("-inf"), hi: float = float("inf")
+    ):
         if sigma <= 0:
             raise ValueError(f"Gaussian requires sigma > 0, got {sigma}")
         if lo >= hi:
@@ -211,9 +209,13 @@ class Gaussian(Distribution):
         return f"Gaussian({', '.join(parts)})"
 
     def __eq__(self, other) -> bool:
-        return (isinstance(other, Gaussian)
-                and self._mu == other._mu and self._sigma == other._sigma
-                and self._lo == other._lo and self._hi == other._hi)
+        return (
+            isinstance(other, Gaussian)
+            and self._mu == other._mu
+            and self._sigma == other._sigma
+            and self._lo == other._lo
+            and self._hi == other._hi
+        )
 
 
 class LogUniform(Distribution):
@@ -254,7 +256,7 @@ class LogUniform(Distribution):
         log_lo = jnp.log10(self._lo)
         log_hi = jnp.log10(self._hi)
         log_val = jax.random.uniform(key, minval=log_lo, maxval=log_hi)
-        return 10.0 ** log_val
+        return 10.0**log_val
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
         in_bounds = (x >= self._lo) & (x <= self._hi)
@@ -300,8 +302,9 @@ class LogNormal(Distribution):
         Upper bound (default: inf).
     """
 
-    def __init__(self, mu: float = 0.0, sigma: float = 1.0,
-                 lo: float = 0.0, hi: float = float("inf")):
+    def __init__(
+        self, mu: float = 0.0, sigma: float = 1.0, lo: float = 0.0, hi: float = float("inf")
+    ):
         if sigma <= 0:
             raise ValueError(f"LogNormal requires sigma > 0, got {sigma}")
         self._mu = float(mu)
@@ -347,8 +350,9 @@ class LogNormal(Distribution):
         return f"LogNormal({', '.join(parts)})"
 
     def __eq__(self, other) -> bool:
-        return (isinstance(other, LogNormal)
-                and self._mu == other._mu and self._sigma == other._sigma)
+        return (
+            isinstance(other, LogNormal) and self._mu == other._mu and self._sigma == other._sigma
+        )
 
 
 class StudentT(Distribution):
@@ -369,9 +373,14 @@ class StudentT(Distribution):
         Bounds.
     """
 
-    def __init__(self, mu: float = 0.0, sigma: float = 1.0,
-                 df: float = 3.0,
-                 lo: float = float("-inf"), hi: float = float("inf")):
+    def __init__(
+        self,
+        mu: float = 0.0,
+        sigma: float = 1.0,
+        df: float = 3.0,
+        lo: float = float("-inf"),
+        hi: float = float("inf"),
+    ):
         self._mu = float(mu)
         self._sigma = float(sigma)
         self._df = float(df)
@@ -403,16 +412,13 @@ class StudentT(Distribution):
         approximation for the bulk of the distribution.
         """
         # Scale factor: Var(t) = df/(df-2) for df>2
-        scale = jnp.where(self._df > 2,
-                          jnp.sqrt(self._df / (self._df - 2)),
-                          3.0)  # fallback for df<=2
-        return jnp.clip(self._mu + self._sigma * scale * xi,
-                         self._lo, self._hi)
+        scale = jnp.where(
+            self._df > 2, jnp.sqrt(self._df / (self._df - 2)), 3.0
+        )  # fallback for df<=2
+        return jnp.clip(self._mu + self._sigma * scale * xi, self._lo, self._hi)
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
-        scale = jnp.where(self._df > 2,
-                          jnp.sqrt(self._df / (self._df - 2)),
-                          3.0)
+        scale = jnp.where(self._df > 2, jnp.sqrt(self._df / (self._df - 2)), 3.0)
         return (theta - self._mu) / (self._sigma * scale)
 
     def __repr__(self) -> str:
@@ -467,6 +473,7 @@ class Fixed(Distribution):
 # ---------------------------------------------------------------------------
 # Shorthand resolution
 # ---------------------------------------------------------------------------
+
 
 def resolve_shorthand(val) -> Distribution:
     """Convert shorthand notation to a Distribution object.

@@ -17,9 +17,10 @@ The FIM at parameters θ with Gaussian noise is:
 where m_k is the model prediction at data point k and σ_k is the noise.
 """
 
+from functools import partial
+
 import jax
 import jax.numpy as jnp
-from functools import partial
 
 
 @partial(jax.jit, static_argnums=(0,))
@@ -43,9 +44,7 @@ def compute_jacobian(predict_fn, params, param_keys):
     return jax.jacobian(predict_fn)(params)
 
 
-def compute_fisher_matrix(forward_model, params, noise,
-                          data_type="photometry",
-                          param_names=None):
+def compute_fisher_matrix(forward_model, params, noise, data_type="photometry", param_names=None):
     """Compute the Fisher Information Matrix.
 
     F_ij = sum_k (1/sigma_k^2) * (dm_k/dtheta_i) * (dm_k/dtheta_j)
@@ -72,8 +71,18 @@ def compute_fisher_matrix(forward_model, params, noise,
         Parameter names corresponding to FIM rows/columns.
     """
     if param_names is None:
-        param_names = ["sigma_ps", "tau_ps", "alpha", "beta", "tau_sfh",
-                       "sfr_norm", "log_z", "tau_v1", "tau_v2", "dust_n"]
+        param_names = [
+            "sigma_ps",
+            "tau_ps",
+            "alpha",
+            "beta",
+            "tau_sfh",
+            "sfr_norm",
+            "log_z",
+            "tau_v1",
+            "tau_v2",
+            "dust_n",
+        ]
 
     # Build a function that maps a flat array of the selected params to predictions
     def predict_from_flat(flat_params):
@@ -95,7 +104,7 @@ def compute_fisher_matrix(forward_model, params, noise,
     jac = jax.jacobian(predict_from_flat)(flat)
 
     # FIM = J^T @ N^{-1} @ J where N^{-1} = diag(1/sigma^2)
-    noise_inv = 1.0 / noise ** 2
+    noise_inv = 1.0 / noise**2
     # Weighted Jacobian: (n_data, n_params) * (n_data, 1) broadcast
     weighted_jac = jac * noise_inv[:, None]
     fim = jac.T @ weighted_jac

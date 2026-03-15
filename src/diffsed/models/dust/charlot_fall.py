@@ -10,10 +10,15 @@ import jax
 import jax.numpy as jnp
 
 
-def charlot_fall(wavelength: jnp.ndarray, age_grid: jnp.ndarray,
-                 tau_v1: float, tau_v2: float, n_slope: float = -0.7,
-                 t_birth: float = 1e7,
-                 transition_width: float = 0.3) -> jnp.ndarray:
+def charlot_fall(
+    wavelength: jnp.ndarray,
+    age_grid: jnp.ndarray,
+    tau_v1: float,
+    tau_v2: float,
+    n_slope: float = -0.7,
+    t_birth: float = 1e7,
+    transition_width: float = 0.3,
+) -> jnp.ndarray:
     """Smooth Charlot & Fall dust attenuation.
 
     tau_lambda(t) = [w(t)*tau_v1 + tau_v2] * (lambda/5500)^n
@@ -56,11 +61,15 @@ def charlot_fall(wavelength: jnp.ndarray, age_grid: jnp.ndarray,
     return jnp.exp(-tau_lambda)
 
 
-def charlot_fall_at_wavelengths(wavelengths: jnp.ndarray, age_grid: jnp.ndarray,
-                                tau_v1: float, tau_v2: float,
-                                n_slope: float = -0.7,
-                                t_birth: float = 1e7,
-                                transition_width: float = 0.3) -> jnp.ndarray:
+def charlot_fall_at_wavelengths(
+    wavelengths: jnp.ndarray,
+    age_grid: jnp.ndarray,
+    tau_v1: float,
+    tau_v2: float,
+    n_slope: float = -0.7,
+    t_birth: float = 1e7,
+    transition_width: float = 0.3,
+) -> jnp.ndarray:
     """Evaluate Charlot & Fall dust at specific wavelengths per filter.
 
     Unlike charlot_fall() which evaluates on the full wavelength grid,
@@ -102,14 +111,18 @@ def charlot_fall_at_wavelengths(wavelengths: jnp.ndarray, age_grid: jnp.ndarray,
     return jnp.exp(-tau_lambda)
 
 
-def charlot_fall_hard(wavelength: jnp.ndarray, age_grid: jnp.ndarray,
-                      tau_v1: float, tau_v2: float,
-                      n_slope: float = -0.7,
-                      t_birth: float = 1e7) -> jnp.ndarray:
+def charlot_fall_hard(
+    wavelength: jnp.ndarray,
+    age_grid: jnp.ndarray,
+    tau_v1: float,
+    tau_v2: float,
+    n_slope: float = -0.7,
+    t_birth: float = 1e7,
+) -> jnp.ndarray:
     """Standard step-function Charlot & Fall (for comparison/testing)."""
     wave_ratio = (wavelength / 5500.0) ** n_slope
     tau_young = (tau_v1 + tau_v2) * wave_ratio
     tau_old = tau_v2 * wave_ratio
-    is_young = (age_grid[:, None] < t_birth)
+    is_young = age_grid[:, None] < t_birth
     tau_lambda = jnp.where(is_young, tau_young[None, :], tau_old[None, :])
     return jnp.exp(-tau_lambda)

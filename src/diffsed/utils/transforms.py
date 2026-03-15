@@ -14,8 +14,7 @@ import jax.numpy as jnp
 
 
 @jax.jit
-def sigmoid(x: jnp.ndarray, x0: float, k: float,
-            ymin: float, ymax: float) -> jnp.ndarray:
+def sigmoid(x: jnp.ndarray, x0: float, k: float, ymin: float, ymax: float) -> jnp.ndarray:
     """Smooth bounded transform: R -> (ymin, ymax).
 
     Parameters
@@ -38,8 +37,7 @@ def sigmoid(x: jnp.ndarray, x0: float, k: float,
 
 
 @jax.jit
-def inverse_sigmoid(y: jnp.ndarray, x0: float, k: float,
-                    ymin: float, ymax: float) -> jnp.ndarray:
+def inverse_sigmoid(y: jnp.ndarray, x0: float, k: float, ymin: float, ymax: float) -> jnp.ndarray:
     """Inverse of sigmoid: (ymin, ymax) -> R."""
     lnarg = (ymax - ymin) / (y - ymin) - 1.0
     return x0 - jnp.log(lnarg) / k

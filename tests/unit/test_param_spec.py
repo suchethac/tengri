@@ -7,8 +7,8 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed.distributions import Uniform, Gaussian, LogUniform, Fixed
-from diffsed.param_spec import ParamSpec, VALID_PARAM_NAMES
+from diffsed.distributions import Fixed, Gaussian, Uniform
+from diffsed.param_spec import VALID_PARAM_NAMES, ParamSpec
 
 
 class TestConstruction:
@@ -118,7 +118,8 @@ class TestProperties:
             redshift=0.1,
         )
         # sfh_alpha, sfh_beta are explicitly free
-        # defaults: sfh_tau_peak_gyr, sfh_peak_sfr, met_logzsol, dust_tau_bc, dust_tau_diff are Uniform (free)
+        # defaults: sfh_tau_peak_gyr, sfh_peak_sfr, met_logzsol,
+        # dust_tau_bc, dust_tau_diff are Uniform (free)
         # psd_sigma, psd_tau_myr are Fixed by default
         # dust_slope, redshift are Fixed
         assert spec.n_free >= 2  # at least the two we set

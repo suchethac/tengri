@@ -8,15 +8,14 @@ import jax
 import jax.numpy as jnp
 
 # Planck 2018 defaults
-DEFAULT_H0 = 67.4       # km/s/Mpc
+DEFAULT_H0 = 67.4  # km/s/Mpc
 DEFAULT_OM0 = 0.315
-C_KM_S = 2.998e5        # speed of light in km/s
-MPC_TO_CM = 3.0857e24   # Mpc to cm
+C_KM_S = 2.998e5  # speed of light in km/s
+MPC_TO_CM = 3.0857e24  # Mpc to cm
 
 
 @jax.jit
-def luminosity_distance(z: float, h0: float = DEFAULT_H0,
-                        om0: float = DEFAULT_OM0) -> float:
+def luminosity_distance(z: float, h0: float = DEFAULT_H0, om0: float = DEFAULT_OM0) -> float:
     """Luminosity distance for flat LCDM (cm).
 
     Uses 100-point Gauss-Legendre quadrature for the comoving integral.
@@ -49,8 +48,7 @@ def luminosity_distance(z: float, h0: float = DEFAULT_H0,
 
 
 @jax.jit
-def age_at_z(z: float, h0: float = DEFAULT_H0,
-             om0: float = DEFAULT_OM0) -> float:
+def age_at_z(z: float, h0: float = DEFAULT_H0, om0: float = DEFAULT_OM0) -> float:
     """Age of universe at redshift z (yr).
 
     Parameters
@@ -75,9 +73,7 @@ def age_at_z(z: float, h0: float = DEFAULT_H0,
     e_z = jnp.sqrt(om0 * (1.0 + z_grid) ** 3 + ol0)
     integrand = 1.0 / ((1.0 + z_grid) * e_z)
 
-    # H0 in 1/yr
-    h0_per_yr = h0 * 1e5 / (MPC_TO_CM / 3.156e7)  # approximate
-    # More precise: H0 in 1/s = h0 * 1e5 / (Mpc_in_cm)
+    # H0 in 1/s = h0 * 1e5 / (Mpc_in_cm)
     h0_inv_yr = 1.0 / (h0 * 1e5 / (3.0857e24 / 3.156e7))
 
     return h0_inv_yr * jnp.trapezoid(integrand, z_grid)

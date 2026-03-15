@@ -37,6 +37,10 @@ cells = [
     import matplotlib.pyplot as plt
     import numpy as np
 
+    import sys; sys.path.insert(0, ".")
+    from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
+    setup_style()
+
     from diffsed import (
         Model, ParamSpec, Uniform, Fixed, Fitter,
         load_ssp_data, load_filter_set,
@@ -160,9 +164,9 @@ cells = [
     axes[0].legend()
 
     # Corner plot
-    fig_corner_1 = result_1band.plot_corner(truths=true_params,
-                                            color=STAGE_COLORS["1 band"],
-                                            label="1 band")
+    fig_corner_1 = safe_corner(result_1band, truths=true_params,
+                               color=STAGE_COLORS["1 band"],
+                               label="1 band")
     plt.show()
     '''),
 
@@ -200,9 +204,9 @@ cells = [
     axes[0].set_title("SFH Recovery — g, r, i")
     axes[0].legend()
 
-    fig_corner_3 = result_3band.plot_corner(truths=true_params,
-                                            color=STAGE_COLORS["3 bands"],
-                                            label="3 bands")
+    fig_corner_3 = safe_corner(result_3band, truths=true_params,
+                               color=STAGE_COLORS["3 bands"],
+                               label="3 bands")
     plt.show()
     '''),
 
@@ -234,9 +238,9 @@ cells = [
     axes[0].set_title("SFH Recovery — SDSS ugriz")
     axes[0].legend()
 
-    fig_corner_5 = result_5band.plot_corner(truths=true_params,
-                                            color=STAGE_COLORS["5 bands"],
-                                            label="5 bands")
+    fig_corner_5 = safe_corner(result_5band, truths=true_params,
+                               color=STAGE_COLORS["5 bands"],
+                               label="5 bands")
     plt.show()
     '''),
 
@@ -278,9 +282,9 @@ cells = [
     axes[0].set_title("SFH Recovery — SDSS ugriz + GALEX NUV")
     axes[0].legend()
 
-    fig_corner_6 = result_6band.plot_corner(truths=true_params,
-                                            color=STAGE_COLORS["6 bands"],
-                                            label="ugriz+NUV")
+    fig_corner_6 = safe_corner(result_6band, truths=true_params,
+                               color=STAGE_COLORS["6 bands"],
+                               label="ugriz+NUV")
     plt.show()
     '''),
 
@@ -342,9 +346,9 @@ cells = [
     plt.tight_layout()
     plt.show()
 
-    fig_corner_spec = result_spec.plot_corner(truths=true_params,
-                                              color=STAGE_COLORS["spectrum"],
-                                              label="Spectrum")
+    fig_corner_spec = safe_corner(result_spec, truths=true_params,
+                                   color=STAGE_COLORS["spectrum"],
+                                   label="Spectrum")
     plt.show()
     '''),
 
@@ -378,8 +382,8 @@ cells = [
     axes[0].set_title("SFH Recovery — Joint Photometry + Spectroscopy")
     axes[0].legend()
 
-    fig_corner_joint = result_joint.plot_corner(truths=true_params,
-                                                color="C4", label="Joint")
+    fig_corner_joint = safe_corner(result_joint, truths=true_params,
+                                    color="C4", label="Joint")
     plt.show()
     '''),
 
@@ -444,7 +448,11 @@ cells = [
         for label in labels:
             summary = all_results[label].summary()
             if pname in summary:
-                widths.append((summary[pname]['hi_68'] - summary[pname]['lo_68']) / 2)
+                s = summary[pname]
+                if 'hi_68' in s and 'lo_68' in s:
+                    widths.append((s['hi_68'] - s['lo_68']) / 2)
+                else:
+                    widths.append(np.nan)
             else:
                 widths.append(np.nan)
         ax.plot(n_data, widths, "o-", label=pname, color=f"C{i}")
@@ -466,15 +474,16 @@ cells = [
     # -----------------------------------------------------------------------
     code(r'''
     # Overlay corner plots: 1-band (broad), 5-band (medium), spectrum (tight)
-    fig = result_1band.plot_corner(truths=true_params,
-                                   color=STAGE_COLORS["1 band"],
-                                   label="1 band")
-    result_5band.plot_corner(truths=true_params,
-                             color=STAGE_COLORS["5 bands"],
-                             label="5 bands", fig=fig)
-    result_spec.plot_corner(truths=true_params,
-                            color=STAGE_COLORS["spectrum"],
-                            label="Spectrum", fig=fig)
+    fig = safe_corner(result_1band, truths=true_params,
+                      color=STAGE_COLORS["1 band"],
+                      label="1 band")
+    if fig is not None:
+        safe_corner(result_5band, truths=true_params,
+                    color=STAGE_COLORS["5 bands"],
+                    label="5 bands", fig=fig)
+        safe_corner(result_spec, truths=true_params,
+                    color=STAGE_COLORS["spectrum"],
+                    label="Spectrum", fig=fig)
     fig.suptitle("Posterior Evolution: 1 band → 5 bands → Spectrum",
                  fontsize=13, y=1.02)
     plt.show()
@@ -509,14 +518,15 @@ cells = [
     # Corner plot of just (psd_sigma, psd_tau_myr): photometry vs spectroscopy
     psd_params = ["psd_sigma", "psd_tau_myr"]
 
-    fig = result_5band.plot_corner(params=psd_params, truths=true_params,
-                                   color=STAGE_COLORS["5 bands"],
-                                   label="5-band photometry")
-    result_spec.plot_corner(params=psd_params, truths=true_params,
-                            color=STAGE_COLORS["spectrum"],
-                            label="Spectrum", fig=fig)
-    result_joint.plot_corner(params=psd_params, truths=true_params,
-                             color="C4", label="Joint", fig=fig)
+    fig = safe_corner(result_5band, params=psd_params, truths=true_params,
+                      color=STAGE_COLORS["5 bands"],
+                      label="5-band photometry")
+    if fig is not None:
+        safe_corner(result_spec, params=psd_params, truths=true_params,
+                    color=STAGE_COLORS["spectrum"],
+                    label="Spectrum", fig=fig)
+        safe_corner(result_joint, params=psd_params, truths=true_params,
+                    color="C4", label="Joint", fig=fig)
     fig.suptitle("PSD Parameter Constraints: Photometry vs. Spectroscopy",
                  fontsize=12, y=1.02)
     plt.show()

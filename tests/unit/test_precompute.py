@@ -2,7 +2,6 @@
 
 import jax
 import jax.numpy as jnp
-import pytest
 from numpy.testing import assert_allclose
 
 from diffsed.models.sps.precompute import (
@@ -38,6 +37,7 @@ class TestFastPhotometry:
 
         # Expected: scale * Lsun * weighted_sum over ages for each filter
         from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+
         expected = scale * LSUN_ERG_PER_S * jnp.mean(ssp_phot, axis=0)
         assert_allclose(flux, expected, rtol=1e-10)
 

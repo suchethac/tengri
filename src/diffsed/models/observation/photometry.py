@@ -4,9 +4,10 @@ Computes observed flux densities by convolving the rest-frame SED
 (redshifted) through filter transmission curves.
 """
 
+from typing import NamedTuple
+
 import jax
 import jax.numpy as jnp
-from typing import NamedTuple
 
 
 class FilterCurve(NamedTuple):
@@ -21,15 +22,21 @@ class FilterCurve(NamedTuple):
     name : str
         Filter name (e.g., "SDSS_r", "F200W").
     """
+
     wave: jnp.ndarray
     trans: jnp.ndarray
     name: str = ""
 
 
 @jax.jit
-def compute_flux_density(sed_rest: jnp.ndarray, wave_rest: jnp.ndarray,
-                         filter_wave: jnp.ndarray, filter_trans: jnp.ndarray,
-                         redshift: float, dl_cm: float) -> float:
+def compute_flux_density(
+    sed_rest: jnp.ndarray,
+    wave_rest: jnp.ndarray,
+    filter_wave: jnp.ndarray,
+    filter_trans: jnp.ndarray,
+    redshift: float,
+    dl_cm: float,
+) -> float:
     """Compute observed flux density through a single filter.
 
     f_nu = (1+z) / (4*pi*dL^2) * int[L_nu(lam/(1+z)) * T(lam) * lam dlam]
@@ -59,12 +66,10 @@ def compute_flux_density(sed_rest: jnp.ndarray, wave_rest: jnp.ndarray,
     wave_obs = wave_rest * (1.0 + redshift)
 
     # Interpolate SED onto filter wavelength grid
-    sed_on_filter = jnp.interp(filter_wave, wave_obs, sed_rest,
-                               left=0.0, right=0.0)
+    sed_on_filter = jnp.interp(filter_wave, wave_obs, sed_rest, left=0.0, right=0.0)
 
     # Filter-weighted integral: int(SED * T * lam dlam) / int(T * lam dlam)
-    numerator = jnp.trapezoid(sed_on_filter * filter_trans * filter_wave,
-                              filter_wave)
+    numerator = jnp.trapezoid(sed_on_filter * filter_trans * filter_wave, filter_wave)
     denominator = jnp.trapezoid(filter_trans * filter_wave, filter_wave)
 
     # Scale: (1+z) / (4 pi dL^2) for flux density
@@ -73,9 +78,9 @@ def compute_flux_density(sed_rest: jnp.ndarray, wave_rest: jnp.ndarray,
     return flux_scale * numerator / jnp.maximum(denominator, 1e-30)
 
 
-def compute_photometry(sed_rest: jnp.ndarray, wave_rest: jnp.ndarray,
-                       filters: list, redshift: float,
-                       dl_cm: float) -> jnp.ndarray:
+def compute_photometry(
+    sed_rest: jnp.ndarray, wave_rest: jnp.ndarray, filters: list, redshift: float, dl_cm: float
+) -> jnp.ndarray:
     """Compute photometry through multiple filters.
 
     Parameters
@@ -98,8 +103,7 @@ def compute_photometry(sed_rest: jnp.ndarray, wave_rest: jnp.ndarray,
     """
     fluxes = []
     for filt in filters:
-        f = compute_flux_density(sed_rest, wave_rest, filt.wave, filt.trans,
-                                 redshift, dl_cm)
+        f = compute_flux_density(sed_rest, wave_rest, filt.wave, filt.trans, redshift, dl_cm)
         fluxes.append(f)
     return jnp.array(fluxes)
 

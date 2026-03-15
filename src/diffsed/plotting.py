@@ -14,9 +14,8 @@ Usage::
     from diffsed.plotting import COLORS, SDSS_WAVE_EFF
 """
 
-import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
+import numpy as np
 from matplotlib.gridspec import GridSpec
 
 # ═══════════════════════════════════════════════════════════════════
@@ -25,46 +24,49 @@ from matplotlib.gridspec import GridSpec
 
 COLORS = {
     # Sampler colors (consistent across all notebooks)
-    "map":       "#888888",   # grey — point estimate
-    "rt":        "#1f77b4",   # blue — Ray Tracing (exact MCMC)
-    "geovi":     "#ff7f0e",   # orange — geoVI (variational)
-    "nuts":      "#2ca02c",   # green — NUTS (gold standard)
-    "mgvi":      "#9467bd",   # purple — MGVI (linear VI)
+    "map": "#888888",  # grey — point estimate
+    "rt": "#1f77b4",  # blue — Ray Tracing (exact MCMC)
+    "geovi": "#ff7f0e",  # orange — geoVI (variational)
+    "nuts": "#2ca02c",  # green — NUTS (gold standard)
+    "mgvi": "#9467bd",  # purple — MGVI (linear VI)
     # Data colors
-    "truth":     "#1a1a1a",   # near-black — ground truth
-    "data":      "#333333",   # dark grey — observed data
-    "model":     "#d62728",   # red — model prediction
+    "truth": "#1a1a1a",  # near-black — ground truth
+    "data": "#333333",  # dark grey — observed data
+    "model": "#d62728",  # red — model prediction
     # SFH components
-    "sfh_mean":  "#1f77b4",   # blue — mean SFH backbone
-    "sfh_full":  "#ff7f0e",   # orange — full SFH (mean + GP)
-    "sfh_gp":    "#2ca02c",   # green — GP contribution
+    "sfh_mean": "#1f77b4",  # blue — mean SFH backbone
+    "sfh_full": "#ff7f0e",  # orange — full SFH (mean + GP)
+    "sfh_gp": "#2ca02c",  # green — GP contribution
     # Band colors (SDSS)
-    "u": "#7b3294", "g": "#008837", "r": "#d73027",
-    "i": "#fc8d59", "z": "#4575b4",
+    "u": "#7b3294",
+    "g": "#008837",
+    "r": "#d73027",
+    "i": "#fc8d59",
+    "z": "#4575b4",
     # Sequential for progressive reveal
     "seq": ["#d4d4d4", "#a8a8a8", "#1f77b4", "#2ca02c", "#d62728"],
 }
 
 # Named sampler styles for consistent legends
 SAMPLER_STYLE = {
-    "MAP":  {"color": COLORS["map"],   "ls": "--", "lw": 1.5, "alpha": 1.0},
-    "RT":   {"color": COLORS["rt"],    "ls": "-",  "lw": 1.5, "alpha": 1.0},
-    "geoVI":{"color": COLORS["geovi"], "ls": "-",  "lw": 1.5, "alpha": 1.0},
-    "NUTS": {"color": COLORS["nuts"],  "ls": "-",  "lw": 1.5, "alpha": 1.0},
-    "MGVI": {"color": COLORS["mgvi"],  "ls": "-",  "lw": 1.5, "alpha": 1.0},
+    "MAP": {"color": COLORS["map"], "ls": "--", "lw": 1.5, "alpha": 1.0},
+    "RT": {"color": COLORS["rt"], "ls": "-", "lw": 1.5, "alpha": 1.0},
+    "geoVI": {"color": COLORS["geovi"], "ls": "-", "lw": 1.5, "alpha": 1.0},
+    "NUTS": {"color": COLORS["nuts"], "ls": "-", "lw": 1.5, "alpha": 1.0},
+    "MGVI": {"color": COLORS["mgvi"], "ls": "-", "lw": 1.5, "alpha": 1.0},
 }
 
 # SDSS effective wavelengths (Angstrom)
 SDSS_BANDS = {"u": 3551, "g": 4686, "r": 6166, "i": 7480, "z": 8932}
 SDSS_WAVE_EFF = np.array([3551, 4686, 6166, 7480, 8932])
 SDSS_BAND_NAMES = ["u", "g", "r", "i", "z"]
-SDSS_BAND_COLORS = [COLORS["u"], COLORS["g"], COLORS["r"],
-                     COLORS["i"], COLORS["z"]]
+SDSS_BAND_COLORS = [COLORS["u"], COLORS["g"], COLORS["r"], COLORS["i"], COLORS["z"]]
 
 
 # ═══════════════════════════════════════════════════════════════════
 # Style setup
 # ═══════════════════════════════════════════════════════════════════
+
 
 def setup_style():
     """Configure matplotlib for publication-quality astronomy figures.
@@ -75,58 +77,71 @@ def setup_style():
     - Inward ticks on all four sides
     - No frame on legends
     """
-    plt.rcParams.update({
-        # Figure
-        "figure.dpi": 150,
-        "figure.facecolor": "white",
-        "savefig.dpi": 300,
-        "savefig.bbox": "tight",
-        "savefig.pad_inches": 0.05,
-        # Font — BAGPIPES uses Helvetica/sans-serif; we use DejaVu Serif
-        # for journal compatibility without requiring LaTeX installation
-        "font.size": 14,
-        "font.family": "serif",
-        "mathtext.fontset": "dejavuserif",
-        # Axes labels — BAGPIPES: 18pt labels, 14pt ticks
-        "axes.labelsize": 18,
-        "axes.titlesize": 16,
-        "xtick.labelsize": 14,
-        "ytick.labelsize": 14,
-        "legend.fontsize": 12,
-        # Axes frame — BAGPIPES: 1.5pt
-        "axes.linewidth": 1.5,
-        "axes.grid": False,
-        # Ticks — BAGPIPES: inward, all four sides
-        "xtick.direction": "in",
-        "ytick.direction": "in",
-        "xtick.top": True,
-        "ytick.right": True,
-        "xtick.major.width": 1.0,
-        "ytick.major.width": 1.0,
-        "xtick.major.size": 5,
-        "ytick.major.size": 5,
-        "xtick.minor.visible": True,
-        "ytick.minor.visible": True,
-        "xtick.minor.width": 0.7,
-        "ytick.minor.width": 0.7,
-        "xtick.minor.size": 3,
-        "ytick.minor.size": 3,
-        # Legend — BAGPIPES: no frame
-        "legend.frameon": False,
-        "legend.handlelength": 1.5,
-        # Lines — BAGPIPES: 2pt
-        "lines.linewidth": 2.0,
-    })
+    plt.rcParams.update(
+        {
+            # Figure
+            "figure.dpi": 150,
+            "figure.facecolor": "white",
+            "savefig.dpi": 300,
+            "savefig.bbox": "tight",
+            "savefig.pad_inches": 0.05,
+            # Font — BAGPIPES uses Helvetica/sans-serif; we use DejaVu Serif
+            # for journal compatibility without requiring LaTeX installation
+            "font.size": 14,
+            "font.family": "serif",
+            "mathtext.fontset": "dejavuserif",
+            # Axes labels — BAGPIPES: 18pt labels, 14pt ticks
+            "axes.labelsize": 18,
+            "axes.titlesize": 16,
+            "xtick.labelsize": 14,
+            "ytick.labelsize": 14,
+            "legend.fontsize": 12,
+            # Axes frame — BAGPIPES: 1.5pt
+            "axes.linewidth": 1.5,
+            "axes.grid": False,
+            # Ticks — BAGPIPES: inward, all four sides
+            "xtick.direction": "in",
+            "ytick.direction": "in",
+            "xtick.top": True,
+            "ytick.right": True,
+            "xtick.major.width": 1.0,
+            "ytick.major.width": 1.0,
+            "xtick.major.size": 5,
+            "ytick.major.size": 5,
+            "xtick.minor.visible": True,
+            "ytick.minor.visible": True,
+            "xtick.minor.width": 0.7,
+            "ytick.minor.width": 0.7,
+            "xtick.minor.size": 3,
+            "ytick.minor.size": 3,
+            # Legend — BAGPIPES: no frame
+            "legend.frameon": False,
+            "legend.handlelength": 1.5,
+            # Lines — BAGPIPES: 2pt
+            "lines.linewidth": 2.0,
+        }
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════
 # SFH plotting (BAGPIPES-inspired)
 # ═══════════════════════════════════════════════════════════════════
 
-def plot_sfh(model, posterior, true_params=None, ax=None,
-             color=None, label="Posterior", method="RT",
-             show_draws=True, n_draws=30, ci_levels=(16, 84),
-             xlim=(0, 13.5), show_mean_sfh=True):
+
+def plot_sfh(
+    model,
+    posterior,
+    true_params=None,
+    ax=None,
+    color=None,
+    label="Posterior",
+    method="RT",
+    show_draws=True,
+    n_draws=30,
+    ci_levels=(16, 84),
+    xlim=(0, 13.5),
+    show_mean_sfh=True,
+):
     """Plot SFH posterior with uncertainty band — BAGPIPES/Prospector style.
 
     Features:
@@ -179,8 +194,9 @@ def plot_sfh(model, posterior, true_params=None, ax=None,
         hi = np.percentile(sfh_arr, ci_levels[1], axis=0)
         median = np.median(sfh_arr, axis=0)
 
-        ax.fill_between(t_gyr, lo, hi, color=color, alpha=0.25,
-                         edgecolor="none", label=f"{label} (68% CI)")
+        ax.fill_between(
+            t_gyr, lo, hi, color=color, alpha=0.25, edgecolor="none", label=f"{label} (68% CI)"
+        )
 
         # Faint sample draws (Prospector style)
         if show_draws:
@@ -196,32 +212,42 @@ def plot_sfh(model, posterior, true_params=None, ax=None,
         sfh = model.predict_sfh(posterior.params)
         t_gyr = np.array(sfh["t_gyr"])
         key = "sfr_full" if model.spec.stochastic else "sfr_mean"
-        ax.plot(t_gyr, sfh[key], color=COLORS["map"], lw=1.8,
-                ls="--", label="MAP", zorder=3)
+        ax.plot(t_gyr, sfh[key], color=COLORS["map"], lw=1.8, ls="--", label="MAP", zorder=3)
 
     # Truth overlay (BAGPIPES convention: solid black)
     if true_params is not None:
         sfh_true = model.predict_sfh(true_params)
         key = "sfr_full" if model.spec.stochastic else "sfr_mean"
-        ax.plot(sfh_true["t_gyr"], sfh_true[key], color=COLORS["truth"],
-                lw=2.0, label="Truth", zorder=10)
+        ax.plot(
+            sfh_true["t_gyr"],
+            sfh_true[key],
+            color=COLORS["truth"],
+            lw=2.0,
+            label="Truth",
+            zorder=10,
+        )
         # Show mean SFH backbone for stochastic models
         if model.spec.stochastic and show_mean_sfh:
-            ax.plot(sfh_true["t_gyr"], sfh_true["sfr_mean"],
-                    color=COLORS["truth"], lw=1.0, ls=":", alpha=0.4)
+            ax.plot(
+                sfh_true["t_gyr"],
+                sfh_true["sfr_mean"],
+                color=COLORS["truth"],
+                lw=1.0,
+                ls=":",
+                alpha=0.4,
+            )
 
     # BAGPIPES convention: lookback time with present at right
     ax.set_xlabel(r"$\mathrm{Lookback\ time\ /\ Gyr}$")
     ax.set_ylabel(r"$\mathrm{SFR\ /\ M_\odot\ yr^{-1}}$")
     ax.set_xlim(xlim[1], xlim[0])  # reversed: high lookback at left, present at right
-    ax.set_ylim(bottom=0.)
+    ax.set_ylim(bottom=0.0)
     ax.legend(loc="upper left")
 
     return ax
 
 
-def plot_sfh_comparison(model, results, true_params=None,
-                        methods=None, figsize=(15, 4)):
+def plot_sfh_comparison(model, results, true_params=None, methods=None, figsize=(15, 4)):
     """Side-by-side SFH recovery for multiple methods.
 
     BAGPIPES-style multi-panel layout.
@@ -247,8 +273,9 @@ def plot_sfh_comparison(model, results, true_params=None,
         axes = [axes]
 
     for ax, method in zip(axes, methods):
-        plot_sfh(model, results[method], true_params=true_params,
-                 ax=ax, method=method, label=method)
+        plot_sfh(
+            model, results[method], true_params=true_params, ax=ax, method=method, label=method
+        )
         ax.set_title(method, fontsize=12, fontweight="bold")
         if ax != axes[0]:
             ax.set_ylabel("")
@@ -261,9 +288,17 @@ def plot_sfh_comparison(model, results, true_params=None,
 # SED / Photometry plotting (Prospector-inspired)
 # ═══════════════════════════════════════════════════════════════════
 
-def plot_sed_fit(wave_eff, flux_obs, noise, flux_true=None,
-                 posterior_draws=None, ax=None, band_names=None,
-                 show_residuals=True):
+
+def plot_sed_fit(
+    wave_eff,
+    flux_obs,
+    noise,
+    flux_true=None,
+    posterior_draws=None,
+    ax=None,
+    band_names=None,
+    show_residuals=True,
+):
     """Plot observed photometry with model fit — Prospector style.
 
     Parameters
@@ -294,25 +329,42 @@ def plot_sed_fit(wave_eff, flux_obs, noise, flux_true=None,
             fig = ax.figure
 
     # Data points with error bars
-    ax_main.errorbar(wave_eff, flux_obs, yerr=noise,
-                      fmt="o", ms=7, color=COLORS["data"],
-                      capsize=3, capthick=1.0, elinewidth=1.0,
-                      zorder=5, label="Observed")
+    ax_main.errorbar(
+        wave_eff,
+        flux_obs,
+        yerr=noise,
+        fmt="o",
+        ms=7,
+        color=COLORS["data"],
+        capsize=3,
+        capthick=1.0,
+        elinewidth=1.0,
+        zorder=5,
+        label="Observed",
+    )
 
     # True fluxes
     if flux_true is not None:
-        ax_main.scatter(wave_eff, flux_true, marker="D", s=40,
-                         facecolors="none", edgecolors=COLORS["truth"],
-                         linewidths=1.2, zorder=6, label="Truth")
+        ax_main.scatter(
+            wave_eff,
+            flux_true,
+            marker="D",
+            s=40,
+            facecolors="none",
+            edgecolors=COLORS["truth"],
+            linewidths=1.2,
+            zorder=6,
+            label="Truth",
+        )
 
     # Posterior predictive draws (faint lines)
     if posterior_draws is not None:
         for draw in posterior_draws:
-            ax_main.plot(wave_eff, draw, "-", color=COLORS["rt"],
-                          alpha=0.08, lw=0.8)
+            ax_main.plot(wave_eff, draw, "-", color=COLORS["rt"], alpha=0.08, lw=0.8)
         median_pred = np.median(posterior_draws, axis=0)
-        ax_main.plot(wave_eff, median_pred, "s", ms=5,
-                      color=COLORS["rt"], zorder=4, label="Model (median)")
+        ax_main.plot(
+            wave_eff, median_pred, "s", ms=5, color=COLORS["rt"], zorder=4, label="Model (median)"
+        )
 
     ax_main.set_ylabel(r"$f_\nu$ (erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$)")
     ax_main.legend(loc="upper right")
@@ -320,9 +372,15 @@ def plot_sed_fit(wave_eff, flux_obs, noise, flux_true=None,
     # Band labels
     if band_names is not None:
         for weff, bname, bcol in zip(wave_eff, band_names, SDSS_BAND_COLORS):
-            ax_main.annotate(bname, (weff, flux_obs[list(wave_eff).index(weff)]),
-                              textcoords="offset points", xytext=(0, 12),
-                              ha="center", fontsize=8, color=bcol)
+            ax_main.annotate(
+                bname,
+                (weff, flux_obs[list(wave_eff).index(weff)]),
+                textcoords="offset points",
+                xytext=(0, 12),
+                ha="center",
+                fontsize=8,
+                color=bcol,
+            )
 
     if show_residuals and posterior_draws is not None:
         median_pred = np.median(posterior_draws, axis=0)
@@ -330,8 +388,10 @@ def plot_sed_fit(wave_eff, flux_obs, noise, flux_true=None,
         ax_res.axhline(0, color="0.5", ls="--", lw=0.8)
         ax_res.axhspan(-1, 1, alpha=0.05, color="0.5")
         ax_res.axhspan(-2, 2, alpha=0.03, color="0.5")
-        colors = [SDSS_BAND_COLORS[i] if i < len(SDSS_BAND_COLORS)
-                  else COLORS["data"] for i in range(len(wave_eff))]
+        colors = [
+            SDSS_BAND_COLORS[i] if i < len(SDSS_BAND_COLORS) else COLORS["data"]
+            for i in range(len(wave_eff))
+        ]
         ax_res.bar(wave_eff, residuals, width=200, color=colors, alpha=0.7)
         ax_res.set_xlabel(r"Wavelength ($\AA$)")
         ax_res.set_ylabel(r"$(d - f)/\sigma$")
@@ -347,8 +407,10 @@ def plot_sed_fit(wave_eff, flux_obs, noise, flux_true=None,
 # Spectrum plotting
 # ═══════════════════════════════════════════════════════════════════
 
-def plot_spectrum_fit(wave_obs, spec_obs, noise, spec_true=None,
-                      spec_draws=None, features=None, z=0.1):
+
+def plot_spectrum_fit(
+    wave_obs, spec_obs, noise, spec_true=None, spec_draws=None, features=None, z=0.1
+):
     """Plot spectroscopic fit with residuals — CIGALE style.
 
     Parameters
@@ -372,24 +434,24 @@ def plot_spectrum_fit(wave_obs, spec_obs, noise, spec_true=None,
 
     # Data
     ax_main.plot(wave_obs, spec_obs, color="0.6", lw=0.5, alpha=0.7)
-    ax_main.fill_between(np.array(wave_obs),
-                          np.array(spec_obs - noise),
-                          np.array(spec_obs + noise),
-                          color="0.8", alpha=0.3)
+    ax_main.fill_between(
+        np.array(wave_obs),
+        np.array(spec_obs - noise),
+        np.array(spec_obs + noise),
+        color="0.8",
+        alpha=0.3,
+    )
 
     # Truth
     if spec_true is not None:
-        ax_main.plot(wave_obs, spec_true, color=COLORS["truth"],
-                      lw=1.0, alpha=0.5, label="Truth")
+        ax_main.plot(wave_obs, spec_true, color=COLORS["truth"], lw=1.0, alpha=0.5, label="Truth")
 
     # Posterior
     if spec_draws is not None:
         median = np.median(spec_draws, axis=0)
         lo, hi = np.percentile(spec_draws, [16, 84], axis=0)
-        ax_main.fill_between(np.array(wave_obs), lo, hi,
-                              color=COLORS["rt"], alpha=0.2)
-        ax_main.plot(wave_obs, median, color=COLORS["rt"],
-                      lw=1.2, label="Model (68% CI)")
+        ax_main.fill_between(np.array(wave_obs), lo, hi, color=COLORS["rt"], alpha=0.2)
+        ax_main.plot(wave_obs, median, color=COLORS["rt"], lw=1.2, label="Model (68% CI)")
 
         # Residuals
         residuals = (np.array(spec_obs) - median) / np.array(noise)
@@ -406,9 +468,16 @@ def plot_spectrum_fit(wave_obs, spec_obs, noise, spec_true=None,
             if float(wave_obs[0]) <= lam_obs <= float(wave_obs[-1]):
                 for ax in [ax_main, ax_res]:
                     ax.axvline(lam_obs, color="0.7", ls=":", lw=0.6)
-                ax_main.text(lam_obs, ax_main.get_ylim()[1] * 0.95, name,
-                              fontsize=7, ha="center", color="0.4",
-                              rotation=90, va="top")
+                ax_main.text(
+                    lam_obs,
+                    ax_main.get_ylim()[1] * 0.95,
+                    name,
+                    fontsize=7,
+                    ha="center",
+                    color="0.4",
+                    rotation=90,
+                    va="top",
+                )
 
     ax_res.set_xlabel(r"Observed wavelength ($\AA$)")
     ax_main.set_ylabel(r"$f_\nu$ (erg s$^{-1}$ cm$^{-2}$ $\AA^{-1}$)")
@@ -422,6 +491,7 @@ def plot_spectrum_fit(wave_obs, spec_obs, noise, spec_true=None,
 # Corner plot wrapper (safe against degenerate posteriors)
 # ═══════════════════════════════════════════════════════════════════
 
+
 def safe_corner(posterior, **kwargs):
     """Wrapper around Posterior.plot_corner that handles degenerate posteriors.
 
@@ -434,8 +504,7 @@ def safe_corner(posterior, **kwargs):
         return None
 
 
-def plot_corner_comparison(posteriors, labels, colors=None,
-                           truths=None, params=None):
+def plot_corner_comparison(posteriors, labels, colors=None, truths=None, params=None):
     """Overlay multiple posteriors on a single corner plot.
 
     Parameters
@@ -451,15 +520,19 @@ def plot_corner_comparison(posteriors, labels, colors=None,
     fig or None
     """
     if colors is None:
-        default_colors = [COLORS["rt"], COLORS["geovi"], COLORS["nuts"],
-                          COLORS["mgvi"], COLORS["map"]]
-        colors = default_colors[:len(posteriors)]
+        default_colors = [
+            COLORS["rt"],
+            COLORS["geovi"],
+            COLORS["nuts"],
+            COLORS["mgvi"],
+            COLORS["map"],
+        ]
+        colors = default_colors[: len(posteriors)]
 
     fig = None
     for post, label, color in zip(posteriors, labels, colors):
         try:
-            fig = post.plot_corner(params=params, truths=truths,
-                                    color=color, label=label, fig=fig)
+            fig = post.plot_corner(params=params, truths=truths, color=color, label=label, fig=fig)
         except (ValueError, np.linalg.LinAlgError):
             print(f"Corner plot skipped for {label}")
             continue
@@ -470,6 +543,7 @@ def plot_corner_comparison(posteriors, labels, colors=None,
 # ═══════════════════════════════════════════════════════════════════
 # Diagnostics table
 # ═══════════════════════════════════════════════════════════════════
+
 
 def diagnostics_table(results, names=None):
     """Print a formatted diagnostics comparison table.
@@ -482,7 +556,9 @@ def diagnostics_table(results, names=None):
     if names is None:
         names = list(results.keys())
 
-    header = f"{'Method':<15} {'Wall time':>10} {'ESS (min)':>10} {'ESS (med)':>10} {'Accept %':>10}"
+    header = (
+        f"{'Method':<15} {'Wall time':>10} {'ESS (min)':>10} {'ESS (med)':>10} {'Accept %':>10}"
+    )
     print(header)
     print("-" * len(header))
 
@@ -498,8 +574,9 @@ def diagnostics_table(results, names=None):
         else:
             ess_min, ess_med = "—", "—"
 
-        accept = res.diagnostics.get("accept_rate_post_burnin",
-                 res.diagnostics.get("mean_accept_prob", None))
+        accept = res.diagnostics.get(
+            "accept_rate_post_burnin", res.diagnostics.get("mean_accept_prob", None)
+        )
         accept_str = f"{accept:.1%}" if accept is not None else "—"
         print(f"{name:<15} {wt:>10} {ess_min:>10} {ess_med:>10} {accept_str:>10}")
 

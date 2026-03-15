@@ -14,6 +14,12 @@ Differentiable SED fitting code in JAX. Models galaxy star formation histories a
 cd ~/Projects/diffsed
 source .venv/bin/activate
 
+# Lint and format (ALWAYS run before committing)
+ruff check src/ tests/              # lint — must pass with zero errors
+ruff format --check src/ tests/     # format check — must pass
+ruff check --fix src/ tests/        # auto-fix safe violations
+ruff format src/ tests/             # auto-format
+
 # Run all tests (302 tests, ~50 seconds)
 pytest tests/ -q
 
@@ -31,12 +37,16 @@ latexmk -pdf 0-ms.tex
 
 ## Code style
 
+- **Ruff** enforces linting and formatting — config in `pyproject.toml` under `[tool.ruff]`
+- Run `ruff check` and `ruff format --check` before every commit; zero violations required
 - Pure JAX functions (no side effects, JIT-compatible)
 - Numpydoc docstrings
 - snake_case naming
 - Immutable arrays (use `.at[].set()`)
 - Units: years (time), Angstrom (wavelength), Msun/yr (SFR)
 - 64-bit precision enabled globally via `jax.config.update("jax_enable_x64", True)`
+- Line length limit: 99 characters
+- Greek letters (σ, ξ, θ) allowed in docstrings and comments (scientific notation)
 
 ## Package structure
 

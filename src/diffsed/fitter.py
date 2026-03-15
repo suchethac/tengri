@@ -22,7 +22,7 @@ import jax
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
-from diffsed.distributions import Uniform, Gaussian, LogUniform, Fixed
+from diffsed.distributions import Gaussian, LogUniform
 from diffsed.utils.transforms import to_bounded, to_unbounded
 
 
@@ -141,17 +141,13 @@ class Fitter:
             if isinstance(dist, Gaussian):
                 # Initialize at mu in unbounded space
                 lo, hi = dist.bounds
-                params[name] = to_unbounded(
-                    jnp.array(dist.mu), lo, hi
-                )
+                params[name] = to_unbounded(jnp.array(dist.mu), lo, hi)
             else:
                 # Initialize near midpoint (u=0) with small perturbation
                 params[name] = 0.1 * jax.random.normal(keys[i])
 
         if self.spec.stochastic:
-            params["psd_xi"] = 0.1 * jax.random.normal(
-                keys[-1], shape=(self.spec.n_grid,)
-            )
+            params["psd_xi"] = 0.1 * jax.random.normal(keys[-1], shape=(self.spec.n_grid,))
 
         return params
 
@@ -161,10 +157,7 @@ class Fitter:
         for name in self._free_names:
             if name in posterior.params:
                 lo, hi = self._bounds[name]
-                val = jnp.clip(
-                    jnp.array(posterior.params[name]),
-                    lo + 1e-6, hi - 1e-6
-                )
+                val = jnp.clip(jnp.array(posterior.params[name]), lo + 1e-6, hi - 1e-6)
                 params[name] = to_unbounded(val, lo, hi)
             else:
                 params[name] = jnp.array(0.0)
@@ -228,20 +221,30 @@ class Fitter:
             return self._run_geovi(key=key, init_from=init_from, **kwargs)
         elif method == "mgvi":
             return self._run_geovi(
-                key=key, init_from=init_from,
-                sample_mode="linear_resample", **kwargs,
+                key=key,
+                init_from=init_from,
+                sample_mode="linear_resample",
+                **kwargs,
             )
         else:
             raise ValueError(
-                f"Unknown method: {method}. "
-                f"Use 'map', 'raytrace', 'nuts', 'geovi', or 'mgvi'."
+                f"Unknown method: {method}. Use 'map', 'raytrace', 'nuts', 'geovi', or 'mgvi'."
             )
 
-    def _run_map(self, *, key, init_from=None,
-                 n_steps=1000, learning_rate=0.02,
-                 optimizer="adam", early_stopping=True,
-                 patience=200, rtol=1e-5,
-                 verbose=True, print_every=200):
+    def _run_map(
+        self,
+        *,
+        key,
+        init_from=None,
+        n_steps=1000,
+        learning_rate=0.02,
+        optimizer="adam",
+        early_stopping=True,
+        patience=200,
+        rtol=1e-5,
+        verbose=True,
+        print_every=200,
+    ):
         """MAP optimization via gradient descent.
 
         Parameters
@@ -266,7 +269,7 @@ class Fitter:
         try:
             import optax
         except ImportError:
-            raise ImportError("optax required for MAP: pip install optax")
+            raise ImportError("optax required for MAP: pip install optax") from None
 
         from diffsed.posterior import Posterior
 
@@ -327,16 +330,17 @@ class Fitter:
                     steps_without_improvement += 1
                     if steps_without_improvement >= patience:
                         if verbose:
-                            print(f"  Early stopping at step {i} "
-                                  f"(no improvement for {patience} steps)")
+                            print(
+                                f"  Early stopping at step {i} "
+                                f"(no improvement for {patience} steps)"
+                            )
                         break
 
         wall_time = time.time() - t0
         best_params = self._to_physical(params)
 
         if verbose:
-            print(f"  MAP ({opt_name}) complete in {wall_time:.1f}s, "
-                  f"{len(loss_history)} steps")
+            print(f"  MAP ({opt_name}) complete in {wall_time:.1f}s, {len(loss_history)} steps")
 
         return Posterior(
             samples=None,
@@ -352,11 +356,18 @@ class Fitter:
             _model=self.model,
         )
 
-    def _run_raytrace(self, *, key, init_from=None,
-                      n_burnin=100, n_steps=500,
-                      n_leapfrog_steps=10,
-                      step_size=None, refresh_rate=0.0,
-                      verbose=True):
+    def _run_raytrace(
+        self,
+        *,
+        key,
+        init_from=None,
+        n_burnin=100,
+        n_steps=500,
+        n_leapfrog_steps=10,
+        step_size=None,
+        refresh_rate=0.0,
+        verbose=True,
+    ):
         """Ray Tracing Sampler (Behroozi 2025).
 
         Propagates light rays through a medium where the refractive
@@ -383,8 +394,8 @@ class Fitter:
         verbose : bool
             Print progress.
         """
-        from diffsed.raytrace_jax import sample_raytrace
         from diffsed.posterior import Posterior
+        from diffsed.raytrace_jax import sample_raytrace
 
         loss_fn = self._build_loss_fn()
 
@@ -413,9 +424,11 @@ class Fitter:
         total_steps = n_burnin + n_steps
 
         if verbose:
-            print(f"Ray Tracing: {D} params, {n_burnin} burn-in + "
-                  f"{n_steps} samples, {n_leapfrog_steps} leapfrog/step, "
-                  f"step_size={float(step_size):.4f}")
+            print(
+                f"Ray Tracing: {D} params, {n_burnin} burn-in + "
+                f"{n_steps} samples, {n_leapfrog_steps} leapfrog/step, "
+                f"step_size={float(step_size):.4f}"
+            )
 
         t0 = time.time()
 
@@ -457,10 +470,12 @@ class Fitter:
         best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
 
         if verbose:
-            print(f"  Ray Tracing complete in {wall_time:.1f}s. "
-                  f"Acceptance: {mean_accept:.1%} (overall), "
-                  f"{mean_accept_post:.1%} (post burn-in). "
-                  f"Samples: {n_samples_out}")
+            print(
+                f"  Ray Tracing complete in {wall_time:.1f}s. "
+                f"Acceptance: {mean_accept:.1%} (overall), "
+                f"{mean_accept_post:.1%} (post burn-in). "
+                f"Samples: {n_samples_out}"
+            )
 
         return Posterior(
             samples=samples_phys,
@@ -481,10 +496,18 @@ class Fitter:
             _model=self.model,
         )
 
-    def _run_nuts(self, *, key, init_from=None,
-                  n_warmup=500, n_burnin=0, n_samples=1000,
-                  target_accept_rate=0.8, max_num_doublings=10,
-                  verbose=True):
+    def _run_nuts(
+        self,
+        *,
+        key,
+        init_from=None,
+        n_warmup=500,
+        n_burnin=0,
+        n_samples=1000,
+        target_accept_rate=0.8,
+        max_num_doublings=10,
+        verbose=True,
+    ):
         """NUTS sampling via BlackJAX.
 
         The sampling proceeds in three phases:
@@ -513,7 +536,7 @@ class Fitter:
         try:
             import blackjax
         except ImportError:
-            raise ImportError("blackjax required for NUTS: pip install blackjax")
+            raise ImportError("blackjax required for NUTS: pip install blackjax") from None
 
         from diffsed.posterior import Posterior
 
@@ -545,24 +568,27 @@ class Fitter:
         if verbose:
             n_dim = len(init_flat)
             burnin_msg = f", {n_burnin} burn-in" if n_burnin > 0 else ""
-            print(f"NUTS: {n_dim} parameters, {n_warmup} warmup{burnin_msg}, "
-                  f"{n_samples} samples, target_accept={target_accept_rate}")
+            print(
+                f"NUTS: {n_dim} parameters, {n_warmup} warmup{burnin_msg}, "
+                f"{n_samples} samples, target_accept={target_accept_rate}"
+            )
 
         t0 = time.time()
 
         # Window adaptation with target acceptance rate
         key, warmup_key = jax.random.split(key)
         warmup = blackjax.window_adaptation(
-            blackjax.nuts, log_posterior_flat,
+            blackjax.nuts,
+            log_posterior_flat,
             target_acceptance_rate=target_accept_rate,
         )
-        (state, parameters), _ = warmup.run(
-            warmup_key, init_flat, num_steps=n_warmup
-        )
+        (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
 
         if verbose:
-            print(f"  Warmup complete ({time.time() - t0:.1f}s). "
-                  f"Step size: {float(parameters['step_size']):.4f}")
+            print(
+                f"  Warmup complete ({time.time() - t0:.1f}s). "
+                f"Step size: {float(parameters['step_size']):.4f}"
+            )
 
         # Sampling
         kernel = blackjax.nuts(log_posterior_flat, **parameters).step
@@ -593,7 +619,7 @@ class Fitter:
             if hasattr(info, "is_divergent"):
                 n_divergent += int(info.is_divergent)
             if verbose and ((i + 1) % 200 == 0 or i == n_samples - 1):
-                print(f"  Sample {i+1}/{n_samples}")
+                print(f"  Sample {i + 1}/{n_samples}")
 
         wall_time = time.time() - t0
         positions = jnp.stack(all_positions)
@@ -612,8 +638,7 @@ class Fitter:
         best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
 
         if verbose:
-            print(f"  NUTS complete in {wall_time:.1f}s. "
-                  f"Divergences: {n_divergent}/{n_samples}")
+            print(f"  NUTS complete in {wall_time:.1f}s. Divergences: {n_divergent}/{n_samples}")
 
         return Posterior(
             samples=samples_phys,
@@ -631,9 +656,17 @@ class Fitter:
             _model=self.model,
         )
 
-    def _run_geovi(self, *, key, init_from=None,
-                   n_iterations=10, n_samples=6, n_posterior_samples=100,
-                   sample_mode="nonlinear_resample", verbose=True):
+    def _run_geovi(
+        self,
+        *,
+        key,
+        init_from=None,
+        n_iterations=10,
+        n_samples=6,
+        n_posterior_samples=100,
+        sample_mode="nonlinear_resample",
+        verbose=True,
+    ):
         """Geometric variational inference via NIFTy.re.
 
         geoVI finds a coordinate transformation where the posterior is
@@ -657,9 +690,7 @@ class Fitter:
         try:
             import nifty8.re as jft
         except ImportError:
-            raise ImportError(
-                "nifty8.re required for geoVI: pip install nifty8[re]"
-            )
+            raise ImportError("nifty8.re required for geoVI: pip install nifty8[re]") from None
 
         from diffsed.posterior import Posterior
 
@@ -705,7 +736,7 @@ class Fitter:
         nifty_model = jft.Model(signal_response, domain=domain)
 
         # Gaussian likelihood: N^-1 = diag(1/noise^2)
-        noise_cov_inv = 1.0 / noise ** 2
+        noise_cov_inv = 1.0 / noise**2
         likelihood = jft.Gaussian(data, noise_cov_inv).amend(nifty_model)
 
         # Initialize
@@ -720,8 +751,7 @@ class Fitter:
         if verbose:
             n_total = len(free_names) + (spec.n_grid if stochastic else 0)
             mode = "geoVI" if sample_mode == "nonlinear_resample" else "MGVI"
-            print(f"{mode}: {n_total} params, {len(data)} data points, "
-                  f"{n_iterations} iterations")
+            print(f"{mode}: {n_total} params, {len(data)} data points, {n_iterations} iterations")
 
         t0 = time.time()
 
@@ -729,7 +759,7 @@ class Fitter:
         delta = max(1, n_samples - 1)
 
         key, opt_key = jax.random.split(key)
-        samples, state = jft.optimize_kl(
+        samples, _state = jft.optimize_kl(
             likelihood,
             init_pos,
             n_total_iterations=n_iterations,
@@ -752,21 +782,25 @@ class Fitter:
 
         # Include the optimization samples
         for s in list(samples):
-            sd = s.tree if hasattr(s, 'tree') else dict(s)
+            sd = s.tree if hasattr(s, "tree") else dict(s)
             all_sample_dicts.append(sd)
 
         # Draw additional samples using draw_linear_residual
         # (linear approximation around the converged point)
-        for j in range(n_posterior_samples):
+        for _j in range(n_posterior_samples):
             draw_key, sub_key = jax.random.split(draw_key)
             try:
                 residual, _ = jft.draw_linear_residual(
-                    likelihood, converged_pos, sub_key,
+                    likelihood,
+                    converged_pos,
+                    sub_key,
                     cg_kwargs={"absdelta": 1e-4, "maxiter": 50},
                 )
                 # Sample = pos + residual
-                sample_tree = residual.tree if hasattr(residual, 'tree') else dict(residual)
-                pos_tree = converged_pos.tree if hasattr(converged_pos, 'tree') else dict(converged_pos)
+                sample_tree = residual.tree if hasattr(residual, "tree") else dict(residual)
+                pos_tree = (
+                    converged_pos.tree if hasattr(converged_pos, "tree") else dict(converged_pos)
+                )
                 combined = {k: pos_tree[k] + sample_tree[k] for k in pos_tree}
                 all_sample_dicts.append(combined)
             except Exception:
@@ -789,8 +823,7 @@ class Fitter:
 
         if verbose:
             mode = "geoVI" if sample_mode == "nonlinear_resample" else "MGVI"
-            print(f"  {mode} complete in {wall_time:.1f}s, "
-                  f"{n_posterior} posterior samples")
+            print(f"  {mode} complete in {wall_time:.1f}s, {n_posterior} posterior samples")
 
         return Posterior(
             samples=samples_phys,

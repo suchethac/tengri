@@ -4,7 +4,6 @@ Verifies that compute_stellar_mass() and compute_derived_quantities()
 return physically reasonable values using real SSP data.
 """
 
-import os
 from pathlib import Path
 
 import jax
@@ -15,8 +14,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from diffsed.forward_model import ForwardModel, ModelConfig
-from diffsed.models.sps.dsps_wrapper import SSPData, load_ssp_data
-
+from diffsed.models.sps.dsps_wrapper import load_ssp_data
 
 # ---------------------------------------------------------------------------
 # Paths to real SSP data
@@ -35,6 +33,7 @@ pytestmark = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="session")
 def ssp_no_neb():
@@ -96,6 +95,7 @@ def smooth_params():
 # 1. Stellar Mass
 # ===================================================================
 
+
 class TestStellarMass:
     """Verify compute_stellar_mass returns physical values."""
 
@@ -109,17 +109,18 @@ class TestStellarMass:
     def test_mass_in_reasonable_range(self, model, fiducial_params):
         masses = model.compute_stellar_mass(fiducial_params)
         mstar = float(masses["mstar_total"])
-        assert 1e8 < mstar < 1e12, (
-            f"M* = {mstar:.2e} Msun outside range [1e8, 1e12]"
-        )
+        assert 1e8 < mstar < 1e12, f"M* = {mstar:.2e} Msun outside range [1e8, 1e12]"
 
     def test_mean_equals_total_when_smooth(self, model, smooth_params):
         """With sigma_ps ~ 0, GP is negligible so mean ≈ total."""
         masses = model.compute_stellar_mass(smooth_params)
         ratio = float(masses["mstar_total"]) / float(masses["mstar_mean"])
-        np.testing.assert_allclose(ratio, 1.0, atol=0.01, err_msg=(
-            f"M*_total / M*_mean = {ratio:.4f}, should be ~1.0 for smooth SFH"
-        ))
+        np.testing.assert_allclose(
+            ratio,
+            1.0,
+            atol=0.01,
+            err_msg=(f"M*_total / M*_mean = {ratio:.4f}, should be ~1.0 for smooth SFH"),
+        )
 
     def test_mass_scales_with_norm(self, model, fiducial_params):
         """Doubling sfr_norm should roughly double M*."""
@@ -128,14 +129,18 @@ class TestStellarMass:
         masses_2x = model.compute_stellar_mass(params_2x)
 
         ratio = float(masses_2x["mstar_total"]) / float(masses_1x["mstar_total"])
-        np.testing.assert_allclose(ratio, 2.0, rtol=0.05, err_msg=(
-            f"Doubling sfr_norm should double M*, got ratio = {ratio:.3f}"
-        ))
+        np.testing.assert_allclose(
+            ratio,
+            2.0,
+            rtol=0.05,
+            err_msg=(f"Doubling sfr_norm should double M*, got ratio = {ratio:.3f}"),
+        )
 
 
 # ===================================================================
 # 2. Derived Quantities
 # ===================================================================
+
 
 class TestDerivedQuantities:
     """Verify compute_derived_quantities returns physical values."""
@@ -159,9 +164,7 @@ class TestDerivedQuantities:
         """sSFR for a star-forming galaxy should be ~1e-11 to 1e-8 yr^-1."""
         derived = model.compute_derived_quantities(fiducial_params)
         ssfr = float(derived["ssfr"])
-        assert 1e-14 < ssfr < 1e-7, (
-            f"sSFR = {ssfr:.2e} yr^-1 outside plausible range"
-        )
+        assert 1e-14 < ssfr < 1e-7, f"sSFR = {ssfr:.2e} yr^-1 outside plausible range"
 
     def test_mstar_consistent_with_compute_stellar_mass(self, model, fiducial_params):
         """mstar_formed from derived should match compute_stellar_mass."""
@@ -211,15 +214,19 @@ class TestDerivedQuantities:
             "xi": jax.random.normal(jax.random.PRNGKey(0), shape=(256,)),
             "sigma_ps": 0.3,  # very smooth
             "tau_ps": 50e6,
-            "alpha": 1.0, "beta": 1.5, "tau_sfh": 3e9, "sfr_norm": 5.0,
-            "log_z": -0.2, "tau_v1": 0.5, "tau_v2": 0.2, "dust_n": -0.7,
+            "alpha": 1.0,
+            "beta": 1.5,
+            "tau_sfh": 3e9,
+            "sfr_norm": 5.0,
+            "log_z": -0.2,
+            "tau_v1": 0.5,
+            "tau_v2": 0.2,
+            "dust_n": -0.7,
         }
         masses = model.compute_stellar_mass(params)
         ratio = float(masses["mstar_total"]) / float(masses["mstar_mean"])
         # With sigma_PS=0.3, the ratio should be within ~30% of 1
-        assert 0.5 < ratio < 2.0, (
-            f"Smooth GP: M*_total/M*_mean = {ratio:.2f}, expected close to 1"
-        )
+        assert 0.5 < ratio < 2.0, f"Smooth GP: M*_total/M*_mean = {ratio:.2f}, expected close to 1"
 
     def test_ensemble_mean_mass_converges(self, model):
         """Over many GP realizations, <M*_total> should approach M*_mean.
@@ -228,9 +235,16 @@ class TestDerivedQuantities:
         ensemble-averaged mass should equal the mean SFH mass (approximately).
         """
         base = {
-            "sigma_ps": 1.5, "tau_ps": 50e6,
-            "alpha": 1.0, "beta": 1.5, "tau_sfh": 3e9, "sfr_norm": 5.0,
-            "log_z": -0.2, "tau_v1": 0.5, "tau_v2": 0.2, "dust_n": -0.7,
+            "sigma_ps": 1.5,
+            "tau_ps": 50e6,
+            "alpha": 1.0,
+            "beta": 1.5,
+            "tau_sfh": 3e9,
+            "sfr_norm": 5.0,
+            "log_z": -0.2,
+            "tau_v1": 0.5,
+            "tau_v2": 0.2,
+            "dust_n": -0.7,
         }
 
         # Get M*_mean (from mean SFH, no GP dependence)
@@ -251,14 +265,13 @@ class TestDerivedQuantities:
 
         # The ensemble average should be within ~50% of the mean SFH mass
         # (finite N, finite grid → won't be exact)
-        assert 0.3 < ratio < 3.0, (
-            f"Ensemble <M*_total>/M*_mean = {ratio:.2f}, expected ~1"
-        )
+        assert 0.3 < ratio < 3.0, f"Ensemble <M*_total>/M*_mean = {ratio:.2f}, expected ~1"
 
 
 # ===================================================================
 # 3. Gradient Flow
 # ===================================================================
+
 
 class TestDerivedGradients:
     """Verify gradients flow through derived quantities."""
@@ -269,9 +282,7 @@ class TestDerivedGradients:
 
         grad = jax.grad(loss)(fiducial_params)
         assert jnp.isfinite(grad["sfr_norm"]), "Gradient w.r.t. sfr_norm not finite"
-        assert float(grad["sfr_norm"]) > 0.0, (
-            "Increasing sfr_norm should increase M*"
-        )
+        assert float(grad["sfr_norm"]) > 0.0, "Increasing sfr_norm should increase M*"
 
     def test_derived_gradient_wrt_sfr_norm(self, model, fiducial_params):
         def loss(p):

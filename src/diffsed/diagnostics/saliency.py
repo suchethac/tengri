@@ -32,14 +32,13 @@ def compute_gradient_sed(forward_model, params, param_name):
     wavelength : array, shape (n_wave,)
         Rest-frame wavelengths (Angstrom).
     """
+
     def sed_as_fn_of_param(val):
         p = dict(params)
         p[param_name] = val
         return forward_model(p)
 
-    gradient_sed = jax.grad(lambda v: jnp.sum(sed_as_fn_of_param(v)))(
-        params[param_name]
-    )
+    gradient_sed = jax.grad(lambda v: jnp.sum(sed_as_fn_of_param(v)))(params[param_name])
     # For a scalar param, grad gives us a scalar — we need the per-wavelength gradient
     # Use jacobian instead
     gradient_sed = jax.jacobian(sed_as_fn_of_param)(params[param_name])
@@ -67,8 +66,18 @@ def compute_all_gradient_seds(forward_model, params, param_names=None):
         Rest-frame wavelengths.
     """
     if param_names is None:
-        param_names = ["sigma_ps", "tau_ps", "alpha", "beta", "tau_sfh",
-                       "sfr_norm", "log_z", "tau_v1", "tau_v2", "dust_n"]
+        param_names = [
+            "sigma_ps",
+            "tau_ps",
+            "alpha",
+            "beta",
+            "tau_sfh",
+            "sfr_norm",
+            "log_z",
+            "tau_v1",
+            "tau_v2",
+            "dust_n",
+        ]
 
     gradients = {}
     for name in param_names:
@@ -102,8 +111,18 @@ def compute_photometry_sensitivity(forward_model, params, param_names=None):
         Parameter names (columns).
     """
     if param_names is None:
-        param_names = ["sigma_ps", "tau_ps", "alpha", "beta", "tau_sfh",
-                       "sfr_norm", "log_z", "tau_v1", "tau_v2", "dust_n"]
+        param_names = [
+            "sigma_ps",
+            "tau_ps",
+            "alpha",
+            "beta",
+            "tau_sfh",
+            "sfr_norm",
+            "log_z",
+            "tau_v1",
+            "tau_v2",
+            "dust_n",
+        ]
 
     def predict_from_flat(flat):
         p = dict(params)

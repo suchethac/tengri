@@ -3,8 +3,7 @@
 These are used by all inference backends (Adam, NUTS, geoVI).
 """
 
-import time
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -28,9 +27,10 @@ class InferenceResult(NamedTuple):
     diagnostics : dict
         Method-specific diagnostics (R-hat, ESS, KL divergence, etc.).
     """
+
     params: dict
-    samples: Optional[dict]
-    loss_history: Optional[jnp.ndarray]
+    samples: dict | None
+    loss_history: jnp.ndarray | None
     wall_time_s: float
     method: str
     diagnostics: dict
@@ -65,6 +65,7 @@ class PriorConfig(NamedTuple):
     dust_n : tuple
         (lo, hi) bounds for dust power-law slope.
     """
+
     sigma_ps: tuple = (0.1, 5.0)
     tau_ps: tuple = (1e6, 500e6)
     alpha: tuple = (0.1, 5.0)
@@ -80,8 +81,7 @@ class PriorConfig(NamedTuple):
 DEFAULT_PRIOR = PriorConfig()
 
 
-def build_loss_fn(forward_model, data, noise, prior_config=None,
-                  data_type="photometry"):
+def build_loss_fn(forward_model, data, noise, prior_config=None, data_type="photometry"):
     """Build a differentiable loss function for inference.
 
     loss(params) = -log_likelihood(params) - log_prior(params)
@@ -133,14 +133,10 @@ def build_loss_fn(forward_model, data, noise, prior_config=None,
         if data_type == "photometry":
             predicted = forward_model.predict_photometry(params)
         elif data_type == "spectroscopy":
-            predicted = forward_model.predict_spectrum(
-                params, forward_model._wave_obs
-            )
+            predicted = forward_model.predict_spectrum(params, forward_model._wave_obs)
         elif data_type == "joint":
             pred_phot = forward_model.predict_photometry(params)
-            pred_spec = forward_model.predict_spectrum(
-                params, forward_model._wave_obs
-            )
+            pred_spec = forward_model.predict_spectrum(params, forward_model._wave_obs)
             predicted = jnp.concatenate([pred_phot, pred_spec])
         else:
             raise ValueError(f"Unknown data_type: {data_type}")

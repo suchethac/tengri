@@ -10,9 +10,10 @@ References
 - SSP templates: https://halos.as.arizona.edu/suchethacooray/ssp-spectra/
 """
 
+from typing import NamedTuple
+
 import jax
 import jax.numpy as jnp
-from typing import NamedTuple
 
 
 class SSPData(NamedTuple):
@@ -29,6 +30,7 @@ class SSPData(NamedTuple):
     ssp_lgmet : array, shape (n_met,)
         Log10(Z/Zsun) metallicity grid.
     """
+
     ssp_wave: jnp.ndarray
     ssp_flux: jnp.ndarray
     ssp_lg_age_gyr: jnp.ndarray
@@ -52,7 +54,7 @@ def load_ssp_data(filepath: str) -> SSPData:
     try:
         import h5py
     except ImportError:
-        raise ImportError("h5py required for SSP loading: pip install h5py")
+        raise ImportError("h5py required for SSP loading: pip install h5py") from None
 
     with h5py.File(filepath, "r") as f:
         return SSPData(
@@ -80,6 +82,7 @@ def load_ssp_data_dsps(filepath: str) -> SSPData:
     """
     try:
         from dsps import load_ssp_templates
+
         ssp_data = load_ssp_templates(fn=filepath)
         return SSPData(
             ssp_wave=jnp.array(ssp_data.ssp_wave),
@@ -92,8 +95,7 @@ def load_ssp_data_dsps(filepath: str) -> SSPData:
 
 
 @jax.jit
-def compute_csp_weights(sfr_on_ssp_ages: jnp.ndarray,
-                        ssp_ages_yr: jnp.ndarray) -> jnp.ndarray:
+def compute_csp_weights(sfr_on_ssp_ages: jnp.ndarray, ssp_ages_yr: jnp.ndarray) -> jnp.ndarray:
     """Compute SFH weights (mass formed per SSP age bin).
 
     Returns the stellar mass formed in each age bin (Msun), NOT
@@ -115,11 +117,13 @@ def compute_csp_weights(sfr_on_ssp_ages: jnp.ndarray,
         Mass formed per age bin (Msun). Sum = total mass formed.
     """
     # Trapezoidal half-widths for each age bin
-    dt = jnp.concatenate([
-        jnp.array([ssp_ages_yr[1] - ssp_ages_yr[0]]),
-        0.5 * (ssp_ages_yr[2:] - ssp_ages_yr[:-2]),
-        jnp.array([ssp_ages_yr[-1] - ssp_ages_yr[-2]]),
-    ])
+    dt = jnp.concatenate(
+        [
+            jnp.array([ssp_ages_yr[1] - ssp_ages_yr[0]]),
+            0.5 * (ssp_ages_yr[2:] - ssp_ages_yr[:-2]),
+            jnp.array([ssp_ages_yr[-1] - ssp_ages_yr[-2]]),
+        ]
+    )
     return sfr_on_ssp_ages * dt
 
 
@@ -127,9 +131,9 @@ LSUN_ERG_PER_S = 3.828e33  # erg/s (IAU 2015)
 
 
 @jax.jit
-def compute_csp_sed(weights: jnp.ndarray,
-                    ssp_flux_at_met: jnp.ndarray,
-                    dust_attenuation: jnp.ndarray) -> jnp.ndarray:
+def compute_csp_sed(
+    weights: jnp.ndarray, ssp_flux_at_met: jnp.ndarray, dust_attenuation: jnp.ndarray
+) -> jnp.ndarray:
     """Compute composite stellar population SED.
 
     SED = Lsun * sum_i (weight_i * dust_i * ssp_flux_i)
@@ -157,9 +161,9 @@ def compute_csp_sed(weights: jnp.ndarray,
 
 
 @jax.jit
-def interpolate_metallicity(ssp_flux: jnp.ndarray,
-                            ssp_lgmet: jnp.ndarray,
-                            log_z: float) -> jnp.ndarray:
+def interpolate_metallicity(
+    ssp_flux: jnp.ndarray, ssp_lgmet: jnp.ndarray, log_z: float
+) -> jnp.ndarray:
     """Interpolate SSP flux to a target metallicity.
 
     Linear interpolation in log(Z/Zsun) space between the two

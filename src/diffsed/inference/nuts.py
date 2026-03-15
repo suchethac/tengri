@@ -18,9 +18,8 @@ import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
 from diffsed.inference.common import (
-    InferenceResult,
-    PriorConfig,
     DEFAULT_PRIOR,
+    InferenceResult,
     build_loss_fn,
     initialize_params,
     unbounded_to_physical,
@@ -75,9 +74,7 @@ def fit_nuts(
     try:
         import blackjax
     except ImportError:
-        raise ImportError(
-            "blackjax required for NUTS: pip install blackjax"
-        )
+        raise ImportError("blackjax required for NUTS: pip install blackjax") from None
 
     if prior_config is None:
         prior_config = DEFAULT_PRIOR
@@ -90,8 +87,7 @@ def fit_nuts(
     # Initialize
     if init_params is None:
         key, init_key = jax.random.split(key)
-        init_params = initialize_params(init_key, forward_model.config.n_grid,
-                                        prior_config)
+        init_params = initialize_params(init_key, forward_model.config.n_grid, prior_config)
 
     # Use JAX's ravel_pytree for JIT-compatible flatten/unflatten.
     # ravel_pytree returns a pure function (unravel_fn) that reconstructs
@@ -105,8 +101,10 @@ def fit_nuts(
         return -loss_fn(params)
 
     if verbose:
-        print(f"NUTS: {n_dim} parameters, {n_warmup} warmup, "
-              f"{n_samples} samples, {n_chains} chain(s)")
+        print(
+            f"NUTS: {n_dim} parameters, {n_warmup} warmup, "
+            f"{n_samples} samples, {n_chains} chain(s)"
+        )
 
     t0 = time.time()
 
@@ -116,13 +114,13 @@ def fit_nuts(
         blackjax.nuts,
         log_posterior_flat,
     )
-    (state, parameters), warmup_info = warmup.run(
-        warmup_key, init_flat, num_steps=n_warmup
-    )
+    (state, parameters), _warmup_info = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
 
     if verbose:
-        print(f"  Warmup complete ({time.time() - t0:.1f}s). "
-              f"Step size: {float(parameters['step_size']):.4f}")
+        print(
+            f"  Warmup complete ({time.time() - t0:.1f}s). "
+            f"Step size: {float(parameters['step_size']):.4f}"
+        )
 
     # Sampling
     kernel = blackjax.nuts(log_posterior_flat, **parameters).step
@@ -142,11 +140,11 @@ def fit_nuts(
     for i, sk in enumerate(sample_keys):
         state, (position, info) = one_step(state, sk)
         all_positions.append(position)
-        if hasattr(info, 'is_divergent'):
+        if hasattr(info, "is_divergent"):
             n_divergent += int(info.is_divergent)
 
         if verbose and ((i + 1) % 200 == 0 or i == n_samples - 1):
-            print(f"  Sample {i+1}/{n_samples}")
+            print(f"  Sample {i + 1}/{n_samples}")
 
     wall_time = time.time() - t0
 
@@ -162,9 +160,7 @@ def fit_nuts(
                 unbounded_samples[k] = []
             unbounded_samples[k].append(v)
 
-    unbounded_samples = {
-        k: jnp.stack(v) for k, v in unbounded_samples.items()
-    }
+    unbounded_samples = {k: jnp.stack(v) for k, v in unbounded_samples.items()}
 
     # Convert to physical space
     physical_samples = {}
@@ -176,16 +172,13 @@ def fit_nuts(
                 physical_samples[k] = []
             physical_samples[k].append(v)
 
-    physical_samples = {
-        k: jnp.stack(v) for k, v in physical_samples.items()
-    }
+    physical_samples = {k: jnp.stack(v) for k, v in physical_samples.items()}
 
     # Posterior mean as point estimate
     best_params = {k: jnp.mean(v, axis=0) for k, v in physical_samples.items()}
 
     if verbose:
-        print(f"  NUTS complete in {wall_time:.1f}s. "
-              f"Divergences: {n_divergent}/{n_samples}")
+        print(f"  NUTS complete in {wall_time:.1f}s. Divergences: {n_divergent}/{n_samples}")
 
     return InferenceResult(
         params=best_params,

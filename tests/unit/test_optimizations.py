@@ -2,17 +2,15 @@
 
 import jax
 import jax.numpy as jnp
-import pytest
 from numpy.testing import assert_allclose
 
+from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw
 from diffsed.utils.optimizations import (
+    compute_full_amplitude_drw,
+    gp_from_xi_hartley,
     hartley,
     inverse_hartley,
-    gp_from_xi_hartley,
-    compute_full_amplitude_drw,
 )
-from diffsed.models.sfh.gp_sfh import gp_from_xi, compute_sqrt_power_drw
-from diffsed.utils.grid import grid_spacing
 
 jax.config.update("jax_enable_x64", True)
 
@@ -98,6 +96,7 @@ class TestHartleyGP:
 
         # rfft GP batch
         from diffsed.models.sfh.gp_sfh import generate_gp_batch
+
         batch_rfft = generate_gp_batch(key, sqrt_power, N, n_real)
         var_rfft = float(jnp.var(batch_rfft))
 
@@ -110,6 +109,4 @@ class TestHartleyGP:
 
         # Variances should be the same order of magnitude
         ratio = var_hartley / max(var_rfft, 1e-30)
-        assert 0.1 < ratio < 10.0, (
-            f"Hartley/rfft variance ratio = {ratio:.3f}, expected ~1"
-        )
+        assert 0.1 < ratio < 10.0, f"Hartley/rfft variance ratio = {ratio:.3f}, expected ~1"

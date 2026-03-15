@@ -2,16 +2,15 @@
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
 from diffsed.models.sfh.psd_models import (
-    psd_drw,
     drw_acf,
     drw_variance,
-    psd_to_sqrt_power,
+    psd_drw,
     psd_matern,
+    psd_to_sqrt_power,
 )
 
 jax.config.update("jax_enable_x64", True)
@@ -64,8 +63,12 @@ class TestPSDDRW:
         integral = 2.0 * jnp.trapezoid(p, omega) / (2.0 * jnp.pi)
 
         expected = drw_variance(sigma_ps)
-        assert_allclose(float(integral), float(expected), rtol=0.005,
-                        err_msg=f"PSD integral failed for sigma={sigma_ps}, tau={tau_ps}")
+        assert_allclose(
+            float(integral),
+            float(expected),
+            rtol=0.005,
+            err_msg=f"PSD integral failed for sigma={sigma_ps}, tau={tau_ps}",
+        )
 
     def test_psd_drw_is_jittable(self):
         """PSD function can be JIT-compiled."""
@@ -76,6 +79,7 @@ class TestPSDDRW:
 
     def test_psd_drw_has_gradients(self):
         """PSD function has well-defined gradients w.r.t. params."""
+
         def loss(sigma_ps, tau_ps):
             omega = jnp.linspace(0.01, 10, 50)
             return jnp.sum(psd_drw(omega, sigma_ps, tau_ps))
@@ -128,13 +132,16 @@ class TestMaternPSD:
 
         p_drw = psd_drw(omega, sigma_ps, tau_ps)
         # For Matern: variance = sigma_PS^2/2, length_scale = tau_PS
-        p_mat = psd_matern(omega, variance=drw_variance(sigma_ps),
-                           length_scale=tau_ps, nu=0.5)
+        p_mat = psd_matern(omega, variance=drw_variance(sigma_ps), length_scale=tau_ps, nu=0.5)
 
         # They should have the same shape (ratio should be constant)
         ratio = p_drw / p_mat
-        assert_allclose(float(ratio.std() / ratio.mean()), 0.0, atol=0.05,
-                        err_msg="DRW and Matern(nu=0.5) shapes differ")
+        assert_allclose(
+            float(ratio.std() / ratio.mean()),
+            0.0,
+            atol=0.05,
+            err_msg="DRW and Matern(nu=0.5) shapes differ",
+        )
 
 
 class TestAmplitudeOperator:

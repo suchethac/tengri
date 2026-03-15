@@ -19,13 +19,15 @@ import jax.numpy as jnp
 
 # Default grid: 1 Myr to ~13.8 Gyr
 DEFAULT_N_GRID = 256
-DEFAULT_LOG_AGE_MIN = 6.0   # log10(1 Myr / yr)
+DEFAULT_LOG_AGE_MIN = 6.0  # log10(1 Myr / yr)
 DEFAULT_LOG_AGE_MAX = 10.14  # log10(13.8 Gyr / yr)
 
 
-def make_log_age_grid(n_grid: int = DEFAULT_N_GRID,
-                      log_age_min: float = DEFAULT_LOG_AGE_MIN,
-                      log_age_max: float = DEFAULT_LOG_AGE_MAX) -> jnp.ndarray:
+def make_log_age_grid(
+    n_grid: int = DEFAULT_N_GRID,
+    log_age_min: float = DEFAULT_LOG_AGE_MIN,
+    log_age_max: float = DEFAULT_LOG_AGE_MAX,
+) -> jnp.ndarray:
     """Create uniform grid in log10(age/yr).
 
     Parameters
@@ -47,7 +49,7 @@ def make_log_age_grid(n_grid: int = DEFAULT_N_GRID,
 
 def log_age_to_age_yr(log_age_grid: jnp.ndarray) -> jnp.ndarray:
     """Convert log10(age/yr) grid to age in years."""
-    return 10.0 ** log_age_grid
+    return 10.0**log_age_grid
 
 
 def log_age_to_age_gyr(log_age_grid: jnp.ndarray) -> jnp.ndarray:
@@ -60,9 +62,9 @@ def grid_spacing(log_age_grid: jnp.ndarray) -> float:
     return float(log_age_grid[1] - log_age_grid[0])
 
 
-def interpolate_to_linear_time(log_age_grid: jnp.ndarray,
-                                values: jnp.ndarray,
-                                n_linear: int = 1000) -> tuple:
+def interpolate_to_linear_time(
+    log_age_grid: jnp.ndarray, values: jnp.ndarray, n_linear: int = 1000
+) -> tuple:
     """Interpolate a quantity from log-age grid to uniform linear time.
 
     The GP SFH is defined on a log-age grid. When plotted vs linear

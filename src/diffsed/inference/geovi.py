@@ -24,9 +24,8 @@ import jax
 import jax.numpy as jnp
 
 from diffsed.inference.common import (
-    InferenceResult,
-    PriorConfig,
     DEFAULT_PRIOR,
+    InferenceResult,
     initialize_params,
     unbounded_to_physical,
 )
@@ -81,9 +80,7 @@ def fit_geovi(
     try:
         import nifty.re as jft
     except ImportError:
-        raise ImportError(
-            "NIFTy.re required for geoVI: pip install nifty8[re]"
-        )
+        raise ImportError("NIFTy.re required for geoVI: pip install nifty8[re]") from None
 
     if prior_config is None:
         prior_config = DEFAULT_PRIOR
@@ -123,14 +120,10 @@ def fit_geovi(
         if data_type == "photometry":
             return forward_model.predict_photometry(params)
         elif data_type == "spectroscopy":
-            return forward_model.predict_spectrum(
-                params, forward_model._wave_obs
-            )
+            return forward_model.predict_spectrum(params, forward_model._wave_obs)
         elif data_type == "joint":
             pred_phot = forward_model.predict_photometry(params)
-            pred_spec = forward_model.predict_spectrum(
-                params, forward_model._wave_obs
-            )
+            pred_spec = forward_model.predict_spectrum(params, forward_model._wave_obs)
             return jnp.concatenate([pred_phot, pred_spec])
         else:
             raise ValueError(f"Unknown data_type: {data_type}")
@@ -146,7 +139,7 @@ def fit_geovi(
     model = jft.Model(signal_response, domain=domain)
 
     # Gaussian likelihood: N^-1 = diag(1/noise^2)
-    noise_cov_inv = 1.0 / noise ** 2
+    noise_cov_inv = 1.0 / noise**2
     likelihood = jft.Gaussian(data, noise_cov_inv).amend(model)
 
     # --- Initialize ---
@@ -159,8 +152,7 @@ def fit_geovi(
         n_data = len(data)
         n_params = n_grid + len(bounds)
         mode = "geoVI" if sample_mode == "nonlinear_resample" else "MGVI"
-        print(f"{mode}: {n_params} params, {n_data} data points, "
-              f"{n_iterations} iterations")
+        print(f"{mode}: {n_params} params, {n_data} data points, {n_iterations} iterations")
 
     t0 = time.time()
 
@@ -169,7 +161,7 @@ def fit_geovi(
     delta = max(1, n_total_samples - 1)
 
     key, opt_key = jax.random.split(key)
-    samples, state = jft.optimize_kl(
+    samples, _state = jft.optimize_kl(
         likelihood,
         init_params,
         n_total_iterations=n_iterations,
@@ -195,17 +187,14 @@ def fit_geovi(
                 physical_samples[k] = []
             physical_samples[k].append(v)
 
-    physical_samples = {
-        k: jnp.stack(v) for k, v in physical_samples.items()
-    }
+    physical_samples = {k: jnp.stack(v) for k, v in physical_samples.items()}
 
     # Posterior mean
     best_params = {k: jnp.mean(v, axis=0) for k, v in physical_samples.items()}
 
     if verbose:
         mode = "geoVI" if sample_mode == "nonlinear_resample" else "MGVI"
-        print(f"  {mode} complete in {wall_time:.1f}s, "
-              f"{n_posterior} posterior samples")
+        print(f"  {mode} complete in {wall_time:.1f}s, {n_posterior} posterior samples")
 
     return InferenceResult(
         params=best_params,

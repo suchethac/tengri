@@ -2,38 +2,40 @@
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import pytest
 
 jax.config.update("jax_enable_x64", True)
 
 from pathlib import Path
 
-from diffsed.raytrace_jax import sample_raytrace, sample_hamiltonian
-from diffsed.distributions import Uniform, Fixed
-from diffsed.param_spec import ParamSpec
-from diffsed.model import Model
+from diffsed.distributions import Uniform
 from diffsed.fitter import Fitter
-from diffsed.posterior import Posterior
-from diffsed.models.sps.dsps_wrapper import load_ssp_data
+from diffsed.model import Model
 from diffsed.models.observation.filters import load_filter_set
-
+from diffsed.models.sps.dsps_wrapper import load_ssp_data
+from diffsed.param_spec import ParamSpec
+from diffsed.posterior import Posterior
+from diffsed.raytrace_jax import sample_hamiltonian, sample_raytrace
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _gaussian_log_prob(mean, cov_inv):
     """Return a log-probability function for a multivariate Gaussian."""
+
     def log_prob(x):
         diff = x - mean
         return -0.5 * diff @ cov_inv @ diff
+
     return log_prob
 
 
 # ---------------------------------------------------------------------------
 # Pure sampler tests (no Model/Fitter dependency)
 # ---------------------------------------------------------------------------
+
 
 class TestSampleRaytraceGaussian:
     """Sample from a 5D Gaussian, verify mean and std are close to truth."""
@@ -47,7 +49,7 @@ class TestSampleRaytraceGaussian:
         log_prob_fn = _gaussian_log_prob(true_mean, cov_inv)
         step_size = 0.03 * jnp.sqrt(float(D))
 
-        chain, log_likelihood, accept_prob = sample_raytrace(
+        chain, _log_likelihood, _accept_prob = sample_raytrace(
             key=key,
             params_init=true_mean + 0.1,
             log_prob_fn=log_prob_fn,
@@ -67,12 +69,8 @@ class TestSampleRaytraceGaussian:
 
         # Check recovered std is in a reasonable range (true std = 0.5)
         recovered_std = jnp.std(chain_post, axis=0)
-        assert jnp.all(recovered_std > 0.1), (
-            f"Recovered std {recovered_std} unreasonably small"
-        )
-        assert jnp.all(recovered_std < 2.0), (
-            f"Recovered std {recovered_std} unreasonably large"
-        )
+        assert jnp.all(recovered_std > 0.1), f"Recovered std {recovered_std} unreasonably small"
+        assert jnp.all(recovered_std < 2.0), f"Recovered std {recovered_std} unreasonably large"
 
 
 class TestSampleRaytraceAcceptance:
@@ -87,7 +85,7 @@ class TestSampleRaytraceAcceptance:
         log_prob_fn = _gaussian_log_prob(mean, cov_inv)
         step_size = 0.03 * jnp.sqrt(float(D))
 
-        chain, log_likelihood, accept_prob = sample_raytrace(
+        _chain, _log_likelihood, accept_prob = sample_raytrace(
             key=key,
             params_init=jnp.zeros(D),
             log_prob_fn=log_prob_fn,
@@ -97,9 +95,7 @@ class TestSampleRaytraceAcceptance:
         )
 
         mean_accept = float(jnp.mean(accept_prob))
-        assert mean_accept > 0.3, (
-            f"Acceptance rate {mean_accept:.2%} is too low (expected >30%)"
-        )
+        assert mean_accept > 0.3, f"Acceptance rate {mean_accept:.2%} is too low (expected >30%)"
 
 
 class TestSampleRaytraceShapes:
@@ -184,8 +180,7 @@ class TestRaytraceVsHmcGaussian:
 
         # And they should agree with each other within ~1.5
         assert jnp.allclose(mean_rt, mean_hmc, atol=1.5), (
-            f"Ray tracing mean {mean_rt} and HMC mean {mean_hmc} "
-            f"differ by more than expected"
+            f"Ray tracing mean {mean_rt} and HMC mean {mean_hmc} differ by more than expected"
         )
 
 
@@ -222,10 +217,14 @@ def fitter_setup():
     model = Model(spec, ssp, filters=filters)
 
     true_params = {
-        "sfh_alpha": 1.5, "sfh_beta": 1.0,
-        "sfh_tau_peak_gyr": 5.0, "sfh_peak_sfr": 10.0,
+        "sfh_alpha": 1.5,
+        "sfh_beta": 1.0,
+        "sfh_tau_peak_gyr": 5.0,
+        "sfh_peak_sfr": 10.0,
         "met_logzsol": -0.3,
-        "dust_tau_bc": 0.3, "dust_tau_diff": 0.2, "dust_slope": -0.7,
+        "dust_tau_bc": 0.3,
+        "dust_tau_diff": 0.2,
+        "dust_slope": -0.7,
         "redshift": 0.1,
     }
     mock = model.mock(true_params, snr=20.0, key=jax.random.PRNGKey(0))
@@ -238,7 +237,7 @@ class TestFitterRaytraceMethod:
     """Integration test: run fitter.run('raytrace') and verify Posterior."""
 
     def test_fitter_raytrace_method(self, fitter_setup):
-        fitter, model, mock, true_params = fitter_setup
+        fitter, _model, _mock, _true_params = fitter_setup
 
         result = fitter.run(
             "raytrace",
@@ -261,8 +260,7 @@ class TestFitterRaytraceMethod:
         for name in fitter._free_names:
             assert name in result.samples, f"Missing samples for {name}"
             assert result.samples[name].shape[0] == n_expected, (
-                f"Expected {n_expected} samples for {name}, "
-                f"got {result.samples[name].shape[0]}"
+                f"Expected {n_expected} samples for {name}, got {result.samples[name].shape[0]}"
             )
 
         # Has params (posterior mean)
@@ -282,12 +280,8 @@ class TestFitterRaytraceMethod:
         for name in fitter._free_names:
             lo, hi = fitter._bounds[name]
             samples = result.samples[name]
-            assert jnp.all(samples >= lo), (
-                f"{name} has samples below lower bound {lo}"
-            )
-            assert jnp.all(samples <= hi), (
-                f"{name} has samples above upper bound {hi}"
-            )
+            assert jnp.all(samples >= lo), f"{name} has samples below lower bound {lo}"
+            assert jnp.all(samples <= hi), f"{name} has samples above upper bound {hi}"
 
 
 @pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
@@ -295,7 +289,7 @@ class TestFitterRaytraceInitFromMap:
     """Test init_from chaining: MAP -> Ray Tracing."""
 
     def test_fitter_raytrace_init_from_map(self, fitter_setup):
-        fitter, model, mock, true_params = fitter_setup
+        fitter, _model, _mock, _true_params = fitter_setup
 
         # First run MAP
         map_result = fitter.run(

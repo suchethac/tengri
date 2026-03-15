@@ -24,9 +24,10 @@ Usage:
     flux = fast_photometry(weights, precomp, dust_at_eff_wave)
 """
 
+from typing import NamedTuple
+
 import jax
 import jax.numpy as jnp
-from typing import NamedTuple
 
 
 class PhotometricPrecomputation(NamedTuple):
@@ -49,6 +50,7 @@ class PhotometricPrecomputation(NamedTuple):
     n_filters : int
         Number of filters.
     """
+
     ssp_phot: jnp.ndarray
     effective_wavelengths: jnp.ndarray
     effective_wavelengths_rest: jnp.ndarray
@@ -74,6 +76,7 @@ class SpectroscopicPrecomputation(NamedTuple):
     redshift : float
         Source redshift.
     """
+
     ssp_on_pixels: jnp.ndarray
     wave_rest_pixels: jnp.ndarray
     wave_obs_pixels: jnp.ndarray
@@ -81,8 +84,9 @@ class SpectroscopicPrecomputation(NamedTuple):
     redshift: float
 
 
-def precompute_photometry(ssp_data, filter_waves, filter_trans,
-                          redshift, dl_cm) -> PhotometricPrecomputation:
+def precompute_photometry(
+    ssp_data, filter_waves, filter_trans, redshift, dl_cm
+) -> PhotometricPrecomputation:
     """Pre-compute SSP broadband fluxes for all filters.
 
     This eliminates the wavelength integral from the MCMC loop.
@@ -116,7 +120,7 @@ def precompute_photometry(ssp_data, filter_waves, filter_trans,
     # Effective wavelengths per filter
     eff_waves = []
     for fw, ft in zip(filter_waves, filter_trans):
-        lam_eff = jnp.trapezoid(ft * fw ** 2, fw) / jnp.trapezoid(ft * fw, fw)
+        lam_eff = jnp.trapezoid(ft * fw**2, fw) / jnp.trapezoid(ft * fw, fw)
         eff_waves.append(lam_eff)
     eff_waves = jnp.array(eff_waves)
     eff_waves_rest = eff_waves / (1.0 + redshift)
@@ -130,15 +134,13 @@ def precompute_photometry(ssp_data, filter_waves, filter_trans,
         for m_idx in range(n_met):
             for a_idx in range(n_age):
                 # Interpolate SSP spectrum onto filter wavelength grid
-                ssp_on_filt = jnp.interp(fw, wave_obs,
-                                         ssp_data.ssp_flux[m_idx, a_idx],
-                                         left=0.0, right=0.0)
-                num = jnp.trapezoid(ssp_on_filt * ft * fw, fw)
-                ssp_phot = ssp_phot.at[m_idx, a_idx, f_idx].set(
-                    num / jnp.maximum(denom, 1e-30)
+                ssp_on_filt = jnp.interp(
+                    fw, wave_obs, ssp_data.ssp_flux[m_idx, a_idx], left=0.0, right=0.0
                 )
+                num = jnp.trapezoid(ssp_on_filt * ft * fw, fw)
+                ssp_phot = ssp_phot.at[m_idx, a_idx, f_idx].set(num / jnp.maximum(denom, 1e-30))
 
-    flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm ** 2)
+    flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm**2)
 
     return PhotometricPrecomputation(
         ssp_phot=ssp_phot,
@@ -150,8 +152,9 @@ def precompute_photometry(ssp_data, filter_waves, filter_trans,
     )
 
 
-def precompute_spectroscopy(ssp_data, wave_obs_pixels,
-                            redshift, dl_cm) -> SpectroscopicPrecomputation:
+def precompute_spectroscopy(
+    ssp_data, wave_obs_pixels, redshift, dl_cm
+) -> SpectroscopicPrecomputation:
     """Pre-rebin SSP templates to observed spectral pixel wavelengths.
 
     Reduces the wavelength dimension from ~7000 (native SSP) to
@@ -183,12 +186,16 @@ def precompute_spectroscopy(ssp_data, wave_obs_pixels,
     ssp_on_pixels = jnp.zeros((n_met, n_age, n_pix))
     for m_idx in range(n_met):
         for a_idx in range(n_age):
-            rebinned = jnp.interp(wave_rest_pixels, ssp_data.ssp_wave,
-                                  ssp_data.ssp_flux[m_idx, a_idx],
-                                  left=0.0, right=0.0)
+            rebinned = jnp.interp(
+                wave_rest_pixels,
+                ssp_data.ssp_wave,
+                ssp_data.ssp_flux[m_idx, a_idx],
+                left=0.0,
+                right=0.0,
+            )
             ssp_on_pixels = ssp_on_pixels.at[m_idx, a_idx].set(rebinned)
 
-    flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm ** 2)
+    flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm**2)
 
     return SpectroscopicPrecomputation(
         ssp_on_pixels=ssp_on_pixels,
@@ -203,11 +210,11 @@ def precompute_spectroscopy(ssp_data, wave_obs_pixels,
 # Fast inference-time functions (these run inside the MCMC loop)
 # -----------------------------------------------------------------------
 
+
 @jax.jit
-def fast_photometry(weights: jnp.ndarray,
-                    ssp_phot_at_z: jnp.ndarray,
-                    dust_at_eff: jnp.ndarray,
-                    flux_scale: float) -> jnp.ndarray:
+def fast_photometry(
+    weights: jnp.ndarray, ssp_phot_at_z: jnp.ndarray, dust_at_eff: jnp.ndarray, flux_scale: float
+) -> jnp.ndarray:
     """Compute photometry from pre-computed SSP broadband fluxes.
 
     This is what runs at each MCMC step. No wavelength integrals —
@@ -234,15 +241,18 @@ def fast_photometry(weights: jnp.ndarray,
     """
     # Weighted sum: weights [Msun] * ssp [Lsun/Hz/Msun] * dust -> Lsun/Hz
     from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+
     flux_lsun = jnp.einsum("i,if,if->f", weights, dust_at_eff, ssp_phot_at_z)
     return flux_scale * flux_lsun * LSUN_ERG_PER_S
 
 
 @jax.jit
-def fast_spectrum(weights: jnp.ndarray,
-                  ssp_on_pixels_at_z: jnp.ndarray,
-                  dust_at_pixels: jnp.ndarray,
-                  flux_scale: float) -> jnp.ndarray:
+def fast_spectrum(
+    weights: jnp.ndarray,
+    ssp_on_pixels_at_z: jnp.ndarray,
+    dust_at_pixels: jnp.ndarray,
+    flux_scale: float,
+) -> jnp.ndarray:
     """Compute spectrum from pre-rebinned SSP templates.
 
     Parameters
@@ -266,9 +276,9 @@ def fast_spectrum(weights: jnp.ndarray,
 
 
 @jax.jit
-def interpolate_ssp_phot_metallicity(ssp_phot: jnp.ndarray,
-                                     ssp_lgmet: jnp.ndarray,
-                                     log_z: float) -> jnp.ndarray:
+def interpolate_ssp_phot_metallicity(
+    ssp_phot: jnp.ndarray, ssp_lgmet: jnp.ndarray, log_z: float
+) -> jnp.ndarray:
     """Interpolate pre-computed SSP photometry to target metallicity.
 
     Parameters
@@ -286,7 +296,6 @@ def interpolate_ssp_phot_metallicity(ssp_phot: jnp.ndarray,
         Interpolated SSP photometry.
     """
     log_z_clamped = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
-    idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_clamped) - 1,
-                   0, len(ssp_lgmet) - 2)
+    idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_clamped) - 1, 0, len(ssp_lgmet) - 2)
     frac = (log_z_clamped - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
     return (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
