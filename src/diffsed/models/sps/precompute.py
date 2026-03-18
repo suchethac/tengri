@@ -33,6 +33,10 @@ from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
+
+# numpy >= 2.0 uses trapezoid; older versions used trapz
+_np_trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
 
 class PhotometricPrecomputation(NamedTuple):
@@ -140,7 +144,7 @@ def precompute_photometry(
 
     for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
         fw_np, ft_np = np.asarray(fw), np.asarray(ft)
-        denom = np.trapezoid(ft_np * fw_np, fw_np)
+        denom = _np_trapezoid(ft_np * fw_np, fw_np)
 
         # Interpolate all SSPs onto this filter's wavelength grid
         # ssp_flux_np is (n_met, n_age, n_wave), we need (n_met, n_age, len(fw))
@@ -153,7 +157,7 @@ def precompute_photometry(
 
         # Vectorized integration: (n_met, n_age, n_fw) * (n_fw,) → trapz
         integrand = ssp_on_filt * ft_np[None, None, :] * fw_np[None, None, :]
-        num = np.trapezoid(integrand, fw_np, axis=-1)  # (n_met, n_age)
+        num = _np_trapezoid(integrand, fw_np, axis=-1)  # (n_met, n_age)
         ssp_phot_np[:, :, f_idx] = num / max(denom, 1e-30)
 
     ssp_phot = jnp.array(ssp_phot_np)
@@ -322,7 +326,7 @@ def precompute_photometry_ztable(
         eff_waves = []
         for fw, ft in zip(filter_waves, filter_trans):
             fw_np, ft_np = np.asarray(fw), np.asarray(ft)
-            lam_eff = np.trapezoid(ft_np * fw_np**2, fw_np) / np.trapezoid(ft_np * fw_np, fw_np)
+            lam_eff = _np_trapezoid(ft_np * fw_np**2, fw_np) / _np_trapezoid(ft_np * fw_np, fw_np)
             eff_waves.append(lam_eff)
         eff_waves = np.array(eff_waves)
         eff_waves_rest_all[zi] = eff_waves / (1.0 + z_val)
@@ -330,7 +334,7 @@ def precompute_photometry_ztable(
         # Pre-integrate SSP through each filter
         for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
             fw_np, ft_np = np.asarray(fw), np.asarray(ft)
-            denom = np.trapezoid(ft_np * fw_np, fw_np)
+            denom = _np_trapezoid(ft_np * fw_np, fw_np)
 
             for m_idx in range(n_met):
                 for a_idx in range(n_age):
@@ -341,7 +345,7 @@ def precompute_photometry_ztable(
                         left=0.0,
                         right=0.0,
                     )
-                    num = np.trapezoid(ssp_on_filt * ft_np * fw_np, fw_np)
+                    num = _np_trapezoid(ssp_on_filt * ft_np * fw_np, fw_np)
                     ssp_phot_all[zi, m_idx, a_idx, f_idx] = num / max(denom, 1e-30)
 
         # Geometric flux scale
