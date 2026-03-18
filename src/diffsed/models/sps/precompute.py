@@ -126,19 +126,32 @@ def precompute_photometry(
     eff_waves_rest = eff_waves / (1.0 + redshift)
 
     # Pre-integrate SSP through each filter for each (met, age)
-    ssp_phot = jnp.zeros((n_met, n_age, n_filters))
+    # Vectorized: interpolate all (met, age) SSPs to each filter grid at once
+    import numpy as np
+
+    ssp_flux_np = np.asarray(ssp_data.ssp_flux)  # (n_met, n_age, n_wave)
+    wave_obs_np = np.asarray(wave_obs)
+    ssp_phot_np = np.zeros((n_met, n_age, n_filters))
 
     for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-        denom = jnp.trapezoid(ft * fw, fw)
+        fw_np, ft_np = np.asarray(fw), np.asarray(ft)
+        denom = np.trapezoid(ft_np * fw_np, fw_np)
 
+        # Interpolate all SSPs onto this filter's wavelength grid
+        # ssp_flux_np is (n_met, n_age, n_wave), we need (n_met, n_age, len(fw))
+        ssp_on_filt = np.zeros((n_met, n_age, len(fw_np)))
         for m_idx in range(n_met):
             for a_idx in range(n_age):
-                # Interpolate SSP spectrum onto filter wavelength grid
-                ssp_on_filt = jnp.interp(
-                    fw, wave_obs, ssp_data.ssp_flux[m_idx, a_idx], left=0.0, right=0.0
+                ssp_on_filt[m_idx, a_idx] = np.interp(
+                    fw_np, wave_obs_np, ssp_flux_np[m_idx, a_idx], left=0.0, right=0.0
                 )
-                num = jnp.trapezoid(ssp_on_filt * ft * fw, fw)
-                ssp_phot = ssp_phot.at[m_idx, a_idx, f_idx].set(num / jnp.maximum(denom, 1e-30))
+
+        # Vectorized integration: (n_met, n_age, n_fw) * (n_fw,) → trapz
+        integrand = ssp_on_filt * ft_np[None, None, :] * fw_np[None, None, :]
+        num = np.trapezoid(integrand, fw_np, axis=-1)  # (n_met, n_age)
+        ssp_phot_np[:, :, f_idx] = num / max(denom, 1e-30)
+
+    ssp_phot = jnp.array(ssp_phot_np)
 
     flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm**2)
 
@@ -182,18 +195,23 @@ def precompute_spectroscopy(
 
     wave_rest_pixels = wave_obs_pixels / (1.0 + redshift)
 
-    # Interpolate each SSP spectrum to the pixel rest-frame wavelengths
-    ssp_on_pixels = jnp.zeros((n_met, n_age, n_pix))
+    # Interpolate all SSP spectra to the pixel rest-frame wavelengths
+    import numpy as np
+
+    ssp_flux_np = np.asarray(ssp_data.ssp_flux)
+    wave_rest_np = np.asarray(wave_rest_pixels)
+    wave_ssp_np = np.asarray(ssp_data.ssp_wave)
+    ssp_on_pixels_np = np.zeros((n_met, n_age, n_pix))
     for m_idx in range(n_met):
         for a_idx in range(n_age):
-            rebinned = jnp.interp(
-                wave_rest_pixels,
-                ssp_data.ssp_wave,
-                ssp_data.ssp_flux[m_idx, a_idx],
+            ssp_on_pixels_np[m_idx, a_idx] = np.interp(
+                wave_rest_np,
+                wave_ssp_np,
+                ssp_flux_np[m_idx, a_idx],
                 left=0.0,
                 right=0.0,
             )
-            ssp_on_pixels = ssp_on_pixels.at[m_idx, a_idx].set(rebinned)
+    ssp_on_pixels = jnp.array(ssp_on_pixels_np)
 
     flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm**2)
 

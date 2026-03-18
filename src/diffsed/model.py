@@ -49,8 +49,10 @@ from diffsed.models.sps.dsps_wrapper import (
 )
 from diffsed.models.sps.precompute import (
     fast_photometry,
+    fast_spectrum,
     interpolate_ssp_phot_metallicity,
     precompute_photometry,
+    precompute_spectroscopy,
 )
 from diffsed.utils.cosmology import luminosity_distance
 from diffsed.utils.grid import (
@@ -207,6 +209,9 @@ class Model:
                 self._z_fixed,
                 self._dl_cm_fixed,
             )
+
+        # Spectroscopy precomputation (same idea: pre-interpolate SSPs)
+        self._spec_precomp = None
 
     # -------------------------------------------------------------------
     # Internal parameter translation
@@ -460,21 +465,64 @@ class Model:
 
         return fast_photometry(weights, ssp_phot_at_z, dust_at_eff, precomp.flux_scale)
 
-    def predict_spectrum(self, params, wave_obs):
+    def precompute_spectroscopy(self, wave_obs):
+        """Pre-interpolate SSP templates to observed wavelength grid.
+
+        Call this before spectroscopic fitting to get a ~20x speedup.
+        Requires fixed redshift.
+
+        Parameters
+        ----------
+        wave_obs : array, shape (n_pix,)
+            Observed wavelength grid (Angstrom).
+
+        Returns
+        -------
+        self
+            For chaining: ``model.precompute_spectroscopy(wave_obs)``
+        """
+        if self._z_fixed is None:
+            raise ValueError("Spectroscopy precomputation requires fixed redshift")
+        self._spec_precomp = precompute_spectroscopy(
+            self.ssp_data,
+            jnp.asarray(wave_obs),
+            self._z_fixed,
+            self._dl_cm_fixed,
+        )
+        self._wave_obs = jnp.asarray(wave_obs)
+        return self
+
+    def predict_spectrum(self, params, wave_obs=None):
         """Compute observed spectrum at given wavelengths.
+
+        Uses the fast precomputed path if ``precompute_spectroscopy()``
+        was called, otherwise falls back to exact interpolation.
 
         Parameters
         ----------
         params : dict
             Parameter values.
-        wave_obs : array
-            Observed wavelength grid (Angstrom).
+        wave_obs : array, optional
+            Observed wavelength grid (Angstrom). If None, uses the
+            grid from ``precompute_spectroscopy()``.
 
         Returns
         -------
         array, shape (n_pix,)
             Spectral flux density in erg/s/cm^2/Hz.
         """
+        if wave_obs is None and self._spec_precomp is not None:
+            wave_obs = self._spec_precomp.wave_obs_pixels
+        elif wave_obs is None and hasattr(self, "_wave_obs"):
+            wave_obs = self._wave_obs
+        elif wave_obs is None:
+            raise ValueError("No wavelength grid. Pass wave_obs or call precompute_spectroscopy()")
+
+        # Fast path: use precomputed SSPs if wavelength grid matches
+        if self._spec_precomp is not None:
+            return self._predict_spectrum_fast(params)
+
+        # Exact path
         sed = self.predict_sed(params)
         z = self._get_redshift(params)
         dl_cm = self._get_dl_cm(params)
@@ -485,6 +533,34 @@ class Model:
             z,
             dl_cm,
         )
+
+    def _predict_spectrum_fast(self, params):
+        """Fast spectrum using pre-interpolated SSP templates."""
+        from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+
+        p = self._get_internal_params(params)
+        precomp = self._spec_precomp
+        sfr = self._compute_sfr(p)
+
+        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+        weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
+
+        # Interpolate pre-rebinned SSPs to target metallicity
+        ssp_at_z = interpolate_ssp_phot_metallicity(
+            precomp.ssp_on_pixels, self.ssp_data.ssp_lgmet, p["log_z"]
+        )
+
+        # Dust at pixel wavelengths
+        dust_at_pix = charlot_fall_at_wavelengths(
+            precomp.wave_rest_pixels,
+            self.ssp_ages_yr,
+            tau_v1=p["tau_v1"],
+            tau_v2=p["tau_v2"],
+            n_slope=p["dust_n"],
+        )
+
+        flux = fast_spectrum(weights, ssp_at_z, dust_at_pix, precomp.flux_scale)
+        return flux * LSUN_ERG_PER_S
 
     def predict_sfh(self, params, n_linear=1000):
         """Compute SFH on a uniform linear-time grid for plotting.
@@ -667,6 +743,40 @@ class Model:
         """Generate mock photometric observation."""
         flux_true = self.predict_photometry(params)
         noise = flux_true / snr
+
+        if key is not None:
+            flux_obs = flux_true + noise * jax.random.normal(key, shape=flux_true.shape)
+        else:
+            flux_obs = flux_true
+
+        return MockData(
+            flux_true=flux_true,
+            flux_obs=flux_obs,
+            noise=noise,
+            params=params,
+        )
+
+    def mock_spectrum(self, params, wave_obs, snr=30.0, key=None):
+        """Generate mock spectroscopic observation.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values.
+        wave_obs : array
+            Observed wavelength grid (Angstrom).
+        snr : float
+            Signal-to-noise ratio per pixel.
+        key : PRNGKey, optional
+            Random key for noise. If None, returns noiseless.
+
+        Returns
+        -------
+        MockData
+            Mock spectroscopic observation.
+        """
+        flux_true = self.predict_spectrum(params, wave_obs)
+        noise = jnp.abs(flux_true) / snr
 
         if key is not None:
             flux_obs = flux_true + noise * jax.random.normal(key, shape=flux_true.shape)

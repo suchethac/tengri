@@ -452,8 +452,8 @@ class Fitter:
                 m_new, kl_val = evi_step(m, subkey, n_samples)
                 # Relative KL change
                 rel_change = jnp.abs(prev_kl - kl_val) / (jnp.abs(prev_kl) + 1e-10)
-                # Converge if relative change < rtol and at least 3 iterations done
-                converged = (rel_change < kl_rtol) & (i >= 3)
+                # Converge if relative change < rtol and at least 5 iterations done
+                converged = (rel_change < kl_rtol) & (i >= 5)
                 return (m_new, kl_val, i + 1, converged)
 
             # First iteration (no convergence check)
@@ -614,12 +614,12 @@ class Fitter:
         self,
         *,
         key,
-        init_from="map",
+        init_from="random",
         n_iterations=50,
         n_samples=3,
         n_posterior_samples=2000,
         kl_rtol=1e-2,
-        n_seeds=1,
+        n_seeds=5,
         verbose=True,
     ):
         """Fully JIT-compiled EVI: ~500x faster than NIFTy's optimize_kl.
@@ -724,7 +724,6 @@ class Fitter:
             init_from = None  # random init below
 
         for s in range(n_seeds):
-            # Seed 0 uses MAP/init_from (if available), rest use random.
             if s == 0 and map_result is not None:
                 init_params = self._unbounded_from_posterior(map_result)
             elif s == 0 and init_from is not None and init_from != "random":
@@ -742,13 +741,16 @@ class Fitter:
                 n_samples=n_samples,
                 kl_rtol=kl_rtol,
             )
+            n_iters = int(n_iters)
 
-            # Evaluate Hamiltonian at converged point to pick best seed
-            pred = (
-                self.model.predict_photometry(self._to_physical(unflatten(converged_flat)))
-                if self.data_type == "photometry"
-                else jnp.zeros_like(self.data)
-            )
+            # Evaluate Hamiltonian to pick best seed
+            phys = self._to_physical(unflatten(converged_flat))
+            if self.data_type == "photometry":
+                pred = self.model.predict_photometry(phys)
+            elif self.data_type == "spectroscopy":
+                pred = self.model.predict_spectrum(phys)
+            else:
+                pred = jnp.zeros_like(self.data)
             chi2 = float(jnp.sum(((self.data - pred) / self.noise) ** 2))
             prior = float(jnp.sum(converged_flat**2))
             loss = 0.5 * chi2 + 0.5 * prior
@@ -757,10 +759,10 @@ class Fitter:
             if loss < best_loss:
                 best_flat = converged_flat
                 best_loss = loss
-                best_iters = int(n_iters)
+                best_iters = n_iters
 
             if verbose and n_seeds > 1:
-                print(f"  Seed {s + 1}/{n_seeds}: H={loss:.1f}, {int(n_iters)} iters")
+                print(f"  Seed {s + 1}/{n_seeds}: H={loss:.1f}, {n_iters} iters")
 
         # --- Seed disagreement check ---
         if n_seeds > 1 and len(seed_losses) > 1:
