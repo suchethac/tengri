@@ -64,18 +64,18 @@ filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 
 # %%
 spec = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0),
-    sfh_beta=Uniform(0.5, 3.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 13.0),
-    sfh_peak_sfr=Uniform(0.1, 100.0),
-    psd_sigma=Uniform(0.1, 4.0),
-    psd_tau_myr=Uniform(1.0, 300.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.5, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_field_psd_sigma=Uniform(0.1, 4.0),
+    sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    stochastic=True,
+    mean_sfh_type=["dpl", "field"],
     n_grid=128,
 )
 model = Model(spec, ssp_data, filters=filters)
@@ -83,12 +83,12 @@ model = Model(spec, ssp_data, filters=filters)
 key = jax.random.PRNGKey(2026)
 true_params = spec.sample(key)
 true_params.update(
-    sfh_alpha=1.0,
-    sfh_beta=1.5,
-    sfh_tau_peak_gyr=8.0,
-    sfh_peak_sfr=30.0,
-    psd_sigma=2.0,
-    psd_tau_myr=20.0,
+    sfh_dpl_alpha=1.0,
+    sfh_dpl_beta=1.5,
+    sfh_dpl_tau_gyr=8.0,
+    sfh_dpl_log_peak_sfr=jnp.log10(30.0),
+    sfh_field_psd_sigma=2.0,
+    sfh_field_psd_tau_myr=20.0,
     met_logzsol=-0.3,
     dust_tau_bc=0.5,
     dust_tau_diff=0.3,
@@ -211,12 +211,12 @@ print("Saved: figures/test_geovi_sfh.png")
 from diffsed.plotting import safe_corner
 
 param_names = [
-    "sfh_alpha",
-    "sfh_beta",
-    "sfh_tau_peak_gyr",
-    "sfh_peak_sfr",
-    "psd_sigma",
-    "psd_tau_myr",
+    "sfh_dpl_alpha",
+    "sfh_dpl_beta",
+    "sfh_dpl_tau_gyr",
+    "sfh_dpl_log_peak_sfr",
+    "sfh_field_psd_sigma",
+    "sfh_field_psd_tau_myr",
     "met_logzsol",
     "dust_tau_bc",
     "dust_tau_diff",
@@ -260,8 +260,8 @@ for i in range(min(len(samples_arr), 50)):
     params_i = dict(true_params)
     for j, name in enumerate(labels):
         params_i[name] = float(samples_arr[i, j])
-    if "psd_xi" in result_geovi.samples:
-        params_i["psd_xi"] = result_geovi.samples["psd_xi"][i]
+    if "sfh_field_xi" in result_geovi.samples:
+        params_i["sfh_field_xi"] = result_geovi.samples["sfh_field_xi"][i]
     pred = model.predict_photometry(params_i)
     pred_fluxes.append(np.array(pred))
     ax1.plot(wave_eff, pred, "-", color="#ff7f0e", alpha=0.15, lw=0.8)

@@ -580,23 +580,21 @@ print(f"Information ratio (naive): {n_spec / n_phot:.0f}x")
 # 7. Apply cosmological dimming ($d_L$, $1+z$)
 #
 # The `Model` class handles parameter name translation (e.g.,
-# `sfh_tau_peak_gyr` → internal `tau_sfh` in yr) and unit conversions
+# `sfh_dpl_tau_gyr` → internal `tau_sfh` in yr) and unit conversions
 # automatically.
 
 # %%
 spec = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0),
-    sfh_beta=Uniform(0.5, 3.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 13.0),
-    sfh_peak_sfr=Uniform(0.1, 100.0),
-    psd_sigma=Fixed(0.0),
-    psd_tau_myr=Fixed(50.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.5, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    stochastic=False,
+    mean_sfh_type="dpl",
 )
 model = Model(spec, ssp_data, filters=filter_curves)
 
@@ -722,7 +720,7 @@ plt.show()
 print("Key insights from the Jacobian:")
 print("  - u-band is most sensitive to dust (UV attenuation is steepest)")
 print("  - z-band is most sensitive to metallicity (NIR metal features)")
-print("  - sfh_alpha and sfh_beta have similar sensitivity patterns → degenerate")
+print("  - sfh_dpl_alpha and sfh_dpl_beta have similar sensitivity patterns → degenerate")
 
 # %% [markdown]
 # ## Key Degeneracies
@@ -735,7 +733,7 @@ print("  - sfh_alpha and sfh_beta have similar sensitivity patterns → degenera
 # | **Age–Dust** | Old red stars look like young dusty stars | UV photometry (dust curve is steeper), IR emission |
 # | **Age–Metallicity** | Old metal-poor ≈ young metal-rich in broadband | Spectroscopy: D4000, Balmer lines resolve age independently |
 # | **SFH shape** ($\alpha$–$\beta$) | Multiple SFH shapes produce similar integrated light | PSD priors constrain burstiness timescale; spectroscopy adds time resolution |
-# | **PSD–Data type** | Photometry constrains $\sigma_{\rm ps}$ (amplitude); spectroscopy constrains $\tau_{\rm ps}$ (timescale) | Combined photometry + spectroscopy recovers both PSD parameters |
+# | **PSD–Data type** | Photometry constrains $\sigma_{\rm field}$ (amplitude); spectroscopy constrains $\tau_{\rm field}$ (timescale) | Combined photometry + spectroscopy recovers both PSD parameters |
 #
 # These degeneracies are not bugs — they are fundamental limits of the
 # data.  The forward model is exact; the challenge is that multiple

@@ -114,11 +114,11 @@ def get_psd_samples(result):
     """Extract PSD sigma and tau from HierarchicalResult (any backend).
 
     CFM mode stores 'psd_sigma_eff' and 'psd_loglogavgslope';
-    flat/RT mode stores 'psd_sigma' and 'psd_tau_myr'.
+    flat/RT mode stores 'sfh_field_psd_sigma' and 'sfh_field_psd_tau_myr'.
     """
     ss = result.shared_samples
-    sigma = np.array(ss.get("psd_sigma", ss.get("psd_sigma_eff", [])))
-    tau = np.array(ss.get("psd_tau_myr", []))
+    sigma = np.array(ss.get("sfh_field_psd_sigma", ss.get("psd_sigma_eff", [])))
+    tau = np.array(ss.get("sfh_field_psd_tau_myr", []))
     slope = np.array(ss.get("psd_loglogavgslope", []))
     return sigma, tau, slope
 
@@ -127,21 +127,21 @@ ssp_data = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGas
 filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 
 # Model factory for hierarchical fitting
-# HierarchicalFitter calls model_factory(psd_sigma, psd_tau_myr)
-def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
+# HierarchicalFitter calls model_factory(sfh_field_psd_sigma, sfh_field_psd_tau_myr)
+def model_factory(sfh_field_psd_sigma=1.0, sfh_field_psd_tau_myr=50.0):
     spec = ParamSpec(
-        sfh_alpha=Uniform(0.5, 3.0),
-        sfh_beta=Uniform(0.5, 3.0),
-        sfh_tau_peak_gyr=Uniform(0.5, 13.0),
-        sfh_peak_sfr=Uniform(0.1, 100.0),
-        psd_sigma=Fixed(psd_sigma),
-        psd_tau_myr=Fixed(psd_tau_myr),
+        sfh_dpl_alpha=Uniform(0.5, 3.0),
+        sfh_dpl_beta=Uniform(0.5, 3.0),
+        sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+        sfh_field_psd_sigma=Fixed(sfh_field_psd_sigma),
+        sfh_field_psd_tau_myr=Fixed(sfh_field_psd_tau_myr),
         met_logzsol=Uniform(-2.0, 0.5),
         dust_tau_bc=Uniform(0.0, 2.0),
         dust_tau_diff=Uniform(0.0, 2.0),
         dust_slope=Fixed(-0.7),
         redshift=Fixed(0.1),
-        stochastic=True,
+        mean_sfh_type=["dpl", "field"],
         n_grid=128,
     )
     return Model(spec, ssp_data, filters=filters)
@@ -163,7 +163,7 @@ for i in range(N_GAL):
     k = jax.random.fold_in(key, i)
     params = model.spec.sample(k)
     # Override PSD params to be shared across the population
-    params = {**params, "psd_sigma": TRUE_SIGMA, "psd_tau_myr": TRUE_TAU}
+    params = {**params, "sfh_field_psd_sigma": TRUE_SIGMA, "sfh_field_psd_tau_myr": TRUE_TAU}
     mock = model.mock(params, snr=20.0, key=jax.random.fold_in(k, 1))
     galaxies.append({"flux_obs": mock.flux_obs, "noise": mock.noise})
     mock_params_list.append(params)
@@ -237,8 +237,8 @@ for i in range(N_GAL):
     # summary_i[param] is a dict: {"value": ...} for MAP, {"median": ..., "lo_68": ..., "hi_68": ...} for sampling
     def _get_val(d):
         return d.get("median", d.get("value", 0))
-    sig_val = _get_val(summary_i.get("psd_sigma", {"value": 0}))
-    tau_val = _get_val(summary_i.get("psd_tau_myr", {"value": 0}))
+    sig_val = _get_val(summary_i.get("sfh_field_psd_sigma", {"value": 0}))
+    tau_val = _get_val(summary_i.get("sfh_field_psd_tau_myr", {"value": 0}))
     individual_sigmas.append(sig_val)
     individual_taus.append(tau_val)
     if i < 3:
@@ -318,7 +318,7 @@ print(result_cfm.summary())
 print("Available shared_samples keys:", list(result_cfm.shared_samples.keys()))
 
 sigma_eff = np.array(result_cfm.shared_samples.get("psd_sigma_eff",
-                     result_cfm.shared_samples.get("psd_sigma", [])))
+                     result_cfm.shared_samples.get("sfh_field_psd_sigma", [])))
 slope_samples = np.array(result_cfm.shared_samples.get("psd_loglogavgslope", []))
 
 fig, axes = plt.subplots(2, 2, figsize=(8, 8))
@@ -388,7 +388,7 @@ for ax, idx in zip(axes.ravel(), example_idx):
         for k_idx in range(n_draws):
             draw = {}
             for name, arr in ind_samples.items():
-                if name == "psd_xi":
+                if name == "sfh_field_xi":
                     draw[name] = arr[k_idx]  # keep as array
                 else:
                     draw[name] = float(arr[k_idx])
@@ -531,8 +531,8 @@ plt.show()
 # %%
 # --- Generate two populations with distinct PSD ---
 POP_CONFIGS = {
-    "Bursty dwarfs": {"psd_sigma": 2.5, "psd_tau_myr": 15.0, "color": "C3"},
-    "Smooth disks":  {"psd_sigma": 0.5, "psd_tau_myr": 150.0, "color": "C0"},
+    "Bursty dwarfs": {"sfh_field_psd_sigma": 2.5, "sfh_field_psd_tau_myr": 15.0, "color": "C3"},
+    "Smooth disks":  {"sfh_field_psd_sigma": 0.5, "sfh_field_psd_tau_myr": 150.0, "color": "C0"},
 }
 N_PER_POP = 10
 
@@ -546,8 +546,8 @@ for pop_name, config in POP_CONFIGS.items():
         k = jax.random.fold_in(key, abs(hash(pop_name)) % (2**31) + i)
         params = model.spec.sample(k)
         params = {**params,
-                  "psd_sigma": config["psd_sigma"],
-                  "psd_tau_myr": config["psd_tau_myr"]}
+                  "sfh_field_psd_sigma": config["sfh_field_psd_sigma"],
+                  "sfh_field_psd_tau_myr": config["sfh_field_psd_tau_myr"]}
         mock = model.mock(params, snr=20.0, key=jax.random.fold_in(k, 1))
         gals.append({"flux_obs": mock.flux_obs, "noise": mock.noise})
         pars.append(params)
@@ -556,7 +556,7 @@ for pop_name, config in POP_CONFIGS.items():
 
 print(f"Generated {N_PER_POP} galaxies per population:")
 for name, config in POP_CONFIGS.items():
-    print(f"  {name}: sigma={config['psd_sigma']}, tau={config['psd_tau_myr']} Myr")
+    print(f"  {name}: sigma={config['sfh_field_psd_sigma']}, tau={config['sfh_field_psd_tau_myr']} Myr")
 
 # %%
 # --- Hierarchical fit for each population ---
@@ -600,7 +600,7 @@ for pop_name, config in POP_CONFIGS.items():
     ax.add_patch(ell)
 
     # Truth marker
-    ax.plot(config["psd_tau_myr"], config["psd_sigma"], "*",
+    ax.plot(config["sfh_field_psd_tau_myr"], config["sfh_field_psd_sigma"], "*",
             color=config["color"], ms=18, markeredgecolor="k",
             markeredgewidth=0.5, zorder=10)
 

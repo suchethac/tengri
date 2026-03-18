@@ -71,7 +71,7 @@ print(f"Filters loaded — {[fc.name for fc in filters[2]]}")
 # This is the same SFH shape used by BAGPIPES (Carnall et al. 2018) and
 # Prospector (Johnson et al. 2021) in parametric mode.
 #
-# We fix `psd_sigma = 0` (no stochastic component), leaving **7 free
+# We use `mean_sfh_type="dpl"` (no stochastic component), leaving **7 free
 # parameters**: 4 SFH shape + 1 metallicity + 2 dust.  This is a
 # low-dimensional problem where NUTS gives exact, gold-standard posteriors.
 #
@@ -82,18 +82,16 @@ print(f"Filters loaded — {[fc.name for fc in filters[2]]}")
 
 # %%
 spec = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0),
-    sfh_beta=Uniform(0.5, 3.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 13.0),
-    sfh_peak_sfr=Uniform(0.1, 100.0),
-    psd_sigma=Fixed(0.0),
-    psd_tau_myr=Fixed(50.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.5, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    stochastic=False,
+    mean_sfh_type="dpl",
 )
 model = Model(spec, ssp_data, filters=filters)
 
@@ -101,10 +99,10 @@ model = Model(spec, ssp_data, filters=filters)
 # (tau_peak=10 Gyr cosmic time ≈ still near peak at z=0.1, alpha=1.0 = slow decline)
 key = jax.random.PRNGKey(2026)
 true_params = dict(
-    sfh_alpha=1.0,               # slow decline after peak
-    sfh_beta=1.5,                # moderate rise
-    sfh_tau_peak_gyr=10.0,       # peaks late — still actively forming stars at z=0.1
-    sfh_peak_sfr=15.0,           # 15 Msun/yr at peak
+    sfh_dpl_alpha=1.0,               # slow decline after peak
+    sfh_dpl_beta=1.5,                # moderate rise
+    sfh_dpl_tau_gyr=10.0,       # peaks late — still actively forming stars at z=0.1
+    sfh_dpl_log_peak_sfr=1.176,      # log10(15) Msun/yr at peak
     met_logzsol=-0.2,            # near-solar metallicity
     dust_tau_bc=0.3,             # moderate birth-cloud dust
     dust_tau_diff=0.2,           # moderate diffuse dust
@@ -267,34 +265,34 @@ plt.show()
 
 # %%
 spec_stoch = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0),
-    sfh_beta=Uniform(0.5, 3.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 13.0),
-    sfh_peak_sfr=Uniform(0.1, 100.0),
-    psd_sigma=Uniform(0.1, 4.0),
-    psd_tau_myr=Uniform(1.0, 300.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.5, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+    sfh_field_psd_sigma=Uniform(0.1, 4.0),
+    sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    stochastic=True,
+    mean_sfh_type=["dpl", "field"],
     n_grid=128,
 )
 model_stoch = Model(spec_stoch, ssp_data, filters=filters)
 
 # Star-forming galaxy with bursty SFH
-# Use spec.sample() to get a full parameter set including psd_xi,
+# Use spec.sample() to get a full parameter set including sfh_field_xi,
 # then override physical params to known values
 key_stoch = jax.random.PRNGKey(2026)
 true_params_stoch = spec_stoch.sample(key_stoch)
 true_params_stoch = {**true_params_stoch,
-    "sfh_alpha": 0.8,               # shallow decline — SF continues to present
-    "sfh_beta": 1.5,                # moderate rise
-    "sfh_tau_peak_gyr": 8.0,        # late peak — still actively forming at z=0.1
-    "sfh_peak_sfr": 80.0,           # very high peak SFR for dramatic dynamic range
-    "psd_sigma": 3.0,               # extreme burstiness — factor ~1000 fluctuations
-    "psd_tau_myr": 20.0,            # 20 Myr — SN feedback timescale
+    "sfh_dpl_alpha": 0.8,               # shallow decline — SF continues to present
+    "sfh_dpl_beta": 1.5,                # moderate rise
+    "sfh_dpl_tau_gyr": 8.0,        # late peak — still actively forming at z=0.1
+    "sfh_dpl_log_peak_sfr": 1.903,      # log10(80) — very high peak SFR for dramatic dynamic range
+    "sfh_field_psd_sigma": 3.0,               # extreme burstiness — factor ~1000 fluctuations
+    "sfh_field_psd_tau_myr": 20.0,            # 20 Myr — SN feedback timescale
     "met_logzsol": -0.3,
     "dust_tau_bc": 0.5,
     "dust_tau_diff": 0.3,

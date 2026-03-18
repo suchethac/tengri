@@ -85,13 +85,13 @@ print("SSP data and filters loaded.")
 # %%
 # Stochastic model with full SDSS filters — our ground truth
 spec_full = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0), sfh_beta=Uniform(0.5, 3.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 13.0), sfh_peak_sfr=Uniform(0.1, 100.0),
-    psd_sigma=Uniform(0.1, 4.0), psd_tau_myr=Uniform(1.0, 300.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0), sfh_dpl_beta=Uniform(0.5, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 13.0), sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+    sfh_field_psd_sigma=Uniform(0.1, 4.0), sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0), dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7), redshift=Fixed(0.1),
-    stochastic=True, n_grid=128,
+    mean_sfh_type=["dpl", "field"], n_grid=128,
 )
 model_full = Model(spec_full, ssp_data, filters=filters_sdss)
 
@@ -100,8 +100,8 @@ true_params = spec_full.sample(key)
 mock_full = model_full.mock(true_params, snr=20.0, key=key)
 
 print(f"Free parameters: {spec_full.n_free}")
-print(f"True PSD sigma:   {true_params['psd_sigma']:.2f}")
-print(f"True PSD tau_myr: {true_params['psd_tau_myr']:.1f}")
+print(f"True PSD sigma:   {true_params['sfh_field_psd_sigma']:.2f}")
+print(f"True PSD tau_myr: {true_params['sfh_field_psd_tau_myr']:.1f}")
 
 # %%
 # Color palette: each stage gets progressively darker/richer color
@@ -393,7 +393,7 @@ n_data = [1, 3, 5, 6, 200]
 colors = [STAGE_COLORS[l] for l in labels]
 
 # Compute posterior spread for key parameters
-key_params = ["sfh_tau_peak_gyr", "met_logzsol", "dust_tau_bc"]
+key_params = ["sfh_dpl_tau_gyr", "met_logzsol", "dust_tau_bc"]
 for i, pname in enumerate(key_params):
     widths = []
     for label in labels:
@@ -457,7 +457,7 @@ plt.show()
 
 # %%
 # Corner plot of just (psd_sigma, psd_tau_myr): photometry vs spectroscopy
-psd_params = ["psd_sigma", "psd_tau_myr"]
+psd_params = ["sfh_field_psd_sigma", "sfh_field_psd_tau_myr"]
 
 fig = safe_corner(result_5band, params=psd_params, truths=true_params,
                   color=STAGE_COLORS["5 bands"],

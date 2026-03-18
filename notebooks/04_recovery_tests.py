@@ -75,24 +75,22 @@ print(f"Filters loaded — {[fc.name for fc in filters[2]]}")
 # ## Part A: Parametric Model (7 free parameters)
 #
 # A smooth double-power-law SFH with no stochastic component
-# (`psd_sigma = 0`).  This is the regime where **diffsed** competes
+# (`mean_sfh_type="dpl"`).  This is the regime where **diffsed** competes
 # directly with BAGPIPES and Prospector.  With only 7 free parameters,
 # **NUTS** gives exact, gold-standard posteriors in $\sim 30$ s.
 
 # %%
 spec_param = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0),
-    sfh_beta=Uniform(0.5, 3.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 13.0),
-    sfh_peak_sfr=Uniform(0.1, 100.0),
-    psd_sigma=Fixed(0.0),
-    psd_tau_myr=Fixed(50.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.5, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    stochastic=False,
+    mean_sfh_type="dpl",
 )
 model_param = Model(spec_param, ssp_data, filters=filters)
 
@@ -238,18 +236,18 @@ for name in spec_param.free_params:
 
 # %%
 spec_stoch = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0),
-    sfh_beta=Uniform(0.5, 3.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 13.0),
-    sfh_peak_sfr=Uniform(0.1, 100.0),
-    psd_sigma=Uniform(0.1, 4.0),
-    psd_tau_myr=Uniform(1.0, 300.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.5, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+    sfh_field_psd_sigma=Uniform(0.1, 4.0),
+    sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    stochastic=True,
+    mean_sfh_type=["dpl", "field"],
     n_grid=128,
 )
 
@@ -257,7 +255,7 @@ spec_stoch = ParamSpec(
 key_stoch = jax.random.PRNGKey(7)
 true_stoch = spec_stoch.sample(key_stoch)
 # Override PSD params to known values for clear demonstration
-true_stoch = {**true_stoch, "psd_sigma": 1.5, "psd_tau_myr": 50.0}
+true_stoch = {**true_stoch, "sfh_field_psd_sigma": 1.5, "sfh_field_psd_tau_myr": 50.0}
 
 model_stoch = Model(spec_stoch, ssp_data, filters=filters)
 mock_stoch = model_stoch.mock(true_stoch, snr=20.0, key=key_stoch)
@@ -265,7 +263,7 @@ mock_stoch = model_stoch.mock(true_stoch, snr=20.0, key=key_stoch)
 D = spec_stoch.n_free
 print(f"Free parameters: D = {D}")
 print(f"  (physical: {D - 128}, GP latent: 128)")
-print(f"True PSD: sigma={true_stoch['psd_sigma']:.1f}, tau={true_stoch['psd_tau_myr']:.0f} Myr")
+print(f"True PSD: sigma={true_stoch['sfh_field_psd_sigma']:.1f}, tau={true_stoch['sfh_field_psd_tau_myr']:.0f} Myr")
 
 # Plot the bursty SFH
 fig, ax = plt.subplots(figsize=(8, 3.5))
@@ -345,7 +343,7 @@ plt.show()
 
 # %%
 # Extract PSD parameter samples for focused corner plot
-psd_names = ["psd_sigma", "psd_tau_myr"]
+psd_names = ["sfh_field_psd_sigma", "sfh_field_psd_tau_myr"]
 psd_truths = {k: true_stoch[k] for k in psd_names}
 
 fig_psd = safe_corner(result_rt, params=psd_names, truths=psd_truths,
@@ -394,7 +392,7 @@ for i, (label, sigma, tau) in enumerate(regimes):
 
     # Sample and override PSD params
     true_i = spec_stoch.sample(key_i)
-    true_i = {**true_i, "psd_sigma": sigma, "psd_tau_myr": tau}
+    true_i = {**true_i, "sfh_field_psd_sigma": sigma, "sfh_field_psd_tau_myr": tau}
 
     mock_i = model_stoch.mock(true_i, snr=20.0, key=key_i)
 
@@ -441,7 +439,7 @@ plt.show()
 # Generate a bursty mock
 key_mm = jax.random.PRNGKey(2024)
 true_bursty = spec_stoch.sample(key_mm)
-true_bursty = {**true_bursty, "psd_sigma": 2.0, "psd_tau_myr": 20.0}
+true_bursty = {**true_bursty, "sfh_field_psd_sigma": 2.0, "sfh_field_psd_tau_myr": 20.0}
 mock_bursty = model_stoch.mock(true_bursty, snr=20.0, key=key_mm)
 
 # Fit with parametric (wrong!) model
@@ -589,7 +587,7 @@ wave_eff = jnp.array([3551, 4686, 6166, 7480, 8932])  # SDSS ugriz
 # Draw posterior predictive samples
 n_draw = min(50, len(result_rt.samples[spec_stoch.free_params[0]]))
 for j in range(n_draw):
-    sample_j = {k: (result_rt.samples[k][j] if k == 'psd_xi' else float(result_rt.samples[k][j])) for k in result_rt.samples}
+    sample_j = {k: (result_rt.samples[k][j] if k == 'sfh_field_xi' else float(result_rt.samples[k][j])) for k in result_rt.samples}
     pred_j = model_stoch.predict_photometry(sample_j)
     axes[0].plot(wave_eff, pred_j, color="C0", alpha=0.08, lw=0.8)
 
@@ -604,7 +602,7 @@ axes[0].legend()
 # Residuals
 median_pred = np.median(
     np.array([model_stoch.predict_photometry(
-        {k: (result_rt.samples[k][j] if k == 'psd_xi' else float(result_rt.samples[k][j])) for k in result_rt.samples}
+        {k: (result_rt.samples[k][j] if k == 'sfh_field_xi' else float(result_rt.samples[k][j])) for k in result_rt.samples}
     ) for j in range(n_draw)]),
     axis=0,
 )

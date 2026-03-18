@@ -445,18 +445,18 @@ print("Higher nu = smoother GP realizations (steeper high-freq rolloff)")
 from functools import partial
 
 spec_stoch = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0),
-    sfh_beta=Uniform(0.5, 3.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 13.0),
-    sfh_peak_sfr=Uniform(0.1, 100.0),
-    psd_sigma=Uniform(0.1, 4.0),
-    psd_tau_myr=Uniform(1.0, 300.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.5, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+    sfh_field_psd_sigma=Uniform(0.1, 4.0),
+    sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    stochastic=True,
+    mean_sfh_type=["dpl", "field"],
     n_grid=128,
 )
 model = Model(spec_stoch, ssp_data, filters=filters)
@@ -466,12 +466,12 @@ matern_15 = partial(matern_psd, nu=1.5)
 smodel = StandardizedForwardModel(model, psd_model=matern_15)
 
 print(f"Latent dimensions: {smodel.n_latent}")
-print(f"Domain: {list(smodel.domain.keys())[:5]}... + psd_xi({smodel.domain['psd_xi']})")
+print(f"Domain: {list(smodel.domain.keys())[:5]}... + sfh_field_xi({smodel.domain['sfh_field_xi']})")
 
 # Generate a mock and fit
 key = jax.random.PRNGKey(99)
 true_params = spec_stoch.sample(key)
-true_params = {**true_params, "psd_sigma": 1.2, "psd_tau_myr": 80.0}
+true_params = {**true_params, "sfh_field_psd_sigma": 1.2, "sfh_field_psd_tau_myr": 80.0}
 
 mock = model.mock(true_params, snr=20.0, key=key)
 fitter = Fitter(model, mock.flux_obs, mock.noise,
@@ -728,18 +728,18 @@ print("The filter effective wavelength is used for photometric predictions.")
 # %%
 # Model with FREE PSD parameters
 spec_free_psd = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0),
-    sfh_beta=Uniform(0.5, 3.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 13.0),
-    sfh_peak_sfr=Uniform(0.1, 100.0),
-    psd_sigma=Uniform(0.1, 4.0),       # FREE -- inferred from data
-    psd_tau_myr=Uniform(1.0, 300.0),    # FREE -- inferred from data
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.5, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+    sfh_field_psd_sigma=Uniform(0.1, 4.0),       # FREE -- inferred from data
+    sfh_field_psd_tau_myr=Uniform(1.0, 300.0),    # FREE -- inferred from data
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    stochastic=True,
+    mean_sfh_type=["dpl", "field"],
     n_grid=128,
 )
 
@@ -748,12 +748,12 @@ model_free = Model(spec_free_psd, ssp_data, filters=filters)
 # Generate mock with known PSD
 key = jax.random.PRNGKey(2024)
 true_free = spec_free_psd.sample(key)
-true_free = {**true_free, "psd_sigma": 1.8, "psd_tau_myr": 60.0}
+true_free = {**true_free, "sfh_field_psd_sigma": 1.8, "sfh_field_psd_tau_myr": 60.0}
 
 mock_free = model_free.mock(true_free, snr=20.0, key=key)
 
-print(f"True PSD: sigma={true_free['psd_sigma']:.1f}, "
-      f"tau={true_free['psd_tau_myr']:.0f} Myr")
+print(f"True PSD: sigma={true_free['sfh_field_psd_sigma']:.1f}, "
+      f"tau={true_free['sfh_field_psd_tau_myr']:.0f} Myr")
 print(f"Free parameters: {spec_free_psd.n_free} "
       f"(physical: {spec_free_psd.n_free - 128}, GP latent: 128)")
 
@@ -765,7 +765,7 @@ rt_free = fitter_free.run("raytrace", init_from=map_free,
                           n_burnin=100, n_steps=300, step_size=0.05, n_leapfrog_steps=50)
 
 # PSD parameter recovery
-fig_psd = safe_corner(rt_free, params=["psd_sigma", "psd_tau_myr"],
+fig_psd = safe_corner(rt_free, params=["sfh_field_psd_sigma", "sfh_field_psd_tau_myr"],
                       truths=true_free, color="C0",
                       label="Ray Tracing")
 plt.suptitle("PSD Parameter Recovery (Free $\\sigma$, $\\tau$)", y=1.02)
@@ -773,7 +773,7 @@ plt.savefig("notebook_figures/09_custom_models_fig08.png", dpi=72, bbox_inches="
 plt.show()
 
 # Quantify
-for name in ["psd_sigma", "psd_tau_myr"]:
+for name in ["sfh_field_psd_sigma", "sfh_field_psd_tau_myr"]:
     lo, med, hi = np.percentile(rt_free.samples[name], [16, 50, 84])
     truth = float(true_free[name])
     covered = "OK" if lo <= truth <= hi else "MISS"
@@ -855,7 +855,7 @@ for name in ["psd_sigma", "psd_tau_myr"]:
 # | **Custom mean SFH** | JAX function `(t_lookback, ...) -> SFR` | Delayed-$\tau$, Diffstar |
 # | **Custom SSP** | Format as `(lgmet, lg_age_gyr, wave, flux)` arrays | MILES, BaSeL, PARSEC |
 # | **Custom filters** | Dict with `wave` and `transmission` arrays | JWST, Euclid, Roman |
-# | **Free PSD params** | Give `Uniform` priors to `psd_sigma`, `psd_tau_myr` | Hierarchical inference |
+# | **Free PSD params** | Give `Uniform` priors to `sfh_field_psd_sigma`, `sfh_field_psd_tau_myr` | Hierarchical inference |
 #
 # The key principle: **one loss function, any prior, any sampler.**
 #

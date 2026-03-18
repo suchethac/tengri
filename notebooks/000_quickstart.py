@@ -66,11 +66,11 @@ wave_spec = np.linspace(3000, 10500, 500)
 # ---------- Reusable plotting helpers ----------
 
 PHYS_PARAMS = [
-    "sfh_alpha", "sfh_beta", "sfh_tau_peak_gyr", "sfh_peak_sfr",
+    "sfh_dpl_alpha", "sfh_dpl_beta", "sfh_dpl_tau_gyr", "sfh_dpl_log_peak_sfr",
     "met_logzsol", "dust_tau_bc", "dust_tau_diff",
 ]
 
-PHYS_PARAMS_STOCH = PHYS_PARAMS + ["psd_sigma", "psd_tau_myr"]
+PHYS_PARAMS_STOCH = PHYS_PARAMS + ["sfh_field_psd_sigma", "sfh_field_psd_tau_myr"]
 
 
 def plot_mock(model, mock, true_params, title="Mock Photometry"):
@@ -254,27 +254,25 @@ def make_truth_lines_red(fig):
 
 # %%
 spec_param = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0),
-    sfh_beta=Uniform(0.5, 3.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 13.0),
-    sfh_peak_sfr=Uniform(0.1, 100.0),
-    psd_sigma=Fixed(0.0),
-    psd_tau_myr=Fixed(50.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.5, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    stochastic=False,
+    mean_sfh_type="dpl",
 )
 model_param = Model(spec_param, ssp_data, filters=filters)
 
 key = jax.random.PRNGKey(2026)
 true_params_param = dict(
-    sfh_alpha=1.0,
-    sfh_beta=1.5,
-    sfh_tau_peak_gyr=10.0,
-    sfh_peak_sfr=15.0,
+    sfh_dpl_alpha=1.0,
+    sfh_dpl_beta=1.5,
+    sfh_dpl_tau_gyr=10.0,
+    sfh_dpl_log_peak_sfr=1.176,
     met_logzsol=-0.2,
     dust_tau_bc=0.3,
     dust_tau_diff=0.2,
@@ -468,18 +466,18 @@ if fig is not None:
 
 # %%
 spec_stoch = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0),
-    sfh_beta=Uniform(0.5, 3.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 13.0),
-    sfh_peak_sfr=Uniform(0.1, 100.0),
-    psd_sigma=Uniform(0.1, 4.0),
-    psd_tau_myr=Uniform(1.0, 300.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.5, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_field_psd_sigma=Uniform(0.1, 4.0),
+    sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    stochastic=True,
+    mean_sfh_type=["dpl", "field"],
     n_grid=128,
 )
 model_stoch = Model(spec_stoch, ssp_data, filters=filters)
@@ -487,12 +485,12 @@ model_stoch = Model(spec_stoch, ssp_data, filters=filters)
 key_s = jax.random.PRNGKey(42)
 true_params_stoch = spec_stoch.sample(key_s)
 true_params_stoch.update(
-    sfh_alpha=1.0,
-    sfh_beta=1.5,
-    sfh_tau_peak_gyr=8.0,
-    sfh_peak_sfr=30.0,
-    psd_sigma=2.0,
-    psd_tau_myr=20.0,
+    sfh_dpl_alpha=1.0,
+    sfh_dpl_beta=1.5,
+    sfh_dpl_tau_gyr=8.0,
+    sfh_dpl_log_peak_sfr=1.477,
+    sfh_field_psd_sigma=2.0,
+    sfh_field_psd_tau_myr=20.0,
     met_logzsol=-0.3,
     dust_tau_bc=0.5,
     dust_tau_diff=0.3,

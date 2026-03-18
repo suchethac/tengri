@@ -397,27 +397,25 @@ filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 
 # Parametric model — no stochastic SFH
 spec = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0),
-    sfh_beta=Uniform(0.5, 3.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 13.0),
-    sfh_peak_sfr=Uniform(0.1, 100.0),
-    psd_sigma=Fixed(0.0),
-    psd_tau_myr=Fixed(50.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.5, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    stochastic=False,
+    mean_sfh_type="dpl",
 )
 model = Model(spec, ssp_data, filters=filters)
 
 # Ground truth
 true_params = dict(
-    sfh_alpha=1.5,
-    sfh_beta=1.2,
-    sfh_tau_peak_gyr=5.0,
-    sfh_peak_sfr=10.0,
+    sfh_dpl_alpha=1.5,
+    sfh_dpl_beta=1.2,
+    sfh_dpl_tau_gyr=5.0,
+    sfh_dpl_log_peak_sfr=1.0,
     met_logzsol=-0.3,
     dust_tau_bc=0.5,
     dust_tau_diff=0.3,
@@ -434,7 +432,7 @@ print(f"Mock flux (5 bands): {np.array(mock.flux_obs)}")
 #
 # Let's build intuition by looking at a 2D slice of $H(\boldsymbol{\xi})$.
 # We fix all parameters at their true values except two —
-# `sfh_alpha` and `met_logzsol` — and sweep a grid.
+# `sfh_dpl_alpha` and `met_logzsol` — and sweep a grid.
 #
 # The contours show where the posterior probability mass lives.
 # Note that the MAP (minimum of $H$) does **not** coincide with the
@@ -450,7 +448,7 @@ H_grid = np.zeros((len(met_vals), len(alpha_vals)))
 
 for i, met in enumerate(met_vals):
     for j, alpha in enumerate(alpha_vals):
-        params_ij = dict(true_params, sfh_alpha=float(alpha), met_logzsol=float(met))
+        params_ij = dict(true_params, sfh_dpl_alpha=float(alpha), met_logzsol=float(met))
         flux_pred = model.predict_photometry(params_ij)
         chi2 = jnp.sum(((mock.flux_obs - flux_pred) / mock.noise) ** 2)
         H_grid[i, j] = float(0.5 * chi2)
@@ -459,7 +457,7 @@ fig, ax = plt.subplots(figsize=(7, 5))
 levels = np.linspace(H_grid.min(), H_grid.min() + 30, 15)
 cs = ax.contourf(alpha_vals, met_vals, H_grid, levels=levels, cmap="viridis_r")
 ax.contour(alpha_vals, met_vals, H_grid, levels=levels, colors="k", linewidths=0.3)
-ax.plot(true_params["sfh_alpha"], true_params["met_logzsol"], "w*", ms=14, zorder=5, label="Truth")
+ax.plot(true_params["sfh_dpl_alpha"], true_params["met_logzsol"], "w*", ms=14, zorder=5, label="Truth")
 
 # Mark approximate MAP
 imin = np.unravel_index(H_grid.argmin(), H_grid.shape)
@@ -610,7 +608,7 @@ print("ESS:", {k: f"{v:.0f}" for k, v in ess_rt.items()})
 
 # %%
 # Trace plots for a few parameters
-trace_params = ["sfh_alpha", "met_logzsol", "dust_tau_bc"]
+trace_params = ["sfh_dpl_alpha", "met_logzsol", "dust_tau_bc"]
 fig, axes = plt.subplots(len(trace_params), 1, figsize=(8, 2.2 * len(trace_params)), sharex=True)
 for ax, name in zip(axes, trace_params):
     chain = np.array(result_rt.samples[name])
@@ -869,30 +867,30 @@ print(result_mgvi.diagnostics_summary())
 # %%
 # Stochastic model setup
 spec_stoch = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0),
-    sfh_beta=Uniform(0.5, 3.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 13.0),
-    sfh_peak_sfr=Uniform(0.1, 100.0),
-    psd_sigma=Uniform(0.1, 4.0),
-    psd_tau_myr=Uniform(1.0, 300.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.5, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+    sfh_field_psd_sigma=Uniform(0.1, 4.0),
+    sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    stochastic=True,
+    mean_sfh_type=["dpl", "field"],
     n_grid=128,
 )
 model_stoch = Model(spec_stoch, ssp_data, filters=filters)
 
 # Ground truth for stochastic model (includes PSD params)
 true_params_stoch = dict(
-    sfh_alpha=1.5,
-    sfh_beta=1.2,
-    sfh_tau_peak_gyr=5.0,
-    sfh_peak_sfr=10.0,
-    psd_sigma=1.5,
-    psd_tau_myr=80.0,
+    sfh_dpl_alpha=1.5,
+    sfh_dpl_beta=1.2,
+    sfh_dpl_tau_gyr=5.0,
+    sfh_dpl_log_peak_sfr=1.0,
+    sfh_field_psd_sigma=1.5,
+    sfh_field_psd_tau_myr=80.0,
     met_logzsol=-0.3,
     dust_tau_bc=0.5,
     dust_tau_diff=0.3,
@@ -924,7 +922,7 @@ print(f"Stochastic RT: {result_stoch_rt.wall_time_s:.1f}s")
 accept = result_stoch_rt.diagnostics.get("accept_rate_post_burnin", 0)
 print(f"Acceptance rate: {accept:.2%}")
 ess_stoch_rt = result_stoch_rt.effective_sample_size()
-phys_ess = {k: v for k, v in ess_stoch_rt.items() if not k.startswith("psd_xi")}
+phys_ess = {k: v for k, v in ess_stoch_rt.items() if not k.startswith("sfh_field_xi")}
 print("ESS (physical params):", {k: f"{v:.0f}" for k, v in phys_ess.items()})
 
 # %%
@@ -953,7 +951,7 @@ try:
     )
     accept = result_stoch_nuts.diagnostics.get("mean_accept_prob", 0)
     ess_nuts_s = result_stoch_nuts.effective_sample_size()
-    phys_ess_nuts = {k: v for k, v in ess_nuts_s.items() if not k.startswith("psd_xi")}
+    phys_ess_nuts = {k: v for k, v in ess_nuts_s.items() if not k.startswith("sfh_field_xi")}
     print(f"NUTS completed in {result_stoch_nuts.wall_time_s:.1f}s")
     print(f"Acceptance rate: {accept:.2%}")
     print("ESS (physical):", {k: f"{v:.0f}" for k, v in phys_ess_nuts.items()})
@@ -980,7 +978,7 @@ for ax, title, res, col in zip(axes, titles_s, results_s, colors_s):
         for k_idx in range(n_draws):
             draw = {}
             for name, arr in res.samples.items():
-                if name == "psd_xi":
+                if name == "sfh_field_xi":
                     draw[name] = arr[k_idx]  # array (n_grid,)
                 else:
                     draw[name] = float(arr[k_idx])
@@ -1010,12 +1008,12 @@ plt.show()
 # Stochastic model: corner plot of physical + PSD params
 # (exclude the 128 GP latents for readability)
 phys_params = [
-    "sfh_alpha",
-    "sfh_beta",
-    "sfh_tau_peak_gyr",
-    "sfh_peak_sfr",
-    "psd_sigma",
-    "psd_tau_myr",
+    "sfh_dpl_alpha",
+    "sfh_dpl_beta",
+    "sfh_dpl_tau_gyr",
+    "sfh_dpl_log_peak_sfr",
+    "sfh_field_psd_sigma",
+    "sfh_field_psd_tau_myr",
     "met_logzsol",
     "dust_tau_bc",
     "dust_tau_diff",

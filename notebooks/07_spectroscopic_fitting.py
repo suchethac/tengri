@@ -93,18 +93,18 @@ filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 # %%
 # Define a stochastic model for spectroscopic fitting
 spec = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0),
-    sfh_beta=Uniform(0.5, 3.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 13.0),
-    sfh_peak_sfr=Uniform(0.1, 100.0),
-    psd_sigma=Uniform(0.1, 4.0),
-    psd_tau_myr=Uniform(1.0, 300.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.5, 3.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+    sfh_field_psd_sigma=Uniform(0.1, 4.0),
+    sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    stochastic=True,
+    mean_sfh_type=["dpl", "field"],
     n_grid=128,
 )
 model = Model(spec, ssp_data, filters=filters)
@@ -247,7 +247,7 @@ ax.plot(wave_obs, spec_obs, "0.6", lw=0.5, label="Data")
 spec_draws = []
 n_draws = min(50, len(next(iter(result_rt.samples.values()))))
 for k_idx in range(n_draws):
-    draw = {name: (arr[k_idx] if name == 'psd_xi' else float(arr[k_idx])) for name, arr in result_rt.samples.items()}
+    draw = {name: (arr[k_idx] if name == 'sfh_field_xi' else float(arr[k_idx])) for name, arr in result_rt.samples.items()}
     spec_draws.append(np.array(model.predict_spectrum(draw, wave_obs)))
 spec_draws = np.array(spec_draws)
 spec_median = np.median(spec_draws, axis=0)
@@ -267,8 +267,8 @@ plt.show()
 
 # %%
 # Corner plot + SFH recovery
-phys_params = ["sfh_alpha", "sfh_beta", "sfh_tau_peak_gyr", "sfh_peak_sfr",
-               "psd_sigma", "psd_tau_myr", "met_logzsol",
+phys_params = ["sfh_dpl_alpha", "sfh_dpl_beta", "sfh_dpl_tau_gyr", "sfh_dpl_log_peak_sfr",
+               "sfh_field_psd_sigma", "sfh_field_psd_tau_myr", "met_logzsol",
                "dust_tau_bc", "dust_tau_diff"]
 
 fig = safe_corner(result_rt,
@@ -402,7 +402,7 @@ for ax, snr_val, col in zip(axes, snr_values, colors_snr):
     sfr_draws = []
     n_d = min(100, len(next(iter(res.samples.values()))))
     for k_idx in range(n_d):
-        draw = {name: (arr[k_idx] if name == 'psd_xi' else float(arr[k_idx])) for name, arr in res.samples.items()}
+        draw = {name: (arr[k_idx] if name == 'sfh_field_xi' else float(arr[k_idx])) for name, arr in res.samples.items()}
         sfh_draw = model.predict_sfh(draw)
         sfr_draws.append(sfh_draw["sfr_mean"])
     sfr_draws = np.array(sfr_draws)

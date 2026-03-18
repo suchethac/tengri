@@ -33,7 +33,7 @@
 #
 # where $\overline{\text{SFR}}(t)$ is the smooth mean SFH (double power law), $x(t)$ is a zero-mean Gaussian Process drawn from the PSD, and $-\sigma_x^2/2$ is a lognormal correction that ensures $\langle \text{SFR} \rangle = \overline{\text{SFR}}$.
 #
-# > **Note on parameter names:** This tutorial uses the low-level function parameter names (`sigma_ps`, `tau_ps`, `alpha`, etc.) to show how each component works internally. The high-level API uses descriptive names (`psd_sigma`, `psd_tau_myr`, `sfh_alpha`, etc.) -- see the [Quickstart](00_quickstart.ipynb).
+# > **Note on parameter names:** This tutorial uses the low-level function parameter names (`sigma_ps`, `tau_ps`, `alpha`, etc.) to show how each component works internally. The high-level API uses descriptive names (`sfh_field_psd_sigma`, `sfh_field_psd_tau_myr`, `sfh_dpl_alpha`, etc.) -- see the [Quickstart](00_quickstart.ipynb).
 
 # %%
 import os
