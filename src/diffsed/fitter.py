@@ -70,8 +70,11 @@ class Fitter:
         """Build a differentiable loss function.
 
         The loss function takes an unbounded parameter dict and returns
-        a scalar: chi² + prior penalties.
+        a scalar: chi² + prior penalties. When noise model is active,
+        uses effective noise with calibration floor and log-determinant.
         """
+        from diffsed.noise import compute_effective_noise, has_noise_model
+
         model = self.model
         data = self.data
         noise = self.noise
@@ -81,6 +84,7 @@ class Fitter:
         fixed_values = self._fixed_values
         spec = self.spec
         stochastic = spec.stochastic
+        use_variable_noise = has_noise_model(spec)
 
         def loss_fn(params_unbounded):
             # Convert unbounded → physical for free params
@@ -109,8 +113,15 @@ class Fitter:
             else:
                 raise ValueError(f"Unknown data_type: {data_type}")
 
-            # Chi-squared
-            chi2 = jnp.sum(((data - predicted) / noise) ** 2)
+            # Chi-squared (with variable noise if active)
+            if use_variable_noise:
+                f_cal = params.get("noise_frac_cal", 0.0)
+                sigma_eff = compute_effective_noise(noise, predicted, f_cal)
+                chi2 = jnp.sum(((data - predicted) / sigma_eff) ** 2)
+                logdet = 2.0 * jnp.sum(jnp.log(sigma_eff))
+            else:
+                chi2 = jnp.sum(((data - predicted) / noise) ** 2)
+                logdet = 0.0
 
             # Prior contributions
             prior_penalty = 0.0
@@ -131,7 +142,7 @@ class Fitter:
                     uniform_lp = -jnp.log(dist.hi - dist.lo)
                     prior_penalty -= 2.0 * (dist.log_prob(val) - uniform_lp)
 
-            return 0.5 * chi2 + 0.5 * prior_penalty
+            return 0.5 * chi2 + 0.5 * logdet + 0.5 * prior_penalty
 
         return loss_fn
 
@@ -239,6 +250,13 @@ class Fitter:
         All functions operate on flat arrays and use jax.lax.while_loop
         for zero Python overhead.
         """
+        from diffsed.noise import (
+            compute_std_inv,
+            has_noise_model,
+            variable_noise_hamiltonian,
+            variable_noise_metric_vec,
+        )
+
         model = self.model
         data_type = self.data_type
         free_names = self._free_names
@@ -248,8 +266,9 @@ class Fitter:
         data = self.data
         noise = self.noise
         noise_inv = 1.0 / noise**2
+        use_variable_noise = has_noise_model(self.spec)
 
-        # --- Signal response ---
+        # --- Signal response (physics only) ---
         def signal_response(primals):
             params = {}
             for name in free_names:
@@ -268,6 +287,33 @@ class Fitter:
                 s = model.predict_spectrum(params, model._wave_obs)
                 return jnp.concatenate([p, s])
             raise ValueError(f"Unknown data_type: {data_type}")
+
+        # --- Signal + noise response for variable noise ---
+        if use_variable_noise:
+
+            def signal_noise_response(primals):
+                """Return (predicted, std_inv) tuple for variable noise metric."""
+                params = {}
+                for name in free_names:
+                    lo, hi = bounds[name]
+                    params[name] = to_bounded(primals[name], lo, hi)
+                for name, val in fixed_values.items():
+                    params[name] = val
+                if stochastic and "psd_xi" in primals:
+                    params["psd_xi"] = primals["psd_xi"]
+                if data_type == "photometry":
+                    predicted = model.predict_photometry(params)
+                elif data_type == "spectroscopy":
+                    predicted = model.predict_spectrum(params, model._wave_obs)
+                elif data_type == "joint":
+                    p = model.predict_photometry(params)
+                    s = model.predict_spectrum(params, model._wave_obs)
+                    predicted = jnp.concatenate([p, s])
+                else:
+                    raise ValueError(f"Unknown data_type: {data_type}")
+                f_cal = params.get("noise_frac_cal", 0.0)
+                std_inv = compute_std_inv(noise, predicted, f_cal)
+                return predicted, std_inv
 
         # --- Flatten/unflatten (static shapes) ---
         param_keys = sorted(pos_dict.keys())
@@ -297,18 +343,41 @@ class Fitter:
         # --- Core primitives ---
         _eps = 6.0 * jnp.finfo(jnp.float64).eps
 
-        def metric_vec(xi, v):
-            """M(xi) @ v = J^T N^{-1} J v + v."""
-            xi_d, v_d = unflatten(xi), unflatten(v)
-            _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
-            _, vjp_fn = jax.vjp(signal_response, xi_d)
-            return flatten(vjp_fn(noise_inv * Jv)[0]) + v
+        if use_variable_noise:
 
-        def hamiltonian(xi):
-            """H(xi) = 0.5 chi2 + 0.5 ||xi||^2."""
-            pred = signal_response(unflatten(xi))
-            chi2 = jnp.sum(((data - pred) / noise) ** 2)
-            return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
+            def metric_vec(xi, v):
+                """GGN metric for VariableCovarianceGaussian likelihood."""
+                return variable_noise_metric_vec(
+                    xi, v, signal_noise_response, data, unflatten, flatten
+                )
+
+            def hamiltonian(xi):
+                """E_lh + 0.5 ||xi||^2 with variable noise (includes logdet)."""
+                pred = signal_response(unflatten(xi))
+                primals = unflatten(xi)
+                params = {}
+                for name in free_names:
+                    lo, hi = bounds[name]
+                    params[name] = to_bounded(primals[name], lo, hi)
+                for name, val in fixed_values.items():
+                    params[name] = val
+                f_cal = params.get("noise_frac_cal", 0.0)
+                return variable_noise_hamiltonian(data, noise, pred, f_cal) + 0.5 * jnp.sum(xi**2)
+
+        else:
+
+            def metric_vec(xi, v):
+                """M(xi) @ v = J^T N^{-1} J v + v."""
+                xi_d, v_d = unflatten(xi), unflatten(v)
+                _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
+                _, vjp_fn = jax.vjp(signal_response, xi_d)
+                return flatten(vjp_fn(noise_inv * Jv)[0]) + v
+
+            def hamiltonian(xi):
+                """H(xi) = 0.5 chi2 + 0.5 ||xi||^2."""
+                pred = signal_response(unflatten(xi))
+                chi2 = jnp.sum(((data - pred) / noise) ** 2)
+                return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
 
         H_vg = jax.value_and_grad(hamiltonian)
 
@@ -1399,6 +1468,8 @@ class Fitter:
 
         cfg = vi_config or VIConfig()
 
+        from diffsed.noise import compute_std_inv, has_noise_model
+
         model = self.model
         data = self.data
         noise = self.noise
@@ -1408,18 +1479,10 @@ class Fitter:
         fixed_values = self._fixed_values
         spec = self.spec
         stochastic = spec.stochastic
+        use_variable_noise = has_noise_model(spec)
 
-        # Build signal_response: unbounded primals → predicted observables
-        def signal_response(primals):
-            params = {}
-            for name in free_names:
-                lo, hi = bounds[name]
-                params[name] = to_bounded(primals[name], lo, hi)
-            for name, val in fixed_values.items():
-                params[name] = val
-            if stochastic and "psd_xi" in primals:
-                params["psd_xi"] = primals["psd_xi"]
-
+        def _predict(params):
+            """Dispatch forward model by data type."""
             if data_type == "photometry":
                 return model.predict_photometry(params)
             elif data_type == "spectroscopy":
@@ -1431,6 +1494,35 @@ class Fitter:
             else:
                 raise ValueError(f"Unknown data_type: {data_type}")
 
+        def _build_params(primals):
+            """Transform unbounded primals → physical params dict."""
+            params = {}
+            for name in free_names:
+                lo, hi = bounds[name]
+                params[name] = to_bounded(primals[name], lo, hi)
+            for name, val in fixed_values.items():
+                params[name] = val
+            if stochastic and "psd_xi" in primals:
+                params["psd_xi"] = primals["psd_xi"]
+            return params
+
+        # Build signal_response: unbounded primals → predicted observables
+        # When noise model is active, returns (predicted, std_inv) tuple
+        # for jft.VariableCovarianceGaussian
+        if use_variable_noise:
+
+            def signal_response(primals):
+                params = _build_params(primals)
+                predicted = _predict(params)
+                f_cal = params.get("noise_frac_cal", 0.0)
+                std_inv = compute_std_inv(noise, predicted, f_cal)
+                return predicted, std_inv
+
+        else:
+
+            def signal_response(primals):
+                return _predict(_build_params(primals))
+
         # Build NIFTy.re domain
         domain = {}
         for name in free_names:
@@ -1441,9 +1533,12 @@ class Fitter:
         signal_response_jit = jax.jit(signal_response)
         nifty_model = jft.Model(signal_response_jit, domain=domain)
 
-        # Gaussian likelihood: N^-1 = diag(1/noise^2)
-        noise_cov_inv = 1.0 / noise**2
-        likelihood = jft.Gaussian(data, noise_cov_inv).amend(nifty_model)
+        # Likelihood: variable noise or fixed Gaussian
+        if use_variable_noise:
+            likelihood = jft.VariableCovarianceGaussian(data).amend(nifty_model)
+        else:
+            noise_cov_inv = 1.0 / noise**2
+            likelihood = jft.Gaussian(data, noise_cov_inv).amend(nifty_model)
 
         # Initialize
         if init_from is not None:

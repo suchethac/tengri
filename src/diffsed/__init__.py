@@ -54,6 +54,12 @@ from diffsed.models.sfh.registry import (
     resolve_sfh,
 )
 from diffsed.models.sps.dsps_wrapper import SSPData, load_ssp_data
+from diffsed.noise import (
+    compute_effective_noise,
+    compute_std_inv,
+    has_noise_model,
+    variable_noise_hamiltonian,
+)
 from diffsed.param_spec import ParamSpec
 from diffsed.posterior import Posterior
 from diffsed.raytrace_jax import sample_raytrace
@@ -83,8 +89,10 @@ __all__ = [
     "Uniform",
     "VIConfig",
     "charlot_fall",
+    "compute_effective_noise",
     "compute_field_gp",
     "compute_sqrt_power_drw",
+    "compute_std_inv",
     # SFH models
     "constant_sfh",
     "delayed_exponential_sfh",
@@ -98,6 +106,7 @@ __all__ = [
     "generate_gp_fourier",
     "generate_mock",
     "gp_from_xi",
+    "has_noise_model",
     "lnorm",
     "load_filter_set",
     "load_ssp_data",

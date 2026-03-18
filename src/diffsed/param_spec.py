@@ -93,6 +93,12 @@ _NON_SFH_PARAMS = {
         "must have lo >= 0",
         Fixed(0.1),
     ),
+    "noise_frac_cal": (
+        "Fractional calibration noise floor (added in quadrature with obs noise)",
+        lambda lo, hi: lo >= 0,
+        "noise_frac_cal bounds must have lo >= 0",
+        Fixed(0.0),
+    ),
 }
 
 # ---------------------------------------------------------------------------

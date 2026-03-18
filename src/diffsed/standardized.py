@@ -243,11 +243,22 @@ def build_standardized_loss(
 ) -> Callable:
     """Build the unified loss function.
 
-    The loss is ALWAYS:
+    When no noise model is active (default):
         H(ξ) = ½ Σ_k ((d_k - m_k(ξ))/σ_k)² + ½ ξᵀξ
 
-    No prior penalty terms. The prior is absorbed into the transforms.
+    When noise model is active (noise_frac_cal is free):
+        H(ξ) = ½ Σ_k ((d_k - m_k)/σ_eff,k)² + Σ_k log(σ_eff,k) + ½ ξᵀξ
+
+    where σ²_eff,k = σ²_obs,k + (f_cal · m_k)² and the log-determinant
+    term prevents the trivial solution σ → ∞.
+
+    No prior penalty terms beyond ½ξᵀξ. The prior is absorbed into the
+    transforms.
     """
+    from diffsed.noise import compute_effective_noise, has_noise_model
+
+    use_variable_noise = has_noise_model(smodel.spec)
+
     xi_template = {}
     for name, shape in smodel.domain.items():
         if shape == ():
@@ -257,14 +268,31 @@ def build_standardized_loss(
 
     _, unravel_fn = ravel_pytree(xi_template)
 
-    def loss_fn(xi_flat: jnp.ndarray) -> jnp.ndarray:
-        xi = unravel_fn(xi_flat)
-        predicted = smodel.predict(xi, data_type=data_type, wave_obs=wave_obs)
+    if use_variable_noise:
 
-        chi2 = jnp.sum(((data - predicted) / noise) ** 2)
-        prior = jnp.sum(xi_flat**2)
+        def loss_fn(xi_flat: jnp.ndarray) -> jnp.ndarray:
+            xi = unravel_fn(xi_flat)
+            predicted = smodel.predict(xi, data_type=data_type, wave_obs=wave_obs)
+            params = smodel.xi_to_params(xi)
+            f_cal = params.get("noise_frac_cal", 0.0)
+            sigma_eff = compute_effective_noise(noise, predicted, f_cal)
 
-        return 0.5 * chi2 + 0.5 * prior
+            chi2 = jnp.sum(((data - predicted) / sigma_eff) ** 2)
+            logdet = jnp.sum(jnp.log(sigma_eff))
+            prior = jnp.sum(xi_flat**2)
+
+            return 0.5 * chi2 + logdet + 0.5 * prior
+
+    else:
+
+        def loss_fn(xi_flat: jnp.ndarray) -> jnp.ndarray:
+            xi = unravel_fn(xi_flat)
+            predicted = smodel.predict(xi, data_type=data_type, wave_obs=wave_obs)
+
+            chi2 = jnp.sum(((data - predicted) / noise) ** 2)
+            prior = jnp.sum(xi_flat**2)
+
+            return 0.5 * chi2 + 0.5 * prior
 
     return loss_fn, unravel_fn
 
@@ -272,7 +300,15 @@ def build_standardized_loss(
 def build_hierarchical_loss(
     smodel: StandardizedForwardModel, galaxies: list, shared_names: list | None = None
 ) -> Callable:
-    """Build hierarchical loss with shared parameters."""
+    """Build hierarchical loss with shared parameters.
+
+    Supports variable noise model: when ``noise_frac_cal`` is free,
+    the effective noise includes a calibration floor and the
+    log-determinant penalty.
+    """
+    from diffsed.noise import compute_effective_noise, has_noise_model
+
+    use_variable_noise = has_noise_model(smodel.spec)
     n_gal = len(galaxies)
 
     if shared_names is None:
@@ -305,7 +341,7 @@ def build_hierarchical_loss(
     def loss_fn(xi_flat: jnp.ndarray) -> jnp.ndarray:
         xi_all = unravel_fn(xi_flat)
 
-        total_chi2 = 0.0
+        total_lh = 0.0
         for i in range(n_gal):
             xi_i = {}
             for name in shared_names:
@@ -314,9 +350,17 @@ def build_hierarchical_loss(
                 xi_i[name] = xi_all[f"g{i}_{name}"]
 
             predicted = smodel.predict(xi_i, data_type="photometry")
-            total_chi2 += jnp.sum(((all_data[i] - predicted) / all_noise[i]) ** 2)
+
+            if use_variable_noise:
+                params_i = smodel.xi_to_params(xi_i)
+                f_cal = params_i.get("noise_frac_cal", 0.0)
+                sigma_eff = compute_effective_noise(all_noise[i], predicted, f_cal)
+                total_lh += jnp.sum(((all_data[i] - predicted) / sigma_eff) ** 2)
+                total_lh += 2.0 * jnp.sum(jnp.log(sigma_eff))
+            else:
+                total_lh += jnp.sum(((all_data[i] - predicted) / all_noise[i]) ** 2)
 
         prior = jnp.sum(xi_flat**2)
-        return 0.5 * total_chi2 + 0.5 * prior
+        return 0.5 * total_lh + 0.5 * prior
 
     return loss_fn, unravel_fn

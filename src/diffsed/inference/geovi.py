@@ -105,18 +105,13 @@ def fit_geovi(
         "dust_n": prior_config.dust_n,
     }
 
-    def signal_response(primals):
-        """Map standardized latent variables to predicted observables.
-
-        This is the nonlinear forward model that NIFTy.re will differentiate
-        through to compute the Fisher metric for geoVI.
-        """
-        # Transform unbounded -> physical
+    def _build_params(primals):
         params = {"xi": primals["xi"]}
         for param_key, (lo, hi) in bounds.items():
             params[param_key] = to_bounded(primals[param_key], lo, hi)
+        return params
 
-        # Forward model
+    def _predict(params):
         if data_type == "photometry":
             return forward_model.predict_photometry(params)
         elif data_type == "spectroscopy":
@@ -128,6 +123,26 @@ def fit_geovi(
         else:
             raise ValueError(f"Unknown data_type: {data_type}")
 
+    # Check if noise_frac_cal is passed (for variable noise support)
+    # The old ForwardModel API doesn't use ParamSpec, so we check the prior_config
+    use_variable_noise = hasattr(prior_config, "noise_frac_cal")
+
+    if use_variable_noise:
+        from diffsed.noise import compute_std_inv
+
+        def signal_response(primals):
+            """Map latents → (predicted, std_inv) for variable noise."""
+            params = _build_params(primals)
+            predicted = _predict(params)
+            f_cal = to_bounded(primals["noise_frac_cal"], *prior_config.noise_frac_cal)
+            std_inv = compute_std_inv(noise, predicted, f_cal)
+            return predicted, std_inv
+    else:
+
+        def signal_response(primals):
+            """Map standardized latent variables to predicted observables."""
+            return _predict(_build_params(primals))
+
     # Build NIFTy.re model
     n_grid = forward_model.config.n_grid
     domain = {
@@ -135,12 +150,17 @@ def fit_geovi(
     }
     for param_key in bounds:
         domain[param_key] = jft.ShapeWithDtype(())
+    if use_variable_noise:
+        domain["noise_frac_cal"] = jft.ShapeWithDtype(())
 
     model = jft.Model(signal_response, domain=domain)
 
-    # Gaussian likelihood: N^-1 = diag(1/noise^2)
-    noise_cov_inv = 1.0 / noise**2
-    likelihood = jft.Gaussian(data, noise_cov_inv).amend(model)
+    # Likelihood: variable noise or fixed Gaussian
+    if use_variable_noise:
+        likelihood = jft.VariableCovarianceGaussian(data).amend(model)
+    else:
+        noise_cov_inv = 1.0 / noise**2
+        likelihood = jft.Gaussian(data, noise_cov_inv).amend(model)
 
     # --- Initialize ---
     if init_params is None:

@@ -73,6 +73,7 @@ _NON_SFH_PARAM_MAP = {
     "dust_tau_diff": ("tau_v2", 1.0, 0.0),
     "dust_slope": ("dust_n", 1.0, 0.0),
     "redshift": ("redshift", 1.0, 0.0),
+    "noise_frac_cal": ("noise_frac_cal", 1.0, 0.0),
 }
 
 
