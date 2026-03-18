@@ -200,18 +200,20 @@ class Model:
         self._field_model = sfh_settings.get("sfh_field_model", "drw")
 
         # Dust law settings (generalized two-component model)
-        self._dust_law_bc = getattr(spec, "dust_law_bc", "power_law")
-        self._dust_law_diff = getattr(spec, "dust_law_diff", self._dust_law_bc)
+        self._dust_law_bc = spec.dust_law_bc
+        self._dust_law_diff = spec.dust_law_diff
 
-        # IGM absorption (Inoue+2014) — enabled by default
-        self._apply_igm = getattr(spec, "apply_igm", True)
+        # IGM absorption (Inoue+2014)
+        self._apply_igm = spec.apply_igm
 
         # Nebular emission backend
         self._nebular_backend = None
-        cloudy_grid_path = getattr(spec, "cloudy_grid_path", None)
-        if cloudy_grid_path is not None:
+        if spec.nebular and spec.cloudy_grid_path is not None:
             from diffsed.models.nebular import CloudyGridBackend
-            self._nebular_backend = CloudyGridBackend(cloudy_grid_path, ssp_data)
+            self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
+        elif spec.nebular:
+            from diffsed.models.nebular import BakedInBackend
+            self._nebular_backend = BakedInBackend()
         else:
             from diffsed.models.nebular import BakedInBackend
             self._nebular_backend = BakedInBackend()
@@ -638,7 +640,8 @@ class Model:
         dl_cm = self._get_dl_cm(params)
 
         # Apply IGM absorption (acts on observed-frame SED)
-        if self._apply_igm and z > 0:
+        # Always compute (cheap), but only apply when enabled
+        if self._apply_igm:
             from diffsed.models.igm import igm_transmission
             wave_obs = self.ssp_data.ssp_wave * (1.0 + z)
             igm_trans = igm_transmission(wave_obs, z)

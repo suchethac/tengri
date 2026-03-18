@@ -107,6 +107,55 @@ _NON_SFH_PARAMS = {
     ),
 }
 
+# Parameters that are only added when specific modules are enabled
+_NEBULAR_PARAMS = {
+    "neb_logU": (
+        "Ionization parameter log10(U)",
+        lambda lo, hi: -5 <= lo and hi <= 0,
+        "must be in [-5, 0]",
+        Fixed(-3.0),
+    ),
+    "neb_logZ_gas": (
+        "Gas-phase metallicity log10(Z_gas/Zsun)",
+        lambda lo, hi: True,
+        "",
+        Fixed(-0.3),  # will be overridden to match met_logzsol if not set
+    ),
+    "neb_fesc": (
+        "Ionizing photon escape fraction",
+        lambda lo, hi: 0 <= lo and hi <= 1,
+        "must be in [0, 1]",
+        Fixed(0.0),
+    ),
+}
+
+_DUST_EXTRA_PARAMS = {
+    "dust_f_obscuration": (
+        "Fraction of unobscured sightlines (Lower 2022)",
+        lambda lo, hi: 0 <= lo and hi <= 1,
+        "must be in [0, 1]",
+        Fixed(0.0),
+    ),
+    "dust_bump_strength": (
+        "UV bump strength at 2175A (Kriek & Conroy 2013)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(0.0),
+    ),
+    "dust_delta": (
+        "Attenuation curve slope modification",
+        lambda lo, hi: True,
+        "",
+        Fixed(0.0),
+    ),
+    "dust_Rv": (
+        "Total-to-selective extinction R_V (Cardelli)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(3.1),
+    ),
+}
+
 # ---------------------------------------------------------------------------
 # Legacy parameter name aliases (old API → new API)
 # ---------------------------------------------------------------------------
@@ -127,7 +176,15 @@ _LEGACY_SFH_TYPE_ALIASES = {
 }
 
 # Settings keys that are not model parameters
-SETTINGS_KEYS = frozenset({"stochastic", "n_grid", "mean_sfh_type"})
+SETTINGS_KEYS = frozenset({
+    "stochastic", "n_grid", "mean_sfh_type",
+    # IGM absorption
+    "apply_igm",
+    # Nebular emission
+    "nebular", "cloudy_grid_path",
+    # Dust law
+    "dust_law_bc", "dust_law_diff",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -135,8 +192,20 @@ SETTINGS_KEYS = frozenset({"stochastic", "n_grid", "mean_sfh_type"})
 # ---------------------------------------------------------------------------
 
 
-def _build_param_registry(mean_sfh_type):
-    """Build the parameter registry for a given mean_sfh_type.
+def _build_param_registry(mean_sfh_type, nebular=False, dust_law_bc="power_law",
+                          dust_law_diff=None):
+    """Build the parameter registry for a given model configuration.
+
+    Parameters
+    ----------
+    mean_sfh_type : list[str]
+        SFH model components.
+    nebular : bool or str
+        Enable nebular parameters. True or "cloudy" adds neb_logU, neb_logZ_gas, neb_fesc.
+    dust_law_bc : str
+        Birth cloud dust law name. Non-power-law laws may add extra parameters.
+    dust_law_diff : str or None
+        Diffuse ISM dust law. None = same as bc.
 
     Returns
     -------
@@ -157,6 +226,17 @@ def _build_param_registry(mean_sfh_type):
 
     # Non-SFH params (always present)
     for pname, (desc, check, err, default) in _NON_SFH_PARAMS.items():
+        registry[pname] = (desc, check, err)
+        defaults[pname] = default
+
+    # Nebular params (only when nebular is enabled)
+    if nebular:
+        for pname, (desc, check, err, default) in _NEBULAR_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+
+    # Dust extra params (always available — they default to Fixed(0) = no-op)
+    for pname, (desc, check, err, default) in _DUST_EXTRA_PARAMS.items():
         registry[pname] = (desc, check, err)
         defaults[pname] = default
 
@@ -187,6 +267,20 @@ class ParamSpec:
         raw_sfh_type = kwargs.pop("mean_sfh_type", None)
         explicit_stochastic = kwargs.pop("stochastic", None)
         n_grid = int(kwargs.pop("n_grid", 256))
+
+        # IGM absorption (default: True — negligible at z<2, essential at z>3)
+        self.apply_igm = kwargs.pop("apply_igm", True)
+
+        # Nebular emission: False (default), True, or "cloudy"
+        self.nebular = kwargs.pop("nebular", False)
+        self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
+        # If cloudy_grid_path is set, enable nebular automatically
+        if self.cloudy_grid_path is not None and not self.nebular:
+            self.nebular = "cloudy"
+
+        # Dust law settings
+        self.dust_law_bc = kwargs.pop("dust_law_bc", "power_law")
+        self.dust_law_diff = kwargs.pop("dust_law_diff", self.dust_law_bc)
 
         # --- Resolve legacy parameter aliases ---
         resolved_kwargs = {}
@@ -231,7 +325,12 @@ class ParamSpec:
         self._n_grid = n_grid
 
         # --- Build dynamic parameter registry ---
-        self._param_registry, self._defaults = _build_param_registry(mean_sfh_type)
+        self._param_registry, self._defaults = _build_param_registry(
+            mean_sfh_type,
+            nebular=self.nebular,
+            dust_law_bc=self.dust_law_bc,
+            dust_law_diff=self.dust_law_diff,
+        )
         self._valid_param_names = frozenset(self._param_registry.keys())
 
         # --- Validate parameter names ---
