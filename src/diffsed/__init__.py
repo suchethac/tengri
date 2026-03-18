@@ -33,6 +33,7 @@ from diffsed.models.sps.dsps_wrapper import SSPData, load_ssp_data
 from diffsed.param_spec import ParamSpec
 from diffsed.posterior import Posterior
 from diffsed.raytrace_jax import sample_raytrace
+from diffsed.vi_config import VIConfig
 
 __all__ = [
     "Fitter",  # High-level API
@@ -50,6 +51,7 @@ __all__ = [
     "SSPData",  # Data loading
     "StudentT",  # High-level API
     "Uniform",  # High-level API
+    "VIConfig",  # High-level API
     "charlot_fall",  # Low-level (internal use and advanced users)
     "compute_sqrt_power_drw",  # Low-level (internal use and advanced users)
     "constant_sfh",  # Low-level (internal use and advanced users)

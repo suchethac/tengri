@@ -133,7 +133,9 @@ class HierarchicalFitter:
         if key is None:
             key = jax.random.PRNGKey(0)
 
-        if method == "geovi":
+        if method == "evi":
+            return self._run_geovi_cfm(key=key, sample_mode="evi", **kwargs)
+        elif method == "geovi":
             return self._run_geovi_cfm(key=key, **kwargs)
         elif method == "mgvi":
             return self._run_geovi_cfm(
@@ -147,17 +149,19 @@ class HierarchicalFitter:
             return self._run_raytrace(key=key, **kwargs)
         else:
             raise ValueError(
-                f"Unknown method: {method}. Use 'geovi', 'mgvi', 'geovi_flat', or 'raytrace'."
+                f"Unknown method: {method}. "
+                f"Use 'evi', 'geovi', 'mgvi', 'geovi_flat', or 'raytrace'."
             )
 
     def _run_geovi_cfm(
         self,
         *,
         key,
-        n_iterations=20,
-        n_samples=4,
+        n_iterations=10,
+        n_samples=3,
         n_posterior_samples=60,
         sample_mode="nonlinear_resample",
+        vi_config=None,
         verbose=True,
     ):
         """Hierarchical geoVI using NIFTy's CorrelatedFieldMaker.
@@ -174,6 +178,10 @@ class HierarchicalFitter:
             import nifty8.re as jft
         except ImportError:
             raise ImportError("nifty8.re required: pip install nifty8[re]") from None
+
+        from diffsed.vi_config import VIConfig, evi_sample_mode
+
+        cfg = vi_config or VIConfig()
 
         n_gal = self.n_galaxies
         spec = self._spec
@@ -286,7 +294,8 @@ class HierarchicalFitter:
 
             return jnp.concatenate(predictions)
 
-        nifty_model = jft.Model(signal_response, domain=domain)
+        signal_response_jit = jax.jit(signal_response)
+        nifty_model = jft.Model(signal_response_jit, domain=domain)
         likelihood = jft.Gaussian(data_concat, noise_inv_concat).amend(nifty_model)
 
         # ── Initialize ────────────────────────────────────────
@@ -336,18 +345,27 @@ class HierarchicalFitter:
                 f"  Running optimize_kl ({n_iterations} iterations, {n_samples} samples/iter)..."
             )
 
+        # Resolve sample_mode
+        if sample_mode == "evi":
+            resolved_mode = evi_sample_mode(n_iterations, cfg.evi_linear_fraction)
+        else:
+            resolved_mode = sample_mode
+
         old_stdout = sys.stdout
         sys.stdout = io.StringIO()
 
         key_opt = keys[-1]
-        delta = max(1, n_samples - 1)
         samples, _state = jft.optimize_kl(
             likelihood,
             init_pos,
             n_total_iterations=n_iterations,
-            n_samples=lambda i: max(1, 1 + int(i * delta / max(n_iterations - 1, 1))),
+            n_samples=n_samples,
             key=key_opt,
-            sample_mode=sample_mode,
+            sample_mode=resolved_mode,
+            residual_map=jax.vmap if cfg.use_vmap else "lmap",
+            draw_linear_kwargs=cfg.draw_linear_kwargs,
+            nonlinearly_update_kwargs=cfg.nonlinearly_update_kwargs,
+            kl_kwargs=cfg.kl_kwargs,
             odir=None,
         )
 
@@ -426,7 +444,15 @@ class HierarchicalFitter:
         )
 
     def _run_geovi(
-        self, *, key, n_iterations=25, n_samples=6, n_posterior_samples=100, verbose=True
+        self,
+        *,
+        key,
+        n_iterations=10,
+        n_samples=3,
+        n_posterior_samples=100,
+        sample_mode="nonlinear_resample",
+        vi_config=None,
+        verbose=True,
     ):
         """Hierarchical geoVI via NIFTy.re.
 
@@ -440,6 +466,10 @@ class HierarchicalFitter:
             raise ImportError(
                 "nifty8.re required for hierarchical geoVI: pip install nifty8[re]"
             ) from None
+
+        from diffsed.vi_config import VIConfig, evi_sample_mode
+
+        cfg = vi_config or VIConfig()
 
         n_gal = self.n_galaxies
         spec = self._spec
@@ -555,7 +585,8 @@ class HierarchicalFitter:
 
             return jnp.concatenate(predictions)
 
-        nifty_model = jft.Model(signal_response, domain=domain)
+        signal_response_jit = jax.jit(signal_response)
+        nifty_model = jft.Model(signal_response_jit, domain=domain)
 
         # Gaussian likelihood
         likelihood = jft.Gaussian(data_concat, noise_inv_concat).amend(nifty_model)
@@ -579,7 +610,6 @@ class HierarchicalFitter:
 
         # ── Run optimize_kl ───────────────────────────────────
         key, opt_key = jax.random.split(keys[-1])
-        delta = max(1, n_samples - 1)
 
         import io
         import logging
@@ -592,6 +622,12 @@ class HierarchicalFitter:
         if verbose:
             print(f"  Running optimize_kl ({n_iterations} iterations)...")
 
+        # Resolve sample_mode
+        if sample_mode == "evi":
+            resolved_mode = evi_sample_mode(n_iterations, cfg.evi_linear_fraction)
+        else:
+            resolved_mode = sample_mode
+
         old_stdout = sys.stdout
         sys.stdout = io.StringIO()
 
@@ -599,9 +635,13 @@ class HierarchicalFitter:
             likelihood,
             init_pos,
             n_total_iterations=n_iterations,
-            n_samples=lambda i: max(1, 1 + int(i * delta / max(n_iterations - 1, 1))),
+            n_samples=n_samples,
             key=opt_key,
-            sample_mode="nonlinear_resample",
+            sample_mode=resolved_mode,
+            residual_map=jax.vmap if cfg.use_vmap else "lmap",
+            draw_linear_kwargs=cfg.draw_linear_kwargs,
+            nonlinearly_update_kwargs=cfg.nonlinearly_update_kwargs,
+            kl_kwargs=cfg.kl_kwargs,
             odir=None,
         )
 
