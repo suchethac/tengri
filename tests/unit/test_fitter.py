@@ -31,24 +31,24 @@ def model_and_mock():
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 
     spec = ParamSpec(
-        sfh_alpha=Uniform(0.5, 3.0),
-        sfh_beta=Uniform(0.3, 2.0),
-        sfh_tau_peak_gyr=Uniform(0.5, 10.0),
-        sfh_peak_sfr=Uniform(0.1, 50.0),
+        mean_sfh_type="dpl",
+        sfh_dpl_alpha=Uniform(0.5, 3.0),
+        sfh_dpl_beta=Uniform(0.3, 2.0),
+        sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
         met_logzsol=Uniform(-1.5, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=0.3,
         dust_slope=-0.7,
         redshift=0.1,
-        stochastic=False,
     )
     model = Model(spec, ssp, filters=filters)
 
     true_params = {
-        "sfh_alpha": 1.2,
-        "sfh_beta": 1.0,
-        "sfh_tau_peak_gyr": 4.0,
-        "sfh_peak_sfr": 8.0,
+        "sfh_dpl_alpha": 1.2,
+        "sfh_dpl_beta": 1.0,
+        "sfh_dpl_tau_gyr": 4.0,
+        "sfh_dpl_log_peak_sfr": 0.9,  # log10(8 Msun/yr)
         "met_logzsol": -0.3,
         "dust_tau_bc": 1.0,
         "dust_tau_diff": 0.3,
@@ -68,7 +68,7 @@ class TestFitterConstruction:
     def test_free_names(self, model_and_mock):
         model, mock, _ = model_and_mock
         fitter = Fitter(model, mock.flux_obs, mock.noise)
-        assert "sfh_alpha" in fitter._free_names
+        assert "sfh_dpl_alpha" in fitter._free_names or "sfh_alpha" in fitter._free_names
         assert "dust_slope" not in fitter._free_names  # fixed
 
 

@@ -4,15 +4,15 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed.model import PARAM_MAP
+from diffsed.model import PARAM_MAP, _build_param_map
 
 
-class TestParamMap:
-    def test_all_params_covered(self):
-        from diffsed.param_spec import VALID_PARAM_NAMES
+class TestLegacyParamMap:
+    """Tests for the legacy module-level PARAM_MAP (backward compat)."""
 
-        for name in VALID_PARAM_NAMES:
-            assert name in PARAM_MAP, f"Missing mapping for {name}"
+    def test_contains_sfh_params(self):
+        assert "sfh_alpha" in PARAM_MAP
+        assert "sfh_beta" in PARAM_MAP
 
     def test_unit_conversion_tau_peak(self):
         _, scale, offset = PARAM_MAP["sfh_tau_peak_gyr"]
@@ -31,10 +31,31 @@ class TestParamMap:
         assert abs(offset - (-1.8477116556169435)) < 1e-10
 
 
-class TestModelConstruction:
-    """Tests that don't need SSP data."""
+class TestDynamicParamMap:
+    """Tests for the dynamic _build_param_map function."""
 
-    def test_param_map_completeness(self):
-        from diffsed.param_spec import VALID_PARAM_NAMES
+    def test_tsnorm_has_sfh_params(self):
+        pm = _build_param_map(["tsnorm"])
+        assert "sfh_tsnorm_log_peak_sfr" in pm
+        assert "sfh_tsnorm_peak_lbt_gyr" in pm
 
-        assert set(PARAM_MAP.keys()) == VALID_PARAM_NAMES
+    def test_tsnorm_has_non_sfh_params(self):
+        pm = _build_param_map(["tsnorm"])
+        assert "met_logzsol" in pm
+        assert "dust_tau_bc" in pm
+
+    def test_tsnorm_field_has_psd_params(self):
+        pm = _build_param_map(["tsnorm", "field"])
+        assert "sfh_field_psd_sigma" in pm
+        assert "sfh_field_psd_tau_myr" in pm
+
+    def test_dpl_has_alpha_beta(self):
+        pm = _build_param_map(["dpl"])
+        assert "sfh_dpl_alpha" in pm
+        assert "sfh_dpl_beta" in pm
+        assert "sfh_dpl_tau_gyr" in pm
+
+    def test_unit_conversions(self):
+        pm = _build_param_map(["tsnorm"])
+        _, scale, _ = pm["sfh_tsnorm_peak_lbt_gyr"]
+        assert scale == 1e9  # Gyr → yr

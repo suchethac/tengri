@@ -42,16 +42,16 @@ def sdss_filters():
 def smooth_spec():
     """Smooth SFH spec with fixed redshift (triggers precomputation)."""
     return ParamSpec(
-        sfh_alpha=Uniform(0.5, 3.0),
-        sfh_beta=Uniform(0.3, 2.0),
-        sfh_tau_peak_gyr=Uniform(0.5, 10.0),
-        sfh_peak_sfr=Uniform(0.1, 50.0),
+        mean_sfh_type="dpl",
+        sfh_dpl_alpha=Uniform(0.5, 3.0),
+        sfh_dpl_beta=Uniform(0.3, 2.0),
+        sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
         met_logzsol=Gaussian(-1.5, 0.3, lo=-2.0, hi=-1.23),
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=0.3,
         dust_slope=-0.7,
         redshift=0.1,
-        stochastic=False,
     )
 
 
@@ -225,18 +225,18 @@ class TestGradientCleanliness:
     def test_stochastic_gradients_finite(self, ssp_data, sdss_filters):
         """Gradients are finite for stochastic (GP) model too."""
         spec = ParamSpec(
-            sfh_alpha=Uniform(0.5, 3.0),
-            sfh_beta=Uniform(0.3, 2.0),
-            sfh_tau_peak_gyr=Uniform(0.5, 10.0),
-            sfh_peak_sfr=Uniform(0.1, 50.0),
-            psd_sigma=Uniform(0.1, 3.0),
-            psd_tau_myr=Uniform(1.0, 300.0),
+            mean_sfh_type=["dpl", "field"],
+            sfh_dpl_alpha=Uniform(0.5, 3.0),
+            sfh_dpl_beta=Uniform(0.3, 2.0),
+            sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_field_psd_sigma=Uniform(0.1, 3.0),
+            sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
             met_logzsol=Gaussian(-1.5, 0.3, lo=-2.0, hi=-1.23),
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=0.3,
             dust_slope=-0.7,
             redshift=0.1,
-            stochastic=True,
             n_grid=64,
         )
         model = Model(spec, ssp_data, filters=sdss_filters, precompute=True)

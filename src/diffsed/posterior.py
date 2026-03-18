@@ -496,9 +496,10 @@ class Posterior:
 
                         n_bins_2d = min(30, max(10, int(np.sqrt(len(xj)))))
                         H, xe, ye = np.histogram2d(
-                            xj, xi, bins=n_bins_2d,
-                            range=[[np.min(xj), np.max(xj)],
-                                   [np.min(xi), np.max(xi)]],
+                            xj,
+                            xi,
+                            bins=n_bins_2d,
+                            range=[[np.min(xj), np.max(xj)], [np.min(xi), np.max(xi)]],
                         )
                         H = gaussian_filter(H, sigma=1.0)
                         # Contour levels at 68% and 95% credible regions
@@ -514,7 +515,9 @@ class Posterior:
                         if len(levels) < 2 or H.max() <= 0:
                             raise ValueError("degenerate histogram")
                         cs = ax.contourf(
-                            X, Y, H.T,
+                            X,
+                            Y,
+                            H.T,
                             levels=levels,
                             colors=[color],
                             alpha=np.linspace(0.1, 0.3, len(levels) - 1),
@@ -524,7 +527,9 @@ class Posterior:
                             c.set_edgecolor("face")
                             c.set_rasterized(True)
                         ax.contour(
-                            X, Y, H.T,
+                            X,
+                            Y,
+                            H.T,
                             levels=levels[:-1],
                             colors=[color],
                             linewidths=0.8,

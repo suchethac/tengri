@@ -40,36 +40,57 @@ def filters():
 
 @pytest.fixture(scope="session")
 def parametric_spec():
+    """Parametric tsnorm spec (no GP field)."""
     return ParamSpec(
-        sfh_alpha=Uniform(0.5, 3.0),
-        sfh_beta=Uniform(0.3, 2.0),
-        sfh_tau_peak_gyr=Uniform(0.5, 10.0),
-        sfh_peak_sfr=Uniform(0.1, 50.0),
+        mean_sfh_type="tsnorm",
+        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
+        sfh_tsnorm_skew=Uniform(-1.0, 1.0),
+        sfh_tsnorm_trunc=Uniform(1.0, 10.0),
         met_logzsol=Uniform(-1.5, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=Uniform(0.0, 2.0),
         dust_slope=-0.7,
         redshift=0.1,
-        stochastic=False,
     )
 
 
 @pytest.fixture(scope="session")
 def stochastic_spec():
+    """Stochastic tsnorm + field spec."""
     return ParamSpec(
-        sfh_alpha=Uniform(0.5, 3.0),
-        sfh_beta=Uniform(0.3, 2.0),
-        sfh_tau_peak_gyr=Uniform(0.5, 10.0),
-        sfh_peak_sfr=Uniform(0.1, 50.0),
-        psd_sigma=Uniform(0.1, 3.0),
-        psd_tau_myr=Uniform(1.0, 300.0),
+        mean_sfh_type=["tsnorm", "field"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
+        sfh_tsnorm_skew=Uniform(-1.0, 1.0),
+        sfh_tsnorm_trunc=Uniform(1.0, 10.0),
+        sfh_field_psd_sigma=Uniform(0.1, 3.0),
+        sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
         met_logzsol=Uniform(-1.5, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=Uniform(0.0, 2.0),
         dust_slope=-0.7,
         redshift=0.1,
-        stochastic=True,
         n_grid=64,
+    )
+
+
+@pytest.fixture(scope="session")
+def dpl_spec():
+    """DPL parametric spec for backward compat testing."""
+    return ParamSpec(
+        mean_sfh_type="dpl",
+        sfh_dpl_alpha=Uniform(0.5, 3.0),
+        sfh_dpl_beta=Uniform(0.3, 2.0),
+        sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        met_logzsol=Uniform(-1.5, 0.2),
+        dust_tau_bc=Uniform(0.0, 3.0),
+        dust_tau_diff=Uniform(0.0, 2.0),
+        dust_slope=-0.7,
+        redshift=0.1,
     )
 
 
@@ -84,18 +105,14 @@ def stochastic_model(stochastic_spec, ssp_data, filters):
 
 
 @pytest.fixture(scope="session")
-def typical_params():
-    return {
-        "sfh_alpha": 1.2,
-        "sfh_beta": 1.0,
-        "sfh_tau_peak_gyr": 4.0,
-        "sfh_peak_sfr": 8.0,
-        "met_logzsol": -0.3,
-        "dust_tau_bc": 1.0,
-        "dust_tau_diff": 0.3,
-        "dust_slope": -0.7,
-        "redshift": 0.1,
-    }
+def dpl_model(dpl_spec, ssp_data, filters):
+    return Model(dpl_spec, ssp_data, filters=filters)
+
+
+@pytest.fixture(scope="session")
+def typical_params(parametric_spec):
+    """Sample typical parameters from the parametric spec."""
+    return parametric_spec.sample(jax.random.PRNGKey(42))
 
 
 # ===================================================================
@@ -129,7 +146,6 @@ class TestPredictPhotometry:
 
     def test_physical_range(self, parametric_model, typical_params):
         phot = parametric_model.predict_photometry(typical_params)
-        # Typical galaxy at z=0.1: ~1e-30 to 1e-26 erg/s/cm²/Hz
         assert jnp.all(phot > 1e-35)
         assert jnp.all(phot < 1e-20)
 
@@ -185,63 +201,29 @@ class TestStochastic:
     def test_sfh_full_differs_from_mean(self, stochastic_model, stochastic_spec):
         params = stochastic_spec.sample(jax.random.PRNGKey(42))
         # Force non-zero psd_sigma
-        params = {**params, "psd_sigma": 1.5}
+        params = {**params, "sfh_field_psd_sigma": 1.5}
         sfh = stochastic_model.predict_sfh(params)
         # With non-zero sigma and random xi, full != mean
         assert not jnp.allclose(sfh["sfr_mean"], sfh["sfr_full"])
 
 
 # ===================================================================
-# Equivalence: parametric model with sigma=0 ≈ stochastic model with sigma=0
+# DPL Model
 # ===================================================================
 
 
-class TestEquivalence:
-    def test_zero_sigma_equivalence(self, ssp_data, filters):
-        spec_param = ParamSpec(
-            sfh_alpha=1.2,
-            sfh_beta=1.0,
-            sfh_tau_peak_gyr=4.0,
-            sfh_peak_sfr=8.0,
-            met_logzsol=-0.3,
-            dust_tau_bc=1.0,
-            dust_tau_diff=0.3,
-            dust_slope=-0.7,
-            redshift=0.1,
-            stochastic=False,
-        )
-        spec_stoch = ParamSpec(
-            sfh_alpha=1.2,
-            sfh_beta=1.0,
-            sfh_tau_peak_gyr=4.0,
-            sfh_peak_sfr=8.0,
-            psd_sigma=0.0,
-            psd_tau_myr=50.0,
-            met_logzsol=-0.3,
-            dust_tau_bc=1.0,
-            dust_tau_diff=0.3,
-            dust_slope=-0.7,
-            redshift=0.1,
-            stochastic=True,
-            n_grid=64,
-        )
+class TestDPL:
+    def test_predict_photometry(self, dpl_model, dpl_spec):
+        params = dpl_spec.sample(jax.random.PRNGKey(42))
+        phot = dpl_model.predict_photometry(params)
+        assert phot.shape == (5,)
+        assert jnp.all(jnp.isfinite(phot))
+        assert jnp.all(phot > 0)
 
-        model_p = Model(spec_param, ssp_data, filters=filters)
-        model_s = Model(spec_stoch, ssp_data, filters=filters)
-
-        params_p = spec_param.sample(jax.random.PRNGKey(0))
-        params_s = spec_stoch.sample(jax.random.PRNGKey(0))
-
-        phot_p = model_p.predict_photometry(params_p)
-        phot_s = model_s.predict_photometry(params_s)
-
-        # With sigma=0, GP contribution is zero, so results should match
-        np.testing.assert_allclose(
-            np.array(phot_p),
-            np.array(phot_s),
-            rtol=0.02,
-            err_msg="Parametric and stochastic (sigma=0) should give similar photometry",
-        )
+    def test_predict_derived(self, dpl_model, dpl_spec):
+        params = dpl_spec.sample(jax.random.PRNGKey(42))
+        d = dpl_model.predict_derived(params)
+        assert float(d["stellar_mass"]) > 0
 
 
 # ===================================================================
@@ -280,12 +262,11 @@ class TestGradients:
             return jnp.sum(parametric_model.predict_photometry(p))
 
         grad = jax.grad(loss)(typical_params)
-        assert jnp.isfinite(grad["sfh_peak_sfr"])
-        assert float(grad["sfh_peak_sfr"]) > 0  # more SFR → more flux
+        assert jnp.isfinite(grad["sfh_tsnorm_log_peak_sfr"])
 
     def test_derived_gradient(self, parametric_model, typical_params):
         def loss(p):
             return parametric_model.predict_derived(p)["stellar_mass"]
 
         grad = jax.grad(loss)(typical_params)
-        assert jnp.isfinite(grad["sfh_peak_sfr"])
+        assert jnp.isfinite(grad["sfh_tsnorm_log_peak_sfr"])

@@ -8,7 +8,8 @@ structure into the forward model. The loss is always:
 No separate prior terms. Works with any sampler (MAP, Ray Tracing,
 NUTS, geoVI, MGVI) and unifies individual + hierarchical inference.
 
-Usage:
+Usage::
+
     smodel = StandardizedForwardModel(model)
     loss = build_standardized_loss(smodel, data, noise)
 
@@ -65,9 +66,13 @@ class StandardizedForwardModel:
         else:
             self._psd_model = self._default_drw_sqrt_power
 
-        # Check if PSD params are free
-        self._psd_sigma_free = "psd_sigma" in self._free_names
-        self._psd_tau_free = "psd_tau_myr" in self._free_names
+        # Check if PSD params are free (support both new and legacy names)
+        self._psd_sigma_free = any(
+            n in self._free_names for n in ("sfh_field_psd_sigma", "psd_sigma")
+        )
+        self._psd_tau_free = any(
+            n in self._free_names for n in ("sfh_field_psd_tau_myr", "psd_tau_myr")
+        )
 
         # Pre-compute log-age grid for GP
         if self._stochastic:
@@ -88,15 +93,12 @@ class StandardizedForwardModel:
 
     @property
     def domain(self) -> dict:
-        """Standardized parameter domain {name: shape}.
-
-        Returns dict compatible with NIFTy's ShapeWithDtype.
-        """
+        """Standardized parameter domain {name: shape}."""
         d = {}
         for name in self._free_names:
             d[name] = ()  # scalar
         if self._stochastic:
-            d["psd_xi"] = (self._n_grid,)  # GP white noise
+            d["sfh_field_xi"] = (self._n_grid,)  # GP white noise
         return d
 
     @property
@@ -139,10 +141,30 @@ class StandardizedForwardModel:
             params[name] = jnp.asarray(val)
 
         # Correlated field: build √P from current PSD params, apply to ξ
-        if self._stochastic and "psd_xi" in xi:
-            sigma = params.get("psd_sigma", jnp.asarray(self._fixed_values.get("psd_sigma", 1.0)))
+        xi_key = "sfh_field_xi" if "sfh_field_xi" in xi else "psd_xi"
+        if self._stochastic and xi_key in xi:
+            # Get sigma from whichever name is in params
+            sigma = params.get(
+                "sfh_field_psd_sigma",
+                params.get(
+                    "psd_sigma",
+                    jnp.asarray(
+                        self._fixed_values.get(
+                            "sfh_field_psd_sigma", self._fixed_values.get("psd_sigma", 1.0)
+                        )
+                    ),
+                ),
+            )
             tau_myr = params.get(
-                "psd_tau_myr", jnp.asarray(self._fixed_values.get("psd_tau_myr", 50.0))
+                "sfh_field_psd_tau_myr",
+                params.get(
+                    "psd_tau_myr",
+                    jnp.asarray(
+                        self._fixed_values.get(
+                            "sfh_field_psd_tau_myr", self._fixed_values.get("psd_tau_myr", 50.0)
+                        )
+                    ),
+                ),
             )
 
             # Build √P from current PSD params (differentiable!)
@@ -154,30 +176,21 @@ class StandardizedForwardModel:
             )
 
             # x(t) = IFFT(√P · ξ_field) — the correlated field
-            xi_field = xi["psd_xi"]
+            xi_field = xi[xi_key]
             x_field = jnp.fft.irfft(
                 sqrt_power[: len(xi_field) // 2 + 1] * jnp.fft.rfft(xi_field),
                 n=self._n_grid,
             )
 
-            # Store as _correlated_field for Model to use directly
             params["_correlated_field"] = x_field
+
+            # Store xi under the key the Model expects
+            params["sfh_field_xi"] = xi[xi_key]
 
         return params
 
     def params_to_xi(self, params: dict) -> dict:
-        """Inverse: physical params → standardized (for initialization).
-
-        Parameters
-        ----------
-        params : dict
-            Physical parameter values.
-
-        Returns
-        -------
-        dict
-            Standardized latent variables.
-        """
+        """Inverse: physical params → standardized (for initialization)."""
         xi = {}
         for name in self._free_names:
             if name in params:
@@ -186,7 +199,9 @@ class StandardizedForwardModel:
                 xi[name] = jnp.array(0.0)
 
         if self._stochastic:
-            xi["psd_xi"] = params.get("psd_xi", jnp.zeros(self._n_grid))
+            xi["sfh_field_xi"] = params.get(
+                "sfh_field_xi", params.get("psd_xi", jnp.zeros(self._n_grid))
+            )
 
         return xi
 
@@ -195,22 +210,7 @@ class StandardizedForwardModel:
     # -------------------------------------------------------------------
 
     def predict(self, xi: dict, data_type: str = "photometry", wave_obs=None) -> jnp.ndarray:
-        """Full forward model: ξ → predicted observables.
-
-        Parameters
-        ----------
-        xi : dict
-            Standardized latent variables.
-        data_type : str
-            "photometry", "spectroscopy", or "joint".
-        wave_obs : array, optional
-            Observed wavelengths for spectroscopy.
-
-        Returns
-        -------
-        array
-            Predicted observables.
-        """
+        """Full forward model: ξ → predicted observables."""
         params = self.xi_to_params(xi)
 
         if data_type == "photometry":
@@ -247,23 +247,7 @@ def build_standardized_loss(
         H(ξ) = ½ Σ_k ((d_k - m_k(ξ))/σ_k)² + ½ ξᵀξ
 
     No prior penalty terms. The prior is absorbed into the transforms.
-
-    Parameters
-    ----------
-    smodel : StandardizedForwardModel
-    data : array
-        Observed data.
-    noise : array
-        1-sigma uncertainties.
-    data_type : str
-    wave_obs : array, optional
-
-    Returns
-    -------
-    callable
-        loss_fn(xi_flat) → scalar. Takes a flat 1D array.
     """
-    # Build the unravel function from a template
     xi_template = {}
     for name, shape in smodel.domain.items():
         if shape == ():
@@ -278,14 +262,6 @@ def build_standardized_loss(
         predicted = smodel.predict(xi, data_type=data_type, wave_obs=wave_obs)
 
         chi2 = jnp.sum(((data - predicted) / noise) ** 2)
-
-        # Prior penalty is ALWAYS ½ξᵀξ — isotropic in every direction.
-        # This is possible because each Distribution.unstandardize() absorbs
-        # the original prior density and its Jacobian into the forward model.
-        # The Hessian of this term is the identity matrix I, which:
-        #   - Sets a floor of 1 on all eigenvalues (no degenerate directions)
-        #   - Makes the condition number depend on the data, not the priors
-        #   - Lets all samplers use a single step size / learning rate
         prior = jnp.sum(xi_flat**2)
 
         return 0.5 * chi2 + 0.5 * prior
@@ -296,36 +272,23 @@ def build_standardized_loss(
 def build_hierarchical_loss(
     smodel: StandardizedForwardModel, galaxies: list, shared_names: list | None = None
 ) -> Callable:
-    """Build hierarchical loss with shared parameters.
-
-    Parameters
-    ----------
-    smodel : StandardizedForwardModel
-    galaxies : list of dict
-        Each has 'flux_obs' and 'noise'.
-    shared_names : list of str, optional
-        Parameter names to share across galaxies.
-        Default: PSD params if free.
-
-    Returns
-    -------
-    callable
-        loss_fn(xi_flat) → scalar.
-    """
+    """Build hierarchical loss with shared parameters."""
     n_gal = len(galaxies)
 
     if shared_names is None:
         # Default: share PSD params
-        shared_names = [n for n in smodel._free_names if n.startswith("psd_") and n != "psd_xi"]
+        shared_names = [
+            n
+            for n in smodel._free_names
+            if (n.startswith("psd_") or n.startswith("sfh_field_psd_"))
+            and n not in ("psd_xi", "sfh_field_xi")
+        ]
 
     per_galaxy_names = [n for n in smodel.domain if n not in shared_names]
 
-    # Build the flat vector template
     xi_template = {}
-    # Shared params
     for name in shared_names:
         xi_template[name] = jnp.array(0.0)
-    # Per-galaxy params
     for i in range(n_gal):
         for name in per_galaxy_names:
             shape = smodel.domain[name]
@@ -336,7 +299,6 @@ def build_hierarchical_loss(
 
     _, unravel_fn = ravel_pytree(xi_template)
 
-    # Precompute data
     all_data = [jnp.asarray(g["flux_obs"]) for g in galaxies]
     all_noise = [jnp.asarray(g["noise"]) for g in galaxies]
 
@@ -345,7 +307,6 @@ def build_hierarchical_loss(
 
         total_chi2 = 0.0
         for i in range(n_gal):
-            # Build per-galaxy xi: shared + galaxy's own
             xi_i = {}
             for name in shared_names:
                 xi_i[name] = xi_all[name]

@@ -1,16 +1,99 @@
-"""Tests for parametric mean SFH models."""
+"""Tests for parametric mean SFH models.
+
+Tests all 9 model functions from the registry plus shared helpers.
+Each model is tested for:
+- Correct output shape and sign (non-negative SFR)
+- Expected peak location and behavior
+- JIT-compatibility
+- Gradient existence via jax.grad
+- Edge-case stability (t=0, t=AGEMAX)
+"""
 
 import jax
 import jax.numpy as jnp
+import pytest
 from numpy.testing import assert_allclose
 
 from diffsed.models.sfh.mean_sfh import (
+    AGEMAX_YR,
+    _clamp_age,
+    _skewed_gaussian_kernel,
     constant_sfh,
+    delayed_exponential_sfh,
     delayed_tau,
     double_powerlaw,
+    dpl,
+    exponential_sfh,
+    lnorm,
+    norm,
+    snorm,
+    triweight_burst,
+    tsnorm,
 )
 
 jax.config.update("jax_enable_x64", True)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+class TestClampAge:
+    """Tests for _clamp_age helper."""
+
+    def test_clamps_low_end(self):
+        """Ages below 1e5 yr are clamped to 1e5."""
+        t = jnp.array([0.0, 100.0, 1e4])
+        clamped = _clamp_age(t)
+        assert jnp.all(clamped >= 1e5)
+
+    def test_clamps_high_end(self):
+        """Ages above AGEMAX_YR are clamped."""
+        t = jnp.array([1e11, 2e10])
+        clamped = _clamp_age(t)
+        assert jnp.all(clamped <= AGEMAX_YR)
+
+    def test_passthrough_in_range(self):
+        """Ages within bounds are unchanged."""
+        t = jnp.array([1e6, 1e8, 1e10])
+        clamped = _clamp_age(t)
+        assert_allclose(clamped, t)
+
+
+class TestSkewedGaussianKernel:
+    """Tests for _skewed_gaussian_kernel."""
+
+    def test_peaks_at_peak_lbt(self):
+        """Kernel peaks near the specified peak lookback time."""
+        age = jnp.linspace(1e8, 1e10, 5000)
+        peak_lbt = 5e9
+        kernel = _skewed_gaussian_kernel(age, peak_lbt=peak_lbt, width=1e9, skew=0.0)
+        peak_idx = jnp.argmax(kernel)
+        assert abs(float(age[peak_idx]) - peak_lbt) / peak_lbt < 0.05
+
+    def test_symmetric_when_skew_zero(self):
+        """Kernel is symmetric about peak when skew=0."""
+        peak = 5e9
+        dt = 1e9
+        val_left = _skewed_gaussian_kernel(
+            jnp.array(peak - dt), peak_lbt=peak, width=1e9, skew=0.0
+        )
+        val_right = _skewed_gaussian_kernel(
+            jnp.array(peak + dt), peak_lbt=peak, width=1e9, skew=0.0
+        )
+        assert_allclose(float(val_left), float(val_right), rtol=1e-10)
+
+    def test_nonnegative(self):
+        """Kernel values are non-negative (it's an exponential)."""
+        age = jnp.logspace(6, 10, 500)
+        kernel = _skewed_gaussian_kernel(age, peak_lbt=3e9, width=1e9, skew=0.5)
+        assert jnp.all(kernel >= 0)
+
+
+# ---------------------------------------------------------------------------
+# Double Power Law (legacy + registry)
+# ---------------------------------------------------------------------------
 
 
 class TestDoublePowerlaw:
@@ -29,14 +112,12 @@ class TestDoublePowerlaw:
         sfr = double_powerlaw(t, alpha=2.0, beta=2.0, tau=tau, norm=10.0)
         peak_idx = jnp.argmax(sfr)
         peak_t = t[peak_idx]
-        # Peak should be within factor of 2 of tau
         assert 0.5 * tau < float(peak_t) < 2.0 * tau
 
     def test_peak_value_equals_norm(self):
         """At the exact peak (symmetric case), SFR = norm / 2."""
         tau = 1e9
         sfr_at_tau = double_powerlaw(jnp.array(tau), alpha=1.0, beta=1.0, tau=tau, norm=10.0)
-        # SFR(tau) = norm / (1^alpha + 1^(-beta)) = norm / 2
         assert_allclose(float(sfr_at_tau), 5.0, rtol=1e-10)
 
     def test_falling_at_late_times(self):
@@ -61,8 +142,254 @@ class TestDoublePowerlaw:
         assert jnp.isfinite(grads)
 
 
+class TestDpl:
+    """Tests for the registry-compatible DPL with log_peak_sfr."""
+
+    def test_matches_double_powerlaw(self):
+        """dpl(log_peak_sfr=1) should match double_powerlaw(norm=10)."""
+        t = jnp.logspace(6, 10, 200)
+        sfr_old = double_powerlaw(t, alpha=1.5, beta=1.0, tau=3e9, norm=10.0)
+        sfr_new = dpl(t, alpha=1.5, beta=1.0, tau=3e9, log_peak_sfr=1.0)
+        assert_allclose(sfr_old, sfr_new, rtol=1e-10)
+
+    def test_jit_and_grad(self):
+        """JIT-compatible and differentiable."""
+        t = jnp.logspace(6, 10, 100)
+        fn = jax.jit(dpl)
+        sfr = fn(t, 1.0, 1.0, 1e9, 1.0)
+        assert jnp.all(jnp.isfinite(sfr))
+
+        grad_fn = jax.grad(lambda lp: jnp.sum(dpl(t, 1.0, 1.0, 1e9, lp)))
+        g = grad_fn(1.0)
+        assert jnp.isfinite(g)
+
+
+# ---------------------------------------------------------------------------
+# tsnorm / snorm / norm family
+# ---------------------------------------------------------------------------
+
+
+class TestTsnorm:
+    """Tests for truncated skew-normal SFH."""
+
+    def test_positive_output(self):
+        """SFR is non-negative."""
+        t = jnp.logspace(6, 10, 500)
+        sfr = tsnorm(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=3.0)
+        assert jnp.all(sfr >= 0)
+
+    def test_peak_near_peak_lbt(self):
+        """SFR peaks near the specified lookback time."""
+        t = jnp.logspace(6, 10, 5000)
+        peak_lbt = 5e9
+        sfr = tsnorm(t, log_peak_sfr=1.0, peak_lbt=peak_lbt, width=2e9, skew=0.0, trunc=5.0)
+        peak_t = float(t[jnp.argmax(sfr)])
+        assert abs(peak_t - peak_lbt) / peak_lbt < 0.2
+
+    def test_truncation_suppresses(self):
+        """With strong truncation, SFR at present (small t) is suppressed."""
+        t = jnp.logspace(6, 10, 500)
+        sfr_no_trunc = snorm(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0)
+        sfr_trunc = tsnorm(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=2.0)
+        # Truncated should be <= untruncated
+        assert jnp.all(sfr_trunc <= sfr_no_trunc + 1e-10)
+
+    def test_jit_and_grad(self):
+        """JIT-compatible and differentiable."""
+        t = jnp.logspace(6, 10, 100)
+        fn = jax.jit(tsnorm)
+        sfr = fn(t, 1.0, 5e9, 2e9, 0.0, 3.0)
+        assert jnp.all(jnp.isfinite(sfr))
+
+        grad_fn = jax.grad(lambda lp: jnp.sum(tsnorm(t, lp, 5e9, 2e9, 0.0, 3.0)))
+        g = grad_fn(1.0)
+        assert jnp.isfinite(g)
+
+
+class TestSnorm:
+    """Tests for skew-normal SFH."""
+
+    def test_nonnegative(self):
+        """SFR is non-negative."""
+        t = jnp.logspace(6, 10, 500)
+        sfr = snorm(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.3)
+        assert jnp.all(sfr >= 0)
+
+    def test_skew_changes_shape(self):
+        """Non-zero skew changes the SFH shape (asymmetry)."""
+        t = jnp.logspace(6, 10, 5000)
+        sfr_sym = snorm(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0)
+        sfr_skew = snorm(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.8)
+        # The shapes should differ (not identical arrays)
+        assert not jnp.allclose(sfr_sym, sfr_skew, rtol=0.01)
+
+
+class TestNorm:
+    """Tests for normal (Gaussian) SFH."""
+
+    def test_is_snorm_with_zero_skew(self):
+        """norm is identical to snorm(skew=0)."""
+        t = jnp.logspace(6, 10, 300)
+        sfr_norm = norm(t, log_peak_sfr=1.0, peak_lbt=4e9, width=1e9)
+        sfr_snorm = snorm(t, log_peak_sfr=1.0, peak_lbt=4e9, width=1e9, skew=0.0)
+        assert_allclose(sfr_norm, sfr_snorm, rtol=1e-10)
+
+
+# ---------------------------------------------------------------------------
+# lnorm (log-normal)
+# ---------------------------------------------------------------------------
+
+
+class TestLnorm:
+    """Tests for log-normal SFH."""
+
+    def test_nonnegative(self):
+        """SFR is non-negative."""
+        t = jnp.logspace(6, 10, 500)
+        sfr = lnorm(t, log_peak_sfr=1.0, peak_lbt=3e9, width=0.5)
+        assert jnp.all(sfr >= 0)
+
+    def test_peak_in_log_space(self):
+        """Peak should be near peak_lbt."""
+        t = jnp.logspace(6, 10, 5000)
+        sfr = lnorm(t, log_peak_sfr=1.0, peak_lbt=1e9, width=0.3)
+        peak_t = float(t[jnp.argmax(sfr)])
+        assert abs(jnp.log10(peak_t) - jnp.log10(1e9)) < 0.5
+
+    def test_asymmetric_in_linear(self):
+        """Log-normal is asymmetric in linear time."""
+        t = jnp.logspace(6, 10, 5000)
+        peak_lbt = 3e9
+        sfr = lnorm(t, log_peak_sfr=1.0, peak_lbt=peak_lbt, width=0.5)
+        peak_idx = jnp.argmax(sfr)
+        # Sum of SFR below peak vs above peak (in linear time) should differ
+        sum_below = jnp.sum(sfr[:peak_idx])
+        sum_above = jnp.sum(sfr[peak_idx:])
+        assert sum_below != pytest.approx(float(sum_above), rel=0.1)
+
+
+# ---------------------------------------------------------------------------
+# constant, exponential, delayed-exponential
+# ---------------------------------------------------------------------------
+
+
+class TestConstantSFH:
+    """Tests for constant SFH with start/end window."""
+
+    def test_flat_in_range(self):
+        """SFR equals 10^log_sfr within the window."""
+        t = jnp.linspace(1e6, 10e9, 500)
+        sfr = constant_sfh(t, log_sfr=1.0, start=0.0, end=AGEMAX_YR)
+        # All points should be ~10
+        assert_allclose(sfr, 10.0, rtol=1e-10)
+
+    def test_zero_outside(self):
+        """SFR is zero outside the window."""
+        t = jnp.array([0.5e9, 1e9, 5e9, 10e9, 15e9])
+        sfr = constant_sfh(t, log_sfr=1.0, start=1e9, end=10e9)
+        assert float(sfr[0]) == 0.0  # before start
+        assert float(sfr[-1]) == 0.0  # after end
+        assert float(sfr[2]) == 10.0  # inside
+
+    def test_correct_shape(self):
+        """Output shape matches input."""
+        t = jnp.logspace(6, 10, 42)
+        sfr = constant_sfh(t, log_sfr=0.0)
+        assert sfr.shape == (42,)
+
+
+class TestExponentialSFH:
+    """Tests for declining exponential SFH."""
+
+    def test_peaks_at_start(self):
+        """SFR is highest at the start time."""
+        t = jnp.linspace(0, 10e9, 1000)
+        sfr = exponential_sfh(t, log_peak_sfr=1.0, tau=1e9, start=0.0)
+        assert jnp.argmax(sfr) < 10  # near t=0
+
+    def test_declining(self):
+        """SFR declines with time after start."""
+        t = jnp.array([0.0, 1e9, 2e9, 5e9, 10e9])
+        sfr = exponential_sfh(t, log_peak_sfr=1.0, tau=1e9, start=0.0)
+        assert jnp.all(jnp.diff(sfr) <= 0)
+
+    def test_zero_before_start(self):
+        """SFR is zero before start."""
+        sfr = exponential_sfh(jnp.array(0.5e9), log_peak_sfr=1.0, tau=1e9, start=1e9)
+        assert float(sfr) == 0.0
+
+
+class TestDelayedExponentialSFH:
+    """Tests for delayed exponential SFH."""
+
+    def test_peaks_at_start_plus_tau(self):
+        """SFR peaks at t = start + tau."""
+        start = 1e9
+        tau = 2e9
+        t = jnp.linspace(start, 10e9, 5000)
+        sfr = delayed_exponential_sfh(t, log_peak_sfr=1.0, tau=tau, start=start)
+        peak_t = float(t[jnp.argmax(sfr)])
+        expected_peak = start + tau
+        assert abs(peak_t - expected_peak) / expected_peak < 0.05
+
+    def test_peak_value_is_peak_sfr(self):
+        """SFR at peak should equal 10^log_peak_sfr."""
+        start = 0.0
+        tau = 1e9
+        t = jnp.array(start + tau)
+        sfr = delayed_exponential_sfh(t, log_peak_sfr=1.0, tau=tau, start=start)
+        assert_allclose(float(sfr), 10.0, rtol=1e-6)
+
+    def test_zero_before_start(self):
+        """SFR is zero before start."""
+        sfr = delayed_exponential_sfh(jnp.array(0.5e9), log_peak_sfr=1.0, tau=1e9, start=1e9)
+        assert float(sfr) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Burst (triweight)
+# ---------------------------------------------------------------------------
+
+
+class TestTriweightBurst:
+    """Tests for triweight burst kernel."""
+
+    def test_compact_support(self):
+        """Kernel is zero far from the peak."""
+        t = jnp.array([1e2, 1e12])  # very young and very old
+        kernel = triweight_burst(t, log_tpeak_myr=2.0, log_tmax_myr=1.0)
+        assert_allclose(kernel, 0.0, atol=1e-10)
+
+    def test_nonnegative(self):
+        """Kernel is non-negative everywhere."""
+        t = jnp.logspace(5, 11, 1000)
+        kernel = triweight_burst(t, log_tpeak_myr=2.0, log_tmax_myr=1.0)
+        assert jnp.all(kernel >= 0)
+
+    def test_peaks_at_tpeak(self):
+        """Kernel peaks near the specified log_tpeak_myr."""
+        t = jnp.logspace(5, 11, 10000)
+        log_tpeak = 2.0  # 100 Myr
+        kernel = triweight_burst(t, log_tpeak_myr=log_tpeak, log_tmax_myr=1.0)
+        peak_t = float(t[jnp.argmax(kernel)])
+        peak_log_myr = jnp.log10(peak_t / 1e6)
+        assert abs(float(peak_log_myr) - log_tpeak) < 0.3
+
+    def test_normalization_prefactor(self):
+        """Kernel at peak should be close to 35/96."""
+        # At the peak (x=0), kernel = (35/96) * (1 - 0)^3 = 35/96
+        t_peak = jnp.array(10.0 ** (2.0 + 6.0))  # 100 Myr in years
+        kernel = triweight_burst(t_peak, log_tpeak_myr=2.0, log_tmax_myr=1.0)
+        assert_allclose(float(kernel), 35.0 / 96.0, rtol=0.01)
+
+
+# ---------------------------------------------------------------------------
+# Legacy functions
+# ---------------------------------------------------------------------------
+
+
 class TestDelayedTau:
-    """Tests for delayed-tau SFH."""
+    """Tests for delayed-tau SFH (legacy)."""
 
     def test_peaks_at_tau(self):
         """SFR peaks at t = tau (analytic)."""
@@ -79,17 +406,79 @@ class TestDelayedTau:
         assert jnp.all(sfr > 0)
 
 
-class TestConstantSFH:
-    """Tests for constant SFH."""
+# ---------------------------------------------------------------------------
+# Cross-cutting: all models JIT and grad
+# ---------------------------------------------------------------------------
 
-    def test_is_constant(self):
-        """Output equals norm for all times."""
+
+_TSNORM_KW = {
+    "log_peak_sfr": 1.0,
+    "peak_lbt": 5e9,
+    "width": 2e9,
+    "skew": 0.0,
+    "trunc": 3.0,
+}
+_SNORM_KW = {
+    "log_peak_sfr": 1.0,
+    "peak_lbt": 5e9,
+    "width": 2e9,
+    "skew": 0.0,
+}
+
+
+class TestAllModelsJitAndGrad:
+    """Verify JIT and gradient support for all registry models."""
+
+    @pytest.mark.parametrize(
+        "fn,kwargs",
+        [
+            (tsnorm, _TSNORM_KW),
+            (snorm, _SNORM_KW),
+            (norm, {"log_peak_sfr": 1.0, "peak_lbt": 5e9, "width": 2e9}),
+            (lnorm, {"log_peak_sfr": 1.0, "peak_lbt": 3e9, "width": 0.5}),
+            (dpl, {"alpha": 1.5, "beta": 1.0, "tau": 3e9, "log_peak_sfr": 1.0}),
+            (constant_sfh, {"log_sfr": 1.0, "start": 0.0, "end": AGEMAX_YR}),
+            (exponential_sfh, {"log_peak_sfr": 1.0, "tau": 1e9, "start": 0.0}),
+            (delayed_exponential_sfh, {"log_peak_sfr": 1.0, "tau": 1e9, "start": 0.0}),
+        ],
+    )
+    def test_jit(self, fn, kwargs):
+        """All models are JIT-compatible."""
         t = jnp.logspace(6, 10, 100)
-        sfr = constant_sfh(t, norm=5.0)
-        assert_allclose(sfr, 5.0, rtol=1e-10)
+        jit_fn = jax.jit(lambda t_: fn(t_, **kwargs))
+        sfr = jit_fn(t)
+        assert jnp.all(jnp.isfinite(sfr))
+        assert sfr.shape == (100,)
 
-    def test_correct_shape(self):
-        """Output shape matches input."""
-        t = jnp.logspace(6, 10, 42)
-        sfr = constant_sfh(t, norm=1.0)
-        assert sfr.shape == (42,)
+    @pytest.mark.parametrize(
+        "fn,kwargs,grad_key",
+        [
+            (tsnorm, _TSNORM_KW, "log_peak_sfr"),
+            (snorm, _SNORM_KW, "log_peak_sfr"),
+            (dpl, {"alpha": 1.5, "beta": 1.0, "tau": 3e9, "log_peak_sfr": 1.0}, "log_peak_sfr"),
+            (exponential_sfh, {"log_peak_sfr": 1.0, "tau": 1e9, "start": 0.0}, "log_peak_sfr"),
+        ],
+    )
+    def test_grad(self, fn, kwargs, grad_key):
+        """All models have finite gradients for key parameters."""
+        t = jnp.logspace(6, 10, 100)
+
+        def loss(val):
+            kw = dict(kwargs)
+            kw[grad_key] = val
+            return jnp.sum(fn(t, **kw))
+
+        g = jax.grad(loss)(kwargs[grad_key])
+        assert jnp.isfinite(g)
+
+    def test_no_nan_at_edges(self):
+        """No NaN at extreme ages."""
+        t = jnp.array([1e5, AGEMAX_YR])
+        for fn, kw in [
+            (tsnorm, _TSNORM_KW),
+            (snorm, _SNORM_KW),
+            (lnorm, {"log_peak_sfr": 1.0, "peak_lbt": 3e9, "width": 0.5}),
+            (dpl, {"alpha": 1.5, "beta": 1.0, "tau": 3e9, "log_peak_sfr": 1.0}),
+        ]:
+            sfr = fn(t, **kw)
+            assert jnp.all(jnp.isfinite(sfr)), f"NaN in {fn.__name__}"

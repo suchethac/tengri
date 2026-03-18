@@ -5,18 +5,28 @@ Model provides a clean API for:
 - Mock galaxy generation (single and batch)
 - Convenience fitting (delegates to Fitter)
 
-The Model translates between the user-facing parameter names (sfh_alpha,
-psd_sigma, etc.) and the internal names used by the low-level functions
-(alpha, sigma_ps, etc.), handling unit conversions automatically.
+The Model translates between the user-facing parameter names and the
+internal names used by the low-level functions, handling unit conversions
+automatically. SFH computation is dispatched through the registry-driven
+composed function, eliminating separate stochastic/parametric code paths.
 
-Usage:
+Usage::
+
     from diffsed import Model, ParamSpec, Uniform, load_ssp_data, load_filter_set
 
     ssp = load_ssp_data("data/ssp.h5")
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    spec = ParamSpec(sfh_alpha=Uniform(0.5, 3.0), ..., redshift=0.1)
+    spec = ParamSpec(
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.5, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        sfh_field_psd_sigma=Uniform(0.01, 1.0),
+        sfh_field_psd_tau_myr=Uniform(10, 500),
+        redshift=0.1,
+    )
     model = Model(spec, ssp, filters=filters)
-
     params = spec.sample(jax.random.PRNGKey(0))
     photometry = model.predict_photometry(params)
 """
@@ -31,9 +41,7 @@ import jax.numpy as jnp
 from diffsed.models.dust.charlot_fall import charlot_fall, charlot_fall_at_wavelengths
 from diffsed.models.observation.photometry import ab_mag_from_flux, compute_flux_density
 from diffsed.models.observation.spectroscopy import compute_spectrum
-from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
-from diffsed.models.sfh.mean_sfh import double_powerlaw
-from diffsed.models.sfh.psd_models import drw_variance
+from diffsed.models.sfh.registry import compute_field_gp, resolve_sfh
 from diffsed.models.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
@@ -53,22 +61,44 @@ from diffsed.utils.grid import (
 )
 
 # ---------------------------------------------------------------------------
-# Parameter name mapping: public → (internal, unit_scale, offset)
-#
-# Conversion: internal = public * scale + offset
+# Non-SFH parameter mapping: public → (internal, unit_scale, offset)
 # ---------------------------------------------------------------------------
 
 # Solar metallicity: log10(Zsun) = log10(0.0142) ≈ -1.848 (Asplund 2009)
 LOG10_ZSUN = -1.8477116556169435
 
+_NON_SFH_PARAM_MAP = {
+    "met_logzsol": ("log_z", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
+    "dust_tau_bc": ("tau_v1", 1.0, 0.0),
+    "dust_tau_diff": ("tau_v2", 1.0, 0.0),
+    "dust_slope": ("dust_n", 1.0, 0.0),
+    "redshift": ("redshift", 1.0, 0.0),
+}
+
+
+def _build_param_map(mean_sfh_type):
+    """Build complete PARAM_MAP from SFH registry + non-SFH params.
+
+    Returns
+    -------
+    dict
+        public_name -> (internal_name, scale, offset)
+    """
+    _, _, sfh_param_map, _ = resolve_sfh(mean_sfh_type)
+    result = dict(sfh_param_map)
+    result.update(_NON_SFH_PARAM_MAP)
+    return result
+
+
+# Legacy module-level PARAM_MAP for backward compatibility with imports
 PARAM_MAP = {
     "sfh_alpha": ("alpha", 1.0, 0.0),
     "sfh_beta": ("beta", 1.0, 0.0),
-    "sfh_tau_peak_gyr": ("tau_sfh", 1e9, 0.0),  # Gyr → yr
+    "sfh_tau_peak_gyr": ("tau_sfh", 1e9, 0.0),
     "sfh_peak_sfr": ("sfr_norm", 1.0, 0.0),
     "psd_sigma": ("sigma_ps", 1.0, 0.0),
-    "psd_tau_myr": ("tau_ps", 1e6, 0.0),  # Myr → yr
-    "met_logzsol": ("log_z", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
+    "psd_tau_myr": ("tau_ps", 1e6, 0.0),
+    "met_logzsol": ("log_z", 1.0, LOG10_ZSUN),
     "dust_tau_bc": ("tau_v1", 1.0, 0.0),
     "dust_tau_diff": ("tau_v2", 1.0, 0.0),
     "dust_slope": ("dust_n", 1.0, 0.0),
@@ -98,6 +128,10 @@ class MockData(NamedTuple):
 class Model:
     """Differentiable forward model with clean parameter API.
 
+    The SFH is computed via a registry-driven composed function that
+    handles additive smooth models, burst mixture, and GP field
+    modulation in a single call.
+
     Parameters
     ----------
     spec : ParamSpec
@@ -121,11 +155,9 @@ class Model:
         self.filter_trans = None
         if filters is not None:
             if isinstance(filters, tuple) and len(filters) == 3:
-                # Output of load_filter_set(): (waves_list, trans_list, curves_list)
                 self.filter_waves = filters[0]
                 self.filter_trans = filters[1]
             elif isinstance(filters, (list, tuple)):
-                # List of FilterCurve namedtuples
                 self.filter_waves = [f.wave for f in filters]
                 self.filter_trans = [f.trans for f in filters]
             else:
@@ -145,6 +177,17 @@ class Model:
         self.age_yr = log_age_to_age_yr(self.log_age_grid)
         self._n_grid = n_grid
 
+        # Resolve SFH from registry
+        sfh_fn, _sfh_params, sfh_param_map, sfh_settings = resolve_sfh(spec.mean_sfh_type)
+        self._sfh_fn = sfh_fn
+        self._sfh_internal_names = {v[0] for v in sfh_param_map.values()}
+        self._sfh_settings = sfh_settings
+        self._param_map = _build_param_map(spec.mean_sfh_type)
+
+        # Field settings
+        self._has_field = spec.stochastic
+        self._field_model = sfh_settings.get("sfh_field_model", "drw")
+
         # Precompute luminosity distance if redshift is fixed
         redshift_dist = spec.get_distribution("redshift")
         if redshift_dist.is_fixed:
@@ -155,9 +198,6 @@ class Model:
             self._z_fixed = None
 
         # Photometry precomputation (Zacharegkas+2025 Section 3)
-        # When redshift is fixed and filters are present, precompute
-        # SSP broadband fluxes to eliminate wavelength integrals from
-        # the inference loop. Gives 30-50x speedup.
         self._precomp = None
         if precompute is True and self._z_fixed is not None and self.filter_waves is not None:
             self._precomp = precompute_photometry(
@@ -177,24 +217,128 @@ class Model:
 
         Merges user-provided values with fixed defaults from the spec.
         Conversion: internal = public * scale + offset
+
+        Also accepts legacy parameter names (sfh_alpha, psd_sigma, etc.)
+        via reverse alias lookup.
         """
         internal = {}
-        for pub_name, (int_name, scale, offset) in PARAM_MAP.items():
+        for pub_name, (int_name, scale, offset) in self._param_map.items():
             if pub_name in params:
                 internal[int_name] = params[pub_name] * scale + offset
             else:
-                # Fall back to fixed value from spec
-                dist = self.spec.get_distribution(pub_name)
-                if dist.is_fixed:
-                    internal[int_name] = dist.bounds[0] * scale + offset
+                # Check legacy alias: find old name that maps to pub_name
+                legacy_val = self._find_legacy_param(params, pub_name)
+                if legacy_val is not None:
+                    internal[int_name] = legacy_val * scale + offset
                 else:
-                    raise KeyError(f"Free parameter '{pub_name}' not found in params dict")
+                    # Fall back to fixed value from spec
+                    try:
+                        dist = self.spec.get_distribution(pub_name)
+                        if dist.is_fixed:
+                            internal[int_name] = dist.bounds[0] * scale + offset
+                        else:
+                            raise KeyError(f"Free parameter '{pub_name}' not found in params dict")
+                    except KeyError as err:
+                        raise KeyError(
+                            f"Parameter '{pub_name}' not found in params dict and not in spec"
+                        ) from err
 
-        # Handle psd_xi
-        if self.spec.stochastic and "psd_xi" in params:
-            internal["xi"] = params["psd_xi"]
+        # Handle field latent vector (both new and legacy names)
+        if self._has_field:
+            if "sfh_field_xi" in params:
+                internal["xi"] = params["sfh_field_xi"]
+            elif "psd_xi" in params:
+                internal["xi"] = params["psd_xi"]
 
         return internal
+
+    @staticmethod
+    def _find_legacy_param(params, new_name):
+        """Check if a legacy param name is in params that maps to new_name.
+
+        TODO(future): Remove once all callers use new parameter names.
+        Legacy callers (fitter.py, hierarchical.py, notebooks) still pass
+        old-style param names like sfh_alpha, psd_sigma, etc.
+        """
+        # Reverse map: new_name -> old_name
+        _REVERSE_ALIASES = {
+            "sfh_dpl_alpha": "sfh_alpha",
+            "sfh_dpl_beta": "sfh_beta",
+            "sfh_dpl_tau_gyr": "sfh_tau_peak_gyr",
+            "sfh_dpl_log_peak_sfr": "sfh_peak_sfr",
+            "sfh_field_psd_sigma": "psd_sigma",
+            "sfh_field_psd_tau_myr": "psd_tau_myr",
+        }
+        old_name = _REVERSE_ALIASES.get(new_name)
+        if old_name and old_name in params:
+            return params[old_name]
+        return None
+
+    def _compute_sfr(self, p):
+        """Compute SFR via the composed SFH function.
+
+        Single dispatch point for all SFH computation — replaces
+        the old stochastic/parametric if/else branches.
+
+        Parameters
+        ----------
+        p : dict
+            Internal parameter dict from _get_internal_params().
+
+        Returns
+        -------
+        array, shape (n_grid,)
+            SFR(t) in Msun/yr on the log-age grid.
+        """
+        # Build kwargs for the composed SFH function
+        kw = {k: v for k, v in p.items() if k in self._sfh_internal_names}
+
+        # If field is present, compute GP and pass to composed fn
+        if self._has_field and "xi" in p:
+            gp_x, k0_half = compute_field_gp(
+                xi=p["xi"],
+                psd_sigma=p["psd_sigma"],
+                psd_tau_myr=p["psd_tau_myr"],
+                n_grid=self._n_grid,
+                d_log_age=float(self.d_log_age),
+                field_model=self._field_model,
+            )
+            kw["gp_x"] = gp_x
+            kw["k0_half"] = k0_half
+
+        return self._sfh_fn(self.age_yr, **kw)
+
+    def _compute_sfr_mean_and_full(self, p):
+        """Compute both mean (no GP) and full (with GP) SFR.
+
+        Used by predict_sfh which needs to return both.
+
+        Returns
+        -------
+        sfr_mean : array
+            SFR without GP modulation.
+        sfr_full : array
+            SFR with GP modulation (same as sfr_mean if no field).
+        """
+        kw = {k: v for k, v in p.items() if k in self._sfh_internal_names}
+        sfr_mean = self._sfh_fn(self.age_yr, **kw)
+
+        if self._has_field and "xi" in p:
+            gp_x, k0_half = compute_field_gp(
+                xi=p["xi"],
+                psd_sigma=p["psd_sigma"],
+                psd_tau_myr=p["psd_tau_myr"],
+                n_grid=self._n_grid,
+                d_log_age=float(self.d_log_age),
+                field_model=self._field_model,
+            )
+            kw["gp_x"] = gp_x
+            kw["k0_half"] = k0_half
+            sfr_full = self._sfh_fn(self.age_yr, **kw)
+        else:
+            sfr_full = sfr_mean
+
+        return sfr_mean, sfr_full
 
     def _get_redshift(self, params):
         """Get redshift value from params or fixed value."""
@@ -229,32 +373,7 @@ class Model:
             Rest-frame SED in erg/s/Hz.
         """
         p = self._get_internal_params(params)
-
-        if self.spec.stochastic:
-            # GP stochastic path
-            sqrt_power = compute_sqrt_power_drw(
-                self._n_grid, float(self.d_log_age), p["sigma_ps"], p["tau_ps"]
-            )
-            gp_x = gp_from_xi(p["xi"], sqrt_power, self._n_grid)
-            k0_half = drw_variance(p["sigma_ps"]) / 2.0
-
-            sfr_mean = double_powerlaw(
-                self.age_yr,
-                alpha=p["alpha"],
-                beta=p["beta"],
-                tau=p["tau_sfh"],
-                norm=p["sfr_norm"],
-            )
-            sfr = sfr_mean * jnp.exp(gp_x - k0_half)
-        else:
-            # Pure parametric path — no GP
-            sfr = double_powerlaw(
-                self.age_yr,
-                alpha=p["alpha"],
-                beta=p["beta"],
-                tau=p["tau_sfh"],
-                norm=p["sfr_norm"],
-            )
+        sfr = self._compute_sfr(p)
 
         # Interpolate SFR to SSP age grid
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
@@ -276,7 +395,6 @@ class Model:
             n_slope=p["dust_n"],
         )
 
-        # Compose CSP SED
         return compute_csp_sed(weights, ssp_flux_at_z, dust_atten)
 
     def predict_photometry(self, params):
@@ -289,8 +407,7 @@ class Model:
         Parameters
         ----------
         params : dict
-            Parameter values (public names). Must include 'redshift'
-            if redshift is free.
+            Parameter values (public names).
 
         Returns
         -------
@@ -300,11 +417,9 @@ class Model:
         if self.filter_waves is None:
             raise ValueError("No filters set. Pass filters to Model().")
 
-        # Fast path: precomputed SSP photometry (no wavelength integrals)
         if self._precomp is not None:
             return self._predict_photometry_fast(params)
 
-        # Exact path: full wavelength integration per filter
         sed = self.predict_sed(params)
         z = self._get_redshift(params)
         dl_cm = self._get_dl_cm(params)
@@ -323,50 +438,18 @@ class Model:
         return jnp.array(fluxes)
 
     def _predict_photometry_fast(self, params):
-        """Fast photometry using precomputed SSP broadband fluxes.
-
-        Instead of integrating SED × filter × dust over wavelength,
-        evaluates dust at filter effective wavelengths and uses a
-        simple weighted sum. ~30-50x faster than exact computation.
-
-        See Zacharegkas, Hearin & Benson (2025) Section 3, Eq. 6-7.
-        """
+        """Fast photometry using precomputed SSP broadband fluxes."""
         p = self._get_internal_params(params)
         precomp = self._precomp
-
-        # 1. Compute SFH weights (same as predict_sed)
-        if self.spec.stochastic and "xi" in p:
-            sqrt_power = compute_sqrt_power_drw(
-                self._n_grid, float(self.d_log_age), p["sigma_ps"], p["tau_ps"]
-            )
-            gp_x = gp_from_xi(p["xi"], sqrt_power, self._n_grid)
-            k0_half = drw_variance(p["sigma_ps"]) / 2.0
-            sfr_mean = double_powerlaw(
-                self.age_yr,
-                alpha=p["alpha"],
-                beta=p["beta"],
-                tau=p["tau_sfh"],
-                norm=p["sfr_norm"],
-            )
-            sfr = sfr_mean * jnp.exp(gp_x - k0_half)
-        else:
-            sfr = double_powerlaw(
-                self.age_yr,
-                alpha=p["alpha"],
-                beta=p["beta"],
-                tau=p["tau_sfh"],
-                norm=p["sfr_norm"],
-            )
+        sfr = self._compute_sfr(p)
 
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
         weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
 
-        # 2. Interpolate precomputed SSP photometry to target metallicity
         ssp_phot_at_z = interpolate_ssp_phot_metallicity(
             precomp.ssp_phot, self.ssp_data.ssp_lgmet, p["log_z"]
         )
 
-        # 3. Evaluate dust at filter effective wavelengths (rest-frame)
         dust_at_eff = charlot_fall_at_wavelengths(
             precomp.effective_wavelengths_rest,
             self.ssp_ages_yr,
@@ -375,7 +458,6 @@ class Model:
             n_slope=p["dust_n"],
         )
 
-        # 4. Fast photometry: weighted sum (no wavelength integrals)
         return fast_photometry(weights, ssp_phot_at_z, dust_at_eff, precomp.flux_scale)
 
     def predict_spectrum(self, params, wave_obs):
@@ -422,24 +504,7 @@ class Model:
             "sfr_full": full SFH including GP (Msun/yr), shape (n_linear,)
         """
         p = self._get_internal_params(params)
-
-        sfr_mean = double_powerlaw(
-            self.age_yr,
-            alpha=p["alpha"],
-            beta=p["beta"],
-            tau=p["tau_sfh"],
-            norm=p["sfr_norm"],
-        )
-
-        if self.spec.stochastic and "xi" in p:
-            sqrt_power = compute_sqrt_power_drw(
-                self._n_grid, float(self.d_log_age), p["sigma_ps"], p["tau_ps"]
-            )
-            gp_x = gp_from_xi(p["xi"], sqrt_power, self._n_grid)
-            k0_half = drw_variance(p["sigma_ps"]) / 2.0
-            sfr_full = sfr_mean * jnp.exp(gp_x - k0_half)
-        else:
-            sfr_full = sfr_mean
+        sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p)
 
         t_gyr_mean, sfr_mean_lin = interpolate_to_linear_time(
             self.log_age_grid, sfr_mean, n_linear
@@ -469,31 +534,12 @@ class Model:
             "ssfr": specific SFR (yr^-1)
         """
         p = self._get_internal_params(params)
+        sfr = self._compute_sfr(p)
 
-        sfr_mean = double_powerlaw(
-            self.age_yr,
-            alpha=p["alpha"],
-            beta=p["beta"],
-            tau=p["tau_sfh"],
-            norm=p["sfr_norm"],
-        )
-
-        if self.spec.stochastic and "xi" in p:
-            sqrt_power = compute_sqrt_power_drw(
-                self._n_grid, float(self.d_log_age), p["sigma_ps"], p["tau_ps"]
-            )
-            gp_x = gp_from_xi(p["xi"], sqrt_power, self._n_grid)
-            k0_half = drw_variance(p["sigma_ps"]) / 2.0
-            sfr = sfr_mean * jnp.exp(gp_x - k0_half)
-        else:
-            sfr = sfr_mean
-
-        # Interpolate to SSP grid and compute mass
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
         weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
         stellar_mass = jnp.sum(weights)
 
-        # Average SFR over recent time windows
         mask_100myr = self.age_yr <= 1e8
         sfr_100myr = jnp.where(
             jnp.sum(mask_100myr) > 0,
@@ -517,21 +563,7 @@ class Model:
         }
 
     def predict_magnitudes(self, params):
-        """Compute observed AB magnitudes through all filters.
-
-        Uses DSPS's calc_obs_mag for cosmologically correct magnitudes.
-        Falls back to our own computation if DSPS is unavailable.
-
-        Parameters
-        ----------
-        params : dict
-            Parameter values.
-
-        Returns
-        -------
-        array, shape (n_filters,)
-            Observed AB magnitudes.
-        """
+        """Compute observed AB magnitudes through all filters."""
         if self.filter_waves is None:
             raise ValueError("No filters set.")
 
@@ -539,7 +571,6 @@ class Model:
             from dsps import calc_obs_mag
             from dsps.cosmology import DEFAULT_COSMOLOGY
 
-            # DSPS expects rest-frame SED in Lsun/Hz
             sed_lsun = self.predict_luminosity(params)
             z = self._get_redshift(params)
             cosmo = DEFAULT_COSMOLOGY
@@ -561,63 +592,34 @@ class Model:
             return jnp.array(mags)
 
         except ImportError:
-            # Fallback: use our own flux → AB mag conversion
             flux = self.predict_photometry(params)
             return ab_mag_from_flux(flux)
 
     def predict_luminosity(self, params):
         """Compute rest-frame luminosity SED in solar units.
 
-        Parameters
-        ----------
-        params : dict
-            Parameter values.
-
         Returns
         -------
         array, shape (n_wave,)
             Rest-frame luminosity in Lsun/Hz.
-            This is the standard unit used by DSPS/FSPS.
         """
         LSUN_CGS = 3.828e33  # erg/s (IAU 2015)
-        sed_erg = self.predict_sed(params)  # erg/s/Hz
+        sed_erg = self.predict_sed(params)
         return sed_erg / LSUN_CGS
 
     def plot_sfh_posterior(
         self, posterior, true_params=None, ax=None, n_draws=50, color="C0", label="Posterior"
     ):
-        """Plot posterior SFH with percentile fill and sample lines.
-
-        Parameters
-        ----------
-        posterior : Posterior
-            Inference result with samples.
-        true_params : dict, optional
-            True parameter values (for truth overlay).
-        ax : matplotlib Axes, optional
-            Axes to plot on.
-        n_draws : int
-            Number of sample lines to draw.
-        color : str
-            Color for posterior.
-        label : str
-            Label for the posterior mean line.
-
-        Returns
-        -------
-        ax : matplotlib Axes
-        """
+        """Plot posterior SFH with percentile fill and sample lines."""
         import matplotlib.pyplot as plt
 
         if ax is None:
             _, ax = plt.subplots(figsize=(10, 5))
 
         if posterior.samples is None:
-            # MAP: just plot the point estimate
             sfh = self.predict_sfh(posterior.params)
             ax.plot(sfh["t_gyr"], sfh["sfr_mean"], color=color, lw=2, label=label)
         else:
-            # Compute SFH for all samples
             n_total = len(next(iter(posterior.samples.values())))
             sfh_draws = []
             for i in range(n_total):
@@ -628,26 +630,22 @@ class Model:
 
             import numpy as np
 
-            sfh_arr = np.array(sfh_draws)  # (n_samples, n_linear)
+            sfh_arr = np.array(sfh_draws)
             t_gyr = np.array(self.predict_sfh(posterior.params)["t_gyr"])
 
-            # Percentile fill (16-84%)
             lo = np.percentile(sfh_arr, 16, axis=0)
             hi = np.percentile(sfh_arr, 84, axis=0)
             ax.fill_between(t_gyr, lo, hi, color=color, alpha=0.2)
 
-            # Faint sample lines
             n_show = min(n_draws, n_total)
             indices = np.linspace(0, n_total - 1, n_show, dtype=int)
             for idx in indices:
                 ax.plot(t_gyr, sfh_arr[idx], color=color, alpha=0.1, lw=0.4)
 
-            # Posterior mean
             sfh_mean = self.predict_sfh(posterior.params)
             key = "sfr_full" if self.spec.stochastic else "sfr_mean"
             ax.plot(t_gyr, sfh_mean[key], color=color, lw=2, label=label)
 
-        # Truth overlay
         if true_params is not None:
             sfh_true = self.predict_sfh(true_params)
             key = "sfr_full" if self.spec.stochastic else "sfr_mean"
@@ -659,7 +657,6 @@ class Model:
         ax.set_ylabel(r"SFR (M$_{\odot}$/yr)")
         ax.set_xlim(0, 13.5)
         ax.legend(fontsize=9)
-
         return ax
 
     # -------------------------------------------------------------------
@@ -667,22 +664,7 @@ class Model:
     # -------------------------------------------------------------------
 
     def mock(self, params, snr=20.0, key=None):
-        """Generate mock photometric observation.
-
-        Parameters
-        ----------
-        params : dict
-            Parameter values.
-        snr : float
-            Signal-to-noise ratio per band.
-        key : PRNGKey, optional
-            For noise. If None, return noiseless.
-
-        Returns
-        -------
-        MockData
-            flux_true, flux_obs, noise, params.
-        """
+        """Generate mock photometric observation."""
         flux_true = self.predict_photometry(params)
         noise = flux_true / snr
 
@@ -699,30 +681,10 @@ class Model:
         )
 
     def mock_batch(self, params_batch, snr=20.0, key=None):
-        """Generate batch of mock observations.
-
-        Parameters
-        ----------
-        params_batch : dict
-            Dict of arrays, each with leading batch dimension.
-        snr : float
-            Signal-to-noise ratio per band.
-        key : PRNGKey, optional
-            For noise.
-
-        Returns
-        -------
-        MockData
-            Each field has leading batch dimension.
-        """
-        # Determine batch size from first array
+        """Generate batch of mock observations."""
         first_key = next(iter(params_batch))
         n_batch = params_batch[first_key].shape[0]
 
-        def _single_mock(params_i, noise_key):
-            return self.mock(params_i, snr=snr, key=noise_key)
-
-        # Unbatch params: dict of (n,) arrays → n dicts of scalars
         def _get_single(i):
             return {k: v[i] for k, v in params_batch.items()}
 
@@ -731,8 +693,7 @@ class Model:
         else:
             noise_keys = [None] * n_batch
 
-        # Use Python loop (vmap would require all-JAX mock, which we can add later)
-        results = [_single_mock(_get_single(i), noise_keys[i]) for i in range(n_batch)]
+        results = [self.mock(_get_single(i), snr=snr, key=noise_keys[i]) for i in range(n_batch)]
 
         return MockData(
             flux_true=jnp.stack([r.flux_true for r in results]),
@@ -746,26 +707,7 @@ class Model:
     # -------------------------------------------------------------------
 
     def fit(self, data, noise, method="map", data_type="photometry", **kwargs):
-        """Fit observed data (convenience wrapper around Fitter).
-
-        Parameters
-        ----------
-        data : array
-            Observed data.
-        noise : array
-            1-sigma uncertainties.
-        method : str
-            "map", "nuts", or "geovi".
-        data_type : str
-            "photometry", "spectroscopy", or "joint".
-        **kwargs
-            Passed to Fitter.run().
-
-        Returns
-        -------
-        Posterior
-            Inference results.
-        """
+        """Fit observed data (convenience wrapper around Fitter)."""
         from diffsed.fitter import Fitter
 
         fitter = Fitter(self, data, noise, data_type=data_type)
