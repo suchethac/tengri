@@ -905,11 +905,11 @@ class Fitter:
             return self._run_raytrace(key=key, init_from=init_from, **kwargs)
         elif method == "nuts":
             return self._run_nuts(key=key, init_from=init_from, **kwargs)
-        elif method == "evi":
+        elif method in ("evi", "geovi", "mgvi"):
             return self._run_evi_jit(key=key, init_from=init_from, **kwargs)
-        elif method == "geovi":
+        elif method == "geovi_nifty":
             return self._run_geovi(key=key, init_from=init_from, **kwargs)
-        elif method == "mgvi":
+        elif method == "mgvi_nifty":
             return self._run_geovi(
                 key=key,
                 init_from=init_from,
@@ -919,7 +919,8 @@ class Fitter:
         else:
             raise ValueError(
                 f"Unknown method: {method}. "
-                f"Use 'map', 'raytrace', 'nuts', 'evi', 'geovi', or 'mgvi'."
+                f"Use 'map', 'raytrace', 'nuts', 'evi', 'geovi', 'mgvi', "
+                f"or 'geovi_nifty'/'mgvi_nifty' for the NIFTy backend."
             )
 
     def _run_map(
