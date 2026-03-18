@@ -364,8 +364,9 @@ def main():
         repo_root = script_dir.parent
         input_dir = str(repo_root / "data" / "cloudy_raw")
 
+    dust_suffix = f"_{args.dust.lower()}" if args.dust != "ND" else ""
     output_path = os.path.join(
-        args.output_dir, f"cloudy_grid_{args.isoc}.h5"
+        args.output_dir, f"cloudy_grid_{args.isoc}{dust_suffix}.h5"
     )
 
     convert(input_dir, output_path, args.isoc, args.dust)
