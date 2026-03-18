@@ -52,20 +52,32 @@ class CloudyGridData(NamedTuple):
 def load_cloudy_grid(filepath: str) -> CloudyGridData:
     """Load a diffsed-format CLOUDY grid HDF5 file.
 
+    Following FSPS convention, stores luminosities in log10 space
+    for interpolation accuracy. A floor of 10^{-95} prevents log(0).
+
     Parameters
     ----------
     filepath : str
         Path to cloudy_grid_*.h5 file (from convert_fsps_cloudy_grid.py).
     """
+    _LOG_FLOOR = 1e-95  # FSPS convention to avoid log(0)
+
     with h5py.File(filepath, "r") as f:
+        line_lum_raw = np.array(f["lines/luminosity"][:])
+        cont_lum_raw = np.array(f["continuum/luminosity"][:])
+
+        # Store in log10 space (FSPS convention for interpolation accuracy)
+        line_lum_log = np.log10(line_lum_raw + _LOG_FLOOR)
+        cont_lum_log = np.log10(cont_lum_raw + _LOG_FLOOR)
+
         return CloudyGridData(
             line_wavelengths=jnp.array(f["lines/wavelength"][:]),
-            line_luminosity=jnp.array(f["lines/luminosity"][:]),
+            line_luminosity=jnp.array(line_lum_log),  # log10 space!
             line_log_met=jnp.array(f["lines/axes/log_met"][:]),
             line_log_age=jnp.array(f["lines/axes/log_age_yr"][:]),
             line_log_U=jnp.array(f["lines/axes/log_U"][:]),
             cont_wavelength=jnp.array(f["continuum/wavelength"][:]),
-            cont_luminosity=jnp.array(f["continuum/luminosity"][:]),
+            cont_luminosity=jnp.array(cont_lum_log),  # log10 space!
             cont_log_met=jnp.array(f["continuum/axes/log_met"][:]),
             cont_log_age=jnp.array(f["continuum/axes/log_age_yr"][:]),
             cont_log_U=jnp.array(f["continuum/axes/log_U"][:]),
@@ -328,8 +340,9 @@ class CloudyGridBackend:
             qh_i = self._get_qh_at(log_z, log_age_i)
 
             # Grid luminosity per Q_H at (Z_gas, age, logU)
-            lum_per_qh = _trilinear_interp(
-                grid.line_luminosity,
+            # Interpolation in log10 space (FSPS convention), then exponentiate
+            log_lum_per_qh = _trilinear_interp(
+                grid.line_luminosity,  # stored in log10
                 grid.line_log_met,
                 grid.line_log_age,
                 grid.line_log_U,
@@ -337,6 +350,7 @@ class CloudyGridBackend:
                 log_age_i,
                 neb_logU,
             )
+            lum_per_qh = 10.0 ** log_lum_per_qh
 
             # Contribution: weight * Q_H * grid_value * (1 - f_esc)
             contrib = ssp_weights[i] * qh_i * lum_per_qh * (1.0 - neb_fesc)
@@ -381,8 +395,9 @@ class CloudyGridBackend:
 
             qh_i = self._get_qh_at(log_z, log_age_i)
 
-            cont_per_qh = _trilinear_interp(
-                grid.cont_luminosity,
+            # Interpolation in log10 space, then exponentiate
+            log_cont_per_qh = _trilinear_interp(
+                grid.cont_luminosity,  # stored in log10
                 grid.cont_log_met,
                 grid.cont_log_age,
                 grid.cont_log_U,
@@ -390,6 +405,7 @@ class CloudyGridBackend:
                 log_age_i,
                 neb_logU,
             )
+            cont_per_qh = 10.0 ** log_cont_per_qh
 
             contrib = ssp_weights[i] * qh_i * cont_per_qh * (1.0 - neb_fesc)
             total_cont = total_cont + jnp.where(age_in_grid, contrib, 0.0)

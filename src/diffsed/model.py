@@ -203,6 +203,19 @@ class Model:
         self._dust_law_bc = getattr(spec, "dust_law_bc", "power_law")
         self._dust_law_diff = getattr(spec, "dust_law_diff", self._dust_law_bc)
 
+        # IGM absorption (Inoue+2014) — enabled by default
+        self._apply_igm = getattr(spec, "apply_igm", True)
+
+        # Nebular emission backend
+        self._nebular_backend = None
+        cloudy_grid_path = getattr(spec, "cloudy_grid_path", None)
+        if cloudy_grid_path is not None:
+            from diffsed.models.nebular import CloudyGridBackend
+            self._nebular_backend = CloudyGridBackend(cloudy_grid_path, ssp_data)
+        else:
+            from diffsed.models.nebular import BakedInBackend
+            self._nebular_backend = BakedInBackend()
+
         # Velocity dispersion: only apply if sigma_v is in the spec
         self._has_sigma_v = spec.has_param("sigma_v") if hasattr(spec, "has_param") else False
         if not self._has_sigma_v:
@@ -577,7 +590,22 @@ class Model:
             dust_Rv=p.get("dust_Rv", 3.1),
         )
 
-        return compute_csp_sed(weights, ssp_flux_at_z, dust_atten)
+        sed = compute_csp_sed(weights, ssp_flux_at_z, dust_atten)
+
+        # Nebular emission (if backend provides it)
+        if self._nebular_backend is not None and self._nebular_backend.has_free_params:
+            neb_sed = self._nebular_backend.predict_nebular_sed(
+                ssp_weights=weights,
+                ssp_wave=self.ssp_data.ssp_wave,
+                ssp_log_ages_yr=self.ssp_log_ages_yr,
+                log_z=p["log_z"],
+                neb_logU=p.get("neb_logU", -3.0),
+                neb_logZ_gas=p.get("neb_logZ_gas", None),
+                neb_fesc=p.get("neb_fesc", 0.0),
+            )
+            sed = sed + neb_sed
+
+        return sed
 
     def predict_photometry(self, params):
         """Compute observed photometric flux densities.
@@ -608,6 +636,13 @@ class Model:
         sed = self.predict_sed(params)
         z = self._get_redshift(params)
         dl_cm = self._get_dl_cm(params)
+
+        # Apply IGM absorption (acts on observed-frame SED)
+        if self._apply_igm and z > 0:
+            from diffsed.models.igm import igm_transmission
+            wave_obs = self.ssp_data.ssp_wave * (1.0 + z)
+            igm_trans = igm_transmission(wave_obs, z)
+            sed = sed * igm_trans
 
         fluxes = []
         for fw, ft in zip(self.filter_waves, self.filter_trans):
