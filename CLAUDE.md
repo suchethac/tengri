@@ -129,6 +129,42 @@ due to the age-dust-metallicity degeneracy. This is a physical limitation, not a
 
 For geoVI/MGVI: check KL convergence across iterations and compare to RT posteriors when possible.
 
+## Performance optimizations
+
+The forward model uses several optimizations for speed:
+
+1. **Fused JIT kernels**: Single `@jax.jit` scope for weights + metallicity interp + dust + einsum, eliminating intermediate array materializations
+2. **Precomputed dust age weights**: Sigmoid(log10(age)) computed once at Model init, not per call
+3. **Mixed precision**: `Model(spec, ssp, forward_dtype="float32")` halves memory, ~1.5x speed, <0.1% error
+4. **XLA compilation cache**: Persistent cache at `/tmp/diffsed_jax_cache` — auto-enabled on import
+5. **Photometry precomputation**: SSP through filters computed once (Zacharegkas+2025), 21.6x speedup
+6. **Spectroscopy precomputation**: SSPs pre-interpolated to observed wavelengths
+
+**Benchmark (MacBook Pro M-series, CPU):**
+
+| Operation | Smooth (D=7) | Stochastic (D=137) |
+|-----------|-------------|-------------------|
+| Forward model | 140 μs | 356 μs |
+| Gradient | 56 μs | 63 μs |
+| EVI (10 iter, 2000 samples) | 11 s | 14 s |
+
+## Testing mandate
+
+**Every code change MUST include pytest tests.** Run before committing:
+
+```bash
+pytest tests/ -q                    # full suite (429+ tests, ~30s)
+ruff check src/ tests/              # lint
+ruff format --check src/ tests/     # format
+```
+
+Test organization:
+- `tests/unit/` — fast, no SSP data needed
+- `tests/integration/` — needs `data/ssp_*.h5`, skips gracefully if missing
+
+For performance changes: add benchmark tests that assert speedup thresholds
+(see `tests/unit/test_dust_precompute.py`, `tests/unit/test_fused_kernels.py`).
+
 ## Agent guide
 
 See `AGENTS.md` for comprehensive AI agent documentation.
