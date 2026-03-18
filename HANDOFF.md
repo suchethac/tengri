@@ -233,10 +233,22 @@ analysis/
 
 ## SSP Data
 
-Real FSPS/MILES SSP templates (15 metallicities × 93 ages × 5994 wavelengths):
-- `data/fsps_prsc_miles_chabrier.h5` — without nebular emission (64 MB)
-- `data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5` — with nebular emission (64 MB, DEFAULT)
-- Source: https://halos.as.arizona.edu/suchethacooray/
+Real FSPS SSP templates. All files go in `data/` (gitignored via `*.h5`).
+
+**Download from:** https://halos.as.arizona.edu/suchethacooray/dsps_ssp/
+
+| File | Library | Resolution | Size | Use case |
+|------|---------|-----------|------|----------|
+| `ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5` | MILES | R~2000 | 64 MB | Default (most notebooks) |
+| `ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5` | C3K | R~10000 | 109 MB | High-res spectral analysis (NB10) |
+| `fsps_prsc_miles_chabrier.h5` | MILES | R~2000 | 64 MB | Without nebular emission |
+
+```bash
+# Download all SSP templates
+cd ~/Projects/diffsed/data
+curl -O https://halos.as.arizona.edu/suchethacooray/dsps_ssp/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+curl -O https://halos.as.arizona.edu/suchethacooray/dsps_ssp/ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+```
 
 ---
 

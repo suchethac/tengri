@@ -60,9 +60,311 @@
 # One loss function. Any prior (via transforms). Any sampler.
 # All five methods below operate on exactly this $H(\boldsymbol{\xi})$.
 
+# %% [markdown]
+# **By the end you will understand:**
+# 1. The Information Hamiltonian — one loss function for any sampler
+# 2. Why standardization helps every inference method
+# 3. When to use MAP, Ray Tracing, NUTS, geoVI, or MGVI
+# 4. How to diagnose convergence (ESS, acceptance rate, divergences)
+# 5. The stochastic model challenge: why NUTS fails at $D \sim 137$
+#
+# **Quick reference:**
+#
+# | Method | Speed | Exactness | Best for |
+# |--------|-------|-----------|----------|
+# | MAP | ~seconds | Point estimate | Initialization, catalogs |
+# | Ray Tracing | ~seconds | Exact MCMC | Default workhorse |
+# | NUTS | ~10s–min | Exact HMC | Gold-standard validation |
+# | geoVI | ~minute | Approximate VI | High-D stochastic models |
+# | MGVI | ~minute | Approximate VI | Hierarchical problems |
+
+# %% [markdown]
+# ## How Standardization Works (and Why It Helps Every Sampler)
+#
+# Standardization is the reparametrization trick that makes all of this
+# possible.  Each physical parameter $\theta_k$ (which may live in a
+# bounded, log-spaced, or otherwise awkward space) is generated from a
+# standard-normal latent $\xi_k$ via a differentiable bijection:
+#
+# $$
+# \theta_k = h_k(\xi_k), \qquad \xi_k \sim \mathcal{N}(0, 1).
+# $$
+#
+# The bijection $h_k$ is chosen so that pushing $\mathcal{N}(0,1)$
+# through it reproduces the desired prior $P(\theta_k)$.  For example:
+#
+# | Prior | Transform $h(\xi)$ | Inverse (standardize) |
+# |-------|--------------------|-----------------------|
+# | `Uniform(a, b)` | $a + (b-a)\,\sigma(\xi)$ | $\mathrm{logit}((\theta-a)/(b-a))$ |
+# | `Gaussian(μ, σ)` | $\mu + \sigma\,\xi$ | $(\theta - \mu)/\sigma$ |
+# | `LogUniform(a, b)` | $\exp(\ln a + (\ln b - \ln a)\,\sigma(\xi))$ | $\mathrm{logit}((\ln\theta - \ln a)/(\ln b - \ln a))$ |
+# | `LogNormal(μ, σ)` | $\exp(\mu + \sigma\,\xi)$ | $(\ln\theta - \mu)/\sigma$ |
+#
+# where $\sigma(\cdot)$ is the sigmoid function.
+#
+# ### The Jacobian cancellation
+#
+# By the change-of-variables formula:
+#
+# $$
+# P(h_k(\xi_k))\,\left|\frac{dh_k}{d\xi_k}\right| = \varphi(\xi_k)
+# $$
+#
+# where $\varphi$ is the standard normal density.  This is not an
+# approximation — it's the *defining property* of the reparametrization.
+# The prior density and the Jacobian exactly cancel, leaving only the
+# $\frac{1}{2}\xi^2$ penalty from the standard normal.
+#
+# ### Why this helps each sampler
+#
+# **The geometric argument:** In physical space, the prior Hessian can
+# span orders of magnitude — e.g., `Uniform(0.5, 3.0)` for SFH α vs
+# `Uniform(1, 300)` for PSD τ.  After standardization, the prior
+# Hessian is exactly **I** (the identity), so the posterior geometry
+# is set by the *data*, not the *parametrization*.
+#
+# | Sampler | Why isotropy helps |
+# |---------|-------------------|
+# | **MAP (Adam)** | Same learning rate works for all params; gradient $\nabla H = \nabla\chi^2 + \xi$ has bounded regularizer |
+# | **NUTS** | Mass matrix starts near identity → faster warmup, fewer divergences |
+# | **Ray Tracing** | Single step size $\Delta s$ works uniformly; $\nabla \ln n$ has comparable magnitude in all directions |
+# | **geoVI / MGVI** | *Required*: the metric $M = J^\top J + \mathbf{I}$ assumes prior = identity |
+#
+# Let's see this in action — we'll compare the condition number of the
+# Hessian in physical vs standardized space.
+
+# %%
+# --- Demonstrate standardization transforms ---
+import jax.numpy as jnp
+import numpy as np
+import matplotlib.pyplot as plt
+from diffsed.distributions import Uniform, Gaussian, LogUniform, LogNormal
+
+# Show how each distribution maps xi ~ N(0,1) to physical space
+xi_grid = jnp.linspace(-3, 3, 200)
+
+dists = {
+    "Uniform(0.5, 3.0)": Uniform(0.5, 3.0),
+    "Gaussian(μ=-0.3, σ=0.5)": Gaussian(-0.3, 0.5),
+    "LogUniform(1, 300)": LogUniform(1.0, 300.0),
+    "LogNormal(μ=3, σ=1)": LogNormal(3.0, 1.0),
+}
+
+fig, axes = plt.subplots(1, 4, figsize=(16, 3.5))
+for ax, (label, dist) in zip(axes, dists.items()):
+    theta = np.array([float(dist.unstandardize(xi)) for xi in xi_grid])
+    ax.plot(xi_grid, theta, "C0-", lw=2)
+    ax.set_xlabel(r"$\xi$ (standardized)")
+    ax.set_ylabel(r"$\theta$ (physical)")
+    ax.set_title(label, fontsize=10)
+    ax.axhline(dist.bounds[0], color="k", ls=":", alpha=0.4)
+    ax.axhline(dist.bounds[1], color="k", ls=":", alpha=0.4)
+    ax.axvline(0, color="gray", ls="--", alpha=0.3)
+
+fig.suptitle(
+    r"Standardization: $\xi \sim \mathcal{N}(0,1) \to \theta$ via differentiable bijection",
+    fontsize=13,
+    y=1.02,
+)
+plt.tight_layout()
+plt.savefig("notebook_figures/03_inference_methods_fig01.png", dpi=72, bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# Each curve above is a differentiable bijection $h_k(\xi)$.
+# At $\xi = 0$ (the prior center), each parameter sits at the midpoint
+# of its physical range.  The sigmoid-based transforms (Uniform,
+# LogUniform) have an S-shape that naturally respects bounds, while
+# the linear/exponential transforms (Gaussian, LogNormal) are unbounded.
+#
+# **Key insight:** In $\xi$-space, every parameter has the same
+# characteristic scale ($\sim 1$).  A step of $\Delta\xi = 0.1$ means
+# the same thing for all parameters — a small perturbation near the
+# prior center.  This is why a single step size works for all samplers.
+
+# %% [markdown]
+# ### Does standardization weaken the gradients?
+#
+# A natural concern: by wrapping $\theta = h(\xi)$ in sigmoids and
+# exponentials, doesn't the chain rule distort or kill the gradient
+# signal?  The answer is **no** — the Jacobian $dh/d\xi$ acts as a
+# **natural preconditioner**, not a gradient killer.
+#
+# The loss gradient in $\xi$-space is:
+#
+# $$
+# \frac{\partial H}{\partial \xi_k}
+#   = \underbrace{\sum_j \frac{m_j - d_j}{\sigma_j^2}
+#     \cdot \frac{\partial m_j}{\partial \theta_k}}_{\text{physical gradient}}
+#   \cdot \underbrace{\frac{d\theta_k}{d\xi_k}}_{\text{Jacobian}}
+#   + \underbrace{\xi_k}_{\text{prior}}
+# $$
+#
+# The Jacobian factor is what makes the difference.  Let's visualize it
+# for each transform, and then see what kind of *effective step size*
+# the optimizer takes in physical space.
+
+# %%
+# --- Jacobian dθ/dξ for each transform ---
+import jax
+import jax.numpy as jnp
+
+jax.config.update("jax_enable_x64", True)
+
+from diffsed.distributions import Uniform, Gaussian, LogUniform, LogNormal
+
+xi_grid = jnp.linspace(-4, 4, 300)
+
+transforms = {
+    "Uniform(0.5, 3.0)": Uniform(0.5, 3.0),
+    "Gaussian(μ=-0.3, σ=0.5)": Gaussian(-0.3, 0.5),
+    "LogUniform(1, 300)": LogUniform(1.0, 300.0),
+    "LogNormal(μ=3, σ=1)": LogNormal(3.0, 1.0),
+}
+
+fig, axes = plt.subplots(2, 4, figsize=(16, 6))
+
+for col, (label, dist) in enumerate(transforms.items()):
+    # Top row: θ(ξ) — the transform itself
+    theta_vals = jnp.array([dist.unstandardize(xi) for xi in xi_grid])
+    axes[0, col].plot(xi_grid, theta_vals, "C0-", lw=2)
+    axes[0, col].set_title(label, fontsize=10)
+    axes[0, col].axvline(0, color="gray", ls="--", alpha=0.3)
+    if col == 0:
+        axes[0, col].set_ylabel(r"$\theta = h(\xi)$")
+
+    # Bottom row: dθ/dξ — the Jacobian (via JAX autodiff)
+    jac_fn = jax.vmap(jax.grad(lambda x, d=dist: d.unstandardize(x)))
+    jacobian_vals = jac_fn(xi_grid)
+    axes[1, col].plot(xi_grid, jacobian_vals, "C3-", lw=2)
+    axes[1, col].axvline(0, color="gray", ls="--", alpha=0.3)
+    axes[1, col].set_xlabel(r"$\xi$")
+    if col == 0:
+        axes[1, col].set_ylabel(r"$d\theta/d\xi$ (Jacobian)")
+
+    # Shade the N(0,1) bulk region
+    for row in range(2):
+        axes[row, col].axvspan(-2, 2, alpha=0.06, color="blue")
+
+fig.suptitle(
+    r"Transform $h(\xi)$ (top) and its Jacobian $dh/d\xi$ (bottom)"
+    "\n"
+    r"Blue shading = 95% of $\mathcal{N}(0,1)$ mass — where sampling actually happens",
+    fontsize=12,
+    y=1.04,
+)
+plt.tight_layout()
+plt.savefig("notebook_figures/03_inference_methods_fig02.png", dpi=72, bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# **What the Jacobian panels reveal:**
+#
+# | Transform | Jacobian $dh/d\xi$ | What it does for the optimizer |
+# |-----------|-------------------|-------------------------------|
+# | **Uniform** (sigmoid) | Bell-shaped: peaks at $\xi=0$, vanishes at $|\xi| \gg 3$ | **Auto-braking** near boundaries — the optimizer naturally slows down as $\theta$ approaches its bounds. No hard clipping needed. |
+# | **Gaussian** (linear) | Constant = $\sigma$ | Pure rescaling — no distortion at all. Gradient in $\xi$ is exactly $\sigma \times$ the physical gradient. |
+# | **LogUniform** (sigmoid in log) | Bell × exponential growth | **Log-scale stepping**: large steps when $\theta$ is large (τ = 200 Myr), small steps when $\theta$ is small (τ = 5 Myr). Exactly right for scale parameters. |
+# | **LogNormal** (exponential) | $\sigma \cdot \theta$ — grows with $\theta$ | Same log-scale stepping. Effectively does gradient descent in $\ln\theta$, which is the natural geometry for positive quantities. |
+#
+# **The crucial point**: within the blue-shaded region ($|\xi| < 2$,
+# where 95% of the prior mass lives), every Jacobian is well-behaved
+# and non-zero.  The gradients are not weakened — they are
+# *preconditioned* so that the optimizer takes appropriately sized steps
+# in the natural geometry of each parameter.
+
+# %%
+# --- Effective step size comparison ---
+# If an optimizer takes a step Δξ = 0.1 in standardized space,
+# what's the corresponding Δθ in physical space?
+# Δθ ≈ (dh/dξ) · Δξ
+
+delta_xi = 0.1
+xi_eval_points = jnp.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+
+print(f"{'Transform':<28} {'ξ':>6}  {'θ':>10}  {'Δθ for Δξ=0.1':>14}  {'Δθ/θ (%)':>10}")
+print("-" * 76)
+
+for label, dist in transforms.items():
+    for xi_val in xi_eval_points:
+        theta = float(dist.unstandardize(xi_val))
+        jac = float(jax.grad(lambda x, d=dist: d.unstandardize(x))(xi_val))
+        delta_theta = jac * delta_xi
+        rel_step = abs(delta_theta / theta) * 100 if abs(theta) > 1e-10 else float("inf")
+        print(
+            f"{label:<28} {float(xi_val):>6.1f}  {theta:>10.3f}  {delta_theta:>14.4f}  {rel_step:>9.1f}%"
+        )
+    print()
+
+# %% [markdown]
+# **Key observations from the table above:**
+#
+# - For **Uniform**, $\Delta\theta$ is largest near $\xi = 0$ (center
+#   of the range) and shrinks toward the boundaries.  This is natural
+#   preconditioning — the optimizer explores freely in the bulk and
+#   decelerates near edges.
+#
+# - For **Gaussian**, $\Delta\theta$ is constant everywhere — no
+#   distortion at all.  This is why Gaussian priors are "free" in
+#   standardized space.
+#
+# - For **LogUniform** and **LogNormal**, the *relative* step size
+#   $\Delta\theta / \theta$ stays roughly constant across orders of
+#   magnitude.  A step of $\Delta\xi = 0.1$ always means "move ~X%
+#   in the current value", regardless of whether $\theta = 5$ or
+#   $\theta = 200$.  This is exactly the logarithmic scaling you'd
+#   want for scale parameters like PSD timescale $\tau$.
+#
+# ### Comparison with physical-space optimization
+#
+# Without standardization, an Adam step $\epsilon = 0.001$ in physical
+# space means:
+# - $\Delta\tau = 0.001$ Myr whether $\tau = 5$ or $\tau = 200$
+#   (pathological for a scale parameter)
+# - $\Delta\alpha = 0.001$ regardless of whether $\alpha$ is near a
+#   boundary (risks overshooting into infeasible regions)
+#
+# With standardization, the same step $\Delta\xi = 0.001$ automatically
+# adapts to each parameter's natural geometry via the Jacobian.
+# The transforms are **preconditioners built into the parametrization**.
+#
+# ### The only edge case
+#
+# The Jacobian *does* vanish at $|\xi| \gg 3$ for sigmoid-based
+# transforms (Uniform, LogUniform).  Could this trap the optimizer?
+# In practice, **no**, because:
+#
+# 1. The $\mathcal{N}(0,1)$ prior penalty $+\xi_k$ in $\nabla H$ grows
+#    linearly with $|\xi|$, always pushing back toward the center.
+# 2. $|\xi| > 3$ means $\theta$ is at >99.7% of its range — if the
+#    MAP is truly there, the prior bounds are probably too tight.
+# 3. The Hessian eigenvalue floor (the $+\mathbf{I}$ from the prior)
+#    prevents the curvature from collapsing even when the likelihood
+#    Jacobian is small.
+
+# %% [markdown]
+# The Hessian condition number analysis (comparing physical vs standardized
+# space) is shown later in this notebook, after the model and MAP are set up.
+
+# %% [markdown]
+# The condition number tells us how anisotropic the posterior is.
+# A condition number of 1 means perfectly isotropic (a sphere); larger
+# values mean the posterior is elongated along some directions.
+#
+# In standardized space, the prior contributes $+\mathbf{I}$ to the
+# Hessian, which sets a **floor of 1** on every eigenvalue.  This means
+# even poorly constrained parameters (where the likelihood Hessian is
+# near zero) still have unit curvature from the prior.  No eigenvalue
+# can collapse to zero, which prevents the pathological "slab"
+# geometries that cause NUTS divergences and HMC instability.
+#
+# This is the deep reason why standardization benefits all samplers —
+# not just the variational ones that require it.
+
 # %%
 import jax
 import jax.numpy as jnp
+
 jax.config.update("jax_enable_x64", True)
 
 import numpy as np
@@ -70,9 +372,21 @@ import matplotlib.pyplot as plt
 from matplotlib import colormaps
 
 from diffsed import (
-    Model, ParamSpec, Uniform, Gaussian, LogUniform, Fixed, Fitter,
-    load_ssp_data, load_filter_set,
+    Model,
+    ParamSpec,
+    Uniform,
+    Gaussian,
+    LogUniform,
+    Fixed,
+    Fitter,
+    load_ssp_data,
+    load_filter_set,
 )
+
+import sys
+
+sys.path.insert(0, ".")
+from _plot_style import convergence_check, convergence_table
 
 # Reproducibility
 key = jax.random.PRNGKey(42)
@@ -145,13 +459,11 @@ fig, ax = plt.subplots(figsize=(7, 5))
 levels = np.linspace(H_grid.min(), H_grid.min() + 30, 15)
 cs = ax.contourf(alpha_vals, met_vals, H_grid, levels=levels, cmap="viridis_r")
 ax.contour(alpha_vals, met_vals, H_grid, levels=levels, colors="k", linewidths=0.3)
-ax.plot(true_params["sfh_alpha"], true_params["met_logzsol"],
-        "w*", ms=14, zorder=5, label="Truth")
+ax.plot(true_params["sfh_alpha"], true_params["met_logzsol"], "w*", ms=14, zorder=5, label="Truth")
 
 # Mark approximate MAP
 imin = np.unravel_index(H_grid.argmin(), H_grid.shape)
-ax.plot(alpha_vals[imin[1]], met_vals[imin[0]],
-        "rx", ms=12, mew=2, zorder=5, label="MAP (grid)")
+ax.plot(alpha_vals[imin[1]], met_vals[imin[0]], "rx", ms=12, mew=2, zorder=5, label="MAP (grid)")
 
 ax.set_xlabel(r"$\alpha_{\rm SFH}$", fontsize=13)
 ax.set_ylabel(r"$\log(Z/Z_\odot)$", fontsize=13)
@@ -159,6 +471,7 @@ ax.set_title(r"$H(\xi)$ — 2D slice (other params at truth)", fontsize=13)
 plt.colorbar(cs, ax=ax, label=r"$H(\xi)$")
 ax.legend(fontsize=11)
 plt.tight_layout()
+plt.savefig("notebook_figures/03_inference_methods_fig03.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -189,6 +502,7 @@ ax.set_ylabel(r"$H(\xi)$")
 ax.set_title(f"MAP convergence — {result_map.wall_time_s:.1f}s")
 ax.set_yscale("log")
 plt.tight_layout()
+plt.savefig("notebook_figures/03_inference_methods_fig04.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 print(f"Wall time: {result_map.wall_time_s:.1f}s")
@@ -221,6 +535,7 @@ ax.set_ylabel(r"SFR [$M_\odot$/yr]")
 ax.set_title("MAP gives a point estimate — no uncertainty band")
 ax.legend()
 plt.tight_layout()
+plt.savefig("notebook_figures/03_inference_methods_fig05.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -296,8 +611,7 @@ print("ESS:", {k: f"{v:.0f}" for k, v in ess_rt.items()})
 # %%
 # Trace plots for a few parameters
 trace_params = ["sfh_alpha", "met_logzsol", "dust_tau_bc"]
-fig, axes = plt.subplots(len(trace_params), 1, figsize=(8, 2.2 * len(trace_params)),
-                         sharex=True)
+fig, axes = plt.subplots(len(trace_params), 1, figsize=(8, 2.2 * len(trace_params)), sharex=True)
 for ax, name in zip(axes, trace_params):
     chain = np.array(result_rt.samples[name])
     ax.plot(chain, "C0-", lw=0.4, alpha=0.7)
@@ -307,6 +621,7 @@ for ax, name in zip(axes, trace_params):
 axes[-1].set_xlabel("Sample index")
 fig.suptitle("Ray Tracing — chain trace", fontsize=13, y=1.01)
 plt.tight_layout()
+plt.savefig("notebook_figures/03_inference_methods_fig06.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -385,8 +700,8 @@ key, subkey = jax.random.split(key)
 result_nuts = fitter.run(
     "nuts",
     init_from=result_map,
-    n_warmup=500,
-    n_samples=500,
+    n_warmup=1000,
+    n_samples=1000,
     key=subkey,
 )
 
@@ -418,7 +733,7 @@ for ax, title, res, col in zip(axes, titles, results, colors):
         # Draw posterior SFH envelope
         sfr_draws = []
         summary = res.summary()
-        for k_idx in range(min(100, len(list(res.samples.values())[0]))):
+        for k_idx in range(min(100, len(next(iter(res.samples.values()))))):
             draw = {name: float(arr[k_idx]) for name, arr in res.samples.items()}
             sfh_draw = model.predict_sfh(draw)
             sfr_draws.append(sfh_draw["sfr_mean"])
@@ -430,8 +745,7 @@ for ax, title, res, col in zip(axes, titles, results, colors):
         ax.plot(t_plot, median_sfr, color=col, ls="--", lw=1.5, label="Median")
     else:
         sfh_map = model.predict_sfh(res.params)
-        ax.plot(sfh_map["t_gyr"], sfh_map["sfr_mean"],
-                color=col, ls="--", lw=2, label="MAP")
+        ax.plot(sfh_map["t_gyr"], sfh_map["sfr_mean"], color=col, ls="--", lw=2, label="MAP")
 
     ax.set_xlabel("Lookback time [Gyr]")
     ax.set_title(title, fontsize=13)
@@ -440,16 +754,16 @@ for ax, title, res, col in zip(axes, titles, results, colors):
 axes[0].set_ylabel(r"SFR [$M_\odot$/yr]")
 fig.suptitle("SFH Recovery — Parametric Model", fontsize=14, y=1.02)
 plt.tight_layout()
+plt.savefig("notebook_figures/03_inference_methods_fig07.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %%
 # Corner plot: RT (blue) + geoVI (orange) + NUTS (green)
 fig = result_rt.plot_corner(truths=true_params, color="C0", label="Ray Tracing")
-result_geovi.plot_corner(truths=true_params, color="C1", label="geoVI",
-                         fig=fig)
-result_nuts.plot_corner(truths=true_params, color="C2", label="NUTS",
-                        fig=fig)
+result_geovi.plot_corner(truths=true_params, color="C1", label="geoVI", fig=fig)
+result_nuts.plot_corner(truths=true_params, color="C2", label="NUTS", fig=fig)
 fig.suptitle("Posterior Comparison — Parametric Model", fontsize=14, y=1.02)
+plt.savefig("notebook_figures/03_inference_methods_fig08.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -463,11 +777,19 @@ band_names = ["u", "g", "r", "i", "z"]
 for ax, label, res, col in zip(axes, method_labels, method_results, method_colors):
     # Data with errorbars
     x = np.arange(len(band_names))
-    ax.errorbar(x, np.array(mock.flux_obs), yerr=np.array(mock.noise),
-                fmt="ko", ms=6, capsize=3, label="Data", zorder=5)
+    ax.errorbar(
+        x,
+        np.array(mock.flux_obs),
+        yerr=np.array(mock.noise),
+        fmt="ko",
+        ms=6,
+        capsize=3,
+        label="Data",
+        zorder=5,
+    )
 
     # Posterior predictive draws
-    n_draws = min(50, len(list(res.samples.values())[0]))
+    n_draws = min(50, len(next(iter(res.samples.values()))))
     for k_idx in range(n_draws):
         draw = {name: float(arr[k_idx]) for name, arr in res.samples.items()}
         flux_pred = model.predict_photometry(draw)
@@ -483,27 +805,18 @@ for ax, label, res, col in zip(axes, method_labels, method_results, method_color
 
 fig.suptitle("Posterior Predictive Checks", fontsize=14, y=1.02)
 plt.tight_layout()
+plt.savefig("notebook_figures/03_inference_methods_fig09.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %%
-# Summary diagnostics table
-print(f"{'Method':<15} {'Wall time':>10} {'ESS (min)':>10} {'ESS (med)':>10} {'Accept %':>10}")
-print("-" * 58)
-
-for name, res in [("MAP", result_map), ("Ray Tracing", result_rt),
-                  ("geoVI", result_geovi), ("NUTS", result_nuts)]:
-    wt = f"{res.wall_time_s:.1f}s"
-    if res.samples is not None:
-        ess = res.effective_sample_size()
-        ess_vals = list(ess.values())
-        ess_min = f"{min(ess_vals):.0f}"
-        ess_med = f"{np.median(ess_vals):.0f}"
-    else:
-        ess_min, ess_med = "—", "—"
-    accept = res.diagnostics.get("accept_rate_post_burnin",
-             res.diagnostics.get("mean_accept_prob", None))
-    accept_str = f"{accept:.1%}" if accept is not None else "—"
-    print(f"{name:<15} {wt:>10} {ess_min:>10} {ess_med:>10} {accept_str:>10}")
+# --- Convergence diagnostics (parametric model) ---
+convergence_table(
+    {
+        "Ray Tracing": result_rt,
+        "geoVI": result_geovi,
+        "NUTS": result_nuts,
+    }
+)
 
 # %% [markdown]
 # ## MGVI: Linear Approximation
@@ -591,8 +904,7 @@ print(f"D = {spec_stoch.n_free} free parameters + 128 GP latents")
 
 # %%
 # Stochastic: MAP → Ray Tracing (step_size=0.01 for D>10)
-fitter_stoch = Fitter(model_stoch, mock_stoch.flux_obs, mock_stoch.noise,
-                      data_type="photometry")
+fitter_stoch = Fitter(model_stoch, mock_stoch.flux_obs, mock_stoch.noise, data_type="photometry")
 
 key, subkey = jax.random.split(key)
 result_stoch_map = fitter_stoch.run("map", n_steps=2000, key=subkey)
@@ -602,9 +914,10 @@ key, subkey = jax.random.split(key)
 result_stoch_rt = fitter_stoch.run(
     "raytrace",
     init_from=result_stoch_map,
-    n_burnin=100,
-    n_steps=300,
-    step_size=0.01,
+    n_burnin=200,
+    n_steps=2000,
+    step_size=0.05,
+    n_leapfrog_steps=50,
     key=subkey,
 )
 print(f"Stochastic RT: {result_stoch_rt.wall_time_s:.1f}s")
@@ -640,8 +953,7 @@ try:
     )
     accept = result_stoch_nuts.diagnostics.get("mean_accept_prob", 0)
     ess_nuts_s = result_stoch_nuts.effective_sample_size()
-    phys_ess_nuts = {k: v for k, v in ess_nuts_s.items()
-                     if not k.startswith("psd_xi")}
+    phys_ess_nuts = {k: v for k, v in ess_nuts_s.items() if not k.startswith("psd_xi")}
     print(f"NUTS completed in {result_stoch_nuts.wall_time_s:.1f}s")
     print(f"Acceptance rate: {accept:.2%}")
     print("ESS (physical):", {k: f"{v:.0f}" for k, v in phys_ess_nuts.items()})
@@ -664,7 +976,7 @@ for ax, title, res, col in zip(axes, titles_s, results_s, colors_s):
 
     if res.samples is not None:
         sfr_draws = []
-        n_draws = min(100, len(list(res.samples.values())[0]))
+        n_draws = min(100, len(next(iter(res.samples.values()))))
         for k_idx in range(n_draws):
             draw = {}
             for name, arr in res.samples.items():
@@ -682,8 +994,7 @@ for ax, title, res, col in zip(axes, titles_s, results_s, colors_s):
         ax.plot(t_plot, median_sfr, color=col, ls="--", lw=1.5, label="Median")
     else:
         sfh_map_s = model_stoch.predict_sfh(res.params)
-        ax.plot(sfh_map_s["t_gyr"], sfh_map_s["sfr_mean"],
-                color=col, ls="--", lw=2, label="MAP")
+        ax.plot(sfh_map_s["t_gyr"], sfh_map_s["sfr_mean"], color=col, ls="--", lw=2, label="MAP")
 
     ax.set_xlabel("Lookback time [Gyr]")
     ax.set_title(title, fontsize=13)
@@ -692,14 +1003,23 @@ for ax, title, res, col in zip(axes, titles_s, results_s, colors_s):
 axes[0].set_ylabel(r"SFR [$M_\odot$/yr]")
 fig.suptitle("SFH Recovery — Stochastic Model ($D \\sim 137$)", fontsize=14, y=1.02)
 plt.tight_layout()
+plt.savefig("notebook_figures/03_inference_methods_fig10.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %%
 # Stochastic model: corner plot of physical + PSD params
 # (exclude the 128 GP latents for readability)
-phys_params = ["sfh_alpha", "sfh_beta", "sfh_tau_peak_gyr", "sfh_peak_sfr",
-               "psd_sigma", "psd_tau_myr", "met_logzsol",
-               "dust_tau_bc", "dust_tau_diff"]
+phys_params = [
+    "sfh_alpha",
+    "sfh_beta",
+    "sfh_tau_peak_gyr",
+    "sfh_peak_sfr",
+    "psd_sigma",
+    "psd_tau_myr",
+    "met_logzsol",
+    "dust_tau_bc",
+    "dust_tau_diff",
+]
 
 fig = result_stoch_rt.plot_corner(
     params=phys_params,
@@ -715,7 +1035,46 @@ result_stoch_geovi.plot_corner(
     fig=fig,
 )
 fig.suptitle("Stochastic Model — Physical + PSD Parameters", fontsize=14, y=1.02)
+plt.savefig("notebook_figures/03_inference_methods_fig11.png", dpi=72, bbox_inches="tight")
 plt.show()
+
+# %%
+# --- Convergence diagnostics (stochastic model) ---
+convergence_table(
+    {
+        "RT (stoch.)": result_stoch_rt,
+        "geoVI (stoch.)": result_stoch_geovi,
+    }
+)
+
+# %% [markdown]
+# ## Convergence Diagnostics
+#
+# Checking that posteriors are converged is essential before trusting
+# any inference result.  The standard diagnostics
+# (Vehtari et al. 2021; Stan/ArviZ/BlackJAX):
+#
+# | Diagnostic | Threshold | Applies to |
+# |-----------|-----------|------------|
+# | **Effective Sample Size** (ESS) | $> 400$ total, $> 100$ per param | RT, NUTS |
+# | **Divergent transitions** | 0 ideal; $> 5\%$ = serious | NUTS only |
+# | **Acceptance rate** | NUTS $\sim 80\%$; RT $30$–$70\%$ | RT, NUTS |
+# | **R-hat** (split $\hat{R}$) | $< 1.01$ | Multi-chain (not used here) |
+#
+# For **variational inference** (geoVI, MGVI), convergence is assessed by
+# monitoring the KL divergence across iterations — it should decrease
+# monotonically.  There is no ESS or R-hat equivalent; instead, compare
+# geoVI posteriors against an MCMC reference (RT) to assess accuracy.
+#
+# **Common pitfalls:**
+#
+# - *NUTS divergences* often signal difficult posterior geometry (e.g.,
+#   dust parameters creating funnels/ridges).  Increase `n_warmup` or
+#   `target_accept_rate` toward 0.95.
+# - *RT high acceptance* ($> 90\%$) means the chain is barely moving.
+#   Increase `n_leapfrog_steps` or adjust `step_size`.
+# - *Low ESS* on specific parameters (e.g., dust, metallicity) reflects
+#   known age-dust-metallicity degeneracies, not sampler failure per se.
 
 # %% [markdown]
 # ## When to Use Which Method
@@ -754,3 +1113,15 @@ plt.show()
 # > - Frank et al. (2021) — geoVI
 # > - Knollmüller & Enßlin (2019) — MGVI
 # > - Hoffman & Gelman (2014) — NUTS
+
+# %% [markdown]
+# ## What You've Learned
+#
+# 1. The standardized loss $H(\xi) = \frac{1}{2}\chi^2 + \frac{1}{2}\xi^T\xi$ works for any sampler
+# 2. MAP is fast but gives no uncertainties — use it for initialization
+# 3. Ray Tracing and geoVI are the primary methods for stochastic models ($D \sim 137$)
+# 4. NUTS is the gold standard for parametric models ($D < 15$)
+# 5. Always check convergence diagnostics before trusting posteriors
+#
+# **Next:** [Tutorial 04 — Recovery Tests](04_recovery_tests.ipynb) validates
+# these methods on mock data across burstiness regimes.

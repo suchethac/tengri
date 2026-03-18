@@ -167,7 +167,8 @@ def main():
     # Build fit kwargs based on method
     fit_kwargs = {}
     if args.method == "raytrace":
-        fit_kwargs = dict(n_steps=args.n_steps, n_leapfrog_steps=10, n_burnin=100)
+        fit_kwargs = dict(n_steps=args.n_steps, n_leapfrog_steps=50,
+                         n_burnin=200, step_size=0.05)
     elif args.method == "geovi":
         fit_kwargs = dict(n_iterations=15, n_posterior_samples=80)
     elif args.method == "nuts":

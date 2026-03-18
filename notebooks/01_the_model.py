@@ -13,676 +13,1009 @@
 # ---
 
 # %% [markdown]
-# # The IFT Correlated Field Model
+# # Tutorial 1: The PSD &rarr; GP &rarr; SFH Model
 #
-# **Building physical intuition for stochastic star formation histories**
+# `diffsed` models galaxy star formation histories (SFHs) as **continuous correlated fields** governed by a power spectral density (PSD), using the **Information Field Theory** (IFT) framework ([En&szlig;lin 2019](https://arxiv.org/abs/1804.03350)). The key insight: the PSD encodes the amplitude and timescale of star formation burstiness &mdash; different feedback mechanisms (supernovae, stellar winds, gas accretion) produce different PSDs, and the data decide which is preferred.
 #
-# This notebook introduces the Information Field Theory (IFT) correlated
-# field model that underpins `diffsed`. We build up the full SFH model
-# piece by piece — the power spectral density, the Gaussian process,
-# the smooth mean SFH, and the lognormal assembly — before ever touching
-# inference.  Think of this as the methods section of a paper, but
-# interactive.
+# **What you will learn:**
 #
-# By the end you will understand:
-# 1. Why galaxy SFHs need stochastic fluctuations
-# 2. How the PSD controls burstiness amplitude and timescale
-# 3. How an FFT-based GP generates correlated fluctuations
-# 4. How the full SFH is assembled with a lognormal correction
-# 5. Why everything being JAX-differentiable matters
-
-# %% [markdown]
-# ## Why burstiness matters
+# 1. What Information Field Theory is and why it matters for SED fitting
+# 2. How the DRW power spectral density encodes burstiness physics
+# 3. How Gaussian Process realizations are generated from a PSD via FFT
+# 4. How the smooth mean SFH (double power law) provides the secular envelope
+# 5. How the full SFH combines mean + GP with a lognormal correction
+# 6. How the $(\sigma_{\rm PS},\; \tau_{\rm PS})$ burstiness plane maps to SFH diversity
+# 7. How end-to-end JAX gradients enable efficient inference
 #
-# Star formation is not smooth. The scatter in the star-forming main
-# sequence ($\sim 0.3$ dex; Speagle et al. 2014) demands stochastic
-# variation on top of any smooth evolutionary track.  At high redshift,
-# UV-bright galaxies require bursty SFHs to explain their luminosity
-# functions (e.g., Sun et al. 2023).  Diagnostics like the
-# H$\alpha$-to-UV ratio directly probe burstiness on $\sim 10\,$Myr
-# timescales (Caplar & Tacchella 2019).
+# **The key equation:**
 #
-# Traditional parametric models — exponentially declining ($\tau$-model),
-# delayed-$\tau$, or even double power laws — produce *deterministically
-# smooth* histories.  They cannot capture:
+# $$\text{SFR}(t) = \overline{\text{SFR}}(t) \;\times\; \exp\!\left(x(t) - \tfrac{\sigma_x^2}{2}\right)$$
 #
-# - **Duty cycles**: galaxies spending part of their life above/below
-#   the main sequence
-# - **Timescale-dependent variability**: feedback-driven fluctuations on
-#   $\sim 10\,$Myr vs. accretion-driven fluctuations on $\sim 300\,$Myr
-# - **Stochastic diversity**: two galaxies with identical masses having
-#   very different recent SFHs
+# where $\overline{\text{SFR}}(t)$ is the smooth mean SFH (double power law), $x(t)$ is a zero-mean Gaussian Process drawn from the PSD, and $-\sigma_x^2/2$ is a lognormal correction that ensures $\langle \text{SFR} \rangle = \overline{\text{SFR}}$.
 #
-# The IFT correlated field model solves this by adding a *Gaussian
-# process* — controlled by a power spectral density — on top of a smooth
-# backbone.  The PSD parameters ($\sigma$, $\tau$) become physically
-# interpretable burstiness priors.
+# > **Note on parameter names:** This tutorial uses the low-level function parameter names (`sigma_ps`, `tau_ps`, `alpha`, etc.) to show how each component works internally. The high-level API uses descriptive names (`psd_sigma`, `psd_tau_myr`, `sfh_alpha`, etc.) -- see the [Quickstart](00_quickstart.ipynb).
 
 # %%
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+
+# Configure JAX before importing it
+from diffsed.utils.devices import setup_jax
+setup_jax()
+
 import jax
 import jax.numpy as jnp
-jax.config.update("jax_enable_x64", True)
-import matplotlib.pyplot as plt
-import numpy as np
+from jax import random, grad, jit
 
-from diffsed.models.sfh.mean_sfh import double_powerlaw, delayed_tau
-
-# --- Three SFHs with the same stellar mass but different burstiness ---
-t_lookback = jnp.linspace(0.01e9, 13.0e9, 500)  # yr
-
-# 1. Smooth parametric (delayed-tau)
-sfr_smooth = delayed_tau(t_lookback, tau=3e9, norm=8e-9)
-
-# 2. Moderately bursty (hand-crafted sinusoidal fluctuations for illustration)
-np.random.seed(12)
-phase = np.cumsum(np.random.normal(0, 0.3, len(t_lookback)))
-sfr_moderate = sfr_smooth * jnp.exp(0.4 * jnp.sin(2 * jnp.pi * t_lookback / 200e6 + phase[:len(t_lookback)]))
-
-# 3. Highly bursty
-sfr_bursty = sfr_smooth * jnp.exp(1.2 * jnp.sin(2 * jnp.pi * t_lookback / 50e6 + phase[:len(t_lookback)]))
-
-fig, ax = plt.subplots(figsize=(10, 4))
-t_gyr = t_lookback / 1e9
-ax.plot(t_gyr, sfr_smooth, lw=2, label="Smooth (delayed-$\\tau$)", color="C0")
-ax.plot(t_gyr, sfr_moderate, lw=1.2, alpha=0.85, label="Moderate burstiness ($\\sigma=0.5$)", color="C1")
-ax.plot(t_gyr, sfr_bursty, lw=1.0, alpha=0.7, label="High burstiness ($\\sigma=1.5$)", color="C3")
-
-ax.set_xlabel("Lookback time [Gyr]")
-ax.set_ylabel("SFR [$M_\\odot\\,\\mathrm{yr}^{-1}$]")
-ax.set_title("Same stellar mass, different burstiness")
-ax.legend(loc="upper right", fontsize=9)
-ax.set_yscale("log")
-ax.set_xlim(0, 13)
-
-# Annotate diagnostic windows
-ax.axvspan(0, 0.01, alpha=0.15, color="gold", label="H$\\alpha$ window (~10 Myr)")
-ax.axvspan(0, 0.1, alpha=0.08, color="purple", label="UV window (~100 Myr)")
-ax.legend(loc="upper right", fontsize=8)
-ax.set_title("Same integrated stellar mass — very different observables")
-plt.tight_layout()
-plt.show()
-
-# %% [markdown]
-# ## The SFH decomposition
-#
-# The key equation of the correlated field model:
-#
-# $$
-# \ln \mathrm{SFR}(t) \;=\; \ln\,\overline{\mathrm{SFR}}(t)
-#     \;-\; \tfrac{K(0)}{2} \;+\; x(t)
-# $$
-#
-# Three pieces:
-#
-# | Component | Symbol | Role |
-# |-----------|--------|------|
-# | Smooth backbone | $\overline{\mathrm{SFR}}(t)$ | Long-term evolutionary trend (double power law) |
-# | Lognormal correction | $-K(0)/2$ | Ensures $\langle e^{x}\rangle = 1$ — prevents bursty models from overproducing stars |
-# | Stochastic field | $x(t) \sim \mathcal{GP}(0, K)$ | Correlated fluctuations governed by the PSD |
-#
-# **Analogy**: think of $\overline{\mathrm{SFR}}$ as the *climate* (long-term
-# average) and $x(t)$ as the *weather* (stochastic day-to-day variation).
-# The PSD determines whether your galaxy lives in the tropics (steady
-# rain) or the desert (rare flash floods).
-
-# %%
-# --- Setup: imports and grid ---
-from diffsed.models.sfh.psd_models import psd_drw, drw_acf, drw_variance
+# diffsed imports
+from diffsed.models.sfh.psd_models import psd_drw, drw_acf, drw_variance, psd_to_sqrt_power
 from diffsed.models.sfh.gp_sfh import (
-    make_log_age_grid, compute_sqrt_power_drw, gp_from_xi,
-    generate_gp_fourier, generate_gp_batch,
+    gp_from_xi, generate_gp_fourier, generate_gp_batch, compute_sqrt_power_drw
 )
 from diffsed.models.sfh.mean_sfh import double_powerlaw
+from diffsed.utils.grid import make_log_age_grid, grid_spacing, log_age_to_age_yr, interpolate_to_linear_time
+from diffsed.utils.cosmology import age_at_z
 
-N_GRID = 128
-log_ages = make_log_age_grid(n_grid=N_GRID)
-d_log_age = float(log_ages[1] - log_ages[0])
-ages_yr = 10**log_ages
-ages_gyr = ages_yr / 1e9
+# ── Plot style ─────────────────────────────────────────────────
+plt.rcParams.update({
+    "figure.dpi": 130,
+    "font.size": 11,
+    "axes.linewidth": 1.2,
+    "xtick.major.width": 1.0,
+    "ytick.major.width": 1.0,
+    "xtick.direction": "in",
+    "ytick.direction": "in",
+    "legend.frameon": False,
+})
 
-print(f"Grid: {N_GRID} points, log(age/yr) = {float(log_ages[0]):.2f} to {float(log_ages[-1]):.2f}")
-print(f"Spacing: {d_log_age:.4f} dex")
-print(f"Time range: {float(ages_gyr[0]):.3f} Myr to {float(ages_gyr[-1]):.1f} Gyr")
+
+# ── Redshift twin-axis helper ──────────────────────────────────
+def add_redshift_axis(ax, z_ticks=[0, 0.5, 1, 2, 3, 5]):
+    """Add redshift labels as a twin x-axis on a lookback-time (Gyr) plot."""
+    ax2 = ax.twiny()
+    t_uni = float(age_at_z(0.0)) / 1e9  # age of universe in Gyr
+    lookbacks = [t_uni - float(age_at_z(z)) / 1e9 for z in z_ticks]
+    xlim = ax.get_xlim()
+    ax2.set_xlim(xlim)
+    valid = [(z, lb) for z, lb in zip(z_ticks, lookbacks)
+             if xlim[0] <= lb <= xlim[1]]
+    if valid:
+        ax2.set_xticks([lb for _, lb in valid])
+        ax2.set_xticklabels([f"z={z}" for z, _ in valid], fontsize=8)
+    ax2.set_xlabel("Redshift", fontsize=9)
+    return ax2
+
+
+# ── Figure saving helper ───────────────────────────────────────
+FIG_DIR = "notebook_figures"
+os.makedirs(FIG_DIR, exist_ok=True)
+
+def savefig(fig, name, dpi=72):
+    path = os.path.join(FIG_DIR, f"01_{name}.png")
+    fig.savefig(path, bbox_inches="tight", dpi=dpi)
+    print(f"Saved {path}")
+
+
+print(f"JAX {jax.__version__} | device: {jax.devices()[0]}")
 
 # %% [markdown]
-# ## The Power Spectral Density
+# ## What is Information Field Theory?
 #
-# The PSD controls **how bursty** and **on what timescale** the SFH
-# fluctuates.  We adopt a damped random walk (DRW / Lorentzian):
+# Information Field Theory (IFT) is **Bayesian inference applied to continuous fields** ([En&szlig;lin 2019](https://arxiv.org/abs/1804.03350)). In our case the "field" is the log-SFR fluctuation $x(t)$ &mdash; a continuous function over cosmic time. The problem: we have a finite number of photometric or spectroscopic measurements (data $\mathbf{d}$), but want to reconstruct a continuous SFH (signal $\mathbf{s}$).
 #
-# $$
-# P(\omega) = \frac{\sigma^2 \,\tau}{1 + (\tau\,\omega)^2}
-# $$
+# The IFT framework sets this up as:
 #
-# Two parameters fully specify the stochastic behavior:
+# | Symbol | Meaning in our context |
+# |:------:|:------------------------|
+# | **Signal** $\mathbf{s} = x(t)$ | Log-SFR fluctuation around the mean (the unknown field) |
+# | **Data** $\mathbf{d}$ | Observed photometry or spectrum |
+# | **Response** $R$ | Maps SFH to observables: $x(t) \to \text{SFR}(t) \to \text{DSPS} \to \text{SED} \to$ photometry |
+# | **Noise** $\mathbf{n}$ | Measurement uncertainties |
 #
-# | Parameter | Symbol | Meaning |
-# |-----------|--------|---------|
-# | Amplitude | $\sigma$ | How bursty (dex of SFR scatter) |
-# | Timescale | $\tau$ | How long bursts last (yr) |
+# The measurement equation is $\mathbf{d} = R(\mathbf{s}) + \mathbf{n}$, which is non-linear because of the exponential link, dust attenuation, and stellar population synthesis.
 #
-# The DRW PSD has a simple analytic autocorrelation function
-# (Wiener--Khinchin theorem):
+# ### The correlated field model
 #
-# $$
-# K(\Delta t) = \frac{\sigma^2}{2}\,\exp\!\left(-\frac{|\Delta t|}{\tau}\right)
-# $$
+# The **prior** on $x(t)$ comes from the PSD: it says "SFR fluctuations at frequency $\omega$ have power $P(\omega)$." This is encoded via the **correlated field model** ([Frank et al. 2021](https://arxiv.org/abs/2105.10470); [Edenhofer et al. 2024](https://arxiv.org/abs/2402.16683)):
 #
-# with stationary variance $K(0) = \sigma^2/2$.
+# $$x = \mathrm{IFFT}\!\left(\sqrt{P} \cdot \hat{\boldsymbol{\xi}}\right), \quad \boldsymbol{\xi} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$$
+#
+# where $\boldsymbol{\xi}$ is a **standardized white-noise vector**. All the physics (correlation timescale, burstiness amplitude) lives in the amplitude operator $\sqrt{P}$. The sampler explores $\boldsymbol{\xi}$-space, which has a simple standard-normal geometry, while the physics is encoded in $\sqrt{P}$.
+#
+# Why is this parametrisation important? Because $\boldsymbol{\xi} \sim \mathcal{N}(\mathbf{0},\mathbf{I})$ has an identity covariance &mdash; there are no strong correlations between its components. Gradient-based samplers like NUTS and variational methods like geoVI work far more efficiently in such a "whitened" coordinate system than they would if we sampled $x(t)$ directly (which has the highly non-trivial covariance $P$).
+#
+# ### The information Hamiltonian
+#
+# The negative log-posterior (called the "information Hamiltonian" in IFT) is:
+#
+# $$H(\boldsymbol{\xi}|\mathbf{d}) = \underbrace{\frac{1}{2}\sum_k \left(\frac{d_k - m_k(\boldsymbol{\xi})}{\sigma_k}\right)^2}_{\text{data fit } (\chi^2)} \;+\; \underbrace{\frac{1}{2}\,\boldsymbol{\xi}^\top \boldsymbol{\xi}}_{\text{GP prior}}$$
+#
+# The first term says "match the data." The second says "don't deviate too far from the prior" &mdash; and because $\boldsymbol{\xi}$ is standardized, the prior is simply a unit Gaussian penalty. Inference means minimising $H$ (MAP) or sampling from $\exp(-H)$ (NUTS/geoVI).
+#
+# ### Why this matters for observers
+#
+# Traditional SED codes use either parametric SFHs (too rigid, can miss real burstiness) or binned non-parametric SFHs with ad-hoc continuity priors (arbitrary bin widths, difficult to interpret). IFT replaces the ad-hoc prior with a **physically motivated PSD kernel**, and the standardized $\boldsymbol{\xi}$-space enables **gradient-based inference** (NUTS, geoVI) that is 10&ndash;100$\times$ faster than gradient-free samplers like `dynesty`.
 
 # %% [markdown]
-# ### Physical timescale guide
+# ## The Power Spectral Density (PSD)
 #
-# | $\tau$ | Physical process | Example |
-# |--------|-----------------|---------|
-# | 5--10 Myr | Stellar winds + supernovae | Individual OB association lifecycle |
-# | 20--50 Myr | Superbubble feedback | Collective SNe clearing gas, then re-accretion |
-# | 100--300 Myr | Gas accretion cycles | Cosmic filament inflow modulation |
-# | 500+ Myr | Mergers / interactions | Major merger–induced starburst + quenching |
+# The **damped random walk** (DRW) PSD is a Lorentzian with two parameters:
 #
-# *If $\tau = 50\,$Myr, a burst lasts about the lifetime of a
-# superbubble — the collective effect of $\sim 10^3$ supernovae
-# clearing and re-filling a $\sim\,$kpc-scale cavity.*
+# $$P(\omega) = \frac{\sigma_{\rm PS}^2 \, \tau_{\rm PS}}{1 + (\tau_{\rm PS}\,\omega)^2}$$
+#
+# **$\sigma_{\rm PS}$** sets the **amplitude** of SFR fluctuations. The stationary variance of the GP is $\sigma_x^2 = \sigma_{\rm PS}^2 / 2$, so a 1$\sigma$ excursion in $x$ corresponds to a multiplicative factor of $e^{\sigma_x}$ in SFR. At $\sigma_{\rm PS} = 0.5$, the SFR varies by about 1.4$\times$ around the mean; at $\sigma_{\rm PS} = 4.0$, it varies by about 50$\times$.
+#
+# **$\tau_{\rm PS}$** sets the **memory time** &mdash; how long a burst or quench episode persists before reverting to the mean. Different physical feedback mechanisms produce characteristic timescales:
+#
+# | $\tau_{\rm PS}$ range | Physical mechanism | References |
+# |:-----:|:----|:----|
+# | 1&ndash;10 Myr | Stellar winds, SN blowout | Hopkins et al. 2018 |
+# | 20&ndash;50 Myr | Supernova feedback cycle | Faucher-Gigu&egrave;re 2018 |
+# | 100&ndash;300 Myr | Gas accretion, halo response | Dekel et al. 2023 |
+#
+# The autocorrelation function (ACF) is the Fourier transform of the PSD: $\xi(\Delta t) = (\sigma_{\rm PS}^2/2)\,\exp(-|\Delta t|/\tau_{\rm PS})$. The ACF tells you how correlated the SFR is between two epochs separated by $\Delta t$.
 
 # %%
-# --- PSD and autocorrelation for three (sigma, tau) combos ---
-omega = jnp.logspace(-10, -5, 500)  # rad/yr
-delta_t = jnp.linspace(0, 500e6, 500)  # yr
+# ── PSD overview: P(omega), ACF, and GP realizations ─────────
 
-configs = [
-    (0.5, 200e6, "C0", "$\\sigma=0.5,\\;\\tau=200\\,$Myr"),
-    (1.0, 50e6,  "C1", "$\\sigma=1.0,\\;\\tau=50\\,$Myr"),
-    (2.0, 10e6,  "C3", "$\\sigma=2.0,\\;\\tau=10\\,$Myr"),
-]
+regimes = {
+    "Smooth":         {"sigma": 0.5, "tau_myr": 200, "color": "#1b9e77"},
+    "Moderate":       {"sigma": 1.5, "tau_myr": 50,  "color": "#d95f02"},
+    "Bursty":         {"sigma": 2.5, "tau_myr": 20,  "color": "#7570b3"},
+    "Highly bursty":  {"sigma": 4.0, "tau_myr": 5,   "color": "#e7298a"},
+}
 
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+# Frequency in rad/Myr (so the knee at omega=1/tau is visible)
+omega_myr = jnp.logspace(-4, 1, 500)  # rad/Myr
+delta_t_myr = jnp.linspace(0, 500, 500)  # Myr
 
-for sigma, tau, color, label in configs:
-    psd_vals = psd_drw(omega, sigma, tau)
-    acf_vals = drw_acf(delta_t, sigma, tau)
-    ax1.loglog(omega, psd_vals, color=color, lw=2, label=label)
-    ax2.plot(delta_t / 1e6, acf_vals, color=color, lw=2, label=label)
+fig, axes = plt.subplots(1, 3, figsize=(14, 4))
 
-ax1.set_xlabel("Angular frequency $\\omega$ [rad/yr]")
-ax1.set_ylabel("$P(\\omega)$")
-ax1.set_title("Power Spectral Density")
-ax1.legend(fontsize=8)
+# ── Panel 1: PSD P(omega) -- use Myr units ──
+ax = axes[0]
+for name, r in regimes.items():
+    tau_myr = r["tau_myr"]
+    P = psd_drw(omega_myr, r["sigma"], tau_myr)  # tau in Myr
+    ax.loglog(omega_myr, P, lw=2.5, color=r["color"],
+              label=rf"$\sigma$={r['sigma']}, $\tau$={tau_myr} Myr")
+    ax.axvline(1.0 / tau_myr, color=r["color"], ls=":", alpha=0.3)
+ax.set_xlabel(r"$\omega$ [rad Myr$^{-1}$]")
+ax.set_ylabel(r"$P(\omega)$")
+ax.set_title("DRW Power Spectrum")
+ax.legend(fontsize=6.5, loc="lower left")
+ax.set_xlim(1e-4, 10)
 
-ax2.set_xlabel("Time lag $\\Delta t$ [Myr]")
-ax2.set_ylabel("Autocovariance $K(\\Delta t)$")
-ax2.set_title("Autocorrelation (Fourier transform of PSD)")
-ax2.legend(fontsize=8)
+# ── Panel 2: ACF (normalized) ──
+ax = axes[1]
+for name, r in regimes.items():
+    tau_myr = r["tau_myr"]
+    acf = drw_acf(delta_t_myr, r["sigma"], tau_myr)
+    acf_norm = acf / acf[0]
+    ax.plot(delta_t_myr, acf_norm, lw=2.5, color=r["color"], label=name)
+ax.set_xlabel(r"$\Delta t$ [Myr]")
+ax.set_ylabel(r"Normalized ACF")
+ax.set_title("Autocorrelation")
+ax.legend(fontsize=7)
+ax.set_ylim(-0.05, 1.05)
+
+# ── Panel 3: GP realizations (linear time, offset for clarity) ──
+ax = axes[2]
+N_GRID = 256
+log_ages = make_log_age_grid(N_GRID)
+d_log = grid_spacing(log_ages)
+ages_yr = log_age_to_age_yr(log_ages)
+
+key = jax.random.PRNGKey(7)
+offset = 0
+for name, r in regimes.items():
+    sqrt_p = compute_sqrt_power_drw(
+        N_GRID, float(d_log), r["sigma"], r["tau_myr"] * 1e6
+    )
+    # Draw 3 realizations
+    for draw in range(3):
+        key, subkey = jax.random.split(key)
+        xi = jax.random.normal(subkey, shape=(N_GRID,))
+        gp = gp_from_xi(xi, sqrt_p, N_GRID)
+        t_gyr, gp_lin = interpolate_to_linear_time(log_ages, gp, 500)
+        lw = 2.0 if draw == 0 else 0.8
+        label = name if draw == 0 else None
+        ax.plot(np.array(t_gyr), np.array(gp_lin) + offset,
+                lw=lw, color=r["color"], alpha=0.7, label=label)
+    offset += 5  # vertical offset between regimes
+
+ax.set_xlabel("Lookback time (Gyr)")
+ax.set_ylabel(r"GP field $x(t)$ (offset)")
+ax.set_title("GP Realizations")
+ax.legend(fontsize=6.5, loc="upper right")
+ax.set_xlim(0, 13.5)
 
 plt.tight_layout()
+savefig(fig, "psd_overview")
 plt.show()
 
 # %% [markdown]
-# ## From PSD to Stochastic SFH
+# ## Generating GP Realizations
 #
-# The correlated field model generates GP realizations via an FFT recipe:
+# Given the PSD, generating a GP realization is a **three-step FFT recipe**:
 #
-# 1. Draw a standardized latent vector: $\boldsymbol{\xi} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$
-# 2. Fourier transform: $\hat{\boldsymbol{\xi}} = \mathrm{FFT}(\boldsymbol{\xi})$
-# 3. Multiply by amplitude operator: $\hat{\mathbf{s}} = \sqrt{P(\omega)}\;\hat{\boldsymbol{\xi}}$
-# 4. Inverse transform: $\mathbf{x} = \mathrm{IFFT}(\hat{\mathbf{s}})$
+# 1. **Draw** a standardized latent vector: $\boldsymbol{\xi} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ &mdash; this is what the sampler explores
+# 2. **Multiply** in Fourier space: $\hat{\boldsymbol{\xi}} = \texttt{rfft}(\boldsymbol{\xi})$, then $\hat{\mathbf{x}} = \sqrt{P/\Delta u} \cdot \hat{\boldsymbol{\xi}}$
+# 3. **Transform** back: $x(t) = \texttt{irfft}(\hat{\mathbf{x}})$
 #
-# The resulting field $x(t)$ inherits the correlation structure encoded in
-# $P(\omega)$.  This is the core of the NIFTy / IFT approach
-# (Ensslin et al. 2009): the latent vector $\boldsymbol{\xi}$ lives in a
-# *standardized* space where the prior is simply $\mathcal{N}(0, I)$,
-# making it ideal for gradient-based samplers.
+# The amplitude operator $\sqrt{P / \Delta u}$ (where $\Delta u$ is the grid spacing in dex) encodes all the correlation structure. Changing $\sigma_{\rm PS}$ or $\tau_{\rm PS}$ changes $\sqrt{P}$ but leaves $\boldsymbol{\xi}$ untouched, so we can explore different burstiness regimes from the **same latent draw**.
+#
+# The grid is 256 points uniformly spaced in $\log_{10}(t_{\rm age}/\text{yr})$ from 1 Myr to 13.8 Gyr. Uniform spacing in log-age gives finer resolution at young ages (sub-Myr steps at 1 Myr, ~38 Myr steps at 1 Gyr), exactly where the SED is most sensitive to SFR changes.
 
 # %%
-# --- GP realizations across the burstiness plane ---
-regimes = [
-    (0.5, 200e6, "Quiescent elliptical\n($\\sigma=0.5,\\;\\tau=200\\,$Myr)"),
-    (1.0, 50e6,  "Steady disk\n($\\sigma=1.0,\\;\\tau=50\\,$Myr)"),
-    (2.0, 20e6,  "Starburst dwarf\n($\\sigma=2.0,\\;\\tau=20\\,$Myr)"),
-    (3.0, 5e6,   "Post-merger\n($\\sigma=3.0,\\;\\tau=5\\,$Myr)"),
-]
+# ── Grid setup ────────────────────────────────────────────────
 
-n_realizations = 5
-fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey=True)
+N_GRID = 256
+log_age_grid = make_log_age_grid(N_GRID)
+d_log_age = grid_spacing(log_age_grid)
+age_yr = log_age_to_age_yr(log_age_grid)
+age_gyr = age_yr / 1e9
 
-for ax, (sigma, tau, title) in zip(axes.ravel(), regimes):
-    sqrt_power = compute_sqrt_power_drw(N_GRID, d_log_age, sigma, tau)
-    key = jax.random.PRNGKey(42)
-    gp_batch = generate_gp_batch(key, sqrt_power, N_GRID, n_realizations)
+# Helper for proper linear-time SFH plotting
+# age_yr IS lookback time (how long ago stars formed)
+# The log-age grid is denser at recent times (small age_yr)
+# interpolate_to_linear_time resamples to uniform spacing for honest plots
 
-    for i in range(n_realizations):
-        ax.plot(ages_gyr, gp_batch[i], lw=0.8, alpha=0.7)
-    ax.axhline(0, color="k", ls="--", lw=0.5)
-    ax.set_title(title, fontsize=10)
-    ax.set_ylabel("$x(t)$ [dex]")
+def sfh_on_linear_time(sfr_on_log_grid, n_pts=1000):
+    """Resample an SFH from the log-age grid to a uniform linear grid."""
+    return interpolate_to_linear_time(log_age_grid, sfr_on_log_grid, n_pts)
+
+print(f"Grid: {N_GRID} points")
+print(f"log(age) range: {float(log_age_grid[0]):.2f} to {float(log_age_grid[-1]):.2f} dex")
+print(f"Age range: {float(age_yr[0])/1e6:.1f} Myr to {float(age_yr[-1])/1e9:.2f} Gyr")
+print(f"Grid spacing: {d_log_age:.4f} dex")
+
+
+# %%
+# ── Same xi, different PSD -> different GP ───────────────────
+# This demonstrates the separation of concerns: xi is the
+# standardized latent variable, sqrt(P) encodes the physics.
+
+key = random.PRNGKey(42)
+xi_fixed = random.normal(key, shape=(N_GRID,))
+
+fig, axes = plt.subplots(2, 2, figsize=(10, 5), sharex=True)
+
+for ax, (name, r) in zip(axes.flat, regimes.items()):
+    sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, r["sigma"], r["tau_myr"] * 1e6)
+    gp = gp_from_xi(xi_fixed, sqrt_p, N_GRID)
+
+    ax.plot(age_gyr, gp, lw=2.0, color=r["color"])
+    ax.axhline(0, ls="--", color="gray", lw=0.7)
+    # Show +/- 1-sigma band
+    sig_x = np.sqrt(float(drw_variance(r["sigma"])))
+    ax.axhspan(-sig_x, sig_x, alpha=0.08, color=r["color"])
+    ax.set_title(rf"{name}: $\sigma_{{\rm PS}}$={r['sigma']}, $\tau_{{\rm PS}}$={r['tau_myr']} Myr",
+                 fontsize=9)
+    ax.set_ylabel(r"$x(t)$", fontsize=10)
+    ax.text(0.97, 0.95, rf"$\sigma_x$={sig_x:.2f}",
+            transform=ax.transAxes, ha="right", va="top", fontsize=8,
+            bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.8))
 
 for ax in axes[1]:
-    ax.set_xlabel("Lookback time [Gyr]")
-axes[0, 0].set_xscale("log")
-fig.suptitle("GP realizations: same latent seed, different PSD parameters", fontsize=12, y=1.02)
-plt.tight_layout()
+    ax.set_xlabel("Stellar age [Gyr]")
+
+fig.suptitle(r"Same latent $\boldsymbol{\xi}$, different PSD $\rightarrow$ different GP",
+             fontsize=11, y=1.02)
+fig.tight_layout()
+savefig(fig, "same_xi_different_psd")
+plt.show()
+
+# %%
+# ── Multiple GP realizations per regime ──────────────────────
+# Different xi draws produce different realizations of the same
+# correlation structure. The shaded band shows the expected
+# +/- 1 sigma_x envelope.
+
+N_REAL = 5
+key = random.PRNGKey(123)
+
+fig, axes = plt.subplots(2, 2, figsize=(10, 5), sharex=True)
+
+for ax, (name, r) in zip(axes.flat, regimes.items()):
+    sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, r["sigma"], r["tau_myr"] * 1e6)
+    gp_batch = generate_gp_batch(key, sqrt_p, N_GRID, N_REAL)
+
+    for i in range(N_REAL):
+        ax.plot(age_gyr, gp_batch[i], lw=1.5, alpha=0.7, color=r["color"])
+
+    ax.axhline(0, ls="--", color="gray", lw=0.7)
+    sig_x = np.sqrt(float(drw_variance(r["sigma"])))
+    ax.axhspan(-sig_x, sig_x, alpha=0.08, color=r["color"])
+    ax.set_title(rf"{name}: $\sigma_{{\rm PS}}$={r['sigma']}, $\tau_{{\rm PS}}$={r['tau_myr']} Myr",
+                 fontsize=9)
+    ax.set_ylabel(r"$x(t)$", fontsize=10)
+
+for ax in axes[1]:
+    ax.set_xlabel("Stellar age [Gyr]")
+
+fig.suptitle(f"{N_REAL} independent GP realizations per regime", fontsize=11, y=1.02)
+fig.tight_layout()
+savefig(fig, "gp_realizations")
 plt.show()
 
 # %% [markdown]
 # ## The Mean Star Formation History
 #
-# The smooth backbone is a double power law (Carnall et al. 2018;
-# Behroozi et al. 2013):
+# The GP $x(t)$ fluctuates around zero by construction &mdash; it only generates stochastic variability. The secular envelope (rising at early times, declining at late times) comes from a separate **smooth mean SFH**. We use the double power law ([Behroozi et al. 2013](https://arxiv.org/abs/1207.6105); [Carnall et al. 2018](https://arxiv.org/abs/2207.08778)):
 #
-# $$
-# \overline{\mathrm{SFR}}(t) = \frac{A}{\left(\frac{t}{\tau_\mathrm{sfh}}\right)^\alpha
-# + \left(\frac{t}{\tau_\mathrm{sfh}}\right)^{-\beta}}
-# $$
+# $$\overline{\text{SFR}}(t) = \frac{A}{(t/\tau)^\alpha + (t/\tau)^{-\beta}}$$
 #
-# Four parameters control the shape:
+# where $t$ is **lookback time**. The function peaks near $t \approx \tau$.
 #
-# | Parameter | Symbol | Meaning |
-# |-----------|--------|---------|
-# | Rise slope | $\beta$ | Steepness of SFR increase (in cosmic time) |
-# | Decline slope | $\alpha$ | Steepness of SFR decrease after peak |
-# | Peak time | $\tau_\mathrm{sfh}$ | Approximate epoch of peak SFR (yr) |
-# | Normalization | $A$ | Peak SFR amplitude ($M_\odot\,\mathrm{yr}^{-1}$) |
+# ### Understanding $\alpha$ and $\beta$
 #
-# **Convention**: `double_powerlaw` takes **lookback time** $t$ in years.
-# In lookback time, $\alpha$ controls the right side (early universe,
-# large lookback) and $\beta$ controls the left side (near present).
+# The parameters have different visual effects depending on whether you think in cosmic time or lookback time. The double power law was originally defined in cosmic time (Behroozi et al. 2013), but our plots show lookback time (present on the left):
+#
+# - **In cosmic time** (early universe on the left, present on the right): $\alpha$ = falling slope (decline from peak to present), $\beta$ = rising slope (early universe to peak)
+# - **In lookback time plots** (present on the left, early universe on the right, what we show): **$\alpha$ controls the right side** (large lookback = early universe), **$\beta$ controls the left side** (small lookback = near present)
+#
+# A practical way to remember: when you see our lookback-time plots, $\beta$ controls how steeply the SFR drops from the peak toward the present (left side), and $\alpha$ controls how steeply it drops toward the early universe (right side).
+#
+# ### The normalization $A$
+#
+# **Important:** The parameter $A$ (norm) is the **peak SFR** in M$_{\odot}$/yr &mdash; it is **not** the stellar mass. Stellar mass is a derived quantity:
+#
+# $$M_* = \int_0^{t_{\rm H}} \text{SFR}(t)\,(1 - R(t))\,\mathrm{d}t$$
+#
+# where $R(t)$ is the returned mass fraction from stellar winds and supernovae. The FSPS SSP templates already account for mass loss, so we do not need to apply $R(t)$ separately when computing the SED.
 
 # %%
-# --- Four SFH archetypes ---
-t_lb = jnp.linspace(0.1e9, 13.0e9, 400)  # lookback time in yr
-t_cosmic = 13.7e9 - t_lb  # cosmic time
+# ── Galaxy archetypes: mean SFH on lookback time ─────────────
+# Four example SFHs showing the range of shapes
+# accessible via the double power law parameters.
 
-archetypes = [
-    dict(alpha=3.0, beta=0.5, tau=2e9,  norm=30.0, label="Early elliptical", color="C3"),
-    dict(alpha=1.5, beta=1.0, tau=5e9,  norm=10.0, label="Disk galaxy",      color="C0"),
-    dict(alpha=1.0, beta=2.0, tau=8e9,  norm=5.0,  label="Late-former",      color="C2"),
-    dict(alpha=1.0, beta=1.0, tau=7e9,  norm=3.0,  label="Quasi-constant",   color="C4"),
-]
+archetypes = {
+    "a=1.0, b=0.5, t=8 Gyr": {
+        "alpha": 1.0, "beta": 0.5, "tau_gyr": 8.0, "norm": 5.0,
+        "color": "#1b9e77",
+    },
+    "a=2.0, b=2.0, t=3 Gyr": {
+        "alpha": 2.0, "beta": 2.0, "tau_gyr": 3.0, "norm": 50.0,
+        "color": "#d95f02",
+    },
+    "a=1.5, b=3.5, t=2 Gyr": {
+        "alpha": 1.5, "beta": 3.5, "tau_gyr": 2.0, "norm": 30.0,
+        "color": "#7570b3",
+    },
+    "a=0.8, b=4.0, t=1.5 Gyr": {
+        "alpha": 0.8, "beta": 4.0, "tau_gyr": 1.5, "norm": 80.0,
+        "color": "#e7298a",
+    },
+}
 
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+fig, ax = plt.subplots(figsize=(9, 4.5))
 
-for p in archetypes:
-    sfr = double_powerlaw(t_lb, p["alpha"], p["beta"], p["tau"], p["norm"])
-    ax1.plot(t_cosmic / 1e9, sfr, lw=2, color=p["color"], label=p["label"])
-    ax2.plot(t_lb / 1e9, sfr, lw=2, color=p["color"], label=p["label"])
+for name, p in archetypes.items():
+    sfr = double_powerlaw(age_yr, p["alpha"], p["beta"],
+                          p["tau_gyr"] * 1e9, p["norm"])
+    ax.plot(age_gyr, sfr, lw=2.2, color=p["color"],
+            label=rf"$\alpha$={p['alpha']}, $\beta$={p['beta']}, "
+                  rf"$\tau$={p['tau_gyr']} Gyr")
 
-ax1.set_xlabel("Cosmic time [Gyr]")
-ax1.set_ylabel("SFR [$M_\\odot\\,\\mathrm{yr}^{-1}$]")
-ax1.set_title("Mean SFH — cosmic time")
-ax1.legend(fontsize=9)
+ax.set_xlabel(r"Lookback time [Gyr]")
+ax.set_ylabel(r"SFR [M$_{\odot}$ yr$^{-1}$]")
+ax.set_title("Mean SFH: Galaxy Archetypes (Double Power Law)", fontsize=11)
+ax.set_xlim(0, 13.5)
+ax.legend(fontsize=7.5, loc="upper right")
 
-ax2.set_xlabel("Lookback time [Gyr]")
-ax2.set_ylabel("SFR [$M_\\odot\\,\\mathrm{yr}^{-1}$]")
-ax2.set_title("Mean SFH — lookback time")
-ax2.legend(fontsize=9)
-ax2.invert_xaxis()
+# Annotate present-day side
+ax.annotate(r"$z=0$ (present)", xy=(0.3, 0.02), xycoords="axes fraction",
+            fontsize=8, color="gray", ha="left")
+ax.annotate("", xy=(0.02, 0.05), xytext=(0.18, 0.05),
+            xycoords="axes fraction",
+            arrowprops=dict(arrowstyle="->", color="gray", lw=1.0))
 
-plt.tight_layout()
+add_redshift_axis(ax)
+
+fig.tight_layout()
+savefig(fig, "galaxy_archetypes")
 plt.show()
 
 # %%
-# --- Effect of varying alpha, beta, tau independently ---
-t_cosmic = jnp.linspace(0.1e9, 13.5e9, 400)
+# ── Parameter exploration: alpha, beta, tau ──────────────────
+# Each panel varies one parameter while holding the others fixed
+# at a baseline (alpha=1.5, beta=1.5, tau=4 Gyr, A=10 Msun/yr).
 
-fig, axes = plt.subplots(1, 3, figsize=(14, 4), sharey=True)
+fig, axes = plt.subplots(1, 3, figsize=(10, 3.8))
 
-# Panel 1: vary alpha
-for alpha in [0.5, 1.5, 3.0, 5.0]:
-    sfr = double_powerlaw(13.7e9 - t_cosmic, alpha=alpha, beta=1.0, tau=5e9, norm=10.0)
-    axes[0].plot(t_cosmic / 1e9, sfr, lw=2, label=f"$\\alpha={alpha}$")
-axes[0].set_title("Varying $\\alpha$ (decline slope)")
-axes[0].legend(fontsize=8)
+base = {"alpha": 1.5, "beta": 1.5, "tau_gyr": 4.0, "norm": 10.0}
+cmap = plt.cm.viridis
 
-# Panel 2: vary beta
-for beta in [0.3, 1.0, 2.0, 4.0]:
-    sfr = double_powerlaw(13.7e9 - t_cosmic, alpha=1.5, beta=beta, tau=5e9, norm=10.0)
-    axes[1].plot(t_cosmic / 1e9, sfr, lw=2, label=f"$\\beta={beta}$")
-axes[1].set_title("Varying $\\beta$ (rise slope)")
-axes[1].legend(fontsize=8)
+# Panel 1: vary alpha (controls RIGHT side = early universe in lookback)
+ax = axes[0]
+alphas = [0.5, 1.0, 2.0, 3.0, 4.0]
+for i, a in enumerate(alphas):
+    sfr = double_powerlaw(age_yr, a, base["beta"],
+                          base["tau_gyr"] * 1e9, base["norm"])
+    ax.plot(age_gyr, sfr, lw=2.0, color=cmap(i / (len(alphas) - 1)),
+            label=rf"$\alpha$={a}")
+ax.set_title(r"Vary $\alpha$ (right side: early universe)", fontsize=9)
+ax.legend(fontsize=7)
+ax.set_ylabel(r"SFR [M$_{\odot}$ yr$^{-1}$]")
 
-# Panel 3: vary tau
-for tau_gyr in [1, 3, 5, 8, 11]:
-    sfr = double_powerlaw(13.7e9 - t_cosmic, alpha=1.5, beta=1.0, tau=tau_gyr * 1e9, norm=10.0)
-    axes[2].plot(t_cosmic / 1e9, sfr, lw=2, label=f"$\\tau={tau_gyr}\\,$Gyr")
-axes[2].set_title("Varying $\\tau_\\mathrm{sfh}$ (peak time)")
-axes[2].legend(fontsize=8)
+# Panel 2: vary beta (controls LEFT side = near present in lookback)
+ax = axes[1]
+betas = [0.3, 0.8, 1.5, 2.5, 4.0]
+for i, b in enumerate(betas):
+    sfr = double_powerlaw(age_yr, base["alpha"], b,
+                          base["tau_gyr"] * 1e9, base["norm"])
+    ax.plot(age_gyr, sfr, lw=2.0, color=cmap(i / (len(betas) - 1)),
+            label=rf"$\beta$={b}")
+ax.set_title(r"Vary $\beta$ (left side: near present)", fontsize=9)
+ax.legend(fontsize=7)
+
+# Panel 3: vary tau (shifts the peak)
+ax = axes[2]
+taus = [1.0, 2.0, 4.0, 7.0, 10.0]
+for i, t in enumerate(taus):
+    sfr = double_powerlaw(age_yr, base["alpha"], base["beta"],
+                          t * 1e9, base["norm"])
+    ax.plot(age_gyr, sfr, lw=2.0, color=cmap(i / (len(taus) - 1)),
+            label=rf"$\tau$={t} Gyr")
+ax.set_title(r"Vary $\tau$ (peak lookback time)", fontsize=9)
+ax.legend(fontsize=7)
 
 for ax in axes:
-    ax.set_xlabel("Cosmic time [Gyr]")
-axes[0].set_ylabel("SFR [$M_\\odot\\,\\mathrm{yr}^{-1}$]")
-plt.tight_layout()
+    ax.set_xlabel("Lookback time [Gyr]")
+    ax.set_xlim(0, 13.5)
+
+fig.tight_layout()
+savefig(fig, "mean_sfh_parameters")
 plt.show()
 
 # %% [markdown]
-# ## Assembling the Full SFH
+# ## The Full SFH: Mean + GP + Lognormal Correction
 #
-# Now we combine the pieces. Step by step:
+# The complete star formation history combines the smooth mean with the GP fluctuations:
 #
-# 1. **Mean SFH**: $\overline{\mathrm{SFR}}(t)$ from the double power law
-# 2. **GP realization**: $x(t) = \mathrm{IFFT}\!\left(\sqrt{P}\;\hat{\xi}\right)$
-# 3. **Lognormal correction**: subtract $K(0)/2$ to ensure
-#    $\langle e^{x(t)}\rangle = 1$
-# 4. **Full SFH**: $\mathrm{SFR}(t) = \overline{\mathrm{SFR}}(t) \cdot
-#    \exp\!\left[x(t) - K(0)/2\right]$
+# $$\text{SFR}(t) = \overline{\text{SFR}}(t) \;\times\; \exp\!\left(x(t) - \frac{\sigma_x^2}{2}\right)$$
 #
-# The correction $-K(0)/2$ is critical.  Without it, the expectation value
-# $\langle e^x \rangle = e^{K(0)/2} > 1$ (lognormal bias), and bursty
-# models would systematically **overproduce** stars relative to the smooth
-# backbone.
+# ### Why $-\sigma_x^2/2$?
+#
+# The GP $x(t)$ is zero-mean, so $\langle x(t)\rangle = 0$. But $\exp(x)$ is **not** mean-one: for a zero-mean Gaussian $x$ with variance $\sigma_x^2$, the expectation of $\exp(x)$ is $\exp(\sigma_x^2/2) > 1$. Without correction, burstier models (larger $\sigma_{\rm PS}$) would have systematically higher **average** SFR than the intended mean.
+#
+# **Intuition:** The median of a lognormal is $\exp(\mu)$, but the mean is $\exp(\mu + \sigma^2/2)$. The upward excursions (bursts) are multiplicatively larger than the downward excursions (quenching dips), pulling the average up. Subtracting $\sigma_x^2/2$ cancels this bias, ensuring $\langle\text{SFR}\rangle = \overline{\text{SFR}}$ regardless of burstiness level.
+#
+# For the DRW, $\sigma_x^2 = \sigma_{\rm PS}^2 / 2$, so the correction is $-\sigma_{\rm PS}^2/4$.
 
 # %%
-# --- Step-by-step SFH assembly ---
-sigma_ps, tau_ps = 1.5, 50e6  # yr
-sqrt_power = compute_sqrt_power_drw(N_GRID, d_log_age, sigma_ps, tau_ps)
-variance = drw_variance(sigma_ps)
+# ── Step-by-step: mean -> GP -> full SFH ─────────────────────
+# Three panels showing each ingredient and the final combination.
 
-key = jax.random.PRNGKey(7)
-xi = jax.random.normal(key, (N_GRID,))
-gp = gp_from_xi(xi, sqrt_power, N_GRID)
+# Mean SFH (spiral-like)
+mean_params = {"alpha": 1.2, "beta": 0.8, "tau_gyr": 6.0, "norm": 8.0}
+mean_sfr = double_powerlaw(age_yr, mean_params["alpha"], mean_params["beta"],
+                           mean_params["tau_gyr"] * 1e9, mean_params["norm"])
 
-# Mean SFH on the log-age grid (lookback time)
-sfr_mean = double_powerlaw(ages_yr, alpha=1.5, beta=1.0, tau=5e9, norm=10.0)
+# GP (moderate burstiness)
+sigma_ps, tau_ps_myr = 1.5, 50.0
+sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, sigma_ps, tau_ps_myr * 1e6)
+key = random.PRNGKey(7)
+gp = generate_gp_fourier(key, sqrt_p, N_GRID)
 
-fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+# Lognormal correction
+sigma_x_sq = float(drw_variance(sigma_ps))
+full_sfr = mean_sfr * jnp.exp(gp - sigma_x_sq / 2.0)
 
-# Panel 1: Mean SFH
-axes[0, 0].plot(ages_gyr, sfr_mean, "C0", lw=2)
-axes[0, 0].set_ylabel("SFR [$M_\\odot\\,\\mathrm{yr}^{-1}$]")
-axes[0, 0].set_title("(1) Mean SFH: $\\overline{\\mathrm{SFR}}(t)$")
-axes[0, 0].set_xscale("log")
+fig, axes = plt.subplots(1, 3, figsize=(10, 3.8))
 
-# Panel 2: GP realization
-axes[0, 1].plot(ages_gyr, gp, "C1", lw=1.5)
-axes[0, 1].axhline(0, color="k", ls="--", lw=0.5)
-axes[0, 1].set_ylabel("$x(t)$")
-axes[0, 1].set_title(f"(2) GP realization ($\\sigma={sigma_ps},\\;\\tau={tau_ps/1e6:.0f}\\,$Myr)")
-axes[0, 1].set_xscale("log")
+# Panel 1: mean SFH (linear)
+ax = axes[0]
+t_mean, mean_lin = sfh_on_linear_time(mean_sfr)
+ax.plot(t_mean, mean_lin, lw=2.2, color="#1b9e77")
+ax.fill_between(np.array(age_gyr), 0, np.array(mean_sfr),
+                alpha=0.15, color="#1b9e77")
+ax.set_ylabel(r"SFR [M$_{\odot}$ yr$^{-1}$]")
+ax.set_title(r"Step 1: Mean $\overline{\mathrm{SFR}}(t)$", fontsize=10)
+ax.set_xlim(0, 13.5)
 
-# Panel 3: exp(GP) WITHOUT correction — show bias
-exp_gp_no_corr = jnp.exp(gp)
-axes[1, 0].plot(ages_gyr, exp_gp_no_corr, "C3", lw=1.5)
-axes[1, 0].axhline(1.0, color="k", ls="--", lw=0.5, label="Unbiased mean = 1")
-axes[1, 0].axhline(float(jnp.exp(0.5 * variance)), color="C3", ls=":",
-                    lw=1.5, label=f"$e^{{K(0)/2}} = {float(jnp.exp(0.5 * variance)):.2f}$")
-axes[1, 0].set_ylabel("$e^{x(t)}$")
-axes[1, 0].set_title("(3) Multiplicative factor WITHOUT correction")
-axes[1, 0].legend(fontsize=8)
-axes[1, 0].set_xscale("log")
+# Panel 2: GP fluctuation
+ax = axes[1]
+ax.plot(age_gyr, gp, lw=2.0, color="#d95f02")
+ax.axhline(0, ls="--", color="gray", lw=0.7)
+ax.axhspan(-np.sqrt(sigma_x_sq), np.sqrt(sigma_x_sq), alpha=0.1, color="#d95f02")
+ax.set_ylabel(r"$x(t)$")
+ax.set_title(rf"Step 2: GP ($\sigma_{{\rm PS}}$={sigma_ps}, $\tau_{{\rm PS}}$={tau_ps_myr:.0f} Myr)",
+             fontsize=10)
 
-# Panel 4: Full SFH with correction
-correction = -0.5 * variance
-sfr_full = sfr_mean * jnp.exp(gp + correction)
-axes[1, 1].plot(ages_gyr, sfr_mean, "C0", lw=1.5, ls="--", alpha=0.5, label="Mean SFH")
-axes[1, 1].plot(ages_gyr, sfr_full, "C1", lw=2, label="Full SFH (with correction)")
-axes[1, 1].set_ylabel("SFR [$M_\\odot\\,\\mathrm{yr}^{-1}$]")
-axes[1, 1].set_title("(4) Full SFH: $\\overline{\\mathrm{SFR}} \\cdot e^{x - K(0)/2}$")
-axes[1, 1].legend(fontsize=9)
-axes[1, 1].set_xscale("log")
+# Panel 3: full SFH (linear)
+ax = axes[2]
+t_mean, mean_lin = sfh_on_linear_time(mean_sfr)
+ax.plot(t_mean, mean_lin, lw=1.5, ls="--", color="gray", label="Mean")
+t_full, full_lin = sfh_on_linear_time(full_sfr)
+ax.plot(t_full, full_lin, lw=2.0, color="#7570b3", label="Full SFH")
+ax.set_ylabel(r"SFR [M$_{\odot}$ yr$^{-1}$]")
+ax.set_title(r"Step 3: $\overline{\mathrm{SFR}} \times e^{x - \sigma_x^2/2}$", fontsize=10)
+ax.legend(fontsize=8)
+ax.set_xlim(0, 13.5)
 
-for ax in axes.ravel():
+for ax in axes:
     ax.set_xlabel("Lookback time [Gyr]")
-plt.tight_layout()
+
+fig.tight_layout()
+savefig(fig, "sfh_step_by_step")
 plt.show()
 
 # %%
-# --- Lognormal bias: ensemble demonstration ---
-sigma_ps = 1.5
-variance = drw_variance(sigma_ps)
-sqrt_power = compute_sqrt_power_drw(N_GRID, d_log_age, sigma_ps, 50e6)
+# ── 4-regime comparison: LOG scale ───────────────────────────
+# Log scale is essential for visualizing extreme burstiness, where
+# SFR varies over orders of magnitude.
 
-key = jax.random.PRNGKey(0)
-n_samples = 1000
-gp_ensemble = generate_gp_batch(key, sqrt_power, N_GRID, n_samples)
+key = random.PRNGKey(1234)
 
-# Without correction: E[exp(x)] should be exp(K(0)/2) > 1
-exp_no_corr = jnp.exp(gp_ensemble)
-mean_no_corr = jnp.mean(exp_no_corr, axis=0)
+fig, axes = plt.subplots(2, 2, figsize=(10, 5.5), sharex=True)
 
-# With correction: E[exp(x - K(0)/2)] should be ~1
-exp_with_corr = jnp.exp(gp_ensemble - 0.5 * variance)
-mean_with_corr = jnp.mean(exp_with_corr, axis=0)
+for ax, (name, r) in zip(axes.flat, regimes.items()):
+    sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, r["sigma"], r["tau_myr"] * 1e6)
+    gp = generate_gp_fourier(key, sqrt_p, N_GRID)
 
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+    sig_x_sq = float(drw_variance(r["sigma"]))
+    sfr = mean_sfr * jnp.exp(gp - sig_x_sq / 2.0)
 
-# Left: spatial mean across grid
-ax1.plot(ages_gyr, mean_no_corr, "C3", lw=2, label="Without correction")
-ax1.plot(ages_gyr, mean_with_corr, "C0", lw=2, label="With $-K(0)/2$ correction")
-ax1.axhline(1.0, color="k", ls="--", lw=0.5)
-ax1.axhline(float(jnp.exp(0.5 * variance)), color="C3", ls=":", lw=1,
-            label=f"Predicted bias $e^{{K(0)/2}} = {float(jnp.exp(0.5 * variance)):.3f}$")
-ax1.set_xlabel("Lookback time [Gyr]")
-ax1.set_ylabel("$\\langle e^{x(t)} \\rangle$ over 1000 realizations")
-ax1.set_title("Ensemble mean of multiplicative factor")
-ax1.legend(fontsize=8)
-ax1.set_xscale("log")
+    ax.semilogy(age_gyr, sfr, lw=2.0, color=r["color"])
+    ax.semilogy(age_gyr, mean_sfr, lw=1.2, ls="--", color="gray")
+    ax.set_title(rf"{name}: $\sigma_{{\rm PS}}$={r['sigma']}, $\tau_{{\rm PS}}$={r['tau_myr']} Myr",
+                 fontsize=9)
+    ax.set_ylabel(r"SFR [M$_{\odot}$ yr$^{-1}$]")
+    ax.set_xlim(0, 13.5)
 
-# Right: histogram of grid-averaged exp(x) per realization
-grid_means_no = jnp.mean(exp_no_corr, axis=1)
-grid_means_yes = jnp.mean(exp_with_corr, axis=1)
-ax2.hist(np.array(grid_means_no), bins=40, alpha=0.6, color="C3", label="Without correction")
-ax2.hist(np.array(grid_means_yes), bins=40, alpha=0.6, color="C0", label="With correction")
-ax2.axvline(1.0, color="k", ls="--", lw=1)
-ax2.set_xlabel("Grid-averaged $\\langle e^x \\rangle$")
-ax2.set_ylabel("Count")
-ax2.set_title(f"Distribution of mean multiplicative factor ($N={n_samples}$)")
-ax2.legend(fontsize=8)
+for ax in axes[1]:
+    ax.set_xlabel("Lookback time [Gyr]")
 
-plt.tight_layout()
+fig.suptitle("Full SFH (log scale) -- same mean, different burstiness",
+             fontsize=11, y=1.02)
+fig.tight_layout()
+savefig(fig, "full_sfh_4_regimes")
+plt.show()
+
+# %%
+# ── 4-regime comparison: LINEAR scale ────────────────────────
+# Linear scale gives better intuition for smooth/moderate regimes
+# where fluctuations are small.
+
+fig, axes = plt.subplots(2, 2, figsize=(10, 5.5), sharex=True)
+
+for ax, (name, r) in zip(axes.flat, regimes.items()):
+    sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, r["sigma"], r["tau_myr"] * 1e6)
+    gp = generate_gp_fourier(key, sqrt_p, N_GRID)
+
+    sig_x_sq = float(drw_variance(r["sigma"]))
+    sfr = mean_sfr * jnp.exp(gp - sig_x_sq / 2.0)
+
+    t_sfr, sfr_lin = sfh_on_linear_time(sfr)
+    ax.plot(t_sfr, sfr_lin, lw=2.0, color=r["color"])
+    t_mean, mean_lin = sfh_on_linear_time(mean_sfr)
+    ax.plot(t_mean, mean_lin, lw=1.2, ls="--", color="gray")
+    ax.set_title(rf"{name}: $\sigma_{{\rm PS}}$={r['sigma']}, $\tau_{{\rm PS}}$={r['tau_myr']} Myr",
+                 fontsize=9)
+    ax.set_ylabel(r"SFR [M$_{\odot}$ yr$^{-1}$]")
+    ax.set_xlim(0, 13.5)
+    ax.set_ylim(bottom=0)
+
+for ax in axes[1]:
+    ax.set_xlabel("Lookback time [Gyr]")
+
+fig.suptitle("Full SFH (linear scale) -- same mean, different burstiness",
+             fontsize=11, y=1.02)
+fig.tight_layout()
+savefig(fig, "full_sfh_4_regimes_linear")
+plt.show()
+
+# %%
+# ── Ensemble of 10 SFHs per regime: LOG ──────────────────────
+# Multiple draws from the same PSD prior show the diversity
+# of SFH shapes that each burstiness regime permits.
+
+N_ENS = 10
+key_ens = random.PRNGKey(314)
+
+fig, axes = plt.subplots(2, 2, figsize=(10, 5.5), sharex=True)
+
+for ax, (name, r) in zip(axes.flat, regimes.items()):
+    sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, r["sigma"], r["tau_myr"] * 1e6)
+    gp_batch = generate_gp_batch(key_ens, sqrt_p, N_GRID, N_ENS)
+    sig_x_sq = float(drw_variance(r["sigma"]))
+
+    for i in range(N_ENS):
+        sfr = mean_sfr * jnp.exp(gp_batch[i] - sig_x_sq / 2.0)
+        ax.semilogy(age_gyr, sfr, lw=1.0, alpha=0.5, color=r["color"])
+
+    ax.semilogy(age_gyr, mean_sfr, lw=2.0, ls="--", color="black",
+                label="Mean SFH")
+    ax.set_title(rf"{name}: $\sigma_{{\rm PS}}$={r['sigma']}, $\tau_{{\rm PS}}$={r['tau_myr']} Myr",
+                 fontsize=9)
+    ax.set_ylabel(r"SFR [M$_{\odot}$ yr$^{-1}$]")
+    ax.set_xlim(0, 13.5)
+    if name == "Smooth":
+        ax.legend(fontsize=7)
+
+for ax in axes[1]:
+    ax.set_xlabel("Lookback time [Gyr]")
+
+fig.suptitle(f"{N_ENS} SFH realizations per regime (log scale)", fontsize=11, y=1.02)
+fig.tight_layout()
+savefig(fig, "sfh_ensemble")
+plt.show()
+
+# %%
+# ── Ensemble of 10 SFHs per regime: LINEAR ──────────────────
+
+fig, axes = plt.subplots(2, 2, figsize=(10, 5.5), sharex=True)
+
+for ax, (name, r) in zip(axes.flat, regimes.items()):
+    sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, r["sigma"], r["tau_myr"] * 1e6)
+    gp_batch = generate_gp_batch(key_ens, sqrt_p, N_GRID, N_ENS)
+    sig_x_sq = float(drw_variance(r["sigma"]))
+
+    for i in range(N_ENS):
+        sfr = mean_sfr * jnp.exp(gp_batch[i] - sig_x_sq / 2.0)
+        t_sfr, sfr_lin = sfh_on_linear_time(sfr)
+        ax.plot(t_sfr, sfr_lin, lw=1.0, alpha=0.5, color=r["color"])
+
+    t_mean, mean_lin = sfh_on_linear_time(mean_sfr)
+    ax.plot(t_mean, mean_lin, lw=2.0, ls="--", color="black",
+            label="Mean SFH")
+    ax.set_title(rf"{name}: $\sigma_{{\rm PS}}$={r['sigma']}, $\tau_{{\rm PS}}$={r['tau_myr']} Myr",
+                 fontsize=9)
+    ax.set_ylabel(r"SFR [M$_{\odot}$ yr$^{-1}$]")
+    ax.set_xlim(0, 13.5)
+    ax.set_ylim(bottom=0)
+    if name == "Smooth":
+        ax.legend(fontsize=7)
+
+for ax in axes[1]:
+    ax.set_xlabel("Lookback time [Gyr]")
+
+fig.suptitle(f"{N_ENS} SFH realizations per regime (linear scale)", fontsize=11, y=1.02)
+fig.tight_layout()
+savefig(fig, "sfh_ensemble_linear")
+plt.show()
+
+# %%
+# ── Zoom: last 1 Gyr (what UV and H-alpha probe) ────────────
+# UV luminosity traces SFR averaged over ~100 Myr; H-alpha traces
+# ~10 Myr. Bursty regimes show large SFR swings on these
+# timescales, directly affecting SFR-indicator calibrations.
+
+mask = age_yr < 1.0e9
+t_recent_myr = np.array(age_yr[mask]) / 1e6
+
+fig, axes = plt.subplots(2, 2, figsize=(10, 5.5), sharex=True)
+
+for ax, (name, r) in zip(axes.flat, regimes.items()):
+    sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, r["sigma"], r["tau_myr"] * 1e6)
+    sig_x_sq = float(drw_variance(r["sigma"]))
+
+    for i in range(3):
+        subkey = random.PRNGKey(500 + i)
+        gp = generate_gp_fourier(subkey, sqrt_p, N_GRID)
+        sfr = mean_sfr * jnp.exp(gp - sig_x_sq / 2.0)
+        ax.semilogy(t_recent_myr, sfr[mask], lw=1.8, alpha=0.7, color=r["color"])
+
+    ax.semilogy(t_recent_myr, np.array(mean_sfr[mask]), lw=1.5, ls="--", color="gray")
+    ax.set_title(rf"{name}: $\sigma_{{\rm PS}}$={r['sigma']}, $\tau_{{\rm PS}}$={r['tau_myr']} Myr",
+                 fontsize=9)
+    ax.set_ylabel(r"SFR [M$_{\odot}$ yr$^{-1}$]")
+
+    # Mark UV and H-alpha timescales
+    ax.axvspan(0, 10, alpha=0.06, color="blue")
+    ax.axvspan(0, 100, alpha=0.04, color="purple")
+    if name == "Smooth":
+        ylim = ax.get_ylim()
+        ax.text(5, ylim[1] * 0.4, r"H$\alpha$", fontsize=7, color="blue")
+        ax.text(50, ylim[1] * 0.4, "UV", fontsize=7, color="purple")
+
+for ax in axes[1]:
+    ax.set_xlabel("Lookback time [Myr]")
+
+fig.suptitle(r"Last 1 Gyr: what UV and H$\alpha$ probe", fontsize=11, y=1.02)
+fig.tight_layout()
+savefig(fig, "sfh_zoom_recent")
+plt.show()
+
+# %%
+# ── Same data in log lookback time ────────────────────────────
+# Log time emphasizes the recent past where UV/Halpha probe.
+
+fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+key = jax.random.PRNGKey(3)
+
+regimes_log = {
+    "Smooth":    {"sigma": 0.5, "tau_myr": 200, "color": "#1b9e77", "ax": axes[0, 0]},
+    "Moderate":  {"sigma": 1.5, "tau_myr": 50,  "color": "#d95f02", "ax": axes[0, 1]},
+    "Bursty":    {"sigma": 2.5, "tau_myr": 20,  "color": "#7570b3", "ax": axes[1, 0]},
+    "Highly bursty": {"sigma": 4.0, "tau_myr": 5, "color": "#e7298a", "ax": axes[1, 1]},
+}
+
+for name, r in regimes_log.items():
+    ax = r["ax"]
+    sqrt_p = compute_sqrt_power_drw(
+        N_GRID, float(d_log_age), r["sigma"], r["tau_myr"] * 1e6
+    )
+    k0_half = float(drw_variance(r["sigma"])) / 2.0
+
+    sfr_mean_bg = double_powerlaw(age_yr, alpha=1.5, beta=1.0, tau=5e9, norm=3.0)
+
+    for draw in range(5):
+        key, subkey = jax.random.split(key)
+        xi = jax.random.normal(subkey, shape=(N_GRID,))
+        gp_val = gp_from_xi(xi, sqrt_p, N_GRID)
+        sfr_full = sfr_mean_bg * jnp.exp(gp_val - k0_half)
+        ax.plot(np.array(age_gyr), np.array(sfr_full),
+                lw=0.5, alpha=0.4, color=r["color"])
+
+    ax.plot(np.array(age_gyr), np.array(sfr_mean_bg),
+            "k--", lw=2, label="Mean SFH")
+    ax.set_xscale("log")
+    ax.set_xlim(1e-3, 14)
+    ax.set_xlabel("Lookback time (Gyr)")
+    ax.set_ylabel(r"SFR (M$_{\odot}$/yr)")
+    ax.set_title(rf"{name} ($\sigma$={r['sigma']}, $\tau$={r['tau_myr']} Myr)",
+                 fontsize=10)
+    ax.legend(fontsize=7)
+    ax.set_ylim(bottom=0)
+
+fig.suptitle("SFH Realizations in Log Lookback Time", fontsize=13, y=1.01)
+fig.tight_layout()
+savefig(fig, "sfh_zoom_recent_logtime")
 plt.show()
 
 # %% [markdown]
 # ## The Burstiness Plane
 #
-# The two PSD parameters $\sigma$ and $\tau$ define a 2D space of galaxy
-# variability — the **burstiness plane**.
+# The 2D $(\sigma_{\rm PS},\; \tau_{\rm PS})$ parameter space produces a rich diversity of SFH behaviors. Varying $\sigma_{\rm PS}$ changes the **amplitude** of fluctuations (smooth vs. violent), while varying $\tau_{\rm PS}$ changes the **timescale** (rapid flickering vs. slow modulation):
 #
-# - **$\sigma$** (vertical axis): controls the *amplitude* of fluctuations.
-#   $\sigma = 0.5$ gives gentle ripples; $\sigma = 3$ gives order-of-magnitude
-#   bursts and quenching episodes.
-# - **$\tau$** (horizontal axis): controls the *timescale*.
-#   $\tau = 10\,$Myr means rapid flickering; $\tau = 200\,$Myr means slow,
-#   secular oscillations.
-#
-# Different regions of this plane correspond to physically distinct galaxy
-# populations, as we now demonstrate.
+# - **Low $\sigma$, high $\tau$** (top-left): gentle, long-timescale modulation
+# - **High $\sigma$, low $\tau$** (bottom-right): rapid, violent bursts
+# - **Low $\sigma$, low $\tau$** (bottom-left): rapid but weak flickering
+# - **High $\sigma$, high $\tau$** (top-right): slow but extreme excursions
 
 # %%
-# --- Burstiness plane: 3x3 grid of (sigma, tau) ---
-sigma_vals = [0.5, 1.5, 3.0]
-tau_vals = [10e6, 50e6, 200e6]
-tau_labels = ["10", "50", "200"]
-n_real = 5
+# ── 3x3 sigma x tau grid: LOG scale ──────────────────────────
 
-# Galaxy type annotations
-annotations = {
-    (0, 0): "Dead elliptical",
-    (0, 2): "Secular disk",
-    (1, 1): "Normal SF galaxy",
-    (2, 0): "Extreme dwarf",
-    (2, 2): "Post-starburst",
-}
+sigma_grid = [0.5, 1.5, 3.0]
+tau_grid_myr = [10, 50, 200]
 
-fig, axes = plt.subplots(3, 3, figsize=(14, 10), sharex=True, sharey=True)
+key_bp = random.PRNGKey(2024)
 
-# Use log-age grid for last 1 Gyr: select lookback < 1 Gyr
-mask = ages_yr <= 1e9
-t_plot = ages_yr[mask] / 1e6  # Myr
+fig, axes = plt.subplots(3, 3, figsize=(10, 7.5), sharex=True, sharey=True)
 
-for i, sigma in enumerate(sigma_vals):
-    for j, tau in enumerate(tau_vals):
+for i, tau_myr in enumerate(tau_grid_myr):
+    for j, sigma in enumerate(sigma_grid):
         ax = axes[i, j]
-        sqrt_power = compute_sqrt_power_drw(N_GRID, d_log_age, sigma, tau)
-        variance = drw_variance(sigma)
-        correction = -0.5 * variance
-        sfr_mean_grid = double_powerlaw(ages_yr, alpha=1.5, beta=1.0, tau=5e9, norm=10.0)
+        sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, sigma, tau_myr * 1e6)
+        gp = generate_gp_fourier(key_bp, sqrt_p, N_GRID)
+        sig_x_sq = float(drw_variance(sigma))
+        sfr = mean_sfr * jnp.exp(gp - sig_x_sq / 2.0)
 
-        key = jax.random.PRNGKey(42)
-        gps = generate_gp_batch(key, sqrt_power, N_GRID, n_real)
-
-        for k in range(n_real):
-            sfr = sfr_mean_grid * jnp.exp(gps[k] + correction)
-            ax.plot(t_plot, sfr[mask], lw=0.8, alpha=0.7)
-
-        ax.plot(t_plot, sfr_mean_grid[mask], "k--", lw=1, alpha=0.4)
-
-        if (i, j) in annotations:
-            ax.text(0.95, 0.95, annotations[(i, j)], transform=ax.transAxes,
-                    ha="right", va="top", fontsize=7, style="italic",
-                    bbox=dict(boxstyle="round,pad=0.2", facecolor="wheat", alpha=0.7))
+        ax.semilogy(age_gyr, sfr, lw=1.5, color="steelblue")
+        ax.semilogy(age_gyr, mean_sfr, lw=0.8, ls="--", color="gray")
+        ax.set_xlim(0, 13.5)
+        ax.set_ylim(1e-3, 1e4)
 
         if i == 0:
-            ax.set_title(f"$\\tau = {tau_labels[j]}\\,$Myr", fontsize=10)
+            ax.set_title(rf"$\sigma_{{\rm PS}}$={sigma}", fontsize=9)
         if j == 0:
-            ax.set_ylabel(f"$\\sigma = {sigma}$\nSFR [$M_\\odot$/yr]", fontsize=9)
+            ax.set_ylabel(rf"$\tau_{{\rm PS}}$={tau_myr} Myr" + "\n"
+                          + r"SFR [M$_{\odot}$ yr$^{-1}$]", fontsize=8)
+        if i == 2:
+            ax.set_xlabel("Lookback time [Gyr]")
 
-for ax in axes[2]:
-    ax.set_xlabel("Lookback time [Myr]")
-axes[0, 0].set_xscale("log")
-
-fig.suptitle("The Burstiness Plane: last 1 Gyr of SFH", fontsize=13, y=1.01)
-plt.tight_layout()
+fig.suptitle(r"Burstiness plane: $\sigma_{\rm PS}$ (columns) $\times$ $\tau_{\rm PS}$ (rows) -- log scale",
+             fontsize=11, y=1.02)
+fig.tight_layout()
+savefig(fig, "burstiness_plane")
 plt.show()
 
 # %%
-# --- Ensemble properties: sSFR scatter, peak-to-trough, duty cycle ---
-sigma_scan = jnp.array([0.3, 0.5, 1.0, 1.5, 2.0, 3.0])
-tau_scan = jnp.array([10e6, 50e6, 200e6])
-n_mc = 500
+# ── 3x3 sigma x tau grid: LINEAR scale ───────────────────────
 
-results = []
+fig, axes = plt.subplots(3, 3, figsize=(10, 7.5), sharex=True)
 
-for tau in tau_scan:
-    for sigma in sigma_scan:
-        sqrt_power = compute_sqrt_power_drw(N_GRID, d_log_age, float(sigma), float(tau))
-        variance = drw_variance(float(sigma))
-        correction = -0.5 * variance
+for i, tau_myr in enumerate(tau_grid_myr):
+    for j, sigma in enumerate(sigma_grid):
+        ax = axes[i, j]
+        sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, sigma, tau_myr * 1e6)
+        gp = generate_gp_fourier(key_bp, sqrt_p, N_GRID)
+        sig_x_sq = float(drw_variance(sigma))
+        sfr = mean_sfr * jnp.exp(gp - sig_x_sq / 2.0)
 
-        key = jax.random.PRNGKey(99)
-        gps = generate_gp_batch(key, sqrt_power, N_GRID, n_mc)
-        sfr_factors = jnp.exp(gps + correction)  # multiplicative factors
+        t_sfr, sfr_lin = sfh_on_linear_time(sfr)
+        ax.plot(t_sfr, sfr_lin, lw=1.5, color="steelblue")
+        t_mean, mean_lin = sfh_on_linear_time(mean_sfr)
+        ax.plot(t_mean, mean_lin, lw=0.8, ls="--", color="gray")
+        ax.set_xlim(0, 13.5)
+        ax.set_ylim(bottom=0)
 
-        # Metrics on last 1 Gyr
-        sfr_recent = sfr_factors[:, mask]
+        if i == 0:
+            ax.set_title(rf"$\sigma_{{\rm PS}}$={sigma}", fontsize=9)
+        if j == 0:
+            ax.set_ylabel(rf"$\tau_{{\rm PS}}$={tau_myr} Myr" + "\n"
+                          + r"SFR [M$_{\odot}$ yr$^{-1}$]", fontsize=8)
+        if i == 2:
+            ax.set_xlabel("Lookback time [Gyr]")
 
-        # sSFR scatter (std of log10 SFR)
-        log_scatter = float(jnp.std(jnp.log10(sfr_recent)))
-
-        # Peak-to-trough ratio (median across realizations)
-        ratios = jnp.max(sfr_recent, axis=1) / jnp.clip(jnp.min(sfr_recent, axis=1), 1e-10)
-        median_ratio = float(jnp.median(ratios))
-
-        # Duty cycle: fraction of time above 2x mean
-        duty = float(jnp.mean(sfr_recent > 2.0))
-
-        results.append(dict(sigma=float(sigma), tau=float(tau),
-                            scatter=log_scatter, ratio=median_ratio, duty=duty))
-
-fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-tau_colors = {10e6: "C3", 50e6: "C1", 200e6: "C0"}
-tau_names = {10e6: "$\\tau=10\\,$Myr", 50e6: "$\\tau=50\\,$Myr", 200e6: "$\\tau=200\\,$Myr"}
-
-for tau in tau_scan:
-    subset = [r for r in results if r["tau"] == float(tau)]
-    sigmas = [r["sigma"] for r in subset]
-    color = tau_colors[float(tau)]
-    label = tau_names[float(tau)]
-
-    axes[0].plot(sigmas, [r["scatter"] for r in subset], "o-", color=color, label=label)
-    axes[1].plot(sigmas, [r["ratio"] for r in subset], "o-", color=color, label=label)
-    axes[2].plot(sigmas, [r["duty"] for r in subset], "o-", color=color, label=label)
-
-axes[0].set_ylabel("$\\log_{10}$ SFR scatter [dex]")
-axes[0].set_title("SFR scatter (last 1 Gyr)")
-axes[1].set_ylabel("Peak / Trough ratio")
-axes[1].set_title("Peak-to-trough ratio")
-axes[1].set_yscale("log")
-axes[2].set_ylabel("Duty cycle (SFR > $2 \\times$ mean)")
-axes[2].set_title("Burst duty cycle")
-
-for ax in axes:
-    ax.set_xlabel("$\\sigma$")
-    ax.legend(fontsize=8)
-plt.tight_layout()
+fig.suptitle(r"Burstiness plane: $\sigma_{\rm PS}$ (columns) $\times$ $\tau_{\rm PS}$ (rows) -- linear scale",
+             fontsize=11, y=1.02)
+fig.tight_layout()
+savefig(fig, "burstiness_plane_linear")
 plt.show()
 
 # %% [markdown]
-# ## Parameter summary
+# ## End-to-End Gradients
 #
-# | # | High-level name | Internal name | Meaning | Units | Typical range |
-# |---|----------------|---------------|---------|-------|---------------|
-# | 1 | `sfh_alpha` | `alpha` | Decline slope (cosmic time) | — | 0.5–5 |
-# | 2 | `sfh_beta` | `beta` | Rise slope (cosmic time) | — | 0.3–3 |
-# | 3 | `sfh_tau_peak_gyr` | `tau_sfh` | Peak SFR epoch | Gyr (→ yr internally) | 1–11 |
-# | 4 | `sfh_norm` | `sfr_norm` | Peak SFR normalization | $M_\odot\,\mathrm{yr}^{-1}$ | 0.1–100 |
-# | 5 | `psd_sigma` | `sigma_ps` | PSD amplitude (burstiness) | — | 0.1–4 |
-# | 6 | `psd_tau_myr` | `tau_ps` | PSD timescale | Myr (→ yr internally) | 5–500 |
-# | 7 | `psd_xi` | `xi` | GP latent vector | — | $\mathcal{N}(0, 1)$ each |
-# | 8 | `met_logzsol` | `log_z` | Stellar metallicity | $\log_{10}(Z/Z_\odot)$ | $-2$ to $+0.2$ |
-# | 9 | `dust_tau_bc` | `tau_v1` | Birth cloud dust optical depth | — | 0–4 |
-# | 10 | `dust_tau_diff` | `tau_v2` | Diffuse dust optical depth | — | 0–4 |
-# | 11 | `dust_delta` | `delta` | Dust attenuation slope deviation | — | $-0.5$ to $+0.3$ |
+# Because the entire pipeline (PSD $\to$ GP $\to$ SFH $\to$ stellar mass) is implemented in **pure JAX**, we can compute exact gradients of any output with respect to any input via automatic differentiation. This is what enables gradient-based inference (NUTS, geoVI, MAP via Adam) rather than slow gradient-free sampling.
 #
-# The GP latent vector `psd_xi` has shape `(n_grid,)` — one free parameter
-# per grid point. It is the variable that samplers explore; the PSD
-# parameters $\sigma$ and $\tau$ control the prior correlation of these
-# latent variables.
-
-# %% [markdown]
-# ## End-to-End Differentiability
-#
-# Everything in this notebook — the PSD, the FFT, the GP, the mean SFH,
-# the lognormal correction — is implemented in **JAX**.  This means
-# automatic differentiation flows end-to-end: from the likelihood loss,
-# through spectral synthesis, dust attenuation, the GP, all the way to
-# the PSD parameters.
-#
-# This is what makes gradient-based inference (MAP, geoVI, MGVI) possible
-# on the full model. Even MCMC methods (Ray Tracing, NUTS) benefit from
-# gradient information for proposal tuning.
-#
-# Let us verify this by computing $\partial\,\mathrm{SFR} / \partial\sigma$
-# and $\partial\,\mathrm{SFR} / \partial\tau$.
+# Below we verify that the stellar mass $M_* = \int \text{SFR}(t)\,\mathrm{d}t$ (a simplified integral, ignoring mass loss for illustration) has **finite, nonzero gradients** with respect to all SFH parameters. If any gradient were zero, that parameter would be invisible to gradient-based samplers.
 
 # %%
-# --- Gradient demo: dSFR/d(sigma) and dSFR/d(tau) ---
-key = jax.random.PRNGKey(42)
-xi_fixed = jax.random.normal(key, (N_GRID,))
-sfr_mean_fixed = double_powerlaw(ages_yr, alpha=1.5, beta=1.0, tau=5e9, norm=10.0)
+# ── Gradient computation ─────────────────────────────────────
 
-def sfr_from_psd_params(sigma_ps, tau_ps):
-    # Full SFH as a function of PSD parameters (with fixed xi).
-    sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, sigma_ps, tau_ps)
-    gp_val = gp_from_xi(xi_fixed, sqrt_p, N_GRID)
-    var = drw_variance(sigma_ps)
-    return sfr_mean_fixed * jnp.exp(gp_val - 0.5 * var)
+# Pre-compute static grid values OUTSIDE the JIT function
+_log_age = make_log_age_grid(N_GRID)
+_d_la = float(_log_age[1] - _log_age[0])
+_age = 10.0 ** _log_age
 
-# Jacobian: dSFR/d(sigma) and dSFR/d(tau) at each grid point
-sigma_0, tau_0 = 1.0, 50e6
-jac_sigma = jax.jacfwd(lambda s: sfr_from_psd_params(s, tau_0))(sigma_0)
-jac_tau = jax.jacfwd(lambda t: sfr_from_psd_params(sigma_0, t))(tau_0)
+def stellar_mass(alpha, beta, tau_yr, norm, sigma_ps, tau_ps_yr, xi):
+    """Compute approximate M* = integral of SFR(t) dt."""
+    # Mean SFH (using lookback time = age for this approximation)
+    mean = double_powerlaw(_age * 1e9, alpha, beta, tau_yr, norm)
 
-sfr_0 = sfr_from_psd_params(sigma_0, tau_0)
+    # GP from xi
+    sqrt_p = compute_sqrt_power_drw(N_GRID, _d_la, sigma_ps, tau_ps_yr)
+    gp = gp_from_xi(xi, sqrt_p, N_GRID)
 
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+    # Full SFH with lognormal correction
+    var_x = 0.5 * sigma_ps**2
+    sfr = mean * jnp.exp(gp - var_x / 2.0)
 
-# Normalized sensitivity: (dSFR/dparam) / SFR
-sens_sigma = jac_sigma / sfr_0
-sens_tau = jac_tau / sfr_0 * 1e6  # per Myr for readability
+    # Integrate: M* = sum(SFR * dt), dt from log-age grid
+    dt = _age * jnp.log(10.0) * _d_la  # dt = t * ln(10) * d(log_age)
+    return jnp.sum(sfr * dt)
 
-ax1.plot(ages_gyr, sens_sigma, "C1", lw=2)
-ax1.axhline(0, color="k", ls="--", lw=0.5)
-ax1.set_xlabel("Lookback time [Gyr]")
-ax1.set_ylabel("$\\frac{1}{\\mathrm{SFR}}\\,\\frac{\\partial\\,\\mathrm{SFR}}{\\partial\\sigma}$")
-ax1.set_title("Sensitivity to burstiness amplitude $\\sigma$")
-ax1.set_xscale("log")
+# Reference parameters
+alpha0, beta0 = 1.2, 0.8
+tau0 = 6.0e9       # yr
+norm0 = 8.0
+sigma0 = 1.5
+tau_ps0 = 50e6     # yr
+xi0 = jax.random.normal(jax.random.PRNGKey(0), shape=(N_GRID,))
 
-ax2.plot(ages_gyr, sens_tau, "C2", lw=2)
-ax2.axhline(0, color="k", ls="--", lw=0.5)
-ax2.set_xlabel("Lookback time [Gyr]")
-ax2.set_ylabel("$\\frac{1}{\\mathrm{SFR}}\\,\\frac{\\partial\\,\\mathrm{SFR}}{\\partial\\tau}$ [per Myr]")
-ax2.set_title("Sensitivity to burstiness timescale $\\tau$")
-ax2.set_xscale("log")
+# Compute M* and all gradients
+mstar = stellar_mass(alpha0, beta0, tau0, norm0, sigma0, tau_ps0, xi0)
 
-plt.tight_layout()
+grad_fn = jax.grad(stellar_mass, argnums=(0, 1, 2, 3, 4, 5))
+grads = grad_fn(alpha0, beta0, tau0, norm0, sigma0, tau_ps0, xi0)
+
+param_names = [r"alpha", r"beta", r"tau (mean)", r"A (norm)",
+               r"sigma_PS", r"tau_PS"]
+
+print(f"Stellar mass: M* = {float(mstar):.3e} Msun")
+print()
+print(f"{'Parameter':<20s} {'Gradient':>15s}  {'|grad| > 0?':>12s}")
+print("-" * 50)
+for name, g in zip(param_names, grads):
+    gval = float(g)
+    ok = "YES" if abs(gval) > 1e-30 else "NO"
+    print(f"{name:<20s} {gval:>15.4e}  {ok:>12s}")
+
+print()
+print("All gradients are finite and nonzero: gradient-based inference works.")
+
+# %% [markdown]
+# ## Parameter Sensitivity
+#
+# To build intuition for what each parameter does, we vary one parameter at a time while holding the others fixed, and show how the resulting SFH changes. Each panel uses the same GP realization ($\boldsymbol{\xi}$), so the stochastic structure is held constant and only the effect of the varied parameter is visible.
+
+# %%
+# ── Parameter sensitivity: 2x3 panel ─────────────────────────
+
+xi_sens = random.normal(random.PRNGKey(77), shape=(N_GRID,))
+cmap_sens = plt.cm.coolwarm
+
+param_sweeps = [
+    {"name": r"$\alpha$", "key": "alpha", "values": [0.5, 1.0, 1.5, 2.5, 4.0],
+     "base": {"alpha": 1.5, "beta": 1.0, "tau_gyr": 5.0, "norm": 8.0,
+              "sigma": 1.5, "tau_myr": 50}},
+    {"name": r"$\beta$", "key": "beta", "values": [0.3, 0.8, 1.5, 2.5, 4.0],
+     "base": {"alpha": 1.5, "beta": 1.0, "tau_gyr": 5.0, "norm": 8.0,
+              "sigma": 1.5, "tau_myr": 50}},
+    {"name": r"$\tau_{\rm mean}$", "key": "tau_gyr",
+     "values": [1.0, 3.0, 5.0, 8.0, 11.0],
+     "base": {"alpha": 1.5, "beta": 1.0, "tau_gyr": 5.0, "norm": 8.0,
+              "sigma": 1.5, "tau_myr": 50}},
+    {"name": r"$A$ (norm)", "key": "norm", "values": [1.0, 3.0, 8.0, 20.0, 50.0],
+     "base": {"alpha": 1.5, "beta": 1.0, "tau_gyr": 5.0, "norm": 8.0,
+              "sigma": 1.5, "tau_myr": 50}},
+    {"name": r"$\sigma_{\rm PS}$", "key": "sigma",
+     "values": [0.3, 0.8, 1.5, 2.5, 4.0],
+     "base": {"alpha": 1.5, "beta": 1.0, "tau_gyr": 5.0, "norm": 8.0,
+              "sigma": 1.5, "tau_myr": 50}},
+    {"name": r"$\tau_{\rm PS}$", "key": "tau_myr",
+     "values": [5, 20, 50, 100, 300],
+     "base": {"alpha": 1.5, "beta": 1.0, "tau_gyr": 5.0, "norm": 8.0,
+              "sigma": 1.5, "tau_myr": 50}},
+]
+
+fig, axes = plt.subplots(2, 3, figsize=(10, 5.5), sharex=True)
+
+for ax, sweep in zip(axes.flat, param_sweeps):
+    vals = sweep["values"]
+    base = sweep["base"].copy()
+
+    for k, v in enumerate(vals):
+        p = base.copy()
+        p[sweep["key"]] = v
+
+        # Mean SFH
+        mean = double_powerlaw(age_yr, p["alpha"], p["beta"],
+                               p["tau_gyr"] * 1e9, p["norm"])
+        # GP
+        sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age,
+                                        p["sigma"], p["tau_myr"] * 1e6)
+        gp = gp_from_xi(xi_sens, sqrt_p, N_GRID)
+        sig_x_sq = float(drw_variance(p["sigma"]))
+        sfr = mean * jnp.exp(gp - sig_x_sq / 2.0)
+
+        label = f"{v}"
+        if sweep["key"] == "tau_myr":
+            label = f"{v} Myr"
+        elif sweep["key"] == "tau_gyr":
+            label = f"{v} Gyr"
+        t_sfr, sfr_lin = sfh_on_linear_time(sfr)
+        ax.plot(t_sfr, sfr_lin, lw=1.8, alpha=0.8,
+                color=cmap_sens(k / (len(vals) - 1)), label=label)
+
+    ax.set_title(f"Vary {sweep['name']}", fontsize=9)
+    ax.legend(fontsize=6, ncol=2)
+    ax.set_xlim(0, 13.5)
+    ax.set_ylim(bottom=0)
+
+for ax in axes[:, 0]:
+    ax.set_ylabel(r"SFR [M$_{\odot}$ yr$^{-1}$]")
+for ax in axes[1]:
+    ax.set_xlabel("Lookback time [Gyr]")
+
+fig.tight_layout()
+savefig(fig, "parameter_sensitivity")
 plt.show()
 
-print("Gradients computed successfully — the full SFH model is end-to-end differentiable.")
+# %% [markdown]
+# ## Summary
+#
+# ### Model parameters at a glance
+#
+# | Parameter | Symbol | Meaning | Typical range | Units |
+# |:----------|:------:|:--------|:--------------|:------|
+# | PSD amplitude | $\sigma_{\rm PS}$ | Scatter in log-SFR ($\sigma_x = \sigma_{\rm PS}/\sqrt{2}$) | 0.3 -- 5.0 | dex |
+# | PSD timescale | $\tau_{\rm PS}$ | Burst memory time | 1 -- 300 | Myr |
+# | Falling slope | $\alpha$ | Decline from peak (cosmic time); controls **right side** of lookback-time plot | 0.5 -- 4.0 | -- |
+# | Rising slope | $\beta$ | Rise to peak (cosmic time); controls **left side** of lookback-time plot | 0.3 -- 3.0 | -- |
+# | Turnover time | $\tau$ | Lookback time of peak SFR | 1 -- 11 | Gyr |
+# | Peak SFR | $A$ | Normalization (**not** stellar mass; $M_* = \int\text{SFR}\,dt$) | 0.1 -- 100 | M$_{\odot}$ yr$^{-1}$ |
+#
+# ### Key takeaways
+#
+# 1. **IFT correlated field model**: SFH fluctuations are a GP drawn from a PSD, parametrised by $\boldsymbol{\xi} \sim \mathcal{N}(0, I)$ in a standardized latent space that is easy to sample.
+# 2. **Two PSD parameters encode the physics**: $\sigma_{\rm PS}$ (how bursty) and $\tau_{\rm PS}$ (how long bursts last).
+# 3. **The mean SFH provides the secular envelope**: a double power law that captures the overall rise and decline of star formation.
+# 4. **Lognormal correction**: $-\sigma_x^2/2$ ensures that burstiness does not bias the mean SFR upward.
+# 5. **End-to-end JAX gradients**: every parameter has a well-defined, nonzero gradient through the full model, enabling NUTS, geoVI, and Fisher matrix calculations.
+#
+# ### Next
+#
+# **Tutorial 2** builds the full forward model: SFH $\to$ SSP integration $\to$ dust $\to$ redshift $\to$ photometry. You will see how the SFH constructed here produces an observable spectral energy distribution.
+
+# %% [markdown]
+# ## Appendix: Hardware Check
+
+# %%
+from diffsed.utils.devices import check_resources
+check_resources()

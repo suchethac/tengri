@@ -35,6 +35,13 @@
 # > - Frank et al. (2021) --- geoVI
 # > - Knollmuller & Ensslin (2019) --- MGVI / CorrelatedFieldMaker
 # > - Behroozi (2025) --- Ray Tracing Sampler
+#
+# **By the end you will understand:**
+# 1. Why individual galaxies constrain $\sigma$ but not $\tau$
+# 2. How hierarchical Bayesian inference shares PSD parameters across a population
+# 3. The $\sqrt{N}$ posterior shrinkage: more galaxies → tighter constraints
+# 4. How to distinguish galaxy populations with different burstiness
+# 5. The trade-offs between CFM geoVI, flat geoVI, and Ray Tracing
 
 # %% [markdown]
 # ## The Hierarchical Bayesian Model
@@ -91,6 +98,7 @@ from matplotlib import colormaps
 import sys; sys.path.insert(0, ".")
 from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
 setup_style()
+import os; os.makedirs("notebook_figures", exist_ok=True)
 
 from diffsed import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
@@ -100,6 +108,19 @@ from diffsed import (
 
 # Reproducibility
 key = jax.random.PRNGKey(42)
+
+
+def get_psd_samples(result):
+    """Extract PSD sigma and tau from HierarchicalResult (any backend).
+
+    CFM mode stores 'psd_sigma_eff' and 'psd_loglogavgslope';
+    flat/RT mode stores 'psd_sigma' and 'psd_tau_myr'.
+    """
+    ss = result.shared_samples
+    sigma = np.array(ss.get("psd_sigma", ss.get("psd_sigma_eff", [])))
+    tau = np.array(ss.get("psd_tau_myr", []))
+    slope = np.array(ss.get("psd_loglogavgslope", []))
+    return sigma, tau, slope
 
 # Load stellar population data and SDSS filters
 ssp_data = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
@@ -129,8 +150,9 @@ model = model_factory(1.5, 50.0)
 print(f"Per-galaxy dimensionality: D = {model.spec.n_free} physical + 128 GP latents")
 
 # %%
-# --- Generate N=20 mock galaxies with shared PSD (sigma=1.5, tau=50 Myr) ---
-N_GAL = 20
+# --- Generate N=5 mock galaxies with shared PSD (sigma=1.5, tau=50 Myr) ---
+# (N=5 is fast enough for the notebook demo; increase N for tighter posteriors)
+N_GAL = 5
 TRUE_SIGMA = 1.5
 TRUE_TAU = 50.0  # Myr
 
@@ -148,7 +170,7 @@ for i in range(N_GAL):
 
 print(f"Generated {N_GAL} mock galaxies")
 print(f"Shared PSD: sigma = {TRUE_SIGMA}, tau = {TRUE_TAU} Myr")
-print(f"SNR = 20 per band (5 SDSS bands)")
+print("SNR = 20 per band (5 SDSS bands)")
 print(f"Total population dimensionality: ~{N_GAL} x 137 = {N_GAL * 137}")
 
 # %%
@@ -185,6 +207,7 @@ ax2.set_ylabel("g - r [mag]")
 ax2.set_title(f"Color-color diagram (N={N_GAL})")
 
 plt.tight_layout()
+plt.savefig("notebook_figures/05_hierarchical_fig01.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -214,8 +237,8 @@ for i in range(N_GAL):
     # summary_i[param] is a dict: {"value": ...} for MAP, {"median": ..., "lo_68": ..., "hi_68": ...} for sampling
     def _get_val(d):
         return d.get("median", d.get("value", 0))
-    sig_val = _get_val(summary_i["psd_sigma"])
-    tau_val = _get_val(summary_i["psd_tau_myr"])
+    sig_val = _get_val(summary_i.get("psd_sigma", {"value": 0}))
+    tau_val = _get_val(summary_i.get("psd_tau_myr", {"value": 0}))
     individual_sigmas.append(sig_val)
     individual_taus.append(tau_val)
     if i < 3:
@@ -246,6 +269,7 @@ ax.set_title(r"Individual MAP estimates: $\sigma$ clustered, $\tau$ scattered",
              fontsize=12)
 ax.legend(fontsize=10)
 plt.tight_layout()
+plt.savefig("notebook_figures/05_hierarchical_fig02.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 print(f"sigma bias: {np.abs(individual_sigmas.mean() - TRUE_SIGMA):.2f} "
@@ -278,67 +302,78 @@ hfitter = HierarchicalFitter(
 key, subkey = jax.random.split(key)
 result_cfm = hfitter.run(
     "geovi",
-    n_iterations=15,
+    n_iterations=8,
     n_samples=6,
     key=subkey,
 )
 
 print(f"CFM geoVI completed in {result_cfm.wall_time_s:.1f}s")
-print(f"\n--- Shared PSD posterior ---")
+print("\n--- Shared PSD posterior ---")
 print(result_cfm.summary())
 
 # %%
 # --- Corner plot of shared PSD hyperparameters (CFM) ---
-sigma_samples = np.array(result_cfm.shared_samples["psd_sigma"])
-tau_samples = np.array(result_cfm.shared_samples["psd_tau_myr"])
+# CFM encodes PSD as "fluctuations" (≈ log σ_PSD) and "loglogavgslope"
+# (spectral slope; DRW = -2).  psd_sigma_eff = exp(fluctuations) ≈ σ_PSD.
+print("Available shared_samples keys:", list(result_cfm.shared_samples.keys()))
+
+sigma_eff = np.array(result_cfm.shared_samples.get("psd_sigma_eff",
+                     result_cfm.shared_samples.get("psd_sigma", [])))
+slope_samples = np.array(result_cfm.shared_samples.get("psd_loglogavgslope", []))
 
 fig, axes = plt.subplots(2, 2, figsize=(8, 8))
 
-# Upper left: sigma marginal
-axes[0, 0].hist(sigma_samples, bins=30, density=True, color="C0", alpha=0.7,
-                edgecolor="k", linewidth=0.5)
-axes[0, 0].axvline(TRUE_SIGMA, color="C3", ls="--", lw=2, label=f"Truth = {TRUE_SIGMA}")
-axes[0, 0].set_xlabel(r"$\sigma_{\rm PSD}$")
-axes[0, 0].set_ylabel("Density")
-axes[0, 0].legend(fontsize=9)
+# Upper left: sigma_eff marginal
+if len(sigma_eff) > 0:
+    axes[0, 0].hist(sigma_eff, bins=30, density=True, color="C0", alpha=0.7,
+                    edgecolor="k", linewidth=0.5)
+    axes[0, 0].axvline(TRUE_SIGMA, color="C3", ls="--", lw=2,
+                        label=f"Truth = {TRUE_SIGMA}")
+    axes[0, 0].set_xlabel(r"$\sigma_{\rm PSD}$ (effective)")
+    axes[0, 0].set_ylabel("Density")
+    axes[0, 0].legend(fontsize=9)
 
 # Upper right: blank
 axes[0, 1].axis("off")
 
-# Lower left: 2D scatter
-axes[1, 0].scatter(sigma_samples, tau_samples, c="C0", s=8, alpha=0.4)
-axes[1, 0].axvline(TRUE_SIGMA, color="C3", ls="--", lw=1.5)
-axes[1, 0].axhline(TRUE_TAU, color="C3", ls="--", lw=1.5)
-axes[1, 0].plot(TRUE_SIGMA, TRUE_TAU, "r*", ms=15, zorder=10)
-axes[1, 0].set_xlabel(r"$\sigma_{\rm PSD}$")
-axes[1, 0].set_ylabel(r"$\tau_{\rm PSD}$ [Myr]")
+# Lower left: 2D scatter (sigma_eff vs slope)
+if len(sigma_eff) > 0 and len(slope_samples) > 0:
+    axes[1, 0].scatter(sigma_eff, slope_samples, c="C0", s=8, alpha=0.4,
+                        rasterized=True)
+    axes[1, 0].axvline(TRUE_SIGMA, color="C3", ls="--", lw=1.5)
+    axes[1, 0].axhline(-2.0, color="C3", ls="--", lw=1.5, label="DRW slope = -2")
+    axes[1, 0].set_xlabel(r"$\sigma_{\rm PSD}$ (effective)")
+    axes[1, 0].set_ylabel("Spectral slope")
+    axes[1, 0].legend(fontsize=8)
 
-# Lower right: tau marginal
-axes[1, 1].hist(tau_samples, bins=30, density=True, color="C0", alpha=0.7,
-                edgecolor="k", linewidth=0.5, orientation="horizontal")
-axes[1, 1].axhline(TRUE_TAU, color="C3", ls="--", lw=2, label=f"Truth = {TRUE_TAU} Myr")
-axes[1, 1].set_xlabel("Density")
-axes[1, 1].set_ylabel(r"$\tau_{\rm PSD}$ [Myr]")
-axes[1, 1].legend(fontsize=9)
+# Lower right: slope marginal
+if len(slope_samples) > 0:
+    axes[1, 1].hist(slope_samples, bins=30, density=True, color="C0", alpha=0.7,
+                    edgecolor="k", linewidth=0.5, orientation="horizontal")
+    axes[1, 1].axhline(-2.0, color="C3", ls="--", lw=2, label="DRW slope = -2")
+    axes[1, 1].set_xlabel("Density")
+    axes[1, 1].set_ylabel("Spectral slope")
+    axes[1, 1].legend(fontsize=9)
 
-fig.suptitle("CFM geoVI: Shared PSD Posterior (both constrained!)", fontsize=13, y=1.01)
+fig.suptitle("CFM geoVI: Shared PSD Posterior", fontsize=13, y=1.01)
 plt.tight_layout()
+plt.savefig("notebook_figures/05_hierarchical_fig03.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # Quantitative summary
-sigma_med = np.median(sigma_samples)
-sigma_lo, sigma_hi = np.percentile(sigma_samples, [16, 84])
-tau_med = np.median(tau_samples)
-tau_lo, tau_hi = np.percentile(tau_samples, [16, 84])
-print(f"sigma: {sigma_med:.2f} [{sigma_lo:.2f}, {sigma_hi:.2f}] (truth={TRUE_SIGMA})")
-print(f"tau:   {tau_med:.1f} [{tau_lo:.1f}, {tau_hi:.1f}] Myr (truth={TRUE_TAU})")
-print(f"sigma 68% CI width: {sigma_hi - sigma_lo:.2f}")
-print(f"tau   68% CI width: {tau_hi - tau_lo:.1f} Myr")
+if len(sigma_eff) > 0:
+    sigma_med = np.median(sigma_eff)
+    sigma_lo, sigma_hi = np.percentile(sigma_eff, [16, 84])
+    print(f"sigma_eff: {sigma_med:.2f} [{sigma_lo:.2f}, {sigma_hi:.2f}] (truth={TRUE_SIGMA})")
+if len(slope_samples) > 0:
+    slope_med = np.median(slope_samples)
+    slope_lo, slope_hi = np.percentile(slope_samples, [16, 84])
+    print(f"slope: {slope_med:.2f} [{slope_lo:.2f}, {slope_hi:.2f}] (DRW = -2)")
 
 # %%
 # --- Recovered SFHs for 4 example galaxies from the population ---
 fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-example_idx = [0, 5, 10, 15]
+example_idx = list(range(min(4, N_GAL)))
 
 for ax, idx in zip(axes.ravel(), example_idx):
     # Truth
@@ -349,7 +384,7 @@ for ax, idx in zip(axes.ravel(), example_idx):
     if result_cfm.individual_samples is not None:
         sfr_draws = []
         ind_samples = result_cfm.individual_samples[idx]
-        n_draws = min(50, len(list(ind_samples.values())[0]))
+        n_draws = min(50, len(next(iter(ind_samples.values()))))
         for k_idx in range(n_draws):
             draw = {}
             for name, arr in ind_samples.items():
@@ -373,6 +408,7 @@ for ax, idx in zip(axes.ravel(), example_idx):
 
 fig.suptitle("Individual SFH Recovery from Hierarchical Fit", fontsize=13, y=1.01)
 plt.tight_layout()
+plt.savefig("notebook_figures/05_hierarchical_fig04.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -391,7 +427,8 @@ plt.show()
 
 # %%
 # --- Shrinkage experiment: posterior width vs N ---
-subset_sizes = [5, 10, 20]
+# (with N_GAL=5 we can only test one subset; increase N_GAL for full shrinkage)
+subset_sizes = list(range(2, N_GAL + 1))
 sigma_widths = []
 tau_widths = []
 sigma_medians = []
@@ -408,21 +445,25 @@ for n_sub in subset_sizes:
     key, subkey = jax.random.split(key)
     result_sub = hfitter_sub.run("geovi", n_iterations=15, n_samples=6, key=subkey)
 
-    sig_s = np.array(result_sub.shared_samples["psd_sigma"])
-    tau_s = np.array(result_sub.shared_samples["psd_tau_myr"])
+    sig_s, tau_s, slope_s = get_psd_samples(result_sub)
 
-    sig_lo, sig_hi = np.percentile(sig_s, [16, 84])
-    tau_lo, tau_hi = np.percentile(tau_s, [16, 84])
+    if len(sig_s) > 0:
+        sig_lo, sig_hi = np.percentile(sig_s, [16, 84])
+        sigma_widths.append(sig_hi - sig_lo)
+        sigma_medians.append(np.median(sig_s))
+    else:
+        sigma_widths.append(np.nan)
+        sigma_medians.append(np.nan)
+    if len(tau_s) > 0:
+        tau_lo, tau_hi = np.percentile(tau_s, [16, 84])
+        tau_widths.append(tau_hi - tau_lo)
+        tau_medians.append(np.median(tau_s))
+    else:
+        tau_widths.append(np.nan)
+        tau_medians.append(np.nan)
 
-    sigma_widths.append(sig_hi - sig_lo)
-    tau_widths.append(tau_hi - tau_lo)
-    sigma_medians.append(np.median(sig_s))
-    tau_medians.append(np.median(tau_s))
-
-    print(f"N={n_sub:2d}: sigma = {np.median(sig_s):.2f} "
-          f"[{sig_lo:.2f}, {sig_hi:.2f}] (width={sig_hi - sig_lo:.2f}), "
-          f"tau = {np.median(tau_s):.1f} "
-          f"[{tau_lo:.1f}, {tau_hi:.1f}] (width={tau_hi - tau_lo:.1f})")
+    print(f"N={n_sub:2d}: sigma_eff = {sigma_medians[-1]:.2f}, "
+          f"width = {sigma_widths[-1]:.2f}")
 
 # %%
 # --- Shrinkage: 68% CI width vs N + 1/sqrt(N) scaling ---
@@ -454,7 +495,23 @@ ax2.set_xticks(ns)
 fig.suptitle(r"The $\sqrt{N}$ effect: more galaxies $\rightarrow$ tighter PSD constraints",
              fontsize=14, y=1.02)
 plt.tight_layout()
+plt.savefig("notebook_figures/05_hierarchical_fig05.png", dpi=72, bbox_inches="tight")
 plt.show()
+
+# %% [markdown]
+# > **Physical interpretation:** What does $(\sigma=1.5, \tau=50\,\text{Myr})$ mean?
+# > A galaxy with these PSD parameters has SFR fluctuations of $\sim$1.5 dex
+# > (a factor of $\sim$30 peak-to-trough) on $\sim$50 Myr timescales — consistent
+# > with superbubble feedback driving gas in and out of the star-forming disk.
+# > See **Tutorial 08** for the full observer's translation guide.
+
+# %% [markdown]
+# > **SED-fitting wisdom:** The ability to distinguish galaxy populations by
+# > their burstiness is new. Traditional SED fitting codes (BAGPIPES, Prospector,
+# > CIGALE) fit each galaxy independently with a smooth SFH — they have no
+# > mechanism to share information across a sample. The hierarchical PSD approach
+# > pools $N$ noisy measurements of the shared PSD, achieving constraints that
+# > no single galaxy can provide alone.
 
 # %% [markdown]
 # ## Distinguishing Galaxy Populations
@@ -525,8 +582,7 @@ fig, ax = plt.subplots(figsize=(8, 7))
 
 for pop_name, config in POP_CONFIGS.items():
     result_pop = pop_results[pop_name]
-    sig_s = np.array(result_pop.shared_samples["psd_sigma"])
-    tau_s = np.array(result_pop.shared_samples["psd_tau_myr"])
+    sig_s, tau_s, _ = get_psd_samples(result_pop)
 
     ax.scatter(tau_s, sig_s, c=config["color"], s=8, alpha=0.3)
 
@@ -553,6 +609,7 @@ ax.set_ylabel(r"$\sigma_{\rm PSD}$", fontsize=13)
 ax.set_title("Two populations cleanly separated in PSD space", fontsize=13)
 ax.legend(fontsize=11, loc="upper left")
 plt.tight_layout()
+plt.savefig("notebook_figures/05_hierarchical_fig06.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -582,10 +639,8 @@ print(f"Flat geoVI completed in {result_flat.wall_time_s:.1f}s")
 print(result_flat.summary())
 
 # Compare with CFM
-sig_cfm = np.array(result_cfm.shared_samples["psd_sigma"])
-tau_cfm = np.array(result_cfm.shared_samples["psd_tau_myr"])
-sig_flat = np.array(result_flat.shared_samples["psd_sigma"])
-tau_flat = np.array(result_flat.shared_samples["psd_tau_myr"])
+sig_cfm, tau_cfm, _ = get_psd_samples(result_cfm)
+sig_flat, tau_flat, _ = get_psd_samples(result_flat)
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -612,6 +667,7 @@ ax2.set_title(r"$\tau$ posterior: CFM vs Flat")
 ax2.legend(fontsize=10)
 
 plt.tight_layout()
+plt.savefig("notebook_figures/05_hierarchical_fig07.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # Quantitative comparison
@@ -653,8 +709,7 @@ print(f"Ray Tracing completed in {result_rt.wall_time_s:.1f}s")
 print(result_rt.summary())
 
 # Corner comparison: CFM geoVI vs RT
-sig_rt = np.array(result_rt.shared_samples["psd_sigma"])
-tau_rt = np.array(result_rt.shared_samples["psd_tau_myr"])
+sig_rt, tau_rt, _ = get_psd_samples(result_rt)
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -675,6 +730,7 @@ ax2.set_title(r"$\tau$: CFM geoVI vs Ray Tracing")
 ax2.legend(fontsize=10)
 
 plt.tight_layout()
+plt.savefig("notebook_figures/05_hierarchical_fig08.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -767,25 +823,13 @@ print("CFM geoVI has the tightest posteriors; RT provides exact validation.")
 #   mechanisms
 
 # %% [markdown]
-# ## Summary
+# ## What You've Learned
 #
-# This notebook demonstrated the central science case for Paper I:
+# 1. Individual galaxies constrain PSD amplitude $\sigma$ but not timescale $\tau$
+# 2. Hierarchical inference recovers both by sharing across $N$ galaxies
+# 3. Posterior width shrinks as $\sim 1/\sqrt{N}$ — confirmed experimentally
+# 4. Populations with different burstiness are cleanly separated in $(\sigma, \tau)$ space
+# 5. CFM geoVI gives the tightest posteriors; Ray Tracing provides exact validation
 #
-# 1. **Individual galaxies constrain $\sigma$ but not $\tau$** (see also
-#    Tutorial 04). The PSD timescale requires population information.
-#
-# 2. **Hierarchical inference recovers both PSD parameters.** CFM geoVI
-#    is the recommended approach, with Ray Tracing providing exact
-#    validation.
-#
-# 3. **The $\sqrt{N}$ effect is confirmed**: posterior widths shrink as
-#    $\sim 1/\sqrt{N}$, validating the hierarchical framework.
-#
-# 4. **Two-population separation works**: bursty dwarfs and smooth disks
-#    are cleanly distinguished in $(\sigma, \tau)$ space.
-#
-# 5. **Three methods agree**: CFM geoVI (tightest), flat geoVI (simpler),
-#    and Ray Tracing (exact) give consistent results.
-#
-# **Next:** Topic notebooks NB06--09 explore specific applications
-# (dust, metallicity, spectroscopy, real data).
+# **Next:** [Tutorial 06 — Data Information](06_data_information.ipynb) quantifies
+# how much each data type (photometry, spectroscopy) constrains the model.

@@ -13,11 +13,20 @@
 # ---
 
 # %% [markdown]
-# # Parameter Recovery and Model Validation
+# # Can I Trust the Posteriors?
 #
-# Before trusting any inference method on real data, we must validate on
-# **mock data where we know the truth**.  This notebook performs systematic
-# recovery tests across two regimes:
+# Before trusting any inference method on real data, we must answer three
+# questions:
+#
+# 1. **Does MAP find the truth?** The optimizer should converge near the
+#    true parameters.
+# 2. **Do posteriors have correct coverage?** The 68% credible interval
+#    should contain the truth ~68% of the time.
+# 3. **How does recovery degrade with burstiness?** Highly bursty SFHs
+#    are harder to recover — but the posterior should honestly reflect
+#    this difficulty by widening.
+#
+# This notebook performs systematic recovery tests across three regimes:
 #
 # - **Part A: Parametric model** (7 free parameters) — smooth SFH,
 #   comparable to BAGPIPES / Prospector.  NUTS is the gold standard.
@@ -26,6 +35,12 @@
 #   geoVI are the primary samplers.
 # - **Part C: Robustness** — SNR dependence, derived quantities, and
 #   posterior predictive checks.
+#
+# **By the end you will understand:**
+# - How well diffsed recovers parametric vs stochastic SFHs
+# - The photometry vs spectroscopy information content difference
+# - Why PSD timescale $\tau$ requires hierarchical inference
+# - What happens when you fit a bursty galaxy with a smooth model
 #
 # These results directly support the claims made in the paper (Figs. 4--7).
 # Population-level (hierarchical) PSD recovery is deferred to
@@ -43,6 +58,7 @@ import numpy as np
 import sys; sys.path.insert(0, ".")
 from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
 setup_style()
+import os; os.makedirs("notebook_figures", exist_ok=True)
 
 from diffsed import (
     Model, ParamSpec, Uniform, Gaussian, LogUniform, Fixed, Fitter,
@@ -94,11 +110,12 @@ ax.errorbar(wave_eff, mock_param.flux_obs, yerr=mock_param.noise,
             fmt="o", color="k", label="Observed (SNR 20)", zorder=3)
 ax.plot(wave_eff, mock_param.flux_true, "s", ms=6, mfc="none",
         color="C3", label="Truth")
-ax.set_xlabel("Wavelength [\\u00c5]")
+ax.set_xlabel("Wavelength [Å]")
 ax.set_ylabel("Flux [arbitrary]")
-ax.set_title("Mock SDSS Photometry \\u2014 Parametric SFH")
+ax.set_title("Mock SDSS Photometry — Parametric SFH")
 ax.legend()
 plt.tight_layout()
+plt.savefig("notebook_figures/04_recovery_tests_fig01.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -121,9 +138,10 @@ fig_corner = safe_corner(result_rt_phot, truths=true_param, color="C0",
 fig_sfh, ax_sfh = plt.subplots(figsize=(7, 4))
 model_param.plot_sfh_posterior(result_rt_phot, true_params=true_param,
                               color="C0", label="Ray Tracing", ax=ax_sfh)
-ax_sfh.set_title("SFH Recovery \\u2014 Parametric (Photometry)")
+ax_sfh.set_title("SFH Recovery — Parametric (Photometry)")
 ax_sfh.legend()
 plt.tight_layout()
+plt.savefig("notebook_figures/04_recovery_tests_fig02.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # --- Check coverage ---
@@ -165,9 +183,10 @@ fig_corner_spec = safe_corner(result_rt_spec, truths=true_param, color="C1",
 fig_sfh_spec, ax_sfh_spec = plt.subplots(figsize=(7, 4))
 model_param.plot_sfh_posterior(result_rt_spec, true_params=true_param,
                               color="C1", label="RT (spec)", ax=ax_sfh_spec)
-ax_sfh_spec.set_title("SFH Recovery \\u2014 Parametric (Spectroscopy)")
+ax_sfh_spec.set_title("SFH Recovery — Parametric (Spectroscopy)")
 ax_sfh_spec.legend()
 plt.tight_layout()
+plt.savefig("notebook_figures/04_recovery_tests_fig03.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -187,6 +206,7 @@ fig_compare = safe_corner(result_rt_phot, truths=true_param, color="C0",
 if fig_compare is not None:
     safe_corner(result_rt_spec, truths=true_param, color="C1",
                 label="Spectroscopy", fig=fig_compare)
+plt.savefig("notebook_figures/04_recovery_tests_fig04.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # --- 68% CI width comparison ---
@@ -209,6 +229,12 @@ for name in spec_param.free_params:
 # variability in dex) and $\tau_{\rm PSD}$ (correlation timescale in Myr).
 #
 # We now need to recover **both** the SFH shape **and** the PSD parameters.
+#
+# > **SED-fitting wisdom:** The stochastic model has 137 free parameters —
+# > 9 physical parameters plus 128 GP latent variables. This is far beyond
+# > what NUTS can handle. BAGPIPES and Prospector typically have 5–15 free
+# > parameters; diffsed's stochastic model pushes into territory where only
+# > Ray Tracing and geoVI remain practical.
 
 # %%
 spec_stoch = ParamSpec(
@@ -248,9 +274,10 @@ ax.plot(sfh_true["t_gyr"], sfh_true["sfr_full"], color="k", lw=1.2,
         label="True SFH (bursty)")
 ax.set_xlabel("Lookback time [Gyr]")
 ax.set_ylabel("SFR [M$_\\odot$ yr$^{-1}$]")
-ax.set_title(f"Stochastic Mock \\u2014 $\\sigma_{{PSD}}$=1.5, $\\tau_{{PSD}}$=50 Myr")
+ax.set_title("Stochastic Mock \u2014 $\\sigma_{PSD}$=1.5, $\\tau_{PSD}$=50 Myr")
 ax.legend()
 plt.tight_layout()
+plt.savefig("notebook_figures/04_recovery_tests_fig05.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -265,7 +292,8 @@ print(f"MAP finished in {time.perf_counter() - t0:.1f}s")
 # Ray Tracing
 t0 = time.perf_counter()
 result_rt = fitter_stoch.run("raytrace", init_from=result_map_stoch,
-                             n_burnin=100, n_steps=300, step_size=0.01)
+                             n_burnin=200, n_steps=2000,
+                             step_size=0.05, n_leapfrog_steps=50)
 t_rt = time.perf_counter() - t0
 print(f"Ray Tracing finished in {t_rt:.1f}s ({D}-D)")
 
@@ -281,15 +309,16 @@ fig, axes = plt.subplots(1, 2, figsize=(14, 4.5), sharey=True)
 
 model_stoch.plot_sfh_posterior(result_rt, true_params=true_stoch,
                               color="C0", label="Ray Tracing", ax=axes[0])
-axes[0].set_title("Ray Tracing \\u2014 SFH Recovery")
+axes[0].set_title("Ray Tracing — SFH Recovery")
 axes[0].legend()
 
 model_stoch.plot_sfh_posterior(result_geovi, true_params=true_stoch,
                               color="C1", label="geoVI", ax=axes[1])
-axes[1].set_title("geoVI \\u2014 SFH Recovery")
+axes[1].set_title("geoVI — SFH Recovery")
 axes[1].legend()
 
 plt.tight_layout()
+plt.savefig("notebook_figures/04_recovery_tests_fig06.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # Corner overlay (physical params only)
@@ -298,6 +327,7 @@ fig_corner_stoch = safe_corner(result_rt, truths=true_stoch, color="C0",
 if fig_corner_stoch is not None:
     safe_corner(result_geovi, truths=true_stoch, color="C1",
                 label="geoVI", fig=fig_corner_stoch)
+plt.savefig("notebook_figures/04_recovery_tests_fig07.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -324,6 +354,7 @@ if fig_psd is not None:
     safe_corner(result_geovi, params=psd_names, truths=psd_truths,
                 color="C1", label="geoVI", fig=fig_psd)
 plt.suptitle("PSD Parameter Recovery (Single Galaxy)", y=1.02)
+plt.savefig("notebook_figures/04_recovery_tests_fig08.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # Quantify
@@ -372,7 +403,8 @@ for i, (label, sigma, tau) in enumerate(regimes):
                       data_type="photometry")
     map_i = fitter_i.run("map", n_steps=500)
     rt_i = fitter_i.run("raytrace", init_from=map_i,
-                        n_burnin=50, n_steps=150, step_size=0.01)
+                        n_burnin=100, n_steps=1000,
+                        step_size=0.05, n_leapfrog_steps=50)
 
     # Plot SFH recovery
     ax = axes_flat[i]
@@ -387,6 +419,7 @@ for i, (label, sigma, tau) in enumerate(regimes):
 plt.suptitle("SFH Recovery Across Burstiness Regimes (Ray Tracing)",
              fontsize=13, y=1.01)
 plt.tight_layout()
+plt.savefig("notebook_figures/04_recovery_tests_fig09.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -396,6 +429,13 @@ plt.show()
 # model) using the **parametric-only** model.  The smooth model cannot
 # capture recent bursts, leading to **systematic bias** in derived
 # quantities -- particularly recent SFR and sSFR.
+#
+# > **Critical lesson:** If your galaxy is genuinely bursty, fitting it with
+# > a smooth parametric model will *systematically bias* derived quantities.
+# > The SFR will be smoothed, missing recent bursts; the stellar mass may be
+# > off because the SFH shape is wrong. This is the fundamental motivation
+# > for the stochastic model — not a better $\chi^2$, but correct physical
+# > inference.
 
 # %%
 # Generate a bursty mock
@@ -416,7 +456,8 @@ fitter_right = Fitter(model_stoch, mock_bursty.flux_obs, mock_bursty.noise,
                       data_type="photometry")
 map_right = fitter_right.run("map", n_steps=500)
 rt_right = fitter_right.run("raytrace", init_from=map_right,
-                            n_burnin=100, n_steps=300, step_size=0.01)
+                            n_burnin=200, n_steps=2000,
+                            step_size=0.05, n_leapfrog_steps=50)
 
 # Compare SFH recovery
 fig, axes = plt.subplots(1, 2, figsize=(14, 4.5), sharey=True)
@@ -434,6 +475,7 @@ axes[1].set_title("Stochastic Model \\u2192 Recovers Burst")
 axes[1].legend()
 
 plt.tight_layout()
+plt.savefig("notebook_figures/04_recovery_tests_fig10.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # Compare derived quantities
@@ -475,7 +517,8 @@ for i, snr in enumerate(snr_values):
                         data_type="photometry")
     map_snr = fitter_snr.run("map", n_steps=500)
     rt_snr = fitter_snr.run("raytrace", init_from=map_snr,
-                            n_burnin=50, n_steps=150, step_size=0.01)
+                            n_burnin=100, n_steps=1000,
+                            step_size=0.05, n_leapfrog_steps=50)
 
     ax = axes_flat[i]
     model_stoch.plot_sfh_posterior(rt_snr, true_params=true_stoch,
@@ -488,6 +531,7 @@ for i, snr in enumerate(snr_values):
 
 plt.suptitle("SFH Recovery vs Data Quality (Ray Tracing)", fontsize=13, y=1.01)
 plt.tight_layout()
+plt.savefig("notebook_figures/04_recovery_tests_fig11.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 
@@ -567,7 +611,7 @@ median_pred = np.median(
 residuals = (mock_stoch.flux_obs - median_pred) / mock_stoch.noise
 axes[1].axhline(0, color="0.5", ls="--", lw=0.8)
 axes[1].bar(wave_eff, residuals, width=150, color="C0", alpha=0.7)
-axes[1].set_xlabel("Wavelength [\\u00c5]")
+axes[1].set_xlabel("Wavelength [Å]")
 axes[1].set_ylabel("Residual [$\\sigma$]")
 axes[1].set_ylim(-4, 4)
 
@@ -575,6 +619,7 @@ chi2_per_band = float(jnp.mean(residuals**2))
 print(f"chi^2 / N_bands = {chi2_per_band:.2f}  (expect ~1)")
 
 plt.tight_layout()
+plt.savefig("notebook_figures/04_recovery_tests_fig12.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -591,6 +636,13 @@ plt.show()
 # | **Model mismatch** | Fitting a bursty galaxy with a smooth model biases SFR and sSFR. Use the stochastic model. |
 # | **SNR dependence** | Posteriors widen at low SNR but remain calibrated. SNR > 10 recommended. |
 #
-# **Next step:** [Tutorial 05 -- Hierarchical PSD Inference](05_hierarchical.ipynb),
-# where we constrain $\tau_{\rm PSD}$ by sharing it across a population
-# of galaxies.
+# ## What You've Learned
+#
+# 1. Parametric models recover all 7 parameters with correct coverage
+# 2. Spectroscopy tightens constraints by 2–5x, especially for metallicity
+# 3. The stochastic model recovers SFH shape even in highly bursty regimes
+# 4. PSD $\sigma$ is constrained per-galaxy; $\tau$ requires hierarchical inference
+# 5. Fitting bursty galaxies with smooth models biases SFR and sSFR
+#
+# **Next:** [Tutorial 05 — Hierarchical Inference](05_hierarchical.ipynb)
+# constrains $\tau_{\rm PSD}$ by sharing it across a galaxy population.

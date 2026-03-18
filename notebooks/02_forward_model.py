@@ -15,10 +15,12 @@
 # %% [markdown]
 # # From SFH to Observable SED
 #
-# This notebook walks through the full forward model pipeline that
-# transforms a star formation history into an observable photometric or
-# spectroscopic measurement.  Every step is differentiable in JAX,
-# which means we can compute exact gradients end-to-end.
+# Every SED fitting code — BAGPIPES, Prospector, CIGALE — has a forward
+# model that maps physical parameters to predicted observations.  In
+# diffsed, this forward model is fully differentiable, which means we can
+# compute exact gradients end-to-end.
+#
+# This notebook walks through the full pipeline step by step.
 #
 # ```
 # SFR(t) ──► weights wᵢ ──► Σ wᵢ Lᵢ(SSP) ──► dust A(λ,t) ──► redshift ──► filters Tᵢ(λ) ──► fᵥ
@@ -31,6 +33,13 @@
 # Each box is a pure JAX function, JIT-compiled and automatically
 # differentiable.  By the end, you will understand exactly what happens
 # inside `model.predict_photometry(params)`.
+#
+# **By the end you will understand:**
+# 1. How stellar population synthesis builds a galaxy spectrum from SSPs
+# 2. How dust attenuation reddens the SED (Charlot & Fall 2000)
+# 3. How filter convolution produces broadband photometry
+# 4. Which parameters affect which bands (the Jacobian)
+# 5. The key degeneracies in SED fitting and how to break them
 
 # %%
 import jax
@@ -109,8 +118,8 @@ for age_gyr, label, color in zip(target_ages_gyr, labels, colors):
     ax.plot(wave, flux_norm, lw=1.2, color=color, label=label)
 
 # Mark key spectral features
-features = {"Ly limit\\n912 Å": 912, "D4000": 4000,
-            "Hα\\n6563 Å": 6563, "Hβ\\n4861 Å": 4861}
+features = {"Ly limit\n912 Å": 912, "D4000": 4000,
+            "Hα\n6563 Å": 6563, "Hβ\n4861 Å": 4861}
 for name, wl in features.items():
     ax.axvline(wl, color="0.7", ls=":", lw=0.8, zorder=0)
     ax.text(wl, 1.05, name, ha="center", fontsize=7, color="0.4",
@@ -125,6 +134,7 @@ ax.set_ylabel("Normalized luminosity density $L_\\nu$ [arbitrary]")
 ax.set_title("SSP Spectra at Solar Metallicity — Five Ages")
 ax.legend(title="SSP age", loc="lower left")
 plt.tight_layout()
+plt.savefig("notebook_figures/02_forward_model_fig01.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -213,6 +223,7 @@ ax.set_title("Weighted SSP Contributions")
 ax.legend(fontsize=7, loc="lower left")
 
 plt.tight_layout()
+plt.savefig("notebook_figures/02_forward_model_fig02.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -318,7 +329,17 @@ ax.set_ylabel("$E(B-V)$ [mag]")
 ax.set_title("Color Excess vs Diffuse Optical Depth")
 
 plt.tight_layout()
+plt.savefig("notebook_figures/02_forward_model_fig03.png", dpi=72, bbox_inches="tight")
 plt.show()
+
+# %% [markdown]
+# > **The dust-age-metallicity degeneracy.**  A young, dusty galaxy
+# > looks similar to an old, metal-rich one at optical wavelengths
+# > because dust reddening, aging, and metal-line blanketing all shift
+# > flux from blue to red.  UV and NIR data break this degeneracy:
+# > the dust attenuation curve is much steeper in the UV than any
+# > stellar population effect, while NIR light is nearly dust-free
+# > and dominated by stellar mass.
 
 # %% [markdown]
 # ## Metallicity Effects
@@ -390,6 +411,7 @@ ax.set_ylabel("$D_n(4000)$")
 ax.set_title("4000 Å Break Strength vs Metallicity (1 Gyr SSP)")
 
 plt.tight_layout()
+plt.savefig("notebook_figures/02_forward_model_fig04.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -435,7 +457,7 @@ band_names = ["u", "g", "r", "i", "z"]
 wave_eff_list = []
 flux_list = []
 
-for fc, fname, fcolor in zip(filter_curves, band_names, filter_colors):
+for fc in filter_curves:
     flux = compute_flux_density(csp_sed, ssp_data.ssp_wave,
                                 fc.wave, fc.trans, redshift, dl_cm)
     wave_eff_list.append(float(jnp.sum(fc.wave * fc.trans) / jnp.sum(fc.trans)))
@@ -471,6 +493,7 @@ ax.set_ylim(0, 1.15)
 ax.set_xlim(2500, 12000)
 
 plt.tight_layout()
+plt.savefig("notebook_figures/02_forward_model_fig05.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -531,6 +554,7 @@ ax.set_title("Spectroscopic Observation (200 data points)")
 ax.legend()
 
 plt.tight_layout()
+plt.savefig("notebook_figures/02_forward_model_fig06.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # Information content comparison
@@ -625,6 +649,7 @@ ax.set_ylabel("AB magnitude")
 ax.set_title("SDSS Photometry")
 
 plt.tight_layout()
+plt.savefig("notebook_figures/02_forward_model_fig07.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -690,6 +715,7 @@ for i in range(sensitivity_norm.shape[1]):
                 fontsize=7, color=color)
 
 plt.tight_layout()
+plt.savefig("notebook_figures/02_forward_model_fig08.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # Key insight
@@ -719,7 +745,18 @@ print("  - sfh_alpha and sfh_beta have similar sensitivity patterns → degenera
 # smoothness and burstiness.
 
 # %% [markdown]
-# ## Next Steps
+# ## What You've Learned
+#
+# 1. The forward model pipeline: SFH → CSP weights → dust → redshift → filters
+# 2. Each step is a differentiable JAX function
+# 3. The Jacobian reveals parameter-band sensitivity and degeneracies
+# 4. Spectroscopy carries ~40x more information than 5-band photometry
+#
+# **Next:** [Tutorial 03 — Inference Methods](03_inference_methods.ipynb)
+# shows how MAP, Ray Tracing, NUTS, geoVI, and MGVI explore the posterior.
+
+# %% [markdown]
+# ## Further Reading
 #
 # Now that you understand the full forward model pipeline, continue
 # with:

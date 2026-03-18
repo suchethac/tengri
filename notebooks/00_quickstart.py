@@ -15,16 +15,25 @@
 # %% [markdown]
 # # Fit a Galaxy in 60 Seconds
 #
-# **diffsed** is a differentiable SED fitting code built on JAX that uses
-# Information Field Theory (IFT) correlated fields to recover bursty star
-# formation histories with PSD-governed priors.  It supports fast parametric
-# fitting comparable to BAGPIPES/Prospector *and* high-dimensional stochastic
-# SFH recovery via Gaussian-process correlated fields — all within a single,
-# unified framework.  Five inference backends are available out of the box:
-# MAP, Ray Tracing, NUTS, geoVI, and MGVI.
+# **diffsed** recovers bursty star formation histories from broadband
+# photometry in seconds.  Where traditional SED fitting codes like BAGPIPES
+# and Prospector assume smooth SFHs, diffsed adds physically motivated
+# stochastic fluctuations governed by a power spectral density (PSD) —
+# and keeps everything differentiable in JAX.
 #
-# This quickstart walks through both modes end-to-end in roughly 60 seconds
-# of wall time.
+# This quickstart demonstrates both modes end-to-end:
+#
+# - **Part A** fits a smooth parametric SFH (7 free parameters) —
+#   comparable to BAGPIPES/Prospector, with NUTS as the gold standard.
+# - **Part B** fits a stochastic SFH with GP-correlated burstiness
+#   (137 free parameters) — the unique capability of diffsed, with
+#   **geoVI** as the primary inference method.
+#
+# By the end you will:
+# 1. Fit a parametric SFH and compare MAP, geoVI, Ray Tracing, and NUTS
+# 2. Fit a stochastic SFH with PSD-governed burstiness
+# 3. See corner plots, SFH recovery, and convergence diagnostics
+# 4. Understand when to use which inference method
 
 # %%
 import time
@@ -33,6 +42,7 @@ import jax
 import jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
 import matplotlib.pyplot as plt
+import numpy as np
 
 from diffsed import (
     Model, ParamSpec, Uniform, Gaussian, LogUniform, Fixed, Fitter,
@@ -42,7 +52,9 @@ from diffsed import (
 # Publication-quality plot style
 import sys; sys.path.insert(0, ".")
 from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
+from _plot_style import plot_corner_comparison, convergence_table
 setup_style()
+import os; os.makedirs("notebook_figures", exist_ok=True)
 
 ssp_data = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
@@ -53,13 +65,20 @@ print(f"Filters loaded — {[fc.name for fc in filters[2]]}")
 # %% [markdown]
 # ## Part A: Parametric Model (catalog-scale fitting)
 #
-# The parametric model is comparable to a standard BAGPIPES or Prospector
-# parametric run.  The SFH is a smooth double-power-law controlled by
-# $\alpha$, $\beta$, $\tau_{\rm peak}$, and a peak SFR normalisation —
-# no stochastic component (we fix `psd_sigma = 0`).
+# The parametric model uses a **double power law** for the SFH — a smooth
+# function that rises with cosmic time ($\beta$ controls the rise), peaks
+# at epoch $\tau_{\rm peak}$, then declines ($\alpha$ controls the decline).
+# This is the same SFH shape used by BAGPIPES (Carnall et al. 2018) and
+# Prospector (Johnson et al. 2021) in parametric mode.
 #
-# With only **7 free parameters**, this is a low-dimensional problem where
-# NUTS (No-U-Turn Sampler) gives exact, gold-standard posteriors.
+# We fix `psd_sigma = 0` (no stochastic component), leaving **7 free
+# parameters**: 4 SFH shape + 1 metallicity + 2 dust.  This is a
+# low-dimensional problem where NUTS gives exact, gold-standard posteriors.
+#
+# > **SED-fitting context:** Most SED fitting in the literature uses smooth
+# > parametric SFHs like this.  It works well for integrated quantities
+# > (stellar mass, mean SFR) but cannot capture bursty star formation.
+# > Part B adds that capability.
 
 # %%
 spec = ParamSpec(
@@ -78,8 +97,18 @@ spec = ParamSpec(
 )
 model = Model(spec, ssp_data, filters=filters)
 
-key = jax.random.PRNGKey(2025)  # seed chosen for well-centered truths
-true_params = spec.sample(key)
+# Star-forming galaxy: late-peaking SFH, high current SFR, moderate dust
+# (tau_peak=10 Gyr cosmic time ≈ still near peak at z=0.1, alpha=1.0 = slow decline)
+key = jax.random.PRNGKey(2026)
+true_params = dict(
+    sfh_alpha=1.0,               # slow decline after peak
+    sfh_beta=1.5,                # moderate rise
+    sfh_tau_peak_gyr=10.0,       # peaks late — still actively forming stars at z=0.1
+    sfh_peak_sfr=15.0,           # 15 Msun/yr at peak
+    met_logzsol=-0.2,            # near-solar metallicity
+    dust_tau_bc=0.3,             # moderate birth-cloud dust
+    dust_tau_diff=0.2,           # moderate diffuse dust
+)
 mock = model.mock(true_params, snr=20.0, key=key)
 
 print(f"Free parameters: {spec.n_free}")
@@ -97,22 +126,26 @@ ax.set_ylabel("Flux [arbitrary]")
 ax.set_title("Mock SDSS Photometry — Parametric SFH")
 ax.legend()
 plt.tight_layout()
+plt.savefig("notebook_figures/00_quickstart_fig01.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ### MAP initialisation + Ray Tracing + geoVI
+# ### MAP + geoVI + Ray Tracing + NUTS
 #
 # We first run **MAP** (Maximum A Posteriori) to find a good starting point
-# ($\lesssim 1$ second).  Then we sample the full posterior with two
+# ($\lesssim 1$ second).  Then we sample the full posterior with three
 # complementary methods:
 #
+# - **geoVI** (Frank et al. 2021) — variational inference on a Riemannian
+#   manifold.  Approximate but scales to very high $D$.  The primary
+#   method for stochastic SFH problems.
 # - **Ray Tracing** (Behroozi 2025) — exact MCMC via Snell's law optics.
 #   Fast, noise-tolerant, works at any dimensionality.
-# - **geoVI** (Frank et al. 2021) — variational inference on a Riemannian
-#   manifold.  Approximate but scales to very high $D$.
+# - **NUTS** (Hoffman & Gelman 2014) — gold-standard HMC.  Exact posteriors
+#   for low-$D$ problems; impractical above $D \sim 20$.
 #
-# All three are inference methods in `diffsed`.  We run them all on the
-# parametric model to cross-validate, then overlay the posteriors.
+# For the parametric model ($D = 7$), all three give consistent posteriors.
+# The differences emerge in Part B where $D \sim 137$.
 
 # %%
 fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
@@ -122,18 +155,6 @@ result_map = fitter.run("map", n_steps=500)
 t_map = time.perf_counter() - t0
 print(f"MAP finished in {t_map:.1f}s")
 
-# Ray Tracing is available only in newer diffsed versions.
-# Fall back gracefully if this installation does not support it.
-result_rt = None
-try:
-    t0 = time.perf_counter()
-    result_rt = fitter.run("raytrace", init_from=result_map,
-                           n_burnin=100, n_steps=500)
-    t_rt = time.perf_counter() - t0
-    print(f"Ray Tracing finished in {t_rt:.1f}s")
-except ValueError as e:
-    print(f"Ray Tracing not available in this diffsed version: {e}")
-
 t0 = time.perf_counter()
 result_geovi = fitter.run("geovi", init_from=result_map,
                           n_iterations=10, n_samples=6)
@@ -141,22 +162,36 @@ t_geovi = time.perf_counter() - t0
 print(f"geoVI finished in {t_geovi:.1f}s")
 
 t0 = time.perf_counter()
+result_rt = fitter.run("raytrace", init_from=result_map,
+                       n_burnin=200, n_steps=2000)
+t_rt = time.perf_counter() - t0
+print(f"Ray Tracing finished in {t_rt:.1f}s  "
+      f"(acceptance: {result_rt.diagnostics.get('accept_rate_post_burnin', 0):.0%})")
+
+t0 = time.perf_counter()
 result_nuts = fitter.run("nuts", init_from=result_map,
-                         n_warmup=500, n_samples=500)
+                         n_warmup=1000, n_samples=1000)
 t_nuts = time.perf_counter() - t0
-print(f"NUTS finished in {t_nuts:.1f}s")
+n_div = result_nuts.diagnostics.get("n_divergent", 0)
+print(f"NUTS finished in {t_nuts:.1f}s  ({n_div} divergences)")
 
 # %%
-import numpy as np
-# --- SFH recovery: RT (if available) + geoVI + NUTS overlaid ---
+# --- Convergence diagnostics ---
+convergence_table({
+    "geoVI": result_geovi,
+    "Ray Tracing": result_rt,
+    "NUTS": result_nuts,
+})
+
+# %%
+# --- SFH recovery: geoVI + RT + NUTS overlaid ---
 fig, axes = plt.subplots(1, 2, figsize=(14, 4.5))
 
 ax_sfh = axes[0]
-if result_rt is not None:
-    model.plot_sfh_posterior(result_rt, true_params=true_params,
-                             color=COLORS["rt"], label="Ray Tracing", ax=ax_sfh)
 model.plot_sfh_posterior(result_geovi, true_params=true_params,
                          color=COLORS["geovi"], label="geoVI", ax=ax_sfh)
+model.plot_sfh_posterior(result_rt, true_params=true_params,
+                         color=COLORS["rt"], label="Ray Tracing", ax=ax_sfh)
 model.plot_sfh_posterior(result_nuts, true_params=true_params,
                          color=COLORS["nuts"], label="NUTS", ax=ax_sfh)
 ax_sfh.set_title("SFH Recovery — Parametric")
@@ -190,31 +225,29 @@ ax_der.set_title("Derived Quantities (NUTS) — truth dashed")
 ax_der.set_yticks([])
 
 plt.tight_layout()
+plt.savefig("notebook_figures/00_quickstart_fig02.png", dpi=72, bbox_inches="tight")
 plt.show()
 
+# %%
 # --- Corner plot: all three samplers overlaid ---
-from _plot_style import plot_corner_comparison
-posts = []
-labels = []
-colors = []
-if result_rt is not None:
-    posts.append(result_rt)
-    labels.append("Ray Tracing")
-    colors.append(COLORS["rt"])
-posts.extend([result_geovi, result_nuts])
-labels.extend(["geoVI", "NUTS"])
-colors.extend([COLORS["geovi"], COLORS["nuts"]])
-
 plot_corner_comparison(
-    posts,
-    labels,
-    colors=colors,
+    [result_geovi, result_rt, result_nuts],
+    ["geoVI", "Ray Tracing", "NUTS"],
+    colors=[COLORS["geovi"], COLORS["rt"], COLORS["nuts"]],
     truths=true_params,
 )
+plt.savefig("notebook_figures/00_quickstart_fig03.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
 # ## Part B: Stochastic Model (IFT correlated field)
+#
+# Smooth SFHs are insufficient for many galaxies.  Star formation is
+# driven by feedback (supernovae, stellar winds, AGN) and gas accretion,
+# producing stochastic fluctuations on timescales from $\sim$10 Myr to
+# $\sim$1 Gyr.  The scatter in the star-forming main sequence
+# ($\sim$0.3 dex; Speagle et al. 2014) demands variability beyond what
+# any smooth function can capture.
 #
 # This is what makes **diffsed** unique.  Instead of a smooth parametric
 # SFH, we add a Gaussian-process correlated field whose power spectral
@@ -250,8 +283,22 @@ spec_stoch = ParamSpec(
 )
 model_stoch = Model(spec_stoch, ssp_data, filters=filters)
 
-key_stoch = jax.random.PRNGKey(7)
+# Star-forming galaxy with bursty SFH
+# Use spec.sample() to get a full parameter set including psd_xi,
+# then override physical params to known values
+key_stoch = jax.random.PRNGKey(2026)
 true_params_stoch = spec_stoch.sample(key_stoch)
+true_params_stoch = {**true_params_stoch,
+    "sfh_alpha": 0.8,               # shallow decline — SF continues to present
+    "sfh_beta": 1.5,                # moderate rise
+    "sfh_tau_peak_gyr": 8.0,        # late peak — still actively forming at z=0.1
+    "sfh_peak_sfr": 80.0,           # very high peak SFR for dramatic dynamic range
+    "psd_sigma": 3.0,               # extreme burstiness — factor ~1000 fluctuations
+    "psd_tau_myr": 20.0,            # 20 Myr — SN feedback timescale
+    "met_logzsol": -0.3,
+    "dust_tau_bc": 0.5,
+    "dust_tau_diff": 0.3,
+}
 mock_stoch = model_stoch.mock(true_params_stoch, snr=20.0, key=key_stoch)
 
 print(f"Free parameters (stochastic): {spec_stoch.n_free}")
@@ -276,17 +323,21 @@ axes[1].set_title("Mock SDSS Photometry — Stochastic SFH")
 axes[1].legend()
 
 plt.tight_layout()
+plt.savefig("notebook_figures/00_quickstart_fig04.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ### Ray Tracing Sampler
+# ### geoVI — The Primary Method for Stochastic SFHs
 #
-# **Ray Tracing** ([Behroozi 2025](https://arxiv.org/abs/2501.xxxxx)) is an
-# exact MCMC sampler inspired by Snell's law of optics.  Proposals follow
-# straight-line trajectories that refract at iso-probability surfaces,
-# making the sampler $\sim 250\times$ more tolerant of gradient noise than
-# standard HMC.  It excels in high-dimensional problems ($D \sim 137$ here)
-# where NUTS struggles with trajectory tuning.
+# **geoVI** ([Frank et al. 2021](https://arxiv.org/abs/2105.10470))
+# performs variational inference on a Riemannian manifold, approximating the
+# posterior with a Gaussian in a curved coordinate system.  It is
+# *approximate* (unlike Ray Tracing or NUTS) but scales gracefully to
+# very high dimensionality and converges in a handful of KL iterations.
+#
+# For the stochastic model ($D \sim 137$), geoVI is the recommended
+# first choice: it produces hundreds of posterior samples without any
+# MCMC tuning, step size selection, or burn-in assessment.
 
 # %%
 fitter_stoch = Fitter(model_stoch, mock_stoch.flux_obs, mock_stoch.noise,
@@ -294,85 +345,90 @@ fitter_stoch = Fitter(model_stoch, mock_stoch.flux_obs, mock_stoch.noise,
 
 t0 = time.perf_counter()
 result_map_stoch = fitter_stoch.run("map", n_steps=1000)
-t_map = time.perf_counter() - t0
-print(f"MAP finished in {t_map:.1f}s")
+t_map_s = time.perf_counter() - t0
+print(f"MAP finished in {t_map_s:.1f}s")
 
-# step_size tuning: want ~50-70% acceptance for good mixing
-# D=137: try 0.05 (0.01 gives 99%+ = barely moving; 0.35 gives 0% = too large)
-result_rt = None
-try:
-    t0 = time.perf_counter()
-    result_rt = fitter_stoch.run("raytrace", init_from=result_map_stoch,
-                                 n_burnin=100, n_steps=500,
-                                 step_size=0.05)
-    t_rt = time.perf_counter() - t0
-    print(f"Ray Tracing finished in {t_rt:.1f}s")
-except ValueError as e:
-    print(f"Ray Tracing not available in this diffsed version: {e}")
+t0 = time.perf_counter()
+result_geovi_stoch = fitter_stoch.run("geovi", init_from=result_map_stoch,
+                                      n_iterations=15, n_samples=6,
+                                      n_posterior_samples=200)
+t_geovi_s = time.perf_counter() - t0
+print(f"geoVI finished in {t_geovi_s:.1f}s  "
+      f"({result_geovi_stoch.diagnostics['n_samples']} samples)")
 
 # %% [markdown]
-# ### geoVI — Geometric Variational Inference
+# ### Ray Tracing — Exact MCMC Cross-Check
 #
-# **geoVI** ([Frank et al. 2021](https://arxiv.org/abs/2105.10470))
-# performs variational inference on a Riemannian manifold, approximating the
-# posterior with a Gaussian in a curved coordinate system.  It is
-# *approximate* (unlike Ray Tracing) but scales gracefully to very high
-# dimensionality and converges in a handful of KL iterations.
+# **Ray Tracing** ([Behroozi 2025](https://arxiv.org/abs/2510.25824))
+# provides exact, asymptotically unbiased posterior samples via Snell's
+# law optics.  It complements geoVI by serving as an independent check:
+# where the two posteriors agree, we have high confidence; where they
+# disagree, the MCMC result should be preferred.
+#
+# > **Step size for $D \sim 137$:** Use `step_size=0.005` with 200
+# > leapfrog steps.  The viable step-size range narrows sharply at
+# > high $D$ — too large and acceptance crashes to 0%.
 
 # %%
 t0 = time.perf_counter()
-result_geovi = fitter_stoch.run("geovi", init_from=result_map_stoch,
-                                n_iterations=10, n_samples=6)
-t_geovi = time.perf_counter() - t0
-print(f"geoVI finished in {t_geovi:.1f}s")
+result_rt_stoch = fitter_stoch.run("raytrace", init_from=result_map_stoch,
+                                   n_burnin=200, n_steps=2000,
+                                   step_size=0.005, n_leapfrog_steps=200)
+t_rt_s = time.perf_counter() - t0
+accept = result_rt_stoch.diagnostics.get("accept_rate_post_burnin", 0)
+print(f"Ray Tracing finished in {t_rt_s:.1f}s  (acceptance: {accept:.0%})")
 
 # %%
-fig, axes = plt.subplots(1, 3, figsize=(15, 4), sharey=True)
+# --- Convergence diagnostics (stochastic model) ---
+convergence_table({
+    "geoVI (stochastic)": result_geovi_stoch,
+    "RT (stochastic)": result_rt_stoch,
+})
 
+# %%
+# --- Overlaid SFH recovery: geoVI primary, RT cross-check ---
+fig, ax = plt.subplots(figsize=(10, 5))
+
+# Truth: thick black line
+ax.plot(sfh_true["t_gyr"], sfh_true["sfr_full"],
+        color=COLORS["truth"], lw=3, label="Truth", zorder=10)
+ax.plot(sfh_true["t_gyr"], sfh_true["sfr_mean"],
+        color=COLORS["truth"], lw=1.5, ls=":", alpha=0.5, label="Mean SFH", zorder=9)
+
+# MAP point estimate
 sfh_map = model_stoch.predict_sfh(result_map_stoch.params)
-axes[0].plot(sfh_map["t_gyr"], sfh_map["sfr_mean"], color="0.4", lw=1.5)
-axes[0].plot(sfh_true["t_gyr"], sfh_true["sfr_full"],
-             color="k", ls="--", lw=1, label="Truth")
-axes[0].set_title("MAP")
-axes[0].set_xlabel("Lookback time [Gyr]")
-axes[0].set_ylabel("SFR [M$_\\odot$ yr$^{-1}$]")
-axes[0].legend()
+ax.plot(sfh_map["t_gyr"], sfh_map["sfr_mean"],
+        color=COLORS["map"], lw=1.5, ls="--", label="MAP", zorder=5)
 
-if result_rt is not None:
-    model_stoch.plot_sfh_posterior(result_rt, true_params=true_params_stoch,
-                                   color="C0", label="Ray Tracing", ax=axes[1])
-    axes[1].set_title("Ray Tracing")
-    axes[1].legend()
-else:
-    axes[1].axis("off")
+# geoVI posterior (primary — plotted first, more prominent)
+model_stoch.plot_sfh_posterior(result_geovi_stoch, true_params=true_params_stoch,
+                               color=COLORS["geovi"], label="geoVI", ax=ax)
 
-model_stoch.plot_sfh_posterior(result_geovi, true_params=true_params_stoch,
-                              color="C1", label="geoVI", ax=axes[2])
-axes[2].set_title("geoVI")
-axes[2].legend()
+# RT posterior (cross-check)
+model_stoch.plot_sfh_posterior(result_rt_stoch, true_params=true_params_stoch,
+                               color=COLORS["rt"], label="Ray Tracing", ax=ax)
+
+ax.set_xlabel("Lookback time [Gyr]")
+ax.set_ylabel("SFR [M$_\\odot$ yr$^{-1}$]")
+ax.set_title("Stochastic SFH Recovery — geoVI (primary) + RT (cross-check)")
+ax.legend(fontsize=9, loc="upper left")
+
+# Clip y-axis: extreme GP samples can push SFR to 1000+ M☉/yr
+sfr_truth_max = float(np.max(sfh_true["sfr_full"]))
+ax.set_ylim(0, max(5 * sfr_truth_max, 50))
 
 plt.tight_layout()
+plt.savefig("notebook_figures/00_quickstart_fig05.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %%
-from _plot_style import plot_corner_comparison
-posts = []
-labels = []
-colors = []
-if result_rt is not None:
-    posts.append(result_rt)
-    labels.append("Ray Tracing")
-    colors.append(COLORS["rt"])
-posts.append(result_geovi)
-labels.append("geoVI")
-colors.append(COLORS["geovi"])
-
 plot_corner_comparison(
-    posts,
-    labels,
-    colors=colors,
+    [result_geovi_stoch, result_rt_stoch],
+    ["geoVI", "Ray Tracing"],
+    colors=[COLORS["geovi"], COLORS["rt"]],
     truths=true_params_stoch,
 )
+plt.savefig("notebook_figures/00_quickstart_fig06.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -384,27 +440,31 @@ plt.show()
 # so NUTS diverges or mixes poorly.  The diffsed forward model is
 # *differentiable* — JAX gives exact gradients through the GP — so the
 # issue is **high dimensionality**, not noisy gradients.  For $D \gtrsim 20$,
-# **Ray Tracing** and **geoVI** are the recommended inference methods.
+# **geoVI** is the recommended primary method, with **Ray Tracing** as an
+# exact MCMC cross-check.
 # NUTS remains the gold standard for low-dimensional parametric models (Part A).
 
 # %% [markdown]
 # ## What's Next?
 #
-# - **[NB01 — The IFT Model](01_the_model.ipynb)**: PSD, GP theory,
-#   mean SFH, and the burstiness plane
-# - **[NB02 — Forward Model](02_forward_model.ipynb)**: SPS pipeline from
-#   SFH to photometry/spectroscopy
-# - **[NB03 — Inference Methods](03_inference_methods.ipynb)**: physics of
-#   RT, geoVI, NUTS — when to use which sampler
-# - **[NB04 — Recovery Tests](04_recovery_tests.ipynb)**: mock validation
-#   across regimes and data types
-# - **[NB05 — Hierarchical](05_hierarchical.ipynb)**: population-level PSD
-#   recovery — the Paper I key result
-# - **[NB06 — Data Information](06_data_information.ipynb)**: progressive
-#   reveal of how data constrains the model
-# - **[NB07 — Spectroscopy](07_spectroscopic_fitting.ipynb)**: fitting
-#   galaxy spectra and resolving degeneracies
-# - **[NB08 — PSD Physics](08_psd_physics.ipynb)**: connecting PSD
-#   parameters to astrophysical mechanisms
-# - **[NB09 — Custom Models](09_custom_models.ipynb)**: extending diffsed
-#   with new priors, PSD models, and dust laws
+# This quickstart gave you the 60-second version.  The tutorial series
+# goes deeper, building from theory through implementation to science:
+#
+# - **[NB01 — The IFT Model](01_the_model.ipynb)**: How the PSD governs
+#   burstiness — the climate/weather analogy for star formation
+# - **[NB02 — Forward Model](02_forward_model.ipynb)**: Step-by-step SPS
+#   pipeline from SFH to photometry, with gradient sensitivity analysis
+# - **[NB03 — Inference Methods](03_inference_methods.ipynb)**: Deep dive
+#   into all five samplers — when each shines and where it breaks
+# - **[NB04 — Recovery Tests](04_recovery_tests.ipynb)**: Can you trust
+#   the posteriors?  Mock validation across burstiness regimes
+# - **[NB05 — Hierarchical](05_hierarchical.ipynb)**: Population-level PSD
+#   recovery — constraining $\tau$ by sharing across $N$ galaxies
+# - **[NB06 — Data Information](06_data_information.ipynb)**: How much data
+#   do you need?  From 1 band to a full spectrum
+# - **[NB07 — Spectroscopy](07_spectroscopic_fitting.ipynb)**: What spectra
+#   tell you that photometry can't — breaking degeneracies with features
+# - **[NB08 — PSD Physics](08_psd_physics.ipynb)**: The observer's
+#   translation guide — mapping PSD parameters to astrophysical mechanisms
+# - **[NB09 — Custom Models](09_custom_models.ipynb)**: Extending diffsed
+#   with new priors, PSD models, dust laws, and SSP templates

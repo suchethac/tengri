@@ -29,6 +29,13 @@
 #
 # > **Prerequisites:** See *Tutorial 01* for the IFT correlated field
 # > model and *Tutorial 02* for the forward model pipeline.
+#
+# **By the end you will understand:**
+# 1. How PSD amplitude $\sigma$ maps to main-sequence scatter
+# 2. How PSD timescale $\tau$ maps to physical feedback processes
+# 3. What the DRW assumes and when you need more flexible PSD models
+# 4. Which observables probe which PSD timescales (window functions)
+# 5. The mass-dependent PSD prediction for Paper II
 
 # %%
 import jax
@@ -42,6 +49,7 @@ from matplotlib.patches import FancyArrowPatch
 import sys; sys.path.insert(0, ".")
 from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
 setup_style()
+import os; os.makedirs("notebook_figures", exist_ok=True)
 
 # Low-level PSD / GP functions
 from diffsed.models.sfh.psd_models import (
@@ -140,6 +148,32 @@ print(f"Time range: {float(ages_gyr[0]):.3f} to {float(ages_gyr[-1]):.1f} Gyr")
 # The stationary variance is $\mathrm{Var}[\ln \mathrm{SFR}] =
 # \sigma^2 / 2$ (integrated power).
 
+# %% [markdown]
+# ## PSD Parameters in Practice
+#
+# What do the PSD parameters map to in physical terms?
+#
+# | $\sigma_{\rm PSD}$ | SFR scatter (dex) | Peak-to-trough | Physical regime |
+# |-----|-----|------|------|
+# | 0.3 | ~0.1 dex | ~2x | Secular disk evolution |
+# | 0.5 | ~0.15 dex | ~3x | Normal main-sequence galaxy |
+# | 1.0 | ~0.3 dex | ~10x | Moderately bursty (MW-mass) |
+# | 1.5 | ~0.5 dex | ~30x | Bursty dwarf galaxy |
+# | 2.0 | ~0.7 dex | ~100x | Extreme starburst/quenching |
+# | 3.0 | ~1.0 dex | ~1000x | Post-merger or AGN-driven |
+#
+# | $\tau_{\rm PSD}$ [Myr] | Dominant process | Observable signature |
+# |-----|------|------|
+# | 5–10 | Stellar winds + SN | Flickering in H$\alpha$ |
+# | 20–50 | Superbubble feedback | Scatter in H$\alpha$/UV ratio |
+# | 100–300 | Gas cycling | Main-sequence scatter |
+# | 500+ | Mergers / halo accretion | Bimodal color distribution |
+#
+# **Key relations:**
+# - Main-sequence scatter: $\sigma_{\rm MS} \approx \sigma / \sqrt{2 \ln^2 10}$
+# - SFR peak-to-trough: $\sim \exp(2\sigma)$ (typical excursion)
+# - H$\alpha$/UV ratio scatter: increases with both $\sigma$ and $\tau$
+
 # %%
 # Four DRW configurations spanning the astrophysical range
 configs = [
@@ -213,6 +247,7 @@ ax.set_xscale("log")
 ax.axhline(0, color="0.5", ls="-", lw=0.5)
 
 plt.tight_layout()
+plt.savefig("notebook_figures/08_psd_physics_fig01.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -287,6 +322,7 @@ ax.spines["right"].set_visible(False)
 ax.spines["left"].set_visible(False)
 
 plt.tight_layout()
+plt.savefig("notebook_figures/08_psd_physics_fig02.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -382,6 +418,7 @@ ax.axhline(0, color="0.5", ls="-", lw=0.5)
 ax.legend(fontsize=9)
 
 plt.tight_layout()
+plt.savefig("notebook_figures/08_psd_physics_fig03.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -495,6 +532,7 @@ ax.legend(fontsize=8, loc="lower left", ncol=2)
 ax.set_ylim(ymin, ymax)
 
 plt.tight_layout()
+plt.savefig("notebook_figures/08_psd_physics_fig04.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -575,6 +613,7 @@ ax.annotate("NIR: persists for Gyr", xy=(2, 0.6),
             fontsize=9, color="#a50026")
 
 plt.tight_layout()
+plt.savefig("notebook_figures/08_psd_physics_fig05.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -630,8 +669,9 @@ for tau_myr in tau_myr_grid:
         sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age,
                                          float(sigma), tau_yr_val)
         keys = jax.random.split(subkey, n_realizations)
+        _sqrt_p = sqrt_p  # bind for closure
         gp_batch = jax.vmap(
-            lambda k: generate_gp_fourier(k, sqrt_p, N_GRID)
+            lambda k, sp=_sqrt_p: generate_gp_fourier(k, sp, N_GRID)
         )(keys)
 
         # SFR = mean * exp(gp - var/2)  [lognormal correction]
@@ -674,8 +714,9 @@ for tau_myr_val, col in zip(tau_myr_grid, tau_colors):
         sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age,
                                          float(sigma), tau_yr_val)
         keys = jax.random.split(subkey, n_realizations)
+        _sqrt_p = sqrt_p  # bind for closure
         gp_batch = jax.vmap(
-            lambda k: generate_gp_fourier(k, sqrt_p, N_GRID)
+            lambda k, sp=_sqrt_p: generate_gp_fourier(k, sp, N_GRID)
         )(keys)
         var_gp = drw_variance(float(sigma))
         sfr_batch = mean_sfr_grid[None, :] * jnp.exp(gp_batch - var_gp / 2.0)
@@ -702,6 +743,7 @@ ax.set_title(r"H$\alpha$/UV ratio scatter vs. PSD amplitude", fontsize=13)
 ax.legend(fontsize=9)
 
 plt.tight_layout()
+plt.savefig("notebook_figures/08_psd_physics_fig06.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -779,6 +821,7 @@ ax.set_xlim(0, 3.0)
 ax.set_ylim(0, 1.0)
 
 plt.tight_layout()
+plt.savefig("notebook_figures/08_psd_physics_fig07.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # Summary table
@@ -888,6 +931,7 @@ for a in axes:
     a.spines["right"].set_visible(False)
 
 plt.tight_layout()
+plt.savefig("notebook_figures/08_psd_physics_fig08.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 print("These schematic relations are informed by:")
@@ -932,3 +976,15 @@ print("  - Paper II will measure sigma(M_halo) from hierarchical inference")
 # - Iyer et al. (2024) --- Non-parametric SFH constraints from photometry
 # - Wan et al. (2024) --- Burstiness metrics from JWST UV/H$\alpha$
 # - Munoz et al. (2026) --- This work (Paper I: methods + mock recovery)
+
+# %% [markdown]
+# ## What You've Learned
+#
+# 1. $\sigma$ controls burstiness amplitude; $\tau$ sets the characteristic timescale
+# 2. The DRW is a good starting point; Matern generalizes the high-frequency slope
+# 3. Window functions reveal which PSD timescales each observable constrains
+# 4. Observable diagnostics (sSFR scatter, H$\alpha$/UV) are predictable from $(\sigma, \tau)$
+# 5. The mass-dependent PSD — $\sigma(M_{\rm halo})$ — is the key Paper II prediction
+#
+# **Next:** [Tutorial 09 — Custom Models](09_custom_models.ipynb) shows how to
+# extend diffsed with new priors, PSD models, dust laws, and SSP templates.

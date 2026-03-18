@@ -13,17 +13,29 @@
 # ---
 
 # %% [markdown]
-# # How Data Constrains the Model
+# # How Much Data Do You Need?
 #
-# The central question of SED fitting: **how much data do you need to
-# constrain a galaxy's star formation history?**
+# When designing a galaxy survey or choosing an SED fitting strategy,
+# the central question is: **how much data do I need?**
+#
+# - Is 5-band photometry (SDSS ugriz) enough to constrain the SFH?
+# - Does adding UV coverage (GALEX NUV) make a qualitative difference?
+# - When do you need a spectrum instead of photometry?
+# - And critically: can you constrain burstiness (PSD parameters) from
+#   photometry alone, or does that require spectroscopy or hierarchical
+#   inference?
 #
 # We take a single mock galaxy with a known bursty SFH and fit it with
 # progressively richer data — from a single photometric band to a
 # 200-pixel spectrum.  At each step we show the posterior and recovered
 # SFH, watching the constraints sharpen in real time.
 #
-# This is the "why this method matters" notebook.
+# **By the end you will understand:**
+# 1. How posterior constraints sharpen with each additional data type
+# 2. Why UV photometry breaks the age-dust degeneracy
+# 3. The qualitative leap from photometry to spectroscopy
+# 4. Which parameters are constrained by which data types
+# 5. Practical survey design guidance for PSD inference
 
 # %%
 import time
@@ -37,6 +49,7 @@ import numpy as np
 import sys; sys.path.insert(0, ".")
 from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
 setup_style()
+import os; os.makedirs("notebook_figures", exist_ok=True)
 
 from diffsed import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
@@ -107,7 +120,7 @@ def run_fit(model, flux_obs, noise, label, data_type="photometry", **kw):
     t0 = time.perf_counter()
     result_map = fitter.run("map", n_steps=1000)
     result_rt = fitter.run("raytrace", init_from=result_map,
-                           n_burnin=100, n_steps=300, step_size=0.01)
+                           n_burnin=100, n_steps=300, step_size=0.05, n_leapfrog_steps=50)
     elapsed = time.perf_counter() - t0
 
     print(f"{label}: fit completed in {elapsed:.1f}s")
@@ -145,6 +158,7 @@ axes[0].legend()
 fig_corner_1 = safe_corner(result_1band, truths=true_params,
                            color=STAGE_COLORS["1 band"],
                            label="1 band")
+plt.savefig("notebook_figures/06_data_information_fig01.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -177,6 +191,7 @@ axes[0].legend()
 fig_corner_3 = safe_corner(result_3band, truths=true_params,
                            color=STAGE_COLORS["3 bands"],
                            label="3 bands")
+plt.savefig("notebook_figures/06_data_information_fig02.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -203,6 +218,7 @@ axes[0].legend()
 fig_corner_5 = safe_corner(result_5band, truths=true_params,
                            color=STAGE_COLORS["5 bands"],
                            label="5 bands")
+plt.savefig("notebook_figures/06_data_information_fig03.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -239,6 +255,7 @@ axes[0].legend()
 fig_corner_6 = safe_corner(result_6band, truths=true_params,
                            color=STAGE_COLORS["6 bands"],
                            label="ugriz+NUV")
+plt.savefig("notebook_figures/06_data_information_fig04.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -290,11 +307,13 @@ axes[1].set_title("SFH Recovery — 200-pixel spectrum")
 axes[1].legend()
 
 plt.tight_layout()
+plt.savefig("notebook_figures/06_data_information_fig05.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 fig_corner_spec = safe_corner(result_spec, truths=true_params,
                                color=STAGE_COLORS["spectrum"],
                                label="Spectrum")
+plt.savefig("notebook_figures/06_data_information_fig06.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -322,6 +341,7 @@ axes[0].legend()
 
 fig_corner_joint = safe_corner(result_joint, truths=true_params,
                                 color="C4", label="Joint")
+plt.savefig("notebook_figures/06_data_information_fig07.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -362,6 +382,7 @@ for ax, (label, result) in zip(axes, all_results.items()):
 fig.suptitle("SFH Recovery: Progressive Data Accumulation",
              fontsize=14, y=1.02)
 plt.tight_layout()
+plt.savefig("notebook_figures/06_data_information_fig08.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # --- Panel 2: Posterior width summary ---
@@ -396,6 +417,7 @@ ax.set_xticklabels(labels, rotation=30, ha="right")
 ax.legend()
 ax.set_title("Posterior Width vs. Data Richness")
 plt.tight_layout()
+plt.savefig("notebook_figures/06_data_information_fig09.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -412,6 +434,7 @@ if fig is not None:
                 label="Spectrum", fig=fig)
 fig.suptitle("Posterior Evolution: 1 band → 5 bands → Spectrum",
              fontsize=13, y=1.02)
+plt.savefig("notebook_figures/06_data_information_fig10.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -447,6 +470,7 @@ if fig is not None:
                 color="C4", label="Joint", fig=fig)
 fig.suptitle("PSD Parameter Constraints: Photometry vs. Spectroscopy",
              fontsize=12, y=1.02)
+plt.savefig("notebook_figures/06_data_information_fig11.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -468,11 +492,20 @@ plt.show()
 #   key to constraining burstiness from photometry alone.
 
 # %% [markdown]
-# ## Next Steps
+# ## What You've Learned
 #
-# - **[NB04 — SFH Recovery Tests](04_sfh_recovery.ipynb)**: Systematic
+# 1. A single band gives almost no constraint — the posterior is near-prior
+# 2. 5-band photometry (ugriz) constrains the mean SFH and dust reasonably well
+# 3. Adding UV (GALEX NUV) qualitatively improves dust and recent SFR constraints
+# 4. Spectroscopy provides the biggest leap — resolving individual absorption features
+# 5. PSD parameters ($\sigma$, $\tau$) require spectroscopy or hierarchical inference
+#
+# **Next:** [Tutorial 07 — Spectroscopy](07_spectroscopic_fitting.ipynb) dives
+# deep into spectral fitting, line diagnostics, and wavelength-range experiments.
+#
+# ## Further Reading
+#
+# - **[NB04 — SFH Recovery Tests](04_recovery_tests.ipynb)**: Systematic
 #   mock recovery benchmarks across parameter space
 # - **[NB05 — Hierarchical Inference](05_hierarchical.ipynb)**: Shared
 #   PSD priors that pool information across galaxy samples
-# - **[NB07 — Spectroscopic Fitting](07_spectroscopy.ipynb)**: Deep
-#   dive into spectral fitting, line diagnostics, and joint modelling

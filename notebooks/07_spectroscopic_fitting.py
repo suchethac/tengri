@@ -35,6 +35,13 @@
 # mock spectra, fit them with `diffsed`, diagnose the fit quality, and
 # compare the information content of photometry vs spectroscopy.
 #
+# **By the end you will understand:**
+# 1. How to generate mock galaxy spectra and fit them with diffsed
+# 2. Which spectral features constrain which physical properties
+# 3. How to diagnose fit quality through residual analysis
+# 4. The quantitative constraint improvement from photometry to spectroscopy
+# 5. How spectral coverage shifts with redshift
+#
 # > **Prerequisites:** NB02 (forward model), NB03 (inference methods).
 
 # %%
@@ -48,6 +55,7 @@ import matplotlib.pyplot as plt
 import sys; sys.path.insert(0, ".")
 from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
 setup_style()
+import os; os.makedirs("notebook_figures", exist_ok=True)
 
 from diffsed import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
@@ -132,6 +140,7 @@ ax.set_ylabel(r"Flux density [erg/s/cm$^2$/\AA]")
 ax.set_title(f"Mock galaxy spectrum (z = 0.1, SNR = {snr:.0f})")
 ax.legend(fontsize=9)
 plt.tight_layout()
+plt.savefig("notebook_figures/07_spectroscopic_fitting_fig01.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -166,6 +175,7 @@ ax.set_xlabel(r"Observed wavelength [\AA]")
 ax.set_ylabel(r"Flux density [erg/s/cm$^2$/\AA]")
 ax.set_title("Key spectral features at z = 0.1")
 plt.tight_layout()
+plt.savefig("notebook_figures/07_spectroscopic_fitting_fig02.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 print("What each feature constrains:")
@@ -174,6 +184,14 @@ print("  Balmer series -> recent SFH (last ~1 Gyr)")
 print("  H-alpha      -> current SFR + dust attenuation")
 print("  [O III]      -> ionization state (AGN vs star-forming)")
 print("  Mg b, Na D   -> metallicity, alpha-element abundance")
+
+# %% [markdown]
+# > **SED-fitting wisdom:** Each spectral feature acts as a temporal filter
+# > on the SFH. H$\alpha$ responds to the last ~5 Myr (ionizing photons from
+# > O stars). Balmer absorption (H$\delta$, H$\gamma$) probes ~100 Myr–1 Gyr
+# > (A-star dominated populations). The 4000 Å break responds to ~1 Gyr+
+# > (metal-line blanketing in evolved stars). In PSD language, different
+# > features probe different frequency ranges of the power spectrum.
 
 # %% [markdown]
 # ## Fitting a Spectrum
@@ -214,7 +232,7 @@ result_rt = fitter.run(
     init_from=result_map,
     n_burnin=100,
     n_steps=300,
-    step_size=0.01,
+    step_size=0.05, n_leapfrog_steps=50,
     key=subkey,
 )
 accept = result_rt.diagnostics.get("accept_rate_post_burnin", 0)
@@ -227,7 +245,7 @@ ax.plot(wave_obs, spec_obs, "0.6", lw=0.5, label="Data")
 
 # Posterior median spectrum (draw a few samples)
 spec_draws = []
-n_draws = min(50, len(list(result_rt.samples.values())[0]))
+n_draws = min(50, len(next(iter(result_rt.samples.values()))))
 for k_idx in range(n_draws):
     draw = {name: (arr[k_idx] if name == 'psd_xi' else float(arr[k_idx])) for name, arr in result_rt.samples.items()}
     spec_draws.append(np.array(model.predict_spectrum(draw, wave_obs)))
@@ -244,6 +262,7 @@ ax.set_ylabel(r"Flux density [erg/s/cm$^2$/\AA]")
 ax.set_title("Spectroscopic fit: data vs model")
 ax.legend(fontsize=9)
 plt.tight_layout()
+plt.savefig("notebook_figures/07_spectroscopic_fitting_fig03.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -260,10 +279,12 @@ fig = safe_corner(result_rt,
 )
 if fig is not None:
     fig.suptitle("Spectroscopic posterior — physical parameters", fontsize=14, y=1.02)
+plt.savefig("notebook_figures/07_spectroscopic_fitting_fig04.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # SFH recovery
 model.plot_sfh_posterior(result_rt, true_params=true_params)
+plt.savefig("notebook_figures/07_spectroscopic_fitting_fig05.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -312,13 +333,14 @@ axes[1].set_ylim(-4, 4)
 
 # Highlight spectral features in residuals
 z_true = 0.1
-for name, lam_rest in [("D4000", 4000.0), (r"H$\beta$", 4861.0),
-                        (r"H$\alpha$", 6563.0)]:
+for _name, lam_rest in [("D4000", 4000.0), (r"H$\beta$", 4861.0),
+                         (r"H$\alpha$", 6563.0)]:
     lam_obs_feat = lam_rest * (1 + z_true)
     for ax in axes:
         ax.axvline(lam_obs_feat, color="0.7", ls=":", lw=0.6)
 
 plt.tight_layout()
+plt.savefig("notebook_figures/07_spectroscopic_fitting_fig06.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 print(f"chi2 = {chi2:.1f}")
@@ -361,7 +383,7 @@ for snr_val in snr_values:
         init_from=map_snr,
         n_burnin=100,
         n_steps=300,
-        step_size=0.01,
+        step_size=0.05, n_leapfrog_steps=50,
         key=subkey,
     )
     results_snr[snr_val] = rt_snr
@@ -378,7 +400,7 @@ for ax, snr_val, col in zip(axes, snr_values, colors_snr):
     ax.plot(sfh_truth["t_gyr"], sfh_truth["sfr_mean"], "k-", lw=2, label="Truth")
 
     sfr_draws = []
-    n_d = min(100, len(list(res.samples.values())[0]))
+    n_d = min(100, len(next(iter(res.samples.values()))))
     for k_idx in range(n_d):
         draw = {name: (arr[k_idx] if name == 'psd_xi' else float(arr[k_idx])) for name, arr in res.samples.items()}
         sfh_draw = model.predict_sfh(draw)
@@ -396,6 +418,7 @@ for ax, snr_val, col in zip(axes, snr_values, colors_snr):
 axes[0].set_ylabel(r"SFR [$M_\odot$/yr]")
 fig.suptitle("SFH Recovery vs Spectral SNR", fontsize=14, y=1.02)
 plt.tight_layout()
+plt.savefig("notebook_figures/07_spectroscopic_fitting_fig07.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -427,7 +450,7 @@ rt_phot = fitter_phot.run(
     init_from=map_phot,
     n_burnin=100,
     n_steps=300,
-    step_size=0.01,
+    step_size=0.05, n_leapfrog_steps=50,
     key=subkey,
 )
 print(f"Photometry RT: {rt_phot.wall_time_s:.1f}s")
@@ -450,6 +473,7 @@ if fig is not None:
     )
     fig.suptitle("Photometry vs Spectroscopy — same galaxy, same method",
                  fontsize=14, y=1.02)
+plt.savefig("notebook_figures/07_spectroscopic_fitting_fig08.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # Quantify constraint improvement
@@ -522,13 +546,14 @@ for ax, z, survey, (lam_lo, lam_hi) in zip(axes, redshifts, survey_names, obs_ra
     ax.set_ylim(0, 1)
     ax.set_yticks([])
     ax.set_title(f"{survey} at z = {z} "
-                 f"(rest: {rest_lo:.0f}--{rest_hi:.0f} \AA)",
+                 f"(rest: {rest_lo:.0f}--{rest_hi:.0f} " + "\\AA)",
                  fontsize=11)
 
 axes[-1].set_xlabel(r"Rest-frame wavelength [\AA]")
 fig.suptitle("Which features are accessible at each redshift?",
              fontsize=13, y=1.02)
 plt.tight_layout()
+plt.savefig("notebook_figures/07_spectroscopic_fitting_fig09.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -563,13 +588,19 @@ plt.show()
 #    from a MAP solution.  Cold starts waste burn-in.
 
 # %% [markdown]
-# ## Next Steps
+# ## What You've Learned
 #
-# - **NB06: Data and Information Content** — quantifying how much
-#   information each observation type provides.
-# - **NB08: PSD Physics** — the power spectral density that governs
-#   burstiness in the stochastic SFH.
-# - **NB09: Custom Models** — extending `diffsed` with your own
-#   forward model components.
-# - **NB03: Inference Methods** — deep dive into MAP, RT, geoVI,
-#   NUTS, and MGVI.
+# 1. Spectroscopy resolves the age-dust-metallicity degeneracy that plagues photometry
+# 2. Individual absorption features (D4000, Balmer) constrain SFH at different timescales
+# 3. Residual analysis ($\chi^2/\nu$, feature-by-feature) is essential for validation
+# 4. Spectroscopy tightens posteriors by 2–10x over photometry, especially for metallicity
+# 5. Rest-frame spectral coverage shifts with redshift — choose your survey accordingly
+#
+# **Next:** [Tutorial 08 — PSD Physics](08_psd_physics.ipynb) connects PSD
+# parameters to astrophysical mechanisms and observable diagnostics.
+#
+# ## Further Reading
+#
+# - **NB06: Data Information** — progressive data reveal from 1 band to full spectrum
+# - **NB09: Custom Models** — extending diffsed with new forward model components
+# - **NB03: Inference Methods** — deep dive into all five samplers

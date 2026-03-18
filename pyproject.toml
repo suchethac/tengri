@@ -78,7 +78,7 @@ ignore = [
 "__init__.py" = ["F401"]           # re-exports are intentional
 "tests/**" = ["F841"]             # unused variables common in test fixtures
 "analysis/**" = ["F841", "E501"]  # scripts: relaxed
-"notebooks/**" = ["F401", "F841", "E402", "E501"]  # notebooks are exploratory
+"notebooks/**" = ["F401", "F841", "E402", "E501", "E702", "I001"]  # notebooks: exploratory, jax.config between imports
 
 [tool.ruff.lint.isort]
 known-first-party = ["diffsed"]

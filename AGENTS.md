@@ -160,6 +160,23 @@ ruff format src/ tests/             # auto-format all files
 - `tests/`: `F841` (unused variables) ignored for fixtures
 - `notebooks/`, `analysis/`: relaxed rules for exploratory code
 
+## Convergence Diagnostics (mandatory)
+
+Every inference result must be checked for convergence before trusting posteriors.
+Use `convergence_check()` or `convergence_table()` from `notebooks/_plot_style.py`.
+
+**Industry-standard thresholds** (Vehtari et al. 2021):
+- **ESS**: > 100 per parameter, > 400 total for reliable summaries
+- **Divergences** (NUTS): 0 ideal; > 5% = posterior unreliable
+- **RT acceptance**: 30–70%; > 90% = chain barely moving
+- **NUTS acceptance**: ~80%
+
+**Known issues**: `dust_tau_bc`, `dust_tau_diff`, `met_logzsol` have low ESS due to
+age-dust-metallicity degeneracy — a physical limitation, not a sampler bug.
+
+**RT tuning for stochastic models (D~137)**: `step_size=0.05, n_leapfrog_steps=50`.
+Sharp viability cliff at step_size~0.06; compensate with more leapfrog steps.
+
 ## Testing
 
 ```bash

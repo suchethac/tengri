@@ -384,14 +384,24 @@ class Posterior:
 
         # Add derived quantities if model is available
         derived = {}
+        derived_truths = {}
         if self._model is not None:
             try:
                 d = self.derived
-                for k in ["stellar_mass", "sfr_100myr"]:
+                for k in ["stellar_mass", "sfr_100myr", "sfr_10myr"]:
                     if k in d:
                         derived[k] = np.array(d[k])
             except Exception:
                 pass
+            # Compute truth derived quantities for truth lines
+            if truths is not None:
+                try:
+                    d_true = self._model.predict_derived(truths)
+                    for k in derived:
+                        if k in d_true:
+                            derived_truths[k] = float(d_true[k])
+                except Exception:
+                    pass
 
         n = len(params) + len(derived)
         if fig is None or axes is None:
@@ -421,27 +431,34 @@ class Posterior:
             "met_logzsol": r"log Z",
             "dust_tau_bc": r"$\tau_{\rm bc}$",
             "dust_tau_diff": r"$\tau_{\rm diff}$",
-            "stellar_mass": r"log M$_*$",
-            "sfr_100myr": r"SFR$_{100}$",
+            "stellar_mass": r"$\log\,M_*$",
+            "sfr_100myr": r"$\log\,$SFR$_{100}$",
+            "sfr_10myr": r"$\log\,$SFR$_{10}$",
         }
+
+        # Merge derived truths into truths dict for truth-line plotting
+        all_truths = dict(truths) if truths else {}
+        all_truths.update(derived_truths)
 
         for i, name_i in enumerate(all_names):
             xi = all_data[name_i]
-            if name_i == "stellar_mass":
-                xi = np.log10(np.maximum(xi, 1.0))
+            _log_derived = ("stellar_mass", "sfr_100myr", "sfr_10myr")
+            if name_i in _log_derived:
+                xi = np.log10(np.maximum(xi, 1e-30))
 
             for j, name_j in enumerate(all_names):
                 ax = axes[i, j]
                 xj = all_data[name_j]
-                if name_j == "stellar_mass":
-                    xj = np.log10(np.maximum(xj, 1.0))
+                if name_j in _log_derived:
+                    xj = np.log10(np.maximum(xj, 1e-30))
 
                 if j > i:
                     ax.set_visible(False)
                     continue
 
                 if i == j:
-                    # Diagonal: 1D KDE + histogram
+                    # Diagonal: 1D histogram + KDE + quantile title
+                    # (following corner.py conventions)
                     n_bins = min(20, max(5, len(xi) // 3))
                     ax.hist(
                         xi,
@@ -461,56 +478,70 @@ class Posterior:
                         ax.plot(x_grid, kde(x_grid), color=color, lw=1.5, label=lbl)
                     except (ImportError, np.linalg.LinAlgError):
                         pass  # fall back to histogram only
-                    if truths and name_i in truths:
-                        tv = truths[name_i]
-                        if name_i == "stellar_mass":
-                            tv = np.log10(max(tv, 1.0))
-                        ax.axvline(tv, color="k", ls="--", lw=1.5)
+                    # Quantile lines + title (corner.py style)
+                    q16, q50, q84 = np.percentile(xi, [16, 50, 84])
+                    ax.axvline(q50, color=color, ls="-", lw=1.0, alpha=0.6)
+                    ax.axvline(q16, color=color, ls=":", lw=0.7, alpha=0.4)
+                    ax.axvline(q84, color=color, ls=":", lw=0.7, alpha=0.4)
+                    if all_truths and name_i in all_truths:
+                        tv = all_truths[name_i]
+                        if name_i in ("stellar_mass", "sfr_100myr", "sfr_10myr"):
+                            tv = np.log10(max(float(tv), 1e-30))
+                        ax.axvline(tv, color="#4682b4", ls="--", lw=1.5)
                 else:
-                    # Off-diagonal: 2D KDE contours
+                    # Off-diagonal: 2D histogram contours (corner.py style)
+                    # hist2d is more robust than KDE at low ESS
                     try:
-                        from scipy.stats import gaussian_kde
+                        from scipy.ndimage import gaussian_filter
 
-                        xy = np.vstack([xj, xi])
-                        kde = gaussian_kde(xy)
-                        x_grid = np.linspace(np.min(xj), np.max(xj), 80)
-                        y_grid = np.linspace(np.min(xi), np.max(xi), 80)
-                        X, Y = np.meshgrid(x_grid, y_grid)
-                        Z = kde(np.vstack([X.ravel(), Y.ravel()])).reshape(X.shape)
-                        # Contour levels at 68% and 95% credible regions
-                        Z_sorted = np.sort(Z.ravel())[::-1]
-                        Z_cumsum = np.cumsum(Z_sorted) / np.sum(Z_sorted)
-                        level_68 = Z_sorted[np.searchsorted(Z_cumsum, 0.68)]
-                        level_95 = Z_sorted[np.searchsorted(Z_cumsum, 0.95)]
-                        ax.contourf(
-                            X,
-                            Y,
-                            Z,
-                            levels=[level_95, level_68, Z.max()],
-                            colors=[color],
-                            alpha=[0.1, 0.3],
+                        n_bins_2d = min(30, max(10, int(np.sqrt(len(xj)))))
+                        H, xe, ye = np.histogram2d(
+                            xj, xi, bins=n_bins_2d,
+                            range=[[np.min(xj), np.max(xj)],
+                                   [np.min(xi), np.max(xi)]],
                         )
+                        H = gaussian_filter(H, sigma=1.0)
+                        # Contour levels at 68% and 95% credible regions
+                        H_sorted = np.sort(H.ravel())[::-1]
+                        H_cumsum = np.cumsum(H_sorted) / np.sum(H_sorted)
+                        level_68 = H_sorted[np.searchsorted(H_cumsum, 0.68)]
+                        level_95 = H_sorted[np.searchsorted(H_cumsum, 0.95)]
+                        xc = 0.5 * (xe[:-1] + xe[1:])
+                        yc = 0.5 * (ye[:-1] + ye[1:])
+                        X, Y = np.meshgrid(xc, yc)
+                        # Guard: contourf needs strictly increasing levels
+                        levels = sorted(set([level_95, level_68, H.max()]))
+                        if len(levels) < 2 or H.max() <= 0:
+                            raise ValueError("degenerate histogram")
+                        cs = ax.contourf(
+                            X, Y, H.T,
+                            levels=levels,
+                            colors=[color],
+                            alpha=np.linspace(0.1, 0.3, len(levels) - 1),
+                        )
+                        # Remove white edges between contour bands.
+                        for c in getattr(cs, "collections", []):
+                            c.set_edgecolor("face")
+                            c.set_rasterized(True)
                         ax.contour(
-                            X,
-                            Y,
-                            Z,
-                            levels=[level_95, level_68],
+                            X, Y, H.T,
+                            levels=levels[:-1],
                             colors=[color],
                             linewidths=0.8,
                             alpha=0.7,
                         )
-                    except (ImportError, np.linalg.LinAlgError):
-                        # Fallback to scatter if KDE fails
+                    except (ImportError, np.linalg.LinAlgError, ValueError):
+                        # Fallback to scatter if hist2d fails
                         ax.scatter(xj, xi, s=8, alpha=0.4, color=color, edgecolors="none")
-                    if truths and name_j in truths and name_i in truths:
-                        tj = truths[name_j]
-                        ti = truths[name_i]
-                        if name_j == "stellar_mass":
-                            tj = np.log10(max(tj, 1.0))
-                        if name_i == "stellar_mass":
-                            ti = np.log10(max(ti, 1.0))
-                        ax.axvline(tj, color="k", ls="--", lw=0.8, alpha=0.5)
-                        ax.axhline(ti, color="k", ls="--", lw=0.8, alpha=0.5)
+                    if all_truths and name_j in all_truths and name_i in all_truths:
+                        tj = float(all_truths[name_j])
+                        ti = float(all_truths[name_i])
+                        if name_j in _log_derived:
+                            tj = np.log10(max(tj, 1e-30))
+                        if name_i in _log_derived:
+                            ti = np.log10(max(ti, 1e-30))
+                        ax.axvline(tj, color="#4682b4", ls="--", lw=0.8, alpha=0.5)
+                        ax.axhline(ti, color="#4682b4", ls="--", lw=0.8, alpha=0.5)
 
                 # Labels on edges only
                 if i == n - 1:

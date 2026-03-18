@@ -614,11 +614,12 @@ class Fitter:
         self,
         *,
         key,
-        init_from=None,
+        init_from="map",
         n_iterations=50,
         n_samples=3,
         n_posterior_samples=2000,
         kl_rtol=1e-2,
+        n_seeds=1,
         verbose=True,
     ):
         """Fully JIT-compiled EVI: ~500x faster than NIFTy's optimize_kl.
@@ -627,18 +628,19 @@ class Fitter:
         minimization) runs inside ``jax.lax.while_loop`` with zero
         Python overhead. Stops automatically when KL converges.
 
-        The default settings are tuned for robustness across a wide
-        range of SED fitting problems (Philipp Frank, private comm.):
+        By default, initializes from a quick MAP estimate (fast, good
+        starting point). Set ``init_from="random"`` for random init,
+        or pass a ``Posterior`` object from a previous fit.
 
-        - ``n_samples=3`` with mirror_samples (6 effective): the stochastic
-          noise from few samples regularizes the Newton-CG steps
-        - ``n_iterations=50`` with ``kl_rtol=1e-2``: auto-stops when
-          converged (typically 5-15 iterations)
-        - ``n_posterior_samples=2000``: smooth posteriors, nearly free
-          with JIT-compiled CG
+        For extra robustness, use ``n_seeds=3`` to run from multiple
+        starting points and automatically select the best.
 
         Parameters
         ----------
+        init_from : str, Posterior, or None
+            ``"map"`` (default): quick MAP estimate as starting point.
+            ``"random"`` or ``None``: random init near prior midpoint.
+            ``Posterior``: use a previous result as initialization.
         n_iterations : int
             Maximum KL iterations. Auto-stops when converged.
         n_samples : int
@@ -648,10 +650,40 @@ class Fitter:
         kl_rtol : float
             Relative KL tolerance for early stopping. Set to 0 to
             disable and run all ``n_iterations``.
+        n_seeds : int
+            Number of random seeds to run. The best result (lowest
+            Hamiltonian) is returned. Multiple seeds catch bad
+            initialization. Warns if seeds disagree (multimodality).
         verbose : bool
             Print progress.
         """
+        import warnings
+
         from diffsed.posterior import Posterior
+
+        # --- Parameter validation ---
+        if n_samples > 12:
+            warnings.warn(
+                f"n_samples={n_samples} is unusually high. With mirror_samples "
+                f"this gives {2 * n_samples} effective samples per iteration. "
+                f"High sample counts reduce stochastic regularization and can "
+                f"cause the Newton-CG optimizer to overshoot. "
+                f"Recommended: n_samples=3 (Philipp Frank, private comm.).",
+                UserWarning,
+                stacklevel=2,
+            )
+        if n_iterations > 100 and kl_rtol <= 0:
+            warnings.warn(
+                f"n_iterations={n_iterations} with kl_rtol={kl_rtol} (no auto-stop). "
+                f"Running many iterations without convergence detection can cause "
+                f"divergence. Consider setting kl_rtol=1e-2 for automatic stopping.",
+                UserWarning,
+                stacklevel=2,
+            )
+        if n_samples < 1:
+            raise ValueError(f"n_samples must be >= 1, got {n_samples}")
+        if n_iterations < 1:
+            raise ValueError(f"n_iterations must be >= 1, got {n_iterations}")
 
         if self._jit_sampler is None:
             dummy_pos = self._initialize_unbounded(jax.random.PRNGKey(0))
@@ -661,35 +693,92 @@ class Fitter:
         flatten = engine["flatten"]
         unflatten = engine["unflatten"]
 
-        # Initialize
-        if init_from is not None:
-            init_params = self._unbounded_from_posterior(init_from)
-        else:
-            init_params = self._initialize_unbounded(key)
-
-        pos_flat = flatten(init_params)
+        n_total = len(self._free_names) + (self.spec.n_grid if self.spec.stochastic else 0)
+        n_seeds = max(1, n_seeds)
 
         if verbose:
-            n_total = len(self._free_names) + (self.spec.n_grid if self.spec.stochastic else 0)
+            seed_str = f", {n_seeds} seeds" if n_seeds > 1 else ""
             print(
                 f"EVI (JIT): {n_total} params, {len(self.data)} data points, "
-                f"{n_iterations} iterations, {n_samples} samples/iter"
+                f"{n_iterations} iterations, {n_samples} samples/iter{seed_str}"
             )
 
         t0 = time.time()
 
-        # Run fully JIT'd optimization
-        key, opt_key = jax.random.split(key)
-        converged_flat, n_iters_done = engine["run_evi"](
-            pos_flat,
-            opt_key,
-            n_iterations=n_iterations,
-            n_samples=n_samples,
-            kl_rtol=kl_rtol,
-        )
-        n_iters_done = int(n_iters_done)
+        # --- Multi-seed optimization ---
+        seed_keys = jax.random.split(key, n_seeds + 1)
+        key = seed_keys[-1]
+        best_flat = None
+        best_loss = jnp.inf
+        best_iters = 0
+        seed_losses = []
 
-        # Draw posterior samples
+        # Resolve init_from: "map" → run a quick MAP, "random"/None → random
+        map_result = None
+        if init_from == "map":
+            map_key, key = jax.random.split(key)
+            map_result = self._run_map(key=map_key, n_steps=500, verbose=False)
+            if verbose:
+                print("  MAP warmstart done")
+        elif isinstance(init_from, str) and init_from == "random":
+            init_from = None  # random init below
+
+        for s in range(n_seeds):
+            # Seed 0 uses MAP/init_from (if available), rest use random.
+            if s == 0 and map_result is not None:
+                init_params = self._unbounded_from_posterior(map_result)
+            elif s == 0 and init_from is not None and init_from != "random":
+                init_params = self._unbounded_from_posterior(init_from)
+            else:
+                init_params = self._initialize_unbounded(seed_keys[s])
+
+            pos_flat = flatten(init_params)
+            opt_key = jax.random.fold_in(seed_keys[s], 999)
+
+            converged_flat, n_iters = engine["run_evi"](
+                pos_flat,
+                opt_key,
+                n_iterations=n_iterations,
+                n_samples=n_samples,
+                kl_rtol=kl_rtol,
+            )
+
+            # Evaluate Hamiltonian at converged point to pick best seed
+            pred = (
+                self.model.predict_photometry(self._to_physical(unflatten(converged_flat)))
+                if self.data_type == "photometry"
+                else jnp.zeros_like(self.data)
+            )
+            chi2 = float(jnp.sum(((self.data - pred) / self.noise) ** 2))
+            prior = float(jnp.sum(converged_flat**2))
+            loss = 0.5 * chi2 + 0.5 * prior
+            seed_losses.append(loss)
+
+            if loss < best_loss:
+                best_flat = converged_flat
+                best_loss = loss
+                best_iters = int(n_iters)
+
+            if verbose and n_seeds > 1:
+                print(f"  Seed {s + 1}/{n_seeds}: H={loss:.1f}, {int(n_iters)} iters")
+
+        # --- Seed disagreement check ---
+        if n_seeds > 1 and len(seed_losses) > 1:
+            loss_std = float(jnp.std(jnp.array(seed_losses)))
+            loss_mean = float(jnp.mean(jnp.array(seed_losses)))
+            if loss_std > 0.1 * abs(loss_mean) and loss_mean != 0:
+                warnings.warn(
+                    f"Seeds disagree: H = {loss_mean:.1f} ± {loss_std:.1f} "
+                    f"(CV={loss_std / abs(loss_mean):.0%}). "
+                    f"This may indicate multimodality or poor convergence. "
+                    f"Consider increasing n_iterations or inspecting the posterior.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+        converged_flat = best_flat
+
+        # --- Draw posterior samples ---
         key, draw_key = jax.random.split(key)
         all_sample_dicts = []
 
@@ -719,12 +808,51 @@ class Fitter:
         samples_phys = {k: jnp.stack(v) for k, v in samples_phys.items()}
         best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
 
+        # --- Post-fit diagnostics ---
+        diag_warnings = []
+
+        # Check chi2/dof
+        if self.data_type == "photometry":
+            pred = self.model.predict_photometry(best_params)
+            chi2_dof = float(jnp.sum(((self.data - pred) / self.noise) ** 2)) / len(self.data)
+            if chi2_dof > 5.0:
+                diag_warnings.append(f"Poor fit: chi2/dof={chi2_dof:.1f} (expected ~1)")
+            elif chi2_dof < 0.1:
+                diag_warnings.append(f"Suspiciously good fit: chi2/dof={chi2_dof:.2f}")
+        else:
+            chi2_dof = None
+
+        # Check parameters at bounds
+        at_bounds = []
+        for name in self._free_names:
+            if name in samples_phys:
+                lo, hi = self._bounds[name]
+                med = float(jnp.median(samples_phys[name]))
+                margin = 0.02 * (hi - lo)
+                if med < lo + margin or med > hi - margin:
+                    at_bounds.append(name)
+        if at_bounds:
+            diag_warnings.append(
+                f"Parameters near bounds: {', '.join(at_bounds)}. Consider widening the prior."
+            )
+
+        # Check for NaN
+        has_nan = any(bool(jnp.any(jnp.isnan(v))) for v in samples_phys.values())
+        if has_nan:
+            diag_warnings.append("NaN detected in posterior samples!")
+
         if verbose:
             print(
                 f"  EVI (JIT) complete in {wall_time:.1f}s, "
-                f"{n_iters_done}/{n_iterations} iterations, "
+                f"{best_iters}/{n_iterations} iterations, "
                 f"{n_posterior} posterior samples"
             )
+            for w in diag_warnings:
+                print(f"  WARNING: {w}")
+
+        # Also emit as proper warnings for non-verbose mode
+        for w in diag_warnings:
+            warnings.warn(w, UserWarning, stacklevel=2)
 
         return Posterior(
             samples=samples_phys,
@@ -732,9 +860,11 @@ class Fitter:
             method="EVI (JIT)",
             wall_time_s=wall_time,
             diagnostics={
-                "n_iterations": n_iters_done,
+                "n_iterations": best_iters,
                 "n_iterations_max": n_iterations,
                 "n_samples": n_posterior,
+                "n_seeds": n_seeds,
+                "chi2_dof": chi2_dof,
                 "sample_mode": "evi_jit",
             },
             loss_history=None,

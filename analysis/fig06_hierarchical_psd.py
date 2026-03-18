@@ -252,7 +252,8 @@ def main():
 
     # Method-specific kwargs
     if args.method == "raytrace":
-        fit_kwargs = dict(n_burnin=100, n_steps=200, n_leapfrog_steps=8)
+        fit_kwargs = dict(n_burnin=200, n_steps=2000, n_leapfrog_steps=50,
+                         step_size=0.05)
     else:
         fit_kwargs = dict(n_iterations=20, n_posterior_samples=60)
 

@@ -278,7 +278,15 @@ def build_standardized_loss(
         predicted = smodel.predict(xi, data_type=data_type, wave_obs=wave_obs)
 
         chi2 = jnp.sum(((data - predicted) / noise) ** 2)
-        prior = jnp.sum(xi_flat**2)  # ALWAYS just ½ξᵀξ
+
+        # Prior penalty is ALWAYS ½ξᵀξ — isotropic in every direction.
+        # This is possible because each Distribution.unstandardize() absorbs
+        # the original prior density and its Jacobian into the forward model.
+        # The Hessian of this term is the identity matrix I, which:
+        #   - Sets a floor of 1 on all eigenvalues (no degenerate directions)
+        #   - Makes the condition number depend on the data, not the priors
+        #   - Lets all samplers use a single step size / learning rate
+        prior = jnp.sum(xi_flat**2)
 
         return 0.5 * chi2 + 0.5 * prior
 

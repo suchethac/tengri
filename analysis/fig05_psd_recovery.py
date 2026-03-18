@@ -122,7 +122,8 @@ def main():
 
     fit_kwargs = {}
     if args.method == "raytrace":
-        fit_kwargs = dict(n_steps=500, n_leapfrog_steps=10, n_burnin=150)
+        fit_kwargs = dict(n_steps=2000, n_leapfrog_steps=50,
+                         n_burnin=200, step_size=0.05)
     elif args.method == "geovi":
         fit_kwargs = dict(n_iterations=20, n_posterior_samples=100)
 

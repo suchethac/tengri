@@ -52,6 +52,16 @@ class Distribution:
         Must be JAX-differentiable. This is the core method for
         standardized inference — it absorbs the prior into the
         forward model so the loss is always ½χ² + ½ξᵀξ.
+
+        The transform h(ξ) is chosen so that P(h(ξ)) |dh/dξ| = φ(ξ),
+        where φ is the standard normal density. This Jacobian cancellation
+        is exact (not an approximation) and is what eliminates all
+        per-parameter prior penalty terms from the loss function.
+
+        The geometric consequence: every parameter has unit-scale
+        curvature from the prior, making the posterior landscape
+        isotropic in the prior directions. This benefits all samplers,
+        not just the variational ones (geoVI/MGVI) that require it.
         """
         raise NotImplementedError(f"{type(self).__name__} must implement unstandardize()")
 
@@ -120,7 +130,12 @@ class Uniform(Distribution):
         return jnp.where(in_bounds, -jnp.log(self._hi - self._lo), -jnp.inf)
 
     def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray:
-        """ξ ~ N(0,1) → Uniform(lo, hi) via sigmoid."""
+        """ξ ~ N(0,1) → Uniform(lo, hi) via sigmoid.
+
+        At ξ=0 (prior center), sigmoid(0) = 0.5, so θ = midpoint of [lo, hi].
+        At ξ=±3 (~99.7% of N(0,1) mass), θ covers ~95% of [lo, hi].
+        The sigmoid naturally respects bounds without clipping.
+        """
         return self._lo + (self._hi - self._lo) * jax.nn.sigmoid(xi)
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:

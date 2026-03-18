@@ -63,53 +63,72 @@ SDSS_BAND_COLORS = [COLORS["u"], COLORS["g"], COLORS["r"],
 def setup_style():
     """Configure matplotlib for publication-quality astronomy figures.
 
-    Follows BAGPIPES (Carnall+2018) styling closely:
-    - Large axis labels (18pt) and tick labels (14pt)
-    - Thick lines (2pt data, 1.5pt axes)
-    - Inward ticks on all four sides
-    - No frame on legends
+    Uses SciencePlots 'science' base style + AAS journal requirements:
+    - Min 6pt fonts, min 0.5pt lines (AAS mandatory)
+    - Inward ticks on all four sides (astronomy convention)
+    - Colorblind-safe palette (AAS recommended)
+    - No chartjunk (Rougier et al. 2014 Rule 8)
+
+    References:
+        - SciencePlots (garrett403/SciencePlots)
+        - AAS Graphics Guide (journals.aas.org/graphics-guide/)
+        - Ten Simple Rules (Rougier et al. 2014, PLOS Comp Bio)
+        - BAGPIPES (Carnall+2018) for astronomy conventions
     """
+    # Use SciencePlots base + no-latex (avoids LaTeX dependency)
+    try:
+        import scienceplots
+        plt.style.use(["science", "no-latex"])
+    except ImportError:
+        pass  # fall back to manual configuration
+
+    # Override with astronomy-specific settings
     plt.rcParams.update({
-        # Figure
+        # Figure — AAS: 300+ DPI for publication
         "figure.dpi": 150,
         "figure.facecolor": "white",
         "savefig.dpi": 300,
         "savefig.bbox": "tight",
         "savefig.pad_inches": 0.05,
-        # Font — BAGPIPES uses Helvetica/sans-serif; we use DejaVu Serif
-        # for journal compatibility without requiring LaTeX installation
-        "font.size": 14,
+        # Font — AAS: Times/Helvetica/Symbol, min 6pt
+        # SciencePlots sets serif; we keep it and increase sizes
+        "font.size": 12,
         "font.family": "serif",
         "mathtext.fontset": "dejavuserif",
-        # Axes labels — BAGPIPES: 18pt labels, 14pt ticks
-        "axes.labelsize": 18,
-        "axes.titlesize": 16,
-        "xtick.labelsize": 14,
-        "ytick.labelsize": 14,
-        "legend.fontsize": 12,
-        # Axes frame — BAGPIPES: 1.5pt
-        "axes.linewidth": 1.5,
+        # Axes labels — visible at journal column width
+        "axes.labelsize": 14,
+        "axes.titlesize": 14,
+        "xtick.labelsize": 11,
+        "ytick.labelsize": 11,
+        "legend.fontsize": 10,
+        # Axes frame — AAS: min 0.5pt lines
+        "axes.linewidth": 1.0,
         "axes.grid": False,
-        # Ticks — BAGPIPES: inward, all four sides
+        # Ticks — astronomy convention: inward, all four sides
         "xtick.direction": "in",
         "ytick.direction": "in",
         "xtick.top": True,
         "ytick.right": True,
-        "xtick.major.width": 1.0,
-        "ytick.major.width": 1.0,
+        "xtick.major.width": 0.8,
+        "ytick.major.width": 0.8,
         "xtick.major.size": 5,
         "ytick.major.size": 5,
         "xtick.minor.visible": True,
         "ytick.minor.visible": True,
-        "xtick.minor.width": 0.7,
-        "ytick.minor.width": 0.7,
+        "xtick.minor.width": 0.5,
+        "ytick.minor.width": 0.5,
         "xtick.minor.size": 3,
         "ytick.minor.size": 3,
-        # Legend — BAGPIPES: no frame
+        # Legend — no frame, compact
         "legend.frameon": False,
         "legend.handlelength": 1.5,
-        # Lines — BAGPIPES: 2pt
-        "lines.linewidth": 2.0,
+        "legend.borderpad": 0.3,
+        "legend.labelspacing": 0.3,
+        # Lines — visible at journal scale (AAS: min 0.5pt)
+        "lines.linewidth": 1.5,
+        "lines.markersize": 6,
+        # Errorbar
+        "errorbar.capsize": 3,
     })
 
 
@@ -174,15 +193,18 @@ def plot_sfh(model, posterior, true_params=None, ax=None,
         median = np.median(sfh_arr, axis=0)
 
         ax.fill_between(t_gyr, lo, hi, color=color, alpha=0.25,
-                         edgecolor="none", label=f"{label} (68% CI)")
+                         edgecolor="none", lw=0,
+                         label=f"{label} (68% CI)", zorder=3,
+                         rasterized=True)
 
         # Faint sample draws (Prospector style)
         if show_draws:
             idx = np.linspace(0, n_total - 1, min(n_draws, n_total), dtype=int)
             for j in idx:
-                ax.plot(t_gyr, sfh_arr[j], color=color, alpha=0.06, lw=0.5)
+                ax.plot(t_gyr, sfh_arr[j], color=color, alpha=0.06, lw=0.5,
+                        rasterized=True)
 
-        # Median line
+        # Median line (always on top — BAGPIPES convention)
         ax.plot(t_gyr, median, color=color, lw=1.8, zorder=4)
 
     else:
@@ -496,6 +518,194 @@ def diagnostics_table(results, names=None):
                  res.diagnostics.get("mean_accept_prob", None))
         accept_str = f"{accept:.1%}" if accept is not None else "—"
         print(f"{name:<15} {wt:>10} {ess_min:>10} {ess_med:>10} {accept_str:>10}")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Convergence diagnostics (industry standard: Stan/ArviZ/BlackJAX)
+# ═══════════════════════════════════════════════════════════════════
+
+# Thresholds following Vehtari et al. (2021) "Rank-normalization,
+# folding, and localization" and Stan/ArviZ conventions.
+CONVERGENCE_THRESHOLDS = {
+    "ess_bulk_min": 100,       # minimum bulk ESS per parameter
+    "ess_total_target": 400,   # target total ESS for reliable summaries
+    "divergence_warn": 0,      # any divergence warrants investigation
+    "divergence_fail_pct": 5,  # >5% divergences = serious problem
+    "accept_rt_lo": 0.20,     # RT acceptance too low = step_size too large
+    "accept_rt_hi": 0.90,     # RT acceptance too high = barely moving
+    "accept_nuts_target": 0.80,
+}
+
+
+def convergence_check(result, method_name="", verbose=True):
+    """Run industry-standard convergence diagnostics on a Posterior result.
+
+    Checks ESS, acceptance rate, and divergences against standard
+    thresholds (Vehtari et al. 2021; Stan/ArviZ conventions).
+
+    Parameters
+    ----------
+    result : Posterior
+        Inference result with .samples and .diagnostics.
+    method_name : str
+        Label for printing (e.g., "RT", "NUTS", "geoVI").
+    verbose : bool
+        If True, print detailed diagnostics.
+
+    Returns
+    -------
+    dict
+        Keys: 'converged' (bool), 'warnings' (list of str),
+        'ess_min', 'ess_median', 'n_params_low_ess'.
+    """
+    warnings = []
+    info = {}
+    th = CONVERGENCE_THRESHOLDS
+
+    name = method_name or result.diagnostics.get("method", "Sampler")
+
+    # --- ESS ---
+    if result.samples is not None:
+        ess = result.effective_sample_size()
+        # Exclude GP latent vector from summary (too many params)
+        ess_phys = {k: v for k, v in ess.items()
+                    if not k.startswith("psd_xi")}
+        if ess_phys:
+            ess_vals = list(ess_phys.values())
+            ess_min = min(ess_vals)
+            ess_med = float(np.median(ess_vals))
+            n_low = sum(1 for v in ess_vals if v < th["ess_bulk_min"])
+
+            info["ess_min"] = ess_min
+            info["ess_median"] = ess_med
+            info["n_params_low_ess"] = n_low
+
+            if ess_min < th["ess_bulk_min"]:
+                low_params = [k for k, v in ess_phys.items()
+                              if v < th["ess_bulk_min"]]
+                warnings.append(
+                    f"Low ESS: {n_low}/{len(ess_phys)} params below "
+                    f"{th['ess_bulk_min']} "
+                    f"(min ESS = {ess_min:.0f} for "
+                    f"{low_params[0] if low_params else '?'})"
+                )
+            if ess_med < th["ess_total_target"]:
+                warnings.append(
+                    f"Median ESS = {ess_med:.0f} < {th['ess_total_target']} "
+                    f"target — consider more samples"
+                )
+    else:
+        info["ess_min"] = None
+        info["ess_median"] = None
+        info["n_params_low_ess"] = None
+
+    # --- Divergences (NUTS) ---
+    n_div = result.diagnostics.get("n_divergent", None)
+    if n_div is not None:
+        n_samples = result.diagnostics.get("n_samples", 1)
+        div_pct = 100 * n_div / max(n_samples, 1)
+        info["n_divergent"] = n_div
+        info["divergence_pct"] = div_pct
+        if n_div > th["divergence_warn"]:
+            severity = "SERIOUS" if div_pct > th["divergence_fail_pct"] else "WARNING"
+            warnings.append(
+                f"{severity}: {n_div}/{n_samples} divergent transitions "
+                f"({div_pct:.1f}%) — posterior may be unreliable"
+            )
+
+    # --- Acceptance rate (RT) ---
+    accept = result.diagnostics.get("accept_rate_post_burnin", None)
+    if accept is not None:
+        info["acceptance_rate"] = accept
+        if accept < th["accept_rt_lo"]:
+            warnings.append(
+                f"RT acceptance {accept:.0%} too low — reduce step_size"
+            )
+        elif accept > th["accept_rt_hi"]:
+            warnings.append(
+                f"RT acceptance {accept:.0%} too high — chain barely moving, "
+                f"increase step_size"
+            )
+
+    # --- Acceptance rate (NUTS) ---
+    accept_nuts = result.diagnostics.get("mean_accept_prob", None)
+    if accept_nuts is not None:
+        info["acceptance_rate"] = accept_nuts
+
+    # --- Overall verdict ---
+    converged = len(warnings) == 0
+    info["converged"] = converged
+    info["warnings"] = warnings
+
+    # --- Print ---
+    if verbose:
+        status = "CONVERGED" if converged else "WARNINGS"
+        print(f"\n{'=' * 60}")
+        print(f"  Convergence diagnostics: {name}  [{status}]")
+        print(f"{'=' * 60}")
+        if info.get("ess_min") is not None:
+            print(f"  ESS (min / median): {info['ess_min']:.0f} / "
+                  f"{info['ess_median']:.0f}")
+        if "acceptance_rate" in info:
+            print(f"  Acceptance rate:    {info['acceptance_rate']:.1%}")
+        if "n_divergent" in info:
+            print(f"  Divergences:        {info['n_divergent']} / "
+                  f"{result.diagnostics.get('n_samples', '?')}")
+        if warnings:
+            for w in warnings:
+                print(f"  >> {w}")
+        else:
+            print("  All diagnostics passed.")
+        print(f"{'=' * 60}\n")
+
+    return info
+
+
+def convergence_table(results_dict, verbose=True):
+    """Run convergence checks on multiple results, print comparison table.
+
+    Parameters
+    ----------
+    results_dict : dict of {name: Posterior}
+    verbose : bool
+
+    Returns
+    -------
+    dict of {name: convergence_info}
+    """
+    all_info = {}
+    for name, res in results_dict.items():
+        all_info[name] = convergence_check(res, method_name=name,
+                                           verbose=False)
+
+    if verbose:
+        # Compact table
+        header = (f"{'Method':<15} {'ESS min':>8} {'ESS med':>8} "
+                  f"{'Accept':>8} {'Diverg':>8} {'Status':>10}")
+        print(header)
+        print("-" * len(header))
+        for name, info in all_info.items():
+            ess_min = (f"{info['ess_min']:.0f}"
+                       if info.get("ess_min") is not None else "—")
+            ess_med = (f"{info['ess_median']:.0f}"
+                       if info.get("ess_median") is not None else "—")
+            accept = (f"{info['acceptance_rate']:.0%}"
+                      if "acceptance_rate" in info else "—")
+            diverg = (f"{info['n_divergent']}"
+                      if "n_divergent" in info else "—")
+            status = "OK" if info["converged"] else "WARN"
+            print(f"{name:<15} {ess_min:>8} {ess_med:>8} "
+                  f"{accept:>8} {diverg:>8} {status:>10}")
+
+        # Print warnings below
+        any_warns = any(info["warnings"] for info in all_info.values())
+        if any_warns:
+            print("\nWarnings:")
+            for name, info in all_info.items():
+                for w in info["warnings"]:
+                    print(f"  [{name}] {w}")
+
+    return all_info
 
 
 # ═══════════════════════════════════════════════════════════════════

@@ -101,7 +101,7 @@ Ray Tracing and geoVI are **equal-priority** primary methods. NUTS validates. MA
 
 - `jax.random.fold_in(key, hash(string))` overflows uint32. Use `abs(hash(x)) % (2**31)`
 - Never create `Model`/`ParamSpec` inside a JAX gradient tape (traced values fail in `__init__`)
-- Ray Tracing step_size: use `0.01` for D>10, `0.005` for D>100 (default `0.03*sqrt(D)` too large)
+- Ray Tracing step_size: for D~137 stochastic model, use `step_size=0.05, n_leapfrog_steps=50, n_steps=2000`. There is a sharp viability cliff at step_size~0.06 where acceptance drops from ~98% to 0%. Compensate with more leapfrog steps and more samples.
 - NIFTy geoVI: use 4-12 samples per KL iteration, not 80 (literature best practice)
 - SSP metallicity grid is `log10(Z)` absolute, not `log10(Z/Zsun)`. Offset: `LOG10_ZSUN = -1.848`
 - Photometry precomputation auto-activates when redshift fixed + filters present (21.6x speedup)
@@ -109,6 +109,25 @@ Ray Tracing and geoVI are **equal-priority** primary methods. NUTS validates. MA
 - Sync to `.ipynb`: `cd notebooks && jupytext --sync *.py`
 - `timeout` command doesn't exist on macOS — use Python-level timeouts or background tasks
 - Corner plot overlay: `fig.axes` returns a flat list; reshape to 2D with `np.array(axes).reshape(n, n)`
+
+## Convergence diagnostics (mandatory for all inference)
+
+Every notebook and analysis script that runs inference MUST check convergence using
+`convergence_check()` or `convergence_table()` from `notebooks/_plot_style.py`.
+
+Standard thresholds (Vehtari et al. 2021; Stan/ArviZ/BlackJAX):
+
+| Diagnostic | Threshold | Applies to |
+|-----------|-----------|------------|
+| ESS (bulk) | > 100 per param, > 400 total | RT, NUTS |
+| Divergences | 0 ideal; > 5% = serious | NUTS only |
+| RT acceptance | 30–70% ideal; > 90% = barely moving | RT only |
+| NUTS acceptance | ~80% | NUTS only |
+
+Known difficult parameters: `dust_tau_bc`, `dust_tau_diff`, `met_logzsol` consistently have low ESS
+due to the age-dust-metallicity degeneracy. This is a physical limitation, not a sampler bug.
+
+For geoVI/MGVI: check KL convergence across iterations and compare to RT posteriors when possible.
 
 ## Agent guide
 

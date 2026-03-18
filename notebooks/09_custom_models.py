@@ -35,6 +35,13 @@
 # (StandardizedForwardModel internals).
 #
 # **Reference:** `ARCHITECTURE.md` for the full design philosophy.
+#
+# **By the end you will understand:**
+# 1. The Distribution protocol — how priors map between physical and standardized space
+# 2. How to write a custom prior (worked example: TruncatedCauchy)
+# 3. How to write a custom PSD model (worked example: Matern)
+# 4. How to swap dust laws, mean SFH models, and SSP templates
+# 5. Why the standardized architecture makes all this composable
 
 # %% [markdown]
 # ## Architecture Overview
@@ -77,6 +84,7 @@ import numpy as np
 import sys; sys.path.insert(0, ".")
 from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
 setup_style()
+import os; os.makedirs("notebook_figures", exist_ok=True)
 
 from diffsed import (
     Model, ParamSpec, Uniform, Gaussian, LogUniform, LogNormal,
@@ -191,6 +199,7 @@ ax.legend(fontsize=7, loc="upper left")
 
 plt.suptitle("Distribution Transforms: $\\xi \\to \\theta$", fontsize=14, y=1.01)
 plt.tight_layout()
+plt.savefig("notebook_figures/09_custom_models_fig01.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 
@@ -311,6 +320,7 @@ axes[1].set_title("Implied prior density")
 axes[1].legend()
 
 plt.tight_layout()
+plt.savefig("notebook_figures/09_custom_models_fig02.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 
@@ -425,6 +435,7 @@ axes[1].set_title("GP Realizations (same $\\xi$, different $\\nu$)")
 axes[1].legend()
 
 plt.tight_layout()
+plt.savefig("notebook_figures/09_custom_models_fig03.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 print("Higher nu = smoother GP realizations (steeper high-freq rolloff)")
@@ -468,11 +479,12 @@ fitter = Fitter(model, mock.flux_obs, mock.noise,
 
 result_map = fitter.run("map", n_steps=500)
 result_rt = fitter.run("raytrace", init_from=result_map,
-                       n_burnin=50, n_steps=200, step_size=0.01)
+                       n_burnin=50, n_steps=200, step_size=0.05, n_leapfrog_steps=50)
 
 # Corner plot of physical params
 fig_corner = safe_corner(result_rt, truths=true_params, color="C0",
                          label="Matern $\\nu$=1.5")
+plt.savefig("notebook_figures/09_custom_models_fig04.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 print("Custom PSD integrates seamlessly -- same loss, same samplers.")
@@ -565,6 +577,7 @@ ax.set_title("Dust Attenuation Laws")
 ax.legend()
 ax.set_ylim(0, 1.05)
 plt.tight_layout()
+plt.savefig("notebook_figures/09_custom_models_fig05.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -627,6 +640,7 @@ ax.legend(loc="upper left")
 ax.set_xlim(0, 14)
 ax.set_ylim(0, None)
 plt.tight_layout()
+plt.savefig("notebook_figures/09_custom_models_fig06.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 print("Any of these can serve as the smooth baseline for the GP field.")
@@ -690,6 +704,7 @@ ax.set_title("SDSS Filter Set")
 ax.legend(ncol=5, fontsize=9)
 ax.set_xlim(2500, 11500)
 plt.tight_layout()
+plt.savefig("notebook_figures/09_custom_models_fig07.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 print("\nTo add custom filters, create a dict with 'wave' and 'transmission' arrays.")
@@ -747,13 +762,14 @@ fitter_free = Fitter(model_free, mock_free.flux_obs, mock_free.noise,
                      data_type="photometry")
 map_free = fitter_free.run("map", n_steps=500)
 rt_free = fitter_free.run("raytrace", init_from=map_free,
-                          n_burnin=100, n_steps=300, step_size=0.01)
+                          n_burnin=100, n_steps=300, step_size=0.05, n_leapfrog_steps=50)
 
 # PSD parameter recovery
 fig_psd = safe_corner(rt_free, params=["psd_sigma", "psd_tau_myr"],
                       truths=true_free, color="C0",
                       label="Ray Tracing")
 plt.suptitle("PSD Parameter Recovery (Free $\\sigma$, $\\tau$)", y=1.02)
+plt.savefig("notebook_figures/09_custom_models_fig08.png", dpi=72, bbox_inches="tight")
 plt.show()
 
 # Quantify
@@ -802,6 +818,30 @@ for name in ["psd_sigma", "psd_tau_myr"]:
 # The physics is in the forward model; the statistics is universal.
 
 # %% [markdown]
+# ## Quick Recipes
+#
+# ### Adding a new dust law
+# 1. Write a JAX function: `(wavelength, age_grid, **params) -> attenuation_factor`
+# 2. Ensure it returns `exp(-tau_lambda)`, shape `(n_ages, n_wave)`
+# 3. Pass to `StandardizedForwardModel(model, dust_model=my_dust)`
+#
+# ### Adding a new PSD model
+# 1. Write a JAX function: `(sigma, tau_yr, n_grid, log_ages) -> sqrt_power`
+# 2. Return `sqrt(P(f))`, shape `(n_grid//2 + 1,)`
+# 3. Pass to `StandardizedForwardModel(model, psd_model=my_psd)`
+#
+# ### Adding a new mean SFH
+# 1. Write a JAX function: `(t_lookback_yr, **params) -> SFR_Msun_per_yr`
+# 2. Ensure differentiability (no `if/else` on array values — use `jnp.where`)
+# 3. Register in `models/sfh/mean_sfh.py`
+#
+# ### Using different SSP templates
+# 1. Format as HDF5 with keys: `ssp_lgmet`, `ssp_lg_age_gyr`, `ssp_wave`, `ssp_flux`
+# 2. Metallicity grid is $\log_{10}(Z)$ absolute (NOT solar-relative)
+# 3. Solar offset: `LOG10_ZSUN = -1.848`
+# 4. Load with `load_ssp_data("path/to/templates.h5")`
+
+# %% [markdown]
 # ## Summary
 #
 # diffsed is designed for extensibility.  The standardized architecture
@@ -821,3 +861,16 @@ for name in ["psd_sigma", "psd_tau_myr"]:
 #
 # For the full design philosophy, see `ARCHITECTURE.md`.
 # For hierarchical PSD inference, see Tutorial 05.
+
+# %% [markdown]
+# ## What You've Learned
+#
+# 1. The Distribution protocol: `unstandardize`/`standardize`/`log_prob`/`sample`
+# 2. Custom priors plug directly into ParamSpec — no sampler changes needed
+# 3. Custom PSD models change the correlation structure of the GP field
+# 4. The key principle: one loss function, any prior, any sampler
+# 5. Extending diffsed means swapping one layer while everything else composes
+#
+# **Congratulations!** You've completed the diffsed tutorial series.
+# For the full design philosophy, see `docs/ARCHITECTURE.md`.
+# For real-data applications, see Paper II.
