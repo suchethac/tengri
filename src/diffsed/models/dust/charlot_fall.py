@@ -1,79 +1,17 @@
-"""Charlot & Fall (2000) two-component dust attenuation.
+"""Charlot & Fall (2000) power-law dust attenuation (backward compatibility).
 
-Separates attenuation into birth-cloud (young stars) and diffuse ISM
-(all stars). Uses a smooth sigmoid transition for gradient compatibility.
+This module provides the original power-law-only Charlot & Fall functions
+used by the fast precomputed path and existing tests. For the generalized
+model with pluggable curves and f_obscuration, use ``attenuation.py``.
 
-Reference: Charlot, S. & Fall, S. M. 2000, ApJ, 539, 718
+All new code should import from ``diffsed.models.dust.attenuation`` directly.
 """
 
 import jax
 import jax.numpy as jnp
 
-
-def precompute_dust_age_weights(
-    age_grid: jnp.ndarray,
-    t_birth: float = 1e7,
-    transition_width: float = 0.3,
-) -> jnp.ndarray:
-    """Precompute the age-dependent birth-cloud weight (sigmoid).
-
-    This depends only on age_grid and t_birth, which are constants
-    during inference. Call once at Model init, then pass to
-    charlot_fall_fast / charlot_fall_at_wavelengths_fast.
-
-    Parameters
-    ----------
-    age_grid : array, shape (n_ages,)
-        Stellar population ages (yr).
-    t_birth : float
-        Birth cloud dispersal age (yr). Default 1e7 (10 Myr).
-    transition_width : float
-        Sigmoid width in dex. Default 0.3.
-
-    Returns
-    -------
-    array, shape (n_ages,)
-        Sigmoid weight: 1 for young stars, 0 for old.
-    """
-    log_age = jnp.log10(jnp.maximum(age_grid, 1.0))
-    log_t_birth = jnp.log10(t_birth)
-    sigmoid_arg = -(log_age - log_t_birth) / transition_width
-    return jax.nn.sigmoid(sigmoid_arg)
-
-
-def charlot_fall_at_wavelengths_fast(
-    wavelengths: jnp.ndarray,
-    dust_age_weights: jnp.ndarray,
-    tau_v1: float,
-    tau_v2: float,
-    n_slope: float = -0.7,
-) -> jnp.ndarray:
-    """Evaluate dust using precomputed age weights (fast path).
-
-    Eliminates log10 + sigmoid from the per-call cost.
-
-    Parameters
-    ----------
-    wavelengths : array, shape (n_filters,)
-        Wavelengths (rest-frame Angstrom).
-    dust_age_weights : array, shape (n_ages,)
-        Precomputed sigmoid weights from precompute_dust_age_weights.
-    tau_v1 : float
-        V-band optical depth of birth cloud.
-    tau_v2 : float
-        V-band optical depth of diffuse ISM.
-    n_slope : float
-        Attenuation curve power-law index. Default -0.7.
-
-    Returns
-    -------
-    array, shape (n_ages, n_filters)
-        Multiplicative attenuation factor exp(-tau_lambda).
-    """
-    wave_ratio = (wavelengths / 5500.0) ** n_slope
-    tau_v_eff = dust_age_weights * tau_v1 + tau_v2
-    tau_lambda = tau_v_eff[:, None] * wave_ratio[None, :]
-    return jnp.exp(-tau_lambda)
+# Re-export from the canonical location
+from diffsed.models.dust.attenuation import precompute_dust_age_weights  # noqa: F401
 
 
 def charlot_fall(
@@ -85,45 +23,30 @@ def charlot_fall(
     t_birth: float = 1e7,
     transition_width: float = 0.3,
 ) -> jnp.ndarray:
-    """Smooth Charlot & Fall dust attenuation.
+    """Original Charlot & Fall (2000) with power-law curve.
 
-    tau_lambda(t) = [w(t)*tau_v1 + tau_v2] * (lambda/5500)^n
-
-    where w(t) is a sigmoid transitioning from 1 (young) to 0 (old)
-    around t_birth. The attenuation factor is exp(-tau_lambda).
-
-    Parameters
-    ----------
-    wavelength : array, shape (n_wave,)
-        Wavelength grid (Angstrom).
-    age_grid : array, shape (n_ages,)
-        Stellar population ages (yr).
-    tau_v1 : float
-        V-band optical depth of birth cloud.
-    tau_v2 : float
-        V-band optical depth of diffuse ISM.
-    n_slope : float
-        Attenuation curve power-law index. Default -0.7.
-    t_birth : float
-        Birth cloud dispersal age (yr). Default 1e7 (10 Myr).
-    transition_width : float
-        Sigmoid width in dex. Default 0.3.
-
-    Returns
-    -------
-    array, shape (n_ages, n_wave)
-        Multiplicative attenuation factor exp(-tau_lambda).
+    Equivalent to ``two_component_dust(..., law_bc="power_law", law_diff="power_law")``.
     """
     wave_ratio = (wavelength / 5500.0) ** n_slope
-
     log_age = jnp.log10(jnp.maximum(age_grid, 1.0))
     log_t_birth = jnp.log10(t_birth)
-    sigmoid_arg = -(log_age - log_t_birth) / transition_width
-    weight = jax.nn.sigmoid(sigmoid_arg)
-
+    weight = jax.nn.sigmoid(-(log_age - log_t_birth) / transition_width)
     tau_v_eff = weight * tau_v1 + tau_v2
     tau_lambda = tau_v_eff[:, None] * wave_ratio[None, :]
+    return jnp.exp(-tau_lambda)
 
+
+def charlot_fall_at_wavelengths_fast(
+    wavelengths: jnp.ndarray,
+    dust_age_weights: jnp.ndarray,
+    tau_v1: float,
+    tau_v2: float,
+    n_slope: float = -0.7,
+) -> jnp.ndarray:
+    """Fast path with precomputed age weights (power-law only)."""
+    wave_ratio = (wavelengths / 5500.0) ** n_slope
+    tau_v_eff = dust_age_weights * tau_v1 + tau_v2
+    tau_lambda = tau_v_eff[:, None] * wave_ratio[None, :]
     return jnp.exp(-tau_lambda)
 
 
@@ -136,44 +59,13 @@ def charlot_fall_at_wavelengths(
     t_birth: float = 1e7,
     transition_width: float = 0.3,
 ) -> jnp.ndarray:
-    """Evaluate Charlot & Fall dust at specific wavelengths per filter.
-
-    Unlike charlot_fall() which evaluates on the full wavelength grid,
-    this evaluates at a small set of wavelengths (e.g., filter effective
-    wavelengths). Used for approximate photometry (Zacharegkas+2025 Eq. 6).
-
-    Parameters
-    ----------
-    wavelengths : array, shape (n_filters,)
-        Wavelengths at which to evaluate dust (rest-frame Angstrom).
-    age_grid : array, shape (n_ages,)
-        Stellar population ages (yr).
-    tau_v1 : float
-        V-band optical depth of birth cloud.
-    tau_v2 : float
-        V-band optical depth of diffuse ISM.
-    n_slope : float
-        Attenuation curve power-law index. Default -0.7.
-    t_birth : float
-        Birth cloud dispersal age (yr). Default 1e7.
-    transition_width : float
-        Sigmoid width in dex. Default 0.3.
-
-    Returns
-    -------
-    array, shape (n_ages, n_filters)
-        Multiplicative attenuation factor exp(-tau_lambda).
-    """
-    wave_ratio = (wavelengths / 5500.0) ** n_slope  # (n_filters,)
-
+    """Evaluate at specific wavelengths (power-law only)."""
+    wave_ratio = (wavelengths / 5500.0) ** n_slope
     log_age = jnp.log10(jnp.maximum(age_grid, 1.0))
     log_t_birth = jnp.log10(t_birth)
-    sigmoid_arg = -(log_age - log_t_birth) / transition_width
-    weight = jax.nn.sigmoid(sigmoid_arg)  # (n_ages,)
-
-    tau_v_eff = weight * tau_v1 + tau_v2  # (n_ages,)
-    tau_lambda = tau_v_eff[:, None] * wave_ratio[None, :]  # (n_ages, n_filters)
-
+    weight = jax.nn.sigmoid(-(log_age - log_t_birth) / transition_width)
+    tau_v_eff = weight * tau_v1 + tau_v2
+    tau_lambda = tau_v_eff[:, None] * wave_ratio[None, :]
     return jnp.exp(-tau_lambda)
 
 
@@ -185,7 +77,7 @@ def charlot_fall_hard(
     n_slope: float = -0.7,
     t_birth: float = 1e7,
 ) -> jnp.ndarray:
-    """Standard step-function Charlot & Fall (for comparison/testing)."""
+    """Step-function variant (for comparison/testing)."""
     wave_ratio = (wavelength / 5500.0) ** n_slope
     tau_young = (tau_v1 + tau_v2) * wave_ratio
     tau_old = tau_v2 * wave_ratio

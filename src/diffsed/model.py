@@ -38,11 +38,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from diffsed.models.dust.charlot_fall import charlot_fall  # backward compat
-from diffsed.models.dust.two_component_dust import (
-    precompute_dust_age_weights,
-    two_component_dust,
-)
+from diffsed.models.dust.attenuation import precompute_dust_age_weights, two_component_dust
 from diffsed.models.observation.photometry import ab_mag_from_flux, compute_flux_density
 from diffsed.models.observation.spectroscopy import compute_spectrum
 from diffsed.models.sfh.registry import compute_field_gp, resolve_sfh
@@ -78,6 +74,13 @@ _NON_SFH_PARAM_MAP = {
     "dust_slope": ("dust_n", 1.0, 0.0),
     "redshift": ("redshift", 1.0, 0.0),
     "noise_frac_cal": ("noise_frac_cal", 1.0, 0.0),
+    # Dust extra params (identity mapping — no unit conversion)
+    "dust_f_obscuration": ("f_obscuration", 1.0, 0.0),
+    "dust_bump_strength": ("dust_bump_strength", 1.0, 0.0),
+    "dust_delta": ("dust_delta", 1.0, 0.0),
+    "dust_Rv": ("dust_Rv", 1.0, 0.0),
+    # Noise model
+    "noise_dof": ("noise_dof", 1.0, 0.0),
 }
 
 
@@ -206,7 +209,12 @@ class Model:
         # IGM absorption (Inoue+2014)
         self._apply_igm = spec.apply_igm
 
-        # Nebular emission backend
+        # Nebular emission backend + params
+        if spec.nebular:
+            self._param_map["neb_logU"] = ("neb_logU", 1.0, 0.0)
+            self._param_map["neb_logZ_gas"] = ("neb_logZ_gas", 1.0, 0.0)
+            self._param_map["neb_fesc"] = ("neb_fesc", 1.0, 0.0)
+
         self._nebular_backend = None
         if spec.nebular and spec.cloudy_grid_path is not None:
             from diffsed.models.nebular import CloudyGridBackend
