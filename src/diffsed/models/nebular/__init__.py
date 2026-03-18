@@ -10,21 +10,25 @@ continuum) to the stellar SED. Three backends:
   ionization parameter (logU) and gas metallicity. Lines and continuum
   computed on-the-fly via interpolation.
 
-- **Cue** (future): Neural net emulator (Li et al. 2025) with 12 free
-  parameters including abundance ratios. Requires JAX port.
+- **Cue**: Neural net emulator (Li et al. 2025) with 12 free parameters
+  including abundance ratios. Pure JAX, JIT-compatible, differentiable.
 
 Usage::
 
-    from diffsed.models.nebular import CloudyGridBackend, BakedInBackend
+    from diffsed.models.nebular import CloudyGridBackend, BakedInBackend, CueBackend
 
     # Load CLOUDY grid
     backend = CloudyGridBackend("data/cloudy_grid_mist.h5", ssp_data)
 
     # Or use baked-in (default)
     backend = BakedInBackend()
+
+    # Or use Cue neural net emulator
+    backend = CueBackend("data/cue_weights.npz")
 """
 
 from diffsed.models.nebular.baked_in import BakedInBackend
 from diffsed.models.nebular.cloudy_grid import CloudyGridBackend
+from diffsed.models.nebular.cue import CueBackend
 
-__all__ = ["BakedInBackend", "CloudyGridBackend"]
+__all__ = ["BakedInBackend", "CloudyGridBackend", "CueBackend"]
