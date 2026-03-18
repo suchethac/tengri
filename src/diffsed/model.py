@@ -47,7 +47,11 @@ from diffsed.models.sps.dsps_wrapper import (
     compute_csp_weights,
     interpolate_metallicity,
 )
-from diffsed.models.sps.precompute import precompute_photometry, precompute_spectroscopy
+from diffsed.models.sps.precompute import (
+    precompute_photometry,
+    precompute_photometry_ztable,
+    precompute_spectroscopy,
+)
 from diffsed.utils.cosmology import luminosity_distance
 from diffsed.utils.grid import (
     grid_spacing,
@@ -230,6 +234,10 @@ class Model:
 
         # Spectroscopy precomputation (same idea: pre-interpolate SSPs)
         self._spec_precomp = None
+
+        # Z-table precomputation (for free-redshift fitting)
+        self._ztable = None
+        self._fused_photometry_ztable = None
 
     # -------------------------------------------------------------------
     # Internal parameter translation
@@ -579,6 +587,9 @@ class Model:
         if self._precomp is not None:
             return self._predict_photometry_fast(params)
 
+        if self._ztable is not None:
+            return self._predict_photometry_ztable(params)
+
         sed = self.predict_sed(params)
         z = self._get_redshift(params)
         dl_cm = self._get_dl_cm(params)
@@ -597,12 +608,22 @@ class Model:
         return jnp.array(fluxes)
 
     def _predict_photometry_fast(self, params):
-        """Fast photometry using fused JIT kernel."""
+        """Fast photometry using fused JIT kernel (fixed z)."""
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
         return self._fused_photometry(
             sfr_on_ssp, p["log_z"], p["tau_v1"], p["tau_v2"], p["dust_n"]
+        )
+
+    def _predict_photometry_ztable(self, params):
+        """Fast photometry using z-table interpolation (free z)."""
+        p = self._get_internal_params(params)
+        sfr = self._compute_sfr(p)
+        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+        z = self._get_redshift(params)
+        return self._fused_photometry_ztable(
+            sfr_on_ssp, p["log_z"], p["tau_v1"], p["tau_v2"], p["dust_n"], z
         )
 
     def precompute_spectroscopy(self, wave_obs):
@@ -632,6 +653,110 @@ class Model:
         self._wave_obs = jnp.asarray(wave_obs)
         self._fused_spectrum = self._build_fused_spectrum()
         return self
+
+    def precompute_ztable(self, z_grid=None, z_min=0.001, z_max=3.0, n_z=100):
+        """Pre-compute SSP photometry on a redshift grid for free-z fitting.
+
+        At inference time, the precomputed table is interpolated to the
+        current z — same speedup as fixed-z precomputation, but z is free.
+        Follows the DSPS ``precompute_ssp_obsmags_on_z_table`` approach.
+
+        Parameters
+        ----------
+        z_grid : array, optional
+            Custom redshift grid. If None, uses linspace(z_min, z_max, n_z).
+        z_min : float
+            Minimum redshift (default 0.001).
+        z_max : float
+            Maximum redshift (default 3.0).
+        n_z : int
+            Number of grid points (default 100). More points = more accurate
+            interpolation. 100 gives <0.01% interpolation error for smooth
+            filter transmission curves.
+
+        Returns
+        -------
+        self
+            For chaining: ``model.precompute_ztable().predict_photometry(params)``
+        """
+        if self.filter_waves is None:
+            raise ValueError("Z-table precomputation requires filters to be set")
+        self._ztable = precompute_photometry_ztable(
+            self.ssp_data,
+            self.filter_waves,
+            self.filter_trans,
+            z_grid=z_grid,
+            z_min=z_min,
+            z_max=z_max,
+            n_z=n_z,
+        )
+        self._fused_photometry_ztable = self._build_fused_photometry_ztable()
+        return self
+
+    def _build_fused_photometry_ztable(self):
+        """Build fused JIT kernel that interpolates the z-table at inference.
+
+        Like _build_fused_photometry but redshift is a free parameter:
+        interpolates precomputed SSP broadband fluxes, effective wavelengths,
+        and flux scale from the z-table.
+        """
+        from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+
+        fdt = self._forward_dtype
+        zt = self._ztable
+        ssp_phot_table = zt.ssp_phot_table.astype(fdt)
+        eff_rest_table = zt.eff_waves_rest_table.astype(fdt)
+        flux_scale_table = zt.flux_scale_table.astype(fdt)
+        z_grid = zt.z_grid.astype(fdt)
+        ssp_lgmet = self.ssp_data.ssp_lgmet.astype(fdt)
+        dust_age_w = self._dust_age_weights.astype(fdt)
+        ssp_ages_yr = self.ssp_ages_yr.astype(fdt)
+        lsun = fdt.type(LSUN_ERG_PER_S)
+
+        @jax.jit
+        def fused_phot_ztable(sfr_on_ssp, log_z, tau_v1, tau_v2, dust_n, redshift):
+            sfr = sfr_on_ssp.astype(fdt)
+            lz = jnp.asarray(log_z, dtype=fdt)
+            tv1 = jnp.asarray(tau_v1, dtype=fdt)
+            tv2 = jnp.asarray(tau_v2, dtype=fdt)
+            dn = jnp.asarray(dust_n, dtype=fdt)
+            z = jnp.asarray(redshift, dtype=fdt)
+
+            # Interpolate z-table to current redshift
+            z_c = jnp.clip(z, z_grid[0], z_grid[-1])
+            zi = jnp.clip(jnp.searchsorted(z_grid, z_c) - 1, 0, len(z_grid) - 2)
+            zf = (z_c - z_grid[zi]) / (z_grid[zi + 1] - z_grid[zi])
+
+            ssp_phot = (1.0 - zf) * ssp_phot_table[zi] + zf * ssp_phot_table[zi + 1]
+            eff_rest = (1.0 - zf) * eff_rest_table[zi] + zf * eff_rest_table[zi + 1]
+            flux_scale = (1.0 - zf) * flux_scale_table[zi] + zf * flux_scale_table[zi + 1]
+
+            # CSP weights
+            age_dt = jnp.concatenate(
+                [
+                    jnp.array([ssp_ages_yr[1] - ssp_ages_yr[0]]),
+                    0.5 * (ssp_ages_yr[2:] - ssp_ages_yr[:-2]),
+                    jnp.array([ssp_ages_yr[-1] - ssp_ages_yr[-2]]),
+                ]
+            )
+            weights = sfr * age_dt
+
+            # Metallicity interpolation
+            log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
+            idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
+            frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
+            ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
+
+            # Dust at effective wavelengths (interpolated from z-table)
+            wave_ratio = (eff_rest / 5500.0) ** dn
+            tau_v_eff = dust_age_w * tv1 + tv2
+            dust = jnp.exp(-(tau_v_eff[:, None] * wave_ratio[None, :]))
+
+            # Weighted sum
+            flux_lsun = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
+            return (flux_scale * flux_lsun * lsun).astype(jnp.float64)
+
+        return fused_phot_ztable
 
     def predict_spectrum(self, params, wave_obs=None):
         """Compute observed spectrum at given wavelengths.

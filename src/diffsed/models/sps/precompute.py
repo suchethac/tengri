@@ -1,27 +1,32 @@
-"""Pre-computation of SSP observables at fixed redshift.
+"""Pre-computation of SSP observables at fixed or tabulated redshift.
 
-The key insight: at inference time, the redshift is known. Everything
-that depends on z but NOT on model parameters (SFH weights, dust, Z)
-can be computed once, outside the MCMC loop. This eliminates the
-expensive wavelength dimension from the gradient tape.
+The key insight: at inference time, redshift is either known (fixed) or
+varies slowly. Everything that depends on z but NOT on model parameters
+(SFH weights, dust, Z) can be pre-computed, eliminating the expensive
+wavelength dimension from the gradient tape.
 
-Three levels of pre-computation:
+Four levels of pre-computation:
 
-1. Photometric: Pre-integrate SSP through filters -> c_SSP(age, Z, band)
-   Galaxy photometry = weighted sum over age/Z, no wavelength integral.
+1. Photometric (fixed z): Pre-integrate SSP through filters.
    Speedup: 30-50x (Zacharegkas+2025 Section 3).
 
-2. Spectroscopic: Pre-rebin SSP to observed pixel wavelengths.
+2. Spectroscopic (fixed z): Pre-rebin SSP to observed pixel wavelengths.
    Reduces wavelength dimension from ~7000 to ~1000-3000.
 
-3. Combined: Both simultaneously.
+3. Photometric z-table (free z): Pre-integrate SSP at each z in a grid.
+   At inference: interpolate to current z. Same speedup, z is free.
+   Follows DSPS precompute_ssp_obsmags_on_z_table approach.
+
+4. Combined: Both simultaneously.
 
 Usage:
-    # At setup (once per galaxy / once per redshift)
+    # Fixed redshift (once per galaxy)
     precomp = precompute_photometry(ssp_data, filters, redshift)
 
-    # At each MCMC step (fast: no wavelength integrals)
-    flux = fast_photometry(weights, precomp, dust_at_eff_wave)
+    # Free redshift (once per survey / filter set)
+    ztable = precompute_photometry_ztable(ssp_data, filters)
+    # At each MCMC step: interpolate to current z
+    flux = fast_photometry_ztable(weights, ztable, z, dust_params)
 """
 
 from typing import NamedTuple
@@ -224,6 +229,134 @@ def precompute_spectroscopy(
     )
 
 
+class PhotometricZTable(NamedTuple):
+    """Pre-computed SSP broadband fluxes on a redshift grid.
+
+    For free-redshift inference: interpolate this table to the current z
+    instead of computing the full wavelength integral each step.
+
+    Attributes
+    ----------
+    ssp_phot_table : array, shape (n_z, n_met, n_age, n_filters)
+        SSP broadband flux at each redshift, metallicity, age, and filter.
+    eff_waves_rest_table : array, shape (n_z, n_filters)
+        Rest-frame effective wavelengths at each redshift.
+    flux_scale_table : array, shape (n_z,)
+        Geometric factor (1+z)/(4π dL²) at each redshift.
+    z_grid : array, shape (n_z,)
+        Redshift grid.
+    n_filters : int
+        Number of filters.
+    """
+
+    ssp_phot_table: jnp.ndarray
+    eff_waves_rest_table: jnp.ndarray
+    flux_scale_table: jnp.ndarray
+    z_grid: jnp.ndarray
+    n_filters: int
+
+
+def precompute_photometry_ztable(
+    ssp_data,
+    filter_waves,
+    filter_trans,
+    z_grid=None,
+    z_min=0.001,
+    z_max=3.0,
+    n_z=100,
+) -> PhotometricZTable:
+    """Pre-compute SSP broadband fluxes on a redshift grid.
+
+    Evaluates the full wavelength integral at each z in the grid.
+    At inference time, interpolate to the current z — same speedup
+    as fixed-z precomputation, but z is now a free parameter.
+
+    Parameters
+    ----------
+    ssp_data : SSPData
+        SSP templates.
+    filter_waves : list of array
+        Wavelength grid per filter (observed frame, Angstrom).
+    filter_trans : list of array
+        Transmission curve per filter.
+    z_grid : array, optional
+        Custom redshift grid. If None, uses linspace(z_min, z_max, n_z).
+    z_min : float
+        Minimum redshift (default 0.001).
+    z_max : float
+        Maximum redshift (default 3.0).
+    n_z : int
+        Number of redshift grid points (default 100).
+
+    Returns
+    -------
+    PhotometricZTable
+        Pre-computed table for fast_photometry_ztable().
+    """
+    from diffsed.utils.cosmology import luminosity_distance
+
+    if z_grid is None:
+        z_grid = jnp.linspace(z_min, z_max, n_z)
+    else:
+        z_grid = jnp.asarray(z_grid)
+
+    n_z_pts = len(z_grid)
+    n_filters = len(filter_waves)
+    n_met = ssp_data.ssp_flux.shape[0]
+    n_age = ssp_data.ssp_flux.shape[1]
+
+    import numpy as np
+
+    ssp_phot_all = np.zeros((n_z_pts, n_met, n_age, n_filters))
+    eff_waves_rest_all = np.zeros((n_z_pts, n_filters))
+    flux_scale_all = np.zeros(n_z_pts)
+
+    ssp_flux_np = np.asarray(ssp_data.ssp_flux)
+    wave_ssp_np = np.asarray(ssp_data.ssp_wave)
+
+    for zi, z_val in enumerate(z_grid):
+        z_val = float(z_val)
+        wave_obs = wave_ssp_np * (1.0 + z_val)
+
+        # Effective wavelengths per filter at this z
+        eff_waves = []
+        for fw, ft in zip(filter_waves, filter_trans):
+            fw_np, ft_np = np.asarray(fw), np.asarray(ft)
+            lam_eff = np.trapezoid(ft_np * fw_np**2, fw_np) / np.trapezoid(ft_np * fw_np, fw_np)
+            eff_waves.append(lam_eff)
+        eff_waves = np.array(eff_waves)
+        eff_waves_rest_all[zi] = eff_waves / (1.0 + z_val)
+
+        # Pre-integrate SSP through each filter
+        for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
+            fw_np, ft_np = np.asarray(fw), np.asarray(ft)
+            denom = np.trapezoid(ft_np * fw_np, fw_np)
+
+            for m_idx in range(n_met):
+                for a_idx in range(n_age):
+                    ssp_on_filt = np.interp(
+                        fw_np,
+                        wave_obs,
+                        ssp_flux_np[m_idx, a_idx],
+                        left=0.0,
+                        right=0.0,
+                    )
+                    num = np.trapezoid(ssp_on_filt * ft_np * fw_np, fw_np)
+                    ssp_phot_all[zi, m_idx, a_idx, f_idx] = num / max(denom, 1e-30)
+
+        # Geometric flux scale
+        dl_cm = float(luminosity_distance(z_val))
+        flux_scale_all[zi] = (1.0 + z_val) / (4.0 * np.pi * dl_cm**2)
+
+    return PhotometricZTable(
+        ssp_phot_table=jnp.array(ssp_phot_all),
+        eff_waves_rest_table=jnp.array(eff_waves_rest_all),
+        flux_scale_table=jnp.array(flux_scale_all),
+        z_grid=z_grid,
+        n_filters=n_filters,
+    )
+
+
 # -----------------------------------------------------------------------
 # Fast inference-time functions (these run inside the MCMC loop)
 # -----------------------------------------------------------------------
@@ -317,3 +450,42 @@ def interpolate_ssp_phot_metallicity(
     idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_clamped) - 1, 0, len(ssp_lgmet) - 2)
     frac = (log_z_clamped - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
     return (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
+
+
+@jax.jit
+def interpolate_ztable(ztable_ssp_phot, ztable_eff_rest, ztable_flux_scale, z_grid, z):
+    """Interpolate z-table to a specific redshift (JIT-compatible).
+
+    Linear interpolation along the z dimension of the precomputed table.
+
+    Parameters
+    ----------
+    ztable_ssp_phot : array, shape (n_z, n_met, n_age, n_filters)
+        Precomputed SSP photometry on z grid.
+    ztable_eff_rest : array, shape (n_z, n_filters)
+        Rest-frame effective wavelengths on z grid.
+    ztable_flux_scale : array, shape (n_z,)
+        Geometric flux scale on z grid.
+    z_grid : array, shape (n_z,)
+        Redshift grid.
+    z : float
+        Target redshift.
+
+    Returns
+    -------
+    ssp_phot : array, shape (n_met, n_age, n_filters)
+        Interpolated SSP photometry.
+    eff_waves_rest : array, shape (n_filters,)
+        Interpolated rest-frame effective wavelengths.
+    flux_scale : float
+        Interpolated geometric factor.
+    """
+    z_clamped = jnp.clip(z, z_grid[0], z_grid[-1])
+    idx = jnp.clip(jnp.searchsorted(z_grid, z_clamped) - 1, 0, len(z_grid) - 2)
+    frac = (z_clamped - z_grid[idx]) / (z_grid[idx + 1] - z_grid[idx])
+
+    ssp_phot = (1.0 - frac) * ztable_ssp_phot[idx] + frac * ztable_ssp_phot[idx + 1]
+    eff_rest = (1.0 - frac) * ztable_eff_rest[idx] + frac * ztable_eff_rest[idx + 1]
+    flux_scale = (1.0 - frac) * ztable_flux_scale[idx] + frac * ztable_flux_scale[idx + 1]
+
+    return ssp_phot, eff_rest, flux_scale
