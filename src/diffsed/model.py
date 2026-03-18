@@ -38,7 +38,11 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from diffsed.models.dust.charlot_fall import charlot_fall, precompute_dust_age_weights
+from diffsed.models.dust.charlot_fall import charlot_fall  # backward compat
+from diffsed.models.dust.two_component_dust import (
+    precompute_dust_age_weights,
+    two_component_dust,
+)
 from diffsed.models.observation.photometry import ab_mag_from_flux, compute_flux_density
 from diffsed.models.observation.spectroscopy import compute_spectrum
 from diffsed.models.sfh.registry import compute_field_gp, resolve_sfh
@@ -194,6 +198,10 @@ class Model:
         # Field settings
         self._has_field = spec.stochastic
         self._field_model = sfh_settings.get("sfh_field_model", "drw")
+
+        # Dust law settings (generalized two-component model)
+        self._dust_law_bc = getattr(spec, "dust_law_bc", "power_law")
+        self._dust_law_diff = getattr(spec, "dust_law_diff", self._dust_law_bc)
 
         # Velocity dispersion: only apply if sigma_v is in the spec
         self._has_sigma_v = spec.has_param("sigma_v") if hasattr(spec, "has_param") else False
@@ -554,13 +562,19 @@ class Model:
             p["log_z"],
         )
 
-        # Dust attenuation
-        dust_atten = charlot_fall(
+        # Dust attenuation (generalized two-component model)
+        dust_atten = two_component_dust(
             self.ssp_data.ssp_wave,
             self.ssp_ages_yr,
             tau_v1=p["tau_v1"],
             tau_v2=p["tau_v2"],
-            n_slope=p["dust_n"],
+            law_bc=self._dust_law_bc,
+            law_diff=self._dust_law_diff,
+            f_obscuration=p.get("f_obscuration", 0.0),
+            n_slope=p.get("dust_n", -0.7),
+            dust_bump_strength=p.get("dust_bump_strength", 0.0),
+            dust_delta=p.get("dust_delta", 0.0),
+            dust_Rv=p.get("dust_Rv", 3.1),
         )
 
         return compute_csp_sed(weights, ssp_flux_at_z, dust_atten)

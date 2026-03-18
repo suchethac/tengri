@@ -23,7 +23,8 @@ from diffsed.fitter import Fitter
 from diffsed.forward_model import ForwardModel, ModelConfig, generate_mock
 from diffsed.hierarchical import HierarchicalFitter, HierarchicalResult
 from diffsed.model import Model
-from diffsed.models.dust.charlot_fall import charlot_fall
+from diffsed.models.dust.charlot_fall import charlot_fall  # backward compat
+from diffsed.models.dust.two_component_dust import two_component_dust
 from diffsed.models.observation.filters import load_filter_set
 from diffsed.models.sfh.gp_sfh import (
     compute_sqrt_power_drw,
@@ -90,6 +91,7 @@ __all__ = [
     "Uniform",
     "VIConfig",
     "charlot_fall",
+    "two_component_dust",
     "compute_effective_noise",
     "compute_field_gp",
     "compute_sqrt_power_drw",
