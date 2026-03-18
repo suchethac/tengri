@@ -289,10 +289,9 @@ class CloudyGridBackend:
         neb_fesc: float = 0.0,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        """Compute emission line luminosities.
+        """Compute emission line luminosities (vectorized over age bins).
 
-        For each SSP age bin with non-zero weight:
-          L_line = weight * Q_H(Z, age) * grid(Z_gas, age, logU)
+        L_line = sum_i [w_i * Q_H(Z, age_i) * grid(Z_gas, age_i, logU) * (1-f_esc)]
 
         Parameters
         ----------
@@ -307,55 +306,40 @@ class CloudyGridBackend:
         neb_logZ_gas : float or None
             Gas metallicity log10(Z). None = tie to stellar Z.
         neb_fesc : float
-            Escape fraction [0, 1]. Fraction of ionizing photons
-            that escape without producing nebular emission.
+            Escape fraction [0, 1].
 
         Returns
         -------
         wavelengths : array, shape (n_lines,)
-            Emission line wavelengths (rest-frame Angstrom).
         luminosities : array, shape (n_lines,)
-            Line luminosities (Lsun).
         """
         if neb_logZ_gas is None:
             neb_logZ_gas = log_z
 
         grid = self.grid
-        n_ages = len(ssp_weights)
 
-        # Sum over age bins: L_line = sum_i [w_i * Q_H(Z, age_i) * grid(Z_gas, age_i, logU)]
-        total_line_lum = jnp.zeros(len(grid.line_wavelengths))
-
-        for i in range(n_ages):
-            log_age_i = ssp_log_ages_yr[i]
-
-            # Only young stars produce ionizing photons (age < ~20 Myr)
-            # Grid only covers ages up to ~20 Myr anyway
+        # Vectorized: compute line luminosity contribution for one age bin
+        def _line_contrib_one_age(log_age_i, weight_i):
             age_in_grid = (
                 (log_age_i >= grid.line_log_age[0])
                 & (log_age_i <= grid.line_log_age[-1])
             )
-
-            # Q_H at this (Z, age)
             qh_i = self._get_qh_at(log_z, log_age_i)
-
-            # Grid luminosity per Q_H at (Z_gas, age, logU)
-            # Interpolation in log10 space (FSPS convention), then exponentiate
             log_lum_per_qh = _trilinear_interp(
-                grid.line_luminosity,  # stored in log10
-                grid.line_log_met,
-                grid.line_log_age,
-                grid.line_log_U,
-                neb_logZ_gas,
-                log_age_i,
-                neb_logU,
+                grid.line_luminosity,
+                grid.line_log_met, grid.line_log_age, grid.line_log_U,
+                neb_logZ_gas, log_age_i, neb_logU,
             )
             lum_per_qh = 10.0 ** log_lum_per_qh
+            contrib = weight_i * qh_i * lum_per_qh * (1.0 - neb_fesc)
+            return jnp.where(age_in_grid, contrib, 0.0)
 
-            # Contribution: weight * Q_H * grid_value * (1 - f_esc)
-            contrib = ssp_weights[i] * qh_i * lum_per_qh * (1.0 - neb_fesc)
-            total_line_lum = total_line_lum + jnp.where(age_in_grid, contrib, 0.0)
+        # vmap over all age bins, then sum
+        all_contribs = jax.vmap(
+            _line_contrib_one_age
+        )(ssp_log_ages_yr, ssp_weights)  # (n_age, n_lines)
 
+        total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
         return grid.line_wavelengths, total_line_lum
 
     def predict_nebular_continuum(
@@ -368,12 +352,11 @@ class CloudyGridBackend:
         neb_fesc: float = 0.0,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        """Compute nebular continuum SED.
+        """Compute nebular continuum SED (vectorized over age bins).
 
         Returns
         -------
         wavelength : array, shape (n_wave_cont,)
-            Nebular continuum wavelength grid (Angstrom).
         luminosity : array, shape (n_wave_cont,)
             Nebular continuum L_nu (Lsun/Hz).
         """
@@ -381,35 +364,27 @@ class CloudyGridBackend:
             neb_logZ_gas = log_z
 
         grid = self.grid
-        n_ages = len(ssp_weights)
 
-        total_cont = jnp.zeros(len(grid.cont_wavelength))
-
-        for i in range(n_ages):
-            log_age_i = ssp_log_ages_yr[i]
-
+        def _cont_contrib_one_age(log_age_i, weight_i):
             age_in_grid = (
                 (log_age_i >= grid.cont_log_age[0])
                 & (log_age_i <= grid.cont_log_age[-1])
             )
-
             qh_i = self._get_qh_at(log_z, log_age_i)
-
-            # Interpolation in log10 space, then exponentiate
             log_cont_per_qh = _trilinear_interp(
-                grid.cont_luminosity,  # stored in log10
-                grid.cont_log_met,
-                grid.cont_log_age,
-                grid.cont_log_U,
-                neb_logZ_gas,
-                log_age_i,
-                neb_logU,
+                grid.cont_luminosity,
+                grid.cont_log_met, grid.cont_log_age, grid.cont_log_U,
+                neb_logZ_gas, log_age_i, neb_logU,
             )
             cont_per_qh = 10.0 ** log_cont_per_qh
+            contrib = weight_i * qh_i * cont_per_qh * (1.0 - neb_fesc)
+            return jnp.where(age_in_grid, contrib, 0.0)
 
-            contrib = ssp_weights[i] * qh_i * cont_per_qh * (1.0 - neb_fesc)
-            total_cont = total_cont + jnp.where(age_in_grid, contrib, 0.0)
+        all_contribs = jax.vmap(
+            _cont_contrib_one_age
+        )(ssp_log_ages_yr, ssp_weights)  # (n_age, n_wave_cont)
 
+        total_cont = jnp.sum(all_contribs, axis=0)
         return grid.cont_wavelength, total_cont
 
     def predict_nebular_sed(
