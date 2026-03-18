@@ -10,6 +10,72 @@ import jax
 import jax.numpy as jnp
 
 
+def precompute_dust_age_weights(
+    age_grid: jnp.ndarray,
+    t_birth: float = 1e7,
+    transition_width: float = 0.3,
+) -> jnp.ndarray:
+    """Precompute the age-dependent birth-cloud weight (sigmoid).
+
+    This depends only on age_grid and t_birth, which are constants
+    during inference. Call once at Model init, then pass to
+    charlot_fall_fast / charlot_fall_at_wavelengths_fast.
+
+    Parameters
+    ----------
+    age_grid : array, shape (n_ages,)
+        Stellar population ages (yr).
+    t_birth : float
+        Birth cloud dispersal age (yr). Default 1e7 (10 Myr).
+    transition_width : float
+        Sigmoid width in dex. Default 0.3.
+
+    Returns
+    -------
+    array, shape (n_ages,)
+        Sigmoid weight: 1 for young stars, 0 for old.
+    """
+    log_age = jnp.log10(jnp.maximum(age_grid, 1.0))
+    log_t_birth = jnp.log10(t_birth)
+    sigmoid_arg = -(log_age - log_t_birth) / transition_width
+    return jax.nn.sigmoid(sigmoid_arg)
+
+
+def charlot_fall_at_wavelengths_fast(
+    wavelengths: jnp.ndarray,
+    dust_age_weights: jnp.ndarray,
+    tau_v1: float,
+    tau_v2: float,
+    n_slope: float = -0.7,
+) -> jnp.ndarray:
+    """Evaluate dust using precomputed age weights (fast path).
+
+    Eliminates log10 + sigmoid from the per-call cost.
+
+    Parameters
+    ----------
+    wavelengths : array, shape (n_filters,)
+        Wavelengths (rest-frame Angstrom).
+    dust_age_weights : array, shape (n_ages,)
+        Precomputed sigmoid weights from precompute_dust_age_weights.
+    tau_v1 : float
+        V-band optical depth of birth cloud.
+    tau_v2 : float
+        V-band optical depth of diffuse ISM.
+    n_slope : float
+        Attenuation curve power-law index. Default -0.7.
+
+    Returns
+    -------
+    array, shape (n_ages, n_filters)
+        Multiplicative attenuation factor exp(-tau_lambda).
+    """
+    wave_ratio = (wavelengths / 5500.0) ** n_slope
+    tau_v_eff = dust_age_weights * tau_v1 + tau_v2
+    tau_lambda = tau_v_eff[:, None] * wave_ratio[None, :]
+    return jnp.exp(-tau_lambda)
+
+
 def charlot_fall(
     wavelength: jnp.ndarray,
     age_grid: jnp.ndarray,

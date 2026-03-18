@@ -38,7 +38,11 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from diffsed.models.dust.charlot_fall import charlot_fall, charlot_fall_at_wavelengths
+from diffsed.models.dust.charlot_fall import (
+    charlot_fall,
+    charlot_fall_at_wavelengths_fast,
+    precompute_dust_age_weights,
+)
 from diffsed.models.observation.photometry import ab_mag_from_flux, compute_flux_density
 from diffsed.models.observation.spectroscopy import compute_spectrum
 from diffsed.models.sfh.registry import compute_field_gp, resolve_sfh
@@ -209,6 +213,9 @@ class Model:
                 self._z_fixed,
                 self._dl_cm_fixed,
             )
+
+        # Precompute dust age weights (sigmoid depends only on age grid)
+        self._dust_age_weights = precompute_dust_age_weights(self.ssp_ages_yr)
 
         # Spectroscopy precomputation (same idea: pre-interpolate SSPs)
         self._spec_precomp = None
@@ -455,9 +462,10 @@ class Model:
             precomp.ssp_phot, self.ssp_data.ssp_lgmet, p["log_z"]
         )
 
-        dust_at_eff = charlot_fall_at_wavelengths(
+        # Fast dust: uses precomputed age sigmoid weights
+        dust_at_eff = charlot_fall_at_wavelengths_fast(
             precomp.effective_wavelengths_rest,
-            self.ssp_ages_yr,
+            self._dust_age_weights,
             tau_v1=p["tau_v1"],
             tau_v2=p["tau_v2"],
             n_slope=p["dust_n"],
@@ -550,10 +558,10 @@ class Model:
             precomp.ssp_on_pixels, self.ssp_data.ssp_lgmet, p["log_z"]
         )
 
-        # Dust at pixel wavelengths
-        dust_at_pix = charlot_fall_at_wavelengths(
+        # Fast dust: uses precomputed age sigmoid weights
+        dust_at_pix = charlot_fall_at_wavelengths_fast(
             precomp.wave_rest_pixels,
-            self.ssp_ages_yr,
+            self._dust_age_weights,
             tau_v1=p["tau_v1"],
             tau_v2=p["tau_v2"],
             n_slope=p["dust_n"],
