@@ -73,7 +73,12 @@ class Fitter:
         a scalar: chi² + prior penalties. When noise model is active,
         uses effective noise with calibration floor and log-determinant.
         """
-        from diffsed.noise import compute_effective_noise, has_noise_model
+        from diffsed.noise import (
+            get_noise_dof,
+            has_noise_model,
+            uses_student_t,
+            variable_noise_hamiltonian,
+        )
 
         model = self.model
         data = self.data
@@ -85,6 +90,7 @@ class Fitter:
         spec = self.spec
         stochastic = spec.stochastic
         use_variable_noise = has_noise_model(spec)
+        noise_dof = get_noise_dof(spec) if uses_student_t(spec) else None
 
         def loss_fn(params_unbounded):
             # Convert unbounded → physical for free params
@@ -113,15 +119,13 @@ class Fitter:
             else:
                 raise ValueError(f"Unknown data_type: {data_type}")
 
-            # Chi-squared (with variable noise if active)
+            # Likelihood energy (with variable noise / Student-t if active)
             if use_variable_noise:
                 f_cal = params.get("noise_frac_cal", 0.0)
-                sigma_eff = compute_effective_noise(noise, predicted, f_cal)
-                chi2 = jnp.sum(((data - predicted) / sigma_eff) ** 2)
-                logdet = 2.0 * jnp.sum(jnp.log(sigma_eff))
+                e_lh = variable_noise_hamiltonian(data, noise, predicted, f_cal, dof=noise_dof)
             else:
                 chi2 = jnp.sum(((data - predicted) / noise) ** 2)
-                logdet = 0.0
+                e_lh = 0.5 * chi2
 
             # Prior contributions
             prior_penalty = 0.0
@@ -142,7 +146,7 @@ class Fitter:
                     uniform_lp = -jnp.log(dist.hi - dist.lo)
                     prior_penalty -= 2.0 * (dist.log_prob(val) - uniform_lp)
 
-            return 0.5 * chi2 + 0.5 * logdet + 0.5 * prior_penalty
+            return e_lh + 0.5 * prior_penalty
 
         return loss_fn
 
@@ -252,7 +256,9 @@ class Fitter:
         """
         from diffsed.noise import (
             compute_std_inv,
+            get_noise_dof,
             has_noise_model,
+            uses_student_t,
             variable_noise_hamiltonian,
             variable_noise_metric_vec,
         )
@@ -267,6 +273,7 @@ class Fitter:
         noise = self.noise
         noise_inv = 1.0 / noise**2
         use_variable_noise = has_noise_model(self.spec)
+        noise_dof = get_noise_dof(self.spec) if uses_student_t(self.spec) else None
 
         # --- Signal response (physics only) ---
         def signal_response(primals):
@@ -362,7 +369,9 @@ class Fitter:
                 for name, val in fixed_values.items():
                     params[name] = val
                 f_cal = params.get("noise_frac_cal", 0.0)
-                return variable_noise_hamiltonian(data, noise, pred, f_cal) + 0.5 * jnp.sum(xi**2)
+                return variable_noise_hamiltonian(
+                    data, noise, pred, f_cal, dof=noise_dof
+                ) + 0.5 * jnp.sum(xi**2)
 
         else:
 
@@ -1468,7 +1477,12 @@ class Fitter:
 
         cfg = vi_config or VIConfig()
 
-        from diffsed.noise import compute_std_inv, has_noise_model
+        from diffsed.noise import (
+            compute_effective_noise,
+            compute_std_inv,
+            has_noise_model,
+            uses_student_t,
+        )
 
         model = self.model
         data = self.data
@@ -1480,6 +1494,7 @@ class Fitter:
         spec = self.spec
         stochastic = spec.stochastic
         use_variable_noise = has_noise_model(spec)
+        use_student_t = uses_student_t(spec)
 
         def _predict(params):
             """Dispatch forward model by data type."""
@@ -1507,16 +1522,28 @@ class Fitter:
             return params
 
         # Build signal_response: unbounded primals → predicted observables
-        # When noise model is active, returns (predicted, std_inv) tuple
-        # for jft.VariableCovarianceGaussian
+        # When noise model is active, returns tuple for variable-covariance
+        # likelihoods:
+        #   Gaussian: (predicted, std_inv) for VariableCovarianceGaussian
+        #   Student-t: (predicted, sigma_eff) for VariableCovarianceStudentT
         if use_variable_noise:
+            if use_student_t:
 
-            def signal_response(primals):
-                params = _build_params(primals)
-                predicted = _predict(params)
-                f_cal = params.get("noise_frac_cal", 0.0)
-                std_inv = compute_std_inv(noise, predicted, f_cal)
-                return predicted, std_inv
+                def signal_response(primals):
+                    params = _build_params(primals)
+                    predicted = _predict(params)
+                    f_cal = params.get("noise_frac_cal", 0.0)
+                    sigma_eff = compute_effective_noise(noise, predicted, f_cal)
+                    return predicted, sigma_eff
+
+            else:
+
+                def signal_response(primals):
+                    params = _build_params(primals)
+                    predicted = _predict(params)
+                    f_cal = params.get("noise_frac_cal", 0.0)
+                    std_inv = compute_std_inv(noise, predicted, f_cal)
+                    return predicted, std_inv
 
         else:
 
@@ -1533,8 +1560,14 @@ class Fitter:
         signal_response_jit = jax.jit(signal_response)
         nifty_model = jft.Model(signal_response_jit, domain=domain)
 
-        # Likelihood: variable noise or fixed Gaussian
-        if use_variable_noise:
+        # Likelihood dispatch:
+        #   Student-t + variable noise → VariableCovarianceStudentT
+        #   Gaussian + variable noise → VariableCovarianceGaussian
+        #   Fixed noise → Gaussian
+        if use_student_t and use_variable_noise:
+            dof = float(spec.get_distribution("noise_dof").value)
+            likelihood = jft.VariableCovarianceStudentT(data, dof).amend(nifty_model)
+        elif use_variable_noise:
             likelihood = jft.VariableCovarianceGaussian(data).amend(nifty_model)
         else:
             noise_cov_inv = 1.0 / noise**2

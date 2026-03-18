@@ -99,6 +99,12 @@ _NON_SFH_PARAMS = {
         "noise_frac_cal bounds must have lo >= 0",
         Fixed(0.0),
     ),
+    "noise_dof": (
+        "Student-t degrees of freedom for outlier robustness (0=Gaussian)",
+        lambda lo, hi: lo >= 0,
+        "noise_dof bounds must have lo >= 0",
+        Fixed(0.0),
+    ),
 }
 
 # ---------------------------------------------------------------------------

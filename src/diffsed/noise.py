@@ -140,6 +140,55 @@ def has_noise_model(spec) -> bool:
     return False
 
 
+def get_noise_dof(spec) -> float | None:
+    """Get the Student-t degrees of freedom, or None if Gaussian.
+
+    Parameters
+    ----------
+    spec : ParamSpec
+        Parameter specification.
+
+    Returns
+    -------
+    float or None
+        Degrees of freedom if noise_dof is set (Fixed or free), None otherwise.
+    """
+    from diffsed.distributions import Fixed
+
+    if "noise_dof" not in spec.all_params:
+        return None
+    dist = spec.get_distribution("noise_dof")
+    if isinstance(dist, Fixed):
+        return dist.value
+    # noise_dof is free — return None to signal it's in the latent vector
+    return None
+
+
+def uses_student_t(spec) -> bool:
+    """Check if Student-t likelihood should be used.
+
+    Returns True if noise_dof is set to a nonzero value (fixed or free).
+
+    Parameters
+    ----------
+    spec : ParamSpec
+        Parameter specification.
+
+    Returns
+    -------
+    bool
+        True if Student-t likelihood should be used.
+    """
+    if "noise_dof" not in spec.all_params:
+        return False
+    from diffsed.distributions import Fixed
+
+    dist = spec.get_distribution("noise_dof")
+    if isinstance(dist, Fixed):
+        return dist.value > 0.0
+    return True  # free noise_dof → Student-t
+
+
 # ---------------------------------------------------------------------------
 # Energy and metric for JIT EVI engine
 # ---------------------------------------------------------------------------
@@ -150,14 +199,21 @@ def variable_noise_hamiltonian(
     noise_obs: jnp.ndarray,
     predicted: jnp.ndarray,
     f_cal: float | jnp.ndarray,
+    dof: float | None = None,
 ) -> jnp.ndarray:
-    """Hamiltonian (energy) for VariableCovarianceGaussian likelihood.
+    """Hamiltonian (energy) for variable-covariance likelihood.
 
-    E_lh = ½ Σ_k (d_k - m_k)² / σ²_eff,k + Σ_k log(σ_eff,k)
+    Gaussian (dof=None):
+        E_lh = ½ Σ_k (d_k - m_k)² / σ²_eff,k + Σ_k log(σ_eff,k)
+
+    Student-t (dof set):
+        E_lh = (ν+1)/2 Σ_k log(1 + r²_k/ν) + Σ_k log(σ_eff,k)
+
+    where r_k = (d_k - m_k) / σ_eff,k.
 
     The log-determinant term Σlog(σ_eff) prevents the trivial solution
-    of σ → ∞ where χ² → 0. This is equivalent to NIFTy's
-    ``VariableCovarianceGaussian.energy()``.
+    of σ → ∞. This matches NIFTy's ``VariableCovarianceGaussian`` and
+    ``VariableCovarianceStudentT`` energy functions.
 
     Note: Does NOT include the ½ξᵀξ prior term. Caller adds that.
 
@@ -171,6 +227,9 @@ def variable_noise_hamiltonian(
         Model-predicted fluxes.
     f_cal : float or scalar array
         Fractional calibration uncertainty.
+    dof : float or None
+        Student-t degrees of freedom. None = Gaussian (default).
+        Typical values: 2 (heavy tails, Alsing+2022), 4 (moderate).
 
     Returns
     -------
@@ -178,9 +237,15 @@ def variable_noise_hamiltonian(
         Likelihood energy (negative log-likelihood up to constant).
     """
     sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
-    chi2 = jnp.sum(((data - predicted) / sigma_eff) ** 2)
+    r = (data - predicted) / sigma_eff
     logdet = jnp.sum(jnp.log(sigma_eff))
-    return 0.5 * chi2 + logdet
+
+    if dof is not None:
+        # Student-t: (ν+1)/2 · Σ log(1 + r²/ν) + Σ log(σ_eff)
+        return 0.5 * (dof + 1.0) * jnp.sum(jnp.log(1.0 + r**2 / dof)) + logdet
+    else:
+        # Gaussian: ½ Σ r² + Σ log(σ_eff)
+        return 0.5 * jnp.sum(r**2) + logdet
 
 
 def variable_noise_metric_vec(

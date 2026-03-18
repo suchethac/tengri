@@ -255,9 +255,15 @@ def build_standardized_loss(
     No prior penalty terms beyond ½ξᵀξ. The prior is absorbed into the
     transforms.
     """
-    from diffsed.noise import compute_effective_noise, has_noise_model
+    from diffsed.noise import (
+        get_noise_dof,
+        has_noise_model,
+        uses_student_t,
+        variable_noise_hamiltonian,
+    )
 
     use_variable_noise = has_noise_model(smodel.spec)
+    noise_dof = get_noise_dof(smodel.spec) if uses_student_t(smodel.spec) else None
 
     xi_template = {}
     for name, shape in smodel.domain.items():
@@ -275,13 +281,10 @@ def build_standardized_loss(
             predicted = smodel.predict(xi, data_type=data_type, wave_obs=wave_obs)
             params = smodel.xi_to_params(xi)
             f_cal = params.get("noise_frac_cal", 0.0)
-            sigma_eff = compute_effective_noise(noise, predicted, f_cal)
 
-            chi2 = jnp.sum(((data - predicted) / sigma_eff) ** 2)
-            logdet = jnp.sum(jnp.log(sigma_eff))
+            e_lh = variable_noise_hamiltonian(data, noise, predicted, f_cal, dof=noise_dof)
             prior = jnp.sum(xi_flat**2)
-
-            return 0.5 * chi2 + logdet + 0.5 * prior
+            return e_lh + 0.5 * prior
 
     else:
 

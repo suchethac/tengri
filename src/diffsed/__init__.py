@@ -58,6 +58,7 @@ from diffsed.noise import (
     compute_effective_noise,
     compute_std_inv,
     has_noise_model,
+    uses_student_t,
     variable_noise_hamiltonian,
 )
 from diffsed.param_spec import ParamSpec

@@ -270,6 +270,128 @@ class TestVariableNoiseHamiltonian:
 
 
 # ---------------------------------------------------------------------------
+# Student-t energy
+# ---------------------------------------------------------------------------
+
+
+class TestStudentTEnergy:
+    """Tests for the Student-t likelihood energy."""
+
+    def test_student_t_matches_hand_computation(self):
+        """Check Student-t energy against formula."""
+        data = jnp.array([1.0, 2.0])
+        noise_obs = jnp.array([0.1, 0.2])
+        predicted = jnp.array([1.05, 2.1])
+        f_cal = 0.05
+        dof = 2.0
+
+        result = variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=dof)
+
+        # Manual: E = (ν+1)/2 · Σ log(1 + r²/ν) + Σ log(σ_eff)
+        sigma_eff = jnp.sqrt(noise_obs**2 + (f_cal * jnp.abs(predicted)) ** 2)
+        r = (data - predicted) / sigma_eff
+        expected = 0.5 * (dof + 1.0) * jnp.sum(jnp.log(1.0 + r**2 / dof))
+        expected += jnp.sum(jnp.log(sigma_eff))
+        npt.assert_allclose(float(result), float(expected), rtol=1e-10)
+
+    def test_student_t_converges_to_gaussian_for_large_dof(self):
+        """Student-t(ν→∞) → Gaussian energy."""
+        data = jnp.array([1.0, 2.0])
+        noise_obs = jnp.array([0.1, 0.2])
+        predicted = jnp.array([1.05, 2.1])
+        f_cal = 0.05
+
+        e_gauss = variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=None)
+        e_t_large = variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=1e6)
+        npt.assert_allclose(float(e_t_large), float(e_gauss), rtol=1e-4)
+
+    def test_student_t_downweights_outliers(self):
+        """A 5σ outlier should contribute less energy with Student-t."""
+        data = jnp.array([1.0, 10.0])  # second point is outlier
+        noise_obs = jnp.array([0.1, 0.1])
+        predicted = jnp.array([1.0, 1.0])
+        f_cal = 0.0
+
+        e_gauss = variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=None)
+        e_t2 = variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=2.0)
+
+        # Gaussian: outlier contributes 0.5 * (9/0.1)^2 = 4050
+        # Student-t(2): outlier contributes 1.5 * log(1 + 8100/2) ≈ 12.6
+        assert e_t2 < e_gauss, "Student-t should give lower energy for outliers"
+
+    def test_student_t_jit_and_grad(self):
+        """JIT + gradient through Student-t energy."""
+        data = jnp.array([1.0, 2.0])
+        noise_obs = jnp.array([0.1, 0.2])
+        predicted = jnp.array([1.1, 1.9])
+
+        @jax.jit
+        def energy(f_cal):
+            return variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=2.0)
+
+        grad = jax.grad(energy)(0.05)
+        assert jnp.isfinite(grad)
+
+
+class TestUsesStudentT:
+    """Tests for Student-t detection."""
+
+    def test_default_no_student_t(self):
+        """Default spec uses Gaussian."""
+        from diffsed import Fixed, ParamSpec, Uniform
+        from diffsed.noise import uses_student_t
+
+        spec = ParamSpec(
+            mean_sfh_type="dpl",
+            sfh_dpl_alpha=Uniform(0.5, 4.0),
+            sfh_dpl_beta=Uniform(0.3, 3.0),
+            sfh_dpl_tau_gyr=Uniform(1.0, 12.0),
+            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+            met_logzsol=Fixed(-0.3),
+            dust_tau_bc=Fixed(0.5),
+            redshift=0.1,
+        )
+        assert uses_student_t(spec) is False
+
+    def test_fixed_dof_activates(self):
+        """noise_dof=Fixed(2.0) → Student-t active."""
+        from diffsed import Fixed, ParamSpec, Uniform
+        from diffsed.noise import uses_student_t
+
+        spec = ParamSpec(
+            mean_sfh_type="dpl",
+            sfh_dpl_alpha=Uniform(0.5, 4.0),
+            sfh_dpl_beta=Uniform(0.3, 3.0),
+            sfh_dpl_tau_gyr=Uniform(1.0, 12.0),
+            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+            noise_frac_cal=Uniform(0.01, 0.2),
+            noise_dof=Fixed(2.0),
+            met_logzsol=Fixed(-0.3),
+            dust_tau_bc=Fixed(0.5),
+            redshift=0.1,
+        )
+        assert uses_student_t(spec) is True
+
+    def test_zero_dof_no_student_t(self):
+        """noise_dof=Fixed(0.0) → Gaussian (default)."""
+        from diffsed import Fixed, ParamSpec, Uniform
+        from diffsed.noise import uses_student_t
+
+        spec = ParamSpec(
+            mean_sfh_type="dpl",
+            sfh_dpl_alpha=Uniform(0.5, 4.0),
+            sfh_dpl_beta=Uniform(0.3, 3.0),
+            sfh_dpl_tau_gyr=Uniform(1.0, 12.0),
+            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+            noise_dof=Fixed(0.0),
+            met_logzsol=Fixed(-0.3),
+            dust_tau_bc=Fixed(0.5),
+            redshift=0.1,
+        )
+        assert uses_student_t(spec) is False
+
+
+# ---------------------------------------------------------------------------
 # variable_noise_metric_vec
 # ---------------------------------------------------------------------------
 
