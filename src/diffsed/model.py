@@ -38,11 +38,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from diffsed.models.dust.charlot_fall import (
-    charlot_fall,
-    charlot_fall_at_wavelengths_fast,
-    precompute_dust_age_weights,
-)
+from diffsed.models.dust.charlot_fall import charlot_fall, precompute_dust_age_weights
 from diffsed.models.observation.photometry import ab_mag_from_flux, compute_flux_density
 from diffsed.models.observation.spectroscopy import compute_spectrum
 from diffsed.models.sfh.registry import compute_field_gp, resolve_sfh
@@ -51,13 +47,7 @@ from diffsed.models.sps.dsps_wrapper import (
     compute_csp_weights,
     interpolate_metallicity,
 )
-from diffsed.models.sps.precompute import (
-    fast_photometry,
-    fast_spectrum,
-    interpolate_ssp_phot_metallicity,
-    precompute_photometry,
-    precompute_spectroscopy,
-)
+from diffsed.models.sps.precompute import precompute_photometry, precompute_spectroscopy
 from diffsed.utils.cosmology import luminosity_distance
 from diffsed.utils.grid import (
     grid_spacing,
@@ -217,6 +207,11 @@ class Model:
         # Precompute dust age weights (sigmoid depends only on age grid)
         self._dust_age_weights = precompute_dust_age_weights(self.ssp_ages_yr)
 
+        # Build fused JIT kernels for fast photometry/spectroscopy
+        self._fused_photometry = None
+        if self._precomp is not None:
+            self._fused_photometry = self._build_fused_photometry()
+
         # Spectroscopy precomputation (same idea: pre-interpolate SSPs)
         self._spec_precomp = None
 
@@ -368,6 +363,101 @@ class Model:
         return luminosity_distance(z)
 
     # -------------------------------------------------------------------
+    # Fused JIT kernels
+    # -------------------------------------------------------------------
+
+    def _build_fused_photometry(self):
+        """Build a single JIT function: SFR-on-SSP → photometry.
+
+        Captures all constants (SSP grid, precomp, dust weights) in the
+        closure so XLA can fuse metallicity interpolation, dust, and
+        weighted sum into one optimized kernel with no intermediate
+        array materializations.
+        """
+        from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+
+        precomp = self._precomp
+        ssp_phot = precomp.ssp_phot
+        ssp_lgmet = self.ssp_data.ssp_lgmet
+        eff_waves_rest = precomp.effective_wavelengths_rest
+        dust_age_w = self._dust_age_weights
+        flux_scale = precomp.flux_scale
+        ssp_ages_yr = self.ssp_ages_yr
+
+        @jax.jit
+        def fused_phot(sfr_on_ssp, log_z, tau_v1, tau_v2, dust_n):
+            # CSP weights
+            dt = jnp.concatenate(
+                [
+                    jnp.array([ssp_ages_yr[1] - ssp_ages_yr[0]]),
+                    0.5 * (ssp_ages_yr[2:] - ssp_ages_yr[:-2]),
+                    jnp.array([ssp_ages_yr[-1] - ssp_ages_yr[-2]]),
+                ]
+            )
+            weights = sfr_on_ssp * dt
+
+            # Metallicity interpolation
+            log_z_c = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
+            idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
+            frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
+            ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
+
+            # Dust at effective wavelengths
+            wave_ratio = (eff_waves_rest / 5500.0) ** dust_n
+            tau_v_eff = dust_age_w * tau_v1 + tau_v2
+            dust = jnp.exp(-(tau_v_eff[:, None] * wave_ratio[None, :]))
+
+            # Weighted sum
+            flux_lsun = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
+            return flux_scale * flux_lsun * LSUN_ERG_PER_S
+
+        return fused_phot
+
+    def _build_fused_spectrum(self):
+        """Build a single JIT function: SFR-on-SSP → spectrum.
+
+        Same fusion approach as photometry but for spectroscopic pixels.
+        """
+        from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+
+        precomp = self._spec_precomp
+        ssp_on_pixels = precomp.ssp_on_pixels
+        ssp_lgmet = self.ssp_data.ssp_lgmet
+        wave_rest_pixels = precomp.wave_rest_pixels
+        dust_age_w = self._dust_age_weights
+        flux_scale = precomp.flux_scale
+        ssp_ages_yr = self.ssp_ages_yr
+
+        @jax.jit
+        def fused_spec(sfr_on_ssp, log_z, tau_v1, tau_v2, dust_n):
+            # CSP weights
+            dt = jnp.concatenate(
+                [
+                    jnp.array([ssp_ages_yr[1] - ssp_ages_yr[0]]),
+                    0.5 * (ssp_ages_yr[2:] - ssp_ages_yr[:-2]),
+                    jnp.array([ssp_ages_yr[-1] - ssp_ages_yr[-2]]),
+                ]
+            )
+            weights = sfr_on_ssp * dt
+
+            # Metallicity interpolation
+            log_z_c = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
+            idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
+            frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
+            ssp_at_z = (1.0 - frac) * ssp_on_pixels[idx] + frac * ssp_on_pixels[idx + 1]
+
+            # Dust at pixel wavelengths
+            wave_ratio = (wave_rest_pixels / 5500.0) ** dust_n
+            tau_v_eff = dust_age_w * tau_v1 + tau_v2
+            dust = jnp.exp(-(tau_v_eff[:, None] * wave_ratio[None, :]))
+
+            # Weighted sum
+            flux = jnp.einsum("i,ip,ip->p", weights, dust, ssp_at_z)
+            return flux_scale * flux * LSUN_ERG_PER_S
+
+        return fused_spec
+
+    # -------------------------------------------------------------------
     # Forward predictions
     # -------------------------------------------------------------------
 
@@ -450,28 +540,13 @@ class Model:
         return jnp.array(fluxes)
 
     def _predict_photometry_fast(self, params):
-        """Fast photometry using precomputed SSP broadband fluxes."""
+        """Fast photometry using fused JIT kernel."""
         p = self._get_internal_params(params)
-        precomp = self._precomp
         sfr = self._compute_sfr(p)
-
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
-
-        ssp_phot_at_z = interpolate_ssp_phot_metallicity(
-            precomp.ssp_phot, self.ssp_data.ssp_lgmet, p["log_z"]
+        return self._fused_photometry(
+            sfr_on_ssp, p["log_z"], p["tau_v1"], p["tau_v2"], p["dust_n"]
         )
-
-        # Fast dust: uses precomputed age sigmoid weights
-        dust_at_eff = charlot_fall_at_wavelengths_fast(
-            precomp.effective_wavelengths_rest,
-            self._dust_age_weights,
-            tau_v1=p["tau_v1"],
-            tau_v2=p["tau_v2"],
-            n_slope=p["dust_n"],
-        )
-
-        return fast_photometry(weights, ssp_phot_at_z, dust_at_eff, precomp.flux_scale)
 
     def precompute_spectroscopy(self, wave_obs):
         """Pre-interpolate SSP templates to observed wavelength grid.
@@ -498,6 +573,7 @@ class Model:
             self._dl_cm_fixed,
         )
         self._wave_obs = jnp.asarray(wave_obs)
+        self._fused_spectrum = self._build_fused_spectrum()
         return self
 
     def predict_spectrum(self, params, wave_obs=None):
@@ -543,32 +619,11 @@ class Model:
         )
 
     def _predict_spectrum_fast(self, params):
-        """Fast spectrum using pre-interpolated SSP templates."""
-        from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
-
+        """Fast spectrum using fused JIT kernel."""
         p = self._get_internal_params(params)
-        precomp = self._spec_precomp
         sfr = self._compute_sfr(p)
-
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
-
-        # Interpolate pre-rebinned SSPs to target metallicity
-        ssp_at_z = interpolate_ssp_phot_metallicity(
-            precomp.ssp_on_pixels, self.ssp_data.ssp_lgmet, p["log_z"]
-        )
-
-        # Fast dust: uses precomputed age sigmoid weights
-        dust_at_pix = charlot_fall_at_wavelengths_fast(
-            precomp.wave_rest_pixels,
-            self._dust_age_weights,
-            tau_v1=p["tau_v1"],
-            tau_v2=p["tau_v2"],
-            n_slope=p["dust_n"],
-        )
-
-        flux = fast_spectrum(weights, ssp_at_z, dust_at_pix, precomp.flux_scale)
-        return flux * LSUN_ERG_PER_S
+        return self._fused_spectrum(sfr_on_ssp, p["log_z"], p["tau_v1"], p["tau_v2"], p["dust_n"])
 
     def predict_sfh(self, params, n_linear=1000):
         """Compute SFH on a uniform linear-time grid for plotting.
