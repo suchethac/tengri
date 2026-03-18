@@ -190,6 +190,16 @@ class Model:
         self._has_field = spec.stochastic
         self._field_model = sfh_settings.get("sfh_field_model", "drw")
 
+        # Velocity dispersion: only apply if sigma_v is in the spec
+        self._has_sigma_v = spec.has_param("sigma_v") if hasattr(spec, "has_param") else False
+        if not self._has_sigma_v:
+            # Check if sigma_v is in the param names directly
+            try:
+                spec.get_distribution("sigma_v")
+                self._has_sigma_v = True
+            except KeyError:
+                self._has_sigma_v = False
+
         # Precompute luminosity distance if redshift is fixed
         redshift_dist = spec.get_distribution("redshift")
         if redshift_dist.is_fixed:
@@ -436,7 +446,8 @@ class Model:
         """Build a single JIT function: SFR-on-SSP → spectrum.
 
         Same fusion approach as photometry but for spectroscopic pixels.
-        Uses forward_dtype for mixed-precision support.
+        Uses forward_dtype for mixed-precision support. Includes velocity
+        dispersion broadening only if sigma_v is in the ParamSpec.
         """
         from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 
@@ -444,14 +455,23 @@ class Model:
         precomp = self._spec_precomp
         ssp_on_pixels = precomp.ssp_on_pixels.astype(fdt)
         ssp_lgmet = self.ssp_data.ssp_lgmet.astype(fdt)
+        wave_obs_pixels = precomp.wave_obs_pixels.astype(fdt)
         wave_rest_pixels = precomp.wave_rest_pixels.astype(fdt)
         dust_age_w = self._dust_age_weights.astype(fdt)
         flux_scale = fdt.type(precomp.flux_scale)
         ssp_ages_yr = self.ssp_ages_yr.astype(fdt)
         lsun = fdt.type(LSUN_ERG_PER_S)
+        n_pix = len(wave_obs_pixels)
+        has_sigma_v = self._has_sigma_v
+
+        # Precompute FFT frequencies for velocity broadening (only if needed)
+        if has_sigma_v:
+            fft_freq = jnp.fft.rfftfreq(n_pix).astype(fdt)
+            dlnwave = jnp.log(wave_obs_pixels[1] / wave_obs_pixels[0]).astype(fdt)
+            c_km_s = fdt.type(299792.458)
 
         @jax.jit
-        def fused_spec(sfr_on_ssp, log_z, tau_v1, tau_v2, dust_n):
+        def fused_spec(sfr_on_ssp, log_z, tau_v1, tau_v2, dust_n, sigma_v=0.0):
             sfr = sfr_on_ssp.astype(fdt)
             lz = jnp.asarray(log_z, dtype=fdt)
             tv1 = jnp.asarray(tau_v1, dtype=fdt)
@@ -479,9 +499,18 @@ class Model:
             tau_v_eff = dust_age_w * tv1 + tv2
             dust = jnp.exp(-(tau_v_eff[:, None] * wave_ratio[None, :]))
 
-            # Weighted sum — output in float64 for likelihood stability
+            # Weighted sum
             flux = jnp.einsum("i,ip,ip->p", weights, dust, ssp_at_z)
-            return (flux_scale * flux * lsun).astype(jnp.float64)
+            flux = flux_scale * flux * lsun
+
+            if has_sigma_v:
+                # Velocity dispersion broadening (FFT convolution)
+                sv = jnp.asarray(sigma_v, dtype=fdt)
+                sigma_pix = (sv / c_km_s) / dlnwave
+                kernel_ft = jnp.exp(-2.0 * jnp.pi**2 * sigma_pix**2 * fft_freq**2)
+                flux = jnp.fft.irfft(jnp.fft.rfft(flux) * kernel_ft, n=n_pix)
+
+            return flux.astype(jnp.float64)
 
         return fused_spec
 
@@ -651,7 +680,11 @@ class Model:
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        return self._fused_spectrum(sfr_on_ssp, p["log_z"], p["tau_v1"], p["tau_v2"], p["dust_n"])
+        # Only pass sigma_v if it's a model parameter
+        sigma_v = params.get("sigma_v", 0.0) if self._has_sigma_v else 0.0
+        return self._fused_spectrum(
+            sfr_on_ssp, p["log_z"], p["tau_v1"], p["tau_v2"], p["dust_n"], sigma_v
+        )
 
     def predict_sfh(self, params, n_linear=1000):
         """Compute SFH on a uniform linear-time grid for plotting.
@@ -902,6 +935,43 @@ class Model:
             noise=jnp.stack([r.noise for r in results]),
             params=params_batch,
         )
+
+    # -------------------------------------------------------------------
+    # Batch predictions (vmap over galaxies)
+    # -------------------------------------------------------------------
+
+    def predict_photometry_batch(self, params_batch):
+        """Compute photometry for a batch of galaxies via jax.vmap.
+
+        Parameters
+        ----------
+        params_batch : dict of arrays
+            Each value has a leading batch dimension: shape (N, ...).
+            E.g. ``{"sfh_dpl_alpha": array([1.0, 1.5, 2.0]), ...}``
+
+        Returns
+        -------
+        array, shape (N, n_filters)
+            Photometric flux for each galaxy.
+        """
+        return jax.vmap(self.predict_photometry)(params_batch)
+
+    def predict_spectrum_batch(self, params_batch):
+        """Compute spectra for a batch of galaxies via jax.vmap.
+
+        Requires ``precompute_spectroscopy()`` to have been called.
+
+        Parameters
+        ----------
+        params_batch : dict of arrays
+            Each value has leading batch dimension.
+
+        Returns
+        -------
+        array, shape (N, n_pix)
+            Spectral flux for each galaxy.
+        """
+        return jax.vmap(self.predict_spectrum)(params_batch)
 
     # -------------------------------------------------------------------
     # Convenience fit

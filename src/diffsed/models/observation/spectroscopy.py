@@ -50,6 +50,52 @@ def compute_spectrum(
 
 
 @jax.jit
+def velocity_broaden(
+    flux: jnp.ndarray,
+    wave: jnp.ndarray,
+    sigma_km_s: float,
+) -> jnp.ndarray:
+    """Broaden a spectrum by stellar velocity dispersion.
+
+    Convolves with a Gaussian in log-wavelength space (equivalent to
+    velocity space: Δv/c = Δln(λ)). Uses FFT convolution for speed.
+
+    Parameters
+    ----------
+    flux : array, shape (n_pix,)
+        Input spectrum on a uniform-in-wavelength grid.
+    wave : array, shape (n_pix,)
+        Wavelength grid (Angstrom). Must be uniformly spaced.
+    sigma_km_s : float
+        Velocity dispersion in km/s. Typical range: 50-300 km/s.
+
+    Returns
+    -------
+    array, shape (n_pix,)
+        Broadened spectrum.
+    """
+    c_km_s = 299792.458  # speed of light in km/s
+    sigma_v = sigma_km_s / c_km_s  # fractional velocity dispersion
+
+    # Pixel scale in log-wavelength
+    dlnwave = jnp.log(wave[1] / wave[0])  # assumes uniform spacing
+
+    # Gaussian kernel width in pixels
+    sigma_pix = sigma_v / dlnwave
+
+    # Build Gaussian kernel in Fourier space (faster than real-space)
+    n = len(flux)
+    freq = jnp.fft.rfftfreq(n)
+    kernel_ft = jnp.exp(-2.0 * jnp.pi**2 * sigma_pix**2 * freq**2)
+
+    # FFT convolution
+    flux_ft = jnp.fft.rfft(flux)
+    broadened = jnp.fft.irfft(flux_ft * kernel_ft, n=n)
+
+    return broadened
+
+
+@jax.jit
 def chebyshev_calibration(
     wave_obs: jnp.ndarray, coeffs: jnp.ndarray, wave_min: float, wave_max: float
 ) -> jnp.ndarray:
