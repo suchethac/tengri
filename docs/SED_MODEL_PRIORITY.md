@@ -15,19 +15,20 @@ Prospector, Bagpipes, CIGALE, BEAGLE, and Synthesizer.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| SFH (8 parametric + burst + GP field) | Complete | Best-in-class stochastic model |
-| SSP/CSP (DSPS JAX) | Complete | Metallicity interpolation, precomputed tables |
-| Dust attenuation (Charlot & Fall) | Partial | Only power-law curve; no flexibility |
-| Dust emission | Missing | Cannot fit IR/FIR data |
-| Nebular emission | Missing | No emission lines or continuum |
-| AGN | Missing | Cannot model active galaxies |
-| IGM absorption | Missing | Cannot fit z > 3 UV photometry |
+| SFH (8 parametric + burst + GP field) | **Complete** | Best-in-class stochastic model |
+| SSP/CSP (DSPS JAX) | **Complete** | Metallicity interpolation, precomputed tables |
+| Dust attenuation | **Complete** | 6 curves + f_obscuration + per-component control |
+| Dust emission | **Complete** | 3 models: greybody, Dale+2014, DL07 analytic + grid |
+| Nebular (CLOUDY grids) | **Complete** | 8 HDF5 grids, trilinear interp, Q_H on-the-fly |
+| Nebular (Cue emulator) | **Complete** | JAX port of Li+2025, 12 params, needs weight conversion |
+| AGN | **Complete** | 3 models: simple, standard (SS73), Kubota & Done 2018 |
+| IGM absorption | **Complete** | Inoue+2014, 39 Lyman lines + continuum |
 | Metallicity | Basic | Single value, no age evolution |
-| Noise model | Basic | Gaussian only, no jitter/outlier |
+| Noise model | **Complete** | Student-t outlier + fractional calibration (separate agent) |
 | Calibration | Missing | No spectrophotometric polynomial |
-| Observation types | Complete | Photometry + spectroscopy + combined |
-| Filters | Complete | 50+ from SVO |
-| Inference | Complete | MAP, RT, NUTS, geoVI, MGVI, EVI |
+| Observation types | **Complete** | Photometry + spectroscopy + combined |
+| Filters | **Complete** | 50+ from SVO |
+| Inference | **Complete** | MAP, RT, NUTS, geoVI, MGVI, EVI |
 
 ---
 
