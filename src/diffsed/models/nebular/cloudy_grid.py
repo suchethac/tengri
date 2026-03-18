@@ -240,8 +240,15 @@ class CloudyGridBackend:
         self.has_free_params = True
         self.grid = load_cloudy_grid(grid_path)
 
-        # Precompute Q_H table from SSP if provided
+        # Max age for nebular emission: 100 Myr (conservative).
+        # CLOUDY grid stops at ~20 Myr, but Q_H is non-negligible up to
+        # ~100 Myr from post-AGB/HB stars. Beyond 100 Myr, Q_H drops
+        # >6 orders of magnitude below peak — safe to ignore.
+        self._max_neb_log_age = 8.0  # log10(100 Myr in yr)
+
+        # Precompute Q_H table and young-age index from SSP if provided
         self._qh_table = None
+        self._young_idx = None  # indices of SSP age bins with nebular emission
         if ssp_data is not None:
             self._precompute_qh(ssp_data)
 
@@ -257,6 +264,13 @@ class CloudyGridBackend:
         self._qh_table = _compute_qh_grid(ssp_wave, ssp_flux)
         self._qh_log_met = ssp_data.ssp_lgmet
         self._qh_log_age = ssp_data.ssp_lg_age_gyr + 9.0  # log(age/yr)
+
+        # Precompute indices of young SSP age bins (only these produce
+        # ionizing photons and contribute to nebular emission)
+        ssp_log_ages = np.array(self._qh_log_age)
+        young_mask = ssp_log_ages <= self._max_neb_log_age
+        self._young_idx = np.where(young_mask)[0]
+        self._n_young = len(self._young_idx)
 
     def _get_qh_at(
         self,
@@ -318,26 +332,25 @@ class CloudyGridBackend:
 
         grid = self.grid
 
-        # Vectorized: compute line luminosity contribution for one age bin
+        # Only young SSP age bins contribute (age < ~20 Myr)
+        # Slice to young bins only — 93 → ~10 bins, ~10x less work
+        young_idx = self._young_idx
+        young_ages = ssp_log_ages_yr[young_idx]
+        young_weights = ssp_weights[young_idx]
+
         def _line_contrib_one_age(log_age_i, weight_i):
-            age_in_grid = (
-                (log_age_i >= grid.line_log_age[0])
-                & (log_age_i <= grid.line_log_age[-1])
-            )
             qh_i = self._get_qh_at(log_z, log_age_i)
             log_lum_per_qh = _trilinear_interp(
                 grid.line_luminosity,
                 grid.line_log_met, grid.line_log_age, grid.line_log_U,
                 neb_logZ_gas, log_age_i, neb_logU,
             )
-            lum_per_qh = 10.0 ** log_lum_per_qh
-            contrib = weight_i * qh_i * lum_per_qh * (1.0 - neb_fesc)
-            return jnp.where(age_in_grid, contrib, 0.0)
+            return weight_i * qh_i * (10.0 ** log_lum_per_qh) * (1.0 - neb_fesc)
 
-        # vmap over all age bins, then sum
+        # vmap over young age bins only, then sum
         all_contribs = jax.vmap(
             _line_contrib_one_age
-        )(ssp_log_ages_yr, ssp_weights)  # (n_age, n_lines)
+        )(young_ages, young_weights)  # (n_young, n_lines)
 
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
         return grid.line_wavelengths, total_line_lum
@@ -365,24 +378,23 @@ class CloudyGridBackend:
 
         grid = self.grid
 
+        # Only young age bins
+        young_idx = self._young_idx
+        young_ages = ssp_log_ages_yr[young_idx]
+        young_weights = ssp_weights[young_idx]
+
         def _cont_contrib_one_age(log_age_i, weight_i):
-            age_in_grid = (
-                (log_age_i >= grid.cont_log_age[0])
-                & (log_age_i <= grid.cont_log_age[-1])
-            )
             qh_i = self._get_qh_at(log_z, log_age_i)
             log_cont_per_qh = _trilinear_interp(
                 grid.cont_luminosity,
                 grid.cont_log_met, grid.cont_log_age, grid.cont_log_U,
                 neb_logZ_gas, log_age_i, neb_logU,
             )
-            cont_per_qh = 10.0 ** log_cont_per_qh
-            contrib = weight_i * qh_i * cont_per_qh * (1.0 - neb_fesc)
-            return jnp.where(age_in_grid, contrib, 0.0)
+            return weight_i * qh_i * (10.0 ** log_cont_per_qh) * (1.0 - neb_fesc)
 
         all_contribs = jax.vmap(
             _cont_contrib_one_age
-        )(ssp_log_ages_yr, ssp_weights)  # (n_age, n_wave_cont)
+        )(young_ages, young_weights)  # (n_young, n_wave_cont)
 
         total_cont = jnp.sum(all_contribs, axis=0)
         return grid.cont_wavelength, total_cont
