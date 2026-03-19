@@ -243,12 +243,60 @@ _DUST_EMISSION_PARAMS = {
     ),
 }
 
+_RADIO_PARAMS = {
+    "radio_q_ir": (
+        "FIR-radio correlation q_IR (Bell 2003: 2.64, evolves with z)",
+        lambda lo, hi: True,
+        "",
+        Fixed(2.64),
+    ),
+    "radio_alpha_sf": (
+        "SF synchrotron spectral index (typical 0.7-0.8)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(0.8),
+    ),
+    "radio_loudness": (
+        "AGN radio-loudness log10(L_5GHz/L_B) (>1 = radio-loud)",
+        lambda lo, hi: True,
+        "",
+        Fixed(0.0),
+    ),
+    "radio_alpha_agn": (
+        "AGN radio spectral index (typical 0.7)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(0.7),
+    ),
+}
+
+_XRAY_PARAMS = {
+    "xray_gamma_agn": (
+        "AGN X-ray photon index Gamma (typical 1.4-2.4)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(1.8),
+    ),
+    "xray_alpha_ox": (
+        "UV-to-X-ray slope alpha_ox (typical -2.0 to -1.0)",
+        lambda lo, hi: True,
+        "",
+        Fixed(-1.4),
+    ),
+}
+
 _AGN_PARAMS = {
     "agn_frac": (
         "AGN luminosity fraction (L_AGN / L_stellar_bol)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         Fixed(0.0),
+    ),
+    "agn_log_lbol": (
+        "AGN bolometric luminosity log10(L_bol / Lsun) — direct parametric mode",
+        lambda lo, hi: True,
+        "",
+        Fixed(10.0),
     ),
     "agn_alpha": (
         "AGN disc power-law slope",
@@ -267,6 +315,12 @@ _AGN_PARAMS = {
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         Fixed(5.0),
+    ),
+    "agn_torus_frac": (
+        "AGN torus covering factor (fraction of L_bol re-emitted by torus)",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1]",
+        Fixed(0.5),
     ),
     "agn_log_mbh": (
         "AGN black hole mass log10(M_BH/Msun)",
@@ -333,23 +387,32 @@ _LEGACY_SFH_TYPE_ALIASES = {
 }
 
 # Settings keys that are not model parameters
-SETTINGS_KEYS = frozenset({
-    "stochastic", "n_grid", "mean_sfh_type",
-    # IGM absorption
-    "apply_igm",
-    # Nebular emission
-    "nebular", "cloudy_grid_path", "cue_weights_path",
-    # Dust law
-    "dust_law_bc", "dust_law_diff",
-    # Dust emission
-    "dust_emission", "dl07_grid_path",
-    # AGN
-    "agn_model",
-    # Radio & X-ray
-    "radio", "xray",
-    # Evolving metallicity
-    "evolving_metallicity",
-})
+SETTINGS_KEYS = frozenset(
+    {
+        "stochastic",
+        "n_grid",
+        "mean_sfh_type",
+        # IGM absorption
+        "apply_igm",
+        # Nebular emission
+        "nebular",
+        "cloudy_grid_path",
+        "cue_weights_path",
+        # Dust law
+        "dust_law_bc",
+        "dust_law_diff",
+        # Dust emission
+        "dust_emission",
+        "dl07_grid_path",
+        # AGN
+        "agn_model",
+        # Radio & X-ray
+        "radio",
+        "xray",
+        # Evolving metallicity
+        "evolving_metallicity",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -357,9 +420,17 @@ SETTINGS_KEYS = frozenset({
 # ---------------------------------------------------------------------------
 
 
-def _build_param_registry(mean_sfh_type, nebular=False, dust_law_bc="power_law",
-                          dust_law_diff=None, dust_emission=None, agn_model=None,
-                          evolving_metallicity=False):
+def _build_param_registry(
+    mean_sfh_type,
+    nebular=False,
+    dust_law_bc="power_law",
+    dust_law_diff=None,
+    dust_emission=None,
+    agn_model=None,
+    radio=False,
+    xray=False,
+    evolving_metallicity=False,
+):
     """Build the parameter registry for a given model configuration.
 
     Parameters
@@ -431,6 +502,18 @@ def _build_param_registry(mean_sfh_type, nebular=False, dust_law_bc="power_law",
     # AGN params (only when AGN model is enabled)
     if agn_model:
         for pname, (desc, check, err, default) in _AGN_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+
+    # Radio params (only when radio=True)
+    if radio:
+        for pname, (desc, check, err, default) in _RADIO_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+
+    # X-ray params (only when xray=True)
+    if xray:
+        for pname, (desc, check, err, default) in _XRAY_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
@@ -545,6 +628,8 @@ class ParamSpec:
             dust_law_diff=self.dust_law_diff,
             dust_emission=self.dust_emission,
             agn_model=self.agn_model,
+            radio=self.radio,
+            xray=self.xray,
             evolving_metallicity=self.evolving_metallicity,
         )
         self._valid_param_names = frozenset(self._param_registry.keys())
