@@ -536,14 +536,14 @@ class ParamSpec:
     Settings (not parameters):
     - mean_sfh_type (str or list[str]): SFH model(s). Default: ["tsnorm", "field"].
     - stochastic (bool): DEPRECATED. Use mean_sfh_type with/without "field" instead.
-    - n_grid (int): GP grid size. Only used if "field" in mean_sfh_type. Default: 256.
+    - n_grid (int): GP grid size. Only used if "field" in mean_sfh_type. Default: 64.
     """
 
     def __init__(self, **kwargs):
         # --- Extract settings ---
         raw_sfh_type = kwargs.pop("mean_sfh_type", None)
         explicit_stochastic = kwargs.pop("stochastic", None)
-        n_grid = int(kwargs.pop("n_grid", 256))
+        n_grid = int(kwargs.pop("n_grid", 64))
 
         # IGM absorption (default: True — negligible at z<2, essential at z>3)
         self.apply_igm = kwargs.pop("apply_igm", True)
