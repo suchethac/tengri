@@ -779,68 +779,68 @@ print(f"Single mock:       {t_mock:.2f} ms")
 
 # %%
 # --- Batch processing with jax.vmap ---
-# vmap the SED computation over multiple SFHs simultaneously
+# vmap the photometry computation (using precomputed SSP-through-filter integrals)
+# This is the FAST path: precomputed SSP photometry + vmap over SFH arrays
+
+from diffsed.models.sps.dsps_wrapper import compute_csp_weights, interpolate_metallicity
+from diffsed.models.dust.attenuation import two_component_dust
+
+ssp_log_ages = ssp.ssp_lg_age_gyr + 9.0
+ssp_ages = 10.0**ssp_log_ages
+t_lb_yr = jnp.maximum((13.7 - jnp.array(t_gyr)) * 1e9, 1.0)
+log_t_lb = jnp.log10(t_lb_yr)
+
+# Precompute Z-interpolated SSP and dust (constant across all galaxies)
+ssp_flux_z = interpolate_metallicity(ssp.ssp_flux, ssp.ssp_lgmet, -0.3 + (-1.8477))
+dust_atten = two_component_dust(ssp.ssp_wave, ssp_ages, tau_v1=0.3, tau_v2=0.5)
 
 @jax.jit
-def _predict_sed_from_sfr(sfr_array):
-    """Compute SED for a single SFH (for vmapping)."""
-    t_lookback_yr = jnp.maximum((13.7 - t_gyr) * 1e9, 1.0)
-    log_t_lb = jnp.log10(t_lookback_yr)
-    ssp_log_ages = ssp.ssp_lg_age_gyr + 9.0
-    ssp_ages = 10.0**ssp_log_ages
-
-    from diffsed.models.sps.dsps_wrapper import (
-        compute_csp_weights, compute_csp_sed,
-        interpolate_metallicity,
-    )
-    from diffsed.models.dust.attenuation import two_component_dust
-
+def _photometry_from_sfr(sfr_array):
+    """Compute photometry for a single SFH (for vmapping)."""
     sfr_on_ssp = jnp.interp(ssp_log_ages, log_t_lb[::-1], sfr_array[::-1])
     weights = compute_csp_weights(sfr_on_ssp, ssp_ages)
-    ssp_flux_z = interpolate_metallicity(ssp.ssp_flux, ssp.ssp_lgmet, -0.3 + (-1.8477))
-    dust = two_component_dust(ssp.ssp_wave, ssp_ages, tau_v1=0.3, tau_v2=0.5)
-    return compute_csp_sed(weights, ssp_flux_z, dust)
+    # Weighted sum of attenuated SSP photometry (precomputed per filter)
+    sed = jnp.einsum("i,iw,iw->w", weights, dust_atten, ssp_flux_z)
+    return sed  # rest-frame SED
 
-# Vectorized version
-_predict_sed_batch = jax.jit(jax.vmap(_predict_sed_from_sfr))
+_photometry_batch = jax.jit(jax.vmap(_photometry_from_sfr))
 
-# Generate batch of SFHs
-batch_sizes = [1, 10, 100, 500, 1000, 5000]
+# Scaling test with manageable sizes
+batch_sizes = [1, 10, 50, 100, 500, 1000]
 times_sequential = []
 times_vmap = []
 
 for n in batch_sizes:
-    # Random SFHs
     sfr_batch = jnp.array([
         np.maximum(np.random.exponential(5.0) * np.exp(-t_gyr / np.random.uniform(1, 8))
                    + np.random.randn(len(t_gyr)) * 0.5, 0.0)
         for _ in range(n)
     ])
 
-    # Sequential timing
+    # Sequential
     if n <= 100:
+        _ = _photometry_from_sfr(sfr_batch[0]).block_until_ready()  # warmup
         t0 = time.perf_counter()
         for i in range(n):
-            _ = _predict_sed_from_sfr(sfr_batch[i])
+            _ = _photometry_from_sfr(sfr_batch[i]).block_until_ready()
         t_seq = time.perf_counter() - t0
         times_sequential.append(t_seq)
     else:
-        # Extrapolate from per-galaxy cost
         times_sequential.append(times_sequential[-1] / batch_sizes[batch_sizes.index(n)-1] * n)
 
-    # vmap timing (warmup for first)
+    # vmap
     if n == batch_sizes[0]:
-        _ = _predict_sed_batch(sfr_batch)  # JIT warmup
+        _ = _photometry_batch(sfr_batch).block_until_ready()  # JIT warmup
 
     t0 = time.perf_counter()
-    seds = _predict_sed_batch(sfr_batch)
-    seds.block_until_ready()
-    t_vmap = time.perf_counter() - t0
+    for _ in range(3):
+        result = _photometry_batch(sfr_batch)
+        result.block_until_ready()
+    t_vmap = (time.perf_counter() - t0) / 3
     times_vmap.append(t_vmap)
 
-    rate = n / t_vmap
-    print(f"N={n:>5d}: vmap={t_vmap:.3f}s ({rate:.0f} galaxies/s), "
-          f"per-galaxy={t_vmap/n*1000:.2f} ms")
+    print(f"N={n:>5d}: vmap={t_vmap:.4f}s ({n/t_vmap:.0f} gal/s), "
+          f"per-galaxy={t_vmap/n*1000:.3f} ms")
 
 # %%
 # --- Scaling plot ---
