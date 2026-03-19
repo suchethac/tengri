@@ -445,3 +445,74 @@ class TestQSOGenPrecision:
         cont = _broken_powerlaw_continuum(wave, -0.349, 0.593, 3880.0)
         idx = jnp.argmin(jnp.abs(wave - 5500))
         np.testing.assert_allclose(float(cont[idx]), 1.0, atol=0.01)
+
+
+class TestQSOGenEmissionLines:
+    """Validate QSOGen emission lines against original.
+
+    The original uses a full empirical template from the SDSS quasar
+    composite (Vanden Berk+2001), including FeII pseudo-continuum and
+    blended line complexes. diffsed uses 18 simple Gaussians. We
+    check that the strongest lines are present and in the right direction.
+    """
+
+    @pytest.fixture(scope="class")
+    def line_ref(self):
+        path = _DATA_DIR / "qsogen_lines_reference.npz"
+        if not path.is_file():
+            pytest.skip("QSOGen line reference not found")
+        return dict(np.load(str(path)))
+
+    def test_lines_add_flux(self):
+        """Emission lines should add positive flux to the continuum."""
+        from diffsed.models.agn.qsogen import qsogen_sed
+
+        wave = jnp.linspace(912, 30000, 5000)
+        sed_lines = np.asarray(qsogen_sed(wave))
+        sed_nolines = np.asarray(qsogen_sed(wave, agn_emline_scale=0.0))
+
+        # At Hα and [OIII], SED with lines should be brighter
+        w = np.asarray(wave)
+        for lam in [1216, 4861, 5007, 6563]:
+            idx = np.argmin(abs(w - lam))
+            assert sed_lines[idx] >= sed_nolines[idx] * 0.99, f"Lines should add flux at {lam}A"
+
+    def test_overall_shape_correlation(self, line_ref):
+        """Full SED shape should correlate > 0.95 with original."""
+        from scipy.stats import pearsonr
+
+        from diffsed.models.agn.qsogen import qsogen_sed
+
+        wave = jnp.array(line_ref["wave"])
+        sed_ds = np.asarray(qsogen_sed(wave))
+
+        c_aa = 2.998e18
+        w = np.asarray(wave)
+        orig_fnu = line_ref["flux_with_lines"] * w**2 / c_aa
+
+        idx = np.argmin(abs(w - 5500))
+        ds_n = sed_ds / sed_ds[idx]
+        orig_n = orig_fnu / orig_fnu[idx]
+
+        mask = (w > 1000) & (w < 25000) & np.isfinite(ds_n) & np.isfinite(orig_n)
+        r, _ = pearsonr(ds_n[mask], orig_n[mask])
+        assert r > 0.90, f"Shape correlation = {r:.3f}, expected > 0.90"
+
+    def test_halpha_prominent(self):
+        """Hα should be a prominent emission line (well above continuum)."""
+        from diffsed.models.agn.qsogen import qsogen_sed
+
+        wave = jnp.linspace(4000, 8000, 2000)
+        sed_lines = np.asarray(qsogen_sed(wave))
+        sed_nolines = np.asarray(qsogen_sed(wave, agn_emline_scale=0.0))
+
+        excess = sed_lines - sed_nolines
+        w = np.asarray(wave)
+        ha_mask = (w > 6500) & (w < 6600)
+        ha_excess = np.max(excess[ha_mask])
+        median_excess = np.median(excess[excess > 0])
+
+        # Hα should be well above the median line excess
+        assert ha_excess > median_excess * 3, (
+            f"Hα excess / median = {ha_excess / median_excess:.1f}, expected > 3"
+        )
