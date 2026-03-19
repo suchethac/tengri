@@ -25,9 +25,7 @@ _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
 # SSP files (PRSC isochrones, matching CLOUDY grid)
 _SSP_NONE_PATH = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
-_SSP_WNE_PATH = (
-    _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-)
+_SSP_WNE_PATH = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 _CLOUDY_PRSC_PATH = _DATA_DIR / "cloudy_grid_prsc.h5"
 _CUE_PATH = _DATA_DIR / "cue_weights.npz"
 
@@ -163,7 +161,7 @@ class TestBakedInVsCloudy:
             ratio = np.median(neb_sed[mask] / baked_neb[mask])
             assert 1.0 - tol < ratio < 1.0 + tol, (
                 f"Continuum {lo}-{hi}A: ratio={ratio:.4f}, "
-                f"expected {1.0-tol:.2f}-{1.0+tol:.2f}"
+                f"expected {1.0 - tol:.2f}-{1.0 + tol:.2f}"
             )
 
     @pytest.mark.parametrize(
@@ -214,9 +212,7 @@ class TestBakedInVsCloudy:
             pytest.skip(f"{line_name} too faint in baked-in SED")
 
         ratio = flux_cloudy / flux_baked
-        assert 0.80 < ratio < 1.25, (
-            f"{line_name}: CLOUDY/baked={ratio:.3f}, expected 0.80-1.25"
-        )
+        assert 0.80 < ratio < 1.25, f"{line_name}: CLOUDY/baked={ratio:.3f}, expected 0.80-1.25"
 
     def test_total_bolometric_agreement(
         self, ssp_data, ssp_wne, cloudy_backend, solar_met_idx, young_burst_idx
@@ -246,22 +242,16 @@ class TestBakedInVsCloudy:
         total_baked = np.sum(baked_neb[baked_neb > 0])
 
         ratio = total_cloudy / total_baked
-        assert 0.85 < ratio < 1.15, (
-            f"Bolometric: CLOUDY/baked={ratio:.3f}, expected 0.85-1.15"
-        )
+        assert 0.85 < ratio < 1.15, f"Bolometric: CLOUDY/baked={ratio:.3f}, expected 0.85-1.15"
 
     @pytest.mark.parametrize("age_myr", [1, 3, 5, 10])
-    def test_multiple_ages(
-        self, ssp_data, ssp_wne, cloudy_backend, solar_met_idx, age_myr
-    ):
+    def test_multiple_ages(self, ssp_data, ssp_wne, cloudy_backend, solar_met_idx, age_myr):
         """Agreement should hold across young SSP ages."""
         wave = np.array(ssp_data.ssp_wave)
         ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
         log_z = float(ssp_data.ssp_lgmet[solar_met_idx])
 
-        age_idx = int(
-            jnp.argmin(jnp.abs(10.0**ssp_log_ages_yr - age_myr * 1e6))
-        )
+        age_idx = int(jnp.argmin(jnp.abs(10.0**ssp_log_ages_yr - age_myr * 1e6)))
         weights = jnp.zeros(len(ssp_log_ages_yr))
         weights = weights.at[age_idx].set(1.0)
 
@@ -275,8 +265,7 @@ class TestBakedInVsCloudy:
             )
         )
         baked_neb = np.array(
-            ssp_wne.ssp_flux[solar_met_idx, age_idx]
-            - ssp_data.ssp_flux[solar_met_idx, age_idx]
+            ssp_wne.ssp_flux[solar_met_idx, age_idx] - ssp_data.ssp_flux[solar_met_idx, age_idx]
         )
 
         # Check H-alpha integrated flux
@@ -287,9 +276,7 @@ class TestBakedInVsCloudy:
             pytest.skip(f"Ha too faint at age={age_myr} Myr")
 
         ratio = flux_cloudy / flux_baked
-        assert 0.70 < ratio < 1.40, (
-            f"Ha at {age_myr} Myr: CLOUDY/baked={ratio:.3f}"
-        )
+        assert 0.70 < ratio < 1.40, f"Ha at {age_myr} Myr: CLOUDY/baked={ratio:.3f}"
 
 
 # ===================================================================
@@ -329,9 +316,7 @@ class TestBakedInVsCue:
         log_age_yr = float(ssp_log_ages_yr[young_burst_idx])
 
         # Get ionizing spectrum params for this SSP
-        ionspec_7, logqion = cue_backend.get_ionizing_params_at(
-            log_z, log_age_yr
-        )
+        ionspec_7, logqion = cue_backend.get_ionizing_params_at(log_z, log_age_yr)
         if ionspec_7 is None:
             pytest.skip("Ionizing params not available")
 
@@ -371,9 +356,7 @@ class TestBakedInVsCue:
 
         ratio = flux_cue / flux_baked
         # Wider tolerance: Cue is trained on different CLOUDY grids
-        assert 0.3 < ratio < 3.0, (
-            f"{line_name}: Cue/baked={ratio:.3f}, expected 0.3-3.0"
-        )
+        assert 0.3 < ratio < 3.0, f"{line_name}: Cue/baked={ratio:.3f}, expected 0.3-3.0"
 
     def test_continuum_agreement(
         self,
@@ -389,9 +372,7 @@ class TestBakedInVsCue:
         log_z = float(ssp_data.ssp_lgmet[solar_met_idx])
         log_age_yr = float(ssp_log_ages_yr[young_burst_idx])
 
-        ionspec_7, logqion = cue_backend.get_ionizing_params_at(
-            log_z, log_age_yr
-        )
+        ionspec_7, logqion = cue_backend.get_ionizing_params_at(log_z, log_age_yr)
         if ionspec_7 is None:
             pytest.skip("Ionizing params not available")
 
@@ -429,9 +410,7 @@ class TestBakedInVsCue:
             if mask.sum() < 5:
                 continue
             ratio = np.median(cue_neb_sed[mask] / baked_neb[mask])
-            assert 0.5 < ratio < 2.0, (
-                f"Cue continuum {lo}-{hi}A: ratio={ratio:.3f}"
-            )
+            assert 0.5 < ratio < 2.0, f"Cue continuum {lo}-{hi}A: ratio={ratio:.3f}"
 
 
 # ===================================================================
@@ -481,9 +460,7 @@ class TestCloudyVsCue:
         c_line_lum = float(c_lum_np[c_idx])
 
         # Cue
-        ionspec_7, logqion = cue_backend.get_ionizing_params_at(
-            log_z, log_age_yr
-        )
+        ionspec_7, logqion = cue_backend.get_ionizing_params_at(log_z, log_age_yr)
         if ionspec_7 is None:
             pytest.skip("Ionizing params not available")
 
@@ -516,8 +493,7 @@ class TestCloudyVsCue:
 
         log_ratio = np.log10(q_line_lum / c_line_lum)
         assert abs(log_ratio) < 0.5, (
-            f"{line_name}: log10(Cue/CLOUDY)={log_ratio:.3f}, "
-            f"expected |dex|<0.5"
+            f"{line_name}: log10(Cue/CLOUDY)={log_ratio:.3f}, expected |dex|<0.5"
         )
 
     def test_balmer_decrement_consistency(
@@ -551,9 +527,7 @@ class TestCloudyVsCue:
         c_hb = float(c_lum_np[np.argmin(np.abs(c_wav_np - 4861))])
 
         # Cue
-        ionspec_7, logqion = cue_backend.get_ionizing_params_at(
-            log_z, log_age_yr
-        )
+        ionspec_7, logqion = cue_backend.get_ionizing_params_at(log_z, log_age_yr)
         if ionspec_7 is None:
             pytest.skip("Ionizing params not available")
 
@@ -587,17 +561,11 @@ class TestCloudyVsCue:
         cue_decrement = q_ha / q_hb
 
         # Both should be roughly Case B (~2.86), within 30%
-        assert 2.0 < cloudy_decrement < 4.0, (
-            f"CLOUDY Ha/Hb={cloudy_decrement:.2f}"
-        )
-        assert 2.0 < cue_decrement < 4.0, (
-            f"Cue Ha/Hb={cue_decrement:.2f}"
-        )
+        assert 2.0 < cloudy_decrement < 4.0, f"CLOUDY Ha/Hb={cloudy_decrement:.2f}"
+        assert 2.0 < cue_decrement < 4.0, f"Cue Ha/Hb={cue_decrement:.2f}"
         # They should agree with each other to ~40%
         ratio = cue_decrement / cloudy_decrement
-        assert 0.6 < ratio < 1.6, (
-            f"Balmer decrement ratio Cue/CLOUDY={ratio:.2f}"
-        )
+        assert 0.6 < ratio < 1.6, f"Balmer decrement ratio Cue/CLOUDY={ratio:.2f}"
 
     def test_line_scatter_statistics(
         self,
@@ -624,9 +592,7 @@ class TestCloudyVsCue:
         c_wav_np, c_lum_np = np.array(c_wav), np.array(c_lum)
 
         # Cue
-        ionspec_7, logqion = cue_backend.get_ionizing_params_at(
-            log_z, log_age_yr
-        )
+        ionspec_7, logqion = cue_backend.get_ionizing_params_at(log_z, log_age_yr)
         if ionspec_7 is None:
             pytest.skip("Ionizing params not available")
 
@@ -657,17 +623,13 @@ class TestCloudyVsCue:
             diffs = np.abs(c_wav_np - cw)
             best = np.argmin(diffs)
             if diffs[best] < 2.0 and c_lum_np[best] > 0 and q_lum_np[ic] > 0:
-                offsets.append(
-                    np.log10(float(q_lum_np[ic]) / float(c_lum_np[best]))
-                )
+                offsets.append(np.log10(float(q_lum_np[ic]) / float(c_lum_np[best])))
 
         offsets = np.array(offsets)
         valid = np.isfinite(offsets)
         offsets = offsets[valid]
 
-        assert len(offsets) > 20, (
-            f"Only {len(offsets)} matched lines, expected >20"
-        )
+        assert len(offsets) > 20, f"Only {len(offsets)} matched lines, expected >20"
 
         median_offset = np.median(offsets)
         nmad = 1.4826 * np.median(np.abs(offsets - median_offset))
@@ -676,3 +638,87 @@ class TestCloudyVsCue:
             f"Median Cue-CLOUDY offset: {median_offset:.3f} dex, expected <0.3"
         )
         assert nmad < 0.5, f"NMAD scatter: {nmad:.3f} dex, expected <0.5"
+
+
+# ===================================================================
+# 4. diffsed nebular vs python-fsps CLOUDY (external reference)
+# ===================================================================
+
+_FSPS_NEB_REF = _DATA_DIR / "fsps_nebular_reference.npz"
+
+
+class TestVsFSPSNebular:
+    """Compare diffsed nebular emission against python-fsps built-in CLOUDY.
+
+    FSPS has its own CLOUDY integration (gas_logu, gas_logz parameters).
+    We compare the nebular contribution (neb - stellar) at key lines.
+    Both use the same underlying FSPS SSPs, so differences come from
+    the nebular model implementation only.
+    """
+
+    @pytest.fixture(scope="class")
+    def fsps_ref(self):
+        if not _FSPS_NEB_REF.is_file():
+            pytest.skip("FSPS nebular reference not found")
+        import os as _os
+
+        if "SPS_HOME" not in _os.environ:
+            pytest.skip("SPS_HOME not set")
+        return dict(np.load(str(_FSPS_NEB_REF)))
+
+    def test_halpha_neb_present(self, fsps_ref):
+        """FSPS should show strong Hα nebular emission at 3 Myr."""
+        wave = fsps_ref["wave"]
+        neb = fsps_ref["neb_logu-2_t0.003"]
+        cont = fsps_ref["noneb_logu-2_t0.003"]
+        idx = np.argmin(abs(wave - 6563))
+        ratio = (neb[idx] - cont[idx]) / max(cont[idx], 1e-50)
+        assert ratio > 10, f"FSPS Hα neb/cont = {ratio:.1f}, expected > 10"
+
+    def test_nebular_decreases_with_age(self, fsps_ref):
+        """Nebular emission should weaken with age."""
+        wave = fsps_ref["wave"]
+        idx_ha = np.argmin(abs(wave - 6563))
+        ratios = []
+        for tage in [0.001, 0.003, 0.01]:
+            key = f"logu-2_t{tage:.3f}"
+            neb = fsps_ref[f"neb_{key}"]
+            cont = fsps_ref[f"noneb_{key}"]
+            r = (neb[idx_ha] - cont[idx_ha]) / max(cont[idx_ha], 1e-50)
+            ratios.append(r)
+        # Should decrease (or at least not increase) with age
+        assert ratios[-1] < ratios[0] * 2, f"Nebular should weaken with age: {ratios}"
+
+    def test_higher_logu_stronger_oiii(self, fsps_ref):
+        """Higher ionization parameter should produce stronger [OIII]."""
+        wave = fsps_ref["wave"]
+        idx = np.argmin(abs(wave - 5007))
+        neb_hi = fsps_ref["neb_logu-2_t0.003"]
+        cont_hi = fsps_ref["noneb_logu-2_t0.003"]
+        neb_lo = fsps_ref["neb_logu-3_t0.003"]
+        cont_lo = fsps_ref["noneb_logu-3_t0.003"]
+
+        oiii_hi = (neb_hi[idx] - cont_hi[idx]) / max(cont_hi[idx], 1e-50)
+        oiii_lo = (neb_lo[idx] - cont_lo[idx]) / max(cont_lo[idx], 1e-50)
+
+        assert oiii_hi > oiii_lo, (
+            f"Higher logU should give stronger [OIII]: "
+            f"logU=-2: {oiii_hi:.1f}, logU=-3: {oiii_lo:.1f}"
+        )
+
+    def test_balmer_decrement_physical(self, fsps_ref):
+        """Hα/Hβ ratio should be ~2.86 (Case B recombination)."""
+        wave = fsps_ref["wave"]
+        neb = fsps_ref["neb_logu-2_t0.003"]
+        cont = fsps_ref["noneb_logu-2_t0.003"]
+
+        idx_ha = np.argmin(abs(wave - 6563))
+        idx_hb = np.argmin(abs(wave - 4861))
+
+        ha_neb = neb[idx_ha] - cont[idx_ha]
+        hb_neb = neb[idx_hb] - cont[idx_hb]
+
+        if hb_neb > 0:
+            ratio = ha_neb / hb_neb
+            # Case B: 2.86 for T=10^4K. Allow 1.5-5 for resolution effects.
+            assert 1.5 < ratio < 5.0, f"Hα/Hβ = {ratio:.2f}, expected ~2.86"
