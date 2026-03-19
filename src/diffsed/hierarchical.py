@@ -113,7 +113,8 @@ class HierarchicalFitter:
         self._template = model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
         self._spec = self._template.spec
         self._free_names = [
-            n for n in self._spec.free_params if n not in ("psd_sigma", "psd_tau_myr")
+            n for n in self._spec.free_params
+            if n not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
         ]
 
     def run(self, method="geovi", *, key=None, **kwargs):
@@ -229,12 +230,12 @@ class HierarchicalFitter:
                     lo, hi = bounds[name]
                     params[name] = to_bounded(ub_scalars[name], lo, hi)
                 for name, val in fixed_values.items():
-                    if name not in ("psd_sigma", "psd_tau_myr"):
+                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
                         params[name] = val
-                params["psd_sigma"] = psd_sigma
-                params["psd_tau_myr"] = psd_tau
+                params["sfh_field_psd_sigma"] = psd_sigma
+                params["sfh_field_psd_tau_myr"] = psd_tau
                 if stochastic:
-                    params["psd_xi"] = xi
+                    params["sfh_field_xi"] = xi
                 return model.predict_photometry(params)
 
             if stochastic:
@@ -707,14 +708,14 @@ class HierarchicalFitter:
                     lo, hi = bounds[name]
                     params[name] = to_bounded(ub_scalars[name], lo, hi)
                 for name, val in fixed_values.items():
-                    if name not in ("psd_sigma", "psd_tau_myr"):
+                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
                         params[name] = val
 
                 # CFM already applies sqrt(P) * xi, so pass the full
                 # correlated field as the GP realization
-                params["psd_xi"] = gp_field
-                params["psd_sigma"] = 1.0
-                params["psd_tau_myr"] = 50.0
+                params["sfh_field_xi"] = gp_field
+                params["sfh_field_psd_sigma"] = 1.0
+                params["sfh_field_psd_tau_myr"] = 50.0
                 return model.predict_photometry(params)
 
             predictions = jax.vmap(forward_one)(gal_ub, gal_xi)
@@ -992,12 +993,12 @@ class HierarchicalFitter:
                     lo, hi = bounds[name]
                     params[name] = to_bounded(ub_scalars[name], lo, hi)
                 for name, val in fixed_values.items():
-                    if name not in ("psd_sigma", "psd_tau_myr"):
+                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
                         params[name] = val
-                params["psd_sigma"] = psd_sigma
-                params["psd_tau_myr"] = psd_tau
+                params["sfh_field_psd_sigma"] = psd_sigma
+                params["sfh_field_psd_tau_myr"] = psd_tau
                 if stochastic:
-                    params["psd_xi"] = xi
+                    params["sfh_field_xi"] = xi
                 return _predict_single(params)
 
             if stochastic:
@@ -1233,12 +1234,12 @@ class HierarchicalFitter:
                     lo, hi = bounds[name]
                     params[name] = to_bounded(ub_scalars[name], lo, hi)
                 for name, val in fixed_values.items():
-                    if name not in ("psd_sigma", "psd_tau_myr"):
+                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
                         params[name] = val
-                params["psd_sigma"] = psd_sigma
-                params["psd_tau_myr"] = psd_tau
+                params["sfh_field_psd_sigma"] = psd_sigma
+                params["sfh_field_psd_tau_myr"] = psd_tau
                 if stochastic:
-                    params["psd_xi"] = xi
+                    params["sfh_field_xi"] = xi
                 return model.predict_photometry(params)
 
             if stochastic:

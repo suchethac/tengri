@@ -568,6 +568,24 @@ class Model:
             elif "psd_xi" in params:
                 internal["xi"] = params["psd_xi"]
 
+        # Warn about unrecognized keys (silent bugs when wrong names used)
+        recognized = set(self._param_map.keys())
+        recognized.update(self._LEGACY_ALIASES.keys() if hasattr(self, "_LEGACY_ALIASES") else ())
+        recognized.update({"sfh_field_xi", "psd_xi"})
+        # Also recognize internal names (for backwards compat)
+        recognized.update(int_name for _, (int_name, _, _) in self._param_map.items())
+        unrecognized = set(params.keys()) - recognized
+        if unrecognized:
+            import warnings
+
+            warnings.warn(
+                f"Unrecognized parameter names passed to Model: {sorted(unrecognized)}. "
+                f"These will be silently ignored. Did you mean one of: "
+                f"{sorted(self._param_map.keys())}?",
+                UserWarning,
+                stacklevel=3,
+            )
+
         return internal
 
     @staticmethod
