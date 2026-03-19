@@ -215,7 +215,7 @@ class Model:
         self._dust_emission_model = getattr(spec, "dust_emission", None)
         if self._dust_emission_model:
             for p in ["dust_T", "dust_beta_ir", "dust_alpha_mir", "dust_alpha_dale",
-                       "dust_umin", "dust_gamma_dl", "dust_qpah"]:
+                       "dust_umin", "dust_gamma_dl", "dust_qpah", "dust_eta_balance"]:
                 self._param_map[p] = (p, 1.0, 0.0)
 
         # AGN model (None = disabled)
@@ -648,9 +648,16 @@ class Model:
             _c_aa_em = 2.99792458e18  # c in Angstrom/s
             nu_em = _c_aa_em / self.ssp_data.ssp_wave
             L_absorbed = -jnp.trapezoid(sed_intrinsic - sed_attenuated, nu_em)
+            # Energy balance deviation:
+            #   eta=1.0 → strict energy balance (default)
+            #   eta>1.0 → extra IR from old-star heating, AGN, geometry
+            #   eta<1.0 → IR-faint (e.g., dust geometry allows UV escape)
+            # Use LogNormal(0, 0.3) prior for ~factor of 2 scatter around strict.
+            eta_balance = p.get("dust_eta_balance", 1.0)
+            L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
             dust_ir = get_emission_model(self._dust_emission_model)(
                 self.ssp_data.ssp_wave,
-                L_absorbed,
+                L_ir,
                 dust_T=p.get("dust_T", 35.0),
                 dust_beta_ir=p.get("dust_beta_ir", 1.6),
                 dust_alpha_mir=p.get("dust_alpha_mir", 2.0),

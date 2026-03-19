@@ -149,9 +149,11 @@ def _tau_ls_laf(
 
     for j in range(_N_LINES):
         lam_j = _LAMBDA_LYMAN[j]
-        # Line contributes only where wave_obs < lam_j * (1 + z_source)
+        # Line j absorbs only photons with lam_j < wave_obs < lam_j*(1+z_S)
+        # Lower bound: photon must have been at line frequency along sightline
+        # Upper bound: absorber must be between us and the source
         lam_max = lam_j * (1.0 + z_source)
-        active = wave_obs < lam_max
+        active = (wave_obs > lam_j) & (wave_obs < lam_max)
 
         # Regime breakpoints
         lam_break1 = 2.2 * lam_j   # z = 1.2
@@ -191,7 +193,8 @@ def _tau_ls_dla(
     for j in range(_N_LINES):
         lam_j = _LAMBDA_LYMAN[j]
         lam_max = lam_j * (1.0 + z_source)
-        active = wave_obs < lam_max
+        # Same lower bound as LAF: lam_j < wave_obs < lam_j*(1+z_S)
+        active = (wave_obs > lam_j) & (wave_obs < lam_max)
 
         lam_break = 3.0 * lam_j  # z = 2.0
 
@@ -213,8 +216,9 @@ def _tau_lc_laf(
     z_source: float,
 ) -> jnp.ndarray:
     """Lyman-continuum LAF optical depth (Inoue+2014 Eqs. 25-27)."""
-    # Only below Lyman limit in rest frame
-    active = wave_obs < _LAMBDA_LIMIT * (1.0 + z_source)
+    # Absorbers at redshift z_abs contribute for wave_obs = 911.8*(1+z_abs)
+    # So wave_obs must be > 911.8 (rest Lyman limit) and < 911.8*(1+z_source)
+    active = (wave_obs > _LAMBDA_LIMIT) & (wave_obs < _LAMBDA_LIMIT * (1.0 + z_source))
 
     z_obs = wave_obs / _LAMBDA_LIMIT - 1.0
 
@@ -280,7 +284,7 @@ def _tau_lc_dla(
     z_source: float,
 ) -> jnp.ndarray:
     """Lyman-continuum DLA optical depth (Inoue+2014 Eqs. 28-29)."""
-    active = wave_obs < _LAMBDA_LIMIT * (1.0 + z_source)
+    active = (wave_obs > _LAMBDA_LIMIT) & (wave_obs < _LAMBDA_LIMIT * (1.0 + z_source))
     z_obs = wave_obs / _LAMBDA_LIMIT - 1.0
 
     # Two source-redshift regimes

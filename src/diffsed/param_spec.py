@@ -199,6 +199,12 @@ _DUST_EMISSION_PARAMS = {
         "must be >= 0",
         Fixed(2.5),
     ),
+    "dust_eta_balance": (
+        "Energy balance scaling: L_IR = eta * L_absorbed (1.0 = strict)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(1.0),
+    ),
 }
 
 _AGN_PARAMS = {
