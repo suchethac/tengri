@@ -402,7 +402,10 @@ def predict_all_lines(
     # L = 10^(log_lum - gas_logq + gas_logqion - log10(Lsun_cgs))
     # Following Cue emulator.py predict_lines():
     #   line_nn_spectra = 10**(line_nn_spectra - gas_logq + gas_logqion - log10(3.839E33))
-    luminosities = 10.0 ** (log_lum_sorted - gas_logq + gas_logqion - _LOG_LSUN)
+    # Clamp exponent to avoid inf/underflow in 10^x (gradient-safe)
+    exponent = log_lum_sorted - gas_logq + gas_logqion - _LOG_LSUN
+    exponent_safe = jnp.clip(exponent, -100.0, 100.0)
+    luminosities = 10.0**exponent_safe
 
     return wav_sorted, luminosities
 
@@ -448,7 +451,9 @@ def predict_continuum(
     # Convert from log10(Lsun/Hz/Q_H) to Lsun/Hz:
     # Following Cue emulator.py predict_cont():
     #   cont = 10**(log_spec - gas_logq + gas_logqion - log10(3.839E33))
-    luminosity = 10.0 ** (log_spec_sorted - gas_logq + gas_logqion - _LOG_LSUN)
+    # Clamp exponent to avoid inf/underflow (gradient-safe)
+    exponent = log_spec_sorted - gas_logq + gas_logqion - _LOG_LSUN
+    luminosity = 10.0 ** jnp.clip(exponent, -100.0, 100.0)
 
     # Zero out wavelengths below Lyman limit (Cue convention)
     luminosity = jnp.where(wav_sorted > 911.6, luminosity, 0.0)
