@@ -77,7 +77,12 @@ class SubNetWeights(NamedTuple):
 
 
 class CueWeights(NamedTuple):
-    """All Cue weights for lines + continuum."""
+    """All Cue weights for lines + continuum.
+
+    Includes precomputed batched weight arrays for fast inference.
+    The ``batched_*`` fields are computed once at load time from
+    the individual ``line_nets`` and stored as dense JAX arrays.
+    """
 
     line_nets: tuple  # tuple of SubNetWeights, one per line sub-network
     cont_net: SubNetWeights
@@ -87,6 +92,23 @@ class CueWeights(NamedTuple):
     nn_line_wav: jnp.ndarray  # (n_nn_lines,) concatenated NN output wavelengths
     line_old_idx: jnp.ndarray  # indices of "old" (cloudyfsps) lines
     cont_wav: jnp.ndarray  # (n_wave_cont,) continuum wavelength grid
+    # Precomputed batched arrays for fast line prediction
+    batched_param_shifts: jnp.ndarray = None  # (16, 12)
+    batched_param_scales: jnp.ndarray = None  # (16, 12)
+    batched_W_hidden: tuple = None  # tuple of (16, in, out) per hidden layer
+    batched_b_hidden: tuple = None  # tuple of (16, out) per hidden layer
+    batched_alpha_hidden: tuple = None  # tuple of (16, out) per hidden layer
+    batched_beta_hidden: tuple = None  # tuple of (16, out) per hidden layer
+    batched_W_out: jnp.ndarray = None  # (16, 256, max_pcas) zero-padded
+    batched_b_out: jnp.ndarray = None  # (16, max_pcas)
+    batched_pca_scale: jnp.ndarray = None  # (16, max_pcas)
+    batched_pca_shift: jnp.ndarray = None  # (16, max_pcas)
+    batched_pca_comp: jnp.ndarray = None  # (16, max_pcas, max_lines)
+    batched_pca_mean: jnp.ndarray = None  # (16, max_lines)
+    batched_spec_scale: jnp.ndarray = None  # (16, max_lines)
+    batched_spec_shift: jnp.ndarray = None  # (16, max_lines)
+    batched_n_lines: tuple = None  # tuple of int (actual n_lines per net)
+    batched_sort_idx: jnp.ndarray = None  # (n_total_lines,) wavelength sort
 
 
 # ---------------------------------------------------------------------------
@@ -169,15 +191,58 @@ def load_cue_weights(npz_path: str) -> CueWeights:
     # Continuum sub-network
     cont_net = _load_subnet(npz, "cont")
 
+    # Precompute batched weight arrays for fast line prediction
+    nets = line_nets
+    n_hidden = nets[0].n_layers - 1
+
+    # Hidden layers: stack (16, in, out) — all same architecture
+    b_W_h = tuple(jnp.stack([n.W[i] for n in nets]) for i in range(n_hidden))
+    b_b_h = tuple(jnp.stack([n.b[i] for n in nets]) for i in range(n_hidden))
+    b_a_h = tuple(jnp.stack([n.alphas[i] for n in nets]) for i in range(n_hidden))
+    b_beta_h = tuple(jnp.stack([n.betas[i] for n in nets]) for i in range(n_hidden))
+
+    # Output layer + PCA: pad to max dims
+    max_pcas = max(n.W[n_hidden].shape[1] for n in nets)
+    max_lines = max(n.pca_components.shape[1] for n in nets)
+
+    def _pad2d(arr, target_r, target_c, fill=0.0):
+        return jnp.pad(
+            arr, ((0, target_r - arr.shape[0]), (0, target_c - arr.shape[1])), constant_values=fill
+        )
+
+    def _pad1d(arr, target, fill=0.0):
+        return jnp.pad(arr, (0, target - arr.shape[0]), constant_values=fill)
+
+    nn_line_wav = jnp.array(npz["nn_line_wavelength"])
+
     return CueWeights(
         line_nets=tuple(line_nets),
         cont_net=cont_net,
         line_names=_LINE_NAMES,
         line_wav_selections=tuple(line_wav_sels),
         sorted_line_wav=jnp.array(npz["sorted_line_wavelength"]),
-        nn_line_wav=jnp.array(npz["nn_line_wavelength"]),
+        nn_line_wav=nn_line_wav,
         line_old_idx=jnp.array(npz["line_old_idx"]),
         cont_wav=jnp.array(npz["cont_wavelength"]),
+        # Precomputed batched arrays
+        batched_param_shifts=jnp.stack([n.param_shift for n in nets]),
+        batched_param_scales=jnp.stack([n.param_scale for n in nets]),
+        batched_W_hidden=b_W_h,
+        batched_b_hidden=b_b_h,
+        batched_alpha_hidden=b_a_h,
+        batched_beta_hidden=b_beta_h,
+        batched_W_out=jnp.stack([_pad2d(n.W[n_hidden], 256, max_pcas) for n in nets]),
+        batched_b_out=jnp.stack([_pad1d(n.b[n_hidden], max_pcas) for n in nets]),
+        batched_pca_scale=jnp.stack([_pad1d(n.pca_scale, max_pcas, fill=1.0) for n in nets]),
+        batched_pca_shift=jnp.stack([_pad1d(n.pca_shift, max_pcas) for n in nets]),
+        batched_pca_comp=jnp.stack([_pad2d(n.pca_components, max_pcas, max_lines) for n in nets]),
+        batched_pca_mean=jnp.stack([_pad1d(n.pca_mean, max_lines) for n in nets]),
+        batched_spec_scale=jnp.stack(
+            [_pad1d(n.log_spec_scale, max_lines, fill=1.0) for n in nets]
+        ),
+        batched_spec_shift=jnp.stack([_pad1d(n.log_spec_shift, max_lines) for n in nets]),
+        batched_n_lines=tuple(n.pca_components.shape[1] for n in nets),
+        batched_sort_idx=jnp.argsort(nn_line_wav),
     )
 
 
@@ -388,50 +453,41 @@ def predict_all_lines(
     luminosities : array, shape (n_lines,)
         Line luminosities in Lsun.
     """
-    # --- Batched hidden layers (all 16 nets have same architecture) ---
-    # Stack weights: (16, in, out) for each hidden layer
-    # All nets share: 4 layers, 256 hidden, same input normalization structure
-    # But each has its own param_shift/scale, so normalize individually first
+    # --- Fully batched forward pass using precomputed weight arrays ---
+    # All stacking/padding was done once at load time in load_cue_weights()
 
-    # Step 1: Normalize input for each network (different shifts/scales)
-    # Stack shifts and scales: (16, 12)
-    param_shifts = jnp.stack([net.param_shift for net in weights.line_nets])
-    param_scales = jnp.stack([net.param_scale for net in weights.line_nets])
-    x = (nn_params[None, :] - param_shifts) / param_scales  # (16, 12)
+    # Step 1: Normalize inputs (16 different shifts/scales)
+    x = (nn_params[None, :] - weights.batched_param_shifts) / weights.batched_param_scales
 
-    # Step 2: Batched hidden layers (3 hidden layers with activation)
-    n_hidden = weights.line_nets[0].n_layers - 1  # typically 3
-    for layer_idx in range(n_hidden):
-        # Stack weights and biases: (16, in_dim, out_dim) and (16, out_dim)
-        W_stack = jnp.stack([net.W[layer_idx] for net in weights.line_nets])
-        b_stack = jnp.stack([net.b[layer_idx] for net in weights.line_nets])
-        alpha_stack = jnp.stack([net.alphas[layer_idx] for net in weights.line_nets])
-        beta_stack = jnp.stack([net.betas[layer_idx] for net in weights.line_nets])
+    # Step 2: Batched hidden layers (precomputed stacked weights)
+    for W, b, alpha, beta in zip(
+        weights.batched_W_hidden,
+        weights.batched_b_hidden,
+        weights.batched_alpha_hidden,
+        weights.batched_beta_hidden,
+    ):
+        x = jnp.einsum("ni,nio->no", x, W) + b
+        x = x * (beta + (1.0 - beta) * jax.nn.sigmoid(alpha * x))
 
-        # Batched matmul: (16, 1, in) @ (16, in, out) → (16, 1, out) → (16, out)
-        x = jnp.einsum("ni,nio->no", x, W_stack) + b_stack
-        x = x * (beta_stack + (1.0 - beta_stack) * jax.nn.sigmoid(alpha_stack * x))
+    # Step 3: Batched output layer (precomputed padded weights)
+    pca_coeffs = jnp.einsum("ni,nio->no", x, weights.batched_W_out) + weights.batched_b_out
+    pca_coeffs = pca_coeffs * weights.batched_pca_scale + weights.batched_pca_shift
 
-    # x is now (16, 256) — the hidden representation for all 16 networks
+    # Step 4: Batched PCA inverse (precomputed padded components)
+    log_spec = (
+        jnp.einsum("np,npl->nl", pca_coeffs, weights.batched_pca_comp) + weights.batched_pca_mean
+    )
+    log_spec = log_spec * weights.batched_spec_scale + weights.batched_spec_shift
 
-    # Step 3: Individual output layers + PCA inverse (different output dims)
+    # Extract actual (unpadded) lines and concatenate
     all_log_lum = []
-    for i, net in enumerate(weights.line_nets):
-        # Output layer: (256,) @ (256, n_pcas) + (n_pcas,)
-        pca_coeffs = x[i] @ net.W[n_hidden] + net.b[n_hidden]
-        pca_coeffs = pca_coeffs * net.pca_scale + net.pca_shift
-
-        # PCA inverse: (n_pcas,) @ (n_pcas, n_lines) + (n_lines,)
-        log_spec = pca_coeffs @ net.pca_components + net.pca_mean
-        log_spec = log_spec * net.log_spec_scale + net.log_spec_shift
-        all_log_lum.append(log_spec)
-
+    for i, n_lines_i in enumerate(weights.batched_n_lines):
+        all_log_lum.append(log_spec[i, :n_lines_i])
     log_lum_concat = jnp.concatenate(all_log_lum, axis=-1)
 
-    # Sort by wavelength
-    sort_idx = jnp.argsort(weights.nn_line_wav)
-    log_lum_sorted = log_lum_concat[sort_idx]
-    wav_sorted = weights.nn_line_wav[sort_idx]
+    # Sort by wavelength (precomputed index)
+    log_lum_sorted = log_lum_concat[weights.batched_sort_idx]
+    wav_sorted = weights.nn_line_wav[weights.batched_sort_idx]
 
     # Convert from log10(Lsun/Q_H) to Lsun (gradient-safe)
     exponent = log_lum_sorted - gas_logq + gas_logqion - _LOG_LSUN
@@ -871,7 +927,7 @@ def predict_continuum_jit(
 
 
 def _cue_weights_flatten(cw):
-    """Flatten CueWeights for JAX pytree: arrays as children, strings as aux."""
+    """Flatten CueWeights for JAX pytree: arrays as children, strings/ints as aux."""
     children = (
         cw.line_nets,
         cw.cont_net,
@@ -879,15 +935,54 @@ def _cue_weights_flatten(cw):
         cw.nn_line_wav,
         cw.line_old_idx,
         cw.cont_wav,
+        # Batched arrays (JAX traceable)
+        cw.batched_param_shifts,
+        cw.batched_param_scales,
+        cw.batched_W_hidden,
+        cw.batched_b_hidden,
+        cw.batched_alpha_hidden,
+        cw.batched_beta_hidden,
+        cw.batched_W_out,
+        cw.batched_b_out,
+        cw.batched_pca_scale,
+        cw.batched_pca_shift,
+        cw.batched_pca_comp,
+        cw.batched_pca_mean,
+        cw.batched_spec_scale,
+        cw.batched_spec_shift,
+        cw.batched_sort_idx,
     )
-    aux_data = (cw.line_names, cw.line_wav_selections)
+    # Non-array aux: strings, int tuples
+    aux_data = (cw.line_names, cw.line_wav_selections, cw.batched_n_lines)
     return children, aux_data
 
 
 def _cue_weights_unflatten(aux_data, children):
     """Unflatten CueWeights from JAX pytree."""
-    line_nets, cont_net, sorted_line_wav, nn_line_wav, line_old_idx, cont_wav = children
-    line_names, line_wav_selections = aux_data
+    (
+        line_nets,
+        cont_net,
+        sorted_line_wav,
+        nn_line_wav,
+        line_old_idx,
+        cont_wav,
+        b_ps,
+        b_psc,
+        b_Wh,
+        b_bh,
+        b_ah,
+        b_beh,
+        b_Wo,
+        b_bo,
+        b_pcas,
+        b_pcash,
+        b_pcac,
+        b_pcam,
+        b_ss,
+        b_ssh,
+        b_si,
+    ) = children
+    line_names, line_wav_selections, batched_n_lines = aux_data
     return CueWeights(
         line_nets=line_nets,
         cont_net=cont_net,
@@ -897,6 +992,22 @@ def _cue_weights_unflatten(aux_data, children):
         nn_line_wav=nn_line_wav,
         line_old_idx=line_old_idx,
         cont_wav=cont_wav,
+        batched_param_shifts=b_ps,
+        batched_param_scales=b_psc,
+        batched_W_hidden=b_Wh,
+        batched_b_hidden=b_bh,
+        batched_alpha_hidden=b_ah,
+        batched_beta_hidden=b_beh,
+        batched_W_out=b_Wo,
+        batched_b_out=b_bo,
+        batched_pca_scale=b_pcas,
+        batched_pca_shift=b_pcash,
+        batched_pca_comp=b_pcac,
+        batched_pca_mean=b_pcam,
+        batched_spec_scale=b_ss,
+        batched_spec_shift=b_ssh,
+        batched_n_lines=batched_n_lines,
+        batched_sort_idx=b_si,
     )
 
 
