@@ -22,7 +22,7 @@ Usage::
     l_nu = unified_agn(wavelength, agn_log_lbol=44.0, disc_model="powerlaw", ...)
 """
 
-from typing import Callable
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -35,7 +35,6 @@ from diffsed.models.agn.skirtor import create_skirtor_from_grid
 # Auto-load tabulated SKIRTOR templates (preferred over analytic)
 _skirtor_fn = None
 from diffsed.models.agn.torus import simple_torus, two_temperature_torus
-
 
 # ===================================================================
 # AGN model registry
@@ -50,9 +49,11 @@ def register_agn_model(name: str) -> Callable:
     The registered function must have signature:
         fn(wavelength, agn_log_lbol, **kwargs) -> L_nu [Lsun Hz^-1]
     """
+
     def decorator(fn: Callable) -> Callable:
         AGN_MODELS[name] = fn
         return fn
+
     return decorator
 
 
@@ -75,15 +76,14 @@ def get_agn_model(name: str) -> Callable:
         If name is not registered.
     """
     if name not in AGN_MODELS:
-        raise ValueError(
-            f"Unknown AGN model '{name}'. Available: {list(AGN_MODELS.keys())}"
-        )
+        raise ValueError(f"Unknown AGN model '{name}'. Available: {list(AGN_MODELS.keys())}")
     return AGN_MODELS[name]
 
 
 # ===================================================================
 # Generic unified AGN combiner
 # ===================================================================
+
 
 def unified_agn(
     wavelength: jnp.ndarray,
@@ -154,6 +154,7 @@ def unified_agn(
 # ===================================================================
 # Pre-registered AGN models
 # ===================================================================
+
 
 @register_agn_model("simple")
 def simple_agn(

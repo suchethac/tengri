@@ -34,7 +34,10 @@ References
 from diffsed.models.agn.blr import blr_emission
 from diffsed.models.agn.disc import multicolor_disc, powerlaw_disc
 from diffsed.models.agn.nlr import nlr_emission
-from diffsed.models.agn.skirtor import create_skirtor_from_grid
+
+# QSOgen must be imported after unified (needs register_agn_model)
+from diffsed.models.agn.qsogen import qsogen, qsogen_sed
+from diffsed.models.agn.skirtor import create_skirtor_from_grid, skirtor_analytic
 from diffsed.models.agn.torus import simple_torus, two_temperature_torus
 from diffsed.models.agn.unified import (
     AGN_MODELS,
@@ -43,28 +46,26 @@ from diffsed.models.agn.unified import (
     unified_agn,
     unified_nlr_blr,
 )
-# QSOgen must be imported after unified (needs register_agn_model)
-from diffsed.models.agn.qsogen import qsogen, qsogen_sed
 
 __all__ = [
     # Registry
     "AGN_MODELS",
+    "blr_emission",
+    "create_skirtor_from_grid",
     "get_agn_model",
-    "register_agn_model",
-    # Unified
-    "unified_agn",
-    "unified_nlr_blr",
     # Disc models
     "multicolor_disc",
-    "powerlaw_disc",
-    # Torus models
-    "simple_torus",
-    "two_temperature_torus",
-    "create_skirtor_from_grid",
     # Line region models
     "nlr_emission",
-    "blr_emission",
+    "powerlaw_disc",
     # QSOgen
     "qsogen",
     "qsogen_sed",
+    "register_agn_model",
+    # Torus models
+    "simple_torus",
+    "two_temperature_torus",
+    # Unified
+    "unified_agn",
+    "unified_nlr_blr",
 ]

@@ -33,26 +33,28 @@ _ANGSTROM_CM = 1e-8  # Angstrom -> cm
 # Key broad emission lines: (rest wavelength [Angstrom], relative strength)
 # Relative strengths based on typical Type 1 AGN composite spectra
 # (Vanden Berk et al. 2001).
-_BLR_LINES = jnp.array([
-    # Ly-alpha 1216 (strongest UV line)
-    [1216.0, 1.00],
-    # NV 1240
-    [1240.0, 0.12],
-    # SiIV + OIV] 1400
-    [1400.0, 0.07],
-    # CIV 1549
-    [1549.0, 0.50],
-    # CIII] 1909
-    [1909.0, 0.20],
-    # MgII 2800
-    [2800.0, 0.35],
-    # H-gamma 4340
-    [4340.0, 0.05],
-    # H-beta 4861
-    [4861.0, 0.22],
-    # H-alpha 6563
-    [6563.0, 0.60],
-])
+_BLR_LINES = jnp.array(
+    [
+        # Ly-alpha 1216 (strongest UV line)
+        [1216.0, 1.00],
+        # NV 1240
+        [1240.0, 0.12],
+        # SiIV + OIV] 1400
+        [1400.0, 0.07],
+        # CIV 1549
+        [1549.0, 0.50],
+        # CIII] 1909
+        [1909.0, 0.20],
+        # MgII 2800
+        [2800.0, 0.35],
+        # H-gamma 4340
+        [4340.0, 0.05],
+        # H-beta 4861
+        [4861.0, 0.22],
+        # H-alpha 6563
+        [6563.0, 0.60],
+    ]
+)
 
 _BLR_LINE_WAVELENGTHS = _BLR_LINES[:, 0]
 _BLR_LINE_STRENGTHS = _BLR_LINES[:, 1]
@@ -141,6 +143,7 @@ def blr_emission(
         return strength * l_lines_total * profile
 
     from jax import vmap
+
     line_spectra = vmap(_single_line)(_BLR_LINES)
     strength_sum = jnp.sum(_BLR_LINE_STRENGTHS)
     l_nu_blr = jnp.sum(line_spectra, axis=0) / jnp.maximum(strength_sum, 1e-30)

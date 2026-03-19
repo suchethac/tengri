@@ -38,30 +38,32 @@ _ANGSTROM_CM = 1e-8  # Angstrom -> cm
 # Key narrow emission lines: (rest wavelength [Angstrom], relative strength)
 # Relative strengths are approximate, calibrated to typical Seyfert 2 spectra.
 # Normalized so that the sum of line luminosities ~ 1.
-_NLR_LINES = jnp.array([
-    # [OII] 3727 doublet (blended)
-    [3727.0, 0.15],
-    # [NeIII] 3869
-    [3869.0, 0.04],
-    # H-beta 4861 (narrow)
-    [4861.0, 0.10],
-    # [OIII] 4959
-    [4959.0, 0.12],
-    # [OIII] 5007 (strongest NLR line)
-    [5007.0, 0.35],
-    # [OI] 6300
-    [6300.0, 0.03],
-    # [NII] 6548
-    [6548.0, 0.05],
-    # H-alpha 6563 (narrow)
-    [6563.0, 0.20],
-    # [NII] 6583
-    [6583.0, 0.15],
-    # [SII] 6716
-    [6716.0, 0.06],
-    # [SII] 6731
-    [6731.0, 0.06],
-])
+_NLR_LINES = jnp.array(
+    [
+        # [OII] 3727 doublet (blended)
+        [3727.0, 0.15],
+        # [NeIII] 3869
+        [3869.0, 0.04],
+        # H-beta 4861 (narrow)
+        [4861.0, 0.10],
+        # [OIII] 4959
+        [4959.0, 0.12],
+        # [OIII] 5007 (strongest NLR line)
+        [5007.0, 0.35],
+        # [OI] 6300
+        [6300.0, 0.03],
+        # [NII] 6548
+        [6548.0, 0.05],
+        # H-alpha 6563 (narrow)
+        [6563.0, 0.20],
+        # [NII] 6583
+        [6583.0, 0.15],
+        # [SII] 6716
+        [6716.0, 0.06],
+        # [SII] 6731
+        [6731.0, 0.06],
+    ]
+)
 
 _NLR_LINE_WAVELENGTHS = _NLR_LINES[:, 0]
 _NLR_LINE_STRENGTHS = _NLR_LINES[:, 1]
@@ -163,6 +165,7 @@ def nlr_emission(
 
     # vmap over lines
     from jax import vmap
+
     line_spectra = vmap(_single_line)(_NLR_LINES)
     # Renormalize strengths
     strength_sum = jnp.sum(_NLR_LINE_STRENGTHS)
@@ -171,7 +174,7 @@ def nlr_emission(
     # --- Continuum emission ---
     l_cont_total = _NLR_CONTINUUM_EFFICIENCY * l_intercepted
     nu = _C_LIGHT / (wavelength * _ANGSTROM_CM)
-    cont_shape = nu ** _NLR_CONTINUUM_ALPHA
+    cont_shape = nu**_NLR_CONTINUUM_ALPHA
 
     # Normalize continuum
     sort_idx = jnp.argsort(nu)

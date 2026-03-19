@@ -126,7 +126,7 @@ def _silicate_profile(wavelength: jnp.ndarray) -> jnp.ndarray:
 # ===================================================================
 
 
-def skirtor_analytic(
+def _skirtor_analytic_fallback(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 44.0,
     agn_tau_skirtor: float = 7.0,
@@ -436,3 +436,38 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         return l_nu_erg / _LSUN_ERG
 
     return skirtor_grid
+
+
+# ===================================================================
+# Auto-load tabulated SKIRTOR as the default
+# ===================================================================
+
+_skirtor_default = None
+
+
+def skirtor_analytic(*args, **kwargs):
+    """SKIRTOR torus SED (auto-loaded from tabulated templates).
+
+    This function uses the tabulated Stalevski+2016 template grid
+    (data/skirtor_templates.npz) with 5D multilinear interpolation.
+    The name ``skirtor_analytic`` is kept for backward compatibility.
+
+    See ``create_skirtor_from_grid`` for parameters.
+    """
+    global _skirtor_default
+    if _skirtor_default is None:
+        from pathlib import Path
+
+        for candidate in [
+            Path(__file__).resolve().parents[3] / "data" / "skirtor_templates.npz",
+            Path("data/skirtor_templates.npz"),
+        ]:
+            if candidate.is_file():
+                _skirtor_default = create_skirtor_from_grid(str(candidate))
+                break
+        if _skirtor_default is None:
+            raise FileNotFoundError(
+                "SKIRTOR templates not found. Download from "
+                "https://sites.google.com/site/skirtorus/sed-library"
+            )
+    return _skirtor_default(*args, **kwargs)
