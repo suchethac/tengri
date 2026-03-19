@@ -122,12 +122,16 @@ model_styles = {
     "skirtor":         ("#8c564b", "-",   2.0, "skirtor"),
 }
 
-# Compute SEDs
+# Compute SEDs (skip models that require external templates)
 seds = {}
 for name in sorted(AGN_MODELS.keys()):
-    seds[name] = np.array(
-        AGN_MODELS[name](wave, agn_log_lbol=log_lbol, agn_frac=1.0)
-    )
+    try:
+        seds[name] = np.array(
+            AGN_MODELS[name](wave, agn_log_lbol=log_lbol, agn_frac=1.0)
+        )
+    except (FileNotFoundError, Exception) as e:
+        print(f"Skipping {name}: {e}")
+        continue
 
 # %%
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -293,6 +297,13 @@ plt.show()
 # %%
 from diffsed.models.agn.skirtor import skirtor_analytic
 
+if not _skirtor_available:
+    fig, ax = plt.subplots(figsize=(6, 2))
+    ax.text(0.5, 0.5, "SKIRTOR section skipped\n(templates not downloaded)",
+            ha="center", va="center", fontsize=12, transform=ax.transAxes)
+    ax.axis("off")
+    savefig(fig, "skirtor_deep_dive")
+    plt.show()
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
 wave_s = jnp.logspace(3.0, 5.5, 2000)  # 1000 A to 300000 A
@@ -302,69 +313,46 @@ wave_s_um = np.array(wave_s) / 1e4
 # --- Panel 1: Vary cos_inc (Type 1 vs Type 2) ---
 ax = axes[0]
 cos_inc_vals = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-colors = plt.cm.RdYlBu(np.linspace(0.1, 0.9, len(cos_inc_vals)))
-for val, col in zip(cos_inc_vals, colors):
-    sed = np.array(skirtor_analytic(
-        wave_s, agn_log_lbol=44.0, agn_cos_inc=val,
-        agn_tau_skirtor=7.0, agn_oa_skirtor=40.0,
-    ))
-    lLl = sed * nu_s
-    ax.loglog(wave_s_um, lLl, color=col, lw=1.5,
-              label=f"cos $i$ = {val:.1f}")
-
+colors_inc = plt.cm.RdYlBu(np.linspace(0.1, 0.9, len(cos_inc_vals)))
+for val, col in zip(cos_inc_vals, colors_inc):
+    sed = np.array(skirtor_analytic(wave_s, agn_log_lbol=44.0, agn_cos_inc=val,
+                                      agn_tau_skirtor=7.0, agn_oa_skirtor=40.0))
+    ax.loglog(wave_s_um, sed * nu_s, color=col, lw=1.5, label=f"cos $i$ = {val:.1f}")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$\lambda L_\lambda$ [$L_\odot$]")
-ax.set_title("Inclination: Type 1 (face-on) vs Type 2 (edge-on)")
+ax.set_title("Inclination: Type 1 vs Type 2")
 ax.set_xlim(0.1, 30)
-ax.legend(fontsize=8)
+ax.legend(fontsize=7)
 ax.axvline(9.7, color="0.7", ls="--", lw=0.7)
-ax.text(9.7, ax.get_ylim()[0] * 5, r"Si 9.7 $\mu$m", fontsize=8,
-        color="0.5", ha="center", rotation=90)
-# Annotate Type 1/2
-ax.annotate("Type 1 (face-on)", xy=(0.15, 0.92), xycoords="axes fraction",
-            fontsize=9, color="#2166ac", fontweight="bold")
-ax.annotate("Type 2 (edge-on)", xy=(0.15, 0.85), xycoords="axes fraction",
-            fontsize=9, color="#b2182b", fontweight="bold")
 
-# --- Panel 2: Vary tau_skirtor (optical depth) ---
+# --- Panel 2: Vary tau ---
 ax = axes[1]
 tau_vals = [3, 5, 7, 9, 11]
-colors = plt.cm.Oranges(np.linspace(0.3, 0.9, len(tau_vals)))
-for val, col in zip(tau_vals, colors):
-    # Show edge-on (Type 2) to see silicate absorption
-    sed = np.array(skirtor_analytic(
-        wave_s, agn_log_lbol=44.0, agn_cos_inc=0.2,
-        agn_tau_skirtor=float(val), agn_oa_skirtor=40.0,
-    ))
-    ax.loglog(wave_s_um, sed * nu_s, color=col, lw=1.5,
-              label=f"$\\tau_{{9.7}}$ = {val}")
-
+colors_tau = plt.cm.Oranges(np.linspace(0.3, 0.9, len(tau_vals)))
+for val, col in zip(tau_vals, colors_tau):
+    sed = np.array(skirtor_analytic(wave_s, agn_log_lbol=44.0, agn_cos_inc=0.2,
+                                      agn_tau_skirtor=float(val), agn_oa_skirtor=40.0))
+    ax.loglog(wave_s_um, sed * nu_s, color=col, lw=1.5, label=f"$\\tau_{{9.7}}$ = {val}")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_title(r"Optical depth $\tau_{9.7}$ (edge-on view)")
+ax.set_title(r"Optical depth $\tau_{9.7}$ (edge-on)")
 ax.set_xlim(0.1, 30)
-ax.legend(fontsize=8)
+ax.legend(fontsize=7)
 ax.axvline(9.7, color="0.7", ls="--", lw=0.7)
 
 # --- Panel 3: Vary opening angle ---
 ax = axes[2]
 oa_vals = [20, 30, 40, 50, 60]
-colors = plt.cm.Greens(np.linspace(0.3, 0.9, len(oa_vals)))
-for val, col in zip(oa_vals, colors):
-    sed = np.array(skirtor_analytic(
-        wave_s, agn_log_lbol=44.0, agn_cos_inc=0.5,
-        agn_tau_skirtor=7.0, agn_oa_skirtor=float(val),
-    ))
-    ax.loglog(wave_s_um, sed * nu_s, color=col, lw=1.5,
-              label=f"OA = {val}$^\\circ$")
-
+colors_oa = plt.cm.Greens(np.linspace(0.3, 0.9, len(oa_vals)))
+for val, col in zip(oa_vals, colors_oa):
+    sed = np.array(skirtor_analytic(wave_s, agn_log_lbol=44.0, agn_cos_inc=0.5,
+                                      agn_tau_skirtor=7.0, agn_oa_skirtor=float(val)))
+    ax.loglog(wave_s_um, sed * nu_s, color=col, lw=1.5, label=f"OA = {val}$^\\circ$")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_title(r"Opening angle $\theta_{\rm OA}$ ($\cos i = 0.5$)")
+ax.set_title(r"Opening angle $\theta_{\rm OA}$")
 ax.set_xlim(0.1, 30)
-ax.legend(fontsize=8)
-ax.axvline(9.7, color="0.7", ls="--", lw=0.7)
+ax.legend(fontsize=7)
 
-fig.suptitle("SKIRTOR clumpy torus model (Stalevski et al. 2012, 2016)",
-             fontsize=13, y=1.02)
+fig.suptitle("SKIRTOR clumpy torus (Stalevski et al. 2012, 2016)", fontsize=13, y=1.02)
 fig.tight_layout()
 savefig(fig, "skirtor_deep_dive")
 plt.show()

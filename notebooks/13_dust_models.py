@@ -112,6 +112,9 @@ for name, fn in DUST_LAWS.items():
         curves[name] = fn(wave_aa, n_slope=-0.7)
     elif name == "cardelli":
         curves[name] = fn(wave_aa, dust_Rv=3.1)
+    elif name == "li08":
+        curves[name] = fn(wave_aa, dust_UV_slope=-1.0, dust_OPT_slope=-1.3,
+                           dust_FUV_slope=-1.8, dust_bump_strength=1.0)
     else:
         curves[name] = fn(wave_aa)
 
@@ -132,6 +135,7 @@ curve_colors = {
     "smc": "#d62728",            # red
     "cardelli": "#9467bd",       # purple
     "salim": "#e377c2",          # pink (was brown, now distinct from K&C)
+    "li08": "#8c564b",            # brown
 }
 curve_labels = {
     "power_law": r"Power law ($n=-0.7$)",
@@ -140,6 +144,7 @@ curve_labels = {
     "smc": "SMC (Gordon+2003)",
     "cardelli": r"Cardelli+1989 ($R_V=3.1$)",
     "salim": r"Salim+2018 ($E_b=1$)",
+    "li08": r"Li+2008 (3-slope parametric)",
 }
 
 fig, ax = plt.subplots(figsize=(9, 5.5))
