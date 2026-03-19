@@ -286,11 +286,11 @@ SETTINGS_KEYS = frozenset({
     # IGM absorption
     "apply_igm",
     # Nebular emission
-    "nebular", "cloudy_grid_path",
+    "nebular", "cloudy_grid_path", "cue_weights_path",
     # Dust law
     "dust_law_bc", "dust_law_diff",
     # Dust emission
-    "dust_emission",
+    "dust_emission", "dl07_grid_path",
     # AGN
     "agn_model",
     # Evolving metallicity
@@ -406,19 +406,23 @@ class ParamSpec:
         # IGM absorption (default: True — negligible at z<2, essential at z>3)
         self.apply_igm = kwargs.pop("apply_igm", True)
 
-        # Nebular emission: False (default), True, or "cloudy"
+        # Nebular emission: False (default), True, "cloudy", or "cue"
         self.nebular = kwargs.pop("nebular", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
-        # If cloudy_grid_path is set, enable nebular automatically
-        if self.cloudy_grid_path is not None and not self.nebular:
+        self.cue_weights_path = kwargs.pop("cue_weights_path", None)
+        # Auto-enable nebular from paths
+        if self.cue_weights_path is not None and not self.nebular:
+            self.nebular = "cue"
+        elif self.cloudy_grid_path is not None and not self.nebular:
             self.nebular = "cloudy"
 
         # Dust law settings
         self.dust_law_bc = kwargs.pop("dust_law_bc", "power_law")
         self.dust_law_diff = kwargs.pop("dust_law_diff", self.dust_law_bc)
 
-        # Dust emission: None (default), "modified_blackbody", "dale2014", "draine_li2007"
+        # Dust emission: None, "modified_blackbody", "dale2014", "draine_li2007", "dl07_tabulated"
         self.dust_emission = kwargs.pop("dust_emission", None)
+        self.dl07_grid_path = kwargs.pop("dl07_grid_path", None)
 
         # AGN model: None (default), "simple", "standard", "kubota_done"
         self.agn_model = kwargs.pop("agn_model", None)

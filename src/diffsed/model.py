@@ -33,6 +33,7 @@ Usage::
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import NamedTuple
 
 import jax
@@ -221,6 +222,28 @@ class Model:
 
         # Dust emission model (None = disabled)
         self._dust_emission_model = getattr(spec, "dust_emission", None)
+        if self._dust_emission_model == "dl07_tabulated":
+            from diffsed.models.dust.emission import DUST_EMISSION_MODELS
+
+            if "dl07_tabulated" not in DUST_EMISSION_MODELS:
+                from diffsed.models.dust.emission import create_dl07_from_grid
+
+                dl07_path = getattr(spec, "dl07_grid_path", None)
+                if dl07_path is None:
+                    # Try default locations
+                    for candidate in [
+                        Path(__file__).resolve().parents[2] / "data" / "dl07_templates.h5",
+                        Path("data/dl07_templates.h5"),
+                    ]:
+                        if candidate.is_file():
+                            dl07_path = str(candidate)
+                            break
+                if dl07_path is None or not Path(dl07_path).is_file():
+                    raise FileNotFoundError(
+                        "DL07 templates not found. Set dl07_grid_path in ParamSpec "
+                        "or run: python scripts/convert_dl07_templates.py"
+                    )
+                DUST_EMISSION_MODELS["dl07_tabulated"] = create_dl07_from_grid(dl07_path)
         if self._dust_emission_model:
             for p in [
                 "dust_T",
@@ -261,7 +284,12 @@ class Model:
             self._param_map["neb_fesc"] = ("neb_fesc", 1.0, 0.0)
 
         self._nebular_backend = None
-        if spec.nebular and spec.cloudy_grid_path is not None:
+        cue_weights_path = getattr(spec, "cue_weights_path", None)
+        if spec.nebular and cue_weights_path is not None:
+            from diffsed.models.nebular import CueBackend
+
+            self._nebular_backend = CueBackend(cue_weights_path, ssp_data=ssp_data)
+        elif spec.nebular and spec.cloudy_grid_path is not None:
             from diffsed.models.nebular import CloudyGridBackend
 
             self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
@@ -273,6 +301,13 @@ class Model:
             from diffsed.models.nebular import BakedInBackend
 
             self._nebular_backend = BakedInBackend()
+
+        # For DL07 tabulated templates, load at init and register
+        if self._dust_emission_model == "dl07_tabulated":
+            dl07_path = getattr(spec, "dl07_grid_path", "data/dl07_templates.h5")
+            from diffsed.models.dust.emission import DUST_EMISSION_MODELS, create_dl07_from_grid
+
+            DUST_EMISSION_MODELS["dl07_tabulated"] = create_dl07_from_grid(dl07_path)
 
         # Velocity dispersion: only apply if sigma_v is in the spec
         self._has_sigma_v = spec.has_param("sigma_v") if hasattr(spec, "has_param") else False
