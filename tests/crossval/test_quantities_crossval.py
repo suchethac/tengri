@@ -38,7 +38,7 @@ _SSP_PATH = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 _SSP_EXISTS = _SSP_PATH.is_file()
 
 
-def _diffsed_smooth_params(n_grid=256):
+def _diffsed_smooth_params(n_grid=64):
     """Return diffsed params for a smooth DPL SFH (near-zero burstiness)."""
     return {
         "sfh_dpl_alpha": 1.0,

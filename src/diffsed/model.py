@@ -207,6 +207,15 @@ class Model:
         self.ssp_data = ssp_data
         self._forward_dtype = jnp.dtype(forward_dtype)
 
+        # Initialize optional-component flags early (before any code that
+        # might short-circuit or raise, so attribute lookups never fail).
+        self._radio_enabled = getattr(spec, "radio", False)
+        self._xray_enabled = getattr(spec, "xray", False)
+        self._agn_model = getattr(spec, "agn_model", None)
+        self._agn_parametric = False
+        self._dust_emission_model = getattr(spec, "dust_emission", None)
+        self._evolving_metallicity = getattr(spec, "evolving_metallicity", False)
+
         # Parse approximation settings
         if approx is None or approx is True:
             self._approx = dict(self._DEFAULT_APPROX)
@@ -1053,32 +1062,58 @@ class Model:
     # Forward predictions
     # -------------------------------------------------------------------
 
-    def predict_sed(self, params):
-        """Compute rest-frame luminosity SED.
+    def _compute_sed_components(self, params, _sfr=None, _weights=None, need_intrinsic=False):
+        """Compute all SED intermediates.
+
+        This is the shared computation engine behind :meth:`predict_sed`,
+        :meth:`predict_sed_quantities`, and the lazy :class:`Prediction`
+        object. By returning all intermediates, downstream code can
+        compute derived quantities without re-running the forward model.
 
         Parameters
         ----------
         params : dict
             Parameter values (public names).
+        _sfr : array, optional
+            Pre-computed SFR on the log-age grid (avoids recomputation
+            when called from :meth:`predict_derived`).
+        _weights : array, optional
+            Pre-computed CSP weights.
+        need_intrinsic : bool
+            If True, always compute the unattenuated stellar SED even
+            when no dust emission model is enabled. Required for
+            ``l_dust_absorbed`` and intrinsic FUV/NUV.
 
         Returns
         -------
-        array, shape (n_wave,)
-            Rest-frame SED in erg/s/Hz.
+        dict with keys:
+            ``"sed_total"`` : array (n_wave,) — final rest-frame SED
+            ``"sed_attenuated"`` : array (n_wave,) — dust-attenuated stellar SED
+            ``"sed_intrinsic"`` : array (n_wave,) or None — unattenuated stellar SED
+            ``"ssp_flux_at_z"`` : array (n_age, n_wave) — Z-interpolated SSP
+            ``"weights"`` : array (n_age,) — CSP mass weights
+            ``"sfr"`` : array (n_grid,) — SFR on log-age grid
+            ``"p"`` : dict — internal parameter dict
+            ``"agn_bol_erg"`` : float — AGN bolometric luminosity (erg/s)
         """
         p = self._get_internal_params(params)
-        sfr = self._compute_sfr(p)
 
-        # Interpolate SFR to SSP age grid
-        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
+        if _sfr is not None:
+            sfr = _sfr
+        else:
+            sfr = self._compute_sfr(p)
+
+        if _weights is not None:
+            weights = _weights
+        else:
+            sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+            weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
 
         # Alpha-element enhancement: shift effective metallicity
         alpha_fe = p.get("alpha_fe", 0.0)
 
         # Metallicity interpolation
         if self._evolving_metallicity:
-            # Age of universe at observed redshift (Gyr)
             z = p.get("redshift", 0.0)
             t_universe_gyr = self._t_universe_gyr(z)
             log_z_per_age = compute_log_z_evolving(
@@ -1087,7 +1122,6 @@ class Model:
                 p["log_z_final"],
                 t_universe_gyr,
             )
-            # Apply alpha enhancement to each age bin
             log_z_per_age = effective_metallicity(log_z_per_age, alpha_fe)
             ssp_flux_at_z = interpolate_metallicity_evolving(
                 self.ssp_data.ssp_flux,
@@ -1121,9 +1155,8 @@ class Model:
         sed_attenuated = compute_csp_sed(weights, ssp_flux_at_z, dust_atten)
 
         # Intrinsic (unattenuated) stellar SED for energy balance
-        # Only compute if dust emission is enabled (avoid wasted work)
         sed_intrinsic = None
-        if self._dust_emission_model is not None:
+        if self._dust_emission_model is not None or need_intrinsic:
             ones_atten = jnp.ones_like(dust_atten)
             sed_intrinsic = compute_csp_sed(weights, ssp_flux_at_z, ones_atten)
 
@@ -1147,15 +1180,9 @@ class Model:
         if self._dust_emission_model is not None and sed_intrinsic is not None:
             from diffsed.models.dust.emission import get_emission_model
 
-            # L_absorbed = integral(L_intrinsic - L_attenuated) over frequency
             _c_aa_em = 2.99792458e18  # c in Angstrom/s
             nu_em = _c_aa_em / self.ssp_data.ssp_wave
             L_absorbed = -jnp.trapezoid(sed_intrinsic - sed_attenuated, nu_em)
-            # Energy balance deviation:
-            #   eta=1.0 → strict energy balance (default)
-            #   eta>1.0 → extra IR from old-star heating, AGN, geometry
-            #   eta<1.0 → IR-faint (e.g., dust geometry allows UV escape)
-            # Use LogNormal(0, 0.3) prior for ~factor of 2 scatter around strict.
             eta_balance = p.get("dust_eta_balance", 1.0)
             L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
             dust_ir = get_emission_model(self._dust_emission_model)(
@@ -1172,23 +1199,21 @@ class Model:
             sed = sed + dust_ir
 
         # AGN contribution
+        agn_bol_erg = 0.0
         if self._agn_model is not None:
             from diffsed.models.agn import get_agn_model
 
             if self._agn_parametric:
-                # Parametric mode: agn_log_lbol is a direct parameter.
-                # Set agn_frac=1.0 since luminosity is fully specified.
                 agn_log_lbol = p.get("agn_log_lbol", 10.0)
                 agn_frac_for_model = 1.0
-                _agn_bol = 10.0**agn_log_lbol
+                agn_bol_erg = 10.0**agn_log_lbol
             else:
-                # Legacy mode: derive L_bol from SED integral * agn_frac
                 agn_frac_for_model = p.get("agn_frac", 0.0)
-                _c_aa = 2.99792458e18  # c in Angstrom/s
-                nu = _c_aa / self.ssp_data.ssp_wave  # Hz (decreasing)
+                _c_aa = 2.99792458e18
+                nu = _c_aa / self.ssp_data.ssp_wave
                 L_bol_stellar = -jnp.trapezoid(sed, nu)
                 agn_log_lbol = jnp.log10(jnp.maximum(L_bol_stellar * agn_frac_for_model, 1e-50))
-                _agn_bol = L_bol_stellar * agn_frac_for_model
+                agn_bol_erg = L_bol_stellar * agn_frac_for_model
             agn_sed = get_agn_model(self._agn_model)(
                 self.ssp_data.ssp_wave,
                 agn_log_lbol=agn_log_lbol,
@@ -1201,19 +1226,16 @@ class Model:
                 agn_log_ledd=p.get("agn_log_ledd", -1.0),
             )
             sed = sed + agn_sed
-        else:
-            _agn_bol = 0.0
 
         # Radio emission (synchrotron from SF + AGN jets)
         if self._radio_enabled:
             from diffsed.models.radio import radio_total
 
-            # L_IR from dust emission (if computed), else estimate from L_absorbed
             _L_ir = p.get("_L_ir_cached", 0.0)
             radio_sed = radio_total(
                 self.ssp_data.ssp_wave,
                 L_ir=_L_ir,
-                L_agn_bol=_agn_bol,
+                L_agn_bol=agn_bol_erg,
                 q_ir=p.get("radio_q_ir", 2.64),
                 alpha_sf=p.get("radio_alpha_sf", 0.8),
                 radio_loudness=p.get("radio_loudness", 0.0),
@@ -1225,20 +1247,43 @@ class Model:
         if self._xray_enabled:
             from diffsed.models.xray import xray_total
 
-            # SFR and M* from derived quantities
             _sfr = p.get("_sfr_cached", 1.0)
             _mstar = p.get("_mstar_cached", 1e10)
             xray_sed = xray_total(
                 self.ssp_data.ssp_wave,
                 sfr=_sfr,
                 stellar_mass=_mstar,
-                L_agn_bol=_agn_bol,
+                L_agn_bol=agn_bol_erg,
                 gamma_agn=p.get("xray_gamma_agn", 1.8),
                 alpha_ox=p.get("xray_alpha_ox", -1.4),
             )
             sed = sed + xray_sed
 
-        return sed
+        return {
+            "sed_total": sed,
+            "sed_attenuated": sed_attenuated,
+            "sed_intrinsic": sed_intrinsic,
+            "ssp_flux_at_z": ssp_flux_at_z,
+            "weights": weights,
+            "sfr": sfr,
+            "p": p,
+            "agn_bol_erg": agn_bol_erg,
+        }
+
+    def predict_sed(self, params):
+        """Compute rest-frame luminosity SED.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values (public names).
+
+        Returns
+        -------
+        array, shape (n_wave,)
+            Rest-frame SED in erg/s/Hz.
+        """
+        return self._compute_sed_components(params)["sed_total"]
 
     def predict_photometry(self, params):
         """Compute observed photometric flux densities.

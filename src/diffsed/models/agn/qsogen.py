@@ -171,6 +171,7 @@ def _load_emline_template():
     candidates = [
         Path(__file__).resolve().parents[4] / "data" / "qsogen_emline_template.dat",
         Path("data/qsogen_emline_template.dat"),
+        Path("/tmp/qsogen/qsosed_emlines_20210625.dat"),
     ]
     for path in candidates:
         if path.is_file():
@@ -179,8 +180,7 @@ def _load_emline_template():
             return _EMLINE_TEMPLATE
 
     raise FileNotFoundError(
-        "QSOGen emission line template not found. Expected at "
-        "data/qsogen_emline_template.dat"
+        "QSOGen emission line template not found. Expected at data/qsogen_emline_template.dat"
     )
 
 
@@ -459,7 +459,7 @@ def _empirical_emission_lines(
     array, shape (n_wave,)
         Emission line f_nu contribution (same units as continuum_fnu).
     """
-    linwav, medval, conval_raw, pkyval, wdyval, nlr = _load_emline_template()
+    linwav, medval, conval_raw, pkyval, wdyval, _nlr = _load_emline_template()
 
     # Baldwin effect: emline_type = (M_i - benorm) * beslope
     # beslope > 0, benorm = -27 -> brighter quasars (more negative M_i)
@@ -580,11 +580,12 @@ def qsogen_sed(
 
     The output is L_nu in Lsun/Hz, normalized via ``agn_log_lbol``.
 
-    Pipeline order:
-    1. Continuum + hot dust + emission lines (shape SED)
-    2. Dust reddening (attenuate)
-    3. Normalize to L_bol (bolometric integral)
-    4. Add Balmer continuum as additive excess (NOT re-normalized)
+    Pipeline order (matching original qsogen):
+    1. Continuum + hot dust (shape SED)
+    2. Normalize to L_bol (bolometric integral of cont+BB only)
+    3. Add emission lines as additive excess (not re-normalized)
+    4. Add Balmer continuum as additive excess (not re-normalized)
+    5. Dust reddening (attenuate full quasar SED)
 
     Parameters
     ----------
@@ -630,34 +631,33 @@ def qsogen_sed(
     # --- Component 2: Hot dust blackbody ---
     hot_dust = _hot_dust_blackbody(wavelength, continuum, agn_tbb, agn_bbnorm)
 
-    # --- Component 3: Emission lines (empirical template) ---
-    # Convert log_lbol (Lsun) to approximate M_i for Baldwin effect
-    m_i = _lbol_to_m_i(agn_log_lbol)
-    emission_lines = _empirical_emission_lines(
-        wavelength,
-        continuum + hot_dust,
-        agn_emline_scale,
-        m_i,
-    )
+    # --- Continuum shape (cont + BB, no lines yet) ---
+    f_nu_cont = continuum + hot_dust
 
-    # --- Combine continuum + BB + lines (all in f_nu) ---
-    f_nu_main = continuum + hot_dust + emission_lines
-
-    # --- Dust reddening ---
-    # Extinction law 10^(-0.4 * A_lam) is the same multiplicative
-    # factor in f_nu and f_lambda.
-    f_nu_main = _apply_dust_reddening(wavelength, f_nu_main, agn_ebv)
-
-    # --- Normalize to bolometric luminosity ---
-    # Integrate f_nu * dnu BEFORE adding Balmer continuum
+    # --- Normalize continuum to bolometric luminosity ---
+    # Matches original qsogen: normalize cont+BB first, then add lines
+    # and BC on top as additive excess (not re-normalized).
     nu = _wavelength_to_nu(wavelength)
     idx_sort = jnp.argsort(nu)
-    integral_nu = jnp.trapezoid(f_nu_main[idx_sort], nu[idx_sort])
+    integral_nu = jnp.trapezoid(f_nu_cont[idx_sort], nu[idx_sort])
     integral_nu = jnp.maximum(jnp.abs(integral_nu), 1e-30)
 
     l_bol_lsun = 10.0**agn_log_lbol
     norm_factor = l_bol_lsun / integral_nu
-    l_nu = f_nu_main * norm_factor
+    l_nu = f_nu_cont * norm_factor
+
+    # --- Component 3: Emission lines (added AFTER normalization) ---
+    # Matches original qsogen where add_emission_lines() runs after
+    # convert_fnu_flambda(). Lines are additive excess on top of the
+    # normalized continuum, so they do not dilute the continuum level.
+    m_i = _lbol_to_m_i(agn_log_lbol)
+    emission_lines = _empirical_emission_lines(
+        wavelength,
+        l_nu,
+        agn_emline_scale,
+        m_i,
+    )
+    l_nu = l_nu + emission_lines
 
     # --- Component 4: Balmer continuum (additive excess) ---
     # Added AFTER L_bol normalization so it is not cancelled by
@@ -666,6 +666,11 @@ def qsogen_sed(
     # qsogen's add_balmer_continuum() which runs after convert_fnu_flambda().
     bc = _balmer_continuum(wavelength, l_nu, agn_bcnorm)
     l_nu = l_nu + bc
+
+    # --- Dust reddening (applied last, to quasar SED including lines) ---
+    # Matches original qsogen where redden_spectrum() is called after
+    # emission lines are added.
+    l_nu = _apply_dust_reddening(wavelength, l_nu, agn_ebv)
 
     return l_nu * agn_frac
 

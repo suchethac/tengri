@@ -313,3 +313,116 @@ class TestFiltersCrossval:
             rtol=0.02,
             err_msg=f"{filt_name}: lambda_eff={lam_eff:.1f}, FSPS={lambda_eff:.1f}",
         )
+
+
+# ===================================================================
+# 8. Noise model: Student-t likelihood
+# ===================================================================
+
+
+class TestNoiseCrossval:
+    """Validate Student-t noise model against analytical expectations.
+
+    The Student-t likelihood generalizes the Gaussian likelihood with
+    heavier tails controlled by the degrees of freedom (dof) parameter.
+    As dof -> infinity, the Student-t approaches the Gaussian.
+    """
+
+    def test_student_t_high_dof_approaches_gaussian(self):
+        """Student-t with dof=1000 should match Gaussian energy closely."""
+        from diffsed.noise import variable_noise_hamiltonian
+
+        data = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        predicted = jnp.array([1.1, 1.9, 3.2, 3.8, 5.1])
+        noise_obs = jnp.array([0.1, 0.1, 0.1, 0.1, 0.1])
+        f_cal = 0.05
+
+        energy_gaussian = float(
+            variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=None)
+        )
+        energy_student_t = float(
+            variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=1000.0)
+        )
+
+        # High dof Student-t should be very close to Gaussian
+        np.testing.assert_allclose(
+            energy_student_t,
+            energy_gaussian,
+            rtol=0.01,
+            err_msg=(
+                f"Student-t(dof=1000) energy={energy_student_t:.4f} "
+                f"differs from Gaussian energy={energy_gaussian:.4f}"
+            ),
+        )
+
+    def test_log_likelihood_finite_for_reasonable_inputs(self):
+        """Energy should be finite for typical SED fitting inputs."""
+        from diffsed.noise import variable_noise_hamiltonian
+
+        data = jnp.array([1e-17, 2e-17, 3e-17, 5e-17, 8e-17])
+        predicted = jnp.array([1.1e-17, 1.8e-17, 3.5e-17, 4.5e-17, 7.5e-17])
+        noise_obs = jnp.array([1e-18, 2e-18, 3e-18, 5e-18, 8e-18])
+        f_cal = 0.05
+
+        # Gaussian mode
+        energy_gauss = variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=None)
+        assert jnp.isfinite(energy_gauss), f"Gaussian energy is not finite: {energy_gauss}"
+
+        # Student-t mode (typical dof values from literature)
+        for dof in [2.0, 4.0, 10.0, 30.0]:
+            energy_t = variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=dof)
+            assert jnp.isfinite(energy_t), f"Student-t(dof={dof}) energy not finite: {energy_t}"
+
+    def test_heavier_tails_higher_likelihood_for_outliers(self):
+        """Low dof (heavy tails) should give lower energy for outlier data.
+
+        Lower energy = higher likelihood. A Student-t with heavy tails
+        (low dof) should be more tolerant of outliers than a Gaussian.
+        """
+        from diffsed.noise import variable_noise_hamiltonian
+
+        # Data with one strong outlier at index 4
+        data = jnp.array([1.0, 2.0, 3.0, 4.0, 20.0])
+        predicted = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        noise_obs = jnp.array([0.1, 0.1, 0.1, 0.1, 0.1])
+        f_cal = 0.0  # no calibration floor, to isolate the tail effect
+
+        # Gaussian energy
+        energy_gaussian = float(
+            variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=None)
+        )
+
+        # Student-t with heavy tails (dof=2, Alsing+2022)
+        energy_heavy = float(
+            variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=2.0)
+        )
+
+        # Heavy tails should give LOWER energy (higher likelihood) for outliers
+        assert energy_heavy < energy_gaussian, (
+            f"Heavy-tail Student-t(dof=2) energy={energy_heavy:.2f} should be "
+            f"less than Gaussian energy={energy_gaussian:.2f} for outlier data"
+        )
+
+    def test_student_t_energy_decreases_with_lower_dof_for_outliers(self):
+        """Energy should decrease monotonically with lower dof for outlier data."""
+        from diffsed.noise import variable_noise_hamiltonian
+
+        # Data with outliers
+        data = jnp.array([1.0, 2.0, 3.0, 4.0, 15.0])
+        predicted = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        noise_obs = jnp.array([0.1, 0.1, 0.1, 0.1, 0.1])
+        f_cal = 0.0
+
+        dof_values = [100.0, 30.0, 10.0, 4.0, 2.0]
+        energies = [
+            float(variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=d))
+            for d in dof_values
+        ]
+
+        # Energy should decrease as dof decreases (heavier tails)
+        for i in range(len(energies) - 1):
+            assert energies[i] > energies[i + 1], (
+                f"Energy should decrease with lower dof: "
+                f"E(dof={dof_values[i]})={energies[i]:.2f} <= "
+                f"E(dof={dof_values[i + 1]})={energies[i + 1]:.2f}"
+            )

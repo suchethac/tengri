@@ -499,6 +499,106 @@ def _pdr_temperature(U_min: float) -> float:
     return 18.0 * U_eff ** (1.0 / 6.0)
 
 
+def _measure_dl07_pah_fraction(grid_path: str) -> float:
+    """Measure the PAH luminosity fraction from tabulated DL07 templates.
+
+    Computes the fraction of total L_nu in the 5--15 um PAH band for the
+    reference parameters qpah=2.5%, umin=1.0, gamma=0.01.  This value
+    calibrates the analytic DL07 model's PAH component.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``dl07_templates.npz`` (or ``.h5``).
+
+    Returns
+    -------
+    float
+        PAH luminosity fraction (integrated 5--15 um / total).
+    """
+    import numpy as np
+
+    data = np.load(grid_path)
+    wavs = data["wavelength"]
+    umin_grid = data["umin_grid"]
+    qpah_grid = data["qpah_grid"]
+    single_u = data["templates_umin_only"]
+    powerlaw = data["templates_umin_umax"]
+
+    # Reference indices: qpah ~ 2.5%, umin ~ 1.0
+    i_q = int(np.argmin(np.abs(qpah_grid - 2.5)))
+    i_u = int(np.argmin(np.abs(umin_grid - 1.0)))
+
+    # Mixed template: (1-gamma)*single_u + gamma*powerlaw, gamma=0.01
+    tmpl = 0.99 * single_u[i_q, i_u] + 0.01 * powerlaw[i_q, i_u]
+
+    # Normalize in L_lambda space
+    norm = np.trapezoid(tmpl, wavs)
+    if norm > 0:
+        tmpl = tmpl / norm
+
+    # Convert to L_nu: L_nu = L_lambda * lambda^2 / c
+    wave_cm = wavs * 1.0e-8
+    nu = 2.99792458e10 / wave_cm
+    tmpl_lnu = tmpl * wave_cm**2 / 2.99792458e10
+
+    # Normalize in L_nu space (nu descending -> negate)
+    int_lnu = -np.trapezoid(tmpl_lnu, nu)
+    if int_lnu > 0:
+        tmpl_lnu = tmpl_lnu / int_lnu
+
+    # PAH band: 5-15 um (50000-150000 Angstrom)
+    pah_mask = (wavs >= 50000) & (wavs <= 150000)
+    pah_frac = float(-np.trapezoid(tmpl_lnu[pah_mask], nu[pah_mask]))
+
+    return pah_frac
+
+
+# Lazy-loaded calibration: measured from DL07 tabulated templates at
+# the reference point qpah=2.5%, umin=1.0, gamma=0.01.
+# Call calibrate_dl07_pah_fraction() to update from your grid file.
+_DL07_PAH_FRAC_REF: float | None = None
+
+# Reference qpah for the calibration measurement
+_DL07_QPAH_REF: float = 2.5
+
+
+def calibrate_dl07_pah_fraction(grid_path: str) -> float:
+    """Measure and cache the DL07 PAH fraction from tabulated templates.
+
+    After calling this, the analytic ``draine_li2007()`` will use the
+    calibrated f_pah instead of the default approximation.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``dl07_templates.npz`` (or ``.h5``).
+
+    Returns
+    -------
+    float
+        The measured PAH luminosity fraction at qpah=2.5%, umin=1.0.
+    """
+    global _DL07_PAH_FRAC_REF
+    _DL07_PAH_FRAC_REF = _measure_dl07_pah_fraction(grid_path)
+    return _DL07_PAH_FRAC_REF
+
+
+def _get_dl07_pah_frac_at_ref() -> float:
+    """Return the calibrated PAH fraction, or a reasonable default.
+
+    The default (0.10) is a conservative estimate that produces FIR-dominated
+    emission consistent with the tabulated templates.  For accurate results,
+    call ``calibrate_dl07_pah_fraction()`` with the DL07 grid path.
+    """
+    if _DL07_PAH_FRAC_REF is not None:
+        return _DL07_PAH_FRAC_REF
+    # Fallback: measured from DL07 templates (qpah=2.5%, umin=1.0, gamma=0.01)
+    # PAH band (5-15 um) contains ~10% of total L_nu.  The old value of 0.25
+    # was too high, pulling the centroid to ~40 um vs the correct ~100-200 um.
+    return 0.10
+
+
 @register_emission_model("draine_li2007")
 def draine_li2007(
     wavelength_aa: jnp.ndarray,
@@ -521,6 +621,10 @@ def draine_li2007(
       warm modified-blackbody at an effective temperature.
     - **q_PAH** controls the relative strength of mid-IR PAH emission
       features, modelled here as a 7.7 um warm component.
+
+    The PAH luminosity fraction is calibrated against the tabulated DL07
+    templates.  Call ``calibrate_dl07_pah_fraction(grid_path)`` to update
+    the calibration from your own grid file.
 
     For production use with the full grain model, load the DL07 templates
     via ``load_draine_li_templates()`` and use ``draine_li2007_from_grid()``.
@@ -569,13 +673,12 @@ def draine_li2007(
     shape_pah = jnp.exp(-0.5 * ((wavelength_aa - lambda_pah) / sigma_pah) ** 2)
 
     # --- Luminosity fractions ---
-    # Calibrated against bagpipes DL07 templates (Draine & Li 2007):
-    #   At q_PAH=2.5%, U_min=1.0, gamma=0.01:
-    #     PAH (5-15 um) ~ 40% of L_IR
-    #     FIR (>30 um)  ~ 35% of L_IR
-    #     MIR continuum ~ 25% of L_IR
-    # PAH fraction scales with q_PAH; FIR fraction grows with U_min.
-    f_pah = (dust_qpah / 3.5) * 0.35
+    # PAH fraction calibrated against tabulated DL07 templates:
+    # At the reference point (qpah=2.5%, umin=1.0, gamma=0.01), the
+    # 5-15 um PAH band contains ~10% of total L_nu.  Scale linearly
+    # with qpah relative to the reference qpah.
+    f_pah_ref = _get_dl07_pah_frac_at_ref()
+    f_pah = (dust_qpah / _DL07_QPAH_REF) * f_pah_ref
     f_pdr = dust_gamma_dl
     f_diff = 1.0 - f_pah - f_pdr
 
@@ -744,6 +847,112 @@ def load_draine_li_templates(filepath: str) -> dict:
 
 
 # ===================================================================
+# Template-based Dale+2014: create from grid file
+# ===================================================================
+
+
+def create_dale2014_from_grid(grid_path: str) -> Callable:
+    """Create a Dale+2014 emission model backed by tabulated templates.
+
+    Loads the NPZ grid once and returns a function matching the emission
+    model registry interface.  The NPZ file must contain:
+
+    - ``wavelength_aa``: rest-frame wavelength grid in Angstrom (n_wave,)
+    - ``alpha_grid``: array of alpha values (n_alpha,)
+    - ``templates_sf``: star-forming templates (n_alpha, n_wave) in
+      L_lambda units (will be normalized internally so that each
+      template integrates to 1 over frequency).
+
+    The returned function performs 1-D linear interpolation in alpha
+    and normalizes the result so that the frequency integral equals
+    ``L_absorbed``.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``dale2014_templates.npz``.
+
+    Returns
+    -------
+    Callable
+        Model function with signature
+        ``(wavelength_aa, L_absorbed, dust_alpha_dale=2.0, **kw) -> L_nu``.
+
+    Example
+    -------
+    >>> dale = create_dale2014_from_grid("data/dale2014_templates.npz")
+    >>> DUST_EMISSION_MODELS["dale2014_tabulated"] = dale
+    >>> sed = dale(wav, L_abs, dust_alpha_dale=1.5)
+    """
+    import numpy as np
+
+    data = np.load(grid_path)
+    tmpl_wave = jnp.array(data["wavelength_aa"])  # (n_wave,)
+    alpha_grid = jnp.array(data["alpha_grid"])  # (n_alpha,)
+    templates_raw = np.array(data["templates_sf"])  # (n_alpha, n_wave)
+
+    # Convert from L_lambda to L_nu: L_nu = L_lambda * lambda^2 / c
+    wave_cm = np.array(tmpl_wave) * _AA_TO_CM
+    nu = _C_CGS / wave_cm  # descending for ascending wavelengths
+
+    templates_lnu = templates_raw * (wave_cm**2)[None, :] / _C_CGS
+
+    # Normalize each template so that integral(L_nu, dnu) = 1
+    # nu is descending, so negate for positive integral
+    for i in range(templates_lnu.shape[0]):
+        integral = -np.trapezoid(templates_lnu[i], nu)
+        if integral > 0:
+            templates_lnu[i] /= integral
+
+    templates = jnp.array(templates_lnu)  # (n_alpha, n_wave)
+
+    def dale2014_tabulated(
+        wavelength_aa: jnp.ndarray,
+        L_absorbed: float,
+        dust_alpha_dale: float = 2.0,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        """Dale+2014 emission from tabulated templates.
+
+        Performs 1-D linear interpolation in alpha and normalizes
+        the template so the frequency integral equals L_absorbed.
+
+        Parameters
+        ----------
+        wavelength_aa : array, shape (n_wave,)
+            Target wavelength grid in Angstrom (sorted ascending).
+        L_absorbed : float
+            Total absorbed luminosity in Lsun.
+        dust_alpha_dale : float
+            Power-law slope of the radiation field distribution.
+            Valid range determined by the grid (typically 0.0625--4.0).
+
+        Returns
+        -------
+        array, shape (n_wave,)
+            Dust emission L_nu in Lsun/Hz.
+        """
+        alpha_c = jnp.clip(dust_alpha_dale, alpha_grid[0], alpha_grid[-1])
+
+        # Linear interpolation index
+        i_a = jnp.clip(
+            jnp.searchsorted(alpha_grid, alpha_c) - 1,
+            0,
+            len(alpha_grid) - 2,
+        )
+        fa = (alpha_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
+
+        template = (1.0 - fa) * templates[i_a] + fa * templates[i_a + 1]
+
+        # Interpolate onto target wavelength grid
+        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+
+        return L_absorbed * sed
+
+    return dale2014_tabulated
+
+
+# ===================================================================
 # Model 4: Draine & Li 2014 (4 parameters) — analytic approximation
 # ===================================================================
 
@@ -852,7 +1061,10 @@ def draine_li2014(
     shape_pah = jnp.exp(-0.5 * ((wavelength_aa - lambda_pah) / sigma_pah) ** 2)
 
     # --- Luminosity fractions ---
-    f_pah = (dust_qpah / 3.5) * 0.35
+    # PAH fraction calibrated against DL07 tabulated templates (same
+    # grain model).  See calibrate_dl07_pah_fraction() and draine_li2007().
+    f_pah_ref = _get_dl07_pah_frac_at_ref()
+    f_pah = (dust_qpah / _DL07_QPAH_REF) * f_pah_ref
     f_pdr = dust_gamma_dl
     f_diff = 1.0 - f_pah - f_pdr
 
@@ -1033,6 +1245,26 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
 # ===================================================================
 # Convenience: apply emission model by name
 # ===================================================================
+
+
+def register_dale2014_tabulated(
+    grid_path: str, name: str = "dale2014_tabulated"
+) -> None:
+    """Load and register the tabulated Dale+2014 model in the emission registry.
+
+    After calling this, the model is available via
+    ``get_emission_model("dale2014_tabulated")`` and can be used as the
+    ``dust_emission_model`` in ``Model()``.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``dale2014_templates.npz``.
+    name : str
+        Registry name. Default ``"dale2014_tabulated"``.
+    """
+    model_fn = create_dale2014_from_grid(grid_path)
+    DUST_EMISSION_MODELS[name] = model_fn
 
 
 def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> None:

@@ -23,14 +23,17 @@ from diffsed.models.dust.attenuation import (
 from diffsed.models.dust.emission import (
     DUST_EMISSION_MODELS,
     apply_dust_emission,
+    calibrate_dl07_pah_fraction,
     cmb_contrast_factor,
     cmb_corrected_temperature,
     compute_absorbed_luminosity,
     compute_absorbed_luminosity_from_tau,
+    create_dale2014_from_grid,
     create_dl14_from_grid,
     get_emission_model,
     load_dl14_templates,
     planck_bnu,
+    register_dale2014_tabulated,
     register_dl14_tabulated,
     register_emission_model,
 )

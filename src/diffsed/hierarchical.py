@@ -218,6 +218,12 @@ class HierarchicalFitter:
 
         # Build model once
         model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
+        data_type = self.data_type
+
+        def _predict(params):
+            if data_type == "photometry":
+                return model.predict_photometry(params)
+            return model.predict_spectrum(params, model._wave_obs)
 
         # --- Hierarchical signal_response (vmapped) ---
         def signal_response(p):
@@ -236,7 +242,7 @@ class HierarchicalFitter:
                 params["sfh_field_psd_tau_myr"] = psd_tau
                 if stochastic:
                     params["sfh_field_xi"] = xi
-                return model.predict_photometry(params)
+                return _predict(params)
 
             if stochastic:
                 predictions = jax.vmap(forward_one)(p["gal"], p["gal_xi"])
@@ -440,7 +446,8 @@ class HierarchicalFitter:
         gal_xi_list = []
         for i in range(n_gal):
             gal = self.galaxies[i]
-            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"])
+            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"],
+                              data_type=self.data_type)
             map_i = fitter_i.run(
                 "map", n_steps=500, learning_rate=0.03,
                 verbose=False, key=init_keys[i],
@@ -622,6 +629,12 @@ class HierarchicalFitter:
 
         # Pre-build model
         model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
+        data_type = self.data_type
+
+        def _predict_cfm(params):
+            if data_type == "photometry":
+                return model.predict_photometry(params)
+            return model.predict_spectrum(params, model._wave_obs)
 
         if verbose:
             print(f"Hierarchical geoVI (CorrelatedFieldMaker): {n_gal} galaxies, n_grid={n_grid}")
@@ -716,7 +729,7 @@ class HierarchicalFitter:
                 params["sfh_field_xi"] = gp_field
                 params["sfh_field_psd_sigma"] = 1.0
                 params["sfh_field_psd_tau_myr"] = 50.0
-                return model.predict_photometry(params)
+                return _predict_cfm(params)
 
             predictions = jax.vmap(forward_one)(gal_ub, gal_xi)
             return predictions.reshape(-1)
@@ -743,7 +756,8 @@ class HierarchicalFitter:
 
         for i in range(n_gal):
             gal = self.galaxies[i]
-            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"])
+            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"],
+                              data_type=self.data_type)
             map_i = fitter_i.run(
                 "map", n_steps=500, learning_rate=0.03, verbose=False, key=keys[i]
             )
@@ -1183,7 +1197,8 @@ class HierarchicalFitter:
 
         for i in range(n_gal):
             gal = self.galaxies[i]
-            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"])
+            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"],
+                              data_type=self.data_type)
             map_i = fitter_i.run(
                 "map", n_steps=500, learning_rate=0.03, verbose=False, key=keys[i]
             )
@@ -1221,6 +1236,12 @@ class HierarchicalFitter:
 
         # Pre-build model once (PSD params will be overridden per-call)
         model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
+        data_type = self.data_type
+
+        def _predict_rt(params):
+            if data_type == "photometry":
+                return model.predict_photometry(params)
+            return model.predict_spectrum(params, model._wave_obs)
 
         def log_prob(flat_params):
             p = unravel_fn(flat_params)
@@ -1240,7 +1261,7 @@ class HierarchicalFitter:
                 params["sfh_field_psd_tau_myr"] = psd_tau
                 if stochastic:
                     params["sfh_field_xi"] = xi
-                return model.predict_photometry(params)
+                return _predict_rt(params)
 
             if stochastic:
                 predictions = jax.vmap(forward_one)(p["gal"], p["gal_xi"])
