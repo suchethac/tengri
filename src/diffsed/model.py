@@ -317,6 +317,17 @@ class Model:
             ]:
                 self._param_map[p] = (p, 1.0, 0.0)
 
+        # Radio and X-ray
+        self._radio_enabled = getattr(spec, "radio", False)
+        if self._radio_enabled:
+            for p in ["radio_q_ir", "radio_alpha_sf", "radio_loudness", "radio_alpha_agn"]:
+                self._param_map[p] = (p, 1.0, 0.0)
+
+        self._xray_enabled = getattr(spec, "xray", False)
+        if self._xray_enabled:
+            for p in ["xray_gamma_agn", "xray_alpha_ox"]:
+                self._param_map[p] = (p, 1.0, 0.0)
+
         # Nebular emission backend + params
         if spec.nebular:
             self._param_map["neb_logU"] = ("neb_logU", 1.0, 0.0)
@@ -1065,6 +1076,41 @@ class Model:
                 agn_log_ledd=p.get("agn_log_ledd", -1.0),
             )
             sed = sed + agn_sed
+            _agn_bol = L_bol_stellar * agn_frac
+        else:
+            _agn_bol = 0.0
+
+        # Radio emission (synchrotron from SF + AGN jets)
+        if self._radio_enabled:
+            from diffsed.models.radio import radio_total
+            # L_IR from dust emission (if computed), else estimate from L_absorbed
+            _L_ir = p.get("_L_ir_cached", 0.0)
+            radio_sed = radio_total(
+                self.ssp_data.ssp_wave,
+                L_ir=_L_ir,
+                L_agn_bol=_agn_bol,
+                q_ir=p.get("radio_q_ir", 2.64),
+                alpha_sf=p.get("radio_alpha_sf", 0.8),
+                radio_loudness=p.get("radio_loudness", 0.0),
+                alpha_agn=p.get("radio_alpha_agn", 0.7),
+            )
+            sed = sed + radio_sed
+
+        # X-ray emission (XRBs + AGN corona)
+        if self._xray_enabled:
+            from diffsed.models.xray import xray_total
+            # SFR and M* from derived quantities
+            _sfr = p.get("_sfr_cached", 1.0)
+            _mstar = p.get("_mstar_cached", 1e10)
+            xray_sed = xray_total(
+                self.ssp_data.ssp_wave,
+                sfr=_sfr,
+                stellar_mass=_mstar,
+                L_agn_bol=_agn_bol,
+                gamma_agn=p.get("xray_gamma_agn", 1.8),
+                alpha_ox=p.get("xray_alpha_ox", -1.4),
+            )
+            sed = sed + xray_sed
 
         return sed
 

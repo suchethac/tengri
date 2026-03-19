@@ -314,6 +314,8 @@ SETTINGS_KEYS = frozenset({
     "dust_emission", "dl07_grid_path",
     # AGN
     "agn_model",
+    # Radio & X-ray
+    "radio", "xray",
     # Evolving metallicity
     "evolving_metallicity",
 })
@@ -450,8 +452,14 @@ class ParamSpec:
         self.dust_emission = kwargs.pop("dust_emission", None)
         self.dl07_grid_path = kwargs.pop("dl07_grid_path", None)
 
-        # AGN model: None (default), "simple", "standard", "kubota_done"
+        # AGN model: None (default), "simple", "standard", "kubota_done", "unified_nlr_blr"
         self.agn_model = kwargs.pop("agn_model", None)
+
+        # Radio: False (default), True — adds synchrotron + AGN jet emission
+        self.radio = kwargs.pop("radio", False)
+
+        # X-ray: False (default), True — adds XRB + AGN corona emission
+        self.xray = kwargs.pop("xray", False)
 
         # Evolving metallicity: False (default), True
         self.evolving_metallicity = kwargs.pop("evolving_metallicity", False)
