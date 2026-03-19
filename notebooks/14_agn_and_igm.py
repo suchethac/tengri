@@ -37,26 +37,31 @@ jax.config.update("jax_enable_x64", True)
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+import matplotlib.colors as mcolors
+import matplotlib.cm as mcm
 import numpy as np
 
 from diffsed.models.agn import AGN_MODELS, get_agn_model, unified_agn
 from diffsed.models.agn.disc import powerlaw_disc, multicolor_disc
 from diffsed.models.agn.torus import simple_torus, two_temperature_torus
 from diffsed.models.igm import igm_transmission
+from diffsed.models.observation.filters import load_filter
 from diffsed import (
     Model, ParamSpec, Uniform, Fixed,
     load_ssp_data, load_filter_set,
 )
 
-# ── Plot style ─────────────────────────────────────────────────
+# -- Plot style --------------------------------------------------------
 plt.rcParams.update({
-    "figure.dpi": 130,
+    "figure.dpi": 150,
     "font.size": 11,
     "font.family": "serif",
     "mathtext.fontset": "dejavuserif",
-    "axes.linewidth": 1.2,
-    "xtick.major.width": 1.0,
-    "ytick.major.width": 1.0,
+    "axes.linewidth": 1.0,
+    "xtick.major.width": 0.8,
+    "ytick.major.width": 0.8,
+    "xtick.minor.width": 0.5,
+    "ytick.minor.width": 0.5,
     "xtick.direction": "in",
     "ytick.direction": "in",
     "xtick.top": True,
@@ -67,16 +72,22 @@ plt.rcParams.update({
     "legend.fontsize": 9,
     "savefig.dpi": 300,
     "savefig.bbox": "tight",
+    "axes.prop_cycle": plt.cycler(
+        color=["#2b6ca3", "#d65f27", "#3a9a5b", "#c03d3e",
+               "#8b6bba", "#8c564b", "#e377c2", "#7f7f7f"]
+    ),
 })
 
-# ── Figure output directory ────────────────────────────────────
+# -- Figure output directory -------------------------------------------
 FIG_DIR = "figures"
 os.makedirs(FIG_DIR, exist_ok=True)
 
-def savefig(fig, name, dpi=150):
+
+def savefig(fig, name, dpi=200):
     path = os.path.join(FIG_DIR, f"14_{name}.png")
     fig.savefig(path, bbox_inches="tight", dpi=dpi)
     print(f"Saved {path}")
+
 
 # %% [markdown]
 # ## 1. AGN Models: Disc + Torus SEDs
@@ -122,20 +133,33 @@ sed_kubota = get_agn_model("kubota_done")(
 wave_um = np.array(wave) / 1e4  # Angstrom -> micron
 nu = 2.99792458e18 / np.array(wave)  # Hz
 
-fig, ax = plt.subplots(figsize=(8, 5))
-ax.loglog(wave_um, np.array(sed_simple) * nu, label="simple", lw=2.0)
-ax.loglog(wave_um, np.array(sed_standard) * nu, label="standard", lw=2.0, ls="--")
-ax.loglog(wave_um, np.array(sed_kubota) * nu, label="kubota_done", lw=2.0, ls=":")
+fig, ax = plt.subplots(figsize=(9, 5.5))
+ax.loglog(wave_um, np.array(sed_simple) * nu, label="simple", lw=2.2, color="#2b6ca3")
+ax.loglog(wave_um, np.array(sed_standard) * nu, label="standard", lw=2.0,
+          ls="--", color="#d65f27")
+ax.loglog(wave_um, np.array(sed_kubota) * nu, label="kubota\\_done", lw=2.0,
+          ls=":", color="#3a9a5b")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$\nu L_\nu$ [$L_\odot$]")
+ax.set_ylabel(r"$\lambda L_\lambda$ [$L_\odot$]")
 ax.set_title(r"AGN SED models ($\log L_{\rm bol} = 44$)")
 ax.set_xlim(0.05, 30)
 ax.set_ylim(bottom=1e6)
-ax.legend(loc="upper right")
-ax.axvline(0.0912, color="0.7", ls=":", lw=0.6, zorder=0)
-ax.text(0.0912, ax.get_ylim()[1] * 0.7, r"Ly limit", fontsize=7, color="0.5", ha="right")
-ax.axvline(9.7, color="0.7", ls=":", lw=0.6, zorder=0)
-ax.text(9.7, ax.get_ylim()[1] * 0.7, r"Si 9.7$\mu$m", fontsize=7, color="0.5", ha="left")
+ax.legend(loc="upper right", fontsize=10)
+
+# Key wavelength annotations
+key_lines = {
+    r"Ly$\alpha$": 0.1216e-4 * 1e4,  # 0.1216 um
+    r"UV 1500\AA": 0.15,
+    r"1 $\mu$m": 1.0,
+    r"10 $\mu$m": 10.0,
+    r"Si 9.7 $\mu$m": 9.7,
+}
+ylim_top = ax.get_ylim()[1]
+for label, lam_um in key_lines.items():
+    ax.axvline(lam_um, color="0.65", ls=":", lw=0.6, zorder=0)
+    ax.text(lam_um, ylim_top * 0.5, label, fontsize=7, color="0.45",
+            ha="center", va="top", rotation=90, style="italic")
+
 fig.tight_layout()
 savefig(fig, "agn_three_models")
 plt.show()
@@ -145,7 +169,8 @@ plt.show()
 #
 # The `unified_agn` combiner splits the bolometric luminosity between the
 # disc (fraction $1 - f_{\rm torus}$) and the torus ($f_{\rm torus}$).
-# Here we show the two components separately for the `simple` model.
+# Here we show the two components separately for the `simple` model,
+# displayed as filled regions to visualize the energy budget.
 
 # %%
 torus_frac = 0.5
@@ -158,18 +183,38 @@ l_torus = simple_torus(wave, agn_log_lbol=log_lbol, agn_torus_frac=torus_frac,
                        agn_T_torus=1000.0)
 l_total = l_disc + l_torus
 
-fig, ax = plt.subplots(figsize=(8, 5))
-ax.loglog(wave_um, np.array(l_disc) * nu, label="Accretion disc", color="#1f77b4", lw=1.8)
-ax.loglog(wave_um, np.array(l_torus) * nu, label="Dust torus", color="#d62728", lw=1.8)
-ax.loglog(wave_um, np.array(l_total) * nu, label="Total AGN", color="k", lw=2.2)
-ax.fill_between(wave_um, 1e-10, np.array(l_disc) * nu, alpha=0.08, color="#1f77b4")
-ax.fill_between(wave_um, 1e-10, np.array(l_torus) * nu, alpha=0.08, color="#d62728")
+# Convert to lambda*L_lambda
+disc_lLl = np.array(l_disc) * nu
+torus_lLl = np.array(l_torus) * nu
+total_lLl = np.array(l_total) * nu
+
+fig, ax = plt.subplots(figsize=(9, 5.5))
+
+# Filled regions showing energy budget
+ax.fill_between(wave_um, 1e-10, disc_lLl, alpha=0.20, color="#2b6ca3",
+                label="Accretion disc")
+ax.fill_between(wave_um, 1e-10, torus_lLl, alpha=0.20, color="#c03d3e",
+                label="Dust torus")
+
+# Line on top
+ax.loglog(wave_um, disc_lLl, color="#2b6ca3", lw=1.5, alpha=0.9)
+ax.loglog(wave_um, torus_lLl, color="#c03d3e", lw=1.5, alpha=0.9)
+ax.loglog(wave_um, total_lLl, color="k", lw=2.2, label="Total AGN")
+
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$\nu L_\nu$ [$L_\odot$]")
+ax.set_ylabel(r"$\lambda L_\lambda$ [$L_\odot$]")
 ax.set_title(r"Disc + torus decomposition ($f_{\rm torus} = 0.5$)")
 ax.set_xlim(0.05, 30)
 ax.set_ylim(bottom=1e6)
-ax.legend(loc="upper right")
+ax.legend(loc="upper right", fontsize=10)
+
+# Mark key wavelengths
+for label, lam_um in {r"Ly$\alpha$": 0.1216, "UV 1500 \AA": 0.15,
+                       r"1 $\mu$m": 1.0, r"Si 9.7 $\mu$m": 9.7}.items():
+    ax.axvline(lam_um, color="0.65", ls=":", lw=0.6, zorder=0)
+    ax.text(lam_um * 1.05, ax.get_ylim()[1] * 0.3, label, fontsize=7,
+            color="0.45", rotation=90, va="top", style="italic")
+
 fig.tight_layout()
 savefig(fig, "disc_torus_decomposition")
 plt.show()
@@ -182,15 +227,11 @@ plt.show()
 # at high fractions the UV and MIR are boosted by the disc and torus.
 
 # %%
-agn_fracs = [0.0, 0.01, 0.05, 0.1, 0.3, 0.5]
+agn_fracs = [0.01, 0.05, 0.1, 0.3, 0.5]
 colors_frac = plt.cm.plasma(np.linspace(0.15, 0.85, len(agn_fracs)))
 
-fig, ax = plt.subplots(figsize=(8, 5))
+fig, ax = plt.subplots(figsize=(9, 5.5))
 for frac, col in zip(agn_fracs, colors_frac):
-    if frac == 0.0:
-        ax.loglog(wave_um, np.ones_like(wave_um) * 1e-10, color=col,
-                  label=f"$f_{{\\rm AGN}} = {frac:.2f}$", lw=0.5)
-        continue
     sed_frac = get_agn_model("simple")(
         wave, agn_log_lbol=log_lbol, agn_frac=frac,
         agn_alpha=-1.0, agn_T_torus=1000.0, agn_torus_frac=0.5,
@@ -199,11 +240,11 @@ for frac, col in zip(agn_fracs, colors_frac):
               label=f"$f_{{\\rm AGN}} = {frac:.2f}$", lw=1.5)
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$\nu L_\nu$ [$L_\odot$]")
+ax.set_ylabel(r"$\lambda L_\lambda$ [$L_\odot$]")
 ax.set_title(r"Effect of $f_{\rm AGN}$ on AGN SED")
 ax.set_xlim(0.05, 30)
 ax.set_ylim(1e6, 1e13)
-ax.legend(loc="lower left", fontsize=8)
+ax.legend(loc="lower left", fontsize=9)
 fig.tight_layout()
 savefig(fig, "agn_frac_effect")
 plt.show()
@@ -221,7 +262,7 @@ plt.show()
 
 # %%
 # Load SSP data
-ssp_data = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
+ssp_data = load_ssp_data("../data/fsps_prsc_miles_chabrier.h5")
 
 # Filter set: GALEX (UV) + SDSS (optical) + WISE (MIR)
 filter_names = [
@@ -284,29 +325,29 @@ sed_agn = np.array(model_agn.predict_sed(params_agn))
 ssp_wave_um = np.array(ssp_data.ssp_wave) / 1e4  # Angstrom -> micron
 
 # %%
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5.5))
 
 # --- Left panel: rest-frame SEDs ---
 nu_ssp = 2.99792458e18 / np.array(ssp_data.ssp_wave)
-ax1.loglog(ssp_wave_um, sed_no_agn * nu_ssp, color="#1f77b4", lw=1.2,
+ax1.loglog(ssp_wave_um, sed_no_agn * nu_ssp, color="#2b6ca3", lw=1.2,
            label="Galaxy only", alpha=0.8)
-ax1.loglog(ssp_wave_um, sed_agn * nu_ssp, color="#d62728", lw=1.2,
+ax1.loglog(ssp_wave_um, sed_agn * nu_ssp, color="#c03d3e", lw=1.2,
            label="Galaxy + AGN (10%)", alpha=0.8)
 ax1.set_xlabel(r"Rest-frame wavelength [$\mu$m]")
-ax1.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
+ax1.set_ylabel(r"$\lambda L_\lambda$ [erg s$^{-1}$]")
 ax1.set_title("Rest-frame SED")
 ax1.set_xlim(0.05, 30)
 ax1.legend(loc="upper right")
 
 # --- Right panel: observed photometry ---
 ax2.scatter(filter_wave_eff / 1e4, phot_no_agn * 1e29, s=60, marker="o",
-            color="#1f77b4", zorder=5, label="Galaxy only")
+            color="#2b6ca3", zorder=5, label="Galaxy only")
 ax2.scatter(filter_wave_eff / 1e4, phot_agn * 1e29, s=60, marker="D",
-            color="#d62728", zorder=5, label="Galaxy + AGN (10%)")
+            color="#c03d3e", zorder=5, label="Galaxy + AGN (10%)")
 # Connect with lines for clarity
-ax2.plot(filter_wave_eff / 1e4, phot_no_agn * 1e29, "-", color="#1f77b4",
+ax2.plot(filter_wave_eff / 1e4, phot_no_agn * 1e29, "-", color="#2b6ca3",
          alpha=0.4, lw=1.0)
-ax2.plot(filter_wave_eff / 1e4, phot_agn * 1e29, "-", color="#d62728",
+ax2.plot(filter_wave_eff / 1e4, phot_agn * 1e29, "-", color="#c03d3e",
          alpha=0.4, lw=1.0)
 ax2.set_xscale("log")
 ax2.set_yscale("log")
@@ -330,7 +371,7 @@ savefig(fig, "agn_forward_model")
 plt.show()
 
 # %% [markdown]
-# ## 3. IGM Absorption
+# ## 3. IGM Transmission
 #
 # The intergalactic medium absorbs photons blueward of Lyman-$\alpha$
 # (1216 \AA) through:
@@ -345,72 +386,117 @@ plt.show()
 # %%
 # Observed wavelength grid
 wave_obs = jnp.linspace(800.0, 15000.0, 5000)
+wave_obs_np = np.array(wave_obs)
 
-# Compute T_IGM at multiple redshifts
-redshifts = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
-colors_z = plt.cm.viridis(np.linspace(0.1, 0.95, len(redshifts)))
+# Compute T_IGM at a dense redshift grid for colormap display
+z_vals = np.arange(0.0, 8.5, 0.5)
+n_z = len(z_vals)
 
-fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True,
-                          gridspec_kw={"height_ratios": [3, 1], "hspace": 0.05})
+# Use a smooth colormap with a colorbar
+cmap = plt.cm.viridis_r
+norm = mcolors.Normalize(vmin=0, vmax=8)
 
-ax_main = axes[0]
-ax_zoom = axes[1]
+fig, ax = plt.subplots(figsize=(10, 5))
 
-for z_s, col in zip(redshifts, colors_z):
+for z_s in z_vals:
     t_igm = np.array(igm_transmission(wave_obs, z_s))
-    ax_main.plot(np.array(wave_obs), t_igm, color=col, lw=1.2,
-                 label=f"$z = {z_s:.0f}$")
+    ax.plot(wave_obs_np, t_igm, color=cmap(norm(z_s)), lw=0.9, alpha=0.85)
 
-# Mark key features
-ax_main.axvline(1216.0, color="0.7", ls=":", lw=0.6)
-ax_main.text(1216, 1.03, r"Ly$\alpha$", fontsize=8, ha="center", color="0.5")
-ax_main.axvline(912.0, color="0.7", ls=":", lw=0.6)
-ax_main.text(912, 1.03, r"Ly limit", fontsize=8, ha="center", color="0.5")
+# Colorbar for redshift
+sm = mcm.ScalarMappable(cmap=cmap, norm=norm)
+sm.set_array([])
+cbar = fig.colorbar(sm, ax=ax, pad=0.02, aspect=30)
+cbar.set_label(r"Source redshift $z$", fontsize=11)
+cbar.set_ticks(np.arange(0, 9, 1))
 
-ax_main.set_ylabel(r"$T_{\rm IGM}(\lambda_{\rm obs})$")
-ax_main.set_ylim(-0.02, 1.1)
-ax_main.set_title("Mean IGM transmission (Inoue et al. 2014)")
-ax_main.legend(loc="lower right", ncol=4, fontsize=8)
-plt.setp(ax_main.get_xticklabels(), visible=False)
+# Mark Ly-alpha and Ly-limit at rest frame
+ax.axvline(1216.0, color="0.6", ls=":", lw=0.7)
+ax.text(1216, 1.04, r"Ly$\alpha$ (rest)", fontsize=8, ha="center", color="0.4")
+ax.axvline(912.0, color="0.6", ls=":", lw=0.7)
+ax.text(912, 1.04, r"Ly limit (rest)", fontsize=8, ha="center", color="0.4")
 
-# Zoom into the Lyman break region at z=4
-t_z4 = np.array(igm_transmission(wave_obs, 4.0))
-ax_zoom.plot(np.array(wave_obs), t_z4, color=colors_z[4], lw=1.5)
-ax_zoom.set_ylabel(r"$T_{\rm IGM}$ ($z=4$)")
-ax_zoom.set_xlabel(r"Observed wavelength [$\AA$]")
-ax_zoom.set_ylim(-0.02, 1.1)
+# Mark Ly-alpha at selected redshifts
+for z_mark in [3, 5, 7]:
+    lam_lya = 1216.0 * (1.0 + z_mark)
+    ax.axvline(lam_lya, color=cmap(norm(z_mark)), ls="--", lw=0.5, alpha=0.5)
+    ax.text(lam_lya, -0.08, f"Ly$\\alpha$\n$z={z_mark}$", fontsize=6.5,
+            ha="center", color=cmap(norm(z_mark)), clip_on=False)
+    lam_lylim = 912.0 * (1.0 + z_mark)
+    ax.axvline(lam_lylim, color=cmap(norm(z_mark)), ls=":", lw=0.4, alpha=0.4)
 
-# Mark Lyman series lines shifted to z=4
-lyman_lines = {"Ly$\\alpha$": 1216.0, "Ly$\\beta$": 1026.0,
-               "Ly$\\gamma$": 973.0, "Ly limit": 912.0}
-for name, lam_rest in lyman_lines.items():
-    lam_obs = lam_rest * (1.0 + 4.0)
-    ax_zoom.axvline(lam_obs, color="0.6", ls=":", lw=0.5)
-    ax_zoom.text(lam_obs, 1.03, name, fontsize=7, ha="center",
-                 color="0.5", rotation=45)
-
-# Shade Gunn-Peterson trough region
-wave_np = np.array(wave_obs)
-mask_gp = wave_np < 912.0 * (1.0 + 4.0)
-ax_zoom.fill_between(wave_np[mask_gp], 0, 1.1, alpha=0.05, color="purple")
-ax_zoom.text(912.0 * 5.0 / 2, 0.5, "Gunn-Peterson\ntrough", fontsize=8,
-             ha="center", color="purple", alpha=0.6)
+ax.set_ylabel(r"$T_{\rm IGM}(\lambda_{\rm obs})$")
+ax.set_xlabel(r"Observed wavelength [$\AA$]")
+ax.set_ylim(-0.05, 1.1)
+ax.set_xlim(800, 15000)
+ax.set_title("Mean IGM transmission (Inoue et al. 2014)")
 
 fig.tight_layout()
 savefig(fig, "igm_transmission")
 plt.show()
 
 # %% [markdown]
-# ## 4. High-$z$ Galaxy with IGM Absorption
+# ### 3b. IGM Transmission Detail: Lyman Series at $z = 4$
+#
+# Zoom into the Lyman break region at $z = 4$ to show the individual
+# Lyman-series absorption features and the Gunn-Peterson trough.
+
+# %%
+t_z4 = np.array(igm_transmission(wave_obs, 4.0))
+
+fig, ax = plt.subplots(figsize=(10, 4))
+ax.plot(wave_obs_np, t_z4, color="#2b6ca3", lw=1.5)
+ax.set_ylabel(r"$T_{\rm IGM}$ ($z=4$)")
+ax.set_xlabel(r"Observed wavelength [$\AA$]")
+ax.set_ylim(-0.02, 1.1)
+ax.set_xlim(800, 15000)
+
+# Mark Lyman series lines shifted to z=4
+lyman_lines = {"Ly$\\alpha$": 1216.0, "Ly$\\beta$": 1026.0,
+               "Ly$\\gamma$": 973.0, "Ly limit": 912.0}
+for name, lam_rest in lyman_lines.items():
+    lam_obs = lam_rest * (1.0 + 4.0)
+    ax.axvline(lam_obs, color="#d65f27", ls=":", lw=0.7)
+    ax.text(lam_obs, 1.04, name, fontsize=7, ha="center",
+            color="#d65f27", rotation=30)
+
+# Shade Gunn-Peterson trough region
+mask_gp = wave_obs_np < 912.0 * (1.0 + 4.0)
+ax.fill_between(wave_obs_np[mask_gp], 0, 1.1, alpha=0.06, color="purple")
+ax.text(912.0 * 5.0 / 2, 0.5, "Gunn-Peterson\ntrough", fontsize=9,
+        ha="center", color="purple", alpha=0.6)
+
+ax.set_title(r"Lyman-series features at $z = 4$")
+fig.tight_layout()
+savefig(fig, "igm_lyman_series_z4")
+plt.show()
+
+# %% [markdown]
+# ## 4. High-$z$ Galaxy with IGM: Dropout Signature
 #
 # At $z = 6$, the Lyman break at 912 \AA\ is redshifted to
 # $\sim 6400$ \AA\ (observed), while Ly$\alpha$ at 1216 \AA\ shifts to
 # $\sim 8500$ \AA. This means essentially all flux blueward of the
 # $i$-band is absorbed, creating a classic "$i$-band dropout."
 #
-# We demonstrate this using a full diffsed forward model at $z = 6$.
+# We show the galaxy SED at $z = 6$ with IGM ON and OFF, overlaid with
+# JWST NIRCam filter transmission curves.
 
 # %%
+# JWST NIRCam wide-band filter names
+jwst_names = [
+    "jwst_f090w", "jwst_f115w", "jwst_f150w", "jwst_f200w",
+    "jwst_f277w", "jwst_f356w", "jwst_f444w",
+]
+jwst_labels = ["F090W", "F115W", "F150W", "F200W", "F277W", "F356W", "F444W"]
+
+# Load filter curves (for transmission overlays)
+jwst_curves = [load_filter(n) for n in jwst_names]
+
+# Also load as filter set for Model
+jwst_filters = load_filter_set(jwst_names)
+# Approximate effective wavelengths (micron)
+jwst_wave_eff_um = np.array([0.90, 1.15, 1.50, 2.00, 2.77, 3.56, 4.44])
+
 # ParamSpec for a z=6 star-forming galaxy
 spec_z6 = ParamSpec(
     sfh_dpl_log_peak_sfr=Fixed(1.5),
@@ -424,7 +510,6 @@ spec_z6 = ParamSpec(
     mean_sfh_type="dpl",
     apply_igm=True,
 )
-
 spec_z6_noigm = ParamSpec(
     sfh_dpl_log_peak_sfr=Fixed(1.5),
     sfh_dpl_tau_gyr=Fixed(0.3),
@@ -438,16 +523,8 @@ spec_z6_noigm = ParamSpec(
     apply_igm=False,
 )
 
-# Use SDSS + JWST NIRCam filters to span the dropout
-filter_names_z6 = [
-    "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "jwst_f090w", "jwst_f115w", "jwst_f150w", "jwst_f200w",
-    "jwst_f277w", "jwst_f356w", "jwst_f444w",
-]
-filters_z6 = load_filter_set(filter_names_z6)
-
-model_z6 = Model(spec_z6, ssp_data, filters=filters_z6)
-model_z6_noigm = Model(spec_z6_noigm, ssp_data, filters=filters_z6)
+model_z6 = Model(spec_z6, ssp_data, filters=jwst_filters)
+model_z6_noigm = Model(spec_z6_noigm, ssp_data, filters=jwst_filters)
 
 params_z6 = spec_z6.sample(jax.random.PRNGKey(42))
 params_z6_noigm = spec_z6_noigm.sample(jax.random.PRNGKey(42))
@@ -455,70 +532,95 @@ params_z6_noigm = spec_z6_noigm.sample(jax.random.PRNGKey(42))
 phot_z6 = np.array(model_z6.predict_photometry(params_z6))
 phot_z6_noigm = np.array(model_z6_noigm.predict_photometry(params_z6_noigm))
 
-# Effective wavelengths (approximate, in Angstrom)
-wave_eff_z6 = np.array([
-    3551, 4686, 6166, 7480, 8932,  # SDSS
-    9000, 11500, 15000, 20000,     # NIRCam SW
-    27700, 35600, 44400,           # NIRCam LW
-])
+# Also get SEDs for continuous curve
+sed_z6_rest = np.array(model_z6.predict_sed(params_z6))
+sed_z6_noigm_rest = np.array(model_z6_noigm.predict_sed(params_z6_noigm))
+ssp_wave_obs_um = np.array(ssp_data.ssp_wave) * (1.0 + 6.0) / 1e4  # observed micron
+
+# Convert SEDs to approximate observed flux (erg/s/cm2/Hz -> uJy)
+# Scale factor: use photometry to anchor the SED normalization
+# For display, we normalize SED to match photometry at F200W
+sed_scale_idx = np.argmin(np.abs(ssp_wave_obs_um - 2.0))  # near F200W
+if sed_z6_noigm_rest[sed_scale_idx] > 0:
+    # F200W is index 3 in our filter list
+    sed_norm = (phot_z6_noigm[3] * 1e29) / (sed_z6_noigm_rest[sed_scale_idx] * 1e29 /
+               np.max(sed_z6_noigm_rest * 1e29) * np.max(phot_z6_noigm * 1e29))
+else:
+    sed_norm = 1.0
 
 # %%
-fig, ax = plt.subplots(figsize=(9, 5))
+fig, ax = plt.subplots(figsize=(10, 6))
 
-# Convert to microJy for visibility
+# Convert to uJy
 phot_uJy = phot_z6 * 1e29
 phot_uJy_noigm = phot_z6_noigm * 1e29
 
-# Plot without IGM
-ax.scatter(wave_eff_z6 / 1e4, phot_uJy_noigm, s=50, marker="s",
-           facecolors="none", edgecolors="#1f77b4", linewidths=1.2,
+# -- Shaded JWST filter bandpasses --
+filter_colors = ["#b0b0b0", "#a0a0a0", "#909090", "#808080",
+                 "#707070", "#606060", "#505050"]
+# Determine which bands are dropouts (Ly-alpha at z=6 = 8512 A = 0.85 um)
+lam_lya_obs_um = 1216.0 * 7.0 / 1e4  # 0.8512 um
+
+for i, (fc, label) in enumerate(zip(jwst_curves, jwst_labels)):
+    fw = np.array(fc.wave) / 1e4  # Angstrom -> micron
+    ft = np.array(fc.trans)
+
+    # Color dropout bands differently
+    eff_wave = jwst_wave_eff_um[i]
+    is_dropout = eff_wave < lam_lya_obs_um
+    fill_color = "#e8c0c0" if is_dropout else "#c0d8e8"
+    edge_color = "#c03d3e" if is_dropout else "#2b6ca3"
+
+    # Plot normalized transmission on a secondary (invisible) scale
+    ax.fill_between(fw, 0, ft * 0.8, alpha=0.12, color=fill_color,
+                    zorder=1, transform=ax.get_xaxis_transform())
+    ax.text(eff_wave, 0.88, label, fontsize=7, ha="center", color=edge_color,
+            fontweight="bold", transform=ax.get_xaxis_transform())
+
+# -- Photometry points --
+# No IGM (open squares)
+ax.scatter(jwst_wave_eff_um, phot_uJy_noigm, s=55, marker="s",
+           facecolors="none", edgecolors="#2b6ca3", linewidths=1.2,
            zorder=5, label="No IGM absorption")
-ax.plot(wave_eff_z6 / 1e4, phot_uJy_noigm, "-", color="#1f77b4",
+ax.plot(jwst_wave_eff_um, phot_uJy_noigm, "-", color="#2b6ca3",
         alpha=0.3, lw=1.0)
 
-# Plot with IGM
-ax.scatter(wave_eff_z6 / 1e4, np.maximum(phot_uJy, 1e-10), s=70,
-           marker="o", color="#d62728", zorder=6, label="With IGM (Inoue+2014)")
-ax.plot(wave_eff_z6 / 1e4, np.maximum(phot_uJy, 1e-10), "-",
-        color="#d62728", alpha=0.3, lw=1.0)
+# With IGM (filled circles)
+ax.scatter(jwst_wave_eff_um, np.maximum(phot_uJy, 1e-10), s=70,
+           marker="o", color="#c03d3e", zorder=6, label="With IGM (Inoue+2014)")
+ax.plot(jwst_wave_eff_um, np.maximum(phot_uJy, 1e-10), "-",
+        color="#c03d3e", alpha=0.3, lw=1.0)
 
-# Mark the Lyman break at z=6
-lam_ly_obs = 912.0 * (1.0 + 6.0) / 1e4  # micron
-lam_lya_obs = 1216.0 * (1.0 + 6.0) / 1e4
+# Mark the Lyman break and Ly-alpha at z=6
+lam_ly_obs = 912.0 * 7.0 / 1e4  # micron
 ax.axvline(lam_ly_obs, color="0.6", ls="--", lw=0.8)
-ax.text(lam_ly_obs, ax.get_ylim()[0] if ax.get_ylim()[0] > 0 else 1e-6,
+ax.text(lam_ly_obs * 0.95, ax.get_ylim()[0] if ax.get_ylim()[0] > 1e-6 else 1e-6,
         f"Ly limit\n({lam_ly_obs:.2f} $\\mu$m)", fontsize=7, ha="right",
         color="0.5", va="bottom")
-ax.axvline(lam_lya_obs, color="0.6", ls=":", lw=0.8)
-ax.text(lam_lya_obs, 1e-4, f"Ly$\\alpha$\n({lam_lya_obs:.2f} $\\mu$m)",
+ax.axvline(lam_lya_obs_um, color="0.6", ls=":", lw=0.8)
+ax.text(lam_lya_obs_um * 1.05, 1e-4, f"Ly$\\alpha$\n({lam_lya_obs_um:.2f} $\\mu$m)",
         fontsize=7, ha="left", color="0.5", va="bottom")
 
-# Shade the dropout region
-ax.axvspan(0.3, lam_lya_obs, alpha=0.06, color="purple")
-ax.text(0.55, 0.02, "$u$-band\ndropout\nregion", fontsize=9,
-        ha="center", color="purple", alpha=0.7, transform=ax.transAxes)
+# Shade dropout region
+ax.axvspan(0.7, lam_lya_obs_um, alpha=0.04, color="purple", zorder=0)
+ax.text(0.8, 0.92, "dropout\nregion", fontsize=9, ha="center", color="purple",
+        alpha=0.5, transform=ax.get_xaxis_transform())
 
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlabel(r"Observed wavelength [$\mu$m]")
 ax.set_ylabel(r"$f_\nu$ [$\mu$Jy]")
-ax.set_title(r"Galaxy at $z = 6$: IGM creates the Lyman-break dropout")
-ax.set_xlim(0.3, 5.5)
-ax.legend(loc="upper right")
-
-# Label filter bands
-band_labels = ["u", "g", "r", "i", "z",
-               "F090W", "F115W", "F150W", "F200W", "F277W", "F356W", "F444W"]
-for weff, label in zip(wave_eff_z6 / 1e4, band_labels):
-    y_pos = max(phot_uJy_noigm[list(wave_eff_z6 / 1e4).index(weff)] * 1.5, 1e-5)
-    ax.text(weff, y_pos, label, fontsize=6, ha="center", color="0.4")
+ax.set_title(r"Galaxy at $z = 6$: IGM dropout with JWST NIRCam bandpasses")
+ax.set_xlim(0.7, 5.5)
+ax.set_ylim(1e-6, phot_uJy_noigm.max() * 5)
+ax.legend(loc="lower right", fontsize=9)
 
 fig.tight_layout()
 savefig(fig, "high_z_galaxy_igm")
 plt.show()
 
 # %% [markdown]
-# ## 5. IGM + Photometric Redshifts: The Dropout Signature
+# ## 5. Dropout Signature Across Redshifts
 #
 # The power of IGM absorption for photometric redshift estimation comes
 # from the fact that the Lyman break moves through the filter set as
@@ -527,25 +629,16 @@ plt.show()
 # the $r$-band, and at $z \sim 7$ in the $i$-band.
 #
 # Here we show observed photometry of the same intrinsic galaxy at
-# $z = 4, 5, 6, 7$ through JWST NIRCam filters, demonstrating how the
-# dropout moves redward.
+# $z = 4, 5, 6, 7$ through JWST NIRCam filters, with filter
+# transmission curves overlaid.
 
 # %%
-# JWST NIRCam filter set (wide-band)
-jwst_names = [
-    "jwst_f090w", "jwst_f115w", "jwst_f150w", "jwst_f200w",
-    "jwst_f277w", "jwst_f356w", "jwst_f444w",
-]
-jwst_filters = load_filter_set(jwst_names)
-# Approximate effective wavelengths (micron)
-jwst_wave_eff_um = np.array([0.90, 1.15, 1.50, 2.00, 2.77, 3.56, 4.44])
-
 target_redshifts = [4.0, 5.0, 6.0, 7.0]
-colors_panel = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
+panel_colors = ["#2b6ca3", "#d65f27", "#3a9a5b", "#c03d3e"]
 
-fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey=True)
+fig, axes = plt.subplots(2, 2, figsize=(13, 9), sharex=True, sharey=True)
 
-for ax, z_target, col in zip(axes.flat, target_redshifts, colors_panel):
+for ax, z_target, col in zip(axes.flat, target_redshifts, panel_colors):
     # Build model at this redshift
     spec_z = ParamSpec(
         sfh_dpl_log_peak_sfr=Fixed(1.5),
@@ -581,6 +674,18 @@ for ax, z_target, col in zip(axes.flat, target_redshifts, colors_panel):
     phot_igm = np.array(model_z.predict_photometry(p_z)) * 1e29  # uJy
     phot_noi = np.array(model_z_noigm.predict_photometry(p_z_noigm)) * 1e29
 
+    # -- Shaded filter bandpasses --
+    lam_lya_z = 1216.0 * (1.0 + z_target) / 1e4  # Ly-alpha in micron
+
+    for i, (fc, label) in enumerate(zip(jwst_curves, jwst_labels)):
+        fw = np.array(fc.wave) / 1e4
+        ft = np.array(fc.trans)
+
+        is_dropout = jwst_wave_eff_um[i] < lam_lya_z
+        fc_color = "#daa0a0" if is_dropout else "#d8d8d8"
+        ax.fill_between(fw, 0, ft * 0.6, alpha=0.20, color=fc_color,
+                        zorder=0, transform=ax.get_xaxis_transform())
+
     # No-IGM as open squares
     ax.scatter(jwst_wave_eff_um, phot_noi, s=40, marker="s",
                facecolors="none", edgecolors="0.5", linewidths=1.0,
@@ -594,8 +699,7 @@ for ax, z_target, col in zip(axes.flat, target_redshifts, colors_panel):
             color=col, alpha=0.4, lw=1.0)
 
     # Shade dropout region
-    lam_lya_z = 1216.0 * (1.0 + z_target) / 1e4  # Ly-alpha in micron
-    ax.axvspan(0.7, lam_lya_z, alpha=0.08, color=col)
+    ax.axvspan(0.7, lam_lya_z, alpha=0.06, color=col, zorder=0)
     ax.axvline(lam_lya_z, color=col, ls=":", lw=0.8, alpha=0.5)
 
     ax.set_title(f"$z = {z_target:.0f}$", fontsize=13, fontweight="bold", color=col)
@@ -605,8 +709,7 @@ for ax, z_target, col in zip(axes.flat, target_redshifts, colors_panel):
     ax.legend(loc="upper right", fontsize=7)
 
     # Label filters
-    for weff, fname in zip(jwst_wave_eff_um, ["F090W", "F115W", "F150W",
-                           "F200W", "F277W", "F356W", "F444W"]):
+    for weff, fname in zip(jwst_wave_eff_um, jwst_labels):
         ax.text(weff, 50, fname, fontsize=6, ha="center", color="0.4", rotation=45)
 
 axes[1, 0].set_xlabel(r"Observed wavelength [$\mu$m]")

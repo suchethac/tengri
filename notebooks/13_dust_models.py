@@ -51,12 +51,23 @@ import jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+from matplotlib.gridspec import GridSpec
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 
 sys.path.insert(0, ".")
 from _plot_style import COLORS, setup_style
 
 setup_style()
+
+# Override with requested settings
+plt.rcParams.update({
+    "font.size": 12,
+    "axes.linewidth": 1.2,
+    "lines.linewidth": 1.5,
+})
+
 os.makedirs("figures", exist_ok=True)
 
 from diffsed import Fixed, Model, ParamSpec, Uniform, load_filter_set, load_ssp_data
@@ -96,7 +107,6 @@ wave_aa = jnp.linspace(1000.0, 30000.0, 2000)
 curves = {}
 for name, fn in DUST_LAWS.items():
     if name in ("kriek_conroy", "salim"):
-        # Show the bump for these laws
         curves[name] = fn(wave_aa, dust_bump_strength=1.0, dust_delta=0.0)
     elif name == "power_law":
         curves[name] = fn(wave_aa, n_slope=-0.7)
@@ -105,14 +115,23 @@ for name, fn in DUST_LAWS.items():
     else:
         curves[name] = fn(wave_aa)
 
-# Plot
+# Normalize all curves to k(V)=1 at 5500 A
+wave_arr = np.array(wave_aa)
+v_idx = np.argmin(np.abs(wave_arr - 5500.0))
+curves_norm = {}
+for name, k in curves.items():
+    k_arr = np.array(k)
+    k_at_v = k_arr[v_idx]
+    curves_norm[name] = k_arr / k_at_v if k_at_v > 0 else k_arr
+
+# Distinct colors: avoid overlap between Kriek&Conroy and Salim
 curve_colors = {
-    "power_law": "#1f77b4",
-    "calzetti": "#ff7f0e",
-    "kriek_conroy": "#2ca02c",
-    "smc": "#d62728",
-    "cardelli": "#9467bd",
-    "salim": "#8c564b",
+    "power_law": "#1f77b4",      # blue
+    "calzetti": "#ff7f0e",       # orange
+    "kriek_conroy": "#2ca02c",   # green
+    "smc": "#d62728",            # red
+    "cardelli": "#9467bd",       # purple
+    "salim": "#e377c2",          # pink (was brown, now distinct from K&C)
 }
 curve_labels = {
     "power_law": r"Power law ($n=-0.7$)",
@@ -123,21 +142,38 @@ curve_labels = {
     "salim": r"Salim+2018 ($E_b=1$)",
 }
 
-fig, ax = plt.subplots(figsize=(9, 5))
+fig, ax = plt.subplots(figsize=(9, 5.5))
+
+wave_um = wave_arr / 1e4
+
 for name in DUST_LAWS:
     ax.plot(
-        np.array(wave_aa) / 1e4,
-        np.array(curves[name]),
+        wave_um,
+        curves_norm[name],
         color=curve_colors[name],
         lw=1.8,
         label=curve_labels[name],
     )
 
-# Mark the 2175A UV bump
+# V-band vertical line
+ax.axvline(0.55, color="0.4", ls="-", lw=0.8, zorder=0, alpha=0.5)
+ax.annotate(
+    r"$V$-band",
+    xy=(0.55, 0.03),
+    xycoords=("data", "axes fraction"),
+    fontsize=9,
+    color="0.4",
+    ha="left",
+    va="bottom",
+    xytext=(5, 0),
+    textcoords="offset points",
+)
+
+# 2175 A UV bump annotation
 ax.axvline(0.2175, color="0.6", ls=":", lw=1.0, zorder=0)
 ax.annotate(
     r"2175 $\AA$ bump",
-    xy=(0.2175, 0.55),
+    xy=(0.2175, 0.92),
     xycoords=("data", "axes fraction"),
     fontsize=9,
     color="0.4",
@@ -145,14 +181,42 @@ ax.annotate(
     rotation=90,
 )
 
+# Log wavelength x-axis
+ax.set_xscale("log")
 ax.set_xlabel(r"Wavelength ($\mu$m)")
-ax.set_ylabel(r"$k(\lambda)$ (relative attenuation)")
+ax.set_ylabel(r"$k(\lambda) / k(V)$  (normalized at 5500 $\AA$)")
 ax.set_xlim(0.1, 3.0)
 ax.set_ylim(0, None)
-ax.legend(loc="upper right", fontsize=9)
-ax.set_title("Dust attenuation curves in diffsed")
+ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
+ax.xaxis.set_minor_formatter(ticker.NullFormatter())
+ax.set_xticks([0.1, 0.2, 0.3, 0.5, 1.0, 2.0, 3.0])
+ax.legend(loc="upper right", fontsize=9, ncol=1)
+
+# INSET: UV bump region (1800-2600 A)
+ax_inset = inset_axes(ax, width="40%", height="35%", loc="center right",
+                       bbox_to_anchor=(-0.02, 0.08, 1, 1),
+                       bbox_transform=ax.transAxes)
+bump_mask = (wave_arr >= 1800) & (wave_arr <= 2600)
+wave_bump = wave_arr[bump_mask]
+
+for name in DUST_LAWS:
+    ax_inset.plot(
+        wave_bump,
+        curves_norm[name][bump_mask],
+        color=curve_colors[name],
+        lw=1.5,
+    )
+
+ax_inset.axvline(2175, color="0.6", ls=":", lw=0.8)
+ax_inset.set_xlim(1800, 2600)
+ax_inset.set_xlabel(r"$\lambda$ ($\AA$)", fontsize=8)
+ax_inset.set_ylabel(r"$k/k(V)$", fontsize=8)
+ax_inset.tick_params(labelsize=7)
+ax_inset.set_title("UV bump region", fontsize=8, pad=2)
+ax_inset.patch.set_alpha(0.9)
+
+fig.savefig("figures/13_attenuation_curves.png", dpi=150, bbox_inches="tight")
 fig.savefig("figures/13_attenuation_curves.pdf", bbox_inches="tight")
-fig.savefig("figures/13_attenuation_curves.png", dpi=200, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -182,14 +246,32 @@ age_grid = jnp.logspace(5, 10.1, 100)  # 0.1 Myr to 13 Gyr
 f_obs_values = [0.0, 0.1, 0.2, 0.3]
 f_obs_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
 
-fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
+# Precompute a fake intrinsic SED shape (hotter = more UV)
+# Use a simple power law as placeholder for illustrative purposes
+wave_plot = jnp.linspace(1000.0, 30000.0, 2000)
+wave_plot_um = np.array(wave_plot) / 1e4
+# Simple UV-bright SED shape for illustration (nu^1 ~ lambda^-3 in Lnu)
+fake_sed = (np.array(wave_plot) / 5500.0) ** (-2.0)
+fake_sed = fake_sed / np.max(fake_sed)
 
-# Left: transmission vs wavelength for young stars (age = 1 Myr)
-ax = axes[0]
-young_idx = 5  # ~0.3 Myr — deeply embedded in birth cloud
+young_idx = 5   # ~0.3 Myr -- deeply embedded in birth cloud
+old_idx = -10   # ~5 Gyr -- only diffuse ISM
+
+fig = plt.figure(figsize=(13, 8))
+gs = GridSpec(2, 2, hspace=0.35, wspace=0.3)
+
+# Top left: SED with and without f_obs (young stars)
+ax_sed_y = fig.add_subplot(gs[0, 0])
+# Top right: SED with and without f_obs (old stars)
+ax_sed_o = fig.add_subplot(gs[0, 1])
+# Bottom left: Transmission for young stars
+ax_tr_y = fig.add_subplot(gs[1, 0])
+# Bottom right: Transmission for old stars
+ax_tr_o = fig.add_subplot(gs[1, 1])
+
 for f_obs, color in zip(f_obs_values, f_obs_colors):
     trans = two_component_dust(
-        wave_aa,
+        wave_plot,
         age_grid,
         tau_v1=1.5,
         tau_v2=0.5,
@@ -197,58 +279,56 @@ for f_obs, color in zip(f_obs_values, f_obs_colors):
         law_diff="calzetti",
         f_obscuration=f_obs,
     )
-    # Plot transmission for young stars
-    ax.plot(
-        np.array(wave_aa) / 1e4,
-        np.array(trans[young_idx]),
-        color=color,
-        lw=1.8,
-        label=rf"$f_{{\rm obs}}={f_obs}$",
-    )
+    label = rf"$f_{{\rm obs}}={f_obs}$"
 
-ax.set_xlabel(r"Wavelength ($\mu$m)")
-ax.set_ylabel(r"Transmission $T(\lambda)$")
-ax.set_xlim(0.1, 3.0)
-ax.set_ylim(0, 1.05)
-ax.legend(fontsize=9)
-ax.set_title("Young stars (age < 10 Myr)")
+    trans_young = np.array(trans[young_idx])
+    trans_old = np.array(trans[old_idx])
 
-# Right: transmission vs wavelength for old stars (age = 5 Gyr)
-ax = axes[1]
-old_idx = -10  # ~5 Gyr — only diffuse ISM
-for f_obs, color in zip(f_obs_values, f_obs_colors):
-    trans = two_component_dust(
-        wave_aa,
-        age_grid,
-        tau_v1=1.5,
-        tau_v2=0.5,
-        law_bc="calzetti",
-        law_diff="calzetti",
-        f_obscuration=f_obs,
-    )
-    ax.plot(
-        np.array(wave_aa) / 1e4,
-        np.array(trans[old_idx]),
-        color=color,
-        lw=1.8,
-        label=rf"$f_{{\rm obs}}={f_obs}$",
-    )
+    # SEDs
+    ax_sed_y.plot(wave_plot_um, fake_sed * trans_young, color=color, lw=1.5, label=label)
+    ax_sed_o.plot(wave_plot_um, fake_sed * trans_old, color=color, lw=1.5, label=label)
 
-ax.set_xlabel(r"Wavelength ($\mu$m)")
-ax.set_ylabel(r"Transmission $T(\lambda)$")
-ax.set_xlim(0.1, 3.0)
-ax.set_ylim(0, 1.05)
-ax.legend(fontsize=9)
-ax.set_title("Old stars (age ~ 5 Gyr)")
+    # Transmission
+    ax_tr_y.plot(wave_plot_um, trans_young, color=color, lw=1.5, label=label)
+    ax_tr_o.plot(wave_plot_um, trans_old, color=color, lw=1.5, label=label)
+
+# Add intrinsic SED to top panels
+ax_sed_y.plot(wave_plot_um, fake_sed, color="0.6", lw=1.0, ls="--", label="Intrinsic", zorder=0)
+ax_sed_o.plot(wave_plot_um, fake_sed, color="0.6", lw=1.0, ls="--", label="Intrinsic", zorder=0)
+
+# Mark f_obs floor on transmission panels
+for f_obs, color in zip(f_obs_values[1:], f_obs_colors[1:]):
+    ax_tr_y.axhline(f_obs, color=color, ls="--", lw=0.8, alpha=0.5)
+    ax_tr_o.axhline(f_obs, color=color, ls="--", lw=0.8, alpha=0.5)
+
+# Labels and formatting
+for ax in [ax_sed_y, ax_sed_o]:
+    ax.set_xlabel(r"Wavelength ($\mu$m)")
+    ax.set_ylabel(r"Relative flux (attenuated SED)")
+    ax.set_xlim(0.1, 3.0)
+    ax.set_ylim(0, None)
+    ax.legend(fontsize=8, loc="upper right")
+
+for ax in [ax_tr_y, ax_tr_o]:
+    ax.set_xlabel(r"Wavelength ($\mu$m)")
+    ax.set_ylabel(r"Transmission $T(\lambda)$")
+    ax.set_xlim(0.1, 3.0)
+    ax.set_ylim(0, 1.05)
+    ax.legend(fontsize=8)
+
+ax_sed_y.set_title("Young stars (age < 10 Myr)", fontsize=11)
+ax_sed_o.set_title("Old stars (age ~ 5 Gyr)", fontsize=11)
+ax_tr_y.set_title("Transmission: young stars", fontsize=11)
+ax_tr_o.set_title("Transmission: old stars", fontsize=11)
 
 fig.suptitle(
-    r"Effect of $f_{\rm obscuration}$ (Lower+2022) on dust transmission",
+    r"Effect of $f_{\rm obscuration}$ (Lower+2022): SED and transmission",
     fontsize=13,
-    y=1.02,
+    y=1.01,
 )
-fig.tight_layout()
+
+fig.savefig("figures/13_f_obscuration.png", dpi=150, bbox_inches="tight")
 fig.savefig("figures/13_f_obscuration.pdf", bbox_inches="tight")
-fig.savefig("figures/13_f_obscuration.png", dpi=200, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -263,7 +343,8 @@ plt.show()
 #   (Calzetti-like or MW-like with 2175A bump).
 #
 # diffsed lets you mix any pair of curves. Below we show the transmission
-# matrix for an SMC birth cloud paired with a Cardelli (MW) diffuse ISM.
+# matrix for an SMC birth cloud paired with a Cardelli (MW) diffuse ISM,
+# compared with a uniform Calzetti model.
 
 # %%
 # SMC birth cloud + Cardelli diffuse ISM
@@ -289,43 +370,49 @@ trans_uniform = two_component_dust(
 
 fig, axes = plt.subplots(1, 2, figsize=(13, 5), sharey=True)
 
-# Show 3 representative ages: young (0.3 Myr), transition (10 Myr), old (1 Gyr)
-age_labels = [(5, "0.3 Myr (birth cloud)"), (45, "10 Myr (transition)"), (80, "1 Gyr (diffuse only)")]
-line_styles = ["-", "--", ":"]
+# Representative ages with physically meaningful labels
+age_configs = [
+    (5,  "0.3 Myr (birth cloud)", "-",  "#d62728"),
+    (45, "10 Myr (transition)",    "--", "#ff7f0e"),
+    (80, "1 Gyr (diffuse only)",   ":",  "#1f77b4"),
+]
 
 ax = axes[0]
-for (idx, label), ls in zip(age_labels, line_styles):
+for idx, label, ls, color in age_configs:
     ax.plot(
-        np.array(wave_aa) / 1e4,
+        wave_um,
         np.array(trans_mixed[idx]),
         ls=ls,
         lw=1.8,
+        color=color,
         label=label,
     )
 ax.set_xlabel(r"Wavelength ($\mu$m)")
 ax.set_ylabel(r"Transmission $T(\lambda)$")
 ax.set_xlim(0.1, 2.0)
-ax.set_title("SMC birth cloud + Cardelli diffuse ISM")
+ax.set_title("SMC birth cloud + Cardelli diffuse ISM", fontsize=11)
 ax.legend(fontsize=9)
 
 ax = axes[1]
-for (idx, label), ls in zip(age_labels, line_styles):
+for idx, label, ls, color in age_configs:
     ax.plot(
-        np.array(wave_aa) / 1e4,
+        wave_um,
         np.array(trans_uniform[idx]),
         ls=ls,
         lw=1.8,
+        color=color,
         label=label,
     )
 ax.set_xlabel(r"Wavelength ($\mu$m)")
 ax.set_xlim(0.1, 2.0)
-ax.set_title("Calzetti birth cloud + Calzetti diffuse ISM")
+ax.set_title("Calzetti birth cloud + Calzetti diffuse ISM", fontsize=11)
 ax.legend(fontsize=9)
 
-fig.suptitle("Per-component dust law control", fontsize=13, y=1.02)
+fig.suptitle("Per-component dust law control: young vs old star attenuation",
+             fontsize=13, y=1.02)
 fig.tight_layout()
+fig.savefig("figures/13_per_component_dust.png", dpi=150, bbox_inches="tight")
 fig.savefig("figures/13_per_component_dust.pdf", bbox_inches="tight")
-fig.savefig("figures/13_per_component_dust.png", dpi=200, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -343,13 +430,15 @@ plt.show()
 # Additionally, tabulated DL07 templates can be loaded from
 # `data/dl07_templates.h5` for production work.
 #
-# Below we compare all three analytic models plus the tabulated DL07.
-# We also show how $U_{\rm min}$ shifts the IR peak using the real
-# DL07 templates.
+# Below we show a comprehensive 3-panel comparison:
+# - Left: all analytic models at the same $L_{\rm absorbed}$
+# - Middle: DL07 tabulated templates varying $U_{\rm min}$
+# - Right: DL07 tabulated templates varying $q_{\rm PAH}$
 
 # %%
 # Wavelength grid from UV to FIR (0.1 to 1000 um)
 wave_full = jnp.logspace(np.log10(1000.0), np.log10(1e7), 3000)  # Angstrom
+wave_full_um = np.array(wave_full) / 1e4
 L_absorbed = 1e10  # Lsun (typical star-forming galaxy)
 
 # Analytic models
@@ -369,45 +458,96 @@ sed_dl07_tab = dl07_tabulated(
     wave_full, L_absorbed, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5
 )
 
-fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+# Helper: find FIR peak wavelength
+def find_peak_wavelength(wave_um_arr, lnu_arr):
+    """Return wavelength (um) at peak L_nu."""
+    lnu = np.array(lnu_arr)
+    valid = lnu > 0
+    if not np.any(valid):
+        return np.nan
+    idx = np.argmax(lnu)
+    return wave_um_arr[idx]
 
-# Left: compare all 4 models
+# --- 3-panel figure ---
+fig, axes = plt.subplots(1, 3, figsize=(17, 5))
+
+# LEFT: All analytic models + tabulated DL07
 ax = axes[0]
-wave_um = np.array(wave_full) / 1e4
+model_specs = [
+    (sed_mbb, "#1f77b4", "-", r"Modified BB ($T=35$ K)"),
+    (sed_dale, "#ff7f0e", "-", r"Dale+2014 ($\alpha=2$)"),
+    (sed_dl07_analytic, "#2ca02c", "-", "DL07 analytic"),
+    (sed_dl07_tab, "#d62728", "--", "DL07 tabulated"),
+]
 
-ax.loglog(wave_um, np.array(sed_mbb), lw=1.8, label=r"Modified BB ($T=35$ K)", color="#1f77b4")
-ax.loglog(wave_um, np.array(sed_dale), lw=1.8, label=r"Dale+2014 ($\alpha=2$)", color="#ff7f0e")
-ax.loglog(wave_um, np.array(sed_dl07_analytic), lw=1.8, label="DL07 analytic", color="#2ca02c")
-ax.loglog(wave_um, np.array(sed_dl07_tab), lw=1.8, label="DL07 tabulated", color="#d62728", ls="--")
+for sed, color, ls, label in model_specs:
+    sed_arr = np.array(sed)
+    ax.loglog(wave_full_um, sed_arr, lw=1.5, color=color, ls=ls, label=label)
+    # Mark FIR peak
+    peak_um = find_peak_wavelength(wave_full_um, sed_arr)
+    if not np.isnan(peak_um):
+        peak_lnu = sed_arr[np.argmax(sed_arr)]
+        ax.plot(peak_um, peak_lnu, "v", color=color, ms=6, zorder=5)
 
 ax.set_xlabel(r"Wavelength ($\mu$m)")
 ax.set_ylabel(r"$L_\nu$ (L$_\odot$ Hz$^{-1}$)")
 ax.set_xlim(1, 1000)
-ax.set_ylim(bottom=1e-5 * np.max(np.array(sed_mbb)))
-ax.legend(fontsize=9, loc="upper left")
-ax.set_title("Dust emission model comparison")
+ymax = max(np.max(np.array(s)) for s, _, _, _ in model_specs)
+ax.set_ylim(bottom=1e-5 * ymax)
+ax.legend(fontsize=8, loc="upper left")
+ax.set_title("All models comparison", fontsize=11)
 
-# Right: U_min variation with tabulated DL07
+# MIDDLE: U_min variation with tabulated DL07
 ax = axes[1]
-umin_values = [0.1, 0.5, 1.0, 5.0, 10.0, 25.0]
-umin_colors = plt.cm.plasma(np.linspace(0.1, 0.9, len(umin_values)))
+umin_values = [0.1, 1.0, 5.0, 25.0]
+umin_cmap = plt.cm.plasma(np.linspace(0.15, 0.85, len(umin_values)))
 
-for umin, color in zip(umin_values, umin_colors):
+for umin, color in zip(umin_values, umin_cmap):
     sed_u = dl07_tabulated(
         wave_full, L_absorbed, dust_umin=umin, dust_gamma_dl=0.01, dust_qpah=2.5
     )
-    ax.loglog(wave_um, np.array(sed_u), lw=1.5, color=color, label=rf"$U_{{\min}}={umin}$")
+    sed_u_arr = np.array(sed_u)
+    ax.loglog(wave_full_um, sed_u_arr, lw=1.5, color=color,
+              label=rf"$U_{{\min}}={umin}$")
+    # Mark FIR peak
+    peak_um = find_peak_wavelength(wave_full_um, sed_u_arr)
+    if not np.isnan(peak_um):
+        peak_lnu = sed_u_arr[np.argmax(sed_u_arr)]
+        ax.plot(peak_um, peak_lnu, "v", color=color, ms=6, zorder=5)
 
 ax.set_xlabel(r"Wavelength ($\mu$m)")
 ax.set_ylabel(r"$L_\nu$ (L$_\odot$ Hz$^{-1}$)")
 ax.set_xlim(1, 1000)
-ax.set_ylim(bottom=1e-5 * np.max(np.array(sed_u)))
-ax.legend(fontsize=8, loc="upper left", ncol=2)
-ax.set_title(r"DL07 tabulated: $U_{\min}$ shifts the IR peak")
+ax.legend(fontsize=9, loc="upper left")
+ax.set_title(r"DL07 tabulated: varying $U_{\min}$", fontsize=11)
+
+# RIGHT: q_PAH variation with tabulated DL07
+ax = axes[2]
+qpah_values = [0.47, 2.5, 4.58]
+qpah_cmap = plt.cm.viridis(np.linspace(0.2, 0.8, len(qpah_values)))
+
+for qpah, color in zip(qpah_values, qpah_cmap):
+    sed_q = dl07_tabulated(
+        wave_full, L_absorbed, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=qpah
+    )
+    sed_q_arr = np.array(sed_q)
+    ax.loglog(wave_full_um, sed_q_arr, lw=1.5, color=color,
+              label=rf"$q_{{\rm PAH}}={qpah}\%$")
+    # Mark FIR peak
+    peak_um = find_peak_wavelength(wave_full_um, sed_q_arr)
+    if not np.isnan(peak_um):
+        peak_lnu = sed_q_arr[np.argmax(sed_q_arr)]
+        ax.plot(peak_um, peak_lnu, "v", color=color, ms=6, zorder=5)
+
+ax.set_xlabel(r"Wavelength ($\mu$m)")
+ax.set_ylabel(r"$L_\nu$ (L$_\odot$ Hz$^{-1}$)")
+ax.set_xlim(1, 1000)
+ax.legend(fontsize=9, loc="upper left")
+ax.set_title(r"DL07 tabulated: varying $q_{\rm PAH}$", fontsize=11)
 
 fig.tight_layout()
+fig.savefig("figures/13_dust_emission_models.png", dpi=150, bbox_inches="tight")
 fig.savefig("figures/13_dust_emission_models.pdf", bbox_inches="tight")
-fig.savefig("figures/13_dust_emission_models.png", dpi=200, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -473,7 +613,7 @@ from diffsed.models.sps.dsps_wrapper import (
     compute_csp_weights,
     interpolate_metallicity,
 )
-from diffsed.models.dust.emission import compute_absorbed_luminosity
+from diffsed.models.dust.emission import compute_absorbed_luminosity, modified_blackbody
 
 # Use model internals to get SFR weights
 p = model._get_internal_params(params)
@@ -511,8 +651,6 @@ print(f"L_absorbed = {float(L_abs):.4e} Lsun")
 
 # %%
 # Now compute L_IR from the emission model
-from diffsed.models.dust.emission import modified_blackbody
-
 sed_ir = modified_blackbody(ssp_data.ssp_wave, L_abs, dust_T=35.0, dust_beta_ir=1.6)
 
 # Integrate L_IR over frequency
@@ -526,26 +664,65 @@ print(f"L_IR / L_abs = {L_ir / float(L_abs):.6f}")
 print(f"Energy balance deviation: {abs(1.0 - L_ir / float(L_abs)) * 100:.4f}%")
 
 # %%
-# Visualize the energy balance
-fig, ax = plt.subplots(figsize=(9, 5))
+# Visualize energy balance with shaded absorbed region and arrow
+wave_ssp_um = np.array(ssp_data.ssp_wave) / 1e4
+sed_intr_arr = np.array(sed_intrinsic)
+sed_att_arr = np.array(sed_attenuated)
+sed_ir_arr = np.array(sed_ir)
 
-wave_um = np.array(ssp_data.ssp_wave) / 1e4
+fig, ax = plt.subplots(figsize=(10, 6))
 
-ax.loglog(wave_um, np.array(sed_intrinsic), color="0.6", lw=1.0, label="Intrinsic stellar", alpha=0.7)
-ax.loglog(wave_um, np.array(sed_attenuated), color="#1f77b4", lw=1.5, label="Attenuated stellar")
-ax.loglog(wave_um, np.array(sed_ir), color="#d62728", lw=1.5, label="Dust emission (MBB)")
+# Intrinsic and attenuated stellar
+ax.loglog(wave_ssp_um, sed_intr_arr, color="0.6", lw=1.0,
+          label="Intrinsic stellar", alpha=0.7)
+ax.loglog(wave_ssp_um, sed_att_arr, color="#1f77b4", lw=1.5,
+          label="Attenuated stellar")
 
-# Shade the absorbed region
+# Dust emission
+ax.loglog(wave_ssp_um, sed_ir_arr, color="#d62728", lw=1.5,
+          label="Dust emission (MBB)")
+
+# Shade absorbed region (UV/optical)
 ax.fill_between(
-    wave_um,
-    np.array(sed_attenuated),
-    np.array(sed_intrinsic),
-    where=np.array(sed_intrinsic) > np.array(sed_attenuated),
+    wave_ssp_um,
+    sed_att_arr,
+    sed_intr_arr,
+    where=sed_intr_arr > sed_att_arr,
     color="#1f77b4",
     alpha=0.15,
-    label=r"$L_{\rm absorbed}$",
+    label=rf"$L_{{\rm absorbed}}$ = {float(L_abs):.2e} L$_{{\odot}}$",
 )
 
+# Shade emitted IR region
+ir_valid = sed_ir_arr > 0
+ax.fill_between(
+    wave_ssp_um,
+    np.zeros_like(sed_ir_arr),
+    sed_ir_arr,
+    where=ir_valid,
+    color="#d62728",
+    alpha=0.08,
+    label=rf"$L_{{\rm IR}}$ = {L_ir:.2e} L$_{{\odot}}$",
+)
+
+# Arrow: absorbed energy -> re-emitted
+arrow_y = 0.3 * np.max(sed_intr_arr)
+ax.annotate(
+    "",
+    xy=(80, arrow_y * 0.1),
+    xytext=(0.3, arrow_y),
+    arrowprops=dict(
+        arrowstyle="->,head_width=0.3,head_length=0.2",
+        color="0.3",
+        lw=2,
+        connectionstyle="arc3,rad=-0.3",
+    ),
+)
+ax.text(2.0, arrow_y * 0.5, r"Energy balance" + "\n" + r"$L_{\rm IR} = L_{\rm abs}$",
+        fontsize=10, color="0.3", ha="center", va="center",
+        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="0.7", alpha=0.8))
+
+# Ratio annotation
 ax.annotate(
     rf"$L_{{\rm IR}} / L_{{\rm abs}} = {L_ir / float(L_abs):.4f}$",
     xy=(0.98, 0.95),
@@ -557,13 +734,13 @@ ax.annotate(
 )
 
 ax.set_xlabel(r"Wavelength ($\mu$m)")
-ax.set_ylabel(r"$L_\nu$ (erg s$^{-1}$ Hz$^{-1}$)")
+ax.set_ylabel(r"$L_\nu$ (L$_\odot$ Hz$^{-1}$)")
 ax.set_xlim(0.09, 300)
-ax.set_ylim(bottom=1e-5 * np.max(np.array(sed_intrinsic)))
+ax.set_ylim(bottom=1e-5 * np.max(sed_intr_arr))
 ax.legend(loc="upper left", fontsize=9)
-ax.set_title("Energy balance verification")
+
+fig.savefig("figures/13_energy_balance.png", dpi=150, bbox_inches="tight")
 fig.savefig("figures/13_energy_balance.pdf", bbox_inches="tight")
-fig.savefig("figures/13_energy_balance.png", dpi=200, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -576,51 +753,102 @@ plt.show()
 # 3. Compute absorbed luminosity via energy balance
 # 4. Add dust IR emission (scaled to $L_{\rm absorbed}$)
 #
-# Below we show this for three dust emission models, using the same
-# stellar population and attenuation parameters.
+# Below we show this as $\nu L_\nu$ ($= \lambda F_\lambda$), which
+# gives equal visual weight to energy output per logarithmic frequency
+# interval. This reveals the stellar peak (~1 um), dust peak (~100 um),
+# and PAH features (~6-12 um) on equal footing.
 
 # %%
-# Full panchromatic SED with all three emission models
-fig, ax = plt.subplots(figsize=(10, 6))
+# Full panchromatic SED in nu*L_nu
+fig, ax = plt.subplots(figsize=(11, 6.5))
 
-# Stellar components (same for all)
-ax.loglog(wave_um, np.array(sed_intrinsic), color="0.7", lw=0.8,
-          label="Intrinsic stellar", alpha=0.5, zorder=1)
-ax.loglog(wave_um, np.array(sed_attenuated), color="0.3", lw=1.5,
+# Convert to nu*L_nu = L_nu * c / wavelength (using wavelength in cm)
+_c_cgs = 2.99792458e10  # cm/s
+wave_cm = np.array(ssp_data.ssp_wave) * 1e-8
+
+# Intrinsic stellar (faint)
+nu_lnu_intr = sed_intr_arr * _c_cgs / wave_cm
+ax.loglog(wave_ssp_um, nu_lnu_intr, color="0.75", lw=0.8,
+          label="Intrinsic stellar", alpha=0.6, zorder=1)
+
+# Attenuated stellar
+nu_lnu_att = sed_att_arr * _c_cgs / wave_cm
+ax.loglog(wave_ssp_um, nu_lnu_att, color="0.3", lw=1.5,
           label="Attenuated stellar", zorder=2)
 
-# Three emission models
+# Three emission models (total = attenuated + IR)
 emission_configs = [
-    ("modified_blackbody", dict(dust_T=35.0, dust_beta_ir=1.8), "#d62728", r"MBB ($T=35$ K)"),
-    ("dale2014", dict(dust_alpha_dale=2.0), "#ff7f0e", r"Dale+2014 ($\alpha=2$)"),
-    ("draine_li2007", dict(dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5), "#2ca02c", "DL07 analytic"),
+    ("modified_blackbody", dict(dust_T=35.0, dust_beta_ir=1.8),
+     "#d62728", r"+ MBB ($T=35$ K)"),
+    ("dale2014", dict(dust_alpha_dale=2.0),
+     "#ff7f0e", r"+ Dale+2014 ($\alpha=2$)"),
 ]
 
 for model_name, kw, color, label in emission_configs:
     ir_sed = DUST_EMISSION_MODELS[model_name](ssp_data.ssp_wave, L_abs, **kw)
-    total = np.array(sed_attenuated) + np.array(ir_sed)
-    ax.loglog(wave_um, total, lw=1.8, color=color, label=f"Total ({label})", zorder=3)
+    total = sed_att_arr + np.array(ir_sed)
+    nu_lnu_total = total * _c_cgs / wave_cm
+    ax.loglog(wave_ssp_um, nu_lnu_total, lw=1.5, color=color,
+              label=f"Total {label}", zorder=3)
 
-# Also show DL07 tabulated total
-ir_tab = dl07_tabulated(ssp_data.ssp_wave, L_abs, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
-total_tab = np.array(sed_attenuated) + np.array(ir_tab)
-ax.loglog(wave_um, total_tab, lw=1.8, color="#9467bd", ls="--",
-          label="Total (DL07 tabulated)", zorder=3)
+# DL07 tabulated total (highlight)
+ir_tab = dl07_tabulated(ssp_data.ssp_wave, L_abs,
+                        dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
+total_tab = sed_att_arr + np.array(ir_tab)
+nu_lnu_tab = total_tab * _c_cgs / wave_cm
+ax.loglog(wave_ssp_um, nu_lnu_tab, lw=2.0, color="#2ca02c",
+          label="Total + DL07 tabulated", zorder=4)
 
-# Mark key wavelength regions
-ax.axvspan(0.09, 0.3, alpha=0.04, color="blue", zorder=0)
-ax.axvspan(8, 1000, alpha=0.04, color="red", zorder=0)
-ax.text(0.14, 0.02, "UV", transform=ax.get_xaxis_transform(), fontsize=9, color="0.5", ha="center")
-ax.text(60, 0.02, "FIR", transform=ax.get_xaxis_transform(), fontsize=9, color="0.5", ha="center")
+# Label key features
+# Stellar peak
+stellar_peak_idx = np.argmax(nu_lnu_intr)
+ax.annotate(
+    "Stellar\npeak",
+    xy=(wave_ssp_um[stellar_peak_idx], nu_lnu_intr[stellar_peak_idx]),
+    xytext=(0.05, 0.85),
+    textcoords="axes fraction",
+    fontsize=9,
+    color="0.4",
+    arrowprops=dict(arrowstyle="->", color="0.5", lw=0.8),
+    ha="center",
+)
+
+# Dust peak (from DL07 tabulated)
+dust_peak_idx = np.argmax(nu_lnu_tab[len(nu_lnu_tab) // 2:]) + len(nu_lnu_tab) // 2
+if dust_peak_idx < len(wave_ssp_um):
+    ax.annotate(
+        "Dust\npeak",
+        xy=(wave_ssp_um[dust_peak_idx], nu_lnu_tab[dust_peak_idx]),
+        xytext=(0.88, 0.75),
+        textcoords="axes fraction",
+        fontsize=9,
+        color="0.4",
+        arrowprops=dict(arrowstyle="->", color="0.5", lw=0.8),
+        ha="center",
+    )
+
+# PAH region annotation
+ax.axvspan(6, 13, alpha=0.04, color="#2ca02c", zorder=0)
+ax.text(9.0, 0.03, "PAH", transform=ax.get_xaxis_transform(),
+        fontsize=9, color="#2ca02c", ha="center", alpha=0.7)
+
+# Wavelength region shading
+ax.axvspan(0.09, 0.3, alpha=0.03, color="blue", zorder=0)
+ax.axvspan(30, 1000, alpha=0.03, color="red", zorder=0)
+ax.text(0.15, 0.03, "UV", transform=ax.get_xaxis_transform(),
+        fontsize=9, color="0.5", ha="center")
+ax.text(100, 0.03, "FIR", transform=ax.get_xaxis_transform(),
+        fontsize=9, color="0.5", ha="center")
 
 ax.set_xlabel(r"Wavelength ($\mu$m)")
-ax.set_ylabel(r"$L_\nu$ (erg s$^{-1}$ Hz$^{-1}$)")
-ax.set_xlim(0.09, 300)
-ax.set_ylim(bottom=1e-5 * np.max(np.array(sed_intrinsic)))
-ax.legend(loc="upper right", fontsize=8, ncol=2)
-ax.set_title("Full panchromatic SED: stellar + dust attenuation + dust emission")
+ax.set_ylabel(r"$\nu L_\nu$ (L$_\odot$)")
+ax.set_xlim(0.09, 500)
+valid_nuLnu = nu_lnu_intr[nu_lnu_intr > 0]
+ax.set_ylim(bottom=1e-4 * np.max(valid_nuLnu))
+ax.legend(loc="upper right", fontsize=9, ncol=1)
+
+fig.savefig("figures/13_panchromatic_sed.png", dpi=150, bbox_inches="tight")
 fig.savefig("figures/13_panchromatic_sed.pdf", bbox_inches="tight")
-fig.savefig("figures/13_panchromatic_sed.png", dpi=200, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -628,13 +856,18 @@ plt.show()
 #
 # This notebook demonstrated diffsed's full dust framework:
 #
-# 1. **6 attenuation curves** with distinct UV behaviour (bump vs no bump)
-# 2. **f\_obscuration** for clumpy dust geometry (Lower+2022)
-# 3. **Per-component control**: different laws for birth cloud vs diffuse ISM
-# 4. **3 emission models** + tabulated DL07 templates, all energy-balanced
+# 1. **6 attenuation curves** with distinct UV behaviour (bump vs no bump),
+#    all normalized to $k(V)=1$, with inset showing the 2175 A region
+# 2. **f\_obscuration** for clumpy dust geometry (Lower+2022), showing
+#    both the SED modification and the transmission floor
+# 3. **Per-component control**: different laws for birth cloud vs diffuse ISM,
+#    with physically meaningful age labels
+# 4. **3 analytic emission models** + tabulated DL07 templates, compared
+#    across $U_{\rm min}$ and $q_{\rm PAH}$ parameter space
 # 5. **Energy balance** verification: $L_{\rm IR} = L_{\rm absorbed}$ to
-#    machine precision
-# 6. **Full panchromatic SEDs** from UV to FIR
+#    machine precision, with clear visualization of absorbed and re-emitted energy
+# 6. **Full panchromatic SEDs** in $\nu L_\nu$ from UV to FIR, with
+#    stellar peak, dust peak, and PAH features labeled
 #
 # Every function is pure JAX --- JIT-compilable and fully differentiable
 # for gradient-based inference.
