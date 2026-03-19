@@ -222,8 +222,16 @@ class Model:
         # Dust emission model (None = disabled)
         self._dust_emission_model = getattr(spec, "dust_emission", None)
         if self._dust_emission_model:
-            for p in ["dust_T", "dust_beta_ir", "dust_alpha_mir", "dust_alpha_dale",
-                       "dust_umin", "dust_gamma_dl", "dust_qpah", "dust_eta_balance"]:
+            for p in [
+                "dust_T",
+                "dust_beta_ir",
+                "dust_alpha_mir",
+                "dust_alpha_dale",
+                "dust_umin",
+                "dust_gamma_dl",
+                "dust_qpah",
+                "dust_eta_balance",
+            ]:
                 self._param_map[p] = (p, 1.0, 0.0)
 
         # Evolving metallicity
@@ -236,8 +244,14 @@ class Model:
         # AGN model (None = disabled)
         self._agn_model = getattr(spec, "agn_model", None)
         if self._agn_model:
-            for p in ["agn_frac", "agn_alpha", "agn_T_torus", "agn_tau_torus",
-                       "agn_log_mbh", "agn_log_ledd"]:
+            for p in [
+                "agn_frac",
+                "agn_alpha",
+                "agn_T_torus",
+                "agn_tau_torus",
+                "agn_log_mbh",
+                "agn_log_ledd",
+            ]:
                 self._param_map[p] = (p, 1.0, 0.0)
 
         # Nebular emission backend + params
@@ -249,12 +263,15 @@ class Model:
         self._nebular_backend = None
         if spec.nebular and spec.cloudy_grid_path is not None:
             from diffsed.models.nebular import CloudyGridBackend
+
             self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
         elif spec.nebular:
             from diffsed.models.nebular import BakedInBackend
+
             self._nebular_backend = BakedInBackend()
         else:
             from diffsed.models.nebular import BakedInBackend
+
             self._nebular_backend = BakedInBackend()
 
         # Velocity dispersion: only apply if sigma_v is in the spec
@@ -291,8 +308,10 @@ class Model:
         self._dust_age_weights = precompute_dust_age_weights(self.ssp_ages_yr)
 
         # Build fused JIT kernels for fast photometry/spectroscopy
+        # Fused kernels support all dust laws but NOT nebular/AGN/dust-emission
+        # (those require the full SED to compute energy balance, line emission, etc.)
         self._fused_photometry = None
-        if self._precomp is not None:
+        if self._precomp is not None and self._fused_compatible():
             self._fused_photometry = self._build_fused_photometry()
 
         # Spectroscopy precomputation (same idea: pre-interpolate SSPs)
@@ -301,6 +320,22 @@ class Model:
         # Z-table precomputation (for free-redshift fitting)
         self._ztable = None
         self._fused_photometry_ztable = None
+
+    def _fused_compatible(self):
+        """Check if the fused JIT kernel can handle the current model config.
+
+        Fused kernels support all dust laws and f_obscuration. They do NOT
+        support nebular emission (Cloudy with free params), dust IR emission,
+        or AGN — those require the full SED to compute energy balance,
+        ionization, etc.
+        """
+        # Nebular: baked-in backend with no free params is fine (adds zero)
+        neb_ok = self._nebular_backend is None or not getattr(
+            self._nebular_backend, "has_free_params", False
+        )
+        dust_em_ok = self._dust_emission_model is None
+        agn_ok = self._agn_model is None
+        return neb_ok and dust_em_ok and agn_ok
 
     # -------------------------------------------------------------------
     # Internal parameter translation
@@ -479,10 +514,11 @@ class Model:
         weighted sum into one optimized kernel with no intermediate
         array materializations.
 
-        If forward_dtype is float32, all closure arrays are cast to
-        float32 for ~1.5x speed and 2x memory savings. The output
-        is cast back to float64 for numerical stability in the likelihood.
+        Supports all registered dust laws (calzetti, kriek_conroy, smc, etc.)
+        via captured law functions. For power-law dust, XLA constant-folds
+        the curve evaluation to identical code as the old hardcoded path.
         """
+        from diffsed.models.dust.attenuation import get_dust_law
         from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 
         dt = self._forward_dtype
@@ -495,14 +531,31 @@ class Model:
         ssp_ages_yr = self.ssp_ages_yr.astype(dt)
         lsun = dt.type(LSUN_ERG_PER_S)
 
+        # Capture dust law functions (pure JAX, JIT-traceable)
+        law_bc_fn = get_dust_law(self._dust_law_bc)
+        law_diff_fn = get_dust_law(self._dust_law_diff)
+
         @jax.jit
-        def fused_phot(sfr_on_ssp, log_z, tau_v1, tau_v2, dust_n):
-            # Cast inputs to forward dtype
+        def fused_phot(
+            sfr_on_ssp,
+            log_z,
+            tau_v1,
+            tau_v2,
+            dust_n,
+            f_obscuration=0.0,
+            dust_bump_strength=0.0,
+            dust_delta=0.0,
+            dust_Rv=3.1,
+        ):
             sfr = sfr_on_ssp.astype(dt)
             lz = jnp.asarray(log_z, dtype=dt)
             tv1 = jnp.asarray(tau_v1, dtype=dt)
             tv2 = jnp.asarray(tau_v2, dtype=dt)
             dn = jnp.asarray(dust_n, dtype=dt)
+            f_obs = jnp.asarray(f_obscuration, dtype=dt)
+            bump = jnp.asarray(dust_bump_strength, dtype=dt)
+            delta = jnp.asarray(dust_delta, dtype=dt)
+            rv = jnp.asarray(dust_Rv, dtype=dt)
 
             # CSP weights
             age_dt = jnp.concatenate(
@@ -520,10 +573,23 @@ class Model:
             frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
             ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
 
-            # Dust at effective wavelengths
-            wave_ratio = (eff_waves_rest / 5500.0) ** dn
-            tau_v_eff = dust_age_w * tv1 + tv2
-            dust = jnp.exp(-(tau_v_eff[:, None] * wave_ratio[None, :]))
+            # Dust: evaluate configurable curves at effective wavelengths
+            k_bc = law_bc_fn(
+                eff_waves_rest,
+                n_slope=dn,
+                dust_bump_strength=bump,
+                dust_delta=delta,
+                dust_Rv=rv,
+            )
+            k_diff = law_diff_fn(
+                eff_waves_rest,
+                n_slope=dn,
+                dust_bump_strength=bump,
+                dust_delta=delta,
+                dust_Rv=rv,
+            )
+            tau = dust_age_w[:, None] * tv1 * k_bc[None, :] + tv2 * k_diff[None, :]
+            dust = f_obs + (1.0 - f_obs) * jnp.exp(-tau)
 
             # Weighted sum — output in float64 for likelihood stability
             flux_lsun = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
@@ -535,9 +601,9 @@ class Model:
         """Build a single JIT function: SFR-on-SSP → spectrum.
 
         Same fusion approach as photometry but for spectroscopic pixels.
-        Uses forward_dtype for mixed-precision support. Includes velocity
-        dispersion broadening only if sigma_v is in the ParamSpec.
+        Supports all dust laws, f_obscuration, and optional velocity broadening.
         """
+        from diffsed.models.dust.attenuation import get_dust_law
         from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 
         fdt = self._forward_dtype
@@ -553,6 +619,10 @@ class Model:
         n_pix = len(wave_obs_pixels)
         has_sigma_v = self._has_sigma_v
 
+        # Capture dust law functions
+        law_bc_fn = get_dust_law(self._dust_law_bc)
+        law_diff_fn = get_dust_law(self._dust_law_diff)
+
         # Precompute FFT frequencies for velocity broadening (only if needed)
         if has_sigma_v:
             fft_freq = jnp.fft.rfftfreq(n_pix).astype(fdt)
@@ -560,12 +630,27 @@ class Model:
             c_km_s = fdt.type(299792.458)
 
         @jax.jit
-        def fused_spec(sfr_on_ssp, log_z, tau_v1, tau_v2, dust_n, sigma_v=0.0):
+        def fused_spec(
+            sfr_on_ssp,
+            log_z,
+            tau_v1,
+            tau_v2,
+            dust_n,
+            sigma_v=0.0,
+            f_obscuration=0.0,
+            dust_bump_strength=0.0,
+            dust_delta=0.0,
+            dust_Rv=3.1,
+        ):
             sfr = sfr_on_ssp.astype(fdt)
             lz = jnp.asarray(log_z, dtype=fdt)
             tv1 = jnp.asarray(tau_v1, dtype=fdt)
             tv2 = jnp.asarray(tau_v2, dtype=fdt)
             dn = jnp.asarray(dust_n, dtype=fdt)
+            f_obs = jnp.asarray(f_obscuration, dtype=fdt)
+            bump = jnp.asarray(dust_bump_strength, dtype=fdt)
+            delta = jnp.asarray(dust_delta, dtype=fdt)
+            rv = jnp.asarray(dust_Rv, dtype=fdt)
 
             # CSP weights
             age_dt = jnp.concatenate(
@@ -583,17 +668,29 @@ class Model:
             frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
             ssp_at_z = (1.0 - frac) * ssp_on_pixels[idx] + frac * ssp_on_pixels[idx + 1]
 
-            # Dust at pixel wavelengths
-            wave_ratio = (wave_rest_pixels / 5500.0) ** dn
-            tau_v_eff = dust_age_w * tv1 + tv2
-            dust = jnp.exp(-(tau_v_eff[:, None] * wave_ratio[None, :]))
+            # Dust: configurable curves at pixel wavelengths
+            k_bc = law_bc_fn(
+                wave_rest_pixels,
+                n_slope=dn,
+                dust_bump_strength=bump,
+                dust_delta=delta,
+                dust_Rv=rv,
+            )
+            k_diff = law_diff_fn(
+                wave_rest_pixels,
+                n_slope=dn,
+                dust_bump_strength=bump,
+                dust_delta=delta,
+                dust_Rv=rv,
+            )
+            tau = dust_age_w[:, None] * tv1 * k_bc[None, :] + tv2 * k_diff[None, :]
+            dust = f_obs + (1.0 - f_obs) * jnp.exp(-tau)
 
             # Weighted sum
             flux = jnp.einsum("i,ip,ip->p", weights, dust, ssp_at_z)
             flux = flux_scale * flux * lsun
 
             if has_sigma_v:
-                # Velocity dispersion broadening (FFT convolution)
                 sv = jnp.asarray(sigma_v, dtype=fdt)
                 sigma_pix = (sv / c_km_s) / dlnwave
                 kernel_ft = jnp.exp(-2.0 * jnp.pi**2 * sigma_pix**2 * fft_freq**2)
@@ -693,6 +790,7 @@ class Model:
         # Dust IR emission (energy-balanced)
         if self._dust_emission_model is not None and sed_intrinsic is not None:
             from diffsed.models.dust.emission import get_emission_model
+
             # L_absorbed = integral(L_intrinsic - L_attenuated) over frequency
             _c_aa_em = 2.99792458e18  # c in Angstrom/s
             nu_em = _c_aa_em / self.ssp_data.ssp_wave
@@ -720,6 +818,7 @@ class Model:
         # AGN contribution
         if self._agn_model is not None:
             from diffsed.models.agn import get_agn_model
+
             agn_frac = p.get("agn_frac", 0.0)
             # AGN bolometric luminosity as fraction of stellar bolometric
             # Integrate over frequency: L_bol = integral(L_nu * dnu)
@@ -774,6 +873,7 @@ class Model:
         # Always compute (cheap), but only apply when enabled
         if self._apply_igm:
             from diffsed.models.igm import igm_transmission
+
             wave_obs = self.ssp_data.ssp_wave * (1.0 + z)
             igm_trans = igm_transmission(wave_obs, z)
             sed = sed * igm_trans
@@ -791,13 +891,27 @@ class Model:
             fluxes.append(f)
         return jnp.array(fluxes)
 
+    def _get_dust_kwargs(self, p):
+        """Extract dust law kwargs from internal params dict."""
+        return {
+            "f_obscuration": p.get("f_obscuration", 0.0),
+            "dust_bump_strength": p.get("dust_bump_strength", 0.0),
+            "dust_delta": p.get("dust_delta", 0.0),
+            "dust_Rv": p.get("dust_Rv", 3.1),
+        }
+
     def _predict_photometry_fast(self, params):
         """Fast photometry using fused JIT kernel (fixed z)."""
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
         return self._fused_photometry(
-            sfr_on_ssp, p["log_z"], p["tau_v1"], p["tau_v2"], p["dust_n"]
+            sfr_on_ssp,
+            p["log_z"],
+            p["tau_v1"],
+            p["tau_v2"],
+            p["dust_n"],
+            **self._get_dust_kwargs(p),
         )
 
     def _predict_photometry_ztable(self, params):
@@ -807,7 +921,13 @@ class Model:
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
         z = self._get_redshift(params)
         return self._fused_photometry_ztable(
-            sfr_on_ssp, p["log_z"], p["tau_v1"], p["tau_v2"], p["dust_n"], z
+            sfr_on_ssp,
+            p["log_z"],
+            p["tau_v1"],
+            p["tau_v2"],
+            p["dust_n"],
+            z,
+            **self._get_dust_kwargs(p),
         )
 
     def precompute_spectroscopy(self, wave_obs):
@@ -835,7 +955,10 @@ class Model:
             self._dl_cm_fixed,
         )
         self._wave_obs = jnp.asarray(wave_obs)
-        self._fused_spectrum = self._build_fused_spectrum()
+        if self._fused_compatible():
+            self._fused_spectrum = self._build_fused_spectrum()
+        else:
+            self._fused_spectrum = None
         return self
 
     def precompute_ztable(self, z_grid=None, z_min=0.001, z_max=3.0, n_z=100):
@@ -878,12 +1001,12 @@ class Model:
         return self
 
     def _build_fused_photometry_ztable(self):
-        """Build fused JIT kernel that interpolates the z-table at inference.
+        """Build fused JIT kernel with z-table interpolation.
 
-        Like _build_fused_photometry but redshift is a free parameter:
-        interpolates precomputed SSP broadband fluxes, effective wavelengths,
-        and flux scale from the z-table.
+        Like _build_fused_photometry but redshift is a free parameter.
+        Supports all dust laws via captured law functions.
         """
+        from diffsed.models.dust.attenuation import get_dust_law
         from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 
         fdt = self._forward_dtype
@@ -897,14 +1020,32 @@ class Model:
         ssp_ages_yr = self.ssp_ages_yr.astype(fdt)
         lsun = fdt.type(LSUN_ERG_PER_S)
 
+        law_bc_fn = get_dust_law(self._dust_law_bc)
+        law_diff_fn = get_dust_law(self._dust_law_diff)
+
         @jax.jit
-        def fused_phot_ztable(sfr_on_ssp, log_z, tau_v1, tau_v2, dust_n, redshift):
+        def fused_phot_ztable(
+            sfr_on_ssp,
+            log_z,
+            tau_v1,
+            tau_v2,
+            dust_n,
+            redshift,
+            f_obscuration=0.0,
+            dust_bump_strength=0.0,
+            dust_delta=0.0,
+            dust_Rv=3.1,
+        ):
             sfr = sfr_on_ssp.astype(fdt)
             lz = jnp.asarray(log_z, dtype=fdt)
             tv1 = jnp.asarray(tau_v1, dtype=fdt)
             tv2 = jnp.asarray(tau_v2, dtype=fdt)
             dn = jnp.asarray(dust_n, dtype=fdt)
             z = jnp.asarray(redshift, dtype=fdt)
+            f_obs = jnp.asarray(f_obscuration, dtype=fdt)
+            bump = jnp.asarray(dust_bump_strength, dtype=fdt)
+            delta = jnp.asarray(dust_delta, dtype=fdt)
+            rv = jnp.asarray(dust_Rv, dtype=fdt)
 
             # Interpolate z-table to current redshift
             z_c = jnp.clip(z, z_grid[0], z_grid[-1])
@@ -931,10 +1072,23 @@ class Model:
             frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
             ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
 
-            # Dust at effective wavelengths (interpolated from z-table)
-            wave_ratio = (eff_rest / 5500.0) ** dn
-            tau_v_eff = dust_age_w * tv1 + tv2
-            dust = jnp.exp(-(tau_v_eff[:, None] * wave_ratio[None, :]))
+            # Dust: configurable curves at effective wavelengths
+            k_bc = law_bc_fn(
+                eff_rest,
+                n_slope=dn,
+                dust_bump_strength=bump,
+                dust_delta=delta,
+                dust_Rv=rv,
+            )
+            k_diff = law_diff_fn(
+                eff_rest,
+                n_slope=dn,
+                dust_bump_strength=bump,
+                dust_delta=delta,
+                dust_Rv=rv,
+            )
+            tau = dust_age_w[:, None] * tv1 * k_bc[None, :] + tv2 * k_diff[None, :]
+            dust = f_obs + (1.0 - f_obs) * jnp.exp(-tau)
 
             # Weighted sum
             flux_lsun = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
@@ -968,8 +1122,8 @@ class Model:
         elif wave_obs is None:
             raise ValueError("No wavelength grid. Pass wave_obs or call precompute_spectroscopy()")
 
-        # Fast path: use precomputed SSPs if wavelength grid matches
-        if self._spec_precomp is not None:
+        # Fast path: use fused kernel if available and compatible
+        if self._spec_precomp is not None and self._fused_spectrum is not None:
             return self._predict_spectrum_fast(params)
 
         # Exact path
@@ -989,10 +1143,15 @@ class Model:
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        # Only pass sigma_v if it's a model parameter
         sigma_v = params.get("sigma_v", 0.0) if self._has_sigma_v else 0.0
         return self._fused_spectrum(
-            sfr_on_ssp, p["log_z"], p["tau_v1"], p["tau_v2"], p["dust_n"], sigma_v
+            sfr_on_ssp,
+            p["log_z"],
+            p["tau_v1"],
+            p["tau_v2"],
+            p["dust_n"],
+            sigma_v,
+            **self._get_dust_kwargs(p),
         )
 
     def predict_sfh(self, params, n_linear=1000):
