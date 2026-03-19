@@ -30,7 +30,10 @@ import jax.numpy as jnp
 from diffsed.models.agn.blr import blr_emission
 from diffsed.models.agn.disc import multicolor_disc, powerlaw_disc
 from diffsed.models.agn.nlr import nlr_emission
-from diffsed.models.agn.skirtor import skirtor_analytic
+from diffsed.models.agn.skirtor import create_skirtor_from_grid
+
+# Auto-load tabulated SKIRTOR templates (preferred over analytic)
+_skirtor_fn = None
 from diffsed.models.agn.torus import simple_torus, two_temperature_torus
 
 
@@ -402,7 +405,31 @@ def skirtor_agn(
     )
 
     # SKIRTOR torus re-emits covering_factor of L_bol
-    l_torus = skirtor_analytic(
+    # Auto-load tabulated templates on first call
+    global _skirtor_fn
+    if _skirtor_fn is None:
+        from pathlib import Path
+
+        grid_path = Path(__file__).resolve().parents[2] / "data" / "skirtor_templates.npz"
+        if not grid_path.is_file():
+            # Search alternative locations
+            for candidate in [
+                Path("data/skirtor_templates.npz"),
+                Path.home() / "Projects/diffsed/data/skirtor_templates.npz",
+            ]:
+                if candidate.is_file():
+                    grid_path = candidate
+                    break
+        if grid_path.is_file():
+            _skirtor_fn = create_skirtor_from_grid(str(grid_path))
+        else:
+            raise FileNotFoundError(
+                "SKIRTOR templates not found. Download from "
+                "https://sites.google.com/site/skirtorus/sed-library "
+                "and convert with scripts/convert_skirtor_templates.py"
+            )
+
+    l_torus = _skirtor_fn(
         wavelength,
         agn_log_lbol=agn_log_lbol,
         agn_tau_skirtor=agn_tau_skirtor,

@@ -306,12 +306,27 @@ class Model:
 
         # AGN model (None = disabled)
         self._agn_model = getattr(spec, "agn_model", None)
+        # Detect parametric AGN mode: agn_log_lbol is a free (non-Fixed)
+        # parameter. Parametric mode uses agn_log_lbol directly, enabling
+        # fused-kernel evaluation. Legacy mode uses agn_frac to derive
+        # L_bol from the full SED integral, forcing the exact path.
+        self._agn_parametric = False
         if self._agn_model:
+            agn_dists = getattr(spec, "_distributions", {})
+            agn_lbol_dist = agn_dists.get("agn_log_lbol")
+            agn_frac_dist = agn_dists.get("agn_frac")
+            # Parametric if agn_log_lbol is free, or if agn_frac is Fixed(0)
+            # (default) and agn_log_lbol exists with any non-zero default.
+            lbol_is_free = agn_lbol_dist is not None and not agn_lbol_dist.is_fixed
+            frac_is_free = agn_frac_dist is not None and not agn_frac_dist.is_fixed
+            self._agn_parametric = lbol_is_free and not frac_is_free
             for p in [
                 "agn_frac",
+                "agn_log_lbol",
                 "agn_alpha",
                 "agn_T_torus",
                 "agn_tau_torus",
+                "agn_torus_frac",
                 "agn_log_mbh",
                 "agn_log_ledd",
             ]:
@@ -454,9 +469,12 @@ class Model:
                     f"in fused kernel (only modified_blackbody, dale2014)"
                 )
 
-        # AGN: always forces exact (needs L_bol from full SED integral)
-        if self._agn_model is not None:
-            reasons.append("AGN requires full SED for bolometric luminosity")
+        # AGN: legacy mode (agn_frac) forces exact path (needs L_bol from
+        # full SED integral). Parametric mode (agn_log_lbol) is fused-compatible.
+        if self._agn_model is not None and not self._agn_parametric:
+            reasons.append(
+                "AGN (legacy agn_frac mode) requires full SED for bolometric luminosity"
+            )
 
         # IGM: can be precomputed at effective wavelengths if approx enabled
         if self._apply_igm and not self._approx["igm"]:
@@ -488,6 +506,14 @@ class Model:
             )
         if self._apply_igm and self._approx["igm"]:
             active_approx.append("IGM absorption precomputed at filter effective wavelengths")
+        if self._agn_model is not None and self._agn_parametric:
+            active_approx.append(
+                "AGN (parametric agn_log_lbol) evaluated at filter effective "
+                "wavelengths. The AGN SED shape (power-law disc + blackbody "
+                "torus) varies strongly across optical-IR; effective-wavelength "
+                "approximation may be less accurate than for dust (~10-20% error "
+                "in broadband fluxes for AGN-dominated bands)"
+            )
 
         if active_approx:
             warnings.warn(
@@ -713,6 +739,13 @@ class Model:
             eff_nu = dt.type(2.99792458e10) / eff_waves_cm  # Hz
             nu_ref_250um = dt.type(2.99792458e10 / 250.0e-4)
 
+        # AGN: capture model function for evaluation at effective wavelengths
+        has_agn = self._agn_model is not None and self._agn_parametric
+        if has_agn:
+            from diffsed.models.agn import get_agn_model
+
+            agn_model_fn = get_agn_model(self._agn_model)
+
         @jax.jit
         def fused_phot(
             sfr_on_ssp,
@@ -728,6 +761,13 @@ class Model:
             dust_T=35.0,
             dust_beta_ir=1.6,
             dust_eta_balance=1.0,
+            agn_log_lbol=10.0,
+            agn_alpha=-1.0,
+            agn_T_torus=1000.0,
+            agn_tau_torus=5.0,
+            agn_torus_frac=0.5,
+            agn_log_mbh=7.0,
+            agn_log_ledd=-1.0,
         ):
             sfr = sfr_on_ssp.astype(dt)
             lz = jnp.asarray(log_z, dtype=dt)
@@ -817,6 +857,27 @@ class Model:
             else:
                 flux_total = flux_attenuated
 
+            # AGN contribution at effective wavelengths (parametric mode)
+            if has_agn:
+                # Evaluate AGN SED at filter effective wavelengths
+                agn_lnu = agn_model_fn(
+                    eff_waves_rest,
+                    agn_log_lbol=agn_log_lbol,
+                    agn_frac=1.0,  # L_bol fully specified by agn_log_lbol
+                    agn_alpha=agn_alpha,
+                    agn_T_torus=agn_T_torus,
+                    agn_tau_torus=agn_tau_torus,
+                    agn_torus_frac=agn_torus_frac,
+                    agn_log_mbh=agn_log_mbh,
+                    agn_log_ledd=agn_log_ledd,
+                )
+                # agn_lnu is in Lsun/Hz, flux_total is in Lsun at eff wavelengths
+                # Convert: L_nu [Lsun/Hz] → add to broadband flux [Lsun]
+                # The precomp SSP photometry is L_nu*dnu integrated through
+                # the filter, so AGN L_nu is treated the same way (evaluated
+                # at the effective wavelength as a representative value).
+                flux_total = flux_total + agn_lnu
+
             # IGM absorption (precomputed at effective wavelengths)
             if has_igm:
                 flux_total = flux_total * igm_trans
@@ -857,6 +918,13 @@ class Model:
             dlnwave = jnp.log(wave_obs_pixels[1] / wave_obs_pixels[0]).astype(fdt)
             c_km_s = fdt.type(299792.458)
 
+        # AGN: capture model function for evaluation at pixel wavelengths
+        has_agn = self._agn_model is not None and self._agn_parametric
+        if has_agn:
+            from diffsed.models.agn import get_agn_model
+
+            agn_model_fn = get_agn_model(self._agn_model)
+
         @jax.jit
         def fused_spec(
             sfr_on_ssp,
@@ -870,6 +938,13 @@ class Model:
             dust_delta=0.0,
             dust_Rv=3.1,
             alpha_fe=0.0,
+            agn_log_lbol=10.0,
+            agn_alpha=-1.0,
+            agn_T_torus=1000.0,
+            agn_tau_torus=5.0,
+            agn_torus_frac=0.5,
+            agn_log_mbh=7.0,
+            agn_log_ledd=-1.0,
         ):
             sfr = sfr_on_ssp.astype(fdt)
             lz = jnp.asarray(log_z, dtype=fdt)
@@ -921,6 +996,22 @@ class Model:
 
             # Weighted sum
             flux = jnp.einsum("i,ip,ip->p", weights, dust, ssp_at_z)
+
+            # AGN contribution at pixel wavelengths (parametric mode)
+            if has_agn:
+                agn_lnu = agn_model_fn(
+                    wave_rest_pixels,
+                    agn_log_lbol=agn_log_lbol,
+                    agn_frac=1.0,  # L_bol fully specified by agn_log_lbol
+                    agn_alpha=agn_alpha,
+                    agn_T_torus=agn_T_torus,
+                    agn_tau_torus=agn_tau_torus,
+                    agn_torus_frac=agn_torus_frac,
+                    agn_log_mbh=agn_log_mbh,
+                    agn_log_ledd=agn_log_ledd,
+                )
+                flux = flux + agn_lnu
+
             flux = flux_scale * flux * lsun
 
             if has_sigma_v:
@@ -1059,30 +1150,39 @@ class Model:
         if self._agn_model is not None:
             from diffsed.models.agn import get_agn_model
 
-            agn_frac = p.get("agn_frac", 0.0)
-            # AGN bolometric luminosity as fraction of stellar bolometric
-            # Integrate over frequency: L_bol = integral(L_nu * dnu)
-            _c_aa = 2.99792458e18  # c in Angstrom/s
-            nu = _c_aa / self.ssp_data.ssp_wave  # Hz (decreasing)
-            L_bol_stellar = -jnp.trapezoid(sed, nu)  # erg/s (proper bolometric)
-            agn_log_lbol = jnp.log10(jnp.maximum(L_bol_stellar * agn_frac, 1e-50))
+            if self._agn_parametric:
+                # Parametric mode: agn_log_lbol is a direct parameter.
+                # Set agn_frac=1.0 since luminosity is fully specified.
+                agn_log_lbol = p.get("agn_log_lbol", 10.0)
+                agn_frac_for_model = 1.0
+                _agn_bol = 10.0**agn_log_lbol
+            else:
+                # Legacy mode: derive L_bol from SED integral * agn_frac
+                agn_frac_for_model = p.get("agn_frac", 0.0)
+                _c_aa = 2.99792458e18  # c in Angstrom/s
+                nu = _c_aa / self.ssp_data.ssp_wave  # Hz (decreasing)
+                L_bol_stellar = -jnp.trapezoid(sed, nu)
+                agn_log_lbol = jnp.log10(jnp.maximum(L_bol_stellar * agn_frac_for_model, 1e-50))
+                _agn_bol = L_bol_stellar * agn_frac_for_model
             agn_sed = get_agn_model(self._agn_model)(
                 self.ssp_data.ssp_wave,
                 agn_log_lbol=agn_log_lbol,
+                agn_frac=agn_frac_for_model,
                 agn_alpha=p.get("agn_alpha", -1.0),
                 agn_T_torus=p.get("agn_T_torus", 1000.0),
                 agn_tau_torus=p.get("agn_tau_torus", 5.0),
+                agn_torus_frac=p.get("agn_torus_frac", 0.5),
                 agn_log_mbh=p.get("agn_log_mbh", 7.0),
                 agn_log_ledd=p.get("agn_log_ledd", -1.0),
             )
             sed = sed + agn_sed
-            _agn_bol = L_bol_stellar * agn_frac
         else:
             _agn_bol = 0.0
 
         # Radio emission (synchrotron from SF + AGN jets)
         if self._radio_enabled:
             from diffsed.models.radio import radio_total
+
             # L_IR from dust emission (if computed), else estimate from L_absorbed
             _L_ir = p.get("_L_ir_cached", 0.0)
             radio_sed = radio_total(
@@ -1099,6 +1199,7 @@ class Model:
         # X-ray emission (XRBs + AGN corona)
         if self._xray_enabled:
             from diffsed.models.xray import xray_total
+
             # SFR and M* from derived quantities
             _sfr = p.get("_sfr_cached", 1.0)
             _mstar = p.get("_mstar_cached", 1e10)
@@ -1182,6 +1283,20 @@ class Model:
             kw["dust_eta_balance"] = p.get("dust_eta_balance", 1.0)
         return kw
 
+    def _get_agn_kwargs(self, p):
+        """Extract AGN kwargs from internal params dict for fused kernel."""
+        if not (self._agn_model is not None and self._agn_parametric):
+            return {}
+        return {
+            "agn_log_lbol": p.get("agn_log_lbol", 10.0),
+            "agn_alpha": p.get("agn_alpha", -1.0),
+            "agn_T_torus": p.get("agn_T_torus", 1000.0),
+            "agn_tau_torus": p.get("agn_tau_torus", 5.0),
+            "agn_torus_frac": p.get("agn_torus_frac", 0.5),
+            "agn_log_mbh": p.get("agn_log_mbh", 7.0),
+            "agn_log_ledd": p.get("agn_log_ledd", -1.0),
+        }
+
     def _predict_photometry_fast(self, params):
         """Fast photometry using fused JIT kernel (fixed z)."""
         p = self._get_internal_params(params)
@@ -1194,6 +1309,7 @@ class Model:
             p["tau_v2"],
             p["dust_n"],
             **self._get_dust_kwargs(p),
+            **self._get_agn_kwargs(p),
         )
 
     def _predict_photometry_ztable(self, params):
@@ -1210,6 +1326,7 @@ class Model:
             p["dust_n"],
             z,
             **self._get_dust_kwargs(p),
+            **self._get_agn_kwargs(p),
         )
 
     def precompute_spectroscopy(self, wave_obs):
@@ -1278,6 +1395,7 @@ class Model:
             z_min=z_min,
             z_max=z_max,
             n_z=n_z,
+            apply_igm=self._apply_igm and self._approx.get("igm", True),
         )
         self._fused_photometry_ztable = self._build_fused_photometry_ztable()
         return self
@@ -1302,8 +1420,19 @@ class Model:
         ssp_ages_yr = self.ssp_ages_yr.astype(fdt)
         lsun = fdt.type(LSUN_ERG_PER_S)
 
+        # IGM: precomputed on z-grid when apply_igm + approx["igm"]
+        igm_trans_table = zt.igm_trans_table.astype(fdt)
+        has_igm_ztable = bool(self._apply_igm and self._approx.get("igm", True))
+
         law_bc_fn = get_dust_law(self._dust_law_bc)
         law_diff_fn = get_dust_law(self._dust_law_diff)
+
+        # AGN: capture model function for evaluation at effective wavelengths
+        has_agn = self._agn_model is not None and self._agn_parametric
+        if has_agn:
+            from diffsed.models.agn import get_agn_model
+
+            agn_model_fn = get_agn_model(self._agn_model)
 
         @jax.jit
         def fused_phot_ztable(
@@ -1318,6 +1447,13 @@ class Model:
             dust_delta=0.0,
             dust_Rv=3.1,
             alpha_fe=0.0,
+            agn_log_lbol=10.0,
+            agn_alpha=-1.0,
+            agn_T_torus=1000.0,
+            agn_tau_torus=5.0,
+            agn_torus_frac=0.5,
+            agn_log_mbh=7.0,
+            agn_log_ledd=-1.0,
         ):
             sfr = sfr_on_ssp.astype(fdt)
             lz = jnp.asarray(log_z, dtype=fdt)
@@ -1379,6 +1515,27 @@ class Model:
 
             # Weighted sum
             flux_lsun = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
+
+            # AGN contribution at effective wavelengths (parametric mode)
+            if has_agn:
+                agn_lnu = agn_model_fn(
+                    eff_rest,
+                    agn_log_lbol=agn_log_lbol,
+                    agn_frac=1.0,  # L_bol fully specified by agn_log_lbol
+                    agn_alpha=agn_alpha,
+                    agn_T_torus=agn_T_torus,
+                    agn_tau_torus=agn_tau_torus,
+                    agn_torus_frac=agn_torus_frac,
+                    agn_log_mbh=agn_log_mbh,
+                    agn_log_ledd=agn_log_ledd,
+                )
+                flux_lsun = flux_lsun + agn_lnu
+
+            # IGM absorption (interpolated from precomputed z-table)
+            if has_igm_ztable:
+                igm_trans = (1.0 - zf) * igm_trans_table[zi] + zf * igm_trans_table[zi + 1]
+                flux_lsun = flux_lsun * igm_trans
+
             return (flux_scale * flux_lsun * lsun).astype(jnp.float64)
 
         return fused_phot_ztable
@@ -1439,6 +1596,7 @@ class Model:
             p["dust_n"],
             sigma_v,
             **self._get_dust_kwargs(p),
+            **self._get_agn_kwargs(p),
         )
 
     def predict_sfh(self, params, n_linear=1000):

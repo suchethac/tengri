@@ -251,6 +251,9 @@ class PhotometricZTable(NamedTuple):
         Redshift grid.
     n_filters : int
         Number of filters.
+    igm_trans_table : array, shape (n_z, n_filters)
+        IGM transmission at effective observed wavelengths per redshift.
+        All ones when IGM is not applied.
     """
 
     ssp_phot_table: jnp.ndarray
@@ -258,6 +261,7 @@ class PhotometricZTable(NamedTuple):
     flux_scale_table: jnp.ndarray
     z_grid: jnp.ndarray
     n_filters: int
+    igm_trans_table: jnp.ndarray
 
 
 def precompute_photometry_ztable(
@@ -268,6 +272,7 @@ def precompute_photometry_ztable(
     z_min=0.001,
     z_max=3.0,
     n_z=100,
+    apply_igm=False,
 ) -> PhotometricZTable:
     """Pre-compute SSP broadband fluxes on a redshift grid.
 
@@ -291,6 +296,10 @@ def precompute_photometry_ztable(
         Maximum redshift (default 3.0).
     n_z : int
         Number of redshift grid points (default 100).
+    apply_igm : bool
+        If True, precompute IGM transmission (Inoue+2014) at the
+        effective observed wavelengths for each z in the grid.
+        Default False (igm_trans_table will be all ones).
 
     Returns
     -------
@@ -314,6 +323,7 @@ def precompute_photometry_ztable(
     ssp_phot_all = np.zeros((n_z_pts, n_met, n_age, n_filters))
     eff_waves_rest_all = np.zeros((n_z_pts, n_filters))
     flux_scale_all = np.zeros(n_z_pts)
+    igm_trans_all = np.ones((n_z_pts, n_filters))
 
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
@@ -330,6 +340,12 @@ def precompute_photometry_ztable(
             eff_waves.append(lam_eff)
         eff_waves = np.array(eff_waves)
         eff_waves_rest_all[zi] = eff_waves / (1.0 + z_val)
+
+        # IGM transmission at effective observed wavelengths
+        if apply_igm:
+            from diffsed.models.igm import igm_transmission
+
+            igm_trans_all[zi] = np.asarray(igm_transmission(jnp.asarray(eff_waves), z_val))
 
         # Pre-integrate SSP through each filter
         for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
@@ -358,6 +374,7 @@ def precompute_photometry_ztable(
         flux_scale_table=jnp.array(flux_scale_all),
         z_grid=z_grid,
         n_filters=n_filters,
+        igm_trans_table=jnp.array(igm_trans_all),
     )
 
 
@@ -493,3 +510,27 @@ def interpolate_ztable(ztable_ssp_phot, ztable_eff_rest, ztable_flux_scale, z_gr
     flux_scale = (1.0 - frac) * ztable_flux_scale[idx] + frac * ztable_flux_scale[idx + 1]
 
     return ssp_phot, eff_rest, flux_scale
+
+
+@jax.jit
+def interpolate_igm_ztable(igm_trans_table, z_grid, z):
+    """Interpolate precomputed IGM transmission to a specific redshift.
+
+    Parameters
+    ----------
+    igm_trans_table : array, shape (n_z, n_filters)
+        Precomputed IGM transmission on z grid.
+    z_grid : array, shape (n_z,)
+        Redshift grid.
+    z : float
+        Target redshift.
+
+    Returns
+    -------
+    igm_trans : array, shape (n_filters,)
+        Interpolated IGM transmission.
+    """
+    z_clamped = jnp.clip(z, z_grid[0], z_grid[-1])
+    idx = jnp.clip(jnp.searchsorted(z_grid, z_clamped) - 1, 0, len(z_grid) - 2)
+    frac = (z_clamped - z_grid[idx]) / (z_grid[idx + 1] - z_grid[idx])
+    return (1.0 - frac) * igm_trans_table[idx] + frac * igm_trans_table[idx + 1]

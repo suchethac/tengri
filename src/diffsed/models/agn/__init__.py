@@ -34,10 +34,7 @@ References
 from diffsed.models.agn.blr import blr_emission
 from diffsed.models.agn.disc import multicolor_disc, powerlaw_disc
 from diffsed.models.agn.nlr import nlr_emission
-from diffsed.models.agn.skirtor import (
-    create_skirtor_from_grid,
-    skirtor_analytic,
-)
+from diffsed.models.agn.skirtor import create_skirtor_from_grid
 from diffsed.models.agn.torus import simple_torus, two_temperature_torus
 from diffsed.models.agn.unified import (
     AGN_MODELS,
@@ -63,7 +60,6 @@ __all__ = [
     # Torus models
     "simple_torus",
     "two_temperature_torus",
-    "skirtor_analytic",
     "create_skirtor_from_grid",
     # Line region models
     "nlr_emission",
