@@ -134,6 +134,8 @@ class HierarchicalFitter:
             key = jax.random.PRNGKey(0)
 
         if method == "evi":
+            return self._run_evi_jit(key=key, **kwargs)
+        elif method == "evi_nifty":
             return self._run_geovi_cfm(key=key, sample_mode="evi", **kwargs)
         elif method == "geovi":
             return self._run_geovi_cfm(key=key, **kwargs)
@@ -150,8 +152,431 @@ class HierarchicalFitter:
         else:
             raise ValueError(
                 f"Unknown method: {method}. "
-                f"Use 'evi', 'geovi', 'mgvi', 'geovi_flat', or 'raytrace'."
+                f"Use 'evi', 'evi_nifty', 'geovi', 'mgvi', "
+                f"'geovi_flat', or 'raytrace'."
             )
+
+    def _run_evi_jit(
+        self,
+        *,
+        key,
+        n_iterations=20,
+        n_samples=3,
+        n_posterior_samples=500,
+        kl_rtol=1e-2,
+        n_seeds=3,
+        verbose=True,
+    ):
+        """Fully JIT-compiled hierarchical EVI.
+
+        Adapts the single-galaxy EVI engine (Fitter._run_evi_jit) for
+        hierarchical inference: shared PSD parameters + per-galaxy
+        latent vectors and physical params, all in a single flat array
+        optimized via Newton-CG with automatic convergence detection.
+
+        The forward model is vmapped over galaxies, giving O(1) graph
+        size regardless of N_gal. The entire optimization loop runs
+        inside ``jax.lax.while_loop`` with zero Python overhead.
+
+        Parameters
+        ----------
+        n_iterations : int
+            Maximum KL iterations. Auto-stops when converged.
+        n_samples : int
+            Samples per iteration (doubled by mirror_samples).
+        n_posterior_samples : int
+            Posterior samples drawn after convergence.
+        kl_rtol : float
+            Relative KL tolerance for early stopping.
+        n_seeds : int
+            Number of random seeds. Best result (lowest H) is kept.
+        verbose : bool
+            Print progress.
+        """
+        from jax.flatten_util import ravel_pytree
+
+        n_gal = self.n_galaxies
+        spec = self._spec
+        stochastic = spec.stochastic
+        n_grid = spec.n_grid
+        free_names = self._free_names
+        sigma_lo, sigma_hi = self.psd_sigma_bounds
+        tau_lo, tau_hi = self.psd_tau_bounds
+
+        bounds = {}
+        for name in free_names:
+            dist = spec.get_distribution(name)
+            bounds[name] = dist.bounds
+        fixed_values = spec.get_fixed_values()
+
+        # Precompute data
+        all_data = jnp.concatenate([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
+        all_noise = jnp.concatenate([jnp.asarray(g["noise"]) for g in self.galaxies])
+        noise_inv = 1.0 / all_noise**2
+        n_data = len(all_data)
+
+        # Build model once
+        model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
+
+        # --- Hierarchical signal_response (vmapped) ---
+        def signal_response(p):
+            psd_sigma = to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi)
+            psd_tau = to_bounded(p["psd_tau_u"], tau_lo, tau_hi)
+
+            def forward_one(ub_scalars, xi):
+                params = {}
+                for name in free_names:
+                    lo, hi = bounds[name]
+                    params[name] = to_bounded(ub_scalars[name], lo, hi)
+                for name, val in fixed_values.items():
+                    if name not in ("psd_sigma", "psd_tau_myr"):
+                        params[name] = val
+                params["psd_sigma"] = psd_sigma
+                params["psd_tau_myr"] = psd_tau
+                if stochastic:
+                    params["psd_xi"] = xi
+                return model.predict_photometry(params)
+
+            if stochastic:
+                predictions = jax.vmap(forward_one)(p["gal"], p["gal_xi"])
+            else:
+                predictions = jax.vmap(
+                    lambda ub, _: forward_one(ub, None)
+                )(p["gal"], jnp.zeros(n_gal))
+            return predictions.reshape(-1)
+
+        # --- Build init structure ---
+        sigma_mid = 0.5 * (sigma_lo + sigma_hi)
+        tau_mid = 0.5 * (tau_lo + tau_hi)
+
+        init_template = {
+            "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
+            "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
+            "gal": {name: jnp.zeros(n_gal) for name in free_names},
+        }
+        if stochastic:
+            init_template["gal_xi"] = jnp.zeros((n_gal, n_grid))
+
+        # Use ravel_pytree for flatten/unflatten
+        _init_flat, unravel_fn = ravel_pytree(init_template)
+        d_total = len(_init_flat)
+
+        def flatten(d):
+            return ravel_pytree(d)[0]
+
+        def unflatten(x):
+            return unravel_fn(x)
+
+        # --- Core EVI primitives (same as single-galaxy) ---
+        _eps = 6.0 * jnp.finfo(jnp.float64).eps
+
+        def metric_vec(xi, v):
+            """GGN metric: M(xi) @ v = J^T N^{-1} J v + v."""
+            xi_d, v_d = unflatten(xi), unflatten(v)
+            _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
+            _, vjp_fn = jax.vjp(signal_response, xi_d)
+            return flatten(vjp_fn(noise_inv * Jv)[0]) + v
+
+        def hamiltonian(xi):
+            """H(xi) = 0.5 chi2 + 0.5 ||xi||^2."""
+            pred = signal_response(unflatten(xi))
+            chi2 = jnp.sum(((all_data - pred) / all_noise) ** 2)
+            return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
+
+        H_vg = jax.value_and_grad(hamiltonian)
+
+        def cg_solve(mat_fn, b, x0, maxiter=30, miniter=6, absdelta=1e-4):
+            """CG solve: mat_fn(x) = b. Energy-based convergence."""
+            r = mat_fn(x0) - b
+            d, gamma = r, jnp.dot(r, r)
+            energy = jnp.dot((r - b) / 2, x0)
+            init = (x0, r, d, gamma, energy, jnp.int32(-2), jnp.int32(0))
+
+            def cond(s):
+                return s[5] < -1
+
+            def body(s):
+                x, r, d, pg, pe, info, i = s
+                i = i + 1
+                q = mat_fn(d)
+                curv = jnp.dot(d, q)
+                alpha = pg / curv
+                info = jnp.where(curv <= 0.0, jnp.int32(-1), info)
+                alpha = jnp.where(curv <= 0.0, 0.0, alpha)
+                x = x - alpha * d
+                r = jnp.where(
+                    (i % 20 == 0) & (info < -1), mat_fn(x) - b, r - alpha * q
+                )
+                gamma = jnp.dot(r, r)
+                energy = jnp.dot((r - b) / 2, x)
+                ed = pe - energy
+                info = jnp.where(ed < -_eps * jnp.abs(energy), jnp.int32(-1), info)
+                info = jnp.where(
+                    (ed < absdelta) & (i >= miniter) & (info < -1),
+                    jnp.int32(0),
+                    info,
+                )
+                info = jnp.where((i >= maxiter) & (info < -1), i, info)
+                d = d * jnp.maximum(0.0, gamma / (pg + 1e-30)) + r
+                return (x, r, d, gamma, energy, info, i)
+
+            return jax.lax.while_loop(cond, body, init)[0]
+
+        # --- Posterior sampler ---
+        def draw_residuals(pos_f, subkeys):
+            def draw_one(subkey):
+                k1, k2 = jax.random.split(subkey)
+                eta_pr = jax.random.normal(k1, shape=(d_total,))
+                eta_lh = jax.random.normal(k2, shape=(n_data,))
+                _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
+                jt = flatten(vjp_fn(jnp.sqrt(noise_inv) * eta_lh)[0])
+                return cg_solve(
+                    lambda v: metric_vec(pos_f, v),
+                    jt + eta_pr,
+                    eta_pr,
+                    maxiter=30,
+                    miniter=6,
+                    absdelta=1e-4,
+                )
+
+            return jax.vmap(draw_one)(subkeys)
+
+        # --- EVI step ---
+        def kl_vg(m, residuals):
+            def single_vg(r):
+                return H_vg(m + r)
+
+            vals, grads = jax.vmap(single_vg)(residuals)
+            return jnp.mean(vals), jnp.mean(grads, axis=0)
+
+        def kl_metric(m, residuals, v):
+            def single_met(r):
+                return metric_vec(m + r, v)
+
+            return jnp.mean(jax.vmap(single_met)(residuals), axis=0)
+
+        def evi_step(m, subkey, n_samp):
+            sample_keys = jax.random.split(subkey, n_samp)
+            residuals = draw_residuals(m, sample_keys)
+            residuals = jnp.concatenate([residuals, -residuals], axis=0)
+
+            def ncg_body(carry):
+                m_cur, prev_val, info, i = carry
+                i = i + 1
+                val, grad = kl_vg(m_cur, residuals)
+                step = cg_solve(
+                    lambda v: kl_metric(m_cur, residuals, v),
+                    -grad,
+                    jnp.zeros_like(m_cur),
+                    maxiter=10,
+                    miniter=3,
+                    absdelta=1e-3,
+                )
+                m_new = m_cur + step
+                ed = prev_val - val
+                info = jnp.where(
+                    (ed < 1e-3) & (i >= 3) & (info < -1), jnp.int32(0), info
+                )
+                info = jnp.where((i >= 10) & (info < -1), i, info)
+                return (m_new, val, info, i)
+
+            def ncg_cond(carry):
+                return carry[2] < -1
+
+            val0, _ = kl_vg(m, residuals)
+            result = jax.lax.while_loop(
+                ncg_cond, ncg_body, (m, val0, jnp.int32(-2), jnp.int32(0))
+            )
+            return result[0], result[1]
+
+        def run_evi(init_pos, evi_key, n_iter, n_samp, rtol):
+            keys = jax.random.split(evi_key, n_iter)
+
+            def cond_fn(state):
+                _m, _prev_kl, i, converged = state
+                return (~converged) & (i < n_iter)
+
+            def body_fn(state):
+                m, prev_kl, i, converged = state
+                subkey = jax.lax.dynamic_index_in_dim(keys, i, keepdims=False)
+                m_new, kl_val = evi_step(m, subkey, n_samp)
+                rel_change = jnp.abs(prev_kl - kl_val) / (jnp.abs(prev_kl) + 1e-10)
+                converged = (rel_change < rtol) & (i >= 5)
+                return (m_new, kl_val, i + 1, converged)
+
+            m0, kl0 = evi_step(init_pos, keys[0], n_samp)
+            init_state = (m0, kl0, jnp.int32(1), jnp.bool_(False))
+            m_final, _kl_final, n_iters, _ = jax.lax.while_loop(
+                cond_fn, body_fn, init_state
+            )
+            return m_final, n_iters
+
+        # --- JIT-compile ---
+        run_evi_jit = jax.jit(
+            run_evi, static_argnames=("n_iter", "n_samp")
+        )
+        draw_residuals_jit = jax.jit(draw_residuals)
+
+        if verbose:
+            print(
+                f"Hierarchical EVI (JIT): {n_gal} galaxies, "
+                f"D={d_total}, {n_iterations} max iterations, "
+                f"{n_samples} samples/iter, {n_seeds} seeds"
+            )
+            print("  Compiling JIT engine...")
+
+        t0 = time.time()
+
+        # --- Initialize per-galaxy params via MAP ---
+        from diffsed import Fitter
+
+        init_keys = jax.random.split(key, n_gal + n_seeds + 2)
+
+        if verbose:
+            print("  Initializing per-galaxy params via MAP...")
+
+        gal_param_lists = {name: [] for name in free_names}
+        gal_xi_list = []
+        for i in range(n_gal):
+            gal = self.galaxies[i]
+            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"])
+            map_i = fitter_i.run(
+                "map", n_steps=500, learning_rate=0.03,
+                verbose=False, key=init_keys[i],
+            )
+            init_u = fitter_i._unbounded_from_posterior(map_i)
+            for name in free_names:
+                gal_param_lists[name].append(init_u.get(name, jnp.array(0.0)))
+            if stochastic:
+                gal_xi_list.append(
+                    init_u.get("psd_xi", jnp.zeros(n_grid))
+                )
+
+        map_init = {
+            "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
+            "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
+            "gal": {
+                name: jnp.stack(vals) for name, vals in gal_param_lists.items()
+            },
+        }
+        if stochastic:
+            map_init["gal_xi"] = jnp.stack(gal_xi_list)
+
+        if verbose:
+            print("  MAP init done. Running multi-seed optimization...")
+
+        # --- Multi-seed optimization ---
+        seed_keys = init_keys[n_gal:]
+        best_flat = None
+        best_loss = jnp.inf
+        best_iters = 0
+
+        for s in range(n_seeds):
+            if s == 0:
+                init_flat = flatten(map_init)
+            else:
+                # Random perturbation of MAP init
+                perturb = 0.3 * jax.random.normal(seed_keys[s], shape=(d_total,))
+                init_flat = flatten(map_init) + perturb
+
+            opt_key = jax.random.fold_in(seed_keys[s], 999)
+            converged_flat, n_iters = run_evi_jit(
+                init_flat, opt_key,
+                n_iter=n_iterations, n_samp=n_samples, rtol=kl_rtol,
+            )
+            n_iters = int(n_iters)
+
+            # Evaluate Hamiltonian
+            loss = float(hamiltonian(converged_flat))
+
+            if verbose and n_seeds > 1:
+                print(f"    Seed {s + 1}/{n_seeds}: H={loss:.1f}, {n_iters} iters")
+
+            if loss < best_loss:
+                best_flat = converged_flat
+                best_loss = loss
+                best_iters = n_iters
+
+        # --- Draw posterior samples ---
+        if verbose:
+            print(f"  Drawing {n_posterior_samples} posterior samples...")
+
+        draw_key = jax.random.fold_in(key, 12345)
+        draw_keys = jax.random.split(draw_key, n_posterior_samples)
+        residuals_flat = draw_residuals_jit(best_flat, draw_keys)
+
+        wall_time = time.time() - t0
+
+        # --- Extract shared PSD posteriors ---
+        converged_p = unflatten(best_flat)
+        sigma_samples = []
+        tau_samples = []
+        for i in range(n_posterior_samples):
+            res_p = unflatten(residuals_flat[i])
+            combined = jax.tree.map(lambda a, b: a + b, converged_p, res_p)
+            sigma_samples.append(
+                to_bounded(combined["psd_sigma_u"], sigma_lo, sigma_hi)
+            )
+            tau_samples.append(
+                to_bounded(combined["psd_tau_u"], tau_lo, tau_hi)
+            )
+
+        shared_samples = {
+            "psd_sigma": jnp.array(sigma_samples),
+            "psd_tau_myr": jnp.array(tau_samples),
+        }
+        shared_params = {k: float(jnp.mean(v)) for k, v in shared_samples.items()}
+
+        # Extract per-galaxy posteriors
+        individual_samples = []
+        for g in range(n_gal):
+            gal_samples = {}
+            for name in free_names:
+                lo, hi = bounds[name]
+                vals = []
+                for i in range(n_posterior_samples):
+                    res_p = unflatten(residuals_flat[i])
+                    combined_val = converged_p["gal"][name][g] + res_p["gal"][name][g]
+                    vals.append(to_bounded(combined_val, lo, hi))
+                gal_samples[name] = jnp.array(vals)
+            if stochastic:
+                xi_vals = []
+                for i in range(n_posterior_samples):
+                    res_p = unflatten(residuals_flat[i])
+                    xi_vals.append(
+                        converged_p["gal_xi"][g] + res_p["gal_xi"][g]
+                    )
+                gal_samples["psd_xi"] = jnp.stack(xi_vals)
+            individual_samples.append(gal_samples)
+
+        if verbose:
+            s = shared_params
+            print(
+                f"  Hierarchical EVI (JIT) complete in {wall_time:.1f}s, "
+                f"{best_iters}/{n_iterations} iterations, "
+                f"{n_posterior_samples} posterior samples"
+            )
+            print(
+                f"  σ_PSD = {s['psd_sigma']:.2f}, "
+                f"τ_PSD = {s['psd_tau_myr']:.1f} Myr"
+            )
+
+        return HierarchicalResult(
+            shared_samples=shared_samples,
+            shared_params=shared_params,
+            individual_samples=individual_samples,
+            method="Hierarchical EVI (JIT)",
+            wall_time_s=wall_time,
+            diagnostics={
+                "n_galaxies": n_gal,
+                "n_iterations": best_iters,
+                "n_iterations_max": n_iterations,
+                "n_samples_posterior": n_posterior_samples,
+                "n_seeds": n_seeds,
+                "best_hamiltonian": float(best_loss),
+                "D_total": d_total,
+            },
+        )
 
     def _run_geovi_cfm(
         self,
@@ -262,37 +687,38 @@ class HierarchicalFitter:
                 if k != "psd_xi":
                     cfm_primals[k] = primals[k]
 
-            predictions = []
-            for i in range(n_gal):
-                # Use shared PSD + per-galaxy xi
-                cfm_primals_i = dict(cfm_primals)
-                cfm_primals_i["psd_xi"] = primals[f"g{i}_xi"]
+            # Stack per-galaxy params into batched arrays (compile-time)
+            gal_xi = jnp.stack([primals[f"g{i}_xi"] for i in range(n_gal)])
+            gal_ub = {
+                name: jnp.stack([primals[f"g{i}_{name}"] for i in range(n_gal)])
+                for name in free_names
+            }
 
-                # Generate the correlated field (GP realization)
+            # Single-galaxy forward (vmapped over galaxy axis)
+            def forward_one(ub_scalars, xi):
+                # Generate the correlated field for this galaxy
+                cfm_primals_i = dict(cfm_primals)
+                cfm_primals_i["psd_xi"] = xi
                 gp_field = corr_field_template(cfm_primals_i)
 
                 # Build per-galaxy physical params
                 params = {}
                 for name in free_names:
                     lo, hi = bounds[name]
-                    params[name] = to_bounded(primals[f"g{i}_{name}"], lo, hi)
+                    params[name] = to_bounded(ub_scalars[name], lo, hi)
                 for name, val in fixed_values.items():
                     if name not in ("psd_sigma", "psd_tau_myr"):
                         params[name] = val
 
-                # Override: use CFM-generated field as psd_xi
-                # The CFM already applies sqrt(P) * xi, so we pass
-                # the full correlated field as the GP realization
+                # CFM already applies sqrt(P) * xi, so pass the full
+                # correlated field as the GP realization
                 params["psd_xi"] = gp_field
-                # Set dummy PSD params (not used when psd_xi is
-                # already a correlated field, but Model expects them)
                 params["psd_sigma"] = 1.0
                 params["psd_tau_myr"] = 50.0
+                return model.predict_photometry(params)
 
-                pred = model.predict_photometry(params)
-                predictions.append(pred)
-
-            return jnp.concatenate(predictions)
+            predictions = jax.vmap(forward_one)(gal_ub, gal_xi)
+            return predictions.reshape(-1)
 
         signal_response_jit = jax.jit(signal_response)
         nifty_model = jft.Model(signal_response_jit, domain=domain)
@@ -549,41 +975,39 @@ class HierarchicalFitter:
             psd_sigma = to_bounded(primals["psd_sigma_u"], sigma_lo, sigma_hi)
             psd_tau = to_bounded(primals["psd_tau_u"], tau_lo, tau_hi)
 
-            # Build per-galaxy params and predict
-            # Use jax.lax.scan for efficient sequential evaluation
-            # (vmap not possible because each galaxy has different xi)
-            def scan_body(carry, i):
+            # Stack per-galaxy params into batched arrays (compile-time)
+            gal_ub = {
+                name: jnp.stack([primals[f"g{i}_{name}"] for i in range(n_gal)])
+                for name in free_names
+            }
+            if stochastic:
+                gal_xi = jnp.stack(
+                    [primals[f"g{i}_psd_xi"] for i in range(n_gal)]
+                )
+
+            # Single-galaxy forward (vmapped over galaxy axis)
+            def forward_one(ub_scalars, xi):
                 params = {}
                 for name in free_names:
                     lo, hi = bounds[name]
-                    params[name] = to_bounded(primals[f"g{i}_{name}"], lo, hi)
+                    params[name] = to_bounded(ub_scalars[name], lo, hi)
                 for name, val in fixed_values.items():
                     if name not in ("psd_sigma", "psd_tau_myr"):
                         params[name] = val
                 params["psd_sigma"] = psd_sigma
                 params["psd_tau_myr"] = psd_tau
                 if stochastic:
-                    params["psd_xi"] = primals[f"g{i}_psd_xi"]
-                return None, _predict_single(params)
+                    params["psd_xi"] = xi
+                return _predict_single(params)
 
-            # Can't use scan with string-indexed primals, use loop
-            # but at least each call uses precomputed photometry
-            predictions = []
-            for i in range(n_gal):
-                params = {}
-                for name in free_names:
-                    lo, hi = bounds[name]
-                    params[name] = to_bounded(primals[f"g{i}_{name}"], lo, hi)
-                for name, val in fixed_values.items():
-                    if name not in ("psd_sigma", "psd_tau_myr"):
-                        params[name] = val
-                params["psd_sigma"] = psd_sigma
-                params["psd_tau_myr"] = psd_tau
-                if stochastic:
-                    params["psd_xi"] = primals[f"g{i}_psd_xi"]
-                predictions.append(_predict_single(params))
+            if stochastic:
+                predictions = jax.vmap(forward_one)(gal_ub, gal_xi)
+            else:
+                predictions = jax.vmap(
+                    lambda ub, _: forward_one(ub, None)
+                )(gal_ub, jnp.zeros(n_gal))
 
-            return jnp.concatenate(predictions)
+            return predictions.reshape(-1)
 
         signal_response_jit = jax.jit(signal_response)
         nifty_model = jft.Model(signal_response_jit, domain=domain)
@@ -738,12 +1162,9 @@ class HierarchicalFitter:
         tau_lo, tau_hi = self.psd_tau_bounds
 
         # Build initial flat vector
-        init = {}
-        # Initialize shared PSD near center of prior (in bounded space)
+        # Build init dict with stacked per-galaxy arrays for vmap
         sigma_mid = 0.5 * (sigma_lo + sigma_hi)
         tau_mid = 0.5 * (tau_lo + tau_hi)
-        init["psd_sigma_u"] = to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi)
-        init["psd_tau_u"] = to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi)
 
         # Pre-build model with midpoint PSD for MAP initialization
         model = self.model_factory(psd_sigma=sigma_mid, psd_tau_myr=tau_mid)
@@ -756,6 +1177,9 @@ class HierarchicalFitter:
         if verbose:
             print("  Initializing per-galaxy params via MAP...")
 
+        gal_param_lists = {name: [] for name in free_names}
+        gal_xi_list = []
+
         for i in range(n_gal):
             gal = self.galaxies[i]
             fitter_i = Fitter(model, gal["flux_obs"], gal["noise"])
@@ -764,18 +1188,25 @@ class HierarchicalFitter:
             )
             init_u = fitter_i._unbounded_from_posterior(map_i)
             for name in free_names:
-                if name in init_u:
-                    init[f"g{i}_{name}"] = init_u[name]
-                else:
-                    init[f"g{i}_{name}"] = jnp.array(0.0)
+                gal_param_lists[name].append(
+                    init_u.get(name, jnp.array(0.0))
+                )
             if stochastic:
-                if "psd_xi" in init_u:
-                    init[f"g{i}_psd_xi"] = init_u["psd_xi"]
-                else:
-                    init[f"g{i}_psd_xi"] = jnp.zeros(n_grid)
+                gal_xi_list.append(
+                    init_u.get("psd_xi", jnp.zeros(n_grid))
+                )
 
         if verbose:
             print("  MAP initialization complete")
+
+        # Structured init: shared scalars + stacked per-galaxy arrays
+        init = {
+            "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
+            "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
+            "gal": {name: jnp.stack(vals) for name, vals in gal_param_lists.items()},
+        }
+        if stochastic:
+            init["gal_xi"] = jnp.stack(gal_xi_list)
 
         init_flat, unravel_fn = ravel_pytree(init)
         D = len(init_flat)
@@ -795,35 +1226,37 @@ class HierarchicalFitter:
             psd_sigma = to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi)
             psd_tau = to_bounded(p["psd_tau_u"], tau_lo, tau_hi)
 
-            predictions = []
-            xi_penalty = 0.0
-
-            for i in range(n_gal):
+            # Single-galaxy forward (vmapped over galaxy axis)
+            def forward_one(ub_scalars, xi):
                 params = {}
                 for name in free_names:
                     lo, hi = bounds[name]
-                    params[name] = to_bounded(p[f"g{i}_{name}"], lo, hi)
+                    params[name] = to_bounded(ub_scalars[name], lo, hi)
                 for name, val in fixed_values.items():
                     if name not in ("psd_sigma", "psd_tau_myr"):
                         params[name] = val
-                # Override PSD with shared values
                 params["psd_sigma"] = psd_sigma
                 params["psd_tau_myr"] = psd_tau
                 if stochastic:
-                    params["psd_xi"] = p[f"g{i}_psd_xi"]
-                    xi_penalty += jnp.sum(p[f"g{i}_psd_xi"] ** 2)
+                    params["psd_xi"] = xi
+                return model.predict_photometry(params)
 
-                pred = model.predict_photometry(params)
-                predictions.append(pred)
+            if stochastic:
+                predictions = jax.vmap(forward_one)(p["gal"], p["gal_xi"])
+            else:
+                predictions = jax.vmap(
+                    lambda ub, _: forward_one(ub, None)
+                )(p["gal"], jnp.zeros(n_gal))
 
-            pred_all = jnp.concatenate(predictions)
+            pred_all = predictions.reshape(-1)
             chi2 = jnp.sum(((all_data - pred_all) / all_noise) ** 2)
 
-            # Prior: standard normal on all unbounded params + xi
-            param_penalty = p["psd_sigma_u"] ** 2 + p["psd_tau_u"] ** 2 + xi_penalty
-            for i in range(n_gal):
-                for name in free_names:
-                    param_penalty += p[f"g{i}_{name}"] ** 2
+            # Prior: standard normal on all unbounded + xi params
+            param_penalty = p["psd_sigma_u"] ** 2 + p["psd_tau_u"] ** 2
+            for name in free_names:
+                param_penalty += jnp.sum(p["gal"][name] ** 2)
+            if stochastic:
+                param_penalty += jnp.sum(p["gal_xi"] ** 2)
 
             return -0.5 * chi2 - 0.5 * param_penalty
 
@@ -851,16 +1284,19 @@ class HierarchicalFitter:
         chain = chain[n_burnin:]
         accept_prob_post = accept_prob[n_burnin:]
 
-        # Extract shared params
-        shared_samples = {"psd_sigma": [], "psd_tau_myr": []}
-        for i in range(chain.shape[0]):
-            p = unravel_fn(chain[i])
-            shared_samples["psd_sigma"].append(
-                float(to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi))
-            )
-            shared_samples["psd_tau_myr"].append(float(to_bounded(p["psd_tau_u"], tau_lo, tau_hi)))
+        # Extract shared params (vectorized over chain)
+        def extract_shared(flat_params):
+            p = unravel_fn(flat_params)
+            return jnp.array([
+                to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi),
+                to_bounded(p["psd_tau_u"], tau_lo, tau_hi),
+            ])
 
-        shared_samples = {k: jnp.array(v) for k, v in shared_samples.items()}
+        shared_arr = jax.vmap(extract_shared)(chain)  # (n_samples, 2)
+        shared_samples = {
+            "psd_sigma": shared_arr[:, 0],
+            "psd_tau_myr": shared_arr[:, 1],
+        }
         shared_params = {k: float(jnp.mean(v)) for k, v in shared_samples.items()}
 
         if verbose:

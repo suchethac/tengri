@@ -33,7 +33,7 @@ class TestConstruction:
             sfh_field_psd_tau_myr=Uniform(10.0, 300.0),
         )
         assert spec.stochastic
-        assert spec.n_grid == 256
+        assert spec.n_grid == 64
 
     def test_shorthand_scalar(self):
         spec = ParamSpec(dust_slope=-0.7)
