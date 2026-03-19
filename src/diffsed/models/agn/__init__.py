@@ -7,6 +7,8 @@ into a unified AGN SED. Three complexity levels:
 - **standard**: multi-color Shakura-Sunyaev disc + two-temperature torus (6 params)
 - **kubota_done**: Kubota & Done (2018) disc + clumpy torus (8+ params)
 - **unified_nlr_blr**: kubota_done + NLR/BLR decomposition with geometric masking (12+ params)
+- **skirtor**: power-law disc + SKIRTOR clumpy torus (Stalevski+2012, 2016) (7 params)
+- **qsogen**: Temple, Hewett & Banerji (2021) empirical quasar SED (7 params)
 
 Usage::
 
@@ -25,11 +27,17 @@ References
 - Kubota & Done 2018, MNRAS, 480, 1247
 - Nenkova et al. 2008, ApJ, 685, 147
 - Stalevski et al. 2012, MNRAS, 420, 2756
+- Stalevski et al. 2016, MNRAS, 458, 2288
+- Temple, Hewett & Banerji 2021, MNRAS, 508, 737
 """
 
 from diffsed.models.agn.blr import blr_emission
 from diffsed.models.agn.disc import multicolor_disc, powerlaw_disc
 from diffsed.models.agn.nlr import nlr_emission
+from diffsed.models.agn.skirtor import (
+    create_skirtor_from_grid,
+    skirtor_analytic,
+)
 from diffsed.models.agn.torus import simple_torus, two_temperature_torus
 from diffsed.models.agn.unified import (
     AGN_MODELS,
@@ -38,6 +46,8 @@ from diffsed.models.agn.unified import (
     unified_agn,
     unified_nlr_blr,
 )
+# QSOgen must be imported after unified (needs register_agn_model)
+from diffsed.models.agn.qsogen import qsogen, qsogen_sed
 
 __all__ = [
     # Registry
@@ -53,7 +63,12 @@ __all__ = [
     # Torus models
     "simple_torus",
     "two_temperature_torus",
+    "skirtor_analytic",
+    "create_skirtor_from_grid",
     # Line region models
     "nlr_emission",
     "blr_emission",
+    # QSOgen
+    "qsogen",
+    "qsogen_sed",
 ]

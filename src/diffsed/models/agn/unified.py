@@ -30,6 +30,7 @@ import jax.numpy as jnp
 from diffsed.models.agn.blr import blr_emission
 from diffsed.models.agn.disc import multicolor_disc, powerlaw_disc
 from diffsed.models.agn.nlr import nlr_emission
+from diffsed.models.agn.skirtor import skirtor_analytic
 from diffsed.models.agn.torus import simple_torus, two_temperature_torus
 
 
@@ -340,6 +341,79 @@ def kubota_done_agn(
         agn_torus_frac=agn_torus_frac,
     )
     return l_nu * agn_frac
+
+
+@register_agn_model("skirtor")
+def skirtor_agn(
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float = 44.0,
+    agn_frac: float = 0.1,
+    agn_tau_skirtor: float = 7.0,
+    agn_p_skirtor: float = 1.0,
+    agn_q_skirtor: float = 1.0,
+    agn_oa_skirtor: float = 40.0,
+    agn_cos_inc: float = 0.5,
+    agn_torus_frac: float = 0.5,
+    **_kwargs,
+) -> jnp.ndarray:
+    """SKIRTOR clumpy torus AGN: disc + SKIRTOR torus (analytic).
+
+    Uses the analytic SKIRTOR approximation (Stalevski et al. 2012, 2016)
+    for the torus emission, combined with a power-law accretion disc.
+
+    5 SKIRTOR-specific free parameters:
+    - agn_tau_skirtor: optical depth at 9.7 um (3-11)
+    - agn_p_skirtor: radial density gradient (0-1.5)
+    - agn_q_skirtor: polar density gradient (0-1.5)
+    - agn_oa_skirtor: opening angle in degrees (20-60)
+    - agn_cos_inc: cosine of inclination (0=edge-on, 1=face-on)
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    agn_log_lbol : float
+        log10(L_bol / Lsun). Default 44.0.
+    agn_frac : float
+        Overall AGN fraction scaling. Default 0.1.
+    agn_tau_skirtor : float
+        9.7 um optical depth (3-11). Default 7.0.
+    agn_p_skirtor : float
+        Radial density gradient (0-1.5). Default 1.0.
+    agn_q_skirtor : float
+        Polar density gradient (0-1.5). Default 1.0.
+    agn_oa_skirtor : float
+        Opening angle [degrees] (20-60). Default 40.0.
+    agn_cos_inc : float
+        cos(inclination), 0=edge-on, 1=face-on. Default 0.5.
+    agn_torus_frac : float
+        Covering fraction. Default 0.5.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        L_nu [Lsun Hz^-1].
+    """
+    # Disc gets (1 - covering_factor) of L_bol
+    l_disc = powerlaw_disc(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_frac=1.0 - agn_torus_frac,
+    )
+
+    # SKIRTOR torus re-emits covering_factor of L_bol
+    l_torus = skirtor_analytic(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_tau_skirtor=agn_tau_skirtor,
+        agn_p_skirtor=agn_p_skirtor,
+        agn_q_skirtor=agn_q_skirtor,
+        agn_oa_skirtor=agn_oa_skirtor,
+        agn_cos_inc=agn_cos_inc,
+        agn_torus_frac=agn_torus_frac,
+    )
+
+    return (l_disc + l_torus) * agn_frac
 
 
 # ===================================================================

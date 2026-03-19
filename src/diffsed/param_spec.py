@@ -280,6 +280,37 @@ _AGN_PARAMS = {
         "",
         Fixed(-1.0),
     ),
+    # SKIRTOR clumpy torus parameters (Stalevski et al. 2012, 2016)
+    "agn_tau_skirtor": (
+        "SKIRTOR 9.7 um optical depth (3-11)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(7.0),
+    ),
+    "agn_p_skirtor": (
+        "SKIRTOR radial density power-law gradient (0-1.5)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(1.0),
+    ),
+    "agn_q_skirtor": (
+        "SKIRTOR polar density power-law gradient (0-1.5)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(1.0),
+    ),
+    "agn_oa_skirtor": (
+        "SKIRTOR torus half-opening angle [degrees] (20-60)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(40.0),
+    ),
+    "agn_cos_inc": (
+        "Cosine of inclination (0=edge-on, 1=face-on)",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1]",
+        Fixed(0.5),
+    ),
 }
 
 # ---------------------------------------------------------------------------
