@@ -423,21 +423,29 @@ The CUE emulator (Li et al. 2024, [arXiv:2405.04598](https://arxiv.org/abs/2405.
 was re-implemented in pure JAX from the original TensorFlow code. Weights are loaded
 from a single `data/cue_weights.npz` file — zero TF dependency at runtime.
 
-| Operation              | JAX (ms) | TF (ms) | Speedup | Notes                       |
-|------------------------|----------|---------|---------|---------------------------- |
-| Lines (128 lines)      |     6.61 |    8.52 |  1.29x  | 16 Speculator sub-networks  |
-| Continuum (1000 pts)   |     1.66 |    1.41 |  0.85x  | 1 sub-network + PCA inverse |
-| Lines + Continuum      |     8.60 |   13.81 |  1.61x  | Combined forward pass       |
-| Lines + `jax.grad`     |     0.45 |     N/A |    —    | Automatic differentiation   |
-| Peak memory (10 calls) |  0.06 MB |  0.59 MB|   10x   | No TF graph overhead        |
+**Batched architecture**: All 16 line sub-networks share the same hidden layer
+dimensions (12→256→256→256). Instead of 16 separate matmuls, we stack the weights
+into `(16, 256, 256)` tensors and run a single `einsum("ni,nio->no")`. Only the
+output layer (different PCA sizes per network) stays sequential.
 
-**Key insight**: The JAX gradient (0.45 ms) is the real win. For SED fitting with
-12 CUE parameters, `jax.grad` gives the full gradient in 0.45 ms vs ~170 ms for
-TF finite differences (12 params × 2 evaluations × 7 ms each). That's a **~380x**
-advantage for gradient-based inference (MAP, HMC, VI).
+| Operation              | JAX (μs) | Old JAX (μs) | TF (μs) | vs Old | vs TF |
+|------------------------|----------|-------------|---------|--------|-------|
+| Lines (128 lines)      |      858 |       2,876 |   8,520 |  3.4x  |  9.9x |
+| Continuum (1000 pts)   |      422 |         424 |   1,410 |  1.0x  |  3.3x |
+| Lines + Continuum      |    1,281 |       3,301 |  13,810 |  2.6x  | 10.8x |
+| Lines + `jax.grad`     |      370 |         450 |     N/A |  1.2x  |   —   |
+| Peak memory (10 calls) |  0.06 MB |     0.06 MB | 0.59 MB |  1.0x  |  10x  |
+
+**Key insight**: The batched einsum gives a **10x** speedup over TF for the
+combined forward pass. For SED fitting with 12 CUE parameters, `jax.grad`
+gives the full gradient in 0.37 ms vs ~170 ms for TF finite differences
+(12 params × 2 evaluations × 7 ms each). That's a **~460x** advantage for
+gradient-based inference (MAP, HMC, VI).
 
 Numerical accuracy: lines agree with TF to < 1e-4 relative tolerance; continuum
 is exact. Validated in `tests/crossval/test_cue_crossval.py`.
+
+Run benchmarks: `python scripts/benchmark_cue.py --with-tf`
 
 ### Dust IR Emission Models
 
