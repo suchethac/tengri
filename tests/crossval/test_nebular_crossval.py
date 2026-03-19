@@ -309,38 +309,26 @@ class TestBakedInVsCue:
         line_name,
         line_wav,
     ):
-        """Cue integrated line flux should agree with baked-in to factor ~2."""
+        """Cue integrated line flux should agree with baked-in to factor ~2.
+
+        Uses the high-level interface (same as CloudyGridBackend) —
+        ssp_weights, log_z, neb_logU.  Q_H and ionizing spectrum are
+        derived internally by the CueBackend.
+        """
         wave = np.array(ssp_data.ssp_wave)
         ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
         log_z = float(ssp_data.ssp_lgmet[solar_met_idx])
-        log_age_yr = float(ssp_log_ages_yr[young_burst_idx])
 
-        # Get ionizing spectrum params for this SSP
-        ionspec_7, logqion = cue_backend.get_ionizing_params_at(log_z, log_age_yr)
-        if ionspec_7 is None:
-            pytest.skip("Ionizing params not available")
-
-        i7 = np.array(ionspec_7)
-        # Cue gas_logz expects log10(Z/Zsun)
-        gas_logz = log_z - _LOG10_ZSUN
+        weights = jnp.zeros(len(ssp_log_ages_yr))
+        weights = weights.at[young_burst_idx].set(1.0)
 
         cue_neb_sed = np.array(
             cue_backend.predict_nebular_sed(
+                ssp_weights=weights,
                 ssp_wave=ssp_data.ssp_wave,
-                line_sigma_aa=0.0,
-                gas_logu=-3.0,
-                gas_logn=2.0,
-                gas_logz=gas_logz,
-                gas_logno=0.0,
-                gas_logco=0.0,
-                ionspec_index1=float(i7[0]),
-                ionspec_index2=float(i7[1]),
-                ionspec_index3=float(i7[2]),
-                ionspec_index4=float(i7[3]),
-                ionspec_logLratio1=float(i7[4]),
-                ionspec_logLratio2=float(i7[5]),
-                ionspec_logLratio3=float(i7[6]),
-                gas_logqion=float(logqion),
+                ssp_log_ages_yr=ssp_log_ages_yr,
+                log_z=log_z,
+                neb_logU=-3.0,
             )
         )
         baked_neb = np.array(
@@ -366,36 +354,24 @@ class TestBakedInVsCue:
         solar_met_idx,
         young_burst_idx,
     ):
-        """Cue nebular continuum should agree with baked-in to <50%."""
+        """Cue nebular continuum should agree with baked-in to <50%.
+
+        Uses the high-level interface — identical call as CloudyGridBackend.
+        """
         wave = np.array(ssp_data.ssp_wave)
         ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
         log_z = float(ssp_data.ssp_lgmet[solar_met_idx])
-        log_age_yr = float(ssp_log_ages_yr[young_burst_idx])
 
-        ionspec_7, logqion = cue_backend.get_ionizing_params_at(log_z, log_age_yr)
-        if ionspec_7 is None:
-            pytest.skip("Ionizing params not available")
-
-        i7 = np.array(ionspec_7)
-        gas_logz = log_z - _LOG10_ZSUN
+        weights = jnp.zeros(len(ssp_log_ages_yr))
+        weights = weights.at[young_burst_idx].set(1.0)
 
         cue_neb_sed = np.array(
             cue_backend.predict_nebular_sed(
+                ssp_weights=weights,
                 ssp_wave=ssp_data.ssp_wave,
-                line_sigma_aa=0.0,
-                gas_logu=-3.0,
-                gas_logn=2.0,
-                gas_logz=gas_logz,
-                gas_logno=0.0,
-                gas_logco=0.0,
-                ionspec_index1=float(i7[0]),
-                ionspec_index2=float(i7[1]),
-                ionspec_index3=float(i7[2]),
-                ionspec_index4=float(i7[3]),
-                ionspec_logLratio1=float(i7[4]),
-                ionspec_logLratio2=float(i7[5]),
-                ionspec_logLratio3=float(i7[6]),
-                gas_logqion=float(logqion),
+                ssp_log_ages_yr=ssp_log_ages_yr,
+                log_z=log_z,
+                neb_logU=-3.0,
             )
         )
         baked_neb = np.array(

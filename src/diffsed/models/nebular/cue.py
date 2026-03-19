@@ -52,6 +52,13 @@ _LOG_LSUN = jnp.log10(_LSUN_ERG)
 _LOG_4PI = jnp.log10(4.0 * jnp.pi)
 _LOG_C = jnp.log10(_C_CGS)
 
+# Solar metallicity (Asplund+2009).
+# SSP ssp_lgmet stores absolute log10(Z); Cue uses log10(Z/Zsun).
+_LOG10_ZSUN = -1.8477116556169435
+
+# Maximum SSP age contributing to nebular emission
+_MAX_NEB_LOG_AGE = 8.0  # log10(100 Myr in yr)
+
 
 # ---------------------------------------------------------------------------
 # Data containers (immutable NamedTuples for JAX tracing)
@@ -638,65 +645,225 @@ class CueBackend:
             log_age_yr,
         )
 
+    # ------------------------------------------------------------------
+    # High-level interface (matches CloudyGridBackend)
+    # ------------------------------------------------------------------
+
+    def _compute_weighted_cue_params(
+        self,
+        ssp_weights: jnp.ndarray,
+        ssp_log_ages_yr: jnp.ndarray,
+        log_z: float,
+        neb_logU: float = -3.0,
+        neb_logZ_gas: float | None = None,
+        gas_logn: float = 2.0,
+        gas_logno: float = 0.0,
+        gas_logco: float = 0.0,
+    ) -> dict:
+        """Derive Cue parameters from SSP weights.
+
+        Computes total Q_H by summing mass-weighted per-Msun Q_H over
+        young age bins, and picks the ionizing spectrum shape from the
+        dominant (highest Q_H × weight) age bin.
+
+        Parameters
+        ----------
+        ssp_weights : array (n_age,)
+            CSP mass weights (Msun per age bin).
+        ssp_log_ages_yr : array (n_age,)
+            log10(age/yr) of SSP age bins.
+        log_z : float
+            Stellar metallicity log10(Z) (absolute).
+        neb_logU : float
+            Ionization parameter log10(U).
+        neb_logZ_gas : float or None
+            Gas metallicity log10(Z) (absolute). None = tie to stellar.
+        gas_logn, gas_logno, gas_logco : float
+            Cue gas properties (defaults match Cue paper).
+
+        Returns
+        -------
+        dict
+            Ready-to-use kwargs for the low-level Cue predict methods.
+        """
+        if self._ionspec_table is None:
+            raise RuntimeError(
+                "CueBackend requires ssp_data at init for the high-level "
+                "interface.  Pass ssp_data= to the constructor."
+            )
+
+        # Young age bins only (< 100 Myr)
+        young_mask = ssp_log_ages_yr <= _MAX_NEB_LOG_AGE
+        young_ages = ssp_log_ages_yr[young_mask]
+        young_weights = ssp_weights[young_mask]
+
+        # Sum mass-weighted Q_H (per Msun) over young age bins
+        total_qh = 0.0
+        best_qh_weight = -1.0
+        best_age_idx = 0
+        for i in range(len(young_ages)):
+            w_i = float(young_weights[i])
+            if w_i <= 0:
+                continue
+            _, logqion_i = self.get_ionizing_params_at(log_z, float(young_ages[i]))
+            if logqion_i is None:
+                continue
+            qh_i = 10.0 ** float(logqion_i)
+            total_qh += w_i * qh_i
+            if w_i * qh_i > best_qh_weight:
+                best_qh_weight = w_i * qh_i
+                best_age_idx = i
+
+        if total_qh <= 0:
+            total_logqion = -99.0
+        else:
+            total_logqion = np.log10(total_qh)
+
+        # Ionizing spectrum shape from dominant age bin
+        ionspec_7, _ = self.get_ionizing_params_at(log_z, float(young_ages[best_age_idx]))
+        i7 = np.array(ionspec_7) if ionspec_7 is not None else np.zeros(7)
+
+        # Gas metallicity: convert absolute → Z/Zsun for Cue
+        gas_logz = neb_logZ_gas if neb_logZ_gas is not None else log_z
+        gas_logz_rel = gas_logz - _LOG10_ZSUN
+
+        return dict(
+            gas_logu=neb_logU,
+            gas_logn=gas_logn,
+            gas_logz=gas_logz_rel,
+            gas_logno=gas_logno,
+            gas_logco=gas_logco,
+            gas_logqion=total_logqion,
+            ionspec_index1=float(i7[0]),
+            ionspec_index2=float(i7[1]),
+            ionspec_index3=float(i7[2]),
+            ionspec_index4=float(i7[3]),
+            ionspec_logLratio1=float(i7[4]),
+            ionspec_logLratio2=float(i7[5]),
+            ionspec_logLratio3=float(i7[6]),
+        )
+
     def predict_nebular_line_luminosities(
         self,
-        gas_logu: float = -2.5,
+        ssp_weights: jnp.ndarray | None = None,
+        ssp_log_ages_yr: jnp.ndarray | None = None,
+        log_z: float | None = None,
+        neb_logU: float = -3.0,
+        neb_logZ_gas: float | None = None,
+        neb_fesc: float = 0.0,
+        neb_fesc_lya: float = 0.0,
+        cloudyfsps_only: bool = True,
+        # Cue-specific overrides (bypass SSP-derived params)
+        gas_logu: float | None = None,
         gas_logn: float = 2.0,
-        gas_logz: float = 0.0,
+        gas_logz: float | None = None,
         gas_logno: float = 0.0,
         gas_logco: float = 0.0,
         gas_logqion: float | None = None,
-        ionspec_index1: float = 19.7,
-        ionspec_index2: float = 5.3,
-        ionspec_index3: float = 1.6,
-        ionspec_index4: float = 0.6,
-        ionspec_logLratio1: float = 3.9,
-        ionspec_logLratio2: float = 0.01,
-        ionspec_logLratio3: float = 0.2,
-        cloudyfsps_only: bool = True,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        ionspec_index1: float | None = None,
+        ionspec_index2: float | None = None,
+        ionspec_index3: float | None = None,
+        ionspec_index4: float | None = None,
+        ionspec_logLratio1: float | None = None,
+        ionspec_logLratio2: float | None = None,
+        ionspec_logLratio3: float | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Predict emission line luminosities.
 
+        Supports two calling conventions:
+
+        1. **High-level** (CloudyGridBackend-compatible): pass
+           ``ssp_weights``, ``ssp_log_ages_yr``, ``log_z``.
+           Q_H and ionizing spectrum are derived from the SSP.
+        2. **Low-level** (direct Cue params): pass ``gas_logu``,
+           ``gas_logz``, ``gas_logqion``, ``ionspec_*`` explicitly.
+
         Parameters
         ----------
-        gas_logu : float
-            Ionization parameter log10(U). Range: [-4, -1].
-        gas_logn : float
-            Gas density log10(n_H/cm^-3). Range: [1, 4].
-        gas_logz : float
-            Gas metallicity log10(Z/Zsun). Range: [-2.2, 0.5].
-        gas_logno : float
-            [N/O] abundance ratio. Range: [-1, log10(5.4)].
-        gas_logco : float
-            [C/O] abundance ratio. Range: [-1, log10(5.4)].
-        gas_logqion : float or None
-            log10(Q_H) normalization. None uses default.
-        ionspec_index1..4 : float
-            Power-law slope segments of ionizing spectrum.
-        ionspec_logLratio1..3 : float
-            Flux ratios between adjacent segments.
-        cloudyfsps_only : bool
-            If True, return only the 128 lines matching the CLOUDY/FSPS grid.
-            If False, return all 138 lines.
+        ssp_weights : array or None
+            CSP mass weights.  If provided, activates high-level mode.
+        ssp_log_ages_yr : array or None
+            log10(age/yr) of SSP age bins.
+        log_z : float or None
+            Stellar metallicity log10(Z) (absolute).
+        neb_logU : float
+            Ionization parameter log10(U). Default -3.0.
+        neb_logZ_gas : float or None
+            Gas metallicity log10(Z) (absolute). None = tie to stellar.
         neb_fesc : float
-            Ionizing photon escape fraction [0, 1]. Default 0.0.
+            Escape fraction [0, 1].
         neb_fesc_lya : float
-            Ly-alpha escape fraction [0, 1]. Default 0.0. Ly-alpha is a
-            resonant line with typically much lower escape fraction than
-            other lines.
+            Ly-alpha escape fraction [0, 1].
+        cloudyfsps_only : bool
+            If True, return 128 CLOUDY/FSPS-matched lines.
+        gas_logu, gas_logn, gas_logz, gas_logno, gas_logco : float
+            Cue gas params (low-level). Override high-level derivation.
+        gas_logqion : float or None
+            log10(Q_H) total. Override high-level derivation.
+        ionspec_* : float or None
+            Ionizing spectrum shape. Override high-level derivation.
 
         Returns
         -------
         wavelengths : array
-            Rest-frame wavelengths in Angstrom.
-        luminosities : array
-            Line luminosities in Lsun (after applying escape fractions).
+        luminosities : array (Lsun)
         """
+        # High-level mode: derive Cue params from SSP weights
+        if ssp_weights is not None:
+            derived = self._compute_weighted_cue_params(
+                ssp_weights,
+                ssp_log_ages_yr,
+                log_z,
+                neb_logU=neb_logU,
+                neb_logZ_gas=neb_logZ_gas,
+                gas_logn=gas_logn,
+                gas_logno=gas_logno,
+                gas_logco=gas_logco,
+            )
+            # Explicit overrides take precedence
+            if gas_logu is None:
+                gas_logu = derived["gas_logu"]
+            if gas_logz is None:
+                gas_logz = derived["gas_logz"]
+            if gas_logqion is None:
+                gas_logqion = derived["gas_logqion"]
+            if ionspec_index1 is None:
+                ionspec_index1 = derived["ionspec_index1"]
+            if ionspec_index2 is None:
+                ionspec_index2 = derived["ionspec_index2"]
+            if ionspec_index3 is None:
+                ionspec_index3 = derived["ionspec_index3"]
+            if ionspec_index4 is None:
+                ionspec_index4 = derived["ionspec_index4"]
+            if ionspec_logLratio1 is None:
+                ionspec_logLratio1 = derived["ionspec_logLratio1"]
+            if ionspec_logLratio2 is None:
+                ionspec_logLratio2 = derived["ionspec_logLratio2"]
+            if ionspec_logLratio3 is None:
+                ionspec_logLratio3 = derived["ionspec_logLratio3"]
+
+        # Fill remaining defaults for pure low-level calls
+        if gas_logu is None:
+            gas_logu = neb_logU
+        if gas_logz is None:
+            gas_logz = 0.0
         if gas_logqion is None:
             gas_logqion = self.default_gas_logqion
+        if ionspec_index1 is None:
+            ionspec_index1 = 19.7
+        if ionspec_index2 is None:
+            ionspec_index2 = 5.3
+        if ionspec_index3 is None:
+            ionspec_index3 = 1.6
+        if ionspec_index4 is None:
+            ionspec_index4 = 0.6
+        if ionspec_logLratio1 is None:
+            ionspec_logLratio1 = 3.9
+        if ionspec_logLratio2 is None:
+            ionspec_logLratio2 = 0.01
+        if ionspec_logLratio3 is None:
+            ionspec_logLratio3 = 0.2
 
         nn_params = _prepare_nn_params(
             jnp.asarray(ionspec_index1, dtype=jnp.float32),
@@ -801,37 +968,86 @@ class CueBackend:
 
     def predict_nebular_sed(
         self,
-        ssp_wave: jnp.ndarray,
+        ssp_wave: jnp.ndarray = None,
+        ssp_weights: jnp.ndarray = None,
+        ssp_log_ages_yr: jnp.ndarray = None,
+        log_z: float = None,
+        neb_logU: float = -3.0,
+        neb_logZ_gas: float = None,
+        neb_fesc: float = 0.0,
+        neb_fesc_lya: float = 0.0,
         line_sigma_aa: float = 0.0,
         **neb_params,
     ) -> jnp.ndarray:
         """Predict total nebular emission on an arbitrary wavelength grid.
 
-        Combines emission lines + nebular continuum, interpolated onto
-        the provided wavelength grid.
+        Supports the same high-level interface as CloudyGridBackend:
+        pass ``ssp_weights``, ``ssp_log_ages_yr``, ``log_z`` and the
+        mass-weighted Q_H and ionizing spectrum are derived internally.
 
         Parameters
         ----------
         ssp_wave : array, shape (n_wave,)
             Output wavelength grid in Angstrom.
+        ssp_weights : array or None
+            CSP mass weights.  Activates high-level mode.
+        ssp_log_ages_yr : array or None
+            log10(age/yr) of SSP age bins.
+        log_z : float or None
+            Stellar metallicity log10(Z) (absolute).
+        neb_logU : float
+            Ionization parameter.
+        neb_logZ_gas : float or None
+            Gas metallicity log10(Z) (absolute). None = tie to stellar.
+        neb_fesc, neb_fesc_lya : float
+            Escape fractions.
         line_sigma_aa : float
             Gaussian width for emission lines (Angstrom). 0 = delta function.
         **neb_params
-            All Cue nebular parameters (see predict_nebular_line_luminosities).
+            Additional Cue-specific overrides (gas_logn, gas_logno, etc.).
 
         Returns
         -------
         array, shape (n_wave,)
             Total nebular SED in Lsun/Hz on the SSP wavelength grid.
         """
-        # Lines
-        line_wav, line_lum = self.predict_nebular_line_luminosities(
-            cloudyfsps_only=False,
+        # Build the shared kwargs for lines and continuum
+        shared = dict(
+            ssp_weights=ssp_weights,
+            ssp_log_ages_yr=ssp_log_ages_yr,
+            log_z=log_z,
+            neb_logU=neb_logU,
+            neb_logZ_gas=neb_logZ_gas,
+            neb_fesc=neb_fesc,
+            neb_fesc_lya=neb_fesc_lya,
             **neb_params,
         )
 
-        # Continuum
-        cont_wav, cont_lum = self.predict_nebular_continuum(**neb_params)
+        # Lines
+        line_wav, line_lum = self.predict_nebular_line_luminosities(
+            cloudyfsps_only=False,
+            **shared,
+        )
+
+        # Continuum (reuse the same high-level → low-level dispatch)
+        # For now, pass through to predict_nebular_continuum with the
+        # same derived params.  We re-derive to keep it simple.
+        if ssp_weights is not None:
+            derived = self._compute_weighted_cue_params(
+                ssp_weights,
+                ssp_log_ages_yr,
+                log_z,
+                neb_logU=neb_logU,
+                neb_logZ_gas=neb_logZ_gas,
+                **{
+                    k: v
+                    for k, v in neb_params.items()
+                    if k in ("gas_logn", "gas_logno", "gas_logco")
+                },
+            )
+            cont_wav, cont_lum = self.predict_nebular_continuum(**derived)
+        else:
+            cont_wav, cont_lum = self.predict_nebular_continuum(**neb_params)
 
         # Interpolate continuum onto SSP grid
         neb_sed = jnp.interp(ssp_wave, cont_wav, cont_lum, left=0.0, right=0.0)
