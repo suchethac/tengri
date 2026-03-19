@@ -23,6 +23,8 @@ from diffsed.models.dust.attenuation import (
 from diffsed.models.dust.emission import (
     DUST_EMISSION_MODELS,
     apply_dust_emission,
+    cmb_contrast_factor,
+    cmb_corrected_temperature,
     compute_absorbed_luminosity,
     compute_absorbed_luminosity_from_tau,
     get_emission_model,
