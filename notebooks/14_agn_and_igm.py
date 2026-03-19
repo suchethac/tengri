@@ -249,7 +249,7 @@ spec_no_agn = ParamSpec(
     mean_sfh_type="dpl",
     apply_igm=False,
 )
-model_no_agn = Model(spec_no_agn, ssp_data, filters=filters)
+model_no_agn = Model(spec_no_agn, ssp_data, filters=filters, precompute=False)
 
 # --- Galaxy WITH AGN (simple model, 10% AGN fraction) ---
 spec_agn = ParamSpec(
@@ -268,7 +268,7 @@ spec_agn = ParamSpec(
     agn_model="simple",
     apply_igm=False,
 )
-model_agn = Model(spec_agn, ssp_data, filters=filters)
+model_agn = Model(spec_agn, ssp_data, filters=filters, precompute=False)
 
 # Sample at the fixed values
 params_no_agn = spec_no_agn.sample(jax.random.PRNGKey(0))
@@ -446,8 +446,8 @@ filter_names_z6 = [
 ]
 filters_z6 = load_filter_set(filter_names_z6)
 
-model_z6 = Model(spec_z6, ssp_data, filters=filters_z6)
-model_z6_noigm = Model(spec_z6_noigm, ssp_data, filters=filters_z6)
+model_z6 = Model(spec_z6, ssp_data, filters=filters_z6, precompute=False)
+model_z6_noigm = Model(spec_z6_noigm, ssp_data, filters=filters_z6, precompute=False)
 
 params_z6 = spec_z6.sample(jax.random.PRNGKey(42))
 params_z6_noigm = spec_z6_noigm.sample(jax.random.PRNGKey(42))
@@ -572,8 +572,8 @@ for ax, z_target, col in zip(axes.flat, target_redshifts, colors_panel):
         apply_igm=False,
     )
 
-    model_z = Model(spec_z, ssp_data, filters=jwst_filters)
-    model_z_noigm = Model(spec_z_noigm, ssp_data, filters=jwst_filters)
+    model_z = Model(spec_z, ssp_data, filters=jwst_filters, precompute=False)
+    model_z_noigm = Model(spec_z_noigm, ssp_data, filters=jwst_filters, precompute=False)
 
     p_z = spec_z.sample(jax.random.PRNGKey(int(z_target * 10)))
     p_z_noigm = spec_z_noigm.sample(jax.random.PRNGKey(int(z_target * 10)))
