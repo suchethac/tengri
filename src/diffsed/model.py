@@ -45,6 +45,8 @@ from diffsed.models.sfh.registry import compute_field_gp, resolve_sfh
 from diffsed.models.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
+    compute_surviving_mass,
+    interpolate_mass_remaining,
     interpolate_metallicity,
 )
 from diffsed.models.sps.precompute import (
@@ -208,6 +210,20 @@ class Model:
 
         # IGM absorption (Inoue+2014)
         self._apply_igm = spec.apply_igm
+
+        # Dust emission model (None = disabled)
+        self._dust_emission_model = getattr(spec, "dust_emission", None)
+        if self._dust_emission_model:
+            for p in ["dust_T", "dust_beta_ir", "dust_alpha_mir", "dust_alpha_dale",
+                       "dust_umin", "dust_gamma_dl", "dust_qpah"]:
+                self._param_map[p] = (p, 1.0, 0.0)
+
+        # AGN model (None = disabled)
+        self._agn_model = getattr(spec, "agn_model", None)
+        if self._agn_model:
+            for p in ["agn_frac", "agn_alpha", "agn_T_torus", "agn_tau_torus",
+                       "agn_log_mbh", "agn_log_ledd"]:
+                self._param_map[p] = (p, 1.0, 0.0)
 
         # Nebular emission backend + params
         if spec.nebular:
@@ -600,7 +616,17 @@ class Model:
             dust_Rv=p.get("dust_Rv", 3.1),
         )
 
-        sed = compute_csp_sed(weights, ssp_flux_at_z, dust_atten)
+        # Attenuated stellar SED
+        sed_attenuated = compute_csp_sed(weights, ssp_flux_at_z, dust_atten)
+
+        # Intrinsic (unattenuated) stellar SED for energy balance
+        # Only compute if dust emission is enabled (avoid wasted work)
+        sed_intrinsic = None
+        if self._dust_emission_model is not None:
+            ones_atten = jnp.ones_like(dust_atten)
+            sed_intrinsic = compute_csp_sed(weights, ssp_flux_at_z, ones_atten)
+
+        sed = sed_attenuated
 
         # Nebular emission (if backend provides it)
         if self._nebular_backend is not None and self._nebular_backend.has_free_params:
@@ -614,6 +640,47 @@ class Model:
                 neb_fesc=p.get("neb_fesc", 0.0),
             )
             sed = sed + neb_sed
+
+        # Dust IR emission (energy-balanced)
+        if self._dust_emission_model is not None and sed_intrinsic is not None:
+            from diffsed.models.dust.emission import get_emission_model
+            # L_absorbed = integral(L_intrinsic - L_attenuated) over frequency
+            _c_aa_em = 2.99792458e18  # c in Angstrom/s
+            nu_em = _c_aa_em / self.ssp_data.ssp_wave
+            L_absorbed = -jnp.trapezoid(sed_intrinsic - sed_attenuated, nu_em)
+            dust_ir = get_emission_model(self._dust_emission_model)(
+                self.ssp_data.ssp_wave,
+                L_absorbed,
+                dust_T=p.get("dust_T", 35.0),
+                dust_beta_ir=p.get("dust_beta_ir", 1.6),
+                dust_alpha_mir=p.get("dust_alpha_mir", 2.0),
+                dust_alpha_dale=p.get("dust_alpha_dale", 2.0),
+                dust_umin=p.get("dust_umin", 1.0),
+                dust_gamma_dl=p.get("dust_gamma_dl", 0.01),
+                dust_qpah=p.get("dust_qpah", 2.5),
+            )
+            sed = sed + dust_ir
+
+        # AGN contribution
+        if self._agn_model is not None:
+            from diffsed.models.agn import get_agn_model
+            agn_frac = p.get("agn_frac", 0.0)
+            # AGN bolometric luminosity as fraction of stellar bolometric
+            # Integrate over frequency: L_bol = integral(L_nu * dnu)
+            _c_aa = 2.99792458e18  # c in Angstrom/s
+            nu = _c_aa / self.ssp_data.ssp_wave  # Hz (decreasing)
+            L_bol_stellar = -jnp.trapezoid(sed, nu)  # erg/s (proper bolometric)
+            agn_log_lbol = jnp.log10(jnp.maximum(L_bol_stellar * agn_frac, 1e-50))
+            agn_sed = get_agn_model(self._agn_model)(
+                self.ssp_data.ssp_wave,
+                agn_log_lbol=agn_log_lbol,
+                agn_alpha=p.get("agn_alpha", -1.0),
+                agn_T_torus=p.get("agn_T_torus", 1000.0),
+                agn_tau_torus=p.get("agn_tau_torus", 5.0),
+                agn_log_mbh=p.get("agn_log_mbh", 7.0),
+                agn_log_ledd=p.get("agn_log_ledd", -1.0),
+            )
+            sed = sed + agn_sed
 
         return sed
 
@@ -915,16 +982,28 @@ class Model:
         -------
         dict with keys:
             "stellar_mass": total mass formed (Msun)
+            "stellar_mass_surviving": surviving mass in living stars +
+                remnants (Msun). None if mass-remaining table not loaded.
             "sfr_100myr": SFR averaged over last 100 Myr (Msun/yr)
             "sfr_10myr": SFR averaged over last 10 Myr (Msun/yr)
-            "ssfr": specific SFR (yr^-1)
+            "ssfr": specific SFR (yr^-1), uses surviving mass if
+                available, else formed mass.
         """
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
 
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
         weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
-        stellar_mass = jnp.sum(weights)
+        mass_formed = jnp.sum(weights)
+
+        # Surviving stellar mass (if mass-remaining table available)
+        mass_surviving = None
+        if self.ssp_data.ssp_mass_remaining is not None:
+            log_z = p.get("log_z", 0.0)
+            mr_at_met = interpolate_mass_remaining(
+                self.ssp_data.ssp_mass_remaining, self.ssp_data.ssp_lgmet, log_z
+            )
+            mass_surviving = compute_surviving_mass(weights, mr_at_met)
 
         mask_100myr = self.age_yr <= 1e8
         sfr_100myr = jnp.where(
@@ -939,10 +1018,13 @@ class Model:
             sfr[0],
         )
 
-        ssfr = sfr_100myr / jnp.maximum(stellar_mass, 1.0)
+        # sSFR: use surviving mass if available, else formed mass
+        mass_for_ssfr = mass_surviving if mass_surviving is not None else mass_formed
+        ssfr = sfr_100myr / jnp.maximum(mass_for_ssfr, 1.0)
 
         return {
-            "stellar_mass": stellar_mass,
+            "stellar_mass": mass_formed,
+            "stellar_mass_surviving": mass_surviving,
             "sfr_100myr": sfr_100myr,
             "sfr_10myr": sfr_10myr,
             "ssfr": ssfr,

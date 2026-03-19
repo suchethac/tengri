@@ -156,6 +156,90 @@ _DUST_EXTRA_PARAMS = {
     ),
 }
 
+_DUST_EMISSION_PARAMS = {
+    "dust_T": (
+        "Dust temperature (K) for greybody/Casey emission",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(35.0),
+    ),
+    "dust_beta_ir": (
+        "IR emissivity index for greybody/Casey emission",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(1.6),
+    ),
+    "dust_alpha_mir": (
+        "Mid-IR power-law slope for Casey 2012 emission",
+        lambda lo, hi: True,
+        "",
+        Fixed(2.0),
+    ),
+    "dust_alpha_dale": (
+        "Dale et al. 2014 alpha parameter (0.0625-4.0)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(2.0),
+    ),
+    "dust_umin": (
+        "Draine & Li 2007 minimum radiation field (0.1-25)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(1.0),
+    ),
+    "dust_gamma_dl": (
+        "Draine & Li 2007 PDR fraction (0-1)",
+        lambda lo, hi: 0 <= lo and hi <= 1,
+        "must be in [0, 1]",
+        Fixed(0.01),
+    ),
+    "dust_qpah": (
+        "Draine & Li 2007 PAH mass fraction (%, 0.47-4.58)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(2.5),
+    ),
+}
+
+_AGN_PARAMS = {
+    "agn_frac": (
+        "AGN luminosity fraction (L_AGN / L_stellar_bol)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(0.0),
+    ),
+    "agn_alpha": (
+        "AGN disc power-law slope",
+        lambda lo, hi: True,
+        "",
+        Fixed(-1.0),
+    ),
+    "agn_T_torus": (
+        "AGN torus temperature (K)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(1000.0),
+    ),
+    "agn_tau_torus": (
+        "AGN torus optical depth at 9.7 um",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(5.0),
+    ),
+    "agn_log_mbh": (
+        "AGN black hole mass log10(M_BH/Msun)",
+        lambda lo, hi: True,
+        "",
+        Fixed(7.0),
+    ),
+    "agn_log_ledd": (
+        "AGN Eddington ratio log10(L/L_Edd)",
+        lambda lo, hi: True,
+        "",
+        Fixed(-1.0),
+    ),
+}
+
 # ---------------------------------------------------------------------------
 # Legacy parameter name aliases (old API → new API)
 # ---------------------------------------------------------------------------
@@ -184,6 +268,10 @@ SETTINGS_KEYS = frozenset({
     "nebular", "cloudy_grid_path",
     # Dust law
     "dust_law_bc", "dust_law_diff",
+    # Dust emission
+    "dust_emission",
+    # AGN
+    "agn_model",
 })
 
 
@@ -193,7 +281,7 @@ SETTINGS_KEYS = frozenset({
 
 
 def _build_param_registry(mean_sfh_type, nebular=False, dust_law_bc="power_law",
-                          dust_law_diff=None):
+                          dust_law_diff=None, dust_emission=None, agn_model=None):
     """Build the parameter registry for a given model configuration.
 
     Parameters
@@ -240,6 +328,18 @@ def _build_param_registry(mean_sfh_type, nebular=False, dust_law_bc="power_law",
         registry[pname] = (desc, check, err)
         defaults[pname] = default
 
+    # Dust emission params (only when dust emission is enabled)
+    if dust_emission:
+        for pname, (desc, check, err, default) in _DUST_EMISSION_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+
+    # AGN params (only when AGN model is enabled)
+    if agn_model:
+        for pname, (desc, check, err, default) in _AGN_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+
     return registry, defaults
 
 
@@ -281,6 +381,12 @@ class ParamSpec:
         # Dust law settings
         self.dust_law_bc = kwargs.pop("dust_law_bc", "power_law")
         self.dust_law_diff = kwargs.pop("dust_law_diff", self.dust_law_bc)
+
+        # Dust emission: None (default), "modified_blackbody", "dale2014", "draine_li2007"
+        self.dust_emission = kwargs.pop("dust_emission", None)
+
+        # AGN model: None (default), "simple", "standard", "kubota_done"
+        self.agn_model = kwargs.pop("agn_model", None)
 
         # --- Resolve legacy parameter aliases ---
         resolved_kwargs = {}
@@ -330,6 +436,8 @@ class ParamSpec:
             nebular=self.nebular,
             dust_law_bc=self.dust_law_bc,
             dust_law_diff=self.dust_law_diff,
+            dust_emission=self.dust_emission,
+            agn_model=self.agn_model,
         )
         self._valid_param_names = frozenset(self._param_registry.keys())
 
