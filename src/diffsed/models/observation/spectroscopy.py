@@ -6,10 +6,300 @@ calibration polynomial to absorb flux-calibration uncertainties
 
 Includes emission-line placement with instrument-resolution blending,
 relevant for R < 1000 spectroscopy where close lines merge.
+
+Also provides wavelength-dependent Line Spread Function (LSF) convolution
+for instruments with variable spectral resolution (e.g., JWST NIRSpec PRISM).
 """
+
+from __future__ import annotations
+
+from typing import Union
 
 import jax
 import jax.numpy as jnp
+from functools import partial
+
+
+# ---------------------------------------------------------------------------
+# SSP library spectral resolutions (velocity dispersion in km/s)
+# ---------------------------------------------------------------------------
+SSP_LIBRARY_RESOLUTIONS: dict[str, float] = {
+    "miles": 70.0,       # R ~ 2500 at 5000 A, sigma ~ 70 km/s
+    "c3k": 15.0,         # R ~ 10000, sigma ~ 15 km/s
+    "fsps_default": 70.0,  # MILES-based (default FSPS)
+}
+
+
+# ---------------------------------------------------------------------------
+# Speed of light
+# ---------------------------------------------------------------------------
+_C_KM_S = 299792.458  # km/s
+_FWHM_TO_SIGMA = 2.3548200  # 2*sqrt(2*ln(2))
+
+
+# ---------------------------------------------------------------------------
+# Instrument resolution profiles
+# ---------------------------------------------------------------------------
+
+
+def nirspec_prism_resolution(wave_um: jnp.ndarray) -> jnp.ndarray:
+    """JWST NIRSpec PRISM R(lambda) -- ranges from ~30 to ~300.
+
+    Approximate from NIRSpec documentation (Jakobsen et al. 2022).
+    R increases roughly linearly from 0.6 to 5.3 um.
+
+    Parameters
+    ----------
+    wave_um : array
+        Observed wavelength in microns.
+
+    Returns
+    -------
+    array
+        Spectral resolution R = lambda / delta_lambda at each wavelength.
+    """
+    return jnp.clip(30.0 + 55.0 * (wave_um - 0.6), 30.0, 330.0)
+
+
+def nirspec_g140m_resolution(wave_um: jnp.ndarray) -> jnp.ndarray:
+    """JWST NIRSpec G140M grating -- roughly constant R~1000.
+
+    Parameters
+    ----------
+    wave_um : array
+        Observed wavelength in microns.
+
+    Returns
+    -------
+    array
+        Spectral resolution R ~ 1000 at each wavelength.
+    """
+    return 1000.0 * jnp.ones_like(wave_um)
+
+
+# ---------------------------------------------------------------------------
+# Line Spread Function (LSF) convolution
+# ---------------------------------------------------------------------------
+
+
+def _resolution_to_sigma_kms(resolution: jnp.ndarray) -> jnp.ndarray:
+    """Convert spectral resolution R to velocity dispersion sigma (km/s).
+
+    sigma = c / (FWHM_TO_SIGMA * R)
+
+    Parameters
+    ----------
+    resolution : array or scalar
+        Spectral resolution R = lambda / delta_lambda.
+
+    Returns
+    -------
+    array or scalar
+        Velocity dispersion in km/s.
+    """
+    return _C_KM_S / (_FWHM_TO_SIGMA * resolution)
+
+
+@jax.jit
+def _apply_lsf_constant_r(
+    spectrum: jnp.ndarray,
+    wave_obs: jnp.ndarray,
+    sigma_eff_kms: float,
+) -> jnp.ndarray:
+    """FFT convolution in log-wavelength space for constant R.
+
+    This is equivalent to velocity_broaden but with the effective
+    (library-subtracted) sigma.
+
+    Parameters
+    ----------
+    spectrum : array, shape (n_pix,)
+        Input spectrum.
+    wave_obs : array, shape (n_pix,)
+        Observed wavelength grid (Angstrom). Must be uniformly spaced.
+    sigma_eff_kms : float
+        Effective velocity dispersion in km/s (after library subtraction).
+
+    Returns
+    -------
+    array, shape (n_pix,)
+        Smoothed spectrum.
+    """
+    sigma_v = sigma_eff_kms / _C_KM_S
+    dlnwave = jnp.log(wave_obs[1] / wave_obs[0])
+    sigma_pix = sigma_v / dlnwave
+
+    n = spectrum.shape[0]
+    freq = jnp.fft.rfftfreq(n)
+    kernel_ft = jnp.exp(-2.0 * jnp.pi**2 * sigma_pix**2 * freq**2)
+
+    flux_ft = jnp.fft.rfft(spectrum)
+    return jnp.fft.irfft(flux_ft * kernel_ft, n=n)
+
+
+@partial(jax.jit, static_argnums=(3,))
+def _apply_lsf_variable_r(
+    spectrum: jnp.ndarray,
+    wave_obs: jnp.ndarray,
+    sigma_eff_kms: jnp.ndarray,
+    n_bins: int = 16,
+) -> jnp.ndarray:
+    """Piecewise-constant LSF convolution for variable R.
+
+    Splits the wavelength range into ``n_bins`` segments. Within each
+    segment the mean effective sigma is used for an FFT convolution.
+    The segments are blended with smooth (raised-cosine) overlap to
+    avoid discontinuities. Accurate to ~1% for typical instrument
+    profiles and fully differentiable.
+
+    Parameters
+    ----------
+    spectrum : array, shape (n_pix,)
+        Input spectrum.
+    wave_obs : array, shape (n_pix,)
+        Observed wavelength grid (Angstrom).
+    sigma_eff_kms : array, shape (n_pix,)
+        Effective velocity dispersion at each pixel (km/s).
+    n_bins : int
+        Number of piecewise-constant segments. More bins = better
+        accuracy but more FFTs. 10-20 is usually sufficient.
+
+    Returns
+    -------
+    array, shape (n_pix,)
+        Smoothed spectrum.
+    """
+    n_pix = spectrum.shape[0]
+    dlnwave = jnp.log(wave_obs[1] / wave_obs[0])
+    freq = jnp.fft.rfftfreq(n_pix)
+    flux_ft = jnp.fft.rfft(spectrum)
+
+    # Pixel indices for bin edges (uniform split)
+    bin_edges = jnp.linspace(0, n_pix, n_bins + 1)
+    bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    bin_width = bin_edges[1] - bin_edges[0]
+
+    # Pixel index array
+    pix_idx = jnp.arange(n_pix, dtype=jnp.float64)
+
+    def _convolve_bin(carry, bin_center):
+        """Convolve with the mean sigma for one bin, weighted by overlap."""
+        # Pixel index of bin center
+        center = bin_center
+        half_w = bin_width * 0.75  # overlap region for blending
+
+        # Smooth weight: raised cosine (1 at center, 0 outside)
+        dist = jnp.abs(pix_idx - center) / half_w
+        weight = jnp.where(dist < 1.0, 0.5 * (1.0 + jnp.cos(jnp.pi * dist)), 0.0)
+
+        # Mean sigma in this bin (weighted by the bin window)
+        bin_mask = jnp.where(
+            jnp.abs(pix_idx - center) < bin_width,
+            1.0,
+            0.0,
+        )
+        sigma_mean = jnp.sum(sigma_eff_kms * bin_mask) / jnp.maximum(
+            jnp.sum(bin_mask), 1.0
+        )
+
+        # FFT convolution with this sigma
+        sigma_pix = (sigma_mean / _C_KM_S) / dlnwave
+        kernel_ft = jnp.exp(-2.0 * jnp.pi**2 * sigma_pix**2 * freq**2)
+        convolved = jnp.fft.irfft(flux_ft * kernel_ft, n=n_pix)
+
+        return carry + weight * convolved, None
+
+    # Accumulate weighted contributions from all bins
+    result = jnp.zeros(n_pix)
+    result, _ = jax.lax.scan(_convolve_bin, result, bin_centers)
+
+    # Normalize by total weight at each pixel
+    def _weight_bin(carry, bin_center):
+        center = bin_center
+        half_w = bin_width * 0.75
+        dist = jnp.abs(pix_idx - center) / half_w
+        weight = jnp.where(dist < 1.0, 0.5 * (1.0 + jnp.cos(jnp.pi * dist)), 0.0)
+        return carry + weight, None
+
+    total_weight, _ = jax.lax.scan(_weight_bin, jnp.zeros(n_pix), bin_centers)
+    total_weight = jnp.maximum(total_weight, 1e-30)
+
+    return result / total_weight
+
+
+def apply_lsf(
+    spectrum: jnp.ndarray,
+    wave_obs: jnp.ndarray,
+    resolution: Union[jnp.ndarray, float],
+    sigma_lib_kms: float = 0.0,
+    n_bins: int = 16,
+) -> jnp.ndarray:
+    """Apply wavelength-dependent Line Spread Function with library resolution subtraction.
+
+    The effective kernel width at each pixel is::
+
+        sigma_eff(lambda) = sqrt(sigma_inst(lambda)^2 - sigma_lib^2)
+
+    where ``sigma_inst = c / (2.355 * R(lambda))`` in km/s.
+
+    If ``sigma_inst < sigma_lib`` at some wavelengths, no smoothing is
+    applied there (cannot sharpen what is already broader).
+
+    For constant R (scalar), this reduces to a single FFT convolution
+    in log-wavelength space (fast). For variable R (array), uses a
+    piecewise-constant bin approximation with smooth blending (~10-20
+    FFTs, accurate to ~1%).
+
+    Parameters
+    ----------
+    spectrum : array, shape (n_pix,)
+        Input flux spectrum.
+    wave_obs : array, shape (n_pix,)
+        Observed wavelength grid (Angstrom). Should be uniformly spaced
+        (or close to it) for FFT convolution accuracy.
+    resolution : array or float
+        Spectral resolution R(lambda). Scalar for constant R, or
+        per-pixel array for wavelength-dependent resolution.
+    sigma_lib_kms : float
+        SSP library velocity resolution (km/s). Subtracted in
+        quadrature. Use ``SSP_LIBRARY_RESOLUTIONS["miles"]`` for
+        MILES-based SSP libraries. Default 0.0 (no subtraction).
+    n_bins : int
+        Number of bins for variable-R piecewise approximation.
+        Ignored for constant R. Default 16.
+
+    Returns
+    -------
+    array, shape (n_pix,)
+        Spectrum convolved with the effective LSF.
+
+    Examples
+    --------
+    Constant R::
+
+        smoothed = apply_lsf(spec, wave, resolution=100.0)
+
+    JWST NIRSpec PRISM (variable R)::
+
+        R_prism = nirspec_prism_resolution(wave / 1e4)  # Angstrom -> um
+        smoothed = apply_lsf(spec, wave, resolution=R_prism, sigma_lib_kms=70.0)
+    """
+    resolution = jnp.asarray(resolution)
+
+    # Compute instrument sigma at each pixel
+    sigma_inst_kms = _C_KM_S / (_FWHM_TO_SIGMA * resolution)
+
+    # Subtract library resolution in quadrature; clamp to zero
+    sigma_lib2 = sigma_lib_kms**2
+    sigma_eff_kms = jnp.sqrt(jnp.maximum(sigma_inst_kms**2 - sigma_lib2, 0.0))
+
+    # Dispatch based on whether R is constant or variable
+    if resolution.ndim == 0:
+        # Scalar R: single FFT convolution (fast path)
+        return _apply_lsf_constant_r(spectrum, wave_obs, sigma_eff_kms)
+    else:
+        # Per-pixel R: piecewise-constant approximation
+        return _apply_lsf_variable_r(spectrum, wave_obs, sigma_eff_kms, n_bins)
 
 
 @jax.jit
@@ -77,8 +367,7 @@ def velocity_broaden(
     array, shape (n_pix,)
         Broadened spectrum.
     """
-    c_km_s = 299792.458  # speed of light in km/s
-    sigma_v = sigma_km_s / c_km_s  # fractional velocity dispersion
+    sigma_v = sigma_km_s / _C_KM_S  # fractional velocity dispersion
 
     # Pixel scale in log-wavelength
     dlnwave = jnp.log(wave[1] / wave[0])  # assumes uniform spacing

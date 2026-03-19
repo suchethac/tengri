@@ -74,8 +74,9 @@ Differences from the Original QSOgen
 Feature               Original (Python/numpy)             This JAX version
 ===================== ================================== ====================================
 Power-law transitions Hard np.where                       Smooth sigmoid (differentiable)
-Emission lines        4 empirical template interpolation  18 analytic Gaussians (VdB+01)
-Baldwin effect slope  0.183                               0.2
+Emission lines        4 empirical template interpolation  Same templates (qsosed_emlines)
+Baldwin effect slope  0.183                               0.183 (matching original)
+Balmer continuum      Added before flux normalization     Added after L_bol normalization
 Host galaxy template  S0 SWIRE included                   Not included (handled by Model)
 IGM absorption        Becker+13 tau_eff                   Handled by diffsed IGM module
 Autodiff              No                                  Yes (JAX JIT-compatible)
@@ -89,8 +90,11 @@ References
 - Stern et al. 2012, ApJ, 753, 30 (W1-W2 AGN selection)
 """
 
+from pathlib import Path
+
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from diffsed.models.agn.unified import register_agn_model
 from diffsed.models.dust.attenuation import smc as smc_curve
@@ -124,51 +128,67 @@ _DEFAULT_BBNORM = 3.96  # Hot dust normalization
 _DEFAULT_EMLINE_SCALE = 1.0  # Emission line strength multiplier
 _DEFAULT_EBV = 0.0  # E(B-V) dust reddening
 
-# Baldwin effect slope (negative = brighter quasars have weaker lines)
-_BALDWIN_SLOPE = -0.2
+# Baldwin effect slope (original Temple+2021 value)
+_BALDWIN_SLOPE = 0.183
 
-# Reference log bolometric luminosity for Baldwin effect normalization
-_LOG_LBOL_REF = 45.0  # erg/s
+# Reference M_i for Baldwin effect normalization (original benorm)
+_BENORM = -27.0
 
 # Sigmoid transition half-width in log-wavelength space
 _SIGMOID_WIDTH = 0.02  # dex (~5% in wavelength)
 
 
 # ===================================================================
-# Emission line table
+# Emission line template (loaded lazily from data file)
 # ===================================================================
+# Template format: 6 rows x N wavelengths
+#   row 0: wavelength (Angstrom)
+#   row 1: median emission lines (flux units, relative to reference continuum)
+#   row 2: reference continuum (for EW-scaling normalization)
+#   row 3: peaky (high-EW) line template
+#   row 4: windy (high-blueshift) line template
+#   row 5: narrow optical line template
+#
+# The original qsogen uses EW-scaling (scal_emline < 0):
+#   flux_with_lines = flux * (1 + |scal| * linval / conval)
+# This preserves EW ratios relative to the actual continuum.
 
-# Each row: [rest wavelength (A), equivalent width (A), FWHM (km/s)]
-# EWs from Vanden Berk et al. (2001) SDSS composite.
-# Broad lines: FWHM ~ 5000 km/s; narrow lines: FWHM ~ 500 km/s.
-_EMISSION_LINES = jnp.array(
-    [
-        # Broad lines
-        [1034.0, 3.0, 5000.0],  # OVI 1034
-        [1216.0, 90.0, 5000.0],  # Ly-alpha
-        [1240.0, 8.0, 5000.0],  # NV 1240
-        [1397.0, 5.0, 5000.0],  # SiIV 1397
-        [1549.0, 25.0, 5000.0],  # CIV 1549
-        [1909.0, 20.0, 5000.0],  # CIII] 1909
-        [2800.0, 30.0, 5000.0],  # MgII 2800
-        [4340.0, 3.0, 5000.0],  # H-gamma
-        [4861.0, 15.0, 5000.0],  # H-beta
-        [6563.0, 40.0, 5000.0],  # H-alpha
-        [18750.0, 5.0, 5000.0],  # Pa-alpha
-        # Narrow lines
-        [3727.0, 4.0, 500.0],  # [OII] 3727
-        [3869.0, 2.0, 500.0],  # [NeIII] 3869
-        [4686.0, 2.0, 500.0],  # HeII 4686
-        [5007.0, 5.0, 500.0],  # [OIII] 5007
-        [6583.0, 3.0, 500.0],  # [NII] 6583
-        [6717.0, 1.5, 500.0],  # [SII] 6717
-        [6731.0, 1.5, 500.0],  # [SII] 6731
+_EMLINE_TEMPLATE = None  # lazy-loaded JAX arrays
+
+
+def _load_emline_template():
+    """Load the empirical emission line template (Temple+2021).
+
+    Returns
+    -------
+    tuple of jnp.ndarray
+        (wavelength, median_lines, reference_continuum, peaky, windy, narrow)
+    """
+    global _EMLINE_TEMPLATE
+    if _EMLINE_TEMPLATE is not None:
+        return _EMLINE_TEMPLATE
+
+    candidates = [
+        Path(__file__).resolve().parents[4] / "data" / "qsogen_emline_template.dat",
+        Path("data/qsogen_emline_template.dat"),
     ]
-)
+    for path in candidates:
+        if path.is_file():
+            data = np.genfromtxt(str(path), unpack=True)
+            _EMLINE_TEMPLATE = tuple(jnp.array(row) for row in data)
+            return _EMLINE_TEMPLATE
 
-_LINE_WAVELENGTHS = _EMISSION_LINES[:, 0]
-_LINE_EWS = _EMISSION_LINES[:, 1]
-_LINE_FWHMS = _EMISSION_LINES[:, 2]
+    raise FileNotFoundError(
+        "QSOGen emission line template not found. Expected at "
+        "data/qsogen_emline_template.dat"
+    )
+
+
+# Redshift-luminosity relation from SDSS DR16Q (Temple+2021 config.py)
+_ZLUM = np.array([0.23, 0.34, 0.6, 1.0, 1.4, 1.8, 2.2, 2.6, 3.0, 3.3, 3.7, 4.13, 4.5])
+_LUMVAL = np.array(
+    [-21.76, -22.9, -24.1, -25.4, -26.0, -26.6, -27.1, -27.6, -27.9, -28.1, -28.4, -28.6, -28.9]
+)
 
 
 # ===================================================================
@@ -401,73 +421,83 @@ def _balmer_continuum(
     return scale * bc_flux * below_edge
 
 
-def _emission_line_spectrum(
+def _empirical_emission_lines(
     wavelength: jnp.ndarray,
-    continuum_flam: jnp.ndarray,
+    continuum_fnu: jnp.ndarray,
     emline_scale: float,
-    log_lbol: float,
+    m_i: float,
 ) -> jnp.ndarray:
-    """Emission line spectrum as sum of Gaussians with Baldwin effect.
+    """Empirical emission line spectrum (Temple+2021 templates).
 
-    Each line is a Gaussian with rest-frame equivalent width from
-    the Vanden Berk et al. (2001) composite, scaled by:
-    - ``emline_scale``: overall strength multiplier
-    - Baldwin effect: EW ~ (L/L_ref)^beslope
+    Uses the full empirical emission line templates from the original
+    qsogen, which include FeII pseudo-continuum, blended line complexes,
+    and realistic line profiles from the SDSS DR16Q composite.
+
+    The template is applied via EW-scaling (matching the original's
+    ``scal_emline < 0`` path): ``flux_lines = |scal| * linval * flux / conval``.
+    This preserves equivalent widths relative to the actual continuum.
+
+    The dimensionless ratio ``linval / conval`` is the same in f_nu and
+    f_lambda, so this works directly in f_nu space.
 
     Parameters
     ----------
     wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    continuum_flam : array, shape (n_wave,)
-        Continuum f_lambda (for EW anchoring).
+    continuum_fnu : array, shape (n_wave,)
+        Continuum f_nu (power-law + hot dust, normalized ~1 at 5500 A).
     emline_scale : float
-        Overall emission line strength multiplier.
-    log_lbol : float
-        log10(L_bol / erg s^-1) for Baldwin effect.
+        Overall emission line strength multiplier (positive values scale
+        line fluxes; negative values preserve EW ratios). Default usage
+        is negative (EW-scaling), matching original qsogen.
+    m_i : float
+        Absolute i-band magnitude (at z=2) for Baldwin effect scaling.
+        Controls the ``emline_type`` parameter via ``beslope``.
 
     Returns
     -------
     array, shape (n_wave,)
-        Emission line f_lambda (same units as continuum_flam).
+        Emission line f_nu contribution (same units as continuum_fnu).
     """
-    # Baldwin effect scaling: EW ~ (L/L_ref)^beslope
-    # In magnitude form: scal ~ (log_lbol - log_lbol_ref)^beslope
-    # Simpler: ratio of luminosities to reference
-    lbol_ratio = 10.0 ** (log_lbol - _LOG_LBOL_REF)
-    baldwin_factor = lbol_ratio**_BALDWIN_SLOPE
+    linwav, medval, conval_raw, pkyval, wdyval, nlr = _load_emline_template()
 
-    # Scale factor
-    scale = emline_scale * baldwin_factor
+    # Baldwin effect: emline_type = (M_i - benorm) * beslope
+    # beslope > 0, benorm = -27 -> brighter quasars (more negative M_i)
+    # get emline_type < 0 -> more blueshifted lines
+    emline_type = (m_i - _BENORM) * _BALDWIN_SLOPE
 
-    def _single_line(line_data):
-        """Compute Gaussian profile for one emission line."""
-        lam_c = line_data[0]
-        ew_rest = line_data[1]
-        fwhm_kms = line_data[2]
+    # Combine templates based on emline_type (matching original exactly)
+    # emline_type = 0: average template
+    # emline_type > 0: blend toward peaky (high-EW)
+    # emline_type < 0: blend toward windy (high-blueshift)
+    varlin_pos = jnp.clip(emline_type, 0.0, 3.0)
+    varlin_neg = jnp.clip(-emline_type, 0.0, 2.0)
 
-        # Gaussian sigma in Angstrom
-        sigma_ang = lam_c * (fwhm_kms / _C_LIGHT_KMS) / 2.3548
-        sigma_ang = jnp.maximum(sigma_ang, 0.01)
+    # Smooth blend between positive and negative regimes
+    is_positive = jax.nn.sigmoid(emline_type * 20.0)  # sharp but differentiable
 
-        # Gaussian profile (normalized so integral over dlambda = 1)
-        profile = jnp.exp(-0.5 * ((wavelength - lam_c) / sigma_ang) ** 2) / (
-            sigma_ang * jnp.sqrt(2.0 * jnp.pi)
-        )
+    linval_pos = varlin_pos * pkyval + (1.0 - varlin_pos) * medval
+    linval_neg = varlin_neg * wdyval + (1.0 - varlin_neg) * medval
+    linval = is_positive * linval_pos + (1.0 - is_positive) * linval_neg
 
-        # Interpolate continuum at line center for EW conversion
-        log_wave = jnp.log10(wavelength)
-        log_lam_c = jnp.log10(lam_c)
-        cont_at_line = jnp.interp(log_lam_c, log_wave, continuum_flam)
-        cont_at_line = jnp.maximum(cont_at_line, 1e-30)
+    # Remove negative dips from extreme extrapolation
+    # (smooth clamp instead of hard zeroing for differentiability)
+    linval = jnp.maximum(linval, 0.0)
 
-        # Line flux = EW * continuum_at_line (in f_lambda)
-        line_flux = scale * ew_rest * cont_at_line
+    # Interpolate template and reference continuum onto working wavelength grid
+    linval_interp = jnp.interp(wavelength, linwav, linval)
+    conval_interp = jnp.interp(wavelength, linwav, conval_raw)
 
-        return line_flux * profile
+    # Prevent division by zero in reference continuum
+    conval_safe = jnp.maximum(conval_interp, 1e-30)
 
-    # Vectorize over all lines
-    line_spectra = jax.vmap(_single_line)(_EMISSION_LINES)
-    return jnp.sum(line_spectra, axis=0)
+    # EW-scaling: preserves equivalent widths relative to actual continuum
+    # Original: flux += |scalin| * linval * flux / conval
+    # In f_nu: the dimensionless ratio linval/conval is identical to f_lambda
+    scale = jnp.abs(emline_scale)
+    line_fnu = scale * linval_interp * continuum_fnu / conval_safe
+
+    return line_fnu
 
 
 def _apply_dust_reddening(
@@ -505,6 +535,28 @@ def _apply_dust_reddening(
 # ===================================================================
 
 
+def _lbol_to_m_i(log_lbol_lsun: float) -> float:
+    """Convert log10(L_bol / Lsun) to approximate absolute i-band magnitude.
+
+    Uses a rough bolometric correction to map L_bol to M_i for the
+    Baldwin effect. The default M_i = -27 at log_lbol ~ 12.5 (Lsun).
+
+    Parameters
+    ----------
+    log_lbol_lsun : float
+        log10(L_bol / Lsun).
+
+    Returns
+    -------
+    float
+        Approximate M_i (AB magnitude).
+    """
+    # L_bol(Lsun) -> L_bol(erg/s) -> M_i via bolometric correction
+    # M_i ~ -2.5 * log10(L_bol / L_ref) + M_i_ref
+    # Calibrated so log_lbol_lsun=12.5 -> M_i ~ -27 (typical SDSS z~2 quasar)
+    return -2.5 * (log_lbol_lsun - 12.5) + _BENORM
+
+
 def qsogen_sed(
     wavelength: jnp.ndarray,
     agn_plslp1: float = _DEFAULT_PLSLP1,
@@ -516,16 +568,23 @@ def qsogen_sed(
     agn_ebv: float = _DEFAULT_EBV,
     agn_log_lbol: float = 45.0,
     agn_frac: float = 1.0,
+    agn_bcnorm: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """QSOgen quasar SED (Temple, Hewett & Banerji 2021).
 
     Generates a rest-frame quasar SED from 912-100000 Angstrom by
     combining a broken power-law continuum, hot dust blackbody,
-    empirical emission lines (with Baldwin effect), and optional
-    SMC-like dust reddening.
+    empirical emission lines (with Baldwin effect), Balmer continuum,
+    and optional SMC-like dust reddening.
 
     The output is L_nu in Lsun/Hz, normalized via ``agn_log_lbol``.
+
+    Pipeline order:
+    1. Continuum + hot dust + emission lines (shape SED)
+    2. Dust reddening (attenuate)
+    3. Normalize to L_bol (bolometric integral)
+    4. Add Balmer continuum as additive excess (NOT re-normalized)
 
     Parameters
     ----------
@@ -543,13 +602,17 @@ def qsogen_sed(
         Hot dust normalization (relative to continuum at 2 um).
         Default 3.96.
     agn_emline_scale : float
-        Emission line strength multiplier. Default 1.0.
+        Emission line strength multiplier. Default 1.0 (negative values
+        use EW-scaling, matching the original qsogen).
     agn_ebv : float
         E(B-V) dust reddening [mag]. Default 0.0 (no reddening).
     agn_log_lbol : float
         log10(L_bol / Lsun). Bolometric luminosity. Default 45.0.
     agn_frac : float
         Overall AGN fraction scaling. Default 1.0.
+    agn_bcnorm : float
+        Balmer continuum normalization. Default 0.0 (disabled).
+        Set to ~1.0 to enable Balmer continuum emission.
 
     Returns
     -------
@@ -567,37 +630,42 @@ def qsogen_sed(
     # --- Component 2: Hot dust blackbody ---
     hot_dust = _hot_dust_blackbody(wavelength, continuum, agn_tbb, agn_bbnorm)
 
-    # --- Component 3: Emission lines ---
-    # Convert agn_log_lbol from Lsun to erg/s for Baldwin effect
-    log_lbol_erg = agn_log_lbol + jnp.log10(_LSUN_ERG)
-    emission_lines = _emission_line_spectrum(
+    # --- Component 3: Emission lines (empirical template) ---
+    # Convert log_lbol (Lsun) to approximate M_i for Baldwin effect
+    m_i = _lbol_to_m_i(agn_log_lbol)
+    emission_lines = _empirical_emission_lines(
         wavelength,
-        continuum,
+        continuum + hot_dust,
         agn_emline_scale,
-        log_lbol_erg,
+        m_i,
     )
 
-    # --- Combine components (all in f_nu, normalized ~1 at 5500 A) ---
-    # NOTE: Balmer continuum (_balmer_continuum) is available but NOT
-    # included by default, matching the original qsogen where bcnorm
-    # must be explicitly set. Add via a future agn_bcnorm parameter.
-    f_nu_total = continuum + hot_dust + emission_lines
+    # --- Combine continuum + BB + lines (all in f_nu) ---
+    f_nu_main = continuum + hot_dust + emission_lines
 
-    # --- Component 4: Dust reddening ---
-    # Reddening operates on f_lambda, but the extinction law A(lambda) is
-    # the same in f_nu: 10^(-0.4 * A_lam) is a multiplicative factor.
-    f_nu_total = _apply_dust_reddening(wavelength, f_nu_total, agn_ebv)
+    # --- Dust reddening ---
+    # Extinction law 10^(-0.4 * A_lam) is the same multiplicative
+    # factor in f_nu and f_lambda.
+    f_nu_main = _apply_dust_reddening(wavelength, f_nu_main, agn_ebv)
 
-    # --- Scale to bolometric luminosity ---
-    # Integrate f_nu * dnu to find shape normalization
+    # --- Normalize to bolometric luminosity ---
+    # Integrate f_nu * dnu BEFORE adding Balmer continuum
     nu = _wavelength_to_nu(wavelength)
     idx_sort = jnp.argsort(nu)
-    integral_nu = jnp.trapezoid(f_nu_total[idx_sort], nu[idx_sort])
+    integral_nu = jnp.trapezoid(f_nu_main[idx_sort], nu[idx_sort])
     integral_nu = jnp.maximum(jnp.abs(integral_nu), 1e-30)
 
-    # Scale to L_nu in Lsun/Hz
     l_bol_lsun = 10.0**agn_log_lbol
-    l_nu = f_nu_total * (l_bol_lsun / integral_nu)
+    norm_factor = l_bol_lsun / integral_nu
+    l_nu = f_nu_main * norm_factor
+
+    # --- Component 4: Balmer continuum (additive excess) ---
+    # Added AFTER L_bol normalization so it is not cancelled by
+    # the bolometric integral. The BC is normalized relative to the
+    # already-scaled continuum at 3000 A, matching the original
+    # qsogen's add_balmer_continuum() which runs after convert_fnu_flambda().
+    bc = _balmer_continuum(wavelength, l_nu, agn_bcnorm)
+    l_nu = l_nu + bc
 
     return l_nu * agn_frac
 
@@ -619,6 +687,7 @@ def qsogen(
     agn_bbnorm: float = _DEFAULT_BBNORM,
     agn_emline_scale: float = _DEFAULT_EMLINE_SCALE,
     agn_ebv: float = _DEFAULT_EBV,
+    agn_bcnorm: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """QSOgen quasar SED (Temple+2021) — registered model entry point.
@@ -639,4 +708,5 @@ def qsogen(
         agn_ebv=agn_ebv,
         agn_log_lbol=agn_log_lbol,
         agn_frac=agn_frac,
+        agn_bcnorm=agn_bcnorm,
     )

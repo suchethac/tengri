@@ -41,7 +41,7 @@ import jax.numpy as jnp
 
 from diffsed.models.dust.attenuation import precompute_dust_age_weights, two_component_dust
 from diffsed.models.observation.photometry import ab_mag_from_flux, compute_flux_density
-from diffsed.models.observation.spectroscopy import compute_spectrum
+from diffsed.models.observation.spectroscopy import apply_lsf, compute_spectrum
 from diffsed.models.sfh.registry import compute_field_gp, resolve_sfh
 from diffsed.models.sps.dsps_wrapper import (
     compute_csp_sed,
@@ -385,6 +385,13 @@ class Model:
                 self._has_sigma_v = True
             except KeyError:
                 self._has_sigma_v = False
+
+        # SSP library velocity resolution for LSF subtraction (km/s)
+        self._sigma_lib_kms = getattr(spec, "sigma_lib_kms", 0.0)
+
+        # Instrument LSF resolution profile (None = no LSF, scalar or array)
+        self._lsf_resolution = getattr(spec, "lsf_resolution", None)
+        self._lsf_n_bins = getattr(spec, "lsf_n_bins", 16)
 
         # Precompute luminosity distance if redshift is fixed
         redshift_dist = spec.get_distribution("redshift")
@@ -1592,7 +1599,7 @@ class Model:
         sed = self.predict_sed(params)
         z = self._get_redshift(params)
         dl_cm = self._get_dl_cm(params)
-        return compute_spectrum(
+        flux = compute_spectrum(
             sed,
             self.ssp_data.ssp_wave,
             wave_obs,
@@ -1600,13 +1607,26 @@ class Model:
             dl_cm,
         )
 
+        # Apply LSF convolution if resolution profile is set
+        resolution = self._lsf_resolution
+        if resolution is not None:
+            flux = apply_lsf(
+                flux,
+                wave_obs,
+                resolution,
+                sigma_lib_kms=self._sigma_lib_kms,
+                n_bins=self._lsf_n_bins,
+            )
+
+        return flux
+
     def _predict_spectrum_fast(self, params):
         """Fast spectrum using fused JIT kernel."""
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
         sigma_v = params.get("sigma_v", 0.0) if self._has_sigma_v else 0.0
-        return self._fused_spectrum(
+        flux = self._fused_spectrum(
             sfr_on_ssp,
             p["log_z"],
             p["tau_v1"],
@@ -1616,6 +1636,21 @@ class Model:
             **self._get_dust_kwargs(p),
             **self._get_agn_kwargs(p),
         )
+
+        # Apply LSF convolution if resolution profile is set
+        # (applied after the fused kernel, which handles velocity broadening)
+        resolution = self._lsf_resolution
+        if resolution is not None:
+            wave_obs = self._spec_precomp.wave_obs_pixels
+            flux = apply_lsf(
+                flux,
+                wave_obs,
+                resolution,
+                sigma_lib_kms=self._sigma_lib_kms,
+                n_bins=self._lsf_n_bins,
+            )
+
+        return flux
 
     def predict_sfh(self, params, n_linear=1000):
         """Compute SFH on a uniform linear-time grid for plotting.

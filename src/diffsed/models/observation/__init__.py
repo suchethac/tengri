@@ -12,16 +12,26 @@ from diffsed.models.observation.eline_marginalization import (
     marginalize_emission_lines,
     predict_with_marginalized_lines,
 )
-from diffsed.models.observation.spectroscopy import blend_emission_lines
+from diffsed.models.observation.spectroscopy import (
+    SSP_LIBRARY_RESOLUTIONS,
+    apply_lsf,
+    blend_emission_lines,
+    nirspec_g140m_resolution,
+    nirspec_prism_resolution,
+)
 
 __all__ = [
     "DEFAULT_LINE_NAMES",
     "DEFAULT_LINE_WAVELENGTHS",
+    "SSP_LIBRARY_RESOLUTIONS",
     "apply_calibration",
+    "apply_lsf",
     "blend_emission_lines",
     "build_eline_design_matrix",
     "calibration_polynomial",
     "chebyshev_basis",
     "marginalize_emission_lines",
+    "nirspec_g140m_resolution",
+    "nirspec_prism_resolution",
     "predict_with_marginalized_lines",
 ]
