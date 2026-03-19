@@ -37,19 +37,17 @@ Notes
 All functions are JIT-compatible and differentiable through JAX.
 """
 
-from pathlib import Path
 from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-
 # ---------------------------------------------------------------------------
 # Physical constants
 # ---------------------------------------------------------------------------
-_C_CGS = 2.9979e10       # cm/s
-_LSUN_ERG = 3.839e33     # erg/s  (Cue convention, NOT IAU 2015)
+_C_CGS = 2.9979e10  # cm/s
+_LSUN_ERG = 3.839e33  # erg/s  (Cue convention, NOT IAU 2015)
 _LOG_LSUN = jnp.log10(_LSUN_ERG)
 _LOG_4PI = jnp.log10(4.0 * jnp.pi)
 _LOG_C = jnp.log10(_C_CGS)
@@ -59,33 +57,36 @@ _LOG_C = jnp.log10(_C_CGS)
 # Data containers (immutable NamedTuples for JAX tracing)
 # ---------------------------------------------------------------------------
 
+
 class SubNetWeights(NamedTuple):
     """Weights for a single Speculator sub-network."""
-    W: tuple          # tuple of (in, out) weight matrices per layer
-    b: tuple          # tuple of (out,) bias vectors per layer
-    alphas: tuple     # tuple of (out,) activation params (hidden layers only)
-    betas: tuple      # tuple of (out,) activation params (hidden layers only)
-    param_shift: jnp.ndarray    # (n_params,)
-    param_scale: jnp.ndarray    # (n_params,)
-    pca_shift: jnp.ndarray      # (n_pcas,)
-    pca_scale: jnp.ndarray      # (n_pcas,)
+
+    W: tuple  # tuple of (in, out) weight matrices per layer
+    b: tuple  # tuple of (out,) bias vectors per layer
+    alphas: tuple  # tuple of (out,) activation params (hidden layers only)
+    betas: tuple  # tuple of (out,) activation params (hidden layers only)
+    param_shift: jnp.ndarray  # (n_params,)
+    param_scale: jnp.ndarray  # (n_params,)
+    pca_shift: jnp.ndarray  # (n_pcas,)
+    pca_scale: jnp.ndarray  # (n_pcas,)
     log_spec_shift: jnp.ndarray  # (n_wavelengths,)
     log_spec_scale: jnp.ndarray  # (n_wavelengths,)
     pca_components: jnp.ndarray  # (n_pcas, n_wavelengths) — sklearn PCA basis
-    pca_mean: jnp.ndarray        # (n_wavelengths,) — sklearn PCA centering
+    pca_mean: jnp.ndarray  # (n_wavelengths,) — sklearn PCA centering
     n_layers: int
 
 
 class CueWeights(NamedTuple):
     """All Cue weights for lines + continuum."""
-    line_nets: tuple       # tuple of SubNetWeights, one per line sub-network
+
+    line_nets: tuple  # tuple of SubNetWeights, one per line sub-network
     cont_net: SubNetWeights
-    line_names: tuple      # tuple of str
+    line_names: tuple  # tuple of str
     line_wav_selections: tuple  # tuple of int arrays per sub-network
-    sorted_line_wav: jnp.ndarray   # (n_lines_total,) sorted line wavelengths
-    nn_line_wav: jnp.ndarray       # (n_nn_lines,) concatenated NN output wavelengths
-    line_old_idx: jnp.ndarray      # indices of "old" (cloudyfsps) lines
-    cont_wav: jnp.ndarray          # (n_wave_cont,) continuum wavelength grid
+    sorted_line_wav: jnp.ndarray  # (n_lines_total,) sorted line wavelengths
+    nn_line_wav: jnp.ndarray  # (n_nn_lines,) concatenated NN output wavelengths
+    line_old_idx: jnp.ndarray  # indices of "old" (cloudyfsps) lines
+    cont_wav: jnp.ndarray  # (n_wave_cont,) continuum wavelength grid
 
 
 # ---------------------------------------------------------------------------
@@ -93,8 +94,22 @@ class CueWeights(NamedTuple):
 # ---------------------------------------------------------------------------
 
 _LINE_NAMES = (
-    "H1", "He1", "He2", "C1", "C2C3", "C4", "N", "O1",
-    "O2", "O3", "ionE_1", "ionE_2", "S4", "Ar4", "Ne3", "Ne4",
+    "H1",
+    "He1",
+    "He2",
+    "C1",
+    "C2C3",
+    "C4",
+    "N",
+    "O1",
+    "O2",
+    "O3",
+    "ionE_1",
+    "ionE_2",
+    "S4",
+    "Ar4",
+    "Ne3",
+    "Ne4",
 )
 
 
@@ -146,8 +161,7 @@ def load_cue_weights(npz_path: str) -> CueWeights:
         prefix = f"line_{name}"
         if f"{prefix}_n_layers" not in npz:
             raise FileNotFoundError(
-                f"Missing line sub-network '{name}' in {npz_path}. "
-                "Re-run convert_cue_weights.py."
+                f"Missing line sub-network '{name}' in {npz_path}. Re-run convert_cue_weights.py."
             )
         line_nets.append(_load_subnet(npz, prefix))
         line_wav_sels.append(jnp.array(npz[f"{prefix}_wav_selection"]))
@@ -171,8 +185,8 @@ def load_cue_weights(npz_path: str) -> CueWeights:
 # Neural network forward pass (pure JAX, JIT-compatible)
 # ---------------------------------------------------------------------------
 
-def _speculator_activation(x: jnp.ndarray, alpha: jnp.ndarray,
-                           beta: jnp.ndarray) -> jnp.ndarray:
+
+def _speculator_activation(x: jnp.ndarray, alpha: jnp.ndarray, beta: jnp.ndarray) -> jnp.ndarray:
     """Learned Swish activation: x * (beta + (1 - beta) * sigmoid(alpha * x))."""
     return x * (beta + (1.0 - beta) * jax.nn.sigmoid(alpha * x))
 
@@ -242,8 +256,10 @@ def _speculator_log_spectrum(
 # Parameter conversion: user-facing -> network input
 # ---------------------------------------------------------------------------
 
-def _logq_from_logu(gas_logu: jnp.ndarray, gas_logn: jnp.ndarray,
-                    log_R: float = 19.0) -> jnp.ndarray:
+
+def _logq_from_logu(
+    gas_logu: jnp.ndarray, gas_logn: jnp.ndarray, log_R: float = 19.0
+) -> jnp.ndarray:
     """Convert ionization parameter logU to logQ.
 
     logQ = logU + log(4*pi) + 2*log(R) + logn + log(c)
@@ -274,13 +290,25 @@ def _prepare_nn_params(
      gas_logq, 10**gas_logn, gas_logz, gas_logno, gas_logco]
     """
     gas_logq = _logq_from_logu(gas_logu, gas_logn)
-    gas_n_linear = 10.0 ** gas_logn
+    gas_n_linear = 10.0**gas_logn
 
-    return jnp.stack([
-        ionspec_index1, ionspec_index2, ionspec_index3, ionspec_index4,
-        ionspec_logLratio1, ionspec_logLratio2, ionspec_logLratio3,
-        gas_logq, gas_n_linear, gas_logz, gas_logno, gas_logco,
-    ], axis=-1)
+    return jnp.stack(
+        [
+            ionspec_index1,
+            ionspec_index2,
+            ionspec_index3,
+            ionspec_index4,
+            ionspec_logLratio1,
+            ionspec_logLratio2,
+            ionspec_logLratio3,
+            gas_logq,
+            gas_n_linear,
+            gas_logz,
+            gas_logno,
+            gas_logco,
+        ],
+        axis=-1,
+    )
 
 
 def prepare_nn_params_from_dict(params: dict) -> jnp.ndarray:
@@ -307,6 +335,7 @@ def prepare_nn_params_from_dict(params: dict) -> jnp.ndarray:
 # ---------------------------------------------------------------------------
 # Line prediction
 # ---------------------------------------------------------------------------
+
 
 def _predict_lines_single_net(
     nn_params: jnp.ndarray,
@@ -382,6 +411,7 @@ def predict_all_lines(
 # Continuum prediction
 # ---------------------------------------------------------------------------
 
+
 def predict_continuum(
     nn_params: jnp.ndarray,
     weights: CueWeights,
@@ -429,6 +459,7 @@ def predict_continuum(
 # ---------------------------------------------------------------------------
 # Backend class (matches CloudyGridBackend interface)
 # ---------------------------------------------------------------------------
+
 
 class CueBackend:
     """Cue neural net emulator backend for nebular emission.
@@ -479,6 +510,7 @@ class CueBackend:
     def _precompute_ionizing_params(self, ssp_data) -> None:
         """Precompute ionizing spectrum parameters for all SSP (met, age)."""
         import numpy as np
+
         from diffsed.models.nebular.ionizing_spectrum import precompute_ionizing_params_table
 
         result = precompute_ionizing_params_table(
@@ -492,7 +524,9 @@ class CueBackend:
         self._ssp_log_age_yr = jnp.array(ssp_data.ssp_lg_age_gyr) + 9.0
 
     def get_ionizing_params_at(
-        self, log_z: float, log_age_yr: float,
+        self,
+        log_z: float,
+        log_age_yr: float,
     ) -> tuple[jnp.ndarray, float]:
         """Get precomputed ionizing params at (Z, age) via interpolation.
 
@@ -502,10 +536,14 @@ class CueBackend:
             return None, None
 
         from diffsed.models.nebular.ionizing_spectrum import interpolate_ionizing_params
+
         return interpolate_ionizing_params(
-            self._ionspec_table, self._logqion_table,
-            self._ssp_lgmet, self._ssp_log_age_yr,
-            log_z, log_age_yr,
+            self._ionspec_table,
+            self._logqion_table,
+            self._ssp_lgmet,
+            self._ssp_log_age_yr,
+            log_z,
+            log_age_yr,
         )
 
     def predict_nebular_line_luminosities(
@@ -515,7 +553,7 @@ class CueBackend:
         gas_logz: float = 0.0,
         gas_logno: float = 0.0,
         gas_logco: float = 0.0,
-        gas_logqion: float = None,
+        gas_logqion: float | None = None,
         ionspec_index1: float = 19.7,
         ionspec_index2: float = 5.3,
         ionspec_index3: float = 1.6,
@@ -589,8 +627,10 @@ class CueBackend:
         )
 
         wav, lum = predict_all_lines(
-            nn_params, self.weights,
-            gas_logq, jnp.asarray(gas_logqion, dtype=jnp.float32),
+            nn_params,
+            self.weights,
+            gas_logq,
+            jnp.asarray(gas_logqion, dtype=jnp.float32),
         )
 
         # Apply general escape fraction
@@ -614,7 +654,7 @@ class CueBackend:
         gas_logz: float = 0.0,
         gas_logno: float = 0.0,
         gas_logco: float = 0.0,
-        gas_logqion: float = None,
+        gas_logqion: float | None = None,
         ionspec_index1: float = 19.7,
         ionspec_index2: float = 5.3,
         ionspec_index3: float = 1.6,
@@ -661,8 +701,10 @@ class CueBackend:
         )
 
         return predict_continuum(
-            nn_params, self.weights,
-            gas_logq, jnp.asarray(gas_logqion, dtype=jnp.float32),
+            nn_params,
+            self.weights,
+            gas_logq,
+            jnp.asarray(gas_logqion, dtype=jnp.float32),
         )
 
     def predict_nebular_sed(
@@ -692,7 +734,8 @@ class CueBackend:
         """
         # Lines
         line_wav, line_lum = self.predict_nebular_line_luminosities(
-            cloudyfsps_only=False, **neb_params,
+            cloudyfsps_only=False,
+            **neb_params,
         )
 
         # Continuum
@@ -702,7 +745,7 @@ class CueBackend:
         neb_sed = jnp.interp(ssp_wave, cont_wav, cont_lum, left=0.0, right=0.0)
 
         # Add emission lines
-        c_angstrom = _C_CGS * 1e8  # Angstrom/s
+        _C_CGS * 1e8  # Angstrom/s
         if line_sigma_aa > 0:
             # Gaussian profiles
             # For each line: convert L_line (Lsun) to Lsun/Hz via Gaussian
@@ -730,6 +773,7 @@ class CueBackend:
 # ---------------------------------------------------------------------------
 # JIT-compiled pure-functional API (for use in inference loops)
 # ---------------------------------------------------------------------------
+
 
 @jax.jit
 def predict_lines_jit(
@@ -783,3 +827,97 @@ def predict_continuum_jit(
     wavelength, luminosity : arrays
     """
     return predict_continuum(nn_params_12, weights, gas_logq, gas_logqion)
+
+
+# ---------------------------------------------------------------------------
+# JAX pytree registration for CueWeights (enables JIT with string fields)
+# ---------------------------------------------------------------------------
+
+
+def _cue_weights_flatten(cw):
+    """Flatten CueWeights for JAX pytree: arrays as children, strings as aux."""
+    children = (
+        cw.line_nets,
+        cw.cont_net,
+        cw.sorted_line_wav,
+        cw.nn_line_wav,
+        cw.line_old_idx,
+        cw.cont_wav,
+    )
+    aux_data = (cw.line_names, cw.line_wav_selections)
+    return children, aux_data
+
+
+def _cue_weights_unflatten(aux_data, children):
+    """Unflatten CueWeights from JAX pytree."""
+    line_nets, cont_net, sorted_line_wav, nn_line_wav, line_old_idx, cont_wav = children
+    line_names, line_wav_selections = aux_data
+    return CueWeights(
+        line_nets=line_nets,
+        cont_net=cont_net,
+        line_names=line_names,
+        line_wav_selections=line_wav_selections,
+        sorted_line_wav=sorted_line_wav,
+        nn_line_wav=nn_line_wav,
+        line_old_idx=line_old_idx,
+        cont_wav=cont_wav,
+    )
+
+
+# Register after class definition
+jax.tree_util.register_pytree_node(CueWeights, _cue_weights_flatten, _cue_weights_unflatten)
+
+
+def _subnet_flatten(sw):
+    """Flatten SubNetWeights: arrays as children, n_layers as aux."""
+    children = (
+        sw.W,
+        sw.b,
+        sw.alphas,
+        sw.betas,
+        sw.param_shift,
+        sw.param_scale,
+        sw.pca_shift,
+        sw.pca_scale,
+        sw.log_spec_shift,
+        sw.log_spec_scale,
+        sw.pca_components,
+        sw.pca_mean,
+    )
+    return children, sw.n_layers
+
+
+def _subnet_unflatten(n_layers, children):
+    """Unflatten SubNetWeights."""
+    (
+        W,
+        b,
+        alphas,
+        betas,
+        param_shift,
+        param_scale,
+        pca_shift,
+        pca_scale,
+        log_spec_shift,
+        log_spec_scale,
+        pca_components,
+        pca_mean,
+    ) = children
+    return SubNetWeights(
+        W=W,
+        b=b,
+        alphas=alphas,
+        betas=betas,
+        param_shift=param_shift,
+        param_scale=param_scale,
+        pca_shift=pca_shift,
+        pca_scale=pca_scale,
+        log_spec_shift=log_spec_shift,
+        log_spec_scale=log_spec_scale,
+        pca_components=pca_components,
+        pca_mean=pca_mean,
+        n_layers=n_layers,
+    )
+
+
+jax.tree_util.register_pytree_node(SubNetWeights, _subnet_flatten, _subnet_unflatten)

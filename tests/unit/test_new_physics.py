@@ -123,6 +123,7 @@ class TestDustEmission:
         assert "modified_blackbody" in DUST_EMISSION_MODELS
         assert "dale2014" in DUST_EMISSION_MODELS
         assert "draine_li2007" in DUST_EMISSION_MODELS
+        assert "draine_li2014" in DUST_EMISSION_MODELS
 
     def test_energy_conservation(self, ir_wave):
         """Total dust emission should equal absorbed luminosity."""
@@ -132,7 +133,8 @@ class TestDustEmission:
         for name, fn in DUST_EMISSION_MODELS.items():
             sed = fn(ir_wave, L_abs, dust_T=35.0, dust_beta_ir=1.6,
                      dust_alpha_dale=2.0, dust_umin=1.0,
-                     dust_gamma_dl=0.01, dust_qpah=2.5)
+                     dust_gamma_dl=0.01, dust_qpah=2.5,
+                     dust_alpha_dl14=2.0)
             nu = _c / ir_wave
             L_total = float(-jnp.trapezoid(sed, nu))
             ratio = L_total / L_abs
@@ -152,6 +154,117 @@ class TestDustEmission:
         g = jax.grad(lambda T: jnp.sum(
             modified_blackbody(ir_wave, 1e10, dust_T=T)))(35.0)
         assert jnp.isfinite(g) and abs(float(g)) > 0
+
+
+class TestDL14Emission:
+    """Test Draine & Li 2014 dust emission model (analytic approximation)."""
+
+    @pytest.fixture
+    def ir_wave(self):
+        return jnp.logspace(jnp.log10(1e4), jnp.log10(1e7), 300)
+
+    def test_dl14_registered(self):
+        from diffsed.models.dust.emission import DUST_EMISSION_MODELS
+        assert "draine_li2014" in DUST_EMISSION_MODELS
+
+    def test_dl14_positive_output(self, ir_wave):
+        from diffsed.models.dust.emission import draine_li2014
+        sed = draine_li2014(ir_wave, 1e10)
+        assert jnp.all(sed >= 0), "DL14 SED should be non-negative"
+        assert float(jnp.max(sed)) > 0, "DL14 SED should have positive values"
+
+    def test_dl14_energy_conservation(self, ir_wave):
+        """DL14 emission should conserve energy within 50%."""
+        from diffsed.models.dust.emission import draine_li2014
+        L_abs = 1e10
+        _c = 2.99792458e18
+        sed = draine_li2014(ir_wave, L_abs, dust_umin=1.0,
+                            dust_gamma_dl=0.01, dust_qpah=2.5,
+                            dust_alpha_dl14=2.0)
+        nu = _c / ir_wave
+        L_total = float(-jnp.trapezoid(sed, nu))
+        ratio = L_total / L_abs
+        assert 0.5 < ratio < 2.0, f"L_emitted/L_absorbed = {ratio:.2f}"
+
+    def test_dl14_alpha_default_matches_dl07(self, ir_wave):
+        """DL14 with alpha=2.0 should be similar to DL07 (both analytic)."""
+        from diffsed.models.dust.emission import draine_li2007, draine_li2014
+        L_abs = 1e10
+        sed_07 = draine_li2007(ir_wave, L_abs, dust_umin=1.0,
+                                dust_gamma_dl=0.01, dust_qpah=2.5)
+        sed_14 = draine_li2014(ir_wave, L_abs, dust_umin=1.0,
+                                dust_gamma_dl=0.01, dust_qpah=2.5,
+                                dust_alpha_dl14=2.0)
+        # Both are analytic approximations, not identical but similar shapes
+        ratio = float(jnp.sum(sed_14)) / float(jnp.sum(sed_07))
+        assert 0.3 < ratio < 3.0, (
+            f"DL14(alpha=2) vs DL07 ratio = {ratio:.2f}, expected similar magnitude"
+        )
+
+    def test_dl14_alpha_affects_spectrum(self, ir_wave):
+        """Different alpha values should produce different spectra."""
+        from diffsed.models.dust.emission import draine_li2014
+        L_abs = 1e10
+        sed_low_alpha = draine_li2014(ir_wave, L_abs, dust_alpha_dl14=1.5,
+                                       dust_gamma_dl=0.1)
+        sed_high_alpha = draine_li2014(ir_wave, L_abs, dust_alpha_dl14=2.5,
+                                        dust_gamma_dl=0.1)
+        # Low alpha = steeper power-law = more dust at high U = warmer
+        # So peak should shift to shorter wavelengths
+        peak_low = float(ir_wave[jnp.argmax(sed_low_alpha)])
+        peak_high = float(ir_wave[jnp.argmax(sed_high_alpha)])
+        # With gamma=0.1, the alpha effect should be noticeable
+        assert not jnp.allclose(sed_low_alpha, sed_high_alpha), (
+            "Different alpha values should give different spectra"
+        )
+
+    def test_dl14_extended_qpah_range(self, ir_wave):
+        """DL14 should handle extended q_PAH range (up to 7.32%)."""
+        from diffsed.models.dust.emission import draine_li2014
+        # q_PAH = 7.0% (beyond DL07's 4.58% max)
+        sed = draine_li2014(ir_wave, 1e10, dust_qpah=7.0)
+        assert jnp.all(jnp.isfinite(sed)), "DL14 should handle q_PAH=7.0%"
+        assert float(jnp.max(sed)) > 0
+
+    def test_dl14_extended_umin_range(self, ir_wave):
+        """DL14 should handle extended U_min range (up to 50)."""
+        from diffsed.models.dust.emission import draine_li2014
+        sed = draine_li2014(ir_wave, 1e10, dust_umin=40.0)
+        assert jnp.all(jnp.isfinite(sed)), "DL14 should handle U_min=40"
+        assert float(jnp.max(sed)) > 0
+
+    def test_dl14_jit_compatible(self, ir_wave):
+        """DL14 should be JIT-compilable."""
+        from diffsed.models.dust.emission import draine_li2014
+        fn = jax.jit(lambda u, g, q, a: draine_li2014(
+            ir_wave, 1e10, dust_umin=u, dust_gamma_dl=g,
+            dust_qpah=q, dust_alpha_dl14=a))
+        sed = fn(1.0, 0.01, 2.5, 2.0)
+        assert sed.shape == ir_wave.shape
+        assert jnp.all(jnp.isfinite(sed))
+
+    def test_dl14_gradients(self, ir_wave):
+        """DL14 should have finite gradients for all parameters."""
+        from diffsed.models.dust.emission import draine_li2014
+
+        def loss(umin, gamma, qpah, alpha):
+            return jnp.sum(draine_li2014(
+                ir_wave, 1e10, dust_umin=umin, dust_gamma_dl=gamma,
+                dust_qpah=qpah, dust_alpha_dl14=alpha))
+
+        grads = jax.grad(loss, argnums=(0, 1, 2, 3))(1.0, 0.05, 2.5, 2.0)
+        for i, name in enumerate(["umin", "gamma", "qpah", "alpha"]):
+            assert jnp.isfinite(grads[i]), f"NaN gradient for {name}"
+            # alpha gradient should be nonzero when gamma > 0
+            if name == "alpha":
+                assert abs(float(grads[i])) > 0, (
+                    "alpha gradient should be nonzero with gamma=0.05"
+                )
+
+    def test_dl14_param_spec_registered(self):
+        """dust_alpha_dl14 should be in the parameter spec."""
+        from diffsed.param_spec import _DUST_EMISSION_PARAMS
+        assert "dust_alpha_dl14" in _DUST_EMISSION_PARAMS
 
 
 # =====================================================================

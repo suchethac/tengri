@@ -1078,7 +1078,9 @@ def apply_dust_emission(
     Parameters
     ----------
     model_name : str
-        One of ``"modified_blackbody"``, ``"dale2014"``, ``"draine_li2007"``.
+        One of ``"modified_blackbody"``, ``"dale2014"``, ``"draine_li2007"``,
+        ``"draine_li2014"``, or any tabulated model registered via
+        ``register_dl07_tabulated()`` / ``register_dl14_tabulated()``.
     wavelength_aa : array, shape (n_wave,)
         Wavelength grid in Angstrom.
     L_absorbed : float

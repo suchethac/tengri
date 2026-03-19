@@ -212,7 +212,7 @@ _DUST_EMISSION_PARAMS = {
         Fixed(2.0),
     ),
     "dust_umin": (
-        "Draine & Li 2007 minimum radiation field (0.1-25)",
+        "Draine & Li minimum radiation field (0.1-25 for DL07, 0.1-50 for DL14)",
         lambda lo, hi: lo > 0,
         "must be > 0",
         Fixed(1.0),
@@ -224,10 +224,16 @@ _DUST_EMISSION_PARAMS = {
         Fixed(0.01),
     ),
     "dust_qpah": (
-        "Draine & Li 2007 PAH mass fraction (%, 0.47-4.58)",
+        "Draine & Li PAH mass fraction (%, 0.47-4.58 for DL07, 0.47-7.32 for DL14)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         Fixed(2.5),
+    ),
+    "dust_alpha_dl14": (
+        "DL14 power-law slope of radiation field distribution (1.0-3.0)",
+        lambda lo, hi: lo >= 1.0 and hi <= 3.0,
+        "must be in [1.0, 3.0]",
+        Fixed(2.0),
     ),
     "dust_eta_balance": (
         "Energy balance scaling: L_IR = eta * L_absorbed (1.0 = strict)",
