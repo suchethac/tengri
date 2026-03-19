@@ -703,7 +703,7 @@ for lbol in agn_lbol_true_vals:
 
     # Generate mock
     mock_test = model_fit.mock(test_params, snr=30.0,
-                                key=jax.random.PRNGKey(int(frac * 1000) + 7))
+                                key=jax.random.PRNGKey(int(lbol * 10) + 7))
 
     # Fit with EVI
     fitter_test = Fitter(model_fit, mock_test.flux_obs, mock_test.noise,
@@ -715,12 +715,12 @@ for lbol in agn_lbol_true_vals:
         n_iterations=8,
         n_samples=3,
         n_posterior_samples=500,
-        key=jax.random.PRNGKey(int(frac * 1000) + 13),
+        key=jax.random.PRNGKey(int(lbol * 10) + 13),
     )
     dt = time.time() - t0
 
     s = result.summary()["agn_log_lbol"]
-    recovery_results[frac] = {
+    recovery_results[lbol] = {
         "median": s["median"],
         "lo_68": s["lo_68"],
         "hi_68": s["hi_68"],
