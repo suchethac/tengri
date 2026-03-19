@@ -27,12 +27,12 @@ import jax.numpy as jnp
 # Physical constants (CGS)
 # ===================================================================
 
-_H_PLANCK = 6.62607015e-27      # Planck constant [erg s]
-_K_BOLTZ = 1.380649e-16         # Boltzmann constant [erg K^-1]
-_C_LIGHT = 2.99792458e10        # Speed of light [cm s^-1]
-_LSUN_ERG = 3.828e33            # Solar luminosity [erg s^-1]
-_ANGSTROM_CM = 1e-8             # Angstrom -> cm
-_MICRON_ANGSTROM = 1e4          # Micron -> Angstrom
+_H_PLANCK = 6.62607015e-27  # Planck constant [erg s]
+_K_BOLTZ = 1.380649e-16  # Boltzmann constant [erg K^-1]
+_C_LIGHT = 2.99792458e10  # Speed of light [cm s^-1]
+_LSUN_ERG = 3.828e33  # Solar luminosity [erg s^-1]
+_ANGSTROM_CM = 1e-8  # Angstrom -> cm
+_MICRON_ANGSTROM = 1e4  # Micron -> Angstrom
 
 # Silicate feature wavelength
 _LAMBDA_SI = 9.7 * _MICRON_ANGSTROM  # 9.7 um in Angstrom
@@ -41,6 +41,7 @@ _LAMBDA_SI = 9.7 * _MICRON_ANGSTROM  # 9.7 um in Angstrom
 # ===================================================================
 # Planck function (numerically stable)
 # ===================================================================
+
 
 def _planck_lnu(
     nu: jnp.ndarray,
@@ -75,6 +76,7 @@ def _wavelength_to_nu(wavelength_angstrom: jnp.ndarray) -> jnp.ndarray:
 # ===================================================================
 # Model 1: Simple hot blackbody torus
 # ===================================================================
+
 
 def simple_torus(
     wavelength: jnp.ndarray,
@@ -131,10 +133,8 @@ def simple_torus(
     shape = b_nu * opacity
 
     # Normalize to L_bol * f_torus
-    nu_sorted = jnp.sort(nu)
     idx_sort = jnp.argsort(nu)
-    shape_sorted = shape[idx_sort]
-    integral = jnp.trapezoid(shape_sorted, nu_sorted)
+    integral = jnp.trapezoid(shape[idx_sort], nu[idx_sort])
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
     l_nu_erg = l_bol_erg * agn_torus_frac * shape / integral_safe
@@ -144,6 +144,7 @@ def simple_torus(
 # ===================================================================
 # Model 2: Two-temperature torus (SKIRTOR-inspired)
 # ===================================================================
+
 
 def two_temperature_torus(
     wavelength: jnp.ndarray,
@@ -207,10 +208,8 @@ def two_temperature_torus(
     shape = (agn_frac_hot * b_hot + (1.0 - agn_frac_hot) * b_warm) * opacity
 
     # Normalize
-    nu_sorted = jnp.sort(nu)
     idx_sort = jnp.argsort(nu)
-    shape_sorted = shape[idx_sort]
-    integral = jnp.trapezoid(shape_sorted, nu_sorted)
+    integral = jnp.trapezoid(shape[idx_sort], nu[idx_sort])
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
     l_nu_erg = l_bol_erg * agn_torus_frac * shape / integral_safe

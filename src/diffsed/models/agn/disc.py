@@ -25,21 +25,22 @@ import jax.numpy as jnp
 # Physical constants (CGS)
 # ===================================================================
 
-_H_PLANCK = 6.62607015e-27      # Planck constant [erg s]
-_K_BOLTZ = 1.380649e-16         # Boltzmann constant [erg K^-1]
-_C_LIGHT = 2.99792458e10        # Speed of light [cm s^-1]
-_SIGMA_SB = 5.670374419e-5      # Stefan-Boltzmann [erg cm^-2 s^-1 K^-4]
-_LSUN_ERG = 3.828e33            # Solar luminosity [erg s^-1]
-_MSUN_G = 1.989e33              # Solar mass [g]
-_G_GRAV = 6.674e-8              # Gravitational constant [cm^3 g^-1 s^-2]
-_SIGMA_T = 6.6524e-25           # Thomson cross section [cm^2]
-_M_PROTON = 1.6726e-24          # Proton mass [g]
-_ANGSTROM_CM = 1e-8             # Angstrom -> cm
+_H_PLANCK = 6.62607015e-27  # Planck constant [erg s]
+_K_BOLTZ = 1.380649e-16  # Boltzmann constant [erg K^-1]
+_C_LIGHT = 2.99792458e10  # Speed of light [cm s^-1]
+_SIGMA_SB = 5.670374419e-5  # Stefan-Boltzmann [erg cm^-2 s^-1 K^-4]
+_LSUN_ERG = 3.828e33  # Solar luminosity [erg s^-1]
+_MSUN_G = 1.989e33  # Solar mass [g]
+_G_GRAV = 6.674e-8  # Gravitational constant [cm^3 g^-1 s^-2]
+_SIGMA_T = 6.6524e-25  # Thomson cross section [cm^2]
+_M_PROTON = 1.6726e-24  # Proton mass [g]
+_ANGSTROM_CM = 1e-8  # Angstrom -> cm
 
 
 # ===================================================================
 # Planck function (numerically stable)
 # ===================================================================
+
 
 def _planck_lnu(
     nu: jnp.ndarray,
@@ -79,6 +80,7 @@ def _wavelength_to_nu(wavelength_angstrom: jnp.ndarray) -> jnp.ndarray:
 # ===================================================================
 # Model 1: Simple power-law disc + UV cutoff
 # ===================================================================
+
 
 def powerlaw_disc(
     wavelength: jnp.ndarray,
@@ -124,12 +126,9 @@ def powerlaw_disc(
     shape = nu**agn_alpha * jnp.exp(-x_clip)
 
     # Normalize: integrate shape * dnu over the grid via trapezoid
-    # Sort by increasing nu for integration
-    nu_sorted = jnp.sort(nu)
-    shape_sorted = nu_sorted**agn_alpha * jnp.exp(
-        -jnp.clip(_H_PLANCK * nu_sorted / (_K_BOLTZ * jnp.maximum(agn_T_max, 1.0)), 0.0, 500.0)
-    )
-    integral = jnp.trapezoid(shape_sorted, nu_sorted)
+    # Sort by increasing nu for integration (reuse shape via indices)
+    sort_idx = jnp.argsort(nu)
+    integral = jnp.trapezoid(shape[sort_idx], nu[sort_idx])
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
     l_nu_erg = l_bol_erg * agn_frac * shape / integral_safe
@@ -139,6 +138,7 @@ def powerlaw_disc(
 # ===================================================================
 # Model 2: Multi-color disc (Shakura-Sunyaev thin disc)
 # ===================================================================
+
 
 def _isco_radius(a_spin: float) -> float:
     """Innermost stable circular orbit in units of R_g = GM/c^2.
@@ -157,9 +157,7 @@ def _isco_radius(a_spin: float) -> float:
     """
     # Clamp spin to physical range
     a = jnp.clip(a_spin, 0.0, 0.998)
-    z1 = 1.0 + (1.0 - a**2) ** (1.0 / 3.0) * (
-        (1.0 + a) ** (1.0 / 3.0) + (1.0 - a) ** (1.0 / 3.0)
-    )
+    z1 = 1.0 + (1.0 - a**2) ** (1.0 / 3.0) * ((1.0 + a) ** (1.0 / 3.0) + (1.0 - a) ** (1.0 / 3.0))
     z2 = jnp.sqrt(3.0 * a**2 + z1**2)
     return 3.0 + z2 - jnp.sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2))
 
@@ -260,8 +258,7 @@ def multicolor_disc(
 
     # Inner temperature: T_in = (3 * G * M * Mdot / (8*pi*sigma_SB * r_in^3))^(1/4)
     t_in = (
-        3.0 * _G_GRAV * 10.0**agn_log_mbh * _MSUN_G * mdot
-        / (8.0 * jnp.pi * _SIGMA_SB * r_in**3)
+        3.0 * _G_GRAV * 10.0**agn_log_mbh * _MSUN_G * mdot / (8.0 * jnp.pi * _SIGMA_SB * r_in**3)
     ) ** 0.25
 
     # Radial grid (logarithmic spacing)
