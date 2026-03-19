@@ -267,3 +267,49 @@ class TestBLRNLRCrossval:
 
         ratio = np.max(blr_hi) / max(np.max(blr_lo), 1e-50)
         np.testing.assert_allclose(ratio, 10.0, rtol=0.5)
+
+
+# ===================================================================
+# 7. Filters: effective wavelengths vs FSPS
+# ===================================================================
+
+_FSPS_FILTER_LAMBDAEFF = {
+    "sdss_u": 3556.5,
+    "sdss_g": 4702.5,
+    "sdss_r": 6175.6,
+    "sdss_i": 7489.9,
+    "sdss_z": 8946.8,
+    "2mass_j": 12387.7,
+    "2mass_h": 16488.9,
+    "2mass_ks": 21635.6,
+}
+
+
+class TestFiltersCrossval:
+    """Compare filter effective wavelengths against FSPS reference values."""
+
+    @pytest.mark.parametrize(
+        "filt_name,lambda_eff",
+        list(_FSPS_FILTER_LAMBDAEFF.items()),
+    )
+    def test_effective_wavelength(self, filt_name, lambda_eff):
+        """Filter effective wavelength should match FSPS to <2%."""
+        from diffsed.models.observation.filters import load_filter_set
+
+        try:
+            filter_waves, filter_trans, _filter_curves = load_filter_set([filt_name])
+        except (FileNotFoundError, ValueError):
+            pytest.skip(f"Filter {filt_name} not available")
+
+        wave = np.asarray(filter_waves[0])
+        trans = np.asarray(filter_trans[0])
+
+        # Effective wavelength: lambda_eff = integral(T*lambda*dlambda) / integral(T*dlambda)
+        lam_eff = np.trapezoid(trans * wave, wave) / np.trapezoid(trans, wave)
+
+        np.testing.assert_allclose(
+            lam_eff,
+            lambda_eff,
+            rtol=0.02,
+            err_msg=f"{filt_name}: lambda_eff={lam_eff:.1f}, FSPS={lambda_eff:.1f}",
+        )
