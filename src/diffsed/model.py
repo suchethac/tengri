@@ -1095,13 +1095,31 @@ class Model:
         """
         p = self._get_internal_params(params)
 
+        # SFH: parametric (from params) or tabulated (from sfh_t_gyr + sfh_sfr)
         if _sfr is not None:
             sfr = _sfr
+        elif "sfh_t_gyr" in params and "sfh_sfr" in params:
+            # Tabulated SFH from simulation: convert cosmic time → lookback → SSP ages
+            t_cosmic_gyr = jnp.asarray(params["sfh_t_gyr"])
+            sfr_table = jnp.asarray(params["sfh_sfr"])
+            z = p.get("redshift", 0.0)
+            t_obs_gyr = self._t_universe_gyr(z) if hasattr(self, '_t_universe_gyr') else 13.7
+            t_lookback_yr = jnp.maximum((t_obs_gyr - t_cosmic_gyr) * 1e9, 1.0)
+            log_t_lookback = jnp.log10(t_lookback_yr)
+            # Interpolate SFR onto SSP age grid (both in log-age space)
+            sfr_on_ssp = jnp.interp(
+                self.ssp_log_ages_yr, log_t_lookback[::-1], sfr_table[::-1],
+            )
+            sfr = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid,
+                              jnp.interp(self.log_age_grid, log_t_lookback[::-1], sfr_table[::-1]))
         else:
             sfr = self._compute_sfr(p)
 
         if _weights is not None:
             weights = _weights
+        elif "sfh_t_gyr" in params:
+            # Weights already from tabulated SFH interpolation above
+            weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
         else:
             sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
             weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
@@ -1110,7 +1128,26 @@ class Model:
         alpha_fe = p.get("alpha_fe", 0.0)
 
         # Metallicity interpolation
-        if self._evolving_metallicity:
+        # Priority: met_history (array) > evolving_metallicity > single Z
+        if "met_history" in params:
+            # Tabulated metallicity history Z(t) from simulation
+            # Expects array of log10(Z/Zsun) at same time grid as sfh_t_gyr
+            met_table = jnp.asarray(params["met_history"])
+            t_cosmic_gyr = jnp.asarray(params.get("sfh_t_gyr", jnp.linspace(0.1, 13.7, len(met_table))))
+            z_val = p.get("redshift", 0.0)
+            t_obs_gyr = self._t_universe_gyr(z_val) if hasattr(self, '_t_universe_gyr') else 13.7
+            t_lookback_yr = jnp.maximum((t_obs_gyr - t_cosmic_gyr) * 1e9, 1.0)
+            log_t_lookback = jnp.log10(t_lookback_yr)
+            # Interpolate Z(t) onto SSP age grid
+            log_z_on_ssp = jnp.interp(
+                self.ssp_log_ages_yr, log_t_lookback[::-1], met_table[::-1],
+            )
+            log_z_abs = log_z_on_ssp + (-1.8477)  # solar offset
+            log_z_abs = effective_metallicity(log_z_abs, alpha_fe)
+            ssp_flux_at_z = interpolate_metallicity_evolving(
+                self.ssp_data.ssp_flux, self.ssp_data.ssp_lgmet, log_z_abs,
+            )
+        elif self._evolving_metallicity:
             z = p.get("redshift", 0.0)
             t_universe_gyr = self._t_universe_gyr(z)
             log_z_per_age = compute_log_z_evolving(

@@ -64,6 +64,13 @@ from diffsed.noise import (
 )
 from diffsed.param_spec import ParamSpec
 from diffsed.posterior import Posterior
+from diffsed.prediction import (
+    DerivedQuantities,
+    EmissionLines,
+    Prediction,
+    SEDQuantities,
+    SFHQuantities,
+)
 from diffsed.raytrace_jax import sample_raytrace
 from diffsed.vi_config import VIConfig
 
@@ -73,6 +80,8 @@ __all__ = [
     # Registry
     "FIELD_MODEL_REGISTRY",
     "SFH_REGISTRY",
+    "DerivedQuantities",
+    "EmissionLines",
     "Fitter",
     "Fixed",
     # Low-level
@@ -86,12 +95,14 @@ __all__ = [
     "ModelConfig",
     "ParamSpec",
     "Posterior",
+    "Prediction",
+    "SEDQuantities",
+    "SFHQuantities",
     "SSPData",
     "StudentT",
     "Uniform",
     "VIConfig",
     "charlot_fall",
-    "two_component_dust",
     "compute_effective_noise",
     "compute_field_gp",
     "compute_sqrt_power_drw",
@@ -121,6 +132,7 @@ __all__ = [
     "snorm",
     "triweight_burst",
     "tsnorm",
+    "two_component_dust",
 ]
 
 # Plotting utilities
