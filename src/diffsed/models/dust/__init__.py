@@ -9,7 +9,7 @@ functions for the fast precomputed path and existing tests.
 Emission
 --------
 ``emission.py`` — IR re-emission models (modified blackbody, Dale 2014,
-Draine & Li 2007) with energy-balance normalization.
+Draine & Li 2007, Draine & Li 2014 update) with energy-balance normalization.
 """
 
 from diffsed.models.dust.attenuation import (
@@ -27,7 +27,10 @@ from diffsed.models.dust.emission import (
     cmb_corrected_temperature,
     compute_absorbed_luminosity,
     compute_absorbed_luminosity_from_tau,
+    create_dl14_from_grid,
     get_emission_model,
+    load_dl14_templates,
     planck_bnu,
+    register_dl14_tabulated,
     register_emission_model,
 )

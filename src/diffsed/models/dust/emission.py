@@ -10,6 +10,7 @@ Available Emission Models
 - **modified_blackbody**: Optically-thin modified blackbody (2-3 params)
 - **dale2014**: Dale et al. (2014) 1-parameter IR template family
 - **draine_li2007**: Draine & Li (2007) 3-parameter model (analytic approx.)
+- **draine_li2014**: Draine & Li (2014 update) 4-parameter model (analytic approx.)
 
 Energy Balance
 --------------
@@ -25,6 +26,8 @@ References
 ----------
 - Dale et al. 2014, ApJ, 784, 83
 - Draine & Li 2007, ApJ, 657, 810
+- Draine & Li 2014 update (CIGALE implementation, Boquien+2019)
+- Aniano et al. 2012, ApJ, 756, 138
 - da Cunha et al. 2013, ApJ, 766, 13
 - Hildebrand 1983, QJRAS, 24, 267
 """
@@ -750,6 +753,295 @@ def load_draine_li_templates(filepath: str) -> dict:
             "single_u": jnp.array(f["single_u"][:]),
             "powerlaw": jnp.array(f["powerlaw"][:]),
         }
+
+
+# ===================================================================
+# Model 4: Draine & Li 2014 (4 parameters) — analytic approximation
+# ===================================================================
+
+
+def _pdr_temperature_dl14(U_min: float, U_max: float = 1.0e7) -> float:
+    """Effective temperature for the PDR component (DL14).
+
+    Like DL07 but with U_max = 10^7 instead of 10^6.
+    """
+    U_eff = jnp.sqrt(U_min * U_max)
+    return 18.0 * U_eff ** (1.0 / 6.0)
+
+
+def _alpha_warm_fraction_correction(alpha: float) -> float:
+    """Correction to the warm/PDR fraction based on the alpha slope.
+
+    In DL07, alpha is fixed at 2.0. In DL14, alpha controls how much
+    dust mass is exposed to high-U radiation fields:
+    - Low alpha (steep): more dust at high U -> warmer emission
+    - High alpha (shallow): less dust at high U -> cooler emission
+
+    The warm fraction scales roughly as 1/(alpha - 1) for the integral
+    of U^{-alpha} from U_min to U_max, normalized relative to alpha=2.
+    """
+    # Relative to alpha=2.0 (DL07 default), the luminosity-weighted
+    # warm fraction scales approximately as (alpha-1)^{-1} / (2-1)^{-1}
+    # = 1/(alpha-1).  Clip to avoid divergence near alpha=1.
+    alpha_safe = jnp.clip(alpha, 1.01, 5.0)
+    return 1.0 / (alpha_safe - 1.0)
+
+
+@register_emission_model("draine_li2014")
+def draine_li2014(
+    wavelength_aa: jnp.ndarray,
+    L_absorbed: float,
+    dust_umin: float = 1.0,
+    dust_gamma_dl: float = 0.01,
+    dust_qpah: float = 2.5,
+    dust_alpha_dl14: float = 2.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Draine & Li (2014 update) dust emission model (analytic approx.).
+
+    Extends the DL07 analytic approximation with:
+    - Variable alpha (power-law slope of radiation field distribution)
+    - Extended q_PAH range (0.47-7.32%)
+    - Extended U_min range (0.1-50)
+    - U_max = 10^7 (was 10^6 in DL07)
+
+    The model:
+    - **(1 - gamma)** of the dust mass is heated by U = U_min only
+      (cool modified-blackbody).
+    - **gamma** of the dust mass sits in PDR environments with
+      dM/dU ~ U^{-alpha} from U_min to U_max = 10^7.
+    - **q_PAH** controls mid-IR PAH emission features.
+    - **alpha** controls the power-law slope (steeper = more warm dust).
+
+    Parameters
+    ----------
+    wavelength_aa : array, shape (n_wave,)
+        Wavelength grid in Angstrom (sorted ascending).
+    L_absorbed : float
+        Total absorbed luminosity in Lsun.
+    dust_umin : float
+        Minimum radiation field intensity (Mathis ISRF units).
+        Typical range: 0.1--50.
+    dust_gamma_dl : float
+        Fraction of dust mass in PDR regions.
+        Typical range: 0.0--1.0.
+    dust_qpah : float
+        PAH mass fraction in percent.
+        Typical range: 0.47--7.32 %.
+    dust_alpha_dl14 : float
+        Power-law slope of the radiation field distribution.
+        Range: 1.0--3.0. Default 2.0 (recovers DL07 behaviour).
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Dust emission L_nu in Lsun/Hz.
+    """
+    wavelength_cm = wavelength_aa * _AA_TO_CM
+    nu = _C_CGS / wavelength_cm
+    nu_ascending = nu[::-1]
+
+    beta_ir = 2.0  # Grain emissivity index
+    nu_ref = _C_CGS / (250.0e-4)
+    emissivity = (nu / nu_ref) ** beta_ir
+
+    # --- Component 1: Diffuse ISM (FIR continuum) ---
+    T_diff = _draine_li_umin_to_temperature(dust_umin)
+    shape_diff = emissivity * planck_bnu(wavelength_aa, T_diff)
+
+    # --- Component 2: PDR warm continuum ---
+    # Effective temperature depends on alpha: lower alpha means the
+    # luminosity-weighted <U> is higher, so use a scaled T_pdr.
+    T_pdr_base = _pdr_temperature_dl14(dust_umin)
+    # Modulate: for alpha < 2 dust is warmer; for alpha > 2 it is cooler.
+    alpha_corr = _alpha_warm_fraction_correction(dust_alpha_dl14)
+    # T scales as U_eff^(1/6), and U_eff ~ alpha_corr, so:
+    T_pdr = T_pdr_base * alpha_corr ** (1.0 / 6.0)
+    shape_pdr = emissivity * planck_bnu(wavelength_aa, T_pdr)
+
+    # --- Component 3: PAH mid-IR feature complex ---
+    lambda_pah = 7.7e4  # 7.7 um in Angstrom
+    sigma_pah = 3.0e4  # ~3 um width (blends 6.2-12.7 um)
+    shape_pah = jnp.exp(-0.5 * ((wavelength_aa - lambda_pah) / sigma_pah) ** 2)
+
+    # --- Luminosity fractions ---
+    f_pah = (dust_qpah / 3.5) * 0.35
+    f_pdr = dust_gamma_dl
+    f_diff = 1.0 - f_pah - f_pdr
+
+    def _normalize_lnu(s):
+        """Normalize L_nu shape to integrate to 1 over frequency."""
+        s_asc = s[::-1]
+        integral = jnp.trapezoid(s_asc, nu_ascending)
+        return jnp.where(integral > 0.0, s / integral, s)
+
+    shape_pah_lnu = shape_pah * (wavelength_cm**2) / _C_CGS
+
+    l_nu = (
+        f_diff * _normalize_lnu(shape_diff)
+        + f_pdr * _normalize_lnu(shape_pdr)
+        + f_pah * _normalize_lnu(shape_pah_lnu)
+    )
+
+    return L_absorbed * l_nu
+
+
+# ===================================================================
+# Template-based DL14: create from grid file
+# ===================================================================
+
+
+def load_dl14_templates(filepath: str) -> dict:
+    """Load DL14 template grid from HDF5.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to ``dl14_templates.h5`` (from ``scripts/convert_dl14_templates.py``).
+
+    Returns
+    -------
+    dict with keys:
+        wavelength, umin_grid, qpah_grid, alpha_grid, single_u, powerlaw.
+        single_u has shape (n_qpah, n_umin, n_wave).
+        powerlaw has shape (n_qpah, n_umin, n_alpha, n_wave).
+    """
+    import h5py as _h5py
+
+    with _h5py.File(filepath, "r") as f:
+        return {
+            "wavelength": jnp.array(f["wavelength"][:]),
+            "umin_grid": jnp.array(f["umin_grid"][:]),
+            "qpah_grid": jnp.array(f["qpah_grid"][:]),
+            "alpha_grid": jnp.array(f["alpha_grid"][:]),
+            "single_u": jnp.array(f["single_u"][:]),
+            "powerlaw": jnp.array(f["powerlaw"][:]),
+        }
+
+
+def create_dl14_from_grid(grid_path: str) -> Callable:
+    """Create a DL14 emission model function backed by tabulated templates.
+
+    Loads the HDF5 grid once and returns a function matching the emission
+    model registry interface. The key difference from DL07: the powerlaw
+    template now depends on alpha too, requiring trilinear interpolation
+    in (q_PAH, U_min, alpha) space instead of bilinear.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``dl14_templates.h5`` (from ``scripts/convert_dl14_templates.py``).
+
+    Returns
+    -------
+    Callable
+        Model function with signature
+        ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
+
+    Example
+    -------
+    >>> dl14 = create_dl14_from_grid("data/dl14_templates.h5")
+    >>> DUST_EMISSION_MODELS["dl14_tabulated"] = dl14
+    >>> sed = dl14(wav, L_abs, dust_umin=1.0, dust_gamma_dl=0.01,
+    ...           dust_qpah=2.5, dust_alpha_dl14=2.0)
+    """
+    templates = load_dl14_templates(grid_path)
+
+    single_u = templates["single_u"]      # (n_qpah, n_umin, n_wave)
+    powerlaw = templates["powerlaw"]      # (n_qpah, n_umin, n_alpha, n_wave)
+    tmpl_wave = templates["wavelength"]
+    umin_grid = templates["umin_grid"]
+    qpah_grid = templates["qpah_grid"]
+    alpha_grid = templates["alpha_grid"]
+
+    def dl14_tabulated(
+        wavelength_aa: jnp.ndarray,
+        L_absorbed: float,
+        dust_umin: float = 1.0,
+        dust_gamma_dl: float = 0.01,
+        dust_qpah: float = 2.5,
+        dust_alpha_dl14: float = 2.0,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        """DL14 emission from tabulated templates.
+
+        j_nu = (1-gamma) * single_U(q_PAH, U_min)
+             + gamma * powerlaw(q_PAH, U_min, alpha)
+
+        Normalized to L_absorbed via energy balance.
+        """
+        # Clip parameters to grid bounds
+        dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
+        dust_qpah_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
+        dust_alpha_c = jnp.clip(dust_alpha_dl14, alpha_grid[0], alpha_grid[-1])
+
+        # Interpolation indices and fractions
+        n_u = len(umin_grid)
+        n_q = len(qpah_grid)
+        n_a = len(alpha_grid)
+
+        i_u = jnp.clip(jnp.searchsorted(umin_grid, dust_umin_c) - 1, 0, n_u - 2)
+        i_q = jnp.clip(jnp.searchsorted(qpah_grid, dust_qpah_c) - 1, 0, n_q - 2)
+        i_a = jnp.clip(jnp.searchsorted(alpha_grid, dust_alpha_c) - 1, 0, n_a - 2)
+
+        fu = (dust_umin_c - umin_grid[i_u]) / (umin_grid[i_u + 1] - umin_grid[i_u])
+        fq = (dust_qpah_c - qpah_grid[i_q]) / (qpah_grid[i_q + 1] - qpah_grid[i_q])
+        fa = (dust_alpha_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
+
+        # Bilinear interpolation for single-U (q_PAH, U_min)
+        def _bilinear(grid):
+            return (
+                (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
+                + (1.0 - fq) * fu * grid[i_q, i_u + 1]
+                + fq * (1.0 - fu) * grid[i_q + 1, i_u]
+                + fq * fu * grid[i_q + 1, i_u + 1]
+            )
+
+        # Trilinear interpolation for powerlaw (q_PAH, U_min, alpha)
+        def _trilinear(grid):
+            # Interpolate at alpha[i_a] and alpha[i_a+1] via bilinear in (q, u)
+            def _bilinear_at_alpha(ia_idx):
+                return (
+                    (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u, ia_idx]
+                    + (1.0 - fq) * fu * grid[i_q, i_u + 1, ia_idx]
+                    + fq * (1.0 - fu) * grid[i_q + 1, i_u, ia_idx]
+                    + fq * fu * grid[i_q + 1, i_u + 1, ia_idx]
+                )
+
+            lo = _bilinear_at_alpha(i_a)
+            hi = _bilinear_at_alpha(i_a + 1)
+            return (1.0 - fa) * lo + fa * hi
+
+        # Mix single-U and power-law components via gamma
+        template = (
+            (1.0 - dust_gamma_dl) * _bilinear(single_u)
+            + dust_gamma_dl * _trilinear(powerlaw)
+        )
+
+        # Interpolate template onto target wavelength grid
+        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+
+        return L_absorbed * sed
+
+    return dl14_tabulated
+
+
+def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> None:
+    """Load and register the tabulated DL14 model in the emission registry.
+
+    After calling this, the model is available via
+    ``get_emission_model("dl14_tabulated")`` and can be used as the
+    ``dust_emission_model`` in ``Model()``.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``dl14_templates.h5``.
+    name : str
+        Registry name. Default ``"dl14_tabulated"``.
+    """
+    model_fn = create_dl14_from_grid(grid_path)
+    DUST_EMISSION_MODELS[name] = model_fn
 
 
 # ===================================================================
