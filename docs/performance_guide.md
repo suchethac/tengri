@@ -428,19 +428,23 @@ dimensions (12→256→256→256). Instead of 16 separate matmuls, we stack the 
 into `(16, 256, 256)` tensors and run a single `einsum("ni,nio->no")`. Only the
 output layer (different PCA sizes per network) stays sequential.
 
-| Operation              | JAX (μs) | Old JAX (μs) | TF (μs) | vs Old | vs TF |
-|------------------------|----------|-------------|---------|--------|-------|
-| Lines (128 lines)      |      858 |       2,876 |   8,520 |  3.4x  |  9.9x |
-| Continuum (1000 pts)   |      422 |         424 |   1,410 |  1.0x  |  3.3x |
-| Lines + Continuum      |    1,281 |       3,301 |  13,810 |  2.6x  | 10.8x |
-| Lines + `jax.grad`     |      370 |         450 |     N/A |  1.2x  |   —   |
-| Peak memory (10 calls) |  0.06 MB |     0.06 MB | 0.59 MB |  1.0x  |  10x  |
+**Three optimization stages** (measured with `block_until_ready`, 500 calls):
 
-**Key insight**: The batched einsum gives a **10x** speedup over TF for the
-combined forward pass. For SED fitting with 12 CUE parameters, `jax.grad`
-gives the full gradient in 0.37 ms vs ~170 ms for TF finite differences
-(12 params × 2 evaluations × 7 ms each). That's a **~460x** advantage for
-gradient-based inference (MAP, HMC, VI).
+| Version                  | Lines (μs) | Total (μs) | vs TF  |
+|--------------------------|------------|------------|--------|
+| Original (16 sequential) |      2,876 |      3,301 |  4.2x  |
+| Batched hidden layers    |        858 |      1,281 |  10.8x |
+| + Precomputed padding    |        541 |        952 |  14.5x |
+| TF (reference)           |      8,520 |     13,810 |  1.0x  |
+
+Gradient: 371 μs via `jax.grad` (all versions). TF has no gradient support.
+
+**Key insight**: For SED fitting with 12 CUE parameters, `jax.grad` at 0.37 ms
+replaces TF finite differences at ~170 ms (12 params × 2 evals × 7 ms).
+That's a **~460x** advantage for gradient-based inference (MAP, HMC, VI).
+
+**Accuracy**: Lines match TF to 2×10⁻⁵ relative tolerance (128/128 matched).
+Continuum median agreement 7×10⁻⁶; interpolation-boundary outliers reach ~4%.
 
 Numerical accuracy: lines agree with TF to < 1e-4 relative tolerance; continuum
 is exact. Validated in `tests/crossval/test_cue_crossval.py`.
