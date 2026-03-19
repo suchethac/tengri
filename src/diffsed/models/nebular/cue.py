@@ -366,6 +366,10 @@ def predict_all_lines(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Predict all emission line luminosities.
 
+    Uses batched matrix multiplications across all 16 line sub-networks
+    for the shared hidden layers (same architecture: 12→256→256→256),
+    then individual output layers + PCA inverse transforms.
+
     Parameters
     ----------
     nn_params : array, shape (12,)
@@ -384,25 +388,52 @@ def predict_all_lines(
     luminosities : array, shape (n_lines,)
         Line luminosities in Lsun.
     """
-    # Predict log10 luminosity from each sub-network, concatenate
-    all_log_lum = []
-    for net in weights.line_nets:
-        log_lum = _predict_lines_single_net(nn_params, net)
-        all_log_lum.append(log_lum)
+    # --- Batched hidden layers (all 16 nets have same architecture) ---
+    # Stack weights: (16, in, out) for each hidden layer
+    # All nets share: 4 layers, 256 hidden, same input normalization structure
+    # But each has its own param_shift/scale, so normalize individually first
 
-    # Concatenated in sub-network order (matches nn_line_wav)
+    # Step 1: Normalize input for each network (different shifts/scales)
+    # Stack shifts and scales: (16, 12)
+    param_shifts = jnp.stack([net.param_shift for net in weights.line_nets])
+    param_scales = jnp.stack([net.param_scale for net in weights.line_nets])
+    x = (nn_params[None, :] - param_shifts) / param_scales  # (16, 12)
+
+    # Step 2: Batched hidden layers (3 hidden layers with activation)
+    n_hidden = weights.line_nets[0].n_layers - 1  # typically 3
+    for layer_idx in range(n_hidden):
+        # Stack weights and biases: (16, in_dim, out_dim) and (16, out_dim)
+        W_stack = jnp.stack([net.W[layer_idx] for net in weights.line_nets])
+        b_stack = jnp.stack([net.b[layer_idx] for net in weights.line_nets])
+        alpha_stack = jnp.stack([net.alphas[layer_idx] for net in weights.line_nets])
+        beta_stack = jnp.stack([net.betas[layer_idx] for net in weights.line_nets])
+
+        # Batched matmul: (16, 1, in) @ (16, in, out) → (16, 1, out) → (16, out)
+        x = jnp.einsum("ni,nio->no", x, W_stack) + b_stack
+        x = x * (beta_stack + (1.0 - beta_stack) * jax.nn.sigmoid(alpha_stack * x))
+
+    # x is now (16, 256) — the hidden representation for all 16 networks
+
+    # Step 3: Individual output layers + PCA inverse (different output dims)
+    all_log_lum = []
+    for i, net in enumerate(weights.line_nets):
+        # Output layer: (256,) @ (256, n_pcas) + (n_pcas,)
+        pca_coeffs = x[i] @ net.W[n_hidden] + net.b[n_hidden]
+        pca_coeffs = pca_coeffs * net.pca_scale + net.pca_shift
+
+        # PCA inverse: (n_pcas,) @ (n_pcas, n_lines) + (n_lines,)
+        log_spec = pca_coeffs @ net.pca_components + net.pca_mean
+        log_spec = log_spec * net.log_spec_scale + net.log_spec_shift
+        all_log_lum.append(log_spec)
+
     log_lum_concat = jnp.concatenate(all_log_lum, axis=-1)
 
-    # Sort by wavelength (nn_line_wav is the concatenated unsorted wavelengths)
+    # Sort by wavelength
     sort_idx = jnp.argsort(weights.nn_line_wav)
     log_lum_sorted = log_lum_concat[sort_idx]
     wav_sorted = weights.nn_line_wav[sort_idx]
 
-    # Convert from log10(Lsun/Q_H) to Lsun:
-    # L = 10^(log_lum - gas_logq + gas_logqion - log10(Lsun_cgs))
-    # Following Cue emulator.py predict_lines():
-    #   line_nn_spectra = 10**(line_nn_spectra - gas_logq + gas_logqion - log10(3.839E33))
-    # Clamp exponent to avoid inf/underflow in 10^x (gradient-safe)
+    # Convert from log10(Lsun/Q_H) to Lsun (gradient-safe)
     exponent = log_lum_sorted - gas_logq + gas_logqion - _LOG_LSUN
     exponent_safe = jnp.clip(exponent, -100.0, 100.0)
     luminosities = 10.0**exponent_safe
