@@ -589,9 +589,9 @@ ax.axvline(float(all_true["agn_log_lbol"]), color="#1a1a1a", ls="--",
            lw=2.0, label=f"Truth = {float(all_true['agn_frac']):.2f}")
 ax.axvline(np.median(agn_samples), color="#c03d3e", ls="-",
            lw=1.5, label=f"Median = {np.median(agn_samples):.3f}")
-ax.set_xlabel(r"$f_{\rm AGN}$")
+ax.set_xlabel(r"$\log\,L_{\rm bol,AGN}$ [erg/s]")
 ax.set_ylabel("Posterior density")
-ax.set_title(r"AGN fraction posterior")
+ax.set_title(r"AGN $\log L_{\rm bol}$ posterior")
 ax.legend(fontsize=9)
 
 # --- Panel 2: agn_frac vs dust_tau_diff (key degeneracy) ---
@@ -603,7 +603,7 @@ ax.axvline(float(all_true["agn_log_lbol"]), color="#1a1a1a", ls="--", lw=1.0)
 ax.axhline(float(all_true["dust_tau_diff"]), color="#1a1a1a", ls="--", lw=1.0)
 ax.scatter([float(all_true["agn_log_lbol"])], [float(all_true["dust_tau_diff"])],
            marker="*", s=150, color="#1a1a1a", zorder=10, label="Truth")
-ax.set_xlabel(r"$f_{\rm AGN}$")
+ax.set_xlabel(r"$\log\,L_{\rm bol,AGN}$ [erg/s]")
 ax.set_ylabel(r"$\tau_{\rm diff}$")
 ax.set_title(r"AGN$-$dust degeneracy")
 ax.legend(fontsize=9)
@@ -691,11 +691,14 @@ for lbol in agn_lbol_true_vals:
                           data_type="photometry")
 
     t0 = time.time()
+    # MAP warmup first for better EVI starting point
+    result_map_test = fitter_test.run("map", n_steps=300, verbose=False,
+                                       key=jax.random.PRNGKey(int(lbol * 10) + 7))
     result = fitter_test.run(
         "evi",
-        n_iterations=8,
-        n_samples=3,
-        n_posterior_samples=500,
+        n_iterations=15,
+        n_samples=4,
+        n_posterior_samples=2000,
         key=jax.random.PRNGKey(int(lbol * 10) + 13),
     )
     dt = time.time() - t0
@@ -721,30 +724,25 @@ lo_68 = np.array([recovery_results[f]["lo_68"] for f in agn_lbol_true_vals])
 hi_68 = np.array([recovery_results[f]["hi_68"] for f in agn_lbol_true_vals])
 
 # 1:1 line
-ax.plot([0, 0.35], [0, 0.35], "k--", lw=1.0, alpha=0.5, label="1:1")
+ax.plot([40, 45], [40, 45], "k--", lw=1.0, alpha=0.5, label="1:1")
 
 # Error bars: median +/- 68% CI
 err_lo = medians - lo_68
 err_hi = hi_68 - medians
 ax.errorbar(true_vals, medians, yerr=[err_lo, err_hi],
             fmt="o", ms=8, color="#8b6bba", capsize=5, capthick=1.5,
-            elinewidth=1.5, zorder=5, label="EVI recovery (68\\% CI)")
+            elinewidth=1.5, zorder=5, label=r"EVI recovery (68\% CI)")
 
-# Shade the "undetectable" region
-ax.axhspan(0, 0.02, alpha=0.08, color="0.5")
-ax.text(0.30, 0.01, "noise floor", fontsize=8, color="0.5", ha="right",
-        va="center", style="italic")
-
-ax.set_xlabel(r"True $f_{\rm AGN}$")
-ax.set_ylabel(r"Recovered $f_{\rm AGN}$")
-ax.set_title("AGN fraction recovery (GALEX + SDSS + WISE, SNR = 30)")
-ax.set_xlim(-0.02, 0.35)
-ax.set_ylim(-0.02, 0.45)
+ax.set_xlabel(r"True $\log\,L_{\rm bol,AGN}$ [erg/s]")
+ax.set_ylabel(r"Recovered $\log\,L_{\rm bol,AGN}$ [erg/s]")
+ax.set_title(r"AGN $\log L_{\rm bol}$ recovery (GALEX + SDSS + WISE, SNR = 30)")
+ax.set_xlim(40.5, 44.5)
+ax.set_ylim(40.5, 44.5)
 ax.set_aspect("equal")
 ax.legend(loc="upper left", fontsize=10)
 
 fig.tight_layout()
-savefig(fig, "agn_frac_recovery")
+savefig(fig, "agn_lbol_recovery")
 plt.show()
 
 # %% [markdown]
