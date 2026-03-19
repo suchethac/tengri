@@ -451,6 +451,56 @@ is exact. Validated in `tests/crossval/test_cue_crossval.py`.
 
 Run benchmarks: `python scripts/benchmark_cue.py --with-tf`
 
+### AGN Models: JAX vs Original Implementations
+
+All benchmarks on Apple M4 Pro, CPU, 500 calls, 5000 wavelength points.
+
+**QSOGen (Temple, Hewett & Banerji 2021):**
+
+| Operation         | JAX (μs) | Original (μs) | Ratio  |
+|-------------------|----------|---------------|--------|
+| Forward (default) |   10,142 |         1,351 |  0.13x |
+| Forward (EBV=0.1) |    9,026 |         1,528 |  0.17x |
+| `jax.grad`        |      474 |           N/A |   —    |
+
+The JAX version is **7.5x slower** on the forward pass because the emission
+line template involves many small Python-level sigmoid/Gaussian operations
+that don't fuse well in XLA. However, gradients (474 μs) are not available
+in the original at all — for gradient-based SED fitting, the JAX version
+enables fitting QSOGen parameters that were previously fixed.
+
+*Known issue:* diffsed QSOGen outputs L_nu (Lsun/Hz); the original outputs
+f_lambda (erg/s/cm²/Å). After unit conversion, UV/opt colors agree to
+within a factor ~1.6. The remaining difference is from emission line
+template implementation details.
+
+**SKIRTOR (Stalevski et al. 2012, 2016):**
+
+| Operation          | JAX (μs) | Notes                    |
+|--------------------|----------|--------------------------|
+| Forward (default)  |    3,222 | Analytic 3-component MBB |
+| Forward (Type 2)   |    4,547 | Edge-on, more computation|
+| `jax.grad` (vs τ)  |      165 | All 5 params differentiable |
+
+No original SKIRTOR Python code to compare (the original is SKIRT Monte
+Carlo radiative transfer, ~hours per model). Our analytic approximation
+runs in 3 ms — enabling real-time fitting of torus parameters.
+
+**All AGN models (2000 pts):**
+
+| Model                    | Forward (μs) | Notes                       |
+|--------------------------|-------------|------------------------------|
+| Power-law disc           |       1,582 | Simplest disc model          |
+| Multi-color disc (K&D)   |       4,853 | Shakura-Sunyaev thin disc    |
+| Simple torus             |       2,139 | Single-T modified blackbody  |
+| Two-temperature torus    |       2,549 | Hot + warm dust              |
+| Simple AGN (disc+torus)  |       4,851 | Combined power-law + torus   |
+| Standard AGN (K&D+2T)    |       7,507 | Full multi-color + 2T torus  |
+| Radio (SF+AGN)           |         149 | Power-law synchrotron        |
+| X-ray (XRB)              |         143 | HMXB + LMXB scaling          |
+
+Run full component benchmarks: `python scripts/benchmark_components.py`
+
 ### Dust IR Emission Models
 
 | Model                         | Time (ms) | Notes                          |
