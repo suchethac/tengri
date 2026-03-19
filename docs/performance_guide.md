@@ -470,9 +470,11 @@ in the original at all — for gradient-based SED fitting, the JAX version
 enables fitting QSOGen parameters that were previously fixed.
 
 *Known issue:* diffsed QSOGen outputs L_nu (Lsun/Hz); the original outputs
-f_lambda (erg/s/cm²/Å). After unit conversion, UV/opt colors agree to
-within a factor ~1.6. The remaining difference is from emission line
-template implementation details.
+f_lambda (erg/s/cm²/Å). After converting to f_nu, UV/opt continuum color
+(no emission lines) is 0.93 (diffsed) vs 0.78 (original) — a **19%
+difference** in the broken power-law shape, likely from sigmoid transition
+width or normalization details. Needs line-by-line calibration against
+the original `set_continuum()` in `qsosed.py`.
 
 **SKIRTOR (Stalevski et al. 2012, 2016):**
 
