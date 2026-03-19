@@ -411,6 +411,81 @@ batch_photometry = jax.vmap(model.predict_photometry)
 batch_flux = batch_photometry(batch_params)  # (n_galaxies, n_filters)
 ```
 
+## Component Benchmarks & Cross-Validation
+
+All benchmarks on Apple M4 Pro, CPU, JAX 0.9 (64-bit), 200 calls per measurement
+after JIT warmup. TF benchmarks use TensorFlow 2.16 (CPU, 32-bit) in a separate
+environment.
+
+### CUE Nebular Emulator: JAX vs TensorFlow
+
+The CUE emulator (Li et al. 2024, [arXiv:2405.04598](https://arxiv.org/abs/2405.04598))
+was re-implemented in pure JAX from the original TensorFlow code. Weights are loaded
+from a single `data/cue_weights.npz` file — zero TF dependency at runtime.
+
+| Operation              | JAX (ms) | TF (ms) | Speedup | Notes                       |
+|------------------------|----------|---------|---------|---------------------------- |
+| Lines (128 lines)      |     6.61 |    8.52 |  1.29x  | 16 Speculator sub-networks  |
+| Continuum (1000 pts)   |     1.66 |    1.41 |  0.85x  | 1 sub-network + PCA inverse |
+| Lines + Continuum      |     8.60 |   13.81 |  1.61x  | Combined forward pass       |
+| Lines + `jax.grad`     |     0.45 |     N/A |    —    | Automatic differentiation   |
+| Peak memory (10 calls) |  0.06 MB |  0.59 MB|   10x   | No TF graph overhead        |
+
+**Key insight**: The JAX gradient (0.45 ms) is the real win. For SED fitting with
+12 CUE parameters, `jax.grad` gives the full gradient in 0.45 ms vs ~170 ms for
+TF finite differences (12 params × 2 evaluations × 7 ms each). That's a **~380x**
+advantage for gradient-based inference (MAP, HMC, VI).
+
+Numerical accuracy: lines agree with TF to < 1e-4 relative tolerance; continuum
+is exact. Validated in `tests/crossval/test_cue_crossval.py`.
+
+### Dust IR Emission Models
+
+| Model                         | Time (ms) | Notes                          |
+|-------------------------------|-----------|--------------------------------|
+| Modified blackbody (T=30 K)   |     0.21  | 2 params, fastest              |
+| Dale+2014 (α=2.0)             |     0.30  | 1 param, analytic 2-component  |
+| DL07 analytic (U_min=1.0)     |     0.47  | 3 params, approximate PAH      |
+| DL07 tabulated (U_min=1.0)    |     2.37  | 3 params, full template interp |
+
+The analytic DL07 is 5x faster than tabulated but has inaccurate PAH/FIR balance
+(centroid 117–253 μm vs bagpipes' 33–42 μm). Use `"dl07_tabulated"` for production,
+analytic for exploratory work or when differentiability through the dust model matters
+more than absolute accuracy.
+
+### Mass-Remaining Fraction
+
+| Method                            | Time (ms) | Accuracy vs FSPS |
+|-----------------------------------|-----------|------------------|
+| Stored FSPS table (interpolated)  |     0.01  | 1–5%             |
+| Internal IMF computation (500 pts)|    15.70  | 1–5%             |
+| Behroozi+2013 fitting formula     |     0.001 | ~2% (Chabrier)   |
+
+The stored table is preferred when available (loaded from `ssp_mass_remaining` in the
+SSP HDF5 file). The internal computation serves as a fallback for non-FSPS SSP
+libraries or when the IMF differs from the pre-computed table.
+
+### Cross-Validation Summary
+
+106+ tests in `tests/crossval/` validate diffsed against bagpipes, python-fsps,
+and CUE TF. Run with:
+
+```bash
+pytest -m crossval                              # bagpipes only
+SPS_HOME=~/Projects/fsps pytest -m crossval     # + FSPS tests
+```
+
+| Component         | vs Code    | Agreement    |
+|-------------------|------------|--------------|
+| IGM (Inoue+2014)  | bagpipes   | exact > Ly-α |
+| Dust CF00          | FSPS       | < 1%         |
+| Mass-remaining     | FSPS       | 1–5%         |
+| Stellar mass (f_surv) | bagpipes | 2.3%      |
+| CUE lines          | TF         | < 0.01%      |
+| CUE continuum      | TF         | exact        |
+| Radio (FIR-radio)  | CIGALE     | < 3%         |
+| SED shape (normalized) | bagpipes | < 50% (BC03 vs FSPS) |
+
 ## References
 
 - Zacharegkas, Hearin & Benson (2025): "Bayesian Posteriors with Stellar
@@ -421,3 +496,11 @@ batch_flux = batch_photometry(batch_params)  # (n_galaxies, n_filters)
   Astronomy" — [arXiv:2508.03888](https://arxiv.org/abs/2508.03888)
 - Hearin et al. (2023): "DSPS: Differentiable Stellar Population Synthesis" —
   [arXiv:2112.06830](https://arxiv.org/abs/2112.06830)
+- Li et al. (2024): "Cue: A Fast Neural Photoionization Emulator" —
+  [arXiv:2405.04598](https://arxiv.org/abs/2405.04598)
+- Dale et al. (2014): "A Two-Parameter Model for the IR/Submm/Radio SEDs" —
+  [ApJ 784, 83](https://doi.org/10.1088/0004-637X/784/1/83)
+- Draine & Li (2007): "Infrared Emission from Interstellar Dust" —
+  [ApJ 657, 810](https://doi.org/10.1086/511055)
+- Carnall et al. (2018): "Inferring the Star Formation Histories of Massive
+  Quiescent Galaxies with BAGPIPES" — [arXiv:1712.04452](https://arxiv.org/abs/1712.04452)
