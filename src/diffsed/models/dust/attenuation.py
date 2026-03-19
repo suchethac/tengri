@@ -208,8 +208,19 @@ def cardelli(
     a_uv = 1.752 - 0.316 * x - 0.104 / ((x - 4.67)**2 + 0.341) + f_a
     b_uv = -3.090 + 1.825 * x + 1.206 / ((x - 4.62)**2 + 0.263) + f_b
 
-    a = jnp.where(x < 1.1, a_ir, jnp.where(x < 3.3, a_opt, a_uv))
-    b = jnp.where(x < 1.1, b_ir, jnp.where(x < 3.3, b_opt, b_uv))
+    # Far-UV: 8.0 <= x <= 10.0 (CCM89 Table 4)
+    y_fuv = jnp.clip(x, 8.0, 10.0) - 8.0
+    a_fuv = -1.073 - 0.628 * y_fuv + 0.137 * y_fuv**2 - 0.070 * y_fuv**3
+    b_fuv = 13.670 + 4.257 * y_fuv - 0.420 * y_fuv**2 + 0.374 * y_fuv**3
+
+    a = jnp.where(
+        x < 1.1, a_ir,
+        jnp.where(x < 3.3, a_opt, jnp.where(x < 8.0, a_uv, a_fuv)),
+    )
+    b = jnp.where(
+        x < 1.1, b_ir,
+        jnp.where(x < 3.3, b_opt, jnp.where(x < 8.0, b_uv, b_fuv)),
+    )
 
     return jnp.clip(a + b / dust_Rv, 0.0)
 
