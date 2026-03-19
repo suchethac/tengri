@@ -1,24 +1,92 @@
-"""QSOgen quasar SED model (Temple, Hewett & Banerji 2021).
+r"""QSOgen quasar SED model (Temple, Hewett & Banerji 2021).
 
-Empirical quasar SED generator producing rest-frame 912-100000 Angstrom
-spectra from seven physically-motivated components:
+Empirical quasar SED producing the characteristic "v-shaped" spectrum:
+blue power-law from the accretion disc falling toward the optical, then
+rising again in the IR from hot dust.  Four additive components in
+f_nu space::
 
-1. **Broken power-law continuum** with smooth sigmoid transitions.
-2. **Hot dust blackbody** emission at ~1240 K.
-3. **Emission lines** as analytic Gaussians with Baldwin effect.
-4. **Dust reddening** via SMC-like extinction.
+        Emission lines (Lya, CIV, MgII, Ha, Hb...)
+             |   |    |       |     |
+    f_nu  \     /\  /\   /\      /\    /\
+           \   /  \/  \ /  \    /  \  /  \     /  Hot dust BB
+            \ /       \/    \  /    \/    \   /   (T~1240K)
+             X  <-break->    \/           \ /
+            / \              power-law     X
+           /   \             continuum    / \
+          EUV    UV        Optical       NIR      MIR
+         <1200A  1200-3880A             1-2um    2-5um
 
-The model is parameterized by 7 free parameters that map to the
-physical quasar SED shape, making it suitable for photometric fitting
-of Type 1 AGN across UV to MIR wavelengths.
+Parameters
+----------
+=========== ======= =================================== ==========================================
+Parameter   Default Physical meaning                     Effect on SED
+=========== ======= =================================== ==========================================
+agn_plslp1  -0.349  Blue/UV slope (f_nu ~ nu^alpha)      Steeper -> more UV flux, bluer u-g
+agn_plslp2  +0.593  Red/optical slope                    Steeper -> redder optical continuum
+agn_plbrk   3880 A  Break wavelength                     Shifts the "valley" of the v-shape
+agn_tbb     1240 K  Hot dust temperature                 Higher T -> dust peak shifts bluer (Wien)
+agn_bbnorm  3.96    Dust BB / continuum at 2 um          Higher -> stronger MIR excess
+agn_emline  1.0     Emission line strength multiplier    Scales all line EWs
+agn_ebv     0.0     SMC-like dust reddening E(B-V)       Reddens UV, suppresses blue flux
+=========== ======= =================================== ==========================================
 
-All functions are pure JAX and JIT-compilable.
+Recommended Inference Strategy
+------------------------------
+When fitting broadband photometry of AGN/quasars:
+
+1. **Always free:** ``agn_log_lbol`` (or ``agn_frac``) -- the AGN
+   contribution strength.  This is the minimum viable AGN model.
+2. **Optionally free:** ``agn_ebv`` -- AGN reddening is the strongest
+   shape variation in real quasars and is degenerate with galaxy dust.
+3. **Optionally free:** ``agn_plslp1`` -- UV slope varies significantly
+   between quasars (alpha ~ -1.5 to +0.5).
+4. **Keep fixed:** ``agn_plslp2``, ``agn_plbrk``, ``agn_tbb``,
+   ``agn_bbnorm`` are well-constrained by the SDSS composite and add
+   more degeneracies than information unless you have MIR data.
+
+For a typical galaxy+AGN decomposition with UV-to-NIR photometry,
+start with 1--2 free AGN parameters and add more only if the data
+warrant it (chi-squared still poor).
+
+If WISE W1/W2 data are available, the hot dust BB becomes strongly
+constraining and ``agn_bbnorm`` could be freed.
+
+Diagnostic colours for AGN contamination:
+
+- **W1-W2 > 0.8** (Stern+12) -- hot dust makes W2 brighter than W1
+- **u-g bluer than expected** -- UV power-law excess
+- **NUV-r very blue** -- strong UV continuum + emission lines
+- **Rest 1-3 um inflection** -- stellar SED drops but AGN dust rises
+
+Baldwin Effect
+--------------
+Emission line EWs scale inversely with luminosity:
+
+    EW(L) = EW_ref * (L / L_ref)^{-0.2}
+
+Brighter quasars have weaker lines relative to continuum.  Physically,
+the more luminous the central engine, the more the continuum "drowns
+out" the line-emitting gas.
+
+Differences from the Original QSOgen
+-------------------------------------
+===================== ================================== ====================================
+Feature               Original (Python/numpy)             This JAX version
+===================== ================================== ====================================
+Power-law transitions Hard np.where                       Smooth sigmoid (differentiable)
+Emission lines        4 empirical template interpolation  18 analytic Gaussians (VdB+01)
+Baldwin effect slope  0.183                               0.2
+Host galaxy template  S0 SWIRE included                   Not included (handled by Model)
+IGM absorption        Becker+13 tau_eff                   Handled by diffsed IGM module
+Autodiff              No                                  Yes (JAX JIT-compatible)
+===================== ================================== ====================================
 
 References
 ----------
 - Temple, Hewett & Banerji 2021, MNRAS, 508, 737
 - Vanden Berk et al. 2001, AJ, 122, 549 (emission line EWs)
 - Gordon et al. 2003, ApJ, 594, 279 (SMC extinction)
+- Stern et al. 2012, ApJ, 753, 30 (W1-W2 AGN selection)
 """
 
 import jax

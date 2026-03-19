@@ -23,7 +23,6 @@ References
 - fit_4loglinear_ionparam() in cue/utils.py
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -116,7 +115,7 @@ def fit_ionizing_spectrum(
         # Q_H for this segment
         nu = _C_AA / seg_wave
         integrand = seg_flux / (_H_PLANCK * nu)
-        Q_seg = np.abs(np.trapz(integrand[::-1], x=nu[::-1]))
+        Q_seg = np.abs(np.trapezoid(integrand[::-1], x=nu[::-1]))
         log_Q = np.log10(max(Q_seg, 1e-99))
 
         def objective(params):
@@ -155,12 +154,14 @@ def fit_ionizing_spectrum(
 
     logLratios = np.diff(log_L)
 
-    # Total Q_H
+    # Total Q_H — integrate photon rate over frequency.
+    # wave is increasing → nu_all is decreasing.  Both integrand and
+    # x must share the same element ordering for np.trapz.
     ionizing_mask = wave <= HI_LIMIT
     nu_all = _C_AA / wave[ionizing_mask]
-    Q_total = np.abs(np.trapz(
+    Q_total = np.abs(np.trapezoid(
         (flux[ionizing_mask] * _LSUN) / (_H_PLANCK * nu_all),
-        x=nu_all[::-1],
+        x=nu_all,
     ))
     log_qion = np.log10(max(Q_total, 1e-99))
 
