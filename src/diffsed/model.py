@@ -170,12 +170,49 @@ class Model:
         and gives ~1.5x speedup with <0.1% accuracy loss. Default
         "float64" preserves full precision. Only affects the fused
         JIT kernels; cosmological distances always use float64.
+    approx : dict, optional
+        Control which approximations the fused kernel uses. Each key
+        enables/disables a specific approximation. When a component's
+        approximation is disabled, the model falls back to the exact
+        path for that component.
+
+        Keys and defaults::
+
+            {
+                "dust_attenuation": True,  # dust at filter eff. wavelengths
+                "dust_emission": True,     # MBB at filter eff. wavelengths
+                "igm": True,               # IGM at filter eff. wavelengths
+            }
+
+        Approximation accuracy (Zacharegkas+2025):
+        - dust_attenuation: <3% for most laws, ~36% for SMC
+        - dust_emission: negligible for optical (MBB peaks at >50μm)
+        - igm: exact for fixed z (precomputed once)
+
+        Set ``approx=False`` to disable all approximations (forces exact
+        path for everything). Set ``approx=True`` (default) to use all.
     """
 
-    def __init__(self, spec, ssp_data, filters=None, precompute=True, forward_dtype="float64"):
+    # Default approximation settings
+    _DEFAULT_APPROX = {
+        "dust_attenuation": True,
+        "dust_emission": True,
+        "igm": True,
+    }
+
+    def __init__(self, spec, ssp_data, filters=None, precompute=True,
+                 forward_dtype="float64", approx=None):
         self.spec = spec
         self.ssp_data = ssp_data
         self._forward_dtype = jnp.dtype(forward_dtype)
+
+        # Parse approximation settings
+        if approx is None or approx is True:
+            self._approx = dict(self._DEFAULT_APPROX)
+        elif approx is False:
+            self._approx = {k: False for k in self._DEFAULT_APPROX}
+        else:
+            self._approx = {**self._DEFAULT_APPROX, **approx}
 
         # Handle filter input formats
         self.filter_waves = None

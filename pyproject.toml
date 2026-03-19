@@ -38,6 +38,9 @@ dev = [
     "ruff>=0.9",
     "jupytext>=1.16",
 ]
+crossval = [
+    "bagpipes>=1.0",
+]
 docs = [
     "sphinx>=7.0",
     "sphinx-book-theme>=1.0",
@@ -89,7 +92,10 @@ docstring-code-format = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -m 'not crossval'"
+markers = [
+    "crossval: cross-validation tests against community SED codes (bagpipes, etc.)",
+]
 
 [tool.jupytext]
 formats = "ipynb,py:percent"
