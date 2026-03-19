@@ -457,7 +457,7 @@ class CloudyGridBackend:
         neb_logU : float
             Ionization parameter.
         neb_logZ_gas : float or None
-            Gas metallicity. None = tie to stellar.
+            Gas metallicity log10(Z) (absolute). None = tie to stellar.
         neb_fesc : float
             Ionizing photon escape fraction.
         neb_fesc_lya : float

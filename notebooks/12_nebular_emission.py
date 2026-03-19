@@ -126,7 +126,7 @@ print(f"SSP wavelength grid: {ssp_data.ssp_wave.shape}  "
 print(f"SSP flux shape:      {ssp_data.ssp_flux.shape}  (n_met, n_age, n_wave)")
 print(f"SSP log(age/Gyr):    [{float(ssp_data.ssp_lg_age_gyr[0]):.2f}, "
       f"{float(ssp_data.ssp_lg_age_gyr[-1]):.2f}]")
-print(f"SSP log(Z/Zsun):     [{float(ssp_data.ssp_lgmet[0]):.2f}, "
+print(f"SSP log(Z) absolute: [{float(ssp_data.ssp_lgmet[0]):.2f}, "
       f"{float(ssp_data.ssp_lgmet[-1]):.2f}]")
 
 # %%
@@ -191,9 +191,17 @@ def identify_line(wav_angstrom, tol=5.0):
 
 # ── Reference physical conditions ─────────────────────────────────
 # These are used consistently for all CLOUDY vs Cue comparisons.
-LOG_Z_STELLAR = -0.5       # half-solar metallicity
-LOG_U_REF = -2.5            # typical ionization parameter
-BURST_AGE_YR = 3e6          # 3 Myr burst
+#
+# Metallicity convention:
+#   SSP ssp_lgmet and CLOUDY backend log_z use absolute log10(Z).
+#   Cue gas_logz uses log10(Z/Zsun).
+#   Convert: log10(Z) = log10(Z/Zsun) + LOG10_ZSUN
+LOG10_ZSUN = -1.8477116556169435  # Asplund+2009
+
+LOG_Z_REL = -0.5                  # log10(Z/Zsun) ≈ 1/3 solar
+LOG_Z_ABS = LOG_Z_REL + LOG10_ZSUN  # absolute log10(Z) for CLOUDY/SSP
+LOG_U_REF = -2.5                  # typical ionization parameter
+BURST_AGE_YR = 3e6                # 3 Myr burst
 
 # SSP age grid
 ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
@@ -205,7 +213,8 @@ ssp_weights = ssp_weights.at[burst_idx].set(1e6)  # 10^6 Msun burst
 
 print(f"Burst SSP at age = {10**float(ssp_log_ages_yr[burst_idx]) / 1e6:.1f} Myr "
       f"(index {burst_idx})")
-print(f"Stellar metallicity: log(Z/Zsun) = {LOG_Z_STELLAR}")
+print(f"Stellar metallicity: log(Z/Zsun) = {LOG_Z_REL}, "
+      f"log(Z) = {LOG_Z_ABS:.3f}")
 print(f"Ionization parameter: log(U) = {LOG_U_REF}")
 
 # %%
@@ -213,7 +222,7 @@ print(f"Ionization parameter: log(U) = {LOG_U_REF}")
 cloudy_wav, cloudy_lum = cloudy_backend.predict_nebular_line_luminosities(
     ssp_weights=ssp_weights,
     ssp_log_ages_yr=ssp_log_ages_yr,
-    log_z=LOG_Z_STELLAR,
+    log_z=LOG_Z_ABS,
     neb_logU=LOG_U_REF,
     neb_logZ_gas=None,  # tie to stellar
     neb_fesc=0.0,
@@ -260,7 +269,7 @@ plt.setp(stemlines, color=C_CLOUDY, linewidth=0.8, alpha=0.7)
 ax1.set_xlabel("Rest Wavelength ($\\AA$)")
 ax1.set_ylabel("$L$ (L$_\\odot$)")
 ax1.set_title(f"CLOUDY Line Spectrum: 3 Myr burst, $10^6$ M$_\\odot$, "
-              f"log U = {LOG_U_REF}, log Z = {LOG_Z_STELLAR}")
+              f"log U = {LOG_U_REF}, log Z/Z$_\\odot$ = {LOG_Z_REL}")
 ax1.set_xlim(900, 20000)
 ax1.set_yscale("log")
 ax1.set_ylim(lum_floor, cloudy_lum_np.max() * 5)
@@ -319,14 +328,14 @@ if HAS_CUE:
     # Get ionizing spectrum params derived from the SAME SSP
     burst_log_age = float(ssp_log_ages_yr[burst_idx])
     ionspec_7, logqion = cue_backend.get_ionizing_params_at(
-        LOG_Z_STELLAR, burst_log_age,
+        LOG_Z_ABS, burst_log_age,
     )
 
     if ionspec_7 is not None:
         ionspec_7_np = np.array(ionspec_7)
         logqion_val = float(logqion)
         print(f"Ionizing spectrum parameters for SSP at "
-              f"age={10**burst_log_age/1e6:.1f} Myr, logZ={LOG_Z_STELLAR}:")
+              f"age={10**burst_log_age/1e6:.1f} Myr, log(Z/Zsun)={LOG_Z_REL}:")
         param_names = ["index1", "index2", "index3", "index4",
                        "logLratio1", "logLratio2", "logLratio3"]
         for name, val in zip(param_names, ionspec_7_np):
@@ -345,12 +354,15 @@ if HAS_CUE:
     cue_kwargs = dict(
         gas_logu=LOG_U_REF,
         gas_logn=2.0,
-        gas_logz=LOG_Z_STELLAR,  # same gas Z
+        gas_logz=LOG_Z_REL,  # same gas Z (Cue uses Z/Zsun)
         gas_logno=0.0,
         gas_logco=0.0,
         cloudyfsps_only=True,   # match CLOUDY line set
     )
     if ionspec_7_np is not None:
+        # logqion is per Msun — scale by burst mass for total Q_H
+        burst_mass = float(ssp_weights[burst_idx])
+        total_logqion = logqion_val + np.log10(burst_mass)
         cue_kwargs.update(dict(
             ionspec_index1=float(ionspec_7_np[0]),
             ionspec_index2=float(ionspec_7_np[1]),
@@ -359,7 +371,7 @@ if HAS_CUE:
             ionspec_logLratio1=float(ionspec_7_np[4]),
             ionspec_logLratio2=float(ionspec_7_np[5]),
             ionspec_logLratio3=float(ionspec_7_np[6]),
-            gas_logqion=logqion_val,
+            gas_logqion=total_logqion,
         ))
 
     cue_wav, cue_lum = cue_backend.predict_nebular_line_luminosities(**cue_kwargs)
@@ -396,7 +408,7 @@ if HAS_CUE:
     ax2.set_xlabel("Rest Wavelength ($\\AA$)")
     ax2.set_xlim(900, 20000)
 
-    fig.suptitle(f"Line Spectra at log U = {LOG_U_REF}, log Z = {LOG_Z_STELLAR}, "
+    fig.suptitle(f"Line Spectra at log U = {LOG_U_REF}, log Z/Z$_\\odot$ = {LOG_Z_REL}, "
                  f"age = 3 Myr", fontsize=13)
     fig.savefig(FIGDIR / "12_cue_vs_cloudy_lines_sidebyside.png",
                 dpi=150, bbox_inches="tight")
@@ -540,64 +552,66 @@ if HAS_CUE:
     # ── logU sweep ─────────────────────────────────────────────────
     logU_values = np.linspace(-4.0, -1.0, 15)
 
-    # Identify key line indices in the CLOUDY wavelength array
-    ha_idx = int(np.argmin(np.abs(cloudy_wav_np - 6563.0)))
-    hb_idx = int(np.argmin(np.abs(cloudy_wav_np - 4861.0)))
-    oiii_idx = int(np.argmin(np.abs(cloudy_wav_np - 5007.0)))
-    oii_idx = int(np.argmin(np.abs(cloudy_wav_np - 3727.0)))
+    # Key diagnostic lines and their rest wavelengths
+    key_lines = {"H-alpha": 6563.0, "H-beta": 4861.0,
+                 "[OIII]5007": 5007.0, "[OII]3727": 3727.0}
 
-    line_indices = {"H-alpha": ha_idx, "H-beta": hb_idx,
-                    "[OIII]5007": oiii_idx, "[OII]3727": oii_idx}
+    # Separate line indices for CLOUDY (166 lines) and Cue (128 lines)
+    cloudy_line_idx = {k: int(np.argmin(np.abs(cloudy_wav_np - wl)))
+                       for k, wl in key_lines.items()}
+    cue_line_idx = {k: int(np.argmin(np.abs(cue_wav_np - wl)))
+                    for k, wl in key_lines.items()}
 
-    cloudy_logU_lines = {k: [] for k in line_indices}
-    cue_logU_lines = {k: [] for k in line_indices}
+    cloudy_logU_lines = {k: [] for k in key_lines}
+    cue_logU_lines = {k: [] for k in key_lines}
 
     for logU in logU_values:
         # CLOUDY
         _, clum = cloudy_backend.predict_nebular_line_luminosities(
             ssp_weights=ssp_weights, ssp_log_ages_yr=ssp_log_ages_yr,
-            log_z=LOG_Z_STELLAR, neb_logU=float(logU),
+            log_z=LOG_Z_ABS, neb_logU=float(logU),
         )
         clum_np = np.array(clum)
-        for k, li in line_indices.items():
-            cloudy_logU_lines[k].append(float(clum_np[li]))
+        for k in key_lines:
+            cloudy_logU_lines[k].append(float(clum_np[cloudy_line_idx[k]]))
 
         # Cue
         ck = dict(cue_kwargs)
         ck["gas_logu"] = float(logU)
         _, qlum = cue_backend.predict_nebular_line_luminosities(**ck)
         qlum_np = np.array(qlum)
-        for k, li in line_indices.items():
-            cue_logU_lines[k].append(float(qlum_np[li]))
+        for k in key_lines:
+            cue_logU_lines[k].append(float(qlum_np[cue_line_idx[k]]))
 
     # Convert to arrays
-    for k in line_indices:
+    for k in key_lines:
         cloudy_logU_lines[k] = np.array(cloudy_logU_lines[k])
         cue_logU_lines[k] = np.array(cue_logU_lines[k])
 
     # ── Z_gas sweep ────────────────────────────────────────────────
     logZ_values = np.linspace(-2.0, 0.3, 12)
 
-    cloudy_logZ_lines = {k: [] for k in line_indices}
-    cue_logZ_lines = {k: [] for k in line_indices}
+    cloudy_logZ_lines = {k: [] for k in key_lines}
+    cue_logZ_lines = {k: [] for k in key_lines}
 
-    for logZ in logZ_values:
+    for logZ_rel in logZ_values:
+        # logZ_rel is log10(Z/Zsun); CLOUDY needs absolute log10(Z)
         _, clum = cloudy_backend.predict_nebular_line_luminosities(
             ssp_weights=ssp_weights, ssp_log_ages_yr=ssp_log_ages_yr,
-            log_z=float(logZ), neb_logU=LOG_U_REF,
+            log_z=float(logZ_rel) + LOG10_ZSUN, neb_logU=LOG_U_REF,
         )
         clum_np = np.array(clum)
-        for k, li in line_indices.items():
-            cloudy_logZ_lines[k].append(float(clum_np[li]))
+        for k in key_lines:
+            cloudy_logZ_lines[k].append(float(clum_np[cloudy_line_idx[k]]))
 
         ck = dict(cue_kwargs)
-        ck["gas_logz"] = float(logZ)
+        ck["gas_logz"] = float(logZ_rel)  # Cue uses Z/Zsun
         _, qlum = cue_backend.predict_nebular_line_luminosities(**ck)
         qlum_np = np.array(qlum)
-        for k, li in line_indices.items():
-            cue_logZ_lines[k].append(float(qlum_np[li]))
+        for k in key_lines:
+            cue_logZ_lines[k].append(float(qlum_np[cue_line_idx[k]]))
 
-    for k in line_indices:
+    for k in key_lines:
         cloudy_logZ_lines[k] = np.array(cloudy_logZ_lines[k])
         cue_logZ_lines[k] = np.array(cue_logZ_lines[k])
 
@@ -608,7 +622,7 @@ if HAS_CUE:
 
     # Top row: absolute luminosities vs logU
     ax = axes[0, 0]
-    for k in line_indices:
+    for k in key_lines:
         valid_c = cloudy_logU_lines[k] > 0
         valid_q = cue_logU_lines[k] > 0
         ax.plot(logU_values[valid_c], cloudy_logU_lines[k][valid_c],
@@ -623,7 +637,7 @@ if HAS_CUE:
 
     # Top right: ratio vs logU
     ax = axes[0, 1]
-    for k in line_indices:
+    for k in key_lines:
         valid = (cloudy_logU_lines[k] > 0) & (cue_logU_lines[k] > 0)
         ratio = cue_logU_lines[k][valid] / cloudy_logU_lines[k][valid]
         ax.plot(logU_values[valid], ratio, "-o", color=line_colors[k],
@@ -639,7 +653,7 @@ if HAS_CUE:
 
     # Bottom left: absolute luminosities vs logZ
     ax = axes[1, 0]
-    for k in line_indices:
+    for k in key_lines:
         valid_c = cloudy_logZ_lines[k] > 0
         valid_q = cue_logZ_lines[k] > 0
         ax.plot(logZ_values[valid_c], cloudy_logZ_lines[k][valid_c],
@@ -653,7 +667,7 @@ if HAS_CUE:
 
     # Bottom right: ratio vs logZ
     ax = axes[1, 1]
-    for k in line_indices:
+    for k in key_lines:
         valid = (cloudy_logZ_lines[k] > 0) & (cue_logZ_lines[k] > 0)
         ratio = cue_logZ_lines[k][valid] / cloudy_logZ_lines[k][valid]
         ax.plot(logZ_values[valid], ratio, "-o", color=line_colors[k],
@@ -674,14 +688,14 @@ if HAS_CUE:
 
     # Numerical summary
     print("\nlogU sweep summary (at logZ = -0.5):")
-    for k in line_indices:
+    for k in key_lines:
         valid = (cloudy_logU_lines[k] > 0) & (cue_logU_lines[k] > 0)
         ratio = cue_logU_lines[k][valid] / cloudy_logU_lines[k][valid]
         print(f"  {k:14s}: ratio range = [{ratio.min():.2f}, {ratio.max():.2f}], "
               f"median = {np.median(ratio):.2f}")
 
     print("\nlogZ sweep summary (at logU = -2.5):")
-    for k in line_indices:
+    for k in key_lines:
         valid = (cloudy_logZ_lines[k] > 0) & (cue_logZ_lines[k] > 0)
         ratio = cue_logZ_lines[k][valid] / cloudy_logZ_lines[k][valid]
         print(f"  {k:14s}: ratio range = [{ratio.min():.2f}, {ratio.max():.2f}], "
@@ -700,7 +714,7 @@ if HAS_CUE:
     # CLOUDY continuum
     cloudy_cont_wav, cloudy_cont_lum = cloudy_backend.predict_nebular_continuum(
         ssp_weights=ssp_weights, ssp_log_ages_yr=ssp_log_ages_yr,
-        log_z=LOG_Z_STELLAR, neb_logU=LOG_U_REF,
+        log_z=LOG_Z_ABS, neb_logU=LOG_U_REF,
     )
     cloudy_cw = np.array(cloudy_cont_wav)
     cloudy_cl = np.array(cloudy_cont_lum)
@@ -841,16 +855,19 @@ if HAS_CUE:
         log_z_csp, float(ssp_log_ages_yr[burst_5myr]),
     )
     cue_neb_kwargs = dict(
-        gas_logu=-2.5, gas_logn=2.0, gas_logz=log_z_csp,
+        gas_logu=-2.5, gas_logn=2.0,
+        gas_logz=log_z_csp - LOG10_ZSUN,  # Cue uses Z/Zsun
         gas_logno=0.0, gas_logco=0.0,
     )
     if ionspec_5myr is not None:
         i5 = np.array(ionspec_5myr)
+        # logqion is per Msun — scale by the young burst mass (10^7 Msun)
+        total_logqion = float(logqion_5myr) + np.log10(float(csp_weights[burst_5myr]))
         cue_neb_kwargs.update(dict(
             ionspec_index1=float(i5[0]), ionspec_index2=float(i5[1]),
             ionspec_index3=float(i5[2]), ionspec_index4=float(i5[3]),
             ionspec_logLratio1=float(i5[4]), ionspec_logLratio2=float(i5[5]),
-            ionspec_logLratio3=float(i5[6]), gas_logqion=float(logqion_5myr),
+            ionspec_logLratio3=float(i5[6]), gas_logqion=total_logqion,
         ))
     cue_neb_sed = cue_backend.predict_nebular_sed(
         ssp_wave=ssp_wave, line_sigma_aa=0.0, **cue_neb_kwargs,
@@ -1022,7 +1039,7 @@ print(f"Q_H dynamic range: ~{48-38} orders of magnitude between 1 Myr and 1 Gyr"
 # %%
 # ── Ionizing spectrum: piecewise power-law fit ─────────────────────
 # Fit the SSP at 3 Myr, half-solar metallicity
-met_idx_fit = int(np.argmin(np.abs(np.array(ssp_data.ssp_lgmet) - LOG_Z_STELLAR)))
+met_idx_fit = int(np.argmin(np.abs(np.array(ssp_data.ssp_lgmet) - LOG_Z_ABS)))
 ssp_wave_np = np.array(ssp_data.ssp_wave)
 ssp_flux_young = np.array(ssp_data.ssp_flux[met_idx_fit, burst_idx, :])
 
@@ -1067,7 +1084,7 @@ for edge, label in [(227.84, "HeII"), (353.07, "OII"),
 ax.set_xlabel("Wavelength ($\\AA$)")
 ax.set_ylabel("$L_\\nu$ (L$_\\odot$ Hz$^{-1}$ M$_\\odot^{-1}$)")
 ax.set_title(f"Piecewise Power-Law Fit to Ionizing Spectrum "
-             f"(3 Myr, log Z = {LOG_Z_STELLAR})")
+             f"(3 Myr, log Z/Z$_\\odot$ = {LOG_Z_REL})")
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(1, 1200)
