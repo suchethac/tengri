@@ -324,38 +324,76 @@ flux = model.predict_spectrum(params)
 
 ---
 
-## Performance Summary
+## Benchmark Results
 
-### Forward Model Benchmarks (MacBook Pro M-series, CPU)
+All benchmarks on Apple M-series CPU, JAX 0.5+, float64, 5 SDSS bands,
+DPL SFH (D=7). SSP grid: 15 Z × 93 ages × 5994 wavelengths.
 
-| Model | Forward | Gradient | Memory (SSP) |
-|-------|---------|----------|-------------|
-| Smooth (D=7), f64 | 140 μs | 56 μs | 107 × 5 × 5 × 8B = 21 KB |
-| Stochastic (D=137), f64 | 356 μs | 63 μs | same |
-| Smooth (D=7), f32 | ~100 μs | ~40 μs | 10.5 KB |
-| Stochastic (D=137), f32 | ~250 μs | ~45 μs | 10.5 KB |
-
-### Full Inference Benchmarks
-
-| Method | D=7 (smooth) | D=137 (stochastic) |
-|--------|-------------|-------------------|
-| EVI (10 iter, 2000 samples) | 11 s | 14 s |
-| Ray Tracing (2000 steps) | ~30 s | ~120 s |
-| NUTS (2000 samples) | ~60 s | N/A (too slow) |
-
-### Optimization Stacking
-
-All optimizations compose — each is independent:
-
+Reproduce with:
+```bash
+python analysis/profile_forward_model.py    # component breakdown
+python analysis/benchmark_dust_laws.py      # dust law comparison
 ```
-Base forward model (exact, f64):           ~3 ms
-+ Photometry precomputation:               ~0.14 ms  (21x)
-+ Fused JIT kernel:                        ~0.10 ms  (1.4x more)
-+ Mixed precision (f32):                   ~0.07 ms  (1.4x more)
-+ Precomputed dust weights:                ~0.06 ms  (1.2x more)
-─────────────────────────────────────────────────
-Total compound speedup:                    ~50x
-```
+
+### Component Breakdown (exact path, power-law dust)
+
+Where time is spent when NOT using the fused kernel:
+
+| Component | Time (μs) | % of Total |
+|-----------|-----------|------------|
+| **Dust attenuation** (93 ages × 5994 λ) | **1700** | **62%** |
+| CSP SED einsum | 506 | 18% |
+| Metallicity interpolation | 209 | 8% |
+| Photometric integration (5 filters) | 197 | 7% |
+| SFH computation | 73 | 3% |
+| SFR interpolation | 49 | 2% |
+| CSP weights (trapezoid) | 3 | <1% |
+| **Total** | **2737** | 100% |
+
+The fused kernel eliminates all of these except SFH: it evaluates dust at
+5 effective wavelengths (not 5994), does the einsum on the precomputed
+(93 × 5) array, and skips photometric integration entirely.
+
+### Fused Kernel: All Dust Laws
+
+| Dust Law | Fused (μs) | Exact (μs) | Forward Speedup | Gradient Speedup |
+|----------|-----------|-----------|----------------|-----------------|
+| power_law | 298 | 3299 | **11x** | **68x** |
+| calzetti | 290 | 3549 | **12x** | **44x** |
+| kriek_conroy | 304 | 4119 | **14x** | **45x** |
+| smc | 281 | 3606 | **13x** | **56x** |
+| cardelli | 301 | 5614 | **19x** | **37x** |
+| salim | 289 | 4139 | **14x** | **59x** |
+
+All fused kernels run at ~290 μs regardless of dust law — the curve
+evaluation at 5 wavelengths is trivial. Gradient speedup is 37-68x
+because XLA differentiates through the fused kernel more efficiently.
+
+**Note:** The Zacharegkas+2025 approximation (dust at effective wavelengths)
+gives <3% error for most laws. SMC has higher error (~36%) due to its
+steep UV curve — use exact path or spectroscopy for SMC-heavy fits.
+
+### Full Inference (EVI)
+
+| Configuration | EVI Time | Posterior Samples |
+|--------------|---------|-------------------|
+| Smooth D=7, power_law | 9.4 s | 100 |
+| Smooth D=7, calzetti | 8.9 s | 100 |
+| Smooth D=7, kriek_conroy | 8.9 s | 100 |
+| Stochastic D=137, power_law | ~14 s | 2000 |
+
+EVI time is dominated by JIT compilation and CG solves, not the forward
+model — so dust law choice has negligible impact on inference time.
+
+### Memory
+
+| Data Structure | Shape | float64 | float32 |
+|---|---|---|---|
+| Raw SSP templates | 15 × 93 × 5994 | **66.9 MB** | **33.5 MB** |
+| Photometry precomp (fixed z) | 15 × 93 × 5 | 56 KB | 28 KB |
+| Z-table (100 z-points) | 100 × 15 × 93 × 5 | 5.6 MB | 2.8 MB |
+| Spectroscopy precomp (200 pix) | 15 × 93 × 200 | 2.2 MB | 1.1 MB |
+| Dust age weights | 93 | 0.7 KB | 0.4 KB |
 
 ### GPU Scaling (Future)
 
