@@ -453,6 +453,7 @@ class CueBackend:
     def __init__(
         self,
         weights_path: str,
+        ssp_data=None,
         default_gas_logqion: float = 49.1,
     ) -> None:
         self.name = "cue"
@@ -463,6 +464,49 @@ class CueBackend:
         # Cache sorted wavelength arrays
         self._line_sort_idx = jnp.argsort(self.weights.nn_line_wav)
         self._cont_sort_idx = jnp.argsort(self.weights.cont_wav)
+
+        # Precompute ionizing spectrum parameters from SSP if provided.
+        # These serve as defaults when ionspec params are not explicitly
+        # specified. Users can override by setting ionspec_index1..4 and
+        # ionspec_logLratio1..3 as free params in ParamSpec.
+        self._ionspec_table = None
+        self._logqion_table = None
+        self._ssp_lgmet = None
+        self._ssp_log_age_yr = None
+        if ssp_data is not None:
+            self._precompute_ionizing_params(ssp_data)
+
+    def _precompute_ionizing_params(self, ssp_data) -> None:
+        """Precompute ionizing spectrum parameters for all SSP (met, age)."""
+        import numpy as np
+        from diffsed.models.nebular.ionizing_spectrum import precompute_ionizing_params_table
+
+        result = precompute_ionizing_params_table(
+            np.array(ssp_data.ssp_wave),
+            np.array(ssp_data.ssp_flux),
+            np.array(ssp_data.ssp_lgmet),
+        )
+        self._ionspec_table = jnp.array(result["ionspec_table"])
+        self._logqion_table = jnp.array(result["logqion_table"])
+        self._ssp_lgmet = jnp.array(ssp_data.ssp_lgmet)
+        self._ssp_log_age_yr = jnp.array(ssp_data.ssp_lg_age_gyr) + 9.0
+
+    def get_ionizing_params_at(
+        self, log_z: float, log_age_yr: float,
+    ) -> tuple[jnp.ndarray, float]:
+        """Get precomputed ionizing params at (Z, age) via interpolation.
+
+        Returns (ionspec_7, logqion) or (None, None) if not precomputed.
+        """
+        if self._ionspec_table is None:
+            return None, None
+
+        from diffsed.models.nebular.ionizing_spectrum import interpolate_ionizing_params
+        return interpolate_ionizing_params(
+            self._ionspec_table, self._logqion_table,
+            self._ssp_lgmet, self._ssp_log_age_yr,
+            log_z, log_age_yr,
+        )
 
     def predict_nebular_line_luminosities(
         self,
