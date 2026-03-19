@@ -29,7 +29,7 @@ References
 - Draine 2003, ARA&A, 41, 241 (silicate opacity profile)
 """
 
-from typing import Callable
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -118,9 +118,7 @@ def _silicate_profile(wavelength: jnp.ndarray) -> jnp.ndarray:
     array
         Silicate opacity profile, peaked at 1.0 at 9.7 um.
     """
-    return jnp.exp(
-        -0.5 * ((wavelength - _LAMBDA_SI_ANGSTROM) / _SIGMA_SI_ANGSTROM) ** 2
-    )
+    return jnp.exp(-0.5 * ((wavelength - _LAMBDA_SI_ANGSTROM) / _SIGMA_SI_ANGSTROM) ** 2)
 
 
 # ===================================================================
@@ -377,8 +375,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     missing = required_keys - set(data.keys())
     if missing:
         raise KeyError(
-            f"SKIRTOR grid file missing keys: {missing}. "
-            f"Available: {list(data.keys())}"
+            f"SKIRTOR grid file missing keys: {missing}. Available: {list(data.keys())}"
         )
 
     # Move arrays to JAX (immutable)
@@ -427,9 +424,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         template = _multilinear_interp_5d(grid_jax, axes, point)
 
         # Resample onto requested wavelength via linear interpolation
-        sed_resampled = jnp.interp(
-            wavelength, wave_grid, template, left=0.0, right=0.0
-        )
+        sed_resampled = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
 
         # Normalize to L_bol * torus_frac
         nu = _wavelength_to_nu(wavelength)
