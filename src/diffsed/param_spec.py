@@ -528,15 +528,212 @@ def _build_param_registry(
 class ParamSpec:
     """Parameter specification defining model parameters and their priors.
 
-    Parameters are specified as keyword arguments. Each can be:
-    - A scalar (int/float) → Fixed value
-    - A tuple (lo, hi) → Uniform prior
-    - A Distribution object (Uniform, Gaussian, LogUniform, Fixed)
+    Parameters are specified as keyword arguments.  Each can be:
 
-    Settings (not parameters):
-    - mean_sfh_type (str or list[str]): SFH model(s). Default: ["tsnorm", "field"].
-    - stochastic (bool): DEPRECATED. Use mean_sfh_type with/without "field" instead.
-    - n_grid (int): GP grid size. Only used if "field" in mean_sfh_type. Default: 64.
+    - A scalar (int/float) → ``Fixed`` value
+    - A tuple (lo, hi)     → ``Uniform`` prior
+    - A ``Distribution`` object (``Uniform``, ``Gaussian``, ``LogUniform``,
+      ``LogNormal``, ``StudentT``, ``Fixed``)
+
+    Settings (model configuration, not fittable parameters)
+    --------------------------------------------------------
+    mean_sfh_type : str or list[str]
+        SFH model(s).  Composable: ``["dpl", "field"]``.
+        Options: dpl, tsnorm, snorm, norm, lnorm, const, exp, dexp, burst, field.
+        Default: ``["dpl", "field"]``.
+    n_grid : int
+        GP grid size (latent dimensions for stochastic SFH).  Default: 64.
+    stochastic : bool
+        DEPRECATED.  Use ``mean_sfh_type`` with/without ``"field"`` instead.
+
+    Dust Attenuation Settings
+    ~~~~~~~~~~~~~~~~~~~~~~~~~
+    dust_law_bc : str
+        Attenuation curve for birth cloud.  Default: ``"power_law"``.
+        Options: ``power_law``, ``calzetti``, ``kriek_conroy``, ``smc``,
+        ``cardelli``, ``salim``, ``li08``.
+    dust_law_diff : str
+        Attenuation curve for diffuse ISM.  Default: same as ``dust_law_bc``.
+        Can be different for per-component control.
+
+    Dust Emission Settings
+    ~~~~~~~~~~~~~~~~~~~~~~
+    dust_emission : str or None
+        IR emission model.  Default: ``None`` (disabled).
+        Options: ``"modified_blackbody"``, ``"casey2012"``, ``"dale2014"``,
+        ``"draine_li2007"``, ``"draine_li2014"``, ``"dl07_tabulated"``.
+    dl07_grid_path : str
+        Path to DL07 HDF5 template grid (for ``"dl07_tabulated"``).
+
+    Nebular Emission Settings
+    ~~~~~~~~~~~~~~~~~~~~~~~~~
+    nebular : bool or str
+        Enable nebular emission.  Default: ``False``.
+        ``True`` or ``"cloudy"`` enables CLOUDY grid backend.
+        ``"cue"`` enables Cue neural emulator.
+    cloudy_grid_path : str
+        Path to CLOUDY HDF5 grid (e.g., ``"data/cloudy_grid_mist.h5"``).
+    cue_weights_path : str
+        Path to Cue weight file (e.g., ``"data/cue_weights.npz"``).
+
+    AGN Settings
+    ~~~~~~~~~~~~
+    agn_model : str or None
+        AGN SED model.  Default: ``None`` (disabled).
+        Options: ``"simple"`` (3 params), ``"standard"`` (SS73 disc + 2T torus),
+        ``"kubota_done"`` (physical disc), ``"unified_nlr_blr"`` (NLR/BLR with
+        geometric masking), ``"qsogen"`` (empirical quasar, Temple+2021),
+        ``"skirtor"`` (clumpy torus RT templates, Stalevski+2016).
+
+    Multi-wavelength Settings
+    ~~~~~~~~~~~~~~~~~~~~~~~~~
+    radio : bool
+        Enable radio synchrotron + AGN jet emission.  Default: ``False``.
+    xray : bool
+        Enable X-ray (XRB + AGN corona) emission.  Default: ``False``.
+
+    IGM Settings
+    ~~~~~~~~~~~~
+    apply_igm : bool
+        Apply Inoue+2014 IGM absorption.  Default: ``True``.
+
+    Metallicity Settings
+    ~~~~~~~~~~~~~~~~~~~~
+    evolving_metallicity : bool
+        Replace ``met_logzsol`` with ``met_logzsol_0`` (old stars) and
+        ``met_logzsol_final`` (young stars) for a linear-in-log Z(t) ramp.
+        Default: ``False``.
+
+    Fittable Parameters (always available)
+    ---------------------------------------
+    ========================== ================= =======================================
+    Parameter                  Default           Description
+    ========================== ================= =======================================
+    met_logzsol                Uniform(-2, 0.2)  Stellar metallicity log10(Z/Zsun)
+    met_alpha_fe               Fixed(0.0)        [alpha/Fe] enhancement (dex)
+    dust_tau_bc                Uniform(0, 4)     Birth cloud V-band optical depth
+    dust_tau_diff              Uniform(0, 3)     Diffuse ISM V-band optical depth
+    dust_slope                 Fixed(-0.7)       Power-law index (for power_law curve)
+    dust_f_obscuration         Fixed(0.0)        Unobscured fraction (Lower+2022)
+    dust_bump_strength         Fixed(0.0)        UV 2175A bump (Kriek&Conroy/Salim)
+    dust_delta                 Fixed(0.0)        Attenuation slope modification
+    dust_Rv                    Fixed(3.1)        R_V (Cardelli curve)
+    redshift                   Fixed(0.1)        Source redshift
+    noise_frac_cal             Fixed(0.0)        Fractional calibration noise floor
+    noise_dof                  Fixed(0.0)        Student-t degrees of freedom
+    ========================== ================= =======================================
+
+    Conditional Parameters (added when modules enabled)
+    ----------------------------------------------------
+    **Nebular** (``nebular=True``):
+
+    ========================== ================= =======================================
+    neb_logU                   Fixed(-3.0)       Ionization parameter log10(U)
+    neb_logZ_gas               Fixed(-0.3)       Gas metallicity (None = tie to stellar)
+    neb_fesc                   Fixed(0.0)        Ionizing photon escape fraction
+    neb_fesc_lya               Fixed(0.0)        Ly-alpha escape fraction
+    ========================== ================= =======================================
+
+    **Dust emission** (``dust_emission != None``):
+
+    ========================== ================= =======================================
+    dust_T                     Fixed(35)         Dust temperature (K) for greybody
+    dust_beta_ir               Fixed(1.6)        Emissivity index
+    dust_alpha_mir             Fixed(2.0)        MIR slope (Casey 2012)
+    dust_alpha_dale            Fixed(2.0)        Dale+2014 alpha
+    dust_umin                  Fixed(1.0)        DL07/DL14 minimum radiation field
+    dust_gamma_dl              Fixed(0.01)       DL07/DL14 PDR fraction
+    dust_qpah                  Fixed(2.5)        DL07/DL14 PAH mass fraction (%)
+    dust_alpha_dl14            Fixed(2.0)        DL14 radiation field slope (1-3)
+    dust_eta_balance           Fixed(1.0)        Energy balance deviation factor
+    ========================== ================= =======================================
+
+    **AGN** (``agn_model != None``):
+
+    ========================== ================= =======================================
+    agn_frac                   Fixed(0.0)        AGN fraction of stellar L_bol (legacy)
+    agn_log_lbol               Fixed(10.0)       AGN log L_bol [erg/s] (parametric)
+    agn_alpha                  Fixed(-1.0)       Disc power-law slope
+    agn_T_torus                Fixed(1000)       Torus temperature (K)
+    agn_tau_torus              Fixed(5.0)        Torus optical depth at 9.7 um
+    agn_torus_frac             Fixed(0.5)        Torus covering fraction
+    agn_log_mbh                Fixed(7.0)        Black hole mass log10(M/Msun)
+    agn_log_ledd               Fixed(-1.0)       Eddington ratio log10(L/L_Edd)
+    agn_tau_skirtor            Fixed(7.0)        SKIRTOR 9.7 um optical depth
+    agn_p_skirtor              Fixed(1.0)        SKIRTOR radial density gradient
+    agn_q_skirtor              Fixed(1.0)        SKIRTOR polar density gradient
+    agn_oa_skirtor             Fixed(40)         SKIRTOR opening angle (degrees)
+    agn_cos_inc                Fixed(0.5)        Cosine of inclination (0=edge-on)
+    ========================== ================= =======================================
+
+    **Radio** (``radio=True``):
+
+    ========================== ================= =======================================
+    radio_q_ir                 Fixed(2.64)       FIR-radio correlation (Bell 2003)
+    radio_alpha_sf             Fixed(0.8)        SF synchrotron spectral index
+    radio_loudness             Fixed(0.0)        AGN radio-loudness log10(L_5GHz/L_B)
+    radio_alpha_agn            Fixed(0.7)        AGN radio spectral index
+    ========================== ================= =======================================
+
+    **X-ray** (``xray=True``):
+
+    ========================== ================= =======================================
+    xray_gamma_agn             Fixed(1.8)        AGN X-ray photon index
+    xray_alpha_ox              Fixed(-1.4)       UV-to-X-ray slope
+    ========================== ================= =======================================
+
+    **Evolving metallicity** (``evolving_metallicity=True``):
+
+    ========================== ================= =======================================
+    met_logzsol_0              Uniform(-2, 0.2)  Initial metallicity (oldest stars)
+    met_logzsol_final          Uniform(-2, 0.2)  Final metallicity (present-day)
+    ========================== ================= =======================================
+
+    Examples
+    --------
+    Minimal parametric model::
+
+        spec = ParamSpec(
+            mean_sfh_type="dpl",
+            sfh_dpl_alpha=Uniform(0.5, 3.0),
+            sfh_dpl_beta=Uniform(0.5, 3.0),
+            sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+            met_logzsol=Uniform(-2.0, 0.5),
+            dust_tau_bc=Uniform(0.0, 2.0),
+            dust_tau_diff=Uniform(0.0, 2.0),
+            redshift=Fixed(0.1),
+        )
+
+    Full model with all physics::
+
+        spec = ParamSpec(
+            mean_sfh_type=["dpl", "field"], n_grid=64,
+            # Dust attenuation
+            dust_law_bc="kriek_conroy",
+            dust_f_obscuration=Uniform(0.0, 0.5),
+            dust_bump_strength=Uniform(0.0, 5.0),
+            # Dust emission (DL07 tabulated templates)
+            dust_emission="dl07_tabulated",
+            dl07_grid_path="data/dl07_templates.h5",
+            dust_umin=Uniform(0.1, 25.0),
+            # Nebular (Cue neural emulator)
+            cue_weights_path="data/cue_weights.npz",
+            neb_logU=Uniform(-4.0, -1.0),
+            neb_fesc_lya=Uniform(0.0, 1.0),
+            # AGN (qsogen empirical quasar)
+            agn_model="qsogen",
+            agn_log_lbol=Uniform(40.0, 46.0),
+            # IGM
+            apply_igm=True,
+            # Radio + X-ray
+            radio=True, xray=True,
+            # Evolving metallicity
+            evolving_metallicity=True,
+            met_logzsol_0=Uniform(-2.0, 0.2),
+            met_logzsol_final=Uniform(-2.0, 0.2),
+            met_alpha_fe=Uniform(-0.2, 0.6),
+        )
     """
 
     def __init__(self, **kwargs):
