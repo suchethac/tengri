@@ -34,7 +34,7 @@ Usage::
 from __future__ import annotations
 
 from pathlib import Path
-from typing import NamedTuple
+from typing import ClassVar, NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -180,8 +180,8 @@ class Model:
 
             {
                 "dust_attenuation": True,  # dust at filter eff. wavelengths
-                "dust_emission": True,     # MBB at filter eff. wavelengths
-                "igm": True,               # IGM at filter eff. wavelengths
+                "dust_emission": True,  # MBB at filter eff. wavelengths
+                "igm": True,  # IGM at filter eff. wavelengths
             }
 
         Approximation accuracy (Zacharegkas+2025):
@@ -193,15 +193,16 @@ class Model:
         path for everything). Set ``approx=True`` (default) to use all.
     """
 
-    # Default approximation settings
-    _DEFAULT_APPROX = {
+    # Default approximation settings (immutable — used as template only)
+    _DEFAULT_APPROX: ClassVar[dict] = {
         "dust_attenuation": True,
         "dust_emission": True,
         "igm": True,
     }
 
-    def __init__(self, spec, ssp_data, filters=None, precompute=True,
-                 forward_dtype="float64", approx=None):
+    def __init__(
+        self, spec, ssp_data, filters=None, precompute=True, forward_dtype="float64", approx=None
+    ):
         self.spec = spec
         self.ssp_data = ssp_data
         self._forward_dtype = jnp.dtype(forward_dtype)
@@ -382,24 +383,20 @@ class Model:
         # Precompute dust age weights (sigmoid depends only on age grid)
         self._dust_age_weights = precompute_dust_age_weights(self.ssp_ages_yr)
 
-        # Warn if SMC dust law is used with fused kernel (high approximation error)
-        _smc = self._dust_law_bc == "smc" or self._dust_law_diff == "smc"
-        _will_fuse = precompute and self._z_fixed is not None and self.filter_waves
-        if _will_fuse and _smc:
-            import warnings
+        # Precompute IGM at effective wavelengths (for fused kernel)
+        self._igm_at_eff = None
+        if (
+            self._apply_igm
+            and self._approx["igm"]
+            and self._precomp is not None
+            and self._z_fixed is not None
+        ):
+            from diffsed.models.igm import igm_transmission
 
-            warnings.warn(
-                "SMC dust law with precomputed photometry has ~36% error "
-                "due to the steep UV curve. The Zacharegkas+2025 "
-                "approximation (dust at filter effective wavelengths) is "
-                "less accurate for steep curves. Consider using "
-                "precompute=False for SMC, or use spectroscopy instead.",
-                UserWarning,
-                stacklevel=2,
-            )
+            eff_obs = self._precomp.effective_wavelengths
+            self._igm_at_eff = igm_transmission(eff_obs, self._z_fixed)
 
         # Build fused JIT kernels for fast photometry/spectroscopy
-        # (those require the full SED to compute energy balance, line emission, etc.)
         self._fused_photometry = None
         if self._precomp is not None and self._fused_compatible():
             self._fused_photometry = self._build_fused_photometry()
@@ -414,24 +411,83 @@ class Model:
     def _fused_compatible(self):
         """Check if the fused JIT kernel can handle the current model config.
 
-        Fused kernels support all dust laws and f_obscuration. They do NOT
-        support nebular emission (Cloudy with free params), dust IR emission,
-        or AGN — those require the full SED to compute energy balance,
-        ionization, etc.
+        Respects ``self._approx`` settings: if a component's approximation
+        is disabled, the fused kernel cannot handle it and the model falls
+        back to the exact path.
+
+        Emits warnings for each active approximation so the user knows
+        what trade-offs are being made.
         """
-        # Nebular: baked-in backend with no free params is fine (adds zero)
+        import warnings
+
+        reasons = []  # reasons to fall back to exact
+
+        # Dust attenuation approximation
+        if not self._approx["dust_attenuation"]:
+            reasons.append("dust_attenuation approx disabled by user")
+
+        # Nebular: Cloudy with free params can't be fused
         neb_ok = self._nebular_backend is None or not getattr(
             self._nebular_backend, "has_free_params", False
         )
-        # Dust emission: MBB and dale2014 supported in fused kernel
-        # (approximate energy balance at effective wavelengths)
-        dust_em_ok = self._dust_emission_model in (
-            None,
-            "modified_blackbody",
-            "dale2014",
-        )
-        agn_ok = self._agn_model is None
-        return neb_ok and dust_em_ok and agn_ok
+        if not neb_ok:
+            reasons.append("nebular emission (Cloudy) requires full SED")
+
+        # Dust emission: MBB/dale2014 supported if approx enabled
+        if self._dust_emission_model is not None:
+            if not self._approx["dust_emission"]:
+                reasons.append("dust_emission approx disabled by user")
+            elif self._dust_emission_model not in ("modified_blackbody", "dale2014"):
+                reasons.append(
+                    f"dust_emission='{self._dust_emission_model}' not supported "
+                    f"in fused kernel (only modified_blackbody, dale2014)"
+                )
+
+        # AGN: always forces exact (needs L_bol from full SED integral)
+        if self._agn_model is not None:
+            reasons.append("AGN requires full SED for bolometric luminosity")
+
+        # IGM: can be precomputed at effective wavelengths if approx enabled
+        if self._apply_igm and not self._approx["igm"]:
+            reasons.append("igm approx disabled by user")
+
+        if reasons:
+            if self._precomp is not None:
+                warnings.warn(
+                    "Fused kernel disabled, using exact path (slower). "
+                    f"Reasons: {'; '.join(reasons)}. "
+                    "Set approx=True or remove incompatible components for "
+                    "~10-50x speedup.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+            return False
+
+        # Emit approximation warnings for active components
+        active_approx = []
+        if self._approx["dust_attenuation"]:
+            active_approx.append(
+                "dust attenuation at filter effective wavelengths "
+                "(<3% error for most laws, ~36% for SMC)"
+            )
+        if self._dust_emission_model in ("modified_blackbody", "dale2014"):
+            active_approx.append(
+                f"dust emission ({self._dust_emission_model}) with approximate "
+                "L_absorbed from broadband fluxes"
+            )
+        if self._apply_igm and self._approx["igm"]:
+            active_approx.append("IGM absorption precomputed at filter effective wavelengths")
+
+        if active_approx:
+            warnings.warn(
+                "Fused kernel active with approximations: "
+                + "; ".join(active_approx)
+                + ". Set approx=False to disable.",
+                UserWarning,
+                stacklevel=3,
+            )
+
+        return True
 
     # -------------------------------------------------------------------
     # Internal parameter translation
@@ -633,6 +689,11 @@ class Model:
 
         from diffsed.models.sps.dsps_wrapper import _ALPHA_TO_Z_COEFF as _A2Z
 
+        # IGM: precomputed at effective wavelengths (constant for fixed z)
+        has_igm = self._igm_at_eff is not None
+        if has_igm:
+            igm_trans = self._igm_at_eff.astype(dt)
+
         # Dust emission: precompute constants for MBB at effective wavelengths
         has_dust_em = self._dust_emission_model in ("modified_blackbody", "dale2014")
         if has_dust_em:
@@ -744,6 +805,10 @@ class Model:
                 flux_total = flux_attenuated + dust_em_flux
             else:
                 flux_total = flux_attenuated
+
+            # IGM absorption (precomputed at effective wavelengths)
+            if has_igm:
+                flux_total = flux_total * igm_trans
 
             return (flux_scale * flux_total * lsun).astype(jnp.float64)
 
