@@ -47,10 +47,7 @@ from diffsed.models.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
     compute_log_z_evolving,
-    compute_surviving_mass,
     effective_metallicity,
-    interpolate_mass_remaining,
-    interpolate_mass_remaining_evolving,
     interpolate_metallicity,
     interpolate_metallicity_evolving,
 )
@@ -1285,6 +1282,59 @@ class Model:
         """
         return self._compute_sed_components(params)["sed_total"]
 
+    def predict(self, params):
+        """Create a lazy prediction object for derived physical quantities.
+
+        Returns a :class:`~diffsed.prediction.Prediction` object whose
+        properties are computed on first access and cached. This is the
+        recommended API for exploring derived quantities from a single
+        galaxy.
+
+        For batch computation over many parameter sets (posterior
+        chains, mock catalogs), use the JIT-compatible group methods
+        :meth:`predict_sfh_quantities`, :meth:`predict_sed_quantities`,
+        or :meth:`predict_line_luminosities` with ``jax.vmap`` instead.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values (public names).
+
+        Returns
+        -------
+        Prediction
+            Lazy prediction object with ``.sfh``, ``.sed``, ``.lines``,
+            ``.radio``, ``.xray``, and ``.ionizing`` property groups.
+
+        Examples
+        --------
+        **Single-galaxy exploration (lazy, on-demand):**
+
+        >>> pred = model.predict(params)
+        >>> pred.sfh.stellar_mass          # triggers SFH computation
+        >>> pred.sfh.mass_weighted_age_gyr # reuses cached SFH
+        >>> pred.sed.l_bol                 # triggers SED computation
+        >>> pred.sed.uv_slope_beta         # reuses cached SED
+        >>> pred.lines.halpha              # triggers nebular computation
+        >>> pred.lines.bpt_nii             # reuses cached lines
+
+        **Batch computation (JIT + vmap):**
+
+        >>> import jax
+        >>> sfh_fn = jax.vmap(model.predict_sfh_quantities)
+        >>> sfh_batch = sfh_fn(params_batch)
+        >>> sfh_batch.stellar_mass  # shape (n_galaxies,)
+
+        See Also
+        --------
+        predict_sfh_quantities : JIT-compatible SFH quantities.
+        predict_sed_quantities : JIT-compatible SED quantities.
+        predict_line_luminosities : JIT-compatible emission lines.
+        """
+        from diffsed.prediction import Prediction
+
+        return Prediction(self, params)
+
     def predict_photometry(self, params):
         """Compute observed photometric flux densities.
 
@@ -1731,6 +1781,14 @@ class Model:
     def predict_derived(self, params):
         """Compute derived physical quantities.
 
+        .. deprecated::
+            Use ``model.predict(params)`` for lazy on-demand access,
+            or ``model.predict_sfh_quantities(params)`` for JIT-compatible
+            batch computation.
+
+        This method is kept for backward compatibility and returns a
+        dict with the same keys as before.
+
         Parameters
         ----------
         params : dict
@@ -1747,62 +1805,16 @@ class Model:
             "ssfr": specific SFR (yr^-1), uses surviving mass if
                 available, else formed mass.
         """
-        p = self._get_internal_params(params)
-        sfr = self._compute_sfr(p)
-
-        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
-        mass_formed = jnp.sum(weights)
-
-        # Surviving stellar mass (if mass-remaining table available)
-        mass_surviving = None
-        if self.ssp_data.ssp_mass_remaining is not None:
-            alpha_fe_mr = p.get("alpha_fe", 0.0)
-            if self._evolving_metallicity:
-                z = p.get("redshift", 0.0)
-                t_universe_gyr = self._t_universe_gyr(z)
-                log_z_per_age = compute_log_z_evolving(
-                    self.ssp_data.ssp_lg_age_gyr,
-                    p["log_z_initial"],
-                    p["log_z_final"],
-                    t_universe_gyr,
-                )
-                log_z_per_age = effective_metallicity(log_z_per_age, alpha_fe_mr)
-                mr_at_met = interpolate_mass_remaining_evolving(
-                    self.ssp_data.ssp_mass_remaining,
-                    self.ssp_data.ssp_lgmet,
-                    log_z_per_age,
-                )
-            else:
-                log_z = effective_metallicity(p.get("log_z", 0.0), alpha_fe_mr)
-                mr_at_met = interpolate_mass_remaining(
-                    self.ssp_data.ssp_mass_remaining, self.ssp_data.ssp_lgmet, log_z
-                )
-            mass_surviving = compute_surviving_mass(weights, mr_at_met)
-
-        mask_100myr = self.age_yr <= 1e8
-        sfr_100myr = jnp.where(
-            jnp.sum(mask_100myr) > 0,
-            jnp.sum(sfr * mask_100myr) / jnp.maximum(jnp.sum(mask_100myr), 1.0),
-            sfr[0],
-        )
-        mask_10myr = self.age_yr <= 1e7
-        sfr_10myr = jnp.where(
-            jnp.sum(mask_10myr) > 0,
-            jnp.sum(sfr * mask_10myr) / jnp.maximum(jnp.sum(mask_10myr), 1.0),
-            sfr[0],
-        )
-
-        # sSFR: use surviving mass if available, else formed mass
-        mass_for_ssfr = mass_surviving if mass_surviving is not None else mass_formed
-        ssfr = sfr_100myr / jnp.maximum(mass_for_ssfr, 1.0)
-
+        pred = self.predict(params)
+        mass_surv = pred.sfh.stellar_mass_surviving
+        # Backward compat: return None instead of NaN
+        mass_surv_out = None if jnp.isnan(mass_surv) else mass_surv
         return {
-            "stellar_mass": mass_formed,
-            "stellar_mass_surviving": mass_surviving,
-            "sfr_100myr": sfr_100myr,
-            "sfr_10myr": sfr_10myr,
-            "ssfr": ssfr,
+            "stellar_mass": pred.sfh.stellar_mass,
+            "stellar_mass_surviving": mass_surv_out,
+            "sfr_100myr": pred.sfh.sfr_100myr,
+            "sfr_10myr": pred.sfh.sfr_10myr,
+            "ssfr": pred.sfh.ssfr,
         }
 
     def predict_magnitudes(self, params):
