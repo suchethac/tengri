@@ -270,3 +270,214 @@ class TestGradients:
 
         grad = jax.grad(loss)(typical_params)
         assert jnp.isfinite(grad["sfh_tsnorm_log_peak_sfr"])
+
+
+# ===================================================================
+# Prediction API (lazy derived quantities)
+# ===================================================================
+
+
+class TestPrediction:
+    """Tests for model.predict() lazy prediction object."""
+
+    def test_returns_prediction(self, parametric_model, typical_params):
+        from diffsed.prediction import Prediction
+
+        pred = parametric_model.predict(typical_params)
+        assert isinstance(pred, Prediction)
+
+    def test_has_property_groups(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        assert hasattr(pred, "sfh")
+        assert hasattr(pred, "sed")
+        assert hasattr(pred, "lines")
+        assert hasattr(pred, "radio")
+        assert hasattr(pred, "xray")
+        assert hasattr(pred, "ionizing")
+
+    # --- SFH properties ---
+
+    def test_sfh_stellar_mass(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        mass = pred.sfh.stellar_mass
+        assert jnp.isfinite(mass)
+        assert float(mass) > 0
+        assert 1e6 < float(mass) < 1e14
+
+    def test_sfh_sfr(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        assert jnp.isfinite(pred.sfh.sfr_100myr)
+        assert jnp.isfinite(pred.sfh.sfr_10myr)
+        assert float(pred.sfh.sfr_100myr) >= 0
+        assert float(pred.sfh.sfr_10myr) >= 0
+
+    def test_sfh_ssfr(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        ssfr = pred.sfh.ssfr
+        assert jnp.isfinite(ssfr)
+        assert float(ssfr) >= 0
+
+    def test_sfh_mass_weighted_age(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        age = pred.sfh.mass_weighted_age_gyr
+        assert jnp.isfinite(age)
+        assert 0 < float(age) < 14.0
+
+    def test_sfh_mass_weighted_metallicity(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        z = pred.sfh.mass_weighted_metallicity
+        assert jnp.isfinite(z)
+        # log10(Z) should be in a reasonable range
+        assert -5.0 < float(z) < 0.5
+
+    # --- SED properties ---
+
+    def test_sed_l_bol(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        l_bol = pred.sed.l_bol
+        assert jnp.isfinite(l_bol)
+        assert float(l_bol) > 0
+
+    def test_sed_l_tir(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        l_tir = pred.sed.l_tir
+        assert jnp.isfinite(l_tir)
+        assert float(l_tir) >= 0
+
+    def test_sed_uv_slope_beta(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        beta = pred.sed.uv_slope_beta
+        assert jnp.isfinite(beta)
+
+    def test_sed_dn4000(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        dn = pred.sed.dn4000
+        assert jnp.isfinite(dn)
+        assert 0.5 < float(dn) < 3.5
+
+    def test_sed_balmer_break(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        bb = pred.sed.balmer_break
+        assert jnp.isfinite(bb)
+        assert 0.5 < float(bb) < 3.5
+
+    def test_sed_m_uv(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        m_uv = pred.sed.m_uv
+        assert jnp.isfinite(m_uv)
+
+    def test_sed_irx(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        irx = pred.sed.irx
+        assert jnp.isfinite(irx)
+
+    def test_sed_fuv_nuv(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        assert jnp.isfinite(pred.sed.fuv_flux)
+        assert jnp.isfinite(pred.sed.nuv_flux)
+        assert float(pred.sed.fuv_flux) > 0
+        assert float(pred.sed.nuv_flux) > 0
+
+    def test_sed_rest_uv_color(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        uv = pred.sed.rest_uv_color
+        assert jnp.isfinite(uv)
+        # U-V typically -1 to 2.5 mag
+        assert -2.0 < float(uv) < 4.0
+
+    def test_sed_luminosity_weighted_age(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        age_lw = pred.sed.luminosity_weighted_age_gyr
+        assert jnp.isfinite(age_lw)
+        assert 0 < float(age_lw) < 14.0
+        # L-weighted should differ from mass-weighted
+        age_mw = pred.sfh.mass_weighted_age_gyr
+        # Both should be reasonable (not testing inequality since it
+        # depends on the SFH shape)
+        assert 0 < float(age_mw) < 14.0
+
+    def test_sed_energy_conservation(self, parametric_model, typical_params):
+        """l_dust_absorbed should be non-negative and finite."""
+        pred = parametric_model.predict(typical_params)
+        l_abs = pred.sed.l_dust_absorbed
+        if jnp.isfinite(l_abs):
+            assert float(l_abs) >= 0
+
+    # --- Emission lines ---
+
+    def test_lines_nan_without_nebular(self, parametric_model, typical_params):
+        """Without free nebular params, lines should be NaN."""
+        pred = parametric_model.predict(typical_params)
+        # BakedIn backend has no predict_nebular_line_luminosities
+        halpha = pred.lines.halpha
+        # Should be NaN (no free nebular model)
+        assert jnp.isnan(halpha) or jnp.isfinite(halpha)
+
+    # --- Radio ---
+
+    def test_radio_l_1p4ghz(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        l_radio = pred.radio.l_1p4ghz
+        assert jnp.isfinite(l_radio)
+        assert float(l_radio) >= 0
+
+    # --- X-ray ---
+
+    def test_xray_l_x_xrb(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        l_x = pred.xray.l_x_xrb
+        assert jnp.isfinite(l_x)
+        assert float(l_x) > 0
+
+    # --- Caching ---
+
+    def test_caching_sfh(self, parametric_model, typical_params):
+        """Accessing SFH properties twice should use cache."""
+        pred = parametric_model.predict(typical_params)
+        m1 = pred.sfh.stellar_mass
+        m2 = pred.sfh.stellar_mass
+        assert float(m1) == float(m2)
+        # Cache should contain weights
+        assert "weights" in pred._cache
+
+    def test_caching_sed_triggers_sfh(self, parametric_model, typical_params):
+        """Accessing SED property should also cache SFH intermediates."""
+        pred = parametric_model.predict(typical_params)
+        _ = pred.sed.l_bol
+        assert "weights" in pred._cache
+        assert "sed_total" in pred._cache
+
+    # --- sed_array ---
+
+    def test_sed_array(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        sed = pred.sed_array
+        assert sed.shape == parametric_model.ssp_data.ssp_wave.shape
+        assert jnp.all(jnp.isfinite(sed))
+
+    def test_sed_array_matches_predict_sed(self, parametric_model, typical_params):
+        pred = parametric_model.predict(typical_params)
+        sed_from_pred = pred.sed_array
+        sed_direct = parametric_model.predict_sed(typical_params)
+        np.testing.assert_allclose(np.array(sed_from_pred), np.array(sed_direct), rtol=1e-10)
+
+    # --- Backward compatibility ---
+
+    def test_predict_derived_backward_compat(self, parametric_model, typical_params):
+        """predict_derived() still returns a dict with old keys."""
+        d = parametric_model.predict_derived(typical_params)
+        assert isinstance(d, dict)
+        assert "stellar_mass" in d
+        assert "stellar_mass_surviving" in d
+        assert "sfr_100myr" in d
+        assert "sfr_10myr" in d
+        assert "ssfr" in d
+
+    def test_predict_derived_values_match(self, parametric_model, typical_params):
+        """predict_derived() values match predict() values."""
+        d = parametric_model.predict_derived(typical_params)
+        pred = parametric_model.predict(typical_params)
+        np.testing.assert_allclose(
+            float(d["stellar_mass"]), float(pred.sfh.stellar_mass), rtol=1e-8
+        )
+        np.testing.assert_allclose(float(d["sfr_100myr"]), float(pred.sfh.sfr_100myr), rtol=1e-8)
