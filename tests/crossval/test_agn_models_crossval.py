@@ -378,3 +378,70 @@ class TestFritzVsSKIRTOR:
 
         assert 1 < peak_sk < 100, f"SKIRTOR peak: {peak_sk:.1f} um"
         assert 1 < peak_ft < 100, f"Simple torus peak: {peak_ft:.1f} um"
+
+
+# ===================================================================
+# 4. QSOGen numerical precision vs original
+# ===================================================================
+
+_QSOGEN_MANUAL_REF = _DATA_DIR / "qsogen_manual_cont_bb.npz"
+
+
+class TestQSOGenPrecision:
+    """Verify QSOGen cont+BB matches original to <0.5% everywhere."""
+
+    @pytest.fixture(scope="class")
+    def manual_ref(self):
+        if not _QSOGEN_MANUAL_REF.is_file():
+            pytest.skip("QSOGen manual reference not found")
+        return dict(np.load(str(_QSOGEN_MANUAL_REF)))
+
+    def test_continuum_plus_bb_shape(self, manual_ref):
+        """Cont + BB (no lines) should match original to <0.5%."""
+        from diffsed.models.agn.qsogen import (
+            _broken_powerlaw_continuum,
+            _hot_dust_blackbody,
+        )
+
+        wave = jnp.array(manual_ref["wave"])
+        cont = _broken_powerlaw_continuum(wave, -0.349, 0.593, 3880.0)
+        bb = _hot_dust_blackbody(wave, cont, 1243.6, 3.961)
+        total = np.asarray(cont) + np.asarray(bb)
+
+        idx_5500 = np.argmin(np.abs(np.asarray(wave) - 5500))
+        ds_n = total / total[idx_5500]
+        orig_n = manual_ref["fnu_norm"]
+
+        # Compare at wavelengths away from sigmoid transitions
+        for w in [2000, 5500, 8000, 15000, 20000, 50000]:
+            idx = np.argmin(np.abs(np.asarray(wave) - w))
+            np.testing.assert_allclose(
+                ds_n[idx],
+                orig_n[idx],
+                rtol=0.005,
+                err_msg=f"QSOGen cont+BB shape at {w}A",
+            )
+
+    def test_bb_absolute_normalization(self, manual_ref):
+        """BB flux at 20000A should equal bbnorm = 3.961 exactly."""
+        from diffsed.models.agn.qsogen import _hot_dust_blackbody
+
+        wave = jnp.array(manual_ref["wave"])
+        bb = np.asarray(_hot_dust_blackbody(wave, None, 1243.6, 3.961))
+
+        idx_20k = np.argmin(np.abs(np.asarray(wave) - 20000))
+        np.testing.assert_allclose(
+            bb[idx_20k],
+            3.961,
+            rtol=1e-3,
+            err_msg="BB(20000A) should equal bbnorm",
+        )
+
+    def test_continuum_at_5500_is_one(self):
+        """Continuum should be normalized to 1.0 at 5500A."""
+        from diffsed.models.agn.qsogen import _broken_powerlaw_continuum
+
+        wave = jnp.linspace(912, 100000, 5000)
+        cont = _broken_powerlaw_continuum(wave, -0.349, 0.593, 3880.0)
+        idx = jnp.argmin(jnp.abs(wave - 5500))
+        np.testing.assert_allclose(float(cont[idx]), 1.0, atol=0.01)

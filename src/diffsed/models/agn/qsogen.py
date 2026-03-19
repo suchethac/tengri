@@ -145,79 +145,79 @@ def _broken_powerlaw_continuum(
     plslp1: float,
     plslp2: float,
     plbrk: float,
+    plstep: float = -1.0,
+    plbrk3: float = 1200.0,
 ) -> jnp.ndarray:
-    """Broken power-law continuum in f_lambda.
+    """Broken power-law continuum in f_nu (matching original qsogen exactly).
 
-    Three segments with smooth sigmoid transitions:
-    - lambda < 1200 A: steepened slope (alpha_3 = plslp1 - 1 in f_nu)
-    - 1200 A < lambda < plbrk: blue slope plslp1 (in f_nu)
-    - lambda > plbrk: red slope plslp2 (in f_nu)
+    Works in f_nu space: f_nu = const * wavelength^sl, where sl = -alpha_nu.
+    Three segments with smooth sigmoid transitions (differentiable):
+    - lambda > plbrk: sl2 = -plslp2 (red/optical)
+    - plbrk3 < lambda < plbrk: sl1 = -plslp1 (blue/UV)
+    - lambda < plbrk3: sl3 = sl1 - plstep (EUV, steepened)
 
-    f_nu ~ nu^alpha is equivalent to f_lambda ~ lambda^(-alpha - 2).
-
-    The continuum is normalized to 1.0 at ``_LAMBDA_NORM`` (5500 A).
+    Normalized to 1.0 at ``_LAMBDA_NORM`` (5500 A).
 
     Parameters
     ----------
     wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     plslp1 : float
-        Blue power-law slope in f_nu (UV side of break).
+        Blue f_nu spectral index. f_nu ~ nu^plslp1 = wavelength^(-plslp1).
     plslp2 : float
-        Red power-law slope in f_nu (optical side of break).
+        Red f_nu spectral index.
     plbrk : float
-        Break wavelength [Angstrom].
+        Break wavelength between blue and red [Angstrom].
+    plstep : float
+        Extra steepening in the EUV below plbrk3. Default -1.0.
+    plbrk3 : float
+        EUV break wavelength [Angstrom]. Default 1200.
 
     Returns
     -------
     array, shape (n_wave,)
-        f_lambda (arbitrary units, normalized at 5500 A).
+        f_nu (arbitrary units, normalized to 1.0 at 5500 A).
     """
-    # Convert f_nu slopes to f_lambda slopes: f_lam ~ lam^(-alpha_nu - 2)
-    slope_blue = -plslp1 - 2.0
-    slope_red = -plslp2 - 2.0
-    slope_euv = -(plslp1 - 1.0) - 2.0  # Steepened below 1200 A
+    # f_nu slopes in wavelength space (matching original qsosed.py exactly)
+    sl1 = -plslp1
+    sl2 = -plslp2
+    sl3 = sl1 - plstep
 
-    # Log-wavelength for sigmoid transitions
+    # Normalization constants for continuity
+    const2 = 1.0 / (_LAMBDA_NORM**sl2)
+    const1 = const2 * (plbrk**sl2) / (plbrk**sl1)
+    const3 = const1 * (plbrk3**sl1) / (plbrk3**sl3)
+
+    # Power-law segments
+    f_red = const2 * wavelength**sl2
+    f_blue = const1 * wavelength**sl1
+    f_euv = const3 * wavelength**sl3
+
+    # Differentiable sigmoid transitions (replaces original np.where)
+    steepness = 1.0 / _SIGMOID_WIDTH
     log_wave = jnp.log10(wavelength)
     log_brk = jnp.log10(jnp.maximum(plbrk, 100.0))
-    log_1200 = jnp.log10(1200.0)
+    log_brk3 = jnp.log10(jnp.maximum(plbrk3, 100.0))
 
-    steepness = 1.0 / _SIGMOID_WIDTH
-
-    # Sigmoid weights:
-    # w_red ~ 1 for lambda >> plbrk, ~ 0 for lambda << plbrk
     w_red = jax.nn.sigmoid(steepness * (log_wave - log_brk))
-    # w_euv ~ 1 for lambda << 1200, ~ 0 for lambda >> 1200
-    w_euv = jax.nn.sigmoid(-steepness * (log_wave - log_1200))
-    # w_blue fills the remainder
-    w_blue = 1.0 - w_red - w_euv
-    # Clip to avoid negative weights from sigmoid overlap
-    w_blue = jnp.clip(w_blue, 0.0, 1.0)
+    w_euv = jax.nn.sigmoid(-steepness * (log_wave - log_brk3))
+    w_blue = jnp.clip(1.0 - w_red - w_euv, 0.0, 1.0)
 
-    # Power-law segments, each referenced to its own pivot
-    # then anchored together through normalization
-    f_blue = (wavelength / plbrk) ** slope_blue
-    f_red = (wavelength / plbrk) ** slope_red
-    # EUV segment: match blue at 1200 A, then steepen
-    f_euv = (wavelength / 1200.0) ** slope_euv * (1200.0 / plbrk) ** slope_blue
+    f_nu = w_euv * f_euv + w_blue * f_blue + w_red * f_red
 
-    f_lam = w_euv * f_euv + w_blue * f_blue + w_red * f_red
-
-    # Normalize at 5500 A
+    # Normalize to 1.0 at 5500 A
     log_norm = jnp.log10(_LAMBDA_NORM)
     w_red_n = jax.nn.sigmoid(steepness * (log_norm - log_brk))
-    w_euv_n = jax.nn.sigmoid(-steepness * (log_norm - log_1200))
+    w_euv_n = jax.nn.sigmoid(-steepness * (log_norm - log_brk3))
     w_blue_n = jnp.clip(1.0 - w_red_n - w_euv_n, 0.0, 1.0)
 
-    f_blue_n = (_LAMBDA_NORM / plbrk) ** slope_blue
-    f_red_n = (_LAMBDA_NORM / plbrk) ** slope_red
-    f_euv_n = (_LAMBDA_NORM / 1200.0) ** slope_euv * (1200.0 / plbrk) ** slope_blue
+    f_norm = (
+        w_euv_n * const3 * _LAMBDA_NORM**sl3
+        + w_blue_n * const1 * _LAMBDA_NORM**sl1
+        + w_red_n * const2 * _LAMBDA_NORM**sl2
+    )
 
-    f_norm = w_euv_n * f_euv_n + w_blue_n * f_blue_n + w_red_n * f_red_n
-    f_norm = jnp.maximum(f_norm, 1e-30)
-
-    return f_lam / f_norm
+    return f_nu / jnp.maximum(f_norm, 1e-30)
 
 
 def _hot_dust_blackbody(
@@ -247,30 +247,18 @@ def _hot_dust_blackbody(
     array, shape (n_wave,)
         Hot dust f_lambda contribution (same units as continuum_flam).
     """
-    b_lam = _planck_blambda(wavelength, tbb)
-    b_lam_anchor = _planck_blambda(jnp.array(_LAMBDA_BB_ANCHOR), tbb)
-    b_lam_anchor = jnp.maximum(b_lam_anchor, 1e-60)
+    # B_nu as function of wavelength (matching original bb() exactly):
+    #   bb(T, wav) = wav^{-3} / (exp(hc/kT*wav) - 1)
+    hc_over_k = 1.43877735e8  # h*c/k_B in Kelvin*Angstrom
+    x = hc_over_k / (tbb * jnp.maximum(wavelength, 1.0))
+    bb_fnu = wavelength ** (-3.0) / (jnp.exp(jnp.clip(x, 0.0, 500.0)) - 1.0)
 
-    # Evaluate continuum at 2 um by interpolation in log space
-    # Use smooth approach: find continuum value at anchor wavelength
-    # Since continuum_flam is already on our wavelength grid, we
-    # evaluate the Planck shape relative to its own anchor value
-    # and scale by bbnorm * continuum_at_anchor.
-    # For the continuum at 2 um, evaluate the broken power law there:
-    # it's embedded in continuum_flam, so we interpolate.
-    log_wave = jnp.log10(wavelength)
-    log_anchor = jnp.log10(_LAMBDA_BB_ANCHOR)
-    continuum_at_anchor = jnp.interp(
-        log_anchor,
-        log_wave,
-        continuum_flam,
-    )
-    continuum_at_anchor = jnp.maximum(continuum_at_anchor, 1e-30)
+    # Normalize: bb_flux(anchor) = bbnorm (ABSOLUTE f_nu, not relative)
+    x_anchor = hc_over_k / (tbb * _LAMBDA_BB_ANCHOR)
+    bb_anchor = _LAMBDA_BB_ANCHOR ** (-3.0) / (jnp.exp(jnp.clip(x_anchor, 0.0, 500.0)) - 1.0)
+    cmult = bbnorm / jnp.maximum(bb_anchor, 1e-60)
 
-    # Blackbody shape normalized at anchor
-    bb_shape = b_lam / b_lam_anchor
-
-    return bbnorm * continuum_at_anchor * bb_shape
+    return cmult * bb_fnu
 
 
 def _balmer_continuum(
@@ -521,33 +509,27 @@ def qsogen_sed(
         log_lbol_erg,
     )
 
-    # --- Component 3b: Balmer continuum (Grandi 1982) ---
-    balmer_cont = _balmer_continuum(wavelength, continuum)
-
-    # --- Combine components (all in f_lambda, normalized at 5500 A) ---
-    f_lam_total = continuum + hot_dust + emission_lines + balmer_cont
+    # --- Combine components (all in f_nu, normalized ~1 at 5500 A) ---
+    # NOTE: Balmer continuum (_balmer_continuum) is available but NOT
+    # included by default, matching the original qsogen where bcnorm
+    # must be explicitly set. Add via a future agn_bcnorm parameter.
+    f_nu_total = continuum + hot_dust + emission_lines
 
     # --- Component 4: Dust reddening ---
-    f_lam_total = _apply_dust_reddening(wavelength, f_lam_total, agn_ebv)
+    # Reddening operates on f_lambda, but the extinction law A(lambda) is
+    # the same in f_nu: 10^(-0.4 * A_lam) is a multiplicative factor.
+    f_nu_total = _apply_dust_reddening(wavelength, f_nu_total, agn_ebv)
 
-    # --- Convert to L_nu and scale to bolometric luminosity ---
-    # f_lam is in arbitrary units (normalized at 5500 A).
-    # Integrate f_lam * dlam to get bolometric "shape integral",
-    # then scale so total luminosity = 10^agn_log_lbol Lsun.
-
-    # L_nu = L_lam * lam^2 / c  (with c in Angstrom/s)
-    c_ang = _C_LIGHT / _ANGSTROM_CM  # c in Angstrom/s
-    f_nu = f_lam_total * wavelength**2 / c_ang
-
-    # Integrate L_nu * dnu to find shape normalization
+    # --- Scale to bolometric luminosity ---
+    # Integrate f_nu * dnu to find shape normalization
     nu = _wavelength_to_nu(wavelength)
     idx_sort = jnp.argsort(nu)
-    integral_nu = jnp.trapezoid(f_nu[idx_sort], nu[idx_sort])
+    integral_nu = jnp.trapezoid(f_nu_total[idx_sort], nu[idx_sort])
     integral_nu = jnp.maximum(jnp.abs(integral_nu), 1e-30)
 
-    # Scale to bolometric luminosity
+    # Scale to L_nu in Lsun/Hz
     l_bol_lsun = 10.0**agn_log_lbol
-    l_nu = f_nu * (l_bol_lsun / integral_nu)
+    l_nu = f_nu_total * (l_bol_lsun / integral_nu)
 
     return l_nu * agn_frac
 
