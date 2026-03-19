@@ -350,6 +350,27 @@ _register(
 
 
 # ---------------------------------------------------------------------------
+# Register tabulated SFH model (for simulations)
+# ---------------------------------------------------------------------------
+
+def _table_sfh_placeholder(t_lookback, **kwargs):
+    """Placeholder — tabulated SFH is handled directly in Model._compute_sed_components."""
+    return jnp.zeros_like(t_lookback)
+
+
+_register(
+    SFHModelSpec(
+        name="table",
+        fn=_table_sfh_placeholder,
+        params={},  # no fittable params — the table IS the SFH
+        settings={},
+        internal_param_map={},
+        composition_type="additive",
+    )
+)
+
+
+# ---------------------------------------------------------------------------
 # Register burst (mixture) model
 # ---------------------------------------------------------------------------
 

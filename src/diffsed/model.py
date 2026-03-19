@@ -1392,10 +1392,13 @@ class Model:
         if self.filter_waves is None:
             raise ValueError("No filters set. Pass filters to Model().")
 
-        if self._precomp is not None and self._fused_photometry is not None:
+        # Tabulated SFH bypasses fused kernel (needs full SED path)
+        _has_tabulated_sfh = "sfh_t_gyr" in params
+
+        if self._precomp is not None and self._fused_photometry is not None and not _has_tabulated_sfh:
             return self._predict_photometry_fast(params)
 
-        if self._ztable is not None and self._fused_photometry_ztable is not None:
+        if self._ztable is not None and self._fused_photometry_ztable is not None and not _has_tabulated_sfh:
             return self._predict_photometry_ztable(params)
 
         sed = self.predict_sed(params)
