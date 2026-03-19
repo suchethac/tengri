@@ -39,6 +39,50 @@ import numpy as np
 _np_trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
 
+def _vectorized_interp(
+    xp_target: np.ndarray, xp_source: np.ndarray, yp_source: np.ndarray
+) -> np.ndarray:
+    """Vectorized linear interpolation: all (met, age) SSPs at once.
+
+    Replaces the inner ``for m in n_met: for a in n_age: np.interp(...)``
+    double loop with a single vectorized NumPy operation.  Computes
+    interpolation indices and weights once, then applies via fancy indexing.
+
+    Parameters
+    ----------
+    xp_target : array, shape (n_target,)
+        Target x-coordinates (e.g. filter wavelengths).
+    xp_source : array, shape (n_source,)
+        Source x-coordinates (must be sorted ascending).
+    yp_source : array, shape (n_met, n_age, n_source)
+        Source y-values for all metallicities and ages.
+
+    Returns
+    -------
+    array, shape (n_met, n_age, n_target)
+        Interpolated values, with out-of-bounds set to 0.
+    """
+    n_source = len(xp_source)
+
+    # Compute interpolation indices and fractional weights once
+    idx = np.searchsorted(xp_source, xp_target) - 1
+    idx = np.clip(idx, 0, n_source - 2)
+
+    dx = xp_source[idx + 1] - xp_source[idx]
+    # Guard against zero-width bins (shouldn't happen with sorted grids)
+    dx = np.where(dx > 0, dx, 1.0)
+    frac = (xp_target - xp_source[idx]) / dx
+
+    # Vectorized gather: (n_met, n_age, n_target) via fancy indexing
+    result = (1.0 - frac) * yp_source[:, :, idx] + frac * yp_source[:, :, idx + 1]
+
+    # Zero out-of-bounds (left and right)
+    oob = (xp_target < xp_source[0]) | (xp_target > xp_source[-1])
+    result[:, :, oob] = 0.0
+
+    return result
+
+
 class PhotometricPrecomputation(NamedTuple):
     """Pre-computed SSP broadband fluxes for fast photometry.
 
@@ -135,7 +179,7 @@ def precompute_photometry(
     eff_waves_rest = eff_waves / (1.0 + redshift)
 
     # Pre-integrate SSP through each filter for each (met, age)
-    # Vectorized: interpolate all (met, age) SSPs to each filter grid at once
+    # Vectorized: compute interpolation weights once, apply to all SSPs at once
     import numpy as np
 
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)  # (n_met, n_age, n_wave)
@@ -146,14 +190,8 @@ def precompute_photometry(
         fw_np, ft_np = np.asarray(fw), np.asarray(ft)
         denom = _np_trapezoid(ft_np * fw_np, fw_np)
 
-        # Interpolate all SSPs onto this filter's wavelength grid
-        # ssp_flux_np is (n_met, n_age, n_wave), we need (n_met, n_age, len(fw))
-        ssp_on_filt = np.zeros((n_met, n_age, len(fw_np)))
-        for m_idx in range(n_met):
-            for a_idx in range(n_age):
-                ssp_on_filt[m_idx, a_idx] = np.interp(
-                    fw_np, wave_obs_np, ssp_flux_np[m_idx, a_idx], left=0.0, right=0.0
-                )
+        # Vectorized interpolation: compute weights once, apply to all (met, age)
+        ssp_on_filt = _vectorized_interp(fw_np, wave_obs_np, ssp_flux_np)
 
         # Vectorized integration: (n_met, n_age, n_fw) * (n_fw,) → trapz
         integrand = ssp_on_filt * ft_np[None, None, :] * fw_np[None, None, :]
@@ -198,28 +236,16 @@ def precompute_spectroscopy(
     SpectroscopicPrecomputation
         Pre-rebinned SSP data for fast_spectrum().
     """
-    n_met = ssp_data.ssp_flux.shape[0]
-    n_age = ssp_data.ssp_flux.shape[1]
-    n_pix = len(wave_obs_pixels)
-
     wave_rest_pixels = wave_obs_pixels / (1.0 + redshift)
 
     # Interpolate all SSP spectra to the pixel rest-frame wavelengths
+    # Vectorized: compute weights once, apply to all (met, age) simultaneously
     import numpy as np
 
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_rest_np = np.asarray(wave_rest_pixels)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
-    ssp_on_pixels_np = np.zeros((n_met, n_age, n_pix))
-    for m_idx in range(n_met):
-        for a_idx in range(n_age):
-            ssp_on_pixels_np[m_idx, a_idx] = np.interp(
-                wave_rest_np,
-                wave_ssp_np,
-                ssp_flux_np[m_idx, a_idx],
-                left=0.0,
-                right=0.0,
-            )
+    ssp_on_pixels_np = _vectorized_interp(wave_rest_np, wave_ssp_np, ssp_flux_np)
     ssp_on_pixels = jnp.array(ssp_on_pixels_np)
 
     flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm**2)
@@ -328,41 +354,40 @@ def precompute_photometry_ztable(
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
 
+    # Precompute filter denominators and effective wavelengths (z-independent)
+    filter_denoms = []
+    eff_waves_obs = []  # observed-frame effective wavelengths (z-independent)
+    for fw, ft in zip(filter_waves, filter_trans):
+        fw_np, ft_np = np.asarray(fw), np.asarray(ft)
+        filter_denoms.append(_np_trapezoid(ft_np * fw_np, fw_np))
+        eff_waves_obs.append(
+            _np_trapezoid(ft_np * fw_np**2, fw_np)
+            / max(_np_trapezoid(ft_np * fw_np, fw_np), 1e-30)
+        )
+    eff_waves_obs = np.array(eff_waves_obs)
+
     for zi, z_val in enumerate(z_grid):
         z_val = float(z_val)
         wave_obs = wave_ssp_np * (1.0 + z_val)
 
-        # Effective wavelengths per filter at this z
-        eff_waves = []
-        for fw, ft in zip(filter_waves, filter_trans):
-            fw_np, ft_np = np.asarray(fw), np.asarray(ft)
-            lam_eff = _np_trapezoid(ft_np * fw_np**2, fw_np) / _np_trapezoid(ft_np * fw_np, fw_np)
-            eff_waves.append(lam_eff)
-        eff_waves = np.array(eff_waves)
-        eff_waves_rest_all[zi] = eff_waves / (1.0 + z_val)
+        # Effective wavelengths: observed-frame are filter properties (z-independent)
+        eff_waves_rest_all[zi] = eff_waves_obs / (1.0 + z_val)
 
         # IGM transmission at effective observed wavelengths
         if apply_igm:
             from diffsed.models.igm import igm_transmission
 
-            igm_trans_all[zi] = np.asarray(igm_transmission(jnp.asarray(eff_waves), z_val))
+            igm_trans_all[zi] = np.asarray(igm_transmission(jnp.asarray(eff_waves_obs), z_val))
 
-        # Pre-integrate SSP through each filter
+        # Pre-integrate SSP through each filter (vectorized over met × age)
         for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
             fw_np, ft_np = np.asarray(fw), np.asarray(ft)
-            denom = _np_trapezoid(ft_np * fw_np, fw_np)
+            denom = filter_denoms[f_idx]
 
-            for m_idx in range(n_met):
-                for a_idx in range(n_age):
-                    ssp_on_filt = np.interp(
-                        fw_np,
-                        wave_obs,
-                        ssp_flux_np[m_idx, a_idx],
-                        left=0.0,
-                        right=0.0,
-                    )
-                    num = _np_trapezoid(ssp_on_filt * ft_np * fw_np, fw_np)
-                    ssp_phot_all[zi, m_idx, a_idx, f_idx] = num / max(denom, 1e-30)
+            ssp_on_filt = _vectorized_interp(fw_np, wave_obs, ssp_flux_np)
+            integrand = ssp_on_filt * ft_np[None, None, :] * fw_np[None, None, :]
+            num = _np_trapezoid(integrand, fw_np, axis=-1)
+            ssp_phot_all[zi, :, :, f_idx] = num / max(denom, 1e-30)
 
         # Geometric flux scale
         dl_cm = float(luminosity_distance(z_val))

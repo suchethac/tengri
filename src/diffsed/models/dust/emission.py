@@ -138,8 +138,9 @@ def cmb_corrected_temperature(
     At high redshift the CMB sets a temperature floor on dust grains.
     The effective equilibrium temperature is (da Cunha et al. 2013)::
 
-        T_eff = (T_dust^(4+beta) + T_CMB(z)^(4+beta)
-                 - T_CMB(z=0)^(4+beta))^{1/(4+beta)}
+        T_eff = (T_dust ^ (4 + beta) + T_CMB(z) ^ (4 + beta) - T_CMB(z=0) ^ (4 + beta)) ^ {
+            1 / (4 + beta)
+        }
 
     Parameters
     ----------
@@ -158,9 +159,7 @@ def cmb_corrected_temperature(
     """
     exponent = 4.0 + beta_ir
     T_cmb_z = _T_CMB_0 * (1.0 + redshift)
-    T_eff = (
-        T_dust**exponent + T_cmb_z**exponent - _T_CMB_0**exponent
-    ) ** (1.0 / exponent)
+    T_eff = (T_dust**exponent + T_cmb_z**exponent - _T_CMB_0**exponent) ** (1.0 / exponent)
     return T_eff
 
 
@@ -261,11 +260,8 @@ def compute_absorbed_luminosity(
 
     absorbed_Lnu = (1.0 - transmission) * L_nu_intrinsic
 
-    # Integrate over frequency: nu is descending, so flip for trapezoid
-    nu_ascending = nu[::-1]
-    absorbed_ascending = absorbed_Lnu[::-1]
-
-    return jnp.trapezoid(absorbed_ascending, nu_ascending)
+    # Integrate over frequency: nu is descending, negate for positive result
+    return -jnp.trapezoid(absorbed_Lnu, nu)
 
 
 def compute_absorbed_luminosity_from_tau(
@@ -357,10 +353,9 @@ def modified_blackbody(
     # Unnormalized SED shape (erg/s/cm^2/Hz/sr units cancel in ratio)
     shape = emissivity * bnu
 
-    # Integrate shape over frequency for normalization
-    nu_ascending = nu[::-1]
-    shape_ascending = shape[::-1]
-    integral = jnp.trapezoid(shape_ascending, nu_ascending)
+    # Integrate shape over frequency for normalization.
+    # nu is descending (wave ascending), so negate to get positive integral.
+    integral = -jnp.trapezoid(shape, nu)
 
     # Guard against zero integral (e.g. wavelength grid entirely outside
     # the thermal peak) — return zeros instead of NaN
@@ -464,9 +459,8 @@ def dale2014(
 
     shape = emissivity * ((1.0 - f_warm) * bnu_cold + f_warm * bnu_warm)
 
-    nu_ascending = nu[::-1]
-    shape_ascending = shape[::-1]
-    integral = jnp.trapezoid(shape_ascending, nu_ascending)
+    # nu is descending, negate for positive integral
+    integral = -jnp.trapezoid(shape, nu)
 
     norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
 
@@ -554,7 +548,6 @@ def draine_li2007(
     """
     wavelength_cm = wavelength_aa * _AA_TO_CM
     nu = _C_CGS / wavelength_cm
-    nu_ascending = nu[::-1]
 
     beta_ir = 2.0  # DL07 uses beta~2 for large grains
     nu_ref = _C_CGS / (250.0e-4)
@@ -586,24 +579,19 @@ def draine_li2007(
     f_pdr = dust_gamma_dl
     f_diff = 1.0 - f_pah - f_pdr
 
-    # Normalize each component to unit bolometric luminosity (integral
-    # over frequency), then mix with the prescribed fractions.
-    def _normalize_lnu(s):
-        """Normalize L_nu shape to integrate to 1 over frequency."""
-        s_asc = s[::-1]
-        integral = jnp.trapezoid(s_asc, nu_ascending)
-        return jnp.where(integral > 0.0, s / integral, s)
-
     # For the PAH component (defined in wavelength-space as a Gaussian),
     # convert to L_nu: L_nu = L_lambda * lambda^2 / c, then normalize.
-    # Since shape_pah is in wavelength-space, we need:
-    #   L_nu(pah) ∝ shape_pah * lambda^2 / c  (Jacobian for lambda→nu)
     shape_pah_lnu = shape_pah * (wavelength_cm**2) / _C_CGS
 
+    # Normalize all 3 components at once: negate because nu is descending
+    int_diff = -jnp.trapezoid(shape_diff, nu)
+    int_pdr = -jnp.trapezoid(shape_pdr, nu)
+    int_pah = -jnp.trapezoid(shape_pah_lnu, nu)
+
     l_nu = (
-        f_diff * _normalize_lnu(shape_diff)
-        + f_pdr * _normalize_lnu(shape_pdr)
-        + f_pah * _normalize_lnu(shape_pah_lnu)
+        f_diff * jnp.where(int_diff > 0.0, shape_diff / int_diff, shape_diff)
+        + f_pdr * jnp.where(int_pdr > 0.0, shape_pdr / int_pdr, shape_pdr)
+        + f_pah * jnp.where(int_pah > 0.0, shape_pah_lnu / int_pah, shape_pah_lnu)
     )
 
     return L_absorbed * l_nu
@@ -839,7 +827,6 @@ def draine_li2014(
     """
     wavelength_cm = wavelength_aa * _AA_TO_CM
     nu = _C_CGS / wavelength_cm
-    nu_ascending = nu[::-1]
 
     beta_ir = 2.0  # Grain emissivity index
     nu_ref = _C_CGS / (250.0e-4)
@@ -869,18 +856,17 @@ def draine_li2014(
     f_pdr = dust_gamma_dl
     f_diff = 1.0 - f_pah - f_pdr
 
-    def _normalize_lnu(s):
-        """Normalize L_nu shape to integrate to 1 over frequency."""
-        s_asc = s[::-1]
-        integral = jnp.trapezoid(s_asc, nu_ascending)
-        return jnp.where(integral > 0.0, s / integral, s)
-
     shape_pah_lnu = shape_pah * (wavelength_cm**2) / _C_CGS
 
+    # Normalize all 3 components: negate because nu is descending
+    int_diff = -jnp.trapezoid(shape_diff, nu)
+    int_pdr = -jnp.trapezoid(shape_pdr, nu)
+    int_pah = -jnp.trapezoid(shape_pah_lnu, nu)
+
     l_nu = (
-        f_diff * _normalize_lnu(shape_diff)
-        + f_pdr * _normalize_lnu(shape_pdr)
-        + f_pah * _normalize_lnu(shape_pah_lnu)
+        f_diff * jnp.where(int_diff > 0.0, shape_diff / int_diff, shape_diff)
+        + f_pdr * jnp.where(int_pdr > 0.0, shape_pdr / int_pdr, shape_pdr)
+        + f_pah * jnp.where(int_pah > 0.0, shape_pah_lnu / int_pah, shape_pah_lnu)
     )
 
     return L_absorbed * l_nu
@@ -942,13 +928,14 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
     -------
     >>> dl14 = create_dl14_from_grid("data/dl14_templates.h5")
     >>> DUST_EMISSION_MODELS["dl14_tabulated"] = dl14
-    >>> sed = dl14(wav, L_abs, dust_umin=1.0, dust_gamma_dl=0.01,
-    ...           dust_qpah=2.5, dust_alpha_dl14=2.0)
+    >>> sed = dl14(
+    ...     wav, L_abs, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5, dust_alpha_dl14=2.0
+    ... )
     """
     templates = load_dl14_templates(grid_path)
 
-    single_u = templates["single_u"]      # (n_qpah, n_umin, n_wave)
-    powerlaw = templates["powerlaw"]      # (n_qpah, n_umin, n_alpha, n_wave)
+    single_u = templates["single_u"]  # (n_qpah, n_umin, n_wave)
+    powerlaw = templates["powerlaw"]  # (n_qpah, n_umin, n_alpha, n_wave)
     tmpl_wave = templates["wavelength"]
     umin_grid = templates["umin_grid"]
     qpah_grid = templates["qpah_grid"]
@@ -1013,9 +1000,8 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
             return (1.0 - fa) * lo + fa * hi
 
         # Mix single-U and power-law components via gamma
-        template = (
-            (1.0 - dust_gamma_dl) * _bilinear(single_u)
-            + dust_gamma_dl * _trilinear(powerlaw)
+        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _trilinear(
+            powerlaw
         )
 
         # Interpolate template onto target wavelength grid
