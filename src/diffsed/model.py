@@ -346,7 +346,7 @@ class Model:
         # Nebular emission backend + params
         if spec.nebular:
             self._param_map["neb_logU"] = ("neb_logU", 1.0, 0.0)
-            self._param_map["neb_logZ_gas"] = ("neb_logZ_gas", 1.0, 0.0)
+            self._param_map["neb_logZ_gas"] = ("neb_logZ_gas", 1.0, LOG10_ZSUN)
             self._param_map["neb_fesc"] = ("neb_fesc", 1.0, 0.0)
             self._param_map["neb_fesc_lya"] = ("neb_fesc_lya", 1.0, 0.0)
 

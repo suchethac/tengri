@@ -23,12 +23,16 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-
 # Physical constants
-_H_PLANCK = 6.62607015e-27   # erg s
-_C_CGS = 2.99792458e10       # cm/s
-_LSUN_ERG = 3.828e33         # erg/s
-_LYMAN_LIMIT = 911.8         # Angstrom
+_H_PLANCK = 6.62607015e-27  # erg s
+_C_CGS = 2.99792458e10  # cm/s
+_LSUN_ERG = 3.828e33  # erg/s
+_LYMAN_LIMIT = 911.8  # Angstrom
+
+# Solar metallicity: log10(Zsun) = log10(0.0142) (Asplund+2009)
+# SSP grids store absolute log10(Z); CLOUDY HDF5 files store log10(Z/Zsun).
+# We convert CLOUDY to absolute at load time so both share the same convention.
+_LOG10_ZSUN = -1.8477116556169435
 
 
 class CloudyGridData(NamedTuple):
@@ -55,6 +59,10 @@ def load_cloudy_grid(filepath: str) -> CloudyGridData:
     Following FSPS convention, stores luminosities in log10 space
     for interpolation accuracy. A floor of 10^{-95} prevents log(0).
 
+    Metallicity axes are converted from log10(Z/Zsun) (FSPS convention
+    in the HDF5 file) to absolute log10(Z) at load time, matching the
+    SSP metallicity grid convention used by DSPS.
+
     Parameters
     ----------
     filepath : str
@@ -70,15 +78,19 @@ def load_cloudy_grid(filepath: str) -> CloudyGridData:
         line_lum_log = np.log10(line_lum_raw + _LOG_FLOOR)
         cont_lum_log = np.log10(cont_lum_raw + _LOG_FLOOR)
 
+        # Convert metallicity from log10(Z/Zsun) → absolute log10(Z)
+        line_log_met_abs = np.array(f["lines/axes/log_met"][:]) + _LOG10_ZSUN
+        cont_log_met_abs = np.array(f["continuum/axes/log_met"][:]) + _LOG10_ZSUN
+
         return CloudyGridData(
             line_wavelengths=jnp.array(f["lines/wavelength"][:]),
             line_luminosity=jnp.array(line_lum_log),  # log10 space!
-            line_log_met=jnp.array(f["lines/axes/log_met"][:]),
+            line_log_met=jnp.array(line_log_met_abs),  # absolute log10(Z)
             line_log_age=jnp.array(f["lines/axes/log_age_yr"][:]),
             line_log_U=jnp.array(f["lines/axes/log_U"][:]),
             cont_wavelength=jnp.array(f["continuum/wavelength"][:]),
             cont_luminosity=jnp.array(cont_lum_log),  # log10 space!
-            cont_log_met=jnp.array(f["continuum/axes/log_met"][:]),
+            cont_log_met=jnp.array(cont_log_met_abs),  # absolute log10(Z)
             cont_log_age=jnp.array(f["continuum/axes/log_age_yr"][:]),
             cont_log_U=jnp.array(f["continuum/axes/log_U"][:]),
         )
