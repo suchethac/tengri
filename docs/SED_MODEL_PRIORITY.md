@@ -20,12 +20,12 @@ Prospector, Bagpipes, CIGALE, BEAGLE, and Synthesizer.
 | Dust attenuation | **Complete** | 6 curves + f_obscuration + per-component control |
 | Dust emission | **Complete** | 3 models: greybody, Dale+2014, DL07 analytic + grid |
 | Nebular (CLOUDY grids) | **Complete** | 8 HDF5 grids, trilinear interp, Q_H on-the-fly |
-| Nebular (Cue emulator) | **Complete** | JAX port of Li+2025, 12 params, needs weight conversion |
+| Nebular (Cue emulator) | **Complete** | JAX port of Li+2025, 12 params, SSP ionizing params precomputed |
 | AGN | **Complete** | 3 models: simple, standard (SS73), Kubota & Done 2018 |
-| IGM absorption | **Complete** | Inoue+2014, 39 Lyman lines + continuum |
-| Metallicity | Basic | Single value, no age evolution |
-| Noise model | **Complete** | Student-t outlier + fractional calibration (separate agent) |
-| Calibration | Missing | No spectrophotometric polynomial |
+| IGM absorption | **Complete** | Inoue+2014, vectorized, cross-validated vs bagpipes |
+| Metallicity | **Complete** | Single Z + evolving Z(t) ramp (2 params) |
+| Noise model | **Complete** | Student-t outlier + fractional calibration |
+| Calibration | **Complete** | Chebyshev spectrophotometric polynomial |
 | Observation types | **Complete** | Photometry + spectroscopy + combined |
 | Filters | **Complete** | 50+ from SVO |
 | Inference | **Complete** | MAP, RT, NUTS, geoVI, MGVI, EVI |
