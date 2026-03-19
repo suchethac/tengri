@@ -45,16 +45,19 @@ from diffsed.models.sfh.registry import compute_field_gp, resolve_sfh
 from diffsed.models.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
+    compute_log_z_evolving,
     compute_surviving_mass,
     interpolate_mass_remaining,
+    interpolate_mass_remaining_evolving,
     interpolate_metallicity,
+    interpolate_metallicity_evolving,
 )
 from diffsed.models.sps.precompute import (
     precompute_photometry,
     precompute_photometry_ztable,
     precompute_spectroscopy,
 )
-from diffsed.utils.cosmology import luminosity_distance
+from diffsed.utils.cosmology import age_at_z, luminosity_distance
 from diffsed.utils.grid import (
     grid_spacing,
     interpolate_to_linear_time,
@@ -68,6 +71,11 @@ from diffsed.utils.grid import (
 
 # Solar metallicity: log10(Zsun) = log10(0.0142) ≈ -1.848 (Asplund 2009)
 LOG10_ZSUN = -1.8477116556169435
+
+_EVOLVING_MET_PARAM_MAP = {
+    "met_logzsol_0": ("log_z_initial", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
+    "met_logzsol_final": ("log_z_final", 1.0, LOG10_ZSUN),
+}
 
 _NON_SFH_PARAM_MAP = {
     "met_logzsol": ("log_z", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
@@ -218,6 +226,13 @@ class Model:
                        "dust_umin", "dust_gamma_dl", "dust_qpah", "dust_eta_balance"]:
                 self._param_map[p] = (p, 1.0, 0.0)
 
+        # Evolving metallicity
+        self._evolving_metallicity = getattr(spec, "evolving_metallicity", False)
+        if self._evolving_metallicity:
+            # Replace met_logzsol mapping with the two evolving-Z params
+            self._param_map.pop("met_logzsol", None)
+            self._param_map.update(_EVOLVING_MET_PARAM_MAP)
+
         # AGN model (None = disabled)
         self._agn_model = getattr(spec, "agn_model", None)
         if self._agn_model:
@@ -352,6 +367,24 @@ class Model:
         if old_name and old_name in params:
             return params[old_name]
         return None
+
+    @staticmethod
+    def _t_universe_gyr(z):
+        """Age of the universe at redshift z in Gyr.
+
+        Thin wrapper around age_at_z (which returns years).
+
+        Parameters
+        ----------
+        z : float or jnp.ndarray
+            Redshift.
+
+        Returns
+        -------
+        float
+            Age of universe in Gyr.
+        """
+        return age_at_z(z) / 1e9
 
     def _compute_sfr(self, p):
         """Compute SFR via the composed SFH function.
@@ -595,11 +628,27 @@ class Model:
         weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
 
         # Metallicity interpolation
-        ssp_flux_at_z = interpolate_metallicity(
-            self.ssp_data.ssp_flux,
-            self.ssp_data.ssp_lgmet,
-            p["log_z"],
-        )
+        if self._evolving_metallicity:
+            # Age of universe at observed redshift (Gyr)
+            z = p.get("redshift", 0.0)
+            t_universe_gyr = self._t_universe_gyr(z)
+            log_z_per_age = compute_log_z_evolving(
+                self.ssp_data.ssp_lg_age_gyr,
+                p["log_z_initial"],
+                p["log_z_final"],
+                t_universe_gyr,
+            )
+            ssp_flux_at_z = interpolate_metallicity_evolving(
+                self.ssp_data.ssp_flux,
+                self.ssp_data.ssp_lgmet,
+                log_z_per_age,
+            )
+        else:
+            ssp_flux_at_z = interpolate_metallicity(
+                self.ssp_data.ssp_flux,
+                self.ssp_data.ssp_lgmet,
+                p["log_z"],
+            )
 
         # Dust attenuation (generalized two-component model)
         dust_atten = two_component_dust(
@@ -1006,10 +1055,25 @@ class Model:
         # Surviving stellar mass (if mass-remaining table available)
         mass_surviving = None
         if self.ssp_data.ssp_mass_remaining is not None:
-            log_z = p.get("log_z", 0.0)
-            mr_at_met = interpolate_mass_remaining(
-                self.ssp_data.ssp_mass_remaining, self.ssp_data.ssp_lgmet, log_z
-            )
+            if self._evolving_metallicity:
+                z = p.get("redshift", 0.0)
+                t_universe_gyr = self._t_universe_gyr(z)
+                log_z_per_age = compute_log_z_evolving(
+                    self.ssp_data.ssp_lg_age_gyr,
+                    p["log_z_initial"],
+                    p["log_z_final"],
+                    t_universe_gyr,
+                )
+                mr_at_met = interpolate_mass_remaining_evolving(
+                    self.ssp_data.ssp_mass_remaining,
+                    self.ssp_data.ssp_lgmet,
+                    log_z_per_age,
+                )
+            else:
+                log_z = p.get("log_z", 0.0)
+                mr_at_met = interpolate_mass_remaining(
+                    self.ssp_data.ssp_mass_remaining, self.ssp_data.ssp_lgmet, log_z
+                )
             mass_surviving = compute_surviving_mass(weights, mr_at_met)
 
         mask_100myr = self.age_yr <= 1e8

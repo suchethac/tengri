@@ -29,12 +29,18 @@ class SSPData(NamedTuple):
         Log10(age/Gyr) of SSP templates.
     ssp_lgmet : array, shape (n_met,)
         Log10(Z/Zsun) metallicity grid.
+    ssp_mass_remaining : array, shape (n_met, n_age), optional
+        Fraction of formed mass still in living stars + remnants
+        at each age and metallicity. Computed from stellar evolution
+        tracks; depends on IMF and isochrone library. None if not
+        available (surviving mass cannot be computed).
     """
 
     ssp_wave: jnp.ndarray
     ssp_flux: jnp.ndarray
     ssp_lg_age_gyr: jnp.ndarray
     ssp_lgmet: jnp.ndarray
+    ssp_mass_remaining: jnp.ndarray | None = None
 
 
 def load_ssp_data(filepath: str) -> SSPData:
@@ -57,11 +63,15 @@ def load_ssp_data(filepath: str) -> SSPData:
         raise ImportError("h5py required for SSP loading: pip install h5py") from None
 
     with h5py.File(filepath, "r") as f:
+        mass_remaining = None
+        if "ssp_mass_remaining" in f:
+            mass_remaining = jnp.array(f["ssp_mass_remaining"][:])
         return SSPData(
             ssp_wave=jnp.array(f["ssp_wave"][:]),
             ssp_flux=jnp.array(f["ssp_flux"][:]),
             ssp_lg_age_gyr=jnp.array(f["ssp_lg_age_gyr"][:]),
             ssp_lgmet=jnp.array(f["ssp_lgmet"][:]),
+            ssp_mass_remaining=mass_remaining,
         )
 
 
@@ -194,3 +204,182 @@ def interpolate_metallicity(
     frac = (log_z_clamped - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
 
     return (1.0 - frac) * ssp_flux[idx] + frac * ssp_flux[idx + 1]
+
+
+@jax.jit
+def interpolate_metallicity_evolving(
+    ssp_flux: jnp.ndarray,
+    ssp_lgmet: jnp.ndarray,
+    log_z_per_age: jnp.ndarray,
+) -> jnp.ndarray:
+    """Interpolate SSP flux with a different metallicity per age bin.
+
+    Each SSP age bin is interpolated at its own metallicity, enabling
+    time-evolving metallicity models (e.g., chemical enrichment).
+
+    Parameters
+    ----------
+    ssp_flux : array, shape (n_met, n_age, n_wave)
+        Full SSP flux grid.
+    ssp_lgmet : array, shape (n_met,)
+        Log10(Z/Zsun) grid.
+    log_z_per_age : array, shape (n_age,)
+        Target log10(Z/Zsun) at each age bin.
+
+    Returns
+    -------
+    array, shape (n_age, n_wave)
+        Interpolated SSP flux with per-age metallicity.
+    """
+    def _interp_one_age(log_z_i, ssp_flux_at_age_i):
+        """Interpolate a single age bin at its metallicity.
+
+        Parameters
+        ----------
+        log_z_i : scalar
+            Target log10(Z/Zsun) for this age bin.
+        ssp_flux_at_age_i : array, shape (n_met, n_wave)
+            SSP flux at all metallicities for this age bin.
+
+        Returns
+        -------
+        array, shape (n_wave,)
+            Interpolated flux.
+        """
+        log_z_c = jnp.clip(log_z_i, ssp_lgmet[0], ssp_lgmet[-1])
+        idx = jnp.clip(
+            jnp.searchsorted(ssp_lgmet, log_z_c) - 1,
+            0,
+            len(ssp_lgmet) - 2,
+        )
+        frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
+        return (1.0 - frac) * ssp_flux_at_age_i[idx] + frac * ssp_flux_at_age_i[idx + 1]
+
+    # ssp_flux is (n_met, n_age, n_wave); transpose to (n_age, n_met, n_wave)
+    # so vmap over the leading (age) axis pairs each age with its metallicity
+    ssp_flux_by_age = jnp.transpose(ssp_flux, (1, 0, 2))  # (n_age, n_met, n_wave)
+    return jax.vmap(_interp_one_age)(log_z_per_age, ssp_flux_by_age)
+
+
+@jax.jit
+def interpolate_mass_remaining_evolving(
+    ssp_mass_remaining: jnp.ndarray,
+    ssp_lgmet: jnp.ndarray,
+    log_z_per_age: jnp.ndarray,
+) -> jnp.ndarray:
+    """Interpolate mass-remaining with a different metallicity per age bin.
+
+    Parameters
+    ----------
+    ssp_mass_remaining : array, shape (n_met, n_age)
+        Fraction of formed mass surviving at each age and metallicity.
+    ssp_lgmet : array, shape (n_met,)
+        Log10(Z/Zsun) grid.
+    log_z_per_age : array, shape (n_age,)
+        Target log10(Z/Zsun) at each age bin.
+
+    Returns
+    -------
+    array, shape (n_age,)
+        Interpolated mass-remaining fraction per age bin.
+    """
+    def _interp_one_age(log_z_i, mr_at_age_i):
+        log_z_c = jnp.clip(log_z_i, ssp_lgmet[0], ssp_lgmet[-1])
+        idx = jnp.clip(
+            jnp.searchsorted(ssp_lgmet, log_z_c) - 1,
+            0,
+            len(ssp_lgmet) - 2,
+        )
+        frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
+        return (1.0 - frac) * mr_at_age_i[idx] + frac * mr_at_age_i[idx + 1]
+
+    # ssp_mass_remaining is (n_met, n_age); transpose to (n_age, n_met)
+    mr_by_age = jnp.transpose(ssp_mass_remaining, (1, 0))  # (n_age, n_met)
+    return jax.vmap(_interp_one_age)(log_z_per_age, mr_by_age)
+
+
+@jax.jit
+def compute_log_z_evolving(
+    ssp_lg_age_gyr: jnp.ndarray,
+    log_z_initial: float,
+    log_z_final: float,
+    t_universe_gyr: float,
+) -> jnp.ndarray:
+    """Compute per-age-bin metallicity from a linear-in-log ramp.
+
+    The metallicity evolves linearly in log(Z/Zsun) space:
+
+        log_z(t_lookback) = log_z_final + (log_z_initial - log_z_final)
+                            * t_lookback / t_universe
+
+    where t_lookback=0 is today (log_z_final) and t_lookback=t_universe
+    is the oldest stars (log_z_initial). SSP ages are lookback times.
+
+    Parameters
+    ----------
+    ssp_lg_age_gyr : array, shape (n_age,)
+        Log10(age/Gyr) of SSP templates.
+    log_z_initial : float
+        Metallicity of the oldest stars (at t_lookback = t_universe),
+        in log10(Z/Zsun) internally (absolute log10(Z)).
+    log_z_final : float
+        Metallicity at present day (t_lookback = 0), in log10(Z).
+    t_universe_gyr : float
+        Age of the universe at the observed redshift (Gyr).
+
+    Returns
+    -------
+    array, shape (n_age,)
+        log10(Z) at each SSP age bin.
+    """
+    age_gyr = 10.0 ** ssp_lg_age_gyr
+    # Clamp lookback time to [0, t_universe] so extrapolation is safe
+    t_frac = jnp.clip(age_gyr / t_universe_gyr, 0.0, 1.0)
+    return log_z_final + (log_z_initial - log_z_final) * t_frac
+
+
+@jax.jit
+def interpolate_mass_remaining(
+    ssp_mass_remaining: jnp.ndarray, ssp_lgmet: jnp.ndarray, log_z: float
+) -> jnp.ndarray:
+    """Interpolate mass-remaining fraction to a target metallicity.
+
+    Parameters
+    ----------
+    ssp_mass_remaining : array, shape (n_met, n_age)
+        Fraction of formed mass surviving at each age and metallicity.
+    ssp_lgmet : array, shape (n_met,)
+        Log10(Z/Zsun) grid.
+    log_z : float
+        Target log10(Z/Zsun).
+
+    Returns
+    -------
+    array, shape (n_age,)
+        Interpolated mass-remaining fraction.
+    """
+    log_z_clamped = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
+    idx = jnp.searchsorted(ssp_lgmet, log_z_clamped) - 1
+    idx = jnp.clip(idx, 0, len(ssp_lgmet) - 2)
+    frac = (log_z_clamped - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
+    return (1.0 - frac) * ssp_mass_remaining[idx] + frac * ssp_mass_remaining[idx + 1]
+
+
+@jax.jit
+def compute_surviving_mass(weights: jnp.ndarray, mass_remaining_at_met: jnp.ndarray) -> float:
+    """Compute surviving stellar mass from CSP weights and mass-remaining.
+
+    Parameters
+    ----------
+    weights : array, shape (n_age,)
+        Mass formed per age bin (Msun) from compute_csp_weights.
+    mass_remaining_at_met : array, shape (n_age,)
+        Fraction of formed mass surviving at each age (from
+        interpolate_mass_remaining).
+
+    Returns
+    -------
+    float
+        Total surviving stellar mass (Msun).
+    """
+    return jnp.sum(weights * mass_remaining_at_met)

@@ -129,6 +129,21 @@ _NEBULAR_PARAMS = {
     ),
 }
 
+_EVOLVING_MET_PARAMS = {
+    "met_logzsol_0": (
+        "Initial metallicity log10(Z/Zsun) (oldest stars)",
+        lambda lo, hi: True,
+        "",
+        Uniform(-2.0, 0.2),
+    ),
+    "met_logzsol_final": (
+        "Final metallicity log10(Z/Zsun) (present-day)",
+        lambda lo, hi: True,
+        "",
+        Uniform(-2.0, 0.2),
+    ),
+}
+
 _DUST_EXTRA_PARAMS = {
     "dust_f_obscuration": (
         "Fraction of unobscured sightlines (Lower 2022)",
@@ -278,6 +293,8 @@ SETTINGS_KEYS = frozenset({
     "dust_emission",
     # AGN
     "agn_model",
+    # Evolving metallicity
+    "evolving_metallicity",
 })
 
 
@@ -287,7 +304,8 @@ SETTINGS_KEYS = frozenset({
 
 
 def _build_param_registry(mean_sfh_type, nebular=False, dust_law_bc="power_law",
-                          dust_law_diff=None, dust_emission=None, agn_model=None):
+                          dust_law_diff=None, dust_emission=None, agn_model=None,
+                          evolving_metallicity=False):
     """Build the parameter registry for a given model configuration.
 
     Parameters
@@ -300,6 +318,8 @@ def _build_param_registry(mean_sfh_type, nebular=False, dust_law_bc="power_law",
         Birth cloud dust law name. Non-power-law laws may add extra parameters.
     dust_law_diff : str or None
         Diffuse ISM dust law. None = same as bc.
+    evolving_metallicity : bool
+        If True, replace met_logzsol with met_logzsol_0 and met_logzsol_final.
 
     Returns
     -------
@@ -320,8 +340,17 @@ def _build_param_registry(mean_sfh_type, nebular=False, dust_law_bc="power_law",
 
     # Non-SFH params (always present)
     for pname, (desc, check, err, default) in _NON_SFH_PARAMS.items():
+        # When evolving metallicity is enabled, skip the single met_logzsol
+        if evolving_metallicity and pname == "met_logzsol":
+            continue
         registry[pname] = (desc, check, err)
         defaults[pname] = default
+
+    # Evolving metallicity params (replaces met_logzsol when enabled)
+    if evolving_metallicity:
+        for pname, (desc, check, err, default) in _EVOLVING_MET_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
 
     # Nebular params (only when nebular is enabled)
     if nebular:
@@ -394,6 +423,9 @@ class ParamSpec:
         # AGN model: None (default), "simple", "standard", "kubota_done"
         self.agn_model = kwargs.pop("agn_model", None)
 
+        # Evolving metallicity: False (default), True
+        self.evolving_metallicity = kwargs.pop("evolving_metallicity", False)
+
         # --- Resolve legacy parameter aliases ---
         resolved_kwargs = {}
         detected_models = set()
@@ -444,6 +476,7 @@ class ParamSpec:
             dust_law_diff=self.dust_law_diff,
             dust_emission=self.dust_emission,
             agn_model=self.agn_model,
+            evolving_metallicity=self.evolving_metallicity,
         )
         self._valid_param_names = frozenset(self._param_registry.keys())
 
