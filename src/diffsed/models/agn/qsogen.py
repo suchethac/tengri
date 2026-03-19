@@ -73,28 +73,30 @@ _SIGMOID_WIDTH = 0.02  # dex (~5% in wavelength)
 # Each row: [rest wavelength (A), equivalent width (A), FWHM (km/s)]
 # EWs from Vanden Berk et al. (2001) SDSS composite.
 # Broad lines: FWHM ~ 5000 km/s; narrow lines: FWHM ~ 500 km/s.
-_EMISSION_LINES = jnp.array([
-    # Broad lines
-    [1034.0, 3.0, 5000.0],   # OVI 1034
-    [1216.0, 90.0, 5000.0],  # Ly-alpha
-    [1240.0, 8.0, 5000.0],   # NV 1240
-    [1397.0, 5.0, 5000.0],   # SiIV 1397
-    [1549.0, 25.0, 5000.0],  # CIV 1549
-    [1909.0, 20.0, 5000.0],  # CIII] 1909
-    [2800.0, 30.0, 5000.0],  # MgII 2800
-    [4340.0, 3.0, 5000.0],   # H-gamma
-    [4861.0, 15.0, 5000.0],  # H-beta
-    [6563.0, 40.0, 5000.0],  # H-alpha
-    [18750.0, 5.0, 5000.0],  # Pa-alpha
-    # Narrow lines
-    [3727.0, 4.0, 500.0],    # [OII] 3727
-    [3869.0, 2.0, 500.0],    # [NeIII] 3869
-    [4686.0, 2.0, 500.0],    # HeII 4686
-    [5007.0, 5.0, 500.0],    # [OIII] 5007
-    [6583.0, 3.0, 500.0],    # [NII] 6583
-    [6717.0, 1.5, 500.0],    # [SII] 6717
-    [6731.0, 1.5, 500.0],    # [SII] 6731
-])
+_EMISSION_LINES = jnp.array(
+    [
+        # Broad lines
+        [1034.0, 3.0, 5000.0],  # OVI 1034
+        [1216.0, 90.0, 5000.0],  # Ly-alpha
+        [1240.0, 8.0, 5000.0],  # NV 1240
+        [1397.0, 5.0, 5000.0],  # SiIV 1397
+        [1549.0, 25.0, 5000.0],  # CIV 1549
+        [1909.0, 20.0, 5000.0],  # CIII] 1909
+        [2800.0, 30.0, 5000.0],  # MgII 2800
+        [4340.0, 3.0, 5000.0],  # H-gamma
+        [4861.0, 15.0, 5000.0],  # H-beta
+        [6563.0, 40.0, 5000.0],  # H-alpha
+        [18750.0, 5.0, 5000.0],  # Pa-alpha
+        # Narrow lines
+        [3727.0, 4.0, 500.0],  # [OII] 3727
+        [3869.0, 2.0, 500.0],  # [NeIII] 3869
+        [4686.0, 2.0, 500.0],  # HeII 4686
+        [5007.0, 5.0, 500.0],  # [OIII] 5007
+        [6583.0, 3.0, 500.0],  # [NII] 6583
+        [6717.0, 1.5, 500.0],  # [SII] 6717
+        [6731.0, 1.5, 500.0],  # [SII] 6731
+    ]
+)
 
 _LINE_WAVELENGTHS = _EMISSION_LINES[:, 0]
 _LINE_EWS = _EMISSION_LINES[:, 1]
@@ -104,6 +106,7 @@ _LINE_FWHMS = _EMISSION_LINES[:, 2]
 # ===================================================================
 # Helper functions
 # ===================================================================
+
 
 def _wavelength_to_nu(wavelength: jnp.ndarray) -> jnp.ndarray:
     """Convert wavelength (Angstrom) to frequency (Hz)."""
@@ -258,7 +261,9 @@ def _hot_dust_blackbody(
     log_wave = jnp.log10(wavelength)
     log_anchor = jnp.log10(_LAMBDA_BB_ANCHOR)
     continuum_at_anchor = jnp.interp(
-        log_anchor, log_wave, continuum_flam,
+        log_anchor,
+        log_wave,
+        continuum_flam,
     )
     continuum_at_anchor = jnp.maximum(continuum_at_anchor, 1e-30)
 
@@ -266,6 +271,78 @@ def _hot_dust_blackbody(
     bb_shape = b_lam / b_lam_anchor
 
     return bbnorm * continuum_at_anchor * bb_shape
+
+
+def _balmer_continuum(
+    wavelength: jnp.ndarray,
+    continuum_flam: jnp.ndarray,
+    bcnorm: float = 1.0,
+    tbc: float = 15000.0,
+    taube: float = 1.0,
+    wavbe: float = 3646.0,
+) -> jnp.ndarray:
+    """Balmer continuum emission (Grandi 1982).
+
+    Adds hydrogen recombination continuum below the Balmer edge at 3646 A.
+    Matches the original qsogen prescription: B_nu(T_BC) * (1 - exp(-tau))
+    where tau = tau_BE * (nu_BE / nu)^3.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    continuum_flam : array, shape (n_wave,)
+        Power-law continuum (for normalization reference at 3000 A).
+    bcnorm : float
+        Balmer continuum strength relative to power-law at 3000 A.
+        Default 1.0 (from original qsogen).
+    tbc : float
+        BC temperature [K]. Default 15000.
+    taube : float
+        Optical depth at Balmer edge. Default 1.0.
+    wavbe : float
+        Balmer edge wavelength [Angstrom]. Default 3646.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Balmer continuum f_lambda contribution.
+    """
+    # B_nu as function of wavelength (matching original bb() convention)
+    # bb(T, wav) = wav^{-3} / (exp(hc/kT*wav) - 1)
+    hc_over_k = 1.43877735e8  # h*c/k_B in Kelvin * Angstrom
+    x = hc_over_k / (tbc * jnp.maximum(wavelength, 1.0))
+    x_clip = jnp.clip(x, 0.0, 500.0)
+    b_nu_wav = wavelength ** (-3.0) / (jnp.exp(x_clip) - 1.0)
+
+    # Optical depth: tau(nu) = taube * (nu_BE / nu)^3 = taube * (wav / wavbe)^3
+    tau = taube * (wavelength / wavbe) ** 3
+    tau_clip = jnp.clip(tau, 0.0, 50.0)
+    absorption = 1.0 - jnp.exp(-tau_clip)
+
+    bc_flux = b_nu_wav * absorption
+
+    # Normalize at 3000 A relative to continuum
+    wnorm = 3000.0
+    log_wave = jnp.log10(wavelength)
+    log_wnorm = jnp.log10(wnorm)
+    cont_at_3000 = jnp.interp(log_wnorm, log_wave, continuum_flam)
+    cont_at_3000 = jnp.maximum(cont_at_3000, 1e-30)
+
+    # BC value at wnorm for normalization
+    x_norm = hc_over_k / (tbc * wnorm)
+    b_norm = wnorm ** (-3.0) / (jnp.exp(jnp.clip(x_norm, 0.0, 500.0)) - 1.0)
+    tau_norm = taube * (wnorm / wavbe) ** 3
+    bc_at_3000 = b_norm * (1.0 - jnp.exp(-jnp.clip(tau_norm, 0.0, 50.0)))
+    bc_at_3000 = jnp.maximum(bc_at_3000, 1e-60)
+
+    scale = bcnorm * cont_at_3000 / bc_at_3000
+
+    # Only below Balmer edge (smooth sigmoid transition)
+    steepness = 1.0 / _SIGMOID_WIDTH
+    below_edge = jax.nn.sigmoid(-steepness * (jnp.log10(wavelength) - jnp.log10(wavbe)))
+
+    return scale * bc_flux * below_edge
 
 
 def _emission_line_spectrum(
@@ -301,7 +378,7 @@ def _emission_line_spectrum(
     # In magnitude form: scal ~ (log_lbol - log_lbol_ref)^beslope
     # Simpler: ratio of luminosities to reference
     lbol_ratio = 10.0 ** (log_lbol - _LOG_LBOL_REF)
-    baldwin_factor = lbol_ratio ** _BALDWIN_SLOPE
+    baldwin_factor = lbol_ratio**_BALDWIN_SLOPE
 
     # Scale factor
     scale = emline_scale * baldwin_factor
@@ -317,9 +394,9 @@ def _emission_line_spectrum(
         sigma_ang = jnp.maximum(sigma_ang, 0.01)
 
         # Gaussian profile (normalized so integral over dlambda = 1)
-        profile = jnp.exp(
-            -0.5 * ((wavelength - lam_c) / sigma_ang) ** 2
-        ) / (sigma_ang * jnp.sqrt(2.0 * jnp.pi))
+        profile = jnp.exp(-0.5 * ((wavelength - lam_c) / sigma_ang) ** 2) / (
+            sigma_ang * jnp.sqrt(2.0 * jnp.pi)
+        )
 
         # Interpolate continuum at line center for EW conversion
         log_wave = jnp.log10(wavelength)
@@ -370,6 +447,7 @@ def _apply_dust_reddening(
 # ===================================================================
 # Main QSOgen SED function
 # ===================================================================
+
 
 def qsogen_sed(
     wavelength: jnp.ndarray,
@@ -424,7 +502,10 @@ def qsogen_sed(
     """
     # --- Component 1: Broken power-law continuum ---
     continuum = _broken_powerlaw_continuum(
-        wavelength, agn_plslp1, agn_plslp2, agn_plbrk,
+        wavelength,
+        agn_plslp1,
+        agn_plslp2,
+        agn_plbrk,
     )
 
     # --- Component 2: Hot dust blackbody ---
@@ -434,11 +515,17 @@ def qsogen_sed(
     # Convert agn_log_lbol from Lsun to erg/s for Baldwin effect
     log_lbol_erg = agn_log_lbol + jnp.log10(_LSUN_ERG)
     emission_lines = _emission_line_spectrum(
-        wavelength, continuum, agn_emline_scale, log_lbol_erg,
+        wavelength,
+        continuum,
+        agn_emline_scale,
+        log_lbol_erg,
     )
 
+    # --- Component 3b: Balmer continuum (Grandi 1982) ---
+    balmer_cont = _balmer_continuum(wavelength, continuum)
+
     # --- Combine components (all in f_lambda, normalized at 5500 A) ---
-    f_lam_total = continuum + hot_dust + emission_lines
+    f_lam_total = continuum + hot_dust + emission_lines + balmer_cont
 
     # --- Component 4: Dust reddening ---
     f_lam_total = _apply_dust_reddening(wavelength, f_lam_total, agn_ebv)
@@ -468,6 +555,7 @@ def qsogen_sed(
 # ===================================================================
 # Register in AGN_MODELS
 # ===================================================================
+
 
 @register_agn_model("qsogen")
 def qsogen(
