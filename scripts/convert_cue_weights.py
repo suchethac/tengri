@@ -27,10 +27,70 @@ References
 
 import argparse
 import sys
+import types
 from pathlib import Path
 
-import dill as pickle
-import numpy as np
+# ---------------------------------------------------------------------------
+# Comprehensive TensorFlow mock so dill/pickle can resolve references to
+# TF classes without importing TensorFlow itself (which segfaults on macOS
+# with certain builds).
+#
+# The pickle files reference:
+#   - tensorflow.python.trackable.data_structures.ListWrapper (just a list)
+#   - Cue's own classes (nn.Speculator, cont_pca.SpectrumPCA) which do
+#     `import tensorflow as tf` at module level and access tf.float32,
+#     tf.function, tf.keras.Model, tf.keras.optimizers.Adam
+# ---------------------------------------------------------------------------
+
+
+class _MockTFModule(types.ModuleType):
+    """Module that returns child mocks for any attribute access."""
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        child = types.ModuleType(f"{self.__name__}.{name}")
+        child.__class__ = _MockTFModule
+        sys.modules[child.__name__] = child
+        return child
+
+    def __call__(self, *args, **kwargs):
+        return self
+
+
+def _install_tf_mock():
+    """Install a comprehensive TF mock into sys.modules."""
+    tf = _MockTFModule("tensorflow")
+    tf.float32 = "float32"
+    tf.function = lambda f: f  # decorator passthrough
+
+    class _FakeModel:
+        pass
+
+    keras = _MockTFModule("tensorflow.keras")
+    keras.Model = _FakeModel
+    optimizers = _MockTFModule("tensorflow.keras.optimizers")
+    optimizers.Adam = lambda **kw: None
+    keras.optimizers = optimizers
+    tf.keras = keras
+
+    ds = _MockTFModule("tensorflow.python.trackable.data_structures")
+    ds.ListWrapper = list
+
+    sys.modules["tensorflow"] = tf
+    sys.modules["tensorflow.keras"] = keras
+    sys.modules["tensorflow.keras.optimizers"] = optimizers
+    sys.modules["tensorflow.python"] = _MockTFModule("tensorflow.python")
+    sys.modules["tensorflow.python.trackable"] = _MockTFModule(
+        "tensorflow.python.trackable"
+    )
+    sys.modules["tensorflow.python.trackable.data_structures"] = ds
+
+
+_install_tf_mock()
+
+import dill as pickle  # noqa: E402
+import numpy as np  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
