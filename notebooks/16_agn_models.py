@@ -297,13 +297,6 @@ plt.show()
 # %%
 from diffsed.models.agn.skirtor import skirtor_analytic
 
-if not _skirtor_available:
-    fig, ax = plt.subplots(figsize=(6, 2))
-    ax.text(0.5, 0.5, "SKIRTOR section skipped\n(templates not downloaded)",
-            ha="center", va="center", fontsize=12, transform=ax.transAxes)
-    ax.axis("off")
-    savefig(fig, "skirtor_deep_dive")
-    plt.show()
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
 wave_s = jnp.logspace(3.0, 5.5, 2000)  # 1000 A to 300000 A
