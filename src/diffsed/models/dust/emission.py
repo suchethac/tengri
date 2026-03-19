@@ -450,113 +450,121 @@ def draine_li2007(
 
 
 # ===================================================================
-# Template-based DL07 interface (for future use with tabulated grids)
+# Template-based DL07: create from grid file
 # ===================================================================
 
-def load_draine_li_templates(filepath: str) -> dict:
-    """Load pre-computed Draine & Li (2007) template grid.
+def create_dl07_from_grid(grid_path: str) -> Callable:
+    """Create a DL07 emission model function backed by tabulated templates.
 
-    Expected file format: HDF5 or .npz with arrays:
-    - ``wavelength``: shape (n_wave,), Angstrom
-    - ``umin_grid``: shape (n_umin,)
-    - ``qpah_grid``: shape (n_qpah,)
-    - ``templates``: shape (n_qpah, n_umin, n_wave), L_nu per unit L_absorbed
+    Loads the HDF5 grid once and returns a function matching the emission
+    model registry interface. Use this instead of the analytic approximation
+    for production work.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``dl07_templates.h5`` (from ``scripts/convert_dl07_templates.py``).
+
+    Returns
+    -------
+    Callable
+        Model function with signature
+        ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
+
+    Example
+    -------
+    >>> dl07 = create_dl07_from_grid("data/dl07_templates.h5")
+    >>> DUST_EMISSION_MODELS["dl07_tabulated"] = dl07  # optional: register
+    >>> sed_ir = dl07(wavelength, L_absorbed, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
+    """
+    templates = load_draine_li_templates(grid_path)
+
+    # Pre-extract arrays for the closure
+    single_u = templates["single_u"]   # (n_qpah, n_umin, n_wave)
+    powerlaw = templates["powerlaw"]   # (n_qpah, n_umin, n_wave)
+    tmpl_wave = templates["wavelength"]
+    umin_grid = templates["umin_grid"]
+    qpah_grid = templates["qpah_grid"]
+
+    def dl07_tabulated(
+        wavelength_aa: jnp.ndarray,
+        L_absorbed: float,
+        dust_umin: float = 1.0,
+        dust_gamma_dl: float = 0.01,
+        dust_qpah: float = 2.5,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        """DL07 emission from tabulated templates (Draine & Li 2007).
+
+        j_nu = (1-gamma) * single_U(q_PAH, U_min)
+             + gamma * powerlaw(q_PAH, U_min)
+
+        Normalized to L_absorbed via energy balance.
+        """
+        dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
+        dust_qpah_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
+
+        # Bilinear interpolation indices
+        i_u = jnp.clip(
+            jnp.searchsorted(umin_grid, dust_umin_c) - 1, 0, len(umin_grid) - 2
+        )
+        i_q = jnp.clip(
+            jnp.searchsorted(qpah_grid, dust_qpah_c) - 1, 0, len(qpah_grid) - 2
+        )
+
+        fu = (dust_umin_c - umin_grid[i_u]) / (
+            umin_grid[i_u + 1] - umin_grid[i_u]
+        )
+        fq = (dust_qpah_c - qpah_grid[i_q]) / (
+            qpah_grid[i_q + 1] - qpah_grid[i_q]
+        )
+
+        def _bilinear(grid):
+            return (
+                (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
+                + (1.0 - fq) * fu * grid[i_q, i_u + 1]
+                + fq * (1.0 - fu) * grid[i_q + 1, i_u]
+                + fq * fu * grid[i_q + 1, i_u + 1]
+            )
+
+        # Mix single-U and power-law components via gamma
+        template = (
+            (1.0 - dust_gamma_dl) * _bilinear(single_u)
+            + dust_gamma_dl * _bilinear(powerlaw)
+        )
+
+        # Interpolate template onto target wavelength grid
+        sed = jnp.interp(
+            wavelength_aa, tmpl_wave, template, left=0.0, right=0.0
+        )
+
+        return L_absorbed * sed
+
+    return dl07_tabulated
+
+
+def load_draine_li_templates(filepath: str) -> dict:
+    """Load DL07 template grid from HDF5.
 
     Parameters
     ----------
     filepath : str
-        Path to template file.
+        Path to ``dl07_templates.h5``.
 
     Returns
     -------
-    dict
-        Keys: ``"wavelength"``, ``"umin_grid"``, ``"qpah_grid"``,
-        ``"templates"`` (all as jnp arrays).
+    dict with keys: wavelength, umin_grid, qpah_grid, single_u, powerlaw
     """
-    import numpy as np
+    import h5py as _h5py
 
-    data = np.load(filepath)
-    return {
-        "wavelength": jnp.array(data["wavelength"]),
-        "umin_grid": jnp.array(data["umin_grid"]),
-        "qpah_grid": jnp.array(data["qpah_grid"]),
-        "templates": jnp.array(data["templates"]),
-    }
-
-
-def draine_li2007_from_grid(
-    wavelength_aa: jnp.ndarray,
-    L_absorbed: float,
-    templates: dict,
-    dust_umin: float = 1.0,
-    dust_gamma_dl: float = 0.01,
-    dust_qpah: float = 2.5,
-) -> jnp.ndarray:
-    """Draine & Li 2007 emission from pre-computed template grid.
-
-    Uses bilinear interpolation in (U_min, q_PAH) space for
-    differentiability.  The gamma parameter linearly mixes the
-    single-U_min template with the delta-function + power-law
-    distribution template.
-
-    Parameters
-    ----------
-    wavelength_aa : array, shape (n_wave,)
-        Target wavelength grid in Angstrom.
-    L_absorbed : float
-        Total absorbed luminosity in Lsun.
-    templates : dict
-        From ``load_draine_li_templates()``.
-    dust_umin : float
-        Minimum radiation field intensity.
-    dust_gamma_dl : float
-        PDR fraction.
-    dust_qpah : float
-        PAH mass fraction (%).
-
-    Returns
-    -------
-    array, shape (n_wave,)
-        Dust emission L_nu in Lsun/Hz.
-    """
-    umin_grid = templates["umin_grid"]
-    qpah_grid = templates["qpah_grid"]
-    tmpl_wave = templates["wavelength"]
-    tmpl_data = templates["templates"]
-
-    # Clamp to grid bounds
-    dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
-    dust_qpah_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
-
-    # Find interpolation indices via searchsorted
-    i_u = jnp.clip(
-        jnp.searchsorted(umin_grid, dust_umin_c) - 1, 0, len(umin_grid) - 2
-    )
-    i_q = jnp.clip(
-        jnp.searchsorted(qpah_grid, dust_qpah_c) - 1, 0, len(qpah_grid) - 2
-    )
-
-    # Fractional position within grid cell
-    fu = (dust_umin_c - umin_grid[i_u]) / (umin_grid[i_u + 1] - umin_grid[i_u])
-    fq = (dust_qpah_c - qpah_grid[i_q]) / (qpah_grid[i_q + 1] - qpah_grid[i_q])
-
-    # Bilinear interpolation
-    t00 = tmpl_data[i_q, i_u]
-    t01 = tmpl_data[i_q, i_u + 1]
-    t10 = tmpl_data[i_q + 1, i_u]
-    t11 = tmpl_data[i_q + 1, i_u + 1]
-
-    template_sed = (
-        (1.0 - fq) * (1.0 - fu) * t00
-        + (1.0 - fq) * fu * t01
-        + fq * (1.0 - fu) * t10
-        + fq * fu * t11
-    )
-
-    # Interpolate template onto target wavelength grid
-    sed_interp = jnp.interp(wavelength_aa, tmpl_wave, template_sed, left=0.0, right=0.0)
-
-    return L_absorbed * sed_interp
+    with _h5py.File(filepath, "r") as f:
+        return {
+            "wavelength": jnp.array(f["wavelength"][:]),
+            "umin_grid": jnp.array(f["umin_grid"][:]),
+            "qpah_grid": jnp.array(f["qpah_grid"][:]),
+            "single_u": jnp.array(f["single_u"][:]),
+            "powerlaw": jnp.array(f["powerlaw"][:]),
+        }
 
 
 # ===================================================================
