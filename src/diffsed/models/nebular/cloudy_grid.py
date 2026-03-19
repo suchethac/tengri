@@ -301,11 +301,16 @@ class CloudyGridBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float = None,
         neb_fesc: float = 0.0,
+        neb_fesc_lya: float = 0.0,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Compute emission line luminosities (vectorized over age bins).
 
         L_line = sum_i [w_i * Q_H(Z, age_i) * grid(Z_gas, age_i, logU) * (1-f_esc)]
+
+        Ly-alpha (1215.67 A) is treated separately: its luminosity is scaled
+        by (1-neb_fesc_lya)/(1-neb_fesc) relative to other lines, reflecting
+        resonant scattering that suppresses Ly-alpha escape independently.
 
         Parameters
         ----------
@@ -321,6 +326,8 @@ class CloudyGridBackend:
             Gas metallicity log10(Z). None = tie to stellar Z.
         neb_fesc : float
             Escape fraction [0, 1].
+        neb_fesc_lya : float
+            Ly-alpha escape fraction [0, 1]. Default 0.0.
 
         Returns
         -------
@@ -353,6 +360,14 @@ class CloudyGridBackend:
         )(young_ages, young_weights)  # (n_young, n_lines)
 
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
+
+        # Apply differential Ly-alpha escape fraction
+        # Ly-alpha at 1215.67 A: scale by (1-fesc_lya)/(1-fesc) to replace
+        # the generic fesc with the Ly-alpha-specific one
+        lya_idx = jnp.argmin(jnp.abs(grid.line_wavelengths - 1215.67))
+        lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(1.0 - neb_fesc, 1e-10)
+        total_line_lum = total_line_lum.at[lya_idx].multiply(lya_scale)
+
         return grid.line_wavelengths, total_line_lum
 
     def predict_nebular_continuum(
@@ -408,6 +423,7 @@ class CloudyGridBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float = None,
         neb_fesc: float = 0.0,
+        neb_fesc_lya: float = 0.0,
         line_sigma_aa: float = 0.0,
         **_kwargs,
     ) -> jnp.ndarray:
@@ -432,6 +448,8 @@ class CloudyGridBackend:
             Gas metallicity. None = tie to stellar.
         neb_fesc : float
             Ionizing photon escape fraction.
+        neb_fesc_lya : float
+            Ly-alpha escape fraction [0, 1]. Default 0.0.
         line_sigma_aa : float
             Gaussian width for emission lines (Angstrom). 0 = delta function
             (add to nearest pixel).
@@ -445,6 +463,7 @@ class CloudyGridBackend:
         line_wave, line_lum = self.predict_nebular_line_luminosities(
             ssp_weights, ssp_log_ages_yr, log_z,
             neb_logU=neb_logU, neb_logZ_gas=neb_logZ_gas, neb_fesc=neb_fesc,
+            neb_fesc_lya=neb_fesc_lya,
         )
 
         # Get continuum

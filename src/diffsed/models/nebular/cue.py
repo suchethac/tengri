@@ -524,6 +524,8 @@ class CueBackend:
         ionspec_logLratio2: float = 0.01,
         ionspec_logLratio3: float = 0.2,
         cloudyfsps_only: bool = True,
+        neb_fesc: float = 0.0,
+        neb_fesc_lya: float = 0.0,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Predict emission line luminosities.
@@ -549,13 +551,19 @@ class CueBackend:
         cloudyfsps_only : bool
             If True, return only the 128 lines matching the CLOUDY/FSPS grid.
             If False, return all 138 lines.
+        neb_fesc : float
+            Ionizing photon escape fraction [0, 1]. Default 0.0.
+        neb_fesc_lya : float
+            Ly-alpha escape fraction [0, 1]. Default 0.0. Ly-alpha is a
+            resonant line with typically much lower escape fraction than
+            other lines.
 
         Returns
         -------
         wavelengths : array
             Rest-frame wavelengths in Angstrom.
         luminosities : array
-            Line luminosities in Lsun.
+            Line luminosities in Lsun (after applying escape fractions).
         """
         if gas_logqion is None:
             gas_logqion = self.default_gas_logqion
@@ -584,6 +592,15 @@ class CueBackend:
             nn_params, self.weights,
             gas_logq, jnp.asarray(gas_logqion, dtype=jnp.float32),
         )
+
+        # Apply general escape fraction
+        lum = lum * (1.0 - neb_fesc)
+
+        # Apply differential Ly-alpha escape fraction
+        # Ly-alpha at 1215.67 A: replace generic fesc with Ly-alpha-specific one
+        lya_idx = jnp.argmin(jnp.abs(wav - 1215.67))
+        lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(1.0 - neb_fesc, 1e-10)
+        lum = lum.at[lya_idx].multiply(lya_scale)
 
         if cloudyfsps_only:
             old_idx = self.weights.line_old_idx

@@ -48,6 +48,7 @@ from diffsed.models.sps.dsps_wrapper import (
     compute_csp_weights,
     compute_log_z_evolving,
     compute_surviving_mass,
+    effective_metallicity,
     interpolate_mass_remaining,
     interpolate_mass_remaining_evolving,
     interpolate_metallicity,
@@ -80,6 +81,7 @@ _EVOLVING_MET_PARAM_MAP = {
 
 _NON_SFH_PARAM_MAP = {
     "met_logzsol": ("log_z", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
+    "met_alpha_fe": ("alpha_fe", 1.0, 0.0),  # [alpha/Fe] in dex
     "dust_tau_bc": ("tau_v1", 1.0, 0.0),
     "dust_tau_diff": ("tau_v2", 1.0, 0.0),
     "dust_slope": ("dust_n", 1.0, 0.0),
@@ -282,6 +284,7 @@ class Model:
             self._param_map["neb_logU"] = ("neb_logU", 1.0, 0.0)
             self._param_map["neb_logZ_gas"] = ("neb_logZ_gas", 1.0, 0.0)
             self._param_map["neb_fesc"] = ("neb_fesc", 1.0, 0.0)
+            self._param_map["neb_fesc_lya"] = ("neb_fesc_lya", 1.0, 0.0)
 
         self._nebular_backend = None
         cue_weights_path = getattr(spec, "cue_weights_path", None)
@@ -342,8 +345,23 @@ class Model:
         # Precompute dust age weights (sigmoid depends only on age grid)
         self._dust_age_weights = precompute_dust_age_weights(self.ssp_ages_yr)
 
+        # Warn if SMC dust law is used with fused kernel (high approximation error)
+        _smc = self._dust_law_bc == "smc" or self._dust_law_diff == "smc"
+        _will_fuse = precompute and self._z_fixed is not None and self.filter_waves
+        if _will_fuse and _smc:
+            import warnings
+
+            warnings.warn(
+                "SMC dust law with precomputed photometry has ~36% error "
+                "due to the steep UV curve. The Zacharegkas+2025 "
+                "approximation (dust at filter effective wavelengths) is "
+                "less accurate for steep curves. Consider using "
+                "precompute=False for SMC, or use spectroscopy instead.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         # Build fused JIT kernels for fast photometry/spectroscopy
-        # Fused kernels support all dust laws but NOT nebular/AGN/dust-emission
         # (those require the full SED to compute energy balance, line emission, etc.)
         self._fused_photometry = None
         if self._precomp is not None and self._fused_compatible():
@@ -368,7 +386,13 @@ class Model:
         neb_ok = self._nebular_backend is None or not getattr(
             self._nebular_backend, "has_free_params", False
         )
-        dust_em_ok = self._dust_emission_model is None
+        # Dust emission: MBB and dale2014 supported in fused kernel
+        # (approximate energy balance at effective wavelengths)
+        dust_em_ok = self._dust_emission_model in (
+            None,
+            "modified_blackbody",
+            "dale2014",
+        )
         agn_ok = self._agn_model is None
         return neb_ok and dust_em_ok and agn_ok
 
@@ -570,6 +594,16 @@ class Model:
         law_bc_fn = get_dust_law(self._dust_law_bc)
         law_diff_fn = get_dust_law(self._dust_law_diff)
 
+        from diffsed.models.sps.dsps_wrapper import _ALPHA_TO_Z_COEFF as _A2Z
+
+        # Dust emission: precompute constants for MBB at effective wavelengths
+        has_dust_em = self._dust_emission_model in ("modified_blackbody", "dale2014")
+        if has_dust_em:
+            # Precompute frequency at effective wavelengths (constant)
+            eff_waves_cm = eff_waves_rest * dt.type(1e-8)
+            eff_nu = dt.type(2.99792458e10) / eff_waves_cm  # Hz
+            nu_ref_250um = dt.type(2.99792458e10 / 250.0e-4)
+
         @jax.jit
         def fused_phot(
             sfr_on_ssp,
@@ -581,6 +615,10 @@ class Model:
             dust_bump_strength=0.0,
             dust_delta=0.0,
             dust_Rv=3.1,
+            alpha_fe=0.0,
+            dust_T=35.0,
+            dust_beta_ir=1.6,
+            dust_eta_balance=1.0,
         ):
             sfr = sfr_on_ssp.astype(dt)
             lz = jnp.asarray(log_z, dtype=dt)
@@ -591,6 +629,7 @@ class Model:
             bump = jnp.asarray(dust_bump_strength, dtype=dt)
             delta = jnp.asarray(dust_delta, dtype=dt)
             rv = jnp.asarray(dust_Rv, dtype=dt)
+            afe = jnp.asarray(alpha_fe, dtype=dt)
 
             # CSP weights
             age_dt = jnp.concatenate(
@@ -601,6 +640,9 @@ class Model:
                 ]
             )
             weights = sfr * age_dt
+
+            # Alpha enhancement: shift effective metallicity
+            lz = lz + _A2Z * afe
 
             # Metallicity interpolation
             log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
@@ -626,9 +668,47 @@ class Model:
             tau = dust_age_w[:, None] * tv1 * k_bc[None, :] + tv2 * k_diff[None, :]
             dust = f_obs + (1.0 - f_obs) * jnp.exp(-tau)
 
-            # Weighted sum — output in float64 for likelihood stability
-            flux_lsun = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
-            return (flux_scale * flux_lsun * lsun).astype(jnp.float64)
+            # Attenuated stellar flux (Lsun)
+            flux_attenuated = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
+
+            if has_dust_em:
+                # Approximate dust emission in the fused kernel:
+                # 1. L_stellar (intrinsic, no dust) at effective wavelengths
+                flux_intrinsic = jnp.einsum("i,if->f", weights, ssp_at_z)
+                # 2. L_absorbed ≈ sum(L_intrinsic - L_attenuated) across bands
+                #    This is an approximation — exact would integrate over full SED
+                L_absorbed_approx = jnp.sum(flux_intrinsic - flux_attenuated) * lsun
+                L_absorbed_approx = jnp.maximum(L_absorbed_approx, dt.type(0.0))
+                L_ir = L_absorbed_approx * jnp.asarray(dust_eta_balance, dtype=dt)
+
+                # 3. Modified blackbody at effective wavelengths
+                T = jnp.asarray(dust_T, dtype=dt)
+                beta = jnp.asarray(dust_beta_ir, dtype=dt)
+                emissivity = (eff_nu / nu_ref_250um) ** beta
+                x = jnp.clip(
+                    dt.type(6.62607015e-27) * eff_nu / (dt.type(1.380649e-16) * T),
+                    dt.type(0.0),
+                    dt.type(500.0),
+                )
+                bnu = (
+                    dt.type(2.0)
+                    * dt.type(6.62607015e-27)
+                    * eff_nu**3
+                    / dt.type(2.99792458e10) ** 2
+                    / (jnp.exp(x) - dt.type(1.0))
+                )
+                mbb_shape = emissivity * bnu  # (n_filters,)
+
+                # 4. Normalize MBB to L_ir (approximate: use sum over filters)
+                mbb_norm = jnp.sum(mbb_shape)
+                mbb_norm_safe = jnp.maximum(mbb_norm, dt.type(1e-100))
+                dust_em_flux = L_ir / lsun * mbb_shape / mbb_norm_safe
+
+                flux_total = flux_attenuated + dust_em_flux
+            else:
+                flux_total = flux_attenuated
+
+            return (flux_scale * flux_total * lsun).astype(jnp.float64)
 
         return fused_phot
 
@@ -639,7 +719,7 @@ class Model:
         Supports all dust laws, f_obscuration, and optional velocity broadening.
         """
         from diffsed.models.dust.attenuation import get_dust_law
-        from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+        from diffsed.models.sps.dsps_wrapper import _ALPHA_TO_Z_COEFF as _A2Z, LSUN_ERG_PER_S
 
         fdt = self._forward_dtype
         precomp = self._spec_precomp
@@ -676,6 +756,7 @@ class Model:
             dust_bump_strength=0.0,
             dust_delta=0.0,
             dust_Rv=3.1,
+            alpha_fe=0.0,
         ):
             sfr = sfr_on_ssp.astype(fdt)
             lz = jnp.asarray(log_z, dtype=fdt)
@@ -686,6 +767,7 @@ class Model:
             bump = jnp.asarray(dust_bump_strength, dtype=fdt)
             delta = jnp.asarray(dust_delta, dtype=fdt)
             rv = jnp.asarray(dust_Rv, dtype=fdt)
+            afe = jnp.asarray(alpha_fe, dtype=fdt)
 
             # CSP weights
             age_dt = jnp.concatenate(
@@ -696,6 +778,9 @@ class Model:
                 ]
             )
             weights = sfr * age_dt
+
+            # Alpha enhancement: shift effective metallicity
+            lz = lz + _A2Z * afe
 
             # Metallicity interpolation
             log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
@@ -759,6 +844,9 @@ class Model:
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
         weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
 
+        # Alpha-element enhancement: shift effective metallicity
+        alpha_fe = p.get("alpha_fe", 0.0)
+
         # Metallicity interpolation
         if self._evolving_metallicity:
             # Age of universe at observed redshift (Gyr)
@@ -770,16 +858,19 @@ class Model:
                 p["log_z_final"],
                 t_universe_gyr,
             )
+            # Apply alpha enhancement to each age bin
+            log_z_per_age = effective_metallicity(log_z_per_age, alpha_fe)
             ssp_flux_at_z = interpolate_metallicity_evolving(
                 self.ssp_data.ssp_flux,
                 self.ssp_data.ssp_lgmet,
                 log_z_per_age,
             )
         else:
+            log_z_eff = effective_metallicity(p["log_z"], alpha_fe)
             ssp_flux_at_z = interpolate_metallicity(
                 self.ssp_data.ssp_flux,
                 self.ssp_data.ssp_lgmet,
-                p["log_z"],
+                log_z_eff,
             )
 
         # Dust attenuation (generalized two-component model)
@@ -819,6 +910,7 @@ class Model:
                 neb_logU=p.get("neb_logU", -3.0),
                 neb_logZ_gas=p.get("neb_logZ_gas", None),
                 neb_fesc=p.get("neb_fesc", 0.0),
+                neb_fesc_lya=p.get("neb_fesc_lya", 0.0),
             )
             sed = sed + neb_sed
 
@@ -927,13 +1019,20 @@ class Model:
         return jnp.array(fluxes)
 
     def _get_dust_kwargs(self, p):
-        """Extract dust law kwargs from internal params dict."""
-        return {
+        """Extract dust law + emission kwargs from internal params dict."""
+        kw = {
             "f_obscuration": p.get("f_obscuration", 0.0),
             "dust_bump_strength": p.get("dust_bump_strength", 0.0),
             "dust_delta": p.get("dust_delta", 0.0),
             "dust_Rv": p.get("dust_Rv", 3.1),
+            "alpha_fe": p.get("alpha_fe", 0.0),
         }
+        # Dust emission params (fused kernel handles MBB/dale2014 inline)
+        if self._dust_emission_model in ("modified_blackbody", "dale2014"):
+            kw["dust_T"] = p.get("dust_T", 35.0)
+            kw["dust_beta_ir"] = p.get("dust_beta_ir", 1.6)
+            kw["dust_eta_balance"] = p.get("dust_eta_balance", 1.0)
+        return kw
 
     def _predict_photometry_fast(self, params):
         """Fast photometry using fused JIT kernel (fixed z)."""
@@ -1042,7 +1141,7 @@ class Model:
         Supports all dust laws via captured law functions.
         """
         from diffsed.models.dust.attenuation import get_dust_law
-        from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+        from diffsed.models.sps.dsps_wrapper import _ALPHA_TO_Z_COEFF as _A2Z, LSUN_ERG_PER_S
 
         fdt = self._forward_dtype
         zt = self._ztable
@@ -1070,6 +1169,7 @@ class Model:
             dust_bump_strength=0.0,
             dust_delta=0.0,
             dust_Rv=3.1,
+            alpha_fe=0.0,
         ):
             sfr = sfr_on_ssp.astype(fdt)
             lz = jnp.asarray(log_z, dtype=fdt)
@@ -1081,6 +1181,7 @@ class Model:
             bump = jnp.asarray(dust_bump_strength, dtype=fdt)
             delta = jnp.asarray(dust_delta, dtype=fdt)
             rv = jnp.asarray(dust_Rv, dtype=fdt)
+            afe = jnp.asarray(alpha_fe, dtype=fdt)
 
             # Interpolate z-table to current redshift
             z_c = jnp.clip(z, z_grid[0], z_grid[-1])
@@ -1100,6 +1201,9 @@ class Model:
                 ]
             )
             weights = sfr * age_dt
+
+            # Alpha enhancement: shift effective metallicity
+            lz = lz + _A2Z * afe
 
             # Metallicity interpolation
             log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
@@ -1249,6 +1353,7 @@ class Model:
         # Surviving stellar mass (if mass-remaining table available)
         mass_surviving = None
         if self.ssp_data.ssp_mass_remaining is not None:
+            alpha_fe_mr = p.get("alpha_fe", 0.0)
             if self._evolving_metallicity:
                 z = p.get("redshift", 0.0)
                 t_universe_gyr = self._t_universe_gyr(z)
@@ -1258,13 +1363,14 @@ class Model:
                     p["log_z_final"],
                     t_universe_gyr,
                 )
+                log_z_per_age = effective_metallicity(log_z_per_age, alpha_fe_mr)
                 mr_at_met = interpolate_mass_remaining_evolving(
                     self.ssp_data.ssp_mass_remaining,
                     self.ssp_data.ssp_lgmet,
                     log_z_per_age,
                 )
             else:
-                log_z = p.get("log_z", 0.0)
+                log_z = effective_metallicity(p.get("log_z", 0.0), alpha_fe_mr)
                 mr_at_met = interpolate_mass_remaining(
                     self.ssp_data.ssp_mass_remaining, self.ssp_data.ssp_lgmet, log_z
                 )

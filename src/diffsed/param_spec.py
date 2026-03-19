@@ -127,6 +127,21 @@ _NEBULAR_PARAMS = {
         "must be in [0, 1]",
         Fixed(0.0),
     ),
+    "neb_fesc_lya": (
+        "Ly-alpha escape fraction (resonant scattering)",
+        lambda lo, hi: 0 <= lo and hi <= 1,
+        "must be in [0, 1]",
+        Fixed(0.0),
+    ),
+}
+
+_ALPHA_FE_PARAMS = {
+    "met_alpha_fe": (
+        "Alpha-element enhancement [alpha/Fe] (dex)",
+        lambda lo, hi: -0.5 <= lo and hi <= 1.0,
+        "must be in [-0.5, 1.0]",
+        Fixed(0.0),
+    ),
 }
 
 _EVOLVING_MET_PARAMS = {
@@ -357,6 +372,11 @@ def _build_param_registry(mean_sfh_type, nebular=False, dust_law_bc="power_law",
         for pname, (desc, check, err, default) in _NEBULAR_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
+
+    # Alpha-element enhancement (always available — defaults to Fixed(0) = no-op)
+    for pname, (desc, check, err, default) in _ALPHA_FE_PARAMS.items():
+        registry[pname] = (desc, check, err)
+        defaults[pname] = default
 
     # Dust extra params (always available — they default to Fixed(0) = no-op)
     for pname, (desc, check, err, default) in _DUST_EXTRA_PARAMS.items():

@@ -24,6 +24,7 @@ Available Attenuation Curves
 - **kriek_conroy**: Calzetti + UV bump + slope delta — Prospector default
 - **smc**: Gordon et al. (2003) SMC Bar, steep UV, no 2175A bump
 - **cardelli**: Cardelli et al. (1989) MW curve with free R_V
+- **li08**: Li et al. (2008) parametric 3-slope + UV bump (reproduces MW/SMC/Calzetti)
 - **salim**: Salim et al. (2018) modified Calzetti (= DSPS default)
 
 References
@@ -33,6 +34,7 @@ References
 - Charlot & Fall 2000, ApJ, 539, 718
 - Gordon et al. 2003, ApJ, 594, 279
 - Kriek & Conroy 2013, ApJL, 775, L16
+- Li et al. 2008, MNRAS, 385, 1903
 - Lower et al. 2022, ApJ, 931, 14
 - Salim et al. 2018, ApJ, 859, 11
 - Zacharegkas et al. 2025, arXiv:2506.19919
@@ -210,6 +212,115 @@ def cardelli(
     b = jnp.where(x < 1.1, b_ir, jnp.where(x < 3.3, b_opt, b_uv))
 
     return jnp.clip(a + b / dust_Rv, 0.0)
+
+
+@register_dust_law("li08")
+def li08(
+    wavelength: jnp.ndarray,
+    dust_UV_slope: float = -1.0,
+    dust_OPT_slope: float = -1.3,
+    dust_FUV_slope: float = -1.8,
+    dust_bump_strength: float = 1.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Li et al. (2008) parametric 3-slope attenuation + UV bump.
+
+    A flexible single functional form with independent power-law slopes
+    in three wavelength regimes (FUV, UV-optical, optical-NIR) joined by
+    smooth sigmoid transitions, plus a Drude UV bump at 2175 Angstrom.
+    Can reproduce MW, SMC, LMC, and Calzetti curves as special cases.
+
+    The unnormalized curve is::
+
+        k_raw(lambda) = (lambda/1500)^FUV_slope  * sigma_FUV(lambda)
+                      + (lambda/1500)^UV_slope   * sigma_UV(lambda)
+                      + (lambda/6000)^OPT_slope  * sigma_OPT(lambda)
+                      + bump * D(lambda, 2175A)
+
+    where sigma are sigmoid weighting functions for smooth transitions,
+    and the result is normalized so that k(5500 A) = 1.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid in Angstrom.
+    dust_UV_slope : float
+        Power-law slope in the UV regime (1500-6000 A).
+        MW ~ -1.0, SMC ~ -1.2, Calzetti ~ -0.75.
+    dust_OPT_slope : float
+        Power-law slope in the optical-NIR regime (> 6000 A).
+        MW ~ -1.3, SMC ~ -1.6, Calzetti ~ -1.05.
+    dust_FUV_slope : float
+        Power-law slope in the FUV regime (< 1500 A).
+        MW ~ -1.8, SMC ~ -2.4, Calzetti ~ -1.4.
+    dust_bump_strength : float
+        Amplitude of the 2175 A UV bump. MW ~ 1.0, SMC/Calzetti ~ 0.0.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Attenuation curve k(lambda), normalized to k(5500 A) = 1.
+
+    Notes
+    -----
+    Presets for common curves:
+
+    - **MW**: UV_slope=-1.0, OPT_slope=-1.3, FUV_slope=-1.8, bump=1.0
+    - **SMC**: UV_slope=-1.2, OPT_slope=-1.6, FUV_slope=-2.4, bump=0.0
+    - **LMC**: UV_slope=-1.1, OPT_slope=-1.4, FUV_slope=-2.0, bump=0.5
+    - **Calzetti**: UV_slope=-0.75, OPT_slope=-1.05, FUV_slope=-1.4, bump=0.0
+
+    References
+    ----------
+    Li et al. 2008, MNRAS, 385, 1903
+    """
+    wave_um = wavelength / 1e4
+
+    # Pivot wavelengths in Angstrom
+    lam_fuv = 1500.0
+    lam_opt = 6000.0
+
+    # Smooth sigmoid transitions (width ~ 0.1 in log-lambda for
+    # differentiability; steepness 20 gives ~95% transition over
+    # factor-of-1.3 in wavelength)
+    steepness = 20.0
+    log_wave = jnp.log10(wavelength)
+    log_fuv = jnp.log10(lam_fuv)
+    log_opt = jnp.log10(lam_opt)
+
+    # w_fuv ~ 1 for lambda << 1500, ~ 0 for lambda >> 1500
+    w_fuv = jax.nn.sigmoid(-steepness * (log_wave - log_fuv))
+    # w_opt ~ 1 for lambda >> 6000, ~ 0 for lambda << 6000
+    w_opt = jax.nn.sigmoid(steepness * (log_wave - log_opt))
+    # w_uv fills the middle
+    w_uv = 1.0 - w_fuv - w_opt
+
+    # Three power-law segments
+    k_fuv = (wavelength / lam_fuv) ** dust_FUV_slope
+    k_uv = (wavelength / lam_fuv) ** dust_UV_slope
+    k_opt = (wavelength / lam_opt) ** dust_OPT_slope
+
+    # Weighted combination
+    k_raw = w_fuv * k_fuv + w_uv * k_uv + w_opt * k_opt
+
+    # UV bump via Drude profile at 2175 A
+    bump = dust_bump_strength * _drude_profile(wave_um)
+    k_raw = k_raw + bump
+
+    # Normalize to k(V) = 1 at 5500 A
+    # Evaluate at 5500 A using the same formula
+    lam_v = 5500.0
+    log_v = jnp.log10(lam_v)
+    w_fuv_v = jax.nn.sigmoid(-steepness * (log_v - log_fuv))
+    w_opt_v = jax.nn.sigmoid(steepness * (log_v - log_opt))
+    w_uv_v = 1.0 - w_fuv_v - w_opt_v
+
+    k_v = (w_fuv_v * (lam_v / lam_fuv) ** dust_FUV_slope
+           + w_uv_v * (lam_v / lam_fuv) ** dust_UV_slope
+           + w_opt_v * (lam_v / lam_opt) ** dust_OPT_slope
+           + dust_bump_strength * _drude_profile(jnp.array(lam_v / 1e4)))
+
+    return jnp.clip(k_raw / k_v, 0.0)
 
 
 @register_dust_law("salim")

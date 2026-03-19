@@ -321,20 +321,35 @@ def _tau_lc_dla(
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# CGM damping wing absorption (Asada et al. 2025)
 # ---------------------------------------------------------------------------
 
+# Physical constants for damping wing calculation
+_C_CGS_IGM = 2.99792458e10    # cm/s
+_LAMBDA_LYA = 1215.67         # Angstrom (Ly-alpha rest wavelength)
+_NU_LYA = _C_CGS_IGM / (_LAMBDA_LYA * 1e-8)  # Hz
+_GAMMA_LYA = 6.265e8          # s^-1 (Ly-alpha natural line width)
+_SIGMA_0 = 5.9e-14            # cm^2 Hz (Ly-alpha cross-section constant: pi*e^2/(m_e*c)*f_12)
 
-@jax.jit
-def igm_transmission(
+
+def _cgm_damping_wing_tau(
     wave_obs: jnp.ndarray,
     z_source: float,
+    z_mid: float = 7.0,
+    dz: float = 0.5,
+    log_nhi: float = 20.0,
 ) -> jnp.ndarray:
-    """Compute mean IGM transmission T_IGM(lambda_obs, z_source).
+    """CGM damping wing optical depth (Asada et al. 2025).
 
-    Implements the Inoue et al. (2014) prescription for the mean
-    intergalactic medium absorption from the Ly-alpha forest and
-    damped Ly-alpha systems.
+    At z > 6, neutral hydrogen in the circumgalactic medium causes
+    Ly-alpha damping wing absorption that the Inoue+2014 model does
+    not capture. The damping wing profile is the Lorentzian far-wing
+    of the Ly-alpha cross-section.
+
+    tau_DW(lambda) = N_HI(z) * sigma_DW(lambda, z)
+
+    where N_HI follows a sigmoid evolution with redshift and sigma_DW
+    is the damping wing cross-section near Ly-alpha.
 
     Parameters
     ----------
@@ -342,6 +357,87 @@ def igm_transmission(
         Observed-frame wavelength in Angstrom.
     z_source : float
         Source redshift.
+    z_mid : float
+        Midpoint redshift of the sigmoid N_HI evolution. Default 7.0.
+    dz : float
+        Width of the sigmoid transition. Default 0.5.
+    log_nhi : float
+        log10(N_HI / cm^-2) at the plateau. Default 20.0.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Damping wing optical depth (>= 0).
+    """
+    # Sigmoid column density evolution: N_HI rises steeply above z_mid
+    n_hi = (10.0 ** log_nhi) / (1.0 + jnp.exp(-(z_source - z_mid) / dz))
+
+    # Observed Ly-alpha wavelength at source redshift
+    lya_obs = _LAMBDA_LYA * (1.0 + z_source)
+
+    # Frequency offset from Ly-alpha at the source
+    # nu_obs = c / (wave_obs * 1e-8), nu_lya_obs = c / (lya_obs * 1e-8)
+    # Delta_nu = nu_obs - nu_lya_obs (positive = blueward of Ly-alpha)
+    nu_obs = _C_CGS_IGM / (wave_obs * 1e-8)
+    nu_lya_obs = _C_CGS_IGM / (lya_obs * 1e-8)
+    delta_nu = nu_obs - nu_lya_obs
+
+    # Damping wing cross-section (Lorentzian far-wing approximation)
+    # sigma_DW = sigma_0 * (gamma / (4*pi)) / (delta_nu^2 + (gamma/(4*pi))^2)
+    # In the far wing (|delta_nu| >> gamma/4pi), this simplifies to
+    # sigma_DW ~ sigma_0 * gamma / (4*pi*delta_nu^2)
+    # We use the full Lorentzian for numerical stability near line center.
+    gamma_4pi = _GAMMA_LYA / (4.0 * jnp.pi)
+    sigma_dw = _SIGMA_0 * gamma_4pi / (delta_nu ** 2 + gamma_4pi ** 2)
+
+    # Optical depth: only apply redward of Ly-alpha at source (damping wing)
+    # and only for wavelengths near Ly-alpha (within ~200 A observed)
+    tau = n_hi * sigma_dw
+
+    # Only absorb redward of Ly-alpha at source redshift (wave_obs > lya_obs)
+    # The damping wing is the red wing absorption from the CGM
+    tau = jnp.where(wave_obs > lya_obs, tau, 0.0)
+
+    # Only apply at z > 5 (below this, CGM is ionized and negligible)
+    tau = jnp.where(z_source > 5.0, tau, 0.0)
+
+    return jnp.clip(tau, a_min=0.0)
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def igm_transmission(
+    wave_obs: jnp.ndarray,
+    z_source: float,
+    add_cgm: bool = True,
+    cgm_z_mid: float = 7.0,
+    cgm_dz: float = 0.5,
+    cgm_log_nhi: float = 20.0,
+) -> jnp.ndarray:
+    """Compute mean IGM transmission T_IGM(lambda_obs, z_source).
+
+    Implements the Inoue et al. (2014) prescription for the mean
+    intergalactic medium absorption from the Ly-alpha forest and
+    damped Ly-alpha systems. Optionally adds CGM damping wing
+    absorption at z > 5 following Asada et al. (2025).
+
+    Parameters
+    ----------
+    wave_obs : array, shape (n_wave,)
+        Observed-frame wavelength in Angstrom.
+    z_source : float
+        Source redshift.
+    add_cgm : bool
+        If True (default), add CGM damping wing absorption at z > 5.
+    cgm_z_mid : float
+        Midpoint redshift of the sigmoid N_HI evolution. Default 7.0.
+    cgm_dz : float
+        Width of the sigmoid transition. Default 0.5.
+    cgm_log_nhi : float
+        log10(N_HI / cm^-2) at the plateau. Default 20.0.
 
     Returns
     -------
@@ -355,4 +451,13 @@ def igm_transmission(
         + _tau_lc_laf(wave_obs, z_source)
         + _tau_lc_dla(wave_obs, z_source)
     )
+
+    # CGM damping wing (Asada+2025): additional absorption at z > 5
+    tau_cgm = jnp.where(
+        add_cgm,
+        _cgm_damping_wing_tau(wave_obs, z_source, cgm_z_mid, cgm_dz, cgm_log_nhi),
+        0.0,
+    )
+    tau_total = tau_total + tau_cgm
+
     return jnp.exp(-jnp.clip(tau_total, a_min=0.0))

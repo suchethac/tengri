@@ -24,9 +24,12 @@ Usage::
 
 from typing import Callable
 
+import jax
 import jax.numpy as jnp
 
+from diffsed.models.agn.blr import blr_emission
 from diffsed.models.agn.disc import multicolor_disc, powerlaw_disc
+from diffsed.models.agn.nlr import nlr_emission
 from diffsed.models.agn.torus import simple_torus, two_temperature_torus
 
 
@@ -337,3 +340,186 @@ def kubota_done_agn(
         agn_torus_frac=agn_torus_frac,
     )
     return l_nu * agn_frac
+
+
+# ===================================================================
+# Geometric masking (smooth sigmoid for differentiability)
+# ===================================================================
+
+_LSUN_ERG = 3.828e33  # Solar luminosity [erg s^-1]
+
+
+def _sigmoid_mask(
+    cos_inc: float,
+    theta_torus: float,
+    width: float = 2.0,
+) -> float:
+    """Smooth geometric mask for disc/BLR visibility.
+
+    Returns ~1 (visible) for face-on orientations and ~0 (obscured)
+    when the line of sight passes through the torus.
+
+    The transition occurs at inclination = 90 - theta_torus (edge of
+    the torus opening cone). A smooth sigmoid replaces the hard cutoff
+    to maintain differentiability.
+
+    Parameters
+    ----------
+    cos_inc : float
+        Cosine of inclination (0 = edge-on, 1 = face-on).
+    theta_torus : float
+        Torus half-opening angle [degrees].
+    width : float
+        Sigmoid transition width [degrees]. Default 2.0.
+
+    Returns
+    -------
+    float
+        Visibility fraction in [0, 1].
+    """
+    # Inclination in degrees: inc = arccos(cos_inc)
+    inc_deg = jnp.degrees(jnp.arccos(jnp.clip(cos_inc, 0.0, 1.0)))
+    # Critical angle: above this the torus blocks the view
+    inc_crit = 90.0 - jnp.clip(theta_torus, 0.0, 90.0)
+    # Sigmoid: 1 when inc << inc_crit, 0 when inc >> inc_crit
+    return jax.nn.sigmoid(-(inc_deg - inc_crit) / jnp.maximum(width, 0.1))
+
+
+# ===================================================================
+# Unified AGN with NLR + BLR decomposition
+# ===================================================================
+
+
+@register_agn_model("unified_nlr_blr")
+def unified_nlr_blr(
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float = 44.0,
+    agn_cos_inc: float = 0.5,
+    agn_theta_torus: float = 30.0,
+    agn_covering_nlr: float = 0.1,
+    agn_covering_blr: float = 0.1,
+    agn_log_mbh: float = 7.0,
+    agn_log_ledd: float = -1.0,
+    agn_a_spin: float = 0.0,
+    agn_T_hot: float = 1200.0,
+    agn_T_warm: float = 300.0,
+    agn_frac_hot: float = 0.3,
+    agn_tau_torus: float = 5.0,
+    agn_torus_frac: float = 0.5,
+    agn_frac: float = 0.1,
+    agn_blr_fwhm: float = 5000.0,
+    agn_nlr_fwhm: float = 500.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Unified AGN SED with NLR/BLR decomposition and geometric masking.
+
+    Extends the ``kubota_done`` model with narrow and broad line region
+    emission, inspired by Synthesizer's UnifiedAGN. The disc and BLR
+    are masked by the torus at high inclinations using a smooth sigmoid
+    transition. The NLR and torus are always visible (isotropic).
+
+    Total SED::
+
+        L_agn = mask_disc * L_disc
+              + L_torus
+              + covering_nlr * L_disc_bol * eta_nlr   (NLR, isotropic)
+              + mask_blr * covering_blr * L_disc_bol * eta_blr  (BLR, masked)
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    agn_log_lbol : float
+        log10(L_bol / Lsun). Total AGN bolometric luminosity. Default 44.0.
+    agn_cos_inc : float
+        Cosine of inclination angle (0 = edge-on/Type 2,
+        1 = face-on/Type 1). Default 0.5.
+    agn_theta_torus : float
+        Torus half-opening angle [degrees]. Default 30.0.
+    agn_covering_nlr : float
+        NLR covering fraction (0 to 1). Default 0.1.
+    agn_covering_blr : float
+        BLR covering fraction (0 to 1). Default 0.1.
+    agn_log_mbh : float
+        log10(M_BH / Msun). Default 7.0.
+    agn_log_ledd : float
+        log10(L/L_Edd). Default -1.0.
+    agn_a_spin : float
+        BH spin (0 to 0.998). Default 0.0.
+    agn_T_hot : float
+        Hot dust temperature [K]. Default 1200.
+    agn_T_warm : float
+        Warm dust temperature [K]. Default 300.
+    agn_frac_hot : float
+        Hot-to-warm dust fraction. Default 0.3.
+    agn_tau_torus : float
+        Torus optical depth at 9.7 um. Default 5.
+    agn_torus_frac : float
+        Torus covering factor (fraction of L_bol intercepted by torus).
+        Default 0.5.
+    agn_frac : float
+        Overall AGN fraction scaling. Default 0.1.
+    agn_blr_fwhm : float
+        BLR line FWHM [km/s]. Default 5000.
+    agn_nlr_fwhm : float
+        NLR line FWHM [km/s]. Default 500.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Total AGN L_nu [Lsun Hz^-1].
+    """
+    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
+
+    # --- Geometric masks ---
+    mask_disc = _sigmoid_mask(agn_cos_inc, agn_theta_torus)
+    mask_blr = _sigmoid_mask(agn_cos_inc, agn_theta_torus)
+
+    # --- Disc emission (intrinsic, before masking) ---
+    # Disc gets (1 - torus_frac) of L_bol
+    l_disc = multicolor_disc(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_frac=1.0 - agn_torus_frac,
+        agn_log_mbh=agn_log_mbh,
+        agn_log_ledd=agn_log_ledd,
+        agn_a_spin=agn_a_spin,
+        agn_cos_inc=agn_cos_inc,
+    )
+    # Apply geometric masking
+    l_disc_masked = mask_disc * l_disc
+
+    # --- Torus emission (always visible) ---
+    l_torus = two_temperature_torus(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_torus_frac=agn_torus_frac,
+        agn_T_hot=agn_T_hot,
+        agn_T_warm=agn_T_warm,
+        agn_frac_hot=agn_frac_hot,
+        agn_tau_torus=agn_tau_torus,
+    )
+
+    # --- NLR emission (isotropic, always visible) ---
+    # NLR is illuminated by the disc bolometric luminosity
+    l_disc_bol_erg = (1.0 - agn_torus_frac) * l_bol_erg
+    l_nlr_erg = nlr_emission(
+        wavelength,
+        l_disc_bol_erg=l_disc_bol_erg,
+        covering_fraction=agn_covering_nlr,
+        fwhm_kms=agn_nlr_fwhm,
+    )
+    l_nlr = l_nlr_erg / _LSUN_ERG
+
+    # --- BLR emission (masked by torus) ---
+    l_blr_erg = blr_emission(
+        wavelength,
+        l_disc_bol_erg=l_disc_bol_erg,
+        covering_fraction=agn_covering_blr,
+        fwhm_kms=agn_blr_fwhm,
+    )
+    l_blr = mask_blr * l_blr_erg / _LSUN_ERG
+
+    # --- Total ---
+    l_total = l_disc_masked + l_torus + l_nlr + l_blr
+    return l_total * agn_frac

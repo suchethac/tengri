@@ -3,6 +3,9 @@
 Fits every spectral pixel directly, with an optional multiplicative
 calibration polynomial to absorb flux-calibration uncertainties
 (following Prospector / Johnson+2021).
+
+Includes emission-line placement with instrument-resolution blending,
+relevant for R < 1000 spectroscopy where close lines merge.
 """
 
 import jax
@@ -140,3 +143,94 @@ def chebyshev_calibration(
             result = result + coeffs[k] * t_curr  # c_{k+1} * T_{k+1}
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Speed of light in Angstrom/s (for frequency conversions)
+# ---------------------------------------------------------------------------
+_C_AA_PER_S = 2.99792458e18
+
+
+@jax.jit
+def blend_emission_lines(
+    line_wavelengths: jnp.ndarray,
+    line_luminosities: jnp.ndarray,
+    spectral_resolution: float,
+    wave_out: jnp.ndarray,
+    redshift: float = 0.0,
+) -> jnp.ndarray:
+    """Place emission lines onto a wavelength grid, blending by instrument resolution.
+
+    Each line is represented as a Gaussian whose width is set by the
+    instrument's spectral resolution R = lambda / delta_lambda. Lines
+    closer than delta_lambda are effectively blended. The output is in
+    Lsun/Hz, ready to be added to a continuum SED.
+
+    Vectorized over all lines simultaneously using ``jax.vmap`` for
+    efficient GPU/TPU execution.
+
+    Parameters
+    ----------
+    line_wavelengths : array, shape (n_lines,)
+        Rest-frame line wavelengths (Angstrom).
+    line_luminosities : array, shape (n_lines,)
+        Line luminosities (Lsun). Total integrated luminosity per line.
+    spectral_resolution : float
+        Instrument spectral resolution R = lambda / delta_lambda.
+        Typical values: R ~ 100 for photometry, R ~ 1000 for low-res
+        spectroscopy, R ~ 5000 for medium-res.
+    wave_out : array, shape (n_pix,)
+        Output wavelength grid (Angstrom, observed frame).
+    redshift : float, optional
+        Source redshift. Default is 0.0.
+
+    Returns
+    -------
+    array, shape (n_pix,)
+        Emission-line spectrum in Lsun/Hz on the output grid.
+        Add to a continuum SED (also in Lsun/Hz) before applying
+        cosmological dimming.
+
+    Notes
+    -----
+    The Gaussian FWHM at each line is FWHM = lambda_obs / R, giving
+    sigma = lambda_obs / (2.355 * R). The profile is normalized to
+    integrate to 1 in wavelength space. To convert from Lsun (total
+    line luminosity) to Lsun/Hz (spectral density), we divide by the
+    frequency width delta_nu = c * sigma / lambda_obs^2.
+    """
+    def _single_line(lam_rest, lum):
+        """Compute Gaussian profile for one line.
+
+        Parameters
+        ----------
+        lam_rest : scalar
+            Rest-frame wavelength (Angstrom).
+        lum : scalar
+            Line luminosity (Lsun).
+
+        Returns
+        -------
+        array, shape (n_pix,)
+            Contribution to the spectrum (Lsun/Hz).
+        """
+        lam_obs = lam_rest * (1.0 + redshift)
+        sigma_aa = lam_obs / (2.355 * spectral_resolution)
+
+        # Gaussian profile normalized in wavelength space: integral = 1
+        profile = jnp.exp(
+            -0.5 * ((wave_out - lam_obs) / sigma_aa) ** 2
+        ) / (jnp.sqrt(2.0 * jnp.pi) * sigma_aa)
+
+        # Convert Lsun (integrated over wavelength) to Lsun/Hz:
+        # delta_nu = c / lam_obs^2 * sigma_aa  (characteristic freq width)
+        # profile_nu = lum * profile_lambda / delta_nu
+        # But more directly: profile is normalized in lambda, so
+        # L_lambda = lum * profile  [Lsun/AA]
+        # L_nu = L_lambda * lambda^2 / c  [Lsun/Hz]
+        # At each pixel: L_nu = lum * profile * wave_out^2 / c
+        return lum * profile * wave_out**2 / _C_AA_PER_S
+
+    # Vectorize over all lines and sum
+    all_profiles = jax.vmap(_single_line)(line_wavelengths, line_luminosities)
+    return jnp.sum(all_profiles, axis=0)

@@ -54,7 +54,7 @@ from diffsed.models.sfh.registry import (
     compute_field_gp,
     resolve_sfh,
 )
-from diffsed.models.sps.dsps_wrapper import SSPData, load_ssp_data
+from diffsed.models.sps.dsps_wrapper import SSPData, effective_metallicity, load_ssp_data
 from diffsed.noise import (
     compute_effective_noise,
     compute_std_inv,

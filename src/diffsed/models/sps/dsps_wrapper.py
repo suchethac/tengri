@@ -137,6 +137,52 @@ def compute_csp_weights(sfr_on_ssp_ages: jnp.ndarray, ssp_ages_yr: jnp.ndarray) 
     return sfr_on_ssp_ages * dt
 
 
+# ---------------------------------------------------------------------------
+# Alpha-element enhancement
+# ---------------------------------------------------------------------------
+
+# Coefficient converting [alpha/Fe] to total metallicity offset.
+# Alpha elements (O, Mg, Si, Ca, Ti) dominate the metal mass budget,
+# so [Z/H]_eff ≈ [Fe/H] + A * [alpha/Fe] with A ~ 0.75.
+# Reference: Thomas, Maraston & Bender 2003; Vazdekis et al. 2015.
+_ALPHA_TO_Z_COEFF = 0.75
+
+
+@jax.jit
+def effective_metallicity(log_z_fe: float, alpha_fe: float = 0.0) -> float:
+    """Convert [Fe/H] + [alpha/Fe] to effective total metallicity.
+
+    Approximates the effect of alpha-element enhancement on the SED
+    as a shift in the total metallicity used for SSP interpolation:
+
+        [Z/H]_eff = [Fe/H] + 0.75 * [alpha/Fe]
+
+    This is the standard approach when SSP templates are computed at
+    fixed abundance ratios and cannot be changed at runtime.
+
+    Parameters
+    ----------
+    log_z_fe : float
+        Iron abundance [Fe/H] (or equivalently, log10(Z) when
+        [alpha/Fe] = 0, i.e. the existing ``log_z`` parameter).
+    alpha_fe : float, optional
+        Alpha-element enhancement [alpha/Fe] in dex.
+        Default is 0.0 (solar abundance ratios).
+
+    Returns
+    -------
+    float
+        Effective total metallicity log10(Z_eff) in the same
+        units as ``log_z_fe``.
+
+    References
+    ----------
+    Thomas, Maraston & Bender 2003, MNRAS 339, 897
+    Vazdekis et al. 2015, MNRAS 449, 1177
+    """
+    return log_z_fe + _ALPHA_TO_Z_COEFF * alpha_fe
+
+
 LSUN_ERG_PER_S = 3.828e33  # erg/s (IAU 2015)
 
 

@@ -25,6 +25,7 @@ References
 ----------
 - Dale et al. 2014, ApJ, 784, 83
 - Draine & Li 2007, ApJ, 657, 810
+- da Cunha et al. 2013, ApJ, 766, 13
 - Hildebrand 1983, QJRAS, 24, 267
 """
 
@@ -118,6 +119,107 @@ def planck_bnu(
 
 
 # ===================================================================
+# CMB heating correction (da Cunha+2013)
+# ===================================================================
+
+_T_CMB_0 = 2.725  # CMB temperature at z=0 (K)
+
+
+def cmb_corrected_temperature(
+    T_dust: float,
+    redshift: float,
+    beta_ir: float = 1.6,
+) -> float:
+    """Effective dust temperature including CMB heating.
+
+    At high redshift the CMB sets a temperature floor on dust grains.
+    The effective equilibrium temperature is (da Cunha et al. 2013)::
+
+        T_eff = (T_dust^(4+beta) + T_CMB(z)^(4+beta)
+                 - T_CMB(z=0)^(4+beta))^{1/(4+beta)}
+
+    Parameters
+    ----------
+    T_dust : float
+        Intrinsic dust temperature in Kelvin (what the galaxy would
+        have at z=0 in isolation).
+    redshift : float
+        Source redshift.
+    beta_ir : float
+        Dust emissivity index. Default 1.6.
+
+    Returns
+    -------
+    float
+        Effective dust temperature in Kelvin.
+    """
+    exponent = 4.0 + beta_ir
+    T_cmb_z = _T_CMB_0 * (1.0 + redshift)
+    T_eff = (
+        T_dust**exponent + T_cmb_z**exponent - _T_CMB_0**exponent
+    ) ** (1.0 / exponent)
+    return T_eff
+
+
+def cmb_contrast_factor(
+    wavelength_aa: jnp.ndarray,
+    T_eff: float,
+    redshift: float,
+) -> jnp.ndarray:
+    """Flux suppression factor from observing dust against the CMB.
+
+    The observed flux is reduced because the galaxy's dust emission is
+    measured against the CMB background (da Cunha et al. 2013)::
+
+        S_obs / S_intrinsic = 1 - B_nu(T_CMB(z)) / B_nu(T_eff)
+
+    Parameters
+    ----------
+    wavelength_aa : array
+        Wavelength grid in Angstrom.
+    T_eff : float
+        CMB-corrected effective dust temperature (K).
+    redshift : float
+        Source redshift.
+
+    Returns
+    -------
+    array
+        Multiplicative contrast factor in [0, 1].
+    """
+    T_cmb_z = _T_CMB_0 * (1.0 + redshift)
+
+    # Compute the Planck ratio B_nu(T_cmb)/B_nu(T_eff) stably.
+    # Since both share the same nu^3 prefactor, the ratio simplifies to
+    #   (exp(x_eff) - 1) / (exp(x_cmb) - 1)
+    # where x = h*nu/(k*T).  For x >> 1 this approaches exp(x_eff - x_cmb)
+    # which is safe because x_cmb > x_eff (T_eff > T_cmb).
+    wavelength_cm = wavelength_aa * _AA_TO_CM
+    nu = _C_CGS / wavelength_cm
+
+    x_eff = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * T_eff), 0.0, 500.0)
+    x_cmb = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * T_cmb_z), 0.0, 500.0)
+
+    # Ratio = (exp(x_eff) - 1) / (exp(x_cmb) - 1)
+    # Use log-space: log(ratio) = log(expm1(x_eff)) - log(expm1(x_cmb))
+    # For large x, expm1(x) ~ exp(x), so log(expm1(x)) ~ x.
+    log_expm1_eff = jnp.where(
+        x_eff > 30.0, x_eff, jnp.log(jnp.expm1(jnp.clip(x_eff, 1e-10, 30.0)))
+    )
+    log_expm1_cmb = jnp.where(
+        x_cmb > 30.0, x_cmb, jnp.log(jnp.expm1(jnp.clip(x_cmb, 1e-10, 30.0)))
+    )
+
+    # B_cmb/B_eff = exp(log_expm1_eff - log_expm1_cmb)
+    # Since T_eff >= T_cmb, x_cmb >= x_eff, so the exponent is <= 0
+    # and the ratio is in [0, 1].
+    log_ratio = log_expm1_eff - log_expm1_cmb
+    ratio = jnp.exp(jnp.clip(log_ratio, -100.0, 0.0))
+
+    return jnp.clip(1.0 - ratio, 0.0, 1.0)
+
+
+# ===================================================================
 # Energy balance
 # ===================================================================
 
@@ -201,6 +303,7 @@ def modified_blackbody(
     L_absorbed: float,
     dust_T: float = 30.0,
     dust_beta_ir: float = 1.8,
+    redshift: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """Optically-thin modified blackbody dust emission.
@@ -212,6 +315,10 @@ def modified_blackbody(
     which is then normalized so that the frequency integral equals
     ``L_absorbed``.
 
+    When ``redshift > 0``, the dust temperature is corrected for CMB
+    heating (da Cunha et al. 2013) and the observed flux is reduced by
+    the CMB contrast factor.
+
     Parameters
     ----------
     wavelength_aa : array, shape (n_wave,)
@@ -222,12 +329,19 @@ def modified_blackbody(
         Dust temperature in Kelvin.  Typical range: 20--60 K.
     dust_beta_ir : float
         Emissivity index.  Typical range: 1.5--2.0.
+    redshift : float
+        Source redshift. When > 0, CMB heating correction is applied.
+        Default 0 (no correction, backward compatible).
 
     Returns
     -------
     array, shape (n_wave,)
         Dust emission L_nu in Lsun/Hz.
     """
+    # CMB correction: always applied. At z=0 this is a no-op since
+    # T_cmb(z=0) terms cancel and B_nu(T_cmb)/B_nu(T_dust) ~ 0.
+    T_eff = cmb_corrected_temperature(dust_T, redshift, dust_beta_ir)
+
     wavelength_cm = wavelength_aa * _AA_TO_CM
     nu = _C_CGS / wavelength_cm
 
@@ -235,7 +349,7 @@ def modified_blackbody(
     nu_ref = _C_CGS / (250.0e-4)  # 250 um in cm
     emissivity = (nu / nu_ref) ** dust_beta_ir
 
-    bnu = planck_bnu(wavelength_aa, dust_T)
+    bnu = planck_bnu(wavelength_aa, T_eff)
 
     # Unnormalized SED shape (erg/s/cm^2/Hz/sr units cancel in ratio)
     shape = emissivity * bnu
@@ -249,7 +363,12 @@ def modified_blackbody(
     # the thermal peak) — return zeros instead of NaN
     norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
 
-    return norm * shape
+    result = norm * shape
+
+    # CMB contrast: suppresses flux where dust is observed against CMB
+    contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
+
+    return result * contrast
 
 
 # ===================================================================
@@ -287,6 +406,7 @@ def dale2014(
     wavelength_aa: jnp.ndarray,
     L_absorbed: float,
     dust_alpha_dale: float = 2.0,
+    redshift: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """Dale et al. (2014) 1-parameter dust emission template.
@@ -296,6 +416,10 @@ def dale2014(
     Here we provide an analytic two-component approximation that captures
     the key alpha-dependent behaviour: low alpha yields warm, peaked SEDs;
     high alpha yields cooler, broader SEDs.
+
+    When ``redshift > 0``, CMB heating correction (da Cunha+2013) is
+    applied to both temperature components, and the CMB contrast factor
+    suppresses the observed flux.
 
     Parameters
     ----------
@@ -308,6 +432,9 @@ def dale2014(
         alpha ~ 1-1.5: luminous IR galaxies.
         alpha ~ 2-2.5: normal star-forming galaxies.
         alpha ~ 3-4: quiescent galaxies.
+    redshift : float
+        Source redshift. When > 0, CMB heating correction is applied.
+        Default 0 (no correction, backward compatible).
 
     Returns
     -------
@@ -321,6 +448,11 @@ def dale2014(
 
     # Both components have beta_ir = 1.8 (typical grain emissivity)
     beta_ir = 1.8
+
+    # CMB correction: always applied (no-op at z=0)
+    T_cold = cmb_corrected_temperature(T_cold, redshift, beta_ir)
+    T_warm = cmb_corrected_temperature(T_warm, redshift, beta_ir)
+
     nu_ref = _C_CGS / (250.0e-4)
     emissivity = (nu / nu_ref) ** beta_ir
 
@@ -335,7 +467,13 @@ def dale2014(
 
     norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
 
-    return norm * shape
+    result = norm * shape
+
+    # CMB contrast using luminosity-weighted effective T
+    T_eff_avg = (1.0 - f_warm) * T_cold + f_warm * T_warm
+    contrast = cmb_contrast_factor(wavelength_aa, T_eff_avg, redshift)
+
+    return result * contrast
 
 
 # ===================================================================
