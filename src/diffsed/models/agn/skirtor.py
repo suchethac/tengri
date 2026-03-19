@@ -459,7 +459,7 @@ def skirtor_analytic(*args, **kwargs):
         from pathlib import Path
 
         for candidate in [
-            Path(__file__).resolve().parents[3] / "data" / "skirtor_templates.npz",
+            Path(__file__).resolve().parents[4] / "data" / "skirtor_templates.npz",
             Path("data/skirtor_templates.npz"),
         ]:
             if candidate.is_file():
