@@ -547,8 +547,8 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Nebular params (only when nebular is enabled)
-    if nebular:
+    # Nebular params (CLOUDY or Cue — not BakedIn/ssp)
+    if nebular and nebular != "ssp":
         for pname, (desc, check, err, default) in _NEBULAR_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
@@ -817,15 +817,78 @@ class ParamSpec:
         # IGM absorption (default: True — negligible at z<2, essential at z>3)
         self.apply_igm = kwargs.pop("apply_igm", True)
 
-        # Nebular emission: False (default), True, "cloudy", or "cue"
-        self.nebular = kwargs.pop("nebular", False)
+        # --- Nebular emission ---
+        nebular_ssp = kwargs.pop("nebular_ssp", False)
+        nebular = kwargs.pop("nebular", False)
+        nebular_cue = kwargs.pop("nebular_cue", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
-        # Auto-enable nebular from paths
-        if self.cue_weights_path is not None and not self.nebular:
-            self.nebular = "cue"
-        elif self.cloudy_grid_path is not None and not self.nebular:
-            self.nebular = "cloudy"
+        self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
+
+        # Backward compat: old string-style flags
+        if nebular == "cue":
+            nebular_cue = True
+            nebular = False
+        elif nebular == "cloudy":
+            nebular = True
+
+        # Backward compat: path implies backend
+        no_explicit = not nebular_cue and not nebular and not nebular_ssp
+        if self.cue_weights_path is not None and no_explicit:
+            nebular_cue = True
+        no_explicit_cloudy = not nebular and not nebular_cue and not nebular_ssp
+        if self.cloudy_grid_path is not None and no_explicit_cloudy:
+            nebular = True
+
+        # Mutual exclusion check
+        n_set = sum([bool(nebular_ssp), bool(nebular), bool(nebular_cue)])
+        if n_set > 1:
+            raise ValueError(
+                "nebular_ssp, nebular (CLOUDY), and nebular_cue are "
+                "mutually exclusive — choose one."
+            )
+
+        # Resolve mode
+        if nebular_cue:
+            self.nebular_mode = "cue"
+            if self.cue_weights_path is None:
+                from diffsed.models.nebular import _DEFAULT_CUE_WEIGHTS_PATH
+
+                self.cue_weights_path = str(_DEFAULT_CUE_WEIGHTS_PATH)
+        elif nebular:
+            self.nebular_mode = "cloudy"
+            if self.cloudy_grid_path is None:
+                self._raise_missing_grid_path()
+        elif nebular_ssp:
+            self.nebular_mode = "ssp"
+        else:
+            self.nebular_mode = "off"
+
+        # Keep self.nebular as truthy for backward compat
+        self.nebular = self.nebular_mode != "off"
+
+        # Validate ionization source
+        if self.neb_ionization in ("agn", "ssp+agn"):
+            raise NotImplementedError(
+                "AGN ionization not yet implemented — use neb_ionization='ssp'"
+            )
+
+        # Warn if nebular_ssp user sets nebular params; drop them from kwargs
+        if self.nebular_mode == "ssp":
+            _NEB_PARAM_NAMES = (
+                set(_NEBULAR_PARAMS) | set(_CUE_IONSPEC_PARAMS) | set(_CUE_GAS_EXTRA_PARAMS)
+            )
+            for name in list(kwargs):
+                if name in _NEB_PARAM_NAMES:
+                    import warnings
+
+                    warnings.warn(
+                        f"'{name}' is ignored with nebular_ssp=True "
+                        f"(emission is baked into SSP at fixed logU/logZ).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    kwargs.pop(name)
 
         # Dust law settings
         self.dust_law_bc = kwargs.pop("dust_law_bc", "power_law")
@@ -892,7 +955,7 @@ class ParamSpec:
         # --- Build dynamic parameter registry ---
         self._param_registry, self._defaults = _build_param_registry(
             mean_sfh_type,
-            nebular=self.nebular,
+            nebular=self.nebular_mode,
             dust_law_bc=self.dust_law_bc,
             dust_law_diff=self.dust_law_diff,
             dust_emission=self.dust_emission,
@@ -901,6 +964,23 @@ class ParamSpec:
             xray=self.xray,
             evolving_metallicity=self.evolving_metallicity,
         )
+        # --- Cue optional params (ionspec / gas extras) ---
+        _ALL_CUE_OPTIONAL = {**_CUE_IONSPEC_PARAMS, **_CUE_GAS_EXTRA_PARAMS}
+        if self.nebular_mode == "cue":
+            # Register any optional Cue params the user explicitly provided
+            for pname, (desc, check, err, default) in _ALL_CUE_OPTIONAL.items():
+                if pname in resolved_kwargs:
+                    self._param_registry[pname] = (desc, check, err)
+                    self._defaults[pname] = default
+        else:
+            # Raise if user tried to set ionspec params in non-Cue mode
+            ionspec_in_kwargs = [p for p in _CUE_IONSPEC_PARAMS if p in resolved_kwargs]
+            if ionspec_in_kwargs:
+                raise ValueError(
+                    f"ionspec params {ionspec_in_kwargs} require nebular_cue=True "
+                    f"(current mode: '{self.nebular_mode}')."
+                )
+
         self._valid_param_names = frozenset(self._param_registry.keys())
 
         # --- Validate parameter names ---
@@ -929,6 +1009,20 @@ class ParamSpec:
 
         # --- Validate physical bounds ---
         self._validate_bounds()
+
+    @staticmethod
+    def _raise_missing_grid_path():
+        """Raise ValueError listing available CLOUDY grids."""
+        from pathlib import Path
+
+        data_dir = Path(__file__).resolve().parents[1] / "data"
+        grids = sorted(data_dir.glob("cloudy_grid_*.h5"))
+        grid_list = "\n".join(f"  {g.name}" for g in grids) if grids else "  (none found)"
+        raise ValueError(
+            f"nebular=True requires cloudy_grid_path. "
+            f"Available grids in {data_dir}/:\n{grid_list}\n"
+            f"Match the grid isochrone to your SSP for consistency."
+        )
 
     @staticmethod
     def _resolve_sfh_type(raw_sfh_type, explicit_stochastic, detected_models=None):
