@@ -1099,53 +1099,126 @@ class Model:
         if _sfr is not None:
             sfr = _sfr
         elif "sfh_t_gyr" in params and "sfh_sfr" in params:
-            # Tabulated SFH from simulation: convert cosmic time → lookback → SSP ages
+            # Tabulated SFH from simulation — use DSPS table functions
+            # which properly handle time→age conversion, trapezoidal
+            # weighting, and metallicity distribution (lognormal MDF).
             t_cosmic_gyr = jnp.asarray(params["sfh_t_gyr"])
             sfr_table = jnp.asarray(params["sfh_sfr"])
             z = p.get("redshift", 0.0)
-            t_obs_gyr = self._t_universe_gyr(z) if hasattr(self, '_t_universe_gyr') else 13.7
+            t_obs_gyr = self._t_universe_gyr(z) if hasattr(self, "_t_universe_gyr") else 13.7
+
+            _use_dsps_table = True
+            # Also compute sfr on internal grid for SFH plotting
             t_lookback_yr = jnp.maximum((t_obs_gyr - t_cosmic_gyr) * 1e9, 1.0)
             log_t_lookback = jnp.log10(t_lookback_yr)
-            # Interpolate SFR onto SSP age grid (both in log-age space)
             sfr_on_ssp = jnp.interp(
                 self.ssp_log_ages_yr, log_t_lookback[::-1], sfr_table[::-1],
             )
-            sfr = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid,
-                              jnp.interp(self.log_age_grid, log_t_lookback[::-1], sfr_table[::-1]))
+            sfr = jnp.interp(
+                self.log_age_grid, log_t_lookback[::-1], sfr_table[::-1],
+            )
         else:
             sfr = self._compute_sfr(p)
 
         if _weights is not None:
             weights = _weights
+            _use_dsps_table = False
         elif "sfh_t_gyr" in params:
-            # Weights already from tabulated SFH interpolation above
             weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
         else:
             sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
             weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
+            _use_dsps_table = False
 
         # Alpha-element enhancement: shift effective metallicity
         alpha_fe = p.get("alpha_fe", 0.0)
 
-        # Metallicity interpolation
+        # --- Metallicity + CSP integral ---
+        # For tabulated SFH with met_history: use DSPS calc_ssp_weights_sfh_table_met_table
+        # which properly handles time→age + metallicity distribution → 2D weights (n_met, n_age).
+        # We then apply dust using these 2D weights for correct age-dependent attenuation.
+        if _use_dsps_table and "met_history" in params:
+            # Use DSPS for the FULL CSP integral with Z(t) history.
+            # This properly handles time→age, trapezoidal weighting,
+            # and lognormal metallicity distribution at each age.
+            from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
+            met_table = jnp.asarray(params["met_history"])
+            log_z_abs = effective_metallicity(met_table + (-1.8477), alpha_fe)
+            lgmet_scatter = float(params.get("lgmet_scatter", 0.2))
+            dsps_result = calc_rest_sed_sfh_table_met_table(
+                gal_t_table=t_cosmic_gyr,
+                gal_sfr_table=sfr_table,
+                gal_lgmet_table=log_z_abs,
+                gal_lgmet_scatter=lgmet_scatter,
+                ssp_lgmet=self.ssp_data.ssp_lgmet,
+                ssp_lg_age_gyr=self.ssp_data.ssp_lg_age_gyr,
+                ssp_flux=self.ssp_data.ssp_flux,
+                t_obs=t_obs_gyr,
+            )
+            # DSPS gives the intrinsic (no-dust) SED and 2D weights
+            _dsps_intrinsic_sed = dsps_result.rest_sed  # (n_wave,) in Lsun/Hz
+            weights = dsps_result.age_weights  # (n_age,) normalized
+            # For dust: use Z-marginalized SSP flux per age
+            lgmet_w = dsps_result.lgmet_weights  # (n_met, n_age)
+            lgmet_w_safe = jnp.maximum(jnp.sum(lgmet_w, axis=0, keepdims=True), 1e-30)
+            ssp_flux_at_z = jnp.einsum("ma,maw->aw", lgmet_w / lgmet_w_safe,
+                                         self.ssp_data.ssp_flux)
+            # Scale weights to absolute mass (DSPS normalizes to 1)
+            total_mass = jnp.sum(dsps_result.weights) * jnp.trapezoid(sfr_table, t_cosmic_gyr * 1e9)
+            # Actually: DSPS age_weights are fractional. Total stellar mass =
+            # integral(SFR * dt). Multiply weights by total mass.
+            _total_mass_formed = jnp.trapezoid(sfr_table, t_cosmic_gyr * 1e9)
+            weights = weights * _total_mass_formed
+
+        elif _use_dsps_table:
+            # Use DSPS for the FULL CSP integral with single Z + scatter
+            from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
+            log_z_solar = p.get("log_z", -1.8477)
+            log_z_eff = effective_metallicity(log_z_solar, alpha_fe)
+            lgmet_scatter = float(params.get("lgmet_scatter", 0.2))
+            dsps_result = calc_rest_sed_sfh_table_lognormal_mdf(
+                gal_t_table=t_cosmic_gyr,
+                gal_sfr_table=sfr_table,
+                gal_lgmet=log_z_eff,
+                gal_lgmet_scatter=lgmet_scatter,
+                ssp_lgmet=self.ssp_data.ssp_lgmet,
+                ssp_lg_age_gyr=self.ssp_data.ssp_lg_age_gyr,
+                ssp_flux=self.ssp_data.ssp_flux,
+                t_obs=t_obs_gyr,
+            )
+            _dsps_intrinsic_sed = dsps_result.rest_sed
+            weights = dsps_result.age_weights
+            _total_mass_formed = jnp.trapezoid(sfr_table, t_cosmic_gyr * 1e9)
+            weights = weights * _total_mass_formed
+            ssp_flux_at_z = interpolate_metallicity(
+                self.ssp_data.ssp_flux, self.ssp_data.ssp_lgmet, log_z_eff,
+            )
+
+        # Metallicity interpolation (non-table path)
         # Priority: met_history (array) > evolving_metallicity > single Z
-        if "met_history" in params:
+        if "met_history" in params and not _use_dsps_table:
             # Tabulated metallicity history Z(t) from simulation
             # Expects array of log10(Z/Zsun) at same time grid as sfh_t_gyr
             met_table = jnp.asarray(params["met_history"])
-            t_cosmic_gyr = jnp.asarray(params.get("sfh_t_gyr", jnp.linspace(0.1, 13.7, len(met_table))))
+            t_cosmic_gyr = jnp.asarray(
+                params.get("sfh_t_gyr", jnp.linspace(0.1, 13.7, len(met_table)))
+            )
             z_val = p.get("redshift", 0.0)
-            t_obs_gyr = self._t_universe_gyr(z_val) if hasattr(self, '_t_universe_gyr') else 13.7
+            t_obs_gyr = self._t_universe_gyr(z_val) if hasattr(self, "_t_universe_gyr") else 13.7
             t_lookback_yr = jnp.maximum((t_obs_gyr - t_cosmic_gyr) * 1e9, 1.0)
             log_t_lookback = jnp.log10(t_lookback_yr)
             # Interpolate Z(t) onto SSP age grid
             log_z_on_ssp = jnp.interp(
-                self.ssp_log_ages_yr, log_t_lookback[::-1], met_table[::-1],
+                self.ssp_log_ages_yr,
+                log_t_lookback[::-1],
+                met_table[::-1],
             )
             log_z_abs = log_z_on_ssp + (-1.8477)  # solar offset
             log_z_abs = effective_metallicity(log_z_abs, alpha_fe)
             ssp_flux_at_z = interpolate_metallicity_evolving(
-                self.ssp_data.ssp_flux, self.ssp_data.ssp_lgmet, log_z_abs,
+                self.ssp_data.ssp_flux,
+                self.ssp_data.ssp_lgmet,
+                log_z_abs,
             )
         elif self._evolving_metallicity:
             z = p.get("redshift", 0.0)
@@ -1348,12 +1421,12 @@ class Model:
         **Single-galaxy exploration (lazy, on-demand):**
 
         >>> pred = model.predict(params)
-        >>> pred.sfh.stellar_mass          # triggers SFH computation
-        >>> pred.sfh.mass_weighted_age_gyr # reuses cached SFH
-        >>> pred.sed.l_bol                 # triggers SED computation
-        >>> pred.sed.uv_slope_beta         # reuses cached SED
-        >>> pred.lines.halpha              # triggers nebular computation
-        >>> pred.lines.bpt_nii             # reuses cached lines
+        >>> pred.sfh.stellar_mass  # triggers SFH computation
+        >>> pred.sfh.mass_weighted_age_gyr  # reuses cached SFH
+        >>> pred.sed.l_bol  # triggers SED computation
+        >>> pred.sed.uv_slope_beta  # reuses cached SED
+        >>> pred.lines.halpha  # triggers nebular computation
+        >>> pred.lines.bpt_nii  # reuses cached lines
 
         **Batch computation (JIT + vmap):**
 
@@ -1371,6 +1444,237 @@ class Model:
         from diffsed.prediction import Prediction
 
         return Prediction(self, params)
+
+    def predict_sfh_quantities(self, params):
+        """Compute SFH-derived quantities (JIT-compatible).
+
+        Returns a :class:`~diffsed.prediction.SFHQuantities` NamedTuple
+        containing stellar mass, SFR, sSFR, and mass-weighted age and
+        metallicity. This method is fully JIT-compatible and can be
+        vectorized with ``jax.vmap`` for batch computation over
+        posterior chains or mock catalogs.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values (public names).
+
+        Returns
+        -------
+        SFHQuantities
+            NamedTuple with fields: ``stellar_mass``,
+            ``stellar_mass_surviving``, ``sfr_100myr``, ``sfr_10myr``,
+            ``ssfr``, ``mass_weighted_age_gyr``,
+            ``mass_weighted_metallicity``.
+
+        Examples
+        --------
+        **Single galaxy:**
+
+        >>> sfh = model.predict_sfh_quantities(params)
+        >>> sfh.stellar_mass
+        Array(1.23e10, dtype=float64)
+
+        **Batch over 10,000 posterior samples:**
+
+        >>> import jax
+        >>> sfh_fn = jax.vmap(model.predict_sfh_quantities)
+        >>> sfh_batch = sfh_fn(params_batch)
+        >>> sfh_batch.stellar_mass  # shape (10000,)
+
+        See Also
+        --------
+        predict : Lazy prediction for single-galaxy exploration.
+        predict_sed_quantities : JIT-compatible SED quantities.
+        """
+        from diffsed.prediction import SFHQuantities
+        from diffsed.utils.sed_quantities import (
+            compute_mass_weighted_age,
+            compute_mass_weighted_metallicity,
+        )
+
+        p = self._get_internal_params(params)
+        sfr = self._compute_sfr(p)
+
+        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+        weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
+        mass_formed = jnp.sum(weights)
+
+        # Surviving mass
+        if self.ssp_data.ssp_mass_remaining is not None:
+            from diffsed.models.sps.dsps_wrapper import (
+                compute_surviving_mass,
+                interpolate_mass_remaining,
+            )
+
+            log_z = p.get("log_z", 0.0)
+            mr_at_met = interpolate_mass_remaining(
+                self.ssp_data.ssp_mass_remaining,
+                self.ssp_data.ssp_lgmet,
+                log_z,
+            )
+            mass_surviving = compute_surviving_mass(weights, mr_at_met)
+        else:
+            mass_surviving = jnp.array(jnp.nan)
+
+        # SFR averages
+        mask_100 = self.age_yr <= 1e8
+        sfr_100myr = jnp.where(
+            jnp.sum(mask_100) > 0,
+            jnp.sum(sfr * mask_100) / jnp.maximum(jnp.sum(mask_100), 1.0),
+            sfr[0],
+        )
+        mask_10 = self.age_yr <= 1e7
+        sfr_10myr = jnp.where(
+            jnp.sum(mask_10) > 0,
+            jnp.sum(sfr * mask_10) / jnp.maximum(jnp.sum(mask_10), 1.0),
+            sfr[0],
+        )
+
+        # sSFR
+        mass_for_ssfr = jnp.where(jnp.isnan(mass_surviving), mass_formed, mass_surviving)
+        ssfr = sfr_100myr / jnp.maximum(mass_for_ssfr, 1.0)
+
+        # Mass-weighted age and metallicity
+        mw_age = compute_mass_weighted_age(weights, self.ssp_ages_yr)
+        mw_z = compute_mass_weighted_metallicity(
+            weights,
+            self.ssp_ages_yr,
+            p.get("log_z", 0.0),
+            log_z_initial=p.get("log_z_initial"),
+            log_z_final=p.get("log_z_final"),
+        )
+
+        return SFHQuantities(
+            stellar_mass=mass_formed,
+            stellar_mass_surviving=mass_surviving,
+            sfr_100myr=sfr_100myr,
+            sfr_10myr=sfr_10myr,
+            ssfr=ssfr,
+            mass_weighted_age_gyr=mw_age,
+            mass_weighted_metallicity=mw_z,
+        )
+
+    def predict_sed_quantities(self, params):
+        """Compute SED-derived quantities (JIT-compatible).
+
+        Returns a :class:`~diffsed.prediction.SEDQuantities` NamedTuple
+        containing bolometric and IR luminosities, UV slope, spectral
+        indices, and luminosity-weighted age/metallicity. Runs the
+        full forward model internally.
+
+        This method is fully JIT-compatible and can be vectorized with
+        ``jax.vmap`` for batch computation.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values (public names).
+
+        Returns
+        -------
+        SEDQuantities
+            NamedTuple with fields: ``l_bol``, ``l_tir``,
+            ``l_dust_absorbed``, ``irx``, ``uv_slope_beta``,
+            ``dn4000``, ``balmer_break``, ``m_uv``, ``fuv_flux``,
+            ``nuv_flux``, ``fuv_flux_intrinsic``, ``nuv_flux_intrinsic``,
+            ``rest_uv_color``, ``luminosity_weighted_age_gyr``,
+            ``luminosity_weighted_metallicity``.
+
+        Examples
+        --------
+        **Single galaxy:**
+
+        >>> sed_q = model.predict_sed_quantities(params)
+        >>> sed_q.l_bol
+        Array(2.5e10, dtype=float64)
+        >>> sed_q.dn4000
+        Array(1.42, dtype=float64)
+
+        **Batch over posterior samples:**
+
+        >>> import jax
+        >>> sed_fn = jax.vmap(model.predict_sed_quantities)
+        >>> sed_batch = sed_fn(params_batch)
+        >>> sed_batch.m_uv  # shape (n_samples,)
+
+        See Also
+        --------
+        predict : Lazy prediction for single-galaxy exploration.
+        predict_sfh_quantities : JIT-compatible SFH quantities.
+        """
+        from diffsed.prediction import SEDQuantities
+        from diffsed.utils.sed_quantities import (
+            compute_balmer_break,
+            compute_bolometric_luminosity,
+            compute_dn4000,
+            compute_fuv_flux,
+            compute_irx,
+            compute_l_dust_absorbed,
+            compute_l_tir,
+            compute_luminosity_weighted_age,
+            compute_luminosity_weighted_metallicity,
+            compute_m_uv,
+            compute_nuv_flux,
+            compute_rest_uv_color,
+            compute_uv_luminosity_1600,
+            compute_uv_slope_beta,
+        )
+
+        comp = self._compute_sed_components(params, need_intrinsic=True)
+        sed = comp["sed_total"]
+        wave = self.ssp_data.ssp_wave
+        p = comp["p"]
+
+        l_bol = compute_bolometric_luminosity(sed, wave)
+        l_tir = compute_l_tir(sed, wave)
+
+        sed_intr = comp["sed_intrinsic"]
+        sed_atten = comp["sed_attenuated"]
+        l_dust = (
+            compute_l_dust_absorbed(sed_intr, sed_atten, wave)
+            if sed_intr is not None
+            else jnp.array(jnp.nan)
+        )
+
+        l_uv = compute_uv_luminosity_1600(sed, wave)
+        irx = compute_irx(l_tir, l_uv)
+
+        # Intrinsic UV fluxes
+        fuv_intr = compute_fuv_flux(sed_intr, wave) if sed_intr is not None else jnp.array(jnp.nan)
+        nuv_intr = compute_nuv_flux(sed_intr, wave) if sed_intr is not None else jnp.array(jnp.nan)
+
+        # Luminosity-weighted quantities
+        weights = comp["weights"]
+        ssp_flux_at_z = comp["ssp_flux_at_z"]
+        lw_age = compute_luminosity_weighted_age(weights, ssp_flux_at_z, self.ssp_ages_yr, wave)
+        lw_z = compute_luminosity_weighted_metallicity(
+            weights,
+            ssp_flux_at_z,
+            self.ssp_ages_yr,
+            wave,
+            p.get("log_z", 0.0),
+            log_z_initial=p.get("log_z_initial"),
+            log_z_final=p.get("log_z_final"),
+        )
+
+        return SEDQuantities(
+            l_bol=l_bol,
+            l_tir=l_tir,
+            l_dust_absorbed=l_dust,
+            irx=irx,
+            uv_slope_beta=compute_uv_slope_beta(sed, wave),
+            dn4000=compute_dn4000(sed, wave),
+            balmer_break=compute_balmer_break(sed, wave),
+            m_uv=compute_m_uv(sed, wave),
+            fuv_flux=compute_fuv_flux(sed, wave),
+            nuv_flux=compute_nuv_flux(sed, wave),
+            fuv_flux_intrinsic=fuv_intr,
+            nuv_flux_intrinsic=nuv_intr,
+            rest_uv_color=compute_rest_uv_color(sed, wave),
+            luminosity_weighted_age_gyr=lw_age,
+            luminosity_weighted_metallicity=lw_z,
+        )
 
     def predict_photometry(self, params):
         """Compute observed photometric flux densities.
@@ -1395,10 +1699,18 @@ class Model:
         # Tabulated SFH bypasses fused kernel (needs full SED path)
         _has_tabulated_sfh = "sfh_t_gyr" in params
 
-        if self._precomp is not None and self._fused_photometry is not None and not _has_tabulated_sfh:
+        if (
+            self._precomp is not None
+            and self._fused_photometry is not None
+            and not _has_tabulated_sfh
+        ):
             return self._predict_photometry_fast(params)
 
-        if self._ztable is not None and self._fused_photometry_ztable is not None and not _has_tabulated_sfh:
+        if (
+            self._ztable is not None
+            and self._fused_photometry_ztable is not None
+            and not _has_tabulated_sfh
+        ):
             return self._predict_photometry_ztable(params)
 
         sed = self.predict_sed(params)
