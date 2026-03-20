@@ -37,10 +37,15 @@ class SSPData(NamedTuple):
     """
 
     ssp_wave: jnp.ndarray
-    ssp_flux: jnp.ndarray
+    ssp_flux: jnp.ndarray  # (n_met, n_age, n_wave) or future (n_met, n_alpha, n_age, n_wave)
     ssp_lg_age_gyr: jnp.ndarray
     ssp_lgmet: jnp.ndarray
     ssp_mass_remaining: jnp.ndarray | None = None
+    # Future: ssp_alpha_fe grid for alpha-enhanced templates (Vazdekis+2015, MIST)
+    # When available, ssp_flux becomes (n_met, n_alpha, n_age, n_wave) and
+    # interpolation adds a third dimension. The current met_alpha_fe parameter
+    # uses effective_metallicity() as an approximation for 2D grids.
+    ssp_alpha_fe: jnp.ndarray | None = None
 
 
 def load_ssp_data(filepath: str) -> SSPData:
