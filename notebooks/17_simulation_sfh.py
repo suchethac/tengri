@@ -42,6 +42,7 @@ import os
 
 import jax
 import jax.numpy as jnp
+
 jax.config.update("jax_enable_x64", True)
 
 import matplotlib.pyplot as plt
@@ -49,36 +50,50 @@ import matplotlib.ticker as ticker
 import numpy as np
 
 from diffsed import (
-    Model, ParamSpec, Fixed, Uniform,
-    load_ssp_data, load_filter_set,
+    Model,
+    ParamSpec,
+    Fixed,
+    Uniform,
+    load_ssp_data,
+    load_filter_set,
 )
 
 # -- Plot style --------------------------------------------------------
-plt.rcParams.update({
-    "figure.dpi": 150,
-    "font.size": 11,
-    "font.family": "serif",
-    "mathtext.fontset": "dejavuserif",
-    "axes.linewidth": 1.0,
-    "xtick.major.width": 0.8,
-    "ytick.major.width": 0.8,
-    "xtick.minor.width": 0.5,
-    "ytick.minor.width": 0.5,
-    "xtick.direction": "in",
-    "ytick.direction": "in",
-    "xtick.top": True,
-    "ytick.right": True,
-    "xtick.minor.visible": True,
-    "ytick.minor.visible": True,
-    "legend.frameon": False,
-    "legend.fontsize": 9,
-    "savefig.dpi": 300,
-    "savefig.bbox": "tight",
-    "axes.prop_cycle": plt.cycler(
-        color=["#2b6ca3", "#d65f27", "#3a9a5b", "#c03d3e",
-               "#8b6bba", "#8c564b", "#e377c2", "#7f7f7f"]
-    ),
-})
+plt.rcParams.update(
+    {
+        "figure.dpi": 150,
+        "font.size": 11,
+        "font.family": "serif",
+        "mathtext.fontset": "dejavuserif",
+        "axes.linewidth": 1.0,
+        "xtick.major.width": 0.8,
+        "ytick.major.width": 0.8,
+        "xtick.minor.width": 0.5,
+        "ytick.minor.width": 0.5,
+        "xtick.direction": "in",
+        "ytick.direction": "in",
+        "xtick.top": True,
+        "ytick.right": True,
+        "xtick.minor.visible": True,
+        "ytick.minor.visible": True,
+        "legend.frameon": False,
+        "legend.fontsize": 9,
+        "savefig.dpi": 300,
+        "savefig.bbox": "tight",
+        "axes.prop_cycle": plt.cycler(
+            color=[
+                "#2b6ca3",
+                "#d65f27",
+                "#3a9a5b",
+                "#c03d3e",
+                "#8b6bba",
+                "#8c564b",
+                "#e377c2",
+                "#7f7f7f",
+            ]
+        ),
+    }
+)
 
 COLORS = ["#2b6ca3", "#d65f27", "#3a9a5b", "#c03d3e", "#8b6bba"]
 
@@ -108,14 +123,24 @@ def savefig(fig, name, dpi=200):
 # %%
 # Load SSP data and filters
 ssp = load_ssp_data("../data/fsps_prsc_miles_chabrier.h5")
-filters = load_filter_set([
-    "galex_fuv", "galex_nuv",
-    "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "wise_w1", "wise_w3",
-])
+filters = load_filter_set(
+    [
+        "galex_fuv",
+        "galex_nuv",
+        "sdss_u",
+        "sdss_g",
+        "sdss_r",
+        "sdss_i",
+        "sdss_z",
+        "wise_w1",
+        "wise_w3",
+    ]
+)
 
-print(f"SSP grid: {ssp.ssp_flux.shape[0]} metallicities x "
-      f"{ssp.ssp_flux.shape[1]} ages x {ssp.ssp_flux.shape[2]} wavelengths")
+print(
+    f"SSP grid: {ssp.ssp_flux.shape[0]} metallicities x "
+    f"{ssp.ssp_flux.shape[1]} ages x {ssp.ssp_flux.shape[2]} wavelengths"
+)
 print(f"Filters: {len(filters[0])} bands loaded")
 
 # %%
@@ -200,13 +225,12 @@ ax1.legend(loc="lower left")
 ax1.set_title("Rest-frame SEDs")
 
 # Right: photometry (observed-frame effective wavelengths)
-filter_wave_eff = np.array([
-    1528, 2271, 3551, 4686, 6166, 7480, 8932, 33526, 115608
-]) * (1.0 + 0.5)  # approximate observed-frame for z=0.5
+filter_wave_eff = np.array([1528, 2271, 3551, 4686, 6166, 7480, 8932, 33526, 115608]) * (
+    1.0 + 0.5
+)  # approximate observed-frame for z=0.5
 
 for i, (label, phot) in enumerate(photometry.items()):
-    ax2.plot(filter_wave_eff / 1e4, phot, "o-", color=COLORS[i], ms=6,
-             lw=1.5, label=label)
+    ax2.plot(filter_wave_eff / 1e4, phot, "o-", color=COLORS[i], ms=6, lw=1.5, label=label)
 ax2.set_xscale("log")
 ax2.set_yscale("log")
 ax2.set_xlabel(r"Observed wavelength ($\mu$m)")
@@ -231,7 +255,7 @@ plt.show()
 # %%
 # Three metallicity histories
 met_const = -0.3 * np.ones(300)
-met_linear = -2.0 + 1.7 * (t_gyr / 13.7)   # -2.0 at t=0 -> -0.3 at t=13.7
+met_linear = -2.0 + 1.7 * (t_gyr / 13.7)  # -2.0 at t=0 -> -0.3 at t=13.7
 met_rapid = -2.0 + 1.7 * (1.0 - np.exp(-t_gyr / 2.0))  # rapid early enrichment
 
 met_configs = {
@@ -333,6 +357,7 @@ spec_neb = ParamSpec(
     dust_tau_bc=Fixed(1.0),
     dust_tau_diff=Fixed(0.5),
     dust_law_bc="kriek_conroy",
+    nebular=True,
     cloudy_grid_path="../data/cloudy_grid_mist.h5",
     neb_logU=Fixed(-2.5),
     redshift=Fixed(z_demo),
@@ -348,6 +373,7 @@ spec_dustem = ParamSpec(
     dust_tau_bc=Fixed(1.0),
     dust_tau_diff=Fixed(0.5),
     dust_law_bc="kriek_conroy",
+    nebular=True,
     cloudy_grid_path="../data/cloudy_grid_mist.h5",
     neb_logU=Fixed(-2.5),
     dust_emission="dl07_tabulated",
@@ -368,6 +394,7 @@ spec_agn = ParamSpec(
     dust_tau_bc=Fixed(1.0),
     dust_tau_diff=Fixed(0.5),
     dust_law_bc="kriek_conroy",
+    nebular=True,
     cloudy_grid_path="../data/cloudy_grid_mist.h5",
     neb_logU=Fixed(-2.5),
     dust_emission="dl07_tabulated",
@@ -390,6 +417,7 @@ spec_full = ParamSpec(
     dust_tau_bc=Fixed(1.0),
     dust_tau_diff=Fixed(0.5),
     dust_law_bc="kriek_conroy",
+    nebular=True,
     cloudy_grid_path="../data/cloudy_grid_mist.h5",
     neb_logU=Fixed(-2.5),
     dust_emission="dl07_tabulated",
@@ -422,8 +450,7 @@ buildup = [
 
 for label, sed, color, lw, ls in buildup:
     mask = sed > 0
-    ax.plot(wave_um[mask], sed[mask], color=color, lw=lw, ls=ls,
-            label=label, alpha=0.85)
+    ax.plot(wave_um[mask], sed[mask], color=color, lw=lw, ls=ls, label=label, alpha=0.85)
 
 ax.set_xscale("log")
 ax.set_yscale("log")
@@ -434,8 +461,7 @@ ax.set_title(f"SED buildup: delayed-tau SFH at z = {z_demo}")
 ax.legend(loc="lower right", fontsize=9)
 
 # Mark UV/optical/NIR/MIR/FIR regions
-for boundary, name in [(0.1, "UV"), (0.4, "Optical"), (1.0, "NIR"),
-                        (5.0, "MIR"), (30, "FIR")]:
+for boundary, name in [(0.1, "UV"), (0.4, "Optical"), (1.0, "NIR"), (5.0, "MIR"), (30, "FIR")]:
     ax.axvline(boundary, color="0.85", ls=":", lw=0.5)
 
 savefig(fig, "sed_buildup")
@@ -497,8 +523,7 @@ for i in range(n_samples):
     sample["sfh_sfr"] = jnp.array(sfr_delayed)
     phot = model_var.predict_photometry(sample)
     photometry_samples.append(np.array(phot))
-    param_samples.append({k: float(v) for k, v in sample.items()
-                          if k in spec_var.free_params})
+    param_samples.append({k: float(v) for k, v in sample.items() if k in spec_var.free_params})
 
 photometry_arr = np.array(photometry_samples)  # (100, 9)
 
@@ -507,16 +532,16 @@ print(f"Flux range per band (min/max ratio):")
 for i, name in enumerate(band_names):
     lo, hi = photometry_arr[:, i].min(), photometry_arr[:, i].max()
     if lo > 0:
-        print(f"  {name:<5}: {hi/lo:.1f}x spread")
+        print(f"  {name:<5}: {hi / lo:.1f}x spread")
 
 # %%
 # Plot photometric SED with uncertainty band from dust/AGN variation
 fig, ax = plt.subplots(figsize=(9, 5))
 
 # Approximate observed-frame effective wavelengths for z=1
-filter_wave_obs = np.array([
-    1528, 2271, 3551, 4686, 6166, 7480, 8932, 33526, 115608
-]) * 2.0  # z=1 -> factor 2
+filter_wave_obs = (
+    np.array([1528, 2271, 3551, 4686, 6166, 7480, 8932, 33526, 115608]) * 2.0
+)  # z=1 -> factor 2
 
 # Percentile bands
 p16 = np.percentile(photometry_arr, 16, axis=0)
@@ -527,17 +552,13 @@ p95 = np.percentile(photometry_arr, 95, axis=0)
 
 wave_plot = filter_wave_obs / 1e4  # micron
 
-ax.fill_between(wave_plot, p05, p95, color=COLORS[0], alpha=0.15,
-                label="5th-95th percentile")
-ax.fill_between(wave_plot, p16, p84, color=COLORS[0], alpha=0.30,
-                label="16th-84th percentile")
-ax.plot(wave_plot, p50, "o-", color=COLORS[0], ms=6, lw=2,
-        label="Median", zorder=5)
+ax.fill_between(wave_plot, p05, p95, color=COLORS[0], alpha=0.15, label="5th-95th percentile")
+ax.fill_between(wave_plot, p16, p84, color=COLORS[0], alpha=0.30, label="16th-84th percentile")
+ax.plot(wave_plot, p50, "o-", color=COLORS[0], ms=6, lw=2, label="Median", zorder=5)
 
 # Overplot a few individual realizations
 for j in range(0, n_samples, 20):
-    ax.plot(wave_plot, photometry_arr[j], "x-", color="0.6", ms=3,
-            lw=0.5, alpha=0.5)
+    ax.plot(wave_plot, photometry_arr[j], "x-", color="0.6", ms=3, lw=0.5, alpha=0.5)
 
 ax.set_xscale("log")
 ax.set_yscale("log")
@@ -548,9 +569,15 @@ ax.legend(loc="lower right")
 
 # Band labels
 for i, name in enumerate(band_names):
-    ax.annotate(name, (wave_plot[i], p50[i]),
-                textcoords="offset points", xytext=(0, 10),
-                ha="center", fontsize=7, color="0.4")
+    ax.annotate(
+        name,
+        (wave_plot[i], p50[i]),
+        textcoords="offset points",
+        xytext=(0, 10),
+        ha="center",
+        fontsize=7,
+        color="0.4",
+    )
 
 savefig(fig, "dust_agn_variation")
 plt.show()
@@ -570,6 +597,7 @@ spec_mock = ParamSpec(
     dust_tau_bc=Fixed(0.8),
     dust_tau_diff=Fixed(0.4),
     dust_law_bc="kriek_conroy",
+    nebular=True,
     cloudy_grid_path="../data/cloudy_grid_mist.h5",
     neb_logU=Fixed(-2.5),
     redshift=Fixed(1.5),
@@ -590,9 +618,9 @@ print(f"Noise (1sig):  {np.array(mock.noise)}")
 
 # %%
 # Plot the mock observation
-filter_wave_mock = np.array([
-    1528, 2271, 3551, 4686, 6166, 7480, 8932, 33526, 115608
-]) * 2.5  # z=1.5
+filter_wave_mock = (
+    np.array([1528, 2271, 3551, 4686, 6166, 7480, 8932, 33526, 115608]) * 2.5
+)  # z=1.5
 
 fig, ax = plt.subplots(figsize=(9, 5))
 
@@ -601,16 +629,27 @@ ax.errorbar(
     filter_wave_mock / 1e4,
     np.array(mock.flux_obs),
     yerr=np.array(mock.noise),
-    fmt="o", ms=8, color="#333333", capsize=4, capthick=1.2,
-    elinewidth=1.2, zorder=5, label="Mock observation (SNR = 20)",
+    fmt="o",
+    ms=8,
+    color="#333333",
+    capsize=4,
+    capthick=1.2,
+    elinewidth=1.2,
+    zorder=5,
+    label="Mock observation (SNR = 20)",
 )
 
 # True flux
 ax.scatter(
     filter_wave_mock / 1e4,
     np.array(mock.flux_true),
-    marker="D", s=50, facecolors="none", edgecolors=COLORS[3],
-    linewidths=1.5, zorder=6, label="True (noiseless)",
+    marker="D",
+    s=50,
+    facecolors="none",
+    edgecolors=COLORS[3],
+    linewidths=1.5,
+    zorder=6,
+    label="True (noiseless)",
 )
 
 ax.set_xscale("log")
@@ -621,9 +660,15 @@ ax.set_title("Mock observation from bursty SFH (z = 1.5)")
 ax.legend()
 
 for i, name in enumerate(band_names):
-    ax.annotate(name, (filter_wave_mock[i] / 1e4, float(mock.flux_obs[i])),
-                textcoords="offset points", xytext=(0, 12),
-                ha="center", fontsize=7, color="0.4")
+    ax.annotate(
+        name,
+        (filter_wave_mock[i] / 1e4, float(mock.flux_obs[i])),
+        textcoords="offset points",
+        xytext=(0, 12),
+        ha="center",
+        fontsize=7,
+        color="0.4",
+    )
 
 savefig(fig, "mock_observation")
 plt.show()
@@ -634,6 +679,7 @@ plt.show()
 # For forward-modeling many simulation galaxies, we generate random SFHs
 # and process them in a loop.  For large catalogs ($N \gtrsim 10^4$),
 # consider using `jax.vmap` with padded arrays for GPU acceleration.
+
 
 # %%
 def generate_random_sfh(key, t_gyr):
@@ -717,14 +763,13 @@ ax1.set_xlim(0, 14)
 ax1.set_ylim(bottom=0)
 
 # Right: mock photometry (all galaxies)
-filter_wave_cat = np.array([
-    1528, 2271, 3551, 4686, 6166, 7480, 8932, 33526, 115608
-]) * 2.0  # z=1
+filter_wave_cat = np.array([1528, 2271, 3551, 4686, 6166, 7480, 8932, 33526, 115608]) * 2.0  # z=1
 
 for i, m in enumerate(mocks_catalog):
     color = cmap(i / n_galaxies)
-    ax2.plot(filter_wave_cat / 1e4, np.array(m.flux_obs), "o-",
-             color=color, alpha=0.4, ms=2, lw=0.5)
+    ax2.plot(
+        filter_wave_cat / 1e4, np.array(m.flux_obs), "o-", color=color, alpha=0.4, ms=2, lw=0.5
+    )
 
 ax2.set_xscale("log")
 ax2.set_yscale("log")
@@ -794,6 +839,7 @@ log_t_lb = jnp.log10(t_lb_yr)
 ssp_flux_z = interpolate_metallicity(ssp.ssp_flux, ssp.ssp_lgmet, -0.3 + (-1.8477))
 dust_atten = two_component_dust(ssp.ssp_wave, ssp_ages, tau_v1=0.3, tau_v2=0.5)
 
+
 @jax.jit
 def _photometry_from_sfr(sfr_array):
     """Compute photometry for a single SFH (for vmapping)."""
@@ -803,6 +849,7 @@ def _photometry_from_sfr(sfr_array):
     sed = jnp.einsum("i,iw,iw->w", weights, dust_atten, ssp_flux_z)
     return sed  # rest-frame SED
 
+
 _photometry_batch = jax.jit(jax.vmap(_photometry_from_sfr))
 
 # Scaling test with manageable sizes
@@ -811,11 +858,16 @@ times_sequential = []
 times_vmap = []
 
 for n in batch_sizes:
-    sfr_batch = jnp.array([
-        np.maximum(np.random.exponential(5.0) * np.exp(-t_gyr / np.random.uniform(1, 8))
-                   + np.random.randn(len(t_gyr)) * 0.5, 0.0)
-        for _ in range(n)
-    ])
+    sfr_batch = jnp.array(
+        [
+            np.maximum(
+                np.random.exponential(5.0) * np.exp(-t_gyr / np.random.uniform(1, 8))
+                + np.random.randn(len(t_gyr)) * 0.5,
+                0.0,
+            )
+            for _ in range(n)
+        ]
+    )
 
     # Sequential
     if n <= 100:
@@ -826,7 +878,7 @@ for n in batch_sizes:
         t_seq = time.perf_counter() - t0
         times_sequential.append(t_seq)
     else:
-        times_sequential.append(times_sequential[-1] / batch_sizes[batch_sizes.index(n)-1] * n)
+        times_sequential.append(times_sequential[-1] / batch_sizes[batch_sizes.index(n) - 1] * n)
 
     # vmap
     if n == batch_sizes[0]:
@@ -839,8 +891,10 @@ for n in batch_sizes:
     t_vmap = (time.perf_counter() - t0) / 3
     times_vmap.append(t_vmap)
 
-    print(f"N={n:>5d}: vmap={t_vmap:.4f}s ({n/t_vmap:.0f} gal/s), "
-          f"per-galaxy={t_vmap/n*1000:.3f} ms")
+    print(
+        f"N={n:>5d}: vmap={t_vmap:.4f}s ({n / t_vmap:.0f} gal/s), "
+        f"per-galaxy={t_vmap / n * 1000:.3f} ms"
+    )
 
 # %%
 # --- Scaling plot ---
@@ -860,10 +914,10 @@ ax1.legend(fontsize=10)
 ax1.grid(True, alpha=0.3)
 
 # Right: per-galaxy cost
-ax2.semilogx(batch_arr, seq_arr / batch_arr * 1000, "s-", color="#d65f27", ms=6,
-             label="Sequential")
-ax2.semilogx(batch_arr, vmap_arr / batch_arr * 1000, "o-", color="#2b6ca3", ms=6,
-             label="jax.vmap")
+ax2.semilogx(
+    batch_arr, seq_arr / batch_arr * 1000, "s-", color="#d65f27", ms=6, label="Sequential"
+)
+ax2.semilogx(batch_arr, vmap_arr / batch_arr * 1000, "o-", color="#2b6ca3", ms=6, label="jax.vmap")
 ax2.set_xlabel("Number of galaxies")
 ax2.set_ylabel("Per-galaxy cost (ms)")
 ax2.set_title("Per-galaxy amortized cost")
@@ -878,17 +932,19 @@ plt.show()
 
 # %%
 # Print summary
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("PERFORMANCE SUMMARY")
-print("="*60)
+print("=" * 60)
 print(f"Single galaxy SED:        {t_sed:.2f} ms")
 print(f"Single galaxy photometry: {t_phot:.2f} ms")
 print(f"Single galaxy mock:       {t_mock:.2f} ms")
-print(f"vmap throughput (N=1000): {1000/times_vmap[batch_sizes.index(1000)]:.0f} galaxies/s")
+print(f"vmap throughput (N=1000): {1000 / times_vmap[batch_sizes.index(1000)]:.0f} galaxies/s")
 if 5000 in batch_sizes:
-    print(f"vmap throughput (N=5000): {5000/times_vmap[batch_sizes.index(5000)]:.0f} galaxies/s")
-print(f"vmap speedup vs sequential (N=100): {times_sequential[batch_sizes.index(100)]/times_vmap[batch_sizes.index(100)]:.1f}x")
-print("="*60)
+    print(f"vmap throughput (N=5000): {5000 / times_vmap[batch_sizes.index(5000)]:.0f} galaxies/s")
+print(
+    f"vmap speedup vs sequential (N=100): {times_sequential[batch_sizes.index(100)] / times_vmap[batch_sizes.index(100)]:.1f}x"
+)
+print("=" * 60)
 
 # %% [markdown]
 # **Key performance findings:**
