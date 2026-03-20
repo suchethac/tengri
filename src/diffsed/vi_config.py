@@ -91,6 +91,99 @@ class VIConfig:
     )
 
 
+@dataclass(frozen=True)
+class BlockStep:
+    """One step in a block Gibbs schedule.
+
+    Parameters
+    ----------
+    sample_mode : str
+        ``"linear_resample"``, ``"nonlinear_resample"``, or
+        ``"nonlinear_update"``.
+    constants : tuple of str
+        Parameter names frozen during KL minimization (their mean
+        doesn't move, but they are still sampled for uncertainty
+        propagation).
+    point_estimates : tuple of str
+        Parameter names excluded from sampling (residual zeroed).
+        Faster than ``constants`` but ignores their uncertainty.
+    n_samples : int or None
+        Override the default n_samples for this block. ``None`` uses
+        the fitter's n_samples.
+    """
+
+    sample_mode: str = "nonlinear_resample"
+    constants: tuple[str, ...] = ()
+    point_estimates: tuple[str, ...] = ()
+    n_samples: int | None = None
+
+
+@dataclass(frozen=True)
+class BlockSchedule:
+    """Block Gibbs schedule for structured variational inference.
+
+    Each optimization iteration cycles through all blocks in order.
+    Different blocks can use different sample modes, freeze different
+    parameters, and draw different numbers of samples.
+
+    Parameters
+    ----------
+    blocks : tuple of BlockStep
+        The blocks to cycle through per iteration.
+    """
+
+    blocks: tuple[BlockStep, ...]
+
+    @staticmethod
+    def individual_geovi() -> BlockSchedule:
+        """Default schedule for individual galaxy geoVI.
+
+        Block A: Update physical params (geoVI), SFH ξ frozen.
+        Block B: Update SFH ξ (MGVI), physical params frozen.
+        Alternates A-B every iteration.
+        """
+        return BlockSchedule(
+            blocks=(
+                BlockStep(
+                    sample_mode="nonlinear_resample",
+                    constants=("sfh_field_xi",),
+                ),
+                BlockStep(
+                    sample_mode="linear_resample",
+                    constants=(),  # joint update for cross-correlations
+                ),
+            )
+        )
+
+    @staticmethod
+    def hierarchical() -> BlockSchedule:
+        """Default schedule for hierarchical PSD inference.
+
+        Block 1: Shared PSD params (geoVI), per-galaxy frozen.
+        Block 2: Per-galaxy physical (geoVI), shared+ξ frozen.
+        Block 3: Per-galaxy ξ (MGVI), shared+physical frozen.
+        """
+        return BlockSchedule(
+            blocks=(
+                BlockStep(
+                    sample_mode="nonlinear_resample",
+                    point_estimates=("gal",),
+                    n_samples=6,
+                ),
+                BlockStep(
+                    sample_mode="nonlinear_resample",
+                    constants=("psd_sigma_u", "psd_tau_u"),
+                    n_samples=3,
+                ),
+                BlockStep(
+                    sample_mode="linear_resample",
+                    constants=("psd_sigma_u", "psd_tau_u"),
+                    n_samples=2,
+                ),
+            )
+        )
+
+
 def evi_sample_mode(n_iterations: int, linear_fraction: float = 0.5):
     """Return a callable sample_mode for EVI: MGVI first, then geoVI.
 

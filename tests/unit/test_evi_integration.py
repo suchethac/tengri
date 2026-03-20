@@ -93,7 +93,7 @@ class TestEVIRuns:
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
         result = fitter.run(
-            "evi",
+            "native_evi",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
@@ -113,7 +113,7 @@ class TestEVIRuns:
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
         result = fitter.run(
-            "evi",
+            "native_evi",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
@@ -131,7 +131,7 @@ class TestEVIRuns:
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
         result = fitter.run(
-            "evi",
+            "native_evi",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
@@ -149,7 +149,7 @@ class TestEVIRuns:
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
         result = fitter.run(
-            "evi",
+            "native_evi",
             n_iterations=3,
             n_samples=2,
             n_seeds=3,
@@ -162,15 +162,15 @@ class TestEVIRuns:
 
 
 class TestGeoVIMGVIRouting:
-    """geovi and mgvi methods route through EVI engine."""
+    """native_geovi and native_mgvi route through JIT engine."""
 
-    def test_geovi_runs(self, model_and_mock):
-        """Method 'geovi' runs (routes to EVI JIT engine)."""
+    def test_native_geovi_runs(self, model_and_mock):
+        """Method 'native_geovi' runs (JIT geoVI engine)."""
         model, mock, _ = model_and_mock
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
         result = fitter.run(
-            "geovi",
+            "native_geovi",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
@@ -180,13 +180,13 @@ class TestGeoVIMGVIRouting:
         )
         assert result is not None
 
-    def test_mgvi_runs(self, model_and_mock):
-        """Method 'mgvi' runs (routes to EVI JIT engine)."""
+    def test_native_mgvi_runs(self, model_and_mock):
+        """Method 'native_mgvi' runs (JIT MGVI engine)."""
         model, mock, _ = model_and_mock
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
         result = fitter.run(
-            "mgvi",
+            "native_mgvi",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
