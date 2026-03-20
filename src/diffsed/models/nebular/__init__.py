@@ -27,8 +27,12 @@ Usage::
     backend = CueBackend("data/cue_weights.npz")
 """
 
+from pathlib import Path
+
 from diffsed.models.nebular.baked_in import BakedInBackend
 from diffsed.models.nebular.cloudy_grid import CloudyGridBackend
 from diffsed.models.nebular.cue import CueBackend
 
-__all__ = ["BakedInBackend", "CloudyGridBackend", "CueBackend"]
+_DEFAULT_CUE_WEIGHTS_PATH = Path(__file__).resolve().parents[4] / "data" / "cue_weights.npz"
+
+__all__ = ["_DEFAULT_CUE_WEIGHTS_PATH", "BakedInBackend", "CloudyGridBackend", "CueBackend"]
