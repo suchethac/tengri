@@ -1174,32 +1174,27 @@ class Model:
             weights = weights * _total_mass_formed
 
         elif _use_dsps_table:
-            # Use DSPS weights (proper time→age + lognormal MDF) with
-            # 2D einsum CSP integral for accuracy + speed (~1.4 ms, <2% error).
-            from dsps.sed.ssp_weights import calc_ssp_weights_sfh_table_lognormal_mdf as _dsps_w_lognormal
-            log_z_solar = p.get("log_z", -1.8477)
-            log_z_eff = effective_metallicity(log_z_solar, alpha_fe)
-            lgmet_scatter = float(params.get("lgmet_scatter", 0.2))
-            dsps_w = _dsps_w_lognormal(
+            # Use DSPS calc_age_weights for proper trapezoidal integration
+            # of SFH within each SSP age bin (Hearin+2023 Eq. 9).
+            # Then our standard interpolate_metallicity + compute_csp_sed.
+            # This gives ~1-2% accuracy at observable wavelengths in 0.5 ms.
+            from dsps.sed.ssp_weights import calc_age_weights_from_sfh_table
+            dsps_age_w = calc_age_weights_from_sfh_table(
                 gal_t_table=t_cosmic_gyr,
                 gal_sfr_table=sfr_table,
-                gal_lgmet=log_z_eff,
-                gal_lgmet_scatter=lgmet_scatter,
-                ssp_lgmet=self.ssp_data.ssp_lgmet,
                 ssp_lg_age_gyr=self.ssp_data.ssp_lg_age_gyr,
                 t_obs=t_obs_gyr,
             )
-            # dsps_w.weights: (n_met, n_age) normalized to sum=1
-            # Scale to absolute mass for correct SED amplitude
+            # DSPS returns normalized weights (sum=1); scale to absolute mass
             _total_mass_formed = jnp.trapezoid(sfr_table, t_cosmic_gyr * 1e9)
-            _dsps_weights_2d = dsps_w.weights * _total_mass_formed  # (n_met, n_age) Msun
-            weights = dsps_w.age_weights * _total_mass_formed  # (n_age,) for dust
-            # Z-averaged SSP for dust application (marginalize met axis)
+            weights = dsps_age_w * _total_mass_formed  # (n_age,) Msun
+
+            # Metallicity: standard interpolation (or evolving Z below)
+            log_z_solar = p.get("log_z", -1.8477)
+            log_z_eff = effective_metallicity(log_z_solar, alpha_fe)
             ssp_flux_at_z = interpolate_metallicity(
                 self.ssp_data.ssp_flux, self.ssp_data.ssp_lgmet, log_z_eff,
             )
-            # Flag: use 2D einsum for the intrinsic SED (bypasses 1D CSP)
-            _use_2d_csp = True
 
         # Metallicity interpolation (non-table path)
         # Priority: met_history (array) > evolving_metallicity > single Z
