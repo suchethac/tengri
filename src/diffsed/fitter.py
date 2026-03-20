@@ -892,66 +892,22 @@ class Fitter:
             m_final, _kl_final, n_iters, _ = jax.lax.while_loop(cond_fn, body_fn, init_state)
             return m_final, n_iters
 
-        # --- geoVI optimizer: sample mode dispatch ---
-        # Sample mode encoding for jax.lax.switch
+        # --- geoVI optimizer: per-mode functions (no lax.switch) ---
+        #
+        # Each sample mode gets its own evi_step function so that JAX
+        # compiles ONLY the code path actually used.  This avoids the
+        # 56s compilation cost of tracing all three branches via
+        # ``jax.lax.switch``.
+        #
+        # ``sample_mode`` is a **static** string argument: JAX caches
+        # a separate compiled version for each mode.
         SAMPLE_LINEAR = jnp.int32(0)
         SAMPLE_NONLINEAR_RESAMPLE = jnp.int32(1)
         SAMPLE_NONLINEAR_UPDATE = jnp.int32(2)
 
-        def evi_step_full(
-            m, subkey, n_samples, sample_mode, prev_residuals, constants_mask, pe_mask
-        ):
-            """One geoVI iteration with full sample mode support.
+        def _kl_minimize(m, residuals, constants_mask):
+            """Newton-CG KL minimization with constants mask."""
 
-            Parameters
-            ----------
-            m : flat array, current expansion point
-            subkey : PRNG key
-            n_samples : int
-                Number of base samples (doubled by mirroring).
-            sample_mode : int
-                0=linear_resample, 1=nonlinear_resample, 2=nonlinear_update
-            prev_residuals : (2*n_samples, D) array
-                Previous residuals (used only for nonlinear_update mode).
-            constants_mask : (D,) bool array
-                True for parameters frozen during KL minimization.
-            pe_mask : (D,) float array
-                0.0 for point-estimated params, 1.0 for sampled params.
-
-            Returns
-            -------
-            m_new : flat array, updated expansion point
-            kl_value : scalar
-            new_residuals : (2*n_samples, D) array
-            """
-            sample_keys = jax.random.split(subkey, n_samples)
-
-            # Draw residuals based on sample_mode
-            def _draw_linear(args):
-                m_, keys_, _prev = args
-                res = draw_residuals(m_, keys_)
-                return jnp.concatenate([res, -res], axis=0)
-
-            def _draw_nonlinear(args):
-                m_, keys_, _prev = args
-                return draw_nonlinear_residuals(m_, keys_)
-
-            def _update_nonlinear(args):
-                m_, keys_, prev_ = args
-                return update_nonlinear_residuals(m_, prev_, keys_)
-
-            residuals = jax.lax.switch(
-                sample_mode,
-                [_draw_linear, _draw_nonlinear, _update_nonlinear],
-                (m, sample_keys, prev_residuals),
-            )
-
-            # Apply point estimates mask (zero out PE param residuals)
-            residuals = residuals * pe_mask[None, :]
-
-            # Newton-CG KL minimization with constants mask.
-            # Faithful port of NIFTy's _static_newton_cg (optimize.py:285-449)
-            # with successive halving line search.
             def _masked_kl_vg(m_cur, res):
                 val, grad = kl_vg(m_cur, res)
                 grad = jnp.where(constants_mask, 0.0, grad)
@@ -962,36 +918,67 @@ class Fitter:
                 mv = kl_metric(m_cur, res, v_masked)
                 return jnp.where(constants_mask, 0.0, mv)
 
-            def _kl_fun_and_grad(m_cur):
+            def _fun_and_grad(m_cur):
                 return _masked_kl_vg(m_cur, residuals)
 
-            def _kl_hessp(m_cur, v):
+            def _hessp(m_cur, v):
                 return _masked_kl_metric(m_cur, residuals, v)
 
-            m_opt, kl_val = _newton_cg_flat(
-                _kl_fun_and_grad,
-                _kl_hessp,
+            return _newton_cg_flat(
+                _fun_and_grad,
+                _hessp,
                 m,
                 maxiter=10,
                 miniter=0,
                 xtol=1e-5,
                 energy_reduction_factor=0.1,
             )
+
+        def evi_step_full(
+            m, subkey, n_samples, sample_mode, prev_residuals, constants_mask, pe_mask
+        ):
+            """One geoVI iteration — ``sample_mode`` must be a static string.
+
+            When used inside ``run_evi_geovi`` (which marks ``sample_mode``
+            as static), JAX compiles a separate version per mode.  The
+            unused branches are never traced, so ``"linear"`` compiles in
+            ~0.03s while ``"nonlinear_resample"`` compiles in ~56s.
+
+            Parameters
+            ----------
+            sample_mode : str  (STATIC — triggers recompilation per value)
+                ``"linear"``, ``"nonlinear_resample"``, ``"nonlinear_update"``
+            """
+            sample_keys = jax.random.split(subkey, n_samples)
+
+            # Python if — only the used branch is traced by JAX
+            if sample_mode == "nonlinear_resample":
+                residuals = draw_nonlinear_residuals(m, sample_keys)
+            elif sample_mode == "nonlinear_update":
+                residuals = update_nonlinear_residuals(m, prev_residuals, sample_keys)
+            else:  # "linear"
+                res = draw_residuals(m, sample_keys)
+                residuals = jnp.concatenate([res, -res], axis=0)
+
+            # Apply point estimates mask
+            residuals = residuals * pe_mask[None, :]
+
+            # KL minimization
+            m_opt, kl_val = _kl_minimize(m, residuals, constants_mask)
             return m_opt, kl_val, residuals
 
         def run_evi_geovi(init_pos, key, n_iterations, n_samples, kl_rtol, sample_mode):
             """Run geoVI with automatic convergence detection.
 
-            Supports all three sample modes: linear_resample (0),
-            nonlinear_resample (1), nonlinear_update (2).
+            ``sample_mode`` is a **static** string — JAX compiles a
+            separate XLA program per mode.  Use:
 
-            For full geoVI, use sample_mode=1 (nonlinear_resample).
-            For EVI, call with sample_mode=0 for early iterations then
-            switch to 1 for later iterations (handled by the caller).
+            - ``"linear"`` — MGVI (fast compile, fast run)
+            - ``"nonlinear_resample"`` — geoVI (slow compile, fast run)
+            - ``"nonlinear_update"`` — geoVI deterministic (slow compile, fast run)
             """
             keys = jax.random.split(key, n_iterations)
             dummy_residuals = jnp.zeros((2 * n_samples, d_total))
-            # No masking in non-Gibbs mode: all free, all sampled
             no_constants = jnp.zeros(d_total, dtype=bool)
             all_sampled = jnp.ones(d_total)
 
@@ -1147,10 +1134,12 @@ class Fitter:
             kl_rtol=1e-2,
         )
 
-        # Pre-compile native geoVI optimizer
+        # Pre-compile native geoVI optimizer.
+        # sample_mode is STATIC: JAX compiles a separate XLA program per mode.
+        # "linear" compiles in ~0.03s, "nonlinear_*" in ~56s (one-time cost).
         run_evi_geovi_jit = jax.jit(
             run_evi_geovi,
-            static_argnames=("n_iterations", "n_samples"),
+            static_argnames=("n_iterations", "n_samples", "sample_mode"),
         )
 
         return {
@@ -1432,15 +1421,18 @@ class Fitter:
             pos_flat = flatten(init_params)
             opt_key = jax.random.fold_in(seed_keys[s], 999)
 
-            # Dispatch to linear (MGVI) or geoVI engine
-            _mode_map = {
-                "linear": engine["SAMPLE_LINEAR"],
-                "mgvi": engine["SAMPLE_LINEAR"],
-                "geovi": engine["SAMPLE_NONLINEAR_RESAMPLE"],
-                "nonlinear_resample": engine["SAMPLE_NONLINEAR_RESAMPLE"],
-                "nonlinear_update": engine["SAMPLE_NONLINEAR_UPDATE"],
+            # Dispatch to native engine.
+            # sample_mode is a static string — JAX compiles separately per mode.
+            _mode_str_map = {
+                "linear": "linear",
+                "mgvi": "linear",
+                "geovi": "nonlinear_resample",
+                "nonlinear_resample": "nonlinear_resample",
+                "nonlinear_update": "nonlinear_update",
             }
-            if sample_mode in ("linear", "mgvi"):
+            mode_str = _mode_str_map.get(sample_mode, "linear")
+            if mode_str == "linear":
+                # Use the old fast MGVI engine (no geoVI overhead)
                 converged_flat, n_iters = engine["run_evi"](
                     pos_flat,
                     opt_key,
@@ -1449,14 +1441,13 @@ class Fitter:
                     kl_rtol=kl_rtol,
                 )
             else:
-                mode_int = _mode_map.get(sample_mode, engine["SAMPLE_NONLINEAR_RESAMPLE"])
                 converged_flat, n_iters = engine["run_evi_geovi"](
                     pos_flat,
                     opt_key,
                     n_iterations=n_iterations,
                     n_samples=n_samples,
                     kl_rtol=kl_rtol,
-                    sample_mode=mode_int,
+                    sample_mode=mode_str,
                 )
             n_iters = int(n_iters)
 

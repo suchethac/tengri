@@ -310,7 +310,7 @@ class TestKLValue:
             pos_flat,
             jax.random.PRNGKey(0),
             1,
-            engine["SAMPLE_LINEAR"],
+            "linear",
             jnp.zeros((2, d_total)),
             jnp.zeros(d_total, dtype=bool),
             jnp.ones(d_total),
@@ -339,7 +339,7 @@ class TestKLValue:
             n_iterations=5,
             n_samples=2,
             kl_rtol=1e-3,
-            sample_mode=engine["SAMPLE_NONLINEAR_RESAMPLE"],
+            sample_mode="nonlinear_resample",
         )
 
         opt_dict = engine["unflatten"](m_opt)
@@ -453,7 +453,7 @@ class TestOptimizeKLConvergence:
             n_iterations=n_iterations,
             n_samples=n_samples,
             kl_rtol=1e-3,
-            sample_mode=engine["SAMPLE_NONLINEAR_RESAMPLE"],
+            sample_mode="nonlinear_resample",
         )
 
         # --- NIFTy geoVI ---
@@ -536,7 +536,7 @@ class TestPosteriorWidthComparison:
             n_iterations=8,
             n_samples=3,
             kl_rtol=1e-3,
-            sample_mode=engine["SAMPLE_NONLINEAR_RESAMPLE"],
+            sample_mode="nonlinear_resample",
         )
 
         n_posterior = 200
