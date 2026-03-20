@@ -481,6 +481,9 @@ SETTINGS_KEYS = frozenset(
         "xray",
         # Evolving metallicity
         "evolving_metallicity",
+        # Metallicity interpolation
+        "met_interp",
+        "lgmet_scatter",
     }
 )
 
@@ -637,14 +640,22 @@ class ParamSpec:
 
     Nebular Emission Settings
     ~~~~~~~~~~~~~~~~~~~~~~~~~
-    nebular : bool or str
-        Enable nebular emission.  Default: ``False``.
-        ``True`` or ``"cloudy"`` enables CLOUDY grid backend.
-        ``"cue"`` enables Cue neural emulator.
+    nebular_ssp : bool
+        Use SSP files with pre-included nebular emission (wNE files).
+        No free nebular parameters.  Default: ``False``.
+    nebular : bool
+        Enable CLOUDY grid nebular emission.  Requires ``cloudy_grid_path``.
+        Default: ``False``.
+    nebular_cue : bool
+        Enable Cue neural emulator.  Default weights loaded automatically.
+        Default: ``False``.
     cloudy_grid_path : str
-        Path to CLOUDY HDF5 grid (e.g., ``"data/cloudy_grid_mist.h5"``).
+        Path to CLOUDY HDF5 grid.  Required when ``nebular=True``.
     cue_weights_path : str
-        Path to Cue weight file (e.g., ``"data/cue_weights.npz"``).
+        Override default Cue weights path.
+    neb_ionization : str
+        Ionization source for Cue: ``"ssp"`` (default), ``"agn"`` (future),
+        ``"ssp+agn"`` (future).
 
     AGN Settings
     ~~~~~~~~~~~~
@@ -789,7 +800,7 @@ class ParamSpec:
             dl07_grid_path="data/dl07_templates.h5",
             dust_umin=Uniform(0.1, 25.0),
             # Nebular (Cue neural emulator)
-            cue_weights_path="data/cue_weights.npz",
+            nebular_cue=True,
             neb_logU=Uniform(-4.0, -1.0),
             neb_fesc_lya=Uniform(0.0, 1.0),
             # AGN (qsogen empirical quasar)
