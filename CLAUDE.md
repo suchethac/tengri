@@ -105,7 +105,7 @@ Ray Tracing and geoVI are **equal-priority** primary methods. NUTS validates. MA
 - Never create `Model`/`ParamSpec` inside a JAX gradient tape (traced values fail in `__init__`)
 - Ray Tracing step_size: for D~137 stochastic model, use `step_size=0.05, n_leapfrog_steps=50, n_steps=2000`. There is a sharp viability cliff at step_size~0.06 where acceptance drops from ~98% to 0%. Compensate with more leapfrog steps and more samples.
 - NIFTy geoVI: use 4-12 samples per KL iteration, not 80 (literature best practice)
-- SSP metallicity grid is `log10(Z)` absolute, not `log10(Z/Zsun)`. Offset: `LOG10_ZSUN = -1.848`
+- SSP metallicity grid is `log10(Z)` absolute, not `log10(Z/Zsun)`. Offset: `LOG10_ZSUN = -1.848`. CLOUDY grid metallicities are also converted to absolute at load time in `load_cloudy_grid()`. Both CloudyGridBackend and CueBackend `log_z` parameters expect absolute Z. Cue's low-level `gas_logz` still expects `log10(Z/Zsun)` — the high-level interface converts automatically. User-facing `neb_logZ_gas` in ParamSpec is `Z/Zsun` (the param_map adds `LOG10_ZSUN`).
 - Photometry precomputation auto-activates when redshift fixed + filters present (21.6x speedup)
 - Notebooks are jupytext `.py` files (percent format) — edit `.py` directly, never `.ipynb`
 - Sync to `.ipynb`: `cd notebooks && jupytext --sync *.py`

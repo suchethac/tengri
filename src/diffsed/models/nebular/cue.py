@@ -908,26 +908,31 @@ class CueBackend:
 
     def predict_nebular_continuum(
         self,
-        gas_logu: float = -2.5,
+        ssp_weights: jnp.ndarray | None = None,
+        ssp_log_ages_yr: jnp.ndarray | None = None,
+        log_z: float | None = None,
+        neb_logU: float = -3.0,
+        neb_logZ_gas: float | None = None,
+        neb_fesc: float = 0.0,
+        gas_logu: float | None = None,
         gas_logn: float = 2.0,
-        gas_logz: float = 0.0,
+        gas_logz: float | None = None,
         gas_logno: float = 0.0,
         gas_logco: float = 0.0,
         gas_logqion: float | None = None,
-        ionspec_index1: float = 19.7,
-        ionspec_index2: float = 5.3,
-        ionspec_index3: float = 1.6,
-        ionspec_index4: float = 0.6,
-        ionspec_logLratio1: float = 3.9,
-        ionspec_logLratio2: float = 0.01,
-        ionspec_logLratio3: float = 0.2,
+        ionspec_index1: float | None = None,
+        ionspec_index2: float | None = None,
+        ionspec_index3: float | None = None,
+        ionspec_index4: float | None = None,
+        ionspec_logLratio1: float | None = None,
+        ionspec_logLratio2: float | None = None,
+        ionspec_logLratio3: float | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Predict nebular continuum SED.
 
-        Parameters
-        ----------
-        See predict_nebular_line_luminosities for parameter descriptions.
+        Supports the same high-level and low-level calling conventions
+        as predict_nebular_line_luminosities.
 
         Returns
         -------
@@ -936,8 +941,60 @@ class CueBackend:
         luminosity : array, shape (n_wave,)
             Nebular continuum in Lsun/Hz.
         """
+        # High-level mode
+        if ssp_weights is not None:
+            derived = self._compute_weighted_cue_params(
+                ssp_weights,
+                ssp_log_ages_yr,
+                log_z,
+                neb_logU=neb_logU,
+                neb_logZ_gas=neb_logZ_gas,
+                gas_logn=gas_logn,
+                gas_logno=gas_logno,
+                gas_logco=gas_logco,
+            )
+            if gas_logu is None:
+                gas_logu = derived["gas_logu"]
+            if gas_logz is None:
+                gas_logz = derived["gas_logz"]
+            if gas_logqion is None:
+                gas_logqion = derived["gas_logqion"]
+            if ionspec_index1 is None:
+                ionspec_index1 = derived["ionspec_index1"]
+            if ionspec_index2 is None:
+                ionspec_index2 = derived["ionspec_index2"]
+            if ionspec_index3 is None:
+                ionspec_index3 = derived["ionspec_index3"]
+            if ionspec_index4 is None:
+                ionspec_index4 = derived["ionspec_index4"]
+            if ionspec_logLratio1 is None:
+                ionspec_logLratio1 = derived["ionspec_logLratio1"]
+            if ionspec_logLratio2 is None:
+                ionspec_logLratio2 = derived["ionspec_logLratio2"]
+            if ionspec_logLratio3 is None:
+                ionspec_logLratio3 = derived["ionspec_logLratio3"]
+
+        # Fill remaining defaults
+        if gas_logu is None:
+            gas_logu = neb_logU
+        if gas_logz is None:
+            gas_logz = 0.0
         if gas_logqion is None:
             gas_logqion = self.default_gas_logqion
+        if ionspec_index1 is None:
+            ionspec_index1 = 19.7
+        if ionspec_index2 is None:
+            ionspec_index2 = 5.3
+        if ionspec_index3 is None:
+            ionspec_index3 = 1.6
+        if ionspec_index4 is None:
+            ionspec_index4 = 0.6
+        if ionspec_logLratio1 is None:
+            ionspec_logLratio1 = 3.9
+        if ionspec_logLratio2 is None:
+            ionspec_logLratio2 = 0.01
+        if ionspec_logLratio3 is None:
+            ionspec_logLratio3 = 0.2
 
         nn_params = _prepare_nn_params(
             jnp.asarray(ionspec_index1, dtype=jnp.float32),
