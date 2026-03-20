@@ -649,6 +649,146 @@ class CueBackend:
     # High-level interface (matches CloudyGridBackend)
     # ------------------------------------------------------------------
 
+    # Default ionizing spectrum shape (young starburst)
+    _IONSPEC_DEFAULTS = dict(
+        ionspec_index1=19.7,
+        ionspec_index2=5.3,
+        ionspec_index3=1.6,
+        ionspec_index4=0.6,
+        ionspec_logLratio1=3.9,
+        ionspec_logLratio2=0.01,
+        ionspec_logLratio3=0.2,
+    )
+
+    def _resolve_cue_params(
+        self,
+        ssp_weights=None,
+        ssp_log_ages_yr=None,
+        log_z=None,
+        neb_logU=-3.0,
+        neb_logZ_gas=None,
+        gas_logu=None,
+        gas_logn=2.0,
+        gas_logz=None,
+        gas_logno=0.0,
+        gas_logco=0.0,
+        gas_logqion=None,
+        ionspec_index1=None,
+        ionspec_index2=None,
+        ionspec_index3=None,
+        ionspec_index4=None,
+        ionspec_logLratio1=None,
+        ionspec_logLratio2=None,
+        ionspec_logLratio3=None,
+        **_kwargs,
+    ) -> dict:
+        """Resolve Cue params from high-level or low-level inputs.
+
+        High-level (ssp_weights provided): derives Q_H, ionspec, gas_logz
+        from SSP.  Explicit overrides take precedence over derived values.
+        Low-level (ssp_weights=None): fills from defaults.
+
+        Returns a flat dict with all 12 Cue params + gas_logqion.
+        """
+        if ssp_weights is not None:
+            derived = self._compute_weighted_cue_params(
+                ssp_weights,
+                ssp_log_ages_yr,
+                log_z,
+                neb_logU=neb_logU,
+                neb_logZ_gas=neb_logZ_gas,
+                gas_logn=gas_logn,
+                gas_logno=gas_logno,
+                gas_logco=gas_logco,
+            )
+        else:
+            derived = {}
+
+        def _pick(name, explicit, default):
+            if explicit is not None:
+                return explicit
+            if name in derived:
+                return derived[name]
+            return default
+
+        return dict(
+            gas_logu=_pick("gas_logu", gas_logu, neb_logU),
+            gas_logn=gas_logn,
+            gas_logz=_pick("gas_logz", gas_logz, 0.0),
+            gas_logno=gas_logno,
+            gas_logco=gas_logco,
+            gas_logqion=_pick("gas_logqion", gas_logqion, self.default_gas_logqion),
+            ionspec_index1=_pick("ionspec_index1", ionspec_index1, 19.7),
+            ionspec_index2=_pick("ionspec_index2", ionspec_index2, 5.3),
+            ionspec_index3=_pick("ionspec_index3", ionspec_index3, 1.6),
+            ionspec_index4=_pick("ionspec_index4", ionspec_index4, 0.6),
+            ionspec_logLratio1=_pick("ionspec_logLratio1", ionspec_logLratio1, 3.9),
+            ionspec_logLratio2=_pick("ionspec_logLratio2", ionspec_logLratio2, 0.01),
+            ionspec_logLratio3=_pick("ionspec_logLratio3", ionspec_logLratio3, 0.2),
+        )
+
+    def _forward_lines(self, p: dict, cloudyfsps_only=True, neb_fesc=0.0, neb_fesc_lya=0.0):
+        """Low-level line prediction from resolved param dict."""
+        nn_params = _prepare_nn_params(
+            jnp.asarray(p["ionspec_index1"], dtype=jnp.float32),
+            jnp.asarray(p["ionspec_index2"], dtype=jnp.float32),
+            jnp.asarray(p["ionspec_index3"], dtype=jnp.float32),
+            jnp.asarray(p["ionspec_index4"], dtype=jnp.float32),
+            jnp.asarray(p["ionspec_logLratio1"], dtype=jnp.float32),
+            jnp.asarray(p["ionspec_logLratio2"], dtype=jnp.float32),
+            jnp.asarray(p["ionspec_logLratio3"], dtype=jnp.float32),
+            jnp.asarray(p["gas_logu"], dtype=jnp.float32),
+            jnp.asarray(p["gas_logn"], dtype=jnp.float32),
+            jnp.asarray(p["gas_logz"], dtype=jnp.float32),
+            jnp.asarray(p["gas_logno"], dtype=jnp.float32),
+            jnp.asarray(p["gas_logco"], dtype=jnp.float32),
+        )
+        gas_logq = _logq_from_logu(
+            jnp.asarray(p["gas_logu"], dtype=jnp.float32),
+            jnp.asarray(p["gas_logn"], dtype=jnp.float32),
+        )
+        wav, lum = predict_all_lines(
+            nn_params,
+            self.weights,
+            gas_logq,
+            jnp.asarray(p["gas_logqion"], dtype=jnp.float32),
+        )
+        lum = lum * (1.0 - neb_fesc)
+        lya_idx = jnp.argmin(jnp.abs(wav - 1215.67))
+        lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(1.0 - neb_fesc, 1e-10)
+        lum = lum.at[lya_idx].multiply(lya_scale)
+        if cloudyfsps_only:
+            old_idx = self.weights.line_old_idx
+            return wav[old_idx], lum[old_idx]
+        return wav, lum
+
+    def _forward_continuum(self, p: dict):
+        """Low-level continuum prediction from resolved param dict."""
+        nn_params = _prepare_nn_params(
+            jnp.asarray(p["ionspec_index1"], dtype=jnp.float32),
+            jnp.asarray(p["ionspec_index2"], dtype=jnp.float32),
+            jnp.asarray(p["ionspec_index3"], dtype=jnp.float32),
+            jnp.asarray(p["ionspec_index4"], dtype=jnp.float32),
+            jnp.asarray(p["ionspec_logLratio1"], dtype=jnp.float32),
+            jnp.asarray(p["ionspec_logLratio2"], dtype=jnp.float32),
+            jnp.asarray(p["ionspec_logLratio3"], dtype=jnp.float32),
+            jnp.asarray(p["gas_logu"], dtype=jnp.float32),
+            jnp.asarray(p["gas_logn"], dtype=jnp.float32),
+            jnp.asarray(p["gas_logz"], dtype=jnp.float32),
+            jnp.asarray(p["gas_logno"], dtype=jnp.float32),
+            jnp.asarray(p["gas_logco"], dtype=jnp.float32),
+        )
+        gas_logq = _logq_from_logu(
+            jnp.asarray(p["gas_logu"], dtype=jnp.float32),
+            jnp.asarray(p["gas_logn"], dtype=jnp.float32),
+        )
+        return predict_continuum(
+            nn_params,
+            self.weights,
+            gas_logq,
+            jnp.asarray(p["gas_logqion"], dtype=jnp.float32),
+        )
+
     def _compute_weighted_cue_params(
         self,
         ssp_weights: jnp.ndarray,
@@ -809,102 +949,32 @@ class CueBackend:
         wavelengths : array
         luminosities : array (Lsun)
         """
-        # High-level mode: derive Cue params from SSP weights
-        if ssp_weights is not None:
-            derived = self._compute_weighted_cue_params(
-                ssp_weights,
-                ssp_log_ages_yr,
-                log_z,
-                neb_logU=neb_logU,
-                neb_logZ_gas=neb_logZ_gas,
-                gas_logn=gas_logn,
-                gas_logno=gas_logno,
-                gas_logco=gas_logco,
-            )
-            # Explicit overrides take precedence
-            if gas_logu is None:
-                gas_logu = derived["gas_logu"]
-            if gas_logz is None:
-                gas_logz = derived["gas_logz"]
-            if gas_logqion is None:
-                gas_logqion = derived["gas_logqion"]
-            if ionspec_index1 is None:
-                ionspec_index1 = derived["ionspec_index1"]
-            if ionspec_index2 is None:
-                ionspec_index2 = derived["ionspec_index2"]
-            if ionspec_index3 is None:
-                ionspec_index3 = derived["ionspec_index3"]
-            if ionspec_index4 is None:
-                ionspec_index4 = derived["ionspec_index4"]
-            if ionspec_logLratio1 is None:
-                ionspec_logLratio1 = derived["ionspec_logLratio1"]
-            if ionspec_logLratio2 is None:
-                ionspec_logLratio2 = derived["ionspec_logLratio2"]
-            if ionspec_logLratio3 is None:
-                ionspec_logLratio3 = derived["ionspec_logLratio3"]
-
-        # Fill remaining defaults for pure low-level calls
-        if gas_logu is None:
-            gas_logu = neb_logU
-        if gas_logz is None:
-            gas_logz = 0.0
-        if gas_logqion is None:
-            gas_logqion = self.default_gas_logqion
-        if ionspec_index1 is None:
-            ionspec_index1 = 19.7
-        if ionspec_index2 is None:
-            ionspec_index2 = 5.3
-        if ionspec_index3 is None:
-            ionspec_index3 = 1.6
-        if ionspec_index4 is None:
-            ionspec_index4 = 0.6
-        if ionspec_logLratio1 is None:
-            ionspec_logLratio1 = 3.9
-        if ionspec_logLratio2 is None:
-            ionspec_logLratio2 = 0.01
-        if ionspec_logLratio3 is None:
-            ionspec_logLratio3 = 0.2
-
-        nn_params = _prepare_nn_params(
-            jnp.asarray(ionspec_index1, dtype=jnp.float32),
-            jnp.asarray(ionspec_index2, dtype=jnp.float32),
-            jnp.asarray(ionspec_index3, dtype=jnp.float32),
-            jnp.asarray(ionspec_index4, dtype=jnp.float32),
-            jnp.asarray(ionspec_logLratio1, dtype=jnp.float32),
-            jnp.asarray(ionspec_logLratio2, dtype=jnp.float32),
-            jnp.asarray(ionspec_logLratio3, dtype=jnp.float32),
-            jnp.asarray(gas_logu, dtype=jnp.float32),
-            jnp.asarray(gas_logn, dtype=jnp.float32),
-            jnp.asarray(gas_logz, dtype=jnp.float32),
-            jnp.asarray(gas_logno, dtype=jnp.float32),
-            jnp.asarray(gas_logco, dtype=jnp.float32),
+        p = self._resolve_cue_params(
+            ssp_weights=ssp_weights,
+            ssp_log_ages_yr=ssp_log_ages_yr,
+            log_z=log_z,
+            neb_logU=neb_logU,
+            neb_logZ_gas=neb_logZ_gas,
+            gas_logu=gas_logu,
+            gas_logn=gas_logn,
+            gas_logz=gas_logz,
+            gas_logno=gas_logno,
+            gas_logco=gas_logco,
+            gas_logqion=gas_logqion,
+            ionspec_index1=ionspec_index1,
+            ionspec_index2=ionspec_index2,
+            ionspec_index3=ionspec_index3,
+            ionspec_index4=ionspec_index4,
+            ionspec_logLratio1=ionspec_logLratio1,
+            ionspec_logLratio2=ionspec_logLratio2,
+            ionspec_logLratio3=ionspec_logLratio3,
         )
-
-        gas_logq = _logq_from_logu(
-            jnp.asarray(gas_logu, dtype=jnp.float32),
-            jnp.asarray(gas_logn, dtype=jnp.float32),
+        return self._forward_lines(
+            p,
+            cloudyfsps_only=cloudyfsps_only,
+            neb_fesc=neb_fesc,
+            neb_fesc_lya=neb_fesc_lya,
         )
-
-        wav, lum = predict_all_lines(
-            nn_params,
-            self.weights,
-            gas_logq,
-            jnp.asarray(gas_logqion, dtype=jnp.float32),
-        )
-
-        # Apply general escape fraction
-        lum = lum * (1.0 - neb_fesc)
-
-        # Apply differential Ly-alpha escape fraction
-        # Ly-alpha at 1215.67 A: replace generic fesc with Ly-alpha-specific one
-        lya_idx = jnp.argmin(jnp.abs(wav - 1215.67))
-        lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(1.0 - neb_fesc, 1e-10)
-        lum = lum.at[lya_idx].multiply(lya_scale)
-
-        if cloudyfsps_only:
-            old_idx = self.weights.line_old_idx
-            return wav[old_idx], lum[old_idx]
-        return wav, lum
 
     def predict_nebular_continuum(
         self,
@@ -941,87 +1011,27 @@ class CueBackend:
         luminosity : array, shape (n_wave,)
             Nebular continuum in Lsun/Hz.
         """
-        # High-level mode
-        if ssp_weights is not None:
-            derived = self._compute_weighted_cue_params(
-                ssp_weights,
-                ssp_log_ages_yr,
-                log_z,
-                neb_logU=neb_logU,
-                neb_logZ_gas=neb_logZ_gas,
-                gas_logn=gas_logn,
-                gas_logno=gas_logno,
-                gas_logco=gas_logco,
-            )
-            if gas_logu is None:
-                gas_logu = derived["gas_logu"]
-            if gas_logz is None:
-                gas_logz = derived["gas_logz"]
-            if gas_logqion is None:
-                gas_logqion = derived["gas_logqion"]
-            if ionspec_index1 is None:
-                ionspec_index1 = derived["ionspec_index1"]
-            if ionspec_index2 is None:
-                ionspec_index2 = derived["ionspec_index2"]
-            if ionspec_index3 is None:
-                ionspec_index3 = derived["ionspec_index3"]
-            if ionspec_index4 is None:
-                ionspec_index4 = derived["ionspec_index4"]
-            if ionspec_logLratio1 is None:
-                ionspec_logLratio1 = derived["ionspec_logLratio1"]
-            if ionspec_logLratio2 is None:
-                ionspec_logLratio2 = derived["ionspec_logLratio2"]
-            if ionspec_logLratio3 is None:
-                ionspec_logLratio3 = derived["ionspec_logLratio3"]
-
-        # Fill remaining defaults
-        if gas_logu is None:
-            gas_logu = neb_logU
-        if gas_logz is None:
-            gas_logz = 0.0
-        if gas_logqion is None:
-            gas_logqion = self.default_gas_logqion
-        if ionspec_index1 is None:
-            ionspec_index1 = 19.7
-        if ionspec_index2 is None:
-            ionspec_index2 = 5.3
-        if ionspec_index3 is None:
-            ionspec_index3 = 1.6
-        if ionspec_index4 is None:
-            ionspec_index4 = 0.6
-        if ionspec_logLratio1 is None:
-            ionspec_logLratio1 = 3.9
-        if ionspec_logLratio2 is None:
-            ionspec_logLratio2 = 0.01
-        if ionspec_logLratio3 is None:
-            ionspec_logLratio3 = 0.2
-
-        nn_params = _prepare_nn_params(
-            jnp.asarray(ionspec_index1, dtype=jnp.float32),
-            jnp.asarray(ionspec_index2, dtype=jnp.float32),
-            jnp.asarray(ionspec_index3, dtype=jnp.float32),
-            jnp.asarray(ionspec_index4, dtype=jnp.float32),
-            jnp.asarray(ionspec_logLratio1, dtype=jnp.float32),
-            jnp.asarray(ionspec_logLratio2, dtype=jnp.float32),
-            jnp.asarray(ionspec_logLratio3, dtype=jnp.float32),
-            jnp.asarray(gas_logu, dtype=jnp.float32),
-            jnp.asarray(gas_logn, dtype=jnp.float32),
-            jnp.asarray(gas_logz, dtype=jnp.float32),
-            jnp.asarray(gas_logno, dtype=jnp.float32),
-            jnp.asarray(gas_logco, dtype=jnp.float32),
+        p = self._resolve_cue_params(
+            ssp_weights=ssp_weights,
+            ssp_log_ages_yr=ssp_log_ages_yr,
+            log_z=log_z,
+            neb_logU=neb_logU,
+            neb_logZ_gas=neb_logZ_gas,
+            gas_logu=gas_logu,
+            gas_logn=gas_logn,
+            gas_logz=gas_logz,
+            gas_logno=gas_logno,
+            gas_logco=gas_logco,
+            gas_logqion=gas_logqion,
+            ionspec_index1=ionspec_index1,
+            ionspec_index2=ionspec_index2,
+            ionspec_index3=ionspec_index3,
+            ionspec_index4=ionspec_index4,
+            ionspec_logLratio1=ionspec_logLratio1,
+            ionspec_logLratio2=ionspec_logLratio2,
+            ionspec_logLratio3=ionspec_logLratio3,
         )
-
-        gas_logq = _logq_from_logu(
-            jnp.asarray(gas_logu, dtype=jnp.float32),
-            jnp.asarray(gas_logn, dtype=jnp.float32),
-        )
-
-        return predict_continuum(
-            nn_params,
-            self.weights,
-            gas_logq,
-            jnp.asarray(gas_logqion, dtype=jnp.float32),
-        )
+        return self._forward_continuum(p)
 
     def predict_nebular_sed(
         self,
@@ -1068,43 +1078,26 @@ class CueBackend:
         array, shape (n_wave,)
             Total nebular SED in Lsun/Hz on the SSP wavelength grid.
         """
-        # Build the shared kwargs for lines and continuum
-        shared = dict(
+        # Resolve params once (avoids double computation for lines + continuum)
+        p = self._resolve_cue_params(
             ssp_weights=ssp_weights,
             ssp_log_ages_yr=ssp_log_ages_yr,
             log_z=log_z,
             neb_logU=neb_logU,
             neb_logZ_gas=neb_logZ_gas,
-            neb_fesc=neb_fesc,
-            neb_fesc_lya=neb_fesc_lya,
             **neb_params,
         )
 
-        # Lines
-        line_wav, line_lum = self.predict_nebular_line_luminosities(
+        # Lines (all 138 for SED construction)
+        line_wav, line_lum = self._forward_lines(
+            p,
             cloudyfsps_only=False,
-            **shared,
+            neb_fesc=neb_fesc,
+            neb_fesc_lya=neb_fesc_lya,
         )
 
-        # Continuum (reuse the same high-level → low-level dispatch)
-        # For now, pass through to predict_nebular_continuum with the
-        # same derived params.  We re-derive to keep it simple.
-        if ssp_weights is not None:
-            derived = self._compute_weighted_cue_params(
-                ssp_weights,
-                ssp_log_ages_yr,
-                log_z,
-                neb_logU=neb_logU,
-                neb_logZ_gas=neb_logZ_gas,
-                **{
-                    k: v
-                    for k, v in neb_params.items()
-                    if k in ("gas_logn", "gas_logno", "gas_logco")
-                },
-            )
-            cont_wav, cont_lum = self.predict_nebular_continuum(**derived)
-        else:
-            cont_wav, cont_lum = self.predict_nebular_continuum(**neb_params)
+        # Continuum (same resolved params — no double computation)
+        cont_wav, cont_lum = self._forward_continuum(p)
 
         # Interpolate continuum onto SSP grid
         neb_sed = jnp.interp(ssp_wave, cont_wav, cont_lum, left=0.0, right=0.0)
