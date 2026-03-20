@@ -111,7 +111,7 @@ _NON_SFH_PARAMS = {
 _NEBULAR_PARAMS = {
     "neb_logU": (
         "Ionization parameter log10(U)",
-        lambda lo, hi: -5 <= lo and hi <= 0,
+        lambda lo, hi: lo >= -5 and hi <= 0,
         "must be in [-5, 0]",
         Fixed(-3.0),
     ),
@@ -123,22 +123,89 @@ _NEBULAR_PARAMS = {
     ),
     "neb_fesc": (
         "Ionizing photon escape fraction",
-        lambda lo, hi: 0 <= lo and hi <= 1,
+        lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
         Fixed(0.0),
     ),
     "neb_fesc_lya": (
         "Ly-alpha escape fraction (resonant scattering)",
-        lambda lo, hi: 0 <= lo and hi <= 1,
+        lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
         Fixed(0.0),
+    ),
+}
+
+# Cue-specific optional params — only registered if user provides them
+_CUE_IONSPEC_PARAMS = {
+    "ionspec_index1": (
+        "Cue ionizing spectrum slope segment 1 (HeII, 1-228A)",
+        lambda lo, hi: lo >= 0 and hi <= 50,
+        "must be in [0, 50]",
+        None,
+    ),
+    "ionspec_index2": (
+        "Cue ionizing spectrum slope segment 2 (OII, 228-353A)",
+        lambda lo, hi: lo >= -1 and hi <= 35,
+        "must be in [-1, 35]",
+        None,
+    ),
+    "ionspec_index3": (
+        "Cue ionizing spectrum slope segment 3 (HeI, 353-504A)",
+        lambda lo, hi: lo >= -2 and hi <= 20,
+        "must be in [-2, 20]",
+        None,
+    ),
+    "ionspec_index4": (
+        "Cue ionizing spectrum slope segment 4 (HI, 504-912A)",
+        lambda lo, hi: lo >= -2 and hi <= 10,
+        "must be in [-2, 10]",
+        None,
+    ),
+    "ionspec_logLratio1": (
+        "Cue log luminosity ratio seg2/seg1",
+        lambda lo, hi: lo >= -1 and hi <= 12,
+        "must be in [-1, 12]",
+        None,
+    ),
+    "ionspec_logLratio2": (
+        "Cue log luminosity ratio seg3/seg2",
+        lambda lo, hi: lo >= -1 and hi <= 3,
+        "must be in [-1, 3]",
+        None,
+    ),
+    "ionspec_logLratio3": (
+        "Cue log luminosity ratio seg4/seg3",
+        lambda lo, hi: lo >= -1 and hi <= 3,
+        "must be in [-1, 3]",
+        None,
+    ),
+}
+
+_CUE_GAS_EXTRA_PARAMS = {
+    "gas_logn": (
+        "Cue gas density log10(n_H/cm^-3)",
+        lambda lo, hi: lo >= 0 and hi <= 5,
+        "must be in [0, 5]",
+        None,
+    ),
+    "gas_logno": (
+        "Cue [N/O] abundance ratio (dex)",
+        lambda lo, hi: lo >= -2 and hi <= 2,
+        "must be in [-2, 2]",
+        None,
+    ),
+    "gas_logco": (
+        "Cue [C/O] abundance ratio (dex)",
+        lambda lo, hi: lo >= -2 and hi <= 2,
+        "must be in [-2, 2]",
+        None,
     ),
 }
 
 _ALPHA_FE_PARAMS = {
     "met_alpha_fe": (
         "Alpha-element enhancement [alpha/Fe] (dex)",
-        lambda lo, hi: -0.5 <= lo and hi <= 1.0,
+        lambda lo, hi: lo >= -0.5 and hi <= 1.0,
         "must be in [-0.5, 1.0]",
         Fixed(0.0),
     ),
@@ -162,7 +229,7 @@ _EVOLVING_MET_PARAMS = {
 _DUST_EXTRA_PARAMS = {
     "dust_f_obscuration": (
         "Fraction of unobscured sightlines (Lower 2022)",
-        lambda lo, hi: 0 <= lo and hi <= 1,
+        lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
         Fixed(0.0),
     ),
@@ -219,7 +286,7 @@ _DUST_EMISSION_PARAMS = {
     ),
     "dust_gamma_dl": (
         "Draine & Li 2007 PDR fraction (0-1)",
-        lambda lo, hi: 0 <= lo and hi <= 1,
+        lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
         Fixed(0.01),
     ),
@@ -396,6 +463,9 @@ SETTINGS_KEYS = frozenset(
         "apply_igm",
         # Nebular emission
         "nebular",
+        "nebular_ssp",
+        "nebular_cue",
+        "neb_ionization",
         "cloudy_grid_path",
         "cue_weights_path",
         # Dust law
@@ -708,7 +778,8 @@ class ParamSpec:
     Full model with all physics::
 
         spec = ParamSpec(
-            mean_sfh_type=["dpl", "field"], n_grid=64,
+            mean_sfh_type=["dpl", "field"],
+            n_grid=64,
             # Dust attenuation
             dust_law_bc="kriek_conroy",
             dust_f_obscuration=Uniform(0.0, 0.5),
@@ -727,7 +798,8 @@ class ParamSpec:
             # IGM
             apply_igm=True,
             # Radio + X-ray
-            radio=True, xray=True,
+            radio=True,
+            xray=True,
             # Evolving metallicity
             evolving_metallicity=True,
             met_logzsol_0=Uniform(-2.0, 0.2),
