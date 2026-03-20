@@ -350,23 +350,22 @@ class Model:
                 self._param_map[p] = (p, 1.0, 0.0)
 
         # Nebular emission backend + params
-        if spec.nebular:
+        if spec.nebular_mode in ("cloudy", "cue"):
             self._param_map["neb_logU"] = ("neb_logU", 1.0, 0.0)
             self._param_map["neb_logZ_gas"] = ("neb_logZ_gas", 1.0, LOG10_ZSUN)
             self._param_map["neb_fesc"] = ("neb_fesc", 1.0, 0.0)
             self._param_map["neb_fesc_lya"] = ("neb_fesc_lya", 1.0, 0.0)
 
         self._nebular_backend = None
-        cue_weights_path = getattr(spec, "cue_weights_path", None)
-        if spec.nebular and cue_weights_path is not None:
+        if spec.nebular_mode == "cue":
             from diffsed.models.nebular import CueBackend
 
-            self._nebular_backend = CueBackend(cue_weights_path, ssp_data=ssp_data)
-        elif spec.nebular and spec.cloudy_grid_path is not None:
+            self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
+        elif spec.nebular_mode == "cloudy":
             from diffsed.models.nebular import CloudyGridBackend
 
             self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
-        elif spec.nebular:
+        elif spec.nebular_mode == "ssp":
             from diffsed.models.nebular import BakedInBackend
 
             self._nebular_backend = BakedInBackend()
@@ -1115,10 +1114,14 @@ class Model:
             t_lookback_yr = jnp.maximum((t_obs_gyr - t_cosmic_gyr) * 1e9, 1.0)
             log_t_lookback = jnp.log10(t_lookback_yr)
             sfr_on_ssp = jnp.interp(
-                self.ssp_log_ages_yr, log_t_lookback[::-1], sfr_table[::-1],
+                self.ssp_log_ages_yr,
+                log_t_lookback[::-1],
+                sfr_table[::-1],
             )
             sfr = jnp.interp(
-                self.log_age_grid, log_t_lookback[::-1], sfr_table[::-1],
+                self.log_age_grid,
+                log_t_lookback[::-1],
+                sfr_table[::-1],
             )
         else:
             sfr = self._compute_sfr(p)
@@ -1145,6 +1148,7 @@ class Model:
             # This properly handles time→age, trapezoidal weighting,
             # and lognormal metallicity distribution at each age.
             from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
+
             met_table = jnp.asarray(params["met_history"])
             log_z_abs = effective_metallicity(met_table + (-1.8477), alpha_fe)
             lgmet_scatter = float(params.get("lgmet_scatter", 0.2))
@@ -1164,10 +1168,13 @@ class Model:
             # For dust: use Z-marginalized SSP flux per age
             lgmet_w = dsps_result.lgmet_weights  # (n_met, n_age)
             lgmet_w_safe = jnp.maximum(jnp.sum(lgmet_w, axis=0, keepdims=True), 1e-30)
-            ssp_flux_at_z = jnp.einsum("ma,maw->aw", lgmet_w / lgmet_w_safe,
-                                         self.ssp_data.ssp_flux)
+            ssp_flux_at_z = jnp.einsum(
+                "ma,maw->aw", lgmet_w / lgmet_w_safe, self.ssp_data.ssp_flux
+            )
             # Scale weights to absolute mass (DSPS normalizes to 1)
-            total_mass = jnp.sum(dsps_result.weights) * jnp.trapezoid(sfr_table, t_cosmic_gyr * 1e9)
+            total_mass = jnp.sum(dsps_result.weights) * jnp.trapezoid(
+                sfr_table, t_cosmic_gyr * 1e9
+            )
             # Actually: DSPS age_weights are fractional. Total stellar mass =
             # integral(SFR * dt). Multiply weights by total mass.
             _total_mass_formed = jnp.trapezoid(sfr_table, t_cosmic_gyr * 1e9)
@@ -1179,6 +1186,7 @@ class Model:
             # Then our standard interpolate_metallicity + compute_csp_sed.
             # This gives ~1-2% accuracy at observable wavelengths in 0.5 ms.
             from dsps.sed.ssp_weights import calc_age_weights_from_sfh_table
+
             dsps_age_w = calc_age_weights_from_sfh_table(
                 gal_t_table=t_cosmic_gyr,
                 gal_sfr_table=sfr_table,
@@ -1193,7 +1201,9 @@ class Model:
             log_z_solar = p.get("log_z", -1.8477)
             log_z_eff = effective_metallicity(log_z_solar, alpha_fe)
             ssp_flux_at_z = interpolate_metallicity(
-                self.ssp_data.ssp_flux, self.ssp_data.ssp_lgmet, log_z_eff,
+                self.ssp_data.ssp_flux,
+                self.ssp_data.ssp_lgmet,
+                log_z_eff,
             )
 
         # Metallicity interpolation (non-table path)
@@ -1268,7 +1278,10 @@ class Model:
             # ~1.4 ms, <2% error vs full DSPS (vs 10% for 1D marginalization)
             _LSUN = 3.828e33
             sed_attenuated = _LSUN * jnp.einsum(
-                'ma,aw,maw->w', _dsps_weights_2d, dust_atten, self.ssp_data.ssp_flux,
+                "ma,aw,maw->w",
+                _dsps_weights_2d,
+                dust_atten,
+                self.ssp_data.ssp_flux,
             )
         else:
             sed_attenuated = compute_csp_sed(weights, ssp_flux_at_z, dust_atten)
@@ -1278,7 +1291,9 @@ class Model:
         if self._dust_emission_model is not None or need_intrinsic:
             if _dsps_weights_2d is not None:
                 sed_intrinsic = _LSUN * jnp.einsum(
-                    'ma,maw->w', _dsps_weights_2d, self.ssp_data.ssp_flux,
+                    "ma,maw->w",
+                    _dsps_weights_2d,
+                    self.ssp_data.ssp_flux,
                 )
             else:
                 ones_atten = jnp.ones_like(dust_atten)
