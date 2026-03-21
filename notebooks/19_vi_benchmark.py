@@ -149,9 +149,21 @@ for label, kwargs in methods.items():
         "chi2_dof": chi2_dof,
     }
 
+    # Diagnostics
+    n_post_actual = 0
+    posterior_type = "none"
+    if isinstance(r.samples, dict) and r.samples:
+        first_key = next(iter(r.samples))
+        n_post_actual = len(r.samples[first_key])
+        posterior_type = (
+            r.diagnostics.get("sample_mode", r.method) if hasattr(r, "diagnostics") else r.method
+        )
+
     chi2_str = f"chi2/dof={chi2_dof:.2f}" if chi2_dof is not None else "chi2/dof=—"
     print(
-        f"{label:30s}  compile={t_compile:6.1f}s  run={t_warm:6.1f}s  total={t_cold:6.1f}s  {chi2_str}"
+        f"{label:30s}  compile={t_compile:6.1f}s  run={t_warm:6.1f}s  "
+        f"total={t_cold:6.1f}s  {chi2_str}  "
+        f"n_samples={n_post_actual}  posterior={posterior_type}"
     )
 
     # Restore kwargs for next iteration
