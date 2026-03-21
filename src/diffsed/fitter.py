@@ -934,6 +934,8 @@ class Fitter:
                 energy_reduction_factor=0.1,
             )
 
+        _RESAMPLE_EVERY = 5  # refresh stale samples every N iterations
+
         def evi_step_full(
             m,
             subkey,
@@ -943,6 +945,7 @@ class Fitter:
             prev_keys,
             constants_mask,
             pe_mask,
+            iteration=0,
         ):
             """One geoVI iteration — ``sample_mode`` must be a static string.
 
@@ -965,15 +968,28 @@ class Fitter:
             m_new, kl_value, new_residuals, used_keys
             """
             # Key handling: _resample = fresh keys, _sample = reuse prev keys
-            if sample_mode.endswith("_resample"):
+            if sample_mode.endswith("_resample") or sample_mode == "geovi":
                 sample_keys = jax.random.split(subkey, n_samples)
             elif sample_mode == "nonlinear_update":
-                sample_keys = prev_keys  # keys only needed for metric sample
+                sample_keys = prev_keys
             else:  # _sample modes: reuse
                 sample_keys = prev_keys
 
             # Python if — only the used branch is traced by JAX
-            if sample_mode in ("nonlinear_resample", "nonlinear_sample"):
+            if sample_mode == "geovi":
+                # Optimal schedule: resample at iter 0 and every
+                # _RESAMPLE_EVERY, nonlinear_update in between.
+                # Uses jax.lax.cond (traces both branches, executes one).
+                do_resample = (iteration == 0) | (iteration % _RESAMPLE_EVERY == 0)
+
+                def _do_resample(_):
+                    return draw_nonlinear_residuals(m, sample_keys)
+
+                def _do_update(_):
+                    return update_nonlinear_residuals(m, prev_residuals, prev_keys)
+
+                residuals = jax.lax.cond(do_resample, _do_resample, _do_update, None)
+            elif sample_mode in ("nonlinear_resample", "nonlinear_sample"):
                 residuals = draw_nonlinear_residuals(m, sample_keys)
             elif sample_mode == "nonlinear_update":
                 residuals = update_nonlinear_residuals(m, prev_residuals, sample_keys)
@@ -1023,6 +1039,7 @@ class Fitter:
                     prev_k,
                     no_constants,
                     all_sampled,
+                    iteration=i,
                 )
                 rel_change = jnp.abs(prev_kl - kl_val) / (jnp.abs(prev_kl) + 1e-10)
                 converged = (rel_change < kl_rtol) & (i >= 5)
@@ -1590,7 +1607,7 @@ class Fitter:
             _mode_str_map = {
                 "linear": "linear_resample",
                 "mgvi": "linear_resample",
-                "geovi": "nonlinear_resample",
+                "geovi": "geovi",
                 "linear_resample": "linear_resample",
                 "linear_sample": "linear_sample",
                 "nonlinear_resample": "nonlinear_resample",
@@ -1872,12 +1889,12 @@ class Fitter:
                 sample_mode="linear_resample",
                 **kwargs,
             )
-        # --- Native JIT (fully XLA-compiled, experimental) ---
+        # --- Native JIT (fully XLA-compiled) ---
         elif method == "native_geovi":
             return self._run_evi_jit(
                 key=key,
                 init_from=init_from,
-                sample_mode="geovi",
+                sample_mode="geovi",  # resample+update schedule, same as fast_geovi
                 **kwargs,
             )
         elif method in ("native_mgvi", "native_evi"):
