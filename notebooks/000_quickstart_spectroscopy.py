@@ -119,7 +119,7 @@ fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="spectroscopy")
 
 key_fit, key = jax.random.split(key)
 t0 = time.perf_counter()
-result = fitter.run("evi", n_posterior_samples=500, n_seeds=3, key=key_fit)
+result = fitter.run("native_evi", n_posterior_samples=500, n_seeds=3, key=key_fit)
 dt = time.perf_counter() - t0
 
 pred = model.predict_spectrum(result.params)

@@ -770,7 +770,7 @@ plt.show()
 # | QSOgen empirical SED | `diffsed.models.agn.qsogen` | `qsogen_sed()` |
 # | SKIRTOR clumpy torus | `diffsed.models.agn.skirtor` | `skirtor_analytic()` |
 # | AGN in forward model | `diffsed.Model` | `agn_model="simple"` in `ParamSpec` |
-# | AGN inference | `diffsed.Fitter` | `fitter.run("evi", ...)` |
+# | AGN inference | `diffsed.Fitter` | `fitter.run("native_evi", ...)` |
 #
 # **Key takeaways:**
 #

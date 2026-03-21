@@ -115,10 +115,11 @@ fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 key1, key = jax.random.split(key)
 t0 = time.perf_counter()
 result_geovi = fitter.run(
-    "geovi",
+    "native_geovi",
     n_iterations=15,
     n_samples=6,
     n_posterior_samples=200,
+    n_seeds=5,
     verbose=False,
     key=key1,
 )
@@ -137,10 +138,11 @@ print(f"geoVI: {t_geovi:.1f} s, {result_geovi.diagnostics['n_samples']} samples"
 key2, key = jax.random.split(key)
 t0 = time.perf_counter()
 result_mgvi = fitter.run(
-    "mgvi",
+    "native_mgvi",
     n_iterations=15,
     n_samples=6,
     n_posterior_samples=200,
+    n_seeds=5,
     verbose=False,
     key=key2,
 )
@@ -158,9 +160,10 @@ print(f"MGVI: {t_mgvi:.1f} s, {result_mgvi.diagnostics['n_samples']} samples")
 key3, key = jax.random.split(key)
 t0 = time.perf_counter()
 result_evi = fitter.run(
-    "evi",
+    "native_evi",
     n_iterations=10,
     n_samples=3,
+    n_seeds=5,
     n_posterior_samples=2000,
     verbose=False,
     key=key3,

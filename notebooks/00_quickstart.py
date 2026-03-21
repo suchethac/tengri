@@ -154,8 +154,8 @@ t_map = time.perf_counter() - t0
 print(f"MAP finished in {t_map:.1f}s")
 
 t0 = time.perf_counter()
-result_geovi = fitter.run("geovi", init_from=result_map,
-                          n_iterations=10, n_samples=6)
+result_geovi = fitter.run("native_geovi", init_from=result_map,
+                          n_iterations=10, n_samples=6, n_seeds=5)
 t_geovi = time.perf_counter() - t0
 print(f"geoVI finished in {t_geovi:.1f}s")
 
@@ -347,9 +347,9 @@ t_map_s = time.perf_counter() - t0
 print(f"MAP finished in {t_map_s:.1f}s")
 
 t0 = time.perf_counter()
-result_geovi_stoch = fitter_stoch.run("geovi", init_from=result_map_stoch,
+result_geovi_stoch = fitter_stoch.run("native_geovi", init_from=result_map_stoch,
                                       n_iterations=15, n_samples=6,
-                                      n_posterior_samples=200)
+                                      n_posterior_samples=200, n_seeds=5)
 t_geovi_s = time.perf_counter() - t0
 print(f"geoVI finished in {t_geovi_s:.1f}s  "
       f"({result_geovi_stoch.diagnostics['n_samples']} samples)")

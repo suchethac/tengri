@@ -297,8 +297,8 @@ print(f"Ray Tracing finished in {t_rt:.1f}s ({D}-D)")
 
 # geoVI
 t0 = time.perf_counter()
-result_geovi = fitter_stoch.run("geovi", init_from=result_map_stoch,
-                                n_iterations=10, n_samples=6)
+result_geovi = fitter_stoch.run("native_geovi", init_from=result_map_stoch,
+                                n_iterations=10, n_samples=6, n_seeds=5)
 t_geovi = time.perf_counter() - t0
 print(f"geoVI finished in {t_geovi:.1f}s ({D}-D)")
 

@@ -669,10 +669,11 @@ plt.show()
 # %%
 key, subkey = jax.random.split(key)
 result_geovi = fitter.run(
-    "geovi",
+    "native_geovi",
     init_from=result_map,
     n_iterations=10,
     n_samples=6,
+    n_seeds=5,
     key=subkey,
 )
 print(f"Wall time: {result_geovi.wall_time_s:.1f}s")
@@ -929,10 +930,11 @@ print("ESS (physical params):", {k: f"{v:.0f}" for k, v in phys_ess.items()})
 # Stochastic: MAP → geoVI
 key, subkey = jax.random.split(key)
 result_stoch_geovi = fitter_stoch.run(
-    "geovi",
+    "native_geovi",
     init_from=result_stoch_map,
     n_iterations=10,
     n_samples=6,
+    n_seeds=5,
     key=subkey,
 )
 print(f"Stochastic geoVI: {result_stoch_geovi.wall_time_s:.1f}s")
