@@ -131,7 +131,7 @@ class TestDustCF00Crossval:
         FSPS dust_type=0 with dust2=tau_V gives T(V) = exp(-tau_V)
         for old stars. diffsed's CF00 should give the same.
         """
-        from diffsed.models.dust.charlot_fall import charlot_fall
+        from diffsed.models.dust.attenuation import two_component_dust
 
         for tau_v2 in [0.1, 0.3, 0.5, 1.0, 2.0]:
             # FSPS
@@ -149,7 +149,11 @@ class TestDustCF00Crossval:
             # diffsed (old stars, 10 Gyr)
             wavs = jnp.array([5500.0])
             ages = jnp.array([1e10])
-            trans_ds = float(charlot_fall(wavs, ages, 0.0, tau_v2, -0.7)[0, 0])
+            trans_ds = float(
+                two_component_dust(
+                    wavs, ages, 0.0, tau_v2, law_bc="power_law", law_diff="power_law", n_slope=-0.7
+                )[0, 0]
+            )
 
             np.testing.assert_allclose(
                 trans_ds,
@@ -160,7 +164,7 @@ class TestDustCF00Crossval:
 
     def test_wavelength_dependence_matches(self, sp):
         """Attenuation curve shape should match FSPS across wavelengths."""
-        from diffsed.models.dust.charlot_fall import charlot_fall
+        from diffsed.models.dust.attenuation import two_component_dust
 
         tau_v2 = 0.5
         sp.params["dust_type"] = 0
@@ -181,7 +185,17 @@ class TestDustCF00Crossval:
 
         # diffsed
         ages = jnp.array([5e9])  # 5 Gyr
-        trans_ds = np.asarray(charlot_fall(jnp.array(test_wavs), ages, 0.0, tau_v2, -0.7))[0]
+        trans_ds = np.asarray(
+            two_component_dust(
+                jnp.array(test_wavs),
+                ages,
+                0.0,
+                tau_v2,
+                law_bc="power_law",
+                law_diff="power_law",
+                n_slope=-0.7,
+            )
+        )[0]
 
         np.testing.assert_allclose(
             trans_ds,
@@ -192,7 +206,7 @@ class TestDustCF00Crossval:
 
     def test_birth_cloud_young_stars(self, sp):
         """Young stars should have extra attenuation from birth cloud."""
-        from diffsed.models.dust.charlot_fall import charlot_fall
+        from diffsed.models.dust.attenuation import two_component_dust
 
         tau_v1 = 1.0  # birth cloud
         tau_v2 = 0.3  # diffuse
@@ -213,7 +227,17 @@ class TestDustCF00Crossval:
 
         # diffsed: young star (1 Myr) should have tau_eff ~ tau_v1 + tau_v2
         ages = jnp.array([1e6])  # 1 Myr
-        trans_ds = float(charlot_fall(jnp.array([5500.0]), ages, tau_v1, tau_v2, -0.7)[0, 0])
+        trans_ds = float(
+            two_component_dust(
+                jnp.array([5500.0]),
+                ages,
+                tau_v1,
+                tau_v2,
+                law_bc="power_law",
+                law_diff="power_law",
+                n_slope=-0.7,
+            )[0, 0]
+        )
 
         # Expected: exp(-(tau_v1 + tau_v2)) ~ exp(-1.3) ~ 0.27
         expected = float(jnp.exp(-(tau_v1 + tau_v2)))

@@ -33,7 +33,7 @@ bagpipes_dust = pytest.importorskip(
     reason="bagpipes not installed",
 )
 
-from diffsed.models.dust.charlot_fall import charlot_fall
+from diffsed.models.dust.attenuation import two_component_dust
 
 
 class TestDustCurveCrossval:
@@ -94,11 +94,13 @@ class TestDustCurveCrossval:
         # diffsed transmission for old stars
         ages_old = np.array([1e10])  # 10 Gyr >> t_birth
         trans_diffsed = np.asarray(
-            charlot_fall(
+            two_component_dust(
                 jnp.array(wavs),
                 jnp.array(ages_old),
                 tau_v1=0.0,  # no birth cloud
                 tau_v2=tau_v,
+                law_bc="power_law",
+                law_diff="power_law",
                 n_slope=n_slope,
             )
         )[0]  # shape (1, n_wave) -> (n_wave,)
@@ -124,7 +126,15 @@ class TestDustCurveCrossval:
         # diffsed (old stars)
         ages_old = np.array([1e10])
         trans_ds = np.asarray(
-            charlot_fall(jnp.array(wavs), jnp.array(ages_old), 0.0, tau_v2, n_slope)
+            two_component_dust(
+                jnp.array(wavs),
+                jnp.array(ages_old),
+                0.0,
+                tau_v2,
+                law_bc="power_law",
+                law_diff="power_law",
+                n_slope=n_slope,
+            )
         )[0]
 
         # bagpipes

@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.dust.charlot_fall import charlot_fall
+from diffsed.models.dust.attenuation import two_component_dust
 from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
 from diffsed.models.sfh.mean_sfh import double_powerlaw
 from diffsed.models.sfh.psd_models import drw_variance
@@ -63,7 +63,11 @@ class TestGradientFiniteDifference:
         ages = jnp.logspace(6, 10, 30)
 
         def f(tau_v1):
-            return jnp.sum(charlot_fall(wave, ages, tau_v1, 0.3))
+            return jnp.sum(
+                two_component_dust(
+                    wave, ages, tau_v1, 0.3, law_bc="power_law", law_diff="power_law"
+                )
+            )
 
         grad_auto = jax.grad(f)(0.5)
 
@@ -94,7 +98,11 @@ class TestGradientDirection:
         ages = jnp.logspace(6, 10, 30)
 
         def total_flux(tau_v1):
-            return jnp.sum(charlot_fall(wave, ages, tau_v1, 0.3))
+            return jnp.sum(
+                two_component_dust(
+                    wave, ages, tau_v1, 0.3, law_bc="power_law", law_diff="power_law"
+                )
+            )
 
         grad = jax.grad(total_flux)(0.5)
         assert float(grad) < 0, "More dust should decrease total flux"
@@ -163,7 +171,15 @@ class TestGradientThroughPipeline:
         ages = jnp.logspace(6, 10, 30)
 
         def pipeline(tau_v1, tau_v2, dust_n):
-            atten = charlot_fall(wave, ages, tau_v1, tau_v2, n_slope=dust_n)
+            atten = two_component_dust(
+                wave,
+                ages,
+                tau_v1,
+                tau_v2,
+                law_bc="power_law",
+                law_diff="power_law",
+                n_slope=dust_n,
+            )
             # Simulate CSP: sum over ages, then sum over wavelengths
             return jnp.sum(atten)
 

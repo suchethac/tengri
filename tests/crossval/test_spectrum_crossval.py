@@ -164,7 +164,7 @@ class TestDustySpectrumCrossval:
 
     def test_cf00_attenuation_curve(self, ssp_data, ref, fsps_wave):
         """Charlot & Fall attenuation at key wavelengths vs FSPS."""
-        from diffsed.models.dust.charlot_fall import charlot_fall
+        from diffsed.models.dust.attenuation import two_component_dust
 
         ssp_wave = np.asarray(ssp_data.ssp_wave)
         tau_v2 = 0.5
@@ -172,7 +172,15 @@ class TestDustySpectrumCrossval:
         # Compute attenuation at several wavelengths for old stars
         ages_yr = np.array([1e10])
         trans = np.asarray(
-            charlot_fall(jnp.array(ssp_wave), jnp.array(ages_yr), 0.0, tau_v2, -0.7)
+            two_component_dust(
+                jnp.array(ssp_wave),
+                jnp.array(ages_yr),
+                0.0,
+                tau_v2,
+                law_bc="power_law",
+                law_diff="power_law",
+                n_slope=-0.7,
+            )
         )[0]
 
         # FSPS reference: ratio of dusty/clean

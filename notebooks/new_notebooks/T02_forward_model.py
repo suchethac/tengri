@@ -48,7 +48,7 @@ from diffsed import (
 from diffsed.models.sps.dsps_wrapper import (
     compute_csp_weights, compute_csp_sed, interpolate_metallicity,
 )
-from diffsed.models.dust.charlot_fall import charlot_fall
+from diffsed.models.dust.attenuation import two_component_dust
 from diffsed.models.sfh.mean_sfh import double_powerlaw
 
 import sys; sys.path.insert(0, ".")
@@ -188,8 +188,10 @@ configs = [(0.5, 0.2, "Low dust"), (1.0, 0.5, "Moderate"),
 
 ax = axes[0]
 for tau_bc, tau_diff, label in configs:
-    atten = charlot_fall(jnp.array(wave_plot), jnp.array([1e6]),
-                         tau_v1=tau_bc, tau_v2=tau_diff)
+    atten = two_component_dust(
+        jnp.array(wave_plot), jnp.array([1e6]),
+        tau_v1=tau_bc, tau_v2=tau_diff, law_bc="power_law", law_diff="power_law"
+    )
     ax.plot(wave_plot, np.array(atten[0]), lw=1.5,
             label=rf"$\hat\tau_{{bc}}={tau_bc}$, $\hat\tau_{{diff}}={tau_diff}$ ({label})")
 ax.set_xlabel(r"Wavelength [$\mathrm{\AA}$]"); ax.set_ylabel(r"Transmission $e^{-\tau_\lambda}$")
@@ -207,8 +209,10 @@ ax.legend(); ax.set_ylim(-0.05, 1.05)
 
 ax = axes[2]
 csp_nodust = compute_csp_sed(weights, ssp_flux_at_Z, no_dust)
-dust_atten = charlot_fall(jnp.array(wave), jnp.array(ssp_ages_yr),
-                          tau_v1=1.0, tau_v2=0.5)
+dust_atten = two_component_dust(
+    jnp.array(wave), jnp.array(ssp_ages_yr),
+    tau_v1=1.0, tau_v2=0.5, law_bc="power_law", law_diff="power_law"
+)
 csp_dusty = compute_csp_sed(weights, ssp_flux_at_Z, dust_atten)
 ax.plot(wave, np.array(csp_nodust), lw=1.2, color="C0", label="No dust", alpha=0.7)
 ax.plot(wave, np.array(csp_dusty), lw=1.5, color="C3", label=r"$\hat\tau_{bc}=1.0$, $\hat\tau_{diff}=0.5$")

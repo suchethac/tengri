@@ -24,7 +24,6 @@ from diffsed.fitter import Fitter
 from diffsed.hierarchical import HierarchicalFitter, HierarchicalResult
 from diffsed.model import Model
 from diffsed.models.dust.attenuation import two_component_dust
-from diffsed.models.dust.charlot_fall import charlot_fall  # legacy compat
 from diffsed.models.observation.filters import load_filter_set
 from diffsed.models.sfh.gp_sfh import (
     compute_sqrt_power_drw,
@@ -100,7 +99,6 @@ __all__ = [
     "StudentT",
     "Uniform",
     "VIConfig",
-    "charlot_fall",
     "compute_effective_noise",
     "compute_field_gp",
     "compute_sqrt_power_drw",

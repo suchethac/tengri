@@ -12,7 +12,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.dust.charlot_fall import precompute_dust_age_weights
+from diffsed.models.dust.attenuation import precompute_dust_age_weights, two_component_dust_fast
 from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S, compute_csp_weights
 from diffsed.models.sps.precompute import (
     fast_photometry,
@@ -167,12 +167,16 @@ def _unfused_photometry(
     tau_v2,
     dust_n,
 ):
-    from diffsed.models.dust.charlot_fall import charlot_fall_at_wavelengths_fast
-
     weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
     ssp_at_z = interpolate_ssp_phot_metallicity(ssp_phot, ssp_lgmet, log_z)
-    dust = charlot_fall_at_wavelengths_fast(
-        eff_waves_rest, dust_age_weights, tau_v1=tau_v1, tau_v2=tau_v2, n_slope=dust_n
+    dust = two_component_dust_fast(
+        eff_waves_rest,
+        dust_age_weights,
+        tau_v1=tau_v1,
+        tau_v2=tau_v2,
+        law_bc="power_law",
+        law_diff="power_law",
+        n_slope=dust_n,
     )
     return fast_photometry(weights, ssp_at_z, dust, flux_scale)
 
@@ -355,8 +359,6 @@ class TestFusedSpectrumAccuracy:
         ssp_ages_yr,
         sfr_on_ssp,
     ):
-        from diffsed.models.dust.charlot_fall import charlot_fall_at_wavelengths_fast
-
         flux_scale = 1e-30
         log_z, tau_v1, tau_v2, dust_n = -1.0, 0.5, 0.3, -0.7
 
@@ -373,11 +375,13 @@ class TestFusedSpectrumAccuracy:
         # Unfused
         weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
         ssp_at_z = interpolate_ssp_phot_metallicity(ssp_on_pixels, ssp_lgmet, log_z)
-        dust = charlot_fall_at_wavelengths_fast(
+        dust = two_component_dust_fast(
             wave_rest_pixels,
             dust_age_weights,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
+            law_bc="power_law",
+            law_diff="power_law",
             n_slope=dust_n,
         )
         flux = fast_spectrum(weights, ssp_at_z, dust, flux_scale)

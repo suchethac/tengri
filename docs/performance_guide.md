@@ -142,7 +142,7 @@ inference. Previously, `log10()` and `sigmoid()` were recomputed at every
 forward call.
 
 Now, `precompute_dust_age_weights()` computes the sigmoid once at Model init.
-The fast dust function `charlot_fall_at_wavelengths_fast()` takes the precomputed
+The fast dust function `two_component_dust_fast()` takes the precomputed
 weights and skips the log10 + sigmoid.
 
 ### How to use it
@@ -157,17 +157,18 @@ model = Model(spec, ssp, filters=filters)
 For standalone use (e.g., in custom forward models):
 
 ```python
-from diffsed.models.dust.charlot_fall import (
+from diffsed.models.dust.attenuation import (
     precompute_dust_age_weights,
-    charlot_fall_at_wavelengths_fast,
+    two_component_dust_fast,
 )
 
 age_grid = 10.0 ** jnp.linspace(5.5, 10.14, 107)
 dust_w = precompute_dust_age_weights(age_grid)
 
 # Per-call: no log10 or sigmoid — just exp(-tau)
-atten = charlot_fall_at_wavelengths_fast(
-    wavelengths, dust_w, tau_v1=0.5, tau_v2=0.3
+atten = two_component_dust_fast(
+    wavelengths, dust_w, tau_v1=0.5, tau_v2=0.3,
+    law_bc="power_law", law_diff="power_law"
 )
 ```
 

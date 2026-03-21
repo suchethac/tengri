@@ -12,10 +12,10 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.dust.charlot_fall import (
-    charlot_fall_at_wavelengths,
-    charlot_fall_at_wavelengths_fast,
+from diffsed.models.dust.attenuation import (
     precompute_dust_age_weights,
+    two_component_dust,
+    two_component_dust_fast,
 )
 
 jax.config.update("jax_enable_x64", True)
@@ -113,6 +113,9 @@ class TestPrecomputeDustAgeWeights:
 # ---------------------------------------------------------------------------
 
 
+_CF_KWARGS = {"law_bc": "power_law", "law_diff": "power_law"}
+
+
 class TestFastDustAgreement:
     """Fast dust must exactly match the original per-call version."""
 
@@ -120,19 +123,21 @@ class TestFastDustAgreement:
         """Fast and original agree exactly for photometric wavelengths."""
         tau_v1, tau_v2, n_slope = 0.5, 0.3, -0.7
 
-        result_original = charlot_fall_at_wavelengths(
+        result_original = two_component_dust(
             filter_wavelengths,
             age_grid,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
             n_slope=n_slope,
+            **_CF_KWARGS,
         )
-        result_fast = charlot_fall_at_wavelengths_fast(
+        result_fast = two_component_dust_fast(
             filter_wavelengths,
             dust_age_weights,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
             n_slope=n_slope,
+            **_CF_KWARGS,
         )
         assert_allclose(result_fast, result_original, rtol=1e-12)
 
@@ -140,19 +145,21 @@ class TestFastDustAgreement:
         """Fast and original agree exactly for spectroscopic wavelengths."""
         tau_v1, tau_v2, n_slope = 1.0, 0.5, -0.7
 
-        result_original = charlot_fall_at_wavelengths(
+        result_original = two_component_dust(
             spectral_wavelengths,
             age_grid,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
             n_slope=n_slope,
+            **_CF_KWARGS,
         )
-        result_fast = charlot_fall_at_wavelengths_fast(
+        result_fast = two_component_dust_fast(
             spectral_wavelengths,
             dust_age_weights,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
             n_slope=n_slope,
+            **_CF_KWARGS,
         )
         assert_allclose(result_fast, result_original, rtol=1e-12)
 
@@ -176,29 +183,32 @@ class TestFastDustAgreement:
         n_slope,
     ):
         """Agreement holds across diverse dust parameter combinations."""
-        result_original = charlot_fall_at_wavelengths(
+        result_original = two_component_dust(
             filter_wavelengths,
             age_grid,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
             n_slope=n_slope,
+            **_CF_KWARGS,
         )
-        result_fast = charlot_fall_at_wavelengths_fast(
+        result_fast = two_component_dust_fast(
             filter_wavelengths,
             dust_age_weights,
             tau_v1=tau_v1,
             tau_v2=tau_v2,
             n_slope=n_slope,
+            **_CF_KWARGS,
         )
         assert_allclose(result_fast, result_original, rtol=1e-12)
 
     def test_output_shape(self, filter_wavelengths, dust_age_weights):
         """Output shape is (n_ages, n_filters)."""
-        result = charlot_fall_at_wavelengths_fast(
+        result = two_component_dust_fast(
             filter_wavelengths,
             dust_age_weights,
             tau_v1=0.5,
             tau_v2=0.3,
+            **_CF_KWARGS,
         )
         assert result.shape == (len(dust_age_weights), len(filter_wavelengths))
 
@@ -215,11 +225,12 @@ class TestFastDustGradients:
         """All gradients are finite."""
 
         def loss(tau_v1, tau_v2):
-            atten = charlot_fall_at_wavelengths_fast(
+            atten = two_component_dust_fast(
                 filter_wavelengths,
                 dust_age_weights,
                 tau_v1=tau_v1,
                 tau_v2=tau_v2,
+                **_CF_KWARGS,
             )
             return jnp.sum(atten)
 
@@ -231,20 +242,22 @@ class TestFastDustGradients:
         """Autodiff gradients match between fast and original."""
 
         def loss_original(tau_v1, tau_v2):
-            atten = charlot_fall_at_wavelengths(
+            atten = two_component_dust(
                 filter_wavelengths,
                 age_grid,
                 tau_v1=tau_v1,
                 tau_v2=tau_v2,
+                **_CF_KWARGS,
             )
             return jnp.sum(atten)
 
         def loss_fast(tau_v1, tau_v2):
-            atten = charlot_fall_at_wavelengths_fast(
+            atten = two_component_dust_fast(
                 filter_wavelengths,
                 dust_age_weights,
                 tau_v1=tau_v1,
                 tau_v2=tau_v2,
+                **_CF_KWARGS,
             )
             return jnp.sum(atten)
 
@@ -258,11 +271,12 @@ class TestFastDustGradients:
 
         @jax.jit
         def fn(tau_v1, tau_v2):
-            return charlot_fall_at_wavelengths_fast(
+            return two_component_dust_fast(
                 filter_wavelengths,
                 dust_age_weights,
                 tau_v1=tau_v1,
                 tau_v2=tau_v2,
+                **_CF_KWARGS,
             )
 
         result = fn(0.5, 0.3)
@@ -280,19 +294,21 @@ class TestFastDustSpeedup:
     def test_fast_path_not_slower(self, age_grid, filter_wavelengths, dust_age_weights):
         """Fast path is at least as fast as original (jitted)."""
         original_jit = jax.jit(
-            lambda tv1, tv2: charlot_fall_at_wavelengths(
+            lambda tv1, tv2: two_component_dust(
                 filter_wavelengths,
                 age_grid,
                 tau_v1=tv1,
                 tau_v2=tv2,
+                **_CF_KWARGS,
             )
         )
         fast_jit = jax.jit(
-            lambda tv1, tv2: charlot_fall_at_wavelengths_fast(
+            lambda tv1, tv2: two_component_dust_fast(
                 filter_wavelengths,
                 dust_age_weights,
                 tau_v1=tv1,
                 tau_v2=tv2,
+                **_CF_KWARGS,
             )
         )
 

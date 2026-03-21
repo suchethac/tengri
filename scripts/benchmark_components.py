@@ -41,11 +41,16 @@ def main():
 
     # --- Dust attenuation ---
     print("\nDust Attenuation:")
-    from diffsed.models.dust.charlot_fall import charlot_fall
+    from diffsed.models.dust.attenuation import two_component_dust
 
     wave = jnp.linspace(1000, 30000, 5994)
     ages = jnp.array([1e6, 1e7, 1e8, 1e9, 1e10])
-    bench(lambda: charlot_fall(wave, ages, 1.0, 0.3, -0.7), "Charlot & Fall (5994 wave, 5 ages)")
+    bench(
+        lambda: two_component_dust(
+            wave, ages, 1.0, 0.3, law_bc="power_law", law_diff="power_law", n_slope=-0.7
+        ),
+        "two_component_dust power_law (5994 wave, 5 ages)",
+    )
 
     # --- Dust emission ---
     print("\nDust IR Emission:")

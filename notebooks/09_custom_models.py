@@ -97,7 +97,7 @@ from diffsed.models.sfh.gp_sfh import gp_from_xi
 from diffsed.models.sfh.mean_sfh import (
     double_powerlaw, delayed_tau, constant_sfh, powerlaw_sfh,
 )
-from diffsed.models.dust.charlot_fall import charlot_fall
+from diffsed.models.dust.attenuation import two_component_dust
 from diffsed.utils.grid import make_log_age_grid
 
 ssp_data = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
@@ -565,7 +565,9 @@ atten_calzetti = calzetti_attenuation(wave, tau_v=1.0)
 ax.plot(wave, atten_calzetti, "C0", lw=2, label="Calzetti ($\\tau_V$=1)")
 
 # Charlot & Fall (young and old stars)
-atten_cf = charlot_fall(wave, age_grid, tau_v1=1.0, tau_v2=0.3)
+atten_cf = two_component_dust(
+    wave, age_grid, tau_v1=1.0, tau_v2=0.3, law_bc="power_law", law_diff="power_law"
+)
 ax.plot(wave, atten_cf[0], "C1", lw=2, ls="--",
         label="C&F birth cloud (1 Myr)")
 ax.plot(wave, atten_cf[-1], "C3", lw=2, ls=":",

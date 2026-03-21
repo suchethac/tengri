@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.dust.charlot_fall import precompute_dust_age_weights
+from diffsed.models.dust.attenuation import precompute_dust_age_weights
 from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 
 jax.config.update("jax_enable_x64", True)

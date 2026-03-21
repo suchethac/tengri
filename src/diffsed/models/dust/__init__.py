@@ -3,8 +3,7 @@
 Attenuation
 -----------
 ``attenuation.py`` — generalized two-component model with pluggable curves
-and f_obscuration.  ``charlot_fall.py`` provides legacy power-law-only
-functions for the fast precomputed path and existing tests.
+and f_obscuration.
 
 Emission
 --------

@@ -58,7 +58,7 @@ from diffsed import (
 from diffsed.models.sps.dsps_wrapper import (
     compute_csp_weights, compute_csp_sed, interpolate_metallicity,
 )
-from diffsed.models.dust.charlot_fall import charlot_fall
+from diffsed.models.dust.attenuation import two_component_dust
 from diffsed.models.observation.photometry import (
     compute_flux_density, ab_mag_from_flux,
 )
@@ -273,8 +273,10 @@ configs = [
 ]
 for tau_bc, tau_diff, label in configs:
     # Attenuation at a young age (1 Myr, fully in birth cloud)
-    atten = charlot_fall(jnp.array(wave_plot), jnp.array([1e6]),
-                         tau_v1=tau_bc, tau_v2=tau_diff)
+    atten = two_component_dust(
+        jnp.array(wave_plot), jnp.array([1e6]),
+        tau_v1=tau_bc, tau_v2=tau_diff, law_bc="power_law", law_diff="power_law"
+    )
     ax.plot(wave_plot, np.array(atten[0]), lw=1.5,
             label=f"$\\tau_{{\\rm bc}}={tau_bc},\\,\\tau_{{\\rm diff}}={tau_diff}$ ({label})")
 ax.set_xlabel("Wavelength [Å]")
@@ -301,8 +303,10 @@ ax.set_ylim(-0.05, 1.05)
 
 # Panel (1,0): Attenuated vs intrinsic SED
 ax = axes[1, 0]
-dust_atten = charlot_fall(ssp_data.ssp_wave, jnp.array(ssp_ages_yr),
-                          tau_v1=1.0, tau_v2=0.5)
+dust_atten = two_component_dust(
+    ssp_data.ssp_wave, jnp.array(ssp_ages_yr),
+    tau_v1=1.0, tau_v2=0.5, law_bc="power_law", law_diff="power_law"
+)
 csp_intrinsic = compute_csp_sed(weights, ssp_flux_at_Z, jnp.ones_like(ssp_flux_at_Z))
 csp_dusty = compute_csp_sed(weights, ssp_flux_at_Z, dust_atten)
 
@@ -440,8 +444,10 @@ redshift = 0.1
 ax = axes[0]
 
 # Compute dusty SED
-dust_atten = charlot_fall(ssp_data.ssp_wave, jnp.array(ssp_ages_yr),
-                          tau_v1=1.0, tau_v2=0.5)
+dust_atten = two_component_dust(
+    ssp_data.ssp_wave, jnp.array(ssp_ages_yr),
+    tau_v1=1.0, tau_v2=0.5, law_bc="power_law", law_diff="power_law"
+)
 csp_sed = compute_csp_sed(weights, ssp_flux_at_Z, dust_atten)
 
 # Observed-frame wavelength
