@@ -550,8 +550,8 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Nebular params (CLOUDY or Cue — not BakedIn/ssp)
-    if nebular and nebular != "ssp":
+    # Nebular params (CLOUDY or Cue — not BakedIn/ssp/off)
+    if nebular in ("cloudy", "cue"):
         for pname, (desc, check, err, default) in _NEBULAR_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
