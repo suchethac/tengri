@@ -93,7 +93,8 @@ spec = ParamSpec(
 )
 
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 300)
-model = Model(spec, ssp_data)\nmodel.precompute_spectroscopy(WAVE_OBS)
+model = Model(spec, ssp_data)
+model.precompute_spectroscopy(WAVE_OBS)
 
 # Fiducial parameters
 FIDUCIAL = {

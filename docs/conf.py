@@ -25,6 +25,7 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx_copybutton",
     "sphinx_design",
+    "sphinx_gallery.gen_gallery",
 ]
 
 # -- MyST configuration ------------------------------------------------------
@@ -83,6 +84,21 @@ intersphinx_mapping = {
     "numpy": ("https://numpy.org/doc/stable/", None),
     "jax": ("https://jax.readthedocs.io/en/latest/", None),
     "matplotlib": ("https://matplotlib.org/stable/", None),
+}
+
+# -- sphinx-gallery configuration --------------------------------------------
+
+sphinx_gallery_conf = {
+    "examples_dirs": ["../examples"],
+    "gallery_dirs": ["auto_examples"],
+    "filename_pattern": r"/plot_",
+    "ignore_pattern": r"csp_integration_comparison",
+    "abort_on_example_error": False,
+    "only_warn_on_example_error": True,
+    "image_scrapers": ("matplotlib",),
+    "within_subsection_order": "FileNameSortKey",
+    "capture_repr": (),
+    "remove_config_comments": True,
 }
 
 # -- Exclude patterns --------------------------------------------------------

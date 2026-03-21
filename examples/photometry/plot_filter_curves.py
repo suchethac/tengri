@@ -17,8 +17,13 @@ filter_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 _waves, _trans, curves = load_filter_set(filter_names)
 
 # Band colors matching standard SDSS convention
-band_colors = {"sdss_u": "#4B0082", "sdss_g": "#00AA00", "sdss_r": "#CC0000",
-               "sdss_i": "#DD6600", "sdss_z": "#880000"}
+band_colors = {
+    "sdss_u": "#4B0082",
+    "sdss_g": "#00AA00",
+    "sdss_r": "#CC0000",
+    "sdss_i": "#DD6600",
+    "sdss_z": "#880000",
+}
 
 fig, ax = plt.subplots(figsize=(8, 4))
 

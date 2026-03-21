@@ -6,8 +6,7 @@ Generate a mock galaxy spectrum and fit it with tengri's MAP optimizer.
 Shows the observed and model spectra with a residual panel below.
 """
 
-import os
-import sys
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -25,10 +24,20 @@ from tengri import (
     load_ssp_data,
 )
 
+
 # --- Check for SSP data ---
-SSP_PATH = "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-if not os.path.exists(SSP_PATH):
-    sys.exit(f"SSP data not found at {SSP_PATH}. Run from the project root.")
+def _find_ssp():
+    """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
+    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    for p in [Path("data") / name, Path("../data") / name]:
+        if p.exists():
+            return str(p)
+    return None
+
+
+SSP_PATH = _find_ssp()
+if SSP_PATH is None:
+    raise FileNotFoundError("SSP data not found — skipping example")
 
 # --- Setup ---
 REDSHIFT = 0.1
@@ -64,12 +73,18 @@ best_spec = model.predict_spectrum(posterior.map_params, WAVE_OBS)
 
 # --- Plot ---
 wave = np.array(WAVE_OBS)
-fig, (ax, ax_res) = plt.subplots(2, 1, figsize=(10, 5), height_ratios=[3, 1],
-                                  sharex=True, gridspec_kw={"hspace": 0.05})
+fig, (ax, ax_res) = plt.subplots(
+    2, 1, figsize=(10, 5), height_ratios=[3, 1], sharex=True, gridspec_kw={"hspace": 0.05}
+)
 
 ax.plot(wave, np.array(mock.flux_obs), color="0.6", lw=0.5, label="Observed")
-ax.fill_between(wave, np.array(mock.flux_obs - mock.noise),
-                np.array(mock.flux_obs + mock.noise), color="0.85", alpha=0.6)
+ax.fill_between(
+    wave,
+    np.array(mock.flux_obs - mock.noise),
+    np.array(mock.flux_obs + mock.noise),
+    color="0.85",
+    alpha=0.6,
+)
 ax.plot(wave, np.array(mock.flux_true), "C0-", lw=1.2, label="Truth", alpha=0.7)
 ax.plot(wave, np.array(best_spec), "C3-", lw=1.0, label="MAP fit")
 ax.set_ylabel(r"$f_\nu$ [arbitrary]")
@@ -82,8 +97,7 @@ for name, lam_rest in features.items():
     lam_obs = lam_rest * (1 + REDSHIFT)
     if wave[0] < lam_obs < wave[-1]:
         ax.axvline(lam_obs, ls=":", color="grey", lw=0.6, alpha=0.5)
-        ax.text(lam_obs, ax.get_ylim()[1] * 0.92, name, fontsize=7,
-                ha="center", color="grey")
+        ax.text(lam_obs, ax.get_ylim()[1] * 0.92, name, fontsize=7, ha="center", color="grey")
 
 residuals = (np.array(mock.flux_obs) - np.array(best_spec)) / np.array(mock.noise)
 ax_res.axhline(0, color="0.5", ls="--", lw=0.8)

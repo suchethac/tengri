@@ -117,6 +117,7 @@ MIT
 
 install
 ssp_grids
+auto_examples/index
 tutorials/index
 demonstrations/index
 reference/index

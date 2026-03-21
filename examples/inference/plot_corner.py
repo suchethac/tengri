@@ -6,8 +6,7 @@ Fits mock photometry and displays a corner plot with injected truth
 values marked. Uses tengri's safe_corner utility.
 """
 
-import os
-import sys
+from pathlib import Path
 
 import jax
 import matplotlib.pyplot as plt
@@ -28,16 +27,20 @@ from tengri import (
 
 setup_style()
 
+
 # --- Data ---
-SSP_PATH = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "..",
-    "data",
-    "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5",
-)
-if not os.path.exists(SSP_PATH):
-    sys.exit("SSP data not found — skipping")
+def _find_ssp():
+    """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
+    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    for p in [Path("data") / name, Path("../data") / name]:
+        if p.exists():
+            return str(p)
+    return None
+
+
+SSP_PATH = _find_ssp()
+if SSP_PATH is None:
+    raise FileNotFoundError("SSP data not found — skipping example")
 
 ssp = load_ssp_data(SSP_PATH)
 filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
@@ -76,7 +79,7 @@ fig = safe_corner(posterior, truths=true_params)
 if fig is not None:
     fig.suptitle("Posterior corner plot (truth = blue lines)", y=1.02)
 
-outdir = os.path.join(os.path.dirname(__file__), "..", "figures")
-os.makedirs(outdir, exist_ok=True)
-plt.savefig(os.path.join(outdir, "corner.png"), dpi=150, bbox_inches="tight")
+outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
+outdir.mkdir(parents=True, exist_ok=True)
+plt.savefig(str(outdir / "corner.png"), dpi=150, bbox_inches="tight")
 plt.show()

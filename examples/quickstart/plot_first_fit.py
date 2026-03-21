@@ -7,7 +7,7 @@ generate mock SDSS photometry, fit it with MAP optimization, and plot
 the resulting SED fit.
 """
 
-import sys
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -25,13 +25,22 @@ from tengri import (
     load_ssp_data,
 )
 
+
 # --- Load SSP data ---
-SSP_PATH = "data/ssp_fsps_v3.2.h5"
-try:
-    ssp = load_ssp_data(SSP_PATH)
-except FileNotFoundError:
-    print(f"SSP data not found at {SSP_PATH}. Skipping.")
-    sys.exit(0)
+def _find_ssp():
+    """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
+    name = "ssp_fsps_v3.2.h5"
+    for p in [Path("data") / name, Path("../data") / name]:
+        if p.exists():
+            return str(p)
+    return None
+
+
+SSP_PATH = _find_ssp()
+if SSP_PATH is None:
+    raise FileNotFoundError("SSP data not found — skipping example")
+
+ssp = load_ssp_data(SSP_PATH)
 
 # --- Define model ---
 spec = ParamSpec(
@@ -47,9 +56,9 @@ spec = ParamSpec(
     mean_sfh_type="tsnorm",
 )
 
-obs = Observation(photometry=Photometry.from_names(
-    ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-))
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+)
 model = Model(spec, ssp, observation=obs)
 
 # --- Generate mock photometry ---
@@ -66,12 +75,25 @@ fig, ax = plt.subplots(figsize=(7, 4))
 filter_names = obs.photometry.names
 wave_eff = np.array([float(jnp.mean(w)) for w in obs.photometry.filter_waves])
 
-ax.errorbar(wave_eff, np.array(mock.flux_obs), yerr=np.array(mock.noise),
-            fmt="o", color="k", ms=5, label="Observed (SNR=20)")
-ax.plot(wave_eff, np.array(mock.flux_true), "s", color="C0",
-        ms=7, mfc="none", label="Truth")
-ax.plot(wave_eff, np.array(model.predict_photometry(posterior.params)),
-        "^", color="C3", ms=7, mfc="none", label="MAP fit")
+ax.errorbar(
+    wave_eff,
+    np.array(mock.flux_obs),
+    yerr=np.array(mock.noise),
+    fmt="o",
+    color="k",
+    ms=5,
+    label="Observed (SNR=20)",
+)
+ax.plot(wave_eff, np.array(mock.flux_true), "s", color="C0", ms=7, mfc="none", label="Truth")
+ax.plot(
+    wave_eff,
+    np.array(model.predict_photometry(posterior.params)),
+    "^",
+    color="C3",
+    ms=7,
+    mfc="none",
+    label="MAP fit",
+)
 
 ax.set_xlabel("Wavelength [A]")
 ax.set_ylabel("Flux density [erg/s/cm$^2$/Hz]")

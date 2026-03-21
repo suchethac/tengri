@@ -7,8 +7,7 @@ tengri's variational inference. Shows observed vs model photometry
 with error bars and residuals.
 """
 
-import os
-import sys
+from pathlib import Path
 
 import jax
 import matplotlib.pyplot as plt
@@ -25,10 +24,20 @@ from tengri import (
     load_ssp_data,
 )
 
+
 # --- Check for SSP data ---
-SSP_PATH = "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-if not os.path.exists(SSP_PATH):
-    sys.exit(f"SSP data not found at {SSP_PATH}. Run from the project root.")
+def _find_ssp():
+    """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
+    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    for p in [Path("data") / name, Path("../data") / name]:
+        if p.exists():
+            return str(p)
+    return None
+
+
+SSP_PATH = _find_ssp()
+if SSP_PATH is None:
+    raise FileNotFoundError("SSP data not found — skipping example")
 
 # --- Setup ---
 ssp_data = load_ssp_data(SSP_PATH)
@@ -63,15 +72,33 @@ best_fit = model.predict_photometry(posterior.map_params)
 wave_eff = np.array([3551, 4686, 6166, 7480, 8932])  # SDSS effective wavelengths
 band_names = ["u", "g", "r", "i", "z"]
 
-fig, (ax, ax_res) = plt.subplots(2, 1, figsize=(7, 5), height_ratios=[3, 1],
-                                  sharex=True, gridspec_kw={"hspace": 0.05})
+fig, (ax, ax_res) = plt.subplots(
+    2, 1, figsize=(7, 5), height_ratios=[3, 1], sharex=True, gridspec_kw={"hspace": 0.05}
+)
 
-ax.errorbar(wave_eff, np.array(mock.flux_obs), yerr=np.array(mock.noise),
-            fmt="o", color="0.3", ms=6, capsize=3, label="Observed", zorder=5)
-ax.scatter(wave_eff, np.array(mock.flux_true), marker="s", s=50,
-           facecolors="none", edgecolors="C0", lw=1.5, label="Truth", zorder=4)
-ax.scatter(wave_eff, np.array(best_fit), marker="D", s=40,
-           color="C3", label="MAP fit", zorder=6)
+ax.errorbar(
+    wave_eff,
+    np.array(mock.flux_obs),
+    yerr=np.array(mock.noise),
+    fmt="o",
+    color="0.3",
+    ms=6,
+    capsize=3,
+    label="Observed",
+    zorder=5,
+)
+ax.scatter(
+    wave_eff,
+    np.array(mock.flux_true),
+    marker="s",
+    s=50,
+    facecolors="none",
+    edgecolors="C0",
+    lw=1.5,
+    label="Truth",
+    zorder=4,
+)
+ax.scatter(wave_eff, np.array(best_fit), marker="D", s=40, color="C3", label="MAP fit", zorder=6)
 ax.set_ylabel(r"$f_\nu$ [arbitrary]")
 ax.legend(frameon=False)
 ax.set_title("SDSS Photometric Fit (MAP)")

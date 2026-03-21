@@ -8,7 +8,7 @@ stellar emission and the dust-attenuated total. Uses the lazy
 effect of dust attenuation on the spectrum.
 """
 
-import sys
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -24,13 +24,22 @@ from tengri import (
     load_ssp_data,
 )
 
+
 # --- Load SSP data ---
-SSP_PATH = "data/ssp_fsps_v3.2.h5"
-try:
-    ssp = load_ssp_data(SSP_PATH)
-except FileNotFoundError:
-    print(f"SSP data not found at {SSP_PATH}. Skipping.")
-    sys.exit(0)
+def _find_ssp():
+    """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
+    name = "ssp_fsps_v3.2.h5"
+    for p in [Path("data") / name, Path("../data") / name]:
+        if p.exists():
+            return str(p)
+    return None
+
+
+SSP_PATH = _find_ssp()
+if SSP_PATH is None:
+    raise FileNotFoundError("SSP data not found — skipping example")
+
+ssp = load_ssp_data(SSP_PATH)
 
 # --- Define a dusty galaxy model ---
 spec = ParamSpec(
@@ -68,12 +77,18 @@ sed_intr_np = np.array(sed_intrinsic)
 fig, ax = plt.subplots(figsize=(9, 4.5))
 mask = (wave > 900) & (wave < 30000)
 
-ax.plot(wave[mask] / 1e4, sed_intr_np[mask], color="C0", lw=1.2,
-        alpha=0.8, label="Intrinsic (no dust)")
-ax.plot(wave[mask] / 1e4, sed_total_np[mask], color="C3", lw=1.2,
-        label="Attenuated (total)")
-ax.fill_between(wave[mask] / 1e4, sed_total_np[mask], sed_intr_np[mask],
-                alpha=0.15, color="C3", label="Dust absorbed")
+ax.plot(
+    wave[mask] / 1e4, sed_intr_np[mask], color="C0", lw=1.2, alpha=0.8, label="Intrinsic (no dust)"
+)
+ax.plot(wave[mask] / 1e4, sed_total_np[mask], color="C3", lw=1.2, label="Attenuated (total)")
+ax.fill_between(
+    wave[mask] / 1e4,
+    sed_total_np[mask],
+    sed_intr_np[mask],
+    alpha=0.15,
+    color="C3",
+    label="Dust absorbed",
+)
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")

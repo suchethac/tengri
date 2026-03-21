@@ -5,3 +5,4 @@ nbsphinx>=0.9
 numpydoc>=1.5
 sphinx-copybutton>=0.5
 sphinx-design>=0.5
+sphinx-gallery>=0.16

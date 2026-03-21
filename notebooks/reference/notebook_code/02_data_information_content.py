@@ -281,7 +281,7 @@ plt.show()
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 model_spec = Model(spec_full, ssp_data, filters=all_filters)
 model_spec.precompute_spectroscopy(WAVE_OBS)
-spec_mock = model_spec.mock(TRUTH, snr=30.0, key=jax.random.PRNGKey(99))
+spec_mock = model_spec.mock_spectrum(TRUTH, WAVE_OBS, snr=30.0, key=jax.random.PRNGKey(99))
 
 # Fit spectrum
 fitter_spec = Fitter(model_spec, spec_mock.flux_obs, spec_mock.noise, data_type="spectroscopy")
