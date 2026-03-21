@@ -1,0 +1,193 @@
+# Variational Inference in diffsed
+
+## The Big Picture
+
+You have a galaxy. You have photometry (or a spectrum). You want to know the physical properties: dust, metallicity, star formation history. There are many combinations of parameters that could produce similar-looking data — that's the **posterior**.
+
+Variational inference finds this posterior by searching for the best Gaussian-like approximation. It's much faster than MCMC for high-dimensional problems (D > 50), at the cost of being approximate.
+
+## How It Works — Intuitively
+
+Imagine you're mapping a mountain landscape in fog. You can't see the whole thing at once, but you can:
+
+1. **Drop a pin** on the map (your current best guess = expansion point **m**)
+2. **Send scouts** in different directions from the pin (= draw **samples**)
+3. Each scout reports back: "the terrain slopes this way" (= **KL gradient**)
+4. You **move the pin** to a better location based on the scouts' reports (= **Newton step**)
+5. Repeat
+
+The quality of your map depends on two things:
+- **Where** the scouts go (sample quality)
+- **How** you move the pin (optimization quality)
+
+## Sample Modes — The Scout Strategies
+
+### Linear scouts (MGVI)
+
+The scouts walk in straight lines from the pin. Fast to deploy, but if the landscape curves (the age-dust degeneracy is a banana-shaped valley), they miss the shape.
+
+```
+resample: send new scouts each round    → explores well, reports are noisy
+sample:   send same scouts each round   → consistent reports, less exploration
+```
+
+### Nonlinear scouts (geoVI)
+
+The scouts follow the curvature of the landscape. They walk along the banana instead of in straight lines. More expensive (each scout needs to solve a Newton problem to find the curved path), but they map the posterior shape accurately.
+
+```
+resample: fresh scouts, curved paths    → best exploration, some noise
+sample:   same scouts, re-curved paths  → deterministic, excellent
+update:   same scouts, re-adjust only   → cheapest, best stability
+```
+
+### The Staleness Problem
+
+If you keep the same scouts for too many rounds, they become **stale**: the pin has moved, but the scouts are still exploring from the old position. Their curved paths get adjusted, but the base randomness is fixed. Over many iterations, this causes a slow drift.
+
+**Solution**: periodically send fresh scouts (resample) to prevent staleness.
+
+## The Default Strategy
+
+When you call `fitter.run("geovi")`, this is what happens internally:
+
+```
+Iteration  1:  nonlinear_resample   ← fresh curved scouts (establish)
+Iteration  2:  nonlinear_update     ← re-adjust at new pin (refine)
+Iteration  3:  nonlinear_update     ← refine
+Iteration  4:  nonlinear_update     ← refine
+Iteration  5:  nonlinear_update     ← refine
+Iteration  6:  nonlinear_resample   ← FRESH scouts (prevent staleness)
+Iteration  7:  nonlinear_update     ← refine
+Iteration  8:  nonlinear_update     ← refine
+Iteration  9:  nonlinear_update     ← refine
+Iteration 10:  nonlinear_update     ← refine
+Iteration 11:  nonlinear_resample   ← FRESH scouts (prevent staleness)
+...
+```
+
+Fresh scouts every 5 iterations. Deterministic refinement in between. This gives:
+- **Stable convergence** (no oscillation from noisy samples)
+- **No staleness** (periodic refresh prevents drift)
+- **Good posterior quality** (nonlinear curving captures banana shapes)
+
+## User API
+
+### Simple (recommended)
+
+```python
+# Just works. Uses the optimal schedule internally.
+result = fitter.run("geovi", n_iterations=15)
+```
+
+### With control
+
+```python
+from diffsed.vi_config import OptimizationSchedule
+
+# geoVI with custom refresh rate
+sched = OptimizationSchedule.geovi(
+    n_iterations=25,
+    resample_every=8,   # refresh every 8 instead of 5
+    n_samples=6,        # more scouts per iteration
+)
+result = fitter.run("geovi", schedule=sched)
+
+# EVI: cheap linear warmup, then geoVI
+sched = OptimizationSchedule.evi(
+    n_iterations=20,
+    transition=10,      # switch from MGVI to geoVI at iter 10
+)
+result = fitter.run("evi", schedule=sched)
+
+# Pure MGVI (fastest, least accurate)
+result = fitter.run("mgvi", n_iterations=10)
+```
+
+### Method hierarchy
+
+| Method | What it does | When to use |
+|--------|-------------|-------------|
+| `"geovi"` | geoVI with periodic resample (DEFAULT) | Almost always |
+| `"mgvi"` | MGVI (linear only) | Quick look, very high D |
+| `"evi"` | MGVI warmup → geoVI | Save time on early iterations |
+| `"raytrace"` | Exact MCMC (Ray Tracing) | Gold-standard validation |
+| `"nuts"` | Exact MCMC (NUTS) | Low-D validation |
+| `"map"` | Point estimate only | Initialization |
+
+### Backend hierarchy
+
+| Prefix | Backend | Speed | Accuracy |
+|--------|---------|-------|----------|
+| (none) / `fast_` | NIFTy `OptimizeVI.update` tight loop | ~12s/galaxy | Exact NIFTy math |
+| `nifty_` | Full `jft.optimize_kl` with logging | ~18s/galaxy | Same, with diagnostics |
+| `native_` | Pure JIT (XLA-compiled) | 0.03s/galaxy* | Approximate CG |
+
+*After one-time 56s compilation. Best for catalog fitting (100+ galaxies).
+
+## The Five Sample Modes (for advanced users)
+
+| Mode | Fresh keys? | Linear draw? | Curve? | Stability | Quality |
+|------|:-----------:|:------------:|:------:|:---------:|:-------:|
+| `linear_resample` | Yes | Yes | No | Noisy | Low |
+| `linear_sample` | No | Yes | No | Stable | Low |
+| `nonlinear_resample` | Yes | Yes | Yes | Some noise | High |
+| `nonlinear_sample` | No | Yes | Yes | Stable | High |
+| `nonlinear_update` | — | No | Re-curve | Most stable | High* |
+
+*Degrades over many iterations without periodic resample.
+
+### What "nonlinear curving" means
+
+The posterior in (dust, metallicity) space is banana-shaped. A Gaussian centered on the mode misses the tails of the banana. geoVI finds a coordinate transform **g** that straightens the banana:
+
+```
+Original space:        geoVI space:
+   ___                    |
+  /   \                   |
+ /     \       g(x)       |
+|  mode |   -------->     * mode
+ \     /                  |
+  \___/                   |
+  (banana)              (straight)
+```
+
+In the straightened space, a Gaussian IS a good approximation. The "curving" step inverts g to map samples from the straight space back to the banana.
+
+### What "nonlinear_update" means
+
+When the pin (expansion point m) moves, the coordinate transform g changes (because g depends on the Jacobian at m). The existing curved samples need to be re-adjusted to the new g. This is cheaper than drawing new samples because:
+1. No new random numbers (deterministic)
+2. The previous curved position is a good starting point for the Newton solve
+3. Only ~3 Newton iterations needed
+
+## Convergence Diagnostics
+
+After fitting, check:
+
+```python
+result = fitter.run("geovi", n_iterations=15)
+
+# Chi-squared per data point (should be ~1)
+print(result.diagnostics["chi2_dof"])
+
+# Posterior predictive check
+for i in range(10):
+    sample = {k: v[i] for k, v in result.samples.items()}
+    pred = model.predict_photometry(sample)
+    # pred should bracket the data within noise
+```
+
+## Performance Guide
+
+| Problem | D | Recommended method | Time |
+|---------|--:|-------------------|------|
+| Smooth SFH, 5 bands | ~7 | `geovi` (15 iter) | ~12s |
+| Stochastic SFH, 5 bands | ~137 | `geovi` (15 iter) | ~30s |
+| Stochastic SFH, spectrum | ~200 | `evi` (20 iter) | ~60s |
+| Hierarchical, 10 galaxies | ~1,400 | `evi` (25 iter) | ~10min |
+| Catalog, 100 galaxies | ~7/galaxy | `native_geovi` | 56s compile + 3s |
+
+## Mathematical Details
+
+See `docs/geovi_jit.md` for the full math: Hamiltonian, metric, coordinate transform, CG solver, Newton-CG, line search.

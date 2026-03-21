@@ -1793,18 +1793,28 @@ class Fitter:
                 verbose=verbose,
             )
 
-        # Resolve sample mode
+        # Resolve sample mode.
+        # For geoVI: use periodic resample + update schedule (prevents
+        # sample staleness while maintaining stable convergence).
+        resample_every = 5  # refresh scouts every 5 iterations
         if sample_mode == "evi":
             resolved_mode = evi_sample_mode(n_iterations, cfg.evi_linear_fraction)
+        elif sample_mode == "nonlinear_resample":
+            # Optimal schedule: resample at 0, then every resample_every,
+            # nonlinear_update in between.
+            def resolved_mode(i: int) -> str:
+                if i == 0 or i % resample_every == 0:
+                    return "nonlinear_resample"
+                return "nonlinear_update"
         else:
             resolved_mode = sample_mode
 
         n_total = len(self._free_names) + (self.spec.n_grid if self.spec.stochastic else 0)
         if verbose:
             _mode_labels = {
-                "nonlinear_resample": "fast_geovi",
-                "linear_resample": "fast_mgvi",
-                "evi": "fast_evi",
+                "nonlinear_resample": "geovi",
+                "linear_resample": "mgvi",
+                "evi": "evi",
             }
             mode_label = _mode_labels.get(sample_mode, sample_mode)
             print(
@@ -2509,9 +2519,17 @@ class Fitter:
 
         t0 = time.time()
 
-        # Resolve sample_mode
+        # Resolve sample_mode — same optimal schedule as _run_fast_vi
+        resample_every = 5
         if sample_mode == "evi":
             resolved_mode = evi_sample_mode(n_iterations, cfg.evi_linear_fraction)
+        elif sample_mode == "nonlinear_resample":
+
+            def resolved_mode(i: int) -> str:
+                if i == 0 or i % resample_every == 0:
+                    return "nonlinear_resample"
+                return "nonlinear_update"
+
         else:
             resolved_mode = sample_mode
 
