@@ -184,6 +184,174 @@ class BlockSchedule:
         )
 
 
+@dataclass(frozen=True)
+class OptimizationSchedule:
+    """Unified optimization schedule for variational inference.
+
+    Controls what happens at each iteration: which sample mode, which
+    parameters to update, how many samples.  Passed to ``fitter.run()``
+    via the ``schedule`` kwarg.
+
+    The schedule is a callable ``f(iteration: int) -> BlockStep`` that
+    returns the configuration for each iteration.  Factory methods
+    provide common strategies.
+
+    Parameters
+    ----------
+    get_step : callable
+        ``get_step(i: int) -> BlockStep`` returning the configuration
+        for iteration ``i``.
+    n_iterations : int
+        Total number of iterations.
+    description : str
+        Human-readable description of the strategy.
+
+    Examples
+    --------
+    >>> sched = OptimizationSchedule.geovi()  # recommended default
+    >>> sched = OptimizationSchedule.evi(n_iterations=20, transition=10)
+    >>> sched = OptimizationSchedule.custom(lambda i: ...)
+    """
+
+    get_step: Callable[[int], BlockStep]
+    n_iterations: int = 15
+    description: str = ""
+
+    def __call__(self, i: int) -> BlockStep:
+        return self.get_step(i)
+
+    def sample_mode_at(self, i: int) -> str:
+        """NIFTy-compatible sample_mode callable for ``jft.optimize_kl``."""
+        return self.get_step(i).sample_mode
+
+    @staticmethod
+    def geovi(
+        n_iterations: int = 15,
+        resample_every: int = 5,
+        n_samples: int = 3,
+    ) -> OptimizationSchedule:
+        """Recommended geoVI schedule.
+
+        Iteration 0: ``nonlinear_resample`` (establish samples).
+        Every ``resample_every`` iterations: ``nonlinear_resample`` (refresh).
+        All other iterations: ``nonlinear_update`` (deterministic refinement).
+
+        This prevents sample staleness while maintaining stable convergence.
+        """
+
+        def _get_step(i: int) -> BlockStep:
+            if i == 0 or i % resample_every == 0:
+                return BlockStep(sample_mode="nonlinear_resample", n_samples=n_samples)
+            return BlockStep(sample_mode="nonlinear_update", n_samples=n_samples)
+
+        return OptimizationSchedule(
+            get_step=_get_step,
+            n_iterations=n_iterations,
+            description=(
+                f"geoVI: resample at iter 0 then every {resample_every}, "
+                f"update between ({n_samples} samples)"
+            ),
+        )
+
+    @staticmethod
+    def evi(
+        n_iterations: int = 20,
+        transition: int = 10,
+        resample_every: int = 5,
+        n_samples: int = 3,
+    ) -> OptimizationSchedule:
+        """EVI schedule: MGVI first, then geoVI.
+
+        Iterations 0..transition-1: ``linear_resample`` (cheap MGVI).
+        Iteration transition: ``nonlinear_resample`` (establish geoVI samples).
+        Every ``resample_every`` after: ``nonlinear_resample`` (refresh).
+        All other iterations: ``nonlinear_update`` (deterministic).
+        """
+
+        def _get_step(i: int) -> BlockStep:
+            if i < transition:
+                return BlockStep(sample_mode="linear_resample", n_samples=n_samples)
+            if i == transition or (i > transition and (i - transition) % resample_every == 0):
+                return BlockStep(sample_mode="nonlinear_resample", n_samples=n_samples)
+            return BlockStep(sample_mode="nonlinear_update", n_samples=n_samples)
+
+        return OptimizationSchedule(
+            get_step=_get_step,
+            n_iterations=n_iterations,
+            description=(
+                f"EVI: linear_resample for {transition} iters, then "
+                f"nonlinear resample+update ({n_samples} samples)"
+            ),
+        )
+
+    @staticmethod
+    def mgvi(n_iterations: int = 15, n_samples: int = 3) -> OptimizationSchedule:
+        """Pure MGVI (linear only)."""
+        return OptimizationSchedule(
+            get_step=lambda i: BlockStep(sample_mode="linear_resample", n_samples=n_samples),
+            n_iterations=n_iterations,
+            description=f"MGVI: linear_resample ({n_samples} samples)",
+        )
+
+    @staticmethod
+    def gibbs(
+        blocks: tuple[BlockStep, ...],
+        n_iterations: int = 15,
+        resample_every: int = 5,
+    ) -> OptimizationSchedule:
+        """Block Gibbs schedule cycling through parameter blocks.
+
+        Each iteration cycles through all blocks in order.
+        Blocks with ``nonlinear_resample`` are switched to
+        ``nonlinear_update`` except every ``resample_every`` iterations.
+
+        Parameters
+        ----------
+        blocks : tuple of BlockStep
+            Blocks to cycle. Each block specifies which params to
+            freeze and which sample mode to use.
+        """
+        n_blocks = len(blocks)
+
+        def _get_step(i: int) -> BlockStep:
+            block_idx = i % n_blocks
+            block = blocks[block_idx]
+            outer_iter = i // n_blocks
+            # Switch nonlinear_resample to nonlinear_update except at
+            # resample points
+            if (
+                block.sample_mode == "nonlinear_resample"
+                and outer_iter > 0
+                and outer_iter % resample_every != 0
+            ):
+                return BlockStep(
+                    sample_mode="nonlinear_update",
+                    constants=block.constants,
+                    point_estimates=block.point_estimates,
+                    n_samples=block.n_samples,
+                )
+            return block
+
+        return OptimizationSchedule(
+            get_step=_get_step,
+            n_iterations=n_iterations * n_blocks,
+            description=f"Gibbs: {n_blocks} blocks x {n_iterations} cycles",
+        )
+
+    @staticmethod
+    def custom(
+        get_step: Callable[[int], BlockStep],
+        n_iterations: int = 15,
+        description: str = "custom",
+    ) -> OptimizationSchedule:
+        """Fully custom schedule."""
+        return OptimizationSchedule(
+            get_step=get_step,
+            n_iterations=n_iterations,
+            description=description,
+        )
+
+
 def evi_sample_mode(n_iterations: int, linear_fraction: float = 0.5):
     """Return a callable sample_mode for EVI: MGVI first, then geoVI.
 
