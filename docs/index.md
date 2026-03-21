@@ -116,6 +116,7 @@ MIT
 :hidden:
 
 install
+ssp_grids
 tutorials/index
 demonstrations/index
 reference/index
