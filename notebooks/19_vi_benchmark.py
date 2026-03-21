@@ -226,7 +226,9 @@ plt.show()
 band_names = ["u", "g", "r", "i", "z"]
 band_wave = np.array([3551, 4686, 6166, 7480, 8932])
 
-vi_methods = [l for l in labels if l != "map" and results[l].samples]
+vi_methods = [
+    l for l in labels if l != "map" and isinstance(results[l].samples, dict) and results[l].samples
+]
 n_vi = len(vi_methods)
 
 fig, axes = plt.subplots(1, n_vi, figsize=(3.5 * n_vi, 4), sharey=True)
@@ -283,7 +285,9 @@ plt.show()
 # %%
 free_names = list(spec.free_params.keys())
 n_params = len(free_names)
-vi_methods_for_params = [l for l in labels if l != "map" and results[l].samples]
+vi_methods_for_params = [
+    l for l in labels if l != "map" and isinstance(results[l].samples, dict) and results[l].samples
+]
 
 fig, axes = plt.subplots(n_params, 1, figsize=(10, 2.2 * n_params), sharex=True)
 
