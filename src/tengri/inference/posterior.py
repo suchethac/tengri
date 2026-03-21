@@ -344,8 +344,8 @@ class Posterior:
         -------
         ParamSpec
         """
-        from diffsed.core.param_spec import ParamSpec
-        from diffsed.distributions import Fixed, Gaussian
+        from tengri.core.param_spec import ParamSpec
+        from tengri.distributions import Fixed, Gaussian
 
         kwargs = {}
 

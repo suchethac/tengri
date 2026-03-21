@@ -14,8 +14,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from diffsed import Fixed, Model, ParamSpec, Uniform
-from diffsed.models.sps.dsps_wrapper import SSPData
+from tengri import Fixed, Model, ParamSpec, Uniform
+from tengri.models.sps.dsps_wrapper import SSPData
 
 jax.config.update("jax_enable_x64", True)
 
@@ -293,7 +293,7 @@ class TestAGNPredictSED:
         agn_log_lbol controls the AGN luminosity as expected.
         Avoids synthetic SSP normalization issues in unit tests.
         """
-        from diffsed.models.agn import get_agn_model
+        from tengri.models.agn import get_agn_model
 
         wave = jnp.linspace(3000.0, 10000.0, 100)
         agn_fn = get_agn_model("simple")

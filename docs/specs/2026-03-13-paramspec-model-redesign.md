@@ -1,11 +1,11 @@
-# diffsed Parameter System Redesign
+# tengri Parameter System Redesign
 
 **Date:** 2026-03-13
 **Status:** Approved (design phase)
 
 ## Problem
 
-The current diffsed API tightly couples model configuration, parameter definitions, and inference. Parameters use cryptic short names (`tau_ps`, `sfr_norm`), the stochastic GP component is always required, redshift is fixed at construction time, and there's no way to fix/free individual parameters or specify priors.
+The current tengri API tightly couples model configuration, parameter definitions, and inference. Parameters use cryptic short names (`tau_ps`, `sfr_norm`), the stochastic GP component is always required, redshift is fixed at construction time, and there's no way to fix/free individual parameters or specify priors.
 
 ## Goals
 
@@ -51,7 +51,7 @@ ParamSpec ──→ Model(spec, ssp, filters) ──→ Precomputation (auto)
 
 ## 1. Distribution Classes
 
-Located in `src/diffsed/distributions.py`.
+Located in `src/tengri/distributions.py`.
 
 ```python
 class Uniform:
@@ -102,7 +102,7 @@ replacing the implicit flat-in-linear Uniform that the sigmoid Jacobian assumes.
 
 ## 2. ParamSpec
 
-Located in `src/diffsed/param_spec.py`.
+Located in `src/tengri/param_spec.py`.
 
 ### Constructor
 
@@ -220,7 +220,7 @@ When `stochastic=True`, `Model` delegates to `ForwardModel.__call__()` as before
 
 ## 3. Model
 
-Located in `src/diffsed/model.py`. Replaces `forward_model.py`.
+Located in `src/tengri/model.py`. Replaces `forward_model.py`.
 
 ### Constructor
 
@@ -298,7 +298,7 @@ posterior = model.fit(data, noise, method="map", data_type="photometry", **kwarg
 
 ## 4. Fitter
 
-Located in `src/diffsed/fitter.py`.
+Located in `src/tengri/fitter.py`.
 
 ```python
 fitter = Fitter(model, data, noise, data_type="photometry")
@@ -356,7 +356,7 @@ The `Fitter` is responsible for:
 
 ## 5. Posterior
 
-Located in `src/diffsed/posterior.py`.
+Located in `src/tengri/posterior.py`.
 
 ```python
 class Posterior:
@@ -427,7 +427,7 @@ This mapping lives inside `Model` and is not exposed to users. The old internal 
 ## 7. File Structure
 
 ```
-src/diffsed/
+src/tengri/
 ├── distributions.py       # NEW: Uniform, Gaussian, LogUniform, Fixed
 ├── param_spec.py          # NEW: ParamSpec class
 ├── model.py               # NEW: Model class (replaces forward_model.py)
@@ -453,8 +453,8 @@ src/diffsed/
 ## 8. Quickstart Notebook Flow
 
 ```python
-from diffsed import Model, ParamSpec, Uniform, Gaussian, Fitter
-from diffsed import load_ssp_data, load_filter_set
+from tengri import Model, ParamSpec, Uniform, Gaussian, Fitter
+from tengri import load_ssp_data, load_filter_set
 
 # 1. Load data
 ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE.h5")
@@ -521,9 +521,9 @@ as internal implementation but removed from `__init__.py` exports. The new publi
 
 ```python
 # New public API
-from diffsed import Model, ParamSpec, Fitter, Posterior
-from diffsed import Uniform, Gaussian, LogUniform, Fixed
-from diffsed import load_ssp_data, load_filter_set
+from tengri import Model, ParamSpec, Fitter, Posterior
+from tengri import Uniform, Gaussian, LogUniform, Fixed
+from tengri import load_ssp_data, load_filter_set
 ```
 
 No deprecation warnings needed — the codebase is private and pre-release.

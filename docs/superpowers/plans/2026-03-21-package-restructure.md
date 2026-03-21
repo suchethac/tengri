@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Reorganize the flat diffsed package into `core/` (forward model) and expanded `inference/` (fitting) subpackages, reducing root clutter from 18 to 3 files.
+**Goal:** Reorganize the flat tengri package into `core/` (forward model) and expanded `inference/` (fitting) subpackages, reducing root clutter from 18 to 3 files.
 
-**Architecture:** Move files into subpackages, update all internal imports (strategy 1: clean break, no shims), keep public API unchanged via `__init__.py` re-exports. Subpackage `__init__.py` files also export key classes for convenience (`from diffsed.core import Model`).
+**Architecture:** Move files into subpackages, update all internal imports (strategy 1: clean break, no shims), keep public API unchanged via `__init__.py` re-exports. Subpackage `__init__.py` files also export key classes for convenience (`from tengri.core import Model`).
 
 **Tech Stack:** Python, JAX, ruff, pytest
 
@@ -13,7 +13,7 @@
 ## Target Structure
 
 ```
-src/diffsed/
+src/tengri/
 ├── __init__.py              # public API re-exports (unchanged interface)
 ├── distributions.py         # cross-cutting priors
 ├── plotting.py              # visualization
@@ -53,52 +53,52 @@ src/diffsed/
 
 | Old path | New path |
 |----------|----------|
-| `diffsed.model` | `diffsed.core.model` |
-| `diffsed.param_spec` | `diffsed.core.param_spec` |
-| `diffsed._param_translate` | `diffsed.core.param_translate` |
-| `diffsed._fused_kernels` | `diffsed.core.fused_kernels` |
-| `diffsed._sed_pipeline` | `diffsed.core.sed_pipeline` |
-| `diffsed._mock` | `diffsed.core.mock` |
-| `diffsed.prediction` | `diffsed.core.prediction` |
-| `diffsed.noise` | `diffsed.core.noise` |
-| `diffsed.fitter` | `diffsed.inference.fitter` |
-| `diffsed.hierarchical` | `diffsed.inference.hierarchical` |
-| `diffsed.posterior` | `diffsed.inference.posterior` |
-| `diffsed.raytrace_jax` | `diffsed.inference.raytrace` |
-| `diffsed.vi_config` | `diffsed.inference.vi_config` |
-| `diffsed.standardized` | `diffsed.inference.standardized` |
+| `tengri.model` | `tengri.core.model` |
+| `tengri.param_spec` | `tengri.core.param_spec` |
+| `tengri._param_translate` | `tengri.core.param_translate` |
+| `tengri._fused_kernels` | `tengri.core.fused_kernels` |
+| `tengri._sed_pipeline` | `tengri.core.sed_pipeline` |
+| `tengri._mock` | `tengri.core.mock` |
+| `tengri.prediction` | `tengri.core.prediction` |
+| `tengri.noise` | `tengri.core.noise` |
+| `tengri.fitter` | `tengri.inference.fitter` |
+| `tengri.hierarchical` | `tengri.inference.hierarchical` |
+| `tengri.posterior` | `tengri.inference.posterior` |
+| `tengri.raytrace_jax` | `tengri.inference.raytrace` |
+| `tengri.vi_config` | `tengri.inference.vi_config` |
+| `tengri.standardized` | `tengri.inference.standardized` |
 
 ---
 
 ## Task 1: Create `core/` subpackage and move files
 
 **Files:**
-- Create: `src/diffsed/core/__init__.py`
+- Create: `src/tengri/core/__init__.py`
 - Move: `model.py`, `param_spec.py`, `_param_translate.py`, `_fused_kernels.py`, `_sed_pipeline.py`, `_mock.py`, `prediction.py`, `noise.py` → `core/`
 - Rename: drop `_` prefix on moved files
 
 - [ ] **Step 1: Create core/ directory and __init__.py**
 
 ```bash
-mkdir -p src/diffsed/core
+mkdir -p src/tengri/core
 ```
 
-Create `src/diffsed/core/__init__.py`:
+Create `src/tengri/core/__init__.py`:
 ```python
 """Core forward model: Model, ParamSpec, Prediction, and internals."""
 
-from diffsed.core.mock import MockData, generate_mock
-from diffsed.core.model import Model
-from diffsed.core.noise import (
+from tengri.core.mock import MockData, generate_mock
+from tengri.core.model import Model
+from tengri.core.noise import (
     compute_effective_noise,
     compute_std_inv,
     has_noise_model,
     uses_student_t,
     variable_noise_hamiltonian,
 )
-from diffsed.core.param_spec import ParamSpec
-from diffsed.core.param_translate import LOG10_ZSUN
-from diffsed.core.prediction import (
+from tengri.core.param_spec import ParamSpec
+from tengri.core.param_translate import LOG10_ZSUN
+from tengri.core.prediction import (
     DerivedQuantities,
     EmissionLines,
     Prediction,
@@ -128,14 +128,14 @@ __all__ = [
 - [ ] **Step 2: Move files with git mv (preserves history)**
 
 ```bash
-git mv src/diffsed/model.py src/diffsed/core/model.py
-git mv src/diffsed/param_spec.py src/diffsed/core/param_spec.py
-git mv src/diffsed/_param_translate.py src/diffsed/core/param_translate.py
-git mv src/diffsed/_fused_kernels.py src/diffsed/core/fused_kernels.py
-git mv src/diffsed/_sed_pipeline.py src/diffsed/core/sed_pipeline.py
-git mv src/diffsed/_mock.py src/diffsed/core/mock.py
-git mv src/diffsed/prediction.py src/diffsed/core/prediction.py
-git mv src/diffsed/noise.py src/diffsed/core/noise.py
+git mv src/tengri/model.py src/tengri/core/model.py
+git mv src/tengri/param_spec.py src/tengri/core/param_spec.py
+git mv src/tengri/_param_translate.py src/tengri/core/param_translate.py
+git mv src/tengri/_fused_kernels.py src/tengri/core/fused_kernels.py
+git mv src/tengri/_sed_pipeline.py src/tengri/core/sed_pipeline.py
+git mv src/tengri/_mock.py src/tengri/core/mock.py
+git mv src/tengri/prediction.py src/tengri/core/prediction.py
+git mv src/tengri/noise.py src/tengri/core/noise.py
 ```
 
 - [ ] **Step 3: Update internal imports within core/ files**
@@ -143,26 +143,26 @@ git mv src/diffsed/noise.py src/diffsed/core/noise.py
 In `core/model.py`, update:
 ```python
 # Old:
-from diffsed._fused_kernels import ...
-from diffsed._param_translate import ...
-from diffsed._sed_pipeline import ...
+from tengri._fused_kernels import ...
+from tengri._param_translate import ...
+from tengri._sed_pipeline import ...
 # New:
-from diffsed.core.fused_kernels import ...
-from diffsed.core.param_translate import ...
-from diffsed.core.sed_pipeline import ...
+from tengri.core.fused_kernels import ...
+from tengri.core.param_translate import ...
+from tengri.core.sed_pipeline import ...
 ```
 
 Also update lazy imports inside methods:
-- `from diffsed.prediction import ...` → `from diffsed.core.prediction import ...`
-- `from diffsed.fitter import Fitter` → `from diffsed.inference.fitter import Fitter`
+- `from tengri.prediction import ...` → `from tengri.core.prediction import ...`
+- `from tengri.fitter import Fitter` → `from tengri.inference.fitter import Fitter`
 
 In `core/mock.py`, update:
 ```python
-# Old: from diffsed.model import MockData
-# New: from diffsed.core.model import MockData
+# Old: from tengri.model import MockData
+# New: from tengri.core.model import MockData
 ```
 
-In `core/param_spec.py` — imports `from diffsed.distributions` (stays at root, no change needed).
+In `core/param_spec.py` — imports `from tengri.distributions` (stays at root, no change needed).
 
 In `core/noise.py` — check for any internal imports that need updating.
 
@@ -173,7 +173,7 @@ In `core/fused_kernels.py` and `core/sed_pipeline.py` — check imports from `mo
 - [ ] **Step 4: Run tests (expect failures from import paths not yet updated elsewhere)**
 
 ```bash
-source .venv/bin/activate && python -c "from diffsed.core import Model, ParamSpec"
+source .venv/bin/activate && python -c "from tengri.core import Model, ParamSpec"
 ```
 
 - [ ] **Step 5: Commit**
@@ -188,17 +188,17 @@ git add -A && git commit -m "refactor: create core/ subpackage, move model + par
 
 **Files:**
 - Move: `fitter.py`, `hierarchical.py`, `posterior.py`, `raytrace_jax.py`, `vi_config.py`, `standardized.py` → `inference/`
-- Update: `src/diffsed/inference/__init__.py`
+- Update: `src/tengri/inference/__init__.py`
 
 - [ ] **Step 1: Move files with git mv**
 
 ```bash
-git mv src/diffsed/fitter.py src/diffsed/inference/fitter.py
-git mv src/diffsed/hierarchical.py src/diffsed/inference/hierarchical.py
-git mv src/diffsed/posterior.py src/diffsed/inference/posterior.py
-git mv src/diffsed/raytrace_jax.py src/diffsed/inference/raytrace.py
-git mv src/diffsed/vi_config.py src/diffsed/inference/vi_config.py
-git mv src/diffsed/standardized.py src/diffsed/inference/standardized.py
+git mv src/tengri/fitter.py src/tengri/inference/fitter.py
+git mv src/tengri/hierarchical.py src/tengri/inference/hierarchical.py
+git mv src/tengri/posterior.py src/tengri/inference/posterior.py
+git mv src/tengri/raytrace_jax.py src/tengri/inference/raytrace.py
+git mv src/tengri/vi_config.py src/tengri/inference/vi_config.py
+git mv src/tengri/standardized.py src/tengri/inference/standardized.py
 ```
 
 - [ ] **Step 2: Update `inference/__init__.py`**
@@ -206,11 +206,11 @@ git mv src/diffsed/standardized.py src/diffsed/inference/standardized.py
 ```python
 """Inference engine: Fitter, Posterior, HierarchicalFitter, and backends."""
 
-from diffsed.inference.fitter import Fitter
-from diffsed.inference.hierarchical import HierarchicalFitter, HierarchicalResult
-from diffsed.inference.posterior import Posterior
-from diffsed.inference.raytrace import sample_raytrace
-from diffsed.inference.vi_config import VIConfig
+from tengri.inference.fitter import Fitter
+from tengri.inference.hierarchical import HierarchicalFitter, HierarchicalResult
+from tengri.inference.posterior import Posterior
+from tengri.inference.raytrace import sample_raytrace
+from tengri.inference.vi_config import VIConfig
 
 __all__ = [
     "Fitter",
@@ -227,49 +227,49 @@ __all__ = [
 In `inference/fitter.py`, update lazy imports:
 ```python
 # Old:
-from diffsed.noise import ...
-from diffsed.posterior import Posterior
-from diffsed.vi_config import VIConfig, evi_sample_mode
-from diffsed.raytrace_jax import sample_raytrace
+from tengri.noise import ...
+from tengri.posterior import Posterior
+from tengri.vi_config import VIConfig, evi_sample_mode
+from tengri.raytrace_jax import sample_raytrace
 # New:
-from diffsed.core.noise import ...
-from diffsed.inference.posterior import Posterior
-from diffsed.inference.vi_config import VIConfig, evi_sample_mode
-from diffsed.inference.raytrace import sample_raytrace
+from tengri.core.noise import ...
+from tengri.inference.posterior import Posterior
+from tengri.inference.vi_config import VIConfig, evi_sample_mode
+from tengri.inference.raytrace import sample_raytrace
 ```
 
 In `inference/hierarchical.py`, update lazy imports:
 ```python
 # Old:
-from diffsed.vi_config import VIConfig, evi_sample_mode
-from diffsed.raytrace_jax import sample_raytrace
+from tengri.vi_config import VIConfig, evi_sample_mode
+from tengri.raytrace_jax import sample_raytrace
 # New:
-from diffsed.inference.vi_config import VIConfig, evi_sample_mode
-from diffsed.inference.raytrace import sample_raytrace
+from tengri.inference.vi_config import VIConfig, evi_sample_mode
+from tengri.inference.raytrace import sample_raytrace
 ```
 
 In `inference/posterior.py`, update lazy imports:
 ```python
-# Old: from diffsed.param_spec import ParamSpec
-# New: from diffsed.core.param_spec import ParamSpec
+# Old: from tengri.param_spec import ParamSpec
+# New: from tengri.core.param_spec import ParamSpec
 ```
 
 In `inference/standardized.py`, update:
 ```python
-# Old: from diffsed.noise import ...
-# New: from diffsed.core.noise import ...
+# Old: from tengri.noise import ...
+# New: from tengri.core.noise import ...
 ```
 
 In `inference/geovi.py`, update:
 ```python
-# Old: from diffsed.noise import compute_std_inv
-# New: from diffsed.core.noise import compute_std_inv
+# Old: from tengri.noise import compute_std_inv
+# New: from tengri.core.noise import compute_std_inv
 ```
 
 - [ ] **Step 4: Verify**
 
 ```bash
-source .venv/bin/activate && python -c "from diffsed.inference import Fitter, Posterior"
+source .venv/bin/activate && python -c "from tengri.inference import Fitter, Posterior"
 ```
 
 - [ ] **Step 5: Commit**
@@ -283,7 +283,7 @@ git add -A && git commit -m "refactor: move fitter, hierarchical, posterior, ray
 ## Task 3: Update root `__init__.py`
 
 **Files:**
-- Modify: `src/diffsed/__init__.py`
+- Modify: `src/tengri/__init__.py`
 
 - [ ] **Step 1: Update all imports to new paths**
 
@@ -291,28 +291,28 @@ The root `__init__.py` is the public API hub. Update every import to the new loc
 
 ```python
 # Core
-from diffsed.core.mock import MockData, generate_mock
-from diffsed.core.model import Model
-from diffsed.core.noise import (
+from tengri.core.mock import MockData, generate_mock
+from tengri.core.model import Model
+from tengri.core.noise import (
     compute_effective_noise, compute_std_inv, has_noise_model,
     uses_student_t, variable_noise_hamiltonian,
 )
-from diffsed.core.param_spec import ParamSpec
-from diffsed.core.param_translate import LOG10_ZSUN  # if exported
-from diffsed.core.prediction import (
+from tengri.core.param_spec import ParamSpec
+from tengri.core.param_translate import LOG10_ZSUN  # if exported
+from tengri.core.prediction import (
     DerivedQuantities, EmissionLines, Prediction, SEDQuantities, SFHQuantities,
 )
 
 # Inference
-from diffsed.inference.fitter import Fitter
-from diffsed.inference.hierarchical import HierarchicalFitter, HierarchicalResult
-from diffsed.inference.posterior import Posterior
-from diffsed.inference.raytrace import sample_raytrace
-from diffsed.inference.vi_config import VIConfig
+from tengri.inference.fitter import Fitter
+from tengri.inference.hierarchical import HierarchicalFitter, HierarchicalResult
+from tengri.inference.posterior import Posterior
+from tengri.inference.raytrace import sample_raytrace
+from tengri.inference.vi_config import VIConfig
 
 # These stay at root — no change:
-from diffsed.distributions import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
-from diffsed.plotting import ...
+from tengri.distributions import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
+from tengri.plotting import ...
 ```
 
 Keep `__all__` the same — the public API is unchanged.
@@ -321,9 +321,9 @@ Keep `__all__` the same — the public API is unchanged.
 
 ```bash
 source .venv/bin/activate && python -c "
-from diffsed import Model, ParamSpec, Fitter, Posterior, Uniform
-from diffsed import Prediction, HierarchicalFitter, VIConfig
-from diffsed import generate_mock, MockData, sample_raytrace
+from tengri import Model, ParamSpec, Fitter, Posterior, Uniform
+from tengri import Prediction, HierarchicalFitter, VIConfig
+from tengri import generate_mock, MockData, sample_raytrace
 print('Public API OK')
 "
 ```
@@ -332,8 +332,8 @@ print('Public API OK')
 
 ```bash
 source .venv/bin/activate && python -c "
-from diffsed.core import Model, ParamSpec
-from diffsed.inference import Fitter, Posterior
+from tengri.core import Model, ParamSpec
+from tengri.inference import Fitter, Posterior
 print('Subpackage API OK')
 "
 ```
@@ -356,18 +356,18 @@ git add -A && git commit -m "refactor: update __init__.py to import from core/ a
 Apply these replacements across all test files:
 
 ```
-from diffsed.model import          → from diffsed.core.model import
-from diffsed.param_spec import     → from diffsed.core.param_spec import
-from diffsed._param_translate import → from diffsed.core.param_translate import
-from diffsed._mock import          → from diffsed.core.mock import
-from diffsed.prediction import     → from diffsed.core.prediction import
-from diffsed.noise import          → from diffsed.core.noise import
-from diffsed.fitter import         → from diffsed.inference.fitter import
-from diffsed.posterior import      → from diffsed.inference.posterior import
-from diffsed.raytrace_jax import   → from diffsed.inference.raytrace import
-from diffsed.vi_config import      → from diffsed.inference.vi_config import
-from diffsed.hierarchical import   → from diffsed.inference.hierarchical import
-from diffsed.standardized import   → from diffsed.inference.standardized import
+from tengri.model import          → from tengri.core.model import
+from tengri.param_spec import     → from tengri.core.param_spec import
+from tengri._param_translate import → from tengri.core.param_translate import
+from tengri._mock import          → from tengri.core.mock import
+from tengri.prediction import     → from tengri.core.prediction import
+from tengri.noise import          → from tengri.core.noise import
+from tengri.fitter import         → from tengri.inference.fitter import
+from tengri.posterior import      → from tengri.inference.posterior import
+from tengri.raytrace_jax import   → from tengri.inference.raytrace import
+from tengri.vi_config import      → from tengri.inference.vi_config import
+from tengri.hierarchical import   → from tengri.inference.hierarchical import
+from tengri.standardized import   → from tengri.inference.standardized import
 ```
 
 Key test files to update:
@@ -414,21 +414,21 @@ git add -A && git commit -m "refactor: update all test imports for core/ and inf
 - [ ] **Step 1: Search and update notebooks**
 
 ```bash
-grep -rl "from diffsed\.\(model\|param_spec\|_param_translate\|noise\|fitter\|posterior\|raytrace_jax\|vi_config\|standardized\|prediction\|_mock\|_fused_kernels\|_sed_pipeline\|hierarchical\)" notebooks/ --include="*.py"
+grep -rl "from tengri\.\(model\|param_spec\|_param_translate\|noise\|fitter\|posterior\|raytrace_jax\|vi_config\|standardized\|prediction\|_mock\|_fused_kernels\|_sed_pipeline\|hierarchical\)" notebooks/ --include="*.py"
 ```
 
 Apply the same import mapping. Only edit `.py` files (not `.ipynb`).
 
 Key files:
-- `notebooks/archive/13_dust_models.py` — `from diffsed.model import LOG10_ZSUN`
-- `notebooks/archive/11_noise_model.py` — `from diffsed.noise`
-- `notebooks/archive/09_custom_models.py` — `from diffsed.standardized`
-- `notebooks/reference/notebook_code/06_noise_models.py` — `from diffsed.noise`
+- `notebooks/archive/13_dust_models.py` — `from tengri.model import LOG10_ZSUN`
+- `notebooks/archive/11_noise_model.py` — `from tengri.noise`
+- `notebooks/archive/09_custom_models.py` — `from tengri.standardized`
+- `notebooks/reference/notebook_code/06_noise_models.py` — `from tengri.noise`
 
 - [ ] **Step 2: Check analysis/ and scripts/**
 
 ```bash
-grep -rl "from diffsed\.\(model\|fitter\|param_spec\|noise\|posterior\)" analysis/ scripts/ --include="*.py"
+grep -rl "from tengri\.\(model\|fitter\|param_spec\|noise\|posterior\)" analysis/ scripts/ --include="*.py"
 ```
 
 Update any matches.
@@ -458,7 +458,7 @@ git add -A && git commit -m "refactor: update notebook and script imports for ne
 Replace the package structure section with:
 
 ```
-src/diffsed/
+src/tengri/
 ├── __init__.py              # public API re-exports
 ├── distributions.py         # Uniform, Gaussian, LogUniform, Fixed
 ├── plotting.py              # Visualization utilities
@@ -521,17 +521,17 @@ source .venv/bin/activate && pytest tests/ -q
 ruff check src/ tests/ && ruff format --check src/ tests/
 
 # Public API (must work unchanged)
-python -c "from diffsed import Model, ParamSpec, Fitter, Posterior, Uniform"
+python -c "from tengri import Model, ParamSpec, Fitter, Posterior, Uniform"
 
 # Subpackage API (new convenience)
-python -c "from diffsed.core import Model, ParamSpec"
-python -c "from diffsed.inference import Fitter, Posterior"
+python -c "from tengri.core import Model, ParamSpec"
+python -c "from tengri.inference import Fitter, Posterior"
 
 # Verify old root files are gone
-test ! -f src/diffsed/model.py && echo "model.py moved"
-test ! -f src/diffsed/fitter.py && echo "fitter.py moved"
-test ! -f src/diffsed/param_spec.py && echo "param_spec.py moved"
+test ! -f src/tengri/model.py && echo "model.py moved"
+test ! -f src/tengri/fitter.py && echo "fitter.py moved"
+test ! -f src/tengri/param_spec.py && echo "param_spec.py moved"
 
 # Count root files (target: 4 .py files + __init__.py)
-ls src/diffsed/*.py | wc -l
+ls src/tengri/*.py | wc -l
 ```

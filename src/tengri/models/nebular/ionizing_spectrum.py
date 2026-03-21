@@ -30,15 +30,15 @@ import numpy as np
 _np_trapz = getattr(np, "trapezoid", np.trapz)
 
 # Physical constants
-_C_AA = 2.9979e18     # c in Angstrom/s
-_H_PLANCK = 6.626e-27 # erg s
-_LSUN = 3.828e33      # erg/s
+_C_AA = 2.9979e18  # c in Angstrom/s
+_H_PLANCK = 6.626e-27  # erg s
+_LSUN = 3.828e33  # erg/s
 
 # Ionization edges (Angstrom) — from cue/constants.py
-HEII_EDGE = 1e8 / 438908.8789   # 227.84 A
-OII_EDGE = 1e8 / 283270.9       # 353.07 A
-HEI_EDGE = 1e8 / 198310.66637   # 504.26 A
-HI_LIMIT = 911.6                 # Lyman limit
+HEII_EDGE = 1e8 / 438908.8789  # 227.84 A
+OII_EDGE = 1e8 / 283270.9  # 353.07 A
+HEI_EDGE = 1e8 / 198310.66637  # 504.26 A
+HI_LIMIT = 911.6  # Lyman limit
 
 # Segment boundaries: [1, HeII, OII, HeI, HI]
 SEGMENT_EDGES = np.array([1.0, HEII_EDGE, OII_EDGE, HEI_EDGE, HI_LIMIT])
@@ -123,8 +123,12 @@ def fit_ionizing_spectrum(
 
         def objective(params):
             pred = params[1] + params[0] * log_wave
-            log_Q_pred = params[1] - np.log10(_H_PLANCK) + np.log10(
-                np.abs((seg_wave[-1] ** params[0] - seg_wave[0] ** params[0]) / params[0])
+            log_Q_pred = (
+                params[1]
+                - np.log10(_H_PLANCK)
+                + np.log10(
+                    np.abs((seg_wave[-1] ** params[0] - seg_wave[0] ** params[0]) / params[0])
+                )
             )
             return (
                 0.5 * np.sum((log_flux - pred) ** 2)
@@ -147,12 +151,14 @@ def fit_ionizing_spectrum(
         alpha = coeff[i, 0]
         log_A = coeff[i, 1]
         if abs(alpha - 1.0) > 1e-8:
-            log_L[i] = log_A + np.log10(_C_AA * _LSUN) + np.log10(
-                np.abs((lam_hi ** (alpha - 1) - lam_lo ** (alpha - 1)) / (alpha - 1))
+            log_L[i] = (
+                log_A
+                + np.log10(_C_AA * _LSUN)
+                + np.log10(np.abs((lam_hi ** (alpha - 1) - lam_lo ** (alpha - 1)) / (alpha - 1)))
             )
         else:
-            log_L[i] = log_A + np.log10(_C_AA * _LSUN) + np.log10(
-                np.abs(np.log(lam_hi) - np.log(lam_lo))
+            log_L[i] = (
+                log_A + np.log10(_C_AA * _LSUN) + np.log10(np.abs(np.log(lam_hi) - np.log(lam_lo)))
             )
 
     logLratios = np.diff(log_L)
@@ -162,10 +168,12 @@ def fit_ionizing_spectrum(
     # x must share the same element ordering for np.trapz.
     ionizing_mask = wave <= HI_LIMIT
     nu_all = _C_AA / wave[ionizing_mask]
-    Q_total = np.abs(_np_trapz(
-        (flux[ionizing_mask] * _LSUN) / (_H_PLANCK * nu_all),
-        x=nu_all,
-    ))
+    Q_total = np.abs(
+        _np_trapz(
+            (flux[ionizing_mask] * _LSUN) / (_H_PLANCK * nu_all),
+            x=nu_all,
+        )
+    )
     log_qion = np.log10(max(Q_total, 1e-99))
 
     return {
@@ -284,12 +292,7 @@ def interpolate_ionizing_params(
     t10 = ionspec_table[iz + 1, ia]
     t11 = ionspec_table[iz + 1, ia + 1]
 
-    ionspec = (
-        (1 - fz) * (1 - fa) * t00
-        + (1 - fz) * fa * t01
-        + fz * (1 - fa) * t10
-        + fz * fa * t11
-    )
+    ionspec = (1 - fz) * (1 - fa) * t00 + (1 - fz) * fa * t01 + fz * (1 - fa) * t10 + fz * fa * t11
 
     # Bilinear for scalar Q_H
     q00 = logqion_table[iz, ia]

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Convert DL14 dust emission templates to diffsed HDF5 grid.
+"""Convert DL14 dust emission templates to tengri HDF5 grid.
 
 Reads the ASCII template files downloaded from CIGALE's GitLab repository
 (originally from Draine's models with 2014 updates) and builds a single
-HDF5 grid for fast interpolation in diffsed.
+HDF5 grid for fast interpolation in tengri.
 
 DL14 extends DL07 with:
 - Variable alpha parameter (power-law slope 1.0-3.0, was fixed at 2 in DL07)
@@ -115,7 +115,7 @@ def read_dl14_spectrum(filepath: str) -> tuple:
 
 
 def convert(input_dir: str, output_path: str) -> None:
-    """Convert DL14 templates to diffsed HDF5 grid.
+    """Convert DL14 templates to tengri HDF5 grid.
 
     Output datasets:
         /wavelength     (n_wave,) in Angstrom
@@ -212,7 +212,7 @@ def convert(input_dir: str, output_path: str) -> None:
                     powerlaw[iq, iu, ia, :] /= total
 
     # Write HDF5
-    wave_aa = wave_um * 1e4  # convert to Angstrom for diffsed convention
+    wave_aa = wave_um * 1e4  # convert to Angstrom for tengri convention
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     print(f"Writing: {output_path}")
@@ -263,7 +263,7 @@ def convert(input_dir: str, output_path: str) -> None:
         f.attrs["n_wave"] = n_wave
         f.attrs["umax_powerlaw"] = 1e7
         f.attrs["description"] = (
-            "DL14 IR emission templates for diffsed. "
+            "DL14 IR emission templates for tengri. "
             "Usage: j_nu = (1-gamma)*single_u[iq,iu] + gamma*powerlaw[iq,iu,ia], "
             "then multiply by L_absorbed for energy balance normalization."
         )
@@ -282,7 +282,7 @@ def convert(input_dir: str, output_path: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert DL14 dust templates to diffsed HDF5"
+        description="Convert DL14 dust templates to tengri HDF5"
     )
     parser.add_argument(
         "--input-dir",

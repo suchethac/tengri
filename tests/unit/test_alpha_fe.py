@@ -13,8 +13,8 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.core.param_spec import ParamSpec
-from diffsed.models.sps.dsps_wrapper import (
+from tengri.core.param_spec import ParamSpec
+from tengri.models.sps.dsps_wrapper import (
     _ALPHA_TO_Z_COEFF,
     effective_metallicity,
 )
@@ -107,8 +107,10 @@ class TestAlphaFeParamSpec:
     def test_default_is_fixed_zero(self):
         """met_alpha_fe should default to Fixed(0.0)."""
         spec = ParamSpec(
-            sfh_dpl_alpha=1.0, sfh_dpl_beta=1.0,
-            sfh_dpl_tau_gyr=5.0, sfh_dpl_log_peak_sfr=1.0,
+            sfh_dpl_alpha=1.0,
+            sfh_dpl_beta=1.0,
+            sfh_dpl_tau_gyr=5.0,
+            sfh_dpl_log_peak_sfr=1.0,
             mean_sfh_type="dpl",
         )
         dist = spec.get_distribution("met_alpha_fe")
@@ -122,7 +124,8 @@ class TestAlphaFeParamSpec:
 
     def test_alpha_fe_free_when_set(self):
         """met_alpha_fe should be free when given a distribution."""
-        from diffsed.distributions import Uniform
+        from tengri.distributions import Uniform
+
         spec = ParamSpec(
             mean_sfh_type="dpl",
             met_alpha_fe=Uniform(-0.2, 0.6),
@@ -144,7 +147,8 @@ class TestAlphaFeParamSpec:
 
     def test_sample_includes_alpha_fe(self):
         """Sampling should include met_alpha_fe."""
-        from diffsed.distributions import Uniform
+        from tengri.distributions import Uniform
+
         spec = ParamSpec(
             mean_sfh_type="dpl",
             met_alpha_fe=Uniform(-0.2, 0.6),
@@ -165,7 +169,8 @@ class TestAlphaFeForwardModel:
 
     @pytest.fixture
     def model_with_alpha(self):
-        from diffsed import Fixed, Model, ParamSpec, Uniform, load_ssp_data
+        from tengri import Fixed, Model, ParamSpec, Uniform, load_ssp_data
+
         ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
         spec = ParamSpec(
             sfh_dpl_alpha=Fixed(1.0),
@@ -185,7 +190,8 @@ class TestAlphaFeForwardModel:
         """alpha_fe=0 should give identical SED as no alpha enhancement."""
         sed_alpha0 = model_with_alpha.predict_sed({"met_alpha_fe": 0.0})
         # Build a model without alpha_fe (defaults to Fixed(0.0))
-        from diffsed import Fixed, Model, ParamSpec, load_ssp_data
+        from tengri import Fixed, Model, ParamSpec, load_ssp_data
+
         ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
         spec_no = ParamSpec(
             sfh_dpl_alpha=Fixed(1.0),
@@ -212,8 +218,10 @@ class TestAlphaFeForwardModel:
 
     def test_alpha_gradient_finite(self, model_with_alpha):
         """Gradient w.r.t. met_alpha_fe should be finite."""
+
         def loss(afe):
             return jnp.sum(model_with_alpha.predict_sed({"met_alpha_fe": afe}))
+
         g = jax.grad(loss)(0.3)
         assert jnp.isfinite(g), "Alpha-Fe gradient should be finite"
         assert abs(float(g)) > 0, "Alpha-Fe gradient should be non-zero"

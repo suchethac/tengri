@@ -74,9 +74,9 @@ The `constants` mechanism freezes a block during KL minimization while still sam
 
 ### File Structure
 
-- `src/diffsed/fitter.py`: `_build_jit_engine()` contains all JIT-compiled functions
-- `src/diffsed/vi_config.py`: `VIConfig`, `BlockStep`, `BlockSchedule` configuration
-- `src/diffsed/hierarchical.py`: Hierarchical inference (mirrors fitter.py structure)
+- `src/tengri/fitter.py`: `_build_jit_engine()` contains all JIT-compiled functions
+- `src/tengri/vi_config.py`: `VIConfig`, `BlockStep`, `BlockSchedule` configuration
+- `src/tengri/hierarchical.py`: Hierarchical inference (mirrors fitter.py structure)
 
 ### Core Primitives (inside `_build_jit_engine`)
 
@@ -132,7 +132,7 @@ All functions operate on flat arrays (not pytree dicts) for XLA efficiency.
 ### User API
 
 ```python
-from diffsed import Fitter
+from tengri import Fitter
 
 # --- Native JIT (default, fully XLA-compiled) ---
 result = fitter.run("native_geovi", ...)   # DEFAULT: JIT geoVI with resample+update, nonlinear draws
@@ -186,7 +186,7 @@ The `"geovi"` / `"mgvi"` / `"evi"` methods (without `native_` prefix) use NIFTy'
 ### Block Gibbs API
 
 ```python
-from diffsed.vi_config import BlockSchedule, BlockStep
+from tengri.vi_config import BlockSchedule, BlockStep
 
 # Default schedule for individual galaxy
 sched = BlockSchedule.individual_geovi()

@@ -4,8 +4,8 @@ import jax
 import jax.numpy as jnp
 from numpy.testing import assert_allclose
 
-from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw
-from diffsed.utils.optimizations import (
+from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.utils.optimizations import (
     compute_full_amplitude_drw,
     gp_from_xi_hartley,
     hartley,
@@ -95,7 +95,7 @@ class TestHartleyGP:
         n_real = 2000
 
         # rfft GP batch
-        from diffsed.models.sfh.gp_sfh import generate_gp_batch
+        from tengri.models.sfh.gp_sfh import generate_gp_batch
 
         batch_rfft = generate_gp_batch(key, sqrt_power, N, n_real)
         var_rfft = float(jnp.var(batch_rfft))

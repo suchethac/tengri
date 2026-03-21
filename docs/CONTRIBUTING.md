@@ -1,4 +1,4 @@
-# Contributing to diffsed
+# Contributing to tengri
 
 > Quick reference for agents and developers making changes.
 
@@ -11,7 +11,7 @@
 ## Environment
 
 ```bash
-cd ~/Projects/diffsed
+cd ~/Projects/tengri
 source .venv/bin/activate
 pytest tests/ -q              # 302 tests, ~50s
 ```
@@ -20,7 +20,7 @@ pytest tests/ -q              # 302 tests, ~50s
 
 ### Adding a new prior distribution
 
-1. Subclass `Distribution` in `src/diffsed/distributions.py`
+1. Subclass `Distribution` in `src/tengri/distributions.py`
 2. Implement: `bounds`, `sample()`, `log_prob()`, `unstandardize()`, `standardize()`
 3. `unstandardize()` MUST be JAX-differentiable — test with `jax.grad`
 4. Add to `__init__.py` exports
@@ -29,7 +29,7 @@ pytest tests/ -q              # 302 tests, ~50s
 
 ### Adding a new inference method
 
-1. Add `_run_METHOD()` to `Fitter` in `src/diffsed/fitter.py`
+1. Add `_run_METHOD()` to `Fitter` in `src/tengri/fitter.py`
 2. Route in `Fitter.run()` method
 3. Return a `Posterior` object
 4. Add tests in `tests/unit/test_fitter.py`
@@ -43,7 +43,7 @@ pytest tests/ -q              # 302 tests, ~50s
 
 ### Modifying the forward model
 
-1. Changes go in `src/diffsed/model.py` (high-level) or `src/diffsed/forward_model.py` (low-level)
+1. Changes go in `src/tengri/model.py` (high-level) or `src/tengri/forward_model.py` (low-level)
 2. The `_correlated_field` key in params dict bypasses internal GP — don't break this
 3. Test both stochastic and non-stochastic modes
 4. Verify gradients: `jax.grad(lambda p: model.predict_photometry(p)["some_param"])`
@@ -69,7 +69,7 @@ pytest tests/unit/test_raytrace.py -v
 # Verify gradient cleanliness
 python -c "
 import jax, jax.numpy as jnp
-from diffsed.distributions import MyNewDist
+from tengri.distributions import MyNewDist
 d = MyNewDist(...)
 g = jax.grad(d.unstandardize)(jnp.array(0.5))
 print(f'Gradient: {g}')  # must be finite

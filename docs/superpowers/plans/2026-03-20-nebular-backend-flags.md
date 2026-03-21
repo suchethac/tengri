@@ -16,9 +16,9 @@
 
 | File | Action | Responsibility |
 |------|--------|---------------|
-| `src/diffsed/param_spec.py` | Modify | Flag parsing, validation, param registration |
-| `src/diffsed/model.py` | Modify | Backend dispatch using `nebular_mode` |
-| `src/diffsed/models/nebular/__init__.py` | Modify | Default Cue weights path constant |
+| `src/tengri/param_spec.py` | Modify | Flag parsing, validation, param registration |
+| `src/tengri/model.py` | Modify | Backend dispatch using `nebular_mode` |
+| `src/tengri/models/nebular/__init__.py` | Modify | Default Cue weights path constant |
 | `tests/unit/test_nebular_flags.py` | Create | All flag validation and param registration tests |
 
 ---
@@ -26,12 +26,12 @@
 ### Task 1: Default Cue Weights Path
 
 **Files:**
-- Modify: `src/diffsed/models/nebular/__init__.py`
-- Modify: `src/diffsed/models/nebular/cue.py`
+- Modify: `src/tengri/models/nebular/__init__.py`
+- Modify: `src/tengri/models/nebular/cue.py`
 
 - [ ] **Step 1: Add default path constant to `__init__.py`**
 
-In `src/diffsed/models/nebular/__init__.py`, add after imports:
+In `src/tengri/models/nebular/__init__.py`, add after imports:
 
 ```python
 from pathlib import Path
@@ -43,14 +43,14 @@ _DEFAULT_CUE_WEIGHTS_PATH = (
 
 - [ ] **Step 2: Verify the path resolves correctly**
 
-Run: `python -c "from diffsed.models.nebular import _DEFAULT_CUE_WEIGHTS_PATH; print(_DEFAULT_CUE_WEIGHTS_PATH); print(_DEFAULT_CUE_WEIGHTS_PATH.exists())"`
+Run: `python -c "from tengri.models.nebular import _DEFAULT_CUE_WEIGHTS_PATH; print(_DEFAULT_CUE_WEIGHTS_PATH); print(_DEFAULT_CUE_WEIGHTS_PATH.exists())"`
 
 Expected: path to `data/cue_weights.npz`, `True`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/diffsed/models/nebular/__init__.py
+git add src/tengri/models/nebular/__init__.py
 git commit -m "chore: add default Cue weights path constant"
 ```
 
@@ -59,7 +59,7 @@ git commit -m "chore: add default Cue weights path constant"
 ### Task 2: Add Cue Ionspec Param Definitions
 
 **Files:**
-- Modify: `src/diffsed/param_spec.py`
+- Modify: `src/tengri/param_spec.py`
 
 - [ ] **Step 1: Add `_CUE_IONSPEC_PARAMS` and `_CUE_GAS_EXTRA_PARAMS` dicts**
 
@@ -141,7 +141,7 @@ Add `"nebular_ssp"`, `"nebular_cue"`, `"neb_ionization"` to `SETTINGS_KEYS` froz
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/diffsed/param_spec.py
+git add src/tengri/param_spec.py
 git commit -m "feat: add Cue ionspec + gas param definitions to param_spec"
 ```
 
@@ -165,8 +165,8 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed.distributions import Fixed, Uniform
-from diffsed.param_spec import ParamSpec
+from tengri.distributions import Fixed, Uniform
+from tengri.param_spec import ParamSpec
 
 
 class TestNebularFlagConflicts:
@@ -334,9 +334,9 @@ git commit -m "test: nebular flag validation tests (RED)"
 ### Task 4: Implement Flag Parsing in ParamSpec
 
 **Files:**
-- Modify: `src/diffsed/param_spec.py:389-414` (SETTINGS_KEYS)
-- Modify: `src/diffsed/param_spec.py:423-484` (_build_param_registry)
-- Modify: `src/diffsed/param_spec.py:748-756` (ParamSpec.__init__)
+- Modify: `src/tengri/param_spec.py:389-414` (SETTINGS_KEYS)
+- Modify: `src/tengri/param_spec.py:423-484` (_build_param_registry)
+- Modify: `src/tengri/param_spec.py:748-756` (ParamSpec.__init__)
 
 - [ ] **Step 1: Update SETTINGS_KEYS**
 
@@ -380,7 +380,7 @@ Replace lines 748-756 with:
         if nebular_cue:
             self.nebular_mode = "cue"
             if self.cue_weights_path is None:
-                from diffsed.models.nebular import _DEFAULT_CUE_WEIGHTS_PATH
+                from tengri.models.nebular import _DEFAULT_CUE_WEIGHTS_PATH
                 self.cue_weights_path = str(_DEFAULT_CUE_WEIGHTS_PATH)
         elif nebular:
             self.nebular_mode = "cloudy"
@@ -485,7 +485,7 @@ Expected: all pass (591+)
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/diffsed/param_spec.py
+git add src/tengri/param_spec.py
 git commit -m "feat: nebular backend flags (nebular_ssp, nebular, nebular_cue)"
 ```
 
@@ -494,7 +494,7 @@ git commit -m "feat: nebular backend flags (nebular_ssp, nebular, nebular_cue)"
 ### Task 5: Update Model Backend Dispatch
 
 **Files:**
-- Modify: `src/diffsed/model.py:352-375`
+- Modify: `src/tengri/model.py:352-375`
 
 - [ ] **Step 1: Simplify Model.__init__ nebular dispatch**
 
@@ -510,20 +510,20 @@ Replace the current nebular backend block with:
 
         self._nebular_backend = None
         if spec.nebular_mode == "cue":
-            from diffsed.models.nebular import CueBackend
+            from tengri.models.nebular import CueBackend
             self._nebular_backend = CueBackend(
                 spec.cue_weights_path, ssp_data=ssp_data
             )
         elif spec.nebular_mode == "cloudy":
-            from diffsed.models.nebular import CloudyGridBackend
+            from tengri.models.nebular import CloudyGridBackend
             self._nebular_backend = CloudyGridBackend(
                 spec.cloudy_grid_path, ssp_data
             )
         elif spec.nebular_mode == "ssp":
-            from diffsed.models.nebular import BakedInBackend
+            from tengri.models.nebular import BakedInBackend
             self._nebular_backend = BakedInBackend()
         else:
-            from diffsed.models.nebular import BakedInBackend
+            from tengri.models.nebular import BakedInBackend
             self._nebular_backend = BakedInBackend()
 ```
 
@@ -542,7 +542,7 @@ Expected: 20 passed
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/diffsed/model.py
+git add src/tengri/model.py
 git commit -m "refactor: Model nebular dispatch uses nebular_mode"
 ```
 
@@ -551,7 +551,7 @@ git commit -m "refactor: Model nebular dispatch uses nebular_mode"
 ### Task 6: Update Docstrings and Examples
 
 **Files:**
-- Modify: `src/diffsed/param_spec.py` (docstrings)
+- Modify: `src/tengri/param_spec.py` (docstrings)
 
 - [ ] **Step 1: Update ParamSpec class docstring**
 
@@ -585,8 +585,8 @@ Replace `cue_weights_path="data/cue_weights.npz"` with `nebular_cue=True`.
 - [ ] **Step 3: Run ruff check and format**
 
 ```bash
-ruff check src/diffsed/param_spec.py src/diffsed/model.py
-ruff format src/diffsed/param_spec.py src/diffsed/model.py
+ruff check src/tengri/param_spec.py src/tengri/model.py
+ruff format src/tengri/param_spec.py src/tengri/model.py
 ```
 
 - [ ] **Step 4: Final full test run**
@@ -599,6 +599,6 @@ JAX_PLATFORMS=cpu pytest tests/crossval/test_nebular_crossval.py tests/crossval/
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/diffsed/param_spec.py src/diffsed/model.py
+git add src/tengri/param_spec.py src/tengri/model.py
 git commit -m "docs: update ParamSpec docstrings for nebular flags"
 ```

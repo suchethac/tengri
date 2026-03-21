@@ -12,7 +12,7 @@ Three pre-registered configurations:
 
 Usage::
 
-    from diffsed.models.agn.unified import unified_agn, get_agn_model
+    from tengri.models.agn.unified import unified_agn, get_agn_model
 
     # Use a named configuration
     model_fn = get_agn_model("simple")
@@ -27,14 +27,14 @@ from collections.abc import Callable
 import jax
 import jax.numpy as jnp
 
-from diffsed.models.agn.blr import blr_emission
-from diffsed.models.agn.disc import multicolor_disc, powerlaw_disc
-from diffsed.models.agn.nlr import nlr_emission
-from diffsed.models.agn.skirtor import create_skirtor_from_grid
+from tengri.models.agn.blr import blr_emission
+from tengri.models.agn.disc import multicolor_disc, powerlaw_disc
+from tengri.models.agn.nlr import nlr_emission
+from tengri.models.agn.skirtor import create_skirtor_from_grid
 
 # Auto-load tabulated SKIRTOR templates (preferred over analytic)
 _skirtor_fn = None
-from diffsed.models.agn.torus import simple_torus, two_temperature_torus
+from tengri.models.agn.torus import simple_torus, two_temperature_torus
 
 # ===================================================================
 # AGN model registry
@@ -416,7 +416,7 @@ def skirtor_agn(
             # Search alternative locations
             for candidate in [
                 Path("data/skirtor_templates.npz"),
-                Path.home() / "Projects/diffsed/data/skirtor_templates.npz",
+                Path.home() / "Projects/tengri/data/skirtor_templates.npz",
             ]:
                 if candidate.is_file():
                     grid_path = candidate

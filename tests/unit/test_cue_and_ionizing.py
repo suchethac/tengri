@@ -18,11 +18,13 @@ class TestIonizingSpectrumFit:
 
     @pytest.fixture(scope="class")
     def ssp(self):
-        from diffsed import load_ssp_data
+        from tengri import load_ssp_data
+
         return load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
 
     def test_fit_returns_7_params(self, ssp):
-        from diffsed.models.nebular.ionizing_spectrum import fit_ionizing_spectrum
+        from tengri.models.nebular.ionizing_spectrum import fit_ionizing_spectrum
+
         wave = np.array(ssp.ssp_wave)
         flux = np.array(ssp.ssp_flux[7, 10, :])  # solar Z, young
         result = fit_ionizing_spectrum(wave, flux)
@@ -33,7 +35,8 @@ class TestIonizingSpectrumFit:
         assert result["powerlaw_params"].shape == (4, 2)
 
     def test_fit_within_cue_ranges(self, ssp):
-        from diffsed.models.nebular.ionizing_spectrum import fit_ionizing_spectrum, _CLIP_RANGES
+        from tengri.models.nebular.ionizing_spectrum import _CLIP_RANGES, fit_ionizing_spectrum
+
         wave = np.array(ssp.ssp_wave)
         flux = np.array(ssp.ssp_flux[7, 10, :])
         result = fit_ionizing_spectrum(wave, flux)
@@ -42,7 +45,8 @@ class TestIonizingSpectrumFit:
 
     def test_qion_reasonable(self, ssp):
         """Q_H should be ~10^46-10^48 for young SSPs."""
-        from diffsed.models.nebular.ionizing_spectrum import fit_ionizing_spectrum
+        from tengri.models.nebular.ionizing_spectrum import fit_ionizing_spectrum
+
         wave = np.array(ssp.ssp_wave)
         flux = np.array(ssp.ssp_flux[7, 10, :])
         result = fit_ionizing_spectrum(wave, flux)
@@ -52,7 +56,8 @@ class TestIonizingSpectrumFit:
 
     def test_index1_steep(self, ssp):
         """The extreme UV slope (index1) should be steep (>5)."""
-        from diffsed.models.nebular.ionizing_spectrum import fit_ionizing_spectrum
+        from tengri.models.nebular.ionizing_spectrum import fit_ionizing_spectrum
+
         wave = np.array(ssp.ssp_wave)
         flux = np.array(ssp.ssp_flux[7, 10, :])
         result = fit_ionizing_spectrum(wave, flux)
@@ -62,7 +67,8 @@ class TestIonizingSpectrumFit:
 
     def test_index4_shallow(self, ssp):
         """The optical slope (index4, near Lyman limit) should be shallower."""
-        from diffsed.models.nebular.ionizing_spectrum import fit_ionizing_spectrum
+        from tengri.models.nebular.ionizing_spectrum import fit_ionizing_spectrum
+
         wave = np.array(ssp.ssp_wave)
         flux = np.array(ssp.ssp_flux[7, 10, :])
         result = fit_ionizing_spectrum(wave, flux)
@@ -81,14 +87,16 @@ class TestIonizingParamsTable:
 
     @pytest.fixture(scope="class")
     def ssp(self):
-        from diffsed import load_ssp_data
+        from tengri import load_ssp_data
+
         return load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
 
     def test_interpolation_within_bounds(self, ssp):
-        from diffsed.models.nebular.ionizing_spectrum import (
-            precompute_ionizing_params_table,
+        from tengri.models.nebular.ionizing_spectrum import (
             interpolate_ionizing_params,
+            precompute_ionizing_params_table,
         )
+
         result = precompute_ionizing_params_table(
             np.array(ssp.ssp_wave),
             np.array(ssp.ssp_flux[:3, :10, :]),  # small subset for speed
@@ -100,7 +108,7 @@ class TestIonizingParamsTable:
             jnp.array(ssp.ssp_lgmet[:3]),
             jnp.array(ssp.ssp_lg_age_gyr[:10]) + 9.0,
             -1.85,  # solar Z
-            6.5,    # 3 Myr
+            6.5,  # 3 Myr
         )
         assert ionspec.shape == (7,)
         assert jnp.all(jnp.isfinite(ionspec))
@@ -116,8 +124,10 @@ class TestCueBackend:
 
     @pytest.fixture(scope="class")
     def backend(self):
-        from diffsed.models.nebular.cue import CueBackend
         import os
+
+        from tengri.models.nebular.cue import CueBackend
+
         weights_path = "data/cue_weights.npz"
         if not os.path.exists(weights_path):
             pytest.skip("Cue weights not found (run convert_cue_weights.py)")
@@ -130,7 +140,9 @@ class TestCueBackend:
 
     def test_predict_lines(self, backend):
         wave, lum = backend.predict_nebular_line_luminosities(
-            gas_logu=-2.5, gas_logn=2.0, gas_logz=0.0,
+            gas_logu=-2.5,
+            gas_logn=2.0,
+            gas_logz=0.0,
             gas_logqion=49.0,
         )
         assert len(wave) > 0
@@ -139,7 +151,9 @@ class TestCueBackend:
 
     def test_predict_continuum(self, backend):
         result = backend.predict_nebular_continuum(
-            gas_logu=-2.5, gas_logn=2.0, gas_logz=0.0,
+            gas_logu=-2.5,
+            gas_logn=2.0,
+            gas_logz=0.0,
             gas_logqion=49.0,
         )
         # Result is (wavelength, luminosity) tuple or just array
@@ -153,7 +167,9 @@ class TestCueBackend:
     def test_halpha_positive(self, backend):
         """H-alpha should be one of the brightest lines."""
         wave, lum = backend.predict_nebular_line_luminosities(
-            gas_logu=-2.5, gas_logn=2.0, gas_logz=0.0,
+            gas_logu=-2.5,
+            gas_logn=2.0,
+            gas_logz=0.0,
             gas_logqion=49.0,
         )
         ha_idx = jnp.argmin(jnp.abs(wave - 6562.8))
@@ -163,10 +179,16 @@ class TestCueBackend:
     def test_logU_affects_lines(self, backend):
         """Higher logU should produce brighter lines."""
         _, lum_low = backend.predict_nebular_line_luminosities(
-            gas_logu=-3.5, gas_logn=2.0, gas_logz=0.0, gas_logqion=49.0,
+            gas_logu=-3.5,
+            gas_logn=2.0,
+            gas_logz=0.0,
+            gas_logqion=49.0,
         )
         _, lum_high = backend.predict_nebular_line_luminosities(
-            gas_logu=-1.5, gas_logn=2.0, gas_logz=0.0, gas_logqion=49.0,
+            gas_logu=-1.5,
+            gas_logn=2.0,
+            gas_logz=0.0,
+            gas_logqion=49.0,
         )
         assert float(jnp.sum(lum_high)) != float(jnp.sum(lum_low)), (
             "Different logU should give different total line luminosity"
@@ -174,9 +196,12 @@ class TestCueBackend:
 
     def test_gradient_through_cue(self, backend):
         """Cue predictions should be differentiable w.r.t. gas params."""
+
         def loss(logu):
             _, lum = backend.predict_nebular_line_luminosities(
-                gas_logu=logu, gas_logn=2.0, gas_logz=0.0,
+                gas_logu=logu,
+                gas_logn=2.0,
+                gas_logz=0.0,
                 gas_logqion=49.0,
             )
             return jnp.sum(lum)
@@ -195,9 +220,11 @@ class TestCueWithSSP:
 
     @pytest.fixture(scope="class")
     def backend_with_ssp(self):
-        from diffsed.models.nebular.cue import CueBackend
-        from diffsed import load_ssp_data
         import os
+
+        from tengri import load_ssp_data
+        from tengri.models.nebular.cue import CueBackend
+
         if not os.path.exists("data/cue_weights.npz"):
             pytest.skip("Cue weights not found")
         ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
@@ -217,7 +244,9 @@ class TestCueWithSSP:
         """Predict lines using SSP-derived ionizing params."""
         ionspec, logqion = backend_with_ssp.get_ionizing_params_at(-1.85, 6.5)
         wave, lum = backend_with_ssp.predict_nebular_line_luminosities(
-            gas_logu=-2.5, gas_logn=2.0, gas_logz=0.0,
+            gas_logu=-2.5,
+            gas_logn=2.0,
+            gas_logz=0.0,
             gas_logqion=float(logqion),
             ionspec_index1=float(ionspec[0]),
             ionspec_index2=float(ionspec[1]),

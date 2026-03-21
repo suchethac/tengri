@@ -1,7 +1,7 @@
-# diffsed Development Handoff
+# tengri Development Handoff
 
 **Last updated:** 2026-03-14 (session 3)
-**Repo:** `~/Projects/diffsed/`
+**Repo:** `~/Projects/tengri/`
 **Paper draft:** `~/writing-workspace/projects/differentiable_psd_sed_fitting/`
 
 ---
@@ -10,16 +10,16 @@
 
 **What it is:** A fully differentiable galaxy SED fitting code using JAX. Treats the star formation history as an IFT correlated field (GP with PSD-governed correlation structure) on top of a smooth mean SFH. End-to-end differentiable: PSD params → GP latent field → SFH → DSPS SPS → dust → photometry/spectra.
 
-**Code name:** Currently `diffsed` (working name). Final name TBD — will be renamed before public release.
+**Code name:** Currently `tengri` (working name). Final name TBD — will be renamed before public release.
 
 **Locations:**
-- Code: `~/Projects/diffsed/` (this repo)
+- Code: `~/Projects/tengri/` (this repo)
 - Paper draft: `~/writing-workspace/projects/differentiable_psd_sed_fitting/`
-- SSP data: `~/Projects/diffsed/data/` (not in git, 64 MB HDF5 files)
+- SSP data: `~/Projects/tengri/data/` (not in git, 64 MB HDF5 files)
 
 **Environment:**
 ```bash
-cd ~/Projects/diffsed
+cd ~/Projects/tengri
 source .venv/bin/activate          # Python 3.12 venv
 pytest tests/ -q                    # 302 tests pass
 jupyter lab notebooks/              # 6 tutorial notebooks
@@ -51,7 +51,7 @@ jupyter lab notebooks/              # 6 tutorial notebooks
 ## High-Level API
 
 ```python
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Gaussian, Fixed, Fitter, Posterior,
     HierarchicalFitter, load_ssp_data, load_filter_set, sample_raytrace,
 )
@@ -245,7 +245,7 @@ Real FSPS SSP templates. All files go in `data/` (gitignored via `*.h5`).
 
 ```bash
 # Download all SSP templates
-cd ~/Projects/diffsed/data
+cd ~/Projects/tengri/data
 curl -O https://halos.as.arizona.edu/suchethacooray/dsps_ssp/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
 curl -O https://halos.as.arizona.edu/suchethacooray/dsps_ssp/ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
 ```
@@ -266,10 +266,10 @@ optax>=0.2       (MAP)
 ## How to Resume
 
 ```bash
-cd ~/Projects/diffsed
+cd ~/Projects/tengri
 source .venv/bin/activate
 pytest tests/ -q                    # should show 302 passed
-python -c "from diffsed import Model, ParamSpec, Uniform, Fitter, Posterior, HierarchicalFitter, sample_raytrace"
+python -c "from tengri import Model, ParamSpec, Uniform, Fitter, Posterior, HierarchicalFitter, sample_raytrace"
 
 # Generate paper figures
 python analysis/fig04_sfh_recovery.py --n-mocks 3 --method raytrace

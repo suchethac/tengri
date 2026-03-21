@@ -11,11 +11,11 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.dust.attenuation import two_component_dust
-from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
-from diffsed.models.sfh.mean_sfh import double_powerlaw
-from diffsed.models.sfh.psd_models import drw_variance
-from diffsed.utils.grid import grid_spacing, log_age_to_age_yr, make_log_age_grid
+from tengri.models.dust.attenuation import two_component_dust
+from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
+from tengri.models.sfh.mean_sfh import double_powerlaw
+from tengri.models.sfh.psd_models import drw_variance
+from tengri.utils.grid import grid_spacing, log_age_to_age_yr, make_log_age_grid
 
 jax.config.update("jax_enable_x64", True)
 

@@ -3,7 +3,7 @@
 
 Downloads the full SKIRTOR clumpy torus model grid from the official
 website and converts it to a NumPy .npz file for fast loading in
-diffsed.
+tengri.
 
 The SKIRTOR library is described in:
 - Stalevski et al. 2012, MNRAS, 420, 2756
@@ -68,7 +68,7 @@ def main():
     print("  oa:      [20, 30, 40, 50, 60] degrees")
     print("  cos_inc: [0.05, 0.15, 0.25, ..., 0.95]")
     print()
-    print("To convert downloaded files to the diffsed .npz format:")
+    print("To convert downloaded files to the tengri .npz format:")
     print("  python scripts/download_skirtor_templates.py --convert --input-dir <path>")
     print()
     print(f"Output will be saved to: {output_path}")

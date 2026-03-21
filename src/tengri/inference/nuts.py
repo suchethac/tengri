@@ -7,7 +7,7 @@ Following Zacharegkas+2025: individual HMC chains can be parallelized
 across GPU threads with near-zero overhead up to memory saturation.
 
 Usage:
-    from diffsed.inference.nuts import fit_nuts
+    from tengri.inference.nuts import fit_nuts
     result = fit_nuts(model, data, noise, n_warmup=500, n_samples=1000)
 """
 
@@ -17,7 +17,7 @@ import jax
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
-from diffsed.inference.common import (
+from tengri.inference.common import (
     DEFAULT_PRIOR,
     InferenceResult,
     build_loss_fn,

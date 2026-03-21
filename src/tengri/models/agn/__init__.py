@@ -1,4 +1,4 @@
-"""AGN emission models for diffsed.
+"""AGN emission models for tengri.
 
 Provides modular accretion disc and dust torus components that combine
 into a unified AGN SED. Three complexity levels:
@@ -12,7 +12,7 @@ into a unified AGN SED. Three complexity levels:
 
 Usage::
 
-    from diffsed.models.agn import get_agn_model, unified_agn
+    from tengri.models.agn import get_agn_model, unified_agn
 
     # Named model
     model_fn = get_agn_model("simple")
@@ -31,15 +31,15 @@ References
 - Temple, Hewett & Banerji 2021, MNRAS, 508, 737
 """
 
-from diffsed.models.agn.blr import blr_emission
-from diffsed.models.agn.disc import multicolor_disc, powerlaw_disc
-from diffsed.models.agn.nlr import nlr_emission
+from tengri.models.agn.blr import blr_emission
+from tengri.models.agn.disc import multicolor_disc, powerlaw_disc
+from tengri.models.agn.nlr import nlr_emission
 
 # QSOgen must be imported after unified (needs register_agn_model)
-from diffsed.models.agn.qsogen import qsogen, qsogen_sed
-from diffsed.models.agn.skirtor import create_skirtor_from_grid, skirtor_analytic
-from diffsed.models.agn.torus import simple_torus, two_temperature_torus
-from diffsed.models.agn.unified import (
+from tengri.models.agn.qsogen import qsogen, qsogen_sed
+from tengri.models.agn.skirtor import create_skirtor_from_grid, skirtor_analytic
+from tengri.models.agn.torus import simple_torus, two_temperature_torus
+from tengri.models.agn.unified import (
     AGN_MODELS,
     get_agn_model,
     register_agn_model,

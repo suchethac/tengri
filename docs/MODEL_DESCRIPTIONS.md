@@ -1,4 +1,4 @@
-# diffsed: Complete Model Descriptions
+# tengri: Complete Model Descriptions
 
 **For paper documentation — describes all physics modules, their mathematical
 formulations, parameters, and references.**

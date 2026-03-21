@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""List available emission lines in a diffsed CLOUDY grid HDF5 file.
+"""List available emission lines in a tengri CLOUDY grid HDF5 file.
 
 Usage:
     python scripts/list_emission_lines.py [data/cloudy_grid_mist.h5]
@@ -12,7 +12,7 @@ import numpy as np
 
 
 def list_lines(filepath: str) -> None:
-    """Print emission line info from a diffsed CLOUDY grid."""
+    """Print emission line info from a tengri CLOUDY grid."""
     with h5py.File(filepath, "r") as f:
         wavelengths = f["lines/wavelength"][:]
         names = [n.decode() if isinstance(n, bytes) else n

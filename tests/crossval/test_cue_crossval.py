@@ -30,7 +30,7 @@ if not _WEIGHTS_PATH.is_file():
 
 @pytest.fixture(scope="module")
 def cue_backend():
-    from diffsed.models.nebular.cue import CueBackend
+    from tengri.models.nebular.cue import CueBackend
 
     return CueBackend(str(_WEIGHTS_PATH))
 

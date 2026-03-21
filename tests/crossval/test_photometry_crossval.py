@@ -151,21 +151,21 @@ class TestMagnitudeRanges:
 
 
 # ===================================================================
-# 4. Cross-check diffsed photometry (if SSP data available)
+# 4. Cross-check tengri photometry (if SSP data available)
 # ===================================================================
 
 
 class TestDiffsedPhotometry:
-    """Compare diffsed photometry against FSPS magnitudes."""
+    """Compare tengri photometry against FSPS magnitudes."""
 
     @pytest.fixture(scope="class")
-    def diffsed_model(self):
+    def tengri_model(self):
         ssp_path = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
         if not ssp_path.is_file():
             pytest.skip("SSP data not found")
 
-        from diffsed import Model, ParamSpec, Uniform
-        from diffsed.models.sps.dsps_wrapper import load_ssp_data
+        from tengri import Model, ParamSpec, Uniform
+        from tengri.models.sps.dsps_wrapper import load_ssp_data
 
         spec = ParamSpec(
             sfh_alpha=Uniform(0.5, 3.0),
@@ -181,9 +181,9 @@ class TestDiffsedPhotometry:
         ssp = load_ssp_data(str(ssp_path))
         return Model(spec, ssp)
 
-    def test_photometry_positive(self, diffsed_model):
-        """diffsed photometry should be positive for a star-forming galaxy."""
-        if diffsed_model is None:
+    def test_photometry_positive(self, tengri_model):
+        """tengri photometry should be positive for a star-forming galaxy."""
+        if tengri_model is None:
             pytest.skip("Model not available")
 
         params = {
@@ -200,7 +200,7 @@ class TestDiffsedPhotometry:
         }
 
         try:
-            phot = diffsed_model.predict_photometry(params)
+            phot = tengri_model.predict_photometry(params)
             assert jnp.all(jnp.isfinite(phot)), "Photometry has non-finite values"
             assert jnp.all(phot > 0), "Photometry should be positive"
         except (ValueError, AttributeError):

@@ -1,7 +1,7 @@
 """Lazy prediction object for derived physical quantities.
 
 The :class:`Prediction` class provides on-demand computation of derived
-quantities from a diffsed forward model. Properties are only computed
+quantities from a tengri forward model. Properties are only computed
 when first accessed, and intermediate results (SFR, SED, emission lines)
 are cached so related quantities share the expensive computation.
 
@@ -79,12 +79,12 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 
-from diffsed.models.sps.dsps_wrapper import (
+from tengri.models.sps.dsps_wrapper import (
     compute_csp_weights,
     compute_surviving_mass,
     interpolate_mass_remaining,
 )
-from diffsed.utils.sed_quantities import (
+from tengri.utils.sed_quantities import (
     KEY_LINES,
     compute_balmer_break,
     compute_bolometric_luminosity,
@@ -814,7 +814,7 @@ class Prediction:
     Parameters
     ----------
     model : Model
-        The diffsed Model instance.
+        The tengri Model instance.
     params : dict
         Parameter values (public names).
 

@@ -1,11 +1,11 @@
 """JAX device and resource management.
 
 Handles GPU/CPU/TPU detection, memory reporting, and platform-aware
-configuration. Ensures diffsed uses all available resources correctly
+configuration. Ensures tengri uses all available resources correctly
 whether running on a MacBook, a GPU workstation, or an HPC cluster.
 
 Usage:
-    from diffsed.utils.devices import setup_jax, device_info
+    from tengri.utils.devices import setup_jax, device_info
     setup_jax()          # auto-configure for current hardware
     print(device_info()) # see what's available
 """

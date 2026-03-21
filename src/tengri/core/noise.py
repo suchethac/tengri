@@ -127,7 +127,7 @@ def has_noise_model(spec) -> bool:
     bool
         True if the noise model is active.
     """
-    from diffsed.distributions import Fixed
+    from tengri.distributions import Fixed
 
     for name in spec.free_params:
         if name.startswith("noise_"):
@@ -153,7 +153,7 @@ def get_noise_dof(spec) -> float | None:
     float or None
         Degrees of freedom if noise_dof is set (Fixed or free), None otherwise.
     """
-    from diffsed.distributions import Fixed
+    from tengri.distributions import Fixed
 
     if "noise_dof" not in spec.all_params:
         return None
@@ -181,7 +181,7 @@ def uses_student_t(spec) -> bool:
     """
     if "noise_dof" not in spec.all_params:
         return False
-    from diffsed.distributions import Fixed
+    from tengri.distributions import Fixed
 
     dist = spec.get_distribution("noise_dof")
     if isinstance(dist, Fixed):

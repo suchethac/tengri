@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Convert Draine & Li 2007 dust emission templates to diffsed HDF5.
+"""Convert Draine & Li 2007 dust emission templates to tengri HDF5.
 
 Reads the ASCII template files from the DL07spec tarball and builds a
-single HDF5 grid for fast interpolation in diffsed.
+single HDF5 grid for fast interpolation in tengri.
 
 Download source:
     https://www.astro.princeton.edu/~draine/dust/irem4/DL07spec.tgz
@@ -146,7 +146,7 @@ def read_dl07_template(filepath: str) -> dict:
 
 
 def convert(input_dir: str, output_path: str) -> None:
-    """Convert DL07 templates to diffsed HDF5 grid.
+    """Convert DL07 templates to tengri HDF5 grid.
 
     The output grid has shape (n_qpah, n_umin, n_umax, n_wave) for j_nu.
     For the standard DL07 usage with gamma, you need:
@@ -250,7 +250,7 @@ def convert(input_dir: str, output_path: str) -> None:
     print(f"Writing: {output_path}")
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
-    wave_aa = wave_um * 1e4  # convert to Angstrom for diffsed convention
+    wave_aa = wave_um * 1e4  # convert to Angstrom for tengri convention
 
     with h5py.File(output_path, "w") as f:
         f.create_dataset("wavelength", data=wave_aa)
@@ -287,7 +287,7 @@ def convert(input_dir: str, output_path: str) -> None:
         f.attrs["n_wave"] = n_wave
         f.attrs["umax_powerlaw"] = 1e6
         f.attrs["description"] = (
-            "DL07 IR emission templates for diffsed. "
+            "DL07 IR emission templates for tengri. "
             "Usage: j_nu = (1-gamma)*single_u[iq,iu] + gamma*powerlaw[iq,iu], "
             "then multiply by L_absorbed for energy balance normalization."
         )
@@ -304,7 +304,7 @@ def convert(input_dir: str, output_path: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert DL07 dust templates to diffsed HDF5"
+        description="Convert DL07 dust templates to tengri HDF5"
     )
     parser.add_argument(
         "--input-dir",

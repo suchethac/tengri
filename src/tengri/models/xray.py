@@ -20,11 +20,11 @@ References
 import jax.numpy as jnp
 
 # Physical constants
-_C_AA = 2.99792458e18     # Angstrom/s
+_C_AA = 2.99792458e18  # Angstrom/s
 _H_PLANCK = 6.62607015e-27  # erg s
-_K_BOLTZ = 1.380649e-16   # erg/K
-_KEV_TO_HZ = 2.418e17     # 1 keV = 2.418e17 Hz
-_LSUN = 3.828e33          # erg/s
+_K_BOLTZ = 1.380649e-16  # erg/K
+_KEV_TO_HZ = 2.418e17  # 1 keV = 2.418e17 Hz
+_LSUN = 3.828e33  # erg/s
 
 
 def xray_xrb(

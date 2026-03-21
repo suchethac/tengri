@@ -100,7 +100,7 @@ def main():
     outpath = "data/cue_reference_outputs.npz"
     np.savez(outpath, **results)
     print(f"\nSaved reference outputs to {outpath}")
-    print("Copy this file to data/ in the diffsed repo and run: pytest -m crossval")
+    print("Copy this file to data/ in the tengri repo and run: pytest -m crossval")
 
 
 if __name__ == "__main__":

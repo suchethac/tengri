@@ -610,7 +610,7 @@ class CueBackend:
         """Precompute ionizing spectrum parameters for all SSP (met, age)."""
         import numpy as np
 
-        from diffsed.models.nebular.ionizing_spectrum import precompute_ionizing_params_table
+        from tengri.models.nebular.ionizing_spectrum import precompute_ionizing_params_table
 
         result = precompute_ionizing_params_table(
             np.array(ssp_data.ssp_wave),
@@ -634,7 +634,7 @@ class CueBackend:
         if self._ionspec_table is None:
             return None, None
 
-        from diffsed.models.nebular.ionizing_spectrum import interpolate_ionizing_params
+        from tengri.models.nebular.ionizing_spectrum import interpolate_ionizing_params
 
         return interpolate_ionizing_params(
             self._ionspec_table,

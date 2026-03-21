@@ -91,7 +91,7 @@ def compute_mass_weighted_age(weights: jnp.ndarray, ssp_ages_yr: jnp.ndarray) ->
     ----------
     weights : array, shape (n_age,)
         CSP mass weights (Msun per SSP age bin), from
-        :func:`~diffsed.models.sps.dsps_wrapper.compute_csp_weights`.
+        :func:`~tengri.models.sps.dsps_wrapper.compute_csp_weights`.
     ssp_ages_yr : array, shape (n_age,)
         SSP isochrone ages in years (lookback time).
 
@@ -503,7 +503,7 @@ def compute_rest_uv_color(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
 
     Uses approximate Johnson U (3200–3900 Å) and V (5000–5800 Å)
     bands. Sufficient for UVJ classification; for precision photometry
-    use :meth:`~diffsed.model.Model.predict_magnitudes` with loaded
+    use :meth:`~tengri.model.Model.predict_magnitudes` with loaded
     filter curves.
 
     Parameters

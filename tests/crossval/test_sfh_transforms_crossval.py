@@ -29,7 +29,7 @@ class TestGPSFHCrossval:
 
     def test_zero_xi_gives_zero_gp(self):
         """Zero latent vector should give zero GP realization."""
-        from diffsed.models.sfh.gp_sfh import gp_from_xi
+        from tengri.models.sfh.gp_sfh import gp_from_xi
 
         n_grid = 128
         xi = jnp.zeros(n_grid)
@@ -40,7 +40,7 @@ class TestGPSFHCrossval:
 
     def test_gp_has_correct_length(self):
         """GP output should match n_grid."""
-        from diffsed.models.sfh.gp_sfh import gp_from_xi
+        from tengri.models.sfh.gp_sfh import gp_from_xi
 
         for n in [64, 128, 256]:
             xi = jax.random.normal(jax.random.PRNGKey(0), shape=(n,))
@@ -50,7 +50,7 @@ class TestGPSFHCrossval:
 
     def test_gp_variance_scales_with_power(self):
         """Larger sqrt_power should produce larger GP variance."""
-        from diffsed.models.sfh.gp_sfh import gp_from_xi
+        from tengri.models.sfh.gp_sfh import gp_from_xi
 
         n = 128
         xi = jax.random.normal(jax.random.PRNGKey(42), shape=(n,))
@@ -64,7 +64,7 @@ class TestGPSFHCrossval:
 
     def test_gp_ensemble_mean_near_zero(self):
         """Ensemble mean of GP realizations should be ~0 (zero-mean process)."""
-        from diffsed.models.sfh.gp_sfh import gp_from_xi
+        from tengri.models.sfh.gp_sfh import gp_from_xi
 
         n = 128
         sqrt_power = jnp.ones(n // 2 + 1)
@@ -80,7 +80,7 @@ class TestGPSFHCrossval:
 
     def test_gp_is_differentiable(self):
         """GP generation should be differentiable w.r.t. xi."""
-        from diffsed.models.sfh.gp_sfh import gp_from_xi
+        from tengri.models.sfh.gp_sfh import gp_from_xi
 
         n = 64
         sqrt_power = jnp.ones(n // 2 + 1)
@@ -102,7 +102,7 @@ class TestTransformsCrossval:
 
     def test_roundtrip_uniform(self):
         """to_unbounded -> to_bounded should be identity for Uniform."""
-        from diffsed.utils.transforms import to_bounded, to_unbounded
+        from tengri.utils.transforms import to_bounded, to_unbounded
 
         lo, hi = 0.5, 3.0
         for x in [0.5, 1.0, 1.75, 2.5, 3.0]:
@@ -112,7 +112,7 @@ class TestTransformsCrossval:
 
     def test_unbounded_is_real_line(self):
         """Unbounded values should span (-inf, inf) as x spans (lo, hi)."""
-        from diffsed.utils.transforms import to_unbounded
+        from tengri.utils.transforms import to_unbounded
 
         lo, hi = 0.0, 1.0
         # Near lower bound -> large negative
@@ -128,7 +128,7 @@ class TestTransformsCrossval:
 
     def test_bounded_stays_in_range(self):
         """to_bounded should always return values in [lo, hi]."""
-        from diffsed.utils.transforms import to_bounded
+        from tengri.utils.transforms import to_bounded
 
         lo, hi = -2.0, 0.5
         for u in [-100, -10, -1, 0, 1, 10, 100]:
@@ -137,7 +137,7 @@ class TestTransformsCrossval:
 
     def test_transform_is_differentiable(self):
         """Transforms should have finite gradients."""
-        from diffsed.utils.transforms import to_bounded, to_unbounded
+        from tengri.utils.transforms import to_bounded, to_unbounded
 
         grad_ub = jax.grad(lambda x: to_unbounded(x, 0.0, 1.0))(0.5)
         grad_b = jax.grad(lambda u: to_bounded(u, 0.0, 1.0))(0.0)
@@ -147,7 +147,7 @@ class TestTransformsCrossval:
 
     def test_jacobian_positive(self):
         """Transform Jacobian should be positive (monotonic mapping)."""
-        from diffsed.utils.transforms import to_unbounded
+        from tengri.utils.transforms import to_unbounded
 
         lo, hi = 0.0, 10.0
         for x in [0.5, 2.0, 5.0, 8.0, 9.5]:
@@ -165,7 +165,7 @@ class TestGridCrossval:
 
     def test_log_age_grid_range(self):
         """Log-age grid should span the requested range."""
-        from diffsed.utils.grid import make_log_age_grid
+        from tengri.utils.grid import make_log_age_grid
 
         grid = np.asarray(make_log_age_grid(256, log_age_min=6.0, log_age_max=10.14))
         np.testing.assert_allclose(grid[0], 6.0, atol=0.01)
@@ -173,7 +173,7 @@ class TestGridCrossval:
 
     def test_log_age_grid_uniform_spacing(self):
         """Grid should be uniformly spaced in log-age."""
-        from diffsed.utils.grid import make_log_age_grid
+        from tengri.utils.grid import make_log_age_grid
 
         grid = np.asarray(make_log_age_grid(128))
         spacing = np.diff(grid)
@@ -181,7 +181,7 @@ class TestGridCrossval:
 
     def test_grid_spacing_matches(self):
         """grid_spacing() should return the actual spacing."""
-        from diffsed.utils.grid import grid_spacing, make_log_age_grid
+        from tengri.utils.grid import grid_spacing, make_log_age_grid
 
         grid = make_log_age_grid(256)
         d = float(grid_spacing(grid))
@@ -202,7 +202,7 @@ class TestIonizingSpectrumCrossval:
         if not _SSP_PATH.is_file():
             pytest.skip("SSP data not found")
 
-        from diffsed.models.sps.dsps_wrapper import load_ssp_data
+        from tengri.models.sps.dsps_wrapper import load_ssp_data
 
         ssp = load_ssp_data(str(_SSP_PATH))
         wave = np.asarray(ssp.ssp_wave)
@@ -227,7 +227,7 @@ class TestIonizingSpectrumCrossval:
         if not _SSP_PATH.is_file():
             pytest.skip("SSP data not found")
 
-        from diffsed.models.sps.dsps_wrapper import load_ssp_data
+        from tengri.models.sps.dsps_wrapper import load_ssp_data
 
         ssp = load_ssp_data(str(_SSP_PATH))
         wave = np.asarray(ssp.ssp_wave)
@@ -265,8 +265,8 @@ class TestPrecomputeCrossval:
         if not _SSP_PATH.is_file():
             pytest.skip("SSP data not found")
 
-        from diffsed import Model, ParamSpec, Uniform
-        from diffsed.models.sps.dsps_wrapper import load_ssp_data
+        from tengri import Model, ParamSpec, Uniform
+        from tengri.models.sps.dsps_wrapper import load_ssp_data
 
         try:
             ssp = load_ssp_data(str(_SSP_PATH))

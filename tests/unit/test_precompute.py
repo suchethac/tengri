@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 from numpy.testing import assert_allclose
 
-from diffsed.models.sps.precompute import (
+from tengri.models.sps.precompute import (
     fast_photometry,
     fast_spectrum,
     interpolate_ssp_phot_metallicity,
@@ -36,7 +36,7 @@ class TestFastPhotometry:
         flux = fast_photometry(weights, ssp_phot, dust, scale)
 
         # Expected: scale * Lsun * weighted_sum over ages for each filter
-        from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+        from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 
         expected = scale * LSUN_ERG_PER_S * jnp.mean(ssp_phot, axis=0)
         assert_allclose(flux, expected, rtol=1e-10)

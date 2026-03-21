@@ -1,14 +1,14 @@
 """Cross-validate IGM transmission against bagpipes (Inoue+2014).
 
-Both diffsed and bagpipes implement the same Inoue et al. (2014)
+Both tengri and bagpipes implement the same Inoue et al. (2014)
 prescription using the same coefficient tables (from eazy-py). The
 implementations differ in:
 
-- diffsed: pure JAX, analytical piecewise power laws, takes observed-frame wavs
+- tengri: pure JAX, analytical piecewise power laws, takes observed-frame wavs
 - bagpipes: numpy, same piecewise power laws, takes rest-frame wavs
 
-Known difference: diffsed applies absorption for wave_obs < lam_j*(1+z)
-without the lower bound wave_obs > lam_j. This means diffsed may
+Known difference: tengri applies absorption for wave_obs < lam_j*(1+z)
+without the lower bound wave_obs > lam_j. This means tengri may
 over-absorb at wavelengths below line rest wavelengths. This produces
 ~5-10% differences at z>2 and non-zero absorption at z=0.
 
@@ -30,30 +30,30 @@ bagpipes_igm = pytest.importorskip(
     reason="bagpipes not installed",
 )
 
-from diffsed.models.igm import igm_transmission
+from tengri.models.igm import igm_transmission
 
 
 class TestIGMTransmissionCrossval:
-    """Compare diffsed IGM vs bagpipes Inoue+2014."""
+    """Compare tengri IGM vs bagpipes Inoue+2014."""
 
     @pytest.mark.parametrize("z_source", [0.5, 1.0, 2.0, 3.0, 5.0])
     def test_transmission_matches_bagpipes(self, rest_wavelengths, z_source):
         """IGM transmission should agree within ~10% across redshifts.
 
-        diffsed takes observed-frame wavelengths; bagpipes takes
+        tengri takes observed-frame wavelengths; bagpipes takes
         rest-frame. We convert: wave_obs = rest_wavs * (1 + z).
         """
         rest_wavs = rest_wavelengths
         wave_obs = rest_wavs * (1.0 + z_source)
 
-        # diffsed (observed-frame input)
-        trans_diffsed = np.asarray(igm_transmission(jnp.array(wave_obs), z_source))
+        # tengri (observed-frame input)
+        trans_tengri = np.asarray(igm_transmission(jnp.array(wave_obs), z_source))
 
         # bagpipes (rest-frame input)
         trans_bagpipes = bagpipes_igm.get_Inoue14_trans(rest_wavs, z_source)
 
         # Both should be in [0, 1]
-        assert np.all(trans_diffsed >= 0.0) and np.all(trans_diffsed <= 1.0 + 1e-10)
+        assert np.all(trans_tengri >= 0.0) and np.all(trans_tengri <= 1.0 + 1e-10)
         assert np.all(trans_bagpipes >= 0.0) and np.all(trans_bagpipes <= 1.0 + 1e-10)
 
         # Focus on wavelengths above Ly-alpha (where the lower-bound
@@ -63,7 +63,7 @@ class TestIGMTransmissionCrossval:
             pytest.skip(f"Too few points above Ly-alpha at z={z_source}")
 
         np.testing.assert_allclose(
-            trans_diffsed[above_lya],
+            trans_tengri[above_lya],
             trans_bagpipes[above_lya],
             atol=1e-4,
             err_msg=f"IGM transmission mismatch above Ly-alpha at z={z_source}",
@@ -75,10 +75,10 @@ class TestIGMTransmissionCrossval:
         z = 2.0
         wave_obs = rest_wavs * (1.0 + z)
 
-        trans_diffsed = np.asarray(igm_transmission(jnp.array(wave_obs), z))
+        trans_tengri = np.asarray(igm_transmission(jnp.array(wave_obs), z))
         trans_bagpipes = bagpipes_igm.get_Inoue14_trans(rest_wavs, z)
 
-        np.testing.assert_allclose(trans_diffsed, 1.0, atol=1e-6)
+        np.testing.assert_allclose(trans_tengri, 1.0, atol=1e-6)
         np.testing.assert_allclose(trans_bagpipes, 1.0, atol=1e-6)
 
     def test_zero_redshift_bagpipes_no_absorption(self, rest_wavelengths):
@@ -86,12 +86,12 @@ class TestIGMTransmissionCrossval:
         trans_bagpipes = bagpipes_igm.get_Inoue14_trans(rest_wavelengths, 0.0)
         np.testing.assert_allclose(trans_bagpipes, 1.0, atol=1e-10)
 
-    def test_zero_redshift_diffsed_no_absorption(self, rest_wavelengths):
-        """At z=0, diffsed should give exactly no IGM absorption."""
+    def test_zero_redshift_tengri_no_absorption(self, rest_wavelengths):
+        """At z=0, tengri should give exactly no IGM absorption."""
         wave_obs = rest_wavelengths  # obs = rest at z=0
-        trans_diffsed = np.asarray(igm_transmission(jnp.array(wave_obs), 0.0))
+        trans_tengri = np.asarray(igm_transmission(jnp.array(wave_obs), 0.0))
 
-        np.testing.assert_allclose(trans_diffsed, 1.0, atol=1e-10)
+        np.testing.assert_allclose(trans_tengri, 1.0, atol=1e-10)
 
     def test_high_redshift_strong_absorption(self):
         """At z=6, UV below Ly-alpha should be heavily absorbed in both."""
@@ -99,11 +99,11 @@ class TestIGMTransmissionCrossval:
         z = 6.0
         wave_obs = rest_wavs * (1.0 + z)
 
-        trans_diffsed = np.asarray(igm_transmission(jnp.array(wave_obs), z))
+        trans_tengri = np.asarray(igm_transmission(jnp.array(wave_obs), z))
         trans_bagpipes = bagpipes_igm.get_Inoue14_trans(rest_wavs, z)
 
         # Both should show strong absorption (T < 0.5) below Ly-alpha
-        assert np.all(trans_diffsed < 0.5), "diffsed: weak absorption at z=6"
+        assert np.all(trans_tengri < 0.5), "tengri: weak absorption at z=6"
         assert np.all(trans_bagpipes < 0.5), "bagpipes: weak absorption at z=6"
 
     @pytest.mark.parametrize("z_source", [1.0, 3.0, 5.0])

@@ -24,8 +24,8 @@ from functools import partial
 # SSP library spectral resolutions (velocity dispersion in km/s)
 # ---------------------------------------------------------------------------
 SSP_LIBRARY_RESOLUTIONS: dict[str, float] = {
-    "miles": 70.0,       # R ~ 2500 at 5000 A, sigma ~ 70 km/s
-    "c3k": 15.0,         # R ~ 10000, sigma ~ 15 km/s
+    "miles": 70.0,  # R ~ 2500 at 5000 A, sigma ~ 70 km/s
+    "c3k": 15.0,  # R ~ 10000, sigma ~ 15 km/s
     "fsps_default": 70.0,  # MILES-based (default FSPS)
 }
 
@@ -198,9 +198,7 @@ def _apply_lsf_variable_r(
             1.0,
             0.0,
         )
-        sigma_mean = jnp.sum(sigma_eff_kms * bin_mask) / jnp.maximum(
-            jnp.sum(bin_mask), 1.0
-        )
+        sigma_mean = jnp.sum(sigma_eff_kms * bin_mask) / jnp.maximum(jnp.sum(bin_mask), 1.0)
 
         # FFT convolution with this sigma
         sigma_pix = (sigma_mean / _C_KM_S) / dlnwave
@@ -488,6 +486,7 @@ def blend_emission_lines(
     line luminosity) to Lsun/Hz (spectral density), we divide by the
     frequency width delta_nu = c * sigma / lambda_obs^2.
     """
+
     def _single_line(lam_rest, lum):
         """Compute Gaussian profile for one line.
 
@@ -507,9 +506,9 @@ def blend_emission_lines(
         sigma_aa = lam_obs / (2.355 * spectral_resolution)
 
         # Gaussian profile normalized in wavelength space: integral = 1
-        profile = jnp.exp(
-            -0.5 * ((wave_out - lam_obs) / sigma_aa) ** 2
-        ) / (jnp.sqrt(2.0 * jnp.pi) * sigma_aa)
+        profile = jnp.exp(-0.5 * ((wave_out - lam_obs) / sigma_aa) ** 2) / (
+            jnp.sqrt(2.0 * jnp.pi) * sigma_aa
+        )
 
         # Convert Lsun (integrated over wavelength) to Lsun/Hz:
         # delta_nu = c / lam_obs^2 * sigma_aa  (characteristic freq width)

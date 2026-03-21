@@ -7,7 +7,7 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed import (
+from tengri import (
     Fixed,
     Model,
     ParamSpec,
@@ -15,9 +15,9 @@ from diffsed import (
     load_filter_set,
     load_ssp_data,
 )
-from diffsed.models.dust.attenuation import two_component_dust
-from diffsed.models.observation.photometry import compute_flux_density
-from diffsed.models.sps.dsps_wrapper import (
+from tengri.models.dust.attenuation import two_component_dust
+from tengri.models.observation.photometry import compute_flux_density
+from tengri.models.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
     interpolate_metallicity,
@@ -150,7 +150,7 @@ print(f"  6. CSP SED (einsum):          {t_sed:8.1f} μs")
 
 # 7. Photometric integration (filter loop)
 z = 0.1
-from diffsed.utils.cosmology import luminosity_distance
+from tengri.utils.cosmology import luminosity_distance
 
 dl_cm = luminosity_distance(z)
 

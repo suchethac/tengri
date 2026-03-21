@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.observation.eline_marginalization import (
+from tengri.models.observation.eline_marginalization import (
     DEFAULT_LINE_WAVELENGTHS,
     build_eline_design_matrix,
     marginalize_emission_lines,
@@ -78,8 +78,9 @@ class TestDesignMatrix:
         G = build_eline_design_matrix(wave_grid, line_waves, 1000.0, 0.0)
         dlam = wave_grid[1] - wave_grid[0]
         integral = jnp.sum(G[:, 0]) * dlam
-        assert_allclose(float(integral), 1.0, rtol=0.01,
-                        err_msg="Gaussian profile should integrate to 1")
+        assert_allclose(
+            float(integral), 1.0, rtol=0.01, err_msg="Gaussian profile should integrate to 1"
+        )
 
     def test_peak_at_line_center(self, wave_grid):
         """Peak of each column should be at the redshifted line center."""
@@ -102,16 +103,12 @@ class TestDesignMatrix:
 
     def test_non_negative(self, wave_grid):
         """Design matrix should be non-negative (Gaussian profiles)."""
-        G = build_eline_design_matrix(
-            wave_grid, DEFAULT_LINE_WAVELENGTHS[:3], 1000.0, 0.0
-        )
+        G = build_eline_design_matrix(wave_grid, DEFAULT_LINE_WAVELENGTHS[:3], 1000.0, 0.0)
         assert jnp.all(G >= 0)
 
     def test_default_line_list(self, wave_grid):
         """Should work with the full default line list."""
-        G = build_eline_design_matrix(
-            wave_grid, DEFAULT_LINE_WAVELENGTHS, 1000.0, 0.0
-        )
+        G = build_eline_design_matrix(wave_grid, DEFAULT_LINE_WAVELENGTHS, 1000.0, 0.0)
         assert G.shape == (len(wave_grid), len(DEFAULT_LINE_WAVELENGTHS))
 
 
@@ -133,8 +130,9 @@ class TestAmplitudeRecovery:
         residual = data - continuum
 
         _, a_hat, _ = marginalize_emission_lines(residual, noise, G)
-        assert_allclose(float(a_hat[0]), true_amp, rtol=1e-4,
-                        err_msg="Should recover injected amplitude")
+        assert_allclose(
+            float(a_hat[0]), true_amp, rtol=1e-4, err_msg="Should recover injected amplitude"
+        )
 
     def test_multi_line_recovery(self, multi_line_setup):
         """Should recover multiple injected line amplitudes."""
@@ -146,8 +144,9 @@ class TestAmplitudeRecovery:
         residual = data - continuum
 
         _, a_hat, _ = marginalize_emission_lines(residual, noise, G)
-        assert_allclose(a_hat, true_amps, rtol=1e-3,
-                        err_msg="Should recover all injected amplitudes")
+        assert_allclose(
+            a_hat, true_amps, rtol=1e-3, err_msg="Should recover all injected amplitudes"
+        )
 
     def test_recovery_with_noise(self, simple_setup):
         """Recovery should be approximate with noise, but unbiased."""
@@ -165,8 +164,7 @@ class TestAmplitudeRecovery:
         # The recovered amplitude should be within ~3 sigma of truth
         sigma_a = jnp.sqrt(a_cov[0, 0])
         assert abs(float(a_hat[0]) - true_amp) < 3.0 * float(sigma_a), (
-            f"Recovered {float(a_hat[0]):.3f} vs true {true_amp}, "
-            f"sigma={float(sigma_a):.3f}"
+            f"Recovered {float(a_hat[0]):.3f} vs true {true_amp}, sigma={float(sigma_a):.3f}"
         )
 
 
@@ -280,9 +278,7 @@ class TestPriorEffect:
         assert abs(float(a_hat_tight[0])) < abs(float(a_hat_wide[0])), (
             "Tight prior should shrink amplitude more than wide prior"
         )
-        assert abs(float(a_hat_tight[0])) < 0.1, (
-            "Very tight prior should push amplitude near zero"
-        )
+        assert abs(float(a_hat_tight[0])) < 0.1, "Very tight prior should push amplitude near zero"
 
     def test_per_line_prior(self, multi_line_setup):
         """Per-line prior variances should independently regulate lines."""
@@ -293,9 +289,7 @@ class TestPriorEffect:
 
         # Tight prior on first line only
         prior_var = jnp.array([1e-10, 1e10, 1e10])
-        _, a_hat, _ = marginalize_emission_lines(
-            residual, noise, G, prior_variance=prior_var
-        )
+        _, a_hat, _ = marginalize_emission_lines(residual, noise, G, prior_variance=prior_var)
         assert abs(float(a_hat[0])) < 0.1, "First line should be suppressed"
         assert abs(float(a_hat[1]) - 5.0) < 0.5, "Second line should be recovered"
         assert abs(float(a_hat[2]) - 5.0) < 0.5, "Third line should be recovered"
@@ -386,8 +380,12 @@ class TestLineIndependence:
         _, a2, _ = marginalize_emission_lines(data_signal, noise, G2)
 
         # H-alpha amplitude should be nearly identical
-        assert_allclose(float(a1[0]), float(a2[0]), rtol=1e-3,
-                        err_msg="Adding distant line shouldn't change H-alpha recovery")
+        assert_allclose(
+            float(a1[0]),
+            float(a2[0]),
+            rtol=1e-3,
+            err_msg="Adding distant line shouldn't change H-alpha recovery",
+        )
         # H-beta should be near zero
         assert abs(float(a2[1])) < 0.01, "Absent line should have near-zero amplitude"
 
@@ -400,9 +398,7 @@ class TestLineIndependence:
 
         _, _, a_cov = marginalize_emission_lines(residual, noise, G)
         # Normalize off-diagonal by geometric mean of diagonals
-        corr_01 = float(a_cov[0, 1]) / jnp.sqrt(
-            float(a_cov[0, 0]) * float(a_cov[1, 1])
-        )
+        corr_01 = float(a_cov[0, 1]) / jnp.sqrt(float(a_cov[0, 0]) * float(a_cov[1, 1]))
         assert abs(corr_01) < 0.1, (
             f"Correlation between well-separated lines should be small, got {corr_01:.4f}"
         )
@@ -446,8 +442,7 @@ class TestZeroLines:
         diff = abs(float(ln_l_marg) - float(ln_l_plain))
         # With 1 line and uninformative prior, correction is O(1)
         assert diff < 50.0, (
-            f"Marginalized and plain lnL should be similar for noise-only data, "
-            f"diff={diff:.1f}"
+            f"Marginalized and plain lnL should be similar for noise-only data, diff={diff:.1f}"
         )
 
     def test_predict_equals_continuum_for_zero_amps(self, simple_setup):
@@ -489,8 +484,9 @@ class TestEdgeCases:
         noise = jnp.ones_like(wave) * 0.1
         residual = jnp.ones_like(wave) * 0.5
         _, _, a_cov = marginalize_emission_lines(residual, noise, G)
-        assert_allclose(a_cov, a_cov.T, atol=1e-10,
-                        err_msg="Posterior covariance should be symmetric")
+        assert_allclose(
+            a_cov, a_cov.T, atol=1e-10, err_msg="Posterior covariance should be symmetric"
+        )
 
     def test_posterior_covariance_positive_definite(self, multi_line_setup):
         """Posterior covariance should be positive definite."""

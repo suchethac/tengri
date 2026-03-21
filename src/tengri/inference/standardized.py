@@ -24,8 +24,8 @@ from collections.abc import Callable
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
-from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw
-from diffsed.utils.grid import make_log_age_grid
+from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.utils.grid import make_log_age_grid
 
 
 class StandardizedForwardModel:
@@ -255,7 +255,7 @@ def build_standardized_loss(
     No prior penalty terms beyond ½ξᵀξ. The prior is absorbed into the
     transforms.
     """
-    from diffsed.core.noise import (
+    from tengri.core.noise import (
         get_noise_dof,
         has_noise_model,
         uses_student_t,
@@ -309,7 +309,7 @@ def build_hierarchical_loss(
     the effective noise includes a calibration floor and the
     log-determinant penalty.
     """
-    from diffsed.core.noise import compute_effective_noise, has_noise_model
+    from tengri.core.noise import compute_effective_noise, has_noise_model
 
     use_variable_noise = has_noise_model(smodel.spec)
     n_gal = len(galaxies)

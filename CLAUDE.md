@@ -1,17 +1,17 @@
-# Claude Code Instructions for diffsed
+# Claude Code Instructions for tengri
 
 ## Project overview
 
 Differentiable SED fitting code in JAX. Models galaxy star formation histories as IFT correlated fields with PSD-governed burstiness priors. Uses DSPS for differentiable stellar population synthesis.
 
-**Code name:** `diffsed` is a working name. Final name TBD.
+**Code name:** `tengri` is a working name. Final name TBD.
 **Paper draft:** `~/writing-workspace/projects/differentiable_psd_sed_fitting/`
 **Paper I:** Methods + mock recovery (including hierarchical PSD). **Paper II:** Real data.
 
 ## Build/test commands
 
 ```bash
-cd ~/Projects/diffsed
+cd ~/Projects/tengri
 source .venv/bin/activate
 
 # Lint and format (ALWAYS run before committing)
@@ -54,7 +54,7 @@ latexmk -pdf 0-ms.tex
 ## Package structure
 
 ```
-src/diffsed/
+src/tengri/
 ├── __init__.py              # public API re-exports
 ├── distributions.py         # Uniform, Gaussian, LogUniform, Fixed
 ├── plotting.py              # Visualization utilities
@@ -96,7 +96,7 @@ src/diffsed/
 Use `Model`, `ParamSpec`, `Fitter`, `Posterior`. ForwardModel has been removed.
 
 ```python
-from diffsed import Model, ParamSpec, Uniform, Fitter, HierarchicalFitter
+from tengri import Model, ParamSpec, Uniform, Fitter, HierarchicalFitter
 ```
 
 Each class has a `.summary()` method for quick inspection:
@@ -183,7 +183,7 @@ The forward model uses several optimizations for speed:
 1. **Fused JIT kernels**: Single `@jax.jit` scope for weights + metallicity interp + dust + einsum, eliminating intermediate array materializations
 2. **Precomputed dust age weights**: Sigmoid(log10(age)) computed once at Model init, not per call
 3. **Mixed precision**: `Model(spec, ssp, forward_dtype="float32")` halves memory, ~1.5x speed, <0.1% error
-4. **XLA compilation cache**: Persistent cache at `/tmp/diffsed_jax_cache` — auto-enabled on import
+4. **XLA compilation cache**: Persistent cache at `/tmp/tengri_jax_cache` — auto-enabled on import
 5. **Photometry precomputation**: SSP through filters computed once (Zacharegkas+2025), 21.6x speedup
 6. **Spectroscopy precomputation**: SSPs pre-interpolated to observed wavelengths
 

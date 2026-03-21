@@ -1,4 +1,4 @@
-"""Parameter specification for diffsed models.
+"""Parameter specification for tengri models.
 
 ParamSpec defines all model parameters: their names, distributions (or fixed
 values), and physical bounds. A single ParamSpec is used for both mock
@@ -50,13 +50,13 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from diffsed.distributions import (
+from tengri.distributions import (
     Distribution,
     Fixed,
     Uniform,
     resolve_shorthand,
 )
-from diffsed.models.sfh.registry import resolve_sfh
+from tengri.models.sfh.registry import resolve_sfh
 
 # ---------------------------------------------------------------------------
 # Non-SFH parameter registry: always present regardless of mean_sfh_type
@@ -871,7 +871,7 @@ class ParamSpec:
         if nebular_cue:
             self.nebular_mode = "cue"
             if self.cue_weights_path is None:
-                from diffsed.models.nebular import _DEFAULT_CUE_WEIGHTS_PATH
+                from tengri.models.nebular import _DEFAULT_CUE_WEIGHTS_PATH
 
                 self.cue_weights_path = str(_DEFAULT_CUE_WEIGHTS_PATH)
         elif nebular:

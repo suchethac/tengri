@@ -13,13 +13,13 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.sps.dsps_wrapper import SSPData
-from diffsed.models.sps.precompute import (
+from tengri.models.sps.dsps_wrapper import SSPData
+from tengri.models.sps.precompute import (
     interpolate_ztable,
     precompute_photometry,
     precompute_photometry_ztable,
 )
-from diffsed.utils.cosmology import luminosity_distance
+from tengri.utils.cosmology import luminosity_distance
 
 jax.config.update("jax_enable_x64", True)
 

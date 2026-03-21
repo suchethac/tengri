@@ -19,7 +19,7 @@ ParamSpec integration example
 -----------------------------
 To add calibration coefficients as free parameters::
 
-    from diffsed.distributions import Gaussian
+    from tengri.distributions import Gaussian
 
     spec = ParamSpec(
         ...,
@@ -31,9 +31,7 @@ To add calibration coefficients as free parameters::
 
     # In the forward model, pack coefficients and apply:
     coeffs = jnp.array([params["cal_c1"], params["cal_c2"], params["cal_c3"]])
-    model_spec = apply_calibration(
-        physical_spec, wave_obs, coeffs, wave_min, wave_max
-    )
+    model_spec = apply_calibration(physical_spec, wave_obs, coeffs, wave_min, wave_max)
 
 References
 ----------

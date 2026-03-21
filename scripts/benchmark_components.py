@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Benchmark all diffsed forward model components.
+"""Benchmark all tengri forward model components.
 
 Measures per-call timing for each physics module after JIT warmup.
 Useful for identifying bottlenecks and tracking performance regressions.
@@ -33,7 +33,7 @@ def bench(fn, label, n_warmup=N_WARMUP, n_runs=N_RUNS):
 
 def main():
     print("=" * 60)
-    print("diffsed Component Benchmarks")
+    print("tengri Component Benchmarks")
     print(f"  Platform: {jax.devices()[0].platform.upper()}")
     print("  Precision: float64")
     print(f"  Runs: {N_RUNS} (after {N_WARMUP} warmup)")
@@ -41,7 +41,7 @@ def main():
 
     # --- Dust attenuation ---
     print("\nDust Attenuation:")
-    from diffsed.models.dust.attenuation import two_component_dust
+    from tengri.models.dust.attenuation import two_component_dust
 
     wave = jnp.linspace(1000, 30000, 5994)
     ages = jnp.array([1e6, 1e7, 1e8, 1e9, 1e10])
@@ -54,7 +54,7 @@ def main():
 
     # --- Dust emission ---
     print("\nDust IR Emission:")
-    from diffsed.models.dust.emission import dale2014, draine_li2007, modified_blackbody
+    from tengri.models.dust.emission import dale2014, draine_li2007, modified_blackbody
 
     wave_ir = jnp.logspace(np.log10(5000), np.log10(5e6), 1000)
     bench(lambda: modified_blackbody(wave_ir, 1.0, dust_T=30.0), "Modified blackbody (1000 pts)")
@@ -65,7 +65,7 @@ def main():
     )
 
     try:
-        from diffsed.models.dust.emission import create_dl07_from_grid
+        from tengri.models.dust.emission import create_dl07_from_grid
 
         dl07 = create_dl07_from_grid("data/dl07_templates.npz")
         bench(
@@ -77,14 +77,14 @@ def main():
 
     # --- IGM ---
     print("\nIGM Absorption:")
-    from diffsed.models.igm import igm_transmission
+    from tengri.models.igm import igm_transmission
 
     wave_obs = jnp.linspace(3000, 15000, 5994)
     bench(lambda: igm_transmission(wave_obs, 3.0), "Inoue+2014 (5994 pts, z=3)")
 
     # --- Mass remaining ---
     print("\nMass-Remaining Fraction:")
-    from diffsed.models.sps.mass_remaining import compute_mass_remaining_fraction
+    from tengri.models.sps.mass_remaining import compute_mass_remaining_fraction
 
     ages_gyr = jnp.array([0.01, 0.1, 1.0, 5.0, 10.0])
     bench(
@@ -95,7 +95,7 @@ def main():
     # --- CUE nebular ---
     print("\nCUE Nebular Emulator:")
     try:
-        from diffsed.models.nebular.cue import CueBackend
+        from tengri.models.nebular.cue import CueBackend
 
         cb = CueBackend("data/cue_weights.npz")
         cue_p = dict(
@@ -133,7 +133,7 @@ def main():
 
     # --- AGN ---
     print("\nAGN Models:")
-    from diffsed.models.agn.unified import simple_agn, standard_agn
+    from tengri.models.agn.unified import simple_agn, standard_agn
 
     wave_agn = jnp.linspace(500, 200000, 5000)
     bench(
@@ -147,7 +147,7 @@ def main():
 
     # --- Radio ---
     print("\nRadio:")
-    from diffsed.models.radio import radio_total
+    from tengri.models.radio import radio_total
 
     wave_radio = jnp.logspace(7, 10, 500)
     bench(
@@ -157,7 +157,7 @@ def main():
 
     # --- X-ray ---
     print("\nX-ray:")
-    from diffsed.models.xray import xray_xrb
+    from tengri.models.xray import xray_xrb
 
     wave_xray = jnp.linspace(0.1, 12.0, 500)
     bench(

@@ -1,6 +1,6 @@
 """Shared fixtures for cross-validation tests against community SED codes.
 
-These tests compare diffsed's physics implementations against bagpipes
+These tests compare tengri's physics implementations against bagpipes
 (Carnall et al. 2018) to verify we produce sensible results. They are
 NOT run by default — invoke with:
 
@@ -19,7 +19,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 # ---------------------------------------------------------------------------
-# SSP data paths (needed for diffsed Model tests)
+# SSP data paths (needed for tengri Model tests)
 # ---------------------------------------------------------------------------
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_PATH = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
@@ -28,10 +28,10 @@ SSP_EXISTS = _SSP_PATH.is_file()
 
 @pytest.fixture(scope="session")
 def ssp_data():
-    """Load SSP data for diffsed Model (skip if files missing)."""
+    """Load SSP data for tengri Model (skip if files missing)."""
     if not SSP_EXISTS:
         pytest.skip("SSP data not found")
-    from diffsed.models.sps.dsps_wrapper import load_ssp_data
+    from tengri.models.sps.dsps_wrapper import load_ssp_data
 
     return load_ssp_data(str(_SSP_PATH))
 

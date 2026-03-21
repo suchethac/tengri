@@ -1,10 +1,10 @@
-# AI Agent Guide for diffsed
+# AI Agent Guide for tengri
 
-> This document helps AI agents (Claude, GPT, Copilot, Cursor, etc.) understand and work with the `diffsed` codebase effectively. If you are an AI assistant helping a user with this package, read this first.
+> This document helps AI agents (Claude, GPT, Copilot, Cursor, etc.) understand and work with the `tengri` codebase effectively. If you are an AI assistant helping a user with this package, read this first.
 
 ## What this package does
 
-`diffsed` is a **differentiable galaxy SED (Spectral Energy Distribution) fitting code** written in JAX. It models star formation histories using Information Field Theory — treating the SFH as a continuous correlated field governed by a power spectral density (PSD).
+`tengri` is a **differentiable galaxy SED (Spectral Energy Distribution) fitting code** written in JAX. It models star formation histories using Information Field Theory — treating the SFH as a continuous correlated field governed by a power spectral density (PSD).
 
 **In plain terms:** Given galaxy observations (photometry or spectra), infer the galaxy's star formation history, dust properties, and metallicity using Bayesian inference with gradient-based samplers.
 
@@ -35,15 +35,15 @@ Parameters (latent xi + physical params)
 
 | File | Purpose | When to read |
 |------|---------|--------------|
-| `src/diffsed/model.py` | High-level Model class | Understanding the forward model |
-| `src/diffsed/models/sfh/gp_sfh.py` | GP generation from PSD | Core IFT machinery |
-| `src/diffsed/models/sfh/psd_models.py` | PSD definitions (DRW, Matern) | Understanding the burstiness prior |
-| `src/diffsed/models/sfh/mean_sfh.py` | Parametric mean SFH | The smooth secular envelope |
-| `src/diffsed/models/dust/charlot_fall.py` | Dust attenuation | Dust modeling |
-| `src/diffsed/models/sps/dsps_wrapper.py` | DSPS CSP integral | SPS integration |
-| `src/diffsed/utils/transforms.py` | Bounded/unbounded parameter maps | Parameter handling |
-| `src/diffsed/utils/devices.py` | JAX hardware configuration | GPU/CPU setup |
-| `src/diffsed/utils/optimizations.py` | Hartley transform, approx photometry | Performance |
+| `src/tengri/model.py` | High-level Model class | Understanding the forward model |
+| `src/tengri/models/sfh/gp_sfh.py` | GP generation from PSD | Core IFT machinery |
+| `src/tengri/models/sfh/psd_models.py` | PSD definitions (DRW, Matern) | Understanding the burstiness prior |
+| `src/tengri/models/sfh/mean_sfh.py` | Parametric mean SFH | The smooth secular envelope |
+| `src/tengri/models/dust/charlot_fall.py` | Dust attenuation | Dust modeling |
+| `src/tengri/models/sps/dsps_wrapper.py` | DSPS CSP integral | SPS integration |
+| `src/tengri/utils/transforms.py` | Bounded/unbounded parameter maps | Parameter handling |
+| `src/tengri/utils/devices.py` | JAX hardware configuration | GPU/CPU setup |
+| `src/tengri/utils/optimizations.py` | Hartley transform, approx photometry | Performance |
 | `tests/conftest.py` | Test fixtures, grid setup | Understanding test patterns |
 
 ## Parameter dictionary convention
@@ -84,7 +84,7 @@ params = {
 ### Generate a mock galaxy SED
 
 ```python
-from diffsed import Model, ParamSpec, Uniform, load_ssp_data, load_filter_set
+from tengri import Model, ParamSpec, Uniform, load_ssp_data, load_filter_set
 
 ssp = load_ssp_data("path/to/ssp_templates.h5")
 filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
@@ -113,7 +113,7 @@ grads = jax.grad(loss_fn)(params)
 
 ### Add a new dust model
 
-1. Create `src/diffsed/models/dust/my_model.py`
+1. Create `src/tengri/models/dust/my_model.py`
 2. Implement a function with signature: `(wavelength, age_grid, **params) -> attenuation_factor`
 3. The function must be pure JAX (jnp operations only, no side effects)
 4. Add tests in `tests/unit/test_dust.py`
@@ -121,7 +121,7 @@ grads = jax.grad(loss_fn)(params)
 
 ### Add a new PSD model
 
-1. Add function to `src/diffsed/models/sfh/psd_models.py`
+1. Add function to `src/tengri/models/sfh/psd_models.py`
 2. Signature: `(omega, **params) -> P(omega)` where omega is angular frequency
 3. Must be JIT-compatible and have well-defined gradients
 4. Add corresponding `compute_sqrt_power_*` function in `gp_sfh.py`
@@ -152,7 +152,7 @@ ruff format src/ tests/             # auto-format all files
 
 - **F**: unused imports/variables (keep imports clean)
 - **E/W**: pycodestyle basics (99-char line limit)
-- **I**: import sorting (stdlib → third-party → first-party `diffsed`)
+- **I**: import sorting (stdlib → third-party → first-party `tengri`)
 - **UP**: Python 3.10+ syntax (use `X | None` not `Optional[X]`)
 - **B**: bugbear patterns (`raise ... from None` in except, no loop-var capture in closures)
 - **SIM**: simplifiable constructs
@@ -188,7 +188,7 @@ Sharp viability cliff at step_size~0.06; compensate with more leapfrog steps.
 ```bash
 pytest tests/ -v                          # all tests
 pytest tests/unit/test_psd_models.py -v   # specific module
-pytest tests/ --cov=src/diffsed           # with coverage
+pytest tests/ --cov=src/tengri           # with coverage
 ```
 
 All tests use `jax.config.update("jax_enable_x64", True)` for numerical precision.

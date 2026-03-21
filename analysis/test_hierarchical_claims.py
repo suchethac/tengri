@@ -20,7 +20,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed import (
+from tengri import (
     Fixed,
     HierarchicalFitter,
     Model,

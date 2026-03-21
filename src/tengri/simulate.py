@@ -1,6 +1,6 @@
 """Forward-model SEDs from arbitrary SFH and metallicity history arrays.
 
-This module provides the simulation-facing API for diffsed: given
+This module provides the simulation-facing API for tengri: given
 tabulated SFH(t) and optionally Z(t) arrays (e.g., from cosmological
 simulations like IllustrisTNG, EAGLE, UniverseMachine), compute the
 rest-frame SED, observed photometry, or spectrum.
@@ -12,8 +12,8 @@ Usage
 -----
 Quick photometry from an SFH array::
 
-    from diffsed import load_ssp_data, load_filter_set
-    from diffsed.simulate import sed_from_sfh, photometry_from_sfh
+    from tengri import load_ssp_data, load_filter_set
+    from tengri.simulate import sed_from_sfh, photometry_from_sfh
 
     ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r"])
@@ -23,14 +23,14 @@ Quick photometry from an SFH array::
     sfr = 10.0 * np.exp(-t_gyr / 3.0)  # exponentially declining
 
     sed = sed_from_sfh(t_gyr, sfr, ssp, log_z=-0.3)
-    phot = photometry_from_sfh(t_gyr, sfr, ssp, filters, log_z=-0.3,
-                                redshift=0.5, dust_tau_bc=0.3, dust_tau_diff=0.5)
+    phot = photometry_from_sfh(
+        t_gyr, sfr, ssp, filters, log_z=-0.3, redshift=0.5, dust_tau_bc=0.3, dust_tau_diff=0.5
+    )
 
 With metallicity history::
 
     log_z_history = -2.0 + 1.5 * t_gyr / 13.7  # enrichment
-    sed = sed_from_sfh(t_gyr, sfr, ssp, log_z=log_z_history,
-                        lgmet_scatter=0.3)
+    sed = sed_from_sfh(t_gyr, sfr, ssp, log_z=log_z_history, lgmet_scatter=0.3)
 
 All functions are pure JAX and JIT-compilable.
 
@@ -41,14 +41,14 @@ References
 
 import jax.numpy as jnp
 
-from diffsed.models.dust.attenuation import two_component_dust
-from diffsed.models.sps.dsps_wrapper import (
+from tengri.models.dust.attenuation import two_component_dust
+from tengri.models.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
     interpolate_metallicity,
     interpolate_metallicity_evolving,
 )
-from diffsed.utils.cosmology import luminosity_distance
+from tengri.utils.cosmology import luminosity_distance
 
 # ===================================================================
 # Constants
@@ -127,30 +127,40 @@ def sed_from_sfh(
     weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
 
     # Metallicity interpolation
-    if isinstance(log_z, (float, int)) or (hasattr(log_z, 'ndim') and log_z.ndim == 0):
+    if isinstance(log_z, (float, int)) or (hasattr(log_z, "ndim") and log_z.ndim == 0):
         # Scalar metallicity — convert to absolute log(Z)
         log_z_abs = float(log_z) + (-1.8477)  # solar offset
         ssp_flux_at_z = interpolate_metallicity(
-            ssp_data.ssp_flux, ssp_data.ssp_lgmet, log_z_abs,
+            ssp_data.ssp_flux,
+            ssp_data.ssp_lgmet,
+            log_z_abs,
         )
     else:
         # Array metallicity history — interpolate onto SSP ages
         log_z_array = jnp.asarray(log_z)
         log_z_on_ssp = jnp.interp(
-            ssp_log_ages_yr, log_t_lookback[::-1], log_z_array[::-1],
+            ssp_log_ages_yr,
+            log_t_lookback[::-1],
+            log_z_array[::-1],
         )
         log_z_abs = log_z_on_ssp + (-1.8477)
         ssp_flux_at_z = interpolate_metallicity_evolving(
-            ssp_data.ssp_flux, ssp_data.ssp_lgmet, log_z_abs,
+            ssp_data.ssp_flux,
+            ssp_data.ssp_lgmet,
+            log_z_abs,
         )
 
     # Dust attenuation
     if dust_tau_bc > 0 or dust_tau_diff > 0:
         dust_atten = two_component_dust(
-            ssp_data.ssp_wave, ssp_ages_yr,
-            tau_v1=dust_tau_bc, tau_v2=dust_tau_diff,
-            law_bc=dust_law, law_diff=dust_law,
-            n_slope=dust_slope, **dust_kwargs,
+            ssp_data.ssp_wave,
+            ssp_ages_yr,
+            tau_v1=dust_tau_bc,
+            tau_v2=dust_tau_diff,
+            law_bc=dust_law,
+            law_diff=dust_law,
+            n_slope=dust_slope,
+            **dust_kwargs,
         )
     else:
         dust_atten = jnp.ones((len(ssp_ages_yr), len(ssp_data.ssp_wave)))
@@ -208,18 +218,25 @@ def photometry_from_sfh(
         "sed" : array (n_wave,) — rest-frame SED in erg/s/Hz
         "stellar_mass" : float — total mass formed
     """
-    from diffsed.models.observation.photometry import compute_flux_density
+    from tengri.models.observation.photometry import compute_flux_density
 
     # Compute SED
-    result = sed_from_sfh(t_gyr, sfr, ssp_data, log_z=log_z,
-                           dust_tau_bc=dust_tau_bc, dust_tau_diff=dust_tau_diff,
-                           **kwargs)
+    result = sed_from_sfh(
+        t_gyr,
+        sfr,
+        ssp_data,
+        log_z=log_z,
+        dust_tau_bc=dust_tau_bc,
+        dust_tau_diff=dust_tau_diff,
+        **kwargs,
+    )
     sed = result["sed"]
     wave = result["wavelength"]
 
     # IGM absorption
     if apply_igm and redshift > 0:
-        from diffsed.models.igm import igm_transmission
+        from tengri.models.igm import igm_transmission
+
         wave_obs = wave * (1.0 + redshift)
         igm_trans = igm_transmission(wave_obs, redshift)
         sed = sed * igm_trans
@@ -281,17 +298,24 @@ def spectrum_from_sfh(
         "sed" : array (n_wave,) — rest-frame SED
         "stellar_mass" : float
     """
-    from diffsed.models.observation.spectroscopy import compute_spectrum
+    from tengri.models.observation.spectroscopy import compute_spectrum
 
-    result = sed_from_sfh(t_gyr, sfr, ssp_data, log_z=log_z,
-                           dust_tau_bc=dust_tau_bc, dust_tau_diff=dust_tau_diff,
-                           **kwargs)
+    result = sed_from_sfh(
+        t_gyr,
+        sfr,
+        ssp_data,
+        log_z=log_z,
+        dust_tau_bc=dust_tau_bc,
+        dust_tau_diff=dust_tau_diff,
+        **kwargs,
+    )
     sed = result["sed"]
     wave = result["wavelength"]
 
     # IGM
     if apply_igm and redshift > 0:
-        from diffsed.models.igm import igm_transmission
+        from tengri.models.igm import igm_transmission
+
         wave_obs_full = wave * (1.0 + redshift)
         igm_trans = igm_transmission(wave_obs_full, redshift)
         sed = sed * igm_trans
@@ -303,7 +327,8 @@ def spectrum_from_sfh(
 
     # Velocity broadening
     if sigma_v > 0:
-        from diffsed.models.observation.spectroscopy import velocity_broaden
+        from tengri.models.observation.spectroscopy import velocity_broaden
+
         flux = velocity_broaden(flux, wave_obs, sigma_v)
 
     result["flux"] = flux

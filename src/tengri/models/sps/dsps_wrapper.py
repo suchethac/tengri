@@ -273,13 +273,7 @@ def _tw_cuml_kern(x, m, h):
     Returns 0 for z < -3, 1 for z > 3, smooth polynomial between.
     """
     z = (x - m) / h
-    val = (
-        -5.0 * z**7 / 69984.0
-        + 7.0 * z**5 / 2592.0
-        - 35.0 * z**3 / 864.0
-        + 35.0 * z / 96.0
-        + 0.5
-    )
+    val = -5.0 * z**7 / 69984.0 + 7.0 * z**5 / 2592.0 - 35.0 * z**3 / 864.0 + 35.0 * z / 96.0 + 0.5
     val = jnp.where(z < -3.0, 0.0, val)
     val = jnp.where(z > 3.0, 1.0, val)
     return val
@@ -368,6 +362,7 @@ def interpolate_metallicity_smooth_evolving(ssp_flux, ssp_lgmet, log_z_per_age, 
     -------
     array (n_age, n_wave)
     """
+
     def _one_age(log_z_i, flux_at_age_i):
         w = compute_lgmet_weights(log_z_i, ssp_lgmet, lgmet_scatter)
         return jnp.einsum("m,mw->w", w, flux_at_age_i)
@@ -408,6 +403,7 @@ def interpolate_metallicity_evolving(
     array, shape (n_age, n_wave)
         Interpolated SSP flux with per-age metallicity.
     """
+
     def _interp_one_age(log_z_i, ssp_flux_at_age_i):
         """Interpolate a single age bin at its metallicity.
 
@@ -460,6 +456,7 @@ def interpolate_mass_remaining_evolving(
     array, shape (n_age,)
         Interpolated mass-remaining fraction per age bin.
     """
+
     def _interp_one_age(log_z_i, mr_at_age_i):
         log_z_c = jnp.clip(log_z_i, ssp_lgmet[0], ssp_lgmet[-1])
         idx = jnp.clip(
@@ -509,7 +506,7 @@ def compute_log_z_evolving(
     array, shape (n_age,)
         log10(Z) at each SSP age bin.
     """
-    age_gyr = 10.0 ** ssp_lg_age_gyr
+    age_gyr = 10.0**ssp_lg_age_gyr
     # Clamp lookback time to [0, t_universe] so extrapolation is safe
     t_frac = jnp.clip(age_gyr / t_universe_gyr, 0.0, 1.0)
     return log_z_final + (log_z_initial - log_z_final) * t_frac

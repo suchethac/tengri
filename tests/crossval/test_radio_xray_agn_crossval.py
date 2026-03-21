@@ -1,15 +1,15 @@
 """Cross-validate radio, X-ray, and AGN models against CIGALE formulas.
 
-Radio: diffsed and CIGALE both use the FIR-radio correlation
+Radio: tengri and CIGALE both use the FIR-radio correlation
   q_IR = log10(L_IR / (3.75e12 * L_1.4GHz))
 with a synchrotron power-law L_nu ~ nu^{-alpha}. The formula is
 analytical, so agreement should be exact for matching parameters.
 
-X-ray: diffsed uses Grimm+2003 (HMXB-SFR) and Gilfanov+2004
+X-ray: tengri uses Grimm+2003 (HMXB-SFR) and Gilfanov+2004
 (LMXB-M*) scaling relations, same as CIGALE's Yang+2020 module.
 We verify the scaling and spectral shapes.
 
-AGN: diffsed implements power-law disc + torus (simple, standard,
+AGN: tengri implements power-law disc + torus (simple, standard,
 kubota_done). CIGALE uses Fritz+2006 radiative transfer templates.
 We compare torus peak wavelength and UV/IR balance qualitatively.
 """
@@ -34,14 +34,14 @@ _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
 
 class TestRadioCrossval:
-    """Compare diffsed radio against CIGALE formula (analytical)."""
+    """Compare tengri radio against CIGALE formula (analytical)."""
 
     def test_fir_radio_formula_matches_cigale(self):
         """L_1.4GHz from FIR-radio correlation should match CIGALE exactly.
 
         Both codes use: L_1.4GHz = L_IR / (3.75e12 * 10^q_IR)
         """
-        from diffsed.models.radio import radio_star_forming
+        from tengri.models.radio import radio_star_forming
 
         wave = jnp.logspace(7, 10, 500)  # 1mm to 100m in Angstrom
         L_ir = 1e10  # Lsun
@@ -54,10 +54,10 @@ class TestRadioCrossval:
 
             # Find L at 1.4 GHz (21 cm = 2.1e9 A)
             idx_14 = np.argmin(np.abs(np.asarray(wave) - 2.1e9))
-            L_14_diffsed = l_nu[idx_14]
+            L_14_tengri = l_nu[idx_14]
 
             np.testing.assert_allclose(
-                L_14_diffsed,
+                L_14_tengri,
                 L_14_expected,
                 rtol=0.03,  # 3% tolerance for wavelength grid discretization
                 err_msg=f"L_1.4GHz mismatch for q={q_ir}, alpha={alpha}",
@@ -65,7 +65,7 @@ class TestRadioCrossval:
 
     def test_spectral_index(self):
         """Power-law slope should match spectral index alpha."""
-        from diffsed.models.radio import radio_star_forming
+        from tengri.models.radio import radio_star_forming
 
         wave = jnp.logspace(7, 10, 500)
         alpha = 0.8
@@ -91,7 +91,7 @@ class TestRadioCrossval:
 
     def test_radio_zero_below_1mm(self):
         """Radio emission should be zero at wavelengths < 1mm (optical/IR)."""
-        from diffsed.models.radio import radio_star_forming
+        from tengri.models.radio import radio_star_forming
 
         wave = jnp.array([5000.0, 10000.0, 1e6, 5e6])  # optical to mid-IR
         l_nu = np.asarray(radio_star_forming(wave, 1e10))
@@ -99,7 +99,7 @@ class TestRadioCrossval:
 
     def test_radio_scales_with_lir(self):
         """Doubling L_IR should double radio luminosity."""
-        from diffsed.models.radio import radio_star_forming
+        from tengri.models.radio import radio_star_forming
 
         wave = jnp.logspace(8, 10, 100)
         l1 = np.asarray(radio_star_forming(wave, 1e10))
@@ -111,7 +111,7 @@ class TestRadioCrossval:
     @pytest.mark.parametrize("q_ir", [2.34, 2.58, 2.80])
     def test_higher_qir_means_less_radio(self, q_ir):
         """Higher q_IR means more IR per unit radio — less radio."""
-        from diffsed.models.radio import radio_star_forming
+        from tengri.models.radio import radio_star_forming
 
         wave = jnp.array([2.1e9])  # 21 cm
         l_low = float(radio_star_forming(wave, 1e10, q_ir=2.34)[0])
@@ -130,7 +130,7 @@ class TestXrayCrossval:
 
     def test_hmxb_scales_with_sfr(self):
         """HMXB luminosity should scale linearly with SFR."""
-        from diffsed.models.xray import xray_xrb
+        from tengri.models.xray import xray_xrb
 
         wave = jnp.array([1.0])  # 1 Angstrom ~ 12.4 keV
         l1 = float(xray_xrb(wave, sfr=1.0, stellar_mass=1e10)[0])
@@ -142,7 +142,7 @@ class TestXrayCrossval:
 
     def test_lmxb_scales_with_mass(self):
         """LMXB luminosity should scale linearly with stellar mass."""
-        from diffsed.models.xray import xray_xrb
+        from tengri.models.xray import xray_xrb
 
         wave = jnp.array([1.0])
         l1 = float(xray_xrb(wave, sfr=0.0, stellar_mass=1e10)[0])
@@ -152,7 +152,7 @@ class TestXrayCrossval:
 
     def test_grimm_relation(self):
         """HMXB L_X should match Grimm+2003: L_X = 2.6e39 * SFR erg/s."""
-        from diffsed.models.xray import xray_xrb
+        from tengri.models.xray import xray_xrb
 
         # At SFR=1 Msun/yr, L_HMXB(2-10 keV) = 2.6e39 erg/s = 6.79e5 Lsun
         # The spectral shape spreads this over energy, so the total integrated
@@ -165,7 +165,7 @@ class TestXrayCrossval:
 
     def test_xray_exponential_cutoff(self):
         """X-ray spectrum should have exponential cutoff at high energies."""
-        from diffsed.models.xray import xray_xrb
+        from tengri.models.xray import xray_xrb
 
         wave_soft = jnp.array([2.0])  # ~6 keV
         wave_hard = jnp.array([0.1])  # ~124 keV
@@ -186,7 +186,7 @@ class TestAGNCrossval:
 
     def test_disc_conserves_luminosity(self):
         """Disc L_bol integral should match input L_bol."""
-        from diffsed.models.agn.disc import powerlaw_disc
+        from tengri.models.agn.disc import powerlaw_disc
 
         wave = jnp.linspace(100, 100000, 5000)
         l_nu = np.asarray(powerlaw_disc(wave, agn_log_lbol=11.0))
@@ -203,7 +203,7 @@ class TestAGNCrossval:
 
     def test_torus_peaks_in_mir(self):
         """Torus at T=1000K should peak at ~3 um (Wien's law)."""
-        from diffsed.models.agn.torus import simple_torus
+        from tengri.models.agn.torus import simple_torus
 
         wave = jnp.linspace(5000, 200000, 5000)
         l_nu = np.asarray(simple_torus(wave, agn_log_lbol=11.0, agn_T_torus=1000.0))
@@ -214,7 +214,7 @@ class TestAGNCrossval:
 
     def test_unified_total_luminosity(self):
         """Unified AGN (disc+torus) should conserve total luminosity."""
-        from diffsed.models.agn.unified import simple_agn
+        from tengri.models.agn.unified import simple_agn
 
         wave = jnp.linspace(100, 500000, 10000)
         l_nu = np.asarray(
@@ -236,7 +236,7 @@ class TestAGNCrossval:
 
     def test_type1_vs_type2_covering(self):
         """Higher torus covering should shift UV→IR balance."""
-        from diffsed.models.agn.unified import simple_agn
+        from tengri.models.agn.unified import simple_agn
 
         wave = jnp.linspace(500, 200000, 5000)
 
@@ -267,7 +267,7 @@ class TestAGNCrossval:
 
     def test_agn_radio_component(self):
         """Radio-loud AGN should produce radio emission."""
-        from diffsed.models.radio import radio_agn
+        from tengri.models.radio import radio_agn
 
         wave = jnp.array([2.1e9])  # 21 cm
         l_quiet = float(radio_agn(wave, L_agn_bol=1e11, radio_loudness=0.0)[0])

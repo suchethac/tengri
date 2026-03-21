@@ -39,22 +39,22 @@ class CloudyGridData(NamedTuple):
     """Pre-loaded CLOUDY grid data."""
 
     # Lines
-    line_wavelengths: jnp.ndarray    # (n_lines,) rest-frame Angstrom
-    line_luminosity: jnp.ndarray     # (n_met, n_age, n_logU, n_lines) Lsun/Q_H
-    line_log_met: jnp.ndarray        # (n_met_lines,) log10(Z)
-    line_log_age: jnp.ndarray        # (n_age_lines,) log10(age/yr)
-    line_log_U: jnp.ndarray          # (n_logU,) log10(U)
+    line_wavelengths: jnp.ndarray  # (n_lines,) rest-frame Angstrom
+    line_luminosity: jnp.ndarray  # (n_met, n_age, n_logU, n_lines) Lsun/Q_H
+    line_log_met: jnp.ndarray  # (n_met_lines,) log10(Z)
+    line_log_age: jnp.ndarray  # (n_age_lines,) log10(age/yr)
+    line_log_U: jnp.ndarray  # (n_logU,) log10(U)
 
     # Continuum
-    cont_wavelength: jnp.ndarray     # (n_wave_cont,) Angstrom
-    cont_luminosity: jnp.ndarray     # (n_met, n_age, n_logU, n_wave) Lsun_Hz/Q_H
-    cont_log_met: jnp.ndarray        # (n_met_cont,) log10(Z)
-    cont_log_age: jnp.ndarray        # (n_age_cont,) log10(age/yr)
-    cont_log_U: jnp.ndarray          # (n_logU,) shared with lines
+    cont_wavelength: jnp.ndarray  # (n_wave_cont,) Angstrom
+    cont_luminosity: jnp.ndarray  # (n_met, n_age, n_logU, n_wave) Lsun_Hz/Q_H
+    cont_log_met: jnp.ndarray  # (n_met_cont,) log10(Z)
+    cont_log_age: jnp.ndarray  # (n_age_cont,) log10(age/yr)
+    cont_log_U: jnp.ndarray  # (n_logU,) shared with lines
 
 
 def load_cloudy_grid(filepath: str) -> CloudyGridData:
-    """Load a diffsed-format CLOUDY grid HDF5 file.
+    """Load a tengri-format CLOUDY grid HDF5 file.
 
     Following FSPS convention, stores luminosities in log10 space
     for interpolation accuracy. A floor of 10^{-95} prevents log(0).
@@ -99,6 +99,7 @@ def load_cloudy_grid(filepath: str) -> CloudyGridData:
 # ---------------------------------------------------------------------------
 # Q_H computation (ionizing photon rate)
 # ---------------------------------------------------------------------------
+
 
 @jax.jit
 def compute_qh(
@@ -151,6 +152,7 @@ _compute_qh_grid = jax.vmap(
 # ---------------------------------------------------------------------------
 # Grid interpolation (trilinear in logZ, logAge, logU)
 # ---------------------------------------------------------------------------
+
 
 def _interp_index_weight(
     x: float,
@@ -232,6 +234,7 @@ def _trilinear_interp(
 # Main backend class
 # ---------------------------------------------------------------------------
 
+
 class CloudyGridBackend:
     """CLOUDY grid-based nebular emission backend.
 
@@ -242,7 +245,7 @@ class CloudyGridBackend:
     Parameters
     ----------
     grid_path : str
-        Path to diffsed-format CLOUDY HDF5 grid.
+        Path to tengri-format CLOUDY HDF5 grid.
     ssp_data : SSPData
         SSP templates (for Q_H computation).
     """
@@ -361,15 +364,19 @@ class CloudyGridBackend:
             qh_i = self._get_qh_at(log_z, log_age_i)
             log_lum_per_qh = _trilinear_interp(
                 grid.line_luminosity,
-                grid.line_log_met, grid.line_log_age, grid.line_log_U,
-                neb_logZ_gas, log_age_i, neb_logU,
+                grid.line_log_met,
+                grid.line_log_age,
+                grid.line_log_U,
+                neb_logZ_gas,
+                log_age_i,
+                neb_logU,
             )
-            return weight_i * qh_i * (10.0 ** log_lum_per_qh) * (1.0 - neb_fesc)
+            return weight_i * qh_i * (10.0**log_lum_per_qh) * (1.0 - neb_fesc)
 
         # vmap over young age bins only, then sum
-        all_contribs = jax.vmap(
-            _line_contrib_one_age
-        )(young_ages, young_weights)  # (n_young, n_lines)
+        all_contribs = jax.vmap(_line_contrib_one_age)(
+            young_ages, young_weights
+        )  # (n_young, n_lines)
 
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
 
@@ -414,14 +421,18 @@ class CloudyGridBackend:
             qh_i = self._get_qh_at(log_z, log_age_i)
             log_cont_per_qh = _trilinear_interp(
                 grid.cont_luminosity,
-                grid.cont_log_met, grid.cont_log_age, grid.cont_log_U,
-                neb_logZ_gas, log_age_i, neb_logU,
+                grid.cont_log_met,
+                grid.cont_log_age,
+                grid.cont_log_U,
+                neb_logZ_gas,
+                log_age_i,
+                neb_logU,
             )
-            return weight_i * qh_i * (10.0 ** log_cont_per_qh) * (1.0 - neb_fesc)
+            return weight_i * qh_i * (10.0**log_cont_per_qh) * (1.0 - neb_fesc)
 
-        all_contribs = jax.vmap(
-            _cont_contrib_one_age
-        )(young_ages, young_weights)  # (n_young, n_wave_cont)
+        all_contribs = jax.vmap(_cont_contrib_one_age)(
+            young_ages, young_weights
+        )  # (n_young, n_wave_cont)
 
         total_cont = jnp.sum(all_contribs, axis=0)
         return grid.cont_wavelength, total_cont
@@ -473,15 +484,23 @@ class CloudyGridBackend:
         """
         # Get line luminosities
         line_wave, line_lum = self.predict_nebular_line_luminosities(
-            ssp_weights, ssp_log_ages_yr, log_z,
-            neb_logU=neb_logU, neb_logZ_gas=neb_logZ_gas, neb_fesc=neb_fesc,
+            ssp_weights,
+            ssp_log_ages_yr,
+            log_z,
+            neb_logU=neb_logU,
+            neb_logZ_gas=neb_logZ_gas,
+            neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
         )
 
         # Get continuum
         cont_wave, cont_lum = self.predict_nebular_continuum(
-            ssp_weights, ssp_log_ages_yr, log_z,
-            neb_logU=neb_logU, neb_logZ_gas=neb_logZ_gas, neb_fesc=neb_fesc,
+            ssp_weights,
+            ssp_log_ages_yr,
+            log_z,
+            neb_logU=neb_logU,
+            neb_logZ_gas=neb_logZ_gas,
+            neb_fesc=neb_fesc,
         )
 
         # Interpolate continuum onto SSP wavelength grid

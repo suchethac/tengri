@@ -8,14 +8,14 @@ jax.config.update("jax_enable_x64", True)
 
 from pathlib import Path
 
-from diffsed.core.model import Model
-from diffsed.core.param_spec import ParamSpec
-from diffsed.distributions import Uniform
-from diffsed.inference.fitter import Fitter
-from diffsed.inference.posterior import Posterior
-from diffsed.inference.raytrace import sample_hamiltonian, sample_raytrace
-from diffsed.models.observation.filters import load_filter_set
-from diffsed.models.sps.dsps_wrapper import load_ssp_data
+from tengri.core.model import Model
+from tengri.core.param_spec import ParamSpec
+from tengri.distributions import Uniform
+from tengri.inference.fitter import Fitter
+from tengri.inference.posterior import Posterior
+from tengri.inference.raytrace import sample_hamiltonian, sample_raytrace
+from tengri.models.observation.filters import load_filter_set
+from tengri.models.sps.dsps_wrapper import load_ssp_data
 
 # ---------------------------------------------------------------------------
 # Helpers

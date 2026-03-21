@@ -8,7 +8,7 @@ No uncertainty quantification, but very fast — useful for:
 - Sanity checks on parameter recovery
 
 Usage:
-    from diffsed.inference.map_optimizer import fit_map
+    from tengri.inference.map_optimizer import fit_map
     result = fit_map(model, data, noise, n_steps=1000)
 """
 
@@ -17,7 +17,7 @@ import time
 import jax
 import jax.numpy as jnp
 
-from diffsed.inference.common import (
+from tengri.inference.common import (
     DEFAULT_PRIOR,
     InferenceResult,
     build_loss_fn,

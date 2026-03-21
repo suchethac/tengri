@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "diffsed"
+name = "tengri"
 version = "0.1.0"
 description = "Differentiable SED fitting with IFT star formation history priors"
 readme = "README.md"
@@ -84,7 +84,7 @@ ignore = [
 "notebooks/**" = ["F401", "F841", "E402", "E501", "E702", "I001"]  # notebooks: exploratory, jax.config between imports
 
 [tool.ruff.lint.isort]
-known-first-party = ["diffsed"]
+known-first-party = ["tengri"]
 combine-as-imports = true
 
 [tool.ruff.format]

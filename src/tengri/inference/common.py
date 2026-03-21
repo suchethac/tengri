@@ -107,7 +107,7 @@ def build_loss_fn(forward_model, data, noise, prior_config=None, data_type="phot
     if prior_config is None:
         prior_config = DEFAULT_PRIOR
 
-    from diffsed.utils.transforms import to_bounded
+    from tengri.utils.transforms import to_bounded
 
     # Build the bounded parameter transform
     bounds = {
@@ -209,7 +209,7 @@ def unbounded_to_physical(params_unbounded, prior_config=None):
     if prior_config is None:
         prior_config = DEFAULT_PRIOR
 
-    from diffsed.utils.transforms import to_bounded
+    from tengri.utils.transforms import to_bounded
 
     bounds = {
         "psd_sigma": prior_config.psd_sigma,

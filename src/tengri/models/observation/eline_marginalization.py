@@ -47,21 +47,23 @@ DEFAULT_LINE_NAMES = (
     "[SII]6731",
 )
 
-DEFAULT_LINE_WAVELENGTHS = jnp.array([
-    1215.67,   # Ly-alpha
-    4101.73,   # H-delta
-    4340.46,   # H-gamma
-    4861.33,   # H-beta
-    4958.91,   # [OIII]4959
-    5006.84,   # [OIII]5007
-    6562.80,   # H-alpha
-    6548.05,   # [NII]6548
-    6583.45,   # [NII]6583
-    3726.03,   # [OII]3726
-    3728.82,   # [OII]3729
-    6716.44,   # [SII]6717
-    6730.81,   # [SII]6731
-])
+DEFAULT_LINE_WAVELENGTHS = jnp.array(
+    [
+        1215.67,  # Ly-alpha
+        4101.73,  # H-delta
+        4340.46,  # H-gamma
+        4861.33,  # H-beta
+        4958.91,  # [OIII]4959
+        5006.84,  # [OIII]5007
+        6562.80,  # H-alpha
+        6548.05,  # [NII]6548
+        6583.45,  # [NII]6583
+        3726.03,  # [OII]3726
+        3728.82,  # [OII]3729
+        6716.44,  # [SII]6717
+        6730.81,  # [SII]6731
+    ]
+)
 
 
 # -------------------------------------------------------------------------
@@ -107,9 +109,9 @@ def build_eline_design_matrix(
     def _single_column(lam_rest):
         lam_obs = lam_rest * (1.0 + redshift)
         sigma = lam_obs / (2.355 * spectral_resolution)
-        profile = jnp.exp(
-            -0.5 * ((wave_obs - lam_obs) / sigma) ** 2
-        ) / (jnp.sqrt(2.0 * jnp.pi) * sigma)
+        profile = jnp.exp(-0.5 * ((wave_obs - lam_obs) / sigma) ** 2) / (
+            jnp.sqrt(2.0 * jnp.pi) * sigma
+        )
         return profile
 
     # vmap over lines -> (n_lines, n_pix), then transpose -> (n_pix, n_lines)
@@ -162,9 +164,7 @@ def marginalize_emission_lines(
     gt_ninv_r = g_weighted.T @ residual
 
     # Prior precision: Lambda^{-1}
-    prior_variance = jnp.broadcast_to(
-        jnp.atleast_1d(prior_variance), (n_lines,)
-    )
+    prior_variance = jnp.broadcast_to(jnp.atleast_1d(prior_variance), (n_lines,))
     lambda_inv = jnp.diag(1.0 / prior_variance)
 
     # Posterior covariance: Sigma_a = (G^T N^{-1} G + Lambda^{-1})^{-1}

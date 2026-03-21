@@ -1,4 +1,4 @@
-# diffsed Architecture Guide
+# tengri Architecture Guide
 
 > For AI agents and developers making code changes. Read this before modifying inference, distributions, or the forward model.
 
@@ -36,7 +36,7 @@ Layer 4 (geoVI/MGVI/hierarchical): + nifty8.re
 ## Module Map
 
 ```
-src/diffsed/
+src/tengri/
 ├── distributions.py            # Prior distributions with standardized transforms
 │                               #   Each has: sample(), log_prob(), unstandardize(ξ→θ), standardize(θ→ξ)
 │                               #   Built-in: Uniform, Gaussian, LogUniform, LogNormal, StudentT, Fixed
@@ -248,16 +248,16 @@ Batch fitting: `fitter.fit_batch(galaxies)` — default method is `native_geovi`
 
 ## File Locations
 
-- **Code:** `~/Projects/diffsed/`
+- **Code:** `~/Projects/tengri/`
 - **Paper draft:** `~/writing-workspace/projects/differentiable_psd_sed_fitting/`
-- **SSP data:** `~/Projects/diffsed/data/` (64 MB HDF5, not in git)
+- **SSP data:** `~/Projects/tengri/data/` (64 MB HDF5, not in git)
 - **Design spec:** `docs/specs/2026-03-15-standardized-model-redesign.md`
 - **Analysis scripts:** `analysis/` (figure generation for paper)
 - **Paper figures:** `analysis/figures/` and paper `figures/` directory
 
 ## Code Name
 
-`diffsed` is a working name. Final public release name TBD.
+`tengri` is a working name. Final public release name TBD.
 
 ## Paper Scope
 

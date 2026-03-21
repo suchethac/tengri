@@ -14,10 +14,10 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.observation.spectroscopy import (
-    SSP_LIBRARY_RESOLUTIONS,
+from tengri.models.observation.spectroscopy import (
     _C_KM_S,
     _FWHM_TO_SIGMA,
+    SSP_LIBRARY_RESOLUTIONS,
     _resolution_to_sigma_kms,
     apply_lsf,
     nirspec_g140m_resolution,
@@ -207,9 +207,7 @@ class TestLibrarySubtraction:
     def test_lib_exceeds_instrument_no_smoothing(self, wave, delta_spectrum):
         """When sigma_lib > sigma_inst, no smoothing is applied."""
         # R=100 gives sigma_inst ~ 1275 km/s; sigma_lib=2000 exceeds it
-        smoothed = apply_lsf(
-            delta_spectrum, wave, resolution=100.0, sigma_lib_kms=2000.0
-        )
+        smoothed = apply_lsf(delta_spectrum, wave, resolution=100.0, sigma_lib_kms=2000.0)
         # Should be essentially unchanged (sigma_eff = 0)
         assert_allclose(smoothed, delta_spectrum, atol=1e-10)
 

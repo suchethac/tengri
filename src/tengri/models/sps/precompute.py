@@ -332,7 +332,7 @@ def precompute_photometry_ztable(
     PhotometricZTable
         Pre-computed table for fast_photometry_ztable().
     """
-    from diffsed.utils.cosmology import luminosity_distance
+    from tengri.utils.cosmology import luminosity_distance
 
     if z_grid is None:
         z_grid = jnp.linspace(z_min, z_max, n_z)
@@ -375,7 +375,7 @@ def precompute_photometry_ztable(
 
         # IGM transmission at effective observed wavelengths
         if apply_igm:
-            from diffsed.models.igm import igm_transmission
+            from tengri.models.igm import igm_transmission
 
             igm_trans_all[zi] = np.asarray(igm_transmission(jnp.asarray(eff_waves_obs), z_val))
 
@@ -437,7 +437,7 @@ def fast_photometry(
         Observed flux density per filter (erg/s/cm^2/Hz).
     """
     # Weighted sum: weights [Msun] * ssp [Lsun/Hz/Msun] * dust -> Lsun/Hz
-    from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     flux_lsun = jnp.einsum("i,if,if->f", weights, dust_at_eff, ssp_phot_at_z)
     return flux_scale * flux_lsun * LSUN_ERG_PER_S

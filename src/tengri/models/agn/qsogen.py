@@ -78,7 +78,7 @@ Emission lines        4 empirical template interpolation  Same templates (qsosed
 Baldwin effect slope  0.183                               0.183 (matching original)
 Balmer continuum      Added before flux normalization     Added after L_bol normalization
 Host galaxy template  S0 SWIRE included                   Not included (handled by Model)
-IGM absorption        Becker+13 tau_eff                   Handled by diffsed IGM module
+IGM absorption        Becker+13 tau_eff                   Handled by tengri IGM module
 Autodiff              No                                  Yes (JAX JIT-compatible)
 ===================== ================================== ====================================
 
@@ -96,8 +96,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from diffsed.models.agn.unified import register_agn_model
-from diffsed.models.dust.attenuation import smc as smc_curve
+from tengri.models.agn.unified import register_agn_model
+from tengri.models.dust.attenuation import smc as smc_curve
 
 # ===================================================================
 # Physical constants (CGS)

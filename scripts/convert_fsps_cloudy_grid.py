@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert FSPS ASCII CLOUDY grids to diffsed HDF5 format.
+"""Convert FSPS ASCII CLOUDY grids to tengri HDF5 format.
 
 Reads ZAU_ND_{isoc}.lines and .cont files from $SPS_HOME/nebular/
 or from data/cloudy_raw/ and writes a single HDF5 file.
@@ -133,7 +133,7 @@ def convert(
     isoc: str = "mist",
     dust_variant: str = "ND",
 ) -> None:
-    """Convert FSPS CLOUDY grids to diffsed HDF5.
+    """Convert FSPS CLOUDY grids to tengri HDF5.
 
     Parameters
     ----------
@@ -283,7 +283,7 @@ def convert(
         f.attrs["n_wave_cont"] = len(cont_grid["wavelength"])
         f.attrs["description"] = (
             "CLOUDY photoionization grids for nebular emission, "
-            "converted from FSPS ASCII format to diffsed HDF5. "
+            "converted from FSPS ASCII format to tengri HDF5. "
             "Lines and continuum may have different grid axes."
         )
 
@@ -317,7 +317,7 @@ def convert(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert FSPS CLOUDY grids to diffsed HDF5"
+        description="Convert FSPS CLOUDY grids to tengri HDF5"
     )
     parser.add_argument(
         "--input-dir",

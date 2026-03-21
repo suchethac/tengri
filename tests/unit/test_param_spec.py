@@ -7,8 +7,8 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed.core.param_spec import ParamSpec
-from diffsed.distributions import Fixed, Gaussian, Uniform
+from tengri.core.param_spec import ParamSpec
+from tengri.distributions import Fixed, Gaussian, Uniform
 
 
 class TestConstruction:

@@ -1,10 +1,10 @@
 """Cross-validate QSOGen and SKIRTOR AGN models.
 
-QSOGen: diffsed's JAX implementation vs the original Python code
+QSOGen: tengri's JAX implementation vs the original Python code
 (Temple, Hewett & Banerji 2021). Reference outputs generated from
 github.com/MJTemple/qsogen.
 
-SKIRTOR: diffsed's analytic approximation vs CIGALE Fritz+2006
+SKIRTOR: tengri's analytic approximation vs CIGALE Fritz+2006
 torus model (qualitative, different radiative transfer approaches).
 Both should show Type 1/2 dichotomy and silicate feature behavior.
 """
@@ -25,12 +25,12 @@ _QSOGEN_REF = _DATA_DIR / "qsogen_reference.npz"
 
 
 # ===================================================================
-# 1. QSOGen: diffsed vs original Temple+2021
+# 1. QSOGen: tengri vs original Temple+2021
 # ===================================================================
 
 
 class TestQSOGenCrossval:
-    """Compare diffsed QSOGen against the original Python implementation."""
+    """Compare tengri QSOGen against the original Python implementation."""
 
     @pytest.fixture(scope="class")
     def qsogen_ref(self):
@@ -41,10 +41,10 @@ class TestQSOGenCrossval:
     def test_continuum_slope_trend(self, qsogen_ref):
         """Bluer slope (plslp1 < 0) should give more UV flux.
 
-        Both diffsed and original QSOGen use the same broken power-law
+        Both tengri and original QSOGen use the same broken power-law
         parameterization, so the trend must match.
         """
-        from diffsed.models.agn.qsogen import qsogen_sed
+        from tengri.models.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(912, 30000, 3000)
 
@@ -68,10 +68,10 @@ class TestQSOGenCrossval:
             color_ds = uv_ds / max(opt_ds, 1e-50)
             color_ref = uv_ref / max(opt_ref, 1e-50)
 
-            # diffsed's emission lines and normalization differ from
+            # tengri's emission lines and normalization differ from
             # original qsogen — UV/opt ratios can differ significantly.
             # We check both are non-zero and finite.
-            assert color_ds > 0 and np.isfinite(color_ds), f"plslp1={slp}: diffsed color invalid"
+            assert color_ds > 0 and np.isfinite(color_ds), f"plslp1={slp}: tengri color invalid"
             assert color_ref > 0 and np.isfinite(color_ref), (
                 f"plslp1={slp}: reference color invalid"
             )
@@ -79,10 +79,10 @@ class TestQSOGenCrossval:
     def test_slope_ordering(self):
         """More positive plslp1 = bluer (f_nu ~ nu^plslp1).
 
-        diffsed convention: plslp1 > 0 -> more UV flux.
+        tengri convention: plslp1 > 0 -> more UV flux.
         Original Temple+2021: plslp1 < 0 -> bluer (opposite sign).
         """
-        from diffsed.models.agn.qsogen import qsogen_sed
+        from tengri.models.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(912, 30000, 3000)
         wave_np = np.asarray(wave)
@@ -94,12 +94,12 @@ class TestQSOGenCrossval:
             opt = np.mean(sed[(wave_np > 5000) & (wave_np < 6000)])
             colors.append(uv / max(opt, 1e-50))
 
-        # In diffsed: positive plslp1 -> bluer -> higher UV/opt
+        # In tengri: positive plslp1 -> bluer -> higher UV/opt
         assert colors[2] > colors[1] > colors[0], f"More positive plslp1 should be bluer: {colors}"
 
     def test_hot_dust_bump(self):
         """Hot dust should create a bump around 1-3 um."""
-        from diffsed.models.agn.qsogen import qsogen_sed
+        from tengri.models.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(912, 100000, 5000)
         wave_np = np.asarray(wave)
@@ -120,7 +120,7 @@ class TestQSOGenCrossval:
 
     def test_dust_reddening(self, qsogen_ref):
         """E(B-V) reddening should suppress UV flux."""
-        from diffsed.models.agn.qsogen import qsogen_sed
+        from tengri.models.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(912, 30000, 3000)
         wave_np = np.asarray(wave)
@@ -144,7 +144,7 @@ class TestQSOGenCrossval:
 
     def test_differentiable(self):
         """QSOGen should be JAX-differentiable."""
-        from diffsed.models.agn.qsogen import qsogen_sed
+        from tengri.models.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(1000, 30000, 1000)
 
@@ -166,7 +166,7 @@ class TestSKIRTORCrossval:
 
     def test_type1_vs_type2(self):
         """Face-on (Type 1) should show more MIR, less silicate absorption."""
-        from diffsed.models.agn.skirtor import skirtor_analytic
+        from tengri.models.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(1000, 200000, 5000)
         wave_np = np.asarray(wave)
@@ -196,7 +196,7 @@ class TestSKIRTORCrossval:
 
     def test_silicate_feature(self):
         """Edge-on view should show silicate absorption at 9.7 um."""
-        from diffsed.models.agn.skirtor import skirtor_analytic
+        from tengri.models.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(50000, 150000, 1000)  # 5-15 um
         wave_np = np.asarray(wave)
@@ -223,7 +223,7 @@ class TestSKIRTORCrossval:
 
     def test_higher_tau_more_absorbed(self):
         """Higher optical depth should produce deeper silicate feature."""
-        from diffsed.models.agn.skirtor import skirtor_analytic
+        from tengri.models.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(50000, 150000, 500)
         wave_np = np.asarray(wave)
@@ -254,7 +254,7 @@ class TestSKIRTORCrossval:
 
     def test_opening_angle_affects_emission(self):
         """Wider opening angle should change the SED shape."""
-        from diffsed.models.agn.skirtor import skirtor_analytic
+        from tengri.models.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(5000, 200000, 2000)
 
@@ -279,7 +279,7 @@ class TestSKIRTORCrossval:
 
     def test_torus_peaks_in_ir(self):
         """Torus emission should peak in MIR/FIR (3-50 um)."""
-        from diffsed.models.agn.skirtor import skirtor_analytic
+        from tengri.models.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(5000, 500000, 5000)
         sed = np.asarray(skirtor_analytic(wave, agn_log_lbol=11.0))
@@ -289,7 +289,7 @@ class TestSKIRTORCrossval:
 
     def test_luminosity_scaling(self):
         """10x L_bol should give ~10x more torus emission."""
-        from diffsed.models.agn.skirtor import skirtor_analytic
+        from tengri.models.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(10000, 200000, 1000)
 
@@ -301,7 +301,7 @@ class TestSKIRTORCrossval:
 
     def test_all_parameters_differentiable(self):
         """SKIRTOR should be differentiable w.r.t. all continuous params."""
-        from diffsed.models.agn.skirtor import skirtor_analytic
+        from tengri.models.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(10000, 200000, 500)
 
@@ -335,7 +335,7 @@ class TestFritzVsSKIRTOR:
 
     def test_both_show_type1_type2_dichotomy(self):
         """Both models should differ between face-on and edge-on views."""
-        from diffsed.models.agn.skirtor import skirtor_analytic
+        from tengri.models.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(10000, 200000, 1000)
 
@@ -362,8 +362,8 @@ class TestFritzVsSKIRTOR:
 
         This is true for both Fritz+2006 (from RT) and SKIRTOR (analytic).
         """
-        from diffsed.models.agn.skirtor import skirtor_analytic
-        from diffsed.models.agn.torus import simple_torus
+        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.models.agn.torus import simple_torus
 
         wave = jnp.linspace(1000, 1000000, 10000)
         wave_np = np.asarray(wave)
@@ -398,7 +398,7 @@ class TestQSOGenPrecision:
 
     def test_continuum_plus_bb_shape(self, manual_ref):
         """Cont + BB (no lines) should match original to <0.5%."""
-        from diffsed.models.agn.qsogen import (
+        from tengri.models.agn.qsogen import (
             _broken_powerlaw_continuum,
             _hot_dust_blackbody,
         )
@@ -424,7 +424,7 @@ class TestQSOGenPrecision:
 
     def test_bb_absolute_normalization(self, manual_ref):
         """BB flux at 20000A should equal bbnorm = 3.961 exactly."""
-        from diffsed.models.agn.qsogen import _hot_dust_blackbody
+        from tengri.models.agn.qsogen import _hot_dust_blackbody
 
         wave = jnp.array(manual_ref["wave"])
         bb = np.asarray(_hot_dust_blackbody(wave, None, 1243.6, 3.961))
@@ -439,7 +439,7 @@ class TestQSOGenPrecision:
 
     def test_continuum_at_5500_is_one(self):
         """Continuum should be normalized to 1.0 at 5500A."""
-        from diffsed.models.agn.qsogen import _broken_powerlaw_continuum
+        from tengri.models.agn.qsogen import _broken_powerlaw_continuum
 
         wave = jnp.linspace(912, 100000, 5000)
         cont = _broken_powerlaw_continuum(wave, -0.349, 0.593, 3880.0)
@@ -452,7 +452,7 @@ class TestQSOGenEmissionLines:
 
     The original uses a full empirical template from the SDSS quasar
     composite (Vanden Berk+2001), including FeII pseudo-continuum and
-    blended line complexes. diffsed uses 18 simple Gaussians. We
+    blended line complexes. tengri uses 18 simple Gaussians. We
     check that the strongest lines are present and in the right direction.
     """
 
@@ -465,7 +465,7 @@ class TestQSOGenEmissionLines:
 
     def test_lines_add_flux(self):
         """Emission lines should add positive flux to the continuum."""
-        from diffsed.models.agn.qsogen import qsogen_sed
+        from tengri.models.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(912, 30000, 5000)
         sed_lines = np.asarray(qsogen_sed(wave))
@@ -481,7 +481,7 @@ class TestQSOGenEmissionLines:
         """Full SED shape should correlate > 0.95 with original."""
         from scipy.stats import pearsonr
 
-        from diffsed.models.agn.qsogen import qsogen_sed
+        from tengri.models.agn.qsogen import qsogen_sed
 
         wave = jnp.array(line_ref["wave"])
         sed_ds = np.asarray(qsogen_sed(wave))
@@ -500,7 +500,7 @@ class TestQSOGenEmissionLines:
 
     def test_halpha_prominent(self):
         """Hα should be a prominent emission line (well above continuum)."""
-        from diffsed.models.agn.qsogen import qsogen_sed
+        from tengri.models.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(4000, 8000, 2000)
         sed_lines = np.asarray(qsogen_sed(wave))

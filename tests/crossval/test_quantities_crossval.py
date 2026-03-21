@@ -10,7 +10,7 @@ Both codes should recover these values. We also compare the
 surviving stellar mass (which depends on SSP mass-loss fractions,
 so we expect ~10-20% disagreement between FSPS and BC03).
 
-Note: diffsed's `stellar_mass` = total FORMED mass (sum of CSP weights).
+Note: tengri's `stellar_mass` = total FORMED mass (sum of CSP weights).
 bagpipes reports `formed_mass` (log10) and `stellar_mass` (surviving).
 """
 
@@ -31,15 +31,15 @@ bagpipes_mg = pytest.importorskip(
 )
 
 # ---------------------------------------------------------------------------
-# SSP data (needed for diffsed Model)
+# SSP data (needed for tengri Model)
 # ---------------------------------------------------------------------------
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_PATH = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 _SSP_EXISTS = _SSP_PATH.is_file()
 
 
-def _diffsed_smooth_params(n_grid=64):
-    """Return diffsed params for a smooth DPL SFH (near-zero burstiness)."""
+def _tengri_smooth_params(n_grid=64):
+    """Return tengri params for a smooth DPL SFH (near-zero burstiness)."""
     return {
         "sfh_dpl_alpha": 1.0,
         "sfh_dpl_beta": 1.5,
@@ -55,12 +55,12 @@ def _diffsed_smooth_params(n_grid=64):
 
 
 @pytest.fixture(scope="module")
-def diffsed_model():
-    """Create a diffsed Model with smooth SFH (no GP burstiness)."""
+def tengri_model():
+    """Create a tengri Model with smooth SFH (no GP burstiness)."""
     if not _SSP_EXISTS:
         pytest.skip("SSP data not found")
 
-    from diffsed import Model, ParamSpec, Uniform
+    from tengri import Model, ParamSpec, Uniform
 
     spec = ParamSpec(
         sfh_alpha=Uniform(0.5, 3.0),
@@ -74,7 +74,7 @@ def diffsed_model():
         redshift=0.1,
     )
 
-    from diffsed.models.sps.dsps_wrapper import load_ssp_data
+    from tengri.models.sps.dsps_wrapper import load_ssp_data
 
     ssp = load_ssp_data(str(_SSP_PATH))
     return Model(spec, ssp)
@@ -131,10 +131,10 @@ class TestFormedMassCrossval:
             err_msg="bagpipes formed_mass != input",
         )
 
-    def test_diffsed_formed_mass_reasonable(self, diffsed_model):
-        """diffsed: formed mass for a smooth SFH should be physical."""
-        params = _diffsed_smooth_params()
-        derived = diffsed_model.predict_derived(params)
+    def test_tengri_formed_mass_reasonable(self, tengri_model):
+        """tengri: formed mass for a smooth SFH should be physical."""
+        params = _tengri_smooth_params()
+        derived = tengri_model.predict_derived(params)
         mstar = float(derived["stellar_mass"])
 
         # For a DPL SFH with these params, mass should be physical
@@ -162,12 +162,12 @@ class TestFormedMassCrossval:
 
 
 class TestSFRCrossval:
-    """Cross-check SFR between diffsed and bagpipes."""
+    """Cross-check SFR between tengri and bagpipes."""
 
-    def test_diffsed_sfr_positive_for_star_forming(self, diffsed_model):
-        """diffsed: SFR should be positive for a star-forming galaxy."""
-        params = _diffsed_smooth_params()
-        derived = diffsed_model.predict_derived(params)
+    def test_tengri_sfr_positive_for_star_forming(self, tengri_model):
+        """tengri: SFR should be positive for a star-forming galaxy."""
+        params = _tengri_smooth_params()
+        derived = tengri_model.predict_derived(params)
         assert float(derived["sfr_100myr"]) > 0.0
         assert float(derived["sfr_10myr"]) > 0.0
 
@@ -183,28 +183,28 @@ class TestSFRCrossval:
                 err_msg=f"SFR mismatch at age={age_gyr}, log_mf={log_mf}",
             )
 
-    def test_ssfr_range_agreement(self, diffsed_model):
+    def test_ssfr_range_agreement(self, tengri_model):
         """Both codes should give sSFR in the same ballpark for SF galaxies.
 
         bagpipes constant SFH (1 Gyr, 10^9 Msun):
             SFR = 1 Msun/yr, M* ~ 10^8.8 (surviving)
             sSFR ~ 10^(-8.8) yr^-1
 
-        diffsed DPL SFH (peaked at 3 Gyr, moderate SFR):
+        tengri DPL SFH (peaked at 3 Gyr, moderate SFR):
             sSFR should be in [1e-12, 1e-8] yr^-1 range.
         """
         # bagpipes
         mg = _make_bagpipes_constant_sfh(1.0, 9.0)
         ssfr_bp = 10**mg.sfh.ssfr  # bagpipes stores log10(sSFR)
 
-        # diffsed
-        params = _diffsed_smooth_params()
-        derived = diffsed_model.predict_derived(params)
+        # tengri
+        params = _tengri_smooth_params()
+        derived = tengri_model.predict_derived(params)
         ssfr_ds = float(derived["ssfr"])
 
         # Both should be in star-forming range
         assert 1e-14 < ssfr_bp < 1e-7, f"bagpipes sSFR = {ssfr_bp:.2e} out of range"
-        assert 1e-14 < ssfr_ds < 1e-7, f"diffsed sSFR = {ssfr_ds:.2e} out of range"
+        assert 1e-14 < ssfr_ds < 1e-7, f"tengri sSFR = {ssfr_ds:.2e} out of range"
 
 
 # ===================================================================
@@ -215,7 +215,7 @@ class TestSFRCrossval:
 class TestSurvivingMassCrossval:
     """Compare surviving vs formed mass fractions.
 
-    diffsed uses FSPS SSPs, bagpipes uses BC03. The mass-loss
+    tengri uses FSPS SSPs, bagpipes uses BC03. The mass-loss
     (recycling) fraction differs by ~10-20%, but the qualitative
     behavior should agree: surviving < formed, and the fraction
     should be ~0.5-0.8 for a 1 Gyr old population.
@@ -251,14 +251,14 @@ class TestSurvivingMassCrossval:
 class TestSEDShapeCrossval:
     """Qualitative SED shape comparison.
 
-    We don't expect exact agreement because diffsed uses FSPS SSPs
+    We don't expect exact agreement because tengri uses FSPS SSPs
     and bagpipes uses BC03, but both should produce SEDs that:
     - Peak in the optical/NIR for a ~1 Gyr population
     - Have similar overall shape (within a factor of ~2)
     - Show the same trends with metallicity and age
     """
 
-    def test_sed_peaks_in_optical_both_codes(self, diffsed_model):
+    def test_sed_peaks_in_optical_both_codes(self, tengri_model):
         """Both codes should produce SEDs peaking in 3000-15000 A."""
         # bagpipes (restrict to optical/NIR to avoid Lyman-break spike)
         wavs_bp = np.arange(2000, 20000, 10.0)
@@ -277,17 +277,17 @@ class TestSEDShapeCrossval:
         bp_wavs = mg.spectrum[:, 0]
         peak_bp = bp_wavs[np.argmax(bp_spectrum)]
 
-        # diffsed — predict rest-frame SED
-        params = _diffsed_smooth_params()
-        sed_ds = np.asarray(diffsed_model.predict_sed(params))
-        wave_ds = np.asarray(diffsed_model.ssp_data.ssp_wave)
+        # tengri — predict rest-frame SED
+        params = _tengri_smooth_params()
+        sed_ds = np.asarray(tengri_model.predict_sed(params))
+        wave_ds = np.asarray(tengri_model.ssp_data.ssp_wave)
         # Restrict to optical range
         mask = (wave_ds > 1000) & (wave_ds < 20000)
         peak_ds = wave_ds[mask][np.argmax(sed_ds[mask])]
 
         # Both should peak in optical/NIR
         assert 2000 < peak_bp < 20000, f"bagpipes peak at {peak_bp:.0f} A"
-        assert 2000 < peak_ds < 20000, f"diffsed peak at {peak_ds:.0f} A"
+        assert 2000 < peak_ds < 20000, f"tengri peak at {peak_ds:.0f} A"
 
     def test_higher_metallicity_redder(self):
         """Higher metallicity should shift the SED redward in bagpipes.

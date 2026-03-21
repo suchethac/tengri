@@ -324,11 +324,11 @@ def _tau_lc_dla(
 # ---------------------------------------------------------------------------
 
 # Physical constants for damping wing calculation
-_C_CGS_IGM = 2.99792458e10    # cm/s
-_LAMBDA_LYA = 1215.67         # Angstrom (Ly-alpha rest wavelength)
+_C_CGS_IGM = 2.99792458e10  # cm/s
+_LAMBDA_LYA = 1215.67  # Angstrom (Ly-alpha rest wavelength)
 _NU_LYA = _C_CGS_IGM / (_LAMBDA_LYA * 1e-8)  # Hz
-_GAMMA_LYA = 6.265e8          # s^-1 (Ly-alpha natural line width)
-_SIGMA_0 = 5.9e-14            # cm^2 Hz (Ly-alpha cross-section constant: pi*e^2/(m_e*c)*f_12)
+_GAMMA_LYA = 6.265e8  # s^-1 (Ly-alpha natural line width)
+_SIGMA_0 = 5.9e-14  # cm^2 Hz (Ly-alpha cross-section constant: pi*e^2/(m_e*c)*f_12)
 
 
 def _cgm_damping_wing_tau(
@@ -369,7 +369,7 @@ def _cgm_damping_wing_tau(
         Damping wing optical depth (>= 0).
     """
     # Sigmoid column density evolution: N_HI rises steeply above z_mid
-    n_hi = (10.0 ** log_nhi) / (1.0 + jnp.exp(-(z_source - z_mid) / dz))
+    n_hi = (10.0**log_nhi) / (1.0 + jnp.exp(-(z_source - z_mid) / dz))
 
     # Observed Ly-alpha wavelength at source redshift
     lya_obs = _LAMBDA_LYA * (1.0 + z_source)
@@ -387,7 +387,7 @@ def _cgm_damping_wing_tau(
     # sigma_DW ~ sigma_0 * gamma / (4*pi*delta_nu^2)
     # We use the full Lorentzian for numerical stability near line center.
     gamma_4pi = _GAMMA_LYA / (4.0 * jnp.pi)
-    sigma_dw = _SIGMA_0 * gamma_4pi / (delta_nu ** 2 + gamma_4pi ** 2)
+    sigma_dw = _SIGMA_0 * gamma_4pi / (delta_nu**2 + gamma_4pi**2)
 
     # Optical depth: only apply redward of Ly-alpha at source (damping wing)
     # and only for wavelengths near Ly-alpha (within ~200 A observed)

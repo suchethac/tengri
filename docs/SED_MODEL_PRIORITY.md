@@ -1,10 +1,10 @@
-# diffsed SED Model Priority Roadmap
+# tengri SED Model Priority Roadmap
 
 **Last Updated:** 2026-03-18
 
 ## Overview
 
-diffsed's core strengths — stochastic PSD-based SFH, fully differentiable JAX pipeline,
+tengri's core strengths — stochastic PSD-based SFH, fully differentiable JAX pipeline,
 standardized latent space, and five inference backends — are complete. This document
 prioritizes the physics and observation models needed for feature parity with
 Prospector, Bagpipes, CIGALE, BEAGLE, and Synthesizer.
@@ -262,7 +262,7 @@ Data type: `data_type="lines"` or `data_type="joint_phot_lines"`.
 ### 4.4 Photometric Redshift Mode
 
 **Priority:** Useful for surveys
-**Why:** Free redshift with redshift prior. Makes diffsed usable for photo-z estimation
+**Why:** Free redshift with redshift prior. Makes tengri usable for photo-z estimation
 alongside physical parameter inference.
 
 **Implementation:** Already supports free redshift. Add z-prior options (template-based
@@ -272,7 +272,7 @@ or N(z) from photo-z code). Enhance z-table precomputation for speed.
 
 **Priority:** Future scalability
 **Why:** Following Synthesizer/Synference, enable SBI for ~1000x speedup on large
-surveys. diffsed's JAX forward model is perfect for generating SBI training sets.
+surveys. tengri's JAX forward model is perfect for generating SBI training sets.
 
 **Implementation:** Training data generator + neural posterior estimator wrapper
 (e.g., sbi package or custom normalizing flow in JAX).
@@ -283,7 +283,7 @@ surveys. diffsed's JAX forward model is perfect for generating SBI training sets
 
 ## Competitive Comparison
 
-| Feature | diffsed | Prospector | Bagpipes | CIGALE | BEAGLE |
+| Feature | tengri | Prospector | Bagpipes | CIGALE | BEAGLE |
 |---------|---------|-----------|----------|--------|--------|
 | SFH models | 8+burst+GP | NP+cont. | 7+NP | Flexible | Limited |
 | Stochastic SFH | PSD-based | Power-spec | No | No | No |

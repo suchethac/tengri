@@ -29,29 +29,29 @@ class TestCosmologyCrossval:
         astropy = pytest.importorskip("astropy")
         from astropy.cosmology import Planck18
 
-        from diffsed.utils.cosmology import luminosity_distance
+        from tengri.utils.cosmology import luminosity_distance
 
         for z in [0.01, 0.1, 0.5, 1.0, 2.0, 5.0]:
             dl_astropy = Planck18.luminosity_distance(z).to("cm").value
-            dl_diffsed = float(luminosity_distance(z))
-            ratio = dl_diffsed / dl_astropy
+            dl_tengri = float(luminosity_distance(z))
+            ratio = dl_tengri / dl_astropy
             np.testing.assert_allclose(
                 ratio,
                 1.0,
                 atol=0.02,
-                err_msg=f"dL at z={z}: diffsed/astropy = {ratio:.4f}",
+                err_msg=f"dL at z={z}: tengri/astropy = {ratio:.4f}",
             )
 
     def test_dl_zero_at_z0(self):
         """Luminosity distance at z=0 should be ~0."""
-        from diffsed.utils.cosmology import luminosity_distance
+        from tengri.utils.cosmology import luminosity_distance
 
         dl = float(luminosity_distance(0.0))
         assert dl < 1e20, f"dL(z=0) = {dl:.2e}, expected ~0"
 
     def test_dl_increases_with_z(self):
         """dL should increase monotonically with redshift."""
-        from diffsed.utils.cosmology import luminosity_distance
+        from tengri.utils.cosmology import luminosity_distance
 
         dls = [float(luminosity_distance(z)) for z in [0.1, 0.5, 1.0, 2.0]]
         assert all(dls[i] < dls[i + 1] for i in range(len(dls) - 1))
@@ -67,28 +67,28 @@ class TestDustLawsCrossval:
 
     def test_calzetti_at_vband(self):
         """Calzetti+2000: k(V) should be ~1 (normalized at V)."""
-        from diffsed.models.dust.attenuation import calzetti
+        from tengri.models.dust.attenuation import calzetti
 
         k = float(calzetti(jnp.array([5500.0]))[0])
         np.testing.assert_allclose(k, 1.0, atol=0.15)
 
     def test_calzetti_uv_steeper_than_optical(self):
         """UV attenuation > optical for all laws."""
-        from diffsed.models.dust.attenuation import calzetti
+        from tengri.models.dust.attenuation import calzetti
 
         k = np.asarray(calzetti(jnp.array([1500.0, 5500.0])))
         assert k[0] > k[1]
 
     def test_cardelli_rv31(self):
         """Cardelli+1989: R_V = 3.1 standard MW curve, positive at V."""
-        from diffsed.models.dust.attenuation import cardelli
+        from tengri.models.dust.attenuation import cardelli
 
         k = float(cardelli(jnp.array([5500.0]), Rv=3.1)[0])
         assert k > 0
 
     def test_smc_steeper_than_calzetti(self):
         """SMC curve should be steeper in UV than Calzetti."""
-        from diffsed.models.dust.attenuation import calzetti, smc
+        from tengri.models.dust.attenuation import calzetti, smc
 
         wave = jnp.array([1500.0, 5500.0])
         ratio_calz = float(calzetti(wave)[0] / calzetti(wave)[1])
@@ -97,7 +97,7 @@ class TestDustLawsCrossval:
 
     def test_power_law_slope(self):
         """Power-law k(λ) = (λ/5500)^n at 2000A."""
-        from diffsed.models.dust.attenuation import power_law
+        from tengri.models.dust.attenuation import power_law
 
         k = np.asarray(power_law(jnp.array([2000.0, 5500.0]), n=-0.7))
         np.testing.assert_allclose(k[1], 1.0, atol=0.01)
@@ -114,7 +114,7 @@ class TestPSDCrossval:
 
     def test_wiener_khinchin_drw(self):
         """Integral of DRW PSD should relate to variance."""
-        from diffsed.models.sfh.psd_models import drw_variance, psd_drw
+        from tengri.models.sfh.psd_models import drw_variance, psd_drw
 
         psd_sigma, psd_tau_yr = 1.5, 50e6
         n_grid = 512
@@ -133,7 +133,7 @@ class TestPSDCrossval:
 
     def test_psd_drw_shape(self):
         """DRW PSD should be flat at low freq, drop at high freq."""
-        from diffsed.models.sfh.psd_models import psd_drw
+        from tengri.models.sfh.psd_models import psd_drw
 
         freqs = jnp.logspace(-3, 1, 100)
         psd = np.asarray(psd_drw(freqs, psd_sigma=1.0, psd_tau_yr=1e7))
@@ -152,7 +152,7 @@ class TestMeanSFHCrossval:
 
     def test_dpl_peak_location(self):
         """Double power-law should peak near tau."""
-        from diffsed.models.sfh.mean_sfh import double_powerlaw
+        from tengri.models.sfh.mean_sfh import double_powerlaw
 
         t = jnp.linspace(0.01, 13.8, 1000)
         sfr = np.asarray(double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0))
@@ -161,7 +161,7 @@ class TestMeanSFHCrossval:
 
     def test_dpl_integral_positive(self):
         """DPL integral should be positive."""
-        from diffsed.models.sfh.mean_sfh import double_powerlaw
+        from tengri.models.sfh.mean_sfh import double_powerlaw
 
         t = jnp.linspace(0.01, 13.8, 1000)
         sfr = double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0)
@@ -169,7 +169,7 @@ class TestMeanSFHCrossval:
 
     def test_dpl_norm_scales_linearly(self):
         """Doubling norm should double the SFR."""
-        from diffsed.models.sfh.mean_sfh import double_powerlaw
+        from tengri.models.sfh.mean_sfh import double_powerlaw
 
         t = jnp.linspace(0.01, 13.8, 1000)
         sfr1 = double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0)
@@ -187,7 +187,7 @@ class TestSpectroscopyCrossval:
 
     def test_broadening_widens_line(self):
         """Velocity broadening should widen a spectral line."""
-        from diffsed.models.observation.spectroscopy import velocity_broaden
+        from tengri.models.observation.spectroscopy import velocity_broaden
 
         wave = jnp.linspace(4800, 4920, 1000)
         spec = jnp.exp(-0.5 * ((wave - 4861) / 0.5) ** 2)
@@ -203,7 +203,7 @@ class TestSpectroscopyCrossval:
 
     def test_broadening_conserves_flux(self):
         """Total flux should be approximately conserved."""
-        from diffsed.models.observation.spectroscopy import velocity_broaden
+        from tengri.models.observation.spectroscopy import velocity_broaden
 
         wave = jnp.linspace(4700, 5000, 2000)
         spec = jnp.exp(-0.5 * ((wave - 4861) / 2.0) ** 2)
@@ -225,7 +225,7 @@ class TestBLRNLRCrossval:
 
     def test_blr_has_broad_lines(self):
         """BLR should produce broad emission (FWHM > 1000 km/s)."""
-        from diffsed.models.agn.blr import blr_emission
+        from tengri.models.agn.blr import blr_emission
 
         wave = jnp.linspace(4700, 5000, 1000)
         # l_disc_bol_erg = 10^45 erg/s
@@ -244,8 +244,8 @@ class TestBLRNLRCrossval:
 
     def test_nlr_narrower_than_blr(self):
         """NLR lines should be narrower than BLR lines."""
-        from diffsed.models.agn.blr import blr_emission
-        from diffsed.models.agn.nlr import nlr_emission
+        from tengri.models.agn.blr import blr_emission
+        from tengri.models.agn.nlr import nlr_emission
 
         wave = jnp.linspace(6400, 6700, 1000)
         blr = np.asarray(blr_emission(wave, l_disc_bol_erg=1e45))
@@ -259,7 +259,7 @@ class TestBLRNLRCrossval:
 
     def test_blr_scales_with_luminosity(self):
         """BLR should scale with disc luminosity."""
-        from diffsed.models.agn.blr import blr_emission
+        from tengri.models.agn.blr import blr_emission
 
         wave = jnp.linspace(6400, 6700, 500)
         blr_lo = np.asarray(blr_emission(wave, l_disc_bol_erg=1e44))
@@ -294,7 +294,7 @@ class TestFiltersCrossval:
     )
     def test_effective_wavelength(self, filt_name, lambda_eff):
         """Filter effective wavelength should match FSPS to <2%."""
-        from diffsed.models.observation.filters import load_filter_set
+        from tengri.models.observation.filters import load_filter_set
 
         try:
             filter_waves, filter_trans, _filter_curves = load_filter_set([filt_name])
@@ -330,7 +330,7 @@ class TestNoiseCrossval:
 
     def test_student_t_high_dof_approaches_gaussian(self):
         """Student-t with dof=1000 should match Gaussian energy closely."""
-        from diffsed.core.noise import variable_noise_hamiltonian
+        from tengri.core.noise import variable_noise_hamiltonian
 
         data = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0])
         predicted = jnp.array([1.1, 1.9, 3.2, 3.8, 5.1])
@@ -357,7 +357,7 @@ class TestNoiseCrossval:
 
     def test_log_likelihood_finite_for_reasonable_inputs(self):
         """Energy should be finite for typical SED fitting inputs."""
-        from diffsed.core.noise import variable_noise_hamiltonian
+        from tengri.core.noise import variable_noise_hamiltonian
 
         data = jnp.array([1e-17, 2e-17, 3e-17, 5e-17, 8e-17])
         predicted = jnp.array([1.1e-17, 1.8e-17, 3.5e-17, 4.5e-17, 7.5e-17])
@@ -379,7 +379,7 @@ class TestNoiseCrossval:
         Lower energy = higher likelihood. A Student-t with heavy tails
         (low dof) should be more tolerant of outliers than a Gaussian.
         """
-        from diffsed.core.noise import variable_noise_hamiltonian
+        from tengri.core.noise import variable_noise_hamiltonian
 
         # Data with one strong outlier at index 4
         data = jnp.array([1.0, 2.0, 3.0, 4.0, 20.0])
@@ -405,7 +405,7 @@ class TestNoiseCrossval:
 
     def test_student_t_energy_decreases_with_lower_dof_for_outliers(self):
         """Energy should decrease monotonically with lower dof for outlier data."""
-        from diffsed.core.noise import variable_noise_hamiltonian
+        from tengri.core.noise import variable_noise_hamiltonian
 
         # Data with outliers
         data = jnp.array([1.0, 2.0, 3.0, 4.0, 15.0])

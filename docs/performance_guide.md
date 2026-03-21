@@ -1,12 +1,12 @@
 # Performance Optimization Guide
 
-A comprehensive guide to diffsed's speed and memory optimizations.
+A comprehensive guide to tengri's speed and memory optimizations.
 For EVI/geoVI inference-specific optimizations, see `evi_optimization_notes.md`.
 
 ## Quick Start: Maximum Performance
 
 ```python
-from diffsed import Model, ParamSpec, Uniform, Fitter, load_ssp_data, load_filter_set
+from tengri import Model, ParamSpec, Uniform, Fitter, load_ssp_data, load_filter_set
 
 ssp = load_ssp_data("data/ssp.h5")
 filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
@@ -157,7 +157,7 @@ model = Model(spec, ssp, filters=filters)
 For standalone use (e.g., in custom forward models):
 
 ```python
-from diffsed.models.dust.attenuation import (
+from tengri.models.dust.attenuation import (
     precompute_dust_age_weights,
     two_component_dust_fast,
 )
@@ -223,7 +223,7 @@ effect on MCMC/VI convergence.
 ### What it does
 
 JAX's XLA compiler traces and compiles JIT functions on first call. This
-takes ~1-5 seconds for the diffsed forward model. Without caching, this
+takes ~1-5 seconds for the tengri forward model. Without caching, this
 happens every time you restart Python.
 
 The persistent cache stores compiled XLA executables on disk. On subsequent
@@ -231,11 +231,11 @@ runs, JAX loads the cached compilation instead of recompiling.
 
 ### How it works
 
-Enabled automatically when you `import diffsed`:
+Enabled automatically when you `import tengri`:
 
 ```python
-# In diffsed/__init__.py:
-jax.config.update("jax_compilation_cache_dir", "/tmp/diffsed_jax_cache")
+# In tengri/__init__.py:
+jax.config.update("jax_compilation_cache_dir", "/tmp/tengri_jax_cache")
 jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
 ```
 
@@ -253,10 +253,10 @@ This matters most in notebooks where you restart kernels frequently.
 
 ```bash
 # Clear cache (if you upgrade JAX or change code structure)
-rm -rf /tmp/diffsed_jax_cache
+rm -rf /tmp/tengri_jax_cache
 
 # Check cache size
-du -sh /tmp/diffsed_jax_cache
+du -sh /tmp/tengri_jax_cache
 ```
 
 ---
@@ -386,7 +386,7 @@ schedule and nonlinear posterior draws).
 | Stochastic D=137, power_law | 56s compile + 0.8s run | 2000 |
 | Catalog (100 galaxies) | 56s compile + 3s total | 100/galaxy |
 
-Compilation cost is one-time and cached to `/tmp/diffsed_jax_cache`.
+Compilation cost is one-time and cached to `/tmp/tengri_jax_cache`.
 Dust law choice has negligible impact on inference time.
 
 Batch fitting: `fitter.fit_batch(galaxies)` uses `native_geovi` by default.
@@ -479,9 +479,9 @@ that don't fuse well in XLA. However, gradients (474 μs) are not available
 in the original at all — for gradient-based SED fitting, the JAX version
 enables fitting QSOGen parameters that were previously fixed.
 
-*Known issue:* diffsed QSOGen outputs L_nu (Lsun/Hz); the original outputs
+*Known issue:* tengri QSOGen outputs L_nu (Lsun/Hz); the original outputs
 f_lambda (erg/s/cm²/Å). After converting to f_nu, UV/opt continuum color
-(no emission lines) is 0.93 (diffsed) vs 0.78 (original) — a **19%
+(no emission lines) is 0.93 (tengri) vs 0.78 (original) — a **19%
 difference** in the broken power-law shape, likely from sigmoid transition
 width or normalization details. Needs line-by-line calibration against
 the original `set_continuum()` in `qsosed.py`.
@@ -541,7 +541,7 @@ libraries or when the IMF differs from the pre-computed table.
 
 ### Cross-Validation Summary
 
-106+ tests in `tests/crossval/` validate diffsed against bagpipes, python-fsps,
+106+ tests in `tests/crossval/` validate tengri against bagpipes, python-fsps,
 and CUE TF. Run with:
 
 ```bash

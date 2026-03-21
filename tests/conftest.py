@@ -1,10 +1,10 @@
-"""Shared test fixtures for diffsed test suite."""
+"""Shared test fixtures for tengri test suite."""
 
 import jax
 import pytest
 
-from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw
-from diffsed.utils.grid import grid_spacing, make_log_age_grid
+from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.utils.grid import grid_spacing, make_log_age_grid
 
 # Enable 64-bit for numerical precision in tests
 jax.config.update("jax_enable_x64", True)

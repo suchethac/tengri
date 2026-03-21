@@ -5,7 +5,7 @@ a loss function from the Model's predictions and the ParamSpec's priors,
 then runs the chosen optimizer/sampler.
 
 Usage:
-    from diffsed import Model, Fitter
+    from tengri import Model, Fitter
 
     fitter = Fitter(model, data, noise)
     result_map = fitter.run("map", n_steps=1500)
@@ -22,8 +22,8 @@ import jax
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
-from diffsed.distributions import Gaussian, LogUniform
-from diffsed.utils.transforms import to_bounded, to_unbounded
+from tengri.distributions import Gaussian, LogUniform
+from tengri.utils.transforms import to_bounded, to_unbounded
 
 
 def _simple_cg(mat_fn, b, x0, maxiter=30, miniter=6):
@@ -61,7 +61,7 @@ def _simple_cg(mat_fn, b, x0, maxiter=30, miniter=6):
 
 
 class Fitter:
-    """Inference engine for diffsed models.
+    """Inference engine for tengri models.
 
     Parameters
     ----------
@@ -150,7 +150,7 @@ class Fitter:
         a scalar: chi² + prior penalties. When noise model is active,
         uses effective noise with calibration floor and log-determinant.
         """
-        from diffsed.core.noise import (
+        from tengri.core.noise import (
             get_noise_dof,
             has_noise_model,
             uses_student_t,
@@ -336,7 +336,7 @@ class Fitter:
         directly and called within the JIT boundary. This ensures
         mathematical equivalence with ``jft.optimize_kl``.
         """
-        from diffsed.core.noise import (
+        from tengri.core.noise import (
             compute_std_inv,
             get_noise_dof,
             has_noise_model,
@@ -1306,7 +1306,7 @@ class Fitter:
         Triggers XLA compilation for all specified modes so that
         subsequent ``fitter.run()`` calls have zero compilation delay.
         Compiled programs are cached both in-memory (this session)
-        and on disk (``/tmp/diffsed_jax_cache``, survives restarts).
+        and on disk (``/tmp/tengri_jax_cache``, survives restarts).
 
         Parameters
         ----------
@@ -1607,7 +1607,7 @@ class Fitter:
         """
         import warnings
 
-        from diffsed.inference.posterior import Posterior
+        from tengri.inference.posterior import Posterior
 
         # --- Parameter validation ---
         if n_samples > 12:
@@ -2028,8 +2028,8 @@ class Fitter:
         verbose : bool
             Print progress.
         """
-        from diffsed.inference.posterior import Posterior
-        from diffsed.inference.vi_config import VIConfig, evi_sample_mode
+        from tengri.inference.posterior import Posterior
+        from tengri.inference.vi_config import VIConfig, evi_sample_mode
 
         cfg = vi_config or VIConfig()
 
@@ -2317,7 +2317,7 @@ class Fitter:
         except ImportError:
             raise ImportError("optax required for MAP: pip install optax") from None
 
-        from diffsed.inference.posterior import Posterior
+        from tengri.inference.posterior import Posterior
 
         loss_fn = self._build_loss_fn()
 
@@ -2440,8 +2440,8 @@ class Fitter:
         verbose : bool
             Print progress.
         """
-        from diffsed.inference.posterior import Posterior
-        from diffsed.inference.raytrace import sample_raytrace
+        from tengri.inference.posterior import Posterior
+        from tengri.inference.raytrace import sample_raytrace
 
         loss_fn = self._build_loss_fn()
 
@@ -2584,7 +2584,7 @@ class Fitter:
         except ImportError:
             raise ImportError("blackjax required for NUTS: pip install blackjax") from None
 
-        from diffsed.inference.posterior import Posterior
+        from tengri.inference.posterior import Posterior
 
         # Warn about high dimensionality
         if self.spec.stochastic:
@@ -2748,12 +2748,12 @@ class Fitter:
         except ImportError:
             raise ImportError("nifty8.re required for geoVI: pip install nifty8[re]") from None
 
-        from diffsed.inference.posterior import Posterior
-        from diffsed.inference.vi_config import VIConfig, evi_sample_mode
+        from tengri.inference.posterior import Posterior
+        from tengri.inference.vi_config import VIConfig, evi_sample_mode
 
         cfg = vi_config or VIConfig()
 
-        from diffsed.core.noise import (
+        from tengri.core.noise import (
             compute_effective_noise,
             compute_std_inv,
             has_noise_model,

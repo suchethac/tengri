@@ -1,4 +1,4 @@
-"""Plotting helper functions for diffsed.
+"""Plotting helper functions for tengri.
 
 Reusable, publication-quality plotting utilities for SFH recovery,
 SED fitting, spectroscopic fits, corner plot comparisons, and
@@ -10,8 +10,8 @@ and CIGALE (Boquien+2019). Designed for ApJ/MNRAS figures.
 
 Usage::
 
-    from diffsed.plotting import plot_sfh, plot_sed_fit, safe_corner
-    from diffsed.plotting import COLORS, SDSS_WAVE_EFF
+    from tengri.plotting import plot_sfh, plot_sed_fit, safe_corner
+    from tengri.plotting import COLORS, SDSS_WAVE_EFF
 """
 
 import matplotlib.pyplot as plt

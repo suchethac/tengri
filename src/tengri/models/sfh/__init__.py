@@ -1,6 +1,6 @@
 """Star formation history models: PSD kernels, GP generation, mean SFH, registry."""
 
-from diffsed.models.sfh.mean_sfh import (
+from tengri.models.sfh.mean_sfh import (
     AGEMAX_YR,
     constant_sfh,
     delayed_exponential_sfh,
@@ -15,7 +15,7 @@ from diffsed.models.sfh.mean_sfh import (
     triweight_burst,
     tsnorm,
 )
-from diffsed.models.sfh.registry import (
+from tengri.models.sfh.registry import (
     FIELD_MODEL_REGISTRY,
     SFH_REGISTRY,
     compute_field_gp,

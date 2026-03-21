@@ -9,8 +9,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from diffsed import Fitter, Fixed, Model, ParamSpec, Uniform
-from diffsed.models.sps.dsps_wrapper import SSPData
+from tengri import Fitter, Fixed, Model, ParamSpec, Uniform
+from tengri.models.sps.dsps_wrapper import SSPData
 
 jax.config.update("jax_enable_x64", True)
 

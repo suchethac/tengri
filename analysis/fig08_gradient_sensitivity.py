@@ -23,7 +23,7 @@ from common import (
     make_model, setup_matplotlib, FIG_DIR, PAPER_FIG_DIR, get_filters,
 )
 
-from diffsed import ParamSpec, Uniform, Gaussian, Model, load_ssp_data
+from tengri import ParamSpec, Uniform, Gaussian, Model, load_ssp_data
 
 
 def compute_jacobian(model, params, filter_names):
@@ -133,13 +133,13 @@ def main():
         stochastic=True,
         n_grid=128,
     )
-    from diffsed import ParamSpec
+    from tengri import ParamSpec
     spec = ParamSpec(**spec_kwargs)
     ssp = load_ssp_data(str(Path(__file__).resolve().parent.parent / "data" /
                             "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"))
 
     filter_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-    from diffsed import load_filter_set
+    from tengri import load_filter_set
     filters = load_filter_set(filter_names)
     model = Model(spec, ssp, filters=filters)
 

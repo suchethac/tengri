@@ -11,7 +11,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed.utils.sed_quantities import (
+from tengri.utils.sed_quantities import (
     C_AA,
     LSUN_ERG,
     PC_CM,

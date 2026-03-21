@@ -25,7 +25,7 @@ from common import (
     FIG_DIR, PAPER_FIG_DIR,
 )
 
-from diffsed import Fitter
+from tengri import Fitter
 
 
 def benchmark_method(model, galaxy, method, key, **kwargs):

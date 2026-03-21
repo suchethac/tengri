@@ -11,7 +11,7 @@ Emission
 Draine & Li 2007, Draine & Li 2014 update) with energy-balance normalization.
 """
 
-from diffsed.models.dust.attenuation import (
+from tengri.models.dust.attenuation import (
     DUST_LAWS,
     get_dust_law,
     precompute_dust_age_weights,
@@ -19,7 +19,7 @@ from diffsed.models.dust.attenuation import (
     two_component_dust,
     two_component_dust_fast,
 )
-from diffsed.models.dust.emission import (
+from tengri.models.dust.emission import (
     DUST_EMISSION_MODELS,
     apply_dust_emission,
     calibrate_dl07_pah_fraction,

@@ -1,7 +1,7 @@
 # EVI Optimization Notes
 
 Notes from discussions with Philipp Frank (geoVI author, MPA Garching), March 2025.
-For use in the diffsed paper's inference methods section.
+For use in the tengri paper's inference methods section.
 
 ## Summary of Improvements
 

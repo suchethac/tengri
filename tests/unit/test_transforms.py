@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.utils.transforms import (
+from tengri.utils.transforms import (
     sigmoid,
     to_bounded,
     to_unbounded,

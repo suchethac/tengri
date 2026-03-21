@@ -147,8 +147,8 @@ def build_fused_photometry(model):
         JIT-compiled function: (sfr_on_ssp, log_z_abs, tau_bc, tau_diff,
         dust_slope, ...) -> photometry array.
     """
-    from diffsed.models.dust.attenuation import get_dust_law
-    from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.models.dust.attenuation import get_dust_law
+    from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = model._forward_dtype
     precomp = model._precomp
@@ -164,13 +164,13 @@ def build_fused_photometry(model):
     law_bc_fn = get_dust_law(model._dust_law_bc)
     law_diff_fn = get_dust_law(model._dust_law_diff)
 
-    from diffsed.models.sps.dsps_wrapper import _ALPHA_TO_Z_COEFF as _A2Z
+    from tengri.models.sps.dsps_wrapper import _ALPHA_TO_Z_COEFF as _A2Z
 
     # Metallicity interpolation mode for fused kernel
     _use_smooth_z = model._met_interp == "smooth"
     _lgmet_scat = dt.type(model._lgmet_scatter)
     if _use_smooth_z:
-        from diffsed.models.sps.dsps_wrapper import compute_lgmet_weights as _clw
+        from tengri.models.sps.dsps_wrapper import compute_lgmet_weights as _clw
 
     # IGM: precomputed at effective wavelengths (constant for fixed z)
     has_igm = model._igm_at_eff is not None
@@ -188,7 +188,7 @@ def build_fused_photometry(model):
     # AGN: capture model function for evaluation at effective wavelengths
     has_agn = model._agn_model is not None and model._agn_parametric
     if has_agn:
-        from diffsed.models.agn import get_agn_model
+        from tengri.models.agn import get_agn_model
 
         agn_model_fn = get_agn_model(model._agn_model)
 
@@ -362,8 +362,8 @@ def build_fused_spectrum(model):
         JIT-compiled function: (sfr_on_ssp, log_z_abs, tau_bc, tau_diff,
         dust_slope, ...) -> spectrum array.
     """
-    from diffsed.models.dust.attenuation import get_dust_law
-    from diffsed.models.sps.dsps_wrapper import (
+    from tengri.models.dust.attenuation import get_dust_law
+    from tengri.models.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
         LSUN_ERG_PER_S,
     )
@@ -394,7 +394,7 @@ def build_fused_spectrum(model):
     # AGN: capture model function for evaluation at pixel wavelengths
     has_agn = model._agn_model is not None and model._agn_parametric
     if has_agn:
-        from diffsed.models.agn import get_agn_model
+        from tengri.models.agn import get_agn_model
 
         agn_model_fn = get_agn_model(model._agn_model)
 
@@ -538,7 +538,7 @@ def build_exact_sed(model):
     -----
     Typical speedup: 4-14x vs un-JIT'd exact path.
     """
-    from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = model._forward_dtype
     ssp_wave = model.ssp_data.ssp_wave.astype(dt)
@@ -618,8 +618,8 @@ def build_fused_photometry_ztable(model):
         JIT-compiled function: (sfr_on_ssp, log_z_abs, tau_bc, tau_diff,
         dust_slope, redshift, ...) -> photometry array.
     """
-    from diffsed.models.dust.attenuation import get_dust_law
-    from diffsed.models.sps.dsps_wrapper import (
+    from tengri.models.dust.attenuation import get_dust_law
+    from tengri.models.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
         LSUN_ERG_PER_S,
     )
@@ -646,14 +646,14 @@ def build_fused_photometry_ztable(model):
     _use_smooth_z_zt = model._met_interp == "smooth"
     _lgmet_scat_zt = fdt.type(model._lgmet_scatter)
     if _use_smooth_z_zt:
-        from diffsed.models.sps.dsps_wrapper import (
+        from tengri.models.sps.dsps_wrapper import (
             compute_lgmet_weights as _clw_zt,
         )
 
     # AGN: capture model function for evaluation at effective wavelengths
     has_agn = model._agn_model is not None and model._agn_parametric
     if has_agn:
-        from diffsed.models.agn import get_agn_model
+        from tengri.models.agn import get_agn_model
 
         agn_model_fn = get_agn_model(model._agn_model)
 

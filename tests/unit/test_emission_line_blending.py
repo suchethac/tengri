@@ -13,7 +13,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.observation.spectroscopy import blend_emission_lines
+from tengri.models.observation.spectroscopy import blend_emission_lines
 
 jax.config.update("jax_enable_x64", True)
 
@@ -80,8 +80,9 @@ class TestSingleLine:
             first_idx = int(jnp.argmax(above_half))
             last_idx = len(wave) - 1 - int(jnp.argmax(above_half[::-1]))
             fwhm_measured = float(wave[last_idx] - wave[first_idx])
-            assert_allclose(fwhm_measured, fwhm_expected, rtol=0.05,
-                            err_msg=f"FWHM mismatch at R={R}")
+            assert_allclose(
+                fwhm_measured, fwhm_expected, rtol=0.05, err_msg=f"FWHM mismatch at R={R}"
+            )
 
     def test_luminosity_conservation(self, halpha):
         """Integral of L_nu * dnu should equal input luminosity."""
@@ -94,8 +95,12 @@ class TestSingleLine:
         nu = _C_AA / wave
         # Integrate: L_total = -integral(L_nu * dnu)  [minus because nu decreasing]
         L_total = float(-jnp.trapezoid(spec, nu))
-        assert_allclose(L_total, float(lum[0]), rtol=0.02,
-                        err_msg=f"Luminosity not conserved: {L_total:.4e} vs {float(lum[0]):.4e}")
+        assert_allclose(
+            L_total,
+            float(lum[0]),
+            rtol=0.02,
+            err_msg=f"Luminosity not conserved: {L_total:.4e} vs {float(lum[0]):.4e}",
+        )
 
     def test_positive_spectrum(self, wave_grid, halpha):
         """Output should be non-negative everywhere."""
@@ -141,8 +146,9 @@ class TestLineBlending:
         # Count local maxima at R=5000
         diff_high = jnp.diff(spec_high)
         sign_changes = jnp.sum(
-            (diff_high[:-1] > 0) & (diff_high[1:] < 0) &
-            (spec_high[1:-1] > 0.01 * jnp.max(spec_high))
+            (diff_high[:-1] > 0)
+            & (diff_high[1:] < 0)
+            & (spec_high[1:-1] > 0.01 * jnp.max(spec_high))
         )
         assert int(sign_changes) >= 2, (
             f"High-R should resolve at least 2 peaks, found {int(sign_changes)}"
@@ -157,8 +163,12 @@ class TestLineBlending:
         nu = _C_AA / wave
         L_total = float(-jnp.trapezoid(spec, nu))
         L_expected = float(jnp.sum(lum))
-        assert_allclose(L_total, L_expected, rtol=0.03,
-                        err_msg=f"Total luminosity: {L_total:.4e} vs {L_expected:.4e}")
+        assert_allclose(
+            L_total,
+            L_expected,
+            rtol=0.03,
+            err_msg=f"Total luminosity: {L_total:.4e} vs {L_expected:.4e}",
+        )
 
 
 # ---------------------------------------------------------------------------

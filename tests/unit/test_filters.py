@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from diffsed.models.observation.filters import (
+from tengri.models.observation.filters import (
     FILTER_REGISTRY,
     download_filter,
     list_available_filters,
@@ -14,7 +14,7 @@ from diffsed.models.observation.filters import (
     load_filter,
     load_filter_set,
 )
-from diffsed.models.observation.photometry import FilterCurve
+from tengri.models.observation.photometry import FilterCurve
 
 # ---------------------------------------------------------------------------
 # Fixtures

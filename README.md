@@ -1,8 +1,12 @@
-# diffsed
+# Tengri
 
-**Differentiable SED fitting with Information Field Theory star formation history priors.**
+A fast, modular JAX framework for Bayesian galaxy SED fitting. Scalable from individual posteriors to hierarchical population inference across thousands of dimensions. Built to be the comprehensive, actively developed tool for extracting the fullest physical picture of galaxies from multiwavelength observations.
 
-A modular, fully differentiable JAX code for galaxy spectral energy distribution (SED) fitting. The star formation history is modeled as a continuous correlated field governed by a power spectral density (PSD) kernel, enabling physically motivated burstiness priors. End-to-end gradients flow through the entire pipeline -- from PSD parameters through stellar population synthesis to predicted photometry and spectroscopy -- enabling fast variational and gradient-based inference.
+---
+
+*The name [Tengri](https://en.wikipedia.org/wiki/Tengri) comes from the all-encompassing God of Heaven in traditional Turkic, Mongolic, and other Central Asian nomadic religions. Tengri is the supreme sky deity in Tengrism, the eternal source of order in the natural world. A fitting name for a code that models the light of galaxies across cosmic time. This name is chosen with respect for the cultural and spiritual traditions it originates from; no religious claim or appropriation is intended.*
+
+---
 
 > **Status:** v0.1.0, active development. Core pipeline fully functional with 808 tests. Paper in preparation.
 
@@ -33,8 +37,8 @@ pip install -e ".[dev]"
 ## Quick start
 
 ```python
-from diffsed import Model, ParamSpec, Fitter, Posterior, Uniform, Gaussian
-from diffsed import load_ssp_data, load_filter_set
+from tengri import Model, ParamSpec, Fitter, Posterior, Uniform, Gaussian
+from tengri import load_ssp_data, load_filter_set
 
 # Load SSP templates and filters
 ssp = load_ssp_data("data/ssp.h5")
@@ -159,7 +163,7 @@ Parametric mean SFH functions can be selected via prefix in `ParamSpec`. These c
 ## Package structure
 
 ```
-src/diffsed/
+src/tengri/
 ├── __init__.py              # Public API re-exports
 ├── distributions.py         # Uniform, Gaussian, LogUniform, LogNormal, Fixed, StudentT
 ├── plotting.py              # SED, SFH, corner, and diagnostic plots
@@ -247,7 +251,7 @@ Key optimizations:
 - **Precomputed spectroscopy**: SSPs pre-interpolated to observed wavelength grid
 - **Precomputed dust age weights**: Sigmoid(log10(age)) computed once at Model init
 - **Mixed precision**: `Model(spec, ssp, forward_dtype="float32")` halves memory, ~1.5x speed, <0.1% error
-- **XLA compilation cache**: Persistent cache at `/tmp/diffsed_jax_cache` avoids recompilation across sessions
+- **XLA compilation cache**: Persistent cache at `/tmp/tengri_jax_cache` avoids recompilation across sessions
 
 ## Design principles
 
@@ -268,7 +272,7 @@ Key optimizations:
 pytest tests/ -q
 
 # Run with coverage
-pytest tests/ --cov=src/diffsed --cov-report=term-missing
+pytest tests/ --cov=src/tengri --cov-report=term-missing
 
 # Lint and format (must pass before committing)
 ruff check src/ tests/

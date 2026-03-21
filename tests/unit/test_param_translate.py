@@ -8,7 +8,7 @@ jax.config.update("jax_enable_x64", True)
 
 import pytest
 
-from diffsed.core.param_translate import (
+from tengri.core.param_translate import (
     _NON_SFH_PARAM_MAP,
     LOG10_ZSUN,
     PARAM_MAP,

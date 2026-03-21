@@ -1,4 +1,4 @@
-"""Dust attenuation model for diffsed.
+"""Dust attenuation model for tengri.
 
 This module provides a generalized two-component dust attenuation framework
 (Charlot & Fall 2000) with pluggable attenuation curves and clumpy dust

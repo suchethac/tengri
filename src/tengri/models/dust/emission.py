@@ -1,4 +1,4 @@
-"""Dust emission models for diffsed.
+"""Dust emission models for tengri.
 
 This module implements IR re-emission of UV/optical light absorbed by dust.
 All models are pure JAX (JIT-compatible, fully differentiable) and follow
@@ -1247,9 +1247,7 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
 # ===================================================================
 
 
-def register_dale2014_tabulated(
-    grid_path: str, name: str = "dale2014_tabulated"
-) -> None:
+def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated") -> None:
     """Load and register the tabulated Dale+2014 model in the emission registry.
 
     After calling this, the model is available via

@@ -1,10 +1,10 @@
-"""Cross-validate diffsed spectra against FSPS and bagpipes.
+"""Cross-validate tengri spectra against FSPS and bagpipes.
 
 Tests actual spectrum VALUES (Lsun/Hz/Msun) at key wavelengths.
 This catches SSP interpolation errors, unit mismatches, metallicity
 offset bugs, dust normalization errors, and nebular contribution.
 
-IMPORTANT: diffsed's ssp_lgmet grid is log10(Z) ABSOLUTE, not
+IMPORTANT: tengri's ssp_lgmet grid is log10(Z) ABSOLUTE, not
 log10(Z/Zsun). Solar metallicity is log10(0.0142) = -1.848, NOT 0.0.
 The Model class handles this conversion (met_logzsol -> log_z), but
 tests using the low-level SSP functions must apply LOG10_ZSUN manually.
@@ -50,7 +50,7 @@ def fsps_wave(ref):
 def ssp_data():
     if not _SSP_PATH.is_file():
         pytest.skip("SSP data not found")
-    from diffsed.models.sps.dsps_wrapper import load_ssp_data
+    from tengri.models.sps.dsps_wrapper import load_ssp_data
 
     return load_ssp_data(str(_SSP_PATH))
 
@@ -67,18 +67,18 @@ def _flux_at(wave, flux, target, width=50.0):
 
 
 class TestSSPSpectrumCrossval:
-    """Compare diffsed SSP spectra against FSPS reference.
+    """Compare tengri SSP spectra against FSPS reference.
 
-    diffsed loads the same FSPS SSP data, so the main source of
+    tengri loads the same FSPS SSP data, so the main source of
     difference is metallicity interpolation. FSPS zcontinuous=1 uses
-    a different interpolation scheme than diffsed's linear-in-logZ.
+    a different interpolation scheme than tengri's linear-in-logZ.
     We allow ~60% tolerance in the UV (where Z-dependence is steepest)
     and ~25% in the optical/NIR.
     """
 
     def test_ssp_1gyr_solar_optical(self, ssp_data, ref, fsps_wave):
         """SSP 1 Gyr solar: optical/NIR flux within 25% of FSPS."""
-        from diffsed.models.sps.dsps_wrapper import interpolate_metallicity
+        from tengri.models.sps.dsps_wrapper import interpolate_metallicity
 
         ssp_flux = np.asarray(
             interpolate_metallicity(ssp_data.ssp_flux, ssp_data.ssp_lgmet, LOG10_ZSUN)
@@ -97,7 +97,7 @@ class TestSSPSpectrumCrossval:
 
     def test_ssp_1gyr_solar_uv(self, ssp_data, ref, fsps_wave):
         """SSP 1 Gyr solar: UV flux within factor 2 (Z-sensitive)."""
-        from diffsed.models.sps.dsps_wrapper import interpolate_metallicity
+        from tengri.models.sps.dsps_wrapper import interpolate_metallicity
 
         ssp_flux = np.asarray(
             interpolate_metallicity(ssp_data.ssp_flux, ssp_data.ssp_lgmet, LOG10_ZSUN)
@@ -114,7 +114,7 @@ class TestSSPSpectrumCrossval:
 
     def test_young_ssp_bluer_than_old(self, ssp_data):
         """100 Myr SSP should be bluer than 10 Gyr SSP."""
-        from diffsed.models.sps.dsps_wrapper import interpolate_metallicity
+        from tengri.models.sps.dsps_wrapper import interpolate_metallicity
 
         ssp_flux = np.asarray(
             interpolate_metallicity(ssp_data.ssp_flux, ssp_data.ssp_lgmet, LOG10_ZSUN)
@@ -136,7 +136,7 @@ class TestSSPSpectrumCrossval:
 
     def test_metallicity_affects_uv(self, ssp_data):
         """Low-Z SSP should be UV-brighter than high-Z at 1 Gyr."""
-        from diffsed.models.sps.dsps_wrapper import interpolate_metallicity
+        from tengri.models.sps.dsps_wrapper import interpolate_metallicity
 
         ssp_wave = np.asarray(ssp_data.ssp_wave)
         ssp_lg_age = np.asarray(ssp_data.ssp_lg_age_gyr)
@@ -164,7 +164,7 @@ class TestDustySpectrumCrossval:
 
     def test_cf00_attenuation_curve(self, ssp_data, ref, fsps_wave):
         """Charlot & Fall attenuation at key wavelengths vs FSPS."""
-        from diffsed.models.dust.attenuation import two_component_dust
+        from tengri.models.dust.attenuation import two_component_dust
 
         ssp_wave = np.asarray(ssp_data.ssp_wave)
         tau_v2 = 0.5
@@ -196,7 +196,7 @@ class TestDustySpectrumCrossval:
                 t_ds,
                 t_ref,
                 rtol=0.05,
-                err_msg=f"Dust T({w}A): diffsed={t_ds:.4f}, FSPS={t_ref:.4f}",
+                err_msg=f"Dust T({w}A): tengri={t_ds:.4f}, FSPS={t_ref:.4f}",
             )
 
     def test_vband_exp_minus_tau(self, ref, fsps_wave):

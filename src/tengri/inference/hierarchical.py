@@ -23,7 +23,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from diffsed.utils.transforms import to_bounded, to_unbounded
+from tengri.utils.transforms import to_bounded, to_unbounded
 
 
 @dataclass
@@ -426,7 +426,7 @@ class HierarchicalFitter:
         t0 = time.time()
 
         # --- Initialize per-galaxy params via MAP ---
-        from diffsed import Fitter
+        from tengri import Fitter
 
         init_keys = jax.random.split(key, n_gal + n_seeds + 2)
 
@@ -595,7 +595,7 @@ class HierarchicalFitter:
         except ImportError:
             raise ImportError("nifty8.re required: pip install nifty8[re]") from None
 
-        from diffsed.inference.vi_config import VIConfig, evi_sample_mode
+        from tengri.inference.vi_config import VIConfig, evi_sample_mode
 
         cfg = vi_config or VIConfig()
 
@@ -730,7 +730,7 @@ class HierarchicalFitter:
                 init[k] = jnp.zeros_like(v)  # start at prior mean
 
         # Per-galaxy: MAP initialization
-        from diffsed import Fitter
+        from tengri import Fitter
 
         keys = jax.random.split(key, n_gal + 1)
 
@@ -890,7 +890,7 @@ class HierarchicalFitter:
                 "nifty8.re required for hierarchical geoVI: pip install nifty8[re]"
             ) from None
 
-        from diffsed.inference.vi_config import VIConfig, evi_sample_mode
+        from tengri.inference.vi_config import VIConfig, evi_sample_mode
 
         cfg = vi_config or VIConfig()
 
@@ -1141,7 +1141,7 @@ class HierarchicalFitter:
         """
         from jax.flatten_util import ravel_pytree
 
-        from diffsed.inference.raytrace import sample_raytrace
+        from tengri.inference.raytrace import sample_raytrace
 
         n_gal = self.n_galaxies
         spec = self._spec
@@ -1165,7 +1165,7 @@ class HierarchicalFitter:
         model = self.model_factory(psd_sigma=sigma_mid, psd_tau_myr=tau_mid)
 
         # Initialize per-galaxy params via individual MAP fits
-        from diffsed import Fitter
+        from tengri import Fitter
 
         keys = jax.random.split(key, n_gal + 2)
 

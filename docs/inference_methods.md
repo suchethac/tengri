@@ -1,6 +1,6 @@
-# Inference Methods in diffsed
+# Inference Methods in tengri
 
-A comprehensive reference for every inference method available in diffsed: mathematical
+A comprehensive reference for every inference method available in tengri: mathematical
 foundations, implementation details, performance characteristics, and usage patterns.
 
 This document consolidates and expands:
@@ -37,7 +37,7 @@ You have a galaxy. You have photometry (or a spectrum). You want to know the phy
 properties: dust, metallicity, star formation history. There are many combinations of
 parameters that could produce similar-looking data --- that is the **posterior**.
 
-diffsed provides five families of inference methods to explore this posterior:
+tengri provides five families of inference methods to explore this posterior:
 
 | Family | Methods | Posterior type | Best for |
 |--------|---------|---------------|----------|
@@ -64,7 +64,7 @@ diffsed provides five families of inference methods to explore this posterior:
 All methods are accessed through `Fitter.run()`:
 
 ```python
-from diffsed import Model, ParamSpec, Fitter
+from tengri import Model, ParamSpec, Fitter
 
 model = Model(spec, ssp)
 fitter = Fitter(model, data, noise)
@@ -91,7 +91,7 @@ print(result.diagnostics)       # chi2_dof, n_iterations, etc.
 
 ### 2.1 Standardized Coordinates
 
-All inference in diffsed operates in **standardized latent coordinates** where every
+All inference in tengri operates in **standardized latent coordinates** where every
 parameter has prior xi ~ N(0, I). Physical parameters with bounded priors (e.g.,
 Uniform(lo, hi)) are mapped to unbounded space via a sigmoid transform:
 
@@ -135,7 +135,7 @@ The metric defines the local curvature of the posterior:
 - **Large eigenvalues** = tightly constrained directions (data-dominated)
 - **Eigenvalues near 1** = unconstrained directions (prior-dominated)
 
-In diffsed, `J` is computed via JAX automatic differentiation (`jax.jvp` for forward-mode,
+In tengri, `J` is computed via JAX automatic differentiation (`jax.jvp` for forward-mode,
 `jax.vjp` for reverse-mode). The metric-vector product `M(xi) @ v` never materializes
 the full Jacobian:
 
@@ -430,7 +430,7 @@ be adjusted via `OptimizationSchedule.geovi(resample_every=N)`.
 
 ## 6. Method Hierarchy
 
-diffsed provides the same mathematical algorithms through multiple backends that trade
+tengri provides the same mathematical algorithms through multiple backends that trade
 off between diagnostic richness and raw speed.
 
 ### Internal Dispatch
@@ -652,7 +652,7 @@ result = fitter.run("native_geovi", init_from=result_map, n_iterations=10)
 ### 7.1 When JAX Recompiles
 
 JAX traces and compiles a function the first time it is called with a new combination
-of **static arguments**. In diffsed, the following are static:
+of **static arguments**. In tengri, the following are static:
 
 | Argument | Effect |
 |----------|--------|
@@ -667,10 +667,10 @@ This means:
 
 ### 7.2 XLA Persistent Cache
 
-diffsed enables the XLA persistent compilation cache at import time:
+tengri enables the XLA persistent compilation cache at import time:
 
 ```
-/tmp/diffsed_jax_cache
+/tmp/tengri_jax_cache
 ```
 
 Compiled XLA programs are stored on disk and survive Python restarts. The first
@@ -918,7 +918,7 @@ Outer cycle 5: resample again (prevent staleness)
 ### 10.6 Usage
 
 ```python
-from diffsed import HierarchicalFitter
+from tengri import HierarchicalFitter
 
 hfitter = HierarchicalFitter(
     model_factory=lambda sigma, tau: Model(spec, ssp, psd_sigma=sigma, psd_tau_myr=tau),
@@ -956,7 +956,7 @@ happens at each iteration. It wraps a callable `f(iteration: int) -> BlockStep`.
 ### 11.1 Factory Methods
 
 ```python
-from diffsed.vi_config import OptimizationSchedule, BlockStep, BlockSchedule
+from tengri.vi_config import OptimizationSchedule, BlockStep, BlockSchedule
 
 # --- Recommended geoVI (default when you call fitter.run("native_geovi")) ---
 sched = OptimizationSchedule.geovi(
@@ -1024,7 +1024,7 @@ class BlockStep:
 For the hierarchical fitter, `BlockSchedule` provides pre-built schedules:
 
 ```python
-from diffsed.vi_config import BlockSchedule
+from tengri.vi_config import BlockSchedule
 
 # Individual galaxy: 2 blocks (physical + SFH)
 sched = BlockSchedule.individual_geovi()

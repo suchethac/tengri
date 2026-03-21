@@ -13,7 +13,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from diffsed import (
+from tengri import (
     Gaussian,
     Model,
     ParamSpec,
@@ -21,7 +21,7 @@ from diffsed import (
     load_filter_set,
     load_ssp_data,
 )
-from diffsed.utils.transforms import to_bounded
+from tengri.utils.transforms import to_bounded
 
 # ---------------------------------------------------------------------------
 # Fixtures

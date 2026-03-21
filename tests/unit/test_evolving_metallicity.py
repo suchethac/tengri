@@ -13,8 +13,8 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.core.param_spec import ParamSpec
-from diffsed.models.sps.dsps_wrapper import (
+from tengri.core.param_spec import ParamSpec
+from tengri.models.sps.dsps_wrapper import (
     compute_log_z_evolving,
     interpolate_mass_remaining,
     interpolate_mass_remaining_evolving,
@@ -86,9 +86,7 @@ class TestInterpolateMetallicityEvolving:
         n_age = ssp_flux.shape[1]
         log_z_per_age = jnp.full(n_age, log_z)
 
-        result_evolving = interpolate_metallicity_evolving(
-            ssp_flux, ssp_lgmet, log_z_per_age
-        )
+        result_evolving = interpolate_metallicity_evolving(ssp_flux, ssp_lgmet, log_z_per_age)
         result_scalar = interpolate_metallicity(ssp_flux, ssp_lgmet, log_z)
 
         assert_allclose(result_evolving, result_scalar, atol=1e-12)
@@ -97,16 +95,13 @@ class TestInterpolateMetallicityEvolving:
         """When Z(t) lands exactly on grid points, use that grid slice."""
         n_age = ssp_flux.shape[1]
         # Each age bin uses a different grid point
-        log_z_per_age = jnp.array([
-            ssp_lgmet[i % len(ssp_lgmet)] for i in range(n_age)
-        ])
+        log_z_per_age = jnp.array([ssp_lgmet[i % len(ssp_lgmet)] for i in range(n_age)])
         result = interpolate_metallicity_evolving(ssp_flux, ssp_lgmet, log_z_per_age)
 
         for i in range(n_age):
             met_idx = i % len(ssp_lgmet)
             expected = ssp_flux[met_idx, i, :]
-            assert_allclose(result[i], expected, atol=1e-12,
-                            err_msg=f"Age bin {i} mismatch")
+            assert_allclose(result[i], expected, atol=1e-12, err_msg=f"Age bin {i} mismatch")
 
     def test_output_shape(self, ssp_flux, ssp_lgmet):
         """Output should be (n_age, n_wave)."""
@@ -160,9 +155,7 @@ class TestInterpolateMassRemainingEvolving:
         result_evolving = interpolate_mass_remaining_evolving(
             ssp_mass_remaining, ssp_lgmet, log_z_per_age
         )
-        result_scalar = interpolate_mass_remaining(
-            ssp_mass_remaining, ssp_lgmet, log_z
-        )
+        result_scalar = interpolate_mass_remaining(ssp_mass_remaining, ssp_lgmet, log_z)
 
         assert_allclose(result_evolving, result_scalar, atol=1e-12)
 
@@ -170,9 +163,7 @@ class TestInterpolateMassRemainingEvolving:
         """Output should be (n_age,)."""
         n_age = ssp_mass_remaining.shape[1]
         log_z_per_age = jnp.zeros(n_age)
-        result = interpolate_mass_remaining_evolving(
-            ssp_mass_remaining, ssp_lgmet, log_z_per_age
-        )
+        result = interpolate_mass_remaining_evolving(ssp_mass_remaining, ssp_lgmet, log_z_per_age)
         assert result.shape == (n_age,)
 
 
@@ -190,9 +181,7 @@ class TestComputeLogZEvolving:
         log_z_initial = -3.0
         log_z_final = -1.0
 
-        result = compute_log_z_evolving(
-            ssp_lg_age_gyr, log_z_initial, log_z_final, t_universe_gyr
-        )
+        result = compute_log_z_evolving(ssp_lg_age_gyr, log_z_initial, log_z_final, t_universe_gyr)
 
         # Youngest age (smallest lookback) should be closest to final
         # Oldest age should approach initial (if age ~ t_universe)
@@ -214,11 +203,9 @@ class TestComputeLogZEvolving:
         log_z_initial = -2.0
         log_z_final = 0.0
 
-        result = compute_log_z_evolving(
-            ssp_lg_age_gyr, log_z_initial, log_z_final, t_universe_gyr
-        )
+        result = compute_log_z_evolving(ssp_lg_age_gyr, log_z_initial, log_z_final, t_universe_gyr)
 
-        age_gyr = 10.0 ** ssp_lg_age_gyr
+        age_gyr = 10.0**ssp_lg_age_gyr
         t_frac = jnp.clip(age_gyr / t_universe_gyr, 0.0, 1.0)
         expected = log_z_final + (log_z_initial - log_z_final) * t_frac
 
@@ -232,9 +219,7 @@ class TestComputeLogZEvolving:
         log_z_initial = -2.0
         log_z_final = 0.0
 
-        result = compute_log_z_evolving(
-            ssp_lg_age_gyr, log_z_initial, log_z_final, t_universe_gyr
-        )
+        result = compute_log_z_evolving(ssp_lg_age_gyr, log_z_initial, log_z_final, t_universe_gyr)
 
         # Ages > 5 Gyr should clamp to initial
         assert float(result[-1]) == pytest.approx(log_z_initial, abs=1e-10)
@@ -256,7 +241,7 @@ class TestEvolvingMetallicityGradients:
 
         def loss(log_z_arr):
             flux = interpolate_metallicity_evolving(ssp_flux, ssp_lgmet, log_z_arr)
-            return jnp.sum(flux ** 2)
+            return jnp.sum(flux**2)
 
         grad = jax.grad(loss)(log_z_per_age)
         assert jnp.all(jnp.isfinite(grad)), "Gradients must be finite"
@@ -271,7 +256,7 @@ class TestEvolvingMetallicityGradients:
                 ssp_lg_age_gyr, log_z_initial, log_z_final, t_universe_gyr
             )
             flux = interpolate_metallicity_evolving(ssp_flux, ssp_lgmet, log_z_per_age)
-            return jnp.sum(flux ** 2)
+            return jnp.sum(flux**2)
 
         grad_fn = jax.grad(loss, argnums=(0, 1))
         g_init, g_final = grad_fn(-2.0, -0.5)
@@ -290,7 +275,7 @@ class TestEvolvingMetallicityGradients:
                 ssp_lg_age_gyr, -2.0, log_z_final, t_universe_gyr
             )
             flux = interpolate_metallicity_evolving(ssp_flux, ssp_lgmet, log_z_per_age)
-            return jnp.sum(flux ** 2)
+            return jnp.sum(flux**2)
 
         val = -0.5
         grad_auto = float(jax.grad(loss)(val))
@@ -298,8 +283,7 @@ class TestEvolvingMetallicityGradients:
         eps = 1e-5
         grad_fd = float((loss(val + eps) - loss(val - eps)) / (2 * eps))
 
-        assert_allclose(grad_auto, grad_fd, rtol=1e-3,
-                        err_msg="Autodiff vs finite-diff mismatch")
+        assert_allclose(grad_auto, grad_fd, rtol=1e-3, err_msg="Autodiff vs finite-diff mismatch")
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +310,8 @@ class TestParamSpecEvolvingMetallicity:
 
     def test_evolving_custom_priors(self):
         """Custom priors should work for evolving metallicity params."""
-        from diffsed.distributions import Uniform
+        from tengri.distributions import Uniform
+
         spec = ParamSpec(
             evolving_metallicity=True,
             met_logzsol_0=Uniform(-3.0, -1.0),

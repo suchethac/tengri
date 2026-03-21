@@ -1,7 +1,7 @@
 """Cross-validate dust IR emission against bagpipes.
 
 Bagpipes uses the full tabulated Draine & Li (2007) template grids,
-while diffsed uses an analytic 2-component approximation (modified
+while tengri uses an analytic 2-component approximation (modified
 blackbodies + simplified PAH feature). We don't expect exact shape
 agreement, but we DO expect:
 
@@ -13,7 +13,7 @@ agreement, but we DO expect:
 For energy balance, bagpipes computes:
     dust_flux = integral(spectrum_nodust - spectrum_dust) dlambda
     ir_emission = dust_flux * DL07_normalized_template(qpah, umin, gamma)
-This is exact by construction. diffsed does the same via
+This is exact by construction. tengri does the same via
 compute_absorbed_luminosity + emission model normalization.
 """
 
@@ -37,16 +37,16 @@ bagpipes_mg = pytest.importorskip(
 
 
 # ===================================================================
-# 1. Energy balance (diffsed internal)
+# 1. Energy balance (tengri internal)
 # ===================================================================
 
 
 class TestEnergyBalanceCrossval:
-    """Verify diffsed's energy-balance dust emission conserves energy."""
+    """Verify tengri's energy-balance dust emission conserves energy."""
 
     def test_absorbed_equals_emitted_mbb(self):
         """Modified blackbody emission should equal absorbed luminosity."""
-        from diffsed.models.dust.emission import (
+        from tengri.models.dust.emission import (
             compute_absorbed_luminosity,
             modified_blackbody,
         )
@@ -78,7 +78,7 @@ class TestEnergyBalanceCrossval:
 
     def test_absorbed_equals_emitted_dale(self):
         """Dale+2014 emission should equal absorbed luminosity."""
-        from diffsed.models.dust.emission import (
+        from tengri.models.dust.emission import (
             compute_absorbed_luminosity,
             dale2014,
         )
@@ -105,7 +105,7 @@ class TestEnergyBalanceCrossval:
 
     def test_absorbed_equals_emitted_draine_li(self):
         """Draine & Li 2007 (analytic) emission should conserve energy."""
-        from diffsed.models.dust.emission import (
+        from tengri.models.dust.emission import (
             compute_absorbed_luminosity,
             draine_li2007,
         )
@@ -133,7 +133,7 @@ class TestEnergyBalanceCrossval:
     @pytest.mark.parametrize("tau_v", [0.1, 0.5, 1.0, 2.0])
     def test_more_dust_more_ir(self, tau_v):
         """Higher optical depth should produce more absorbed luminosity."""
-        from diffsed.models.dust.emission import compute_absorbed_luminosity
+        from tengri.models.dust.emission import compute_absorbed_luminosity
 
         wave = jnp.linspace(1000, 30000, 2000)
         l_nu = jnp.ones_like(wave) * 1e-10
@@ -276,25 +276,25 @@ class TestDL07ParameterTrends:
 
 
 # ===================================================================
-# 4. diffsed vs bagpipes DL07 qualitative comparison
+# 4. tengri vs bagpipes DL07 qualitative comparison
 # ===================================================================
 
 
 class TestDL07ShapeCrossval:
-    """Compare diffsed's analytic DL07 approximation vs bagpipes templates.
+    """Compare tengri's analytic DL07 approximation vs bagpipes templates.
 
-    diffsed uses modified blackbodies + simplified PAH component, while
+    tengri uses modified blackbodies + simplified PAH component, while
     bagpipes uses the full tabulated DL07 grids. We expect qualitative
     agreement but not exact shape match.
     """
 
     def test_both_peak_in_fir(self):
         """Both implementations should produce FIR-peaked emission."""
-        from diffsed.models.dust.emission import draine_li2007
+        from tengri.models.dust.emission import draine_li2007
 
         wavs = np.logspace(np.log10(5000), np.log10(5e6), 1000)
 
-        # diffsed analytic
+        # tengri analytic
         l_ds = np.asarray(
             draine_li2007(
                 jnp.array(wavs),
@@ -313,7 +313,7 @@ class TestDL07ShapeCrossval:
         peak_ds = wavs[np.argmax(l_ds)] / 1e4  # um
         peak_bp = wavs[np.argmax(l_bp)] / 1e4  # um
 
-        assert 1.0 < peak_ds < 500, f"diffsed DL07 peak at {peak_ds:.0f} um"
+        assert 1.0 < peak_ds < 500, f"tengri DL07 peak at {peak_ds:.0f} um"
         assert 1.0 < peak_bp < 500, f"bagpipes DL07 peak at {peak_bp:.0f} um"
 
     def test_bagpipes_umin_trend(self):
@@ -328,14 +328,14 @@ class TestDL07ShapeCrossval:
 
         assert np.all(np.diff(centroids) < 0), "bagpipes: centroid should decrease with umin"
 
-    def test_diffsed_umin_extreme_trend(self):
-        """diffsed analytic DL07: umin=0.1 should be colder than umin=25.
+    def test_tengri_umin_extreme_trend(self):
+        """tengri analytic DL07: umin=0.1 should be colder than umin=25.
 
         Known limitation: the analytic T ~ U^{1/6} mapping may not
         produce a monotonic centroid shift for all intermediate umin
         values. We test the extreme endpoints only.
         """
-        from diffsed.models.dust.emission import draine_li2007
+        from tengri.models.dust.emission import draine_li2007
 
         wavs = np.logspace(np.log10(5000), np.log10(5e6), 1000)
         jnp_wavs = jnp.array(wavs)
@@ -351,7 +351,7 @@ class TestDL07ShapeCrossval:
         c_warm = np.average(wavs, weights=np.maximum(l_warm, 0))
 
         assert c_warm < c_cold, (
-            f"diffsed: umin=25 centroid ({c_warm / 1e4:.0f}um) should be "
+            f"tengri: umin=25 centroid ({c_warm / 1e4:.0f}um) should be "
             f"bluer than umin=0.1 ({c_cold / 1e4:.0f}um)"
         )
 

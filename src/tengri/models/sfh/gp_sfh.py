@@ -191,7 +191,7 @@ def compute_sqrt_power_drw(
     array, shape (n_freq,)
         sqrt(P_u(q) / d_log_age) at rfft frequencies.
     """
-    from diffsed.models.sfh.psd_models import psd_drw, psd_to_sqrt_power
+    from tengri.models.sfh.psd_models import psd_drw, psd_to_sqrt_power
 
     t_ref = 10.0**log_age_ref
     ln10 = jnp.log(10.0)

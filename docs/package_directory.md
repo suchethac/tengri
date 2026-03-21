@@ -1,12 +1,12 @@
-# diffsed Package Directory
+# tengri Package Directory
 
-Complete reference for every module in the `diffsed` package. Covers purpose, key exports, and inter-module dependencies.
+Complete reference for every module in the `tengri` package. Covers purpose, key exports, and inter-module dependencies.
 
 ---
 
 ## Public API
 
-The top-level `from diffsed import ...` exposes:
+The top-level `from tengri import ...` exposes:
 
 | Category | Exports |
 |----------|---------|
@@ -747,7 +747,7 @@ Forward-model SEDs from arbitrary SFH and metallicity arrays (e.g., from cosmolo
 Arrows indicate "imports from". Higher modules depend on lower ones.
 
 ```
-diffsed (top-level __init__)
+tengri (top-level __init__)
   |
   +-- core/
   |     model.py ---------> param_spec, param_translate, sed_pipeline,

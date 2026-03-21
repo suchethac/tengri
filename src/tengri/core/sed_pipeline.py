@@ -5,7 +5,7 @@ physical parameters into rest-frame SEDs. It handles SFH dispatch,
 metallicity interpolation, dust attenuation, nebular emission,
 AGN contribution, dust emission, and IGM absorption.
 
-All functions take a ``model`` argument (the :class:`~diffsed.model.Model`
+All functions take a ``model`` argument (the :class:`~tengri.model.Model`
 instance) instead of ``self``, allowing the heavy computation to live
 outside the class while preserving access to model state.
 """
@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from diffsed.models.dust.attenuation import two_component_dust_fast
-from diffsed.models.sps.dsps_wrapper import (
+from tengri.models.dust.attenuation import two_component_dust_fast
+from tengri.models.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
     compute_log_z_evolving,
@@ -33,7 +33,7 @@ def interp_metallicity(model, log_z):
     Parameters
     ----------
     model : Model
-        The diffsed Model instance.
+        The tengri Model instance.
     log_z : float
         Log10 absolute metallicity.
 
@@ -58,7 +58,7 @@ def interp_metallicity_evolving(model, log_z_per_age):
     Parameters
     ----------
     model : Model
-        The diffsed Model instance.
+        The tengri Model instance.
     log_z_per_age : array, shape (n_age,)
         Log10 absolute metallicity at each SSP age bin.
 
@@ -85,7 +85,7 @@ def get_dust_kwargs(model, p):
     Parameters
     ----------
     model : Model
-        The diffsed Model instance.
+        The tengri Model instance.
     p : dict
         Internal parameter dict from ``_get_internal_params()``.
 
@@ -115,7 +115,7 @@ def get_agn_kwargs(model, p):
     Parameters
     ----------
     model : Model
-        The diffsed Model instance.
+        The tengri Model instance.
     p : dict
         Internal parameter dict from ``_get_internal_params()``.
 
@@ -148,7 +148,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
     Parameters
     ----------
     model : Model
-        The diffsed Model instance.
+        The tengri Model instance.
     params : dict
         Parameter values (public names).
     _sfr : array, optional
@@ -438,7 +438,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
 
     # Dust IR emission (energy-balanced)
     if model._dust_emission_model is not None and sed_intrinsic is not None:
-        from diffsed.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import get_emission_model
 
         _c_aa_em = 2.99792458e18  # c in Angstrom/s
         nu_em = _c_aa_em / model.ssp_data.ssp_wave
@@ -461,7 +461,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
     # AGN contribution
     agn_bol_erg = 0.0
     if model._agn_model is not None:
-        from diffsed.models.agn import get_agn_model
+        from tengri.models.agn import get_agn_model
 
         if model._agn_parametric:
             agn_log_lbol = p.get("agn_log_lbol", 10.0)
@@ -489,7 +489,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
 
     # Radio emission (synchrotron from SF + AGN jets)
     if model._radio_enabled:
-        from diffsed.models.radio import radio_total
+        from tengri.models.radio import radio_total
 
         _L_ir = p.get("_L_ir_cached", 0.0)
         radio_sed = radio_total(
@@ -505,7 +505,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
 
     # X-ray emission (XRBs + AGN corona)
     if model._xray_enabled:
-        from diffsed.models.xray import xray_total
+        from tengri.models.xray import xray_total
 
         _sfr_cached = p.get("_sfr_cached", 1.0)
         _mstar = p.get("_mstar_cached", 1e10)

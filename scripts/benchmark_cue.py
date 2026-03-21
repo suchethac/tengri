@@ -38,7 +38,7 @@ N_RUNS = 200
 
 
 def bench_jax():
-    from diffsed.models.nebular.cue import CueBackend
+    from tengri.models.nebular.cue import CueBackend
 
     cb = CueBackend("data/cue_weights.npz")
 

@@ -6,7 +6,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed.inference.posterior import Posterior
+from tengri.inference.posterior import Posterior
 
 
 @pytest.fixture
@@ -84,14 +84,14 @@ class TestResample:
 class TestToParamSpec:
     def test_map_to_param_spec(self, map_posterior):
         spec = map_posterior.to_param_spec()
-        from diffsed.distributions import Fixed
+        from tengri.distributions import Fixed
 
         d = spec.get_distribution("sfh_dpl_alpha")
         assert isinstance(d, Fixed)
 
     def test_sampling_to_param_spec(self, sampling_posterior):
         spec = sampling_posterior.to_param_spec()
-        from diffsed.distributions import Gaussian
+        from tengri.distributions import Gaussian
 
         d = spec.get_distribution("sfh_dpl_alpha")
         assert isinstance(d, Gaussian)

@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.sfh.registry import (
+from tengri.models.sfh.registry import (
     FIELD_MODEL_REGISTRY,
     SFH_REGISTRY,
     compute_field_gp,

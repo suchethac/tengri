@@ -1,6 +1,6 @@
 """Geometric Variational Inference (geoVI) via NIFTy.re.
 
-The primary inference method for diffsed. geoVI finds a coordinate
+The primary inference method for tengri. geoVI finds a coordinate
 transformation where the posterior is approximately Gaussian, then
 draws samples in that transformed space. Much faster than MCMC for
 high-dimensional problems (256-dim GP latent space).
@@ -14,7 +14,7 @@ References:
 - Edenhofer et al. 2024 (arXiv:2402.16683) — NIFTy.re
 
 Usage:
-    from diffsed.inference.geovi import fit_geovi
+    from tengri.inference.geovi import fit_geovi
     result = fit_geovi(model, data, noise, n_iterations=10, n_samples=6)
 """
 
@@ -23,7 +23,7 @@ import time
 import jax
 import jax.numpy as jnp
 
-from diffsed.inference.common import (
+from tengri.inference.common import (
     DEFAULT_PRIOR,
     InferenceResult,
     initialize_params,
@@ -87,7 +87,7 @@ def fit_geovi(
     if key is None:
         key = jax.random.PRNGKey(42)
 
-    from diffsed.utils.transforms import to_bounded
+    from tengri.utils.transforms import to_bounded
 
     # --- Build NIFTy.re model and likelihood ---
 
@@ -128,7 +128,7 @@ def fit_geovi(
     use_variable_noise = hasattr(prior_config, "noise_frac_cal")
 
     if use_variable_noise:
-        from diffsed.core.noise import compute_std_inv
+        from tengri.core.noise import compute_std_inv
 
         def signal_response(primals):
             """Map latents → (predicted, std_inv) for variable noise."""
@@ -189,7 +189,7 @@ def fit_geovi(
         key=opt_key,
         sample_mode=sample_mode,
         odir=None,  # no disk output
-        name="diffsed",
+        name="tengri",
     )
 
     wall_time = time.time() - t0

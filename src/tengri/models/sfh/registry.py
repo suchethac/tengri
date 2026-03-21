@@ -32,9 +32,9 @@ from typing import Any, NamedTuple
 
 import jax.numpy as jnp
 
-from diffsed.distributions import Distribution, Fixed, Uniform
-from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
-from diffsed.models.sfh.mean_sfh import (
+from tengri.distributions import Distribution, Fixed, Uniform
+from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
+from tengri.models.sfh.mean_sfh import (
     AGEMAX_YR,
     constant_sfh,
     delayed_exponential_sfh,
@@ -46,7 +46,7 @@ from diffsed.models.sfh.mean_sfh import (
     triweight_burst,
     tsnorm,
 )
-from diffsed.models.sfh.psd_models import drw_variance
+from tengri.models.sfh.psd_models import drw_variance
 
 # ---------------------------------------------------------------------------
 # Data structures

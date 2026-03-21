@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.dust.attenuation import two_component_dust
+from tengri.models.dust.attenuation import two_component_dust
 
 jax.config.update("jax_enable_x64", True)
 

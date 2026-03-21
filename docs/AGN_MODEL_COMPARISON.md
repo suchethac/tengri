@@ -4,7 +4,7 @@
 
 ## Summary Comparison Table
 
-| Feature | **diffsed** | **CIGALE** | **Prospector/FSPS** | **ProSpect** | **Bagpipes** | **Synthesizer** | **AGNfitter-rx** | **qsogen** |
+| Feature | **tengri** | **CIGALE** | **Prospector/FSPS** | **ProSpect** | **Bagpipes** | **Synthesizer** | **AGNfitter-rx** | **qsogen** |
 |---|---|---|---|---|---|---|---|---|
 | **Disc model** | Power-law; SS73 multicolor; Kubota & Done (2018) 3-zone | Schartmann (2005) or Feltre (2012) parametric; slope adjustable via delta_AGN | Broken power-law (from Nenkova 2008 templates) | Fritz (2006) isotropic central source (power-law, 0.001-20 um) | None | Broken power-law; Kubota & Done (2018) qsosed; Hagen & Done (2023) relqso | Richards (2006) empirical; Slone & Netzer (2012) alpha-disc; Kubota & Done (2018) AGNSED; Temple (2021) empirical composite | Empirical broken power-law continuum with BB hot dust |
 | **Disc type** | Analytic (JAX) | Template library | Template library | Template library | -- | Analytic + CLOUDY grid | Template libraries (4 options) | Empirical parametric |
@@ -27,7 +27,7 @@
 
 ## Detailed Code-by-Code Analysis
 
-### 1. diffsed (this code)
+### 1. tengri (this code)
 
 **Architecture:** Four AGN complexity tiers, all pure JAX and fully differentiable.
 
@@ -250,7 +250,7 @@
 
 ## Feature Matrix (Quick Reference)
 
-| Capability | diffsed | CIGALE | Prospector | ProSpect | Bagpipes | Synthesizer | AGNfitter-rx | qsogen |
+| Capability | tengri | CIGALE | Prospector | ProSpect | Bagpipes | Synthesizer | AGNfitter-rx | qsogen |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | Accretion disc | Y (3 models) | Y (parametric) | Y (template) | Y (template) | N | Y (3 models) | Y (4 models) | Y (empirical) |
 | Physical disc (SS73/KD18) | Y | N | N | N | N | Y | Y (KD18) | N |
@@ -273,19 +273,19 @@
 
 ## Key Takeaways
 
-1. **diffsed is unique in being fully differentiable (JAX).** No other SED fitting code offers gradient-based inference for AGN parameters. This enables HMC/NUTS and variational inference, which scale far better than MCMC for the 9-15 parameter AGN models.
+1. **tengri is unique in being fully differentiable (JAX).** No other SED fitting code offers gradient-based inference for AGN parameters. This enables HMC/NUTS and variational inference, which scale far better than MCMC for the 9-15 parameter AGN models.
 
 2. **CIGALE and AGNfitter-rx have the most comprehensive torus models**, with multiple RT template libraries. CIGALE's SKIRTOR with polar dust is the current standard for IR AGN SED fitting.
 
 3. **Prospector's AGN is deliberately minimal** (2 params), designed as a nuisance component for galaxy SED fitting rather than detailed AGN characterization.
 
-4. **Synthesizer's UnifiedAGN is the closest analog to diffsed's unified_nlr_blr**, with CLOUDY-based NLR/BLR. However, Synthesizer is a forward model only (no built-in fitter).
+4. **Synthesizer's UnifiedAGN is the closest analog to tengri's unified_nlr_blr**, with CLOUDY-based NLR/BLR. However, Synthesizer is a forward model only (no built-in fitter).
 
-5. **Emission lines are a major differentiator.** Only diffsed, Synthesizer, and qsogen include AGN emission lines. CIGALE, Prospector, ProSpect, and Bagpipes all lack AGN emission lines entirely. This matters for rest-frame optical/UV fitting where BLR lines contribute significantly to broadband photometry.
+5. **Emission lines are a major differentiator.** Only tengri, Synthesizer, and qsogen include AGN emission lines. CIGALE, Prospector, ProSpect, and Bagpipes all lack AGN emission lines entirely. This matters for rest-frame optical/UV fitting where BLR lines contribute significantly to broadband photometry.
 
-6. **The main weakness of diffsed's AGN relative to template-based codes** is the analytic (rather than RT) torus model. The two-temperature modified blackbody cannot reproduce the detailed silicate feature profiles that SKIRTOR/CLUMPY templates can. However, for broadband photometry fitting (as opposed to MIR spectroscopy), this is a minor limitation.
+6. **The main weakness of tengri's AGN relative to template-based codes** is the analytic (rather than RT) torus model. The two-temperature modified blackbody cannot reproduce the detailed silicate feature profiles that SKIRTOR/CLUMPY templates can. However, for broadband photometry fitting (as opposed to MIR spectroscopy), this is a minor limitation.
 
-7. **BH physics (mass, spin, accretion rate) as model parameters** are available only in diffsed, Synthesizer, and AGNfitter-rx (KD18/SN12 models). This enables physical constraints on the central engine rather than just phenomenological AGN fractions.
+7. **BH physics (mass, spin, accretion rate) as model parameters** are available only in tengri, Synthesizer, and AGNfitter-rx (KD18/SN12 models). This enables physical constraints on the central engine rather than just phenomenological AGN fractions.
 
 ---
 

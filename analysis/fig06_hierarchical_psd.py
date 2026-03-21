@@ -24,7 +24,7 @@ from common import (
     setup_matplotlib, FIG_DIR, PAPER_FIG_DIR, PSD_REGIMES, get_ssp, get_filters,
 )
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, HierarchicalFitter,
     load_ssp_data, load_filter_set,
 )

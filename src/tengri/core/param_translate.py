@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import warnings
 
-from diffsed.models.sfh.registry import resolve_sfh
+from tengri.models.sfh.registry import resolve_sfh
 
 # ---------------------------------------------------------------------------
 # Constants

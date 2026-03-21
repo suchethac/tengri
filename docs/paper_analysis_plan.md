@@ -1,4 +1,4 @@
-# Paper Analysis Plan: diffsed Paper I
+# Paper Analysis Plan: tengri Paper I
 
 ## Paper: "Information Field Theory for Galaxy SED Fitting: Reconstructing Bursty Star Formation Histories"
 

@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 from numpy.testing import assert_allclose
 
-from diffsed.inference.common import (
+from tengri.inference.common import (
     DEFAULT_PRIOR,
     PriorConfig,
     initialize_params,

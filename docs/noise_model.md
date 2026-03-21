@@ -32,7 +32,7 @@ underestimated, which is common in practice due to:
 
 When the true noise exceeds the reported uncertainties, the chi-squared
 term dominates the posterior, which contracts to an overconfident point
-estimate. In the standardized formulation used by diffsed, the loss is
+estimate. In the standardized formulation used by tengri, the loss is
 $H(\boldsymbol{\xi}) = \frac{1}{2}\chi^2 + \frac{1}{2}\boldsymbol{\xi}^T\boldsymbol{\xi}$,
 where $\boldsymbol{\xi} \sim \mathcal{N}(0, I)$ are standardized latent
 variables. If $\chi^2 \gg \|\boldsymbol{\xi}\|^2$, the prior term
@@ -201,7 +201,7 @@ The degrees of freedom $\nu$ can be:
 
 ## 5. Comparison with Other Codes
 
-| Feature | diffsed | Prospector | BAGPIPES | ProSpect | Alsing+2022 |
+| Feature | tengri | Prospector | BAGPIPES | ProSpect | Alsing+2022 |
 |---------|---------|-----------|----------|----------|-------------|
 | **Fractional calibration floor** | $f_{\mathrm{cal}}$ (free or fixed) | Multiplicative jitter kernel | No | Band-dependent, pre-applied | $\gamma_b$ (hierarchical) |
 | **Log-determinant** | Yes (VariableCovGaussian) | Yes (when C varies) | Yes (spec scaling only) | No | Yes |

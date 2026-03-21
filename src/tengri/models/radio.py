@@ -20,10 +20,10 @@ References
 import jax.numpy as jnp
 
 # Physical constants
-_C_CGS = 2.99792458e10    # cm/s
-_C_AA = 2.99792458e18     # Angstrom/s
-_LSUN = 3.828e33          # erg/s
-_JY = 1e-23               # erg/s/cm^2/Hz
+_C_CGS = 2.99792458e10  # cm/s
+_C_AA = 2.99792458e18  # Angstrom/s
+_LSUN = 3.828e33  # erg/s
+_JY = 1e-23  # erg/s/cm^2/Hz
 
 
 def radio_star_forming(

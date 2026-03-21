@@ -1,4 +1,4 @@
-"""High-level Model class wrapping the diffsed forward model.
+"""High-level Model class wrapping the tengri forward model.
 
 Model provides a clean API for:
 - Forward predictions (SED, photometry, spectrum, SFH, derived quantities)
@@ -12,7 +12,7 @@ composed function, eliminating separate stochastic/parametric code paths.
 
 Usage::
 
-    from diffsed import Model, ParamSpec, Uniform, load_ssp_data, load_filter_set
+    from tengri import Model, ParamSpec, Uniform, load_ssp_data, load_filter_set
 
     ssp = load_ssp_data("data/ssp.h5")
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
@@ -39,38 +39,38 @@ from typing import ClassVar, NamedTuple
 import jax
 import jax.numpy as jnp
 
-from diffsed.core.fused_kernels import (
+from tengri.core.fused_kernels import (
     build_exact_sed,
     build_fused_photometry,
     build_fused_photometry_ztable,
     build_fused_spectrum,
     is_fused_compatible,
 )
-from diffsed.core.param_translate import (
+from tengri.core.param_translate import (
     _EVOLVING_MET_PARAM_MAP,
     LOG10_ZSUN,
     _build_param_map,
     get_internal_params,
 )
-from diffsed.core.sed_pipeline import (
+from tengri.core.sed_pipeline import (
     compute_sed_components,
     get_agn_kwargs,
     get_dust_kwargs,
     interp_metallicity,
     interp_metallicity_evolving,
 )
-from diffsed.models.dust.attenuation import precompute_dust_age_weights
-from diffsed.models.observation.photometry import ab_mag_from_flux, compute_flux_density
-from diffsed.models.observation.spectroscopy import apply_lsf, compute_spectrum
-from diffsed.models.sfh.registry import compute_field_gp, resolve_sfh
-from diffsed.models.sps.dsps_wrapper import compute_csp_weights
-from diffsed.models.sps.precompute import (
+from tengri.models.dust.attenuation import precompute_dust_age_weights
+from tengri.models.observation.photometry import ab_mag_from_flux, compute_flux_density
+from tengri.models.observation.spectroscopy import apply_lsf, compute_spectrum
+from tengri.models.sfh.registry import compute_field_gp, resolve_sfh
+from tengri.models.sps.dsps_wrapper import compute_csp_weights
+from tengri.models.sps.precompute import (
     precompute_photometry,
     precompute_photometry_ztable,
     precompute_spectroscopy,
 )
-from diffsed.utils.cosmology import age_at_z, luminosity_distance
-from diffsed.utils.grid import (
+from tengri.utils.cosmology import age_at_z, luminosity_distance
+from tengri.utils.grid import (
     grid_spacing,
     interpolate_to_linear_time,
     log_age_to_age_yr,
@@ -226,7 +226,7 @@ class Model:
         self._dust_law_bc = spec.dust_law_bc
         self._dust_law_diff = spec.dust_law_diff
         # Cache resolved dust law functions (avoid dict lookup per forward call)
-        from diffsed.models.dust.attenuation import get_dust_law
+        from tengri.models.dust.attenuation import get_dust_law
 
         self._dust_law_bc_fn = get_dust_law(self._dust_law_bc)
         self._dust_law_diff_fn = get_dust_law(self._dust_law_diff)
@@ -237,10 +237,10 @@ class Model:
         # Dust emission model (None = disabled)
         self._dust_emission_model = getattr(spec, "dust_emission", None)
         if self._dust_emission_model == "dl07_tabulated":
-            from diffsed.models.dust.emission import DUST_EMISSION_MODELS
+            from tengri.models.dust.emission import DUST_EMISSION_MODELS
 
             if "dl07_tabulated" not in DUST_EMISSION_MODELS:
-                from diffsed.models.dust.emission import create_dl07_from_grid
+                from tengri.models.dust.emission import create_dl07_from_grid
 
                 dl07_path = getattr(spec, "dl07_grid_path", None)
                 if dl07_path is None:
@@ -326,19 +326,19 @@ class Model:
 
         self._nebular_backend = None
         if spec.nebular_mode == "cue":
-            from diffsed.models.nebular import CueBackend
+            from tengri.models.nebular import CueBackend
 
             self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
         elif spec.nebular_mode == "cloudy":
-            from diffsed.models.nebular import CloudyGridBackend
+            from tengri.models.nebular import CloudyGridBackend
 
             self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
         elif spec.nebular_mode == "ssp":
-            from diffsed.models.nebular import BakedInBackend
+            from tengri.models.nebular import BakedInBackend
 
             self._nebular_backend = BakedInBackend()
         else:
-            from diffsed.models.nebular import BakedInBackend
+            from tengri.models.nebular import BakedInBackend
 
             self._nebular_backend = BakedInBackend()
 
@@ -390,7 +390,7 @@ class Model:
             and self._precomp is not None
             and self._z_fixed is not None
         ):
-            from diffsed.models.igm import igm_transmission
+            from tengri.models.igm import igm_transmission
 
             eff_obs = self._precomp.effective_wavelengths
             self._igm_at_eff = igm_transmission(eff_obs, self._z_fixed)
@@ -417,7 +417,7 @@ class Model:
     def _get_internal_params(self, params):
         """Translate public param dict to internal names with unit conversion.
 
-        Thin wrapper around :func:`diffsed._param_translate.get_internal_params`.
+        Thin wrapper around :func:`tengri._param_translate.get_internal_params`.
         """
         return get_internal_params(params, self._param_map, self.spec, self._has_field)
 
@@ -535,7 +535,7 @@ class Model:
     def _compute_sed_components(self, params, _sfr=None, _weights=None, need_intrinsic=False):
         """Compute all SED intermediates.
 
-        Delegates to :func:`diffsed._sed_pipeline.compute_sed_components`.
+        Delegates to :func:`tengri._sed_pipeline.compute_sed_components`.
         """
         return compute_sed_components(self, params, _sfr, _weights, need_intrinsic)
 
@@ -557,7 +557,7 @@ class Model:
     def predict(self, params):
         """Create a lazy prediction object for derived physical quantities.
 
-        Returns a :class:`~diffsed.prediction.Prediction` object whose
+        Returns a :class:`~tengri.prediction.Prediction` object whose
         properties are computed on first access and cached. This is the
         recommended API for exploring derived quantities from a single
         galaxy.
@@ -603,14 +603,14 @@ class Model:
         predict_sed_quantities : JIT-compatible SED quantities.
         predict_line_luminosities : JIT-compatible emission lines.
         """
-        from diffsed.core.prediction import Prediction
+        from tengri.core.prediction import Prediction
 
         return Prediction(self, params)
 
     def predict_sfh_quantities(self, params):
         """Compute SFH-derived quantities (JIT-compatible).
 
-        Returns a :class:`~diffsed.prediction.SFHQuantities` NamedTuple
+        Returns a :class:`~tengri.prediction.SFHQuantities` NamedTuple
         containing stellar mass, SFR, sSFR, and mass-weighted age and
         metallicity. This method is fully JIT-compatible and can be
         vectorized with ``jax.vmap`` for batch computation over
@@ -649,8 +649,8 @@ class Model:
         predict : Lazy prediction for single-galaxy exploration.
         predict_sed_quantities : JIT-compatible SED quantities.
         """
-        from diffsed.core.prediction import SFHQuantities
-        from diffsed.utils.sed_quantities import (
+        from tengri.core.prediction import SFHQuantities
+        from tengri.utils.sed_quantities import (
             compute_mass_weighted_age,
             compute_mass_weighted_metallicity,
         )
@@ -664,7 +664,7 @@ class Model:
 
         # Surviving mass
         if self.ssp_data.ssp_mass_remaining is not None:
-            from diffsed.models.sps.dsps_wrapper import (
+            from tengri.models.sps.dsps_wrapper import (
                 compute_surviving_mass,
                 interpolate_mass_remaining,
             )
@@ -720,7 +720,7 @@ class Model:
     def predict_sed_quantities(self, params):
         """Compute SED-derived quantities (JIT-compatible).
 
-        Returns a :class:`~diffsed.prediction.SEDQuantities` NamedTuple
+        Returns a :class:`~tengri.prediction.SEDQuantities` NamedTuple
         containing bolometric and IR luminosities, UV slope, spectral
         indices, and luminosity-weighted age/metallicity. Runs the
         full forward model internally.
@@ -765,8 +765,8 @@ class Model:
         predict : Lazy prediction for single-galaxy exploration.
         predict_sfh_quantities : JIT-compatible SFH quantities.
         """
-        from diffsed.core.prediction import SEDQuantities
-        from diffsed.utils.sed_quantities import (
+        from tengri.core.prediction import SEDQuantities
+        from tengri.utils.sed_quantities import (
             compute_balmer_break,
             compute_bolometric_luminosity,
             compute_dn4000,
@@ -882,7 +882,7 @@ class Model:
         # Apply IGM absorption (acts on observed-frame SED)
         # Always compute (cheap), but only apply when enabled
         if self._apply_igm:
-            from diffsed.models.igm import igm_transmission
+            from tengri.models.igm import igm_transmission
 
             wave_obs = self.ssp_data.ssp_wave * (1.0 + z)
             igm_trans = igm_transmission(wave_obs, z)
@@ -1386,7 +1386,7 @@ class Model:
 
     def fit(self, data, noise, method="map", data_type="photometry", **kwargs):
         """Fit observed data (convenience wrapper around Fitter)."""
-        from diffsed.inference.fitter import Fitter
+        from tengri.inference.fitter import Fitter
 
         fitter = Fitter(self, data, noise, data_type=data_type)
         return fitter.run(method, **kwargs)

@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.sfh.psd_models import (
+from tengri.models.sfh.psd_models import (
     drw_acf,
     drw_variance,
     psd_drw,

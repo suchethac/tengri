@@ -44,14 +44,14 @@ _LOG10_ZSUN = -1.8477116556169435
 
 @pytest.fixture(scope="module")
 def ssp_data():
-    from diffsed import load_ssp_data
+    from tengri import load_ssp_data
 
     return load_ssp_data(str(_SSP_NONE_PATH))
 
 
 @pytest.fixture(scope="module")
 def ssp_wne():
-    from diffsed import load_ssp_data
+    from tengri import load_ssp_data
 
     return load_ssp_data(str(_SSP_WNE_PATH))
 
@@ -60,7 +60,7 @@ def ssp_wne():
 def cloudy_backend(ssp_data):
     if not _CLOUDY_PRSC_PATH.is_file():
         pytest.skip("CLOUDY PRSC grid not found")
-    from diffsed.models.nebular.cloudy_grid import CloudyGridBackend
+    from tengri.models.nebular.cloudy_grid import CloudyGridBackend
 
     return CloudyGridBackend(str(_CLOUDY_PRSC_PATH), ssp_data)
 
@@ -69,7 +69,7 @@ def cloudy_backend(ssp_data):
 def cue_backend(ssp_data):
     if not _CUE_PATH.is_file():
         pytest.skip("Cue weights not found")
-    from diffsed.models.nebular.cue import CueBackend
+    from tengri.models.nebular.cue import CueBackend
 
     return CueBackend(str(_CUE_PATH), ssp_data)
 
@@ -617,14 +617,14 @@ class TestCloudyVsCue:
 
 
 # ===================================================================
-# 4. diffsed nebular vs python-fsps CLOUDY (external reference)
+# 4. tengri nebular vs python-fsps CLOUDY (external reference)
 # ===================================================================
 
 _FSPS_NEB_REF = _DATA_DIR / "fsps_nebular_reference.npz"
 
 
 class TestVsFSPSNebular:
-    """Compare diffsed nebular emission against python-fsps built-in CLOUDY.
+    """Compare tengri nebular emission against python-fsps built-in CLOUDY.
 
     FSPS has its own CLOUDY integration (gas_logu, gas_logz parameters).
     We compare the nebular contribution (neb - stellar) at key lines.

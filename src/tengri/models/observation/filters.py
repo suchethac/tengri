@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 import jax.numpy as jnp
 import numpy as np
 
-from diffsed.models.observation.photometry import FilterCurve
+from tengri.models.observation.photometry import FilterCurve
 
 # ---------------------------------------------------------------------------
 # Registry: short name -> SVO Filter Profile Service ID
@@ -235,7 +235,7 @@ def download_filter(
         return _load_filter_file(filepath)
 
     url = f"{_SVO_BASE_URL}?ID={svo_id}"
-    request = Request(url, headers={"User-Agent": "diffsed/1.0"})
+    request = Request(url, headers={"User-Agent": "tengri/1.0"})
 
     try:
         with urlopen(request, timeout=30) as response:

@@ -1,1 +1,1 @@
-"""Integration tests for diffsed forward model with real SSP data."""
+"""Integration tests for tengri forward model with real SSP data."""

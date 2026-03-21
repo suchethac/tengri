@@ -15,8 +15,8 @@ from jax.flatten_util import ravel_pytree
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed import Fixed, Model, ParamSpec, Uniform, load_filter_set, load_ssp_data
-from diffsed.utils.transforms import to_bounded, to_unbounded
+from tengri import Fixed, Model, ParamSpec, Uniform, load_filter_set, load_ssp_data
+from tengri.utils.transforms import to_bounded, to_unbounded
 
 # ---------------------------------------------------------------------------
 # Setup

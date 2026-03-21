@@ -12,9 +12,9 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.dust.attenuation import precompute_dust_age_weights, two_component_dust_fast
-from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S, compute_csp_weights
-from diffsed.models.sps.precompute import (
+from tengri.models.dust.attenuation import precompute_dust_age_weights, two_component_dust_fast
+from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S, compute_csp_weights
+from tengri.models.sps.precompute import (
     fast_photometry,
     fast_spectrum,
     interpolate_ssp_phot_metallicity,

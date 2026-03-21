@@ -12,9 +12,9 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from diffsed.models.igm import igm_transmission
-from diffsed.models.sps.dsps_wrapper import SSPData
-from diffsed.models.sps.precompute import (
+from tengri.models.igm import igm_transmission
+from tengri.models.sps.dsps_wrapper import SSPData
+from tengri.models.sps.precompute import (
     interpolate_igm_ztable,
     precompute_photometry_ztable,
 )

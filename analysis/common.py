@@ -15,7 +15,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Gaussian, Fixed, Fitter, Posterior,
     load_ssp_data, load_filter_set,
 )

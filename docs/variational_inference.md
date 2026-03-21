@@ -1,4 +1,4 @@
-# Variational Inference in diffsed
+# Variational Inference in tengri
 
 ## The Big Picture
 
@@ -84,7 +84,7 @@ result = fitter.run("native_geovi", n_iterations=15)
 ### With control
 
 ```python
-from diffsed.vi_config import OptimizationSchedule
+from tengri.vi_config import OptimizationSchedule
 
 # geoVI with custom refresh rate
 sched = OptimizationSchedule.geovi(

@@ -1,4 +1,4 @@
-"""Tests for diffsed.noise — NIFTy-native noise model.
+"""Tests for tengri.noise — NIFTy-native noise model.
 
 Tests the core noise computation functions, the detection helper,
 and the GGN metric-vector product for VariableCovarianceGaussian.
@@ -11,7 +11,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed.core.noise import (
+from tengri.core.noise import (
     compute_effective_noise,
     compute_std_inv,
     has_noise_model,
@@ -128,7 +128,7 @@ class TestHasNoiseModel:
 
     def test_default_spec_no_noise(self):
         """Default ParamSpec has noise OFF (Fixed(0.0))."""
-        from diffsed import Fixed, ParamSpec, Uniform
+        from tengri import Fixed, ParamSpec, Uniform
 
         spec = ParamSpec(
             mean_sfh_type="dpl",
@@ -144,7 +144,7 @@ class TestHasNoiseModel:
 
     def test_free_noise_frac_cal(self):
         """noise_frac_cal as Uniform → noise model active."""
-        from diffsed import Fixed, ParamSpec, Uniform
+        from tengri import Fixed, ParamSpec, Uniform
 
         spec = ParamSpec(
             mean_sfh_type="dpl",
@@ -161,7 +161,7 @@ class TestHasNoiseModel:
 
     def test_fixed_nonzero_noise(self):
         """noise_frac_cal=Fixed(0.05) → noise model active."""
-        from diffsed import Fixed, ParamSpec, Uniform
+        from tengri import Fixed, ParamSpec, Uniform
 
         spec = ParamSpec(
             mean_sfh_type="dpl",
@@ -178,7 +178,7 @@ class TestHasNoiseModel:
 
     def test_fixed_zero_no_noise(self):
         """noise_frac_cal=Fixed(0.0) → noise model OFF."""
-        from diffsed import Fixed, ParamSpec, Uniform
+        from tengri import Fixed, ParamSpec, Uniform
 
         spec = ParamSpec(
             mean_sfh_type="dpl",
@@ -338,8 +338,8 @@ class TestUsesStudentT:
 
     def test_default_no_student_t(self):
         """Default spec uses Gaussian."""
-        from diffsed import Fixed, ParamSpec, Uniform
-        from diffsed.core.noise import uses_student_t
+        from tengri import Fixed, ParamSpec, Uniform
+        from tengri.core.noise import uses_student_t
 
         spec = ParamSpec(
             mean_sfh_type="dpl",
@@ -355,8 +355,8 @@ class TestUsesStudentT:
 
     def test_fixed_dof_activates(self):
         """noise_dof=Fixed(2.0) → Student-t active."""
-        from diffsed import Fixed, ParamSpec, Uniform
-        from diffsed.core.noise import uses_student_t
+        from tengri import Fixed, ParamSpec, Uniform
+        from tengri.core.noise import uses_student_t
 
         spec = ParamSpec(
             mean_sfh_type="dpl",
@@ -374,8 +374,8 @@ class TestUsesStudentT:
 
     def test_zero_dof_no_student_t(self):
         """noise_dof=Fixed(0.0) → Gaussian (default)."""
-        from diffsed import Fixed, ParamSpec, Uniform
-        from diffsed.core.noise import uses_student_t
+        from tengri import Fixed, ParamSpec, Uniform
+        from tengri.core.noise import uses_student_t
 
         spec = ParamSpec(
             mean_sfh_type="dpl",

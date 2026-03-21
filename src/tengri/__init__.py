@@ -1,4 +1,4 @@
-"""diffsed: Differentiable SED fitting with IFT star formation history priors.
+"""tengri: Differentiable SED fitting with IFT star formation history priors.
 
 A modular, fully differentiable JAX pipeline:
 PSD-governed GP → SFH → DSPS SED → photometry/spectroscopy.
@@ -12,45 +12,45 @@ jax.config.update("jax_enable_x64", True)
 
 # Enable persistent XLA compilation cache — avoids re-compilation
 # across sessions/restarts. ~10x first-call speedup on subsequent runs.
-jax.config.update("jax_compilation_cache_dir", "/tmp/diffsed_jax_cache")
+jax.config.update("jax_compilation_cache_dir", "/tmp/tengri_jax_cache")
 jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
 
 __version__ = "0.1.0"
 
 # --- New high-level API ---
-from diffsed.core.mock import MockData, generate_mock
-from diffsed.core.model import Model
-from diffsed.core.noise import (
+from tengri.core.mock import MockData, generate_mock
+from tengri.core.model import Model
+from tengri.core.noise import (
     compute_effective_noise,
     compute_std_inv,
     has_noise_model,
     uses_student_t,
     variable_noise_hamiltonian,
 )
-from diffsed.core.param_spec import ParamSpec
-from diffsed.core.prediction import (
+from tengri.core.param_spec import ParamSpec
+from tengri.core.prediction import (
     DerivedQuantities,
     EmissionLines,
     Prediction,
     SEDQuantities,
     SFHQuantities,
 )
-from diffsed.distributions import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
-from diffsed.inference.fitter import Fitter
-from diffsed.inference.hierarchical import HierarchicalFitter, HierarchicalResult
-from diffsed.inference.posterior import Posterior
-from diffsed.inference.raytrace import sample_raytrace
-from diffsed.inference.vi_config import VIConfig
-from diffsed.models.dust.attenuation import two_component_dust
-from diffsed.models.observation.filters import load_filter_set
-from diffsed.models.sfh.gp_sfh import (
+from tengri.distributions import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
+from tengri.inference.fitter import Fitter
+from tengri.inference.hierarchical import HierarchicalFitter, HierarchicalResult
+from tengri.inference.posterior import Posterior
+from tengri.inference.raytrace import sample_raytrace
+from tengri.inference.vi_config import VIConfig
+from tengri.models.dust.attenuation import two_component_dust
+from tengri.models.observation.filters import load_filter_set
+from tengri.models.sfh.gp_sfh import (
     compute_sqrt_power_drw,
     generate_gp_batch,
     generate_gp_fourier,
     gp_from_xi,
     make_log_age_grid,
 )
-from diffsed.models.sfh.mean_sfh import (
+from tengri.models.sfh.mean_sfh import (
     AGEMAX_YR,
     constant_sfh,
     delayed_exponential_sfh,
@@ -64,14 +64,14 @@ from diffsed.models.sfh.mean_sfh import (
     triweight_burst,
     tsnorm,
 )
-from diffsed.models.sfh.psd_models import drw_acf, drw_variance, psd_drw
-from diffsed.models.sfh.registry import (
+from tengri.models.sfh.psd_models import drw_acf, drw_variance, psd_drw
+from tengri.models.sfh.registry import (
     FIELD_MODEL_REGISTRY,
     SFH_REGISTRY,
     compute_field_gp,
     resolve_sfh,
 )
-from diffsed.models.sps.dsps_wrapper import SSPData, effective_metallicity, load_ssp_data
+from tengri.models.sps.dsps_wrapper import SSPData, effective_metallicity, load_ssp_data
 
 __all__ = [
     # High-level API
@@ -132,7 +132,7 @@ __all__ = [
 ]
 
 # Plotting utilities
-from diffsed.plotting import (
+from tengri.plotting import (
     COLORS,
     SDSS_WAVE_EFF,
     SPECTRAL_FEATURES,

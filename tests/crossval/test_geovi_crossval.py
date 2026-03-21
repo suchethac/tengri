@@ -36,11 +36,11 @@ pytestmark = pytest.mark.crossval
 
 jft = pytest.importorskip("nifty8.re", reason="nifty8.re not installed")
 
-from diffsed.core.param_spec import ParamSpec
-from diffsed.distributions import Uniform
-from diffsed.models.observation.filters import load_filter_set
-from diffsed.models.sps.dsps_wrapper import load_ssp_data
-from diffsed.utils.transforms import to_bounded
+from tengri.core.param_spec import ParamSpec
+from tengri.distributions import Uniform
+from tengri.models.observation.filters import load_filter_set
+from tengri.models.sps.dsps_wrapper import load_ssp_data
+from tengri.utils.transforms import to_bounded
 
 # ---------------------------------------------------------------------------
 # Data paths -- skip if SSP data missing
@@ -108,7 +108,7 @@ def smooth_spec():
 @pytest.fixture(scope="module")
 def model_and_data(smooth_spec, ssp_data, filters):
     """Build Model, generate mock data, return (model, data, noise)."""
-    from diffsed.core.model import Model
+    from tengri.core.model import Model
 
     model = Model(smooth_spec, ssp_data, filters=filters)
 
@@ -121,7 +121,7 @@ def model_and_data(smooth_spec, ssp_data, filters):
 @pytest.fixture(scope="module")
 def fitter(model_and_data):
     """Build Fitter for the smooth model."""
-    from diffsed.inference.fitter import Fitter
+    from tengri.inference.fitter import Fitter
 
     model, data, noise = model_and_data
     return Fitter(model, data, noise, data_type="photometry")

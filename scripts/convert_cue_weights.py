@@ -367,7 +367,7 @@ def main():
     parser.add_argument(
         "--output", "-o",
         default="data/cue_weights.npz",
-        help="Output npz file path (relative to diffsed root).",
+        help="Output npz file path (relative to tengri root).",
     )
     args = parser.parse_args()
     convert(args.cue_dir, args.output)

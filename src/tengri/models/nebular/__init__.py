@@ -1,4 +1,4 @@
-"""Nebular emission models for diffsed.
+"""Nebular emission models for tengri.
 
 Provides modular backends for adding nebular emission (emission lines +
 continuum) to the stellar SED. Three backends:
@@ -15,7 +15,7 @@ continuum) to the stellar SED. Three backends:
 
 Usage::
 
-    from diffsed.models.nebular import CloudyGridBackend, BakedInBackend, CueBackend
+    from tengri.models.nebular import CloudyGridBackend, BakedInBackend, CueBackend
 
     # Load CLOUDY grid
     backend = CloudyGridBackend("data/cloudy_grid_mist.h5", ssp_data)
@@ -29,9 +29,9 @@ Usage::
 
 from pathlib import Path
 
-from diffsed.models.nebular.baked_in import BakedInBackend
-from diffsed.models.nebular.cloudy_grid import CloudyGridBackend
-from diffsed.models.nebular.cue import CueBackend
+from tengri.models.nebular.baked_in import BakedInBackend
+from tengri.models.nebular.cloudy_grid import CloudyGridBackend
+from tengri.models.nebular.cue import CueBackend
 
 _DEFAULT_CUE_WEIGHTS_PATH = Path(__file__).resolve().parents[4] / "data" / "cue_weights.npz"
 
