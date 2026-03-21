@@ -188,11 +188,13 @@ Shares PSD hyperparameters across N galaxies. Each galaxy has its own `ξ_field_
 
 **Three approaches available:**
 
-1. **CorrelatedFieldMaker + geoVI** (`hfitter.run("geovi")`) — Recommended. PSD hyperparameters are part of the generative model.
+1. **CorrelatedFieldMaker + native_geovi** (`hfitter.run("native_geovi")`) — Recommended (default). PSD hyperparameters are part of the generative model. JIT-compiled with resample+update schedule.
 
-2. **MGVI** (`hfitter.run("mgvi")`) — Same but faster per iteration. For very large N.
+2. **native_mgvi** (`hfitter.run("native_mgvi")`) — Same but faster per iteration. For very large N.
 
 3. **Ray Tracing** (`hfitter.run("raytrace")`) — Flat vector, MAP initialization per galaxy. Works for small N.
+
+Batch fitting: `fitter.fit_batch(galaxies)` — default method is `native_geovi`.
 
 ## Key Gotchas
 

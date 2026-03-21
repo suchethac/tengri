@@ -184,18 +184,26 @@ posteriors.
 
 | Method | Command | Backend | Speed |
 |--------|---------|---------|-------|
-| EVI (JIT) | `fitter.run("evi")` | Custom JIT | **1.7s** (cached) |
-| geoVI | `fitter.run("geovi")` | NIFTy optimize_kl | ~20s |
-| MGVI | `fitter.run("mgvi")` | NIFTy optimize_kl | ~15s |
+| native_geovi (DEFAULT) | `fitter.run("native_geovi")` | JIT (XLA) | **0.03s/gal** (after 56s compile) |
+| native_mgvi / native_evi | `fitter.run("native_mgvi")` | JIT (XLA) | **0.03s/gal** (after compile) |
+| geovi / fast_geovi | `fitter.run("geovi")` | NIFTy tight loop | ~12s |
+| mgvi / fast_mgvi | `fitter.run("mgvi")` | NIFTy tight loop | ~15s |
+| evi / fast_evi | `fitter.run("evi")` | NIFTy tight loop | ~12s |
+| nifty_geovi | `fitter.run("nifty_geovi")` | Full NIFTy | ~18s |
+| nifty_mgvi | `fitter.run("nifty_mgvi")` | Full NIFTy | ~18s |
+| geovi_nuts / mgvi_nuts | `fitter.run("geovi_nuts")` | VI + NUTS | ~20s |
 | MAP | `fitter.run("map")` | Adam/optax | ~2s |
 | Ray Tracing | `fitter.run("raytrace")` | Custom JAX | ~60s |
 | NUTS | `fitter.run("nuts")` | BlackJAX | ~120s |
+
+Batch fitting: `fitter.fit_batch(galaxies)` — default method is `native_geovi`.
 
 ### Posterior Sampling Methods
 
 | Method | Command | Speed (2000 samples) |
 |--------|---------|---------------------|
-| JIT CG (default) | `posterior_method="jit"` | **0.01s** |
+| JIT nonlinear (default for geoVI) | `posterior_method="nonlinear"` | ~5ms/sample |
+| JIT CG (linear) | `posterior_method="jit"` | **0.01s** |
 | BlackJAX NUTS | `posterior_method="blackjax"` | ~6s |
 | NIFTy CG | `posterior_method="nifty"` | ~1080s |
 
@@ -204,5 +212,5 @@ posteriors.
 ```python
 fitter = Fitter(model, data, noise)
 fitter.compile()  # ~3s one-time cost
-result = fitter.run("evi", n_posterior_samples=2000)  # ~1.7s
+result = fitter.run("native_geovi", n_posterior_samples=2000)
 ```

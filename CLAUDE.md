@@ -82,15 +82,28 @@ from diffsed import Model, ParamSpec, Uniform, Fitter, HierarchicalFitter
 
 ## Inference methods
 
-Ray Tracing and geoVI are **equal-priority** primary methods. NUTS validates. MAP initializes.
+`native_geovi` is the **default** going forward. Ray Tracing validates. NUTS validates low-D. MAP initializes.
 
 | Method | Command | Best for |
 |--------|---------|----------|
-| MAP | `fitter.run("map", optimizer="adam")` | Point estimates. Optimizer swappable: adam/adamw/sgd/custom optax |
-| Ray Tracing | `fitter.run("raytrace", n_burnin=100, n_steps=300)` | Exact MCMC, stochastic-gradient resilient |
+| **native_geovi** | `fitter.run("native_geovi")` | **Default.** JIT-compiled geoVI with resample+update schedule, nonlinear posterior draws |
+| native_mgvi / native_evi | `fitter.run("native_mgvi")` | JIT-compiled MGVI/EVI |
+| geovi / fast_geovi | `fitter.run("geovi")` | NIFTy OptimizeVI.update tight loop, resample+update schedule |
+| mgvi / fast_mgvi | `fitter.run("mgvi")` | NIFTy MGVI tight loop |
+| evi / fast_evi | `fitter.run("evi")` | NIFTy EVI tight loop |
+| nifty_geovi | `fitter.run("nifty_geovi")` | Full jft.optimize_kl with logging (debugging) |
+| nifty_mgvi | `fitter.run("nifty_mgvi")` | Full NIFTy MGVI with logging |
+| geovi_nuts | `fitter.run("geovi_nuts")` | geoVI optimization + NUTS posterior draws |
+| mgvi_nuts | `fitter.run("mgvi_nuts")` | MGVI optimization + NUTS posterior draws |
 | NUTS | `fitter.run("nuts", n_warmup=500, n_burnin=50)` | Gold-standard validation (low-D only) |
-| geoVI | `fitter.run("geovi", n_iterations=15)` | Non-Gaussian posteriors, moderate D |
-| MGVI | `fitter.run("mgvi", n_iterations=15)` | Fastest VI, very large D (>10^5) |
+| Ray Tracing | `fitter.run("raytrace", n_burnin=100, n_steps=300)` | Exact MCMC, stochastic-gradient resilient |
+| MAP | `fitter.run("map", optimizer="adam")` | Point estimates. Optimizer swappable: adam/adamw/sgd/custom optax |
+
+**Internal dispatch:** `_run_evi_jit` handles native_geovi/native_mgvi/native_evi. `_run_fast_vi` handles geovi/fast_geovi/mgvi/fast_mgvi/evi/fast_evi/geovi_nuts/mgvi_nuts. `_run_nifty_vi` handles nifty_geovi/nifty_mgvi. `_run_map`/`_run_nuts`/`_run_raytrace` handle the rest.
+
+**Batch fitting:** `fitter.fit_batch(galaxies)` (NOT `fit_catalog`). Default method is `native_geovi`.
+
+**Removed names:** `geovi_nifty` -> `nifty_geovi`, `mgvi_nifty` -> `nifty_mgvi`, `geovi_full` -> `nifty_geovi`, `mgvi_full` -> `nifty_mgvi`, `fit_catalog` -> `fit_batch`.
 
 ## Key conventions
 
@@ -152,7 +165,7 @@ The forward model uses several optimizations for speed:
 |-----------|-------------|-------------------|
 | Forward model | 140 μs | 356 μs |
 | Gradient | 56 μs | 63 μs |
-| EVI (10 iter, 2000 samples) | 11 s | 14 s |
+| native_geovi (10 iter) | 56s compile + 0.3s run | 56s compile + 0.8s run |
 
 ## Testing mandate
 

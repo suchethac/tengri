@@ -374,17 +374,22 @@ because XLA differentiates through the fused kernel more efficiently.
 gives <3% error for most laws. SMC has higher error (~36%) due to its
 steep UV curve — use exact path or spectroscopy for SMC-heavy fits.
 
-### Full Inference (EVI)
+### Full Inference
 
-| Configuration | EVI Time | Posterior Samples |
+The default method is `native_geovi` (JIT-compiled geoVI with resample+update
+schedule and nonlinear posterior draws).
+
+| Configuration | native_geovi Time | Posterior Samples |
 |--------------|---------|-------------------|
-| Smooth D=7, power_law | 9.4 s | 100 |
-| Smooth D=7, calzetti | 8.9 s | 100 |
-| Smooth D=7, kriek_conroy | 8.9 s | 100 |
-| Stochastic D=137, power_law | ~14 s | 2000 |
+| Smooth D=7, power_law | 56s compile + 0.3s run | 100 |
+| Smooth D=7, calzetti | 56s compile + 0.3s run | 100 |
+| Stochastic D=137, power_law | 56s compile + 0.8s run | 2000 |
+| Catalog (100 galaxies) | 56s compile + 3s total | 100/galaxy |
 
-EVI time is dominated by JIT compilation and CG solves, not the forward
-model — so dust law choice has negligible impact on inference time.
+Compilation cost is one-time and cached to `/tmp/diffsed_jax_cache`.
+Dust law choice has negligible impact on inference time.
+
+Batch fitting: `fitter.fit_batch(galaxies)` uses `native_geovi` by default.
 
 ### Memory
 
@@ -403,11 +408,15 @@ On GPU (A100/H100), the fused kernel with float32 would benefit from:
 - `jax.vmap` over galaxies for batch fitting (1000+ galaxies in parallel)
 - Zacharegkas+2025 achieves ~1000 posteriors/minute on a single GPU
 
-For batch fitting (Paper II), use:
+For batch fitting (Paper II), use `fitter.fit_batch(galaxies)` which defaults
+to `native_geovi`:
 
 ```python
-import jax
+# High-level batch fitting API
+results = fitter.fit_batch(galaxies)  # default method: native_geovi
 
+# Low-level vmap for custom forward model calls
+import jax
 batch_photometry = jax.vmap(model.predict_photometry)
 batch_flux = batch_photometry(batch_params)  # (n_galaxies, n_filters)
 ```

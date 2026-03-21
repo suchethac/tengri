@@ -42,8 +42,8 @@ diffsed provides five families of inference methods to explore this posterior:
 | Family | Methods | Posterior type | Best for |
 |--------|---------|---------------|----------|
 | **MAP** | `map` | Point estimate | Initialization, quick look |
-| **Variational (linear)** | `mgvi`, `native_mgvi` | Approximate Gaussian | Very high D (>10^5), speed |
-| **Variational (nonlinear)** | `geovi`, `native_geovi`, `evi` | Non-Gaussian VI | Most problems (default) |
+| **Variational (linear)** | `native_mgvi`, `mgvi`, `fast_mgvi`, `nifty_mgvi` | Approximate Gaussian | Very high D (>10^5), speed |
+| **Variational (nonlinear)** | `native_geovi` (default), `native_evi`, `geovi`, `fast_geovi`, `evi`, `fast_evi`, `nifty_geovi` | Non-Gaussian VI | Most problems |
 | **Hybrid** | `geovi_nuts`, `mgvi_nuts` | VI optimization + MCMC samples | Best of both worlds |
 | **MCMC** | `raytrace`, `nuts` | Exact posterior | Validation, low-D |
 
@@ -51,11 +51,11 @@ diffsed provides five families of inference methods to explore this posterior:
 
 | Problem | D | Recommended | Fallback |
 |---------|--:|-------------|----------|
-| Smooth SFH, few bands | ~7 | `geovi` (15 iter) | `raytrace` |
-| Stochastic SFH, photometry | ~137 | `geovi` (15 iter) | `evi` (20 iter) |
-| Stochastic SFH, spectrum | ~200 | `evi` (20 iter) | `geovi` (25 iter) |
-| Hierarchical, 10 galaxies | ~1,400 | `evi` (25 iter) | `geovi` |
-| Catalog, 100+ galaxies | ~7/gal | `native_geovi` | `native_mgvi` |
+| Smooth SFH, few bands | ~7 | `native_geovi` (15 iter) | `raytrace` |
+| Stochastic SFH, photometry | ~137 | `native_geovi` (15 iter) | `native_evi` (20 iter) |
+| Stochastic SFH, spectrum | ~200 | `native_evi` (20 iter) | `native_geovi` (25 iter) |
+| Hierarchical, 10 galaxies | ~1,400 | `native_evi` (25 iter) | `native_geovi` |
+| Catalog, 100+ galaxies | ~7/gal | `native_geovi` via `fit_batch` | `native_mgvi` |
 | Validation (low-D) | <20 | `nuts` | `raytrace` |
 | Validation (high-D) | >20 | `raytrace` | `geovi_nuts` |
 
@@ -69,12 +69,15 @@ from diffsed import Model, ParamSpec, Fitter
 model = Model(spec, ssp)
 fitter = Fitter(model, data, noise)
 
-# Simple
-result = fitter.run("geovi", n_iterations=15)
+# Simple (native_geovi is the default)
+result = fitter.run("native_geovi", n_iterations=15)
 
 # With initialization from MAP
 result_map = fitter.run("map", n_steps=1500)
-result = fitter.run("geovi", init_from=result_map)
+result = fitter.run("native_geovi", init_from=result_map)
+
+# Batch fitting (default method: native_geovi)
+results = fitter.fit_batch(galaxies)
 
 # Access results
 print(result.params)            # posterior mean (physical space)
@@ -398,7 +401,7 @@ adjustment cannot fully compensate. The KL value plateaus or slowly drifts.
 The optimal strategy combines both: deterministic refinement (update) for stability,
 with periodic fresh samples (resample) to prevent staleness.
 
-When you call `fitter.run("geovi")`, this is what happens internally:
+When you call `fitter.run("native_geovi")` (the default), this is what happens internally:
 
 ```
 Iteration  1:  nonlinear_resample   <-- fresh curved scouts (establish)
@@ -430,7 +433,69 @@ be adjusted via `OptimizationSchedule.geovi(resample_every=N)`.
 diffsed provides the same mathematical algorithms through multiple backends that trade
 off between diagnostic richness and raw speed.
 
-### 6.1 fast_geovi / geovi (Default)
+### Internal Dispatch
+
+| Internal method | Public names |
+|----------------|-------------|
+| `_run_evi_jit` | native_geovi, native_mgvi, native_evi |
+| `_run_fast_vi` | geovi, fast_geovi, mgvi, fast_mgvi, evi, fast_evi, geovi_nuts, mgvi_nuts |
+| `_run_nifty_vi` | nifty_geovi, nifty_mgvi |
+| `_run_map` | map |
+| `_run_nuts` | nuts |
+| `_run_raytrace` | raytrace |
+
+**Removed names**: `geovi_nifty` -> `nifty_geovi`, `mgvi_nifty` -> `nifty_mgvi`,
+`geovi_full` -> `nifty_geovi`, `mgvi_full` -> `nifty_mgvi`, `fit_catalog` -> `fit_batch`.
+
+### 6.1 native_geovi (Default)
+
+```python
+result = fitter.run("native_geovi", n_iterations=15)
+```
+
+**Backend**: Pure JAX, fully XLA-compiled. The entire optimization loop runs inside
+`jax.lax.while_loop` with zero Python overhead.
+
+**What it does**: JIT-compiled geoVI with the "geovi" sample mode: resample at
+iteration 0 and every 5th iteration, nonlinear_update between (via `jax.lax.cond`).
+
+**Posterior samples**: Draws **nonlinear** (geoVI-curved) posterior samples. This
+captures non-Gaussian shapes that linear CG samples miss.
+
+**Speed**: ~0.03s/galaxy AFTER one-time ~56s compilation. Best for all use cases,
+especially catalog fitting via `fitter.fit_batch(galaxies)`.
+
+**Key differences from NIFTy backends**:
+- CG solver uses energy-based convergence with periodic reset (every 20 iterations),
+  vs NIFTy's gradient-norm convergence with custom reset strategy
+- Newton-CG termination uses energy decrease < 1e-3 after miniter=3, vs NIFTy's xtol
+  with `sampnorm` gradient norm
+- No `sampnorm`: uses standard L1 gradient norm instead
+- Compiles the ENTIRE outer loop into one XLA program (no intermediate Python)
+- Supports automatic early stopping when relative KL change < `kl_rtol`
+
+**Expected numerical differences vs NIFTy**:
+- Converged expansion point m: agreement within ~1e-3
+- Hamiltonian at convergence: agreement within ~0.1
+- Posterior standard deviations: agreement within ~10-20% (sampling noise)
+- Posterior means: agreement within ~0.5 sigma
+
+**Multi-seed support**: Supports `n_seeds` for running from multiple random starting
+points. The best result (lowest Hamiltonian) is returned. Seeds that disagree by >10%
+in Hamiltonian trigger a multimodality warning.
+
+### 6.2 native_mgvi / native_evi
+
+```python
+result = fitter.run("native_mgvi", n_iterations=15)
+result = fitter.run("native_evi", n_iterations=20)
+```
+
+Same JIT-compiled backend as `native_geovi` but with different sample modes.
+`native_mgvi` uses linear resampling. `native_evi` runs MGVI for the first half,
+then switches to geoVI for the second half.
+
+### 6.3 fast_geovi / geovi
 
 ```python
 result = fitter.run("geovi", n_iterations=15)
@@ -456,7 +521,7 @@ via the JIT engine. This captures non-Gaussian shapes that linear CG samples mis
 
 **Speed**: ~12s/galaxy for smooth SFH (D~7), ~30s for stochastic SFH (D~137).
 
-### 6.2 fast_mgvi / mgvi
+### 6.4 fast_mgvi / mgvi
 
 ```python
 result = fitter.run("mgvi", n_iterations=15)
@@ -467,7 +532,7 @@ Same as `geovi` but uses `linear_resample` every iteration. Faster per iteration
 
 Posterior samples are linear CG draws (Gaussian).
 
-### 6.3 fast_evi / evi
+### 6.5 fast_evi / evi
 
 ```python
 result = fitter.run("evi", n_iterations=20)
@@ -482,7 +547,7 @@ correction becomes valuable.
 
 The transition point is controlled by `VIConfig.evi_linear_fraction` (default 0.5).
 
-### 6.4 nifty_geovi / nifty_mgvi
+### 6.6 nifty_geovi / nifty_mgvi
 
 ```python
 result = fitter.run("nifty_geovi", n_iterations=15)
@@ -496,38 +561,7 @@ need detailed per-iteration diagnostics that the fast backend strips.
 
 **Speed**: ~18s/galaxy (roughly 35% slower than the fast backend due to Python overhead).
 
-### 6.5 native_geovi / native_mgvi / native_evi
-
-```python
-result = fitter.run("native_geovi", n_iterations=15)
-```
-
-**Backend**: Pure JAX, fully XLA-compiled. The entire optimization loop (sample drawing +
-Newton-CG KL minimization + convergence detection) runs inside `jax.lax.while_loop` with
-zero Python overhead.
-
-**Key differences from NIFTy backends**:
-- CG solver uses energy-based convergence with periodic reset (every 20 iterations),
-  vs NIFTy's gradient-norm convergence with custom reset strategy
-- Newton-CG termination uses energy decrease < 1e-3 after miniter=3, vs NIFTy's xtol
-  with `sampnorm` gradient norm
-- No `sampnorm`: uses standard L1 gradient norm instead
-- Compiles the ENTIRE outer loop into one XLA program (no intermediate Python)
-- Supports automatic early stopping when relative KL change < `kl_rtol`
-
-**Speed**: ~0.03s/galaxy AFTER one-time ~56s compilation. Best for catalog fitting.
-
-**Expected numerical differences vs NIFTy**:
-- Converged expansion point m: agreement within ~1e-3
-- Hamiltonian at convergence: agreement within ~0.1
-- Posterior standard deviations: agreement within ~10-20% (sampling noise)
-- Posterior means: agreement within ~0.5 sigma
-
-**Multi-seed support**: The native backend supports `n_seeds` for running from multiple
-random starting points. The best result (lowest Hamiltonian) is returned. Seeds that
-disagree by >10% in Hamiltonian trigger a multimodality warning.
-
-### 6.6 geovi_nuts / mgvi_nuts (Hybrid)
+### 6.7 geovi_nuts / mgvi_nuts (Hybrid)
 
 ```python
 result = fitter.run("geovi_nuts", n_iterations=10, n_posterior_samples=500)
@@ -544,7 +578,7 @@ reducing warmup time.
 **Posterior samples**: Independent MCMC samples via NUTS. Not restricted to the Gaussian
 or geoVI-curved approximation.
 
-### 6.7 raytrace
+### 6.8 raytrace
 
 ```python
 result = fitter.run("raytrace", n_burnin=100, n_steps=500, n_leapfrog_steps=10)
@@ -567,7 +601,7 @@ stochastic gradients.
 - Acceptance rate: 30-70% ideal; >90% means barely moving
 - ESS (bulk): >100 per parameter, >400 total (Vehtari et al. 2021)
 
-### 6.8 nuts
+### 6.9 nuts
 
 ```python
 result = fitter.run("nuts", n_warmup=500, n_samples=1000)
@@ -589,7 +623,7 @@ warning is issued when `spec.stochastic` is True.
 - Divergences: 0 ideal; >5% = serious problem
 - ESS (bulk): >100 per parameter
 
-### 6.9 map
+### 6.10 map
 
 ```python
 result = fitter.run("map", n_steps=1500, optimizer="adam", learning_rate=0.02)
@@ -608,7 +642,7 @@ starting point that dramatically improves convergence:
 
 ```python
 result_map = fitter.run("map", n_steps=1000)
-result = fitter.run("geovi", init_from=result_map, n_iterations=10)
+result = fitter.run("native_geovi", init_from=result_map, n_iterations=10)
 ```
 
 ---
@@ -681,9 +715,9 @@ result = fitter.run("native_geovi")  # no compilation delay
 | Posterior draw (200 samples) | ~1s | CG-based residual drawing |
 | `"geovi"` mode (lax.cond) | ~56s | Traces both resample and update branches |
 
-The `"geovi"` sample mode (used by `native_geovi`) uses `jax.lax.cond` to dynamically
-choose between resample and update. This traces both branches, incurring the full 56s
-cost. The fast/NIFTy backends avoid this by dispatching in Python.
+The `"geovi"` sample mode (used by `native_geovi`, the default) uses `jax.lax.cond`
+to dynamically choose between resample and update. This traces both branches, incurring
+the full 56s cost. The fast/NIFTy backends avoid this by dispatching in Python.
 
 ---
 
@@ -891,11 +925,11 @@ hfitter = HierarchicalFitter(
     galaxies=[{"flux_obs": f, "noise": n} for f, n in zip(fluxes, noises)],
 )
 
-# Default geoVI with CorrelatedFieldMaker
-result = hfitter.run("geovi", n_iterations=25)
+# Default: native_geovi with CorrelatedFieldMaker
+result = hfitter.run("native_geovi", n_iterations=25)
 
 # EVI (MGVI first, then geoVI)
-result = hfitter.run("evi", n_iterations=30)
+result = hfitter.run("native_evi", n_iterations=30)
 ```
 
 ### 10.7 Expected Performance (Hierarchical)
@@ -924,7 +958,7 @@ happens at each iteration. It wraps a callable `f(iteration: int) -> BlockStep`.
 ```python
 from diffsed.vi_config import OptimizationSchedule, BlockStep, BlockSchedule
 
-# --- Recommended geoVI (default when you call fitter.run("geovi")) ---
+# --- Recommended geoVI (default when you call fitter.run("native_geovi")) ---
 sched = OptimizationSchedule.geovi(
     n_iterations=15,      # total iterations
     resample_every=5,     # fresh samples every N iterations
@@ -1007,12 +1041,12 @@ static `sample_mode` string.
 
 ```python
 # The schedule is implicit when using standard methods:
-result = fitter.run("geovi", n_iterations=15)
+result = fitter.run("native_geovi", n_iterations=15)
 # This internally creates OptimizationSchedule.geovi(n_iterations=15)
 
 # For explicit control, pass schedule directly:
 sched = OptimizationSchedule.geovi(resample_every=8, n_samples=6)
-result = fitter.run("geovi", schedule=sched)
+result = fitter.run("native_geovi", schedule=sched)
 ```
 
 ---
@@ -1024,7 +1058,7 @@ result = fitter.run("geovi", schedule=sched)
 The most basic diagnostic. After fitting:
 
 ```python
-result = fitter.run("geovi", n_iterations=15)
+result = fitter.run("native_geovi", n_iterations=15)
 print(result.diagnostics["chi2_dof"])
 ```
 
@@ -1053,7 +1087,7 @@ This often indicates that the data prefers values outside the prior range.
 Generate model predictions from posterior samples and verify they bracket the data:
 
 ```python
-result = fitter.run("geovi", n_iterations=15)
+result = fitter.run("native_geovi", n_iterations=15)
 
 for i in range(10):
     sample = {k: v[i] for k, v in result.samples.items()}
@@ -1106,14 +1140,16 @@ Stan/ArviZ/BlackJAX thresholds).
 
 ```
 Need a point estimate?          --> fitter.run("map")
-Need speed, D < 50?             --> fitter.run("geovi")
-Need speed, D > 1000?           --> fitter.run("mgvi") or fitter.run("native_mgvi")
+Need speed, D < 50?             --> fitter.run("native_geovi")   (default)
+Need speed, D > 1000?           --> fitter.run("native_mgvi")
 Need accuracy, D < 20?          --> fitter.run("nuts")
 Need accuracy, D > 20?          --> fitter.run("raytrace")
-Need speed + accuracy?          --> fitter.run("geovi")  (default nonlinear samples)
+Need speed + accuracy?          --> fitter.run("native_geovi")   (default, nonlinear draws)
 Need exact samples + speed?     --> fitter.run("geovi_nuts")
-Catalog of 100+ galaxies?       --> fitter.compile(); fitter.run("native_geovi")
-Hierarchical (shared PSD)?      --> hfitter.run("geovi")
+Catalog of 100+ galaxies?       --> fitter.compile(); fitter.fit_batch(galaxies)
+Hierarchical (shared PSD)?      --> hfitter.run("native_geovi")
+NIFTy-exact math needed?        --> fitter.run("geovi")          (NIFTy tight loop)
+Debugging NIFTy behavior?       --> fitter.run("nifty_geovi")    (full logging)
 ```
 
 ### VIConfig Defaults (Philipp Frank's Recommendations)

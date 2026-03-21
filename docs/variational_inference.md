@@ -49,7 +49,7 @@ If you keep the same scouts for too many rounds, they become **stale**: the pin 
 
 ## The Default Strategy
 
-When you call `fitter.run("geovi")`, this is what happens internally:
+When you call `fitter.run("native_geovi")` (the default), this is what happens internally:
 
 ```
 Iteration  1:  nonlinear_resample   ← fresh curved scouts (establish)
@@ -77,7 +77,8 @@ Fresh scouts every 5 iterations. Deterministic refinement in between. This gives
 
 ```python
 # Just works. Uses the optimal schedule internally.
-result = fitter.run("geovi", n_iterations=15)
+# native_geovi is the default going forward.
+result = fitter.run("native_geovi", n_iterations=15)
 ```
 
 ### With control
@@ -108,9 +109,15 @@ result = fitter.run("mgvi", n_iterations=10)
 
 | Method | What it does | When to use |
 |--------|-------------|-------------|
-| `"geovi"` | geoVI with periodic resample (DEFAULT) | Almost always |
-| `"mgvi"` | MGVI (linear only) | Quick look, very high D |
-| `"evi"` | MGVI warmup → geoVI | Save time on early iterations |
+| `"native_geovi"` | JIT geoVI with resample+update, nonlinear draws (**DEFAULT**) | Almost always |
+| `"native_mgvi"` / `"native_evi"` | JIT MGVI/EVI | Quick look, very high D |
+| `"geovi"` / `"fast_geovi"` | NIFTy OptimizeVI.update tight loop | NIFTy-exact math needed |
+| `"mgvi"` / `"fast_mgvi"` | NIFTy MGVI tight loop | NIFTy-exact MGVI |
+| `"evi"` / `"fast_evi"` | NIFTy EVI tight loop | NIFTy-exact EVI |
+| `"nifty_geovi"` | Full jft.optimize_kl with logging | Debugging |
+| `"nifty_mgvi"` | Full NIFTy MGVI with logging | Debugging |
+| `"geovi_nuts"` | geoVI optimization + NUTS posterior draws | Best of both worlds |
+| `"mgvi_nuts"` | MGVI optimization + NUTS posterior draws | VI init + MCMC samples |
 | `"raytrace"` | Exact MCMC (Ray Tracing) | Gold-standard validation |
 | `"nuts"` | Exact MCMC (NUTS) | Low-D validation |
 | `"map"` | Point estimate only | Initialization |
@@ -119,11 +126,29 @@ result = fitter.run("mgvi", n_iterations=10)
 
 | Prefix | Backend | Speed | Accuracy |
 |--------|---------|-------|----------|
+| `native_` | Pure JIT (XLA-compiled) | 0.03s/galaxy* | **Default** |
 | (none) / `fast_` | NIFTy `OptimizeVI.update` tight loop | ~12s/galaxy | Exact NIFTy math |
 | `nifty_` | Full `jft.optimize_kl` with logging | ~18s/galaxy | Same, with diagnostics |
-| `native_` | Pure JIT (XLA-compiled) | 0.03s/galaxy* | Approximate CG |
 
 *After one-time 56s compilation. Best for catalog fitting (100+ galaxies).
+
+### Internal dispatch
+
+| Internal method | Public names |
+|----------------|-------------|
+| `_run_evi_jit` | native_geovi, native_mgvi, native_evi |
+| `_run_fast_vi` | geovi, fast_geovi, mgvi, fast_mgvi, evi, fast_evi, geovi_nuts, mgvi_nuts |
+| `_run_nifty_vi` | nifty_geovi, nifty_mgvi |
+| `_run_map` | map |
+| `_run_nuts` | nuts |
+| `_run_raytrace` | raytrace |
+
+### Batch fitting
+
+`fitter.fit_batch(galaxies)` fits multiple galaxies. Default method is `native_geovi`.
+
+**Removed names**: `geovi_nifty` -> `nifty_geovi`, `mgvi_nifty` -> `nifty_mgvi`,
+`geovi_full` -> `nifty_geovi`, `mgvi_full` -> `nifty_mgvi`, `fit_catalog` -> `fit_batch`.
 
 ## The Five Sample Modes (for advanced users)
 
@@ -166,7 +191,7 @@ When the pin (expansion point m) moves, the coordinate transform g changes (beca
 After fitting, check:
 
 ```python
-result = fitter.run("geovi", n_iterations=15)
+result = fitter.run("native_geovi", n_iterations=15)
 
 # Chi-squared per data point (should be ~1)
 print(result.diagnostics["chi2_dof"])
@@ -182,11 +207,11 @@ for i in range(10):
 
 | Problem | D | Recommended method | Time |
 |---------|--:|-------------------|------|
-| Smooth SFH, 5 bands | ~7 | `geovi` (15 iter) | ~12s |
-| Stochastic SFH, 5 bands | ~137 | `geovi` (15 iter) | ~30s |
-| Stochastic SFH, spectrum | ~200 | `evi` (20 iter) | ~60s |
-| Hierarchical, 10 galaxies | ~1,400 | `evi` (25 iter) | ~10min |
-| Catalog, 100 galaxies | ~7/galaxy | `native_geovi` | 56s compile + 3s |
+| Smooth SFH, 5 bands | ~7 | `native_geovi` (15 iter) | 56s compile + 0.3s |
+| Stochastic SFH, 5 bands | ~137 | `native_geovi` (15 iter) | 56s compile + 0.8s |
+| Stochastic SFH, spectrum | ~200 | `native_evi` (20 iter) | ~60s |
+| Hierarchical, 10 galaxies | ~1,400 | `native_evi` (25 iter) | ~10min |
+| Catalog, 100+ galaxies | ~7/galaxy | `native_geovi` via `fit_batch` | 56s compile + 3s |
 
 ## Mathematical Details
 

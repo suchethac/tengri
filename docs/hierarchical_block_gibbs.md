@@ -46,6 +46,9 @@ Three blocks per outer iteration, ordered by importance:
 - `evi_step_full` in `fitter.py` already supports `constants_mask` and `pe_mask`
 - `BlockSchedule.hierarchical()` in `vi_config.py` defines the blocks
 - `HierarchicalFitter._run_evi_jit` has a flat-array JIT engine
+- `fitter.fit_batch(galaxies)` for batch fitting (default method: `native_geovi`)
+- `OptimizationSchedule` class in `vi_config.py` for custom schedules
+- `_simple_cg` is a module-level function for catalog engine
 
 ### What's needed
 1. **Build block masks** from the hierarchical parameter layout:

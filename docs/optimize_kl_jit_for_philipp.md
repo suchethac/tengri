@@ -157,9 +157,16 @@ def kl_metric(m, residuals, v):
 
 ## Compatibility
 
-The custom JIT implementation is the default for `fitter.run("evi")`.
-NIFTy's `optimize_kl` remains available via `fitter.run("geovi")` or
-`fitter.run("mgvi")` for validation and compatibility.
+The custom JIT implementation is the default for all inference: `fitter.run("native_geovi")`
+is the recommended default going forward. The `native_geovi` method uses the "geovi"
+sample mode (resample at iter 0 and every 5th, nonlinear_update between) with nonlinear
+posterior draws.
+
+NIFTy's `optimize_kl` remains available via `fitter.run("geovi")` / `fitter.run("mgvi")`
+(tight loop, exact NIFTy math) or `fitter.run("nifty_geovi")` / `fitter.run("nifty_mgvi")`
+(full logging) for validation and debugging.
+
+Batch fitting uses `fitter.fit_batch(galaxies)` with `native_geovi` as the default method.
 
 ## Suggestions for NIFTy
 

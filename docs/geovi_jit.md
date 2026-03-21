@@ -134,28 +134,54 @@ All functions operate on flat arrays (not pytree dicts) for XLA efficiency.
 ```python
 from diffsed import Fitter
 
-# --- NIFTy optimize_kl (exact, uses OptimizeVI.update in tight loop) ---
-result = fitter.run("geovi", ...)    # geoVI (nonlinear, most accurate)
+# --- Native JIT (default, fully XLA-compiled) ---
+result = fitter.run("native_geovi", ...)   # DEFAULT: JIT geoVI with resample+update, nonlinear draws
+result = fitter.run("native_mgvi", ...)    # JIT MGVI
+result = fitter.run("native_evi", ...)     # JIT EVI
+
+# --- NIFTy optimize_kl (uses OptimizeVI.update in tight loop) ---
+result = fitter.run("geovi", ...)    # geoVI (nonlinear, exact NIFTy math)
 result = fitter.run("mgvi", ...)     # MGVI (linearized geoVI)
 result = fitter.run("evi", ...)      # EVI: MGVI first half, geoVI second half
 
-# --- Native JIT (fully XLA-compiled, experimental) ---
-result = fitter.run("native_geovi", ...)   # JIT geoVI (different CG, may oscillate)
-result = fitter.run("native_mgvi", ...)    # JIT MGVI
-result = fitter.run("native_evi", ...)     # JIT EVI
+# --- Full NIFTy (with logging, for debugging) ---
+result = fitter.run("nifty_geovi", ...)   # Full jft.optimize_kl with logging
+result = fitter.run("nifty_mgvi", ...)    # Full NIFTy MGVI with logging
+
+# --- Hybrid VI + MCMC ---
+result = fitter.run("geovi_nuts", ...)    # geoVI optimization + NUTS posterior draws
+result = fitter.run("mgvi_nuts", ...)     # MGVI optimization + NUTS posterior draws
+
+# --- Batch fitting ---
+results = fitter.fit_batch(galaxies)      # Default method: native_geovi
 ```
 
 ### Architecture
 
-The default `"geovi"` / `"mgvi"` / `"evi"` methods use NIFTy's `OptimizeVI.update`
-in a tight Python loop with logging/pickling stripped. This gives:
+**`native_geovi` is the default going forward.** It uses a fully XLA-compiled loop
+(zero Python overhead) with the "geovi" sample mode: resample at iteration 0 and
+every 5th iteration, nonlinear_update between (via `jax.lax.cond`). Posterior draws
+are nonlinear (geoVI-curved), not linear CG.
+
+The `"geovi"` / `"mgvi"` / `"evi"` methods (without `native_` prefix) use NIFTy's
+`OptimizeVI.update` in a tight Python loop with logging/pickling stripped. This gives:
 - **Exact same math** as `jft.optimize_kl` (same CG, Newton-CG, line search, sampnorm)
 - **~35% faster** than the full `jft.optimize_kl` (no stdout capture, no pickle saves)
 - **Stable convergence** (H stays in 4.5-6.5 range for 8 iterations)
 
-The `"native_*"` methods use a fully XLA-compiled loop (zero Python overhead)
-but with a reimplemented CG and Newton-CG that doesn't perfectly match NIFTy's
-convergence behavior. These are experimental and may oscillate more.
+### Internal Dispatch
+
+| Internal method | Public names |
+|----------------|-------------|
+| `_run_evi_jit` | native_geovi, native_mgvi, native_evi |
+| `_run_fast_vi` | geovi, fast_geovi, mgvi, fast_mgvi, evi, fast_evi, geovi_nuts, mgvi_nuts |
+| `_run_nifty_vi` | nifty_geovi, nifty_mgvi |
+| `_run_map` | map |
+| `_run_nuts` | nuts |
+| `_run_raytrace` | raytrace |
+
+**Removed names**: `geovi_nifty` -> `nifty_geovi`, `mgvi_nifty` -> `nifty_mgvi`,
+`geovi_full` -> `nifty_geovi`, `mgvi_full` -> `nifty_mgvi`.
 
 ### Block Gibbs API
 
