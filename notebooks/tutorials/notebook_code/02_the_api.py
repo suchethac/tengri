@@ -255,9 +255,10 @@ for _ in range(n):
 t_grad = (time.perf_counter() - t0) / n * 1e6
 print(f"Gradient:  {t_grad:.0f} µs  ({t_grad/t_precomp:.1f}× forward pass)")
 
-# Full Jacobian
+# Full Jacobian (returns a dict of arrays: one per parameter)
 J = jax.jacobian(model.predict_spectrum)(params)
-print(f"Jacobian shape: {J.shape}")
+first_key = list(J.keys())[0]
+print(f"Jacobian: {len(J)} parameter entries, first shape: {J[first_key].shape}")
 print("Gradients cost ~1.5× the forward pass. This is what makes geoVI and RT possible.")
 
 # %%

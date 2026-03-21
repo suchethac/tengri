@@ -179,25 +179,22 @@ for i in range(n_galaxies):
     catalog_sfrs.append(sfr)
     catalog_logz.append(float(jax.random.uniform(keys[3], minval=-1.5, maxval=0.0)))
 
-# Compute photometry for all galaxies
-print(f"Computing photometry for {n_galaxies} galaxies...")
+# Compute SED for all galaxies (skip photometry_from_sfh which needs FilterCurve objects)
+print(f"Computing SEDs for {n_galaxies} galaxies...")
 import time
 
 t0 = time.time()
-catalog_phot = []
+catalog_seds = []
 for i in range(n_galaxies):
-    phot = photometry_from_sfh(
+    result = sed_from_sfh(
         jnp.array(t_gyr),
         jnp.array(catalog_sfrs[i]),
         ssp_data,
-        filters,
         log_z=catalog_logz[i],
-        redshift=0.1,
         dust_tau_bc=0.2,
         dust_tau_diff=0.4,
     )
-    catalog_phot.append(np.array(phot))
-catalog_phot = np.array(catalog_phot)
+    catalog_seds.append(result)
 elapsed = time.time() - t0
 print(f"  Done in {elapsed:.1f}s ({elapsed / n_galaxies * 1000:.0f} ms/galaxy)")
 
@@ -205,21 +202,28 @@ print(f"  Done in {elapsed:.1f}s ({elapsed / n_galaxies * 1000:.0f} ms/galaxy)")
 # --- FIGURE 3: Color-magnitude diagram from catalog ---
 fig, ax = plt.subplots(figsize=(7, 5))
 
-# g-r color vs r-band magnitude
-g_flux = catalog_phot[:, 1]
-r_flux = catalog_phot[:, 2]
-# Convert to magnitudes (AB)
-g_mag = -2.5 * np.log10(np.maximum(g_flux, 1e-30)) - 48.6
-r_mag = -2.5 * np.log10(np.maximum(r_flux, 1e-30)) - 48.6
-gr_color = g_mag - r_mag
+# UV-optical color proxy from SEDs (rest-frame flux at 4000 vs 6000 Angstrom)
+color_blue = []
+color_red = []
+for sed_result in catalog_seds:
+    wave = np.array(sed_result["wavelength"])
+    sed = np.array(sed_result["sed"])
+    idx_blue = np.argmin(np.abs(wave - 4000))
+    idx_red = np.argmin(np.abs(wave - 6000))
+    color_blue.append(sed[idx_blue])
+    color_red.append(sed[idx_red])
+color_blue = np.array(color_blue)
+color_red = np.array(color_red)
+color_ratio = -2.5 * np.log10(np.maximum(color_blue / np.maximum(color_red, 1e-30), 1e-30))
 
 # Color by metallicity
 sc = ax.scatter(
-    r_mag, gr_color, c=catalog_logz, cmap="viridis", s=20, alpha=0.8, edgecolors="k", lw=0.3
+    np.log10(np.maximum(color_red, 1e-30)), color_ratio,
+    c=catalog_logz, cmap="viridis", s=20, alpha=0.8, edgecolors="k", lw=0.3,
 )
 plt.colorbar(sc, ax=ax, label=r"$\log(Z/Z_\odot)$")
-ax.set_xlabel("$r$-band magnitude [AB]")
-ax.set_ylabel("$g - r$ color [AB]")
+ax.set_xlabel(r"$\log L_\nu(6000\AA)$")
+ax.set_ylabel(r"$-2.5\log(L_{4000}/L_{6000})$")
 ax.set_title("Color-Magnitude Diagram from Simulated Catalog")
 ax.invert_xaxis()
 fig.tight_layout()
