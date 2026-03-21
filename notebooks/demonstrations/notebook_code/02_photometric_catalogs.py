@@ -145,7 +145,7 @@ for n in batch_sizes:
         fitter_i = Fitter(model, mocks[i].flux_obs, mocks[i].noise, data_type="photometry")
         _ = fitter_i.run("map", n_steps=300, verbose=False)
         res_i = fitter_i.run(
-            "native_geovi", n_iterations=5, n_samples=3, n_seeds=1,
+            "native_geovi", n_iterations=5, n_samples=3, n_seeds=3,
             n_posterior_samples=200, verbose=False,
         )
         results.append(res_i)
@@ -180,7 +180,7 @@ for i in range(min(10, N_CAT)):
     fitter_i = Fitter(model, mocks[i].flux_obs, mocks[i].noise, data_type="photometry")
     _ = fitter_i.run("map", n_steps=200, verbose=False)
     res_i = fitter_i.run(
-        "native_geovi", n_iterations=5, n_samples=3, n_seeds=1,
+        "native_geovi", n_iterations=5, n_samples=3, n_seeds=3,
         n_posterior_samples=200, verbose=False,
     )
     quick_results.append(res_i)

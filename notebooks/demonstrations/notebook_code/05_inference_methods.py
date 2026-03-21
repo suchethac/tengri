@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Under the Hood: How diffsed Samples the Posterior
+# # Under the Hood: How tengri Samples the Posterior
 #
 # tengri ships five inference methods, all optimizing the same loss function.
 # This notebook profiles them, compares their posteriors, and provides a

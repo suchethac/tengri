@@ -34,12 +34,8 @@ class Photometry:
     names: tuple[str, ...] = ()
 
     # Derived fields — set in __post_init__
-    filter_waves: tuple[jnp.ndarray, ...] = dataclasses.field(
-        default=(), hash=False, repr=False
-    )
-    filter_trans: tuple[jnp.ndarray, ...] = dataclasses.field(
-        default=(), hash=False, repr=False
-    )
+    filter_waves: tuple[jnp.ndarray, ...] = dataclasses.field(default=(), hash=False, repr=False)
+    filter_trans: tuple[jnp.ndarray, ...] = dataclasses.field(default=(), hash=False, repr=False)
     n_filters: int = 0
 
     def __post_init__(self):

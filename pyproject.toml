@@ -19,18 +19,15 @@ dependencies = [
     "matplotlib>=3.7",
     "dsps>=0.3",
     "h5py>=3.0",
+    "nifty8[re]>=8.5",
 ]
 
 [project.optional-dependencies]
-nifty = ["nifty8[re]>=8.5"]
 nuts = ["blackjax>=1.0"]
 optax = ["optax>=0.2"]
-filters = ["sedpy>=0.3"]
 all = [
-    "nifty8[re]>=8.5",
     "blackjax>=1.0",
     "optax>=0.2",
-    "sedpy>=0.3",
 ]
 dev = [
     "pytest>=7.0",

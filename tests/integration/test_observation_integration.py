@@ -13,7 +13,7 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri.core.model import Model
 from tengri.core.param_spec import ParamSpec
-from tengri.distributions import Fixed, Gaussian, Uniform
+from tengri.distributions import Fixed, Uniform
 from tengri.inference.fitter import Fitter
 from tengri.models.observation.noise_config import NoiseConfig
 from tengri.models.observation.observation import Observation
@@ -57,9 +57,7 @@ def base_spec():
 @pytest.fixture(scope="module")
 def phot_obs():
     return Observation(
-        photometry=Photometry.from_names(
-            ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-        ),
+        photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
     )
 
 
@@ -117,9 +115,7 @@ class TestObservationWithModel:
         wave_obs = jnp.linspace(10000, 50000, 100)
         obs = Observation(
             photometry=Photometry(filters=tuple(_make_synthetic_filters())),
-            spectroscopy=SpectroscopyConfig(
-                wave_obs=wave_obs, calibration_order=2
-            ),
+            spectroscopy=SpectroscopyConfig(wave_obs=wave_obs, calibration_order=2),
         )
         model = Model(base_spec, ssp, observation=obs)
         assert "cal_c1" in model.spec.free_params
@@ -135,7 +131,7 @@ class TestObservationWithModel:
         assert "noise_frac_cal" in model.spec.free_params
 
     def test_auto_merge_user_precedence(self, ssp):
-        """User-defined cal_c1 overrides auto-merged one."""
+        """User-provided noise_frac_cal isn't overridden by auto-merge."""
         spec = ParamSpec(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 3.0),
@@ -145,22 +141,19 @@ class TestObservationWithModel:
             met_logzsol=Uniform(-1.5, 0.2),
             dust_tau_bc=Uniform(0.0, 3.0),
             redshift=Fixed(0.5),
-            # User explicitly sets cal_c1
-            cal_c1=Gaussian(0, 0.5),
+            # User explicitly sets noise_frac_cal as a wider Uniform
+            noise_frac_cal=Uniform(0.0, 0.5),
         )
-        wave_obs = jnp.linspace(10000, 50000, 100)
         obs = Observation(
             photometry=Photometry(filters=tuple(_make_synthetic_filters())),
-            spectroscopy=SpectroscopyConfig(
-                wave_obs=wave_obs, calibration_order=2
-            ),
+            # NoiseConfig tries to auto-merge a different distribution
+            noise=NoiseConfig(calibration_floor=Uniform(0.01, 0.1)),
         )
         model = Model(spec, ssp, observation=obs)
-        # User's Gaussian(0, 0.5) should win over auto-merged Gaussian(0, 0.1)
-        dist = model.spec.get_distribution("cal_c1")
-        assert isinstance(dist, Gaussian)
-        # Check sigma to confirm it's the user's version
-        assert dist.bounds[1] > 0.3  # sigma=0.5 → bounds wider than 0.1
+        # User's Uniform(0.0, 0.5) should win over NoiseConfig's Uniform(0.01, 0.1)
+        dist = model.spec.get_distribution("noise_frac_cal")
+        assert isinstance(dist, Uniform)
+        assert dist.bounds[1] == 0.5  # User's upper bound, not 0.1
 
     def test_auto_precompute_spectroscopy(self, ssp, base_spec):
         """Fixed z + spectroscopy config triggers auto-precomputation."""
@@ -216,9 +209,7 @@ class TestObservationWithModel:
 class TestObservationWithFitter:
     def test_fitter_infers_photometry_type(self, ssp, base_spec):
         """Fitter(model, data, noise) with phot-only obs infers photometry."""
-        obs = Observation(
-            photometry=Photometry(filters=tuple(_make_synthetic_filters()))
-        )
+        obs = Observation(photometry=Photometry(filters=tuple(_make_synthetic_filters())))
         model = Model(base_spec, ssp, observation=obs)
         # Generate fake data
         key = jax.random.PRNGKey(0)
@@ -231,9 +222,7 @@ class TestObservationWithFitter:
 
     def test_fitter_explicit_data_type_still_works(self, ssp, base_spec):
         """Explicit data_type= overrides observation inference."""
-        obs = Observation(
-            photometry=Photometry(filters=tuple(_make_synthetic_filters()))
-        )
+        obs = Observation(photometry=Photometry(filters=tuple(_make_synthetic_filters())))
         model = Model(base_spec, ssp, observation=obs)
         flux = jnp.ones(3)
         noise = jnp.ones(3) * 0.1
@@ -257,9 +246,7 @@ class TestObservationWithFitter:
 class TestObservationEndToEnd:
     def test_photometry_map_fit(self, ssp, base_spec):
         """Full: Observation → Model → predict → Fitter → MAP."""
-        obs = Observation(
-            photometry=Photometry(filters=tuple(_make_synthetic_filters()))
-        )
+        obs = Observation(photometry=Photometry(filters=tuple(_make_synthetic_filters())))
         model = Model(base_spec, ssp, observation=obs)
 
         # Generate mock photometry

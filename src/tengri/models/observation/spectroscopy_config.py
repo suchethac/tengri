@@ -48,16 +48,12 @@ class SpectroscopyConfig:
     """
 
     wave_obs: jnp.ndarray = dataclasses.field(hash=False)
-    resolution: float | jnp.ndarray | None = dataclasses.field(
-        default=None, hash=False
-    )
+    resolution: float | jnp.ndarray | None = dataclasses.field(default=None, hash=False)
     sigma_lib_kms: float = 70.0
     lsf_n_bins: int = 16
     calibration_order: int = 0
     eline_marginalize: bool = False
-    eline_wavelengths: jnp.ndarray | None = dataclasses.field(
-        default=None, hash=False
-    )
+    eline_wavelengths: jnp.ndarray | None = dataclasses.field(default=None, hash=False)
     eline_prior_sigma: float = 100.0
 
     @property
@@ -86,10 +82,7 @@ class SpectroscopyConfig:
         """
         if self.calibration_order == 0:
             return {}
-        return {
-            f"cal_c{i + 1}": Gaussian(0.0, 0.1)
-            for i in range(self.calibration_order)
-        }
+        return {f"cal_c{i + 1}": Gaussian(0.0, 0.1) for i in range(self.calibration_order)}
 
     # -------------------------------------------------------------------
     # Instrument factories

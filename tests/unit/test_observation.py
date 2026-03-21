@@ -24,6 +24,7 @@ from tengri.models.observation.spectroscopy_config import SpectroscopyConfig
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_filter(name="test_r", center=6200.0, width=500.0, n=50):
     """Create a synthetic Gaussian filter for testing."""
     wave = jnp.linspace(center - 2 * width, center + 2 * width, n)

@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+title: "tengri: Differentiable SED Fitting with IFT Star Formation History Priors"
+message: "If you use this software, please cite it using the metadata from this file."
+type: software
+authors:
+  - family-names: Cooray
+    given-names: Suchetha
+license: MIT
+repository-code: "https://github.com/suchethac/tengri"
+version: 0.1.0
+date-released: "2026-01-01"
+keywords:
+  - galaxy
+  - SED fitting
+  - star formation history
+  - information field theory
+  - JAX
+  - Bayesian inference
+  - spectral energy distribution
