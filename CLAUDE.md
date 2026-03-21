@@ -55,25 +55,40 @@ latexmk -pdf 0-ms.tex
 
 ```
 src/diffsed/
-├── distributions.py       # Uniform, Gaussian, LogUniform, Fixed
-├── param_spec.py          # ParamSpec: parameter definitions + validation
-├── model.py               # High-level Model (thin orchestrator, ~1400 lines)
-├── _param_translate.py    # Public→internal param mapping + unit conversion
-├── _fused_kernels.py      # JIT kernel factory functions (photometry, spectroscopy)
-├── _sed_pipeline.py       # Core SED computation engine (_compute_sed_components)
-├── _mock.py               # Mock galaxy generation (generate_mock, MockData)
-├── fitter.py              # Fitter: MAP, Ray Tracing, NUTS, geoVI, MGVI
-├── raytrace_jax.py        # Ray Tracing Sampler (Behroozi 2025, Apache 2.0)
-├── posterior.py            # Posterior: summary, corner, autocorrelation, ESS
-├── hierarchical.py        # HierarchicalFitter: shared PSD via CorrelatedFieldMaker
-├── models/sfh/            # PSD, GP generation, mean SFH
-├── models/dust/           # Two-component attenuation + IR emission (MBB, Dale+2014, DL07)
-├── models/agn/            # AGN disc + torus (simple, standard, kubota_done)
-├── models/nebular/cue.py  # Cue neural emulator (Li+2024, JAX re-impl of TF)
-├── models/sps/            # DSPS wrapper, SSP loading, mass_remaining (IMF-based)
-├── models/observation/    # photometry, spectroscopy, filters
-├── utils/                 # transforms, grid, cosmology, precompute
-└── inference/             # Inference backends (geoVI, NUTS, MAP)
+├── __init__.py              # public API re-exports
+├── distributions.py         # Uniform, Gaussian, LogUniform, Fixed
+├── plotting.py              # Visualization utilities
+├── simulate.py              # SED-from-SFH utilities
+│
+├── core/                    # forward model
+│   ├── model.py             # Model class (thin orchestrator)
+│   ├── param_spec.py        # ParamSpec: parameter definitions + validation
+│   ├── param_translate.py   # Public→internal param mapping + unit conversion
+│   ├── fused_kernels.py     # JIT kernel factory functions
+│   ├── sed_pipeline.py      # Core SED computation engine
+│   ├── prediction.py        # Lazy Prediction object
+│   ├── noise.py             # Noise model handling
+│   └── mock.py              # Mock galaxy generation
+│
+├── inference/               # all fitting + results
+│   ├── fitter.py            # Fitter: MAP, Ray Tracing, NUTS, geoVI, MGVI
+│   ├── hierarchical.py      # HierarchicalFitter: shared PSD
+│   ├── posterior.py          # Posterior: summary, corner, ESS
+│   ├── raytrace.py          # Ray Tracing Sampler (Behroozi 2025)
+│   ├── vi_config.py         # VI settings
+│   ├── common.py, nuts.py, geovi.py, map_optimizer.py
+│
+├── models/                  # physics modules
+│   ├── sfh/                 # SFH models, PSD, GP generation
+│   ├── dust/                # Two-component attenuation + IR emission
+│   ├── agn/                 # AGN disc + torus models
+│   ├── nebular/             # Nebular emission (BakedIn, CLOUDY, Cue)
+│   ├── sps/                 # DSPS wrapper, SSP loading
+│   ├── observation/         # Photometry, spectroscopy, filters
+│   ├── igm.py, radio.py, xray.py
+│
+├── utils/                   # Grid, cosmology, transforms
+└── diagnostics/             # Fisher, saliency, green functions
 ```
 
 ## High-level API (preferred)
