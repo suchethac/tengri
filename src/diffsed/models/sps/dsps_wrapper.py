@@ -291,10 +291,6 @@ def _get_lgmet_bin_edges(grid, lo=_LGMET_LO, hi=_LGMET_HI):
 
     Uses half-spacing on each side, with outer edges clamped.
     """
-    dz = jnp.diff(grid)
-    half_dz = jnp.concatenate([dz[:1], 0.5 * (dz[:-1] + dz[1:]), dz[-1:]])
-    edges_lo = grid - half_dz / 2.0
-    edges_hi = grid + half_dz / 2.0
     edges = jnp.concatenate([jnp.array([lo]), 0.5 * (grid[:-1] + grid[1:]), jnp.array([hi])])
     return edges
 

@@ -15,7 +15,6 @@ Coefficient tables from eazy-py (Brammer et al.):
     https://github.com/gbrammer/eazy-py/blob/master/eazy/data/
 """
 
-import jax
 import jax.numpy as jnp
 
 # ---------------------------------------------------------------------------

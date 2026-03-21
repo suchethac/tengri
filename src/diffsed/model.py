@@ -223,14 +223,8 @@ class Model:
         self.ssp_data = ssp_data
         self._forward_dtype = jnp.dtype(forward_dtype)
 
-        # Initialize optional-component flags early (before any code that
-        # might short-circuit or raise, so attribute lookups never fail).
-        self._radio_enabled = getattr(spec, "radio", False)
-        self._xray_enabled = getattr(spec, "xray", False)
-        self._agn_model = getattr(spec, "agn_model", None)
-        self._agn_parametric = False
-        self._dust_emission_model = getattr(spec, "dust_emission", None)
-        self._evolving_metallicity = getattr(spec, "evolving_metallicity", False)
+        # Initialize metallicity interpolation settings early so attribute
+        # lookups never fail before the full-init code runs.
         self._met_interp = getattr(spec, "met_interp", "linear")
         self._lgmet_scatter = float(getattr(spec, "lgmet_scatter", 0.1))
 
@@ -399,13 +393,6 @@ class Model:
             from diffsed.models.nebular import BakedInBackend
 
             self._nebular_backend = BakedInBackend()
-
-        # For DL07 tabulated templates, load at init and register
-        if self._dust_emission_model == "dl07_tabulated":
-            dl07_path = getattr(spec, "dl07_grid_path", "data/dl07_templates.h5")
-            from diffsed.models.dust.emission import DUST_EMISSION_MODELS, create_dl07_from_grid
-
-            DUST_EMISSION_MODELS["dl07_tabulated"] = create_dl07_from_grid(dl07_path)
 
         # Velocity dispersion: only apply if sigma_v is in the spec
         self._has_sigma_v = spec.has_param("sigma_v") if hasattr(spec, "has_param") else False
@@ -1317,11 +1304,7 @@ class Model:
             ssp_flux_at_z = jnp.einsum(
                 "ma,maw->aw", lgmet_w / lgmet_w_safe, self.ssp_data.ssp_flux
             )
-            # Scale weights to absolute mass (DSPS normalizes to 1)
-            total_mass = jnp.sum(dsps_result.weights) * jnp.trapezoid(
-                sfr_table, t_cosmic_gyr * 1e9
-            )
-            # Actually: DSPS age_weights are fractional. Total stellar mass =
+            # DSPS age_weights are fractional. Total stellar mass =
             # integral(SFR * dt). Multiply weights by total mass.
             _total_mass_formed = jnp.trapezoid(sfr_table, t_cosmic_gyr * 1e9)
             weights = weights * _total_mass_formed

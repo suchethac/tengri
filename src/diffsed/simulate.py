@@ -39,9 +39,7 @@ References
 - Hearin et al. 2023, MNRAS, 521, 1741 (DSPS)
 """
 
-import jax
 import jax.numpy as jnp
-import numpy as np
 
 from diffsed.models.dust.attenuation import two_component_dust
 from diffsed.models.sps.dsps_wrapper import (
