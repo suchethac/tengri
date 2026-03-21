@@ -326,15 +326,19 @@ def phot_from_params(p):
 
 J = jax.jacobian(phot_from_params)(params)
 
-# Extract into a matrix
+# Extract Jacobian into a matrix
 param_names = spec.free_params
 n_params = len(param_names)
-n_bands = len(filters)
+phot_val = model.predict_photometry(params)
+n_bands = len(phot_val)
+band_labels = ["u", "g", "r", "i", "z"][:n_bands]
+
 J_matrix = np.zeros((n_bands, n_params))
 for j, name in enumerate(param_names):
-    J_matrix[:, j] = np.array(J[name]).flatten()[:n_bands]
+    jval = np.array(J[name]).flatten()
+    J_matrix[:, j] = jval[:n_bands]
 
-# Normalize each column by parameter scale
+# Normalize each column
 for j in range(n_params):
     col_max = np.max(np.abs(J_matrix[:, j]))
     if col_max > 0:
@@ -343,7 +347,7 @@ for j in range(n_params):
 fig, ax = plt.subplots(figsize=(10, 4))
 im = ax.imshow(J_matrix.T, aspect="auto", cmap="RdBu_r", vmin=-1, vmax=1)
 ax.set_xticks(range(n_bands))
-ax.set_xticklabels(["u", "g", "r", "i", "z"], fontsize=10)
+ax.set_xticklabels(band_labels, fontsize=10)
 ax.set_yticks(range(n_params))
 ax.set_yticklabels([n.replace("sfh_tsnorm_", "").replace("met_", "").replace("dust_", "d_")
                      for n in param_names], fontsize=8)
