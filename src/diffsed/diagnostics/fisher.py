@@ -72,16 +72,16 @@ def compute_fisher_matrix(forward_model, params, noise, data_type="photometry", 
     """
     if param_names is None:
         param_names = [
-            "sigma_ps",
-            "tau_ps",
+            "psd_sigma",
+            "psd_tau_yr",
             "alpha",
             "beta",
             "tau_sfh",
             "sfr_norm",
-            "log_z",
-            "tau_v1",
-            "tau_v2",
-            "dust_n",
+            "log_z_abs",
+            "tau_bc",
+            "tau_diff",
+            "dust_slope",
         ]
 
     # Build a function that maps a flat array of the selected params to predictions

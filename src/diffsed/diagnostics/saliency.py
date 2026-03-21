@@ -67,16 +67,16 @@ def compute_all_gradient_seds(forward_model, params, param_names=None):
     """
     if param_names is None:
         param_names = [
-            "sigma_ps",
-            "tau_ps",
+            "psd_sigma",
+            "psd_tau_yr",
             "alpha",
             "beta",
             "tau_sfh",
             "sfr_norm",
-            "log_z",
-            "tau_v1",
-            "tau_v2",
-            "dust_n",
+            "log_z_abs",
+            "tau_bc",
+            "tau_diff",
+            "dust_slope",
         ]
 
     gradients = {}
@@ -112,16 +112,16 @@ def compute_photometry_sensitivity(forward_model, params, param_names=None):
     """
     if param_names is None:
         param_names = [
-            "sigma_ps",
-            "tau_ps",
+            "psd_sigma",
+            "psd_tau_yr",
             "alpha",
             "beta",
             "tau_sfh",
             "sfr_norm",
-            "log_z",
-            "tau_v1",
-            "tau_v2",
-            "dust_n",
+            "log_z_abs",
+            "tau_bc",
+            "tau_diff",
+            "dust_slope",
         ]
 
     def predict_from_flat(flat):

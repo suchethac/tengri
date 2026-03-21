@@ -108,9 +108,9 @@ from diffsed import Model, ParamSpec, Uniform, Fitter, HierarchicalFitter
 ## Key conventions
 
 - High-level params: `sfh_alpha`, `sfh_tau_peak_gyr`, `psd_sigma`, `psd_tau_myr`, `met_logzsol`, `dust_tau_bc`
-- Internal params (old API): `alpha`, `tau_sfh`, `sigma_ps`, `tau_ps`, `log_z`, `tau_v1`
+- Internal params: `alpha`, `tau_sfh`, `psd_sigma`, `psd_tau_yr`, `log_z_abs`, `tau_bc`, `tau_diff`, `dust_slope`
 - GP latent vector `psd_xi` has shape `(n_grid,)` and prior `ξ ~ N(0, I)`
-- PSD timescale in high-level API is in **Myr** (`psd_tau_myr`); internal is in **years** (`tau_ps`)
+- PSD timescale in high-level API is in **Myr** (`psd_tau_myr`); internal is in **years** (`psd_tau_yr`)
 
 ## Gotchas
 

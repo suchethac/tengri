@@ -22,30 +22,30 @@ class TestPSDDRW:
     def test_psd_drw_shape(self):
         """PSD output shape matches input frequency shape."""
         omega = jnp.linspace(0, 10, 100)
-        p = psd_drw(omega, sigma_ps=1.0, tau_ps=1e8)
+        p = psd_drw(omega, psd_sigma=1.0, psd_tau_yr=1e8)
         assert p.shape == omega.shape
 
     def test_psd_drw_at_zero_frequency(self):
         """P(0) = sigma_PS^2 * tau_PS."""
-        sigma_ps, tau_ps = 2.0, 1e8
-        p0 = psd_drw(jnp.array(0.0), sigma_ps, tau_ps)
-        assert_allclose(float(p0), sigma_ps**2 * tau_ps, rtol=1e-10)
+        psd_sigma, psd_tau_yr = 2.0, 1e8
+        p0 = psd_drw(jnp.array(0.0), psd_sigma, psd_tau_yr)
+        assert_allclose(float(p0), psd_sigma**2 * psd_tau_yr, rtol=1e-10)
 
     def test_psd_drw_positive(self):
         """PSD is strictly positive everywhere."""
         omega = jnp.linspace(0, 100, 1000)
-        p = psd_drw(omega, sigma_ps=1.0, tau_ps=1e7)
+        p = psd_drw(omega, psd_sigma=1.0, psd_tau_yr=1e7)
         assert jnp.all(p > 0)
 
     def test_psd_drw_monotone_decreasing(self):
         """DRW PSD decreases monotonically with frequency."""
         omega = jnp.linspace(0, 100, 1000)
-        p = psd_drw(omega, sigma_ps=1.0, tau_ps=1e7)
+        p = psd_drw(omega, psd_sigma=1.0, psd_tau_yr=1e7)
         assert jnp.all(jnp.diff(p) <= 0)
 
-    @pytest.mark.parametrize("sigma_ps", [0.5, 1.0, 2.0, 3.0])
-    @pytest.mark.parametrize("tau_ps", [5e6, 20e6, 50e6, 200e6])
-    def test_psd_integral_equals_variance(self, sigma_ps, tau_ps):
+    @pytest.mark.parametrize("psd_sigma", [0.5, 1.0, 2.0, 3.0])
+    @pytest.mark.parametrize("psd_tau_yr", [5e6, 20e6, 50e6, 200e6])
+    def test_psd_integral_equals_variance(self, psd_sigma, psd_tau_yr):
         """T1: int P(omega) d_omega / (2*pi) = sigma_PS^2 / 2.
 
         This is the Wiener-Khinchin theorem: the integral of the PSD
@@ -53,21 +53,21 @@ class TestPSDDRW:
         """
         # Use dense grid for numerical integration
         # Go far past the knee: omega >> 1/tau to capture the tail
-        omega_max = 1000.0 / tau_ps
+        omega_max = 1000.0 / psd_tau_yr
         n_pts = 500_000
         omega = jnp.linspace(0, omega_max, n_pts)
-        p = psd_drw(omega, sigma_ps, tau_ps)
+        p = psd_drw(omega, psd_sigma, psd_tau_yr)
 
         # Numerical integral: int P(omega) d_omega / (2*pi)
         # Factor of 2 for negative frequencies (PSD is symmetric)
         integral = 2.0 * jnp.trapezoid(p, omega) / (2.0 * jnp.pi)
 
-        expected = drw_variance(sigma_ps)
+        expected = drw_variance(psd_sigma)
         assert_allclose(
             float(integral),
             float(expected),
             rtol=0.005,
-            err_msg=f"PSD integral failed for sigma={sigma_ps}, tau={tau_ps}",
+            err_msg=f"PSD integral failed for sigma={psd_sigma}, tau={psd_tau_yr}",
         )
 
     def test_psd_drw_is_jittable(self):
@@ -80,9 +80,9 @@ class TestPSDDRW:
     def test_psd_drw_has_gradients(self):
         """PSD function has well-defined gradients w.r.t. params."""
 
-        def loss(sigma_ps, tau_ps):
+        def loss(psd_sigma, psd_tau_yr):
             omega = jnp.linspace(0.01, 10, 50)
-            return jnp.sum(psd_drw(omega, sigma_ps, tau_ps))
+            return jnp.sum(psd_drw(omega, psd_sigma, psd_tau_yr))
 
         grad_fn = jax.grad(loss, argnums=(0, 1))
         g_sigma, g_tau = grad_fn(1.0, 1e8)
@@ -95,9 +95,9 @@ class TestDRWACF:
 
     def test_acf_at_zero_lag(self):
         """ACF(0) = sigma_PS^2 / 2."""
-        sigma_ps = 2.0
-        acf0 = drw_acf(0.0, sigma_ps, 1e8)
-        assert_allclose(float(acf0), drw_variance(sigma_ps), rtol=1e-10)
+        psd_sigma = 2.0
+        acf0 = drw_acf(0.0, psd_sigma, 1e8)
+        assert_allclose(float(acf0), drw_variance(psd_sigma), rtol=1e-10)
 
     def test_acf_positive(self):
         """ACF is positive for all lags."""
@@ -127,12 +127,14 @@ class TestMaternPSD:
     def test_matern_nu05_matches_drw(self):
         """Matern with nu=0.5 is equivalent to DRW (up to normalization)."""
         omega = jnp.linspace(0.01, 10, 100)
-        sigma_ps = 1.5
-        tau_ps = 5e7
+        psd_sigma = 1.5
+        psd_tau_yr = 5e7
 
-        p_drw = psd_drw(omega, sigma_ps, tau_ps)
+        p_drw = psd_drw(omega, psd_sigma, psd_tau_yr)
         # For Matern: variance = sigma_PS^2/2, length_scale = tau_PS
-        p_mat = psd_matern(omega, variance=drw_variance(sigma_ps), length_scale=tau_ps, nu=0.5)
+        p_mat = psd_matern(
+            omega, variance=drw_variance(psd_sigma), length_scale=psd_tau_yr, nu=0.5
+        )
 
         # They should have the same shape (ratio should be constant)
         ratio = p_drw / p_mat

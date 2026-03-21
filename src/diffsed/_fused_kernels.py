@@ -144,8 +144,8 @@ def build_fused_photometry(model):
     Returns
     -------
     callable
-        JIT-compiled function: (sfr_on_ssp, log_z, tau_v1, tau_v2,
-        dust_n, ...) -> photometry array.
+        JIT-compiled function: (sfr_on_ssp, log_z_abs, tau_bc, tau_diff,
+        dust_slope, ...) -> photometry array.
     """
     from diffsed.models.dust.attenuation import get_dust_law
     from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
@@ -195,10 +195,10 @@ def build_fused_photometry(model):
     @jax.jit
     def fused_phot(
         sfr_on_ssp,
-        log_z,
-        tau_v1,
-        tau_v2,
-        dust_n,
+        log_z_abs,
+        tau_bc,
+        tau_diff,
+        dust_slope,
         f_obscuration=0.0,
         dust_bump_strength=0.0,
         dust_delta=0.0,
@@ -216,10 +216,10 @@ def build_fused_photometry(model):
         agn_log_ledd=-1.0,
     ):
         sfr = sfr_on_ssp.astype(dt)
-        lz = jnp.asarray(log_z, dtype=dt)
-        tv1 = jnp.asarray(tau_v1, dtype=dt)
-        tv2 = jnp.asarray(tau_v2, dtype=dt)
-        dn = jnp.asarray(dust_n, dtype=dt)
+        lz = jnp.asarray(log_z_abs, dtype=dt)
+        tv1 = jnp.asarray(tau_bc, dtype=dt)
+        tv2 = jnp.asarray(tau_diff, dtype=dt)
+        dn = jnp.asarray(dust_slope, dtype=dt)
         f_obs = jnp.asarray(f_obscuration, dtype=dt)
         bump = jnp.asarray(dust_bump_strength, dtype=dt)
         delta = jnp.asarray(dust_delta, dtype=dt)
@@ -359,8 +359,8 @@ def build_fused_spectrum(model):
     Returns
     -------
     callable
-        JIT-compiled function: (sfr_on_ssp, log_z, tau_v1, tau_v2,
-        dust_n, ...) -> spectrum array.
+        JIT-compiled function: (sfr_on_ssp, log_z_abs, tau_bc, tau_diff,
+        dust_slope, ...) -> spectrum array.
     """
     from diffsed.models.dust.attenuation import get_dust_law
     from diffsed.models.sps.dsps_wrapper import (
@@ -401,10 +401,10 @@ def build_fused_spectrum(model):
     @jax.jit
     def fused_spec(
         sfr_on_ssp,
-        log_z,
-        tau_v1,
-        tau_v2,
-        dust_n,
+        log_z_abs,
+        tau_bc,
+        tau_diff,
+        dust_slope,
         sigma_v=0.0,
         f_obscuration=0.0,
         dust_bump_strength=0.0,
@@ -420,10 +420,10 @@ def build_fused_spectrum(model):
         agn_log_ledd=-1.0,
     ):
         sfr = sfr_on_ssp.astype(fdt)
-        lz = jnp.asarray(log_z, dtype=fdt)
-        tv1 = jnp.asarray(tau_v1, dtype=fdt)
-        tv2 = jnp.asarray(tau_v2, dtype=fdt)
-        dn = jnp.asarray(dust_n, dtype=fdt)
+        lz = jnp.asarray(log_z_abs, dtype=fdt)
+        tv1 = jnp.asarray(tau_bc, dtype=fdt)
+        tv2 = jnp.asarray(tau_diff, dtype=fdt)
+        dn = jnp.asarray(dust_slope, dtype=fdt)
         f_obs = jnp.asarray(f_obscuration, dtype=fdt)
         bump = jnp.asarray(dust_bump_strength, dtype=fdt)
         delta = jnp.asarray(dust_delta, dtype=fdt)
@@ -531,7 +531,7 @@ def build_exact_sed(model):
     Returns
     -------
     callable
-        JIT-compiled function: (weights, ssp_at_z, tau_v1, tau_v2,
+        JIT-compiled function: (weights, ssp_at_z, tau_bc, tau_diff,
         ...) -> (sed_atten, sed_intr).
 
     Notes
@@ -553,8 +553,8 @@ def build_exact_sed(model):
     def exact_sed(
         weights,
         ssp_at_z,
-        tau_v1,
-        tau_v2,
+        tau_bc,
+        tau_diff,
         n_slope=-0.7,
         dust_bump_strength=0.0,
         dust_delta=0.0,
@@ -585,7 +585,7 @@ def build_exact_sed(model):
         )
 
         # Dust + CSP SED: XLA fuses broadcast + exp + einsum
-        tau = dust_age_w[:, None] * tau_v1 * k_bc[None, :] + tau_v2 * k_diff[None, :]
+        tau = dust_age_w[:, None] * tau_bc * k_bc[None, :] + tau_diff * k_diff[None, :]
         dust_trans = f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau)
 
         sed_atten = (lsun * jnp.einsum("i,iw,iw->w", w, ssp_z, dust_trans)).astype(jnp.float64)
@@ -615,8 +615,8 @@ def build_fused_photometry_ztable(model):
     Returns
     -------
     callable
-        JIT-compiled function: (sfr_on_ssp, log_z, tau_v1, tau_v2,
-        dust_n, redshift, ...) -> photometry array.
+        JIT-compiled function: (sfr_on_ssp, log_z_abs, tau_bc, tau_diff,
+        dust_slope, redshift, ...) -> photometry array.
     """
     from diffsed.models.dust.attenuation import get_dust_law
     from diffsed.models.sps.dsps_wrapper import (
@@ -660,10 +660,10 @@ def build_fused_photometry_ztable(model):
     @jax.jit
     def fused_phot_ztable(
         sfr_on_ssp,
-        log_z,
-        tau_v1,
-        tau_v2,
-        dust_n,
+        log_z_abs,
+        tau_bc,
+        tau_diff,
+        dust_slope,
         redshift,
         f_obscuration=0.0,
         dust_bump_strength=0.0,
@@ -679,10 +679,10 @@ def build_fused_photometry_ztable(model):
         agn_log_ledd=-1.0,
     ):
         sfr = sfr_on_ssp.astype(fdt)
-        lz = jnp.asarray(log_z, dtype=fdt)
-        tv1 = jnp.asarray(tau_v1, dtype=fdt)
-        tv2 = jnp.asarray(tau_v2, dtype=fdt)
-        dn = jnp.asarray(dust_n, dtype=fdt)
+        lz = jnp.asarray(log_z_abs, dtype=fdt)
+        tv1 = jnp.asarray(tau_bc, dtype=fdt)
+        tv2 = jnp.asarray(tau_diff, dtype=fdt)
+        dn = jnp.asarray(dust_slope, dtype=fdt)
         z = jnp.asarray(redshift, dtype=fdt)
         f_obs = jnp.asarray(f_obscuration, dtype=fdt)
         bump = jnp.asarray(dust_bump_strength, dtype=fdt)

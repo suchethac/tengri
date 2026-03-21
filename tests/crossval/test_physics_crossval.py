@@ -116,16 +116,16 @@ class TestPSDCrossval:
         """Integral of DRW PSD should relate to variance."""
         from diffsed.models.sfh.psd_models import drw_variance, psd_drw
 
-        sigma_ps, tau_ps = 1.5, 50e6
+        psd_sigma, psd_tau_yr = 1.5, 50e6
         n_grid = 512
         d_log_age = 0.02
 
         freqs = jnp.fft.rfftfreq(n_grid, d=d_log_age)
         freqs = freqs[1:]
-        psd = psd_drw(freqs, sigma_ps, tau_ps)
+        psd = psd_drw(freqs, psd_sigma, psd_tau_yr)
 
         variance_from_psd = float(jnp.sum(psd) * (freqs[1] - freqs[0]))
-        variance_analytic = float(drw_variance(sigma_ps))
+        variance_analytic = float(drw_variance(psd_sigma))
 
         # Both should be positive and in the same ballpark
         assert variance_from_psd > 0
@@ -136,7 +136,7 @@ class TestPSDCrossval:
         from diffsed.models.sfh.psd_models import psd_drw
 
         freqs = jnp.logspace(-3, 1, 100)
-        psd = np.asarray(psd_drw(freqs, sigma_ps=1.0, tau_ps=1e7))
+        psd = np.asarray(psd_drw(freqs, psd_sigma=1.0, psd_tau_yr=1e7))
 
         # High freq should be much less than low freq
         assert psd[-1] < psd[0] * 0.1

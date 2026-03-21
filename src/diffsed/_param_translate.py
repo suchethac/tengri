@@ -4,16 +4,16 @@ Naming Conventions
 ------------------
 Metallicity:
     Public:   met_logzsol     = log10(Z/Zsun) (relative to solar)
-    Internal: log_z           = log10(Z) (absolute)
+    Internal: log_z_abs       = log10(Z) (absolute)
     Offset:   LOG10_ZSUN = -1.8477 (Asplund 2009)
 
 Dust:
     Public:   dust_tau_bc, dust_tau_diff, dust_slope
-    Internal: tau_v1, tau_v2, dust_n
+    Internal: tau_bc, tau_diff, dust_slope
 
 PSD:
     Public:   sfh_field_psd_sigma, sfh_field_psd_tau_myr
-    Internal: sigma_ps, tau_ps (years, not Myr)
+    Internal: psd_sigma, psd_tau_yr (years, not Myr)
 
 Ages:
     ssp_log_ages_yr = log10(age/yr) on SSP grid
@@ -47,16 +47,16 @@ LOG10_ZSUN = -1.8477116556169435
 # ---------------------------------------------------------------------------
 
 _EVOLVING_MET_PARAM_MAP = {
-    "met_logzsol_0": ("log_z_initial", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
-    "met_logzsol_final": ("log_z_final", 1.0, LOG10_ZSUN),
+    "met_logzsol_0": ("log_z_abs_initial", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
+    "met_logzsol_final": ("log_z_abs_final", 1.0, LOG10_ZSUN),
 }
 
 _NON_SFH_PARAM_MAP = {
-    "met_logzsol": ("log_z", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
+    "met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
     "met_alpha_fe": ("alpha_fe", 1.0, 0.0),  # [alpha/Fe] in dex
-    "dust_tau_bc": ("tau_v1", 1.0, 0.0),
-    "dust_tau_diff": ("tau_v2", 1.0, 0.0),
-    "dust_slope": ("dust_n", 1.0, 0.0),
+    "dust_tau_bc": ("tau_bc", 1.0, 0.0),
+    "dust_tau_diff": ("tau_diff", 1.0, 0.0),
+    "dust_slope": ("dust_slope", 1.0, 0.0),
     "redshift": ("redshift", 1.0, 0.0),
     "noise_frac_cal": ("noise_frac_cal", 1.0, 0.0),
     # Dust extra params (identity mapping — no unit conversion)
@@ -86,12 +86,12 @@ PARAM_MAP = {
     "sfh_beta": ("beta", 1.0, 0.0),
     "sfh_tau_peak_gyr": ("tau_sfh", 1e9, 0.0),
     "sfh_peak_sfr": ("sfr_norm", 1.0, 0.0),
-    "psd_sigma": ("sigma_ps", 1.0, 0.0),
-    "psd_tau_myr": ("tau_ps", 1e6, 0.0),
-    "met_logzsol": ("log_z", 1.0, LOG10_ZSUN),
-    "dust_tau_bc": ("tau_v1", 1.0, 0.0),
-    "dust_tau_diff": ("tau_v2", 1.0, 0.0),
-    "dust_slope": ("dust_n", 1.0, 0.0),
+    "psd_sigma": ("psd_sigma", 1.0, 0.0),
+    "psd_tau_myr": ("psd_tau_yr", 1e6, 0.0),
+    "met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN),
+    "dust_tau_bc": ("tau_bc", 1.0, 0.0),
+    "dust_tau_diff": ("tau_diff", 1.0, 0.0),
+    "dust_slope": ("dust_slope", 1.0, 0.0),
     "redshift": ("redshift", 1.0, 0.0),
 }
 

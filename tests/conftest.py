@@ -31,19 +31,19 @@ def d_log_age(log_age_grid):
 @pytest.fixture
 def drw_params_moderate():
     """Moderate burstiness DRW parameters."""
-    return {"sigma_ps": 1.0, "tau_ps": 50e6}  # 50 Myr
+    return {"psd_sigma": 1.0, "psd_tau_yr": 50e6}  # 50 Myr
 
 
 @pytest.fixture
 def drw_params_smooth():
     """Smooth (low burstiness) DRW parameters."""
-    return {"sigma_ps": 0.5, "tau_ps": 200e6}  # 200 Myr
+    return {"psd_sigma": 0.5, "psd_tau_yr": 200e6}  # 200 Myr
 
 
 @pytest.fixture
 def drw_params_bursty():
     """Highly bursty DRW parameters."""
-    return {"sigma_ps": 3.0, "tau_ps": 5e6}  # 5 Myr
+    return {"psd_sigma": 3.0, "psd_tau_yr": 5e6}  # 5 Myr
 
 
 @pytest.fixture
@@ -52,6 +52,6 @@ def sqrt_power_moderate(d_log_age, drw_params_moderate):
     return compute_sqrt_power_drw(
         256,
         float(d_log_age),
-        drw_params_moderate["sigma_ps"],
-        drw_params_moderate["tau_ps"],
+        drw_params_moderate["psd_sigma"],
+        drw_params_moderate["psd_tau_yr"],
     )

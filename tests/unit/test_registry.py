@@ -224,7 +224,7 @@ class TestComputeFieldGP:
         gp_x, k0_half = compute_field_gp(
             xi=xi,
             psd_sigma=0.5,
-            psd_tau_myr=50.0,
+            psd_tau_yr=50e6,
             n_grid=64,
             d_log_age=0.065,
         )
@@ -239,7 +239,7 @@ class TestComputeFieldGP:
         gp_x, k0_half = compute_field_gp(
             xi=xi,
             psd_sigma=1.0,
-            psd_tau_myr=50.0,
+            psd_tau_yr=50e6,
             n_grid=64,
             d_log_age=0.065,
         )

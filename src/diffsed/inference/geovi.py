@@ -93,16 +93,16 @@ def fit_geovi(
 
     # Define the bounds for sigmoid transforms
     bounds = {
-        "sigma_ps": prior_config.sigma_ps,
-        "tau_ps": prior_config.tau_ps,
+        "psd_sigma": prior_config.psd_sigma,
+        "psd_tau_yr": prior_config.psd_tau_yr,
         "alpha": prior_config.alpha,
         "beta": prior_config.beta,
         "tau_sfh": prior_config.tau_sfh,
         "sfr_norm": prior_config.sfr_norm,
-        "log_z": prior_config.log_z,
-        "tau_v1": prior_config.tau_v1,
-        "tau_v2": prior_config.tau_v2,
-        "dust_n": prior_config.dust_n,
+        "log_z_abs": prior_config.log_z_abs,
+        "tau_bc": prior_config.tau_bc,
+        "tau_diff": prior_config.tau_diff,
+        "dust_slope": prior_config.dust_slope,
     }
 
     def _build_params(primals):

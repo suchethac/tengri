@@ -353,6 +353,7 @@ _register(
 # Register tabulated SFH model (for simulations)
 # ---------------------------------------------------------------------------
 
+
 def _table_sfh_placeholder(t_lookback, **kwargs):
     """Placeholder — tabulated SFH is handled directly in Model._compute_sed_components."""
     return jnp.zeros_like(t_lookback)
@@ -431,7 +432,7 @@ _register(
         },
         internal_param_map={
             "sfh_field_psd_sigma": ("psd_sigma", 1.0, 0.0),
-            "sfh_field_psd_tau_myr": ("psd_tau_myr", 1.0, 0.0),
+            "sfh_field_psd_tau_myr": ("psd_tau_yr", 1e6, 0.0),
         },
         composition_type="modulator",
     )
@@ -551,7 +552,7 @@ def resolve_sfh(
 def compute_field_gp(
     xi: jnp.ndarray,
     psd_sigma: float,
-    psd_tau_myr: float,
+    psd_tau_yr: float,
     n_grid: int,
     d_log_age: float,
     field_model: str = "drw",
@@ -564,8 +565,8 @@ def compute_field_gp(
         Latent vector (xi ~ N(0, I)).
     psd_sigma : float
         PSD amplitude (dex).
-    psd_tau_myr : float
-        PSD timescale (Myr).
+    psd_tau_yr : float
+        PSD timescale (yr).
     n_grid : int
         Grid size.
     d_log_age : float
@@ -581,8 +582,7 @@ def compute_field_gp(
         Lognormal correction: K(0)/2 = sigma_PS^2 / 4.
     """
     sqrt_power_fn = FIELD_MODEL_REGISTRY[field_model]
-    tau_yr = psd_tau_myr * 1e6
-    sqrt_power = sqrt_power_fn(n_grid, d_log_age, psd_sigma, tau_yr)
+    sqrt_power = sqrt_power_fn(n_grid, d_log_age, psd_sigma, psd_tau_yr)
     gp_x = gp_from_xi(xi, sqrt_power, n_grid)
     k0_half = drw_variance(psd_sigma) / 2.0
     return gp_x, k0_half

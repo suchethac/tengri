@@ -44,9 +44,9 @@ class PriorConfig(NamedTuple):
 
     Attributes
     ----------
-    sigma_ps : tuple
+    psd_sigma : tuple
         (lo, hi) bounds for PSD amplitude.
-    tau_ps : tuple
+    psd_tau_yr : tuple
         (lo, hi) bounds for PSD timescale in years.
     alpha : tuple
         (lo, hi) bounds for falling power-law index.
@@ -56,26 +56,26 @@ class PriorConfig(NamedTuple):
         (lo, hi) bounds for SFH turnover in years.
     sfr_norm : tuple
         (lo, hi) bounds for SFR normalization.
-    log_z : tuple
-        (lo, hi) bounds for log metallicity.
-    tau_v1 : tuple
+    log_z_abs : tuple
+        (lo, hi) bounds for log metallicity (absolute).
+    tau_bc : tuple
         (lo, hi) bounds for birth cloud dust.
-    tau_v2 : tuple
+    tau_diff : tuple
         (lo, hi) bounds for diffuse dust.
-    dust_n : tuple
+    dust_slope : tuple
         (lo, hi) bounds for dust power-law slope.
     """
 
-    sigma_ps: tuple = (0.1, 5.0)
-    tau_ps: tuple = (1e6, 500e6)
+    psd_sigma: tuple = (0.1, 5.0)
+    psd_tau_yr: tuple = (1e6, 500e6)
     alpha: tuple = (0.1, 5.0)
     beta: tuple = (0.1, 3.0)
     tau_sfh: tuple = (0.1e9, 12e9)
     sfr_norm: tuple = (0.01, 200.0)
-    log_z: tuple = (-2.0, 0.2)
-    tau_v1: tuple = (0.0, 4.0)
-    tau_v2: tuple = (0.0, 3.0)
-    dust_n: tuple = (-1.5, 0.0)
+    log_z_abs: tuple = (-2.0, 0.2)
+    tau_bc: tuple = (0.0, 4.0)
+    tau_diff: tuple = (0.0, 3.0)
+    dust_slope: tuple = (-1.5, 0.0)
 
 
 DEFAULT_PRIOR = PriorConfig()
@@ -111,16 +111,16 @@ def build_loss_fn(forward_model, data, noise, prior_config=None, data_type="phot
 
     # Build the bounded parameter transform
     bounds = {
-        "sigma_ps": prior_config.sigma_ps,
-        "tau_ps": prior_config.tau_ps,
+        "psd_sigma": prior_config.psd_sigma,
+        "psd_tau_yr": prior_config.psd_tau_yr,
         "alpha": prior_config.alpha,
         "beta": prior_config.beta,
         "tau_sfh": prior_config.tau_sfh,
         "sfr_norm": prior_config.sfr_norm,
-        "log_z": prior_config.log_z,
-        "tau_v1": prior_config.tau_v1,
-        "tau_v2": prior_config.tau_v2,
-        "dust_n": prior_config.dust_n,
+        "log_z_abs": prior_config.log_z_abs,
+        "tau_bc": prior_config.tau_bc,
+        "tau_diff": prior_config.tau_diff,
+        "dust_slope": prior_config.dust_slope,
     }
 
     def loss(params_unbounded):
@@ -178,16 +178,16 @@ def initialize_params(key, n_grid=256, prior_config=None):
 
     return {
         "xi": 0.1 * jax.random.normal(keys[0], shape=(n_grid,)),
-        "sigma_ps": jax.random.normal(keys[1]) * 0.5,
-        "tau_ps": jax.random.normal(keys[2]) * 0.5,
+        "psd_sigma": jax.random.normal(keys[1]) * 0.5,
+        "psd_tau_yr": jax.random.normal(keys[2]) * 0.5,
         "alpha": jax.random.normal(keys[3]) * 0.3,
         "beta": jax.random.normal(keys[4]) * 0.3,
         "tau_sfh": jax.random.normal(keys[5]) * 0.3,
         "sfr_norm": jax.random.normal(keys[6]) * 0.3,
-        "log_z": jax.random.normal(keys[7]) * 0.3,
-        "tau_v1": jax.random.normal(keys[8]) * 0.3,
-        "tau_v2": jax.random.normal(keys[9]) * 0.3,
-        "dust_n": jax.random.normal(keys[10]) * 0.3,
+        "log_z_abs": jax.random.normal(keys[7]) * 0.3,
+        "tau_bc": jax.random.normal(keys[8]) * 0.3,
+        "tau_diff": jax.random.normal(keys[9]) * 0.3,
+        "dust_slope": jax.random.normal(keys[10]) * 0.3,
     }
 
 
@@ -212,16 +212,16 @@ def unbounded_to_physical(params_unbounded, prior_config=None):
     from diffsed.utils.transforms import to_bounded
 
     bounds = {
-        "sigma_ps": prior_config.sigma_ps,
-        "tau_ps": prior_config.tau_ps,
+        "psd_sigma": prior_config.psd_sigma,
+        "psd_tau_yr": prior_config.psd_tau_yr,
         "alpha": prior_config.alpha,
         "beta": prior_config.beta,
         "tau_sfh": prior_config.tau_sfh,
         "sfr_norm": prior_config.sfr_norm,
-        "log_z": prior_config.log_z,
-        "tau_v1": prior_config.tau_v1,
-        "tau_v2": prior_config.tau_v2,
-        "dust_n": prior_config.dust_n,
+        "log_z_abs": prior_config.log_z_abs,
+        "tau_bc": prior_config.tau_bc,
+        "tau_diff": prior_config.tau_diff,
+        "dust_slope": prior_config.dust_slope,
     }
 
     params = {"xi": params_unbounded["xi"]}

@@ -217,26 +217,26 @@ class TestDRWJacobianCorrection:
         d = (10.14 - 6.0) / (N_GRID - 1)
         key = jax.random.PRNGKey(42)
 
-        for sigma_ps in [0.5, 1.0, 2.0]:
-            sqrt_power = compute_sqrt_power_drw(N_GRID, d, sigma_ps, 50e6)
+        for psd_sigma in [0.5, 1.0, 2.0]:
+            sqrt_power = compute_sqrt_power_drw(N_GRID, d, psd_sigma, 50e6)
             batch = generate_gp_batch(key, sqrt_power, N_GRID, 1000)
             var = float(jnp.var(batch))
 
             # Variance should be finite, positive, and bounded
-            assert var > 0, f"GP variance = {var} for sigma_ps={sigma_ps}"
+            assert var > 0, f"GP variance = {var} for psd_sigma={psd_sigma}"
             assert var < 1e6, f"GP variance = {var} too large"
 
     def test_larger_sigma_larger_variance(self):
-        """GP variance increases with sigma_ps."""
+        """GP variance increases with psd_sigma."""
         d = (10.14 - 6.0) / (N_GRID - 1)
         key = jax.random.PRNGKey(42)
         n_real = 2000
 
         vars = []
-        for sigma_ps in [0.5, 1.0, 2.0]:
-            sqrt_power = compute_sqrt_power_drw(N_GRID, d, sigma_ps, 50e6)
+        for psd_sigma in [0.5, 1.0, 2.0]:
+            sqrt_power = compute_sqrt_power_drw(N_GRID, d, psd_sigma, 50e6)
             batch = generate_gp_batch(key, sqrt_power, N_GRID, n_real)
             vars.append(float(jnp.var(batch)))
 
-        # Variance should increase monotonically with sigma_ps
+        # Variance should increase monotonically with psd_sigma
         assert vars[0] < vars[1] < vars[2]

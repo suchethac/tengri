@@ -275,7 +275,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         weights = dsps_age_w * _total_mass_formed  # (n_age,) Msun
 
         # Metallicity: dispatch to linear or smooth interpolation
-        log_z_solar = p.get("log_z", -1.8477)
+        log_z_solar = p.get("log_z_abs", -1.8477)
         log_z_eff = effective_metallicity(log_z_solar, alpha_fe)
         ssp_flux_at_z = interp_metallicity(model, log_z_eff)
 
@@ -309,14 +309,14 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         t_universe_gyr = model._t_universe_gyr(z)
         log_z_per_age = compute_log_z_evolving(
             model.ssp_data.ssp_lg_age_gyr,
-            p["log_z_initial"],
-            p["log_z_final"],
+            p["log_z_abs_initial"],
+            p["log_z_abs_final"],
             t_universe_gyr,
         )
         log_z_per_age = effective_metallicity(log_z_per_age, alpha_fe)
         ssp_flux_at_z = interp_metallicity_evolving(model, log_z_per_age)
     else:
-        log_z_eff = effective_metallicity(p["log_z"], alpha_fe)
+        log_z_eff = effective_metallicity(p["log_z_abs"], alpha_fe)
         ssp_flux_at_z = interp_metallicity(model, log_z_eff)
 
         # --- Fast JIT path: dust + einsum in one compiled kernel ---
@@ -329,9 +329,9 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
             sed_attenuated, sed_intrinsic_jit = model._jit_exact_sed(
                 weights,
                 ssp_flux_at_z,
-                p["tau_v1"],
-                p["tau_v2"],
-                n_slope=p.get("dust_n", -0.7),
+                p["tau_bc"],
+                p["tau_diff"],
+                n_slope=p.get("dust_slope", -0.7),
                 dust_bump_strength=p.get("dust_bump_strength", 0.0),
                 dust_delta=p.get("dust_delta", 0.0),
                 dust_Rv=p.get("dust_Rv", 3.1),
@@ -355,12 +355,12 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         dust_atten = two_component_dust_fast(
             wave_dt,
             dust_age_w,
-            tau_v1=p["tau_v1"],
-            tau_v2=p["tau_v2"],
+            tau_v1=p["tau_bc"],
+            tau_v2=p["tau_diff"],
             law_bc=model._dust_law_bc,
             law_diff=model._dust_law_diff,
             f_obscuration=p.get("f_obscuration", 0.0),
-            n_slope=p.get("dust_n", -0.7),
+            n_slope=p.get("dust_slope", -0.7),
             dust_bump_strength=p.get("dust_bump_strength", 0.0),
             dust_delta=p.get("dust_delta", 0.0),
             dust_Rv=p.get("dust_Rv", 3.1),
@@ -398,12 +398,12 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         dust_atten = two_component_dust_fast(
             wave_dt,
             dust_age_w,
-            tau_v1=p["tau_v1"],
-            tau_v2=p["tau_v2"],
+            tau_v1=p["tau_bc"],
+            tau_v2=p["tau_diff"],
             law_bc=model._dust_law_bc,
             law_diff=model._dust_law_diff,
             f_obscuration=p.get("f_obscuration", 0.0),
-            n_slope=p.get("dust_n", -0.7),
+            n_slope=p.get("dust_slope", -0.7),
             dust_bump_strength=p.get("dust_bump_strength", 0.0),
             dust_delta=p.get("dust_delta", 0.0),
             dust_Rv=p.get("dust_Rv", 3.1),
@@ -428,7 +428,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
             ssp_weights=weights,
             ssp_wave=model.ssp_data.ssp_wave,
             ssp_log_ages_yr=model.ssp_log_ages_yr,
-            log_z=p["log_z"],
+            log_z=p["log_z_abs"],
             neb_logU=p.get("neb_logU", -3.0),
             neb_logZ_gas=p.get("neb_logZ_gas", None),
             neb_fesc=p.get("neb_fesc", 0.0),

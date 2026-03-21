@@ -161,7 +161,7 @@ def generate_gp_batch(
 
 
 def compute_sqrt_power_drw(
-    n_points: int, d_log_age: float, sigma_ps: float, tau_ps: float, log_age_ref: float = 8.0
+    n_points: int, d_log_age: float, psd_sigma: float, psd_tau_yr: float, log_age_ref: float = 8.0
 ) -> jnp.ndarray:
     """Pre-compute the DRW amplitude operator for the log-age grid.
 
@@ -179,9 +179,9 @@ def compute_sqrt_power_drw(
         Grid size.
     d_log_age : float
         Grid spacing in dex.
-    sigma_ps : float
+    psd_sigma : float
         DRW PSD amplitude.
-    tau_ps : float
+    psd_tau_yr : float
         DRW damping timescale (yr).
     log_age_ref : float
         Reference log10(age/yr) for Jacobian correction. Default 8.0 (100 Myr).
@@ -204,7 +204,7 @@ def compute_sqrt_power_drw(
     omega_phys = q / (t_ref * ln10)
 
     # Evaluate PSD in physical domain and apply Jacobian
-    p_phys = psd_drw(omega_phys, sigma_ps, tau_ps)
+    p_phys = psd_drw(omega_phys, psd_sigma, psd_tau_yr)
     p_logage = p_phys / (t_ref * ln10)
 
     return psd_to_sqrt_power(p_logage, d_log_age)

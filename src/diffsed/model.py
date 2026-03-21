@@ -471,7 +471,7 @@ class Model:
             gp_x, k0_half = compute_field_gp(
                 xi=p["xi"],
                 psd_sigma=p["psd_sigma"],
-                psd_tau_myr=p["psd_tau_myr"],
+                psd_tau_yr=p["psd_tau_yr"],
                 n_grid=self._n_grid,
                 d_log_age=float(self.d_log_age),
                 field_model=self._field_model,
@@ -500,7 +500,7 @@ class Model:
             gp_x, k0_half = compute_field_gp(
                 xi=p["xi"],
                 psd_sigma=p["psd_sigma"],
-                psd_tau_myr=p["psd_tau_myr"],
+                psd_tau_yr=p["psd_tau_yr"],
                 n_grid=self._n_grid,
                 d_log_age=float(self.d_log_age),
                 field_model=self._field_model,
@@ -669,7 +669,7 @@ class Model:
                 interpolate_mass_remaining,
             )
 
-            log_z = p.get("log_z", 0.0)
+            log_z = p.get("log_z_abs", 0.0)
             mr_at_met = interpolate_mass_remaining(
                 self.ssp_data.ssp_mass_remaining,
                 self.ssp_data.ssp_lgmet,
@@ -702,9 +702,9 @@ class Model:
         mw_z = compute_mass_weighted_metallicity(
             weights,
             self.ssp_ages_yr,
-            p.get("log_z", 0.0),
-            log_z_initial=p.get("log_z_initial"),
-            log_z_final=p.get("log_z_final"),
+            p.get("log_z_abs", 0.0),
+            log_z_initial=p.get("log_z_abs_initial"),
+            log_z_final=p.get("log_z_abs_final"),
         )
 
         return SFHQuantities(
@@ -815,9 +815,9 @@ class Model:
             ssp_flux_at_z,
             self.ssp_ages_yr,
             wave,
-            p.get("log_z", 0.0),
-            log_z_initial=p.get("log_z_initial"),
-            log_z_final=p.get("log_z_final"),
+            p.get("log_z_abs", 0.0),
+            log_z_initial=p.get("log_z_abs_initial"),
+            log_z_final=p.get("log_z_abs_final"),
         )
 
         return SEDQuantities(
@@ -916,10 +916,10 @@ class Model:
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
         return self._fused_photometry(
             sfr_on_ssp,
-            p["log_z"],
-            p["tau_v1"],
-            p["tau_v2"],
-            p["dust_n"],
+            p["log_z_abs"],
+            p["tau_bc"],
+            p["tau_diff"],
+            p["dust_slope"],
             **self._get_dust_kwargs(p),
             **self._get_agn_kwargs(p),
         )
@@ -932,10 +932,10 @@ class Model:
         z = self._get_redshift(params)
         return self._fused_photometry_ztable(
             sfr_on_ssp,
-            p["log_z"],
-            p["tau_v1"],
-            p["tau_v2"],
-            p["dust_n"],
+            p["log_z_abs"],
+            p["tau_bc"],
+            p["tau_diff"],
+            p["dust_slope"],
             z,
             **self._get_dust_kwargs(p),
             **self._get_agn_kwargs(p),
@@ -1075,10 +1075,10 @@ class Model:
         sigma_v = params.get("sigma_v", 0.0) if self._has_sigma_v else 0.0
         flux = self._fused_spectrum(
             sfr_on_ssp,
-            p["log_z"],
-            p["tau_v1"],
-            p["tau_v2"],
-            p["dust_n"],
+            p["log_z_abs"],
+            p["tau_bc"],
+            p["tau_diff"],
+            p["dust_slope"],
             sigma_v,
             **self._get_dust_kwargs(p),
             **self._get_agn_kwargs(p),

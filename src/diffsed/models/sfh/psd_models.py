@@ -21,7 +21,7 @@ import jax.numpy as jnp
 # ---------------------------------------------------------------------------
 
 
-def psd_drw(omega: jnp.ndarray, sigma_ps: float, tau_ps: float) -> jnp.ndarray:
+def psd_drw(omega: jnp.ndarray, psd_sigma: float, psd_tau_yr: float) -> jnp.ndarray:
     """Damped random walk (Lorentzian) power spectral density.
 
     P(omega) = sigma_PS^2 * tau_PS / (1 + (tau_PS * omega)^2)
@@ -30,9 +30,9 @@ def psd_drw(omega: jnp.ndarray, sigma_ps: float, tau_ps: float) -> jnp.ndarray:
     ----------
     omega : array
         Angular frequency (rad / yr).
-    sigma_ps : float
+    psd_sigma : float
         PSD amplitude.
-    tau_ps : float
+    psd_tau_yr : float
         Characteristic damping timescale (yr).
 
     Returns
@@ -40,10 +40,10 @@ def psd_drw(omega: jnp.ndarray, sigma_ps: float, tau_ps: float) -> jnp.ndarray:
     array
         Power spectral density at each omega.
     """
-    return sigma_ps**2 * tau_ps / (1.0 + (tau_ps * omega) ** 2)
+    return psd_sigma**2 * psd_tau_yr / (1.0 + (psd_tau_yr * omega) ** 2)
 
 
-def drw_acf(delta_t: jnp.ndarray, sigma_ps: float, tau_ps: float) -> jnp.ndarray:
+def drw_acf(delta_t: jnp.ndarray, psd_sigma: float, psd_tau_yr: float) -> jnp.ndarray:
     """Analytic autocorrelation function for DRW.
 
     xi(dt) = (sigma_PS^2 / 2) * exp(-|dt| / tau_PS)
@@ -52,9 +52,9 @@ def drw_acf(delta_t: jnp.ndarray, sigma_ps: float, tau_ps: float) -> jnp.ndarray
     ----------
     delta_t : array
         Time lag (yr).
-    sigma_ps : float
+    psd_sigma : float
         PSD amplitude.
-    tau_ps : float
+    psd_tau_yr : float
         Damping timescale (yr).
 
     Returns
@@ -62,12 +62,12 @@ def drw_acf(delta_t: jnp.ndarray, sigma_ps: float, tau_ps: float) -> jnp.ndarray
     array
         Autocovariance at each lag.
     """
-    return 0.5 * sigma_ps**2 * jnp.exp(-jnp.abs(delta_t) / tau_ps)
+    return 0.5 * psd_sigma**2 * jnp.exp(-jnp.abs(delta_t) / psd_tau_yr)
 
 
-def drw_variance(sigma_ps: float) -> float:
+def drw_variance(psd_sigma: float) -> float:
     """Stationary variance of DRW: sigma_x^2 = sigma_PS^2 / 2."""
-    return 0.5 * sigma_ps**2
+    return 0.5 * psd_sigma**2
 
 
 def psd_to_sqrt_power(psd_values: jnp.ndarray, d_grid: float) -> jnp.ndarray:

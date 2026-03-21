@@ -66,7 +66,7 @@ class TestBuildParamMap:
     def test_met_unit_conversion_present(self):
         pm = _build_param_map(["tsnorm"])
         int_name, scale, offset = pm["met_logzsol"]
-        assert int_name == "log_z"
+        assert int_name == "log_z_abs"
         assert scale == 1.0
         assert offset == LOG10_ZSUN
 
@@ -141,8 +141,8 @@ class TestGetInternalParams:
 
     def _simple_map(self):
         return {
-            "met_logzsol": ("log_z", 1.0, LOG10_ZSUN),
-            "dust_tau_bc": ("tau_v1", 1.0, 0.0),
+            "met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN),
+            "dust_tau_bc": ("tau_bc", 1.0, 0.0),
         }
 
     def test_scale_and_offset_applied(self):
@@ -150,40 +150,40 @@ class TestGetInternalParams:
         spec = _DummySpec()
         params = {"met_logzsol": 0.0, "dust_tau_bc": 0.3}
         result = get_internal_params(params, param_map, spec, has_field=False)
-        assert abs(result["log_z"] - LOG10_ZSUN) < 1e-12  # 0.0 * 1.0 + LOG10_ZSUN
-        assert abs(result["tau_v1"] - 0.3) < 1e-12
+        assert abs(result["log_z_abs"] - LOG10_ZSUN) < 1e-12  # 0.0 * 1.0 + LOG10_ZSUN
+        assert abs(result["tau_bc"] - 0.3) < 1e-12
 
     def test_met_logzsol_solar_is_log10zsun(self):
-        """met_logzsol=0 (solar) should map to log_z = LOG10_ZSUN."""
-        param_map = {"met_logzsol": ("log_z", 1.0, LOG10_ZSUN)}
+        """met_logzsol=0 (solar) should map to log_z_abs = LOG10_ZSUN."""
+        param_map = {"met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN)}
         spec = _DummySpec()
         params = {"met_logzsol": 0.0}
         result = get_internal_params(params, param_map, spec, has_field=False)
-        assert abs(result["log_z"] - LOG10_ZSUN) < 1e-12
+        assert abs(result["log_z_abs"] - LOG10_ZSUN) < 1e-12
 
     def test_met_logzsol_above_solar(self):
-        """met_logzsol=0.2 should map to log_z = 0.2 + LOG10_ZSUN."""
-        param_map = {"met_logzsol": ("log_z", 1.0, LOG10_ZSUN)}
+        """met_logzsol=0.2 should map to log_z_abs = 0.2 + LOG10_ZSUN."""
+        param_map = {"met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN)}
         spec = _DummySpec()
         params = {"met_logzsol": 0.2}
         result = get_internal_params(params, param_map, spec, has_field=False)
-        assert abs(result["log_z"] - (0.2 + LOG10_ZSUN)) < 1e-12
+        assert abs(result["log_z_abs"] - (0.2 + LOG10_ZSUN)) < 1e-12
 
     def test_fixed_param_from_spec(self):
         """When a param is absent from params but fixed in spec, use spec value."""
-        param_map = {"dust_tau_bc": ("tau_v1", 1.0, 0.0)}
+        param_map = {"dust_tau_bc": ("tau_bc", 1.0, 0.0)}
         spec = _DummySpec(fixed_params={"dust_tau_bc": 0.5})
         params = {}
         result = get_internal_params(params, param_map, spec, has_field=False)
-        assert abs(result["tau_v1"] - 0.5) < 1e-12
+        assert abs(result["tau_bc"] - 0.5) < 1e-12
 
     def test_legacy_alias_fallback(self):
         """psd_sigma in params should be accepted for sfh_field_psd_sigma."""
-        param_map = {"sfh_field_psd_sigma": ("sigma_ps", 1.0, 0.0)}
+        param_map = {"sfh_field_psd_sigma": ("psd_sigma", 1.0, 0.0)}
         spec = _DummySpec()
         params = {"psd_sigma": 0.7}
         result = get_internal_params(params, param_map, spec, has_field=False)
-        assert abs(result["sigma_ps"] - 0.7) < 1e-12
+        assert abs(result["psd_sigma"] - 0.7) < 1e-12
 
     def test_has_field_passes_xi(self):
         param_map = {}
@@ -209,7 +209,7 @@ class TestGetInternalParams:
         assert "xi" not in result
 
     def test_unrecognized_keys_warn(self):
-        param_map = {"met_logzsol": ("log_z", 1.0, LOG10_ZSUN)}
+        param_map = {"met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN)}
         spec = _DummySpec()
         params = {"met_logzsol": 0.0, "totally_unknown_param": 99.0}
         with warnings.catch_warnings(record=True) as w:
@@ -221,7 +221,7 @@ class TestGetInternalParams:
 
     def test_free_param_missing_raises(self):
         """A free param absent from both params and spec should raise KeyError."""
-        param_map = {"dust_tau_bc": ("tau_v1", 1.0, 0.0)}
+        param_map = {"dust_tau_bc": ("tau_bc", 1.0, 0.0)}
 
         class _FreeSpec:
             def get_distribution(self, name):
@@ -231,7 +231,7 @@ class TestGetInternalParams:
             get_internal_params({}, param_map, _FreeSpec(), has_field=False)
 
     def test_does_not_mutate_params(self):
-        param_map = {"met_logzsol": ("log_z", 1.0, LOG10_ZSUN)}
+        param_map = {"met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN)}
         spec = _DummySpec()
         params = {"met_logzsol": 0.0}
         original = dict(params)
@@ -253,12 +253,12 @@ class TestLegacyParamMap:
 
     def test_unit_conversion_tau_peak(self):
         _, scale, offset = PARAM_MAP["sfh_tau_peak_gyr"]
-        assert scale == 1e9  # Gyr → yr
+        assert scale == 1e9  # Gyr -> yr
         assert offset == 0.0
 
     def test_unit_conversion_psd_tau(self):
         _, scale, offset = PARAM_MAP["psd_tau_myr"]
-        assert scale == 1e6  # Myr → yr
+        assert scale == 1e6  # Myr -> yr
         assert offset == 0.0
 
     def test_metallicity_solar_offset(self):

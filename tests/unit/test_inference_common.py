@@ -22,26 +22,26 @@ class TestPriorConfig:
         p = DEFAULT_PRIOR
         assert len(p) == 10
         for name in [
-            "sigma_ps",
-            "tau_ps",
+            "psd_sigma",
+            "psd_tau_yr",
             "alpha",
             "beta",
             "tau_sfh",
             "sfr_norm",
-            "log_z",
-            "tau_v1",
-            "tau_v2",
-            "dust_n",
+            "log_z_abs",
+            "tau_bc",
+            "tau_diff",
+            "dust_slope",
         ]:
             bounds = getattr(p, name)
             assert bounds[0] < bounds[1], f"{name} bounds inverted"
 
     def test_custom_prior(self):
         """Can create prior with custom bounds."""
-        p = PriorConfig(sigma_ps=(0.5, 2.0))
-        assert p.sigma_ps == (0.5, 2.0)
+        p = PriorConfig(psd_sigma=(0.5, 2.0))
+        assert p.psd_sigma == (0.5, 2.0)
         # Others keep defaults
-        assert p.tau_ps == (1e6, 500e6)
+        assert p.psd_tau_yr == (1e6, 500e6)
 
 
 class TestInitializeParams:
@@ -53,16 +53,16 @@ class TestInitializeParams:
         params = initialize_params(key)
         required = {
             "xi",
-            "sigma_ps",
-            "tau_ps",
+            "psd_sigma",
+            "psd_tau_yr",
             "alpha",
             "beta",
             "tau_sfh",
             "sfr_norm",
-            "log_z",
-            "tau_v1",
-            "tau_v2",
-            "dust_n",
+            "log_z_abs",
+            "tau_bc",
+            "tau_diff",
+            "dust_slope",
         }
         assert set(params.keys()) == required
 
@@ -104,16 +104,16 @@ class TestUnboundedToPhysical:
 
         prior = DEFAULT_PRIOR
         for name in [
-            "sigma_ps",
-            "tau_ps",
+            "psd_sigma",
+            "psd_tau_yr",
             "alpha",
             "beta",
             "tau_sfh",
             "sfr_norm",
-            "log_z",
-            "tau_v1",
-            "tau_v2",
-            "dust_n",
+            "log_z_abs",
+            "tau_bc",
+            "tau_diff",
+            "dust_slope",
         ]:
             lo, hi = getattr(prior, name)
             val = float(params_p[name])
@@ -123,24 +123,24 @@ class TestUnboundedToPhysical:
         """Even extreme unbounded values map to within bounds."""
         params_u = {
             "xi": jnp.zeros(256),
-            "sigma_ps": jnp.array(100.0),  # very positive
-            "tau_ps": jnp.array(-100.0),  # very negative
+            "psd_sigma": jnp.array(100.0),  # very positive
+            "psd_tau_yr": jnp.array(-100.0),  # very negative
             "alpha": jnp.array(0.0),
             "beta": jnp.array(0.0),
             "tau_sfh": jnp.array(0.0),
             "sfr_norm": jnp.array(0.0),
-            "log_z": jnp.array(0.0),
-            "tau_v1": jnp.array(0.0),
-            "tau_v2": jnp.array(0.0),
-            "dust_n": jnp.array(0.0),
+            "log_z_abs": jnp.array(0.0),
+            "tau_bc": jnp.array(0.0),
+            "tau_diff": jnp.array(0.0),
+            "dust_slope": jnp.array(0.0),
         }
         params_p = unbounded_to_physical(params_u)
 
         prior = DEFAULT_PRIOR
-        # sigma_ps at u=100 should be near upper bound
-        assert float(params_p["sigma_ps"]) > 4.9
-        assert float(params_p["sigma_ps"]) <= prior.sigma_ps[1]
+        # psd_sigma at u=100 should be near upper bound
+        assert float(params_p["psd_sigma"]) > 4.9
+        assert float(params_p["psd_sigma"]) <= prior.psd_sigma[1]
 
-        # tau_ps at u=-100 should be near lower bound
-        assert float(params_p["tau_ps"]) < 2e6
-        assert float(params_p["tau_ps"]) >= prior.tau_ps[0]
+        # psd_tau_yr at u=-100 should be near lower bound
+        assert float(params_p["psd_tau_yr"]) < 2e6
+        assert float(params_p["psd_tau_yr"]) >= prior.psd_tau_yr[0]
