@@ -39,7 +39,10 @@ from typing import ClassVar, NamedTuple
 import jax
 import jax.numpy as jnp
 
-from diffsed.models.dust.attenuation import precompute_dust_age_weights
+from diffsed.models.dust.attenuation import (
+    precompute_dust_age_weights,
+    two_component_dust_fast,
+)
 from diffsed.models.observation.photometry import ab_mag_from_flux, compute_flux_density
 from diffsed.models.observation.spectroscopy import apply_lsf, compute_spectrum
 from diffsed.models.sfh.registry import compute_field_gp, resolve_sfh
@@ -1278,16 +1281,14 @@ class Model:
             log_z_eff = effective_metallicity(p["log_z"], alpha_fe)
             ssp_flux_at_z = self._interp_metallicity(log_z_eff)
 
-        # Dust attenuation (optimized: precomputed age weights + separable exp)
-        from diffsed.models.dust.attenuation import two_component_dust_separable
-
-        dust_atten = two_component_dust_separable(
+        # Dust attenuation (using precomputed age weights — avoids sigmoid recompute)
+        dust_atten = two_component_dust_fast(
             self.ssp_data.ssp_wave,
             self._dust_age_weights,
             tau_v1=p["tau_v1"],
             tau_v2=p["tau_v2"],
-            law_bc_fn=self._dust_law_bc_fn,
-            law_diff_fn=self._dust_law_diff_fn,
+            law_bc=self._dust_law_bc,
+            law_diff=self._dust_law_diff,
             f_obscuration=p.get("f_obscuration", 0.0),
             n_slope=p.get("dust_n", -0.7),
             dust_bump_strength=p.get("dust_bump_strength", 0.0),

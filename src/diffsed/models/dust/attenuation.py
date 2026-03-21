@@ -40,11 +40,10 @@ References
 - Zacharegkas et al. 2025, arXiv:2506.19919
 """
 
-from typing import Callable
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
-
 
 # ===================================================================
 # Attenuation curve registry
@@ -440,6 +439,59 @@ def two_component_dust(
     )
 
     return f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau_lambda)
+
+
+def two_component_dust_separable(
+    wavelength: jnp.ndarray,
+    dust_age_weights: jnp.ndarray,
+    tau_v1: float,
+    tau_v2: float,
+    law_bc_fn: Callable,
+    law_diff_fn: Callable,
+    f_obscuration: float = 0.0,
+    **law_params,
+) -> jnp.ndarray:
+    """Optimized dust attenuation: separates age-dependent and age-independent terms.
+
+    Exploits exp(a + b) = exp(a) * exp(b) to factor the diffuse ISM
+    component out of the (n_age, n_wave) broadcast.  The diffuse ``exp()``
+    operates on (n_wave,) instead of (n_age, n_wave), saving one full-grid
+    exponentiation.  Accepts pre-resolved law functions (no dict lookup).
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid (Angstrom).
+    dust_age_weights : array, shape (n_ages,)
+        From ``precompute_dust_age_weights`` (precomputed at Model init).
+    tau_v1, tau_v2 : float
+        Birth cloud and diffuse ISM optical depths.
+    law_bc_fn, law_diff_fn : callable
+        Pre-resolved dust law functions (e.g. ``get_dust_law("calzetti")``).
+    f_obscuration : float
+        Unattenuated fraction [0, 1].
+    **law_params
+        Passed to law functions.
+
+    Returns
+    -------
+    array, shape (n_ages, n_wave)
+        Multiplicative attenuation factor in [0, 1].
+    """
+    k_bc = law_bc_fn(wavelength, **law_params)
+    k_diff = law_diff_fn(wavelength, **law_params)
+
+    # Diffuse ISM: age-independent → (n_wave,) exp instead of (n_age, n_wave)
+    diffuse_trans = jnp.exp(-tau_v2 * k_diff)  # (n_wave,)
+
+    # Birth cloud: age-dependent outer product → (n_age, n_wave)
+    bc_trans = jnp.exp(-dust_age_weights[:, None] * tau_v1 * k_bc[None, :])
+
+    # Combine: broadcast (n_age, n_wave) * (n_wave,) avoids materializing
+    # the full (n_age, n_wave) diffuse array
+    transmission = bc_trans * diffuse_trans[None, :]
+
+    return f_obscuration + (1.0 - f_obscuration) * transmission
 
 
 def two_component_dust_fast(
