@@ -90,7 +90,7 @@ model = Model(spec, ssp_data, filters=filters)
 
 # %%
 # Generate 100 diverse mock galaxies
-N_CAT = 100
+N_CAT = 20
 keys = jax.random.split(jax.random.PRNGKey(42), N_CAT)
 true_params_all = jax.vmap(spec.sample)(keys)
 
@@ -176,7 +176,7 @@ plt.show()
 # --- FIGURE 3: Recovered vs true (2×3 grid) ---
 # Fit first 50 galaxies quickly
 quick_results = []
-for i in range(min(50, N_CAT)):
+for i in range(min(10, N_CAT)):
     fitter_i = Fitter(model, mocks[i].flux_obs, mocks[i].noise, data_type="photometry")
     _ = fitter_i.run("map", n_steps=200, verbose=False)
     res_i = fitter_i.run(

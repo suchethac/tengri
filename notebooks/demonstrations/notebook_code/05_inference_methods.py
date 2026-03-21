@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Under the Hood: How diffsed Samples the Posterior
 #
-# diffsed ships five inference methods, all optimizing the same loss function.
+# tengri ships five inference methods, all optimizing the same loss function.
 # This notebook profiles them, compares their posteriors, and provides a
 # decision tree for choosing the right one.
 
@@ -32,7 +32,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -140,7 +140,7 @@ print(f"Stochastic model: D = {spec_stoch.n_free}")
 # %% [markdown]
 # ## The Information Hamiltonian
 #
-# Every inference method in diffsed minimizes or samples from the same loss:
+# Every inference method in tengri minimizes or samples from the same loss:
 #
 # $$H(\xi \mid d) = \frac{1}{2} \chi^2(\xi) + \frac{1}{2} \xi^\top \xi$$
 #

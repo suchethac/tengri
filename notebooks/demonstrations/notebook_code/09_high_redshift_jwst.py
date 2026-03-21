@@ -168,8 +168,10 @@ ax.errorbar(
     wave_eff, np.array(mock.flux_obs), yerr=np.array(mock.noise),
     fmt="o", ms=8, color=COLORS["data"], capsize=3,
 )
-for i, (w, f) in enumerate(zip(wave_eff, np.array(mock.flux_obs))):
-    ax.text(w, f * 1.1, jwst_filter_names[i].split("_")[-1],
+n_filt = len(mock.flux_obs)
+for i, (w, f) in enumerate(zip(wave_eff[:n_filt], np.array(mock.flux_obs))):
+    label = jwst_filter_names[i].split("_")[-1] if i < len(jwst_filter_names) else f"F{i}"
+    ax.text(w, f * 1.1, label,
             ha="center", fontsize=7, rotation=45)
 ax.set_xlabel("Observed wavelength [Å]")
 ax.set_ylabel("Flux density")
