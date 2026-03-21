@@ -283,13 +283,12 @@ fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="spectroscopy")
 print(f"Fitter: {len(mock.flux_obs)} data points, {spec.n_free} parameters")
 
 # %%
-# The loss function
-xi_zero = jnp.zeros(spec.n_free)
-H = fitter.loss(xi_zero)
-g = jax.grad(fitter.loss)(xi_zero)
-print(f"H(ξ=0) = {float(H):.1f}  (information Hamiltonian)")
-print(f"|∇H|   = {float(jnp.linalg.norm(g)):.1f}")
-print("\nH(ξ) = ½χ² + ½ξᵀξ — every method minimizes or samples from this.")
+# The loss function (information Hamiltonian)
+# H(ξ) = ½χ² + ½ξᵀξ — every inference method minimizes or samples from this.
+# The Fitter builds this internally. All we need to do is call .run():
+print("H(ξ) = ½χ² + ½ξᵀξ — every method minimizes or samples from this.")
+print(f"  ξ dimension: {spec.n_free}")
+print(f"  Data dimension: {len(mock.flux_obs)}")
 
 # %%
 # MAP — point estimate

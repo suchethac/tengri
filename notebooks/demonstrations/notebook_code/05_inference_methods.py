@@ -149,12 +149,10 @@ fitter_stoch = Fitter(
     model_stoch, mock_stoch.flux_obs, mock_stoch.noise, data_type="spectroscopy"
 )
 
-xi_test = jnp.zeros(spec_param.n_free)
-H = fitter_param.loss(xi_test)
-g = jax.grad(fitter_param.loss)(xi_test)
-print(f"H(ξ=0) = {float(H):.1f}")
-print(f"|∇H| = {float(jnp.linalg.norm(g)):.1f}")
-print(f"Gradient dimension: {len(g)}")
+# The loss function H(ξ) = ½χ² + ½ξᵀξ is built internally by the Fitter.
+# All methods minimize/sample from the same H — only the strategy differs.
+print(f"Parametric model: D = {spec_param.n_free}, N_data = {len(mock_param.flux_obs)}")
+print(f"Stochastic model: D = {spec_stoch.n_free}, N_data = {len(mock_stoch.flux_obs)}")
 
 # %% [markdown]
 # ## native_geovi: The Default
