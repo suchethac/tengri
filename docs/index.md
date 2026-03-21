@@ -14,22 +14,41 @@ A fast, modular JAX framework for Bayesian galaxy SED fitting. Scalable from ind
 
 - **IFT-based SFH model**: Star formation history as a continuous 1D field reconstructed from noisy SED data via Information Field Theory (Ensslin 2019). The PSD encodes the amplitude and timescale of burstiness.
 - **Fully differentiable**: Pure JAX from PSD parameters through to predicted photometry. Gradients via autodiff enable HMC, variational inference, and gradient-based optimization.
-- **GPU-native**: All operations are JIT-compiled and run on GPU/TPU. Designed for catalog-scale inference following the approach of [Zacharegkas, Hearin & Benson (2025)](https://arxiv.org/abs/2506.19919).
+- **GPU-native**: All operations are JIT-compiled and run on GPU/TPU. Designed for catalog-scale inference.
 - **Modular forward model**: Every component (SFH, dust, SPS, AGN, nebular, observation) is a swappable pure function. The forward model is the primary product; inference is one application of it.
 - **Multiple inference backends**: MAP, Ray Tracing (Behroozi 2025), NUTS ([BlackJAX](https://github.com/blackjax-devs/blackjax)), geoVI/MGVI ([NIFTy.re](https://gitlab.mpcdf.mpg.de/ift/nifty)), and hierarchical population fitting.
 - **DSPS-powered SPS**: Differentiable stellar population synthesis via [DSPS](https://github.com/ArgonneCPAC/dsps) (Hearin et al. 2023). Accepts any SSP template in HDF5 format.
 
+## Installation
+
+```bash
+pip install -e .              # core install (JAX, DSPS, NIFTy)
+pip install -e ".[all]"       # + BlackJAX (NUTS) + optax (MAP)
+pip install -e ".[dev]"       # + pytest, ruff, jupytext
+```
+
+**Requirements:** Python >= 3.10, JAX >= 0.4.20, DSPS >= 0.3, NIFTy.re >= 8.5
+
+## SSP grids
+
+tengri requires pre-computed Simple Stellar Population (SSP) grids in DSPS-compatible HDF5 format. A [repository of pre-formatted templates](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/) from BC03, BPASS, FSPS, and ProGeny is publicly available.
+
+```bash
+# Download an SSP grid (e.g., FSPS v3.2)
+wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/ssp_fsps_v3.2.h5 -P data/
+```
+
+Any SSP template set can be used — the only requirement is the DSPS HDF5 schema (age, metallicity, wavelength, spectra arrays). This enables SPS uncertainty testing across different stellar libraries and IMFs.
+
 ## Quick start
 
 ```python
-from tengri import Model, ParamSpec, Fitter, Posterior, Uniform, Gaussian
+from tengri import Model, ParamSpec, Fitter, Uniform, Gaussian
 from tengri import load_ssp_data, load_filter_set
 
-# Load SSP templates and filters
-ssp = load_ssp_data("data/ssp.h5")
+ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
 filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 
-# Define the model: parametric SFH + stochastic GP field
 spec = ParamSpec(
     sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
     sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
@@ -41,31 +60,31 @@ spec = ParamSpec(
     redshift=0.1,
 )
 
-# Build the model (auto-precomputes photometry kernels at fixed redshift)
 model = Model(spec, ssp, filters=filters)
-
-# Fit observed data
 fitter = Fitter(model, data, noise)
 result = fitter.run("geovi")        # or "raytrace", "nuts", "map"
 print(result.summary_table())
-
-# Posterior analysis
-posterior = Posterior(result, model)
-posterior.corner()
-posterior.plot_sfh()
 ```
 
-## Documentation
+## Inference methods
 
-- {doc}`Installation <install>` — setup and requirements
-- {doc}`Tutorials <tutorials/index>` — learn tengri step by step
-- {doc}`Demonstrations <demonstrations/index>` — science workflows (spectroscopy, catalogs, hierarchical)
-- {doc}`Reference <reference/index>` — physics deep-dives (PSD, dust, AGN, nebular, noise)
-- {doc}`Observation Guide <observation/index>` — unified Observation API
-- {doc}`Performance <performance/index>` — benchmarks, optimization, profiling
-- {doc}`Advanced <advanced/index>` — convergence diagnostics, batch fitting, extending tengri
-- {doc}`API Reference <api/index>` — auto-generated from docstrings
-- {doc}`Developer Guide <developer/index>` — architecture, contributing, internals
+| Method | Command | Best for |
+|--------|---------|----------|
+| MAP | `fitter.run("map")` | Point estimates |
+| Ray Tracing | `fitter.run("raytrace")` | Exact MCMC, stochastic-gradient resilient |
+| NUTS | `fitter.run("nuts")` | Gold-standard validation (low-D) |
+| geoVI | `fitter.run("geovi")` | Non-Gaussian posteriors, moderate D |
+| MGVI | `fitter.run("mgvi")` | Fastest VI, very large D |
+| Hierarchical | `HierarchicalFitter(models, data).run()` | Shared PSD across populations |
+
+## Performance
+
+Forward model timings on Apple M-series CPU:
+
+| Operation | Smooth (D=7) | Stochastic (D=137) |
+|-----------|-------------|-------------------|
+| Forward model | 140 μs | 356 μs |
+| Gradient | 56 μs | 63 μs |
 
 ## Dependencies
 
@@ -73,23 +92,20 @@ posterior.plot_sfh()
 |---------|------|----------|
 | [JAX](https://github.com/google/jax) | Autodiff, JIT, GPU | Yes |
 | [DSPS](https://github.com/ArgonneCPAC/dsps) | Differentiable SPS | Yes |
+| [NIFTy.re](https://gitlab.mpcdf.mpg.de/ift/nifty) | geoVI / MGVI | Yes |
 | [NumPy](https://github.com/numpy/numpy) | Array utilities | Yes |
 | [Matplotlib](https://github.com/matplotlib/matplotlib) | Plotting | Yes |
 | [h5py](https://github.com/h5py/h5py) | SSP template I/O | Yes |
-| [NIFTy.re](https://gitlab.mpcdf.mpg.de/ift/nifty) | geoVI / MGVI inference | Optional |
-| [BlackJAX](https://github.com/blackjax-devs/blackjax) | NUTS / HMC sampling | Optional |
+| [BlackJAX](https://github.com/blackjax-devs/blackjax) | NUTS / HMC | Optional |
 | [optax](https://github.com/google-deepmind/optax) | MAP optimization | Optional |
-| [sedpy](https://github.com/bd-j/sedpy) | Filter transmission curves | Optional |
 
 ## References
 
-- Ensslin, T. A. (2019). *Information field theory.* [arXiv:1804.03350](https://arxiv.org/abs/1804.03350)
 - Frank, P. et al. (2021). *Geometric Variational Inference.* [arXiv:2105.10470](https://arxiv.org/abs/2105.10470)
-- Edenhofer, G. et al. (2024). *Re-envisioning Numerical Information Field Theory (NIFTy.re).* [arXiv:2402.16683](https://arxiv.org/abs/2402.16683)
 - Hearin, A. P. et al. (2023). *DSPS: Differentiable Stellar Population Synthesis.* [arXiv:2112.08423](https://arxiv.org/abs/2112.08423)
-- Zacharegkas, G., Hearin, A. & Benson, A. (2025). *Bayesian Posteriors with Stellar Population Synthesis on GPUs.* [arXiv:2506.19919](https://arxiv.org/abs/2506.19919)
-- Munoz, J. B. et al. (2026). *Relatively Fast and Reasonably Furious.* [arXiv:2601.07912](https://arxiv.org/abs/2601.07912)
-- Wan, J. et al. (2024). *Stochastic prior for non-parametric SFHs.* [arXiv:2404.14494](https://arxiv.org/abs/2404.14494)
+- Edenhofer, G. et al. (2024). *Re-envisioning Numerical Information Field Theory (NIFTy.re).* [arXiv:2402.16683](https://arxiv.org/abs/2402.16683)
+- Behroozi, P. (2025). *Ray Tracing Sampler.* [arXiv:2504.20029](https://arxiv.org/abs/2504.20029)
+- Ensslin, T. A. (2019). *Information field theory.* [arXiv:1804.03350](https://arxiv.org/abs/1804.03350)
 
 ## License
 

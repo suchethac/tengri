@@ -8,25 +8,24 @@ cd tengri
 pip install -e .
 ```
 
+This installs the core dependencies: JAX, DSPS, NIFTy.re, NumPy, matplotlib, h5py.
+
 ## Optional dependencies
 
-Install extras for specific functionality:
-
 ```bash
-pip install -e ".[all]"       # all optional dependencies
-pip install -e ".[nuts]"      # BlackJAX for NUTS sampling
-pip install -e ".[nifty]"     # NIFTy for variational inference
-pip install -e ".[optax]"     # Optax optimizers for MAP
-pip install -e ".[filters]"   # sedpy for filter curves
+pip install -e ".[all]"       # + BlackJAX (NUTS) + optax (MAP)
+pip install -e ".[nuts]"      # BlackJAX for NUTS sampling only
+pip install -e ".[optax]"     # Optax optimizers for MAP only
 ```
 
-## SSP data
+## SSP grids
 
-tengri requires pre-computed Simple Stellar Population (SSP) grids:
+tengri requires pre-computed SSP grids in DSPS-compatible HDF5 format.
+A [repository of pre-formatted templates](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/)
+from BC03, BPASS, FSPS, and ProGeny is publicly available.
 
 ```bash
-# Download FSPS-based SSP grid (required for most examples)
-# Place in data/ssp_fsps_v3.2.h5
+wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/ssp_fsps_v3.2.h5 -P data/
 ```
 
 ## Development install
@@ -40,9 +39,10 @@ pip install -e ".[docs]"      # sphinx, furo, nbsphinx
 
 - Python ≥ 3.10
 - JAX ≥ 0.4.20
+- DSPS ≥ 0.3
+- NIFTy.re ≥ 8.5
 - NumPy ≥ 1.24
 - matplotlib ≥ 3.7
-- DSPS ≥ 0.3
 - h5py ≥ 3.0
 
 ## Platform notes
