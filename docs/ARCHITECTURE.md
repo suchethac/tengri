@@ -22,7 +22,7 @@ Layer 1 (MAP): + optax
   → Gradient descent optimization
 
 Layer 2 (Ray Tracing): no extra deps
-  → raytrace_jax.py (Behroozi 2025, Apache 2.0)
+  → inference/raytrace.py (Behroozi 2025, Apache 2.0)
 
 Layer 3 (NUTS): + blackjax
   → Hamiltonian Monte Carlo
@@ -37,46 +37,70 @@ Layer 4 (geoVI/MGVI/hierarchical): + nifty8.re
 
 ```
 src/diffsed/
-├── distributions.py        # Prior distributions with standardized transforms
-│                           #   Each has: sample(), log_prob(), unstandardize(ξ→θ), standardize(θ→ξ)
-│                           #   Built-in: Uniform, Gaussian, LogUniform, LogNormal, StudentT, Fixed
-│                           #   Custom: implement unstandardize() — must be JAX-differentiable
+├── distributions.py            # Prior distributions with standardized transforms
+│                               #   Each has: sample(), log_prob(), unstandardize(ξ→θ), standardize(θ→ξ)
+│                               #   Built-in: Uniform, Gaussian, LogUniform, LogNormal, StudentT, Fixed
+│                               #   Custom: implement unstandardize() — must be JAX-differentiable
 │
-├── param_spec.py           # ParamSpec: single source of truth for all parameters
-│                           #   Separates free vs fixed, validates, provides sampling
+├── core/
+│   ├── model.py                # Model: high-level forward model
+│   │                           #   predict_photometry(), predict_spectrum(), predict_sfh()
+│   │                           #   predict_derived(), mock(), mock_batch()
+│   │                           #   Accepts _correlated_field key to bypass internal GP
+│   ├── param_spec.py           # ParamSpec: single source of truth for all parameters
+│   │                           #   Separates free vs fixed, validates, provides sampling
+│   ├── param_translate.py      # Public↔internal parameter name mapping
+│   │                           #   e.g. met_logzsol → log_z_abs, psd_tau_myr → psd_tau_yr
+│   ├── sed_pipeline.py         # Low-level SED pipeline (weights, dust, photometry)
+│   ├── fused_kernels.py        # Fused JIT kernels (weights + Z-interp + dust + einsum)
+│   ├── prediction.py           # predict_photometry / predict_spectrum implementations
+│   ├── noise.py                # Noise model helpers
+│   └── mock.py                 # Mock observation generation
 │
-├── model.py                # Model: high-level forward model
-│                           #   predict_photometry(), predict_spectrum(), predict_sfh()
-│                           #   predict_derived(), mock(), mock_batch()
-│                           #   Wraps ForwardModel with clean parameter names
-│                           #   Accepts _correlated_field key to bypass internal GP
+├── inference/
+│   ├── standardized.py         # StandardizedForwardModel: ξ → observables
+│   │                           #   Absorbs priors via Distribution.unstandardize()
+│   │                           #   build_standardized_loss(): H = ½χ² + ½ξᵀξ
+│   │                           #   build_hierarchical_loss(): shared params across N galaxies
+│   │                           #   Accepts custom PSD model (DRW default, user-swappable)
+│   ├── fitter.py               # Fitter: inference engine
+│   │                           #   run("map"), run("raytrace"), run("nuts"), run("geovi"), run("mgvi")
+│   │                           #   All methods return Posterior objects
+│   ├── raytrace.py             # Ray Tracing Sampler (Behroozi 2025)
+│   │                           #   Snell's law MCMC: n(x) = L(x)^{1/(D-1)}
+│   │                           #   250× more gradient-noise resilient than HMC
+│   ├── posterior.py            # Posterior: results + diagnostics
+│   │                           #   summary(), effective_sample_size(), autocorrelation()
+│   │                           #   plot_corner() with overlay support, to_arviz(), resample()
+│   ├── hierarchical.py         # HierarchicalFitter: population-level PSD
+│   │                           #   Uses CorrelatedFieldMaker for joint PSD learning (geoVI)
+│   │                           #   Also supports flat-vector RT and geoVI
+│   ├── map_optimizer.py        # MAP optimization (adam/adamw/sgd/custom optax)
+│   ├── nuts.py                 # NUTS sampler (blackjax wrapper)
+│   ├── geovi.py                # geoVI inference (nifty8.re wrapper)
+│   ├── geovi_nuts.py           # geoVI warm-start → NUTS refinement
+│   ├── vi_config.py            # VI configuration and sample scheduling
+│   └── common.py               # Shared inference utilities
 │
-├── standardized.py         # StandardizedForwardModel: ξ → observables
-│                           #   Absorbs priors into forward model via Distribution.unstandardize()
-│                           #   build_standardized_loss(): H = ½χ² + ½ξᵀξ
-│                           #   build_hierarchical_loss(): shared params across N galaxies
-│                           #   Accepts custom PSD model (DRW default, user-swappable)
+├── diagnostics/
+│   ├── fisher.py               # Fisher information matrix
+│   ├── green_functions.py      # Green's function analysis
+│   └── saliency.py             # Gradient saliency maps
 │
-├── fitter.py               # Fitter: inference engine
-│                           #   run("map"), run("raytrace"), run("nuts"), run("geovi"), run("mgvi")
-│                           #   All methods return Posterior objects
-│                           #   Burns in properly (n_burnin for RT and NUTS)
+├── models/                     # Physics modules (SFH, dust, AGN, nebular, SPS, observation)
+│   ├── sfh/                    #   PSD models, GP generation, mean SFH
+│   ├── dust/                   #   attenuation.py (two_component_dust), emission.py
+│   ├── agn/                    #   Disc, torus (SKIRTOR), BLR, NLR, QSOGen, unified
+│   ├── nebular/                #   Cue neural emulator, CLOUDY grid, baked-in
+│   ├── sps/                    #   DSPS wrapper, SSP loading, mass_remaining, precompute
+│   ├── observation/            #   Photometry, spectroscopy, filters, calibration
+│   ├── igm.py                  #   IGM transmission (Inoue+2014)
+│   ├── radio.py                #   Radio continuum (q_IR model)
+│   └── xray.py                 #   X-ray emission
 │
-├── raytrace_jax.py         # Ray Tracing Sampler (Behroozi 2025)
-│                           #   Snell's law MCMC: n(x) = L(x)^{1/(D-1)}
-│                           #   250× more gradient-noise resilient than HMC
-│
-├── posterior.py             # Posterior: results + diagnostics
-│                           #   summary(), effective_sample_size(), autocorrelation()
-│                           #   plot_corner() with overlay support, to_arviz(), resample()
-│
-├── hierarchical.py         # HierarchicalFitter: population-level PSD
-│                           #   Uses CorrelatedFieldMaker for joint PSD learning (geoVI)
-│                           #   Also supports flat-vector RT and geoVI
-│
-├── forward_model.py        # Low-level ForwardModel (internal, legacy API)
-├── models/                 # Physics modules (SFH, dust, SPS, observation)
-└── utils/                  # Transforms, grid, cosmology, precomputation
+├── simulate.py                 # Simulation utilities
+├── plotting.py                 # Plotting helpers
+└── utils/                      # Transforms, grid, cosmology, precomputation
 ```
 
 ## Parameter Flow
@@ -90,11 +114,21 @@ User defines ParamSpec:
 
                     ↓
 
-StandardizedForwardModel builds ξ→θ mapping:
+StandardizedForwardModel (inference/standardized.py) builds ξ→θ mapping:
   ξ_alpha   → sigmoid(ξ)·(3.0-0.5)+0.5     [Uniform.unstandardize]
   ξ_met     → clip(-0.5+0.3·ξ, -2, 0)      [Gaussian.unstandardize]
   ξ_sigma   → exp(0.0+0.8·ξ)               [LogNormal.unstandardize]
   ξ_field   → IFFT(√P(σ,τ)·ξ_field)        [correlated field]
+
+                    ↓
+
+param_translate.py maps public → internal names:
+  met_logzsol       → log_z_abs       (+ LOG10_ZSUN offset)
+  dust_tau_bc       → tau_bc
+  dust_tau_diff     → tau_diff
+  dust_slope        → dust_slope
+  sfh_field_psd_sigma    → psd_sigma
+  sfh_field_psd_tau_myr  → psd_tau_yr  (×1e6 to convert Myr→yr)
 
                     ↓
 
@@ -164,11 +198,11 @@ smodel = StandardizedForwardModel(model, psd_model=my_psd)
 
 | Method | Module | Dependency | Exact? | Best D |
 |--------|--------|------------|--------|--------|
-| MAP | fitter.py | optax | No (point est) | Any |
-| Ray Tracing | raytrace_jax.py | — | Yes | ≤300 |
-| NUTS | fitter.py | blackjax | Yes | ≤20 |
-| geoVI | fitter.py | nifty8.re | Approximate | ≤10⁵ |
-| MGVI | fitter.py | nifty8.re | Approximate | ≤10⁶ |
+| MAP | inference/map_optimizer.py | optax | No (point est) | Any |
+| Ray Tracing | inference/raytrace.py | -- | Yes | ≤300 |
+| NUTS | inference/nuts.py | blackjax | Yes | ≤20 |
+| geoVI | inference/geovi.py | nifty8.re | Approximate | ≤10^5 |
+| MGVI | inference/fitter.py | nifty8.re | Approximate | ≤10^6 |
 
 **Ray Tracing and geoVI are equal-priority primaries.** NUTS validates. MAP initializes.
 
@@ -210,7 +244,7 @@ Batch fitting: `fitter.fit_batch(galaxies)` — default method is `native_geovi`
 
 6. **Notebook editing:** Use Python JSON manipulation for `.ipynb`, not text editing.
 
-7. **`_correlated_field` key:** When `StandardizedForwardModel` passes a pre-computed correlated field to `Model.predict_photometry()`, it uses the `_correlated_field` key in the params dict. The Model uses this directly instead of recomputing `√P · ξ`.
+7. **`_correlated_field` key:** When `StandardizedForwardModel` (in `inference/standardized.py`) passes a pre-computed correlated field to `Model.predict_photometry()`, it uses the `_correlated_field` key in the params dict. The Model uses this directly instead of recomputing `sqrt(P) * xi`.
 
 ## File Locations
 
