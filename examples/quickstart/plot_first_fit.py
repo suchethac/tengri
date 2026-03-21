@@ -58,7 +58,7 @@ true_params = spec.sample(key)
 mock = model.mock(true_params, snr=20.0, key=key)
 
 # --- Fit with MAP ---
-fitter = Fitter(model, flux_obs=mock.flux_obs, flux_err=mock.noise)
+fitter = Fitter(model, data=mock.flux_obs, noise=mock.noise)
 posterior = fitter.run("map", optimizer="adam", n_steps=300, verbose=False)
 
 # --- Plot ---

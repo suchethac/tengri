@@ -21,7 +21,6 @@ from tengri import (
     Observation,
     ParamSpec,
     Photometry,
-    Uniform,
     load_ssp_data,
 )
 
@@ -55,14 +54,11 @@ params = spec.sample(jax.random.PRNGKey(0))
 # --- Compute SEDs: with and without dust ---
 sed_total = model.predict_sed(params)
 
-spec_nodust = ParamSpec(
-    **{k: Fixed(float(params[k])) for k in params},
-    dust_tau_bc=Fixed(0.0),
-    dust_tau_diff=Fixed(0.0),
-    mean_sfh_type="tsnorm",
-)
-model_nodust = Model(spec_nodust, ssp, observation=obs)
-sed_intrinsic = model_nodust.predict_sed(spec_nodust.sample(jax.random.PRNGKey(0)))
+# Remove dust to get intrinsic SED
+params_nodust = {k: v for k, v in params.items()}
+params_nodust["dust_tau_bc"] = jnp.array(0.0)
+params_nodust["dust_tau_diff"] = jnp.array(0.0)
+sed_intrinsic = model.predict_sed(params_nodust)
 
 wave = np.array(ssp.ssp_wave)
 sed_total_np = np.array(sed_total)
