@@ -26,6 +26,40 @@ from diffsed.distributions import Gaussian, LogUniform
 from diffsed.utils.transforms import to_bounded, to_unbounded
 
 
+def _simple_cg(mat_fn, b, x0, maxiter=30, miniter=6):
+    """Lightweight CG solve for catalog fitting. JIT-friendly."""
+    _eps = 6.0 * jnp.finfo(jnp.float64).eps
+    r = mat_fn(x0) - b
+    d = r
+    gamma = jnp.dot(r, r)
+    energy = jnp.dot((r - b) / 2, x0)
+    init = (x0, r, d, gamma, energy, jnp.int32(-2), jnp.int32(0))
+
+    def cond(s):
+        return s[5] < -1
+
+    def body(s):
+        x, r, d, pg, pe, info, i = s
+        i = i + 1
+        q = mat_fn(d)
+        curv = jnp.dot(d, q)
+        alpha = pg / curv
+        info = jnp.where(curv <= 0.0, jnp.int32(0), info)
+        alpha = jnp.where(curv <= 0.0, 0.0, alpha)
+        x = x - alpha * d
+        r = jnp.where((i % 20 == 0) & (info < -1), mat_fn(x) - b, r - alpha * q)
+        gamma = jnp.dot(r, r)
+        energy = jnp.dot((r - b) / 2, x)
+        ed = pe - energy
+        info = jnp.where(ed < -_eps * jnp.abs(energy), jnp.int32(-1), info)
+        info = jnp.where((ed < 1e-4) & (i >= miniter) & (info < -1), jnp.int32(0), info)
+        info = jnp.where((i >= maxiter) & (info < -1), i, info)
+        d = d * jnp.maximum(0.0, gamma / (pg + 1e-30)) + r
+        return (x, r, d, gamma, energy, info, i)
+
+    return jax.lax.while_loop(cond, body, init)[0]
+
+
 class Fitter:
     """Inference engine for diffsed models.
 
@@ -2123,6 +2157,279 @@ class Fitter:
             loss_history=None,
             _model=self.model,
         )
+
+    def fit_catalog(
+        self,
+        catalog,
+        *,
+        key=None,
+        n_iterations=15,
+        n_samples=3,
+        n_posterior_samples=200,
+        n_seeds=5,
+        sample_mode="geovi",
+        verbose=True,
+    ):
+        """Fit a catalog of galaxies using a single compiled engine.
+
+        Unlike calling ``fitter.run()`` in a loop (which rebuilds the
+        JIT engine per galaxy), this method compiles **once** and
+        applies the same program to every galaxy. Data and noise are
+        dynamic arguments — JAX does NOT recompile when they change.
+
+        Parameters
+        ----------
+        catalog : list of dict
+            Each dict has ``"flux_obs"`` and ``"noise"`` arrays (same
+            shape across all galaxies).
+        key : PRNGKey, optional
+        n_iterations, n_samples, n_posterior_samples, n_seeds : int
+            Same as ``run()``.
+        sample_mode : str
+            ``"geovi"`` (default) — resample+update schedule.
+        verbose : bool
+
+        Returns
+        -------
+        list of Posterior
+            One result per galaxy.
+
+        Example
+        -------
+        >>> catalog = [{"flux_obs": f, "noise": n} for f, n in zip(fluxes, noises)]
+        >>> results = fitter.fit_catalog(catalog, n_iterations=15)
+        >>> # Compiles once (~15s), then ~2ms per galaxy
+        """
+        from diffsed.posterior import Posterior
+
+        if key is None:
+            key = jax.random.PRNGKey(42)
+
+        model = self.model
+        data_type = self.data_type
+        free_names = self._free_names
+        bounds = self._bounds
+        fixed_values = self._fixed_values
+        stochastic = self.spec.stochastic
+
+        # Signal response does NOT depend on data — only on the model
+        def signal_response(primals):
+            params = {}
+            for name in free_names:
+                lo, hi = bounds[name]
+                params[name] = to_bounded(primals[name], lo, hi)
+            for name, val in fixed_values.items():
+                params[name] = val
+            if stochastic and "psd_xi" in primals:
+                params["psd_xi"] = primals["psd_xi"]
+            if data_type == "photometry":
+                return model.predict_photometry(params)
+            elif data_type == "spectroscopy":
+                return model.predict_spectrum(params, model._wave_obs)
+            elif data_type == "joint":
+                p = model.predict_photometry(params)
+                s = model.predict_spectrum(params, model._wave_obs)
+                return jnp.concatenate([p, s])
+            raise ValueError(f"Unknown data_type: {data_type}")
+
+        # Build flatten/unflatten from a dummy position
+        dummy_pos = self._initialize_unbounded(jax.random.PRNGKey(0))
+        param_keys = sorted(dummy_pos.keys())
+        slices = []
+        idx = 0
+        for k in param_keys:
+            arr = jnp.atleast_1d(dummy_pos[k]).ravel()
+            shape = jnp.atleast_1d(dummy_pos[k]).shape
+            slices.append((idx, idx + arr.shape[0], shape))
+            idx += arr.shape[0]
+        d_total = idx
+
+        def flatten(d):
+            return jnp.concatenate([jnp.atleast_1d(d[k]).ravel() for k in param_keys])
+
+        def unflatten(x):
+            d = {}
+            for i_k, k in enumerate(param_keys):
+                start, end, shape = slices[i_k]
+                val = jax.lax.dynamic_slice(x, (start,), (end - start,))
+                val = val.reshape(shape)
+                if shape == (1,):
+                    val = val[0]
+                d[k] = val
+            return d
+
+        # Core function: fit ONE galaxy given (data, noise_inv, init, key)
+        # Data and noise_inv are DYNAMIC — JAX won't recompile for new values.
+        def _fit_one(data_vec, noise_inv_vec, init_flat, fit_key):
+            """Fit one galaxy. All args are dynamic (no recompilation)."""
+            sqrt_noise_inv = jnp.sqrt(noise_inv_vec)
+
+            def metric_vec(xi, v):
+                xi_d, v_d = unflatten(xi), unflatten(v)
+                _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
+                _, vjp_fn = jax.vjp(signal_response, xi_d)
+                return flatten(vjp_fn(noise_inv_vec * Jv)[0]) + v
+
+            def hamiltonian(xi):
+                pred = signal_response(unflatten(xi))
+                chi2 = jnp.sum(((data_vec - pred) * jnp.sqrt(noise_inv_vec)) ** 2)
+                return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
+
+            H_vg = jax.value_and_grad(hamiltonian)
+            n_data = data_vec.shape[0]
+
+            # Draw linear residuals
+            def draw_residuals(pos_f, subkeys):
+                def draw_one(subkey):
+                    k1, k2 = jax.random.split(subkey)
+                    eta_pr = jax.random.normal(k1, shape=(d_total,))
+                    eta_lh = jax.random.normal(k2, shape=(n_data,))
+                    _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
+                    jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
+                    # Simple CG solve (no resnorm for catalog speed)
+                    return _simple_cg(
+                        lambda v: metric_vec(pos_f, v),
+                        jt + eta_pr,
+                        eta_pr,
+                    )
+
+                return jax.vmap(draw_one)(subkeys)
+
+            # KL functions
+            def kl_vg(m, residuals):
+                def single_vg(r):
+                    return H_vg(m + r)
+
+                vals, grads = jax.vmap(single_vg)(residuals)
+                return jnp.mean(vals), jnp.mean(grads, axis=0)
+
+            def kl_metric(m, residuals, v):
+                def single_met(r):
+                    return metric_vec(m + r, v)
+
+                return jnp.mean(jax.vmap(single_met)(residuals), axis=0)
+
+            # Simple Newton-CG KL step
+            def evi_step(m, subkey):
+                sample_keys = jax.random.split(subkey, n_samples)
+                residuals = draw_residuals(m, sample_keys)
+                residuals = jnp.concatenate([residuals, -residuals], axis=0)
+
+                val, grad = kl_vg(m, residuals)
+                step = _simple_cg(
+                    lambda v: kl_metric(m, residuals, v),
+                    -grad,
+                    jnp.zeros_like(m),
+                )
+                return m + step, val
+
+            # Run EVI loop
+            keys = jax.random.split(fit_key, n_iterations)
+
+            def body(carry, subkey):
+                m = carry
+                m_new, kl = evi_step(m, subkey)
+                return m_new, kl
+
+            m_final, _kl_history = jax.lax.scan(body, init_flat, keys)
+
+            # Draw posterior samples
+            draw_keys = jax.random.split(jax.random.fold_in(fit_key, 999), n_posterior_samples)
+            residuals = draw_residuals(m_final, draw_keys)
+            return m_final, residuals
+
+        # Compile once
+        sample_data = jnp.asarray(catalog[0]["flux_obs"])
+        sample_noise_inv = 1.0 / jnp.asarray(catalog[0]["noise"]) ** 2
+        sample_init = flatten(dummy_pos)
+
+        if verbose:
+            print(
+                f"fit_catalog: {len(catalog)} galaxies, "
+                f"D={d_total}, N={len(sample_data)}, "
+                f"{n_iterations} iter, {n_samples} samples"
+            )
+            print("  Compiling catalog engine...", end="", flush=True)
+
+        fit_one_jit = jax.jit(_fit_one)
+        # Warmup compilation
+        t0 = time.time()
+        _ = fit_one_jit(sample_data, sample_noise_inv, sample_init, key)
+        t_compile = time.time() - t0
+        if verbose:
+            print(f" {t_compile:.1f}s")
+
+        # Fit all galaxies
+        results = []
+        for i, gal in enumerate(catalog):
+            gal_key = jax.random.fold_in(key, i)
+            data_vec = jnp.asarray(gal["flux_obs"])
+            noise_inv_vec = 1.0 / jnp.asarray(gal["noise"]) ** 2
+
+            # Multi-seed: run from n_seeds random inits, pick best
+            best_flat = None
+            best_loss = jnp.inf
+            best_residuals = None
+            for s in range(n_seeds):
+                seed_key = jax.random.fold_in(gal_key, s)
+                init_pos = flatten(self._initialize_unbounded(seed_key))
+                m_out, res_out = fit_one_jit(data_vec, noise_inv_vec, init_pos, seed_key)
+                pred = signal_response(unflatten(m_out))
+                loss = 0.5 * float(
+                    jnp.sum(((data_vec - pred) ** 2) * noise_inv_vec)
+                ) + 0.5 * float(jnp.sum(m_out**2))
+                if loss < best_loss:
+                    best_flat, best_loss, best_residuals = m_out, loss, res_out
+
+            # Convert to Posterior
+            converged_dict = unflatten(best_flat)
+            samples_phys = {}
+            for j in range(n_posterior_samples):
+                res = unflatten(best_residuals[j])
+                phys = self._to_physical({k: converged_dict[k] + res[k] for k in converged_dict})
+                for k, v in phys.items():
+                    if k not in samples_phys:
+                        samples_phys[k] = []
+                    samples_phys[k].append(v)
+
+            samples_phys = {k: jnp.stack(v) for k, v in samples_phys.items()}
+            best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+
+            # Chi2
+            pred = model.predict_photometry(best_params) if data_type == "photometry" else None
+            chi2_dof = (
+                float(jnp.sum(((data_vec - pred) / gal["noise"]) ** 2)) / len(data_vec)
+                if pred is not None
+                else None
+            )
+
+            results.append(
+                Posterior(
+                    samples=samples_phys,
+                    params=best_params,
+                    method="fit_catalog",
+                    wall_time_s=0.0,
+                    diagnostics={"chi2_dof": chi2_dof, "H": float(best_loss)},
+                    loss_history=None,
+                    _model=model,
+                )
+            )
+
+            if verbose and (i < 5 or (i + 1) % 10 == 0 or i == len(catalog) - 1):
+                print(
+                    f"  Galaxy {i + 1}/{len(catalog)}: "
+                    f"chi2/dof={chi2_dof:.2f}, H={float(best_loss):.1f}"
+                )
+
+        if verbose:
+            t_total = time.time() - t0
+            print(
+                f"  Done: {len(catalog)} galaxies in {t_total:.1f}s "
+                f"({t_compile:.1f}s compile + "
+                f"{(t_total - t_compile) / len(catalog) * 1000:.1f}ms/galaxy)"
+            )
+
+        return results
 
     def _run_map(
         self,
