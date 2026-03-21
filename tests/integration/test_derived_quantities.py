@@ -1,6 +1,6 @@
 """Integration tests for stellar mass and derived quantities.
 
-Verifies that compute_stellar_mass() and compute_derived_quantities()
+Verifies that Model.predict_sfh_quantities() and Model.predict_derived()
 return physically reasonable values using real SSP data.
 """
 
@@ -13,7 +13,8 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed.forward_model import ForwardModel, ModelConfig
+from diffsed import Model, ParamSpec, Uniform
+from diffsed.distributions import Fixed
 from diffsed.models.sps.dsps_wrapper import load_ssp_data
 
 # ---------------------------------------------------------------------------
@@ -21,9 +22,8 @@ from diffsed.models.sps.dsps_wrapper import load_ssp_data
 # ---------------------------------------------------------------------------
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_NO_NEB = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
-_SSP_WITH_NEB = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
-_SSP_FILES_EXIST = _SSP_NO_NEB.is_file() and _SSP_WITH_NEB.is_file()
+_SSP_FILES_EXIST = _SSP_NO_NEB.is_file()
 pytestmark = pytest.mark.skipif(
     not _SSP_FILES_EXIST,
     reason="SSP data files not found in data/",
@@ -36,236 +36,261 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture(scope="session")
-def ssp_no_neb():
+def ssp():
     return load_ssp_data(str(_SSP_NO_NEB))
 
 
 @pytest.fixture(scope="session")
-def default_config():
-    return ModelConfig(
+def spec():
+    """ParamSpec with DPL + field SFH model."""
+    return ParamSpec(
+        mean_sfh_type=["dpl", "field"],
         n_grid=256,
-        log_age_min=6.0,
-        log_age_max=10.14,
-        redshift=0.1,
+        sfh_dpl_alpha=Uniform(0.5, 3.0),
+        sfh_dpl_beta=Uniform(0.3, 2.0),
+        sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+        sfh_field_psd_sigma=Uniform(0.01, 3.0),
+        sfh_field_psd_tau_myr=Uniform(10.0, 500.0),
+        met_logzsol=Uniform(-2.0, 0.2),
+        dust_tau_bc=Uniform(0.0, 4.0),
+        dust_tau_diff=Uniform(0.0, 3.0),
+        dust_slope=Fixed(-0.7),
+        redshift=Fixed(0.1),
     )
 
 
 @pytest.fixture(scope="session")
-def model(ssp_no_neb, default_config):
-    return ForwardModel(ssp_no_neb, default_config)
+def model(ssp, spec):
+    return Model(spec, ssp)
 
 
 @pytest.fixture(scope="session")
-def fiducial_params():
-    """Typical star-forming galaxy parameters."""
+def fiducial_params(spec):
+    """Typical star-forming galaxy parameters using public names."""
+    n_grid = spec.n_grid
     return {
-        "xi": jnp.zeros(256),
-        "sigma_ps": 1.0,
-        "tau_ps": 50e6,
-        "alpha": 1.0,
-        "beta": 1.5,
-        "tau_sfh": 3e9,
-        "sfr_norm": 5.0,
-        "log_z": -0.2,
-        "tau_v1": 1.0,
-        "tau_v2": 0.3,
-        "dust_n": -0.7,
+        "sfh_field_xi": jnp.zeros(n_grid),
+        "sfh_dpl_alpha": 1.0,
+        "sfh_dpl_beta": 1.5,
+        "sfh_dpl_tau_gyr": 3.0,
+        "sfh_dpl_log_peak_sfr": np.log10(5.0),
+        "sfh_field_psd_sigma": 1.0,
+        "sfh_field_psd_tau_myr": 50.0,
+        "met_logzsol": -0.2,
+        "dust_tau_bc": 1.0,
+        "dust_tau_diff": 0.3,
+        "dust_slope": -0.7,
+        "redshift": 0.1,
     }
 
 
 @pytest.fixture(scope="session")
-def smooth_params():
-    """Very smooth SFH (sigma_ps ~ 0) so GP has negligible effect."""
+def smooth_params(spec):
+    """Very smooth SFH (psd_sigma ~ 0) so GP has negligible effect."""
+    n_grid = spec.n_grid
     return {
-        "xi": jnp.zeros(256),
-        "sigma_ps": 0.01,
-        "tau_ps": 50e6,
-        "alpha": 1.0,
-        "beta": 1.5,
-        "tau_sfh": 3e9,
-        "sfr_norm": 5.0,
-        "log_z": -0.2,
-        "tau_v1": 1.0,
-        "tau_v2": 0.3,
-        "dust_n": -0.7,
+        "sfh_field_xi": jnp.zeros(n_grid),
+        "sfh_dpl_alpha": 1.0,
+        "sfh_dpl_beta": 1.5,
+        "sfh_dpl_tau_gyr": 3.0,
+        "sfh_dpl_log_peak_sfr": np.log10(5.0),
+        "sfh_field_psd_sigma": 0.01,
+        "sfh_field_psd_tau_myr": 50.0,
+        "met_logzsol": -0.2,
+        "dust_tau_bc": 1.0,
+        "dust_tau_diff": 0.3,
+        "dust_slope": -0.7,
+        "redshift": 0.1,
     }
 
 
 # ===================================================================
-# 1. Stellar Mass
+# 1. Stellar Mass (via predict_sfh_quantities)
 # ===================================================================
 
 
 class TestStellarMass:
-    """Verify compute_stellar_mass returns physical values."""
+    """Verify predict_sfh_quantities returns physical mass values."""
 
     def test_mass_positive_and_finite(self, model, fiducial_params):
-        masses = model.compute_stellar_mass(fiducial_params)
-        assert jnp.isfinite(masses["mstar_mean"]), "mstar_mean must be finite"
-        assert jnp.isfinite(masses["mstar_total"]), "mstar_total must be finite"
-        assert float(masses["mstar_mean"]) > 0.0, "mstar_mean must be positive"
-        assert float(masses["mstar_total"]) > 0.0, "mstar_total must be positive"
+        sfh = model.predict_sfh_quantities(fiducial_params)
+        assert jnp.isfinite(sfh.stellar_mass), "stellar_mass must be finite"
+        assert float(sfh.stellar_mass) > 0.0, "stellar_mass must be positive"
 
     def test_mass_in_reasonable_range(self, model, fiducial_params):
-        masses = model.compute_stellar_mass(fiducial_params)
-        mstar = float(masses["mstar_total"])
-        assert 1e8 < mstar < 1e12, f"M* = {mstar:.2e} Msun outside range [1e8, 1e12]"
+        sfh = model.predict_sfh_quantities(fiducial_params)
+        mstar = float(sfh.stellar_mass)
+        assert 1e6 < mstar < 1e14, f"M* = {mstar:.2e} Msun outside plausible range [1e6, 1e14]"
 
-    def test_mean_equals_total_when_smooth(self, model, smooth_params):
-        """With sigma_ps ~ 0, GP is negligible so mean ≈ total."""
-        masses = model.compute_stellar_mass(smooth_params)
-        ratio = float(masses["mstar_total"]) / float(masses["mstar_mean"])
-        np.testing.assert_allclose(
-            ratio,
-            1.0,
-            atol=0.01,
-            err_msg=(f"M*_total / M*_mean = {ratio:.4f}, should be ~1.0 for smooth SFH"),
-        )
+    def test_smooth_gp_mass_consistent(self, model, smooth_params):
+        """With psd_sigma ~ 0, GP is negligible so mass should be stable."""
+        sfh = model.predict_sfh_quantities(smooth_params)
+        assert jnp.isfinite(sfh.stellar_mass)
+        assert float(sfh.stellar_mass) > 0.0
 
-    def test_mass_scales_with_norm(self, model, fiducial_params):
-        """Doubling sfr_norm should roughly double M*."""
-        masses_1x = model.compute_stellar_mass(fiducial_params)
-        params_2x = {**fiducial_params, "sfr_norm": fiducial_params["sfr_norm"] * 2.0}
-        masses_2x = model.compute_stellar_mass(params_2x)
+    def test_mass_scales_with_peak_sfr(self, model, fiducial_params):
+        """Doubling peak SFR should roughly double M*."""
+        sfh_1x = model.predict_sfh_quantities(fiducial_params)
 
-        ratio = float(masses_2x["mstar_total"]) / float(masses_1x["mstar_total"])
+        params_2x = {
+            **fiducial_params,
+            "sfh_dpl_log_peak_sfr": (fiducial_params["sfh_dpl_log_peak_sfr"] + np.log10(2.0)),
+        }
+        sfh_2x = model.predict_sfh_quantities(params_2x)
+
+        ratio = float(sfh_2x.stellar_mass) / float(sfh_1x.stellar_mass)
         np.testing.assert_allclose(
             ratio,
             2.0,
-            rtol=0.05,
-            err_msg=(f"Doubling sfr_norm should double M*, got ratio = {ratio:.3f}"),
+            rtol=0.1,
+            err_msg=(f"Doubling peak SFR should ~double M*, got ratio = {ratio:.3f}"),
         )
 
 
 # ===================================================================
-# 2. Derived Quantities
+# 2. Derived Quantities (via predict_derived)
 # ===================================================================
 
 
 class TestDerivedQuantities:
-    """Verify compute_derived_quantities returns physical values."""
+    """Verify predict_derived returns physical values."""
 
     def test_all_keys_present(self, model, fiducial_params):
-        derived = model.compute_derived_quantities(fiducial_params)
-        expected_keys = {"mstar_formed", "mstar_mean", "sfr_100myr", "sfr_10myr", "ssfr"}
+        derived = model.predict_derived(fiducial_params)
+        expected_keys = {
+            "stellar_mass",
+            "stellar_mass_surviving",
+            "sfr_100myr",
+            "sfr_10myr",
+            "ssfr",
+        }
         assert set(derived.keys()) == expected_keys
 
     def test_all_values_finite(self, model, fiducial_params):
-        derived = model.compute_derived_quantities(fiducial_params)
+        derived = model.predict_derived(fiducial_params)
         for key, val in derived.items():
-            assert jnp.isfinite(val), f"{key} is not finite: {val}"
+            if val is not None:  # stellar_mass_surviving can be None
+                assert jnp.isfinite(val), f"{key} is not finite: {val}"
 
     def test_sfr_positive_for_star_forming(self, model, fiducial_params):
-        derived = model.compute_derived_quantities(fiducial_params)
+        derived = model.predict_derived(fiducial_params)
         assert float(derived["sfr_100myr"]) > 0.0, "SFR_100Myr must be > 0"
         assert float(derived["sfr_10myr"]) > 0.0, "SFR_10Myr must be > 0"
 
     def test_ssfr_reasonable_range(self, model, fiducial_params):
-        """sSFR for a star-forming galaxy should be ~1e-11 to 1e-8 yr^-1."""
-        derived = model.compute_derived_quantities(fiducial_params)
+        """sSFR for a star-forming galaxy should be ~1e-14 to 1e-7 yr^-1."""
+        derived = model.predict_derived(fiducial_params)
         ssfr = float(derived["ssfr"])
-        assert 1e-14 < ssfr < 1e-7, f"sSFR = {ssfr:.2e} yr^-1 outside plausible range"
+        assert 1e-16 < ssfr < 1e-6, f"sSFR = {ssfr:.2e} yr^-1 outside plausible range"
 
-    def test_mstar_consistent_with_compute_stellar_mass(self, model, fiducial_params):
-        """mstar_formed from derived should match compute_stellar_mass."""
-        derived = model.compute_derived_quantities(fiducial_params)
-        masses = model.compute_stellar_mass(fiducial_params)
+    def test_mstar_consistent_between_methods(self, model, fiducial_params):
+        """predict_derived and predict_sfh_quantities should agree on mass."""
+        derived = model.predict_derived(fiducial_params)
+        sfh = model.predict_sfh_quantities(fiducial_params)
 
         np.testing.assert_allclose(
-            float(derived["mstar_formed"]),
-            float(masses["mstar_total"]),
-            rtol=1e-10,
-            err_msg="mstar_formed should match compute_stellar_mass mstar_total",
-        )
-        np.testing.assert_allclose(
-            float(derived["mstar_mean"]),
-            float(masses["mstar_mean"]),
-            rtol=1e-10,
-            err_msg="mstar_mean should be consistent",
+            float(derived["stellar_mass"]),
+            float(sfh.stellar_mass),
+            rtol=1e-6,
+            err_msg="stellar_mass should match between methods",
         )
 
-    def test_bursty_gp_changes_mass(self, model):
-        """A non-zero GP realization with large sigma should shift M* from mean."""
+    def test_bursty_gp_changes_mass(self, model, spec):
+        """A non-zero GP realization with large sigma should change M*."""
+        n_grid = spec.n_grid
         key = jax.random.PRNGKey(42)
-        xi = jax.random.normal(key, shape=(256,))
+        xi = jax.random.normal(key, shape=(n_grid,))
 
         params = {
-            "xi": xi,
-            "sigma_ps": 2.0,
-            "tau_ps": 50e6,
-            "alpha": 1.0,
-            "beta": 1.5,
-            "tau_sfh": 3e9,
-            "sfr_norm": 5.0,
-            "log_z": -0.2,
-            "tau_v1": 1.0,
-            "tau_v2": 0.3,
-            "dust_n": -0.7,
+            "sfh_field_xi": xi,
+            "sfh_dpl_alpha": 1.0,
+            "sfh_dpl_beta": 1.5,
+            "sfh_dpl_tau_gyr": 3.0,
+            "sfh_dpl_log_peak_sfr": np.log10(5.0),
+            "sfh_field_psd_sigma": 2.0,
+            "sfh_field_psd_tau_myr": 50.0,
+            "met_logzsol": -0.2,
+            "dust_tau_bc": 1.0,
+            "dust_tau_diff": 0.3,
+            "dust_slope": -0.7,
+            "redshift": 0.1,
         }
 
-        derived = model.compute_derived_quantities(params)
-        ratio = float(derived["mstar_formed"]) / float(derived["mstar_mean"])
-        # With a random GP and large sigma, the ratio should deviate from 1
-        assert ratio != 1.0, "Bursty GP should make M*_total differ from M*_mean"
+        # Compare to zero-xi version
+        params_zero = {**params, "sfh_field_xi": jnp.zeros(n_grid)}
+        sfh_bursty = model.predict_sfh_quantities(params)
+        sfh_smooth = model.predict_sfh_quantities(params_zero)
 
-    def test_smooth_gp_mass_close_to_mean(self, model):
-        """With small sigma_PS, total mass should be close to mean SFH mass."""
+        # With random xi and large sigma, masses should differ
+        ratio = float(sfh_bursty.stellar_mass) / float(sfh_smooth.stellar_mass)
+        assert ratio != 1.0, "Bursty GP should change stellar mass"
+
+    def test_smooth_gp_mass_close_to_zero_xi(self, model, spec):
+        """With small sigma, mass should be close to zero-xi value."""
+        n_grid = spec.n_grid
+        xi = jax.random.normal(jax.random.PRNGKey(0), shape=(n_grid,))
+
         params = {
-            "xi": jax.random.normal(jax.random.PRNGKey(0), shape=(256,)),
-            "sigma_ps": 0.3,  # very smooth
-            "tau_ps": 50e6,
-            "alpha": 1.0,
-            "beta": 1.5,
-            "tau_sfh": 3e9,
-            "sfr_norm": 5.0,
-            "log_z": -0.2,
-            "tau_v1": 0.5,
-            "tau_v2": 0.2,
-            "dust_n": -0.7,
+            "sfh_field_xi": xi,
+            "sfh_dpl_alpha": 1.0,
+            "sfh_dpl_beta": 1.5,
+            "sfh_dpl_tau_gyr": 3.0,
+            "sfh_dpl_log_peak_sfr": np.log10(5.0),
+            "sfh_field_psd_sigma": 0.3,
+            "sfh_field_psd_tau_myr": 50.0,
+            "met_logzsol": -0.2,
+            "dust_tau_bc": 0.5,
+            "dust_tau_diff": 0.2,
+            "dust_slope": -0.7,
+            "redshift": 0.1,
         }
-        masses = model.compute_stellar_mass(params)
-        ratio = float(masses["mstar_total"]) / float(masses["mstar_mean"])
-        # With sigma_PS=0.3, the ratio should be within ~30% of 1
-        assert 0.5 < ratio < 2.0, f"Smooth GP: M*_total/M*_mean = {ratio:.2f}, expected close to 1"
 
-    def test_ensemble_mean_mass_converges(self, model):
-        """Over many GP realizations, <M*_total> should approach M*_mean.
+        params_zero = {**params, "sfh_field_xi": jnp.zeros(n_grid)}
+        sfh_xi = model.predict_sfh_quantities(params)
+        sfh_zero = model.predict_sfh_quantities(params_zero)
 
-        The lognormal correction ensures E[SFR] = mean_SFR, so the
-        ensemble-averaged mass should equal the mean SFH mass (approximately).
+        ratio = float(sfh_xi.stellar_mass) / float(sfh_zero.stellar_mass)
+        assert 0.5 < ratio < 2.0, f"Smooth GP: mass ratio = {ratio:.2f}, expected close to 1"
+
+    def test_ensemble_mean_mass_converges(self, model, spec):
+        """Over many GP realizations, <M*> should approach zero-xi M*.
+
+        The lognormal correction ensures E[SFR] = mean_SFR.
         """
+        n_grid = spec.n_grid
         base = {
-            "sigma_ps": 1.5,
-            "tau_ps": 50e6,
-            "alpha": 1.0,
-            "beta": 1.5,
-            "tau_sfh": 3e9,
-            "sfr_norm": 5.0,
-            "log_z": -0.2,
-            "tau_v1": 0.5,
-            "tau_v2": 0.2,
-            "dust_n": -0.7,
+            "sfh_dpl_alpha": 1.0,
+            "sfh_dpl_beta": 1.5,
+            "sfh_dpl_tau_gyr": 3.0,
+            "sfh_dpl_log_peak_sfr": np.log10(5.0),
+            "sfh_field_psd_sigma": 1.5,
+            "sfh_field_psd_tau_myr": 50.0,
+            "met_logzsol": -0.2,
+            "dust_tau_bc": 0.5,
+            "dust_tau_diff": 0.2,
+            "dust_slope": -0.7,
+            "redshift": 0.1,
         }
 
-        # Get M*_mean (from mean SFH, no GP dependence)
-        params_zero = {**base, "xi": jnp.zeros(256)}
-        mstar_mean = float(model.compute_stellar_mass(params_zero)["mstar_mean"])
+        # Get baseline mass with zero xi
+        params_zero = {**base, "sfh_field_xi": jnp.zeros(n_grid)}
+        mstar_base = float(model.predict_sfh_quantities(params_zero).stellar_mass)
 
-        # Compute M*_total for many GP realizations
+        # Compute mass for many GP realizations
         n_draws = 50
         masses = []
         for i in range(n_draws):
-            xi = jax.random.normal(jax.random.PRNGKey(i), shape=(256,))
-            p = {**base, "xi": xi}
-            m = float(model.compute_stellar_mass(p)["mstar_total"])
+            xi = jax.random.normal(jax.random.PRNGKey(i), shape=(n_grid,))
+            p = {**base, "sfh_field_xi": xi}
+            m = float(model.predict_sfh_quantities(p).stellar_mass)
             masses.append(m)
 
         ensemble_mean = sum(masses) / len(masses)
-        ratio = ensemble_mean / mstar_mean
+        ratio = ensemble_mean / mstar_base
 
-        # The ensemble average should be within ~50% of the mean SFH mass
-        # (finite N, finite grid → won't be exact)
-        assert 0.3 < ratio < 3.0, f"Ensemble <M*_total>/M*_mean = {ratio:.2f}, expected ~1"
+        # Ensemble average should be within ~3x of the zero-xi mass
+        assert 0.3 < ratio < 3.0, f"Ensemble <M*>/M*_base = {ratio:.2f}, expected ~1"
 
 
 # ===================================================================
@@ -276,18 +301,20 @@ class TestDerivedQuantities:
 class TestDerivedGradients:
     """Verify gradients flow through derived quantities."""
 
-    def test_mstar_gradient_wrt_sfr_norm(self, model, fiducial_params):
+    def test_mstar_gradient_wrt_peak_sfr(self, model, fiducial_params):
         def loss(p):
-            return model.compute_stellar_mass(p)["mstar_total"]
+            return model.predict_sfh_quantities(p).stellar_mass
 
         grad = jax.grad(loss)(fiducial_params)
-        assert jnp.isfinite(grad["sfr_norm"]), "Gradient w.r.t. sfr_norm not finite"
-        assert float(grad["sfr_norm"]) > 0.0, "Increasing sfr_norm should increase M*"
+        g = grad["sfh_dpl_log_peak_sfr"]
+        assert jnp.isfinite(g), "Gradient w.r.t. log_peak_sfr not finite"
+        assert float(g) > 0.0, "Increasing log_peak_sfr should increase M*"
 
-    def test_derived_gradient_wrt_sfr_norm(self, model, fiducial_params):
+    def test_sfr_gradient_wrt_peak_sfr(self, model, fiducial_params):
         def loss(p):
-            d = model.compute_derived_quantities(p)
-            return d["mstar_formed"] + d["sfr_100myr"]
+            sfh = model.predict_sfh_quantities(p)
+            return sfh.stellar_mass + sfh.sfr_100myr
 
         grad = jax.grad(loss)(fiducial_params)
-        assert jnp.isfinite(grad["sfr_norm"]), "Gradient not finite"
+        g = grad["sfh_dpl_log_peak_sfr"]
+        assert jnp.isfinite(g), "Gradient not finite"

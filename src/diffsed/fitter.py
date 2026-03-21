@@ -1433,11 +1433,21 @@ class Fitter:
         if verbose:
             print(f"  Drawing {n_samples} posterior samples via BlackJAX NUTS...")
 
-        @jax.jit
-        def logdensity_fn(x):
-            lh_val = likelihood(x)
-            prior = 0.5 * sum(jnp.sum(v**2) for v in x.values())
-            return -lh_val - prior
+        if likelihood is not None:
+
+            @jax.jit
+            def logdensity_fn(x):
+                lh_val = likelihood(x)
+                prior = 0.5 * sum(jnp.sum(v**2) for v in x.values())
+                return -lh_val - prior
+
+        else:
+            # Build log-density from the loss function (used by _run_evi_jit path)
+            loss_fn = self._build_loss_fn()
+
+            @jax.jit
+            def logdensity_fn(x):
+                return -loss_fn(x)
 
         warmup_key, sample_key = jax.random.split(key)
         n_warmup = min(200, n_samples)
@@ -1509,6 +1519,7 @@ class Fitter:
         kl_rtol=1e-2,
         n_seeds=5,
         sample_mode="linear",
+        posterior_method="jit",
         verbose=True,
     ):
         """Fully JIT-compiled EVI: ~500x faster than NIFTy's optimize_kl.
@@ -1712,15 +1723,10 @@ class Fitter:
         converged_dict = unflatten(converged_flat)
 
         if n_posterior_samples > 0:
-            # Use nonlinear draws for geoVI modes, linear for MGVI
-            use_nonlinear = sample_mode in (
-                "geovi",
-                "nonlinear_resample",
-                "nonlinear_update",
-                "nonlinear_sample",
-            )
-            if use_nonlinear:
-                all_sample_dicts = self._draw_nonlinear_jit_samples(
+            if posterior_method == "blackjax":
+                # NUTS posterior sampling from converged position
+                all_sample_dicts = self._draw_blackjax_samples(
+                    None,  # likelihood not needed — logdensity built internally
                     converged_dict,
                     draw_key,
                     n_posterior_samples,
@@ -1728,14 +1734,30 @@ class Fitter:
                     verbose=verbose,
                 )
             else:
-                if verbose:
-                    print(f"  Drawing {n_posterior_samples} posterior samples (JIT CG)...")
-                draw_keys = jax.random.split(draw_key, n_posterior_samples)
-                residuals_flat = engine["draw_samples"](converged_flat, draw_keys)
-                for i in range(n_posterior_samples):
-                    res = unflatten(residuals_flat[i])
-                    combined = {k: converged_dict[k] + res[k] for k in converged_dict}
-                    all_sample_dicts.append(combined)
+                # Use nonlinear draws for geoVI modes, linear for MGVI
+                use_nonlinear = sample_mode in (
+                    "geovi",
+                    "nonlinear_resample",
+                    "nonlinear_update",
+                    "nonlinear_sample",
+                )
+                if use_nonlinear:
+                    all_sample_dicts = self._draw_nonlinear_jit_samples(
+                        converged_dict,
+                        draw_key,
+                        n_posterior_samples,
+                        all_sample_dicts,
+                        verbose=verbose,
+                    )
+                else:
+                    if verbose:
+                        print(f"  Drawing {n_posterior_samples} posterior samples (JIT CG)...")
+                    draw_keys = jax.random.split(draw_key, n_posterior_samples)
+                    residuals_flat = engine["draw_samples"](converged_flat, draw_keys)
+                    for i in range(n_posterior_samples):
+                        res = unflatten(residuals_flat[i])
+                        combined = {k: converged_dict[k] + res[k] for k in converged_dict}
+                        all_sample_dicts.append(combined)
 
         wall_time = time.time() - t0
         n_posterior = len(all_sample_dicts)
@@ -1825,28 +1847,23 @@ class Fitter:
         Parameters
         ----------
         method : str
-            **NIFTy optimize_kl (exact, gold standard):**
+            **Default (native JIT, fully XLA-compiled):**
             ``"geovi"`` — geoVI with nonlinear coordinate curving.
             ``"mgvi"`` — MGVI (linearized geoVI).
-            ``"evi"`` — EVI: MGVI first half, geoVI second half.
-
-            **Fast (default) — NIFTy exact math, tight loop:**
-            ``"fast_geovi"`` / ``"geovi"`` — geoVI nonlinear curving.
-            ``"fast_mgvi"`` / ``"mgvi"`` — MGVI (linearized).
-            ``"fast_evi"`` / ``"evi"`` — EVI: MGVI first half, geoVI second.
+            ``"evi"`` — EVI: MGVI then geoVI.
 
             **Hybrid (VI optimization + NUTS posterior sampling):**
             ``"geovi_nuts"`` — geoVI optimization, then NUTS samples.
             ``"mgvi_nuts"`` — MGVI optimization, then NUTS samples.
 
+            **Fast (NIFTy exact math, tight Python loop):**
+            ``"fast_geovi"`` — geoVI via NIFTy OptimizeVI.update.
+            ``"fast_mgvi"`` — MGVI via NIFTy OptimizeVI.update.
+            ``"fast_evi"`` — EVI via NIFTy OptimizeVI.update.
+
             **NIFTy (full jft.optimize_kl with logging/diagnostics):**
             ``"nifty_geovi"`` — Full NIFTy geoVI with minisanity.
             ``"nifty_mgvi"`` — Full NIFTy MGVI with logging.
-
-            **Native JIT (fully XLA-compiled, experimental):**
-            ``"native_geovi"`` — JIT-compiled geoVI.
-            ``"native_mgvi"`` — JIT-compiled MGVI.
-            ``"native_evi"`` — JIT-compiled EVI.
 
             **Other:**
             ``"map"`` — MAP optimization (Adam/SGD).
@@ -1873,8 +1890,40 @@ class Fitter:
             return self._run_raytrace(key=key, init_from=init_from, **kwargs)
         elif method == "nuts":
             return self._run_nuts(key=key, init_from=init_from, **kwargs)
-        # --- Fast: NIFTy exact math, tight loop (DEFAULT) ---
-        elif method in ("fast_geovi", "geovi"):
+        # --- Native JIT (DEFAULT): fully XLA-compiled geoVI/MGVI ---
+        elif method in ("geovi", "native_geovi"):
+            return self._run_evi_jit(
+                key=key,
+                init_from=init_from,
+                sample_mode="geovi",
+                **kwargs,
+            )
+        elif method in ("mgvi", "native_mgvi", "evi", "native_evi"):
+            return self._run_evi_jit(
+                key=key,
+                init_from=init_from,
+                sample_mode="linear",
+                **kwargs,
+            )
+        # --- Hybrid: geoVI/MGVI optimization + NUTS posterior sampling ---
+        elif method == "geovi_nuts":
+            return self._run_evi_jit(
+                key=key,
+                init_from=init_from,
+                sample_mode="geovi",
+                posterior_method="blackjax",
+                **kwargs,
+            )
+        elif method == "mgvi_nuts":
+            return self._run_evi_jit(
+                key=key,
+                init_from=init_from,
+                sample_mode="linear",
+                posterior_method="blackjax",
+                **kwargs,
+            )
+        # --- Fast: NIFTy exact math, tight loop ---
+        elif method == "fast_geovi":
             return self._run_fast_vi(
                 key=key,
                 init_from=init_from,
@@ -1882,35 +1931,18 @@ class Fitter:
                 posterior_method="nonlinear",
                 **kwargs,
             )
-        elif method in ("fast_mgvi", "mgvi"):
+        elif method == "fast_mgvi":
             return self._run_fast_vi(
                 key=key,
                 init_from=init_from,
                 sample_mode="linear_resample",
                 **kwargs,
             )
-        elif method in ("fast_evi", "evi"):
+        elif method == "fast_evi":
             return self._run_fast_vi(
                 key=key,
                 init_from=init_from,
                 sample_mode="evi",
-                **kwargs,
-            )
-        # --- Hybrid: geoVI optimization + NUTS posterior sampling ---
-        elif method == "geovi_nuts":
-            return self._run_fast_vi(
-                key=key,
-                init_from=init_from,
-                sample_mode="nonlinear_resample",
-                posterior_method="blackjax",
-                **kwargs,
-            )
-        elif method == "mgvi_nuts":
-            return self._run_fast_vi(
-                key=key,
-                init_from=init_from,
-                sample_mode="linear_resample",
-                posterior_method="blackjax",
                 **kwargs,
             )
         # --- NIFTy: full jft.optimize_kl (with logging/minisanity) ---
@@ -1923,28 +1955,13 @@ class Fitter:
                 sample_mode="linear_resample",
                 **kwargs,
             )
-        # --- Native JIT (fully XLA-compiled) ---
-        elif method == "native_geovi":
-            return self._run_evi_jit(
-                key=key,
-                init_from=init_from,
-                sample_mode="geovi",  # resample+update schedule, same as fast_geovi
-                **kwargs,
-            )
-        elif method in ("native_mgvi", "native_evi"):
-            return self._run_evi_jit(
-                key=key,
-                init_from=init_from,
-                sample_mode="linear",
-                **kwargs,
-            )
         else:
             raise ValueError(
                 f"Unknown method: {method}. "
-                f"Fast (default): 'geovi'/'fast_geovi', 'mgvi'/'fast_mgvi', "
-                f"'evi'/'fast_evi'. "
+                f"Default: 'geovi', 'mgvi', 'evi'. "
+                f"Hybrid: 'geovi_nuts', 'mgvi_nuts'. "
+                f"Fast (NIFTy loop): 'fast_geovi', 'fast_mgvi', 'fast_evi'. "
                 f"NIFTy full: 'nifty_geovi', 'nifty_mgvi'. "
-                f"Native JIT: 'native_geovi', 'native_mgvi', 'native_evi'. "
                 f"Other: 'map', 'raytrace', 'nuts'."
             )
 

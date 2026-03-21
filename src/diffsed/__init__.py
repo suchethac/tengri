@@ -18,9 +18,9 @@ jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
 __version__ = "0.1.0"
 
 # --- New high-level API ---
+from diffsed._mock import MockData, generate_mock
 from diffsed.distributions import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
 from diffsed.fitter import Fitter
-from diffsed.forward_model import ForwardModel, ModelConfig, generate_mock
 from diffsed.hierarchical import HierarchicalFitter, HierarchicalResult
 from diffsed.model import Model
 from diffsed.models.dust.attenuation import two_component_dust
@@ -84,15 +84,13 @@ __all__ = [
     "EmissionLines",
     "Fitter",
     "Fixed",
-    # Low-level
-    "ForwardModel",
     "Gaussian",
     "HierarchicalFitter",
     "HierarchicalResult",
     "LogNormal",
     "LogUniform",
+    "MockData",
     "Model",
-    "ModelConfig",
     "ParamSpec",
     "Posterior",
     "Prediction",

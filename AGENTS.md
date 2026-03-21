@@ -35,7 +35,7 @@ Parameters (latent xi + physical params)
 
 | File | Purpose | When to read |
 |------|---------|--------------|
-| `src/diffsed/forward_model.py` | Full pipeline class | Understanding the forward model |
+| `src/diffsed/model.py` | High-level Model class | Understanding the forward model |
 | `src/diffsed/models/sfh/gp_sfh.py` | GP generation from PSD | Core IFT machinery |
 | `src/diffsed/models/sfh/psd_models.py` | PSD definitions (DRW, Matern) | Understanding the burstiness prior |
 | `src/diffsed/models/sfh/mean_sfh.py` | Parametric mean SFH | The smooth secular envelope |
@@ -48,30 +48,34 @@ Parameters (latent xi + physical params)
 
 ## Parameter dictionary convention
 
-The forward model expects a flat dictionary with these keys:
+The ``Model`` class uses **public parameter names** (via ``ParamSpec``).
+For a DPL + GP field model:
 
 ```python
 params = {
     # Latent GP variables (standardized: xi ~ N(0, I))
-    "xi": jnp.ndarray,          # shape (256,), the latent vector
+    "sfh_field_xi": jnp.ndarray,          # shape (n_grid,)
 
     # PSD parameters (DRW)
-    "sigma_ps": float,           # PSD amplitude (typically 0.3-3.0)
-    "tau_ps": float,             # damping timescale in YEARS (5e6 to 200e6)
+    "sfh_field_psd_sigma": float,          # PSD amplitude (0.01-3.0)
+    "sfh_field_psd_tau_myr": float,        # damping timescale in Myr (10-500)
 
     # Mean SFH (double power law)
-    "alpha": float,              # falling slope (0.5-4.0)
-    "beta": float,               # rising slope (0.3-2.0)
-    "tau_sfh": float,            # turnover time in YEARS (0.5e9 to 8e9)
-    "sfr_norm": float,           # peak SFR in Msun/yr (0.1-100)
+    "sfh_dpl_alpha": float,                # falling slope (0.1-5.0)
+    "sfh_dpl_beta": float,                 # rising slope (0.1-3.0)
+    "sfh_dpl_tau_gyr": float,              # turnover time in Gyr (0.1-12)
+    "sfh_dpl_log_peak_sfr": float,         # log10 peak SFR (Msun/yr)
 
     # Metallicity
-    "log_z": float,              # log10(Z/Zsun) (-2.0 to 0.2)
+    "met_logzsol": float,                  # log10(Z/Zsun) (-2.0 to 0.2)
 
-    # Dust (Charlot & Fall 2000)
-    "tau_v1": float,             # birth cloud V-band optical depth (0-3)
-    "tau_v2": float,             # diffuse ISM V-band optical depth (0-2)
-    "dust_n": float,             # attenuation curve slope (typically -0.7)
+    # Dust (two-component attenuation)
+    "dust_tau_bc": float,                  # birth cloud optical depth (0-4)
+    "dust_tau_diff": float,                # diffuse ISM optical depth (0-3)
+    "dust_slope": float,                   # power-law index (typically -0.7)
+
+    # Redshift
+    "redshift": float,
 }
 ```
 
@@ -80,21 +84,23 @@ params = {
 ### Generate a mock galaxy SED
 
 ```python
-from diffsed.forward_model import ForwardModel, ModelConfig, generate_mock
-from diffsed.models.sps.dsps_wrapper import load_ssp_data
+from diffsed import Model, ParamSpec, Uniform, load_ssp_data, load_filter_set
 
-ssp_data = load_ssp_data("path/to/ssp_templates.h5")
-config = ModelConfig(redshift=0.1)
-model = ForwardModel(ssp_data, config, filter_waves=[...], filter_trans=[...])
-
-params = {
-    "xi": jax.random.normal(key, (256,)),
-    "sigma_ps": 1.0, "tau_ps": 50e6,
-    "alpha": 1.5, "beta": 0.8, "tau_sfh": 2e9, "sfr_norm": 5.0,
-    "log_z": -0.3,
-    "tau_v1": 0.5, "tau_v2": 0.3, "dust_n": -0.7,
-}
-mock = generate_mock(model, params, key=key, snr=20.0)
+ssp = load_ssp_data("path/to/ssp_templates.h5")
+filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+spec = ParamSpec(
+    mean_sfh_type=["dpl", "field"],
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.3, 2.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+    sfh_dpl_log_peak_sfr=Uniform(-1, 2),
+    sfh_field_psd_sigma=Uniform(0.01, 1.0),
+    sfh_field_psd_tau_myr=Uniform(10, 500),
+    redshift=0.1,
+)
+model = Model(spec, ssp, filters=filters)
+params = spec.sample(jax.random.PRNGKey(0))
+mock = model.mock(params, snr=20.0, key=jax.random.PRNGKey(1))
 ```
 
 ### Compute gradients
@@ -111,7 +117,7 @@ grads = jax.grad(loss_fn)(params)
 2. Implement a function with signature: `(wavelength, age_grid, **params) -> attenuation_factor`
 3. The function must be pure JAX (jnp operations only, no side effects)
 4. Add tests in `tests/unit/test_dust.py`
-5. Register in `forward_model.py` if replacing Charlot & Fall
+5. Register in the dust model registry if replacing the default
 
 ### Add a new PSD model
 
