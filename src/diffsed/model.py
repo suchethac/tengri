@@ -39,7 +39,7 @@ from typing import ClassVar, NamedTuple
 import jax
 import jax.numpy as jnp
 
-from diffsed.models.dust.attenuation import precompute_dust_age_weights, two_component_dust
+from diffsed.models.dust.attenuation import precompute_dust_age_weights
 from diffsed.models.observation.photometry import ab_mag_from_flux, compute_flux_density
 from diffsed.models.observation.spectroscopy import apply_lsf, compute_spectrum
 from diffsed.models.sfh.registry import compute_field_gp, resolve_sfh
@@ -266,6 +266,11 @@ class Model:
         # Dust law settings (generalized two-component model)
         self._dust_law_bc = spec.dust_law_bc
         self._dust_law_diff = spec.dust_law_diff
+        # Cache resolved dust law functions (avoid dict lookup per forward call)
+        from diffsed.models.dust.attenuation import get_dust_law
+
+        self._dust_law_bc_fn = get_dust_law(self._dust_law_bc)
+        self._dust_law_diff_fn = get_dust_law(self._dust_law_diff)
 
         # IGM absorption (Inoue+2014)
         self._apply_igm = spec.apply_igm
@@ -778,6 +783,12 @@ class Model:
 
         from diffsed.models.sps.dsps_wrapper import _ALPHA_TO_Z_COEFF as _A2Z
 
+        # Metallicity interpolation mode for fused kernel
+        _use_smooth_z = self._met_interp == "smooth"
+        _lgmet_scat = dt.type(self._lgmet_scatter)
+        if _use_smooth_z:
+            from diffsed.models.sps.dsps_wrapper import compute_lgmet_weights as _clw
+
         # IGM: precomputed at effective wavelengths (constant for fixed z)
         has_igm = self._igm_at_eff is not None
         if has_igm:
@@ -845,11 +856,17 @@ class Model:
             # Alpha enhancement: shift effective metallicity
             lz = lz + _A2Z * afe
 
-            # Metallicity interpolation
-            log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
-            idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
-            frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
-            ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
+            # Metallicity interpolation (respects met_interp setting)
+            if _use_smooth_z:
+                # Triweight kernel: smooth C2 gradients (ssp_phot is tiny: n_met x n_age x n_filt)
+                zw = _clw(lz, ssp_lgmet, _lgmet_scat)
+                ssp_at_z = jnp.einsum("m,maf->af", zw, ssp_phot)
+            else:
+                # 2-point linear (FSPS-style)
+                log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
+                idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
+                frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
+                ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
 
             # Dust: evaluate configurable curves at effective wavelengths
             k_bc = law_bc_fn(
@@ -1261,14 +1278,16 @@ class Model:
             log_z_eff = effective_metallicity(p["log_z"], alpha_fe)
             ssp_flux_at_z = self._interp_metallicity(log_z_eff)
 
-        # Dust attenuation (generalized two-component model)
-        dust_atten = two_component_dust(
+        # Dust attenuation (optimized: precomputed age weights + separable exp)
+        from diffsed.models.dust.attenuation import two_component_dust_separable
+
+        dust_atten = two_component_dust_separable(
             self.ssp_data.ssp_wave,
-            self.ssp_ages_yr,
+            self._dust_age_weights,
             tau_v1=p["tau_v1"],
             tau_v2=p["tau_v2"],
-            law_bc=self._dust_law_bc,
-            law_diff=self._dust_law_diff,
+            law_bc_fn=self._dust_law_bc_fn,
+            law_diff_fn=self._dust_law_diff_fn,
             f_obscuration=p.get("f_obscuration", 0.0),
             n_slope=p.get("dust_n", -0.7),
             dust_bump_strength=p.get("dust_bump_strength", 0.0),
@@ -1937,6 +1956,12 @@ class Model:
         law_bc_fn = get_dust_law(self._dust_law_bc)
         law_diff_fn = get_dust_law(self._dust_law_diff)
 
+        # Metallicity interpolation mode (ztable variant)
+        _use_smooth_z_zt = self._met_interp == "smooth"
+        _lgmet_scat_zt = fdt.type(self._lgmet_scatter)
+        if _use_smooth_z_zt:
+            from diffsed.models.sps.dsps_wrapper import compute_lgmet_weights as _clw_zt
+
         # AGN: capture model function for evaluation at effective wavelengths
         has_agn = self._agn_model is not None and self._agn_parametric
         if has_agn:
@@ -1999,11 +2024,15 @@ class Model:
             # Alpha enhancement: shift effective metallicity
             lz = lz + _A2Z * afe
 
-            # Metallicity interpolation
-            log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
-            idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
-            frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
-            ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
+            # Metallicity interpolation (respects met_interp setting)
+            if _use_smooth_z_zt:
+                zw = _clw_zt(lz, ssp_lgmet, _lgmet_scat_zt)
+                ssp_at_z = jnp.einsum("m,maf->af", zw, ssp_phot)
+            else:
+                log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
+                idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
+                frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
+                ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
 
             # Dust: configurable curves at effective wavelengths
             k_bc = law_bc_fn(
