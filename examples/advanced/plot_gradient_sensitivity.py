@@ -41,12 +41,19 @@ def _find_ssp():
 
 
 SSP_PATH = _find_ssp()
+
+# Locate filter cache
+_FILTER_DIR = next(
+    (str(d) for d in [Path("data/filters"), Path("../data/filters"),
+     Path("../../data/filters"), Path("../../../data/filters")] if d.exists()),
+    "data/filters",
+)
 if SSP_PATH is None:
     raise FileNotFoundError("SSP data not found — skipping example")
 
 ssp = load_ssp_data(SSP_PATH)
 bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-filters = load_filter_set(bands)
+filters = load_filter_set(bands, cache_dir=_FILTER_DIR)
 
 # --- Model ---
 spec = ParamSpec(

@@ -37,6 +37,13 @@ def _find_ssp():
 
 
 SSP_PATH = _find_ssp()
+
+# Locate filter cache
+_FILTER_DIR = next(
+    (str(d) for d in [Path("data/filters"), Path("../data/filters"),
+     Path("../../data/filters"), Path("../../../data/filters")] if d.exists()),
+    "data/filters",
+)
 if SSP_PATH is None:
     raise FileNotFoundError("SSP data not found — skipping example")
 
@@ -57,7 +64,7 @@ spec = ParamSpec(
     mean_sfh_type="tsnorm",
 )
 
-obs = Observation(photometry=Photometry.from_names(["sdss_r"]))
+obs = Observation(photometry=Photometry.from_names(["sdss_r"], cache_dir=_FILTER_DIR))
 model = Model(spec, ssp, observation=obs)
 params = spec.sample(jax.random.PRNGKey(0))
 
