@@ -73,7 +73,7 @@ ssp_data = load_ssp_data(
 )
 filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 print(
-    f"SSP templates: {ssp_data.n_met} metallicities × {ssp_data.n_age} ages "
+    f"SSP templates: {ssp_data.ssp_flux.shape[0]} metallicities × {ssp_data.ssp_flux.shape[1]} ages "
     f"× {ssp_data.ssp_flux.shape[-1]} wavelengths"
 )
 

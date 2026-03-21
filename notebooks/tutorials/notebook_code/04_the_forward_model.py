@@ -73,13 +73,13 @@ filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 # --- FIGURE 1: SSP spectra at 5 ages ---
 ages_idx = [0, 20, 40, 60, 80]  # sample indices
 age_labels = ["1 Myr", "10 Myr", "100 Myr", "1 Gyr", "10 Gyr"]
-met_idx = ssp_data.n_met // 2  # approximately solar
+met_idx = ssp_data.ssp_flux.shape[0] // 2  # approximately solar
 
 fig, ax = plt.subplots(figsize=(10, 4))
 wavelengths = np.array(ssp_data.ssp_wave)
 
 for i, (aidx, label) in enumerate(zip(ages_idx, age_labels)):
-    if aidx < ssp_data.n_age:
+    if aidx < ssp_data.ssp_flux.shape[1]:
         flux = np.array(ssp_data.ssp_flux[met_idx, aidx, :])
         flux_norm = flux / np.median(flux[flux > 0]) if np.any(flux > 0) else flux
         ax.plot(wavelengths, flux_norm, lw=0.8, alpha=0.8, label=label)
@@ -144,7 +144,7 @@ ax_sfh.set_xlim(13.5, 0)
 ax_sfh.set_title("(1) Star Formation History")
 
 # Weights = SFR × Δt (contribution of each age bin)
-ages_log = np.array(ssp_data.log_age)
+ages_log = np.array(ssp_data.ssp_lg_age_gyr)
 ages_gyr = 10**ages_log / 1e9
 ax_weights.loglog(ages_gyr, np.abs(sfr[:len(ages_gyr)]) + 1e-10, color=COLORS["sfh_mean"], lw=1.2)
 ax_weights.set_xlabel("Lookback time [Gyr]")
