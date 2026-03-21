@@ -8,14 +8,14 @@ jax.config.update("jax_enable_x64", True)
 
 from pathlib import Path
 
+from diffsed.core.model import Model
+from diffsed.core.param_spec import ParamSpec
 from diffsed.distributions import Uniform
-from diffsed.fitter import Fitter
-from diffsed.model import Model
+from diffsed.inference.fitter import Fitter
+from diffsed.inference.posterior import Posterior
+from diffsed.inference.raytrace import sample_hamiltonian, sample_raytrace
 from diffsed.models.observation.filters import load_filter_set
 from diffsed.models.sps.dsps_wrapper import load_ssp_data
-from diffsed.param_spec import ParamSpec
-from diffsed.posterior import Posterior
-from diffsed.raytrace_jax import sample_hamiltonian, sample_raytrace
 
 # ---------------------------------------------------------------------------
 # Helpers

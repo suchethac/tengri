@@ -13,12 +13,11 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
+from diffsed.core.param_spec import ParamSpec
 from diffsed.models.sps.dsps_wrapper import (
     _ALPHA_TO_Z_COEFF,
     effective_metallicity,
-    interpolate_metallicity,
 )
-from diffsed.param_spec import ParamSpec
 
 jax.config.update("jax_enable_x64", True)
 
@@ -166,7 +165,7 @@ class TestAlphaFeForwardModel:
 
     @pytest.fixture
     def model_with_alpha(self):
-        from diffsed import Model, ParamSpec, Fixed, Uniform, load_ssp_data
+        from diffsed import Fixed, Model, ParamSpec, Uniform, load_ssp_data
         ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
         spec = ParamSpec(
             sfh_dpl_alpha=Fixed(1.0),
@@ -186,7 +185,7 @@ class TestAlphaFeForwardModel:
         """alpha_fe=0 should give identical SED as no alpha enhancement."""
         sed_alpha0 = model_with_alpha.predict_sed({"met_alpha_fe": 0.0})
         # Build a model without alpha_fe (defaults to Fixed(0.0))
-        from diffsed import Model, ParamSpec, Fixed, load_ssp_data
+        from diffsed import Fixed, Model, ParamSpec, load_ssp_data
         ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
         spec_no = ParamSpec(
             sfh_dpl_alpha=Fixed(1.0),

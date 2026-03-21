@@ -7,7 +7,7 @@ generation. For the ``Model``-based API, use ``Model.mock()`` instead.
 import jax
 
 # Re-export MockData so callers can import from one place
-from diffsed.model import MockData
+from diffsed.core.model import MockData
 
 __all__ = ["MockData", "generate_mock"]
 

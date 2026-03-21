@@ -6,7 +6,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed.posterior import Posterior
+from diffsed.inference.posterior import Posterior
 
 
 @pytest.fixture

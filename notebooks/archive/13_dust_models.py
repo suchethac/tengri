@@ -627,7 +627,7 @@ sfr_on_ssp = jnp.interp(model.ssp_log_ages_yr, model.log_age_grid, sfr)
 weights = compute_csp_weights(sfr_on_ssp, model.ssp_ages_yr)
 
 # Metallicity interpolation
-from diffsed.model import LOG10_ZSUN
+from diffsed.core.model import LOG10_ZSUN
 
 log_z = -0.3 + LOG10_ZSUN
 ssp_flux_at_z = interpolate_metallicity(ssp_data.ssp_flux, ssp_data.ssp_lgmet, log_z)

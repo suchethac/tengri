@@ -1,8 +1,16 @@
-"""Inference backends: MAP optimization, MCMC sampling, variational inference.
+"""Inference engine: Fitter, Posterior, HierarchicalFitter, and backends."""
 
-All backends share the same interface:
-    result = fit_*(forward_model, data, noise, prior_config, **kwargs)
+from diffsed.inference.fitter import Fitter
+from diffsed.inference.hierarchical import HierarchicalFitter, HierarchicalResult
+from diffsed.inference.posterior import Posterior
+from diffsed.inference.raytrace import sample_raytrace
+from diffsed.inference.vi_config import VIConfig
 
-Each returns an InferenceResult with posterior samples/point estimates,
-diagnostics, and timing information.
-"""
+__all__ = [
+    "Fitter",
+    "HierarchicalFitter",
+    "HierarchicalResult",
+    "Posterior",
+    "VIConfig",
+    "sample_raytrace",
+]

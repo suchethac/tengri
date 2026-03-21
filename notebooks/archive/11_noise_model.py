@@ -80,7 +80,7 @@ from diffsed import (
     load_filter_set,
     load_ssp_data,
 )
-from diffsed.noise import compute_effective_noise, variable_noise_hamiltonian
+from diffsed.core.noise import compute_effective_noise, variable_noise_hamiltonian
 
 # %%
 ssp_data = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")

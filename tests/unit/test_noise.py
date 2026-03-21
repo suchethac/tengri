@@ -11,7 +11,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed.noise import (
+from diffsed.core.noise import (
     compute_effective_noise,
     compute_std_inv,
     has_noise_model,
@@ -339,7 +339,7 @@ class TestUsesStudentT:
     def test_default_no_student_t(self):
         """Default spec uses Gaussian."""
         from diffsed import Fixed, ParamSpec, Uniform
-        from diffsed.noise import uses_student_t
+        from diffsed.core.noise import uses_student_t
 
         spec = ParamSpec(
             mean_sfh_type="dpl",
@@ -356,7 +356,7 @@ class TestUsesStudentT:
     def test_fixed_dof_activates(self):
         """noise_dof=Fixed(2.0) → Student-t active."""
         from diffsed import Fixed, ParamSpec, Uniform
-        from diffsed.noise import uses_student_t
+        from diffsed.core.noise import uses_student_t
 
         spec = ParamSpec(
             mean_sfh_type="dpl",
@@ -375,7 +375,7 @@ class TestUsesStudentT:
     def test_zero_dof_no_student_t(self):
         """noise_dof=Fixed(0.0) → Gaussian (default)."""
         from diffsed import Fixed, ParamSpec, Uniform
-        from diffsed.noise import uses_student_t
+        from diffsed.core.noise import uses_student_t
 
         spec = ParamSpec(
             mean_sfh_type="dpl",

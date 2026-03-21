@@ -18,11 +18,29 @@ jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
 __version__ = "0.1.0"
 
 # --- New high-level API ---
-from diffsed._mock import MockData, generate_mock
+from diffsed.core.mock import MockData, generate_mock
+from diffsed.core.model import Model
+from diffsed.core.noise import (
+    compute_effective_noise,
+    compute_std_inv,
+    has_noise_model,
+    uses_student_t,
+    variable_noise_hamiltonian,
+)
+from diffsed.core.param_spec import ParamSpec
+from diffsed.core.prediction import (
+    DerivedQuantities,
+    EmissionLines,
+    Prediction,
+    SEDQuantities,
+    SFHQuantities,
+)
 from diffsed.distributions import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
-from diffsed.fitter import Fitter
-from diffsed.hierarchical import HierarchicalFitter, HierarchicalResult
-from diffsed.model import Model
+from diffsed.inference.fitter import Fitter
+from diffsed.inference.hierarchical import HierarchicalFitter, HierarchicalResult
+from diffsed.inference.posterior import Posterior
+from diffsed.inference.raytrace import sample_raytrace
+from diffsed.inference.vi_config import VIConfig
 from diffsed.models.dust.attenuation import two_component_dust
 from diffsed.models.observation.filters import load_filter_set
 from diffsed.models.sfh.gp_sfh import (
@@ -54,24 +72,6 @@ from diffsed.models.sfh.registry import (
     resolve_sfh,
 )
 from diffsed.models.sps.dsps_wrapper import SSPData, effective_metallicity, load_ssp_data
-from diffsed.noise import (
-    compute_effective_noise,
-    compute_std_inv,
-    has_noise_model,
-    uses_student_t,
-    variable_noise_hamiltonian,
-)
-from diffsed.param_spec import ParamSpec
-from diffsed.posterior import Posterior
-from diffsed.prediction import (
-    DerivedQuantities,
-    EmissionLines,
-    Prediction,
-    SEDQuantities,
-    SFHQuantities,
-)
-from diffsed.raytrace_jax import sample_raytrace
-from diffsed.vi_config import VIConfig
 
 __all__ = [
     # High-level API

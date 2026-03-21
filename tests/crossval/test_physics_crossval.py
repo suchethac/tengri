@@ -330,7 +330,7 @@ class TestNoiseCrossval:
 
     def test_student_t_high_dof_approaches_gaussian(self):
         """Student-t with dof=1000 should match Gaussian energy closely."""
-        from diffsed.noise import variable_noise_hamiltonian
+        from diffsed.core.noise import variable_noise_hamiltonian
 
         data = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0])
         predicted = jnp.array([1.1, 1.9, 3.2, 3.8, 5.1])
@@ -357,7 +357,7 @@ class TestNoiseCrossval:
 
     def test_log_likelihood_finite_for_reasonable_inputs(self):
         """Energy should be finite for typical SED fitting inputs."""
-        from diffsed.noise import variable_noise_hamiltonian
+        from diffsed.core.noise import variable_noise_hamiltonian
 
         data = jnp.array([1e-17, 2e-17, 3e-17, 5e-17, 8e-17])
         predicted = jnp.array([1.1e-17, 1.8e-17, 3.5e-17, 4.5e-17, 7.5e-17])
@@ -379,7 +379,7 @@ class TestNoiseCrossval:
         Lower energy = higher likelihood. A Student-t with heavy tails
         (low dof) should be more tolerant of outliers than a Gaussian.
         """
-        from diffsed.noise import variable_noise_hamiltonian
+        from diffsed.core.noise import variable_noise_hamiltonian
 
         # Data with one strong outlier at index 4
         data = jnp.array([1.0, 2.0, 3.0, 4.0, 20.0])
@@ -405,7 +405,7 @@ class TestNoiseCrossval:
 
     def test_student_t_energy_decreases_with_lower_dof_for_outliers(self):
         """Energy should decrease monotonically with lower dof for outlier data."""
-        from diffsed.noise import variable_noise_hamiltonian
+        from diffsed.core.noise import variable_noise_hamiltonian
 
         # Data with outliers
         data = jnp.array([1.0, 2.0, 3.0, 4.0, 15.0])

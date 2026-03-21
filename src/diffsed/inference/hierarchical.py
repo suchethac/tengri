@@ -113,7 +113,8 @@ class HierarchicalFitter:
         self._template = model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
         self._spec = self._template.spec
         self._free_names = [
-            n for n in self._spec.free_params
+            n
+            for n in self._spec.free_params
             if n not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
         ]
 
@@ -247,9 +248,9 @@ class HierarchicalFitter:
             if stochastic:
                 predictions = jax.vmap(forward_one)(p["gal"], p["gal_xi"])
             else:
-                predictions = jax.vmap(
-                    lambda ub, _: forward_one(ub, None)
-                )(p["gal"], jnp.zeros(n_gal))
+                predictions = jax.vmap(lambda ub, _: forward_one(ub, None))(
+                    p["gal"], jnp.zeros(n_gal)
+                )
             return predictions.reshape(-1)
 
         # --- Build init structure ---
@@ -311,9 +312,7 @@ class HierarchicalFitter:
                 info = jnp.where(curv <= 0.0, jnp.int32(-1), info)
                 alpha = jnp.where(curv <= 0.0, 0.0, alpha)
                 x = x - alpha * d
-                r = jnp.where(
-                    (i % 20 == 0) & (info < -1), mat_fn(x) - b, r - alpha * q
-                )
+                r = jnp.where((i % 20 == 0) & (info < -1), mat_fn(x) - b, r - alpha * q)
                 gamma = jnp.dot(r, r)
                 energy = jnp.dot((r - b) / 2, x)
                 ed = pe - energy
@@ -381,9 +380,7 @@ class HierarchicalFitter:
                 )
                 m_new = m_cur + step
                 ed = prev_val - val
-                info = jnp.where(
-                    (ed < 1e-3) & (i >= 3) & (info < -1), jnp.int32(0), info
-                )
+                info = jnp.where((ed < 1e-3) & (i >= 3) & (info < -1), jnp.int32(0), info)
                 info = jnp.where((i >= 10) & (info < -1), i, info)
                 return (m_new, val, info, i)
 
@@ -391,9 +388,7 @@ class HierarchicalFitter:
                 return carry[2] < -1
 
             val0, _ = kl_vg(m, residuals)
-            result = jax.lax.while_loop(
-                ncg_cond, ncg_body, (m, val0, jnp.int32(-2), jnp.int32(0))
-            )
+            result = jax.lax.while_loop(ncg_cond, ncg_body, (m, val0, jnp.int32(-2), jnp.int32(0)))
             return result[0], result[1]
 
         def run_evi(init_pos, evi_key, n_iter, n_samp, rtol):
@@ -413,15 +408,11 @@ class HierarchicalFitter:
 
             m0, kl0 = evi_step(init_pos, keys[0], n_samp)
             init_state = (m0, kl0, jnp.int32(1), jnp.bool_(False))
-            m_final, _kl_final, n_iters, _ = jax.lax.while_loop(
-                cond_fn, body_fn, init_state
-            )
+            m_final, _kl_final, n_iters, _ = jax.lax.while_loop(cond_fn, body_fn, init_state)
             return m_final, n_iters
 
         # --- JIT-compile ---
-        run_evi_jit = jax.jit(
-            run_evi, static_argnames=("n_iter", "n_samp")
-        )
+        run_evi_jit = jax.jit(run_evi, static_argnames=("n_iter", "n_samp"))
         draw_residuals_jit = jax.jit(draw_residuals)
 
         if verbose:
@@ -446,26 +437,24 @@ class HierarchicalFitter:
         gal_xi_list = []
         for i in range(n_gal):
             gal = self.galaxies[i]
-            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"],
-                              data_type=self.data_type)
+            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"], data_type=self.data_type)
             map_i = fitter_i.run(
-                "map", n_steps=500, learning_rate=0.03,
-                verbose=False, key=init_keys[i],
+                "map",
+                n_steps=500,
+                learning_rate=0.03,
+                verbose=False,
+                key=init_keys[i],
             )
             init_u = fitter_i._unbounded_from_posterior(map_i)
             for name in free_names:
                 gal_param_lists[name].append(init_u.get(name, jnp.array(0.0)))
             if stochastic:
-                gal_xi_list.append(
-                    init_u.get("psd_xi", jnp.zeros(n_grid))
-                )
+                gal_xi_list.append(init_u.get("psd_xi", jnp.zeros(n_grid)))
 
         map_init = {
             "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
             "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
-            "gal": {
-                name: jnp.stack(vals) for name, vals in gal_param_lists.items()
-            },
+            "gal": {name: jnp.stack(vals) for name, vals in gal_param_lists.items()},
         }
         if stochastic:
             map_init["gal_xi"] = jnp.stack(gal_xi_list)
@@ -489,8 +478,11 @@ class HierarchicalFitter:
 
             opt_key = jax.random.fold_in(seed_keys[s], 999)
             converged_flat, n_iters = run_evi_jit(
-                init_flat, opt_key,
-                n_iter=n_iterations, n_samp=n_samples, rtol=kl_rtol,
+                init_flat,
+                opt_key,
+                n_iter=n_iterations,
+                n_samp=n_samples,
+                rtol=kl_rtol,
             )
             n_iters = int(n_iters)
 
@@ -522,12 +514,8 @@ class HierarchicalFitter:
         for i in range(n_posterior_samples):
             res_p = unflatten(residuals_flat[i])
             combined = jax.tree.map(lambda a, b: a + b, converged_p, res_p)
-            sigma_samples.append(
-                to_bounded(combined["psd_sigma_u"], sigma_lo, sigma_hi)
-            )
-            tau_samples.append(
-                to_bounded(combined["psd_tau_u"], tau_lo, tau_hi)
-            )
+            sigma_samples.append(to_bounded(combined["psd_sigma_u"], sigma_lo, sigma_hi))
+            tau_samples.append(to_bounded(combined["psd_tau_u"], tau_lo, tau_hi))
 
         shared_samples = {
             "psd_sigma": jnp.array(sigma_samples),
@@ -551,9 +539,7 @@ class HierarchicalFitter:
                 xi_vals = []
                 for i in range(n_posterior_samples):
                     res_p = unflatten(residuals_flat[i])
-                    xi_vals.append(
-                        converged_p["gal_xi"][g] + res_p["gal_xi"][g]
-                    )
+                    xi_vals.append(converged_p["gal_xi"][g] + res_p["gal_xi"][g])
                 gal_samples["psd_xi"] = jnp.stack(xi_vals)
             individual_samples.append(gal_samples)
 
@@ -564,10 +550,7 @@ class HierarchicalFitter:
                 f"{best_iters}/{n_iterations} iterations, "
                 f"{n_posterior_samples} posterior samples"
             )
-            print(
-                f"  σ_PSD = {s['psd_sigma']:.2f}, "
-                f"τ_PSD = {s['psd_tau_myr']:.1f} Myr"
-            )
+            print(f"  σ_PSD = {s['psd_sigma']:.2f}, τ_PSD = {s['psd_tau_myr']:.1f} Myr")
 
         return HierarchicalResult(
             shared_samples=shared_samples,
@@ -612,7 +595,7 @@ class HierarchicalFitter:
         except ImportError:
             raise ImportError("nifty8.re required: pip install nifty8[re]") from None
 
-        from diffsed.vi_config import VIConfig, evi_sample_mode
+        from diffsed.inference.vi_config import VIConfig, evi_sample_mode
 
         cfg = vi_config or VIConfig()
 
@@ -756,8 +739,7 @@ class HierarchicalFitter:
 
         for i in range(n_gal):
             gal = self.galaxies[i]
-            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"],
-                              data_type=self.data_type)
+            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"], data_type=self.data_type)
             map_i = fitter_i.run(
                 "map", n_steps=500, learning_rate=0.03, verbose=False, key=keys[i]
             )
@@ -908,7 +890,7 @@ class HierarchicalFitter:
                 "nifty8.re required for hierarchical geoVI: pip install nifty8[re]"
             ) from None
 
-        from diffsed.vi_config import VIConfig, evi_sample_mode
+        from diffsed.inference.vi_config import VIConfig, evi_sample_mode
 
         cfg = vi_config or VIConfig()
 
@@ -996,9 +978,7 @@ class HierarchicalFitter:
                 for name in free_names
             }
             if stochastic:
-                gal_xi = jnp.stack(
-                    [primals[f"g{i}_psd_xi"] for i in range(n_gal)]
-                )
+                gal_xi = jnp.stack([primals[f"g{i}_psd_xi"] for i in range(n_gal)])
 
             # Single-galaxy forward (vmapped over galaxy axis)
             def forward_one(ub_scalars, xi):
@@ -1018,9 +998,9 @@ class HierarchicalFitter:
             if stochastic:
                 predictions = jax.vmap(forward_one)(gal_ub, gal_xi)
             else:
-                predictions = jax.vmap(
-                    lambda ub, _: forward_one(ub, None)
-                )(gal_ub, jnp.zeros(n_gal))
+                predictions = jax.vmap(lambda ub, _: forward_one(ub, None))(
+                    gal_ub, jnp.zeros(n_gal)
+                )
 
             return predictions.reshape(-1)
 
@@ -1161,7 +1141,7 @@ class HierarchicalFitter:
         """
         from jax.flatten_util import ravel_pytree
 
-        from diffsed.raytrace_jax import sample_raytrace
+        from diffsed.inference.raytrace import sample_raytrace
 
         n_gal = self.n_galaxies
         spec = self._spec
@@ -1197,20 +1177,15 @@ class HierarchicalFitter:
 
         for i in range(n_gal):
             gal = self.galaxies[i]
-            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"],
-                              data_type=self.data_type)
+            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"], data_type=self.data_type)
             map_i = fitter_i.run(
                 "map", n_steps=500, learning_rate=0.03, verbose=False, key=keys[i]
             )
             init_u = fitter_i._unbounded_from_posterior(map_i)
             for name in free_names:
-                gal_param_lists[name].append(
-                    init_u.get(name, jnp.array(0.0))
-                )
+                gal_param_lists[name].append(init_u.get(name, jnp.array(0.0)))
             if stochastic:
-                gal_xi_list.append(
-                    init_u.get("psd_xi", jnp.zeros(n_grid))
-                )
+                gal_xi_list.append(init_u.get("psd_xi", jnp.zeros(n_grid)))
 
         if verbose:
             print("  MAP initialization complete")
@@ -1266,9 +1241,9 @@ class HierarchicalFitter:
             if stochastic:
                 predictions = jax.vmap(forward_one)(p["gal"], p["gal_xi"])
             else:
-                predictions = jax.vmap(
-                    lambda ub, _: forward_one(ub, None)
-                )(p["gal"], jnp.zeros(n_gal))
+                predictions = jax.vmap(lambda ub, _: forward_one(ub, None))(
+                    p["gal"], jnp.zeros(n_gal)
+                )
 
             pred_all = predictions.reshape(-1)
             chi2 = jnp.sum(((all_data - pred_all) / all_noise) ** 2)
@@ -1309,10 +1284,12 @@ class HierarchicalFitter:
         # Extract shared params (vectorized over chain)
         def extract_shared(flat_params):
             p = unravel_fn(flat_params)
-            return jnp.array([
-                to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi),
-                to_bounded(p["psd_tau_u"], tau_lo, tau_hi),
-            ])
+            return jnp.array(
+                [
+                    to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi),
+                    to_bounded(p["psd_tau_u"], tau_lo, tau_hi),
+                ]
+            )
 
         shared_arr = jax.vmap(extract_shared)(chain)  # (n_samples, 2)
         shared_samples = {

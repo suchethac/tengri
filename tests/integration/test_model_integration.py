@@ -9,11 +9,11 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
+from diffsed.core.model import MockData, Model
+from diffsed.core.param_spec import ParamSpec
 from diffsed.distributions import Uniform
-from diffsed.model import MockData, Model
 from diffsed.models.observation.filters import load_filter_set
 from diffsed.models.sps.dsps_wrapper import load_ssp_data
-from diffsed.param_spec import ParamSpec
 
 # ---------------------------------------------------------------------------
 # Skip if SSP data not available
@@ -281,7 +281,7 @@ class TestPrediction:
     """Tests for model.predict() lazy prediction object."""
 
     def test_returns_prediction(self, parametric_model, typical_params):
-        from diffsed.prediction import Prediction
+        from diffsed.core.prediction import Prediction
 
         pred = parametric_model.predict(typical_params)
         assert isinstance(pred, Prediction)

@@ -263,7 +263,7 @@ class TestDL14Emission:
 
     def test_dl14_param_spec_registered(self):
         """dust_alpha_dl14 should be in the parameter spec."""
-        from diffsed.param_spec import _DUST_EMISSION_PARAMS
+        from diffsed.core.param_spec import _DUST_EMISSION_PARAMS
         assert "dust_alpha_dl14" in _DUST_EMISSION_PARAMS
 
 
@@ -292,8 +292,12 @@ class TestAGN:
     def test_agn_in_forward_model(self):
         """AGN should boost UV and MIR flux relative to pure stellar."""
         from diffsed import (
-            Model, ParamSpec, Uniform, Fixed,
-            load_ssp_data, load_filter_set,
+            Fixed,
+            Model,
+            ParamSpec,
+            Uniform,
+            load_filter_set,
+            load_ssp_data,
         )
         ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
         filters = load_filter_set(["galex_fuv", "sdss_r", "wise_w3"])
@@ -337,8 +341,12 @@ class TestDustEmissionForwardModel:
 
     def test_dust_emission_adds_ir_flux(self):
         from diffsed import (
-            Model, ParamSpec, Uniform, Fixed,
-            load_ssp_data, load_filter_set,
+            Fixed,
+            Model,
+            ParamSpec,
+            Uniform,
+            load_filter_set,
+            load_ssp_data,
         )
         ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
         filters = load_filter_set(["sdss_r", "wise_w3"])
@@ -377,8 +385,12 @@ class TestDustEmissionForwardModel:
 
     def test_dust_emission_gradient(self):
         from diffsed import (
-            Model, ParamSpec, Uniform, Fixed,
-            load_ssp_data, load_filter_set,
+            Fixed,
+            Model,
+            ParamSpec,
+            Uniform,
+            load_filter_set,
+            load_ssp_data,
         )
         ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
         filters = load_filter_set(["wise_w3"])

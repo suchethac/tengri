@@ -344,8 +344,8 @@ class Posterior:
         -------
         ParamSpec
         """
+        from diffsed.core.param_spec import ParamSpec
         from diffsed.distributions import Fixed, Gaussian
-        from diffsed.param_spec import ParamSpec
 
         kwargs = {}
 

@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from diffsed._mock import generate_mock
+from diffsed.core.mock import generate_mock
 
 
 class _FakeModel:

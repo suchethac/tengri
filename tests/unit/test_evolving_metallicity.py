@@ -13,6 +13,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
+from diffsed.core.param_spec import ParamSpec
 from diffsed.models.sps.dsps_wrapper import (
     compute_log_z_evolving,
     interpolate_mass_remaining,
@@ -20,7 +21,6 @@ from diffsed.models.sps.dsps_wrapper import (
     interpolate_metallicity,
     interpolate_metallicity_evolving,
 )
-from diffsed.param_spec import ParamSpec
 
 jax.config.update("jax_enable_x64", True)
 

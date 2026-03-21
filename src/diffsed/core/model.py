@@ -39,20 +39,20 @@ from typing import ClassVar, NamedTuple
 import jax
 import jax.numpy as jnp
 
-from diffsed._fused_kernels import (
+from diffsed.core.fused_kernels import (
     build_exact_sed,
     build_fused_photometry,
     build_fused_photometry_ztable,
     build_fused_spectrum,
     is_fused_compatible,
 )
-from diffsed._param_translate import (
+from diffsed.core.param_translate import (
     _EVOLVING_MET_PARAM_MAP,
     LOG10_ZSUN,
     _build_param_map,
     get_internal_params,
 )
-from diffsed._sed_pipeline import (
+from diffsed.core.sed_pipeline import (
     compute_sed_components,
     get_agn_kwargs,
     get_dust_kwargs,
@@ -603,7 +603,7 @@ class Model:
         predict_sed_quantities : JIT-compatible SED quantities.
         predict_line_luminosities : JIT-compatible emission lines.
         """
-        from diffsed.prediction import Prediction
+        from diffsed.core.prediction import Prediction
 
         return Prediction(self, params)
 
@@ -649,7 +649,7 @@ class Model:
         predict : Lazy prediction for single-galaxy exploration.
         predict_sed_quantities : JIT-compatible SED quantities.
         """
-        from diffsed.prediction import SFHQuantities
+        from diffsed.core.prediction import SFHQuantities
         from diffsed.utils.sed_quantities import (
             compute_mass_weighted_age,
             compute_mass_weighted_metallicity,
@@ -765,7 +765,7 @@ class Model:
         predict : Lazy prediction for single-galaxy exploration.
         predict_sfh_quantities : JIT-compatible SFH quantities.
         """
-        from diffsed.prediction import SEDQuantities
+        from diffsed.core.prediction import SEDQuantities
         from diffsed.utils.sed_quantities import (
             compute_balmer_break,
             compute_bolometric_luminosity,
@@ -1386,7 +1386,7 @@ class Model:
 
     def fit(self, data, noise, method="map", data_type="photometry", **kwargs):
         """Fit observed data (convenience wrapper around Fitter)."""
-        from diffsed.fitter import Fitter
+        from diffsed.inference.fitter import Fitter
 
         fitter = Fitter(self, data, noise, data_type=data_type)
         return fitter.run(method, **kwargs)

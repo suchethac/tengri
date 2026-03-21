@@ -91,7 +91,7 @@ from diffsed import (
     StudentT, Fixed, Fitter, load_ssp_data, load_filter_set,
 )
 from diffsed.distributions import Distribution
-from diffsed.standardized import StandardizedForwardModel
+from diffsed.inference.standardized import StandardizedForwardModel
 from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw
 from diffsed.models.sfh.gp_sfh import gp_from_xi
 from diffsed.models.sfh.mean_sfh import (

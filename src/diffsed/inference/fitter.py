@@ -150,7 +150,7 @@ class Fitter:
         a scalar: chi² + prior penalties. When noise model is active,
         uses effective noise with calibration floor and log-determinant.
         """
-        from diffsed.noise import (
+        from diffsed.core.noise import (
             get_noise_dof,
             has_noise_model,
             uses_student_t,
@@ -336,7 +336,7 @@ class Fitter:
         directly and called within the JIT boundary. This ensures
         mathematical equivalence with ``jft.optimize_kl``.
         """
-        from diffsed.noise import (
+        from diffsed.core.noise import (
             compute_std_inv,
             get_noise_dof,
             has_noise_model,
@@ -1607,7 +1607,7 @@ class Fitter:
         """
         import warnings
 
-        from diffsed.posterior import Posterior
+        from diffsed.inference.posterior import Posterior
 
         # --- Parameter validation ---
         if n_samples > 12:
@@ -2028,8 +2028,8 @@ class Fitter:
         verbose : bool
             Print progress.
         """
-        from diffsed.posterior import Posterior
-        from diffsed.vi_config import VIConfig, evi_sample_mode
+        from diffsed.inference.posterior import Posterior
+        from diffsed.inference.vi_config import VIConfig, evi_sample_mode
 
         cfg = vi_config or VIConfig()
 
@@ -2317,7 +2317,7 @@ class Fitter:
         except ImportError:
             raise ImportError("optax required for MAP: pip install optax") from None
 
-        from diffsed.posterior import Posterior
+        from diffsed.inference.posterior import Posterior
 
         loss_fn = self._build_loss_fn()
 
@@ -2440,8 +2440,8 @@ class Fitter:
         verbose : bool
             Print progress.
         """
-        from diffsed.posterior import Posterior
-        from diffsed.raytrace_jax import sample_raytrace
+        from diffsed.inference.posterior import Posterior
+        from diffsed.inference.raytrace import sample_raytrace
 
         loss_fn = self._build_loss_fn()
 
@@ -2584,7 +2584,7 @@ class Fitter:
         except ImportError:
             raise ImportError("blackjax required for NUTS: pip install blackjax") from None
 
-        from diffsed.posterior import Posterior
+        from diffsed.inference.posterior import Posterior
 
         # Warn about high dimensionality
         if self.spec.stochastic:
@@ -2748,12 +2748,12 @@ class Fitter:
         except ImportError:
             raise ImportError("nifty8.re required for geoVI: pip install nifty8[re]") from None
 
-        from diffsed.posterior import Posterior
-        from diffsed.vi_config import VIConfig, evi_sample_mode
+        from diffsed.inference.posterior import Posterior
+        from diffsed.inference.vi_config import VIConfig, evi_sample_mode
 
         cfg = vi_config or VIConfig()
 
-        from diffsed.noise import (
+        from diffsed.core.noise import (
             compute_effective_noise,
             compute_std_inv,
             has_noise_model,

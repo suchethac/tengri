@@ -48,7 +48,7 @@ from diffsed import (
     load_filter_set,
     load_ssp_data,
 )
-from diffsed.noise import compute_effective_noise
+from diffsed.core.noise import compute_effective_noise
 
 import sys, os  # noqa: E401
 
@@ -59,7 +59,15 @@ except NameError:
     _nb_dir = os.getcwd()
     sys.path.insert(0, os.path.join(_nb_dir, ".."))
 # Change to project root so data/ paths work
-os.chdir(os.path.join(sys.path[0], ".."))
+# chdir to project root for data/ access
+if os.path.exists("data"):
+    pass  # already in project root
+elif os.path.exists(os.path.join("..", "data")):
+    os.chdir("..")
+elif os.path.exists(os.path.join("..", "..", "data")):
+    os.chdir(os.path.join("..", ".."))
+elif os.path.exists(os.path.join("..", "..", "..", "data")):
+    os.chdir(os.path.join("..", "..", ".."))
 
 from _plot_style import COLORS, setup_style
 
