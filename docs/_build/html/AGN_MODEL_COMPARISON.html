@@ -1,0 +1,992 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="./">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html">
+        <link rel="canonical" href="https://suchethac.github.io/tengri/AGN_MODEL_COMPARISON.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>AGN Model Comparison Across SED Fitting Codes - tengri</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=fae7dedd" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="index.html"><div class="brand">tengri</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
+  
+  <span class="sidebar-brand-text">tengri</span>
+  
+</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="tutorials/index.html">Tutorials</a><input aria-label="Toggle navigation of Tutorials" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="demonstrations/index.html">Demonstrations</a><input aria-label="Toggle navigation of Demonstrations" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="reference/index.html">Reference</a><input aria-label="Toggle navigation of Reference" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="observation/index.html">Observation Guide</a><input aria-label="Toggle navigation of Observation Guide" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="performance/index.html">Performance</a><input aria-label="Toggle navigation of Performance" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="advanced/index.html">Advanced Topics</a><input aria-label="Toggle navigation of Advanced Topics" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="api/index.html">API Reference</a><input aria-label="Toggle navigation of API Reference" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="developer/index.html">Developer Guide</a><input aria-label="Toggle navigation of Developer Guide" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/suchethac/tengri/blob/main/docs/AGN_MODEL_COMPARISON.md?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/suchethac/tengri/edit/main/docs/AGN_MODEL_COMPARISON.md" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section class="tex2jax_ignore mathjax_ignore" id="agn-model-comparison-across-sed-fitting-codes">
+<h1>AGN Model Comparison Across SED Fitting Codes<a class="headerlink" href="#agn-model-comparison-across-sed-fitting-codes" title="Link to this heading">¶</a></h1>
+<p><strong>Last updated:</strong> 2026-03-18</p>
+<section id="summary-comparison-table">
+<h2>Summary Comparison Table<a class="headerlink" href="#summary-comparison-table" title="Link to this heading">¶</a></h2>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feature</p></th>
+<th class="head"><p><strong>tengri</strong></p></th>
+<th class="head"><p><strong>CIGALE</strong></p></th>
+<th class="head"><p><strong>Prospector/FSPS</strong></p></th>
+<th class="head"><p><strong>ProSpect</strong></p></th>
+<th class="head"><p><strong>Bagpipes</strong></p></th>
+<th class="head"><p><strong>Synthesizer</strong></p></th>
+<th class="head"><p><strong>AGNfitter-rx</strong></p></th>
+<th class="head"><p><strong>qsogen</strong></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Disc model</strong></p></td>
+<td><p>Power-law; SS73 multicolor; Kubota &amp; Done (2018) 3-zone</p></td>
+<td><p>Schartmann (2005) or Feltre (2012) parametric; slope adjustable via delta_AGN</p></td>
+<td><p>Broken power-law (from Nenkova 2008 templates)</p></td>
+<td><p>Fritz (2006) isotropic central source (power-law, 0.001-20 um)</p></td>
+<td><p>None</p></td>
+<td><p>Broken power-law; Kubota &amp; Done (2018) qsosed; Hagen &amp; Done (2023) relqso</p></td>
+<td><p>Richards (2006) empirical; Slone &amp; Netzer (2012) alpha-disc; Kubota &amp; Done (2018) AGNSED; Temple (2021) empirical composite</p></td>
+<td><p>Empirical broken power-law continuum with BB hot dust</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Disc type</strong></p></td>
+<td><p>Analytic (JAX)</p></td>
+<td><p>Template library</p></td>
+<td><p>Template library</p></td>
+<td><p>Template library</p></td>
+<td><p>–</p></td>
+<td><p>Analytic + CLOUDY grid</p></td>
+<td><p>Template libraries (4 options)</p></td>
+<td><p>Empirical parametric</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Torus model</strong></p></td>
+<td><p>Simple BB; Two-temperature (SKIRTOR-inspired)</p></td>
+<td><p>Fritz (2006) smooth RT; SKIRTOR (2016) clumpy two-phase</p></td>
+<td><p>Nenkova (2008) CLUMPY</p></td>
+<td><p>Fritz (2006) smooth RT</p></td>
+<td><p>None</p></td>
+<td><p>Analytic (within UnifiedAGN)</p></td>
+<td><p>Silva (2004) smooth; Nenkova (2008) clumpy; SKIRTOR (2016) two-phase; CAT3D-Wind (Honig &amp; Kishimoto 2017)</p></td>
+<td><p>BB hot dust component</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Torus type</strong></p></td>
+<td><p>Analytic (modified BB + silicate opacity)</p></td>
+<td><p>Radiative transfer templates</p></td>
+<td><p>Radiative transfer templates</p></td>
+<td><p>Radiative transfer templates</p></td>
+<td><p>–</p></td>
+<td><p>Analytic</p></td>
+<td><p>RT template libraries (4 options)</p></td>
+<td><p>Empirical (single BB)</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Torus geometry</strong></p></td>
+<td><p>Smooth (simple) or two-temperature (standard/kubota_done)</p></td>
+<td><p>Smooth (Fritz) or clumpy two-phase (SKIRTOR)</p></td>
+<td><p>Clumpy</p></td>
+<td><p>Smooth</p></td>
+<td><p>–</p></td>
+<td><p>Combined with disc</p></td>
+<td><p>Smooth or clumpy or two-phase or wind (choice of 4)</p></td>
+<td><p>N/A (empirical)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Torus params</strong></p></td>
+<td><p>2-5 (T, tau, f_hot, T_warm, covering factor)</p></td>
+<td><p>7 (Fritz); 6+2 (SKIRTOR + polar dust)</p></td>
+<td><p>1 (agn_tau)</p></td>
+<td><p>7 (Fritz)</p></td>
+<td><p>–</p></td>
+<td><p>Geometry via inclination + covering factor</p></td>
+<td><p>2-4 per model choice</p></td>
+<td><p>1 (tbb, bbnorm)</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Emission lines</strong></p></td>
+<td><p>Yes: NLR (11 forbidden + Balmer lines) + BLR (9 permitted lines), analytic Gaussian profiles</p></td>
+<td><p>No (AGN emission lines not included)</p></td>
+<td><p>No (AGN lines not included; nebular lines from SF only)</p></td>
+<td><p>No</p></td>
+<td><p>–</p></td>
+<td><p>Yes: NLR + BLR via CLOUDY photoionization grids</p></td>
+<td><p>Partial (THB21 disc model includes blended lines)</p></td>
+<td><p>Yes: 4 empirical emission-line templates with Baldwin effect</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>NLR/BLR decomposition</strong></p></td>
+<td><p>Yes (unified_nlr_blr model with geometric masking)</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+<td><p>–</p></td>
+<td><p>Yes (separate NLR/BLR covering fractions)</p></td>
+<td><p>No explicit decomposition</p></td>
+<td><p>Partial (scal_nlr parameter scales narrow lines)</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Geometric masking</strong></p></td>
+<td><p>Yes (smooth sigmoid for differentiability)</p></td>
+<td><p>Yes (viewing angle determines Type 1/2)</p></td>
+<td><p>No</p></td>
+<td><p>Yes (psy parameter)</p></td>
+<td><p>–</p></td>
+<td><p>Yes (inclination-dependent)</p></td>
+<td><p>No explicit masking</p></td>
+<td><p>No (Type 1 quasars only)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Polar dust</strong></p></td>
+<td><p>No</p></td>
+<td><p>Yes (E(B-V), T=100K, SMC extinction law)</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+<td><p>–</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>X-ray extension</strong></p></td>
+<td><p>Yes (separate xray_agn_corona module)</p></td>
+<td><p>Yes (X-CIGALE: alpha_ox, Gamma)</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+<td><p>–</p></td>
+<td><p>No</p></td>
+<td><p>Yes (alpha_ox, Gamma, L_2keV)</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Radio extension</strong></p></td>
+<td><p>Yes (separate radio_agn module)</p></td>
+<td><p>Yes (radio module)</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+<td><p>–</p></td>
+<td><p>No</p></td>
+<td><p>Yes (power-law + double power-law)</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>BH physics</strong></p></td>
+<td><p>Yes (M_BH, L/L_Edd, spin, ISCO)</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+<td><p>–</p></td>
+<td><p>Yes (M_BH, mdot, spin in relqso)</p></td>
+<td><p>Yes (M_BH, mdot in KD18/SN12)</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Differentiable</strong></p></td>
+<td><p>Yes (pure JAX, JIT-compilable)</p></td>
+<td><p>No (grid-based chi-sq / Bayesian)</p></td>
+<td><p>No (MCMC sampling over templates)</p></td>
+<td><p>No (R, grid-based)</p></td>
+<td><p>–</p></td>
+<td><p>Partial (Python/C, not autodiff)</p></td>
+<td><p>No (MCMC)</p></td>
+<td><p>No (forward model only)</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Total AGN free params</strong></p></td>
+<td><p>3 (simple), 6 (standard), 9 (kubota_done), 15 (unified_nlr_blr)</p></td>
+<td><p>7 (Fritz) or 8-9 (SKIRTOR + polar dust + fracAGN + delta_AGN)</p></td>
+<td><p>2 (fagn, agn_tau)</p></td>
+<td><p>7+ (Fritz params + AGN fraction)</p></td>
+<td><p>0</p></td>
+<td><p>4-6+ (M_BH, mdot, inclination, metallicity, covering fractions)</p></td>
+<td><p>5-19 (depends on component selection)</p></td>
+<td><p>~10-15 (continuum + lines + dust + galaxy)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Inference method</strong></p></td>
+<td><p>HMC/NUTS, geoVI, ray-tracing (gradient-based)</p></td>
+<td><p>Chi-sq minimization + Bayesian (grid)</p></td>
+<td><p>Nested sampling (dynesty) or MCMC (emcee)</p></td>
+<td><p>Optimization (optim/MCMC in R)</p></td>
+<td><p>Nested sampling (MultiNest/nautilus)</p></td>
+<td><p>Forward model (not a fitter)</p></td>
+<td><p>MCMC (emcee)</p></td>
+<td><p>Forward model (not a fitter)</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<hr class="docutils" />
+<section id="detailed-code-by-code-analysis">
+<h2>Detailed Code-by-Code Analysis<a class="headerlink" href="#detailed-code-by-code-analysis" title="Link to this heading">¶</a></h2>
+<section id="tengri-this-code">
+<h3>1. tengri (this code)<a class="headerlink" href="#tengri-this-code" title="Link to this heading">¶</a></h3>
+<p><strong>Architecture:</strong> Four AGN complexity tiers, all pure JAX and fully differentiable.</p>
+<p><strong>Disc models:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">simple</span></code>: Power-law F_nu ~ nu^alpha with exponential UV cutoff. 2 params: alpha, T_max.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">standard</span></code> / <code class="docutils literal notranslate"><span class="pre">kubota_done</span></code>: Shakura-Sunyaev multicolor disc. Radial temperature profile T(r) ~ r^{-3/4} integrated over 50 logarithmic annuli. Params: log M_BH, log L/L_Edd, spin (sets ISCO via Bardeen-Press-Teukolsky formula), cos(inclination).</p></li>
+</ul>
+<p><strong>Torus models:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">simple_torus</span></code>: Single-temperature modified blackbody with silicate opacity at 9.7 um. 2 params: T_torus, tau_torus.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">two_temperature_torus</span></code>: Hot (sublimation, ~1200K) + warm (outer, ~300K) mixture with silicate opacity. SKIRTOR-inspired. 4 params: T_hot, T_warm, f_hot, tau_torus.</p></li>
+</ul>
+<p><strong>Emission lines (unified_nlr_blr only):</strong></p>
+<ul class="simple">
+<li><p>NLR: 11 lines ([OII], [NeIII], H-beta, [OIII] doublet, [OI], [NII] doublet, H-alpha, [SII] doublet) with Gaussian profiles, FWHM ~500 km/s. Isotropic (not masked by torus).</p></li>
+<li><p>BLR: 9 lines (Ly-alpha, NV, SiIV+OIV], CIV, CIII], MgII, H-gamma, H-beta, H-alpha) with broad Gaussians, FWHM ~5000 km/s. Masked by torus via smooth sigmoid.</p></li>
+<li><p>Line strengths calibrated to Vanden Berk et al. (2001) composite and typical Seyfert 2 spectra.</p></li>
+</ul>
+<p><strong>Key strengths:</strong></p>
+<ul class="simple">
+<li><p>Fully differentiable end-to-end: enables gradient-based inference (HMC/NUTS, geoVI).</p></li>
+<li><p>Modular: can mix disc + torus + NLR + BLR independently.</p></li>
+<li><p>BH physics: ISCO from spin, Eddington ratio, gravitational radius.</p></li>
+<li><p>Smooth geometric masking preserves gradient flow (sigmoid, not hard cutoff).</p></li>
+</ul>
+<p><strong>Key weaknesses:</strong></p>
+<ul class="simple">
+<li><p>Analytic line profiles, not from photoionization grids (less physically accurate line ratios than CLOUDY).</p></li>
+<li><p>No polar dust component.</p></li>
+<li><p>Two-temperature torus is a simplification of full RT; cannot reproduce detailed silicate feature profiles.</p></li>
+<li><p>No dust-reprocessed emission from NLR/BLR.</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="cigale-x-cigale">
+<h3>2. CIGALE (+ X-CIGALE)<a class="headerlink" href="#cigale-x-cigale" title="Link to this heading">¶</a></h3>
+<p><strong>Disc model:</strong> Parametric power-law disc from Schartmann (2005) or updated Feltre et al. (2012). A free parameter delta_AGN adjusts the slope in the 0.125-10 um range. Template-based, not analytic.</p>
+<p><strong>Torus models (two options):</strong></p>
+<p><em>Fritz et al. (2006) – smooth torus:</em></p>
+<ul class="simple">
+<li><p>Radiative transfer through smooth dust distribution.</p></li>
+<li><p>7 parameters: r_ratio (R_out/R_in, default 60), tau (optical depth at 9.7 um), beta (central source slope), gamma (dust density gradient), opening_angle (full, default 100 deg), psy (viewing angle), fracAGN.</p></li>
+<li><p>Includes scattered + thermal dust emission with energy conservation to 1-10%.</p></li>
+</ul>
+<p><em>SKIRTOR (Stalevski et al. 2016) – clumpy two-phase torus:</em></p>
+<ul class="simple">
+<li><p>3D radiative transfer, two-phase medium (high-density clumps + smooth inter-clump dust).</p></li>
+<li><p>6 torus template parameters: tau_9.7 (edge-on optical depth), p (radial density gradient), q (polar density gradient), opening angle (half-opening of dusty cone), Y (R_out/R_in ratio), inclination.</p></li>
+<li><p>Additional CIGALE parameters: delta_AGN (disc slope), fracAGN (AGN fraction of total IR), E(B-V) polar dust (SMC extinction), polar dust temperature (~100K), polar dust emissivity index.</p></li>
+<li><p>Total: ~8-9 free parameters.</p></li>
+</ul>
+<p><strong>Emission lines:</strong> Not included in AGN module. Galaxy nebular emission is separate.</p>
+<p><strong>Key strengths:</strong></p>
+<ul class="simple">
+<li><p>Full radiative transfer torus templates: physically accurate IR SEDs including silicate features.</p></li>
+<li><p>SKIRTOR is state-of-the-art clumpy torus with polar dust.</p></li>
+<li><p>X-CIGALE extends to X-ray (alpha_ox correlation) and radio.</p></li>
+<li><p>Large user community, extensive validation.</p></li>
+</ul>
+<p><strong>Key weaknesses:</strong></p>
+<ul class="simple">
+<li><p>No AGN emission lines (UV/optical BLR/NLR not modeled).</p></li>
+<li><p>Template grid: discrete parameter values, no interpolation for gradients.</p></li>
+<li><p>No BH physics (mass, spin, accretion rate not parameters).</p></li>
+<li><p>Cannot do gradient-based inference.</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="prospector-fsps">
+<h3>3. Prospector / FSPS<a class="headerlink" href="#prospector-fsps" title="Link to this heading">¶</a></h3>
+<p><strong>Disc model:</strong> Broken power-law incident spectrum from Nenkova et al. (2008) CLUMPY templates. Not independently parameterized – the disc shape is baked into the CLUMPY template.</p>
+<p><strong>Torus model:</strong> Nenkova et al. (2008) CLUMPY torus. Radiative transfer through clumpy medium. In FSPS, the full CLUMPY parameter space (which has ~6 params) is collapsed to a single shape parameter: agn_tau (optical depth at 5500A of individual clumps, range 5-150).</p>
+<p><strong>Parameters:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">fagn</span></code>: AGN luminosity as fraction of stellar bolometric luminosity. Can exceed 1.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">agn_tau</span></code>: Torus optical depth (shape parameter). Default 10. Valid range 5-150.</p></li>
+<li><p>Total: <strong>2 free parameters</strong>.</p></li>
+</ul>
+<p><strong>Emission lines:</strong> Not included for AGN. Nebular emission from star formation is separate.</p>
+<p><strong>Key strengths:</strong></p>
+<ul class="simple">
+<li><p>Minimal parameter overhead: easy to include AGN without blowing up parameter space.</p></li>
+<li><p>Physically motivated CLUMPY templates.</p></li>
+<li><p>Well-integrated with Prospector’s Bayesian framework (dynesty).</p></li>
+<li><p>Widely used and validated (Leja et al. 2018).</p></li>
+</ul>
+<p><strong>Key weaknesses:</strong></p>
+<ul class="simple">
+<li><p>Only 2 parameters: very limited AGN complexity. Cannot fit detailed AGN SEDs.</p></li>
+<li><p>No BH physics, no emission lines, no geometric masking.</p></li>
+<li><p>Template extrapolation outside tau=[5,150] is unreliable.</p></li>
+<li><p>No disc/torus decomposition: everything is one combined template.</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="prospect">
+<h3>4. ProSpect<a class="headerlink" href="#prospect" title="Link to this heading">¶</a></h3>
+<p><strong>Disc + Torus model:</strong> Uses Fritz et al. (2006) smooth torus radiative transfer templates, same underlying model as CIGALE’s Fritz module.</p>
+<p><strong>Parameters:</strong> Same 7 Fritz parameters as CIGALE: r_ratio, tau, beta, gamma, opening_angle, psy (viewing angle), fracAGN. The help functions <code class="docutils literal notranslate"><span class="pre">?Fritz</span></code> and <code class="docutils literal notranslate"><span class="pre">?AGN_UnOb</span></code> provide details.</p>
+<p><strong>Emission lines:</strong> Not included for AGN.</p>
+<p><strong>Key strengths:</strong></p>
+<ul class="simple">
+<li><p>Full Fritz (2006) RT templates: proper radiative transfer.</p></li>
+<li><p>Integrated into ProSpect’s R-based fitting framework (Robotham &amp; Bellstedt 2020).</p></li>
+<li><p>7 parameters give good flexibility for torus fitting.</p></li>
+</ul>
+<p><strong>Key weaknesses:</strong></p>
+<ul class="simple">
+<li><p>No clumpy torus option (smooth only).</p></li>
+<li><p>No AGN emission lines.</p></li>
+<li><p>No BH physics.</p></li>
+<li><p>R-based: not easily combined with Python/JAX frameworks.</p></li>
+<li><p>No polar dust.</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="bagpipes">
+<h3>5. Bagpipes<a class="headerlink" href="#bagpipes" title="Link to this heading">¶</a></h3>
+<p><strong>AGN model:</strong> <strong>None.</strong> Bagpipes (Carnall et al. 2018) does not include an AGN component as of v1.3.5 (Feb 2026). Objects with known AGN contamination are typically excluded from fitting.</p>
+<p><strong>Components available:</strong> Stellar populations (BC03), dust emission (Draine &amp; Li 2007), nebular emission, dust attenuation.</p>
+<p><strong>Key weakness:</strong> Cannot fit AGN-host decomposition at all.</p>
+</section>
+<hr class="docutils" />
+<section id="synthesizer-unifiedagn">
+<h3>6. Synthesizer (UnifiedAGN)<a class="headerlink" href="#synthesizer-unifiedagn" title="Link to this heading">¶</a></h3>
+<p><strong>Disc models (3 options):</strong></p>
+<ul class="simple">
+<li><p>Broken power-law (similar to Feltre et al. 2016).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">qsosed</span></code>: Kubota &amp; Done (2018) simplified AGNSED. Free params: M_BH, accretion rate (mdot). Bolometric luminosity computed from mass and mdot with radiative efficiency eta=0.1.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">relqso</span></code>: Hagen &amp; Done (2023) extension adding BH spin as a third parameter. Full GR ray tracing.</p></li>
+</ul>
+<p><strong>Torus model:</strong> Integrated within the UnifiedAGN framework (analytic, geometry-dependent).</p>
+<p><strong>Emission lines:</strong></p>
+<ul class="simple">
+<li><p>NLR and BLR modeled via CLOUDY photoionization grids.</p></li>
+<li><p>Grids cover physical conditions expected in both regions.</p></li>
+<li><p>Default covering fractions: 0.1 for both NLR and BLR.</p></li>
+<li><p>Default ionization parameter: 0.1, hydrogen density: 10^5 cm^-3.</p></li>
+</ul>
+<p><strong>Parameters:</strong> M_BH, accretion rate, inclination, metallicity, NLR/BLR covering fractions. Total: ~4-6+.</p>
+<p><strong>Key strengths:</strong></p>
+<ul class="simple">
+<li><p>Self-consistent disc + NLR + BLR + torus model.</p></li>
+<li><p>CLOUDY grids: physically accurate emission-line ratios (unlike analytic profiles).</p></li>
+<li><p>Multiple disc models including relativistic effects.</p></li>
+<li><p>Open-source Python.</p></li>
+</ul>
+<p><strong>Key weaknesses:</strong></p>
+<ul class="simple">
+<li><p>Forward model / grid generator, NOT a fitter. Must be coupled to external inference.</p></li>
+<li><p>UnifiedAGN paper (Wilkins et al.) still in prep; full details not yet published.</p></li>
+<li><p>Not differentiable.</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="agnfitter-agnfitter-rx">
+<h3>7. AGNfitter / AGNfitter-rx<a class="headerlink" href="#agnfitter-agnfitter-rx" title="Link to this heading">¶</a></h3>
+<p><strong>Disc models (4 options):</strong></p>
+<ul class="simple">
+<li><p>R06 (Richards et al. 2006): Semi-empirical quasar SED + NIR BB tail + SMC dust reddening. 2-3 params.</p></li>
+<li><p>SN12 (Slone &amp; Netzer 2012): Theoretical alpha-disc, 108 templates. Params: log M_BH (7.4-9.8), log mdot (-4 to 2.49), E(B-V).</p></li>
+<li><p>KD18 (Kubota &amp; Done 2018): AGNSED with outer disc + warm Comptonization + hot corona. Params: log M_BH (6-10), log mdot (-1.5 to 0), photon index Gamma.</p></li>
+<li><p>THB21 (Temple et al. 2021): Empirical composite including broad + narrow emission lines + blended line emission. 2-3 params.</p></li>
+</ul>
+<p><strong>Torus models (4 options):</strong></p>
+<ul class="simple">
+<li><p>S04 (Silva et al. 2004): Semi-empirical smooth dust. 2 params: normalization, log N_H (21-25).</p></li>
+<li><p>NK08 (Nenkova et al. 2008): Clumpy Gaussian polar / power-law radial clouds. 2-4 params.</p></li>
+<li><p>SKIRTOR (Stalevski et al. 2016): Two-phase clumpy torus. 2-4 params: inclination (0-90), opening angle (10-80), tau (3-300).</p></li>
+<li><p>CAT3D-Wind (Honig &amp; Kishimoto 2017): Clumpy disc + outflowing wind. 2-4 params: radial power-law index, wind fraction.</p></li>
+</ul>
+<p><strong>X-ray:</strong> alpha_ox–L_2500A correlation, photon index Gamma.</p>
+<p><strong>Radio:</strong> Single or double power-law + transition frequency.</p>
+<p><strong>Emission lines:</strong> Included via THB21 disc model (empirical broad + narrow + blended lines).</p>
+<p><strong>Total parameter space:</strong> Up to 19 free parameters depending on component selection.</p>
+<p><strong>Key strengths:</strong></p>
+<ul class="simple">
+<li><p>Most flexible AGN code: 4 disc x 4 torus combinations = 16 model configurations.</p></li>
+<li><p>Covers X-ray to radio.</p></li>
+<li><p>Physically motivated BH parameters in SN12 and KD18.</p></li>
+<li><p>Modern torus options including wind model.</p></li>
+</ul>
+<p><strong>Key weaknesses:</strong></p>
+<ul class="simple">
+<li><p>Combinatorial complexity can lead to overfitting.</p></li>
+<li><p>MCMC inference is slow for high-dimensional parameter space.</p></li>
+<li><p>No differentiable/gradient-based inference.</p></li>
+<li><p>Emission lines only available via one specific disc model (THB21).</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="qsogen">
+<h3>8. qsogen<a class="headerlink" href="#qsogen" title="Link to this heading">¶</a></h3>
+<p><strong>Disc model:</strong> Empirical broken power-law continuum with two slopes (plslp1, plslp2) joined at a break wavelength (plbrk1). Additional steep slope below Ly-alpha. Hot dust modeled as single blackbody (temperature tbb, normalization bbnorm). Not a physical disc model.</p>
+<p><strong>Torus model:</strong> Hot dust blackbody component only. Not a physical torus model.</p>
+<p><strong>Emission lines:</strong> Yes, sophisticated treatment:</p>
+<ul class="simple">
+<li><p>4 empirical emission-line templates (median, peaky/high-EW, windy/blueshifted, narrow-line).</p></li>
+<li><p>emline_type parameter interpolates between templates (-2 to +3).</p></li>
+<li><p>Baldwin effect: beslope parameter scales EW with luminosity.</p></li>
+<li><p>Separate scaling for H-alpha, Ly-alpha, and narrow lines.</p></li>
+</ul>
+<p><strong>Host galaxy:</strong> S0 template from SWIRE, fraction controlled by fragal parameter.</p>
+<p><strong>Additional components:</strong> IGM absorption, dust reddening (empirical quasar extinction curve, ebv parameter).</p>
+<p><strong>Total parameters:</strong> ~10-15 (continuum slopes, BB temperature, emission-line type/scaling, dust, galaxy fraction).</p>
+<p><strong>Key strengths:</strong></p>
+<ul class="simple">
+<li><p>Empirically calibrated to real quasar populations.</p></li>
+<li><p>Sophisticated emission-line treatment with Baldwin effect.</p></li>
+<li><p>Excellent for generating realistic quasar colors/magnitudes.</p></li>
+<li><p>Fast forward model.</p></li>
+</ul>
+<p><strong>Key weaknesses:</strong></p>
+<ul class="simple">
+<li><p>Purely empirical: no physical disc/torus model. Cannot constrain BH mass or accretion rate.</p></li>
+<li><p>Type 1 quasars only (no obscured AGN).</p></li>
+<li><p>Forward model only, not a fitter.</p></li>
+<li><p>No radiative transfer.</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="feature-matrix-quick-reference">
+<h2>Feature Matrix (Quick Reference)<a class="headerlink" href="#feature-matrix-quick-reference" title="Link to this heading">¶</a></h2>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Capability</p></th>
+<th class="head text-center"><p>tengri</p></th>
+<th class="head text-center"><p>CIGALE</p></th>
+<th class="head text-center"><p>Prospector</p></th>
+<th class="head text-center"><p>ProSpect</p></th>
+<th class="head text-center"><p>Bagpipes</p></th>
+<th class="head text-center"><p>Synthesizer</p></th>
+<th class="head text-center"><p>AGNfitter-rx</p></th>
+<th class="head text-center"><p>qsogen</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Accretion disc</p></td>
+<td class="text-center"><p>Y (3 models)</p></td>
+<td class="text-center"><p>Y (parametric)</p></td>
+<td class="text-center"><p>Y (template)</p></td>
+<td class="text-center"><p>Y (template)</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y (3 models)</p></td>
+<td class="text-center"><p>Y (4 models)</p></td>
+<td class="text-center"><p>Y (empirical)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Physical disc (SS73/KD18)</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>Y (KD18)</p></td>
+<td class="text-center"><p>N</p></td>
+</tr>
+<tr class="row-even"><td><p>Smooth torus</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>Y (Fritz)</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y (Fritz)</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>Y (S04)</p></td>
+<td class="text-center"><p>N</p></td>
+</tr>
+<tr class="row-odd"><td><p>Clumpy torus</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y (SKIRTOR)</p></td>
+<td class="text-center"><p>Y (CLUMPY)</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y (NK08, SKIRTOR, CAT3D)</p></td>
+<td class="text-center"><p>N</p></td>
+</tr>
+<tr class="row-even"><td><p>Torus RT templates</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>N</p></td>
+</tr>
+<tr class="row-odd"><td><p>NLR emission</p></td>
+<td class="text-center"><p>Y (analytic)</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y (CLOUDY)</p></td>
+<td class="text-center"><p>Partial</p></td>
+<td class="text-center"><p>Y (empirical)</p></td>
+</tr>
+<tr class="row-even"><td><p>BLR emission</p></td>
+<td class="text-center"><p>Y (analytic)</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y (CLOUDY)</p></td>
+<td class="text-center"><p>Partial</p></td>
+<td class="text-center"><p>Y (empirical)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Geometric masking</p></td>
+<td class="text-center"><p>Y (sigmoid)</p></td>
+<td class="text-center"><p>Y (viewing angle)</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y (psy)</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y (inclination)</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+</tr>
+<tr class="row-even"><td><p>Polar dust</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y (SKIRTOR)</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+</tr>
+<tr class="row-odd"><td><p>BH mass param</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>Y (SN12, KD18)</p></td>
+<td class="text-center"><p>N</p></td>
+</tr>
+<tr class="row-even"><td><p>BH spin param</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y (relqso)</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+</tr>
+<tr class="row-odd"><td><p>X-ray module</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>Y (X-CIGALE)</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>N</p></td>
+</tr>
+<tr class="row-even"><td><p>Radio module</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>N</p></td>
+</tr>
+<tr class="row-odd"><td><p>Differentiable</p></td>
+<td class="text-center"><p>Y (JAX)</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+</tr>
+<tr class="row-even"><td><p>Built-in fitter</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y</p></td>
+<td class="text-center"><p>N</p></td>
+</tr>
+<tr class="row-odd"><td><p>Baldwin effect</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>N</p></td>
+<td class="text-center"><p>Y</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<hr class="docutils" />
+<section id="key-takeaways">
+<h2>Key Takeaways<a class="headerlink" href="#key-takeaways" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p><strong>tengri is unique in being fully differentiable (JAX).</strong> No other SED fitting code offers gradient-based inference for AGN parameters. This enables HMC/NUTS and variational inference, which scale far better than MCMC for the 9-15 parameter AGN models.</p></li>
+<li><p><strong>CIGALE and AGNfitter-rx have the most comprehensive torus models</strong>, with multiple RT template libraries. CIGALE’s SKIRTOR with polar dust is the current standard for IR AGN SED fitting.</p></li>
+<li><p><strong>Prospector’s AGN is deliberately minimal</strong> (2 params), designed as a nuisance component for galaxy SED fitting rather than detailed AGN characterization.</p></li>
+<li><p><strong>Synthesizer’s UnifiedAGN is the closest analog to tengri’s unified_nlr_blr</strong>, with CLOUDY-based NLR/BLR. However, Synthesizer is a forward model only (no built-in fitter).</p></li>
+<li><p><strong>Emission lines are a major differentiator.</strong> Only tengri, Synthesizer, and qsogen include AGN emission lines. CIGALE, Prospector, ProSpect, and Bagpipes all lack AGN emission lines entirely. This matters for rest-frame optical/UV fitting where BLR lines contribute significantly to broadband photometry.</p></li>
+<li><p><strong>The main weakness of tengri’s AGN relative to template-based codes</strong> is the analytic (rather than RT) torus model. The two-temperature modified blackbody cannot reproduce the detailed silicate feature profiles that SKIRTOR/CLUMPY templates can. However, for broadband photometry fitting (as opposed to MIR spectroscopy), this is a minor limitation.</p></li>
+<li><p><strong>BH physics (mass, spin, accretion rate) as model parameters</strong> are available only in tengri, Synthesizer, and AGNfitter-rx (KD18/SN12 models). This enables physical constraints on the central engine rather than just phenomenological AGN fractions.</p></li>
+</ol>
+</section>
+<hr class="docutils" />
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Carnall et al. 2018, MNRAS, 480, 4379 (Bagpipes)</p></li>
+<li><p>Calistro Rivera et al. 2016, ApJ, 833, 98 (AGNfitter)</p></li>
+<li><p>Conroy &amp; Gunn 2010, ApJ, 712, 833 (FSPS)</p></li>
+<li><p>Fritz et al. 2006, MNRAS, 366, 767 (smooth torus RT)</p></li>
+<li><p>Hagen &amp; Done 2023 (relqso, GR ray-traced disc)</p></li>
+<li><p>Honig &amp; Kishimoto 2017, ApJL, 838, L20 (CAT3D-Wind)</p></li>
+<li><p>Johnson et al. 2021, ApJS, 254, 22 (Prospector)</p></li>
+<li><p>Kubota &amp; Done 2018, MNRAS, 480, 1247 (AGNSED disc model)</p></li>
+<li><p>Leja et al. 2018, ApJ, 854, 62 (Prospector AGN)</p></li>
+<li><p>Nenkova et al. 2008, ApJ, 685, 147 (CLUMPY torus)</p></li>
+<li><p>Robotham et al. 2020, MNRAS, 495, 905 (ProSpect)</p></li>
+<li><p>Stalevski et al. 2012, MNRAS, 420, 2756; 2016, MNRAS, 458, 2288 (SKIRTOR)</p></li>
+<li><p>Temple et al. 2021, MNRAS, 508, 737 (qsogen)</p></li>
+<li><p>Vijarnwannaluk et al. 2022 (NLR covering fractions)</p></li>
+<li><p>Wilkins et al. in prep (Synthesizer UnifiedAGN)</p></li>
+<li><p>Yang et al. 2020, MNRAS, 491, 740 (X-CIGALE)</p></li>
+<li><p>Zhuang et al. 2024, arXiv:2405.12111 (AGNfitter-rx)</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="sources-consulted">
+<h2>Sources Consulted<a class="headerlink" href="#sources-consulted" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/JohannesBuchner/cigale/blob/master/pcigale/sed_modules/fritz2006.py">CIGALE Fritz2006 source</a></p></li>
+<li><p><a class="reference external" href="https://gitlab.lam.fr/cigale/cigale/-/tree/master/database_builder/skirtor2016">CIGALE SKIRTOR database builder</a></p></li>
+<li><p><a class="reference external" href="https://arxiv.org/abs/2001.08263">X-CIGALE paper (Yang et al. 2020)</a></p></li>
+<li><p><a class="reference external" href="https://prospect.readthedocs.io/en/latest/advanced.html">Prospector documentation</a></p></li>
+<li><p><a class="reference external" href="https://dfm.io/python-fsps/current/stellarpop_api/">Python-FSPS StellarPop API</a></p></li>
+<li><p><a class="reference external" href="https://github.com/asgr/ProSpect">ProSpect GitHub</a></p></li>
+<li><p><a class="reference external" href="https://arxiv.org/abs/2002.06980">ProSpect paper (Robotham et al. 2020)</a></p></li>
+<li><p><a class="reference external" href="https://bagpipes.readthedocs.io/">Bagpipes documentation</a></p></li>
+<li><p><a class="reference external" href="https://github.com/ACCarnall/bagpipes">Bagpipes GitHub</a></p></li>
+<li><p><a class="reference external" href="https://arxiv.org/html/2508.03888">Synthesizer paper (2025)</a></p></li>
+<li><p><a class="reference external" href="https://arxiv.org/html/2405.12111v1">AGNfitter-rx paper</a></p></li>
+<li><p><a class="reference external" href="https://github.com/GabrielaCR/AGNfitter">AGNfitter GitHub</a></p></li>
+<li><p><a class="reference external" href="https://github.com/MJTemple/qsogen">qsogen GitHub</a></p></li>
+<li><p><a class="reference external" href="https://github.com/MJTemple/qsogen/blob/main/config.py">qsogen config.py</a></p></li>
+<li><p><a class="reference external" href="https://sites.google.com/site/skirtorus/sed-library">SKIRTOR SED library</a></p></li>
+<li><p><a class="reference external" href="https://sites.google.com/site/skirtorus/model">SKIRTOR model description</a></p></li>
+<li><p><a class="reference external" href="https://www.aanda.org/articles/aa/full_html/2024/12/aa50510-24/aa50510-24.html">CIGALE low-luminosity AGN module</a></p></li>
+</ul>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Suchetha Cooray
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">AGN Model Comparison Across SED Fitting Codes</a><ul>
+<li><a class="reference internal" href="#summary-comparison-table">Summary Comparison Table</a></li>
+<li><a class="reference internal" href="#detailed-code-by-code-analysis">Detailed Code-by-Code Analysis</a><ul>
+<li><a class="reference internal" href="#tengri-this-code">1. tengri (this code)</a></li>
+<li><a class="reference internal" href="#cigale-x-cigale">2. CIGALE (+ X-CIGALE)</a></li>
+<li><a class="reference internal" href="#prospector-fsps">3. Prospector / FSPS</a></li>
+<li><a class="reference internal" href="#prospect">4. ProSpect</a></li>
+<li><a class="reference internal" href="#bagpipes">5. Bagpipes</a></li>
+<li><a class="reference internal" href="#synthesizer-unifiedagn">6. Synthesizer (UnifiedAGN)</a></li>
+<li><a class="reference internal" href="#agnfitter-agnfitter-rx">7. AGNfitter / AGNfitter-rx</a></li>
+<li><a class="reference internal" href="#qsogen">8. qsogen</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#feature-matrix-quick-reference">Feature Matrix (Quick Reference)</a></li>
+<li><a class="reference internal" href="#key-takeaways">Key Takeaways</a></li>
+<li><a class="reference internal" href="#references">References</a></li>
+<li><a class="reference internal" href="#sources-consulted">Sources Consulted</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="_static/documentation_options.js?v=01f34227"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    </body>
+</html>

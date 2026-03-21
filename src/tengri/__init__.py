@@ -43,6 +43,10 @@ from tengri.inference.raytrace import sample_raytrace
 from tengri.inference.vi_config import VIConfig
 from tengri.models.dust.attenuation import two_component_dust
 from tengri.models.observation.filters import load_filter_set
+from tengri.models.observation.noise_config import NoiseConfig
+from tengri.models.observation.observation import Observation
+from tengri.models.observation.photometry_config import Photometry
+from tengri.models.observation.spectroscopy_config import SpectroscopyConfig
 from tengri.models.sfh.gp_sfh import (
     compute_sqrt_power_drw,
     generate_gp_batch,
@@ -90,12 +94,16 @@ __all__ = [
     "LogUniform",
     "MockData",
     "Model",
+    "NoiseConfig",
+    "Observation",
     "ParamSpec",
+    "Photometry",
     "Posterior",
     "Prediction",
     "SEDQuantities",
     "SFHQuantities",
     "SSPData",
+    "SpectroscopyConfig",
     "StudentT",
     "Uniform",
     "VIConfig",

@@ -71,14 +71,25 @@ class Fitter:
         Observed data (photometry or spectrum).
     noise : array
         1-sigma uncertainties.
-    data_type : str
-        "photometry", "spectroscopy", or "joint".
+    data_type : str or None
+        ``"photometry"``, ``"spectroscopy"``, or ``"joint"``.
+        If ``None`` (default), inferred from ``model.observation``.
+        Explicit values override the inferred type.
     """
 
-    def __init__(self, model, data, noise, data_type="photometry"):
+    def __init__(self, model, data, noise, data_type=None):
         self.model = model
         self.data = jnp.asarray(data)
         self.noise = jnp.asarray(noise)
+
+        # Infer data_type from Observation if not provided
+        if data_type is None:
+            obs = getattr(model, "observation", None)
+            if obs is not None:
+                data_type = obs.data_type
+            else:
+                data_type = "photometry"  # backward compat default
+
         self.data_type = data_type
         self.spec = model.spec
 

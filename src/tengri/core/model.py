@@ -165,8 +165,51 @@ class Model:
     }
 
     def __init__(
-        self, spec, ssp_data, filters=None, precompute=True, forward_dtype="float64", approx=None
+        self,
+        spec,
+        ssp_data,
+        filters=None,
+        observation=None,
+        precompute=True,
+        forward_dtype="float64",
+        approx=None,
     ):
+        # --- Observation / filters resolution ---
+        if filters is not None and observation is not None:
+            raise ValueError(
+                "Cannot specify both filters= and observation=. "
+                "Use observation=Observation(photometry=...) instead."
+            )
+
+        if observation is not None:
+            from tengri.models.observation.observation import Observation
+
+            if not isinstance(observation, Observation):
+                raise TypeError(
+                    f"observation must be an Observation instance, got {type(observation)}"
+                )
+            # Auto-merge observation params into spec
+            obs_params = observation.get_all_params()
+            if obs_params:
+                spec = spec.with_params(**obs_params)
+            # Extract filters from observation for backward compat internals
+            if observation.can_do_photometry:
+                filters = (
+                    list(observation.photometry.filter_waves),
+                    list(observation.photometry.filter_trans),
+                    list(observation.photometry.filters),
+                )
+
+        elif filters is not None:
+            # Backward compat: wrap raw filters into an Observation
+            from tengri.models.observation.observation import Observation
+            from tengri.models.observation.photometry_config import Photometry
+
+            observation = Observation(
+                photometry=Photometry.from_filter_set(filters)
+            )
+
+        self.observation = observation
         self.spec = spec
         self.ssp_data = ssp_data
         self._forward_dtype = jnp.dtype(forward_dtype)
@@ -353,11 +396,16 @@ class Model:
                 self._has_sigma_v = False
 
         # SSP library velocity resolution for LSF subtraction (km/s)
-        self._sigma_lib_kms = getattr(spec, "sigma_lib_kms", 0.0)
-
-        # Instrument LSF resolution profile (None = no LSF, scalar or array)
-        self._lsf_resolution = getattr(spec, "lsf_resolution", None)
-        self._lsf_n_bins = getattr(spec, "lsf_n_bins", 16)
+        # Observation config takes precedence over spec attributes
+        if observation is not None and observation.can_do_spectroscopy:
+            sc = observation.spectroscopy
+            self._sigma_lib_kms = sc.sigma_lib_kms
+            self._lsf_resolution = sc.resolution
+            self._lsf_n_bins = sc.lsf_n_bins
+        else:
+            self._sigma_lib_kms = getattr(spec, "sigma_lib_kms", 0.0)
+            self._lsf_resolution = getattr(spec, "lsf_resolution", None)
+            self._lsf_n_bins = getattr(spec, "lsf_n_bins", 16)
 
         # Precompute luminosity distance if redshift is fixed
         redshift_dist = spec.get_distribution("redshift")
@@ -405,6 +453,15 @@ class Model:
 
         # Spectroscopy precomputation (same idea: pre-interpolate SSPs)
         self._spec_precomp = None
+
+        # Auto-precompute spectroscopy from Observation config
+        if (
+            observation is not None
+            and observation.can_do_spectroscopy
+            and self._z_fixed is not None
+            and precompute is not False
+        ):
+            self.precompute_spectroscopy(observation.spectroscopy.wave_obs)
 
         # Z-table precomputation (for free-redshift fitting)
         self._ztable = None

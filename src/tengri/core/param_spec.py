@@ -1102,6 +1102,65 @@ class ParamSpec:
                 )
 
     # -------------------------------------------------------------------
+    # Immutable copy with additional parameters
+    # -------------------------------------------------------------------
+
+    def with_params(self, **kwargs) -> ParamSpec:
+        """Return a new ParamSpec with additional parameters merged in.
+
+        Creates a copy of this ParamSpec with extra parameters added.
+        Existing user-defined parameters take precedence — if a param
+        name already exists, the new value is silently ignored.
+
+        This is used by Model to auto-merge observation-driven parameters
+        (calibration coefficients, noise model params) into the spec.
+
+        Parameters
+        ----------
+        **kwargs
+            Parameter name → Distribution (or scalar/tuple shorthand).
+            Only params not already present are added.
+
+        Returns
+        -------
+        ParamSpec
+            New instance with merged parameters.
+        """
+        if not kwargs:
+            return self
+
+        import copy
+
+        new_spec = copy.copy(self)
+        # Deep-copy mutable internals so the original is untouched
+        new_distributions = dict(self._distributions)
+        new_registry = dict(self._param_registry)
+        new_defaults = dict(self._defaults)
+
+        for name, val in kwargs.items():
+            if name in new_distributions:
+                # User-defined wins — skip
+                continue
+            dist = resolve_shorthand(val)
+            new_distributions[name] = dist
+            new_registry[name] = (
+                f"Auto-merged from Observation ({name})",
+                lambda lo, hi: True,
+                "",
+            )
+            new_defaults[name] = dist
+
+        object.__setattr__(new_spec, "_distributions", new_distributions)
+        object.__setattr__(new_spec, "_param_registry", new_registry)
+        object.__setattr__(new_spec, "_defaults", new_defaults)
+        object.__setattr__(
+            new_spec,
+            "_valid_param_names",
+            frozenset(new_registry.keys()),
+        )
+        return new_spec
+
+    # -------------------------------------------------------------------
     # Properties
     # -------------------------------------------------------------------
 

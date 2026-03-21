@@ -1,0 +1,1301 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="./">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html">
+        <link rel="canonical" href="https://suchethac.github.io/tengri/performance_guide.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>Performance Optimization Guide - tengri</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=fae7dedd" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="index.html"><div class="brand">tengri</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
+  
+  <span class="sidebar-brand-text">tengri</span>
+  
+</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="tutorials/index.html">Tutorials</a><input aria-label="Toggle navigation of Tutorials" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="demonstrations/index.html">Demonstrations</a><input aria-label="Toggle navigation of Demonstrations" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="reference/index.html">Reference</a><input aria-label="Toggle navigation of Reference" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="observation/index.html">Observation Guide</a><input aria-label="Toggle navigation of Observation Guide" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="performance/index.html">Performance</a><input aria-label="Toggle navigation of Performance" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="advanced/index.html">Advanced Topics</a><input aria-label="Toggle navigation of Advanced Topics" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="api/index.html">API Reference</a><input aria-label="Toggle navigation of API Reference" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="developer/index.html">Developer Guide</a><input aria-label="Toggle navigation of Developer Guide" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/suchethac/tengri/blob/main/docs/performance_guide.md?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/suchethac/tengri/edit/main/docs/performance_guide.md" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section class="tex2jax_ignore mathjax_ignore" id="performance-optimization-guide">
+<h1>Performance Optimization Guide<a class="headerlink" href="#performance-optimization-guide" title="Link to this heading">¶</a></h1>
+<p>A comprehensive guide to tengri’s speed and memory optimizations.
+For EVI/geoVI inference-specific optimizations, see <code class="docutils literal notranslate"><span class="pre">evi_optimization_notes.md</span></code>.</p>
+<section id="quick-start-maximum-performance">
+<h2>Quick Start: Maximum Performance<a class="headerlink" href="#quick-start-maximum-performance" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tengri</span><span class="w"> </span><span class="kn">import</span> <span class="n">Model</span><span class="p">,</span> <span class="n">ParamSpec</span><span class="p">,</span> <span class="n">Uniform</span><span class="p">,</span> <span class="n">Fitter</span><span class="p">,</span> <span class="n">load_ssp_data</span><span class="p">,</span> <span class="n">load_filter_set</span>
+
+<span class="n">ssp</span> <span class="o">=</span> <span class="n">load_ssp_data</span><span class="p">(</span><span class="s2">&quot;data/ssp.h5&quot;</span><span class="p">)</span>
+<span class="n">filters</span> <span class="o">=</span> <span class="n">load_filter_set</span><span class="p">([</span><span class="s2">&quot;sdss_u&quot;</span><span class="p">,</span> <span class="s2">&quot;sdss_g&quot;</span><span class="p">,</span> <span class="s2">&quot;sdss_r&quot;</span><span class="p">,</span> <span class="s2">&quot;sdss_i&quot;</span><span class="p">,</span> <span class="s2">&quot;sdss_z&quot;</span><span class="p">])</span>
+
+<span class="n">spec</span> <span class="o">=</span> <span class="n">ParamSpec</span><span class="p">(</span>
+    <span class="n">sfh_dpl_alpha</span><span class="o">=</span><span class="n">Uniform</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">),</span>
+    <span class="n">sfh_dpl_beta</span><span class="o">=</span><span class="n">Uniform</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">),</span>
+    <span class="n">sfh_dpl_tau_gyr</span><span class="o">=</span><span class="n">Uniform</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">13.0</span><span class="p">),</span>
+    <span class="n">sfh_dpl_log_peak_sfr</span><span class="o">=</span><span class="n">Uniform</span><span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">),</span>
+    <span class="n">met_logzsol</span><span class="o">=</span><span class="n">Uniform</span><span class="p">(</span><span class="o">-</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
+    <span class="n">dust_tau_bc</span><span class="o">=</span><span class="n">Uniform</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">),</span>
+    <span class="n">dust_tau_diff</span><span class="o">=</span><span class="n">Uniform</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">),</span>
+    <span class="n">dust_slope</span><span class="o">=-</span><span class="mf">0.7</span><span class="p">,</span>
+    <span class="n">redshift</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>       <span class="c1"># FIXED redshift → enables precomputation</span>
+    <span class="n">mean_sfh_type</span><span class="o">=</span><span class="s2">&quot;dpl&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># All optimizations enabled automatically:</span>
+<span class="c1"># 1. Photometry precomputation (fixed z + filters → auto)</span>
+<span class="c1"># 2. Fused JIT kernel (auto when precompute is on)</span>
+<span class="c1"># 3. Precomputed dust age weights (always)</span>
+<span class="c1"># 4. XLA compilation cache (always)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Model</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">ssp</span><span class="p">,</span> <span class="n">filters</span><span class="o">=</span><span class="n">filters</span><span class="p">)</span>
+
+<span class="c1"># Optional: mixed precision for 2x memory savings</span>
+<span class="n">model_fast</span> <span class="o">=</span> <span class="n">Model</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">ssp</span><span class="p">,</span> <span class="n">filters</span><span class="o">=</span><span class="n">filters</span><span class="p">,</span> <span class="n">forward_dtype</span><span class="o">=</span><span class="s2">&quot;float32&quot;</span><span class="p">)</span>
+
+<span class="c1"># For spectroscopy: call precompute_spectroscopy() before fitting</span>
+<span class="n">wave_obs</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">3800</span><span class="p">,</span> <span class="mi">9200</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="mf">0.1</span><span class="p">)</span>  <span class="c1"># observed frame</span>
+<span class="n">model</span><span class="o">.</span><span class="n">precompute_spectroscopy</span><span class="p">(</span><span class="n">wave_obs</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="optimization-1-fused-jit-kernels">
+<h2>Optimization 1: Fused JIT Kernels<a class="headerlink" href="#optimization-1-fused-jit-kernels" title="Link to this heading">¶</a></h2>
+<section id="what-it-does">
+<h3>What it does<a class="headerlink" href="#what-it-does" title="Link to this heading">¶</a></h3>
+<p>The forward model involves a chain of operations:</p>
+<ol class="arabic simple">
+<li><p>SFR → CSP weights (trapezoidal integration)</p></li>
+<li><p>Metallicity interpolation (linear in log Z)</p></li>
+<li><p>Dust attenuation (Charlot &amp; Fall)</p></li>
+<li><p>Weighted sum (einsum)</p></li>
+</ol>
+<p>Previously, each step was a separate <code class="docutils literal notranslate"><span class="pre">&#64;jax.jit</span></code> function. XLA cannot optimize
+across JIT boundaries, so intermediate arrays were materialized between steps.</p>
+<p>The fused kernel wraps all four steps in a <strong>single <code class="docutils literal notranslate"><span class="pre">&#64;jax.jit</span></code> closure</strong>. XLA
+can now:</p>
+<ul class="simple">
+<li><p>Eliminate intermediate array allocations</p></li>
+<li><p>Fuse element-wise operations (dust × SSP × weights)</p></li>
+<li><p>Optimize memory layout for the full computation graph</p></li>
+</ul>
+</section>
+<section id="how-to-use-it">
+<h3>How to use it<a class="headerlink" href="#how-to-use-it" title="Link to this heading">¶</a></h3>
+<p><strong>It’s automatic.</strong> When you create a <code class="docutils literal notranslate"><span class="pre">Model</span></code> with <code class="docutils literal notranslate"><span class="pre">precompute=True</span></code> (default)
+and a fixed redshift, the fused kernel is built during <code class="docutils literal notranslate"><span class="pre">__init__</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">Model</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">ssp</span><span class="p">,</span> <span class="n">filters</span><span class="o">=</span><span class="n">filters</span><span class="p">)</span>
+<span class="c1"># model._fused_photometry is now a compiled JIT function</span>
+
+<span class="c1"># These use the fused kernel automatically:</span>
+<span class="n">flux</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict_photometry</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>For spectroscopy, call <code class="docutils literal notranslate"><span class="pre">precompute_spectroscopy()</span></code> to build the fused spectrum
+kernel:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span><span class="o">.</span><span class="n">precompute_spectroscopy</span><span class="p">(</span><span class="n">wave_obs</span><span class="p">)</span>
+<span class="c1"># model._fused_spectrum is now a compiled JIT function</span>
+<span class="n">spec_flux</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict_spectrum</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="what-s-inside-the-fused-kernel">
+<h3>What’s inside the fused kernel<a class="headerlink" href="#what-s-inside-the-fused-kernel" title="Link to this heading">¶</a></h3>
+<p>The fused photometry kernel has this signature (internal, not user-facing):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Built by Model._build_fused_photometry()</span>
+<span class="c1"># Closure captures: ssp_phot, ssp_lgmet, eff_waves_rest, dust_age_weights,</span>
+<span class="c1">#                   flux_scale, ssp_ages_yr, LSUN_ERG_PER_S</span>
+
+<span class="nd">@jax</span><span class="o">.</span><span class="n">jit</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">fused_phot</span><span class="p">(</span><span class="n">sfr_on_ssp</span><span class="p">,</span> <span class="n">log_z</span><span class="p">,</span> <span class="n">tau_v1</span><span class="p">,</span> <span class="n">tau_v2</span><span class="p">,</span> <span class="n">dust_n</span><span class="p">):</span>
+    <span class="c1"># 1. CSP weights from SFR</span>
+    <span class="n">weights</span> <span class="o">=</span> <span class="n">sfr_on_ssp</span> <span class="o">*</span> <span class="n">dt_ages</span>
+
+    <span class="c1"># 2. Metallicity interpolation</span>
+    <span class="n">ssp_at_z</span> <span class="o">=</span> <span class="n">lerp</span><span class="p">(</span><span class="n">ssp_phot</span><span class="p">,</span> <span class="n">ssp_lgmet</span><span class="p">,</span> <span class="n">log_z</span><span class="p">)</span>
+
+    <span class="c1"># 3. Dust attenuation (precomputed age weights)</span>
+    <span class="n">dust</span> <span class="o">=</span> <span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">tau_eff</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">wave_ratio</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:])</span>
+
+    <span class="c1"># 4. Weighted sum</span>
+    <span class="k">return</span> <span class="n">flux_scale</span> <span class="o">*</span> <span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;i,if,if-&gt;f&quot;</span><span class="p">,</span> <span class="n">weights</span><span class="p">,</span> <span class="n">dust</span><span class="p">,</span> <span class="n">ssp_at_z</span><span class="p">)</span> <span class="o">*</span> <span class="n">LSUN</span>
+</pre></div>
+</div>
+<p>All constants are captured as closure variables — XLA treats them as compile-time
+constants and can fold them into the computation.</p>
+</section>
+<section id="benchmark">
+<h3>Benchmark<a class="headerlink" href="#benchmark" title="Link to this heading">¶</a></h3>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Before (separate JITs)</p></th>
+<th class="head"><p>After (fused)</p></th>
+<th class="head"><p>Speedup</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Smooth gradient (D=7)</p></td>
+<td><p>64 μs</p></td>
+<td><p>56 μs</p></td>
+<td><p>1.1x</p></td>
+</tr>
+<tr class="row-odd"><td><p>Stochastic gradient (D=137)</p></td>
+<td><p>176 μs</p></td>
+<td><p>63 μs</p></td>
+<td><p><strong>2.8x</strong></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The stochastic model benefits more because the separate-JIT path had more
+dispatch overhead relative to compute.</p>
+</section>
+<section id="when-not-to-use-it">
+<h3>When NOT to use it<a class="headerlink" href="#when-not-to-use-it" title="Link to this heading">¶</a></h3>
+<p>The fused kernel requires:</p>
+<ul class="simple">
+<li><p>Fixed redshift (so SSP precomputation is valid)</p></li>
+<li><p>Filters set (for photometry) or <code class="docutils literal notranslate"><span class="pre">precompute_spectroscopy()</span></code> called (for spectra)</p></li>
+</ul>
+<p>If redshift is a free parameter, the exact path is used automatically (no fusion).</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="optimization-2-precomputed-dust-age-weights">
+<h2>Optimization 2: Precomputed Dust Age Weights<a class="headerlink" href="#optimization-2-precomputed-dust-age-weights" title="Link to this heading">¶</a></h2>
+<section id="id1">
+<h3>What it does<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h3>
+<p>Charlot &amp; Fall dust attenuation computes a sigmoid transition:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">weight</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="o">=</span> <span class="n">sigmoid</span><span class="p">(</span><span class="o">-</span><span class="p">(</span><span class="n">log10</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="o">-</span> <span class="n">log10</span><span class="p">(</span><span class="n">t_birth</span><span class="p">))</span> <span class="o">/</span> <span class="n">width</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This depends only on the SSP age grid and <code class="docutils literal notranslate"><span class="pre">t_birth</span></code> — both are constants during
+inference. Previously, <code class="docutils literal notranslate"><span class="pre">log10()</span></code> and <code class="docutils literal notranslate"><span class="pre">sigmoid()</span></code> were recomputed at every
+forward call.</p>
+<p>Now, <code class="docutils literal notranslate"><span class="pre">precompute_dust_age_weights()</span></code> computes the sigmoid once at Model init.
+The fast dust function <code class="docutils literal notranslate"><span class="pre">two_component_dust_fast()</span></code> takes the precomputed
+weights and skips the log10 + sigmoid.</p>
+</section>
+<section id="id2">
+<h3>How to use it<a class="headerlink" href="#id2" title="Link to this heading">¶</a></h3>
+<p><strong>Automatic.</strong> The Model always precomputes dust age weights:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">Model</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">ssp</span><span class="p">,</span> <span class="n">filters</span><span class="o">=</span><span class="n">filters</span><span class="p">)</span>
+<span class="c1"># model._dust_age_weights is a 1D array of sigmoid values</span>
+</pre></div>
+</div>
+<p>For standalone use (e.g., in custom forward models):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tengri.models.dust.attenuation</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">precompute_dust_age_weights</span><span class="p">,</span>
+    <span class="n">two_component_dust_fast</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">age_grid</span> <span class="o">=</span> <span class="mf">10.0</span> <span class="o">**</span> <span class="n">jnp</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">5.5</span><span class="p">,</span> <span class="mf">10.14</span><span class="p">,</span> <span class="mi">107</span><span class="p">)</span>
+<span class="n">dust_w</span> <span class="o">=</span> <span class="n">precompute_dust_age_weights</span><span class="p">(</span><span class="n">age_grid</span><span class="p">)</span>
+
+<span class="c1"># Per-call: no log10 or sigmoid — just exp(-tau)</span>
+<span class="n">atten</span> <span class="o">=</span> <span class="n">two_component_dust_fast</span><span class="p">(</span>
+    <span class="n">wavelengths</span><span class="p">,</span> <span class="n">dust_w</span><span class="p">,</span> <span class="n">tau_v1</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">tau_v2</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>
+    <span class="n">law_bc</span><span class="o">=</span><span class="s2">&quot;power_law&quot;</span><span class="p">,</span> <span class="n">law_diff</span><span class="o">=</span><span class="s2">&quot;power_law&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="optimization-3-mixed-precision-float32-forward-model">
+<h2>Optimization 3: Mixed Precision (float32 Forward Model)<a class="headerlink" href="#optimization-3-mixed-precision-float32-forward-model" title="Link to this heading">¶</a></h2>
+<section id="id3">
+<h3>What it does<a class="headerlink" href="#id3" title="Link to this heading">¶</a></h3>
+<p>The forward model (SFH → weights → metallicity interp → dust → einsum) is
+numerically stable in float32. Zacharegkas et al. (2025) run their entire
+SED pipeline in float32. Only cosmological distances (dL² at z &gt; 0.01)
+need float64, and those are precomputed once.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">forward_dtype=&quot;float32&quot;</span></code>:</p>
+<ul class="simple">
+<li><p>All SSP arrays in the fused kernel closure are stored in float32 (2x memory)</p></li>
+<li><p>All forward-model arithmetic is float32 (faster SIMD on CPU, faster on GPU)</p></li>
+<li><p>Output is cast back to float64 for the chi-squared/likelihood</p></li>
+</ul>
+</section>
+<section id="id4">
+<h3>How to use it<a class="headerlink" href="#id4" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Default: float64 (full precision)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Model</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">ssp</span><span class="p">,</span> <span class="n">filters</span><span class="o">=</span><span class="n">filters</span><span class="p">)</span>
+
+<span class="c1"># Mixed precision: float32 forward, float64 output</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Model</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">ssp</span><span class="p">,</span> <span class="n">filters</span><span class="o">=</span><span class="n">filters</span><span class="p">,</span> <span class="n">forward_dtype</span><span class="o">=</span><span class="s2">&quot;float32&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="accuracy">
+<h3>Accuracy<a class="headerlink" href="#accuracy" title="Link to this heading">¶</a></h3>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Metric</p></th>
+<th class="head"><p>float32 vs float64</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Photometry relative error</p></td>
+<td><p>&lt; 0.1% (typical ~0.01%)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Gradient relative error</p></td>
+<td><p>&lt; 1%</p></td>
+</tr>
+<tr class="row-even"><td><p>Acceptable for inference?</p></td>
+<td><p>Yes — noise floor is typically 5% (SNR=20)</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The 0.1% forward model error is well below the observational noise floor
+for any realistic galaxy survey. Gradient errors of ~1% have no meaningful
+effect on MCMC/VI convergence.</p>
+</section>
+<section id="id5">
+<h3>When NOT to use it<a class="headerlink" href="#id5" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Debugging numerical issues: use float64 to rule out precision problems</p></li>
+<li><p>Validating against other codes: use float64 for exact comparison</p></li>
+<li><p>Very high SNR spectroscopy (SNR &gt; 200): float32 errors may become significant</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="optimization-4-xla-persistent-compilation-cache">
+<h2>Optimization 4: XLA Persistent Compilation Cache<a class="headerlink" href="#optimization-4-xla-persistent-compilation-cache" title="Link to this heading">¶</a></h2>
+<section id="id6">
+<h3>What it does<a class="headerlink" href="#id6" title="Link to this heading">¶</a></h3>
+<p>JAX’s XLA compiler traces and compiles JIT functions on first call. This
+takes ~1-5 seconds for the tengri forward model. Without caching, this
+happens every time you restart Python.</p>
+<p>The persistent cache stores compiled XLA executables on disk. On subsequent
+runs, JAX loads the cached compilation instead of recompiling.</p>
+</section>
+<section id="how-it-works">
+<h3>How it works<a class="headerlink" href="#how-it-works" title="Link to this heading">¶</a></h3>
+<p>Enabled automatically when you <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">tengri</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># In tengri/__init__.py:</span>
+<span class="n">jax</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s2">&quot;jax_compilation_cache_dir&quot;</span><span class="p">,</span> <span class="s2">&quot;/tmp/tengri_jax_cache&quot;</span><span class="p">)</span>
+<span class="n">jax</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s2">&quot;jax_persistent_cache_min_entry_size_bytes&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="impact">
+<h3>Impact<a class="headerlink" href="#impact" title="Link to this heading">¶</a></h3>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Scenario</p></th>
+<th class="head"><p>Without cache</p></th>
+<th class="head"><p>With cache</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>First call to <code class="docutils literal notranslate"><span class="pre">predict_photometry</span></code></p></td>
+<td><p>1-2s</p></td>
+<td><p>1-2s (compiles + caches)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Second call (same session)</p></td>
+<td><p>~0.1ms</p></td>
+<td><p>~0.1ms (in-memory)</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>First call after restart</strong></p></td>
+<td><p><strong>1-2s (recompile)</strong></p></td>
+<td><p><strong>~50ms (load from disk)</strong></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>This matters most in notebooks where you restart kernels frequently.</p>
+</section>
+<section id="cache-management">
+<h3>Cache management<a class="headerlink" href="#cache-management" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Clear cache (if you upgrade JAX or change code structure)</span>
+rm<span class="w"> </span>-rf<span class="w"> </span>/tmp/tengri_jax_cache
+
+<span class="c1"># Check cache size</span>
+du<span class="w"> </span>-sh<span class="w"> </span>/tmp/tengri_jax_cache
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="optimization-5-photometry-precomputation-zacharegkas-2025">
+<h2>Optimization 5: Photometry Precomputation (Zacharegkas+2025)<a class="headerlink" href="#optimization-5-photometry-precomputation-zacharegkas-2025" title="Link to this heading">¶</a></h2>
+<section id="id7">
+<h3>What it does<a class="headerlink" href="#id7" title="Link to this heading">¶</a></h3>
+<p>Traditional SED fitting computes galaxy photometry by:</p>
+<ol class="arabic simple">
+<li><p>Computing the full SED at ~7000 wavelengths</p></li>
+<li><p>Redshifting the SED</p></li>
+<li><p>Integrating through each filter transmission curve</p></li>
+</ol>
+<p>The Zacharegkas et al. (2025) approximation precomputes the wavelength
+integral: for each SSP template at each age/metallicity, compute the
+broadband flux through each filter once. Then galaxy photometry is just a
+weighted sum — no wavelength dimension at all.</p>
+<p>Dust is approximated by evaluating the attenuation curve at the filter
+effective wavelength (constant over the filter bandwidth to ~0.1% accuracy).</p>
+</section>
+<section id="id8">
+<h3>How to use it<a class="headerlink" href="#id8" title="Link to this heading">¶</a></h3>
+<p><strong>Automatic</strong> when redshift is fixed and filters are present:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">spec</span> <span class="o">=</span> <span class="n">ParamSpec</span><span class="p">(</span><span class="n">redshift</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>  <span class="c1"># Fixed redshift</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Model</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">ssp</span><span class="p">,</span> <span class="n">filters</span><span class="o">=</span><span class="n">filters</span><span class="p">)</span>
+<span class="c1"># model._precomp is now a PhotometricPrecomputation</span>
+<span class="c1"># predict_photometry() uses the fast path automatically</span>
+</pre></div>
+</div>
+</section>
+<section id="id9">
+<h3>Impact<a class="headerlink" href="#id9" title="Link to this heading">¶</a></h3>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Path</p></th>
+<th class="head"><p>Forward time</p></th>
+<th class="head"><p>Gradient time</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Exact (7000 wavelengths)</p></td>
+<td><p>~3 ms</p></td>
+<td><p>~6 ms</p></td>
+</tr>
+<tr class="row-odd"><td><p>Precomputed (5 bands)</p></td>
+<td><p>~0.14 ms</p></td>
+<td><p>~0.06 ms</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Speedup</strong></p></td>
+<td><p><strong>21x</strong></p></td>
+<td><p><strong>100x</strong></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="optimization-6-spectroscopy-precomputation">
+<h2>Optimization 6: Spectroscopy Precomputation<a class="headerlink" href="#optimization-6-spectroscopy-precomputation" title="Link to this heading">¶</a></h2>
+<section id="id10">
+<h3>What it does<a class="headerlink" href="#id10" title="Link to this heading">¶</a></h3>
+<p>Same idea as photometry precomputation, but for spectroscopy. Instead of
+interpolating SSP templates to the observed wavelength grid at every call,
+pre-interpolate once and store the result.</p>
+<p>Reduces the SSP array from (n_met, n_age, ~7000) to (n_met, n_age, n_pix)
+where n_pix ~ 200-1000 (the observed spectral pixels).</p>
+</section>
+<section id="id11">
+<h3>How to use it<a class="headerlink" href="#id11" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Observed wavelength grid</span>
+<span class="n">wave_obs</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">3800</span><span class="p">,</span> <span class="mi">9200</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="mf">0.1</span><span class="p">)</span>
+
+<span class="c1"># Precompute (call once before fitting)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">precompute_spectroscopy</span><span class="p">(</span><span class="n">wave_obs</span><span class="p">)</span>
+
+<span class="c1"># All subsequent calls use the fast path</span>
+<span class="n">flux</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict_spectrum</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="benchmark-results">
+<h2>Benchmark Results<a class="headerlink" href="#benchmark-results" title="Link to this heading">¶</a></h2>
+<p>All benchmarks on Apple M-series CPU, JAX 0.5+, float64, 5 SDSS bands,
+DPL SFH (D=7). SSP grid: 15 Z × 93 ages × 5994 wavelengths.</p>
+<p>Reproduce with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>analysis/profile_forward_model.py<span class="w">    </span><span class="c1"># component breakdown</span>
+python<span class="w"> </span>analysis/benchmark_dust_laws.py<span class="w">      </span><span class="c1"># dust law comparison</span>
+</pre></div>
+</div>
+<section id="component-breakdown-exact-path-power-law-dust">
+<h3>Component Breakdown (exact path, power-law dust)<a class="headerlink" href="#component-breakdown-exact-path-power-law-dust" title="Link to this heading">¶</a></h3>
+<p>Where time is spent when NOT using the fused kernel:</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Component</p></th>
+<th class="head"><p>Time (μs)</p></th>
+<th class="head"><p>% of Total</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Dust attenuation</strong> (93 ages × 5994 λ)</p></td>
+<td><p><strong>1700</strong></p></td>
+<td><p><strong>62%</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p>CSP SED einsum</p></td>
+<td><p>506</p></td>
+<td><p>18%</p></td>
+</tr>
+<tr class="row-even"><td><p>Metallicity interpolation</p></td>
+<td><p>209</p></td>
+<td><p>8%</p></td>
+</tr>
+<tr class="row-odd"><td><p>Photometric integration (5 filters)</p></td>
+<td><p>197</p></td>
+<td><p>7%</p></td>
+</tr>
+<tr class="row-even"><td><p>SFH computation</p></td>
+<td><p>73</p></td>
+<td><p>3%</p></td>
+</tr>
+<tr class="row-odd"><td><p>SFR interpolation</p></td>
+<td><p>49</p></td>
+<td><p>2%</p></td>
+</tr>
+<tr class="row-even"><td><p>CSP weights (trapezoid)</p></td>
+<td><p>3</p></td>
+<td><p>&lt;1%</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Total</strong></p></td>
+<td><p><strong>2737</strong></p></td>
+<td><p>100%</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The fused kernel eliminates all of these except SFH: it evaluates dust at
+5 effective wavelengths (not 5994), does the einsum on the precomputed
+(93 × 5) array, and skips photometric integration entirely.</p>
+</section>
+<section id="fused-kernel-all-dust-laws">
+<h3>Fused Kernel: All Dust Laws<a class="headerlink" href="#fused-kernel-all-dust-laws" title="Link to this heading">¶</a></h3>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Dust Law</p></th>
+<th class="head"><p>Fused (μs)</p></th>
+<th class="head"><p>Exact (μs)</p></th>
+<th class="head"><p>Forward Speedup</p></th>
+<th class="head"><p>Gradient Speedup</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>power_law</p></td>
+<td><p>298</p></td>
+<td><p>3299</p></td>
+<td><p><strong>11x</strong></p></td>
+<td><p><strong>68x</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p>calzetti</p></td>
+<td><p>290</p></td>
+<td><p>3549</p></td>
+<td><p><strong>12x</strong></p></td>
+<td><p><strong>44x</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>kriek_conroy</p></td>
+<td><p>304</p></td>
+<td><p>4119</p></td>
+<td><p><strong>14x</strong></p></td>
+<td><p><strong>45x</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p>smc</p></td>
+<td><p>281</p></td>
+<td><p>3606</p></td>
+<td><p><strong>13x</strong></p></td>
+<td><p><strong>56x</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>cardelli</p></td>
+<td><p>301</p></td>
+<td><p>5614</p></td>
+<td><p><strong>19x</strong></p></td>
+<td><p><strong>37x</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p>salim</p></td>
+<td><p>289</p></td>
+<td><p>4139</p></td>
+<td><p><strong>14x</strong></p></td>
+<td><p><strong>59x</strong></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>All fused kernels run at ~290 μs regardless of dust law — the curve
+evaluation at 5 wavelengths is trivial. Gradient speedup is 37-68x
+because XLA differentiates through the fused kernel more efficiently.</p>
+<p><strong>Note:</strong> The Zacharegkas+2025 approximation (dust at effective wavelengths)
+gives &lt;3% error for most laws. SMC has higher error (~36%) due to its
+steep UV curve — use exact path or spectroscopy for SMC-heavy fits.</p>
+</section>
+<section id="full-inference">
+<h3>Full Inference<a class="headerlink" href="#full-inference" title="Link to this heading">¶</a></h3>
+<p>The default method is <code class="docutils literal notranslate"><span class="pre">native_geovi</span></code> (JIT-compiled geoVI with resample+update
+schedule and nonlinear posterior draws).</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Configuration</p></th>
+<th class="head"><p>native_geovi Time</p></th>
+<th class="head"><p>Posterior Samples</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Smooth D=7, power_law</p></td>
+<td><p>56s compile + 0.3s run</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-odd"><td><p>Smooth D=7, calzetti</p></td>
+<td><p>56s compile + 0.3s run</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>Stochastic D=137, power_law</p></td>
+<td><p>56s compile + 0.8s run</p></td>
+<td><p>2000</p></td>
+</tr>
+<tr class="row-odd"><td><p>Catalog (100 galaxies)</p></td>
+<td><p>56s compile + 3s total</p></td>
+<td><p>100/galaxy</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Compilation cost is one-time and cached to <code class="docutils literal notranslate"><span class="pre">/tmp/tengri_jax_cache</span></code>.
+Dust law choice has negligible impact on inference time.</p>
+<p>Batch fitting: <code class="docutils literal notranslate"><span class="pre">fitter.fit_batch(galaxies)</span></code> uses <code class="docutils literal notranslate"><span class="pre">native_geovi</span></code> by default.</p>
+</section>
+<section id="memory">
+<h3>Memory<a class="headerlink" href="#memory" title="Link to this heading">¶</a></h3>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Data Structure</p></th>
+<th class="head"><p>Shape</p></th>
+<th class="head"><p>float64</p></th>
+<th class="head"><p>float32</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Raw SSP templates</p></td>
+<td><p>15 × 93 × 5994</p></td>
+<td><p><strong>66.9 MB</strong></p></td>
+<td><p><strong>33.5 MB</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p>Photometry precomp (fixed z)</p></td>
+<td><p>15 × 93 × 5</p></td>
+<td><p>56 KB</p></td>
+<td><p>28 KB</p></td>
+</tr>
+<tr class="row-even"><td><p>Z-table (100 z-points)</p></td>
+<td><p>100 × 15 × 93 × 5</p></td>
+<td><p>5.6 MB</p></td>
+<td><p>2.8 MB</p></td>
+</tr>
+<tr class="row-odd"><td><p>Spectroscopy precomp (200 pix)</p></td>
+<td><p>15 × 93 × 200</p></td>
+<td><p>2.2 MB</p></td>
+<td><p>1.1 MB</p></td>
+</tr>
+<tr class="row-even"><td><p>Dust age weights</p></td>
+<td><p>93</p></td>
+<td><p>0.7 KB</p></td>
+<td><p>0.4 KB</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="gpu-scaling-future">
+<h3>GPU Scaling (Future)<a class="headerlink" href="#gpu-scaling-future" title="Link to this heading">¶</a></h3>
+<p>On GPU (A100/H100), the fused kernel with float32 would benefit from:</p>
+<ul class="simple">
+<li><p>Hardware float32 throughput (2x vs float64)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">jax.vmap</span></code> over galaxies for batch fitting (1000+ galaxies in parallel)</p></li>
+<li><p>Zacharegkas+2025 achieves ~1000 posteriors/minute on a single GPU</p></li>
+</ul>
+<p>For batch fitting (Paper II), use <code class="docutils literal notranslate"><span class="pre">fitter.fit_batch(galaxies)</span></code> which defaults
+to <code class="docutils literal notranslate"><span class="pre">native_geovi</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># High-level batch fitting API</span>
+<span class="n">results</span> <span class="o">=</span> <span class="n">fitter</span><span class="o">.</span><span class="n">fit_batch</span><span class="p">(</span><span class="n">galaxies</span><span class="p">)</span>  <span class="c1"># default method: native_geovi</span>
+
+<span class="c1"># Low-level vmap for custom forward model calls</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>
+<span class="n">batch_photometry</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">vmap</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">predict_photometry</span><span class="p">)</span>
+<span class="n">batch_flux</span> <span class="o">=</span> <span class="n">batch_photometry</span><span class="p">(</span><span class="n">batch_params</span><span class="p">)</span>  <span class="c1"># (n_galaxies, n_filters)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="component-benchmarks-cross-validation">
+<h2>Component Benchmarks &amp; Cross-Validation<a class="headerlink" href="#component-benchmarks-cross-validation" title="Link to this heading">¶</a></h2>
+<p>All benchmarks on Apple M4 Pro, CPU, JAX 0.9 (64-bit), 200 calls per measurement
+after JIT warmup. TF benchmarks use TensorFlow 2.16 (CPU, 32-bit) in a separate
+environment.</p>
+<section id="cue-nebular-emulator-jax-vs-tensorflow">
+<h3>CUE Nebular Emulator: JAX vs TensorFlow<a class="headerlink" href="#cue-nebular-emulator-jax-vs-tensorflow" title="Link to this heading">¶</a></h3>
+<p>The CUE emulator (Li et al. 2024, <a class="reference external" href="https://arxiv.org/abs/2405.04598">arXiv:2405.04598</a>)
+was re-implemented in pure JAX from the original TensorFlow code. Weights are loaded
+from a single <code class="docutils literal notranslate"><span class="pre">data/cue_weights.npz</span></code> file — zero TF dependency at runtime.</p>
+<p><strong>Batched architecture</strong>: All 16 line sub-networks share the same hidden layer
+dimensions (12→256→256→256). Instead of 16 separate matmuls, we stack the weights
+into <code class="docutils literal notranslate"><span class="pre">(16,</span> <span class="pre">256,</span> <span class="pre">256)</span></code> tensors and run a single <code class="docutils literal notranslate"><span class="pre">einsum(&quot;ni,nio-&gt;no&quot;)</span></code>. Only the
+output layer (different PCA sizes per network) stays sequential.</p>
+<p><strong>Three optimization stages</strong> (measured with <code class="docutils literal notranslate"><span class="pre">block_until_ready</span></code>, 500 calls):</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Version</p></th>
+<th class="head"><p>Lines (μs)</p></th>
+<th class="head"><p>Total (μs)</p></th>
+<th class="head"><p>vs TF</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Original (16 sequential)</p></td>
+<td><p>2,876</p></td>
+<td><p>3,301</p></td>
+<td><p>4.2x</p></td>
+</tr>
+<tr class="row-odd"><td><p>Batched hidden layers</p></td>
+<td><p>858</p></td>
+<td><p>1,281</p></td>
+<td><p>10.8x</p></td>
+</tr>
+<tr class="row-even"><td><p>+ Precomputed padding</p></td>
+<td><p>541</p></td>
+<td><p>952</p></td>
+<td><p>14.5x</p></td>
+</tr>
+<tr class="row-odd"><td><p>TF (reference)</p></td>
+<td><p>8,520</p></td>
+<td><p>13,810</p></td>
+<td><p>1.0x</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Gradient: 371 μs via <code class="docutils literal notranslate"><span class="pre">jax.grad</span></code> (all versions). TF has no gradient support.</p>
+<p><strong>Key insight</strong>: For SED fitting with 12 CUE parameters, <code class="docutils literal notranslate"><span class="pre">jax.grad</span></code> at 0.37 ms
+replaces TF finite differences at ~170 ms (12 params × 2 evals × 7 ms).
+That’s a <strong>~460x</strong> advantage for gradient-based inference (MAP, HMC, VI).</p>
+<p><strong>Accuracy</strong>: Lines match TF to 2×10⁻⁵ relative tolerance (128/128 matched).
+Continuum median agreement 7×10⁻⁶; interpolation-boundary outliers reach ~4%.</p>
+<p>Numerical accuracy: lines agree with TF to &lt; 1e-4 relative tolerance; continuum
+is exact. Validated in <code class="docutils literal notranslate"><span class="pre">tests/crossval/test_cue_crossval.py</span></code>.</p>
+<p>Run benchmarks: <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">scripts/benchmark_cue.py</span> <span class="pre">--with-tf</span></code></p>
+</section>
+<section id="agn-models-jax-vs-original-implementations">
+<h3>AGN Models: JAX vs Original Implementations<a class="headerlink" href="#agn-models-jax-vs-original-implementations" title="Link to this heading">¶</a></h3>
+<p>All benchmarks on Apple M4 Pro, CPU, 500 calls, 5000 wavelength points.</p>
+<p><strong>QSOGen (Temple, Hewett &amp; Banerji 2021):</strong></p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>JAX (μs)</p></th>
+<th class="head"><p>Original (μs)</p></th>
+<th class="head"><p>Ratio</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Forward (default)</p></td>
+<td><p>10,142</p></td>
+<td><p>1,351</p></td>
+<td><p>0.13x</p></td>
+</tr>
+<tr class="row-odd"><td><p>Forward (EBV=0.1)</p></td>
+<td><p>9,026</p></td>
+<td><p>1,528</p></td>
+<td><p>0.17x</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">jax.grad</span></code></p></td>
+<td><p>474</p></td>
+<td><p>N/A</p></td>
+<td><p>—</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The JAX version is <strong>7.5x slower</strong> on the forward pass because the emission
+line template involves many small Python-level sigmoid/Gaussian operations
+that don’t fuse well in XLA. However, gradients (474 μs) are not available
+in the original at all — for gradient-based SED fitting, the JAX version
+enables fitting QSOGen parameters that were previously fixed.</p>
+<p><em>Known issue:</em> tengri QSOGen outputs L_nu (Lsun/Hz); the original outputs
+f_lambda (erg/s/cm²/Å). After converting to f_nu, UV/opt continuum color
+(no emission lines) is 0.93 (tengri) vs 0.78 (original) — a <strong>19%
+difference</strong> in the broken power-law shape, likely from sigmoid transition
+width or normalization details. Needs line-by-line calibration against
+the original <code class="docutils literal notranslate"><span class="pre">set_continuum()</span></code> in <code class="docutils literal notranslate"><span class="pre">qsosed.py</span></code>.</p>
+<p><strong>SKIRTOR (Stalevski et al. 2012, 2016):</strong></p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>JAX (μs)</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Forward (default)</p></td>
+<td><p>3,222</p></td>
+<td><p>Analytic 3-component MBB</p></td>
+</tr>
+<tr class="row-odd"><td><p>Forward (Type 2)</p></td>
+<td><p>4,547</p></td>
+<td><p>Edge-on, more computation</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">jax.grad</span></code> (vs τ)</p></td>
+<td><p>165</p></td>
+<td><p>All 5 params differentiable</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>No original SKIRTOR Python code to compare (the original is SKIRT Monte
+Carlo radiative transfer, ~hours per model). Our analytic approximation
+runs in 3 ms — enabling real-time fitting of torus parameters.</p>
+<p><strong>All AGN models (2000 pts):</strong></p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>Forward (μs)</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Power-law disc</p></td>
+<td><p>1,582</p></td>
+<td><p>Simplest disc model</p></td>
+</tr>
+<tr class="row-odd"><td><p>Multi-color disc (K&amp;D)</p></td>
+<td><p>4,853</p></td>
+<td><p>Shakura-Sunyaev thin disc</p></td>
+</tr>
+<tr class="row-even"><td><p>Simple torus</p></td>
+<td><p>2,139</p></td>
+<td><p>Single-T modified blackbody</p></td>
+</tr>
+<tr class="row-odd"><td><p>Two-temperature torus</p></td>
+<td><p>2,549</p></td>
+<td><p>Hot + warm dust</p></td>
+</tr>
+<tr class="row-even"><td><p>Simple AGN (disc+torus)</p></td>
+<td><p>4,851</p></td>
+<td><p>Combined power-law + torus</p></td>
+</tr>
+<tr class="row-odd"><td><p>Standard AGN (K&amp;D+2T)</p></td>
+<td><p>7,507</p></td>
+<td><p>Full multi-color + 2T torus</p></td>
+</tr>
+<tr class="row-even"><td><p>Radio (SF+AGN)</p></td>
+<td><p>149</p></td>
+<td><p>Power-law synchrotron</p></td>
+</tr>
+<tr class="row-odd"><td><p>X-ray (XRB)</p></td>
+<td><p>143</p></td>
+<td><p>HMXB + LMXB scaling</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Run full component benchmarks: <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">scripts/benchmark_components.py</span></code></p>
+</section>
+<section id="dust-ir-emission-models">
+<h3>Dust IR Emission Models<a class="headerlink" href="#dust-ir-emission-models" title="Link to this heading">¶</a></h3>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>Time (ms)</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Modified blackbody (T=30 K)</p></td>
+<td><p>0.21</p></td>
+<td><p>2 params, fastest</p></td>
+</tr>
+<tr class="row-odd"><td><p>Dale+2014 (α=2.0)</p></td>
+<td><p>0.30</p></td>
+<td><p>1 param, analytic 2-component</p></td>
+</tr>
+<tr class="row-even"><td><p>DL07 analytic (U_min=1.0)</p></td>
+<td><p>0.47</p></td>
+<td><p>3 params, approximate PAH</p></td>
+</tr>
+<tr class="row-odd"><td><p>DL07 tabulated (U_min=1.0)</p></td>
+<td><p>2.37</p></td>
+<td><p>3 params, full template interp</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The analytic DL07 is 5x faster than tabulated but has inaccurate PAH/FIR balance
+(centroid 117–253 μm vs bagpipes’ 33–42 μm). Use <code class="docutils literal notranslate"><span class="pre">&quot;dl07_tabulated&quot;</span></code> for production,
+analytic for exploratory work or when differentiability through the dust model matters
+more than absolute accuracy.</p>
+</section>
+<section id="mass-remaining-fraction">
+<h3>Mass-Remaining Fraction<a class="headerlink" href="#mass-remaining-fraction" title="Link to this heading">¶</a></h3>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Method</p></th>
+<th class="head"><p>Time (ms)</p></th>
+<th class="head"><p>Accuracy vs FSPS</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Stored FSPS table (interpolated)</p></td>
+<td><p>0.01</p></td>
+<td><p>1–5%</p></td>
+</tr>
+<tr class="row-odd"><td><p>Internal IMF computation (500 pts)</p></td>
+<td><p>15.70</p></td>
+<td><p>1–5%</p></td>
+</tr>
+<tr class="row-even"><td><p>Behroozi+2013 fitting formula</p></td>
+<td><p>0.001</p></td>
+<td><p>~2% (Chabrier)</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The stored table is preferred when available (loaded from <code class="docutils literal notranslate"><span class="pre">ssp_mass_remaining</span></code> in the
+SSP HDF5 file). The internal computation serves as a fallback for non-FSPS SSP
+libraries or when the IMF differs from the pre-computed table.</p>
+</section>
+<section id="cross-validation-summary">
+<h3>Cross-Validation Summary<a class="headerlink" href="#cross-validation-summary" title="Link to this heading">¶</a></h3>
+<p>106+ tests in <code class="docutils literal notranslate"><span class="pre">tests/crossval/</span></code> validate tengri against bagpipes, python-fsps,
+and CUE TF. Run with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pytest<span class="w"> </span>-m<span class="w"> </span>crossval<span class="w">                              </span><span class="c1"># bagpipes only</span>
+<span class="nv">SPS_HOME</span><span class="o">=</span>~/Projects/fsps<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>crossval<span class="w">     </span><span class="c1"># + FSPS tests</span>
+</pre></div>
+</div>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Component</p></th>
+<th class="head"><p>vs Code</p></th>
+<th class="head"><p>Agreement</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>IGM (Inoue+2014)</p></td>
+<td><p>bagpipes</p></td>
+<td><p>exact &gt; Ly-α</p></td>
+</tr>
+<tr class="row-odd"><td><p>Dust CF00</p></td>
+<td><p>FSPS</p></td>
+<td><p>&lt; 1%</p></td>
+</tr>
+<tr class="row-even"><td><p>Mass-remaining</p></td>
+<td><p>FSPS</p></td>
+<td><p>1–5%</p></td>
+</tr>
+<tr class="row-odd"><td><p>Stellar mass (f_surv)</p></td>
+<td><p>bagpipes</p></td>
+<td><p>2.3%</p></td>
+</tr>
+<tr class="row-even"><td><p>CUE lines</p></td>
+<td><p>TF</p></td>
+<td><p>&lt; 0.01%</p></td>
+</tr>
+<tr class="row-odd"><td><p>CUE continuum</p></td>
+<td><p>TF</p></td>
+<td><p>exact</p></td>
+</tr>
+<tr class="row-even"><td><p>Radio (FIR-radio)</p></td>
+<td><p>CIGALE</p></td>
+<td><p>&lt; 3%</p></td>
+</tr>
+<tr class="row-odd"><td><p>SED shape (normalized)</p></td>
+<td><p>bagpipes</p></td>
+<td><p>&lt; 50% (BC03 vs FSPS)</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Zacharegkas, Hearin &amp; Benson (2025): “Bayesian Posteriors with Stellar
+Population Synthesis on GPUs” — <a class="reference external" href="https://arxiv.org/abs/2506.19919">arXiv:2506.19919</a></p></li>
+<li><p>Frank, Leike &amp; Enßlin (2021): “Geometric Variational Inference” —
+<a class="reference external" href="https://arxiv.org/abs/2105.10470">arXiv:2105.10470</a></p></li>
+<li><p>Lovell et al. (2025): “Synthesizer: Synthetic Observables for Modern
+Astronomy” — <a class="reference external" href="https://arxiv.org/abs/2508.03888">arXiv:2508.03888</a></p></li>
+<li><p>Hearin et al. (2023): “DSPS: Differentiable Stellar Population Synthesis” —
+<a class="reference external" href="https://arxiv.org/abs/2112.06830">arXiv:2112.06830</a></p></li>
+<li><p>Li et al. (2024): “Cue: A Fast Neural Photoionization Emulator” —
+<a class="reference external" href="https://arxiv.org/abs/2405.04598">arXiv:2405.04598</a></p></li>
+<li><p>Dale et al. (2014): “A Two-Parameter Model for the IR/Submm/Radio SEDs” —
+<a class="reference external" href="https://doi.org/10.1088/0004-637X/784/1/83">ApJ 784, 83</a></p></li>
+<li><p>Draine &amp; Li (2007): “Infrared Emission from Interstellar Dust” —
+<a class="reference external" href="https://doi.org/10.1086/511055">ApJ 657, 810</a></p></li>
+<li><p>Carnall et al. (2018): “Inferring the Star Formation Histories of Massive
+Quiescent Galaxies with BAGPIPES” — <a class="reference external" href="https://arxiv.org/abs/1712.04452">arXiv:1712.04452</a></p></li>
+</ul>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Suchetha Cooray
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Performance Optimization Guide</a><ul>
+<li><a class="reference internal" href="#quick-start-maximum-performance">Quick Start: Maximum Performance</a></li>
+<li><a class="reference internal" href="#optimization-1-fused-jit-kernels">Optimization 1: Fused JIT Kernels</a><ul>
+<li><a class="reference internal" href="#what-it-does">What it does</a></li>
+<li><a class="reference internal" href="#how-to-use-it">How to use it</a></li>
+<li><a class="reference internal" href="#what-s-inside-the-fused-kernel">What’s inside the fused kernel</a></li>
+<li><a class="reference internal" href="#benchmark">Benchmark</a></li>
+<li><a class="reference internal" href="#when-not-to-use-it">When NOT to use it</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#optimization-2-precomputed-dust-age-weights">Optimization 2: Precomputed Dust Age Weights</a><ul>
+<li><a class="reference internal" href="#id1">What it does</a></li>
+<li><a class="reference internal" href="#id2">How to use it</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#optimization-3-mixed-precision-float32-forward-model">Optimization 3: Mixed Precision (float32 Forward Model)</a><ul>
+<li><a class="reference internal" href="#id3">What it does</a></li>
+<li><a class="reference internal" href="#id4">How to use it</a></li>
+<li><a class="reference internal" href="#accuracy">Accuracy</a></li>
+<li><a class="reference internal" href="#id5">When NOT to use it</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#optimization-4-xla-persistent-compilation-cache">Optimization 4: XLA Persistent Compilation Cache</a><ul>
+<li><a class="reference internal" href="#id6">What it does</a></li>
+<li><a class="reference internal" href="#how-it-works">How it works</a></li>
+<li><a class="reference internal" href="#impact">Impact</a></li>
+<li><a class="reference internal" href="#cache-management">Cache management</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#optimization-5-photometry-precomputation-zacharegkas-2025">Optimization 5: Photometry Precomputation (Zacharegkas+2025)</a><ul>
+<li><a class="reference internal" href="#id7">What it does</a></li>
+<li><a class="reference internal" href="#id8">How to use it</a></li>
+<li><a class="reference internal" href="#id9">Impact</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#optimization-6-spectroscopy-precomputation">Optimization 6: Spectroscopy Precomputation</a><ul>
+<li><a class="reference internal" href="#id10">What it does</a></li>
+<li><a class="reference internal" href="#id11">How to use it</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#benchmark-results">Benchmark Results</a><ul>
+<li><a class="reference internal" href="#component-breakdown-exact-path-power-law-dust">Component Breakdown (exact path, power-law dust)</a></li>
+<li><a class="reference internal" href="#fused-kernel-all-dust-laws">Fused Kernel: All Dust Laws</a></li>
+<li><a class="reference internal" href="#full-inference">Full Inference</a></li>
+<li><a class="reference internal" href="#memory">Memory</a></li>
+<li><a class="reference internal" href="#gpu-scaling-future">GPU Scaling (Future)</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#component-benchmarks-cross-validation">Component Benchmarks &amp; Cross-Validation</a><ul>
+<li><a class="reference internal" href="#cue-nebular-emulator-jax-vs-tensorflow">CUE Nebular Emulator: JAX vs TensorFlow</a></li>
+<li><a class="reference internal" href="#agn-models-jax-vs-original-implementations">AGN Models: JAX vs Original Implementations</a></li>
+<li><a class="reference internal" href="#dust-ir-emission-models">Dust IR Emission Models</a></li>
+<li><a class="reference internal" href="#mass-remaining-fraction">Mass-Remaining Fraction</a></li>
+<li><a class="reference internal" href="#cross-validation-summary">Cross-Validation Summary</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#references">References</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="_static/documentation_options.js?v=01f34227"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    </body>
+</html>
