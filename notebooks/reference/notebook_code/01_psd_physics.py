@@ -222,11 +222,30 @@ plt.show()
 # %% [markdown]
 # ## 4. Green's Functions and Window Functions
 #
-# The Green's function $G_\lambda(t_{\rm age})$ describes how much a stellar
-# population of age $t_{\rm age}$ contributes to flux at wavelength $\lambda$.
-# The window function $W_\lambda = G_\lambda \cdot \langle \text{SFR} \rangle$
-# weights by the mean SFH, telling you which lookback times *actually*
-# contribute to each observable.
+# The Green's function $G_\lambda(t_{\rm age})$ is the luminosity produced by
+# $1\,M_\odot$ of stars formed at age $t_{\rm age}$, observed at wavelength
+# $\lambda$. It is simply the SSP SED evaluated at specific wavelengths as a
+# function of stellar age (Burnham+2026, arXiv:2601.20930). The observable
+# luminosity is a convolution:
+#
+# $$L_\lambda(t_{\rm obs}) = \int G_\lambda(t_{\rm age}) \cdot
+#   \dot{M}_\star(t_{\rm age})\, dt_{\rm age}$$
+#
+# Different wavelengths probe different SFH timescales:
+#
+# - **H-alpha (6563 A):** peaks at ~3--5 Myr, drops by orders of magnitude by
+#   10 Myr. Traces star formation on ~5 Myr timescales.
+# - **FUV (1500 A):** peaks at ~10 Myr, decays over ~100 Myr. Traces star
+#   formation on ~50 Myr timescales.
+# - **Optical V-band (5500 A):** relatively flat with age. Traces accumulated
+#   stellar mass.
+# - **NIR H-band (1.6 um):** very flat. Excellent stellar mass tracer.
+#
+# The Green's function determines what timescales each observable probes:
+# H-alpha is sensitive to PSD power at ~5 Myr (constrains short-timescale
+# burstiness), while UV averages over ~50 Myr (constrains intermediate
+# timescales). The H-alpha/UV ratio is therefore sensitive to the PSD slope
+# between 5--50 Myr.
 
 # %%
 from tengri import load_ssp_data
@@ -242,41 +261,100 @@ from tengri.models.sps.dsps_wrapper import interpolate_metallicity
 LOG10_ZSUN = -1.848
 ssp_flux_at_z = interpolate_metallicity(ssp_data.ssp_flux, ssp_data.ssp_lgmet, LOG10_ZSUN)
 ssp_ages_yr = 10.0 ** (ssp_data.ssp_lg_age_gyr + 9.0)
+ssp_ages_myr = ssp_ages_yr / 1e6
 
-# Compute Green's functions at key wavelengths
-wavelengths = {
-    "FUV (1500A)": 1500.0,
-    "u-band (3500A)": 3500.0,
-    "V-band (5500A)": 5500.0,
-    "K-band (22000A)": 22000.0,
+# Key wavelengths (Burnham+2026 Fig. 2 style)
+wavelengths_burnham = {
+    r"H$\alpha$ (6563 $\AA$)": 6563.0,
+    r"FUV (1500 $\AA$)": 1500.0,
+    r"V-band (5500 $\AA$)": 5500.0,
+    r"H-band (1.6 $\mu$m)": 16000.0,
+}
+colors_gf = {
+    r"H$\alpha$ (6563 $\AA$)": "#7b2d8e",  # purple
+    r"FUV (1500 $\AA$)": "#2ca02c",  # green
+    r"V-band (5500 $\AA$)": "#d67d00",  # orange
+    r"H-band (1.6 $\mu$m)": "#c44e52",  # red
 }
 
 # %%
-# --- FIGURE 4: Green's functions at 4 wavelengths ---
-fig, ax = plt.subplots(figsize=(7, 4))
-colors_gf = [COLORS["seq"][4], COLORS["seq"][3], COLORS["seq"][2], COLORS["seq"][0]]
-for i, (label, wave) in enumerate(wavelengths.items()):
+# --- FIGURE 4: Green's functions (Burnham+2026 style) ---
+fig, ax = plt.subplots(figsize=(8, 5))
+
+for label, wave in wavelengths_burnham.items():
     gf = compute_green_function(ssp_flux_at_z, ssp_data.ssp_wave, wave_target=wave)
     gf_norm = gf / jnp.max(gf)
-    ax.plot(ssp_ages_yr / 1e6, gf_norm, label=label, color=colors_gf[i], lw=1.5)
+    ax.plot(ssp_ages_myr, gf_norm, label=label, color=colors_gf[label], lw=2.0)
+
 ax.set_xscale("log")
+ax.set_yscale("log")
 ax.set_xlabel("Stellar age [Myr]")
-ax.set_ylabel("$G_\\lambda(t)$ (normalized)")
-ax.set_title("Green's Functions: Age Sensitivity by Wavelength")
-ax.legend(fontsize=8, frameon=False)
+ax.set_ylabel(r"$G_\lambda(t_{\rm age})$ (normalized to peak)")
+ax.set_title(
+    r"Green's Functions: How Different Wavelengths Probe SFH Timescales",
+    fontsize=11,
+)
+ax.legend(fontsize=9, frameon=False, loc="upper right")
 ax.set_xlim(1, 14000)
+ax.set_ylim(1e-5, 2.0)
+
+# Annotate characteristic timescales
+ax.annotate(
+    r"H$\alpha$ traces $\sim$5 Myr",
+    xy=(5, 0.8),
+    xytext=(15, 0.3),
+    fontsize=8,
+    color="#7b2d8e",
+    arrowprops={"arrowstyle": "->", "color": "#7b2d8e", "lw": 0.8},
+)
+ax.annotate(
+    "UV traces ~50 Myr",
+    xy=(50, 0.3),
+    xytext=(200, 0.08),
+    fontsize=8,
+    color="#2ca02c",
+    arrowprops={"arrowstyle": "->", "color": "#2ca02c", "lw": 0.8},
+)
+ax.annotate(
+    "Optical traces ~1 Gyr",
+    xy=(1000, 0.3),
+    xytext=(3000, 0.06),
+    fontsize=8,
+    color="#d67d00",
+    arrowprops={"arrowstyle": "->", "color": "#d67d00", "lw": 0.8},
+)
+
+# Reference note
+ax.text(
+    0.02,
+    0.02,
+    "After Burnham+2026, Fig. 2",
+    transform=ax.transAxes,
+    fontsize=7,
+    fontstyle="italic",
+    color="gray",
+)
+
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "01_green_functions.png"), bbox_inches="tight")
 plt.show()
 
+# %% [markdown]
+# ### Window Functions
+#
+# The window function $W_\lambda(t) = G_\lambda(t) \cdot \langle \text{SFR}(t)
+# \rangle$ weights the Green's function by the mean SFH. While $G_\lambda$
+# tells you what ages a wavelength *can* probe, the window function tells you
+# which lookback times *actually* contribute to the observed flux for a given
+# galaxy. A wavelength that is sensitive to 10 Myr ages is useless if the
+# galaxy had no star formation 10 Myr ago.
+
 # %%
 # --- FIGURE 5: Window functions with a tsnorm mean SFH ---
 ages_yr_grid = jnp.logspace(6, 10.14, 200)
-mean_sfr = tsnorm(
-    ages_yr_grid, log_peak_sfr=1.0, peak_lbt=3e9, width=2e9, skew=0.0, trunc=5.0
-)
+mean_sfr = tsnorm(ages_yr_grid, log_peak_sfr=1.0, peak_lbt=3e9, width=2e9, skew=0.0, trunc=5.0)
 
-fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
 
 # Left: mean SFH
 ax = axes[0]
@@ -288,22 +366,48 @@ ax.set_xscale("log")
 
 # Right: window functions
 ax = axes[1]
-for i, (label, wave) in enumerate(wavelengths.items()):
+for label, wave in wavelengths_burnham.items():
     gf = compute_green_function(ssp_flux_at_z, ssp_data.ssp_wave, wave_target=wave)
     # Interpolate GF onto the same age grid
     gf_interp = jnp.interp(jnp.log10(ages_yr_grid), jnp.log10(ssp_ages_yr), gf)
     wf = compute_window_function(gf_interp, mean_sfr)
     wf_norm = wf / jnp.max(wf + 1e-30)
-    ax.plot(ages_yr_grid / 1e6, wf_norm, label=label, color=colors_gf[i], lw=1.5)
+    ax.plot(ages_yr_grid / 1e6, wf_norm, label=label, color=colors_gf[label], lw=1.8)
 ax.set_xscale("log")
 ax.set_xlabel("Lookback time [Myr]")
-ax.set_ylabel("$W_\\lambda(t)$ (normalized)")
-ax.set_title("Window Functions")
+ax.set_ylabel(r"$W_\lambda(t)$ (normalized)")
+ax.set_title(r"Window Functions: $W_\lambda = G_\lambda \times \langle \mathrm{SFR} \rangle$")
 ax.legend(fontsize=8, frameon=False)
 ax.set_xlim(1, 14000)
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "01_window_functions.png"), bbox_inches="tight")
 plt.show()
+
+# %% [markdown]
+# ### Connecting Green's Functions to PSD Inference
+#
+# The Green's function is the bridge between PSD parameters and observables:
+#
+# 1. **H-alpha probes ~5 Myr timescales** — it is sensitive to PSD power at
+#    $\omega \sim 2\pi / (5\,\text{Myr})$, constraining short-timescale
+#    burstiness ($\sigma_{\rm PS}$).
+#
+# 2. **UV probes ~50 Myr timescales** — it averages over the most recent
+#    ~50 Myr of star formation, constraining intermediate PSD power.
+#
+# 3. **The H-alpha/UV ratio is sensitive to the PSD slope** between 5 and
+#    50 Myr — a steep PSD (low short-timescale power) gives a tight
+#    H-alpha/UV relation, while a flat PSD (high burstiness at all
+#    timescales) produces large scatter.
+#
+# 4. **Optical/NIR constrain the long-timescale SFH** (stellar mass
+#    buildup) but are insensitive to the PSD — their Green's functions
+#    are nearly flat with age.
+#
+# This is why photometric SED fitting with only broadband data struggles
+# to constrain burstiness: the observations average over too many
+# timescales. Adding H-alpha (or spectroscopy near H-alpha) dramatically
+# improves PSD constraints because it provides a narrow time probe.
 
 # %% [markdown]
 # ## 5. Observable Diagnostics
