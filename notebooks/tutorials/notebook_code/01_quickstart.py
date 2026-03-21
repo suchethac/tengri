@@ -51,6 +51,9 @@ try:
 except NameError:
     _nb_dir = os.getcwd()
     sys.path.insert(0, os.path.join(_nb_dir, ".."))
+# Change to project root so data/ paths work
+os.chdir(os.path.join(sys.path[0], ".."))
+
 from _plot_style import (  # noqa: E402
     COLORS,
     SPECTRAL_FEATURES,
