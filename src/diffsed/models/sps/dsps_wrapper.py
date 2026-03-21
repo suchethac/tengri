@@ -257,6 +257,136 @@ def interpolate_metallicity(
     return (1.0 - frac) * ssp_flux[idx] + frac * ssp_flux[idx + 1]
 
 
+# ---------------------------------------------------------------------------
+# Smooth metallicity interpolation (triweight kernel, DSPS-compatible)
+# ---------------------------------------------------------------------------
+
+_LGMET_LO = -4.0
+_LGMET_HI = 0.5
+
+
+@jax.jit
+def _tw_cuml_kern(x, m, h):
+    """Triweight kernel CDF (same as DSPS _tw_cuml_kern).
+
+    Cumulative distribution of the triweight kernel with support |z| < 3.
+    Returns 0 for z < -3, 1 for z > 3, smooth polynomial between.
+    """
+    z = (x - m) / h
+    val = (
+        -5.0 * z**7 / 69984.0
+        + 7.0 * z**5 / 2592.0
+        - 35.0 * z**3 / 864.0
+        + 35.0 * z / 96.0
+        + 0.5
+    )
+    val = jnp.where(z < -3.0, 0.0, val)
+    val = jnp.where(z > 3.0, 1.0, val)
+    return val
+
+
+@jax.jit
+def _get_lgmet_bin_edges(grid, lo=_LGMET_LO, hi=_LGMET_HI):
+    """Bin edges from midpoints, matching DSPS convention.
+
+    Uses half-spacing on each side, with outer edges clamped.
+    """
+    dz = jnp.diff(grid)
+    half_dz = jnp.concatenate([dz[:1], 0.5 * (dz[:-1] + dz[1:]), dz[-1:]])
+    edges_lo = grid - half_dz / 2.0
+    edges_hi = grid + half_dz / 2.0
+    edges = jnp.concatenate([jnp.array([lo]), 0.5 * (grid[:-1] + grid[1:]), jnp.array([hi])])
+    return edges
+
+
+@jax.jit
+def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=0.1):
+    """Metallicity weights via triweight CDF integration (DSPS-compatible).
+
+    Integrates the triweight kernel CDF between bin edges, exactly
+    matching the DSPS ``triweighted_histogram`` approach. The kernel
+    has support at |z| < 3σ, giving smooth multi-bin weights.
+
+    Parameters
+    ----------
+    log_z : float
+        Target log10(Z/Zsun).
+    ssp_lgmet : array (n_met,)
+        SSP metallicity grid.
+    lgmet_scatter : float
+        Kernel bandwidth in dex (DSPS default: 0.1).
+
+    Returns
+    -------
+    array (n_met,) — normalized weights summing to 1.
+    """
+    edges = _get_lgmet_bin_edges(ssp_lgmet)
+    # CDF difference: probability mass in each bin
+    # Note: CDF(lo) - CDF(hi) gives the mass between lo and hi
+    # because _tw_cuml_kern returns CDF of the flipped kernel.
+    # DSPS convention: _tw_cuml_kern(x, lo, sig) - _tw_cuml_kern(x, hi, sig)
+    # where x is the galaxy metallicity, lo/hi are bin edges.
+    cdf_lo = _tw_cuml_kern(log_z, edges[:-1], lgmet_scatter)
+    cdf_hi = _tw_cuml_kern(log_z, edges[1:], lgmet_scatter)
+    raw = cdf_lo - cdf_hi
+
+    total = jnp.sum(raw)
+    nearest = jnp.argmin(jnp.abs(ssp_lgmet - log_z))
+    fallback = jnp.zeros_like(raw).at[nearest].set(1.0)
+    return jnp.where(total > 0, raw / total, fallback)
+
+
+@jax.jit
+def interpolate_metallicity_smooth(ssp_flux, ssp_lgmet, log_z, lgmet_scatter=0.1):
+    """Interpolate SSP flux using triweight kernel over metallicity.
+
+    C2-continuous gradients. Matches DSPS approach (Hearin+2023).
+
+    Parameters
+    ----------
+    ssp_flux : array (n_met, n_age, n_wave)
+    ssp_lgmet : array (n_met,)
+    log_z : float — target log10(Z/Zsun)
+    lgmet_scatter : float — kernel bandwidth in dex
+
+    Returns
+    -------
+    array (n_age, n_wave)
+    """
+    w = compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter)
+    return jnp.einsum("m,maw->aw", w, ssp_flux)
+
+
+@jax.jit
+def interpolate_metallicity_smooth_evolving(ssp_flux, ssp_lgmet, log_z_per_age, lgmet_scatter=0.1):
+    """Triweight metallicity interpolation with per-age Z.
+
+    Parameters
+    ----------
+    ssp_flux : array (n_met, n_age, n_wave)
+    ssp_lgmet : array (n_met,)
+    log_z_per_age : array (n_age,) — per-bin log10(Z/Zsun)
+    lgmet_scatter : float
+
+    Returns
+    -------
+    array (n_age, n_wave)
+    """
+    def _one_age(log_z_i, flux_at_age_i):
+        w = compute_lgmet_weights(log_z_i, ssp_lgmet, lgmet_scatter)
+        return jnp.einsum("m,mw->w", w, flux_at_age_i)
+
+    flux_by_age = jnp.transpose(ssp_flux, (1, 0, 2))
+    return jax.vmap(_one_age)(log_z_per_age, flux_by_age)
+
+
+@jax.jit
+def interpolate_mass_remaining_smooth(ssp_mass_remaining, ssp_lgmet, log_z, lgmet_scatter=0.1):
+    """Smooth mass-remaining interpolation using triweight kernel."""
+    w = compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter)
+    return jnp.einsum("m,ma->a", w, ssp_mass_remaining)
+
+
 @jax.jit
 def interpolate_metallicity_evolving(
     ssp_flux: jnp.ndarray,

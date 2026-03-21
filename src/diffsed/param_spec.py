@@ -684,6 +684,14 @@ class ParamSpec:
         Replace ``met_logzsol`` with ``met_logzsol_0`` (old stars) and
         ``met_logzsol_final`` (young stars) for a linear-in-log Z(t) ramp.
         Default: ``False``.
+    met_interp : str
+        Metallicity interpolation method.  Default: ``"linear"``.
+        - ``"linear"``: 2-point linear in log(Z) (same as FSPS/Prospector).
+        - ``"smooth"``: Triweight kernel (same as DSPS, Hearin+2023).
+          Better gradient quality for NUTS/geoVI.
+    lgmet_scatter : float
+        Triweight kernel bandwidth in dex for ``met_interp="smooth"``.
+        Default: 0.1 (DSPS default). Physically: intrinsic Z scatter.
 
     Fittable Parameters (always available)
     ---------------------------------------
@@ -920,6 +928,10 @@ class ParamSpec:
 
         # Evolving metallicity: False (default), True
         self.evolving_metallicity = kwargs.pop("evolving_metallicity", False)
+
+        # Metallicity interpolation: "linear" (2-point, FSPS) or "smooth" (triweight, DSPS)
+        self.met_interp = kwargs.pop("met_interp", "linear")
+        self.lgmet_scatter = float(kwargs.pop("lgmet_scatter", 0.1))
 
         # --- Resolve legacy parameter aliases ---
         resolved_kwargs = {}

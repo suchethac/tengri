@@ -50,6 +50,8 @@ from diffsed.models.sps.dsps_wrapper import (
     effective_metallicity,
     interpolate_metallicity,
     interpolate_metallicity_evolving,
+    interpolate_metallicity_smooth,
+    interpolate_metallicity_smooth_evolving,
 )
 from diffsed.models.sps.precompute import (
     precompute_photometry,
@@ -212,6 +214,8 @@ class Model:
         self._agn_parametric = False
         self._dust_emission_model = getattr(spec, "dust_emission", None)
         self._evolving_metallicity = getattr(spec, "evolving_metallicity", False)
+        self._met_interp = getattr(spec, "met_interp", "linear")
+        self._lgmet_scatter = float(getattr(spec, "lgmet_scatter", 0.1))
 
         # Parse approximation settings
         if approx is None or approx is True:
@@ -639,6 +643,24 @@ class Model:
             Age of universe in Gyr.
         """
         return age_at_z(z) / 1e9
+
+    def _interp_metallicity(self, log_z):
+        """Dispatch metallicity interpolation (single Z value)."""
+        if self._met_interp == "smooth":
+            return interpolate_metallicity_smooth(
+                self.ssp_data.ssp_flux, self.ssp_data.ssp_lgmet,
+                log_z, self._lgmet_scatter)
+        return interpolate_metallicity(
+            self.ssp_data.ssp_flux, self.ssp_data.ssp_lgmet, log_z)
+
+    def _interp_metallicity_evolving(self, log_z_per_age):
+        """Dispatch evolving metallicity interpolation (per-age Z)."""
+        if self._met_interp == "smooth":
+            return interpolate_metallicity_smooth_evolving(
+                self.ssp_data.ssp_flux, self.ssp_data.ssp_lgmet,
+                log_z_per_age, self._lgmet_scatter)
+        return interpolate_metallicity_evolving(
+            self.ssp_data.ssp_flux, self.ssp_data.ssp_lgmet, log_z_per_age)
 
     def _compute_sfr(self, p):
         """Compute SFR via the composed SFH function.
@@ -1197,14 +1219,10 @@ class Model:
             _total_mass_formed = jnp.trapezoid(sfr_table, t_cosmic_gyr * 1e9)
             weights = dsps_age_w * _total_mass_formed  # (n_age,) Msun
 
-            # Metallicity: standard interpolation (or evolving Z below)
+            # Metallicity: dispatch to linear or smooth interpolation
             log_z_solar = p.get("log_z", -1.8477)
             log_z_eff = effective_metallicity(log_z_solar, alpha_fe)
-            ssp_flux_at_z = interpolate_metallicity(
-                self.ssp_data.ssp_flux,
-                self.ssp_data.ssp_lgmet,
-                log_z_eff,
-            )
+            ssp_flux_at_z = self._interp_metallicity(log_z_eff)
 
         # Metallicity interpolation (non-table path)
         # Priority: met_history (array) > evolving_metallicity > single Z
@@ -1227,11 +1245,7 @@ class Model:
             )
             log_z_abs = log_z_on_ssp + (-1.8477)  # solar offset
             log_z_abs = effective_metallicity(log_z_abs, alpha_fe)
-            ssp_flux_at_z = interpolate_metallicity_evolving(
-                self.ssp_data.ssp_flux,
-                self.ssp_data.ssp_lgmet,
-                log_z_abs,
-            )
+            ssp_flux_at_z = self._interp_metallicity_evolving(log_z_abs)
         elif self._evolving_metallicity:
             z = p.get("redshift", 0.0)
             t_universe_gyr = self._t_universe_gyr(z)
@@ -1242,18 +1256,10 @@ class Model:
                 t_universe_gyr,
             )
             log_z_per_age = effective_metallicity(log_z_per_age, alpha_fe)
-            ssp_flux_at_z = interpolate_metallicity_evolving(
-                self.ssp_data.ssp_flux,
-                self.ssp_data.ssp_lgmet,
-                log_z_per_age,
-            )
+            ssp_flux_at_z = self._interp_metallicity_evolving(log_z_per_age)
         else:
             log_z_eff = effective_metallicity(p["log_z"], alpha_fe)
-            ssp_flux_at_z = interpolate_metallicity(
-                self.ssp_data.ssp_flux,
-                self.ssp_data.ssp_lgmet,
-                log_z_eff,
-            )
+            ssp_flux_at_z = self._interp_metallicity(log_z_eff)
 
         # Dust attenuation (generalized two-component model)
         dust_atten = two_component_dust(
