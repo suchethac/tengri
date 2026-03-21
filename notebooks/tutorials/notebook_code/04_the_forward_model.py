@@ -40,11 +40,14 @@ from diffsed import (
     load_filter_set,
     load_ssp_data,
 )
-from diffsed.models.sps.csp import compute_csp_weights
-from diffsed.models.dust.attenuation import charlot_fall
+from diffsed.models.sps.dsps_wrapper import compute_csp_weights
 
 import sys, os  # noqa: E401, E402
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+try:
+    _nb_dir = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    _nb_dir = os.getcwd()
+sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
 from _plot_style import COLORS, SPECTRAL_FEATURES, setup_style  # noqa: E402
 
 setup_style()
@@ -182,19 +185,17 @@ ax_curve.set_ylabel("Transmission")
 ax_curve.legend(fontsize=7)
 ax_curve.set_title("(1) Attenuation Curves")
 
-# Birth cloud transition
-from diffsed.models.dust.attenuation import _sigmoid_age_weight
+# Birth cloud transition: sigmoid at ~10 Myr
 ages_log_dust = np.linspace(5, 11, 100)
-try:
-    w = np.array([float(_sigmoid_age_weight(a)) for a in ages_log_dust])
-    ax_trans.plot(10**ages_log_dust / 1e6, w, color=COLORS["sfh_mean"], lw=1.5)
-    ax_trans.axvline(10, color="grey", ls="--", lw=0.8, label="10 Myr")
-    ax_trans.set_xlabel("Age [Myr]")
-    ax_trans.set_ylabel("Birth cloud weight w(t)")
-    ax_trans.set_xscale("log")
-    ax_trans.legend(fontsize=8)
-except Exception:
-    ax_trans.text(0.5, 0.5, "Sigmoid not available", ha="center", transform=ax_trans.transAxes)
+ages_myr = 10**ages_log_dust / 1e6
+# Sigmoid transition: w(t) = 1 / (1 + exp((log10(t) - 7) / 0.3))
+w = 1.0 / (1.0 + np.exp((ages_log_dust - 7.0) / 0.3))
+ax_trans.plot(ages_myr, w, color=COLORS["sfh_mean"], lw=1.5)
+ax_trans.axvline(10, color="grey", ls="--", lw=0.8, label="10 Myr")
+ax_trans.set_xlabel("Age [Myr]")
+ax_trans.set_ylabel("Birth cloud weight w(t)")
+ax_trans.set_xscale("log")
+ax_trans.legend(fontsize=8)
 ax_trans.set_title("(2) Birth Cloud Transition")
 
 # Dusty vs dust-free SED
@@ -250,7 +251,7 @@ plt.show()
 
 # %%
 # --- FIGURE 5: SED with filter curves and photometric points ---
-from diffsed.models.observation.filters import SDSS_WAVE_EFF
+# SDSS effective wavelengths (Angstrom)
 
 fig, ax = plt.subplots(figsize=(10, 4))
 sed_full = model.predict_spectrum(params)

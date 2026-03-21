@@ -41,13 +41,18 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed.models.sfh.psd import psd_drw, compute_sqrt_power_drw
-from diffsed.models.sfh.gp import gp_from_xi, generate_gp_fourier
+from diffsed.models.sfh.psd_models import psd_drw
+from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw
+from diffsed.models.sfh.gp_sfh import gp_from_xi, generate_gp_fourier
 from diffsed.models.sfh.mean_sfh import tsnorm
 from diffsed.utils.grid import make_log_age_grid, grid_spacing
 
 import sys, os  # noqa: E401, E402
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+try:
+    _nb_dir = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    _nb_dir = os.getcwd()
+sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
 from _plot_style import COLORS, setup_style  # noqa: E402
 
 setup_style()

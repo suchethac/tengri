@@ -59,12 +59,16 @@ from diffsed.utils.grid import grid_spacing
 
 import sys, os  # noqa: E401
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+try:
+    _nb_dir = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    _nb_dir = os.getcwd()
+sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
 from _plot_style import COLORS, setup_style
 
 setup_style()
 
-FIGDIR = os.path.join(os.path.dirname(__file__), "..", "figures", "reference")
+FIGDIR = os.path.join(_nb_dir, "..", "figures", "reference")
 os.makedirs(FIGDIR, exist_ok=True)
 
 # %% [markdown]
