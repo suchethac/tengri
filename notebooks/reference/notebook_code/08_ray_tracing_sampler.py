@@ -243,7 +243,7 @@ if result_rt.samples is not None:
 
 # %%
 # Convergence diagnostics
-convergence_table(result_rt)
+convergence_table({"RT (D=7)": result_rt})
 
 # %% [markdown]
 # ## 3. RT on a Stochastic Model (D ~ 137)
@@ -319,7 +319,7 @@ plt.show()
 
 # %%
 # Convergence diagnostics for D~137
-convergence_table(result_rt_stoch)
+convergence_table({"RT (D=137)": result_rt_stoch})
 
 # %% [markdown]
 # ## 4. Step Size Guide

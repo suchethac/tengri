@@ -212,10 +212,10 @@ for row, stage in enumerate(STAGES):
     # Right: SFH posterior
     ax = axes[row, 1]
     plot_sfh(
-        ax,
         model_s,
         result,
         true_params=TRUTH,
+        ax=ax,
         n_draws=30,
         color=COLORS["geovi"],
     )

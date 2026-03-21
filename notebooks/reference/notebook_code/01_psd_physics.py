@@ -138,7 +138,8 @@ ages_gyr = 10**log_ages / 1e9
 key = jax.random.PRNGKey(42)
 for reg in REGIMES:
     tau_yr = reg["tau_myr"] * 1e6
-    gp = generate_gp_fourier(key, reg["sigma"], tau_yr, N_GRID, d_log_age)
+    sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, reg["sigma"], tau_yr)
+    gp = generate_gp_fourier(key, sqrt_p, N_GRID)
     ax.plot(ages_gyr, gp, color=reg["color"], lw=1.0, alpha=0.8)
 ax.set_xlabel("Lookback time [Gyr]")
 ax.set_ylabel(r"$x(t)$")
@@ -325,7 +326,8 @@ for idx, sigma in enumerate(sigma_values):
     ha_uv_samples = []
     for i in range(n_samples):
         subkey = jax.random.fold_in(key, i + idx * 1000)
-        gp = generate_gp_fourier(subkey, sigma, tau_yr_fixed, N_GRID, d_log_age)
+        sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, sigma, tau_yr_fixed)
+        gp = generate_gp_fourier(subkey, sqrt_p, N_GRID)
         # Mean SFH
         base_sfr = tsnorm(
             10**log_ages,
@@ -365,7 +367,8 @@ for sigma_val in sigma_range:
     ssfrs = []
     for i in range(100):
         subkey = jax.random.fold_in(key, i + 10000)
-        gp = generate_gp_fourier(subkey, float(sigma_val), tau_yr_fixed, N_GRID, d_log_age)
+        sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, float(sigma_val), tau_yr_fixed)
+        gp = generate_gp_fourier(subkey, sqrt_p, N_GRID)
         base_sfr = tsnorm(
             10**log_ages,
             log_peak_sfr=1.0,
@@ -407,7 +410,8 @@ for idx, (ax, tau_myr) in enumerate(zip(axes.flat, tau_values_myr)):
     tau_yr = tau_myr * 1e6
     for i in range(5):
         subkey = jax.random.fold_in(key, i + idx * 100)
-        gp = generate_gp_fourier(subkey, sigma_fixed, tau_yr, N_GRID, d_log_age)
+        sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, sigma_fixed, tau_yr)
+        gp = generate_gp_fourier(subkey, sqrt_p, N_GRID)
         base_sfr = tsnorm(
             10**log_ages,
             log_peak_sfr=1.0,
