@@ -14,9 +14,9 @@
 # ---
 
 # %% [markdown]
-# # Under the Hood: How tengri Samples the Posterior
+# # Under the Hood: How diffsed Samples the Posterior
 #
-# tengri ships five inference methods, all optimizing the same loss function.
+# diffsed ships five inference methods, all optimizing the same loss function.
 # This notebook profiles them, compares their posteriors, and provides a
 # decision tree for choosing the right one.
 
@@ -32,7 +32,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri import (
+from diffsed import (
     Fitter,
     Fixed,
     Model,
@@ -59,9 +59,6 @@ elif os.path.exists(os.path.join("..", "..", "data")):
     os.chdir(os.path.join("..", ".."))
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
-
-FIGDIR = os.path.join("demonstrations", "figures")
-os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import (  # noqa: E402
     COLORS,
@@ -143,7 +140,7 @@ print(f"Stochastic model: D = {spec_stoch.n_free}")
 # %% [markdown]
 # ## The Information Hamiltonian
 #
-# Every inference method in tengri minimizes or samples from the same loss:
+# Every inference method in diffsed minimizes or samples from the same loss:
 #
 # $$H(\xi \mid d) = \frac{1}{2} \chi^2(\xi) + \frac{1}{2} \xi^\top \xi$$
 #
@@ -242,7 +239,7 @@ plot_sfh(model_stoch, result_geovi_s, true_params=true_stoch, ax=ax,
          show_mean_sfh=True)
 ax.set_title(f"native_geovi: D = 137 in {timings['native_geovi (D=137)']:.1f}s")
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "fig01_geovi_sfh_137.png"), dpi=150, bbox_inches="tight")
+plt.savefig("fig01_geovi_sfh_137.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -256,7 +253,7 @@ if hasattr(result_geovi_s, "diagnostics") and "kl_history" in result_geovi_s.dia
     ax.set_title("native_geovi Convergence")
     ax.set_yscale("log")
     fig.tight_layout()
-    plt.savefig(os.path.join(FIGDIR, "fig02_kl_convergence.png"), dpi=150, bbox_inches="tight")
+    plt.savefig("fig02_kl_convergence.png", dpi=150, bbox_inches="tight")
     plt.show()
 else:
     print("(KL history not available — skipping convergence plot)")
@@ -330,7 +327,7 @@ ax_r.set_title(f"Ray Tracing ({timings['RT (D=137)']:.1f}s)")
 
 fig.suptitle("D = 137: Approximate (geoVI) vs Exact (RT)", fontsize=11)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "fig03_geovi_vs_rt_137.png"), dpi=150, bbox_inches="tight")
+plt.savefig("fig03_geovi_vs_rt_137.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -359,7 +356,7 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle("D = 7: All three methods agree", y=1.02)
-    plt.savefig(os.path.join(FIGDIR, "fig04_all_methods_d7.png"), dpi=150, bbox_inches="tight")
+    plt.savefig("fig04_all_methods_d7.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -424,7 +421,7 @@ for bar, t in zip(bars, times_137):
 
 fig.suptitle("Inference Method Timing Comparison", fontsize=12)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "fig05_timing_comparison.png"), dpi=150, bbox_inches="tight")
+plt.savefig("fig05_timing_comparison.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%

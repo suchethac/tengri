@@ -46,3 +46,8 @@ data/dl07_raw/
 data/dl14_raw/
 data/*.h5
 # Regenerate with: python scripts/convert_fsps_cloudy_grid.py && python scripts/convert_dl07_templates.py
+
+# Notebook figure outputs (should be in notebooks/*/figures/)
+fig*.png
+fig*.pdf
+notebooks/*/figures/
