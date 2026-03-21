@@ -233,7 +233,7 @@ truth_params = {
     "dust_slope": -0.7,
     "redshift": 0.1,
 }
-mock = model_truth.generate_mock(truth_params, noise_snr=30.0, key=jax.random.PRNGKey(42))
+mock = model_truth.mock(truth_params, snr=30.0, key=jax.random.PRNGKey(42))
 
 # Add 5% systematic scatter
 key = jax.random.PRNGKey(99)

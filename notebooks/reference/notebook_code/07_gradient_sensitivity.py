@@ -53,7 +53,15 @@ except NameError:
     _nb_dir = os.getcwd()
     sys.path.insert(0, os.path.join(_nb_dir, ".."))
 # Change to project root so data/ paths work
-os.chdir(os.path.join(sys.path[0], ".."))
+# chdir to project root for data/ access
+if os.path.exists("data"):
+    pass  # already in project root
+elif os.path.exists(os.path.join("..", "data")):
+    os.chdir("..")
+elif os.path.exists(os.path.join("..", "..", "data")):
+    os.chdir(os.path.join("..", ".."))
+elif os.path.exists(os.path.join("..", "..", "..", "data")):
+    os.chdir(os.path.join("..", "..", ".."))
 
 from _plot_style import COLORS, SPECTRAL_FEATURES, setup_style
 
@@ -85,7 +93,7 @@ spec = ParamSpec(
 )
 
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 300)
-model = Model(spec, ssp_data, wave_obs=WAVE_OBS)
+model = Model(spec, ssp_data)\nmodel.precompute_spectroscopy(WAVE_OBS)
 
 # Fiducial parameters
 FIDUCIAL = {

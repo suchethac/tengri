@@ -62,7 +62,15 @@ except NameError:
     _nb_dir = os.getcwd()
     sys.path.insert(0, os.path.join(_nb_dir, ".."))
 # Change to project root so data/ paths work
-os.chdir(os.path.join(sys.path[0], ".."))
+# chdir to project root for data/ access
+if os.path.exists("data"):
+    pass  # already in project root
+elif os.path.exists(os.path.join("..", "data")):
+    os.chdir("..")
+elif os.path.exists(os.path.join("..", "..", "data")):
+    os.chdir(os.path.join("..", ".."))
+elif os.path.exists(os.path.join("..", "..", "..", "data")):
+    os.chdir(os.path.join("..", "..", ".."))
 
 from _plot_style import (
     COLORS,
@@ -191,7 +199,7 @@ truth_param = {
     "dust_slope": -0.7,
     "redshift": 0.1,
 }
-mock_param = model_param.generate_mock(truth_param, noise_snr=20.0, key=jax.random.PRNGKey(42))
+mock_param = model_param.mock(truth_param, snr=20.0, key=jax.random.PRNGKey(42))
 
 # MAP initialization
 fitter_param = Fitter(model_param, mock_param.flux_obs, mock_param.noise)
@@ -276,7 +284,7 @@ truth_stoch = {
     "dust_slope": -0.7,
     "redshift": 0.1,
 }
-mock_stoch = model_stoch.generate_mock(truth_stoch, noise_snr=20.0, key=jax.random.PRNGKey(0))
+mock_stoch = model_stoch.mock(truth_stoch, snr=20.0, key=jax.random.PRNGKey(0))
 
 fitter_stoch = Fitter(model_stoch, mock_stoch.flux_obs, mock_stoch.noise)
 result_map_stoch = fitter_stoch.run("map", n_steps=800, learning_rate=0.01)

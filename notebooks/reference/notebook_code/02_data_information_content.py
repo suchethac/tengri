@@ -52,7 +52,15 @@ except NameError:
     _nb_dir = os.getcwd()
     sys.path.insert(0, os.path.join(_nb_dir, ".."))
 # Change to project root so data/ paths work
-os.chdir(os.path.join(sys.path[0], ".."))
+# chdir to project root for data/ access
+if os.path.exists("data"):
+    pass  # already in project root
+elif os.path.exists(os.path.join("..", "data")):
+    os.chdir("..")
+elif os.path.exists(os.path.join("..", "..", "data")):
+    os.chdir(os.path.join("..", ".."))
+elif os.path.exists(os.path.join("..", "..", "..", "data")):
+    os.chdir(os.path.join("..", "..", ".."))
 
 from _plot_style import (
     COLORS,
@@ -108,7 +116,7 @@ spec_full = ParamSpec(
 
 # Generate full 5-band mock
 model_full = Model(spec_full, ssp_data, filters=all_filters)
-mock = model_full.generate_mock(TRUTH, noise_snr=20.0, key=jax.random.PRNGKey(42))
+mock = model_full.mock(TRUTH, snr=20.0, key=jax.random.PRNGKey(42))
 flux_obs_all = mock.flux_obs
 noise_all = mock.noise
 
@@ -271,8 +279,9 @@ plt.show()
 # %%
 # Generate spectroscopic mock
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
-model_spec = Model(spec_full, ssp_data, filters=all_filters, wave_obs=WAVE_OBS)
-spec_mock = model_spec.generate_mock(TRUTH, noise_snr=30.0, key=jax.random.PRNGKey(99))
+model_spec = Model(spec_full, ssp_data, filters=all_filters)
+model_spec.precompute_spectroscopy(WAVE_OBS)
+spec_mock = model_spec.mock(TRUTH, snr=30.0, key=jax.random.PRNGKey(99))
 
 # Fit spectrum
 fitter_spec = Fitter(model_spec, spec_mock.flux_obs, spec_mock.noise, data_type="spectroscopy")
