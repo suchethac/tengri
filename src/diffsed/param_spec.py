@@ -1228,6 +1228,84 @@ class ParamSpec:
             if not dist.is_fixed and (val < lo or val > hi):
                 raise ValueError(f"Parameter '{name}' = {val} is outside bounds [{lo}, {hi}]")
 
+    def summary(self) -> str:
+        """Return a human-readable summary of the model configuration.
+
+        Displays SFH type, enabled modules, dimensionality, and a table
+        of all parameters grouped by component (free first, then fixed).
+
+        Returns
+        -------
+        str
+            Formatted summary string.
+        """
+        lines: list[str] = []
+        sep = "─" * 66
+
+        # Header
+        sfh_label = "+".join(self._mean_sfh_type)
+        lines.append(f"ParamSpec  SFH: {sfh_label}")
+        lines.append(sep)
+
+        # Dimensionality
+        n_free = self.n_free
+        n_fixed = len(self.fixed_params)
+        dim_parts = [f"{n_free} free"]
+        if self.stochastic:
+            dim_parts.append(f"+ {self._n_grid} latent (ξ)")
+        dim_parts.append(f"+ {n_fixed} fixed")
+        lines.append(f"  Dimensions:  {', '.join(dim_parts)}")
+
+        # Enabled modules
+        modules: list[str] = []
+        if self.nebular_mode != "off":
+            modules.append(f"nebular={self.nebular_mode}")
+        dust_em = getattr(self, "dust_emission", None)
+        if dust_em:
+            modules.append(f"dust_emission={dust_em}")
+        agn = getattr(self, "agn_model", None)
+        if agn:
+            modules.append(f"agn={agn}")
+        if getattr(self, "apply_igm", False):
+            modules.append("igm")
+        if getattr(self, "radio", False):
+            modules.append("radio")
+        if getattr(self, "xray", False):
+            modules.append("xray")
+        dust_bc = getattr(self, "dust_law_bc", "power_law")
+        dust_diff = getattr(self, "dust_law_diff", None) or dust_bc
+        if dust_bc != "power_law" or dust_diff != "power_law":
+            modules.append(f"dust_law={dust_bc}/{dust_diff}")
+        ev_met = getattr(self, "evolving_metallicity", False)
+        if ev_met:
+            modules.append("evolving_Z")
+        if modules:
+            lines.append(f"  Modules:     {', '.join(modules)}")
+        lines.append("")
+
+        # Parameter table
+        hdr = f"  {'Parameter':<32s} {'Prior':<26s} {'Bounds'}"
+        lines.append(hdr)
+        lines.append("  " + "─" * 64)
+
+        # Group: free parameters first, then fixed
+        for name in self.free_params:
+            dist = self._distributions[name]
+            lo, hi = dist.bounds
+            prior_str = repr(dist)
+            bounds_str = f"[{lo:.4g}, {hi:.4g}]"
+            lines.append(f"  {name:<32s} {prior_str:<26s} {bounds_str}")
+
+        if self.fixed_params:
+            lines.append("  " + "─" * 64)
+            for name in self.fixed_params:
+                dist = self._distributions[name]
+                val = dist.bounds[0]
+                lines.append(f"  {name:<32s} {'Fixed':<26s} {val:.4g}")
+
+        lines.append(sep)
+        return "\n".join(lines)
+
     def __repr__(self) -> str:
         lines = [f"ParamSpec(mean_sfh_type={self._mean_sfh_type},"]
         for name in sorted(self._distributions.keys()):
