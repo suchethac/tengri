@@ -94,12 +94,8 @@ methods = {
     "nifty_geovi": {"method": "nifty_geovi"},
     # --- Native JIT: linear ---
     "native_mgvi": {"method": "native_mgvi", "n_seeds": 1},
-    # --- Native JIT: geoVI nonlinear_update ---
-    "native_geovi (update)": {
-        "method": "native_geovi",
-        "sample_mode": "nonlinear_update",
-        "n_seeds": 1,
-    },
+    # --- Native JIT: geoVI ---
+    "native_geovi": {"method": "native_geovi", "n_seeds": 1},
     # --- MAP (point estimate, for reference) ---
     "map": {"method": "map", "n_steps": 500},
 }
