@@ -273,7 +273,7 @@ plt.show()
 # --- FIGURE 5: Window functions with a tsnorm mean SFH ---
 ages_yr_grid = jnp.logspace(6, 10.14, 200)
 mean_sfr = tsnorm(
-    ages_yr_grid, log_peak_sfr=1.0, peak_lbt_gyr=3.0, width_gyr=2.0, skew=0.0, trunc=5.0
+    ages_yr_grid, log_peak_sfr=1.0, peak_lbt=3.0, width_gyr=2.0, skew=0.0, trunc=5.0
 )
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 4))
@@ -332,7 +332,7 @@ for idx, sigma in enumerate(sigma_values):
         base_sfr = tsnorm(
             10**log_ages,
             log_peak_sfr=1.0,
-            peak_lbt_gyr=3.0,
+            peak_lbt=3.0,
             width_gyr=2.0,
             skew=0.0,
             trunc=5.0,
@@ -372,7 +372,7 @@ for sigma_val in sigma_range:
         base_sfr = tsnorm(
             10**log_ages,
             log_peak_sfr=1.0,
-            peak_lbt_gyr=3.0,
+            peak_lbt=3.0,
             width_gyr=2.0,
             skew=0.0,
             trunc=5.0,
@@ -415,7 +415,7 @@ for idx, (ax, tau_myr) in enumerate(zip(axes.flat, tau_values_myr)):
         base_sfr = tsnorm(
             10**log_ages,
             log_peak_sfr=1.0,
-            peak_lbt_gyr=3.0,
+            peak_lbt=3.0,
             width_gyr=2.0,
             skew=0.0,
             trunc=5.0,

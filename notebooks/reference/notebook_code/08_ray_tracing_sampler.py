@@ -308,7 +308,7 @@ plot_sfh(
     ax,
     model_stoch,
     result_rt_stoch,
-    truth_params=truth_stoch,
+    true_params=truth_stoch,
     n_draws=30,
     color=COLORS["rt"],
 )
