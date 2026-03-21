@@ -45,9 +45,10 @@ from diffsed.models.sps.dsps_wrapper import compute_csp_weights
 import sys, os  # noqa: E401, E402
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
 except NameError:
     _nb_dir = os.getcwd()
-sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
+    sys.path.insert(0, os.path.join(_nb_dir, ".."))
 from _plot_style import COLORS, SPECTRAL_FEATURES, setup_style  # noqa: E402
 
 setup_style()

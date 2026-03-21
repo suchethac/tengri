@@ -50,9 +50,10 @@ from diffsed.utils.grid import make_log_age_grid, grid_spacing
 import sys, os  # noqa: E401, E402
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
 except NameError:
     _nb_dir = os.getcwd()
-sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
+    sys.path.insert(0, os.path.join(_nb_dir, ".."))
 from _plot_style import COLORS, setup_style  # noqa: E402
 
 setup_style()
@@ -104,7 +105,7 @@ for reg in REGIMES:
     tau_yr = tau * 1e6
     sqrt_power = compute_sqrt_power_drw(N_GRID, d_log_age, sigma, tau_yr)
     xi = jax.random.normal(jax.random.PRNGKey(42), shape=(N_GRID,))
-    gp = gp_from_xi(xi, sqrt_power)
+    gp = gp_from_xi(xi, sqrt_power, N_GRID)
     ax_gp.plot(ages_gyr, np.array(gp), color=reg["color"], lw=1)
 
 ax_psd.set_xlabel("Frequency [1/Myr]")
@@ -142,7 +143,7 @@ xi = jax.random.normal(jax.random.PRNGKey(7), shape=(N_GRID,))
 for sigma, c in [(0.5, COLORS["seq"][0]), (1.0, COLORS["seq"][2]),
                   (2.0, COLORS["seq"][3]), (3.0, COLORS["seq"][4])]:
     sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, sigma, tau_fixed * 1e6)
-    gp = gp_from_xi(xi, sqrt_p)
+    gp = gp_from_xi(xi, sqrt_p, N_GRID)
     ax_sig.plot(ages_gyr, np.array(gp), color=c, lw=1.2, label=f"σ = {sigma}")
 ax_sig.set_xlim(13.5, 0)
 ax_sig.set_xlabel("Lookback time [Gyr]")
@@ -155,7 +156,7 @@ sigma_fixed = 2.0
 for tau, c in [(5, COLORS["seq"][4]), (20, COLORS["seq"][3]),
                (50, COLORS["seq"][2]), (200, COLORS["seq"][0])]:
     sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, sigma_fixed, tau * 1e6)
-    gp = gp_from_xi(xi, sqrt_p)
+    gp = gp_from_xi(xi, sqrt_p, N_GRID)
     ax_tau.plot(ages_gyr, np.array(gp), color=c, lw=1.2, label=f"τ = {tau} Myr")
 ax_tau.set_xlim(13.5, 0)
 ax_tau.set_xlabel("Lookback time [Gyr]")
@@ -179,7 +180,7 @@ plt.show()
 sigma, tau_myr = 2.0, 20.0
 xi = jax.random.normal(jax.random.PRNGKey(42), shape=(N_GRID,))
 sqrt_power = compute_sqrt_power_drw(N_GRID, d_log_age, sigma, tau_myr * 1e6)
-gp = gp_from_xi(xi, sqrt_power)
+gp = gp_from_xi(xi, sqrt_power, N_GRID)
 
 # Mean SFH (tsnorm)
 mean_sfr = tsnorm(
@@ -230,7 +231,7 @@ plt.show()
 fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 for idx, ax in enumerate(axes.flat):
     xi_i = jax.random.normal(jax.random.PRNGKey(idx * 7 + 3), shape=(N_GRID,))
-    gp_i = np.array(gp_from_xi(xi_i, sqrt_power))
+    gp_i = np.array(gp_from_xi(xi_i, sqrt_power, N_GRID))
     sfr_i = np.array(mean_sfr) * np.exp(gp_i - variance / 2)
     ax.semilogy(ages_gyr, sfr_i, color=COLORS["truth"], lw=1.2)
     ax.semilogy(ages_gyr, np.array(mean_sfr), color=COLORS["sfh_mean"], lw=0.8, ls="--", alpha=0.5)
@@ -257,7 +258,7 @@ sfr_with = []
 sfr_without = []
 for i in range(n_draws):
     xi_i = jax.random.normal(jax.random.PRNGKey(i), shape=(N_GRID,))
-    gp_i = np.array(gp_from_xi(xi_i, sqrt_power))
+    gp_i = np.array(gp_from_xi(xi_i, sqrt_power, N_GRID))
     sfr_with.append(np.array(mean_sfr) * np.exp(gp_i - variance / 2))
     sfr_without.append(np.array(mean_sfr) * np.exp(gp_i))
 
@@ -343,9 +344,9 @@ for i, sigma in enumerate(sigmas):
         ax = axes[i, j]
         sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, sigma, tau * 1e6)
         xi_ij = jax.random.normal(jax.random.PRNGKey(i * 10 + j), shape=(N_GRID,))
-        gp_ij = np.array(gp_from_xi(xi_ij, sqrt_p))
+        gp_ij = np.array(gp_from_xi(xi_ij, sqrt_p, N_GRID))
         var_ij = float(jnp.var(gp_from_xi(
-            jax.random.normal(jax.random.PRNGKey(999), shape=(N_GRID,)), sqrt_p
+            jax.random.normal(jax.random.PRNGKey(999), shape=(N_GRID,)), sqrt_p, N_GRID
         )))
         sfr_ij = np.array(mean_sfr) * np.exp(gp_ij - var_ij / 2)
 
@@ -386,8 +387,8 @@ for sigma in sig_range:
     sfrs_100 = []
     for k in range(n_ens):
         xi_k = jax.random.normal(jax.random.PRNGKey(k + 1000), shape=(N_GRID,))
-        gp_k = np.array(gp_from_xi(xi_k, sqrt_p))
-        sfr_k = np.array(mean_sfr) * np.exp(gp_k - float(jnp.var(gp_from_xi(xi_k, sqrt_p))) / 2)
+        gp_k = np.array(gp_from_xi(xi_k, sqrt_p, N_GRID))
+        sfr_k = np.array(mean_sfr) * np.exp(gp_k - float(jnp.var(gp_from_xi(xi_k, sqrt_p, N_GRID))) / 2)
         # SFR at 100 Myr lookback
         idx_100 = np.argmin(np.abs(ages_gyr - 0.1))
         sfrs_100.append(sfr_k[idx_100])

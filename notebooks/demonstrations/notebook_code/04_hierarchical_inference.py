@@ -51,9 +51,10 @@ from diffsed import (
 import sys, os  # noqa: E401, E402
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
 except NameError:
     _nb_dir = os.getcwd()
-sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
+    sys.path.insert(0, os.path.join(_nb_dir, ".."))
 from _plot_style import (  # noqa: E402
     COLORS,
     convergence_table,

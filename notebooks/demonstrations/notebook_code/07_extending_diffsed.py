@@ -48,9 +48,10 @@ from diffsed.utils.grid import make_log_age_grid, grid_spacing
 import sys, os  # noqa: E401, E402
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
 except NameError:
     _nb_dir = os.getcwd()
-sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
+    sys.path.insert(0, os.path.join(_nb_dir, ".."))
 from _plot_style import COLORS, setup_style  # noqa: E402
 
 setup_style()
@@ -178,9 +179,9 @@ ax1.legend(fontsize=8)
 ax1.set_title("PSD: DRW vs Matérn")
 
 # GP realizations
-gp_drw = np.array(gp_from_xi(xi, sqrt_drw))
-gp_m15 = np.array(gp_from_xi(xi, sqrt_m15))
-gp_m05 = np.array(gp_from_xi(xi, sqrt_m05))
+gp_drw = np.array(gp_from_xi(xi, sqrt_drw, N_GRID))
+gp_m15 = np.array(gp_from_xi(xi, sqrt_m15, N_GRID))
+gp_m05 = np.array(gp_from_xi(xi, sqrt_m05, N_GRID))
 
 ax2.plot(ages_gyr, gp_drw, color=COLORS["rt"], lw=1, label="DRW", alpha=0.8)
 ax2.plot(ages_gyr, gp_m15, color=COLORS["geovi"], lw=1, label="Matérn ν=1.5", alpha=0.8)
