@@ -235,6 +235,15 @@ axes[3].set_xlabel("Lookback time [Gyr]")
 axes[3].set_ylabel(r"SFR [$M_\odot$/yr]")
 axes[3].set_xlim(0, 13.5)
 axes[3].set_title("(4) Full SFH = mean × exp(x − K/2)")
+# 200 Myr inset
+inset = axes[3].inset_axes([0.6, 0.6, 0.35, 0.35])
+mask_200 = ages_gyr < 0.2
+if hasattr(ages_gyr, "__len__") and np.any(mask_200):
+    inset.plot(ages_gyr[mask_200] * 1e3, sfr_full[mask_200], color=COLORS["truth"], lw=1)
+    inset.set_xlabel("Lookback [Myr]", fontsize=6)
+    inset.set_ylabel("SFR", fontsize=6)
+    inset.tick_params(labelsize=5)
+    inset.set_xlim(0, 200)
 
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig03_step_by_step.png"), dpi=150, bbox_inches="tight")

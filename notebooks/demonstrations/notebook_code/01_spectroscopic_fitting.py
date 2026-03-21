@@ -105,6 +105,13 @@ model_param.precompute_spectroscopy(WAVE_OBS)
 
 key = jax.random.PRNGKey(42)
 true_param = spec_param.sample(key)
+# Override tsnorm to a typical star-forming galaxy (still forming stars now)
+true_param = {**true_param}
+true_param["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
+true_param["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
+true_param["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
+true_param["sfh_tsnorm_skew"] = jnp.array(-0.5)
+true_param["sfh_tsnorm_trunc"] = jnp.array(2.0)
 mock_spec = model_param.mock_spectrum(true_param, WAVE_OBS, snr=30.0, key=key)
 mock_phot = model_param.mock(true_param, snr=20.0, key=jax.random.fold_in(key, 1))
 
@@ -192,6 +199,18 @@ fig, ax = plt.subplots(figsize=(8, 4))
 plot_sfh(model_param, result_geovi_spec, true_params=true_param, ax=ax,
          color=COLORS["geovi"], label="Spectroscopy", method="geoVI")
 ax.set_title("SFH Recovery from Spectroscopy")
+# 200 Myr inset
+sfh_true_p = model_param.predict_sfh(true_param)
+t_gyr_p = np.array(sfh_true_p["t_gyr"])
+sfr_p = np.array(sfh_true_p["sfr_mean"])
+inset = ax.inset_axes([0.6, 0.6, 0.35, 0.35])
+mask_200 = t_gyr_p < 0.2
+if hasattr(t_gyr_p, "__len__") and np.any(mask_200):
+    inset.plot(t_gyr_p[mask_200] * 1e3, sfr_p[mask_200], color=COLORS["truth"], lw=1)
+    inset.set_xlabel("Lookback [Myr]", fontsize=6)
+    inset.set_ylabel("SFR", fontsize=6)
+    inset.tick_params(labelsize=5)
+    inset.set_xlim(0, 200)
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig03_sfh_spec.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -233,7 +252,13 @@ model_stoch = Model(spec_stoch, ssp_data, filters=filters)
 model_stoch.precompute_spectroscopy(WAVE_OBS)
 
 true_stoch = spec_stoch.sample(jax.random.PRNGKey(77))
+# Override to a typical star-forming galaxy with burstiness
 true_stoch = {**true_stoch}
+true_stoch["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
+true_stoch["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
+true_stoch["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
+true_stoch["sfh_tsnorm_skew"] = jnp.array(-0.5)
+true_stoch["sfh_tsnorm_trunc"] = jnp.array(2.0)
 true_stoch["sfh_field_psd_sigma"] = jnp.array(2.0)
 true_stoch["sfh_field_psd_tau_myr"] = jnp.array(20.0)
 
@@ -264,6 +289,18 @@ plot_sfh(model_stoch, result_stoch_spec, true_params=true_stoch, ax=ax,
          color=COLORS["geovi"], label="Spectroscopy", method="geoVI",
          show_mean_sfh=True)
 ax.set_title(f"Bursty SFH Recovery from Spectroscopy (D = {spec_stoch.n_free})")
+# 200 Myr inset
+sfh_true_s = model_stoch.predict_sfh(true_stoch)
+t_gyr_s = np.array(sfh_true_s["t_gyr"])
+sfr_full_s = np.array(sfh_true_s["sfr_full"])
+inset = ax.inset_axes([0.6, 0.6, 0.35, 0.35])
+mask_200 = t_gyr_s < 0.2
+if hasattr(t_gyr_s, "__len__") and np.any(mask_200):
+    inset.plot(t_gyr_s[mask_200] * 1e3, sfr_full_s[mask_200], color=COLORS["truth"], lw=1)
+    inset.set_xlabel("Lookback [Myr]", fontsize=6)
+    inset.set_ylabel("SFR", fontsize=6)
+    inset.tick_params(labelsize=5)
+    inset.set_xlim(0, 200)
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig05_sfh_bursty_spec.png"), dpi=150, bbox_inches="tight")
 plt.show()

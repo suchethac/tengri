@@ -119,7 +119,13 @@ regime_data = {}
 for ax, reg in zip(axes.flat, REGIMES):
     key = jax.random.PRNGKey(abs(hash(reg["label"])) % 2**31)
     true_p = spec_stoch.sample(key)
+    # Override to a typical star-forming galaxy with regime-specific burstiness
     true_p = {**true_p}
+    true_p["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
+    true_p["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
+    true_p["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
+    true_p["sfh_tsnorm_skew"] = jnp.array(-0.5)
+    true_p["sfh_tsnorm_trunc"] = jnp.array(2.0)
     true_p["sfh_field_psd_sigma"] = jnp.array(reg["sigma"])
     true_p["sfh_field_psd_tau_myr"] = jnp.array(float(reg["tau"]))
 
@@ -251,6 +257,20 @@ plot_sfh(model_stoch, regime_results["Bursty"], true_params=bursty_true,
          ax=ax_right, color=COLORS["geovi"], label="Stochastic", method="geoVI",
          show_mean_sfh=True)
 ax_right.set_title("Correct Model (stochastic, D=137)")
+
+# 200 Myr insets on both panels
+sfh_bursty = model_stoch.predict_sfh(bursty_true)
+t_gyr_b = np.array(sfh_bursty["t_gyr"])
+sfr_full_b = np.array(sfh_bursty["sfr_full"])
+mask_200 = t_gyr_b < 0.2
+for ax_panel in [ax_wrong, ax_right]:
+    inset = ax_panel.inset_axes([0.6, 0.6, 0.35, 0.35])
+    if hasattr(t_gyr_b, "__len__") and np.any(mask_200):
+        inset.plot(t_gyr_b[mask_200] * 1e3, sfr_full_b[mask_200], color=COLORS["truth"], lw=1)
+        inset.set_xlabel("Lookback [Myr]", fontsize=6)
+        inset.set_ylabel("SFR", fontsize=6)
+        inset.tick_params(labelsize=5)
+        inset.set_xlim(0, 200)
 
 fig.suptitle("The Wrong Model Trap: Parametric Misses Bursts", fontsize=12, fontweight="bold")
 fig.tight_layout()

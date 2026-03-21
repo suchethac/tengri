@@ -94,6 +94,13 @@ model.precompute_spectroscopy(WAVE_OBS)
 # Fit a single galaxy
 key = jax.random.PRNGKey(42)
 true_params = spec.sample(key)
+# Override tsnorm to a typical star-forming galaxy (still forming stars now)
+true_params = {**true_params}
+true_params["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
+true_params["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
+true_params["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
+true_params["sfh_tsnorm_skew"] = jnp.array(-0.5)
+true_params["sfh_tsnorm_trunc"] = jnp.array(2.0)
 mock = model.mock_spectrum(true_params, WAVE_OBS, snr=30.0, key=key)
 
 fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="spectroscopy")

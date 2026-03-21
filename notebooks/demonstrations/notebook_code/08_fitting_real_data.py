@@ -105,6 +105,13 @@ model.precompute_spectroscopy(WAVE_OBS)
 
 # Generate a "real" galaxy (in practice, load from file)
 true_params = spec.sample(jax.random.PRNGKey(42))
+# Override tsnorm to a typical star-forming galaxy (still forming stars now)
+true_params = {**true_params}
+true_params["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
+true_params["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
+true_params["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
+true_params["sfh_tsnorm_skew"] = jnp.array(-0.5)
+true_params["sfh_tsnorm_trunc"] = jnp.array(2.0)
 mock = model.mock_spectrum(true_params, WAVE_OBS, snr=25.0, key=jax.random.PRNGKey(1))
 
 # This is your data:

@@ -139,6 +139,13 @@ WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 model.precompute_spectroscopy(WAVE_OBS)
 
 params = spec.sample(jax.random.PRNGKey(42))
+# Override tsnorm to a typical star-forming galaxy (still forming stars now)
+params = {**params}
+params["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
+params["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
+params["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
+params["sfh_tsnorm_skew"] = jnp.array(-0.5)
+params["sfh_tsnorm_trunc"] = jnp.array(2.0)
 sfh = model.predict_sfh(params)
 
 # %%
