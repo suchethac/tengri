@@ -935,7 +935,14 @@ class Fitter:
             )
 
         def evi_step_full(
-            m, subkey, n_samples, sample_mode, prev_residuals, constants_mask, pe_mask
+            m,
+            subkey,
+            n_samples,
+            sample_mode,
+            prev_residuals,
+            prev_keys,
+            constants_mask,
+            pe_mask,
         ):
             """One geoVI iteration — ``sample_mode`` must be a static string.
 
@@ -947,16 +954,30 @@ class Fitter:
             Parameters
             ----------
             sample_mode : str  (STATIC — triggers recompilation per value)
-                ``"linear"``, ``"nonlinear_resample"``, ``"nonlinear_update"``
+                ``"linear_resample"`` — fresh MGVI samples (standard MGVI)
+                ``"linear_sample"`` — reuse keys from prev iter (deterministic MGVI)
+                ``"nonlinear_resample"`` — fresh geoVI samples (standard geoVI)
+                ``"nonlinear_sample"`` — reuse keys + curve (deterministic geoVI)
+                ``"nonlinear_update"`` — re-curve existing residuals at new m
+
+            Returns
+            -------
+            m_new, kl_value, new_residuals, used_keys
             """
-            sample_keys = jax.random.split(subkey, n_samples)
+            # Key handling: _resample = fresh keys, _sample = reuse prev keys
+            if sample_mode.endswith("_resample"):
+                sample_keys = jax.random.split(subkey, n_samples)
+            elif sample_mode == "nonlinear_update":
+                sample_keys = prev_keys  # keys only needed for metric sample
+            else:  # _sample modes: reuse
+                sample_keys = prev_keys
 
             # Python if — only the used branch is traced by JAX
-            if sample_mode == "nonlinear_resample":
+            if sample_mode in ("nonlinear_resample", "nonlinear_sample"):
                 residuals = draw_nonlinear_residuals(m, sample_keys)
             elif sample_mode == "nonlinear_update":
                 residuals = update_nonlinear_residuals(m, prev_residuals, sample_keys)
-            else:  # "linear"
+            else:  # linear_resample, linear_sample
                 res = draw_residuals(m, sample_keys)
                 residuals = jnp.concatenate([res, -res], axis=0)
 
@@ -965,50 +986,56 @@ class Fitter:
 
             # KL minimization
             m_opt, kl_val = _kl_minimize(m, residuals, constants_mask)
-            return m_opt, kl_val, residuals
+            return m_opt, kl_val, residuals, sample_keys
 
         def run_evi_geovi(init_pos, key, n_iterations, n_samples, kl_rtol, sample_mode):
             """Run geoVI with automatic convergence detection.
 
             ``sample_mode`` is a **static** string — JAX compiles a
-            separate XLA program per mode.  Use:
+            separate XLA program per mode.  All 5 NIFTy modes supported:
 
-            - ``"linear"`` — MGVI (fast compile, fast run)
-            - ``"nonlinear_resample"`` — geoVI (slow compile, fast run)
-            - ``"nonlinear_update"`` — geoVI deterministic (slow compile, fast run)
+            - ``"linear_resample"`` — fresh MGVI samples each iteration
+            - ``"linear_sample"`` — reuse PRNG keys (deterministic MGVI)
+            - ``"nonlinear_resample"`` — fresh geoVI samples
+            - ``"nonlinear_sample"`` — reuse keys + curve (deterministic geoVI)
+            - ``"nonlinear_update"`` — re-curve existing residuals at new m
             """
             keys = jax.random.split(key, n_iterations)
             dummy_residuals = jnp.zeros((2 * n_samples, d_total))
+            dummy_keys = jax.random.split(keys[0], n_samples)
             no_constants = jnp.zeros(d_total, dtype=bool)
             all_sampled = jnp.ones(d_total)
 
+            # State: (m, prev_kl, residuals, prev_keys, iter, converged)
             def cond_fn(state):
-                _m, _prev_kl, _res, i, converged = state
+                _m, _prev_kl, _res, _pk, i, converged = state
                 return (~converged) & (i < n_iterations)
 
             def body_fn(state):
-                m, prev_kl, prev_res, i, converged = state
+                m, prev_kl, prev_res, prev_k, i, converged = state
                 subkey = jax.lax.dynamic_index_in_dim(keys, i, keepdims=False)
-                m_new, kl_val, new_res = evi_step_full(
+                m_new, kl_val, new_res, new_k = evi_step_full(
                     m,
                     subkey,
                     n_samples,
                     sample_mode,
                     prev_res,
+                    prev_k,
                     no_constants,
                     all_sampled,
                 )
                 rel_change = jnp.abs(prev_kl - kl_val) / (jnp.abs(prev_kl) + 1e-10)
                 converged = (rel_change < kl_rtol) & (i >= 5)
-                return (m_new, kl_val, new_res, i + 1, converged)
+                return (m_new, kl_val, new_res, new_k, i + 1, converged)
 
-            # First iteration
-            m0, kl0, res0 = evi_step_full(
+            # First iteration (always resample to establish initial keys)
+            m0, kl0, res0, keys0 = evi_step_full(
                 init_pos,
                 keys[0],
                 n_samples,
                 sample_mode,
                 dummy_residuals,
+                dummy_keys,
                 no_constants,
                 all_sampled,
             )
@@ -1016,12 +1043,13 @@ class Fitter:
                 m0,
                 kl0,
                 res0,
+                keys0,
                 jnp.int32(1),
                 jnp.bool_(False),
             )
 
-            m_final, _kl, _res, n_iters, _ = jax.lax.while_loop(cond_fn, body_fn, init_state)
-            return m_final, n_iters
+            result = jax.lax.while_loop(cond_fn, body_fn, init_state)
+            return result[0], result[4]  # m_final, n_iters
 
         # --- Parameter range mapping for mask construction ---
         param_ranges = {}
@@ -1424,14 +1452,17 @@ class Fitter:
             # Dispatch to native engine.
             # sample_mode is a static string — JAX compiles separately per mode.
             _mode_str_map = {
-                "linear": "linear",
-                "mgvi": "linear",
+                "linear": "linear_resample",
+                "mgvi": "linear_resample",
                 "geovi": "nonlinear_resample",
+                "linear_resample": "linear_resample",
+                "linear_sample": "linear_sample",
                 "nonlinear_resample": "nonlinear_resample",
+                "nonlinear_sample": "nonlinear_sample",
                 "nonlinear_update": "nonlinear_update",
             }
-            mode_str = _mode_str_map.get(sample_mode, "linear")
-            if mode_str == "linear":
+            mode_str = _mode_str_map.get(sample_mode, "linear_resample")
+            if mode_str in ("linear_resample", "linear_sample"):
                 # Use the old fast MGVI engine (no geoVI overhead)
                 converged_flat, n_iters = engine["run_evi"](
                     pos_flat,
