@@ -88,6 +88,14 @@ intersphinx_mapping = {
 
 # -- sphinx-gallery configuration --------------------------------------------
 
+_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+
+def _reset_cwd(gallery_conf, fname):
+    """Set cwd to project root so examples find data/ and data/filters/."""
+    os.chdir(_project_root)
+
+
 sphinx_gallery_conf = {
     "examples_dirs": ["../examples"],
     "gallery_dirs": ["auto_examples"],
@@ -99,6 +107,7 @@ sphinx_gallery_conf = {
     "within_subsection_order": "FileNameSortKey",
     "capture_repr": (),
     "remove_config_comments": True,
+    "reset_modules": (_reset_cwd,),
 }
 
 # -- Exclude patterns --------------------------------------------------------

@@ -29,8 +29,9 @@ from tengri import (
 # --- Load SSP data ---
 def _find_ssp():
     """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-    name = "ssp_fsps_v3.2.h5"
-    for p in [Path("data") / name, Path("../data") / name]:
+    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    for p in [Path("data") / name, Path("../data") / name,
+              Path("../../data") / name, Path("../../../data") / name]:
         if p.exists():
             return str(p)
     return None

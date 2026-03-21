@@ -7,14 +7,21 @@ Filters are loaded from the SVO Filter Profile Service via tengri's filter
 registry.
 """
 
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import load_filter_set
 
-# Load SDSS ugriz filters (cached locally after first download)
+# Locate filter cache — works from project root or sphinx-gallery cwd
+_FILTER_DIRS = [Path("data/filters"), Path("../data/filters"),
+                Path("../../data/filters"), Path("../../../data/filters")]
+cache_dir = next((d for d in _FILTER_DIRS if d.exists()), "data/filters")
+
+# Load SDSS ugriz filters
 filter_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-_waves, _trans, curves = load_filter_set(filter_names)
+_waves, _trans, curves = load_filter_set(filter_names, cache_dir=str(cache_dir))
 
 # Band colors matching standard SDSS convention
 band_colors = {
@@ -42,5 +49,4 @@ ax.set_ylim(0, None)
 ax.legend(frameon=False, ncol=5, loc="upper right")
 fig.tight_layout()
 
-plt.savefig("filter_curves.png", dpi=150, bbox_inches="tight")
 plt.show()

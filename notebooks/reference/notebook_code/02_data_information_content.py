@@ -401,22 +401,22 @@ plt.show()
 for stage_name in ["1 band (r)", "5 bands (ugriz)"]:
     result = results_stages[stage_name]
     if result.samples is not None:
-        fig = safe_corner(
-            result,
-            params=[
-                "sfh_tsnorm_log_peak_sfr",
-                "sfh_tsnorm_peak_lbt_gyr",
-                "met_logzsol",
-                "dust_tau_diff",
-            ],
-            truths=[
-                TRUTH["sfh_tsnorm_log_peak_sfr"],
-                TRUTH["sfh_tsnorm_peak_lbt_gyr"],
-                TRUTH["met_logzsol"],
-                TRUTH["dust_tau_diff"],
-            ],
-            color=COLORS["geovi"],
-        )
+        corner_params = [
+            "sfh_tsnorm_log_peak_sfr",
+            "sfh_tsnorm_peak_lbt_gyr",
+            "met_logzsol",
+            "dust_tau_diff",
+        ]
+        try:
+            fig = safe_corner(
+                result,
+                params=corner_params,
+                truths=TRUTH,
+                color=COLORS["geovi"],
+            )
+        except Exception as e:
+            print(f"  Corner plot skipped: {e}")
+            fig = None
         if fig is not None:
             fig.suptitle(f"Corner: {stage_name}", y=1.02)
             plt.savefig(
