@@ -1,0 +1,858 @@
+"""Pure JAX functions for computing derived physical quantities from SEDs.
+
+This module provides the computational primitives used by both the lazy
+``Prediction`` object (for single-galaxy exploration) and the JIT-compatible
+``predict_sfh_quantities`` / ``predict_sed_quantities`` methods (for
+population-level batch computation via ``jax.vmap``).
+
+All functions are:
+- **Pure**: no side effects, no mutation, no caching
+- **JIT-compatible**: can be wrapped in ``jax.jit``
+- **Differentiable**: gradients flow through all computations
+- **Static-shape**: use ``jnp.where`` masks (not dynamic slicing)
+  so array shapes are known at trace time
+
+Physical conventions
+--------------------
+- SED units: erg/s/Hz (rest-frame luminosity L_ν)
+- Wavelength: Angstrom (ascending order in ``ssp_wave``)
+- Frequency: Hz (``ν = c / λ``, descending when λ is ascending)
+- Luminosity integrals: ``L = -∫ L_ν dν`` (negative sign because ν
+  is descending when integrated via ``jnp.trapezoid`` with ascending λ)
+- Line luminosities: Lsun
+- Time: years (ages), converted to Gyr for output where noted
+- Mass: Msun
+
+References
+----------
+- Balogh et al. 1999, ApJ, 527, 54 — Dn4000 definition
+- Wang et al. 2024, ApJ — modified Balmer break
+- Bell 2003, ApJ, 586, 794 — FIR-radio correlation
+- Murphy et al. 2011, ApJ, 737, 67 — radio-SFR calibration
+- Lehmer et al. 2010, ApJ, 724, 559 — XRB scaling relations
+- Lehmer et al. 2016, ApJ, 825, 7 — updated XRB scaling
+- Duras et al. 2020, A&A, 636, A73 — AGN bolometric corrections
+- Condon 1992, ARA&A, 30, 575 — thermal radio emission
+"""
+
+import jax
+import jax.numpy as jnp
+
+# ---------------------------------------------------------------------------
+# Physical constants
+# ---------------------------------------------------------------------------
+
+C_AA = 2.99792458e18
+"""Speed of light in Angstrom/s."""
+
+LSUN_ERG = 3.828e33
+"""Solar luminosity in erg/s (IAU 2015 nominal)."""
+
+PC_CM = 3.0856775814913674e18
+"""Parsec in cm."""
+
+AB_ZEROPOINT = -48.6
+"""AB magnitude zeropoint: m_AB = -2.5 log10(f_ν) - 48.6."""
+
+# ---------------------------------------------------------------------------
+# Key emission line wavelengths (rest-frame, Angstrom)
+# ---------------------------------------------------------------------------
+
+KEY_LINES = {
+    "lya": (1215.67,),
+    "civ_1549": (1548.19, 1550.78),
+    "oii": (3727.12, 3730.12),
+    "hbeta": (4862.76,),
+    "oiii_4959": (4960.30,),
+    "oiii_5007": (5008.31,),
+    "nii_6548": (6549.96,),
+    "halpha": (6564.72,),
+    "nii_6584": (6585.37,),
+    "sii_6717": (6718.40,),
+    "sii_6731": (6732.78,),
+}
+"""Key emission lines for survey diagnostics.
+
+Each value is a tuple of rest-frame wavelengths (Angstrom). For doublets
+(e.g., [OII] 3726+3729), both components are listed and their luminosities
+are summed by :func:`extract_line_luminosity`.
+"""
+
+
+# ===================================================================
+# SFH-based quantities (no SED needed)
+# ===================================================================
+
+
+def compute_mass_weighted_age(weights: jnp.ndarray, ssp_ages_yr: jnp.ndarray) -> jnp.ndarray:
+    """Mass-weighted stellar age.
+
+    Parameters
+    ----------
+    weights : array, shape (n_age,)
+        CSP mass weights (Msun per SSP age bin), from
+        :func:`~diffsed.models.sps.dsps_wrapper.compute_csp_weights`.
+    ssp_ages_yr : array, shape (n_age,)
+        SSP isochrone ages in years (lookback time).
+
+    Returns
+    -------
+    float
+        Mass-weighted age in Gyr:
+        ``Σ(w_i × age_i) / Σ(w_i) / 1e9``.
+    """
+    total = jnp.sum(weights)
+    return jnp.sum(weights * ssp_ages_yr) / jnp.maximum(total, 1e-30) / 1e9
+
+
+def compute_mass_weighted_metallicity(
+    weights: jnp.ndarray,
+    ssp_ages_yr: jnp.ndarray,
+    log_z: float,
+    log_z_initial: float | None = None,
+    log_z_final: float | None = None,
+) -> jnp.ndarray:
+    """Mass-weighted metallicity.
+
+    .. warning::
+        ``log_z_initial`` and ``log_z_final`` must be Python ``None``
+        or concrete floats, not JAX traced values. The ``if None``
+        branch is resolved at trace time, so this function is JIT-safe
+        only when the evolving-Z flag is a static Python bool.
+
+    For a single metallicity parameter, this is trivially ``log_z``.
+    For evolving metallicity, Z varies linearly with lookback time:
+
+    .. math::
+
+        \\log Z(t) = \\log Z_{\\rm final}
+            + (\\log Z_{\\rm initial} - \\log Z_{\\rm final}) \\times t/t_{\\max}
+
+    The mass-weighted value is then ``log10(Σ(w_i × Z_i) / Σ(w_i))``,
+    where ``Z_i = 10^{log_z_i}`` is the linear metallicity at each bin.
+
+    Parameters
+    ----------
+    weights : array, shape (n_age,)
+        CSP mass weights.
+    ssp_ages_yr : array, shape (n_age,)
+        SSP ages in years.
+    log_z : float
+        Single metallicity log10(Z) (used when not evolving).
+    log_z_initial : float, optional
+        Initial (oldest) metallicity log10(Z). If None, returns ``log_z``.
+    log_z_final : float, optional
+        Final (present-day) metallicity log10(Z).
+
+    Returns
+    -------
+    float
+        Mass-weighted metallicity in log10(Z).
+    """
+    if log_z_initial is None or log_z_final is None:
+        return log_z
+
+    t_max = jnp.max(ssp_ages_yr)
+    t_frac = ssp_ages_yr / jnp.maximum(t_max, 1.0)
+    log_z_per_bin = log_z_final + (log_z_initial - log_z_final) * t_frac
+    z_linear = 10.0**log_z_per_bin
+    total_w = jnp.sum(weights)
+    mean_z = jnp.sum(weights * z_linear) / jnp.maximum(total_w, 1e-30)
+    return jnp.log10(jnp.maximum(mean_z, 1e-30))
+
+
+# ===================================================================
+# SED-based quantities
+# ===================================================================
+
+
+def compute_bolometric_luminosity(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    """Bolometric luminosity from the full SED.
+
+    Integrates L_ν over all frequencies:
+
+    .. math::
+
+        L_{\\rm bol} = -\\int L_\\nu \\, d\\nu
+
+    The negative sign arises because ν is descending when λ is ascending.
+
+    Parameters
+    ----------
+    sed : array, shape (n_wave,)
+        Rest-frame SED in erg/s/Hz.
+    wave : array, shape (n_wave,)
+        Wavelength grid in Angstrom (ascending).
+
+    Returns
+    -------
+    float
+        Bolometric luminosity in Lsun.
+    """
+    nu = C_AA / wave
+    l_bol_erg = -jnp.trapezoid(sed, nu)
+    return l_bol_erg / LSUN_ERG
+
+
+def compute_l_tir(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    """Total infrared luminosity (8–1000 μm).
+
+    Standard definition used in IRX-β studies and IR luminosity functions.
+
+    Parameters
+    ----------
+    sed : array, shape (n_wave,)
+        Rest-frame SED in erg/s/Hz.
+    wave : array, shape (n_wave,)
+        Wavelength grid in Angstrom.
+
+    Returns
+    -------
+    float
+        L_TIR in Lsun. Zero if no flux in the 8–1000 μm range.
+    """
+    nu = C_AA / wave
+    mask = (wave >= 8.0e4) & (wave <= 1.0e7)  # 8-1000 μm in Angstrom
+    sed_ir = jnp.where(mask, sed, 0.0)
+    l_ir_erg = -jnp.trapezoid(sed_ir, nu)
+    return jnp.maximum(l_ir_erg, 0.0) / LSUN_ERG
+
+
+def compute_l_dust_absorbed(
+    sed_intrinsic: jnp.ndarray, sed_attenuated: jnp.ndarray, wave: jnp.ndarray
+) -> jnp.ndarray:
+    """Dust-absorbed luminosity.
+
+    The energy removed from the stellar SED by dust attenuation:
+
+    .. math::
+
+        L_{\\rm abs} = \\int (L_{\\nu,\\rm intrinsic}
+                       - L_{\\nu,\\rm attenuated}) \\, d\\nu
+
+    This should equal L_TIR when ``dust_eta_balance = 1.0`` (strict
+    energy balance).
+
+    Parameters
+    ----------
+    sed_intrinsic : array, shape (n_wave,)
+        Unattenuated stellar SED in erg/s/Hz.
+    sed_attenuated : array, shape (n_wave,)
+        Dust-attenuated stellar SED in erg/s/Hz.
+    wave : array, shape (n_wave,)
+        Wavelength grid in Angstrom.
+
+    Returns
+    -------
+    float
+        Dust-absorbed luminosity in Lsun.
+    """
+    nu = C_AA / wave
+    l_abs_erg = -jnp.trapezoid(sed_intrinsic - sed_attenuated, nu)
+    return jnp.maximum(l_abs_erg, 0.0) / LSUN_ERG
+
+
+def _mean_flux_in_band(sed, wave, lam_lo, lam_hi):
+    """Mean flux density in a wavelength band.
+
+    Helper for spectral indices (Dn4000, Balmer break, FUV/NUV).
+    Uses ``jnp.where`` masks to keep shapes static for JIT.
+
+    Parameters
+    ----------
+    sed : array, shape (n_wave,)
+        SED in erg/s/Hz.
+    wave : array, shape (n_wave,)
+        Wavelength in Angstrom (ascending).
+    lam_lo, lam_hi : float
+        Band edges in Angstrom.
+
+    Returns
+    -------
+    float
+        Mean L_ν in the band (erg/s/Hz).
+    """
+    mask = (wave >= lam_lo) & (wave <= lam_hi)
+    w = mask.astype(sed.dtype)
+    # Trapezoid-weighted mean: ∫(sed * dλ) / ∫(dλ) within the band
+    sed_masked = jnp.where(mask, sed, 0.0)
+    num = jnp.trapezoid(sed_masked, wave)
+    den = jnp.trapezoid(w, wave)
+    # Return NaN if the band has no wavelength coverage (den ≈ 0)
+    return jnp.where(den > 1e-20, num / jnp.maximum(den, 1e-30), jnp.nan)
+
+
+def compute_dn4000(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    """Narrow 4000 Å break index (Balogh et al. 1999).
+
+    Defined as the ratio of mean f_ν in the red (4000–4100 Å) to blue
+    (3850–3950 Å) windows:
+
+    .. math::
+
+        D_n(4000) = \\frac{\\langle f_\\nu \\rangle_{4000-4100}}
+                          {\\langle f_\\nu \\rangle_{3850-3950}}
+
+    Values range ~1.0 (young starbursts) to ~2.5 (old passive galaxies).
+
+    Parameters
+    ----------
+    sed : array, shape (n_wave,)
+        SED in erg/s/Hz.
+    wave : array, shape (n_wave,)
+        Wavelength in Angstrom.
+
+    Returns
+    -------
+    float
+        Dn4000 (dimensionless).
+    """
+    red = _mean_flux_in_band(sed, wave, 4000.0, 4100.0)
+    blue = _mean_flux_in_band(sed, wave, 3850.0, 3950.0)
+    return red / jnp.maximum(blue, 1e-30)
+
+
+def compute_balmer_break(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    """Modified Balmer break (Wang et al. 2024).
+
+    Optimized for high-redshift galaxies where the classical D4000
+    (metal absorption) is weak. Uses a bluer window (3620–3720 Å)
+    that captures the hydrogen bound-free discontinuity:
+
+    .. math::
+
+        BB = \\frac{\\langle f_\\nu \\rangle_{4000-4100}}
+                   {\\langle f_\\nu \\rangle_{3620-3720}}
+
+    Parameters
+    ----------
+    sed : array, shape (n_wave,)
+        SED in erg/s/Hz.
+    wave : array, shape (n_wave,)
+        Wavelength in Angstrom.
+
+    Returns
+    -------
+    float
+        Balmer break strength (dimensionless).
+    """
+    red = _mean_flux_in_band(sed, wave, 4000.0, 4100.0)
+    blue = _mean_flux_in_band(sed, wave, 3620.0, 3720.0)
+    return red / jnp.maximum(blue, 1e-30)
+
+
+def compute_uv_slope_beta(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    """UV spectral slope β from 1250–2600 Å.
+
+    Fit to the power-law form ``f_λ ∝ λ^β``. Since the SED is in
+    f_ν units, we fit ``ln(f_ν)`` vs ``ln(λ)`` and subtract 2:
+
+    .. math::
+
+        \\beta = \\frac{d \\ln f_\\nu}{d \\ln \\lambda} - 2
+
+    Uses analytic weighted least-squares with a boolean mask as weights,
+    keeping array shapes static for JIT.
+
+    Parameters
+    ----------
+    sed : array, shape (n_wave,)
+        SED in erg/s/Hz.
+    wave : array, shape (n_wave,)
+        Wavelength in Angstrom.
+
+    Returns
+    -------
+    float
+        UV slope β (typically -2.5 to 0 for star-forming galaxies).
+    """
+    mask = (wave >= 1250.0) & (wave <= 2600.0)
+    w = mask.astype(sed.dtype)
+    log_wave = jnp.log(jnp.maximum(wave, 1.0))
+    log_fnu = jnp.log(jnp.maximum(sed, 1e-50))
+
+    # Weighted linear regression: slope = (Σwxy - ΣwxΣwy/Σw) / (Σwx² - (Σwx)²/Σw)
+    sw = jnp.sum(w)
+    sx = jnp.sum(w * log_wave)
+    sy = jnp.sum(w * log_fnu)
+    sxx = jnp.sum(w * log_wave**2)
+    sxy = jnp.sum(w * log_wave * log_fnu)
+
+    denom = sxx - sx**2 / jnp.maximum(sw, 1e-30)
+    slope_fnu = (sxy - sx * sy / jnp.maximum(sw, 1e-30)) / jnp.maximum(denom, 1e-30)
+    # Return NaN if no wavelength points in the 1250-2600 Å window
+    return jnp.where(sw > 1.0, slope_fnu - 2.0, jnp.nan)
+
+
+def compute_fuv_flux(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    """Mean flux density in the far-UV (1000–1700 Å).
+
+    Traces star formation on ~10–30 Myr timescales, dominated by
+    O- and B-type stars.
+
+    Parameters
+    ----------
+    sed : array, shape (n_wave,)
+        SED in erg/s/Hz.
+    wave : array, shape (n_wave,)
+        Wavelength in Angstrom.
+
+    Returns
+    -------
+    float
+        Mean f_ν in erg/s/Hz.
+    """
+    return _mean_flux_in_band(sed, wave, 1000.0, 1700.0)
+
+
+def compute_nuv_flux(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    """Mean flux density in the near-UV (1700–3200 Å).
+
+    Traces star formation on ~30–100 Myr timescales, including
+    contributions from early- to mid-B type stars.
+
+    Parameters
+    ----------
+    sed : array, shape (n_wave,)
+        SED in erg/s/Hz.
+    wave : array, shape (n_wave,)
+        Wavelength in Angstrom.
+
+    Returns
+    -------
+    float
+        Mean f_ν in erg/s/Hz.
+    """
+    return _mean_flux_in_band(sed, wave, 1700.0, 3200.0)
+
+
+def compute_m_uv(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    """Absolute UV magnitude at rest-frame 1500 Å.
+
+    Standard quantity for UV luminosity functions. Computed as the
+    mean f_ν in a 100 Å window around 1500 Å, converted to absolute
+    AB magnitude assuming the SED is at 10 pc:
+
+    .. math::
+
+        M_{\\rm UV} = -2.5 \\log_{10}\\left(
+            \\frac{\\langle L_\\nu \\rangle}{4\\pi (10\\,{\\rm pc})^2}
+        \\right) - 48.6
+
+    Parameters
+    ----------
+    sed : array, shape (n_wave,)
+        SED in erg/s/Hz (rest-frame luminosity).
+    wave : array, shape (n_wave,)
+        Wavelength in Angstrom.
+
+    Returns
+    -------
+    float
+        M_UV in AB magnitudes.
+    """
+    l_nu = _mean_flux_in_band(sed, wave, 1450.0, 1550.0)
+    d_10pc_cm = 10.0 * PC_CM
+    f_nu = l_nu / (4.0 * jnp.pi * d_10pc_cm**2)
+    return -2.5 * jnp.log10(jnp.maximum(f_nu, 1e-50)) + AB_ZEROPOINT
+
+
+def compute_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    """Monochromatic UV luminosity νL_ν at rest-frame 1600 Å.
+
+    Used in IRX-β and ionizing efficiency calculations.
+
+    Parameters
+    ----------
+    sed : array, shape (n_wave,)
+        SED in erg/s/Hz.
+    wave : array, shape (n_wave,)
+        Wavelength in Angstrom.
+
+    Returns
+    -------
+    float
+        νL_ν at 1600 Å in erg/s.
+    """
+    l_nu_1600 = jnp.interp(1600.0, wave, sed)
+    nu_1600 = C_AA / 1600.0
+    return nu_1600 * l_nu_1600
+
+
+def compute_irx(l_tir_lsun: jnp.ndarray, l_uv_erg: jnp.ndarray) -> jnp.ndarray:
+    """Infrared excess IRX = log10(L_TIR / L_UV).
+
+    Parameters
+    ----------
+    l_tir_lsun : float
+        Total IR luminosity in Lsun.
+    l_uv_erg : float
+        UV luminosity νL_ν(1600 Å) in erg/s.
+
+    Returns
+    -------
+    float
+        IRX (dimensionless log ratio).
+    """
+    l_tir_erg = l_tir_lsun * LSUN_ERG
+    return jnp.log10(jnp.maximum(l_tir_erg, 1e-50) / jnp.maximum(l_uv_erg, 1e-50))
+
+
+def compute_rest_uv_color(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    """Rest-frame U-V color from rectangular band approximations.
+
+    Uses approximate Johnson U (3200–3900 Å) and V (5000–5800 Å)
+    bands. Sufficient for UVJ classification; for precision photometry
+    use :meth:`~diffsed.model.Model.predict_magnitudes` with loaded
+    filter curves.
+
+    Parameters
+    ----------
+    sed : array, shape (n_wave,)
+        SED in erg/s/Hz.
+    wave : array, shape (n_wave,)
+        Wavelength in Angstrom.
+
+    Returns
+    -------
+    float
+        U - V in AB magnitudes.
+    """
+    f_u = _mean_flux_in_band(sed, wave, 3200.0, 3900.0)
+    f_v = _mean_flux_in_band(sed, wave, 5000.0, 5800.0)
+    mag_u = -2.5 * jnp.log10(jnp.maximum(f_u, 1e-50))
+    mag_v = -2.5 * jnp.log10(jnp.maximum(f_v, 1e-50))
+    return mag_u - mag_v
+
+
+# ===================================================================
+# Luminosity-weighted quantities (need per-bin SED info)
+# ===================================================================
+
+
+def compute_per_bin_luminosity(
+    weights: jnp.ndarray, ssp_flux_at_z: jnp.ndarray, wave: jnp.ndarray
+) -> jnp.ndarray:
+    """Bolometric luminosity contributed by each SSP age bin.
+
+    Parameters
+    ----------
+    weights : array, shape (n_age,)
+        CSP mass weights (Msun per bin).
+    ssp_flux_at_z : array, shape (n_age, n_wave)
+        Metallicity-interpolated SSP flux (Lsun/Hz/Msun).
+    wave : array, shape (n_wave,)
+        Wavelength in Angstrom.
+
+    Returns
+    -------
+    array, shape (n_age,)
+        L_bol per age bin in erg/s.
+    """
+    nu = C_AA / wave
+
+    def _lbol_one_bin(w_i, flux_i):
+        return -jnp.trapezoid(w_i * flux_i * LSUN_ERG, nu)
+
+    return jax.vmap(_lbol_one_bin)(weights, ssp_flux_at_z)
+
+
+def compute_luminosity_weighted_age(
+    weights: jnp.ndarray,
+    ssp_flux_at_z: jnp.ndarray,
+    ssp_ages_yr: jnp.ndarray,
+    wave: jnp.ndarray,
+) -> jnp.ndarray:
+    """Luminosity-weighted stellar age.
+
+    Weights each SSP bin by its bolometric luminosity rather than its
+    mass, giving a diagnostic biased toward the light-dominating
+    population.
+
+    Parameters
+    ----------
+    weights : array, shape (n_age,)
+        CSP mass weights.
+    ssp_flux_at_z : array, shape (n_age, n_wave)
+        Metallicity-interpolated SSP flux.
+    ssp_ages_yr : array, shape (n_age,)
+        SSP ages in years.
+    wave : array, shape (n_wave,)
+        Wavelength in Angstrom.
+
+    Returns
+    -------
+    float
+        Luminosity-weighted age in Gyr.
+    """
+    l_per_bin = compute_per_bin_luminosity(weights, ssp_flux_at_z, wave)
+    l_total = jnp.sum(l_per_bin)
+    return jnp.sum(l_per_bin * ssp_ages_yr) / jnp.maximum(l_total, 1e-30) / 1e9
+
+
+def compute_luminosity_weighted_metallicity(
+    weights: jnp.ndarray,
+    ssp_flux_at_z: jnp.ndarray,
+    ssp_ages_yr: jnp.ndarray,
+    wave: jnp.ndarray,
+    log_z: float,
+    log_z_initial: float | None = None,
+    log_z_final: float | None = None,
+) -> jnp.ndarray:
+    """Luminosity-weighted metallicity.
+
+    Parameters
+    ----------
+    weights : array, shape (n_age,)
+        CSP mass weights.
+    ssp_flux_at_z : array, shape (n_age, n_wave)
+        Metallicity-interpolated SSP flux.
+    ssp_ages_yr : array, shape (n_age,)
+        SSP ages in years.
+    wave : array, shape (n_wave,)
+        Wavelength in Angstrom.
+    log_z : float
+        Single metallicity log10(Z).
+    log_z_initial, log_z_final : float, optional
+        For evolving metallicity.
+
+    Returns
+    -------
+    float
+        Luminosity-weighted metallicity in log10(Z).
+    """
+    if log_z_initial is None or log_z_final is None:
+        return log_z
+
+    l_per_bin = compute_per_bin_luminosity(weights, ssp_flux_at_z, wave)
+    l_total = jnp.sum(l_per_bin)
+
+    t_max = jnp.max(ssp_ages_yr)
+    t_frac = ssp_ages_yr / jnp.maximum(t_max, 1.0)
+    log_z_per_bin = log_z_final + (log_z_initial - log_z_final) * t_frac
+    z_linear = 10.0**log_z_per_bin
+
+    mean_z = jnp.sum(l_per_bin * z_linear) / jnp.maximum(l_total, 1e-30)
+    return jnp.log10(jnp.maximum(mean_z, 1e-30))
+
+
+# ===================================================================
+# Emission line extraction
+# ===================================================================
+
+
+def extract_line_luminosity(
+    line_waves: jnp.ndarray, line_lums: jnp.ndarray, target_waves: tuple[float, ...]
+) -> jnp.ndarray:
+    """Extract emission line luminosity by wavelength matching.
+
+    For doublets (multiple target wavelengths), the luminosities
+    of all matched components are summed.
+
+    Parameters
+    ----------
+    line_waves : array, shape (n_lines,)
+        Rest-frame line wavelengths from nebular model.
+    line_lums : array, shape (n_lines,)
+        Line luminosities in Lsun.
+    target_waves : tuple of float
+        Target wavelength(s) in Angstrom. For doublets, pass both
+        components (e.g., ``(3727.12, 3730.12)`` for [OII]).
+
+    Returns
+    -------
+    float
+        Total line luminosity in Lsun. Returns NaN if ``line_waves``
+        is empty (no nebular model).
+    """
+    if line_waves.shape[0] == 0:
+        return jnp.array(jnp.nan)
+
+    def _lookup_one(target):
+        idx = jnp.argmin(jnp.abs(line_waves - target))
+        return line_lums[idx]
+
+    total = jnp.array(0.0)
+    for tw in target_waves:
+        total = total + _lookup_one(tw)
+
+    return total
+
+
+# ===================================================================
+# Radio quantities (empirical scaling relations)
+# ===================================================================
+
+
+def compute_l_radio_1p4ghz_from_sfr(sfr: jnp.ndarray) -> jnp.ndarray:
+    """1.4 GHz radio luminosity from SFR (Murphy et al. 2011).
+
+    .. math::
+
+        L_{1.4\\,{\\rm GHz}} = \\frac{\\rm SFR}{5.52 \\times 10^{-22}}
+
+    Parameters
+    ----------
+    sfr : float
+        Star formation rate in Msun/yr.
+
+    Returns
+    -------
+    float
+        L_1.4GHz in erg/s/Hz.
+    """
+    return sfr / 5.52e-22
+
+
+def compute_l_radio_thermal(q_h: jnp.ndarray) -> jnp.ndarray:
+    """Thermal (free-free) radio luminosity at 1.4 GHz from Q_H.
+
+    Following Condon (1992), the thermal radio luminosity is:
+
+    .. math::
+
+        L_{\\rm th}(1.4\\,{\\rm GHz}) \\approx 5.5 \\times 10^{-28}
+            \\times (T_e / 10^4)^{0.45} \\times Q_H
+
+    assuming T_e = 10^4 K.
+
+    Parameters
+    ----------
+    q_h : float
+        Ionizing photon production rate in photons/s.
+
+    Returns
+    -------
+    float
+        Thermal radio luminosity at 1.4 GHz in erg/s/Hz.
+    """
+    return 5.5e-28 * q_h
+
+
+def compute_q_ir(l_tir_lsun: jnp.ndarray, l_1p4ghz: jnp.ndarray) -> jnp.ndarray:
+    """FIR-radio correlation parameter q_TIR.
+
+    .. math::
+
+        q_{\\rm TIR} = \\log_{10}\\left(
+            \\frac{L_{\\rm TIR}}{3.75 \\times 10^{12}\\,{\\rm W}}
+        \\right) - \\log_{10}\\left(
+            \\frac{L_{1.4}}{\\rm W\\,Hz^{-1}}
+        \\right)
+
+    Typical value: q_TIR ≈ 2.64 (Bell 2003).
+
+    Parameters
+    ----------
+    l_tir_lsun : float
+        Total IR luminosity in Lsun.
+    l_1p4ghz : float
+        1.4 GHz luminosity in erg/s/Hz.
+
+    Returns
+    -------
+    float
+        q_TIR (dimensionless).
+    """
+    l_tir_w = l_tir_lsun * LSUN_ERG * 1e-7  # erg/s → W
+    l_radio_w = l_1p4ghz * 1e-7  # erg/s/Hz → W/Hz
+    return jnp.log10(jnp.maximum(l_tir_w, 1e-50) / 3.75e12) - jnp.log10(
+        jnp.maximum(l_radio_w, 1e-50)
+    )
+
+
+# ===================================================================
+# X-ray quantities (empirical scaling relations)
+# ===================================================================
+
+
+def compute_l_x_xrb(sfr: jnp.ndarray, stellar_mass: jnp.ndarray) -> jnp.ndarray:
+    """X-ray luminosity from X-ray binaries (0.5–8 keV).
+
+    Combines high-mass XRBs (proportional to SFR) and low-mass XRBs
+    (proportional to stellar mass) following Lehmer et al. (2010, 2016):
+
+    .. math::
+
+        L_{X,{\\rm XRB}} = 2.6 \\times 10^{39} \\times {\\rm SFR}
+                          + 9.05 \\times 10^{28} \\times M_\\star
+
+    Parameters
+    ----------
+    sfr : float
+        Star formation rate in Msun/yr.
+    stellar_mass : float
+        Stellar mass in Msun.
+
+    Returns
+    -------
+    float
+        L_X in erg/s.
+    """
+    l_hmxb = 2.6e39 * sfr
+    l_lmxb = 9.05e28 * stellar_mass
+    return l_hmxb + l_lmxb
+
+
+def compute_l_x_agn(l_bol_agn_erg: jnp.ndarray) -> jnp.ndarray:
+    """AGN X-ray luminosity (2–10 keV) from bolometric luminosity.
+
+    Uses the Duras et al. (2020) bolometric correction:
+
+    .. math::
+
+        k_{\\rm bol} = a \\left[1 + \\left(
+            \\frac{\\log L_{\\rm bol} / L_\\odot}{b}
+        \\right)^c \\right]
+
+    with a=15.33, b=11.48, c=16.20 for the 2–10 keV band.
+
+    Parameters
+    ----------
+    l_bol_agn_erg : float
+        AGN bolometric luminosity in erg/s.
+
+    Returns
+    -------
+    float
+        AGN 2–10 keV luminosity in erg/s.
+    """
+    log_l_sol = jnp.log10(jnp.maximum(l_bol_agn_erg, 1e-50) / LSUN_ERG)
+    # Duras+2020 Eq. 6, Table 2 (2-10 keV)
+    a, b, c = 15.33, 11.48, 16.20
+    k_bol = a * (1.0 + (log_l_sol / b) ** c)
+    return l_bol_agn_erg / jnp.maximum(k_bol, 1.0)
+
+
+# ===================================================================
+# Ionizing photon budget
+# ===================================================================
+
+
+def compute_ionizing_efficiency(q_h: jnp.ndarray, l_uv_erg: jnp.ndarray) -> jnp.ndarray:
+    """Ionizing photon production efficiency ξ_ion.
+
+    Key parameter for cosmic reionization studies:
+
+    .. math::
+
+        \\xi_{\\rm ion} = Q_H / L_{\\rm UV}
+
+    where L_UV is the monochromatic UV luminosity density at 1500 Å
+    in erg/s/Hz.
+
+    Parameters
+    ----------
+    q_h : float
+        Ionizing photon production rate (photons/s).
+    l_uv_erg : float
+        UV luminosity νL_ν at 1600 Å in erg/s, or L_ν in erg/s/Hz.
+        Convention varies — typically expressed as
+        ``log10(ξ_ion / Hz erg^-1)``.
+
+    Returns
+    -------
+    float
+        log10(ξ_ion) in Hz/erg.
+    """
+    return jnp.log10(jnp.maximum(q_h, 1e-50) / jnp.maximum(l_uv_erg, 1e-50))
