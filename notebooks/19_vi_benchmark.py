@@ -40,7 +40,16 @@ from diffsed.models.observation.filters import load_filter_set
 from diffsed.models.sps.dsps_wrapper import load_ssp_data
 
 # %% [markdown]
-# ## Setup
+# ## Setup: Mock Galaxy with Known Truth
+#
+# We generate a synthetic galaxy with known physical properties so we can check
+# whether each method recovers the truth. The mock uses:
+# - **Truncated skew-normal SFH** (tsnorm) with 8 free parameters
+# - **SDSS ugriz** photometry at z=0.1
+# - **SNR=20** per band (realistic ground-based photometry)
+#
+# This is a smooth (parametric) SFH — no stochastic GP field. Dimensionality D=8
+# is low enough for NUTS to work, giving us a gold-standard comparison.
 
 # %%
 ssp = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
@@ -71,12 +80,39 @@ N = len(mock.flux_obs)
 print(f"D = {D} free parameters, N = {N} data points")
 
 # %% [markdown]
+# ## Method Overview
+#
+# | Method | Optimization | Posterior Draws | Backend |
+# |--------|-------------|-----------------|---------|
+# | **geovi** | geoVI (resample+update schedule) | Nonlinear geoVI-curved | NIFTy tight loop |
+# | fast_evi | MGVI warmup → geoVI | Linear CG (MGVI) | NIFTy tight loop |
+# | fast_mgvi | MGVI (linear only) | Linear CG (MGVI) | NIFTy tight loop |
+# | nifty_geovi | Full `jft.optimize_kl` | Nonlinear geoVI-curved | NIFTy full pipeline |
+# | geovi_nuts | geoVI optimization | BlackJAX NUTS | NIFTy + BlackJAX |
+# | nuts | — | BlackJAX NUTS from MAP | BlackJAX |
+# | native_geovi | geoVI (resample+update, JIT) | Nonlinear geoVI-curved (JIT) | Pure JAX `lax.while_loop` |
+# | map | Adam gradient descent | — (point estimate) | JAX optax |
+#
+# ### Key concepts
+#
+# - **Nonlinear posterior draws** (geoVI-curved): Samples follow the posterior's
+#   banana-shaped degeneracies. Essential for accurate uncertainty estimates.
+# - **Linear posterior draws** (MGVI): Gaussian approximation. Fast but misses
+#   non-Gaussian structure. Chi2/dof will be worse.
+# - **Resample+update schedule**: Fresh geoVI samples at iterations 0, 5, 10...
+#   deterministic refinement (nonlinear_update) in between. Prevents both
+#   oscillation (from fresh samples) and staleness (from fixed samples).
+# - **Native JIT**: Entire optimization loop compiled to a single XLA program.
+#   Microsecond per-galaxy execution after one-time compilation.
+
+# %% [markdown]
 # ## Benchmark All Methods
 #
-# For each method:
-# 1. **Cold run** (includes compilation): measures total wall time on first call
-# 2. **Warm run** (cached): measures pure execution time
-# 3. Compute H and chi2/dof from the result
+# For each method we run twice:
+# 1. **Cold run** — includes any JIT/XLA compilation overhead
+# 2. **Warm run** — pure execution time (cached compilation)
+#
+# The difference is the one-time compilation cost.
 
 # %%
 N_ITER = 15
@@ -84,16 +120,18 @@ N_SAMP = 3
 N_POST = 200
 
 methods = {
-    # --- VI methods (approximate posteriors) ---
+    # --- Default: geoVI with optimal resample+update schedule ---
     "geovi": {"method": "geovi"},
+    # --- VI methods with linear posterior draws ---
     "fast_evi": {"method": "fast_evi"},
     "fast_mgvi": {"method": "fast_mgvi"},
+    # --- Full NIFTy (with logging/diagnostics) ---
     "nifty_geovi": {"method": "nifty_geovi"},
-    # --- Hybrid: VI optimization + MCMC posteriors ---
+    # --- Hybrid: geoVI optimization + NUTS posterior ---
     "geovi_nuts": {"method": "geovi_nuts"},
-    # --- Pure MCMC (exact posteriors, gold standard) ---
+    # --- Pure MCMC (gold standard for low D) ---
     "nuts": {"method": "nuts"},
-    # --- Native JIT ---
+    # --- Native JIT (same behavior as geovi, compiled to XLA) ---
     "native_geovi": {"method": "native_geovi", "n_seeds": 1},
     # --- Point estimate ---
     "map": {"method": "map", "n_steps": 500},
@@ -171,6 +209,16 @@ for label, kwargs in methods.items():
 
 # %% [markdown]
 # ## Timing Comparison
+#
+# **Compile time** is paid once (per model configuration + iteration count).
+# After that, each galaxy runs at the **cached run time**.
+#
+# For NIFTy-based methods (geovi, fast_evi, nifty_geovi, geovi_nuts), the
+# "compile" time is mainly NIFTy's internal JIT. For native methods, it's
+# XLA compiling the full optimization loop into a single program.
+#
+# The native JIT engine's per-galaxy time is in **milliseconds** — but the
+# compile cost is higher because XLA must trace nested while_loops.
 
 # %%
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
@@ -209,6 +257,20 @@ plt.show()
 
 # %% [markdown]
 # ## Accuracy Comparison: Chi2/dof
+#
+# Chi2/dof measures how well the **posterior mean** fits the data:
+# - **Chi2/dof ≈ 1**: Good fit (residuals consistent with noise)
+# - **Chi2/dof < 0.5**: Overfitting or noise overestimated
+# - **Chi2/dof > 3**: Poor fit — model doesn't explain the data
+#
+# Note: low chi2/dof doesn't guarantee correct parameters (NUTS can
+# get stuck in a local mode with chi2=0.3 but wrong parameters).
+# Always check parameter recovery alongside chi2.
+#
+# **Key insight**: Methods with **nonlinear posterior draws** (geovi,
+# native_geovi, geovi_nuts) have lower chi2 than methods with **linear
+# draws** (fast_evi, fast_mgvi) because the nonlinear draws capture the
+# banana-shaped age-dust-metallicity degeneracy.
 
 # %%
 fig, ax = plt.subplots(figsize=(8, 4))
@@ -237,6 +299,15 @@ plt.show()
 
 # %% [markdown]
 # ## Posterior Predictive Check
+#
+# For each posterior sample, we compute the predicted photometry and check
+# whether the observed data falls within the predicted spread (68% CI).
+#
+# A good method should:
+# - Have the observed data points (black squares) inside the blue shaded region
+# - Have a shaded region that's neither too wide (uncertain) nor too narrow (overconfident)
+#
+# Each panel shows one method. The title shows chi2/dof and run time.
 
 # %%
 band_names = ["u", "g", "r", "i", "z"]
