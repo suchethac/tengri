@@ -114,16 +114,19 @@ print(f"Stochastic:   {spec.stochastic}")
 # In latent space, every parameter has a standard Gaussian prior N(0,1).
 # This is what makes all inference methods work on the same loss function.
 # The physics enters through the forward model f(ξ), not through the prior.
+#
+# Each Distribution has standardize() and unstandardize() methods.
 key = jax.random.PRNGKey(0)
 params = spec.sample(key)
-xi = spec.standardize(params)
-params_rt = spec.unstandardize(xi)
 
-print("Round-trip test (should match):")
+print("Round-trip test: physical → latent → physical (should match):")
 for name in spec.free_params:
-    orig = float(params[name])
-    rt = float(params_rt[name])
-    print(f"  {name:<35s}: {orig:.6f} → ξ → {rt:.6f}  {'✓' if abs(orig - rt) < 1e-10 else '✗'}")
+    dist = spec.get_distribution(name)
+    theta = params[name]
+    xi = dist.standardize(theta)
+    theta_rt = dist.unstandardize(xi)
+    match = abs(float(theta) - float(theta_rt)) < 1e-10
+    print(f"  {name:<35s}: {float(theta):.6f} → ξ={float(xi):.4f} → {float(theta_rt):.6f}  {'✓' if match else '✗'}")
 
 # %%
 # Sample from the prior
@@ -338,6 +341,10 @@ for name, info in summary.items():
         med = info["median"]
         lo, hi = info.get("lo_68", float("nan")), info.get("hi_68", float("nan"))
         print(f"  {name:<33s} {med:>10.4f}  [{lo:.4f}, {hi:.4f}]")
+
+# %%
+# summary_table() gives a nicely formatted overview
+print(result.summary_table())
 
 # %%
 # SFH from posterior
