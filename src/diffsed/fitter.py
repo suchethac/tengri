@@ -1244,6 +1244,46 @@ class Fitter:
 
         return existing_samples
 
+    def _draw_nonlinear_jit_samples(
+        self, pos_dict, key, n_samples, existing_samples, *, verbose=True
+    ):
+        """Draw geoVI nonlinear posterior samples via JIT engine.
+
+        Unlike ``_draw_jit_samples`` (linear CG only), this applies
+        the geoVI coordinate curving to each sample.  Produces
+        samples from the nonlinear approximation, capturing
+        banana-shaped degeneracies that the linear Gaussian misses.
+
+        Uses ``draw_nonlinear_residuals`` from the JIT engine.
+        """
+        if verbose:
+            print(f"  Drawing {n_samples} nonlinear posterior samples (JIT geoVI)...")
+
+        if self._jit_sampler is None:
+            self._jit_sampler = self._build_jit_engine(pos_dict)
+
+        engine = self._jit_sampler
+        flatten, unflatten = engine["flatten"], engine["unflatten"]
+        pos_flat = flatten(pos_dict)
+
+        # Draw in batches to avoid OOM for large n_samples
+        batch_size = min(n_samples, 50)
+        draw_keys = jax.random.split(key, n_samples)
+
+        for batch_start in range(0, n_samples, batch_size):
+            batch_end = min(batch_start + batch_size, n_samples)
+            batch_keys = draw_keys[batch_start:batch_end]
+            # draw_nonlinear_samples returns (2*n, D): first n positive, last n mirrors
+            residuals_flat = engine["draw_nonlinear_samples"](pos_flat, batch_keys)
+            n_batch = batch_end - batch_start
+            # Use only the first n (positive) samples, not the mirrors
+            for i in range(n_batch):
+                res = unflatten(residuals_flat[i])
+                combined = {k: pos_dict[k] + res[k] for k in pos_dict}
+                existing_samples.append(combined)
+
+        return existing_samples
+
     def _draw_blackjax_samples(
         self, likelihood, pos_dict, key, n_samples, existing_samples, *, verbose=True
     ):
@@ -1683,6 +1723,7 @@ class Fitter:
                 key=key,
                 init_from=init_from,
                 sample_mode="nonlinear_resample",
+                posterior_method="nonlinear",
                 **kwargs,
             )
         elif method in ("fast_mgvi", "mgvi"):
@@ -1879,7 +1920,17 @@ class Fitter:
                 all_sample_dicts.append(sd)
 
         if n_posterior_samples > 0:
-            if posterior_method == "jit":
+            if posterior_method == "nonlinear":
+                # geoVI-curved posterior samples (captures non-Gaussian shapes)
+                all_sample_dicts = self._draw_nonlinear_jit_samples(
+                    converged_dict,
+                    draw_key,
+                    n_posterior_samples,
+                    all_sample_dicts,
+                    verbose=verbose,
+                )
+            elif posterior_method == "jit":
+                # Linear CG posterior samples (MGVI approximation)
                 all_sample_dicts = self._draw_jit_samples(
                     converged_dict,
                     draw_key,
