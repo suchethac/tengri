@@ -157,7 +157,14 @@ t0 = time.perf_counter()
 result_geovi = fitter.run("native_geovi", init_from=result_map,
                           n_iterations=10, n_samples=6, n_seeds=5)
 t_geovi = time.perf_counter() - t0
-print(f"geoVI finished in {t_geovi:.1f}s")
+print(f"geoVI (native) finished in {t_geovi:.1f}s")
+
+t0 = time.perf_counter()
+result_geovi_nuts = fitter.run("geovi_nuts", init_from=result_map,
+                               n_iterations=10, n_samples=3,
+                               n_posterior_samples=500)
+t_geovi_nuts = time.perf_counter() - t0
+print(f"geoVI+NUTS finished in {t_geovi_nuts:.1f}s")
 
 t0 = time.perf_counter()
 result_rt = fitter.run("raytrace", init_from=result_map,
@@ -177,6 +184,7 @@ print(f"NUTS finished in {t_nuts:.1f}s  ({n_div} divergences)")
 # --- Convergence diagnostics ---
 convergence_table({
     "geoVI": result_geovi,
+    "geoVI+NUTS": result_geovi_nuts,
     "Ray Tracing": result_rt,
     "NUTS": result_nuts,
 })

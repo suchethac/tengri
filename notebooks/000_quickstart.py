@@ -319,9 +319,10 @@ fitter_param = Fitter(model_param, mock_param.flux_obs, mock_param.noise,
 key_evi_p, key = jax.random.split(key)
 t0 = time.perf_counter()
 result_evi_p = fitter_param.run(
-    "evi",
+    "native_geovi",
     n_iterations=50,
     n_samples=6,
+    n_seeds=5,
     n_posterior_samples=10000,
     verbose=True,
     key=key_evi_p,
@@ -398,11 +399,27 @@ n_div = result_nuts_p.diagnostics.get("n_divergent", 0)
 n_samp = result_nuts_p.diagnostics.get("n_samples", 0)
 print(f"NUTS: {t_nuts_p:.1f} s, {n_samp} samples, {n_div} divergences")
 
+# geoVI+NUTS hybrid: geoVI optimization for fast init, NUTS for exact posteriors
+t0 = time.perf_counter()
+result_geovi_nuts_p = fitter_param.run(
+    "geovi_nuts",
+    n_iterations=10,
+    n_samples=3,
+    n_posterior_samples=2000,
+    key=key_nuts_p,
+)
+t_gn = time.perf_counter() - t0
+print(f"geoVI+NUTS: {t_gn:.1f} s")
+
 # %% [markdown]
 # ### A5a. Convergence Diagnostics
 
 # %%
-convergence_table({"EVI": result_evi_p, "NUTS": result_nuts_p})
+convergence_table({
+    "native_geovi": result_evi_p,
+    "geoVI+NUTS": result_geovi_nuts_p,
+    "NUTS": result_nuts_p,
+})
 
 # %% [markdown]
 # ### A5b. NUTS Photometry Fit
@@ -440,15 +457,15 @@ plt.show()
 
 # %%
 fig = plot_corner_comparison(
-    [result_evi_p, result_nuts_p],
-    ["EVI", "NUTS"],
-    colors=[COLORS["geovi"], COLORS["nuts"]],
+    [result_evi_p, result_geovi_nuts_p, result_nuts_p],
+    ["native_geoVI", "geoVI+NUTS", "NUTS"],
+    colors=[COLORS["geovi"], COLORS.get("evi", "C2"), COLORS["nuts"]],
     truths=true_params_param,
     params=PHYS_PARAMS,
 )
 make_truth_lines_red(fig)
 if fig is not None:
-    fig.suptitle("Part A: EVI vs NUTS — Posterior Consistency", y=1.02, fontsize=14)
+    fig.suptitle("Part A: native_geoVI vs geoVI+NUTS vs NUTS", y=1.02, fontsize=14)
     plt.savefig("notebook_figures/000_A_combined_corner.png",
                 dpi=150, bbox_inches="tight")
     plt.show()
@@ -539,9 +556,10 @@ fitter_stoch = Fitter(model_stoch, mock_stoch.flux_obs, mock_stoch.noise,
 key_evi_s, key = jax.random.split(key)
 t0 = time.perf_counter()
 result_evi_s = fitter_stoch.run(
-    "evi",
+    "native_geovi",
     n_iterations=50,
     n_samples=6,
+    n_seeds=5,
     n_posterior_samples=10000,
     verbose=True,
     key=key_evi_s,
