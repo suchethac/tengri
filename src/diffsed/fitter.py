@@ -1658,17 +1658,33 @@ class Fitter:
         # --- Draw posterior samples ---
         key, draw_key = jax.random.split(key)
         all_sample_dicts = []
+        converged_dict = unflatten(converged_flat)
 
         if n_posterior_samples > 0:
-            if verbose:
-                print(f"  Drawing {n_posterior_samples} posterior samples (JIT CG)...")
-            draw_keys = jax.random.split(draw_key, n_posterior_samples)
-            residuals_flat = engine["draw_samples"](converged_flat, draw_keys)
-            converged_dict = unflatten(converged_flat)
-            for i in range(n_posterior_samples):
-                res = unflatten(residuals_flat[i])
-                combined = {k: converged_dict[k] + res[k] for k in converged_dict}
-                all_sample_dicts.append(combined)
+            # Use nonlinear draws for geoVI modes, linear for MGVI
+            use_nonlinear = sample_mode in (
+                "geovi",
+                "nonlinear_resample",
+                "nonlinear_update",
+                "nonlinear_sample",
+            )
+            if use_nonlinear:
+                all_sample_dicts = self._draw_nonlinear_jit_samples(
+                    converged_dict,
+                    draw_key,
+                    n_posterior_samples,
+                    all_sample_dicts,
+                    verbose=verbose,
+                )
+            else:
+                if verbose:
+                    print(f"  Drawing {n_posterior_samples} posterior samples (JIT CG)...")
+                draw_keys = jax.random.split(draw_key, n_posterior_samples)
+                residuals_flat = engine["draw_samples"](converged_flat, draw_keys)
+                for i in range(n_posterior_samples):
+                    res = unflatten(residuals_flat[i])
+                    combined = {k: converged_dict[k] + res[k] for k in converged_dict}
+                    all_sample_dicts.append(combined)
 
         wall_time = time.time() - t0
         n_posterior = len(all_sample_dicts)
