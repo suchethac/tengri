@@ -1189,6 +1189,13 @@ class Fitter:
             "SAMPLE_NONLINEAR_RESAMPLE": SAMPLE_NONLINEAR_RESAMPLE,
             "SAMPLE_NONLINEAR_UPDATE": SAMPLE_NONLINEAR_UPDATE,
             "evi_step_full": evi_step_full,
+            # geoVI-NUTS primitives (coordinate transform + metric)
+            "transformation_flat": transformation_flat,
+            "left_sqrt_metric_flat": left_sqrt_metric_flat,
+            "right_sqrt_metric_flat": right_sqrt_metric_flat,
+            "metric_vec": metric_vec,
+            "cg_solve": cg_solve,
+            "hamiltonian": hamiltonian,
         }
 
     def compile(self):
@@ -1632,6 +1639,10 @@ class Fitter:
             ``"fast_mgvi"`` / ``"mgvi"`` — MGVI (linearized).
             ``"fast_evi"`` / ``"evi"`` — EVI: MGVI first half, geoVI second.
 
+            **Hybrid (VI optimization + NUTS posterior sampling):**
+            ``"geovi_nuts"`` — geoVI optimization, then NUTS samples.
+            ``"mgvi_nuts"`` — MGVI optimization, then NUTS samples.
+
             **NIFTy (full jft.optimize_kl with logging/diagnostics):**
             ``"nifty_geovi"`` — Full NIFTy geoVI with minisanity.
             ``"nifty_mgvi"`` — Full NIFTy MGVI with logging.
@@ -1686,6 +1697,23 @@ class Fitter:
                 key=key,
                 init_from=init_from,
                 sample_mode="evi",
+                **kwargs,
+            )
+        # --- Hybrid: geoVI optimization + NUTS posterior sampling ---
+        elif method == "geovi_nuts":
+            return self._run_fast_vi(
+                key=key,
+                init_from=init_from,
+                sample_mode="nonlinear_resample",
+                posterior_method="blackjax",
+                **kwargs,
+            )
+        elif method == "mgvi_nuts":
+            return self._run_fast_vi(
+                key=key,
+                init_from=init_from,
+                sample_mode="linear_resample",
+                posterior_method="blackjax",
                 **kwargs,
             )
         # --- NIFTy: full jft.optimize_kl (with logging/minisanity) ---

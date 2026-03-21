@@ -85,16 +85,16 @@ N_POST = 200
 
 methods = {
     # --- Default (geovi with optimal resample+update schedule) ---
-    "geovi (default)": {"method": "geovi"},
+    "geovi": {"method": "geovi"},
     # --- Fast: NIFTy tight loop ---
     "fast_mgvi": {"method": "fast_mgvi"},
     "fast_evi": {"method": "fast_evi"},
-    "fast_geovi": {"method": "fast_geovi"},
+    # --- Hybrid: geoVI + NUTS posterior ---
+    "geovi_nuts": {"method": "geovi_nuts"},
     # --- Full NIFTy ---
     "nifty_geovi": {"method": "nifty_geovi"},
-    # --- Native JIT: linear ---
+    # --- Native JIT ---
     "native_mgvi": {"method": "native_mgvi", "n_seeds": 1},
-    # --- Native JIT: geoVI ---
     "native_geovi": {"method": "native_geovi", "n_seeds": 1},
     # --- MAP (point estimate, for reference) ---
     "map": {"method": "map", "n_steps": 500},
@@ -342,6 +342,113 @@ print()
 print("Notes:")
 print(f"  - {N_ITER} iterations, {N_SAMP} samples/iter, {N_POST} posterior samples")
 print(f"  - D = {D} free params, N = {N} data points")
-print("  - 'geovi (default)' uses optimal resample+update schedule")
+print("  - 'geovi' uses optimal resample+update schedule")
+print("  - 'geovi_nuts' uses geoVI optimization + NUTS posterior sampling")
 print("  - Compile time is one-time; run time is per-galaxy (cached)")
-print("  - native_mgvi compile is near-zero; native_geovi ~56s one-time")
+
+# %% [markdown]
+# ## Posterior Distributions Overlay
+#
+# Overlay 1D marginal posteriors from all methods on the same axes.
+# This shows whether different methods agree on the posterior shape,
+# not just the median.
+
+# %%
+fig, axes = plt.subplots(2, (n_params + 1) // 2, figsize=(14, 7))
+axes = axes.ravel()
+
+colors_map = {}
+for j, label in enumerate(vi_methods_for_params):
+    colors_map[label] = f"C{j}"
+
+for i, pname in enumerate(free_names):
+    ax = axes[i]
+    true_val = float(true_params[pname])
+
+    for label in vi_methods_for_params:
+        result = results[label]
+        if pname not in result.samples:
+            continue
+        vals = np.array(result.samples[pname]).ravel()
+        if len(vals) < 5:
+            continue
+        lo, hi = np.percentile(vals, [1, 99])
+        bins = np.linspace(lo, hi, 30)
+        ax.hist(
+            vals,
+            bins=bins,
+            density=True,
+            alpha=0.3,
+            color=colors_map[label],
+            label=label if i == 0 else "",
+            histtype="stepfilled",
+        )
+        ax.hist(vals, bins=bins, density=True, color=colors_map[label], histtype="step", lw=1.2)
+
+    ax.axvline(true_val, color="k", ls="--", lw=1.5, label="Truth" if i == 0 else "")
+    ax.set_xlabel(pname, fontsize=9)
+    ax.set_ylabel("Density" if i % ((n_params + 1) // 2) == 0 else "", fontsize=9)
+
+# Remove unused axes
+for j in range(i + 1, len(axes)):
+    axes[j].set_visible(False)
+
+axes[0].legend(fontsize=7, ncol=2, loc="upper right")
+fig.suptitle("1D Marginal Posteriors (overlaid)", fontsize=13, y=1.01)
+fig.tight_layout()
+plt.show()
+
+# %% [markdown]
+# ## Posterior Predictive: All Methods Overlaid
+#
+# Overlay predicted photometry from all methods on a single plot.
+
+# %%
+fig, ax = plt.subplots(figsize=(8, 5))
+
+for j, label in enumerate(vi_methods_for_params):
+    result = results[label]
+    first_key = next(iter(result.samples))
+    n_samp = min(50, len(result.samples[first_key]))
+
+    predictions = []
+    for i_s in range(n_samp):
+        sample = {k: v[i_s] for k, v in result.samples.items()}
+        pred = model.predict_photometry(sample)
+        predictions.append(np.array(pred))
+
+    if not predictions:
+        continue
+    predictions = np.stack(predictions)
+    pred_med = np.median(predictions, axis=0)
+    pred_lo = np.percentile(predictions, 16, axis=0)
+    pred_hi = np.percentile(predictions, 84, axis=0)
+
+    color = colors_map[label]
+    offset = (j - len(vi_methods_for_params) / 2) * 30  # slight x-offset for visibility
+    ax.fill_between(
+        band_wave + offset,
+        pred_lo,
+        pred_hi,
+        alpha=0.15,
+        color=color,
+    )
+    ax.plot(band_wave + offset, pred_med, "o-", color=color, ms=3, lw=1, label=label)
+
+ax.errorbar(
+    band_wave,
+    np.array(mock.flux_obs),
+    yerr=np.array(mock.noise),
+    fmt="s",
+    color="k",
+    ms=7,
+    capsize=4,
+    label="Observed",
+    zorder=10,
+)
+ax.set_xlabel("Wavelength (A)")
+ax.set_ylabel("Flux density")
+ax.set_title("Posterior Predictive: All Methods Overlaid")
+ax.legend(fontsize=8, ncol=2)
+fig.tight_layout()
+plt.show()
