@@ -285,7 +285,7 @@ plt.show()
 # ## Parameter Recovery
 
 # %%
-free_names = list(spec.free_params.keys())
+free_names = list(spec.free_params)
 n_params = len(free_names)
 vi_methods_for_params = [
     l for l in labels if l != "map" and isinstance(results[l].samples, dict) and results[l].samples
