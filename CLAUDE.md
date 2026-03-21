@@ -57,28 +57,38 @@ latexmk -pdf 0-ms.tex
 src/diffsed/
 ├── distributions.py       # Uniform, Gaussian, LogUniform, Fixed
 ├── param_spec.py          # ParamSpec: parameter definitions + validation
-├── model.py               # High-level Model (wraps ForwardModel)
+├── model.py               # High-level Model (thin orchestrator, ~1400 lines)
+├── _param_translate.py    # Public→internal param mapping + unit conversion
+├── _fused_kernels.py      # JIT kernel factory functions (photometry, spectroscopy)
+├── _sed_pipeline.py       # Core SED computation engine (_compute_sed_components)
+├── _mock.py               # Mock galaxy generation (generate_mock, MockData)
 ├── fitter.py              # Fitter: MAP, Ray Tracing, NUTS, geoVI, MGVI
 ├── raytrace_jax.py        # Ray Tracing Sampler (Behroozi 2025, Apache 2.0)
 ├── posterior.py            # Posterior: summary, corner, autocorrelation, ESS
 ├── hierarchical.py        # HierarchicalFitter: shared PSD via CorrelatedFieldMaker
 ├── models/sfh/            # PSD, GP generation, mean SFH
-├── models/dust/           # Charlot & Fall attenuation + IR emission (MBB, Dale+2014, DL07)
+├── models/dust/           # Two-component attenuation + IR emission (MBB, Dale+2014, DL07)
 ├── models/agn/            # AGN disc + torus (simple, standard, kubota_done)
 ├── models/nebular/cue.py  # Cue neural emulator (Li+2024, JAX re-impl of TF)
 ├── models/sps/            # DSPS wrapper, SSP loading, mass_remaining (IMF-based)
 ├── models/observation/    # photometry, spectroscopy, filters
 ├── utils/                 # transforms, grid, cosmology, precompute
-└── forward_model.py       # Low-level pipeline (old API, still used internally)
+└── inference/             # Inference backends (geoVI, NUTS, MAP)
 ```
 
 ## High-level API (preferred)
 
-Use `Model`, `ParamSpec`, `Fitter`, `Posterior` — not the old `ForwardModel`/`ModelConfig`.
+Use `Model`, `ParamSpec`, `Fitter`, `Posterior`. ForwardModel has been removed.
 
 ```python
 from diffsed import Model, ParamSpec, Uniform, Fitter, HierarchicalFitter
 ```
+
+Each class has a `.summary()` method for quick inspection:
+- `spec.summary()` — parameters, priors, enabled modules
+- `model.summary()` — SSP grid, filters, precomputation, fused kernel status
+- `fitter.summary()` — data shape, S/N, free params, available methods
+- `posterior.summary_table()` — median + 68% CI + ESS, diagnostics
 
 ## Inference methods
 
@@ -114,6 +124,9 @@ from diffsed import Model, ParamSpec, Uniform, Fitter, HierarchicalFitter
 
 ## Gotchas
 
+- `charlot_fall.py` has been removed. Use `two_component_dust(law_bc="power_law")` from `attenuation.py`
+- `forward_model.py` has been removed. Use `Model` class exclusively
+- Internal param names changed: `tau_v1`→`tau_bc`, `tau_v2`→`tau_diff`, `dust_n`→`dust_slope`, `sigma_ps`→`psd_sigma`, `tau_ps`→`psd_tau_yr`, `log_z`→`log_z_abs`
 - `jax.random.fold_in(key, hash(string))` overflows uint32. Use `abs(hash(x)) % (2**31)`
 - Never create `Model`/`ParamSpec` inside a JAX gradient tape (traced values fail in `__init__`)
 - Ray Tracing step_size: for D~137 stochastic model, use `step_size=0.05, n_leapfrog_steps=50, n_steps=2000`. There is a sharp viability cliff at step_size~0.06 where acceptance drops from ~98% to 0%. Compensate with more leapfrog steps and more samples.
@@ -172,7 +185,7 @@ The forward model uses several optimizations for speed:
 **Every code change MUST include pytest tests.** Run before committing:
 
 ```bash
-pytest tests/ -q                    # full suite (~530 tests, ~60s)
+pytest tests/ -q                    # full suite (~808 tests, ~150s)
 ruff check src/ tests/              # lint
 ruff format --check src/ tests/     # format
 ```
