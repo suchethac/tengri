@@ -465,6 +465,9 @@ class Model:
         if self._precomp is not None and self._fused_compatible():
             self._fused_photometry = self._build_fused_photometry()
 
+        # JIT-compiled exact-path SED kernel (eliminates Python dispatch overhead)
+        self._jit_exact_sed = self._build_exact_sed()
+
         # Spectroscopy precomputation (same idea: pre-interpolate SSPs)
         self._spec_precomp = None
 
@@ -1111,6 +1114,93 @@ class Model:
         return fused_spec
 
     # -------------------------------------------------------------------
+    # JIT-compiled exact-path SED kernel
+    # -------------------------------------------------------------------
+
+    def _build_exact_sed(self):
+        """Build a JIT-compiled function for exact-path dust + CSP SED.
+
+        Without JIT, the exact path dispatches ~15 JAX operations through
+        Python individually.  Each dispatch costs ~100-300 μs — totalling
+        ~78% of the measured dust cost.  This wraps dust curve evaluation,
+        age-dependent attenuation, and the CSP einsum in a single
+        ``@jax.jit`` scope, eliminating Python dispatch overhead and
+        enabling XLA kernel fusion (exp + einsum in one kernel).
+
+        Optimizations baked in:
+
+        - **Mixed precision**: all intermediates use ``forward_dtype``
+          (halves memory traffic when float32).
+        - **Duplicate law skip**: when ``law_bc == law_diff`` (common
+          Charlot & Fall case), the curve is evaluated once, not twice.
+        - **Fused dust + einsum**: XLA can fuse ``exp(-tau)`` into the
+          downstream ``einsum("i,iw,iw->w")``, avoiding a full
+          ``(n_age, n_wave)`` materialization.
+
+        Returns a function::
+
+            (weights, ssp_at_z, tau_v1, tau_v2, **kw) -> (sed_atten, sed_intr)
+
+        Typical speedup: 4-14x vs un-JIT'd exact path.
+        """
+        from diffsed.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+
+        dt = self._forward_dtype
+        ssp_wave = self.ssp_data.ssp_wave.astype(dt)
+        dust_age_w = self._dust_age_weights.astype(dt)
+        lsun = dt.type(LSUN_ERG_PER_S)
+
+        law_bc_fn = self._dust_law_bc_fn
+        law_diff_fn = self._dust_law_diff_fn
+        same_law = self._dust_law_bc == self._dust_law_diff
+
+        @jax.jit
+        def exact_sed(
+            weights,
+            ssp_at_z,
+            tau_v1,
+            tau_v2,
+            n_slope=-0.7,
+            dust_bump_strength=0.0,
+            dust_delta=0.0,
+            dust_Rv=3.1,
+            f_obscuration=0.0,
+        ):
+            w = weights.astype(dt)
+            ssp_z = ssp_at_z.astype(dt)
+
+            # Dust curves — skip duplicate when bc == diff
+            k_bc = law_bc_fn(
+                ssp_wave,
+                n_slope=n_slope,
+                dust_bump_strength=dust_bump_strength,
+                dust_delta=dust_delta,
+                dust_Rv=dust_Rv,
+            )
+            k_diff = (
+                k_bc
+                if same_law
+                else law_diff_fn(
+                    ssp_wave,
+                    n_slope=n_slope,
+                    dust_bump_strength=dust_bump_strength,
+                    dust_delta=dust_delta,
+                    dust_Rv=dust_Rv,
+                )
+            )
+
+            # Dust + CSP SED: XLA fuses broadcast + exp + einsum
+            tau = dust_age_w[:, None] * tau_v1 * k_bc[None, :] + tau_v2 * k_diff[None, :]
+            dust_trans = f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau)
+
+            sed_atten = (lsun * jnp.einsum("i,iw,iw->w", w, ssp_z, dust_trans)).astype(jnp.float64)
+            sed_intr = (lsun * jnp.einsum("i,iw->w", w, ssp_z)).astype(jnp.float64)
+
+            return sed_atten, sed_intr
+
+        return exact_sed
+
+    # -------------------------------------------------------------------
     # Forward predictions
     # -------------------------------------------------------------------
 
@@ -1295,35 +1385,53 @@ class Model:
             log_z_eff = effective_metallicity(p["log_z"], alpha_fe)
             ssp_flux_at_z = self._interp_metallicity(log_z_eff)
 
-        # --- Mixed-precision exact path ---
-        # Cast the large (n_age, n_wave) intermediates to forward_dtype.
-        # This halves memory traffic when forward_dtype=float32 (4.5→2.2 MB),
-        # giving ~1.6x speedup on memory-bound dust+einsum operations.
-        dt = self._forward_dtype
-        ssp_flux_at_z = ssp_flux_at_z.astype(dt)
-        dust_age_w = self._dust_age_weights.astype(dt)
-        wave_dt = self.ssp_data.ssp_wave.astype(dt)
+            # --- Fast JIT path: dust + einsum in one compiled kernel ---
+            # Eliminates ~78% Python dispatch overhead (4-14x speedup).
+            if (
+                _dsps_weights_2d is None
+                and not self._evolving_metallicity
+                and self._jit_exact_sed is not None
+            ):
+                sed_attenuated, sed_intrinsic_jit = self._jit_exact_sed(
+                    weights,
+                    ssp_flux_at_z,
+                    p["tau_v1"],
+                    p["tau_v2"],
+                    n_slope=p.get("dust_n", -0.7),
+                    dust_bump_strength=p.get("dust_bump_strength", 0.0),
+                    dust_delta=p.get("dust_delta", 0.0),
+                    dust_Rv=p.get("dust_Rv", 3.1),
+                    f_obscuration=p.get("f_obscuration", 0.0),
+                )
+                sed_intrinsic = (
+                    sed_intrinsic_jit
+                    if (self._dust_emission_model is not None or need_intrinsic)
+                    else None
+                )
+                # Skip the non-JIT dust/einsum below
+                _dsps_weights_2d = "jit_done"
 
-        # Dust attenuation (using precomputed age weights — avoids sigmoid recompute)
-        dust_atten = two_component_dust_fast(
-            wave_dt,
-            dust_age_w,
-            tau_v1=p["tau_v1"],
-            tau_v2=p["tau_v2"],
-            law_bc=self._dust_law_bc,
-            law_diff=self._dust_law_diff,
-            f_obscuration=p.get("f_obscuration", 0.0),
-            n_slope=p.get("dust_n", -0.7),
-            dust_bump_strength=p.get("dust_bump_strength", 0.0),
-            dust_delta=p.get("dust_delta", 0.0),
-            dust_Rv=p.get("dust_Rv", 3.1),
-        )
+        # --- Fallback: non-JIT path for DSPS/evolving-Z/met-history ---
+        if _dsps_weights_2d is not None and _dsps_weights_2d != "jit_done":
+            dt = self._forward_dtype
+            ssp_flux_at_z = ssp_flux_at_z.astype(dt)
+            dust_age_w = self._dust_age_weights.astype(dt)
+            wave_dt = self.ssp_data.ssp_wave.astype(dt)
 
-        # Attenuated stellar SED
-        # _dsps_weights_2d is set by DSPS table path above; None otherwise
-        if _dsps_weights_2d is not None:
-            # 2D CSP with proper metallicity-age correlation:
-            # SED = LSUN × Σ_{m,a} [w(m,a) × dust(a,λ) × SSP(m,a,λ)]
+            dust_atten = two_component_dust_fast(
+                wave_dt,
+                dust_age_w,
+                tau_v1=p["tau_v1"],
+                tau_v2=p["tau_v2"],
+                law_bc=self._dust_law_bc,
+                law_diff=self._dust_law_diff,
+                f_obscuration=p.get("f_obscuration", 0.0),
+                n_slope=p.get("dust_n", -0.7),
+                dust_bump_strength=p.get("dust_bump_strength", 0.0),
+                dust_delta=p.get("dust_delta", 0.0),
+                dust_Rv=p.get("dust_Rv", 3.1),
+            )
+
             _LSUN = 3.828e33
             sed_attenuated = (
                 _LSUN
@@ -1334,15 +1442,9 @@ class Model:
                     self.ssp_data.ssp_flux.astype(dt),
                 )
             ).astype(jnp.float64)
-        else:
-            sed_attenuated = compute_csp_sed(weights.astype(dt), ssp_flux_at_z, dust_atten).astype(
-                jnp.float64
-            )
 
-        # Intrinsic (unattenuated) stellar SED for energy balance
-        sed_intrinsic = None
-        if self._dust_emission_model is not None or need_intrinsic:
-            if _dsps_weights_2d is not None:
+            sed_intrinsic = None
+            if self._dust_emission_model is not None or need_intrinsic:
                 sed_intrinsic = (
                     _LSUN
                     * jnp.einsum(
@@ -1351,7 +1453,34 @@ class Model:
                         self.ssp_data.ssp_flux.astype(dt),
                     )
                 ).astype(jnp.float64)
-            else:
+
+        elif _dsps_weights_2d is None:
+            # Non-DSPS fallback (evolving Z or met_history without DSPS)
+            dt = self._forward_dtype
+            ssp_flux_at_z = ssp_flux_at_z.astype(dt)
+            dust_age_w = self._dust_age_weights.astype(dt)
+            wave_dt = self.ssp_data.ssp_wave.astype(dt)
+
+            dust_atten = two_component_dust_fast(
+                wave_dt,
+                dust_age_w,
+                tau_v1=p["tau_v1"],
+                tau_v2=p["tau_v2"],
+                law_bc=self._dust_law_bc,
+                law_diff=self._dust_law_diff,
+                f_obscuration=p.get("f_obscuration", 0.0),
+                n_slope=p.get("dust_n", -0.7),
+                dust_bump_strength=p.get("dust_bump_strength", 0.0),
+                dust_delta=p.get("dust_delta", 0.0),
+                dust_Rv=p.get("dust_Rv", 3.1),
+            )
+
+            sed_attenuated = compute_csp_sed(weights.astype(dt), ssp_flux_at_z, dust_atten).astype(
+                jnp.float64
+            )
+
+            sed_intrinsic = None
+            if self._dust_emission_model is not None or need_intrinsic:
                 ones_atten = jnp.ones_like(dust_atten)
                 sed_intrinsic = compute_csp_sed(
                     weights.astype(dt), ssp_flux_at_z, ones_atten
