@@ -1,4 +1,4 @@
-# diffsed Notebook Suite — Comprehensive Plan
+# tengri Notebook Suite — Comprehensive Plan
 
 ## Architecture
 
@@ -6,7 +6,7 @@ Two labeled tracks, numbered independently:
 
 | Track | Purpose | Audience |
 |-------|---------|----------|
-| **T** (Tutorial) | Learn the code, understand the method | Astronomers who want to use diffsed |
+| **T** (Tutorial) | Learn the code, understand the method | Astronomers who want to use tengri |
 | **A** (Analysis) | Reproduce paper figures, validate claims | Referees, collaborators, the author |
 
 Tutorials are the Sphinx documentation. Analysis notebooks are the paper's computational backbone.
@@ -293,7 +293,7 @@ Tutorials are the Sphinx documentation. Analysis notebooks are the paper's compu
 
 ---
 
-### T06 — Extending diffsed: Custom Models and New Physics
+### T06 — Extending tengri: Custom Models and New Physics
 
 **Goal:** How to modify the code. For developers and advanced users.
 

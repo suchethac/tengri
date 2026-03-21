@@ -52,26 +52,26 @@ setup_style()
 import os; os.makedirs("notebook_figures", exist_ok=True)
 
 # Low-level PSD / GP functions
-from diffsed.models.sfh.psd_models import (
+from tengri.models.sfh.psd_models import (
     psd_drw, drw_acf, drw_variance, psd_to_sqrt_power, psd_matern,
 )
-from diffsed.models.sfh.gp_sfh import (
+from tengri.models.sfh.gp_sfh import (
     gp_from_xi, generate_gp_fourier, compute_sqrt_power_drw,
     make_log_age_grid,
 )
-from diffsed.models.sfh.mean_sfh import double_powerlaw
-from diffsed.utils.grid import (
+from tengri.models.sfh.mean_sfh import double_powerlaw
+from tengri.utils.grid import (
     make_log_age_grid as grid_make, log_age_to_age_gyr, grid_spacing,
 )
 
 # High-level API
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 
 # Diagnostics: Green's functions and window functions
-from diffsed.diagnostics.green_functions import (
+from tengri.diagnostics.green_functions import (
     compute_green_function, compute_window_function,
     compute_window_function_fourier, compute_time_sensitivity_matrix,
 )
@@ -987,4 +987,4 @@ print("  - Paper II will measure sigma(M_halo) from hierarchical inference")
 # 5. The mass-dependent PSD — $\sigma(M_{\rm halo})$ — is the key Paper II prediction
 #
 # **Next:** [Tutorial 09 — Custom Models](09_custom_models.ipynb) shows how to
-# extend diffsed with new priors, PSD models, dust laws, and SSP templates.
+# extend tengri with new priors, PSD models, dust laws, and SSP templates.

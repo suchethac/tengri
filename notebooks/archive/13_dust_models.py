@@ -17,7 +17,7 @@
 #
 # Dust is the dominant systematic in SED fitting. It absorbs UV/optical
 # photons and re-emits them in the infrared, reshaping the entire SED.
-# **diffsed** provides a modular, fully differentiable dust framework:
+# **tengri** provides a modular, fully differentiable dust framework:
 #
 # - **Attenuation**: 6 pluggable curves with two-component (birth cloud +
 #   diffuse ISM) geometry and clumpy dust (f\_obscuration).
@@ -25,7 +25,7 @@
 #   2007) plus tabulated DL07 templates, all energy-balanced.
 # - **Per-component control**: different laws for birth cloud vs diffuse ISM.
 #
-# This notebook demonstrates every dust feature in diffsed end-to-end,
+# This notebook demonstrates every dust feature in tengri end-to-end,
 # from the wavelength-dependent attenuation curves through to a full
 # panchromatic SED from UV to FIR.
 #
@@ -70,9 +70,9 @@ plt.rcParams.update({
 
 os.makedirs("figures", exist_ok=True)
 
-from diffsed import Fixed, Model, ParamSpec, Uniform, load_filter_set, load_ssp_data
-from diffsed.models.dust.attenuation import DUST_LAWS, two_component_dust
-from diffsed.models.dust.emission import (
+from tengri import Fixed, Model, ParamSpec, Uniform, load_filter_set, load_ssp_data
+from tengri.models.dust.attenuation import DUST_LAWS, two_component_dust
+from tengri.models.dust.emission import (
     DUST_EMISSION_MODELS,
     compute_absorbed_luminosity,
     create_dl07_from_grid,
@@ -347,7 +347,7 @@ plt.show()
 # - **Diffuse ISM** (all ages): ambient dust with moderate attenuation
 #   (Calzetti-like or MW-like with 2175A bump).
 #
-# diffsed lets you mix any pair of curves. Below we show the transmission
+# tengri lets you mix any pair of curves. Below we show the transmission
 # matrix for an SMC birth cloud paired with a Cardelli (MW) diffuse ISM,
 # compared with a uniform Calzetti model.
 
@@ -423,7 +423,7 @@ plt.show()
 # %% [markdown]
 # ## 4. Dust Emission Models
 #
-# diffsed implements three dust emission models, all normalized by the
+# tengri implements three dust emission models, all normalized by the
 # energy-balance constraint $L_{\rm IR} = L_{\rm absorbed}$:
 #
 # | Model | Parameters | Description |
@@ -613,12 +613,12 @@ params = {
 
 # %%
 # Compute intrinsic and attenuated SEDs manually for energy balance check
-from diffsed.models.sps.dsps_wrapper import (
+from tengri.models.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
     interpolate_metallicity,
 )
-from diffsed.models.dust.emission import compute_absorbed_luminosity, modified_blackbody
+from tengri.models.dust.emission import compute_absorbed_luminosity, modified_blackbody
 
 # Use model internals to get SFR weights
 p = model._get_internal_params(params)
@@ -627,7 +627,7 @@ sfr_on_ssp = jnp.interp(model.ssp_log_ages_yr, model.log_age_grid, sfr)
 weights = compute_csp_weights(sfr_on_ssp, model.ssp_ages_yr)
 
 # Metallicity interpolation
-from diffsed.core.model import LOG10_ZSUN
+from tengri.core.model import LOG10_ZSUN
 
 log_z = -0.3 + LOG10_ZSUN
 ssp_flux_at_z = interpolate_metallicity(ssp_data.ssp_flux, ssp_data.ssp_lgmet, log_z)
@@ -751,7 +751,7 @@ plt.show()
 # %% [markdown]
 # ## 6. Full Panchromatic SED: Stellar + Dust Attenuation + Dust Emission
 #
-# The complete forward model in diffsed:
+# The complete forward model in tengri:
 #
 # 1. Compute the intrinsic stellar SED from the SFH + metallicity + SSPs
 # 2. Apply two-component dust attenuation (birth cloud + diffuse ISM)
@@ -859,7 +859,7 @@ plt.show()
 # %% [markdown]
 # ## Summary
 #
-# This notebook demonstrated diffsed's full dust framework:
+# This notebook demonstrated tengri's full dust framework:
 #
 # 1. **6 attenuation curves** with distinct UV behaviour (bump vs no bump),
 #    all normalized to $k(V)=1$, with inset showing the 2175 A region

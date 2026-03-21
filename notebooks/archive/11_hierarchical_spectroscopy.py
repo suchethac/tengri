@@ -49,7 +49,7 @@ from _plot_style import setup_style
 setup_style()
 os.makedirs("notebook_figures", exist_ok=True)
 
-from diffsed import (
+from tengri import (
     Fixed,
     Fitter,
     HierarchicalFitter,
@@ -171,7 +171,7 @@ plt.show()
 # %%
 # --- Individual fits ---
 # Each galaxy creates a new Fitter (data is bound at construction).
-# The XLA persistent cache (/tmp/diffsed_jax_cache) means the
+# The XLA persistent cache (/tmp/tengri_jax_cache) means the
 # compiled program is loaded from disk after the first galaxy,
 # so galaxy 2+ only pay ~1s for JAX tracing, not ~15s for XLA compile.
 #

@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Dust Attenuation and Emission
 #
-# diffsed implements a generalized two-component dust model (Charlot & Fall
+# tengri implements a generalized two-component dust model (Charlot & Fall
 # 2000) with pluggable attenuation curves. This notebook visualizes all
 # seven available curves, explores the two-component model, and shows the
 # panchromatic SED from UV through IR.
@@ -32,7 +32,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fixed,
     Model,
     ParamSpec,
@@ -41,7 +41,7 @@ from diffsed import (
     load_ssp_data,
     two_component_dust,
 )
-from diffsed.models.dust.attenuation import DUST_LAWS, get_dust_law
+from tengri.models.dust.attenuation import DUST_LAWS, get_dust_law
 
 import sys, os  # noqa: E401
 
@@ -102,7 +102,7 @@ for (name, kwargs, label), color in zip(CURVES, curve_colors):
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$k(\lambda)$ (normalized at 5500 $\AA$)")
-ax.set_title("Dust Attenuation Curves in diffsed")
+ax.set_title("Dust Attenuation Curves in tengri")
 ax.axvline(0.55, ls=":", color="grey", lw=0.5, alpha=0.5)
 ax.annotate(
     "V-band", xy=(0.55, 0.05), xycoords=("data", "axes fraction"), fontsize=7, color="grey"
@@ -115,7 +115,7 @@ ax.set_xlim(0.1, 3.0)
 ax.set_ylim(0, None)
 ax.legend(fontsize=8, frameon=False, ncol=2)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "03_attenuation_curves.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "03_attenuation_curves.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -192,7 +192,7 @@ ax.set_xlim(1000, 20000)
 ax.legend(fontsize=8, frameon=False)
 
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "03_two_component.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "03_two_component.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -269,7 +269,7 @@ ax.set_yscale("log")
 ax.set_xlim(900, 50000)
 ax.legend(fontsize=7, frameon=False, ncol=2)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "03_panchromatic_sed.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "03_panchromatic_sed.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -297,7 +297,7 @@ ax.set_ylabel(r"$k(\lambda)$")
 ax.set_title("UV Bump Region Detail")
 ax.legend(fontsize=7, frameon=False, ncol=2)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "03_uv_bump.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "03_uv_bump.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -354,7 +354,7 @@ ax.set_xlabel("Peak lookback time [Gyr]")
 ax.set_ylabel(r"$\tau_{\rm diff}$")
 ax.set_title("Age-Dust Degeneracy: Iso-color Contours")
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "03_age_dust_degeneracy.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "03_age_dust_degeneracy.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

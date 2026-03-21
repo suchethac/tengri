@@ -46,7 +46,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 os.environ["JAX_PLATFORMS"] = "cpu"
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,

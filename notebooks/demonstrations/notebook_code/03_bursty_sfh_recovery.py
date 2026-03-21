@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Recovering Bursty Star Formation Histories
 #
-# The core capability of diffsed: recovering bursty SFH features that
+# The core capability of tengri: recovering bursty SFH features that
 # parametric models miss. Plus the "wrong model trap" — fitting a bursty
 # galaxy with a smooth model looks fine in chi-squared but gives wrong SFRs.
 
@@ -32,7 +32,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -59,6 +59,9 @@ elif os.path.exists(os.path.join("..", "..", "data")):
     os.chdir(os.path.join("..", ".."))
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
+
+FIGDIR = os.path.join("demonstrations", "figures")
+os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import COLORS, plot_sfh, safe_corner, setup_style  # noqa: E402
 
@@ -136,7 +139,7 @@ for ax, reg in zip(axes.flat, REGIMES):
 
 fig.suptitle("The Four Burstiness Regimes", fontsize=12)
 fig.tight_layout()
-plt.savefig("fig01_burstiness_regimes.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig01_burstiness_regimes.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -172,7 +175,7 @@ for ax, reg in zip(axes.flat, REGIMES):
 
 fig.suptitle("SFH Recovery Across Burstiness Regimes (Spectroscopy, SNR=30)", fontsize=11)
 fig.tight_layout()
-plt.savefig("fig02_sfh_recovery_4regimes.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig02_sfh_recovery_4regimes.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -193,7 +196,7 @@ for ax, reg in zip(axes.flat, REGIMES):
 
 fig.suptitle("PSD Parameter Recovery per Regime", fontsize=11)
 fig.tight_layout()
-plt.savefig("fig03_psd_corners.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig03_psd_corners.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -251,7 +254,7 @@ ax_right.set_title("Correct Model (stochastic, D=137)")
 
 fig.suptitle("The Wrong Model Trap: Parametric Misses Bursts", fontsize=12, fontweight="bold")
 fig.tight_layout()
-plt.savefig("fig05_wrong_model_trap.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig05_wrong_model_trap.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -283,7 +286,7 @@ for ax, res, mod, title in [
 
 fig.suptitle("Both Models Fit the Data — But Only One Gets the SFH Right", fontsize=11)
 fig.tight_layout()
-plt.savefig("fig06_ppc_both_models.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig06_ppc_both_models.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

@@ -15,7 +15,7 @@
 # %% [markdown]
 # # Tutorial 14: AGN Models and IGM Absorption
 #
-# This notebook demonstrates two physics modules in **diffsed** that are
+# This notebook demonstrates two physics modules in **tengri** that are
 # critical for broadband SED fitting beyond the local universe:
 #
 # 1. **AGN emission** &mdash; accretion disc + dust torus models at three
@@ -41,12 +41,12 @@ import matplotlib.colors as mcolors
 import matplotlib.cm as mcm
 import numpy as np
 
-from diffsed.models.agn import AGN_MODELS, get_agn_model, unified_agn
-from diffsed.models.agn.disc import powerlaw_disc, multicolor_disc
-from diffsed.models.agn.torus import simple_torus, two_temperature_torus
-from diffsed.models.igm import igm_transmission
-from diffsed.models.observation.filters import load_filter
-from diffsed import (
+from tengri.models.agn import AGN_MODELS, get_agn_model, unified_agn
+from tengri.models.agn.disc import powerlaw_disc, multicolor_disc
+from tengri.models.agn.torus import simple_torus, two_temperature_torus
+from tengri.models.igm import igm_transmission
+from tengri.models.observation.filters import load_filter
+from tengri import (
     Model, ParamSpec, Uniform, Fixed,
     load_ssp_data, load_filter_set,
 )
@@ -92,7 +92,7 @@ def savefig(fig, name, dpi=200):
 # %% [markdown]
 # ## 1. AGN Models: Disc + Torus SEDs
 #
-# diffsed provides three pre-registered AGN configurations, all combining
+# tengri provides three pre-registered AGN configurations, all combining
 # an accretion disc (UV/optical) with a dust torus (MIR):
 #
 # | Model | Disc | Torus | Free params |
@@ -379,7 +379,7 @@ plt.show()
 # - **Lyman-series line absorption** (Ly$\alpha$ forest + DLA systems)
 # - **Lyman-continuum absorption** ($\lambda < 912$ \AA)
 #
-# diffsed implements the Inoue et al. (2014) mean IGM transmission
+# tengri implements the Inoue et al. (2014) mean IGM transmission
 # $T_{\rm IGM}(\lambda_{\rm obs}, z_{\rm source})$, which is a
 # function of observed wavelength and source redshift.
 
@@ -727,11 +727,11 @@ plt.show()
 #
 # | Feature | Module | Key function |
 # |---------|--------|-------------|
-# | AGN disc emission | `diffsed.models.agn.disc` | `powerlaw_disc`, `multicolor_disc` |
-# | AGN torus emission | `diffsed.models.agn.torus` | `simple_torus`, `two_temperature_torus` |
-# | Unified AGN SED | `diffsed.models.agn.unified` | `unified_agn`, `get_agn_model` |
-# | IGM transmission | `diffsed.models.igm` | `igm_transmission` |
-# | Forward model integration | `diffsed.Model` | `agn_model="simple"` in `ParamSpec` |
+# | AGN disc emission | `tengri.models.agn.disc` | `powerlaw_disc`, `multicolor_disc` |
+# | AGN torus emission | `tengri.models.agn.torus` | `simple_torus`, `two_temperature_torus` |
+# | Unified AGN SED | `tengri.models.agn.unified` | `unified_agn`, `get_agn_model` |
+# | IGM transmission | `tengri.models.igm` | `igm_transmission` |
+# | Forward model integration | `tengri.Model` | `agn_model="simple"` in `ParamSpec` |
 #
 # **Key takeaways:**
 #

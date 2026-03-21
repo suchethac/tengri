@@ -46,7 +46,7 @@ jax.config.update("jax_enable_x64", True)
 import matplotlib.pyplot as plt
 import numpy as np
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
     HierarchicalFitter,
     load_ssp_data, load_filter_set,
@@ -307,5 +307,5 @@ fig.tight_layout(); savefig(fig, "population_distinction"); plt.show()
 # 3. **Populations with different burstiness** are cleanly separated
 #    in the $(\sigma_{\rm PS}, \tau_{\rm PS})$ plane.
 #
-# **Next:** [T06 — Extending diffsed](T06_extending.ipynb) for custom
+# **Next:** [T06 — Extending tengri](T06_extending.ipynb) for custom
 # PSD models, dust laws, and SSP templates.

@@ -30,7 +30,7 @@ jax.config.update("jax_enable_x64", True)
 import matplotlib.pyplot as plt
 import numpy as np
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )

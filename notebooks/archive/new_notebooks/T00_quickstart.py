@@ -15,10 +15,10 @@
 # %% [markdown]
 # # Fit a Galaxy in 60 Seconds
 #
-# **diffsed** recovers bursty star formation histories from photometric and
+# **tengri** recovers bursty star formation histories from photometric and
 # spectroscopic data using differentiable stellar population synthesis and
 # Information Field Theory.  Where traditional SED-fitting codes impose smooth
-# or discretely binned SFHs, diffsed treats the SFH as a *continuous
+# or discretely binned SFHs, tengri treats the SFH as a *continuous
 # correlated field* governed by a power spectral density (PSD) — and keeps
 # the entire forward model differentiable in JAX.
 #
@@ -29,7 +29,7 @@
 # | SFH model | Double power law (smooth) | Double power law + GP burstiness |
 # | Free parameters | 7 | ~137 |
 # | Inference | MAP → NUTS (gold standard) | MAP → Ray Tracing |
-# | Comparable to | BAGPIPES / Prospector parametric mode | **Unique to diffsed** |
+# | Comparable to | BAGPIPES / Prospector parametric mode | **Unique to tengri** |
 #
 # By the end you will have fitted both a smooth and a bursty mock galaxy,
 # seen posterior SFH recovery with a zoomed inset of the last 200 Myr
@@ -49,7 +49,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Gaussian, LogUniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
@@ -152,7 +152,7 @@ def add_sfh_inset(ax, t_gyr, sfr, inset_range_myr=200, loc="upper right",
 # %% [markdown]
 # ## Load SSP Data
 #
-# diffsed requires pre-computed simple stellar population (SSP) spectra.
+# tengri requires pre-computed simple stellar population (SSP) spectra.
 # The default templates use FSPS with MIST isochrones, MILES spectra, a
 # Chabrier IMF, and nebular emission from Cloudy.
 
@@ -314,7 +314,7 @@ plt.show()
 #
 # Real galaxies are not smooth.  Feedback from supernovae, stellar winds,
 # and gas accretion drives stochastic SFR fluctuations on timescales from
-# ~1 Myr to ~1 Gyr.  diffsed captures this by adding a Gaussian-process
+# ~1 Myr to ~1 Gyr.  tengri captures this by adding a Gaussian-process
 # correlated field to the smooth mean SFH, governed by a damped random
 # walk (DRW) power spectral density with two physical parameters:
 #
@@ -514,7 +514,7 @@ plt.show()
 # | **SFH recovery** | Smooth envelope well-recovered | Burst amplitude recovered; phase unconstrained |
 # | **Wall time** | ~seconds (NUTS) | ~minutes (Ray Tracing) |
 #
-# **Key takeaway:** diffsed's stochastic mode recovers bursty SFH
+# **Key takeaway:** tengri's stochastic mode recovers bursty SFH
 # structure that parametric models miss entirely.  The 200 Myr inset
 # reveals the regime where Hα and UV observations constrain the SFH —
 # and where the PSD-governed GP adds real information.

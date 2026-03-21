@@ -24,7 +24,7 @@
 # posterior and it collapses to an overconfident point estimate ---
 # defeating the purpose of sophisticated inference machinery like geoVI.
 #
-# This notebook demonstrates diffsed's **NIFTy-native noise model**,
+# This notebook demonstrates tengri's **NIFTy-native noise model**,
 # which follows Information Field Theory (IFT) principles: noise
 # parameters are part of the generative model and jointly inferred
 # with the signal. We show:
@@ -71,7 +71,7 @@ from _plot_style import COLORS, setup_style
 setup_style()
 os.makedirs("notebook_figures", exist_ok=True)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -80,7 +80,7 @@ from diffsed import (
     load_filter_set,
     load_ssp_data,
 )
-from diffsed.core.noise import compute_effective_noise, variable_noise_hamiltonian
+from tengri.core.noise import compute_effective_noise, variable_noise_hamiltonian
 
 # %%
 ssp_data = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")

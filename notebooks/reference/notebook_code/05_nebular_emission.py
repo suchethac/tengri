@@ -20,7 +20,7 @@
 # contributes significantly to galaxy photometry, especially at high
 # redshift where strong emission lines fall into broadband filters.
 #
-# diffsed provides three nebular backends:
+# tengri provides three nebular backends:
 #
 # 1. **BakedIn**: SSP templates with nebular emission pre-computed at
 #    fixed ionization parameter and gas metallicity. Zero extra parameters.
@@ -40,13 +40,13 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fixed,
     Model,
     ParamSpec,
     load_ssp_data,
 )
-from diffsed.models.nebular import BakedInBackend
+from tengri.models.nebular import BakedInBackend
 
 import sys, os  # noqa: E401
 
@@ -145,7 +145,7 @@ ax.set_title("SED with Baked-In Nebular Emission (Star-Forming Galaxy)")
 ax.set_xscale("log")
 ax.set_xlim(900, 20000)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "05_sed_nebular.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "05_sed_nebular.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -181,7 +181,7 @@ ax.set_title(r"H$\alpha$ Region")
 ax.legend(fontsize=8, frameon=False)
 
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "05_emission_line_zoom.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "05_emission_line_zoom.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -226,7 +226,7 @@ ax.set_ylabel(r"Normalized $L_\nu$")
 ax.set_title("Emission Line Strength vs Star Formation Rate")
 ax.legend(fontsize=7, frameon=False)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "05_eline_vs_sfr.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "05_eline_vs_sfr.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

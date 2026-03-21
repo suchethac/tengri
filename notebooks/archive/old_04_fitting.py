@@ -15,7 +15,7 @@
 # %% [markdown]
 # # Tutorial 4: Fitting with MAP Optimization
 #
-# This tutorial demonstrates fitting mock galaxies using diffsed's gradient-based MAP optimization. We show:
+# This tutorial demonstrates fitting mock galaxies using tengri's gradient-based MAP optimization. We show:
 # 1. **Photometry-only** fitting (5 SDSS bands)
 # 2. **Parameter fixing** — fix some parameters, fit others
 # 3. **SNR dependence** — how noise level affects recovery
@@ -34,7 +34,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Fitter, Uniform, Gaussian, Fixed,
     load_ssp_data, load_filter_set,
 )

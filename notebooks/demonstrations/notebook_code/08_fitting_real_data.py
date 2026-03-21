@@ -34,7 +34,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -61,6 +61,9 @@ elif os.path.exists(os.path.join("..", "..", "data")):
     os.chdir(os.path.join("..", ".."))
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
+
+FIGDIR = os.path.join("demonstrations", "figures")
+os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import COLORS, plot_sfh, safe_corner, setup_style  # noqa: E402
 
@@ -120,7 +123,7 @@ ax.set_ylabel("Flux density")
 ax.set_title(f"Galaxy Spectrum at z = {REDSHIFT}")
 ax.legend(fontsize=8)
 fig.tight_layout()
-plt.savefig("fig01_real_spectrum.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig01_real_spectrum.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -172,7 +175,7 @@ ax_r.set_xlabel("Observed wavelength [Å]")
 chi2 = np.sum(res**2) / len(res)
 ax_f.set_title(f"Spectral Fit (reduced χ² = {chi2:.2f})")
 fig.tight_layout()
-plt.savefig("fig02_spectral_fit.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig02_spectral_fit.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -181,14 +184,14 @@ fig, ax = plt.subplots(figsize=(8, 4))
 plot_sfh(model, result, ax=ax, color=COLORS["geovi"], label="native_geovi", method="geoVI")
 ax.set_title("Star Formation History")
 fig.tight_layout()
-plt.savefig("fig03_sfh.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig03_sfh.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
 # --- FIGURE 4: Corner plot ---
 fig = safe_corner(result)
 if fig is not None:
-    plt.savefig("fig04_corner.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig04_corner.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

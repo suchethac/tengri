@@ -13,9 +13,9 @@
 # ---
 
 # %% [markdown]
-# # Recovering Bursty Star Formation Histories with diffsed
+# # Recovering Bursty Star Formation Histories with tengri
 #
-# This notebook demonstrates the core capability of **diffsed**: recovering
+# This notebook demonstrates the core capability of **tengri**: recovering
 # bursty, stochastic star formation histories from broadband photometry
 # using a PSD-based Gaussian process SFH model and evidence-based
 # variational inference (EVI).
@@ -61,14 +61,14 @@ setup_style()
 import os
 os.makedirs("figures", exist_ok=True)
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
-from diffsed.models.sfh.gp_sfh import (
+from tengri.models.sfh.gp_sfh import (
     generate_gp_fourier, compute_sqrt_power_drw, make_log_age_grid,
 )
-from diffsed.models.sfh.mean_sfh import double_powerlaw
+from tengri.models.sfh.mean_sfh import double_powerlaw
 
 # Reproducibility
 KEY_MASTER = jax.random.PRNGKey(2026)

@@ -19,7 +19,7 @@
 # At z > 5, burstiness dominates: emission lines boost broadband fluxes,
 # outshining biases stellar masses, and parametric models overestimate M★
 # by up to 0.3 dex. This notebook demonstrates high-redshift SED fitting
-# where diffsed's stochastic SFH model is essential.
+# where tengri's stochastic SFH model is essential.
 
 # %%
 import warnings
@@ -32,7 +32,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -59,6 +59,9 @@ elif os.path.exists(os.path.join("..", "..", "data")):
     os.chdir(os.path.join("..", ".."))
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
+
+FIGDIR = os.path.join("demonstrations", "figures")
+os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import COLORS, plot_sfh, safe_corner, setup_style  # noqa: E402
 
@@ -152,7 +155,7 @@ try:
     ax.set_ylabel("Flux density")
     ax.set_title(f"Galaxy at z = {Z_HIGH}: Lyman Break in NIR")
     fig.tight_layout()
-    plt.savefig("fig01_sed_z6.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig01_sed_z6.png"), dpi=150, bbox_inches="tight")
     plt.show()
 except Exception as e:
     print(f"SED plot skipped: {e}")
@@ -172,7 +175,7 @@ ax.set_xlabel("Observed wavelength [Å]")
 ax.set_ylabel("Flux density")
 ax.set_title(f"Mock JWST Photometry at z = {Z_HIGH} (SNR = 10)")
 fig.tight_layout()
-plt.savefig("fig02_mock_jwst_phot.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig02_mock_jwst_phot.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -193,7 +196,7 @@ plot_sfh(model_stoch, result_stoch, true_params=true_p,
          show_mean_sfh=True)
 ax.set_title(f"SFH Recovery at z = {Z_HIGH}")
 fig.tight_layout()
-plt.savefig("fig03_sfh_z6.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig03_sfh_z6.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -237,7 +240,7 @@ ax.legend(fontsize=9)
 bias = np.median(np.log10(np.clip(mstar_param, 1, None))) - np.median(np.log10(np.clip(mstar_stoch, 1, None)))
 ax.set_title(f"Stellar Mass at z = {Z_HIGH}: Parametric biased by {bias:+.2f} dex")
 fig.tight_layout()
-plt.savefig("fig04_mstar_bias.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig04_mstar_bias.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -246,7 +249,7 @@ plt.show()
 # At z > 5, burstiness is not optional — it's the dominant mode of star
 # formation. Parametric models systematically overestimate stellar masses
 # because they can't capture the rapid fluctuations that boost emission
-# lines and UV flux. diffsed's stochastic model with native_geovi handles
+# lines and UV flux. tengri's stochastic model with native_geovi handles
 # this naturally.
 #
 # **This is the science case for Paper II.**

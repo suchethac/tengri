@@ -15,7 +15,7 @@
 # %% [markdown]
 # # Quickstart: From Parametric to Bursty SFH Recovery
 #
-# This notebook demonstrates the full diffsed workflow in two parts:
+# This notebook demonstrates the full tengri workflow in two parts:
 #
 # - **Part A**: Parametric SFH ($D = 7$) — smooth double power law,
 #   EVI + NUTS cross-validation.
@@ -38,11 +38,11 @@ from matplotlib.gridspec import GridSpec
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
-from diffsed.plotting import plot_corner_comparison
+from tengri.plotting import plot_corner_comparison
 
 import sys; sys.path.insert(0, ".")
 from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, SDSS_BAND_NAMES

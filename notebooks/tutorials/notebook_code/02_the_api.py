@@ -14,9 +14,9 @@
 # ---
 
 # %% [markdown]
-# # The diffsed API: Model, Fitter, Posterior
+# # The tengri API: Model, Fitter, Posterior
 #
-# diffsed has three core objects: `Model` (forward model), `Fitter` (inference
+# tengri has three core objects: `Model` (forward model), `Fitter` (inference
 # engine), `Posterior` (results container). This notebook shows how to create,
 # configure, inspect, and compose them. You'll also learn the three JAX
 # patterns that make everything fast: `jit` (compile), `vmap` (batch),
@@ -34,7 +34,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Gaussian,
@@ -65,6 +65,9 @@ elif os.path.exists(os.path.join("..", "..", "data")):
     os.chdir(os.path.join("..", ".."))
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
+
+FIGDIR = os.path.join("tutorials", "figures")
+os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import setup_style, COLORS  # noqa: E402
 
@@ -248,7 +251,7 @@ ax.set_yscale("log")
 ax.legend()
 ax.set_title("vmap Scaling: Sublinear via XLA Parallelism")
 fig.tight_layout()
-plt.savefig("fig01_vmap_scaling.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig01_vmap_scaling.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -383,7 +386,7 @@ if hasattr(result, "effective_sample_size"):
 # %% [markdown]
 # ## The JAX Mental Model
 #
-# diffsed is built on JAX. Three things to know:
+# tengri is built on JAX. Three things to know:
 #
 # 1. **jit** — compiles functions. Slow first call (tracing), fast after.
 # 2. **vmap** — vectorizes over a batch dimension. Use it for catalogs.

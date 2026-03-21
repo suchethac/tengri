@@ -13,7 +13,7 @@
 # ---
 
 # %% [markdown]
-# # Extending diffsed
+# # Extending tengri
 #
 # The framework is modular: PSD model, mean SFH, dust law, SSP
 # templates, and inference method can each be swapped independently.
@@ -34,9 +34,9 @@ jax.config.update("jax_enable_x64", True)
 import matplotlib.pyplot as plt
 import numpy as np
 
-from diffsed.models.sfh.psd_models import psd_drw, drw_acf
-from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
-from diffsed.utils.grid import make_log_age_grid, grid_spacing, log_age_to_age_yr
+from tengri.models.sfh.psd_models import psd_drw, drw_acf
+from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
+from tengri.utils.grid import make_log_age_grid, grid_spacing, log_age_to_age_yr
 
 import sys; sys.path.insert(0, ".")
 import sys; sys.path.insert(0, "..")
@@ -162,7 +162,7 @@ fig.tight_layout(); savefig(fig, "custom_psd"); plt.show()
 # %% [markdown]
 # ## 4. Alternative SSP Templates
 #
-# diffsed accepts any SSP template set in DSPS-compatible HDF5 format.
+# tengri accepts any SSP template set in DSPS-compatible HDF5 format.
 # Pre-formatted templates from multiple SPS codes are available at:
 #
 # `https://halos.as.arizona.edu/suchethacooray/ssp-spectra/`

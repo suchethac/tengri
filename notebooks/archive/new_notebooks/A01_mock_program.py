@@ -33,14 +33,14 @@ jax.config.update("jax_enable_x64", True)
 import matplotlib.pyplot as plt
 import numpy as np
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Fixed,
     load_ssp_data, load_filter_set,
 )
-from diffsed.models.sfh.psd_models import psd_drw, drw_variance
-from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw, generate_gp_fourier
-from diffsed.models.sfh.mean_sfh import double_powerlaw
-from diffsed.utils.grid import make_log_age_grid, grid_spacing, log_age_to_age_yr
+from tengri.models.sfh.psd_models import psd_drw, drw_variance
+from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw, generate_gp_fourier
+from tengri.models.sfh.mean_sfh import double_powerlaw
+from tengri.utils.grid import make_log_age_grid, grid_spacing, log_age_to_age_yr
 
 import sys; sys.path.insert(0, ".")
 from _plot_style import setup_style, COLORS
@@ -107,7 +107,7 @@ ax_psd.set_title("DRW Power Spectrum"); ax_psd.legend(fontsize=6)
 
 # Top-right: ACF
 ax_acf = fig.add_subplot(gs[0, 1])
-from diffsed.models.sfh.psd_models import drw_acf
+from tengri.models.sfh.psd_models import drw_acf
 dt = jnp.linspace(0, 500, 300)
 for name, r in PSD_REGIMES.items():
     acf = drw_acf(dt, r["sigma"], r["tau_myr"])

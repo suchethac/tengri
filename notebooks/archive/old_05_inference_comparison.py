@@ -15,7 +15,7 @@
 # %% [markdown]
 # # Tutorial 5: Inference Methods — MAP, NUTS, Ray Tracing, and geoVI
 #
-# diffsed supports four gradient-based inference methods. All exploit end-to-end differentiability through the forward model.
+# tengri supports four gradient-based inference methods. All exploit end-to-end differentiability through the forward model.
 #
 # | Method | Speed | Uncertainties | Best for |
 # |--------|-------|---------------|----------|
@@ -36,7 +36,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time, io
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Fitter, Uniform, Gaussian, Fixed,
     load_ssp_data, load_filter_set,
 )

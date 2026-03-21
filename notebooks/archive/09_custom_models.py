@@ -13,10 +13,10 @@
 # ---
 
 # %% [markdown]
-# # Extending diffsed
+# # Extending tengri
 #
 # This notebook is for **developers** who want to add new components to
-# diffsed: custom priors, PSD models, dust laws, mean SFHs, or filter
+# tengri: custom priors, PSD models, dust laws, mean SFHs, or filter
 # sets.
 #
 # The standardized architecture makes this elegant.  The core insight
@@ -72,7 +72,7 @@
 # $\xi \sim \mathcal{N}(0, I)$ through the full pipeline to observables.
 # Every layer is a pure JAX function -- differentiable end to end.
 #
-# **To extend diffsed, you swap one layer.  Everything else composes.**
+# **To extend tengri, you swap one layer.  Everything else composes.**
 
 # %%
 import jax
@@ -86,19 +86,19 @@ from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
 setup_style()
 import os; os.makedirs("notebook_figures", exist_ok=True)
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Gaussian, LogUniform, LogNormal,
     StudentT, Fixed, Fitter, load_ssp_data, load_filter_set,
 )
-from diffsed.distributions import Distribution
-from diffsed.inference.standardized import StandardizedForwardModel
-from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw
-from diffsed.models.sfh.gp_sfh import gp_from_xi
-from diffsed.models.sfh.mean_sfh import (
+from tengri.distributions import Distribution
+from tengri.inference.standardized import StandardizedForwardModel
+from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.models.sfh.gp_sfh import gp_from_xi
+from tengri.models.sfh.mean_sfh import (
     double_powerlaw, delayed_tau, constant_sfh, powerlaw_sfh,
 )
-from diffsed.models.dust.attenuation import two_component_dust
-from diffsed.utils.grid import make_log_age_grid
+from tengri.models.dust.attenuation import two_component_dust
+from tengri.utils.grid import make_log_age_grid
 
 ssp_data = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 # load_filter_set returns a 3-tuple: (waves, trans, filter_curves)
@@ -111,7 +111,7 @@ print(f"Filters: {[fc.name for fc in filter_curves]}")
 # %% [markdown]
 # ## The Distribution Protocol
 #
-# The key abstraction in diffsed is the **Distribution protocol**.  Every
+# The key abstraction in tengri is the **Distribution protocol**.  Every
 # prior maps between physical space $\theta$ and standardized space $\xi$:
 #
 # | Method | Direction | Purpose |
@@ -650,7 +650,7 @@ print("Any of these can serve as the smooth baseline for the GP field.")
 # %% [markdown]
 # ## Using Different SSP Templates
 #
-# diffsed ships with **FSPS/MIST** templates accessed via
+# tengri ships with **FSPS/MIST** templates accessed via
 # [DSPS](https://github.com/ArgonneCPAC/dsps) (Hearin+2023).  The SSP
 # data contains:
 #
@@ -846,7 +846,7 @@ for name in ["sfh_field_psd_sigma", "sfh_field_psd_tau_myr"]:
 # %% [markdown]
 # ## Summary
 #
-# diffsed is designed for extensibility.  The standardized architecture
+# tengri is designed for extensibility.  The standardized architecture
 # ensures everything composes cleanly:
 #
 # | Extension point | What to implement | Example |
@@ -871,8 +871,8 @@ for name in ["sfh_field_psd_sigma", "sfh_field_psd_tau_myr"]:
 # 2. Custom priors plug directly into ParamSpec — no sampler changes needed
 # 3. Custom PSD models change the correlation structure of the GP field
 # 4. The key principle: one loss function, any prior, any sampler
-# 5. Extending diffsed means swapping one layer while everything else composes
+# 5. Extending tengri means swapping one layer while everything else composes
 #
-# **Congratulations!** You've completed the diffsed tutorial series.
+# **Congratulations!** You've completed the tengri tutorial series.
 # For the full design philosophy, see `docs/ARCHITECTURE.md`.
 # For real-data applications, see Paper II.

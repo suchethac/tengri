@@ -32,11 +32,11 @@
 #
 # Spectroscopy resolves the **age--dust--metallicity degeneracy** that
 # plagues broadband photometry.  This notebook shows how to generate
-# mock spectra, fit them with `diffsed`, diagnose the fit quality, and
+# mock spectra, fit them with `tengri`, diagnose the fit quality, and
 # compare the information content of photometry vs spectroscopy.
 #
 # **By the end you will understand:**
-# 1. How to generate mock galaxy spectra and fit them with diffsed
+# 1. How to generate mock galaxy spectra and fit them with tengri
 # 2. Which spectral features constrain which physical properties
 # 3. How to diagnose fit quality through residual analysis
 # 4. The quantitative constraint improvement from photometry to spectroscopy
@@ -57,7 +57,7 @@ from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
 setup_style()
 import os; os.makedirs("notebook_figures", exist_ok=True)
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
@@ -578,7 +578,7 @@ plt.show()
 # 3. **Calibration systematics.** Flux calibration errors introduce
 #    correlated residuals.  If you see broad wiggles in the residuals,
 #    consider a polynomial calibration correction.
-# 4. **Emission lines.** The current `diffsed` forward model does not
+# 4. **Emission lines.** The current `tengri` forward model does not
 #    include nebular emission.  Mask strong emission lines ([O III],
 #    H$\alpha$, [N II]) or fit them separately.
 # 5. **Resolution matching.** Convolve the model to the spectrograph's
@@ -602,5 +602,5 @@ plt.show()
 # ## Further Reading
 #
 # - **NB06: Data Information** — progressive data reveal from 1 band to full spectrum
-# - **NB09: Custom Models** — extending diffsed with new forward model components
+# - **NB09: Custom Models** — extending tengri with new forward model components
 # - **NB03: Inference Methods** — deep dive into all five samplers

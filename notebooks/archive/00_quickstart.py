@@ -15,9 +15,9 @@
 # %% [markdown]
 # # Fit a Galaxy in 60 Seconds
 #
-# **diffsed** recovers bursty star formation histories from broadband
+# **tengri** recovers bursty star formation histories from broadband
 # photometry in seconds.  Where traditional SED fitting codes like BAGPIPES
-# and Prospector assume smooth SFHs, diffsed adds physically motivated
+# and Prospector assume smooth SFHs, tengri adds physically motivated
 # stochastic fluctuations governed by a power spectral density (PSD) —
 # and keeps everything differentiable in JAX.
 #
@@ -26,7 +26,7 @@
 # - **Part A** fits a smooth parametric SFH (7 free parameters) —
 #   comparable to BAGPIPES/Prospector, with NUTS as the gold standard.
 # - **Part B** fits a stochastic SFH with GP-correlated burstiness
-#   (137 free parameters) — the unique capability of diffsed, with
+#   (137 free parameters) — the unique capability of tengri, with
 #   **geoVI** as the primary inference method.
 #
 # By the end you will:
@@ -44,7 +44,7 @@ jax.config.update("jax_enable_x64", True)
 import matplotlib.pyplot as plt
 import numpy as np
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Gaussian, LogUniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
@@ -255,7 +255,7 @@ plt.show()
 # ($\sim$0.3 dex; Speagle et al. 2014) demands variability beyond what
 # any smooth function can capture.
 #
-# This is what makes **diffsed** unique.  Instead of a smooth parametric
+# This is what makes **tengri** unique.  Instead of a smooth parametric
 # SFH, we add a Gaussian-process correlated field whose power spectral
 # density (PSD) is governed by two physical hyper-parameters:
 #
@@ -443,7 +443,7 @@ plt.show()
 # NUTS relies on Hamiltonian dynamics and the U-turn criterion to set
 # trajectory length.  In the 137-D stochastic model, $D$ is simply too
 # high: the U-turn criterion becomes unreliable and tuning is impractical,
-# so NUTS diverges or mixes poorly.  The diffsed forward model is
+# so NUTS diverges or mixes poorly.  The tengri forward model is
 # *differentiable* — JAX gives exact gradients through the GP — so the
 # issue is **high dimensionality**, not noisy gradients.  For $D \gtrsim 20$,
 # **geoVI** is the recommended primary method, with **Ray Tracing** as an
@@ -472,5 +472,5 @@ plt.show()
 #   tell you that photometry can't — breaking degeneracies with features
 # - **[NB08 — PSD Physics](08_psd_physics.ipynb)**: The observer's
 #   translation guide — mapping PSD parameters to astrophysical mechanisms
-# - **[NB09 — Custom Models](09_custom_models.ipynb)**: Extending diffsed
+# - **[NB09 — Custom Models](09_custom_models.ipynb)**: Extending tengri
 #   with new priors, PSD models, dust laws, and SSP templates

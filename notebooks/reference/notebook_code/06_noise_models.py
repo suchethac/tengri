@@ -17,7 +17,7 @@
 # # Noise Models
 #
 # Real astronomical data has noise properties more complex than simple
-# Gaussian errors. diffsed provides two noise model extensions:
+# Gaussian errors. tengri provides two noise model extensions:
 #
 # 1. **Calibration floor** ($f_{\rm cal}$): a fractional uncertainty added
 #    in quadrature to observational errors, accounting for systematic
@@ -39,7 +39,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -48,7 +48,7 @@ from diffsed import (
     load_filter_set,
     load_ssp_data,
 )
-from diffsed.core.noise import compute_effective_noise
+from tengri.core.noise import compute_effective_noise
 
 import sys, os  # noqa: E401
 
@@ -142,7 +142,7 @@ ax.set_title("SNR Saturation from Calibration Floor")
 ax.legend(fontsize=8, frameon=False)
 
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "06_calibration_floor.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "06_calibration_floor.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -178,7 +178,7 @@ ax.set_yscale("log")
 ax.set_ylim(1e-5, 1)
 ax.legend(fontsize=8, frameon=False)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "06_student_t.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "06_student_t.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -277,7 +277,7 @@ for ax, result, title in [
     ax.set_title(title)
 
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "06_noise_residuals.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "06_noise_residuals.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -298,7 +298,7 @@ plt.show()
 # %% [markdown]
 # ## Summary
 #
-# Noise modelling is a first-class citizen in diffsed following the NIFTy
+# Noise modelling is a first-class citizen in tengri following the NIFTy
 # Information Field Theory philosophy. The calibration floor prevents
 # over-fitting to systematic residuals and the Student-t likelihood provides
 # outlier robustness. Both are jointly inferred with physical parameters.

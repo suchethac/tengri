@@ -16,7 +16,7 @@
 # %% [markdown]
 # # AGN Models and IGM Absorption
 #
-# diffsed includes modular AGN emission models (accretion disc + dust torus)
+# tengri includes modular AGN emission models (accretion disc + dust torus)
 # and an Inoue et al. (2014) IGM absorption prescription. This notebook
 # explores the available AGN configurations and shows how IGM absorption
 # modifies the SED at different redshifts.
@@ -32,20 +32,20 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fixed,
     Model,
     ParamSpec,
     load_ssp_data,
 )
-from diffsed.models.agn import (
+from tengri.models.agn import (
     AGN_MODELS,
     get_agn_model,
     powerlaw_disc,
     simple_torus,
     unified_agn,
 )
-from diffsed.models.igm import igm_transmission
+from tengri.models.igm import igm_transmission
 
 import sys, os  # noqa: E401
 
@@ -76,7 +76,7 @@ os.makedirs(FIGDIR, exist_ok=True)
 # %% [markdown]
 # ## 1. Available AGN Models
 #
-# diffsed provides several AGN SED configurations registered in a model
+# tengri provides several AGN SED configurations registered in a model
 # registry.
 
 # %%
@@ -132,7 +132,7 @@ ax.set_title("AGN SED Components (Simple Model)")
 ax.set_xlim(0.01, 100)
 ax.legend(frameon=False)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "04_agn_components.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "04_agn_components.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -167,7 +167,7 @@ ax.set_title("AGN Model Comparison (log $L_{\\rm bol}$ = 44)")
 ax.set_xlim(0.01, 100)
 ax.legend(fontsize=7, frameon=False)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "04_agn_model_comparison.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "04_agn_model_comparison.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -235,7 +235,7 @@ ax.set_title("Galaxy + AGN SED")
 ax.set_xlim(900, 50000)
 ax.legend(fontsize=8, frameon=False)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "04_galaxy_agn.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "04_galaxy_agn.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -266,7 +266,7 @@ ax.axhline(1.0, ls=":", color="grey", lw=0.5)
 ax.set_ylim(-0.05, 1.1)
 ax.legend(fontsize=8, frameon=False, ncol=2)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "04_igm_transmission.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "04_igm_transmission.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -313,7 +313,7 @@ ax.set_yscale("log")
 ax.set_xlim(800, 20000)
 ax.legend(fontsize=8, frameon=False)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "04_igm_sed_effect.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "04_igm_sed_effect.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

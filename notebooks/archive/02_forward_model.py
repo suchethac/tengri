@@ -17,7 +17,7 @@
 #
 # Every SED fitting code — BAGPIPES, Prospector, CIGALE — has a forward
 # model that maps physical parameters to predicted observations.  In
-# diffsed, this forward model is fully differentiable, which means we can
+# tengri, this forward model is fully differentiable, which means we can
 # compute exact gradients end-to-end.
 #
 # This notebook walks through the full pipeline step by step.
@@ -49,20 +49,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # High-level API
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 
 # Low-level imports for step-by-step pipeline
-from diffsed.models.sps.dsps_wrapper import (
+from tengri.models.sps.dsps_wrapper import (
     compute_csp_weights, compute_csp_sed, interpolate_metallicity,
 )
-from diffsed.models.dust.attenuation import two_component_dust
-from diffsed.models.observation.photometry import (
+from tengri.models.dust.attenuation import two_component_dust
+from tengri.models.observation.photometry import (
     compute_flux_density, ab_mag_from_flux,
 )
-from diffsed.models.sfh.mean_sfh import double_powerlaw
+from tengri.models.sfh.mean_sfh import double_powerlaw
 
 # Load data
 ssp_data = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
@@ -455,7 +455,7 @@ wave_obs = wave * (1 + redshift)
 ax.plot(wave_obs, np.array(csp_sed), "0.4", lw=0.8, label="SED (observed frame)")
 
 # Compute photometry through each filter
-from diffsed.utils.cosmology import luminosity_distance
+from tengri.utils.cosmology import luminosity_distance
 dl_cm = float(luminosity_distance(redshift))
 
 filter_colors = ["C4", "C2", "C3", "C1", "C5"]

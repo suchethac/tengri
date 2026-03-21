@@ -37,7 +37,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     HierarchicalFitter,
@@ -65,6 +65,9 @@ elif os.path.exists(os.path.join("..", "..", "data")):
     os.chdir(os.path.join("..", ".."))
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
+
+FIGDIR = os.path.join("demonstrations", "figures")
+os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import (  # noqa: E402
     COLORS,
@@ -167,7 +170,7 @@ for i, ax in enumerate(axes.flat):
         ax.set_ylabel("Flux")
 fig.suptitle(f"Mock Population: {N_GAL} galaxies, shared σ = {TRUE_SIGMA}, τ = {TRUE_TAU} Myr")
 fig.tight_layout()
-plt.savefig("fig01_galaxy_diversity.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig01_galaxy_diversity.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -232,7 +235,7 @@ ax_tau.legend(fontsize=7)
 ax_sig.set_title("Individual: σ roughly constrained")
 ax_tau.set_title("Individual: τ nearly unconstrained")
 fig.tight_layout()
-plt.savefig("fig02_individual_psd.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig02_individual_psd.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -293,7 +296,7 @@ ax_sig.legend(fontsize=8)
 ax_tau.legend(fontsize=8)
 fig.suptitle(f"Hierarchical (N = {N_GAL}) vs Individual — spectroscopy", fontsize=11)
 fig.tight_layout()
-plt.savefig("fig03_hierarchical_vs_individual.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig03_hierarchical_vs_individual.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -345,7 +348,7 @@ ax_sig.legend(fontsize=8)
 ax_tau.legend(fontsize=8)
 fig.suptitle("Hierarchical PSD: Spectroscopy vs Photometry", fontsize=11)
 fig.tight_layout()
-plt.savefig("fig04_spec_vs_phot.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig04_spec_vs_phot.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -409,7 +412,7 @@ ax.set_yscale("log")
 ax.legend()
 ax.set_title(r"Posterior Shrinkage: $\propto 1/\sqrt{N}$")
 fig.tight_layout()
-plt.savefig("fig05_sqrt_n_scaling.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig05_sqrt_n_scaling.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -486,7 +489,7 @@ ax.set_ylabel(r"$\sigma_{\rm PS}$")
 ax.legend(fontsize=9)
 ax.set_title("Population Distinction: Bursty Dwarfs vs Smooth Disks")
 fig.tight_layout()
-plt.savefig("fig06_population_distinction.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig06_population_distinction.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -514,7 +517,7 @@ for i, ax in enumerate(axes.flat):
 
 fig.suptitle("SFH Recovery (Hierarchical, 4 example galaxies)", fontsize=11)
 fig.tight_layout()
-plt.savefig("fig07_hierarchical_sfh.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig07_hierarchical_sfh.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

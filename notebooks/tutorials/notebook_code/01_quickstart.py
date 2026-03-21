@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Differentiable SED Fitting in 10 Seconds
 #
-# diffsed combines Information Field Theory correlated-field priors with
+# tengri combines Information Field Theory correlated-field priors with
 # differentiable stellar population synthesis and JIT-compiled variational
 # inference. This notebook fits a galaxy spectrum two ways: first a smooth
 # parametric SFH (7 free parameters), then a bursty stochastic SFH
@@ -34,7 +34,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -61,6 +61,9 @@ elif os.path.exists(os.path.join("..", "..", "data")):
     os.chdir(os.path.join("..", ".."))
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
+
+FIGDIR = os.path.join("tutorials", "figures")
+os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import (  # noqa: E402
     COLORS,
@@ -184,13 +187,13 @@ ax.set_ylabel("Flux density")
 ax.legend(fontsize=8, loc="upper right")
 ax.set_title("Mock Rest-Frame Spectrum at z = 0.1 (SNR = 30)")
 fig.tight_layout()
-plt.savefig("fig01_mock_spectrum_param.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig01_mock_spectrum_param.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
 # ### Fitting with native_geovi
 #
-# native_geovi is diffsed's default inference method: geometric Variational
+# native_geovi is tengri's default inference method: geometric Variational
 # Inference (geoVI; Frank et al. 2021) reimplemented as a fully JIT-compiled
 # JAX program. It constructs a coordinate transform that flattens the posterior
 # geometry — straightening curved degeneracies like the age–dust banana — then
@@ -266,7 +269,7 @@ ax_res.set_ylim(-4, 4)
 chi2 = np.sum(residuals**2) / len(residuals)
 ax_fit.set_title(f"Spectral Fit — native_geovi (reduced $\\chi^2$ = {chi2:.2f})")
 fig.tight_layout()
-plt.savefig("fig02_spectral_fit_param.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig02_spectral_fit_param.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -276,7 +279,7 @@ plot_sfh(model_param, result_geovi_param, true_params=true_params_param, ax=ax,
          color=COLORS["geovi"], label="native_geovi", method="geoVI")
 ax.set_title("SFH Recovery — Parametric (D = 7)")
 fig.tight_layout()
-plt.savefig("fig03_sfh_param.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig03_sfh_param.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -284,7 +287,7 @@ plt.show()
 fig = safe_corner(result_geovi_param, truths=true_params_param)
 if fig is not None:
     fig.suptitle("Parametric Posterior — native_geovi", y=1.02)
-    plt.savefig("fig04_corner_param.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig04_corner_param.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -326,7 +329,7 @@ if fig is not None:
         f"native_geovi ({t_geovi:.1f}s) vs NUTS ({t_nuts:.1f}s) — D = 7",
         y=1.02,
     )
-    plt.savefig("fig05_geovi_vs_nuts.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig05_geovi_vs_nuts.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -351,7 +354,7 @@ for name, res, t in [
 #
 # Real galaxies don't form stars smoothly. Star formation fluctuates on
 # timescales from ~1 Myr (molecular cloud collapse) to ~1 Gyr (mergers,
-# quenching). diffsed models this burstiness as a Gaussian process controlled
+# quenching). tengri models this burstiness as a Gaussian process controlled
 # by a power spectral density (PSD). The PSD has two physical parameters:
 # σ_PS (amplitude of fluctuations) and τ_PS (coherence timescale). The GP
 # field adds 128 correlated latent dimensions. Total: 9 physical + 128 GP = 137
@@ -444,7 +447,7 @@ ax_spec.set_ylabel("Flux density")
 ax_spec.set_title("Mock Spectrum (SNR = 30)")
 
 fig.tight_layout()
-plt.savefig("fig06_bursty_truth.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig06_bursty_truth.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -486,7 +489,7 @@ ax.set_title(
     fontweight="bold",
 )
 fig.tight_layout()
-plt.savefig("fig07_sfh_stochastic_money.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig07_sfh_stochastic_money.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -527,7 +530,7 @@ ax_res.set_ylim(-4, 4)
 chi2_s = np.sum(residuals_s**2) / len(residuals_s)
 ax_fit.set_title(f"Spectral Fit — Stochastic D = 137 (reduced $\\chi^2$ = {chi2_s:.2f})")
 fig.tight_layout()
-plt.savefig("fig08_spectral_fit_stochastic.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig08_spectral_fit_stochastic.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -536,7 +539,7 @@ phys_params = [p for p in spec_stoch.free_params if "xi" not in p]
 fig = safe_corner(result_geovi_stoch, truths=true_params_stoch, params=phys_params)
 if fig is not None:
     fig.suptitle("Physical Parameters — Stochastic (D = 137)", y=1.02)
-    plt.savefig("fig09_corner_stochastic.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig09_corner_stochastic.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -547,7 +550,7 @@ plt.show()
 # "light rays" through parameter space, using Snell's law to bend trajectories
 # toward high-likelihood regions. Unlike NUTS, it's ~250× more tolerant of
 # gradient noise and works efficiently at D = 137. It's the primary exact
-# MCMC method in diffsed.
+# MCMC method in tengri.
 
 # %%
 # Ray Tracing on the stochastic model
@@ -581,7 +584,7 @@ ax_r.set_title(f"Ray Tracing ({t_rt_s:.1f}s)")
 
 fig.suptitle("Stochastic SFH Recovery — native_geovi (approximate) vs Ray Tracing (exact)", fontsize=11)
 fig.tight_layout()
-plt.savefig("fig10_geovi_vs_rt.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig10_geovi_vs_rt.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

@@ -38,7 +38,7 @@
 import sys
 sys.path.insert(0, "../src")
 
-from diffsed.utils.devices import setup_jax
+from tengri.utils.devices import setup_jax
 setup_jax()
 
 import jax
@@ -61,9 +61,9 @@ plt.rcParams.update({
 os.makedirs("figures", exist_ok=True)
 
 # ---- New high-level API imports ----
-from diffsed import Model, ParamSpec, Uniform, Gaussian, Fixed, load_ssp_data, load_filter_set
-from diffsed.models.observation.photometry import ab_mag_from_flux
-from diffsed.utils.cosmology import luminosity_distance
+from tengri import Model, ParamSpec, Uniform, Gaussian, Fixed, load_ssp_data, load_filter_set
+from tengri.models.observation.photometry import ab_mag_from_flux
+from tengri.utils.cosmology import luminosity_distance
 
 # ---- Load SSP templates ----
 SSP_PATH = "../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
@@ -90,7 +90,7 @@ print("Setup complete.")
 #
 # We start with a single galaxy at $z = 0.1$ with moderate burstiness ($\sigma_{\rm PSD} = 1.5$, $\tau_{\rm PSD} = 30$ Myr). The `model.mock()` method runs the full forward model to produce noiseless photometry, then adds Gaussian noise at a specified signal-to-noise ratio. The true parameters are known exactly -- this is our ground truth for testing parameter recovery in Tutorials 4-5.
 #
-# The left panel shows the star formation history in **linear lookback time** (Gyr). In the double power-law convention used by `diffsed`, `sfh_alpha` controls the declining phase after peak SFR (cosmic time), and `sfh_beta` controls the rising phase. The dashed line is the smooth mean SFH; the solid line includes stochastic GP fluctuations from the DRW power spectrum.
+# The left panel shows the star formation history in **linear lookback time** (Gyr). In the double power-law convention used by `tengri`, `sfh_alpha` controls the declining phase after peak SFR (cosmic time), and `sfh_beta` controls the rising phase. The dashed line is the smooth mean SFH; the solid line includes stochastic GP fluctuations from the DRW power spectrum.
 
 # %%
 # ---- Define the parameter specification ----
@@ -550,7 +550,7 @@ print(f"lines, and [OIII] each constrain different physical properties.")
 # ---
 # ## Summary
 #
-# This tutorial demonstrated the mock generation capabilities of `diffsed` using the `Model`/`ParamSpec` API. The key methods and their use cases are:
+# This tutorial demonstrated the mock generation capabilities of `tengri` using the `Model`/`ParamSpec` API. The key methods and their use cases are:
 #
 # | Mock type | Use case | Key method |
 # |-----------|----------|------------|

@@ -21,7 +21,7 @@
 # At high redshift these lines can boost broadband fluxes by 0.2&ndash;0.5 mag
 # &mdash; H$\alpha$ enters JWST F444W at $z \sim 5$&ndash;$7$, for example.
 #
-# `diffsed` provides three nebular backends:
+# `tengri` provides three nebular backends:
 #
 # | Backend | ParamSpec flag | Free params | Use case |
 # |---------|---------------|-------------|----------|
@@ -52,24 +52,24 @@ from matplotlib.colors import Normalize
 from matplotlib import cm
 
 # Configure JAX
-from diffsed.utils.devices import setup_jax
+from tengri.utils.devices import setup_jax
 
 setup_jax()
 
 import jax
 import jax.numpy as jnp
 
-# diffsed imports
-from diffsed import load_ssp_data, load_filter_set
-from diffsed.models.nebular import CloudyGridBackend, BakedInBackend, CueBackend
-from diffsed.models.nebular.cloudy_grid import compute_qh, load_cloudy_grid, _compute_qh_grid
-from diffsed.models.nebular.ionizing_spectrum import (
+# tengri imports
+from tengri import load_ssp_data, load_filter_set
+from tengri.models.nebular import CloudyGridBackend, BakedInBackend, CueBackend
+from tengri.models.nebular.cloudy_grid import compute_qh, load_cloudy_grid, _compute_qh_grid
+from tengri.models.nebular.ionizing_spectrum import (
     fit_ionizing_spectrum,
     SEGMENT_EDGES,
     HI_LIMIT,
 )
-from diffsed.models.observation.photometry import compute_flux_density
-from diffsed.utils.cosmology import luminosity_distance
+from tengri.models.observation.photometry import compute_flux_density
+from tengri.utils.cosmology import luminosity_distance
 
 # ── Plot style ─────────────────────────────────────────────────────
 plt.rcParams.update(

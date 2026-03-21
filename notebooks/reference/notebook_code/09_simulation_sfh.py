@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Forward-Modeling Simulated SFHs
 #
-# diffsed can forward-model SEDs from arbitrary tabulated star formation
+# tengri can forward-model SEDs from arbitrary tabulated star formation
 # histories -- for example, from cosmological simulations like IllustrisTNG,
 # EAGLE, or UniverseMachine. The `simulate` module bypasses the parametric
 # SFH models and directly uses the DSPS CSP integral.
@@ -37,8 +37,8 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import load_filter_set, load_ssp_data
-from diffsed.simulate import photometry_from_sfh, sed_from_sfh
+from tengri import load_filter_set, load_ssp_data
+from tengri.simulate import photometry_from_sfh, sed_from_sfh
 
 import sys, os  # noqa: E401
 
@@ -120,7 +120,7 @@ ax.set_title("Example Tabulated Star Formation Histories")
 ax.legend(fontsize=8, frameon=False)
 ax.set_xlim(0, 14)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "09_tabulated_sfhs.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "09_tabulated_sfhs.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -153,7 +153,7 @@ ax.set_title("Rest-Frame SEDs from Tabulated SFHs")
 ax.set_xlim(900, 50000)
 ax.legend(fontsize=7, frameon=False)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "09_tabulated_seds.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "09_tabulated_seds.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -235,7 +235,7 @@ ax.set_ylabel(r"$-2.5\log(L_{4000}/L_{6000})$")
 ax.set_title("Color-Magnitude Diagram from Simulated Catalog")
 ax.invert_xaxis()
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "09_color_magnitude.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "09_color_magnitude.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

@@ -29,7 +29,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -176,7 +176,7 @@ plt.show()
 # ## 5. Corner Plot
 
 # %%
-from diffsed.plotting import safe_corner
+from tengri.plotting import safe_corner
 
 truths = {k: float(true_params[k]) for k in spec.free_params}
 fig = safe_corner(result, params=spec.free_params, truths=truths)

@@ -15,7 +15,7 @@
 # %% [markdown]
 # # VI Methods Benchmark: Speed, Accuracy, and Compilation
 #
-# Comprehensive comparison of all variational inference methods in diffsed.
+# Comprehensive comparison of all variational inference methods in tengri.
 # For each method we measure:
 # - **Compile time** (one-time JIT/XLA cost)
 # - **Run time** (per-galaxy execution after compilation)
@@ -35,9 +35,9 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 logging.getLogger("nifty8").setLevel(logging.ERROR)
 
-from diffsed import Fitter, Model, ParamSpec, Uniform
-from diffsed.models.observation.filters import load_filter_set
-from diffsed.models.sps.dsps_wrapper import load_ssp_data
+from tengri import Fitter, Model, ParamSpec, Uniform
+from tengri.models.observation.filters import load_filter_set
+from tengri.models.sps.dsps_wrapper import load_ssp_data
 
 # %% [markdown]
 # ## Setup: Mock Galaxy with Known Truth
@@ -453,7 +453,7 @@ print("  - Compile time is one-time; run time is per-galaxy (cached)")
 #
 # ### Persistent XLA cache
 #
-# diffsed enables XLA's persistent cache at `/tmp/diffsed_jax_cache`.
+# tengri enables XLA's persistent cache at `/tmp/tengri_jax_cache`.
 # Compiled programs survive across Python sessions. First run of a new
 # session may still recompile, but subsequent sessions reuse the cache.
 #

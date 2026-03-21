@@ -43,7 +43,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -163,7 +163,7 @@ ax.set_xlabel(r"$\theta_1$")
 ax.set_ylabel(r"$\theta_2$")
 
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "08_snell_law.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "08_snell_law.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -238,7 +238,7 @@ if result_rt.samples is not None:
             ax.set_xlabel("Sample index")
     fig.suptitle("RT Trace Plots (D=7)", y=1.02)
     fig.tight_layout()
-    plt.savefig(os.path.join(FIGDIR, "08_rt_traces_d7.pdf"), bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "08_rt_traces_d7.png"), bbox_inches="tight")
     plt.show()
 
 # %%
@@ -314,7 +314,7 @@ plot_sfh(
 )
 ax.set_title("RT SFH Recovery (D~137 stochastic model)")
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "08_rt_sfh_d137.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "08_rt_sfh_d137.png"), bbox_inches="tight")
 plt.show()
 
 # %%
@@ -367,7 +367,7 @@ ax.set_title("RT Step Size vs Acceptance Rate (D=7)")
 ax.legend(fontsize=8, frameon=False)
 ax.set_ylim(0, 1.05)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "08_step_size_acceptance.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "08_step_size_acceptance.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

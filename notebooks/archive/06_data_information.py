@@ -51,7 +51,7 @@ from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
 setup_style()
 import os; os.makedirs("notebook_figures", exist_ok=True)
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )

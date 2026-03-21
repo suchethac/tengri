@@ -15,7 +15,7 @@
 # %% [markdown]
 # # Tutorial 16: AGN Models &mdash; A Comprehensive Guide
 #
-# **diffsed** provides six AGN emission models spanning a wide range of
+# **tengri** provides six AGN emission models spanning a wide range of
 # physical complexity, from a 3-parameter power-law disc to the empirical
 # QSOgen quasar SED and the clumpy SKIRTOR torus.  All are pure JAX,
 # JIT-compilable, and fully differentiable &mdash; enabling gradient-based
@@ -51,8 +51,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
 
-from diffsed.models.agn import AGN_MODELS, get_agn_model
-from diffsed import (
+from tengri.models.agn import AGN_MODELS, get_agn_model
+from tengri import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
@@ -194,7 +194,7 @@ plt.show()
 # four key parameters and their effect on the SED shape.
 
 # %%
-from diffsed.models.agn.qsogen import qsogen_sed
+from tengri.models.agn.qsogen import qsogen_sed
 
 fig, axes = plt.subplots(2, 2, figsize=(12, 9))
 
@@ -295,7 +295,7 @@ plt.show()
 # **emission** in face-on (Type 1) views.
 
 # %%
-from diffsed.models.agn.skirtor import skirtor_analytic
+from tengri.models.agn.skirtor import skirtor_analytic
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
@@ -492,7 +492,7 @@ plt.show()
 #
 # This is the core demonstration: we generate a mock galaxy+AGN
 # observation at $z = 0.3$ with known parameters, then recover them
-# using diffsed's Evidence-maximizing Variational Inference (EVI).
+# using tengri's Evidence-maximizing Variational Inference (EVI).
 #
 # The key question: **can we recover `agn_frac` from photometry alone?**
 # This is non-trivial because AGN emission is partially degenerate
@@ -665,7 +665,7 @@ except Exception as e:
 # ## 6. AGN Fraction Recovery Test
 #
 # We repeat the fit at five values of $f_{\rm AGN}$ from 0.0 to 0.3
-# to test: **at what AGN fraction does diffsed begin to reliably
+# to test: **at what AGN fraction does tengri begin to reliably
 # detect the AGN component?**  With GALEX+SDSS+WISE photometry at
 # SNR $= 30$, we expect the detection threshold to be around 5%.
 
@@ -766,11 +766,11 @@ plt.show()
 #
 # | Feature | Module | Key API |
 # |---------|--------|---------|
-# | 6 AGN models | `diffsed.models.agn` | `AGN_MODELS`, `get_agn_model()` |
-# | QSOgen empirical SED | `diffsed.models.agn.qsogen` | `qsogen_sed()` |
-# | SKIRTOR clumpy torus | `diffsed.models.agn.skirtor` | `skirtor_analytic()` |
-# | AGN in forward model | `diffsed.Model` | `agn_model="simple"` in `ParamSpec` |
-# | AGN inference | `diffsed.Fitter` | `fitter.run("native_evi", ...)` |
+# | 6 AGN models | `tengri.models.agn` | `AGN_MODELS`, `get_agn_model()` |
+# | QSOgen empirical SED | `tengri.models.agn.qsogen` | `qsogen_sed()` |
+# | SKIRTOR clumpy torus | `tengri.models.agn.skirtor` | `skirtor_analytic()` |
+# | AGN in forward model | `tengri.Model` | `agn_model="simple"` in `ParamSpec` |
+# | AGN inference | `tengri.Fitter` | `fitter.run("native_evi", ...)` |
 #
 # **Key takeaways:**
 #

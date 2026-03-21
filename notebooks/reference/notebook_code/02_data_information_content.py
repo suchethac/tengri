@@ -33,7 +33,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -215,14 +215,14 @@ for row, stage in enumerate(STAGES):
         ax,
         model_s,
         result,
-        truth_params=TRUTH,
+        true_params=TRUTH,
         n_draws=30,
         color=COLORS["geovi"],
     )
     ax.set_title(f"SFH posterior ({stage['name']})")
 
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "02_progressive_reveal.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "02_progressive_reveal.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -267,7 +267,7 @@ for ax, param, label in zip(axes.flat, params_to_track, param_labels):
 
 fig.suptitle("Posterior Width vs Data Complexity", y=1.02)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "02_posterior_width_vs_data.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "02_posterior_width_vs_data.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -313,7 +313,7 @@ ax.set_ylabel("Flux density")
 ax.set_title("Spectroscopic Fit")
 ax.legend(fontsize=8, frameon=False)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "02_spectrum_fit.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "02_spectrum_fit.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -349,7 +349,7 @@ ax.set_ylabel(r"$\sigma_{\rm posterior}$")
 ax.set_title("Posterior Width: Photometry vs Spectroscopy")
 ax.legend(fontsize=8, frameon=False)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "02_phot_vs_spec.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "02_phot_vs_spec.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -390,7 +390,7 @@ ax.set_ylabel("Relative information ($1/\\sigma^2$)")
 ax.set_title("Information Gain vs Data Complexity")
 ax.legend(fontsize=8, frameon=False)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "02_information_gain.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "02_information_gain.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -420,7 +420,7 @@ for stage_name in ["1 band (r)", "5 bands (ugriz)"]:
         if fig is not None:
             fig.suptitle(f"Corner: {stage_name}", y=1.02)
             plt.savefig(
-                os.path.join(FIGDIR, f"02_corner_{stage_name.replace(' ', '_')}.pdf"),
+                os.path.join(FIGDIR, f"02_corner_{stage_name.replace(' ', '_')}.png"),
                 bbox_inches="tight",
             )
             plt.show()

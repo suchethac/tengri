@@ -18,7 +18,7 @@
 # Cosmological simulations (IllustrisTNG, EAGLE, UniverseMachine, FIRE, etc.)
 # produce star formation and metallicity histories as discrete time series for
 # each galaxy.  This notebook shows how to pass those tabulated histories
-# directly through **diffsed**'s full physics pipeline&mdash;dust attenuation,
+# directly through **tengri**'s full physics pipeline&mdash;dust attenuation,
 # nebular emission, AGN, IGM absorption&mdash;to generate synthetic photometry
 # and spectra.
 #
@@ -49,7 +49,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
 
-from diffsed import (
+from tengri import (
     Model,
     ParamSpec,
     Fixed,
@@ -246,7 +246,7 @@ plt.show()
 # ## 2. Metallicity History
 #
 # Simulations also track the stellar metallicity as a function of time.
-# diffsed supports this via the `met_history` key: an array of
+# tengri supports this via the `met_history` key: an array of
 # $\log_{10}(Z/Z_\odot)$ values on the same time grid as `sfh_t_gyr`.
 #
 # We show how three different enrichment histories&mdash;constant, linear,
@@ -305,7 +305,7 @@ plt.show()
 # %% [markdown]
 # ## 3. Full Physics Pipeline Buildup
 #
-# All diffsed physics modules work with tabulated SFH.  Here we
+# All tengri physics modules work with tabulated SFH.  Here we
 # demonstrate the progressive SED buildup for a single delayed-tau SFH
 # at $z = 2$:
 #
@@ -827,8 +827,8 @@ print(f"Single mock:       {t_mock:.2f} ms")
 # vmap the photometry computation (using precomputed SSP-through-filter integrals)
 # This is the FAST path: precomputed SSP photometry + vmap over SFH arrays
 
-from diffsed.models.sps.dsps_wrapper import compute_csp_weights, interpolate_metallicity
-from diffsed.models.dust.attenuation import two_component_dust
+from tengri.models.sps.dsps_wrapper import compute_csp_weights, interpolate_metallicity
+from tengri.models.dust.attenuation import two_component_dust
 
 ssp_log_ages = ssp.ssp_lg_age_gyr + 9.0
 ssp_ages = 10.0**ssp_log_ages
@@ -960,7 +960,7 @@ print("=" * 60)
 # %% [markdown]
 # ## Summary
 #
-# This notebook demonstrated how simulation outputs plug into diffsed:
+# This notebook demonstrated how simulation outputs plug into tengri:
 #
 # | Feature | How |
 # |---------|-----|

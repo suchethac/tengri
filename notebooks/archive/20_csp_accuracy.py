@@ -15,7 +15,7 @@
 # %% [markdown]
 # # NB20 — CSP Integral Accuracy & Metallicity Interpolation
 #
-# **Goal:** Compare diffsed's CSP integral against the DSPS reference,
+# **Goal:** Compare tengri's CSP integral against the DSPS reference,
 # diagnose where differences arise, and demonstrate the new smooth
 # triweight metallicity interpolation that matches DSPS exactly.
 #
@@ -29,7 +29,7 @@
 #
 # $$L_\mathrm{CSP}(\lambda) = \sum_{i,m} w_i \, \phi_m \, \mathrm{SSP}(\lambda, Z_m, \mathrm{age}_i)$$
 #
-# This notebook shows that diffsed can use either:
+# This notebook shows that tengri can use either:
 # - **2-point linear** interpolation in $\log(Z)$ (same as FSPS/Prospector)
 # - **Triweight kernel** (same as DSPS, Hearin+2023) with smooth $C^2$ gradients
 #
@@ -65,7 +65,7 @@ jax.config.update("jax_enable_x64", True)
 # ## 1. Load SSP templates
 
 # %%
-from diffsed.models.sps.dsps_wrapper import (
+from tengri.models.sps.dsps_wrapper import (
     load_ssp_data,
     compute_csp_weights,
     compute_csp_sed,
@@ -136,7 +136,7 @@ plt.show()
 # | **Prospector** (Johnson+2021) | delegates to FSPS | delegates to FSPS |
 # | **CIGALE** (Boquien+2019) | grid-based | nearest-neighbor |
 # | **DSPS** (Hearin+2023) | cumulative mass interp | triweight kernel |
-# | **diffsed** (this work) | DSPS cumulative | **both** (selectable) |
+# | **tengri** (this work) | DSPS cumulative | **both** (selectable) |
 
 # %% [markdown]
 # ## 4. DSPS reference SEDs
@@ -181,16 +181,16 @@ for name, sfr in sfh_models.items():
 #
 # | Method | Age weights | Z interpolation |
 # |--------|------------|-----------------|
-# | **A**: diffsed standard | midpoint rule | 2-point linear |
-# | **B**: diffsed + DSPS age | DSPS cumulative | 2-point linear |
-# | **C**: diffsed smooth | DSPS cumulative | triweight kernel |
+# | **A**: tengri standard | midpoint rule | 2-point linear |
+# | **B**: tengri + DSPS age | DSPS cumulative | 2-point linear |
+# | **C**: tengri smooth | DSPS cumulative | triweight kernel |
 # | **Ref**: full DSPS | DSPS cumulative | triweight kernel |
 
 # %%
 wave = np.array(ssp.ssp_wave)
 
 def method_a(sfr_table):
-    """diffsed standard: midpoint weights + 2-point Z."""
+    """tengri standard: midpoint weights + 2-point Z."""
     ssp_ages_gyr = 10.0 ** ssp.ssp_lg_age_gyr
     ssp_ages_yr = ssp_ages_gyr * 1e9
     t_lookback = t_obs_gyr - t_table
@@ -211,7 +211,7 @@ def method_b(sfr_table):
     return compute_csp_sed(weights, ssp_at_z, dust), weights
 
 def method_c(sfr_table):
-    """DSPS age weights + triweight smooth Z (diffsed native)."""
+    """DSPS age weights + triweight smooth Z (tengri native)."""
     age_w = _get_dsps_age_weights(sfr_table)
     total_mass = jnp.trapezoid(sfr_table, t_table * 1e9)
     weights = age_w * total_mass
@@ -219,7 +219,7 @@ def method_c(sfr_table):
     dust = jnp.ones_like(ssp_at_z)
     return compute_csp_sed(weights, ssp_at_z, dust), weights
 
-print("Computing diffsed SEDs (3 methods)...")
+print("Computing tengri SEDs (3 methods)...")
 results = {}
 for name, sfr in sfh_models.items():
     sed_a, w_a = method_a(sfr)
@@ -249,7 +249,7 @@ for ax, (name, sfr) in zip(axes, sfh_models.items()):
     ax.step(ssp_ages_gyr, w_dsps / total_dsps, where="mid",
             color=COLORS["truth"], lw=2, label="DSPS (cumulative)")
     ax.step(ssp_ages_gyr, w_midpt / total_midpt, where="mid",
-            color=COLORS["rt"], lw=1.5, ls="--", label="diffsed (midpoint)")
+            color=COLORS["rt"], lw=1.5, ls="--", label="tengri (midpoint)")
     ax.set_xscale("log")
     ax.set_xlabel("SSP age (Gyr)")
     ax.set_ylabel("Normalized weight")
@@ -358,7 +358,7 @@ axes[0].set_ylabel("Weight")
 axes[0].set_title(r"Metallicity kernels at $\log(Z/Z_\odot)=-0.3$")
 axes[0].legend(fontsize=8)
 
-# Right: diffsed vs DSPS cross-validation
+# Right: tengri vs DSPS cross-validation
 scatter_vals = [0.05, 0.1, 0.2, 0.3]
 max_diffs = []
 for sc in scatter_vals:
@@ -369,8 +369,8 @@ for sc in scatter_vals:
 axes[1].semilogy(scatter_vals, max_diffs, "o-", color=COLORS["rt"], lw=2, ms=8)
 axes[1].axhline(1e-4, color="0.7", ls=":", lw=0.8, label=r"$10^{-4}$")
 axes[1].set_xlabel(r"lgmet\_scatter (dex)")
-axes[1].set_ylabel("|w_diffsed - w_DSPS|_max")
-axes[1].set_title("diffsed triweight vs DSPS: cross-validation")
+axes[1].set_ylabel("|w_tengri - w_DSPS|_max")
+axes[1].set_title("tengri triweight vs DSPS: cross-validation")
 axes[1].legend()
 
 fig.tight_layout()
@@ -576,7 +576,7 @@ plt.show()
 # ## 12. Usage
 #
 # ```python
-# from diffsed import ParamSpec, Uniform
+# from tengri import ParamSpec, Uniform
 #
 # # FSPS-compatible (default)
 # spec = ParamSpec(met_interp="linear", met_logzsol=Uniform(-2, 0.2))

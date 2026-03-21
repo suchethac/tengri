@@ -15,7 +15,7 @@
 # %% [markdown]
 # # Inference: Five Methods, One Loss Function
 #
-# All five inference methods in diffsed operate on the **same
+# All five inference methods in tengri operate on the **same
 # standardised information Hamiltonian**:
 #
 # $$H(\boldsymbol{\xi} \mid \mathbf{d}) = \tfrac{1}{2}\chi^2 + \tfrac{1}{2}\boldsymbol{\xi}^\top\boldsymbol{\xi}$$
@@ -47,7 +47,7 @@ jax.config.update("jax_enable_x64", True)
 import matplotlib.pyplot as plt
 import numpy as np
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )

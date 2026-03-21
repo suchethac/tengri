@@ -17,7 +17,7 @@
 # # Catalog-Scale Photometry: 1000 Galaxies in Minutes
 #
 # Fitting one galaxy is nice. Fitting a catalog of 1000 is the real test.
-# diffsed's JIT compilation + vmap batching gives sublinear per-galaxy
+# tengri's JIT compilation + vmap batching gives sublinear per-galaxy
 # scaling — the first galaxy pays the compile cost, the rest are nearly free.
 
 # %%
@@ -32,7 +32,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -59,6 +59,9 @@ elif os.path.exists(os.path.join("..", "..", "data")):
     os.chdir(os.path.join("..", ".."))
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
+
+FIGDIR = os.path.join("demonstrations", "figures")
+os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import COLORS, setup_style  # noqa: E402
 
@@ -113,7 +116,7 @@ ax.set_xlabel("g − r")
 ax.set_ylabel("u − g")
 ax.set_title(f"Mock Catalog: {N_CAT} Galaxies")
 fig.tight_layout()
-plt.savefig("fig01_color_color_catalog.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig01_color_color_catalog.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -164,7 +167,7 @@ ax.set_ylabel("Total wall time [s]")
 ax.legend()
 ax.set_title("Catalog Fitting: Sublinear Scaling via JIT Cache")
 fig.tight_layout()
-plt.savefig("fig02_scaling.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig02_scaling.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -201,7 +204,7 @@ for ax, pname, label in zip(axes.flat, params_to_check, labels):
 
 fig.suptitle(f"Parameter Recovery ({len(quick_results)} galaxies, native_geovi)", fontsize=11)
 fig.tight_layout()
-plt.savefig("fig03_recovered_vs_true.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig03_recovered_vs_true.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%

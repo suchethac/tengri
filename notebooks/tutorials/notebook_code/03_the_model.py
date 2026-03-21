@@ -41,11 +41,11 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed.models.sfh.psd_models import psd_drw
-from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw
-from diffsed.models.sfh.gp_sfh import gp_from_xi, generate_gp_fourier
-from diffsed.models.sfh.mean_sfh import tsnorm
-from diffsed.utils.grid import make_log_age_grid, grid_spacing
+from tengri.models.sfh.psd_models import psd_drw
+from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.models.sfh.gp_sfh import gp_from_xi, generate_gp_fourier
+from tengri.models.sfh.mean_sfh import tsnorm
+from tengri.utils.grid import make_log_age_grid, grid_spacing
 
 import sys, os  # noqa: E401, E402
 try:
@@ -64,6 +64,9 @@ elif os.path.exists(os.path.join("..", "..", "data")):
     os.chdir(os.path.join("..", ".."))
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
+
+FIGDIR = os.path.join("tutorials", "figures")
+os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import COLORS, setup_style  # noqa: E402
 
@@ -134,7 +137,7 @@ ax_gp.set_xlim(13.5, 0)
 ax_gp.set_title("GP Realizations (same ξ)")
 
 fig.tight_layout()
-plt.savefig("fig01_psd_overview.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig01_psd_overview.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -176,7 +179,7 @@ ax_tau.set_title(f"Fix σ = {sigma_fixed}, vary τ")
 ax_tau.legend(fontsize=8)
 
 fig.tight_layout()
-plt.savefig("fig02_parameter_sweeps.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig02_parameter_sweeps.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -234,7 +237,7 @@ axes[3].set_xlim(13.5, 0)
 axes[3].set_title("(4) Full SFH = mean × exp(x − K/2)")
 
 fig.tight_layout()
-plt.savefig("fig03_step_by_step.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig03_step_by_step.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -252,7 +255,7 @@ for idx, ax in enumerate(axes.flat):
     ax.set_title(f"Realization {idx + 1}")
 fig.suptitle(f"Same PSD (σ = {sigma}, τ = {tau_myr} Myr), different ξ", fontsize=11)
 fig.tight_layout()
-plt.savefig("fig04_multiple_realizations.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig04_multiple_realizations.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -288,14 +291,14 @@ ax.set_ylabel(r"$\langle$SFR$\rangle$ [$M_\odot$/yr]")
 ax.legend(fontsize=8)
 ax.set_title("Lognormal Correction: Preserving the Mean")
 fig.tight_layout()
-plt.savefig("fig05_lognormal_correction.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig05_lognormal_correction.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
 # ## The Secular Backbone
 #
 # The GP has zero mean by construction, so we need a separate smooth secular
-# component. diffsed supports 8 parametric shapes (plus tabulated). The
+# component. tengri supports 8 parametric shapes (plus tabulated). The
 # default is the truncated skew-normal (tsnorm, Bellstedt+2020).
 
 # %%
@@ -335,7 +338,7 @@ for ax in [ax_lbt, ax_w, ax_s]:
 
 fig.suptitle("Truncated Skew-Normal Mean SFH (Bellstedt+2020)", fontsize=11)
 fig.tight_layout()
-plt.savefig("fig06_tsnorm_variations.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig06_tsnorm_variations.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -377,7 +380,7 @@ for i, sigma in enumerate(sigmas):
 
 fig.suptitle("The Burstiness Plane: (σ, τ) Controls SFH Character", fontsize=12, y=1.01)
 fig.tight_layout()
-plt.savefig("fig07_burstiness_plane.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig07_burstiness_plane.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -413,7 +416,7 @@ ax.set_ylabel(r"$\sigma(\log_{10}$ SFR$_{100\rm Myr})$ [dex]")
 ax.legend(fontsize=8)
 ax.set_title("SFR Scatter vs PSD Amplitude (τ = 50 Myr)")
 fig.tight_layout()
-plt.savefig("fig08_observable_diagnostics.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig08_observable_diagnostics.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

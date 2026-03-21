@@ -32,7 +32,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fixed,
     Model,
     ParamSpec,
@@ -40,7 +40,7 @@ from diffsed import (
     load_filter_set,
     load_ssp_data,
 )
-from diffsed.models.sps.dsps_wrapper import compute_csp_weights
+from tengri.models.sps.dsps_wrapper import compute_csp_weights
 
 import sys, os  # noqa: E401, E402
 try:
@@ -59,6 +59,9 @@ elif os.path.exists(os.path.join("..", "..", "data")):
     os.chdir(os.path.join("..", ".."))
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
+
+FIGDIR = os.path.join("tutorials", "figures")
+os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import COLORS, SPECTRAL_FEATURES, setup_style  # noqa: E402
 
@@ -107,7 +110,7 @@ ax.set_xlim(900, 30000)
 ax.legend(fontsize=8, title="Age")
 ax.set_title("Simple Stellar Populations at Solar Metallicity")
 fig.tight_layout()
-plt.savefig("fig01_ssp_spectra.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig01_ssp_spectra.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -167,7 +170,7 @@ ax_csp.set_ylabel("Flux density")
 ax_csp.set_title("(3) Composite Spectrum")
 
 fig.tight_layout()
-plt.savefig("fig02_csp_assembly.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig02_csp_assembly.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -227,7 +230,7 @@ ax_sed.legend(fontsize=8)
 ax_sed.set_title("(3) Dust Effect on SED")
 
 fig.tight_layout()
-plt.savefig("fig03_dust_effects.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig03_dust_effects.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -255,7 +258,7 @@ ax.set_ylabel("Normalized flux")
 ax.legend(fontsize=8)
 ax.set_title("Metallicity Effect on Spectrum (no dust)")
 fig.tight_layout()
-plt.savefig("fig04_metallicity.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig04_metallicity.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -282,7 +285,7 @@ ax.set_xlabel("Observed wavelength [Å]")
 ax.set_ylabel("Flux density")
 ax.set_title("Spectrum → Photometry via Filter Convolution")
 fig.tight_layout()
-plt.savefig("fig05_sed_to_photometry.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig05_sed_to_photometry.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -316,7 +319,7 @@ ax3.set_title("Photometry (5 bands)")
 
 fig.suptitle("The Complete Forward Model Pipeline", fontsize=12)
 fig.tight_layout()
-plt.savefig("fig06_complete_pipeline.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig06_complete_pipeline.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -364,7 +367,7 @@ ax.set_ylabel("Parameter")
 plt.colorbar(im, ax=ax, label="Normalized sensitivity", shrink=0.8)
 ax.set_title("Jacobian: ∂photometry / ∂parameter (signed, normalized)")
 fig.tight_layout()
-plt.savefig("fig07_jacobian_heatmap.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig07_jacobian_heatmap.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

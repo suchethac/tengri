@@ -15,7 +15,7 @@
 # %% [markdown]
 # # Derived Physical Quantities
 #
-# diffsed computes a comprehensive set of derived quantities from the
+# tengri computes a comprehensive set of derived quantities from the
 # forward model — from stellar masses and SFRs to UV slopes, emission
 # line diagnostics, and radio/X-ray scaling relations.
 #
@@ -39,8 +39,8 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed import Model, ParamSpec, Uniform
-from diffsed.models.sps.dsps_wrapper import load_ssp_data
+from tengri import Model, ParamSpec, Uniform
+from tengri.models.sps.dsps_wrapper import load_ssp_data
 
 # %%
 ssp = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")

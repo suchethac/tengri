@@ -19,7 +19,7 @@
 # Spectra contain orders of magnitude more information than photometry. A
 # 200-pixel spectrum constrains ~40× more than 5-band photometry — breaking
 # degeneracies that plague broadband fitting. This notebook demonstrates
-# spectroscopic fitting with diffsed: parametric and stochastic models,
+# spectroscopic fitting with tengri: parametric and stochastic models,
 # photometry vs spectroscopy comparison, SNR dependence, and redshift
 # accessibility.
 
@@ -35,7 +35,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -62,6 +62,9 @@ elif os.path.exists(os.path.join("..", "..", "data")):
     os.chdir(os.path.join("..", ".."))
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
+
+FIGDIR = os.path.join("demonstrations", "figures")
+os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import (  # noqa: E402
     COLORS,
@@ -126,7 +129,7 @@ ax.set_ylabel("Flux density")
 ax.legend(fontsize=8)
 ax.set_title("Mock Galaxy Spectrum at z = 0.1")
 fig.tight_layout()
-plt.savefig("fig01_mock_spectrum.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig01_mock_spectrum.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -178,7 +181,7 @@ ax_r.set_xlabel("Observed wavelength [Å]")
 chi2 = np.sum(res**2) / len(res)
 ax_f.set_title(f"Spectral Fit (reduced $\\chi^2$ = {chi2:.2f})")
 fig.tight_layout()
-plt.savefig("fig02_spectral_fit.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig02_spectral_fit.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -188,7 +191,7 @@ plot_sfh(model_param, result_geovi_spec, true_params=true_param, ax=ax,
          color=COLORS["geovi"], label="Spectroscopy", method="geoVI")
 ax.set_title("SFH Recovery from Spectroscopy")
 fig.tight_layout()
-plt.savefig("fig03_sfh_spec.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig03_sfh_spec.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -196,7 +199,7 @@ plt.show()
 fig = safe_corner(result_geovi_spec, truths=true_param)
 if fig is not None:
     fig.suptitle("Parametric Posterior — Spectroscopy", y=1.02)
-    plt.savefig("fig04_corner_spec.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig04_corner_spec.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -258,7 +261,7 @@ plot_sfh(model_stoch, result_stoch_spec, true_params=true_stoch, ax=ax,
          show_mean_sfh=True)
 ax.set_title(f"Bursty SFH Recovery from Spectroscopy (D = {spec_stoch.n_free})")
 fig.tight_layout()
-plt.savefig("fig05_sfh_bursty_spec.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig05_sfh_bursty_spec.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -267,7 +270,7 @@ psd_params = ["sfh_field_psd_sigma", "sfh_field_psd_tau_myr"]
 fig = safe_corner(result_stoch_spec, truths=true_stoch, params=psd_params)
 if fig is not None:
     fig.suptitle("PSD Parameters — Spectroscopy Constrains Both σ and τ", y=1.02)
-    plt.savefig("fig06_psd_corner.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig06_psd_corner.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -298,7 +301,7 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle("Photometry vs Spectroscopy — Physical Parameters", y=1.02)
-    plt.savefig("fig07_phot_vs_spec_corner.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig07_phot_vs_spec_corner.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -312,7 +315,7 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle("PSD Recovery: Spectroscopy Breaks the σ–τ Degeneracy", y=1.02)
-    plt.savefig("fig08_psd_phot_vs_spec.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig08_psd_phot_vs_spec.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -357,7 +360,7 @@ for ax, snr in zip(axes, [10, 30, 100]):
     ax.set_title(f"SNR = {snr}")
 fig.suptitle("SFH Recovery vs Signal-to-Noise Ratio", fontsize=11)
 fig.tight_layout()
-plt.savefig("fig09_snr_dependence.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig09_snr_dependence.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -389,7 +392,7 @@ for ax, z, survey, (wlo, whi) in zip(axes, redshifts, surveys, windows):
 
 fig.suptitle("Spectral Feature Accessibility vs Redshift", fontsize=11)
 fig.tight_layout()
-plt.savefig("fig10_redshift_accessibility.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig10_redshift_accessibility.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

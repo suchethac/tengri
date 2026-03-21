@@ -37,7 +37,7 @@
 #   posterior predictive checks.
 #
 # **By the end you will understand:**
-# - How well diffsed recovers parametric vs stochastic SFHs
+# - How well tengri recovers parametric vs stochastic SFHs
 # - The photometry vs spectroscopy information content difference
 # - Why PSD timescale $\tau$ requires hierarchical inference
 # - What happens when you fit a bursty galaxy with a smooth model
@@ -60,7 +60,7 @@ from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, safe_corner
 setup_style()
 import os; os.makedirs("notebook_figures", exist_ok=True)
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Gaussian, LogUniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
@@ -75,7 +75,7 @@ print(f"Filters loaded — {[fc.name for fc in filters[2]]}")
 # ## Part A: Parametric Model (7 free parameters)
 #
 # A smooth double-power-law SFH with no stochastic component
-# (`mean_sfh_type="dpl"`).  This is the regime where **diffsed** competes
+# (`mean_sfh_type="dpl"`).  This is the regime where **tengri** competes
 # directly with BAGPIPES and Prospector.  With only 7 free parameters,
 # **NUTS** gives exact, gold-standard posteriors in $\sim 30$ s.
 
@@ -221,7 +221,7 @@ for name in spec_param.free_params:
 # %% [markdown]
 # ## Part B: Stochastic Model (137 free parameters)
 #
-# This is the IFT model -- the unique contribution of **diffsed**.  The SFH
+# This is the IFT model -- the unique contribution of **tengri**.  The SFH
 # includes a Gaussian-process correlated field whose PSD is governed by two
 # physical hyper-parameters: $\sigma_{\rm PSD}$ (amplitude of stochastic
 # variability in dex) and $\tau_{\rm PSD}$ (correlation timescale in Myr).
@@ -231,7 +231,7 @@ for name in spec_param.free_params:
 # > **SED-fitting wisdom:** The stochastic model has 137 free parameters —
 # > 9 physical parameters plus 128 GP latent variables. This is far beyond
 # > what NUTS can handle. BAGPIPES and Prospector typically have 5–15 free
-# > parameters; diffsed's stochastic model pushes into territory where only
+# > parameters; tengri's stochastic model pushes into territory where only
 # > Ray Tracing and geoVI remain practical.
 
 # %%

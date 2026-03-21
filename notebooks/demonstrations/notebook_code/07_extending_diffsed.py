@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Custom Physics: Bring Your Own Model
 #
-# diffsed is modular: swap PSD models, dust laws, priors, and mean SFH shapes
+# tengri is modular: swap PSD models, dust laws, priors, and mean SFH shapes
 # without changing any inference code. This notebook demonstrates each
 # extension point.
 
@@ -31,7 +31,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fixed,
     Model,
     ParamSpec,
@@ -39,11 +39,11 @@ from diffsed import (
     load_filter_set,
     load_ssp_data,
 )
-from diffsed.distributions import Distribution
-from diffsed.models.sfh.psd_models import psd_drw
-from diffsed.models.sfh.gp_sfh import compute_sqrt_power_drw
-from diffsed.models.sfh.gp_sfh import gp_from_xi
-from diffsed.utils.grid import make_log_age_grid, grid_spacing
+from tengri.distributions import Distribution
+from tengri.models.sfh.psd_models import psd_drw
+from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.models.sfh.gp_sfh import gp_from_xi
+from tengri.utils.grid import make_log_age_grid, grid_spacing
 
 import sys, os  # noqa: E401, E402
 try:
@@ -62,6 +62,9 @@ elif os.path.exists(os.path.join("..", "..", "data")):
     os.chdir(os.path.join("..", ".."))
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
+
+FIGDIR = os.path.join("demonstrations", "figures")
+os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import COLORS, setup_style  # noqa: E402
 
@@ -145,7 +148,7 @@ ax2.legend(fontsize=8)
 ax2.set_title("Implied Prior Density")
 
 fig.tight_layout()
-plt.savefig("fig01_custom_prior.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig01_custom_prior.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -204,7 +207,7 @@ ax2.legend(fontsize=8)
 ax2.set_title("GP Realizations (same ξ)")
 
 fig.tight_layout()
-plt.savefig("fig02_custom_psd.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig02_custom_psd.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -239,14 +242,14 @@ ax.set_ylabel("Transmission (e^{-τ})")
 ax.legend(fontsize=8)
 ax.set_title("Attenuation Curves at τ_V = 1.0")
 fig.tight_layout()
-plt.savefig("fig03_dust_curves.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig03_dust_curves.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
 # ## Mean SFH Shapes
 
 # %%
-from diffsed.models.sfh.mean_sfh import tsnorm
+from tengri.models.sfh.mean_sfh import tsnorm
 
 ages_yr = 10**log_ages
 ages_gyr = ages_yr / 1e9
@@ -272,7 +275,7 @@ ax.set_ylabel(r"SFR [$M_\odot$/yr]")
 ax.legend(fontsize=8)
 ax.set_title("Mean SFH Shapes (Truncated Skew-Normal)")
 fig.tight_layout()
-plt.savefig("fig04_mean_sfh_shapes.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig04_mean_sfh_shapes.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

@@ -15,7 +15,7 @@
 # %% [markdown]
 # # The IFT Correlated Field Model
 #
-# This tutorial develops the mathematical framework that makes diffsed
+# This tutorial develops the mathematical framework that makes tengri
 # different from other SED-fitting codes.  The central idea: **the star
 # formation history is a continuous field, not a parametric function or a
 # set of independent time bins.**  Its temporal correlation structure is
@@ -55,7 +55,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
-from diffsed.utils.devices import setup_jax
+from tengri.utils.devices import setup_jax
 setup_jax()
 
 import jax
@@ -63,19 +63,19 @@ import jax.numpy as jnp
 from jax import random, grad, jit
 
 # Low-level model components
-from diffsed.models.sfh.psd_models import (
+from tengri.models.sfh.psd_models import (
     psd_drw, drw_acf, drw_variance, psd_to_sqrt_power,
 )
-from diffsed.models.sfh.gp_sfh import (
+from tengri.models.sfh.gp_sfh import (
     gp_from_xi, generate_gp_fourier, generate_gp_batch,
     compute_sqrt_power_drw,
 )
-from diffsed.models.sfh.mean_sfh import double_powerlaw
-from diffsed.utils.grid import (
+from tengri.models.sfh.mean_sfh import double_powerlaw
+from tengri.utils.grid import (
     make_log_age_grid, grid_spacing, log_age_to_age_yr,
     interpolate_to_linear_time,
 )
-from diffsed.utils.cosmology import age_at_z
+from tengri.utils.cosmology import age_at_z
 
 # ── Plot style ────────────────────────────────────────────────────
 plt.rcParams.update({
@@ -1043,5 +1043,5 @@ plt.show()
 # ## Appendix: Hardware Check
 
 # %%
-from diffsed.utils.devices import check_resources
+from tengri.utils.devices import check_resources
 check_resources()

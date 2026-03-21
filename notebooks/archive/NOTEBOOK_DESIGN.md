@@ -1,6 +1,6 @@
 # Notebook Design Language
 
-**For agents and contributors writing or editing diffsed notebooks.**
+**For agents and contributors writing or editing tengri notebooks.**
 
 ## Architecture
 
@@ -37,7 +37,7 @@ cd notebooks && jupytext --sync *.py
 4. To add a new cell, insert a `# %%` marker
 5. Keep `_plot_style.py` — it provides `setup_style()`, `COLORS`, `safe_corner`
 
-## API Patterns (diffsed-specific)
+## API Patterns (tengri-specific)
 
 ### Data Loading
 ```python
@@ -104,7 +104,7 @@ fitter = Fitter(model, spec_obs, noise, data_type="spectroscopy")
 
 ## Plotting conventions (BAGPIPES-inspired)
 
-- **Style**: Use `diffsed.plotting.setup_style()` or notebook `_plot_style.setup_style()` — 18pt axis labels, 14pt ticks, inward ticks on all four sides, 2pt lines, no legend frame.
+- **Style**: Use `tengri.plotting.setup_style()` or notebook `_plot_style.setup_style()` — 18pt axis labels, 14pt ticks, inward ticks on all four sides, 2pt lines, no legend frame.
 - **SFH axis**: Lookback time with **present at the right** (reversed axis: `ax.set_xlim(13.5, 0)` so high lookback is left).
 - **Primary posterior fill**: Use navajowhite or a light tint of the sampler color for 68% CI fill where a single method is highlighted; multi-method overlay uses COLORS["rt"], COLORS["geovi"], COLORS["nuts"].
 - **Truth**: Solid black or near-black (`#1a1a1a`) line; dashed for markers in derived-quantity plots.

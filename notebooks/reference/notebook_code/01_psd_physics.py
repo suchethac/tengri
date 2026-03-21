@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Connecting PSD Parameters to Astrophysics
 #
-# The star formation history (SFH) in diffsed is modelled as a smooth secular
+# The star formation history (SFH) in tengri is modelled as a smooth secular
 # trend modulated by a Gaussian process whose correlation structure is governed
 # by a **Power Spectral Density** (PSD). This notebook builds physical
 # intuition for the two DRW parameters -- amplitude $\sigma_{\rm PS}$ and
@@ -44,7 +44,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     compute_sqrt_power_drw,
     drw_acf,
     drw_variance,
@@ -54,8 +54,8 @@ from diffsed import (
     psd_drw,
     tsnorm,
 )
-from diffsed.models.sfh.psd_models import psd_matern
-from diffsed.utils.grid import grid_spacing
+from tengri.models.sfh.psd_models import psd_matern
+from tengri.utils.grid import grid_spacing
 
 import sys, os  # noqa: E401
 
@@ -146,7 +146,7 @@ ax.set_title("GP Realizations")
 ax.set_xscale("log")
 
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "01_psd_acf_gp.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "01_psd_acf_gp.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -184,7 +184,7 @@ ax.set_title("Astrophysical Timescales Relevant to SFH Variability")
 ax.axvspan(5, 500, alpha=0.1, color=COLORS["rt"], label=r"Typical $\tau_{\rm PS}$ prior range")
 ax.legend(fontsize=8, frameon=False)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "01_timescales.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "01_timescales.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -215,7 +215,7 @@ ax.set_ylabel(r"$P(\omega)$ [Myr]")
 ax.set_title("PSD Comparison: DRW vs Matern")
 ax.legend(frameon=False)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "01_matern_comparison.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "01_matern_comparison.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -228,14 +228,14 @@ plt.show()
 # contribute to each observable.
 
 # %%
-from diffsed import load_ssp_data
+from tengri import load_ssp_data
 
 ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-from diffsed.diagnostics.green_functions import (
+from tengri.diagnostics.green_functions import (
     compute_green_function,
     compute_window_function,
 )
-from diffsed.models.sps.dsps_wrapper import interpolate_metallicity
+from tengri.models.sps.dsps_wrapper import interpolate_metallicity
 
 # Pick a reference metallicity (solar)
 LOG10_ZSUN = -1.848
@@ -265,7 +265,7 @@ ax.set_title("Green's Functions: Age Sensitivity by Wavelength")
 ax.legend(fontsize=8, frameon=False)
 ax.set_xlim(1, 14000)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "01_green_functions.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "01_green_functions.png"), bbox_inches="tight")
 plt.show()
 
 # %%
@@ -301,7 +301,7 @@ ax.set_title("Window Functions")
 ax.legend(fontsize=8, frameon=False)
 ax.set_xlim(1, 14000)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "01_window_functions.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "01_window_functions.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -387,7 +387,7 @@ axes[1].set_xlabel(r"$\sigma_{\rm PS}$")
 axes[1].set_ylabel(r"$\sigma[\log \mathrm{sSFR}]$ [dex]")
 axes[1].set_title("sSFR Scatter vs PSD Amplitude")
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "01_ssfr_diagnostics.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "01_ssfr_diagnostics.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -428,13 +428,13 @@ axes[1, 1].set_xlabel("Lookback time [Gyr]")
 axes[0, 0].legend(fontsize=7, frameon=False)
 fig.suptitle(f"Effect of $\\tau_{{\\rm PS}}$ ($\\sigma_{{\\rm PS}}$ = {sigma_fixed})", y=1.02)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "01_tau_effect.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "01_tau_effect.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
 # ## 7. Literature Mapping Table
 #
-# Connecting diffsed PSD parameters to published SFH variability studies.
+# Connecting tengri PSD parameters to published SFH variability studies.
 
 # %%
 # --- FIGURE 8: Literature mapping table ---
@@ -476,7 +476,7 @@ for key_cell, cell in table.get_celld().items():
         cell.set_text_props(weight="bold")
 ax.set_title("PSD Parameter Mapping to Literature", fontsize=11, pad=20)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "01_literature_table.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "01_literature_table.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

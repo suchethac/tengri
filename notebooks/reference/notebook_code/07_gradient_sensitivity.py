@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Multiscale Gradient Scalograms
 #
-# Because the entire diffsed pipeline is differentiable, we can compute
+# Because the entire tengri pipeline is differentiable, we can compute
 # exact Jacobians $\partial \text{SED}(\lambda) / \partial \theta$ via
 # autodiff. This reveals which wavelengths carry information about each
 # physical parameter, and at what spectral resolution that information
@@ -36,7 +36,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fixed,
     Model,
     ParamSpec,
@@ -164,7 +164,7 @@ for i, (ax, name) in enumerate(zip(axes, free_names)):
 axes[-1].set_xlabel(r"Observed wavelength [$\AA$]")
 fig.suptitle("Gradient SEDs: $\\partial$ Spectrum / $\\partial$ Parameter", y=1.01)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "07_gradient_seds.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "07_gradient_seds.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -206,7 +206,7 @@ for feat_name, feat_wave in SPECTRAL_FEATURES.items():
         )
 
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "07_sensitivity_heatmap.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "07_sensitivity_heatmap.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -262,7 +262,7 @@ for ax, p_idx, p_name in zip(axes, param_indices, params_to_show):
 axes[-1].set_xlabel(r"Observed wavelength [$\AA$]")
 fig.suptitle("Multiscale Gradient Scalograms", y=1.01)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "07_scalogram.pdf"), bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "07_scalogram.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

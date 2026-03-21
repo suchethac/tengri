@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Rest-Frame Properties, Diagnostics, and Batch Processing
 #
-# diffsed computes derived galaxy properties — M★, SFR, sSFR, D4000, UV slope
+# tengri computes derived galaxy properties — M★, SFR, sSFR, D4000, UV slope
 # — as differentiable functions of the model parameters. This notebook shows
 # how to extract and batch-process them.
 
@@ -32,7 +32,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -59,6 +59,9 @@ elif os.path.exists(os.path.join("..", "..", "data")):
     os.chdir(os.path.join("..", ".."))
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
+
+FIGDIR = os.path.join("demonstrations", "figures")
+os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import COLORS, plot_sfh, setup_style  # noqa: E402
 
@@ -140,7 +143,7 @@ ax3.set_title("Specific SFR")
 
 fig.suptitle("Derived Quantity Posteriors from native_geovi", fontsize=11)
 fig.tight_layout()
-plt.savefig("fig01_derived_posteriors.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig01_derived_posteriors.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -179,7 +182,7 @@ ax.set_xlabel(r"$\log_{10}(M_\star / M_\odot)$")
 ax.set_ylabel(r"$\log_{10}({\rm SFR}_{100\rm Myr} / M_\odot\,{\rm yr}^{-1})$")
 ax.set_title("Star-Forming Main Sequence (from prior)")
 fig.tight_layout()
-plt.savefig("fig03_main_sequence.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig03_main_sequence.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%

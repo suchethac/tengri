@@ -1,4 +1,4 @@
-"""Publication-quality plotting style and helper functions for diffsed notebooks.
+"""Publication-quality plotting style and helper functions for tengri notebooks.
 
 Inspired by BAGPIPES (Carnall+2018), Prospector (Johnson+2021), and CIGALE
 (Boquien+2019) plotting conventions. Designed for astronomy journals (ApJ/MNRAS).

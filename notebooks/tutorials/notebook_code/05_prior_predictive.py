@@ -32,7 +32,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from diffsed import (
+from tengri import (
     Fixed,
     Model,
     ParamSpec,
@@ -58,6 +58,9 @@ elif os.path.exists(os.path.join("..", "..", "data")):
     os.chdir(os.path.join("..", ".."))
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
+
+FIGDIR = os.path.join("tutorials", "figures")
+os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import COLORS, setup_style  # noqa: E402
 
@@ -133,7 +136,7 @@ ax.set_xlabel("Observed wavelength [Å]")
 ax.set_ylabel("Normalized flux")
 ax.set_title(f"Prior Predictive: {N_PRIOR} Spectra (colored by u−r)")
 fig.tight_layout()
-plt.savefig("fig01_prior_predictive_spectra.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig01_prior_predictive_spectra.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -152,7 +155,7 @@ ax.plot([0.0, 0.3, 0.6, 0.9, 1.2], [0.5, 0.8, 1.2, 1.6, 2.0],
         "k--", lw=1, alpha=0.5, label="Approx. SDSS locus")
 ax.legend(fontsize=8)
 fig.tight_layout()
-plt.savefig("fig02_prior_color_color.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig02_prior_color_color.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -167,7 +170,7 @@ ax.set_xlabel("Lookback time [Gyr]")
 ax.set_ylabel(r"SFR [$M_\odot$/yr]")
 ax.set_title(f"Prior Predictive SFHs (50 of {N_PRIOR})")
 fig.tight_layout()
-plt.savefig("fig03_prior_sfhs.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig03_prior_sfhs.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -232,7 +235,7 @@ ax_cc.legend(fontsize=7)
 ax_cc.set_title("Color–Color: Bad Prior vs Good Prior")
 
 fig.tight_layout()
-plt.savefig("fig04_bad_prior.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig04_bad_prior.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -279,7 +282,7 @@ ax.set_title("Stochastic Prior Predictive SFHs (colored by σ_PS)")
 sm = plt.cm.ScalarMappable(cmap="viridis", norm=plt.Normalize(0, 4))
 plt.colorbar(sm, ax=ax, label=r"$\sigma_{\rm PS}$")
 fig.tight_layout()
-plt.savefig("fig05_stochastic_prior_sfhs.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig05_stochastic_prior_sfhs.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

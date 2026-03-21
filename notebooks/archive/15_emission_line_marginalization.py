@@ -25,7 +25,7 @@
 # likelihood, leaving a lower-dimensional posterior over the physical
 # parameters alone.
 #
-# This is one of `diffsed`'s key capabilities: the marginalized
+# This is one of `tengri`'s key capabilities: the marginalized
 # log-likelihood is fully differentiable in JAX, so gradients with
 # respect to continuum parameters (dust, metallicity, SFH shape) flow
 # through the marginalization automatically.
@@ -37,7 +37,7 @@
 # 3. Recover line amplitudes from noisy data via marginalization
 # 4. Show why marginalization prevents biased continuum fits when the
 #    nebular model predicts wrong line ratios
-# 5. Integration with a full `diffsed` spectral fit
+# 5. Integration with a full `tengri` spectral fit
 # 6. Gradient verification: $\nabla_\theta \ln L_{\rm marg}$ is finite
 #
 # > **Reference:** Johnson et al. (2021) --- Prospector linear
@@ -62,7 +62,7 @@ jax.config.update("jax_enable_x64", True)
 import matplotlib.pyplot as plt
 import numpy as np
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -71,7 +71,7 @@ from diffsed import (
     load_filter_set,
     load_ssp_data,
 )
-from diffsed.models.observation.eline_marginalization import (
+from tengri.models.observation.eline_marginalization import (
     DEFAULT_LINE_NAMES,
     DEFAULT_LINE_WAVELENGTHS,
     build_eline_design_matrix,
@@ -494,7 +494,7 @@ flux_obs_full = (flux_true_with_lines
 def log_posterior_marginalized(params):
     """Log-posterior with analytically marginalized emission lines.
 
-    The continuum model comes from diffsed's forward model; line
+    The continuum model comes from tengri's forward model; line
     amplitudes are marginalized via the design matrix.
     """
     # Continuum prediction from physical params
@@ -656,7 +656,7 @@ print("Saved: figures/15_gradient_verification.png")
 # | **Cost** | N/A | One matrix solve per likelihood call |
 #
 # **Key takeaway:** Analytical emission line marginalization lets
-# diffsed fit galaxy spectra for physical parameters while treating
+# tengri fit galaxy spectra for physical parameters while treating
 # line amplitudes as nuisance parameters --- with correct uncertainty
 # propagation and full differentiability.  This is essential for
 # spectroscopic SED fitting where nebular model systematics would

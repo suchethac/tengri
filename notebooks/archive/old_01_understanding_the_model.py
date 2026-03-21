@@ -15,7 +15,7 @@
 # %% [markdown]
 # # Tutorial 1: The PSD &rarr; GP &rarr; SFH Model
 #
-# `diffsed` models galaxy star formation histories (SFHs) as **continuous correlated fields** governed by a power spectral density (PSD), using the **Information Field Theory** (IFT) framework ([En&szlig;lin 2019](https://arxiv.org/abs/1804.03350)). The key insight: the PSD encodes the amplitude and timescale of star formation burstiness &mdash; different feedback mechanisms (supernovae, stellar winds, gas accretion) produce different PSDs, and the data decide which is preferred.
+# `tengri` models galaxy star formation histories (SFHs) as **continuous correlated fields** governed by a power spectral density (PSD), using the **Information Field Theory** (IFT) framework ([En&szlig;lin 2019](https://arxiv.org/abs/1804.03350)). The key insight: the PSD encodes the amplitude and timescale of star formation burstiness &mdash; different feedback mechanisms (supernovae, stellar winds, gas accretion) produce different PSDs, and the data decide which is preferred.
 #
 # **What you will learn:**
 #
@@ -45,21 +45,21 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
 # Configure JAX before importing it
-from diffsed.utils.devices import setup_jax
+from tengri.utils.devices import setup_jax
 setup_jax()
 
 import jax
 import jax.numpy as jnp
 from jax import random, grad, jit
 
-# diffsed imports
-from diffsed.models.sfh.psd_models import psd_drw, drw_acf, drw_variance, psd_to_sqrt_power
-from diffsed.models.sfh.gp_sfh import (
+# tengri imports
+from tengri.models.sfh.psd_models import psd_drw, drw_acf, drw_variance, psd_to_sqrt_power
+from tengri.models.sfh.gp_sfh import (
     gp_from_xi, generate_gp_fourier, generate_gp_batch, compute_sqrt_power_drw
 )
-from diffsed.models.sfh.mean_sfh import double_powerlaw
-from diffsed.utils.grid import make_log_age_grid, grid_spacing, log_age_to_age_yr, interpolate_to_linear_time
-from diffsed.utils.cosmology import age_at_z
+from tengri.models.sfh.mean_sfh import double_powerlaw
+from tengri.utils.grid import make_log_age_grid, grid_spacing, log_age_to_age_yr, interpolate_to_linear_time
+from tengri.utils.cosmology import age_at_z
 
 # ── Plot style ─────────────────────────────────────────────────
 plt.rcParams.update({
@@ -1026,5 +1026,5 @@ plt.show()
 # ## Appendix: Hardware Check
 
 # %%
-from diffsed.utils.devices import check_resources
+from tengri.utils.devices import check_resources
 check_resources()

@@ -30,11 +30,11 @@ jax.config.update("jax_enable_x64", True)
 import matplotlib.pyplot as plt
 import numpy as np
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Fixed,
     load_ssp_data, load_filter_set,
 )
-from diffsed.inference.hierarchical import HierarchicalFitter
+from tengri.inference.hierarchical import HierarchicalFitter
 
 import sys; sys.path.insert(0, ".")
 from _plot_style import setup_style, COLORS

@@ -19,7 +19,7 @@
 # $f(\boldsymbol{\xi})$, our goal is to characterize the posterior
 # $P(\boldsymbol{\xi} \mid \mathbf{d})$.
 #
-# In `diffsed` every model — parametric or stochastic — is expressed in
+# In `tengri` every model — parametric or stochastic — is expressed in
 # **standardized coordinates** $\boldsymbol{\xi} \sim \mathcal{N}(0, I)$.
 # All priors are absorbed into bijective transforms, so the inference
 # problem reduces to minimizing a single scalar: the **information
@@ -138,7 +138,7 @@
 import jax.numpy as jnp
 import numpy as np
 import matplotlib.pyplot as plt
-from diffsed.distributions import Uniform, Gaussian, LogUniform, LogNormal
+from tengri.distributions import Uniform, Gaussian, LogUniform, LogNormal
 
 # Show how each distribution maps xi ~ N(0,1) to physical space
 xi_grid = jnp.linspace(-3, 3, 200)
@@ -211,7 +211,7 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed.distributions import Uniform, Gaussian, LogUniform, LogNormal
+from tengri.distributions import Uniform, Gaussian, LogUniform, LogNormal
 
 xi_grid = jnp.linspace(-4, 4, 300)
 
@@ -371,7 +371,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
 
-from diffsed import (
+from tengri import (
     Model,
     ParamSpec,
     Uniform,
@@ -663,7 +663,7 @@ plt.show()
 # | **Limitations** | Approximate (Gaussian in transformed space); can't capture multimodality; accuracy degrades for highly non-Gaussian posteriors |
 #
 # geoVI is an **equal-priority** primary method alongside Ray Tracing in
-# `diffsed`.  It excels when $D$ is large and a good Gaussian
+# `tengri`.  It excels when $D$ is large and a good Gaussian
 # approximation exists in some coordinate system.
 
 # %%
@@ -863,7 +863,7 @@ print(result_mgvi.diagnostics_summary())
 # - **Ray Tracing still works** (constant-speed optics, noise-tolerant).
 # - **geoVI still works** (Riemannian geometry, iterative KL).
 #
-# This is the **defining use case** for `diffsed`.
+# This is the **defining use case** for `tengri`.
 
 # %%
 # Stochastic model setup

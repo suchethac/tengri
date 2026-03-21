@@ -16,7 +16,7 @@
 # # The Forward Model: SFH → SED → Photometry
 #
 # Every SED-fitting code has a forward model that maps physical
-# parameters to predicted observations.  In diffsed, this forward model
+# parameters to predicted observations.  In tengri, this forward model
 # is **fully differentiable** — JAX computes exact gradients through the
 # entire pipeline, which is the key enabler for high-dimensional
 # inference.
@@ -41,15 +41,15 @@ jax.config.update("jax_enable_x64", True)
 import matplotlib.pyplot as plt
 import numpy as np
 
-from diffsed import (
+from tengri import (
     Model, ParamSpec, Uniform, Fixed,
     load_ssp_data, load_filter_set,
 )
-from diffsed.models.sps.dsps_wrapper import (
+from tengri.models.sps.dsps_wrapper import (
     compute_csp_weights, compute_csp_sed, interpolate_metallicity,
 )
-from diffsed.models.dust.attenuation import two_component_dust
-from diffsed.models.sfh.mean_sfh import double_powerlaw
+from tengri.models.dust.attenuation import two_component_dust
+from tengri.models.sfh.mean_sfh import double_powerlaw
 
 import sys; sys.path.insert(0, ".")
 import sys; sys.path.insert(0, "..")

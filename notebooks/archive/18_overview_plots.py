@@ -13,10 +13,10 @@
 # ---
 
 # %% [markdown]
-# # Overview Plots: Publication Figures for the diffsed Paper
+# # Overview Plots: Publication Figures for the tengri Paper
 #
 # This notebook creates the "money plots" --- comprehensive figures that
-# showcase **diffsed**'s capabilities for the paper.  Each figure is
+# showcase **tengri**'s capabilities for the paper.  Each figure is
 # designed to be self-contained, publication-quality, and suitable for
 # direct inclusion in the manuscript.
 #
@@ -91,7 +91,7 @@ def savefig(fig, name, dpi=300):
 
 # %%
 # Load SSP data and suppress fused-kernel warnings for exact-path models
-from diffsed import (
+from tengri import (
     Fixed,
     Model,
     ParamSpec,
@@ -99,10 +99,10 @@ from diffsed import (
     load_filter_set,
     load_ssp_data,
 )
-from diffsed.models.dust.attenuation import DUST_LAWS
-from diffsed.models.agn import AGN_MODELS, get_agn_model
-from diffsed.models.igm import igm_transmission
-from diffsed.models.observation.filters import FILTER_REGISTRY, load_filter
+from tengri.models.dust.attenuation import DUST_LAWS
+from tengri.models.agn import AGN_MODELS, get_agn_model
+from tengri.models.igm import igm_transmission
+from tengri.models.observation.filters import FILTER_REGISTRY, load_filter
 
 SSP_PATH = "../data/fsps_prsc_miles_chabrier.h5"
 CLOUDY_PATH = "../data/cloudy_grid_mist.h5"
@@ -384,7 +384,7 @@ ax.text(5.0, 2e8, "PAH\nfeatures", fontsize=8, color="#cc3311", ha="center", va=
 ax.text(100, 1e8, "FIR dust\nemission", fontsize=8, color="#cc3311", ha="center", va="bottom")
 
 ax.legend(loc="upper right", fontsize=9, ncol=1, handlelength=2.0)
-ax.set_title(r"diffsed forward model: star-forming galaxy at $z=1$", fontsize=13, pad=10)
+ax.set_title(r"tengri forward model: star-forming galaxy at $z=1$", fontsize=13, pad=10)
 
 fig.tight_layout()
 savefig(fig, "forward_model_pipeline")
@@ -867,7 +867,7 @@ plt.show()
 #
 # A complete galaxy+AGN SED from X-ray (0.1 \AA) to radio (10 cm),
 # with all physical components labeled. This shows the full panchromatic
-# reach of **diffsed** when all modules (radio, X-ray) are enabled.
+# reach of **tengri** when all modules (radio, X-ray) are enabled.
 
 # %%
 # Build the most complete model: stellar + dust + nebular + AGN + radio + xray
@@ -993,7 +993,7 @@ ax.set_ylabel(r"$\nu L_\nu$ [$L_\odot$]")
 ax.set_xlim(1e-4, 1e5)
 ax.set_ylim(1e2, None)
 ax.legend(loc="upper right", fontsize=9)
-ax.set_title("diffsed panchromatic wavelength coverage: X-ray to radio", fontsize=13, pad=10)
+ax.set_title("tengri panchromatic wavelength coverage: X-ray to radio", fontsize=13, pad=10)
 
 fig.tight_layout()
 savefig(fig, "wavelength_coverage")
@@ -1003,7 +1003,7 @@ plt.show()
 # ---
 # ## Figure 6: Filter Library
 #
-# All major filter sets available in **diffsed** overlaid on a template
+# All major filter sets available in **tengri** overlaid on a template
 # galaxy SED.  Filters are color-coded by survey/instrument.
 
 # %%
@@ -1111,7 +1111,7 @@ ax.set_ylabel(r"$\nu L_\nu$ [$L_\odot$] / Filter transmission")
 ax.set_xlim(0.1, 30)
 ax.set_ylim(10 ** (log_y_min), 10 ** (log_y_max))
 ax.legend(loc="upper right", fontsize=9, ncol=2, handlelength=2.0)
-ax.set_title("diffsed filter library (color-coded by survey)", fontsize=13, pad=10)
+ax.set_title("tengri filter library (color-coded by survey)", fontsize=13, pad=10)
 
 fig.tight_layout()
 savefig(fig, "filter_library")

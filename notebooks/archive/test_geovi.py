@@ -41,7 +41,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed import (
+from tengri import (
     Fitter,
     Fixed,
     Model,
@@ -211,7 +211,7 @@ print("Saved: figures/test_geovi_sfh.png")
 # ## Corner Plot — geoVI vs EVI
 
 # %%
-from diffsed.plotting import safe_corner
+from tengri.plotting import safe_corner
 
 param_names = [
     "sfh_dpl_alpha",
