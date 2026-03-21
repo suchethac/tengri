@@ -356,9 +356,120 @@ print()
 print("Notes:")
 print(f"  - {N_ITER} iterations, {N_SAMP} samples/iter, {N_POST} posterior samples")
 print(f"  - D = {D} free params, N = {N} data points")
-print("  - 'geovi' uses optimal resample+update schedule")
+print("  - 'geovi' uses optimal resample+update schedule with nonlinear posterior draws")
 print("  - 'geovi_nuts' uses geoVI optimization + NUTS posterior sampling")
 print("  - Compile time is one-time; run time is per-galaxy (cached)")
+
+# %% [markdown]
+# ## Native JIT: Compilation vs Execution Deep Dive
+#
+# The native JIT engine compiles the **entire optimization loop** into a single
+# XLA program. This has a one-time compilation cost, but after that each galaxy
+# runs in **milliseconds**.
+#
+# ### When does JAX recompile?
+#
+# JAX caches compiled programs keyed by **static arguments**. It recompiles when:
+# - `n_iterations` changes (e.g., 10 → 15)
+# - `n_samples` changes (e.g., 3 → 6)
+# - `sample_mode` changes (e.g., `"linear_resample"` → `"nonlinear_update"`)
+# - Model structure changes (different D or N)
+#
+# JAX does **NOT** recompile when:
+# - Different galaxy data (different `pos_flat`, different `key`)
+# - Different noise values (same shape)
+# - This is the **catalog fitting** scenario: same model, different data
+#
+# ### Persistent XLA cache
+#
+# diffsed enables XLA's persistent cache at `/tmp/diffsed_jax_cache`.
+# Compiled programs survive across Python sessions. First run of a new
+# session may still recompile, but subsequent sessions reuse the cache.
+#
+# ### What takes so long to compile?
+#
+# The nonlinear curving has nested `jax.lax.while_loop` (CG inside Newton-CG
+# inside curving inside optimization loop). XLA must lower this entire
+# structure to HLO (High Level Operations). The linear path skips curving,
+# so it compiles much faster.
+
+# %%
+print("=== Native JIT: Compilation vs Execution Breakdown ===")
+print()
+
+# Build a fresh engine to measure compilation
+fitter._jit_sampler = None
+init_pos_bench = fitter._initialize_unbounded(jax.random.PRNGKey(0))
+engine_bench = fitter._build_jit_engine(init_pos_bench)
+flatten_b = engine_bench["flatten"]
+pos_flat_b = flatten_b(init_pos_bench)
+
+# --- Optimization: first call (compile) vs second call (cached) ---
+for mode_name, mode_str in [
+    ("MGVI (linear)", "linear_resample"),
+    ("geoVI (nonlinear_update)", "nonlinear_update"),
+]:
+    # First call = compile + run
+    t0 = time.time()
+    engine_bench["run_evi_geovi"](
+        pos_flat_b,
+        jax.random.PRNGKey(42),
+        n_iterations=N_ITER,
+        n_samples=N_SAMP,
+        kl_rtol=0.0,
+        sample_mode=mode_str,
+    )
+    t_first = time.time() - t0
+
+    # Second call = cached run only
+    t0 = time.time()
+    engine_bench["run_evi_geovi"](
+        pos_flat_b,
+        jax.random.PRNGKey(42),
+        n_iterations=N_ITER,
+        n_samples=N_SAMP,
+        kl_rtol=0.0,
+        sample_mode=mode_str,
+    )
+    t_cached = time.time() - t0
+
+    print(f"  {mode_name}:")
+    print(f"    First call (compile + run): {t_first * 1000:10.1f} ms")
+    print(f"    Cached call (run only):     {t_cached * 1000:10.1f} ms")
+    print(f"    Compilation overhead:        {(t_first - t_cached) * 1000:10.1f} ms")
+    print()
+
+# --- Posterior draws: first call vs cached ---
+draw_keys_bench = jax.random.split(jax.random.PRNGKey(99), N_POST)
+
+t0 = time.time()
+engine_bench["draw_samples"](pos_flat_b, draw_keys_bench)
+t_first_draw = time.time() - t0
+
+t0 = time.time()
+engine_bench["draw_samples"](pos_flat_b, draw_keys_bench)
+t_cached_draw = time.time() - t0
+
+print(f"  Posterior draws ({N_POST} linear CG samples):")
+print(f"    First call (compile + run): {t_first_draw * 1000:10.1f} ms")
+print(f"    Cached call (run only):     {t_cached_draw * 1000:10.1f} ms")
+print(f"    Compilation overhead:        {(t_first_draw - t_cached_draw) * 1000:10.1f} ms")
+
+print()
+print("  === TOTAL PER-GALAXY TIME (cached) ===")
+print(
+    f"    Optimization + {N_POST} posterior draws: {t_cached * 1000 + t_cached_draw * 1000:.1f} ms"
+)
+print()
+print("  === CATALOG FITTING ESTIMATE ===")
+t_compile_total = max(t_first - t_cached, 0) + max(t_first_draw - t_cached_draw, 0)
+t_per_galaxy = t_cached + t_cached_draw
+for n_gal in [10, 100, 1000]:
+    t_total = t_compile_total + n_gal * t_per_galaxy
+    print(
+        f"    {n_gal:5d} galaxies: {t_compile_total:.1f}s compile + "
+        f"{n_gal}×{t_per_galaxy * 1000:.1f}ms = {t_total:.1f}s total"
+    )
 
 # %% [markdown]
 # ## Posterior Distributions Overlay
