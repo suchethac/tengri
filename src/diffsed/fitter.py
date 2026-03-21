@@ -1198,21 +1198,110 @@ class Fitter:
             "hamiltonian": hamiltonian,
         }
 
-    def compile(self):
-        """Pre-compile the JIT inference engine.
+    def compile(
+        self,
+        *,
+        n_iterations=15,
+        n_samples=3,
+        n_posterior_samples=200,
+        modes=("linear_resample", "nonlinear_update"),
+        verbose=True,
+    ):
+        """Pre-compile the JIT inference engine ahead of time.
 
-        Absorbs the ~2-3s compilation cost upfront. The compiled engine
-        works for any converged position and sample count (same model/data).
+        Triggers XLA compilation for all specified modes so that
+        subsequent ``fitter.run()`` calls have zero compilation delay.
+        Compiled programs are cached both in-memory (this session)
+        and on disk (``/tmp/diffsed_jax_cache``, survives restarts).
+
+        Parameters
+        ----------
+        n_iterations : int
+            Compile for this iteration count (recompilation if changed).
+        n_samples : int
+            Compile for this sample count (recompilation if changed).
+        n_posterior_samples : int
+            Compile posterior draw for this many samples.
+        modes : tuple of str
+            Which sample modes to pre-compile. Each mode compiles
+            separately. Default covers MGVI + geoVI update (fastest).
+            Add ``"nonlinear_resample"`` for full geoVI (~56s extra).
+        verbose : bool
+            Print compilation progress.
 
         Example
         -------
         >>> fitter = Fitter(model, data, noise)
-        >>> fitter.compile()  # ~2-3s compile
-        >>> result = fitter.run("evi", n_posterior_samples=2000)  # no compile delay
+        >>> fitter.compile()  # ~3s for default modes
+        >>> fitter.compile(
+        ...     modes=(  # ~60s for all modes
+        ...         "linear_resample",
+        ...         "nonlinear_update",
+        ...         "nonlinear_resample",
+        ...     )
+        ... )
+        >>> result = fitter.run("native_geovi")  # instant
         """
         if self._jit_sampler is None:
             dummy_pos = self._initialize_unbounded(jax.random.PRNGKey(0))
             self._jit_sampler = self._build_jit_engine(dummy_pos)
+
+        engine = self._jit_sampler
+        flatten = engine["flatten"]
+        dummy_pos = self._initialize_unbounded(jax.random.PRNGKey(0))
+        pos_flat = flatten(dummy_pos)
+
+        if verbose:
+            print(
+                f"Compiling: n_iter={n_iterations}, n_samp={n_samples}, "
+                f"n_post={n_posterior_samples}, modes={modes}"
+            )
+
+        # Pre-compile each optimization mode
+        for mode in modes:
+            if verbose:
+                print(f"  Compiling {mode}...", end="", flush=True)
+            t0 = time.time()
+            engine["run_evi_geovi"](
+                pos_flat,
+                jax.random.PRNGKey(0),
+                n_iterations=n_iterations,
+                n_samples=n_samples,
+                kl_rtol=0.0,
+                sample_mode=mode,
+            )
+            if verbose:
+                print(f" {time.time() - t0:.1f}s")
+
+        # Pre-compile MGVI optimizer (old path, used by native_mgvi)
+        if verbose:
+            print("  Compiling MGVI (old path)...", end="", flush=True)
+        t0 = time.time()
+        engine["run_evi"](
+            pos_flat,
+            jax.random.PRNGKey(0),
+            n_iterations=n_iterations,
+            n_samples=n_samples,
+            kl_rtol=1e-2,
+        )
+        if verbose:
+            print(f" {time.time() - t0:.1f}s")
+
+        # Pre-compile posterior draw
+        if verbose:
+            print(
+                f"  Compiling posterior draw ({n_posterior_samples} samples)...",
+                end="",
+                flush=True,
+            )
+        t0 = time.time()
+        draw_keys = jax.random.split(jax.random.PRNGKey(0), n_posterior_samples)
+        engine["draw_samples"](pos_flat, draw_keys)
+        if verbose:
+            print(f" {time.time() - t0:.1f}s")
+
+        if verbose:
+            print("Compilation complete.")
         return self
 
     def _draw_jit_samples(self, pos_dict, key, n_samples, existing_samples, *, verbose=True):
