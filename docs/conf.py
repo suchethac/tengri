@@ -89,7 +89,6 @@ intersphinx_mapping = {
 
 exclude_patterns = [
     "_build",
-    "_notebooks",
     "internal",
     "**.ipynb_checkpoints",
     "superpowers",

@@ -1025,11 +1025,15 @@ class ParamSpec:
 
         # --- Resolve shorthands and store distributions ---
         self._distributions: dict[str, Distribution] = {}
+        self._user_provided: frozenset[str] = frozenset()
+        user_names = set()
         for name in sorted(self._valid_param_names):
             if name in resolved_kwargs:
                 self._distributions[name] = resolve_shorthand(resolved_kwargs[name])
+                user_names.add(name)
             else:
                 self._distributions[name] = self._defaults[name]
+        self._user_provided = frozenset(user_names)
 
         # --- Validate physical bounds ---
         self._validate_bounds()
@@ -1138,8 +1142,8 @@ class ParamSpec:
         new_defaults = dict(self._defaults)
 
         for name, val in kwargs.items():
-            if name in new_distributions:
-                # User-defined wins — skip
+            if name in self._user_provided:
+                # User explicitly set this param — their definition wins
                 continue
             dist = resolve_shorthand(val)
             new_distributions[name] = dist
@@ -1158,6 +1162,8 @@ class ParamSpec:
             "_valid_param_names",
             frozenset(new_registry.keys()),
         )
+        # Preserve user_provided set — auto-merged params are NOT user-provided
+        object.__setattr__(new_spec, "_user_provided", self._user_provided)
         return new_spec
 
     # -------------------------------------------------------------------

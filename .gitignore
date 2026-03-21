@@ -51,3 +51,7 @@ data/*.h5
 fig*.png
 fig*.pdf
 notebooks/*/figures/
+
+# Sphinx docs build artifacts
+docs/_build/
+docs/_notebooks/

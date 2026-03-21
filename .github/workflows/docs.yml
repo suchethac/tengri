@@ -29,6 +29,9 @@ jobs:
           pip install -e .
           pip install -r docs/requirements.txt
 
+      - name: Install pandoc
+        run: sudo apt-get install -y pandoc
+
       - name: Build documentation
         run: cd docs && make html
 

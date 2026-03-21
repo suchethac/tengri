@@ -439,11 +439,19 @@ class TestParamSpecWithParams:
         assert "cal_c1" not in base_spec.all_params
 
     def test_user_defined_wins(self, base_spec):
-        """If user already defined a param, with_params doesn't override."""
-        # met_logzsol already exists as Uniform(-1.5, 0.2)
+        """User-provided params can't be overridden by with_params."""
+        # met_logzsol was explicitly provided by user as Uniform(-1.5, 0.2)
         new_spec = base_spec.with_params(met_logzsol=Gaussian(0, 1))
         # Should keep the original Uniform, not the new Gaussian
         dist = new_spec.get_distribution("met_logzsol")
+        assert isinstance(dist, Uniform)
+
+    def test_default_can_be_overridden(self, base_spec):
+        """Default (non-user-provided) params CAN be overridden."""
+        # noise_frac_cal is a default Fixed(0.0), not user-provided
+        assert isinstance(base_spec.get_distribution("noise_frac_cal"), Fixed)
+        new_spec = base_spec.with_params(noise_frac_cal=Uniform(0.01, 0.15))
+        dist = new_spec.get_distribution("noise_frac_cal")
         assert isinstance(dist, Uniform)
 
     def test_empty_kwargs_returns_self(self, base_spec):
@@ -452,15 +460,16 @@ class TestParamSpecWithParams:
         assert result is base_spec
 
     def test_multiple_params(self, base_spec):
-        """Can add multiple new params at once."""
+        """Can add multiple params at once, including overriding defaults."""
         new_spec = base_spec.with_params(
             cal_c1=Gaussian(0, 0.1),
             cal_c2=Gaussian(0, 0.1),
-            cal_c3=Gaussian(0, 0.1),
+            noise_frac_cal=Uniform(0.01, 0.15),
         )
         assert "cal_c1" in new_spec.free_params
         assert "cal_c2" in new_spec.free_params
-        assert "cal_c3" in new_spec.free_params
+        # noise_frac_cal was a default Fixed(0.0), now overridden to free
+        assert "noise_frac_cal" in new_spec.free_params
 
     def test_fixed_param_added(self, base_spec):
         """Fixed params added via with_params appear in fixed_params."""

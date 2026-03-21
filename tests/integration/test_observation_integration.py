@@ -1,0 +1,293 @@
+"""Integration tests for Observation with Model and Fitter.
+
+Requires SSP data — skips gracefully if not found.
+"""
+
+from pathlib import Path
+
+import jax
+import jax.numpy as jnp
+import pytest
+
+jax.config.update("jax_enable_x64", True)
+
+from tengri.core.model import Model
+from tengri.core.param_spec import ParamSpec
+from tengri.distributions import Fixed, Gaussian, Uniform
+from tengri.inference.fitter import Fitter
+from tengri.models.observation.noise_config import NoiseConfig
+from tengri.models.observation.observation import Observation
+from tengri.models.observation.photometry import FilterCurve
+from tengri.models.observation.photometry_config import Photometry
+from tengri.models.observation.spectroscopy_config import SpectroscopyConfig
+from tengri.models.sps.dsps_wrapper import load_ssp_data
+
+# ---------------------------------------------------------------------------
+_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+_SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+_SSP_EXISTS = _SSP_FILE.is_file()
+
+pytestmark = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def ssp():
+    return load_ssp_data(str(_SSP_FILE))
+
+
+@pytest.fixture(scope="module")
+def base_spec():
+    return ParamSpec(
+        mean_sfh_type="dpl",
+        sfh_dpl_alpha=Uniform(0.5, 3.0),
+        sfh_dpl_beta=Uniform(0.3, 2.0),
+        sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        met_logzsol=Uniform(-1.5, 0.2),
+        dust_tau_bc=Uniform(0.0, 3.0),
+        redshift=Fixed(0.5),
+    )
+
+
+@pytest.fixture(scope="module")
+def phot_obs():
+    return Observation(
+        photometry=Photometry.from_names(
+            ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+        ),
+    )
+
+
+def _make_synthetic_filters(n=3):
+    """Create synthetic filters (no network required)."""
+    filters = []
+    for _i, (cen, name) in enumerate(
+        [(4500, "synth_b"), (6200, "synth_r"), (8000, "synth_i")][:n]
+    ):
+        wave = jnp.linspace(cen - 500, cen + 500, 50)
+        trans = jnp.exp(-0.5 * ((wave - cen) / 200.0) ** 2)
+        filters.append(FilterCurve(wave=wave, trans=trans, name=name))
+    return filters
+
+
+# ===========================================================================
+# Model integration
+# ===========================================================================
+
+
+class TestObservationWithModel:
+    def test_model_accepts_observation_photometry(self, ssp, base_spec):
+        """Model(spec, ssp, observation=obs) with photometry works."""
+        filters = _make_synthetic_filters()
+        obs = Observation(photometry=Photometry(filters=tuple(filters)))
+        model = Model(base_spec, ssp, observation=obs)
+        assert model.observation is not None
+        assert model.observation.can_do_photometry
+        assert model.filter_waves is not None
+        assert len(model.filter_waves) == 3
+
+    def test_model_observation_backward_compat(self, ssp, base_spec):
+        """Model(spec, ssp, filters=...) still works, creates Observation."""
+        filters = _make_synthetic_filters()
+        # 3-tuple format (simulating load_filter_set output)
+        filter_data = (
+            [f.wave for f in filters],
+            [f.trans for f in filters],
+            filters,
+        )
+        model = Model(base_spec, ssp, filters=filter_data)
+        assert model.observation is not None
+        assert model.observation.can_do_photometry
+        assert model.observation.photometry.n_filters == 3
+
+    def test_model_rejects_both_filters_and_observation(self, ssp, base_spec):
+        """ValueError if both filters= and observation= provided."""
+        filters = _make_synthetic_filters()
+        obs = Observation(photometry=Photometry(filters=tuple(filters)))
+        with pytest.raises(ValueError, match="Cannot specify both"):
+            Model(base_spec, ssp, filters=filters, observation=obs)
+
+    def test_auto_merge_adds_calibration_params(self, ssp, base_spec):
+        """model.spec.free_params includes cal_c1..cN from spectroscopy."""
+        wave_obs = jnp.linspace(10000, 50000, 100)
+        obs = Observation(
+            photometry=Photometry(filters=tuple(_make_synthetic_filters())),
+            spectroscopy=SpectroscopyConfig(
+                wave_obs=wave_obs, calibration_order=2
+            ),
+        )
+        model = Model(base_spec, ssp, observation=obs)
+        assert "cal_c1" in model.spec.free_params
+        assert "cal_c2" in model.spec.free_params
+
+    def test_auto_merge_adds_noise_params(self, ssp, base_spec):
+        """model.spec.free_params includes noise_frac_cal from noise config."""
+        obs = Observation(
+            photometry=Photometry(filters=tuple(_make_synthetic_filters())),
+            noise=NoiseConfig(calibration_floor=Uniform(0.01, 0.1)),
+        )
+        model = Model(base_spec, ssp, observation=obs)
+        assert "noise_frac_cal" in model.spec.free_params
+
+    def test_auto_merge_user_precedence(self, ssp):
+        """User-defined cal_c1 overrides auto-merged one."""
+        spec = ParamSpec(
+            mean_sfh_type="dpl",
+            sfh_dpl_alpha=Uniform(0.5, 3.0),
+            sfh_dpl_beta=Uniform(0.3, 2.0),
+            sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+            met_logzsol=Uniform(-1.5, 0.2),
+            dust_tau_bc=Uniform(0.0, 3.0),
+            redshift=Fixed(0.5),
+            # User explicitly sets cal_c1
+            cal_c1=Gaussian(0, 0.5),
+        )
+        wave_obs = jnp.linspace(10000, 50000, 100)
+        obs = Observation(
+            photometry=Photometry(filters=tuple(_make_synthetic_filters())),
+            spectroscopy=SpectroscopyConfig(
+                wave_obs=wave_obs, calibration_order=2
+            ),
+        )
+        model = Model(spec, ssp, observation=obs)
+        # User's Gaussian(0, 0.5) should win over auto-merged Gaussian(0, 0.1)
+        dist = model.spec.get_distribution("cal_c1")
+        assert isinstance(dist, Gaussian)
+        # Check sigma to confirm it's the user's version
+        assert dist.bounds[1] > 0.3  # sigma=0.5 → bounds wider than 0.1
+
+    def test_auto_precompute_spectroscopy(self, ssp, base_spec):
+        """Fixed z + spectroscopy config triggers auto-precomputation."""
+        wave_obs = jnp.linspace(10000, 50000, 100)
+        obs = Observation(
+            spectroscopy=SpectroscopyConfig(wave_obs=wave_obs),
+        )
+        model = Model(base_spec, ssp, observation=obs)
+        # _spec_precomp should be set
+        assert model._spec_precomp is not None
+
+    def test_no_precompute_when_z_free(self, ssp):
+        """Free z → spectroscopy precomputation does NOT auto-trigger."""
+        spec = ParamSpec(
+            mean_sfh_type="dpl",
+            sfh_dpl_alpha=Uniform(0.5, 3.0),
+            sfh_dpl_beta=Uniform(0.3, 2.0),
+            sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+            met_logzsol=Uniform(-1.5, 0.2),
+            dust_tau_bc=Uniform(0.0, 3.0),
+            redshift=Uniform(0.1, 1.0),  # Free redshift
+        )
+        wave_obs = jnp.linspace(10000, 50000, 100)
+        obs = Observation(
+            spectroscopy=SpectroscopyConfig(wave_obs=wave_obs),
+        )
+        model = Model(spec, ssp, observation=obs)
+        assert model._spec_precomp is None
+
+    def test_lsf_settings_from_observation(self, ssp, base_spec):
+        """LSF resolution/sigma_lib from SpectroscopyConfig override spec attrs."""
+        wave_obs = jnp.linspace(10000, 50000, 100)
+        obs = Observation(
+            spectroscopy=SpectroscopyConfig(
+                wave_obs=wave_obs,
+                resolution=2000.0,
+                sigma_lib_kms=15.0,
+                lsf_n_bins=8,
+            ),
+        )
+        model = Model(base_spec, ssp, observation=obs)
+        assert model._lsf_resolution == 2000.0
+        assert model._sigma_lib_kms == 15.0
+        assert model._lsf_n_bins == 8
+
+
+# ===========================================================================
+# Fitter integration
+# ===========================================================================
+
+
+class TestObservationWithFitter:
+    def test_fitter_infers_photometry_type(self, ssp, base_spec):
+        """Fitter(model, data, noise) with phot-only obs infers photometry."""
+        obs = Observation(
+            photometry=Photometry(filters=tuple(_make_synthetic_filters()))
+        )
+        model = Model(base_spec, ssp, observation=obs)
+        # Generate fake data
+        key = jax.random.PRNGKey(0)
+        params = base_spec.sample(key)
+        flux = model.predict_photometry(params)
+        noise = jnp.ones_like(flux) * 0.1
+
+        fitter = Fitter(model, flux, noise)
+        assert fitter.data_type == "photometry"
+
+    def test_fitter_explicit_data_type_still_works(self, ssp, base_spec):
+        """Explicit data_type= overrides observation inference."""
+        obs = Observation(
+            photometry=Photometry(filters=tuple(_make_synthetic_filters()))
+        )
+        model = Model(base_spec, ssp, observation=obs)
+        flux = jnp.ones(3)
+        noise = jnp.ones(3) * 0.1
+
+        fitter = Fitter(model, flux, noise, data_type="photometry")
+        assert fitter.data_type == "photometry"
+
+    def test_fitter_no_observation_defaults_photometry(self, ssp, base_spec):
+        """No observation, no data_type → defaults to 'photometry'."""
+        model = Model(base_spec, ssp)
+        model.observation = None
+        fitter = Fitter(model, jnp.ones(3), jnp.ones(3) * 0.1)
+        assert fitter.data_type == "photometry"
+
+
+# ===========================================================================
+# End-to-end
+# ===========================================================================
+
+
+class TestObservationEndToEnd:
+    def test_photometry_map_fit(self, ssp, base_spec):
+        """Full: Observation → Model → predict → Fitter → MAP."""
+        obs = Observation(
+            photometry=Photometry(filters=tuple(_make_synthetic_filters()))
+        )
+        model = Model(base_spec, ssp, observation=obs)
+
+        # Generate mock photometry
+        key = jax.random.PRNGKey(42)
+        params = base_spec.sample(key)
+        flux_true = model.predict_photometry(params)
+        noise = jnp.abs(flux_true) * 0.05 + 1e-32
+
+        fitter = Fitter(model, flux_true, noise)
+        posterior = fitter.run("map", n_steps=20, optimizer="adam")
+        assert posterior is not None
+        assert posterior.params is not None
+
+    def test_joint_pack_unpack_roundtrip(self, ssp, base_spec):
+        """obs.pack_data → predict → obs.unpack_prediction consistency."""
+        wave_obs = jnp.linspace(10000, 50000, 50)
+        obs = Observation(
+            photometry=Photometry(filters=tuple(_make_synthetic_filters())),
+            spectroscopy=SpectroscopyConfig(wave_obs=wave_obs),
+        )
+        model = Model(base_spec, ssp, observation=obs)
+
+        # Check pack/unpack shapes
+        phot_data = jnp.ones(3) * 1e-29
+        spec_data = jnp.ones(50) * 1e-30
+        packed = obs.pack_data(phot=phot_data, spec=spec_data)
+        assert packed.shape == (53,)
+
+        unpacked = obs.unpack_prediction(packed)
+        assert unpacked["photometry"].shape == (3,)
+        assert unpacked["spectroscopy"].shape == (50,)
