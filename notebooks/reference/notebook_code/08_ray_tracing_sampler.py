@@ -305,10 +305,10 @@ print(f"RT (D~137): {rt_stoch_time:.1f}s")
 # --- FIGURE 3: SFH recovery from stochastic model ---
 fig, ax = plt.subplots(figsize=(8, 4))
 plot_sfh(
-    ax,
     model_stoch,
     result_rt_stoch,
     true_params=truth_stoch,
+    ax=ax,
     n_draws=30,
     color=COLORS["rt"],
 )
