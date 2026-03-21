@@ -169,20 +169,31 @@ plt.show()
 # This shows the per-galaxy posterior quality and serves as initialization.
 
 # %%
-# --- Individual EVI fits ---
+# --- Individual fits ---
+# Each galaxy creates a new Fitter (data is bound at construction).
+# The XLA persistent cache (/tmp/diffsed_jax_cache) means the
+# compiled program is loaded from disk after the first galaxy,
+# so galaxy 2+ only pay ~1s for JAX tracing, not ~15s for XLA compile.
+#
+# For true catalog-scale fitting (>100 galaxies), use the native
+# engine directly via fitter._build_jit_engine() to avoid per-galaxy
+# Fitter construction overhead.
+import time as _time
+
 individual_results = []
 
 for i in range(min(4, N_GAL)):
+    _t0 = _time.perf_counter()
     k = jax.random.fold_in(key, 1000 + i)
     fitter_i = Fitter(model, galaxies_spec[i]["flux_obs"],
                        galaxies_spec[i]["noise"], data_type="spectroscopy")
-    result_i = fitter_i.run("native_evi", n_iterations=30, n_samples=3,
+    result_i = fitter_i.run("native_geovi", n_iterations=30, n_samples=3,
                              n_posterior_samples=500, n_seeds=3,
                              key=k, verbose=False)
+    _dt = _time.perf_counter() - _t0
     individual_results.append(result_i)
-    s = result_i.summary()
     chi2 = result_i.diagnostics.get("chi2_dof", "?")
-    print(f"Galaxy {i}: chi2/dof={chi2}, wall_time={result_i.wall_time_s:.1f}s")
+    print(f"Galaxy {i}: chi2/dof={chi2}, wall={_dt:.1f}s")
 
 # %%
 # --- Posterior contours for first 2 galaxies ---
