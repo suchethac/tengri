@@ -120,6 +120,73 @@ class Posterior:
 
         return result
 
+    def summary_table(self) -> str:
+        """Return a formatted string table of parameter summaries.
+
+        For MAP: shows parameter values.
+        For sampling: shows median with 68% credible intervals and ESS.
+
+        Returns
+        -------
+        str
+            Formatted table string.
+        """
+        sep = "─" * 66
+        lines: list[str] = []
+        n_samples = "MAP" if self.samples is None else next(iter(self.samples.values())).shape[0]
+        lines.append(
+            f"Posterior  method: {self.method}  "
+            f"samples: {n_samples}  "
+            f"wall_time: {self.wall_time_s:.1f}s"
+        )
+        lines.append(sep)
+
+        stats = self.summary()
+        if not stats:
+            lines.append("  (no parameters)")
+            lines.append(sep)
+            return "\n".join(lines)
+
+        if self.samples is None:
+            # MAP table
+            hdr = f"  {'Parameter':<32s} {'Value':>12s}"
+            lines.append(hdr)
+            lines.append("  " + "─" * 44)
+            for name in sorted(stats):
+                val = stats[name]["value"]
+                lines.append(f"  {name:<32s} {val:>12.4f}")
+        else:
+            # Sampling table with credible intervals
+            # Try to get ESS if available
+            ess = self.diagnostics.get("ess_bulk", {})
+            hdr = f"  {'Parameter':<28s} {'Median':>9s} {'16%':>9s} {'84%':>9s} {'ESS':>7s}"
+            lines.append(hdr)
+            lines.append("  " + "─" * 64)
+            for name in sorted(stats):
+                s = stats[name]
+                med = f"{s['median']:.4f}"
+                lo = f"{s['lo_68']:.4f}"
+                hi = f"{s['hi_68']:.4f}"
+                ess_val = ess.get(name)
+                ess_str = f"{ess_val:.0f}" if ess_val is not None else "—"
+                lines.append(f"  {name:<28s} {med:>9s} {lo:>9s} {hi:>9s} {ess_str:>7s}")
+
+        # Diagnostics summary
+        diag = self.diagnostics
+        diag_parts: list[str] = []
+        if "acceptance_rate" in diag:
+            diag_parts.append(f"accept={diag['acceptance_rate']:.1%}")
+        if "n_divergences" in diag:
+            diag_parts.append(f"divergences={diag['n_divergences']}")
+        if "final_loss" in diag:
+            diag_parts.append(f"loss={diag['final_loss']:.2f}")
+        if diag_parts:
+            lines.append("")
+            lines.append(f"  Diagnostics: {', '.join(diag_parts)}")
+
+        lines.append(sep)
+        return "\n".join(lines)
+
     # -------------------------------------------------------------------
     # Autocorrelation and effective sample size
     # -------------------------------------------------------------------

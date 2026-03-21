@@ -1390,3 +1390,78 @@ class Model:
 
         fitter = Fitter(self, data, noise, data_type=data_type)
         return fitter.run(method, **kwargs)
+
+    def summary(self) -> str:
+        """Return a human-readable summary of the model configuration.
+
+        Returns
+        -------
+        str
+            Formatted summary showing SSP grid, filters, precomputation,
+            fused kernel status, and enabled components.
+        """
+        sep = "─" * 66
+        lines: list[str] = [f"Model  SFH: {'+'.join(self.spec.mean_sfh_type)}", sep]
+
+        # SSP grid
+        n_met, n_age, n_wave = self.ssp_data.ssp_flux.shape
+        wave = self.ssp_data.ssp_wave
+        lines.append(
+            f"  SSP grid:    {n_met} Z × {n_age} ages × {n_wave} λ "
+            f"[{float(wave[0]):.0f}–{float(wave[-1]):.0f} Å]"
+        )
+
+        # Filters
+        if self.filter_waves is not None:
+            n_filt = len(self.filter_waves)
+            lines.append(f"  Filters:     {n_filt} bands")
+        else:
+            lines.append("  Filters:     none")
+
+        # Redshift
+        if self._z_fixed is not None:
+            lines.append(f"  Redshift:    {self._z_fixed:.4f} (fixed)")
+        else:
+            lines.append("  Redshift:    free")
+
+        # Dtype and precomputation
+        lines.append(f"  Dtype:       {self._forward_dtype}")
+        precomp_parts: list[str] = []
+        if self._precomp is not None:
+            precomp_parts.append("photometry")
+        if self._spec_precomp is not None:
+            precomp_parts.append("spectroscopy")
+        if self._ztable is not None:
+            precomp_parts.append("z-table")
+        lines.append(f"  Precomputed: {', '.join(precomp_parts) if precomp_parts else 'none'}")
+
+        # Fused kernel status
+        fused = "active" if self._fused_photometry is not None else "off"
+        lines.append(f"  Fused kernel: {fused}")
+
+        # Enabled components
+        components: list[str] = []
+        if self.spec.nebular_mode != "off":
+            components.append(f"nebular={self.spec.nebular_mode}")
+        if self._dust_emission_model:
+            components.append(f"dust_emission={self._dust_emission_model}")
+        if self._agn_model:
+            components.append(f"agn={self._agn_model}")
+        if self._apply_igm:
+            components.append("igm")
+        if self._radio_enabled:
+            components.append("radio")
+        if self._xray_enabled:
+            components.append("xray")
+        if components:
+            lines.append(f"  Components:  {', '.join(components)}")
+
+        # Dimensionality
+        n_free = self.spec.n_free
+        n_grid = self._n_grid if self._has_field else 0
+        lines.append(
+            f"  Parameters:  {n_free} free" + (f" + {n_grid} latent (ξ)" if n_grid else "")
+        )
+
+        lines.append(sep)
+        return "\n".join(lines)

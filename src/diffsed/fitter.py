@@ -96,6 +96,49 @@ class Fitter:
         # compiles lazily on first VI run.
         self._jit_sampler = None
 
+    def summary(self) -> str:
+        """Return a human-readable summary of the fitting problem.
+
+        Returns
+        -------
+        str
+            Formatted summary showing data shape, free parameters,
+            priors, bounds, and available inference methods.
+        """
+        sep = "─" * 66
+        lines: list[str] = [f"Fitter  data_type: {self.data_type}", sep]
+
+        # Data shape
+        n_data = self.data.shape[0]
+        snr_med = float(jnp.median(jnp.abs(self.data / self.noise)))
+        lines.append(f"  Data points: {n_data}")
+        lines.append(f"  Median S/N:  {snr_med:.1f}")
+
+        # Dimensionality
+        n_free = len(self._free_names)
+        n_grid = self.model._n_grid if self.model._has_field else 0
+        dim_str = f"{n_free} free"
+        if n_grid:
+            dim_str += f" + {n_grid} latent (ξ)"
+        lines.append(f"  Parameters:  {dim_str}")
+        lines.append("")
+
+        # Free parameter table
+        hdr = f"  {'Parameter':<32s} {'Prior':<26s} {'Bounds'}"
+        lines.append(hdr)
+        lines.append("  " + "─" * 64)
+        for name in self._free_names:
+            dist = self.spec.get_distribution(name)
+            lo, hi = dist.bounds
+            lines.append(f"  {name:<32s} {dist!r:<26s} [{lo:.4g}, {hi:.4g}]")
+
+        # Available methods
+        lines.append("")
+        lines.append("  Methods:     map, raytrace, nuts, geovi, mgvi, geovi_nuts")
+
+        lines.append(sep)
+        return "\n".join(lines)
+
     # -------------------------------------------------------------------
     # Loss function construction
     # -------------------------------------------------------------------
