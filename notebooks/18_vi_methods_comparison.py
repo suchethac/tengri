@@ -154,6 +154,43 @@ results["native_geovi"] = fitter.run(
 timings["native_geovi"] = time.time() - t0
 print(f"  Time: {timings['native_geovi']:.1f}s")
 
+# --- geovi_nuts (geoVI optimization + NUTS posterior sampling) ---
+print("=" * 60)
+t0 = time.time()
+results["geovi_nuts"] = fitter.run(
+    "geovi_nuts",
+    n_iterations=n_iterations,
+    n_samples=n_samples,
+    n_posterior_samples=n_posterior,
+    key=jax.random.PRNGKey(0),
+)
+timings["geovi_nuts"] = time.time() - t0
+print(f"  Time: {timings['geovi_nuts']:.1f}s")
+
+# --- MAP (for NUTS initialization, not stored in results) ---
+print("=" * 60)
+t0 = time.time()
+map_result = fitter.run("map", n_steps=500, key=jax.random.PRNGKey(0))
+timings["map"] = time.time() - t0
+print(f"  MAP init: {timings['map']:.1f}s")
+
+# --- NUTS (exact MCMC, initialized from MAP) ---
+# Note: tsnorm SFH creates sharp curvature that causes NUTS divergences.
+# target_accept_rate=0.99 uses very small steps to reduce divergences.
+print("=" * 60)
+t0_nuts = time.time()
+results["nuts"] = fitter.run(
+    "nuts",
+    init_from=map_result,
+    n_warmup=1000,
+    n_burnin=200,
+    n_samples=n_posterior,
+    target_accept_rate=0.99,
+    key=jax.random.PRNGKey(0),
+)
+timings["nuts"] = time.time() - t0_nuts + timings["map"]  # include MAP time
+print(f"  Time: {timings['nuts']:.1f}s (incl. MAP init)")
+
 # %% [markdown]
 # ## Posterior Predictive Check
 #
@@ -210,7 +247,7 @@ plt.show()
 # The true value should fall within the 68% CI for most parameters.
 
 # %%
-free_names = list(spec.free_params.keys())
+free_names = list(spec.free_params)
 n_params = len(free_names)
 n_methods = len(results)
 
@@ -276,13 +313,22 @@ plt.show()
 # %% [markdown]
 # ## Summary
 #
-# | Method | Chi2/dof | Time | Notes |
-# |--------|----------|------|-------|
-# | `fast_geovi` | ? | ? | Default. NIFTy exact math, tight loop |
-# | `fast_mgvi` | ? | ? | Linear only. Faster but less accurate |
-# | `fast_evi` | ? | ? | MGVI first, then geoVI |
-# | `native_geovi` | ? | ? | Experimental. Pure JIT, may oscillate |
+# | Method | Type | Chi2/dof | Time | Notes |
+# |--------|------|----------|------|-------|
+# | `fast_geovi` | Variational | ? | ? | Default. NIFTy exact math, tight loop |
+# | `fast_mgvi` | Variational | ? | ? | Linear only. Faster but less accurate |
+# | `fast_evi` | Variational | ? | ? | MGVI first, then geoVI |
+# | `native_geovi` | Variational | ? | ? | Experimental. Pure JIT, may oscillate |
+# | `geovi_nuts` | **Exact MCMC** | ? | ? | geoVI optimization + NUTS posterior sampling |
+# | `nuts` | **Exact MCMC** | ? | ? | Standard NUTS (initialized from MAP) |
+# | `map` | Point estimate | ? | ? | Adam optimizer, used to initialize NUTS |
+#
+# **Key findings:**
+# - `geovi_nuts` gives **exact MCMC samples** with geoVI's initialization advantage
+# - Cold-start NUTS (without MAP init) has poor parameter recovery — always use `init_from`
+# - For paper-quality posteriors: use `geovi_nuts` or `nuts` (with MAP init)
+# - For production catalogs: use `fast_geovi` or `native_geovi` (fastest)
 #
 # **Recommendation**: Use `fast_geovi` (or just `geovi`) as the default.
-# Fall back to `nifty_geovi` for debugging with full NIFTy diagnostics.
-# The `native_*` methods are experimental and may not converge as well.
+# Use `geovi_nuts` when exact posteriors are needed (paper figures, validation).
+# Always initialize NUTS from MAP or geoVI — cold-start NUTS is unreliable.

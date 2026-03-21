@@ -176,7 +176,7 @@ for i in range(min(4, N_GAL)):
     k = jax.random.fold_in(key, 1000 + i)
     fitter_i = Fitter(model, galaxies_spec[i]["flux_obs"],
                        galaxies_spec[i]["noise"], data_type="spectroscopy")
-    result_i = fitter_i.run("evi", n_iterations=30, n_samples=3,
+    result_i = fitter_i.run("native_evi", n_iterations=30, n_samples=3,
                              n_posterior_samples=500, n_seeds=3,
                              key=k, verbose=False)
     individual_results.append(result_i)
