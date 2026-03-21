@@ -84,19 +84,18 @@ N_SAMP = 3
 N_POST = 200
 
 methods = {
-    # --- Default (geovi with optimal resample+update schedule) ---
+    # --- VI methods (approximate posteriors) ---
     "geovi": {"method": "geovi"},
-    # --- Fast: NIFTy tight loop ---
-    "fast_mgvi": {"method": "fast_mgvi"},
     "fast_evi": {"method": "fast_evi"},
-    # --- Hybrid: geoVI + NUTS posterior ---
-    "geovi_nuts": {"method": "geovi_nuts"},
-    # --- Full NIFTy ---
+    "fast_mgvi": {"method": "fast_mgvi"},
     "nifty_geovi": {"method": "nifty_geovi"},
+    # --- Hybrid: VI optimization + MCMC posteriors ---
+    "geovi_nuts": {"method": "geovi_nuts"},
+    # --- Pure MCMC (exact posteriors, gold standard) ---
+    "nuts": {"method": "nuts"},
     # --- Native JIT ---
-    "native_mgvi": {"method": "native_mgvi", "n_seeds": 1},
     "native_geovi": {"method": "native_geovi", "n_seeds": 1},
-    # --- MAP (point estimate, for reference) ---
+    # --- Point estimate ---
     "map": {"method": "map", "n_steps": 500},
 }
 
@@ -106,7 +105,10 @@ timings = {}
 for label, kwargs in methods.items():
     method = kwargs.pop("method")
     common = {}
-    if method not in ("map",):
+    if method == "nuts":
+        # NUTS has its own kwargs: n_warmup, n_samples (not n_iterations)
+        common = {"n_warmup": 200, "n_samples": N_POST}
+    elif method != "map":
         common = {
             "n_iterations": N_ITER,
             "n_samples": N_SAMP,
