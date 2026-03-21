@@ -1,7 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: py:percent,ipynb
+#     formats: notebook_code//py:percent,ipynb
 #     text_representation:
 #       extension: .py
 #       format_name: percent
@@ -42,7 +42,7 @@ from diffsed.models.sps.csp import compute_csp_weights
 from diffsed.models.dust.attenuation import charlot_fall
 
 import sys, os  # noqa: E401, E402
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from _plot_style import COLORS, SPECTRAL_FEATURES, setup_style  # noqa: E402
 
 setup_style()

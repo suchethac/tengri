@@ -1,7 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: py:percent,ipynb
+#     formats: notebook_code//py:percent,ipynb
 #     text_representation:
 #       extension: .py
 #       format_name: percent
@@ -47,7 +47,7 @@ from diffsed import (
 )
 
 import sys, os  # noqa: E401, E402
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from _plot_style import (  # noqa: E402
     COLORS,
     convergence_table,

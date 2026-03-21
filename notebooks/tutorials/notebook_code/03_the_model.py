@@ -1,7 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: py:percent,ipynb
+#     formats: notebook_code//py:percent,ipynb
 #     text_representation:
 #       extension: .py
 #       format_name: percent
@@ -45,7 +45,7 @@ from diffsed.models.sfh.mean_sfh import tsnorm
 from diffsed.utils.grid import make_log_age_grid, grid_spacing
 
 import sys, os  # noqa: E401, E402
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from _plot_style import COLORS, setup_style  # noqa: E402
 
 setup_style()

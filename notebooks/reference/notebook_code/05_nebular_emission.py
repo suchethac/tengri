@@ -1,7 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: py:percent,ipynb
+#     formats: notebook_code//py:percent,ipynb
 #     text_representation:
 #       extension: .py
 #       format_name: percent
@@ -48,7 +48,7 @@ from diffsed.models.nebular import BakedInBackend
 
 import sys, os  # noqa: E401
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from _plot_style import COLORS, SPECTRAL_FEATURES, setup_style
 
 setup_style()
