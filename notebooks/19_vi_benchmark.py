@@ -113,27 +113,31 @@ for label, kwargs in methods.items():
             "n_posterior_samples": N_POST,
         }
 
-    # Cold run (compile + execute)
-    # Reset JIT cache to measure compilation
-    fitter._jit_sampler = None
-    t0 = time.time()
-    r = fitter.run(method, verbose=False, key=jax.random.PRNGKey(42), **common, **kwargs)
-    t_cold = time.time() - t0
+    # Run twice: first = cold (may include compilation), second = warm (cached)
+    try:
+        t0 = time.time()
+        r = fitter.run(method, verbose=False, key=jax.random.PRNGKey(42), **common, **kwargs)
+        t_cold = time.time() - t0
 
-    # Warm run (cached)
-    t0 = time.time()
-    r = fitter.run(method, verbose=False, key=jax.random.PRNGKey(42), **common, **kwargs)
-    t_warm = time.time() - t0
+        t0 = time.time()
+        r = fitter.run(method, verbose=False, key=jax.random.PRNGKey(42), **common, **kwargs)
+        t_warm = time.time() - t0
+    except Exception as e:
+        print(f"{label:30s}  FAILED: {e}")
+        kwargs["method"] = method
+        continue
 
     t_compile = max(0, t_cold - t_warm)
 
-    # Compute H
-    if hasattr(r, "params") and r.params:
-        pred = model.predict_photometry(r.params)
-        chi2 = float(jnp.sum(((mock.flux_obs - pred) / mock.noise) ** 2))
-        chi2_dof = chi2 / N
-    else:
-        chi2_dof = None
+    # Compute chi2/dof
+    chi2_dof = None
+    try:
+        if hasattr(r, "params") and isinstance(r.params, dict) and r.params:
+            pred = model.predict_photometry(r.params)
+            chi2 = float(jnp.sum(((mock.flux_obs - pred) / mock.noise) ** 2))
+            chi2_dof = chi2 / N
+    except Exception:
+        pass
 
     results[label] = r
     timings[label] = {
@@ -143,11 +147,9 @@ for label, kwargs in methods.items():
         "chi2_dof": chi2_dof,
     }
 
+    chi2_str = f"chi2/dof={chi2_dof:.2f}" if chi2_dof is not None else "chi2/dof=—"
     print(
-        f"{label:30s}  compile={t_compile:6.1f}s  run={t_warm:6.1f}s  "
-        f"total={t_cold:6.1f}s  chi2/dof={chi2_dof:.2f}"
-        if chi2_dof
-        else f"{label:30s}  compile={t_compile:6.1f}s  run={t_warm:6.1f}s  total={t_cold:6.1f}s"
+        f"{label:30s}  compile={t_compile:6.1f}s  run={t_warm:6.1f}s  total={t_cold:6.1f}s  {chi2_str}"
     )
 
     # Restore kwargs for next iteration
