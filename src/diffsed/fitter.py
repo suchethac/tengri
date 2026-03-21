@@ -1442,7 +1442,7 @@ class Fitter:
                 return -lh_val - prior
 
         else:
-            # Build log-density from the loss function (used by _run_evi_jit path)
+            # Build log-density from the loss function (used by _run_native_vi path)
             loss_fn = self._build_loss_fn()
 
             @jax.jit
@@ -1508,7 +1508,7 @@ class Fitter:
     # Fully JIT'd EVI optimizer
     # -------------------------------------------------------------------
 
-    def _run_evi_jit(
+    def _run_native_vi(
         self,
         *,
         key,
@@ -1522,7 +1522,7 @@ class Fitter:
         posterior_method="jit",
         verbose=True,
     ):
-        """Fully JIT-compiled EVI: ~500x faster than NIFTy's optimize_kl.
+        """Native JIT-compiled geoVI/MGVI: ~500x faster than NIFTy's optimize_kl.
 
         Supports multiple sample modes:
         - ``"linear"`` (default): MGVI linear sampling (fastest).
@@ -1850,16 +1850,13 @@ class Fitter:
             **Default (native JIT, fully XLA-compiled):**
             ``"geovi"`` — geoVI with nonlinear coordinate curving.
             ``"mgvi"`` — MGVI (linearized geoVI).
-            ``"evi"`` — EVI: MGVI then geoVI.
 
-            **Hybrid (VI optimization + NUTS posterior sampling):**
+            **Hybrid (native geoVI optimization + NUTS posterior):**
             ``"geovi_nuts"`` — geoVI optimization, then NUTS samples.
-            ``"mgvi_nuts"`` — MGVI optimization, then NUTS samples.
 
-            **Fast (NIFTy exact math, tight Python loop):**
+            **NIFTy (exact math, tight Python loop):**
             ``"fast_geovi"`` — geoVI via NIFTy OptimizeVI.update.
             ``"fast_mgvi"`` — MGVI via NIFTy OptimizeVI.update.
-            ``"fast_evi"`` — EVI via NIFTy OptimizeVI.update.
 
             **NIFTy (full jft.optimize_kl with logging/diagnostics):**
             ``"nifty_geovi"`` — Full NIFTy geoVI with minisanity.
@@ -1892,37 +1889,29 @@ class Fitter:
             return self._run_nuts(key=key, init_from=init_from, **kwargs)
         # --- Native JIT (DEFAULT): fully XLA-compiled geoVI/MGVI ---
         elif method in ("geovi", "native_geovi"):
-            return self._run_evi_jit(
+            return self._run_native_vi(
                 key=key,
                 init_from=init_from,
                 sample_mode="geovi",
                 **kwargs,
             )
         elif method in ("mgvi", "native_mgvi", "evi", "native_evi"):
-            return self._run_evi_jit(
+            return self._run_native_vi(
                 key=key,
                 init_from=init_from,
                 sample_mode="linear",
                 **kwargs,
             )
-        # --- Hybrid: geoVI/MGVI optimization + NUTS posterior sampling ---
+        # --- Hybrid: native geoVI optimization + NUTS posterior sampling ---
         elif method == "geovi_nuts":
-            return self._run_evi_jit(
+            return self._run_native_vi(
                 key=key,
                 init_from=init_from,
                 sample_mode="geovi",
                 posterior_method="blackjax",
                 **kwargs,
             )
-        elif method == "mgvi_nuts":
-            return self._run_evi_jit(
-                key=key,
-                init_from=init_from,
-                sample_mode="linear",
-                posterior_method="blackjax",
-                **kwargs,
-            )
-        # --- Fast: NIFTy exact math, tight loop ---
+        # --- NIFTy: exact math, tight Python loop ---
         elif method == "fast_geovi":
             return self._run_fast_vi(
                 key=key,
@@ -1938,13 +1927,6 @@ class Fitter:
                 sample_mode="linear_resample",
                 **kwargs,
             )
-        elif method == "fast_evi":
-            return self._run_fast_vi(
-                key=key,
-                init_from=init_from,
-                sample_mode="evi",
-                **kwargs,
-            )
         # --- NIFTy: full jft.optimize_kl (with logging/minisanity) ---
         elif method == "nifty_geovi":
             return self._run_nifty_vi(key=key, init_from=init_from, **kwargs)
@@ -1958,9 +1940,9 @@ class Fitter:
         else:
             raise ValueError(
                 f"Unknown method: {method}. "
-                f"Default: 'geovi', 'mgvi', 'evi'. "
-                f"Hybrid: 'geovi_nuts', 'mgvi_nuts'. "
-                f"Fast (NIFTy loop): 'fast_geovi', 'fast_mgvi', 'fast_evi'. "
+                f"Default: 'geovi', 'mgvi'. "
+                f"Hybrid: 'geovi_nuts'. "
+                f"NIFTy loop: 'fast_geovi', 'fast_mgvi'. "
                 f"NIFTy full: 'nifty_geovi', 'nifty_mgvi'. "
                 f"Other: 'map', 'raytrace', 'nuts'."
             )
