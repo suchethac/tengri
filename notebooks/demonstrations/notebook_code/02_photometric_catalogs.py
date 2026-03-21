@@ -134,8 +134,9 @@ t_single = time.perf_counter() - t0
 print(f"Single galaxy fit: {t_single:.1f}s")
 
 # %%
-# Batch fit: time N=10, 20, 50, 100
-batch_sizes = [10, 20, 50, 100]
+# Batch fit: time N=5, 10
+# Use MAP for speed; native_geovi shown on single galaxy above
+batch_sizes = [5, 10]
 batch_times = {}
 
 for n in batch_sizes:
@@ -143,11 +144,7 @@ for n in batch_sizes:
     results = []
     for i in range(n):
         fitter_i = Fitter(model, mocks[i].flux_obs, mocks[i].noise, data_type="photometry")
-        _ = fitter_i.run("map", n_steps=300, verbose=False)
-        res_i = fitter_i.run(
-            "native_geovi", n_iterations=5, n_samples=3, n_seeds=3,
-            n_posterior_samples=200, verbose=False,
-        )
+        res_i = fitter_i.run("map", n_steps=500, verbose=False)
         results.append(res_i)
     dt = time.perf_counter() - t0
     batch_times[n] = dt
@@ -174,15 +171,11 @@ plt.show()
 
 # %%
 # --- FIGURE 3: Recovered vs true (2×3 grid) ---
-# Fit first 50 galaxies quickly
+# Use MAP results for quick comparison
 quick_results = []
 for i in range(min(10, N_CAT)):
     fitter_i = Fitter(model, mocks[i].flux_obs, mocks[i].noise, data_type="photometry")
-    _ = fitter_i.run("map", n_steps=200, verbose=False)
-    res_i = fitter_i.run(
-        "native_geovi", n_iterations=5, n_samples=3, n_seeds=3,
-        n_posterior_samples=200, verbose=False,
-    )
+    res_i = fitter_i.run("map", n_steps=500, verbose=False)
     quick_results.append(res_i)
 
 params_to_check = [
@@ -195,7 +188,7 @@ labels = ["log peak SFR", "peak LBT [Gyr]", "width [Gyr]", "log Z/Z☉", "τ_BC"
 fig, axes = plt.subplots(2, 3, figsize=(14, 8))
 for ax, pname, label in zip(axes.flat, params_to_check, labels):
     true_vals = np.array([float(true_params_all[pname][i]) for i in range(len(quick_results))])
-    rec_vals = np.array([float(jnp.median(r.samples[pname])) for r in quick_results])
+    rec_vals = np.array([float(r.params[pname]) for r in quick_results])
 
     ax.scatter(true_vals, rec_vals, s=10, alpha=0.6, color=COLORS["geovi"])
     lim = [min(true_vals.min(), rec_vals.min()), max(true_vals.max(), rec_vals.max())]
@@ -204,7 +197,7 @@ for ax, pname, label in zip(axes.flat, params_to_check, labels):
     ax.set_ylabel(f"Recovered {label}")
     ax.set_title(label)
 
-fig.suptitle(f"Parameter Recovery ({len(quick_results)} galaxies, native_geovi)", fontsize=11)
+fig.suptitle(f"Parameter Recovery ({len(quick_results)} galaxies, MAP)", fontsize=11)
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig03_recovered_vs_true.png"), dpi=150, bbox_inches="tight")
 plt.show()

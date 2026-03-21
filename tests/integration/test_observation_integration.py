@@ -233,7 +233,7 @@ class TestObservationWithFitter:
     def test_fitter_no_observation_defaults_photometry(self, ssp, base_spec):
         """No observation, no data_type → defaults to 'photometry'."""
         model = Model(base_spec, ssp)
-        model.observation = None
+        assert model.observation is None
         fitter = Fitter(model, jnp.ones(3), jnp.ones(3) * 0.1)
         assert fitter.data_type == "photometry"
 

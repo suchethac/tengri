@@ -221,10 +221,13 @@ class TestSpectroscopyConfig:
         assert sc.resolution.shape == (200,)
 
     def test_nirspec_g140m_factory(self):
-        """nirspec_g140m() creates config with constant R~1000."""
+        """nirspec_g140m() creates config with R~1000 via resolution function."""
         wave = _make_wave_obs()
         sc = SpectroscopyConfig.nirspec_g140m(wave)
-        assert sc.resolution == 1000.0
+        assert sc.has_lsf
+        # nirspec_g140m_resolution returns ~1000 for all wavelengths
+        r = jnp.asarray(sc.resolution)
+        assert jnp.allclose(r, 1000.0)
 
     def test_constant_r_factory(self):
         """constant_r(R=5000) stores scalar resolution."""

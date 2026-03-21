@@ -259,20 +259,7 @@ class Observation:
             lines.append(f"  Spectroscopy : {self.spectroscopy.summary()}")
 
         if self.noise is not None:
-            noise_parts = []
-            if isinstance(self.noise.calibration_floor, (int, float)):
-                if self.noise.calibration_floor > 0:
-                    noise_parts.append(
-                        f"cal floor={self.noise.calibration_floor:.3f} (fixed)"
-                    )
-            else:
-                noise_parts.append(
-                    f"cal floor={self.noise.calibration_floor!r} (free)"
-                )
-            if self.noise.student_t_dof is not None:
-                noise_parts.append(f"Student-t dof={self.noise.student_t_dof}")
-            if noise_parts:
-                lines.append(f"  Noise      : {', '.join(noise_parts)}")
+            lines.append(f"  Noise      : {self.noise.summary()}")
 
         lines.append(f"  Data type  : {self.data_type}")
         lines.append(f"  N data     : {self.n_data}")

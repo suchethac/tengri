@@ -47,6 +47,8 @@ Legacy DPL (backward compatible)::
 
 from __future__ import annotations
 
+import copy
+
 import jax
 import jax.numpy as jnp
 
@@ -1132,8 +1134,6 @@ class ParamSpec:
         """
         if not kwargs:
             return self
-
-        import copy
 
         new_spec = copy.copy(self)
         # Deep-copy mutable internals so the original is untouched

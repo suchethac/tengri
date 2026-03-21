@@ -53,3 +53,14 @@ class NoiseConfig:
             params["noise_dof"] = Fixed(self.student_t_dof)
 
         return params
+
+    def summary(self) -> str:
+        """Return a one-line summary of the noise configuration."""
+        parts = []
+        if isinstance(self.calibration_floor, Distribution):
+            parts.append(f"cal floor={self.calibration_floor!r} (free)")
+        elif self.calibration_floor > 0:
+            parts.append(f"cal floor={self.calibration_floor:.3f} (fixed)")
+        if self.student_t_dof is not None:
+            parts.append(f"Student-t dof={self.student_t_dof}")
+        return ", ".join(parts) if parts else "Gaussian (default)"

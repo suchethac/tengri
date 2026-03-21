@@ -181,28 +181,19 @@ class Model:
                 "Use observation=Observation(photometry=...) instead."
             )
 
-        if observation is not None:
+        if observation is not None or filters is not None:
             from tengri.models.observation.observation import Observation
 
+        if observation is not None:
             if not isinstance(observation, Observation):
                 raise TypeError(
                     f"observation must be an Observation instance, got {type(observation)}"
                 )
-            # Auto-merge observation params into spec
             obs_params = observation.get_all_params()
             if obs_params:
                 spec = spec.with_params(**obs_params)
-            # Extract filters from observation for backward compat internals
-            if observation.can_do_photometry:
-                filters = (
-                    list(observation.photometry.filter_waves),
-                    list(observation.photometry.filter_trans),
-                    list(observation.photometry.filters),
-                )
 
         elif filters is not None:
-            # Backward compat: wrap raw filters into an Observation
-            from tengri.models.observation.observation import Observation
             from tengri.models.observation.photometry_config import Photometry
 
             observation = Observation(
@@ -230,7 +221,10 @@ class Model:
         # Handle filter input formats
         self.filter_waves = None
         self.filter_trans = None
-        if filters is not None:
+        if observation is not None and observation.can_do_photometry:
+            self.filter_waves = list(observation.photometry.filter_waves)
+            self.filter_trans = list(observation.photometry.filter_trans)
+        elif filters is not None:
             if isinstance(filters, tuple) and len(filters) == 3:
                 self.filter_waves = filters[0]
                 self.filter_trans = filters[1]

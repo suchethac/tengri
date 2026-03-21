@@ -89,22 +89,22 @@ class SpectroscopyConfig:
     # -------------------------------------------------------------------
 
     @staticmethod
-    def nirspec_prism(
+    def _from_resolution(
         wave_obs: jnp.ndarray,
+        resolution: float | jnp.ndarray | None,
         sigma_lib_kms: float = 70.0,
         calibration_order: int = 0,
         eline_marginalize: bool = False,
         **kwargs,
     ) -> SpectroscopyConfig:
-        """JWST NIRSpec PRISM configuration.
-
-        Variable resolution R ~ 30-330 across 0.6-5.3 microns
-        (Jakobsen et al. 2022).
+        """Shared constructor for instrument factories.
 
         Parameters
         ----------
         wave_obs : jnp.ndarray
             Observed wavelength grid (Angstrom).
+        resolution : float, array, or None
+            Spectral resolution R(lambda).
         sigma_lib_kms : float
             SSP library resolution. Default: 70.0.
         calibration_order : int
@@ -114,10 +114,6 @@ class SpectroscopyConfig:
         **kwargs
             Passed to ``SpectroscopyConfig``.
         """
-        from tengri.models.observation.spectroscopy import nirspec_prism_resolution
-
-        wave_um = jnp.asarray(wave_obs) / 1e4
-        resolution = nirspec_prism_resolution(wave_um)
         return SpectroscopyConfig(
             wave_obs=jnp.asarray(wave_obs),
             resolution=resolution,
@@ -128,72 +124,30 @@ class SpectroscopyConfig:
         )
 
     @staticmethod
-    def nirspec_g140m(
-        wave_obs: jnp.ndarray,
-        sigma_lib_kms: float = 70.0,
-        calibration_order: int = 0,
-        eline_marginalize: bool = False,
-        **kwargs,
-    ) -> SpectroscopyConfig:
-        """JWST NIRSpec G140M grating configuration.
+    def nirspec_prism(wave_obs: jnp.ndarray, **kwargs) -> SpectroscopyConfig:
+        """JWST NIRSpec PRISM: variable R ~ 30-330 (Jakobsen+2022)."""
+        from tengri.models.observation.spectroscopy import nirspec_prism_resolution
 
-        Roughly constant R ~ 1000.
+        wave_jax = jnp.asarray(wave_obs)
+        resolution = nirspec_prism_resolution(wave_jax / 1e4)
+        return SpectroscopyConfig._from_resolution(wave_jax, resolution, **kwargs)
 
-        Parameters
-        ----------
-        wave_obs : jnp.ndarray
-            Observed wavelength grid (Angstrom).
-        sigma_lib_kms : float
-            SSP library resolution. Default: 70.0.
-        calibration_order : int
-            Chebyshev calibration order. Default: 0.
-        eline_marginalize : bool
-            Marginalize emission lines. Default: False.
-        **kwargs
-            Passed to ``SpectroscopyConfig``.
-        """
-        return SpectroscopyConfig(
-            wave_obs=jnp.asarray(wave_obs),
-            resolution=1000.0,
-            sigma_lib_kms=sigma_lib_kms,
-            calibration_order=calibration_order,
-            eline_marginalize=eline_marginalize,
-            **kwargs,
-        )
+    @staticmethod
+    def nirspec_g140m(wave_obs: jnp.ndarray, **kwargs) -> SpectroscopyConfig:
+        """JWST NIRSpec G140M: roughly constant R ~ 1000."""
+        from tengri.models.observation.spectroscopy import nirspec_g140m_resolution
+
+        wave_jax = jnp.asarray(wave_obs)
+        resolution = nirspec_g140m_resolution(wave_jax / 1e4)
+        return SpectroscopyConfig._from_resolution(wave_jax, resolution, **kwargs)
 
     @staticmethod
     def constant_r(
-        wave_obs: jnp.ndarray,
-        R: float,
-        sigma_lib_kms: float = 70.0,
-        calibration_order: int = 0,
-        eline_marginalize: bool = False,
-        **kwargs,
+        wave_obs: jnp.ndarray, R: float, **kwargs
     ) -> SpectroscopyConfig:
-        """Constant-resolution spectrograph configuration.
-
-        Parameters
-        ----------
-        wave_obs : jnp.ndarray
-            Observed wavelength grid (Angstrom).
-        R : float
-            Spectral resolution (constant).
-        sigma_lib_kms : float
-            SSP library resolution. Default: 70.0.
-        calibration_order : int
-            Chebyshev calibration order. Default: 0.
-        eline_marginalize : bool
-            Marginalize emission lines. Default: False.
-        **kwargs
-            Passed to ``SpectroscopyConfig``.
-        """
-        return SpectroscopyConfig(
-            wave_obs=jnp.asarray(wave_obs),
-            resolution=float(R),
-            sigma_lib_kms=sigma_lib_kms,
-            calibration_order=calibration_order,
-            eline_marginalize=eline_marginalize,
-            **kwargs,
+        """Constant-resolution spectrograph."""
+        return SpectroscopyConfig._from_resolution(
+            wave_obs, float(R), **kwargs
         )
 
     def summary(self) -> str:

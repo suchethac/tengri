@@ -11,7 +11,6 @@ from collections.abc import Sequence
 
 import jax.numpy as jnp
 
-from tengri.models.observation.filters import load_filter
 from tengri.models.observation.photometry import FilterCurve
 
 
@@ -89,8 +88,10 @@ class Photometry:
         >>> phot.n_filters
         3
         """
-        filters = tuple(load_filter(n, cache_dir=cache_dir) for n in names)
-        return Photometry(filters=filters, names=tuple(names))
+        from tengri.models.observation.filters import load_filter_set
+
+        _waves, _trans, curves = load_filter_set(list(names), cache_dir=cache_dir)
+        return Photometry(filters=tuple(curves), names=tuple(names))
 
     @staticmethod
     def from_filter_set(
