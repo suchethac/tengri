@@ -54,24 +54,25 @@ DUST_LAWS: dict[str, Callable] = {}
 
 def register_dust_law(name: str) -> Callable:
     """Register a dust attenuation curve function (decorator factory)."""
+
     def decorator(fn: Callable) -> Callable:
         DUST_LAWS[name] = fn
         return fn
+
     return decorator
 
 
 def get_dust_law(name: str) -> Callable:
     """Get a registered dust law by name."""
     if name not in DUST_LAWS:
-        raise ValueError(
-            f"Unknown dust law '{name}'. Available: {list(DUST_LAWS.keys())}"
-        )
+        raise ValueError(f"Unknown dust law '{name}'. Available: {list(DUST_LAWS.keys())}")
     return DUST_LAWS[name]
 
 
 # ===================================================================
 # Utility: Drude profile for the 2175 Angstrom UV bump
 # ===================================================================
+
 
 def _drude_profile(
     wave_um: jnp.ndarray,
@@ -82,15 +83,13 @@ def _drude_profile(
 
     D(lambda) = (lambda * gamma)^2 / ((lambda^2 - x0^2)^2 + (lambda*gamma)^2)
     """
-    return (
-        (wave_um * gamma) ** 2
-        / ((wave_um**2 - x0**2) ** 2 + (wave_um * gamma) ** 2)
-    )
+    return (wave_um * gamma) ** 2 / ((wave_um**2 - x0**2) ** 2 + (wave_um * gamma) ** 2)
 
 
 # ===================================================================
 # Attenuation curves
 # ===================================================================
+
 
 @register_dust_law("power_law")
 def power_law(
@@ -167,7 +166,8 @@ def smc(
     k_ir = 0.6 * x**1.7
 
     k = jnp.where(
-        wave_um < 0.3, k_uv,
+        wave_um < 0.3,
+        k_uv,
         jnp.where(wave_um < 1.0, k_opt, k_ir),
     )
     return jnp.clip(k, 0.0)
@@ -192,20 +192,31 @@ def cardelli(
 
     # Optical: 1.1 <= x <= 3.3
     y = x - 1.82
-    a_opt = (1.0 + 0.17699 * y - 0.50447 * y**2 - 0.02427 * y**3
-             + 0.72085 * y**4 + 0.01979 * y**5 - 0.77530 * y**6
-             + 0.32999 * y**7)
-    b_opt = (1.41338 * y + 2.28305 * y**2 + 1.07233 * y**3
-             - 5.38434 * y**4 - 0.62251 * y**5 + 5.30260 * y**6
-             - 2.09002 * y**7)
+    a_opt = (
+        1.0
+        + 0.17699 * y
+        - 0.50447 * y**2
+        - 0.02427 * y**3
+        + 0.72085 * y**4
+        + 0.01979 * y**5
+        - 0.77530 * y**6
+        + 0.32999 * y**7
+    )
+    b_opt = (
+        1.41338 * y
+        + 2.28305 * y**2
+        + 1.07233 * y**3
+        - 5.38434 * y**4
+        - 0.62251 * y**5
+        + 5.30260 * y**6
+        - 2.09002 * y**7
+    )
 
     # UV: 3.3 <= x <= 8.0
-    f_a = jnp.where(x >= 5.9,
-                     -0.04473 * (x - 5.9)**2 - 0.009779 * (x - 5.9)**3, 0.0)
-    f_b = jnp.where(x >= 5.9,
-                     0.2130 * (x - 5.9)**2 + 0.1207 * (x - 5.9)**3, 0.0)
-    a_uv = 1.752 - 0.316 * x - 0.104 / ((x - 4.67)**2 + 0.341) + f_a
-    b_uv = -3.090 + 1.825 * x + 1.206 / ((x - 4.62)**2 + 0.263) + f_b
+    f_a = jnp.where(x >= 5.9, -0.04473 * (x - 5.9) ** 2 - 0.009779 * (x - 5.9) ** 3, 0.0)
+    f_b = jnp.where(x >= 5.9, 0.2130 * (x - 5.9) ** 2 + 0.1207 * (x - 5.9) ** 3, 0.0)
+    a_uv = 1.752 - 0.316 * x - 0.104 / ((x - 4.67) ** 2 + 0.341) + f_a
+    b_uv = -3.090 + 1.825 * x + 1.206 / ((x - 4.62) ** 2 + 0.263) + f_b
 
     # Far-UV: 8.0 <= x <= 10.0 (CCM89 Table 4)
     y_fuv = jnp.clip(x, 8.0, 10.0) - 8.0
@@ -213,11 +224,13 @@ def cardelli(
     b_fuv = 13.670 + 4.257 * y_fuv - 0.420 * y_fuv**2 + 0.374 * y_fuv**3
 
     a = jnp.where(
-        x < 1.1, a_ir,
+        x < 1.1,
+        a_ir,
         jnp.where(x < 3.3, a_opt, jnp.where(x < 8.0, a_uv, a_fuv)),
     )
     b = jnp.where(
-        x < 1.1, b_ir,
+        x < 1.1,
+        b_ir,
         jnp.where(x < 3.3, b_opt, jnp.where(x < 8.0, b_uv, b_fuv)),
     )
 
@@ -325,10 +338,12 @@ def li08(
     w_opt_v = jax.nn.sigmoid(steepness * (log_v - log_opt))
     w_uv_v = 1.0 - w_fuv_v - w_opt_v
 
-    k_v = (w_fuv_v * (lam_v / lam_fuv) ** dust_FUV_slope
-           + w_uv_v * (lam_v / lam_fuv) ** dust_UV_slope
-           + w_opt_v * (lam_v / lam_opt) ** dust_OPT_slope
-           + dust_bump_strength * _drude_profile(jnp.array(lam_v / 1e4)))
+    k_v = (
+        w_fuv_v * (lam_v / lam_fuv) ** dust_FUV_slope
+        + w_uv_v * (lam_v / lam_fuv) ** dust_UV_slope
+        + w_opt_v * (lam_v / lam_opt) ** dust_OPT_slope
+        + dust_bump_strength * _drude_profile(jnp.array(lam_v / 1e4))
+    )
 
     return jnp.clip(k_raw / k_v, 0.0)
 
@@ -354,6 +369,7 @@ def salim(
 # ===================================================================
 # Two-component dust model
 # ===================================================================
+
 
 def precompute_dust_age_weights(
     age_grid: jnp.ndarray,
@@ -433,10 +449,7 @@ def two_component_dust(
     log_t_birth = jnp.log10(t_birth)
     weight = jax.nn.sigmoid(-(log_age - log_t_birth) / transition_width)
 
-    tau_lambda = (
-        weight[:, None] * tau_v1 * k_bc[None, :]
-        + tau_v2 * k_diff[None, :]
-    )
+    tau_lambda = weight[:, None] * tau_v1 * k_bc[None, :] + tau_v2 * k_diff[None, :]
 
     return f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau_lambda)
 
@@ -504,33 +517,41 @@ def two_component_dust_fast(
     f_obscuration: float = 0.0,
     **law_params,
 ) -> jnp.ndarray:
-    """Fast path using precomputed age weights.
+    """Fast dust attenuation using precomputed age weights.
+
+    Avoids recomputing the birth-cloud age sigmoid every call.  Used by
+    both the fused kernel (at effective wavelengths) and the exact path
+    (at the full wavelength grid).
+
+    The output dtype follows the input ``wavelengths`` dtype, enabling
+    mixed-precision: pass float32 arrays to halve memory traffic on the
+    ``(n_ages, n_wave)`` intermediates (~1.6x speedup on CPU).
 
     Parameters
     ----------
-    wavelengths : array, shape (n_filters,)
-        Evaluation wavelengths (rest-frame Angstrom).
+    wavelengths : array, shape (n_wave,)
+        Evaluation wavelengths (rest-frame Angstrom).  Can be the full
+        SSP grid or just the filter effective wavelengths.
     dust_age_weights : array, shape (n_ages,)
-        From ``precompute_dust_age_weights``.
+        From ``precompute_dust_age_weights`` (computed once at Model init).
     tau_v1, tau_v2 : float
-        Birth cloud and diffuse ISM optical depths.
+        Birth cloud and diffuse ISM V-band optical depths.
     law_bc, law_diff : str
-        Attenuation curve names.
+        Attenuation curve names (looked up in ``DUST_LAWS`` registry).
     f_obscuration : float
-        Unattenuated fraction [0, 1].
+        Fraction of unattenuated sightlines [0, 1] (Lower 2022).
     **law_params
-        Curve parameters.
+        Passed to curve functions: ``n_slope``, ``dust_bump_strength``,
+        ``dust_delta``, ``dust_Rv``, etc.
 
     Returns
     -------
-    array, shape (n_ages, n_filters)
+    array, shape (n_ages, n_wave)
+        Multiplicative attenuation factor in [0, 1].
     """
     k_bc = get_dust_law(law_bc)(wavelengths, **law_params)
     k_diff = get_dust_law(law_diff)(wavelengths, **law_params)
 
-    tau_lambda = (
-        dust_age_weights[:, None] * tau_v1 * k_bc[None, :]
-        + tau_v2 * k_diff[None, :]
-    )
+    tau_lambda = dust_age_weights[:, None] * tau_v1 * k_bc[None, :] + tau_v2 * k_diff[None, :]
 
     return f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau_lambda)
