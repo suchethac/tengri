@@ -973,40 +973,14 @@ total_cloudy = stellar_sed + cloudy_neb_sed
 ssp_data_wne = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 stellar_baked = jnp.sum(csp_weights[:, None] * ssp_data_wne.ssp_flux[met_idx], axis=0)
 
-# Cue nebular SED (if available)
+# Cue nebular SED (if available) — same high-level interface as CLOUDY
 if HAS_CUE:
-    # Get ionizing params for dominant age
-    ionspec_5myr, logqion_5myr = cue_backend.get_ionizing_params_at(
-        log_z_csp,
-        float(ssp_log_ages_yr[burst_5myr]),
-    )
-    cue_neb_kwargs = dict(
-        gas_logu=-2.5,
-        gas_logn=2.0,
-        gas_logz=log_z_csp - LOG10_ZSUN,  # Cue uses Z/Zsun
-        gas_logno=0.0,
-        gas_logco=0.0,
-    )
-    if ionspec_5myr is not None:
-        i5 = np.array(ionspec_5myr)
-        # logqion is per Msun — scale by the young burst mass (10^7 Msun)
-        total_logqion = float(logqion_5myr) + np.log10(float(csp_weights[burst_5myr]))
-        cue_neb_kwargs.update(
-            dict(
-                ionspec_index1=float(i5[0]),
-                ionspec_index2=float(i5[1]),
-                ionspec_index3=float(i5[2]),
-                ionspec_index4=float(i5[3]),
-                ionspec_logLratio1=float(i5[4]),
-                ionspec_logLratio2=float(i5[5]),
-                ionspec_logLratio3=float(i5[6]),
-                gas_logqion=total_logqion,
-            )
-        )
     cue_neb_sed = cue_backend.predict_nebular_sed(
+        ssp_weights=csp_weights,
         ssp_wave=ssp_wave,
-        line_sigma_aa=0.0,
-        **cue_neb_kwargs,
+        ssp_log_ages_yr=ssp_log_ages_yr,
+        log_z=log_z_csp,
+        neb_logU=-2.5,
     )
     total_cue = stellar_sed + cue_neb_sed
 
@@ -1163,7 +1137,7 @@ met_indices = [0, len(log_mets) // 4, len(log_mets) // 2, 3 * len(log_mets) // 4
 colors_met = plt.cm.coolwarm(np.linspace(0, 1, len(met_indices)))
 
 for mi, c in zip(met_indices, colors_met):
-    label = f"log Z/Z$_\\odot$ = {float(log_mets[mi]):.2f}"
+    label = f"log Z/Z$_\\odot$ = {float(log_mets[mi]) - LOG10_ZSUN:.2f}"
     qh_vals = np.array(qh_table[mi])
     valid = qh_vals > 0
     ax.plot(
