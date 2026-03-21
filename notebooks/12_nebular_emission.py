@@ -1253,36 +1253,93 @@ for k in [
 # %% [markdown]
 # ## Summary
 #
-# | Feature | BakedIn | CloudyGrid | Cue |
-# |---------|---------|------------|-----|
+# ### Backend Comparison
+#
+# | Feature | BakedIn (`nebular_ssp`) | CloudyGrid (`nebular`) | Cue (`nebular_cue`) |
+# |---------|------------------------|----------------------|-------------------|
 # | Free logU | No | Yes | Yes |
 # | Free gas Z | No | Yes | Yes |
 # | Abundance ratios | No | No | Yes ([N/O], [C/O]) |
-# | Speed | Fastest (no-op) | Fast (interp) | Fast (NN forward) |
-# | Differentiable | N/A | Yes (JAX) | Yes (JAX) |
-# | Dependencies | None | h5py | None (pure JAX) |
+# | Gas density | Fixed | Fixed in grid | Free (log n) |
+# | Ionizing spectrum | Fixed (SSP) | Fixed (SSP) | Free or SSP-derived |
+# | Lines returned | 0 (in SSP) | 166 | 128 (CLOUDY-matched) or 138 (all) |
+# | Speed | No-op | ~&mu;s (trilinear interp) | ~&mu;s (NN forward) |
+# | JIT + differentiable | N/A | Yes (JAX vmap) | Yes (pure JAX) |
+# | Data dependency | wNE SSP file | HDF5 grid (~13 MB per isochrone) | NPZ weights (~10 MB, universal) |
+# | Isochrone coupling | In SSP | **Must match** SSP isochrones | Independent |
 #
-# **Key findings from the Cue vs CLOUDY comparison:**
+# ### Measured Accuracy (cross-validated against FSPS baked-in)
 #
-# 1. **Line-by-line agreement** is typically within 0.2&ndash;0.3 dex
-#    for the strongest diagnostic lines (H$\alpha$, H$\beta$, [OIII]),
-#    but some weaker lines can diverge by $>0.5$ dex. The scatter depends
-#    on how well the piecewise power-law approximation captures the
-#    true ionizing spectrum shape.
+# | Metric | CLOUDY Grid | Cue |
+# |--------|-------------|-----|
+# | Continuum (line-free windows) | ~1% | ~10&ndash;50% |
+# | H$\alpha$ integrated flux | 1&ndash;4% | 5&ndash;30% |
+# | H$\beta$ integrated flux | 1&ndash;2% | 5&ndash;30% |
+# | [OIII] 5007 integrated flux | 3&ndash;4% | 10&ndash;50% |
+# | Balmer decrement (H$\alpha$/H$\beta$) | 3.01 (Case B = 2.86) | 2.81 |
+# | Photometric boost (JWST z=6) | &minus;0.18 mag | &minus;0.17 mag |
 #
-# 2. **Parameter sensitivity** is qualitatively similar: both backends
-#    show [OIII]/H$\alpha$ increasing with logU, and metal lines
-#    strengthening with gas metallicity. Quantitative ratios can differ
-#    at extreme logU or low Z.
+# ### Cue vs CLOUDY Line-by-Line Statistics
 #
-# 3. **Nebular continuum** shapes generally agree, with the Balmer and
-#    Paschen jumps present in both. Normalization differences arise
-#    from different $Q_H$ computations.
+# | Statistic | Value |
+# |-----------|-------|
+# | Median offset (Cue &minus; CLOUDY) | &minus;0.02 dex |
+# | NMAD scatter | 0.11 dex (~25%) |
+# | Outlier fraction (&gt;0.5 dex) | 7.4% |
+# | Number of matched lines | ~100 |
 #
-# 4. **Photometric impact**: At $z \sim 5$&ndash;$7$, H$\alpha$ enters
-#    F444W and boosts flux by 0.3&ndash;0.8 mag. The three backends
-#    give qualitatively similar boosts but differ at the 0.1&ndash;0.2 mag level.
+# ### Why CLOUDY is More Accurate
 #
-# 5. **Recommendation**: Use CLOUDY grid for production SED fitting
-#    (well-tested, calibrated). Use Cue when modeling non-solar abundance
-#    ratios or when a fully differentiable, grid-free emulator is needed.
+# 1. Uses the **same underlying CLOUDY grids** distributed with FSPS
+# 2. $Q_H$ computed by **direct numerical integration** of the SSP ionizing spectrum
+# 3. Trilinear interpolation on the CLOUDY grid is exact at grid points
+#
+# ### Why Cue Has ~0.1 dex Scatter
+#
+# 1. Trained on a **different CLOUDY grid** (different parameter sampling, isochrones)
+# 2. The 4-segment piecewise power-law approximation to the ionizing spectrum
+#    loses absorption-line detail and He II edge structure
+# 3. Neural network emulator has ~5% intrinsic uncertainty (Li et al. 2024)
+# 4. Different normalisation path: Cue uses $\log Q$ (from $\log U + \log n + \log R$),
+#    CLOUDY grid uses $Q_H$ directly
+#
+# ### When to Use Which
+#
+# | Use case | Recommended | Why |
+# |----------|-------------|-----|
+# | Production SED fitting (photometry) | CLOUDY Grid | Most accurate, well-tested |
+# | Spectroscopic fitting with emission lines | CLOUDY Grid | Better line-by-line accuracy |
+# | Non-solar abundance ratios ([N/O], [C/O]) | Cue | Only backend with free abundance ratios |
+# | High-$z$ galaxies with strong lines | Either | Both give similar photometric boosts |
+# | Hierarchical models | CLOUDY Grid | Fewer nuisance params, more stable |
+# | Ionizing spectrum inference | Cue | Can fit/infer 7 ionspec shape params |
+#
+# ### Implementation Notes
+#
+# **Metallicity convention:**
+# SSP `ssp_lgmet` and CLOUDY grid `log_z` use **absolute** $\log_{10}(Z)$.
+# Cue low-level `gas_logz` uses $\log_{10}(Z/Z_\odot)$.
+# The high-level interface (`predict_nebular_sed(ssp_weights=..., log_z=...)`)
+# converts automatically. User-facing `neb_logZ_gas` in `ParamSpec` is
+# $\log_{10}(Z/Z_\odot)$.
+#
+# **Backend selection in `ParamSpec`:**
+# ```python
+# # BakedIn (SSP already includes nebular at fixed logU=-3, logZ=solar)
+# spec = ParamSpec(nebular_ssp=True, ...)
+#
+# # CLOUDY grid (match grid isochrone to your SSP)
+# spec = ParamSpec(nebular=True, cloudy_grid_path="data/cloudy_grid_prsc.h5", ...)
+#
+# # Cue neural emulator (default weights loaded automatically)
+# spec = ParamSpec(nebular_cue=True, ...)
+#
+# # Cue with free ionizing spectrum params
+# spec = ParamSpec(nebular_cue=True, ionspec_index1=Uniform(1, 42), ...)
+# ```
+#
+# **Gotchas:**
+# - CLOUDY grid **must match** your SSP isochrone library (MIST grid + PARSEC SSP = ~5% systematic)
+# - Cue returns 128 lines (CLOUDY-matched) or 138 (all). CLOUDY returns 166. **Never compare by index.**
+# - When `neb_logZ_gas=None` (default), gas metallicity is tied to stellar metallicity automatically
+# - For composite stellar populations, the high-level interface sums mass-weighted $Q_H$ over young age bins
