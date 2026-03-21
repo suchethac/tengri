@@ -4,7 +4,7 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-from diffsed.model import PARAM_MAP, _build_param_map
+from diffsed._param_translate import PARAM_MAP, _build_param_map
 
 
 class TestLegacyParamMap:

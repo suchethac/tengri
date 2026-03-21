@@ -39,6 +39,12 @@ from typing import ClassVar, NamedTuple
 import jax
 import jax.numpy as jnp
 
+from diffsed._param_translate import (
+    _EVOLVING_MET_PARAM_MAP,
+    LOG10_ZSUN,
+    _build_param_map,
+    get_internal_params,
+)
 from diffsed.models.dust.attenuation import (
     precompute_dust_age_weights,
     two_component_dust_fast,
@@ -68,66 +74,6 @@ from diffsed.utils.grid import (
     log_age_to_age_yr,
     make_log_age_grid,
 )
-
-# ---------------------------------------------------------------------------
-# Non-SFH parameter mapping: public → (internal, unit_scale, offset)
-# ---------------------------------------------------------------------------
-
-# Solar metallicity: log10(Zsun) = log10(0.0142) ≈ -1.848 (Asplund 2009)
-LOG10_ZSUN = -1.8477116556169435
-
-_EVOLVING_MET_PARAM_MAP = {
-    "met_logzsol_0": ("log_z_initial", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
-    "met_logzsol_final": ("log_z_final", 1.0, LOG10_ZSUN),
-}
-
-_NON_SFH_PARAM_MAP = {
-    "met_logzsol": ("log_z", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
-    "met_alpha_fe": ("alpha_fe", 1.0, 0.0),  # [alpha/Fe] in dex
-    "dust_tau_bc": ("tau_v1", 1.0, 0.0),
-    "dust_tau_diff": ("tau_v2", 1.0, 0.0),
-    "dust_slope": ("dust_n", 1.0, 0.0),
-    "redshift": ("redshift", 1.0, 0.0),
-    "noise_frac_cal": ("noise_frac_cal", 1.0, 0.0),
-    # Dust extra params (identity mapping — no unit conversion)
-    "dust_f_obscuration": ("f_obscuration", 1.0, 0.0),
-    "dust_bump_strength": ("dust_bump_strength", 1.0, 0.0),
-    "dust_delta": ("dust_delta", 1.0, 0.0),
-    "dust_Rv": ("dust_Rv", 1.0, 0.0),
-    # Noise model
-    "noise_dof": ("noise_dof", 1.0, 0.0),
-}
-
-
-def _build_param_map(mean_sfh_type):
-    """Build complete PARAM_MAP from SFH registry + non-SFH params.
-
-    Returns
-    -------
-    dict
-        public_name -> (internal_name, scale, offset)
-    """
-    _, _, sfh_param_map, _ = resolve_sfh(mean_sfh_type)
-    result = dict(sfh_param_map)
-    result.update(_NON_SFH_PARAM_MAP)
-    return result
-
-
-# Legacy module-level PARAM_MAP for backward compatibility with imports
-PARAM_MAP = {
-    "sfh_alpha": ("alpha", 1.0, 0.0),
-    "sfh_beta": ("beta", 1.0, 0.0),
-    "sfh_tau_peak_gyr": ("tau_sfh", 1e9, 0.0),
-    "sfh_peak_sfr": ("sfr_norm", 1.0, 0.0),
-    "psd_sigma": ("sigma_ps", 1.0, 0.0),
-    "psd_tau_myr": ("tau_ps", 1e6, 0.0),
-    "met_logzsol": ("log_z", 1.0, LOG10_ZSUN),
-    "dust_tau_bc": ("tau_v1", 1.0, 0.0),
-    "dust_tau_diff": ("tau_v2", 1.0, 0.0),
-    "dust_slope": ("dust_n", 1.0, 0.0),
-    "redshift": ("redshift", 1.0, 0.0),
-}
-
 
 # ---------------------------------------------------------------------------
 # MockData container
@@ -561,82 +507,9 @@ class Model:
     def _get_internal_params(self, params):
         """Translate public param dict to internal names with unit conversion.
 
-        Merges user-provided values with fixed defaults from the spec.
-        Conversion: internal = public * scale + offset
-
-        Also accepts legacy parameter names (sfh_alpha, psd_sigma, etc.)
-        via reverse alias lookup.
+        Thin wrapper around :func:`diffsed._param_translate.get_internal_params`.
         """
-        internal = {}
-        for pub_name, (int_name, scale, offset) in self._param_map.items():
-            if pub_name in params:
-                internal[int_name] = params[pub_name] * scale + offset
-            else:
-                # Check legacy alias: find old name that maps to pub_name
-                legacy_val = self._find_legacy_param(params, pub_name)
-                if legacy_val is not None:
-                    internal[int_name] = legacy_val * scale + offset
-                else:
-                    # Fall back to fixed value from spec
-                    try:
-                        dist = self.spec.get_distribution(pub_name)
-                        if dist.is_fixed:
-                            internal[int_name] = dist.bounds[0] * scale + offset
-                        else:
-                            raise KeyError(f"Free parameter '{pub_name}' not found in params dict")
-                    except KeyError as err:
-                        raise KeyError(
-                            f"Parameter '{pub_name}' not found in params dict and not in spec"
-                        ) from err
-
-        # Handle field latent vector (both new and legacy names)
-        if self._has_field:
-            if "sfh_field_xi" in params:
-                internal["xi"] = params["sfh_field_xi"]
-            elif "psd_xi" in params:
-                internal["xi"] = params["psd_xi"]
-
-        # Warn about unrecognized keys (silent bugs when wrong names used)
-        recognized = set(self._param_map.keys())
-        recognized.update(self._LEGACY_ALIASES.keys() if hasattr(self, "_LEGACY_ALIASES") else ())
-        recognized.update({"sfh_field_xi", "psd_xi"})
-        # Also recognize internal names (for backwards compat)
-        recognized.update(int_name for _, (int_name, _, _) in self._param_map.items())
-        unrecognized = set(params.keys()) - recognized
-        if unrecognized:
-            import warnings
-
-            warnings.warn(
-                f"Unrecognized parameter names passed to Model: {sorted(unrecognized)}. "
-                f"These will be silently ignored. Did you mean one of: "
-                f"{sorted(self._param_map.keys())}?",
-                UserWarning,
-                stacklevel=3,
-            )
-
-        return internal
-
-    @staticmethod
-    def _find_legacy_param(params, new_name):
-        """Check if a legacy param name is in params that maps to new_name.
-
-        TODO(future): Remove once all callers use new parameter names.
-        Legacy callers (fitter.py, hierarchical.py, notebooks) still pass
-        old-style param names like sfh_alpha, psd_sigma, etc.
-        """
-        # Reverse map: new_name -> old_name
-        _REVERSE_ALIASES = {
-            "sfh_dpl_alpha": "sfh_alpha",
-            "sfh_dpl_beta": "sfh_beta",
-            "sfh_dpl_tau_gyr": "sfh_tau_peak_gyr",
-            "sfh_dpl_log_peak_sfr": "sfh_peak_sfr",
-            "sfh_field_psd_sigma": "psd_sigma",
-            "sfh_field_psd_tau_myr": "psd_tau_myr",
-        }
-        old_name = _REVERSE_ALIASES.get(new_name)
-        if old_name and old_name in params:
-            return params[old_name]
-        return None
+        return get_internal_params(params, self._param_map, self.spec, self._has_field)
 
     @staticmethod
     def _t_universe_gyr(z):
