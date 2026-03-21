@@ -137,6 +137,8 @@ plt.show()
 fitter_spec = Fitter(
     model_param, mock_spec.flux_obs, mock_spec.noise, data_type="spectroscopy"
 )
+fitter_spec.compile(verbose=False)  # pre-compile (not timed)
+
 t0 = time.perf_counter()
 result_map = fitter_spec.run("map", n_steps=500, verbose=False)
 result_geovi_spec = fitter_spec.run(
@@ -244,6 +246,8 @@ mock_phot_s = model_stoch.mock(true_stoch, snr=20.0, key=jax.random.PRNGKey(79))
 fitter_stoch_spec = Fitter(
     model_stoch, mock_spec_s.flux_obs, mock_spec_s.noise, data_type="spectroscopy"
 )
+fitter_stoch_spec.compile(verbose=False)  # pre-compile (not timed)
+
 t0 = time.perf_counter()
 _ = fitter_stoch_spec.run("map", n_steps=1000, verbose=False)
 result_stoch_spec = fitter_stoch_spec.run(

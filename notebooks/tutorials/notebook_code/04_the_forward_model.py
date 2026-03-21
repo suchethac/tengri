@@ -151,7 +151,7 @@ sfr = np.array(sfh["sfr_mean"])
 ax_sfh.plot(t_gyr, sfr, color=COLORS["truth"], lw=1.5)
 ax_sfh.set_xlabel("Lookback time [Gyr]")
 ax_sfh.set_ylabel(r"SFR [$M_\odot$/yr]")
-ax_sfh.set_xlim(13.5, 0)
+ax_sfh.set_xlim(0, 13.5)
 ax_sfh.set_title("(1) Star Formation History")
 
 # Weights = SFR × Δt (contribution of each age bin)
@@ -299,7 +299,7 @@ fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 4))
 ax1.plot(t_gyr, sfr, color=COLORS["truth"], lw=1.5)
 ax1.set_xlabel("Lookback time [Gyr]")
 ax1.set_ylabel(r"SFR [$M_\odot$/yr]")
-ax1.set_xlim(13.5, 0)
+ax1.set_xlim(0, 13.5)
 ax1.set_title("SFH")
 
 # SED

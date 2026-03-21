@@ -122,6 +122,8 @@ plt.show()
 # %%
 # Single galaxy fit — baseline timing
 fitter_single = Fitter(model, mocks[0].flux_obs, mocks[0].noise, data_type="photometry")
+fitter_single.compile(verbose=False)  # pre-compile (not timed)
+
 t0 = time.perf_counter()
 _ = fitter_single.run("map", n_steps=300, verbose=False)
 res_single = fitter_single.run(

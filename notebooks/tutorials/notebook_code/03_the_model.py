@@ -133,7 +133,7 @@ ax_acf.set_title("Autocorrelation Function")
 
 ax_gp.set_xlabel("Lookback time [Gyr]")
 ax_gp.set_ylabel("GP field x(t)")
-ax_gp.set_xlim(13.5, 0)
+ax_gp.set_xlim(0, 13.5)
 ax_gp.set_title("GP Realizations (same ξ)")
 
 fig.tight_layout()
@@ -159,7 +159,7 @@ for sigma, c in [(0.5, COLORS["seq"][0]), (1.0, COLORS["seq"][2]),
     sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, sigma, tau_fixed * 1e6)
     gp = gp_from_xi(xi, sqrt_p, N_GRID)
     ax_sig.plot(ages_gyr, np.array(gp), color=c, lw=1.2, label=f"σ = {sigma}")
-ax_sig.set_xlim(13.5, 0)
+ax_sig.set_xlim(0, 13.5)
 ax_sig.set_xlabel("Lookback time [Gyr]")
 ax_sig.set_ylabel("GP field x(t)")
 ax_sig.set_title(f"Fix τ = {tau_fixed} Myr, vary σ")
@@ -172,7 +172,7 @@ for tau, c in [(5, COLORS["seq"][4]), (20, COLORS["seq"][3]),
     sqrt_p = compute_sqrt_power_drw(N_GRID, d_log_age, sigma_fixed, tau * 1e6)
     gp = gp_from_xi(xi, sqrt_p, N_GRID)
     ax_tau.plot(ages_gyr, np.array(gp), color=c, lw=1.2, label=f"τ = {tau} Myr")
-ax_tau.set_xlim(13.5, 0)
+ax_tau.set_xlim(0, 13.5)
 ax_tau.set_xlabel("Lookback time [Gyr]")
 ax_tau.set_ylabel("GP field x(t)")
 ax_tau.set_title(f"Fix σ = {sigma_fixed}, vary τ")
@@ -218,22 +218,22 @@ axes[0].set_title("(1) White noise ξ ~ N(0,I)")
 axes[1].plot(ages_gyr, gp_np, color=COLORS["sfh_gp"], lw=1.2)
 axes[1].set_xlabel("Lookback time [Gyr]")
 axes[1].set_ylabel("x(t)")
-axes[1].set_xlim(13.5, 0)
+axes[1].set_xlim(0, 13.5)
 axes[1].set_title("(2) Correlated field x(t)")
 
 # (3) Mean SFH
-axes[2].semilogy(ages_gyr, np.array(mean_sfr), color=COLORS["sfh_mean"], lw=1.5)
+axes[2].plot(ages_gyr, np.array(mean_sfr), color=COLORS["sfh_mean"], lw=1.5)
 axes[2].set_xlabel("Lookback time [Gyr]")
 axes[2].set_ylabel(r"SFR [$M_\odot$/yr]")
-axes[2].set_xlim(13.5, 0)
+axes[2].set_xlim(0, 13.5)
 axes[2].set_title(r"(3) Mean SFH $\bar{\dot{M}}_\star(t)$")
 
 # (4) Full SFH
-axes[3].semilogy(ages_gyr, sfr_full, color=COLORS["truth"], lw=1.5)
-axes[3].semilogy(ages_gyr, np.array(mean_sfr), color=COLORS["sfh_mean"], lw=0.8, ls="--", alpha=0.5)
+axes[3].plot(ages_gyr, sfr_full, color=COLORS["truth"], lw=1.5)
+axes[3].plot(ages_gyr, np.array(mean_sfr), color=COLORS["sfh_mean"], lw=0.8, ls="--", alpha=0.5)
 axes[3].set_xlabel("Lookback time [Gyr]")
 axes[3].set_ylabel(r"SFR [$M_\odot$/yr]")
-axes[3].set_xlim(13.5, 0)
+axes[3].set_xlim(0, 13.5)
 axes[3].set_title("(4) Full SFH = mean × exp(x − K/2)")
 
 fig.tight_layout()
@@ -247,9 +247,9 @@ for idx, ax in enumerate(axes.flat):
     xi_i = jax.random.normal(jax.random.PRNGKey(idx * 7 + 3), shape=(N_GRID,))
     gp_i = np.array(gp_from_xi(xi_i, sqrt_power, N_GRID))
     sfr_i = np.array(mean_sfr) * np.exp(gp_i - variance / 2)
-    ax.semilogy(ages_gyr, sfr_i, color=COLORS["truth"], lw=1.2)
-    ax.semilogy(ages_gyr, np.array(mean_sfr), color=COLORS["sfh_mean"], lw=0.8, ls="--", alpha=0.5)
-    ax.set_xlim(13.5, 0)
+    ax.plot(ages_gyr, sfr_i, color=COLORS["truth"], lw=1.2)
+    ax.plot(ages_gyr, np.array(mean_sfr), color=COLORS["sfh_mean"], lw=0.8, ls="--", alpha=0.5)
+    ax.set_xlim(0, 13.5)
     ax.set_xlabel("Lookback time [Gyr]")
     ax.set_ylabel(r"SFR [$M_\odot$/yr]")
     ax.set_title(f"Realization {idx + 1}")
@@ -280,12 +280,12 @@ mean_with = np.mean(sfr_with, axis=0)
 mean_without = np.mean(sfr_without, axis=0)
 
 fig, ax = plt.subplots(figsize=(8, 4))
-ax.semilogy(ages_gyr, np.array(mean_sfr), "k-", lw=2, label=r"Target: $\bar{\dot{M}}_\star$")
-ax.semilogy(ages_gyr, mean_with, color=COLORS["sfh_gp"], lw=1.5, ls="--",
+ax.plot(ages_gyr, np.array(mean_sfr), "k-", lw=2, label=r"Target: $\bar{\dot{M}}_\star$")
+ax.plot(ages_gyr, mean_with, color=COLORS["sfh_gp"], lw=1.5, ls="--",
             label=f"With correction (mean of {n_draws})")
-ax.semilogy(ages_gyr, mean_without, color=COLORS["model"], lw=1.5, ls=":",
+ax.plot(ages_gyr, mean_without, color=COLORS["model"], lw=1.5, ls=":",
             label=f"Without correction (biased high)")
-ax.set_xlim(13.5, 0)
+ax.set_xlim(0, 13.5)
 ax.set_xlabel("Lookback time [Gyr]")
 ax.set_ylabel(r"$\langle$SFR$\rangle$ [$M_\odot$/yr]")
 ax.legend(fontsize=8)
@@ -309,8 +309,8 @@ fig, (ax_lbt, ax_w, ax_s) = plt.subplots(1, 3, figsize=(15, 4))
 for lbt, c in [(2, COLORS["seq"][0]), (6, COLORS["seq"][2]),
                (10, COLORS["seq"][3]), (12, COLORS["seq"][4])]:
     sfr = tsnorm(ages_yr, log_peak_sfr=1.5, peak_lbt=lbt * 1e9, width=2e9, skew=0.0, trunc=3.0)
-    ax_lbt.semilogy(ages_gyr, np.array(sfr), color=c, lw=1.2, label=f"peak = {lbt} Gyr")
-ax_lbt.set_xlim(13.5, 0)
+    ax_lbt.plot(ages_gyr, np.array(sfr), color=c, lw=1.2, label=f"peak = {lbt} Gyr")
+ax_lbt.set_xlim(0, 13.5)
 ax_lbt.legend(fontsize=7)
 ax_lbt.set_title("Vary peak lookback")
 
@@ -318,8 +318,8 @@ ax_lbt.set_title("Vary peak lookback")
 for w, c in [(0.5, COLORS["seq"][0]), (1, COLORS["seq"][2]),
              (3, COLORS["seq"][3]), (5, COLORS["seq"][4])]:
     sfr = tsnorm(ages_yr, log_peak_sfr=1.5, peak_lbt=6e9, width=w * 1e9, skew=0.0, trunc=3.0)
-    ax_w.semilogy(ages_gyr, np.array(sfr), color=c, lw=1.2, label=f"width = {w} Gyr")
-ax_w.set_xlim(13.5, 0)
+    ax_w.plot(ages_gyr, np.array(sfr), color=c, lw=1.2, label=f"width = {w} Gyr")
+ax_w.set_xlim(0, 13.5)
 ax_w.legend(fontsize=7)
 ax_w.set_title("Vary width")
 
@@ -327,8 +327,8 @@ ax_w.set_title("Vary width")
 for s, c in [(-2, COLORS["seq"][0]), (0, COLORS["seq"][2]),
              (1, COLORS["seq"][3]), (3, COLORS["seq"][4])]:
     sfr = tsnorm(ages_yr, log_peak_sfr=1.5, peak_lbt=6e9, width=2e9, skew=float(s), trunc=3.0)
-    ax_s.semilogy(ages_gyr, np.array(sfr), color=c, lw=1.2, label=f"skew = {s}")
-ax_s.set_xlim(13.5, 0)
+    ax_s.plot(ages_gyr, np.array(sfr), color=c, lw=1.2, label=f"skew = {s}")
+ax_s.set_xlim(0, 13.5)
 ax_s.legend(fontsize=7)
 ax_s.set_title("Vary skewness")
 
@@ -364,10 +364,10 @@ for i, sigma in enumerate(sigmas):
         )))
         sfr_ij = np.array(mean_sfr) * np.exp(gp_ij - var_ij / 2)
 
-        ax.semilogy(ages_gyr, sfr_ij, color=COLORS["truth"], lw=1)
-        ax.semilogy(ages_gyr, np.array(mean_sfr), color=COLORS["sfh_mean"],
+        ax.plot(ages_gyr, sfr_ij, color=COLORS["truth"], lw=1)
+        ax.plot(ages_gyr, np.array(mean_sfr), color=COLORS["sfh_mean"],
                     lw=0.6, ls="--", alpha=0.4)
-        ax.set_xlim(13.5, 0)
+        ax.set_xlim(0, 13.5)
         ax.set_ylim(1e-2, 1e3)
 
         if i == 0:

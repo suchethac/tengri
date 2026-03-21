@@ -210,6 +210,8 @@ t0 = time.perf_counter()
 result_map_p = fitter_param.run("map", n_steps=500, verbose=False)
 timings["MAP (D=7)"] = time.perf_counter() - t0
 
+fitter_param.compile(verbose=False)  # pre-compile (not timed)
+
 t0 = time.perf_counter()
 result_geovi_p = fitter_param.run(
     "native_geovi", n_iterations=15, n_samples=6, n_seeds=5,
@@ -220,6 +222,8 @@ timings["native_geovi (D=7)"] = time.perf_counter() - t0
 t0 = time.perf_counter()
 result_map_s = fitter_stoch.run("map", n_steps=1000, verbose=False)
 timings["MAP (D=137)"] = time.perf_counter() - t0
+
+fitter_stoch.compile(verbose=False)  # pre-compile (not timed)
 
 t0 = time.perf_counter()
 result_geovi_s = fitter_stoch.run(

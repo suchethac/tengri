@@ -210,6 +210,8 @@ t0 = time.perf_counter()
 result_map_param = fitter_param.run("map", n_steps=500, verbose=False)
 t_map = time.perf_counter() - t0
 
+fitter_param.compile(verbose=False)  # pre-compile (not timed)
+
 t0 = time.perf_counter()
 result_geovi_param = fitter_param.run(
     "native_geovi",
@@ -419,11 +421,11 @@ sfr_mean = np.array(sfh_true["sfr_mean"])
 fig, (ax_sfh, ax_spec) = plt.subplots(1, 2, figsize=(12, 4))
 
 # Left: True SFH
-ax_sfh.semilogy(t_gyr, sfr_full, color=COLORS["truth"], lw=1.5, label="Full SFH (with GP)")
-ax_sfh.semilogy(t_gyr, sfr_mean, color=COLORS["sfh_mean"], lw=1, ls="--", label="Mean SFH (secular)")
+ax_sfh.plot(t_gyr, sfr_full, color=COLORS["truth"], lw=1.5, label="Full SFH (with GP)")
+ax_sfh.plot(t_gyr, sfr_mean, color=COLORS["sfh_mean"], lw=1, ls="--", label="Mean SFH (secular)")
 ax_sfh.set_xlabel("Lookback time [Gyr]")
 ax_sfh.set_ylabel(r"SFR [$M_\odot\,{\rm yr}^{-1}$]")
-ax_sfh.set_xlim(13.5, 0)
+ax_sfh.set_xlim(0, 13.5)
 ax_sfh.legend(fontsize=8)
 ax_sfh.set_title(f"True Bursty SFH (σ = 2.0, τ = 20 Myr)")
 # 200 Myr inset
@@ -434,7 +436,7 @@ inset.plot(t_gyr[mask_200] * 1e3, sfr_mean[mask_200], color=COLORS["sfh_mean"], 
 inset.set_xlabel("Lookback [Myr]", fontsize=6)
 inset.set_ylabel("SFR", fontsize=6)
 inset.tick_params(labelsize=5)
-inset.set_xlim(200, 0)
+inset.set_xlim(0, 200)
 
 # Right: Mock spectrum
 ax_spec.errorbar(
@@ -459,6 +461,8 @@ fitter_stoch = Fitter(
 t0 = time.perf_counter()
 result_map_stoch = fitter_stoch.run("map", n_steps=1000, verbose=False)
 t_map_s = time.perf_counter() - t0
+
+fitter_stoch.compile(verbose=False)  # pre-compile (not timed)
 
 t0 = time.perf_counter()
 result_geovi_stoch = fitter_stoch.run(

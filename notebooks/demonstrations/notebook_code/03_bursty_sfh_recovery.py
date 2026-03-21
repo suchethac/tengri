@@ -128,9 +128,9 @@ for ax, reg in zip(axes.flat, REGIMES):
     sfr_full = np.array(sfh["sfr_full"])
     sfr_mean = np.array(sfh["sfr_mean"])
 
-    ax.semilogy(t_gyr, sfr_full, color=COLORS["truth"], lw=1.2)
-    ax.semilogy(t_gyr, sfr_mean, color=COLORS["sfh_mean"], lw=0.8, ls="--", alpha=0.5)
-    ax.set_xlim(13.5, 0)
+    ax.plot(t_gyr, sfr_full, color=COLORS["truth"], lw=1.2)
+    ax.plot(t_gyr, sfr_mean, color=COLORS["sfh_mean"], lw=0.8, ls="--", alpha=0.5)
+    ax.set_xlim(0, 13.5)
     ax.set_xlabel("Lookback time [Gyr]")
     ax.set_ylabel(r"SFR [$M_\odot$/yr]")
     ax.set_title(f"{reg['label']} (σ={reg['sigma']}, τ={reg['tau']} Myr)")

@@ -505,9 +505,9 @@ for i, ax in enumerate(axes.flat):
     sfr_true = np.array(sfh_true["sfr_full"])
     sfr_mean_true = np.array(sfh_true["sfr_mean"])
 
-    ax.semilogy(t_gyr, sfr_true, color=COLORS["truth"], lw=1.5, label="Truth")
-    ax.semilogy(t_gyr, sfr_mean_true, color=COLORS["sfh_mean"], lw=0.8, ls="--", alpha=0.5)
-    ax.set_xlim(13.5, 0)
+    ax.plot(t_gyr, sfr_true, color=COLORS["truth"], lw=1.5, label="Truth")
+    ax.plot(t_gyr, sfr_mean_true, color=COLORS["sfh_mean"], lw=0.8, ls="--", alpha=0.5)
+    ax.set_xlim(0, 13.5)
     ax.set_title(f"Galaxy {i}", fontsize=9)
     ax.set_xlabel("Lookback time [Gyr]")
     if i % 2 == 0:
