@@ -452,15 +452,15 @@ class TestParamSpecWithParams:
         assert result is base_spec
 
     def test_multiple_params(self, base_spec):
-        """Can add multiple params at once."""
+        """Can add multiple new params at once."""
         new_spec = base_spec.with_params(
             cal_c1=Gaussian(0, 0.1),
             cal_c2=Gaussian(0, 0.1),
-            noise_frac_cal=Uniform(0.01, 0.15),
+            cal_c3=Gaussian(0, 0.1),
         )
         assert "cal_c1" in new_spec.free_params
         assert "cal_c2" in new_spec.free_params
-        assert "noise_frac_cal" in new_spec.free_params
+        assert "cal_c3" in new_spec.free_params
 
     def test_fixed_param_added(self, base_spec):
         """Fixed params added via with_params appear in fixed_params."""
