@@ -90,7 +90,7 @@ model = Model(spec, ssp_data, filters=filters)
 
 # %%
 # Generate 100 diverse mock galaxies
-N_CAT = 20
+N_CAT = 10
 keys = jax.random.split(jax.random.PRNGKey(42), N_CAT)
 true_params_all = jax.vmap(spec.sample)(keys)
 
@@ -127,7 +127,7 @@ fitter_single.compile(verbose=False)  # pre-compile (not timed)
 t0 = time.perf_counter()
 _ = fitter_single.run("map", n_steps=300, verbose=False)
 res_single = fitter_single.run(
-    "native_geovi", n_iterations=15, n_samples=6, n_seeds=3,
+    "native_geovi", n_iterations=8, n_samples=6, n_seeds=3,
     n_posterior_samples=500, verbose=False,
 )
 t_single = time.perf_counter() - t0
@@ -145,7 +145,7 @@ for n in batch_sizes:
         fitter_i = Fitter(model, mocks[i].flux_obs, mocks[i].noise, data_type="photometry")
         _ = fitter_i.run("map", n_steps=300, verbose=False)
         res_i = fitter_i.run(
-            "native_geovi", n_iterations=10, n_samples=3, n_seeds=1,
+            "native_geovi", n_iterations=5, n_samples=3, n_seeds=1,
             n_posterior_samples=200, verbose=False,
         )
         results.append(res_i)
@@ -180,7 +180,7 @@ for i in range(min(10, N_CAT)):
     fitter_i = Fitter(model, mocks[i].flux_obs, mocks[i].noise, data_type="photometry")
     _ = fitter_i.run("map", n_steps=200, verbose=False)
     res_i = fitter_i.run(
-        "native_geovi", n_iterations=10, n_samples=3, n_seeds=1,
+        "native_geovi", n_iterations=5, n_samples=3, n_seeds=1,
         n_posterior_samples=200, verbose=False,
     )
     quick_results.append(res_i)

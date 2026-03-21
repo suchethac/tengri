@@ -163,7 +163,7 @@ except Exception as e:
 # %%
 # --- FIGURE 2: Mock JWST photometry ---
 fig, ax = plt.subplots(figsize=(8, 4))
-wave_eff = np.linspace(9000, 44000, len(jwst_filters))  # approximate
+n_actual = len(mock.flux_obs)\nwave_eff = np.linspace(9000, 44000, n_actual)  # approximate
 ax.errorbar(
     wave_eff, np.array(mock.flux_obs), yerr=np.array(mock.noise),
     fmt="o", ms=8, color=COLORS["data"], capsize=3,
