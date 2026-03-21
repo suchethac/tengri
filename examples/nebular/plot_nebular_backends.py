@@ -10,7 +10,6 @@ Shows how each backend predicts emission lines in the optical window.
 import os
 import sys
 
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 

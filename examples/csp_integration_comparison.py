@@ -28,27 +28,34 @@
 
 # %%
 import sys
+
 sys.path.insert(0, "../src")
 
 import time
+
 import jax
 import jax.numpy as jnp
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.models.sps.dsps_wrapper import (
-    load_ssp_data, compute_csp_weights, compute_csp_sed,
-    interpolate_metallicity, interpolate_metallicity_smooth,
-    compute_lgmet_weights, LSUN_ERG_PER_S,
-)
-from tengri.models.observation.filters import load_filter_set
-from tengri.models.observation.photometry import compute_flux_density
-from tengri.utils.cosmology import luminosity_distance
+from dsps.cosmology import DEFAULT_COSMOLOGY, age_at_z
 from dsps.sed import calc_rest_sed_sfh_table_lognormal_mdf
 from dsps.sed.ssp_weights import calc_age_weights_from_sfh_table
-from dsps.cosmology import DEFAULT_COSMOLOGY, age_at_z
+
+from tengri.models.observation.filters import load_filter_set
+from tengri.models.observation.photometry import compute_flux_density
+from tengri.models.sps.dsps_wrapper import (
+    LSUN_ERG_PER_S,
+    compute_csp_sed,
+    compute_csp_weights,
+    compute_lgmet_weights,
+    interpolate_metallicity,
+    interpolate_metallicity_smooth,
+    load_ssp_data,
+)
+from tengri.utils.cosmology import luminosity_distance
 
 # Style
 try:
