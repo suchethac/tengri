@@ -21,11 +21,11 @@ pip install -e ".[optax]"     # Optax optimizers for MAP only
 ## SSP grids
 
 tengri requires pre-computed SSP grids in DSPS-compatible HDF5 format.
-A [repository of pre-formatted templates](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/)
-from BC03, BPASS, FSPS, and ProGeny is publicly available.
+See the {doc}`full SSP grids catalog <ssp_grids>` for all 46 available templates.
 
 ```bash
-wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/ssp_fsps_v3.2.h5 -P data/
+# Recommended default (FSPS MIST + C3K + Chabrier, 109 MB)
+wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/fsps_mist_c3k_a_chabrier.h5 -P data/
 ```
 
 ## Development install

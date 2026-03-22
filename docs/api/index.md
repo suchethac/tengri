@@ -4,7 +4,7 @@ Auto-generated from docstrings. The public API is importable directly from
 `tengri` (e.g. `from tengri import Model, Fitter, Uniform`).
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 1
 
 core
 inference

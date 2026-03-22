@@ -6,7 +6,7 @@ is JIT-compiled. This section covers what to expect, how to make things faster,
 and how to measure performance in your own setup.
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 1
 
 benchmarks
 optimization

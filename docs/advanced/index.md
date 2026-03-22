@@ -8,7 +8,7 @@ start with the {doc}`../tutorials/index` and then explore the
 {doc}`../demonstrations/index`.
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 1
 
 convergence
 batch_fitting

@@ -112,16 +112,14 @@ Forward model timings on Apple M-series CPU:
 MIT
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 1
 :hidden:
 
 install
-ssp_grids
-auto_examples/index
 tutorials/index
 demonstrations/index
 reference/index
-observation/index
+auto_examples/index
 performance/index
 advanced/index
 api/index

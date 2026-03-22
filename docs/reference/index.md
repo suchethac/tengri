@@ -1,6 +1,6 @@
 # Reference
 
-Physics and methods deep-dives — PSD models, dust attenuation, AGN, nebular emission, noise, and inference algorithms.
+Physics and methods deep-dives — PSD models, dust attenuation, AGN, nebular emission, noise, inference algorithms, and the Observation API.
 
 ```{toctree}
 :maxdepth: 1
@@ -14,4 +14,5 @@ Physics and methods deep-dives — PSD models, dust attenuation, AGN, nebular em
 ../_notebooks/reference/07_gradient_sensitivity
 ../_notebooks/reference/08_ray_tracing_sampler
 ../_notebooks/reference/09_simulation_sfh
+../observation/index
 ```

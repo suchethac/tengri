@@ -10,7 +10,7 @@ parameter translation, JIT strategy, and known gotchas. The **AI Agent Guide**
 provides a quick-start reference for AI assistants working with the code.
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 1
 
 architecture
 contributing
