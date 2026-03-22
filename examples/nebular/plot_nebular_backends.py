@@ -73,8 +73,8 @@ fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 
 # Panel 1: H-beta + [O III]
 regions = [
-    (axes[0], 4700, 5100, r"H$\beta$ + [O III]", {"H$\\beta$": 4861, "[O III]": 5007}),
-    (axes[1], 6400, 6750, r"H$\\alpha$ Region", {"H$\\alpha$": 6563}),
+    (axes[0], 4700, 5100, "H-beta + [O III]", {"H-beta": 4861, "[O III]": 5007}),
+    (axes[1], 6400, 6750, "H-alpha Region", {"H-alpha": 6563}),
 ]
 
 for ax, wmin, wmax, title, lines in regions:
@@ -101,9 +101,8 @@ for ax, wmin, wmax, title, lines in regions:
     ax.set_title(title)
     ax.legend(frameon=False, fontsize=8)
 
-fig.suptitle("Nebular Emission: Backend Comparison", fontsize=12, y=1.02)
-fig.tight_layout()
-plt.savefig("nebular_backends.png", dpi=150, bbox_inches="tight")
+fig.suptitle("Nebular Emission: Backend Comparison", fontsize=12)
+fig.tight_layout(rect=[0, 0, 1, 0.95])
 plt.show()
 
 # --- Summary ---

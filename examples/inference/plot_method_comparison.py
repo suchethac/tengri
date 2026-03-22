@@ -94,7 +94,7 @@ result_geovi = fitter.run(
 fig = safe_corner(result_geovi, truths=true_params)
 if fig is not None:
     # Mark MAP point
-    map_vals = [float(result_map.best_fit[p]) for p in spec.free_params]
+    map_vals = [float(result_map.params[p]) for p in spec.free_params]
     n = len(spec.free_params)
     axes = np.array(fig.axes).reshape(n, n)
     for i in range(n):
