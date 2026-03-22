@@ -1,4 +1,4 @@
-uAdvanced Topics
-========================================
+Advanced Topics
+===============
 
-Examples demonstrating advanced functionality.
+Hierarchical inference, gradient sensitivity, and batch fitting.

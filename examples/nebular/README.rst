@@ -1,4 +1,4 @@
-uNebular Emission
-========================================
+Nebular Emission
+================
 
-Examples demonstrating nebular functionality.
+Nebular emission backends comparison.

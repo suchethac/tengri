@@ -1,4 +1,4 @@
-uPhotometry
-========================================
+Photometry
+==========
 
-Examples demonstrating photometry functionality.
+Filter curves and photometric fitting.

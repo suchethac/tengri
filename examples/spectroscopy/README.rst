@@ -1,4 +1,4 @@
-uSpectroscopy
-========================================
+Spectroscopy
+============
 
-Examples demonstrating spectroscopy functionality.
+Spectroscopic fitting and spectral features.

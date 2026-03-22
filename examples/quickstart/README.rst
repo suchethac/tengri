@@ -1,4 +1,4 @@
-uQuick Start
-========================================
+Quick Start
+===========
 
-Examples demonstrating quickstart functionality.
+Getting started with tengri — first fit and SED visualization.

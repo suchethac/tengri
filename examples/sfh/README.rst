@@ -1,4 +1,4 @@
-uStar Formation Histories
-========================================
+Star Formation Histories
+========================
 
-Examples demonstrating sfh functionality.
+Parametric and stochastic star formation history models.

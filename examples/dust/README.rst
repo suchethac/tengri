@@ -1,4 +1,4 @@
-uDust Models
-========================================
+Dust Models
+===========
 
-Examples demonstrating dust functionality.
+Attenuation laws, two-component dust, and IR emission.

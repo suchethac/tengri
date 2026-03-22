@@ -1,4 +1,4 @@
-uAGN Models
-========================================
+AGN Models
+==========
 
-Examples demonstrating agn functionality.
+AGN disc and torus SED templates.

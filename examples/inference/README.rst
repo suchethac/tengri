@@ -1,4 +1,4 @@
-uInference Methods
-========================================
+Inference Methods
+=================
 
-Examples demonstrating inference functionality.
+Comparing inference methods and convergence diagnostics.
