@@ -1,1 +1,31 @@
-/* Minimal Furo customizations for tengri docs */
+/* tengri docs customizations */
+
+/* Fix nbsphinx output cell background — remove pink/red tint */
+.nboutput .output_area pre {
+    background-color: var(--color-code-background) !important;
+    color: var(--color-code-foreground) !important;
+}
+
+.nboutput .output_area {
+    background-color: transparent !important;
+    border-left: 3px solid var(--color-brand-primary, #2962ff) !important;
+}
+
+/* stderr output — neutral instead of pink */
+.nboutput .output_area.stderr pre {
+    background-color: var(--color-code-background) !important;
+    color: var(--color-code-foreground) !important;
+}
+
+/* Remove any red/pink background on output wrappers */
+div.nboutput div.output_area div,
+div.nboutput div.output_area pre {
+    background: transparent !important;
+}
+
+/* Ensure code output text is selectable */
+.nboutput .output_area pre,
+.nbinput .input_area pre {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+}

@@ -88,26 +88,16 @@ intersphinx_mapping = {
 
 # -- sphinx-gallery configuration --------------------------------------------
 
-_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-
-
-def _reset_cwd(gallery_conf, fname):
-    """Set cwd to project root so examples find data/ and data/filters/."""
-    os.chdir(_project_root)
-
-
 sphinx_gallery_conf = {
     "examples_dirs": ["../examples"],
     "gallery_dirs": ["auto_examples"],
     "filename_pattern": r"/plot_",
-    "ignore_pattern": r"csp_integration_comparison",
     "abort_on_example_error": False,
     "only_warn_on_example_error": True,
     "image_scrapers": ("matplotlib",),
     "within_subsection_order": "FileNameSortKey",
     "capture_repr": (),
     "remove_config_comments": True,
-    "reset_modules": (_reset_cwd,),
 }
 
 # -- Exclude patterns --------------------------------------------------------
@@ -118,4 +108,5 @@ exclude_patterns = [
     "**.ipynb_checkpoints",
     "superpowers",
     "specs",
+    "auto_examples/**/*.ipynb",
 ]

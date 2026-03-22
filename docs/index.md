@@ -119,7 +119,19 @@ install
 tutorials/index
 demonstrations/index
 reference/index
+```
+
+```{toctree}
+:maxdepth: 2
+:hidden:
+
 auto_examples/index
+```
+
+```{toctree}
+:maxdepth: 1
+:hidden:
+
 performance/index
 advanced/index
 api/index
