@@ -163,9 +163,10 @@ def precompute_photometry(
     PhotometricPrecomputation
         Pre-computed data for fast_photometry().
     """
-    n_met = ssp_data.ssp_flux.shape[0]
-    n_age = ssp_data.ssp_flux.shape[1]
     n_filters = len(filter_waves)
+
+    # Detect 4D alpha-enhanced grid
+    _is_4d = ssp_data.ssp_flux.ndim == 4
 
     # Redshift SSP wavelengths to observed frame
     wave_obs = ssp_data.ssp_wave * (1.0 + redshift)
@@ -178,27 +179,40 @@ def precompute_photometry(
     eff_waves = jnp.array(eff_waves)
     eff_waves_rest = eff_waves / (1.0 + redshift)
 
-    # Pre-integrate SSP through each filter for each (met, age)
-    # Vectorized: compute interpolation weights once, apply to all SSPs at once
+    # Pre-integrate SSP through each filter
+    # For 3D: (n_met, n_age, n_filt)
+    # For 4D: (n_met, n_alpha, n_age, n_filt) — integrates all [α/Fe] slices
     import numpy as np
 
-    ssp_flux_np = np.asarray(ssp_data.ssp_flux)  # (n_met, n_age, n_wave)
+    ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_obs_np = np.asarray(wave_obs)
-    ssp_phot_np = np.zeros((n_met, n_age, n_filters))
 
-    for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-        fw_np, ft_np = np.asarray(fw), np.asarray(ft)
-        denom = _np_trapezoid(ft_np * fw_np, fw_np)
-
-        # Vectorized interpolation: compute weights once, apply to all (met, age)
-        ssp_on_filt = _vectorized_interp(fw_np, wave_obs_np, ssp_flux_np)
-
-        # Vectorized integration: (n_met, n_age, n_fw) * (n_fw,) → trapz
-        integrand = ssp_on_filt * ft_np[None, None, :] * fw_np[None, None, :]
-        num = _np_trapezoid(integrand, fw_np, axis=-1)  # (n_met, n_age)
-        ssp_phot_np[:, :, f_idx] = num / max(denom, 1e-30)
-
-    ssp_phot = jnp.array(ssp_phot_np)
+    if _is_4d:
+        n_met, n_alpha, n_age, _ = ssp_flux_np.shape
+        # Reshape to (n_met*n_alpha, n_age, n_wave) for vectorized integration
+        ssp_flat = ssp_flux_np.reshape(n_met * n_alpha, n_age, -1)
+        ssp_phot_flat = np.zeros((n_met * n_alpha, n_age, n_filters))
+        for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
+            fw_np, ft_np = np.asarray(fw), np.asarray(ft)
+            denom = _np_trapezoid(ft_np * fw_np, fw_np)
+            ssp_on_filt = _vectorized_interp(fw_np, wave_obs_np, ssp_flat)
+            integrand = ssp_on_filt * ft_np[None, None, :] * fw_np[None, None, :]
+            num = _np_trapezoid(integrand, fw_np, axis=-1)
+            ssp_phot_flat[:, :, f_idx] = num / max(denom, 1e-30)
+        ssp_phot = jnp.array(
+            ssp_phot_flat.reshape(n_met, n_alpha, n_age, n_filters)
+        )
+    else:
+        n_met, n_age, _ = ssp_flux_np.shape
+        ssp_phot_np = np.zeros((n_met, n_age, n_filters))
+        for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
+            fw_np, ft_np = np.asarray(fw), np.asarray(ft)
+            denom = _np_trapezoid(ft_np * fw_np, fw_np)
+            ssp_on_filt = _vectorized_interp(fw_np, wave_obs_np, ssp_flux_np)
+            integrand = ssp_on_filt * ft_np[None, None, :] * fw_np[None, None, :]
+            num = _np_trapezoid(integrand, fw_np, axis=-1)
+            ssp_phot_np[:, :, f_idx] = num / max(denom, 1e-30)
+        ssp_phot = jnp.array(ssp_phot_np)
 
     flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm**2)
 
