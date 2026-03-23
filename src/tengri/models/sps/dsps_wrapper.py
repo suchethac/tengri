@@ -71,12 +71,18 @@ def load_ssp_data(filepath: str) -> SSPData:
         mass_remaining = None
         if "ssp_mass_remaining" in f:
             mass_remaining = jnp.array(f["ssp_mass_remaining"][:])
+
+        alpha_fe = None
+        if "ssp_alpha_fe" in f:
+            alpha_fe = jnp.array(f["ssp_alpha_fe"][:])
+
         return SSPData(
             ssp_wave=jnp.array(f["ssp_wave"][:]),
             ssp_flux=jnp.array(f["ssp_flux"][:]),
             ssp_lg_age_gyr=jnp.array(f["ssp_lg_age_gyr"][:]),
             ssp_lgmet=jnp.array(f["ssp_lgmet"][:]),
             ssp_mass_remaining=mass_remaining,
+            ssp_alpha_fe=alpha_fe,
         )
 
 
@@ -186,6 +192,177 @@ def effective_metallicity(log_z_fe: float, alpha_fe: float = 0.0) -> float:
     Vazdekis et al. 2015, MNRAS 449, 1177
     """
     return log_z_fe + _ALPHA_TO_Z_COEFF * alpha_fe
+
+
+def has_alpha_grid(ssp_data: SSPData) -> bool:
+    """Check if SSP data includes an [alpha/Fe] grid dimension.
+
+    When True, ssp_flux has shape (n_met, n_alpha, n_age, n_wave) and
+    proper bilinear (Z, [α/Fe]) interpolation should be used instead of
+    the effective_metallicity approximation.
+
+    Parameters
+    ----------
+    ssp_data : SSPData
+        Loaded SSP template data.
+
+    Returns
+    -------
+    bool
+        True if ssp_alpha_fe is present and ssp_flux is 4D.
+    """
+    return (
+        ssp_data.ssp_alpha_fe is not None
+        and ssp_data.ssp_flux.ndim == 4
+    )
+
+
+@jax.jit
+def interpolate_met_alpha(
+    ssp_flux: jnp.ndarray,
+    ssp_lgmet: jnp.ndarray,
+    ssp_alpha_fe: jnp.ndarray,
+    log_z: float,
+    alpha_fe: float,
+) -> jnp.ndarray:
+    """Bilinear interpolation in (metallicity, [α/Fe]) for 4D SSP grids.
+
+    This is the correct approach when alpha-enhanced SSP templates are
+    available (e.g., sMILES, BPASS v2.3, α-MC).  It replaces the
+    ``effective_metallicity()`` approximation, which is only valid when
+    α-enhanced templates are NOT available.
+
+    Parameters
+    ----------
+    ssp_flux : array, shape (n_met, n_alpha, n_age, n_wave)
+        SSP flux on the full (Z, [α/Fe]) grid.
+    ssp_lgmet : array, shape (n_met,)
+        Log10(Z/Zsun) metallicity grid.  This is **total metallicity**
+        [M/H], NOT [Fe/H], following sMILES/α-MC convention.
+    ssp_alpha_fe : array, shape (n_alpha,)
+        [α/Fe] grid values (e.g., [-0.2, 0.0, +0.2, +0.4, +0.6]).
+    log_z : float
+        Target total metallicity [M/H] = log10(Z/Zsun).
+    alpha_fe : float
+        Target [α/Fe] in dex.
+
+    Returns
+    -------
+    array, shape (n_age, n_wave)
+        Interpolated SSP flux at the target (Z, [α/Fe]).
+    """
+    # Metallicity index and fraction
+    lz = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
+    iz = jnp.clip(jnp.searchsorted(ssp_lgmet, lz) - 1, 0, len(ssp_lgmet) - 2)
+    fz = (lz - ssp_lgmet[iz]) / (ssp_lgmet[iz + 1] - ssp_lgmet[iz])
+
+    # Alpha index and fraction
+    afe = jnp.clip(alpha_fe, ssp_alpha_fe[0], ssp_alpha_fe[-1])
+    ia = jnp.clip(jnp.searchsorted(ssp_alpha_fe, afe) - 1, 0, len(ssp_alpha_fe) - 2)
+    fa = (afe - ssp_alpha_fe[ia]) / (ssp_alpha_fe[ia + 1] - ssp_alpha_fe[ia])
+
+    # Bilinear: four corners → (n_age, n_wave)
+    return (
+        (1.0 - fz) * (1.0 - fa) * ssp_flux[iz, ia]
+        + fz * (1.0 - fa) * ssp_flux[iz + 1, ia]
+        + (1.0 - fz) * fa * ssp_flux[iz, ia + 1]
+        + fz * fa * ssp_flux[iz + 1, ia + 1]
+    )
+
+
+@jax.jit
+def interpolate_met_alpha_evolving(
+    ssp_flux: jnp.ndarray,
+    ssp_lgmet: jnp.ndarray,
+    ssp_alpha_fe: jnp.ndarray,
+    log_z_per_age: jnp.ndarray,
+    alpha_fe_per_age: jnp.ndarray,
+) -> jnp.ndarray:
+    """Per-age bilinear interpolation in (Z, [α/Fe]) for time-evolving abundances.
+
+    Each SSP age bin can have a different metallicity AND a different
+    [α/Fe], enabling physically motivated chemical evolution where old
+    stars are α-enhanced and young stars are solar-scaled.
+
+    Parameters
+    ----------
+    ssp_flux : array, shape (n_met, n_alpha, n_age, n_wave)
+        SSP flux on the full (Z, [α/Fe]) grid.
+    ssp_lgmet : array, shape (n_met,)
+        Log10(Z/Zsun) metallicity grid ([M/H], total metallicity).
+    ssp_alpha_fe : array, shape (n_alpha,)
+        [α/Fe] grid values.
+    log_z_per_age : array, shape (n_age,)
+        Target [M/H] at each SSP age bin.
+    alpha_fe_per_age : array, shape (n_age,)
+        Target [α/Fe] at each SSP age bin.
+
+    Returns
+    -------
+    array, shape (n_age, n_wave)
+        Interpolated SSP flux with per-age (Z, [α/Fe]).
+    """
+
+    def _interp_one_age(lz_i, afe_i, flux_at_age_i):
+        # flux_at_age_i: (n_met, n_alpha, n_wave)
+        lz = jnp.clip(lz_i, ssp_lgmet[0], ssp_lgmet[-1])
+        iz = jnp.clip(jnp.searchsorted(ssp_lgmet, lz) - 1, 0, len(ssp_lgmet) - 2)
+        fz = (lz - ssp_lgmet[iz]) / (ssp_lgmet[iz + 1] - ssp_lgmet[iz])
+
+        afe = jnp.clip(afe_i, ssp_alpha_fe[0], ssp_alpha_fe[-1])
+        ia = jnp.clip(jnp.searchsorted(ssp_alpha_fe, afe) - 1, 0, len(ssp_alpha_fe) - 2)
+        fa = (afe - ssp_alpha_fe[ia]) / (ssp_alpha_fe[ia + 1] - ssp_alpha_fe[ia])
+
+        return (
+            (1.0 - fz) * (1.0 - fa) * flux_at_age_i[iz, ia]
+            + fz * (1.0 - fa) * flux_at_age_i[iz + 1, ia]
+            + (1.0 - fz) * fa * flux_at_age_i[iz, ia + 1]
+            + fz * fa * flux_at_age_i[iz + 1, ia + 1]
+        )
+
+    # Transpose: (n_met, n_alpha, n_age, n_wave) → (n_age, n_met, n_alpha, n_wave)
+    flux_by_age = jnp.transpose(ssp_flux, (2, 0, 1, 3))
+    return jax.vmap(_interp_one_age)(log_z_per_age, alpha_fe_per_age, flux_by_age)
+
+
+@jax.jit
+def compute_alpha_fe_evolving(
+    ssp_lg_age_gyr: jnp.ndarray,
+    alpha_fe_old: float,
+    alpha_fe_young: float,
+    t_universe_gyr: float,
+) -> jnp.ndarray:
+    """Compute per-age [α/Fe] from a linear ramp in lookback time.
+
+    Old stars (large lookback time) have high [α/Fe] (formed before
+    Type Ia SNe enriched Fe).  Young stars have lower [α/Fe] (solar
+    or sub-solar).  This is the standard chemical evolution prediction.
+
+    The ramp is linear in lookback time::
+
+        [α/Fe](t_lookback) = α_young + (α_old - α_young) * t_lookback / t_universe
+
+    Parameters
+    ----------
+    ssp_lg_age_gyr : array, shape (n_age,)
+        Log10(age/Gyr) of SSP templates (= lookback time for SSP bins).
+    alpha_fe_old : float
+        [α/Fe] of the oldest stars (at t_lookback = t_universe).
+        Typically +0.3 to +0.5 for massive ellipticals.
+    alpha_fe_young : float
+        [α/Fe] at present day (t_lookback ≈ 0).
+        Typically ~0.0 (solar) for disk galaxies.
+    t_universe_gyr : float
+        Age of the universe at the observed redshift (Gyr).
+
+    Returns
+    -------
+    array, shape (n_age,)
+        [α/Fe] at each SSP age bin.
+    """
+    age_gyr = 10.0**ssp_lg_age_gyr
+    t_frac = jnp.clip(age_gyr / t_universe_gyr, 0.0, 1.0)
+    return alpha_fe_young + (alpha_fe_old - alpha_fe_young) * t_frac
 
 
 LSUN_ERG_PER_S = 3.828e33  # erg/s (IAU 2015)
