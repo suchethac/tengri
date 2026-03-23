@@ -237,12 +237,12 @@ def interpolate_met_alpha(
     ssp_flux : array, shape (n_met, n_alpha, n_age, n_wave)
         SSP flux on the full (Z, [α/Fe]) grid.
     ssp_lgmet : array, shape (n_met,)
-        Log10(Z/Zsun) metallicity grid.  This is **total metallicity**
-        [M/H], NOT [Fe/H], following sMILES/α-MC convention.
+        [Fe/H] iron abundance grid (log10 relative to solar).
+        All source libraries must be converted to [Fe/H] at load time.
     ssp_alpha_fe : array, shape (n_alpha,)
         [α/Fe] grid values (e.g., [-0.2, 0.0, +0.2, +0.4, +0.6]).
     log_z : float
-        Target total metallicity [M/H] = log10(Z/Zsun).
+        Target [Fe/H] (iron abundance, log10 relative to solar).
     alpha_fe : float
         Target [α/Fe] in dex.
 
@@ -289,7 +289,7 @@ def interpolate_met_alpha_evolving(
     ssp_flux : array, shape (n_met, n_alpha, n_age, n_wave)
         SSP flux on the full (Z, [α/Fe]) grid.
     ssp_lgmet : array, shape (n_met,)
-        Log10(Z/Zsun) metallicity grid ([M/H], total metallicity).
+        [Fe/H] iron abundance grid (log10 relative to solar).
     ssp_alpha_fe : array, shape (n_alpha,)
         [α/Fe] grid values.
     log_z_per_age : array, shape (n_age,)

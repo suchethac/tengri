@@ -24,25 +24,40 @@ Alpha-enhanced SSP files use the same format as standard SSPs, with two addition
 ssp_wave          (n_wave,)       Rest-frame wavelength [Å]
 ssp_flux          (n_met, n_alpha, n_age, n_wave)   SSP luminosity [Lsun/Hz/Msun]
 ssp_lg_age_gyr    (n_age,)        log10(age/Gyr)
-ssp_lgmet         (n_met,)        log10(Z/Zsun) — TOTAL metallicity [M/H], NOT [Fe/H]
+ssp_lgmet         (n_met,)        [Fe/H] = iron abundance relative to solar
 ssp_alpha_fe      (n_alpha,)      [α/Fe] grid values [dex]
 ssp_mass_remaining (n_met, n_alpha, n_age)  [optional] surviving mass fraction
 ```
 
-**Critical convention:** `ssp_lgmet` should be total metallicity [M/H], not iron
-abundance [Fe/H]. The grid already encodes the Fe/α partition at each [α/Fe]
-node. Do NOT apply `effective_metallicity()` when using 4D grids.
+**Critical convention:** `ssp_lgmet` is **[Fe/H]** (iron abundance), NOT [M/H]
+(total metallicity).  This is the canonical convention because:
+- It's what observers measure (SDSS, GALAH, APOGEE report [Fe/H])
+- It's what MESA/MIST use natively (α-MC grids are in [Fe/H])
+- Interpolating at fixed [Fe/H] cleanly isolates the effect of varying [α/Fe]
+- No nonlinear Salaris mapping needed at inference time
 
-**Warning: source libraries use different conventions:**
-- **sMILES** (Knowles+2023): grid indexed by [M/H] — use directly
-- **α-MC** (Park+2024): grid indexed by [Fe/H] — convert to [M/H] at load time
-- **BPASS v2.3** (Byrne+2022): grid indexed by Z (mass fraction) — convert to [M/H]
+Do NOT apply `effective_metallicity()` when using 4D grids.
 
-The SSP loader must convert to [M/H] using (Knowles+2023 Eq. 2, from Salaris+1993):
+**Converting source libraries to [Fe/H]:**
+
+All source libraries must be converted to a common [Fe/H] grid at load time.
+The Salaris relation (Salaris, Chieffi & Straniero 1993; Knowles+2023 Eq. 2):
 
     [M/H] = [Fe/H] + 0.66154 × [α/Fe] + 0.20465 × [α/Fe]²
 
-For α-MC grids indexed by [Fe/H], apply this per [α/Fe] slice at load time.
+Inverted:
+
+    [Fe/H] = [M/H] − 0.66154 × [α/Fe] − 0.20465 × [α/Fe]²
+
+| Source library | Native grid variable | Conversion to [Fe/H] |
+|---|---|---|
+| **α-MC** (Park+2024) | [Fe/H] | Use directly |
+| **sMILES** (Knowles+2023) | [M/H] | `[Fe/H] = [M/H] − 0.66154×[α/Fe] − 0.20465×[α/Fe]²` per slice, then re-interpolate onto common [Fe/H] grid |
+| **BPASS v2.3** (Byrne+2022) | Z (mass fraction) | `[Fe/H] = log10(Z/0.0142) − 0.66154×[α/Fe] − 0.20465×[α/Fe]²` per slice, then re-interpolate |
+
+**After conversion, each [α/Fe] slice has the same [Fe/H] grid** (e.g., −2.5 to
++0.5 in steps of 0.25, matching α-MC).  This gives a clean rectangular array
+for JAX JIT compilation.
 
 ## Interpolation
 
