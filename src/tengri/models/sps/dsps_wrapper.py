@@ -158,6 +158,61 @@ def compute_csp_weights(sfr_on_ssp_ages: jnp.ndarray, ssp_ages_yr: jnp.ndarray) 
 # Reference: Thomas, Maraston & Bender 2003; Vazdekis et al. 2015.
 _ALPHA_TO_Z_COEFF = 0.75
 
+# Salaris relation coefficients (Salaris, Chieffi & Straniero 1993;
+# Knowles et al. 2023 Eq. 2). This is a semi-empirical fit to detailed
+# stellar interior models with different abundance mixtures.
+_SALARIS_LINEAR = 0.66154
+_SALARIS_QUADRATIC = 0.20465
+
+
+def salaris_mh_from_feh(feh: float, alpha_fe: float) -> float:
+    """Convert [Fe/H] + [α/Fe] to total metallicity [M/H].
+
+    Uses the Salaris, Chieffi & Straniero (1993) relation as parameterized
+    by Knowles et al. (2023) Eq. 2::
+
+        [M/H] = [Fe/H] + 0.66154 × [α/Fe] + 0.20465 × [α/Fe]²
+
+    At solar [α/Fe] = 0.0, [M/H] = [Fe/H] exactly.
+
+    Parameters
+    ----------
+    feh : float
+        Iron abundance [Fe/H] (dex, relative to solar).
+    alpha_fe : float
+        Alpha-element enhancement [α/Fe] (dex).
+
+    Returns
+    -------
+    float
+        Total metallicity [M/H] (dex, relative to solar).
+    """
+    return feh + _SALARIS_LINEAR * alpha_fe + _SALARIS_QUADRATIC * alpha_fe**2
+
+
+def salaris_feh_from_mh(mh: float, alpha_fe: float) -> float:
+    """Convert total metallicity [M/H] + [α/Fe] to iron abundance [Fe/H].
+
+    Inverse of the Salaris relation::
+
+        [Fe/H] = [M/H] − 0.66154 × [α/Fe] − 0.20465 × [α/Fe]²
+
+    At solar [α/Fe] = 0.0, [Fe/H] = [M/H] exactly.
+
+    Parameters
+    ----------
+    mh : float
+        Total metallicity [M/H] (dex, relative to solar).
+    alpha_fe : float
+        Alpha-element enhancement [α/Fe] (dex).
+
+    Returns
+    -------
+    float
+        Iron abundance [Fe/H] (dex, relative to solar).
+    """
+    return mh - _SALARIS_LINEAR * alpha_fe - _SALARIS_QUADRATIC * alpha_fe**2
+
 
 @jax.jit
 def effective_metallicity(log_z_fe: float, alpha_fe: float = 0.0) -> float:
