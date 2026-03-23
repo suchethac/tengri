@@ -33,7 +33,6 @@ Usage::
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import ClassVar, NamedTuple
 
 import jax
@@ -272,29 +271,11 @@ class Model:
         self._apply_igm = spec.apply_igm
 
         # Dust emission model (None = disabled)
+        # "dl07_tabulated" is a legacy alias — map to "draine_li2007" which
+        # now auto-loads tabulated templates on first call.
         self._dust_emission_model = getattr(spec, "dust_emission", None)
         if self._dust_emission_model == "dl07_tabulated":
-            from tengri.models.dust.emission import DUST_EMISSION_MODELS
-
-            if "dl07_tabulated" not in DUST_EMISSION_MODELS:
-                from tengri.models.dust.emission import create_dl07_from_grid
-
-                dl07_path = getattr(spec, "dl07_grid_path", None)
-                if dl07_path is None:
-                    # Try default locations
-                    for candidate in [
-                        Path(__file__).resolve().parents[2] / "data" / "dl07_templates.h5",
-                        Path("data/dl07_templates.h5"),
-                    ]:
-                        if candidate.is_file():
-                            dl07_path = str(candidate)
-                            break
-                if dl07_path is None or not Path(dl07_path).is_file():
-                    raise FileNotFoundError(
-                        "DL07 templates not found. Set dl07_grid_path in ParamSpec "
-                        "or run: python scripts/convert_dl07_templates.py"
-                    )
-                DUST_EMISSION_MODELS["dl07_tabulated"] = create_dl07_from_grid(dl07_path)
+            self._dust_emission_model = "draine_li2007"
         if self._dust_emission_model:
             for p in [
                 "dust_T",

@@ -47,13 +47,20 @@ def synthetic_ssp():
 @pytest.fixture(scope="module")
 def simple_filters():
     """Synthetic 3-band filter set covering the SSP wavelength range."""
+    from tengri.models.observation.photometry import FilterCurve
+
     waves = [
         jnp.linspace(3500.0, 4500.0, 50),
         jnp.linspace(5000.0, 6500.0, 50),
         jnp.linspace(7500.0, 9000.0, 50),
     ]
     trans = [jnp.ones(50) * 0.5 for _ in range(3)]
-    return (waves, trans, None)
+    names = ["synth_blue", "synth_green", "synth_red"]
+    curves = [
+        FilterCurve(wave=w, trans=t, name=n)
+        for n, w, t in zip(names, waves, trans)
+    ]
+    return (waves, trans, curves)
 
 
 @pytest.fixture(scope="module")

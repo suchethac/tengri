@@ -8,9 +8,17 @@ luminosity from the attenuation step.
 Available Emission Models
 -------------------------
 - **modified_blackbody**: Optically-thin modified blackbody (2-3 params)
-- **dale2014**: Dale et al. (2014) 1-parameter IR template family
-- **draine_li2007**: Draine & Li (2007) 3-parameter model (analytic approx.)
-- **draine_li2014**: Draine & Li (2014 update) 4-parameter model (analytic approx.)
+- **dale2014**: Dale et al. (2014) 1-parameter IR template family (tabulated)
+- **draine_li2007**: Draine & Li (2007) 3-parameter model (tabulated)
+- **draine_li2014**: Draine & Li (2014 update) 4-parameter model (tabulated)
+
+Template Auto-Loading
+---------------------
+The ``"draine_li2007"``, ``"dale2014"``, and ``"draine_li2014"`` models
+auto-load tabulated templates from the ``data/`` directory on first use.
+If templates are not found, they fall back to analytic approximations with
+a warning.  The analytic fallbacks are crude (single-Gaussian PAH, hand-tuned
+temperatures) and should NOT be used for science.
 
 Energy Balance
 --------------
@@ -32,9 +40,29 @@ References
 - Hildebrand 1983, QJRAS, 24, 267
 """
 
+import warnings
 from collections.abc import Callable
+from pathlib import Path
 
 import jax.numpy as jnp
+
+# ===================================================================
+# Template search paths (resolved once, reused for all models)
+# ===================================================================
+
+_DATA_CANDIDATES = [
+    Path(__file__).resolve().parents[4] / "data",
+    Path("data"),
+]
+
+
+def _find_data_file(filename: str) -> str | None:
+    """Search standard data directories for a template file."""
+    for d in _DATA_CANDIDATES:
+        candidate = d / filename
+        if candidate.is_file():
+            return str(candidate)
+    return None
 
 # ===================================================================
 # Physical constants (CGS)
@@ -399,45 +427,22 @@ def _dale_component_temperature(alpha: float) -> tuple[float, float, float]:
     return T_cold, T_warm, f_warm
 
 
-@register_emission_model("dale2014")
-def dale2014(
+def _dale2014_analytic_fallback(
     wavelength_aa: jnp.ndarray,
     L_absorbed: float,
     dust_alpha_dale: float = 2.0,
     redshift: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Dale et al. (2014) 1-parameter dust emission template.
+    """Dale et al. (2014) ANALYTIC FALLBACK — not for science.
 
-    The full Dale model parameterizes the IR SED by the power-law slope
-    alpha of the radiation field intensity distribution dM/dU ~ U^{-alpha}.
-    Here we provide an analytic two-component approximation that captures
-    the key alpha-dependent behaviour: low alpha yields warm, peaked SEDs;
-    high alpha yields cooler, broader SEDs.
+    .. deprecated::
+        This crude approximation replaces the full Dale template library
+        with two hand-tuned modified blackbodies.  Use the tabulated
+        version (the default ``"dale2014"`` registry entry, which
+        auto-loads ``data/dale2014_templates.npz``).
 
-    When ``redshift > 0``, CMB heating correction (da Cunha+2013) is
-    applied to both temperature components, and the CMB contrast factor
-    suppresses the observed flux.
-
-    Parameters
-    ----------
-    wavelength_aa : array, shape (n_wave,)
-        Wavelength grid in Angstrom (sorted ascending).
-    L_absorbed : float
-        Total absorbed luminosity in Lsun.
-    dust_alpha_dale : float
-        Power-law slope.  Valid range: 0.0625--4.0.
-        alpha ~ 1-1.5: luminous IR galaxies.
-        alpha ~ 2-2.5: normal star-forming galaxies.
-        alpha ~ 3-4: quiescent galaxies.
-    redshift : float
-        Source redshift. When > 0, CMB heating correction is applied.
-        Default 0 (no correction, backward compatible).
-
-    Returns
-    -------
-    array, shape (n_wave,)
-        Dust emission L_nu in Lsun/Hz.
+    Only used when template files are not found.
     """
     wavelength_cm = wavelength_aa * _AA_TO_CM
     nu = _C_CGS / wavelength_cm
@@ -599,8 +604,7 @@ def _get_dl07_pah_frac_at_ref() -> float:
     return 0.10
 
 
-@register_emission_model("draine_li2007")
-def draine_li2007(
+def _draine_li2007_analytic_fallback(
     wavelength_aa: jnp.ndarray,
     L_absorbed: float,
     dust_umin: float = 1.0,
@@ -608,47 +612,15 @@ def draine_li2007(
     dust_qpah: float = 2.5,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Draine & Li (2007) dust emission model (analytic approximation).
+    """Draine & Li (2007) ANALYTIC FALLBACK — not for science.
 
-    The full DL07 model requires pre-computed grain opacity tables for
-    silicate, graphite, and PAH grains.  This implementation provides a
-    differentiable analytic approximation:
+    .. deprecated::
+        This crude approximation models the entire PAH feature complex as
+        a single Gaussian at 7.7 μm and uses hand-tuned temperature
+        formulas.  Use the tabulated version (the default ``"draine_li2007"``
+        registry entry, which auto-loads ``data/dl07_templates.npz``).
 
-    - **(1 - gamma)** of the dust mass is heated by a single radiation
-      field U_min, producing a cool modified-blackbody component.
-    - **gamma** of the dust mass sits in PDR environments with a
-      distribution of U from U_min to U_max = 1e6, approximated as a
-      warm modified-blackbody at an effective temperature.
-    - **q_PAH** controls the relative strength of mid-IR PAH emission
-      features, modelled here as a 7.7 um warm component.
-
-    The PAH luminosity fraction is calibrated against the tabulated DL07
-    templates.  Call ``calibrate_dl07_pah_fraction(grid_path)`` to update
-    the calibration from your own grid file.
-
-    For production use with the full grain model, load the DL07 templates
-    via ``load_draine_li_templates()`` and use ``draine_li2007_from_grid()``.
-
-    Parameters
-    ----------
-    wavelength_aa : array, shape (n_wave,)
-        Wavelength grid in Angstrom (sorted ascending).
-    L_absorbed : float
-        Total absorbed luminosity in Lsun.
-    dust_umin : float
-        Minimum radiation field intensity (Mathis ISRF units).
-        Typical range: 0.1--25.
-    dust_gamma_dl : float
-        Fraction of dust mass in PDR regions.
-        Typical range: 0.0--1.0 (usually < 0.1 for normal galaxies).
-    dust_qpah : float
-        PAH mass fraction in percent.
-        Typical range: 0.47--4.58 %.
-
-    Returns
-    -------
-    array, shape (n_wave,)
-        Dust emission L_nu in Lsun/Hz.
+    Only used when template files are not found.
     """
     wavelength_cm = wavelength_aa * _AA_TO_CM
     nu = _C_CGS / wavelength_cm
@@ -751,7 +723,11 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
         j_nu = (1-gamma) * single_U(q_PAH, U_min)
              + gamma * powerlaw(q_PAH, U_min)
 
-        Normalized to L_absorbed via energy balance.
+        Templates are in L_lambda convention (normalized to integrate to
+        1 over wavelength).  This function converts to L_nu (Lsun/Hz)
+        and scales by L_absorbed to enforce energy balance.
+
+        Returns L_nu in Lsun/Hz.
         """
         dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
         dust_qpah_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
@@ -777,9 +753,20 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
         )
 
         # Interpolate template onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+        # Template is in L_lambda space (integral over wavelength = 1)
+        sed_llam = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
-        return L_absorbed * sed
+        # Convert L_lambda -> L_nu: L_nu = L_lambda * lambda^2 / c
+        wavelength_cm = wavelength_aa * _AA_TO_CM
+        nu = _C_CGS / wavelength_cm
+        sed_lnu = sed_llam * (wavelength_cm**2) / _C_CGS
+
+        # Renormalize so that integral(L_nu, d_nu) = L_absorbed
+        # nu is descending (wavelength ascending), so negate
+        integral = -jnp.trapezoid(sed_lnu, nu)
+        norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+
+        return norm * sed_lnu
 
     return dl07_tabulated
 
@@ -889,7 +876,10 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
     data = np.load(grid_path)
     tmpl_wave = jnp.array(data["wavelength_aa"])  # (n_wave,)
     alpha_grid = jnp.array(data["alpha_grid"])  # (n_alpha,)
-    templates_raw = np.array(data["templates_sf"])  # (n_alpha, n_wave)
+    templates_raw = np.array(data["templates_sf"])
+    # Handle both (n_alpha, n_wave) and (n_wave, n_alpha) layouts
+    if templates_raw.shape[0] == len(tmpl_wave) and templates_raw.shape[1] == len(alpha_grid):
+        templates_raw = templates_raw.T  # -> (n_alpha, n_wave)
 
     # Convert from L_lambda to L_nu: L_nu = L_lambda * lambda^2 / c
     wave_cm = np.array(tmpl_wave) * _AA_TO_CM
@@ -984,8 +974,7 @@ def _alpha_warm_fraction_correction(alpha: float) -> float:
     return 1.0 / (alpha_safe - 1.0)
 
 
-@register_emission_model("draine_li2014")
-def draine_li2014(
+def _draine_li2014_analytic_fallback(
     wavelength_aa: jnp.ndarray,
     L_absorbed: float,
     dust_umin: float = 1.0,
@@ -994,45 +983,15 @@ def draine_li2014(
     dust_alpha_dl14: float = 2.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Draine & Li (2014 update) dust emission model (analytic approx.).
+    """Draine & Li (2014 update) ANALYTIC FALLBACK — not for science.
 
-    Extends the DL07 analytic approximation with:
-    - Variable alpha (power-law slope of radiation field distribution)
-    - Extended q_PAH range (0.47-7.32%)
-    - Extended U_min range (0.1-50)
-    - U_max = 10^7 (was 10^6 in DL07)
+    .. deprecated::
+        This crude approximation uses single-Gaussian PAH and hand-tuned
+        temperature formulas.  Use the tabulated version (the default
+        ``"draine_li2014"`` registry entry, which auto-loads
+        ``data/dl14_templates.h5``).
 
-    The model:
-    - **(1 - gamma)** of the dust mass is heated by U = U_min only
-      (cool modified-blackbody).
-    - **gamma** of the dust mass sits in PDR environments with
-      dM/dU ~ U^{-alpha} from U_min to U_max = 10^7.
-    - **q_PAH** controls mid-IR PAH emission features.
-    - **alpha** controls the power-law slope (steeper = more warm dust).
-
-    Parameters
-    ----------
-    wavelength_aa : array, shape (n_wave,)
-        Wavelength grid in Angstrom (sorted ascending).
-    L_absorbed : float
-        Total absorbed luminosity in Lsun.
-    dust_umin : float
-        Minimum radiation field intensity (Mathis ISRF units).
-        Typical range: 0.1--50.
-    dust_gamma_dl : float
-        Fraction of dust mass in PDR regions.
-        Typical range: 0.0--1.0.
-    dust_qpah : float
-        PAH mass fraction in percent.
-        Typical range: 0.47--7.32 %.
-    dust_alpha_dl14 : float
-        Power-law slope of the radiation field distribution.
-        Range: 1.0--3.0. Default 2.0 (recovers DL07 behaviour).
-
-    Returns
-    -------
-    array, shape (n_wave,)
-        Dust emission L_nu in Lsun/Hz.
+    Only used when template files are not found.
     """
     wavelength_cm = wavelength_aa * _AA_TO_CM
     nu = _C_CGS / wavelength_cm
@@ -1311,3 +1270,166 @@ def apply_dust_emission(
     """
     model_fn = get_emission_model(model_name)
     return model_fn(wavelength_aa, L_absorbed, **params)
+
+
+# ===================================================================
+# Lazy auto-loading: template-based models as defaults
+# ===================================================================
+#
+# On first call, each model tries to load tabulated templates from
+# data/.  If found, the template-based version replaces itself in
+# the registry.  If not found, falls back to the analytic
+# approximation with a loud warning.
+#
+# This gives:
+#   - Zero-config: ``dust_emission="draine_li2007"`` just works
+#   - Fast import: no I/O at import time
+#   - Correct physics: tabulated templates used by default
+# ===================================================================
+
+# Track which models have been resolved (to avoid repeated warnings)
+_resolved: set[str] = set()
+
+
+def _make_lazy_loader(
+    name: str,
+    template_filename: str,
+    loader_fn_name: str,
+    fallback_fn: Callable,
+) -> Callable:
+    """Create a lazy-loading wrapper that auto-loads templates on first call.
+
+    Parameters
+    ----------
+    name : str
+        Registry name (e.g. ``"draine_li2007"``).
+    template_filename : str
+        Filename to search for in data/ (e.g. ``"dl07_templates.npz"``).
+    loader_fn_name : str
+        Name of the ``create_*_from_grid`` function in this module.
+    fallback_fn : Callable
+        The analytic fallback function.
+    """
+
+    def _lazy_wrapper(*args, **kwargs):
+        if name not in _resolved:
+            _resolved.add(name)
+            path = _find_data_file(template_filename)
+            if path is not None:
+                try:
+                    loader = globals()[loader_fn_name]
+                    tabulated = loader(path)
+                    DUST_EMISSION_MODELS[name] = tabulated
+                    return tabulated(*args, **kwargs)
+                except Exception as e:
+                    warnings.warn(
+                        f"Failed to load {template_filename}: {e}. "
+                        f"Falling back to analytic {name} (NOT suitable for "
+                        f"science — crude single-Gaussian PAH approximation).",
+                        stacklevel=2,
+                    )
+                    DUST_EMISSION_MODELS[name] = fallback_fn
+            else:
+                warnings.warn(
+                    f"Template file '{template_filename}' not found in data/. "
+                    f"Falling back to analytic {name} (NOT suitable for "
+                    f"science — crude approximation with hand-tuned "
+                    f"temperatures). Download templates or set the path "
+                    f"manually via register_*_tabulated().",
+                    stacklevel=2,
+                )
+                DUST_EMISSION_MODELS[name] = fallback_fn
+        return DUST_EMISSION_MODELS[name](*args, **kwargs)
+
+    _lazy_wrapper.__name__ = name
+    _lazy_wrapper.__doc__ = (
+        f"Lazy-loading wrapper for {name}. Auto-loads tabulated templates "
+        f"from data/{template_filename} on first call."
+    )
+    return _lazy_wrapper
+
+
+# --- DL07: tries dl07_templates.npz, then .h5 ---
+def _find_dl07_templates() -> str | None:
+    for fn in ("dl07_templates.npz", "dl07_templates.h5"):
+        path = _find_data_file(fn)
+        if path is not None:
+            return path
+    return None
+
+
+def _dl07_lazy_wrapper(*args, **kwargs):
+    """Draine & Li (2007) — auto-loads tabulated templates on first call."""
+    if "draine_li2007" not in _resolved:
+        _resolved.add("draine_li2007")
+        path = _find_dl07_templates()
+        if path is not None:
+            try:
+                tabulated = create_dl07_from_grid(path)
+                DUST_EMISSION_MODELS["draine_li2007"] = tabulated
+                DUST_EMISSION_MODELS["dl07_tabulated"] = tabulated
+                return tabulated(*args, **kwargs)
+            except Exception as e:
+                warnings.warn(
+                    f"Failed to load DL07 templates: {e}. "
+                    f"Falling back to analytic DL07 (NOT suitable for "
+                    f"science — crude single-Gaussian PAH approximation).",
+                    stacklevel=2,
+                )
+                DUST_EMISSION_MODELS["draine_li2007"] = (
+                    _draine_li2007_analytic_fallback
+                )
+        else:
+            warnings.warn(
+                "DL07 template files (dl07_templates.npz/.h5) not found "
+                "in data/. Falling back to analytic DL07 (NOT suitable "
+                "for science). Run: python scripts/convert_dl07_templates.py",
+                stacklevel=2,
+            )
+            DUST_EMISSION_MODELS["draine_li2007"] = (
+                _draine_li2007_analytic_fallback
+            )
+    return DUST_EMISSION_MODELS["draine_li2007"](*args, **kwargs)
+
+
+DUST_EMISSION_MODELS["draine_li2007"] = _dl07_lazy_wrapper
+
+
+# --- Dale+2014: tries dale2014_templates.npz ---
+DUST_EMISSION_MODELS["dale2014"] = _make_lazy_loader(
+    "dale2014",
+    "dale2014_templates.npz",
+    "create_dale2014_from_grid",
+    _dale2014_analytic_fallback,
+)
+
+
+# --- DL14: tries dl14_templates.h5 ---
+DUST_EMISSION_MODELS["draine_li2014"] = _make_lazy_loader(
+    "draine_li2014",
+    "dl14_templates.h5",
+    "create_dl14_from_grid",
+    _draine_li2014_analytic_fallback,
+)
+
+
+# ===================================================================
+# Backward-compatible module-level aliases for direct imports
+# ===================================================================
+# Tests and user code may do ``from tengri.models.dust.emission import draine_li2007``.
+# These aliases point to the lazy wrappers (which auto-load templates on call).
+
+
+def draine_li2007(*args, **kwargs):
+    """Draine & Li (2007) — dispatches to the registry (auto-loads templates)."""
+    return DUST_EMISSION_MODELS["draine_li2007"](*args, **kwargs)
+
+
+def dale2014(*args, **kwargs):
+    """Dale et al. (2014) — dispatches to the registry (auto-loads templates)."""
+    return DUST_EMISSION_MODELS["dale2014"](*args, **kwargs)
+
+
+def draine_li2014(*args, **kwargs):
+    """Draine & Li (2014) — dispatches to the registry (auto-loads templates)."""
+    return DUST_EMISSION_MODELS["draine_li2014"](*args, **kwargs)

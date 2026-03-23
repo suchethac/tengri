@@ -155,7 +155,9 @@ Each class has a `.summary()` method for quick inspection:
 - Corner plot overlay: `fig.axes` returns a flat list; reshape to 2D with `np.array(axes).reshape(n, n)`
 - ParamSpec free params use full prefixes: `sfh_dpl_alpha`, `sfh_dpl_log_peak_sfr`, `sfh_field_psd_sigma`, `sfh_field_xi` — NOT shorthand like `sfh_alpha` or `psd_xi`. Check with `spec.free_params` and `spec.sample(key).keys()`.
 - IGM `igm_transmission(wave_obs, z)` takes **observed-frame** wavelengths. bagpipes `get_Inoue14_trans(rest_wavs, z)` takes **rest-frame**. Convert: `wave_obs = rest_wavs * (1+z)`.
-- Analytic DL07 (`draine_li2007`) has incorrect PAH/FIR balance vs tabulated templates. Use `register_dl07_tabulated("data/dl07_templates.npz")` for production; analytic is a differentiable fallback only.
+- Dust emission models (`draine_li2007`, `dale2014`) **auto-load tabulated templates** from `data/` on first use. If templates are not found, they fall back to crude analytic approximations with a warning. The analytic fallbacks (single-Gaussian PAH, hand-tuned MBB) are NOT suitable for science. `"dl07_tabulated"` is a legacy alias for `"draine_li2007"` (both now use templates).
+- DL14 templates (`draine_li2014`) require running `scripts/download_dl14_templates.py` — analytic fallback only until then.
+- AGN torus models in `torus.py` (`simple_torus`, `two_temperature_torus`) are **toy models** (1-2 temperature MBB, not radiative transfer). Use SKIRTOR (`skirtor_analytic`, auto-loads `data/skirtor_templates.npz`) for science.
 
 ## Convergence diagnostics (mandatory for all inference)
 

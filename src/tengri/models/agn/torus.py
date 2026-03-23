@@ -1,18 +1,19 @@
-"""Dust torus models for AGN infrared emission.
+"""Toy torus models for AGN infrared emission.
 
-Two models are provided:
+.. warning::
+    These are **toy models** using 1-2 temperature modified blackbodies.
+    They are NOT radiative transfer results and should NOT be used for
+    science.  For production work, use the SKIRTOR templates in
+    ``tengri.models.agn.skirtor`` (tabulated from 3D Monte Carlo RT).
 
-1. **Simple hot blackbody torus** — single-temperature modified blackbody
+Two toy models are provided for testing and fast prototyping:
+
+1. **simple_torus** — single-temperature modified blackbody
    with silicate opacity. 2 free parameters.
-2. **Two-temperature torus** — hot + warm dust components inspired by
-   SKIRTOR clumpy torus geometry. 4 free parameters.
+2. **two_temperature_torus** — hot + warm dust components. 4 free params.
 
 Both return specific luminosity L_nu in Lsun/Hz. All functions are pure
 JAX and JIT-compilable.
-
-Physical picture: The torus intercepts a fraction of the disc luminosity
-(the covering factor) and re-emits it thermally in the IR. The silicate
-feature at 9.7 um produces opacity-dependent absorption/emission.
 
 References
 ----------

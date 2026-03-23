@@ -120,6 +120,8 @@ def unified_agn(
     array, shape (n_wave,)
         Total AGN L_nu [Lsun Hz^-1] = L_disc + L_torus.
     """
+    from tengri.models.agn.skirtor import skirtor_analytic
+
     disc_fns = {
         "powerlaw": powerlaw_disc,
         "multicolor": multicolor_disc,
@@ -127,6 +129,7 @@ def unified_agn(
     torus_fns = {
         "simple": simple_torus,
         "two_temperature": two_temperature_torus,
+        "skirtor": skirtor_analytic,
     }
 
     disc_fn = disc_fns[disc_model]
