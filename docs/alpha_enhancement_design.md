@@ -29,11 +29,20 @@ ssp_alpha_fe      (n_alpha,)      [α/Fe] grid values [dex]
 ssp_mass_remaining (n_met, n_alpha, n_age)  [optional] surviving mass fraction
 ```
 
-**Critical convention:** `ssp_lgmet` is total metallicity [M/H], not iron abundance [Fe/H]. The grid already encodes the Fe/α partition at each [α/Fe] node. Do NOT apply `effective_metallicity()` when using 4D grids.
+**Critical convention:** `ssp_lgmet` should be total metallicity [M/H], not iron
+abundance [Fe/H]. The grid already encodes the Fe/α partition at each [α/Fe]
+node. Do NOT apply `effective_metallicity()` when using 4D grids.
 
-The relationship is (Knowles+2023 Eq. 2, from Salaris+1993):
+**Warning: source libraries use different conventions:**
+- **sMILES** (Knowles+2023): grid indexed by [M/H] — use directly
+- **α-MC** (Park+2024): grid indexed by [Fe/H] — convert to [M/H] at load time
+- **BPASS v2.3** (Byrne+2022): grid indexed by Z (mass fraction) — convert to [M/H]
+
+The SSP loader must convert to [M/H] using (Knowles+2023 Eq. 2, from Salaris+1993):
 
     [M/H] = [Fe/H] + 0.66154 × [α/Fe] + 0.20465 × [α/Fe]²
+
+For α-MC grids indexed by [Fe/H], apply this per [α/Fe] slice at load time.
 
 ## Interpolation
 
@@ -137,6 +146,10 @@ automatically handled by the SSP templates:
 | Mass-remaining fraction | Yes | `ssp_mass_remaining` from SSP file |
 | Ionizing photon rate Q_H | Yes | Encoded in UV end of SSP flux |
 | SFR calibrations | **No** | L_Hα→SFR and L_UV→SFR conversion factors are IMF-dependent |
-| Stellar mass estimates | Partially | M/L changes, but inference adjusts |
+| Stellar mass estimates | Yes | M/L encoded in SSP normalization |
 
-The SFR calibration factors should be stored as metadata in the SSP HDF5 file.
+**For tengri specifically:** swapping IMF is purely an SSP template swap. No code
+changes needed. Q_H is computed from the SSP spectrum (not hardcoded),
+mass-remaining comes from the HDF5 file, and SFR is a model input (not derived
+from observed luminosity). SFR calibration factors (for quoting derived quantities)
+should be stored as metadata in the SSP HDF5 file.
