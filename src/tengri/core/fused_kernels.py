@@ -164,7 +164,15 @@ def build_fused_photometry(model):
     law_bc_fn = get_dust_law(model._dust_law_bc)
     law_diff_fn = get_dust_law(model._dust_law_diff)
 
-    from tengri.models.sps.dsps_wrapper import _ALPHA_TO_Z_COEFF as _A2Z
+    from tengri.models.sps.dsps_wrapper import (
+        _ALPHA_TO_Z_COEFF as _A2Z,
+        has_alpha_grid,
+    )
+
+    # Alpha-enhanced SSP grid detection (4D vs 3D)
+    _has_alpha = has_alpha_grid(model.ssp_data)
+    if _has_alpha:
+        ssp_alpha_fe = model.ssp_data.ssp_alpha_fe.astype(dt)
 
     # Metallicity interpolation mode for fused kernel
     _use_smooth_z = model._met_interp == "smooth"
@@ -236,21 +244,33 @@ def build_fused_photometry(model):
         )
         weights = sfr * age_dt
 
-        # Alpha enhancement: shift effective metallicity
-        lz = lz + _A2Z * afe
-
-        # Metallicity interpolation (respects met_interp setting)
-        if _use_smooth_z:
-            # Triweight kernel: smooth C2 gradients
-            # (ssp_phot is tiny: n_met x n_age x n_filt)
-            zw = _clw(lz, ssp_lgmet, _lgmet_scat)
-            ssp_at_z = jnp.einsum("m,maf->af", zw, ssp_phot)
+        # Metallicity + alpha interpolation
+        if _has_alpha:
+            # 4D bilinear: (Z, [α/Fe]) interpolation on precomputed photometry
+            # ssp_phot shape: (n_met, n_alpha, n_age, n_filt)
+            lz_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
+            iz = jnp.clip(jnp.searchsorted(ssp_lgmet, lz_c) - 1, 0, len(ssp_lgmet) - 2)
+            fz = (lz_c - ssp_lgmet[iz]) / (ssp_lgmet[iz + 1] - ssp_lgmet[iz])
+            afe_c = jnp.clip(afe, ssp_alpha_fe[0], ssp_alpha_fe[-1])
+            ia = jnp.clip(jnp.searchsorted(ssp_alpha_fe, afe_c) - 1, 0, len(ssp_alpha_fe) - 2)
+            fa = (afe_c - ssp_alpha_fe[ia]) / (ssp_alpha_fe[ia + 1] - ssp_alpha_fe[ia])
+            ssp_at_z = (
+                (1 - fz) * (1 - fa) * ssp_phot[iz, ia]
+                + fz * (1 - fa) * ssp_phot[iz + 1, ia]
+                + (1 - fz) * fa * ssp_phot[iz, ia + 1]
+                + fz * fa * ssp_phot[iz + 1, ia + 1]
+            )
         else:
-            # 2-point linear (FSPS-style)
-            log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
-            idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
-            frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
-            ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
+            # 3D: effective_metallicity fallback
+            lz = lz + _A2Z * afe
+            if _use_smooth_z:
+                zw = _clw(lz, ssp_lgmet, _lgmet_scat)
+                ssp_at_z = jnp.einsum("m,maf->af", zw, ssp_phot)
+            else:
+                log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
+                idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
+                frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
+                ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
 
         # Dust: evaluate configurable curves at effective wavelengths
         k_bc = law_bc_fn(
@@ -366,12 +386,17 @@ def build_fused_spectrum(model):
     from tengri.models.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
         LSUN_ERG_PER_S,
+        has_alpha_grid,
     )
 
     fdt = model._forward_dtype
     precomp = model._spec_precomp
     ssp_on_pixels = precomp.ssp_on_pixels.astype(fdt)
     ssp_lgmet = model.ssp_data.ssp_lgmet.astype(fdt)
+
+    _has_alpha_zt = has_alpha_grid(model.ssp_data)
+    if _has_alpha_zt:
+        ssp_alpha_fe_zt = model.ssp_data.ssp_alpha_fe.astype(fdt)
     wave_obs_pixels = precomp.wave_obs_pixels.astype(fdt)
     wave_rest_pixels = precomp.wave_rest_pixels.astype(fdt)
     dust_age_w = model._dust_age_weights.astype(fdt)
@@ -440,14 +465,29 @@ def build_fused_spectrum(model):
         )
         weights = sfr * age_dt
 
-        # Alpha enhancement: shift effective metallicity
-        lz = lz + _A2Z * afe
-
-        # Metallicity interpolation
-        log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
-        idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
-        frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
-        ssp_at_z = (1.0 - frac) * ssp_on_pixels[idx] + frac * ssp_on_pixels[idx + 1]
+        # Metallicity + alpha interpolation
+        if _has_alpha_zt:
+            lz_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
+            iz = jnp.clip(jnp.searchsorted(ssp_lgmet, lz_c) - 1, 0, len(ssp_lgmet) - 2)
+            fz = (lz_c - ssp_lgmet[iz]) / (ssp_lgmet[iz + 1] - ssp_lgmet[iz])
+            afe_c = jnp.clip(afe, ssp_alpha_fe_zt[0], ssp_alpha_fe_zt[-1])
+            n_afe = len(ssp_alpha_fe_zt)
+            ia = jnp.clip(
+                jnp.searchsorted(ssp_alpha_fe_zt, afe_c) - 1, 0, n_afe - 2
+            )
+            fa = (afe_c - ssp_alpha_fe_zt[ia]) / (ssp_alpha_fe_zt[ia + 1] - ssp_alpha_fe_zt[ia])
+            ssp_at_z = (
+                (1 - fz) * (1 - fa) * ssp_on_pixels[iz, ia]
+                + fz * (1 - fa) * ssp_on_pixels[iz + 1, ia]
+                + (1 - fz) * fa * ssp_on_pixels[iz, ia + 1]
+                + fz * fa * ssp_on_pixels[iz + 1, ia + 1]
+            )
+        else:
+            lz = lz + _A2Z * afe
+            log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
+            idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
+            frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
+            ssp_at_z = (1.0 - frac) * ssp_on_pixels[idx] + frac * ssp_on_pixels[idx + 1]
 
         # Dust: configurable curves at pixel wavelengths
         k_bc = law_bc_fn(
@@ -622,6 +662,7 @@ def build_fused_photometry_ztable(model):
     from tengri.models.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
         LSUN_ERG_PER_S,
+        has_alpha_grid,
     )
 
     fdt = model._forward_dtype
@@ -634,6 +675,10 @@ def build_fused_photometry_ztable(model):
     dust_age_w = model._dust_age_weights.astype(fdt)
     ssp_ages_yr = model.ssp_ages_yr.astype(fdt)
     lsun = fdt.type(LSUN_ERG_PER_S)
+
+    _has_alpha_zt = has_alpha_grid(model.ssp_data)
+    if _has_alpha_zt:
+        ssp_alpha_fe_zt = model.ssp_data.ssp_alpha_fe.astype(fdt)
 
     # IGM: precomputed on z-grid when apply_igm + approx["igm"]
     igm_trans_table = zt.igm_trans_table.astype(fdt)
@@ -709,22 +754,37 @@ def build_fused_photometry_ztable(model):
         )
         weights = sfr * age_dt
 
-        # Alpha enhancement: shift effective metallicity
-        lz = lz + _A2Z * afe
-
-        # Metallicity interpolation (respects met_interp setting)
-        if _use_smooth_z_zt:
-            zw = _clw_zt(lz, ssp_lgmet, _lgmet_scat_zt)
-            ssp_at_z = jnp.einsum("m,maf->af", zw, ssp_phot)
-        else:
-            log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
-            idx = jnp.clip(
-                jnp.searchsorted(ssp_lgmet, log_z_c) - 1,
-                0,
-                len(ssp_lgmet) - 2,
+        # Metallicity + alpha interpolation
+        if _has_alpha_zt:
+            lz_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
+            iz = jnp.clip(jnp.searchsorted(ssp_lgmet, lz_c) - 1, 0, len(ssp_lgmet) - 2)
+            fz = (lz_c - ssp_lgmet[iz]) / (ssp_lgmet[iz + 1] - ssp_lgmet[iz])
+            afe_c = jnp.clip(afe, ssp_alpha_fe_zt[0], ssp_alpha_fe_zt[-1])
+            n_afe = len(ssp_alpha_fe_zt)
+            ia = jnp.clip(
+                jnp.searchsorted(ssp_alpha_fe_zt, afe_c) - 1, 0, n_afe - 2
             )
-            frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
-            ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
+            fa = (afe_c - ssp_alpha_fe_zt[ia]) / (ssp_alpha_fe_zt[ia + 1] - ssp_alpha_fe_zt[ia])
+            ssp_at_z = (
+                (1 - fz) * (1 - fa) * ssp_phot[iz, ia]
+                + fz * (1 - fa) * ssp_phot[iz + 1, ia]
+                + (1 - fz) * fa * ssp_phot[iz, ia + 1]
+                + fz * fa * ssp_phot[iz + 1, ia + 1]
+            )
+        else:
+            lz = lz + _A2Z * afe
+            if _use_smooth_z_zt:
+                zw = _clw_zt(lz, ssp_lgmet, _lgmet_scat_zt)
+                ssp_at_z = jnp.einsum("m,maf->af", zw, ssp_phot)
+            else:
+                log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
+                idx = jnp.clip(
+                    jnp.searchsorted(ssp_lgmet, log_z_c) - 1,
+                    0,
+                    len(ssp_lgmet) - 2,
+                )
+                frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
+                ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
 
         # Dust: configurable curves at effective wavelengths
         k_bc = law_bc_fn(

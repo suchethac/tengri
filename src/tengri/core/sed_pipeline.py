@@ -20,6 +20,9 @@ from tengri.models.sps.dsps_wrapper import (
     compute_csp_weights,
     compute_log_z_evolving,
     effective_metallicity,
+    has_alpha_grid,
+    interpolate_met_alpha,
+    interpolate_met_alpha_evolving,
     interpolate_metallicity,
     interpolate_metallicity_evolving,
     interpolate_metallicity_smooth,
@@ -77,6 +80,75 @@ def interp_metallicity_evolving(model, log_z_per_age):
     return interpolate_metallicity_evolving(
         model.ssp_data.ssp_flux, model.ssp_data.ssp_lgmet, log_z_per_age
     )
+
+
+def interp_met_alpha_dispatch(model, log_z, alpha_fe):
+    """Dispatch metallicity+alpha interpolation based on SSP grid dimensionality.
+
+    When 4D alpha-enhanced SSPs are loaded, uses proper bilinear (Z, [α/Fe])
+    interpolation. Otherwise falls back to effective_metallicity approximation
+    on the 3D grid.
+
+    Parameters
+    ----------
+    model : Model
+        The tengri Model instance.
+    log_z : float
+        Iron abundance [Fe/H] (or log10(Z/Zsun) for 3D grids).
+    alpha_fe : float
+        Alpha-element enhancement [α/Fe] in dex.
+
+    Returns
+    -------
+    array, shape (n_age, n_wave)
+    """
+    if has_alpha_grid(model.ssp_data):
+        return interpolate_met_alpha(
+            model.ssp_data.ssp_flux,
+            model.ssp_data.ssp_lgmet,
+            model.ssp_data.ssp_alpha_fe,
+            log_z,
+            alpha_fe,
+        )
+    # Fallback: effective_metallicity on 3D grid
+    log_z_eff = effective_metallicity(log_z, alpha_fe)
+    return interp_metallicity(model, log_z_eff)
+
+
+def interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe_per_age):
+    """Dispatch per-age metallicity+alpha interpolation.
+
+    When 4D alpha-enhanced SSPs are loaded, uses per-age bilinear (Z, [α/Fe])
+    interpolation. Otherwise applies effective_metallicity per age bin and
+    interpolates on the 3D grid.
+
+    Parameters
+    ----------
+    model : Model
+        The tengri Model instance.
+    log_z_per_age : array, shape (n_age,)
+        [Fe/H] at each SSP age bin.
+    alpha_fe_per_age : array or float
+        [α/Fe] at each SSP age bin (array for evolving, scalar for constant).
+
+    Returns
+    -------
+    array, shape (n_age, n_wave)
+    """
+    if has_alpha_grid(model.ssp_data):
+        # Broadcast scalar alpha_fe to per-age array
+        if not hasattr(alpha_fe_per_age, 'shape') or alpha_fe_per_age.ndim == 0:
+            alpha_fe_per_age = jnp.full_like(log_z_per_age, alpha_fe_per_age)
+        return interpolate_met_alpha_evolving(
+            model.ssp_data.ssp_flux,
+            model.ssp_data.ssp_lgmet,
+            model.ssp_data.ssp_alpha_fe,
+            log_z_per_age,
+            alpha_fe_per_age,
+        )
+    # Fallback: effective_metallicity on 3D grid
+    log_z_eff = effective_metallicity(log_z_per_age, alpha_fe_per_age)
+    return interp_metallicity_evolving(model, log_z_eff)
 
 
 def get_dust_kwargs(model, p):
@@ -217,8 +289,11 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         weights = compute_csp_weights(sfr_on_ssp, model.ssp_ages_yr)
         _use_dsps_table = False
 
-    # Alpha-element enhancement: shift effective metallicity
+    # Alpha-element enhancement
+    # When 4D alpha-enhanced SSPs are loaded, proper bilinear (Z, [α/Fe])
+    # interpolation is used. Otherwise falls back to effective_metallicity.
     alpha_fe = p.get("alpha_fe", 0.0)
+    _has_alpha = has_alpha_grid(model.ssp_data)
 
     # --- Metallicity + CSP integral ---
     # For tabulated SFH with met_history: use DSPS
@@ -233,6 +308,8 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
 
         met_table = jnp.asarray(params["met_history"])
+        # DSPS calc_rest_sed_sfh_table_met_table only supports 3D grids;
+        # use effective_metallicity for the Z(t) table regardless of grid dim.
         log_z_abs = effective_metallicity(met_table + (-1.8477), alpha_fe)
         lgmet_scatter = float(params.get("lgmet_scatter", 0.2))
         dsps_result = calc_rest_sed_sfh_table_met_table(
@@ -274,10 +351,9 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         _total_mass_formed = jnp.trapezoid(sfr_table, t_cosmic_gyr * 1e9)
         weights = dsps_age_w * _total_mass_formed  # (n_age,) Msun
 
-        # Metallicity: dispatch to linear or smooth interpolation
+        # Metallicity + alpha: dispatch to 4D bilinear or 3D + effective_met
         log_z_solar = p.get("log_z_abs", -1.8477)
-        log_z_eff = effective_metallicity(log_z_solar, alpha_fe)
-        ssp_flux_at_z = interp_metallicity(model, log_z_eff)
+        ssp_flux_at_z = interp_met_alpha_dispatch(model, log_z_solar, alpha_fe)
 
     # Metallicity interpolation (non-table path)
     # Priority: met_history (array) > evolving_metallicity > single Z
@@ -302,8 +378,9 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
             met_table[::-1],
         )
         log_z_abs = log_z_on_ssp + (-1.8477)  # solar offset
-        log_z_abs = effective_metallicity(log_z_abs, alpha_fe)
-        ssp_flux_at_z = interp_metallicity_evolving(model, log_z_abs)
+        ssp_flux_at_z = interp_met_alpha_evolving_dispatch(
+            model, log_z_abs, alpha_fe
+        )
     elif model._evolving_metallicity:
         z = p.get("redshift", 0.0)
         t_universe_gyr = model._t_universe_gyr(z)
@@ -313,11 +390,11 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
             p["log_z_abs_final"],
             t_universe_gyr,
         )
-        log_z_per_age = effective_metallicity(log_z_per_age, alpha_fe)
-        ssp_flux_at_z = interp_metallicity_evolving(model, log_z_per_age)
+        ssp_flux_at_z = interp_met_alpha_evolving_dispatch(
+            model, log_z_per_age, alpha_fe
+        )
     else:
-        log_z_eff = effective_metallicity(p["log_z_abs"], alpha_fe)
-        ssp_flux_at_z = interp_metallicity(model, log_z_eff)
+        ssp_flux_at_z = interp_met_alpha_dispatch(model, p["log_z_abs"], alpha_fe)
 
         # --- Fast JIT path: dust + einsum in one compiled kernel ---
         # Eliminates ~78% Python dispatch overhead (4-14x speedup).
