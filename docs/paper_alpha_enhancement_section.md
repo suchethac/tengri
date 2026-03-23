@@ -58,3 +58,41 @@ When 4D α-enhanced SSP grids are not available, tengri falls back to the effect
 - Salaris, M., Chieffi, A., & Straniero, O. 1993, ApJ, 414, 580 ([M/H]–[Fe/H]–[α/Fe] relation)
 - Conroy, C., Graves, G. J., & van Dokkum, P. G. 2014, ApJ, 780, 33 (α-enhancement in ETGs)
 - Beverage, A. G., et al. 2024, ApJ, 966, 1 (Heavy Metal Survey, z~2 [α/Fe])
+
+---
+
+## Appendix: Metallicity Convention Details (for methods section or appendix)
+
+Three metallicity conventions exist in the literature. tengri uses [Fe/H] as
+the canonical SSP grid axis:
+
+- **[Fe/H]** — iron abundance relative to solar: log₁₀(N_Fe/N_H) − log₁₀(N_Fe/N_H)_☉
+- **[M/H]** (or [Z/H]) — total metal mass fraction relative to solar: log₁₀(Z/X) − log₁₀(Z/X)_☉
+- **Z** — absolute metal mass fraction
+
+At solar abundance ratios ([α/Fe] = 0.0), all three conventions reduce to the
+same quantity: [Fe/H] = [M/H] = log₁₀(Z/Z_☉).
+
+When [α/Fe] ≠ 0, they diverge because α-elements (O, Mg, Si, Ca, Ti) contribute
+~70% of the metal mass. The Salaris relation (Salaris, Chieffi & Straniero 1993)
+connects them:
+
+    [M/H] = [Fe/H] + 0.66154 × [α/Fe] + 0.20465 × [α/Fe]²
+
+This is a semi-empirical fit to detailed stellar interior models. At [α/Fe] = +0.4
+(typical for massive ellipticals and MW thick disk), [M/H] exceeds [Fe/H] by
+~0.30 dex. The quadratic term is small (0.033 dex at [α/Fe] = 0.4) but
+non-negligible at [α/Fe] = 0.6.
+
+We adopt [Fe/H] as the canonical grid axis because: (i) it is directly measured
+by spectroscopic surveys (SDSS, GALAH, APOGEE); (ii) it is the native variable
+of MESA/MIST stellar evolution models used by α-MC (Park et al. 2024); and
+(iii) interpolating at fixed [Fe/H] cleanly isolates the spectral effect of
+varying [α/Fe], since the iron-line blanketing is held constant.
+
+The commonly used approximation [Z/H]_eff ≈ [Fe/H] + 0.75 × [α/Fe]
+(Thomas, Maraston & Bender 2003; Vazdekis et al. 2015) is a linearization
+of the Salaris relation with a different coefficient (0.75 vs 0.66) reflecting
+different solar mixture assumptions. This approximation is used only when
+alpha-enhanced SSP grids are not available; when 4D grids are loaded, tengri
+uses proper bilinear interpolation across the [α/Fe] dimension.
