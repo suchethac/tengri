@@ -292,8 +292,22 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
     # Alpha-element enhancement
     # When 4D alpha-enhanced SSPs are loaded, proper bilinear (Z, [α/Fe])
     # interpolation is used. Otherwise falls back to effective_metallicity.
-    alpha_fe = p.get("alpha_fe", 0.0)
     _has_alpha = has_alpha_grid(model.ssp_data)
+
+    # Resolve [α/Fe]: either global scalar or per-age evolving ramp
+    _alpha_evolving = getattr(model, "_alpha_fe_evolving", False)
+    if _alpha_evolving:
+        from tengri.models.sps.dsps_wrapper import compute_alpha_fe_evolving
+
+        alpha_fe_old = p.get("alpha_fe_old", 0.3)
+        alpha_fe_young = p.get("alpha_fe_young", 0.0)
+        z_val = p.get("redshift", 0.0)
+        t_universe = model._t_universe_gyr(z_val) if hasattr(model, "_t_universe_gyr") else 13.7
+        alpha_fe = compute_alpha_fe_evolving(
+            model.ssp_data.ssp_lg_age_gyr, alpha_fe_old, alpha_fe_young, t_universe,
+        )  # (n_age,) per-age values
+    else:
+        alpha_fe = p.get("alpha_fe", 0.0)  # scalar
 
     # --- Metallicity + CSP integral ---
     # For tabulated SFH with met_history: use DSPS

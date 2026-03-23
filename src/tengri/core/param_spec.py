@@ -206,7 +206,25 @@ _CUE_GAS_EXTRA_PARAMS = {
 
 _ALPHA_FE_PARAMS = {
     "met_alpha_fe": (
-        "Alpha-element enhancement [alpha/Fe] (dex)",
+        "Alpha-element enhancement [alpha/Fe] (dex). "
+        "Applied uniformly to all ages unless alpha_fe_evolving=True.",
+        lambda lo, hi: lo >= -0.5 and hi <= 1.0,
+        "must be in [-0.5, 1.0]",
+        Fixed(0.0),
+    ),
+}
+
+_EVOLVING_ALPHA_PARAMS = {
+    "met_alpha_fe_old": (
+        "[alpha/Fe] of oldest stars (at t_lookback = t_universe). "
+        "Typically +0.3 to +0.5 for massive ellipticals.",
+        lambda lo, hi: lo >= -0.5 and hi <= 1.0,
+        "must be in [-0.5, 1.0]",
+        Uniform(0.0, 0.6),
+    ),
+    "met_alpha_fe_young": (
+        "[alpha/Fe] at present day (t_lookback ~ 0). "
+        "Typically ~0.0 (solar) for disk galaxies.",
         lambda lo, hi: lo >= -0.5 and hi <= 1.0,
         "must be in [-0.5, 1.0]",
         Fixed(0.0),
@@ -481,8 +499,9 @@ SETTINGS_KEYS = frozenset(
         # Radio & X-ray
         "radio",
         "xray",
-        # Evolving metallicity
+        # Evolving metallicity / alpha
         "evolving_metallicity",
+        "alpha_fe_evolving",
         # Metallicity interpolation
         "met_interp",
         "lgmet_scatter",
@@ -505,6 +524,7 @@ def _build_param_registry(
     radio=False,
     xray=False,
     evolving_metallicity=False,
+    alpha_fe_evolving=False,
 ):
     """Build the parameter registry for a given model configuration.
 
@@ -558,10 +578,18 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Alpha-element enhancement (always available — defaults to Fixed(0) = no-op)
-    for pname, (desc, check, err, default) in _ALPHA_FE_PARAMS.items():
-        registry[pname] = (desc, check, err)
-        defaults[pname] = default
+    # Alpha-element enhancement
+    if alpha_fe_evolving:
+        # Evolving [α/Fe]: old stars more α-enhanced than young.
+        # Replaces global met_alpha_fe with per-age ramp.
+        for pname, (desc, check, err, default) in _EVOLVING_ALPHA_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+    else:
+        # Global [α/Fe] (same for all ages — defaults to Fixed(0) = no-op)
+        for pname, (desc, check, err, default) in _ALPHA_FE_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
 
     # Dust extra params (always available — they default to Fixed(0) = no-op)
     for pname, (desc, check, err, default) in _DUST_EXTRA_PARAMS.items():
@@ -931,6 +959,11 @@ class ParamSpec:
         # Evolving metallicity: False (default), True
         self.evolving_metallicity = kwargs.pop("evolving_metallicity", False)
 
+        # Evolving alpha-enhancement: False (default), True
+        # When True, [α/Fe] varies with lookback time (old stars more α-enhanced).
+        # Replaces met_alpha_fe with met_alpha_fe_old + met_alpha_fe_young.
+        self.alpha_fe_evolving = kwargs.pop("alpha_fe_evolving", False)
+
         # Metallicity interpolation: "smooth" (triweight, DSPS) or "linear" (2-point, FSPS)
         # Default: smooth — 8.5x smoother gradients at <1% speed overhead
         self.met_interp = kwargs.pop("met_interp", "smooth")
@@ -989,6 +1022,7 @@ class ParamSpec:
             radio=self.radio,
             xray=self.xray,
             evolving_metallicity=self.evolving_metallicity,
+            alpha_fe_evolving=self.alpha_fe_evolving,
         )
         # --- Cue optional params (ionspec / gas extras) ---
         _ALL_CUE_OPTIONAL = {**_CUE_IONSPEC_PARAMS, **_CUE_GAS_EXTRA_PARAMS}

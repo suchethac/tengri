@@ -46,6 +46,7 @@ from tengri.core.fused_kernels import (
     is_fused_compatible,
 )
 from tengri.core.param_translate import (
+    _EVOLVING_ALPHA_PARAM_MAP,
     _EVOLVING_MET_PARAM_MAP,
     LOG10_ZSUN,
     _build_param_map,
@@ -295,6 +296,15 @@ class Model:
             # Replace met_logzsol mapping with the two evolving-Z params
             self._param_map.pop("met_logzsol", None)
             self._param_map.update(_EVOLVING_MET_PARAM_MAP)
+
+        # Evolving alpha-enhancement: replaces global met_alpha_fe
+        self._alpha_fe_evolving = getattr(spec, "alpha_fe_evolving", False)
+        if self._alpha_fe_evolving:
+            self._param_map.pop("met_alpha_fe", None)
+            self._param_map.update(_EVOLVING_ALPHA_PARAM_MAP)
+
+        # Store spec reference for pipeline access
+        self._spec = spec
 
         # AGN model (None = disabled)
         self._agn_model = getattr(spec, "agn_model", None)

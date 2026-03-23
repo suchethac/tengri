@@ -51,9 +51,14 @@ _EVOLVING_MET_PARAM_MAP = {
     "met_logzsol_final": ("log_z_abs_final", 1.0, LOG10_ZSUN),
 }
 
+_EVOLVING_ALPHA_PARAM_MAP = {
+    "met_alpha_fe_old": ("alpha_fe_old", 1.0, 0.0),  # [alpha/Fe] of oldest stars
+    "met_alpha_fe_young": ("alpha_fe_young", 1.0, 0.0),  # [alpha/Fe] at present day
+}
+
 _NON_SFH_PARAM_MAP = {
     "met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
-    "met_alpha_fe": ("alpha_fe", 1.0, 0.0),  # [alpha/Fe] in dex
+    "met_alpha_fe": ("alpha_fe", 1.0, 0.0),  # [alpha/Fe] in dex (global)
     "dust_tau_bc": ("tau_bc", 1.0, 0.0),
     "dust_tau_diff": ("tau_diff", 1.0, 0.0),
     "dust_slope": ("dust_slope", 1.0, 0.0),
