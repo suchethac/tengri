@@ -75,7 +75,15 @@ from tengri.models.sfh.registry import (
     compute_field_gp,
     resolve_sfh,
 )
-from tengri.models.sps.dsps_wrapper import SSPData, effective_metallicity, load_ssp_data
+from tengri.models.sps.dsps_wrapper import (
+    SSPData,
+    effective_metallicity,
+    has_alpha_grid,
+    interpolate_met_alpha,
+    load_ssp_data,
+    salaris_feh_from_mh,
+    salaris_mh_from_feh,
+)
 
 __all__ = [
     # High-level API
