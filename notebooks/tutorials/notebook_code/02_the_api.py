@@ -41,10 +41,11 @@ from tengri import (
     LogNormal,
     LogUniform,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     StudentT,
     Uniform,
-    load_filter_set,
     load_ssp_data,
 )
 
@@ -77,7 +78,7 @@ setup_style()
 ssp_data = load_ssp_data(
     "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 )
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
 
 # %% [markdown]
 # ## ParamSpec: Defining Your Model
@@ -168,7 +169,7 @@ print(f"  {'Fixed':<15s} Held constant during inference")
 # function.
 
 # %%
-model = Model(spec, ssp_data, filters=filters)
+model = Model(spec, ssp_data, observation=obs)
 print(f"Model created: {spec.n_free} free parameters")
 
 # %%
@@ -183,7 +184,7 @@ print(f"Spectrum shape: {spectrum.shape}")
 # %%
 # Predict photometry
 phot = model.predict_photometry(params)
-print(f"Photometry ({len(filters)} bands): {np.array(phot)}")
+print(f"Photometry ({len(phot)} bands): {np.array(phot)}")
 
 # %%
 # Precomputation speedup
@@ -290,7 +291,7 @@ print(f"  sfr_full shape: {sfh['sfr_full'].shape}")
 # %%
 # Generate mock data
 mock = model.mock_spectrum(params, WAVE_OBS, snr=30.0, key=jax.random.PRNGKey(99))
-fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="spectroscopy")
+fitter = Fitter(model, mock.flux_obs, mock.noise)
 print(f"Fitter: {len(mock.flux_obs)} data points, {spec.n_free} parameters")
 
 # %%

@@ -43,9 +43,10 @@ from tengri import (
     Fitter,
     Fixed,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     Uniform,
-    load_filter_set,
     load_ssp_data,
 )
 from tengri.core.noise import compute_effective_noise
@@ -188,7 +189,9 @@ plt.show()
 
 # %%
 ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+)
 
 # ParamSpec with noise model
 spec_noise = ParamSpec(
@@ -220,7 +223,7 @@ spec_no_noise = ParamSpec(
 )
 
 # Generate mock with 5% systematic floor baked in
-model_truth = Model(spec_no_noise, ssp_data, filters=filters)
+model_truth = Model(spec_no_noise, ssp_data, observation=obs)
 truth_params = {
     "sfh_tsnorm_log_peak_sfr": 0.8,
     "sfh_tsnorm_peak_lbt_gyr": 4.0,
@@ -241,12 +244,12 @@ sys_scatter = 0.05 * mock.flux_true * jax.random.normal(key, shape=mock.flux_tru
 flux_with_sys = mock.flux_obs + sys_scatter
 
 # Fit without noise model
-model_no_noise = Model(spec_no_noise, ssp_data, filters=filters)
+model_no_noise = Model(spec_no_noise, ssp_data, observation=obs)
 fitter_no_noise = Fitter(model_no_noise, flux_with_sys, mock.noise)
 result_no_noise = fitter_no_noise.run("map", n_steps=500, learning_rate=0.02)
 
 # Fit with noise model
-model_noise = Model(spec_noise, ssp_data, filters=filters)
+model_noise = Model(spec_noise, ssp_data, observation=obs)
 fitter_noise = Fitter(model_noise, flux_with_sys, mock.noise)
 result_noise = fitter_noise.run("map", n_steps=500, learning_rate=0.02)
 

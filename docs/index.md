@@ -16,7 +16,7 @@ A fast, modular JAX framework for Bayesian galaxy SED fitting. Scalable from ind
 - **Fully differentiable**: Pure JAX from PSD parameters through to predicted photometry. Gradients via autodiff enable HMC, variational inference, and gradient-based optimization.
 - **GPU-native**: All operations are JIT-compiled and run on GPU/TPU. Designed for catalog-scale inference.
 - **Modular forward model**: Every component (SFH, dust, SPS, AGN, nebular, observation) is a swappable pure function. The forward model is the primary product; inference is one application of it.
-- **Multiple inference backends**: MAP, Ray Tracing (Behroozi 2025), NUTS ([BlackJAX](https://github.com/blackjax-devs/blackjax)), geoVI/MGVI ([NIFTy.re](https://gitlab.mpcdf.mpg.de/ift/nifty)), and hierarchical population fitting.
+- **Multiple inference backends**: MAP, Ray Tracing (Behroozi 2025), NUTS ([BlackJAX](https://github.com/blackjax-devs/blackjax)), geoVI/MGVI ([NIFTy.re](https://gitlab.mpcdf.mpg.de/ift/nifty)), Nested Slice Sampling (Yallup+2026) for Bayesian evidence, and hierarchical population fitting.
 - **DSPS-powered SPS**: Differentiable stellar population synthesis via [DSPS](https://github.com/ArgonneCPAC/dsps) (Hearin et al. 2023). Accepts any SSP template in HDF5 format.
 
 ## Installation
@@ -44,10 +44,12 @@ Any SSP template set can be used — the only requirement is the DSPS HDF5 schem
 
 ```python
 from tengri import Model, ParamSpec, Fitter, Uniform, Gaussian
-from tengri import load_ssp_data, load_filter_set
+from tengri import Observation, Photometry, load_ssp_data
 
 ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+obs = Observation(photometry=Photometry.from_names(
+    ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+))
 
 spec = ParamSpec(
     sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
@@ -60,7 +62,7 @@ spec = ParamSpec(
     redshift=0.1,
 )
 
-model = Model(spec, ssp, filters=filters)
+model = Model(spec, ssp, observation=obs)
 fitter = Fitter(model, data, noise)
 result = fitter.run("geovi")        # or "raytrace", "nuts", "map"
 print(result.summary_table())
@@ -75,6 +77,7 @@ print(result.summary_table())
 | NUTS | `fitter.run("nuts")` | Gold-standard validation (low-D) |
 | geoVI | `fitter.run("geovi")` | Non-Gaussian posteriors, moderate D |
 | MGVI | `fitter.run("mgvi")` | Fastest VI, very large D |
+| NSS | `fitter.run("nss")` | Bayesian evidence for model comparison (D ≲ 30) |
 | Hierarchical | `HierarchicalFitter(models, data).run()` | Shared PSD across populations |
 
 ## Performance
@@ -105,6 +108,7 @@ Forward model timings on Apple M-series CPU:
 - Hearin, A. P. et al. (2023). *DSPS: Differentiable Stellar Population Synthesis.* [arXiv:2112.08423](https://arxiv.org/abs/2112.08423)
 - Edenhofer, G. et al. (2024). *Re-envisioning Numerical Information Field Theory (NIFTy.re).* [arXiv:2402.16683](https://arxiv.org/abs/2402.16683)
 - Behroozi, P. (2025). *Ray Tracing Sampler.* [arXiv:2504.20029](https://arxiv.org/abs/2504.20029)
+- Yallup, D., Kroupa, S. & Handley, W. (2026). *Nested Slice Sampling.* [arXiv:2601.23252](https://arxiv.org/abs/2601.23252)
 - Ensslin, T. A. (2019). *Information field theory.* [arXiv:1804.03350](https://arxiv.org/abs/1804.03350)
 
 ## License
@@ -115,26 +119,15 @@ MIT
 :maxdepth: 1
 :hidden:
 
-install
-tutorials/index
-demonstrations/index
-reference/index
-```
-
-```{toctree}
-:maxdepth: 2
-:hidden:
-
-auto_examples/index
-```
-
-```{toctree}
-:maxdepth: 1
-:hidden:
-
+getting_started/index
+the_model/index
+inference/index
+worked_examples/index
+examples
 performance/index
 advanced/index
-api/index
+observation/index
 developer/index
+api/index
 changelog
 ```

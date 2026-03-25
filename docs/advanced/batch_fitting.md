@@ -134,16 +134,18 @@ result = fitter_i.run("native_geovi", init_from=result_map, n_iterations=25)
 ### SDSS photometry
 
 ```python
-from tengri import Model, ParamSpec, Uniform, Fitter
+from tengri import Model, ParamSpec, Uniform, Fitter, Observation, Photometry
 
 spec = ParamSpec(
     redshift=0.05,       # fixed redshift from spectroscopic catalog
     sfh="field",         # stochastic SFH
     dust=True,
-    filters=["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
 )
 
-model = Model(spec, ssp)
+obs = Observation(photometry=Photometry.from_names(
+    ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+))
+model = Model(spec, ssp, observation=obs)
 fitter = Fitter(model, flux_obs, noise)
 results = fitter.fit_batch(sdss_galaxies)
 ```
@@ -165,9 +167,13 @@ spec = ParamSpec(
     sfh="field",
     dust=True,
     nebular=True,
-    filters=["jwst_f115w", "jwst_f150w", "jwst_f200w",
-             "jwst_f277w", "jwst_f356w", "jwst_f444w"],
 )
+
+obs = Observation(photometry=Photometry.from_names(
+    ["jwst_f115w", "jwst_f150w", "jwst_f200w",
+     "jwst_f277w", "jwst_f356w", "jwst_f444w"]
+))
+model = Model(spec, ssp, observation=obs)
 ```
 
 :::{note}

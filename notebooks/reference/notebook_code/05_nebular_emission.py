@@ -240,3 +240,6 @@ plt.show()
 # The BakedIn backend requires no extra data files and is the recommended
 # starting point. Switch to CloudyGrid or Cue when you need to fit
 # ionization parameter or detailed abundances.
+#
+# **See also:** [Nebular Backends Deep-Dive](../_notebooks/reference/12_nebular_backends) for
+# detailed CloudyGrid grid inspection, Cue emulator architecture, and backend comparison.

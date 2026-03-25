@@ -24,6 +24,9 @@ COLORS = {
     "geovi":     "#ff7f0e",   # orange — geoVI (variational)
     "nuts":      "#2ca02c",   # green — NUTS (gold standard)
     "mgvi":      "#9467bd",   # purple — MGVI (linear VI)
+    "pathfinder": "#8c564b",  # brown — Pathfinder (approximate)
+    "ess":       "#e377c2",   # pink — Elliptical Slice Sampling
+    "laplace":   "#bcbd22",   # olive/yellow-green — Laplace
     # Data colors
     "truth":     "#1a1a1a",   # near-black — ground truth
     "data":      "#333333",   # dark grey — observed data
@@ -46,6 +49,9 @@ SAMPLER_STYLE = {
     "geoVI":{"color": COLORS["geovi"], "ls": "-",  "lw": 1.5, "alpha": 1.0},
     "NUTS": {"color": COLORS["nuts"],  "ls": "-",  "lw": 1.5, "alpha": 1.0},
     "MGVI": {"color": COLORS["mgvi"],  "ls": "-",  "lw": 1.5, "alpha": 1.0},
+    "Pathfinder": {"color": COLORS["pathfinder"], "ls": "-.", "lw": 1.5, "alpha": 1.0},
+    "ESS":  {"color": COLORS["ess"],   "ls": "-",  "lw": 1.5, "alpha": 1.0},
+    "Laplace": {"color": COLORS["laplace"], "ls": ":", "lw": 2.0, "alpha": 1.0},
 }
 
 # SDSS effective wavelengths (Angstrom)
@@ -220,20 +226,75 @@ def plot_sfh(model, posterior, true_params=None, ax=None,
         sfh_true = model.predict_sfh(true_params)
         key = "sfr_full" if model.spec.stochastic else "sfr_mean"
         ax.plot(sfh_true["t_gyr"], sfh_true[key], color=COLORS["truth"],
-                lw=2.0, label="Truth", zorder=10)
+                lw=3.0, label="Truth", zorder=10)
         # Show mean SFH backbone for stochastic models
         if model.spec.stochastic and show_mean_sfh:
             ax.plot(sfh_true["t_gyr"], sfh_true["sfr_mean"],
                     color=COLORS["truth"], lw=1.0, ls=":", alpha=0.4)
 
-    # BAGPIPES convention: lookback time with present at right
+    # Lookback time: 0 (present) at left, high lookback at right
     ax.set_xlabel(r"$\mathrm{Lookback\ time\ /\ Gyr}$")
     ax.set_ylabel(r"$\mathrm{SFR\ /\ M_\odot\ yr^{-1}}$")
-    ax.set_xlim(xlim[1], xlim[0])  # reversed: high lookback at left, present at right
+    ax.set_xlim(xlim[0], xlim[1])
+
+    # Sensible ylim: bottom at 0, top at 1.5× the 84th percentile peak
     ax.set_ylim(bottom=0.)
-    ax.legend(loc="upper left")
+    if posterior.samples is not None and len(sfh_draws) > 0:
+        hi_peak = np.max(np.percentile(sfh_arr, 84, axis=0))
+        if hi_peak > 0:
+            ax.set_ylim(top=hi_peak * 1.5)
+
+    ax.legend(loc="upper right")
+
+    # 200 Myr inset (always for stochastic models)
+    if posterior.samples is not None and model.spec.stochastic:
+        ax_in = add_sfh_inset(ax, t_gyr, np.median(sfh_arr, axis=0),
+                              color=color, lw=1.2)
+        if true_params is not None:
+            sfh_t = model.predict_sfh(true_params)
+            t_key = "sfr_full" if model.spec.stochastic else "sfr_mean"
+            t_myr = np.asarray(sfh_t["t_gyr"]) * 1e3
+            mask = t_myr <= 200
+            if mask.sum() > 2:
+                ax_in.plot(t_myr[mask], np.asarray(sfh_t[t_key])[mask],
+                           color=COLORS["truth"], lw=1.5)
 
     return ax
+
+
+def add_sfh_inset(ax, t_gyr, sfr, inset_range_myr=200, **kwargs):
+    """Add a zoom inset showing recent SFH (last 200 Myr by default).
+
+    Parameters
+    ----------
+    ax : matplotlib Axes
+        Parent axes to attach the inset to.
+    t_gyr : array
+        Lookback time in Gyr.
+    sfr : array
+        Star formation rate.
+    inset_range_myr : float
+        Maximum lookback time to show in the inset (Myr).
+    **kwargs
+        Passed to ax_in.plot().
+
+    Returns
+    -------
+    ax_in : matplotlib Axes
+        The inset axes (for further customization).
+    """
+    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    ax_in = inset_axes(ax, width="35%", height="40%", loc="upper right",
+                       borderpad=1.5)
+    t_myr = np.asarray(t_gyr) * 1e3
+    mask = t_myr <= inset_range_myr
+    if mask.sum() > 2:
+        ax_in.plot(t_myr[mask], np.asarray(sfr)[mask], **kwargs)
+    ax_in.set_xlim(0, inset_range_myr)
+    ax_in.set_xlabel("Lookback (Myr)", fontsize=6)
+    ax_in.set_ylabel("SFR", fontsize=6)
+    ax_in.tick_params(labelsize=5)
+    return ax_in
 
 
 def plot_sfh_comparison(model, results, true_params=None,

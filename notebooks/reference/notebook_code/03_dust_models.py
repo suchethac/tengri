@@ -35,9 +35,10 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fixed,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     Uniform,
-    load_filter_set,
     load_ssp_data,
     two_component_dust,
 )
@@ -312,7 +313,7 @@ plt.show()
 fig, ax = plt.subplots(figsize=(7, 5))
 
 # Compute r-band - i-band color for a grid of (tau_diff, age)
-filters_ri = load_filter_set(["sdss_r", "sdss_i"])
+obs_ri = Observation(photometry=Photometry.from_names(["sdss_r", "sdss_i"]))
 tau_range = np.linspace(0.0, 1.5, 15)
 age_range = np.linspace(1.0, 10.0, 15)
 color_grid = np.zeros((len(tau_range), len(age_range)))
@@ -331,7 +332,7 @@ for i_t, tau in enumerate(tau_range):
             dust_slope=Fixed(-0.7),
             redshift=Fixed(0.1),
         )
-        model_grid = Model(spec_grid, ssp_data, filters=filters_ri)
+        model_grid = Model(spec_grid, ssp_data, observation=obs_ri)
         params_grid = {
             "sfh_tsnorm_log_peak_sfr": 1.0,
             "sfh_tsnorm_peak_lbt_gyr": float(age),

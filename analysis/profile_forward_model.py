@@ -10,9 +10,10 @@ jax.config.update("jax_enable_x64", True)
 from tengri import (
     Fixed,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     Uniform,
-    load_filter_set,
     load_ssp_data,
 )
 from tengri.models.dust.attenuation import two_component_dust
@@ -25,8 +26,9 @@ from tengri.models.sps.dsps_wrapper import (
 
 print("Loading SSP data and filters...")
 ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-fw, ft, _ = filters
+obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+fw = obs.photometry.filter_waves
+ft = obs.photometry.filter_trans
 
 spec = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
@@ -39,7 +41,7 @@ spec = ParamSpec(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
 )
-model = Model(spec, ssp, filters=filters, precompute=False)
+model = Model(spec, ssp, observation=obs, precompute=False)
 params = spec.sample(jax.random.PRNGKey(42))
 p = model._get_internal_params(params)
 
@@ -178,7 +180,7 @@ print("\n" + "=" * 60)
 print("FUSED KERNEL (for comparison)")
 print("=" * 60)
 
-model_fused = Model(spec, ssp, filters=filters, precompute=True)
+model_fused = Model(spec, ssp, observation=obs, precompute=True)
 _ = model_fused.predict_photometry(params)
 t_fused, _ = bench("Fused", lambda: model_fused.predict_photometry(params))
 print(f"  Fused photometry (power_law): {t_fused:8.1f} μs")
@@ -198,7 +200,7 @@ spec_cal = ParamSpec(
     dust_law_bc="calzetti",
     dust_law_diff="calzetti",
 )
-model_cal = Model(spec_cal, ssp, filters=filters, precompute=True)
+model_cal = Model(spec_cal, ssp, observation=obs, precompute=True)
 params_cal = spec_cal.sample(jax.random.PRNGKey(42))
 _ = model_cal.predict_photometry(params_cal)
 t_fused_cal, _ = bench("Fused Cal", lambda: model_cal.predict_photometry(params_cal))

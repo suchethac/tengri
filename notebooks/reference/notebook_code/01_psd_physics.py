@@ -588,6 +588,249 @@ plt.savefig(os.path.join(FIGDIR, "01_literature_table.png"), bbox_inches="tight"
 plt.show()
 
 # %% [markdown]
+# ## 8. Alternative PSD Models
+#
+# The DRW is the default PSD in tengri, but the package also provides two
+# alternative models for situations where different spectral behaviour is
+# needed.
+#
+# ### 8a. Matern PSD
+#
+# The Matern covariance family is parameterised by a smoothness parameter
+# $\nu$. Its 1-D spectral density is
+#
+# $$P_{\rm Matern}(\omega) \propto \frac{\sigma^2}
+#   {\bigl(\lambda + \omega^2\bigr)^{\nu + 1/2}}, \qquad
+#   \lambda = \frac{2\nu}{\ell^2}$$
+#
+# where $\ell$ is the length scale and $\sigma^2$ the marginal variance.
+# Key properties:
+#
+# - **$\nu = 0.5$** recovers the DRW (Lorentzian) exactly.
+# - **Higher $\nu$** suppresses high-frequency power more steeply
+#   ($\propto \omega^{-(2\nu+1)}$ vs $\omega^{-2}$ for DRW), producing
+#   smoother GP realizations with fewer rapid oscillations.
+# - **$\nu \to \infty$** yields the squared-exponential (infinitely smooth)
+#   kernel.
+#
+# Use Matern when the data favour smoother SFHs than the DRW allows, for
+# example in massive quiescent galaxies where star formation varies slowly.
+
+# %%
+# --- FIGURE 9: Matern PSD family comparison (detailed) ---
+from tengri.models.sfh.psd_models import psd_matern, psd_extended_regulator
+
+omega_alt = np.logspace(-3, 2, 600)  # rad / Myr
+sigma_alt, tau_myr_alt = 1.0, 100.0
+tau_yr_alt = tau_myr_alt * 1e6
+
+fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
+
+# Left panel: PSD comparison
+ax = axes[0]
+psd_ref = psd_drw(omega_alt / 1e6, sigma_alt, tau_yr_alt) * 1e6
+ax.loglog(omega_alt, psd_ref, "k-", lw=2.5, label=r"DRW ($\nu = 0.5$)")
+
+nu_values = [1.5, 2.5, 5.0]
+nu_colors = [COLORS["geovi"], COLORS["nuts"], COLORS["mgvi"]]
+nu_styles = ["--", "-.", ":"]
+for nu, c, ls in zip(nu_values, nu_colors, nu_styles):
+    psd_m = psd_matern(omega_alt / 1e6, sigma_alt**2, tau_yr_alt, nu) * 1e6
+    ax.loglog(omega_alt, psd_m, ls=ls, color=c, lw=1.8,
+              label=rf"Mat\'ern $\nu = {nu}$")
+
+ax.set_xlabel(r"$\omega$ [rad / Myr]")
+ax.set_ylabel(r"$P(\omega)$ [Myr]")
+ax.set_title(r"Mat\'ern PSD Family")
+ax.legend(fontsize=8, frameon=False)
+
+# Annotate high-frequency slopes
+ax.annotate(r"$\omega^{-2}$", xy=(50, 2e-2), fontsize=9, color="k")
+ax.annotate(r"$\omega^{-4}$", xy=(50, 3e-5), fontsize=9, color=COLORS["geovi"])
+
+# Right panel: GP realizations from each PSD
+ax = axes[1]
+key_alt = jax.random.PRNGKey(17)
+xi = jax.random.normal(key_alt, shape=(N_GRID,))
+
+# DRW realization
+sqrt_p_drw = compute_sqrt_power_drw(N_GRID, d_log_age, sigma_alt, tau_yr_alt)
+gp_drw = gp_from_xi(xi, sqrt_p_drw, N_GRID)
+ax.plot(ages_gyr, gp_drw, "k-", lw=1.2, alpha=0.9, label=r"DRW ($\nu = 0.5$)")
+
+# Matern realizations (same xi for fair comparison)
+from tengri.models.sfh.psd_models import psd_to_sqrt_power
+omega_grid = 2.0 * jnp.pi * jnp.fft.rfftfreq(N_GRID, d=d_log_age)
+
+for nu, c, ls in zip(nu_values, nu_colors, nu_styles):
+    psd_vals = psd_matern(omega_grid, sigma_alt**2, tau_yr_alt, nu)
+    sqrt_p_mat = psd_to_sqrt_power(psd_vals, d_log_age)
+    gp_mat = gp_from_xi(xi, sqrt_p_mat, N_GRID)
+    ax.plot(ages_gyr, gp_mat, ls=ls, color=c, lw=1.0, alpha=0.85,
+            label=rf"Mat\'ern $\nu = {nu}$")
+
+ax.set_xlabel("Lookback time [Gyr]")
+ax.set_ylabel(r"$x(t)$")
+ax.set_title("GP Realizations (same latent draw)")
+ax.set_xscale("log")
+ax.legend(fontsize=8, frameon=False)
+
+fig.tight_layout()
+plt.savefig(os.path.join(FIGDIR, "01_matern_family.png"), bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# **Interpretation.** All four curves above use the *same* latent vector
+# $\xi$, so differences are entirely due to the PSD shape. Higher $\nu$
+# progressively filters out rapid fluctuations while preserving the
+# long-timescale structure. The DRW ($\nu = 0.5$) shows the most jagged
+# behaviour; $\nu = 5$ is almost sinusoidal.
+
+# %% [markdown]
+# ### 8b. Extended Regulator PSD
+#
+# The **extended regulator model** (Tacchella+2020; Caplar & Tacchella 2019)
+# decomposes SFH variability into two physical components:
+#
+# $$P_{\rm ext}(f) = \frac{\sigma_{\rm reg}^2}
+#   {\bigl(1 + (2\pi f\,\tau_{\rm in})^2\bigr)
+#    \bigl(1 + (2\pi f\,\tau_{\rm eq})^2\bigr)}
+#   + \frac{\sigma_{\rm dyn}^2}
+#     {1 + (2\pi f\,\tau_{\rm dyn})^2}$$
+#
+# where $f$ is the cyclic frequency (Hz, not angular).
+#
+# - **Regulator term** (first): gas inflow on timescale $\tau_{\rm in}$
+#   equilibrated on $\tau_{\rm eq}$. This is a *double* Lorentzian with
+#   steeper high-frequency rolloff ($\propto f^{-4}$) than the DRW.
+# - **Dynamical term** (second): short-timescale stochastic variability
+#   from dynamical processes (e.g., spiral arms, GMC formation) on
+#   $\tau_{\rm dyn}$.
+#
+# The sum of these two components produces a PSD with a **shoulder** at
+# intermediate frequencies, unlike the single-break DRW. This physically
+# encodes the idea that SFH variability has contributions from two
+# distinct mechanisms operating at different timescales.
+
+# %%
+# --- FIGURE 10: Extended Regulator vs DRW ---
+freq_hz = np.logspace(-4, 0, 600)  # cyclic frequency in Myr^-1
+omega_er = 2.0 * np.pi * freq_hz   # angular frequency for DRW comparison
+
+# Extended regulator fiducial parameters (Tacchella+2020 inspired)
+s_reg = 0.8       # regulator amplitude
+tau_in = 200.0     # inflow timescale [Myr]
+tau_eq = 50.0      # equilibrium timescale [Myr]
+s_dyn = 0.4        # dynamical amplitude
+tau_dyn_myr = 10.0 # dynamical timescale [Myr]
+
+psd_er = psd_extended_regulator(freq_hz, s_reg, tau_in, tau_eq, s_dyn, tau_dyn_myr)
+
+# DRW matched to same total variance (for fair visual comparison)
+# Total variance of ext. regulator = integral P(f) df ≈ numerical
+er_var = float(np.trapz(psd_er, freq_hz))
+# DRW variance = sigma^2 / (4 pi tau) in cyclic frequency
+# Match by setting sigma^2 * tau = 2 * er_var
+sigma_match = np.sqrt(2.0 * er_var / (tau_in * 1e-3))
+tau_match_yr = tau_in * 1e6
+psd_drw_match = psd_drw(omega_er / 1e6, sigma_match, tau_match_yr) * 1e6
+
+fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
+
+# Left: PSD comparison
+ax = axes[0]
+ax.loglog(freq_hz, psd_er, color=COLORS["rt"], lw=2.0,
+          label="Extended regulator")
+ax.loglog(freq_hz, psd_drw_match, "k--", lw=1.5,
+          label=f"DRW (matched variance)")
+
+# Show individual components
+psd_reg_only = psd_extended_regulator(freq_hz, s_reg, tau_in, tau_eq, 0.0, tau_dyn_myr)
+psd_dyn_only = psd_extended_regulator(freq_hz, 0.0, tau_in, tau_eq, s_dyn, tau_dyn_myr)
+ax.loglog(freq_hz, psd_reg_only, ":", color=COLORS["geovi"], lw=1.2, alpha=0.7,
+          label="Regulator component")
+ax.loglog(freq_hz, psd_dyn_only, ":", color=COLORS["nuts"], lw=1.2, alpha=0.7,
+          label="Dynamical component")
+
+ax.set_xlabel(r"$f$ [Myr$^{-1}$]")
+ax.set_ylabel(r"$P(f)$ [Myr]")
+ax.set_title("Extended Regulator vs DRW")
+ax.legend(fontsize=7, frameon=False)
+
+# Annotate the two breaks
+ax.axvline(1.0 / tau_in, color=COLORS["geovi"], ls=":", alpha=0.4, lw=0.8)
+ax.axvline(1.0 / tau_dyn_myr, color=COLORS["nuts"], ls=":", alpha=0.4, lw=0.8)
+ax.text(1.0 / tau_in * 1.3, ax.get_ylim()[1] * 0.3,
+        r"$1/\tau_{\rm in}$", fontsize=8, color=COLORS["geovi"])
+ax.text(1.0 / tau_dyn_myr * 1.3, ax.get_ylim()[1] * 0.3,
+        r"$1/\tau_{\rm dyn}$", fontsize=8, color=COLORS["nuts"])
+
+# Right: GP realizations
+ax = axes[1]
+key_er = jax.random.PRNGKey(99)
+n_real = 5
+
+# Extended regulator realizations via Fourier synthesis
+omega_grid_er = 2.0 * jnp.pi * jnp.fft.rfftfreq(N_GRID, d=d_log_age)
+freq_grid_er = omega_grid_er / (2.0 * jnp.pi)
+
+psd_er_grid = psd_extended_regulator(
+    jnp.abs(freq_grid_er), s_reg, tau_in, tau_eq, s_dyn, tau_dyn_myr
+)
+sqrt_p_er = psd_to_sqrt_power(psd_er_grid, d_log_age)
+
+psd_drw_grid = psd_drw(omega_grid_er, sigma_match, tau_match_yr)
+sqrt_p_drw_match = psd_to_sqrt_power(psd_drw_grid, d_log_age)
+
+for i in range(n_real):
+    subkey = jax.random.fold_in(key_er, i)
+    xi_er = jax.random.normal(subkey, shape=(N_GRID,))
+    gp_er = gp_from_xi(xi_er, sqrt_p_er, N_GRID)
+    gp_drw_r = gp_from_xi(xi_er, sqrt_p_drw_match, N_GRID)
+    alpha = 0.9 if i == 0 else 0.4
+    lbl_er = "Ext. regulator" if i == 0 else None
+    lbl_drw = "DRW" if i == 0 else None
+    ax.plot(ages_gyr, gp_er, color=COLORS["rt"], lw=0.8, alpha=alpha, label=lbl_er)
+    ax.plot(ages_gyr, gp_drw_r, "k-", lw=0.6, alpha=alpha * 0.5, label=lbl_drw)
+
+ax.set_xlabel("Lookback time [Gyr]")
+ax.set_ylabel(r"$x(t)$")
+ax.set_title("GP Realizations: Ext. Regulator vs DRW")
+ax.set_xscale("log")
+ax.legend(fontsize=8, frameon=False)
+
+fig.tight_layout()
+plt.savefig(os.path.join(FIGDIR, "01_extended_regulator.png"), bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# **Interpretation.** The extended regulator PSD has a characteristic
+# shoulder between the two break frequencies. In the GP realizations, this
+# manifests as smoother long-timescale trends (from the regulator
+# component) punctuated by sharper short-timescale flickers (from the
+# dynamical component). The DRW, by contrast, has a single characteristic
+# timescale and cannot separate these two modes of variability.
+
+# %% [markdown]
+# ### 8c. When to Use Which PSD
+#
+# | PSD model | Parameters | Best for | Limitations |
+# |-----------|-----------|----------|-------------|
+# | **DRW** | $\sigma_{\rm PS}$, $\tau_{\rm PS}$ (2 free) | Default choice; simplest model; sufficient for most photometric SED fits | Single break frequency; cannot separate physical mechanisms |
+# | **Matern** | $\sigma^2$, $\ell$, $\nu$ (3 free) | Smoother SFHs (massive/quiescent galaxies); tunable high-frequency rolloff | Extra parameter; $\nu$ poorly constrained by broadband photometry alone |
+# | **Extended regulator** | $\sigma_{\rm reg}$, $\tau_{\rm in}$, $\tau_{\rm eq}$, $\sigma_{\rm dyn}$, $\tau_{\rm dyn}$ (5 free) | Physically motivated dual-timescale models; connecting to gas regulation theory | Many parameters; requires spectroscopy or H-alpha to constrain both timescales |
+#
+# **Practical guidance:**
+#
+# - Start with the **DRW** (2 parameters). It is the default in tengri and
+#   sufficient for most applications.
+# - Switch to **Matern** if residuals show the DRW is too jagged (too much
+#   high-frequency power) for the galaxy population being studied.
+# - Use the **extended regulator** when you want to connect SFH inference
+#   to gas regulation physics, or when multi-wavelength data (especially
+#   H-alpha + UV) can constrain multiple timescales simultaneously.
+
+# %% [markdown]
 # ## Summary
 #
 # | Parameter | Physical meaning | Observational diagnostic |

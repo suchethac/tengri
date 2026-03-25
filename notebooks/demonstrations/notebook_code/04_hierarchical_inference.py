@@ -42,13 +42,16 @@ from tengri import (
     Fixed,
     HierarchicalFitter,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
+    SpectroscopyConfig,
     Uniform,
-    load_filter_set,
     load_ssp_data,
 )
 
 import sys, os  # noqa: E401, E402
+
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
@@ -81,14 +84,13 @@ from _plot_style import (  # noqa: E402
 setup_style()
 
 # %%
-# Load SSP data and filters
-ssp_data = load_ssp_data(
-    "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-)
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-
-# Observed wavelength grid for spectroscopy
+# Load SSP data and define observation
+ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
+    spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS),
+)
 
 # True shared PSD parameters
 TRUE_SIGMA = 2.0
@@ -96,6 +98,7 @@ TRUE_TAU = 20.0
 N_GAL = 10
 SPEC_SNR = 30.0
 PHOT_SNR = 20.0
+
 
 # %%
 # Model factory for hierarchical inference
@@ -117,9 +120,7 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         mean_sfh_type=["tsnorm", "field"],
         n_grid=128,
     )
-    m = Model(spec, ssp_data, filters=filters)
-    m.precompute_spectroscopy(WAVE_OBS)
-    return m
+    return Model(spec, ssp_data, observation=obs)
 
 
 # %%
@@ -147,7 +148,7 @@ for i in range(N_GAL):
     true_params_all.append(params)
 
 print(f"  Spectroscopy: {len(WAVE_OBS)} pixels, SNR = {SPEC_SNR}")
-print(f"  Photometry: {len(filters)} bands, SNR = {PHOT_SNR}")
+print(f"  Photometry: {obs.n_data_phot} bands, SNR = {PHOT_SNR}")
 
 # %%
 # --- FIGURE 1: Galaxy diversity ---
@@ -157,9 +158,13 @@ for i, ax in enumerate(axes.flat):
         ax.set_visible(False)
         continue
     ax.errorbar(
-        np.array(WAVE_OBS), np.array(galaxies_spec[i]["flux_obs"]),
+        np.array(WAVE_OBS),
+        np.array(galaxies_spec[i]["flux_obs"]),
         yerr=np.array(galaxies_spec[i]["noise"]),
-        fmt=".", ms=1.5, color=COLORS["data"], alpha=0.5,
+        fmt=".",
+        ms=1.5,
+        color=COLORS["data"],
+        alpha=0.5,
     )
     true_spec = model_gen.predict_spectrum(true_params_all[i])
     ax.plot(np.array(WAVE_OBS), np.array(true_spec), color=COLORS["truth"], lw=0.8)
@@ -197,24 +202,35 @@ spec_free = ParamSpec(
     mean_sfh_type=["tsnorm", "field"],
     n_grid=128,
 )
-model_free = Model(spec_free, ssp_data, filters=filters)
-model_free.precompute_spectroscopy(WAVE_OBS)
+model_free = Model(spec_free, ssp_data, observation=obs)
 
 individual_results = []
 print("Fitting individual galaxies (PSD free)...")
 for i in range(min(4, N_GAL)):
     fitter_i = Fitter(
-        model_free, galaxies_spec[i]["flux_obs"], galaxies_spec[i]["noise"],
-        data_type="spectroscopy",
+        model_free,
+        galaxies_spec[i]["flux_obs"],
+        galaxies_spec[i]["noise"],
     )
+    t0_c = time.perf_counter()
+    fitter_i.compile(verbose=False)
+    t_compile = time.perf_counter() - t0_c
+    t0 = time.perf_counter()
     res_i = fitter_i.run(
-        "native_geovi", n_iterations=15, n_samples=6, n_seeds=3,
-        n_posterior_samples=500, verbose=False,
+        "native_geovi",
+        n_iterations=15,
+        n_samples=6,
+        n_seeds=3,
+        n_posterior_samples=500,
+        verbose=False,
     )
+    t_run = time.perf_counter() - t0
     individual_results.append(res_i)
     sig_med = float(jnp.median(res_i.samples["sfh_field_psd_sigma"]))
     tau_med = float(jnp.median(res_i.samples["sfh_field_psd_tau_myr"]))
-    print(f"  Galaxy {i}: σ = {sig_med:.2f}, τ = {tau_med:.0f} Myr  ({res_i.wall_time_s:.1f}s)")
+    print(f"  Galaxy {i}: σ = {sig_med:.2f}, τ = {tau_med:.0f} Myr")
+    print(f"    XLA compile: {t_compile:.1f}s (one-time, cached)")
+    print(f"    native_geovi: {t_run:.1f}s <- runtime per galaxy")
 
 # %%
 # --- FIGURE 2: Individual PSD posteriors (wide, overlapping) ---
@@ -250,7 +266,8 @@ plt.show()
 print(f"\nHierarchical fit: {N_GAL} galaxies (spectroscopy)...")
 t0 = time.perf_counter()
 hfitter_spec = HierarchicalFitter(
-    model_factory, galaxies_spec,
+    model_factory,
+    galaxies_spec,
     psd_sigma_prior=(0.1, 4.0),
     psd_tau_prior=(1.0, 300.0),
     data_type="spectroscopy",
@@ -268,8 +285,12 @@ t_hier_spec = time.perf_counter() - t0
 
 sig_spec = np.array(result_hier_spec.shared_samples["psd_sigma"])
 tau_spec = np.array(result_hier_spec.shared_samples["psd_tau_myr"])
-print(f"  σ_PS = {np.median(sig_spec):.2f} [{np.percentile(sig_spec, 16):.2f}, {np.percentile(sig_spec, 84):.2f}]")
-print(f"  τ_PS = {np.median(tau_spec):.0f} [{np.percentile(tau_spec, 16):.0f}, {np.percentile(tau_spec, 84):.0f}] Myr")
+print(
+    f"  σ_PS = {np.median(sig_spec):.2f} [{np.percentile(sig_spec, 16):.2f}, {np.percentile(sig_spec, 84):.2f}]"
+)
+print(
+    f"  τ_PS = {np.median(tau_spec):.0f} [{np.percentile(tau_spec, 16):.0f}, {np.percentile(tau_spec, 84):.0f}] Myr"
+)
 print(f"  Wall time: {t_hier_spec:.1f}s")
 
 # %%
@@ -284,8 +305,12 @@ for i, res in enumerate(individual_results):
     ax_tau.hist(tau_s, bins=30, alpha=0.15, density=True, color="grey")
 
 # Hierarchical (bold)
-ax_sig.hist(sig_spec, bins=40, alpha=0.7, density=True, color=COLORS["geovi"], label="Hierarchical")
-ax_tau.hist(tau_spec, bins=40, alpha=0.7, density=True, color=COLORS["geovi"], label="Hierarchical")
+ax_sig.hist(
+    sig_spec, bins=40, alpha=0.7, density=True, color=COLORS["geovi"], label="Hierarchical"
+)
+ax_tau.hist(
+    tau_spec, bins=40, alpha=0.7, density=True, color=COLORS["geovi"], label="Hierarchical"
+)
 
 ax_sig.axvline(TRUE_SIGMA, color=COLORS["truth"], lw=2, ls="--", label="Truth")
 ax_tau.axvline(TRUE_TAU, color=COLORS["truth"], lw=2, ls="--", label="Truth")
@@ -296,7 +321,9 @@ ax_sig.legend(fontsize=8)
 ax_tau.legend(fontsize=8)
 fig.suptitle(f"Hierarchical (N = {N_GAL}) vs Individual — spectroscopy", fontsize=11)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "fig03_hierarchical_vs_individual.png"), dpi=150, bbox_inches="tight")
+plt.savefig(
+    os.path.join(FIGDIR, "fig03_hierarchical_vs_individual.png"), dpi=150, bbox_inches="tight"
+)
 plt.show()
 
 # %% [markdown]
@@ -307,7 +334,8 @@ plt.show()
 print(f"\nHierarchical fit: {N_GAL} galaxies (photometry)...")
 t0 = time.perf_counter()
 hfitter_phot = HierarchicalFitter(
-    model_factory, galaxies_phot,
+    model_factory,
+    galaxies_phot,
     psd_sigma_prior=(0.1, 4.0),
     psd_tau_prior=(1.0, 300.0),
     data_type="photometry",
@@ -325,8 +353,12 @@ t_hier_phot = time.perf_counter() - t0
 
 sig_phot = np.array(result_hier_phot.shared_samples["psd_sigma"])
 tau_phot = np.array(result_hier_phot.shared_samples["psd_tau_myr"])
-print(f"  σ_PS = {np.median(sig_phot):.2f} [{np.percentile(sig_phot, 16):.2f}, {np.percentile(sig_phot, 84):.2f}]")
-print(f"  τ_PS = {np.median(tau_phot):.0f} [{np.percentile(tau_phot, 16):.0f}, {np.percentile(tau_phot, 84):.0f}] Myr")
+print(
+    f"  σ_PS = {np.median(sig_phot):.2f} [{np.percentile(sig_phot, 16):.2f}, {np.percentile(sig_phot, 84):.2f}]"
+)
+print(
+    f"  τ_PS = {np.median(tau_phot):.0f} [{np.percentile(tau_phot, 16):.0f}, {np.percentile(tau_phot, 84):.0f}] Myr"
+)
 print(f"  Wall time: {t_hier_phot:.1f}s")
 
 # %%
@@ -369,15 +401,21 @@ print("  " + "-" * 55)
 for n in N_VALUES:
     gals_sub = galaxies_spec[:n]
     hf = HierarchicalFitter(
-        model_factory, gals_sub,
+        model_factory,
+        gals_sub,
         psd_sigma_prior=(0.1, 4.0),
         psd_tau_prior=(1.0, 300.0),
         data_type="spectroscopy",
     )
     t0 = time.perf_counter()
     res = hf.run(
-        "evi", n_iterations=50, n_samples=6, n_posterior_samples=500,
-        n_seeds=10, verbose=False, key=jax.random.PRNGKey(n),
+        "evi",
+        n_iterations=50,
+        n_samples=6,
+        n_posterior_samples=500,
+        n_seeds=10,
+        verbose=False,
+        key=jax.random.PRNGKey(n),
     )
     dt = time.perf_counter() - t0
 
@@ -389,8 +427,10 @@ for n in N_VALUES:
     sigma_widths.append(sw)
     tau_widths.append(tw)
 
-    print(f"  {n:>2d}   {np.median(sig_s):>5.2f}   {sw:>7.2f}   "
-          f"{np.median(tau_s):>5.0f}   {tw:>7.0f}   {dt:>5.1f}s")
+    print(
+        f"  {n:>2d}   {np.median(sig_s):>5.2f}   {sw:>7.2f}   "
+        f"{np.median(tau_s):>5.0f}   {tw:>7.0f}   {dt:>5.1f}s"
+    )
 
 # %%
 # --- FIGURE 5: CI width vs N with 1/sqrt(N) reference ---
@@ -398,7 +438,9 @@ ns = np.array(N_VALUES, dtype=float)
 sigma_widths = np.array(sigma_widths)
 
 fig, ax = plt.subplots(figsize=(6, 4))
-ax.scatter(ns, sigma_widths, s=60, color=COLORS["geovi"], zorder=3, label=r"$\sigma_{\rm PS}$ 68% width")
+ax.scatter(
+    ns, sigma_widths, s=60, color=COLORS["geovi"], zorder=3, label=r"$\sigma_{\rm PS}$ 68% width"
+)
 
 # 1/sqrt(N) reference
 n_ref = np.linspace(1.5, 12, 50)
@@ -444,21 +486,31 @@ for pop_name, cfg in POP_CONFIGS.items():
 
     # Hierarchical fit
     hf = HierarchicalFitter(
-        model_factory, gals,
+        model_factory,
+        gals,
         psd_sigma_prior=(0.1, 4.0),
         psd_tau_prior=(1.0, 300.0),
         data_type="spectroscopy",
     )
     res = hf.run(
-        "evi", n_iterations=50, n_samples=6, n_posterior_samples=500,
-        n_seeds=10, verbose=False, key=jax.random.PRNGKey(abs(hash(pop_name)) % 2**31),
+        "evi",
+        n_iterations=50,
+        n_samples=6,
+        n_posterior_samples=500,
+        n_seeds=10,
+        verbose=False,
+        key=jax.random.PRNGKey(abs(hash(pop_name)) % 2**31),
     )
     pop_results[pop_name] = res
 
     sig_s = np.array(res.shared_samples["psd_sigma"])
     tau_s = np.array(res.shared_samples["psd_tau_myr"])
-    print(f"  Recovered: σ = {np.median(sig_s):.2f} [{np.percentile(sig_s, 16):.2f}, {np.percentile(sig_s, 84):.2f}]")
-    print(f"             τ = {np.median(tau_s):.0f} [{np.percentile(tau_s, 16):.0f}, {np.percentile(tau_s, 84):.0f}] Myr")
+    print(
+        f"  Recovered: σ = {np.median(sig_s):.2f} [{np.percentile(sig_s, 16):.2f}, {np.percentile(sig_s, 84):.2f}]"
+    )
+    print(
+        f"             τ = {np.median(tau_s):.0f} [{np.percentile(tau_s, 16):.0f}, {np.percentile(tau_s, 84):.0f}] Myr"
+    )
 
 # %%
 # --- FIGURE 6: Population distinction ---
@@ -473,10 +525,15 @@ for pop_name, res in pop_results.items():
     sig_lo, sig_hi = np.percentile(sig_s, [16, 84])
     tau_lo, tau_hi = np.percentile(tau_s, [16, 84])
     from matplotlib.patches import Ellipse
+
     ell = Ellipse(
         (np.median(tau_s), np.median(sig_s)),
-        width=(tau_hi - tau_lo), height=(sig_hi - sig_lo),
-        facecolor="none", edgecolor=pop_colors[pop_name], lw=2, label=pop_name,
+        width=(tau_hi - tau_lo),
+        height=(sig_hi - sig_lo),
+        facecolor="none",
+        edgecolor=pop_colors[pop_name],
+        lw=2,
+        label=pop_name,
     )
     ax.add_patch(ell)
 
@@ -518,6 +575,108 @@ for i, ax in enumerate(axes.flat):
 fig.suptitle("SFH Recovery (Hierarchical, 4 example galaxies)", fontsize=11)
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig07_hierarchical_sfh.png"), dpi=150, bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ## Convergence Diagnostics
+
+# %%
+# Convergence table for individual fits
+indiv_dict = {f"Galaxy {i}": r for i, r in enumerate(individual_results)}
+convergence_table(indiv_dict)
+
+# %%
+# PSD recovery table: individual vs hierarchical
+print(
+    f"\n{'Method':<20s} {'sig_true':>8s} {'sig_med':>8s} {'sig_16':>8s} "
+    f"{'sig_84':>8s} {'tau_true':>8s} {'tau_med':>8s} {'tau_16':>8s} {'tau_84':>8s}"
+)
+print("-" * 88)
+for i, res in enumerate(individual_results):
+    sig_s = np.array(res.samples["sfh_field_psd_sigma"])
+    tau_s = np.array(res.samples["sfh_field_psd_tau_myr"])
+    print(
+        f"{'Individual ' + str(i):<20s} {TRUE_SIGMA:>8.2f} {np.median(sig_s):>8.2f} "
+        f"{np.percentile(sig_s, 16):>8.2f} {np.percentile(sig_s, 84):>8.2f} "
+        f"{TRUE_TAU:>8.1f} {np.median(tau_s):>8.1f} "
+        f"{np.percentile(tau_s, 16):>8.1f} {np.percentile(tau_s, 84):>8.1f}"
+    )
+
+print(
+    f"{'Hier (spec)':<20s} {TRUE_SIGMA:>8.2f} {np.median(sig_spec):>8.2f} "
+    f"{np.percentile(sig_spec, 16):>8.2f} {np.percentile(sig_spec, 84):>8.2f} "
+    f"{TRUE_TAU:>8.1f} {np.median(tau_spec):>8.1f} "
+    f"{np.percentile(tau_spec, 16):>8.1f} {np.percentile(tau_spec, 84):>8.1f}"
+)
+
+print(
+    f"{'Hier (phot)':<20s} {TRUE_SIGMA:>8.2f} {np.median(sig_phot):>8.2f} "
+    f"{np.percentile(sig_phot, 16):>8.2f} {np.percentile(sig_phot, 84):>8.2f} "
+    f"{TRUE_TAU:>8.1f} {np.median(tau_phot):>8.1f} "
+    f"{np.percentile(tau_phot, 16):>8.1f} {np.percentile(tau_phot, 84):>8.1f}"
+)
+
+# %%
+# --- FIGURE 8: Posterior predictive photometry (4 galaxies, 2x2) ---
+fig, axes = plt.subplots(2, 2, figsize=(10, 7))
+filter_names = ["u", "g", "r", "i", "z"]
+band_idx = np.arange(len(filter_names))
+
+for i, ax in enumerate(axes.flat):
+    if i >= min(4, N_GAL):
+        ax.set_visible(False)
+        continue
+    # Observed photometry
+    phot_obs = np.array(galaxies_phot[i]["flux_obs"])
+    phot_noise = np.array(galaxies_phot[i]["noise"])
+    ax.errorbar(
+        band_idx,
+        phot_obs,
+        yerr=phot_noise,
+        fmt="o",
+        ms=6,
+        color=COLORS["data"],
+        label="Observed",
+        zorder=5,
+    )
+
+    # True photometry
+    phot_true = np.array(model_gen.predict_photometry(true_params_all[i]))
+    ax.plot(
+        band_idx,
+        phot_true,
+        "s",
+        ms=8,
+        mfc="none",
+        mec=COLORS["truth"],
+        mew=1.5,
+        label="Truth",
+        zorder=4,
+    )
+
+    # Posterior draws from individual fits (if available)
+    if i < len(individual_results):
+        res_i = individual_results[i]
+        n_draw = min(30, len(next(iter(res_i.samples.values()))))
+        for j in range(n_draw):
+            p_j = {k: v[j] for k, v in res_i.samples.items()}
+            phot_j = np.array(model_free.predict_photometry(p_j))
+            ax.plot(band_idx, phot_j, ".", ms=2, color=COLORS["geovi"], alpha=0.15)
+        # Dummy for legend
+        ax.plot([], [], ".", ms=5, color=COLORS["geovi"], label="Posterior draws")
+
+    ax.set_xticks(band_idx)
+    ax.set_xticklabels(filter_names)
+    ax.set_ylabel("Flux")
+    ax.set_title(f"Galaxy {i}", fontsize=9)
+    if i == 0:
+        ax.legend(fontsize=7)
+
+fig.suptitle("Posterior Predictive Photometry (4 example galaxies)", fontsize=11)
+fig.tight_layout()
+plt.savefig(
+    os.path.join(FIGDIR, "fig08_posterior_predictive_phot.png"), dpi=150, bbox_inches="tight"
+)
 plt.show()
 
 # %% [markdown]

@@ -21,16 +21,16 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import (
-    setup_matplotlib, FIG_DIR, PAPER_FIG_DIR, PSD_REGIMES, get_ssp, get_filters,
+    setup_matplotlib, FIG_DIR, PAPER_FIG_DIR, PSD_REGIMES, get_ssp, get_observation,
 )
 
 from tengri import (
-    Model, ParamSpec, Uniform, HierarchicalFitter,
-    load_ssp_data, load_filter_set,
+    Model, Observation, ParamSpec, Photometry, Uniform, HierarchicalFitter,
+    load_ssp_data,
 )
 
 
-def make_model_factory(ssp, filters):
+def make_model_factory(ssp, obs):
     """Create a model factory that accepts PSD params."""
     def factory(psd_sigma, psd_tau_myr):
         spec = ParamSpec(
@@ -48,7 +48,7 @@ def make_model_factory(ssp, filters):
             stochastic=True,
             n_grid=64,
         )
-        return Model(spec, ssp, filters=filters)
+        return Model(spec, ssp, observation=obs)
     return factory
 
 
@@ -245,8 +245,8 @@ def main():
     args = parser.parse_args()
 
     ssp = get_ssp()
-    filters = get_filters()
-    model_factory = make_model_factory(ssp, filters)
+    obs = get_observation()
+    model_factory = make_model_factory(ssp, obs)
 
     key = jax.random.PRNGKey(7)
 

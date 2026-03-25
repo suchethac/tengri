@@ -14,7 +14,7 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Model, ParamSpec, Uniform, load_filter_set, load_ssp_data
+from tengri import Fixed, Model, Observation, ParamSpec, Photometry, Uniform, load_ssp_data
 from tengri.models.sfh.mean_sfh import _clamp_age, _skewed_gaussian_kernel, tsnorm
 
 
@@ -32,7 +32,7 @@ def bench(fn, n=500, warmup=5):
 
 
 ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
 
 # ---------------------------------------------------------------
 # 1. Standalone: JIT vs non-JIT
@@ -153,7 +153,7 @@ with warnings.catch_warnings():
         dust_slope=Fixed(-0.7),
         redshift=Fixed(0.1),
     )
-    model_dpl = Model(spec_dpl, ssp, filters=filters, precompute=True)
+    model_dpl = Model(spec_dpl, ssp, observation=obs, precompute=True)
     par_dpl = spec_dpl.sample(jax.random.PRNGKey(42))
 
     spec_tsn = ParamSpec(
@@ -168,7 +168,7 @@ with warnings.catch_warnings():
         dust_slope=Fixed(-0.7),
         redshift=Fixed(0.1),
     )
-    model_tsn = Model(spec_tsn, ssp, filters=filters, precompute=True)
+    model_tsn = Model(spec_tsn, ssp, observation=obs, precompute=True)
     par_tsn = spec_tsn.sample(jax.random.PRNGKey(42))
 
     # Also stochastic versions (D~137)
@@ -185,7 +185,7 @@ with warnings.catch_warnings():
         dust_slope=Fixed(-0.7),
         redshift=Fixed(0.1),
     )
-    model_dpl_s = Model(spec_dpl_stoch, ssp, filters=filters, precompute=True)
+    model_dpl_s = Model(spec_dpl_stoch, ssp, observation=obs, precompute=True)
     par_dpl_s = spec_dpl_stoch.sample(jax.random.PRNGKey(42))
 
     spec_tsn_stoch = ParamSpec(
@@ -202,7 +202,7 @@ with warnings.catch_warnings():
         dust_slope=Fixed(-0.7),
         redshift=Fixed(0.1),
     )
-    model_tsn_s = Model(spec_tsn_stoch, ssp, filters=filters, precompute=True)
+    model_tsn_s = Model(spec_tsn_stoch, ssp, observation=obs, precompute=True)
     par_tsn_s = spec_tsn_stoch.sample(jax.random.PRNGKey(42))
 
 configs = [

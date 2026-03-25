@@ -36,13 +36,15 @@ from tengri import (
     Fitter,
     Fixed,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     Uniform,
-    load_filter_set,
     load_ssp_data,
 )
 
 import sys, os  # noqa: E401, E402
+
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
@@ -63,15 +65,15 @@ elif os.path.exists(os.path.join("..", "..", "..", "data")):
 FIGDIR = os.path.join("demonstrations", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
-from _plot_style import COLORS, setup_style  # noqa: E402
+from _plot_style import COLORS, convergence_table, setup_style  # noqa: E402
 
 setup_style()
 
 # %%
-ssp_data = load_ssp_data(
-    "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
 )
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 
 spec = ParamSpec(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
@@ -86,7 +88,7 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model = Model(spec, ssp_data, filters=filters)
+model = Model(spec, ssp_data, observation=obs)
 
 # %%
 # Generate 100 diverse mock galaxies
@@ -101,7 +103,7 @@ for i in range(N_CAT):
     m = model.mock(p_i, snr=20.0, key=jax.random.fold_in(jax.random.PRNGKey(0), i))
     mocks.append(m)
 
-print(f"Generated {N_CAT} mock galaxies, {len(filters)} bands, SNR = 20")
+print(f"Generated {N_CAT} mock galaxies, {obs.n_data} bands, SNR = 20")
 
 # %%
 # --- FIGURE 1: Color–color diagram of mock catalog ---
@@ -121,17 +123,30 @@ plt.show()
 
 # %%
 # Single galaxy fit — baseline timing
-fitter_single = Fitter(model, mocks[0].flux_obs, mocks[0].noise, data_type="photometry")
-fitter_single.compile(verbose=False)  # pre-compile (not timed)
+fitter_single = Fitter(model, mocks[0].flux_obs, mocks[0].noise)
+
+t0_compile = time.perf_counter()
+fitter_single.compile(verbose=False)
+t_compile = time.perf_counter() - t0_compile
+
+_ = fitter_single.run("map", n_steps=300, verbose=False)
 
 t0 = time.perf_counter()
-_ = fitter_single.run("map", n_steps=300, verbose=False)
 res_single = fitter_single.run(
-    "native_geovi", n_iterations=8, n_samples=6, n_seeds=3,
-    n_posterior_samples=500, verbose=False,
+    "native_geovi",
+    n_iterations=8,
+    n_samples=6,
+    n_seeds=3,
+    n_posterior_samples=500,
+    verbose=False,
 )
 t_single = time.perf_counter() - t0
-print(f"Single galaxy fit: {t_single:.1f}s")
+print(f"XLA compile: {t_compile:.1f}s (one-time, cached on disk)")
+print(f"native_geovi: {t_single:.1f}s <- runtime per galaxy")
+
+# %%
+# Convergence diagnostics — single galaxy example
+print(convergence_table({"geoVI": res_single}, verbose=True))
 
 # %%
 # Batch fit: time N=5, 10
@@ -143,12 +158,12 @@ for n in batch_sizes:
     t0 = time.perf_counter()
     results = []
     for i in range(n):
-        fitter_i = Fitter(model, mocks[i].flux_obs, mocks[i].noise, data_type="photometry")
+        fitter_i = Fitter(model, mocks[i].flux_obs, mocks[i].noise)
         res_i = fitter_i.run("map", n_steps=500, verbose=False)
         results.append(res_i)
     dt = time.perf_counter() - t0
     batch_times[n] = dt
-    print(f"  N = {n:>3d}: {dt:.1f}s total, {dt/n:.2f}s/galaxy")
+    print(f"  N = {n:>3d}: {dt:.1f}s total, {dt / n:.2f}s/galaxy")
 
 # %%
 # --- FIGURE 2: Wall time vs catalog size ---
@@ -170,34 +185,64 @@ plt.savefig(os.path.join(FIGDIR, "fig02_scaling.png"), dpi=150, bbox_inches="tig
 plt.show()
 
 # %%
-# --- FIGURE 3: Recovered vs true (2×3 grid) ---
-# Use MAP results for quick comparison
+# --- FIGURE 3: Recovered vs true (2x3 grid) ---
+# Use native_geovi for posteriors with error bars
 quick_results = []
 for i in range(min(10, N_CAT)):
-    fitter_i = Fitter(model, mocks[i].flux_obs, mocks[i].noise, data_type="photometry")
-    res_i = fitter_i.run("map", n_steps=500, verbose=False)
+    fitter_i = Fitter(model, mocks[i].flux_obs, mocks[i].noise)
+    _ = fitter_i.run("map", n_steps=500, verbose=False)
+    res_i = fitter_i.run(
+        "native_geovi",
+        n_iterations=8,
+        n_samples=6,
+        n_seeds=3,
+        n_posterior_samples=500,
+        verbose=False,
+    )
     quick_results.append(res_i)
 
 params_to_check = [
-    "sfh_tsnorm_log_peak_sfr", "sfh_tsnorm_peak_lbt_gyr",
-    "sfh_tsnorm_width_gyr", "met_logzsol",
-    "dust_tau_bc", "dust_tau_diff",
+    "sfh_tsnorm_log_peak_sfr",
+    "sfh_tsnorm_peak_lbt_gyr",
+    "sfh_tsnorm_width_gyr",
+    "met_logzsol",
+    "dust_tau_bc",
+    "dust_tau_diff",
 ]
-labels = ["log peak SFR", "peak LBT [Gyr]", "width [Gyr]", "log Z/Z☉", "τ_BC", "τ_diff"]
+labels = ["log peak SFR", "peak LBT [Gyr]", "width [Gyr]", "log Z/Z☉", "tau_BC", "tau_diff"]
 
 fig, axes = plt.subplots(2, 3, figsize=(14, 8))
 for ax, pname, label in zip(axes.flat, params_to_check, labels):
     true_vals = np.array([float(true_params_all[pname][i]) for i in range(len(quick_results))])
-    rec_vals = np.array([float(r.params[pname]) for r in quick_results])
+    med_vals = np.array([float(np.median(r.samples[pname])) for r in quick_results])
+    lo_vals = np.array([float(np.percentile(r.samples[pname], 16)) for r in quick_results])
+    hi_vals = np.array([float(np.percentile(r.samples[pname], 84)) for r in quick_results])
 
-    ax.scatter(true_vals, rec_vals, s=10, alpha=0.6, color=COLORS["geovi"])
-    lim = [min(true_vals.min(), rec_vals.min()), max(true_vals.max(), rec_vals.max())]
+    ax.errorbar(
+        true_vals,
+        med_vals,
+        yerr=[med_vals - lo_vals, hi_vals - med_vals],
+        fmt="o",
+        ms=4,
+        alpha=0.7,
+        color=COLORS["geovi"],
+        ecolor=COLORS["geovi"],
+        elinewidth=1,
+        capsize=2,
+    )
+    lim = [
+        min(true_vals.min(), lo_vals.min()),
+        max(true_vals.max(), hi_vals.max()),
+    ]
     ax.plot(lim, lim, "k--", lw=0.8)
     ax.set_xlabel(f"True {label}")
     ax.set_ylabel(f"Recovered {label}")
     ax.set_title(label)
 
-fig.suptitle(f"Parameter Recovery ({len(quick_results)} galaxies, MAP)", fontsize=11)
+fig.suptitle(
+    f"Parameter Recovery ({len(quick_results)} galaxies, native_geovi, 68% CI)",
+    fontsize=11,
+)
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig03_recovered_vs_true.png"), dpi=150, bbox_inches="tight")
 plt.show()

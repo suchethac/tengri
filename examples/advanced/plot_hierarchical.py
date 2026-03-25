@@ -20,9 +20,10 @@ from tengri import (
     Fixed,
     HierarchicalFitter,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     Uniform,
-    load_filter_set,
     load_ssp_data,
     setup_style,
 )
@@ -43,17 +44,11 @@ def _find_ssp():
 
 SSP_PATH = _find_ssp()
 
-# Locate filter cache
-_FILTER_DIR = next(
-    (str(d) for d in [Path("data/filters"), Path("../data/filters"),
-     Path("../../data/filters"), Path("../../../data/filters")] if d.exists()),
-    "data/filters",
-)
 if SSP_PATH is None:
     raise FileNotFoundError("SSP data not found — skipping example")
 
 ssp = load_ssp_data(SSP_PATH)
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"], cache_dir=_FILTER_DIR)
+obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
 
 # --- True shared PSD ---
 TRUE_SIGMA = 2.0
@@ -79,7 +74,7 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         mean_sfh_type=["tsnorm", "field"],
         n_grid=128,
     )
-    return Model(spec, ssp, filters=filters)
+    return Model(spec, ssp, observation=obs)
 
 
 # --- Generate mock galaxies ---
@@ -99,7 +94,6 @@ hfitter = HierarchicalFitter(
     galaxies,
     psd_sigma_prior=(0.1, 4.0),
     psd_tau_prior=(1.0, 300.0),
-    data_type="photometry",
 )
 
 t0 = time.perf_counter()

@@ -24,6 +24,7 @@
 # emission line treatment.
 
 # %%
+import time
 import warnings
 
 import jax
@@ -38,13 +39,16 @@ from tengri import (
     Fitter,
     Fixed,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
+    SpectroscopyConfig,
     Uniform,
-    load_filter_set,
     load_ssp_data,
 )
 
 import sys, os  # noqa: E401, E402
+
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
@@ -65,15 +69,18 @@ elif os.path.exists(os.path.join("..", "..", "..", "data")):
 FIGDIR = os.path.join("demonstrations", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
-from _plot_style import COLORS, plot_sfh, safe_corner, setup_style  # noqa: E402
+from _plot_style import (  # noqa: E402
+    COLORS,
+    convergence_table,
+    plot_sfh,
+    safe_corner,
+    setup_style,
+)
 
 setup_style()
 
 # %%
-ssp_data = load_ssp_data(
-    "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-)
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 
 # %% [markdown]
 # ## Loading and Preparing Data
@@ -86,6 +93,11 @@ filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 # In practice: load from FITS file, trim wavelength, mask bad pixels
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 REDSHIFT = 0.05  # known spectroscopic redshift
+
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
+    spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS),
+)
 
 spec = ParamSpec(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
@@ -100,8 +112,7 @@ spec = ParamSpec(
     redshift=Fixed(REDSHIFT),
     mean_sfh_type="tsnorm",
 )
-model = Model(spec, ssp_data, filters=filters)
-model.precompute_spectroscopy(WAVE_OBS)
+model = Model(spec, ssp_data, observation=obs)
 
 # Generate a "real" galaxy (in practice, load from file)
 true_params = spec.sample(jax.random.PRNGKey(42))
@@ -110,20 +121,26 @@ true_params = {**true_params}
 true_params["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
 true_params["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
 true_params["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
-true_params["sfh_tsnorm_skew"] = jnp.array(-0.5)
+true_params["sfh_tsnorm_skew"] = jnp.array(0.3)
 true_params["sfh_tsnorm_trunc"] = jnp.array(2.0)
 mock = model.mock_spectrum(true_params, WAVE_OBS, snr=25.0, key=jax.random.PRNGKey(1))
 
 # This is your data:
-flux_obs = mock.flux_obs    # shape (200,)
-noise = mock.noise          # shape (200,), per-pixel uncertainties
+flux_obs = mock.flux_obs  # shape (200,)
+noise = mock.noise  # shape (200,), per-pixel uncertainties
 
 # %%
 # --- FIGURE 1: "Real" spectrum ---
 fig, ax = plt.subplots(figsize=(10, 3.5))
 ax.errorbar(
-    np.array(WAVE_OBS), np.array(flux_obs), yerr=np.array(noise),
-    fmt=".", ms=2, color=COLORS["data"], alpha=0.5, label="Observed",
+    np.array(WAVE_OBS),
+    np.array(flux_obs),
+    yerr=np.array(noise),
+    fmt=".",
+    ms=2,
+    color=COLORS["data"],
+    alpha=0.5,
+    label="Observed",
 )
 ax.set_xlabel("Observed wavelength [Å]")
 ax.set_ylabel("Flux density")
@@ -137,17 +154,27 @@ plt.show()
 # ## Fitting
 
 # %%
-fitter = Fitter(model, flux_obs, noise, data_type="spectroscopy")
+fitter = Fitter(model, flux_obs, noise)
 
 # MAP initialization
 result_map = fitter.run("map", n_steps=500, verbose=False)
 
-# native_geovi inference
+# Compile + run native_geovi with timing separation
+t0_c = time.perf_counter()
+fitter.compile(verbose=False)
+t_compile = time.perf_counter() - t0_c
+t0 = time.perf_counter()
 result = fitter.run(
-    "native_geovi", n_iterations=15, n_samples=6, n_seeds=5,
-    n_posterior_samples=5000, verbose=False,
+    "native_geovi",
+    n_iterations=15,
+    n_samples=6,
+    n_seeds=5,
+    n_posterior_samples=5000,
+    verbose=False,
 )
-print(f"Fit: {result.wall_time_s:.1f}s")
+t_run = time.perf_counter() - t0
+print(f"XLA compile: {t_compile:.1f}s (one-time, cached)")
+print(f"native_geovi: {t_run:.1f}s <- runtime per galaxy")
 
 # %%
 # --- FIGURE 2: Spectral fit ---
@@ -163,8 +190,9 @@ fig, (ax_f, ax_r) = plt.subplots(
     2, 1, figsize=(10, 5), gridspec_kw={"height_ratios": [3, 1]}, sharex=True
 )
 w = np.array(WAVE_OBS)
-ax_f.errorbar(w, np.array(flux_obs), yerr=np.array(noise),
-              fmt=".", ms=2, color=COLORS["data"], alpha=0.4)
+ax_f.errorbar(
+    w, np.array(flux_obs), yerr=np.array(noise), fmt=".", ms=2, color=COLORS["data"], alpha=0.4
+)
 for d in draws[:30]:
     ax_f.plot(w, d, color=COLORS["geovi"], alpha=0.04, lw=0.5)
 ax_f.plot(w, med, color=COLORS["geovi"], lw=1.5, label="Posterior median")
@@ -183,6 +211,25 @@ chi2 = np.sum(res**2) / len(res)
 ax_f.set_title(f"Spectral Fit (reduced χ² = {chi2:.2f})")
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig02_spectral_fit.png"), dpi=150, bbox_inches="tight")
+plt.show()
+
+# %%
+convergence_table({"native_geovi": result})
+
+# %%
+# --- Residual distribution (should be ~N(0,1) if model adequate) ---
+residuals = (np.array(flux_obs) - med) / np.array(noise)
+fig, ax = plt.subplots(figsize=(6, 3))
+ax.hist(residuals, bins=30, density=True, alpha=0.7, color=COLORS["geovi"])
+x = np.linspace(-4, 4, 100)
+ax.plot(x, np.exp(-(x**2) / 2) / np.sqrt(2 * np.pi), "k--", lw=1.5, label="N(0,1)")
+ax.set_xlabel(r"Residual ($\sigma$)")
+ax.set_ylabel("Density")
+ax.legend()
+chi2_dof = float(np.mean(residuals**2))
+ax.set_title(f"Residual Distribution ($\\chi^2/N$ = {chi2_dof:.2f})")
+fig.tight_layout()
+plt.savefig(os.path.join(FIGDIR, "fig02b_residual_hist.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%

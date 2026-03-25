@@ -11,15 +11,16 @@ from tengri import (
     Fitter,
     Fixed,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     Uniform,
-    load_filter_set,
     load_ssp_data,
 )
 
 print("Loading SSP data and filters...")
 ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
 
 DUST_LAWS = ["power_law", "calzetti", "kriek_conroy", "smc", "cardelli", "salim"]
 
@@ -46,8 +47,8 @@ for law in DUST_LAWS:
         dust_law_diff=law,
     )
 
-    model_fused = Model(spec, ssp, filters=filters, precompute=True)
-    model_exact = Model(spec, ssp, filters=filters, precompute=False)
+    model_fused = Model(spec, ssp, observation=obs, precompute=True)
+    model_exact = Model(spec, ssp, observation=obs, precompute=False)
 
     key = jax.random.PRNGKey(42)
     params = spec.sample(key)
@@ -105,8 +106,8 @@ for law in DUST_LAWS:
         dust_law_diff=law,
     )
 
-    model_fused = Model(spec, ssp, filters=filters, precompute=True)
-    model_exact = Model(spec, ssp, filters=filters, precompute=False)
+    model_fused = Model(spec, ssp, observation=obs, precompute=True)
+    model_exact = Model(spec, ssp, observation=obs, precompute=False)
     params = spec.sample(jax.random.PRNGKey(42))
 
     _mf, _me = model_fused, model_exact  # bind for closure
@@ -155,10 +156,10 @@ for law in ["power_law", "calzetti", "kriek_conroy"]:
         dust_law_bc=law,
         dust_law_diff=law,
     )
-    model = Model(spec, ssp, filters=filters, precompute=True)
+    model = Model(spec, ssp, observation=obs, precompute=True)
     params = spec.sample(jax.random.PRNGKey(42))
     mock = model.mock(params, snr=20.0, key=jax.random.PRNGKey(0))
-    fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
+    fitter = Fitter(model, mock.flux_obs, mock.noise)
 
     t0 = time.perf_counter()
     result = fitter.run(
@@ -195,7 +196,7 @@ for f_obs_val in [0.0, 0.3]:
         dust_law_bc="calzetti",
         dust_law_diff="calzetti",
     )
-    model = Model(spec, ssp, filters=filters, precompute=True)
+    model = Model(spec, ssp, observation=obs, precompute=True)
     params = spec.sample(jax.random.PRNGKey(42))
 
     has_fused = model._fused_photometry is not None

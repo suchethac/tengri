@@ -15,7 +15,7 @@ from jax.flatten_util import ravel_pytree
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Model, ParamSpec, Uniform, load_filter_set, load_ssp_data
+from tengri import Fixed, Model, Observation, ParamSpec, Photometry, Uniform, load_ssp_data
 from tengri.utils.transforms import to_bounded, to_unbounded
 
 # ---------------------------------------------------------------------------
@@ -23,7 +23,7 @@ from tengri.utils.transforms import to_bounded, to_unbounded
 # ---------------------------------------------------------------------------
 
 ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
 
 
 def bench(fn, n=200, warmup=5):
@@ -61,7 +61,7 @@ spec = ParamSpec(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
 )
-model = Model(spec, ssp, filters=filters, precompute=True)
+model = Model(spec, ssp, observation=obs, precompute=True)
 key = jax.random.PRNGKey(0)
 params = spec.sample(key)
 

@@ -139,9 +139,9 @@ def main():
                             "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"))
 
     filter_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-    from tengri import load_filter_set
-    filters = load_filter_set(filter_names)
-    model = Model(spec, ssp, filters=filters)
+    from tengri import Observation, Photometry
+    obs = Observation(photometry=Photometry.from_names(filter_names))
+    model = Model(spec, ssp, observation=obs)
 
     # Evaluate at a specific point
     key = jax.random.PRNGKey(7)

@@ -25,23 +25,26 @@ ensemble. The constraint on shared parameters improves as sqrt(N).
 ## Usage
 
 ```python
-from tengri import Model, ParamSpec, HierarchicalFitter
+from tengri import Model, ParamSpec, HierarchicalFitter, Observation, Photometry
 import jax
+
+obs = Observation(photometry=Photometry.from_names(
+    ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+))
 
 spec = ParamSpec(
     redshift=0.1,
     sfh="field",
     dust=True,
-    filters=["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
 )
 
 ssp = ...  # load SSP data
 
 hfitter = HierarchicalFitter(
     model_factory=lambda sigma, tau: Model(
-        ParamSpec(redshift=0.1, sfh="field", dust=True,
-                  filters=["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
+        ParamSpec(redshift=0.1, sfh="field", dust=True),
         ssp,
+        observation=obs,
         psd_sigma=sigma,
         psd_tau_myr=tau,
     ),

@@ -38,9 +38,10 @@ from tengri import (
     Fitter,
     Fixed,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     Uniform,
-    load_filter_set,
     load_ssp_data,
 )
 
@@ -82,7 +83,7 @@ setup_style()
 ssp_data = load_ssp_data(
     "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 )
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
 print(
     f"SSP templates: {ssp_data.ssp_flux.shape[0]} metallicities × {ssp_data.ssp_flux.shape[1]} ages "
     f"× {ssp_data.ssp_flux.shape[-1]} wavelengths"
@@ -117,7 +118,7 @@ for name in spec_param.free_params:
 # %%
 # Create the model with spectroscopic precomputation
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)  # SDSS-like, 200 pixels
-model_param = Model(spec_param, ssp_data, filters=filters)
+model_param = Model(spec_param, ssp_data, observation=obs)
 model_param.precompute_spectroscopy(WAVE_OBS)
 print(f"Model created: {spec_param.n_free} free parameters, {len(WAVE_OBS)} spectral pixels")
 
@@ -150,7 +151,7 @@ true_params_param = {**true_params_param}
 true_params_param["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
 true_params_param["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
 true_params_param["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
-true_params_param["sfh_tsnorm_skew"] = jnp.array(-0.5)
+true_params_param["sfh_tsnorm_skew"] = jnp.array(0.3)
 true_params_param["sfh_tsnorm_trunc"] = jnp.array(2.0)
 mock_param = model_param.mock_spectrum(true_params_param, WAVE_OBS, snr=30.0, key=key)
 
@@ -210,15 +211,19 @@ plt.show()
 # %%
 # MAP initialization + native_geovi inference
 fitter_param = Fitter(
-    model_param, mock_param.flux_obs, mock_param.noise, data_type="spectroscopy"
+    model_param, mock_param.flux_obs, mock_param.noise,
 )
 
 t0 = time.perf_counter()
 result_map_param = fitter_param.run("map", n_steps=500, verbose=False)
 t_map = time.perf_counter() - t0
 
-fitter_param.compile(verbose=False)  # pre-compile (not timed)
+# XLA compilation (one-time cost, cached on disk for future sessions)
+t0_compile = time.perf_counter()
+fitter_param.compile(verbose=False)
+t_compile = time.perf_counter() - t0_compile
 
+# Inference runtime (this is what you pay per galaxy after compilation)
 t0 = time.perf_counter()
 result_geovi_param = fitter_param.run(
     "native_geovi",
@@ -230,7 +235,9 @@ result_geovi_param = fitter_param.run(
 )
 t_geovi = time.perf_counter() - t0
 
-print(f"MAP: {t_map:.1f}s  ·  native_geovi: {t_geovi:.1f}s  ·  Total: {t_map + t_geovi:.1f}s")
+print(f"XLA compile: {t_compile:.1f}s (one-time, cached)")
+print(f"MAP init:    {t_map:.1f}s")
+print(f"native_geovi: {t_geovi:.1f}s  ← runtime per galaxy")
 
 # %%
 # --- FIGURE 2: Spectral Fit ---
@@ -287,18 +294,36 @@ fig, ax = plt.subplots(figsize=(8, 4))
 plot_sfh(model_param, result_geovi_param, true_params=true_params_param, ax=ax,
          color=COLORS["geovi"], label="native_geovi", method="geoVI")
 ax.set_title("SFH Recovery — Parametric (D = 7)")
-# 200 Myr inset
+# 200 Myr inset — truth + posterior SFH draws
 sfh_true_param = model_param.predict_sfh(true_params_param)
 t_gyr_p = np.array(sfh_true_param["t_gyr"])
-sfr_p = np.array(sfh_true_param["sfr_mean"])
-inset = ax.inset_axes([0.6, 0.6, 0.35, 0.35])
+sfr_key_p = "sfr_full" if model_param.spec.stochastic else "sfr_mean"
+sfr_true_p = np.array(sfh_true_param[sfr_key_p])
+inset = ax.inset_axes([0.58, 0.58, 0.38, 0.38])
 mask_200 = t_gyr_p < 0.2
 if hasattr(t_gyr_p, "__len__") and np.any(mask_200):
-    inset.plot(t_gyr_p[mask_200] * 1e3, sfr_p[mask_200], color=COLORS["truth"], lw=1)
+    t_inset = t_gyr_p[mask_200] * 1e3  # Gyr → Myr
+    # Posterior SFH draws
+    if result_geovi_param.samples is not None:
+        n_samp = len(next(iter(result_geovi_param.samples.values())))
+        sfh_draws = []
+        for i in range(n_samp):
+            s_i = {k: result_geovi_param.samples[k][i] for k in result_geovi_param.samples}
+            sfh_draws.append(np.array(model_param.predict_sfh(s_i)[sfr_key_p])[mask_200])
+        sfh_arr = np.array(sfh_draws)
+        lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
+        median = np.median(sfh_arr, axis=0)
+        inset.fill_between(t_inset, lo, hi, color=COLORS["geovi"], alpha=0.3, lw=0)
+        inset.plot(t_inset, median, color=COLORS["geovi"], lw=1.2, label="Posterior")
+    else:
+        sfh_fit = model_param.predict_sfh(result_geovi_param.params)
+        inset.plot(t_inset, np.array(sfh_fit[sfr_key_p])[mask_200], color=COLORS["geovi"], lw=1.2, ls="--", label="MAP")
+    inset.plot(t_inset, sfr_true_p[mask_200], color=COLORS["truth"], lw=1.5, label="Truth")
     inset.set_xlabel("Lookback [Myr]", fontsize=6)
     inset.set_ylabel("SFR", fontsize=6)
     inset.tick_params(labelsize=5)
     inset.set_xlim(0, 200)
+    inset.legend(fontsize=5, loc="upper right")
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig03_sfh_param.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -336,6 +361,18 @@ print(f"NUTS: {t_nuts:.1f}s")
 ct = convergence_table(
     {"native_geovi": result_geovi_param, "NUTS": result_nuts_param}
 )
+
+# %% [markdown]
+# ### Parameter recovery
+
+# %%
+print(f"{'Parameter':<32s} {'True':>8s} {'Median':>8s} {'16%':>8s} {'84%':>8s} {'Status':>6s}")
+print("-" * 76)
+for name in spec_param.free_params:
+    truth = float(true_params_param[name])
+    lo, med, hi = np.percentile(result_geovi_param.samples[name], [16, 50, 84])
+    covered = "\u2713" if lo <= truth <= hi else "MISS"
+    print(f"  {name:<30s} {truth:8.3f} {med:8.3f} {lo:8.3f} {hi:8.3f} {covered:>6s}")
 
 # %%
 # --- FIGURE 5: native_geovi vs NUTS ---
@@ -411,7 +448,7 @@ print(f"  GP latent: {len([p for p in spec_stoch.free_params if 'xi' in p])}")
 
 # %%
 # Create stochastic model with spectroscopic precomputation
-model_stoch = Model(spec_stoch, ssp_data, filters=filters)
+model_stoch = Model(spec_stoch, ssp_data, observation=obs)
 model_stoch.precompute_spectroscopy(WAVE_OBS)
 
 # %%
@@ -423,7 +460,7 @@ true_params_stoch = {**true_params_stoch}
 true_params_stoch["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
 true_params_stoch["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
 true_params_stoch["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
-true_params_stoch["sfh_tsnorm_skew"] = jnp.array(-0.5)
+true_params_stoch["sfh_tsnorm_skew"] = jnp.array(0.3)
 true_params_stoch["sfh_tsnorm_trunc"] = jnp.array(2.0)
 true_params_stoch["sfh_field_psd_sigma"] = jnp.array(2.0)
 true_params_stoch["sfh_field_psd_tau_myr"] = jnp.array(20.0)
@@ -479,15 +516,19 @@ plt.show()
 # %%
 # MAP + native_geovi on the stochastic model
 fitter_stoch = Fitter(
-    model_stoch, mock_stoch.flux_obs, mock_stoch.noise, data_type="spectroscopy"
+    model_stoch, mock_stoch.flux_obs, mock_stoch.noise,
 )
 
 t0 = time.perf_counter()
 result_map_stoch = fitter_stoch.run("map", n_steps=1000, verbose=False)
 t_map_s = time.perf_counter() - t0
 
-fitter_stoch.compile(verbose=False)  # pre-compile (not timed)
+# XLA compilation (one-time cost, cached on disk)
+t0_compile_s = time.perf_counter()
+fitter_stoch.compile(verbose=False)
+t_compile_s = time.perf_counter() - t0_compile_s
 
+# Inference runtime
 t0 = time.perf_counter()
 result_geovi_stoch = fitter_stoch.run(
     "native_geovi",
@@ -499,10 +540,12 @@ result_geovi_stoch = fitter_stoch.run(
 )
 t_geovi_s = time.perf_counter() - t0
 
-print(f"\n{'=' * 50}")
-print(f"  137-dimensional posterior sampled in {t_geovi_s:.1f} seconds")
-print(f"{'=' * 50}")
-print(f"\n  MAP: {t_map_s:.1f}s  ·  native_geovi: {t_geovi_s:.1f}s  ·  Total: {t_map_s + t_geovi_s:.1f}s")
+print(f"\n{'=' * 55}")
+print(f"  137-dimensional posterior in {t_geovi_s:.1f}s runtime")
+print(f"{'=' * 55}")
+print(f"  XLA compile: {t_compile_s:.1f}s (one-time, cached)")
+print(f"  MAP init:    {t_map_s:.1f}s")
+print(f"  native_geovi: {t_geovi_s:.1f}s  ← runtime per galaxy")
 
 # %%
 # --- FIGURE 7: Stochastic SFH Recovery (THE MONEY FIGURE) ---
@@ -516,18 +559,35 @@ ax.set_title(
     f"Stochastic SFH Recovery — 137 parameters, {t_geovi_s:.1f}s",
     fontweight="bold",
 )
-# 200 Myr inset
+# 200 Myr inset — truth + posterior SFH draws
 sfh_true_s = model_stoch.predict_sfh(true_params_stoch)
 t_gyr_s = np.array(sfh_true_s["t_gyr"])
-sfr_full_s = np.array(sfh_true_s["sfr_full"])
-inset = ax.inset_axes([0.6, 0.6, 0.35, 0.35])
+sfr_key_s = "sfr_full"
+sfr_true_s = np.array(sfh_true_s[sfr_key_s])
+inset = ax.inset_axes([0.58, 0.58, 0.38, 0.38])
 mask_200 = t_gyr_s < 0.2
 if hasattr(t_gyr_s, "__len__") and np.any(mask_200):
-    inset.plot(t_gyr_s[mask_200] * 1e3, sfr_full_s[mask_200], color=COLORS["truth"], lw=1)
+    t_inset = t_gyr_s[mask_200] * 1e3
+    if result_geovi_stoch.samples is not None:
+        n_samp = len(next(iter(result_geovi_stoch.samples.values())))
+        sfh_draws = []
+        for i in range(n_samp):
+            s_i = {k: result_geovi_stoch.samples[k][i] for k in result_geovi_stoch.samples}
+            sfh_draws.append(np.array(model_stoch.predict_sfh(s_i)[sfr_key_s])[mask_200])
+        sfh_arr = np.array(sfh_draws)
+        lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
+        median = np.median(sfh_arr, axis=0)
+        inset.fill_between(t_inset, lo, hi, color=COLORS["geovi"], alpha=0.3, lw=0)
+        inset.plot(t_inset, median, color=COLORS["geovi"], lw=1.2, label="Posterior")
+    else:
+        sfh_fit = model_stoch.predict_sfh(result_geovi_stoch.params)
+        inset.plot(t_inset, np.array(sfh_fit[sfr_key_s])[mask_200], color=COLORS["geovi"], lw=1.2, ls="--", label="MAP")
+    inset.plot(t_inset, sfr_true_s[mask_200], color=COLORS["truth"], lw=1.5, label="Truth")
     inset.set_xlabel("Lookback [Myr]", fontsize=6)
     inset.set_ylabel("SFR", fontsize=6)
     inset.tick_params(labelsize=5)
     inset.set_xlim(0, 200)
+    inset.legend(fontsize=5, loc="upper right")
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig07_sfh_stochastic_money.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -600,8 +660,8 @@ result_rt_stoch = fitter_stoch.run(
     init_from=result_map_stoch,
     n_burnin=200,
     n_steps=2000,
-    step_size=0.005,
-    n_leapfrog_steps=200,
+    step_size=0.05,
+    n_leapfrog_steps=50,
     verbose=False,
 )
 t_rt_s = time.perf_counter() - t0
@@ -610,19 +670,75 @@ acc = result_rt_stoch.diagnostics.get("acceptance_rate", float("nan"))
 print(f"Ray Tracing: {t_rt_s:.1f}s, acceptance = {acc:.1%}")
 
 # %%
-# --- FIGURE 10: native_geovi vs Ray Tracing ---
-fig, (ax_g, ax_r) = plt.subplots(1, 2, figsize=(14, 4), sharey=True)
-plot_sfh(model_stoch, result_geovi_stoch, true_params=true_params_stoch,
-         ax=ax_g, color=COLORS["geovi"], label="native_geovi", method="geoVI",
-         show_mean_sfh=True)
-ax_g.set_title(f"native_geovi ({t_geovi_s:.1f}s)")
+# Convergence diagnostics for D=137 methods
+ct_stoch = convergence_table(
+    {"native_geovi": result_geovi_stoch, "Ray Tracing": result_rt_stoch}
+)
 
-plot_sfh(model_stoch, result_rt_stoch, true_params=true_params_stoch,
-         ax=ax_r, color=COLORS["rt"], label="Ray Tracing", method="RT",
-         show_mean_sfh=True)
-ax_r.set_title(f"Ray Tracing ({t_rt_s:.1f}s)")
+# %%
+# --- FIGURE 10: All methods on one plot ---
+fig, ax = plt.subplots(figsize=(10, 5))
 
-fig.suptitle("Stochastic SFH Recovery — native_geovi (approximate) vs Ray Tracing (exact)", fontsize=11)
+# Truth first — bold, on top
+sfh_true_cmp = model_stoch.predict_sfh(true_params_stoch)
+t_gyr_cmp = np.array(sfh_true_cmp["t_gyr"])
+ax.plot(t_gyr_cmp, sfh_true_cmp["sfr_full"], color=COLORS["truth"],
+        lw=3.0, zorder=10, label="Truth")
+ax.plot(t_gyr_cmp, sfh_true_cmp["sfr_mean"], color=COLORS["truth"],
+        lw=1.5, ls=":", alpha=0.4, zorder=10)
+
+# Overlay each method's posterior SFH as 68% CI band
+for result, color, label in [
+    (result_geovi_stoch, COLORS["geovi"], f"native_geovi ({t_geovi_s:.1f}s)"),
+    (result_rt_stoch, COLORS["rt"], f"Ray Tracing ({t_rt_s:.1f}s)"),
+]:
+    if result.samples is not None:
+        n_samp = len(next(iter(result.samples.values())))
+        sfh_draws = []
+        for i in range(n_samp):
+            s_i = {k: result.samples[k][i] for k in result.samples}
+            sfh_draws.append(np.array(model_stoch.predict_sfh(s_i)["sfr_full"]))
+        sfh_arr = np.array(sfh_draws)
+        lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
+        median = np.median(sfh_arr, axis=0)
+        ax.fill_between(t_gyr_cmp, lo, hi, color=color, alpha=0.2, lw=0, label=f"{label} (68% CI)")
+        ax.plot(t_gyr_cmp, median, color=color, lw=1.5, zorder=5)
+
+ax.set_xlabel(r"$\mathrm{Lookback\ time\ /\ Gyr}$")
+ax.set_ylabel(r"$\mathrm{SFR\ /\ M_\odot\ yr^{-1}}$")
+ax.set_xlim(0, 13.5)
+ax.set_ylim(bottom=0.)
+ax.legend(loc="upper right")
+ax.set_title("Stochastic SFH Recovery — native_geovi vs Ray Tracing (D = 137)")
+
+# 200 Myr inset with both posteriors
+inset = ax.inset_axes([0.55, 0.55, 0.4, 0.4])
+mask_cmp = t_gyr_cmp < 0.2
+if np.any(mask_cmp):
+    t_inset = t_gyr_cmp[mask_cmp] * 1e3
+    for result, color, label in [
+        (result_geovi_stoch, COLORS["geovi"], "geoVI"),
+        (result_rt_stoch, COLORS["rt"], "RT"),
+    ]:
+        if result.samples is not None:
+            n_samp = len(next(iter(result.samples.values())))
+            draws = []
+            for i in range(n_samp):
+                s_i = {k: result.samples[k][i] for k in result.samples}
+                draws.append(np.array(model_stoch.predict_sfh(s_i)["sfr_full"])[mask_cmp])
+            arr = np.array(draws)
+            lo, hi = np.percentile(arr, [16, 84], axis=0)
+            med = np.median(arr, axis=0)
+            inset.fill_between(t_inset, lo, hi, color=color, alpha=0.25, lw=0)
+            inset.plot(t_inset, med, color=color, lw=1.2, label=label)
+    inset.plot(t_inset, np.array(sfh_true_cmp["sfr_full"])[mask_cmp],
+               color=COLORS["truth"], lw=2.0, label="Truth")
+    inset.set_xlabel("Lookback [Myr]", fontsize=6)
+    inset.set_ylabel("SFR", fontsize=6)
+    inset.tick_params(labelsize=5)
+    inset.set_xlim(0, 200)
+    inset.legend(fontsize=5, loc="upper right")
+
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig10_geovi_vs_rt.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -633,15 +749,16 @@ plt.show()
 # %%
 # Summary timing table
 print("\n  Summary")
-print("  " + "=" * 65)
-print(f"  {'Model':<20s} {'D':>4s}  {'Method':<16s} {'Wall Clock':>10s}  Notes")
-print("  " + "-" * 65)
-print(f"  {'Parametric':<20s} {'7':>4s}  {'native_geovi':<16s} {t_geovi:>9.1f}s  Default")
-print(f"  {'Parametric':<20s} {'7':>4s}  {'NUTS':<16s} {t_nuts:>9.1f}s  Exact, gold standard")
-print(f"  {'Stochastic':<20s} {'137':>4s}  {'native_geovi':<16s} {t_geovi_s:>9.1f}s  Default")
-print(f"  {'Stochastic':<20s} {'137':>4s}  {'Ray Tracing':<16s} {t_rt_s:>9.1f}s  Exact (Behroozi 2025)")
-print("  " + "=" * 65)
-print(f"\n  Headline: 137D posterior in {t_geovi_s:.0f}s with native_geovi.")
+print("  " + "=" * 75)
+print(f"  {'Model':<20s} {'D':>4s}  {'Method':<16s} {'Compile':>8s} {'Runtime':>8s}  Notes")
+print("  " + "-" * 75)
+print(f"  {'Parametric':<20s} {'7':>4s}  {'native_geovi':<16s} {t_compile:>7.1f}s {t_geovi:>7.1f}s  Default")
+print(f"  {'Parametric':<20s} {'7':>4s}  {'NUTS':<16s} {'':>8s} {t_nuts:>7.1f}s  Exact, gold standard")
+print(f"  {'Stochastic':<20s} {'137':>4s}  {'native_geovi':<16s} {t_compile_s:>7.1f}s {t_geovi_s:>7.1f}s  Default")
+print(f"  {'Stochastic':<20s} {'137':>4s}  {'Ray Tracing':<16s} {'':>8s} {t_rt_s:>7.1f}s  Exact (Behroozi 2025)")
+print("  " + "=" * 75)
+print(f"\n  Compile is one-time (cached on disk). Runtime is per galaxy.")
+print(f"  Headline: 137D posterior in {t_geovi_s:.0f}s runtime with native_geovi.")
 
 # %% [markdown]
 # ## What You Just Did

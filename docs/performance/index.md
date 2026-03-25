@@ -9,6 +9,7 @@ and how to measure performance in your own setup.
 :maxdepth: 1
 
 benchmarks
+inference_comparison
 optimization
 profiling
 ```

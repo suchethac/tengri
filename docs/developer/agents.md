@@ -89,10 +89,12 @@ params = {
 ### Generate a mock galaxy SED
 
 ```python
-from tengri import Model, ParamSpec, Uniform, load_ssp_data, load_filter_set
+from tengri import Model, ParamSpec, Uniform, Observation, Photometry, load_ssp_data
 
 ssp = load_ssp_data("path/to/ssp_templates.h5")
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+obs = Observation(photometry=Photometry.from_names(
+    ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+))
 spec = ParamSpec(
     mean_sfh_type=["dpl", "field"],
     sfh_dpl_alpha=Uniform(0.5, 3.0),
@@ -103,7 +105,7 @@ spec = ParamSpec(
     sfh_field_psd_tau_myr=Uniform(10, 500),
     redshift=0.1,
 )
-model = Model(spec, ssp, filters=filters)
+model = Model(spec, ssp, observation=obs)
 params = spec.sample(jax.random.PRNGKey(0))
 mock = model.mock(params, snr=20.0, key=jax.random.PRNGKey(1))
 ```

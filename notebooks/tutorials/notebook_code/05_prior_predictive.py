@@ -35,9 +35,10 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fixed,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     Uniform,
-    load_filter_set,
     load_ssp_data,
 )
 
@@ -70,7 +71,7 @@ setup_style()
 ssp_data = load_ssp_data(
     "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 )
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 
 # %%
@@ -88,7 +89,7 @@ spec_good = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model_good = Model(spec_good, ssp_data, filters=filters)
+model_good = Model(spec_good, ssp_data, observation=obs)
 model_good.precompute_spectroscopy(WAVE_OBS)
 
 # %%
@@ -194,7 +195,7 @@ spec_bad = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model_bad = Model(spec_bad, ssp_data, filters=filters)
+model_bad = Model(spec_bad, ssp_data, observation=obs)
 model_bad.precompute_spectroscopy(WAVE_OBS)
 
 bad_spectra = []
@@ -260,7 +261,7 @@ spec_stoch = ParamSpec(
     mean_sfh_type=["tsnorm", "field"],
     n_grid=128,
 )
-model_stoch = Model(spec_stoch, ssp_data, filters=filters)
+model_stoch = Model(spec_stoch, ssp_data, observation=obs)
 
 # %%
 # --- FIGURE 5: Stochastic prior SFHs ---

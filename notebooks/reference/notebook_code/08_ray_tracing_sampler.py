@@ -47,9 +47,10 @@ from tengri import (
     Fitter,
     Fixed,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     Uniform,
-    load_filter_set,
     load_ssp_data,
 )
 
@@ -87,7 +88,9 @@ os.makedirs(FIGDIR, exist_ok=True)
 
 # %%
 ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+)
 
 # %% [markdown]
 # ## 1. Snell's Law Physics Analogy
@@ -186,7 +189,7 @@ spec_param = ParamSpec(
     redshift=Fixed(0.1),
 )
 
-model_param = Model(spec_param, ssp_data, filters=filters)
+model_param = Model(spec_param, ssp_data, observation=obs)
 truth_param = {
     "sfh_tsnorm_log_peak_sfr": 0.8,
     "sfh_tsnorm_peak_lbt_gyr": 4.0,
@@ -269,7 +272,7 @@ spec_stoch = ParamSpec(
     n_grid=128,
 )
 
-model_stoch = Model(spec_stoch, ssp_data, filters=filters)
+model_stoch = Model(spec_stoch, ssp_data, observation=obs)
 truth_stoch = {
     "sfh_tsnorm_log_peak_sfr": 0.8,
     "sfh_tsnorm_peak_lbt_gyr": 4.0,

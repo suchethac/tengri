@@ -19,9 +19,10 @@ jax.config.update("jax_enable_x64", True)
 from tengri import (
     Fixed,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     Uniform,
-    load_filter_set,
     load_ssp_data,
     setup_style,
 )
@@ -42,18 +43,12 @@ def _find_ssp():
 
 SSP_PATH = _find_ssp()
 
-# Locate filter cache
-_FILTER_DIR = next(
-    (str(d) for d in [Path("data/filters"), Path("../data/filters"),
-     Path("../../data/filters"), Path("../../../data/filters")] if d.exists()),
-    "data/filters",
-)
 if SSP_PATH is None:
     raise FileNotFoundError("SSP data not found — skipping example")
 
 ssp = load_ssp_data(SSP_PATH)
 bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-filters = load_filter_set(bands, cache_dir=_FILTER_DIR)
+obs = Observation(photometry=Photometry.from_names(bands))
 
 # --- Model ---
 spec = ParamSpec(
@@ -69,7 +64,7 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model = Model(spec, ssp, filters=filters)
+model = Model(spec, ssp, observation=obs)
 
 # --- Fiducial point ---
 fiducial = {

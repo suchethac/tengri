@@ -7,17 +7,24 @@ defaults used across all figure-generation scripts.
 from __future__ import annotations
 
 import time
-from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 from tengri import (
-    Model, ParamSpec, Uniform, Gaussian, Fixed, Fitter, Posterior,
-    load_ssp_data, load_filter_set,
+    Fitter,
+    Gaussian,
+    Model,
+    Observation,
+    ParamSpec,
+    Photometry,
+    Posterior,
+    Uniform,
+    load_filter_set,
+    load_ssp_data,
 )
 
 # ── Paths ──────────────────────────────────────────────────────────
@@ -39,10 +46,10 @@ PSD_REGIMES = {
 
 # ── Default SFH params (star-forming galaxy) ──────────────────────
 DEFAULT_SFH = dict(
-    sfh_alpha=Uniform(0.5, 3.0),
-    sfh_beta=Uniform(0.3, 2.0),
-    sfh_tau_peak_gyr=Uniform(1.0, 8.0),
-    sfh_peak_sfr=Uniform(1.0, 30.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.3, 2.0),
+    sfh_dpl_tau_gyr=Uniform(1.0, 8.0),
+    sfh_dpl_log_peak_sfr=Uniform(0.0, 1.5),
 )
 
 DEFAULT_SPS = dict(
@@ -85,13 +92,28 @@ def get_ssp():
 
 
 def get_filters(filter_names=None):
-    """Load filter set (cached)."""
+    """Load filter set (cached). Legacy — prefer get_observation()."""
     if filter_names is None:
         filter_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
     key = tuple(filter_names)
     if key not in _FILTER_CACHE:
         _FILTER_CACHE[key] = load_filter_set(filter_names)
     return _FILTER_CACHE[key]
+
+
+_OBS_CACHE = {}
+
+
+def get_observation(filter_names=None):
+    """Create an Observation with photometry (cached)."""
+    if filter_names is None:
+        filter_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+    key = tuple(filter_names)
+    if key not in _OBS_CACHE:
+        _OBS_CACHE[key] = Observation(
+            photometry=Photometry.from_names(list(filter_names))
+        )
+    return _OBS_CACHE[key]
 
 
 # ── Model factory ─────────────────────────────────────────────────
@@ -121,11 +143,11 @@ def make_model(psd_regime: str, redshift: float = 0.1,
     spec_kwargs = dict(**DEFAULT_SFH, **DEFAULT_SPS)
 
     if free_psd:
-        spec_kwargs["psd_sigma"] = Uniform(0.1, 4.0)
-        spec_kwargs["psd_tau_myr"] = Uniform(1.0, 300.0)
+        spec_kwargs["sfh_field_psd_sigma"] = Uniform(0.1, 4.0)
+        spec_kwargs["sfh_field_psd_tau_myr"] = Uniform(1.0, 300.0)
     else:
-        spec_kwargs["psd_sigma"] = psd["psd_sigma"]
-        spec_kwargs["psd_tau_myr"] = psd["psd_tau_myr"]
+        spec_kwargs["sfh_field_psd_sigma"] = psd["psd_sigma"]
+        spec_kwargs["sfh_field_psd_tau_myr"] = psd["psd_tau_myr"]
 
     spec_kwargs["redshift"] = redshift
     spec_kwargs["stochastic"] = stochastic
@@ -133,9 +155,9 @@ def make_model(psd_regime: str, redshift: float = 0.1,
 
     spec = ParamSpec(**spec_kwargs)
     ssp = get_ssp()
-    filters = get_filters(filter_names)
+    obs = get_observation(filter_names)
 
-    return Model(spec, ssp, filters=filters)
+    return Model(spec, ssp, observation=obs)
 
 
 # ── Mock generation ───────────────────────────────────────────────
@@ -145,10 +167,10 @@ class MockGalaxy:
     true_params: dict
     flux_obs: jnp.ndarray
     noise: jnp.ndarray
-    true_sfh: Optional[dict] = None
-    spec_obs: Optional[jnp.ndarray] = None
-    spec_noise: Optional[jnp.ndarray] = None
-    wave_spec: Optional[jnp.ndarray] = None
+    true_sfh: dict | None = None
+    spec_obs: jnp.ndarray | None = None
+    spec_noise: jnp.ndarray | None = None
+    wave_spec: jnp.ndarray | None = None
 
 
 def generate_mock_galaxy(model: Model, key, snr: float = 20.0,
@@ -238,9 +260,8 @@ def fit_galaxy(model: Model, galaxy: MockGalaxy, method: str = "raytrace",
     else:
         data = galaxy.flux_obs
         noise = galaxy.noise
-        data_type = "photometry"
 
-    fitter = Fitter(model, data, noise, data_type=data_type)
+    fitter = Fitter(model, data, noise)
 
     # Default: MAP init → sampler
     t0 = time.time()

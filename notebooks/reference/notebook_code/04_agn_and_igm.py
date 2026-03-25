@@ -330,3 +330,6 @@ plt.show()
 # The AGN components are additive: the total SED is stellar + disc + torus.
 # At high redshift ($z > 5$), IGM absorption becomes the dominant spectral
 # modification, and the optional CGM damping wing term becomes relevant.
+#
+# **See also:** [Advanced AGN Models](../_notebooks/reference/11_advanced_agn) for
+# Kubota & Done multi-color disc, SKIRTOR clumpy torus, and unified NLR/BLR models.

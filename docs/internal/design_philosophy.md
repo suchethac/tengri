@@ -83,7 +83,12 @@ Each parameter is either `Fixed(value)`, `Uniform(lo, hi)`, `Gaussian(mu, sigma)
 
 **`Model`** — The forward model with clean parameter names:
 ```python
-model = Model(spec, ssp_data, filters=filters)
+from tengri import Observation, Photometry
+
+obs = Observation(photometry=Photometry.from_names(
+    ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+))
+model = Model(spec, ssp_data, observation=obs)
 photometry = model.predict_photometry(params)
 sfh = model.predict_sfh(params)
 derived = model.predict_derived(params)  # stellar mass, SFR, sSFR
@@ -93,7 +98,7 @@ The Model translates between user-facing names (`sfh_tau_peak_gyr` in Gyr) and i
 
 **`Fitter`** — Separates inference from the model:
 ```python
-fitter = Fitter(model, data, noise, data_type="photometry")
+fitter = Fitter(model, data, noise)
 result_map = fitter.run("map", n_steps=1500)
 result_nuts = fitter.run("nuts", init_from=result_map, n_warmup=500)
 ```

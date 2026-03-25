@@ -90,9 +90,10 @@ print(f"Float precision: float64 (jax_enable_x64=True)")
 from tengri import (
     Fixed,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     Uniform,
-    load_filter_set,
     load_ssp_data,
 )
 
@@ -108,7 +109,7 @@ if not Path(ssp_path).exists():
         sys.exit(1)
 
 ssp = load_ssp_data(ssp_path)
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
 
 print(f"SSP shape: {ssp.ssp_flux.shape} "
       f"({ssp.ssp_flux.shape[0]} met × {ssp.ssp_flux.shape[1]} age × "
@@ -156,7 +157,7 @@ spec_smooth = ParamSpec(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
 )
-model_smooth = Model(spec_smooth, ssp, filters=filters, precompute=True)
+model_smooth = Model(spec_smooth, ssp, observation=obs, precompute=True)
 
 if model_smooth._precomp is not None:
     pc = model_smooth._precomp
@@ -172,7 +173,8 @@ if model_smooth._precomp is not None:
 try:
     from tengri.models.sps.precompute import precompute_photometry_ztable
     n_z = 200
-    fw_list, ft_list, _ = filters
+    fw_list = list(obs.photometry.filter_waves)
+    ft_list = list(obs.photometry.filter_trans)
     ztab = precompute_photometry_ztable(ssp, fw_list, ft_list, z_min=0.01, z_max=3.0, n_z=n_z)
     zt_shape = f"{ztab.ssp_phot_table.shape}"
     zt_mb = array_mb(ztab.ssp_phot_table)
@@ -184,7 +186,7 @@ except Exception as e:
 # Spectroscopy precomputation
 try:
     wave_obs = jnp.linspace(3800, 9200, 200)
-    model_spec = Model(spec_smooth, ssp, filters=filters, precompute=True)
+    model_spec = Model(spec_smooth, ssp, observation=obs, precompute=True)
     model_spec.precompute_spectroscopy(wave_obs)
     if model_spec._spec_precomp is not None:
         sp = model_spec._spec_precomp
@@ -220,7 +222,7 @@ except Exception as e:
 
 # Filter curves
 filter_mb = 0.0
-for fw_i, ft_i in zip(filters[0], filters[1]):
+for fw_i, ft_i in zip(obs.photometry.filter_waves, obs.photometry.filter_trans):
     filter_mb += array_mb(fw_i) + array_mb(ft_i)
 print(f"{'Filter curves (5 SDSS bands)':<50s} {'(5 × ~1000 pts)':<25s} "
       f"{filter_mb:>10.3f} {'—':>10s}")
@@ -311,7 +313,7 @@ from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
 
 for n_grid in [128, 256, 512]:
     xi = jax.random.normal(jax.random.PRNGKey(0), (n_grid,))
-    sqrt_p = compute_sqrt_power_drw(n_grid, d_log_age=0.03, sigma_ps=0.5, tau_ps=100e6)
+    sqrt_p = compute_sqrt_power_drw(n_grid, d_log_age=0.03, psd_sigma=0.5, psd_tau_yr=100e6)
     fn = lambda _xi=xi, _sp=sqrt_p, _n=n_grid: gp_from_xi(_xi, _sp, _n)
     t_fwd, r = bench(fn, n=500)
     grad_fn = jax.jit(jax.grad(lambda x, _sp=sqrt_p, _n=n_grid: jnp.sum(gp_from_xi(x, _sp, _n))))
@@ -333,14 +335,14 @@ t_w, weights = bench(lambda: compute_csp_weights(sfr_on_ssp, model_smooth.ssp_ag
 print(format_row("CSP weights (trapezoid)", t_w, None, array_mb(weights)))
 
 t_met, ssp_at_z = bench(
-    lambda: interpolate_metallicity(ssp.ssp_flux, ssp.ssp_lgmet, p["log_z"]),
+    lambda: interpolate_metallicity(ssp.ssp_flux, ssp.ssp_lgmet, p["log_z_abs"]),
     n=200,
 )
 print(format_row("Metallicity interpolation", t_met, None, array_mb(ssp_at_z)))
 
 from tengri.models.dust.attenuation import two_component_dust
 dust_atten = two_component_dust(ssp.ssp_wave, model_smooth.ssp_ages_yr,
-                                 p["tau_v1"], p["tau_v2"])
+                                 p["tau_bc"], p["tau_diff"])
 
 t_sed, sed = bench(
     lambda: compute_csp_sed(weights, ssp_at_z, dust_atten),
@@ -357,18 +359,18 @@ for law_name in ["power_law", "calzetti", "kriek_conroy", "smc", "cardelli", "sa
         continue
     fn = lambda ln=law_name: two_component_dust(
         ssp.ssp_wave, model_smooth.ssp_ages_yr,
-        p["tau_v1"], p["tau_v2"],
-        law_bc=ln, law_diff=ln, n_slope=p["dust_n"],
+        p["tau_bc"], p["tau_diff"],
+        law_bc=ln, law_diff=ln, n_slope=p["dust_slope"],
     )
     t_fwd, r = bench(fn, n=200)
     grad_fn = jax.jit(jax.grad(
         lambda tv, ln=law_name: jnp.sum(two_component_dust(
             ssp.ssp_wave, model_smooth.ssp_ages_yr,
-            tv, p["tau_v2"], law_bc=ln, law_diff=ln, n_slope=p["dust_n"],
+            tv, p["tau_diff"], law_bc=ln, law_diff=ln, n_slope=p["dust_slope"],
         ))
     ))
-    _ = grad_fn(p["tau_v1"])
-    t_grad, _ = bench(lambda: grad_fn(p["tau_v1"]), n=200)
+    _ = grad_fn(p["tau_bc"])
+    t_grad, _ = bench(lambda: grad_fn(p["tau_bc"]), n=200)
     print(format_row(f"Dust attenuation ({law_name})", t_fwd, t_grad, array_mb(r)))
 
 # --- Dust emission ---
@@ -510,7 +512,8 @@ from tengri.utils.cosmology import luminosity_distance
 
 z = 0.1
 dl_cm = luminosity_distance(z)
-fw, ft, _ = filters
+fw = obs.photometry.filter_waves
+ft = obs.photometry.filter_trans
 
 
 def phot_loop():
@@ -674,7 +677,7 @@ for name, spec, precomp, kwargs in configs:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         try:
-            m = Model(spec, ssp, filters=filters, precompute=precomp, **kwargs)
+            m = Model(spec, ssp, observation=obs, precompute=precomp, **kwargs)
             par = spec.sample(jax.random.PRNGKey(42))
 
             # Forward
@@ -702,7 +705,7 @@ print("\n" + "=" * 80)
 print("SECTION 4: predict_sed() COMPONENT BREAKDOWN (exact path)")
 print("=" * 80)
 
-model_exact = Model(spec_min, ssp, filters=filters, precompute=False)
+model_exact = Model(spec_min, ssp, observation=obs, precompute=False)
 par_ex = spec_min.sample(jax.random.PRNGKey(42))
 p_ex = model_exact._get_internal_params(par_ex)
 
@@ -726,14 +729,14 @@ t4, w_ex = bench(lambda: compute_csp_weights(sfr_ssp_ex, model_exact.ssp_ages_yr
 
 # 5. Met interp
 t5, ssp_z_ex = bench(
-    lambda: interpolate_metallicity(ssp.ssp_flux, ssp.ssp_lgmet, p_ex["log_z"]),
+    lambda: interpolate_metallicity(ssp.ssp_flux, ssp.ssp_lgmet, p_ex["log_z_abs"]),
     n=200,
 )
 
 # 6. Dust atten
 t6, dust_ex = bench(
     lambda: two_component_dust(ssp.ssp_wave, model_exact.ssp_ages_yr,
-                                p_ex["tau_v1"], p_ex["tau_v2"], n_slope=p_ex["dust_n"]),
+                                p_ex["tau_bc"], p_ex["tau_diff"], n_slope=p_ex["dust_slope"]),
     n=200,
 )
 
@@ -767,7 +770,7 @@ for step_name, t in steps:
 print(f"\n  {'TOTAL':<42s} {total_ex:>8.1f} {'100.0%':>8s}")
 
 # Fused comparison
-model_fused = Model(spec_min, ssp, filters=filters, precompute=True)
+model_fused = Model(spec_min, ssp, observation=obs, precompute=True)
 _ = model_fused.predict_photometry(par_ex)
 t_fused, _ = bench(lambda: model_fused.predict_photometry(par_ex), n=200)
 print(f"\n  {'Fused kernel (same model)':<42s} {t_fused:>8.1f}")

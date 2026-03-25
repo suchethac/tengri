@@ -24,9 +24,10 @@ from tengri import (
     Fixed,
     HierarchicalFitter,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     Uniform,
-    load_filter_set,
     load_ssp_data,
 )
 
@@ -34,7 +35,7 @@ from tengri import (
 # Setup
 # ---------------------------------------------------------------------------
 ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
 
 
 def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
@@ -53,7 +54,7 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         mean_sfh_type=["dpl", "field"],
         n_grid=128,
     )
-    return Model(spec, ssp, filters=filters)
+    return Model(spec, ssp, observation=obs)
 
 
 def generate_mock_population(n_gal, true_sigma, true_tau, key, snr=20.0):

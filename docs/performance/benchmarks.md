@@ -57,7 +57,8 @@ at 5 wavelengths is trivial:
 
 :::{note}
 The Zacharegkas+2025 approximation (dust evaluated at filter effective wavelengths)
-gives <3% error for most laws. SMC has higher error (~36%) due to its steep UV curve.
+gives <1% error for most laws. SMC has higher error (up to ~7% in sdss_u) due to its
+steep UV curve. See the {ref}`precision-tradeoffs` section below for detailed measurements per law.
 Use the exact path or spectroscopy for SMC-dominated fits.
 :::
 
@@ -156,3 +157,189 @@ python analysis/profile_all_components.py
 # Inference method comparison (paper Figure 7)
 python analysis/fig07_speed_benchmarks.py --n-repeats 3
 ```
+
+## Comparison to other codes
+
+*Coming soon.* We plan to benchmark tengri against Prospector, bagpipes, and CIGALE
+on identical mock photometry. Preliminary results suggest 10-100x speedups in gradient
+computation due to analytical autodiff vs finite differences.
+
+## Scaling
+
+How tengri's forward model and inference scale with problem size. All measurements
+on Apple M-series MacBook Pro, CPU, JAX 0.5+, 64-bit precision.
+
+### Parameter dimensions
+
+The number of free parameters D is dominated by the GP latent vector `psd_xi`, which
+controls the stochastic SFH. The smooth parametric model has ~7 parameters; adding
+a stochastic field with N grid points adds N dimensions.
+
+| Configuration | D | Forward (μs) | Gradient (μs) |
+|---|:---:|:---:|:---:|
+| Smooth parametric (tsnorm) | 7 | 140 | 56 |
+| Full stochastic | 137 | 356 | 63 |
+
+Gradients scale sub-linearly with D because the GP latent vector ξ enters through a
+linear transform (IFFT + element-wise multiplication). The Jacobian of this linear map
+is trivial, so adding 130 GP modes costs only ~7 μs in gradient time. The forward pass
+scales more steeply because the SFH must be evaluated at all grid points, but the
+dominant cost (dust attenuation, einsum) is independent of D.
+
+### Photometric bands
+
+With fixed redshift, tengri precomputes the SSP-through-filter integral once. Adding
+more bands increases precomputation cost linearly but has negligible effect on per-call
+cost since the fused kernel operates on a `(93 x N_bands)` array.
+
+Measured with `analysis/bench_scaling.py --quick`:
+
+| Bands | Forward (μs) | Gradient (μs) |
+|:---:|:---:|:---:|
+| 3 | 39 | 88 |
+| 5 (SDSS) | 36 | 27 |
+| 8 | 36 | 42 |
+| 10 | 40 | 37 |
+| 15 | 46 | 82 |
+| 20 | 46 | 36 |
+
+The per-call scaling is essentially flat — forward time varies by only ~10 μs across
+3-to-20 bands. This is because the inner einsum `(93, N_bands)` is memory-bound,
+not compute-bound, at these sizes.
+
+:::{tip}
+For surveys with many bands at fixed redshift (e.g., J-PAS with 56 narrow bands),
+photometry precomputation is essential. Without it, the cost would scale with
+`N_bands x 5994` wavelength evaluations per call.
+:::
+
+### Spectral pixels
+
+Spectroscopy cost scales linearly with pixel count because the main operations are
+interpolation of SSP templates to the observed wavelength grid and dust evaluation at
+each pixel.
+
+Measured with `analysis/bench_scaling.py --quick`:
+
+| N_pix | Forward (μs) | Gradient (μs) | Notes |
+|:---:|:---:|:---:|---|
+| 50 | 59 | 34 | Very low-res |
+| 100 | 71 | 48 | Low-res prism |
+| 200 | 98 | 110 | Typical low-res |
+| 500 | 183 | 181 | Medium resolution |
+| 1000 | 219 | 262 | R~1000 grating |
+| 2000 | 356 | 352 | High resolution |
+
+:::{note}
+Spectroscopy precomputation (pre-interpolating SSPs to the observed wavelength grid)
+is applied automatically when a spectroscopy configuration is provided. The timings
+above include this precomputation.
+:::
+
+### Catalog-scale fitting
+
+The XLA compilation cost is amortized over the entire catalog. After the first
+galaxy, each additional fit takes only the runtime cost. Compilation is cached on
+disk at `/tmp/tengri_jax_cache` and persists across Python sessions.
+
+:::{note}
+Run `python analysis/bench_scaling.py` to reproduce these measurements on your
+hardware.
+:::
+
+(precision-tradeoffs)=
+## Precision Tradeoffs
+
+Every optimization involves a precision-speed tradeoff. This section quantifies each one
+so you can make informed decisions about which optimizations to enable.
+
+### Mixed precision (float32)
+
+Setting `forward_dtype="float32"` halves memory usage and provides ~1.5x speedup.
+The question is: how much accuracy do you lose?
+
+Measured with `analysis/bench_accuracy_tradeoffs.py --quick` across 20 redshift/dust
+configurations (z = 0.01–3.0, τ_bc = 0–3):
+
+**Photometry relative error: < 2 × 10⁻⁸ (mean), < 5 × 10⁻⁸ (max).**
+
+These errors are negligible — they are 6 orders of magnitude below typical observational
+uncertainties (SNR~20 ≈ 5% noise). The forward model is numerically stable in float32
+because the dominant operations (einsum, interpolation) are well-conditioned.
+
+**When to use float64:**
+
+- Debugging numerical issues (gradients going to NaN, optimization diverging)
+- Cross-code validation against bagpipes or FSPS (need to match to <0.01%)
+- Very high SNR spectroscopy (SNR > 200) where model error approaches noise level
+- Computing Fisher information matrices (second derivatives amplify rounding)
+
+:::{tip}
+Start with `forward_dtype="float32"` and only switch to float64 if you observe
+numerical problems. The vast majority of science cases are well-served by float32.
+:::
+
+### Photometry precomputation
+
+The Zacharegkas+2025 approximation evaluates dust attenuation at filter effective
+wavelengths instead of the full 5994-point wavelength grid. This enables a 10–20x
+speedup but introduces a small approximation error that depends on the dust law.
+
+Measured with `analysis/bench_accuracy_tradeoffs.py --quick` (5 random parameter draws
+per dust law, 5 SDSS bands):
+
+| Dust law | Mean error | Max error | Worst band | Notes |
+|---|:---:|:---:|:---:|---|
+| power_law | 0.19% | 0.68% | sdss_g | Excellent |
+| calzetti | 0.29% | 1.00% | sdss_g | Excellent |
+| kriek_conroy | 0.29% | 1.00% | sdss_g | Good |
+| smc | 1.70% | 6.89% | sdss_u | **Caution in UV** |
+| cardelli | 0.36% | 1.55% | sdss_g | Good |
+| salim | 0.29% | 1.00% | sdss_g | Excellent |
+
+Most dust laws have smooth wavelength dependence that is well-captured by evaluation
+at a few effective wavelengths. The errors are far below typical photometric
+uncertainties.
+
+:::{warning}
+The SMC law has a very steep UV slope (the 2175 Å bump is absent and the far-UV rise
+is much steeper than other laws) that is poorly approximated by evaluation at filter
+effective wavelengths. The worst-case error (6.9% in sdss_u) can exceed typical
+photometric uncertainties. Use the exact (non-precomputed) path for SMC-dominated fits,
+or switch to spectroscopy where the full wavelength grid is always used.
+:::
+
+Precomputation activates automatically when redshift is fixed and filters are provided.
+To force the exact path (e.g., for SMC), set `precompute=False` in the Model constructor.
+
+### Hardware considerations
+
+All benchmarks in the tengri documentation were measured on an Apple M-series MacBook
+Pro using CPU execution.
+
+**CPU:** Intel CPUs may differ by ~20% in either direction depending on the model and
+clock speed. The relative scaling (e.g., gradient being cheaper than forward pass)
+holds across architectures.
+
+**GPU:** JAX supports CUDA GPUs natively, and the forward model will run on GPU without
+code changes. However, JAX Metal (Apple Silicon GPU) is experimental and causes test
+failures. Use `JAX_PLATFORMS=cpu` for reliable results on Apple hardware.
+
+:::{warning}
+Do not use JAX Metal for production inference. It causes numerical errors in some JAX
+operations. All tengri benchmarks and tests assume CPU execution via
+`JAX_PLATFORMS=cpu`.
+:::
+
+**XLA compilation cache:** The persistent cache at `/tmp/tengri_jax_cache` stores
+compiled XLA programs. After a JAX version upgrade, clear the cache to avoid stale
+compiled artifacts:
+
+```bash
+rm -rf /tmp/tengri_jax_cache
+```
+
+:::{note}
+Run `python analysis/bench_accuracy_tradeoffs.py` to reproduce these accuracy
+measurements on your hardware.
+:::
