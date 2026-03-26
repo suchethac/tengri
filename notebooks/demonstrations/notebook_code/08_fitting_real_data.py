@@ -154,7 +154,7 @@ plt.show()
 # ## Fitting
 
 # %%
-fitter = Fitter(model, flux_obs, noise)
+fitter = Fitter(model, flux_obs, noise, data_type="spectroscopy")
 
 # MAP initialization
 result_map = fitter.run("map", n_steps=500, verbose=False)

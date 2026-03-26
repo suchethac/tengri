@@ -268,29 +268,29 @@ if HAS_DATA:
     noise_mir = jnp.abs(model_mir.predict_photometry(true_params)) / 20.0
 
     # Fisher analysis for the degenerate subspace
+    # compute_fisher_matrix calls predict_photometry which expects public param names
     fisher_params = ["met_logzsol", "dust_tau_bc", "dust_tau_diff"]
-    internal_params = model_sdss._get_internal_params(true_params)
 
     fim_sdss, _ = compute_fisher_matrix(
         model_sdss,
-        internal_params,
+        true_params,
         noise_sdss,
         data_type="photometry",
-        param_names=["log_z_abs", "tau_bc", "tau_diff"],
+        param_names=fisher_params,
     )
     fim_nir, _ = compute_fisher_matrix(
         model_nir,
-        internal_params,
+        true_params,
         noise_nir,
         data_type="photometry",
-        param_names=["log_z_abs", "tau_bc", "tau_diff"],
+        param_names=fisher_params,
     )
     fim_mir, _ = compute_fisher_matrix(
         model_mir,
-        internal_params,
+        true_params,
         noise_mir,
         data_type="photometry",
-        param_names=["log_z_abs", "tau_bc", "tau_diff"],
+        param_names=fisher_params,
     )
 
     # Cramer-Rao bounds
@@ -365,22 +365,21 @@ if HAS_DATA:
         mean_sfh_type="tsnorm",
     )
     model_free_z = Model(spec_free_z, ssp_data, observation=obs_sdss)
-    internal_free = model_free_z._get_internal_params(true_params)
 
-    # Fisher with redshift included
+    # Fisher with redshift included — use public param names
     fim_fixed_z, _ = compute_fisher_matrix(
         model_sdss,
-        internal_params,
+        true_params,
         noise_sdss,
         data_type="photometry",
-        param_names=["log_z_abs", "tau_bc", "tau_diff"],
+        param_names=fisher_params,
     )
     fim_free_z, _ = compute_fisher_matrix(
         model_free_z,
-        internal_free,
+        true_params,
         noise_sdss,
         data_type="photometry",
-        param_names=["log_z_abs", "tau_bc", "tau_diff", "redshift"],
+        param_names=fisher_params + ["redshift"],
     )
 
     sigma_fixed = fisher_parameter_errors(fim_fixed_z)

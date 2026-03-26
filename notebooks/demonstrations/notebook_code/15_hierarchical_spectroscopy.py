@@ -373,7 +373,7 @@ hfitter_spec = HierarchicalFitter(
     data_type="spectroscopy",
 )
 result_hier_spec = hfitter_spec.run(
-    "native_geovi",
+    "evi",
     n_iterations=50,
     n_samples=6,
     n_posterior_samples=500,
@@ -487,7 +487,7 @@ hfitter_phot = HierarchicalFitter(
     data_type="photometry",
 )
 result_hier_phot = hfitter_phot.run(
-    "native_geovi",
+    "evi",
     n_iterations=50,
     n_samples=6,
     n_posterior_samples=500,
@@ -723,7 +723,7 @@ for n_sub in N_VALUES:
     )
     t0 = time.perf_counter()
     res_sub = hf_sub.run(
-        "native_geovi",
+        "evi",
         n_iterations=50,
         n_samples=6,
         n_posterior_samples=500,

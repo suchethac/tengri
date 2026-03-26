@@ -211,6 +211,7 @@ for i in range(min(4, N_GAL)):
         model_free,
         galaxies_spec[i]["flux_obs"],
         galaxies_spec[i]["noise"],
+        data_type="spectroscopy",
     )
     t0_c = time.perf_counter()
     fitter_i.compile(verbose=False)

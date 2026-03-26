@@ -36,8 +36,12 @@ jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri.models.agn import (
-    AGN_MODELS, get_agn_model, multicolor_disc, powerlaw_disc,
-    two_temperature_torus, unified_nlr_blr,
+    AGN_MODELS,
+    get_agn_model,
+    multicolor_disc,
+    powerlaw_disc,
+    two_temperature_torus,
+    unified_nlr_blr,
 )
 
 try:
@@ -91,22 +95,32 @@ for name, fn in AGN_MODELS.items():
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), sharey=True)
 
 # (a) Vary BH spin
-for a, c, lb in zip([0.0, 0.5, 0.998],
-                     [COLORS["blue"], COLORS["green"], COLORS["red"]],
-                     ["$a=0$", "$a=0.5$", "$a=0.998$"]):
-    l = multicolor_disc(wavelength, agn_log_lbol=44.0, agn_log_mbh=8.0,
-                        agn_log_ledd=-1.0, agn_a_spin=a)
+for a, c, lb in zip(
+    [0.0, 0.5, 0.998],
+    [COLORS["rt"], COLORS["nuts"], COLORS["model"]],
+    ["$a=0$", "$a=0.5$", "$a=0.998$"],
+):
+    l = multicolor_disc(
+        wavelength, agn_log_lbol=44.0, agn_log_mbh=8.0, agn_log_ledd=-1.0, agn_a_spin=a
+    )
     axes[0].loglog(wave_um, np.asarray(l * 3e18 / wavelength), color=c, label=lb, lw=1.8)
-axes[0].set(xlabel=r"Wavelength [$\mu$m]", ylabel=r"$\nu L_\nu$ [arb.]",
-            title="(a) BH spin", xlim=(1e-3, 10))
+axes[0].set(
+    xlabel=r"Wavelength [$\mu$m]",
+    ylabel=r"$\nu L_\nu$ [arb.]",
+    title="(a) BH spin",
+    xlim=(1e-3, 10),
+)
 axes[0].legend(fontsize=8)
 
 # (b) Vary Eddington ratio
-for le, c, lb in zip([-2.0, -1.0, -0.5],
-                      [COLORS["blue"], COLORS["green"], COLORS["red"]],
-                      [r"$\log\lambda=-2$", r"$\log\lambda=-1$", r"$\log\lambda=-0.5$"]):
-    l = multicolor_disc(wavelength, agn_log_lbol=44.0, agn_log_mbh=8.0,
-                        agn_log_ledd=le, agn_a_spin=0.0)
+for le, c, lb in zip(
+    [-2.0, -1.0, -0.5],
+    [COLORS["rt"], COLORS["nuts"], COLORS["model"]],
+    [r"$\log\lambda=-2$", r"$\log\lambda=-1$", r"$\log\lambda=-0.5$"],
+):
+    l = multicolor_disc(
+        wavelength, agn_log_lbol=44.0, agn_log_mbh=8.0, agn_log_ledd=le, agn_a_spin=0.0
+    )
     axes[1].loglog(wave_um, np.asarray(l * 3e18 / wavelength), color=c, label=lb, lw=1.8)
 axes[1].set(xlabel=r"Wavelength [$\mu$m]", title="(b) Eddington ratio", xlim=(1e-3, 10))
 axes[1].legend(fontsize=8)
@@ -118,13 +132,27 @@ plt.show()
 # %%
 # Power-law vs multi-color disc comparison
 fig, ax = plt.subplots(figsize=(7, 4.5))
-ax.loglog(wave_um, np.asarray(powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_alpha=-1.0)),
-          color=COLORS["blue"], ls="--", lw=1.8, label=r"Power-law ($\alpha=-1$)")
-ax.loglog(wave_um, np.asarray(multicolor_disc(wavelength, agn_log_lbol=44.0,
-          agn_log_mbh=8.0, agn_log_ledd=-1.0)),
-          color=COLORS["red"], lw=1.8, label=r"Multi-color ($M_8$, $\lambda=0.1$)")
-ax.set(xlabel=r"Wavelength [$\mu$m]", ylabel=r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]",
-       title="Power-law vs multi-color disc", xlim=(1e-3, 10))
+ax.loglog(
+    wave_um,
+    np.asarray(powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_alpha=-1.0)),
+    color=COLORS["rt"],
+    ls="--",
+    lw=1.8,
+    label=r"Power-law ($\alpha=-1$)",
+)
+ax.loglog(
+    wave_um,
+    np.asarray(multicolor_disc(wavelength, agn_log_lbol=44.0, agn_log_mbh=8.0, agn_log_ledd=-1.0)),
+    color=COLORS["model"],
+    lw=1.8,
+    label=r"Multi-color ($M_8$, $\lambda=0.1$)",
+)
+ax.set(
+    xlabel=r"Wavelength [$\mu$m]",
+    ylabel=r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]",
+    title="Power-law vs multi-color disc",
+    xlim=(1e-3, 10),
+)
 ax.legend(fontsize=8)
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "11_disc_comparison.png"), dpi=150, bbox_inches="tight")
@@ -138,15 +166,19 @@ plt.show()
 
 # %%
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), sharey=True)
-for tau, c in zip([1.0, 5.0, 10.0], [COLORS["blue"], COLORS["green"], COLORS["red"]]):
+for tau, c in zip([1.0, 5.0, 10.0], [COLORS["rt"], COLORS["nuts"], COLORS["model"]]):
     l = two_temperature_torus(wavelength, agn_log_lbol=44.0, agn_tau_torus=tau)
     axes[0].loglog(wave_um, np.asarray(l), color=c, label=rf"$\tau_{{9.7}}={tau:.0f}$", lw=1.8)
 axes[0].axvline(9.7, color="gray", ls=":", alpha=0.5)
-axes[0].set(xlabel=r"Wavelength [$\mu$m]", ylabel=r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]",
-            title=r"(a) Optical depth $\tau_{9.7}$", xlim=(0.5, 100))
+axes[0].set(
+    xlabel=r"Wavelength [$\mu$m]",
+    ylabel=r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]",
+    title=r"(a) Optical depth $\tau_{9.7}$",
+    xlim=(0.5, 100),
+)
 axes[0].legend(fontsize=8)
 
-for fh, c in zip([0.1, 0.3, 0.7], [COLORS["blue"], COLORS["green"], COLORS["red"]]):
+for fh, c in zip([0.1, 0.3, 0.7], [COLORS["rt"], COLORS["nuts"], COLORS["model"]]):
     l = two_temperature_torus(wavelength, agn_log_lbol=44.0, agn_frac_hot=fh)
     axes[1].loglog(wave_um, np.asarray(l), color=c, label=rf"$f_{{\rm hot}}={fh}$", lw=1.8)
 axes[1].axvline(9.7, color="gray", ls=":", alpha=0.5)
@@ -166,21 +198,26 @@ plt.show()
 fig, ax = plt.subplots(figsize=(7, 4.5))
 try:
     skirtor_fn = get_agn_model("skirtor")
-    for ci, c, lb in zip([0.9, 0.5, 0.1],
-                          [COLORS["blue"], COLORS["green"], COLORS["red"]],
-                          [r"Face-on ($\cos i=0.9$)", r"Intermediate", r"Edge-on ($\cos i=0.1$)"]):
+    for ci, c, lb in zip(
+        [0.9, 0.5, 0.1],
+        [COLORS["rt"], COLORS["nuts"], COLORS["model"]],
+        [r"Face-on ($\cos i=0.9$)", r"Intermediate", r"Edge-on ($\cos i=0.1$)"],
+    ):
         l = skirtor_fn(wavelength, agn_log_lbol=44.0, agn_frac=1.0, agn_cos_inc=ci)
         ax.loglog(wave_um, np.asarray(l), color=c, label=lb, lw=1.8)
     ax.set_title("SKIRTOR: inclination dependence")
 except Exception as e:
     print(f"SKIRTOR unavailable ({e}); showing two-temperature fallback.")
-    for cfg, c in zip([dict(agn_frac_hot=0.5, agn_T_hot=1200.0),
-                       dict(agn_frac_hot=0.3, agn_T_hot=1200.0),
-                       dict(agn_frac_hot=0.1, agn_T_hot=800.0)],
-                      [COLORS["blue"], COLORS["green"], COLORS["red"]]):
+    for cfg, c in zip(
+        [
+            dict(agn_frac_hot=0.5, agn_T_hot=1200.0),
+            dict(agn_frac_hot=0.3, agn_T_hot=1200.0),
+            dict(agn_frac_hot=0.1, agn_T_hot=800.0),
+        ],
+        [COLORS["rt"], COLORS["nuts"], COLORS["model"]],
+    ):
         l = two_temperature_torus(wavelength, agn_log_lbol=44.0, **cfg)
-        ax.loglog(wave_um, np.asarray(l), color=c, lw=1.8,
-                  label=f"f_hot={cfg['agn_frac_hot']}")
+        ax.loglog(wave_um, np.asarray(l), color=c, lw=1.8, label=f"f_hot={cfg['agn_frac_hot']}")
     ax.set_title("Two-T torus fallback")
 ax.axvline(9.7, color="gray", ls=":", alpha=0.5)
 ax.set(xlabel=r"Wavelength [$\mu$m]", ylabel=r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]", xlim=(0.3, 200))
@@ -198,16 +235,28 @@ plt.show()
 
 # %%
 fig, ax = plt.subplots(figsize=(8, 5))
-for ci, c, lb in zip([0.95, 0.5, 0.1],
-                      [COLORS["blue"], COLORS["green"], COLORS["red"]],
-                      ["Type 1 (face-on)", "Intermediate", "Type 2 (edge-on)"]):
-    l = unified_nlr_blr(wavelength, agn_log_lbol=44.0, agn_cos_inc=ci,
-                        agn_theta_torus=30.0, agn_log_mbh=8.0, agn_frac=1.0)
+for ci, c, lb in zip(
+    [0.95, 0.5, 0.1],
+    [COLORS["rt"], COLORS["nuts"], COLORS["model"]],
+    ["Type 1 (face-on)", "Intermediate", "Type 2 (edge-on)"],
+):
+    l = unified_nlr_blr(
+        wavelength,
+        agn_log_lbol=44.0,
+        agn_cos_inc=ci,
+        agn_theta_torus=30.0,
+        agn_log_mbh=8.0,
+        agn_frac=1.0,
+    )
     ax.loglog(wave_um, np.asarray(l * 3e18 / wavelength), color=c, label=lb, lw=1.8)
 ax.axvline(0.1216, color="gray", ls=":", alpha=0.4)
 ax.axvline(9.7, color="gray", ls=":", alpha=0.4)
-ax.set(xlabel=r"Wavelength [$\mu$m]", ylabel=r"$\nu L_\nu$ [arb.]",
-       title="Type 1 vs Type 2 from geometric masking", xlim=(1e-3, 100))
+ax.set(
+    xlabel=r"Wavelength [$\mu$m]",
+    ylabel=r"$\nu L_\nu$ [arb.]",
+    title="Type 1 vs Type 2 from geometric masking",
+    xlim=(1e-3, 100),
+)
 ax.legend(fontsize=8)
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "11_type1_vs_type2.png"), dpi=150, bbox_inches="tight")
@@ -218,23 +267,38 @@ plt.show()
 
 # %%
 fig, ax = plt.subplots(figsize=(8, 5))
-styles = {"simple": (COLORS["blue"], "--"), "standard": (COLORS["green"], "-"),
-          "kubota_done": (COLORS["red"], "-"), "unified_nlr_blr": ("purple", "-")}
+styles = {
+    "simple": (COLORS["rt"], "--"),
+    "standard": (COLORS["nuts"], "-"),
+    "kubota_done": (COLORS["model"], "-"),
+    "unified_nlr_blr": (COLORS["mgvi"], "-"),
+}
 for name, (color, ls) in styles.items():
     try:
         l = get_agn_model(name)(wavelength, agn_log_lbol=44.0, agn_frac=1.0)
-        ax.loglog(wave_um, np.asarray(l * 3e18 / wavelength), color=color, ls=ls,
-                  label=name, lw=1.8)
+        ax.loglog(
+            wave_um, np.asarray(l * 3e18 / wavelength), color=color, ls=ls, label=name, lw=1.8
+        )
     except Exception as e:
         print(f"Skipping {name}: {e}")
 try:
     l = get_agn_model("skirtor")(wavelength, agn_log_lbol=44.0, agn_frac=1.0)
-    ax.loglog(wave_um, np.asarray(l * 3e18 / wavelength), color="orange", ls="-.",
-              label="skirtor", lw=1.8)
+    ax.loglog(
+        wave_um,
+        np.asarray(l * 3e18 / wavelength),
+        color=COLORS["geovi"],
+        ls="-.",
+        label="skirtor",
+        lw=1.8,
+    )
 except Exception:
     print("SKIRTOR unavailable; omitting.")
-ax.set(xlabel=r"Wavelength [$\mu$m]", ylabel=r"$\nu L_\nu$ [arb.]",
-       title=r"AGN model comparison ($\log L_{\rm bol}=44$)", xlim=(1e-3, 100))
+ax.set(
+    xlabel=r"Wavelength [$\mu$m]",
+    ylabel=r"$\nu L_\nu$ [arb.]",
+    title=r"AGN model comparison ($\log L_{\rm bol}=44$)",
+    xlim=(1e-3, 100),
+)
 ax.legend(fontsize=8, ncol=2)
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "11_agn_model_comparison.png"), dpi=150, bbox_inches="tight")
@@ -250,16 +314,29 @@ nu_arr = np.asarray(3e18 / wavelength)
 x_s = np.clip(6.626e-27 * nu_arr / (1.381e-16 * 6000.0), 0, 500)
 x_d = np.clip(6.626e-27 * nu_arr / (1.381e-16 * 30.0), 0, 500)
 galaxy = nu_arr**3 / (np.exp(x_s) - 1.0)
-galaxy = galaxy / galaxy.max() + 0.3 * nu_arr**3 / (np.exp(x_d) - 1.0) / (nu_arr**3 / (np.exp(x_d) - 1.0)).max()
+galaxy = (
+    galaxy / galaxy.max()
+    + 0.3 * nu_arr**3 / (np.exp(x_d) - 1.0) / (nu_arr**3 / (np.exp(x_d) - 1.0)).max()
+)
 agn_raw = np.asarray(get_agn_model("standard")(wavelength, agn_log_lbol=44.0, agn_frac=1.0))
 agn_norm = agn_raw / agn_raw.max()
 
 ax.loglog(wave_um, galaxy, color="gray", ls="--", lw=1.5, label="Host only", alpha=0.7)
-for fa, c in zip([0.1, 0.3, 0.5], [COLORS["blue"], COLORS["green"], COLORS["red"]]):
-    ax.loglog(wave_um, (1 - fa) * galaxy + fa * agn_norm, color=c, lw=1.8,
-              label=rf"$f_{{\rm AGN}}={fa:.0%}$")
-ax.set(xlabel=r"Wavelength [$\mu$m]", ylabel=r"$L_\nu$ [normalized]",
-       title="Galaxy + AGN", xlim=(0.01, 100), ylim=(1e-6, 10))
+for fa, c in zip([0.1, 0.3, 0.5], [COLORS["rt"], COLORS["nuts"], COLORS["model"]]):
+    ax.loglog(
+        wave_um,
+        (1 - fa) * galaxy + fa * agn_norm,
+        color=c,
+        lw=1.8,
+        label=rf"$f_{{\rm AGN}}={fa*100:.0f}\%$",
+    )
+ax.set(
+    xlabel=r"Wavelength [$\mu$m]",
+    ylabel=r"$L_\nu$ [normalized]",
+    title="Galaxy + AGN",
+    xlim=(0.01, 100),
+    ylim=(1e-6, 10),
+)
 ax.legend(fontsize=8)
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "11_galaxy_plus_agn.png"), dpi=150, bbox_inches="tight")

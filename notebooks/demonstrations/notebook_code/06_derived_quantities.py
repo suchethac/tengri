@@ -106,7 +106,7 @@ true_params["sfh_tsnorm_skew"] = jnp.array(0.3)
 true_params["sfh_tsnorm_trunc"] = jnp.array(2.0)
 mock = model.mock_spectrum(true_params, WAVE_OBS, snr=30.0, key=key)
 
-fitter = Fitter(model, mock.flux_obs, mock.noise)
+fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="spectroscopy")
 _ = fitter.run("map", n_steps=500, verbose=False)
 t0_c = time.perf_counter()
 fitter.compile(verbose=False)
