@@ -343,7 +343,467 @@ fig.savefig(os.path.join(FIGDIR, "11_galaxy_plus_agn.png"), dpi=150, bbox_inches
 plt.show()
 
 # %% [markdown]
-# ## 8. Conclusion: Model Selection Guidance
+# ## 8. Spin-Dependent Radiative Efficiency
+#
+# The Novikov-Thorne radiative efficiency $\eta$ depends on the BH spin $a$
+# through the ISCO radius (Bardeen, Press & Teukolsky 1972):
+#
+# $$\eta = 1 - \sqrt{1 - \frac{2}{3\,r_{\rm ISCO}(a)}}$$
+#
+# For Schwarzschild ($a=0$): $r_{\rm ISCO}=6\,R_g$, $\eta\approx0.057$.
+# For maximal prograde spin ($a=0.998$): $r_{\rm ISCO}\approx1.24\,R_g$,
+# $\eta\approx0.32$. This sets the accretion luminosity per unit mass:
+# $L = \eta \dot{M} c^2$.
+
+# %%
+from tengri.models.agn.disc import _isco_radius
+
+spin_grid = np.linspace(0.0, 0.998, 200)
+r_isco_arr = np.array([float(_isco_radius(a)) for a in spin_grid])
+eta_arr = 1.0 - np.sqrt(1.0 - 2.0 / (3.0 * r_isco_arr))
+
+# Reference values from Bardeen+1972
+ref_spins = [0.0, 0.5, 0.9, 0.998]
+ref_labels = [
+    r"$a=0$ (Schwarzschild)",
+    r"$a=0.5$",
+    r"$a=0.9$",
+    r"$a=0.998$ (maximal)",
+]
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
+
+# (a) eta vs spin
+axes[0].plot(spin_grid, eta_arr, color=COLORS["rt"], lw=2)
+for a_ref, lb in zip(ref_spins, ref_labels):
+    r_ref = float(_isco_radius(a_ref))
+    eta_ref = 1.0 - np.sqrt(1.0 - 2.0 / (3.0 * r_ref))
+    axes[0].plot(a_ref, eta_ref, "o", color=COLORS["model"], ms=7, zorder=5)
+    axes[0].annotate(
+        f"$\\eta={eta_ref:.3f}$",
+        (a_ref, eta_ref),
+        textcoords="offset points",
+        xytext=(8, -12 if a_ref > 0.5 else 8),
+        fontsize=7,
+    )
+axes[0].set(
+    xlabel=r"BH spin $a$",
+    ylabel=r"Radiative efficiency $\eta$",
+    title=r"(a) Novikov-Thorne $\eta(a)$",
+    xlim=(-0.02, 1.02),
+    ylim=(0, 0.38),
+)
+axes[0].axhline(1.0 / 12.0, color="gray", ls=":", alpha=0.4, lw=1)
+axes[0].text(0.02, 1.0 / 12.0 + 0.005, r"$\eta=1/12$ (Newtonian)", fontsize=7, color="gray")
+
+# (b) r_ISCO vs spin
+axes[1].plot(spin_grid, r_isco_arr, color=COLORS["nuts"], lw=2)
+for a_ref, lb in zip(ref_spins, ref_labels):
+    r_ref = float(_isco_radius(a_ref))
+    axes[1].plot(a_ref, r_ref, "o", color=COLORS["model"], ms=7, zorder=5)
+    axes[1].annotate(
+        f"$r_{{\\rm ISCO}}={r_ref:.2f}$",
+        (a_ref, r_ref),
+        textcoords="offset points",
+        xytext=(8, 5),
+        fontsize=7,
+    )
+axes[1].set(
+    xlabel=r"BH spin $a$",
+    ylabel=r"$r_{\rm ISCO}$ [$R_g$]",
+    title=r"(b) ISCO radius (Bardeen+1972)",
+    xlim=(-0.02, 1.02),
+)
+
+fig.suptitle("Spin-dependent radiative efficiency", fontsize=12, y=1.02)
+fig.tight_layout()
+fig.savefig(
+    os.path.join(FIGDIR, "11_spin_radiative_efficiency.png"), dpi=150, bbox_inches="tight"
+)
+plt.show()
+
+# %% [markdown]
+# ## 9. Kubota & Done 3-Zone Disc
+#
+# The full K&D (2018) model decomposes the accretion disc into three
+# radially stratified zones:
+#
+# 1. **Outer standard disc** ($r > R_{\rm warm}$): Shakura-Sunyaev blackbody
+#    producing the optical/UV big blue bump.
+# 2. **Warm Comptonization** ($R_{\rm hot} < r < R_{\rm warm}$): Optically
+#    thick, warm electrons producing the **soft X-ray excess**.
+# 3. **Hot corona** ($R_{\rm ISCO} < r < R_{\rm hot}$): Optically thin, hot
+#    electrons producing the **hard X-ray power law**.
+#
+# Compare this to the standard multicolor disc (outer zone only).
+
+# %%
+from tengri.models.agn.disc import kubota_done_disc
+
+# Extended wavelength range: 1 Angstrom to 10 micron
+wave_xray = jnp.logspace(0.0, 5.0, 2000)  # 1 A to 100000 A = 10 um
+wave_xray_um = np.asarray(wave_xray) / 1e4
+
+# Standard multicolor disc (outer zone only)
+l_standard = np.asarray(
+    multicolor_disc(
+        wave_xray,
+        agn_log_lbol=44.0,
+        agn_log_mbh=8.0,
+        agn_log_ledd=-1.0,
+        agn_a_spin=0.0,
+    )
+)
+
+# Full 3-zone K&D disc
+l_kd = np.asarray(
+    kubota_done_disc(
+        wave_xray,
+        agn_log_lbol=44.0,
+        agn_log_mbh=8.0,
+        agn_log_ledd=-1.0,
+        agn_a_spin=0.0,
+        agn_f_hard=0.02,
+        agn_gamma_warm=2.5,
+        agn_kt_warm=0.2,
+        agn_gamma_hard=1.8,
+        agn_kt_hot=100.0,
+    )
+)
+
+nu_xray = np.asarray(3e18 / wave_xray)
+
+fig, ax = plt.subplots(figsize=(8, 5))
+ax.loglog(
+    wave_xray_um,
+    l_standard * nu_xray,
+    color=COLORS["rt"],
+    ls="--",
+    lw=1.8,
+    label="Standard disc (outer zone only)",
+)
+ax.loglog(
+    wave_xray_um,
+    l_kd * nu_xray,
+    color=COLORS["model"],
+    lw=2,
+    label=r"K\&D 3-zone ($\Gamma_{\rm warm}=2.5$, $kT_{\rm hot}=100$ keV)",
+)
+
+# Annotate the three zones
+ax.annotate(
+    "Outer disc\n(optical/UV)",
+    xy=(0.05, 0.65),
+    xycoords="axes fraction",
+    fontsize=8,
+    color=COLORS["rt"],
+    ha="center",
+)
+ax.annotate(
+    "Warm Comptonization\n(soft X-ray excess)",
+    xy=(0.35, 0.85),
+    xycoords="axes fraction",
+    fontsize=8,
+    color=COLORS["model"],
+    ha="center",
+)
+ax.annotate(
+    "Hot corona\n(hard X-ray)",
+    xy=(0.82, 0.5),
+    xycoords="axes fraction",
+    fontsize=8,
+    color=COLORS["model"],
+    ha="center",
+)
+
+# Energy reference lines
+for e_kev, lb in [(0.2, "0.2 keV"), (2.0, "2 keV"), (100.0, "100 keV")]:
+    lam_um = 12.4 / e_kev / 1e4  # keV to um
+    if 1e-4 < lam_um < 10:
+        ax.axvline(lam_um, color="gray", ls=":", alpha=0.3)
+        ax.text(lam_um * 1.1, ax.get_ylim()[0] * 5, lb, fontsize=6, color="gray", rotation=90)
+
+ax.set(
+    xlabel=r"Wavelength [$\mu$m]",
+    ylabel=r"$\nu L_\nu$ [arb.]",
+    title="Standard disc vs Kubota & Done (2018) 3-zone model",
+    xlim=(1e-4, 10),
+)
+ax.legend(fontsize=8)
+fig.tight_layout()
+fig.savefig(
+    os.path.join(FIGDIR, "11_kubota_done_3zone.png"), dpi=150, bbox_inches="tight"
+)
+plt.show()
+
+# %% [markdown]
+# ## 10. BLR with Fe II Pseudo-Continuum
+#
+# The Fe II pseudo-continuum is a forest of thousands of blended
+# Fe II multiplet transitions producing two broad bumps:
+#
+# - **UV Fe II** ($\sim$2200-2800 A): UV multiplets (Tsuzuki+2006)
+# - **Optical Fe II** ($\sim$4434-4684 A): multiplet 37, 38 (Boroson & Green 1992)
+#
+# The strength is parameterized by $R_{\rm Fe} = F(\text{Fe II}\,4434\text{-}4684)
+# / F(\text{H}\beta)$.
+
+# %%
+from tengri.models.agn.blr import blr_emission
+
+_LSUN_ERG_LOCAL = 3.828e33
+l_disc_bol = 10.0**44.0 * _LSUN_ERG_LOCAL
+
+# Wavelength grid focused on UV-optical
+wave_blr = jnp.linspace(1000.0, 8000.0, 3000)
+
+fig, ax = plt.subplots(figsize=(9, 5))
+fe2_values = [0.0, 0.5, 1.0, 2.0]
+fe2_colors = [COLORS["truth"], COLORS["rt"], COLORS["nuts"], COLORS["model"]]
+fe2_labels = [
+    r"$R_{\rm Fe}=0$ (no Fe II)",
+    r"$R_{\rm Fe}=0.5$",
+    r"$R_{\rm Fe}=1.0$",
+    r"$R_{\rm Fe}=2.0$ (strong)",
+]
+
+for rfe, c, lb in zip(fe2_values, fe2_colors, fe2_labels):
+    l_blr = np.asarray(
+        blr_emission(
+            wave_blr,
+            l_disc_bol_erg=l_disc_bol,
+            covering_fraction=0.1,
+            fwhm_kms=5000.0,
+            agn_fe2_strength=rfe,
+        )
+    )
+    ax.plot(np.asarray(wave_blr), l_blr, color=c, lw=1.5, label=lb, alpha=0.85)
+
+# Label the Fe II bumps
+ax.annotate(
+    "UV Fe II\n(2200-2800 A)",
+    xy=(2500, 0),
+    xycoords=("data", "axes fraction"),
+    xytext=(2500, 0.85),
+    textcoords=("data", "axes fraction"),
+    fontsize=8,
+    ha="center",
+    color="gray",
+    arrowprops=dict(arrowstyle="->", color="gray", alpha=0.5),
+)
+ax.annotate(
+    "Optical Fe II\n(4434-4684 A)",
+    xy=(4570, 0),
+    xycoords=("data", "axes fraction"),
+    xytext=(4570, 0.85),
+    textcoords=("data", "axes fraction"),
+    fontsize=8,
+    ha="center",
+    color="gray",
+    arrowprops=dict(arrowstyle="->", color="gray", alpha=0.5),
+)
+
+# Mark key broad lines
+blr_line_labels = {
+    r"Ly$\alpha$": 1216.0,
+    "C IV": 1549.0,
+    "C III]": 1909.0,
+    "Mg II": 2800.0,
+    r"H$\beta$": 4861.0,
+    r"H$\alpha$": 6563.0,
+}
+ymax = ax.get_ylim()[1]
+for name, lam in blr_line_labels.items():
+    ax.axvline(lam, color="gray", ls=":", alpha=0.3, lw=0.8)
+    ax.text(lam, ymax * 0.95, name, fontsize=6, ha="center", color="gray", rotation=90)
+
+ax.set(
+    xlabel=r"Wavelength [$\rm \AA$]",
+    ylabel=r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]",
+    title=r"BLR emission: broad lines + Fe II pseudo-continuum",
+)
+ax.legend(fontsize=8)
+fig.tight_layout()
+fig.savefig(
+    os.path.join(FIGDIR, "11_blr_fe2_emission.png"), dpi=150, bbox_inches="tight"
+)
+plt.show()
+
+# %% [markdown]
+# ## 11. Polar Dust Reddening
+#
+# In the unified AGN model, **polar dust** reddens the UV/optical emission
+# from the disc and BLR along Type 1 sightlines without affecting the
+# torus IR emission. This explains moderately reddened Type 1 AGN
+# (CIGALE skirtor2016 module; Lyu & Rieke 2018).
+#
+# The polar dust uses an SMC extinction law (no 2175 A bump) since AGN
+# sightlines typically lack this feature.
+
+# %%
+fig, ax = plt.subplots(figsize=(8, 5))
+ebv_values = [0.0, 0.1, 0.3, 0.5]
+ebv_colors = [COLORS["truth"], COLORS["rt"], COLORS["nuts"], COLORS["model"]]
+ebv_labels = [
+    r"$E(B-V)_{\rm polar}=0$ (unobscured)",
+    r"$E(B-V)_{\rm polar}=0.1$",
+    r"$E(B-V)_{\rm polar}=0.3$",
+    r"$E(B-V)_{\rm polar}=0.5$",
+]
+
+for ebv, c, lb in zip(ebv_values, ebv_colors, ebv_labels):
+    l = unified_nlr_blr(
+        wavelength,
+        agn_log_lbol=44.0,
+        agn_cos_inc=0.95,  # face-on Type 1
+        agn_theta_torus=30.0,
+        agn_log_mbh=8.0,
+        agn_frac=1.0,
+        agn_polar_ebv=ebv,
+    )
+    ax.loglog(
+        wave_um,
+        np.asarray(l * 3e18 / wavelength),
+        color=c,
+        lw=1.8,
+        label=lb,
+    )
+
+# Reference lines
+ax.axvline(0.1216, color="gray", ls=":", alpha=0.3)
+ax.text(0.13, ax.get_ylim()[0] * 3, r"Ly$\alpha$", fontsize=7, color="gray")
+ax.axvline(9.7, color="gray", ls=":", alpha=0.3)
+ax.text(10.5, ax.get_ylim()[0] * 3, r"Si 9.7 $\mu$m", fontsize=7, color="gray")
+
+# Annotate the key effect
+ax.annotate(
+    "Polar dust reddens\nUV/optical only",
+    xy=(0.3, 0.75),
+    xycoords="axes fraction",
+    fontsize=9,
+    ha="center",
+    style="italic",
+    color="gray",
+)
+ax.annotate(
+    "Torus IR\nunaffected",
+    xy=(0.8, 0.55),
+    xycoords="axes fraction",
+    fontsize=9,
+    ha="center",
+    style="italic",
+    color="gray",
+)
+
+ax.set(
+    xlabel=r"Wavelength [$\mu$m]",
+    ylabel=r"$\nu L_\nu$ [arb.]",
+    title=r"Type 1 AGN with polar dust reddening (SMC law)",
+    xlim=(1e-3, 100),
+)
+ax.legend(fontsize=8)
+fig.tight_layout()
+fig.savefig(
+    os.path.join(FIGDIR, "11_polar_dust_reddening.png"), dpi=150, bbox_inches="tight"
+)
+plt.show()
+
+# %% [markdown]
+# ## 12. Recalibrated BLR Line Strengths (Vanden Berk+2001)
+#
+# The BLR line template uses relative strengths calibrated against the
+# SDSS composite quasar spectrum (Vanden Berk et al. 2001, AJ, 122, 549).
+# This plot shows all lines and their relative intensities.
+
+# %%
+# BLR line catalog (same as in blr.py)
+blr_catalog = [
+    (r"Ly$\alpha$ 1216", 1216.0, 1.00),
+    ("N V 1240", 1240.0, 0.08),
+    ("Si IV+O IV] 1400", 1400.0, 0.09),
+    ("C IV 1549", 1549.0, 0.26),
+    ("C III] 1909", 1909.0, 0.24),
+    ("Mg II 2800", 2800.0, 0.36),
+    (r"H$\gamma$ 4340", 4340.0, 0.15),
+    (r"H$\beta$ 4861", 4861.0, 0.50),
+    (r"H$\alpha$ 6563", 6563.0, 1.43),
+]
+
+wave_lines = jnp.linspace(900.0, 7500.0, 5000)
+l_blr_lines = np.asarray(
+    blr_emission(
+        wave_lines,
+        l_disc_bol_erg=l_disc_bol,
+        covering_fraction=0.1,
+        fwhm_kms=5000.0,
+        agn_fe2_strength=0.0,
+    )
+)
+
+fig, axes = plt.subplots(2, 1, figsize=(10, 7), gridspec_kw={"height_ratios": [3, 1]})
+
+# Top panel: BLR spectrum with labeled lines
+axes[0].plot(np.asarray(wave_lines), l_blr_lines, color=COLORS["rt"], lw=1.2)
+for name, lam, strength in blr_catalog:
+    axes[0].axvline(lam, color="gray", ls=":", alpha=0.3, lw=0.7)
+    # Place label above the line
+    axes[0].text(
+        lam,
+        axes[0].get_ylim()[1] * 0.02 if axes[0].get_ylim()[1] > 0 else 1.0,
+        name,
+        fontsize=6,
+        ha="center",
+        va="bottom",
+        rotation=60,
+        color=COLORS["model"],
+    )
+axes[0].set(
+    ylabel=r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]",
+    title="BLR emission lines (Vanden Berk+2001 calibrated ratios)",
+    xlim=(900, 7500),
+)
+# Re-draw labels after axis limits are set
+axes[0].set_ylim(bottom=0)
+for name, lam, strength in blr_catalog:
+    ymax_ax = axes[0].get_ylim()[1]
+    axes[0].text(
+        lam,
+        ymax_ax * 0.92,
+        name,
+        fontsize=6,
+        ha="center",
+        va="top",
+        rotation=60,
+        color=COLORS["model"],
+    )
+
+# Bottom panel: bar chart of relative strengths
+line_names = [c[0] for c in blr_catalog]
+line_strengths = [c[2] for c in blr_catalog]
+line_wavelengths = [c[1] for c in blr_catalog]
+bar_colors = [COLORS["rt"] if s < 0.5 else COLORS["model"] for s in line_strengths]
+
+axes[1].bar(
+    range(len(line_names)),
+    line_strengths,
+    color=bar_colors,
+    edgecolor="white",
+    linewidth=0.5,
+)
+axes[1].set_xticks(range(len(line_names)))
+axes[1].set_xticklabels(line_names, fontsize=7, rotation=45, ha="right")
+axes[1].set(ylabel="Relative strength", title="Line ratios (normalized to Ly$\\alpha$)")
+for i, (nm, s) in enumerate(zip(line_names, line_strengths)):
+    axes[1].text(i, s + 0.02, f"{s:.2f}", fontsize=6, ha="center", va="bottom")
+
+fig.tight_layout()
+fig.savefig(
+    os.path.join(FIGDIR, "11_blr_line_ratios.png"), dpi=150, bbox_inches="tight"
+)
+plt.show()
+
+# %% [markdown]
+# ## 13. Conclusion: Model Selection Guidance
 #
 # - **`simple`**: Few AGN-sensitive bands; fast; minimal degeneracies.
 # - **`standard`**: Broadband UV-to-MIR; captures disc temperature + two-T torus.
@@ -354,6 +814,13 @@ plt.show()
 # **Key degeneracies:** $M_{\rm BH}$/$\lambda_{\rm Edd}$ (break with spectroscopy);
 # spin $a$ (needs far-UV/X-ray); $\tau_{9.7}$/temperature (MIR spectroscopy);
 # `agn_torus_frac` (NIR constrains disc/torus split).
+#
+# **New features demonstrated above:**
+# - Spin-dependent $\eta$ with Bardeen+1972 reference values (Section 8)
+# - 3-zone K&D disc with soft X-ray excess and hard X-ray corona (Section 9)
+# - Fe II pseudo-continuum with tunable $R_{\rm Fe}$ (Section 10)
+# - Polar dust reddening for Type 1 AGN (Section 11)
+# - Vanden Berk+2001 calibrated BLR line ratios (Section 12)
 #
 # **See also:** [AGN & IGM](../_notebooks/reference/04_agn_and_igm) for the simple
 # power-law disc, simple torus, and IGM absorption (Inoue+2014).
