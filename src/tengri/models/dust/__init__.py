@@ -10,6 +10,11 @@ Emission
 ``emission.py`` — IR re-emission models (modified blackbody, Casey 2012,
 Dale 2014, Draine & Li 2007, Draine & Li 2014 update) with energy-balance
 normalization.
+
+Priors
+------
+``priors.py`` — redshift-dependent dust attenuation priors from
+Narayanan+2018 cosmological RT simulations.
 """
 
 from tengri.models.dust.attenuation import (
@@ -25,6 +30,10 @@ from tengri.models.dust.attenuation import (
     wg00_cloudy,
     wg00_dusty,
     wg00_shell,
+)
+from tengri.models.dust.priors import (
+    narayanan_prior,
+    narayanan_tau_prior,
 )
 from tengri.models.dust.emission import (
     DUST_EMISSION_MODELS,

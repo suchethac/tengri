@@ -135,6 +135,18 @@ _NEBULAR_PARAMS = {
         "must be in [0, 1]",
         Fixed(0.0),
     ),
+    "neb_dig_frac": (
+        "DIG fraction of nebular emission (Tacchella+2022)",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1]",
+        Fixed(0.0),
+    ),
+    "neb_dig_delta_logU": (
+        "DIG ionization parameter offset (dex, negative)",
+        lambda lo, hi: lo >= -4 and hi <= 0,
+        "must be in [-4, 0]",
+        Fixed(-1.0),
+    ),
 }
 
 # Cue-specific optional params — only registered if user provides them
@@ -223,8 +235,7 @@ _EVOLVING_ALPHA_PARAMS = {
         Uniform(0.0, 0.6),
     ),
     "met_alpha_fe_young": (
-        "[alpha/Fe] at present day (t_lookback ~ 0). "
-        "Typically ~0.0 (solar) for disk galaxies.",
+        "[alpha/Fe] at present day (t_lookback ~ 0). Typically ~0.0 (solar) for disk galaxies.",
         lambda lo, hi: lo >= -0.5 and hi <= 1.0,
         "must be in [-0.5, 1.0]",
         Fixed(0.0),
@@ -243,6 +254,15 @@ _EVOLVING_MET_PARAMS = {
         lambda lo, hi: True,
         "",
         Uniform(-2.0, 0.2),
+    ),
+}
+
+_SINGLE_COMPONENT_DUST_PARAMS = {
+    "dust_tau_v": (
+        "V-band optical depth (uniform screen)",
+        lambda lo, hi: lo >= 0,
+        "must have lo >= 0",
+        Uniform(0.0, 4.0),
     ),
 }
 
@@ -323,7 +343,11 @@ _DUST_EMISSION_PARAMS = {
         Fixed(2.0),
     ),
     "dust_eta_balance": (
-        "Energy balance scaling: L_IR = eta * L_absorbed (1.0 = strict)",
+        "Energy balance relaxation: L_IR = eta * L_absorbed. "
+        "eta=1.0 = strict energy balance; eta>1 = extra IR from obscured "
+        "sources (e.g. embedded AGN, Kokorev+2021/Stardust); eta<1 = "
+        "geometric mismatch where some absorbed UV escapes without "
+        "re-emission into the line of sight",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         Fixed(1.0),
@@ -369,6 +393,27 @@ _XRAY_PARAMS = {
         lambda lo, hi: True,
         "",
         Fixed(-1.4),
+    ),
+}
+
+_SHOCK_PARAMS = {
+    "shock_frac": (
+        "Fraction of nebular Halpha replaced by shock emission [0, 1]",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1]",
+        Fixed(0.0),
+    ),
+    "shock_velocity": (
+        "Shock velocity in km/s (Allen+2008 grid: 100-1000)",
+        lambda lo, hi: lo >= 100 and hi <= 1000,
+        "must be in [100, 1000]",
+        Fixed(300.0),
+    ),
+    "shock_log_density": (
+        "Log10 pre-shock density in cm^-3 (reserved for future grids)",
+        lambda lo, hi: True,
+        "",
+        Fixed(0.0),
     ),
 }
 
@@ -488,7 +533,10 @@ SETTINGS_KEYS = frozenset(
         "neb_ionization",
         "cloudy_grid_path",
         "cue_weights_path",
-        # Dust law
+        # Dust model & law
+        "dust_model",
+        "dust_approx",
+        "dust_law",
         "dust_law_bc",
         "dust_law_diff",
         # Dust emission
@@ -499,6 +547,8 @@ SETTINGS_KEYS = frozenset(
         # Radio & X-ray
         "radio",
         "xray",
+        # Shock emission
+        "shock",
         # Evolving metallicity / alpha
         "evolving_metallicity",
         "alpha_fe_evolving",
@@ -517,12 +567,14 @@ SETTINGS_KEYS = frozenset(
 def _build_param_registry(
     mean_sfh_type,
     nebular=False,
+    dust_model="two_component",
     dust_law_bc="power_law",
     dust_law_diff=None,
     dust_emission=None,
     agn_model=None,
     radio=False,
     xray=False,
+    shock=False,
     evolving_metallicity=False,
     alpha_fe_evolving=False,
 ):
@@ -534,6 +586,9 @@ def _build_param_registry(
         SFH model components.
     nebular : bool or str
         Enable nebular parameters. True or "cloudy" adds neb_logU, neb_logZ_gas, neb_fesc.
+    dust_model : str
+        Dust geometry model: ``"two_component"`` (Charlot & Fall) or
+        ``"single_component"`` (uniform screen).
     dust_law_bc : str
         Birth cloud dust law name. Non-power-law laws may add extra parameters.
     dust_law_diff : str or None
@@ -559,12 +614,23 @@ def _build_param_registry(
         defaults[pname] = pdef.default
 
     # Non-SFH params (always present)
+    _is_single = dust_model == "single_component"
+    _skip_dust_params = {"dust_tau_bc", "dust_tau_diff"} if _is_single else set()
     for pname, (desc, check, err, default) in _NON_SFH_PARAMS.items():
         # When evolving metallicity is enabled, skip the single met_logzsol
         if evolving_metallicity and pname == "met_logzsol":
             continue
+        # When single-component dust, skip birth-cloud / diffuse params
+        if pname in _skip_dust_params:
+            continue
         registry[pname] = (desc, check, err)
         defaults[pname] = default
+
+    # Single-component dust params (replaces tau_bc + tau_diff)
+    if dust_model == "single_component":
+        for pname, (desc, check, err, default) in _SINGLE_COMPONENT_DUST_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
 
     # Evolving metallicity params (replaces met_logzsol when enabled)
     if evolving_metallicity:
@@ -617,6 +683,12 @@ def _build_param_registry(
     # X-ray params (only when xray=True)
     if xray:
         for pname, (desc, check, err, default) in _XRAY_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+
+    # Shock emission params (only when shock=True)
+    if shock:
+        for pname, (desc, check, err, default) in _SHOCK_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
@@ -939,9 +1011,45 @@ class ParamSpec:
                     )
                     kwargs.pop(name)
 
+        # Dust model: "two_component" (Charlot & Fall) or "single_component" (screen)
+        self.dust_model = kwargs.pop("dust_model", "two_component")
+        if self.dust_model not in ("two_component", "single_component"):
+            raise ValueError(
+                f"dust_model must be 'two_component' or 'single_component', "
+                f"got '{self.dust_model}'"
+            )
+
+        # Dust approximation for two-component model:
+        #   "fast" (default): hard age threshold at t_birth — original C&F 2000,
+        #     enables two-CSP decomposition (no n_ages x n_wave intermediate)
+        #   "exact": smooth sigmoid transition — differentiable but requires
+        #     full (n_ages, n_wave) outer product
+        self.dust_approx = kwargs.pop("dust_approx", "fast")
+        if self.dust_approx not in ("fast", "exact"):
+            raise ValueError(f"dust_approx must be 'fast' or 'exact', got '{self.dust_approx}'")
+
         # Dust law settings
-        self.dust_law_bc = kwargs.pop("dust_law_bc", "power_law")
-        self.dust_law_diff = kwargs.pop("dust_law_diff", self.dust_law_bc)
+        # For single-component, accept `dust_law` as cleaner alias for `dust_law_bc`
+        dust_law_alias = kwargs.pop("dust_law", None)
+        if dust_law_alias is not None:
+            self.dust_law_bc = kwargs.pop("dust_law_bc", dust_law_alias)
+        else:
+            self.dust_law_bc = kwargs.pop("dust_law_bc", "power_law")
+
+        if self.dust_model == "single_component":
+            dust_law_diff_explicit = kwargs.pop("dust_law_diff", None)
+            if dust_law_diff_explicit is not None:
+                import warnings
+
+                warnings.warn(
+                    "dust_law_diff is ignored with dust_model='single_component' "
+                    "(only one attenuation curve is used).",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            self.dust_law_diff = self.dust_law_bc  # Not used, but keep consistent
+        else:
+            self.dust_law_diff = kwargs.pop("dust_law_diff", self.dust_law_bc)
 
         # Dust emission: None, "modified_blackbody", "dale2014", "draine_li2007", "dl07_tabulated"
         self.dust_emission = kwargs.pop("dust_emission", None)
@@ -955,6 +1063,9 @@ class ParamSpec:
 
         # X-ray: False (default), True — adds XRB + AGN corona emission
         self.xray = kwargs.pop("xray", False)
+
+        # Shock emission: False (default), True — adds MAPPINGS V shock lines
+        self.shock = kwargs.pop("shock", False)
 
         # Evolving metallicity: False (default), True
         self.evolving_metallicity = kwargs.pop("evolving_metallicity", False)
@@ -1015,12 +1126,14 @@ class ParamSpec:
         self._param_registry, self._defaults = _build_param_registry(
             mean_sfh_type,
             nebular=self.nebular_mode,
+            dust_model=self.dust_model,
             dust_law_bc=self.dust_law_bc,
             dust_law_diff=self.dust_law_diff,
             dust_emission=self.dust_emission,
             agn_model=self.agn_model,
             radio=self.radio,
             xray=self.xray,
+            shock=self.shock,
             evolving_metallicity=self.evolving_metallicity,
             alpha_fe_evolving=self.alpha_fe_evolving,
         )
@@ -1371,10 +1484,16 @@ class ParamSpec:
             modules.append("radio")
         if getattr(self, "xray", False):
             modules.append("xray")
-        dust_bc = getattr(self, "dust_law_bc", "power_law")
-        dust_diff = getattr(self, "dust_law_diff", None) or dust_bc
-        if dust_bc != "power_law" or dust_diff != "power_law":
-            modules.append(f"dust_law={dust_bc}/{dust_diff}")
+        if getattr(self, "shock", False):
+            modules.append("shock")
+        dust_mdl = getattr(self, "dust_model", "two_component")
+        if dust_mdl == "single_component":
+            modules.append(f"dust=single({getattr(self, 'dust_law_bc', 'power_law')})")
+        else:
+            dust_bc = getattr(self, "dust_law_bc", "power_law")
+            dust_diff = getattr(self, "dust_law_diff", None) or dust_bc
+            if dust_bc != "power_law" or dust_diff != "power_law":
+                modules.append(f"dust_law={dust_bc}/{dust_diff}")
         ev_met = getattr(self, "evolving_metallicity", False)
         if ev_met:
             modules.append("evolving_Z")

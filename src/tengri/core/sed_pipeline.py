@@ -539,6 +539,32 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         )
         sed = sed + neb_sed
 
+    # Shock emission (MAPPINGS V — Allen+2008)
+    # Mix: replace shock_frac of nebular Halpha with shock emission lines
+    if getattr(model, "_shock_enabled", False):
+        from tengri.models.nebular.shock import shock_emission_sed
+
+        shock_frac = p.get("shock_frac", 0.0)
+        shock_velocity = p.get("shock_velocity", 300.0)
+        shock_log_density = p.get("shock_log_density", 0.0)
+
+        # Estimate L_halpha from the SED near 6563 A as a proxy.
+        # Use a fraction of the bolometric luminosity scaled by shock_frac.
+        _c_aa_shock = 2.99792458e18  # c in Angstrom/s
+        _nu_shock = _c_aa_shock / model.ssp_data.ssp_wave
+        l_bol = -jnp.trapezoid(sed, _nu_shock)
+        # Approximate: L_Halpha ~ 1e-3 * L_bol for a star-forming galaxy
+        l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
+        l_shock_halpha = shock_frac * l_halpha_approx
+
+        shock_sed = shock_emission_sed(
+            model.ssp_data.ssp_wave,
+            shock_velocity,
+            l_shock_halpha,
+            shock_log_density=shock_log_density,
+        )
+        sed = sed + shock_sed
+
     # Dust IR emission (energy-balanced)
     if model._dust_emission_model is not None and sed_intrinsic is not None:
         from tengri.models.dust.emission import get_emission_model

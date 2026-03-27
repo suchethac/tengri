@@ -1,22 +1,13 @@
-"""Cross-validate dust attenuation against bagpipes.
+"""Cross-validate dust attenuation and emission against published references.
 
-Charlot & Fall (2000) attenuation is a power-law curve:
-    A(lambda) / A_V = (5500 / lambda)^n
+Part 1 (bagpipes): Charlot & Fall (2000) power-law curve vs bagpipes.
+Part 2 (reference): Calzetti+2000, CCM89, Pei92, KC13, CF00 physics,
+    WG00 geometries, energy balance, Casey 2012 FIR peak.
 
-Both codes implement this. The parameterization differs:
-- tengri: optical depth tau_V, transmission = exp(-tau_V * (lam/5500)^n)
-- bagpipes CF00: A_V magnitudes, transmission = 10^(-A_V * A_lam / 2.5)
+Part 2 tests require NO external dependencies (pure reference values).
 
-Mapping: tau_V = A_V * ln(10) / 2.5  (i.e., A_V = 1.086 * tau_V)
-
-For old stars (age >> t_birth=10 Myr) in tengri's Charlot & Fall:
-    tau_eff = tau_v2 only (birth cloud weight = 0)
-For young stars (age << t_birth):
-    tau_eff = tau_v1 + tau_v2
-
-We compare the attenuation CURVE shape (wavelength dependence),
-not the age dependence, since bagpipes CF00 doesn't separate
-birth-cloud vs diffuse — it returns a single A(lambda)/A_V curve.
+Usage:
+    pytest -m crossval tests/crossval/test_dust_crossval.py -v
 """
 
 import jax
@@ -28,16 +19,40 @@ jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 
-bagpipes_dust = pytest.importorskip(
-    "bagpipes.models.dust_attenuation_model",
-    reason="bagpipes not installed",
+from tengri.models.dust.attenuation import (
+    calzetti,
+    cardelli,
+    kriek_conroy,
+    lmc,
+    smc,
+    two_component_dust,
+    wg00_cloudy,
+    wg00_dusty,
+    wg00_shell,
+)
+from tengri.models.dust.emission import (
+    casey2012,
+    compute_absorbed_luminosity,
+    modified_blackbody,
 )
 
-from tengri.models.dust.attenuation import two_component_dust
+# bagpipes is optional — only Part 1 (TestDustCurveCrossval) requires it
+try:
+    import bagpipes.models.dust_attenuation_model as bagpipes_dust
+
+    HAS_BAGPIPES = True
+except ImportError:
+    HAS_BAGPIPES = False
+    bagpipes_dust = None  # type: ignore[assignment]
+
+_skip_no_bagpipes = pytest.mark.skipif(
+    not HAS_BAGPIPES, reason="bagpipes not installed"
+)
 
 
+@_skip_no_bagpipes
 class TestDustCurveCrossval:
-    """Compare power-law attenuation curve shape."""
+    """Compare power-law attenuation curve shape (requires bagpipes)."""
 
     @pytest.mark.parametrize("n_slope", [-0.7, -1.0, -1.3])
     def test_power_law_shape_matches(self, optical_wavelengths, n_slope):
