@@ -7,22 +7,30 @@ and f_obscuration.
 
 Emission
 --------
-``emission.py`` — IR re-emission models (modified blackbody, Dale 2014,
-Draine & Li 2007, Draine & Li 2014 update) with energy-balance normalization.
+``emission.py`` — IR re-emission models (modified blackbody, Casey 2012,
+Dale 2014, Draine & Li 2007, Draine & Li 2014 update) with energy-balance
+normalization.
 """
 
 from tengri.models.dust.attenuation import (
     DUST_LAWS,
     get_dust_law,
+    precompute_dust_age_mask,
     precompute_dust_age_weights,
     register_dust_law,
+    single_component_dust,
+    single_component_dust_fast,
     two_component_dust,
     two_component_dust_fast,
+    wg00_cloudy,
+    wg00_dusty,
+    wg00_shell,
 )
 from tengri.models.dust.emission import (
     DUST_EMISSION_MODELS,
     apply_dust_emission,
     calibrate_dl07_pah_fraction,
+    casey2012,
     cmb_contrast_factor,
     cmb_corrected_temperature,
     compute_absorbed_luminosity,

@@ -729,3 +729,189 @@ def single_component_dust_fast(
         wavelengths, tau_v=tau_v, law=law, f_obscuration=f_obscuration, **law_params
     )
     return jnp.broadcast_to(trans_1d[None, :], (n_ages, len(wavelengths)))
+
+
+# ===================================================================
+# Witt & Gordon (2000) dust geometry transmission functions
+# ===================================================================
+#
+# These functions compute the wavelength-dependent transmission T(lambda)
+# for different star-dust geometries, given a V-band optical depth tau_V
+# and an underlying extinction curve k(lambda).
+#
+# The key insight from Witt & Gordon (2000, ApJ, 528, 799) is that the
+# EFFECTIVE attenuation depends strongly on the spatial distribution of
+# dust relative to stars.  A uniform foreground screen (SHELL) produces
+# the steepest wavelength dependence; a homogeneous mix (CLOUDY) is
+# greyer because high-tau sightlines are self-shielded; a clumpy medium
+# (DUSTY) is greyest because photons preferentially escape through
+# low-tau channels.
+#
+# All functions are pure JAX and JIT-compatible.
+
+
+def wg00_shell(
+    wavelength: jnp.ndarray,
+    tau_v: float,
+    law: str = "cardelli",
+    **law_params,
+) -> jnp.ndarray:
+    """Witt & Gordon (2000) SHELL geometry — foreground screen.
+
+    The simplest geometry: a uniform dust slab in front of all stars.
+    Transmission is the standard Beer-Lambert law::
+
+        T(lambda) = exp(-tau_V * k(lambda))
+
+    This is identical to ``single_component_dust`` with ``f_obscuration=0``
+    and is included for completeness alongside the CLOUDY and DUSTY models.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid in Angstrom.
+    tau_v : float
+        V-band optical depth (tau at 5500 A).
+    law : str
+        Underlying extinction curve name. Default ``"cardelli"`` (MW).
+    **law_params
+        Passed to the extinction curve function (e.g., ``dust_Rv``).
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Transmission T(lambda) in [0, 1].
+
+    References
+    ----------
+    Witt & Gordon 2000, ApJ, 528, 799 (Section 3.1)
+    """
+    k = get_dust_law(law)(wavelength, **law_params)
+    return jnp.exp(-tau_v * k)
+
+
+def wg00_cloudy(
+    wavelength: jnp.ndarray,
+    tau_v: float,
+    law: str = "cardelli",
+    **law_params,
+) -> jnp.ndarray:
+    """Witt & Gordon (2000) CLOUDY geometry — homogeneous dust-star mix.
+
+    Stars and dust are uniformly mixed throughout a slab of total
+    V-band optical depth ``tau_V``.  The analytic solution for a
+    homogeneous slab (e.g., Natta & Panagia 1984; Calzetti et al. 1994)
+    integrates the radiative transfer along the slab::
+
+        T(lambda) = (1 - exp(-tau_V * k(lambda))) / (tau_V * k(lambda))
+
+    At low optical depth (tau*k -> 0), T -> 1 (transparent).
+    At high optical depth, T -> 1/(tau*k), producing a *greyer* curve
+    than the foreground screen because stars near the observer's side
+    of the slab suffer less extinction.
+
+    A numerically stable implementation is used to avoid division by
+    zero when tau*k is very small.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid in Angstrom.
+    tau_v : float
+        Total V-band optical depth through the slab.
+    law : str
+        Underlying extinction curve name. Default ``"cardelli"`` (MW).
+    **law_params
+        Passed to the extinction curve function (e.g., ``dust_Rv``).
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Transmission T(lambda) in [0, 1].
+
+    Notes
+    -----
+    The slab formula is the zero-scattering (absorption-only) solution.
+    WG00 Monte Carlo simulations include scattering, which makes the
+    effective attenuation slightly greyer still.  The analytic form here
+    captures the dominant geometric effect and is widely used in SED
+    fitting codes (e.g., Synthesizer, CIGALE).
+
+    References
+    ----------
+    Natta & Panagia 1984, ApJ, 287, 228
+    Calzetti, Kinney & Storchi-Bergmann 1994, ApJ, 429, 582
+    Witt & Gordon 2000, ApJ, 528, 799 (Section 3.2, "homogeneous" model)
+    """
+    k = get_dust_law(law)(wavelength, **law_params)
+    tau_k = tau_v * k
+
+    # Numerically stable: for small tau_k, use Taylor expansion
+    # (1 - exp(-x)) / x -> 1 - x/2 + x^2/6 - ... for x -> 0
+    # Switch at |x| < 1e-4 to avoid loss of precision
+    safe_tau_k = jnp.where(tau_k > 1e-10, tau_k, 1.0)
+    ratio = (1.0 - jnp.exp(-safe_tau_k)) / safe_tau_k
+    # Taylor expansion for small tau_k: 1 - tau_k/2
+    taylor = 1.0 - tau_k / 2.0 + tau_k**2 / 6.0
+    return jnp.where(tau_k > 1e-4, ratio, taylor)
+
+
+def wg00_dusty(
+    wavelength: jnp.ndarray,
+    tau_v: float,
+    law: str = "cardelli",
+    n_clumps: float = 10.0,
+    **law_params,
+) -> jnp.ndarray:
+    """Witt & Gordon (2000) DUSTY geometry — clumpy two-phase medium.
+
+    The ISM is modelled as ``n_clumps`` identical clumps, each with
+    optical depth ``tau_clump = tau_V / n_clumps``, distributed along
+    random sightlines (Natta & Panagia 1984; Hobson & Padman 1993).
+    The probability of a photon traversing N clumps follows a Poisson
+    distribution, giving the mean transmission::
+
+        T(lambda) = exp(-n_clumps * (1 - exp(-tau_clump * k(lambda))))
+
+    where ``tau_clump = tau_V / n_clumps``.
+
+    This produces the *greyest* effective attenuation of the three WG00
+    geometries because photons preferentially escape through low-column
+    channels between clumps.
+
+    **Limiting behaviour:**
+
+    - ``n_clumps -> inf`` (fixed ``tau_V``): ``tau_clump -> 0``, each
+      clump becomes optically thin, recovers the homogeneous slab.
+    - ``n_clumps = 1``: single clump with ``tau_clump = tau_V``, similar
+      to a screen but with Poisson line-of-sight averaging.
+    - ``tau_V = 0``: T = 1 (transparent), regardless of ``n_clumps``.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid in Angstrom.
+    tau_v : float
+        Total V-band optical depth (= ``n_clumps * tau_clump``).
+    law : str
+        Underlying extinction curve name. Default ``"cardelli"`` (MW).
+    n_clumps : float
+        Mean number of clumps along a sightline. Higher values approach
+        the homogeneous limit.  Typical range: 1-40.  Default 10.
+    **law_params
+        Passed to the extinction curve function (e.g., ``dust_Rv``).
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Transmission T(lambda) in [0, 1].
+
+    References
+    ----------
+    Natta & Panagia 1984, ApJ, 287, 228
+    Hobson & Padman 1993, MNRAS, 264, 161
+    Witt & Gordon 2000, ApJ, 528, 799 (Section 3.3, "clumpy" model)
+    """
+    k = get_dust_law(law)(wavelength, **law_params)
+    tau_clump = tau_v / jnp.maximum(n_clumps, 1e-10)
+    return jnp.exp(-n_clumps * (1.0 - jnp.exp(-tau_clump * k)))

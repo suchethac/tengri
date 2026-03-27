@@ -143,6 +143,152 @@ def calibration_polynomial(
     return 1.0 + x * b1 - b2
 
 
+@jax.jit(static_argnames=("n_poly",))
+def marginalize_calibration(
+    model_flux: jnp.ndarray,
+    obs_flux: jnp.ndarray,
+    obs_err: jnp.ndarray,
+    wavelength: jnp.ndarray,
+    n_poly: int = 3,
+    prior_sigma: float = 1.0,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Analytically marginalize over calibration polynomial coefficients.
+
+    Given a model SED m(lambda) and observed spectrum d(lambda) with noise
+    sigma(lambda), the calibrated model is C(lambda)*m(lambda) where C is
+    a Chebyshev polynomial.  With a Gaussian prior on the polynomial
+    coefficients c ~ N(0, prior_sigma^2 I), the optimal coefficients and
+    marginalized log-likelihood are computed in closed form.
+
+    This follows the Prospector approach (Johnson et al. 2021): the
+    calibration polynomial is treated as a nuisance and integrated out
+    analytically at each likelihood evaluation, reducing the dimensionality
+    of the sampling problem.
+
+    Parameters
+    ----------
+    model_flux : array, shape (n_wave,)
+        Physical model spectrum (any flux units, matching obs_flux).
+    obs_flux : array, shape (n_wave,)
+        Observed spectrum.
+    obs_err : array, shape (n_wave,)
+        1-sigma uncertainties on the observed spectrum (same units).
+    wavelength : array, shape (n_wave,)
+        Wavelength grid [Angstrom].
+    n_poly : int
+        Number of Chebyshev polynomial coefficients (order 1 through
+        n_poly).  The constant term (T_0 = 1) is implicit and fixed.
+        Default 3.
+    prior_sigma : float
+        Standard deviation of the Gaussian prior on each coefficient.
+        Default 1.0.
+
+    Returns
+    -------
+    log_likelihood_marginal : scalar
+        Marginalized log-likelihood with calibration polynomial
+        integrated out.
+    c_hat : array, shape (n_poly,)
+        MAP calibration coefficients (a_1 ... a_n_poly).
+    c_hat_err : array, shape (n_poly,)
+        Posterior standard deviations of the coefficients (sqrt of
+        diagonal of the posterior covariance).
+
+    Notes
+    -----
+    The marginalized log-likelihood is:
+
+        ln L_marg = -0.5 * [chi2(c_hat) + c_hat^T Lambda^{-1} c_hat
+                            - ln|Sigma_post| + ln|Lambda|]
+
+    where Lambda = prior_sigma^2 * I is the prior covariance and
+    Sigma_post = (A + Lambda^{-1})^{-1} is the posterior covariance.
+    Constant terms (-N/2 * ln(2pi) - sum ln sigma_i) are included.
+
+    References
+    ----------
+    Johnson et al. 2021, ApJS, 254, 22 (Prospector).
+    """
+    wave_min = wavelength[0]
+    wave_max = wavelength[-1]
+
+    # Normalized coordinate x in [-1, 1]
+    x = 2.0 * (wavelength - wave_min) / (wave_max - wave_min) - 1.0
+
+    # Build Chebyshev basis T_1(x) ... T_{n_poly}(x) via recurrence
+    # T_0 = 1, T_1 = x, T_{k+1} = 2x T_k - T_{k-1}
+    def _cheb_step(carry, _k):
+        t_prev, t_curr = carry
+        t_next = 2.0 * x * t_curr - t_prev
+        return (t_curr, t_next), t_next
+
+    t0 = jnp.ones_like(x)
+    t1 = x
+    init = (t0, t1)
+
+    # We need T_1 through T_{n_poly}. T_1 = x is already computed.
+    # Scan generates T_2 ... T_{n_poly}.
+    _, higher = jax.lax.scan(_cheb_step, init, jnp.arange(2, n_poly + 1))
+    # basis shape: (n_poly, n_wave), rows are T_1, T_2, ..., T_{n_poly}
+    basis = jnp.concatenate([t1[jnp.newaxis], higher], axis=0)
+
+    # Inverse variance weights
+    inv_var = 1.0 / jnp.maximum(obs_err**2, 1e-30)
+
+    # Design matrix: D_jk = sum_i [T_j(x_i) * m_i * T_k(x_i) * m_i / sigma_i^2]
+    # = sum_i [T_j * T_k * m^2 / sigma^2]
+    weighted_model = model_flux * jnp.sqrt(inv_var)  # m / sigma
+    # B_{j,i} = T_j(x_i) * m(x_i) / sigma(x_i)
+    b_matrix = basis * weighted_model[jnp.newaxis, :]  # (n_poly, n_wave)
+
+    # A = B @ B^T + (1/prior_sigma^2) * I
+    a_matrix = b_matrix @ b_matrix.T  # (n_poly, n_poly)
+    prior_precision = 1.0 / (prior_sigma**2)
+    a_matrix = a_matrix + prior_precision * jnp.eye(a_matrix.shape[0])
+
+    # Residual vector: r_j = sum_i [T_j(x_i) * m(x_i) * (d_i - m_i) / sigma_i^2]
+    residual = obs_flux - model_flux
+    rhs = jnp.sum(basis * model_flux[jnp.newaxis, :] * residual[jnp.newaxis, :]
+                   * inv_var[jnp.newaxis, :], axis=1)  # (n_poly,)
+
+    # Solve for MAP coefficients: A c_hat = rhs
+    c_hat = jax.numpy.linalg.solve(a_matrix, rhs)
+
+    # Posterior covariance Sigma_post = A^{-1}
+    # For c_hat_err we need diag(A^{-1}), computed via solve against identity
+    sigma_post = jax.numpy.linalg.solve(
+        a_matrix, jnp.eye(a_matrix.shape[0])
+    )
+    c_hat_err = jnp.sqrt(jnp.maximum(jnp.diag(sigma_post), 0.0))
+
+    # --- Marginalized log-likelihood ---
+
+    # Calibrated model at c_hat
+    cal_poly = 1.0 + jnp.dot(c_hat, basis)  # (n_wave,)
+    model_cal = cal_poly * model_flux
+    chi2 = jnp.sum((obs_flux - model_cal) ** 2 * inv_var)
+
+    # Prior penalty: c_hat^T Lambda^{-1} c_hat
+    prior_penalty = prior_precision * jnp.dot(c_hat, c_hat)
+
+    # Log-determinant terms
+    # ln|Sigma_post| = -ln|A|, ln|Lambda| = n_poly * ln(prior_sigma^2)
+    _sign_a, logdet_a = jnp.linalg.slogdet(a_matrix)
+    log_det_sigma_post = -logdet_a  # ln|A^{-1}|
+    log_det_lambda = n_poly * jnp.log(prior_sigma**2)
+
+    # Constant normalization: -N/2 * ln(2pi) - sum(ln sigma_i)
+    n_wave = wavelength.shape[0]
+    log_norm = -0.5 * n_wave * jnp.log(2.0 * jnp.pi) - jnp.sum(jnp.log(obs_err))
+
+    log_likelihood_marginal = (
+        log_norm
+        - 0.5 * (chi2 + prior_penalty - log_det_sigma_post + log_det_lambda)
+    )
+
+    return log_likelihood_marginal, c_hat, c_hat_err
+
+
 @jax.jit
 def apply_calibration(
     spectrum: jnp.ndarray,

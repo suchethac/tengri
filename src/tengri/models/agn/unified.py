@@ -28,7 +28,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.models.agn.blr import blr_emission
-from tengri.models.agn.disc import multicolor_disc, powerlaw_disc
+from tengri.models.agn.disc import kubota_done_disc, multicolor_disc, powerlaw_disc
 from tengri.models.agn.nlr import nlr_emission
 from tengri.models.agn.skirtor import create_skirtor_from_grid
 
@@ -125,6 +125,7 @@ def unified_agn(
     disc_fns = {
         "powerlaw": powerlaw_disc,
         "multicolor": multicolor_disc,
+        "kubota_done_3zone": kubota_done_disc,
     }
     torus_fns = {
         "simple": simple_torus,
@@ -358,6 +359,126 @@ def multicolor_agn(
 # Backward-compat alias (renamed from kubota_done -> multicolor_agn)
 kubota_done_agn = multicolor_agn
 AGN_MODELS["kubota_done"] = multicolor_agn
+
+
+@register_agn_model("kubota_done_full")
+def kubota_done_full_agn(
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float,
+    agn_frac: float = 0.1,
+    agn_log_mbh: float = 8.0,
+    agn_log_ledd: float = -1.0,
+    agn_a_spin: float = 0.0,
+    agn_cos_inc: float = 0.5,
+    agn_f_hard: float = 0.02,
+    agn_gamma_warm: float = 2.5,
+    agn_kt_warm: float = 0.2,
+    agn_gamma_hard: float = 1.8,
+    agn_kt_hot: float = 100.0,
+    agn_r_warm_ratio: float = 2.0,
+    agn_T_hot: float = 1200.0,
+    agn_T_warm: float = 300.0,
+    agn_frac_hot: float = 0.3,
+    agn_tau_torus: float = 5.0,
+    agn_torus_frac: float = 0.5,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Full Kubota & Done (2018) 3-zone disc + two-temperature torus.
+
+    Extends ``multicolor_agn`` with the full K&D 3-zone disc model:
+    outer standard disc, warm Comptonization (soft X-ray excess), and
+    hot corona (hard X-ray power law). Combined with a two-temperature
+    dust torus.
+
+    Disc parameters (9):
+    - agn_log_mbh: BH mass
+    - agn_log_ledd: Eddington ratio
+    - agn_a_spin: BH spin
+    - agn_cos_inc: inclination
+    - agn_f_hard: coronal luminosity fraction
+    - agn_gamma_warm: warm photon index
+    - agn_kt_warm: warm electron temperature [keV]
+    - agn_gamma_hard: hard X-ray photon index
+    - agn_kt_hot: hot corona temperature [keV]
+
+    Torus parameters (4):
+    - agn_T_hot, agn_T_warm: torus dust temperatures [K]
+    - agn_frac_hot: hot-to-warm dust ratio
+    - agn_tau_torus: torus optical depth
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    agn_log_lbol : float
+        log10(L_bol / Lsun).
+    agn_frac : float
+        Overall AGN fraction scaling. Default 0.1.
+    agn_log_mbh : float
+        log10(M_BH / Msun). Default 8.0.
+    agn_log_ledd : float
+        log10(L/L_Edd). Default -1.0.
+    agn_a_spin : float
+        BH spin (0 to 0.998). Default 0.0.
+    agn_cos_inc : float
+        cos(inclination). Default 0.5.
+    agn_f_hard : float
+        Fraction of L_Edd in corona. Default 0.02.
+    agn_gamma_warm : float
+        Warm Comptonization photon index. Default 2.5.
+    agn_kt_warm : float
+        Warm electron temperature [keV]. Default 0.2.
+    agn_gamma_hard : float
+        Hard X-ray photon index. Default 1.8.
+    agn_kt_hot : float
+        Hot corona temperature [keV]. Default 100.0.
+    agn_r_warm_ratio : float
+        R_warm / R_hot. Default 2.0.
+    agn_T_hot : float
+        Hot dust temperature [K]. Default 1200.
+    agn_T_warm : float
+        Warm dust temperature [K]. Default 300.
+    agn_frac_hot : float
+        Hot-to-warm dust fraction. Default 0.3.
+    agn_tau_torus : float
+        Torus optical depth at 9.7 um. Default 5.
+    agn_torus_frac : float
+        Covering factor. Default 0.5.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        L_nu [Lsun Hz^-1].
+    """
+    # 3-zone disc gets (1 - covering_factor) of L_bol
+    l_disc = kubota_done_disc(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_frac=1.0 - agn_torus_frac,
+        agn_log_mbh=agn_log_mbh,
+        agn_log_ledd=agn_log_ledd,
+        agn_a_spin=agn_a_spin,
+        agn_cos_inc=agn_cos_inc,
+        agn_f_hard=agn_f_hard,
+        agn_gamma_warm=agn_gamma_warm,
+        agn_kt_warm=agn_kt_warm,
+        agn_gamma_hard=agn_gamma_hard,
+        agn_kt_hot=agn_kt_hot,
+        agn_r_warm_ratio=agn_r_warm_ratio,
+    )
+
+    # Torus re-emits covering_factor of L_bol
+    l_torus = two_temperature_torus(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_torus_frac=agn_torus_frac,
+        agn_T_hot=agn_T_hot,
+        agn_T_warm=agn_T_warm,
+        agn_frac_hot=agn_frac_hot,
+        agn_tau_torus=agn_tau_torus,
+    )
+
+    return (l_disc + l_torus) * agn_frac
 
 
 @register_agn_model("skirtor")
@@ -598,9 +719,7 @@ def unified_nlr_blr(
     # covering_factor ~ cos(theta_torus). If agn_torus_frac is at default
     # (0.5), use the geometric value; otherwise honour the explicit setting.
     geom_cf = jnp.cos(jnp.radians(jnp.clip(agn_theta_torus, 0.0, 90.0)))
-    agn_torus_frac = jnp.where(
-        agn_torus_frac == 0.5, geom_cf, agn_torus_frac
-    )
+    agn_torus_frac = jnp.where(agn_torus_frac == 0.5, geom_cf, agn_torus_frac)
 
     # --- Geometric masks ---
     mask_disc = _sigmoid_mask(agn_cos_inc, agn_theta_torus)

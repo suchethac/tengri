@@ -4,6 +4,7 @@ from tengri.models.observation.calibration import (
     apply_calibration,
     calibration_polynomial,
     chebyshev_basis,
+    marginalize_calibration,
 )
 from tengri.models.observation.eline_marginalization import (
     DEFAULT_LINE_NAMES,
@@ -38,6 +39,7 @@ __all__ = [
     "build_eline_design_matrix",
     "calibration_polynomial",
     "chebyshev_basis",
+    "marginalize_calibration",
     "marginalize_emission_lines",
     "nirspec_g140m_resolution",
     "nirspec_prism_resolution",

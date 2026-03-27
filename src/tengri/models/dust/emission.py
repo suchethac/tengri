@@ -8,6 +8,7 @@ luminosity from the attenuation step.
 Available Emission Models
 -------------------------
 - **modified_blackbody**: Optically-thin modified blackbody (2-3 params)
+- **casey2012**: Casey (2012) modified blackbody + mid-IR power law (3 params)
 - **dale2014**: Dale et al. (2014) 1-parameter IR template family (tabulated)
 - **draine_li2007**: Draine & Li (2007) 3-parameter model (tabulated)
 - **draine_li2014**: Draine & Li (2014 update) 4-parameter model (tabulated)
@@ -32,6 +33,7 @@ This is computed from the attenuation step and passed to each model as
 
 References
 ----------
+- Casey 2012, MNRAS, 425, 3094
 - Dale et al. 2014, ApJ, 784, 83
 - Draine & Li 2007, ApJ, 657, 810
 - Draine & Li 2014 update (CIGALE implementation, Boquien+2019)
@@ -483,20 +485,25 @@ def casey2012(
     # Empirical turnover wavelength (Casey 2012, Eq. 3 with errata)
     lambda0_cm = (_CASEY_B1_UM + _CASEY_B2_UM_PER_K * T_eff) * 1.0e-4  # μm -> cm
 
-    # Transition function: f(ν) = 1 / (1 + (λ_0/λ)^2)
-    # λ_0/λ = ν / ν_0 where ν_0 = c / λ_0
-    nu0 = _C_CGS / lambda0_cm
-    f_transition = 1.0 / (1.0 + (nu / nu0) ** 2)
+    # Transition function: f(λ) = 1 / (1 + (λ/λ_0)^2)
+    # f→1 at short λ (mid-IR power law dominates), f→0 at long λ (MBB dominates)
+    # Casey 2012 convention: power law for Wien side, MBB for Rayleigh-Jeans
+    f_transition = 1.0 / (1.0 + (wavelength_cm / lambda0_cm) ** 2)
+
+    # Planck argument (shared by both components)
+    x = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * T_eff), 0.0, 500.0)
+    nu_ref = _C_CGS / (100.0e-4)  # 100 μm pivot in Hz
 
     # --- Mid-IR power-law component ---
-    # S_pl(ν) ~ ν^α_mid * f(ν)
-    # Use a reference frequency to keep the amplitude sensible
-    nu_ref = _C_CGS / (100.0e-4)  # 100 μm pivot in Hz
-    power_law = (nu / nu_ref) ** dust_alpha_mir * f_transition
+    # S_pl(ν) ~ ν^α_mid * f(ν) * exp(-hν/kT) [Wien cutoff]
+    # The exponential cutoff prevents the power law from diverging at
+    # UV/optical wavelengths. This follows Casey (2012) Eq. 2 where the
+    # power law implicitly operates only in the IR regime.
+    wien_cutoff = jnp.exp(-x)
+    power_law = (nu / nu_ref) ** dust_alpha_mir * f_transition * wien_cutoff
 
     # --- Modified blackbody component ---
     # S_bb(ν) ~ ν^(3+β) / (exp(hν/kT) - 1) * (1 - f(ν))
-    x = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * T_eff), 0.0, 500.0)
     mbb = (nu / nu_ref) ** (3.0 + dust_beta_ir) / (jnp.exp(x) - 1.0)
     mbb = mbb * (1.0 - f_transition)
 

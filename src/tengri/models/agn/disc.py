@@ -300,3 +300,291 @@ def multicolor_disc(
     scale = l_bol_requested / l_nu_total_safe
 
     return l_nu_intrinsic * scale / _LSUN_ERG
+
+
+# ===================================================================
+# Model 3: Kubota & Done (2018) 3-zone disc
+# ===================================================================
+
+# keV -> erg conversion
+_KEV_TO_ERG = 1.602176634e-9
+
+
+def _warm_comptonization_lnu(
+    nu: jnp.ndarray,
+    temperature: float,
+    nu_warm: float,
+    gamma_warm: float,
+) -> jnp.ndarray:
+    """Modified blackbody for the warm Comptonization zone.
+
+    The warm zone produces a soft X-ray excess via optically thick,
+    warm electron scattering. The SED is a Comptonized blackbody:
+
+        L_nu ~ B_nu(T_disc(r)) * (nu / nu_warm)^(Gamma_warm - 1)
+
+    for nu > nu_warm, otherwise pure blackbody.
+
+    Parameters
+    ----------
+    nu : array
+        Frequency [Hz].
+    temperature : float
+        Local disc temperature [K].
+    nu_warm : float
+        Warm electron characteristic frequency [Hz],
+        derived from kT_warm.
+    gamma_warm : float
+        Warm Comptonization photon index (~2.5).
+
+    Returns
+    -------
+    array
+        Modified B_nu [erg s^-1 cm^-2 Hz^-1 sr^-1].
+    """
+    b_nu = _planck_lnu(nu, temperature)
+    # Comptonization enhancement: smooth transition at nu_warm
+    ratio = nu / jnp.maximum(nu_warm, 1.0)
+    # Only enhance above nu_warm; below it's a standard blackbody
+    enhancement = jnp.where(
+        ratio > 1.0,
+        ratio ** (gamma_warm - 1.0),
+        1.0,
+    )
+    return b_nu * enhancement
+
+
+def _hot_corona_lnu(
+    nu: jnp.ndarray,
+    l_hot_erg: float,
+    gamma_hard: float,
+    kt_hot_erg: float,
+) -> jnp.ndarray:
+    """Hot corona emission: power law with exponential cutoff.
+
+    The optically thin, hot corona produces hard X-ray emission:
+
+        L_nu ~ nu^(1 - Gamma_hard) * exp(-h*nu / kT_hot)
+
+    Normalized so that the frequency-integrated luminosity = l_hot_erg.
+
+    Parameters
+    ----------
+    nu : array
+        Frequency [Hz].
+    l_hot_erg : float
+        Total hot corona luminosity [erg s^-1].
+    gamma_hard : float
+        Hard X-ray photon index (~1.8).
+    kt_hot_erg : float
+        Hot corona temperature [erg] (= kT_hot in erg).
+
+    Returns
+    -------
+    array
+        L_nu [erg s^-1 Hz^-1].
+    """
+    # Power law with exponential cutoff
+    x = _H_PLANCK * nu / jnp.maximum(kt_hot_erg, 1e-30)
+    x_clip = jnp.clip(x, 0.0, 500.0)
+    shape = nu ** (1.0 - gamma_hard) * jnp.exp(-x_clip)
+
+    # Normalize: integrate shape over frequency
+    sort_idx = jnp.argsort(nu)
+    integral = jnp.trapezoid(shape[sort_idx], nu[sort_idx])
+    integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+
+    return l_hot_erg * shape / integral_safe
+
+
+def kubota_done_disc(
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float,
+    agn_frac: float = 1.0,
+    agn_log_mbh: float = 8.0,
+    agn_log_ledd: float = -1.0,
+    agn_a_spin: float = 0.0,
+    agn_cos_inc: float = 0.5,
+    agn_f_hard: float = 0.02,
+    agn_gamma_warm: float = 2.5,
+    agn_kt_warm: float = 0.2,
+    agn_gamma_hard: float = 1.8,
+    agn_kt_hot: float = 100.0,
+    agn_r_warm_ratio: float = 2.0,
+    n_radii: int = 50,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Kubota & Done (2018) 3-zone accretion disc.
+
+    Three radially stratified zones:
+
+    1. **Outer standard disc** (r > R_warm): Shakura-Sunyaev blackbody.
+       Produces the optical/UV big blue bump.
+    2. **Warm Comptonization** (R_hot < r < R_warm): Optically thick,
+       warm electrons. Produces the soft X-ray excess. SED is a modified
+       blackbody: B_nu(T(r)) * (nu/nu_warm)^(Gamma_warm - 1).
+    3. **Hot corona** (R_ISCO < r < R_hot): Optically thin, hot electrons.
+       Produces hard X-ray power law with exponential cutoff.
+
+    Zone radii are determined from an approximate QSOSED prescription:
+    - R_hot = R_ISCO * (1 + f_hard * L_bol/L_Edd)^(1/3)
+    - R_warm = R_hot * r_warm_ratio
+
+    The total SED is normalized so all 3 zones sum to
+    L_bol * agn_frac.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    agn_log_lbol : float
+        log10(L_bol / Lsun). Total AGN bolometric luminosity.
+    agn_frac : float
+        Fraction of L_bol emitted by the disc (all 3 zones). Default 1.0.
+    agn_log_mbh : float
+        log10(M_BH / Msun). Default 8.0.
+    agn_log_ledd : float
+        log10(L / L_Edd). Eddington ratio. Default -1.0.
+    agn_a_spin : float
+        Dimensionless BH spin (0 to 0.998). Default 0.0.
+    agn_cos_inc : float
+        Cosine of inclination. Default 0.5.
+    agn_f_hard : float
+        Fraction of L_Edd emitted by the hot corona. Default 0.02.
+    agn_gamma_warm : float
+        Warm Comptonization photon index. Default 2.5.
+    agn_kt_warm : float
+        Warm electron temperature [keV]. Default 0.2.
+    agn_gamma_hard : float
+        Hard X-ray photon index. Default 1.8.
+    agn_kt_hot : float
+        Hot corona temperature [keV]. Default 100.0.
+    agn_r_warm_ratio : float
+        R_warm / R_hot ratio. Default 2.0.
+    n_radii : int
+        Number of radial integration points per zone. Default 50.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Specific luminosity L_nu [Lsun Hz^-1].
+
+    References
+    ----------
+    - Kubota & Done 2018, MNRAS, 480, 1247
+    - Done et al. 2012, MNRAS, 420, 1848 (QSOSED)
+    """
+    nu = _wavelength_to_nu(wavelength)
+
+    # --- Black hole parameters ---
+    r_g = _gravitational_radius(agn_log_mbh)
+    r_isco_rg = _isco_radius(agn_a_spin)
+    r_isco_cm = r_isco_rg * r_g
+
+    # Radiative efficiency (Novikov-Thorne)
+    eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
+
+    l_edd = _eddington_luminosity(agn_log_mbh)
+    l_edd_ratio = jnp.clip(10.0**agn_log_ledd, 1e-10, 1.0)
+    l_bol_erg = l_edd_ratio * l_edd
+    mdot = l_bol_erg / (eta * _C_LIGHT**2)
+
+    # Inner temperature
+    t_in = (
+        3.0
+        * _G_GRAV
+        * 10.0**agn_log_mbh
+        * _MSUN_G
+        * mdot
+        / (8.0 * jnp.pi * _SIGMA_SB * r_isco_cm**3)
+    ) ** 0.25
+
+    # --- Zone radii (QSOSED approximation) ---
+    # R_hot: approximate from QSOSED
+    f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
+    r_hot_rg = r_isco_rg * (1.0 + f_hard_safe * l_edd_ratio) ** (1.0 / 3.0)
+    r_hot_cm = r_hot_rg * r_g
+
+    # R_warm: parameterized as multiple of R_hot
+    r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
+    r_warm_cm = r_hot_cm * r_warm_ratio_safe
+
+    # Outer disc radius: self-gravity limit
+    r_out_cm = 1000.0 * r_isco_rg * r_g
+
+    # Ensure proper ordering: R_ISCO < R_hot < R_warm < R_out
+    r_hot_cm = jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm * 0.5)
+    r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm * 1.01, r_out_cm * 0.9)
+
+    # --- Warm Comptonization characteristic frequency ---
+    kt_warm_erg = agn_kt_warm * _KEV_TO_ERG
+    nu_warm = kt_warm_erg / _H_PLANCK
+
+    # --- Hot corona temperature ---
+    kt_hot_erg = agn_kt_hot * _KEV_TO_ERG
+
+    # --- Corona luminosity ---
+    # L_hot = f_hard * L_Edd (capped at L_bol)
+    l_hot_erg = jnp.minimum(f_hard_safe * l_edd, l_bol_erg * 0.5)
+
+    # ===============================================================
+    # Zone 1: Outer standard disc (r > R_warm)
+    # ===============================================================
+    log_r_warm = jnp.log10(r_warm_cm)
+    log_r_out = jnp.log10(r_out_cm)
+    log_r_outer = jnp.linspace(log_r_warm, log_r_out, n_radii)
+    r_outer = 10.0**log_r_outer
+
+    r_ratio_outer = r_outer / r_isco_cm
+    torque_outer = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio_outer), 1e-30) ** 0.25
+    t_outer = t_in * r_ratio_outer ** (-0.75) * torque_outer
+
+    d_log_r_outer = log_r_outer[1] - log_r_outer[0]
+    dr_outer = r_outer * jnp.log(10.0) * d_log_r_outer
+
+    def _outer_ring(r_cm, t_ring, dr_ring):
+        b_nu = _planck_lnu(nu, t_ring)
+        area = 2.0 * jnp.pi * r_cm * dr_ring
+        return b_nu * area * jnp.maximum(agn_cos_inc, 0.01)
+
+    l_nu_outer = jnp.sum(jax.vmap(_outer_ring)(r_outer, t_outer, dr_outer), axis=0)
+
+    # ===============================================================
+    # Zone 2: Warm Comptonization (R_hot < r < R_warm)
+    # ===============================================================
+    log_r_hot = jnp.log10(r_hot_cm)
+    log_r_warm_grid = jnp.linspace(log_r_hot, log_r_warm, n_radii)
+    r_warm_grid = 10.0**log_r_warm_grid
+
+    r_ratio_warm = r_warm_grid / r_isco_cm
+    torque_warm = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio_warm), 1e-30) ** 0.25
+    t_warm = t_in * r_ratio_warm ** (-0.75) * torque_warm
+
+    d_log_r_warm = log_r_warm_grid[1] - log_r_warm_grid[0]
+    dr_warm = r_warm_grid * jnp.log(10.0) * d_log_r_warm
+
+    def _warm_ring(r_cm, t_ring, dr_ring):
+        b_nu_mod = _warm_comptonization_lnu(nu, t_ring, nu_warm, agn_gamma_warm)
+        area = 2.0 * jnp.pi * r_cm * dr_ring
+        return b_nu_mod * area * jnp.maximum(agn_cos_inc, 0.01)
+
+    l_nu_warm = jnp.sum(jax.vmap(_warm_ring)(r_warm_grid, t_warm, dr_warm), axis=0)
+
+    # ===============================================================
+    # Zone 3: Hot corona (R_ISCO < r < R_hot)
+    # ===============================================================
+    l_nu_hot = _hot_corona_lnu(nu, l_hot_erg, agn_gamma_hard, kt_hot_erg)
+
+    # ===============================================================
+    # Combine and normalize
+    # ===============================================================
+    l_nu_total = l_nu_outer + l_nu_warm + l_nu_hot
+
+    # Normalize all 3 zones to L_bol * agn_frac
+    l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_frac
+    sort_idx = jnp.argsort(nu)
+    l_nu_integral = jnp.trapezoid(l_nu_total[sort_idx], nu[sort_idx])
+    l_nu_integral_safe = jnp.maximum(jnp.abs(l_nu_integral), 1e-100)
+    scale = l_bol_requested / l_nu_integral_safe
+
+    return l_nu_total * scale / _LSUN_ERG
