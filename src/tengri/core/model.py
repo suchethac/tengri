@@ -354,6 +354,12 @@ class Model:
             for p in ["xray_gamma_agn", "xray_alpha_ox"]:
                 self._param_map[p] = (p, 1.0, 0.0)
 
+        # Shock emission (MAPPINGS V)
+        self._shock_enabled = getattr(spec, "shock", False)
+        if self._shock_enabled:
+            for p in ["shock_frac", "shock_velocity", "shock_log_density"]:
+                self._param_map[p] = (p, 1.0, 0.0)
+
         # Nebular emission backend + params
         if spec.nebular_mode in ("cloudy", "cue"):
             self._param_map["neb_logU"] = ("neb_logU", 1.0, 0.0)
@@ -1546,6 +1552,8 @@ class Model:
             components.append("radio")
         if self._xray_enabled:
             components.append("xray")
+        if self._shock_enabled:
+            components.append("shock")
         if components:
             lines.append(f"  Components:  {', '.join(components)}")
 
