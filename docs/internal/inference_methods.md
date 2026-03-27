@@ -670,7 +670,7 @@ This means:
 tengri enables the XLA persistent compilation cache at import time:
 
 ```
-/tmp/tengri_jax_cache
+~/.cache/tengri_jax_cache
 ```
 
 Compiled XLA programs are stored on disk and survive Python restarts. The first

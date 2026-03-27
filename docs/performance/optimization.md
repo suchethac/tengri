@@ -6,10 +6,10 @@ possible fits from your setup.
 ## Quick start: fastest possible fit
 
 ```python
-from tengri import Model, ParamSpec, Uniform, Fitter, load_ssp_data, load_filter_set
+from tengri import Model, ParamSpec, Uniform, Fitter, Observation, Photometry, load_ssp_data
 
 ssp = load_ssp_data("data/ssp.h5")
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
 
 spec = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
@@ -25,18 +25,18 @@ spec = ParamSpec(
 )
 
 # All optimizations activate automatically:
-#   1. Photometry precomputation (fixed z + filters)
+#   1. Photometry precomputation (fixed z + observation)
 #   2. Fused JIT kernel (auto when precompute is on)
 #   3. Precomputed dust age weights (always)
 #   4. XLA compilation cache (always)
-model = Model(spec, ssp, filters=filters, forward_dtype="float32")
+model = Model(spec, ssp, observation=obs, forward_dtype="float32")
 
 # Fit
 fitter = Fitter(model, obs_flux, obs_err)
 posterior = fitter.run("native_geovi")
 ```
 
-The key ingredients: fixed redshift, filters provided at init, and `forward_dtype="float32"`.
+The key ingredients: fixed redshift, observation with photometry provided at init, and `forward_dtype="float32"`.
 
 ## Optimization 1: Fused JIT kernels
 
@@ -55,11 +55,11 @@ The fused kernel wraps all four steps in a **single `@jax.jit` closure**. XLA ca
 
 ### How to use it
 
-It is automatic. When you create a `Model` with a fixed redshift and filters, the
+It is automatic. When you create a `Model` with a fixed redshift and an observation, the
 fused kernel is built during `__init__`:
 
 ```python
-model = Model(spec, ssp, filters=filters)
+model = Model(spec, ssp, observation=obs)
 # model._fused_photometry is now a compiled JIT function
 
 flux = model.predict_photometry(params)  # uses fused kernel
@@ -98,11 +98,11 @@ wavelength, which is accurate to ~0.1% over the filter bandwidth for most dust l
 
 ### How to use it
 
-Automatic when redshift is fixed and filters are present:
+Automatic when redshift is fixed and an observation with photometry is present:
 
 ```python
 spec = ParamSpec(redshift=0.1, ...)  # fixed redshift
-model = Model(spec, ssp, filters=filters)
+model = Model(spec, ssp, observation=obs)
 # predict_photometry() uses the fast path automatically
 ```
 
@@ -133,10 +133,10 @@ The forward model is numerically stable in float32. With `forward_dtype="float32
 
 ```python
 # Default: float64
-model = Model(spec, ssp, filters=filters)
+model = Model(spec, ssp, observation=obs)
 
 # Mixed precision: float32 forward, float64 likelihood
-model = Model(spec, ssp, filters=filters, forward_dtype="float32")
+model = Model(spec, ssp, observation=obs, forward_dtype="float32")
 ```
 
 ### Accuracy
@@ -173,7 +173,7 @@ dust function skips the log/sigmoid entirely.
 Automatic. The Model always precomputes dust age weights:
 
 ```python
-model = Model(spec, ssp, filters=filters)
+model = Model(spec, ssp, observation=obs)
 # model._dust_age_weights is a 1D array of precomputed sigmoid values
 ```
 
@@ -230,7 +230,7 @@ Enabled automatically on `import tengri`:
 
 ```python
 # Set in tengri/__init__.py
-jax.config.update("jax_compilation_cache_dir", "/tmp/tengri_jax_cache")
+jax.config.update("jax_compilation_cache_dir", "~/.cache/tengri_jax_cache")
 jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
 ```
 
@@ -248,18 +248,18 @@ This matters most in notebooks where you restart kernels frequently.
 
 ```bash
 # Clear cache (after upgrading JAX or changing code structure)
-rm -rf /tmp/tengri_jax_cache
+rm -rf ~/.cache/tengri_jax_cache
 
 # Check cache size
-du -sh /tmp/tengri_jax_cache
+du -sh ~/.cache/tengri_jax_cache
 ```
 
 ## Summary: what activates when
 
 | Optimization | Activation | Requirement |
 |-------------|------------|-------------|
-| Fused JIT kernels | Automatic | Fixed redshift + filters |
-| Photometry precomputation | Automatic | Fixed redshift + filters |
+| Fused JIT kernels | Automatic | Fixed redshift + observation with photometry |
+| Photometry precomputation | Automatic | Fixed redshift + observation with photometry |
 | Spectroscopy precomputation | Manual | Call `model.precompute_spectroscopy(wave_obs)` |
 | Mixed precision | Manual | Pass `forward_dtype="float32"` |
 | Dust age weights | Automatic | Always |

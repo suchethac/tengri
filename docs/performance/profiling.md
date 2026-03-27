@@ -2,6 +2,139 @@
 
 How to measure performance in your own setup and identify bottlenecks.
 
+tengri ships a built-in profiling module (`tengri.profiling`) with JAX-aware
+timers, pipeline breakdown tools, memory tracking, and scaling benchmarks ---
+inspired by the [Synthesizer](https://synthesizer-project.github.io/synthesizer/)
+project's profiling infrastructure, adapted for JAX's async dispatch and JIT
+compilation model.
+
+## Built-in profiling module
+
+### Timer infrastructure
+
+The `tengri.profiling` module provides JAX-aware timing utilities that
+automatically call `block_until_ready()` and track JIT compilation time
+separately from steady-state runtime.
+
+```python
+from tengri.profiling import tic, toc, bench, profiled, timers
+
+# tic/toc for ad-hoc timing
+tic("dust_attenuation")
+result = two_component_dust(wave, ages, tau_bc, tau_diff)
+toc("dust_attenuation", result)  # pass result for JAX sync
+
+# bench() for quick benchmarks (warmup + JAX sync included)
+time_us, result = bench(lambda: model.predict_photometry(params), n=200)
+print(f"Forward model: {time_us:.0f} μs")
+
+# With compilation time
+time_us, result, compile_us = bench(
+    lambda: model.predict_photometry(params),
+    return_compile_time=True,
+)
+print(f"Steady-state: {time_us:.0f} μs, compile: {compile_us/1e3:.0f} ms")
+
+# @profiled decorator for instrumenting functions
+@profiled("my_operation", source="jit")
+def my_fn(x):
+    return jnp.sum(x ** 2)
+
+for _ in range(100):
+    my_fn(x)
+
+# View accumulated results
+print(timers)  # summary table
+timers.to_csv("timing_results.csv")
+timers.reset()  # clear for next run
+```
+
+The `OperationTimers` object tracks cumulative time, call count, min/max,
+compilation time, and source label (``"python"`` or ``"jit"``) for each
+named operation.
+
+### Pipeline profiling
+
+Profile the full `predict_photometry` pipeline step by step, automatically
+detecting the fused vs exact execution path:
+
+```python
+from tengri.profiling.pipeline import profile_pipeline, compare_paths
+
+# Profile a single model configuration
+report = profile_pipeline(model, params, n=200, config_name="smooth D=7")
+print(report)
+report.to_csv("pipeline_timing.csv")
+
+# Compare fused vs exact paths
+exact_report, fused_report = compare_paths(spec, ssp, filters)
+```
+
+Output:
+
+```
+PIPELINE BREAKDOWN (smooth D=7, D=7, FUSED path)
+========================================================================
+Step                                      Time (μs)  % Total  Grad (μs)
+------------------------------------------------------------------------
+  param_conversion                          241.5    26.8%          —
+  sfh_computation                           105.8    11.8%          —
+  sfr_interpolation                          73.4     8.1%          —
+  fused_kernel                              479.8    53.3%          —
+------------------------------------------------------------------------
+  TOTAL                                     900.6   100.0%      103.9
+```
+
+### Memory profiling
+
+Track JAX array footprints and process RSS:
+
+```python
+from tengri.profiling.memory import profile_memory
+
+report = profile_memory(model)
+print(report)
+report.to_csv("memory_footprint.csv")
+```
+
+Output shows per-component memory (SSP templates, precomputed photometry,
+filter curves, CUE weights, etc.) in both float64 and float32.
+
+### Scaling benchmarks
+
+Measure how performance scales with problem size:
+
+```bash
+# Quick mode (~2 min)
+python profiling/profile_scaling.py --quick
+
+# Full mode (~15 min) — dimension, bands, spectral pixels
+python profiling/profile_scaling.py --full
+
+# Just dimension scaling
+python profiling/profile_scaling.py --dimension-only
+```
+
+### Full profiling suite
+
+Run everything with one command:
+
+```bash
+# Quick CI mode
+python profiling/run_all.py --quick
+
+# Comprehensive
+python profiling/run_all.py --full
+
+# Generate analysis plots from saved results
+python profiling/analyse_results.py --input-dir profiling/outputs
+```
+
+Results are saved to `profiling/outputs/` as CSV files, JSON results, and
+publication-quality PDF/PNG plots.
+
+---
+
 ## Quick timing with `%timeit`
 
 In a Jupyter notebook or IPython session, use `%timeit` to measure individual
@@ -10,10 +143,12 @@ operations after JIT warmup:
 ```python
 import jax
 import jax.numpy as jnp
-from tengri import Model, ParamSpec, Uniform, load_ssp_data, load_filter_set
+from tengri import Model, ParamSpec, Uniform, Observation, Photometry, load_ssp_data
 
 ssp = load_ssp_data("data/ssp.h5")
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+obs = Observation(photometry=Photometry.from_names(
+    ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+))
 spec = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
@@ -26,7 +161,7 @@ spec = ParamSpec(
     redshift=0.1,
     mean_sfh_type="dpl",
 )
-model = Model(spec, ssp, filters=filters)
+model = Model(spec, ssp, observation=obs)
 
 # Sample parameters and warm up the JIT
 key = jax.random.PRNGKey(0)
@@ -161,7 +296,7 @@ To inspect the optimized computation graph:
 ```bash
 XLA_FLAGS="--xla_dump_to=/tmp/xla_dump" python -c "
 import jax
-from tengri import Model, ParamSpec, load_ssp_data, load_filter_set
+from tengri import Model, ParamSpec, Observation, Photometry, load_ssp_data
 # ... set up model and run predict_photometry
 "
 ```
@@ -215,8 +350,8 @@ for device in jax.devices():
 4. **Is float64 needed?** Switch to `forward_dtype="float32"` for a ~1.5x speedup
    with negligible accuracy loss.
 
-5. **Is the compilation cache working?** Check that `/tmp/tengri_jax_cache` exists
-   and is growing. Clear it if you have upgraded JAX.
+5. **Is the compilation cache working?** Check that `~/.cache/tengri_jax_cache`
+   exists and is growing. Clear it if you have upgraded JAX.
 
 6. **Are you running on CPU?** tengri is tested on CPU. GPU support via JAX is
    available but experimental (JAX Metal on Apple Silicon has known issues ---

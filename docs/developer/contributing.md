@@ -97,7 +97,7 @@ tests/
 ### Running tests
 
 ```bash
-# Full suite (~808 tests, ~150s)
+# Full suite (~1221 tests, ~105s)
 pytest tests/ -q
 
 # Specific module

@@ -25,7 +25,7 @@ results = fitter.fit_batch(galaxies, method="native_geovi", n_iterations=15)
 
 **Key points:**
 - The first galaxy takes ~15s (XLA compilation). Subsequent galaxies take ~2ms each
-  with `native_geovi` thanks to the persistent XLA cache at `/tmp/tengri_jax_cache`.
+  with `native_geovi` thanks to the persistent XLA cache at `~/.cache/tengri_jax_cache`.
 - Any inference method works: `native_geovi` (default), `raytrace`, `nuts`, etc.
 - For `native_*` methods, `n_seeds=5` is set automatically to improve robustness.
 
@@ -191,7 +191,7 @@ catalogs particularly efficient.
 | 100 | raytrace | ~15s | ~10s | ~17 min |
 
 The XLA compilation cache persists across Python sessions (stored at
-`/tmp/tengri_jax_cache`), so restarting the kernel does not re-trigger compilation
+`~/.cache/tengri_jax_cache`), so restarting the kernel does not re-trigger compilation
 for the same model configuration.
 
 ## When to use batch vs. hierarchical

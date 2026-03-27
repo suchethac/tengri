@@ -20,7 +20,7 @@ ruff format --check src/ tests/     # format check — must pass
 ruff check --fix src/ tests/        # auto-fix safe violations
 ruff format src/ tests/             # auto-format
 
-# Run all tests (~994 tests, ~100 seconds)
+# Run all tests (~1221 tests, ~105 seconds)
 pytest tests/ -q
 
 # Run specific test module
@@ -89,7 +89,8 @@ src/tengri/
 │   ├── igm.py, radio.py, xray.py
 │
 ├── utils/                   # Grid, cosmology, transforms
-└── diagnostics/             # Fisher, saliency, green functions
+├── diagnostics/             # Fisher, saliency, green functions
+└── profiling/               # Pipeline profiling, memory, timers
 ```
 
 ## High-level API (preferred)
@@ -206,7 +207,7 @@ The forward model uses several optimizations for speed:
 1. **Fused JIT kernels**: Single `@jax.jit` scope for weights + metallicity interp + dust + einsum, eliminating intermediate array materializations
 2. **Precomputed dust age weights**: Sigmoid(log10(age)) computed once at Model init, not per call
 3. **Mixed precision**: `Model(spec, ssp, forward_dtype="float32")` halves memory, ~1.5x speed, <0.1% error
-4. **XLA compilation cache**: Persistent cache at `/tmp/tengri_jax_cache` — auto-enabled on import
+4. **XLA compilation cache**: Persistent cache at `~/.cache/tengri_jax_cache` — auto-enabled on import
 5. **Photometry precomputation**: SSP through filters computed once (Zacharegkas+2025), 21.6x speedup
 6. **Spectroscopy precomputation**: SSPs pre-interpolated to observed wavelengths
 
@@ -223,7 +224,7 @@ The forward model uses several optimizations for speed:
 **Every code change MUST include pytest tests.** Run before committing:
 
 ```bash
-pytest tests/ -q                    # full suite (~994 tests, ~100s)
+pytest tests/ -q                    # full suite (~1221 tests, ~105s)
 ruff check src/ tests/              # lint
 ruff format --check src/ tests/     # format
 ```

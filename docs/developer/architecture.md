@@ -51,6 +51,11 @@ src/tengri/
 │   ├── green_functions.py   # Green's function analysis
 │   └── saliency.py          # Gradient saliency maps
 │
+├── profiling/               # Performance measurement
+│   ├── timers.py            # Timing utilities
+│   ├── pipeline.py          # Component-level pipeline profiling
+│   └── memory.py            # Memory usage tracking
+│
 └── utils/                   # Grid, cosmology, transforms
 ```
 

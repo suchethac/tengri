@@ -167,7 +167,7 @@ Run both checks after every code change.
 ## Testing
 
 ```bash
-pytest tests/ -q                    # full suite (~808 tests, ~150s)
+pytest tests/ -q                    # full suite (~1221 tests, ~105s)
 pytest tests/unit/ -v               # unit tests only (fast, no SSP data)
 pytest tests/integration/ -v        # integration tests (needs SSP data)
 ```

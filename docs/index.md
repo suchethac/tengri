@@ -8,7 +8,7 @@ A fast, modular JAX framework for Bayesian galaxy SED fitting. Scalable from ind
 
 ---
 
-> **Status:** v0.1.0, active development. Core pipeline fully functional with 808 tests. Paper in preparation.
+> **Status:** v0.1.0, active development. Core pipeline fully functional with 1221 tests. Paper in preparation.
 
 ## Highlights
 
@@ -16,7 +16,7 @@ A fast, modular JAX framework for Bayesian galaxy SED fitting. Scalable from ind
 - **Fully differentiable**: Pure JAX from PSD parameters through to predicted photometry. Gradients via autodiff enable HMC, variational inference, and gradient-based optimization.
 - **GPU-native**: All operations are JIT-compiled and run on GPU/TPU. Designed for catalog-scale inference.
 - **Modular forward model**: Every component (SFH, dust, SPS, AGN, nebular, observation) is a swappable pure function. The forward model is the primary product; inference is one application of it.
-- **Multiple inference backends**: MAP, Ray Tracing (Behroozi 2025), NUTS ([BlackJAX](https://github.com/blackjax-devs/blackjax)), geoVI/MGVI ([NIFTy.re](https://gitlab.mpcdf.mpg.de/ift/nifty)), Nested Slice Sampling (Yallup+2026) for Bayesian evidence, and hierarchical population fitting.
+- **Multiple inference backends**: MAP, Ray Tracing (Behroozi 2025), NUTS ([BlackJAX](https://github.com/blackjax-devs/blackjax)), geoVI/MGVI ([NIFTy.re](https://gitlab.mpcdf.mpg.de/ift/nifty)), Laplace, Pathfinder (Zhang+2022), Elliptical Slice Sampling (Murray+2010), Nested Slice Sampling (Yallup+2026) for Bayesian evidence, and hierarchical population fitting.
 - **DSPS-powered SPS**: Differentiable stellar population synthesis via [DSPS](https://github.com/ArgonneCPAC/dsps) (Hearin et al. 2023). Accepts any SSP template in HDF5 format.
 
 ## Installation
@@ -64,7 +64,7 @@ spec = ParamSpec(
 
 model = Model(spec, ssp, observation=obs)
 fitter = Fitter(model, data, noise)
-result = fitter.run("geovi")        # or "raytrace", "nuts", "map"
+result = fitter.run("native_geovi")  # or "raytrace", "nuts", "map", "laplace", "nss"
 print(result.summary_table())
 ```
 
@@ -73,12 +73,14 @@ print(result.summary_table())
 | Method | Command | Best for |
 |--------|---------|----------|
 | MAP | `fitter.run("map")` | Point estimates |
+| native_geovi | `fitter.run("native_geovi")` | **Default.** JIT-compiled geoVI, nonlinear posteriors |
 | Ray Tracing | `fitter.run("raytrace")` | Exact MCMC, stochastic-gradient resilient |
 | NUTS | `fitter.run("nuts")` | Gold-standard validation (low-D) |
-| geoVI | `fitter.run("geovi")` | Non-Gaussian posteriors, moderate D |
-| MGVI | `fitter.run("mgvi")` | Fastest VI, very large D |
+| Laplace | `fitter.run("laplace")` | Instant Gaussian posterior from Hessian at MAP |
+| Pathfinder | `fitter.run("pathfinder")` | Fast approximate posterior, good NUTS initializer |
+| Elliptical Slice | `fitter.run("elliptical_slice")` | Exact MCMC for Gaussian-prior latent models |
 | NSS | `fitter.run("nss")` | Bayesian evidence for model comparison (D ≲ 30) |
-| Hierarchical | `HierarchicalFitter(models, data).run()` | Shared PSD across populations |
+| Hierarchical | `HierarchicalFitter(factory, data).run()` | Shared PSD across populations |
 
 ## Performance
 
@@ -109,6 +111,8 @@ Forward model timings on Apple M-series CPU:
 - Edenhofer, G. et al. (2024). *Re-envisioning Numerical Information Field Theory (NIFTy.re).* [arXiv:2402.16683](https://arxiv.org/abs/2402.16683)
 - Behroozi, P. (2025). *Ray Tracing Sampler.* [arXiv:2504.20029](https://arxiv.org/abs/2504.20029)
 - Yallup, D., Kroupa, S. & Handley, W. (2026). *Nested Slice Sampling.* [arXiv:2601.23252](https://arxiv.org/abs/2601.23252)
+- Zhang, L. et al. (2022). *Pathfinder: Parallel quasi-Newton variational inference.* [arXiv:2108.03782](https://arxiv.org/abs/2108.03782)
+- Murray, I., Adams, R. P. & MacKay, D. J. C. (2010). *Elliptical Slice Sampling.* [arXiv:1001.0175](https://arxiv.org/abs/1001.0175)
 - Ensslin, T. A. (2019). *Information field theory.* [arXiv:1804.03350](https://arxiv.org/abs/1804.03350)
 
 ## License

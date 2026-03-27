@@ -85,7 +85,7 @@ generates an optimized XLA HLO program, and compiles it to native machine code. 
 happens **once** and the result is:
 
 1. **Cached in memory** for the rest of the session (subsequent calls are instant).
-2. **Cached on disk** at `/tmp/tengri_jax_cache` (subsequent sessions skip compilation).
+2. **Cached on disk** at `~/.cache/tengri_jax_cache` (subsequent sessions skip compilation).
 
 For catalog-scale fitting, the 56 seconds is amortized over hundreds or thousands of
 galaxies. After the first galaxy, each additional fit takes only the runtime cost.
@@ -240,7 +240,7 @@ above include this precomputation.
 
 The XLA compilation cost is amortized over the entire catalog. After the first
 galaxy, each additional fit takes only the runtime cost. Compilation is cached on
-disk at `/tmp/tengri_jax_cache` and persists across Python sessions.
+disk at `~/.cache/tengri_jax_cache` and persists across Python sessions.
 
 :::{note}
 Run `python analysis/bench_scaling.py` to reproduce these measurements on your
@@ -331,12 +331,12 @@ operations. All tengri benchmarks and tests assume CPU execution via
 `JAX_PLATFORMS=cpu`.
 :::
 
-**XLA compilation cache:** The persistent cache at `/tmp/tengri_jax_cache` stores
+**XLA compilation cache:** The persistent cache at `~/.cache/tengri_jax_cache` stores
 compiled XLA programs. After a JAX version upgrade, clear the cache to avoid stale
 compiled artifacts:
 
 ```bash
-rm -rf /tmp/tengri_jax_cache
+rm -rf ~/.cache/tengri_jax_cache
 ```
 
 :::{note}

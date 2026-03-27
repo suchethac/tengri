@@ -186,7 +186,7 @@ With 25 outer iterations: ~190 ms runtime (after ~60s one-time compilation).
 :::{warning}
 Compilation time scales with the number of galaxies because the vmapped forward
 model must be traced for N galaxies. For N > 100, expect compile times of several
-minutes. The XLA cache at `/tmp/tengri_jax_cache` persists this across sessions.
+minutes. The XLA cache at `~/.cache/tengri_jax_cache` persists this across sessions.
 :::
 
 ## References

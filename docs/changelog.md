@@ -27,8 +27,8 @@ Comprehensive physics model audit, new models, and cross-validation.
 - API docs updated with all new modules
 
 ### Testing
-- 1076 unit tests (up from 808)
-- 115+ cross-validation tests against published reference values (CCM89, Calzetti, Inoue+2014, Bardeen+1972, Temple+2021, da Cunha+2013)
+- 1221 tests (up from 808), including 329 cross-validation tests
+- Cross-validation against published reference values (CCM89, Calzetti, Inoue+2014, Bardeen+1972, Temple+2021, da Cunha+2013)
 
 ## v0.1.0
 
@@ -36,7 +36,7 @@ Initial release — methods paper (Paper I).
 
 - IFT correlated field SFH model with PSD-governed burstiness priors
 - Differentiable forward model in JAX (SFH → CSP → dust → photometry/spectroscopy)
-- Six inference methods: MAP, Ray Tracing, NUTS, geoVI, MGVI, EVI
+- Ten inference methods: MAP, native_geovi, Ray Tracing, NUTS, Laplace, Pathfinder, Elliptical Slice, NSS, geoVI, MGVI
 - Hierarchical population-level PSD inference
 - Two-component dust attenuation (Calzetti, Kriek-Conroy, SMC, Cardelli, Salim, power-law)
 - Dust IR emission (DL07, DL14, Dale 2014)
@@ -44,4 +44,4 @@ Initial release — methods paper (Paper I).
 - Nebular emission (baked-in, CLOUDY grids, CUE neural emulator)
 - Fused JIT kernels for optimized performance
 - Mixed precision support
-- 808 tests across unit, integration, and cross-validation tiers
+- 1221 tests across unit, integration, and cross-validation tiers

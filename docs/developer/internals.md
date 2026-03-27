@@ -9,12 +9,16 @@ on the method name:
 
 | Dispatch function | Methods handled |
 |-------------------|----------------|
-| `_run_evi_jit` | `native_geovi`, `native_mgvi`, `native_evi` |
+| `_run_native_vi` | `native_geovi`, `native_mgvi`, `native_evi` |
 | `_run_fast_vi` | `geovi`, `fast_geovi`, `mgvi`, `fast_mgvi`, `evi`, `fast_evi`, `geovi_nuts`, `mgvi_nuts` |
 | `_run_nifty_vi` | `nifty_geovi`, `nifty_mgvi` |
 | `_run_map` | `map` |
 | `_run_nuts` | `nuts` |
 | `_run_raytrace` | `raytrace` |
+| `_run_nss` | `nss` |
+| `_run_laplace` | `laplace` |
+| `_run_pathfinder` | `pathfinder` |
+| `_run_elliptical_slice` | `elliptical_slice` |
 
 **`native_geovi`** is the default going forward. It is a JIT-compiled geoVI
 with a resample+update schedule and nonlinear posterior draws. Ray Tracing
@@ -26,8 +30,13 @@ provides initialization.
 | Method | Module | Extra dependency | Exact? | Best dimensionality |
 |--------|--------|-----------------|--------|---------------------|
 | MAP | `inference/map_optimizer.py` | optax | No (point estimate) | Any |
+| native_geovi | `inference/fitter.py` | nifty8.re | Approximate | Up to ~100,000 |
 | Ray Tracing | `inference/raytrace.py` | -- | Yes | Up to ~300 |
 | NUTS | `inference/nuts.py` | blackjax | Yes | Up to ~20 |
+| Laplace | `inference/laplace.py` | -- | Approximate (Gaussian) | Any |
+| Pathfinder | `inference/pathfinder.py` | blackjax | Approximate | Up to ~100 |
+| Elliptical Slice | `inference/elliptical_slice.py` | -- | Yes | Any (Gaussian prior) |
+| NSS | `inference/ns/nss.py` | -- | Yes + evidence | Up to ~30 |
 | geoVI | `inference/geovi.py` | nifty8.re | Approximate | Up to ~100,000 |
 | MGVI | `inference/fitter.py` | nifty8.re | Approximate | Up to ~1,000,000 |
 
@@ -91,7 +100,7 @@ These internal names were renamed in previous refactors:
 
 tengri uses several XLA/JIT optimizations:
 
-**Persistent XLA cache.** A compilation cache at `/tmp/tengri_jax_cache` is
+**Persistent XLA cache.** A compilation cache at `~/.cache/tengri_jax_cache` is
 auto-enabled on import. This avoids recompilation across Python sessions for
 the same model configuration.
 
