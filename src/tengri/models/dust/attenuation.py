@@ -27,16 +27,25 @@ Available Attenuation Curves
 - **li08**: Li et al. (2008) parametric 3-slope + UV bump (reproduces MW/SMC/Calzetti)
 - **salim**: Salim et al. (2018) modified Calzetti (= DSPS default)
 
+Dust Geometries (Witt & Gordon 2000)
+-------------------------------------
+- **wg00_shell**: Foreground screen — standard exp(-tau*k)
+- **wg00_cloudy**: Homogeneous dust-star mix (slab) — greyer than screen
+- **wg00_dusty**: Clumpy two-phase medium (Natta & Panagia 1984) — greyest
+
 References
 ----------
 - Calzetti et al. 2000, ApJ, 533, 682
 - Cardelli et al. 1989, ApJ, 345, 245
 - Charlot & Fall 2000, ApJ, 539, 718
 - Gordon et al. 2003, ApJ, 594, 279
+- Hobson & Padman 1993, MNRAS, 264, 161
 - Kriek & Conroy 2013, ApJL, 775, L16
 - Li et al. 2008, MNRAS, 385, 1903
 - Lower et al. 2022, ApJ, 931, 14
+- Natta & Panagia 1984, ApJ, 287, 228
 - Salim et al. 2018, ApJ, 859, 11
+- Witt & Gordon 2000, ApJ, 528, 799
 - Zacharegkas et al. 2025, arXiv:2506.19919
 """
 
@@ -149,28 +158,83 @@ def kriek_conroy(
     return jnp.clip(k_calz * slope_mod + bump, 0.0)
 
 
+def _pei92_curve(
+    wavelength: jnp.ndarray,
+    lam_i: jnp.ndarray,
+    a_i: jnp.ndarray,
+    b_i: jnp.ndarray,
+    n_i: jnp.ndarray,
+    R_V: float,
+) -> jnp.ndarray:
+    """Pei (1992, ApJ, 395, 130) generalized Drude profile sum.
+
+    Computes A(lambda)/A(V) normalized to k(5500 A) = 1. Fully continuous,
+    no piecewise boundaries.
+
+    Parameters
+    ----------
+    wavelength : array
+        Wavelength in Angstrom.
+    lam_i, a_i, b_i, n_i : arrays, shape (n_components,)
+        Drude component parameters from Pei 1992 Table 4.
+    R_V : float
+        Total-to-selective extinction ratio.
+    """
+    wave_um = wavelength / 1e4  # (n_wave,)
+    # xi(lambda) = sum_i a_i / ((lam/lam_i)^n_i + (lam_i/lam)^n_i + b_i)
+    # shape: (n_components, n_wave)
+    ratio = wave_um[None, :] / lam_i[:, None]
+    denom = ratio ** n_i[:, None] + ratio ** (-n_i[:, None]) + b_i[:, None]
+    xi = jnp.sum(a_i[:, None] / denom, axis=0)
+
+    # Pei 1992 Drude sum gives extinction proportional to tau(lambda).
+    # A(lambda)/A(V) = xi(lambda) / xi(V). Normalize to k(5500 A) = 1.
+    wave_v = 0.55  # um
+    ratio_v = wave_v / lam_i
+    xi_v = jnp.sum(a_i / (ratio_v ** n_i + ratio_v ** (-n_i) + b_i))
+    return jnp.clip(xi / xi_v, 0.0)
+
+
+# Pei 1992 Table 4 — SMC Bar (6 components, R_V = 2.93, no 2175 A bump)
+_SMC_LAM = jnp.array([0.042, 0.08, 0.22, 9.7, 18.0, 25.0])
+_SMC_A = jnp.array([185.0, 27.0, 0.005, 0.010, 0.012, 0.030])
+_SMC_B = jnp.array([90.0, 5.50, -1.95, -1.95, -1.80, 0.00])
+_SMC_N = jnp.array([2.0, 4.0, 2.0, 2.0, 2.0, 2.0])
+_SMC_RV = 2.93
+
+# Pei 1992 Table 4 — LMC (6 components, R_V = 3.16, weak 2175 A bump)
+_LMC_LAM = jnp.array([0.046, 0.08, 0.22, 9.7, 18.0, 25.0])
+_LMC_A = jnp.array([175.0, 19.0, 0.023, 0.005, 0.006, 0.020])
+_LMC_B = jnp.array([90.0, 5.50, -1.95, -1.95, -1.80, 0.00])
+_LMC_N = jnp.array([2.0, 4.5, 2.0, 2.0, 2.0, 2.0])
+_LMC_RV = 3.16
+
+
 @register_dust_law("smc")
 def smc(
     wavelength: jnp.ndarray,
     **_kwargs,
 ) -> jnp.ndarray:
-    """SMC Bar extinction curve (Gordon+2003 / Pei 1992).
+    """SMC Bar extinction curve (Pei 1992, ApJ, 395, 130).
 
-    Steep UV rise, NO 2175A bump. Common at high redshift.
+    Steep UV rise, NO 2175 A bump. Common at high redshift. R_V = 2.93.
+    Uses generalized Drude profile sum — fully continuous, no piecewise
+    boundaries.
     """
-    wave_um = wavelength / 1e4
-    x = 1.0 / wave_um
+    return _pei92_curve(wavelength, _SMC_LAM, _SMC_A, _SMC_B, _SMC_N, _SMC_RV)
 
-    k_uv = 1.0 + 0.2 * (x - 3.33) + 0.25 * (x - 3.33) ** 2
-    k_opt = 1.0 + 1.39 * (x - 1.82)
-    k_ir = 0.6 * x**1.7
 
-    k = jnp.where(
-        wave_um < 0.3,
-        k_uv,
-        jnp.where(wave_um < 1.0, k_opt, k_ir),
-    )
-    return jnp.clip(k, 0.0)
+@register_dust_law("lmc")
+def lmc(
+    wavelength: jnp.ndarray,
+    **_kwargs,
+) -> jnp.ndarray:
+    """LMC average extinction curve (Pei 1992, ApJ, 395, 130).
+
+    Weak 2175 A bump, intermediate between MW and SMC. R_V = 3.16.
+    Uses generalized Drude profile sum — fully continuous.
+    """
+    return _pei92_curve(wavelength, _LMC_LAM, _LMC_A, _LMC_B, _LMC_N, _LMC_RV)
 
 
 @register_dust_law("cardelli")
@@ -399,6 +463,34 @@ def precompute_dust_age_weights(
     return jax.nn.sigmoid(-(log_age - log_t_birth) / transition_width)
 
 
+def precompute_dust_age_mask(
+    age_grid: jnp.ndarray,
+    t_birth: float = 1e7,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Precompute hard young/old masks for fast two-CSP dust decomposition.
+
+    Uses a hard threshold at ``t_birth`` instead of a smooth sigmoid.
+    This is the original Charlot & Fall (2000) formulation and enables
+    a fast path where dust is factored out of the age sum entirely.
+
+    Parameters
+    ----------
+    age_grid : array, shape (n_ages,)
+        Stellar population ages (yr).
+    t_birth : float
+        Birth cloud dispersal age (yr). Default 1e7 (10 Myr).
+
+    Returns
+    -------
+    young_mask : array, shape (n_ages,)
+        1.0 for young ages (< t_birth), 0.0 for old.
+    old_mask : array, shape (n_ages,)
+        1.0 for old ages (>= t_birth), 0.0 for young.
+    """
+    young = (age_grid < t_birth).astype(jnp.float64)
+    return young, 1.0 - young
+
+
 def two_component_dust(
     wavelength: jnp.ndarray,
     age_grid: jnp.ndarray,
@@ -555,3 +647,85 @@ def two_component_dust_fast(
     tau_lambda = dust_age_weights[:, None] * tau_v1 * k_bc[None, :] + tau_v2 * k_diff[None, :]
 
     return f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau_lambda)
+
+
+# ===================================================================
+# Single-component dust model (uniform screen)
+# ===================================================================
+
+
+def single_component_dust(
+    wavelength: jnp.ndarray,
+    tau_v: float,
+    law: str = "power_law",
+    f_obscuration: float = 0.0,
+    **law_params,
+) -> jnp.ndarray:
+    """Single-component (uniform screen) dust attenuation.
+
+    Applies one attenuation curve at one optical depth to all stellar
+    ages identically.  Faster than the two-component model because there
+    is no age-dependent birth-cloud term.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid (Angstrom).
+    tau_v : float
+        V-band optical depth.
+    law : str
+        Attenuation curve name (from ``DUST_LAWS`` registry).
+    f_obscuration : float
+        Fraction of unattenuated sightlines [0, 1] (Lower 2022).
+    **law_params
+        Passed to curve function: ``n_slope``, ``dust_bump_strength``,
+        ``dust_delta``, ``dust_Rv``, etc.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Multiplicative transmission factor in [0, 1].
+    """
+    k = get_dust_law(law)(wavelength, **law_params)
+    return f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau_v * k)
+
+
+def single_component_dust_fast(
+    wavelengths: jnp.ndarray,
+    n_ages: int,
+    tau_v: float,
+    law: str = "power_law",
+    f_obscuration: float = 0.0,
+    **law_params,
+) -> jnp.ndarray:
+    """Single-component dust attenuation broadcast to (n_ages, n_wave).
+
+    Computes ``exp()`` on the 1-D wavelength grid only, then broadcasts
+    to ``(n_ages, n_wave)`` via ``jnp.broadcast_to`` (zero-copy in XLA).
+    This is the production path used by the SED pipeline.
+
+    Parameters
+    ----------
+    wavelengths : array, shape (n_wave,)
+        Evaluation wavelengths (rest-frame Angstrom).
+    n_ages : int
+        Number of SSP age bins (for output shape).
+    tau_v : float
+        V-band optical depth.
+    law : str
+        Attenuation curve name (from ``DUST_LAWS`` registry).
+    f_obscuration : float
+        Fraction of unattenuated sightlines [0, 1] (Lower 2022).
+    **law_params
+        Passed to curve function.
+
+    Returns
+    -------
+    array, shape (n_ages, n_wave)
+        Multiplicative transmission factor in [0, 1].  All age rows
+        are identical (age-independent attenuation).
+    """
+    trans_1d = single_component_dust(
+        wavelengths, tau_v=tau_v, law=law, f_obscuration=f_obscuration, **law_params
+    )
+    return jnp.broadcast_to(trans_1d[None, :], (n_ages, len(wavelengths)))

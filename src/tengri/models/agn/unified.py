@@ -272,8 +272,8 @@ def standard_agn(
     return l_nu * agn_frac
 
 
-@register_agn_model("kubota_done")
-def kubota_done_agn(
+@register_agn_model("multicolor_agn")
+def multicolor_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
     agn_frac: float = 0.1,
@@ -288,7 +288,12 @@ def kubota_done_agn(
     agn_torus_frac: float = 0.5,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Kubota & Done (2018) disc + clumpy torus.
+    """Multicolor Shakura-Sunyaev disc + two-temperature torus.
+
+    Standard thin-disc SED with spin-dependent ISCO and Novikov-Thorne
+    radiative efficiency, combined with a toy two-temperature torus.
+    Note: this is the outer standard disc only — no warm Comptonization
+    or hot corona (for the full 3-zone model, see QSOSED).
 
     8+ free parameters:
     - agn_log_mbh: black hole mass
@@ -348,6 +353,11 @@ def kubota_done_agn(
         agn_torus_frac=agn_torus_frac,
     )
     return l_nu * agn_frac
+
+
+# Backward-compat alias (renamed from kubota_done -> multicolor_agn)
+kubota_done_agn = multicolor_agn
+AGN_MODELS["kubota_done"] = multicolor_agn
 
 
 @register_agn_model("skirtor")
@@ -514,21 +524,24 @@ def unified_nlr_blr(
     agn_frac: float = 0.1,
     agn_blr_fwhm: float = 5000.0,
     agn_nlr_fwhm: float = 500.0,
+    agn_polar_ebv: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """Unified AGN SED with NLR/BLR decomposition and geometric masking.
 
-    Extends the ``kubota_done`` model with narrow and broad line region
-    emission, inspired by Synthesizer's UnifiedAGN. The disc and BLR
-    are masked by the torus at high inclinations using a smooth sigmoid
-    transition. The NLR and torus are always visible (isotropic).
+    Extends the ``multicolor_agn`` model with narrow and broad line region
+    emission, inspired by Synthesizer's UnifiedAGN and CIGALE's polar dust.
+    The disc and BLR are masked by the torus at high inclinations using a
+    smooth sigmoid transition. The NLR and torus are always visible
+    (isotropic). For Type 1 views, polar dust reddening (SMC law) is
+    applied to the disc and BLR.
 
     Total SED::
 
-        L_agn = mask_disc * L_disc
+        L_agn = mask_disc * A_polar(λ) * L_disc
               + L_torus
               + covering_nlr * L_disc_bol * eta_nlr   (NLR, isotropic)
-              + mask_blr * covering_blr * L_disc_bol * eta_blr  (BLR, masked)
+              + mask_blr * A_polar(λ) * covering_blr * L_disc_bol * eta_blr
 
     Parameters
     ----------
@@ -568,6 +581,11 @@ def unified_nlr_blr(
         BLR line FWHM [km/s]. Default 5000.
     agn_nlr_fwhm : float
         NLR line FWHM [km/s]. Default 500.
+    agn_polar_ebv : float
+        Polar dust E(B-V) applied to disc + BLR for Type 1 views
+        (SMC extinction law). Accounts for moderately obscured Type 1
+        AGN where polar dust reddens the UV/optical continuum
+        (as in CIGALE skirtor2016 module). Default 0.0 (no reddening).
 
     Returns
     -------
@@ -575,6 +593,14 @@ def unified_nlr_blr(
         Total AGN L_nu [Lsun Hz^-1].
     """
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
+
+    # Derive torus covering factor from opening angle for consistency:
+    # covering_factor ~ cos(theta_torus). If agn_torus_frac is at default
+    # (0.5), use the geometric value; otherwise honour the explicit setting.
+    geom_cf = jnp.cos(jnp.radians(jnp.clip(agn_theta_torus, 0.0, 90.0)))
+    agn_torus_frac = jnp.where(
+        agn_torus_frac == 0.5, geom_cf, agn_torus_frac
+    )
 
     # --- Geometric masks ---
     mask_disc = _sigmoid_mask(agn_cos_inc, agn_theta_torus)
@@ -591,8 +617,18 @@ def unified_nlr_blr(
         agn_a_spin=agn_a_spin,
         agn_cos_inc=agn_cos_inc,
     )
-    # Apply geometric masking
-    l_disc_masked = mask_disc * l_disc
+    # --- Polar dust extinction (Type 1 reddening, SMC law) ---
+    # Applied to disc and BLR when visible (mask > 0).
+    # Uses SMC law since AGN sightlines typically lack a 2175 A bump.
+    from tengri.models.dust.attenuation import smc as _smc_law
+
+    k_polar = _smc_law(wavelength)  # k(λ)/k(V), normalized at 5500 A
+    # R_V(SMC) = 2.93; A(λ) = E(B-V) * R_V * k(λ)
+    _RV_SMC = 2.93
+    polar_trans = jnp.exp(-0.921 * agn_polar_ebv * _RV_SMC * k_polar)
+
+    # Apply geometric masking + polar dust to disc
+    l_disc_masked = mask_disc * l_disc * polar_trans
 
     # --- Torus emission (always visible) ---
     l_torus = two_temperature_torus(
@@ -623,7 +659,7 @@ def unified_nlr_blr(
         covering_fraction=agn_covering_blr,
         fwhm_kms=agn_blr_fwhm,
     )
-    l_blr = mask_blr * l_blr_erg / _LSUN_ERG
+    l_blr = mask_blr * polar_trans * l_blr_erg / _LSUN_ERG
 
     # --- Total ---
     l_total = l_disc_masked + l_torus + l_nlr + l_blr

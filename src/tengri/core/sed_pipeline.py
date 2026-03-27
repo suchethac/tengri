@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tengri.models.dust.attenuation import two_component_dust_fast
+from tengri.models.dust.attenuation import single_component_dust_fast, two_component_dust_fast
 from tengri.models.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
@@ -137,7 +137,7 @@ def interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe_per_age):
     """
     if has_alpha_grid(model.ssp_data):
         # Broadcast scalar alpha_fe to per-age array
-        if not hasattr(alpha_fe_per_age, 'shape') or alpha_fe_per_age.ndim == 0:
+        if not hasattr(alpha_fe_per_age, "shape") or alpha_fe_per_age.ndim == 0:
             alpha_fe_per_age = jnp.full_like(log_z_per_age, alpha_fe_per_age)
         return interpolate_met_alpha_evolving(
             model.ssp_data.ssp_flux,
@@ -179,6 +179,45 @@ def get_dust_kwargs(model, p):
         kw["dust_beta_ir"] = p.get("dust_beta_ir", 1.6)
         kw["dust_eta_balance"] = p.get("dust_eta_balance", 1.0)
     return kw
+
+
+def _compute_dust_atten(model, wave_dt, p):
+    """Compute dust attenuation array, dispatching on dust model type.
+
+    Returns shape ``(n_ages, n_wave)`` for both single- and two-component.
+    """
+    law_kw = {
+        "f_obscuration": p.get("f_obscuration", 0.0),
+        "n_slope": p.get("dust_slope", -0.7),
+        "dust_bump_strength": p.get("dust_bump_strength", 0.0),
+        "dust_delta": p.get("dust_delta", 0.0),
+        "dust_Rv": p.get("dust_Rv", 3.1),
+    }
+    if model._dust_model == "single_component":
+        return single_component_dust_fast(
+            wave_dt,
+            n_ages=len(model.ssp_ages_yr),
+            tau_v=p["tau_v"],
+            law=model._dust_law_bc,
+            **law_kw,
+        )
+    # For the non-fused fallback path, always use smooth sigmoid weights
+    # (this path is only hit for evolving-Z etc., not performance-critical)
+    from tengri.models.dust.attenuation import precompute_dust_age_weights
+
+    if model._dust_age_weights is not None:
+        dust_age_w = model._dust_age_weights.astype(wave_dt.dtype)
+    else:
+        dust_age_w = precompute_dust_age_weights(model.ssp_ages_yr).astype(wave_dt.dtype)
+    return two_component_dust_fast(
+        wave_dt,
+        dust_age_w,
+        tau_v1=p["tau_bc"],
+        tau_v2=p["tau_diff"],
+        law_bc=model._dust_law_bc,
+        law_diff=model._dust_law_diff,
+        **law_kw,
+    )
 
 
 def get_agn_kwargs(model, p):
@@ -304,7 +343,10 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         z_val = p.get("redshift", 0.0)
         t_universe = model._t_universe_gyr(z_val) if hasattr(model, "_t_universe_gyr") else 13.7
         alpha_fe = compute_alpha_fe_evolving(
-            model.ssp_data.ssp_lg_age_gyr, alpha_fe_old, alpha_fe_young, t_universe,
+            model.ssp_data.ssp_lg_age_gyr,
+            alpha_fe_old,
+            alpha_fe_young,
+            t_universe,
         )  # (n_age,) per-age values
     else:
         alpha_fe = p.get("alpha_fe", 0.0)  # scalar
@@ -392,9 +434,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
             met_table[::-1],
         )
         log_z_abs = log_z_on_ssp + (-1.8477)  # solar offset
-        ssp_flux_at_z = interp_met_alpha_evolving_dispatch(
-            model, log_z_abs, alpha_fe
-        )
+        ssp_flux_at_z = interp_met_alpha_evolving_dispatch(model, log_z_abs, alpha_fe)
     elif model._evolving_metallicity:
         z = p.get("redshift", 0.0)
         t_universe_gyr = model._t_universe_gyr(z)
@@ -404,9 +444,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
             p["log_z_abs_final"],
             t_universe_gyr,
         )
-        ssp_flux_at_z = interp_met_alpha_evolving_dispatch(
-            model, log_z_per_age, alpha_fe
-        )
+        ssp_flux_at_z = interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe)
     else:
         ssp_flux_at_z = interp_met_alpha_dispatch(model, p["log_z_abs"], alpha_fe)
 
@@ -440,22 +478,9 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
     if _dsps_weights_2d is not None and _dsps_weights_2d != "jit_done":
         dt = model._forward_dtype
         ssp_flux_at_z = ssp_flux_at_z.astype(dt)
-        dust_age_w = model._dust_age_weights.astype(dt)
         wave_dt = model.ssp_data.ssp_wave.astype(dt)
 
-        dust_atten = two_component_dust_fast(
-            wave_dt,
-            dust_age_w,
-            tau_v1=p["tau_bc"],
-            tau_v2=p["tau_diff"],
-            law_bc=model._dust_law_bc,
-            law_diff=model._dust_law_diff,
-            f_obscuration=p.get("f_obscuration", 0.0),
-            n_slope=p.get("dust_slope", -0.7),
-            dust_bump_strength=p.get("dust_bump_strength", 0.0),
-            dust_delta=p.get("dust_delta", 0.0),
-            dust_Rv=p.get("dust_Rv", 3.1),
-        )
+        dust_atten = _compute_dust_atten(model, wave_dt, p)
 
         _LSUN = 3.828e33
         sed_attenuated = (
@@ -483,22 +508,9 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         # Non-DSPS fallback (evolving Z or met_history without DSPS)
         dt = model._forward_dtype
         ssp_flux_at_z = ssp_flux_at_z.astype(dt)
-        dust_age_w = model._dust_age_weights.astype(dt)
         wave_dt = model.ssp_data.ssp_wave.astype(dt)
 
-        dust_atten = two_component_dust_fast(
-            wave_dt,
-            dust_age_w,
-            tau_v1=p["tau_bc"],
-            tau_v2=p["tau_diff"],
-            law_bc=model._dust_law_bc,
-            law_diff=model._dust_law_diff,
-            f_obscuration=p.get("f_obscuration", 0.0),
-            n_slope=p.get("dust_slope", -0.7),
-            dust_bump_strength=p.get("dust_bump_strength", 0.0),
-            dust_delta=p.get("dust_delta", 0.0),
-            dust_Rv=p.get("dust_Rv", 3.1),
-        )
+        dust_atten = _compute_dust_atten(model, wave_dt, p)
 
         sed_attenuated = compute_csp_sed(weights.astype(dt), ssp_flux_at_z, dust_atten).astype(
             jnp.float64
@@ -578,11 +590,17 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         )
         sed = sed + agn_sed
 
+    # Populate cached physical quantities for radio/X-ray models
+    # L_ir: total IR luminosity from dust energy balance (Lsun)
+    _L_ir = L_ir if "L_ir" in dir() else p.get("_L_ir_cached", 0.0)
+    # SFR: instantaneous SFR at z_obs (Msun/yr) from the SFH
+    _sfr_cached = sfr_table[-1] if "sfr_table" in dir() else p.get("_sfr_cached", 1.0)
+    # M*: total stellar mass formed (Msun)
+    _mstar = jnp.sum(weights) if weights is not None else p.get("_mstar_cached", 1e10)
+
     # Radio emission (synchrotron from SF + AGN jets)
     if model._radio_enabled:
         from tengri.models.radio import radio_total
-
-        _L_ir = p.get("_L_ir_cached", 0.0)
         radio_sed = radio_total(
             model.ssp_data.ssp_wave,
             L_ir=_L_ir,
@@ -598,8 +616,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
     if model._xray_enabled:
         from tengri.models.xray import xray_total
 
-        _sfr_cached = p.get("_sfr_cached", 1.0)
-        _mstar = p.get("_mstar_cached", 1e10)
+        # Use pipeline-computed SFR and M* (populated above)
         xray_sed = xray_total(
             model.ssp_data.ssp_wave,
             sfr=_sfr_cached,

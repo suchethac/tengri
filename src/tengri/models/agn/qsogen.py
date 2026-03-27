@@ -391,7 +391,9 @@ def _balmer_continuum(
     x_clip = jnp.clip(x, 0.0, 500.0)
     b_nu_wav = wavelength ** (-3.0) / (jnp.exp(x_clip) - 1.0)
 
-    # Optical depth: tau(nu) = taube * (nu_BE / nu)^3 = taube * (wav / wavbe)^3
+    # Optical depth: tau(nu) = taube * (nu_BE/nu)^3 = taube * (wavelength / wavbe)^3
+    # Grandi (1982): H photoionization cross-section ~ nu^-3, so tau decreases
+    # at shorter wavelengths (higher frequencies) above the Balmer edge.
     tau = taube * (wavelength / wavbe) ** 3
     tau_clip = jnp.clip(tau, 0.0, 50.0)
     absorption = 1.0 - jnp.exp(-tau_clip)

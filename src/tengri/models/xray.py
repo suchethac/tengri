@@ -127,8 +127,12 @@ def xray_agn_corona(
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / (1.6022e-9)
 
-    # L_2500A from bolometric correction: L_2500 ~ L_bol / 5
-    L_2500 = L_agn_bol / 5.0  # Lsun/Hz (rough)
+    # Monochromatic luminosity density at 2500 A in Lsun/Hz.
+    # L_bol = BC_2500 * nu_2500 * L_nu(2500) => L_nu = L_bol / (BC * nu)
+    # BC_2500 ~ 5.15 (Hopkins+2007), nu_2500 = c / 2500 A = 1.199e15 Hz
+    _NU_2500 = 1.199e15  # Hz
+    _BC_2500 = 5.15  # Hopkins+2007 bolometric correction at 2500 A
+    L_2500 = L_agn_bol * _LSUN / (_BC_2500 * _NU_2500) / _LSUN  # Lsun/Hz
 
     # alpha_ox = 0.384 * log10(L_2keV / L_2500A)
     # => L_2keV = L_2500 * 10^(alpha_ox / 0.384)

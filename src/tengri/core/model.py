@@ -196,9 +196,7 @@ class Model:
         elif filters is not None:
             from tengri.models.observation.photometry_config import Photometry
 
-            observation = Observation(
-                photometry=Photometry.from_filter_set(filters)
-            )
+            observation = Observation(photometry=Photometry.from_filter_set(filters))
 
         self.observation = observation
         self.spec = spec
@@ -253,20 +251,31 @@ class Model:
         self._sfh_fn = sfh_fn
         self._sfh_internal_names = {v[0] for v in sfh_param_map.values()}
         self._sfh_settings = sfh_settings
-        self._param_map = _build_param_map(spec.mean_sfh_type)
+        self._param_map = _build_param_map(
+            spec.mean_sfh_type,
+            dust_model=getattr(spec, "dust_model", "two_component"),
+        )
 
         # Field settings
         self._has_field = spec.stochastic
         self._field_model = sfh_settings.get("sfh_field_model", "drw")
 
-        # Dust law settings (generalized two-component model)
+        # Dust model: "two_component" (Charlot & Fall) or "single_component" (screen)
+        self._dust_model = getattr(spec, "dust_model", "two_component")
+        # Dust approx: "fast" (hard threshold, 2-CSP) or "exact" (smooth sigmoid)
+        self._dust_approx = getattr(spec, "dust_approx", "fast")
+
+        # Dust law settings
         self._dust_law_bc = spec.dust_law_bc
         self._dust_law_diff = spec.dust_law_diff
         # Cache resolved dust law functions (avoid dict lookup per forward call)
         from tengri.models.dust.attenuation import get_dust_law
 
         self._dust_law_bc_fn = get_dust_law(self._dust_law_bc)
-        self._dust_law_diff_fn = get_dust_law(self._dust_law_diff)
+        if self._dust_model == "single_component":
+            self._dust_law_diff_fn = self._dust_law_bc_fn  # not used, keep consistent
+        else:
+            self._dust_law_diff_fn = get_dust_law(self._dust_law_diff)
 
         # IGM absorption (Inoue+2014)
         self._apply_igm = spec.apply_igm
@@ -413,7 +422,15 @@ class Model:
             )
 
         # Precompute dust age weights (sigmoid depends only on age grid)
-        self._dust_age_weights = precompute_dust_age_weights(self.ssp_ages_yr)
+        # Dust precomputation depends on model and approximation mode
+        if self._dust_model == "single_component":
+            self._dust_age_weights = None
+        elif self._dust_approx == "exact":
+            # Smooth sigmoid weights for exact two-component dust
+            self._dust_age_weights = precompute_dust_age_weights(self.ssp_ages_yr)
+        else:
+            # Fast mode: age weights not used (two-CSP decomposition in fused kernel)
+            self._dust_age_weights = None
 
         # Precompute IGM at effective wavelengths (for fused kernel)
         self._igm_at_eff = None
@@ -721,19 +738,23 @@ class Model:
         else:
             mass_surviving = jnp.array(jnp.nan)
 
-        # SFR averages
+        # SFR averages — proper time-weighted mean on log-spaced age grid
+        # <SFR>_T = integral(SFR * dt) / T, using trapezoidal rule
         mask_100 = self.age_yr <= 1e8
-        sfr_100myr = jnp.where(
-            jnp.sum(mask_100) > 0,
-            jnp.sum(sfr * mask_100) / jnp.maximum(jnp.sum(mask_100), 1.0),
-            sfr[0],
-        )
+        age_100 = jnp.where(mask_100, self.age_yr, 0.0)
+        sfr_100_masked = jnp.where(mask_100, sfr, 0.0)
+        integral_100 = jnp.trapezoid(sfr_100_masked, age_100)
+        min_100 = jnp.min(jnp.where(mask_100, self.age_yr, 1e8))
+        span_100 = jnp.maximum(jnp.max(age_100) - min_100, 1.0)
+        sfr_100myr = jnp.where(jnp.sum(mask_100) > 1, integral_100 / span_100, sfr[0])
+
         mask_10 = self.age_yr <= 1e7
-        sfr_10myr = jnp.where(
-            jnp.sum(mask_10) > 0,
-            jnp.sum(sfr * mask_10) / jnp.maximum(jnp.sum(mask_10), 1.0),
-            sfr[0],
-        )
+        age_10 = jnp.where(mask_10, self.age_yr, 0.0)
+        sfr_10_masked = jnp.where(mask_10, sfr, 0.0)
+        integral_10 = jnp.trapezoid(sfr_10_masked, age_10)
+        min_10 = jnp.min(jnp.where(mask_10, self.age_yr, 1e7))
+        span_10 = jnp.maximum(jnp.max(age_10) - min_10, 1.0)
+        sfr_10myr = jnp.where(jnp.sum(mask_10) > 1, integral_10 / span_10, sfr[0])
 
         # sSFR
         mass_for_ssfr = jnp.where(jnp.isnan(mass_surviving), mass_formed, mass_surviving)
@@ -956,6 +977,15 @@ class Model:
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+        if self._dust_model == "single_component":
+            return self._fused_photometry(
+                sfr_on_ssp,
+                p["log_z_abs"],
+                p["tau_v"],
+                p["dust_slope"],
+                **self._get_dust_kwargs(p),
+                **self._get_agn_kwargs(p),
+            )
         return self._fused_photometry(
             sfr_on_ssp,
             p["log_z_abs"],
@@ -972,6 +1002,16 @@ class Model:
         sfr = self._compute_sfr(p)
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
         z = self._get_redshift(params)
+        if self._dust_model == "single_component":
+            return self._fused_photometry_ztable(
+                sfr_on_ssp,
+                p["log_z_abs"],
+                p["tau_v"],
+                p["dust_slope"],
+                z,
+                **self._get_dust_kwargs(p),
+                **self._get_agn_kwargs(p),
+            )
         return self._fused_photometry_ztable(
             sfr_on_ssp,
             p["log_z_abs"],
@@ -1115,16 +1155,27 @@ class Model:
         sfr = self._compute_sfr(p)
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
         sigma_v = params.get("sigma_v", 0.0) if self._has_sigma_v else 0.0
-        flux = self._fused_spectrum(
-            sfr_on_ssp,
-            p["log_z_abs"],
-            p["tau_bc"],
-            p["tau_diff"],
-            p["dust_slope"],
-            sigma_v,
-            **self._get_dust_kwargs(p),
-            **self._get_agn_kwargs(p),
-        )
+        if self._dust_model == "single_component":
+            flux = self._fused_spectrum(
+                sfr_on_ssp,
+                p["log_z_abs"],
+                p["tau_v"],
+                p["dust_slope"],
+                sigma_v,
+                **self._get_dust_kwargs(p),
+                **self._get_agn_kwargs(p),
+            )
+        else:
+            flux = self._fused_spectrum(
+                sfr_on_ssp,
+                p["log_z_abs"],
+                p["tau_bc"],
+                p["tau_diff"],
+                p["dust_slope"],
+                sigma_v,
+                **self._get_dust_kwargs(p),
+                **self._get_agn_kwargs(p),
+            )
 
         # Apply LSF convolution if resolution profile is set
         # (applied after the fused kernel, which handles velocity broadening)

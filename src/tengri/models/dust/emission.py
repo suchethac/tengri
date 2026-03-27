@@ -64,6 +64,7 @@ def _find_data_file(filename: str) -> str | None:
             return str(candidate)
     return None
 
+
 # ===================================================================
 # Physical constants (CGS)
 # ===================================================================
@@ -392,6 +393,124 @@ def modified_blackbody(
     result = norm * shape
 
     # CMB contrast: suppresses flux where dust is observed against CMB
+    contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
+
+    return result * contrast
+
+
+# ===================================================================
+# Model 1b: Casey (2012) modified blackbody + mid-IR power law
+# ===================================================================
+
+# Empirical coefficients for turnover wavelength (Casey 2012, Eq. 3, errata)
+_CASEY_B1_UM = 26.68  # μm
+_CASEY_B2_UM_PER_K = 6.246e-3  # μm / K
+
+
+@register_emission_model("casey2012")
+def casey2012(
+    wavelength_aa: jnp.ndarray,
+    L_absorbed: float,
+    dust_T: float = 35.0,
+    dust_beta_ir: float = 1.8,
+    dust_alpha_mir: float = 2.0,
+    redshift: float = 0.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Casey (2012) modified blackbody + mid-IR power law dust emission.
+
+    Combines a modified blackbody (FIR peak from cold/warm dust) with a
+    mid-IR power law (Wien-side excess from warm dust continuum), joined
+    by a smooth sigmoid transition function.  The key advantage over a
+    pure modified blackbody is capturing the 8--40 μm excess seen in real
+    galaxy SEDs.
+
+    The model is (Casey 2012, MNRAS, 425, 3094, Eq. 2)::
+
+        S(ν) = N_pl * ν^α_mid * f(ν)
+             + N_bb * ν^(3+β) / (exp(hν/kT) - 1) * (1 - f(ν))
+
+    where the transition function is::
+
+        f(ν) = 1 / (1 + (λ_0 / λ)^2)
+
+    and the empirical turnover wavelength is (Eq. 3, with errata)::
+
+        λ_0 = b1 + b2 * T   [μm]
+
+    with ``b1 = 26.68 μm``, ``b2 = 6.246e-3 μm/K``.
+
+    Both components are normalized so that the total frequency integral
+    equals ``L_absorbed``.
+
+    When ``redshift > 0``, the dust temperature is corrected for CMB
+    heating (da Cunha et al. 2013) and the observed flux is reduced by
+    the CMB contrast factor.
+
+    Parameters
+    ----------
+    wavelength_aa : array, shape (n_wave,)
+        Wavelength grid in Angstrom (sorted ascending).
+    L_absorbed : float
+        Total absorbed luminosity in Lsun (sets the normalization).
+    dust_T : float
+        Dust temperature in Kelvin.  Typical range: 25--60 K.
+    dust_beta_ir : float
+        Dust emissivity index for the MBB component.
+        Typical range: 1.5--2.0.
+    dust_alpha_mir : float
+        Mid-IR power-law slope.  Typical range: 1.5--2.5.
+    redshift : float
+        Source redshift. When > 0, CMB heating correction is applied.
+        Default 0 (no correction).
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Dust emission L_nu in Lsun/Hz.
+
+    References
+    ----------
+    Casey, C. M., 2012, MNRAS, 425, 3094.
+    da Cunha, E. et al., 2013, ApJ, 766, 13 (CMB corrections).
+    """
+    # CMB correction (no-op at z=0)
+    T_eff = cmb_corrected_temperature(dust_T, redshift, dust_beta_ir)
+
+    wavelength_cm = wavelength_aa * _AA_TO_CM
+    nu = _C_CGS / wavelength_cm  # Hz, descending
+
+    # Empirical turnover wavelength (Casey 2012, Eq. 3 with errata)
+    lambda0_cm = (_CASEY_B1_UM + _CASEY_B2_UM_PER_K * T_eff) * 1.0e-4  # μm -> cm
+
+    # Transition function: f(ν) = 1 / (1 + (λ_0/λ)^2)
+    # λ_0/λ = ν / ν_0 where ν_0 = c / λ_0
+    nu0 = _C_CGS / lambda0_cm
+    f_transition = 1.0 / (1.0 + (nu / nu0) ** 2)
+
+    # --- Mid-IR power-law component ---
+    # S_pl(ν) ~ ν^α_mid * f(ν)
+    # Use a reference frequency to keep the amplitude sensible
+    nu_ref = _C_CGS / (100.0e-4)  # 100 μm pivot in Hz
+    power_law = (nu / nu_ref) ** dust_alpha_mir * f_transition
+
+    # --- Modified blackbody component ---
+    # S_bb(ν) ~ ν^(3+β) / (exp(hν/kT) - 1) * (1 - f(ν))
+    x = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * T_eff), 0.0, 500.0)
+    mbb = (nu / nu_ref) ** (3.0 + dust_beta_ir) / (jnp.exp(x) - 1.0)
+    mbb = mbb * (1.0 - f_transition)
+
+    # Combined unnormalized shape
+    shape = power_law + mbb
+
+    # Normalize so integral over frequency = L_absorbed
+    # nu is descending (wave ascending), negate for positive integral
+    integral = -jnp.trapezoid(shape, nu)
+    norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+
+    result = norm * shape
+
+    # CMB contrast suppression
     contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
 
     return result * contrast
@@ -1376,9 +1495,7 @@ def _dl07_lazy_wrapper(*args, **kwargs):
                     f"science — crude single-Gaussian PAH approximation).",
                     stacklevel=2,
                 )
-                DUST_EMISSION_MODELS["draine_li2007"] = (
-                    _draine_li2007_analytic_fallback
-                )
+                DUST_EMISSION_MODELS["draine_li2007"] = _draine_li2007_analytic_fallback
         else:
             warnings.warn(
                 "DL07 template files (dl07_templates.npz/.h5) not found "
@@ -1386,9 +1503,7 @@ def _dl07_lazy_wrapper(*args, **kwargs):
                 "for science). Run: python scripts/convert_dl07_templates.py",
                 stacklevel=2,
             )
-            DUST_EMISSION_MODELS["draine_li2007"] = (
-                _draine_li2007_analytic_fallback
-            )
+            DUST_EMISSION_MODELS["draine_li2007"] = _draine_li2007_analytic_fallback
     return DUST_EMISSION_MODELS["draine_li2007"](*args, **kwargs)
 
 

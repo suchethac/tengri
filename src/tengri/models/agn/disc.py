@@ -1,12 +1,16 @@
 """Accretion disc models for AGN emission.
 
-Two models are provided:
+Three models are provided:
 
 1. **Simple power-law + UV cutoff** — minimal AGN disc with 3 parameters.
 2. **Multi-color disc (Shakura-Sunyaev)** — physically-motivated standard thin
    disc following Kubota & Done (2018), simplified to the key parameters.
+   Implements the outer standard disc zone only.
+3. **Kubota & Done 3-zone disc** — full K&D (2018) model with outer standard
+   disc, warm Comptonization (soft X-ray excess), and hot corona (hard X-ray
+   power law). Three radially-stratified zones with self-consistent radii.
 
-Both return specific luminosity L_nu in Lsun/Hz as a function of rest-frame
+All return specific luminosity L_nu in Lsun/Hz as a function of rest-frame
 wavelength. All functions are pure JAX and JIT-compilable.
 
 Physical constants are in CGS. Wavelength inputs are in Angstrom.
@@ -16,6 +20,7 @@ References
 - Shakura & Sunyaev 1973, A&A, 24, 337
 - Kubota & Done 2018, MNRAS, 480, 1247
 - Nandra & Pounds 1994, MNRAS, 268, 405 (power-law slopes)
+- Done et al. 2012, MNRAS, 420, 1848 (QSOSED)
 """
 
 import jax
@@ -249,9 +254,10 @@ def multicolor_disc(
     # Outer disc radius: 1000 * r_isco (self-gravity limit)
     r_out = 1000.0 * r_isco * r_g
 
-    # Accretion rate from L = eta * Mdot * c^2
-    # eta ~ 1/(4*r_isco) for Novikov-Thorne, simplified to 0.1
-    eta = 0.1
+    # Radiative efficiency from Novikov-Thorne: eta = 1 - sqrt(1 - 2/(3*r_isco))
+    # For a=0 (Schwarzschild): r_isco=6, eta=0.057
+    # For a=0.998 (maximal spin): r_isco~1.24, eta~0.32
+    eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco))
     l_edd = _eddington_luminosity(agn_log_mbh)
     l_bol_erg = jnp.minimum(10.0**agn_log_ledd, 1.0) * l_edd
     mdot = l_bol_erg / (eta * _C_LIGHT**2)  # [g s^-1]
@@ -281,7 +287,7 @@ def multicolor_disc(
     # Use vmap over radii
     def _ring_lnu(r_cm, t_ring, dr_ring):
         b_nu = _planck_lnu(nu, t_ring)  # (n_wave,)
-        area = 4.0 * jnp.pi**2 * r_cm * dr_ring  # [cm^2]
+        area = 2.0 * jnp.pi * r_cm * dr_ring  # [cm^2]
         return b_nu * area * jnp.maximum(agn_cos_inc, 0.01)
 
     ring_contributions = jax.vmap(_ring_lnu)(r_grid, t_profile, dr)  # (n_radii, n_wave)

@@ -28,6 +28,7 @@ class TestDustLaws:
             "calzetti",
             "kriek_conroy",
             "smc",
+            "lmc",
             "cardelli",
             "li08",
             "salim",

@@ -1031,7 +1031,10 @@ class CueBackend:
             ionspec_logLratio2=ionspec_logLratio2,
             ionspec_logLratio3=ionspec_logLratio3,
         )
-        return self._forward_continuum(p)
+        cont_wav, cont_lum = self._forward_continuum(p)
+        # Apply escape fraction — if photons escape, nebular continuum is
+        # suppressed proportionally (consistent with line treatment).
+        return cont_wav, cont_lum * (1.0 - neb_fesc)
 
     def predict_nebular_sed(
         self,
@@ -1098,6 +1101,7 @@ class CueBackend:
 
         # Continuum (same resolved params — no double computation)
         cont_wav, cont_lum = self._forward_continuum(p)
+        cont_lum = cont_lum * (1.0 - neb_fesc)  # escape fraction suppression
 
         # Interpolate continuum onto SSP grid
         neb_sed = jnp.interp(ssp_wave, cont_wav, cont_lum, left=0.0, right=0.0)

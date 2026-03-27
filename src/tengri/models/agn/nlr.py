@@ -46,8 +46,8 @@ _NLR_LINES = jnp.array(
         [3869.0, 0.04],
         # H-beta 4861 (narrow)
         [4861.0, 0.10],
-        # [OIII] 4959
-        [4959.0, 0.12],
+        # [OIII] 4959 (ratio 5007/4959 = 2.98; Storey & Zeippen 2000)
+        [4959.0, 0.117],
         # [OIII] 5007 (strongest NLR line)
         [5007.0, 0.35],
         # [OI] 6300
