@@ -9,38 +9,12 @@ from tengri.models.sfh.gp_sfh import (
     compute_sqrt_power_drw,
     generate_gp_batch,
     gp_from_xi,
-    xi_to_complex,
 )
 from tengri.models.sfh.psd_models import psd_to_sqrt_power
 
 jax.config.update("jax_enable_x64", True)
 
 N_GRID = 256
-
-
-class TestXiToComplex:
-    """Tests for real-to-complex Fourier coefficient mapping."""
-
-    def test_correct_output_shape(self):
-        """Output has n_freq = n_points//2 + 1 complex coefficients."""
-        xi = jnp.zeros(N_GRID)
-        xi_c = xi_to_complex(xi, N_GRID)
-        assert xi_c.shape == (N_GRID // 2 + 1,)
-        assert jnp.iscomplexobj(xi_c)
-
-    def test_dc_is_real(self):
-        """DC component (index 0) has zero imaginary part."""
-        key = jax.random.PRNGKey(0)
-        xi = jax.random.normal(key, shape=(N_GRID,))
-        xi_c = xi_to_complex(xi, N_GRID)
-        assert_allclose(float(xi_c[0].imag), 0.0, atol=1e-15)
-
-    def test_nyquist_is_real(self):
-        """Nyquist component has zero imaginary part (even N)."""
-        key = jax.random.PRNGKey(1)
-        xi = jax.random.normal(key, shape=(N_GRID,))
-        xi_c = xi_to_complex(xi, N_GRID)
-        assert_allclose(float(xi_c[-1].imag), 0.0, atol=1e-15)
 
 
 class TestGPFromXi:
