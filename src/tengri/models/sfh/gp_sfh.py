@@ -40,46 +40,6 @@ def make_log_age_grid(
     return jnp.linspace(log_age_min, log_age_max, n_grid)
 
 
-def xi_to_complex(xi: jnp.ndarray, n_points: int) -> jnp.ndarray:
-    """Convert real latent vector to Hermitian-symmetric Fourier coefficients.
-
-    Maps n_points real values to n_freq = n_points//2 + 1 complex coefficients
-    with Hermitian symmetry enforced (DC and Nyquist are real).
-
-    Layout (even n_points):
-        xi[0:n_freq]     -> real parts
-        xi[n_freq:end]   -> imaginary parts of interior frequencies
-
-    Parameters
-    ----------
-    xi : array, shape (n_points,)
-        Real-valued standardized latent vector.
-    n_points : int
-        Grid size.
-
-    Returns
-    -------
-    array, shape (n_freq,)
-        Complex Fourier coefficients.
-    """
-    n_freq = n_points // 2 + 1
-
-    xi_real = xi[:n_freq]
-    xi_imag = jnp.zeros(n_freq)
-
-    # Interior frequencies: k = 1, ..., n_freq-2
-    interior_imag = xi[n_freq : 2 * n_freq - 2]
-    xi_imag = xi_imag.at[1 : n_freq - 1].set(interior_imag)
-
-    # For odd n_points, last frequency needs imaginary part
-    is_odd = n_points % 2 == 1
-    odd_imag_idx = jnp.minimum(2 * n_freq - 2, n_points - 1)
-    last_imag = jnp.where(is_odd, xi[odd_imag_idx], 0.0)
-    xi_imag = xi_imag.at[n_freq - 1].set(last_imag)
-
-    return xi_real + 1j * xi_imag
-
-
 def gp_from_xi(xi: jnp.ndarray, sqrt_power: jnp.ndarray, n_points: int) -> jnp.ndarray:
     """Deterministic GP realization from standardized latent vector.
 

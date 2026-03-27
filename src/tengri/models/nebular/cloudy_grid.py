@@ -27,7 +27,7 @@ import numpy as np
 _H_PLANCK = 6.62607015e-27  # erg s
 _C_CGS = 2.99792458e10  # cm/s
 _LSUN_ERG = 3.828e33  # erg/s
-_LYMAN_LIMIT = 911.8  # Angstrom
+_LYMAN_LIMIT = 911.76  # Angstrom (physical: 911.7633 A)
 
 # Solar metallicity: log10(Zsun) = log10(0.0142) (Asplund+2009)
 # SSP grids store absolute log10(Z); CLOUDY HDF5 files store log10(Z/Zsun).
@@ -521,8 +521,11 @@ class CloudyGridBackend:
         else:
             # Delta functions: add to nearest pixel
             # Convert line luminosity to flux density: L_line / delta_nu
+            n_wave = ssp_wave.shape[0]
             for j in range(len(line_wave)):
                 idx = jnp.argmin(jnp.abs(ssp_wave - line_wave[j]))
+                # Clamp to [1, n_wave-2] so both idx-1 and idx+1 are valid
+                idx = jnp.clip(idx, 1, n_wave - 2)
                 # Approximate delta_nu from pixel width
                 dwave = jnp.abs(ssp_wave[idx + 1] - ssp_wave[idx - 1]) / 2.0
                 dnu = _C_CGS / (ssp_wave[idx] * 1e-8) ** 2 * dwave * 1e-8

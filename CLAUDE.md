@@ -20,7 +20,7 @@ ruff format --check src/ tests/     # format check — must pass
 ruff check --fix src/ tests/        # auto-fix safe violations
 ruff format src/ tests/             # auto-format
 
-# Run all tests (~530 tests, ~60 seconds)
+# Run all tests (~994 tests, ~100 seconds)
 pytest tests/ -q
 
 # Run specific test module
@@ -71,20 +71,21 @@ src/tengri/
 │   └── mock.py              # Mock galaxy generation
 │
 ├── inference/               # all fitting + results
-│   ├── fitter.py            # Fitter: MAP, Ray Tracing, NUTS, geoVI, MGVI
+│   ├── fitter.py            # Fitter: MAP, Ray Tracing, NUTS, geoVI, MGVI, NSS
 │   ├── hierarchical.py      # HierarchicalFitter: shared PSD
-│   ├── posterior.py          # Posterior: summary, corner, ESS
+│   ├── posterior.py          # Posterior: summary, corner, ESS, log_evidence
 │   ├── raytrace.py          # Ray Tracing Sampler (Behroozi 2025)
+│   ├── ns/                  # Nested Slice Sampling (Yallup+2026), local port
 │   ├── vi_config.py         # VI settings
 │   ├── common.py, nuts.py, geovi.py, map_optimizer.py
 │
 ├── models/                  # physics modules
 │   ├── sfh/                 # SFH models, PSD, GP generation
-│   ├── dust/                # Two-component attenuation + IR emission
-│   ├── agn/                 # AGN disc + torus models
+│   ├── dust/                # Two-component attenuation + IR emission + WG00 geometries
+│   ├── agn/                 # AGN disc (incl. K&D 3-zone) + torus + BLR/NLR + QSOgen
 │   ├── nebular/             # Nebular emission (BakedIn, CLOUDY, Cue)
-│   ├── sps/                 # DSPS wrapper, SSP loading
-│   ├── observation/         # Photometry, spectroscopy, filters
+│   ├── sps/                 # DSPS wrapper, SSP loading, alpha-enhancement
+│   ├── observation/         # Photometry, spectroscopy, calibration marginalization
 │   ├── igm.py, radio.py, xray.py
 │
 ├── utils/                   # Grid, cosmology, transforms
@@ -122,9 +123,13 @@ Each class has a `.summary()` method for quick inspection:
 | mgvi_nuts | `fitter.run("mgvi_nuts")` | MGVI optimization + NUTS posterior draws |
 | NUTS | `fitter.run("nuts", n_warmup=500, n_burnin=50)` | Gold-standard validation (low-D only) |
 | Ray Tracing | `fitter.run("raytrace", n_burnin=100, n_steps=300)` | Exact MCMC, stochastic-gradient resilient |
+| NSS | `fitter.run("nss", n_live=500, num_delete=50)` | Bayesian evidence (log Z) for model comparison. Smooth models only, D ≲ 30 |
+| Laplace | `fitter.run("laplace", init_from=map_result)` | Instant Gaussian posterior from Hessian at MAP. Auto-runs MAP if no init_from. Laplace log-evidence |
+| Pathfinder | `fitter.run("pathfinder", maxiter=30)` | Fast approximate posterior via L-BFGS path (Zhang+2022). Good NUTS initializer |
+| Elliptical Slice | `fitter.run("elliptical_slice", n_burnin=200)` | Exact MCMC for Gaussian-prior latent models (Murray+2010). Natural for GP field |
 | MAP | `fitter.run("map", optimizer="adam")` | Point estimates. Optimizer swappable: adam/adamw/sgd/custom optax |
 
-**Internal dispatch:** `_run_evi_jit` handles native_geovi/native_mgvi/native_evi. `_run_fast_vi` handles geovi/fast_geovi/mgvi/fast_mgvi/evi/fast_evi/geovi_nuts/mgvi_nuts. `_run_nifty_vi` handles nifty_geovi/nifty_mgvi. `_run_map`/`_run_nuts`/`_run_raytrace` handle the rest.
+**Internal dispatch:** `_run_evi_jit` handles native_geovi/native_mgvi/native_evi. `_run_fast_vi` handles geovi/fast_geovi/mgvi/fast_mgvi/evi/fast_evi/geovi_nuts/mgvi_nuts. `_run_nifty_vi` handles nifty_geovi/nifty_mgvi. `_run_nss` handles nss. `_run_laplace`/`_run_pathfinder`/`_run_elliptical_slice`/`_run_map`/`_run_nuts`/`_run_raytrace` handle the rest.
 
 **Batch fitting:** `fitter.fit_batch(galaxies)` (NOT `fit_catalog`). Default method is `native_geovi`.
 
@@ -145,6 +150,8 @@ Each class has a `.summary()` method for quick inspection:
 - `jax.random.fold_in(key, hash(string))` overflows uint32. Use `abs(hash(x)) % (2**31)`
 - Never create `Model`/`ParamSpec` inside a JAX gradient tape (traced values fail in `__init__`)
 - Ray Tracing step_size: for D~137 stochastic model, use `step_size=0.05, n_leapfrog_steps=50, n_steps=2000`. There is a sharp viability cliff at step_size~0.06 where acceptance drops from ~98% to 0%. Compensate with more leapfrog steps and more samples.
+- Ray Tracing integrator: both DKD (default) and KDK work. `sample_raytrace(..., integrator="kdk")`. KDK uses half-step UpdateV (δ=dt/2) twice per step; both are second-order palindromic integrators with valid radiance tracking.
+- Ray Tracing is verified bit-for-bit identical to Behroozi's reference JAX implementation. Cross-validation test in `tests/crossval/test_raytrace_crossval.py`.
 - NIFTy geoVI: use 4-12 samples per KL iteration, not 80 (literature best practice)
 - SSP metallicity grid is `log10(Z)` absolute, not `log10(Z/Zsun)`. Offset: `LOG10_ZSUN = -1.848`. CLOUDY grid metallicities are also converted to absolute at load time in `load_cloudy_grid()`. Both CloudyGridBackend and CueBackend `log_z` parameters expect absolute Z. Cue's low-level `gas_logz` still expects `log10(Z/Zsun)` — the high-level interface converts automatically. User-facing `neb_logZ_gas` in ParamSpec is `Z/Zsun` (the param_map adds `LOG10_ZSUN`).
 - Photometry precomputation auto-activates when redshift fixed + filters present (21.6x speedup)
@@ -158,25 +165,39 @@ Each class has a `.summary()` method for quick inspection:
 - Dust emission models (`draine_li2007`, `dale2014`) **auto-load tabulated templates** from `data/` on first use. If templates are not found, they fall back to crude analytic approximations with a warning. The analytic fallbacks (single-Gaussian PAH, hand-tuned MBB) are NOT suitable for science. `"dl07_tabulated"` is a legacy alias for `"draine_li2007"` (both now use templates).
 - DL14 templates (`draine_li2014`) require running `scripts/download_dl14_templates.py` — analytic fallback only until then.
 - AGN torus models in `torus.py` (`simple_torus`, `two_temperature_torus`) are **toy models** (1-2 temperature MBB, not radiative transfer). Use SKIRTOR (`skirtor_analytic`, auto-loads `data/skirtor_templates.npz`) for science.
+- AGN `multicolor_agn` (formerly `kubota_done`) implements the outer standard disc only. For the full 3-zone Kubota & Done (2018) model with warm Comptonization + hot corona, use `kubota_done_full` (`kubota_done_disc`).
+- AGN disc radiative efficiency is now spin-dependent: `η = 1 - sqrt(1 - 2/(3*r_isco))`. Previous hardcoded η=0.1 was wrong for non-zero spin.
+- BLR line strengths calibrated to Vanden Berk+2001 composite. Fe II pseudo-continuum available via `agn_fe2_strength` parameter (default 0, disabled).
+- Dust geometry functions: `wg00_shell`, `wg00_cloudy`, `wg00_dusty` implement Witt & Gordon (2000) RT-based star-dust geometries. These compute transmission T(λ), not k(λ).
+- Casey (2012) MBB + mid-IR power law dust emission: `casey2012`. Use for submm-selected galaxies needing the 8-40 μm excess.
+- `marginalize_calibration()` in `observation/calibration.py` analytically marginalizes over Chebyshev calibration polynomial coefficients (Johnson+2021/Prospector approach).
+- SMC/LMC extinction curves now use Pei (1992) generalized Drude profile sums — fully continuous, no piecewise boundaries.
+- `unified_nlr_blr` AGN model now supports `agn_polar_ebv` for SMC polar dust reddening of Type 1 AGN, and auto-derives `agn_torus_frac` from `cos(theta_torus)` when at default.
 
 ## Convergence diagnostics (mandatory for all inference)
 
 Every notebook and analysis script that runs inference MUST check convergence using
 `convergence_check()` or `convergence_table()` from `notebooks/_plot_style.py`.
+Also available: `result.check_convergence()` and `result.autocorrelation_time()` on Posterior objects.
 
 Standard thresholds (Vehtari et al. 2021; Stan/ArviZ/BlackJAX):
 
 | Diagnostic | Threshold | Applies to |
 |-----------|-----------|------------|
 | ESS (bulk) | > 100 per param, > 400 total | RT, NUTS |
+| ACT (τ) | N > 5τ (Sokal/Behroozi criterion) | RT, NUTS, ESS |
 | Divergences | 0 ideal; > 5% = serious | NUTS only |
 | RT acceptance | 30–70% ideal; > 90% = barely moving | RT only |
 | NUTS acceptance | ~80% | NUTS only |
+
+**Autocorrelation time estimation** uses Sokal's self-consistent window method (ported from Behroozi 2025, `acor_estimate.c`): τ = 1 + 2Σρ(k), truncated at k > 5τ. Both standard and absolute-deviation modes are computed; the max is used for ESS = N/τ. Chain is converged when N > 5τ for all parameters.
 
 Known difficult parameters: `dust_tau_bc`, `dust_tau_diff`, `met_logzsol` consistently have low ESS
 due to the age-dust-metallicity degeneracy. This is a physical limitation, not a sampler bug.
 
 For geoVI/MGVI: check KL convergence across iterations and compare to RT posteriors when possible.
+
+**Autocorrelation plot**: `plot_autocorrelation(result)` from `_plot_style.py` shows ACF vs lag for each parameter with the Sokal window marked.
 
 ## Performance optimizations
 
@@ -202,7 +223,7 @@ The forward model uses several optimizations for speed:
 **Every code change MUST include pytest tests.** Run before committing:
 
 ```bash
-pytest tests/ -q                    # full suite (~808 tests, ~150s)
+pytest tests/ -q                    # full suite (~994 tests, ~100s)
 ruff check src/ tests/              # lint
 ruff format --check src/ tests/     # format
 ```

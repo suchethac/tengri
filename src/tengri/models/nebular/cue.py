@@ -1107,7 +1107,6 @@ class CueBackend:
         neb_sed = jnp.interp(ssp_wave, cont_wav, cont_lum, left=0.0, right=0.0)
 
         # Add emission lines
-        _C_CGS * 1e8  # Angstrom/s
         if line_sigma_aa > 0:
             # Gaussian profiles
             # For each line: convert L_line (Lsun) to Lsun/Hz via Gaussian
@@ -1122,8 +1121,11 @@ class CueBackend:
                 neb_sed = neb_sed + ll * _LSUN_ERG * profile
         else:
             # Delta function: add to nearest pixel
+            n_wave = ssp_wave.shape[0]
             for j in range(len(line_wav)):
                 idx = jnp.argmin(jnp.abs(ssp_wave - line_wav[j]))
+                # Clamp to [1, n_wave-2] so both idx-1 and idx+1 are valid
+                idx = jnp.clip(idx, 1, n_wave - 2)
                 dwave = jnp.abs(ssp_wave[idx + 1] - ssp_wave[idx - 1]) / 2.0
                 dnu = _C_CGS / (ssp_wave[idx] * 1e-8) ** 2 * dwave * 1e-8
                 line_flux_density = line_lum[j] / dnu  # Lsun/Hz

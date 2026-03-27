@@ -38,7 +38,7 @@ _LSUN = 3.828e33  # erg/s
 HEII_EDGE = 1e8 / 438908.8789  # 227.84 A
 OII_EDGE = 1e8 / 283270.9  # 353.07 A
 HEI_EDGE = 1e8 / 198310.66637  # 504.26 A
-HI_LIMIT = 911.6  # Lyman limit
+HI_LIMIT = 911.76  # Lyman limit (physical: 911.7633 A)
 
 # Segment boundaries: [1, HeII, OII, HeI, HI]
 SEGMENT_EDGES = np.array([1.0, HEII_EDGE, OII_EDGE, HEI_EDGE, HI_LIMIT])

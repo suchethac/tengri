@@ -338,7 +338,7 @@ def _cgm_damping_wing_tau(
     dz: float = 0.5,
     log_nhi: float = 20.0,
 ) -> jnp.ndarray:
-    """CGM damping wing optical depth (Asada et al. 2025).
+    """CGM damping wing optical depth (experimental, Asada et al. in prep).
 
     At z > 6, neutral hydrogen in the circumgalactic medium causes
     Ly-alpha damping wing absorption that the Inoue+2014 model does
@@ -411,7 +411,7 @@ def _cgm_damping_wing_tau(
 def igm_transmission(
     wave_obs: jnp.ndarray,
     z_source: float,
-    add_cgm: bool = True,
+    add_cgm: bool = False,
     cgm_z_mid: float = 7.0,
     cgm_dz: float = 0.5,
     cgm_log_nhi: float = 20.0,
@@ -430,7 +430,8 @@ def igm_transmission(
     z_source : float
         Source redshift.
     add_cgm : bool
-        If True (default), add CGM damping wing absorption at z > 5.
+        If True, add CGM damping wing absorption at z > 5. Default False
+        (experimental — the Asada et al. model is not yet validated).
     cgm_z_mid : float
         Midpoint redshift of the sigmoid N_HI evolution. Default 7.0.
     cgm_dz : float
