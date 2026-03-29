@@ -32,6 +32,12 @@ class TestDustLaws:
             "cardelli",
             "li08",
             "salim",
+            "tea",
+            "noll09",
+            "salim_sbl18",
+            "leitherer02",
+            "conroy2010",
+            "narayanan_z",
         }
 
     def test_all_laws_return_positive(self, wave):
