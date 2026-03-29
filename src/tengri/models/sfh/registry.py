@@ -46,6 +46,7 @@ from tengri.models.sfh.mean_sfh import (
     triweight_burst,
     tsnorm,
 )
+from tengri.models.sfh.nonparametric import continuity_sfh, dirichlet_sfh
 from tengri.models.sfh.psd_models import drw_variance
 
 # ---------------------------------------------------------------------------
@@ -366,6 +367,79 @@ _register(
         params={},  # no fittable params — the table IS the SFH
         settings={},
         internal_param_map={},
+        composition_type="additive",
+    )
+)
+
+
+# ---------------------------------------------------------------------------
+# Register non-parametric SFH models (Leja+2017, Leja+2019)
+# ---------------------------------------------------------------------------
+
+# --- continuity (Leja+2019): piecewise-constant with Student-t smoothness prior ---
+_register(
+    SFHModelSpec(
+        name="continuity",
+        fn=continuity_sfh,
+        params={
+            "sfh_cont_log_total_mass": ParamDef(
+                "log10 total stellar mass formed (Msun)",
+                _always_true,
+                "",
+                Uniform(8.0, 12.0),
+            ),
+            **{
+                f"sfh_cont_ratio_{i}": ParamDef(
+                    f"log10 SFR ratio bin {i}/{i + 1}",
+                    _always_true,
+                    "",
+                    Uniform(-1.0, 1.0),
+                )
+                for i in range(6)  # 7 bins -> 6 ratios
+            },
+        },
+        settings={},
+        internal_param_map={
+            "sfh_cont_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            **{
+                f"sfh_cont_ratio_{i}": (f"ratio_{i}", 1.0, 0.0)
+                for i in range(6)
+            },
+        },
+        composition_type="additive",
+    )
+)
+
+# --- dirichlet (Leja+2017): piecewise-constant with Dirichlet mass fraction prior ---
+_register(
+    SFHModelSpec(
+        name="dirichlet",
+        fn=dirichlet_sfh,
+        params={
+            "sfh_dir_log_total_mass": ParamDef(
+                "log10 total stellar mass formed (Msun)",
+                _always_true,
+                "",
+                Uniform(8.0, 12.0),
+            ),
+            **{
+                f"sfh_dir_z_{i}": ParamDef(
+                    f"Dirichlet stick-breaking variable {i}",
+                    lambda lo, hi: lo >= 0 and hi <= 1,
+                    "must be in [0, 1]",
+                    Uniform(0.01, 0.99),
+                )
+                for i in range(6)  # 7 bins -> 6 auxiliary variables
+            },
+        },
+        settings={},
+        internal_param_map={
+            "sfh_dir_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            **{
+                f"sfh_dir_z_{i}": (f"z_frac_{i}", 1.0, 0.0)
+                for i in range(6)
+            },
+        },
         composition_type="additive",
     )
 )
