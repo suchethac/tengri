@@ -21,7 +21,10 @@ Available Attenuation Curves
 ----------------------------
 - **power_law**: (lambda/5500)^n — original Charlot & Fall (2000)
 - **calzetti**: Calzetti et al. (2000) starburst polynomial, R_V=4.05
+- **leitherer02**: Leitherer et al. (2002) UV extension of Calzetti (970-1800 A)
 - **kriek_conroy**: Calzetti + UV bump + slope delta — Prospector default
+- **noll09**: Noll et al. (2009) modified Calzetti+L02: (base+bump)*slope
+- **salim_sbl18**: Salim+2018 modified Calzetti+L02: base*slope+bump
 - **smc**: Gordon et al. (2003) SMC Bar, steep UV, no 2175A bump
 - **cardelli**: Cardelli et al. (1989) MW curve with free R_V
 - **li08**: Li et al. (2008) parametric 3-slope + UV bump (reproduces MW/SMC/Calzetti)
@@ -46,11 +49,13 @@ References
 - Haskell et al. 2024, arXiv:2401.11007
 - Hobson & Padman 1993, MNRAS, 264, 161
 - Kriek & Conroy 2013, ApJL, 775, L16
+- Leitherer et al. 2002, ApJS, 140, 303
 - Li et al. 2008, MNRAS, 385, 1903
 - Lower et al. 2022, ApJ, 931, 14
 - Narayanan et al. 2018, ApJ, 869, 70
 - Natta & Panagia 1984, ApJ, 287, 228
-- Salim et al. 2018, ApJ, 859, 11
+- Noll et al. 2009, A&A, 507, 1793
+- Salim, Boquien & Lee 2018, ApJ, 859, 11
 - Witt & Gordon 2000, ApJ, 528, 799
 - Zacharegkas et al. 2025, arXiv:2506.19919
 """
@@ -99,6 +104,45 @@ def _drude_profile(
     D(lambda) = (lambda * gamma)^2 / ((lambda^2 - x0^2)^2 + (lambda*gamma)^2)
     """
     return (wave_um * gamma) ** 2 / ((wave_um**2 - x0**2) ** 2 + (wave_um * gamma) ** 2)
+
+
+# ===================================================================
+# Internal helpers
+# ===================================================================
+
+
+def _calzetti_l02_kprime(wavelength: jnp.ndarray) -> jnp.ndarray:
+    """Compute k'(lambda) = A(lambda)/E(B-V) using L02 + C00.
+
+    Returns the raw reddening curve (NOT normalized by R_V).
+    Uses Leitherer (2002) for lambda <= 1500 A, Calzetti (2000) above.
+
+    Parameters
+    ----------
+    wavelength : array
+        Wavelength in Angstrom.
+
+    Returns
+    -------
+    array
+        k'(lambda) reddening curve.
+    """
+    wave_um = wavelength / 1e4
+    x = 1.0 / wave_um
+    rv = 4.05
+
+    # L02 polynomial (valid 0.097-0.18 um)
+    k_l02 = 5.472 + 0.671 * x - 9.218e-3 * x**2 + 2.620e-3 * x**3
+
+    # Calzetti UV polynomial (valid 0.12-0.63 um)
+    k_uv = 2.659 * (-2.156 + 1.509 * x - 0.198 * x**2 + 0.011 * x**3) + rv
+
+    # Calzetti IR polynomial (valid 0.63-2.2 um)
+    k_ir = 2.659 * (-1.857 + 1.040 * x) + rv
+
+    # Use L02 below 0.15 um, Calzetti above
+    k_calz = jnp.where(wave_um >= 0.63, k_ir, k_uv)
+    return jnp.where(wave_um <= 0.15, k_l02, k_calz)
 
 
 # ===================================================================
@@ -197,7 +241,7 @@ def _pei92_curve(
     # A(lambda)/A(V) = xi(lambda) / xi(V). Normalize to k(5500 A) = 1.
     wave_v = 0.55  # um
     ratio_v = wave_v / lam_i
-    xi_v = jnp.sum(a_i / (ratio_v ** n_i + ratio_v ** (-n_i) + b_i))
+    xi_v = jnp.sum(a_i / (ratio_v**n_i + ratio_v ** (-n_i) + b_i))
     return jnp.clip(xi / xi_v, 0.0)
 
 
@@ -436,6 +480,192 @@ def salim(
     )
 
 
+@register_dust_law("leitherer02")
+def leitherer02(
+    wavelength: jnp.ndarray,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Leitherer et al. (2002) UV starburst attenuation curve.
+
+    Far-UV extension of the Calzetti (2000) law, valid 970-1800 Angstrom.
+    Uses R_V = 4.05 (same as Calzetti).  For wavelengths outside the
+    L02 range, falls back to Calzetti (2000).
+
+    The k'(lambda) = A(lambda)/E(B-V) polynomial is::
+
+        k'(lambda) = 5.472 + 0.671/x - 9.218e-3/x^2 + 2.620e-3/x^3
+
+    where x = lambda in microns.
+
+    The L02 polynomial is used for the full L02 valid range (0.097-0.18 um),
+    with C00 used for longer wavelengths.  This matches the standalone
+    ``dust_attenuation.averages.L02`` model.
+
+    Returns k(lambda) = k'(lambda) / R_V, following the dust_attenuation
+    package convention.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid in Angstrom.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Attenuation curve k(lambda) = k'(lambda) / R_V.
+
+    References
+    ----------
+    Leitherer et al. 2002, ApJS, 140, 303 (eq. 14)
+    """
+    wave_um = wavelength / 1e4
+    x = 1.0 / wave_um
+    rv = 4.05
+
+    # L02 polynomial (valid 0.097-0.18 um)
+    k_l02 = 5.472 + 0.671 * x - 9.218e-3 * x**2 + 2.620e-3 * x**3
+
+    # Calzetti UV polynomial (valid 0.12-0.63 um)
+    k_uv = 2.659 * (-2.156 + 1.509 * x - 0.198 * x**2 + 0.011 * x**3) + rv
+
+    # Calzetti IR polynomial (valid 0.63-2.2 um)
+    k_ir = 2.659 * (-1.857 + 1.040 * x) + rv
+
+    # Use L02 up to 0.18 um (full L02 range), Calzetti above
+    k_calz = jnp.where(wave_um >= 0.63, k_ir, k_uv)
+    k_prime = jnp.where(wave_um <= 0.18, k_l02, k_calz)
+
+    return jnp.clip(k_prime / rv, 0.0)
+
+
+@register_dust_law("noll09")
+def noll09(
+    wavelength: jnp.ndarray,
+    dust_bump_strength: float = 0.0,
+    dust_delta: float = 0.0,
+    dust_bump_x0: float = 0.2175,
+    dust_bump_gamma: float = 0.035,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Noll et al. (2009) modified Calzetti + L02 with UV bump + slope delta.
+
+    This is the ``N09`` model from the ``dust_attenuation`` package.
+    Uses Leitherer (2002) for lambda < 1500 A and Calzetti (2000) above.
+    The modification order is: **(base + bump) * power_law**.
+
+    This differs from ``kriek_conroy`` which does NOT use L02 and applies
+    the bump AFTER the slope: ``base * power_law + bump``.
+
+    The normalization follows the dust_attenuation package convention:
+    k(lambda) = k'(lambda) / R_V, where R_V = 4.05 is the fixed Calzetti
+    value.  This means k(V) is NOT exactly 1.0 when bump or slope
+    modifications are applied (matching the package behaviour).
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid in Angstrom.
+    dust_bump_strength : float
+        Amplitude of 2175 A UV bump (E_b). 0 = no bump.
+    dust_delta : float
+        Power-law slope modification. 0 = pure Calzetti+L02.
+    dust_bump_x0 : float
+        Central wavelength of UV bump in microns. Default 0.2175.
+    dust_bump_gamma : float
+        FWHM of UV bump in microns. Default 0.035.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Attenuation curve k(lambda) = k'(lambda) / R_V.
+
+    References
+    ----------
+    Noll et al. 2009, A&A, 507, 1793
+    """
+    wave_um = wavelength / 1e4
+    rv = 4.05
+
+    # Base k'(lambda) = A(lambda)/E(B-V): L02 below 0.15 um, Calzetti above
+    k_base = _calzetti_l02_kprime(wavelength)
+
+    # UV bump (Drude profile)
+    bump = dust_bump_strength * _drude_profile(wave_um, x0=dust_bump_x0, gamma=dust_bump_gamma)
+
+    # Power law slope modification: (lambda / 0.55 um)^delta
+    slope_mod = (wave_um / 0.55) ** dust_delta
+
+    # N09 order: (base + bump) * slope_mod
+    k_prime = (k_base + bump) * slope_mod
+
+    # Normalize by fixed Rv (package convention, NOT by k_prime(V))
+    return jnp.clip(k_prime / rv, 0.0)
+
+
+@register_dust_law("salim_sbl18")
+def salim_sbl18(
+    wavelength: jnp.ndarray,
+    dust_bump_strength: float = 0.0,
+    dust_delta: float = 0.0,
+    dust_bump_x0: float = 0.2175,
+    dust_bump_gamma: float = 0.035,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Salim, Boquien & Lee (2018) modified Calzetti + L02 with UV bump + slope.
+
+    This is the ``SBL18`` model from the ``dust_attenuation`` package.
+    Uses Leitherer (2002) for lambda < 1500 A and Calzetti (2000) above.
+    The modification order is: **(base * power_law) + bump**.
+
+    This differs from ``noll09`` which applies: ``(base + bump) * power_law``.
+    The SBL18 order is identical to ``kriek_conroy``, but SBL18 additionally
+    uses L02 in the far-UV.
+
+    The normalization follows the dust_attenuation package convention:
+    k(lambda) = k'(lambda) / R_V, where R_V = 4.05 is the fixed Calzetti
+    value.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid in Angstrom.
+    dust_bump_strength : float
+        Amplitude of 2175 A UV bump (E_b). 0 = no bump.
+    dust_delta : float
+        Power-law slope modification. 0 = pure Calzetti+L02.
+    dust_bump_x0 : float
+        Central wavelength of UV bump in microns. Default 0.2175.
+    dust_bump_gamma : float
+        FWHM of UV bump in microns. Default 0.035.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Attenuation curve k(lambda) = k'(lambda) / R_V.
+
+    References
+    ----------
+    Salim, Boquien & Lee 2018, ApJ, 859, 11
+    """
+    wave_um = wavelength / 1e4
+    rv = 4.05
+
+    # Base k'(lambda): L02 below 0.15 um, Calzetti above
+    k_base = _calzetti_l02_kprime(wavelength)
+
+    # UV bump (Drude profile)
+    bump = dust_bump_strength * _drude_profile(wave_um, x0=dust_bump_x0, gamma=dust_bump_gamma)
+
+    # Power law slope modification
+    slope_mod = (wave_um / 0.55) ** dust_delta
+
+    # SBL18 order: (base * slope_mod) + bump
+    k_prime = k_base * slope_mod + bump
+
+    # Normalize by fixed Rv (package convention)
+    return jnp.clip(k_prime / rv, 0.0)
+
+
 @register_dust_law("tea")
 def tea(
     wavelength: jnp.ndarray,
@@ -450,7 +680,7 @@ def tea(
     functional form is identical to Kriek & Conroy (2013), but E_b is
     derived from delta via a tight relation calibrated on NIHAO-SKIRT::
 
-        E_b = 2.5 * exp(3.5 * delta) * 10^scatter
+        E_b = 2.5 * exp(3.5 * delta) * 10 ^ scatter
 
     This reduces the free parameters to 2 (delta and overall tau_V),
     plus optional scatter around the median E_b(delta) relation.
@@ -518,9 +748,7 @@ def narayanan_z(
     ----------
     Narayanan et al. 2018, ApJ, 869, 70
     """
-    delta_z = jnp.where(
-        dust_delta == -0.2, -0.2 - 0.1 * redshift, dust_delta
-    )
+    delta_z = jnp.where(dust_delta == -0.2, -0.2 - 0.1 * redshift, dust_delta)
     bump_z = jnp.where(
         dust_bump_strength == 1.0,
         jnp.maximum(0.0, 1.0 - 0.15 * redshift),
