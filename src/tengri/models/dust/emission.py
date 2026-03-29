@@ -12,14 +12,18 @@ Available Emission Models
 - **dale2014**: Dale et al. (2014) 1-parameter IR template family (tabulated)
 - **draine_li2007**: Draine & Li (2007) 3-parameter model (tabulated)
 - **draine_li2014**: Draine & Li (2014 update) 4-parameter model (tabulated)
+- **astrodust**: Hensley & Draine (2023) Astrodust+PAH model (tabulated)
+- **bosa**: Boquien & Salim (2021) (L_TIR, sSFR)-parameterized model (tabulated)
+- **themis**: Jones et al. (2017) THEMIS/DustEM model (tabulated)
 
 Template Auto-Loading
 ---------------------
-The ``"draine_li2007"``, ``"dale2014"``, and ``"draine_li2014"`` models
-auto-load tabulated templates from the ``data/`` directory on first use.
-If templates are not found, they fall back to analytic approximations with
-a warning.  The analytic fallbacks are crude (single-Gaussian PAH, hand-tuned
-temperatures) and should NOT be used for science.
+The ``"draine_li2007"``, ``"dale2014"``, ``"draine_li2014"``,
+``"astrodust"``, ``"bosa"``, and ``"themis"`` models auto-load tabulated
+templates from the ``data/`` directory on first use.  If templates are not
+found, they fall back to analytic approximations with a warning.  The
+analytic fallbacks are crude (single-Gaussian PAH, hand-tuned temperatures)
+and should NOT be used for science.
 
 Energy Balance
 --------------
@@ -40,6 +44,9 @@ References
 - Aniano et al. 2012, ApJ, 756, 138
 - da Cunha et al. 2013, ApJ, 766, 13
 - Hildebrand 1983, QJRAS, 24, 267
+- Hensley & Draine 2023, ApJ, 948, 55 (Astrodust+PAH)
+- Boquien & Salim 2021, A&A, 653, A149 (BOSA templates)
+- Jones et al. 2017, A&A, 602, A46 (THEMIS dust model)
 """
 
 import warnings
@@ -438,7 +445,7 @@ def casey2012(
 
     and the empirical turnover wavelength is (Eq. 3, with errata)::
 
-        λ_0 = b1 + b2 * T   [μm]
+        λ_0 = b1 + b2 * T[μm]
 
     with ``b1 = 26.68 μm``, ``b2 = 6.246e-3 μm/K``.
 
@@ -1328,6 +1335,233 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
 
 
 # ===================================================================
+# Model 5: MAGPHYS 4-component (da Cunha, Charlot & Elbaz 2008)
+# ===================================================================
+
+# PAH Drude profile parameters (Smith+2007, Table 1).
+# Each tuple: (center_um, fwhm_um, relative_strength).
+_PAH_FEATURES = (
+    (3.3, 0.05, 0.06),  # 3.3 μm C-H stretch
+    (6.2, 0.19, 0.25),  # 6.2 μm C-C stretch
+    (7.7, 0.93, 1.00),  # 7.7 μm C-C stretch (strongest)
+    (8.6, 0.36, 0.33),  # 8.6 μm C-H in-plane bend
+    (11.3, 0.36, 0.52),  # 11.3 μm C-H out-of-plane bend
+    (12.7, 0.53, 0.17),  # 12.7 μm C-H out-of-plane bend
+)
+
+# Pre-pack into JAX arrays for JIT compatibility.
+_PAH_CENTER_UM = jnp.array([f[0] for f in _PAH_FEATURES])
+_PAH_FWHM_UM = jnp.array([f[1] for f in _PAH_FEATURES])
+_PAH_STRENGTH = jnp.array([f[2] for f in _PAH_FEATURES])
+
+
+def _drude_profile(
+    wavelength_um: jnp.ndarray,
+    center_um: jnp.ndarray,
+    fwhm_um: jnp.ndarray,
+    strength: jnp.ndarray,
+) -> jnp.ndarray:
+    """Sum of Drude profiles for PAH emission features.
+
+    The Drude profile for each feature *i* is::
+
+        D_i(λ) = S_i * (γ_i / λ_{0,i})^2
+                 / ((λ / λ_{0,i} - λ_{0,i} / λ)^2 + (γ_i / λ_{0,i})^2)
+
+    where γ_i = FWHM_i.
+
+    Parameters
+    ----------
+    wavelength_um : array, shape (n_wave,)
+        Wavelength grid in microns.
+    center_um : array, shape (n_feat,)
+        Central wavelengths of features in microns.
+    fwhm_um : array, shape (n_feat,)
+        FWHM of each feature in microns.
+    strength : array, shape (n_feat,)
+        Relative strength of each feature.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Summed Drude profile (energy-density units, unnormalized).
+    """
+    # Broadcast: wavelength (n_wave, 1) vs features (1, n_feat)
+    lam = wavelength_um[:, None]  # (n_wave, n_feat)
+    lam0 = center_um[None, :]
+    gamma = fwhm_um[None, :]
+    s = strength[None, :]
+
+    gamma_over_lam0 = gamma / lam0
+    x = lam / lam0 - lam0 / lam
+    profile = s * gamma_over_lam0**2 / (x**2 + gamma_over_lam0**2)
+
+    return jnp.sum(profile, axis=1)
+
+
+def _pah_template(wavelength_aa: jnp.ndarray) -> jnp.ndarray:
+    """PAH emission template from summed Drude profiles (Smith+2007).
+
+    Parameters
+    ----------
+    wavelength_aa : array, shape (n_wave,)
+        Wavelength grid in Angstrom.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        PAH emission template (L_nu-like, unnormalized).  Normalized to
+        integrate to unity over frequency by the caller.
+    """
+    wavelength_um = wavelength_aa * 1.0e-4  # Å -> μm
+    return _drude_profile(wavelength_um, _PAH_CENTER_UM, _PAH_FWHM_UM, _PAH_STRENGTH)
+
+
+def _modified_blackbody_component(
+    wavelength_aa: jnp.ndarray,
+    temperature: float,
+    beta: float,
+    redshift: float,
+) -> jnp.ndarray:
+    """Single MBB component, CMB-corrected and normalized to unit integral.
+
+    Parameters
+    ----------
+    wavelength_aa : array, shape (n_wave,)
+        Wavelength grid in Angstrom (sorted ascending).
+    temperature : float
+        Intrinsic dust temperature in Kelvin.
+    beta : float
+        Emissivity index.
+    redshift : float
+        Source redshift (for CMB correction).
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        MBB L_nu normalized so that ``integral L_nu dnu = 1``.
+    """
+    T_eff = cmb_corrected_temperature(temperature, redshift, beta)
+
+    wavelength_cm = wavelength_aa * _AA_TO_CM
+    nu = _C_CGS / wavelength_cm
+
+    nu_ref = _C_CGS / (250.0e-4)  # 250 μm reference
+    emissivity = (nu / nu_ref) ** beta
+    bnu = planck_bnu(wavelength_aa, T_eff)
+    shape = emissivity * bnu
+
+    # CMB contrast suppression
+    contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
+    shape = shape * contrast
+
+    # Normalize to unit integral over frequency
+    integral = -jnp.trapezoid(shape, nu)
+    norm = jnp.where(integral > 0.0, 1.0 / integral, 0.0)
+    return shape * norm
+
+
+@register_emission_model("magphys")
+def magphys_dc08(
+    wavelength_aa: jnp.ndarray,
+    L_absorbed: float,
+    dust_T_warm: float = 45.0,
+    dust_T_cold: float = 20.0,
+    dust_T_hot: float = 180.0,
+    dust_xi_pah: float = 0.06,
+    dust_xi_mir: float = 0.07,
+    dust_xi_warm: float = 0.25,
+    redshift: float = 0.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """MAGPHYS 4-component dust emission (da Cunha, Charlot & Elbaz 2008).
+
+    Decomposes dust emission into four components:
+
+    1. **PAH features** — sum of Drude profiles at 3.3, 6.2, 7.7, 8.6,
+       11.3, and 12.7 μm (Smith+2007 template).
+    2. **Hot MIR continuum** — modified blackbody at ``dust_T_hot``,
+       β = 1.5.  Very small grains near young stars.
+    3. **Warm birth-cloud grains** — modified blackbody at ``dust_T_warm``,
+       β = 1.5.
+    4. **Cold ISM grains** — modified blackbody at ``dust_T_cold``,
+       β = 2.0.
+
+    The total emission is::
+
+        L_nu = L_absorbed * [
+            xi_PAH * PAH(λ)
+            + xi_MIR * MBB(λ, T_hot, β=1.5)
+            + xi_W * MBB(λ, T_warm, β=1.5)
+            + (1 - xi_PAH - xi_MIR - xi_W) * MBB(λ, T_cold, β=2.0)
+        ]
+
+    Each component is independently normalized to unit integral before
+    weighting, so the total integrates to ``L_absorbed``.
+
+    Parameters
+    ----------
+    wavelength_aa : array, shape (n_wave,)
+        Wavelength grid in Angstrom (sorted ascending).
+    L_absorbed : float
+        Total absorbed luminosity in Lsun (energy-balance normalization).
+    dust_T_warm : float
+        Warm birth-cloud grain temperature in Kelvin.  Default 45 K.
+    dust_T_cold : float
+        Cold ISM grain temperature in Kelvin.  Default 20 K.
+    dust_T_hot : float
+        Hot MIR grain temperature in Kelvin.  Default 180 K.
+    dust_xi_pah : float
+        Fractional luminosity in PAH features.  Default 0.06.
+    dust_xi_mir : float
+        Fractional luminosity in hot MIR continuum.  Default 0.07.
+    dust_xi_warm : float
+        Fractional luminosity in warm grains.  Default 0.25.
+    redshift : float
+        Source redshift.  CMB corrections applied to all MBB components.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Dust emission L_nu in Lsun/Hz.
+
+    References
+    ----------
+    da Cunha, Charlot & Elbaz 2008, MNRAS, 388, 1595.
+    Smith et al. 2007, ApJ, 656, 770 (PAH Drude profiles).
+    """
+    wavelength_cm = wavelength_aa * _AA_TO_CM
+    nu = _C_CGS / wavelength_cm
+
+    # --- Component 1: PAH template (no CMB correction — features are MIR) ---
+    pah_shape = _pah_template(wavelength_aa)
+    pah_integral = -jnp.trapezoid(pah_shape, nu)
+    pah_norm = jnp.where(pah_integral > 0.0, 1.0 / pah_integral, 0.0)
+    pah_component = pah_shape * pah_norm
+
+    # --- Component 2: hot MIR continuum (β = 1.5) ---
+    hot_component = _modified_blackbody_component(wavelength_aa, dust_T_hot, 1.5, redshift)
+
+    # --- Component 3: warm birth-cloud grains (β = 1.5) ---
+    warm_component = _modified_blackbody_component(wavelength_aa, dust_T_warm, 1.5, redshift)
+
+    # --- Component 4: cold ISM grains (β = 2.0) ---
+    cold_component = _modified_blackbody_component(wavelength_aa, dust_T_cold, 2.0, redshift)
+
+    # Fractional weights (cold is the remainder)
+    xi_cold = 1.0 - dust_xi_pah - dust_xi_mir - dust_xi_warm
+
+    L_nu = L_absorbed * (
+        dust_xi_pah * pah_component
+        + dust_xi_mir * hot_component
+        + dust_xi_warm * warm_component
+        + xi_cold * cold_component
+    )
+
+    return L_nu
+
+
+# ===================================================================
 # Convenience: apply emission model by name
 # ===================================================================
 
@@ -1366,6 +1600,772 @@ def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> Non
     """
     model_fn = create_dl07_from_grid(grid_path)
     DUST_EMISSION_MODELS[name] = model_fn
+
+
+# ===================================================================
+# Model 6: Astrodust+PAH (Hensley & Draine 2023) — template-based
+# ===================================================================
+
+
+def _astrodust_analytic_fallback(
+    wavelength_aa: jnp.ndarray,
+    L_absorbed: float,
+    dust_umin: float = 1.0,
+    dust_gamma_dl: float = 0.01,
+    dust_qpah: float = 3.0,
+    redshift: float = 0.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Astrodust+PAH ANALYTIC FALLBACK — not for science.
+
+    .. deprecated::
+        This reuses the DL07 analytic fallback as a placeholder.
+        Use the tabulated version (the default ``"astrodust"`` registry
+        entry, which auto-loads ``data/astrodust_templates.npz``).
+        Download templates via ``scripts/download_astrodust_templates.py``.
+
+    Only used when template files are not found.
+    """
+    return _draine_li2007_analytic_fallback(
+        wavelength_aa,
+        L_absorbed,
+        dust_umin=dust_umin,
+        dust_gamma_dl=dust_gamma_dl,
+        dust_qpah=dust_qpah,
+        **_kwargs,
+    )
+
+
+def load_astrodust_templates(filepath: str) -> dict:
+    """Load Astrodust+PAH template grid from NPZ or HDF5.
+
+    The template file must contain:
+
+    - ``wavelength_um``: wavelength grid in microns (n_wave,)
+    - ``qpah_grid``: PAH mass fractions (n_qpah,)
+    - ``umin_grid``: minimum radiation field intensities (n_umin,)
+    - ``spectra_single``: single-U templates (n_qpah, n_umin, n_wave)
+    - ``spectra_pdr``: power-law U (PDR) templates (n_qpah, n_umin, n_wave)
+
+    Parameters
+    ----------
+    filepath : str
+        Path to ``astrodust_templates.npz`` or ``.h5``.
+
+    Returns
+    -------
+    dict
+        Keys: wavelength_aa, umin_grid, qpah_grid, single_u, powerlaw.
+        All arrays are JAX arrays.  wavelength_aa is in Angstrom (converted
+        from microns).  single_u and powerlaw have shape
+        (n_qpah, n_umin, n_wave) and are normalized so each template
+        integrates to 1 over frequency in L_nu convention.
+    """
+    import numpy as np
+
+    if filepath.endswith(".npz"):
+        data = np.load(filepath)
+    else:
+        import h5py as _h5py
+
+        f = _h5py.File(filepath, "r")
+        data = {k: np.array(f[k][:]) for k in f}
+        f.close()
+
+    wavs_um = np.array(data["wavelength_um"])
+    wavs_aa = wavs_um * 1.0e4  # microns -> Angstrom
+
+    single_u = np.array(data["spectra_single"])  # (n_qpah, n_umin, n_wave)
+    powerlaw = np.array(data["spectra_pdr"])  # (n_qpah, n_umin, n_wave)
+
+    # Convert to L_nu: L_nu = L_lambda * lambda^2 / c
+    wave_cm = wavs_aa * _AA_TO_CM
+    nu = _C_CGS / wave_cm  # descending
+
+    for arr in (single_u, powerlaw):
+        for i in range(arr.shape[0]):
+            for j in range(arr.shape[1]):
+                lnu = arr[i, j] * (wave_cm**2) / _C_CGS
+                integral = -np.trapezoid(lnu, nu)
+                if integral > 0:
+                    arr[i, j] = lnu / integral
+                else:
+                    arr[i, j] = lnu
+
+    return {
+        "wavelength_aa": jnp.array(wavs_aa),
+        "umin_grid": jnp.array(data["umin_grid"]),
+        "qpah_grid": jnp.array(data["qpah_grid"]),
+        "single_u": jnp.array(single_u),
+        "powerlaw": jnp.array(powerlaw),
+    }
+
+
+def create_astrodust_from_grid(
+    template_data: dict | str,
+) -> Callable:
+    """Create Astrodust+PAH emission function from pre-loaded template grid.
+
+    The mixing formula is identical to DL07::
+
+        j_nu = (1 - gamma) * j_single(qPAH, Umin)
+             + gamma * j_PDR(qPAH, Umin)
+
+    Parameters
+    ----------
+    template_data : dict or str
+        Either a dict (from ``load_astrodust_templates``) or a file path.
+        If a string, ``load_astrodust_templates`` is called automatically.
+
+    Returns
+    -------
+    Callable
+        Model function with signature
+        ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
+
+    References
+    ----------
+    Hensley, B. S. & Draine, B. T. 2023, ApJ, 948, 55.
+    """
+    if isinstance(template_data, str):
+        template_data = load_astrodust_templates(template_data)
+
+    single_u = template_data["single_u"]  # (n_qpah, n_umin, n_wave)
+    powerlaw = template_data["powerlaw"]  # (n_qpah, n_umin, n_wave)
+    tmpl_wave = template_data["wavelength_aa"]
+    umin_grid = template_data["umin_grid"]
+    qpah_grid = template_data["qpah_grid"]
+
+    def astrodust_emission(
+        wavelength_aa: jnp.ndarray,
+        L_absorbed: float,
+        dust_umin: float = 1.0,
+        dust_gamma_dl: float = 0.01,
+        dust_qpah: float = 3.0,
+        redshift: float = 0.0,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        """Astrodust+PAH emission from tabulated templates (Hensley & Draine 2023).
+
+        j_nu = (1-gamma) * single_U(qPAH, Umin) + gamma * PDR(qPAH, Umin)
+
+        Templates are pre-normalized in L_nu convention.  The function
+        interpolates bilinearly in (qPAH, Umin) space, mixes via gamma,
+        and scales by L_absorbed to enforce energy balance.
+
+        Parameters
+        ----------
+        wavelength_aa : array, shape (n_wave,)
+            Wavelength grid in Angstrom (sorted ascending).
+        L_absorbed : float
+            Total absorbed luminosity in Lsun.
+        dust_umin : float
+            Minimum radiation field intensity (Mathis ISRF units).
+        dust_gamma_dl : float
+            Fraction of dust mass in PDR (high-U) component.
+        dust_qpah : float
+            PAH mass fraction (%).
+        redshift : float
+            Source redshift (for CMB contrast correction).
+
+        Returns
+        -------
+        array, shape (n_wave,)
+            Dust emission L_nu in Lsun/Hz.
+        """
+        dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
+        dust_qpah_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
+
+        # Bilinear interpolation indices
+        i_u = jnp.clip(
+            jnp.searchsorted(umin_grid, dust_umin_c) - 1,
+            0,
+            len(umin_grid) - 2,
+        )
+        i_q = jnp.clip(
+            jnp.searchsorted(qpah_grid, dust_qpah_c) - 1,
+            0,
+            len(qpah_grid) - 2,
+        )
+
+        fu = (dust_umin_c - umin_grid[i_u]) / (umin_grid[i_u + 1] - umin_grid[i_u])
+        fq = (dust_qpah_c - qpah_grid[i_q]) / (qpah_grid[i_q + 1] - qpah_grid[i_q])
+
+        def _bilinear(grid: jnp.ndarray) -> jnp.ndarray:
+            return (
+                (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
+                + (1.0 - fq) * fu * grid[i_q, i_u + 1]
+                + fq * (1.0 - fu) * grid[i_q + 1, i_u]
+                + fq * fu * grid[i_q + 1, i_u + 1]
+            )
+
+        # Mix single-U and PDR components via gamma
+        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _bilinear(
+            powerlaw
+        )
+
+        # Interpolate onto target wavelength grid
+        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+
+        # CMB contrast correction at high redshift
+        T_eff_approx = 18.0 * dust_umin ** (1.0 / 6.0)
+        T_eff = cmb_corrected_temperature(T_eff_approx, redshift, 2.0)
+        contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
+
+        return L_absorbed * sed * contrast
+
+    return astrodust_emission
+
+
+def register_astrodust_tabulated(grid_path: str, name: str = "astrodust_tabulated") -> None:
+    """Load and register the tabulated Astrodust model.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``astrodust_templates.npz`` or ``.h5``.
+    name : str
+        Registry name.  Default ``"astrodust_tabulated"``.
+    """
+    model_fn = create_astrodust_from_grid(grid_path)
+    DUST_EMISSION_MODELS[name] = model_fn
+
+
+# ===================================================================
+# Model 7: BOSA (Boquien & Salim 2021) — template-based
+# ===================================================================
+
+
+def _bosa_analytic_fallback(
+    wavelength_aa: jnp.ndarray,
+    L_absorbed: float,
+    dust_log_ssfr: float = -10.0,
+    redshift: float = 0.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """BOSA ANALYTIC FALLBACK — not for science.
+
+    .. deprecated::
+        This crude approximation models the BOSA template library as a
+        single modified blackbody whose temperature depends on sSFR.
+        Use the tabulated version (the default ``"bosa"`` registry entry,
+        which auto-loads ``data/bosa_templates.npz``).
+        Download templates via ``scripts/download_bosa_templates.py``.
+
+    Only used when template files are not found.
+    """
+    # Map sSFR to dust temperature: higher sSFR -> warmer dust
+    # Empirical calibration from Boquien & Salim (2021) Fig. 8:
+    # log(sSFR) ~ -10 -> T_dust ~ 25 K; log(sSFR) ~ -8 -> T_dust ~ 45 K
+    T_dust = 25.0 + 10.0 * (dust_log_ssfr + 10.0)
+    T_dust = jnp.clip(T_dust, 15.0, 60.0)
+
+    return modified_blackbody(
+        wavelength_aa,
+        L_absorbed,
+        dust_T=T_dust,
+        dust_beta_ir=1.8,
+        redshift=redshift,
+    )
+
+
+def load_bosa_templates(filepath: str) -> dict:
+    """Load BOSA template grid from NPZ or HDF5.
+
+    The template file must contain:
+
+    - ``wavelength_um``: wavelength grid in microns (n_wave,)
+    - ``log_ltir_grid``: log10(L_TIR/Lsun) grid (n_ltir,)
+    - ``log_ssfr_grid``: log10(sSFR/yr^-1) grid (n_ssfr,)
+    - ``spectra``: normalized SED templates (n_ltir, n_ssfr, n_wave)
+
+    Parameters
+    ----------
+    filepath : str
+        Path to ``bosa_templates.npz`` or ``.h5``.
+
+    Returns
+    -------
+    dict
+        Keys: wavelength_aa, log_ltir_grid, log_ssfr_grid, spectra.
+        All arrays are JAX arrays.  wavelength_aa is in Angstrom.
+        spectra have shape (n_ltir, n_ssfr, n_wave) and are normalized
+        so each template integrates to 1 over frequency in L_nu convention.
+    """
+    import numpy as np
+
+    if filepath.endswith(".npz"):
+        data = np.load(filepath)
+    else:
+        import h5py as _h5py
+
+        f = _h5py.File(filepath, "r")
+        data = {k: np.array(f[k][:]) for k in f}
+        f.close()
+
+    wavs_um = np.array(data["wavelength_um"])
+    wavs_aa = wavs_um * 1.0e4  # microns -> Angstrom
+
+    spectra = np.array(data["spectra"])  # (n_ltir, n_ssfr, n_wave)
+
+    # Convert to L_nu and normalize
+    wave_cm = wavs_aa * _AA_TO_CM
+    nu = _C_CGS / wave_cm
+
+    for i in range(spectra.shape[0]):
+        for j in range(spectra.shape[1]):
+            lnu = spectra[i, j] * (wave_cm**2) / _C_CGS
+            integral = -np.trapezoid(lnu, nu)
+            if integral > 0:
+                spectra[i, j] = lnu / integral
+            else:
+                spectra[i, j] = lnu
+
+    return {
+        "wavelength_aa": jnp.array(wavs_aa),
+        "log_ltir_grid": jnp.array(data["log_ltir_grid"]),
+        "log_ssfr_grid": jnp.array(data["log_ssfr_grid"]),
+        "spectra": jnp.array(spectra),
+    }
+
+
+def create_bosa_from_grid(template_data: dict | str) -> Callable:
+    """Create BOSA emission function from pre-loaded template grid.
+
+    The BOSA model (Boquien & Salim 2021) parameterizes dust emission
+    templates by (L_TIR, sSFR) instead of radiation field parameters.
+    This provides a direct link between star formation activity and
+    dust temperature.
+
+    For fitting, L_TIR is derived from L_absorbed (energy balance),
+    so the free parameter is just ``dust_log_ssfr``.  The template
+    is selected by interpolating in (log L_TIR, log sSFR) space.
+
+    Parameters
+    ----------
+    template_data : dict or str
+        Either a dict (from ``load_bosa_templates``) or a file path.
+
+    Returns
+    -------
+    Callable
+        Model function with signature
+        ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
+
+    References
+    ----------
+    Boquien, M. & Salim, S. 2021, A&A, 653, A149.
+    """
+    if isinstance(template_data, str):
+        template_data = load_bosa_templates(template_data)
+
+    spectra = template_data["spectra"]  # (n_ltir, n_ssfr, n_wave)
+    tmpl_wave = template_data["wavelength_aa"]
+    log_ltir_grid = template_data["log_ltir_grid"]
+    log_ssfr_grid = template_data["log_ssfr_grid"]
+
+    def bosa_emission(
+        wavelength_aa: jnp.ndarray,
+        L_absorbed: float,
+        dust_log_ssfr: float = -10.0,
+        redshift: float = 0.0,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        """BOSA emission from tabulated templates (Boquien & Salim 2021).
+
+        Interpolates in (log L_TIR, log sSFR) space.  L_TIR is derived
+        from L_absorbed via energy balance.
+
+        Parameters
+        ----------
+        wavelength_aa : array, shape (n_wave,)
+            Wavelength grid in Angstrom (sorted ascending).
+        L_absorbed : float
+            Total absorbed luminosity in Lsun (= L_TIR).
+        dust_log_ssfr : float
+            log10(sSFR / yr^-1).  Typical range: -12 to -8.
+        redshift : float
+            Source redshift (for CMB contrast correction).
+
+        Returns
+        -------
+        array, shape (n_wave,)
+            Dust emission L_nu in Lsun/Hz.
+        """
+        # L_TIR ~ L_absorbed (energy balance)
+        log_ltir = jnp.log10(jnp.clip(L_absorbed, 1.0e-30, None))
+
+        log_ltir_c = jnp.clip(log_ltir, log_ltir_grid[0], log_ltir_grid[-1])
+        log_ssfr_c = jnp.clip(dust_log_ssfr, log_ssfr_grid[0], log_ssfr_grid[-1])
+
+        n_l = len(log_ltir_grid)
+        n_s = len(log_ssfr_grid)
+
+        # Bilinear interpolation
+        i_l = jnp.clip(
+            jnp.searchsorted(log_ltir_grid, log_ltir_c) - 1,
+            0,
+            n_l - 2,
+        )
+        i_s = jnp.clip(
+            jnp.searchsorted(log_ssfr_grid, log_ssfr_c) - 1,
+            0,
+            n_s - 2,
+        )
+
+        fl = (log_ltir_c - log_ltir_grid[i_l]) / (log_ltir_grid[i_l + 1] - log_ltir_grid[i_l])
+        fs = (log_ssfr_c - log_ssfr_grid[i_s]) / (log_ssfr_grid[i_s + 1] - log_ssfr_grid[i_s])
+
+        template = (
+            (1.0 - fl) * (1.0 - fs) * spectra[i_l, i_s]
+            + (1.0 - fl) * fs * spectra[i_l, i_s + 1]
+            + fl * (1.0 - fs) * spectra[i_l + 1, i_s]
+            + fl * fs * spectra[i_l + 1, i_s + 1]
+        )
+
+        # Interpolate onto target wavelength grid
+        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+
+        return L_absorbed * sed
+
+    return bosa_emission
+
+
+def register_bosa_tabulated(grid_path: str, name: str = "bosa_tabulated") -> None:
+    """Load and register the tabulated BOSA model.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``bosa_templates.npz`` or ``.h5``.
+    name : str
+        Registry name.  Default ``"bosa_tabulated"``.
+    """
+    model_fn = create_bosa_from_grid(grid_path)
+    DUST_EMISSION_MODELS[name] = model_fn
+
+
+# ===================================================================
+# Model 8: THEMIS (Jones et al. 2017) — template-based
+# ===================================================================
+
+
+def _themis_analytic_fallback(
+    wavelength_aa: jnp.ndarray,
+    L_absorbed: float,
+    dust_umin: float = 1.0,
+    dust_gamma_dl: float = 0.01,
+    dust_qhac: float = 0.17,
+    redshift: float = 0.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """THEMIS ANALYTIC FALLBACK — not for science.
+
+    .. deprecated::
+        This reuses the DL07 analytic fallback as a placeholder.
+        Use the tabulated version (the default ``"themis"`` registry
+        entry, which auto-loads ``data/themis_templates.npz``).
+        Download templates via ``scripts/download_themis_templates.py``.
+
+    Only used when template files are not found.
+    """
+    # Map qhac to an approximate qpah for the DL07 fallback:
+    # THEMIS qhac ~ 0.17 is roughly equivalent to DL07 qpah ~ 3%
+    qpah_equiv = dust_qhac * 18.0  # crude linear scaling
+    return _draine_li2007_analytic_fallback(
+        wavelength_aa,
+        L_absorbed,
+        dust_umin=dust_umin,
+        dust_gamma_dl=dust_gamma_dl,
+        dust_qpah=qpah_equiv,
+        **_kwargs,
+    )
+
+
+def load_themis_templates(filepath: str) -> dict:
+    """Load THEMIS template grid from NPZ or HDF5.
+
+    The template file must contain:
+
+    - ``wavelength_um``: wavelength grid in microns (n_wave,)
+    - ``qhac_grid``: a-C(:H) aromatic fraction (n_qhac,)
+    - ``umin_grid``: minimum radiation field intensities (n_umin,)
+    - ``spectra_single``: single-U templates (n_qhac, n_umin, n_wave)
+    - ``spectra_pdr``: power-law U (PDR) templates (n_qhac, n_umin, n_wave)
+
+    Parameters
+    ----------
+    filepath : str
+        Path to ``themis_templates.npz`` or ``.h5``.
+
+    Returns
+    -------
+    dict
+        Keys: wavelength_aa, umin_grid, qhac_grid, single_u, powerlaw.
+        All arrays are JAX arrays.  wavelength_aa is in Angstrom.
+        single_u and powerlaw have shape (n_qhac, n_umin, n_wave) and are
+        normalized in L_nu convention.
+    """
+    import numpy as np
+
+    if filepath.endswith(".npz"):
+        data = np.load(filepath)
+    else:
+        import h5py as _h5py
+
+        f = _h5py.File(filepath, "r")
+        data = {k: np.array(f[k][:]) for k in f}
+        f.close()
+
+    wavs_um = np.array(data["wavelength_um"])
+    wavs_aa = wavs_um * 1.0e4  # microns -> Angstrom
+
+    single_u = np.array(data["spectra_single"])  # (n_qhac, n_umin, n_wave)
+    powerlaw = np.array(data["spectra_pdr"])  # (n_qhac, n_umin, n_wave)
+
+    # Convert to L_nu and normalize
+    wave_cm = wavs_aa * _AA_TO_CM
+    nu = _C_CGS / wave_cm
+
+    for arr in (single_u, powerlaw):
+        for i in range(arr.shape[0]):
+            for j in range(arr.shape[1]):
+                lnu = arr[i, j] * (wave_cm**2) / _C_CGS
+                integral = -np.trapezoid(lnu, nu)
+                if integral > 0:
+                    arr[i, j] = lnu / integral
+                else:
+                    arr[i, j] = lnu
+
+    return {
+        "wavelength_aa": jnp.array(wavs_aa),
+        "umin_grid": jnp.array(data["umin_grid"]),
+        "qhac_grid": jnp.array(data["qhac_grid"]),
+        "single_u": jnp.array(single_u),
+        "powerlaw": jnp.array(powerlaw),
+    }
+
+
+def create_themis_from_grid(template_data: dict | str) -> Callable:
+    """Create THEMIS emission function from pre-loaded DustEM template grid.
+
+    The THEMIS model (Jones et al. 2017) uses the same mixing formula
+    as DL07 but with different grain compositions.  The aromatic fraction
+    parameter ``qhac`` (a-C(:H) aromatic carbon mass fraction) replaces
+    ``qpah`` from DL07.
+
+    Parameters
+    ----------
+    template_data : dict or str
+        Either a dict (from ``load_themis_templates``) or a file path.
+
+    Returns
+    -------
+    Callable
+        Model function with signature
+        ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
+
+    References
+    ----------
+    Jones, A. P. et al. 2017, A&A, 602, A46.
+    """
+    if isinstance(template_data, str):
+        template_data = load_themis_templates(template_data)
+
+    single_u = template_data["single_u"]  # (n_qhac, n_umin, n_wave)
+    powerlaw = template_data["powerlaw"]  # (n_qhac, n_umin, n_wave)
+    tmpl_wave = template_data["wavelength_aa"]
+    umin_grid = template_data["umin_grid"]
+    qhac_grid = template_data["qhac_grid"]
+
+    def themis_emission(
+        wavelength_aa: jnp.ndarray,
+        L_absorbed: float,
+        dust_umin: float = 1.0,
+        dust_gamma_dl: float = 0.01,
+        dust_qhac: float = 0.17,
+        redshift: float = 0.0,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        """THEMIS emission from tabulated DustEM templates (Jones+2017).
+
+        j_nu = (1-gamma) * single_U(qhac, Umin) + gamma * PDR(qhac, Umin)
+
+        Parameters
+        ----------
+        wavelength_aa : array, shape (n_wave,)
+            Wavelength grid in Angstrom (sorted ascending).
+        L_absorbed : float
+            Total absorbed luminosity in Lsun.
+        dust_umin : float
+            Minimum radiation field intensity (Mathis ISRF units).
+        dust_gamma_dl : float
+            Fraction of dust mass in PDR (high-U) component.
+        dust_qhac : float
+            a-C(:H) aromatic carbon mass fraction.
+            Typical range: 0.02--0.30.
+        redshift : float
+            Source redshift (for CMB contrast correction).
+
+        Returns
+        -------
+        array, shape (n_wave,)
+            Dust emission L_nu in Lsun/Hz.
+        """
+        dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
+        dust_qhac_c = jnp.clip(dust_qhac, qhac_grid[0], qhac_grid[-1])
+
+        # Bilinear interpolation indices
+        i_u = jnp.clip(
+            jnp.searchsorted(umin_grid, dust_umin_c) - 1,
+            0,
+            len(umin_grid) - 2,
+        )
+        i_q = jnp.clip(
+            jnp.searchsorted(qhac_grid, dust_qhac_c) - 1,
+            0,
+            len(qhac_grid) - 2,
+        )
+
+        fu = (dust_umin_c - umin_grid[i_u]) / (umin_grid[i_u + 1] - umin_grid[i_u])
+        fq = (dust_qhac_c - qhac_grid[i_q]) / (qhac_grid[i_q + 1] - qhac_grid[i_q])
+
+        def _bilinear(grid: jnp.ndarray) -> jnp.ndarray:
+            return (
+                (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
+                + (1.0 - fq) * fu * grid[i_q, i_u + 1]
+                + fq * (1.0 - fu) * grid[i_q + 1, i_u]
+                + fq * fu * grid[i_q + 1, i_u + 1]
+            )
+
+        # Mix single-U and PDR components via gamma
+        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _bilinear(
+            powerlaw
+        )
+
+        # Interpolate onto target wavelength grid
+        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+
+        # CMB contrast correction at high redshift
+        T_eff_approx = 18.0 * dust_umin ** (1.0 / 6.0)
+        T_eff = cmb_corrected_temperature(T_eff_approx, redshift, 2.0)
+        contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
+
+        return L_absorbed * sed * contrast
+
+    return themis_emission
+
+
+def register_themis_tabulated(grid_path: str, name: str = "themis_tabulated") -> None:
+    """Load and register the tabulated THEMIS model.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``themis_templates.npz`` or ``.h5``.
+    name : str
+        Registry name.  Default ``"themis_tabulated"``.
+    """
+    model_fn = create_themis_from_grid(grid_path)
+    DUST_EMISSION_MODELS[name] = model_fn
+
+
+# ===================================================================
+# Model: Two-temperature energy balance with spatial offset
+# ===================================================================
+
+
+@register_emission_model("energy_balance_split")
+def energy_balance_split(
+    wavelength_aa: jnp.ndarray,
+    L_absorbed_stellar: float,
+    L_agn_ir: float = 0.0,
+    eta_balance: float = 1.0,
+    f_cold: float = 0.5,
+    dust_T_warm: float = 45.0,
+    dust_T_cold: float = 20.0,
+    dust_beta_warm: float = 1.5,
+    dust_beta_cold: float = 2.0,
+    redshift: float = 0.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Two-temperature energy balance with AGN contribution.
+
+    Extends simple eta_balance by decomposing IR into warm (SF-heated)
+    and cold (diffuse ISM) components, plus optional AGN IR contribution.
+
+    The total IR luminosity budget is::
+
+        L_IR_total = eta_balance * L_absorbed_stellar + L_agn_ir
+        L_warm = (1 - f_cold) * L_IR_total
+        L_cold = f_cold * L_IR_total
+
+    Each component is a modified blackbody with its own temperature and
+    emissivity index. This allows fitting galaxies where:
+
+    - AGN contributes to IR without UV counterpart (obscured AGN)
+    - Spatial offset between UV and FIR emission regions
+
+    Based on the Stardust approach (Kokorev et al. 2021).
+
+    Parameters
+    ----------
+    wavelength_aa : array, shape (n_wave,)
+        Wavelength grid in Angstrom (sorted ascending).
+    L_absorbed_stellar : float
+        Total absorbed stellar luminosity in Lsun.
+    L_agn_ir : float
+        Additional AGN-heated IR luminosity in Lsun (default 0).
+    eta_balance : float
+        Energy balance parameter: ratio of re-emitted to absorbed
+        stellar luminosity. eta=1 is strict energy balance.
+    f_cold : float
+        Fraction of total IR luminosity in the cold component.
+        Must be in [0, 1]. Default 0.5.
+    dust_T_warm : float
+        Warm dust temperature in Kelvin (default 45 K).
+    dust_T_cold : float
+        Cold dust temperature in Kelvin (default 20 K).
+    dust_beta_warm : float
+        Warm component emissivity index (default 1.5).
+    dust_beta_cold : float
+        Cold component emissivity index (default 2.0).
+    redshift : float
+        Source redshift. When > 0, CMB heating correction is applied
+        to both components.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Dust emission L_nu in Lsun/Hz.
+
+    References
+    ----------
+    - Kokorev et al. 2021, ApJ, 921, 40 (Stardust)
+    - da Cunha et al. 2008, MNRAS, 388, 1595 (MAGPHYS)
+    """
+    L_ir_total = eta_balance * L_absorbed_stellar + L_agn_ir
+
+    L_warm = (1.0 - f_cold) * L_ir_total
+    L_cold = f_cold * L_ir_total
+
+    # Each component is a modified blackbody
+    sed_warm = modified_blackbody(
+        wavelength_aa,
+        L_absorbed=L_warm,
+        dust_T=dust_T_warm,
+        dust_beta_ir=dust_beta_warm,
+        redshift=redshift,
+    )
+    sed_cold = modified_blackbody(
+        wavelength_aa,
+        L_absorbed=L_cold,
+        dust_T=dust_T_cold,
+        dust_beta_ir=dust_beta_cold,
+        redshift=redshift,
+    )
+
+    return sed_warm + sed_cold
 
 
 def apply_dust_emission(
@@ -1535,6 +2535,33 @@ DUST_EMISSION_MODELS["draine_li2014"] = _make_lazy_loader(
 )
 
 
+# --- Astrodust+PAH (Hensley & Draine 2023): tries astrodust_templates.npz ---
+DUST_EMISSION_MODELS["astrodust"] = _make_lazy_loader(
+    "astrodust",
+    "astrodust_templates.npz",
+    "create_astrodust_from_grid",
+    _astrodust_analytic_fallback,
+)
+
+
+# --- BOSA (Boquien & Salim 2021): tries bosa_templates.npz ---
+DUST_EMISSION_MODELS["bosa"] = _make_lazy_loader(
+    "bosa",
+    "bosa_templates.npz",
+    "create_bosa_from_grid",
+    _bosa_analytic_fallback,
+)
+
+
+# --- THEMIS (Jones+2017): tries themis_templates.npz ---
+DUST_EMISSION_MODELS["themis"] = _make_lazy_loader(
+    "themis",
+    "themis_templates.npz",
+    "create_themis_from_grid",
+    _themis_analytic_fallback,
+)
+
+
 # ===================================================================
 # Backward-compatible module-level aliases for direct imports
 # ===================================================================
@@ -1555,3 +2582,18 @@ def dale2014(*args, **kwargs):
 def draine_li2014(*args, **kwargs):
     """Draine & Li (2014) — dispatches to the registry (auto-loads templates)."""
     return DUST_EMISSION_MODELS["draine_li2014"](*args, **kwargs)
+
+
+def astrodust(*args, **kwargs):
+    """Astrodust+PAH (Hensley & Draine 2023) — dispatches to the registry."""
+    return DUST_EMISSION_MODELS["astrodust"](*args, **kwargs)
+
+
+def bosa(*args, **kwargs):
+    """BOSA (Boquien & Salim 2021) — dispatches to the registry."""
+    return DUST_EMISSION_MODELS["bosa"](*args, **kwargs)
+
+
+def themis(*args, **kwargs):
+    """THEMIS (Jones+2017) — dispatches to the registry."""
+    return DUST_EMISSION_MODELS["themis"](*args, **kwargs)

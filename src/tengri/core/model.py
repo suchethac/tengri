@@ -306,6 +306,20 @@ class Model:
             self._param_map.pop("met_logzsol", None)
             self._param_map.update(_EVOLVING_MET_PARAM_MAP)
 
+        # Chemical evolution: Z(t) derived from SFH via gas-regulator model
+        self._chem_evol_enabled = getattr(spec, "chem_evol", False)
+        if self._chem_evol_enabled:
+            # Remove met_logzsol (metallicity derived from SFH)
+            self._param_map.pop("met_logzsol", None)
+            # Add chem_evol params (identity mapping, no unit conversion)
+            for p in [
+                "chem_yield",
+                "chem_eta_outflow",
+                "chem_f_gas_init",
+                "chem_return_frac",
+            ]:
+                self._param_map[p] = (p, 1.0, 0.0)
+
         # Evolving alpha-enhancement: replaces global met_alpha_fe
         self._alpha_fe_evolving = getattr(spec, "alpha_fe_evolving", False)
         if self._alpha_fe_evolving:

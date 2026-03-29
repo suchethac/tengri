@@ -257,6 +257,37 @@ _EVOLVING_MET_PARAMS = {
     ),
 }
 
+_CHEM_EVOL_PARAMS = {
+    "chem_yield": (
+        "Nucleosynthetic yield (mass of metals per unit stellar mass locked). "
+        "Typical 0.02-0.04 for solar neighborhood with Chabrier IMF.",
+        lambda lo, hi: lo > 0 and hi <= 0.2,
+        "must be in (0, 0.2]",
+        Fixed(0.03),
+    ),
+    "chem_eta_outflow": (
+        "Mass loading factor (Mdot_out / SFR). "
+        "0 = closed box, >0 = leaky box with outflows.",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(0.0),
+    ),
+    "chem_f_gas_init": (
+        "Initial gas fraction at earliest cosmic time. "
+        "Default 0.9 (galaxy starts gas-dominated).",
+        lambda lo, hi: lo > 0 and hi <= 1,
+        "must be in (0, 1]",
+        Fixed(0.9),
+    ),
+    "chem_return_frac": (
+        "Stellar mass return fraction (instantaneous recycling). "
+        "Default 0.4 for Chabrier IMF.",
+        lambda lo, hi: lo >= 0 and hi < 1,
+        "must be in [0, 1)",
+        Fixed(0.4),
+    ),
+}
+
 _SINGLE_COMPONENT_DUST_PARAMS = {
     "dust_tau_v": (
         "V-band optical depth (uniform screen)",
@@ -552,6 +583,8 @@ SETTINGS_KEYS = frozenset(
         # Evolving metallicity / alpha
         "evolving_metallicity",
         "alpha_fe_evolving",
+        # Chemical evolution (Z from SFH)
+        "chem_evol",
         # Metallicity interpolation
         "met_interp",
         "lgmet_scatter",
@@ -577,6 +610,7 @@ def _build_param_registry(
     shock=False,
     evolving_metallicity=False,
     alpha_fe_evolving=False,
+    chem_evol=False,
 ):
     """Build the parameter registry for a given model configuration.
 
@@ -595,6 +629,9 @@ def _build_param_registry(
         Diffuse ISM dust law. None = same as bc.
     evolving_metallicity : bool
         If True, replace met_logzsol with met_logzsol_0 and met_logzsol_final.
+    chem_evol : bool
+        If True, derive Z(t) from SFH via gas-regulator model. Replaces
+        met_logzsol with chem_yield, chem_eta_outflow, etc.
 
     Returns
     -------
@@ -617,8 +654,8 @@ def _build_param_registry(
     _is_single = dust_model == "single_component"
     _skip_dust_params = {"dust_tau_bc", "dust_tau_diff"} if _is_single else set()
     for pname, (desc, check, err, default) in _NON_SFH_PARAMS.items():
-        # When evolving metallicity is enabled, skip the single met_logzsol
-        if evolving_metallicity and pname == "met_logzsol":
+        # When evolving metallicity or chem_evol enabled, skip met_logzsol
+        if (evolving_metallicity or chem_evol) and pname == "met_logzsol":
             continue
         # When single-component dust, skip birth-cloud / diffuse params
         if pname in _skip_dust_params:
@@ -635,6 +672,12 @@ def _build_param_registry(
     # Evolving metallicity params (replaces met_logzsol when enabled)
     if evolving_metallicity:
         for pname, (desc, check, err, default) in _EVOLVING_MET_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+
+    # Chemical evolution params (replaces met_logzsol when enabled)
+    if chem_evol:
+        for pname, (desc, check, err, default) in _CHEM_EVOL_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
@@ -1070,6 +1113,17 @@ class ParamSpec:
         # Evolving metallicity: False (default), True
         self.evolving_metallicity = kwargs.pop("evolving_metallicity", False)
 
+        # Chemical evolution: derive Z(t) from SFH via gas-regulator model
+        self.chem_evol = kwargs.pop("chem_evol", False)
+
+        # Mutual exclusion: chem_evol and evolving_metallicity
+        if self.chem_evol and self.evolving_metallicity:
+            raise ValueError(
+                "chem_evol and evolving_metallicity are mutually exclusive. "
+                "chem_evol derives Z(t) from SFH; evolving_metallicity uses "
+                "a linear Z(t) ramp with met_logzsol_0/met_logzsol_final."
+            )
+
         # Evolving alpha-enhancement: False (default), True
         # When True, [α/Fe] varies with lookback time (old stars more α-enhanced).
         # Replaces met_alpha_fe with met_alpha_fe_old + met_alpha_fe_young.
@@ -1136,6 +1190,7 @@ class ParamSpec:
             shock=self.shock,
             evolving_metallicity=self.evolving_metallicity,
             alpha_fe_evolving=self.alpha_fe_evolving,
+            chem_evol=self.chem_evol,
         )
         # --- Cue optional params (ionspec / gas extras) ---
         _ALL_CUE_OPTIONAL = {**_CUE_IONSPEC_PARAMS, **_CUE_GAS_EXTRA_PARAMS}
@@ -1497,6 +1552,9 @@ class ParamSpec:
         ev_met = getattr(self, "evolving_metallicity", False)
         if ev_met:
             modules.append("evolving_Z")
+        chem_ev = getattr(self, "chem_evol", False)
+        if chem_ev:
+            modules.append("chem_evol_Z")
         if modules:
             lines.append(f"  Modules:     {', '.join(modules)}")
         lines.append("")

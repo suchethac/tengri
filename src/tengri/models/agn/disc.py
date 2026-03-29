@@ -1,6 +1,6 @@
 """Accretion disc models for AGN emission.
 
-Three models are provided:
+Four models are provided:
 
 1. **Simple power-law + UV cutoff** — minimal AGN disc with 3 parameters.
 2. **Multi-color disc (Shakura-Sunyaev)** — physically-motivated standard thin
@@ -9,6 +9,10 @@ Three models are provided:
 3. **Kubota & Done 3-zone disc** — full K&D (2018) model with outer standard
    disc, warm Comptonization (soft X-ray excess), and hot corona (hard X-ray
    power law). Three radially-stratified zones with self-consistent radii.
+4. **ADAF + truncated disc** — for low-luminosity AGN (L/L_Edd < 0.01).
+   The inner disc transitions to an advection-dominated accretion flow
+   (optically thin, radiatively inefficient). Based on Mahadevan (1997)
+   and Nemmen+2014.
 
 All return specific luminosity L_nu in Lsun/Hz as a function of rest-frame
 wavelength. All functions are pure JAX and JIT-compilable.
@@ -21,6 +25,9 @@ References
 - Kubota & Done 2018, MNRAS, 480, 1247
 - Nandra & Pounds 1994, MNRAS, 268, 405 (power-law slopes)
 - Done et al. 2012, MNRAS, 420, 1848 (QSOSED)
+- Mahadevan 1997, ApJ, 477, 585 (ADAF spectra)
+- Nemmen et al. 2014, MNRAS, 438, 2804 (ADAF modelling)
+- Lopez et al. 2024 (ADAF + truncated disc for LLAGN)
 """
 
 import jax
@@ -586,5 +593,219 @@ def kubota_done_disc(
     l_nu_integral = jnp.trapezoid(l_nu_total[sort_idx], nu[sort_idx])
     l_nu_integral_safe = jnp.maximum(jnp.abs(l_nu_integral), 1e-100)
     scale = l_bol_requested / l_nu_integral_safe
+
+    return l_nu_total * scale / _LSUN_ERG
+
+
+# ===================================================================
+# Model 4: ADAF + truncated disc (low-luminosity AGN)
+# ===================================================================
+
+
+def adaf_disc(
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float,
+    agn_frac: float = 0.1,
+    agn_log_mbh: float = 8.0,
+    agn_log_ledd: float = -3.0,
+    agn_r_tr: float = 100.0,
+    agn_adaf_beta: float = 0.5,
+    agn_adaf_delta: float = 0.01,
+    agn_cos_inc: float = 0.5,
+    n_radii: int = 50,
+    **_kwargs,
+) -> jnp.ndarray:
+    """ADAF + truncated disc model for low-luminosity AGN.
+
+    At low accretion rates (L/L_Edd < 0.01), the inner disc transitions
+    to an advection-dominated accretion flow. The outer disc remains
+    as a standard Shakura-Sunyaev disc truncated at ``r_tr``.
+
+    The ADAF SED has three components:
+
+    1. **Synchrotron** (radio-mm): L_nu ~ nu^(1/3) * exp(-nu/nu_c)
+    2. **Bremsstrahlung** (X-ray): L_nu ~ nu^(-0.5) * exp(-h*nu/kT_e)
+    3. **Inverse Compton** (hard X-ray): L_nu ~ nu^(-(p-1)/2)
+
+    The truncated outer disc contributes UV/optical emission from
+    ``r_tr`` outward.
+
+    Based on Mahadevan 1997, ApJ 477, 585 and Nemmen+2014.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    agn_log_lbol : float
+        log10(L_bol / Lsun). Total AGN bolometric luminosity.
+    agn_frac : float
+        Fraction of L_bol emitted by this component (0 to 1). Default 0.1.
+    agn_log_mbh : float
+        log10(M_BH / Msun). Determines gravitational radius and ADAF
+        synchrotron peak frequency. Typical range: 6 to 10. Default 8.0.
+    agn_log_ledd : float
+        log10(L / L_Edd). Eddington ratio. For ADAF regime, should be
+        < -2. Default -3.0 (sub-Eddington).
+    agn_r_tr : float
+        Truncation radius in gravitational radii (R_g = GM/c^2). Inner
+        edge of the thin disc / outer edge of ADAF. Typical: 10-1000 R_g.
+        Default 100.0.
+    agn_adaf_beta : float
+        Ratio of magnetic to total pressure in ADAF (0 to 1). Controls
+        the synchrotron emission strength. Default 0.5.
+    agn_adaf_delta : float
+        Fraction of viscous energy directly heating electrons (0 to 1).
+        Controls the electron temperature. Default 0.01.
+    agn_cos_inc : float
+        Cosine of inclination angle. Default 0.5 (60 deg).
+    n_radii : int
+        Number of radial integration points for the outer disc. Default 50.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Specific luminosity L_nu [Lsun Hz^-1].
+
+    Notes
+    -----
+    The total ADAF luminosity scales as ~L_bol * r_ISCO / r_tr because
+    most gravitational energy is advected into the black hole rather than
+    radiated. Larger truncation radii therefore produce weaker ADAF
+    emission and stronger outer disc emission.
+
+    The synchrotron peak frequency scales as ~10^12 * (M/10^8)^(-1/2) Hz,
+    placing it in the sub-mm/mm regime for typical SMBH masses.
+
+    References
+    ----------
+    - Mahadevan 1997, ApJ, 477, 585
+    - Nemmen et al. 2014, MNRAS, 438, 2804
+    - Lopez et al. 2024
+    """
+    nu = _wavelength_to_nu(wavelength)
+    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
+
+    # --- Black hole parameters ---
+    r_g = _gravitational_radius(agn_log_mbh)
+    r_isco_rg = _isco_radius(0.0)  # Schwarzschild for LLAGN
+    r_tr_safe = jnp.maximum(agn_r_tr, r_isco_rg + 1.0)  # r_tr > r_isco
+
+    # Eddington ratio and accretion rate
+    l_edd = _eddington_luminosity(agn_log_mbh)
+    l_edd_ratio = jnp.clip(10.0**agn_log_ledd, 1e-10, 1.0)
+
+    # Radiative efficiency (Novikov-Thorne for Schwarzschild)
+    eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
+    mdot = l_edd_ratio * l_edd / (eta * _C_LIGHT**2)
+
+    # ===============================================================
+    # ADAF component (r < r_tr)
+    # ===============================================================
+    # ADAF radiative luminosity fraction: L_adaf ~ L_bol * (r_isco / r_tr)
+    # Most energy is advected, not radiated
+    adaf_efficiency = r_isco_rg / r_tr_safe
+    l_adaf_erg = l_bol_erg * adaf_efficiency
+
+    # --- ADAF electron temperature ---
+    # T_e ~ 5e9 * delta^0.5 K (Mahadevan 1997, virial modified by delta)
+    t_e = 5e9 * jnp.maximum(agn_adaf_delta, 1e-6) ** 0.5
+
+    # --- Synchrotron component ---
+    # Peak frequency scales with BH mass (Mahadevan 1997 Eq. 23)
+    nu_peak_sync = 1e12 * (10.0**agn_log_mbh / 1e8) ** (-0.5)
+    # Synchrotron spectrum: nu^(1/3) * exp(-nu/3*nu_peak)
+    nu_ratio_sync = nu / jnp.maximum(nu_peak_sync, 1.0)
+    sync_shape = nu_ratio_sync ** (1.0 / 3.0) * jnp.exp(
+        -jnp.clip(nu_ratio_sync / 3.0, 0.0, 500.0)
+    )
+
+    # --- Bremsstrahlung component ---
+    # Cutoff at kT_e/h
+    nu_brem = _K_BOLTZ * t_e / _H_PLANCK
+    nu_ratio_brem = nu / jnp.maximum(nu_brem, 1.0)
+    brem_shape = nu_ratio_brem ** (-0.5) * jnp.exp(
+        -jnp.clip(nu_ratio_brem, 0.0, 500.0)
+    )
+
+    # --- Inverse Compton component ---
+    # Power-law with index -(p-1)/2 where p ~ 2.5 for ADAF
+    # IC is sub-dominant in sub-mm but contributes at hard X-ray
+    p_ic = 2.5
+    ic_shape = nu ** (-(p_ic - 1.0) / 2.0) * jnp.exp(
+        -jnp.clip(nu / jnp.maximum(nu_brem, 1.0), 0.0, 500.0)
+    )
+
+    # Relative weights (Mahadevan 1997): synchrotron dominates at low nu,
+    # bremsstrahlung at intermediate, IC at high
+    # beta controls synchrotron strength (magnetic field)
+    beta_safe = jnp.clip(agn_adaf_beta, 0.01, 0.99)
+    sync_weight = beta_safe
+    brem_weight = 1.0 - beta_safe
+    ic_weight = 0.1 * beta_safe  # IC is typically sub-dominant
+
+    adaf_shape = sync_weight * sync_shape + brem_weight * brem_shape + ic_weight * ic_shape
+
+    # Normalize ADAF to l_adaf_erg
+    sort_idx = jnp.argsort(nu)
+    adaf_integral = jnp.trapezoid(adaf_shape[sort_idx], nu[sort_idx])
+    adaf_integral_safe = jnp.maximum(jnp.abs(adaf_integral), 1e-100)
+    l_nu_adaf = l_adaf_erg * adaf_shape / adaf_integral_safe
+
+    # ===============================================================
+    # Truncated outer disc (r > r_tr)
+    # ===============================================================
+    r_in_cm = r_tr_safe * r_g  # inner edge at truncation radius
+    r_isco_cm = r_isco_rg * r_g
+    r_out_cm = 1000.0 * r_isco_rg * r_g  # self-gravity limit
+
+    # Inner temperature (at ISCO, for profile normalization)
+    t_in = (
+        3.0
+        * _G_GRAV
+        * 10.0**agn_log_mbh
+        * _MSUN_G
+        * mdot
+        / (8.0 * jnp.pi * _SIGMA_SB * r_isco_cm**3)
+    ) ** 0.25
+
+    # Radial grid (logarithmic spacing from r_tr to r_out)
+    log_r_min = jnp.log10(r_in_cm)
+    log_r_max = jnp.log10(r_out_cm)
+    log_r_grid = jnp.linspace(log_r_min, log_r_max, n_radii)
+    r_grid = 10.0**log_r_grid
+
+    # Temperature profile: T(r) = T_in * (r/r_isco)^{-3/4} * (1 - sqrt(r_isco/r))^{1/4}
+    # Note: zero-torque at ISCO, not at r_tr
+    r_ratio = r_grid / r_isco_cm
+    torque_correction = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio), 1e-30) ** 0.25
+    t_profile = t_in * r_ratio ** (-0.75) * torque_correction
+
+    d_log_r = log_r_grid[1] - log_r_grid[0]
+    dr = r_grid * jnp.log(10.0) * d_log_r
+
+    def _ring_lnu(r_cm, t_ring, dr_ring):
+        b_nu = _planck_lnu(nu, t_ring)
+        area = 2.0 * jnp.pi * r_cm * dr_ring
+        return b_nu * area * jnp.maximum(agn_cos_inc, 0.01)
+
+    ring_contributions = jax.vmap(_ring_lnu)(r_grid, t_profile, dr)
+    l_nu_disc = jnp.sum(ring_contributions, axis=0)
+
+    # ===============================================================
+    # Combine and normalize
+    # ===============================================================
+    # Disc luminosity: L_bol * (1 - r_isco/r_tr) [remaining after ADAF]
+    l_disc_erg = l_bol_erg * (1.0 - adaf_efficiency)
+    disc_integral = jnp.trapezoid(l_nu_disc[sort_idx], nu[sort_idx])
+    disc_integral_safe = jnp.maximum(jnp.abs(disc_integral), 1e-100)
+    l_nu_disc_norm = l_disc_erg * l_nu_disc / disc_integral_safe
+
+    l_nu_total = l_nu_adaf + l_nu_disc_norm
+
+    # Apply overall AGN fraction scaling
+    l_bol_requested = l_bol_erg * agn_frac
+    total_integral = jnp.trapezoid(l_nu_total[sort_idx], nu[sort_idx])
+    total_integral_safe = jnp.maximum(jnp.abs(total_integral), 1e-100)
+    scale = l_bol_requested / total_integral_safe
 
     return l_nu_total * scale / _LSUN_ERG

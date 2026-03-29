@@ -1,0 +1,279 @@
+"""Gas-regulator chemical evolution model: Z(t) from SFH.
+
+Derives a time-dependent metallicity history Z(t) from the star formation
+history using the closed-box / leaky-box analytic framework. This couples
+metallicity to the SFH self-consistently, reducing the free parameter count
+by eliminating the need for a separate metallicity parameter.
+
+The model follows the gas regulator framework of Bellstedt et al. (2020,
+2021; ProSpect) and Leja et al. (2019; Prospector):
+
+    Closed box:  Z(t) = y * ln(1 / f_gas(t))
+    Leaky box:   Z(t) = y / (1 + eta) * ln(1 / f_gas(t))
+
+where y is the nucleosynthetic yield, eta is the mass-loading factor
+(outflow rate / SFR), and f_gas is the gas fraction.
+
+References
+----------
+- Bellstedt et al. 2020 (MNRAS 498, 5581): ProSpect chemical evolution
+- Bellstedt et al. 2021 (MNRAS 503, 3309): Shark + ProSpect validation
+- Leja et al. 2019 (ApJ 876, 3): Prospector continuity SFH
+- Tinsley 1980 (Fundamentals of Cosmic Physics 5, 287): closed-box model
+"""
+
+from __future__ import annotations
+
+import jax.numpy as jnp
+
+# Solar metallicity (mass fraction) from Asplund et al. (2009)
+Z_SUN = 0.0142
+LOG10_ZSUN = -1.8477116556169435
+
+
+def closed_box_metallicity(
+    age_yr: jnp.ndarray,
+    sfr: jnp.ndarray,
+    yield_y: float = 0.03,
+    eta_outflow: float = 0.0,
+    f_gas_init: float = 0.9,
+    return_frac: float = 0.4,
+) -> jnp.ndarray:
+    """Compute metallicity history Z(t) from SFH using closed/leaky box model.
+
+    Given a star formation rate history on a lookback-time grid, compute the
+    gas-phase metallicity at each timestep using analytic chemical evolution.
+    The SFR is integrated from oldest to youngest (cosmic time order) to build
+    up cumulative stellar mass, gas depletion, and enrichment.
+
+    Parameters
+    ----------
+    age_yr : array, shape (n_age,)
+        Lookback time grid in years. Convention: youngest (smallest lookback
+        time) first, oldest last. This matches tengri's internal log-age grid.
+    sfr : array, shape (n_age,)
+        Star formation rate in Msun/yr at each lookback time.
+    yield_y : float
+        Nucleosynthetic yield (mass of metals produced per unit mass locked
+        in long-lived stars). Default 0.03 (solar neighborhood value for
+        Chabrier IMF; Vincenzo et al. 2016).
+    eta_outflow : float
+        Mass loading factor: Mdot_out / SFR. 0 = closed box (no outflows).
+        Typical values: 0.5-3 for dwarf galaxies, 0-0.5 for massive galaxies.
+    f_gas_init : float
+        Initial gas fraction M_gas / (M_gas + M_star) at earliest cosmic time.
+        Default 0.9 (galaxy starts gas-dominated).
+    return_frac : float
+        Instantaneous recycling fraction: fraction of formed stellar mass
+        returned to the ISM via winds/SNe. Default 0.4 (Chabrier IMF;
+        Leitner & Kravtsov 2011).
+
+    Returns
+    -------
+    log_z_solar : array, shape (n_age,)
+        log10(Z/Z_sun) at each lookback time. Clipped to [-4, +1].
+
+    Notes
+    -----
+    The computation proceeds in cosmic time (oldest first). Since the input
+    grid is in lookback time (youngest first), arrays are reversed internally.
+
+    The effective yield in the leaky-box model is y_eff = y / (1 + eta).
+    With eta=0 this reduces to the closed-box solution.
+
+    Gas mass evolves as:
+        M_gas(t) = M_gas(0) - (1 - R) * M_star_formed(t) - eta * M_star_formed(t)
+
+    where M_star_formed is the cumulative integral of SFR. The (1-R) term
+    accounts for mass locked into long-lived stars/remnants, and the eta term
+    accounts for outflows.
+    """
+    # Reverse to cosmic time order (oldest first)
+    sfr_cosmic = sfr[::-1]
+    age_cosmic = age_yr[::-1]
+
+    # Time step sizes (in years) along cosmic time
+    # Use forward differences: dt[i] = age_cosmic[i] - age_cosmic[i+1]
+    # (lookback time decreases along cosmic time, so reversed ages decrease)
+    # Actually after reversal, age_cosmic goes from large to small (oldest
+    # lookback = largest value, first), so dt = |diff|.
+    dt = jnp.abs(jnp.diff(age_cosmic))
+    # Prepend a zero for the first bin (no mass formed before the first step)
+    dt = jnp.concatenate([jnp.zeros(1), dt])
+
+    # Cumulative stellar mass formed in cosmic time order
+    mass_formed_cumulative = jnp.cumsum(sfr_cosmic * dt)
+
+    # Total baryonic mass (gas + stars at t=0)
+    # At the earliest time, M_star ~ 0 and f_gas = f_gas_init
+    # So M_gas_init = f_gas_init * M_total, and the total mass we need
+    # is set so the gas fraction works out correctly.
+    # Use the final cumulative mass to set the scale.
+    total_mass_formed = mass_formed_cumulative[-1]
+    # M_total = M_gas_init / f_gas_init
+    # At end: M_gas_final = M_gas_init - (1-R+eta)*M_star_formed_total
+    # We need M_gas_init large enough that M_gas stays positive.
+    # Set M_total from f_gas_init and the expected final mass:
+    # M_total = total_mass_formed * (1 - return_frac + eta_outflow) / (1 - f_gas_init)
+    # But protect against zero SFR:
+    net_lock_frac = 1.0 - return_frac + eta_outflow
+    m_total = jnp.where(
+        total_mass_formed > 0,
+        total_mass_formed * net_lock_frac / jnp.maximum(1.0 - f_gas_init, 0.01),
+        1.0,  # arbitrary scale when no stars form
+    )
+    m_gas_init = f_gas_init * m_total
+
+    # Gas mass at each step:
+    # M_gas(t) = M_gas_init - (1 - R + eta) * M_star_formed(t)
+    m_gas = m_gas_init - net_lock_frac * mass_formed_cumulative
+    m_gas = jnp.maximum(m_gas, 1e-10 * m_total)  # floor to prevent log(0)
+
+    # Gas fraction
+    m_star_net = (1.0 - return_frac) * mass_formed_cumulative
+    f_gas = m_gas / (m_gas + m_star_net)
+    f_gas = jnp.clip(f_gas, 1e-6, 1.0)
+
+    # Metallicity: leaky-box formula
+    y_eff = yield_y / (1.0 + eta_outflow)
+    z_metal = y_eff * jnp.log(1.0 / f_gas)
+    z_metal = jnp.maximum(z_metal, 1e-8)  # floor at ~10^-8
+
+    # Convert to log10(Z/Zsun)
+    log_z_solar = jnp.log10(z_metal / Z_SUN)
+    log_z_solar = jnp.clip(log_z_solar, -4.0, 1.0)
+
+    # Reverse back to lookback time order (youngest first)
+    return log_z_solar[::-1]
+
+
+def closed_box_metallicity_anchored(
+    age_yr: jnp.ndarray,
+    sfr: jnp.ndarray,
+    met_logzsol_final: float,
+    eta_outflow: float = 0.0,
+    return_frac: float = 0.4,
+) -> jnp.ndarray:
+    """Compute Z(t) anchored to a target present-day metallicity.
+
+    Instead of specifying yield_y and f_gas_init independently, this function
+    adjusts f_gas_init so that the final (youngest) metallicity matches
+    ``met_logzsol_final``. This is useful for inference where the observed
+    metallicity constrains the endpoint.
+
+    The effective yield is computed from the target metallicity and the
+    implied gas fraction at the final time step.
+
+    Parameters
+    ----------
+    age_yr : array, shape (n_age,)
+        Lookback time grid in years (youngest first).
+    sfr : array, shape (n_age,)
+        Star formation rate in Msun/yr at each lookback time.
+    met_logzsol_final : float
+        Target present-day metallicity in log10(Z/Zsun).
+    eta_outflow : float
+        Mass loading factor. Default 0.0 (closed box).
+    return_frac : float
+        Stellar mass return fraction. Default 0.4.
+
+    Returns
+    -------
+    log_z_solar : array, shape (n_age,)
+        log10(Z/Z_sun) at each lookback time. The youngest element will
+        approximately equal ``met_logzsol_final``.
+    """
+    # Target Z at present day
+    z_target = Z_SUN * 10.0**met_logzsol_final
+
+    # We need to find yield_y that produces z_target at the endpoint.
+    # The shape of Z(t) is set by the SFH; the yield just scales it.
+    # Strategy: run with y=1.0, get the unnormalized Z profile, then
+    # rescale so the final value matches.
+
+    # First, get the profile shape with a reference yield
+    log_z_ref = closed_box_metallicity(
+        age_yr,
+        sfr,
+        yield_y=1.0,
+        eta_outflow=eta_outflow,
+        f_gas_init=0.9,
+        return_frac=return_frac,
+    )
+
+    # The youngest element (index 0) is the present-day value
+    z_ref_final = Z_SUN * 10.0 ** log_z_ref[0]
+
+    # Scale factor to match target
+    scale = jnp.where(z_ref_final > 1e-30, z_target / z_ref_final, 1.0)
+
+    # Apply scaling in linear Z space, then convert back
+    z_ref_linear = Z_SUN * 10.0**log_z_ref
+    z_scaled = z_ref_linear * scale
+    z_scaled = jnp.maximum(z_scaled, 1e-8)
+
+    log_z_solar = jnp.log10(z_scaled / Z_SUN)
+    return jnp.clip(log_z_solar, -4.0, 1.0)
+
+
+def chem_evol_metallicity_on_ssp_grid(
+    ssp_log_ages_yr: jnp.ndarray,
+    log_age_grid: jnp.ndarray,
+    sfr: jnp.ndarray,
+    yield_y: float = 0.03,
+    eta_outflow: float = 0.0,
+    f_gas_init: float = 0.9,
+    return_frac: float = 0.4,
+) -> jnp.ndarray:
+    """Compute Z(t) from SFH and interpolate onto the SSP age grid.
+
+    This is the main entry point for the SED pipeline integration.
+    It computes chemical evolution on the GP/SFH grid, then interpolates
+    the resulting log(Z/Zsun) onto the SSP log-age grid.
+
+    Parameters
+    ----------
+    ssp_log_ages_yr : array, shape (n_ssp_age,)
+        Log10(age/yr) of the SSP templates.
+    log_age_grid : array, shape (n_grid,)
+        Log10(lookback time / yr) grid on which the SFR is defined.
+    sfr : array, shape (n_grid,)
+        Star formation rate at each grid point.
+    yield_y : float
+        Nucleosynthetic yield.
+    eta_outflow : float
+        Mass loading factor.
+    f_gas_init : float
+        Initial gas fraction.
+    return_frac : float
+        Stellar return fraction.
+
+    Returns
+    -------
+    log_z_abs : array, shape (n_ssp_age,)
+        log10(Z) absolute metallicity on the SSP age grid. This is in the
+        same units as ``ssp_lgmet`` (absolute, not solar-relative).
+    """
+    # Convert log-age grid to linear years
+    age_yr = 10.0**log_age_grid
+
+    # Compute Z(t) on the SFH grid
+    log_z_solar = closed_box_metallicity(
+        age_yr,
+        sfr,
+        yield_y=yield_y,
+        eta_outflow=eta_outflow,
+        f_gas_init=f_gas_init,
+        return_frac=return_frac,
+    )
+
+    # Interpolate onto SSP age grid (both in log-age space)
+    log_z_on_ssp = jnp.interp(
+        ssp_log_ages_yr,
+        log_age_grid,
+        log_z_solar,
+    )
+
+    # Convert from log10(Z/Zsun) to log10(Z) absolute
+    log_z_abs = log_z_on_ssp + LOG10_ZSUN
+    return log_z_abs

@@ -445,6 +445,20 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
             t_universe_gyr,
         )
         ssp_flux_at_z = interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe)
+    elif getattr(model, "_chem_evol_enabled", False):
+        # Chemical evolution: derive Z(t) from SFH via gas-regulator model
+        from tengri.models.sfh.chemical_evolution import chem_evol_metallicity_on_ssp_grid
+
+        log_z_per_age = chem_evol_metallicity_on_ssp_grid(
+            model.ssp_log_ages_yr,
+            model.log_age_grid,
+            sfr,
+            yield_y=p.get("chem_yield", 0.03),
+            eta_outflow=p.get("chem_eta_outflow", 0.0),
+            f_gas_init=p.get("chem_f_gas_init", 0.9),
+            return_frac=p.get("chem_return_frac", 0.4),
+        )
+        ssp_flux_at_z = interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe)
     else:
         ssp_flux_at_z = interp_met_alpha_dispatch(model, p["log_z_abs"], alpha_fe)
 

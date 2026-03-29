@@ -15,6 +15,7 @@ Coefficient tables from eazy-py (Brammer et al.):
     https://github.com/gbrammer/eazy-py/blob/master/eazy/data/
 """
 
+import jax
 import jax.numpy as jnp
 
 # ---------------------------------------------------------------------------
@@ -461,3 +462,162 @@ def igm_transmission(
     tau_total = tau_total + tau_cgm
 
     return jnp.exp(-jnp.clip(tau_total, a_min=0.0))
+
+
+# ---------------------------------------------------------------------------
+# Patchy reionization damping wing (Mason+2018, Keating+2025)
+# ---------------------------------------------------------------------------
+
+
+def _damping_wing_tau(
+    wave_obs: jnp.ndarray,
+    z: float,
+    x_HI: float,
+    R_bubble: float,
+) -> jnp.ndarray:
+    """Damping wing optical depth from a partially neutral IGM.
+
+    Follows Miralda-Escude (1998, ApJ 501, 15) for the Lorentzian
+    damping wing profile of the Ly-alpha transition.
+
+    The damping wing extends *redward* of Ly-alpha at the source
+    redshift (unlike the Lyman series forest which is blueward).
+    An ionized bubble of radius R_bubble around the source carves
+    out a proximity zone where tau = 0.
+
+    Parameters
+    ----------
+    wave_obs : array, shape (n_wave,)
+        Observed-frame wavelength [Angstrom].
+    z : float
+        Source redshift.
+    x_HI : float
+        Volume-averaged neutral fraction (0 = ionized, 1 = neutral).
+    R_bubble : float
+        Ionized bubble radius [proper Mpc].
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Damping wing optical depth (>= 0).
+    """
+    # Gunn-Peterson optical depth at Ly-alpha (Miralda-Escude 1998 Eq. 1)
+    tau_GP = 6.45e5 * ((1.0 + z) / 7.0) ** 1.5
+
+    # Observed Ly-alpha at source redshift
+    lya_obs = _LAMBDA_LYA * (1.0 + z)
+
+    # Frequency domain (more natural for the Lorentzian profile)
+    nu_obs = _C_CGS_IGM / (wave_obs * 1e-8)  # Hz
+    nu_lya_obs = _C_CGS_IGM / (lya_obs * 1e-8)  # Hz
+
+    # Frequency offset from Ly-alpha at source
+    delta_nu = nu_obs - nu_lya_obs
+
+    # Damping wing Lorentzian profile
+    # tau_DW = tau_GP * x_HI * (gamma / 4pi) / (delta_nu^2 + (gamma/4pi)^2)
+    gamma_4pi = _GAMMA_LYA / (4.0 * jnp.pi)
+    tau_lorentz = tau_GP * x_HI * gamma_4pi / (delta_nu**2 + gamma_4pi**2)
+
+    # Bubble correction: the ionized bubble of radius R_bubble
+    # shields wavelengths very close to Lya. The bubble edge
+    # corresponds to a redshift offset dz ~ R_bubble * H(z) / c.
+    # H(z) ~ 100 * h * sqrt(Omega_m * (1+z)^3) km/s/Mpc
+    # For simplicity, use H(z) ~ 1000 * sqrt((1+z)^3 / 343) km/s/Mpc
+    # at z~6 this gives H ~ 1000 km/s/Mpc
+    h_z_kms_per_mpc = 100.0 * 0.7 * jnp.sqrt(0.3 * (1.0 + z) ** 3)
+    # Velocity offset at bubble edge [km/s]
+    v_bubble = R_bubble * h_z_kms_per_mpc
+    # Corresponding frequency offset
+    nu_bubble = nu_lya_obs * v_bubble / 2.998e5  # c in km/s
+
+    # Inside the bubble (|delta_nu| < nu_bubble on the red side), tau = 0
+    # Use a smooth sigmoid for differentiability
+    # The damping wing is on the red side: wave_obs > lya_obs => delta_nu < 0
+    # We want to suppress tau when |delta_nu| < nu_bubble
+    bubble_mask = jax.nn.sigmoid(
+        (jnp.abs(delta_nu) - nu_bubble) / jnp.maximum(nu_bubble * 0.1, 1.0)
+    )
+
+    tau_wing = tau_lorentz * bubble_mask
+
+    # Only apply redward of Ly-alpha at source (damping wing side)
+    tau_wing = jnp.where(wave_obs > lya_obs, tau_wing, 0.0)
+
+    return jnp.clip(tau_wing, a_min=0.0)
+
+
+def igm_transmission_patchy(
+    wave_obs: jnp.ndarray,
+    z: float,
+    x_HI: float = 0.0,
+    R_bubble: float = 1.0,
+    **kwargs,
+) -> jnp.ndarray:
+    """IGM transmission with patchy reionization damping wing.
+
+    Extends Inoue+2014 with a neutral IGM damping wing component
+    for z > 5.5 where reionization is incomplete. When ``x_HI = 0``,
+    this reduces exactly to standard ``igm_transmission``.
+
+    The damping wing optical depth follows Miralda-Escude (1998):
+
+        tau_DW(lambda) = tau_GP * x_HI * (gamma / 4pi)
+                         / (delta_nu^2 + (gamma/4pi)^2)
+
+    where delta_nu is the frequency offset from Ly-alpha at the source
+    redshift, and the Gunn-Peterson optical depth is:
+
+        tau_GP = 6.45e5 * ((1+z)/7)^1.5
+
+    An ionized bubble of radius ``R_bubble`` around the source creates
+    a proximity zone that suppresses the damping wing close to Ly-alpha.
+
+    Parameters
+    ----------
+    wave_obs : array, shape (n_wave,)
+        Observed-frame wavelength [Angstrom].
+    z : float
+        Source redshift.
+    x_HI : float
+        Volume-averaged neutral hydrogen fraction. 0 = fully ionized
+        (standard Inoue+2014), 1 = fully neutral. At z~6: x_HI ~ 0.1-0.5.
+        At z~8: x_HI ~ 0.5-0.9. Default 0.0.
+    R_bubble : float
+        Radius of ionized bubble around the source [proper Mpc].
+        Typical: 0.5-5 pMpc at z~7. Larger bubbles reduce the damping
+        wing absorption. Default 1.0.
+    **kwargs
+        Additional keyword arguments passed to ``igm_transmission``
+        (e.g., add_cgm, cgm_z_mid, etc.).
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Transmission factor T in [0, 1]. Multiply rest-frame SED by
+        T to get absorbed spectrum.
+
+    Notes
+    -----
+    At z < 5.5, the neutral fraction is effectively zero and this
+    function returns the same result as ``igm_transmission``.
+
+    The damping wing extends *redward* of Ly-alpha (unlike the Lyman
+    series forest which absorbs blueward). This means it affects the
+    UV continuum longward of Ly-alpha, which is not captured by the
+    standard Inoue+2014 model.
+
+    References
+    ----------
+    - Miralda-Escude 1998, ApJ, 501, 15
+    - Mason et al. 2018, ApJ, 856, 2
+    - Keating et al. 2025
+    """
+    # Standard Inoue+2014 transmission
+    t_inoue = igm_transmission(wave_obs, z, **kwargs)
+
+    # Damping wing from partially neutral IGM
+    tau_wing = _damping_wing_tau(wave_obs, z, x_HI, R_bubble)
+    t_wing = jnp.exp(-tau_wing)
+
+    return t_inoue * t_wing

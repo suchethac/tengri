@@ -7,6 +7,7 @@ into a unified AGN SED. Three complexity levels:
 - **standard**: multi-color Shakura-Sunyaev disc + two-temperature torus (6 params)
 - **kubota_done**: Kubota & Done (2018) disc (outer zone only) + clumpy torus (8+ params)
 - **kubota_done_full**: Kubota & Done (2018) full 3-zone disc + torus (13+ params)
+- **adaf**: ADAF + truncated disc for low-luminosity AGN (Lopez+2024, Mahadevan 1997) (6 params)
 - **unified_nlr_blr**: kubota_done + NLR/BLR decomposition with geometric masking (12+ params)
 - **skirtor**: power-law disc + SKIRTOR clumpy torus (Stalevski+2012, 2016) (7 params)
 - **qsogen**: Temple, Hewett & Banerji (2021) empirical quasar SED (7 params)
@@ -33,7 +34,7 @@ References
 """
 
 from tengri.models.agn.blr import blr_emission
-from tengri.models.agn.disc import kubota_done_disc, multicolor_disc, powerlaw_disc
+from tengri.models.agn.disc import adaf_disc, kubota_done_disc, multicolor_disc, powerlaw_disc
 from tengri.models.agn.nlr import nlr_emission
 
 # QSOgen must be imported after unified (needs register_agn_model)
@@ -42,6 +43,7 @@ from tengri.models.agn.skirtor import create_skirtor_from_grid, skirtor_analytic
 from tengri.models.agn.torus import simple_torus, two_temperature_torus
 from tengri.models.agn.unified import (
     AGN_MODELS,
+    adaf_agn,
     get_agn_model,
     kubota_done_full_agn,
     register_agn_model,
@@ -52,6 +54,8 @@ from tengri.models.agn.unified import (
 __all__ = [
     # Registry
     "AGN_MODELS",
+    "adaf_agn",
+    "adaf_disc",
     "blr_emission",
     "create_skirtor_from_grid",
     "get_agn_model",

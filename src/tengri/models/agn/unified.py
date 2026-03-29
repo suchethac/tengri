@@ -28,7 +28,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.models.agn.blr import blr_emission
-from tengri.models.agn.disc import kubota_done_disc, multicolor_disc, powerlaw_disc
+from tengri.models.agn.disc import adaf_disc, kubota_done_disc, multicolor_disc, powerlaw_disc
 from tengri.models.agn.nlr import nlr_emission
 from tengri.models.agn.skirtor import create_skirtor_from_grid
 
@@ -63,7 +63,7 @@ def get_agn_model(name: str) -> Callable:
     Parameters
     ----------
     name : str
-        Model name. One of: "simple", "standard", "kubota_done".
+        Model name. One of: "simple", "standard", "kubota_done", "adaf", etc.
 
     Returns
     -------
@@ -126,6 +126,7 @@ def unified_agn(
         "powerlaw": powerlaw_disc,
         "multicolor": multicolor_disc,
         "kubota_done_3zone": kubota_done_disc,
+        "adaf": adaf_disc,
     }
     torus_fns = {
         "simple": simple_torus,
@@ -573,6 +574,96 @@ def skirtor_agn(
         agn_oa_skirtor=agn_oa_skirtor,
         agn_cos_inc=agn_cos_inc,
         agn_torus_frac=agn_torus_frac,
+    )
+
+    return (l_disc + l_torus) * agn_frac
+
+
+@register_agn_model("adaf")
+def adaf_agn(
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float,
+    agn_frac: float = 0.1,
+    agn_log_mbh: float = 8.0,
+    agn_log_ledd: float = -3.0,
+    agn_r_tr: float = 100.0,
+    agn_adaf_beta: float = 0.5,
+    agn_adaf_delta: float = 0.01,
+    agn_cos_inc: float = 0.5,
+    agn_torus_frac: float = 0.3,
+    agn_T_torus: float = 500.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """ADAF + truncated disc + simple torus for low-luminosity AGN.
+
+    At low accretion rates (L/L_Edd < 0.01), the inner disc transitions
+    to an ADAF. The outer disc remains as a truncated Shakura-Sunyaev disc.
+    A simple torus re-emits a fraction of the bolometric luminosity in the IR.
+
+    6 free parameters (+ agn_frac scaling):
+
+    - agn_log_mbh: BH mass
+    - agn_log_ledd: Eddington ratio (should be < -2 for ADAF regime)
+    - agn_r_tr: truncation radius [R_g]
+    - agn_adaf_beta: magnetic pressure fraction
+    - agn_adaf_delta: electron heating fraction
+    - agn_torus_frac: torus covering factor
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    agn_log_lbol : float
+        log10(L_bol / Lsun).
+    agn_frac : float
+        Overall AGN fraction. Default 0.1.
+    agn_log_mbh : float
+        log10(M_BH / Msun). Default 8.0.
+    agn_log_ledd : float
+        log10(L/L_Edd). Default -3.0.
+    agn_r_tr : float
+        Truncation radius in R_g. Default 100.
+    agn_adaf_beta : float
+        Magnetic pressure fraction (0-1). Default 0.5.
+    agn_adaf_delta : float
+        Electron heating fraction (0-1). Default 0.01.
+    agn_cos_inc : float
+        cos(inclination). Default 0.5.
+    agn_torus_frac : float
+        Torus covering factor. Default 0.3 (lower than standard AGN).
+    agn_T_torus : float
+        Torus temperature [K]. Default 500 (cooler than luminous AGN).
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        L_nu [Lsun Hz^-1].
+
+    References
+    ----------
+    - Mahadevan 1997, ApJ, 477, 585
+    - Nemmen et al. 2014, MNRAS, 438, 2804
+    - Lopez et al. 2024
+    """
+    # ADAF + truncated disc gets (1 - torus_frac) of L_bol
+    l_disc = adaf_disc(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_frac=1.0 - agn_torus_frac,
+        agn_log_mbh=agn_log_mbh,
+        agn_log_ledd=agn_log_ledd,
+        agn_r_tr=agn_r_tr,
+        agn_adaf_beta=agn_adaf_beta,
+        agn_adaf_delta=agn_adaf_delta,
+        agn_cos_inc=agn_cos_inc,
+    )
+
+    # Simple torus re-emits torus_frac of L_bol
+    l_torus = simple_torus(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_torus_frac=agn_torus_frac,
+        agn_T_torus=agn_T_torus,
     )
 
     return (l_disc + l_torus) * agn_frac

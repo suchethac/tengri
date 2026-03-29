@@ -26,6 +26,9 @@ Available Attenuation Curves
 - **cardelli**: Cardelli et al. (1989) MW curve with free R_V
 - **li08**: Li et al. (2008) parametric 3-slope + UV bump (reproduces MW/SMC/Calzetti)
 - **salim**: Salim et al. (2018) modified Calzetti (= DSPS default)
+- **tea**: Haskell et al. (2024) TEA 3-param empirical (NIHAO-SKIRT bump-slope correlation)
+- **narayanan_z**: Narayanan et al. (2018) redshift-dependent Kriek-Conroy (SIMBA RT)
+- **conroy2010**: Conroy+2010 mixed MW + power-law (FSPS dust_type=1)
 
 Dust Geometries (Witt & Gordon 2000)
 -------------------------------------
@@ -38,11 +41,14 @@ References
 - Calzetti et al. 2000, ApJ, 533, 682
 - Cardelli et al. 1989, ApJ, 345, 245
 - Charlot & Fall 2000, ApJ, 539, 718
+- Conroy, White & Gunn 2010, ApJ, 708, 58
 - Gordon et al. 2003, ApJ, 594, 279
+- Haskell et al. 2024, arXiv:2401.11007
 - Hobson & Padman 1993, MNRAS, 264, 161
 - Kriek & Conroy 2013, ApJL, 775, L16
 - Li et al. 2008, MNRAS, 385, 1903
 - Lower et al. 2022, ApJ, 931, 14
+- Narayanan et al. 2018, ApJ, 869, 70
 - Natta & Panagia 1984, ApJ, 287, 228
 - Salim et al. 2018, ApJ, 859, 11
 - Witt & Gordon 2000, ApJ, 528, 799
@@ -428,6 +434,144 @@ def salim(
         dust_bump_strength=dust_bump_strength,
         dust_delta=dust_delta,
     )
+
+
+@register_dust_law("tea")
+def tea(
+    wavelength: jnp.ndarray,
+    dust_delta: float = -0.2,
+    dust_tea_scatter: float = 0.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """TEA attenuation curve (Haskell+2024, NIHAO-SKIRT).
+
+    Three-parameter empirical attenuation with physically motivated
+    bump-slope correlation from radiative transfer simulations. The
+    functional form is identical to Kriek & Conroy (2013), but E_b is
+    derived from delta via a tight relation calibrated on NIHAO-SKIRT::
+
+        E_b = 2.5 * exp(3.5 * delta) * 10^scatter
+
+    This reduces the free parameters to 2 (delta and overall tau_V),
+    plus optional scatter around the median E_b(delta) relation.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid in Angstrom.
+    dust_delta : float
+        Power-law slope modification. Steeper (more negative) = weaker bump.
+    dust_tea_scatter : float
+        Scatter in E_b around the median relation (dex). Default 0 = median.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Attenuation curve k(lambda), normalized to k(5500 A) = 1.
+
+    References
+    ----------
+    Haskell et al. 2024, arXiv:2401.11007
+    """
+    eb = 2.5 * jnp.exp(3.5 * dust_delta) * 10.0**dust_tea_scatter
+    return kriek_conroy(wavelength, dust_delta=dust_delta, dust_bump_strength=eb)
+
+
+@register_dust_law("narayanan_z")
+def narayanan_z(
+    wavelength: jnp.ndarray,
+    dust_delta: float = -0.2,
+    dust_bump_strength: float = 1.0,
+    redshift: float = 0.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Narayanan+2018 redshift-dependent attenuation.
+
+    Uses the Kriek & Conroy (2013) curve with z-dependent median
+    parameters calibrated on SIMBA cosmological radiative-transfer
+    simulations::
+
+        delta_median(z) ~ -0.2 - 0.1 * z   (steeper at high z)
+        E_b_median(z)   ~ max(0, 1.0 - 0.15 * z)  (weaker bump at high z)
+
+    When explicit delta / bump values differ from the defaults, those
+    values are used as-is.  When defaults are kept, the z-dependent
+    median is applied.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid in Angstrom.
+    dust_delta : float
+        Power-law slope modification. Default -0.2 triggers z-scaling.
+    dust_bump_strength : float
+        UV bump amplitude E_b. Default 1.0 triggers z-scaling.
+    redshift : float
+        Galaxy redshift.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Attenuation curve k(lambda), normalized to k(5500 A) = 1.
+
+    References
+    ----------
+    Narayanan et al. 2018, ApJ, 869, 70
+    """
+    delta_z = jnp.where(
+        dust_delta == -0.2, -0.2 - 0.1 * redshift, dust_delta
+    )
+    bump_z = jnp.where(
+        dust_bump_strength == 1.0,
+        jnp.maximum(0.0, 1.0 - 0.15 * redshift),
+        dust_bump_strength,
+    )
+    return kriek_conroy(wavelength, dust_delta=delta_z, dust_bump_strength=bump_z)
+
+
+@register_dust_law("conroy2010")
+def conroy2010(
+    wavelength: jnp.ndarray,
+    dust_Rv: float = 3.1,
+    n_slope: float = -0.7,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Conroy+2010 mixed MW + power-law attenuation (FSPS dust_type=1).
+
+    Milky Way (Cardelli 1989) curve dominates below a transition
+    wavelength, power law dominates above. A smooth sigmoid blend at
+    ~5500 A ensures differentiability.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid in Angstrom.
+    dust_Rv : float
+        Total-to-selective extinction ratio for the MW component.
+    n_slope : float
+        Power-law index for the long-wavelength component.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Attenuation curve k(lambda), normalized to k(5500 A) = 1.
+
+    References
+    ----------
+    Conroy, White & Gunn 2010, ApJ, 708, 58
+    """
+    k_mw = cardelli(wavelength, dust_Rv=dust_Rv)
+    k_pl = power_law(wavelength, n_slope=n_slope)
+    # Smooth sigmoid blend: MW dominates UV, power-law dominates IR
+    x = jnp.log10(wavelength / 5500.0)
+    blend = jax.nn.sigmoid(x / 0.05)
+    k_raw = (1.0 - blend) * k_mw + blend * k_pl
+    # Normalize to k(5500 A) = 1
+    lam_v = jnp.array(5500.0)
+    x_v = jnp.log10(lam_v / 5500.0)
+    blend_v = jax.nn.sigmoid(x_v / 0.05)
+    k_v = (1.0 - blend_v) * cardelli(lam_v[None], dust_Rv=dust_Rv)[0] + blend_v * 1.0
+    return jnp.clip(k_raw / k_v, 0.0)
 
 
 # ===================================================================
