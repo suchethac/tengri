@@ -42,7 +42,7 @@ import jax
 import jax.numpy as jnp
 
 
-@jax.jit(static_argnums=(1,))
+@jax.jit(static_argnums=(1,), static_argnames=("order",))
 def chebyshev_basis(
     wavelength: jnp.ndarray,
     order: int,

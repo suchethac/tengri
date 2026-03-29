@@ -75,9 +75,31 @@ class Fitter:
         ``"photometry"``, ``"spectroscopy"``, or ``"joint"``.
         If ``None`` (default), inferred from ``model.observation``.
         Explicit values override the inferred type.
+    calibration_marginalize : bool
+        If ``True``, analytically marginalize over spectroscopic
+        calibration polynomial coefficients (Chebyshev) when computing
+        the spectroscopic log-likelihood.  Only applies when
+        ``data_type`` is ``"spectroscopy"`` or ``"joint"``.
+        Follows the Prospector approach (Johnson et al. 2021).
+        Default ``False``.
+    cal_n_poly : int
+        Number of Chebyshev polynomial coefficients for calibration
+        marginalization (order 1 through ``cal_n_poly``).  Default 3.
+    cal_prior_sigma : float
+        Standard deviation of the Gaussian prior on each calibration
+        coefficient.  Default 1.0.
     """
 
-    def __init__(self, model, data, noise, data_type=None):
+    def __init__(
+        self,
+        model,
+        data,
+        noise,
+        data_type=None,
+        calibration_marginalize=False,
+        cal_n_poly=3,
+        cal_prior_sigma=1.0,
+    ):
         self.model = model
         self.data = jnp.asarray(data)
         self.noise = jnp.asarray(noise)
@@ -92,6 +114,12 @@ class Fitter:
 
         self.data_type = data_type
         self.spec = model.spec
+
+        # Calibration marginalization settings
+        self._calibration_marginalize = calibration_marginalize
+        self._cal_n_poly = cal_n_poly
+        self._cal_prior_sigma = cal_prior_sigma
+        self._has_spectroscopy = data_type in ("spectroscopy", "joint")
 
         # Separate free and fixed parameters
         self._free_names = self.spec.free_params
@@ -145,7 +173,10 @@ class Fitter:
 
         # Available methods
         lines.append("")
-        lines.append("  Methods:     map, raytrace, nuts, geovi, mgvi, geovi_nuts")
+        lines.append(
+            "  Methods:     map, raytrace, nuts, geovi, mgvi, geovi_nuts, "
+            "laplace, pathfinder, elliptical_slice"
+        )
 
         lines.append(sep)
         return "\n".join(lines)
@@ -179,6 +210,9 @@ class Fitter:
         stochastic = spec.stochastic
         use_variable_noise = has_noise_model(spec)
         noise_dof = get_noise_dof(spec) if uses_student_t(spec) else None
+        use_cal_marg = self._calibration_marginalize and self._has_spectroscopy
+        cal_n_poly = self._cal_n_poly
+        cal_prior_sigma = self._cal_prior_sigma
 
         def loss_fn(params_unbounded):
             # Convert unbounded → physical for free params
@@ -208,7 +242,46 @@ class Fitter:
                 raise ValueError(f"Unknown data_type: {data_type}")
 
             # Likelihood energy (with variable noise / Student-t if active)
-            if use_variable_noise:
+            if use_cal_marg and data_type == "spectroscopy":
+                # Analytically marginalize over calibration polynomial
+                from tengri.models.observation.calibration import (
+                    marginalize_calibration,
+                )
+
+                log_like_spec, _c_hat, _c_err = marginalize_calibration(
+                    predicted,
+                    data,
+                    noise,
+                    model._wave_obs,
+                    n_poly=cal_n_poly,
+                    prior_sigma=cal_prior_sigma,
+                )
+                e_lh = -log_like_spec
+            elif use_cal_marg and data_type == "joint":
+                # Joint: marginalize spectroscopic part, standard chi2 for photometry
+                from tengri.models.observation.calibration import (
+                    marginalize_calibration,
+                )
+
+                n_phot = model.predict_photometry(params).shape[0]
+                data_phot = data[:n_phot]
+                data_spec = data[n_phot:]
+                noise_phot = noise[:n_phot]
+                noise_spec = noise[n_phot:]
+                pred_phot = predicted[:n_phot]
+                pred_spec = predicted[n_phot:]
+
+                chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
+                log_like_spec, _c_hat, _c_err = marginalize_calibration(
+                    pred_spec,
+                    data_spec,
+                    noise_spec,
+                    model._wave_obs,
+                    n_poly=cal_n_poly,
+                    prior_sigma=cal_prior_sigma,
+                )
+                e_lh = 0.5 * chi2_phot - log_like_spec
+            elif use_variable_noise:
                 f_cal = params.get("noise_frac_cal", 0.0)
                 e_lh = variable_noise_hamiltonian(data, noise, predicted, f_cal, dof=noise_dof)
             else:
@@ -237,6 +310,113 @@ class Fitter:
             return e_lh + 0.5 * prior_penalty
 
         return loss_fn
+
+    def _build_logprior_fn(self):
+        """Build a log-prior function in physical parameter space.
+
+        Returns a function: dict of free params → scalar log-prior.
+        """
+        spec = self.spec
+        free_names = self._free_names
+
+        def logprior_fn(free_params):
+            lp = 0.0
+            for name in free_names:
+                dist = spec.get_distribution(name)
+                lp = lp + dist.log_prob(free_params[name])
+            return lp
+
+        return logprior_fn
+
+    def _build_loglikelihood_fn(self):
+        """Build a log-likelihood function in physical parameter space.
+
+        Returns a function: dict of free params → scalar log-likelihood.
+        Fixed parameters are automatically merged.
+        """
+        from tengri.core.noise import (
+            get_noise_dof,
+            has_noise_model,
+            uses_student_t,
+            variable_noise_hamiltonian,
+        )
+
+        model = self.model
+        data = self.data
+        noise = self.noise
+        data_type = self.data_type
+        fixed_values = self._fixed_values
+        spec = self.spec
+        use_variable_noise = has_noise_model(spec)
+        noise_dof = get_noise_dof(spec) if uses_student_t(spec) else None
+        use_cal_marg = self._calibration_marginalize and self._has_spectroscopy
+        cal_n_poly = self._cal_n_poly
+        cal_prior_sigma = self._cal_prior_sigma
+
+        def loglikelihood_fn(free_params):
+            # Merge free + fixed
+            params = dict(free_params)
+            for name, val in fixed_values.items():
+                params[name] = val
+
+            # Forward model prediction
+            if data_type == "photometry":
+                predicted = model.predict_photometry(params)
+            elif data_type == "spectroscopy":
+                predicted = model.predict_spectrum(params, model._wave_obs)
+            elif data_type == "joint":
+                pred_phot = model.predict_photometry(params)
+                pred_spec = model.predict_spectrum(params, model._wave_obs)
+                predicted = jnp.concatenate([pred_phot, pred_spec])
+            else:
+                raise ValueError(f"Unknown data_type: {data_type}")
+
+            # Log-likelihood with optional calibration marginalization
+            if use_cal_marg and data_type == "spectroscopy":
+                from tengri.models.observation.calibration import (
+                    marginalize_calibration,
+                )
+
+                log_like_spec, _c_hat, _c_err = marginalize_calibration(
+                    predicted,
+                    data,
+                    noise,
+                    model._wave_obs,
+                    n_poly=cal_n_poly,
+                    prior_sigma=cal_prior_sigma,
+                )
+                return log_like_spec
+            elif use_cal_marg and data_type == "joint":
+                from tengri.models.observation.calibration import (
+                    marginalize_calibration,
+                )
+
+                n_phot = model.predict_photometry(params).shape[0]
+                data_phot = data[:n_phot]
+                data_spec = data[n_phot:]
+                noise_phot = noise[:n_phot]
+                noise_spec = noise[n_phot:]
+                pred_phot = predicted[:n_phot]
+                pred_spec = predicted[n_phot:]
+
+                chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
+                log_like_spec, _c_hat, _c_err = marginalize_calibration(
+                    pred_spec,
+                    data_spec,
+                    noise_spec,
+                    model._wave_obs,
+                    n_poly=cal_n_poly,
+                    prior_sigma=cal_prior_sigma,
+                )
+                return -0.5 * chi2_phot + log_like_spec
+            elif use_variable_noise:
+                f_cal = params.get("noise_frac_cal", 0.0)
+                return -variable_noise_hamiltonian(data, noise, predicted, f_cal, dof=noise_dof)
+            else:
+                chi2 = jnp.sum(((data - predicted) / noise) ** 2)
+                return -0.5 * chi2
+
+        return loglikelihood_fn
 
     def _initialize_unbounded(self, key):
         """Create initial unbounded parameter dict."""
@@ -1566,7 +1746,7 @@ class Fitter:
         self,
         *,
         key,
-        init_from="random",
+        init_from="auto",
         n_iterations=50,
         n_samples=3,
         n_posterior_samples=2000,
@@ -1574,6 +1754,7 @@ class Fitter:
         n_seeds=5,
         sample_mode="linear",
         posterior_method="jit",
+        parallel_seeds=None,
         verbose=True,
     ):
         """Native JIT-compiled geoVI/MGVI: ~500x faster than NIFTy's optimize_kl.
@@ -1587,17 +1768,14 @@ class Fitter:
         minimization) runs inside ``jax.lax.while_loop`` with zero
         Python overhead. Stops automatically when KL converges.
 
-        By default, initializes from a quick MAP estimate (fast, good
-        starting point). Set ``init_from="random"`` for random init,
-        or pass a ``Posterior`` object from a previous fit.
-
-        For extra robustness, use ``n_seeds=3`` to run from multiple
-        starting points and automatically select the best.
-
         Parameters
         ----------
         init_from : str, Posterior, or None
-            ``"map"`` (default): quick MAP estimate as starting point.
+            ``"auto"`` (default): MAP for ``n_seeds=1``, random for
+            ``n_seeds>1``. MAP gives better convergence for a single
+            seed; random init is better for multi-seed because vmap
+            needs diverse starting points to find the global mode.
+            ``"map"``: quick MAP estimate as starting point for all seeds.
             ``"random"`` or ``None``: random init near prior midpoint.
             ``Posterior``: use a previous result as initialization.
         n_iterations : int
@@ -1610,9 +1788,15 @@ class Fitter:
             Relative KL tolerance for early stopping. Set to 0 to
             disable and run all ``n_iterations``.
         n_seeds : int
-            Number of random seeds to run. The best result (lowest
-            Hamiltonian) is returned. Multiple seeds catch bad
-            initialization. Warns if seeds disagree (multimodality).
+            Number of random seeds to run in parallel via ``jax.vmap``.
+            The best result (lowest Hamiltonian) is returned. Multiple
+            seeds catch bad initialization and multimodality.
+        parallel_seeds : bool or None
+            If ``None`` (default), auto-detect: ``True`` on GPU/TPU,
+            ``False`` on CPU. On CPU, sequential is typically faster
+            because early-converging seeds exit early, while vmap must
+            run all seeds for the maximum iteration count.
+            Set explicitly to override.
         verbose : bool
             Print progress.
         """
@@ -1644,6 +1828,10 @@ class Fitter:
         if n_iterations < 1:
             raise ValueError(f"n_iterations must be >= 1, got {n_iterations}")
 
+        # Normalize init_from: None → "auto"
+        if init_from is None:
+            init_from = "auto"
+
         if self._jit_sampler is None:
             dummy_pos = self._initialize_unbounded(jax.random.PRNGKey(0))
             self._jit_sampler = self._build_jit_engine(dummy_pos)
@@ -1655,8 +1843,46 @@ class Fitter:
         n_total = len(self._free_names) + (self.spec.n_grid if self.spec.stochastic else 0)
         n_seeds = max(1, n_seeds)
 
+        # --- Resolve init_from="auto" ---
+        # "auto": MAP for 1 seed (best convergence), random for >1 seed
+        # (diverse starts → better global mode search, required for vmap).
+        if init_from == "auto":
+            init_from = "map" if n_seeds == 1 else "random"
+            if verbose and n_seeds > 1:
+                print(
+                    f"  init_from='auto' → 'random' (n_seeds={n_seeds}; "
+                    f"random starts are better for multi-seed exploration)"
+                )
+            elif verbose:
+                print("  init_from='auto' → 'map' (single seed; MAP warmstart)")
+
+        # Warn about suboptimal combinations
+        if init_from == "map" and n_seeds > 1:
+            warnings.warn(
+                f"init_from='map' with n_seeds={n_seeds}: MAP init gives all seeds "
+                f"nearly identical starting points, defeating the purpose of multi-seed. "
+                f"Consider init_from='random' for diverse exploration, or n_seeds=1 "
+                f"for fast single-seed MAP-initialized convergence.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        # Auto-detect parallel_seeds based on backend
+        if parallel_seeds is None:
+            backend = jax.default_backend()
+            parallel_seeds = backend in ("gpu", "tpu")
+            if verbose and n_seeds > 1:
+                if parallel_seeds:
+                    print(f"  parallel_seeds=True (auto: {backend} backend)")
+                else:
+                    print(
+                        f"  parallel_seeds=False (auto: {backend} backend; "
+                        f"sequential is faster on CPU due to early stopping)"
+                    )
+
         if verbose:
             seed_str = f", {n_seeds} seeds" if n_seeds > 1 else ""
+            par_str = " (vmap)" if parallel_seeds and n_seeds > 1 else ""
             mode_labels = {
                 "linear": "MGVI",
                 "mgvi": "MGVI",
@@ -1667,93 +1893,161 @@ class Fitter:
             mode_label = mode_labels.get(sample_mode, sample_mode)
             print(
                 f"{mode_label} (JIT): {n_total} params, {len(self.data)} data points, "
-                f"{n_iterations} iterations, {n_samples} samples/iter{seed_str}"
+                f"{n_iterations} iterations, {n_samples} samples/iter"
+                f"{seed_str}{par_str}"
             )
 
         t0 = time.time()
 
-        # --- Multi-seed optimization ---
+        # --- Resolve sample_mode string ---
+        _mode_str_map = {
+            "linear": "linear_resample",
+            "mgvi": "linear_resample",
+            "geovi": "geovi",
+            "linear_resample": "linear_resample",
+            "linear_sample": "linear_sample",
+            "nonlinear_resample": "nonlinear_resample",
+            "nonlinear_sample": "nonlinear_sample",
+            "nonlinear_update": "nonlinear_update",
+        }
+        mode_str = _mode_str_map.get(sample_mode, "linear_resample")
+        _use_geovi = mode_str not in ("linear_resample", "linear_sample")
+
+        # --- Build initial positions ---
         seed_keys = jax.random.split(key, n_seeds + 1)
         key = seed_keys[-1]
-        best_flat = None
-        best_loss = jnp.inf
-        best_iters = 0
-        seed_losses = []
 
-        # Resolve init_from: "map" → run a quick MAP, "random"/None → random
         map_result = None
         if init_from == "map":
             map_key, key = jax.random.split(key)
             map_result = self._run_map(key=map_key, n_steps=500, verbose=False)
             if verbose:
                 print("  MAP warmstart done")
-        elif isinstance(init_from, str) and init_from == "random":
-            init_from = None  # random init below
 
+        init_flats = []
         for s in range(n_seeds):
-            if s == 0 and map_result is not None:
+            if map_result is not None:
                 init_params = self._unbounded_from_posterior(map_result)
-            elif s == 0 and init_from is not None and init_from != "random":
+            elif isinstance(init_from, Posterior):
                 init_params = self._unbounded_from_posterior(init_from)
             else:
                 init_params = self._initialize_unbounded(seed_keys[s])
+            init_flats.append(flatten(init_params))
 
-            pos_flat = flatten(init_params)
-            opt_key = jax.random.fold_in(seed_keys[s], 999)
+        opt_keys = jnp.stack([jax.random.fold_in(seed_keys[s], 999) for s in range(n_seeds)])
 
-            # Dispatch to native engine.
-            # sample_mode is a static string — JAX compiles separately per mode.
-            _mode_str_map = {
-                "linear": "linear_resample",
-                "mgvi": "linear_resample",
-                "geovi": "geovi",
-                "linear_resample": "linear_resample",
-                "linear_sample": "linear_sample",
-                "nonlinear_resample": "nonlinear_resample",
-                "nonlinear_sample": "nonlinear_sample",
-                "nonlinear_update": "nonlinear_update",
-            }
-            mode_str = _mode_str_map.get(sample_mode, "linear_resample")
-            if mode_str in ("linear_resample", "linear_sample"):
-                # Use the old fast MGVI engine (no geoVI overhead)
-                converged_flat, n_iters = engine["run_evi"](
-                    pos_flat,
-                    opt_key,
-                    n_iterations=n_iterations,
-                    n_samples=n_samples,
-                    kl_rtol=kl_rtol,
-                )
+        # --- Run optimization ---
+        if parallel_seeds and n_seeds > 1:
+            # === VMAP PATH: all seeds in parallel ===
+            init_batch = jnp.stack(init_flats)  # (n_seeds, d_total)
+
+            if _use_geovi:
+                # vmap over (init_pos, key), static (n_iterations, n_samples, kl_rtol, mode)
+                def _run_single_geovi(pos, k):
+                    return engine["run_evi_geovi"](
+                        pos,
+                        k,
+                        n_iterations=n_iterations,
+                        n_samples=n_samples,
+                        kl_rtol=kl_rtol,
+                        sample_mode=mode_str,
+                    )
+
+                vmapped_run = jax.vmap(_run_single_geovi)
             else:
-                converged_flat, n_iters = engine["run_evi_geovi"](
-                    pos_flat,
-                    opt_key,
-                    n_iterations=n_iterations,
-                    n_samples=n_samples,
-                    kl_rtol=kl_rtol,
-                    sample_mode=mode_str,
-                )
-            n_iters = int(n_iters)
 
-            # Evaluate Hamiltonian to pick best seed
-            phys = self._to_physical(unflatten(converged_flat))
-            if self.data_type == "photometry":
-                pred = self.model.predict_photometry(phys)
-            elif self.data_type == "spectroscopy":
-                pred = self.model.predict_spectrum(phys)
-            else:
-                pred = jnp.zeros_like(self.data)
-            chi2 = float(jnp.sum(((self.data - pred) / self.noise) ** 2))
-            prior = float(jnp.sum(converged_flat**2))
-            loss = 0.5 * chi2 + 0.5 * prior
-            seed_losses.append(loss)
+                def _run_single_evi(pos, k):
+                    return engine["run_evi"](
+                        pos,
+                        k,
+                        n_iterations=n_iterations,
+                        n_samples=n_samples,
+                        kl_rtol=kl_rtol,
+                    )
 
-            if loss < best_loss:
-                best_flat = converged_flat
-                best_loss = loss
-                best_iters = n_iters
+                vmapped_run = jax.vmap(_run_single_evi)
+
+            # Run all seeds in parallel
+            all_converged, all_n_iters = vmapped_run(init_batch, opt_keys)
+            # all_converged: (n_seeds, d_total), all_n_iters: (n_seeds,)
+
+            # Batch Hamiltonian evaluation
+            def _eval_hamiltonian(converged_flat):
+                phys = self._to_physical(unflatten(converged_flat))
+                if self.data_type == "photometry":
+                    pred = self.model.predict_photometry(phys)
+                elif self.data_type == "spectroscopy":
+                    pred = self.model.predict_spectrum(phys)
+                else:
+                    pred = jnp.zeros_like(self.data)
+                chi2 = jnp.sum(((self.data - pred) / self.noise) ** 2)
+                prior = jnp.sum(converged_flat**2)
+                return 0.5 * chi2 + 0.5 * prior
+
+            seed_losses_arr = jax.vmap(_eval_hamiltonian)(all_converged)
+            best_idx = jnp.argmin(seed_losses_arr)
+            best_flat = all_converged[best_idx]
+            best_iters = int(all_n_iters[best_idx])
+            seed_losses = [float(seed_losses_arr[s]) for s in range(n_seeds)]
 
             if verbose and n_seeds > 1:
-                print(f"  Seed {s + 1}/{n_seeds}: H={loss:.1f}, {n_iters} iters")
+                for s in range(n_seeds):
+                    marker = " ← best" if s == int(best_idx) else ""
+                    print(
+                        f"  Seed {s + 1}/{n_seeds}: H={seed_losses[s]:.1f}, "
+                        f"{int(all_n_iters[s])} iters{marker}"
+                    )
+
+        else:
+            # === SEQUENTIAL PATH: for loop (debugging / single seed) ===
+            best_flat = None
+            best_loss = jnp.inf
+            best_iters = 0
+            seed_losses = []
+
+            for s in range(n_seeds):
+                pos_flat = init_flats[s]
+                opt_key = opt_keys[s]
+
+                if _use_geovi:
+                    converged_flat, n_iters = engine["run_evi_geovi"](
+                        pos_flat,
+                        opt_key,
+                        n_iterations=n_iterations,
+                        n_samples=n_samples,
+                        kl_rtol=kl_rtol,
+                        sample_mode=mode_str,
+                    )
+                else:
+                    converged_flat, n_iters = engine["run_evi"](
+                        pos_flat,
+                        opt_key,
+                        n_iterations=n_iterations,
+                        n_samples=n_samples,
+                        kl_rtol=kl_rtol,
+                    )
+                n_iters = int(n_iters)
+
+                # Evaluate Hamiltonian to pick best seed
+                phys = self._to_physical(unflatten(converged_flat))
+                if self.data_type == "photometry":
+                    pred = self.model.predict_photometry(phys)
+                elif self.data_type == "spectroscopy":
+                    pred = self.model.predict_spectrum(phys)
+                else:
+                    pred = jnp.zeros_like(self.data)
+                chi2 = float(jnp.sum(((self.data - pred) / self.noise) ** 2))
+                prior = float(jnp.sum(converged_flat**2))
+                loss = 0.5 * chi2 + 0.5 * prior
+                seed_losses.append(loss)
+
+                if loss < best_loss:
+                    best_flat = converged_flat
+                    best_loss = loss
+                    best_iters = n_iters
+
+                if verbose and n_seeds > 1:
+                    print(f"  Seed {s + 1}/{n_seeds}: H={loss:.1f}, {n_iters} iters")
 
         # --- Seed disagreement check ---
         if n_seeds > 1 and len(seed_losses) > 1:
@@ -1920,6 +2214,10 @@ class Fitter:
             ``"map"`` — MAP optimization (Adam/SGD).
             ``"raytrace"`` — Ray Tracing Sampler (exact MCMC).
             ``"nuts"`` — NUTS via BlackJAX (exact MCMC).
+            ``"nss"`` — Nested Slice Sampling (evidence + posterior, smooth only).
+            ``"laplace"`` — Laplace approximation (Gaussian from Hessian at MAP).
+            ``"pathfinder"`` — Pathfinder (fast approximate via L-BFGS path).
+            ``"elliptical_slice"`` — Elliptical Slice Sampling (exact, for GP latents).
         init_from : Posterior, optional
             Use a previous result as initialization.
         key : PRNGKey, optional
@@ -1991,6 +2289,18 @@ class Fitter:
                 sample_mode="linear_resample",
                 **kwargs,
             )
+        # --- Nested Slice Sampling (evidence computation) ---
+        elif method == "nss":
+            return self._run_nss(key=key, init_from=init_from, **kwargs)
+        # --- Laplace approximation (Gaussian at MAP) ---
+        elif method == "laplace":
+            return self._run_laplace(key=key, init_from=init_from, **kwargs)
+        # --- Pathfinder (fast approximate via L-BFGS path) ---
+        elif method == "pathfinder":
+            return self._run_pathfinder(key=key, init_from=init_from, **kwargs)
+        # --- Elliptical Slice Sampling (exact MCMC for GP latents) ---
+        elif method == "elliptical_slice":
+            return self._run_elliptical_slice(key=key, init_from=init_from, **kwargs)
         else:
             raise ValueError(
                 f"Unknown method: {method}. "
@@ -1998,8 +2308,167 @@ class Fitter:
                 f"Hybrid: 'geovi_nuts'. "
                 f"NIFTy loop: 'fast_geovi', 'fast_mgvi'. "
                 f"NIFTy full: 'nifty_geovi', 'nifty_mgvi'. "
-                f"Other: 'map', 'raytrace', 'nuts'."
+                f"Other: 'map', 'raytrace', 'nuts', 'nss', "
+                f"'laplace', 'pathfinder', 'elliptical_slice'."
             )
+
+    def _run_nss(
+        self,
+        *,
+        key,
+        init_from=None,
+        n_live=500,
+        num_delete=50,
+        num_inner_steps=None,
+        log_evidence_tol=-3.0,
+        max_iterations=10000,
+        n_posterior_samples=1000,
+        max_steps=10,
+        max_shrinkage=100,
+        verbose=True,
+    ):
+        """Nested Slice Sampling for Bayesian evidence computation.
+
+        Uses Hit-and-Run Slice Sampling (HRSS) as the inner kernel.
+        Based on Yallup, Kroupa & Handley (2026, arXiv:2601.23252).
+
+        Restricted to parametric (non-stochastic) SFH models where D ≲ 30.
+
+        Parameters
+        ----------
+        n_live : int
+            Number of live points.
+        num_delete : int
+            Points to replace per iteration.
+        num_inner_steps : int or None
+            HRSS walk length per replacement. Defaults to D.
+        log_evidence_tol : float
+            Terminate when log(Z_remaining) - log(Z_accumulated) < this.
+        max_iterations : int
+            Safety limit on iterations.
+        n_posterior_samples : int
+            Number of posterior samples to draw after convergence.
+        max_steps : int
+            Maximum stepping-out steps in slice sampling.
+        max_shrinkage : int
+            Maximum shrinking steps in slice sampling.
+        verbose : bool
+            Print progress.
+        """
+        from tengri.inference.ns.nss import as_top_level_api
+        from tengri.inference.ns.utils import ess as ns_ess, finalise, sample as ns_sample
+        from tengri.inference.posterior import Posterior
+
+        # Guard stochastic models
+        if self.spec.stochastic:
+            raise ValueError(
+                "NSS not supported for stochastic SFH models (D~137). "
+                "Use 'geovi' or 'raytrace' instead."
+            )
+
+        logprior_fn = self._build_logprior_fn()
+        loglikelihood_fn = self._build_loglikelihood_fn()
+
+        D = len(self._free_names)
+        if num_inner_steps is None:
+            num_inner_steps = D
+
+        if verbose:
+            print(
+                f"NSS: {D} parameters, {n_live} live points, "
+                f"{num_delete} deletions/iter, {num_inner_steps} HRSS steps"
+            )
+
+        # Build NSS algorithm
+        algo = as_top_level_api(
+            logprior_fn,
+            loglikelihood_fn,
+            num_inner_steps,
+            num_delete=num_delete,
+            max_steps=max_steps,
+            max_shrinkage=max_shrinkage,
+        )
+
+        # Initialize live points from prior
+        key, init_key = jax.random.split(key)
+        all_samples = self.spec.sample_batch(init_key, n_live)
+        particles = {name: all_samples[name] for name in self._free_names}
+
+        live = algo.init(particles)
+        step = jax.jit(algo.step)
+
+        dead_points = []
+        n_iter = 0
+        t0 = time.time()
+
+        while True:
+            key, subkey = jax.random.split(key)
+            live, dead = step(subkey, live)
+            dead_points.append(dead)
+            n_iter += 1
+
+            # Check termination
+            logZ_est = float(jnp.logaddexp(live.integrator.logZ, live.integrator.logZ_live))
+            remaining = float(live.integrator.logZ_live - live.integrator.logZ)
+
+            if verbose and n_iter % 10 == 0:
+                elapsed = time.time() - t0
+                print(
+                    f"  NSS iter {n_iter}: log Z ≈ {logZ_est:.2f}, "
+                    f"n_dead={n_iter * num_delete}, "
+                    f"elapsed={elapsed:.1f}s"
+                )
+
+            if remaining < log_evidence_tol:
+                break
+            if n_iter >= max_iterations:
+                if verbose:
+                    print("  NSS: max iterations reached")
+                break
+
+        wall_time = time.time() - t0
+        logZ = float(jnp.logaddexp(live.integrator.logZ, live.integrator.logZ_live))
+
+        # Finalise and extract posterior samples
+        ns_run = finalise(live, dead_points)
+
+        key, sample_key = jax.random.split(key)
+        resampled = ns_sample(sample_key, ns_run, n_posterior_samples)
+
+        key, ess_key = jax.random.split(key)
+        ess_val = float(ns_ess(ess_key, ns_run))
+
+        # Convert to physical param dict
+        samples_phys = {}
+        for name in self._free_names:
+            samples_phys[name] = resampled.position[name]
+        # Add fixed params (broadcast)
+        for name, val in self._fixed_values.items():
+            samples_phys[name] = jnp.full(n_posterior_samples, val)
+
+        best_params = {k: jnp.median(v, axis=0) for k, v in samples_phys.items()}
+
+        if verbose:
+            print(f"  NSS complete in {wall_time:.1f}s. log Z = {logZ:.2f}, ESS = {ess_val:.0f}")
+
+        return Posterior(
+            samples=samples_phys,
+            params=best_params,
+            method="NSS (Yallup+2026)",
+            wall_time_s=wall_time,
+            diagnostics={
+                "n_live": n_live,
+                "num_delete": num_delete,
+                "num_inner_steps": num_inner_steps,
+                "n_iterations": n_iter,
+                "n_dead": n_iter * num_delete,
+                "log_evidence": logZ,
+                "log_evidence_err": float(jnp.sqrt(jnp.maximum(ess_val, 1.0)) / n_live),
+                "ess": ess_val,
+            },
+            log_evidence=logZ,
+            _model=self.model,
+        )
 
     def _run_fast_vi(
         self,
@@ -2513,17 +2982,11 @@ class Fitter:
         mean_accept = float(jnp.mean(accept_prob))
         mean_accept_post = float(jnp.mean(accept_prob_post))
 
-        # Convert to physical parameter space
-        samples_phys = {}
-        for i in range(n_samples_out):
-            sample_u = unravel_fn(chain[i])
-            sample_p = self._to_physical(sample_u)
-            for k, v in sample_p.items():
-                if k not in samples_phys:
-                    samples_phys[k] = []
-                samples_phys[k].append(v)
+        # Convert to physical parameter space (vectorized)
+        def _convert_one(flat_sample):
+            return self._to_physical(unravel_fn(flat_sample))
 
-        samples_phys = {k: jnp.stack(v) for k, v in samples_phys.items()}
+        samples_phys = jax.vmap(_convert_one)(chain)
         best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
 
         if verbose:
@@ -2711,6 +3174,100 @@ class Fitter:
             },
             loss_history=None,
             _model=self.model,
+        )
+
+    # -------------------------------------------------------------------
+    # Laplace, Pathfinder, Elliptical Slice Sampling
+    # -------------------------------------------------------------------
+
+    def _build_loglikelihood_unbounded_fn(self):
+        """Build a log-likelihood function in unbounded parameter space.
+
+        For Elliptical Slice Sampling, which handles the N(0,I) prior
+        internally. Returns only the data likelihood (no prior terms).
+        """
+        loglik_fn = self._build_loglikelihood_fn()
+        bounds = self._bounds
+        free_names = self._free_names
+        fixed_values = self._fixed_values
+        spec = self.spec
+
+        def loglik_unbounded(params_unbounded):
+            params = {}
+            for name in free_names:
+                lo, hi = bounds[name]
+                params[name] = to_bounded(params_unbounded[name], lo, hi)
+            for name, val in fixed_values.items():
+                params[name] = val
+            if spec.stochastic and "psd_xi" in params_unbounded:
+                params["psd_xi"] = params_unbounded["psd_xi"]
+            return loglik_fn(params)
+
+        return loglik_unbounded
+
+    def _run_laplace(self, *, key, init_from=None, n_map_steps=1000, **kwargs):
+        """Laplace approximation: Gaussian posterior from Hessian at MAP."""
+        from tengri.inference.laplace import run_laplace
+
+        loss_fn = self._build_loss_fn()
+
+        if init_from is not None:
+            map_params = self._unbounded_from_posterior(init_from)
+        else:
+            map_result = self._run_map(
+                key=key,
+                n_steps=n_map_steps,
+                verbose=kwargs.get("verbose", True),
+            )
+            map_params = self._unbounded_from_posterior(map_result)
+
+        return run_laplace(
+            key=key,
+            loss_fn=loss_fn,
+            map_params_unbounded=map_params,
+            to_physical_fn=self._to_physical,
+            model=self.model,
+            **kwargs,
+        )
+
+    def _run_pathfinder(self, *, key, init_from=None, **kwargs):
+        """Pathfinder: fast approximate posterior via L-BFGS path."""
+        from tengri.inference.pathfinder import run_pathfinder
+
+        loss_fn = self._build_loss_fn()
+
+        if init_from is not None:
+            init_params = self._unbounded_from_posterior(init_from)
+        else:
+            init_params = self._initialize_unbounded(key)
+
+        return run_pathfinder(
+            key=key,
+            loss_fn=loss_fn,
+            init_params=init_params,
+            to_physical_fn=self._to_physical,
+            model=self.model,
+            **kwargs,
+        )
+
+    def _run_elliptical_slice(self, *, key, init_from=None, **kwargs):
+        """Elliptical Slice Sampling for Gaussian-prior latent models."""
+        from tengri.inference.elliptical_slice import run_elliptical_slice
+
+        loglik_fn = self._build_loglikelihood_unbounded_fn()
+
+        if init_from is not None:
+            init_params = self._unbounded_from_posterior(init_from)
+        else:
+            init_params = self._initialize_unbounded(key)
+
+        return run_elliptical_slice(
+            key=key,
+            loglikelihood_unbounded_fn=loglik_fn,
+            init_params=init_params,
+            to_physical_fn=self._to_physical,
+            model=self.model,
+            **kwargs,
         )
 
     def _run_nifty_vi(

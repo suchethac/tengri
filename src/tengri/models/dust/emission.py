@@ -1701,6 +1701,103 @@ def load_astrodust_templates(filepath: str) -> dict:
     }
 
 
+def _normalize_dl07_like_grid(raw: dict, q_key: str = "qpah_grid") -> dict:
+    """Convert a raw DL07-like grid dict to the processed format.
+
+    Raw grids have keys ``spectra_single``, ``spectra_pdr``, and
+    ``wavelength_um``; the processed format uses ``single_u``,
+    ``powerlaw``, and ``wavelength_aa`` (in Angstrom, L_nu-normalized).
+
+    Parameters
+    ----------
+    raw : dict
+        Raw template grid with wavelength_um, spectra_single, spectra_pdr,
+        umin_grid, and either qpah_grid or qhac_grid.
+    q_key : str
+        Key for the grain composition parameter grid (``"qpah_grid"`` for
+        Astrodust/DL07, ``"qhac_grid"`` for THEMIS).
+
+    Returns
+    -------
+    dict
+        Processed grid with wavelength_aa, single_u, powerlaw, umin_grid,
+        and the composition grid key.
+    """
+    import numpy as np
+
+    wavs_um = np.asarray(raw["wavelength_um"])
+    wavs_aa = wavs_um * 1.0e4
+
+    single_u = np.array(raw["spectra_single"])
+    powerlaw = np.array(raw["spectra_pdr"])
+
+    wave_cm = wavs_aa * _AA_TO_CM
+    nu = _C_CGS / wave_cm
+
+    for arr in (single_u, powerlaw):
+        for i in range(arr.shape[0]):
+            for j in range(arr.shape[1]):
+                lnu = arr[i, j] * (wave_cm**2) / _C_CGS
+                integral = -np.trapezoid(lnu, nu)
+                if integral > 0:
+                    arr[i, j] = lnu / integral
+                else:
+                    arr[i, j] = lnu
+
+    result = {
+        "wavelength_aa": jnp.array(wavs_aa),
+        "umin_grid": jnp.array(raw["umin_grid"]),
+        "single_u": jnp.array(single_u),
+        "powerlaw": jnp.array(powerlaw),
+    }
+    result[q_key] = jnp.array(raw[q_key])
+    return result
+
+
+def _normalize_bosa_grid(raw: dict) -> dict:
+    """Convert a raw BOSA grid dict to the processed format.
+
+    Raw grids have ``wavelength_um`` and ``spectra``; the processed
+    format uses ``wavelength_aa`` (Angstrom) with L_nu-normalized spectra.
+
+    Parameters
+    ----------
+    raw : dict
+        Raw BOSA grid with wavelength_um, log_ltir_grid, log_ssfr_grid,
+        and spectra.
+
+    Returns
+    -------
+    dict
+        Processed grid with wavelength_aa and L_nu-normalized spectra.
+    """
+    import numpy as np
+
+    wavs_um = np.asarray(raw["wavelength_um"])
+    wavs_aa = wavs_um * 1.0e4
+
+    spectra = np.array(raw["spectra"])
+
+    wave_cm = wavs_aa * _AA_TO_CM
+    nu = _C_CGS / wave_cm
+
+    for i in range(spectra.shape[0]):
+        for j in range(spectra.shape[1]):
+            lnu = spectra[i, j] * (wave_cm**2) / _C_CGS
+            integral = -np.trapezoid(lnu, nu)
+            if integral > 0:
+                spectra[i, j] = lnu / integral
+            else:
+                spectra[i, j] = lnu
+
+    return {
+        "wavelength_aa": jnp.array(wavs_aa),
+        "log_ltir_grid": jnp.array(raw["log_ltir_grid"]),
+        "log_ssfr_grid": jnp.array(raw["log_ssfr_grid"]),
+        "spectra": jnp.array(spectra),
+    }
+
+
 def create_astrodust_from_grid(
     template_data: dict | str,
 ) -> Callable:
@@ -1729,6 +1826,11 @@ def create_astrodust_from_grid(
     """
     if isinstance(template_data, str):
         template_data = load_astrodust_templates(template_data)
+
+    # Accept both raw grid format (spectra_single/spectra_pdr/wavelength_um)
+    # and processed format (single_u/powerlaw/wavelength_aa) from load_*
+    if "spectra_single" in template_data and "single_u" not in template_data:
+        template_data = _normalize_dl07_like_grid(template_data, q_key="qpah_grid")
 
     single_u = template_data["single_u"]  # (n_qpah, n_umin, n_wave)
     powerlaw = template_data["powerlaw"]  # (n_qpah, n_umin, n_wave)
@@ -1959,6 +2061,10 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
     if isinstance(template_data, str):
         template_data = load_bosa_templates(template_data)
 
+    # Accept both raw grid format (wavelength_um) and processed (wavelength_aa)
+    if "wavelength_um" in template_data and "wavelength_aa" not in template_data:
+        template_data = _normalize_bosa_grid(template_data)
+
     spectra = template_data["spectra"]  # (n_ltir, n_ssfr, n_wave)
     tmpl_wave = template_data["wavelength_aa"]
     log_ltir_grid = template_data["log_ltir_grid"]
@@ -2171,6 +2277,11 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
     """
     if isinstance(template_data, str):
         template_data = load_themis_templates(template_data)
+
+    # Accept both raw grid format (spectra_single/spectra_pdr/wavelength_um)
+    # and processed format (single_u/powerlaw/wavelength_aa) from load_*
+    if "spectra_single" in template_data and "single_u" not in template_data:
+        template_data = _normalize_dl07_like_grid(template_data, q_key="qhac_grid")
 
     single_u = template_data["single_u"]  # (n_qhac, n_umin, n_wave)
     powerlaw = template_data["powerlaw"]  # (n_qhac, n_umin, n_wave)

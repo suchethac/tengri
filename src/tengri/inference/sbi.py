@@ -128,10 +128,17 @@ def generate_sbi_training_data(
     else:
         predict_fn = model.predict_spectrum
 
-    # Use vmap for batched prediction
-    # Each sample in theta_dict has shape (n_samples,) or (n_samples, n_grid)
-    # We need per-sample dicts for vmap
-    x_clean = jax.vmap(predict_fn)(theta_dict)
+    # Use vmap for batched prediction; fall back to a loop for
+    # non-traceable callables (e.g., mocks in tests).
+    try:
+        x_clean = jax.vmap(predict_fn)(theta_dict)
+    except Exception:
+        # Fallback: loop over samples individually
+        results = []
+        for i in range(n_samples):
+            single = {k: v[i] for k, v in theta_dict.items()}
+            results.append(predict_fn(single))
+        x_clean = jnp.stack(results)
 
     # Sample per-observation SNR
     snr_min, snr_max = snr_range

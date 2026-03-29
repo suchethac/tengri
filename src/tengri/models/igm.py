@@ -477,8 +477,9 @@ def _damping_wing_tau(
 ) -> jnp.ndarray:
     """Damping wing optical depth from a partially neutral IGM.
 
-    Follows Miralda-Escude (1998, ApJ 501, 15) for the Lorentzian
-    damping wing profile of the Ly-alpha transition.
+    Follows Miralda-Escude (1998, ApJ 501, 15) Eq. 9 for the
+    integrated damping wing profile from a uniform neutral IGM
+    extending from the bubble edge to high redshift.
 
     The damping wing extends *redward* of Ly-alpha at the source
     redshift (unlike the Lyman series forest which is blueward).
@@ -500,6 +501,19 @@ def _damping_wing_tau(
     -------
     array, shape (n_wave,)
         Damping wing optical depth (>= 0).
+
+    Notes
+    -----
+    The Gunn-Peterson optical depth is tau_GP = 6.45e5 * ((1+z)/7)^1.5.
+    The integrated damping wing from a uniform neutral medium gives
+    (Miralda-Escude 1998):
+
+        tau_DW(x) ~ tau_GP * x_HI * Lambda_alpha / (pi * x^2)
+
+    where x = (nu - nu_alpha)/nu_alpha is the dimensionless frequency
+    offset and Lambda_alpha = Gamma_alpha / (4*pi*nu_alpha) is the
+    dimensionless damping constant.  The bubble provides a lower
+    integration limit that suppresses absorption close to Ly-alpha.
     """
     # Gunn-Peterson optical depth at Ly-alpha (Miralda-Escude 1998 Eq. 1)
     tau_GP = 6.45e5 * ((1.0 + z) / 7.0) ** 1.5
@@ -507,39 +521,46 @@ def _damping_wing_tau(
     # Observed Ly-alpha at source redshift
     lya_obs = _LAMBDA_LYA * (1.0 + z)
 
-    # Frequency domain (more natural for the Lorentzian profile)
-    nu_obs = _C_CGS_IGM / (wave_obs * 1e-8)  # Hz
-    nu_lya_obs = _C_CGS_IGM / (lya_obs * 1e-8)  # Hz
+    # Dimensionless wavelength offset: x = lambda_obs/lya_obs - 1
+    # x > 0 is redward of Lya (damping wing side)
+    x_wave = wave_obs / lya_obs - 1.0
 
-    # Frequency offset from Ly-alpha at source
-    delta_nu = nu_obs - nu_lya_obs
+    # Damping constant: Lambda = Gamma_alpha / (4*pi*nu_alpha)
+    # nu_alpha = c / (lambda_alpha * 1e-8)
+    lambda_alpha = _LAMBDA_LYA * 1e-8  # cm
+    nu_alpha = _C_CGS_IGM / lambda_alpha
+    lambda_damp = _GAMMA_LYA / (4.0 * jnp.pi * nu_alpha)
 
-    # Damping wing Lorentzian profile
-    # tau_DW = tau_GP * x_HI * (gamma / 4pi) / (delta_nu^2 + (gamma/4pi)^2)
-    gamma_4pi = _GAMMA_LYA / (4.0 * jnp.pi)
-    tau_lorentz = tau_GP * x_HI * gamma_4pi / (delta_nu**2 + gamma_4pi**2)
-
-    # Bubble correction: the ionized bubble of radius R_bubble
-    # shields wavelengths very close to Lya. The bubble edge
-    # corresponds to a redshift offset dz ~ R_bubble * H(z) / c.
-    # H(z) ~ 100 * h * sqrt(Omega_m * (1+z)^3) km/s/Mpc
-    # For simplicity, use H(z) ~ 1000 * sqrt((1+z)^3 / 343) km/s/Mpc
-    # at z~6 this gives H ~ 1000 km/s/Mpc
+    # Bubble edge in dimensionless frequency offset:
+    # The bubble of radius R_bubble [pMpc] corresponds to a velocity
+    # offset v_bubble = R_bubble * H(z), hence a wavelength offset
+    # x_bubble = v_bubble / c.
+    # H(z) = H_0 * sqrt(Omega_m * (1+z)^3) for matter-dominated era
     h_z_kms_per_mpc = 100.0 * 0.7 * jnp.sqrt(0.3 * (1.0 + z) ** 3)
-    # Velocity offset at bubble edge [km/s]
-    v_bubble = R_bubble * h_z_kms_per_mpc
-    # Corresponding frequency offset
-    nu_bubble = nu_lya_obs * v_bubble / 2.998e5  # c in km/s
+    v_bubble = R_bubble * h_z_kms_per_mpc  # km/s
+    x_bubble = v_bubble / 2.998e5  # dimensionless
 
-    # Inside the bubble (|delta_nu| < nu_bubble on the red side), tau = 0
-    # Use a smooth sigmoid for differentiability
-    # The damping wing is on the red side: wave_obs > lya_obs => delta_nu < 0
-    # We want to suppress tau when |delta_nu| < nu_bubble
-    bubble_mask = jax.nn.sigmoid(
-        (jnp.abs(delta_nu) - nu_bubble) / jnp.maximum(nu_bubble * 0.1, 1.0)
+    # Integrated damping wing tau from Miralda-Escude (1998) Eq. 9:
+    # tau(x) = tau_GP * x_HI * Lambda / pi * [1/x_bubble - 1/x]
+    # for x > x_bubble (outside the bubble on the red side).
+    #
+    # The 1/x_bubble term gives the total column from the bubble edge,
+    # and 1/x corrects for the integration starting point.
+    # Use soft clipping for differentiability.
+    x_safe = jnp.maximum(x_wave, x_bubble + 1e-10)
+    tau_wing = (
+        tau_GP
+        * x_HI
+        * lambda_damp
+        / jnp.pi
+        * (1.0 / jnp.maximum(x_bubble, 1e-10) - 1.0 / x_safe)
     )
 
-    tau_wing = tau_lorentz * bubble_mask
+    # Smooth bubble mask: suppress for x < x_bubble (inside bubble)
+    bubble_mask = jax.nn.sigmoid(
+        (x_wave - x_bubble) / jnp.maximum(x_bubble * 0.1, 1e-8)
+    )
+    tau_wing = tau_wing * bubble_mask
 
     # Only apply redward of Ly-alpha at source (damping wing side)
     tau_wing = jnp.where(wave_obs > lya_obs, tau_wing, 0.0)
