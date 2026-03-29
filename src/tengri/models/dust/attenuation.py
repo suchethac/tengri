@@ -354,44 +354,40 @@ def cardelli(
 @register_dust_law("li08")
 def li08(
     wavelength: jnp.ndarray,
-    dust_UV_slope: float = -1.0,
-    dust_OPT_slope: float = -1.3,
-    dust_FUV_slope: float = -1.8,
-    dust_bump_strength: float = 1.0,
+    dust_c1: float = 6.0,
+    dust_c2: float = 4.0,
+    dust_c3: float = 2.0,
+    dust_c4: float = 0.04,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Li et al. (2008) parametric 3-slope attenuation + UV bump.
+    """Li et al. (2008) analytical dust attenuation/extinction curve.
 
-    A flexible single functional form with independent power-law slopes
-    in three wavelength regimes (FUV, UV-optical, optical-NIR) joined by
-    smooth sigmoid transitions, plus a Drude UV bump at 2175 Angstrom.
-    Can reproduce MW, SMC, LMC, and Calzetti curves as special cases.
+    A flexible 4-parameter analytical model that can reproduce MW, LMC,
+    SMC, and Calzetti-like curves through a single functional form.
+    The three terms represent a UV/optical continuum, a far-UV rise,
+    and the 2175 Angstrom UV bump respectively.
 
-    The unnormalized curve is::
+    The normalized attenuation is (Li et al. 2008, Eq. 1)::
 
-        k_raw(lambda) = (lambda/1500)^FUV_slope  * sigma_FUV(lambda)
-                      + (lambda/1500)^UV_slope   * sigma_UV(lambda)
-                      + (lambda/6000)^OPT_slope  * sigma_OPT(lambda)
-                      + bump * D(lambda, 2175A)
+        A_lam/A_V = c1 / [(lam/0.08)^c2 + (0.08/lam)^c2 + c3]
+                  + 233 * [1 - c1/(6.88^c2 + 0.145^c2 + c3) - c4/4.60]
+                    / [(lam/0.046)^2 + (0.046/lam)^2 + 90]
+                  + c4 / [(lam/0.2175)^2 + (0.2175/lam)^2 - 1.95]
 
-    where sigma are sigmoid weighting functions for smooth transitions,
-    and the result is normalized so that k(5500 A) = 1.
+    where lam is the wavelength in micron and c1-c4 are dimensionless.
 
     Parameters
     ----------
     wavelength : array, shape (n_wave,)
         Wavelength grid in Angstrom.
-    dust_UV_slope : float
-        Power-law slope in the UV regime (1500-6000 A).
-        MW ~ -1.0, SMC ~ -1.2, Calzetti ~ -0.75.
-    dust_OPT_slope : float
-        Power-law slope in the optical-NIR regime (> 6000 A).
-        MW ~ -1.3, SMC ~ -1.6, Calzetti ~ -1.05.
-    dust_FUV_slope : float
-        Power-law slope in the FUV regime (< 1500 A).
-        MW ~ -1.8, SMC ~ -2.4, Calzetti ~ -1.4.
-    dust_bump_strength : float
-        Amplitude of the 2175 A UV bump. MW ~ 1.0, SMC/Calzetti ~ 0.0.
+    dust_c1 : float
+        Continuum amplitude. Controls overall UV-optical shape.
+    dust_c2 : float
+        Continuum curvature. Higher values produce steeper UV rises.
+    dust_c3 : float
+        Continuum offset. Shifts the overall curve level.
+    dust_c4 : float
+        UV bump amplitude at 2175 Angstrom. Set to 0 for bump-free.
 
     Returns
     -------
@@ -400,66 +396,56 @@ def li08(
 
     Notes
     -----
-    Presets for common curves:
+    Approximate presets for common curves (Markov et al. 2023, 2025):
 
-    - **MW**: UV_slope=-1.0, OPT_slope=-1.3, FUV_slope=-1.8, bump=1.0
-    - **SMC**: UV_slope=-1.2, OPT_slope=-1.6, FUV_slope=-2.4, bump=0.0
-    - **LMC**: UV_slope=-1.1, OPT_slope=-1.4, FUV_slope=-2.0, bump=0.5
-    - **Calzetti**: UV_slope=-0.75, OPT_slope=-1.05, FUV_slope=-1.4, bump=0.0
+    - **MW-like**: c1~6.0, c2~4.0, c3~2.0, c4~0.04
+    - **SMC-like**: c1~5.0, c2~5.5, c3~1.5, c4~0.0
+    - **Calzetti-like**: c1~3.5, c2~2.5, c3~3.0, c4~0.0
 
     References
     ----------
-    Li et al. 2008, MNRAS, 385, 1903
+    Li, A., Liang, S. L., Kann, D. A., et al. 2008, ApJ, 685, 1046
+    Markov, V., Gallerani, S., Pallottini, A., et al. 2023, A&A, 679, A12
+    Markov, V., Gallerani, S., Pallottini, A., et al. 2025, A&A (arXiv:2504.12378)
     """
-    wave_um = wavelength / 1e4
+    lam = wavelength / 1e4  # Angstrom -> micron
 
-    # Pivot wavelengths in Angstrom
-    lam_fuv = 1500.0
-    lam_opt = 6000.0
-
-    # Smooth sigmoid transitions (width ~ 0.1 in log-lambda for
-    # differentiability; steepness 20 gives ~95% transition over
-    # factor-of-1.3 in wavelength)
-    steepness = 20.0
-    log_wave = jnp.log10(wavelength)
-    log_fuv = jnp.log10(lam_fuv)
-    log_opt = jnp.log10(lam_opt)
-
-    # w_fuv ~ 1 for lambda << 1500, ~ 0 for lambda >> 1500
-    w_fuv = jax.nn.sigmoid(-steepness * (log_wave - log_fuv))
-    # w_opt ~ 1 for lambda >> 6000, ~ 0 for lambda << 6000
-    w_opt = jax.nn.sigmoid(steepness * (log_wave - log_opt))
-    # w_uv fills the middle
-    w_uv = 1.0 - w_fuv - w_opt
-
-    # Three power-law segments
-    k_fuv = (wavelength / lam_fuv) ** dust_FUV_slope
-    k_uv = (wavelength / lam_fuv) ** dust_UV_slope
-    k_opt = (wavelength / lam_opt) ** dust_OPT_slope
-
-    # Weighted combination
-    k_raw = w_fuv * k_fuv + w_uv * k_uv + w_opt * k_opt
-
-    # UV bump via Drude profile at 2175 A
-    bump = dust_bump_strength * _drude_profile(wave_um)
-    k_raw = k_raw + bump
-
-    # Normalize to k(V) = 1 at 5500 A
-    # Evaluate at 5500 A using the same formula
-    lam_v = 5500.0
-    log_v = jnp.log10(lam_v)
-    w_fuv_v = jax.nn.sigmoid(-steepness * (log_v - log_fuv))
-    w_opt_v = jax.nn.sigmoid(steepness * (log_v - log_opt))
-    w_uv_v = 1.0 - w_fuv_v - w_opt_v
-
-    k_v = (
-        w_fuv_v * (lam_v / lam_fuv) ** dust_FUV_slope
-        + w_uv_v * (lam_v / lam_fuv) ** dust_UV_slope
-        + w_opt_v * (lam_v / lam_opt) ** dust_OPT_slope
-        + dust_bump_strength * _drude_profile(jnp.array(lam_v / 1e4))
+    # Term 1: UV/optical continuum
+    t1 = dust_c1 / (
+        (lam / 0.08) ** dust_c2 + (0.08 / lam) ** dust_c2 + dust_c3
     )
 
-    return jnp.clip(k_raw / k_v, 0.0)
+    # Normalization constant for term 2 (ensures A_V continuity)
+    norm_c1 = dust_c1 / (6.88 ** dust_c2 + 0.145 ** dust_c2 + dust_c3)
+    norm_c4 = dust_c4 / 4.60
+
+    # Term 2: Far-UV rise
+    t2 = 233.0 * (1.0 - norm_c1 - norm_c4) / (
+        (lam / 0.046) ** 2 + (0.046 / lam) ** 2 + 90.0
+    )
+
+    # Term 3: 2175 Angstrom UV bump
+    t3 = dust_c4 / (
+        (lam / 0.2175) ** 2 + (0.2175 / lam) ** 2 - 1.95
+    )
+
+    a_lam_over_av = t1 + t2 + t3
+
+    # Evaluate at V-band (5500 A = 0.55 um) for normalization to k(5500)=1
+    lam_v = 0.55
+    t1_v = dust_c1 / (
+        (lam_v / 0.08) ** dust_c2 + (0.08 / lam_v) ** dust_c2 + dust_c3
+    )
+    t2_v = 233.0 * (1.0 - norm_c1 - norm_c4) / (
+        (lam_v / 0.046) ** 2 + (0.046 / lam_v) ** 2 + 90.0
+    )
+    t3_v = dust_c4 / (
+        (lam_v / 0.2175) ** 2 + (0.2175 / lam_v) ** 2 - 1.95
+    )
+    a_v_over_av = t1_v + t2_v + t3_v
+
+    # Return k(lambda) = A_lambda/A_V normalized so k(5500 A) = 1
+    return jnp.clip(a_lam_over_av / a_v_over_av, 0.0)
 
 
 @register_dust_law("salim")
