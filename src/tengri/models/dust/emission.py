@@ -2614,7 +2614,9 @@ def _make_lazy_loader(
     def _lazy_wrapper(*args, **kwargs):
         if name not in _resolved:
             _resolved.add(name)
-            path = _find_data_file(template_filename)
+            # Try v2 standardized HDF5 first, then legacy format
+            v2_name = template_filename.rsplit(".", 1)[0] + "_v2.h5"
+            path = _find_data_file(v2_name) or _find_data_file(template_filename)
             if path is not None:
                 try:
                     loader = globals()[loader_fn_name]
