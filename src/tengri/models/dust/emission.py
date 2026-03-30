@@ -957,6 +957,32 @@ def load_draine_li_templates(filepath: str) -> dict:
     import h5py as _h5py
 
     with _h5py.File(filepath, "r") as f:
+        # v2 standardized format: /grid/qpah, /grid/umin, /spectra/single_u, /spectra/pdr
+        if "grid" in f and "spectra" in f:
+            wavs = np.array(f["wavelength"][:])
+            # Convert micron to Angstrom if needed
+            wave_unit = f["wavelength"].attrs.get("unit", "Angstrom")
+            if wave_unit == "micron":
+                wavs = wavs * 1e4
+            single_u = np.array(f["spectra"]["single_u"][:])
+            powerlaw = np.array(f["spectra"]["pdr"][:])
+            # Normalize
+            for i in range(single_u.shape[0]):
+                for j in range(single_u.shape[1]):
+                    norm = np.trapezoid(single_u[i, j], wavs)
+                    if norm > 0:
+                        single_u[i, j] /= norm
+                    norm = np.trapezoid(powerlaw[i, j], wavs)
+                    if norm > 0:
+                        powerlaw[i, j] /= norm
+            return {
+                "wavelength": jnp.array(wavs),
+                "umin_grid": jnp.array(f["grid"]["umin"][:]),
+                "qpah_grid": jnp.array(f["grid"]["qpah"][:]),
+                "single_u": jnp.array(single_u),
+                "powerlaw": jnp.array(powerlaw),
+            }
+        # Legacy flat format
         return {
             "wavelength": jnp.array(f["wavelength"][:]),
             "umin_grid": jnp.array(f["umin_grid"][:]),
@@ -1199,14 +1225,51 @@ def load_dl14_templates(filepath: str) -> dict:
     import h5py as _h5py
 
     with _h5py.File(filepath, "r") as f:
-        return {
-            "wavelength": jnp.array(f["wavelength"][:]),
-            "umin_grid": jnp.array(f["umin_grid"][:]),
-            "qpah_grid": jnp.array(f["qpah_grid"][:]),
-            "alpha_grid": jnp.array(f["alpha_grid"][:]),
-            "single_u": jnp.array(f["single_u"][:]),
-            "powerlaw": jnp.array(f["powerlaw"][:]),
-        }
+        # v2 standardized format: /grid/*, /spectra/*
+        if "grid" in f and "spectra" in f:
+            wavelength = jnp.array(f["wavelength"][:])
+            umin_grid = jnp.array(f["grid"]["umin"][:])
+            qpah_grid = jnp.array(f["grid"]["qpah"][:])
+            alpha_grid = jnp.array(f["grid"]["alpha"][:])
+            raw_single = jnp.array(f["spectra"]["single_u"][:])
+            single_u = raw_single[0]
+            raw_pdr = jnp.array(f["spectra"]["pdr"][:])
+            powerlaw = jnp.transpose(raw_pdr, (1, 2, 0, 3))
+        else:
+            # Legacy flat format
+            wavelength = jnp.array(f["wavelength"][:])
+            umin_grid = jnp.array(f["umin_grid"][:])
+            qpah_grid = jnp.array(f["qpah_grid"][:])
+            alpha_grid = jnp.array(f["alpha_grid"][:])
+
+        # File may have old key names (single_u/powerlaw) or new
+        # names (templates_single_u/templates_pdr) from convert script.
+        if "grid" not in f and "single_u" in f:
+            single_u = jnp.array(f["single_u"][:])
+            powerlaw = jnp.array(f["powerlaw"][:])
+        elif "grid" not in f and "templates_single_u" in f:
+            # File shape: (n_alpha, n_qpah, n_umin, n_wave)
+            # For single_u: average over alpha axis → (n_qpah, n_umin, n_wave)
+            # (single-U templates are alpha-independent by definition)
+            raw_single = jnp.array(f["templates_single_u"][:])
+            single_u = raw_single[0]  # alpha-independent, take first slice
+
+            # For powerlaw (PDR): transpose to (n_qpah, n_umin, n_alpha, n_wave)
+            raw_pdr = jnp.array(f["templates_pdr"][:])
+            powerlaw = jnp.transpose(raw_pdr, (1, 2, 0, 3))
+        else:
+            raise KeyError(
+                f"DL14 HDF5 missing expected keys. Found: {list(f.keys())}"
+            )
+
+    return {
+        "wavelength": wavelength,
+        "umin_grid": umin_grid,
+        "qpah_grid": qpah_grid,
+        "alpha_grid": alpha_grid,
+        "single_u": single_u,
+        "powerlaw": powerlaw,
+    }
 
 
 def create_dl14_from_grid(grid_path: str) -> Callable:
