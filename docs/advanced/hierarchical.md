@@ -65,8 +65,6 @@ result = hfitter.run("geovi", key=jax.random.PRNGKey(0), n_iterations=25)
 |--------|-------------|
 | `geovi` | geoVI with CorrelatedFieldMaker (recommended) |
 | `mgvi` | MGVI --- faster per iteration, for very large N |
-| `evi` | JIT-compiled EVI with automatic convergence |
-| `evi_nifty` | Full NIFTy EVI with logging |
 | `raytrace` | Ray Tracing on flat parameter vector |
 
 ## The block Gibbs structure

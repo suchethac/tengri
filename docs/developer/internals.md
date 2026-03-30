@@ -9,8 +9,8 @@ on the method name:
 
 | Dispatch function | Methods handled |
 |-------------------|----------------|
-| `_run_native_vi` | `native_geovi`, `native_mgvi`, `native_evi` |
-| `_run_fast_vi` | `geovi`, `fast_geovi`, `mgvi`, `fast_mgvi`, `evi`, `fast_evi`, `geovi_nuts`, `mgvi_nuts` |
+| `_run_native_vi` | `native_geovi`, `native_mgvi` |
+| `_run_fast_vi` | `geovi`, `fast_geovi`, `mgvi`, `fast_mgvi`, `geovi_nuts`, `mgvi_nuts` |
 | `_run_nifty_vi` | `nifty_geovi`, `nifty_mgvi` |
 | `_run_map` | `map` |
 | `_run_nuts` | `nuts` |

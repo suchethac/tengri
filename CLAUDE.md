@@ -114,10 +114,9 @@ Each class has a `.summary()` method for quick inspection:
 | Method | Command | Best for |
 |--------|---------|----------|
 | **native_geovi** | `fitter.run("native_geovi")` | **Default.** JIT-compiled geoVI with resample+update schedule, nonlinear posterior draws |
-| native_mgvi / native_evi | `fitter.run("native_mgvi")` | JIT-compiled MGVI/EVI |
+| native_mgvi | `fitter.run("native_mgvi")` | JIT-compiled MGVI |
 | geovi / fast_geovi | `fitter.run("geovi")` | NIFTy OptimizeVI.update tight loop, resample+update schedule |
 | mgvi / fast_mgvi | `fitter.run("mgvi")` | NIFTy MGVI tight loop |
-| evi / fast_evi | `fitter.run("evi")` | NIFTy EVI tight loop |
 | nifty_geovi | `fitter.run("nifty_geovi")` | Full jft.optimize_kl with logging (debugging) |
 | nifty_mgvi | `fitter.run("nifty_mgvi")` | Full NIFTy MGVI with logging |
 | geovi_nuts | `fitter.run("geovi_nuts")` | geoVI optimization + NUTS posterior draws |
@@ -130,7 +129,7 @@ Each class has a `.summary()` method for quick inspection:
 | Elliptical Slice | `fitter.run("elliptical_slice", n_burnin=200)` | Exact MCMC for Gaussian-prior latent models (Murray+2010). Natural for GP field |
 | MAP | `fitter.run("map", optimizer="adam")` | Point estimates. Optimizer swappable: adam/adamw/sgd/custom optax |
 
-**Internal dispatch:** `_run_evi_jit` handles native_geovi/native_mgvi/native_evi. `_run_fast_vi` handles geovi/fast_geovi/mgvi/fast_mgvi/evi/fast_evi/geovi_nuts/mgvi_nuts. `_run_nifty_vi` handles nifty_geovi/nifty_mgvi. `_run_nss` handles nss. `_run_laplace`/`_run_pathfinder`/`_run_elliptical_slice`/`_run_map`/`_run_nuts`/`_run_raytrace` handle the rest.
+**Internal dispatch:** `_run_native_vi` handles native_geovi/native_mgvi. `_run_fast_vi` handles geovi/fast_geovi/mgvi/fast_mgvi/geovi_nuts/mgvi_nuts. `_run_nifty_vi` handles nifty_geovi/nifty_mgvi. `_run_nss` handles nss. `_run_laplace`/`_run_pathfinder`/`_run_elliptical_slice`/`_run_map`/`_run_nuts`/`_run_raytrace` handle the rest.
 
 **Batch fitting:** `fitter.fit_batch(galaxies)` (NOT `fit_catalog`). Default method is `native_geovi`.
 
