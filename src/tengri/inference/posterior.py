@@ -50,6 +50,7 @@ class Posterior:
     wall_time_s: float
     diagnostics: dict
     loss_history: jnp.ndarray | None = None
+    log_evidence: float | None = None
     _model: object = field(default=None, repr=False)
 
     # -------------------------------------------------------------------
@@ -184,6 +185,13 @@ class Posterior:
             lines.append("")
             lines.append(f"  Diagnostics: {', '.join(diag_parts)}")
 
+        if self.log_evidence is not None:
+            err = self.diagnostics.get("log_evidence_err")
+            if err is not None:
+                lines.append(f"  log Z (evidence) = {self.log_evidence:.2f} ± {err:.2f}")
+            else:
+                lines.append(f"  log Z (evidence) = {self.log_evidence:.2f}")
+
         lines.append(sep)
         return "\n".join(lines)
 
@@ -242,8 +250,10 @@ class Posterior:
     def effective_sample_size(self) -> dict:
         """Estimate effective sample size (ESS) for each parameter.
 
-        Uses the initial positive sequence estimator (Geyer 1992):
-        truncate the autocorrelation sum at the first negative pair.
+        Uses Sokal's self-consistent window method (Behroozi 2025):
+        τ = 1 + 2 Σ ρ(k), truncated at k > 5τ. Takes the max of
+        standard and absolute-deviation autocorrelation times for
+        a conservative estimate.
 
         Returns
         -------
@@ -253,22 +263,56 @@ class Posterior:
         if self.samples is None:
             raise ValueError("ESS requires samples (not MAP)")
 
-        acfs = self.autocorrelation()
-        result = {}
+        from tengri.diagnostics.autocorrelation import effective_sample_size
 
-        for name, acf in acfs.items():
-            n = next(iter(self.samples.values())).shape[0]
-            # Initial positive sequence: sum pairs of consecutive ACF values
-            # and stop when the pair sum goes negative
-            tau = 1.0  # starts at lag 0 (acf[0] = 1)
-            for i in range(1, len(acf) - 1, 2):
-                pair_sum = acf[i] + acf[i + 1] if i + 1 < len(acf) else acf[i]
-                if pair_sum < 0:
-                    break
-                tau += 2.0 * pair_sum
-            result[name] = n / tau
+        ess_info = effective_sample_size({k: np.asarray(v) for k, v in self.samples.items()})
+        return {name: info["ess"] for name, info in ess_info.items()}
 
-        return result
+    def autocorrelation_time(self) -> dict:
+        """Estimate integrated autocorrelation time for each parameter.
+
+        Uses Sokal's self-consistent window method with both standard
+        and absolute-deviation modes (Behroozi 2025).
+
+        Returns
+        -------
+        dict
+            Keys: parameter names.
+            Values: dict with 'tau_standard', 'tau_absolute', 'tau_max',
+            'ess', 'chain_converged'.
+        """
+        if self.samples is None:
+            raise ValueError("Autocorrelation time requires samples (not MAP)")
+
+        from tengri.diagnostics.autocorrelation import effective_sample_size
+
+        return effective_sample_size({k: np.asarray(v) for k, v in self.samples.items()})
+
+    def check_convergence(self, verbose: bool = True) -> dict:
+        """Check chain convergence using autocorrelation diagnostics.
+
+        Follows Behroozi (2025): chain is converged when N > 5τ for
+        all parameters.
+
+        Parameters
+        ----------
+        verbose : bool
+            Print diagnostics table.
+
+        Returns
+        -------
+        dict
+            Keys: 'all_converged', 'params', 'warnings'.
+        """
+        if self.samples is None:
+            raise ValueError("Convergence check requires samples (not MAP)")
+
+        from tengri.diagnostics.autocorrelation import check_chain_length
+
+        return check_chain_length(
+            {k: np.asarray(v) for k, v in self.samples.items()},
+            verbose=verbose,
+        )
 
     def diagnostics_summary(self) -> str:
         """Print a diagnostics summary including ESS and R-hat proxy."""

@@ -136,7 +136,13 @@ def init_pos(fitter):
 @pytest.fixture(scope="module")
 def jit_engine(fitter, init_pos):
     """Build JIT engine from init position."""
-    return fitter._build_jit_engine(init_pos)
+    return fitter._get_or_build_engine(init_pos)
+
+
+@pytest.fixture(scope="module")
+def data_args(fitter):
+    """Data-dependent arguments for JIT engine calls."""
+    return fitter._data_args
 
 
 @pytest.fixture(scope="module")
@@ -195,7 +201,7 @@ class TestLinearResidualCovariance:
     and check that the empirical covariance approximates M^{-1}.
     """
 
-    def test_jit_residual_covariance_matches_metric_inverse(self, jit_engine, init_pos):
+    def test_jit_residual_covariance_matches_metric_inverse(self, jit_engine, init_pos, data_args):
         """Sample covariance of JIT residuals should approximate M^{-1}.
 
         For M = J^T N^{-1} J + I, residuals have covariance M^{-1} < I,
@@ -208,7 +214,7 @@ class TestLinearResidualCovariance:
 
         n_draws = 500
         keys = jax.random.split(jax.random.PRNGKey(123), n_draws)
-        residuals = engine["draw_samples"](pos_flat, keys)
+        residuals = engine["draw_samples"](pos_flat, keys, data_args)
 
         residuals_np = np.array(residuals)
         cov = np.cov(residuals_np, rowvar=False)
@@ -226,7 +232,9 @@ class TestLinearResidualCovariance:
         )
         assert trace_ratio > 0.01, f"trace(cov)/D = {trace_ratio:.3f}, unexpectedly small"
 
-    def test_nifty_and_jit_residual_variances_agree(self, jit_engine, init_pos, nifty_likelihood):
+    def test_nifty_and_jit_residual_variances_agree(
+        self, jit_engine, init_pos, nifty_likelihood, data_args
+    ):
         """Per-parameter variance from JIT and NIFTy draws should agree.
 
         We draw 200 residuals from each and compare the per-dimension
@@ -240,7 +248,7 @@ class TestLinearResidualCovariance:
         # JIT draws
         n_draws = 200
         jit_keys = jax.random.split(jax.random.PRNGKey(456), n_draws)
-        jit_residuals = np.array(engine["draw_samples"](pos_flat, jit_keys))
+        jit_residuals = np.array(engine["draw_samples"](pos_flat, jit_keys, data_args))
         jit_var = np.var(jit_residuals, axis=0)
 
         # NIFTy draws
@@ -291,7 +299,9 @@ class TestKLValue:
     Hamiltonians decrease after optimization.
     """
 
-    def test_hamiltonian_at_init_is_consistent(self, jit_engine, init_pos, nifty_likelihood):
+    def test_hamiltonian_at_init_is_consistent(
+        self, jit_engine, init_pos, nifty_likelihood, data_args
+    ):
         """Hamiltonian at init should be finite and positive for both."""
         engine = jit_engine
         flatten = engine["flatten"]
@@ -306,20 +316,25 @@ class TestKLValue:
         # JIT: run one evi_step to get a KL value (H averaged over samples)
         d_total = engine["d_total"]
         step_fn = engine["evi_step_full"]
-        _, kl_val, _ = step_fn(
+        dummy_keys = jax.random.split(jax.random.PRNGKey(0), 1)
+        _, kl_val, _, _ = step_fn(
             pos_flat,
             jax.random.PRNGKey(0),
             1,
-            "linear",
+            "linear_resample",
             jnp.zeros((2, d_total)),
+            dummy_keys,
             jnp.zeros(d_total, dtype=bool),
             jnp.ones(d_total),
+            data_args,
         )
 
         assert np.isfinite(float(kl_val)), "JIT KL at init is not finite"
         assert float(kl_val) > 0, f"JIT KL = {float(kl_val)}, expected > 0"
 
-    def test_kl_decreases_after_optimization(self, jit_engine, init_pos, nifty_likelihood):
+    def test_kl_decreases_after_optimization(
+        self, jit_engine, init_pos, nifty_likelihood, data_args
+    ):
         """After a few geoVI iterations the KL should decrease.
 
         This is not a direct value comparison but ensures both engines
@@ -336,6 +351,7 @@ class TestKLValue:
         m_opt, _ = run_geovi(
             pos_flat,
             jax.random.PRNGKey(55),
+            data_args,
             n_iterations=5,
             n_samples=2,
             kl_rtol=1e-3,
@@ -393,7 +409,7 @@ class TestMetricVectorProduct:
             f"v^T M v = {vMv:.4f} < ||v||^2 = {v2:.4f}, metric not positive definite"
         )
 
-    def test_cg_inverts_metric_correctly(self, jit_engine, init_pos):
+    def test_cg_inverts_metric_correctly(self, jit_engine, init_pos, data_args):
         """M @ M^{-1} b ~ b: draw a residual (covariance M^{-1}), then
         verify that applying the metric recovers approximately b.
 
@@ -408,7 +424,7 @@ class TestMetricVectorProduct:
 
         # Single residual draw
         key = jax.random.split(jax.random.PRNGKey(222), 1)
-        residual = engine["draw_samples"](pos_flat, key)[0]
+        residual = engine["draw_samples"](pos_flat, key, data_args)[0]
 
         # Residual should have norm < sqrt(D) (since var < 1 per dim)
         r_norm = float(jnp.linalg.norm(residual))
@@ -431,7 +447,9 @@ class TestOptimizeKLConvergence:
     the Hamiltonian values at convergence should be close.
     """
 
-    def test_converged_hamiltonian_close(self, fitter, init_pos, jit_engine, nifty_likelihood):
+    def test_converged_hamiltonian_close(
+        self, fitter, init_pos, jit_engine, nifty_likelihood, data_args
+    ):
         """Hamiltonian at converged points should agree within 10%.
 
         Both methods minimize the same KL divergence, so they should
@@ -450,6 +468,7 @@ class TestOptimizeKLConvergence:
         m_jit, _ = run_geovi(
             pos_flat,
             jax.random.PRNGKey(42),
+            data_args,
             n_iterations=n_iterations,
             n_samples=n_samples,
             kl_rtol=1e-3,
@@ -516,7 +535,7 @@ class TestPosteriorWidthComparison:
     at N=200.
     """
 
-    def test_posterior_stds_agree(self, fitter, init_pos, jit_engine, nifty_likelihood):
+    def test_posterior_stds_agree(self, fitter, init_pos, jit_engine, nifty_likelihood, data_args):
         """Posterior standard deviations should agree within ~50%.
 
         We run both methods for a few iterations, draw 200 posterior
@@ -533,6 +552,7 @@ class TestPosteriorWidthComparison:
         m_jit, _ = run_geovi(
             pos_flat,
             jax.random.PRNGKey(77),
+            data_args,
             n_iterations=8,
             n_samples=3,
             kl_rtol=1e-3,
@@ -541,7 +561,7 @@ class TestPosteriorWidthComparison:
 
         n_posterior = 200
         draw_keys = jax.random.split(jax.random.PRNGKey(888), n_posterior)
-        jit_residuals = engine["draw_samples"](m_jit, draw_keys)
+        jit_residuals = engine["draw_samples"](m_jit, draw_keys, data_args)
         jit_samples = np.array(m_jit[None, :] + jit_residuals)
 
         # --- NIFTy: converge + draw samples ---

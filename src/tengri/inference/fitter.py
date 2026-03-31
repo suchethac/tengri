@@ -131,9 +131,63 @@ class Fitter:
             dist = self.spec.get_distribution(name)
             self._bounds[name] = dist.bounds
 
+        # Pre-compute data-dependent arguments passed to JIT'd functions.
+        # These are passed as explicit arguments (not closed over) so that
+        # engines compiled for one galaxy can be reused for another with
+        # the same model + parameter structure.
+        noise_inv = 1.0 / self.noise**2
+        self._data_args = {
+            "data": self.data,
+            "noise": self.noise,
+            "noise_inv": noise_inv,
+            "sqrt_noise_inv": jnp.sqrt(noise_inv),
+            "n_data": jnp.int32(len(self.data)),
+        }
+
         # JIT posterior sampler — call compile() to pre-compile, or it
         # compiles lazily on first VI run.
         self._jit_sampler = None
+
+    def _engine_cache_key(self):
+        """Return a hashable key identifying the JIT engine shape.
+
+        Two Fitters sharing the same Model will reuse the same compiled
+        engine if their cache keys match (same data_type, stochastic
+        flag, latent dimension, data length, free parameter names, and
+        noise model presence).
+        """
+        from tengri.core.noise import has_noise_model
+
+        return (
+            self.data_type,
+            self.spec.stochastic,
+            self.spec.n_grid if self.spec.stochastic else 0,
+            len(self.data),
+            tuple(sorted(self._free_names)),
+            has_noise_model(self.spec),
+        )
+
+    def _get_or_build_engine(self, pos_dict):
+        """Return the JIT engine, reusing a cached version when possible.
+
+        Engines are cached on the Model object so that multiple Fitters
+        created with the same Model (but different data) share the same
+        compiled XLA programs.
+        """
+        if self._jit_sampler is not None:
+            return self._jit_sampler
+
+        cache_key = self._engine_cache_key()
+        if not hasattr(self.model, "_jit_engine_cache"):
+            self.model._jit_engine_cache = {}
+        if cache_key in self.model._jit_engine_cache:
+            self._jit_sampler = self.model._jit_engine_cache[cache_key]
+            return self._jit_sampler
+
+        engine = self._build_jit_engine(pos_dict)
+        self.model._jit_engine_cache[cache_key] = engine
+        self._jit_sampler = engine
+        return engine
 
     def summary(self) -> str:
         """Return a human-readable summary of the fitting problem.
@@ -551,9 +605,9 @@ class Fitter:
         bounds = self._bounds
         fixed_values = self._fixed_values
         stochastic = self.spec.stochastic
-        data = self.data
-        noise = self.noise
-        noise_inv = 1.0 / noise**2
+        # data/noise are NO LONGER captured here as local variables.
+        # Instead they are passed at call-time via the ``data_args`` dict
+        # so that the compiled engine can be reused across galaxies.
         use_variable_noise = has_noise_model(self.spec)
         noise_dof = get_noise_dof(self.spec) if uses_student_t(self.spec) else None
 
@@ -580,7 +634,7 @@ class Fitter:
         # --- Signal + noise response for variable noise ---
         if use_variable_noise:
 
-            def signal_noise_response(primals):
+            def signal_noise_response(primals, data_args):
                 """Return (predicted, std_inv) tuple for variable noise metric."""
                 params = {}
                 for name in free_names:
@@ -601,6 +655,7 @@ class Fitter:
                 else:
                     raise ValueError(f"Unknown data_type: {data_type}")
                 f_cal = params.get("noise_frac_cal", 0.0)
+                noise = data_args["noise"]
                 std_inv = compute_std_inv(noise, predicted, f_cal)
                 return predicted, std_inv
 
@@ -614,7 +669,7 @@ class Fitter:
             slices.append((idx, idx + arr.shape[0], shape))
             idx += arr.shape[0]
         d_total = idx
-        n_data = len(noise_inv)
+        n_data = len(self.data)  # static shape — same for all galaxies with same obs
 
         def flatten(d):
             return jnp.concatenate([jnp.atleast_1d(d[k]).ravel() for k in param_keys])
@@ -634,14 +689,19 @@ class Fitter:
 
         if use_variable_noise:
 
-            def metric_vec(xi, v):
+            def metric_vec(xi, v, data_args):
                 """GGN metric for VariableCovarianceGaussian likelihood."""
-                return variable_noise_metric_vec(
-                    xi, v, signal_noise_response, data, unflatten, flatten
-                )
+                data = data_args["data"]
 
-            def hamiltonian(xi):
+                def _snr(primals):
+                    return signal_noise_response(primals, data_args)
+
+                return variable_noise_metric_vec(xi, v, _snr, data, unflatten, flatten)
+
+            def hamiltonian(xi, data_args):
                 """E_lh + 0.5 ||xi||^2 with variable noise (includes logdet)."""
+                data = data_args["data"]
+                noise = data_args["noise"]
                 pred = signal_response(unflatten(xi))
                 primals = unflatten(xi)
                 params = {}
@@ -657,20 +717,25 @@ class Fitter:
 
         else:
 
-            def metric_vec(xi, v):
+            def metric_vec(xi, v, data_args):
                 """M(xi) @ v = J^T N^{-1} J v + v."""
+                noise_inv = data_args["noise_inv"]
                 xi_d, v_d = unflatten(xi), unflatten(v)
                 _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
                 _, vjp_fn = jax.vjp(signal_response, xi_d)
                 return flatten(vjp_fn(noise_inv * Jv)[0]) + v
 
-            def hamiltonian(xi):
+            def hamiltonian(xi, data_args):
                 """H(xi) = 0.5 chi2 + 0.5 ||xi||^2."""
+                data = data_args["data"]
+                noise = data_args["noise"]
                 pred = signal_response(unflatten(xi))
                 chi2 = jnp.sum(((data - pred) / noise) ** 2)
                 return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
 
-        H_vg = jax.value_and_grad(hamiltonian)
+        def H_vg(xi, data_args):
+            """Hamiltonian value and gradient w.r.t. xi only."""
+            return jax.value_and_grad(lambda x: hamiltonian(x, data_args))(xi)
 
         _tiny = 6.0 * jnp.finfo(jnp.float64).tiny
         _n_reset = 20
@@ -760,17 +825,19 @@ class Fitter:
             return jax.lax.while_loop(cond, body, init)[0]
 
         # --- Posterior sampler: draw linear residuals ---
-        def draw_residuals(pos_f, subkeys):
+        def draw_residuals(pos_f, subkeys, data_args):
             """Draw n linear residual samples (vmapped)."""
+            sqrt_ni = data_args["sqrt_noise_inv"]
+            n_d = n_data  # static, captured at engine-build time
 
             def draw_one(subkey):
                 k1, k2 = jax.random.split(subkey)
                 eta_pr = jax.random.normal(k1, shape=(d_total,))
-                eta_lh = jax.random.normal(k2, shape=(n_data,))
+                eta_lh = jax.random.normal(k2, shape=(n_d,))
                 _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
-                jt = flatten(vjp_fn(jnp.sqrt(noise_inv) * eta_lh)[0])
+                jt = flatten(vjp_fn(sqrt_ni * eta_lh)[0])
                 return cg_solve(
-                    lambda v: metric_vec(pos_f, v),
+                    lambda v: metric_vec(pos_f, v, data_args),
                     jt + eta_pr,
                     eta_pr,
                     maxiter=30,
@@ -780,49 +847,53 @@ class Fitter:
 
             return jax.vmap(draw_one)(subkeys)
 
-        def _draw_batch_fn(pos_f, k):
-            return draw_residuals(pos_f, k)
+        def _draw_batch_fn(pos_f, k, data_args):
+            return draw_residuals(pos_f, k, data_args)
 
-        draw_batch = jax.jit(jax.vmap(_draw_batch_fn, in_axes=(None, 0)))
+        draw_batch = jax.jit(jax.vmap(_draw_batch_fn, in_axes=(None, 0, None)))
 
         # --- geoVI: nonlinear coordinate transform primitives ---
-        sqrt_noise_inv = jnp.sqrt(noise_inv)
 
-        def transformation_flat(pos_f):
+        def transformation_flat(pos_f, data_args):
             """t(x) = sqrt(N^{-1}) @ f(x). Maps to whitened data-space."""
-            return sqrt_noise_inv * signal_response(unflatten(pos_f))
+            sqrt_ni = data_args["sqrt_noise_inv"]
+            return sqrt_ni * signal_response(unflatten(pos_f))
 
-        def left_sqrt_metric_flat(pos_f, v_data):
+        def left_sqrt_metric_flat(pos_f, v_data, data_args):
             """L^T(pos) @ v = J^T(pos) @ sqrt(N^{-1}) @ v.
 
             Maps whitened data-space vector to parameter-space.
             Matches NIFTy's ``likelihood.left_sqrt_metric(pos, v)``
             for the Gaussian case.
             """
+            sqrt_ni = data_args["sqrt_noise_inv"]
             _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
-            return flatten(vjp_fn(sqrt_noise_inv * v_data)[0])
+            return flatten(vjp_fn(sqrt_ni * v_data)[0])
 
-        def right_sqrt_metric_flat(pos_f, v_param):
+        def right_sqrt_metric_flat(pos_f, v_param, data_args):
             """L(pos) @ v = sqrt(N^{-1}) @ J(pos) @ v.
 
             Maps parameter-space vector to whitened data-space.
             Matches NIFTy's ``likelihood.right_sqrt_metric(pos, v)``
             for the Gaussian case.
             """
+            sqrt_ni = data_args["sqrt_noise_inv"]
             _, Jv = jax.jvp(signal_response, (unflatten(pos_f),), (unflatten(v_param),))
-            return sqrt_noise_inv * Jv
+            return sqrt_ni * Jv
 
-        def draw_metric_sample(pos_f, subkey):
+        def draw_metric_sample(pos_f, subkey, data_args):
             """Draw one sample with covariance M = J^T N^{-1} J + I.
 
             This is ``draw_linear_residual(..., from_inverse=False)``
             in NIFTy. The metric sample is NOT CG-inverted.
             """
+            sqrt_ni = data_args["sqrt_noise_inv"]
+            n_d = n_data  # static, captured at engine-build time
             k1, k2 = jax.random.split(subkey)
             eta_pr = jax.random.normal(k1, shape=(d_total,))
-            eta_lh = jax.random.normal(k2, shape=(n_data,))
+            eta_lh = jax.random.normal(k2, shape=(n_d,))
             _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
-            jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
+            jt = flatten(vjp_fn(sqrt_ni * eta_lh)[0])
             return jt + eta_pr
 
         def _newton_cg_flat(
@@ -994,7 +1065,7 @@ class Fitter:
             result = jax.lax.while_loop(ncg_cond, ncg_body, init_state)
             return result[0], result[1]
 
-        def curve_residual(m, r_linear, metric_key, sign):
+        def curve_residual(m, r_linear, metric_key, sign, data_args):
             """Nonlinearly update a linear residual to a geoVI curved residual.
 
             Exact port of NIFTy ``nonlinearly_update_residual``
@@ -1007,31 +1078,40 @@ class Fitter:
             r_linear : flat array, linear residual (covariance M^{-1})
             metric_key : PRNG key (same as used for draw_residuals)
             sign : +1.0 or -1.0 (for mirrored samples)
+            data_args : dict, data-dependent arguments
 
             Returns
             -------
             flat array : curved residual (x_opt - m)
             """
             x0 = m + r_linear
-            ms = sign * draw_metric_sample(m, metric_key)
-            trafo_at_m = transformation_flat(m)
+            ms = sign * draw_metric_sample(m, metric_key, data_args)
+            trafo_at_m = transformation_flat(m, data_args)
 
             def phi_vg(x):
-                trafo_x = transformation_flat(x)
+                trafo_x = transformation_flat(x, data_args)
                 delta_trafo = trafo_x - trafo_at_m
-                g_x = (x - m) + left_sqrt_metric_flat(m, delta_trafo)
+                g_x = (x - m) + left_sqrt_metric_flat(m, delta_trafo, data_args)
                 r = ms - g_x
                 val = 0.5 * jnp.dot(r, r)
-                ngrad = r + left_sqrt_metric_flat(x, right_sqrt_metric_flat(m, r))
+                ngrad = r + left_sqrt_metric_flat(
+                    x, right_sqrt_metric_flat(m, r, data_args), data_args
+                )
                 return val, -ngrad
 
             def phi_metric(x, v):
-                tm = left_sqrt_metric_flat(m, right_sqrt_metric_flat(x, v)) + v
-                return left_sqrt_metric_flat(x, right_sqrt_metric_flat(m, tm)) + tm
+                tm = (
+                    left_sqrt_metric_flat(m, right_sqrt_metric_flat(x, v, data_args), data_args)
+                    + v
+                )
+                return (
+                    left_sqrt_metric_flat(x, right_sqrt_metric_flat(m, tm, data_args), data_args)
+                    + tm
+                )
 
             # sampnorm (evi.py:178-181)
             def sampnorm(natgrad):
-                fpp = right_sqrt_metric_flat(m, natgrad)
+                fpp = right_sqrt_metric_flat(m, natgrad, data_args)
                 return jnp.sqrt(jnp.dot(natgrad, natgrad) + jnp.dot(fpp, fpp))
 
             x_opt, _ = _newton_cg_flat(
@@ -1046,25 +1126,25 @@ class Fitter:
             )
             return x_opt - m
 
-        def draw_nonlinear_residuals(m, subkeys):
+        def draw_nonlinear_residuals(m, subkeys, data_args):
             """Draw geoVI nonlinear residuals: linear draw + curving + mirror.
 
             Returns (2*n_samples, D) array: curved residuals with mirrored pairs.
             Matches NIFTy's ``nonlinear_resample`` sample mode.
             """
             # First draw linear residuals
-            linear_residuals = draw_residuals(m, subkeys)
+            linear_residuals = draw_residuals(m, subkeys, data_args)
 
             # Curve each residual and its mirror
             def curve_pair(r, subkey):
-                r_pos = curve_residual(m, r, subkey, sign=1.0)
-                r_neg = curve_residual(m, -r, subkey, sign=-1.0)
+                r_pos = curve_residual(m, r, subkey, sign=1.0, data_args=data_args)
+                r_neg = curve_residual(m, -r, subkey, sign=-1.0, data_args=data_args)
                 return r_pos, r_neg
 
             pos_curved, neg_curved = jax.vmap(curve_pair)(linear_residuals, subkeys)
             return jnp.concatenate([pos_curved, neg_curved], axis=0)
 
-        def update_nonlinear_residuals(m, prev_residuals, subkeys):
+        def update_nonlinear_residuals(m, prev_residuals, subkeys, data_args):
             """Re-curve existing residuals at updated expansion point.
 
             Takes 2*n_samples residuals (first half positive, second half
@@ -1076,47 +1156,47 @@ class Fitter:
             r_neg = prev_residuals[n_half:]
 
             def recurve_pair(r_p, r_n, subkey):
-                new_p = curve_residual(m, r_p, subkey, sign=1.0)
-                new_n = curve_residual(m, r_n, subkey, sign=-1.0)
+                new_p = curve_residual(m, r_p, subkey, sign=1.0, data_args=data_args)
+                new_n = curve_residual(m, r_n, subkey, sign=-1.0, data_args=data_args)
                 return new_p, new_n
 
             new_pos, new_neg = jax.vmap(recurve_pair)(r_pos, r_neg, subkeys)
             return jnp.concatenate([new_pos, new_neg], axis=0)
 
         # --- EVI optimizer: fully JIT'd optimize_kl ---
-        def kl_vg(m, residuals):
+        def kl_vg(m, residuals, data_args):
             """KL value and gradient averaged over samples."""
 
             def single_vg(r):
-                return H_vg(m + r)
+                return H_vg(m + r, data_args)
 
             vals, grads = jax.vmap(single_vg)(residuals)
             return jnp.mean(vals), jnp.mean(grads, axis=0)
 
-        def kl_metric(m, residuals, v):
+        def kl_metric(m, residuals, v, data_args):
             """KL metric-vector product averaged over samples."""
 
             def single_met(r):
-                return metric_vec(m + r, v)
+                return metric_vec(m + r, v, data_args)
 
             return jnp.mean(jax.vmap(single_met)(residuals), axis=0)
 
-        def evi_step(m, subkey, n_samples):
+        def evi_step(m, subkey, n_samples, data_args):
             """One EVI iteration: draw samples + Newton-CG KL minimize.
 
             Returns (m_new, kl_value).
             """
             # Draw linear residual samples + mirror
             sample_keys = jax.random.split(subkey, n_samples)
-            residuals = draw_residuals(m, sample_keys)
+            residuals = draw_residuals(m, sample_keys, data_args)
             residuals = jnp.concatenate([residuals, -residuals], axis=0)
 
             # Newton-CG KL minimization (same path as evi_step_full)
             def _evi_kl_vg(m_cur):
-                return kl_vg(m_cur, residuals)
+                return kl_vg(m_cur, residuals, data_args)
 
             def _evi_kl_hessp(m_cur, v):
-                return kl_metric(m_cur, residuals, v)
+                return kl_metric(m_cur, residuals, v, data_args)
 
             m_opt, kl_val = _newton_cg_flat(
                 _evi_kl_vg,
@@ -1129,7 +1209,7 @@ class Fitter:
             )
             return m_opt, kl_val
 
-        def run_evi(init_pos, key, n_iterations, n_samples, kl_rtol):
+        def run_evi(init_pos, key, data_args, n_iterations, n_samples, kl_rtol):
             """Run EVI with automatic convergence detection.
 
             Stops early when the relative KL change between iterations
@@ -1146,7 +1226,7 @@ class Fitter:
             def body_fn(state):
                 m, prev_kl, i, converged = state
                 subkey = jax.lax.dynamic_index_in_dim(keys, i, keepdims=False)
-                m_new, kl_val = evi_step(m, subkey, n_samples)
+                m_new, kl_val = evi_step(m, subkey, n_samples, data_args)
                 # Relative KL change
                 rel_change = jnp.abs(prev_kl - kl_val) / (jnp.abs(prev_kl) + 1e-10)
                 # Converge if relative change < rtol and at least 5 iterations done
@@ -1154,7 +1234,7 @@ class Fitter:
                 return (m_new, kl_val, i + 1, converged)
 
             # First iteration (no convergence check)
-            m0, kl0 = evi_step(init_pos, keys[0], n_samples)
+            m0, kl0 = evi_step(init_pos, keys[0], n_samples, data_args)
             init_state = (m0, kl0, jnp.int32(1), jnp.bool_(False))
 
             m_final, _kl_final, n_iters, _ = jax.lax.while_loop(cond_fn, body_fn, init_state)
@@ -1173,17 +1253,17 @@ class Fitter:
         SAMPLE_NONLINEAR_RESAMPLE = jnp.int32(1)
         SAMPLE_NONLINEAR_UPDATE = jnp.int32(2)
 
-        def _kl_minimize(m, residuals, constants_mask):
+        def _kl_minimize(m, residuals, constants_mask, data_args):
             """Newton-CG KL minimization with constants mask."""
 
             def _masked_kl_vg(m_cur, res):
-                val, grad = kl_vg(m_cur, res)
+                val, grad = kl_vg(m_cur, res, data_args)
                 grad = jnp.where(constants_mask, 0.0, grad)
                 return val, grad
 
             def _masked_kl_metric(m_cur, res, v):
                 v_masked = jnp.where(constants_mask, 0.0, v)
-                mv = kl_metric(m_cur, res, v_masked)
+                mv = kl_metric(m_cur, res, v_masked, data_args)
                 return jnp.where(constants_mask, 0.0, mv)
 
             def _fun_and_grad(m_cur):
@@ -1213,6 +1293,7 @@ class Fitter:
             prev_keys,
             constants_mask,
             pe_mask,
+            data_args,
             iteration=0,
         ):
             """One geoVI iteration — ``sample_mode`` must be a static string.
@@ -1230,6 +1311,8 @@ class Fitter:
                 ``"nonlinear_resample"`` — fresh geoVI samples (standard geoVI)
                 ``"nonlinear_sample"`` — reuse keys + curve (deterministic geoVI)
                 ``"nonlinear_update"`` — re-curve existing residuals at new m
+            data_args : dict
+                Data-dependent arguments (data, noise, noise_inv, etc.).
 
             Returns
             -------
@@ -1251,28 +1334,28 @@ class Fitter:
                 do_resample = (iteration == 0) | (iteration % _RESAMPLE_EVERY == 0)
 
                 def _do_resample(_):
-                    return draw_nonlinear_residuals(m, sample_keys)
+                    return draw_nonlinear_residuals(m, sample_keys, data_args)
 
                 def _do_update(_):
-                    return update_nonlinear_residuals(m, prev_residuals, prev_keys)
+                    return update_nonlinear_residuals(m, prev_residuals, prev_keys, data_args)
 
                 residuals = jax.lax.cond(do_resample, _do_resample, _do_update, None)
             elif sample_mode in ("nonlinear_resample", "nonlinear_sample"):
-                residuals = draw_nonlinear_residuals(m, sample_keys)
+                residuals = draw_nonlinear_residuals(m, sample_keys, data_args)
             elif sample_mode == "nonlinear_update":
-                residuals = update_nonlinear_residuals(m, prev_residuals, sample_keys)
+                residuals = update_nonlinear_residuals(m, prev_residuals, sample_keys, data_args)
             else:  # linear_resample, linear_sample
-                res = draw_residuals(m, sample_keys)
+                res = draw_residuals(m, sample_keys, data_args)
                 residuals = jnp.concatenate([res, -res], axis=0)
 
             # Apply point estimates mask
             residuals = residuals * pe_mask[None, :]
 
             # KL minimization
-            m_opt, kl_val = _kl_minimize(m, residuals, constants_mask)
+            m_opt, kl_val = _kl_minimize(m, residuals, constants_mask, data_args)
             return m_opt, kl_val, residuals, sample_keys
 
-        def run_evi_geovi(init_pos, key, n_iterations, n_samples, kl_rtol, sample_mode):
+        def run_evi_geovi(init_pos, key, data_args, n_iterations, n_samples, kl_rtol, sample_mode):
             """Run geoVI with automatic convergence detection.
 
             ``sample_mode`` is a **static** string — JAX compiles a
@@ -1307,6 +1390,7 @@ class Fitter:
                     prev_k,
                     no_constants,
                     all_sampled,
+                    data_args,
                     iteration=i,
                 )
                 rel_change = jnp.abs(prev_kl - kl_val) / (jnp.abs(prev_kl) + 1e-10)
@@ -1323,6 +1407,7 @@ class Fitter:
                 dummy_keys,
                 no_constants,
                 all_sampled,
+                data_args,
             )
             init_state = (
                 m0,
@@ -1377,7 +1462,9 @@ class Fitter:
                     _nifty_domain["psd_xi"] = jft.ShapeWithDtype((self.spec.n_grid,))
                 _nifty_model = jft.Model(jax.jit(signal_response), domain=_nifty_domain)
                 if not use_variable_noise:
-                    nifty_likelihood = jft.Gaussian(data, noise_inv).amend(_nifty_model)
+                    nifty_likelihood = jft.Gaussian(self.data, self._data_args["noise_inv"]).amend(
+                        _nifty_model
+                    )
                 # Build OptimizeVI with vmap and JIT
                 # (this pre-compiles all the internal functions)
                 nifty_opt_vi = OptimizeVI(
@@ -1429,19 +1516,24 @@ class Fitter:
             pos_d = converged.tree if hasattr(converged, "tree") else dict(converged)
             return flatten(pos_d), samples
 
-        # Compile the core functions with dummy data
+        # Compile the core functions with dummy data.
+        # data_args is passed as argument (not closed over) to all JIT'd
+        # functions so the same compiled XLA program can be reused with
+        # different data of the same shape.
         dummy_pos = flatten(pos_dict)
         dummy_keys = jax.random.split(jax.random.PRNGKey(0), 2)
+        dummy_data_args = self._data_args
 
         # Pre-compile posterior sampler
         draw_samples_jit = jax.jit(draw_residuals)
-        _ = draw_samples_jit(dummy_pos, dummy_keys)
+        _ = draw_samples_jit(dummy_pos, dummy_keys, dummy_data_args)
 
         # Pre-compile native optimizer (for n_iterations=10, n_samples=3)
         run_evi_jit = jax.jit(run_evi, static_argnames=("n_iterations", "n_samples"))
         _ = run_evi_jit(
             dummy_pos,
             jax.random.PRNGKey(0),
+            dummy_data_args,
             n_iterations=2,
             n_samples=2,
             kl_rtol=1e-2,
@@ -1527,14 +1619,14 @@ class Fitter:
         ... )
         >>> result = fitter.run("native_geovi")  # instant
         """
+        dummy_pos = self._initialize_unbounded(jax.random.PRNGKey(0))
         if self._jit_sampler is None:
-            dummy_pos = self._initialize_unbounded(jax.random.PRNGKey(0))
-            self._jit_sampler = self._build_jit_engine(dummy_pos)
+            self._jit_sampler = self._get_or_build_engine(dummy_pos)
 
         engine = self._jit_sampler
         flatten = engine["flatten"]
-        dummy_pos = self._initialize_unbounded(jax.random.PRNGKey(0))
         pos_flat = flatten(dummy_pos)
+        data_args = self._data_args
 
         if verbose:
             print(
@@ -1550,6 +1642,7 @@ class Fitter:
             engine["run_evi_geovi"](
                 pos_flat,
                 jax.random.PRNGKey(0),
+                data_args,
                 n_iterations=n_iterations,
                 n_samples=n_samples,
                 kl_rtol=0.0,
@@ -1565,6 +1658,7 @@ class Fitter:
         engine["run_evi"](
             pos_flat,
             jax.random.PRNGKey(0),
+            data_args,
             n_iterations=n_iterations,
             n_samples=n_samples,
             kl_rtol=1e-2,
@@ -1581,7 +1675,7 @@ class Fitter:
             )
         t0 = time.time()
         draw_keys = jax.random.split(jax.random.PRNGKey(0), n_posterior_samples)
-        engine["draw_samples"](pos_flat, draw_keys)
+        engine["draw_samples"](pos_flat, draw_keys, data_args)
         if verbose:
             print(f" {time.time() - t0:.1f}s")
 
@@ -1603,13 +1697,13 @@ class Fitter:
             print(f"  Drawing {n_samples} posterior samples (JIT CG)...")
 
         if self._jit_sampler is None:
-            self._jit_sampler = self._build_jit_engine(pos_dict)
+            self._jit_sampler = self._get_or_build_engine(pos_dict)
 
         engine = self._jit_sampler
         flatten, unflatten = engine["flatten"], engine["unflatten"]
         pos_flat = flatten(pos_dict)
         draw_keys = jax.random.split(key, n_samples)
-        residuals_flat = engine["draw_samples"](pos_flat, draw_keys)
+        residuals_flat = engine["draw_samples"](pos_flat, draw_keys, self._data_args)
 
         for i in range(n_samples):
             res = unflatten(residuals_flat[i])
@@ -1634,11 +1728,12 @@ class Fitter:
             print(f"  Drawing {n_samples} nonlinear posterior samples (JIT geoVI)...")
 
         if self._jit_sampler is None:
-            self._jit_sampler = self._build_jit_engine(pos_dict)
+            self._jit_sampler = self._get_or_build_engine(pos_dict)
 
         engine = self._jit_sampler
         flatten, unflatten = engine["flatten"], engine["unflatten"]
         pos_flat = flatten(pos_dict)
+        data_args = self._data_args
 
         # Draw in batches to avoid OOM for large n_samples
         batch_size = min(n_samples, 50)
@@ -1648,7 +1743,7 @@ class Fitter:
             batch_end = min(batch_start + batch_size, n_samples)
             batch_keys = draw_keys[batch_start:batch_end]
             # draw_nonlinear_samples returns (2*n, D): first n positive, last n mirrors
-            residuals_flat = engine["draw_nonlinear_samples"](pos_flat, batch_keys)
+            residuals_flat = engine["draw_nonlinear_samples"](pos_flat, batch_keys, data_args)
             n_batch = batch_end - batch_start
             # Use only the first n (positive) samples, not the mirrors
             for i in range(n_batch):
@@ -1832,13 +1927,14 @@ class Fitter:
         if init_from is None:
             init_from = "auto"
 
+        dummy_pos = self._initialize_unbounded(jax.random.PRNGKey(0))
         if self._jit_sampler is None:
-            dummy_pos = self._initialize_unbounded(jax.random.PRNGKey(0))
-            self._jit_sampler = self._build_jit_engine(dummy_pos)
+            self._jit_sampler = self._get_or_build_engine(dummy_pos)
 
         engine = self._jit_sampler
         flatten = engine["flatten"]
         unflatten = engine["unflatten"]
+        data_args = self._data_args
 
         n_total = len(self._free_names) + (self.spec.n_grid if self.spec.stochastic else 0)
         n_seeds = max(1, n_seeds)
@@ -1947,6 +2043,7 @@ class Fitter:
                     return engine["run_evi_geovi"](
                         pos,
                         k,
+                        data_args,
                         n_iterations=n_iterations,
                         n_samples=n_samples,
                         kl_rtol=kl_rtol,
@@ -1960,6 +2057,7 @@ class Fitter:
                     return engine["run_evi"](
                         pos,
                         k,
+                        data_args,
                         n_iterations=n_iterations,
                         n_samples=n_samples,
                         kl_rtol=kl_rtol,
@@ -2013,6 +2111,7 @@ class Fitter:
                     converged_flat, n_iters = engine["run_evi_geovi"](
                         pos_flat,
                         opt_key,
+                        data_args,
                         n_iterations=n_iterations,
                         n_samples=n_samples,
                         kl_rtol=kl_rtol,
@@ -2022,6 +2121,7 @@ class Fitter:
                     converged_flat, n_iters = engine["run_evi"](
                         pos_flat,
                         opt_key,
+                        data_args,
                         n_iterations=n_iterations,
                         n_samples=n_samples,
                         kl_rtol=kl_rtol,
@@ -2101,7 +2201,7 @@ class Fitter:
                     if verbose:
                         print(f"  Drawing {n_posterior_samples} posterior samples (JIT CG)...")
                     draw_keys = jax.random.split(draw_key, n_posterior_samples)
-                    residuals_flat = engine["draw_samples"](converged_flat, draw_keys)
+                    residuals_flat = engine["draw_samples"](converged_flat, draw_keys, data_args)
                     for i in range(n_posterior_samples):
                         res = unflatten(residuals_flat[i])
                         combined = {k: converged_dict[k] + res[k] for k in converged_dict}
@@ -2520,7 +2620,7 @@ class Fitter:
             init_params = self._initialize_unbounded(key)
 
         if self._jit_sampler is None:
-            self._jit_sampler = self._build_jit_engine(init_params)
+            self._jit_sampler = self._get_or_build_engine(init_params)
 
         engine = self._jit_sampler
         flatten = engine["flatten"]

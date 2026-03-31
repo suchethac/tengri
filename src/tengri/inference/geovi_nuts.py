@@ -63,7 +63,7 @@ class GeoVITransform(NamedTuple):
     hamiltonian: object  # callable
 
 
-def extract_transform(engine, m_star_flat):
+def extract_transform(engine, m_star_flat, data_args):
     """Extract a GeoVITransform from the JIT engine and a converged position.
 
     Parameters
@@ -72,22 +72,35 @@ def extract_transform(engine, m_star_flat):
         The dict returned by ``Fitter._build_jit_engine()``.
     m_star_flat : array
         Converged expansion point (flat array in standardized coordinates).
+    data_args : dict
+        Data-dependent values (data, noise_inv, sqrt_noise_inv, etc.).
+        Bound into the returned transform's callables so that downstream
+        callers (g_forward, g_inverse, build_log_density) do not need
+        to carry data_args themselves.
 
     Returns
     -------
     GeoVITransform
     """
-    trafo_at_m = engine["transformation_flat"](m_star_flat)
+    # Bind data_args into the engine primitives so the GeoVITransform
+    # callables have the old (xi, v) signatures.
+    _trafo = engine["transformation_flat"]
+    _left = engine["left_sqrt_metric_flat"]
+    _right = engine["right_sqrt_metric_flat"]
+    _met = engine["metric_vec"]
+    _ham = engine["hamiltonian"]
+
+    trafo_at_m = _trafo(m_star_flat, data_args)
     return GeoVITransform(
         m_star=m_star_flat,
         trafo_at_m=trafo_at_m,
         d_total=engine["d_total"],
-        transformation_flat=engine["transformation_flat"],
-        left_sqrt_metric=engine["left_sqrt_metric_flat"],
-        right_sqrt_metric=engine["right_sqrt_metric_flat"],
-        metric_vec=engine["metric_vec"],
+        transformation_flat=lambda pos: _trafo(pos, data_args),
+        left_sqrt_metric=lambda pos, v: _left(pos, v, data_args),
+        right_sqrt_metric=lambda pos, v: _right(pos, v, data_args),
+        metric_vec=lambda xi, v: _met(xi, v, data_args),
         cg_solve=engine["cg_solve"],
-        hamiltonian=engine["hamiltonian"],
+        hamiltonian=lambda xi: _ham(xi, data_args),
     )
 
 

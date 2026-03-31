@@ -77,7 +77,14 @@ def engine(fitter_and_mock):
     """Pre-compiled JIT engine."""
     fitter = fitter_and_mock[0]
     dummy_pos = fitter._initialize_unbounded(jax.random.PRNGKey(0))
-    return fitter._build_jit_engine(dummy_pos)
+    return fitter._get_or_build_engine(dummy_pos)
+
+
+@pytest.fixture(scope="module")
+def data_args(fitter_and_mock):
+    """Data-dependent arguments for JIT engine calls."""
+    fitter = fitter_and_mock[0]
+    return fitter._data_args
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +351,7 @@ class TestOptimizationSchedule:
 class TestNativeGeoVISchedule:
     """Verify native engine uses resample+update schedule (same as fast path)."""
 
-    def test_geovi_mode_stable_convergence(self, engine):
+    def test_geovi_mode_stable_convergence(self, engine, data_args):
         """The 'geovi' sample_mode should not oscillate wildly."""
         flatten = engine["flatten"]
         d_total = engine["d_total"]
@@ -355,6 +362,7 @@ class TestNativeGeoVISchedule:
         m, _iters = engine["run_evi_geovi"](
             pos_flat,
             jax.random.PRNGKey(42),
+            data_args,
             n_iterations=8,
             n_samples=2,
             kl_rtol=0.0,
