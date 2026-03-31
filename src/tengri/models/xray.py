@@ -5,6 +5,10 @@ Predicts X-ray SED from three components:
 2. AGN corona — power-law with exponential cutoff
 3. Hot gas — thermal bremsstrahlung (optional)
 
+Self-consistent disc-corona coupling: ``xray_agn_corona_from_disc``
+derives alpha_ox from the disc UV luminosity (Just+2007), then builds
+an anisotropic X-ray power law (Yang+2022).
+
 Based on CIGALE's Yang+2020 and Lopez+2024 modules.
 
 All pure JAX, JIT-compatible.
@@ -15,6 +19,8 @@ References
 - Gilfanov 2004, MNRAS, 349, 146 (LMXB-mass relation)
 - Yang et al. 2020 (CIGALE X-ray module)
 - Lopez et al. 2024 (updated IR-to-X-ray relation)
+- Just et al. 2007, ApJ, 665, 1004 (alpha_ox-L_2500 relation)
+- Yang et al. 2022, ApJ, 927, 42 (X-ray anisotropy)
 """
 
 import jax.numpy as jnp
@@ -91,6 +97,134 @@ def xray_xrb(
     # X-ray only (E > 0.1 keV = lambda < 124 A)
     xray_mask = wavelength < 124.0
     return jnp.where(xray_mask, L_nu_hmxb + L_nu_lmxb, 0.0)
+
+
+def alpha_ox_from_l2500(l_2500_erg_hz: float) -> float:
+    """Compute alpha_ox from monochromatic 2500 A luminosity (Just+2007).
+
+    Parameters
+    ----------
+    l_2500_erg_hz : float
+        Monochromatic luminosity density at 2500 A in erg/s/Hz.
+
+    Returns
+    -------
+    float
+        alpha_ox (typically between -2.0 and -1.0).
+
+    References
+    ----------
+    Just et al. 2007, ApJ, 665, 1004, Eq. 3.
+    """
+    return -0.137 * jnp.log10(l_2500_erg_hz) + 2.638
+
+
+def xray_anisotropy(
+    l_x: jnp.ndarray,
+    cos_inc: float,
+    a1: float = 0.5,
+    a2: float = 0.0,
+) -> jnp.ndarray:
+    """Apply viewing-angle anisotropy to X-ray luminosity (Yang+2022).
+
+    The correction factor is normalised so that face-on (cos_inc=1)
+    gives maximum luminosity:
+
+      f(theta) = a1 * cos(theta) + a2 * cos^2(theta) + (1 - a1 - a2)
+
+    Parameters
+    ----------
+    l_x : array
+        Isotropic (face-on) X-ray luminosity spectrum.
+    cos_inc : float
+        Cosine of inclination angle (1 = face-on, 0 = edge-on).
+    a1 : float
+        Linear anisotropy coefficient. Default 0.5.
+    a2 : float
+        Quadratic anisotropy coefficient. Default 0.0.
+
+    Returns
+    -------
+    array
+        Anisotropy-corrected L_X, same shape as ``l_x``.
+
+    References
+    ----------
+    Yang et al. 2022, ApJ, 927, 42.
+    """
+    factor = a1 * cos_inc + a2 * cos_inc**2 + (1.0 - a1 - a2)
+    return l_x * factor
+
+
+def xray_agn_corona_from_disc(
+    wavelength: jnp.ndarray,
+    l_2500_erg_hz: float,
+    cos_inc: float = 1.0,
+    delta_alpha_ox: float = 0.0,
+    gamma: float = 1.8,
+    E_cut: float = 300.0,
+    apply_anisotropy: bool = True,
+    a1: float = 0.5,
+    a2: float = 0.0,
+) -> jnp.ndarray:
+    """Self-consistent AGN corona emission derived from disc UV luminosity.
+
+    Computes alpha_ox from L_2500 via the Just+2007 relation, derives
+    L_2keV, builds the X-ray power-law spectrum, and optionally applies
+    viewing-angle anisotropy (Yang+2022).
+
+    Parameters
+    ----------
+    wavelength : array (n_wave,)
+        Wavelength in Angstrom.
+    l_2500_erg_hz : float
+        Monochromatic luminosity density at 2500 A (erg/s/Hz).
+    cos_inc : float
+        Cosine of inclination (1 = face-on). Default 1.0.
+    delta_alpha_ox : float
+        Additive offset to the Just+2007 alpha_ox. Default 0.0.
+    gamma : float
+        Photon index. Default 1.8. Range: 1.4-2.4.
+    E_cut : float
+        Exponential cutoff energy (keV). Default 300.
+    apply_anisotropy : bool
+        Whether to apply Yang+2022 viewing-angle correction.
+    a1 : float
+        Linear anisotropy coefficient. Default 0.5.
+    a2 : float
+        Quadratic anisotropy coefficient. Default 0.0.
+
+    Returns
+    -------
+    array (n_wave,)
+        L_nu in Lsun/Hz.
+    """
+    # alpha_ox from disc UV luminosity
+    alpha_ox = alpha_ox_from_l2500(l_2500_erg_hz) + delta_alpha_ox
+
+    # Derive L_2keV from alpha_ox definition:
+    #   alpha_ox = 0.384 * log10(L_2keV / L_2500)
+    #   => L_2keV = L_2500 * 10^(alpha_ox / 0.384)
+    l_2500_lsun_hz = l_2500_erg_hz / _LSUN
+    l_2kev_lsun_hz = l_2500_lsun_hz * 10.0 ** (alpha_ox / 0.384)
+
+    # Build power-law spectrum with exponential cutoff
+    nu = _C_AA / wavelength
+    E_keV = _H_PLANCK * nu / 1.6022e-9  # convert to keV
+    E_ref = 2.0  # keV
+    spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
+
+    # Normalise at 2 keV
+    l_nu = l_2kev_lsun_hz / (_KEV_TO_HZ * E_ref) * spec
+
+    # X-ray mask (E > 0.1 keV => lambda < 124 A)
+    l_nu = jnp.where(wavelength < 124.0, l_nu, 0.0)
+
+    # Optional anisotropy correction
+    if apply_anisotropy:
+        l_nu = xray_anisotropy(l_nu, cos_inc, a1=a1, a2=a2)
+
+    return l_nu
 
 
 def xray_agn_corona(

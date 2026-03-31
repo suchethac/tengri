@@ -34,7 +34,14 @@ References
 """
 
 from tengri.models.agn.blr import blr_emission
-from tengri.models.agn.disc import adaf_disc, kubota_done_disc, multicolor_disc, powerlaw_disc
+from tengri.models.agn.disc import (
+    adaf_disc,
+    beloborodov_gamma_hot,
+    compute_l2500,
+    kubota_done_disc,
+    multicolor_disc,
+    powerlaw_disc,
+)
 from tengri.models.agn.nlr import nlr_emission
 
 # QSOgen must be imported after unified (needs register_agn_model)
@@ -56,7 +63,9 @@ __all__ = [
     "AGN_MODELS",
     "adaf_agn",
     "adaf_disc",
+    "beloborodov_gamma_hot",
     "blr_emission",
+    "compute_l2500",
     "create_skirtor_from_grid",
     "get_agn_model",
     # Disc models

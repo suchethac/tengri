@@ -28,6 +28,7 @@ References
 - Mahadevan 1997, ApJ, 477, 585 (ADAF spectra)
 - Nemmen et al. 2014, MNRAS, 438, 2804 (ADAF modelling)
 - Lopez et al. 2024 (ADAF + truncated disc for LLAGN)
+- Beloborodov 1999, ApJ, 510, L123 (self-consistent Gamma_hot)
 """
 
 import jax
@@ -404,6 +405,64 @@ def _hot_corona_lnu(
     return l_hot_erg * shape / integral_safe
 
 
+def beloborodov_gamma_hot(
+    l_diss_hot: float,
+    l_seed: float,
+) -> float:
+    """Self-consistent hard X-ray photon index (Beloborodov 1999).
+
+    Derives the spectral index of the hot corona from the ratio of
+    dissipated luminosity to seed photon luminosity:
+
+        Gamma_hot = (7/3) * (L_diss / L_seed)^{-0.1}
+
+    Parameters
+    ----------
+    l_diss_hot : float
+        Luminosity dissipated in the hot corona [any units].
+    l_seed : float
+        Soft photon luminosity intercepted by the corona [same units].
+
+    Returns
+    -------
+    float
+        Hard X-ray photon index, clipped to [1.4, 3.0].
+
+    References
+    ----------
+    - Beloborodov 1999, ApJ, 510, L123
+    - Kubota & Done 2018, MNRAS, 480, 1247
+    """
+    ratio = jnp.clip(l_diss_hot / jnp.maximum(l_seed, 1e-30), 1e-3, 1e3)
+    gamma = (7.0 / 3.0) * ratio ** (-0.1)
+    return jnp.clip(gamma, 1.4, 3.0)
+
+
+def compute_l2500(
+    wavelength: jnp.ndarray,
+    l_nu: jnp.ndarray,
+) -> float:
+    """Extract monochromatic luminosity at rest-frame 2500 Angstrom.
+
+    Linearly interpolates L_nu onto 2500 A. Useful for computing
+    alpha_ox and other AGN diagnostics.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Rest-frame wavelength [Angstrom], need not be sorted.
+    l_nu : array, shape (n_wave,)
+        Specific luminosity [Lsun Hz^-1].
+
+    Returns
+    -------
+    float
+        L_nu at 2500 A [Lsun Hz^-1].
+    """
+    sort_idx = jnp.argsort(wavelength)
+    return jnp.interp(2500.0, wavelength[sort_idx], l_nu[sort_idx])
+
+
 def kubota_done_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
@@ -419,6 +478,7 @@ def kubota_done_disc(
     agn_kt_hot: float = 100.0,
     agn_r_warm_ratio: float = 2.0,
     n_radii: int = 50,
+    agn_self_consistent_gamma: bool = False,
     **_kwargs,
 ) -> jnp.ndarray:
     """Kubota & Done (2018) 3-zone accretion disc.
@@ -470,6 +530,10 @@ def kubota_done_disc(
         R_warm / R_hot ratio. Default 2.0.
     n_radii : int
         Number of radial integration points per zone. Default 50.
+    agn_self_consistent_gamma : bool
+        If True, derive ``agn_gamma_hard`` self-consistently from the
+        Beloborodov (1999) relation using the corona energy balance
+        instead of using the input value. Default False.
 
     Returns
     -------
@@ -580,7 +644,17 @@ def kubota_done_disc(
     # ===============================================================
     # Zone 3: Hot corona (R_ISCO < r < R_hot)
     # ===============================================================
-    l_nu_hot = _hot_corona_lnu(nu, l_hot_erg, agn_gamma_hard, kt_hot_erg)
+    # Self-consistent Gamma_hot (Beloborodov 1999): derive from the
+    # ratio of corona dissipation to intercepted seed luminosity.
+    # L_seed ~ bolometric luminosity of the warm zone (Zone 2).
+    sort_idx_warm = jnp.argsort(nu)
+    l_warm_bol = jnp.trapezoid(l_nu_warm[sort_idx_warm], nu[sort_idx_warm])
+    l_warm_bol_safe = jnp.maximum(jnp.abs(l_warm_bol), 1e-100)
+    gamma_hard_sc = beloborodov_gamma_hot(l_hot_erg, l_warm_bol_safe)
+
+    # Use self-consistent value or the user-supplied value
+    gamma_hard_eff = jnp.where(agn_self_consistent_gamma, gamma_hard_sc, agn_gamma_hard)
+    l_nu_hot = _hot_corona_lnu(nu, l_hot_erg, gamma_hard_eff, kt_hot_erg)
 
     # ===============================================================
     # Combine and normalize
@@ -715,17 +789,13 @@ def adaf_disc(
     nu_peak_sync = 1e12 * (10.0**agn_log_mbh / 1e8) ** (-0.5)
     # Synchrotron spectrum: nu^(1/3) * exp(-nu/3*nu_peak)
     nu_ratio_sync = nu / jnp.maximum(nu_peak_sync, 1.0)
-    sync_shape = nu_ratio_sync ** (1.0 / 3.0) * jnp.exp(
-        -jnp.clip(nu_ratio_sync / 3.0, 0.0, 500.0)
-    )
+    sync_shape = nu_ratio_sync ** (1.0 / 3.0) * jnp.exp(-jnp.clip(nu_ratio_sync / 3.0, 0.0, 500.0))
 
     # --- Bremsstrahlung component ---
     # Cutoff at kT_e/h
     nu_brem = _K_BOLTZ * t_e / _H_PLANCK
     nu_ratio_brem = nu / jnp.maximum(nu_brem, 1.0)
-    brem_shape = nu_ratio_brem ** (-0.5) * jnp.exp(
-        -jnp.clip(nu_ratio_brem, 0.0, 500.0)
-    )
+    brem_shape = nu_ratio_brem ** (-0.5) * jnp.exp(-jnp.clip(nu_ratio_brem, 0.0, 500.0))
 
     # --- Inverse Compton component ---
     # Power-law with index -(p-1)/2 where p ~ 2.5 for ADAF
