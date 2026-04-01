@@ -1037,6 +1037,7 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
         tmpl_wave_raw = np.array(data["wavelength_aa"])
         alpha_grid_raw = np.array(data["alpha_grid"])
         templates_raw = np.array(data["templates_sf"])
+        already_lnu = False
     else:
         import h5py as _h5py
 
@@ -1050,6 +1051,10 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
                 tmpl_wave_raw = np.array(f["wavelength_aa"][:])
                 alpha_grid_raw = np.array(f["alpha_grid"][:])
                 templates_raw = np.array(f["templates_sf"][:])
+            # Check if already in L_nu normalized form
+            already_lnu = (
+                f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
+            )
 
     tmpl_wave = jnp.array(tmpl_wave_raw)
     alpha_grid = jnp.array(alpha_grid_raw)
@@ -1057,20 +1062,24 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
     if templates_raw.shape[0] == len(tmpl_wave) and templates_raw.shape[1] == len(alpha_grid):
         templates_raw = templates_raw.T  # -> (n_alpha, n_wave)
 
-    # Convert from L_lambda to L_nu: L_nu = L_lambda * lambda^2 / c
-    wave_cm = np.array(tmpl_wave) * _AA_TO_CM
-    nu = _C_CGS / wave_cm  # descending for ascending wavelengths
+    if already_lnu:
+        # Templates are pre-normalized in L_nu convention — use directly
+        templates = jnp.array(templates_raw)
+    else:
+        # Convert from L_lambda to L_nu: L_nu = L_lambda * lambda^2 / c
+        wave_cm = np.array(tmpl_wave) * _AA_TO_CM
+        nu = _C_CGS / wave_cm  # descending for ascending wavelengths
 
-    templates_lnu = templates_raw * (wave_cm**2)[None, :] / _C_CGS
+        templates_lnu = templates_raw * (wave_cm**2)[None, :] / _C_CGS
 
-    # Normalize each template so that integral(L_nu, dnu) = 1
-    # nu is descending, so negate for positive integral
-    for i in range(templates_lnu.shape[0]):
-        integral = -np.trapezoid(templates_lnu[i], nu)
-        if integral > 0:
-            templates_lnu[i] /= integral
+        # Normalize each template so that integral(L_nu, dnu) = 1
+        # nu is descending, so negate for positive integral
+        for i in range(templates_lnu.shape[0]):
+            integral = -np.trapezoid(templates_lnu[i], nu)
+            if integral > 0:
+                templates_lnu[i] /= integral
 
-    templates = jnp.array(templates_lnu)  # (n_alpha, n_wave)
+        templates = jnp.array(templates_lnu)  # (n_alpha, n_wave)
 
     def dale2014_tabulated(
         wavelength_aa: jnp.ndarray,
@@ -1737,6 +1746,8 @@ def load_astrodust_templates(filepath: str) -> dict:
     """
     import numpy as np
 
+    already_lnu = False
+
     if filepath.endswith(".npz"):
         data = np.load(filepath)
         wavs_um = np.array(data["wavelength_um"])
@@ -1744,41 +1755,49 @@ def load_astrodust_templates(filepath: str) -> dict:
         powerlaw = np.array(data["spectra_pdr"])
         umin_grid = np.array(data["umin_grid"])
         qpah_grid = np.array(data["qpah_grid"])
+        wavs_aa = wavs_um * 1.0e4
     else:
         import h5py as _h5py
 
         with _h5py.File(filepath, "r") as f:
-            # Support both flat (legacy) and nested v2 HDF5 layout
-            if "grid" in f:
-                # v2 layout: grid/{qpah,umin}, spectra/{single_u,pdr}, wavelength
-                wavs_um = np.array(f["wavelength"][:])
+            already_lnu = (
+                f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
+            )
+            if "wavelength_aa" in f:
+                # Standardized HDF5 (already Angstrom + L_nu normalized)
+                wavs_aa = np.array(f["wavelength_aa"][:])
+                single_u = np.array(f["single_u"][:])
+                powerlaw = np.array(f["powerlaw"][:])
+                umin_grid = np.array(f["umin_grid"][:])
+                qpah_grid = np.array(f["qpah_grid"][:])
+            elif "grid" in f:
+                # v2 layout
+                wavs_aa = np.array(f["wavelength"][:]) * 1.0e4
                 single_u = np.array(f["spectra/single_u"][:])
                 powerlaw = np.array(f["spectra/pdr"][:])
                 umin_grid = np.array(f["grid/umin"][:])
                 qpah_grid = np.array(f["grid/qpah"][:])
             else:
-                # Legacy flat layout
-                wavs_um = np.array(f["wavelength_um"][:])
+                wavs_aa = np.array(f["wavelength_um"][:]) * 1.0e4
                 single_u = np.array(f["spectra_single"][:])
                 powerlaw = np.array(f["spectra_pdr"][:])
                 umin_grid = np.array(f["umin_grid"][:])
                 qpah_grid = np.array(f["qpah_grid"][:])
 
-    wavs_aa = wavs_um * 1.0e4  # microns -> Angstrom
+    if not already_lnu:
+        # Convert to L_nu: L_nu = L_lambda * lambda^2 / c
+        wave_cm = wavs_aa * _AA_TO_CM
+        nu = _C_CGS / wave_cm  # descending
 
-    # Convert to L_nu: L_nu = L_lambda * lambda^2 / c
-    wave_cm = wavs_aa * _AA_TO_CM
-    nu = _C_CGS / wave_cm  # descending
-
-    for arr in (single_u, powerlaw):
-        for i in range(arr.shape[0]):
-            for j in range(arr.shape[1]):
-                lnu = arr[i, j] * (wave_cm**2) / _C_CGS
-                integral = -np.trapezoid(lnu, nu)
-                if integral > 0:
-                    arr[i, j] = lnu / integral
-                else:
-                    arr[i, j] = lnu
+        for arr in (single_u, powerlaw):
+            for i in range(arr.shape[0]):
+                for j in range(arr.shape[1]):
+                    lnu = arr[i, j] * (wave_cm**2) / _C_CGS
+                    integral = -np.trapezoid(lnu, nu)
+                    if integral > 0:
+                        arr[i, j] = lnu / integral
+                    else:
+                        arr[i, j] = lnu
 
     return {
         "wavelength_aa": jnp.array(wavs_aa),
@@ -2084,44 +2103,52 @@ def load_bosa_templates(filepath: str) -> dict:
     """
     import numpy as np
 
+    already_lnu = False
+
     if filepath.endswith(".npz"):
         data = np.load(filepath)
         wavs_um = np.array(data["wavelength_um"])
         spectra = np.array(data["spectra"])
         log_ltir_grid = np.array(data["log_ltir_grid"])
         log_ssfr_grid = np.array(data["log_ssfr_grid"])
+        wavs_aa = wavs_um * 1.0e4
     else:
         import h5py as _h5py
 
         with _h5py.File(filepath, "r") as f:
-            if "grid" in f and "spectra" in f:
-                # v2 layout: grid/{log_ltir,log_ssfr}, spectra/{templates},
-                # wavelength (micron)
-                wavs_um = np.array(f["wavelength"][:])
+            already_lnu = (
+                f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
+            )
+            if "wavelength_aa" in f:
+                # Standardized HDF5
+                wavs_aa = np.array(f["wavelength_aa"][:])
+                spectra = np.array(f["spectra"][:])
+                log_ltir_grid = np.array(f["log_ltir_grid"][:])
+                log_ssfr_grid = np.array(f["log_ssfr_grid"][:])
+            elif "grid" in f:
+                wavs_aa = np.array(f["wavelength"][:]) * 1.0e4
                 spectra = np.array(f["spectra"]["templates"][:])
                 log_ltir_grid = np.array(f["grid"]["log_ltir"][:])
                 log_ssfr_grid = np.array(f["grid"]["log_ssfr"][:])
             else:
-                # Legacy flat layout
-                wavs_um = np.array(f["wavelength_um"][:])
+                wavs_aa = np.array(f["wavelength_um"][:]) * 1.0e4
                 spectra = np.array(f["spectra"][:])
                 log_ltir_grid = np.array(f["log_ltir_grid"][:])
                 log_ssfr_grid = np.array(f["log_ssfr_grid"][:])
 
-    wavs_aa = wavs_um * 1.0e4  # microns -> Angstrom
+    if not already_lnu:
+        # Convert to L_nu and normalize
+        wave_cm = wavs_aa * _AA_TO_CM
+        nu = _C_CGS / wave_cm
 
-    # Convert to L_nu and normalize
-    wave_cm = wavs_aa * _AA_TO_CM
-    nu = _C_CGS / wave_cm
-
-    for i in range(spectra.shape[0]):
-        for j in range(spectra.shape[1]):
-            lnu = spectra[i, j] * (wave_cm**2) / _C_CGS
-            integral = -np.trapezoid(lnu, nu)
-            if integral > 0:
-                spectra[i, j] = lnu / integral
-            else:
-                spectra[i, j] = lnu
+        for i in range(spectra.shape[0]):
+            for j in range(spectra.shape[1]):
+                lnu = spectra[i, j] * (wave_cm**2) / _C_CGS
+                integral = -np.trapezoid(lnu, nu)
+                if integral > 0:
+                    spectra[i, j] = lnu / integral
+                else:
+                    spectra[i, j] = lnu
 
     return {
         "wavelength_aa": jnp.array(wavs_aa),
@@ -2314,6 +2341,8 @@ def load_themis_templates(filepath: str) -> dict:
     """
     import numpy as np
 
+    already_lnu = False
+
     if filepath.endswith(".npz"):
         data = np.load(filepath)
         wavs_um = np.array(data["wavelength_um"])
@@ -2321,39 +2350,48 @@ def load_themis_templates(filepath: str) -> dict:
         powerlaw = np.array(data["spectra_pdr"])
         umin_grid = np.array(data["umin_grid"])
         qhac_grid = np.array(data["qhac_grid"])
+        wavs_aa = wavs_um * 1.0e4
     else:
         import h5py as _h5py
 
         with _h5py.File(filepath, "r") as f:
-            if "grid" in f:
-                # v2 layout: grid/{qhac, umin}, spectra/{single_u, pdr}
-                wavs_um = np.array(f["wavelength"][:])
+            already_lnu = (
+                f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
+            )
+            if "wavelength_aa" in f:
+                # Standardized HDF5
+                wavs_aa = np.array(f["wavelength_aa"][:])
+                single_u = np.array(f["single_u"][:])
+                powerlaw = np.array(f["powerlaw"][:])
+                umin_grid = np.array(f["umin_grid"][:])
+                qhac_grid = np.array(f["qhac_grid"][:])
+            elif "grid" in f:
+                wavs_aa = np.array(f["wavelength"][:]) * 1.0e4
                 single_u = np.array(f["spectra/single_u"][:])
                 powerlaw = np.array(f["spectra/pdr"][:])
                 umin_grid = np.array(f["grid/umin"][:])
                 qhac_grid = np.array(f["grid/qhac"][:])
             else:
-                wavs_um = np.array(f["wavelength_um"][:])
+                wavs_aa = np.array(f["wavelength_um"][:]) * 1.0e4
                 single_u = np.array(f["spectra_single"][:])
                 powerlaw = np.array(f["spectra_pdr"][:])
                 umin_grid = np.array(f["umin_grid"][:])
                 qhac_grid = np.array(f["qhac_grid"][:])
 
-    wavs_aa = wavs_um * 1.0e4  # microns -> Angstrom
+    if not already_lnu:
+        # Convert to L_nu and normalize
+        wave_cm = wavs_aa * _AA_TO_CM
+        nu = _C_CGS / wave_cm
 
-    # Convert to L_nu and normalize
-    wave_cm = wavs_aa * _AA_TO_CM
-    nu = _C_CGS / wave_cm
-
-    for arr in (single_u, powerlaw):
-        for i in range(arr.shape[0]):
-            for j in range(arr.shape[1]):
-                lnu = arr[i, j] * (wave_cm**2) / _C_CGS
-                integral = -np.trapezoid(lnu, nu)
-                if integral > 0:
-                    arr[i, j] = lnu / integral
-                else:
-                    arr[i, j] = lnu
+        for arr in (single_u, powerlaw):
+            for i in range(arr.shape[0]):
+                for j in range(arr.shape[1]):
+                    lnu = arr[i, j] * (wave_cm**2) / _C_CGS
+                    integral = -np.trapezoid(lnu, nu)
+                    if integral > 0:
+                        arr[i, j] = lnu / integral
+                    else:
+                        arr[i, j] = lnu
 
     return {
         "wavelength_aa": jnp.array(wavs_aa),
@@ -2663,9 +2701,9 @@ def _make_lazy_loader(
     def _lazy_wrapper(*args, **kwargs):
         if name not in _resolved:
             _resolved.add(name)
-            # Try legacy format first (properly normalized), then v2 HDF5
-            v2_name = template_filename.rsplit(".", 1)[0] + "_v2.h5"
-            path = _find_data_file(template_filename) or _find_data_file(v2_name)
+            # Try HDF5 first (standardized, pre-normalized), then NPZ/v2
+            h5_name = template_filename.rsplit(".", 1)[0] + ".h5"
+            path = _find_data_file(h5_name) or _find_data_file(template_filename)
             if path is not None:
                 try:
                     loader = globals()[loader_fn_name]
