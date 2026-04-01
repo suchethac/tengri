@@ -48,7 +48,9 @@ if SSP_PATH is None:
     raise FileNotFoundError("SSP data not found — skipping example")
 
 ssp = load_ssp_data(SSP_PATH)
-obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+)
 
 # --- True shared PSD ---
 TRUE_SIGMA = 2.0
