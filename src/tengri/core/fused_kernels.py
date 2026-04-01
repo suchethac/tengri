@@ -155,14 +155,25 @@ def build_fused_photometry(model):
     ssp_phot = precomp.ssp_phot.astype(dt)
     ssp_lgmet = model.ssp_data.ssp_lgmet.astype(dt)
     eff_waves_rest = precomp.effective_wavelengths_rest.astype(dt)
-    dust_age_w = model._dust_age_weights.astype(dt)
+    _is_single_dust = model._dust_model == "single_component"
+    _dust_exact = getattr(model, "_dust_approx", "fast") == "exact"
+    if not _is_single_dust:
+        if _dust_exact:
+            # Smooth sigmoid weights for exact two-component dust
+            dust_age_w = model._dust_age_weights.astype(dt)
+        else:
+            # Hard threshold for fast two-CSP decomposition (default)
+            _t_birth = 1e7  # 10 Myr — Charlot & Fall (2000)
+            young_mask = (model.ssp_ages_yr < _t_birth).astype(dt)
+            old_mask = dt.type(1.0) - young_mask
     flux_scale = dt.type(precomp.flux_scale)
     ssp_ages_yr = model.ssp_ages_yr.astype(dt)
     lsun = dt.type(LSUN_ERG_PER_S)
 
     # Capture dust law functions (pure JAX, JIT-traceable)
     law_bc_fn = get_dust_law(model._dust_law_bc)
-    law_diff_fn = get_dust_law(model._dust_law_diff)
+    if not _is_single_dust:
+        law_diff_fn = get_dust_law(model._dust_law_diff)
 
     from tengri.models.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
@@ -200,33 +211,134 @@ def build_fused_photometry(model):
 
         agn_model_fn = get_agn_model(model._agn_model)
 
-    @jax.jit
-    def fused_phot(
+    # Single-component: signature is (sfr, log_z, tau_v, dust_slope, ...)
+    # Two-component:    signature is (sfr, log_z, tau_bc, tau_diff, dust_slope, ...)
+    # Both defined as separate closures to keep signatures clean for callers.
+
+    if _is_single_dust:
+
+        @jax.jit
+        def fused_phot(
+            sfr_on_ssp,
+            log_z_abs,
+            tau_v,
+            dust_slope,
+            f_obscuration=0.0,
+            dust_bump_strength=0.0,
+            dust_delta=0.0,
+            dust_Rv=3.1,
+            alpha_fe=0.0,
+            dust_T=35.0,
+            dust_beta_ir=1.6,
+            dust_eta_balance=1.0,
+            agn_log_lbol=10.0,
+            agn_alpha=-1.0,
+            agn_T_torus=1000.0,
+            agn_tau_torus=5.0,
+            agn_torus_frac=0.5,
+            agn_log_mbh=7.0,
+            agn_log_ledd=-1.0,
+        ):
+            return _fused_phot_body(
+                sfr_on_ssp,
+                log_z_abs,
+                0.0,
+                0.0,
+                dust_slope,
+                f_obscuration,
+                dust_bump_strength,
+                dust_delta,
+                dust_Rv,
+                alpha_fe,
+                dust_T,
+                dust_beta_ir,
+                dust_eta_balance,
+                agn_log_lbol,
+                agn_alpha,
+                agn_T_torus,
+                agn_tau_torus,
+                agn_torus_frac,
+                agn_log_mbh,
+                agn_log_ledd,
+                tau_v=tau_v,
+            )
+
+    else:
+
+        @jax.jit
+        def fused_phot(
+            sfr_on_ssp,
+            log_z_abs,
+            tau_bc,
+            tau_diff,
+            dust_slope,
+            f_obscuration=0.0,
+            dust_bump_strength=0.0,
+            dust_delta=0.0,
+            dust_Rv=3.1,
+            alpha_fe=0.0,
+            dust_T=35.0,
+            dust_beta_ir=1.6,
+            dust_eta_balance=1.0,
+            agn_log_lbol=10.0,
+            agn_alpha=-1.0,
+            agn_T_torus=1000.0,
+            agn_tau_torus=5.0,
+            agn_torus_frac=0.5,
+            agn_log_mbh=7.0,
+            agn_log_ledd=-1.0,
+        ):
+            return _fused_phot_body(
+                sfr_on_ssp,
+                log_z_abs,
+                tau_bc,
+                tau_diff,
+                dust_slope,
+                f_obscuration,
+                dust_bump_strength,
+                dust_delta,
+                dust_Rv,
+                alpha_fe,
+                dust_T,
+                dust_beta_ir,
+                dust_eta_balance,
+                agn_log_lbol,
+                agn_alpha,
+                agn_T_torus,
+                agn_tau_torus,
+                agn_torus_frac,
+                agn_log_mbh,
+                agn_log_ledd,
+            )
+
+    def _fused_phot_body(
         sfr_on_ssp,
         log_z_abs,
         tau_bc,
         tau_diff,
         dust_slope,
-        f_obscuration=0.0,
-        dust_bump_strength=0.0,
-        dust_delta=0.0,
-        dust_Rv=3.1,
-        alpha_fe=0.0,
-        dust_T=35.0,
-        dust_beta_ir=1.6,
-        dust_eta_balance=1.0,
-        agn_log_lbol=10.0,
-        agn_alpha=-1.0,
-        agn_T_torus=1000.0,
-        agn_tau_torus=5.0,
-        agn_torus_frac=0.5,
-        agn_log_mbh=7.0,
-        agn_log_ledd=-1.0,
+        f_obscuration,
+        dust_bump_strength,
+        dust_delta,
+        dust_Rv,
+        alpha_fe,
+        dust_T,
+        dust_beta_ir,
+        dust_eta_balance,
+        agn_log_lbol,
+        agn_alpha,
+        agn_T_torus,
+        agn_tau_torus,
+        agn_torus_frac,
+        agn_log_mbh,
+        agn_log_ledd,
+        tau_v=0.0,
     ):
         sfr = sfr_on_ssp.astype(dt)
         lz = jnp.asarray(log_z_abs, dtype=dt)
         tv1 = jnp.asarray(tau_bc, dtype=dt)
         tv2 = jnp.asarray(tau_diff, dtype=dt)
+        tv = jnp.asarray(tau_v, dtype=dt)
         dn = jnp.asarray(dust_slope, dtype=dt)
         f_obs = jnp.asarray(f_obscuration, dtype=dt)
         bump = jnp.asarray(dust_bump_strength, dtype=dt)
@@ -273,25 +385,34 @@ def build_fused_photometry(model):
                 ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
 
         # Dust: evaluate configurable curves at effective wavelengths
-        k_bc = law_bc_fn(
-            eff_waves_rest,
-            n_slope=dn,
-            dust_bump_strength=bump,
-            dust_delta=delta,
-            dust_Rv=rv,
-        )
-        k_diff = law_diff_fn(
-            eff_waves_rest,
-            n_slope=dn,
-            dust_bump_strength=bump,
-            dust_delta=delta,
-            dust_Rv=rv,
-        )
-        tau = dust_age_w[:, None] * tv1 * k_bc[None, :] + tv2 * k_diff[None, :]
-        dust = f_obs + (1.0 - f_obs) * jnp.exp(-tau)
+        _law_kw = dict(n_slope=dn, dust_bump_strength=bump, dust_delta=delta, dust_Rv=rv)
+        if _is_single_dust:
+            # Single-component: age-independent screen → factor out of einsum
+            k = law_bc_fn(eff_waves_rest, **_law_kw)
+            trans_1d = f_obs + (1.0 - f_obs) * jnp.exp(-tv * k)
+            flux_attenuated = jnp.einsum("i,if->f", weights, ssp_at_z) * trans_1d
+        elif _dust_exact:
+            # Exact: smooth sigmoid age weights — full (n_ages, n_wave) outer product
+            k_bc = law_bc_fn(eff_waves_rest, **_law_kw)
+            k_diff = law_diff_fn(eff_waves_rest, **_law_kw)
+            tau = dust_age_w[:, None] * tv1 * k_bc[None, :] + tv2 * k_diff[None, :]
+            dust = f_obs + (1.0 - f_obs) * jnp.exp(-tau)
+            flux_attenuated = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
+        else:
+            # Fast two-CSP decomposition (Charlot & Fall hard threshold):
+            #   flux = trans_diff * (trans_bc * CSP_young + CSP_old)
+            # Two 1D einsums + 1D dust — no (n_ages, n_wave) intermediate.
+            k_bc = law_bc_fn(eff_waves_rest, **_law_kw)
+            k_diff = law_diff_fn(eff_waves_rest, **_law_kw)
+            trans_bc = jnp.exp(-tv1 * k_bc)  # (n_filt,)
+            trans_diff = jnp.exp(-tv2 * k_diff)  # (n_filt,)
 
-        # Attenuated stellar flux (Lsun)
-        flux_attenuated = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
+            csp_young = jnp.einsum("i,if->f", weights * young_mask, ssp_at_z)
+            csp_old = jnp.einsum("i,if->f", weights * old_mask, ssp_at_z)
+
+            flux_no_geom = trans_diff * (trans_bc * csp_young + csp_old)
+            flux_intrinsic_for_geom = csp_young + csp_old
+            flux_attenuated = f_obs * flux_intrinsic_for_geom + (1.0 - f_obs) * flux_no_geom
 
         if has_dust_em:
             # Approximate dust emission in the fused kernel:
@@ -399,7 +520,15 @@ def build_fused_spectrum(model):
         ssp_alpha_fe_zt = model.ssp_data.ssp_alpha_fe.astype(fdt)
     wave_obs_pixels = precomp.wave_obs_pixels.astype(fdt)
     wave_rest_pixels = precomp.wave_rest_pixels.astype(fdt)
-    dust_age_w = model._dust_age_weights.astype(fdt)
+    _is_single_dust_spec = model._dust_model == "single_component"
+    _dust_exact_spec = getattr(model, "_dust_approx", "fast") == "exact"
+    if not _is_single_dust_spec:
+        if _dust_exact_spec:
+            dust_age_w = model._dust_age_weights.astype(fdt)
+        else:
+            _t_birth_spec = 1e7
+            young_mask_spec = (model.ssp_ages_yr < _t_birth_spec).astype(fdt)
+            old_mask_spec = fdt.type(1.0) - young_mask_spec
     flux_scale = fdt.type(precomp.flux_scale)
     ssp_ages_yr = model.ssp_ages_yr.astype(fdt)
     lsun = fdt.type(LSUN_ERG_PER_S)
@@ -407,8 +536,9 @@ def build_fused_spectrum(model):
     has_sigma_v = model._has_sigma_v
 
     # Capture dust law functions
-    law_bc_fn = get_dust_law(model._dust_law_bc)
-    law_diff_fn = get_dust_law(model._dust_law_diff)
+    law_bc_fn_spec = get_dust_law(model._dust_law_bc)
+    if not _is_single_dust_spec:
+        law_diff_fn_spec = get_dust_law(model._dust_law_diff)
 
     # Precompute FFT frequencies for velocity broadening (only if needed)
     if has_sigma_v:
@@ -423,31 +553,32 @@ def build_fused_spectrum(model):
 
         agn_model_fn = get_agn_model(model._agn_model)
 
-    @jax.jit
-    def fused_spec(
+    def _fused_spec_body(
         sfr_on_ssp,
         log_z_abs,
         tau_bc,
         tau_diff,
         dust_slope,
-        sigma_v=0.0,
-        f_obscuration=0.0,
-        dust_bump_strength=0.0,
-        dust_delta=0.0,
-        dust_Rv=3.1,
-        alpha_fe=0.0,
-        agn_log_lbol=10.0,
-        agn_alpha=-1.0,
-        agn_T_torus=1000.0,
-        agn_tau_torus=5.0,
-        agn_torus_frac=0.5,
-        agn_log_mbh=7.0,
-        agn_log_ledd=-1.0,
+        sigma_v,
+        f_obscuration,
+        dust_bump_strength,
+        dust_delta,
+        dust_Rv,
+        alpha_fe,
+        agn_log_lbol,
+        agn_alpha,
+        agn_T_torus,
+        agn_tau_torus,
+        agn_torus_frac,
+        agn_log_mbh,
+        agn_log_ledd,
+        tau_v=0.0,
     ):
         sfr = sfr_on_ssp.astype(fdt)
         lz = jnp.asarray(log_z_abs, dtype=fdt)
         tv1 = jnp.asarray(tau_bc, dtype=fdt)
         tv2 = jnp.asarray(tau_diff, dtype=fdt)
+        tv = jnp.asarray(tau_v, dtype=fdt)
         dn = jnp.asarray(dust_slope, dtype=fdt)
         f_obs = jnp.asarray(f_obscuration, dtype=fdt)
         bump = jnp.asarray(dust_bump_strength, dtype=fdt)
@@ -472,9 +603,7 @@ def build_fused_spectrum(model):
             fz = (lz_c - ssp_lgmet[iz]) / (ssp_lgmet[iz + 1] - ssp_lgmet[iz])
             afe_c = jnp.clip(afe, ssp_alpha_fe_zt[0], ssp_alpha_fe_zt[-1])
             n_afe = len(ssp_alpha_fe_zt)
-            ia = jnp.clip(
-                jnp.searchsorted(ssp_alpha_fe_zt, afe_c) - 1, 0, n_afe - 2
-            )
+            ia = jnp.clip(jnp.searchsorted(ssp_alpha_fe_zt, afe_c) - 1, 0, n_afe - 2)
             fa = (afe_c - ssp_alpha_fe_zt[ia]) / (ssp_alpha_fe_zt[ia + 1] - ssp_alpha_fe_zt[ia])
             ssp_at_z = (
                 (1 - fz) * (1 - fa) * ssp_on_pixels[iz, ia]
@@ -490,25 +619,31 @@ def build_fused_spectrum(model):
             ssp_at_z = (1.0 - frac) * ssp_on_pixels[idx] + frac * ssp_on_pixels[idx + 1]
 
         # Dust: configurable curves at pixel wavelengths
-        k_bc = law_bc_fn(
-            wave_rest_pixels,
-            n_slope=dn,
-            dust_bump_strength=bump,
-            dust_delta=delta,
-            dust_Rv=rv,
-        )
-        k_diff = law_diff_fn(
-            wave_rest_pixels,
-            n_slope=dn,
-            dust_bump_strength=bump,
-            dust_delta=delta,
-            dust_Rv=rv,
-        )
-        tau = dust_age_w[:, None] * tv1 * k_bc[None, :] + tv2 * k_diff[None, :]
-        dust = f_obs + (1.0 - f_obs) * jnp.exp(-tau)
+        _law_kw = dict(n_slope=dn, dust_bump_strength=bump, dust_delta=delta, dust_Rv=rv)
+        if _is_single_dust_spec:
+            k = law_bc_fn_spec(wave_rest_pixels, **_law_kw)
+            trans_1d = f_obs + (1.0 - f_obs) * jnp.exp(-tv * k)
+            flux = jnp.einsum("i,ip->p", weights, ssp_at_z) * trans_1d
+        elif _dust_exact_spec:
+            # Exact: smooth sigmoid — full (n_ages, n_pix) outer product
+            k_bc = law_bc_fn_spec(wave_rest_pixels, **_law_kw)
+            k_diff = law_diff_fn_spec(wave_rest_pixels, **_law_kw)
+            tau = dust_age_w[:, None] * tv1 * k_bc[None, :] + tv2 * k_diff[None, :]
+            dust = f_obs + (1.0 - f_obs) * jnp.exp(-tau)
+            flux = jnp.einsum("i,ip,ip->p", weights, dust, ssp_at_z)
+        else:
+            # Fast two-CSP decomposition for spectroscopy
+            k_bc = law_bc_fn_spec(wave_rest_pixels, **_law_kw)
+            k_diff = law_diff_fn_spec(wave_rest_pixels, **_law_kw)
+            trans_bc = jnp.exp(-tv1 * k_bc)
+            trans_diff = jnp.exp(-tv2 * k_diff)
 
-        # Weighted sum
-        flux = jnp.einsum("i,ip,ip->p", weights, dust, ssp_at_z)
+            csp_young = jnp.einsum("i,ip->p", weights * young_mask_spec, ssp_at_z)
+            csp_old = jnp.einsum("i,ip->p", weights * old_mask_spec, ssp_at_z)
+
+            flux_no_geom = trans_diff * (trans_bc * csp_young + csp_old)
+            flux_intrinsic = csp_young + csp_old
+            flux = f_obs * flux_intrinsic + (1.0 - f_obs) * flux_no_geom
 
         # AGN contribution at pixel wavelengths (parametric mode)
         if has_agn:
@@ -534,6 +669,94 @@ def build_fused_spectrum(model):
             flux = jnp.fft.irfft(jnp.fft.rfft(flux) * kernel_ft, n=n_pix)
 
         return flux.astype(jnp.float64)
+
+    if _is_single_dust_spec:
+
+        @jax.jit
+        def fused_spec(
+            sfr_on_ssp,
+            log_z_abs,
+            tau_v,
+            dust_slope,
+            sigma_v=0.0,
+            f_obscuration=0.0,
+            dust_bump_strength=0.0,
+            dust_delta=0.0,
+            dust_Rv=3.1,
+            alpha_fe=0.0,
+            agn_log_lbol=10.0,
+            agn_alpha=-1.0,
+            agn_T_torus=1000.0,
+            agn_tau_torus=5.0,
+            agn_torus_frac=0.5,
+            agn_log_mbh=7.0,
+            agn_log_ledd=-1.0,
+        ):
+            return _fused_spec_body(
+                sfr_on_ssp,
+                log_z_abs,
+                0.0,
+                0.0,
+                dust_slope,
+                sigma_v,
+                f_obscuration,
+                dust_bump_strength,
+                dust_delta,
+                dust_Rv,
+                alpha_fe,
+                agn_log_lbol,
+                agn_alpha,
+                agn_T_torus,
+                agn_tau_torus,
+                agn_torus_frac,
+                agn_log_mbh,
+                agn_log_ledd,
+                tau_v=tau_v,
+            )
+
+    else:
+
+        @jax.jit
+        def fused_spec(
+            sfr_on_ssp,
+            log_z_abs,
+            tau_bc,
+            tau_diff,
+            dust_slope,
+            sigma_v=0.0,
+            f_obscuration=0.0,
+            dust_bump_strength=0.0,
+            dust_delta=0.0,
+            dust_Rv=3.1,
+            alpha_fe=0.0,
+            agn_log_lbol=10.0,
+            agn_alpha=-1.0,
+            agn_T_torus=1000.0,
+            agn_tau_torus=5.0,
+            agn_torus_frac=0.5,
+            agn_log_mbh=7.0,
+            agn_log_ledd=-1.0,
+        ):
+            return _fused_spec_body(
+                sfr_on_ssp,
+                log_z_abs,
+                tau_bc,
+                tau_diff,
+                dust_slope,
+                sigma_v,
+                f_obscuration,
+                dust_bump_strength,
+                dust_delta,
+                dust_Rv,
+                alpha_fe,
+                agn_log_lbol,
+                agn_alpha,
+                agn_T_torus,
+                agn_tau_torus,
+                agn_torus_frac,
+                agn_log_mbh,
+                agn_log_ledd,
+            )
 
     return fused_spec
 
@@ -582,55 +805,73 @@ def build_exact_sed(model):
 
     dt = model._forward_dtype
     ssp_wave = model.ssp_data.ssp_wave.astype(dt)
-    dust_age_w = model._dust_age_weights.astype(dt)
+    _is_single_dust_exact = model._dust_model == "single_component"
+    _dust_exact_sed = getattr(model, "_dust_approx", "fast") == "exact"
+    if not _is_single_dust_exact:
+        if _dust_exact_sed:
+            dust_age_w = model._dust_age_weights.astype(dt)
+        else:
+            _t_birth_exact = 1e7
+            young_mask_exact = (model.ssp_ages_yr < _t_birth_exact).astype(dt)
+            old_mask_exact = dt.type(1.0) - young_mask_exact
     lsun = dt.type(LSUN_ERG_PER_S)
 
     law_bc_fn = model._dust_law_bc_fn
-    law_diff_fn = model._dust_law_diff_fn
-    same_law = model._dust_law_bc == model._dust_law_diff
+    if not _is_single_dust_exact:
+        law_diff_fn = model._dust_law_diff_fn
+        same_law = model._dust_law_bc == model._dust_law_diff
 
     @jax.jit
     def exact_sed(
         weights,
         ssp_at_z,
-        tau_bc,
-        tau_diff,
+        tau_bc=0.0,
+        tau_diff=0.0,
         n_slope=-0.7,
         dust_bump_strength=0.0,
         dust_delta=0.0,
         dust_Rv=3.1,
         f_obscuration=0.0,
+        tau_v=0.0,
     ):
         w = weights.astype(dt)
         ssp_z = ssp_at_z.astype(dt)
 
-        # Dust curves -- skip duplicate when bc == diff
-        k_bc = law_bc_fn(
-            ssp_wave,
+        _law_kw = dict(
             n_slope=n_slope,
             dust_bump_strength=dust_bump_strength,
             dust_delta=dust_delta,
             dust_Rv=dust_Rv,
         )
-        k_diff = (
-            k_bc
-            if same_law
-            else law_diff_fn(
-                ssp_wave,
-                n_slope=n_slope,
-                dust_bump_strength=dust_bump_strength,
-                dust_delta=dust_delta,
-                dust_Rv=dust_Rv,
-            )
-        )
 
-        # Dust + CSP SED: XLA fuses broadcast + exp + einsum
-        tau = dust_age_w[:, None] * tau_bc * k_bc[None, :] + tau_diff * k_diff[None, :]
-        dust_trans = f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau)
+        if _is_single_dust_exact:
+            k = law_bc_fn(ssp_wave, **_law_kw)
+            trans_1d = f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau_v * k)
+            sed_atten = (lsun * jnp.einsum("i,iw->w", w, ssp_z) * trans_1d).astype(jnp.float64)
+        elif _dust_exact_sed:
+            # Exact: smooth sigmoid — full (n_ages, n_wave) outer product
+            k_bc = law_bc_fn(ssp_wave, **_law_kw)
+            k_diff = k_bc if same_law else law_diff_fn(ssp_wave, **_law_kw)
+            tau = dust_age_w[:, None] * tau_bc * k_bc[None, :] + tau_diff * k_diff[None, :]
+            dust_trans = f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau)
+            sed_atten = (lsun * jnp.einsum("i,iw,iw->w", w, ssp_z, dust_trans)).astype(jnp.float64)
+        else:
+            # Fast two-CSP decomposition
+            k_bc = law_bc_fn(ssp_wave, **_law_kw)
+            k_diff = k_bc if same_law else law_diff_fn(ssp_wave, **_law_kw)
+            trans_bc = jnp.exp(-tau_bc * k_bc)
+            trans_diff = jnp.exp(-tau_diff * k_diff)
 
-        sed_atten = (lsun * jnp.einsum("i,iw,iw->w", w, ssp_z, dust_trans)).astype(jnp.float64)
+            csp_young = jnp.einsum("i,iw->w", w * young_mask_exact, ssp_z)
+            csp_old = jnp.einsum("i,iw->w", w * old_mask_exact, ssp_z)
+
+            flux_no_geom = trans_diff * (trans_bc * csp_young + csp_old)
+            flux_intr = csp_young + csp_old
+            sed_atten = (
+                lsun * (f_obscuration * flux_intr + (1.0 - f_obscuration) * flux_no_geom)
+            ).astype(jnp.float64)
+
         sed_intr = (lsun * jnp.einsum("i,iw->w", w, ssp_z)).astype(jnp.float64)
-
         return sed_atten, sed_intr
 
     return exact_sed
@@ -672,7 +913,15 @@ def build_fused_photometry_ztable(model):
     flux_scale_table = zt.flux_scale_table.astype(fdt)
     z_grid = zt.z_grid.astype(fdt)
     ssp_lgmet = model.ssp_data.ssp_lgmet.astype(fdt)
-    dust_age_w = model._dust_age_weights.astype(fdt)
+    _is_single_dust_zt = model._dust_model == "single_component"
+    _dust_exact_zt = getattr(model, "_dust_approx", "fast") == "exact"
+    if not _is_single_dust_zt:
+        if _dust_exact_zt:
+            dust_age_w = model._dust_age_weights.astype(fdt)
+        else:
+            _t_birth_zt = 1e7
+            young_mask_zt = (model.ssp_ages_yr < _t_birth_zt).astype(fdt)
+            old_mask_zt = fdt.type(1.0) - young_mask_zt
     ssp_ages_yr = model.ssp_ages_yr.astype(fdt)
     lsun = fdt.type(LSUN_ERG_PER_S)
 
@@ -684,8 +933,9 @@ def build_fused_photometry_ztable(model):
     igm_trans_table = zt.igm_trans_table.astype(fdt)
     has_igm_ztable = bool(model._apply_igm and model._approx.get("igm", True))
 
-    law_bc_fn = get_dust_law(model._dust_law_bc)
-    law_diff_fn = get_dust_law(model._dust_law_diff)
+    law_bc_fn_zt = get_dust_law(model._dust_law_bc)
+    if not _is_single_dust_zt:
+        law_diff_fn_zt = get_dust_law(model._dust_law_diff)
 
     # Metallicity interpolation mode (ztable variant)
     _use_smooth_z_zt = model._met_interp == "smooth"
@@ -702,31 +952,32 @@ def build_fused_photometry_ztable(model):
 
         agn_model_fn = get_agn_model(model._agn_model)
 
-    @jax.jit
-    def fused_phot_ztable(
+    def _fused_zt_body(
         sfr_on_ssp,
         log_z_abs,
         tau_bc,
         tau_diff,
         dust_slope,
         redshift,
-        f_obscuration=0.0,
-        dust_bump_strength=0.0,
-        dust_delta=0.0,
-        dust_Rv=3.1,
-        alpha_fe=0.0,
-        agn_log_lbol=10.0,
-        agn_alpha=-1.0,
-        agn_T_torus=1000.0,
-        agn_tau_torus=5.0,
-        agn_torus_frac=0.5,
-        agn_log_mbh=7.0,
-        agn_log_ledd=-1.0,
+        f_obscuration,
+        dust_bump_strength,
+        dust_delta,
+        dust_Rv,
+        alpha_fe,
+        agn_log_lbol,
+        agn_alpha,
+        agn_T_torus,
+        agn_tau_torus,
+        agn_torus_frac,
+        agn_log_mbh,
+        agn_log_ledd,
+        tau_v=0.0,
     ):
         sfr = sfr_on_ssp.astype(fdt)
         lz = jnp.asarray(log_z_abs, dtype=fdt)
         tv1 = jnp.asarray(tau_bc, dtype=fdt)
         tv2 = jnp.asarray(tau_diff, dtype=fdt)
+        tv = jnp.asarray(tau_v, dtype=fdt)
         dn = jnp.asarray(dust_slope, dtype=fdt)
         z = jnp.asarray(redshift, dtype=fdt)
         f_obs = jnp.asarray(f_obscuration, dtype=fdt)
@@ -761,9 +1012,7 @@ def build_fused_photometry_ztable(model):
             fz = (lz_c - ssp_lgmet[iz]) / (ssp_lgmet[iz + 1] - ssp_lgmet[iz])
             afe_c = jnp.clip(afe, ssp_alpha_fe_zt[0], ssp_alpha_fe_zt[-1])
             n_afe = len(ssp_alpha_fe_zt)
-            ia = jnp.clip(
-                jnp.searchsorted(ssp_alpha_fe_zt, afe_c) - 1, 0, n_afe - 2
-            )
+            ia = jnp.clip(jnp.searchsorted(ssp_alpha_fe_zt, afe_c) - 1, 0, n_afe - 2)
             fa = (afe_c - ssp_alpha_fe_zt[ia]) / (ssp_alpha_fe_zt[ia + 1] - ssp_alpha_fe_zt[ia])
             ssp_at_z = (
                 (1 - fz) * (1 - fa) * ssp_phot[iz, ia]
@@ -787,25 +1036,31 @@ def build_fused_photometry_ztable(model):
                 ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
 
         # Dust: configurable curves at effective wavelengths
-        k_bc = law_bc_fn(
-            eff_rest,
-            n_slope=dn,
-            dust_bump_strength=bump,
-            dust_delta=delta,
-            dust_Rv=rv,
-        )
-        k_diff = law_diff_fn(
-            eff_rest,
-            n_slope=dn,
-            dust_bump_strength=bump,
-            dust_delta=delta,
-            dust_Rv=rv,
-        )
-        tau = dust_age_w[:, None] * tv1 * k_bc[None, :] + tv2 * k_diff[None, :]
-        dust = f_obs + (1.0 - f_obs) * jnp.exp(-tau)
+        _law_kw = dict(n_slope=dn, dust_bump_strength=bump, dust_delta=delta, dust_Rv=rv)
+        if _is_single_dust_zt:
+            k = law_bc_fn_zt(eff_rest, **_law_kw)
+            trans_1d = f_obs + (1.0 - f_obs) * jnp.exp(-tv * k)
+            flux_lsun = jnp.einsum("i,if->f", weights, ssp_at_z) * trans_1d
+        elif _dust_exact_zt:
+            # Exact: smooth sigmoid — full (n_ages, n_filt) outer product
+            k_bc = law_bc_fn_zt(eff_rest, **_law_kw)
+            k_diff = law_diff_fn_zt(eff_rest, **_law_kw)
+            tau = dust_age_w[:, None] * tv1 * k_bc[None, :] + tv2 * k_diff[None, :]
+            dust = f_obs + (1.0 - f_obs) * jnp.exp(-tau)
+            flux_lsun = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
+        else:
+            # Fast two-CSP decomposition
+            k_bc = law_bc_fn_zt(eff_rest, **_law_kw)
+            k_diff = law_diff_fn_zt(eff_rest, **_law_kw)
+            trans_bc = jnp.exp(-tv1 * k_bc)
+            trans_diff = jnp.exp(-tv2 * k_diff)
 
-        # Weighted sum
-        flux_lsun = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
+            csp_young = jnp.einsum("i,if->f", weights * young_mask_zt, ssp_at_z)
+            csp_old = jnp.einsum("i,if->f", weights * old_mask_zt, ssp_at_z)
+
+            flux_no_geom = trans_diff * (trans_bc * csp_young + csp_old)
+            flux_intr = csp_young + csp_old
+            flux_lsun = f_obs * flux_intr + (1.0 - f_obs) * flux_no_geom
 
         # AGN contribution at effective wavelengths (parametric mode)
         if has_agn:
@@ -829,4 +1084,487 @@ def build_fused_photometry_ztable(model):
 
         return (flux_scale * flux_lsun * lsun).astype(jnp.float64)
 
+    if _is_single_dust_zt:
+
+        @jax.jit
+        def fused_phot_ztable(
+            sfr_on_ssp,
+            log_z_abs,
+            tau_v,
+            dust_slope,
+            redshift,
+            f_obscuration=0.0,
+            dust_bump_strength=0.0,
+            dust_delta=0.0,
+            dust_Rv=3.1,
+            alpha_fe=0.0,
+            agn_log_lbol=10.0,
+            agn_alpha=-1.0,
+            agn_T_torus=1000.0,
+            agn_tau_torus=5.0,
+            agn_torus_frac=0.5,
+            agn_log_mbh=7.0,
+            agn_log_ledd=-1.0,
+        ):
+            return _fused_zt_body(
+                sfr_on_ssp,
+                log_z_abs,
+                0.0,
+                0.0,
+                dust_slope,
+                redshift,
+                f_obscuration,
+                dust_bump_strength,
+                dust_delta,
+                dust_Rv,
+                alpha_fe,
+                agn_log_lbol,
+                agn_alpha,
+                agn_T_torus,
+                agn_tau_torus,
+                agn_torus_frac,
+                agn_log_mbh,
+                agn_log_ledd,
+                tau_v=tau_v,
+            )
+
+    else:
+
+        @jax.jit
+        def fused_phot_ztable(
+            sfr_on_ssp,
+            log_z_abs,
+            tau_bc,
+            tau_diff,
+            dust_slope,
+            redshift,
+            f_obscuration=0.0,
+            dust_bump_strength=0.0,
+            dust_delta=0.0,
+            dust_Rv=3.1,
+            alpha_fe=0.0,
+            agn_log_lbol=10.0,
+            agn_alpha=-1.0,
+            agn_T_torus=1000.0,
+            agn_tau_torus=5.0,
+            agn_torus_frac=0.5,
+            agn_log_mbh=7.0,
+            agn_log_ledd=-1.0,
+        ):
+            return _fused_zt_body(
+                sfr_on_ssp,
+                log_z_abs,
+                tau_bc,
+                tau_diff,
+                dust_slope,
+                redshift,
+                f_obscuration,
+                dust_bump_strength,
+                dust_delta,
+                dust_Rv,
+                alpha_fe,
+                agn_log_lbol,
+                agn_alpha,
+                agn_T_torus,
+                agn_tau_torus,
+                agn_torus_frac,
+                agn_log_mbh,
+                agn_log_ledd,
+            )
+
     return fused_phot_ztable
+
+
+# -------------------------------------------------------------------
+# Compositional rest-frame SED kernel (Tier 2)
+# -------------------------------------------------------------------
+
+
+def is_tier2_compatible(model):
+    """Check if the compositional rest-frame SED kernel can be built.
+
+    Tier 2 supports ALL physics components (unlike Tier 1 fused kernels).
+    It only falls back when the model uses features that require non-standard
+    SFH/metallicity paths (tabulated SFH, DSPS table, evolving Z).
+
+    Parameters
+    ----------
+    model : Model
+        The model instance to check.
+
+    Returns
+    -------
+    bool
+        True if Tier 2 kernel can be built.
+    """
+    # Evolving metallicity needs per-age Z interpolation — complex but supported
+    # Chemical evolution derives Z(t) from SFH — self-referential, supported
+    # The only hard blockers are DSPS table path and tabulated SFH
+    # (those are detected at call time, not build time)
+    return True
+
+
+def build_fused_rest_sed(model):
+    """Build a JIT'd function: internal params -> rest-frame SED.
+
+    Composes all enabled physics components into a single JIT'd function.
+    Disabled components are excluded from the XLA graph at trace time
+    (Python ``if`` on captured booleans).
+
+    This is the **Tier 2** kernel — full wavelength resolution like the
+    exact path but JIT-compiled end-to-end like the fused kernels.
+    The observation model (redshift, filter integration, IGM) is applied
+    separately by thin wrappers.
+
+    Parameters
+    ----------
+    model : Model
+        The model instance providing config and precomputed arrays.
+
+    Returns
+    -------
+    callable
+        JIT-compiled function:
+        ``(weights, ssp_flux_at_z, p_dict) -> rest_sed``
+        where ``p_dict`` contains internal dust/AGN/nebular/radio/X-ray
+        parameters.
+    """
+    from tengri.models.dust.attenuation import get_dust_law
+    from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+
+    dt = model._forward_dtype
+    ssp_wave = model.ssp_data.ssp_wave.astype(dt)
+    _is_single_dust = model._dust_model == "single_component"
+    _dust_exact = getattr(model, "_dust_approx", "fast") == "exact"
+    if not _is_single_dust:
+        if _dust_exact:
+            dust_age_w = model._dust_age_weights.astype(dt)
+        else:
+            _t_birth = 1e7  # 10 Myr — Charlot & Fall (2000)
+            young_mask = (model.ssp_ages_yr < _t_birth).astype(dt)
+            old_mask = dt.type(1.0) - young_mask
+    lsun = dt.type(LSUN_ERG_PER_S)
+
+    # Capture dust law functions (pure JAX, JIT-traceable)
+    law_bc_fn = get_dust_law(model._dust_law_bc)
+    if not _is_single_dust:
+        law_diff_fn = get_dust_law(model._dust_law_diff)
+        same_law = model._dust_law_bc == model._dust_law_diff
+
+    # --- Optional components (Python if at trace time) ---
+    # Nebular
+    has_nebular = model._nebular_backend is not None and getattr(
+        model._nebular_backend, "has_free_params", False
+    )
+    # Full-precision wavelength array for components that need float64
+    ssp_wave_f64 = model.ssp_data.ssp_wave
+
+    if has_nebular:
+        nebular_backend = model._nebular_backend
+        ssp_log_ages_yr = model.ssp_log_ages_yr
+
+    # Shock emission
+    has_shock = getattr(model, "_shock_enabled", False)
+    if has_shock:
+        from tengri.models.nebular.shock import shock_emission_sed
+
+    # Dust emission
+    has_dust_em = model._dust_emission_model is not None
+    if has_dust_em:
+        from tengri.models.dust.emission import get_emission_model
+
+        dust_emission_fn = get_emission_model(model._dust_emission_model)
+
+    # AGN
+    has_agn = model._agn_model is not None
+    agn_parametric = model._agn_parametric if has_agn else False
+    if has_agn:
+        from tengri.models.agn import get_agn_model
+
+        agn_model_fn = get_agn_model(model._agn_model)
+
+    # Radio
+    has_radio = model._radio_enabled
+    if has_radio:
+        from tengri.models.radio import radio_total
+
+    # X-ray
+    has_xray = model._xray_enabled
+    if has_xray:
+        from tengri.models.xray import xray_total
+
+    # Constants for energy balance
+    _c_aa = dt.type(2.99792458e18)  # c in Angstrom/s
+
+    @jax.jit
+    def rest_sed_kernel(weights, ssp_flux_at_z, p):
+        """Compute rest-frame SED from CSP weights and Z-interpolated SSP.
+
+        Parameters
+        ----------
+        weights : array, shape (n_age,)
+            CSP mass weights (Msun).
+        ssp_flux_at_z : array, shape (n_age, n_wave)
+            SSP flux interpolated to target metallicity.
+        p : dict
+            Internal parameters (dust, AGN, nebular, radio, X-ray).
+
+        Returns
+        -------
+        array, shape (n_wave,)
+            Rest-frame SED in erg/s/Hz.
+        """
+        w = weights.astype(dt)
+        ssp_z = ssp_flux_at_z.astype(dt)
+
+        # --- 1. Dust attenuation ---
+        tau_bc = jnp.asarray(p.get("tau_bc", 0.0), dtype=dt)
+        tau_diff = jnp.asarray(p.get("tau_diff", 0.0), dtype=dt)
+        tau_v = jnp.asarray(p.get("tau_v", 0.0), dtype=dt)
+        dust_slope = jnp.asarray(p.get("dust_slope", -0.7), dtype=dt)
+        f_obs = jnp.asarray(p.get("f_obscuration", 0.0), dtype=dt)
+        bump = jnp.asarray(p.get("dust_bump_strength", 0.0), dtype=dt)
+        delta = jnp.asarray(p.get("dust_delta", 0.0), dtype=dt)
+        rv = jnp.asarray(p.get("dust_Rv", 3.1), dtype=dt)
+
+        _law_kw = dict(
+            n_slope=dust_slope,
+            dust_bump_strength=bump,
+            dust_delta=delta,
+            dust_Rv=rv,
+        )
+
+        if _is_single_dust:
+            k = law_bc_fn(ssp_wave, **_law_kw)
+            trans_1d = f_obs + (1.0 - f_obs) * jnp.exp(-tau_v * k)
+            sed_atten = (lsun * jnp.einsum("i,iw->w", w, ssp_z) * trans_1d).astype(jnp.float64)
+            sed_intr = (lsun * jnp.einsum("i,iw->w", w, ssp_z)).astype(jnp.float64)
+        elif _dust_exact:
+            k_bc = law_bc_fn(ssp_wave, **_law_kw)
+            k_diff = k_bc if same_law else law_diff_fn(ssp_wave, **_law_kw)
+            tau = dust_age_w[:, None] * tau_bc * k_bc[None, :] + tau_diff * k_diff[None, :]
+            dust_trans = f_obs + (1.0 - f_obs) * jnp.exp(-tau)
+            sed_atten = (lsun * jnp.einsum("i,iw,iw->w", w, ssp_z, dust_trans)).astype(jnp.float64)
+            sed_intr = (lsun * jnp.einsum("i,iw->w", w, ssp_z)).astype(jnp.float64)
+        else:
+            # Fast two-CSP decomposition
+            k_bc = law_bc_fn(ssp_wave, **_law_kw)
+            k_diff = k_bc if same_law else law_diff_fn(ssp_wave, **_law_kw)
+            trans_bc = jnp.exp(-tau_bc * k_bc)
+            trans_diff = jnp.exp(-tau_diff * k_diff)
+
+            csp_young = jnp.einsum("i,iw->w", w * young_mask, ssp_z)
+            csp_old = jnp.einsum("i,iw->w", w * old_mask, ssp_z)
+
+            flux_no_geom = trans_diff * (trans_bc * csp_young + csp_old)
+            flux_intr = csp_young + csp_old
+            sed_atten = (lsun * (f_obs * flux_intr + (1.0 - f_obs) * flux_no_geom)).astype(
+                jnp.float64
+            )
+            sed_intr = (lsun * flux_intr).astype(jnp.float64)
+
+        sed = sed_atten
+
+        # --- 2. Nebular emission ---
+        if has_nebular:
+            neb_sed = nebular_backend.predict_nebular_sed(
+                ssp_weights=weights,
+                ssp_wave=ssp_wave_f64,
+                ssp_log_ages_yr=ssp_log_ages_yr,
+                log_z=p["log_z_abs"],
+                neb_logU=p.get("neb_logU", -3.0),
+                neb_logZ_gas=p.get("neb_logZ_gas", None),
+                neb_fesc=p.get("neb_fesc", 0.0),
+                neb_fesc_lya=p.get("neb_fesc_lya", 0.0),
+            )
+            sed = sed + neb_sed
+
+        # --- 3. Shock emission ---
+        if has_shock:
+            shock_frac = p.get("shock_frac", 0.0)
+            shock_velocity = p.get("shock_velocity", 300.0)
+            shock_log_density = p.get("shock_log_density", 0.0)
+            nu_shock = _c_aa / ssp_wave.astype(jnp.float64)
+            l_bol = -jnp.trapezoid(sed, nu_shock)
+            l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
+            l_shock_halpha = shock_frac * l_halpha_approx
+            shock_sed = shock_emission_sed(
+                ssp_wave_f64,
+                shock_velocity,
+                l_shock_halpha,
+                shock_log_density=shock_log_density,
+            )
+            sed = sed + shock_sed
+
+        # --- 4. Dust IR emission (energy-balanced) ---
+        if has_dust_em:
+            nu_em = _c_aa / ssp_wave.astype(jnp.float64)
+            L_absorbed = -jnp.trapezoid(sed_intr - sed_atten, nu_em)
+            eta_balance = p.get("dust_eta_balance", 1.0)
+            L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
+            dust_ir = dust_emission_fn(
+                ssp_wave_f64,
+                L_ir,
+                dust_T=p.get("dust_T", 35.0),
+                dust_beta_ir=p.get("dust_beta_ir", 1.6),
+                dust_alpha_mir=p.get("dust_alpha_mir", 2.0),
+                dust_alpha_dale=p.get("dust_alpha_dale", 2.0),
+                dust_umin=p.get("dust_umin", 1.0),
+                dust_gamma_dl=p.get("dust_gamma_dl", 0.01),
+                dust_qpah=p.get("dust_qpah", 2.5),
+            )
+            sed = sed + dust_ir
+        else:
+            L_ir = jnp.float64(0.0)
+
+        # --- 5. AGN ---
+        agn_bol_erg = jnp.float64(0.0)
+        if has_agn:
+            if agn_parametric:
+                agn_log_lbol = p.get("agn_log_lbol", 10.0)
+                agn_frac_val = 1.0
+                agn_bol_erg = 10.0**agn_log_lbol
+            else:
+                agn_frac_val = p.get("agn_frac", 0.0)
+                nu_agn = _c_aa / ssp_wave.astype(jnp.float64)
+                L_bol_stellar = -jnp.trapezoid(sed, nu_agn)
+                agn_log_lbol = jnp.log10(jnp.maximum(L_bol_stellar * agn_frac_val, 1e-50))
+                agn_bol_erg = L_bol_stellar * agn_frac_val
+            agn_sed = agn_model_fn(
+                ssp_wave_f64,
+                agn_log_lbol=agn_log_lbol,
+                agn_frac=agn_frac_val,
+                agn_alpha=p.get("agn_alpha", -1.0),
+                agn_T_torus=p.get("agn_T_torus", 1000.0),
+                agn_tau_torus=p.get("agn_tau_torus", 5.0),
+                agn_torus_frac=p.get("agn_torus_frac", 0.5),
+                agn_log_mbh=p.get("agn_log_mbh", 7.0),
+                agn_log_ledd=p.get("agn_log_ledd", -1.0),
+            )
+            sed = sed + agn_sed
+
+        # --- 6. Radio ---
+        if has_radio:
+            radio_sed = radio_total(
+                ssp_wave_f64,
+                L_ir=L_ir,
+                L_agn_bol=agn_bol_erg,
+                q_ir=p.get("radio_q_ir", 2.64),
+                alpha_sf=p.get("radio_alpha_sf", 0.8),
+                radio_loudness=p.get("radio_loudness", 0.0),
+                alpha_agn=p.get("radio_alpha_agn", 0.7),
+            )
+            sed = sed + radio_sed
+
+        # --- 7. X-ray ---
+        if has_xray:
+            # SFR: use last weight as proxy for current SFR
+            sfr_current = p.get("_sfr_current", 1.0)
+            mstar = jnp.sum(weights)
+            xray_sed = xray_total(
+                ssp_wave_f64,
+                sfr=sfr_current,
+                stellar_mass=mstar,
+                L_agn_bol=agn_bol_erg,
+                gamma_agn=p.get("xray_gamma_agn", 1.8),
+                alpha_ox=p.get("xray_alpha_ox", -1.4),
+            )
+            sed = sed + xray_sed
+
+        return sed
+
+    return rest_sed_kernel
+
+
+# -------------------------------------------------------------------
+# Tier 2 observation wrappers
+# -------------------------------------------------------------------
+
+
+def observe_photometry_from_rest_sed(
+    rest_sed,
+    wave_rest,
+    z,
+    dl_cm,
+    filter_waves,
+    filter_trans,
+    apply_igm=False,
+):
+    """Apply redshift + filter integration to a rest-frame SED.
+
+    Thin wrapper that converts a Tier 2 rest-frame SED into observed
+    photometric flux densities. Not JIT'd itself (loops over filters),
+    but each filter integration is a fast JAX operation.
+
+    Parameters
+    ----------
+    rest_sed : array, shape (n_wave,)
+        Rest-frame SED in erg/s/Hz.
+    wave_rest : array, shape (n_wave,)
+        Rest-frame wavelength grid (Angstrom).
+    z : float
+        Redshift.
+    dl_cm : float
+        Luminosity distance (cm).
+    filter_waves : list of arrays
+        Filter wavelength arrays.
+    filter_trans : list of arrays
+        Filter transmission arrays.
+    apply_igm : bool
+        Whether to apply IGM absorption.
+
+    Returns
+    -------
+    array, shape (n_filters,)
+        Observed flux densities in erg/s/cm^2/Hz.
+    """
+    from tengri.models.observation.photometry import compute_flux_density
+
+    sed = rest_sed
+    if apply_igm:
+        from tengri.models.igm import igm_transmission
+
+        wave_obs = wave_rest * (1.0 + z)
+        igm_trans = igm_transmission(wave_obs, z)
+        sed = sed * igm_trans
+
+    fluxes = []
+    for fw, ft in zip(filter_waves, filter_trans):
+        f = compute_flux_density(sed, wave_rest, fw, ft, z, dl_cm)
+        fluxes.append(f)
+    return jnp.array(fluxes)
+
+
+def observe_spectrum_from_rest_sed(
+    rest_sed,
+    wave_rest,
+    wave_obs,
+    z,
+    dl_cm,
+):
+    """Apply redshift + interpolation to a rest-frame SED.
+
+    Thin wrapper that converts a Tier 2 rest-frame SED into an
+    observed spectrum at specified wavelength pixels.
+
+    Parameters
+    ----------
+    rest_sed : array, shape (n_wave,)
+        Rest-frame SED in erg/s/Hz.
+    wave_rest : array, shape (n_wave,)
+        Rest-frame wavelength grid (Angstrom).
+    wave_obs : array, shape (n_pix,)
+        Observed wavelength grid (Angstrom).
+    z : float
+        Redshift.
+    dl_cm : float
+        Luminosity distance (cm).
+
+    Returns
+    -------
+    array, shape (n_pix,)
+        Spectral flux density in erg/s/cm^2/Hz.
+    """
+    from tengri.models.observation.spectroscopy import compute_spectrum
+
+    return compute_spectrum(rest_sed, wave_rest, wave_obs, z, dl_cm)

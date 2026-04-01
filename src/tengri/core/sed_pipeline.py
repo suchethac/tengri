@@ -472,13 +472,14 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
             sed_attenuated, sed_intrinsic_jit = model._jit_exact_sed(
                 weights,
                 ssp_flux_at_z,
-                p["tau_bc"],
-                p["tau_diff"],
+                p.get("tau_bc", 0.0),
+                p.get("tau_diff", 0.0),
                 n_slope=p.get("dust_slope", -0.7),
                 dust_bump_strength=p.get("dust_bump_strength", 0.0),
                 dust_delta=p.get("dust_delta", 0.0),
                 dust_Rv=p.get("dust_Rv", 3.1),
                 f_obscuration=p.get("f_obscuration", 0.0),
+                tau_v=p.get("tau_v", 0.0),
             )
             sed_intrinsic = (
                 sed_intrinsic_jit
@@ -641,6 +642,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
     # Radio emission (synchrotron from SF + AGN jets)
     if model._radio_enabled:
         from tengri.models.radio import radio_total
+
         radio_sed = radio_total(
             model.ssp_data.ssp_wave,
             L_ir=_L_ir,

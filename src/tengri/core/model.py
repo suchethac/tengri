@@ -33,6 +33,7 @@ Usage::
 
 from __future__ import annotations
 
+import warnings
 from typing import ClassVar, NamedTuple
 
 import jax
@@ -42,8 +43,12 @@ from tengri.core.fused_kernels import (
     build_exact_sed,
     build_fused_photometry,
     build_fused_photometry_ztable,
+    build_fused_rest_sed,
     build_fused_spectrum,
     is_fused_compatible,
+    is_tier2_compatible,
+    observe_photometry_from_rest_sed,
+    observe_spectrum_from_rest_sed,
 )
 from tengri.core.param_translate import (
     _EVOLVING_ALPHA_PARAM_MAP,
@@ -472,6 +477,18 @@ class Model:
 
         # JIT-compiled exact-path SED kernel (eliminates Python dispatch overhead)
         self._jit_exact_sed = build_exact_sed(self)
+
+        # Tier 2: Compositional rest-frame SED kernel (all components, JIT'd)
+        self._fused_rest_sed = None
+        if is_tier2_compatible(self):
+            try:
+                self._fused_rest_sed = build_fused_rest_sed(self)
+            except Exception as e:
+                warnings.warn(
+                    f"Compositional SED kernel (Tier 2) build failed: {e}",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
         # Spectroscopy precomputation (same idea: pre-interpolate SSPs)
         self._spec_precomp = None
@@ -958,12 +975,21 @@ class Model:
         ):
             return self._predict_photometry_ztable(params)
 
+        # Tier 2: compositional rest-frame SED + observation wrapper
+        if (
+            self._fused_rest_sed is not None
+            and not _has_tabulated_sfh
+            and not self._evolving_metallicity
+            and not getattr(self, "_chem_evol_enabled", False)
+        ):
+            return self._predict_photometry_tier2(params)
+
+        # Tier 3: exact path (Python dispatch)
         sed = self.predict_sed(params)
         z = self._get_redshift(params)
         dl_cm = self._get_dl_cm(params)
 
         # Apply IGM absorption (acts on observed-frame SED)
-        # Always compute (cheap), but only apply when enabled
         if self._apply_igm:
             from tengri.models.igm import igm_transmission
 
@@ -1042,6 +1068,78 @@ class Model:
             **self._get_dust_kwargs(p),
             **self._get_agn_kwargs(p),
         )
+
+    # -------------------------------------------------------------------
+    # Tier 2: Compositional rest-frame SED dispatch
+    # -------------------------------------------------------------------
+
+    def _compute_rest_sed_tier2(self, params):
+        """Compute rest-frame SED via the compositional JIT kernel (Tier 2).
+
+        Handles SFH computation, metallicity interpolation, and delegates
+        the rest (dust, nebular, AGN, radio, X-ray) to the fused kernel.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values (public names).
+
+        Returns
+        -------
+        array, shape (n_wave,)
+            Rest-frame SED in erg/s/Hz.
+        """
+        from tengri.core.sed_pipeline import interp_met_alpha_dispatch
+
+        p = self._get_internal_params(params)
+        sfr = self._compute_sfr(p)
+        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+        weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
+
+        # Metallicity interpolation (single Z, non-evolving path)
+        alpha_fe = p.get("alpha_fe", 0.0)
+        ssp_flux_at_z = interp_met_alpha_dispatch(self, p["log_z_abs"], alpha_fe)
+
+        # Enrich p with current SFR for X-ray model
+        if self._xray_enabled:
+            p = {**p, "_sfr_current": sfr[-1]}
+
+        return self._fused_rest_sed(weights, ssp_flux_at_z, p)
+
+    def _predict_photometry_tier2(self, params):
+        """Photometry via Tier 2: compositional rest SED + filter integration."""
+        rest_sed = self._compute_rest_sed_tier2(params)
+        z = self._get_redshift(params)
+        dl_cm = self._get_dl_cm(params)
+        return observe_photometry_from_rest_sed(
+            rest_sed,
+            self.ssp_data.ssp_wave,
+            z,
+            dl_cm,
+            self.filter_waves,
+            self.filter_trans,
+            apply_igm=self._apply_igm,
+        )
+
+    def _predict_spectrum_tier2(self, params, wave_obs):
+        """Spectrum via Tier 2: compositional rest SED + interpolation."""
+        rest_sed = self._compute_rest_sed_tier2(params)
+        z = self._get_redshift(params)
+        dl_cm = self._get_dl_cm(params)
+        flux = observe_spectrum_from_rest_sed(rest_sed, self.ssp_data.ssp_wave, wave_obs, z, dl_cm)
+
+        # Apply LSF convolution if resolution profile is set
+        resolution = self._lsf_resolution
+        if resolution is not None:
+            flux = apply_lsf(
+                flux,
+                wave_obs,
+                resolution,
+                sigma_lib_kms=self._sigma_lib_kms,
+                n_bins=self._lsf_n_bins,
+            )
+
+        return flux
 
     def precompute_spectroscopy(self, wave_obs):
         """Pre-interpolate SSP templates to observed wavelength grid.
@@ -1140,11 +1238,21 @@ class Model:
         elif wave_obs is None:
             raise ValueError("No wavelength grid. Pass wave_obs or call precompute_spectroscopy()")
 
-        # Fast path: use fused kernel if available and compatible
+        # Tier 1: use fused kernel if available and compatible
         if self._spec_precomp is not None and self._fused_spectrum is not None:
             return self._predict_spectrum_fast(params)
 
-        # Exact path
+        # Tier 2: compositional rest-frame SED + observation wrapper
+        _has_tabulated_sfh = "sfh_t_gyr" in params
+        if (
+            self._fused_rest_sed is not None
+            and not _has_tabulated_sfh
+            and not self._evolving_metallicity
+            and not getattr(self, "_chem_evol_enabled", False)
+        ):
+            return self._predict_spectrum_tier2(params, wave_obs)
+
+        # Tier 3: exact path (Python dispatch)
         sed = self.predict_sed(params)
         z = self._get_redshift(params)
         dl_cm = self._get_dl_cm(params)
