@@ -242,9 +242,16 @@ class Fitter:
     def _build_loss_fn(self):
         """Build a differentiable loss function.
 
-        The loss function takes an unbounded parameter dict and returns
-        a scalar: chi² + prior penalties. When noise model is active,
-        uses effective noise with calibration floor and log-determinant.
+        The loss function takes an unbounded parameter dict **and a
+        ``data_args`` dict** and returns a scalar: chi² + prior penalties.
+        Observed data are passed as explicit arguments (not captured in
+        the closure) so that the compiled XLA program can be reused across
+        galaxies sharing the same model structure.
+
+        Returns
+        -------
+        callable
+            ``loss_fn(params_unbounded, data_args) -> scalar``
         """
         from tengri.core.noise import (
             get_noise_dof,
@@ -254,8 +261,6 @@ class Fitter:
         )
 
         model = self.model
-        data = self.data
-        noise = self.noise
         data_type = self.data_type
         free_names = self._free_names
         bounds = self._bounds
@@ -268,7 +273,10 @@ class Fitter:
         cal_n_poly = self._cal_n_poly
         cal_prior_sigma = self._cal_prior_sigma
 
-        def loss_fn(params_unbounded):
+        def loss_fn(params_unbounded, data_args):
+            data = data_args["data"]
+            noise = data_args["noise"]
+
             # Convert unbounded → physical for free params
             params = {}
             for name in free_names:
@@ -365,6 +373,22 @@ class Fitter:
 
         return loss_fn
 
+    def _get_or_build_loss_fn(self):
+        """Return the cached loss function, building it if needed.
+
+        The loss function is cached on the Model object keyed by
+        ``_engine_cache_key()`` so that multiple Fitters with the same
+        model structure share the same compiled XLA program.
+        """
+        cache_key = self._engine_cache_key()
+        if not hasattr(self.model, "_loss_fn_cache"):
+            self.model._loss_fn_cache = {}
+        if cache_key in self.model._loss_fn_cache:
+            return self.model._loss_fn_cache[cache_key]
+        loss_fn = self._build_loss_fn()
+        self.model._loss_fn_cache[cache_key] = loss_fn
+        return loss_fn
+
     def _build_logprior_fn(self):
         """Build a log-prior function in physical parameter space.
 
@@ -385,8 +409,10 @@ class Fitter:
     def _build_loglikelihood_fn(self):
         """Build a log-likelihood function in physical parameter space.
 
-        Returns a function: dict of free params → scalar log-likelihood.
-        Fixed parameters are automatically merged.
+        Returns a function: ``(dict of free params, data_args) → scalar``.
+        Fixed parameters are automatically merged.  Observed data are
+        passed via ``data_args`` (not captured in the closure) for cache
+        reuse across galaxies.
         """
         from tengri.core.noise import (
             get_noise_dof,
@@ -396,8 +422,6 @@ class Fitter:
         )
 
         model = self.model
-        data = self.data
-        noise = self.noise
         data_type = self.data_type
         fixed_values = self._fixed_values
         spec = self.spec
@@ -407,7 +431,10 @@ class Fitter:
         cal_n_poly = self._cal_n_poly
         cal_prior_sigma = self._cal_prior_sigma
 
-        def loglikelihood_fn(free_params):
+        def loglikelihood_fn(free_params, data_args):
+            data = data_args["data"]
+            noise = data_args["noise"]
+
             # Merge free + fixed
             params = dict(free_params)
             for name, val in fixed_values.items():
@@ -471,6 +498,17 @@ class Fitter:
                 return -0.5 * chi2
 
         return loglikelihood_fn
+
+    def _get_or_build_loglikelihood_fn(self):
+        """Return the cached log-likelihood function, building if needed."""
+        cache_key = self._engine_cache_key()
+        if not hasattr(self.model, "_loglik_fn_cache"):
+            self.model._loglik_fn_cache = {}
+        if cache_key in self.model._loglik_fn_cache:
+            return self.model._loglik_fn_cache[cache_key]
+        loglik_fn = self._build_loglikelihood_fn()
+        self.model._loglik_fn_cache[cache_key] = loglik_fn
+        return loglik_fn
 
     def _initialize_unbounded(self, key):
         """Create initial unbounded parameter dict."""
@@ -1212,11 +1250,9 @@ class Fitter:
         def run_evi(init_pos, key, data_args, n_iterations, n_samples, kl_rtol):
             """Run EVI with automatic convergence detection.
 
-            Stops early when the relative KL change between iterations
-            drops below ``kl_rtol``. Uses ``jax.lax.while_loop`` so
-            the iteration count is dynamic.
+            ``n_iterations`` is dynamic — uses ``jax.random.fold_in``
+            for per-iteration keys so no pre-split is needed.
             """
-            keys = jax.random.split(key, n_iterations)
 
             # State: (m, prev_kl, iteration, converged)
             def cond_fn(state):
@@ -1225,7 +1261,7 @@ class Fitter:
 
             def body_fn(state):
                 m, prev_kl, i, converged = state
-                subkey = jax.lax.dynamic_index_in_dim(keys, i, keepdims=False)
+                subkey = jax.random.fold_in(key, i)
                 m_new, kl_val = evi_step(m, subkey, n_samples, data_args)
                 # Relative KL change
                 rel_change = jnp.abs(prev_kl - kl_val) / (jnp.abs(prev_kl) + 1e-10)
@@ -1234,7 +1270,8 @@ class Fitter:
                 return (m_new, kl_val, i + 1, converged)
 
             # First iteration (no convergence check)
-            m0, kl0 = evi_step(init_pos, keys[0], n_samples, data_args)
+            first_key = jax.random.fold_in(key, 0)
+            m0, kl0 = evi_step(init_pos, first_key, n_samples, data_args)
             init_state = (m0, kl0, jnp.int32(1), jnp.bool_(False))
 
             m_final, _kl_final, n_iters, _ = jax.lax.while_loop(cond_fn, body_fn, init_state)
@@ -1358,6 +1395,10 @@ class Fitter:
         def run_evi_geovi(init_pos, key, data_args, n_iterations, n_samples, kl_rtol, sample_mode):
             """Run geoVI with automatic convergence detection.
 
+            ``n_iterations`` is a **dynamic** traced value — changing it
+            does NOT trigger recompilation.  Keys are generated on-the-fly
+            via ``jax.random.fold_in`` instead of pre-splitting.
+
             ``sample_mode`` is a **static** string — JAX compiles a
             separate XLA program per mode.  All 5 NIFTy modes supported:
 
@@ -1367,9 +1408,10 @@ class Fitter:
             - ``"nonlinear_sample"`` — reuse keys + curve (deterministic geoVI)
             - ``"nonlinear_update"`` — re-curve existing residuals at new m
             """
-            keys = jax.random.split(key, n_iterations)
+            # Generate per-iteration keys on-the-fly via fold_in (no
+            # pre-split needed, so n_iterations can be dynamic).
             dummy_residuals = jnp.zeros((2 * n_samples, d_total))
-            dummy_keys = jax.random.split(keys[0], n_samples)
+            dummy_keys = jax.random.split(jax.random.fold_in(key, 0), n_samples)
             no_constants = jnp.zeros(d_total, dtype=bool)
             all_sampled = jnp.ones(d_total)
 
@@ -1380,7 +1422,7 @@ class Fitter:
 
             def body_fn(state):
                 m, prev_kl, prev_res, prev_k, i, converged = state
-                subkey = jax.lax.dynamic_index_in_dim(keys, i, keepdims=False)
+                subkey = jax.random.fold_in(key, i)
                 m_new, kl_val, new_res, new_k = evi_step_full(
                     m,
                     subkey,
@@ -1398,9 +1440,10 @@ class Fitter:
                 return (m_new, kl_val, new_res, new_k, i + 1, converged)
 
             # First iteration (always resample to establish initial keys)
+            first_key = jax.random.fold_in(key, 0)
             m0, kl0, res0, keys0 = evi_step_full(
                 init_pos,
-                keys[0],
+                first_key,
                 n_samples,
                 sample_mode,
                 dummy_residuals,
@@ -1529,7 +1572,9 @@ class Fitter:
         _ = draw_samples_jit(dummy_pos, dummy_keys, dummy_data_args)
 
         # Pre-compile native optimizer (for n_iterations=10, n_samples=3)
-        run_evi_jit = jax.jit(run_evi, static_argnames=("n_iterations", "n_samples"))
+        # n_iterations is DYNAMIC (while_loop handles it). n_samples is
+        # STATIC (determines array shapes in draw_residuals).
+        run_evi_jit = jax.jit(run_evi, static_argnames=("n_samples",))
         _ = run_evi_jit(
             dummy_pos,
             jax.random.PRNGKey(0),
@@ -1542,9 +1587,12 @@ class Fitter:
         # Pre-compile native geoVI optimizer.
         # sample_mode is STATIC: JAX compiles a separate XLA program per mode.
         # "linear" compiles in ~0.03s, "nonlinear_*" in ~56s (one-time cost).
+        # n_iterations is DYNAMIC: the while_loop handles variable counts
+        # without recompilation. n_samples is STATIC because it determines
+        # array shapes (residuals, sample keys) that JAX needs at trace time.
         run_evi_geovi_jit = jax.jit(
             run_evi_geovi,
-            static_argnames=("n_iterations", "n_samples", "sample_mode"),
+            static_argnames=("n_samples", "sample_mode"),
         )
 
         return {
@@ -1594,9 +1642,13 @@ class Fitter:
         Parameters
         ----------
         n_iterations : int
-            Compile for this iteration count (recompilation if changed).
+            Iteration count for the pre-compilation run.  Changing
+            ``n_iterations`` at run time does NOT trigger recompilation
+            (the iteration count is a dynamic traced value).
         n_samples : int
-            Compile for this sample count (recompilation if changed).
+            Compile for this sample count.  Changing ``n_samples``
+            at run time DOES trigger recompilation (array shapes
+            depend on it).
         n_posterior_samples : int
             Compile posterior draw for this many samples.
         modes : tuple of str
@@ -1772,11 +1824,12 @@ class Fitter:
 
         else:
             # Build log-density from the loss function (used by _run_native_vi path)
-            loss_fn = self._build_loss_fn()
+            loss_fn = self._get_or_build_loss_fn()
+            _data_args = self._data_args
 
             @jax.jit
             def logdensity_fn(x):
-                return -loss_fn(x)
+                return -loss_fn(x, _data_args)
 
         warmup_key, sample_key = jax.random.split(key)
         n_warmup = min(200, n_samples)
@@ -2467,7 +2520,8 @@ class Fitter:
             )
 
         logprior_fn = self._build_logprior_fn()
-        loglikelihood_fn = self._build_loglikelihood_fn()
+        loglikelihood_fn = self._get_or_build_loglikelihood_fn()
+        data_args = self._data_args
 
         D = len(self._free_names)
         if num_inner_steps is None:
@@ -2479,10 +2533,13 @@ class Fitter:
                 f"{num_delete} deletions/iter, {num_inner_steps} HRSS steps"
             )
 
-        # Build NSS algorithm
+        # Build NSS algorithm — bind data_args into the likelihood
+        def _nss_loglik(free_params):
+            return loglikelihood_fn(free_params, data_args)
+
         algo = as_top_level_api(
             logprior_fn,
-            loglikelihood_fn,
+            _nss_loglik,
             num_inner_steps,
             num_delete=num_delete,
             max_steps=max_steps,
@@ -2899,7 +2956,8 @@ class Fitter:
 
         from tengri.inference.posterior import Posterior
 
-        loss_fn = self._build_loss_fn()
+        loss_fn = self._get_or_build_loss_fn()
+        data_args = self._data_args
 
         if init_from is not None:
             init_params = self._unbounded_from_posterior(init_from)
@@ -2927,8 +2985,8 @@ class Fitter:
         opt_state = opt.init(init_params)
 
         @jax.jit
-        def step(params, opt_state):
-            loss, grads = jax.value_and_grad(loss_fn)(params)
+        def step(params, opt_state, data_args):
+            loss, grads = jax.value_and_grad(lambda p: loss_fn(p, data_args))(params)
             updates, new_opt_state = opt.update(grads, opt_state, params)
             new_params = optax.apply_updates(params, updates)
             return new_params, new_opt_state, loss
@@ -2940,7 +2998,7 @@ class Fitter:
         t0 = time.time()
 
         for i in range(n_steps):
-            params, opt_state, loss_val = step(params, opt_state)
+            params, opt_state, loss_val = step(params, opt_state, data_args)
             current_loss = float(loss_val)
             loss_history.append(current_loss)
 
@@ -3023,7 +3081,8 @@ class Fitter:
         from tengri.inference.posterior import Posterior
         from tengri.inference.raytrace import sample_raytrace
 
-        loss_fn = self._build_loss_fn()
+        loss_fn = self._get_or_build_loss_fn()
+        data_args = self._data_args
 
         if init_from is not None:
             init_params = self._unbounded_from_posterior(init_from)
@@ -3045,7 +3104,7 @@ class Fitter:
 
         def log_prob_flat(position):
             params = unravel_fn(position)
-            return -loss_fn(params)
+            return -loss_fn(params, data_args)
 
         total_steps = n_burnin + n_steps
 
@@ -3171,7 +3230,8 @@ class Fitter:
                 stacklevel=3,
             )
 
-        loss_fn = self._build_loss_fn()
+        loss_fn = self._get_or_build_loss_fn()
+        data_args = self._data_args
 
         if init_from is not None:
             init_params = self._unbounded_from_posterior(init_from)
@@ -3183,7 +3243,7 @@ class Fitter:
 
         def log_posterior_flat(position):
             params = unravel_fn(position)
-            return -loss_fn(params)
+            return -loss_fn(params, data_args)
 
         if verbose:
             n_dim = len(init_flat)
@@ -3210,51 +3270,57 @@ class Fitter:
                 f"Step size: {float(parameters['step_size']):.4f}"
             )
 
-        # Sampling
+        # Sampling — use jax.lax.scan for zero Python dispatch overhead
         kernel = blackjax.nuts(log_posterior_flat, **parameters).step
 
         @jax.jit
         def one_step(state, rng_key):
             state, info = kernel(rng_key, state)
-            return state, (state.position, info)
+            return state, (state.position, info.is_divergent)
 
-        # Burn-in: run steps but discard
+        # Burn-in via scan (discarded)
         if n_burnin > 0:
             key, burnin_key = jax.random.split(key)
             burnin_keys = jax.random.split(burnin_key, n_burnin)
-            for sk in burnin_keys:
-                state, _ = one_step(state, sk)
+
+            @jax.jit
+            def burnin_scan(state, keys):
+                def _step(s, k):
+                    s, _ = one_step(s, k)
+                    return s, None
+
+                s, _ = jax.lax.scan(_step, state, keys)
+                return s
+
+            state = burnin_scan(state, burnin_keys)
             if verbose:
                 print(f"  Burn-in complete ({n_burnin} steps discarded)")
 
         key, sample_key = jax.random.split(key)
         sample_keys = jax.random.split(sample_key, n_samples)
 
-        all_positions = []
-        n_divergent = 0
+        # Sampling via scan — single JIT call for all samples
+        @jax.jit
+        def sample_scan(state, keys):
+            def _step(s, k):
+                s, (pos, div) = one_step(s, k)
+                return s, (pos, div)
 
-        for i, sk in enumerate(sample_keys):
-            state, (position, info) = one_step(state, sk)
-            all_positions.append(position)
-            if hasattr(info, "is_divergent"):
-                n_divergent += int(info.is_divergent)
-            if verbose and ((i + 1) % 200 == 0 or i == n_samples - 1):
-                print(f"  Sample {i + 1}/{n_samples}")
+            return jax.lax.scan(_step, state, keys)
+
+        _, (positions, divergent) = sample_scan(state, sample_keys)
+        n_divergent = int(jnp.sum(divergent))
 
         wall_time = time.time() - t0
-        positions = jnp.stack(all_positions)
 
-        # Unravel and convert to physical
-        samples_phys = {}
-        for i in range(n_samples):
-            sample_u = unravel_fn(positions[i])
-            sample_p = self._to_physical(sample_u)
-            for k, v in sample_p.items():
-                if k not in samples_phys:
-                    samples_phys[k] = []
-                samples_phys[k].append(v)
+        if verbose:
+            print(f"  Sampling complete ({n_samples} samples)")
 
-        samples_phys = {k: jnp.stack(v) for k, v in samples_phys.items()}
+        # Vectorized post-processing: unravel + convert to physical
+        def _convert_one(flat_pos):
+            return self._to_physical(unravel_fn(flat_pos))
+
+        samples_phys = jax.vmap(_convert_one)(positions)
         best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
 
         if verbose:
@@ -3284,15 +3350,15 @@ class Fitter:
         """Build a log-likelihood function in unbounded parameter space.
 
         For Elliptical Slice Sampling, which handles the N(0,I) prior
-        internally. Returns only the data likelihood (no prior terms).
+        internally.  Returns ``loglik(params_unbounded, data_args)``.
         """
-        loglik_fn = self._build_loglikelihood_fn()
+        loglik_fn = self._get_or_build_loglikelihood_fn()
         bounds = self._bounds
         free_names = self._free_names
         fixed_values = self._fixed_values
         spec = self.spec
 
-        def loglik_unbounded(params_unbounded):
+        def loglik_unbounded(params_unbounded, data_args):
             params = {}
             for name in free_names:
                 lo, hi = bounds[name]
@@ -3301,7 +3367,7 @@ class Fitter:
                 params[name] = val
             if spec.stochastic and "psd_xi" in params_unbounded:
                 params["psd_xi"] = params_unbounded["psd_xi"]
-            return loglik_fn(params)
+            return loglik_fn(params, data_args)
 
         return loglik_unbounded
 
@@ -3309,7 +3375,8 @@ class Fitter:
         """Laplace approximation: Gaussian posterior from Hessian at MAP."""
         from tengri.inference.laplace import run_laplace
 
-        loss_fn = self._build_loss_fn()
+        loss_fn = self._get_or_build_loss_fn()
+        data_args = self._data_args
 
         if init_from is not None:
             map_params = self._unbounded_from_posterior(init_from)
@@ -3324,6 +3391,7 @@ class Fitter:
         return run_laplace(
             key=key,
             loss_fn=loss_fn,
+            data_args=data_args,
             map_params_unbounded=map_params,
             to_physical_fn=self._to_physical,
             model=self.model,
@@ -3334,7 +3402,8 @@ class Fitter:
         """Pathfinder: fast approximate posterior via L-BFGS path."""
         from tengri.inference.pathfinder import run_pathfinder
 
-        loss_fn = self._build_loss_fn()
+        loss_fn = self._get_or_build_loss_fn()
+        data_args = self._data_args
 
         if init_from is not None:
             init_params = self._unbounded_from_posterior(init_from)
@@ -3344,6 +3413,7 @@ class Fitter:
         return run_pathfinder(
             key=key,
             loss_fn=loss_fn,
+            data_args=data_args,
             init_params=init_params,
             to_physical_fn=self._to_physical,
             model=self.model,
@@ -3354,7 +3424,8 @@ class Fitter:
         """Elliptical Slice Sampling for Gaussian-prior latent models."""
         from tengri.inference.elliptical_slice import run_elliptical_slice
 
-        loglik_fn = self._build_loglikelihood_unbounded_fn()
+        loglik_unbounded_fn = self._build_loglikelihood_unbounded_fn()
+        data_args = self._data_args
 
         if init_from is not None:
             init_params = self._unbounded_from_posterior(init_from)
@@ -3363,7 +3434,8 @@ class Fitter:
 
         return run_elliptical_slice(
             key=key,
-            loglikelihood_unbounded_fn=loglik_fn,
+            loglikelihood_unbounded_fn=loglik_unbounded_fn,
+            data_args=data_args,
             init_params=init_params,
             to_physical_fn=self._to_physical,
             model=self.model,

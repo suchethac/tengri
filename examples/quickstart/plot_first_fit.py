@@ -30,8 +30,12 @@ from tengri import (
 def _find_ssp():
     """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
     name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [Path("data") / name, Path("../data") / name,
-              Path("../../data") / name, Path("../../../data") / name]:
+    for p in [
+        Path("data") / name,
+        Path("../data") / name,
+        Path("../../data") / name,
+        Path("../../../data") / name,
+    ]:
         if p.exists():
             return str(p)
     return None
@@ -41,8 +45,16 @@ SSP_PATH = _find_ssp()
 
 # Locate filter cache
 _FILTER_DIR = next(
-    (str(d) for d in [Path("data/filters"), Path("../data/filters"),
-     Path("../../data/filters"), Path("../../../data/filters")] if d.exists()),
+    (
+        str(d)
+        for d in [
+            Path("data/filters"),
+            Path("../data/filters"),
+            Path("../../data/filters"),
+            Path("../../../data/filters"),
+        ]
+        if d.exists()
+    ),
     "data/filters",
 )
 if SSP_PATH is None:
@@ -65,14 +77,16 @@ spec = ParamSpec(
 )
 
 bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-obs = Observation(
-    photometry=Photometry.from_names(bands, cache_dir=_FILTER_DIR)
-)
+obs = Observation(photometry=Photometry.from_names(bands, cache_dir=_FILTER_DIR))
 model = Model(spec, ssp, observation=obs)
 
-# --- Generate mock photometry ---
+# --- Generate mock photometry (star-forming galaxy) ---
 key = jax.random.PRNGKey(42)
 true_params = spec.sample(key)
+true_params["sfh_tsnorm_peak_lbt_gyr"] = 3.0
+true_params["sfh_tsnorm_width_gyr"] = 2.0
+true_params["sfh_tsnorm_log_peak_sfr"] = 1.0
+true_params["sfh_tsnorm_skew"] = 0.3  # Positive skew = recent star formation
 mock = model.mock(true_params, snr=20.0, key=key)
 
 # --- Fit with MAP ---
@@ -108,6 +122,20 @@ ax.set_xlabel("Wavelength [A]")
 ax.set_ylabel("Flux density [erg/s/cm$^2$/Hz]")
 ax.set_title("First Photometric Fit with tengri")
 ax.legend(fontsize=9, frameon=False)
+
+# --- SFH inset: truth vs MAP ---
+sfh_true = model.predict_sfh(true_params)
+sfh_fit = model.predict_sfh(posterior.params)
+t_gyr = np.array(sfh_true["t_gyr"])
+inset = ax.inset_axes([0.58, 0.58, 0.38, 0.38])
+mask = t_gyr < 5.0
+inset.plot(t_gyr[mask], np.array(sfh_true["sfr_mean"])[mask], "k-", lw=1.5, label="Truth")
+inset.plot(t_gyr[mask], np.array(sfh_fit["sfr_mean"])[mask], "r--", lw=1.2, label="MAP")
+inset.set_xlabel("Lookback [Gyr]", fontsize=6)
+inset.set_ylabel("SFR", fontsize=6)
+inset.tick_params(labelsize=5)
+inset.legend(fontsize=5)
+
 fig.tight_layout()
 plt.savefig("plot_first_fit.png", dpi=150, bbox_inches="tight")
 plt.show()

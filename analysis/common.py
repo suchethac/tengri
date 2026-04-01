@@ -34,13 +34,15 @@ FIG_DIR = PROJECT_ROOT / "analysis" / "figures"
 FIG_DIR.mkdir(exist_ok=True)
 
 SSP_FILE = DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-PAPER_FIG_DIR = Path.home() / "writing-workspace" / "projects" / "differentiable_psd_sed_fitting" / "figures"
+PAPER_FIG_DIR = (
+    Path.home() / "writing-workspace" / "projects" / "differentiable_psd_sed_fitting" / "figures"
+)
 
 # ── PSD regimes ────────────────────────────────────────────────────
 PSD_REGIMES = {
-    "smooth":       {"psd_sigma": 0.5, "psd_tau_myr": 200.0},
-    "moderate":     {"psd_sigma": 1.0, "psd_tau_myr": 50.0},
-    "bursty":       {"psd_sigma": 2.0, "psd_tau_myr": 20.0},
+    "smooth": {"psd_sigma": 0.5, "psd_tau_myr": 200.0},
+    "moderate": {"psd_sigma": 1.0, "psd_tau_myr": 50.0},
+    "bursty": {"psd_sigma": 2.0, "psd_tau_myr": 20.0},
     "highly_bursty": {"psd_sigma": 3.0, "psd_tau_myr": 5.0},
 }
 
@@ -64,18 +66,21 @@ DEFAULT_SPS = dict(
 def setup_matplotlib():
     """Set publication-quality matplotlib defaults."""
     import matplotlib.pyplot as plt
-    plt.rcParams.update({
-        "font.size": 11,
-        "axes.labelsize": 12,
-        "axes.titlesize": 12,
-        "xtick.labelsize": 10,
-        "ytick.labelsize": 10,
-        "legend.fontsize": 9,
-        "figure.dpi": 150,
-        "savefig.dpi": 300,
-        "savefig.bbox": "tight",
-        "font.family": "serif",
-    })
+
+    plt.rcParams.update(
+        {
+            "font.size": 11,
+            "axes.labelsize": 12,
+            "axes.titlesize": 12,
+            "xtick.labelsize": 10,
+            "ytick.labelsize": 10,
+            "legend.fontsize": 9,
+            "figure.dpi": 150,
+            "savefig.dpi": 300,
+            "savefig.bbox": "tight",
+            "font.family": "serif",
+        }
+    )
     return plt
 
 
@@ -110,17 +115,19 @@ def get_observation(filter_names=None):
         filter_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
     key = tuple(filter_names)
     if key not in _OBS_CACHE:
-        _OBS_CACHE[key] = Observation(
-            photometry=Photometry.from_names(list(filter_names))
-        )
+        _OBS_CACHE[key] = Observation(photometry=Photometry.from_names(list(filter_names)))
     return _OBS_CACHE[key]
 
 
 # ── Model factory ─────────────────────────────────────────────────
-def make_model(psd_regime: str, redshift: float = 0.1,
-               stochastic: bool = True, n_grid: int = 128,
-               free_psd: bool = False,
-               filter_names: list | None = None) -> Model:
+def make_model(
+    psd_regime: str,
+    redshift: float = 0.1,
+    stochastic: bool = True,
+    n_grid: int = 128,
+    free_psd: bool = False,
+    filter_names: list | None = None,
+) -> Model:
     """Create a Model for a given PSD regime.
 
     Parameters
@@ -164,6 +171,7 @@ def make_model(psd_regime: str, redshift: float = 0.1,
 @dataclass
 class MockGalaxy:
     """A single mock galaxy with truth and observations."""
+
     true_params: dict
     flux_obs: jnp.ndarray
     noise: jnp.ndarray
@@ -173,9 +181,9 @@ class MockGalaxy:
     wave_spec: jnp.ndarray | None = None
 
 
-def generate_mock_galaxy(model: Model, key, snr: float = 20.0,
-                         spec_snr: float = 15.0,
-                         wave_spec=None) -> MockGalaxy:
+def generate_mock_galaxy(
+    model: Model, key, snr: float = 20.0, spec_snr: float = 15.0, wave_spec=None
+) -> MockGalaxy:
     """Generate a single mock galaxy.
 
     Parameters
@@ -208,9 +216,7 @@ def generate_mock_galaxy(model: Model, key, snr: float = 20.0,
     if wave_spec is not None:
         spec_true = model.predict_spectrum(true_params, wave_spec)
         spec_noise = spec_true / spec_snr
-        spec_obs = spec_true + spec_noise * jax.random.normal(
-            spec_key, shape=spec_true.shape
-        )
+        spec_obs = spec_true + spec_noise * jax.random.normal(spec_key, shape=spec_true.shape)
         result.spec_obs = spec_obs
         result.spec_noise = spec_noise
         result.wave_spec = wave_spec
@@ -218,8 +224,9 @@ def generate_mock_galaxy(model: Model, key, snr: float = 20.0,
     return result
 
 
-def generate_mock_population(model: Model, n_galaxies: int, key,
-                             snr: float = 20.0, **kwargs) -> list[MockGalaxy]:
+def generate_mock_population(
+    model: Model, n_galaxies: int, key, snr: float = 20.0, **kwargs
+) -> list[MockGalaxy]:
     """Generate a population of mock galaxies."""
     keys = jax.random.split(key, n_galaxies)
     return [generate_mock_galaxy(model, k, snr=snr, **kwargs) for k in keys]
@@ -229,6 +236,7 @@ def generate_mock_population(model: Model, n_galaxies: int, key,
 @dataclass
 class FitResult:
     """Results from fitting a single mock galaxy."""
+
     posterior: Posterior
     true_params: dict
     true_sfh: dict
@@ -236,8 +244,13 @@ class FitResult:
     wall_time_s: float
 
 
-def fit_galaxy(model: Model, galaxy: MockGalaxy, method: str = "raytrace",
-               data_type: str = "photometry", **kwargs) -> FitResult:
+def fit_galaxy(
+    model: Model,
+    galaxy: MockGalaxy,
+    method: str = "raytrace",
+    data_type: str = "photometry",
+    **kwargs,
+) -> FitResult:
     """Fit a single mock galaxy.
 
     Parameters
@@ -256,7 +269,13 @@ def fit_galaxy(model: Model, galaxy: MockGalaxy, method: str = "raytrace",
     if data_type == "spectroscopy" and galaxy.spec_obs is not None:
         data = galaxy.spec_obs
         noise = galaxy.spec_noise
-        model._wave_obs = galaxy.wave_spec
+        # Rebuild model with spectroscopic observation
+        from tengri import SpectroscopyConfig
+
+        spec_obs = Observation(
+            spectroscopy=SpectroscopyConfig(wave_obs=galaxy.wave_spec),
+        )
+        model = Model(model.spec, model.ssp_data, observation=spec_obs)
     else:
         data = galaxy.flux_obs
         noise = galaxy.noise
@@ -268,11 +287,9 @@ def fit_galaxy(model: Model, galaxy: MockGalaxy, method: str = "raytrace",
     key = kwargs.pop("key", jax.random.PRNGKey(42))
 
     if method in ("raytrace", "nuts", "geovi"):
-        result_map = fitter.run("map", n_steps=1000, learning_rate=0.03,
-                                verbose=False, key=key)
+        result_map = fitter.run("map", n_steps=1000, learning_rate=0.03, verbose=False, key=key)
         key = jax.random.fold_in(key, 1)
-        posterior = fitter.run(method, init_from=result_map, key=key,
-                               verbose=False, **kwargs)
+        posterior = fitter.run(method, init_from=result_map, key=key, verbose=False, **kwargs)
     else:
         posterior = fitter.run(method, key=key, verbose=False, **kwargs)
 
@@ -288,8 +305,7 @@ def fit_galaxy(model: Model, galaxy: MockGalaxy, method: str = "raytrace",
 
 
 # ── SFH residual metrics ─────────────────────────────────────────
-def sfh_residuals(model: Model, fit_result: FitResult,
-                  t_max_gyr: float = 1.0) -> dict:
+def sfh_residuals(model: Model, fit_result: FitResult, t_max_gyr: float = 1.0) -> dict:
     """Compute SFH recovery metrics.
 
     Returns
@@ -330,7 +346,9 @@ def sfh_residuals(model: Model, fit_result: FitResult,
 
     # Recent (t < t_max_gyr)
     mask_recent = t_gyr < t_max_gyr
-    rmse_recent = float(np.sqrt(np.mean(residual[mask_recent]**2))) if mask_recent.any() else np.nan
+    rmse_recent = (
+        float(np.sqrt(np.mean(residual[mask_recent] ** 2))) if mask_recent.any() else np.nan
+    )
 
     # Bias
     bias = float(np.mean(residual))

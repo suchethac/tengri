@@ -29,8 +29,12 @@ from tengri import (
 def _find_ssp():
     """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
     name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [Path("data") / name, Path("../data") / name,
-              Path("../../data") / name, Path("../../../data") / name]:
+    for p in [
+        Path("data") / name,
+        Path("../data") / name,
+        Path("../../data") / name,
+        Path("../../../data") / name,
+    ]:
         if p.exists():
             return str(p)
     return None
@@ -40,8 +44,16 @@ SSP_PATH = _find_ssp()
 
 # Locate filter cache
 _FILTER_DIR = next(
-    (str(d) for d in [Path("data/filters"), Path("../data/filters"),
-     Path("../../data/filters"), Path("../../../data/filters")] if d.exists()),
+    (
+        str(d)
+        for d in [
+            Path("data/filters"),
+            Path("../data/filters"),
+            Path("../../data/filters"),
+            Path("../../../data/filters"),
+        ]
+        if d.exists()
+    ),
     "data/filters",
 )
 if SSP_PATH is None:
@@ -68,14 +80,18 @@ spec = ParamSpec(
 )
 model = Model(spec, ssp_data, observation=obs)
 
-# --- Generate mock data ---
+# --- Generate mock data (star-forming galaxy) ---
 true_params = spec.sample(jax.random.PRNGKey(42))
+true_params["sfh_tsnorm_peak_lbt_gyr"] = 3.0
+true_params["sfh_tsnorm_width_gyr"] = 2.0
+true_params["sfh_tsnorm_log_peak_sfr"] = 1.0
+true_params["sfh_tsnorm_skew"] = 0.3  # Positive skew = recent star formation
 mock = model.mock(true_params, snr=20.0, key=jax.random.PRNGKey(0))
 
 # --- Fit with MAP ---
 fitter = Fitter(model, mock.flux_obs, mock.noise)
 posterior = fitter.run("map", optimizer="adam", n_steps=300, verbose=False)
-best_fit = model.predict_photometry(posterior.map_params)
+best_fit = model.predict_photometry(posterior.params)
 
 # --- Plot ---
 wave_eff = np.array([3551, 4686, 6166, 7480, 8932])  # SDSS effective wavelengths
@@ -120,6 +136,19 @@ ax_res.set_ylabel(r"$(f_\mathrm{obs} - f_\mathrm{mod}) / \sigma$")
 ax_res.set_ylim(-4, 4)
 ax_res.set_xticks(wave_eff)
 ax_res.set_xticklabels(band_names)
+
+# --- SFH inset: truth vs MAP ---
+sfh_true = model.predict_sfh(true_params)
+sfh_fit = model.predict_sfh(posterior.params)
+t_gyr = np.array(sfh_true["t_gyr"])
+inset = ax.inset_axes([0.58, 0.58, 0.38, 0.38])
+mask = t_gyr < 5.0
+inset.plot(t_gyr[mask], np.array(sfh_true["sfr_mean"])[mask], "k-", lw=1.5, label="Truth")
+inset.plot(t_gyr[mask], np.array(sfh_fit["sfr_mean"])[mask], "r--", lw=1.2, label="MAP")
+inset.set_xlabel("Lookback [Gyr]", fontsize=6)
+inset.set_ylabel("SFR", fontsize=6)
+inset.tick_params(labelsize=5)
+inset.legend(fontsize=5)
 
 fig.tight_layout()
 plt.savefig("photometric_fit.png", dpi=150, bbox_inches="tight")

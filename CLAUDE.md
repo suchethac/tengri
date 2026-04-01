@@ -109,11 +109,12 @@ Each class has a `.summary()` method for quick inspection:
 
 ## Inference methods
 
-`native_geovi` is the **default** going forward. Ray Tracing validates. NUTS validates low-D. MAP initializes.
+`geovi` (NIFTy fast path) is the **default** for single-galaxy fitting. `native_geovi` is for batch/vmap. Ray Tracing validates. NUTS validates low-D. MAP initializes.
 
 | Method | Command | Best for |
 |--------|---------|----------|
-| **native_geovi** | `fitter.run("native_geovi")` | **Default.** JIT-compiled geoVI with resample+update schedule, nonlinear posterior draws |
+| **geovi** | `fitter.run("geovi")` | **Default.** NIFTy geoVI tight loop — fast for single galaxy (~12s), no heavy compile |
+| native_geovi | `fitter.run("native_geovi")` | Fully JIT-compiled geoVI — slower first call (~30s compile) but enables `jax.vmap` for batch fitting |
 | native_mgvi | `fitter.run("native_mgvi")` | JIT-compiled MGVI |
 | geovi / fast_geovi | `fitter.run("geovi")` | NIFTy OptimizeVI.update tight loop, resample+update schedule |
 | mgvi / fast_mgvi | `fitter.run("mgvi")` | NIFTy MGVI tight loop |
@@ -129,9 +130,9 @@ Each class has a `.summary()` method for quick inspection:
 | Elliptical Slice | `fitter.run("elliptical_slice", n_burnin=200)` | Exact MCMC for Gaussian-prior latent models (Murray+2010). Natural for GP field |
 | MAP | `fitter.run("map", optimizer="adam")` | Point estimates. Optimizer swappable: adam/adamw/sgd/custom optax |
 
-**Internal dispatch:** `_run_native_vi` handles native_geovi/native_mgvi. `_run_fast_vi` handles geovi/fast_geovi/mgvi/fast_mgvi/geovi_nuts/mgvi_nuts. `_run_nifty_vi` handles nifty_geovi/nifty_mgvi. `_run_nss` handles nss. `_run_laplace`/`_run_pathfinder`/`_run_elliptical_slice`/`_run_map`/`_run_nuts`/`_run_raytrace` handle the rest.
+**Internal dispatch:** `_run_fast_vi` handles geovi/fast_geovi/mgvi/fast_mgvi (NIFTy fast path — default). `_run_native_vi` handles native_geovi/native_mgvi (fully JIT — for batch/vmap). `_run_nifty_vi` handles nifty_geovi/nifty_mgvi. `_run_nss` handles nss. `_run_laplace`/`_run_pathfinder`/`_run_elliptical_slice`/`_run_map`/`_run_nuts`/`_run_raytrace` handle the rest.
 
-**Batch fitting:** `fitter.fit_batch(galaxies)` (NOT `fit_catalog`). Default method is `native_geovi`.
+**Batch fitting:** `fitter.fit_batch(galaxies)` (NOT `fit_catalog`). Default method is `geovi` (NIFTy). Use `method="native_geovi"` for vmap batch path.
 
 **Removed names:** `geovi_nifty` -> `nifty_geovi`, `mgvi_nifty` -> `nifty_mgvi`, `geovi_full` -> `nifty_geovi`, `mgvi_full` -> `nifty_mgvi`, `fit_catalog` -> `fit_batch`.
 

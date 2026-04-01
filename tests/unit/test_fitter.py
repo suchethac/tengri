@@ -78,15 +78,16 @@ class TestLossFunction:
         fitter = Fitter(model, mock.flux_obs, mock.noise)
         loss_fn = fitter._build_loss_fn()
         init = fitter._initialize_unbounded(jax.random.PRNGKey(0))
-        loss = loss_fn(init)
+        loss = loss_fn(init, fitter._data_args)
         assert jnp.isfinite(loss)
 
     def test_loss_gradient_finite(self, model_and_mock):
         model, mock, _ = model_and_mock
         fitter = Fitter(model, mock.flux_obs, mock.noise)
         loss_fn = fitter._build_loss_fn()
+        data_args = fitter._data_args
         init = fitter._initialize_unbounded(jax.random.PRNGKey(0))
-        grad = jax.grad(loss_fn)(init)
+        grad = jax.grad(lambda p: loss_fn(p, data_args))(init)
         for name, g in grad.items():
             assert jnp.all(jnp.isfinite(g)), f"Non-finite gradient for {name}"
 
@@ -133,5 +134,5 @@ class TestGaussianPrior:
         fitter = Fitter(model, mock.flux_obs, mock.noise)
         loss_fn = fitter._build_loss_fn()
         init = fitter._initialize_unbounded(jax.random.PRNGKey(2))
-        loss = loss_fn(init)
+        loss = loss_fn(init, fitter._data_args)
         assert jnp.isfinite(loss)

@@ -27,7 +27,7 @@ Available Attenuation Curves
 - **salim_sbl18**: Salim+2018 modified Calzetti+L02: base*slope+bump
 - **smc**: Gordon et al. (2003) SMC Bar, steep UV, no 2175A bump
 - **cardelli**: Cardelli et al. (1989) MW curve with free R_V
-- **li08**: Li et al. (2008) parametric 3-slope + UV bump (reproduces MW/SMC/Calzetti)
+- **li08**: Li et al. (2008) Eq. (1) four-coefficient curve (continuum + FUV rise + 2175 Å bump)
 - **salim**: Salim et al. (2018) modified Calzetti (= DSPS default)
 - **tea**: Haskell et al. (2024) TEA 3-param empirical (NIHAO-SKIRT bump-slope correlation)
 - **narayanan_z**: Narayanan et al. (2018) redshift-dependent Kriek-Conroy (SIMBA RT)

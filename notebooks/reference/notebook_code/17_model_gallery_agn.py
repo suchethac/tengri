@@ -77,6 +77,78 @@ setup_style()
 FIGDIR = os.path.join(_nb_dir, "..", "figures", "reference")
 os.makedirs(FIGDIR, exist_ok=True)
 
+
+def _set_reasonable_log_ylim_from_axes(
+    axes,
+    pad_log=0.12,
+    min_xy_points=4,
+    floor_below_peak_dex=10.0,
+    wide_log_span_threshold=10.0,
+    percentile_lo_hi=(5.0, 95.0),
+):
+    """Tighten log *y* limits from line data inside each subplot's *x* range.
+
+    - Skips ``axvline`` polylines (too few points or zero *x* span) so their
+      artificial *y* range does not dominate limits.
+    - Per line, drops values more than ``floor_below_peak_dex`` below that
+      line's 99th percentile (removes line-model numerical floors / spikes).
+    - If the pooled log-span still exceeds ``wide_log_span_threshold``, uses
+      ``percentile_lo_hi`` on log10(y) instead of raw min/max.
+    """
+    ax_list = np.ravel(np.atleast_1d(axes))
+    if ax_list.size == 0:
+        return
+    ys = []
+    for ax in ax_list:
+        x_lo, x_hi = ax.get_xlim()
+        if not np.isfinite(x_lo) or not np.isfinite(x_hi) or x_lo >= x_hi:
+            continue
+        for line in ax.get_lines():
+            x = np.asarray(line.get_xdata(), dtype=float)
+            y = np.asarray(line.get_ydata(), dtype=float)
+            if x.size < min_xy_points:
+                continue
+            x_span = float(np.ptp(x))
+            x_scale = max(float(np.max(np.abs(x))), 1.0)
+            if x_span <= 1e-9 * x_scale or x_span <= 1e-12:
+                continue
+            m = (x >= x_lo) & (x <= x_hi) & np.isfinite(y) & (y > 0)
+            if not np.any(m):
+                continue
+            y_win = y[m]
+            peak = float(np.percentile(y_win, 99.0))
+            if not np.isfinite(peak) or peak <= 0:
+                continue
+            floor = peak * 10 ** (-floor_below_peak_dex)
+            y_win = y_win[y_win >= floor]
+            if y_win.size == 0:
+                continue
+            ys.append(y_win)
+    if not ys:
+        return
+    y = np.concatenate(ys)
+    logy = np.log10(y)
+    if not np.all(np.isfinite(logy)):
+        return
+    raw_lo = float(np.min(logy))
+    raw_hi = float(np.max(logy))
+    if raw_hi - raw_lo > wide_log_span_threshold:
+        p_lo, p_hi = percentile_lo_hi
+        lo_log, hi_log = (float(t) for t in np.percentile(logy, [p_lo, p_hi]))
+    else:
+        lo_log, hi_log = raw_lo, raw_hi
+    lo_log -= pad_log
+    hi_log += pad_log
+    if hi_log - lo_log < pad_log * 2:
+        mid = 0.5 * (lo_log + hi_log)
+        lo_log, hi_log = mid - pad_log * 2, mid + pad_log * 2
+    y0, y1 = 10**lo_log, 10**hi_log
+    if not np.isfinite(y0) or not np.isfinite(y1) or y0 <= 0 or y1 <= y0:
+        return
+    for ax in ax_list:
+        ax.set_ylim(y0, y1)
+
+
 # Physical constants
 _LSUN_ERG = 3.828e33  # Solar luminosity [erg s^-1]
 
@@ -102,7 +174,7 @@ nu_xray = np.asarray(3e18 / wave_xray)
 # 4. **Narrow Line Region** (optical lines): extended gas, FWHM ~500 km/s, isotropic
 
 # %%
-fig, ax = plt.subplots(figsize=(10, 6))
+fig, ax = plt.subplots(figsize=(9, 5.5))
 
 # Compute individual components of unified_nlr_blr manually for labeling
 _log_lbol = 44.0
@@ -164,25 +236,6 @@ ax.loglog(wave_um, l_blr * nu_arr, color=COLORS["nuts"], lw=1.5, ls="--", label=
 ax.loglog(wave_um, l_nlr * nu_arr, color=COLORS["mgvi"], lw=1.5, ls=":", label="NLR")
 ax.loglog(wave_um, l_total * nu_arr, color=COLORS["truth"], lw=2.5, label="Total", alpha=0.7)
 
-# Annotate spectral regions
-for label, x_pos, _y_frac in [
-    ("X-ray", 5e-4, 0.4),
-    ("UV", 0.02, 0.85),
-    ("Optical", 0.5, 0.7),
-    ("NIR", 2, 0.6),
-    ("MIR", 15, 0.8),
-    ("FIR", 70, 0.55),
-]:
-    ax.text(
-        x_pos,
-        ax.get_ylim()[0],
-        label,
-        fontsize=7,
-        color="gray",
-        ha="center",
-        transform=ax.get_xaxis_transform(),
-    )
-
 # Reference wavelengths
 for lam_um, _name in [(0.1216, r"Ly$\alpha$"), (9.7, "Si 9.7")]:
     ax.axvline(lam_um, color="gray", ls=":", alpha=0.3, lw=0.7)
@@ -193,6 +246,27 @@ ax.set(
     title=r"Full AGN SED: disc + torus + BLR + NLR ($\log L_{\rm bol}=44$, Type 1)",
     xlim=(1e-3, 100),
 )
+_set_reasonable_log_ylim_from_axes(ax)
+
+# Region labels: *y* is axes fraction (0–1) for get_xaxis_transform()
+for label, x_pos, y_axes in [
+    ("X-ray", 5e-4, 0.4),
+    ("UV", 0.02, 0.85),
+    ("Optical", 0.5, 0.7),
+    ("NIR", 2, 0.6),
+    ("MIR", 15, 0.8),
+    ("FIR", 70, 0.55),
+]:
+    ax.text(
+        x_pos,
+        y_axes,
+        label,
+        fontsize=7,
+        color="gray",
+        ha="center",
+        transform=ax.get_xaxis_transform(),
+    )
+
 ax.legend(fontsize=8, ncol=2, loc="upper left")
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "17_agn_full_sed_overview.png"), dpi=150, bbox_inches="tight")
@@ -210,7 +284,7 @@ plt.show()
 # ### 2a. Power-Law Disc: Varying Spectral Slope
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
 # (a) Vary alpha
 alphas = [-0.5, -1.0, -1.5]
@@ -255,7 +329,7 @@ plt.show()
 # ### 2b. Multicolor Disc (Shakura-Sunyaev): Black Hole Mass, Eddington Ratio, and Spin
 
 # %%
-fig, axes = plt.subplots(2, 2, figsize=(12, 9))
+fig, axes = plt.subplots(2, 2, figsize=(10, 7.5))
 
 # (a) Vary M_BH
 log_mbhs = [6.0, 7.0, 8.0, 9.0]
@@ -370,7 +444,7 @@ plt.show()
 # 3. **Hot corona** ($R_{\rm ISCO} < r < R_{\rm hot}$): hard X-ray power law
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
 # (a) Compare standard disc vs 3-zone K&D
 l_standard = np.asarray(
@@ -488,7 +562,7 @@ plt.show()
 # SED: synchrotron (radio/mm), bremsstrahlung (X-ray), and inverse Compton.
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
 # (a) ADAF vs standard disc at L/L_Edd = 0.001
 l_adaf = np.asarray(
@@ -590,7 +664,7 @@ plt.show()
 # into the optical, then rising again in the IR from hot dust.
 
 # %%
-fig, axes = plt.subplots(2, 2, figsize=(12, 9))
+fig, axes = plt.subplots(2, 2, figsize=(10, 7.5))
 
 # Use a UV-focused wavelength grid for QSOgen
 wave_qso = jnp.logspace(np.log10(912), np.log10(1e5), 2000)
@@ -744,7 +818,7 @@ plt.show()
 # ### 4a. Simple Torus (Toy): Single-Temperature Modified Blackbody
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), sharey=True)
+fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
 
 # (a) Vary temperature
 temps = [500, 800, 1000, 1500]
@@ -774,6 +848,7 @@ axes[1].set(
     xlim=(0.5, 200),
 )
 axes[1].legend(fontsize=8)
+_set_reasonable_log_ylim_from_axes(axes)
 
 fig.suptitle("Simple torus (toy model, single-T MBB)", fontsize=12, y=1.02)
 fig.tight_layout()
@@ -784,7 +859,7 @@ plt.show()
 # ### 4b. Two-Temperature Torus (Toy): Hot + Warm Components
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), sharey=True)
+fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
 
 # (a) Vary optical depth
 for tau, c in zip([1.0, 5.0, 10.0], [COLORS["rt"], COLORS["nuts"], COLORS["model"]]):
@@ -812,6 +887,7 @@ axes[1].set(
     xlim=(0.5, 200),
 )
 axes[1].legend(fontsize=8)
+_set_reasonable_log_ylim_from_axes(axes)
 
 fig.suptitle("Two-temperature torus (hot 1200 K + warm 300 K)", fontsize=12, y=1.02)
 fig.tight_layout()
@@ -826,7 +902,7 @@ plt.show()
 # approximation if the template grid is unavailable.
 
 # %%
-fig, ax = plt.subplots(figsize=(8, 5))
+fig, ax = plt.subplots(figsize=(7, 4))
 try:
     skirtor_fn = get_agn_model("skirtor")
     for ci, c, lb in zip(
@@ -868,12 +944,14 @@ except Exception as e:
     ax.set_title("SKIRTOR analytic approximation: inclination dependence")
 
 ax.axvline(9.7, color="gray", ls=":", alpha=0.5)
-ax.text(10.5, ax.get_ylim()[1] * 0.5, r"Si 9.7 $\mu$m", fontsize=7, color="gray")
 ax.set(
     xlabel=r"Wavelength [$\mu$m]",
     ylabel=r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]",
     xlim=(0.3, 200),
 )
+_set_reasonable_log_ylim_from_axes(ax)
+_y0, _y1 = ax.get_ylim()
+ax.text(10.5, np.sqrt(_y0 * _y1), r"Si 9.7 $\mu$m", fontsize=7, color="gray")
 ax.legend(fontsize=8)
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "17_skirtor_torus.png"), dpi=150, bbox_inches="tight")
@@ -890,7 +968,7 @@ plt.show()
 _l_disc_bol = 10.0**44.0 * _LSUN_ERG
 wave_blr = jnp.linspace(1000.0, 8000.0, 3000)
 
-fig, axes = plt.subplots(2, 2, figsize=(12, 9))
+fig, axes = plt.subplots(2, 2, figsize=(10, 7.5))
 
 # (a) All 9 broad lines labeled
 l_blr_only = np.asarray(
@@ -1050,7 +1128,7 @@ plt.show()
 # %%
 wave_nlr = jnp.linspace(3500.0, 7200.0, 3000)
 
-fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
 # (a) NLR spectrum with labeled lines
 l_nlr_spec = np.asarray(
@@ -1155,7 +1233,7 @@ plt.show()
 # ### 7a. Type 1 vs Type 2 Comparison
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
 # (a) Type 1 vs Type 2
 for ci, c, lb in zip(
@@ -1233,7 +1311,7 @@ plt.show()
 # ### 7b. Polar Dust Reddening
 
 # %%
-fig, ax = plt.subplots(figsize=(8, 5))
+fig, ax = plt.subplots(figsize=(7, 4))
 ebv_values = [0.0, 0.1, 0.3, 0.5]
 ebv_colors = [COLORS["truth"], COLORS["rt"], COLORS["nuts"], COLORS["model"]]
 for ebv, c in zip(ebv_values, ebv_colors):
@@ -1289,7 +1367,7 @@ plt.show()
 # ### 7c. Torus Covering Factor from Opening Angle
 
 # %%
-fig, ax = plt.subplots(figsize=(8, 5))
+fig, ax = plt.subplots(figsize=(7, 4))
 theta_grid = np.linspace(0.0, 90.0, 100)
 cf_grid = np.cos(np.radians(theta_grid))
 

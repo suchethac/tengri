@@ -131,6 +131,28 @@ MODEL_LABELS = {
     "energy_balance_split": "Energy Balance Split",
 }
 
+
+def _set_reasonable_log_ylim(ax, pad_log=0.12):
+    """Tighten log-scale *y* limits from line data within the axis *x* range."""
+    x_lo, x_hi = ax.get_xlim()
+    ys = []
+    for line in ax.get_lines():
+        x = np.asarray(line.get_xdata())
+        y = np.asarray(line.get_ydata())
+        m = (x >= x_lo) & (x <= x_hi) & np.isfinite(y) & (y > 0)
+        if np.any(m):
+            ys.append(y[m])
+    if not ys:
+        return
+    y = np.concatenate(ys)
+    lo, hi = float(np.min(y)), float(np.max(y))
+    if not np.isfinite(lo) or not np.isfinite(hi) or lo <= 0 or hi <= 0:
+        return
+    if hi / lo < 1.02:
+        lo, hi = lo * 0.7, hi * 1.4
+    ax.set_ylim(10 ** (np.log10(lo) - pad_log), 10 ** (np.log10(hi) + pad_log))
+
+
 # %% [markdown]
 # ---
 # ## 1. Overview -- All Models at T=35 K
@@ -140,7 +162,7 @@ MODEL_LABELS = {
 # analytic fallbacks here for guaranteed availability.
 
 # %%
-fig, ax = plt.subplots(figsize=(10, 6))
+fig, ax = plt.subplots(figsize=(9, 5.5))
 
 # --- Analytic models ---
 # Modified blackbody
@@ -269,6 +291,7 @@ ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.xaxis.set_minor_formatter(ticker.NullFormatter())
 ax.set_xticks([1, 3, 10, 30, 100, 300, 1000])
 ax.get_xaxis().set_major_formatter(ticker.ScalarFormatter())
+_set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "16_overview_all_models.png"), dpi=150, bbox_inches="tight")
@@ -284,7 +307,7 @@ plt.show()
 # Two free parameters: temperature $T$ and emissivity index $\beta$.
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
 # --- Panel 1: Vary temperature ---
 ax = axes[0]
@@ -309,6 +332,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 # --- Panel 2: Vary beta ---
 ax = axes[1]
@@ -328,6 +352,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "16_modified_blackbody.png"), dpi=150, bbox_inches="tight")
@@ -341,7 +366,7 @@ plt.show()
 # The two components are joined by a smooth sigmoid transition function.
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
 # --- Panel 1: Casey vs MBB comparison ---
 ax = axes[0]
@@ -381,6 +406,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 # --- Panel 2: Vary alpha_mir ---
 ax = axes[1]
@@ -403,6 +429,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "16_casey2012.png"), dpi=150, bbox_inches="tight")
@@ -418,7 +445,7 @@ plt.show()
 # 4. **Cold ISM grains** -- Diffuse ISM component (T ~ 20 K)
 
 # %%
-fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+fig, axes = plt.subplots(2, 2, figsize=(10, 8))
 
 # --- Panel 1: All 4 components ---
 ax = axes[0, 0]
@@ -492,6 +519,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=8)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 # --- Panel 2: PAH Drude profiles (zoom on 3--15 um) ---
 ax = axes[0, 1]
@@ -522,6 +550,8 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel("PAH emission (arb.)")
 ax.set_title(r"PAH Drude Profiles (Smith+2007)")
 ax.set_xlim(2, 15)
+_emax = float(np.max(np.array(pah_emission)))
+ax.set_ylim(0, _emax * 1.2)
 
 # --- Panel 3: Vary xi_pah ---
 ax = axes[1, 0]
@@ -543,6 +573,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 # --- Panel 4: Vary T_warm and T_cold ---
 ax = axes[1, 1]
@@ -567,6 +598,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "16_magphys_components.png"), dpi=150, bbox_inches="tight")
@@ -587,7 +619,7 @@ plt.show()
 # radiation field intensity), `gamma` (fraction in PDR component).
 
 # %%
-fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+fig, axes = plt.subplots(1, 3, figsize=(12, 4.5))
 
 # --- Panel 1: Vary qPAH ---
 ax = axes[0]
@@ -609,6 +641,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 # --- Panel 2: Vary Umin ---
 ax = axes[1]
@@ -630,6 +663,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 # --- Panel 3: Vary gamma (single-U vs PDR mix) ---
 ax = axes[2]
@@ -651,6 +685,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "16_draine_li2007.png"), dpi=150, bbox_inches="tight")
@@ -664,7 +699,7 @@ plt.show()
 # DL07 uses a fixed alpha=2.0.
 
 # %%
-fig, ax = plt.subplots(figsize=(8, 5))
+fig, ax = plt.subplots(figsize=(7, 4))
 
 # DL07 reference
 lnu_dl07 = _draine_li2007_analytic_fallback(
@@ -693,6 +728,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "16_draine_li2014.png"), dpi=150, bbox_inches="tight")
@@ -707,7 +743,7 @@ plt.show()
 # radiation field (cooler).
 
 # %%
-fig, ax = plt.subplots(figsize=(8, 5))
+fig, ax = plt.subplots(figsize=(7, 4))
 
 alpha_dale_values = [1.0, 1.5, 2.0, 2.5, 3.0]
 cmap = plt.cm.RdYlBu_r
@@ -747,6 +783,7 @@ ax.annotate(
     color=cmap(0.9),
     style="italic",
 )
+_set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "16_dale2014.png"), dpi=150, bbox_inches="tight")
@@ -761,7 +798,7 @@ plt.show()
 # underlying grain physics.
 
 # %%
-fig, ax = plt.subplots(figsize=(8, 5))
+fig, ax = plt.subplots(figsize=(7, 4))
 
 # Compare DL07 and Astrodust at same parameters
 lnu_dl07 = _draine_li2007_analytic_fallback(
@@ -809,6 +846,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "16_astrodust.png"), dpi=150, bbox_inches="tight")
@@ -822,7 +860,7 @@ plt.show()
 # connection between star formation activity and dust temperature.
 
 # %%
-fig, ax = plt.subplots(figsize=(8, 5))
+fig, ax = plt.subplots(figsize=(7, 4))
 
 ssfr_values = [-11.0, -10.0, -9.5, -9.0, -8.5]
 cmap = plt.cm.hot_r
@@ -846,6 +884,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "16_bosa.png"), dpi=150, bbox_inches="tight")
@@ -859,7 +898,7 @@ plt.show()
 # lead to different aromatic feature profiles and FIR/submm slopes.
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
 # --- Panel 1: THEMIS vs DL07 ---
 ax = axes[0]
@@ -894,6 +933,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 # --- Panel 2: Vary qhac ---
 ax = axes[1]
@@ -915,6 +955,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "16_themis.png"), dpi=150, bbox_inches="tight")
@@ -930,7 +971,7 @@ plt.show()
 # from strict energy balance (eta != 1).
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
 # --- Panel 1: Warm + cold decomposition ---
 ax = axes[0]
@@ -991,6 +1032,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 # --- Panel 2: Vary eta_balance and AGN contribution ---
 ax = axes[1]
@@ -1037,6 +1079,7 @@ ax.set_xlim(1, 1000)
 ax.legend(fontsize=8)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "16_energy_balance.png"), dpi=150, bbox_inches="tight")
@@ -1053,7 +1096,7 @@ plt.show()
 # $$T_{\mathrm{eff}} = \left(T_{\mathrm{dust}}^{4+\beta} + T_{\mathrm{CMB}}(z)^{4+\beta} - T_{\mathrm{CMB}}(0)^{4+\beta}\right)^{1/(4+\beta)}$$
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
 # --- Panel 1: T_eff vs T_dust at various redshifts ---
 ax = axes[0]
@@ -1103,6 +1146,7 @@ ax.set_xlim(10, 1000)
 ax.legend(fontsize=9)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([10, 100, 1000])
+_set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "16_cmb_corrections.png"), dpi=150, bbox_inches="tight")
@@ -1182,7 +1226,7 @@ for row in summary_data:
 
 # %%
 # Also display as a formatted figure table
-fig, ax = plt.subplots(figsize=(16, 4.5))
+fig, ax = plt.subplots(figsize=(13, 4.0))
 ax.axis("off")
 
 table = ax.table(

@@ -33,6 +33,7 @@ Usage::
 
 from __future__ import annotations
 
+import contextlib
 import warnings
 from typing import ClassVar, NamedTuple
 
@@ -45,6 +46,8 @@ from tengri.core.fused_kernels import (
     build_fused_photometry_ztable,
     build_fused_rest_sed,
     build_fused_spectrum,
+    build_fused_tier2_photometry,
+    build_fused_tier2_spectrum,
     is_fused_compatible,
     is_tier2_compatible,
     observe_photometry_from_rest_sed,
@@ -489,6 +492,13 @@ class Model:
                     UserWarning,
                     stacklevel=2,
                 )
+
+        # Fused Tier 2 end-to-end photometry (params → photometry in one JIT)
+        self._fused_tier2_phot = None
+        self._fused_tier2_spec = None
+        if self._fused_rest_sed is not None and self.filter_waves is not None:
+            with contextlib.suppress(Exception):
+                self._fused_tier2_phot = build_fused_tier2_photometry(self)
 
         # Spectroscopy precomputation (same idea: pre-interpolate SSPs)
         self._spec_precomp = None
@@ -1107,7 +1117,15 @@ class Model:
         return self._fused_rest_sed(weights, ssp_flux_at_z, p)
 
     def _predict_photometry_tier2(self, params):
-        """Photometry via Tier 2: compositional rest SED + filter integration."""
+        """Photometry via Tier 2: compositional rest SED + filter integration.
+
+        Uses the fused end-to-end JIT kernel when available (eliminates
+        Python dispatch between SFH, metallicity, SED, and filter steps).
+        Falls back to unfused path otherwise.
+        """
+        if self._fused_tier2_phot is not None:
+            return self._fused_tier2_phot(params)
+
         rest_sed = self._compute_rest_sed_tier2(params)
         z = self._get_redshift(params)
         dl_cm = self._get_dl_cm(params)
@@ -1122,11 +1140,26 @@ class Model:
         )
 
     def _predict_spectrum_tier2(self, params, wave_obs):
-        """Spectrum via Tier 2: compositional rest SED + interpolation."""
-        rest_sed = self._compute_rest_sed_tier2(params)
-        z = self._get_redshift(params)
-        dl_cm = self._get_dl_cm(params)
-        flux = observe_spectrum_from_rest_sed(rest_sed, self.ssp_data.ssp_wave, wave_obs, z, dl_cm)
+        """Spectrum via Tier 2: compositional rest SED + interpolation.
+
+        Uses the fused end-to-end JIT kernel when available and the
+        wave_obs grid matches the precomputed grid. Falls back to
+        unfused path otherwise.
+        """
+        if (
+            self._fused_tier2_spec is not None
+            and self._spec_precomp is not None
+            and wave_obs is self._spec_precomp.wave_obs_pixels
+        ):
+            flux = self._fused_tier2_spec(params)
+            # Apply LSF if needed (below)
+        else:
+            rest_sed = self._compute_rest_sed_tier2(params)
+            z = self._get_redshift(params)
+            dl_cm = self._get_dl_cm(params)
+            flux = observe_spectrum_from_rest_sed(
+                rest_sed, self.ssp_data.ssp_wave, wave_obs, z, dl_cm
+            )
 
         # Apply LSF convolution if resolution profile is set
         resolution = self._lsf_resolution
@@ -1170,6 +1203,12 @@ class Model:
             self._fused_spectrum = build_fused_spectrum(self)
         else:
             self._fused_spectrum = None
+
+        # Build fused Tier 2 spectrum (end-to-end JIT)
+        self._fused_tier2_spec = None
+        if self._fused_rest_sed is not None:
+            with contextlib.suppress(Exception):
+                self._fused_tier2_spec = build_fused_tier2_spectrum(self)
         return self
 
     def precompute_ztable(self, z_grid=None, z_min=0.001, z_max=3.0, n_z=100):

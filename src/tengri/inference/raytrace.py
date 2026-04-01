@@ -134,6 +134,10 @@ def UpdateV(momentum, grad, D, step_size):
     Implements Eq. 23 from Behroozi (2025):
     tan(θ_f/2) = tan(θ_i/2) * exp(-Δs * |∇ln(n)|)
 
+    Matches the C implementation guard: ``if (!mnorm || !gnorm) return 0;``
+    When either the momentum or gradient has zero norm, the velocity is
+    unchanged and delta_ln_L = 0.
+
     Parameters
     ----------
     momentum : array
@@ -151,42 +155,58 @@ def UpdateV(momentum, grad, D, step_size):
         (new_momentum, delta_ln_L, norm_v, norm_g, theta_i, theta_f, f_v, f_n)
     """
     norm_v = jnp.sqrt(tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(momentum))))
-    unit_v = tree_map(lambda m, n: m / n, momentum, norm_v)
     norm_g = jnp.sqrt(tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(grad))))
-    unit_g = tree_map(lambda g, n: g / n, grad, norm_g)
 
-    sub_vec = tree_map(lambda v, g: v - g, unit_v, unit_g)
-    sub_vec_norm = jnp.sqrt(
-        tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(sub_vec)))
-    )
-    add_vec = tree_map(lambda v, g: v + g, unit_v, unit_g)
-    add_vec_norm = jnp.sqrt(
-        tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(add_vec)))
-    )
+    # Guard: if either norm is zero, no refraction occurs.
+    # Matches C code: if (!mnorm || !gnorm) return 0;
+    # Without this, unit_g = grad/0 → NaN, poisoning the entire chain.
+    # This matters for KDK at stationary points (e.g. mode of a Gaussian).
+    zero = jnp.float64(0.0) if momentum.dtype == jnp.float64 else jnp.float32(0.0)
+    zero_result = (momentum, zero, norm_v, norm_g, zero, zero, jnp.ones_like(zero), zero)
 
-    theta_i = 2.0 * jnp.arctan2(sub_vec_norm, add_vec_norm)
-    theta_f = 2.0 * jnp.arctan2(
-        sub_vec_norm,
-        add_vec_norm * jnp.exp(norm_g * norm_v * step_size / (D - 1.0)),
-    )
+    def _refract(_):
+        unit_v = tree_map(lambda m, n: m / n, momentum, norm_v)
+        unit_g = tree_map(lambda g, n: g / n, grad, norm_g)
 
-    f_v = jax.lax.cond(
-        jnp.sin(theta_i) == 0,
-        lambda _: 1.0,
-        lambda _: jnp.sin(theta_f) / jnp.sin(theta_i),
+        sub_vec = tree_map(lambda v, g: v - g, unit_v, unit_g)
+        sub_vec_norm = jnp.sqrt(
+            tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(sub_vec)))
+        )
+        add_vec = tree_map(lambda v, g: v + g, unit_v, unit_g)
+        add_vec_norm = jnp.sqrt(
+            tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(add_vec)))
+        )
+
+        theta_i = 2.0 * jnp.arctan2(sub_vec_norm, add_vec_norm)
+        theta_f = 2.0 * jnp.arctan2(
+            sub_vec_norm,
+            add_vec_norm * jnp.exp(norm_g * norm_v * step_size / (D - 1.0)),
+        )
+
+        f_v = jax.lax.cond(
+            jnp.sin(theta_i) == 0,
+            lambda _: 1.0,
+            lambda _: jnp.sin(theta_f) / jnp.sin(theta_i),
+            operand=None,
+        )
+        f_n = (jnp.cos(theta_f) - f_v * jnp.cos(theta_i)) * norm_v
+
+        new_momentum = tree_map(lambda m, ug, fv, fn: fv * m + fn * ug, momentum, unit_g, f_v, f_n)
+
+        delta_ln_L = jax.lax.cond(
+            jnp.sin(theta_i) == 0,
+            lambda _: norm_v * norm_g * step_size * jnp.cos(theta_i),
+            lambda _: (1.0 - D) * jnp.log(f_v),
+            operand=None,
+        )
+        return (new_momentum, delta_ln_L, norm_v, norm_g, theta_i, theta_f, f_v, f_n)
+
+    return jax.lax.cond(
+        (norm_v == 0) | (norm_g == 0),
+        lambda _: zero_result,
+        _refract,
         operand=None,
     )
-    f_n = (jnp.cos(theta_f) - f_v * jnp.cos(theta_i)) * norm_v
-
-    new_momentum = tree_map(lambda m, ug, fv, fn: fv * m + fn * ug, momentum, unit_g, f_v, f_n)
-
-    delta_ln_L = jax.lax.cond(
-        jnp.sin(theta_i) == 0,
-        lambda _: norm_v * norm_g * step_size * jnp.cos(theta_i),
-        lambda _: (1.0 - D) * jnp.log(f_v),
-        operand=None,
-    )
-    return (new_momentum, delta_ln_L, norm_v, norm_g, theta_i, theta_f, f_v, f_n)
 
 
 # -------------------------------------------------------------------
@@ -239,6 +259,66 @@ def raytracer_leapfrog_norefresh(
 
 
 # -------------------------------------------------------------------
+# KDK (Kick-Drift-Kick) integrators
+# -------------------------------------------------------------------
+
+
+def raytracer_kdk_norefresh(params, momentum, log_prob_fn, step_size, n_steps, refresh_rate, key):
+    """Ray tracing KDK leapfrog without momentum refresh.
+
+    KDK: Kick(dt/2) at position → Drift(dt) → Kick(dt/2) at new position.
+    Both DKD and KDK are second-order palindromic integrators with valid
+    radiance tracking. The half-kicks use δ = dt/2 in the Snell's law formula.
+    """
+    ln_L = 0
+    half_dt = step_size * 0.5
+
+    def step(i, args):
+        params, momentum, ln_L = args
+        # Half kick at current position
+        grad = jax.grad(log_prob_fn)(params)
+        momentum, delta_ln_L, *_ = UpdateV(momentum, grad, momentum.size, half_dt)
+        ln_L += delta_ln_L
+        # Full drift
+        params = tree_map(lambda p, m: p + m * step_size, params, momentum)
+        # Half kick at new position
+        grad = jax.grad(log_prob_fn)(params)
+        momentum, delta_ln_L, *_ = UpdateV(momentum, grad, momentum.size, half_dt)
+        ln_L += delta_ln_L
+        return params, momentum, ln_L
+
+    new_params, new_momentum, new_ln_L = jax.lax.fori_loop(
+        0, n_steps, step, (params, momentum, ln_L)
+    )
+    return new_params, new_momentum, new_ln_L, key
+
+
+def hmc_kdk_norefresh(params, momentum, log_prob_fn, step_size, n_steps, refresh_rate, key):
+    """HMC KDK leapfrog without momentum refresh."""
+    momentum_dot = tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(momentum)))
+
+    def step(i, args):
+        params, momentum = args
+        # Half kick
+        grad = jax.grad(log_prob_fn)(params)
+        momentum = tree_map(lambda m, g: m + 0.5 * step_size * g, momentum, grad)
+        # Full drift
+        params = tree_map(lambda p, m: p + m * step_size, params, momentum)
+        # Half kick
+        grad = jax.grad(log_prob_fn)(params)
+        momentum = tree_map(lambda m, g: m + 0.5 * step_size * g, momentum, grad)
+        return params, momentum
+
+    new_params, new_momentum = jax.lax.fori_loop(0, n_steps, step, (params, momentum))
+
+    new_momentum_dot = tree_reduce(
+        op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(new_momentum))
+    )
+    kinetic_energy_diff = 0.5 * (momentum_dot - new_momentum_dot)
+    return new_params, new_momentum, -kinetic_energy_diff, key
+
+
+# -------------------------------------------------------------------
 # Public API
 # -------------------------------------------------------------------
 
@@ -278,6 +358,7 @@ def sample_raytrace(
     refresh_rate=0,
     metro_check=1,
     sample_hmc=False,
+    integrator="dkd",
 ):
     """Run Ray Tracing Sampler and return the full Markov chain.
 
@@ -301,6 +382,11 @@ def sample_raytrace(
         1 = apply Metropolis correction, 0 = skip.
     sample_hmc : bool
         If True, use HMC instead of ray tracing.
+    integrator : str
+        Leapfrog integrator scheme: ``"dkd"`` (Drift-Kick-Drift, default)
+        or ``"kdk"`` (Kick-Drift-Kick). KDK is the time-reversed partner
+        of DKD. Both are symplectic and second-order. DKD matches
+        Behroozi's reference implementation.
 
     Returns
     -------
@@ -308,21 +394,38 @@ def sample_raytrace(
         Parameter samples.
     log_likelihood : array, shape (n_steps,)
         Log-likelihood at each accepted sample.
+    accept_prob : array, shape (n_steps,)
+        Acceptance probability at each step.
     """
     if params_init.size < 2 and not sample_hmc:
         sample_hmc = True
 
-    leapfrog_func = raytracer_leapfrog_norefresh
-    if sample_hmc:
-        if refresh_rate:
-            leapfrog_func = hmc_leapfrog_refresh
+    integrator = integrator.lower()
+    if integrator not in ("dkd", "kdk"):
+        raise ValueError(f"Unknown integrator: {integrator!r}. Use 'dkd' or 'kdk'.")
+    if integrator == "kdk":
+        if sample_hmc:
+            leapfrog_func = hmc_kdk_norefresh
         else:
-            leapfrog_func = hmc_leapfrog_norefresh
-    elif refresh_rate:
-        leapfrog_func = raytracer_leapfrog_refresh
+            leapfrog_func = raytracer_kdk_norefresh
+    else:
+        leapfrog_func = raytracer_leapfrog_norefresh
+        if sample_hmc:
+            if refresh_rate:
+                leapfrog_func = hmc_leapfrog_refresh
+            else:
+                leapfrog_func = hmc_leapfrog_norefresh
+        elif refresh_rate:
+            leapfrog_func = raytracer_leapfrog_refresh
+
+    # Cache log-likelihood in scan carry to avoid redundant evaluation.
+    # After accept: lnl = new_lnl = log_prob(new_params) = log_prob(params).
+    # After reject: lnl = old_lnl = log_prob(old_params) = log_prob(params).
+    # Saves one forward model evaluation per MCMC step.
+    init_lnl = log_prob_fn(params_init)
 
     def ray_step_fn(carry, x):
-        params, key = carry
+        params, key, old_lnl = carry
         key, normal_key, uniform_key = jax.random.split(key, 3)
 
         momentum = normal_like_tree(normal_key, params)
@@ -338,8 +441,7 @@ def sample_raytrace(
             key,
         )
 
-        # Metropolis-Hastings correction
-        old_lnl = log_prob_fn(params)
+        # Metropolis-Hastings correction (old_lnl from carry, not recomputed)
         new_lnl = log_prob_fn(new_params)
         log_likelihood_diff = new_lnl - old_lnl
         log_accept_prob = log_likelihood_diff - delta_ln_L
@@ -349,11 +451,11 @@ def sample_raytrace(
         accept = jax.random.uniform(uniform_key) < accept_prob
         params = ifelse(accept, new_params, params)
         lnl = ifelse(accept, new_lnl, old_lnl)
-        return (params, key), (params, accept_prob, lnl)
+        return (params, key, lnl), (params, accept_prob, lnl)
 
     _, (chain, accept_prob, log_likelihood) = jax.lax.scan(
         ray_step_fn,
-        (params_init, key),
+        (params_init, key, init_lnl),
         xs=None,
         length=n_steps,
     )

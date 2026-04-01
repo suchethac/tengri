@@ -8,7 +8,7 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.19.1
 #   kernelspec:
-#     display_name: Python 3
+#     display_name: .venv
 #     language: python
 #     name: python3
 # ---
@@ -34,7 +34,7 @@
 # 3. Modified Calzetti family (KC13, N09, SBL18)
 # 4. MW / SMC / LMC extinction curves
 # 5. Physics-motivated curves (TEA, Conroy2010, Narayanan)
-# 6. Parameter exploration
+# 6. Parameter exploration (incl. Li et al. 2008 $c_1$--$c_4$)
 # 7. Dust geometries (WG00)
 # 8. Two-component dust model
 # 9. Summary table
@@ -53,6 +53,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri.models.dust.attenuation import (
     DUST_LAWS,
     get_dust_law,
+    li08,
     precompute_dust_age_weights,
     two_component_dust,
     wg00_cloudy,
@@ -90,7 +91,7 @@ os.makedirs(FIGDIR, exist_ok=True)
 # ## 1. Overview -- All Curves at Default Parameters
 #
 # Every registered attenuation curve evaluated at its default parameters
-# on a common wavelength grid (1000--25000 A). This is the "model flavors"
+# on a common wavelength grid (100--25000 A). This is the "model flavors"
 # comparison -- a quick visual guide to the full menu of options.
 #
 # Curves are grouped by family:
@@ -101,7 +102,7 @@ os.makedirs(FIGDIR, exist_ok=True)
 # - **Parametric** (solid thin): power_law, Li08
 
 # %%
-wave = jnp.linspace(1000.0, 25000.0, 2000)
+wave = jnp.linspace(100.0, 25000.0, 2000)
 
 # Group curves for colour and linestyle consistency
 _GROUPS = {
@@ -159,7 +160,7 @@ for group_info in _GROUPS.values():
         _CURVE_COLORS[name] = _cm[_ci]
         _ci += 1
 
-fig, ax = plt.subplots(figsize=(12, 7))
+fig, ax = plt.subplots(figsize=(10, 6))
 
 for group_name, group_info in _GROUPS.items():
     for name in group_info["curves"]:
@@ -177,11 +178,11 @@ for group_name, group_info in _GROUPS.items():
 ax.set_xlabel(r"Wavelength ($\AA$)")
 ax.set_ylabel(r"$k(\lambda)$ (normalized at 5500 $\AA$)")
 ax.set_title("All 14 Dust Attenuation Curves at Default Parameters")
-ax.set_xlim(1000, 25000)
-ax.set_ylim(0, 12)
+ax.set_xlim(900, 8000)
+ax.set_ylim(0, 8)
 ax.axvline(5500, color="grey", ls=":", alpha=0.5, label=r"$\lambda_V = 5500\,\AA$")
 ax.axvline(2175, color="grey", ls="--", alpha=0.3, label=r"2175 $\AA$ bump")
-ax.legend(fontsize=8, ncol=2, loc="upper right", framealpha=0.9)
+ax.legend(fontsize=16, ncol=2, loc="upper right", framealpha=0.9)
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "15_all_attenuation_curves.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -207,7 +208,7 @@ wave_uv = jnp.linspace(900.0, 25000.0, 2000)
 k_c00 = get_dust_law("calzetti")(wave_uv)
 k_l02 = get_dust_law("leitherer02")(wave_uv)
 
-fig, ax = plt.subplots(figsize=(10, 5))
+fig, ax = plt.subplots(figsize=(7, 4))
 
 ax.plot(np.array(wave_uv), np.array(k_c00), color=COLORS["rt"], lw=2.5, label="Calzetti (C00)")
 ax.plot(
@@ -222,16 +223,16 @@ ax.axvspan(1200, 1800, alpha=0.08, color=COLORS["geovi"])
 ax.axvline(1200, color="grey", ls=":", alpha=0.4)
 ax.annotate(
     "C00 lower limit\n(1200 A)",
-    xy=(1200, 5.5), fontsize=8, ha="center", color="grey",
+    xy=(1200, 4.5), fontsize=8, ha="center", color="grey",
 )
 ax.axvline(5500, color="grey", ls=":", alpha=0.3)
 
 ax.set_xlabel(r"Wavelength ($\AA$)")
 ax.set_ylabel(r"$k(\lambda)$")
 ax.set_title("Empirical Average Curves: Calzetti (C00) vs Leitherer (L02)")
-ax.set_xlim(900, 10000)
-ax.set_ylim(0, 8)
-ax.legend(fontsize=9, loc="upper right")
+ax.set_xlim(900, 6000)
+ax.set_ylim(0, 5)
+ax.legend(fontsize=12, loc="upper right")
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "15_calzetti_vs_leitherer.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -268,7 +269,7 @@ k_n09 = get_dust_law("noll09")(wave_mod, dust_delta=delta, dust_bump_strength=bu
 k_sbl18 = get_dust_law("salim_sbl18")(wave_mod, dust_delta=delta, dust_bump_strength=bump)
 k_c00 = get_dust_law("calzetti")(wave_mod)
 
-fig, (ax_main, ax_zoom) = plt.subplots(1, 2, figsize=(13, 5), width_ratios=[2, 1])
+fig, (ax_main, ax_zoom) = plt.subplots(1, 2, figsize=(10, 4), width_ratios=[2, 1])
 
 # Main panel
 for k_arr, label, color, ls in [
@@ -283,9 +284,9 @@ ax_main.axvline(2175, color="grey", ls="--", alpha=0.3, label=r"2175 $\AA$")
 ax_main.set_xlabel(r"Wavelength ($\AA$)")
 ax_main.set_ylabel(r"$k(\lambda)$")
 ax_main.set_title(rf"Modified Calzetti Family ($\delta={delta}$, $E_b={bump}$)")
-ax_main.set_xlim(1000, 15000)
+ax_main.set_xlim(1000, 10000)
 ax_main.set_ylim(0, 10)
-ax_main.legend(fontsize=8, loc="upper right")
+ax_main.legend(fontsize=12, loc="upper right")
 
 # UV zoom panel
 uv_mask = np.array(wave_mod) < 4000
@@ -306,7 +307,7 @@ ax_zoom.set_xlabel(r"Wavelength ($\AA$)")
 ax_zoom.set_ylabel(r"$k(\lambda)$")
 ax_zoom.set_title("UV Bump Region (zoom)")
 ax_zoom.set_xlim(1000, 4000)
-ax_zoom.legend(fontsize=8)
+ax_zoom.legend(fontsize=12)
 
 fig.tight_layout()
 fig.savefig(
@@ -337,7 +338,7 @@ k_mw = get_dust_law("cardelli")(wave_ext, dust_Rv=3.1)
 k_smc = get_dust_law("smc")(wave_ext)
 k_lmc = get_dust_law("lmc")(wave_ext)
 
-fig, ax = plt.subplots(figsize=(10, 5))
+fig, ax = plt.subplots(figsize=(8, 5))
 
 ax.plot(np.array(wave_ext), np.array(k_mw), color=COLORS["rt"], lw=2.5, label="MW (CCM89, R_V=3.1)")
 ax.plot(np.array(wave_ext), np.array(k_smc), color=COLORS["geovi"], lw=2.5, label="SMC (Pei 1992)")
@@ -367,9 +368,9 @@ ax.annotate(
 ax.set_xlabel(r"Wavelength ($\AA$)")
 ax.set_ylabel(r"$k(\lambda) = A(\lambda) / A(V)$")
 ax.set_title("Milky Way, SMC, and LMC Extinction Curves")
-ax.set_xlim(1000, 10000)
+ax.set_xlim(1000, 6000)
 ax.set_ylim(0, 10)
-ax.legend(fontsize=9, loc="upper right")
+ax.legend(fontsize=12, loc="upper right")
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "15_mw_smc_lmc.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -406,7 +407,7 @@ plt.show()
 wave_phys = jnp.linspace(1000.0, 15000.0, 2000)
 
 # 5a. TEA: show delta sweep with the E_b(delta) correlation
-fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+fig, axes = plt.subplots(1, 3, figsize=(10, 3))
 
 # TEA
 ax = axes[0]
@@ -463,7 +464,7 @@ ax.set_ylabel(r"$k(\lambda)$")
 ax.set_title("Narayanan+2018: Redshift Evolution")
 ax.set_xlim(1000, 10000)
 ax.set_ylim(0, 8)
-ax.legend(fontsize=8, loc="upper right")
+ax.legend(fontsize=16, loc="upper right")
 
 fig.tight_layout()
 fig.savefig(
@@ -521,7 +522,7 @@ plt.show()
 deltas = [-0.5, -0.3, -0.1, 0.0, 0.1, 0.3]
 delta_colors = plt.cm.coolwarm(np.linspace(0.0, 1.0, len(deltas)))
 
-fig, ax = plt.subplots(figsize=(10, 5))
+fig, ax = plt.subplots(figsize=(6, 4))
 
 for d, c in zip(deltas, delta_colors):
     k = get_dust_law("kriek_conroy")(wave_param, dust_delta=d, dust_bump_strength=0.0)
@@ -533,9 +534,9 @@ ax.plot(np.array(wave_param), np.array(k_ref), color="black", lw=1.5, ls=":", la
 ax.set_xlabel(r"Wavelength ($\AA$)")
 ax.set_ylabel(r"$k(\lambda)$")
 ax.set_title(r"Kriek-Conroy: Slope Modification ($E_b = 0$)")
-ax.set_xlim(1000, 15000)
+ax.set_xlim(1000, 10000)
 ax.set_ylim(0, 10)
-ax.legend(fontsize=8, ncol=2)
+ax.legend(fontsize=16, ncol=2)
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "15_kc13_delta_sweep.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -626,6 +627,139 @@ ax.set_ylim(0, 10)
 ax.legend(fontsize=9)
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "15_uv_zoom_comparison.png"), dpi=150, bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ### 6f. Li et al. (2008): four coefficients $c_1$--$c_4$ (corrected implementation)
+#
+# Li et al. (2008, ApJ 685, 1046) give a **single closed form** for
+# $A_\lambda / A_V$ with four dimensionless parameters: a UV--optical continuum
+# term, a far-UV rise, and a Lorentzian-style 2175 Å bump (their Eq. 1).
+# In tengri these map to keyword arguments `dust_c1`--`dust_c4` on `li08`
+# (continuum amplitude, continuum curvature, continuum offset, bump amplitude).
+#
+# **Correction note.** Older drafts of this gallery (and a mistaken experimental
+# wrapper) described Li+2008 using separate FUV / UV / optical power-law slopes
+# plus a Drude bump. That is **not** the published L08 parametrization and has
+# been removed. The code now follows Li et al. (2008) Eq. (1) and matches the
+# docstring in `tengri.models.dust.attenuation.li08`.
+#
+# Below: (left) one-at-a-time sweeps around the **default** $(c_1,c_2,c_3,c_4)
+# = (6, 4, 2, 0.04); (right) literature **presets** from Markov et al. (2023, 2025)
+# for MW-like, SMC-like, and Calzetti-like shapes (see `li08` docstring).
+
+# %%
+wave_li = jnp.linspace(1000.0, 15000.0, 2000)
+_li_defaults = dict(dust_c1=6.0, dust_c2=4.0, dust_c3=2.0, dust_c4=0.04)
+
+
+def _li08_kw(**overrides):
+    kw = {**_li_defaults, **overrides}
+    return li08(wave_li, **kw)
+
+
+fig, axes = plt.subplots(2, 2, figsize=(12, 9), sharex=True)
+
+# c1: overall continuum amplitude
+ax = axes[0, 0]
+c1_vals = [4.0, 5.0, 6.0, 7.0, 8.0]
+c1_colors = plt.cm.viridis(np.linspace(0.15, 0.9, len(c1_vals)))
+for c1, c in zip(c1_vals, c1_colors):
+    k_curve = _li08_kw(dust_c1=c1)
+    ax.plot(np.array(wave_li), np.array(k_curve), color=c, lw=2, label=rf"$c_1 = {c1:.1f}$")
+ax.axvline(2175, color="grey", ls="--", alpha=0.35)
+ax.set_ylabel(r"$k(\lambda)$")
+ax.set_title(r"Li+2008: vary $c_1$ (continuum amplitude)")
+ax.set_xlim(1000, 15000)
+ax.set_ylim(0, 5)
+ax.legend(fontsize=7, loc="upper right")
+
+# c2: steepens the UV rise when increased
+ax = axes[0, 1]
+c2_vals = [2.5, 3.0, 4.0, 5.0, 5.5]
+c2_colors = plt.cm.plasma(np.linspace(0.15, 0.9, len(c2_vals)))
+for c2, c in zip(c2_vals, c2_colors):
+    k_curve = _li08_kw(dust_c2=c2)
+    ax.plot(np.array(wave_li), np.array(k_curve), color=c, lw=2, label=rf"$c_2 = {c2:.1f}$")
+ax.axvline(2175, color="grey", ls="--", alpha=0.35)
+ax.set_ylabel(r"$k(\lambda)$")
+ax.set_title(r"Li+2008: vary $c_2$ (continuum curvature / UV steepness)")
+ax.set_ylim(0, 5)
+ax.legend(fontsize=7, loc="upper right")
+
+# c3: shifts continuum level
+ax = axes[1, 0]
+c3_vals = [1.0, 1.5, 2.0, 2.5, 3.0]
+c3_colors = plt.cm.cividis(np.linspace(0.15, 0.9, len(c3_vals)))
+for c3, c in zip(c3_vals, c3_colors):
+    k_curve = _li08_kw(dust_c3=c3)
+    ax.plot(np.array(wave_li), np.array(k_curve), color=c, lw=2, label=rf"$c_3 = {c3:.1f}$")
+ax.axvline(2175, color="grey", ls="--", alpha=0.35)
+ax.set_xlabel(r"Wavelength ($\AA$)")
+ax.set_ylabel(r"$k(\lambda)$")
+ax.set_title(r"Li+2008: vary $c_3$ (continuum offset)")
+ax.set_ylim(0, 5)
+ax.legend(fontsize=7, loc="upper right")
+
+# c4: 2175 Å bump (0 = SMC-like smooth UV)
+ax = axes[1, 1]
+c4_vals = [0.0, 0.02, 0.04, 0.08, 0.12]
+c4_colors = plt.cm.magma(np.linspace(0.2, 0.95, len(c4_vals)))
+for c4, c in zip(c4_vals, c4_colors):
+    k_curve = _li08_kw(dust_c4=c4)
+    ax.plot(np.array(wave_li), np.array(k_curve), color=c, lw=2, label=rf"$c_4 = {c4:.2f}$")
+ax.axvline(2175, color="grey", ls="--", alpha=0.35)
+ax.set_xlabel(r"Wavelength ($\AA$)")
+ax.set_ylabel(r"$k(\lambda)$")
+ax.set_title(r"Li+2008: vary $c_4$ (2175 $\AA$ bump strength)")
+ax.set_xlim(1000, 6000)
+ax.set_ylim(0, 5)
+ax.legend(fontsize=7, loc="upper right")
+
+fig.suptitle(
+    "Li et al. (2008) Eq. (1): effect of each coefficient (defaults: "
+    r"$c_1=6$, $c_2=4$, $c_3=2$, $c_4=0.04$)",
+    fontsize=12,
+    y=1.01,
+)
+fig.tight_layout()
+fig.savefig(os.path.join(FIGDIR, "15_li08_parameter_sweeps.png"), dpi=150, bbox_inches="tight")
+plt.show()
+
+# Presets (Markov+ 2023, 2025; see `li08` docstring)
+fig, ax = plt.subplots(figsize=(10, 5))
+_presets = [
+    ("MW-like", dict(dust_c1=6.0, dust_c2=4.0, dust_c3=2.0, dust_c4=0.04), COLORS["rt"], "-"),
+    ("SMC-like", dict(dust_c1=5.0, dust_c2=5.5, dust_c3=1.5, dust_c4=0.0), COLORS["geovi"], "--"),
+    (
+        "Calzetti-like",
+        dict(dust_c1=3.5, dust_c2=2.5, dust_c3=3.0, dust_c4=0.0),
+        COLORS["nuts"],
+        "-.",
+    ),
+]
+for label, kw, color, ls in _presets:
+    k_curve = li08(wave_li, **kw)
+    ax.plot(np.array(wave_li), np.array(k_curve), color=color, ls=ls, lw=2.5, label=label)
+
+k_def = li08(wave_li)
+ax.plot(
+    np.array(wave_li),
+    np.array(k_def),
+    color="black",
+    lw=1.2,
+    ls=":",
+    label="tengri default (= MW-like)",
+)
+ax.axvline(2175, color="grey", ls="--", alpha=0.35)
+ax.set_xlabel(r"Wavelength ($\AA$)")
+ax.set_ylabel(r"$k(\lambda)$")
+ax.set_title("Li+2008: literature presets (same functional form, different $c_i$)")
+ax.set_xlim(1000, 15000)
+ax.set_ylim(0, 5)
+ax.legend(fontsize=9)
+fig.tight_layout()
+fig.savefig(os.path.join(FIGDIR, "15_li08_presets.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -931,7 +1065,7 @@ plt.show()
 # | `cardelli` | Cardelli et al. (1989) | `dust_Rv` | Yes (strong) | MW sightlines; extinction (not attenuation) |
 # | `smc` | Pei (1992) | None | No | High-$z$, metal-poor galaxies |
 # | `lmc` | Pei (1992) | None | Yes (weak) | Intermediate environments |
-# | `li08` | Li et al. (2008) | `UV_slope`, `OPT_slope`, `FUV_slope`, `bump` | Optional | Maximum flexibility; reproduces MW/SMC/Calzetti |
+# | `li08` | Li et al. (2008) | `dust_c1`, `dust_c2`, `dust_c3`, `dust_c4` | Yes ($c_4$ = bump term) | Flexible analytic $A_\lambda/A_V$; literature presets for MW/SMC/Calzetti-like |
 # | `tea` | Haskell et al. (2024) | `dust_delta`, `scatter` | Correlated | Physics-motivated; fewest free params with bump |
 # | `conroy2010` | Conroy et al. (2010) | `dust_Rv`, `n_slope` | Yes (MW) | FSPS `dust_type=1`; MW + power-law blend |
 # | `narayanan_z` | Narayanan et al. (2018) | `dust_delta`, `dust_bump_strength`, `redshift` | Weakens with $z$ | Redshift-evolving attenuation from RT simulations |

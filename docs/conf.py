@@ -98,6 +98,7 @@ sphinx_gallery_conf = {
     "within_subsection_order": "FileNameSortKey",
     "capture_repr": (),
     "remove_config_comments": True,
+    "nested_sections": False,
 }
 
 # -- Exclude patterns --------------------------------------------------------

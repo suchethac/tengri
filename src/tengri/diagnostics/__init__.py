@@ -7,4 +7,5 @@ is differentiable end-to-end. They provide:
 1. Fisher Information Matrix (FIM) — parameter constraints from data
 2. Gradient SEDs (saliency) — ∂flux/∂θ across wavelength
 3. Laplace approximation — cheap posteriors from the Hessian at MAP
+4. Autocorrelation time estimation — Sokal method (Behroozi 2025)
 """

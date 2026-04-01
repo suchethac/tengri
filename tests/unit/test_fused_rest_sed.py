@@ -458,3 +458,116 @@ class TestGradients:
         assert jnp.isfinite(grad)
         # More dust absorption → lower total flux → non-positive gradient
         assert grad <= 0.0
+
+
+# ---------------------------------------------------------------------------
+# Test: Fused Tier 2 end-to-end kernels
+# ---------------------------------------------------------------------------
+
+
+class TestFusedTier2Photometry:
+    """Validate the fused end-to-end params → photometry JIT kernel."""
+
+    def test_fused_tier2_phot_builds(self, synthetic_ssp, simple_spec):
+        """Fused Tier 2 photometry kernel builds for fixed-z + filters."""
+        from tengri.core.model import Model
+        from tengri.models.observation.filters import FilterCurve
+
+        filters = [
+            FilterCurve(
+                name=f"f{i}",
+                wave=jnp.linspace(c - 500, c + 500, 50),
+                trans=jnp.exp(-0.5 * ((jnp.linspace(c - 500, c + 500, 50) - c) / 200) ** 2),
+            )
+            for i, c in enumerate([4000.0, 6000.0, 8000.0])
+        ]
+        model = Model(simple_spec, synthetic_ssp, filters=filters)
+        assert model._fused_tier2_phot is not None
+
+    def test_fused_tier2_phot_matches_unfused(self, synthetic_ssp, simple_spec, simple_params):
+        """Fused Tier 2 photometry matches unfused path."""
+        from tengri.core.model import Model
+        from tengri.models.observation.filters import FilterCurve
+
+        filters = [
+            FilterCurve(
+                name=f"f{i}",
+                wave=jnp.linspace(c - 500, c + 500, 50),
+                trans=jnp.exp(-0.5 * ((jnp.linspace(c - 500, c + 500, 50) - c) / 200) ** 2),
+            )
+            for i, c in enumerate([4000.0, 6000.0, 8000.0])
+        ]
+        model = Model(simple_spec, synthetic_ssp, filters=filters)
+
+        # Fused path
+        phot_fused = model._fused_tier2_phot(simple_params)
+
+        # Unfused: force through _compute_rest_sed_tier2 + filter loop
+        model._fused_tier2_phot = None
+        phot_unfused = model._predict_photometry_tier2(simple_params)
+
+        assert_allclose(phot_fused, phot_unfused, rtol=1e-10)
+
+    def test_fused_tier2_phot_gradient(self, synthetic_ssp, simple_spec):
+        """Gradients propagate through fused Tier 2 photometry."""
+        from tengri.core.model import Model
+        from tengri.models.observation.filters import FilterCurve
+
+        filters = [
+            FilterCurve(
+                name="r",
+                wave=jnp.linspace(5500, 7000, 50),
+                trans=jnp.ones(50),
+            )
+        ]
+        model = Model(simple_spec, synthetic_ssp, filters=filters)
+        assert model._fused_tier2_phot is not None
+
+        def loss(dust_tau_bc):
+            params = {
+                "sfh_dpl_alpha": 1.5,
+                "sfh_dpl_beta": 1.0,
+                "sfh_dpl_tau_gyr": 4.0,
+                "sfh_dpl_log_peak_sfr": 1.0,
+                "met_logzsol": -0.3,
+                "dust_tau_bc": dust_tau_bc,
+                "dust_tau_diff": 0.3,
+                "dust_slope": -0.7,
+                "redshift": 0.1,
+            }
+            return jnp.sum(model._fused_tier2_phot(params))
+
+        grad = jax.grad(loss)(1.0)
+        assert jnp.isfinite(grad)
+
+    def test_free_z_builds(self, synthetic_ssp):
+        """Fused Tier 2 photometry builds even with free redshift."""
+        from tengri.core.model import Model
+        from tengri.models.observation.filters import FilterCurve
+
+        spec = ParamSpec(
+            mean_sfh_type="dpl",
+            sfh_dpl_alpha=Uniform(0.5, 3.0),
+            sfh_dpl_beta=Uniform(0.3, 2.0),
+            sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+            met_logzsol=Uniform(-1.5, 0.2),
+            dust_tau_bc=Uniform(0.0, 3.0),
+            dust_tau_diff=0.3,
+            dust_slope=-0.7,
+            redshift=Uniform(0.01, 0.5),  # FREE
+        )
+        filters = [
+            FilterCurve(
+                name="r",
+                wave=jnp.linspace(5500, 7000, 50),
+                trans=jnp.ones(50),
+            )
+        ]
+        model = Model(spec, synthetic_ssp, filters=filters)
+        assert model._fused_tier2_phot is not None
+
+        params = spec.sample(jax.random.PRNGKey(42))
+        phot = model._fused_tier2_phot(params)
+        assert phot.shape == (1,)
+        assert jnp.all(jnp.isfinite(phot))

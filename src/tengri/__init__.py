@@ -12,7 +12,13 @@ jax.config.update("jax_enable_x64", True)
 
 # Enable persistent XLA compilation cache — avoids re-compilation
 # across sessions/restarts. ~10x first-call speedup on subsequent runs.
-jax.config.update("jax_compilation_cache_dir", "/tmp/tengri_jax_cache")
+# ~/.cache persists across reboots (unlike /tmp on macOS).
+import os as _os
+
+jax.config.update(
+    "jax_compilation_cache_dir",
+    _os.path.join(_os.path.expanduser("~"), ".cache", "tengri_jax_cache"),
+)
 jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
 
 __version__ = "0.1.0"

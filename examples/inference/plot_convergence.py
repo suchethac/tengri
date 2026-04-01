@@ -18,9 +18,10 @@ from tengri import (
     Fitter,
     Fixed,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     Uniform,
-    load_filter_set,
     load_ssp_data,
     setup_style,
 )
@@ -32,8 +33,12 @@ setup_style()
 def _find_ssp():
     """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
     name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [Path("data") / name, Path("../data") / name,
-              Path("../../data") / name, Path("../../../data") / name]:
+    for p in [
+        Path("data") / name,
+        Path("../data") / name,
+        Path("../../data") / name,
+        Path("../../../data") / name,
+    ]:
         if p.exists():
             return str(p)
     return None
@@ -41,17 +46,13 @@ def _find_ssp():
 
 SSP_PATH = _find_ssp()
 
-# Locate filter cache
-_FILTER_DIR = next(
-    (str(d) for d in [Path("data/filters"), Path("../data/filters"),
-     Path("../../data/filters"), Path("../../../data/filters")] if d.exists()),
-    "data/filters",
-)
 if SSP_PATH is None:
     raise FileNotFoundError("SSP data not found — skipping example")
 
 ssp = load_ssp_data(SSP_PATH)
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"], cache_dir=_FILTER_DIR)
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+)
 
 # --- Model + mock ---
 spec = ParamSpec(
@@ -67,9 +68,14 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model = Model(spec, ssp, filters=filters)
+model = Model(spec, ssp, observation=obs)
 key = jax.random.PRNGKey(7)
 true_params = spec.sample(key)
+# Override to ensure star-forming galaxy
+true_params["sfh_tsnorm_peak_lbt_gyr"] = 3.0
+true_params["sfh_tsnorm_width_gyr"] = 2.0
+true_params["sfh_tsnorm_log_peak_sfr"] = 1.0
+true_params["sfh_tsnorm_skew"] = 0.3  # Positive skew = recent star formation
 mock = model.mock(true_params, snr=20.0, key=key)
 
 # --- Fit with native_geovi ---
@@ -89,9 +95,9 @@ posterior = fitter.run(
 print(posterior.summary_table())
 ess = posterior.effective_sample_size()
 
-# --- Figure: ESS bar chart + trace plots ---
+# --- Figure: ESS bar chart + trace plots + SFH inset ---
 names = spec.free_params
-fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+fig, axes = plt.subplots(1, 3, figsize=(16, 4))
 
 # Left: ESS per parameter
 ess_vals = [ess.get(n, 0.0) for n in names]
@@ -111,6 +117,18 @@ axes[1].set_xlabel("Sample index")
 axes[1].set_ylabel("Parameter value")
 axes[1].set_title("Trace plots (first 3 parameters)")
 axes[1].legend(fontsize=7)
+
+# Right: SFH truth vs inferred
+sfh_true = model.predict_sfh(true_params)
+sfh_fit = model.predict_sfh(posterior.params)
+t_gyr = np.array(sfh_true["t_gyr"])
+mask = t_gyr < 5.0
+axes[2].plot(t_gyr[mask], np.array(sfh_true["sfr_mean"])[mask], "k-", lw=1.5, label="Truth")
+axes[2].plot(t_gyr[mask], np.array(sfh_fit["sfr_mean"])[mask], "r--", lw=1.2, label="geoVI")
+axes[2].set_xlabel("Lookback [Gyr]")
+axes[2].set_ylabel("SFR [Msun/yr]")
+axes[2].set_title("SFH recovery")
+axes[2].legend(fontsize=7)
 
 fig.tight_layout()
 outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")

@@ -18,9 +18,10 @@ from tengri import (
     Fitter,
     Fixed,
     Model,
+    Observation,
     ParamSpec,
+    Photometry,
     Uniform,
-    load_filter_set,
     load_ssp_data,
     safe_corner,
     setup_style,
@@ -33,8 +34,12 @@ setup_style()
 def _find_ssp():
     """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
     name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [Path("data") / name, Path("../data") / name,
-              Path("../../data") / name, Path("../../../data") / name]:
+    for p in [
+        Path("data") / name,
+        Path("../data") / name,
+        Path("../../data") / name,
+        Path("../../../data") / name,
+    ]:
         if p.exists():
             return str(p)
     return None
@@ -42,17 +47,13 @@ def _find_ssp():
 
 SSP_PATH = _find_ssp()
 
-# Locate filter cache
-_FILTER_DIR = next(
-    (str(d) for d in [Path("data/filters"), Path("../data/filters"),
-     Path("../../data/filters"), Path("../../../data/filters")] if d.exists()),
-    "data/filters",
-)
 if SSP_PATH is None:
     raise FileNotFoundError("SSP data not found — skipping example")
 
 ssp = load_ssp_data(SSP_PATH)
-filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"], cache_dir=_FILTER_DIR)
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+)
 
 # --- Model ---
 spec = ParamSpec(
@@ -68,11 +69,15 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model = Model(spec, ssp, filters=filters)
+model = Model(spec, ssp, observation=obs)
 
-# --- Mock photometry ---
+# --- Mock photometry (star-forming galaxy) ---
 key = jax.random.PRNGKey(42)
 true_params = spec.sample(key)
+true_params["sfh_tsnorm_peak_lbt_gyr"] = 3.0
+true_params["sfh_tsnorm_width_gyr"] = 2.0
+true_params["sfh_tsnorm_log_peak_sfr"] = 1.0
+true_params["sfh_tsnorm_skew"] = 0.3  # Positive skew = recent star formation
 mock = model.mock(true_params, snr=20.0, key=key)
 
 # --- Fit: MAP ---
@@ -107,5 +112,27 @@ if fig is not None:
 
 outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
 outdir.mkdir(parents=True, exist_ok=True)
-plt.savefig(str(outdir / "method_comparison.png"), dpi=150, bbox_inches="tight")
+plt.savefig(str(outdir / "method_comparison_corner.png"), dpi=150, bbox_inches="tight")
+
+# --- SFH: truth vs MAP vs geoVI ---
+sfh_true = model.predict_sfh(true_params)
+sfh_map = model.predict_sfh(result_map.params)
+sfh_geovi = model.predict_sfh(result_geovi.params)
+t_gyr = np.array(sfh_true["t_gyr"])
+mask = t_gyr < 5.0
+
+fig_sfh, ax_sfh = plt.subplots(figsize=(6, 3.5))
+ax_sfh.plot(t_gyr[mask], np.array(sfh_true["sfr_mean"])[mask], "k-", lw=2, label="Truth")
+ax_sfh.plot(
+    t_gyr[mask], np.array(sfh_map["sfr_mean"])[mask], "--", color="C3", lw=1.5, label="MAP"
+)
+ax_sfh.plot(
+    t_gyr[mask], np.array(sfh_geovi["sfr_mean"])[mask], "--", color="C0", lw=1.5, label="geoVI"
+)
+ax_sfh.set_xlabel("Lookback time [Gyr]")
+ax_sfh.set_ylabel("SFR [Msun/yr]")
+ax_sfh.set_title("SFH recovery: MAP vs geoVI")
+ax_sfh.legend(fontsize=8, frameon=False)
+fig_sfh.tight_layout()
+plt.savefig(str(outdir / "method_comparison_sfh.png"), dpi=150, bbox_inches="tight")
 plt.show()

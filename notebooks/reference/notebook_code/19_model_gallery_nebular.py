@@ -127,7 +127,7 @@ r_sii_ha = np.clip(r_sii_ha, 0.05, 2.0)
 # Halpha/Hbeta (Case B -- nearly constant)
 r_ha_hb = 2.86 * np.ones_like(logU_grid)
 
-fig, axes = plt.subplots(2, 3, figsize=(14, 7))
+fig, axes = plt.subplots(2, 3, figsize=(11, 5.5))
 
 # Panel 1: [OIII]/Hbeta
 ax = axes[0, 0]
@@ -194,7 +194,7 @@ plt.show()
 # the comparison schematically.
 
 # %%
-fig, ax = plt.subplots(figsize=(7, 5))
+fig, ax = plt.subplots(figsize=(6.5, 4.5))
 
 # Representative comparison at logU = -3.0, solar metallicity
 # Typical CLOUDY line ratios (Byler+2017)
@@ -240,7 +240,7 @@ plt.show()
 # HII region emission on BPT diagrams.
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+fig, axes = plt.subplots(1, 2, figsize=(9, 3.5))
 
 velocities = np.array(_SHOCK_V)
 
@@ -303,7 +303,7 @@ plt.show()
 # BPT diagram.
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+fig, axes = plt.subplots(1, 2, figsize=(9, 3.5))
 
 # Panel A: [NII]/Halpha vs DIG fraction
 f_dig_arr = np.linspace(0, 0.7, 50)
@@ -364,7 +364,7 @@ plt.show()
 # %%
 wave_obs = jnp.linspace(800.0, 15000.0, 3000)  # Angstrom
 
-fig, ax = plt.subplots(figsize=(9, 4))
+fig, ax = plt.subplots(figsize=(8, 3.5))
 
 redshifts = [0.5, 2.0, 4.0, 6.0]
 colors_z = plt.cm.plasma(np.linspace(0.1, 0.9, len(redshifts)))
@@ -398,7 +398,7 @@ plt.show()
 # %%
 wave_obs_eor = jnp.linspace(6000.0, 20000.0, 3000)
 
-fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+fig, axes = plt.subplots(1, 2, figsize=(9, 3.5))
 
 # Panel A: z = 7, vary x_HI
 ax = axes[0]
@@ -449,7 +449,7 @@ plt.show()
 # curves. We show SDSS and JWST filter sets overlaid on a schematic SED.
 
 # %%
-fig, ax = plt.subplots(figsize=(10, 4))
+fig, ax = plt.subplots(figsize=(9, 3.5))
 
 # Schematic rest-frame galaxy SED (simple power-law + emission lines)
 wave_sed = np.linspace(1000, 50000, 5000)
@@ -510,7 +510,7 @@ plt.show()
 # lines are resolved.
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+fig, axes = plt.subplots(1, 2, figsize=(9, 3.5))
 
 # Panel A: Gaussian line at different spectral resolutions
 ax = axes[0]
@@ -560,7 +560,7 @@ plt.show()
 wave_cal = np.linspace(3500, 9500, 500)
 wave_min, wave_max = 3500.0, 9500.0
 
-fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+fig, axes = plt.subplots(1, 2, figsize=(9, 3.5))
 
 # Panel A: Individual Chebyshev basis functions
 ax = axes[0]
@@ -621,7 +621,7 @@ plt.show()
 #   predictions, with scatter ~0.3 dex.
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+fig, axes = plt.subplots(1, 2, figsize=(9, 3.5))
 
 # Panel A: Design matrix visualization
 ax = axes[0]

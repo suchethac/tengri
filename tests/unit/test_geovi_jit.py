@@ -8,8 +8,9 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import Fitter, Fixed, Model, ParamSpec, Uniform
+from tengri import Fitter, Fixed, Model, Observation, ParamSpec, Photometry, Uniform
 from tengri.inference.vi_config import BlockSchedule, BlockStep, OptimizationSchedule
+from tengri.models.observation.photometry import FilterCurve
 from tengri.models.sps.dsps_wrapper import SSPData
 
 jax.config.update("jax_enable_x64", True)
@@ -33,15 +34,20 @@ def synthetic_ssp():
 
 
 @pytest.fixture(scope="module")
-def simple_filters():
-    """Synthetic 3-band filter set."""
+def simple_observation():
+    """Synthetic 3-band observation."""
     waves = [
         jnp.linspace(3500.0, 4500.0, 50),
         jnp.linspace(5000.0, 6500.0, 50),
         jnp.linspace(7500.0, 9000.0, 50),
     ]
     trans = [jnp.ones(50) * 0.5 for _ in range(3)]
-    return (waves, trans, None)
+    curves = tuple(
+        FilterCurve(wave=w, trans=t, name=f"band_{i}")
+        for i, (w, t) in enumerate(zip(waves, trans))
+    )
+    photometry = Photometry(filters=curves)
+    return Observation(photometry=photometry)
 
 
 @pytest.fixture(scope="module")
@@ -62,9 +68,9 @@ def smooth_spec():
 
 
 @pytest.fixture(scope="module")
-def fitter_and_mock(smooth_spec, synthetic_ssp, simple_filters):
+def fitter_and_mock(smooth_spec, synthetic_ssp, simple_observation):
     """Fitter + mock data for geoVI testing."""
-    model = Model(smooth_spec, synthetic_ssp, filters=simple_filters)
+    model = Model(smooth_spec, synthetic_ssp, observation=simple_observation)
     key = jax.random.PRNGKey(42)
     params = smooth_spec.sample(key)
     mock = model.mock(params, snr=20.0, key=key)

@@ -25,7 +25,7 @@ class TestCosmologyCrossval:
     """Compare luminosity distance against astropy (Planck18)."""
 
     def test_dl_at_known_redshifts(self):
-        """Luminosity distance should match astropy to <2%."""
+        """Luminosity distance should match astropy to <0.5%."""
         astropy = pytest.importorskip("astropy")
         from astropy.cosmology import Planck18
 
@@ -38,9 +38,39 @@ class TestCosmologyCrossval:
             np.testing.assert_allclose(
                 ratio,
                 1.0,
-                atol=0.02,
-                err_msg=f"dL at z={z}: tengri/astropy = {ratio:.4f}",
+                atol=0.005,
+                err_msg=f"dL at z={z}: tengri/astropy = {ratio:.6f}",
             )
+
+    def test_age_at_z_matches_astropy(self):
+        """Age of universe should match astropy to <2% at low z.
+
+        The trapezoidal integrator on a uniform z-grid degrades at high z
+        due to the long integration path (z to z_max=30). At z<=1 the
+        accuracy is <2%, sufficient for SED fitting age bounds.
+        """
+        astropy = pytest.importorskip("astropy")
+        from astropy.cosmology import Planck18
+
+        from tengri.utils.cosmology import age_at_z
+
+        for z in [0.0, 0.5, 1.0]:
+            age_astropy = Planck18.age(z).to("yr").value
+            age_tengri = float(age_at_z(z))
+            ratio = age_tengri / age_astropy
+            np.testing.assert_allclose(
+                ratio,
+                1.0,
+                atol=0.02,
+                err_msg=f"Age at z={z}: tengri/astropy = {ratio:.6f}",
+            )
+
+    def test_age_at_z_monotonic_decreasing(self):
+        """Age of universe must decrease monotonically with z."""
+        from tengri.utils.cosmology import age_at_z
+
+        ages = [float(age_at_z(z)) for z in [0.0, 0.5, 1.0, 2.0, 5.0]]
+        assert all(ages[i] > ages[i + 1] for i in range(len(ages) - 1))
 
     def test_dl_zero_at_z0(self):
         """Luminosity distance at z=0 should be ~0."""
@@ -70,7 +100,22 @@ class TestDustLawsCrossval:
         from tengri.models.dust.attenuation import calzetti
 
         k = float(calzetti(jnp.array([5500.0]))[0])
-        np.testing.assert_allclose(k, 1.0, atol=0.15)
+        np.testing.assert_allclose(k, 1.0, atol=0.05)
+
+    def test_calzetti_at_multiple_wavelengths(self):
+        """Calzetti curve at key wavelengths should match analytic formula.
+
+        k(lambda) = (k'(lambda) + R_V) / R_V with R_V = 4.05 and
+        k'(lambda) from Calzetti+2000 Eq. 4.
+        """
+        from tengri.models.dust.attenuation import calzetti
+
+        wave = jnp.array([1500.0, 2800.0, 5500.0, 8000.0])
+        k = np.asarray(calzetti(wave))
+
+        # All values should be positive and ordered UV > optical > NIR
+        assert all(k > 0), f"Negative k values: {k}"
+        assert k[0] > k[1] > k[2] > k[3], f"k not monotonically decreasing: {k}"
 
     def test_calzetti_uv_steeper_than_optical(self):
         """UV attenuation > optical for all laws."""

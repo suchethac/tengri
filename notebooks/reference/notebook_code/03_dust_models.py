@@ -720,7 +720,7 @@ plt.show()
 # | LMC | Yes (weak) | Fixed | LMC-like environments |
 # | Cardelli | Yes (MW) | $R_V$ free | MW sightlines |
 # | Salim | No | Modified Calzetti | DSPS default |
-# | Li+2008 | Yes (tunable) | 3 slopes | Maximum flexibility |
+# | Li+2008 | Yes ($c_4$ bump term) | 4 coeffs ($c_1$--$c_4$, Li 2008 Eq. 1) | Flexible analytic; MW/SMC/Calzetti presets |
 #
 # The two-component model separates birth-cloud and diffuse-ISM attenuation,
 # which is crucial for correctly interpreting UV-bright young stars versus

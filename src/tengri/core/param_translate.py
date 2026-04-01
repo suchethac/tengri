@@ -105,13 +105,20 @@ PARAM_MAP = {
 # ---------------------------------------------------------------------------
 
 
-def _build_param_map(mean_sfh_type):
+_SINGLE_COMPONENT_DUST_PARAM_MAP = {
+    "dust_tau_v": ("tau_v", 1.0, 0.0),
+}
+
+
+def _build_param_map(mean_sfh_type, dust_model="two_component"):
     """Build complete param map from SFH registry + non-SFH params.
 
     Parameters
     ----------
     mean_sfh_type : list[str]
         SFH type tokens, e.g. ``["tsnorm"]`` or ``["tsnorm", "field"]``.
+    dust_model : str
+        ``"two_component"`` or ``"single_component"``.
 
     Returns
     -------
@@ -120,7 +127,14 @@ def _build_param_map(mean_sfh_type):
     """
     _, _, sfh_param_map, _ = resolve_sfh(mean_sfh_type)
     result = dict(sfh_param_map)
-    result.update(_NON_SFH_PARAM_MAP)
+    if dust_model == "single_component":
+        # Skip tau_bc/tau_diff, add tau_v
+        for k, v in _NON_SFH_PARAM_MAP.items():
+            if k not in ("dust_tau_bc", "dust_tau_diff"):
+                result[k] = v
+        result.update(_SINGLE_COMPONENT_DUST_PARAM_MAP)
+    else:
+        result.update(_NON_SFH_PARAM_MAP)
     return result
 
 

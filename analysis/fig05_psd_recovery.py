@@ -21,23 +21,31 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import (
-    make_model, generate_mock_galaxy, fit_galaxy,
-    setup_matplotlib, FIG_DIR, PAPER_FIG_DIR, PSD_REGIMES,
+    FIG_DIR,
+    PAPER_FIG_DIR,
+    PSD_REGIMES,
+    fit_galaxy,
+    generate_mock_galaxy,
+    make_model,
+    setup_matplotlib,
 )
 
 
-def run_psd_recovery(psd_regime: str, data_type: str, method: str,
-                     key, **fit_kwargs):
+def run_psd_recovery(psd_regime: str, data_type: str, method: str, key, **fit_kwargs):
     """Run PSD recovery with free PSD params."""
-    model = make_model(psd_regime, redshift=0.1, stochastic=True,
-                       n_grid=128, free_psd=True)
+    model = make_model(psd_regime, redshift=0.1, stochastic=True, n_grid=128, free_psd=True)
 
     wave_spec = jnp.linspace(3500, 9500, 200) if data_type == "spectroscopy" else None
-    galaxy = generate_mock_galaxy(model, key, snr=20.0, spec_snr=15.0,
-                                  wave_spec=wave_spec)
+    galaxy = generate_mock_galaxy(model, key, snr=20.0, spec_snr=15.0, wave_spec=wave_spec)
 
-    result = fit_galaxy(model, galaxy, method=method, data_type=data_type,
-                        key=jax.random.fold_in(key, 99), **fit_kwargs)
+    result = fit_galaxy(
+        model,
+        galaxy,
+        method=method,
+        data_type=data_type,
+        key=jax.random.fold_in(key, 99),
+        **fit_kwargs,
+    )
 
     return model, galaxy, result
 
@@ -55,30 +63,33 @@ def plot_psd_corner(results_phot, results_spec):
         sigma_true = psd_true["psd_sigma"]
         tau_true = psd_true["psd_tau_myr"]
 
-        for col, (dtype, results, color, label) in enumerate([
-            ("Photometry", results_phot[regime], "#2ca02c", "Phot"),
-            ("Spectroscopy", results_spec[regime], "#d62728", "Spec"),
-        ]):
+        for col, (_dtype, results, color, label) in enumerate(
+            [
+                ("Photometry", results_phot[regime], "#2ca02c", "Phot"),
+                ("Spectroscopy", results_spec[regime], "#d62728", "Spec"),
+            ]
+        ):
             ax = axes[row, col]
-            model, galaxy, fit_result = results
+            _model, _galaxy, fit_result = results
 
             posterior = fit_result.posterior
-            if posterior.samples is None or "psd_sigma" not in posterior.samples:
-                ax.text(0.5, 0.5, "No PSD samples", transform=ax.transAxes,
-                        ha="center")
+            if posterior.samples is None or "sfh_field_psd_sigma" not in posterior.samples:
+                ax.text(0.5, 0.5, "No PSD samples", transform=ax.transAxes, ha="center")
                 continue
 
-            sigma_samples = np.array(posterior.samples["psd_sigma"])
-            tau_samples = np.array(posterior.samples["psd_tau_myr"])
+            sigma_samples = np.array(posterior.samples["sfh_field_psd_sigma"])
+            tau_samples = np.array(posterior.samples["sfh_field_psd_tau_myr"])
 
             # 2D KDE contours
             try:
                 xy = np.vstack([sigma_samples, tau_samples])
                 kde = gaussian_kde(xy)
-                x_grid = np.linspace(max(0.05, sigma_samples.min() - 0.3),
-                                     min(4.5, sigma_samples.max() + 0.3), 80)
-                y_grid = np.linspace(max(0.5, tau_samples.min() - 20),
-                                     min(350, tau_samples.max() + 20), 80)
+                x_grid = np.linspace(
+                    max(0.05, sigma_samples.min() - 0.3), min(4.5, sigma_samples.max() + 0.3), 80
+                )
+                y_grid = np.linspace(
+                    max(0.5, tau_samples.min() - 20), min(350, tau_samples.max() + 20), 80
+                )
                 X, Y = np.meshgrid(x_grid, y_grid)
                 Z = kde(np.vstack([X.ravel(), Y.ravel()])).reshape(X.shape)
                 Z_sorted = np.sort(Z.ravel())[::-1]
@@ -87,13 +98,16 @@ def plot_psd_corner(results_phot, results_spec):
                 level_95 = Z_sorted[np.searchsorted(Z_cumsum, 0.95)]
                 levels = sorted(set([level_95, level_68, Z.max()]))
                 if len(levels) >= 2:
-                    ax.contourf(X, Y, Z, levels=levels,
-                                colors=[color], alpha=[0.1, 0.3][:len(levels)-1])
-                    ax.contour(X, Y, Z, levels=levels[:-1],
-                               colors=[color], linewidths=0.8, alpha=0.7)
+                    ax.contourf(
+                        X, Y, Z, levels=levels, colors=[color], alpha=[0.1, 0.3][: len(levels) - 1]
+                    )
+                    ax.contour(
+                        X, Y, Z, levels=levels[:-1], colors=[color], linewidths=0.8, alpha=0.7
+                    )
             except (np.linalg.LinAlgError, ValueError):
-                ax.scatter(sigma_samples, tau_samples, s=5, alpha=0.3,
-                           color=color, edgecolors="none")
+                ax.scatter(
+                    sigma_samples, tau_samples, s=5, alpha=0.3, color=color, edgecolors="none"
+                )
 
             # Truth
             ax.axvline(sigma_true, color="k", ls="--", lw=1.2, alpha=0.7)
@@ -101,8 +115,9 @@ def plot_psd_corner(results_phot, results_spec):
             ax.plot(sigma_true, tau_true, "k+", ms=12, mew=2, zorder=10)
 
             # Posterior median
-            ax.plot(np.median(sigma_samples), np.median(tau_samples),
-                    "o", color=color, ms=6, zorder=10)
+            ax.plot(
+                np.median(sigma_samples), np.median(tau_samples), "o", color=color, ms=6, zorder=10
+            )
 
             ax.set_xlabel(r"$\sigma_{\rm PSD}$", fontsize=12)
             ax.set_ylabel(r"$\tau_{\rm PSD}$ (Myr)", fontsize=12)
@@ -116,14 +131,12 @@ def plot_psd_corner(results_phot, results_spec):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--method", type=str, default="raytrace",
-                        choices=["raytrace", "geovi"])
+    parser.add_argument("--method", type=str, default="raytrace", choices=["raytrace", "geovi"])
     args = parser.parse_args()
 
     fit_kwargs = {}
     if args.method == "raytrace":
-        fit_kwargs = dict(n_steps=2000, n_leapfrog_steps=50,
-                         n_burnin=200, step_size=0.05)
+        fit_kwargs = dict(n_steps=2000, n_leapfrog_steps=50, n_burnin=200, step_size=0.05)
     elif args.method == "geovi":
         fit_kwargs = dict(n_iterations=20, n_posterior_samples=100)
 
@@ -133,7 +146,7 @@ def main():
     results_spec = {}
 
     for regime in ["moderate", "bursty"]:
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print(f"Regime: {regime} (free PSD params)")
         psd = PSD_REGIMES[regime]
         print(f"  Truth: sigma={psd['psd_sigma']}, tau={psd['psd_tau_myr']} Myr")
@@ -142,14 +155,21 @@ def main():
 
         print("  Photometry...", flush=True)
         results_phot[regime] = run_psd_recovery(
-            regime, "photometry", args.method, key_r, **fit_kwargs,
+            regime,
+            "photometry",
+            args.method,
+            key_r,
+            **fit_kwargs,
         )
         print(f"    Done ({results_phot[regime][2].wall_time_s:.1f}s)")
 
         print("  Spectroscopy...", flush=True)
         results_spec[regime] = run_psd_recovery(
-            regime, "spectroscopy", args.method,
-            jax.random.fold_in(key_r, 1000), **fit_kwargs,
+            regime,
+            "spectroscopy",
+            args.method,
+            jax.random.fold_in(key_r, 1000),
+            **fit_kwargs,
         )
         print(f"    Done ({results_spec[regime][2].wall_time_s:.1f}s)")
 

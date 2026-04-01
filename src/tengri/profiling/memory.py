@@ -1,0 +1,338 @@
+"""Memory profiling for tengri.
+
+Tracks JAX array footprints (device memory) and process RSS (host memory)
+for model components and data structures.
+
+Usage
+-----
+>>> from tengri.profiling.memory import profile_memory, MemoryReport
+>>> report = profile_memory(model)
+>>> print(report)
+>>> report.to_csv("profiling/outputs/memory.csv")
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import resource
+from typing import Any
+
+
+# ---------------------------------------------------------------------------
+# Data containers
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class MemoryEntry:
+    """Memory footprint of a single data structure."""
+
+    name: str
+    shape: str
+    f64_mb: float
+    f32_mb: float | None = None
+    category: str = ""  # "ssp", "precomp", "nebular", "filter", "dust"
+
+
+@dataclasses.dataclass
+class MemoryReport:
+    """Complete memory profiling report."""
+
+    entries: list[MemoryEntry]
+    rss_mb: float  # current process RSS
+
+    @property
+    def total_f64_mb(self) -> float:
+        return sum(e.f64_mb for e in self.entries)
+
+    @property
+    def total_f32_mb(self) -> float:
+        return sum(e.f32_mb for e in self.entries if e.f32_mb is not None)
+
+    def summary(self) -> str:
+        """Human-readable memory report."""
+        lines = []
+        lines.append("MEMORY FOOTPRINT")
+        lines.append("=" * 85)
+        lines.append(
+            f"{'Data Structure':<45s} {'Shape':<20s}"
+            f" {'f64 (MB)':>10s} {'f32 (MB)':>10s}"
+        )
+        lines.append("-" * 85)
+
+        # Group by category
+        categories = {}
+        for e in self.entries:
+            cat = e.category or "other"
+            categories.setdefault(cat, []).append(e)
+
+        for cat, entries in categories.items():
+            if len(categories) > 1:
+                lines.append(f"\n  [{cat.upper()}]")
+            for e in entries:
+                f32_str = f"{e.f32_mb:.3f}" if e.f32_mb is not None else "—"
+                lines.append(
+                    f"  {e.name:<43s} {e.shape:<20s}"
+                    f" {e.f64_mb:>10.3f} {f32_str:>10s}"
+                )
+
+        lines.append("-" * 85)
+        f32_total = f"{self.total_f32_mb:.1f}" if self.total_f32_mb > 0 else "—"
+        lines.append(
+            f"  {'TOTAL':<43s} {'':20s}"
+            f" {self.total_f64_mb:>10.1f} {f32_total:>10s}"
+        )
+        lines.append(f"\n  Process RSS: {self.rss_mb:.1f} MB")
+        return "\n".join(lines)
+
+    def to_csv(self, path: str) -> None:
+        """Write memory report to CSV."""
+        import csv
+
+        fieldnames = ["name", "shape", "f64_mb", "f32_mb", "category"]
+        with open(path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for e in self.entries:
+                writer.writerow({
+                    "name": e.name,
+                    "shape": e.shape,
+                    "f64_mb": f"{e.f64_mb:.3f}",
+                    "f32_mb": f"{e.f32_mb:.3f}" if e.f32_mb is not None else "",
+                    "category": e.category,
+                })
+
+    def __repr__(self) -> str:
+        return self.summary()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _arr_mb(arr: Any) -> float:
+    """Memory of a JAX/numpy array in MB."""
+    if arr is None:
+        return 0.0
+    if hasattr(arr, "nbytes"):
+        return arr.nbytes / 1e6
+    return 0.0
+
+
+def _shape_str(arr: Any) -> str:
+    """Shape string for display."""
+    if arr is None:
+        return "—"
+    if hasattr(arr, "shape"):
+        return "×".join(str(s) for s in arr.shape)
+    return "—"
+
+
+def get_rss_mb() -> float:
+    """Current process RSS in MB."""
+    # macOS returns bytes, Linux returns KB
+    import platform
+
+    usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if platform.system() == "Darwin":
+        return usage / 1e6  # bytes → MB
+    return usage / 1e3  # KB → MB
+
+
+# ---------------------------------------------------------------------------
+# Profile model memory
+# ---------------------------------------------------------------------------
+
+
+def profile_memory(model) -> MemoryReport:
+    """Profile memory footprint of a Model and its data structures.
+
+    Parameters
+    ----------
+    model : Model
+        A tengri Model instance.
+
+    Returns
+    -------
+    MemoryReport
+        Detailed memory breakdown.
+    """
+    entries = []
+    ssp = model.ssp_data
+
+    # --- SSP data ---
+    f64 = _arr_mb(ssp.ssp_flux)
+    entries.append(MemoryEntry(
+        name="SSP templates",
+        shape=_shape_str(ssp.ssp_flux),
+        f64_mb=f64,
+        f32_mb=f64 / 2,
+        category="ssp",
+    ))
+
+    entries.append(MemoryEntry(
+        name="SSP wavelength grid",
+        shape=_shape_str(ssp.ssp_wave),
+        f64_mb=_arr_mb(ssp.ssp_wave),
+        f32_mb=_arr_mb(ssp.ssp_wave) / 2,
+        category="ssp",
+    ))
+
+    entries.append(MemoryEntry(
+        name="SSP metallicity grid",
+        shape=_shape_str(ssp.ssp_lgmet),
+        f64_mb=_arr_mb(ssp.ssp_lgmet),
+        category="ssp",
+    ))
+
+    entries.append(MemoryEntry(
+        name="SSP age grid",
+        shape=_shape_str(ssp.ssp_lg_age_gyr),
+        f64_mb=_arr_mb(ssp.ssp_lg_age_gyr),
+        category="ssp",
+    ))
+
+    # Alpha-enhanced SSPs (4D)
+    if hasattr(ssp, "ssp_alpha_fe") and ssp.ssp_alpha_fe is not None:
+        entries.append(MemoryEntry(
+            name="SSP alpha grid",
+            shape=_shape_str(ssp.ssp_alpha_fe),
+            f64_mb=_arr_mb(ssp.ssp_alpha_fe),
+            category="ssp",
+        ))
+
+    # --- Precomputed photometry ---
+    if model._precomp is not None:
+        pc = model._precomp
+        f64 = _arr_mb(pc.ssp_phot)
+        entries.append(MemoryEntry(
+            name="Precomp photometry (fixed z)",
+            shape=_shape_str(pc.ssp_phot),
+            f64_mb=f64,
+            f32_mb=f64 / 2,
+            category="precomp",
+        ))
+        if hasattr(pc, "eff_waves_rest") and pc.eff_waves_rest is not None:
+            entries.append(MemoryEntry(
+                name="Effective wavelengths (rest)",
+                shape=_shape_str(pc.eff_waves_rest),
+                f64_mb=_arr_mb(pc.eff_waves_rest),
+                category="precomp",
+            ))
+
+    # --- Precomputed spectroscopy ---
+    if hasattr(model, "_spec_precomp") and model._spec_precomp is not None:
+        sp = model._spec_precomp
+        f64 = _arr_mb(sp.ssp_on_pixels)
+        entries.append(MemoryEntry(
+            name="Precomp spectroscopy",
+            shape=_shape_str(sp.ssp_on_pixels),
+            f64_mb=f64,
+            f32_mb=f64 / 2,
+            category="precomp",
+        ))
+
+    # --- Z-table ---
+    if hasattr(model, "_ztable") and model._ztable is not None:
+        zt = model._ztable
+        f64 = _arr_mb(zt.ssp_phot_table)
+        entries.append(MemoryEntry(
+            name="Z-table (redshift interpolation)",
+            shape=_shape_str(zt.ssp_phot_table),
+            f64_mb=f64,
+            f32_mb=f64 / 2,
+            category="precomp",
+        ))
+
+    # --- Dust age weights ---
+    if hasattr(model, "_dust_age_weights") and model._dust_age_weights is not None:
+        entries.append(MemoryEntry(
+            name="Dust age weights (precomp)",
+            shape=_shape_str(model._dust_age_weights),
+            f64_mb=_arr_mb(model._dust_age_weights),
+            category="dust",
+        ))
+
+    # --- Filters ---
+    if model.filter_waves is not None:
+        total_filter = 0.0
+        for fw_i, ft_i in zip(model.filter_waves, model.filter_trans):
+            total_filter += _arr_mb(fw_i) + _arr_mb(ft_i)
+        n_filt = len(model.filter_waves)
+        entries.append(MemoryEntry(
+            name=f"Filter curves ({n_filt} bands)",
+            shape=f"{n_filt} × ~{len(model.filter_waves[0])} pts",
+            f64_mb=total_filter,
+            category="filter",
+        ))
+
+    # --- Nebular (CUE weights) ---
+    neb = getattr(model, "_nebular_backend", None)
+    if neb is not None and hasattr(neb, "_weights"):
+        cue_total = 0.0
+        w = neb._weights
+        for field_name in w._fields:
+            val = getattr(w, field_name)
+            if hasattr(val, "nbytes"):
+                cue_total += val.nbytes / 1e6
+            elif isinstance(val, (list, tuple)):
+                for item in val:
+                    if hasattr(item, "nbytes"):
+                        cue_total += item.nbytes / 1e6
+        entries.append(MemoryEntry(
+            name="CUE neural emulator weights",
+            shape="(16 sub-nets + cont.)",
+            f64_mb=cue_total,
+            category="nebular",
+        ))
+
+    return MemoryReport(entries=entries, rss_mb=get_rss_mb())
+
+
+# ---------------------------------------------------------------------------
+# Memory scaling
+# ---------------------------------------------------------------------------
+
+
+def profile_memory_scaling(
+    spec_factory,
+    ssp,
+    filters,
+    dimension_values: list[int] | None = None,
+) -> list[tuple[int, MemoryReport]]:
+    """Measure memory footprint as a function of problem dimension.
+
+    Parameters
+    ----------
+    spec_factory : callable
+        Function that takes ``n_grid`` and returns a ParamSpec.
+    ssp : SSPData
+        SSP data.
+    filters : tuple
+        Filter set.
+    dimension_values : list of int, optional
+        Grid sizes to test. Default: [64, 128, 256, 512].
+
+    Returns
+    -------
+    list of (dimension, MemoryReport)
+    """
+    import warnings
+
+    from tengri import Model
+
+    if dimension_values is None:
+        dimension_values = [64, 128, 256, 512]
+
+    results = []
+    for dim in dimension_values:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            spec = spec_factory(dim)
+            m = Model(spec, ssp, filters=filters, precompute=True)
+            report = profile_memory(m)
+            results.append((dim, report))
+            print(f"  D={dim:>4d}: {report.total_f64_mb:.1f} MB (RSS: {report.rss_mb:.0f} MB)")
+
+    return results

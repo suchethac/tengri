@@ -1568,3 +1568,261 @@ def observe_spectrum_from_rest_sed(
     from tengri.models.observation.spectroscopy import compute_spectrum
 
     return compute_spectrum(rest_sed, wave_rest, wave_obs, z, dl_cm)
+
+
+# -------------------------------------------------------------------
+# Fused Tier 2 end-to-end kernels (params → photometry/spectrum)
+# -------------------------------------------------------------------
+
+
+def build_fused_tier2_photometry(model):
+    """Build a single JIT function: params dict → observed photometry.
+
+    Fuses the entire Tier 2 pipeline into one ``@jax.jit`` scope:
+
+    1. Parameter translation (public → internal names + unit conversion)
+    2. SFH computation (registry-dispatched composed function)
+    3. Metallicity interpolation (linear or smooth, single-Z)
+    4. Compositional rest-frame SED kernel (dust, nebular, AGN, ...)
+    5. Filter integration (loop unrolled by JAX tracer)
+    6. Optional IGM absorption
+
+    Eliminates all Python dispatch overhead between steps. The filter
+    loop executes 5 ``compute_flux_density`` calls in Python, but the
+    JAX tracer unrolls them into a single XLA program.
+
+    Parameters
+    ----------
+    model : Model
+        Fully initialized Model with filters and fixed redshift.
+
+    Returns
+    -------
+    callable or None
+        JIT-compiled function: ``params_dict -> photometry_array``.
+        Returns None if prerequisites are not met (no filters, no
+        fixed z, no Tier 2 kernel).
+    """
+    if model._fused_rest_sed is None:
+        return None
+    if model.filter_waves is None:
+        return None
+
+    from tengri.core.param_translate import get_internal_params
+    from tengri.core.sed_pipeline import interp_met_alpha_dispatch
+    from tengri.models.observation.photometry import compute_flux_density
+    from tengri.models.sfh.registry import compute_field_gp
+    from tengri.models.sps.dsps_wrapper import compute_csp_weights
+
+    # Capture model state at build time
+    rest_sed_kernel = model._fused_rest_sed
+    param_map = model._param_map
+    spec = model.spec
+    has_field = model._has_field
+    sfh_fn = model._sfh_fn
+    sfh_internal_names = model._sfh_internal_names
+    field_model = model._field_model
+    n_grid = model._n_grid
+    d_log_age = float(model.d_log_age)
+    ssp_log_ages_yr = model.ssp_log_ages_yr
+    log_age_grid = model.log_age_grid
+    age_yr = model.age_yr
+    ssp_ages_yr = model.ssp_ages_yr
+    ssp_wave = model.ssp_data.ssp_wave
+    xray_enabled = model._xray_enabled
+    filter_waves = model.filter_waves
+    filter_trans = model.filter_trans
+    apply_igm = model._apply_igm
+
+    # Redshift: fixed (precompute IGM once) or free (traced through)
+    z_fixed = model._z_fixed
+    dl_cm_fixed = model._dl_cm_fixed
+    is_free_z = z_fixed is None
+
+    # IGM at full wavelength grid (only for fixed z)
+    igm_trans_full = None
+    if apply_igm and not is_free_z:
+        from tengri.models.igm import igm_transmission
+
+        wave_obs_full = ssp_wave * (1.0 + z_fixed)
+        igm_trans_full = igm_transmission(wave_obs_full, z_fixed)
+
+    # For free-z: need luminosity_distance inside JIT
+    if is_free_z:
+        from tengri.utils.cosmology import luminosity_distance as _lum_dist
+
+        if apply_igm:
+            from tengri.models.igm import igm_transmission as _igm_fn
+
+    # --- Shared SFH + SED computation (used by both fixed-z and free-z) ---
+    def _compute_rest_sed(params):
+        """params → (rest_sed, redshift_value)."""
+        p = get_internal_params(params, param_map, spec, has_field)
+
+        kw = {k: v for k, v in p.items() if k in sfh_internal_names}
+        if has_field and "xi" in p:
+            gp_x, k0_half = compute_field_gp(
+                xi=p["xi"],
+                psd_sigma=p["psd_sigma"],
+                psd_tau_yr=p["psd_tau_yr"],
+                n_grid=n_grid,
+                d_log_age=d_log_age,
+                field_model=field_model,
+            )
+            kw["gp_x"] = gp_x
+            kw["k0_half"] = k0_half
+        sfr = sfh_fn(age_yr, **kw)
+
+        sfr_on_ssp = jnp.interp(ssp_log_ages_yr, log_age_grid, sfr)
+        weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
+
+        alpha_fe = p.get("alpha_fe", 0.0)
+        ssp_flux_at_z = interp_met_alpha_dispatch(model, p["log_z_abs"], alpha_fe)
+
+        if xray_enabled:
+            p = {**p, "_sfr_current": sfr[-1]}
+
+        rest_sed = rest_sed_kernel(weights, ssp_flux_at_z, p)
+        z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
+        return rest_sed, z
+
+    if is_free_z:
+
+        @jax.jit
+        def fused_tier2_phot(params):
+            """params dict → observed photometry (free z)."""
+            rest_sed, z = _compute_rest_sed(params)
+            dl_cm = _lum_dist(z)
+
+            if apply_igm:
+                wave_obs = ssp_wave * (1.0 + z)
+                rest_sed = rest_sed * _igm_fn(wave_obs, z)
+
+            fluxes = []
+            for fw, ft in zip(filter_waves, filter_trans):
+                f = compute_flux_density(rest_sed, ssp_wave, fw, ft, z, dl_cm)
+                fluxes.append(f)
+            return jnp.array(fluxes)
+
+    else:
+
+        @jax.jit
+        def fused_tier2_phot(params):
+            """params dict → observed photometry (fixed z)."""
+            rest_sed, _z = _compute_rest_sed(params)
+
+            if igm_trans_full is not None:
+                rest_sed = rest_sed * igm_trans_full
+
+            fluxes = []
+            for fw, ft in zip(filter_waves, filter_trans):
+                f = compute_flux_density(rest_sed, ssp_wave, fw, ft, z_fixed, dl_cm_fixed)
+                fluxes.append(f)
+            return jnp.array(fluxes)
+
+    return fused_tier2_phot
+
+
+def build_fused_tier2_spectrum(model):
+    """Build a single JIT function: params dict → observed spectrum.
+
+    Like :func:`build_fused_tier2_photometry` but for spectroscopy.
+    Requires ``precompute_spectroscopy()`` to have been called (for
+    the wavelength grid) or an Observation with spectroscopy config.
+
+    Parameters
+    ----------
+    model : Model
+        Fully initialized Model with spectroscopy config.
+
+    Returns
+    -------
+    callable or None
+        JIT-compiled function: ``params_dict -> spectrum_array``.
+    """
+    if model._fused_rest_sed is None:
+        return None
+
+    from tengri.core.param_translate import get_internal_params
+    from tengri.core.sed_pipeline import interp_met_alpha_dispatch
+    from tengri.models.observation.spectroscopy import compute_spectrum
+    from tengri.models.sfh.registry import compute_field_gp
+    from tengri.models.sps.dsps_wrapper import compute_csp_weights
+
+    # Must have a wavelength grid
+    wave_obs = None
+    if model._spec_precomp is not None:
+        wave_obs = model._spec_precomp.wave_obs_pixels
+    elif hasattr(model, "_wave_obs"):
+        wave_obs = model._wave_obs
+    if wave_obs is None:
+        return None
+
+    # Capture model state
+    rest_sed_kernel = model._fused_rest_sed
+    param_map = model._param_map
+    spec = model.spec
+    has_field = model._has_field
+    sfh_fn = model._sfh_fn
+    sfh_internal_names = model._sfh_internal_names
+    field_model = model._field_model
+    n_grid = model._n_grid
+    d_log_age = float(model.d_log_age)
+    ssp_log_ages_yr = model.ssp_log_ages_yr
+    log_age_grid = model.log_age_grid
+    age_yr = model.age_yr
+    ssp_ages_yr = model.ssp_ages_yr
+    ssp_wave = model.ssp_data.ssp_wave
+    xray_enabled = model._xray_enabled
+
+    z_fixed = model._z_fixed
+    dl_cm_fixed = model._dl_cm_fixed
+    is_free_z = z_fixed is None
+
+    if is_free_z:
+        from tengri.utils.cosmology import luminosity_distance as _lum_dist_spec
+
+    # Shared SFH+SED (same as photometry)
+    def _compute_rest_sed_spec(params):
+        p = get_internal_params(params, param_map, spec, has_field)
+        kw = {k: v for k, v in p.items() if k in sfh_internal_names}
+        if has_field and "xi" in p:
+            gp_x, k0_half = compute_field_gp(
+                xi=p["xi"],
+                psd_sigma=p["psd_sigma"],
+                psd_tau_yr=p["psd_tau_yr"],
+                n_grid=n_grid,
+                d_log_age=d_log_age,
+                field_model=field_model,
+            )
+            kw["gp_x"] = gp_x
+            kw["k0_half"] = k0_half
+        sfr = sfh_fn(age_yr, **kw)
+        sfr_on_ssp = jnp.interp(ssp_log_ages_yr, log_age_grid, sfr)
+        weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
+        alpha_fe = p.get("alpha_fe", 0.0)
+        ssp_flux_at_z = interp_met_alpha_dispatch(model, p["log_z_abs"], alpha_fe)
+        if xray_enabled:
+            p = {**p, "_sfr_current": sfr[-1]}
+        rest_sed = rest_sed_kernel(weights, ssp_flux_at_z, p)
+        z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
+        return rest_sed, z
+
+    if is_free_z:
+
+        @jax.jit
+        def fused_tier2_spec(params):
+            """params dict → observed spectrum (free z)."""
+            rest_sed, z = _compute_rest_sed_spec(params)
+            dl_cm = _lum_dist_spec(z)
+            return compute_spectrum(rest_sed, ssp_wave, wave_obs, z, dl_cm)
+
+    else:
+
+        @jax.jit
+        def fused_tier2_spec(params):
+            """params dict → observed spectrum (fixed z)."""
+            rest_sed, _z = _compute_rest_sed_spec(params)
+            return compute_spectrum(rest_sed, ssp_wave, wave_obs, z_fixed, dl_cm_fixed)
+
+    return fused_tier2_spec

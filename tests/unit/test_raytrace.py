@@ -322,3 +322,135 @@ class TestFitterRaytraceInitFromMap:
             f"Accept rate {rt_result.diagnostics['accept_rate']:.2%} "
             f"unexpectedly low when initialized from MAP"
         )
+
+
+# ---------------------------------------------------------------------------
+# KDK integrator tests
+# ---------------------------------------------------------------------------
+
+
+class TestKDKIntegrator:
+    """Verify KDK integrator produces valid samples."""
+
+    def test_kdk_raytrace_gaussian(self):
+        """KDK should recover Gaussian mean, matching DKD."""
+        D = 5
+        key = jax.random.PRNGKey(42)
+        true_mean = jnp.zeros(D)
+        cov_inv = jnp.eye(D)
+
+        log_prob_fn = _gaussian_log_prob(true_mean, cov_inv)
+        step_size = 0.03 * jnp.sqrt(float(D))
+
+        chain, _lnl, accept_prob = sample_raytrace(
+            key=key,
+            params_init=jnp.zeros(D),
+            log_prob_fn=log_prob_fn,
+            n_steps=200,
+            n_leapfrog_steps=10,
+            step_size=float(step_size),
+            integrator="kdk",
+        )
+
+        # Acceptance should be reasonable
+        mean_accept = float(jnp.mean(accept_prob))
+        assert mean_accept > 0.3, f"KDK accept rate {mean_accept:.2%} too low"
+
+        # Mean should be near zero
+        chain_mean = jnp.mean(chain[50:], axis=0)
+        assert jnp.allclose(chain_mean, true_mean, atol=0.8)
+
+    def test_kdk_hmc_gaussian(self):
+        """KDK HMC should also work."""
+        D = 3
+        key = jax.random.PRNGKey(7)
+        true_mean = jnp.ones(D)
+        cov_inv = jnp.eye(D) * 2.0
+
+        log_prob_fn = _gaussian_log_prob(true_mean, cov_inv)
+
+        chain, _lnl, accept_prob = sample_raytrace(
+            key=key,
+            params_init=true_mean,
+            log_prob_fn=log_prob_fn,
+            n_steps=100,
+            n_leapfrog_steps=10,
+            step_size=0.05,
+            sample_hmc=True,
+            integrator="kdk",
+        )
+
+        mean_accept = float(jnp.mean(accept_prob))
+        assert mean_accept > 0.3
+        assert chain.shape == (100, D)
+
+    def test_invalid_integrator_raises(self):
+        """Unknown integrator should raise ValueError."""
+        D = 3
+        key = jax.random.PRNGKey(0)
+
+        with pytest.raises(ValueError, match="Unknown integrator"):
+            sample_raytrace(
+                key=key,
+                params_init=jnp.zeros(D),
+                log_prob_fn=lambda x: -0.5 * jnp.sum(x**2),
+                n_steps=10,
+                n_leapfrog_steps=5,
+                step_size=0.1,
+                integrator="invalid",
+            )
+
+
+# ---------------------------------------------------------------------------
+# Posterior autocorrelation integration
+# ---------------------------------------------------------------------------
+
+
+class TestPosteriorAutocorrelation:
+    """Verify Posterior.autocorrelation_time() and check_convergence()."""
+
+    def test_autocorrelation_time_on_gaussian_chain(self):
+        """Run RT on Gaussian, check autocorrelation_time() returns sane values."""
+        D = 5
+        key = jax.random.PRNGKey(0)
+        log_prob_fn = _gaussian_log_prob(jnp.zeros(D), jnp.eye(D))
+
+        chain, _log_lik, _accept_prob = sample_raytrace(
+            key=key,
+            params_init=jnp.zeros(D),
+            log_prob_fn=log_prob_fn,
+            n_steps=500,
+            n_leapfrog_steps=10,
+            step_size=0.05,
+        )
+
+        # Build a minimal Posterior
+        samples = {f"param_{i}": chain[50:, i] for i in range(D)}
+
+        posterior = Posterior(
+            samples=samples,
+            params={f"param_{i}": jnp.mean(chain[50:, i]) for i in range(D)},
+            method="Ray Tracing test",
+            wall_time_s=1.0,
+            diagnostics={},
+            loss_history=None,
+            _model=None,
+        )
+
+        # autocorrelation_time should return per-param info
+        act = posterior.autocorrelation_time()
+        assert len(act) == D
+        for _name, info in act.items():
+            assert "tau_max" in info
+            assert "ess" in info
+            assert info["tau_max"] >= 1.0
+
+        # effective_sample_size should return ESS values
+        ess = posterior.effective_sample_size()
+        assert len(ess) == D
+        for _name, val in ess.items():
+            assert val > 0
+
+        # check_convergence should not crash
+        conv = posterior.check_convergence(verbose=False)
+        assert "all_converged" in conv
