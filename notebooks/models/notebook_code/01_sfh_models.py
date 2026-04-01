@@ -115,7 +115,7 @@ from _plot_style import COLORS, add_sfh_inset, setup_style
 
 setup_style()
 
-FIGDIR = os.path.join(_nb_dir, "..", "figures", "reference")
+FIGDIR = os.path.join("models", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 # Lookback labels match plot_sfh() in _plot_style.py

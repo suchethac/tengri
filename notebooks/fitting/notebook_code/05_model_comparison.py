@@ -73,7 +73,7 @@ elif os.path.exists(os.path.join("..", "..", "data")):
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
 
-FIGDIR = os.path.join("demonstrations", "figures")
+FIGDIR = os.path.join("fitting", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import (

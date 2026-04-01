@@ -40,6 +40,35 @@ wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/ssp_fsps_v3.2.h5 -P
 
 Any SSP template set can be used — the only requirement is the DSPS HDF5 schema (age, metallicity, wavelength, spectra arrays). This enables SPS uncertainty testing across different stellar libraries and IMFs.
 
+## How it works
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    tengri architecture                  │
+│                                                         │
+│   Observations ──────────────────► Fitter ─► Posterior │
+│                                       ▲                 │
+│                                  Model(spec, ssp)       │
+│                                  ▲           ▲          │
+│                              ParamSpec     SSP grid     │
+│                              (physics)    (templates)   │
+└─────────────────────────────────────────────────────────┘
+```
+
+**ParamSpec** declares the free parameters and their priors (SFH shape, dust, metallicity, redshift). **SSP grid** holds the pre-computed stellar population spectra (any DSPS-compatible HDF5 file). **Model** combines them into a differentiable forward model that maps physical parameters to predicted photometry or spectra. **Fitter** runs inference (MAP, VI, MCMC) and returns a **Posterior** with posterior samples, summary statistics, and convergence diagnostics.
+
+## Start here
+
+| I want to... | Go to |
+|---|---|
+| Fit my first galaxy in 10 minutes | `quickstart/01_quickstart` notebook |
+| Understand why tengri beats parametric SFH codes | `quickstart/03_bursty_sfh_recovery` notebook |
+| Fit a photometric catalog efficiently | `fitting/02_fitting_photometry` notebook |
+| Understand the SFH prior and PSD parameters | `theory/01_sfh_prior` notebook |
+| See all available dust, AGN, and nebular models | `models/` track notebooks |
+| Choose the right inference method | `fitting/06_advanced_inference` notebook |
+| Infer population-level SFH statistics | `fitting/07_hierarchical_psd` notebook |
+
 ## Quick start
 
 ```python

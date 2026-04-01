@@ -64,7 +64,7 @@ elif os.path.exists(os.path.join("..", "..", "data")):
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
 
-FIGDIR = os.path.join("tutorials", "figures")
+FIGDIR = os.path.join("quickstart", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import (
@@ -427,7 +427,7 @@ for name, res, t in [
     ("native_geovi", result_geovi_param, t_geovi),
     ("NUTS", result_nuts_param, t_nuts),
 ]:
-    n_samp = len(list(res.samples.values())[0]) if res.samples else 0
+    n_samp = len(next(iter(res.samples.values()))) if res.samples else 0
     print(f"  {name:<16s} | {t:>8.1f} s | {n_samp:>17d} | {n_samp / t:>7.0f}")
 
 # %% [markdown]

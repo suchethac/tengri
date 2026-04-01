@@ -39,7 +39,8 @@ Where time is spent when using the **exact** (non-precomputed) path with power-l
 
 The fused kernel with photometry precomputation eliminates most of this: dust is
 evaluated at 5 effective wavelengths (not 5994), the einsum operates on a (93 x 5)
-array, and photometric integration is skipped entirely.
+array, and photometric integration is skipped entirely. The combined speedup is
+**21.6× on the forward model** (2737 μs → 127 μs for 5-band photometry at fixed redshift).
 
 ## Fused kernel by dust law
 

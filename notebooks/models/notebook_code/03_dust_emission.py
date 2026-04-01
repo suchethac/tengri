@@ -61,7 +61,7 @@ from _plot_style import COLORS, setup_style
 
 setup_style()
 
-FIGDIR = os.path.join(_nb_dir, "..", "figures", "reference")
+FIGDIR = os.path.join("models", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 # %%

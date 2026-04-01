@@ -7,8 +7,12 @@ Type 1 (broad-line, blue disc continuum visible) or Type 2 (narrow-line only,
 torus blocks the accretion disc) depending purely on viewing angle.
 """
 
+import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+
+jax.config.update("jax_enable_x64", True)
 
 from tengri import setup_style
 from tengri.models.agn import unified_nlr_blr
@@ -27,8 +31,6 @@ configs = [
 ]
 
 fig, ax = plt.subplots(figsize=(8, 5))
-
-import jax.numpy as jnp
 
 wave_jnp = jnp.array(wave_aa)
 for cfg in configs:
