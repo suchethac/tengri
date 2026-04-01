@@ -370,23 +370,53 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     """
     import numpy as np
 
-    data = np.load(grid_path)
-    required_keys = {"grid", "wavelength", "tau", "p", "q", "oa", "cos_inc"}
-    missing = required_keys - set(data.keys())
-    if missing:
-        raise KeyError(
-            f"SKIRTOR grid file missing keys: {missing}. Available: {list(data.keys())}"
-        )
+    if grid_path.endswith(".npz"):
+        data = np.load(grid_path)
+        required_keys = {"grid", "wavelength", "tau", "p", "q", "oa", "cos_inc"}
+        missing = required_keys - set(data.keys())
+        if missing:
+            raise KeyError(
+                f"SKIRTOR grid file missing keys: {missing}. Available: {list(data.keys())}"
+            )
+        grid_raw = np.array(data["grid"])
+        wave_raw = np.array(data["wavelength"])
+        tau_raw = np.array(data["tau"])
+        p_raw = np.array(data["p"])
+        q_raw = np.array(data["q"])
+        oa_raw = np.array(data["oa"])
+        cos_inc_raw = np.array(data["cos_inc"])
+    else:
+        import h5py as _h5py
+
+        with _h5py.File(grid_path, "r") as f:
+            if "grid" in f and isinstance(f["grid"], _h5py.Group):
+                # v2 layout: grid/{tau_97,p,q,opening_angle,cos_inclination},
+                # spectra/{torus_emission}, wavelength
+                wave_raw = np.array(f["wavelength"][:])
+                grid_raw = np.array(f["spectra/torus_emission"][:])
+                tau_raw = np.array(f["grid/tau_97"][:])
+                p_raw = np.array(f["grid/p"][:])
+                q_raw = np.array(f["grid/q"][:])
+                oa_raw = np.array(f["grid/opening_angle"][:])
+                cos_inc_raw = np.array(f["grid/cos_inclination"][:])
+            else:
+                grid_raw = np.array(f["grid"][:])
+                wave_raw = np.array(f["wavelength"][:])
+                tau_raw = np.array(f["tau"][:])
+                p_raw = np.array(f["p"][:])
+                q_raw = np.array(f["q"][:])
+                oa_raw = np.array(f["oa"][:])
+                cos_inc_raw = np.array(f["cos_inc"][:])
 
     # Move arrays to JAX (immutable)
-    grid_jax = jnp.array(data["grid"])  # (n_tau, n_p, n_q, n_oa, n_inc, n_wave)
-    wave_grid = jnp.array(data["wavelength"])
+    grid_jax = jnp.array(grid_raw)  # (n_tau, n_p, n_q, n_oa, n_inc, n_wave)
+    wave_grid = jnp.array(wave_raw)
     axes = (
-        jnp.array(data["tau"]),
-        jnp.array(data["p"]),
-        jnp.array(data["q"]),
-        jnp.array(data["oa"]),
-        jnp.array(data["cos_inc"]),
+        jnp.array(tau_raw),
+        jnp.array(p_raw),
+        jnp.array(q_raw),
+        jnp.array(oa_raw),
+        jnp.array(cos_inc_raw),
     )
 
     def skirtor_grid(
@@ -461,7 +491,9 @@ def skirtor_analytic(*args, **kwargs):
         from pathlib import Path
 
         for candidate in [
+            Path(__file__).resolve().parents[4] / "data" / "skirtor_templates_v2.h5",
             Path(__file__).resolve().parents[4] / "data" / "skirtor_templates.npz",
+            Path("data/skirtor_templates_v2.h5"),
             Path("data/skirtor_templates.npz"),
         ]:
             if candidate.is_file():

@@ -1032,10 +1032,27 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
     """
     import numpy as np
 
-    data = np.load(grid_path)
-    tmpl_wave = jnp.array(data["wavelength_aa"])  # (n_wave,)
-    alpha_grid = jnp.array(data["alpha_grid"])  # (n_alpha,)
-    templates_raw = np.array(data["templates_sf"])
+    if grid_path.endswith(".npz"):
+        data = np.load(grid_path)
+        tmpl_wave_raw = np.array(data["wavelength_aa"])
+        alpha_grid_raw = np.array(data["alpha_grid"])
+        templates_raw = np.array(data["templates_sf"])
+    else:
+        import h5py as _h5py
+
+        with _h5py.File(grid_path, "r") as f:
+            if "grid" in f:
+                # v2 layout
+                tmpl_wave_raw = np.array(f["wavelength"][:])
+                alpha_grid_raw = np.array(f["grid/alpha"][:])
+                templates_raw = np.array(f["spectra/templates"][:])
+            else:
+                tmpl_wave_raw = np.array(f["wavelength_aa"][:])
+                alpha_grid_raw = np.array(f["alpha_grid"][:])
+                templates_raw = np.array(f["templates_sf"][:])
+
+    tmpl_wave = jnp.array(tmpl_wave_raw)
+    alpha_grid = jnp.array(alpha_grid_raw)
     # Handle both (n_alpha, n_wave) and (n_wave, n_alpha) layouts
     if templates_raw.shape[0] == len(tmpl_wave) and templates_raw.shape[1] == len(alpha_grid):
         templates_raw = templates_raw.T  # -> (n_alpha, n_wave)
@@ -1225,42 +1242,36 @@ def load_dl14_templates(filepath: str) -> dict:
     import h5py as _h5py
 
     with _h5py.File(filepath, "r") as f:
-        # v2 standardized format: /grid/*, /spectra/*
         if "grid" in f and "spectra" in f:
+            # v2 standardized format: /grid/*, /spectra/*
             wavelength = jnp.array(f["wavelength"][:])
             umin_grid = jnp.array(f["grid"]["umin"][:])
             qpah_grid = jnp.array(f["grid"]["qpah"][:])
             alpha_grid = jnp.array(f["grid"]["alpha"][:])
             raw_single = jnp.array(f["spectra"]["single_u"][:])
-            single_u = raw_single[0]
+            single_u = raw_single[0]  # alpha-independent
             raw_pdr = jnp.array(f["spectra"]["pdr"][:])
             powerlaw = jnp.transpose(raw_pdr, (1, 2, 0, 3))
-        else:
-            # Legacy flat format
+        elif "single_u" in f:
+            # Legacy flat format with correct key names
             wavelength = jnp.array(f["wavelength"][:])
             umin_grid = jnp.array(f["umin_grid"][:])
             qpah_grid = jnp.array(f["qpah_grid"][:])
             alpha_grid = jnp.array(f["alpha_grid"][:])
-
-        # File may have old key names (single_u/powerlaw) or new
-        # names (templates_single_u/templates_pdr) from convert script.
-        if "grid" not in f and "single_u" in f:
             single_u = jnp.array(f["single_u"][:])
             powerlaw = jnp.array(f["powerlaw"][:])
-        elif "grid" not in f and "templates_single_u" in f:
-            # File shape: (n_alpha, n_qpah, n_umin, n_wave)
-            # For single_u: average over alpha axis → (n_qpah, n_umin, n_wave)
-            # (single-U templates are alpha-independent by definition)
+        elif "templates_single_u" in f:
+            # Older format with templates_single_u/templates_pdr keys
+            wavelength = jnp.array(f["wavelength"][:])
+            umin_grid = jnp.array(f["umin_grid"][:])
+            qpah_grid = jnp.array(f["qpah_grid"][:])
+            alpha_grid = jnp.array(f["alpha_grid"][:])
             raw_single = jnp.array(f["templates_single_u"][:])
-            single_u = raw_single[0]  # alpha-independent, take first slice
-
-            # For powerlaw (PDR): transpose to (n_qpah, n_umin, n_alpha, n_wave)
+            single_u = raw_single[0]
             raw_pdr = jnp.array(f["templates_pdr"][:])
             powerlaw = jnp.transpose(raw_pdr, (1, 2, 0, 3))
         else:
-            raise KeyError(
-                f"DL14 HDF5 missing expected keys. Found: {list(f.keys())}"
-            )
+            raise KeyError(f"DL14 HDF5 missing expected keys. Found: {list(f.keys())}")
 
     return {
         "wavelength": wavelength,
@@ -1728,18 +1739,32 @@ def load_astrodust_templates(filepath: str) -> dict:
 
     if filepath.endswith(".npz"):
         data = np.load(filepath)
+        wavs_um = np.array(data["wavelength_um"])
+        single_u = np.array(data["spectra_single"])
+        powerlaw = np.array(data["spectra_pdr"])
+        umin_grid = np.array(data["umin_grid"])
+        qpah_grid = np.array(data["qpah_grid"])
     else:
         import h5py as _h5py
 
-        f = _h5py.File(filepath, "r")
-        data = {k: np.array(f[k][:]) for k in f}
-        f.close()
+        with _h5py.File(filepath, "r") as f:
+            # Support both flat (legacy) and nested v2 HDF5 layout
+            if "grid" in f:
+                # v2 layout: grid/{qpah,umin}, spectra/{single_u,pdr}, wavelength
+                wavs_um = np.array(f["wavelength"][:])
+                single_u = np.array(f["spectra/single_u"][:])
+                powerlaw = np.array(f["spectra/pdr"][:])
+                umin_grid = np.array(f["grid/umin"][:])
+                qpah_grid = np.array(f["grid/qpah"][:])
+            else:
+                # Legacy flat layout
+                wavs_um = np.array(f["wavelength_um"][:])
+                single_u = np.array(f["spectra_single"][:])
+                powerlaw = np.array(f["spectra_pdr"][:])
+                umin_grid = np.array(f["umin_grid"][:])
+                qpah_grid = np.array(f["qpah_grid"][:])
 
-    wavs_um = np.array(data["wavelength_um"])
     wavs_aa = wavs_um * 1.0e4  # microns -> Angstrom
-
-    single_u = np.array(data["spectra_single"])  # (n_qpah, n_umin, n_wave)
-    powerlaw = np.array(data["spectra_pdr"])  # (n_qpah, n_umin, n_wave)
 
     # Convert to L_nu: L_nu = L_lambda * lambda^2 / c
     wave_cm = wavs_aa * _AA_TO_CM
@@ -1757,8 +1782,8 @@ def load_astrodust_templates(filepath: str) -> dict:
 
     return {
         "wavelength_aa": jnp.array(wavs_aa),
-        "umin_grid": jnp.array(data["umin_grid"]),
-        "qpah_grid": jnp.array(data["qpah_grid"]),
+        "umin_grid": jnp.array(umin_grid),
+        "qpah_grid": jnp.array(qpah_grid),
         "single_u": jnp.array(single_u),
         "powerlaw": jnp.array(powerlaw),
     }
@@ -2061,17 +2086,29 @@ def load_bosa_templates(filepath: str) -> dict:
 
     if filepath.endswith(".npz"):
         data = np.load(filepath)
+        wavs_um = np.array(data["wavelength_um"])
+        spectra = np.array(data["spectra"])
+        log_ltir_grid = np.array(data["log_ltir_grid"])
+        log_ssfr_grid = np.array(data["log_ssfr_grid"])
     else:
         import h5py as _h5py
 
-        f = _h5py.File(filepath, "r")
-        data = {k: np.array(f[k][:]) for k in f}
-        f.close()
+        with _h5py.File(filepath, "r") as f:
+            if "grid" in f and "spectra" in f:
+                # v2 layout: grid/{log_ltir,log_ssfr}, spectra/{templates},
+                # wavelength (micron)
+                wavs_um = np.array(f["wavelength"][:])
+                spectra = np.array(f["spectra"]["templates"][:])
+                log_ltir_grid = np.array(f["grid"]["log_ltir"][:])
+                log_ssfr_grid = np.array(f["grid"]["log_ssfr"][:])
+            else:
+                # Legacy flat layout
+                wavs_um = np.array(f["wavelength_um"][:])
+                spectra = np.array(f["spectra"][:])
+                log_ltir_grid = np.array(f["log_ltir_grid"][:])
+                log_ssfr_grid = np.array(f["log_ssfr_grid"][:])
 
-    wavs_um = np.array(data["wavelength_um"])
     wavs_aa = wavs_um * 1.0e4  # microns -> Angstrom
-
-    spectra = np.array(data["spectra"])  # (n_ltir, n_ssfr, n_wave)
 
     # Convert to L_nu and normalize
     wave_cm = wavs_aa * _AA_TO_CM
@@ -2088,8 +2125,8 @@ def load_bosa_templates(filepath: str) -> dict:
 
     return {
         "wavelength_aa": jnp.array(wavs_aa),
-        "log_ltir_grid": jnp.array(data["log_ltir_grid"]),
-        "log_ssfr_grid": jnp.array(data["log_ssfr_grid"]),
+        "log_ltir_grid": jnp.array(log_ltir_grid),
+        "log_ssfr_grid": jnp.array(log_ssfr_grid),
         "spectra": jnp.array(spectra),
     }
 
@@ -2279,18 +2316,30 @@ def load_themis_templates(filepath: str) -> dict:
 
     if filepath.endswith(".npz"):
         data = np.load(filepath)
+        wavs_um = np.array(data["wavelength_um"])
+        single_u = np.array(data["spectra_single"])
+        powerlaw = np.array(data["spectra_pdr"])
+        umin_grid = np.array(data["umin_grid"])
+        qhac_grid = np.array(data["qhac_grid"])
     else:
         import h5py as _h5py
 
-        f = _h5py.File(filepath, "r")
-        data = {k: np.array(f[k][:]) for k in f}
-        f.close()
+        with _h5py.File(filepath, "r") as f:
+            if "grid" in f:
+                # v2 layout: grid/{qhac, umin}, spectra/{single_u, pdr}
+                wavs_um = np.array(f["wavelength"][:])
+                single_u = np.array(f["spectra/single_u"][:])
+                powerlaw = np.array(f["spectra/pdr"][:])
+                umin_grid = np.array(f["grid/umin"][:])
+                qhac_grid = np.array(f["grid/qhac"][:])
+            else:
+                wavs_um = np.array(f["wavelength_um"][:])
+                single_u = np.array(f["spectra_single"][:])
+                powerlaw = np.array(f["spectra_pdr"][:])
+                umin_grid = np.array(f["umin_grid"][:])
+                qhac_grid = np.array(f["qhac_grid"][:])
 
-    wavs_um = np.array(data["wavelength_um"])
     wavs_aa = wavs_um * 1.0e4  # microns -> Angstrom
-
-    single_u = np.array(data["spectra_single"])  # (n_qhac, n_umin, n_wave)
-    powerlaw = np.array(data["spectra_pdr"])  # (n_qhac, n_umin, n_wave)
 
     # Convert to L_nu and normalize
     wave_cm = wavs_aa * _AA_TO_CM
@@ -2308,8 +2357,8 @@ def load_themis_templates(filepath: str) -> dict:
 
     return {
         "wavelength_aa": jnp.array(wavs_aa),
-        "umin_grid": jnp.array(data["umin_grid"]),
-        "qhac_grid": jnp.array(data["qhac_grid"]),
+        "umin_grid": jnp.array(umin_grid),
+        "qhac_grid": jnp.array(qhac_grid),
         "single_u": jnp.array(single_u),
         "powerlaw": jnp.array(powerlaw),
     }
@@ -2614,9 +2663,9 @@ def _make_lazy_loader(
     def _lazy_wrapper(*args, **kwargs):
         if name not in _resolved:
             _resolved.add(name)
-            # Try v2 standardized HDF5 first, then legacy format
+            # Try legacy format first (properly normalized), then v2 HDF5
             v2_name = template_filename.rsplit(".", 1)[0] + "_v2.h5"
-            path = _find_data_file(v2_name) or _find_data_file(template_filename)
+            path = _find_data_file(template_filename) or _find_data_file(v2_name)
             if path is not None:
                 try:
                     loader = globals()[loader_fn_name]
@@ -2651,9 +2700,9 @@ def _make_lazy_loader(
     return _lazy_wrapper
 
 
-# --- DL07: tries dl07_templates.npz, then .h5 ---
+# --- DL07: tries v2 HDF5 first, then legacy .npz/.h5 ---
 def _find_dl07_templates() -> str | None:
-    for fn in ("dl07_templates.npz", "dl07_templates.h5"):
+    for fn in ("dl07_templates_v2.h5", "dl07_templates.npz", "dl07_templates.h5"):
         path = _find_data_file(fn)
         if path is not None:
             return path
