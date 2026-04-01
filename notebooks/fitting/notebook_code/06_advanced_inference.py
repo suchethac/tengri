@@ -79,6 +79,9 @@ from _plot_style import (
 
 setup_style()
 
+FIGDIR = os.path.join(_nb_dir, "..", "figures")
+os.makedirs(FIGDIR, exist_ok=True)
+
 # %% [markdown]
 # ## 1. Setup: Parametric Model (D = 7)
 
@@ -225,7 +228,7 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle("Laplace (Gaussian) vs NUTS (exact)", y=1.02)
-    plt.savefig("fig01a_corner_laplace_vs_nuts.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig01a_corner_laplace_vs_nuts.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -240,7 +243,7 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle("Pathfinder vs NUTS", y=1.02)
-    plt.savefig("fig01b_corner_pathfinder_vs_nuts.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig01b_corner_pathfinder_vs_nuts.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -255,7 +258,7 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle("Elliptical Slice Sampling vs NUTS", y=1.02)
-    plt.savefig("fig01c_corner_ess_vs_nuts.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig01c_corner_ess_vs_nuts.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -276,7 +279,7 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle("D = 7: Five Methods Compared", y=1.02)
-    plt.savefig("fig01d_corner_all_methods.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig01d_corner_all_methods.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -356,7 +359,7 @@ fig.suptitle(
     y=1.02,
 )
 fig.tight_layout()
-plt.savefig("fig05_marginal_posteriors.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig05_marginal_posteriors.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -439,7 +442,7 @@ for bar, t in zip(bars, times):
         fontsize=8,
     )
 fig.tight_layout()
-plt.savefig("fig02_timing_comparison.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig02_timing_comparison.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -475,7 +478,7 @@ for ax, (name, (result, color)) in zip(axes, sfh_results.items()):
 
 fig.suptitle("SFH Recovery: All Methods", fontsize=12, y=1.02)
 fig.tight_layout()
-plt.savefig("fig03_sfh_recovery.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig03_sfh_recovery.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -631,7 +634,7 @@ ax3.set_title(f"Ray Tracing ({timings_s['RT']:.1f}s)")
 
 fig.suptitle("D = 137: High-D Methods Compared", fontsize=12, y=1.02)
 fig.tight_layout()
-plt.savefig("fig04_sfh_high_d.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig04_sfh_high_d.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -648,7 +651,7 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle("D = 137: Physical Parameter Posteriors", y=1.02)
-    plt.savefig("fig06_corner_high_d.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGDIR, "fig06_corner_high_d.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 

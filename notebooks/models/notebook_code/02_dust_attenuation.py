@@ -84,7 +84,7 @@ from _plot_style import COLORS, setup_style
 
 setup_style()
 
-FIGDIR = os.path.join(_nb_dir, "..", "figures", "reference")
+FIGDIR = os.path.join("models", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 # %% [markdown]
@@ -162,7 +162,7 @@ for group_info in _GROUPS.values():
 
 fig, ax = plt.subplots(figsize=(10, 6))
 
-for group_name, group_info in _GROUPS.items():
+for _group_name, group_info in _GROUPS.items():
     for name in group_info["curves"]:
         fn = get_dust_law(name)
         k = fn(wave)

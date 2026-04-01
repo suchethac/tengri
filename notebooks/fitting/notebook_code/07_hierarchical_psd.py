@@ -69,7 +69,7 @@ elif os.path.exists(os.path.join("..", "..", "data")):
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
 
-FIGDIR = os.path.join("demonstrations", "figures")
+FIGDIR = os.path.join("fitting", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import (
@@ -236,7 +236,7 @@ for i in range(min(4, N_GAL)):
 # %%
 # --- FIGURE 2: Individual PSD posteriors (wide, overlapping) ---
 fig, (ax_sig, ax_tau) = plt.subplots(1, 2, figsize=(10, 4))
-for i, res in enumerate(individual_results):
+for _i, res in enumerate(individual_results):
     sig_s = np.array(res.samples["sfh_field_psd_sigma"])
     tau_s = np.array(res.samples["sfh_field_psd_tau_myr"])
     ax_sig.hist(sig_s, bins=30, alpha=0.4, density=True, label=f"Galaxy {i}")
@@ -299,7 +299,7 @@ print(f"  Wall time: {t_hier_spec:.1f}s")
 fig, (ax_sig, ax_tau) = plt.subplots(1, 2, figsize=(10, 4))
 
 # Individual (faded)
-for i, res in enumerate(individual_results):
+for _i, res in enumerate(individual_results):
     sig_s = np.array(res.samples["sfh_field_psd_sigma"])
     tau_s = np.array(res.samples["sfh_field_psd_tau_myr"])
     ax_sig.hist(sig_s, bins=30, alpha=0.15, density=True, color="grey")
@@ -593,7 +593,7 @@ print(
     f"{'sig_84':>8s} {'tau_true':>8s} {'tau_med':>8s} {'tau_16':>8s} {'tau_84':>8s}"
 )
 print("-" * 88)
-for i, res in enumerate(individual_results):
+for _i, res in enumerate(individual_results):
     sig_s = np.array(res.samples["sfh_field_psd_sigma"])
     tau_s = np.array(res.samples["sfh_field_psd_tau_myr"])
     print(
@@ -933,7 +933,7 @@ for i in range(min(4, N_GAL)):
 # --- FIGURE 2: Individual PSD posteriors (wide, overlapping) ---
 fig, (ax_sig, ax_tau) = plt.subplots(1, 2, figsize=(10, 4))
 
-for i, res in enumerate(individual_results):
+for _i, res in enumerate(individual_results):
     sig_s = np.array(res.samples["sfh_field_psd_sigma"])
     tau_s = np.array(res.samples["sfh_field_psd_tau_myr"])
     ax_sig.hist(sig_s, bins=30, alpha=0.35, density=True, label=f"Gal {i}")

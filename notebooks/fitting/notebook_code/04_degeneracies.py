@@ -73,7 +73,7 @@ elif os.path.exists(os.path.join("..", "..", "data")):
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
 
-FIGDIR = os.path.join("demonstrations", "figures")
+FIGDIR = os.path.join("fitting", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import (
@@ -381,7 +381,7 @@ if HAS_DATA:
         true_params,
         noise_sdss,
         data_type="photometry",
-        param_names=fisher_params + ["redshift"],
+        param_names=[*fisher_params, "redshift"],
     )
 
     sigma_fixed = fisher_parameter_errors(fim_fixed_z)

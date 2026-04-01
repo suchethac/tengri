@@ -63,7 +63,7 @@ elif os.path.exists(os.path.join("..", "..", "data")):
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
 
-FIGDIR = os.path.join("demonstrations", "figures")
+FIGDIR = os.path.join("specialist", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import COLORS, convergence_table, plot_sfh, setup_style
@@ -123,7 +123,7 @@ result = fitter.run(
 t_run = time.perf_counter() - t0
 print(f"XLA compile: {t_compile:.1f}s (one-time, cached)")
 print(f"native_geovi: {t_run:.1f}s <- runtime per galaxy")
-print(f"Samples: {len(list(result.samples.values())[0])}")
+print(f"Samples: {len(next(iter(result.samples.values())))}")
 
 # %%
 convergence_table({"native_geovi": result})
@@ -159,7 +159,7 @@ plt.show()
 # %%
 # Derived quantities from posterior
 sfh_derived = []
-for i in range(min(500, len(list(result.samples.values())[0]))):
+for i in range(min(500, len(next(iter(result.samples.values()))))):
     p = {k: v[i] for k, v in result.samples.items()}
     sfh_i = model.predict_sfh(p)
     sfr = np.array(sfh_i["sfr_mean"])

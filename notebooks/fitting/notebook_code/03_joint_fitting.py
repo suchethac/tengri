@@ -72,7 +72,7 @@ elif os.path.exists(os.path.join("..", "..", "data")):
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
 
-FIGDIR = os.path.join("demonstrations", "figures")
+FIGDIR = os.path.join("fitting", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 from _plot_style import (
@@ -351,7 +351,7 @@ for i, pname in enumerate(param_names):
     ax = axes[i]
     tv = true_vals[pname]
 
-    for j, (label, res) in enumerate(results.items()):
+    for j, (_label, res) in enumerate(results.items()):
         bf = res.best_fit if hasattr(res, "best_fit") else res.params
         val = float(bf[pname])
         ax.scatter(j, val - tv, s=50, color=colors_list[j], zorder=5)
