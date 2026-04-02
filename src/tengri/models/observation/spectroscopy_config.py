@@ -39,12 +39,45 @@ class SpectroscopyConfig:
     eline_marginalize : bool
         Whether to analytically marginalize emission line amplitudes
         during likelihood computation. Default: False.
+
+        .. deprecated::
+            ``eline_marginalize=True`` is equivalent to ``eline_mode="marginalized"``.
+            Use ``eline_mode="marginalized"`` instead.
     eline_wavelengths : jnp.ndarray or None
         Custom emission line wavelengths (rest-frame Angstrom). If None,
         uses the default 13-line list (Balmer + forbidden). Default: None.
+
+        .. deprecated::
+            ``eline_wavelengths`` is superseded by ``eline_catalog``.
+            Use ``eline_catalog=LineCatalog(...)`` instead.
     eline_prior_sigma : float
         Prior width on emission line amplitudes for marginalization.
         Default: 100.0.
+    eline_mode : str
+        Emission line fitting mode. One of:
+
+        - ``"off"``: No emission line fitting (default, backward compatible).
+        - ``"fixed"``: Lines from nebular model only.
+        - ``"marginalized"``: Analytically marginalize line amplitudes
+          (recommended for spectroscopic fitting).
+        - ``"fitted"``: Line amplitudes as free MCMC parameters.
+
+        Default: ``"off"``.
+    eline_catalog : LineCatalog or None
+        Line catalog. ``None`` falls back to ``LineCatalog.default_13()`` for
+        backward compatibility. Use ``LineCatalog.default_optical()`` for
+        FastSpecFit parity. Default: None.
+    eline_prior_type : str
+        Prior type for line amplitudes. One of ``"flat"`` (uninformative) or
+        ``"cloudy"`` (CLOUDY-grid-interpolated). Default: ``"flat"``.
+    eline_prior_width_dex : float
+        Prior scatter in dex for the ``"cloudy"`` prior. Default: 0.3.
+    eline_fix_doublets : bool
+        Enforce atomic physics doublet ratios. Default: True.
+    eline_broad : bool
+        Enable broad component for AGN candidate lines. Default: False.
+    eline_broad_fwhm_min_kms : float
+        Minimum FWHM for the broad component in km/s. Default: 500.0.
     """
 
     wave_obs: jnp.ndarray = dataclasses.field(hash=False)
@@ -55,6 +88,22 @@ class SpectroscopyConfig:
     eline_marginalize: bool = False
     eline_wavelengths: jnp.ndarray | None = dataclasses.field(default=None, hash=False)
     eline_prior_sigma: float = 100.0
+    eline_mode: str = "off"
+    eline_catalog: object | None = dataclasses.field(default=None, hash=False)
+    eline_prior_type: str = "flat"
+    eline_prior_width_dex: float = 0.3
+    eline_fix_doublets: bool = True
+    eline_broad: bool = False
+    eline_broad_fwhm_min_kms: float = 500.0
+
+    def __post_init__(self) -> None:
+        # Backward compat: old eline_marginalize=True → eline_mode="marginalized"
+        if self.eline_marginalize and self.eline_mode == "off":
+            object.__setattr__(self, "eline_mode", "marginalized")
+
+    # -------------------------------------------------------------------
+    # Properties
+    # -------------------------------------------------------------------
 
     @property
     def n_pixels(self) -> int:
@@ -70,6 +119,35 @@ class SpectroscopyConfig:
     def has_calibration(self) -> bool:
         """Whether a calibration polynomial is configured."""
         return self.calibration_order > 0
+
+    @property
+    def has_eline_fitting(self) -> bool:
+        """True if emission lines are being fit (marginalized or fitted mode)."""
+        return self.eline_mode in ("marginalized", "fitted")
+
+    @property
+    def effective_catalog(self) -> object:
+        """Return the catalog, falling back to default_13() if not set.
+
+        Also checks the deprecated ``eline_wavelengths`` field: if
+        ``eline_catalog`` is None but ``eline_wavelengths`` is set, returns
+        ``LineCatalog.default_13()`` (custom wavelengths are ignored for now).
+
+        Returns
+        -------
+        LineCatalog
+            The active line catalog.
+        """
+        from tengri.models.observation.line_catalog import LineCatalog
+
+        if self.eline_catalog is not None:
+            return self.eline_catalog
+        # eline_wavelengths backward compat: fall back to default names
+        return LineCatalog.default_13()
+
+    # -------------------------------------------------------------------
+    # Parameter helpers
+    # -------------------------------------------------------------------
 
     def get_calibration_params(self) -> dict[str, Distribution]:
         """Return ParamSpec entries for calibration polynomial.
@@ -146,6 +224,50 @@ class SpectroscopyConfig:
         """Constant-resolution spectrograph."""
         return SpectroscopyConfig._from_resolution(wave_obs, float(R), **kwargs)
 
+    @classmethod
+    def desi_like(
+        cls, wave_obs: jnp.ndarray, resolution: float = 2500.0, **kwargs
+    ) -> SpectroscopyConfig:
+        """DESI-like spectroscopic configuration with full line fitting.
+
+        Pre-configured with:
+
+        - ~40-line optical catalog (FastSpecFit parity)
+        - Marginalized emission lines with CLOUDY priors
+        - Doublet constraints enabled
+        - Calibration polynomial order 3
+
+        Parameters
+        ----------
+        wave_obs : jnp.ndarray
+            Observed-frame wavelength grid (Angstrom).
+        resolution : float
+            Spectral resolution R = lambda/delta_lambda. Default: 2500 (DESI).
+        **kwargs
+            Additional fields passed to ``SpectroscopyConfig``.
+
+        Returns
+        -------
+        SpectroscopyConfig
+            Configured for DESI-like spectroscopic fitting.
+        """
+        from tengri.models.observation.line_catalog import LineCatalog
+
+        return cls(
+            wave_obs=wave_obs,
+            resolution=resolution,
+            calibration_order=3,
+            eline_mode="marginalized",
+            eline_catalog=LineCatalog.default_optical(),
+            eline_prior_type="cloudy",
+            eline_fix_doublets=True,
+            **kwargs,
+        )
+
+    # -------------------------------------------------------------------
+    # Summary
+    # -------------------------------------------------------------------
+
     def summary(self) -> str:
         """Return a one-line summary of the spectroscopy configuration."""
         parts = [f"{self.n_pixels} pixels"]
@@ -157,6 +279,8 @@ class SpectroscopyConfig:
                 parts.append(f"R={float(r_arr.min()):.0f}-{float(r_arr.max()):.0f}")
         if self.has_calibration:
             parts.append(f"cal order={self.calibration_order}")
-        if self.eline_marginalize:
+        if self.eline_mode != "off":
+            parts.append(f"eline={self.eline_mode}")
+        elif self.eline_marginalize:
             parts.append("eline marg")
         return ", ".join(parts)
