@@ -153,6 +153,18 @@ class LineCatalog:
         True for hydrogen Balmer/Lyman series lines.
     is_broad_candidate : tuple[bool, ...]
         True for lines that can carry a broad AGN component.
+
+    Examples
+    --------
+    Build the default DESI-like catalog and select BPT lines::
+
+        cat = LineCatalog.default_optical()
+        bpt = cat.select(names=["Halpha", "Hbeta", "OIII_5007", "NII_6584"])
+        C = bpt.build_constraint_matrix()  # (n_lines, n_independent)
+
+    Use a custom wavelength subset from a line-finding step::
+
+        detected = cat.select(wavelengths=[6562.8, 4861.3, 5006.8])
     """
 
     names: tuple[str, ...]
@@ -189,6 +201,13 @@ class LineCatalog:
         LineCatalog
             Catalog of ~40 lines sorted by wavelength with doublet constraints
             auto-detected from ``_DOUBLET_RATIOS``.
+
+        Examples
+        --------
+        ::
+
+            cat = LineCatalog.default_optical()
+            # cat.n_lines == 39, cat.n_independent == 33
         """
         lines = sorted(_DEFAULT_OPTICAL_LINES, key=lambda t: t[1])
         return cls._from_line_tuples(lines)
@@ -212,6 +231,14 @@ class LineCatalog:
         -------
         LineCatalog
             13-line catalog with doublet constraints where applicable.
+
+        Examples
+        --------
+        ::
+
+            cat = LineCatalog.default_13()
+            # Backward-compatible with DEFAULT_LINE_WAVELENGTHS in eline_marginalization.py
+            # cat.n_lines == 13
         """
         return cls._from_line_tuples(_DEFAULT_13_LINES)
 
@@ -321,6 +348,25 @@ class LineCatalog:
         ValueError
             If any name in ``names`` is not found in the catalog, or if any
             wavelength in ``wavelengths`` cannot be matched within 5 Angstrom.
+
+        Examples
+        --------
+        Select BPT diagram lines by name::
+
+            cat = LineCatalog.default_optical()
+            bpt = cat.select(names=["Halpha", "Hbeta", "OIII_5007", "NII_6584"])
+
+        Select by observed wavelengths (e.g. from a line-finding algorithm)::
+
+            bpt = cat.select(wavelengths=[6562.80, 4861.33, 5006.84, 6583.45])
+
+        Select only optical window::
+
+            optical = cat.select(wave_min=3700.0, wave_max=7000.0)
+
+        Select hydrogen lines only::
+
+            hydrogen = cat.select(species=["H1"])
         """
         waves_np = [float(w) for w in self.wavelengths]
 
@@ -440,6 +486,12 @@ class LineCatalog:
 
         Examples
         --------
+        Constrain [OIII] doublet so 5007/4959 ratio is fixed at 2.98::
+
+            cat = LineCatalog.default_optical()
+            C = cat.build_constraint_matrix()  # shape (39, 33)
+            G_eff = G_full @ C  # (n_pix, n_independent)
+
         For [OIII] 5007 (primary, idx=p) / 4959 (secondary, idx=s), ratio=2.98:
 
         - Column s is zeroed.
