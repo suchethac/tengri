@@ -785,23 +785,21 @@ class Model:
         else:
             mass_surviving = jnp.array(jnp.nan)
 
-        # SFR averages — proper time-weighted mean on log-spaced age grid
-        # <SFR>_T = integral(SFR * dt) / T, using trapezoidal rule
+        # SFR averages — time-weighted mean over a lookback-time window.
+        # <SFR>_T = sum(SFR_i * dt_i) / sum(dt_i)  for all age_i <= T.
+        # Use jnp.gradient for symmetric bin widths; avoids the trapezoid boundary
+        # artifact where zeroing SFR outside the window but keeping the full age
+        # axis creates a phantom half-bin contribution at the window edge.
+        dt = jnp.gradient(self.age_yr)
         mask_100 = self.age_yr <= 1e8
-        age_100 = jnp.where(mask_100, self.age_yr, 0.0)
-        sfr_100_masked = jnp.where(mask_100, sfr, 0.0)
-        integral_100 = jnp.trapezoid(sfr_100_masked, age_100)
-        min_100 = jnp.min(jnp.where(mask_100, self.age_yr, 1e8))
-        span_100 = jnp.maximum(jnp.max(age_100) - min_100, 1.0)
-        sfr_100myr = jnp.where(jnp.sum(mask_100) > 1, integral_100 / span_100, sfr[0])
+        numerator_100 = jnp.sum(jnp.where(mask_100, sfr * dt, 0.0))
+        denom_100 = jnp.maximum(jnp.sum(jnp.where(mask_100, dt, 0.0)), 1.0)
+        sfr_100myr = jnp.where(jnp.sum(mask_100) > 1, numerator_100 / denom_100, sfr[0])
 
         mask_10 = self.age_yr <= 1e7
-        age_10 = jnp.where(mask_10, self.age_yr, 0.0)
-        sfr_10_masked = jnp.where(mask_10, sfr, 0.0)
-        integral_10 = jnp.trapezoid(sfr_10_masked, age_10)
-        min_10 = jnp.min(jnp.where(mask_10, self.age_yr, 1e7))
-        span_10 = jnp.maximum(jnp.max(age_10) - min_10, 1.0)
-        sfr_10myr = jnp.where(jnp.sum(mask_10) > 1, integral_10 / span_10, sfr[0])
+        numerator_10 = jnp.sum(jnp.where(mask_10, sfr * dt, 0.0))
+        denom_10 = jnp.maximum(jnp.sum(jnp.where(mask_10, dt, 0.0)), 1.0)
+        sfr_10myr = jnp.where(jnp.sum(mask_10) > 1, numerator_10 / denom_10, sfr[0])
 
         # sSFR
         mass_for_ssfr = jnp.where(jnp.isnan(mass_surviving), mass_formed, mass_surviving)
@@ -1644,12 +1642,104 @@ class Model:
     # Convenience fit
     # -------------------------------------------------------------------
 
-    def fit(self, data, noise, method="map", data_type="photometry", **kwargs):
-        """Fit observed data (convenience wrapper around Fitter)."""
+    def fit(
+        self,
+        data=None,
+        noise=None,
+        method: str = "vi",
+        data_type: str | None = None,
+        *,
+        photometry: tuple | None = None,
+        spectrum: tuple | None = None,
+        init: str | None = None,
+        **kwargs,
+    ):
+        """Fit observed data.  Convenience wrapper — no Fitter construction needed.
+
+        Parameters
+        ----------
+        data : array, optional
+            Observed flux array (photometry or spectroscopy). For joint fitting,
+            leave as ``None`` and use ``photometry=`` / ``spectrum=`` instead.
+        noise : array, optional
+            1-sigma uncertainties matching ``data``.
+        method : str
+            Inference method. Default ``"vi"`` (geoVI variational inference).
+            Any canonical name accepted by ``Fitter.run()`` works here:
+            ``"vi"``, ``"vi_linear"``, ``"mcmc"``, ``"mcmc_raytrace"``,
+            ``"mcmc_nuts"``, ``"map"``, ``"laplace"``, ``"auto"``, etc.
+        data_type : str or None
+            ``"photometry"``, ``"spectroscopy"``, or ``"joint"``.
+            When ``None`` (default), inferred from the model's ``observation``
+            or from whether ``photometry=`` / ``spectrum=`` kwargs are used.
+        photometry : tuple of (flux, noise), optional
+            Photometric data for joint fitting. Pass alongside ``spectrum=``.
+        spectrum : tuple of (flux, noise), optional
+            Spectroscopic data for joint fitting. Pass alongside ``photometry=``.
+        init : str or None
+            Initialization strategy. ``"map"`` runs MAP optimization first, then
+            uses the result to warm-start the requested method. ``None`` (default)
+            uses the method's own default initialization.
+        **kwargs
+            Forwarded to ``Fitter.run()``.
+
+        Returns
+        -------
+        Posterior
+            Inference results.  ``._fitter`` is set so ``.refine()`` works.
+            After this call, ``self.fitter_`` holds the ``Fitter`` instance.
+
+        Examples
+        --------
+        >>> result = model.fit(flux_obs, noise)
+        >>> result = model.fit(flux_obs, noise, method="mcmc")
+        >>> result = model.fit(photometry=(flux_p, noise_p), spectrum=(flux_s, noise_s))
+        >>> result = model.fit(flux_obs, noise, init="map")
+        >>> result = model.fit(flux_obs, noise).refine("mcmc_raytrace")
+        """
         from tengri.inference.fitter import Fitter
 
+        # --- Resolve data arrays ---
+        if photometry is not None or spectrum is not None:
+            import jax.numpy as jnp
+
+            if photometry is not None and spectrum is not None:
+                flux_p, noise_p = photometry
+                flux_s, noise_s = spectrum
+                data = jnp.concatenate([jnp.asarray(flux_p), jnp.asarray(flux_s)])
+                noise = jnp.concatenate([jnp.asarray(noise_p), jnp.asarray(noise_s)])
+                data_type = data_type or "joint"
+            elif photometry is not None:
+                data, noise = photometry
+                data_type = data_type or "photometry"
+            else:
+                data, noise = spectrum
+                data_type = data_type or "spectroscopy"
+        else:
+            if data is None or noise is None:
+                raise ValueError(
+                    "Provide either positional (data, noise) or keyword "
+                    "photometry=(flux, noise) / spectrum=(flux, noise)."
+                )
+
+        # --- Infer data_type if still None ---
+        if data_type is None:
+            obs = getattr(self, "observation", None)
+            if obs is not None:
+                data_type = obs.data_type
+            else:
+                data_type = "photometry"
+
+        # --- Build fitter ---
         fitter = Fitter(self, data, noise, data_type=data_type)
-        return fitter.run(method, **kwargs)
+        self.fitter_ = fitter
+
+        # --- Optional MAP warm start ---
+        init_from = None
+        if init == "map":
+            init_from = fitter.run("map")
+
+        return fitter.run(method, init_from=init_from, **kwargs)
 
     def summary(self) -> str:
         """Return a human-readable summary of the model configuration.
