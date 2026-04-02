@@ -85,6 +85,107 @@ _REVERSE_ALIASES = {
     "sfh_field_psd_tau_myr": "psd_tau_myr",
 }
 
+# ---------------------------------------------------------------------------
+# High-level API: short name → full prefixed name
+# ---------------------------------------------------------------------------
+
+# sfh_type token → {short_name: full_prefixed_name}
+# Used by Model.from_config() to expand user-supplied short priors.
+_SFH_SHORT_NAMES: dict[str, dict[str, str]] = {
+    "tsnorm": {
+        "log_peak_sfr": "sfh_tsnorm_log_peak_sfr",
+        "peak_lbt_gyr": "sfh_tsnorm_peak_lbt_gyr",
+        "width_gyr": "sfh_tsnorm_width_gyr",
+        "skew": "sfh_tsnorm_skew",
+        "trunc": "sfh_tsnorm_trunc",
+    },
+    "snorm": {
+        "log_peak_sfr": "sfh_snorm_log_peak_sfr",
+        "peak_lbt_gyr": "sfh_snorm_peak_lbt_gyr",
+        "width_gyr": "sfh_snorm_width_gyr",
+        "skew": "sfh_snorm_skew",
+    },
+    "lnorm": {
+        "log_peak_sfr": "sfh_lnorm_log_peak_sfr",
+        "peak_lbt_gyr": "sfh_lnorm_peak_lbt_gyr",
+        "width_gyr": "sfh_lnorm_width_gyr",
+    },
+    "dpl": {
+        "alpha": "sfh_dpl_alpha",
+        "beta": "sfh_dpl_beta",
+        "log_peak_sfr": "sfh_dpl_log_peak_sfr",
+        "tau_gyr": "sfh_dpl_tau_gyr",
+    },
+    "delayed": {
+        "tau_gyr": "sfh_delayed_tau_gyr",
+        "log_peak_sfr": "sfh_delayed_log_peak_sfr",
+    },
+    # "field" additions apply to any sfh that includes "+field"
+    "field": {
+        "psd_sigma": "sfh_field_psd_sigma",
+        "psd_tau_myr": "sfh_field_psd_tau_myr",
+    },
+}
+
+# Universal short names valid for any SFH type
+_UNIVERSAL_SHORT_NAMES: dict[str, str] = {
+    "logzsol": "met_logzsol",
+    "tau_bc": "dust_tau_bc",
+    "tau_diff": "dust_tau_diff",
+    "dust_slope": "dust_slope",
+    "agn_frac": "agn_frac",
+    "neb_logU": "neb_logU",
+    "redshift": "redshift",
+}
+
+
+def resolve_short_names(sfh_type: str | list[str], priors: dict) -> dict:
+    """Expand short parameter names to full prefixed names.
+
+    Parameters
+    ----------
+    sfh_type : str or list of str
+        SFH type tokens, e.g. ``"tsnorm"`` or ``["dpl", "field"]``.
+        Determines which short names are valid.
+    priors : dict
+        User-supplied prior dict, may contain short names like ``"log_peak_sfr"``
+        or full names like ``"sfh_tsnorm_log_peak_sfr"``. Full names pass through
+        unchanged.
+
+    Returns
+    -------
+    dict
+        New dict with all short names expanded to full prefixed names.
+        Unknown keys that are neither short nor full names pass through unchanged.
+
+    Examples
+    --------
+    >>> resolve_short_names("tsnorm", {"log_peak_sfr": Uniform(-1, 2.5)})
+    {"sfh_tsnorm_log_peak_sfr": Uniform(-1, 2.5)}
+    """
+    if isinstance(sfh_type, str):
+        tokens = [t.strip() for t in sfh_type.replace("+", " ").split()]
+    else:
+        tokens = list(sfh_type)
+
+    # Build combined short→full map for this sfh_type
+    short_map: dict[str, str] = {}
+    for token in tokens:
+        if token in _SFH_SHORT_NAMES:
+            short_map.update(_SFH_SHORT_NAMES[token])
+    short_map.update(_UNIVERSAL_SHORT_NAMES)
+
+    expanded: dict = {}
+    for key, val in priors.items():
+        if key in short_map:
+            expanded[short_map[key]] = val
+        else:
+            # Assume it's already a full name (pass through)
+            expanded[key] = val
+
+    return expanded
+
+
 # Legacy module-level PARAM_MAP for backward compatibility with imports
 PARAM_MAP = {
     "sfh_alpha": ("alpha", 1.0, 0.0),
