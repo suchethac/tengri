@@ -21,12 +21,10 @@ All inference methods available in tengri --- from fast variational inference to
 ```{toctree}
 :maxdepth: 1
 
-../_notebooks/demonstrations/05_inference_methods
-../_notebooks/reference/08_ray_tracing_sampler
+../_notebooks/fitting/06_advanced_inference
 /advanced/convergence
-../_notebooks/demonstrations/04_hierarchical_inference
-../_notebooks/demonstrations/15_hierarchical_spectroscopy
-../_notebooks/demonstrations/13_model_comparison
+../_notebooks/fitting/07_hierarchical_psd
+../_notebooks/fitting/05_model_comparison
 /advanced/batch_fitting
-../_notebooks/demonstrations/14_emission_line_marginalization
+../_notebooks/specialist/05_emission_line_marginalization
 ```

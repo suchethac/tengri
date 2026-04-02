@@ -110,4 +110,9 @@ exclude_patterns = [
     "superpowers",
     "specs",
     "auto_examples/**/*.ipynb",
+    # Old notebook directories superseded by the new track structure
+    # (quickstart/, fitting/, theory/, models/, specialist/)
+    "_notebooks/demonstrations/**",
+    "_notebooks/reference/**",
+    "_notebooks/tutorials/**",
 ]

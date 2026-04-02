@@ -10,8 +10,9 @@ Start here if you are new to tengri.
 ```{toctree}
 :maxdepth: 1
 
-../_notebooks/tutorials/05_prior_predictive
-../_notebooks/demonstrations/03_bursty_sfh_recovery
+../_notebooks/quickstart/01_quickstart
+../_notebooks/quickstart/02_tengri_capabilities
+../_notebooks/quickstart/03_bursty_sfh_recovery
 ```
 
 ## Fitting track
@@ -21,12 +22,13 @@ Practical fitting workflows: photometric catalogs, spectroscopy, joint fitting.
 ```{toctree}
 :maxdepth: 1
 
-../_notebooks/demonstrations/01_spectroscopic_fitting
-../_notebooks/demonstrations/02_photometric_catalogs
-../_notebooks/demonstrations/11_joint_fitting
-../_notebooks/demonstrations/10_degeneracies
-../_notebooks/demonstrations/09_high_redshift_jwst
-../_notebooks/demonstrations/08_fitting_real_data
+../_notebooks/fitting/01_fitting_spectra
+../_notebooks/fitting/02_fitting_photometry
+../_notebooks/fitting/03_joint_fitting
+../_notebooks/fitting/04_degeneracies
+../_notebooks/fitting/05_model_comparison
+../_notebooks/fitting/06_advanced_inference
+../_notebooks/fitting/07_hierarchical_psd
 ```
 
 ## Derived quantities and diagnostics
@@ -36,16 +38,20 @@ What to do after you have a posterior.
 ```{toctree}
 :maxdepth: 1
 
-../_notebooks/demonstrations/06_derived_quantities
-../_notebooks/reference/02_data_information_content
-../_notebooks/reference/07_gradient_sensitivity
-../_notebooks/reference/09_simulation_sfh
+../_notebooks/specialist/02_derived_quantities
+../_notebooks/specialist/03_model_checking
+../_notebooks/specialist/06_simulation_sfh
 ```
 
-## Extending tengri
+## Specialist topics
+
+Deep dives into specific capabilities.
 
 ```{toctree}
 :maxdepth: 1
 
-../_notebooks/demonstrations/07_extending_tengri
+../_notebooks/specialist/01_real_data
+../_notebooks/specialist/04_extending_tengri
+../_notebooks/specialist/05_emission_line_marginalization
+../_notebooks/specialist/07_advanced_spectroscopy
 ```

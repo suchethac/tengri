@@ -7,6 +7,6 @@ Learn the basics of tengri --- from installation to your first galaxy fit.
 
 /install
 concepts
-../_notebooks/tutorials/01_quickstart
-../_notebooks/tutorials/02_the_api
+../_notebooks/quickstart/01_quickstart
+../_notebooks/quickstart/02_tengri_capabilities
 ```
