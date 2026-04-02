@@ -149,6 +149,32 @@ _NEBULAR_PARAMS = {
     ),
 }
 
+# ---- Emission line velocity parameters ----
+_ELINE_PARAMS = {
+    "eline_sigma_kms": (
+        "Emission line velocity dispersion in km/s (added in quadrature to instrument resolution)",
+        lambda lo, hi: lo >= 0,
+        "must have lo >= 0",
+        Fixed(0.0),  # Default: instrument resolution only
+    ),
+    "eline_delta_v_kms": (
+        "Emission line velocity offset from systemic redshift in km/s",
+        lambda lo, hi: True,
+        "",
+        Fixed(0.0),  # Default: no velocity offset
+    ),
+}
+
+# ---- Broad emission line component parameters (AGN) ----
+_ELINE_BROAD_PARAMS = {
+    "eline_broad_sigma_kms": (
+        "Broad emission line velocity dispersion in km/s",
+        lambda lo, hi: lo >= 200,
+        "must have lo >= 200 km/s (broad component)",
+        Uniform(500.0, 5000.0),
+    ),
+}
+
 # Cue-specific optional params — only registered if user provides them
 _CUE_IONSPEC_PARAMS = {
     "ionspec_index1": (
@@ -585,6 +611,9 @@ SETTINGS_KEYS = frozenset(
         # Metallicity interpolation
         "met_interp",
         "lgmet_scatter",
+        # Emission line fitting mode
+        "eline_mode",  # "off", "fixed", "marginalized", "fitted"
+        "eline_broad",  # bool — enable broad AGN emission line component
     }
 )
 
@@ -608,6 +637,8 @@ def _build_param_registry(
     evolving_metallicity=False,
     alpha_fe_evolving=False,
     chem_evol=False,
+    eline_mode="off",
+    eline_broad=False,
 ):
     """Build the parameter registry for a given model configuration.
 
@@ -729,6 +760,18 @@ def _build_param_registry(
     # Shock emission params (only when shock=True)
     if shock:
         for pname, (desc, check, err, default) in _SHOCK_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+
+    # Emission line velocity parameters (registered when eline_mode is active)
+    if eline_mode in ("marginalized", "fitted"):
+        for pname, (desc, check, err, default) in _ELINE_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+
+    # Broad emission line component (AGN)
+    if eline_broad:
+        for pname, (desc, check, err, default) in _ELINE_BROAD_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
@@ -1131,6 +1174,17 @@ class ParamSpec:
         self.met_interp = kwargs.pop("met_interp", "smooth")
         self.lgmet_scatter = float(kwargs.pop("lgmet_scatter", 0.1))
 
+        # Emission line fitting mode: "off" (default), "fixed", "marginalized", "fitted"
+        self.eline_mode = kwargs.pop("eline_mode", "off")
+        if self.eline_mode not in ("off", "fixed", "marginalized", "fitted"):
+            raise ValueError(
+                f"eline_mode must be 'off', 'fixed', 'marginalized', or 'fitted', "
+                f"got '{self.eline_mode}'"
+            )
+
+        # Broad emission line component (AGN): False (default), True
+        self.eline_broad = bool(kwargs.pop("eline_broad", False))
+
         # --- Resolve legacy parameter aliases ---
         resolved_kwargs = {}
         detected_models = set()
@@ -1188,6 +1242,8 @@ class ParamSpec:
             evolving_metallicity=self.evolving_metallicity,
             alpha_fe_evolving=self.alpha_fe_evolving,
             chem_evol=self.chem_evol,
+            eline_mode=self.eline_mode,
+            eline_broad=self.eline_broad,
         )
         # --- Cue optional params (ionspec / gas extras) ---
         _ALL_CUE_OPTIONAL = {**_CUE_IONSPEC_PARAMS, **_CUE_GAS_EXTRA_PARAMS}
