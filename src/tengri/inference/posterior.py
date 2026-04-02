@@ -62,6 +62,7 @@ class Posterior:
     loss_history: jnp.ndarray | None = None
     log_evidence: float | None = None
     _model: object = field(default=None, repr=False)
+    _fitter: object = field(default=None, repr=False)
     eline_fluxes: jnp.ndarray | None = field(default=None, repr=False)
     eline_flux_cov: jnp.ndarray | None = field(default=None, repr=False)
     eline_names: tuple | None = field(default=None, repr=False)
@@ -346,10 +347,10 @@ class Posterior:
         # Diagnostics summary
         diag = self.diagnostics
         diag_parts: list[str] = []
-        if "acceptance_rate" in diag:
-            diag_parts.append(f"accept={diag['acceptance_rate']:.1%}")
-        if "n_divergences" in diag:
-            diag_parts.append(f"divergences={diag['n_divergences']}")
+        if "accept_rate" in diag:  # key from raytrace (fitter.py:3509)
+            diag_parts.append(f"accept={diag['accept_rate']:.1%}")
+        if "n_divergent" in diag:  # key from NUTS (nuts.py:193)
+            diag_parts.append(f"divergences={diag['n_divergent']}")
         if "final_loss" in diag:
             diag_parts.append(f"loss={diag['final_loss']:.2f}")
         if diag_parts:
@@ -856,3 +857,106 @@ class Posterior:
         return (
             f"Posterior(method='{self.method}', n_samples={n}, wall_time={self.wall_time_s:.1f}s)"
         )
+
+    # -------------------------------------------------------------------
+    # Method chaining
+    # -------------------------------------------------------------------
+
+    def refine(self, method: str, **kwargs):
+        """Re-run inference from this result using a different method.
+
+        Requires that this Posterior was produced by ``model.fit()`` or
+        ``fitter.run()`` — both set the ``._fitter`` back-reference.
+
+        Parameters
+        ----------
+        method : str
+            Any canonical method name accepted by ``Fitter.run()``.
+            E.g. ``"mcmc_raytrace"``, ``"mcmc_nuts"``, ``"vi"``.
+        **kwargs
+            Passed to ``Fitter.run()`` (e.g. ``n_steps``, ``n_warmup``).
+
+        Returns
+        -------
+        Posterior
+            New result warm-started from this posterior.
+
+        Raises
+        ------
+        RuntimeError
+            If ``._fitter`` is not set (Posterior created outside model.fit/fitter.run).
+
+        Examples
+        --------
+        >>> result_vi = model.fit(flux, noise)
+        >>> result_exact = result_vi.refine("mcmc_raytrace", n_steps=1000)
+        """
+        if self._fitter is None:
+            raise RuntimeError(
+                "Posterior.refine() requires a back-reference to its Fitter. "
+                "Use model.fit() or fitter.run() to produce this Posterior. "
+                "Posteriors loaded from disk or created manually lack this reference."
+            )
+        return self._fitter.run(method, init_from=self, **kwargs)
+
+    def validate(self, n_steps: int = 200, **kwargs):
+        """Run a short MCMC check and return a validation summary.
+
+        Runs ``n_steps`` of Ray Tracing (or NUTS for D≤20) from this
+        posterior's MAP estimate, then computes the marginal overlap
+        between this posterior and the MCMC check posterior for each
+        parameter.
+
+        Parameters
+        ----------
+        n_steps : int
+            Number of MCMC steps. Default 200 (quick sanity check).
+        **kwargs
+            Forwarded to the MCMC run.
+
+        Returns
+        -------
+        dict
+            Keys: ``"mcmc_result"`` (Posterior), ``"overlap"`` (dict of
+            float per parameter, 1.0 = perfect overlap), ``"passed"``
+            (bool, True when all overlaps > 0.5).
+
+        Raises
+        ------
+        RuntimeError
+            If ``._fitter`` is not set.
+        """
+        if self._fitter is None:
+            raise RuntimeError(
+                "Posterior.validate() requires a back-reference to its Fitter. "
+                "Use model.fit() or fitter.run() to produce this Posterior."
+            )
+        d = self._fitter.spec.n_free
+        mcmc_method = "mcmc_nuts" if d <= 20 else "mcmc_raytrace"
+        mcmc_result = self._fitter.run(mcmc_method, init_from=self, n_steps=n_steps, **kwargs)
+
+        # Compute per-parameter marginal overlap (histogram intersection)
+        overlap: dict[str, float] = {}
+        if self.samples is not None and mcmc_result.samples is not None:
+            import numpy as np
+
+            for name in self.samples:
+                if name == "psd_xi":
+                    continue
+                vi_arr = np.array(self.samples[name])
+                mc_arr = np.array(mcmc_result.samples[name])
+                if vi_arr.ndim != 1:
+                    continue
+                lo = min(vi_arr.min(), mc_arr.min())
+                hi = max(vi_arr.max(), mc_arr.max())
+                if hi <= lo:
+                    overlap[name] = 1.0
+                    continue
+                bins = np.linspace(lo, hi, 30)
+                h_vi, _ = np.histogram(vi_arr, bins=bins, density=True)
+                h_mc, _ = np.histogram(mc_arr, bins=bins, density=True)
+                bin_w = bins[1] - bins[0]
+                overlap[name] = float(np.sum(np.minimum(h_vi, h_mc)) * bin_w)
+
+        passed = all(v > 0.5 for v in overlap.values()) if overlap else True
+        return {"mcmc_result": mcmc_result, "overlap": overlap, "passed": passed}
