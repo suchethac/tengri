@@ -288,6 +288,8 @@ class LineCatalog:
         wave_min: float = 0.0,
         wave_max: float = float("inf"),
         species: Sequence[str] | None = None,
+        names: Sequence[str] | None = None,
+        wavelengths: Sequence[float] | None = None,
     ) -> LineCatalog:
         """Return a filtered copy of the catalog.
 
@@ -299,22 +301,71 @@ class LineCatalog:
             Maximum rest-frame wavelength in Angstrom (inclusive).
         species : sequence of str, optional
             If given, retain only lines whose species code is in this list.
+        names : sequence of str, optional
+            If given, retain only lines whose name exactly matches one in this list.
+            Raises ValueError if any name is not found in the catalog.
+        wavelengths : sequence of float, optional
+            If given, match each wavelength to the nearest line in the catalog
+            within 5 Angstrom tolerance. Raises ValueError if no match is found
+            for any wavelength.
 
         Returns
         -------
         LineCatalog
-            New catalog containing only lines satisfying the given criteria.
+            New catalog containing only lines satisfying all given criteria (AND logic).
             Doublet constraints are rebuilt with updated indices; constraints
             where either member is filtered out are dropped.
+
+        Raises
+        ------
+        ValueError
+            If any name in ``names`` is not found in the catalog, or if any
+            wavelength in ``wavelengths`` cannot be matched within 5 Angstrom.
         """
         waves_np = [float(w) for w in self.wavelengths]
-        keep_set = set(species) if species is not None else None
 
-        kept_indices = [
-            i
-            for i, (w, sp) in enumerate(zip(waves_np, self.species))
-            if wave_min <= w <= wave_max and (keep_set is None or sp in keep_set)
-        ]
+        # Start with all indices
+        kept_indices: set[int] = set(range(self.n_lines))
+
+        # Filter by wavelength range
+        if wave_min > 0.0 or wave_max < float("inf"):
+            kept_indices &= {i for i, w in enumerate(waves_np) if wave_min <= w <= wave_max}
+
+        # Filter by species
+        if species is not None:
+            species_set = set(species)
+            kept_indices &= {i for i, sp in enumerate(self.species) if sp in species_set}
+
+        # Filter by exact line names
+        if names is not None:
+            names_set = set(names)
+            # Verify all requested names exist
+            catalog_names = set(self.names)
+            missing_names = names_set - catalog_names
+            if missing_names:
+                raise ValueError(
+                    f"Names not found in catalog: {sorted(missing_names)}. "
+                    f"Available names: {sorted(catalog_names)}"
+                )
+            kept_indices &= {i for i, nm in enumerate(self.names) if nm in names_set}
+
+        # Filter by wavelength matching (nearest within 5 Å)
+        if wavelengths is not None:
+            matched_indices: set[int] = set()
+            for target_wave in wavelengths:
+                # Find nearest line within 5 Angstrom tolerance
+                distances = [abs(w - target_wave) for w in waves_np]
+                nearest_idx = min(range(len(distances)), key=lambda i: distances[i])
+                nearest_dist = distances[nearest_idx]
+
+                if nearest_dist > 5.0:
+                    raise ValueError(
+                        f"No line within 5 Angstrom of {target_wave} Å. "
+                        f"Nearest line: {self.names[nearest_idx]} at "
+                        f"{waves_np[nearest_idx]} Å ({nearest_dist:.2f} Å away)."
+                    )
+                matched_indices.add(nearest_idx)
+            kept_indices &= matched_indices
 
         if not kept_indices:
             return LineCatalog(
@@ -326,14 +377,17 @@ class LineCatalog:
                 is_broad_candidate=(),
             )
 
-        # Build old -> new index mapping
-        old_to_new: dict[int, int] = {old: new for new, old in enumerate(kept_indices)}
+        # Sort kept indices for consistent ordering
+        kept_indices_list = sorted(kept_indices)
 
-        new_names = tuple(self.names[i] for i in kept_indices)
-        new_waves = jnp.array([waves_np[i] for i in kept_indices])
-        new_species = tuple(self.species[i] for i in kept_indices)
-        new_is_balmer = tuple(self.is_balmer[i] for i in kept_indices)
-        new_is_broad = tuple(self.is_broad_candidate[i] for i in kept_indices)
+        # Build old -> new index mapping
+        old_to_new: dict[int, int] = {old: new for new, old in enumerate(kept_indices_list)}
+
+        new_names = tuple(self.names[i] for i in kept_indices_list)
+        new_waves = jnp.array([waves_np[i] for i in kept_indices_list])
+        new_species = tuple(self.species[i] for i in kept_indices_list)
+        new_is_balmer = tuple(self.is_balmer[i] for i in kept_indices_list)
+        new_is_broad = tuple(self.is_broad_candidate[i] for i in kept_indices_list)
 
         # Rebuild doublets — keep only if both members survived the filter
         new_doublets: list[DoubletConstraint] = []
