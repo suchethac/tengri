@@ -284,6 +284,21 @@ class TestSaveLoad:
 
 
 # ---------------------------------------------------------------------------
+# Picklable stub posterior for SBIPosterior tests
+# ---------------------------------------------------------------------------
+
+
+class _FakePosterior:
+    """Minimal picklable posterior stub used in SBIPosterior I/O tests."""
+
+    def sample(self, n, x=None):
+        return jnp.ones((n, 3))
+
+    def log_prob(self, theta, x=None):
+        return jnp.zeros(len(theta))
+
+
+# ---------------------------------------------------------------------------
 # SBIPosterior
 # ---------------------------------------------------------------------------
 
@@ -300,10 +315,8 @@ class TestSBIPosterior:
     def test_from_file_dict_format(self):
         from tengri.inference.sbi import SBIPosterior
 
-        mock_posterior = MagicMock()
-        mock_posterior.sample.return_value = jnp.ones((100, 3))
         state = {
-            "posterior": mock_posterior,
+            "posterior": _FakePosterior(),
             "param_names": ["a", "b", "c"],
             "metadata": {"training_epochs": 50},
         }
@@ -322,10 +335,8 @@ class TestSBIPosterior:
     def test_from_file_bare_object(self):
         from tengri.inference.sbi import SBIPosterior
 
-        mock_posterior = MagicMock()
-
         with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
-            pickle.dump(mock_posterior, f)
+            pickle.dump(_FakePosterior(), f)
             path = f.name
 
         try:
@@ -382,9 +393,8 @@ class TestSBIPosterior:
     def test_save_load_round_trip(self):
         from tengri.inference.sbi import SBIPosterior
 
-        mock_posterior = MagicMock()
         original = SBIPosterior(
-            mock_posterior,
+            _FakePosterior(),
             param_names=["x", "y"],
             metadata={"epochs": 10},
         )

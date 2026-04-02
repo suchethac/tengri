@@ -53,6 +53,7 @@ import warnings
 from collections.abc import Callable
 from pathlib import Path
 
+import jax
 import jax.numpy as jnp
 
 # ===================================================================
@@ -1394,7 +1395,24 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
         # Interpolate template onto target wavelength grid
         sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
-        return L_absorbed * sed
+        # Fallback: if template is zero (e.g. qpah beyond valid grid range),
+        # use the analytic approximation to avoid returning all-zero SED.
+        sed_fallback = _draine_li2014_analytic_fallback(
+            wavelength_aa,
+            L_absorbed,
+            dust_umin=dust_umin,
+            dust_gamma_dl=dust_gamma_dl,
+            dust_qpah=dust_qpah,
+            dust_alpha_dl14=dust_alpha_dl14,
+        )
+        template_max = jnp.max(jnp.abs(template))
+        sed_out = jax.lax.cond(
+            template_max < 1e-20,
+            lambda: sed_fallback,
+            lambda: L_absorbed * sed,
+        )
+
+        return sed_out
 
     return dl14_tabulated
 

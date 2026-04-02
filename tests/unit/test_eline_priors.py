@@ -199,12 +199,20 @@ class TestMarginalizeEmissionLinesCloudy:
         assert a_hat[2] > a_hat[0], "Halpha should be stronger than Hbeta"
 
     def test_l_hbeta_scaling(self, mock_spectral_data):
-        """Scaling l_hbeta should scale the prior means linearly."""
+        """Scaling l_hbeta should scale the prior means linearly.
+
+        To test prior-dominated behaviour we need uninformative data (large
+        noise), so we override the fixture noise here.  With noise >> signal,
+        the posterior mean converges to the prior mean which scales linearly
+        with l_hbeta.
+        """
         d = mock_spectral_data
+        # Use very large noise so the posterior is prior-dominated.
+        uninformative_noise = jnp.ones_like(d["noise"]) * 1e6
 
         _, a_hat_1, _ = marginalize_emission_lines_cloudy(
             d["residual"],
-            d["noise"],
+            uninformative_noise,
             d["design_matrix"],
             line_wavelengths=d["line_wavelengths"],
             l_hbeta=1.0,
@@ -212,13 +220,12 @@ class TestMarginalizeEmissionLinesCloudy:
 
         _, a_hat_10, _ = marginalize_emission_lines_cloudy(
             d["residual"],
-            d["noise"],
+            uninformative_noise,
             d["design_matrix"],
             line_wavelengths=d["line_wavelengths"],
             l_hbeta=10.0,
         )
 
-        # With zero residual, a_hat should scale with l_hbeta
-        # (the prior mean dominates when there's no signal)
-        ratio = a_hat_10 / jnp.maximum(a_hat_1, 1e-30)
+        # In the prior-dominated regime, a_hat ≈ prior_mean ∝ l_hbeta
+        ratio = a_hat_10 / jnp.maximum(jnp.abs(a_hat_1), 1e-30)
         assert jnp.all(ratio > 5.0), "l_hbeta=10 should give ~10x larger amplitudes"
