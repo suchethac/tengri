@@ -25,6 +25,35 @@ from jax.flatten_util import ravel_pytree
 from tengri.distributions import Gaussian, LogUniform
 from tengri.utils.transforms import to_bounded, to_unbounded
 
+# ---------------------------------------------------------------------------
+# Method name unification
+# ---------------------------------------------------------------------------
+
+# Maps deprecated/old method strings → new canonical names.
+_DEPRECATED_METHOD_ALIASES: dict[str, str] = {
+    "geovi": "vi",
+    "native_geovi": "vi",
+    "mgvi": "vi_linear",
+    "native_mgvi": "vi_linear",
+    "evi": "vi_linear",
+    "native_evi": "vi_linear",
+    "fast_geovi": "vi_nifty",
+    "nifty_geovi": "vi_nifty",
+    "fast_mgvi": "vi_nifty_linear",
+    "nifty_mgvi": "vi_nifty_linear",
+    "raytrace": "mcmc_raytrace",
+    "nuts": "mcmc_nuts",
+    "elliptical_slice": "mcmc_ess",
+    "nss": "evidence",
+    "geovi_nuts": "vi",
+}
+
+# Threshold for "mcmc" auto-selection: low-D → NUTS, high-D → Ray Tracing.
+_MCMC_AUTO_D_THRESHOLD = 20
+
+# Threshold for "auto" method selection.
+_AUTO_D_THRESHOLDS = (15, 50)  # (laplace_max, vi_linear_max)
+
 
 def _simple_cg(mat_fn, b, x0, maxiter=30, miniter=6):
     """Lightweight CG solve for catalog fitting. JIT-friendly."""
@@ -162,6 +191,7 @@ class Fitter:
             else:
                 _catalog = LineCatalog.default_13()
             self._eline_wavelengths = _catalog.wavelengths
+            self._eline_independent_wavelengths = _catalog.independent_wavelengths
             self._eline_names = _catalog.names
             fix_doublets = True
             if _spec_config is not None and hasattr(_spec_config, "eline_fix_doublets"):
@@ -178,6 +208,7 @@ class Fitter:
             )
         else:
             self._eline_wavelengths = None
+            self._eline_independent_wavelengths = None
             self._eline_names = None
             self._eline_constraint_matrix = None
             self._eline_prior_sigma = 100.0
@@ -227,6 +258,9 @@ class Fitter:
             len(self.data),
             tuple(sorted(self._free_names)),
             has_noise_model(self.spec),
+            self._eline_marginalize,
+            self._calibration_marginalize,
+            self._eline_prior_type,
         )
 
     def _get_or_build_engine(self, pos_dict):
@@ -336,6 +370,7 @@ class Fitter:
         cal_prior_sigma = self._cal_prior_sigma
         use_eline_marg = self._eline_marginalize
         eline_wavelengths = self._eline_wavelengths
+        eline_independent_wavelengths = self._eline_independent_wavelengths
         eline_constraint_matrix = self._eline_constraint_matrix
         eline_prior_type = self._eline_prior_type
         eline_prior_sigma = self._eline_prior_sigma
@@ -371,8 +406,124 @@ class Fitter:
             else:
                 raise ValueError(f"Unknown data_type: {data_type}")
 
-            # Likelihood energy (with variable noise / Student-t if active)
-            if use_cal_marg and data_type == "spectroscopy":
+            # Likelihood energy — ordered most-specific first so combined branches
+            # (eline+cal) are not shadowed by the less-specific cal-only branches.
+            if use_eline_marg and use_cal_marg and data_type == "spectroscopy":
+                # Both: marginalize lines first, then calibration on line-added prediction
+                from tengri.models.observation.calibration import marginalize_calibration
+                from tengri.models.observation.eline_marginalization import (
+                    apply_doublet_constraints,
+                    build_eline_design_matrix,
+                    marginalize_emission_lines,
+                )
+
+                z = params.get("redshift", fixed_values.get("redshift", 0.0))
+                sigma_kms = params.get("eline_sigma_kms", 0.0)
+                delta_v = params.get("eline_delta_v_kms", 0.0)
+                resolution = getattr(model, "_spectral_resolution", None) or 2000.0
+                G = build_eline_design_matrix(
+                    model._wave_obs,
+                    eline_wavelengths,
+                    resolution,
+                    z,
+                    eline_sigma_kms=sigma_kms,
+                    eline_delta_v_kms=delta_v,
+                )
+                G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
+                if eline_prior_type == "cloudy":
+                    from tengri.models.observation.eline_priors import (
+                        marginalize_emission_lines_cloudy,
+                    )
+
+                    log_z = params.get("met_logzsol", fixed_values.get("met_logzsol", 0.0))
+                    neb_logU = params.get("neb_logU", fixed_values.get("neb_logU", -3.0))
+                    _, a_hat, _ = marginalize_emission_lines_cloudy(
+                        data - predicted,
+                        noise,
+                        G_eff,
+                        log_z=log_z,
+                        neb_logU=neb_logU,
+                        line_wavelengths=eline_independent_wavelengths,
+                        prior_width_dex=eline_prior_width_dex,
+                    )
+                else:
+                    prior_var = jnp.full(G_eff.shape[1], eline_prior_sigma**2)
+                    _, a_hat, _ = marginalize_emission_lines(
+                        data - predicted, noise, G_eff, prior_variance=prior_var
+                    )
+                pred_with_lines = predicted + G_eff @ a_hat
+                log_like_spec, _c_hat, _c_err = marginalize_calibration(
+                    pred_with_lines,
+                    data,
+                    noise,
+                    model._wave_obs,
+                    n_poly=cal_n_poly,
+                    prior_sigma=cal_prior_sigma,
+                )
+                e_lh = -log_like_spec
+            elif use_eline_marg and use_cal_marg and data_type == "joint":
+                # Joint + both: marginalize lines on spec part, then calibration on spec,
+                # standard chi2 for photometry
+                from tengri.models.observation.calibration import marginalize_calibration
+                from tengri.models.observation.eline_marginalization import (
+                    apply_doublet_constraints,
+                    build_eline_design_matrix,
+                    marginalize_emission_lines,
+                )
+
+                z = params.get("redshift", fixed_values.get("redshift", 0.0))
+                sigma_kms = params.get("eline_sigma_kms", 0.0)
+                delta_v = params.get("eline_delta_v_kms", 0.0)
+                resolution = getattr(model, "_spectral_resolution", None) or 2000.0
+                n_phot = model.predict_photometry(params).shape[0]
+                data_phot = data[:n_phot]
+                data_spec = data[n_phot:]
+                noise_phot = noise[:n_phot]
+                noise_spec = noise[n_phot:]
+                pred_phot = predicted[:n_phot]
+                pred_spec = predicted[n_phot:]
+                G = build_eline_design_matrix(
+                    model._wave_obs,
+                    eline_wavelengths,
+                    resolution,
+                    z,
+                    eline_sigma_kms=sigma_kms,
+                    eline_delta_v_kms=delta_v,
+                )
+                G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
+                if eline_prior_type == "cloudy":
+                    from tengri.models.observation.eline_priors import (
+                        marginalize_emission_lines_cloudy,
+                    )
+
+                    log_z = params.get("met_logzsol", fixed_values.get("met_logzsol", 0.0))
+                    neb_logU = params.get("neb_logU", fixed_values.get("neb_logU", -3.0))
+                    _, a_hat, _ = marginalize_emission_lines_cloudy(
+                        data_spec - pred_spec,
+                        noise_spec,
+                        G_eff,
+                        log_z=log_z,
+                        neb_logU=neb_logU,
+                        line_wavelengths=eline_independent_wavelengths,
+                        prior_width_dex=eline_prior_width_dex,
+                    )
+                else:
+                    prior_var = jnp.full(G_eff.shape[1], eline_prior_sigma**2)
+                    _, a_hat, _ = marginalize_emission_lines(
+                        data_spec - pred_spec, noise_spec, G_eff, prior_variance=prior_var
+                    )
+                pred_spec_with_lines = pred_spec + G_eff @ a_hat
+                chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
+                log_like_spec, _c_hat, _c_err = marginalize_calibration(
+                    pred_spec_with_lines,
+                    data_spec,
+                    noise_spec,
+                    model._wave_obs,
+                    n_poly=cal_n_poly,
+                    prior_sigma=cal_prior_sigma,
+                )
+                e_lh = 0.5 * chi2_phot - log_like_spec
+            elif use_cal_marg and data_type == "spectroscopy":
                 # Analytically marginalize over calibration polynomial
                 from tengri.models.observation.calibration import (
                     marginalize_calibration,
@@ -411,43 +562,7 @@ class Fitter:
                     prior_sigma=cal_prior_sigma,
                 )
                 e_lh = 0.5 * chi2_phot - log_like_spec
-            elif use_eline_marg and use_cal_marg and data_type == "spectroscopy":
-                # Both: marginalize lines first, then calibration on line-added prediction
-                from tengri.models.observation.calibration import marginalize_calibration
-                from tengri.models.observation.eline_marginalization import (
-                    apply_doublet_constraints,
-                    build_eline_design_matrix,
-                    marginalize_emission_lines,
-                )
-
-                z = params.get("redshift", fixed_values.get("redshift", 0.0))
-                sigma_kms = params.get("eline_sigma_kms", 0.0)
-                delta_v = params.get("eline_delta_v_kms", 0.0)
-                resolution = getattr(model, "_spectral_resolution", None) or 2000.0
-                G = build_eline_design_matrix(
-                    model._wave_obs,
-                    eline_wavelengths,
-                    resolution,
-                    z,
-                    eline_sigma_kms=sigma_kms,
-                    eline_delta_v_kms=delta_v,
-                )
-                G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
-                prior_var = jnp.full(G_eff.shape[1], eline_prior_sigma**2)
-                _, a_hat, _ = marginalize_emission_lines(
-                    data - predicted, noise, G_eff, prior_variance=prior_var
-                )
-                pred_with_lines = predicted + G_eff @ a_hat
-                log_like_spec, _c_hat, _c_err = marginalize_calibration(
-                    pred_with_lines,
-                    data,
-                    noise,
-                    model._wave_obs,
-                    n_poly=cal_n_poly,
-                    prior_sigma=cal_prior_sigma,
-                )
-                e_lh = -log_like_spec
-            elif use_eline_marg and not use_cal_marg and data_type == "spectroscopy":
+            elif use_eline_marg and data_type == "spectroscopy":
                 # Analytically marginalize emission line amplitudes
                 from tengri.models.observation.eline_marginalization import (
                     apply_doublet_constraints,
@@ -482,7 +597,7 @@ class Fitter:
                         G_eff,
                         log_z=log_z,
                         neb_logU=neb_logU,
-                        line_wavelengths=eline_wavelengths,
+                        line_wavelengths=eline_independent_wavelengths,
                         prior_width_dex=eline_prior_width_dex,
                     )
                 else:
@@ -491,7 +606,7 @@ class Fitter:
                         residual, noise, G_eff, prior_variance=prior_var
                     )
                 e_lh = -ln_l_eline
-            elif use_eline_marg and not use_cal_marg and data_type == "joint":
+            elif use_eline_marg and data_type == "joint":
                 # Joint: marginalize lines on spectroscopic part, standard chi2 for photometry
                 from tengri.models.observation.eline_marginalization import (
                     apply_doublet_constraints,
@@ -533,7 +648,7 @@ class Fitter:
                         G_eff,
                         log_z=log_z,
                         neb_logU=neb_logU,
-                        line_wavelengths=eline_wavelengths,
+                        line_wavelengths=eline_independent_wavelengths,
                         prior_width_dex=eline_prior_width_dex,
                     )
                 else:
@@ -2680,128 +2795,176 @@ class Fitter:
     # Inference methods
     # -------------------------------------------------------------------
 
-    def run(self, method, *, init_from=None, key=None, **kwargs):
+    def run(self, method: str = "vi", *, init_from=None, key=None, **kwargs):
         """Run inference.
 
         Parameters
         ----------
         method : str
-            **Default (native JIT, fully XLA-compiled):**
-            ``"geovi"`` — geoVI with nonlinear coordinate curving.
-            ``"mgvi"`` — MGVI (linearized geoVI).
+            Canonical names (recommended):
 
-            **Hybrid (native geoVI optimization + NUTS posterior):**
-            ``"geovi_nuts"`` — geoVI optimization, then NUTS samples.
+            ``"vi"``             — Variational inference (geoVI by default).
+            ``"vi_linear"``      — Linear VI / MGVI.
+            ``"vi_nifty"``       — NIFTy tight-loop geoVI.
+            ``"vi_nifty_linear"``— NIFTy tight-loop MGVI.
+            ``"mcmc"``           — MCMC, auto-selects NUTS (D≤20) or Ray Tracing (D>20).
+            ``"mcmc_raytrace"``  — Ray Tracing explicitly.
+            ``"mcmc_nuts"``      — NUTS via BlackJAX.
+            ``"mcmc_ess"``       — Elliptical Slice Sampling.
+            ``"map"``            — MAP optimization.
+            ``"laplace"``        — Gaussian at MAP.
+            ``"pathfinder"``     — L-BFGS path.
+            ``"evidence"``       — Nested Slice Sampling (log Z).
+            ``"auto"``           — Auto-selects by dimensionality.
 
-            **NIFTy (exact math, tight Python loop):**
-            ``"fast_geovi"`` — geoVI via NIFTy OptimizeVI.update.
-            ``"fast_mgvi"`` — MGVI via NIFTy OptimizeVI.update.
+            Power-user ``vi_flavor=`` kwarg (only with ``method="vi"``):
+            ``vi_flavor="nifty"``      — NIFTy tight loop.
+            ``vi_flavor="nifty_full"`` — NIFTy with full logging.
+            ``vi_flavor="linear"``     — Linearized geoVI (MGVI).
 
-            **NIFTy (full jft.optimize_kl with logging/diagnostics):**
-            ``"nifty_geovi"`` — Full NIFTy geoVI with minisanity.
-            ``"nifty_mgvi"`` — Full NIFTy MGVI with logging.
+            Deprecated aliases (still work, emit DeprecationWarning):
+            ``"geovi"``, ``"native_geovi"`` → ``"vi"``
+            ``"mgvi"``, ``"native_mgvi"``   → ``"vi_linear"``
+            ``"fast_geovi"``, ``"nifty_geovi"`` → ``"vi_nifty"``
+            ``"fast_mgvi"``, ``"nifty_mgvi"``   → ``"vi_nifty_linear"``
+            ``"raytrace"`` → ``"mcmc_raytrace"``
+            ``"nuts"``     → ``"mcmc_nuts"``
+            ``"elliptical_slice"`` → ``"mcmc_ess"``
+            ``"nss"``      → ``"evidence"``
 
-            **Other:**
-            ``"map"`` — MAP optimization (Adam/SGD).
-            ``"raytrace"`` — Ray Tracing Sampler (exact MCMC).
-            ``"nuts"`` — NUTS via BlackJAX (exact MCMC).
-            ``"nss"`` — Nested Slice Sampling (evidence + posterior, smooth only).
-            ``"laplace"`` — Laplace approximation (Gaussian from Hessian at MAP).
-            ``"pathfinder"`` — Pathfinder (fast approximate via L-BFGS path).
-            ``"elliptical_slice"`` — Elliptical Slice Sampling (exact, for GP latents).
         init_from : Posterior, optional
             Use a previous result as initialization.
         key : PRNGKey, optional
             Random key.
+        vi_flavor : str, optional
+            Backend variant for ``method="vi"`` only.
+            ``"nifty"``, ``"nifty_full"``, or ``"linear"``.
         **kwargs
-            Method-specific arguments.
+            Method-specific arguments passed to the underlying sampler.
 
         Returns
         -------
         Posterior
-            Inference results.
+            Inference results with ``._fitter`` back-reference set.
         """
         if key is None:
             key = jax.random.PRNGKey(42)
 
+        # Pop vi_flavor before forwarding kwargs
+        vi_flavor = kwargs.pop("vi_flavor", None)
+
+        # Resolve deprecated aliases
+        if method in _DEPRECATED_METHOD_ALIASES:
+            canonical = _DEPRECATED_METHOD_ALIASES[method]
+            warnings.warn(
+                f"Method '{method}' is deprecated. Use '{canonical}' instead. "
+                f"Old names will be removed in tengri v1.0.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            # Special case: geovi_nuts was a hybrid; map to vi with blackjax posterior
+            if method == "geovi_nuts":
+                kwargs.setdefault("posterior_method", "blackjax")
+            method = canonical
+
+        # --- "auto" method: dimensionality-based selection ---
+        if method == "auto":
+            d = self.spec.n_free
+            lo, hi = _AUTO_D_THRESHOLDS
+            if d <= lo:
+                method = "laplace"
+            elif d <= hi:
+                method = "vi_linear"
+            else:
+                method = "vi"
+
+        # --- Dispatch to underlying _run_* methods ---
         if method == "map":
-            return self._run_map(key=key, init_from=init_from, **kwargs)
-        elif method == "raytrace":
-            return self._run_raytrace(key=key, init_from=init_from, **kwargs)
-        elif method == "nuts":
-            return self._run_nuts(key=key, init_from=init_from, **kwargs)
-        # --- Native JIT (DEFAULT): fully XLA-compiled geoVI/MGVI ---
-        elif method in ("geovi", "native_geovi"):
-            return self._run_native_vi(
-                key=key,
-                init_from=init_from,
-                sample_mode="geovi",
-                **kwargs,
-            )
-        elif method in ("mgvi", "native_mgvi", "evi", "native_evi"):
-            return self._run_native_vi(
-                key=key,
-                init_from=init_from,
-                sample_mode="linear",
-                **kwargs,
-            )
-        # --- Hybrid: native geoVI optimization + NUTS posterior sampling ---
-        elif method == "geovi_nuts":
-            return self._run_native_vi(
-                key=key,
-                init_from=init_from,
-                sample_mode="geovi",
-                posterior_method="blackjax",
-                **kwargs,
-            )
-        # --- NIFTy: exact math, tight Python loop ---
-        elif method == "fast_geovi":
-            return self._run_fast_vi(
+            result = self._run_map(key=key, init_from=init_from, **kwargs)
+
+        elif method in ("vi", "vi_linear"):
+            # vi_flavor overrides method for power users
+            if vi_flavor == "nifty":
+                result = self._run_fast_vi(
+                    key=key,
+                    init_from=init_from,
+                    sample_mode="nonlinear_resample",
+                    posterior_method="nonlinear",
+                    **kwargs,
+                )
+            elif vi_flavor == "nifty_full":
+                result = self._run_nifty_vi(key=key, init_from=init_from, **kwargs)
+            elif vi_flavor == "linear" or method == "vi_linear":
+                result = self._run_native_vi(
+                    key=key,
+                    init_from=init_from,
+                    sample_mode="linear",
+                    **kwargs,
+                )
+            else:
+                # Default "vi": geoVI (nonlinear, most accurate)
+                result = self._run_native_vi(
+                    key=key,
+                    init_from=init_from,
+                    sample_mode="geovi",
+                    **kwargs,
+                )
+
+        elif method == "vi_nifty":
+            result = self._run_fast_vi(
                 key=key,
                 init_from=init_from,
                 sample_mode="nonlinear_resample",
                 posterior_method="nonlinear",
                 **kwargs,
             )
-        elif method == "fast_mgvi":
-            return self._run_fast_vi(
+
+        elif method == "vi_nifty_linear":
+            result = self._run_fast_vi(
                 key=key,
                 init_from=init_from,
                 sample_mode="linear_resample",
                 **kwargs,
             )
-        # --- NIFTy: full jft.optimize_kl (with logging/minisanity) ---
-        elif method == "nifty_geovi":
-            return self._run_nifty_vi(key=key, init_from=init_from, **kwargs)
-        elif method == "nifty_mgvi":
-            return self._run_nifty_vi(
-                key=key,
-                init_from=init_from,
-                sample_mode="linear_resample",
-                **kwargs,
-            )
-        # --- Nested Slice Sampling (evidence computation) ---
-        elif method == "nss":
-            return self._run_nss(key=key, init_from=init_from, **kwargs)
-        # --- Laplace approximation (Gaussian at MAP) ---
+
+        elif method == "mcmc":
+            # Auto-select: NUTS for low-D (exact gold-standard), RT for high-D
+            d = self.spec.n_free
+            if d <= _MCMC_AUTO_D_THRESHOLD:
+                result = self._run_nuts(key=key, init_from=init_from, **kwargs)
+            else:
+                result = self._run_raytrace(key=key, init_from=init_from, **kwargs)
+
+        elif method == "mcmc_raytrace":
+            result = self._run_raytrace(key=key, init_from=init_from, **kwargs)
+
+        elif method == "mcmc_nuts":
+            result = self._run_nuts(key=key, init_from=init_from, **kwargs)
+
+        elif method == "mcmc_ess":
+            result = self._run_elliptical_slice(key=key, init_from=init_from, **kwargs)
+
+        elif method == "evidence":
+            result = self._run_nss(key=key, init_from=init_from, **kwargs)
+
         elif method == "laplace":
-            return self._run_laplace(key=key, init_from=init_from, **kwargs)
-        # --- Pathfinder (fast approximate via L-BFGS path) ---
+            result = self._run_laplace(key=key, init_from=init_from, **kwargs)
+
         elif method == "pathfinder":
-            return self._run_pathfinder(key=key, init_from=init_from, **kwargs)
-        # --- Elliptical Slice Sampling (exact MCMC for GP latents) ---
-        elif method == "elliptical_slice":
-            return self._run_elliptical_slice(key=key, init_from=init_from, **kwargs)
+            result = self._run_pathfinder(key=key, init_from=init_from, **kwargs)
+
         else:
             raise ValueError(
-                f"Unknown method: {method}. "
-                f"Default: 'geovi', 'mgvi'. "
-                f"Hybrid: 'geovi_nuts'. "
-                f"NIFTy loop: 'fast_geovi', 'fast_mgvi'. "
-                f"NIFTy full: 'nifty_geovi', 'nifty_mgvi'. "
-                f"Other: 'map', 'raytrace', 'nuts', 'nss', "
-                f"'laplace', 'pathfinder', 'elliptical_slice'."
+                f"Unknown method: '{method}'. "
+                f"Canonical names: 'vi', 'vi_linear', 'vi_nifty', 'vi_nifty_linear', "
+                f"'mcmc', 'mcmc_raytrace', 'mcmc_nuts', 'mcmc_ess', 'map', 'laplace', "
+                f"'pathfinder', 'evidence', 'auto'. "
+                f"See Fitter.run() docstring for deprecated aliases."
             )
+
+        # Attach back-reference so Posterior.refine() works
+        result._fitter = self
+        return result
 
     def _run_nss(
         self,
