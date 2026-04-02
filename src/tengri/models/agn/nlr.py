@@ -129,6 +129,7 @@ def nlr_emission(
     l_disc_bol_erg: float,
     covering_fraction: float = 0.1,
     fwhm_kms: float = _NLR_FWHM_KMS,
+    line_efficiency: float = _NLR_LINE_EFFICIENCY,
 ) -> jnp.ndarray:
     """NLR emission spectrum: line emission + power-law continuum.
 
@@ -145,6 +146,9 @@ def nlr_emission(
         NLR covering fraction (0 to 1). Default 0.1.
     fwhm_kms : float
         Line FWHM [km/s]. Default 500.
+    line_efficiency : float
+        Fraction of intercepted luminosity converted to line emission.
+        Default 0.10.
 
     Returns
     -------
@@ -154,7 +158,7 @@ def nlr_emission(
     l_intercepted = covering_fraction * l_disc_bol_erg
 
     # --- Line emission ---
-    l_lines_total = _NLR_LINE_EFFICIENCY * l_intercepted
+    l_lines_total = line_efficiency * l_intercepted
 
     # Sum Gaussian profiles for each line
     def _single_line(line_data):

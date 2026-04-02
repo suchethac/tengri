@@ -212,10 +212,13 @@ def _fe2_pseudo_continuum(
     # is approximately strength * 1.0 (nearly all flux within +-1.3 sigma).
     # For more precise normalization, compute numerically over the grid.
     mask_opt = (wavelength >= 4434.0) & (wavelength <= 4684.0)
-    # Integrate Fe II template in this window (trapezoidal, per-Hz units)
-    # We need the integral in flux (per-Hz) units, same as H-beta line flux.
-    opt_flux = jnp.sum(fe2_template * mask_opt)
-    # Avoid division by zero when wavelength grid doesn't cover optical
+    # Integrate Fe II template in the 4434-4684 A optical bump (Boroson & Green 1992).
+    # fe2_template is in L_nu [Lsun Hz^{-1}]; integrate over frequency so the
+    # normalization is grid-resolution-independent (jnp.sum depends on pixel spacing).
+    _C_AA_BLR = 2.99792458e18  # c in Angstrom/s
+    nu_blr = _C_AA_BLR / jnp.maximum(wavelength, 1.0)
+    sort_nu = jnp.argsort(nu_blr)
+    opt_flux = jnp.abs(jnp.trapezoid((fe2_template * mask_opt)[sort_nu], nu_blr[sort_nu]))
     opt_flux = jnp.maximum(opt_flux, 1e-30)
 
     # Scale so that integral in 4434-4684 window equals fe2_strength
@@ -229,6 +232,7 @@ def blr_emission(
     covering_fraction: float = 0.1,
     fwhm_kms: float = _BLR_FWHM_KMS,
     agn_fe2_strength: float = 0.0,
+    line_efficiency: float = _BLR_LINE_EFFICIENCY,
 ) -> jnp.ndarray:
     """BLR emission spectrum: broad permitted lines + Fe II pseudo-continuum.
 
@@ -253,6 +257,9 @@ def blr_emission(
     agn_fe2_strength : float
         Fe II to H-beta flux ratio R_Fe = F(Fe II 4434-4684)/F(H-beta).
         Typical range 0.5-2.0. Default 0.0 (disabled, backward compatible).
+    line_efficiency : float
+        Fraction of intercepted luminosity converted to line emission.
+        Default 0.08.
 
     Returns
     -------
@@ -260,7 +267,7 @@ def blr_emission(
         BLR L_nu [erg s^-1 Hz^-1] (before torus masking).
     """
     l_intercepted = covering_fraction * l_disc_bol_erg
-    l_lines_total = _BLR_LINE_EFFICIENCY * l_intercepted
+    l_lines_total = line_efficiency * l_intercepted
 
     # Sum broad Gaussian profiles for each line
     def _single_line(line_data):
