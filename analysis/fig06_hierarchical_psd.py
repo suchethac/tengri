@@ -299,9 +299,9 @@ def main():
     if args.method == "raytrace":
         fit_kwargs = dict(n_burnin=200, n_steps=2000, n_leapfrog_steps=50, step_size=0.05)
     else:
-        # 50 iterations with MAP warm-start improves hierarchical geoVI convergence.
+        # 50 iterations with more posterior samples improves hierarchical geoVI convergence.
         # 20 iterations was insufficient — posteriors sat at ~0.6× the truth.
-        fit_kwargs = dict(n_iterations=50, n_posterior_samples=100, init_from="map")
+        fit_kwargs = dict(n_iterations=50, n_posterior_samples=100)
 
     # ── Convergence test ──────────────────────────────────────
     sigma_true, tau_true = 1.0, 50.0
