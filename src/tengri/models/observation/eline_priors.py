@@ -19,6 +19,7 @@ References
 """
 
 import jax.numpy as jnp
+import numpy as np
 
 # -------------------------------------------------------------------------
 # CLOUDY reference line ratios (relative to Hbeta = 1.0)
@@ -154,6 +155,10 @@ def cloudy_line_priors(
     prior_sigmas : array (n_lines,)
         Prior standard deviations (in same units as means, i.e. the
         linear-space scatter corresponding to ``prior_width_dex``).
+
+    Notes
+    -----
+    For richer priors using a full CLOUDY grid, use ``cloudy_grid_line_priors()``.
     """
     # Interpolate between metallicity grid points
     # Linear interp in log_z between sub-solar and solar
@@ -229,6 +234,10 @@ def marginalize_emission_lines_cloudy(
         Posterior-mean line amplitudes.
     a_cov : array (n_lines, n_lines)
         Posterior covariance of line amplitudes.
+
+    Notes
+    -----
+    For richer priors using a full CLOUDY grid, use ``cloudy_grid_line_priors()``.
     """
     from tengri.models.observation.eline_marginalization import marginalize_emission_lines
 
@@ -262,3 +271,213 @@ def marginalize_emission_lines_cloudy(
     a_hat = a_hat_shifted + scaled_means
 
     return ln_l_marg, a_hat, a_cov
+
+
+def cloudy_grid_line_priors(
+    grid_data,
+    log_z: float,
+    neb_logU: float,
+    log_age_yr: float = 7.0,
+    prior_width_dex: float = 0.3,
+    target_wavelengths: jnp.ndarray | None = None,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """CLOUDY-grid-interpolated emission line priors.
+
+    Uses the full CLOUDY HDF5 grid (typically shape n_met × n_age × n_logU ×
+    n_lines in log10 space) to compute line ratio priors via trilinear
+    interpolation, replacing the hardcoded 2×2 grid in ``cloudy_line_priors()``.
+
+    Parameters
+    ----------
+    grid_data : CloudyGridData
+        Loaded CLOUDY grid (from ``load_cloudy_grid(path)`` in
+        ``tengri.models.nebular``). Must have attributes:
+        ``line_luminosity`` (n_met, n_age, n_logU, n_lines),
+        ``line_log_met``, ``line_log_age``, ``line_log_U``,
+        ``line_wavelengths``.
+    log_z : float
+        Gas-phase metallicity log10(Z) (absolute, not Z/Zsun).
+    neb_logU : float
+        Ionization parameter log10(U).
+    log_age_yr : float
+        log10(age / yr) for the dominant stellar population.
+        Default 7.0 (10 Myr — typical for HII regions).
+    prior_width_dex : float
+        Gaussian prior width in dex. Default 0.3.
+    target_wavelengths : array (n_target,) or None
+        If provided, return priors only for these rest-frame wavelengths
+        by matching each to the nearest grid line. If None, returns priors
+        for all grid lines.
+
+    Returns
+    -------
+    prior_means : array (n_lines_out,)
+        Line luminosities relative to Hbeta (interpolated from grid, linear).
+    prior_sigmas : array (n_lines_out,)
+        Prior standard deviations in the same units.
+
+    Notes
+    -----
+    The grid stores ``line_luminosity`` in log10 space. The function:
+
+    1. Clamps (log_z, neb_logU, log_age_yr) to grid bounds
+    2. Performs trilinear interpolation across the 3 axes in log10 space
+    3. Exponentiates: ``10**interpolated`` to get linear luminosities
+    4. Normalises relative to Hbeta (detected by wavelength ~4861 Å)
+    5. Applies dex scatter: ``sigma = mean * (10**width - 1)``
+
+    For richer priors using a full CLOUDY grid, prefer this over
+    ``cloudy_line_priors()`` which uses a hardcoded 2×2 table.
+    """
+    # Clamp to grid bounds
+    log_z_c = float(jnp.clip(log_z, grid_data.line_log_met.min(), grid_data.line_log_met.max()))
+    log_u_c = float(jnp.clip(neb_logU, grid_data.line_log_U.min(), grid_data.line_log_U.max()))
+    log_a_c = float(
+        jnp.clip(log_age_yr, grid_data.line_log_age.min(), grid_data.line_log_age.max())
+    )
+
+    # Helper: 1D linear interp weight
+    def _frac(arr, val):
+        idx = np.searchsorted(arr, val) - 1
+        idx = np.clip(idx, 0, len(arr) - 2)
+        t = (val - arr[idx]) / (arr[idx + 1] - arr[idx] + 1e-30)
+        return int(idx), float(np.clip(t, 0.0, 1.0))
+
+    iz, tz = _frac(np.array(grid_data.line_log_met), log_z_c)
+    ia, ta = _frac(np.array(grid_data.line_log_age), log_a_c)
+    iu, tu = _frac(np.array(grid_data.line_log_U), log_u_c)
+
+    # Trilinear: interpolate over 8 corners of the (z, a, u) cube
+    lum = grid_data.line_luminosity  # (n_met, n_age, n_logU, n_lines)
+
+    def _get(dz, da, du):
+        return np.array(lum[iz + dz, ia + da, iu + du, :])
+
+    log_lum = (
+        (1 - tz) * (1 - ta) * (1 - tu) * _get(0, 0, 0)
+        + tz * (1 - ta) * (1 - tu) * _get(1, 0, 0)
+        + (1 - tz) * ta * (1 - tu) * _get(0, 1, 0)
+        + (1 - tz) * (1 - ta) * tu * _get(0, 0, 1)
+        + tz * ta * (1 - tu) * _get(1, 1, 0)
+        + tz * (1 - ta) * tu * _get(1, 0, 1)
+        + (1 - tz) * ta * tu * _get(0, 1, 1)
+        + tz * ta * tu * _get(1, 1, 1)
+    )
+
+    # Convert from log10 to linear
+    lin_lum = 10.0**log_lum
+
+    # Normalize to Hbeta = 1.0 (find Hbeta by nearest wavelength to 4861 Å)
+    grid_wavs = np.array(grid_data.line_wavelengths)
+    hbeta_idx = int(np.argmin(np.abs(grid_wavs - 4861.33)))
+    hbeta_lum = lin_lum[hbeta_idx]
+    if hbeta_lum < 1e-30:
+        hbeta_lum = 1.0  # safety fallback
+    prior_means_all = lin_lum / hbeta_lum
+
+    # Apply dex scatter
+    prior_sigmas_all = prior_means_all * (10.0**prior_width_dex - 1.0)
+    prior_sigmas_all = np.maximum(prior_sigmas_all, 1e-10)
+
+    # Wrap as jnp arrays
+    prior_means_all = jnp.array(prior_means_all)
+    prior_sigmas_all = jnp.array(prior_sigmas_all)
+
+    if target_wavelengths is None:
+        return prior_means_all, prior_sigmas_all
+
+    # Match target_wavelengths to nearest grid line
+    target_wavs = np.array(target_wavelengths)
+    diffs = np.abs(target_wavs[:, None] - grid_wavs[None, :])
+    nearest_idx = np.argmin(diffs, axis=1)
+    return prior_means_all[nearest_idx], prior_sigmas_all[nearest_idx]
+
+
+def balmer_decrement_prior(
+    dust_tau_diff: float,
+    R_V: float = 4.05,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Predicted Balmer line ratios given nebular dust attenuation.
+
+    Uses the Calzetti (2000) nebular attenuation law to predict the
+    observed Balmer decrement. Couples the Balmer line priors to the
+    dust parameter being fit, providing a self-consistent constraint.
+
+    Intrinsic Case B ratios (T=10^4 K, n_e=100 cm^-3,
+    Osterbrock & Ferland 2006):
+
+    - Hα/Hβ = 2.86
+    - Hγ/Hβ = 0.468
+    - Hδ/Hβ = 0.259
+    - Hε/Hβ = 0.159
+
+    Parameters
+    ----------
+    dust_tau_diff : float
+        Diffuse ISM optical depth at V-band (the ``dust_tau_diff``
+        physical parameter in tengri).
+    R_V : float
+        Total-to-selective extinction ratio. Default 4.05 (Calzetti+2000).
+
+    Returns
+    -------
+    wavelengths : array (4,)
+        Balmer line rest-frame wavelengths [Hα, Hβ, Hγ, Hδ] in Angstrom.
+    predicted_ratios : array (4,)
+        Predicted observed Balmer ratios relative to Hβ = 1.0, after
+        applying nebular dust attenuation.
+
+    Notes
+    -----
+    The Calzetti nebular E(B-V) is related to the diffuse dust optical
+    depth by:
+
+        E(B-V)_neb = dust_tau_diff / (R_V * 0.44)
+
+    where the factor 0.44 comes from the Calzetti (2000) prescription
+    that nebular emission is more attenuated than stellar continuum:
+
+        E(B-V)_neb = E(B-V)_star / 0.44.
+
+    Balmer attenuation uses the Calzetti law k(λ) evaluated at each
+    Balmer wavelength. Relative to Hβ:
+
+        ratio_obs(λ) = ratio_intrinsic(λ) × 10^{-0.4 × [A(λ) - A(Hβ)]}
+
+    For richer priors using a full CLOUDY grid, prefer this over
+    ``cloudy_line_priors()`` which uses a hardcoded 2×2 table.
+    """
+    # Intrinsic Case B ratios (Hα, Hβ, Hγ, Hδ) relative to Hβ=1
+    intrinsic = jnp.array([2.86, 1.0, 0.468, 0.259])
+    wavelengths = jnp.array([6562.80, 4861.33, 4340.46, 4101.73])
+
+    # Calzetti (2000) k(λ) curve piecewise fit (optical regime)
+    # For λ in [6300, 22000]: k(λ) = 2.659(-1.857 + 1.040/λ_um) + R_V
+    # For λ in [1200, 6300]: k(λ) = 2.659(-2.156 + 1.509/λ_um - 0.198/λ_um^2
+    # + 0.011/λ_um^3) + R_V
+    # λ_um = λ_Angstrom / 1e4
+    lam_um = wavelengths / 1e4
+
+    # All Balmer lines are < 6563 Å, so use the blue piecewise:
+    k_lam = 2.659 * (-2.156 + 1.509 / lam_um - 0.198 / lam_um**2 + 0.011 / lam_um**3) + R_V
+    k_lam = jnp.maximum(k_lam, 0.0)
+
+    # E(B-V)_neb from dust_tau_diff
+    # tau_V = R_V * E(B-V)_star, and tau_diff ≈ tau_V,
+    # so E(B-V)_star = tau_diff / R_V
+    # E(B-V)_neb = E(B-V)_star / 0.44
+    ebv_neb = dust_tau_diff / (R_V * 0.44)
+
+    # Attenuation A(λ) = k(λ) * E(B-V)_neb
+    a_lam = k_lam * ebv_neb
+
+    # Hβ index is 1
+    a_hbeta = a_lam[1]
+
+    # Relative attenuation factor: 10^{-0.4 * (A(λ) - A(Hβ))}
+    rel_atten = 10.0 ** (-0.4 * (a_lam - a_hbeta))
+
+    # Predicted observed ratios
+    predicted_ratios = intrinsic * rel_atten
+
+    return wavelengths, predicted_ratios
