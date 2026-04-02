@@ -154,7 +154,6 @@ def build_eline_design_matrix(
     )
 
 
-@jax.jit
 def build_broad_design_matrix(
     wave_obs: jnp.ndarray,
     line_wavelengths: jnp.ndarray,
@@ -198,6 +197,10 @@ def build_broad_design_matrix(
         eline_sigma_kms=broad_sigma_kms,
         eline_delta_v_kms=eline_delta_v_kms,
     )
+
+
+# Apply JIT
+build_broad_design_matrix = jax.jit(build_broad_design_matrix)
 
 
 def apply_doublet_constraints(
@@ -282,7 +285,7 @@ def marginalize_emission_lines(
     residual: jnp.ndarray,
     noise: jnp.ndarray,
     design_matrix: jnp.ndarray,
-    prior_variance: jnp.ndarray = None,
+    prior_variance: jnp.ndarray | None = None,
 ) -> tuple:
     """Analytically marginalize emission-line amplitudes.
 
@@ -325,7 +328,9 @@ def marginalize_emission_lines(
     gt_ninv_r = g_weighted.T @ residual
 
     # Prior precision: Lambda^{-1}
-    prior_variance = jnp.broadcast_to(jnp.atleast_1d(prior_variance), (n_lines,))
+    # Default: flat prior (very large variance = effectively uninformative)
+    _pv = prior_variance if prior_variance is not None else jnp.full((n_lines,), 1e10)
+    prior_variance = jnp.broadcast_to(jnp.atleast_1d(_pv), (n_lines,))
     lambda_inv = jnp.diag(1.0 / prior_variance)
 
     # Posterior covariance: Sigma_a = (G^T N^{-1} G + Lambda^{-1})^{-1}
@@ -347,7 +352,7 @@ def marginalize_emission_lines(
     # Log-determinant correction:
     # 0.5 * (ln|Sigma_a| - ln|Lambda|)
     # = 0.5 * (slogdet(Sigma_a) - sum(ln(prior_variance)))
-    _, logdet_sigma = jnp.linalg.slogdet(a_cov)
+    _sign, logdet_sigma = jnp.linalg.slogdet(a_cov)
     log_det_correction = logdet_sigma - jnp.sum(jnp.log(prior_variance))
 
     ln_l_marg = -0.5 * chi2_marg - 0.5 * prior_penalty + 0.5 * log_det_correction
