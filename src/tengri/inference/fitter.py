@@ -88,6 +88,13 @@ class Fitter:
     cal_prior_sigma : float
         Standard deviation of the Gaussian prior on each calibration
         coefficient.  Default 1.0.
+    eline_marginalize : bool or None
+        Whether to analytically marginalize emission line amplitudes.
+        ``None`` (default) auto-detects from the model's ``SpectroscopyConfig``
+        (uses ``eline_mode="marginalized"`` setting).
+    eline_prior_type : str or None
+        Prior type for emission lines: ``"flat"`` or ``"cloudy"``.
+        ``None`` auto-detects from ``SpectroscopyConfig.eline_prior_type``.
     """
 
     def __init__(
@@ -99,6 +106,8 @@ class Fitter:
         calibration_marginalize=False,
         cal_n_poly=3,
         cal_prior_sigma=1.0,
+        eline_marginalize=None,
+        eline_prior_type=None,
     ):
         self.model = model
         self.data = jnp.asarray(data)
@@ -120,6 +129,59 @@ class Fitter:
         self._cal_n_poly = cal_n_poly
         self._cal_prior_sigma = cal_prior_sigma
         self._has_spectroscopy = data_type in ("spectroscopy", "joint")
+
+        # Emission line marginalization settings
+        _spec_config = getattr(model, "_spectroscopy_config", None)
+        # Also try model.observation.spectroscopy if _spectroscopy_config not set
+        if _spec_config is None:
+            obs = getattr(model, "observation", None)
+            if obs is not None:
+                _spec_config = getattr(obs, "spectroscopy", None)
+
+        if eline_marginalize is None:
+            if _spec_config is not None and hasattr(_spec_config, "eline_mode"):
+                eline_marginalize = _spec_config.eline_mode == "marginalized"
+            else:
+                eline_marginalize = False
+
+        self._eline_marginalize = bool(eline_marginalize) and self._has_spectroscopy
+
+        if eline_prior_type is None:
+            if _spec_config is not None and hasattr(_spec_config, "eline_prior_type"):
+                eline_prior_type = _spec_config.eline_prior_type
+            else:
+                eline_prior_type = "flat"
+        self._eline_prior_type = eline_prior_type
+
+        # Precompute static arrays for emission line fitting
+        if self._eline_marginalize:
+            from tengri.models.observation.line_catalog import LineCatalog
+
+            if _spec_config is not None and _spec_config.eline_catalog is not None:
+                _catalog = _spec_config.effective_catalog
+            else:
+                _catalog = LineCatalog.default_13()
+            self._eline_wavelengths = _catalog.wavelengths
+            self._eline_names = _catalog.names
+            fix_doublets = True
+            if _spec_config is not None and hasattr(_spec_config, "eline_fix_doublets"):
+                fix_doublets = _spec_config.eline_fix_doublets
+            if fix_doublets:
+                self._eline_constraint_matrix = _catalog.build_constraint_matrix()
+            else:
+                self._eline_constraint_matrix = jnp.eye(_catalog.n_lines)
+            self._eline_prior_sigma = (
+                getattr(_spec_config, "eline_prior_sigma", 100.0) if _spec_config else 100.0
+            )
+            self._eline_prior_width_dex = (
+                getattr(_spec_config, "eline_prior_width_dex", 0.3) if _spec_config else 0.3
+            )
+        else:
+            self._eline_wavelengths = None
+            self._eline_names = None
+            self._eline_constraint_matrix = None
+            self._eline_prior_sigma = 100.0
+            self._eline_prior_width_dex = 0.3
 
         # Separate free and fixed parameters
         self._free_names = self.spec.free_params
@@ -272,6 +334,12 @@ class Fitter:
         use_cal_marg = self._calibration_marginalize and self._has_spectroscopy
         cal_n_poly = self._cal_n_poly
         cal_prior_sigma = self._cal_prior_sigma
+        use_eline_marg = self._eline_marginalize
+        eline_wavelengths = self._eline_wavelengths
+        eline_constraint_matrix = self._eline_constraint_matrix
+        eline_prior_type = self._eline_prior_type
+        eline_prior_sigma = self._eline_prior_sigma
+        eline_prior_width_dex = self._eline_prior_width_dex
 
         def loss_fn(params_unbounded, data_args):
             data = data_args["data"]
@@ -343,6 +411,138 @@ class Fitter:
                     prior_sigma=cal_prior_sigma,
                 )
                 e_lh = 0.5 * chi2_phot - log_like_spec
+            elif use_eline_marg and use_cal_marg and data_type == "spectroscopy":
+                # Both: marginalize lines first, then calibration on line-added prediction
+                from tengri.models.observation.calibration import marginalize_calibration
+                from tengri.models.observation.eline_marginalization import (
+                    apply_doublet_constraints,
+                    build_eline_design_matrix,
+                    marginalize_emission_lines,
+                )
+
+                z = params.get("redshift", fixed_values.get("redshift", 0.0))
+                sigma_kms = params.get("eline_sigma_kms", 0.0)
+                delta_v = params.get("eline_delta_v_kms", 0.0)
+                resolution = getattr(model, "_spectral_resolution", None) or 2000.0
+                G = build_eline_design_matrix(
+                    model._wave_obs,
+                    eline_wavelengths,
+                    resolution,
+                    z,
+                    eline_sigma_kms=sigma_kms,
+                    eline_delta_v_kms=delta_v,
+                )
+                G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
+                prior_var = jnp.full(G_eff.shape[1], eline_prior_sigma**2)
+                _, a_hat, _ = marginalize_emission_lines(
+                    data - predicted, noise, G_eff, prior_variance=prior_var
+                )
+                pred_with_lines = predicted + G_eff @ a_hat
+                log_like_spec, _c_hat, _c_err = marginalize_calibration(
+                    pred_with_lines,
+                    data,
+                    noise,
+                    model._wave_obs,
+                    n_poly=cal_n_poly,
+                    prior_sigma=cal_prior_sigma,
+                )
+                e_lh = -log_like_spec
+            elif use_eline_marg and not use_cal_marg and data_type == "spectroscopy":
+                # Analytically marginalize emission line amplitudes
+                from tengri.models.observation.eline_marginalization import (
+                    apply_doublet_constraints,
+                    build_eline_design_matrix,
+                    marginalize_emission_lines,
+                )
+
+                z = params.get("redshift", fixed_values.get("redshift", 0.0))
+                sigma_kms = params.get("eline_sigma_kms", 0.0)
+                delta_v = params.get("eline_delta_v_kms", 0.0)
+                resolution = getattr(model, "_spectral_resolution", None) or 2000.0
+                G = build_eline_design_matrix(
+                    model._wave_obs,
+                    eline_wavelengths,
+                    resolution,
+                    z,
+                    eline_sigma_kms=sigma_kms,
+                    eline_delta_v_kms=delta_v,
+                )
+                G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
+                residual = data - predicted
+                if eline_prior_type == "cloudy":
+                    from tengri.models.observation.eline_priors import (
+                        marginalize_emission_lines_cloudy,
+                    )
+
+                    log_z = params.get("met_logzsol", fixed_values.get("met_logzsol", 0.0))
+                    neb_logU = params.get("neb_logU", fixed_values.get("neb_logU", -3.0))
+                    ln_l_eline, _, _ = marginalize_emission_lines_cloudy(
+                        residual,
+                        noise,
+                        G_eff,
+                        log_z=log_z,
+                        neb_logU=neb_logU,
+                        line_wavelengths=eline_wavelengths,
+                        prior_width_dex=eline_prior_width_dex,
+                    )
+                else:
+                    prior_var = jnp.full(G_eff.shape[1], eline_prior_sigma**2)
+                    ln_l_eline, _, _ = marginalize_emission_lines(
+                        residual, noise, G_eff, prior_variance=prior_var
+                    )
+                e_lh = -ln_l_eline
+            elif use_eline_marg and not use_cal_marg and data_type == "joint":
+                # Joint: marginalize lines on spectroscopic part, standard chi2 for photometry
+                from tengri.models.observation.eline_marginalization import (
+                    apply_doublet_constraints,
+                    build_eline_design_matrix,
+                    marginalize_emission_lines,
+                )
+
+                z = params.get("redshift", fixed_values.get("redshift", 0.0))
+                sigma_kms = params.get("eline_sigma_kms", 0.0)
+                delta_v = params.get("eline_delta_v_kms", 0.0)
+                resolution = getattr(model, "_spectral_resolution", None) or 2000.0
+                n_phot = model.predict_photometry(params).shape[0]
+                data_phot = data[:n_phot]
+                data_spec = data[n_phot:]
+                noise_phot = noise[:n_phot]
+                noise_spec = noise[n_phot:]
+                pred_phot = predicted[:n_phot]
+                pred_spec = predicted[n_phot:]
+                G = build_eline_design_matrix(
+                    model._wave_obs,
+                    eline_wavelengths,
+                    resolution,
+                    z,
+                    eline_sigma_kms=sigma_kms,
+                    eline_delta_v_kms=delta_v,
+                )
+                G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
+                residual_spec = data_spec - pred_spec
+                if eline_prior_type == "cloudy":
+                    from tengri.models.observation.eline_priors import (
+                        marginalize_emission_lines_cloudy,
+                    )
+
+                    log_z = params.get("met_logzsol", fixed_values.get("met_logzsol", 0.0))
+                    neb_logU = params.get("neb_logU", fixed_values.get("neb_logU", -3.0))
+                    ln_l_eline, _, _ = marginalize_emission_lines_cloudy(
+                        residual_spec,
+                        noise_spec,
+                        G_eff,
+                        log_z=log_z,
+                        neb_logU=neb_logU,
+                        line_wavelengths=eline_wavelengths,
+                        prior_width_dex=eline_prior_width_dex,
+                    )
+                else:
+                    prior_var = jnp.full(G_eff.shape[1], eline_prior_sigma**2)
+                    ln_l_eline, _, _ = marginalize_emission_lines(
+                        residual_spec, noise_spec, G_eff, prior_variance=prior_var
+                    )
+                chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
+                e_lh = 0.5 * chi2_phot - ln_l_eline
             elif use_variable_noise:
                 f_cal = params.get("noise_frac_cal", 0.0)
                 e_lh = variable_noise_hamiltonian(data, noise, predicted, f_cal, dof=noise_dof)
@@ -430,6 +630,12 @@ class Fitter:
         use_cal_marg = self._calibration_marginalize and self._has_spectroscopy
         cal_n_poly = self._cal_n_poly
         cal_prior_sigma = self._cal_prior_sigma
+        use_eline_marg = self._eline_marginalize
+        eline_wavelengths = self._eline_wavelengths
+        eline_constraint_matrix = self._eline_constraint_matrix
+        eline_prior_type = self._eline_prior_type
+        eline_prior_sigma = self._eline_prior_sigma
+        eline_prior_width_dex = self._eline_prior_width_dex
 
         def loglikelihood_fn(free_params, data_args):
             data = data_args["data"]
@@ -490,6 +696,138 @@ class Fitter:
                     prior_sigma=cal_prior_sigma,
                 )
                 return -0.5 * chi2_phot + log_like_spec
+            elif use_eline_marg and use_cal_marg and data_type == "spectroscopy":
+                # Both: marginalize lines first, then calibration on line-added prediction
+                from tengri.models.observation.calibration import marginalize_calibration
+                from tengri.models.observation.eline_marginalization import (
+                    apply_doublet_constraints,
+                    build_eline_design_matrix,
+                    marginalize_emission_lines,
+                )
+
+                z = params.get("redshift", fixed_values.get("redshift", 0.0))
+                sigma_kms = params.get("eline_sigma_kms", 0.0)
+                delta_v = params.get("eline_delta_v_kms", 0.0)
+                resolution = getattr(model, "_spectral_resolution", None) or 2000.0
+                G = build_eline_design_matrix(
+                    model._wave_obs,
+                    eline_wavelengths,
+                    resolution,
+                    z,
+                    eline_sigma_kms=sigma_kms,
+                    eline_delta_v_kms=delta_v,
+                )
+                G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
+                prior_var = jnp.full(G_eff.shape[1], eline_prior_sigma**2)
+                _, a_hat, _ = marginalize_emission_lines(
+                    data - predicted, noise, G_eff, prior_variance=prior_var
+                )
+                pred_with_lines = predicted + G_eff @ a_hat
+                log_like_spec, _c_hat, _c_err = marginalize_calibration(
+                    pred_with_lines,
+                    data,
+                    noise,
+                    model._wave_obs,
+                    n_poly=cal_n_poly,
+                    prior_sigma=cal_prior_sigma,
+                )
+                return log_like_spec
+            elif use_eline_marg and not use_cal_marg and data_type == "spectroscopy":
+                # Analytically marginalize emission line amplitudes
+                from tengri.models.observation.eline_marginalization import (
+                    apply_doublet_constraints,
+                    build_eline_design_matrix,
+                    marginalize_emission_lines,
+                )
+
+                z = params.get("redshift", fixed_values.get("redshift", 0.0))
+                sigma_kms = params.get("eline_sigma_kms", 0.0)
+                delta_v = params.get("eline_delta_v_kms", 0.0)
+                resolution = getattr(model, "_spectral_resolution", None) or 2000.0
+                G = build_eline_design_matrix(
+                    model._wave_obs,
+                    eline_wavelengths,
+                    resolution,
+                    z,
+                    eline_sigma_kms=sigma_kms,
+                    eline_delta_v_kms=delta_v,
+                )
+                G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
+                residual = data - predicted
+                if eline_prior_type == "cloudy":
+                    from tengri.models.observation.eline_priors import (
+                        marginalize_emission_lines_cloudy,
+                    )
+
+                    log_z = params.get("met_logzsol", fixed_values.get("met_logzsol", 0.0))
+                    neb_logU = params.get("neb_logU", fixed_values.get("neb_logU", -3.0))
+                    ln_l_eline, _, _ = marginalize_emission_lines_cloudy(
+                        residual,
+                        noise,
+                        G_eff,
+                        log_z=log_z,
+                        neb_logU=neb_logU,
+                        line_wavelengths=eline_wavelengths,
+                        prior_width_dex=eline_prior_width_dex,
+                    )
+                else:
+                    prior_var = jnp.full(G_eff.shape[1], eline_prior_sigma**2)
+                    ln_l_eline, _, _ = marginalize_emission_lines(
+                        residual, noise, G_eff, prior_variance=prior_var
+                    )
+                return ln_l_eline
+            elif use_eline_marg and not use_cal_marg and data_type == "joint":
+                # Joint: marginalize lines on spectroscopic part, standard chi2 for photometry
+                from tengri.models.observation.eline_marginalization import (
+                    apply_doublet_constraints,
+                    build_eline_design_matrix,
+                    marginalize_emission_lines,
+                )
+
+                z = params.get("redshift", fixed_values.get("redshift", 0.0))
+                sigma_kms = params.get("eline_sigma_kms", 0.0)
+                delta_v = params.get("eline_delta_v_kms", 0.0)
+                resolution = getattr(model, "_spectral_resolution", None) or 2000.0
+                n_phot = model.predict_photometry(params).shape[0]
+                data_phot = data[:n_phot]
+                data_spec = data[n_phot:]
+                noise_phot = noise[:n_phot]
+                noise_spec = noise[n_phot:]
+                pred_phot = predicted[:n_phot]
+                pred_spec = predicted[n_phot:]
+                G = build_eline_design_matrix(
+                    model._wave_obs,
+                    eline_wavelengths,
+                    resolution,
+                    z,
+                    eline_sigma_kms=sigma_kms,
+                    eline_delta_v_kms=delta_v,
+                )
+                G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
+                residual_spec = data_spec - pred_spec
+                if eline_prior_type == "cloudy":
+                    from tengri.models.observation.eline_priors import (
+                        marginalize_emission_lines_cloudy,
+                    )
+
+                    log_z = params.get("met_logzsol", fixed_values.get("met_logzsol", 0.0))
+                    neb_logU = params.get("neb_logU", fixed_values.get("neb_logU", -3.0))
+                    ln_l_eline, _, _ = marginalize_emission_lines_cloudy(
+                        residual_spec,
+                        noise_spec,
+                        G_eff,
+                        log_z=log_z,
+                        neb_logU=neb_logU,
+                        line_wavelengths=eline_wavelengths,
+                        prior_width_dex=eline_prior_width_dex,
+                    )
+                else:
+                    prior_var = jnp.full(G_eff.shape[1], eline_prior_sigma**2)
+                    ln_l_eline, _, _ = marginalize_emission_lines(
+                        residual_spec, noise_spec, G_eff, prior_variance=prior_var
+                    )
+                chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
+                return -0.5 * chi2_phot + ln_l_eline
             elif use_variable_noise:
                 f_cal = params.get("noise_frac_cal", 0.0)
                 return -variable_noise_hamiltonian(data, noise, predicted, f_cal, dof=noise_dof)
