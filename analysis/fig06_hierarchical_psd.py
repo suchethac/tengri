@@ -295,12 +295,14 @@ def main():
 
     key = jax.random.PRNGKey(7)
 
-    # Method-specific kwargs
+    # Method-specific kwargs.
+    # NOTE: "geovi" (CFM) uses NIFTy's CorrelatedFieldMaker and returns
+    # psd_fluctuations / psd_loglogavgslope / psd_sigma_eff — not psd_sigma/psd_tau_myr.
+    # This script's display code expects the raytrace flat parametrization.
+    # Use "raytrace" for publishable results; geovi_flat works too.
     if args.method == "raytrace":
         fit_kwargs = dict(n_burnin=200, n_steps=2000, n_leapfrog_steps=50, step_size=0.05)
     else:
-        # 50 iterations with more posterior samples improves hierarchical geoVI convergence.
-        # 20 iterations was insufficient — posteriors sat at ~0.6× the truth.
         fit_kwargs = dict(n_iterations=50, n_posterior_samples=100)
 
     # ── Convergence test ──────────────────────────────────────

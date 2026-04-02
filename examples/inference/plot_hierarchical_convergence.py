@@ -96,11 +96,16 @@ hfitter = HierarchicalFitter(
     psd_sigma_prior=(0.1, 4.0),
     psd_tau_prior=(1.0, 300.0),
 )
+# raytrace returns psd_sigma / psd_tau_myr directly (standard parametrization).
+# geovi (CFM) uses NIFTy's internal names (psd_fluctuations, psd_loglogavgslope)
+# which require different post-processing — use raytrace for this demo.
 result = hfitter.run(
-    "geovi",
+    "raytrace",
     key=jax.random.PRNGKey(42),
-    n_iterations=8,
-    n_posterior_samples=300,
+    n_burnin=100,
+    n_steps=200,
+    n_leapfrog_steps=20,
+    step_size=0.05,
     verbose=False,
 )
 
