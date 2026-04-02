@@ -49,6 +49,7 @@ from tengri.inference.raytrace import sample_raytrace
 from tengri.inference.vi_config import VIConfig
 from tengri.models.dust.attenuation import two_component_dust
 from tengri.models.observation.filters import load_filter_set
+from tengri.models.observation.line_catalog import LineCatalog
 from tengri.models.observation.noise_config import NoiseConfig
 from tengri.models.observation.observation import Observation
 from tengri.models.observation.photometry_config import Photometry
@@ -104,6 +105,7 @@ __all__ = [
     "Gaussian",
     "HierarchicalFitter",
     "HierarchicalResult",
+    "LineCatalog",
     "LogNormal",
     "LogUniform",
     "MockData",
