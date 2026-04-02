@@ -266,10 +266,7 @@ def has_alpha_grid(ssp_data: SSPData) -> bool:
     bool
         True if ssp_alpha_fe is present and ssp_flux is 4D.
     """
-    return (
-        ssp_data.ssp_alpha_fe is not None
-        and ssp_data.ssp_flux.ndim == 4
-    )
+    return ssp_data.ssp_alpha_fe is not None and ssp_data.ssp_flux.ndim == 4
 
 
 @jax.jit

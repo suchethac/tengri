@@ -131,8 +131,11 @@ class TestInterpolateMetAlpha:
 
         g = alpha_ssp_grid
         result = interpolate_met_alpha(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            log_z=-0.5, alpha_fe=0.0,
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            log_z=-0.5,
+            alpha_fe=0.0,
         )
         expected = g["ssp_flux"][1, 1]  # lgmet=-0.5 is idx 1, alpha=0.0 is idx 1
         assert jnp.allclose(result, expected, atol=1e-10)
@@ -144,8 +147,11 @@ class TestInterpolateMetAlpha:
         g = alpha_ssp_grid
         # Midpoint between lgmet[0]=-1.5 and lgmet[1]=-0.5 at alpha[1]=0.0
         result = interpolate_met_alpha(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            log_z=-1.0, alpha_fe=0.0,
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            log_z=-1.0,
+            alpha_fe=0.0,
         )
         expected = 0.5 * g["ssp_flux"][0, 1] + 0.5 * g["ssp_flux"][1, 1]
         assert jnp.allclose(result, expected, atol=1e-10)
@@ -156,12 +162,18 @@ class TestInterpolateMetAlpha:
 
         g = alpha_ssp_grid
         sed_solar = interpolate_met_alpha(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            log_z=-0.5, alpha_fe=0.0,
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            log_z=-0.5,
+            alpha_fe=0.0,
         )
         sed_alpha = interpolate_met_alpha(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            log_z=-0.5, alpha_fe=0.4,
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            log_z=-0.5,
+            alpha_fe=0.4,
         )
         assert not jnp.allclose(sed_solar, sed_alpha)
 
@@ -171,8 +183,11 @@ class TestInterpolateMetAlpha:
 
         g = alpha_ssp_grid
         result = interpolate_met_alpha(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            log_z=-0.5, alpha_fe=0.2,
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            log_z=-0.5,
+            alpha_fe=0.2,
         )
         assert result.shape == (10, 20)
 
@@ -184,8 +199,11 @@ class TestInterpolateMetAlpha:
         for lz in [-1.5, -1.0, -0.5, 0.0]:
             for afe in [-0.2, 0.0, 0.2, 0.4, 0.6]:
                 result = interpolate_met_alpha(
-                    g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-                    log_z=lz, alpha_fe=afe,
+                    g["ssp_flux"],
+                    g["ssp_lgmet"],
+                    g["ssp_alpha_fe"],
+                    log_z=lz,
+                    alpha_fe=afe,
                 )
                 assert jnp.all(jnp.isfinite(result)), f"Non-finite at lz={lz}, afe={afe}"
 
@@ -196,12 +214,18 @@ class TestInterpolateMetAlpha:
         g = alpha_ssp_grid
         # Beyond low Z boundary
         result_low = interpolate_met_alpha(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            log_z=-5.0, alpha_fe=0.0,
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            log_z=-5.0,
+            alpha_fe=0.0,
         )
         result_edge = interpolate_met_alpha(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            log_z=-1.5, alpha_fe=0.0,
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            log_z=-1.5,
+            alpha_fe=0.0,
         )
         assert jnp.allclose(result_low, result_edge, atol=1e-10)
 
@@ -212,8 +236,11 @@ class TestInterpolateMetAlpha:
         g = alpha_ssp_grid
         jit_fn = jax.jit(interpolate_met_alpha, static_argnames=[])
         result = jit_fn(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            log_z=-0.5, alpha_fe=0.2,
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            log_z=-0.5,
+            alpha_fe=0.2,
         )
         assert jnp.all(jnp.isfinite(result))
 
@@ -224,10 +251,15 @@ class TestInterpolateMetAlpha:
         g = alpha_ssp_grid
 
         def total_flux(lz):
-            return jnp.sum(interpolate_met_alpha(
-                g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-                log_z=lz, alpha_fe=0.0,
-            ))
+            return jnp.sum(
+                interpolate_met_alpha(
+                    g["ssp_flux"],
+                    g["ssp_lgmet"],
+                    g["ssp_alpha_fe"],
+                    log_z=lz,
+                    alpha_fe=0.0,
+                )
+            )
 
         grad = jax.grad(total_flux)(-0.5)
         assert jnp.isfinite(grad)
@@ -239,10 +271,15 @@ class TestInterpolateMetAlpha:
         g = alpha_ssp_grid
 
         def total_flux(afe):
-            return jnp.sum(interpolate_met_alpha(
-                g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-                log_z=-0.5, alpha_fe=afe,
-            ))
+            return jnp.sum(
+                interpolate_met_alpha(
+                    g["ssp_flux"],
+                    g["ssp_lgmet"],
+                    g["ssp_alpha_fe"],
+                    log_z=-0.5,
+                    alpha_fe=afe,
+                )
+            )
 
         grad = jax.grad(total_flux)(0.2)
         assert jnp.isfinite(grad)
@@ -267,16 +304,22 @@ class TestInterpolateMetAlphaEvolving:
         n_age = len(g["ssp_lg_age_gyr"])
 
         global_result = interpolate_met_alpha(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            log_z=-0.5, alpha_fe=0.2,
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            log_z=-0.5,
+            alpha_fe=0.2,
         )
 
         lz_per_age = jnp.full(n_age, -0.5)
         afe_per_age = jnp.full(n_age, 0.2)
 
         evolving_result = interpolate_met_alpha_evolving(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            lz_per_age, afe_per_age,
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            lz_per_age,
+            afe_per_age,
         )
 
         assert jnp.allclose(global_result, evolving_result, atol=1e-10)
@@ -292,8 +335,11 @@ class TestInterpolateMetAlphaEvolving:
         afe_per_age = jnp.linspace(-0.2, 0.6, n_age)  # old=0.6, young=-0.2
 
         result = interpolate_met_alpha_evolving(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            lz_per_age, afe_per_age,
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            lz_per_age,
+            afe_per_age,
         )
 
         # Each age bin should be different since [α/Fe] varies
@@ -308,8 +354,11 @@ class TestInterpolateMetAlphaEvolving:
         n_age = len(g["ssp_lg_age_gyr"])
 
         result = interpolate_met_alpha_evolving(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            jnp.full(n_age, -0.5), jnp.full(n_age, 0.0),
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            jnp.full(n_age, -0.5),
+            jnp.full(n_age, 0.0),
         )
         assert result.shape == (n_age, 20)
 
@@ -322,8 +371,11 @@ class TestInterpolateMetAlphaEvolving:
 
         jit_fn = jax.jit(interpolate_met_alpha_evolving)
         result = jit_fn(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            jnp.full(n_age, -0.5), jnp.full(n_age, 0.0),
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            jnp.full(n_age, -0.5),
+            jnp.full(n_age, 0.0),
         )
         assert jnp.all(jnp.isfinite(result))
 
@@ -573,8 +625,11 @@ class TestSolarAlphaEquivalence:
         # 4D interpolation at [α/Fe] = 0.0, same metallicity
         for i_met, lz in enumerate(g["ssp_lgmet"]):
             result_4d = interpolate_met_alpha(
-                g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-                log_z=float(lz), alpha_fe=0.0,
+                g["ssp_flux"],
+                g["ssp_lgmet"],
+                g["ssp_alpha_fe"],
+                log_z=float(lz),
+                alpha_fe=0.0,
             )
             expected_3d = slice_3d[i_met]  # (n_age, n_wave)
             assert jnp.allclose(result_4d, expected_3d, atol=1e-10), (
@@ -594,11 +649,16 @@ class TestSolarAlphaEquivalence:
 
         for lz in [-1.0, -0.5, -0.25]:
             result_4d = interpolate_met_alpha(
-                g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-                log_z=lz, alpha_fe=0.0,
+                g["ssp_flux"],
+                g["ssp_lgmet"],
+                g["ssp_alpha_fe"],
+                log_z=lz,
+                alpha_fe=0.0,
             )
             result_3d = interpolate_metallicity(
-                ssp_flux_3d, g["ssp_lgmet"], lz,
+                ssp_flux_3d,
+                g["ssp_lgmet"],
+                lz,
             )
             assert jnp.allclose(result_4d, result_3d, atol=1e-10), (
                 f"4D bilinear at [α/Fe]=0 should match 3D linear at [Fe/H]={lz}"
@@ -615,12 +675,17 @@ class TestSolarAlphaEquivalence:
         n_age = len(g["ssp_lg_age_gyr"])
 
         global_result = interpolate_met_alpha(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            log_z=-0.5, alpha_fe=0.0,
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            log_z=-0.5,
+            alpha_fe=0.0,
         )
 
         evolving_result = interpolate_met_alpha_evolving(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
             jnp.full(n_age, -0.5),
             jnp.full(n_age, 0.0),  # constant solar
         )
@@ -737,8 +802,11 @@ class TestConventionDifferences:
 
         # Method 1: proper 4D interpolation
         sed_4d = interpolate_met_alpha(
-            g["ssp_flux"], g["ssp_lgmet"], g["ssp_alpha_fe"],
-            log_z=feh, alpha_fe=afe,
+            g["ssp_flux"],
+            g["ssp_lgmet"],
+            g["ssp_alpha_fe"],
+            log_z=feh,
+            alpha_fe=afe,
         )
 
         # Method 2: effective_metallicity on 3D solar-alpha slice

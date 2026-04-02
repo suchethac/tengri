@@ -143,9 +143,7 @@ class TestNarayananZ:
         """Explicit non-default params are used as-is regardless of z."""
         delta = -0.5
         bump = 2.0
-        k_nz = narayanan_z(
-            wavelength, dust_delta=delta, dust_bump_strength=bump, redshift=5.0
-        )
+        k_nz = narayanan_z(wavelength, dust_delta=delta, dust_bump_strength=bump, redshift=5.0)
         k_kc = kriek_conroy(wavelength, dust_delta=delta, dust_bump_strength=bump)
         assert_allclose(k_nz, k_kc, rtol=1e-12)
 

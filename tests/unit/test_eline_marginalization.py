@@ -474,7 +474,7 @@ class TestEdgeCases:
         residual = jnp.zeros(n_pix)
 
         # Should not crash — prior regularizes the underdetermined system
-        ln_l, a_hat, a_cov = marginalize_emission_lines(residual, noise, G)
+        ln_l, a_hat, _a_cov = marginalize_emission_lines(residual, noise, G)
         assert jnp.isfinite(ln_l), "Should handle n_lines > n_pix"
         assert jnp.all(jnp.isfinite(a_hat))
 

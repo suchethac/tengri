@@ -17,9 +17,7 @@ class TestNarayananPrior:
     def test_z0_baseline_bump(self):
         """At z=0, bump strength mean should be ~1.0."""
         priors = narayanan_prior(z=0.0)
-        np.testing.assert_allclose(
-            priors["dust_bump_strength"].mu, 1.0, atol=1e-10
-        )
+        np.testing.assert_allclose(priors["dust_bump_strength"].mu, 1.0, atol=1e-10)
 
     def test_delta_more_negative_at_high_z(self):
         """Higher z should give more negative (steeper) delta."""
@@ -42,9 +40,7 @@ class TestNarayananPrior:
         """At z = 1/0.15 ~ 6.67, bump should be exactly 0."""
         z_threshold = 1.0 / 0.15
         priors = narayanan_prior(z=z_threshold)
-        np.testing.assert_allclose(
-            priors["dust_bump_strength"].mu, 0.0, atol=1e-10
-        )
+        np.testing.assert_allclose(priors["dust_bump_strength"].mu, 0.0, atol=1e-10)
 
     def test_returns_gaussian_distributions(self):
         """Both values should be Gaussian distribution instances."""
@@ -61,9 +57,7 @@ class TestNarayananPrior:
         """Sigma should be 0.15 for delta, 0.3 for bump (z-independent)."""
         priors = narayanan_prior(z=1.5)
         np.testing.assert_allclose(priors["dust_delta"].sigma, 0.15, atol=1e-10)
-        np.testing.assert_allclose(
-            priors["dust_bump_strength"].sigma, 0.3, atol=1e-10
-        )
+        np.testing.assert_allclose(priors["dust_bump_strength"].sigma, 0.3, atol=1e-10)
 
 
 class TestNarayananTauPrior:
@@ -97,9 +91,7 @@ class TestNarayananTauPrior:
         priors = narayanan_tau_prior(z=1.0, log_mstar=10.5)
         tau_mu = priors["dust_tau_diff"].mu
         expected_sigma = 0.3 * tau_mu + 0.1
-        np.testing.assert_allclose(
-            priors["dust_tau_diff"].sigma, expected_sigma, atol=1e-10
-        )
+        np.testing.assert_allclose(priors["dust_tau_diff"].sigma, expected_sigma, atol=1e-10)
 
     def test_massive_high_z_galaxy(self):
         """Massive high-z galaxy: tau should be substantially larger."""

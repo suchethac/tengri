@@ -166,8 +166,11 @@ class TestDL07Tabulated:
             for gamma in [0.001, 0.01, 0.1, 0.5]:
                 for qpah in [0.5, 2.5, 4.5]:
                     sed = dl07(
-                        ir_wave, 1e10,
-                        dust_umin=umin, dust_gamma_dl=gamma, dust_qpah=qpah,
+                        ir_wave,
+                        1e10,
+                        dust_umin=umin,
+                        dust_gamma_dl=gamma,
+                        dust_qpah=qpah,
                     )
                     assert jnp.all(jnp.isfinite(sed)), (
                         f"DL07 not finite for umin={umin}, gamma={gamma}, qpah={qpah}"
@@ -240,9 +243,7 @@ class TestDale2014Tabulated:
         L_emitted = float(-jnp.trapezoid(sed, nu))
         ratio = L_emitted / L_abs
 
-        assert 0.5 < ratio < 2.0, (
-            f"Dale2014 energy balance: L_emitted/L_absorbed = {ratio:.4f}"
-        )
+        assert 0.5 < ratio < 2.0, f"Dale2014 energy balance: L_emitted/L_absorbed = {ratio:.4f}"
 
     def test_alpha_shifts_spectrum(self, ir_wave):
         """Low alpha should produce warmer SED, high alpha cooler."""
@@ -358,9 +359,7 @@ class TestSKIRTORTemplates:
             sed = skirtor_analytic(wave, agn_log_lbol=44.0, agn_torus_frac=0.5)
 
         peak_wave = float(wave[jnp.argmax(sed)])
-        assert 1e4 < peak_wave < 1e6, (
-            f"Torus peak at {peak_wave:.0f} A, expected MIR (1e4-1e6 A)"
-        )
+        assert 1e4 < peak_wave < 1e6, f"Torus peak at {peak_wave:.0f} A, expected MIR (1e4-1e6 A)"
 
 
 # ===================================================================

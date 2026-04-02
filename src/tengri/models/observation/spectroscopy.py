@@ -13,12 +13,10 @@ for instruments with variable spectral resolution (e.g., JWST NIRSpec PRISM).
 
 from __future__ import annotations
 
-from typing import Union
+from functools import partial
 
 import jax
 import jax.numpy as jnp
-from functools import partial
-
 
 # ---------------------------------------------------------------------------
 # SSP library spectral resolutions (velocity dispersion in km/s)
@@ -228,7 +226,7 @@ def _apply_lsf_variable_r(
 def apply_lsf(
     spectrum: jnp.ndarray,
     wave_obs: jnp.ndarray,
-    resolution: Union[jnp.ndarray, float],
+    resolution: jnp.ndarray | float,
     sigma_lib_kms: float = 0.0,
     n_bins: int = 16,
 ) -> jnp.ndarray:

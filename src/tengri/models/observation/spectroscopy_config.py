@@ -142,13 +142,9 @@ class SpectroscopyConfig:
         return SpectroscopyConfig._from_resolution(wave_jax, resolution, **kwargs)
 
     @staticmethod
-    def constant_r(
-        wave_obs: jnp.ndarray, R: float, **kwargs
-    ) -> SpectroscopyConfig:
+    def constant_r(wave_obs: jnp.ndarray, R: float, **kwargs) -> SpectroscopyConfig:
         """Constant-resolution spectrograph."""
-        return SpectroscopyConfig._from_resolution(
-            wave_obs, float(R), **kwargs
-        )
+        return SpectroscopyConfig._from_resolution(wave_obs, float(R), **kwargs)
 
     def summary(self) -> str:
         """Return a one-line summary of the spectroscopy configuration."""

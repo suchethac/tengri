@@ -56,10 +56,7 @@ def simple_filters():
     ]
     trans = [jnp.ones(50) * 0.5 for _ in range(3)]
     names = ["synth_blue", "synth_green", "synth_red"]
-    curves = [
-        FilterCurve(wave=w, trans=t, name=n)
-        for n, w, t in zip(names, waves, trans)
-    ]
+    curves = [FilterCurve(wave=w, trans=t, name=n) for n, w, t in zip(names, waves, trans)]
     return (waves, trans, curves)
 
 

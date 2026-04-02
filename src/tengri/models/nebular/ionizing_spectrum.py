@@ -121,18 +121,24 @@ def fit_ionizing_spectrum(
         Q_seg = np.abs(_np_trapz(integrand[::-1], x=nu[::-1]))
         log_Q = np.log10(max(Q_seg, 1e-99))
 
-        def objective(params):
-            pred = params[1] + params[0] * log_wave
+        def objective(
+            params,
+            _log_wave=log_wave,
+            _seg_wave=seg_wave,
+            _log_flux=log_flux,
+            _log_Q=log_Q,
+        ):
+            pred = params[1] + params[0] * _log_wave
             log_Q_pred = (
                 params[1]
                 - np.log10(_H_PLANCK)
                 + np.log10(
-                    np.abs((seg_wave[-1] ** params[0] - seg_wave[0] ** params[0]) / params[0])
+                    np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
                 )
             )
             return (
-                0.5 * np.sum((log_flux - pred) ** 2)
-                + 0.5 * len(seg_wave) * (log_Q - log_Q_pred) ** 2
+                0.5 * np.sum((_log_flux - pred) ** 2)
+                + 0.5 * len(_seg_wave) * (_log_Q - log_Q_pred) ** 2
             )
 
         res = minimize(

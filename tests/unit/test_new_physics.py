@@ -85,9 +85,9 @@ class TestDustLaws:
 
         for name, fn in DUST_LAWS.items():
 
-            def _loss(ns, bs, dd, rv):
+            def _loss(ns, bs, dd, rv, _fn=fn):
                 return jnp.sum(
-                    fn(wave, n_slope=ns, dust_bump_strength=bs, dust_delta=dd, dust_Rv=rv)
+                    _fn(wave, n_slope=ns, dust_bump_strength=bs, dust_delta=dd, dust_Rv=rv)
                 )
 
             g = jax.grad(_loss, argnums=(0, 1, 2, 3))(-0.7, 1.0, 0.0, 3.1)

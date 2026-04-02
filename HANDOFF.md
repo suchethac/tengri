@@ -1,6 +1,6 @@
 # tengri Development Handoff
 
-**Last updated:** 2026-03-14 (session 3)
+**Last updated:** 2026-04-01 (session 4)
 **Repo:** `~/Projects/tengri/`
 **Paper draft:** `~/writing-workspace/projects/differentiable_psd_sed_fitting/`
 
@@ -21,30 +21,30 @@
 ```bash
 cd ~/Projects/tengri
 source .venv/bin/activate          # Python 3.12 venv
-pytest tests/ -q                    # 302 tests pass
-jupyter lab notebooks/              # 6 tutorial notebooks
+pytest tests/ -q                    # 1615 tests collected, all pass
+jupyter lab notebooks/              # 14 demonstration notebooks, 5 tutorial notebooks
 ```
 
 **Key dependencies:** JAX ≥0.4.20, DSPS ≥0.3, NIFTy8.re ≥8.5, BlackJAX ≥1.3, optax ≥0.2, h5py, matplotlib, scipy
 
 **What's done:**
-- Complete code with 4 inference methods (MAP, Ray Tracing Sampler, NUTS, geoVI), 302 tests passing
-- 6 tutorial notebooks, all executing
+- Complete code with 12+ inference methods (MAP, Ray Tracing, NUTS, geoVI/MGVI, NSS, Laplace, Pathfinder, Elliptical Slice, native variants), 1615 tests passing
+- 14 demonstration notebooks + 5 tutorial notebooks, all executing; Sphinx Gallery docs site
 - Paper I draft complete (20 pages, compiles), all sections written
-- 5 of 8 paper figures generated from analysis scripts
-- Hierarchical PSD inference infrastructure implemented
+- All 8 paper figures generated from analysis scripts and wired into LaTeX
+- Hierarchical PSD inference via NIFTy CorrelatedFieldMaker implemented
+- Notebook/docs refactor complete (Phases 1–8): jupytext sync, Sphinx Gallery, restructured docs
 
 **What the paper needs before submission:**
-1. **Improve hierarchical PSD recovery** — current flat-vector approach is biased. Need to use NIFTy's `CorrelatedFieldMaker` for joint PSD hyperparameter learning (see Eberle+2025, Roth+2024 for patterns)
-2. **Production figure runs** — current figures use 1-3 mocks per regime; need 50-100 for publishable statistics
-3. **Fig 1 schematic** — framework overview diagram (only figure not yet created)
-4. **Wire remaining figures into LaTeX** — Figs 2-3 (from notebooks) need `\includegraphics`
+1. **Production figure runs** — current figures use 1-3 mocks per regime; need 50-100 for publishable statistics
+2. **Fig 1 schematic** — framework overview diagram (only figure not yet created; all others done)
+3. **Tune hierarchical recovery** — current CFM geoVI gives fluctuations=0.89, slope=-0.13 for truth σ=1.5, τ=30 Myr; needs more iterations or better initialization
 
 **What Paper II needs (real data):** Apply the same framework to SDSS spectra, intermediate-z photometry, JWST data.
 
 ---
 
-**Status:** 302 tests pass. All 6 notebooks execute. 4 inference methods. Hierarchical PSD inference implemented. Paper draft complete (20 pages). 5 paper figures generated.
+**Status:** 1615 tests pass. 14 demo + 5 tutorial notebooks execute. 12+ inference methods. Hierarchical PSD via NIFTy CFM. Paper draft complete (20 pages). All 8 paper figures generated and wired into LaTeX. Sphinx docs site with Sphinx Gallery complete.
 
 ---
 
@@ -58,9 +58,9 @@ from tengri import (
 
 # Define model
 spec = ParamSpec(
-    sfh_alpha=Uniform(0.5, 3.0), sfh_beta=Uniform(0.3, 2.0),
-    sfh_tau_peak_gyr=Uniform(0.5, 10.0), sfh_peak_sfr=Uniform(0.1, 50.0),
-    psd_sigma=Uniform(0.1, 3.0), psd_tau_myr=Uniform(1.0, 300.0),
+    sfh_dpl_alpha=Uniform(0.5, 3.0), sfh_dpl_beta=Uniform(0.3, 2.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 10.0), sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+    sfh_field_psd_sigma=Uniform(0.1, 3.0), sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
     met_logzsol=Gaussian(-0.3, 0.2, lo=-2.0, hi=0.2),
     dust_tau_bc=Uniform(0.0, 3.0), dust_tau_diff=0.3, dust_slope=-0.7,
     redshift=0.1, stochastic=True, n_grid=128,
@@ -200,14 +200,15 @@ analysis/
 
 ### Critical (for paper submission)
 - [x] **Hierarchical geoVI with CorrelatedFieldMaker**: DONE — `hfitter.run("geovi")` uses NIFTy CFM natively
+- [x] **Wire notebook figures into LaTeX**: DONE — Figs 2-3 already have `\includegraphics` in `2-methods.tex` (confirmed)
 - [ ] **Production figure runs**: Re-run fig04 with 50-100 mocks per regime, fig06 with N=50-200 galaxies using geoVI(CFM)
 - [ ] **Fig 1 schematic**: Draw framework overview diagram (TikZ or manual)
-- [ ] **Wire notebook figures into LaTeX**: Figs 2-3 need `\includegraphics` (PNG files already copied)
 - [ ] **Tune hierarchical recovery**: Current CFM geoVI gives fluctuations=0.89, slope=-0.13 for truth σ=1.5, τ=30 Myr. Needs more iterations or better initialization.
 
 ### Important
-- [ ] **Internal param rename**: `sigma_ps` → `psd_sigma` across ~20 files (low-level API)
-- [ ] **Paper compile check**: Recompile after MGVI/CFM updates, verify no broken refs
+- [x] **Internal param rename**: `sigma_ps`/`tau_ps` only appear as function-local variable names in `src/tengri/utils/optimizations.py` (3 lines, not exported API) — not a real issue
+- [x] **Paper compile check**: All figures wired into LaTeX; `latexmk -pdf 0-ms.tex` verified clean
+- [x] **Notebook/docs refactor (Phases 1-8)**: Complete — jupytext sync, Sphinx Gallery, restructured toctrees, concepts page, inference decision table, benchmarks page, performance tradeoffs
 
 ### Nice to have
 - [ ] **GPU benchmarks**: Re-run speed comparison on GPU
@@ -268,7 +269,7 @@ optax>=0.2       (MAP)
 ```bash
 cd ~/Projects/tengri
 source .venv/bin/activate
-pytest tests/ -q                    # should show 302 passed
+pytest tests/ -q                    # should show 1615 passed
 python -c "from tengri import Model, ParamSpec, Uniform, Fitter, Posterior, HierarchicalFitter, sample_raytrace"
 
 # Generate paper figures

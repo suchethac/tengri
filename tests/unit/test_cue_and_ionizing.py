@@ -102,7 +102,7 @@ class TestIonizingParamsTable:
             np.array(ssp.ssp_flux[:3, :10, :]),  # small subset for speed
             np.array(ssp.ssp_lgmet[:3]),
         )
-        ionspec, logqion = interpolate_ionizing_params(
+        ionspec, _logqion = interpolate_ionizing_params(
             jnp.array(result["ionspec_table"]),
             jnp.array(result["logqion_table"]),
             jnp.array(ssp.ssp_lgmet[:3]),
@@ -158,7 +158,7 @@ class TestCueBackend:
         )
         # Result is (wavelength, luminosity) tuple or just array
         if isinstance(result, tuple):
-            wave_cont, lum_cont = result
+            _wave_cont, lum_cont = result
             assert len(lum_cont) > 0
             assert jnp.all(jnp.isfinite(lum_cont))
         else:
@@ -243,7 +243,7 @@ class TestCueWithSSP:
     def test_predict_with_ssp_params(self, backend_with_ssp):
         """Predict lines using SSP-derived ionizing params."""
         ionspec, logqion = backend_with_ssp.get_ionizing_params_at(-1.85, 6.5)
-        wave, lum = backend_with_ssp.predict_nebular_line_luminosities(
+        _wave, lum = backend_with_ssp.predict_nebular_line_luminosities(
             gas_logu=-2.5,
             gas_logn=2.0,
             gas_logz=0.0,

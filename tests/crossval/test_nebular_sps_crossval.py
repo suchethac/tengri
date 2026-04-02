@@ -121,7 +121,7 @@ class TestIGMPublishedValues:
         for i in range(len(transmissions) - 1):
             assert transmissions[i] >= transmissions[i + 1] - 0.01, (
                 f"T({redshifts[i]})={transmissions[i]:.3f} < "
-                f"T({redshifts[i+1]})={transmissions[i+1]:.3f}"
+                f"T({redshifts[i + 1]})={transmissions[i + 1]:.3f}"
             )
 
     def test_transmission_above_lya_is_unity(self):
@@ -154,7 +154,9 @@ class TestABMagnitudeZeroPoint:
         f_nu = 3.631e-20  # erg/s/cm^2/Hz (AB zero point)
         mag = float(ab_mag_from_flux(jnp.array(f_nu)))
         np.testing.assert_allclose(
-            mag, 0.0, atol=0.001,
+            mag,
+            0.0,
+            atol=0.001,
             err_msg=f"AB mag for f_nu=3.631e-20 = {mag:.4f}, expected 0.0",
         )
 
@@ -167,7 +169,9 @@ class TestABMagnitudeZeroPoint:
         mag1 = float(ab_mag_from_flux(f1))
         mag10 = float(ab_mag_from_flux(f10))
         np.testing.assert_allclose(
-            mag1 - mag10, 2.5, atol=0.001,
+            mag1 - mag10,
+            2.5,
+            atol=0.001,
             err_msg="10x flux ratio should give 2.5 mag difference",
         )
 
@@ -208,7 +212,9 @@ class TestPlanckFunction:
         # So B_nu peaks around 8800 A for the Sun.
         expected_bnu_peak = _H_PLANCK * _C_CGS / (2.821 * _K_BOLTZMANN * T_sun) / 1e-8
         np.testing.assert_allclose(
-            peak_wave, expected_bnu_peak, rtol=0.02,
+            peak_wave,
+            expected_bnu_peak,
+            rtol=0.02,
             err_msg=f"B_nu peak at {peak_wave:.0f}A, expected ~{expected_bnu_peak:.0f}A",
         )
 
@@ -235,11 +241,10 @@ class TestPlanckFunction:
         expected = _STEFAN_BOLTZMANN * T**4 / np.pi
         # Allow 2% tolerance for finite wavelength range
         np.testing.assert_allclose(
-            integral, expected, rtol=0.02,
-            err_msg=(
-                f"Stefan-Boltzmann: integral={integral:.4e}, "
-                f"expected={expected:.4e}"
-            ),
+            integral,
+            expected,
+            rtol=0.02,
+            err_msg=(f"Stefan-Boltzmann: integral={integral:.4e}, expected={expected:.4e}"),
         )
 
     def test_rayleigh_jeans_slope(self):
@@ -262,7 +267,9 @@ class TestPlanckFunction:
         slope = np.polyfit(log_wave, log_bnu, 1)[0]
         # B_nu ~ nu^2 ~ lambda^{-2} in Rayleigh-Jeans
         np.testing.assert_allclose(
-            slope, -2.0, atol=0.05,
+            slope,
+            -2.0,
+            atol=0.05,
             err_msg=f"Rayleigh-Jeans slope = {slope:.3f}, expected -2.0",
         )
 
@@ -285,7 +292,9 @@ class TestMetallicityConversion:
 
         z_sun = 10.0**LOG10_ZSUN
         np.testing.assert_allclose(
-            z_sun, 0.0142, rtol=0.005,
+            z_sun,
+            0.0142,
+            rtol=0.005,
             err_msg=f"Z_sun = {z_sun:.5f}, expected 0.0142 (Asplund+2009)",
         )
 
@@ -295,7 +304,9 @@ class TestMetallicityConversion:
 
         expected = np.log10(0.0142)
         np.testing.assert_allclose(
-            LOG10_ZSUN, expected, atol=0.001,
+            LOG10_ZSUN,
+            expected,
+            atol=0.001,
             err_msg=f"LOG10_ZSUN={LOG10_ZSUN:.5f}, expected {expected:.5f}",
         )
 
@@ -318,7 +329,9 @@ class TestSalarisRelation:
 
         mh = salaris_mh_from_feh(0.0, 0.0)
         np.testing.assert_allclose(
-            mh, 0.0, atol=1e-10,
+            mh,
+            0.0,
+            atol=1e-10,
             err_msg=f"[M/H]={mh:.6f} for solar, expected 0.0",
         )
 
@@ -333,7 +346,9 @@ class TestSalarisRelation:
         expected = 0.66154 * alpha_fe + 0.20465 * alpha_fe**2
         mh = salaris_mh_from_feh(0.0, alpha_fe)
         np.testing.assert_allclose(
-            mh, expected, atol=1e-10,
+            mh,
+            expected,
+            atol=1e-10,
             err_msg=f"[M/H]={mh:.6f}, expected {expected:.6f}",
         )
 
@@ -349,7 +364,9 @@ class TestSalarisRelation:
         mh = salaris_mh_from_feh(feh_orig, alpha_fe)
         feh_recovered = salaris_feh_from_mh(mh, alpha_fe)
         np.testing.assert_allclose(
-            feh_recovered, feh_orig, atol=1e-10,
+            feh_recovered,
+            feh_orig,
+            atol=1e-10,
             err_msg=f"Round-trip: {feh_orig} -> {mh} -> {feh_recovered}",
         )
 
@@ -365,7 +382,9 @@ class TestSalarisRelation:
         expected = -1.0 + 0.66154 * 0.3 + 0.20465 * 0.3**2
         mh = salaris_mh_from_feh(-1.0, 0.3)
         np.testing.assert_allclose(
-            mh, expected, atol=1e-10,
+            mh,
+            expected,
+            atol=1e-10,
             err_msg=f"[M/H]={mh:.6f}, expected {expected:.6f}",
         )
 
@@ -404,14 +423,23 @@ class TestPhotometryFlatSpectrum:
         z = 0.0001
         dl_cm = 3.086e24 * z * _C_CGS / 70.0  # rough Hubble law
 
-        flux = float(compute_flux_density(
-            sed_rest, wave_rest, filt_wave, filt_trans, z, dl_cm,
-        ))
+        flux = float(
+            compute_flux_density(
+                sed_rest,
+                wave_rest,
+                filt_wave,
+                filt_trans,
+                z,
+                dl_cm,
+            )
+        )
 
         # Expected: (1+z) / (4*pi*dL^2) * f_nu
         expected = (1.0 + z) / (4.0 * np.pi * dl_cm**2) * f_nu_const
         np.testing.assert_allclose(
-            flux, expected, rtol=0.01,
+            flux,
+            expected,
+            rtol=0.01,
             err_msg=f"Flat spectrum flux = {flux:.4e}, expected {expected:.4e}",
         )
 
@@ -431,13 +459,22 @@ class TestPhotometryFlatSpectrum:
         z = 0.0001
         dl_cm = 3.086e24 * z * _C_CGS / 70.0
 
-        flux = float(compute_flux_density(
-            sed_rest, wave_rest, filt_wave, filt_trans, z, dl_cm,
-        ))
+        flux = float(
+            compute_flux_density(
+                sed_rest,
+                wave_rest,
+                filt_wave,
+                filt_trans,
+                z,
+                dl_cm,
+            )
+        )
 
         expected = (1.0 + z) / (4.0 * np.pi * dl_cm**2) * f_nu_const
         np.testing.assert_allclose(
-            flux, expected, rtol=0.01,
+            flux,
+            expected,
+            rtol=0.01,
             err_msg="Flat spectrum through Gaussian filter should give f_nu",
         )
 
@@ -493,7 +530,9 @@ class TestVelocityBroadening:
         expected_fwhm = 2.3548 * sigma_aa
 
         np.testing.assert_allclose(
-            fwhm_aa, expected_fwhm, rtol=0.1,
+            fwhm_aa,
+            expected_fwhm,
+            rtol=0.1,
             err_msg=f"FWHM = {fwhm_aa:.2f}A, expected {expected_fwhm:.2f}A",
         )
 
@@ -512,7 +551,9 @@ class TestVelocityBroadening:
         total_out = float(jnp.sum(flux_out))
 
         np.testing.assert_allclose(
-            total_out, total_in, rtol=0.01,
+            total_out,
+            total_in,
+            rtol=0.01,
             err_msg="Velocity broadening should conserve total flux",
         )
 
@@ -551,7 +592,9 @@ class TestChebyshevCalibration:
         wave = jnp.array([lam_test])
         cal = float(calibration_polynomial(wave, coeffs, wave_min, wave_max)[0])
         np.testing.assert_allclose(
-            cal, 1.5, atol=1e-10,
+            cal,
+            1.5,
+            atol=1e-10,
             err_msg=f"C = 1 + T_1(0.5) = {cal:.6f}, expected 1.5",
         )
 
@@ -559,7 +602,9 @@ class TestChebyshevCalibration:
         coeffs = jnp.array([0.0, 1.0, 0.0])
         cal = float(calibration_polynomial(wave, coeffs, wave_min, wave_max)[0])
         np.testing.assert_allclose(
-            cal, 0.5, atol=1e-10,
+            cal,
+            0.5,
+            atol=1e-10,
             err_msg=f"C = 1 + T_2(0.5) = {cal:.6f}, expected 0.5",
         )
 
@@ -567,7 +612,9 @@ class TestChebyshevCalibration:
         coeffs = jnp.array([0.0, 0.0, 1.0])
         cal = float(calibration_polynomial(wave, coeffs, wave_min, wave_max)[0])
         np.testing.assert_allclose(
-            cal, 0.0, atol=1e-10,
+            cal,
+            0.0,
+            atol=1e-10,
             err_msg=f"C = 1 + T_3(0.5) = {cal:.6f}, expected 0.0",
         )
 
@@ -579,7 +626,9 @@ class TestChebyshevCalibration:
         coeffs = jnp.array([0.0, 0.0, 0.0])
         cal = calibration_polynomial(wave, coeffs, 4000.0, 8000.0)
         np.testing.assert_allclose(
-            np.array(cal), 1.0, atol=1e-12,
+            np.array(cal),
+            1.0,
+            atol=1e-12,
             err_msg="Zero coefficients should give C = 1 everywhere",
         )
 
@@ -595,7 +644,9 @@ class TestChebyshevCalibration:
         coeffs = jnp.array([0.1, 0.0, 0.0])
         cal = float(calibration_polynomial(wave, coeffs, wave_min, wave_max)[0])
         np.testing.assert_allclose(
-            cal, 1.05, atol=1e-10,
+            cal,
+            1.05,
+            atol=1e-10,
             err_msg=f"C = 1 + 0.1*T_1(0.5) = {cal:.6f}, expected 1.05",
         )
 
@@ -638,11 +689,18 @@ class TestCalibrationMarginalization:
         obs_err = jnp.ones(n_wave) * 1e-22
 
         _log_lik, c_hat, _c_hat_err = marginalize_calibration(
-            model_flux, obs_flux, obs_err, wave, n_poly=3, prior_sigma=1.0,
+            model_flux,
+            obs_flux,
+            obs_err,
+            wave,
+            n_poly=3,
+            prior_sigma=1.0,
         )
 
         np.testing.assert_allclose(
-            np.array(c_hat), np.array(true_coeffs), atol=0.01,
+            np.array(c_hat),
+            np.array(true_coeffs),
+            atol=0.01,
             err_msg=f"Recovered coefficients {np.array(c_hat)} differ from "
             f"true {np.array(true_coeffs)}",
         )
@@ -659,11 +717,18 @@ class TestCalibrationMarginalization:
         obs_err = jnp.ones(n_wave) * 1e-22
 
         _log_lik, c_hat, _c_hat_err = marginalize_calibration(
-            model_flux, obs_flux, obs_err, wave, n_poly=3, prior_sigma=1.0,
+            model_flux,
+            obs_flux,
+            obs_err,
+            wave,
+            n_poly=3,
+            prior_sigma=1.0,
         )
 
         np.testing.assert_allclose(
-            np.array(c_hat), 0.0, atol=0.01,
+            np.array(c_hat),
+            0.0,
+            atol=0.01,
             err_msg=f"Expected c ~ 0 when obs = model, got {np.array(c_hat)}",
         )
 
@@ -706,7 +771,9 @@ class TestModifiedBlackbodySlope:
         slope = np.polyfit(log_nu, log_lnu, 1)[0]
         expected = 2.0 + beta
         np.testing.assert_allclose(
-            slope, expected, atol=0.15,
+            slope,
+            expected,
+            atol=0.15,
             err_msg=f"MBB RJ slope = {slope:.3f}, expected {expected:.1f}",
         )
 
@@ -726,7 +793,9 @@ class TestModifiedBlackbodySlope:
         slope = np.polyfit(np.log10(nu[mask]), np.log10(l_nu_np[mask]), 1)[0]
         expected = 2.0 + beta
         np.testing.assert_allclose(
-            slope, expected, atol=0.15,
+            slope,
+            expected,
+            atol=0.15,
             err_msg=f"MBB RJ slope = {slope:.3f}, expected {expected:.1f}",
         )
 
@@ -750,7 +819,9 @@ class TestCMBCorrection:
         T_dust = 35.0
         T_eff = float(cmb_corrected_temperature(T_dust, redshift=0.0, beta_ir=1.8))
         np.testing.assert_allclose(
-            T_eff, T_dust, atol=0.01,
+            T_eff,
+            T_dust,
+            atol=0.01,
             err_msg=f"T_eff(z=0) = {T_eff:.2f}K, expected {T_dust}K",
         )
 
@@ -778,7 +849,9 @@ class TestCMBCorrection:
         T_expected = (T_dust**exp + T_cmb_z**exp - T_cmb_0**exp) ** (1.0 / exp)
 
         np.testing.assert_allclose(
-            T_eff, T_expected, rtol=0.001,
+            T_eff,
+            T_expected,
+            rtol=0.001,
             err_msg=f"T_eff(z=7) = {T_eff:.2f}K, expected {T_expected:.2f}K",
         )
 
@@ -788,15 +861,12 @@ class TestCMBCorrection:
 
         T_dust = 30.0
         redshifts = [0.0, 1.0, 3.0, 5.0, 7.0, 10.0]
-        temps = [
-            float(cmb_corrected_temperature(T_dust, z, beta_ir=1.8))
-            for z in redshifts
-        ]
+        temps = [float(cmb_corrected_temperature(T_dust, z, beta_ir=1.8)) for z in redshifts]
 
         for i in range(len(temps) - 1):
             assert temps[i] <= temps[i + 1] + 0.01, (
                 f"T_eff not monotonic: T(z={redshifts[i]})={temps[i]:.2f} > "
-                f"T(z={redshifts[i+1]})={temps[i+1]:.2f}"
+                f"T(z={redshifts[i + 1]})={temps[i + 1]:.2f}"
             )
 
     def test_cmb_dominates_at_high_z(self):
@@ -826,6 +896,8 @@ class TestCMBCorrection:
 
         # At z=0, T_cmb/T_dust << 1 in the IR, so contrast ~ 1
         np.testing.assert_allclose(
-            np.array(contrast), 1.0, atol=0.01,
+            np.array(contrast),
+            1.0,
+            atol=0.01,
             err_msg="CMB contrast at z=0 should be ~1",
         )

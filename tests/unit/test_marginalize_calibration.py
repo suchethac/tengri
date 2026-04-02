@@ -139,9 +139,7 @@ class TestMarginalizeCalibration:
         chi2_uncal = jnp.sum((obs_flux - simple_spectrum) ** 2 * inv_var)
         n_wave = wavelength.shape[0]
         log_like_uncal = (
-            -0.5 * n_wave * jnp.log(2.0 * jnp.pi)
-            - jnp.sum(jnp.log(obs_err))
-            - 0.5 * chi2_uncal
+            -0.5 * n_wave * jnp.log(2.0 * jnp.pi) - jnp.sum(jnp.log(obs_err)) - 0.5 * chi2_uncal
         )
 
         assert log_like_marg > log_like_uncal
@@ -149,12 +147,8 @@ class TestMarginalizeCalibration:
     def test_jit_compatible(self, wavelength, simple_spectrum):
         """Function should be JIT-compilable."""
         obs_err = 0.01 * simple_spectrum
-        fn = jax.jit(
-            lambda m, d, e, w: marginalize_calibration(m, d, e, w, n_poly=3)
-        )
-        log_like, c_hat, _c_hat_err = fn(
-            simple_spectrum, simple_spectrum, obs_err, wavelength
-        )
+        fn = jax.jit(lambda m, d, e, w: marginalize_calibration(m, d, e, w, n_poly=3))
+        log_like, c_hat, _c_hat_err = fn(simple_spectrum, simple_spectrum, obs_err, wavelength)
         assert jnp.isfinite(log_like)
         assert c_hat.shape == (3,)
 

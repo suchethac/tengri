@@ -191,9 +191,9 @@ def _fe2_pseudo_continuum(
         sigma_total = jnp.maximum(sigma_total, 0.01)
 
         # Gaussian in wavelength space [per Angstrom]
-        phi_lam = jnp.exp(
-            -0.5 * ((wavelength - lam_c) / sigma_total) ** 2
-        ) / (sigma_total * jnp.sqrt(2.0 * jnp.pi))
+        phi_lam = jnp.exp(-0.5 * ((wavelength - lam_c) / sigma_total) ** 2) / (
+            sigma_total * jnp.sqrt(2.0 * jnp.pi)
+        )
 
         # Convert per-Angstrom to per-Hz
         phi_nu = phi_lam * wavelength**2 / c_ang

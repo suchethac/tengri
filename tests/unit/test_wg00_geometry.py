@@ -236,9 +236,7 @@ class TestWG00Dusty:
         assert float(jnp.mean(t_few)) > float(jnp.mean(t_many))
 
     def test_jit_compatible(self, wavelength):
-        jitted = jax.jit(
-            lambda w, t, n: wg00_dusty(w, t, law="cardelli", n_clumps=n)
-        )
+        jitted = jax.jit(lambda w, t, n: wg00_dusty(w, t, law="cardelli", n_clumps=n))
         result = jitted(wavelength, 1.0, 10.0)
         expected = wg00_dusty(wavelength, tau_v=1.0, law="cardelli", n_clumps=10.0)
         assert_allclose(result, expected, rtol=1e-12)
@@ -246,9 +244,7 @@ class TestWG00Dusty:
     def test_differentiable_tau(self):
         """Gradients exist with respect to tau_V."""
         wave = jnp.array([3000.0, 5500.0, 10000.0])
-        grad_fn = jax.grad(
-            lambda t: jnp.sum(wg00_dusty(wave, t, law="cardelli", n_clumps=10.0))
-        )
+        grad_fn = jax.grad(lambda t: jnp.sum(wg00_dusty(wave, t, law="cardelli", n_clumps=10.0)))
         grad_val = grad_fn(1.0)
         assert jnp.isfinite(grad_val)
         assert float(grad_val) < 0.0
@@ -256,9 +252,7 @@ class TestWG00Dusty:
     def test_differentiable_n_clumps(self):
         """Gradients exist with respect to n_clumps."""
         wave = jnp.array([3000.0, 5500.0, 10000.0])
-        grad_fn = jax.grad(
-            lambda n: jnp.sum(wg00_dusty(wave, 2.0, law="cardelli", n_clumps=n))
-        )
+        grad_fn = jax.grad(lambda n: jnp.sum(wg00_dusty(wave, 2.0, law="cardelli", n_clumps=n)))
         grad_val = grad_fn(10.0)
         assert jnp.isfinite(grad_val)
 

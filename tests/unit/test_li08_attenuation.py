@@ -34,17 +34,13 @@ def _reference_li08(wave_aa, c1, c2, c3, c4):
     d0 = 6.88**c2 + 0.145**c2 + c3
     norm_c1 = c1 / d0
     norm_c4 = c4 / 4.60
-    t2 = 233.0 * (1.0 - norm_c1 - norm_c4) / (
-        (lam / 0.046) ** 2 + (0.046 / lam) ** 2 + 90.0
-    )
+    t2 = 233.0 * (1.0 - norm_c1 - norm_c4) / ((lam / 0.046) ** 2 + (0.046 / lam) ** 2 + 90.0)
     t3 = c4 / ((lam / 0.2175) ** 2 + (0.2175 / lam) ** 2 - 1.95)
     a_lam = t1 + t2 + t3
     # Evaluate at V-band
     lv = 0.55
     t1v = c1 / ((lv / 0.08) ** c2 + (0.08 / lv) ** c2 + c3)
-    t2v = 233.0 * (1.0 - norm_c1 - norm_c4) / (
-        (lv / 0.046) ** 2 + (0.046 / lv) ** 2 + 90.0
-    )
+    t2v = 233.0 * (1.0 - norm_c1 - norm_c4) / ((lv / 0.046) ** 2 + (0.046 / lv) ** 2 + 90.0)
     t3v = c4 / ((lv / 0.2175) ** 2 + (0.2175 / lv) ** 2 - 1.95)
     a_v = t1v + t2v + t3v
     return np.clip(a_lam / a_v, 0.0, None)
@@ -61,17 +57,15 @@ class TestReferenceValues:
     """Verify against independent numpy implementation of Markov+2025 Eq. 1."""
 
     def test_default_params(self):
-        ref = _reference_li08(
-            np.array(WAVS), DEFAULT_C1, DEFAULT_C2, DEFAULT_C3, DEFAULT_C4
-        )
+        ref = _reference_li08(np.array(WAVS), DEFAULT_C1, DEFAULT_C2, DEFAULT_C3, DEFAULT_C4)
         tng = np.array(li08(WAVS))
         np.testing.assert_allclose(tng, ref, rtol=1e-10)
 
     @pytest.mark.parametrize(
         "c1,c2,c3,c4",
         [
-            (5.0, 5.5, 1.5, 0.0),   # SMC-like (steep, no bump)
-            (3.5, 2.5, 3.0, 0.0),   # Calzetti-like (flat, no bump)
+            (5.0, 5.5, 1.5, 0.0),  # SMC-like (steep, no bump)
+            (3.5, 2.5, 3.0, 0.0),  # Calzetti-like (flat, no bump)
             (6.0, 4.0, 2.0, 0.08),  # Strong bump
             (8.0, 3.0, 1.0, 0.02),  # Arbitrary
         ],
@@ -122,14 +116,19 @@ class TestPhysicalProperties:
         idx_2175 = np.argmin(np.abs(np.array(wavs) - 2175.0))
         assert k_bump[idx_2175] > k_flat[idx_2175]
 
-    def test_steeper_with_higher_c2(self):
-        """With default parameters, t2 dominates; higher c2 reduces k(UV)/k(V) slightly."""
+    def test_higher_c2_reduces_uv_ratio(self):
+        """Higher c2 reduces k(UV)/k(V) because t1 collapses at 1500 A.
+
+        The t1 Drude denominator grows as (1500/800)^c2, so increasing c2 from
+        2.5 to 5.5 drops t1(1500 A) from ~0.85 to ~0.18. The t2 far-UV term
+        barely changes. Net: k(1500 A)/k(5500 A) decreases (~3.1 -> ~2.5).
+        """
         wavs = jnp.array([1500.0, 5500.0])
-        k_flat = li08(wavs, dust_c2=2.5)
-        k_steep = li08(wavs, dust_c2=5.5)
-        ratio_flat = float(k_flat[0] / k_flat[1])
-        ratio_steep = float(k_steep[0] / k_steep[1])
-        assert ratio_steep < ratio_flat
+        k_low_c2 = li08(wavs, dust_c2=2.5)
+        k_high_c2 = li08(wavs, dust_c2=5.5)
+        ratio_low = float(k_low_c2[0] / k_low_c2[1])
+        ratio_high = float(k_high_c2[0] / k_high_c2[1])
+        assert ratio_high < ratio_low
 
 
 class TestJAXCompatibility:

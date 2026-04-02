@@ -199,9 +199,7 @@ def precompute_photometry(
             integrand = ssp_on_filt * ft_np[None, None, :] * fw_np[None, None, :]
             num = _np_trapezoid(integrand, fw_np, axis=-1)
             ssp_phot_flat[:, :, f_idx] = num / max(denom, 1e-30)
-        ssp_phot = jnp.array(
-            ssp_phot_flat.reshape(n_met, n_alpha, n_age, n_filters)
-        )
+        ssp_phot = jnp.array(ssp_phot_flat.reshape(n_met, n_alpha, n_age, n_filters))
     else:
         n_met, n_age, _ = ssp_flux_np.shape
         ssp_phot_np = np.zeros((n_met, n_age, n_filters))

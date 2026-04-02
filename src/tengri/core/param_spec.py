@@ -266,22 +266,19 @@ _CHEM_EVOL_PARAMS = {
         Fixed(0.03),
     ),
     "chem_eta_outflow": (
-        "Mass loading factor (Mdot_out / SFR). "
-        "0 = closed box, >0 = leaky box with outflows.",
+        "Mass loading factor (Mdot_out / SFR). 0 = closed box, >0 = leaky box with outflows.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         Fixed(0.0),
     ),
     "chem_f_gas_init": (
-        "Initial gas fraction at earliest cosmic time. "
-        "Default 0.9 (galaxy starts gas-dominated).",
+        "Initial gas fraction at earliest cosmic time. Default 0.9 (galaxy starts gas-dominated).",
         lambda lo, hi: lo > 0 and hi <= 1,
         "must be in (0, 1]",
         Fixed(0.9),
     ),
     "chem_return_frac": (
-        "Stellar mass return fraction (instantaneous recycling). "
-        "Default 0.4 for Chabrier IMF.",
+        "Stellar mass return fraction (instantaneous recycling). Default 0.4 for Chabrier IMF.",
         lambda lo, hi: lo >= 0 and hi < 1,
         "must be in [0, 1)",
         Fixed(0.4),

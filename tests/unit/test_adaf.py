@@ -11,6 +11,7 @@ jax.config.update("jax_enable_x64", True)
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def wavelength():
     """Broad wavelength grid from radio (1 cm) to hard X-ray (1 A)."""

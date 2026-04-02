@@ -401,10 +401,7 @@ _register(
         settings={},
         internal_param_map={
             "sfh_cont_log_total_mass": ("log_total_mass", 1.0, 0.0),
-            **{
-                f"sfh_cont_ratio_{i}": (f"ratio_{i}", 1.0, 0.0)
-                for i in range(6)
-            },
+            **{f"sfh_cont_ratio_{i}": (f"ratio_{i}", 1.0, 0.0) for i in range(6)},
         },
         composition_type="additive",
     )
@@ -435,10 +432,7 @@ _register(
         settings={},
         internal_param_map={
             "sfh_dir_log_total_mass": ("log_total_mass", 1.0, 0.0),
-            **{
-                f"sfh_dir_z_{i}": (f"z_frac_{i}", 1.0, 0.0)
-                for i in range(6)
-            },
+            **{f"sfh_dir_z_{i}": (f"z_frac_{i}", 1.0, 0.0) for i in range(6)},
         },
         composition_type="additive",
     )

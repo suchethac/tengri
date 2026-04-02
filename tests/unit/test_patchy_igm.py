@@ -60,7 +60,10 @@ class TestPatchyIGM:
         lya_obs = 1215.67 * (1.0 + z)  # ~9722.5 A
 
         t = igm_transmission_patchy(
-            wave_obs_lya_region, z, x_HI=1.0, R_bubble=0.5,
+            wave_obs_lya_region,
+            z,
+            x_HI=1.0,
+            R_bubble=0.5,
         )
 
         # Redward of Lya: significant absorption from damping wing
@@ -83,7 +86,10 @@ class TestPatchyIGM:
 
         t_standard = igm_transmission(wave_obs, z)
         t_patchy = igm_transmission_patchy(
-            wave_obs, z, x_HI=0.5, R_bubble=1.0,
+            wave_obs,
+            z,
+            x_HI=0.5,
+            R_bubble=1.0,
         )
 
         # Near rest 1300 A (obs ~10400 A), patchy should show more absorption
@@ -99,10 +105,16 @@ class TestPatchyIGM:
 
         z = 7.0
         t_small = igm_transmission_patchy(
-            wave_obs_lya_region, z, x_HI=0.5, R_bubble=0.5,
+            wave_obs_lya_region,
+            z,
+            x_HI=0.5,
+            R_bubble=0.5,
         )
         t_large = igm_transmission_patchy(
-            wave_obs_lya_region, z, x_HI=0.5, R_bubble=5.0,
+            wave_obs_lya_region,
+            z,
+            x_HI=0.5,
+            R_bubble=5.0,
         )
 
         # Larger bubble -> more transmission (less absorption)
@@ -116,7 +128,10 @@ class TestPatchyIGM:
         for z in [3.0, 6.0, 8.0, 10.0]:
             for x_hi in [0.0, 0.3, 0.7, 1.0]:
                 t = igm_transmission_patchy(
-                    wave_obs_broad, z, x_HI=x_hi, R_bubble=1.0,
+                    wave_obs_broad,
+                    z,
+                    x_HI=x_hi,
+                    R_bubble=1.0,
                 )
                 assert jnp.all(t >= 0.0), f"T < 0 at z={z}, x_HI={x_hi}"
                 assert jnp.all(t <= 1.0 + 1e-10), f"T > 1 at z={z}, x_HI={x_hi}"
@@ -134,10 +149,16 @@ class TestPatchyIGM:
 
         z = 7.0
         t_low = igm_transmission_patchy(
-            wave_obs_lya_region, z, x_HI=0.1, R_bubble=1.0,
+            wave_obs_lya_region,
+            z,
+            x_HI=0.1,
+            R_bubble=1.0,
         )
         t_high = igm_transmission_patchy(
-            wave_obs_lya_region, z, x_HI=0.8, R_bubble=1.0,
+            wave_obs_lya_region,
+            z,
+            x_HI=0.8,
+            R_bubble=1.0,
         )
 
         # Integrated transmission should decrease with x_HI
@@ -170,7 +191,10 @@ class TestPatchyIGMJitGrad:
         def _loss(x_hi):
             return jnp.sum(
                 igm_transmission_patchy(
-                    wave_obs_lya_region, 7.0, x_HI=x_hi, R_bubble=1.0,
+                    wave_obs_lya_region,
+                    7.0,
+                    x_HI=x_hi,
+                    R_bubble=1.0,
                 )
             )
 
@@ -186,7 +210,10 @@ class TestPatchyIGMJitGrad:
         def _loss(r_bubble):
             return jnp.sum(
                 igm_transmission_patchy(
-                    wave_obs_lya_region, 7.0, x_HI=0.5, R_bubble=r_bubble,
+                    wave_obs_lya_region,
+                    7.0,
+                    x_HI=0.5,
+                    R_bubble=r_bubble,
                 )
             )
 

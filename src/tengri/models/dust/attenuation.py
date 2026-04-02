@@ -411,37 +411,25 @@ def li08(
     lam = wavelength / 1e4  # Angstrom -> micron
 
     # Term 1: UV/optical continuum
-    t1 = dust_c1 / (
-        (lam / 0.08) ** dust_c2 + (0.08 / lam) ** dust_c2 + dust_c3
-    )
+    t1 = dust_c1 / ((lam / 0.08) ** dust_c2 + (0.08 / lam) ** dust_c2 + dust_c3)
 
     # Normalization constant for term 2 (ensures A_V continuity)
-    norm_c1 = dust_c1 / (6.88 ** dust_c2 + 0.145 ** dust_c2 + dust_c3)
+    norm_c1 = dust_c1 / (6.88**dust_c2 + 0.145**dust_c2 + dust_c3)
     norm_c4 = dust_c4 / 4.60
 
     # Term 2: Far-UV rise
-    t2 = 233.0 * (1.0 - norm_c1 - norm_c4) / (
-        (lam / 0.046) ** 2 + (0.046 / lam) ** 2 + 90.0
-    )
+    t2 = 233.0 * (1.0 - norm_c1 - norm_c4) / ((lam / 0.046) ** 2 + (0.046 / lam) ** 2 + 90.0)
 
     # Term 3: 2175 Angstrom UV bump
-    t3 = dust_c4 / (
-        (lam / 0.2175) ** 2 + (0.2175 / lam) ** 2 - 1.95
-    )
+    t3 = dust_c4 / ((lam / 0.2175) ** 2 + (0.2175 / lam) ** 2 - 1.95)
 
     a_lam_over_av = t1 + t2 + t3
 
     # Evaluate at V-band (5500 A = 0.55 um) for normalization to k(5500)=1
     lam_v = 0.55
-    t1_v = dust_c1 / (
-        (lam_v / 0.08) ** dust_c2 + (0.08 / lam_v) ** dust_c2 + dust_c3
-    )
-    t2_v = 233.0 * (1.0 - norm_c1 - norm_c4) / (
-        (lam_v / 0.046) ** 2 + (0.046 / lam_v) ** 2 + 90.0
-    )
-    t3_v = dust_c4 / (
-        (lam_v / 0.2175) ** 2 + (0.2175 / lam_v) ** 2 - 1.95
-    )
+    t1_v = dust_c1 / ((lam_v / 0.08) ** dust_c2 + (0.08 / lam_v) ** dust_c2 + dust_c3)
+    t2_v = 233.0 * (1.0 - norm_c1 - norm_c4) / ((lam_v / 0.046) ** 2 + (0.046 / lam_v) ** 2 + 90.0)
+    t3_v = dust_c4 / ((lam_v / 0.2175) ** 2 + (0.2175 / lam_v) ** 2 - 1.95)
     a_v_over_av = t1_v + t2_v + t3_v
 
     # Return k(lambda) = A_lambda/A_V normalized so k(5500 A) = 1

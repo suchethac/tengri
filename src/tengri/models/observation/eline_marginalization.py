@@ -123,7 +123,7 @@ def marginalize_emission_lines(
     residual: jnp.ndarray,
     noise: jnp.ndarray,
     design_matrix: jnp.ndarray,
-    prior_variance: jnp.ndarray = jnp.array(1e10),
+    prior_variance: jnp.ndarray = None,
 ) -> tuple:
     """Analytically marginalize emission-line amplitudes.
 
@@ -151,6 +151,8 @@ def marginalize_emission_lines(
     a_cov : array, shape (n_lines, n_lines)
         Posterior covariance of line amplitudes.
     """
+    if prior_variance is None:
+        prior_variance = jnp.array(1e10)
     n_lines = design_matrix.shape[1]
 
     # Inverse noise variance, shape (n_pix,)
@@ -186,7 +188,7 @@ def marginalize_emission_lines(
     # Log-determinant correction:
     # 0.5 * (ln|Sigma_a| - ln|Lambda|)
     # = 0.5 * (slogdet(Sigma_a) - sum(ln(prior_variance)))
-    sign, logdet_sigma = jnp.linalg.slogdet(a_cov)
+    _, logdet_sigma = jnp.linalg.slogdet(a_cov)
     log_det_correction = logdet_sigma - jnp.sum(jnp.log(prior_variance))
 
     ln_l_marg = -0.5 * chi2_marg - 0.5 * prior_penalty + 0.5 * log_det_correction

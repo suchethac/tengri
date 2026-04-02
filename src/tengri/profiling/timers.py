@@ -37,7 +37,8 @@ from __future__ import annotations
 import functools
 import threading
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # JAX sync helper
@@ -324,16 +325,18 @@ class OperationTimers:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for name, data in rows:
-                writer.writerow({
-                    "operation": name,
-                    "cum_time_s": f"{data['cum_time']:.6f}",
-                    "count": data["count"],
-                    "mean_us": f"{data['mean_us']:.1f}",
-                    "min_us": f"{data['min_us']:.1f}",
-                    "max_us": f"{data['max_us']:.1f}",
-                    "compile_us": f"{data['compile_us']:.1f}",
-                    "source": data["source"],
-                })
+                writer.writerow(
+                    {
+                        "operation": name,
+                        "cum_time_s": f"{data['cum_time']:.6f}",
+                        "count": data["count"],
+                        "mean_us": f"{data['mean_us']:.1f}",
+                        "min_us": f"{data['min_us']:.1f}",
+                        "max_us": f"{data['max_us']:.1f}",
+                        "compile_us": f"{data['compile_us']:.1f}",
+                        "source": data["source"],
+                    }
+                )
 
     def summary(self, top_n: int = 20) -> str:
         """Human-readable summary table.
@@ -355,15 +358,15 @@ class OperationTimers:
         total_us = sum(d["cum_time"] for _, d in items) * 1e6
 
         lines = []
-        lines.append(f"{'Operation':<40s} {'Mean (μs)':>10s} {'Count':>6s} "
-                      f"{'% Total':>8s} {'Compile':>10s} {'Source':>8s}")
+        lines.append(
+            f"{'Operation':<40s} {'Mean (μs)':>10s} {'Count':>6s} "
+            f"{'% Total':>8s} {'Compile':>10s} {'Source':>8s}"
+        )
         lines.append("-" * 86)
 
         for name, data in items:
             pct = (data["cum_time"] * 1e6 / total_us * 100) if total_us > 0 else 0
-            compile_str = (
-                f"{data['compile_us']:.0f} μs" if data["compile_us"] > 0 else "—"
-            )
+            compile_str = f"{data['compile_us']:.0f} μs" if data["compile_us"] > 0 else "—"
             lines.append(
                 f"  {name:<38s} {data['mean_us']:>8.1f} μs {data['count']:>6d} "
                 f"{pct:>7.1f}% {compile_str:>10s} {data['source']:>8s}"

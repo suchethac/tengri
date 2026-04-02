@@ -649,9 +649,7 @@ class TestWG00GeometriesReference:
         t_dusty = float(wg00_dusty(wave, tau_v=tau_v, law="cardelli", n_clumps=10.0)[0])
 
         # Shell < Cloudy always holds. Dusty vs Cloudy depends on n_clumps.
-        assert t_shell < t_cloudy, (
-            f"Expected Shell ({t_shell:.4f}) < Cloudy ({t_cloudy:.4f})"
-        )
+        assert t_shell < t_cloudy, f"Expected Shell ({t_shell:.4f}) < Cloudy ({t_cloudy:.4f})"
 
     def test_cloudy_transparent_at_low_tau(self) -> None:
         """Cloudy slab should approach T=1 at very low optical depth."""

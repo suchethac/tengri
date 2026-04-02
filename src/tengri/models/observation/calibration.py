@@ -248,17 +248,17 @@ def marginalize_calibration(
 
     # Residual vector: r_j = sum_i [T_j(x_i) * m(x_i) * (d_i - m_i) / sigma_i^2]
     residual = obs_flux - model_flux
-    rhs = jnp.sum(basis * model_flux[jnp.newaxis, :] * residual[jnp.newaxis, :]
-                   * inv_var[jnp.newaxis, :], axis=1)  # (n_poly,)
+    rhs = jnp.sum(
+        basis * model_flux[jnp.newaxis, :] * residual[jnp.newaxis, :] * inv_var[jnp.newaxis, :],
+        axis=1,
+    )  # (n_poly,)
 
     # Solve for MAP coefficients: A c_hat = rhs
     c_hat = jax.numpy.linalg.solve(a_matrix, rhs)
 
     # Posterior covariance Sigma_post = A^{-1}
     # For c_hat_err we need diag(A^{-1}), computed via solve against identity
-    sigma_post = jax.numpy.linalg.solve(
-        a_matrix, jnp.eye(a_matrix.shape[0])
-    )
+    sigma_post = jax.numpy.linalg.solve(a_matrix, jnp.eye(a_matrix.shape[0]))
     c_hat_err = jnp.sqrt(jnp.maximum(jnp.diag(sigma_post), 0.0))
 
     # --- Marginalized log-likelihood ---
@@ -281,9 +281,8 @@ def marginalize_calibration(
     n_wave = wavelength.shape[0]
     log_norm = -0.5 * n_wave * jnp.log(2.0 * jnp.pi) - jnp.sum(jnp.log(obs_err))
 
-    log_likelihood_marginal = (
-        log_norm
-        - 0.5 * (chi2 + prior_penalty - log_det_sigma_post + log_det_lambda)
+    log_likelihood_marginal = log_norm - 0.5 * (
+        chi2 + prior_penalty - log_det_sigma_post + log_det_lambda
     )
 
     return log_likelihood_marginal, c_hat, c_hat_err

@@ -321,8 +321,8 @@ fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 alphas = [-0.5, -1.0, -1.5]
 alpha_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"]]
 for alpha, c in zip(alphas, alpha_colors):
-    l = np.asarray(powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_alpha=alpha))
-    axes[0].loglog(wave_um, l, color=c, lw=1.8, label=rf"$\alpha={alpha}$")
+    lnu = np.asarray(powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_alpha=alpha))
+    axes[0].loglog(wave_um, lnu, color=c, lw=1.8, label=rf"$\alpha={alpha}$")
 
 axes[0].set(
     xlabel=r"Wavelength [$\mu$m]",
@@ -336,10 +336,10 @@ axes[0].legend(fontsize=8)
 t_maxs = [1e4, 5e4, 1e5, 1e6]
 t_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
 for t_max, c in zip(t_maxs, t_colors):
-    l = np.asarray(powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_alpha=-1.0, agn_T_max=t_max))
+    lnu = np.asarray(powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_alpha=-1.0, agn_T_max=t_max))
     axes[1].loglog(
         wave_um,
-        l * nu_arr,
+        lnu * nu_arr,
         color=c,
         lw=1.8,
         label=rf"$T_{{\rm max}}=10^{{{np.log10(t_max):.0f}}}$ K",
@@ -366,12 +366,12 @@ fig, axes = plt.subplots(2, 2, figsize=(10, 7.5))
 log_mbhs = [6.0, 7.0, 8.0, 9.0]
 mbh_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
 for log_mbh, c in zip(log_mbhs, mbh_colors):
-    l = np.asarray(
+    lnu = np.asarray(
         multicolor_disc(wavelength, agn_log_lbol=44.0, agn_log_mbh=log_mbh, agn_log_ledd=-1.0)
     )
     axes[0, 0].loglog(
         wave_um,
-        l * nu_arr,
+        lnu * nu_arr,
         color=c,
         lw=1.8,
         label=rf"$M_{{\rm BH}}=10^{{{log_mbh:.0f}}}\ M_\odot$",
@@ -388,12 +388,12 @@ axes[0, 0].legend(fontsize=7)
 log_ledds = [-2.0, -1.0, -0.5, 0.0]
 ledd_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
 for log_ledd, c in zip(log_ledds, ledd_colors):
-    l = np.asarray(
+    lnu = np.asarray(
         multicolor_disc(wavelength, agn_log_lbol=44.0, agn_log_mbh=8.0, agn_log_ledd=log_ledd)
     )
     axes[0, 1].loglog(
         wave_um,
-        l * nu_arr,
+        lnu * nu_arr,
         color=c,
         lw=1.8,
         label=rf"$\log\lambda_{{Edd}}={log_ledd}$",
@@ -410,7 +410,7 @@ axes[0, 1].legend(fontsize=7)
 spins = [0.0, 0.5, 0.9, 0.998]
 spin_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
 for a_spin, c in zip(spins, spin_colors):
-    l = np.asarray(
+    lnu = np.asarray(
         multicolor_disc(
             wavelength,
             agn_log_lbol=44.0,
@@ -419,7 +419,7 @@ for a_spin, c in zip(spins, spin_colors):
             agn_a_spin=a_spin,
         )
     )
-    axes[1, 0].loglog(wave_um, l * nu_arr, color=c, lw=1.8, label=rf"$a={a_spin}$")
+    axes[1, 0].loglog(wave_um, lnu * nu_arr, color=c, lw=1.8, label=rf"$a={a_spin}$")
 axes[1, 0].set(
     xlabel=r"Wavelength [$\mu$m]",
     ylabel=r"$\nu L_\nu$ [arb.]",
@@ -555,7 +555,7 @@ axes[0].legend(fontsize=7)
 f_hards = [0.005, 0.02, 0.05, 0.1]
 fh_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
 for f_hard, c in zip(f_hards, fh_colors):
-    l = np.asarray(
+    lnu = np.asarray(
         kubota_done_disc(
             wave_xray,
             agn_log_lbol=44.0,
@@ -566,7 +566,7 @@ for f_hard, c in zip(f_hards, fh_colors):
     )
     axes[1].loglog(
         wave_xray_um,
-        l * nu_xray,
+        lnu * nu_xray,
         color=c,
         lw=1.8,
         label=rf"$f_{{\rm hard}}={f_hard}$",
@@ -656,7 +656,7 @@ axes[0].legend(fontsize=7)
 r_trs = [30.0, 100.0, 300.0, 1000.0]
 rtr_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
 for r_tr, c in zip(r_trs, rtr_colors):
-    l = np.asarray(
+    lnu = np.asarray(
         adaf_disc(
             wave_xray,
             agn_log_lbol=42.0,
@@ -668,7 +668,7 @@ for r_tr, c in zip(r_trs, rtr_colors):
     )
     axes[1].loglog(
         wave_xray_um,
-        l * nu_xray,
+        lnu * nu_xray,
         color=c,
         lw=1.8,
         label=rf"$R_{{\rm tr}}={r_tr:.0f}\,R_g$",
@@ -704,10 +704,10 @@ for a, c, lb in zip(
     [COLORS["rt"], COLORS["nuts"], COLORS["model"]],
     ["$a=0$", "$a=0.5$", "$a=0.998$"],
 ):
-    l = multicolor_disc(
+    lnu = multicolor_disc(
         wavelength, agn_log_lbol=44.0, agn_log_mbh=8.0, agn_log_ledd=-1.0, agn_a_spin=a
     )
-    axes[0].loglog(wave_um, np.asarray(l * 3e18 / wavelength), color=c, label=lb, lw=1.8)
+    axes[0].loglog(wave_um, np.asarray(lnu * 3e18 / wavelength), color=c, label=lb, lw=1.8)
 axes[0].set(
     xlabel=r"Wavelength [$\mu$m]",
     ylabel=r"$\nu L_\nu$ [arb.]",
@@ -722,10 +722,10 @@ for le, c, lb in zip(
     [COLORS["rt"], COLORS["nuts"], COLORS["model"]],
     [r"$\log\lambda=-2$", r"$\log\lambda=-1$", r"$\log\lambda=-0.5$"],
 ):
-    l = multicolor_disc(
+    lnu = multicolor_disc(
         wavelength, agn_log_lbol=44.0, agn_log_mbh=8.0, agn_log_ledd=le, agn_a_spin=0.0
     )
-    axes[1].loglog(wave_um, np.asarray(l * 3e18 / wavelength), color=c, label=lb, lw=1.8)
+    axes[1].loglog(wave_um, np.asarray(lnu * 3e18 / wavelength), color=c, label=lb, lw=1.8)
 axes[1].set(xlabel=r"Wavelength [$\mu$m]", title="(b) Eddington ratio", xlim=(1e-3, 10))
 axes[1].legend(fontsize=8)
 fig.suptitle("Multi-color disc (Kubota & Done 2018)", fontsize=12, y=1.02)
@@ -841,10 +841,10 @@ if _qsogen_available:
     ebvs = [0.0, 0.1, 0.3, 0.5]
     ebv_colors = [COLORS["truth"], COLORS["rt"], COLORS["nuts"], COLORS["model"]]
     for ebv, c in zip(ebvs, ebv_colors):
-        l = np.asarray(qsogen_sed(wave_qso, agn_log_lbol=45.0, agn_ebv=ebv))
+        lnu = np.asarray(qsogen_sed(wave_qso, agn_log_lbol=45.0, agn_ebv=ebv))
         axes[0, 1].loglog(
             wave_qso_um,
-            l * nu_qso,
+            lnu * nu_qso,
             color=c,
             lw=1.8,
             label=rf"$E(B-V)={ebv}$",
@@ -861,10 +861,10 @@ if _qsogen_available:
     plslp1s = [-1.5, -0.5, -0.349, 0.5]
     plslp1_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
     for plslp1, c in zip(plslp1s, plslp1_colors):
-        l = np.asarray(qsogen_sed(wave_qso, agn_log_lbol=45.0, agn_plslp1=plslp1))
+        lnu = np.asarray(qsogen_sed(wave_qso, agn_log_lbol=45.0, agn_plslp1=plslp1))
         axes[1, 0].loglog(
             wave_qso_um,
-            l * nu_qso,
+            lnu * nu_qso,
             color=c,
             lw=1.8,
             label=rf"$\alpha_1={plslp1}$",
@@ -881,10 +881,10 @@ if _qsogen_available:
     tbbs = [800, 1000, 1240, 1500]
     tbb_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
     for tbb, c in zip(tbbs, tbb_colors):
-        l = np.asarray(qsogen_sed(wave_qso, agn_log_lbol=45.0, agn_tbb=float(tbb)))
+        lnu = np.asarray(qsogen_sed(wave_qso, agn_log_lbol=45.0, agn_tbb=float(tbb)))
         axes[1, 1].loglog(
             wave_qso_um,
-            l * nu_qso,
+            lnu * nu_qso,
             color=c,
             lw=1.8,
             label=rf"$T_{{\rm BB}}={tbb}$ K",
@@ -930,8 +930,8 @@ fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
 temps = [500, 800, 1000, 1500]
 t_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
 for t, c in zip(temps, t_colors):
-    l = np.asarray(simple_torus(wavelength, agn_log_lbol=44.0, agn_T_torus=float(t)))
-    axes[0].loglog(wave_um, l, color=c, lw=1.8, label=rf"$T={t}$ K")
+    lnu = np.asarray(simple_torus(wavelength, agn_log_lbol=44.0, agn_T_torus=float(t)))
+    axes[0].loglog(wave_um, lnu, color=c, lw=1.8, label=rf"$T={t}$ K")
 axes[0].axvline(9.7, color="gray", ls=":", alpha=0.5)
 axes[0].set(
     xlabel=r"Wavelength [$\mu$m]",
@@ -945,8 +945,8 @@ axes[0].legend(fontsize=8)
 taus = [1.0, 3.0, 5.0, 10.0]
 tau_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
 for tau, c in zip(taus, tau_colors):
-    l = np.asarray(simple_torus(wavelength, agn_log_lbol=44.0, agn_tau_torus=tau))
-    axes[1].loglog(wave_um, l, color=c, lw=1.8, label=rf"$\tau_{{9.7}}={tau:.0f}$")
+    lnu = np.asarray(simple_torus(wavelength, agn_log_lbol=44.0, agn_tau_torus=tau))
+    axes[1].loglog(wave_um, lnu, color=c, lw=1.8, label=rf"$\tau_{{9.7}}={tau:.0f}$")
 axes[1].axvline(9.7, color="gray", ls=":", alpha=0.5)
 axes[1].set(
     xlabel=r"Wavelength [$\mu$m]",
@@ -969,8 +969,8 @@ fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
 
 # (a) Vary optical depth
 for tau, c in zip([1.0, 5.0, 10.0], [COLORS["rt"], COLORS["nuts"], COLORS["model"]]):
-    l = np.asarray(two_temperature_torus(wavelength, agn_log_lbol=44.0, agn_tau_torus=tau))
-    axes[0].loglog(wave_um, l, color=c, label=rf"$\tau_{{9.7}}={tau:.0f}$", lw=1.8)
+    lnu = np.asarray(two_temperature_torus(wavelength, agn_log_lbol=44.0, agn_tau_torus=tau))
+    axes[0].loglog(wave_um, lnu, color=c, label=rf"$\tau_{{9.7}}={tau:.0f}$", lw=1.8)
 axes[0].axvline(9.7, color="gray", ls=":", alpha=0.5)
 axes[0].set(
     xlabel=r"Wavelength [$\mu$m]",
@@ -984,8 +984,8 @@ axes[0].legend(fontsize=8)
 for fh, c in zip(
     [0.1, 0.3, 0.5, 0.7], [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
 ):
-    l = np.asarray(two_temperature_torus(wavelength, agn_log_lbol=44.0, agn_frac_hot=fh))
-    axes[1].loglog(wave_um, l, color=c, label=rf"$f_{{\rm hot}}={fh}$", lw=1.8)
+    lnu = np.asarray(two_temperature_torus(wavelength, agn_log_lbol=44.0, agn_frac_hot=fh))
+    axes[1].loglog(wave_um, lnu, color=c, label=rf"$f_{{\rm hot}}={fh}$", lw=1.8)
 axes[1].axvline(9.7, color="gray", ls=":", alpha=0.5)
 axes[1].set(
     xlabel=r"Wavelength [$\mu$m]",
@@ -1021,8 +1021,8 @@ try:
             r"Edge-on ($\cos i=0.1$, Type 2)",
         ],
     ):
-        l = np.asarray(skirtor_fn(wavelength, agn_log_lbol=44.0, agn_frac=1.0, agn_cos_inc=ci))
-        ax.loglog(wave_um, l, color=c, label=lb, lw=1.8)
+        lnu = np.asarray(skirtor_fn(wavelength, agn_log_lbol=44.0, agn_frac=1.0, agn_cos_inc=ci))
+        ax.loglog(wave_um, lnu, color=c, label=lb, lw=1.8)
     ax.set_title("SKIRTOR: inclination dependence (Type 1 to Type 2)")
 except Exception as e:
     print(f"SKIRTOR unavailable ({e}); showing analytic two-T fallback.")
@@ -1038,7 +1038,7 @@ except Exception as e:
             r"Edge-on ($\cos i=0.1$)",
         ],
     ):
-        l = np.asarray(
+        lnu = np.asarray(
             skirtor_analytic(
                 wavelength,
                 agn_log_lbol=44.0,
@@ -1046,7 +1046,7 @@ except Exception as e:
                 agn_cos_inc=ci,
             )
         )
-        ax.loglog(wave_um, l, color=c, label=lb, lw=1.8)
+        ax.loglog(wave_um, lnu, color=c, label=lb, lw=1.8)
     ax.set_title("SKIRTOR analytic approximation: inclination dependence")
 
 ax.axvline(9.7, color="gray", ls=":", alpha=0.5)
@@ -1345,7 +1345,7 @@ for ci, c, lb in zip(
     [COLORS["rt"], COLORS["nuts"], COLORS["model"]],
     ["Type 1 (face-on)", "Intermediate", "Type 2 (edge-on)"],
 ):
-    l = unified_nlr_blr(
+    lnu = unified_nlr_blr(
         wavelength,
         agn_log_lbol=44.0,
         agn_cos_inc=ci,
@@ -1353,7 +1353,7 @@ for ci, c, lb in zip(
         agn_log_mbh=8.0,
         agn_frac=1.0,
     )
-    ax.loglog(wave_um, np.asarray(l * 3e18 / wavelength), color=c, label=lb, lw=1.8)
+    ax.loglog(wave_um, np.asarray(lnu * 3e18 / wavelength), color=c, label=lb, lw=1.8)
 ax.axvline(0.1216, color="gray", ls=":", alpha=0.4)
 ax.axvline(9.7, color="gray", ls=":", alpha=0.4)
 ax.set(
@@ -1384,7 +1384,7 @@ for ci, c, lb in zip(
     [COLORS["rt"], COLORS["nuts"], COLORS["model"]],
     ["Type 1 (face-on, cos i=0.95)", "Intermediate (cos i=0.5)", "Type 2 (edge-on, cos i=0.1)"],
 ):
-    l = np.asarray(
+    lnu = np.asarray(
         unified_nlr_blr(
             wavelength,
             agn_log_lbol=44.0,
@@ -1394,7 +1394,7 @@ for ci, c, lb in zip(
             agn_frac=1.0,
         )
     )
-    axes[0].loglog(wave_um, l * nu_arr, color=c, label=lb, lw=1.8)
+    axes[0].loglog(wave_um, lnu * nu_arr, color=c, label=lb, lw=1.8)
 axes[0].axvline(0.1216, color="gray", ls=":", alpha=0.3)
 axes[0].axvline(9.7, color="gray", ls=":", alpha=0.3)
 axes[0].set(
@@ -1458,7 +1458,7 @@ fig, ax = plt.subplots(figsize=(7, 4))
 ebv_values = [0.0, 0.1, 0.3, 0.5]
 ebv_colors = [COLORS["truth"], COLORS["rt"], COLORS["nuts"], COLORS["model"]]
 for ebv, c in zip(ebv_values, ebv_colors):
-    l = np.asarray(
+    lnu = np.asarray(
         unified_nlr_blr(
             wavelength,
             agn_log_lbol=44.0,
@@ -1471,7 +1471,7 @@ for ebv, c in zip(ebv_values, ebv_colors):
     )
     ax.loglog(
         wave_um,
-        l * nu_arr,
+        lnu * nu_arr,
         color=c,
         lw=1.8,
         label=rf"$E(B-V)_{{\rm polar}}={ebv}$",

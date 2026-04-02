@@ -99,9 +99,7 @@ class TestIGMReionCrossval:
 
         # Close to Lya: very strong absorption
         near_lya = (wave_obs > lya_obs + 50.0) & (wave_obs < lya_obs + 300.0)
-        assert jnp.all(t[near_lya] < 0.8), (
-            "Expected strong absorption near Lya at z=8, x_HI=0.9"
-        )
+        assert jnp.all(t[near_lya] < 0.8), "Expected strong absorption near Lya at z=8, x_HI=0.9"
 
     def test_damping_wing_profile_decays(self):
         """Damping wing absorption decreases with distance from Lya.
@@ -123,6 +121,4 @@ class TestIGMReionCrossval:
         t_far = igm_transmission_patchy(wave_far, z, x_HI=0.5, R_bubble=1.0)
 
         # Near Lya should have more absorption (lower T)
-        assert jnp.mean(t_near) < jnp.mean(t_far), (
-            "Damping wing should be stronger close to Lya"
-        )
+        assert jnp.mean(t_near) < jnp.mean(t_far), "Damping wing should be stronger close to Lya"

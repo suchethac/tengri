@@ -26,19 +26,21 @@ import jax.numpy as jnp
 
 # Rest-frame vacuum wavelengths (Angstrom) for the reference lines.
 # These must be in the same order as the ratio arrays below.
-CLOUDY_LINE_WAVELENGTHS = jnp.array([
-    3727.0,   # [OII] 3726+3729 doublet
-    4101.73,  # H-delta
-    4340.46,  # H-gamma
-    4861.33,  # H-beta (reference)
-    4959.0,   # [OIII] 4959
-    5007.0,   # [OIII] 5007
-    6548.0,   # [NII] 6548
-    6563.0,   # H-alpha
-    6583.0,   # [NII] 6583
-    6716.0,   # [SII] 6716
-    6731.0,   # [SII] 6731
-])
+CLOUDY_LINE_WAVELENGTHS = jnp.array(
+    [
+        3727.0,  # [OII] 3726+3729 doublet
+        4101.73,  # H-delta
+        4340.46,  # H-gamma
+        4861.33,  # H-beta (reference)
+        4959.0,  # [OIII] 4959
+        5007.0,  # [OIII] 5007
+        6548.0,  # [NII] 6548
+        6563.0,  # H-alpha
+        6583.0,  # [NII] 6583
+        6716.0,  # [SII] 6716
+        6731.0,  # [SII] 6731
+    ]
+)
 
 CLOUDY_LINE_NAMES = (
     "[OII]3727",
@@ -56,51 +58,57 @@ CLOUDY_LINE_NAMES = (
 
 # Line ratios relative to Hbeta at solar metallicity, logU = -3.
 # Source: standard CLOUDY HII region models (Byler+2017, Levesque+2010).
-_CLOUDY_SOLAR_LOGU3 = jnp.array([
-    2.50,   # [OII] 3727 / Hbeta
-    0.26,   # H-delta / Hbeta (Case B)
-    0.47,   # H-gamma / Hbeta (Case B)
-    1.00,   # H-beta (reference)
-    0.45,   # [OIII] 4959 / Hbeta
-    1.34,   # [OIII] 5007 / Hbeta
-    0.13,   # [NII] 6548 / Hbeta
-    2.86,   # H-alpha / Hbeta (Case B)
-    0.39,   # [NII] 6583 / Hbeta
-    0.22,   # [SII] 6716 / Hbeta
-    0.16,   # [SII] 6731 / Hbeta
-])
+_CLOUDY_SOLAR_LOGU3 = jnp.array(
+    [
+        2.50,  # [OII] 3727 / Hbeta
+        0.26,  # H-delta / Hbeta (Case B)
+        0.47,  # H-gamma / Hbeta (Case B)
+        1.00,  # H-beta (reference)
+        0.45,  # [OIII] 4959 / Hbeta
+        1.34,  # [OIII] 5007 / Hbeta
+        0.13,  # [NII] 6548 / Hbeta
+        2.86,  # H-alpha / Hbeta (Case B)
+        0.39,  # [NII] 6583 / Hbeta
+        0.22,  # [SII] 6716 / Hbeta
+        0.16,  # [SII] 6731 / Hbeta
+    ]
+)
 
 # Line ratios at sub-solar metallicity (0.2 Zsun), logU = -3.
 # Metal lines are weaker, Balmer ratios unchanged (Case B).
-_CLOUDY_SUBSOLAR_LOGU3 = jnp.array([
-    1.20,   # [OII] — lower at low Z
-    0.26,   # H-delta (Case B, Z-independent)
-    0.47,   # H-gamma (Case B, Z-independent)
-    1.00,   # H-beta
-    0.80,   # [OIII] 4959 — higher at low Z (less cooling)
-    2.40,   # [OIII] 5007 — higher at low Z
-    0.03,   # [NII] 6548 — much weaker at low Z
-    2.86,   # H-alpha (Case B)
-    0.09,   # [NII] 6583 — much weaker at low Z
-    0.10,   # [SII] 6716 — weaker at low Z
-    0.07,   # [SII] 6731 — weaker at low Z
-])
+_CLOUDY_SUBSOLAR_LOGU3 = jnp.array(
+    [
+        1.20,  # [OII] — lower at low Z
+        0.26,  # H-delta (Case B, Z-independent)
+        0.47,  # H-gamma (Case B, Z-independent)
+        1.00,  # H-beta
+        0.80,  # [OIII] 4959 — higher at low Z (less cooling)
+        2.40,  # [OIII] 5007 — higher at low Z
+        0.03,  # [NII] 6548 — much weaker at low Z
+        2.86,  # H-alpha (Case B)
+        0.09,  # [NII] 6583 — much weaker at low Z
+        0.10,  # [SII] 6716 — weaker at low Z
+        0.07,  # [SII] 6731 — weaker at low Z
+    ]
+)
 
 # Line ratios at solar metallicity, logU = -2 (higher ionization).
 # [OIII] is stronger, [NII]/[SII] weaker relative to logU=-3.
-_CLOUDY_SOLAR_LOGU2 = jnp.array([
-    1.50,   # [OII] — lower at high U
-    0.26,   # H-delta (Case B)
-    0.47,   # H-gamma (Case B)
-    1.00,   # H-beta
-    1.10,   # [OIII] 4959 — much stronger at high U
-    3.30,   # [OIII] 5007 — much stronger at high U
-    0.08,   # [NII] 6548 — weaker at high U
-    2.86,   # H-alpha (Case B)
-    0.24,   # [NII] 6583 — weaker at high U
-    0.12,   # [SII] 6716 — weaker at high U
-    0.09,   # [SII] 6731 — weaker at high U
-])
+_CLOUDY_SOLAR_LOGU2 = jnp.array(
+    [
+        1.50,  # [OII] — lower at high U
+        0.26,  # H-delta (Case B)
+        0.47,  # H-gamma (Case B)
+        1.00,  # H-beta
+        1.10,  # [OIII] 4959 — much stronger at high U
+        3.30,  # [OIII] 5007 — much stronger at high U
+        0.08,  # [NII] 6548 — weaker at high U
+        2.86,  # H-alpha (Case B)
+        0.24,  # [NII] 6583 — weaker at high U
+        0.12,  # [SII] 6716 — weaker at high U
+        0.09,  # [SII] 6731 — weaker at high U
+    ]
+)
 
 # Solar metallicity reference: log10(Z/Zsun) = 0
 _LOG_ZSOL = 0.0

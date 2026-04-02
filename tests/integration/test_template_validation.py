@@ -214,7 +214,13 @@ class TestBosaEmission:
         )
 
     def test_energy_scaling(self, bosa_fn):
-        """Output should scale linearly with L_absorbed."""
+        """Output should scale approximately linearly with L_absorbed.
+
+        BOSA templates have a luminosity-dependent SED shape (the L_TIR axis
+        shifts the radiation field and dust temperature distribution), so the
+        ratio is not exactly 2.0. The 8% tolerance reflects this intentional
+        physical non-linearity, not a normalization bug.
+        """
         sed1 = bosa_fn(WAVE_AA, L_absorbed=1e10, dust_log_ssfr=-10.0)
         sed2 = bosa_fn(WAVE_AA, L_absorbed=2e10, dust_log_ssfr=-10.0)
         ratio = jnp.trapezoid(sed2, WAVE_AA) / jnp.trapezoid(sed1, WAVE_AA)

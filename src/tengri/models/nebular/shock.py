@@ -177,9 +177,7 @@ def shock_emission_sed(
     array, shape (n_wave,)
         Shock emission SED in Lsun/Hz.
     """
-    line_lum = _shock_line_luminosities_array(
-        shock_velocity, l_shock_halpha, shock_log_density
-    )
+    line_lum = _shock_line_luminosities_array(shock_velocity, l_shock_halpha, shock_log_density)
 
     sed = jnp.zeros_like(wavelength)
     n_wave = wavelength.shape[0]

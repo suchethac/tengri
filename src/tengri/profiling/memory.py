@@ -17,7 +17,6 @@ import dataclasses
 import resource
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Data containers
 # ---------------------------------------------------------------------------
@@ -54,10 +53,7 @@ class MemoryReport:
         lines = []
         lines.append("MEMORY FOOTPRINT")
         lines.append("=" * 85)
-        lines.append(
-            f"{'Data Structure':<45s} {'Shape':<20s}"
-            f" {'f64 (MB)':>10s} {'f32 (MB)':>10s}"
-        )
+        lines.append(f"{'Data Structure':<45s} {'Shape':<20s} {'f64 (MB)':>10s} {'f32 (MB)':>10s}")
         lines.append("-" * 85)
 
         # Group by category
@@ -71,17 +67,11 @@ class MemoryReport:
                 lines.append(f"\n  [{cat.upper()}]")
             for e in entries:
                 f32_str = f"{e.f32_mb:.3f}" if e.f32_mb is not None else "—"
-                lines.append(
-                    f"  {e.name:<43s} {e.shape:<20s}"
-                    f" {e.f64_mb:>10.3f} {f32_str:>10s}"
-                )
+                lines.append(f"  {e.name:<43s} {e.shape:<20s} {e.f64_mb:>10.3f} {f32_str:>10s}")
 
         lines.append("-" * 85)
         f32_total = f"{self.total_f32_mb:.1f}" if self.total_f32_mb > 0 else "—"
-        lines.append(
-            f"  {'TOTAL':<43s} {'':20s}"
-            f" {self.total_f64_mb:>10.1f} {f32_total:>10s}"
-        )
+        lines.append(f"  {'TOTAL':<43s} {'':20s} {self.total_f64_mb:>10.1f} {f32_total:>10s}")
         lines.append(f"\n  Process RSS: {self.rss_mb:.1f} MB")
         return "\n".join(lines)
 
@@ -94,13 +84,15 @@ class MemoryReport:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for e in self.entries:
-                writer.writerow({
-                    "name": e.name,
-                    "shape": e.shape,
-                    "f64_mb": f"{e.f64_mb:.3f}",
-                    "f32_mb": f"{e.f32_mb:.3f}" if e.f32_mb is not None else "",
-                    "category": e.category,
-                })
+                writer.writerow(
+                    {
+                        "name": e.name,
+                        "shape": e.shape,
+                        "f64_mb": f"{e.f64_mb:.3f}",
+                        "f32_mb": f"{e.f32_mb:.3f}" if e.f32_mb is not None else "",
+                        "category": e.category,
+                    }
+                )
 
     def __repr__(self) -> str:
         return self.summary()
@@ -163,96 +155,116 @@ def profile_memory(model) -> MemoryReport:
 
     # --- SSP data ---
     f64 = _arr_mb(ssp.ssp_flux)
-    entries.append(MemoryEntry(
-        name="SSP templates",
-        shape=_shape_str(ssp.ssp_flux),
-        f64_mb=f64,
-        f32_mb=f64 / 2,
-        category="ssp",
-    ))
+    entries.append(
+        MemoryEntry(
+            name="SSP templates",
+            shape=_shape_str(ssp.ssp_flux),
+            f64_mb=f64,
+            f32_mb=f64 / 2,
+            category="ssp",
+        )
+    )
 
-    entries.append(MemoryEntry(
-        name="SSP wavelength grid",
-        shape=_shape_str(ssp.ssp_wave),
-        f64_mb=_arr_mb(ssp.ssp_wave),
-        f32_mb=_arr_mb(ssp.ssp_wave) / 2,
-        category="ssp",
-    ))
+    entries.append(
+        MemoryEntry(
+            name="SSP wavelength grid",
+            shape=_shape_str(ssp.ssp_wave),
+            f64_mb=_arr_mb(ssp.ssp_wave),
+            f32_mb=_arr_mb(ssp.ssp_wave) / 2,
+            category="ssp",
+        )
+    )
 
-    entries.append(MemoryEntry(
-        name="SSP metallicity grid",
-        shape=_shape_str(ssp.ssp_lgmet),
-        f64_mb=_arr_mb(ssp.ssp_lgmet),
-        category="ssp",
-    ))
+    entries.append(
+        MemoryEntry(
+            name="SSP metallicity grid",
+            shape=_shape_str(ssp.ssp_lgmet),
+            f64_mb=_arr_mb(ssp.ssp_lgmet),
+            category="ssp",
+        )
+    )
 
-    entries.append(MemoryEntry(
-        name="SSP age grid",
-        shape=_shape_str(ssp.ssp_lg_age_gyr),
-        f64_mb=_arr_mb(ssp.ssp_lg_age_gyr),
-        category="ssp",
-    ))
+    entries.append(
+        MemoryEntry(
+            name="SSP age grid",
+            shape=_shape_str(ssp.ssp_lg_age_gyr),
+            f64_mb=_arr_mb(ssp.ssp_lg_age_gyr),
+            category="ssp",
+        )
+    )
 
     # Alpha-enhanced SSPs (4D)
     if hasattr(ssp, "ssp_alpha_fe") and ssp.ssp_alpha_fe is not None:
-        entries.append(MemoryEntry(
-            name="SSP alpha grid",
-            shape=_shape_str(ssp.ssp_alpha_fe),
-            f64_mb=_arr_mb(ssp.ssp_alpha_fe),
-            category="ssp",
-        ))
+        entries.append(
+            MemoryEntry(
+                name="SSP alpha grid",
+                shape=_shape_str(ssp.ssp_alpha_fe),
+                f64_mb=_arr_mb(ssp.ssp_alpha_fe),
+                category="ssp",
+            )
+        )
 
     # --- Precomputed photometry ---
     if model._precomp is not None:
         pc = model._precomp
         f64 = _arr_mb(pc.ssp_phot)
-        entries.append(MemoryEntry(
-            name="Precomp photometry (fixed z)",
-            shape=_shape_str(pc.ssp_phot),
-            f64_mb=f64,
-            f32_mb=f64 / 2,
-            category="precomp",
-        ))
-        if hasattr(pc, "eff_waves_rest") and pc.eff_waves_rest is not None:
-            entries.append(MemoryEntry(
-                name="Effective wavelengths (rest)",
-                shape=_shape_str(pc.eff_waves_rest),
-                f64_mb=_arr_mb(pc.eff_waves_rest),
+        entries.append(
+            MemoryEntry(
+                name="Precomp photometry (fixed z)",
+                shape=_shape_str(pc.ssp_phot),
+                f64_mb=f64,
+                f32_mb=f64 / 2,
                 category="precomp",
-            ))
+            )
+        )
+        if hasattr(pc, "eff_waves_rest") and pc.eff_waves_rest is not None:
+            entries.append(
+                MemoryEntry(
+                    name="Effective wavelengths (rest)",
+                    shape=_shape_str(pc.eff_waves_rest),
+                    f64_mb=_arr_mb(pc.eff_waves_rest),
+                    category="precomp",
+                )
+            )
 
     # --- Precomputed spectroscopy ---
     if hasattr(model, "_spec_precomp") and model._spec_precomp is not None:
         sp = model._spec_precomp
         f64 = _arr_mb(sp.ssp_on_pixels)
-        entries.append(MemoryEntry(
-            name="Precomp spectroscopy",
-            shape=_shape_str(sp.ssp_on_pixels),
-            f64_mb=f64,
-            f32_mb=f64 / 2,
-            category="precomp",
-        ))
+        entries.append(
+            MemoryEntry(
+                name="Precomp spectroscopy",
+                shape=_shape_str(sp.ssp_on_pixels),
+                f64_mb=f64,
+                f32_mb=f64 / 2,
+                category="precomp",
+            )
+        )
 
     # --- Z-table ---
     if hasattr(model, "_ztable") and model._ztable is not None:
         zt = model._ztable
         f64 = _arr_mb(zt.ssp_phot_table)
-        entries.append(MemoryEntry(
-            name="Z-table (redshift interpolation)",
-            shape=_shape_str(zt.ssp_phot_table),
-            f64_mb=f64,
-            f32_mb=f64 / 2,
-            category="precomp",
-        ))
+        entries.append(
+            MemoryEntry(
+                name="Z-table (redshift interpolation)",
+                shape=_shape_str(zt.ssp_phot_table),
+                f64_mb=f64,
+                f32_mb=f64 / 2,
+                category="precomp",
+            )
+        )
 
     # --- Dust age weights ---
     if hasattr(model, "_dust_age_weights") and model._dust_age_weights is not None:
-        entries.append(MemoryEntry(
-            name="Dust age weights (precomp)",
-            shape=_shape_str(model._dust_age_weights),
-            f64_mb=_arr_mb(model._dust_age_weights),
-            category="dust",
-        ))
+        entries.append(
+            MemoryEntry(
+                name="Dust age weights (precomp)",
+                shape=_shape_str(model._dust_age_weights),
+                f64_mb=_arr_mb(model._dust_age_weights),
+                category="dust",
+            )
+        )
 
     # --- Filters ---
     if model.filter_waves is not None:
@@ -260,12 +272,14 @@ def profile_memory(model) -> MemoryReport:
         for fw_i, ft_i in zip(model.filter_waves, model.filter_trans):
             total_filter += _arr_mb(fw_i) + _arr_mb(ft_i)
         n_filt = len(model.filter_waves)
-        entries.append(MemoryEntry(
-            name=f"Filter curves ({n_filt} bands)",
-            shape=f"{n_filt} × ~{len(model.filter_waves[0])} pts",
-            f64_mb=total_filter,
-            category="filter",
-        ))
+        entries.append(
+            MemoryEntry(
+                name=f"Filter curves ({n_filt} bands)",
+                shape=f"{n_filt} × ~{len(model.filter_waves[0])} pts",
+                f64_mb=total_filter,
+                category="filter",
+            )
+        )
 
     # --- Nebular (CUE weights) ---
     neb = getattr(model, "_nebular_backend", None)
@@ -280,12 +294,14 @@ def profile_memory(model) -> MemoryReport:
                 for item in val:
                     if hasattr(item, "nbytes"):
                         cue_total += item.nbytes / 1e6
-        entries.append(MemoryEntry(
-            name="CUE neural emulator weights",
-            shape="(16 sub-nets + cont.)",
-            f64_mb=cue_total,
-            category="nebular",
-        ))
+        entries.append(
+            MemoryEntry(
+                name="CUE neural emulator weights",
+                shape="(16 sub-nets + cont.)",
+                f64_mb=cue_total,
+                category="nebular",
+            )
+        )
 
     return MemoryReport(entries=entries, rss_mb=get_rss_mb())
 

@@ -74,18 +74,18 @@ def continuity_sfh(
     n_bins = len(bin_edges_gyr) - 1
 
     # Collect ratios from kwargs in order
-    log_sfr_ratios = jnp.array([
-        ratio_kwargs[f"ratio_{i}"] for i in range(n_bins - 1)
-    ])
+    log_sfr_ratios = jnp.array([ratio_kwargs[f"ratio_{i}"] for i in range(n_bins - 1)])
 
     # Convert ratios to absolute log-SFR.
     # Oldest bin is the reference (log_sfr = 0). Each younger bin
     # accumulates the sum of ratios from it to the oldest bin:
     #   log_SFR_j = sum(r_k for k = j..N-2)
-    log_sfr = jnp.concatenate([
-        jnp.cumsum(log_sfr_ratios[::-1])[::-1],
-        jnp.array([0.0]),  # oldest bin is reference
-    ])
+    log_sfr = jnp.concatenate(
+        [
+            jnp.cumsum(log_sfr_ratios[::-1])[::-1],
+            jnp.array([0.0]),  # oldest bin is reference
+        ]
+    )
 
     # Normalize to total mass
     bin_widths_yr = jnp.diff(bin_edges_gyr) * 1e9  # Gyr -> yr
@@ -160,10 +160,12 @@ def _stick_breaking(z_fractions: jnp.ndarray) -> jnp.ndarray:
 
     # fractions[j] = cumprod[j] * z[j] for j < N-1
     # fractions[N-1] = cumprod[N-1]
-    fractions = jnp.concatenate([
-        cumprod[:-1] * z_fractions,
-        jnp.array([cumprod[-1]]),
-    ])
+    fractions = jnp.concatenate(
+        [
+            cumprod[:-1] * z_fractions,
+            jnp.array([cumprod[-1]]),
+        ]
+    )
     return fractions
 
 
@@ -208,9 +210,7 @@ def dirichlet_sfh(
     n_bins = len(bin_edges_gyr) - 1
 
     # Collect z_fractions from kwargs in order
-    z_fractions = jnp.array([
-        z_kwargs[f"z_frac_{i}"] for i in range(n_bins - 1)
-    ])
+    z_fractions = jnp.array([z_kwargs[f"z_frac_{i}"] for i in range(n_bins - 1)])
 
     # Clip to (epsilon, 1-epsilon) for numerical stability
     z_fractions = jnp.clip(z_fractions, 1e-6, 1.0 - 1e-6)

@@ -61,9 +61,7 @@ class Observation:
 
     def __post_init__(self):
         if self.photometry is None and self.spectroscopy is None:
-            raise ValueError(
-                "Observation requires at least one of photometry or spectroscopy."
-            )
+            raise ValueError("Observation requires at least one of photometry or spectroscopy.")
 
     # -------------------------------------------------------------------
     # Capability queries
@@ -154,27 +152,21 @@ class Observation:
 
         if self.can_do_photometry:
             if phot is None:
-                raise ValueError(
-                    "Observation has photometry but phot= was not provided."
-                )
+                raise ValueError("Observation has photometry but phot= was not provided.")
             phot = jnp.asarray(phot)
             if phot.shape != (self.n_data_phot,):
                 raise ValueError(
-                    f"phot shape {phot.shape} doesn't match "
-                    f"expected ({self.n_data_phot},)"
+                    f"phot shape {phot.shape} doesn't match expected ({self.n_data_phot},)"
                 )
             arrays.append(phot)
 
         if self.can_do_spectroscopy:
             if spec is None:
-                raise ValueError(
-                    "Observation has spectroscopy but spec= was not provided."
-                )
+                raise ValueError("Observation has spectroscopy but spec= was not provided.")
             spec = jnp.asarray(spec)
             if spec.shape != (self.n_data_spec,):
                 raise ValueError(
-                    f"spec shape {spec.shape} doesn't match "
-                    f"expected ({self.n_data_spec},)"
+                    f"spec shape {spec.shape} doesn't match expected ({self.n_data_spec},)"
                 )
             arrays.append(spec)
 
@@ -264,9 +256,7 @@ class Observation:
         lines.append(f"  Data type  : {self.data_type}")
         lines.append(f"  N data     : {self.n_data}")
         if self.is_joint:
-            lines.append(
-                f"               ({self.n_data_phot} phot + {self.n_data_spec} spec)"
-            )
+            lines.append(f"               ({self.n_data_phot} phot + {self.n_data_spec} spec)")
 
         obs_params = self.get_all_params()
         if obs_params:

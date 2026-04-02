@@ -549,17 +549,11 @@ def _damping_wing_tau(
     # Use soft clipping for differentiability.
     x_safe = jnp.maximum(x_wave, x_bubble + 1e-10)
     tau_wing = (
-        tau_GP
-        * x_HI
-        * lambda_damp
-        / jnp.pi
-        * (1.0 / jnp.maximum(x_bubble, 1e-10) - 1.0 / x_safe)
+        tau_GP * x_HI * lambda_damp / jnp.pi * (1.0 / jnp.maximum(x_bubble, 1e-10) - 1.0 / x_safe)
     )
 
     # Smooth bubble mask: suppress for x < x_bubble (inside bubble)
-    bubble_mask = jax.nn.sigmoid(
-        (x_wave - x_bubble) / jnp.maximum(x_bubble * 0.1, 1e-8)
-    )
+    bubble_mask = jax.nn.sigmoid((x_wave - x_bubble) / jnp.maximum(x_bubble * 0.1, 1e-8))
     tau_wing = tau_wing * bubble_mask
 
     # Only apply redward of Ly-alpha at source (damping wing side)

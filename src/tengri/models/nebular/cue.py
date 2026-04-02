@@ -37,7 +37,7 @@ Notes
 All functions are JIT-compatible and differentiable through JAX.
 """
 
-from typing import NamedTuple
+from typing import ClassVar, NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -650,7 +650,7 @@ class CueBackend:
     # ------------------------------------------------------------------
 
     # Default ionizing spectrum shape (young starburst)
-    _IONSPEC_DEFAULTS = dict(
+    _IONSPEC_DEFAULTS: ClassVar[dict] = dict(
         ionspec_index1=19.7,
         ionspec_index2=5.3,
         ionspec_index3=1.6,
@@ -1038,12 +1038,12 @@ class CueBackend:
 
     def predict_nebular_sed(
         self,
-        ssp_wave: jnp.ndarray = None,
-        ssp_weights: jnp.ndarray = None,
-        ssp_log_ages_yr: jnp.ndarray = None,
-        log_z: float = None,
+        ssp_wave: jnp.ndarray | None = None,
+        ssp_weights: jnp.ndarray | None = None,
+        ssp_log_ages_yr: jnp.ndarray | None = None,
+        log_z: float | None = None,
         neb_logU: float = -3.0,
-        neb_logZ_gas: float = None,
+        neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
         line_sigma_aa: float = 0.0,

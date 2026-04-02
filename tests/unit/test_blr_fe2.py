@@ -65,9 +65,7 @@ class TestFe2PseudoContinuum:
 
     def test_jit_compatible(self, wavelength):
         """Function should be JIT-compilable."""
-        fn = jax.jit(
-            lambda w: _fe2_pseudo_continuum(w, fwhm_kms=3000.0, fe2_strength=1.0)
-        )
+        fn = jax.jit(lambda w: _fe2_pseudo_continuum(w, fwhm_kms=3000.0, fe2_strength=1.0))
         result = fn(wavelength)
         assert result.shape == wavelength.shape
         assert jnp.all(jnp.isfinite(result))
@@ -90,9 +88,7 @@ class TestBlrEmissionWithFe2:
 
     def test_backward_compatible_default(self, wavelength):
         """Default agn_fe2_strength=0.0 should match old behavior."""
-        result_default = blr_emission(
-            wavelength, l_disc_bol_erg=1e45, covering_fraction=0.1
-        )
+        result_default = blr_emission(wavelength, l_disc_bol_erg=1e45, covering_fraction=0.1)
         result_explicit = blr_emission(
             wavelength,
             l_disc_bol_erg=1e45,
@@ -103,12 +99,8 @@ class TestBlrEmissionWithFe2:
 
     def test_fe2_adds_flux(self, wavelength):
         """Enabling Fe II should add flux, never subtract."""
-        result_no_fe2 = blr_emission(
-            wavelength, l_disc_bol_erg=1e45, agn_fe2_strength=0.0
-        )
-        result_with_fe2 = blr_emission(
-            wavelength, l_disc_bol_erg=1e45, agn_fe2_strength=1.0
-        )
+        result_no_fe2 = blr_emission(wavelength, l_disc_bol_erg=1e45, agn_fe2_strength=0.0)
+        result_with_fe2 = blr_emission(wavelength, l_disc_bol_erg=1e45, agn_fe2_strength=1.0)
         # Fe II should add flux in the optical bump region
         mask_opt = (wavelength > 4400.0) & (wavelength < 4700.0)
         assert jnp.all(result_with_fe2[mask_opt] >= result_no_fe2[mask_opt] - 1e-30)
@@ -123,9 +115,7 @@ class TestBlrEmissionWithFe2:
 
     def test_jit_with_fe2(self, wavelength):
         """blr_emission with Fe II should be JIT-compilable."""
-        fn = jax.jit(
-            lambda w: blr_emission(w, l_disc_bol_erg=1e45, agn_fe2_strength=1.0)
-        )
+        fn = jax.jit(lambda w: blr_emission(w, l_disc_bol_erg=1e45, agn_fe2_strength=1.0))
         result = fn(wavelength)
         assert jnp.all(jnp.isfinite(result))
         assert result.shape == wavelength.shape
