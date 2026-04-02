@@ -52,7 +52,7 @@ def make_model_factory(ssp, obs):
             dust_slope=-0.7,
             redshift=0.1,
             stochastic=True,
-            n_grid=64,
+            n_grid=32,  # keep D manageable for hierarchical raytrace
         )
         return Model(spec, ssp, observation=obs)
 
@@ -301,7 +301,9 @@ def main():
     # This script's display code expects the raytrace flat parametrization.
     # Use "raytrace" for publishable results; geovi_flat works too.
     if args.method == "raytrace":
-        fit_kwargs = dict(n_burnin=200, n_steps=2000, n_leapfrog_steps=50, step_size=0.05)
+        # Hierarchical model D ≈ N × D_galaxy + 2 ≫ single-galaxy D~137.
+        # Much smaller step_size needed to stay on the viable side of the acceptance cliff.
+        fit_kwargs = dict(n_burnin=150, n_steps=600, n_leapfrog_steps=20, step_size=0.01)
     else:
         fit_kwargs = dict(n_iterations=50, n_posterior_samples=100)
 
