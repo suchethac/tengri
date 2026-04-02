@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:02.569** total execution time for 21 files **from all galleries**:
+**00:03.169** total execution time for 29 files **from all galleries**:
 
 .. container::
 
@@ -33,10 +33,16 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_auto_examples_advanced_plot_joint_fit.py` (``../examples/advanced/plot_joint_fit.py``)
-     - 00:01.826
+     - 00:01.883
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_inference_plot_hierarchical_convergence.py` (``../examples/inference/plot_hierarchical_convergence.py``)
+     - 00:00.768
      - 0.0
    * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectrum_fit.py` (``../examples/spectroscopy/plot_spectrum_fit.py``)
-     - 00:00.742
+     - 00:00.518
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_gradient_sensitivity.py` (``../examples/advanced/plot_gradient_sensitivity.py``)
      - 00:00.000
@@ -53,7 +59,13 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_templates.py` (``../examples/agn/plot_agn_templates.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_type12.py` (``../examples/agn/plot_agn_type12.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_plot_dust_curves.py` (``../examples/dust/plot_dust_curves.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_plot_dust_emission_models.py` (``../examples/dust/plot_dust_emission_models.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_plot_two_component.py` (``../examples/dust/plot_two_component.py``)
@@ -66,6 +78,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_inference_plot_method_comparison.py` (``../examples/inference/plot_method_comparison.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_diagnostics.py` (``../examples/nebular/plot_bpt_diagnostics.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_nebular_backends.py` (``../examples/nebular/plot_nebular_backends.py``)
@@ -83,6 +98,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_quickstart_plot_sed_components.py` (``../examples/quickstart/plot_sed_components.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_bursty_recovery.py` (``../examples/sfh/plot_bursty_recovery.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_parametric_sfh.py` (``../examples/sfh/plot_parametric_sfh.py``)
      - 00:00.000
      - 0.0
@@ -93,5 +111,11 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_stochastic_sfh.py` (``../examples/sfh/plot_stochastic_sfh.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_wrong_model_trap.py` (``../examples/sfh/plot_wrong_model_trap.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectral_features.py` (``../examples/spectroscopy/plot_spectral_features.py``)
      - 00:00.000
      - 0.0
