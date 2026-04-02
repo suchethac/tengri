@@ -56,3 +56,4 @@ notebooks/*/figures/
 docs/_build/
 docs/_notebooks/
 docs/auto_examples/
+.worktrees/
