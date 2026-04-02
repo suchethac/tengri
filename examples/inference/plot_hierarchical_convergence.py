@@ -55,12 +55,13 @@ TRUE_TAU   = 40.0
 
 
 def make_model(psd_sigma=TRUE_SIGMA, psd_tau_myr=TRUE_TAU):
+    # n_grid=32 keeps per-galaxy D ≈ 36 — feasible for hierarchical raytrace.
+    # Larger n_grid (128) gives D ≈ 820 total for N=6 which hangs.
     spec = ParamSpec(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-        sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-        sfh_tsnorm_skew=Uniform(-3.0, 3.0),
-        sfh_tsnorm_trunc=Uniform(1.0, 10.0),
+        sfh_dpl_alpha=Uniform(0.5, 3.0),
+        sfh_dpl_beta=Uniform(0.3, 2.0),
+        sfh_dpl_tau_gyr=Uniform(1.0, 8.0),
+        sfh_dpl_log_peak_sfr=Uniform(0.0, 1.5),
         sfh_field_psd_sigma=Fixed(psd_sigma),
         sfh_field_psd_tau_myr=Fixed(psd_tau_myr),
         met_logzsol=Uniform(-2.0, 0.2),
@@ -68,7 +69,8 @@ def make_model(psd_sigma=TRUE_SIGMA, psd_tau_myr=TRUE_TAU):
         dust_tau_diff=Uniform(0.0, 1.5),
         dust_slope=Fixed(-0.7),
         redshift=Fixed(0.1),
-        mean_sfh_type=["tsnorm", "field"],
+        stochastic=True,
+        n_grid=32,
     )
     return Model(spec, ssp, observation=obs), spec
 
@@ -98,14 +100,15 @@ hfitter = HierarchicalFitter(
 )
 # raytrace returns psd_sigma / psd_tau_myr directly (standard parametrization).
 # geovi (CFM) uses NIFTy's internal names (psd_fluctuations, psd_loglogavgslope)
-# which require different post-processing — use raytrace for this demo.
+# which require different post-processing — use raytrace for this gallery demo.
+# Step size 0.01 is conservative for the ~230-D hierarchical problem.
 result = hfitter.run(
     "raytrace",
     key=jax.random.PRNGKey(42),
-    n_burnin=100,
-    n_steps=200,
-    n_leapfrog_steps=20,
-    step_size=0.05,
+    n_burnin=50,
+    n_steps=150,
+    n_leapfrog_steps=10,
+    step_size=0.01,
     verbose=False,
 )
 
@@ -128,5 +131,6 @@ for ax, samples, truth, label, unit in [
 
 fig.suptitle(f"Hierarchical PSD Recovery: N = {N_GAL} galaxies", fontsize=11, y=1.02)
 fig.tight_layout()
-plt.savefig("plot_hierarchical_convergence.png", dpi=150, bbox_inches="tight")
-plt.show()
+out = Path(__file__).parent / "plot_hierarchical_convergence.png"
+plt.savefig(out, dpi=150, bbox_inches="tight")
+print(f"Saved: {out}")
