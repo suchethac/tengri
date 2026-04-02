@@ -196,11 +196,10 @@ def _log_qh_from_lacc(l_acc_erg: float, alpha_pl: float) -> float:
 
 
 def agn_nlr_cue(
-    wavelength: jnp.ndarray,
     cue_backend,
     l_acc_erg: float,
     covering_fraction: float = 0.1,
-    gas_logu: float = -3.0,
+    neb_logU: float = -3.0,
     gas_logn: float = 3.0,
     gas_logz: float = 0.0,
     gas_logno: float = 0.0,
@@ -216,16 +215,13 @@ def agn_nlr_cue(
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
-        Rest-frame wavelength grid [Angstrom].  Not directly used by Cue
-        (which returns its own line wavelengths), but kept for API symmetry.
     cue_backend : CueBackend
         Initialized Cue emulator backend with loaded weights.
     l_acc_erg : float
         AGN accretion luminosity [erg s^-1].
     covering_fraction : float
         NLR covering fraction (0 to 1).  Default 0.1.
-    gas_logu : float
+    neb_logU : float
         Gas ionization parameter log10(U).  Default -3.0.
     gas_logn : float
         Gas electron density log10(n_e / cm^-3).  Default 3.0.
@@ -257,7 +253,7 @@ def agn_nlr_cue(
 
     # Step 3: call Cue low-level API
     line_wav, line_lum = cue_backend.predict_nebular_line_luminosities(
-        gas_logu=gas_logu,
+        gas_logu=neb_logU,
         gas_logn=gas_logn,
         gas_logz=gas_logz,
         gas_logno=gas_logno,
@@ -291,20 +287,19 @@ def agn_nlr_cue(
 
 
 def agn_nlr_emission(
-    wavelength: jnp.ndarray,
     backend: str = "cue",
     cue_backend=None,
     l_acc_erg: float = 1e44,
     covering_fraction: float = 0.1,
     alpha_pl: float = -1.7,
-    gas_logu: float = -3.0,
+    neb_logU: float = -3.0,
     gas_logn: float = 3.0,
     gas_logz: float = 0.0,
     gas_logno: float = 0.0,
     gas_logco: float = 0.0,
     ionspec_params: dict | None = None,
     **kwargs,
-) -> jnp.ndarray | tuple[jnp.ndarray, jnp.ndarray]:
+) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Unified AGN NLR emission dispatcher.
 
     Routes to one of the available NLR backends depending on
@@ -312,8 +307,6 @@ def agn_nlr_emission(
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
-        Rest-frame wavelength grid [Angstrom].
     backend : str
         Backend name: ``"cue"`` or ``"feltre"``.
     cue_backend : CueBackend or None
@@ -324,7 +317,7 @@ def agn_nlr_emission(
         NLR covering fraction.  Default 0.1.
     alpha_pl : float
         AGN EUV power-law slope.  Default -1.7.
-    gas_logu : float
+    neb_logU : float
         Gas ionization parameter log10(U) (Cue backend).
     gas_logn : float
         Gas density log10(n_e / cm^-3) (Cue backend).
@@ -357,11 +350,10 @@ def agn_nlr_emission(
                 "Initialize with CueBackend(weights_path)."
             )
         return agn_nlr_cue(
-            wavelength,
             cue_backend=cue_backend,
             l_acc_erg=l_acc_erg,
             covering_fraction=covering_fraction,
-            gas_logu=gas_logu,
+            neb_logU=neb_logU,
             gas_logn=gas_logn,
             gas_logz=gas_logz,
             gas_logno=gas_logno,
