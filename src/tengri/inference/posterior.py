@@ -42,6 +42,16 @@ class Posterior:
         Loss values over iterations (MAP only).
     _model : Model
         Reference to the model (for derived quantities).
+    eline_fluxes : array or None
+        Emission line fluxes. Shape (n_samples, n_lines) for MCMC, or
+        (n_lines,) for MAP. Flux units match the input data.
+    eline_flux_cov : array or None
+        Posterior covariance of line fluxes. Shape (n_samples, n_lines, n_lines)
+        or (n_lines, n_lines).
+    eline_names : tuple or None
+        Line identifiers matching eline_fluxes columns.
+    eline_wavelengths : array or None
+        Rest-frame wavelengths matching eline_fluxes columns (Angstrom).
     """
 
     samples: dict | None
@@ -52,6 +62,10 @@ class Posterior:
     loss_history: jnp.ndarray | None = None
     log_evidence: float | None = None
     _model: object = field(default=None, repr=False)
+    eline_fluxes: jnp.ndarray | None = field(default=None, repr=False)
+    eline_flux_cov: jnp.ndarray | None = field(default=None, repr=False)
+    eline_names: tuple | None = field(default=None, repr=False)
+    eline_wavelengths: jnp.ndarray | None = field(default=None, repr=False)
 
     # -------------------------------------------------------------------
     # Derived quantities
@@ -84,6 +98,163 @@ class Posterior:
                 derived_lists[k].append(v)
 
         return {k: jnp.stack(v) for k, v in derived_lists.items()}
+
+    def line_fluxes(self) -> dict[str, tuple[float, float, float]]:
+        """Emission line flux posterior summaries.
+
+        Returns median and 68% credible interval for each emission line.
+
+        Returns
+        -------
+        dict
+            ``{line_name: (median, lo_68, hi_68)}`` for each emission line.
+            Flux units match the input data. For MAP results, all three
+            values are the same (single-point estimate).
+
+        Raises
+        ------
+        ValueError
+            If no emission line fluxes are available. Set
+            ``eline_mode="marginalized"`` in ``SpectroscopyConfig`` to enable.
+
+        Examples
+        --------
+        ::
+
+            fluxes = result.line_fluxes()
+            ha_median, ha_lo, ha_hi = fluxes["Halpha"]
+        """
+        if self.eline_fluxes is None:
+            raise ValueError(
+                "No emission line fluxes available. "
+                "Set eline_mode='marginalized' or 'fitted' in SpectroscopyConfig."
+            )
+        result = {}
+        for i, name in enumerate(self.eline_names):
+            if self.eline_fluxes.ndim == 1:
+                # MAP: single estimate
+                val = float(self.eline_fluxes[i])
+                result[name] = (val, val, val)
+            else:
+                flux_i = self.eline_fluxes[:, i]
+                lo, med, hi = jnp.percentile(flux_i, jnp.array([16.0, 50.0, 84.0]))
+                result[name] = (float(med), float(lo), float(hi))
+        return result
+
+    def bpt_nii(self) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """BPT-NII ([NII]/Hα vs [OIII]/Hβ) diagram coordinates.
+
+        Returns log10 line ratios for each posterior sample.
+
+        Returns
+        -------
+        log_nii_ha : array (n_samples,) or scalar
+            log10([NII]6584 / Hα)
+        log_oiii_hb : array (n_samples,) or scalar
+            log10([OIII]5007 / Hβ)
+
+        Raises
+        ------
+        ValueError
+            If emission line fluxes are not available or BPT lines are missing.
+
+        Examples
+        --------
+        ::
+
+            x, y = result.bpt_nii()
+            plt.scatter(x, y, alpha=0.3)
+        """
+        if self.eline_fluxes is None:
+            raise ValueError("No emission line fluxes available.")
+        names = list(self.eline_names)
+        required = ["NII_6584", "Halpha", "OIII_5007", "Hbeta"]
+        missing = [n for n in required if n not in names]
+        if missing:
+            raise ValueError(f"BPT lines not in catalog: {missing}")
+
+        def _get(name):
+            idx = names.index(name)
+            if self.eline_fluxes.ndim == 1:
+                return self.eline_fluxes[idx]
+            return self.eline_fluxes[:, idx]
+
+        eps = 1e-30
+        log_nii_ha = jnp.log10(
+            jnp.maximum(_get("NII_6584"), eps) / jnp.maximum(_get("Halpha"), eps)
+        )
+        log_oiii_hb = jnp.log10(
+            jnp.maximum(_get("OIII_5007"), eps) / jnp.maximum(_get("Hbeta"), eps)
+        )
+        return log_nii_ha, log_oiii_hb
+
+    def balmer_decrement(self) -> tuple[float, float, float]:
+        """Observed Hα/Hβ ratio from posterior line fluxes.
+
+        Returns the posterior distribution of the Balmer decrement
+        (Hα/Hβ), which is a direct dust attenuation diagnostic.
+        The intrinsic Case B ratio is 2.86; higher values indicate dust.
+
+        Returns
+        -------
+        tuple
+            ``(median, lo_68, hi_68)`` of Hα/Hβ. For MAP results,
+            all three values are equal.
+
+        Raises
+        ------
+        ValueError
+            If Hα or Hβ fluxes are not available.
+
+        Examples
+        --------
+        ::
+
+            med, lo, hi = result.balmer_decrement()
+            print(f"Ha/Hb = {med:.2f} [{lo:.2f}, {hi:.2f}]")
+            # Intrinsic Case B = 2.86; excess indicates dust attenuation
+        """
+        if self.eline_fluxes is None:
+            raise ValueError("No emission line fluxes available.")
+        names = list(self.eline_names)
+        for n in ["Halpha", "Hbeta"]:
+            if n not in names:
+                raise ValueError(f"Required line '{n}' not in catalog.")
+
+        def _get(name):
+            idx = names.index(name)
+            if self.eline_fluxes.ndim == 1:
+                return self.eline_fluxes[idx]
+            return self.eline_fluxes[:, idx]
+
+        eps = 1e-30
+        ratio = jnp.maximum(_get("Halpha"), eps) / jnp.maximum(_get("Hbeta"), eps)
+        if ratio.ndim == 0:
+            v = float(ratio)
+            return (v, v, v)
+        lo, med, hi = jnp.percentile(ratio, jnp.array([16.0, 50.0, 84.0]))
+        return (float(med), float(lo), float(hi))
+
+    def equivalent_widths(self) -> dict[str, tuple[float, float, float]]:
+        """Rest-frame emission line equivalent widths.
+
+        EW(λ) = F_line / f_cont(λ_line), where f_cont is the continuum
+        flux density at the line center.
+
+        Returns
+        -------
+        dict
+            ``{line_name: (median_EW, lo_68, hi_68)}`` in Angstrom.
+
+        Notes
+        -----
+        Requires ``_model`` to compute the continuum prediction.
+        Not yet implemented — raises ``NotImplementedError``.
+        """
+        raise NotImplementedError(
+            "equivalent_widths() not yet implemented. "
+            "Use line_fluxes() and divide by the continuum model manually."
+        )
 
     # -------------------------------------------------------------------
     # Summary statistics
