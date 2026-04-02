@@ -23,6 +23,7 @@ import dataclasses
 from collections.abc import Sequence
 
 import jax.numpy as jnp
+import numpy as np
 
 # ---------------------------------------------------------------------------
 # Doublet ratio constants (primary / secondary)
@@ -35,6 +36,7 @@ _DOUBLET_RATIOS: dict[tuple[str, str], float] = {
     ("OII_3729", "OII_3726"): 1.3,  # [OII] — density-dependent, fix to typical
     ("NeV_3426", "NeV_3346"): 1.3,  # [NeV]
     ("OII_7330", "OII_7320"): 1.0,  # [OII] NIR doublet
+    ("MgII_2803", "MgII_2796"): 1.0,  # MgII — optically thick limit
     ("SIII_9532", "SIII_9069"): 2.47,  # [SIII]
 }
 
@@ -78,6 +80,7 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool]] = [
     ("NII_6548", 6548.05, "N2", False, False),
     ("Halpha", 6562.80, "H1", True, True),
     ("NII_6584", 6583.45, "N2", False, False),
+    # SII 6717/6731 intentionally unconstrained: ratio is density-sensitive
     ("SII_6717", 6716.44, "S2", False, False),
     ("SII_6731", 6730.81, "S2", False, False),
     # Near-IR lines (7000-10000 Å)
@@ -264,8 +267,10 @@ class LineCatalog:
         ------
         ImportError
             If ``h5py`` is not installed.
+        OSError
+            If the file cannot be opened or read.
         KeyError
-            If the HDF5 file does not contain expected datasets.
+            If required datasets (``lines/names``, ``lines/wavelength``) are missing.
         """
         try:
             import h5py
@@ -501,8 +506,6 @@ class LineCatalog:
         """
         n = self.n_lines
         # Build as a regular numpy array for mutation, then convert
-        import numpy as np
-
         mat = np.eye(n, dtype=float)
 
         constrained_cols: set[int] = set()
@@ -600,12 +603,34 @@ def _parse_cloudy_species(name: str) -> str:
 
 
 def _is_balmer_line(name: str, species: str) -> bool:
-    """Heuristic: True if the line is a hydrogen Balmer/Lyman series member."""
+    """Heuristic: True if the line is a hydrogen Balmer/Lyman series member.
+
+    For H1 species, checks both keyword matching (e.g. "Halpha", "Lya") and
+    wavelength range for CLOUDY-style names (e.g. "H  1 4101.67A").
+    Balmer series: 3646–6563 Å. Lyman series: 912–1216 Å.
+    """
     if species != "H1":
         return False
+
+    # Try simple keyword match first
     balmer_keywords = ("alpha", "beta", "gamma", "delta", "epsilon", "lya", "ly", "ha", "hb")
     name_lower = name.lower()
-    return any(kw in name_lower for kw in balmer_keywords)
+    if any(kw in name_lower for kw in balmer_keywords):
+        return True
+
+    # For CLOUDY-style names, extract wavelength and check range
+    parts = name.strip().split()
+    if len(parts) >= 3:
+        try:
+            # CLOUDY format: "H  1 1215.67A" -> parts[2] = "1215.67A"
+            wave_str = parts[2].rstrip("A").rstrip("a")
+            wave = float(wave_str)
+            # Balmer series (3646–6563 Å) or Lyman series (912–1216 Å)
+            return (3646 <= wave <= 6563) or (912 <= wave <= 1216)
+        except (ValueError, IndexError):
+            pass
+
+    return False
 
 
 def _is_broad_candidate(name: str, species: str) -> bool:
