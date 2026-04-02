@@ -74,7 +74,7 @@ def make_model(psd_sigma=TRUE_SIGMA, psd_tau_myr=TRUE_TAU):
 
 
 N_GAL = 6
-mocks = []
+galaxies = []
 model_gen, spec_gen = make_model()
 for i in range(N_GAL):
     key = jax.random.PRNGKey(i)
@@ -82,16 +82,27 @@ for i in range(N_GAL):
     p["sfh_field_psd_sigma"]  = jnp.array(TRUE_SIGMA)
     p["sfh_field_psd_tau_myr"] = jnp.array(TRUE_TAU)
     m = model_gen.mock(p, snr=10.0, key=key)
-    mocks.append(m)
+    galaxies.append({"flux_obs": m.flux_obs, "noise": m.noise})
+
+
+def model_factory(psd_sigma, psd_tau_myr):
+    return make_model(psd_sigma, psd_tau_myr)[0]
+
 
 # Hierarchical fit over N_GAL galaxies
 hfitter = HierarchicalFitter(
-    mocks,
-    model_factory=lambda: make_model()[0],
+    model_factory,
+    galaxies,
     psd_sigma_prior=(0.1, 4.0),
     psd_tau_prior=(1.0, 300.0),
 )
-result = hfitter.run(n_iterations=8, n_samples=4, n_posterior_samples=300, verbose=False)
+result = hfitter.run(
+    "geovi",
+    key=jax.random.PRNGKey(42),
+    n_iterations=8,
+    n_posterior_samples=300,
+    verbose=False,
+)
 
 sig_s = np.array(result.shared_samples["psd_sigma"])
 tau_s = np.array(result.shared_samples["psd_tau_myr"])
