@@ -24,54 +24,20 @@ References
 
 import jax.numpy as jnp
 
+from tengri.models.agn._phys import (
+    LSUN_ERG as _LSUN_ERG,
+    planck_lnu as _planck_lnu,
+    wavelength_to_nu as _wavelength_to_nu,
+)
+
 # ===================================================================
 # Physical constants (CGS)
 # ===================================================================
 
-_H_PLANCK = 6.62607015e-27  # Planck constant [erg s]
-_K_BOLTZ = 1.380649e-16  # Boltzmann constant [erg K^-1]
-_C_LIGHT = 2.99792458e10  # Speed of light [cm s^-1]
-_LSUN_ERG = 3.828e33  # Solar luminosity [erg s^-1]
-_ANGSTROM_CM = 1e-8  # Angstrom -> cm
 _MICRON_ANGSTROM = 1e4  # Micron -> Angstrom
 
 # Silicate feature wavelength
 _LAMBDA_SI = 9.7 * _MICRON_ANGSTROM  # 9.7 um in Angstrom
-
-
-# ===================================================================
-# Planck function (numerically stable)
-# ===================================================================
-
-
-def _planck_lnu(
-    nu: jnp.ndarray,
-    temperature: float,
-) -> jnp.ndarray:
-    """Planck function B_nu(T) [erg s^-1 cm^-2 Hz^-1 sr^-1].
-
-    Parameters
-    ----------
-    nu : array
-        Frequency [Hz].
-    temperature : float
-        Temperature [K].
-
-    Returns
-    -------
-    array
-        B_nu(T).
-    """
-    t_safe = jnp.maximum(temperature, 1.0)
-    x = _H_PLANCK * nu / (_K_BOLTZ * t_safe)
-    x_clip = jnp.clip(x, 0.0, 500.0)
-    prefactor = 2.0 * _H_PLANCK * nu**3 / _C_LIGHT**2
-    return prefactor / (jnp.exp(x_clip) - 1.0)
-
-
-def _wavelength_to_nu(wavelength_angstrom: jnp.ndarray) -> jnp.ndarray:
-    """Convert wavelength (Angstrom) to frequency (Hz)."""
-    return _C_LIGHT / (wavelength_angstrom * _ANGSTROM_CM)
 
 
 # ===================================================================

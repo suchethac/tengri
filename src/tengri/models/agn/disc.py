@@ -34,60 +34,24 @@ References
 import jax
 import jax.numpy as jnp
 
+from tengri.models.agn._phys import (
+    C_LIGHT as _C_LIGHT,
+    H_PLANCK as _H_PLANCK,
+    K_BOLTZ as _K_BOLTZ,
+    LSUN_ERG as _LSUN_ERG,
+    planck_lnu as _planck_lnu,
+    wavelength_to_nu as _wavelength_to_nu,
+)
+
 # ===================================================================
 # Physical constants (CGS)
 # ===================================================================
 
-_H_PLANCK = 6.62607015e-27  # Planck constant [erg s]
-_K_BOLTZ = 1.380649e-16  # Boltzmann constant [erg K^-1]
-_C_LIGHT = 2.99792458e10  # Speed of light [cm s^-1]
 _SIGMA_SB = 5.670374419e-5  # Stefan-Boltzmann [erg cm^-2 s^-1 K^-4]
-_LSUN_ERG = 3.828e33  # Solar luminosity [erg s^-1]
 _MSUN_G = 1.989e33  # Solar mass [g]
 _G_GRAV = 6.674e-8  # Gravitational constant [cm^3 g^-1 s^-2]
 _SIGMA_T = 6.6524e-25  # Thomson cross section [cm^2]
 _M_PROTON = 1.6726e-24  # Proton mass [g]
-_ANGSTROM_CM = 1e-8  # Angstrom -> cm
-
-
-# ===================================================================
-# Planck function (numerically stable)
-# ===================================================================
-
-
-def _planck_lnu(
-    nu: jnp.ndarray,
-    temperature: float,
-) -> jnp.ndarray:
-    """Planck function B_nu(T) in erg s^-1 cm^-2 Hz^-1 sr^-1.
-
-    Uses log-space exponent to avoid overflow at low T or high nu.
-    Returns 0 where temperature <= 0 (JIT-safe).
-
-    Parameters
-    ----------
-    nu : array
-        Frequency [Hz].
-    temperature : float
-        Temperature [K].
-
-    Returns
-    -------
-    array
-        B_nu(T) [erg s^-1 cm^-2 Hz^-1 sr^-1].
-    """
-    # Clamp temperature to avoid division by zero
-    t_safe = jnp.maximum(temperature, 1.0)
-    x = _H_PLANCK * nu / (_K_BOLTZ * t_safe)
-    # Clip exponent to avoid overflow in exp
-    x_clip = jnp.clip(x, 0.0, 500.0)
-    prefactor = 2.0 * _H_PLANCK * nu**3 / _C_LIGHT**2
-    return prefactor / (jnp.exp(x_clip) - 1.0)
-
-
-def _wavelength_to_nu(wavelength_angstrom: jnp.ndarray) -> jnp.ndarray:
-    """Convert wavelength (Angstrom) to frequency (Hz)."""
-    return _C_LIGHT / (wavelength_angstrom * _ANGSTROM_CM)
 
 
 # ===================================================================
@@ -295,7 +259,9 @@ def multicolor_disc(
     # Use vmap over radii
     def _ring_lnu(r_cm, t_ring, dr_ring):
         b_nu = _planck_lnu(nu, t_ring)  # (n_wave,)
-        area = 2.0 * jnp.pi * r_cm * dr_ring  # [cm^2]
+        # dL_nu = pi * B_nu * dA * cos(i): the pi comes from integrating B_nu cos(theta)
+        # over the hemisphere (Rybicki & Lightman 1979, Eq. 1.6).  dA = 2*pi*r*dr.
+        area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring  # [cm^2 sr]
         return b_nu * area * jnp.maximum(agn_cos_inc, 0.01)
 
     ring_contributions = jax.vmap(_ring_lnu)(r_grid, t_profile, dr)  # (n_radii, n_wave)
@@ -351,12 +317,17 @@ def _warm_comptonization_lnu(
         Modified B_nu [erg s^-1 cm^-2 Hz^-1 sr^-1].
     """
     b_nu = _planck_lnu(nu, temperature)
-    # Comptonization enhancement: smooth transition at nu_warm
-    ratio = nu / jnp.maximum(nu_warm, 1.0)
-    # Only enhance above nu_warm; below it's a standard blackbody
+    # Seed frequency from the LOCAL disc blackbody temperature at this ring radius.
+    # The warm Comptonization zone up-scatters photons from the disc temperature
+    # to the warm electron temperature kT_warm (K&D 2018, MNRAS 480, 1247, Eq. 3).
+    nu_seed = _K_BOLTZ * temperature / _H_PLANCK
+    # Power-law enhancement between nu_seed and nu_warm (soft X-ray cutoff)
+    ratio = nu / jnp.maximum(nu_seed, 1.0)
+    # Cap the enhancement at (nu_warm/nu_seed)^(Gamma-1) to avoid divergence above cutoff
+    max_enh = (nu_warm / jnp.maximum(nu_seed, 1.0)) ** (gamma_warm - 1.0)
     enhancement = jnp.where(
         ratio > 1.0,
-        ratio ** (gamma_warm - 1.0),
+        jnp.minimum(ratio ** (gamma_warm - 1.0), max_enh),
         1.0,
     )
     return b_nu * enhancement
@@ -412,9 +383,14 @@ def beloborodov_gamma_hot(
     """Self-consistent hard X-ray photon index (Beloborodov 1999).
 
     Derives the spectral index of the hot corona from the ratio of
-    dissipated luminosity to seed photon luminosity:
+    dissipated luminosity to seed photon luminosity.
+
+    Kubota & Done (2018, MNRAS 480 1247) Eq. 6 rewrites the Beloborodov
+    (1999, ApJ 510 L123) Compton-amplification result as:
 
         Gamma_hot = (7/3) * (L_diss / L_seed)^{-0.1}
+
+    The exponent -0.1 is the K&D 2018 formulation of Beloborodov (1999).
 
     Parameters
     ----------
@@ -431,10 +407,10 @@ def beloborodov_gamma_hot(
     References
     ----------
     - Beloborodov 1999, ApJ, 510, L123
-    - Kubota & Done 2018, MNRAS, 480, 1247
+    - Kubota & Done 2018, MNRAS, 480, 1247, Eq. 6
     """
     ratio = jnp.clip(l_diss_hot / jnp.maximum(l_seed, 1e-30), 1e-3, 1e3)
-    gamma = (7.0 / 3.0) * ratio ** (-0.1)
+    gamma = (7.0 / 3.0) * ratio ** (-0.1)  # K&D 2018 Eq. 6
     return jnp.clip(gamma, 1.4, 3.0)
 
 
@@ -615,7 +591,8 @@ def kubota_done_disc(
 
     def _outer_ring(r_cm, t_ring, dr_ring):
         b_nu = _planck_lnu(nu, t_ring)
-        area = 2.0 * jnp.pi * r_cm * dr_ring
+        # dL_nu = pi * B_nu * dA * cos(i) (Rybicki & Lightman 1979, Eq. 1.6)
+        area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
         return b_nu * area * jnp.maximum(agn_cos_inc, 0.01)
 
     l_nu_outer = jnp.sum(jax.vmap(_outer_ring)(r_outer, t_outer, dr_outer), axis=0)
@@ -636,7 +613,8 @@ def kubota_done_disc(
 
     def _warm_ring(r_cm, t_ring, dr_ring):
         b_nu_mod = _warm_comptonization_lnu(nu, t_ring, nu_warm, agn_gamma_warm)
-        area = 2.0 * jnp.pi * r_cm * dr_ring
+        # dL_nu = pi * B_nu_mod * dA * cos(i) (Rybicki & Lightman 1979, Eq. 1.6)
+        area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
         return b_nu_mod * area * jnp.maximum(agn_cos_inc, 0.01)
 
     l_nu_warm = jnp.sum(jax.vmap(_warm_ring)(r_warm_grid, t_warm, dr_warm), axis=0)
@@ -781,12 +759,21 @@ def adaf_disc(
     l_adaf_erg = l_bol_erg * adaf_efficiency
 
     # --- ADAF electron temperature ---
-    # T_e ~ 5e9 * delta^0.5 K (Mahadevan 1997, virial modified by delta)
-    t_e = 5e9 * jnp.maximum(agn_adaf_delta, 1e-6) ** 0.5
+    # T_e scales with (delta/m_dot)^0.5 from the electron energy balance.
+    # Mahadevan (1997, ApJ 477 585) Eq. 4-9 give T_e from the coupled
+    # electron-proton energy equations; the key scaling is
+    #   T_e ∝ (δ / ṁ)^0.5 × virial_constant
+    # where ṁ = L/L_Edd.  At m_dot = delta = 1 this recovers ~5×10^9 K.
+    m_dot_dimensionless = jnp.clip(l_edd_ratio, 1e-10, 1.0)
+    t_e = 5e9 * jnp.sqrt(jnp.maximum(agn_adaf_delta, 1e-6) / m_dot_dimensionless)
+    t_e = jnp.clip(t_e, 1e8, 5e11)  # physical range [K]
 
     # --- Synchrotron component ---
-    # Peak frequency scales with BH mass (Mahadevan 1997 Eq. 23)
-    nu_peak_sync = 1e12 * (10.0**agn_log_mbh / 1e8) ** (-0.5)
+    # Peak frequency (Mahadevan 1997 Eq. 24):
+    #   nu_peak ∝ M_BH^{-1/2} * m_dot^{1/2}
+    # The M_BH and m_dot scalings follow directly from nu_c = (3/2)*nu_cyclotron*(T_e/m_e c^2)^2
+    # combined with B ∝ m_dot^{1/2} M_BH^{-1/2} in the ADAF equipartition field.
+    nu_peak_sync = 1e12 * (10.0**agn_log_mbh / 1e8) ** (-0.5) * m_dot_dimensionless**0.5
     # Synchrotron spectrum: nu^(1/3) * exp(-nu/3*nu_peak)
     nu_ratio_sync = nu / jnp.maximum(nu_peak_sync, 1.0)
     sync_shape = nu_ratio_sync ** (1.0 / 3.0) * jnp.exp(-jnp.clip(nu_ratio_sync / 3.0, 0.0, 500.0))
@@ -855,7 +842,8 @@ def adaf_disc(
 
     def _ring_lnu(r_cm, t_ring, dr_ring):
         b_nu = _planck_lnu(nu, t_ring)
-        area = 2.0 * jnp.pi * r_cm * dr_ring
+        # dL_nu = pi * B_nu * dA * cos(i) (Rybicki & Lightman 1979, Eq. 1.6)
+        area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
         return b_nu * area * jnp.maximum(agn_cos_inc, 0.01)
 
     ring_contributions = jax.vmap(_ring_lnu)(r_grid, t_profile, dr)
