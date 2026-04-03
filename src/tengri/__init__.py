@@ -25,7 +25,7 @@ __version__ = "0.1.0"
 
 # --- New high-level API ---
 from tengri.core.mock import MockData, generate_mock
-from tengri.core.model import Model
+from tengri.core.model import Model, PriorPredictive
 from tengri.core.noise import (
     compute_effective_noise,
     compute_std_inv,
@@ -92,6 +92,70 @@ from tengri.models.sps.dsps_wrapper import (
     salaris_mh_from_feh,
 )
 
+
+def posteriors_to_dataframe(results: list, params: list[str] | None = None):
+    """Summarise a list of Posteriors into a pandas DataFrame.
+
+    Requires ``pandas`` (``pip install pandas``).
+
+    Parameters
+    ----------
+    results : list of Posterior
+        Output of ``model.fit_catalog()`` or any list of Posterior objects.
+    params : list of str or None
+        Parameter names to include. Default: all scalar free parameters,
+        excluding ``psd_xi``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per galaxy, columns: ``{param}_median``, ``{param}_lo68``,
+        ``{param}_hi68`` for each requested parameter.
+
+    Examples
+    --------
+    >>> df = tengri.posteriors_to_dataframe(results, params=["met_logzsol", "dust_tau_bc"])
+    """
+    try:
+        import pandas as pd
+    except ImportError:
+        raise ImportError(
+            "posteriors_to_dataframe() requires pandas: pip install pandas"
+        ) from None
+
+    import numpy as np
+
+    rows = []
+    for result in results:
+        row: dict = {}
+
+        if result.samples is None:
+            # MAP: use point estimates
+            for name, val in result.params.items():
+                if name == "psd_xi":
+                    continue
+                if params is not None and name not in params:
+                    continue
+                row[f"{name}_value"] = float(np.mean(np.array(val)))
+        else:
+            # Sampling: use median + 68% CI
+            for name, arr in result.samples.items():
+                if name == "psd_xi":
+                    continue
+                if params is not None and name not in params:
+                    continue
+                arr_np = np.array(arr)
+                if arr_np.ndim != 1:
+                    continue
+                row[f"{name}_median"] = float(np.median(arr_np))
+                row[f"{name}_lo68"] = float(np.percentile(arr_np, 16))
+                row[f"{name}_hi68"] = float(np.percentile(arr_np, 84))
+
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
 __all__ = [
     # High-level API
     "AGEMAX_YR",
@@ -116,6 +180,7 @@ __all__ = [
     "Photometry",
     "Posterior",
     "Prediction",
+    "PriorPredictive",
     "SEDQuantities",
     "SFHQuantities",
     "SSPData",
@@ -146,6 +211,7 @@ __all__ = [
     "load_ssp_data",
     "make_log_age_grid",
     "norm",
+    "posteriors_to_dataframe",
     "psd_drw",
     "resolve_sfh",
     "sample_raytrace",
