@@ -6,6 +6,10 @@ from tengri.models.observation.calibration import (
     chebyshev_basis,
     marginalize_calibration,
 )
+from tengri.models.observation.eline_catalog import (
+    CLOUDY_LINE_NAMES,
+    CLOUDY_LINE_WAVELENGTHS,
+)
 from tengri.models.observation.eline_marginalization import (
     DEFAULT_LINE_NAMES,
     DEFAULT_LINE_WAVELENGTHS,
@@ -14,8 +18,6 @@ from tengri.models.observation.eline_marginalization import (
     predict_with_marginalized_lines,
 )
 from tengri.models.observation.eline_priors import (
-    CLOUDY_LINE_NAMES,
-    CLOUDY_LINE_WAVELENGTHS,
     cloudy_line_priors,
     marginalize_emission_lines_cloudy,
 )

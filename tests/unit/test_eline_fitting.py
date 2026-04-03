@@ -19,14 +19,14 @@ from tengri.models.observation.line_catalog import LineCatalog
 class TestDesignMatrix:
     def test_shape(self):
         wave = jnp.linspace(4000, 7000, 1000)
-        lines = jnp.array([4861.33, 5006.84, 6562.80])
+        lines = jnp.array([4862.68, 5008.24, 6564.61])  # vacuum Hβ, [OIII]5007, Hα
         G = build_eline_design_matrix(wave, lines, 2000.0, 0.0)
         assert G.shape == (1000, 3)
 
     def test_normalized_profiles(self):
         """Each column should integrate to approximately 1."""
         wave = jnp.linspace(4000, 7000, 5000)
-        lines = jnp.array([4861.33, 5006.84, 6562.80])
+        lines = jnp.array([4862.68, 5008.24, 6564.61])  # vacuum Hβ, [OIII]5007, Hα
         G = build_eline_design_matrix(wave, lines, 2000.0, 0.0)
         dlam = float(jnp.mean(jnp.diff(wave)))
         for i in range(3):
@@ -35,7 +35,7 @@ class TestDesignMatrix:
 
     def test_velocity_broadening_widens_profile(self):
         wave = jnp.linspace(6500, 6620, 500)
-        ha = jnp.array([6562.80])
+        ha = jnp.array([6564.61])  # vacuum Hα
         G_narrow = build_eline_design_matrix(wave, ha, 2000.0, 0.0, eline_sigma_kms=0.0)
         G_broad = build_eline_design_matrix(wave, ha, 2000.0, 0.0, eline_sigma_kms=200.0)
         fwhm_narrow = int(jnp.sum(G_narrow[:, 0] > 0.5 * G_narrow[:, 0].max()))
@@ -44,7 +44,7 @@ class TestDesignMatrix:
 
     def test_velocity_offset_shifts_center(self):
         wave = jnp.linspace(6500, 6650, 1000)
-        ha = jnp.array([6562.80])
+        ha = jnp.array([6564.61])  # vacuum Hα
         G_zero = build_eline_design_matrix(wave, ha, 2000.0, 0.0, eline_delta_v_kms=0.0)
         G_red = build_eline_design_matrix(wave, ha, 2000.0, 0.0, eline_delta_v_kms=300.0)
         peak_zero = float(wave[jnp.argmax(G_zero[:, 0])])
@@ -53,16 +53,16 @@ class TestDesignMatrix:
 
     def test_redshift_shifts_lines(self):
         wave = jnp.linspace(9000, 10000, 500)
-        ha = jnp.array([6562.80])
+        ha = jnp.array([6564.61])  # vacuum Hα
         z = 0.5
         G = build_eline_design_matrix(wave, ha, 1000.0, z)
         peak = float(wave[jnp.argmax(G[:, 0])])
-        assert abs(peak - 6562.80 * 1.5) < 20.0
+        assert abs(peak - 6564.61 * 1.5) < 20.0
 
     def test_backward_compatible_4arg_call(self):
         """Old 4-argument call must still work."""
         wave = jnp.linspace(4000, 7000, 500)
-        lines = jnp.array([6562.80])
+        lines = jnp.array([6564.61])  # vacuum Hα
         G = build_eline_design_matrix(wave, lines, 2000.0, 0.0)
         assert G.shape == (500, 1)
 
@@ -106,7 +106,7 @@ class TestDoubletConstraints:
 class TestMarginalization:
     def test_recovers_injected_line(self):
         wave = jnp.linspace(6400, 6700, 500)
-        ha = jnp.array([6562.80])
+        ha = jnp.array([6564.61])  # vacuum Hα
         G = build_eline_design_matrix(wave, ha, 2000.0, 0.0)
         true_flux = jnp.array([5.0])
         continuum = jnp.ones_like(wave) * 10.0
@@ -120,13 +120,24 @@ class TestMarginalization:
         assert abs(float(a_hat[0]) - 5.0) < 0.5
 
     def test_gradient_through_marginalization(self):
+        """Gradient of -ln_L w.r.t. continuum level must be finite and correctly signed.
+
+        Physical check: marginalizing over a line amplitude, the continuum-level
+        gradient must point toward the true continuum.
+        - Under-subtracted (level < truth): residual inflated → increasing level
+          reduces -ln_L → d(-ln_L)/d(level) < 0.
+        - Over-subtracted (level > truth): residual negative → increasing level
+          makes it worse → d(-ln_L)/d(level) > 0.
+        """
         wave = jnp.linspace(6400, 6700, 200)
-        ha = jnp.array([6562.80])
+        ha = jnp.array([6564.61])  # vacuum Hα
         noise_arr = jnp.full_like(wave, 0.1)
-        data = jnp.ones_like(wave)
+
+        G = build_eline_design_matrix(wave, ha, 2000.0, 0.0)
+        # Inject a true Hα signal on top of a flat continuum=1.0
+        data = G @ jnp.array([5.0]) + 1.0
 
         def neg_log_like(level):
-            G = build_eline_design_matrix(wave, ha, 2000.0, 0.0)
             residual = data - level * jnp.ones_like(wave)
             prior_var = jnp.full(1, 100.0**2)
             ln_l, _, _ = marginalize_emission_lines(
@@ -134,12 +145,28 @@ class TestMarginalization:
             )
             return -ln_l
 
-        g = jax.grad(neg_log_like)(1.0)
-        assert jnp.isfinite(g)
+        # At correct continuum, gradient is near zero (minimum of -ln_L)
+        g_at_true = jax.grad(neg_log_like)(1.0)
+        assert jnp.isfinite(g_at_true), f"Non-finite gradient at true continuum: {g_at_true}"
+        assert abs(float(g_at_true)) < 2.0, f"Gradient too large at true continuum: {g_at_true}"
+
+        # Under-subtracted: d(-ln_L)/d(level) < 0
+        g_low = jax.grad(neg_log_like)(0.0)
+        assert jnp.isfinite(g_low), f"Non-finite gradient at under-subtracted level: {g_low}"
+        assert float(g_low) < 0.0, (
+            f"Expected negative gradient when continuum under-subtracted, got {float(g_low):.4f}"
+        )
+
+        # Over-subtracted: d(-ln_L)/d(level) > 0
+        g_high = jax.grad(neg_log_like)(3.0)
+        assert jnp.isfinite(g_high), f"Non-finite gradient at over-subtracted level: {g_high}"
+        assert float(g_high) > 0.0, (
+            f"Expected positive gradient when continuum over-subtracted, got {float(g_high):.4f}"
+        )
 
     def test_jit_compiles(self):
         wave = jnp.linspace(4000, 7000, 500)
-        lines = jnp.array([4861.33, 5006.84, 6562.80])
+        lines = jnp.array([4862.68, 5008.24, 6564.61])  # vacuum Hβ, [OIII]5007, Hα
 
         @jax.jit
         def run(data, noise_arr):

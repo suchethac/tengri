@@ -349,9 +349,9 @@ def build_fused_photometry(model):
         # CSP weights
         age_dt = jnp.concatenate(
             [
-                jnp.array([ssp_ages_yr[1] - ssp_ages_yr[0]]),
+                jnp.array([0.5 * (ssp_ages_yr[1] - ssp_ages_yr[0])]),
                 0.5 * (ssp_ages_yr[2:] - ssp_ages_yr[:-2]),
-                jnp.array([ssp_ages_yr[-1] - ssp_ages_yr[-2]]),
+                jnp.array([0.5 * (ssp_ages_yr[-1] - ssp_ages_yr[-2])]),
             ]
         )
         weights = sfr * age_dt
@@ -589,9 +589,9 @@ def build_fused_spectrum(model):
         # CSP weights
         age_dt = jnp.concatenate(
             [
-                jnp.array([ssp_ages_yr[1] - ssp_ages_yr[0]]),
+                jnp.array([0.5 * (ssp_ages_yr[1] - ssp_ages_yr[0])]),
                 0.5 * (ssp_ages_yr[2:] - ssp_ages_yr[:-2]),
-                jnp.array([ssp_ages_yr[-1] - ssp_ages_yr[-2]]),
+                jnp.array([0.5 * (ssp_ages_yr[-1] - ssp_ages_yr[-2])]),
             ]
         )
         weights = sfr * age_dt
@@ -998,9 +998,9 @@ def build_fused_photometry_ztable(model):
         # CSP weights
         age_dt = jnp.concatenate(
             [
-                jnp.array([ssp_ages_yr[1] - ssp_ages_yr[0]]),
+                jnp.array([0.5 * (ssp_ages_yr[1] - ssp_ages_yr[0])]),
                 0.5 * (ssp_ages_yr[2:] - ssp_ages_yr[:-2]),
-                jnp.array([ssp_ages_yr[-1] - ssp_ages_yr[-2]]),
+                jnp.array([0.5 * (ssp_ages_yr[-1] - ssp_ages_yr[-2])]),
             ]
         )
         weights = sfr * age_dt

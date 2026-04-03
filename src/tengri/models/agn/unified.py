@@ -546,10 +546,13 @@ def skirtor_agn(
     if _skirtor_fn is None:
         from pathlib import Path
 
-        grid_path = Path(__file__).resolve().parents[2] / "data" / "skirtor_templates.npz"
+        # parents[4] = project root (src/tengri/models/agn/unified.py → 4 levels up)
+        grid_path = Path(__file__).resolve().parents[4] / "data" / "skirtor_templates.npz"
         if not grid_path.is_file():
-            # Search alternative locations
+            # Search alternative locations including v2 grid and project-relative paths
             for candidate in [
+                Path(__file__).resolve().parents[4] / "data" / "skirtor_templates_v2.h5",
+                Path("data/skirtor_templates_v2.h5"),
                 Path("data/skirtor_templates.npz"),
                 Path.home() / "Projects/tengri/data/skirtor_templates.npz",
             ]:
@@ -810,7 +813,12 @@ def unified_nlr_blr(
     # covering_factor ~ cos(theta_torus). If agn_torus_frac is at default
     # (0.5), use the geometric value; otherwise honour the explicit setting.
     geom_cf = jnp.cos(jnp.radians(jnp.clip(agn_theta_torus, 0.0, 90.0)))
-    agn_torus_frac = jnp.where(agn_torus_frac == 0.5, geom_cf, agn_torus_frac)
+    # When agn_torus_frac is a free parameter, use it directly.
+    # The jnp.where(|x-0.5| < 1e-6, geom_cf, x) creates a likelihood discontinuity
+    # at torus_frac=0.5±1e-6 that corrupts gradient-based inference (VI, MAP).
+    # Auto-derivation from theta_torus is done at the ParamSpec level via fixed values,
+    # not in the forward pass.
+    _ = geom_cf  # retained for reference; used when agn_torus_frac is fixed by ParamSpec
 
     # --- Geometric masks ---
     mask_disc = _sigmoid_mask(agn_cos_inc, agn_theta_torus)

@@ -508,16 +508,17 @@ class CloudyGridBackend:
 
         # Add emission lines
         if line_sigma_aa > 0:
-            # Gaussian profiles
+            # Gaussian profiles: spread L_line (Lsun) into L_nu (Lsun/Hz).
+            # sigma_nu = sigma_aa * c / lambda^2 converts the wavelength width to frequency.
+            # profile / (sqrt(2π) * sigma_nu) normalises to ∫profile dnu = 1 (units: 1/Hz).
+            # DO NOT multiply by _LSUN_ERG: ll is in Lsun, neb_sed is in Lsun/Hz.
             for j in range(len(line_wave)):
                 lw = line_wave[j]
                 ll = line_lum[j]
-                # Convert line luminosity (Lsun) to Lsun/Hz via Gaussian
-                # sigma_nu = sigma_lambda * c / lambda^2
                 sigma_nu = line_sigma_aa * _C_CGS / (lw * 1e-8) ** 2
                 profile = jnp.exp(-0.5 * ((ssp_wave - lw) / line_sigma_aa) ** 2)
                 profile = profile / (jnp.sqrt(2 * jnp.pi) * sigma_nu)
-                neb_sed = neb_sed + ll * _LSUN_ERG * profile
+                neb_sed = neb_sed + ll * profile  # Lsun * 1/Hz = Lsun/Hz
         else:
             # Delta functions: add to nearest pixel
             # Convert line luminosity to flux density: L_line / delta_nu

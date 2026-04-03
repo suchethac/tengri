@@ -80,6 +80,23 @@ class SpectroscopyConfig:
     eline_broad: bool = False
     eline_broad_fwhm_min_kms: float = 500.0
 
+    def __post_init__(self) -> None:
+        _valid_modes = ("off", "fixed", "marginalized", "fitted")
+        if self.eline_mode not in _valid_modes:
+            raise ValueError(f"eline_mode must be one of {_valid_modes}, got {self.eline_mode!r}")
+        if self.eline_mode == "fitted":
+            raise NotImplementedError(
+                "eline_mode='fitted' (free MCMC line amplitudes) is not yet implemented. "
+                "Use 'marginalized' for analytic marginalization instead."
+            )
+        if self.resolution is not None and not isinstance(self.resolution, (int, float)):
+            res_arr = jnp.asarray(self.resolution)
+            if res_arr.ndim > 0 and res_arr.shape[0] != len(self.wave_obs):
+                raise ValueError(
+                    f"resolution array length {res_arr.shape[0]} does not match "
+                    f"wave_obs length {len(self.wave_obs)}"
+                )
+
     # -------------------------------------------------------------------
     # Properties
     # -------------------------------------------------------------------

@@ -28,7 +28,8 @@ class SSPData(NamedTuple):
     ssp_lg_age_gyr : array, shape (n_age,)
         Log10(age/Gyr) of SSP templates.
     ssp_lgmet : array, shape (n_met,)
-        Log10(Z/Zsun) metallicity grid.
+        log10(Z) metallicity grid (absolute log10 metallicity, NOT log10(Z/Zsun)).
+        Offset from solar: log10(Zsun) ≈ -1.848. See CLAUDE.md conventions.
     ssp_mass_remaining : array, shape (n_met, n_age), optional
         Fraction of formed mass still in living stars + remnants
         at each age and metallicity. Computed from stellar evolution
@@ -137,12 +138,15 @@ def compute_csp_weights(sfr_on_ssp_ages: jnp.ndarray, ssp_ages_yr: jnp.ndarray) 
     array, shape (n_age,)
         Mass formed per age bin (Msun). Sum = total mass formed.
     """
-    # Trapezoidal half-widths for each age bin
+    # Trapezoidal half-widths for each age bin (standard trapezoid rule bin widths).
+    # Endpoint bins use half their one-sided width; interior bins use the average of
+    # the two adjacent spacings. Using full width for endpoints over-weights the
+    # youngest and oldest SSP bins.
     dt = jnp.concatenate(
         [
-            jnp.array([ssp_ages_yr[1] - ssp_ages_yr[0]]),
+            jnp.array([0.5 * (ssp_ages_yr[1] - ssp_ages_yr[0])]),
             0.5 * (ssp_ages_yr[2:] - ssp_ages_yr[:-2]),
-            jnp.array([ssp_ages_yr[-1] - ssp_ages_yr[-2]]),
+            jnp.array([0.5 * (ssp_ages_yr[-1] - ssp_ages_yr[-2])]),
         ]
     )
     return sfr_on_ssp_ages * dt

@@ -11,6 +11,12 @@ import jax.numpy as jnp
 import pytest
 
 from tengri.models.agn.disc import (
+    _eddington_luminosity,
+    _gravitational_radius,
+    _isco_radius,
+    _l_seed_geometric,
+    _nt_l_diss_analytic,
+    _r_hot_bisect,
     beloborodov_gamma_hot,
     compute_l2500,
     kubota_done_disc,
@@ -212,3 +218,123 @@ class TestKubotaDoneSelfConsistent:
         assert jnp.all(jnp.isfinite(ratio_low))
         # The SEDs should differ in the X-ray band
         assert not jnp.allclose(ratio_high, ratio_low, atol=1e-15)
+
+
+# ===================================================================
+# _r_hot_bisect: exact K&D 2018 Eq. 2 solve
+# ===================================================================
+
+_SIGMA_SB = 5.670374419e-5  # erg cm^-2 s^-1 K^-4
+
+
+def _make_disc_params(log_mbh=8.0, log_ledd=-1.0, a_spin=0.0):
+    """Return (r_isco_cm, t_in) for the given BH parameters."""
+    import jax.numpy as jnp
+
+    r_g = _gravitational_radius(log_mbh)
+    r_isco_rg = _isco_radius(a_spin)
+    r_isco_cm = r_isco_rg * r_g
+    eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
+    l_edd = _eddington_luminosity(log_mbh)
+    l_edd_ratio = jnp.clip(10.0**log_ledd, 1e-10, 1.0)
+    l_bol = l_edd_ratio * l_edd
+    mdot = l_bol / (eta * 3e10**2)
+    t_in = (
+        3.0
+        * 6.674e-8
+        * 10.0**log_mbh
+        * 2e33
+        * float(mdot)
+        / (8.0 * jnp.pi * _SIGMA_SB * r_isco_cm**3)
+    ) ** 0.25
+    return float(r_isco_cm), float(t_in)
+
+
+class TestRHotBisect:
+    """Regression tests for the exact K&D 2018 Eq. 2 r_hot bisection solver."""
+
+    def test_energy_balance_satisfied(self):
+        """L_diss(r_hot) must equal the target to machine precision."""
+        r_isco, t_in = _make_disc_params()
+        l_edd = float(_eddington_luminosity(8.0))
+        l_target = 0.02 * l_edd  # default f_hard = 0.02
+
+        r_hot = float(_r_hot_bisect(r_isco, t_in, l_target))
+        x_hot = r_hot / r_isco
+        l_check = float(_nt_l_diss_analytic(x_hot, r_isco, t_in))
+
+        # Energy balance must be satisfied to better than 1e-8 relative
+        assert abs(l_check - l_target) / l_target < 1e-8
+
+    def test_r_hot_increases_with_f_hard(self):
+        """Larger f_hard (more corona power) must give larger r_hot."""
+        r_isco, t_in = _make_disc_params()
+        l_edd = float(_eddington_luminosity(8.0))
+
+        r_hot_lo = float(_r_hot_bisect(r_isco, t_in, 0.01 * l_edd))
+        r_hot_hi = float(_r_hot_bisect(r_isco, t_in, 0.05 * l_edd))
+        assert r_hot_hi > r_hot_lo
+
+    def test_r_hot_exceeds_r_isco(self):
+        """r_hot must always be > r_isco for any positive target."""
+        r_isco, t_in = _make_disc_params()
+        l_edd = float(_eddington_luminosity(8.0))
+
+        for f in [0.005, 0.01, 0.02, 0.05]:
+            r_hot = float(_r_hot_bisect(r_isco, t_in, f * l_edd))
+            assert r_hot > r_isco
+
+    def test_finite_and_positive(self):
+        """r_hot must be finite and positive for typical parameters."""
+        import jax.numpy as jnp
+
+        for log_mbh in [7.0, 8.0, 9.0]:
+            for log_ledd in [-2.0, -1.0, -0.5]:
+                r_isco, t_in = _make_disc_params(log_mbh, log_ledd)
+                l_edd = float(_eddington_luminosity(log_mbh))
+                r_hot = _r_hot_bisect(r_isco, t_in, 0.02 * l_edd)
+                assert jnp.isfinite(r_hot)
+                assert r_hot > 0.0
+
+
+class TestLSeedGeometric:
+    """Tests for the geometric L_seed integral (K&D 2018 Eq. 3)."""
+
+    def test_positive_and_finite(self):
+        """L_seed must be positive and finite."""
+        import jax.numpy as jnp
+
+        r_isco, t_in = _make_disc_params()
+        l_edd = float(_eddington_luminosity(8.0))
+        r_hot = float(_r_hot_bisect(r_isco, t_in, 0.02 * l_edd))
+        r_g = float(_gravitational_radius(8.0))
+        r_out = 1000.0 * r_isco  # approximate outer radius for test
+
+        l_seed = _l_seed_geometric(r_isco, r_hot, r_out, t_in)
+        assert jnp.isfinite(l_seed)
+        assert l_seed > 0.0
+
+    def test_l_seed_less_than_disc_bol(self):
+        """L_seed (covering factor < 1) must be less than the disc bolometric."""
+        r_isco, t_in = _make_disc_params()
+        l_edd = float(_eddington_luminosity(8.0))
+        r_hot = float(_r_hot_bisect(r_isco, t_in, 0.02 * l_edd))
+        r_out = 1000.0 * r_isco
+
+        l_seed = float(_l_seed_geometric(r_isco, r_hot, r_out, t_in))
+        # L_seed must be < l_edd * 0.1 (total NT disc luminosity factor)
+        l0 = 4.0 * 3.14159 * r_isco**2 * _SIGMA_SB * t_in**4
+        assert l_seed < l0 * 0.1
+
+    def test_l_seed_decreases_with_larger_r_hot(self):
+        """Larger r_hot (smaller disc area intercepted) -> smaller L_seed."""
+        r_isco, t_in = _make_disc_params()
+        l_edd = float(_eddington_luminosity(8.0))
+        r_hot_small = float(_r_hot_bisect(r_isco, t_in, 0.01 * l_edd))
+        r_hot_large = float(_r_hot_bisect(r_isco, t_in, 0.05 * l_edd))
+        r_out = 1000.0 * r_isco
+
+        l_seed_small = float(_l_seed_geometric(r_isco, r_hot_small, r_out, t_in))
+        l_seed_large = float(_l_seed_geometric(r_isco, r_hot_large, r_out, t_in))
+        # Larger r_hot means smaller disc outside corona, so less L_seed
+        assert l_seed_large < l_seed_small

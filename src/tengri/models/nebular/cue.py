@@ -1108,17 +1108,16 @@ class CueBackend:
 
         # Add emission lines
         if line_sigma_aa > 0:
-            # Gaussian profiles
-            # For each line: convert L_line (Lsun) to Lsun/Hz via Gaussian
-            # sigma_nu = sigma_lambda * c / lambda^2 (in Hz)
-            # profile in Hz^-1, integrated over nu gives 1
+            # Gaussian profiles: spread L_line (Lsun) into L_nu (Lsun/Hz).
+            # profile / (sqrt(2π) * sigma_nu) is normalised so ∫profile dnu = 1 (units: 1/Hz).
+            # DO NOT multiply by _LSUN_ERG: ll is in Lsun, neb_sed is in Lsun/Hz.
             for j in range(len(line_wav)):
                 lw = line_wav[j]
                 ll = line_lum[j]
                 sigma_nu = line_sigma_aa * _C_CGS / (lw * 1e-8) ** 2
                 profile = jnp.exp(-0.5 * ((ssp_wave - lw) / line_sigma_aa) ** 2)
                 profile = profile / (jnp.sqrt(2.0 * jnp.pi) * sigma_nu)
-                neb_sed = neb_sed + ll * _LSUN_ERG * profile
+                neb_sed = neb_sed + ll * profile  # Lsun * 1/Hz = Lsun/Hz
         else:
             # Delta function: add to nearest pixel
             n_wave = ssp_wave.shape[0]

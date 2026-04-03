@@ -632,11 +632,22 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         sed = sed + agn_sed
 
     # Populate cached physical quantities for radio/X-ray models
-    # L_ir: total IR luminosity from dust energy balance (Lsun)
+    # L_ir: total IR luminosity from dust energy balance (Lsun).
+    # NOTE: L_ir is 0 on the DSPS table path (sed_intrinsic is None) because no
+    # dust reemission model runs. Radio SF emission will be 0. Pass _L_ir_cached
+    # in params to override when using the DSPS table path with radio enabled.
     _L_ir = L_ir if "L_ir" in dir() else p.get("_L_ir_cached", 0.0)
-    # SFR: instantaneous SFR at z_obs (Msun/yr) from the SFH
-    _sfr_cached = sfr_table[-1] if "sfr_table" in dir() else p.get("_sfr_cached", 1.0)
-    # M*: total stellar mass formed (Msun)
+    # SFR: instantaneous SFR at z_obs (Msun/yr) from the SFH.
+    # Use sfr[-1] for parametric SFH (most recent time bin ≈ current SFR).
+    # sfr_table is only defined for the table-based SFH path.
+    _sfr_cached = (
+        sfr_table[-1]
+        if "sfr_table" in dir()
+        else (sfr[-1] if sfr is not None else p.get("_sfr_cached", 1.0))
+    )
+    # M*: total stellar mass formed (Msun).
+    # Note: XRB calibrations use surviving stellar mass; formed mass overestimates
+    # by ~30-50% for old stellar populations (known limitation).
     _mstar = jnp.sum(weights) if weights is not None else p.get("_mstar_cached", 1e10)
 
     # Radio emission (synchrotron from SF + AGN jets)

@@ -20,7 +20,7 @@ ruff format --check src/ tests/     # format check — must pass
 ruff check --fix src/ tests/        # auto-fix safe violations
 ruff format src/ tests/             # auto-format
 
-# Run all tests (~1221 tests, ~105 seconds)
+# Run all tests (~1764 tests, ~120 seconds)
 pytest tests/ -q
 
 # Run specific test module
@@ -82,10 +82,10 @@ src/tengri/
 ├── models/                  # physics modules
 │   ├── sfh/                 # SFH models, PSD, GP generation
 │   ├── dust/                # Two-component attenuation + IR emission + WG00 geometries
-│   ├── agn/                 # AGN disc (incl. K&D 3-zone) + torus + BLR/NLR + QSOgen
+│   ├── agn/                 # AGN disc (incl. K&D 3-zone) + torus + BLR/NLR + QSOgen + _phys.py (shared constants)
 │   ├── nebular/             # Nebular emission (BakedIn, CLOUDY, Cue)
 │   ├── sps/                 # DSPS wrapper, SSP loading, alpha-enhancement
-│   ├── observation/         # Photometry, spectroscopy, calibration marginalization
+│   ├── observation/         # Photometry, spectroscopy, calibration marginalization, emission line fitting (line_catalog.py, eline_*.py)
 │   ├── igm.py, radio.py, xray.py
 │
 ├── utils/                   # Grid, cosmology, transforms
@@ -101,6 +101,57 @@ Use `Model`, `ParamSpec`, `Fitter`, `Posterior`. ForwardModel has been removed.
 from tengri import Model, ParamSpec, Uniform, Fitter, HierarchicalFitter
 ```
 
+### Quickstart (one-liner API)
+
+```python
+# Build model from config with short-name priors
+model = Model.from_config(
+    ssp="data/ssp.h5", sfh="tsnorm", filters=["sdss_u", "sdss_g", "sdss_r"],
+    redshift=0.1,
+    priors=dict(log_peak_sfr=Uniform(-1, 2.5), logzsol=Uniform(-2, 0.2)),
+)
+
+# Fit (default: geoVI variational inference)
+result = model.fit(flux, noise)
+
+# Refine with MCMC
+result_exact = result.refine("mcmc_raytrace", n_steps=1000)
+
+# Validate (short MCMC check + overlap report)
+report = result.validate()
+
+# Prior predictive check
+pp = model.prior_predictive(n=200)
+pp.check_finite()  # flag NaN/Inf draws
+
+# Population fitting (shared PSD hyperparameters)
+pop_result = model.fit_population(observations_list)
+pop_result.plot_population()
+```
+
+### Model.from_config()
+
+Factory classmethod: `Model.from_config(ssp, sfh="dpl", dust="charlot_fall", nebular=None, agn=None, redshift=0.1, filters=None, priors={})`
+
+- Short-name priors auto-expanded: `log_peak_sfr` → `sfh_tsnorm_log_peak_sfr`, `logzsol` → `met_logzsol`
+- `redshift="free"` makes redshift a free parameter
+- Builds ParamSpec + Observation internally
+
+### Model.fit()
+
+Convenience wrapper: `model.fit(data, noise, method="vi")` — no Fitter construction needed. Supports:
+- `photometry=(flux, noise)` + `spectrum=(flux, noise)` for joint fitting
+- `init="map"` for MAP-initialized VI/MCMC
+- Returns Posterior with `._fitter` set for `.refine()` chaining
+- Stores Fitter as `model.fitter_` for later access
+
+### Posterior chaining
+
+- `result.refine(method, **kwargs)` — re-run from current posterior (warm-start)
+- `result.validate(n_steps=200)` — short MCMC check, returns `{"mcmc_result", "overlap", "passed"}`
+- `result.line_fluxes()` — emission line flux posteriors `{name: (median, lo, hi)}`
+- `result.bpt_nii()` — BPT diagram coordinates
+
 Each class has a `.summary()` method for quick inspection:
 - `spec.summary()` — parameters, priors, enabled modules
 - `model.summary()` — SSP grid, filters, precomputation, fused kernel status
@@ -109,32 +160,31 @@ Each class has a `.summary()` method for quick inspection:
 
 ## Inference methods
 
-`geovi` (NIFTy fast path) is the **default** for single-galaxy fitting. `native_geovi` is for batch/vmap. Ray Tracing validates. NUTS validates low-D. MAP initializes.
+**Canonical method names** (as of 2026-04-02). Old names (`geovi`, `raytrace`, `nuts`, etc.) still work but emit `DeprecationWarning` and will be removed in v1.0.
 
-| Method | Command | Best for |
-|--------|---------|----------|
-| **geovi** | `fitter.run("geovi")` | **Default.** NIFTy geoVI tight loop — fast for single galaxy (~12s), no heavy compile |
-| native_geovi | `fitter.run("native_geovi")` | Fully JIT-compiled geoVI — slower first call (~30s compile) but enables `jax.vmap` for batch fitting |
-| native_mgvi | `fitter.run("native_mgvi")` | JIT-compiled MGVI |
-| geovi / fast_geovi | `fitter.run("geovi")` | NIFTy OptimizeVI.update tight loop, resample+update schedule |
-| mgvi / fast_mgvi | `fitter.run("mgvi")` | NIFTy MGVI tight loop |
-| nifty_geovi | `fitter.run("nifty_geovi")` | Full jft.optimize_kl with logging (debugging) |
-| nifty_mgvi | `fitter.run("nifty_mgvi")` | Full NIFTy MGVI with logging |
-| geovi_nuts | `fitter.run("geovi_nuts")` | geoVI optimization + NUTS posterior draws |
-| mgvi_nuts | `fitter.run("mgvi_nuts")` | MGVI optimization + NUTS posterior draws |
-| NUTS | `fitter.run("nuts", n_warmup=500, n_burnin=50)` | Gold-standard validation (low-D only) |
-| Ray Tracing | `fitter.run("raytrace", n_burnin=100, n_steps=300)` | Exact MCMC, stochastic-gradient resilient |
-| NSS | `fitter.run("nss", n_live=500, num_delete=50)` | Bayesian evidence (log Z) for model comparison. Smooth models only, D ≲ 30 |
-| Laplace | `fitter.run("laplace", init_from=map_result)` | Instant Gaussian posterior from Hessian at MAP. Auto-runs MAP if no init_from. Laplace log-evidence |
-| Pathfinder | `fitter.run("pathfinder", maxiter=30)` | Fast approximate posterior via L-BFGS path (Zhang+2022). Good NUTS initializer |
-| Elliptical Slice | `fitter.run("elliptical_slice", n_burnin=200)` | Exact MCMC for Gaussian-prior latent models (Murray+2010). Natural for GP field |
-| MAP | `fitter.run("map", optimizer="adam")` | Point estimates. Optimizer swappable: adam/adamw/sgd/custom optax |
+| Canonical | Old name(s) | Command | Best for |
+|-----------|-------------|---------|----------|
+| **vi** | geovi, native_geovi | `fitter.run("vi")` | **Default.** geoVI — fast for single galaxy (~12s) |
+| vi_linear | mgvi, native_mgvi, evi | `fitter.run("vi_linear")` | MGVI/EVI — linear response variant |
+| vi_nifty | fast_geovi, nifty_geovi | `fitter.run("vi_nifty")` | NIFTy geoVI with full logging (debugging) |
+| vi_nifty_linear | fast_mgvi, nifty_mgvi | `fitter.run("vi_nifty_linear")` | NIFTy MGVI with full logging |
+| mcmc_raytrace | raytrace | `fitter.run("mcmc_raytrace", n_steps=300)` | Exact MCMC, stochastic-gradient resilient |
+| mcmc_nuts | nuts | `fitter.run("mcmc_nuts", n_warmup=500)` | Gold-standard validation (low-D only) |
+| mcmc_ess | elliptical_slice | `fitter.run("mcmc_ess", n_burnin=200)` | Exact MCMC for Gaussian-prior latent models (Murray+2010) |
+| mcmc | — | `fitter.run("mcmc")` | Auto: NUTS if D<=20, else Ray Tracing |
+| evidence | nss | `fitter.run("evidence", n_live=500)` | Bayesian evidence (log Z) via Nested Slice Sampling. D <= 30 |
+| laplace | — | `fitter.run("laplace")` | Instant Gaussian posterior from Hessian at MAP |
+| pathfinder | — | `fitter.run("pathfinder", maxiter=30)` | Fast approximate posterior via L-BFGS path (Zhang+2022) |
+| map | — | `fitter.run("map", optimizer="adam")` | Point estimates |
+| auto | — | `fitter.run("auto")` | D<=15: laplace, D<=50: vi_linear, else: vi |
 
-**Internal dispatch:** `_run_fast_vi` handles geovi/fast_geovi/mgvi/fast_mgvi (NIFTy fast path — default). `_run_native_vi` handles native_geovi/native_mgvi (fully JIT — for batch/vmap). `_run_nifty_vi` handles nifty_geovi/nifty_mgvi. `_run_nss` handles nss. `_run_laplace`/`_run_pathfinder`/`_run_elliptical_slice`/`_run_map`/`_run_nuts`/`_run_raytrace` handle the rest.
+**Method chaining:** `result.refine("mcmc_raytrace", n_steps=1000)` re-runs from the current posterior. `result.validate(n_steps=200)` runs a short MCMC check and reports marginal overlap.
 
-**Batch fitting:** `fitter.fit_batch(galaxies)` (NOT `fit_catalog`). Default method is `geovi` (NIFTy). Use `method="native_geovi"` for vmap batch path.
+**Internal dispatch:** `_run_fast_vi` handles vi/vi_linear (NIFTy fast path — default). `_run_native_vi` handles native VI (fully JIT — for batch/vmap). `_run_nifty_vi` handles vi_nifty/vi_nifty_linear. `_run_nss` handles evidence. `_run_laplace`/`_run_pathfinder`/`_run_elliptical_slice`/`_run_map`/`_run_nuts`/`_run_raytrace` handle the rest.
 
-**Removed names:** `geovi_nifty` -> `nifty_geovi`, `mgvi_nifty` -> `nifty_mgvi`, `geovi_full` -> `nifty_geovi`, `mgvi_full` -> `nifty_mgvi`, `fit_catalog` -> `fit_batch`.
+**Batch fitting:** `fitter.fit_batch(galaxies)` (NOT `fit_catalog`). Default method is `vi` (NIFTy geoVI). Use `method="vi"` with `native=True` for vmap batch path.
+
+**Deprecated names (emit warning, removed in v1.0):** `geovi`->`vi`, `native_geovi`->`vi`, `mgvi`->`vi_linear`, `raytrace`->`mcmc_raytrace`, `nuts`->`mcmc_nuts`, `elliptical_slice`->`mcmc_ess`, `nss`->`evidence`, `geovi_nuts`->`vi`. See `_DEPRECATED_METHOD_ALIASES` in fitter.py for full map.
 
 ## Key conventions
 
@@ -142,6 +192,9 @@ Each class has a `.summary()` method for quick inspection:
 - Internal params: `alpha`, `tau_sfh`, `psd_sigma`, `psd_tau_yr`, `log_z_abs`, `tau_bc`, `tau_diff`, `dust_slope`
 - GP latent vector `psd_xi` has shape `(n_grid,)` and prior `ξ ~ N(0, I)`
 - PSD timescale in high-level API is in **Myr** (`psd_tau_myr`); internal is in **years** (`psd_tau_yr`)
+- **Short-name aliases**: `resolve_short_names(sfh_type, priors)` expands short names to full prefixed names. E.g., `alpha` → `sfh_dpl_alpha` for DPL, `logzsol` → `met_logzsol` universally. See `param_translate.py` for the full table.
+- **AGN shared physics**: `_planck_lnu` and constants now in `models/agn/_phys.py` (shared by disc.py, torus.py, skirtor.py). Do NOT duplicate Planck function in AGN modules.
+- **NLR API**: `agn_nlr_emission()` always returns `(wavelengths, luminosities)` tuple. Parameter is `neb_logU` (not `gas_logu`).
 
 ## Gotchas
 
@@ -173,7 +226,22 @@ Each class has a `.summary()` method for quick inspection:
 - Casey (2012) MBB + mid-IR power law dust emission: `casey2012`. Use for submm-selected galaxies needing the 8-40 μm excess.
 - `marginalize_calibration()` in `observation/calibration.py` analytically marginalizes over Chebyshev calibration polynomial coefficients (Johnson+2021/Prospector approach).
 - SMC/LMC extinction curves now use Pei (1992) generalized Drude profile sums — fully continuous, no piecewise boundaries.
-- `unified_nlr_blr` AGN model now supports `agn_polar_ebv` for SMC polar dust reddening of Type 1 AGN, and auto-derives `agn_torus_frac` from `cos(theta_torus)` when at default.
+- `unified_nlr_blr` AGN model supports `agn_polar_ebv` for SMC polar dust reddening of Type 1 AGN. `agn_torus_frac` is no longer auto-derived from `cos(theta_torus)` in the forward pass (doing so created a gradient discontinuity at the default value 0.5 that corrupted VI/MAP). Fix at the ParamSpec level via a Fixed prior instead.
+- Emission line wavelengths in `line_catalog.py` are **vacuum** wavelengths throughout. All test values updated to match (e.g. Hα = 6564.61 Å, Hβ = 4862.68 Å, [OIII]5007 = 5008.24 Å). Do NOT use air wavelengths.
+- `LineCatalog` doublet constraints: [OII] 3726/3729, [OII] 7320/7330, and [SII] 6717/6731 are **NOT** constrained — their ratios are density diagnostics, not fixed by atomic physics. Only [OIII], [NII], [NeV], MgII, [SIII] are constrained.
+- `LineCatalog.independent_wavelengths` property returns wavelengths for the independent (non-constrained secondary) amplitude columns, matching column order of `build_constraint_matrix()`.
+- `CLOUDY_LINE_NAMES` and `CLOUDY_LINE_WAVELENGTHS` are exported from `tengri.models.observation.eline_catalog` (not `eline_priors`).
+- `SpectroscopyConfig.__post_init__` now validates: `eline_mode` must be one of `("off", "fixed", "marginalized", "fitted")`; `"fitted"` raises NotImplementedError; resolution array length must match `wave_obs`.
+- CSP trapezoidal weights now use correct half-widths at both endpoints (previously full-width, over-weighting youngest and oldest SSP bins by ~2x). All three paths updated: `fused_kernels.py`, `sed_components.py`, `dsps_wrapper.compute_csp_weights`.
+- `continuity_sfh` / `dirichlet_sfh` now assign ages to bins via `searchsorted` on bin edges (step function per Leja+2019), not `interp` on bin centers. Also use `.shape[0]` instead of `len()` to avoid `ConcretizationTypeError` under JIT.
+- `Posterior.bpt_nii()` returns `jnp.nan` for non-detected lines (negative amplitudes). Previous behaviour clamped to 1e-30, giving log10 ≈ −30 and corrupting BPT diagrams.
+- Nebular line profile unit bug fixed: `cloudy_grid.py`, `cue.py`, `shock.py` no longer multiply by `_LSUN_ERG`. The profile is already in Lsun/Hz when `ll` [Lsun] × profile [Hz⁻¹].
+- Shock `sigma_nu` fixed: `line_sigma_aa` is in Å and must be converted to cm (×1e-8) before the CGS `c/λ²` formula. Previous SEDs had sigma_nu ~1e8× too large, so line widths were ~1e8× too narrow.
+- XRB (`xray.py`) normalization fixed: spectral shape is now integrated over the 2–10 keV reference band (200-point grid) before normalizing. Previous single-point normalization at E_ref gave ~2–3× error in absolute luminosity.
+- Radio `L_B` calculation fixed: spurious `_LSUN / _LSUN` cancel that was a no-op has been removed; expression now reads `L_B = L_agn_bol / (BC_B * nu_B)` in Lsun/Hz directly.
+- `narayanan_z` (`attenuation.py`) uses tolerance comparison `abs(x - default) < 1e-6` instead of `==` for float equality on potentially traced values.
+- IGM LAF opacity (`igm.py`) clamps `z_obs >= 0` before fractional-exponent power laws to avoid NaN for photons shortward of the Lyman limit.
+- Lya in `LineCatalog.default_13()` and `default_optical()` has `is_broad_candidate=False` — Lya is a resonance line with complex radiative transfer, not suitable for the standard Gaussian broad-component model.
 
 ## Convergence diagnostics (mandatory for all inference)
 
@@ -224,7 +292,7 @@ The forward model uses several optimizations for speed:
 **Every code change MUST include pytest tests.** Run before committing:
 
 ```bash
-pytest tests/ -q                    # full suite (~1221 tests, ~105s)
+pytest tests/ -q                    # full suite (~1764 tests, ~120s)
 ruff check src/ tests/              # lint
 ruff format --check src/ tests/     # format
 ```
@@ -250,6 +318,47 @@ SPS_HOME=~/Projects/fsps pytest -m crossval  # includes FSPS tests
 
 For performance changes: add benchmark tests that assert speedup thresholds
 (see `tests/unit/test_dust_precompute.py`, `tests/unit/test_fused_kernels.py`).
+
+## Known bugs (MUST FIX before paper submission)
+
+See `docs/known_bugs.md` for full details, references to check, and regression test requirements.
+
+**RULE: Every fix MUST cite the original paper equation number or reference code line. Do NOT guess the correct formula — read the paper. Every fix MUST include a regression test that would have caught the bug.**
+
+**Status (2026-04-02):** 22 of 39 original audit bugs fixed. 11 of 23 emission-line-branch bugs fixed. Additional fixes by follow-up agent (see below). Remaining open:
+
+### Still open from original audit
+- `disc.py:319-333` — Warm Comptonization still uses simplified enhancement, not nthcomp (K&D 2018)
+- `disc.py:264,595,617,846` — Ring area pi factor may be double-counted (needs trace verification)
+- `emission.py:159` — Planck `exp(x)-1` at x=0, use `jnp.expm1` or clip to 1e-10
+- `sed_pipeline.py:651` — `_mstar` uses formed mass, not surviving mass for XRB scaling (comment added; fix requires surviving-mass computation from DSPS)
+- `posterior.py` — `summary_table()` key name mismatch (accept_rate vs acceptance_rate) needs verification
+
+### Still open from emission line branch
+- `eline_priors.py:169-180` — `cloudy_line_priors()` interpolation loses metallicity at high logU (missing 4th grid point)
+- `eline_priors.py:248-278` — `marginalize_emission_lines_cloudy` returns wrong ln_L for non-zero-mean prior (biases MAP/VI)
+- No tests for `cloudy_grid_line_priors()` or finite-difference gradient check for marginalization
+
+### Fixed by follow-up agent (bugs now closed)
+- `line_catalog.py` — all wavelengths updated to vacuum (previously air). Default 13 lines docstring updated.
+- `line_catalog.py` — `n_independent` docstring corrected to 34 for `default_optical()` (OII doublets removed from constraints).
+- `line_catalog.py` — MgII_2796 now correctly flagged as constrained secondary (was `is_broad_candidate=True`).
+- `cloudy_grid.py`, `cue.py`, `shock.py` — spurious `* _LSUN_ERG` factor removed from Gaussian line profiles (was double-converting units).
+- `shock.py` — `sigma_nu` missing 1e-8 Å→cm conversion fixed.
+- `xray.py` — XRB spectral normalization now integrates over 2–10 keV band (was single-point, ~2–3× off).
+- `radio.py` — `L_B` expression cleaned up (spurious `_LSUN/_LSUN` removed).
+- `qsogen.py` — Balmer continuum optical depth direction fixed: `tau ∝ (λ_BE/λ)³` (increases at shorter λ), not `(λ/λ_BE)³`.
+- `qsogen.py` — Hot dust BB normalization corrected: `bbnorm` is now ratio f_bb/f_cont at 2μm anchor, not absolute f_nu.
+- `fused_kernels.py`, `sed_components.py`, `dsps_wrapper.py` — CSP endpoint trapezoidal weights corrected to half-widths.
+- `nonparametric.py` — `continuity_sfh`/`dirichlet_sfh` use step-function assignment via `searchsorted`, not linear interpolation on bin centers.
+- `nonparametric.py` — `len(bin_edges_gyr)` replaced with `.shape[0]` to avoid `ConcretizationTypeError` under JIT.
+- `igm.py` — `z_obs_safe = max(z_obs, 0)` prevents NaN from fractional powers with negative base.
+- `attenuation.py` — `narayanan_z` float equality replaced with tolerance comparison (JIT-safe).
+- `unified.py` — `agn_torus_frac` auto-derivation removed from forward pass (was causing gradient discontinuity).
+- `unified.py` — SKIRTOR template path corrected (`parents[4]`, was `parents[2]`).
+- `posterior.py` — BPT ratios return NaN for non-detections (not log10(1e-30)).
+- `fitter.py` — `eline_broad` consistency warning if SpectroscopyConfig and ParamSpec disagree.
+- `spectroscopy_config.py` — input validation added in `__post_init__`.
 
 ## Agent guide
 

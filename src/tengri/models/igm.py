@@ -249,36 +249,41 @@ def _tau_lc_laf(
     active = (wave_obs > _LAMBDA_LIMIT) & (wave_obs < _LAMBDA_LIMIT * (1.0 + z_source))
 
     z_obs = wave_obs / _LAMBDA_LIMIT - 1.0
+    # Clamp z_obs >= 0 so fractional exponents (1.2, 3.7, 5.5) never receive a
+    # negative base in the inactive region (wave_obs < lambda_limit). JAX evaluates
+    # all branches regardless of the active mask, so without this clamp the power
+    # expressions produce NaN for short-wavelength photons.
+    z_obs_safe = jnp.maximum(z_obs, 0.0)
 
     # Three source-redshift regimes
     # Regime z_S < 1.2
     t_low = (
-        0.325 * ((1.0 + z_obs) ** 1.2 - jnp.clip(1.0 + z_source, a_max=2.2) ** 1.2)
-        - 9.4e-2 * ((1.0 + z_obs) ** 3.7 - jnp.clip(1.0 + z_source, a_max=2.2) ** 3.7)
-        + 0.01478 * ((1.0 + z_obs) ** 5.5 - jnp.clip(1.0 + z_source, a_max=2.2) ** 5.5)
+        0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, a_max=2.2) ** 1.2)
+        - 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, a_max=2.2) ** 3.7)
+        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, a_max=2.2) ** 5.5)
     )
 
     # Regime 1.2 <= z_S < 4.7
     t_mid = (
-        2.55e-2 * ((1.0 + z_obs) ** 1.2 - (1.0 + z_source) ** 1.2)
-        - 0.325 * ((1.0 + z_obs) ** 1.2 - jnp.clip(1.0 + z_source, a_max=2.2) ** 1.2)
-        - 1.15e-2 * ((1.0 + z_obs) ** 3.7 - jnp.clip(1.0 + z_source, a_max=5.7) ** 3.7)
-        + 9.4e-2 * ((1.0 + z_obs) ** 3.7 - jnp.clip(1.0 + z_source, a_max=2.2) ** 3.7)
-        - 7.83e-4 * ((1.0 + z_obs) ** 5.5 - jnp.clip(1.0 + z_source, a_max=5.7) ** 5.5)
-        + 0.01478 * ((1.0 + z_obs) ** 5.5 - jnp.clip(1.0 + z_source, a_max=2.2) ** 5.5)
+        2.55e-2 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
+        - 0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, a_max=2.2) ** 1.2)
+        - 1.15e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, a_max=5.7) ** 3.7)
+        + 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, a_max=2.2) ** 3.7)
+        - 7.83e-4 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, a_max=5.7) ** 5.5)
+        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, a_max=2.2) ** 5.5)
     )
 
     # Regime z_S >= 4.7
     t_high = (
-        5.22e-4 * ((1.0 + z_obs) ** 1.2 - (1.0 + z_source) ** 1.2)
-        + 2.55e-2 * ((1.0 + z_obs) ** 1.2 - (1.0 + z_source) ** 1.2)
-        - 0.325 * ((1.0 + z_obs) ** 1.2 - jnp.clip(1.0 + z_source, a_max=2.2) ** 1.2)
-        - 1.328e-3 * ((1.0 + z_obs) ** 3.7 - (1.0 + z_source) ** 3.7)
-        - 1.15e-2 * ((1.0 + z_obs) ** 3.7 - jnp.clip(1.0 + z_source, a_max=5.7) ** 3.7)
-        + 9.4e-2 * ((1.0 + z_obs) ** 3.7 - jnp.clip(1.0 + z_source, a_max=2.2) ** 3.7)
-        - 5.15e-5 * ((1.0 + z_obs) ** 5.5 - (1.0 + z_source) ** 5.5)
-        - 7.83e-4 * ((1.0 + z_obs) ** 5.5 - jnp.clip(1.0 + z_source, a_max=5.7) ** 5.5)
-        + 0.01478 * ((1.0 + z_obs) ** 5.5 - jnp.clip(1.0 + z_source, a_max=2.2) ** 5.5)
+        5.22e-4 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
+        + 2.55e-2 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
+        - 0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, a_max=2.2) ** 1.2)
+        - 1.328e-3 * ((1.0 + z_obs_safe) ** 3.7 - (1.0 + z_source) ** 3.7)
+        - 1.15e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, a_max=5.7) ** 3.7)
+        + 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, a_max=2.2) ** 3.7)
+        - 5.15e-5 * ((1.0 + z_obs_safe) ** 5.5 - (1.0 + z_source) ** 5.5)
+        - 7.83e-4 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, a_max=5.7) ** 5.5)
+        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, a_max=2.2) ** 5.5)
     )
 
     tau = jnp.where(

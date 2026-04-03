@@ -82,17 +82,25 @@ def xray_xrb(
     L_hmxb_ref = 2.6e39 * sfr * 10.0**log_L_hmxb_offset
     L_lmxb_ref = 8.3e28 * stellar_mass * 10.0**log_L_lmxb_offset
 
-    # Power-law with exponential cutoff: dN/dE ~ E^{-Gamma} * exp(-E/E_cut)
-    # L_nu = L_ref * (E/E_ref)^{-Gamma+1} * exp(-E/E_cut) (energy flux per Hz)
-    E_ref = 5.0  # keV (geometric mean of 2-10 keV)
+    # Power-law with exponential cutoff: L_nu ∝ (E/E_ref)^{-Γ+1} * exp(-E/E_cut)
+    # Normalise by integrating the spectral shape over the 2-10 keV reference band
+    # (not by a single-point bandwidth, which gives ~2-3x error in absolute luminosity).
+    E_ref = 5.0  # keV (reference for spectral shape evaluation)
 
     spec_hmxb = (E_keV / E_ref) ** (-gamma_hmxb + 1) * jnp.exp(-E_keV / E_cut)
     spec_lmxb = (E_keV / E_ref) ** (-gamma_lmxb + 1) * jnp.exp(-E_keV / E_cut)
 
-    # Normalize: integral over 2-10 keV should give the reference luminosity
-    # For simplicity, normalize at E_ref and scale
-    L_nu_hmxb = (L_hmxb_ref / _LSUN) / (E_ref * _KEV_TO_HZ) * spec_hmxb
-    L_nu_lmxb = (L_lmxb_ref / _LSUN) / (E_ref * _KEV_TO_HZ) * spec_lmxb
+    # Compute band integral of each spectral shape over 2-10 keV on a fine grid.
+    # ∫L_nu dnu = L_ref  → L_nu = L_ref * spec / ∫_band spec dnu
+    E_fine = jnp.linspace(2.0, 10.0, 200)  # keV
+    nu_fine = E_fine * _KEV_TO_HZ
+    spec_hmxb_fine = (E_fine / E_ref) ** (-gamma_hmxb + 1) * jnp.exp(-E_fine / E_cut)
+    spec_lmxb_fine = (E_fine / E_ref) ** (-gamma_lmxb + 1) * jnp.exp(-E_fine / E_cut)
+    band_int_hmxb = jnp.maximum(jnp.trapezoid(spec_hmxb_fine, nu_fine), 1e-60)
+    band_int_lmxb = jnp.maximum(jnp.trapezoid(spec_lmxb_fine, nu_fine), 1e-60)
+
+    L_nu_hmxb = (L_hmxb_ref / _LSUN) / band_int_hmxb * spec_hmxb
+    L_nu_lmxb = (L_lmxb_ref / _LSUN) / band_int_lmxb * spec_lmxb
 
     # X-ray only (E > 0.1 keV = lambda < 124 A)
     xray_mask = wavelength < 124.0

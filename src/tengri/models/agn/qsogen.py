@@ -341,10 +341,14 @@ def _hot_dust_blackbody(
     x = hc_over_k / (tbb * jnp.maximum(wavelength, 1.0))
     bb_fnu = wavelength ** (-3.0) / (jnp.exp(jnp.clip(x, 0.0, 500.0)) - 1.0)
 
-    # Normalize: bb_flux(anchor) = bbnorm (ABSOLUTE f_nu, not relative)
+    # Normalize: bbnorm is the ratio f_bb(2μm) / f_cont(2μm) (Temple+2021).
+    # Evaluate the BB and continuum at the 2μm anchor to get the relative scale.
     x_anchor = hc_over_k / (tbb * _LAMBDA_BB_ANCHOR)
     bb_anchor = _LAMBDA_BB_ANCHOR ** (-3.0) / (jnp.exp(jnp.clip(x_anchor, 0.0, 500.0)) - 1.0)
-    cmult = bbnorm / jnp.maximum(bb_anchor, 1e-60)
+    cont_at_anchor = jnp.interp(
+        jnp.array([_LAMBDA_BB_ANCHOR]), wavelength, continuum_flam, left=0.0, right=0.0
+    )[0]
+    cmult = bbnorm * jnp.maximum(cont_at_anchor, 1e-60) / jnp.maximum(bb_anchor, 1e-60)
 
     return cmult * bb_fnu
 
@@ -391,10 +395,10 @@ def _balmer_continuum(
     x_clip = jnp.clip(x, 0.0, 500.0)
     b_nu_wav = wavelength ** (-3.0) / (jnp.exp(x_clip) - 1.0)
 
-    # Optical depth: tau(nu) = taube * (nu_BE/nu)^3 = taube * (wavelength / wavbe)^3
-    # Grandi (1982): H photoionization cross-section ~ nu^-3, so tau decreases
-    # at shorter wavelengths (higher frequencies) above the Balmer edge.
-    tau = taube * (wavelength / wavbe) ** 3
+    # Optical depth: sigma_bf(nu) ~ nu^{-3} (Osterbrock & Ferland, AGN^2 Eq. 2.4), so
+    # tau(lambda) = tau_BE * (lambda_BE / lambda)^3 — tau INCREASES at shorter wavelengths
+    # (higher frequencies), reaching tau_BE at the Balmer edge and falling beyond.
+    tau = taube * (wavbe / wavelength) ** 3
     tau_clip = jnp.clip(tau, 0.0, 50.0)
     absorption = 1.0 - jnp.exp(-tau_clip)
 

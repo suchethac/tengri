@@ -25,7 +25,7 @@ Available Attenuation Curves
 - **kriek_conroy**: Calzetti + UV bump + slope delta — Prospector default
 - **noll09**: Noll et al. (2009) modified Calzetti+L02: (base+bump)*slope
 - **salim_sbl18**: Salim+2018 modified Calzetti+L02: base*slope+bump
-- **smc**: Gordon et al. (2003) SMC Bar, steep UV, no 2175A bump
+- **smc**: Pei (1992, ApJ 395 130) SMC Bar, steep UV, no 2175A bump
 - **cardelli**: Cardelli et al. (1989) MW curve with free R_V
 - **li08**: Li et al. (2008) Eq. (1) four-coefficient curve (continuum + FUV rise + 2175 Å bump)
 - **salim**: Salim et al. (2018) modified Calzetti (= DSPS default)
@@ -50,7 +50,7 @@ References
 - Hobson & Padman 1993, MNRAS, 264, 161
 - Kriek & Conroy 2013, ApJL, 775, L16
 - Leitherer et al. 2002, ApJS, 140, 303
-- Li et al. 2008, MNRAS, 385, 1903
+- Li et al. 2008, ApJ, 685, 1046
 - Lower et al. 2022, ApJ, 931, 14
 - Narayanan et al. 2018, ApJ, 869, 70
 - Natta & Panagia 1984, ApJ, 287, 228
@@ -140,9 +140,10 @@ def _calzetti_l02_kprime(wavelength: jnp.ndarray) -> jnp.ndarray:
     # Calzetti IR polynomial (valid 0.63-2.2 um)
     k_ir = 2.659 * (-1.857 + 1.040 * x) + rv
 
-    # Use L02 below 0.15 um, Calzetti above
+    # L02 valid range: 970-1800 A (Leitherer+2002 ApJS 140 303 Eq. 14).  Use 0.18 um cutoff,
+    # matching the standalone leitherer02 function; 0.15 um was too conservative.
     k_calz = jnp.where(wave_um >= 0.63, k_ir, k_uv)
-    return jnp.where(wave_um <= 0.15, k_l02, k_calz)
+    return jnp.where(wave_um <= 0.18, k_l02, k_calz)
 
 
 # ===================================================================
@@ -465,11 +466,11 @@ def leitherer02(
     Uses R_V = 4.05 (same as Calzetti).  For wavelengths outside the
     L02 range, falls back to Calzetti (2000).
 
-    The k'(lambda) = A(lambda)/E(B-V) polynomial is::
+    The k'(lambda) = A(lambda)/E(B-V) polynomial is (Leitherer+2002 ApJS 140 303 Eq. 14)::
 
-        k'(lambda) = 5.472 + 0.671/x - 9.218e-3/x^2 + 2.620e-3/x^3
+        k'(lambda) = 5.472 + 0.671*x - 9.218e-3*x^2 + 2.620e-3*x^3
 
-    where x = lambda in microns.
+    where x = 1/lambda [um^{-1}] (i.e., x = 1/lambda_micron, not lambda itself).
 
     The L02 polynomial is used for the full L02 valid range (0.097-0.18 um),
     with C00 used for longer wavelengths.  This matches the standalone
@@ -722,9 +723,10 @@ def narayanan_z(
     ----------
     Narayanan et al. 2018, ApJ, 869, 70
     """
-    delta_z = jnp.where(dust_delta == -0.2, -0.2 - 0.1 * redshift, dust_delta)
+    # Use tolerance comparison (not ==) to avoid JIT-unsafe float equality on traced values.
+    delta_z = jnp.where(jnp.abs(dust_delta - (-0.2)) < 1e-6, -0.2 - 0.1 * redshift, dust_delta)
     bump_z = jnp.where(
-        dust_bump_strength == 1.0,
+        jnp.abs(dust_bump_strength - 1.0) < 1e-6,
         jnp.maximum(0.0, 1.0 - 0.15 * redshift),
         dust_bump_strength,
     )
@@ -833,7 +835,7 @@ def precompute_dust_age_mask(
     old_mask : array, shape (n_ages,)
         1.0 for old ages (>= t_birth), 0.0 for young.
     """
-    young = (age_grid < t_birth).astype(jnp.float64)
+    young = (age_grid < t_birth).astype(age_grid.dtype)  # preserve input precision
     return young, 1.0 - young
 
 
@@ -1074,7 +1076,7 @@ def single_component_dust_fast(
     trans_1d = single_component_dust(
         wavelengths, tau_v=tau_v, law=law, f_obscuration=f_obscuration, **law_params
     )
-    return jnp.broadcast_to(trans_1d[None, :], (n_ages, len(wavelengths)))
+    return jnp.broadcast_to(trans_1d[None, :], (n_ages, wavelengths.shape[0]))
 
 
 # ===================================================================
@@ -1195,9 +1197,11 @@ def wg00_cloudy(
     # Numerically stable: for small tau_k, use Taylor expansion
     # (1 - exp(-x)) / x -> 1 - x/2 + x^2/6 - ... for x -> 0
     # Switch at |x| < 1e-4 to avoid loss of precision
-    safe_tau_k = jnp.where(tau_k > 1e-10, tau_k, 1.0)
-    ratio = (1.0 - jnp.exp(-safe_tau_k)) / safe_tau_k
-    # Taylor expansion for small tau_k: 1 - tau_k/2
+    # Use jnp.maximum (not jnp.where) so the gradient of ratio w.r.t. tau_k stays
+    # connected when tau_k is small — jnp.where with a constant fallback gives zero
+    # gradient in the masked branch, producing dead gradients near tau_k=0.
+    ratio = (1.0 - jnp.exp(-jnp.maximum(tau_k, 1e-10))) / jnp.maximum(tau_k, 1e-10)
+    # Taylor expansion for small tau_k: correct gradient throughout [0, 1e-4]
     taylor = 1.0 - tau_k / 2.0 + tau_k**2 / 6.0
     return jnp.where(tau_k > 1e-4, ratio, taylor)
 

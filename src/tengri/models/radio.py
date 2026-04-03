@@ -110,7 +110,7 @@ def radio_agn(
     # BC_B ~ 5.15 (Hopkins+2007, Table 1), nu_B = c / 4400 A = 6.818e14 Hz
     _NU_B = 6.818e14  # Hz
     _BC_B = 5.15  # Hopkins+2007 bolometric correction at 4400 A
-    L_B = L_agn_bol * _LSUN / (_BC_B * _NU_B) / _LSUN  # Lsun/Hz
+    L_B = L_agn_bol / (_BC_B * _NU_B)  # Lsun/Hz
 
     # L_5GHz from radio-loudness definition
     L_5GHz = L_B * 10.0**radio_loudness  # Lsun/Hz

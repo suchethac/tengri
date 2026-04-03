@@ -55,12 +55,12 @@ def build_ssp_component(model):
         lz = jnp.asarray(log_z_abs, dtype=dt)
         afe = jnp.asarray(alpha_fe, dtype=dt)
 
-        # CSP weights (trapezoidal)
+        # CSP weights (trapezoidal rule, consistent with fused kernel)
         age_dt = jnp.concatenate(
             [
-                jnp.array([ssp_ages_yr[1] - ssp_ages_yr[0]]),
+                jnp.array([0.5 * (ssp_ages_yr[1] - ssp_ages_yr[0])]),
                 0.5 * (ssp_ages_yr[2:] - ssp_ages_yr[:-2]),
-                jnp.array([ssp_ages_yr[-1] - ssp_ages_yr[-2]]),
+                jnp.array([0.5 * (ssp_ages_yr[-1] - ssp_ages_yr[-2])]),
             ]
         )
         weights = sfr * age_dt

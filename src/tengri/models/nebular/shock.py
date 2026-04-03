@@ -187,11 +187,13 @@ def shock_emission_sed(
         for j in range(_N_LINES):
             lw = _LINE_WAVES[j]
             ll = line_lum[j]
-            # sigma_nu = sigma_lambda * c / lambda^2
-            sigma_nu = line_sigma_aa * _C_CGS / (lw * 1e-8) ** 2
+            # sigma_nu = sigma_lambda[cm] * c[cm/s] / lambda[cm]^2
+            # line_sigma_aa is in Å; convert to cm with 1e-8 before using in CGS formula.
+            sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (lw * 1e-8) ** 2
             profile = jnp.exp(-0.5 * ((wavelength - lw) / line_sigma_aa) ** 2)
             profile = profile / (jnp.sqrt(2.0 * jnp.pi) * sigma_nu)
-            sed = sed + ll * _LSUN_ERG * profile
+            # profile [Hz^{-1}], ll [Lsun] -> contribution [Lsun/Hz] (no unit conversion needed)
+            sed = sed + ll * profile
     else:
         # Delta functions: add to nearest pixel
         for j in range(_N_LINES):

@@ -198,7 +198,11 @@ def cmb_corrected_temperature(
     """
     exponent = 4.0 + beta_ir
     T_cmb_z = _T_CMB_0 * (1.0 + redshift)
-    T_eff = (T_dust**exponent + T_cmb_z**exponent - _T_CMB_0**exponent) ** (1.0 / exponent)
+    # Clamp T_dust to positive values before raising to a fractional exponent.
+    # Negative T_dust (possible during unconstrained sampling) would give NaN.
+    T_dust_safe = jnp.maximum(T_dust, 1.0)
+    inner = jnp.maximum(T_dust_safe**exponent + T_cmb_z**exponent - _T_CMB_0**exponent, 0.0)
+    T_eff = inner ** (1.0 / exponent)
     return T_eff
 
 
@@ -435,16 +439,20 @@ def casey2012(
     pure modified blackbody is capturing the 8--40 μm excess seen in real
     galaxy SEDs.
 
-    The model is (Casey 2012, MNRAS, 425, 3094, Eq. 2)::
+    The implemented model uses the following convention (see code comments)::
 
-        S(ν) = N_pl * ν^α_mid * f(ν)
-             + N_bb * ν^(3+β) / (exp(hν/kT) - 1) * (1 - f(ν))
+        S(ν) = N_pl * ν^α_mid * f(λ)         [mid-IR power law, f→1 at short λ]
+             + N_bb * ν^(3+β) / (exp(hν/kT) - 1) * (1 - f(λ))   [FIR MBB, 1-f→1 at long λ]
 
-    where the transition function is::
+    where the transition function (f→1 selects power law at short λ) is::
 
-        f(ν) = 1 / (1 + (λ_0 / λ)^2)
+        f(λ) = 1 / (1 + (λ / λ_0)^2)
 
-    and the empirical turnover wavelength is (Eq. 3, with errata)::
+    Note: Casey (2012, MNRAS 425 3094) Eq. 2 defines the carrier function differently;
+    the code's convention has f→1 at short λ (mid-IR) and 1-f→1 at long λ (FIR).
+    The shapes produced are equivalent; only the labelling of f vs (1-f) differs.
+
+    The empirical turnover wavelength is (Eq. 3, with errata)::
 
         λ_0 = b1 + b2 * T[μm]
 
@@ -1392,8 +1400,16 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
             powerlaw
         )
 
-        # Interpolate template onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+        # Normalize template to enforce energy balance: ∫L_nu dnu = L_absorbed.
+        # Templates may be stored in arbitrary units; normalization makes scaling exact.
+        # (Same approach as DL07 loader; DL14 stores j_nu so no L_lambda→L_nu conversion.)
+        nu_tmpl = _C_CGS / (tmpl_wave * _AA_TO_CM)
+        sort_tmpl = jnp.argsort(nu_tmpl)
+        tmpl_integral = jnp.trapezoid(template[sort_tmpl], nu_tmpl[sort_tmpl])
+        template_norm = template / jnp.maximum(jnp.abs(tmpl_integral), 1e-100)
+
+        # Interpolate normalized template onto target wavelength grid
+        sed = jnp.interp(wavelength_aa, tmpl_wave, template_norm, left=0.0, right=0.0)
 
         # Fallback: if template is zero (e.g. qpah beyond valid grid range),
         # use the analytic approximation to avoid returning all-zero SED.
@@ -1635,10 +1651,15 @@ def magphys_dc08(
     nu = _C_CGS / wavelength_cm
 
     # --- Component 1: PAH template (no CMB correction — features are MIR) ---
-    pah_shape = _pah_template(wavelength_aa)
-    pah_integral = -jnp.trapezoid(pah_shape, nu)
+    # _pah_template returns Drude profiles in L_lambda space (Smith+2007 convention).
+    # Must convert to L_nu before normalizing: L_nu = L_lambda * lambda^2 / c.
+    # Normalizing L_lambda directly against dnu mixes unit spaces and gives
+    # wrong fractional luminosities for the PAH vs MBB components.
+    pah_shape = _pah_template(wavelength_aa)  # L_lambda-like (Drude in wavelength)
+    pah_lnu = pah_shape * (wavelength_cm**2) / _C_CGS  # convert to L_nu
+    pah_integral = -jnp.trapezoid(pah_lnu, nu)
     pah_norm = jnp.where(pah_integral > 0.0, 1.0 / pah_integral, 0.0)
-    pah_component = pah_shape * pah_norm
+    pah_component = pah_lnu * pah_norm  # normalized L_nu
 
     # --- Component 2: hot MIR continuum (β = 1.5) ---
     hot_component = _modified_blackbody_component(wavelength_aa, dust_T_hot, 1.5, redshift)
@@ -2732,7 +2753,7 @@ def _make_lazy_loader(
                     warnings.warn(
                         f"Failed to load {template_filename}: {e}. "
                         f"Falling back to analytic {name} (NOT suitable for "
-                        f"science — crude single-Gaussian PAH approximation).",
+                        f"science — crude analytic approximation).",
                         stacklevel=2,
                     )
                     DUST_EMISSION_MODELS[name] = fallback_fn
@@ -2740,7 +2761,7 @@ def _make_lazy_loader(
                 warnings.warn(
                     f"Template file '{template_filename}' not found in data/. "
                     f"Falling back to analytic {name} (NOT suitable for "
-                    f"science — crude approximation with hand-tuned "
+                    f"science — crude analytic approximation with hand-tuned "
                     f"temperatures). Download templates or set the path "
                     f"manually via register_*_tabulated().",
                     stacklevel=2,
@@ -2807,13 +2828,37 @@ DUST_EMISSION_MODELS["dale2014"] = _make_lazy_loader(
 )
 
 
-# --- DL14: tries dl14_templates.h5 ---
-DUST_EMISSION_MODELS["draine_li2014"] = _make_lazy_loader(
-    "draine_li2014",
-    "dl14_templates.h5",
-    "create_dl14_from_grid",
-    _draine_li2014_analytic_fallback,
-)
+# --- DL14: tries dl14_templates_v2.h5 (improved grid) before dl14_templates.h5 ---
+def _dl14_lazy_wrapper(*args, **kwargs):
+    """Lazy loader for DL14: prioritizes v2 grid, falls back to legacy, then analytic."""
+    global _dl14_fn
+    if _dl14_fn is None:
+        for fname in ("dl14_templates_v2.h5", "dl14_templates.h5"):
+            path = _find_data_file(fname)
+            if path is not None:
+                try:
+                    _dl14_fn = create_dl14_from_grid(path)
+                    DUST_EMISSION_MODELS["draine_li2014"] = _dl14_fn
+                    break
+                except Exception as e:
+                    import warnings
+
+                    warnings.warn(f"Failed to load DL14 from {fname}: {e}", stacklevel=2)
+        if _dl14_fn is None:
+            import warnings
+
+            warnings.warn(
+                "DL14 template files not found (dl14_templates_v2.h5 or dl14_templates.h5). "
+                "Falling back to analytic draine_li2014 (NOT suitable for science).",
+                stacklevel=2,
+            )
+            _dl14_fn = _draine_li2014_analytic_fallback
+            DUST_EMISSION_MODELS["draine_li2014"] = _dl14_fn
+    return _dl14_fn(*args, **kwargs)
+
+
+_dl14_fn = None
+DUST_EMISSION_MODELS["draine_li2014"] = _dl14_lazy_wrapper
 
 
 # --- Astrodust+PAH (Hensley & Draine 2023): tries astrodust_templates.npz ---

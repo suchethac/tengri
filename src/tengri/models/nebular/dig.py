@@ -14,7 +14,8 @@ The mixing model evaluates any nebular backend at two ionization parameters:
 where logU_DIG = logU_HII + delta_logU (delta_logU is negative, default -1 dex).
 
 When ``neb_dig_frac=0`` (default), this reduces to pure HII emission with
-zero overhead beyond the standard nebular call.
+zero overhead when ``neb_dig_frac`` is a Python float 0.0; under JIT with
+a traced value, both forward passes execute.
 
 References
 ----------
@@ -101,17 +102,16 @@ def mix_dig_emission(
     )
 
     # HII component (standard ionization parameter)
-    neb_hii = nebular_backend.predict_nebular_sed(
-        neb_logU=neb_logU,
-        **common_kw,
-    )
+    neb_hii = nebular_backend.predict_nebular_sed(neb_logU=neb_logU, **common_kw)
+
+    # Short-circuit: when neb_dig_frac is a Python literal 0.0, skip the extra
+    # forward pass entirely.  Under JIT with a traced value both passes execute.
+    if isinstance(neb_dig_frac, (int, float)) and neb_dig_frac == 0.0:
+        return neb_hii
 
     # DIG component (lower ionization parameter)
     logU_dig = neb_logU + neb_dig_delta_logU
-    neb_dig = nebular_backend.predict_nebular_sed(
-        neb_logU=logU_dig,
-        **common_kw,
-    )
+    neb_dig = nebular_backend.predict_nebular_sed(neb_logU=logU_dig, **common_kw)
 
     # Linear mix
     return (1.0 - neb_dig_frac) * neb_hii + neb_dig_frac * neb_dig

@@ -191,11 +191,17 @@ def closed_box_metallicity_anchored(
     # Strategy: run with y=1.0, get the unnormalized Z profile, then
     # rescale so the final value matches.
 
-    # First, get the profile shape with a reference yield
+    # Use a small reference yield to get the f_gas(t) profile shape.
+    # yield_y=1.0 produces super-solar metallicities for typical SFHs
+    # (Z >> Z_sun), hitting the clip boundary in closed_box_metallicity and
+    # distorting the profile shape before the scale factor is applied.
+    # yield_y=0.01 (near the Pagel 1997 / Pilyugin+2007 empirical range) keeps
+    # the reference profile within the physical [-4, 1] dex clip.
+    _YIELD_REF = 0.01
     log_z_ref = closed_box_metallicity(
         age_yr,
         sfr,
-        yield_y=1.0,
+        yield_y=_YIELD_REF,
         eta_outflow=eta_outflow,
         f_gas_init=0.9,
         return_frac=return_frac,
@@ -204,7 +210,8 @@ def closed_box_metallicity_anchored(
     # The youngest element (index 0) is the present-day value
     z_ref_final = Z_SUN * 10.0 ** log_z_ref[0]
 
-    # Scale factor to match target
+    # Scale factor: Z ∝ yield_y in the leaky-box, so scaling by z_target/z_ref_final
+    # is equivalent to using yield_y = _YIELD_REF * scale directly.
     scale = jnp.where(z_ref_final > 1e-30, z_target / z_ref_final, 1.0)
 
     # Apply scaling in linear Z space, then convert back

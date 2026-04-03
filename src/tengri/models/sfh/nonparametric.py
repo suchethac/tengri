@@ -71,7 +71,7 @@ def continuity_sfh(
     if bin_edges_gyr is None:
         bin_edges_gyr = DEFAULT_BIN_EDGES_GYR
 
-    n_bins = len(bin_edges_gyr) - 1
+    n_bins = bin_edges_gyr.shape[0] - 1  # len() raises ConcretizationTypeError under JIT
 
     # Collect ratios from kwargs in order
     log_sfr_ratios = jnp.array([ratio_kwargs[f"ratio_{i}"] for i in range(n_bins - 1)])
@@ -93,12 +93,15 @@ def continuity_sfh(
     mass_unnorm = jnp.sum(sfr_unnorm * bin_widths_yr)
     sfr_bins = sfr_unnorm * 10.0**log_total_mass / mass_unnorm
 
-    # Interpolate piecewise-constant onto the age grid.
-    # Use bin centers for the interpolation anchors.
+    # Piecewise-constant (step function) — Leja+2019 ApJ 876 3 defines the continuity
+    # SFH as step functions, not linearly interpolated.  Use bin EDGES (not centers)
+    # for searchsorted so ages near boundaries are assigned to the correct bin.
     bin_edges_yr = bin_edges_gyr * 1e9
-    bin_centers_yr = 0.5 * (bin_edges_yr[:-1] + bin_edges_yr[1:])
 
-    sfr = jnp.interp(age_yr, bin_centers_yr, sfr_bins, left=sfr_bins[0], right=sfr_bins[-1])
+    # bin_idx: which bin each age falls in, using left-edge convention [edge_j, edge_{j+1})
+    bin_idx = jnp.searchsorted(bin_edges_yr, age_yr, side="right") - 1
+    bin_idx = jnp.clip(bin_idx, 0, n_bins - 1)
+    sfr = sfr_bins[bin_idx]
     return jnp.maximum(sfr, 0.0)
 
 
@@ -207,7 +210,7 @@ def dirichlet_sfh(
     if bin_edges_gyr is None:
         bin_edges_gyr = DEFAULT_BIN_EDGES_GYR
 
-    n_bins = len(bin_edges_gyr) - 1
+    n_bins = bin_edges_gyr.shape[0] - 1  # len() raises ConcretizationTypeError under JIT
 
     # Collect z_fractions from kwargs in order
     z_fractions = jnp.array([z_kwargs[f"z_frac_{i}"] for i in range(n_bins - 1)])
@@ -223,9 +226,11 @@ def dirichlet_sfh(
     total_mass = 10.0**log_total_mass
     sfr_bins = mass_fracs * total_mass / bin_widths_yr
 
-    # Interpolate piecewise-constant onto the age grid
+    # Piecewise-constant (step function) — Leja+2019 ApJ 876 3; use bin EDGES
+    # (not centers) so ages near boundaries go to the correct bin.
     bin_edges_yr = bin_edges_gyr * 1e9
-    bin_centers_yr = 0.5 * (bin_edges_yr[:-1] + bin_edges_yr[1:])
 
-    sfr = jnp.interp(age_yr, bin_centers_yr, sfr_bins, left=sfr_bins[0], right=sfr_bins[-1])
+    bin_idx = jnp.searchsorted(bin_edges_yr, age_yr, side="right") - 1
+    bin_idx = jnp.clip(bin_idx, 0, n_bins - 1)
+    sfr = sfr_bins[bin_idx]
     return jnp.maximum(sfr, 0.0)

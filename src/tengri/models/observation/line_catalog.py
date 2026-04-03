@@ -31,13 +31,14 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 _DOUBLET_RATIOS: dict[tuple[str, str], float] = {
-    ("OIII_5007", "OIII_4959"): 2.98,  # [OIII] — from transition probabilities
-    ("NII_6584", "NII_6548"): 2.94,  # [NII] — from transition probabilities
-    ("OII_3729", "OII_3726"): 1.3,  # [OII] — density-dependent, fix to typical
-    ("NeV_3426", "NeV_3346"): 1.3,  # [NeV]
-    ("OII_7330", "OII_7320"): 1.0,  # [OII] NIR doublet
+    ("OIII_5007", "OIII_4959"): 2.98,  # [OIII] — fixed by transition probabilities
+    ("NII_6584", "NII_6548"): 2.94,  # [NII] — fixed by transition probabilities
+    ("NeV_3426", "NeV_3346"): 1.3,  # [NeV] — from transition probabilities
     ("MgII_2803", "MgII_2796"): 1.0,  # MgII — optically thick limit
-    ("SIII_9532", "SIII_9069"): 2.47,  # [SIII]
+    ("SIII_9532", "SIII_9069"): 2.47,  # [SIII] — fixed by transition probabilities
+    # [OII] 3726/3729 and [OII] 7320/7330 are electron-density diagnostics —
+    # their ratios are NOT fixed by atomic physics and must never be constrained.
+    # [SII] 6717/6731 is similarly density-sensitive and is also left unconstrained.
 }
 
 # ---------------------------------------------------------------------------
@@ -47,7 +48,7 @@ _DOUBLET_RATIOS: dict[tuple[str, str], float] = {
 
 _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool]] = [
     # UV lines (1200-3000 Å)
-    ("Lya", 1215.67, "H1", True, True),
+    ("Lya", 1215.67, "H1", False, True),
     ("NV_1240", 1240.81, "N5", False, False),
     ("OI_1304", 1304.35, "O1", False, False),
     ("SiIV_1396", 1396.76, "Si4", False, False),
@@ -56,39 +57,39 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool]] = [
     ("AlIII_1857", 1857.40, "Al3", False, False),
     ("SiIII_1892", 1892.03, "Si3", False, False),
     ("CIII_1908", 1908.73, "C3", False, True),
-    ("MgII_2796", 2796.35, "Mg2", False, True),
+    ("MgII_2796", 2796.35, "Mg2", False, False),  # constrained secondary of MgII_2803
     ("MgII_2803", 2803.53, "Mg2", False, True),
-    ("NeV_3346", 3346.79, "Ne5", False, False),
-    ("NeV_3426", 3426.85, "Ne5", False, False),
+    ("NeV_3346", 3347.78, "Ne5", False, False),
+    ("NeV_3426", 3427.94, "Ne5", False, False),
     # Optical lines (3700-6800 Å)
-    ("OII_3726", 3726.03, "O2", False, False),
-    ("OII_3729", 3728.82, "O2", False, False),
-    ("NeIII_3869", 3869.86, "Ne3", False, False),
-    ("Hepsilon", 3970.07, "H1", True, True),
-    ("Hdelta", 4101.73, "H1", True, True),
-    ("Hgamma", 4340.46, "H1", True, True),
-    ("OIII_4363", 4363.21, "O3", False, False),
-    ("HeI_4471", 4471.48, "He1", False, False),
-    ("HeII_4686", 4685.71, "He2", False, False),
-    ("Hbeta", 4861.33, "H1", True, True),
-    ("OIII_4959", 4958.91, "O3", False, False),
-    ("OIII_5007", 5006.84, "O3", False, False),
-    ("NII_5755", 5755.08, "N2", False, False),
-    ("HeI_5876", 5875.66, "He1", False, False),
-    ("OI_6300", 6300.30, "O1", False, False),
-    ("SIII_6312", 6312.06, "S3", False, False),
-    ("NII_6548", 6548.05, "N2", False, False),
-    ("Halpha", 6562.80, "H1", True, True),
-    ("NII_6584", 6583.45, "N2", False, False),
+    ("OII_3726", 3727.09, "O2", False, False),
+    ("OII_3729", 3729.88, "O2", False, False),
+    ("NeIII_3869", 3870.16, "Ne3", False, False),
+    ("Hepsilon", 3971.20, "H1", True, True),
+    ("Hdelta", 4102.89, "H1", True, True),
+    ("Hgamma", 4341.68, "H1", True, True),
+    ("OIII_4363", 4364.44, "O3", False, False),
+    ("HeI_4471", 4472.74, "He1", False, False),
+    ("HeII_4686", 4687.02, "He2", False, False),
+    ("Hbeta", 4862.68, "H1", True, True),
+    ("OIII_4959", 4960.30, "O3", False, False),
+    ("OIII_5007", 5008.24, "O3", False, False),
+    ("NII_5755", 5756.19, "N2", False, False),
+    ("HeI_5876", 5877.25, "He1", False, False),
+    ("OI_6300", 6302.05, "O1", False, False),
+    ("SIII_6312", 6313.81, "S3", False, False),
+    ("NII_6548", 6549.86, "N2", False, False),
+    ("Halpha", 6564.61, "H1", True, True),
+    ("NII_6584", 6585.28, "N2", False, False),
     # SII 6717/6731 intentionally unconstrained: ratio is density-sensitive
-    ("SII_6717", 6716.44, "S2", False, False),
-    ("SII_6731", 6730.81, "S2", False, False),
+    ("SII_6717", 6718.29, "S2", False, False),
+    ("SII_6731", 6732.67, "S2", False, False),
     # Near-IR lines (7000-10000 Å)
-    ("ArIII_7135", 7135.78, "Ar3", False, False),
-    ("OII_7320", 7319.99, "O2", False, False),
-    ("OII_7330", 7330.73, "O2", False, False),
-    ("SIII_9069", 9068.60, "S3", False, False),
-    ("SIII_9532", 9531.10, "S3", False, False),
+    ("ArIII_7135", 7137.80, "Ar3", False, False),
+    ("OII_7320", 7321.47, "O2", False, False),
+    ("OII_7330", 7332.21, "O2", False, False),
+    ("SIII_9069", 9071.10, "S3", False, False),
+    ("SIII_9532", 9533.23, "S3", False, False),
 ]
 
 # ---------------------------------------------------------------------------
@@ -97,19 +98,19 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool]] = [
 # ---------------------------------------------------------------------------
 
 _DEFAULT_13_LINES: list[tuple[str, float, str, bool, bool]] = [
-    ("Lya", 1215.67, "H1", True, True),
-    ("Hdelta", 4101.73, "H1", True, True),
-    ("Hgamma", 4340.46, "H1", True, True),
-    ("Hbeta", 4861.33, "H1", True, True),
-    ("OIII_4959", 4958.91, "O3", False, False),
-    ("OIII_5007", 5006.84, "O3", False, False),
-    ("Halpha", 6562.80, "H1", True, True),
-    ("NII_6548", 6548.05, "N2", False, False),
-    ("NII_6584", 6583.45, "N2", False, False),
-    ("OII_3726", 3726.03, "O2", False, False),
-    ("OII_3729", 3728.82, "O2", False, False),
-    ("SII_6717", 6716.44, "S2", False, False),
-    ("SII_6731", 6730.81, "S2", False, False),
+    ("Lya", 1215.67, "H1", False, True),
+    ("Hdelta", 4102.89, "H1", True, True),
+    ("Hgamma", 4341.68, "H1", True, True),
+    ("Hbeta", 4862.68, "H1", True, True),
+    ("OIII_4959", 4960.30, "O3", False, False),
+    ("OIII_5007", 5008.24, "O3", False, False),
+    ("Halpha", 6564.61, "H1", True, True),
+    ("NII_6548", 6549.86, "N2", False, False),
+    ("NII_6584", 6585.28, "N2", False, False),
+    ("OII_3726", 3727.09, "O2", False, False),
+    ("OII_3729", 3729.88, "O2", False, False),
+    ("SII_6717", 6718.29, "S2", False, False),
+    ("SII_6731", 6732.67, "S2", False, False),
 ]
 
 
@@ -191,6 +192,24 @@ class LineCatalog:
         """Number of independent amplitude parameters after doublet constraints."""
         return self.n_lines - len(self.doublets)
 
+    @property
+    def independent_wavelengths(self) -> jnp.ndarray:
+        """Wavelengths of the independent (non-constrained) amplitude parameters.
+
+        After applying doublet constraints, the design matrix has
+        ``n_independent`` columns, one per independent amplitude. This property
+        returns the wavelength of each independent parameter's primary line,
+        in column order matching ``build_constraint_matrix()``.
+
+        Returns
+        -------
+        jnp.ndarray, shape (n_independent,)
+            Rest-frame vacuum wavelengths for independent amplitude columns.
+        """
+        secondary_indices = {dc.secondary_idx for dc in self.doublets}
+        kept = [i for i in range(self.n_lines) if i not in secondary_indices]
+        return self.wavelengths[jnp.array(kept)]
+
     # ------------------------------------------------------------------
     # Factory methods
     # ------------------------------------------------------------------
@@ -210,7 +229,7 @@ class LineCatalog:
         ::
 
             cat = LineCatalog.default_optical()
-            # cat.n_lines == 39, cat.n_independent == 33
+            # cat.n_lines == 39, cat.n_independent == 34
         """
         lines = sorted(_DEFAULT_OPTICAL_LINES, key=lambda t: t[1])
         return cls._from_line_tuples(lines)
@@ -225,10 +244,10 @@ class LineCatalog:
 
         Lines
         -----
-        Lya (1215.67), Hdelta (4101.73), Hgamma (4340.46), Hbeta (4861.33),
-        OIII_4959 (4958.91), OIII_5007 (5006.84), Halpha (6562.80),
-        NII_6548 (6548.05), NII_6584 (6583.45), OII_3726 (3726.03),
-        OII_3729 (3728.82), SII_6717 (6716.44), SII_6731 (6730.81).
+        Lya (1215.67), Hdelta (4102.89), Hgamma (4341.68), Hbeta (4862.68),
+        OIII_4959 (4960.30), OIII_5007 (5008.24), Halpha (6564.61),
+        NII_6548 (6549.86), NII_6584 (6585.28), OII_3726 (3727.09),
+        OII_3729 (3729.88), SII_6717 (6718.29), SII_6731 (6732.67).
 
         Returns
         -------
@@ -363,7 +382,7 @@ class LineCatalog:
 
         Select by observed wavelengths (e.g. from a line-finding algorithm)::
 
-            bpt = cat.select(wavelengths=[6562.80, 4861.33, 5006.84, 6583.45])
+            bpt = cat.select(wavelengths=[6564.61, 4862.68, 5008.24, 6585.28])
 
         Select only optical window::
 
@@ -494,7 +513,7 @@ class LineCatalog:
         Constrain [OIII] doublet so 5007/4959 ratio is fixed at 2.98::
 
             cat = LineCatalog.default_optical()
-            C = cat.build_constraint_matrix()  # shape (39, 33)
+            C = cat.build_constraint_matrix()  # shape (39, 32)
             G_eff = G_full @ C  # (n_pix, n_independent)
 
         For [OIII] 5007 (primary, idx=p) / 4959 (secondary, idx=s), ratio=2.98:
@@ -613,7 +632,7 @@ def _is_balmer_line(name: str, species: str) -> bool:
         return False
 
     # Try simple keyword match first
-    balmer_keywords = ("alpha", "beta", "gamma", "delta", "epsilon", "lya", "ly", "ha", "hb")
+    balmer_keywords = ("alpha", "beta", "gamma", "delta", "epsilon", "ha", "hb")
     name_lower = name.lower()
     if any(kw in name_lower for kw in balmer_keywords):
         return True
@@ -641,6 +660,21 @@ def _is_broad_candidate(name: str, species: str) -> bool:
     broad_keywords = ("lya", "civ", "mgii", "ciii", "halpha", "hbeta", "hgamma", "hdelta")
     name_lower = name.lower()
     return any(kw in name_lower for kw in broad_keywords)
+
+
+def _get_doublet_ratio_by_wavelength(primary_wave: float, secondary_wave: float) -> float:
+    """Look up doublet ratio by wavelength proximity to known pairs (within 5 Å)."""
+    for (pname, sname), ratio in _DOUBLET_RATIOS.items():
+        pwave = next((t[1] for t in _DEFAULT_OPTICAL_LINES if t[0] == pname), None)
+        swave = next((t[1] for t in _DEFAULT_OPTICAL_LINES if t[0] == sname), None)
+        if (
+            pwave is not None
+            and swave is not None
+            and abs(primary_wave - pwave) < 5.0
+            and abs(secondary_wave - swave) < 5.0
+        ):
+            return ratio
+    return 1.0
 
 
 def _detect_doublets_by_proximity(
@@ -682,9 +716,8 @@ def _detect_doublets_by_proximity(
             # Primary is the one with the longer wavelength (heuristic)
             primary_idx, secondary_idx = (i, j) if wavelengths[i] > wavelengths[j] else (j, i)
             # Check if there is a known ratio
-            ratio = _DOUBLET_RATIOS.get(
-                (names[primary_idx], names[secondary_idx]),
-                _DOUBLET_RATIOS.get((names[secondary_idx], names[primary_idx]), 1.0),
+            ratio = _get_doublet_ratio_by_wavelength(
+                wavelengths[primary_idx], wavelengths[secondary_idx]
             )
             doublets.append(
                 DoubletConstraint(

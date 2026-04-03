@@ -153,8 +153,18 @@ class TestAdafDisc:
             agn_r_tr=10.0,
         )
 
-        # Higher L_bol should produce brighter overall SED
-        assert jnp.sum(l_high) > jnp.sum(l_low)
+        # Higher L_bol should produce brighter overall SED.
+        # Compare bolometric luminosities via frequency integral — raw sum
+        # over a log-spaced wavelength grid is NOT a bolometric proxy because
+        # L_nu * dnu gains a nu factor, biasing toward radio-peaking SEDs.
+        c_aa_per_s = 2.99792458e18  # c in Angstrom/s
+        nu = c_aa_per_s / wavelength  # Hz, descending when wavelength ascending
+        sort_idx = jnp.argsort(nu)
+        lbol_high = jnp.trapezoid(l_high[sort_idx], nu[sort_idx])
+        lbol_low = jnp.trapezoid(l_low[sort_idx], nu[sort_idx])
+        assert lbol_high > lbol_low, (
+            f"Higher L_bol SED not brighter: {lbol_high:.3e} vs {lbol_low:.3e} Lsun"
+        )
 
     def test_agn_frac_scaling(self, wavelength):
         """agn_frac linearly scales the output."""

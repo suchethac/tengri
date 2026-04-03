@@ -180,12 +180,21 @@ class Posterior:
                 return self.eline_fluxes[idx]
             return self.eline_fluxes[:, idx]
 
-        eps = 1e-30
-        log_nii_ha = jnp.log10(
-            jnp.maximum(_get("NII_6584"), eps) / jnp.maximum(_get("Halpha"), eps)
+        nii = _get("NII_6584")
+        ha = _get("Halpha")
+        oiii = _get("OIII_5007")
+        hb = _get("Hbeta")
+        # NaN for non-detections (negative amplitudes); clamping to 1e-30 would
+        # give log10(1e-30/F) ~ -30 and corrupt BPT diagrams.
+        log_nii_ha = jnp.where(
+            (nii > 0) & (ha > 0),
+            jnp.log10(jnp.maximum(nii, 1e-30) / jnp.maximum(ha, 1e-30)),
+            jnp.nan,
         )
-        log_oiii_hb = jnp.log10(
-            jnp.maximum(_get("OIII_5007"), eps) / jnp.maximum(_get("Hbeta"), eps)
+        log_oiii_hb = jnp.where(
+            (oiii > 0) & (hb > 0),
+            jnp.log10(jnp.maximum(oiii, 1e-30) / jnp.maximum(hb, 1e-30)),
+            jnp.nan,
         )
         return log_nii_ha, log_oiii_hb
 

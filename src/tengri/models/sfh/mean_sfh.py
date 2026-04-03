@@ -218,9 +218,10 @@ def lnorm(
 ) -> jnp.ndarray:
     """Log-normal SFH — Gaussian in log10(age) space.
 
-    Peaks at peak_lbt, but is asymmetric in linear time (broader
-    toward older ages). Natural for SFHs that peak and decline
-    slowly.
+    The mode in log10(age) space is peak_lbt, but the peak in linear
+    time is shifted: t_peak_linear = peak_lbt * 10^{-w^2 * ln(10)}.
+    For w=0.3, this is a ~15% shift toward younger ages.  peak_lbt is
+    best interpreted as the median lookback time, not the linear peak.
 
     Parameters
     ----------
