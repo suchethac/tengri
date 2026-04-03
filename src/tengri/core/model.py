@@ -122,8 +122,8 @@ class PriorPredictive:
         Back-reference to the parent model.
     """
 
-    flux: "jnp.ndarray | None"
-    sfh: "jnp.ndarray"
+    flux: jnp.ndarray | None
+    sfh: jnp.ndarray
     params: dict
     _model: object = dataclasses.field(default=None, repr=False)
 
@@ -1843,7 +1843,7 @@ class Model:
     # Prior predictive check
     # -------------------------------------------------------------------
 
-    def prior_predictive(self, n: int = 500, seed: int = 42) -> "PriorPredictive":
+    def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
         """Sample from the prior and evaluate the forward model on each draw.
 
         Returns a ``PriorPredictive`` object with draw arrays and convenience
