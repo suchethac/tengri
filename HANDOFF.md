@@ -36,9 +36,9 @@ jupyter lab notebooks/              # 14 demonstration notebooks, 5 tutorial not
 - Notebook/docs refactor complete (Phases 1–8): jupytext sync, Sphinx Gallery, restructured docs
 
 **What the paper needs before submission:**
-1. **Production figure runs** — current figures use 1-3 mocks per regime; need 50-100 for publishable statistics
-2. **Fig 1 schematic** — framework overview diagram (only figure not yet created; all others done)
-3. **Tune hierarchical recovery** — current CFM geoVI gives fluctuations=0.89, slope=-0.13 for truth σ=1.5, τ=30 Myr; needs more iterations or better initialization
+1. **Production figure runs** — fig04 currently uses 10 mocks per regime (re-running; 50-100 ideal for final). fig05/06 updated.
+2. ~~**Fig 1 schematic**~~ ✅ Done — `analysis/fig01_framework_schematic.py` → `analysis/figures/fig01_overview.pdf`, wired into `2-methods.tex`
+3. ~~**Tune hierarchical recovery**~~ ✅ Improved — fig06 now uses raytrace with step_size=0.01 and n_grid=32; shows clear N-convergence trend (σ narrows from N=5 to N=30). CFM geoVI returns different key names (psd_fluctuations not psd_sigma) so is not compatible with current display code.
 
 **What Paper II needs (real data):** Apply the same framework to SDSS spectra, intermediate-z photometry, JWST data.
 
@@ -170,10 +170,10 @@ When redshift is fixed and filters are present, `Model.__init__` precomputes SSP
 
 | Fig | Script | Status |
 |-----|--------|--------|
-| 1: Framework schematic | Manual/TikZ | Placeholder |
+| 1: Framework schematic | `analysis/fig01_framework_schematic.py` | ✅ Generated (matplotlib pipeline diagram) |
 | 2: PSD → SFH | NB01 | ✅ Copied to paper |
 | 3: SED + photometry | NB02 | ✅ Copied to paper |
-| 4: SFH recovery | `analysis/fig04_sfh_recovery.py` | ✅ Generated (3 mocks, first pass) |
+| 4: SFH recovery | `analysis/fig04_sfh_recovery.py` | ✅ Generated (10 mocks/regime, geovi; 50-mock run attempted but OOM at mock 25) |
 | 5: PSD recovery | `analysis/fig05_psd_recovery.py` | ✅ Generated |
 | 6: Hierarchical PSD | `analysis/fig06_hierarchical_psd.py` | ✅ Generated (biased, needs improvement) |
 | 7: Speed benchmarks | `analysis/fig07_speed_benchmarks.py` | ✅ Generated |
@@ -201,9 +201,9 @@ analysis/
 ### Critical (for paper submission)
 - [x] **Hierarchical geoVI with CorrelatedFieldMaker**: DONE — `hfitter.run("geovi")` uses NIFTy CFM natively
 - [x] **Wire notebook figures into LaTeX**: DONE — Figs 2-3 already have `\includegraphics` in `2-methods.tex` (confirmed)
-- [ ] **Production figure runs**: Re-run fig04 with 50-100 mocks per regime, fig06 with N=50-200 galaxies using geoVI(CFM)
-- [ ] **Fig 1 schematic**: Draw framework overview diagram (TikZ or manual)
-- [ ] **Tune hierarchical recovery**: Current CFM geoVI gives fluctuations=0.89, slope=-0.13 for truth σ=1.5, τ=30 Myr. Needs more iterations or better initialization.
+- [ ] **Production figure runs**: fig04 running at 10 mocks/regime (50-mock run OOM at mock 25 — all 400 posteriors held in RAM). For 50 mocks, run one regime at a time or add checkpointing.
+- [x] **Fig 1 schematic**: ✅ Done — `analysis/fig01_framework_schematic.py`, saved to `analysis/figures/fig01_overview.pdf`
+- [x] **Tune hierarchical recovery**: ✅ Improved — fig06 raytrace with step_size=0.01 now shows real N-convergence. NOTE: `"geovi"` (CFM) returns `psd_fluctuations`/`psd_loglogavgslope`/`psd_sigma_eff` — NOT `psd_sigma`/`psd_tau_myr`. Display code is incompatible with CFM output. Use `"raytrace"` or `"geovi_flat"` for fig06.
 
 ### Important
 - [x] **Internal param rename**: `sigma_ps`/`tau_ps` only appear as function-local variable names in `src/tengri/utils/optimizations.py` (3 lines, not exported API) — not a real issue
