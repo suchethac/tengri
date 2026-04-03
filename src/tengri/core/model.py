@@ -2110,6 +2110,159 @@ class Model:
 
         return results
 
+    def _method_recommendation(self) -> tuple[str, str]:
+        """Return (method_name, reason) for the recommended inference method."""
+        d = self.spec.n_free
+        if self.spec.stochastic:
+            d_total = d + self.spec.n_grid
+            return "vi", f"D={d_total}, stochastic, geoVI default"
+        elif d <= 15:
+            return "laplace", f"D={d}, smooth, instant Gaussian approximation"
+        elif d <= 50:
+            return "vi_linear", f"D={d}, smooth, fast VI"
+        else:
+            return "vi", f"D={d}, moderate-high, geoVI default"
+
+    def tree(self) -> str:
+        """Return a human-readable physics tree showing the model hierarchy.
+
+        Shows the active sub-models at each physical layer (SFH, SPS, Dust,
+        Nebular, AGN, Observation), the free parameters at each layer, and
+        the recommended inference method.
+
+        Returns
+        -------
+        str
+            Multi-line formatted tree string.
+
+        Examples
+        --------
+        >>> print(model.tree())
+        Model  [D=7, stochastic=False]
+        ...
+        """
+        sep = "│"
+        branch = "├──"
+        last = "└──"
+        lines: list[str] = []
+
+        d = self.spec.n_free
+        stoch = "True" if self.spec.stochastic else "False"
+        n_grid = self.spec.n_grid if self.spec.stochastic else 0
+        d_total = d + n_grid
+        lines.append(f"Model  [D={d_total}, stochastic={stoch}]")
+        lines.append(sep)
+
+        # SFH layer
+        sfh_type = getattr(self.spec, "mean_sfh_type", ["unknown"])
+        sfh_name = "+".join(sfh_type) if isinstance(sfh_type, (list, tuple)) else str(sfh_type)
+        lines.append(f"{branch} SFH: {sfh_name}")
+        sfh_params = [
+            p
+            for p in self.spec.free_params
+            if p.startswith("sfh_") or p in ("psd_sigma", "psd_tau_myr")
+        ]
+        for i, name in enumerate(sfh_params):
+            prefix = last if i == len(sfh_params) - 1 else branch
+            try:
+                dist = self.spec.get_distribution(name)
+                lines.append(f"{sep}   {prefix} {name:<30s} ~ {dist!r}")
+            except Exception:
+                lines.append(f"{sep}   {prefix} {name}")
+        if self.spec.stochastic:
+            lines.append(f"{sep}   {last} sfh_field_xi  [{n_grid}-dim GP latent, xi ~ N(0,I)]")
+        lines.append(sep)
+
+        # SPS layer
+        try:
+            ssp = self.ssp_data
+            n_met, n_age, n_wave = ssp.ssp_flux.shape
+            lines.append(f"{branch} SPS: DSPS  [{n_met} Z x {n_age} ages x {n_wave} lambda]")
+        except Exception:
+            lines.append(f"{branch} SPS: DSPS")
+        lines.append(sep)
+
+        # Dust layer
+        lines.append(f"{branch} Dust: Charlot & Fall")
+        dust_params = [p for p in self.spec.free_params if p.startswith("dust_")]
+        for name in dust_params:
+            try:
+                dist = self.spec.get_distribution(name)
+                lines.append(f"{sep}   {branch} {name:<30s} ~ {dist!r}")
+            except Exception:
+                lines.append(f"{sep}   {branch} {name}")
+        lines.append(sep)
+
+        # Nebular layer
+        neb_mode = getattr(self.spec, "nebular_mode", None)
+        if neb_mode and neb_mode != "off":
+            lines.append(f"{branch} Nebular: {neb_mode}")
+            neb_params = [p for p in self.spec.free_params if p.startswith("neb_")]
+            for name in neb_params:
+                try:
+                    dist = self.spec.get_distribution(name)
+                    lines.append(f"{sep}   {branch} {name:<30s} ~ {dist!r}")
+                except Exception:
+                    lines.append(f"{sep}   {branch} {name}")
+            lines.append(sep)
+
+        # AGN layer
+        agn_model = getattr(self, "_agn_model", None) or getattr(self.spec, "agn_model", None)
+        if agn_model:
+            lines.append(f"{branch} AGN: {agn_model}")
+            agn_params = [p for p in self.spec.free_params if p.startswith("agn_")]
+            for name in agn_params:
+                try:
+                    dist = self.spec.get_distribution(name)
+                    lines.append(f"{sep}   {branch} {name:<30s} ~ {dist!r}")
+                except Exception:
+                    lines.append(f"{sep}   {branch} {name}")
+            lines.append(sep)
+
+        # Observation layer
+        filter_waves = getattr(self, "filter_waves", None)
+        z_fixed = getattr(self, "_z_fixed", None)
+        z_info = f"z={z_fixed:.4f} [fixed]" if z_fixed is not None else "z [free]"
+        if filter_waves is not None:
+            n_filt = len(filter_waves)
+            precomp = getattr(self, "_precomp", None)
+            precomp_str = "YES (21.6x speedup)" if precomp is not None else "NO"
+            lines.append(f"{last} Observation: Photometry [{n_filt} bands] at {z_info}")
+            lines.append(f"    Precomputed: {precomp_str}")
+        else:
+            wave_obs = getattr(self, "_wave_obs", None)
+            if wave_obs is not None:
+                lines.append(f"{last} Observation: Spectroscopy at {z_info}")
+            else:
+                lines.append(f"{last} Observation: {z_info}")
+
+        lines.append("")
+        method, reason = self._method_recommendation()
+        lines.append("Recommended inference:")
+        lines.append(f"  -> model.fit(data, noise, method={method!r})   [{reason}]")
+        if not self.spec.stochastic and d <= 30:
+            lines.append(
+                "  -> model.fit(data, noise, method='evidence')  [Bayesian evidence, D<=30]"
+            )
+
+        return "\n".join(lines)
+
+    def recommend_method(self) -> str:
+        """Return the recommended inference method string for this model.
+
+        Returns
+        -------
+        str
+            Canonical method name for ``Fitter.run()`` or ``model.fit()``.
+
+        Examples
+        --------
+        >>> method = model.recommend_method()
+        >>> result = model.fit(flux, noise, method=method)
+        """
+        method, _ = self._method_recommendation()
+        return method
+
     def summary(self) -> str:
         """Return a human-readable summary of the model configuration.
 
