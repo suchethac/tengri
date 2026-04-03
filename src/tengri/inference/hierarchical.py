@@ -73,6 +73,66 @@ class HierarchicalResult:
             f"wall_time={self.wall_time_s:.1f}s)"
         )
 
+    @property
+    def individual(self):
+        """Per-galaxy posterior marginals as a list of lightweight objects.
+
+        Returns
+        -------
+        list of SimpleNamespace
+            Each element has ``.samples`` (dict) and ``.params`` (dict).
+            Returns empty list if ``individual_samples`` is None.
+        """
+        from types import SimpleNamespace
+
+        if self.individual_samples is None:
+            return []
+        result = []
+        for samp in self.individual_samples:
+            params = {
+                k: float(np.median(v)) if hasattr(v, "ndim") and v.ndim == 1 else v
+                for k, v in samp.items()
+            }
+            result.append(SimpleNamespace(samples=samp, params=params))
+        return result
+
+    def plot_population(self, params=("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"), ax=None):
+        """Scatter plot of shared PSD parameter posteriors.
+
+        Parameters
+        ----------
+        params : tuple of str
+            Two parameter names for x and y axes.
+        ax : matplotlib Axes, optional
+
+        Returns
+        -------
+        matplotlib Axes
+        """
+        import matplotlib.pyplot as plt
+
+        if ax is None:
+            _, ax = plt.subplots(figsize=(6, 5))
+
+        px, py = params
+        if px in self.shared_samples and py in self.shared_samples:
+            x = np.array(self.shared_samples[px])
+            y = np.array(self.shared_samples[py])
+            ax.scatter(x, y, s=8, alpha=0.4, color="C0", edgecolors="none")
+            ax.set_xlabel(px)
+            ax.set_ylabel(py)
+            ax.set_title("Population posterior (shared PSD params)")
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                f"Parameters {px!r} or {py!r} not found",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+        return ax
+
 
 class HierarchicalFitter:
     """Hierarchical inference for shared PSD parameters.
