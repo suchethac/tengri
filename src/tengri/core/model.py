@@ -34,6 +34,7 @@ Usage::
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import warnings
 from typing import ClassVar, NamedTuple
 
@@ -97,6 +98,63 @@ class MockData(NamedTuple):
     flux_obs: jnp.ndarray  # noisy photometry
     noise: jnp.ndarray  # 1-sigma uncertainties
     params: dict  # input parameters
+
+
+# ---------------------------------------------------------------------------
+# PriorPredictive container
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass
+class PriorPredictive:
+    """Results of a prior predictive check.
+
+    Attributes
+    ----------
+    flux : jnp.ndarray or None
+        Predicted photometry draws, shape ``(n, n_filters)``.
+        None if the model has no filters.
+    sfh : jnp.ndarray
+        SFH draws, shape ``(n, n_grid)``.
+    params : dict
+        Drawn parameter samples, each of shape ``(n,)``.
+    _model : object
+        Back-reference to the parent model.
+    """
+
+    flux: "jnp.ndarray | None"
+    sfh: "jnp.ndarray"
+    params: dict
+    _model: object = dataclasses.field(default=None, repr=False)
+
+    def check_finite(self) -> dict:
+        """Check for NaN/Inf in flux draws.
+
+        Returns
+        -------
+        dict
+            ``{"n_nan": int, "n_inf": int, "frac_bad": float, "ok": bool}``
+        """
+        import warnings
+
+        import numpy as np
+
+        if self.flux is None:
+            return {"n_nan": 0, "n_inf": 0, "frac_bad": 0.0, "ok": True}
+
+        flux_np = np.array(self.flux)
+        n_nan = int(np.sum(np.isnan(flux_np)))
+        n_inf = int(np.sum(np.isinf(flux_np)))
+        total = flux_np.size
+        frac_bad = (n_nan + n_inf) / max(total, 1)
+        if n_nan + n_inf > 0:
+            warnings.warn(
+                f"prior_predictive: {n_nan} NaN and {n_inf} Inf values in flux draws "
+                f"({frac_bad:.1%} of total). Check priors for extreme parameter combinations.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return {"n_nan": n_nan, "n_inf": n_inf, "frac_bad": frac_bad, "ok": (n_nan + n_inf == 0)}
 
 
 # ---------------------------------------------------------------------------
@@ -1639,6 +1697,199 @@ class Model:
         return jax.vmap(self.predict_spectrum)(params_batch)
 
     # -------------------------------------------------------------------
+    # Factory classmethod
+    # -------------------------------------------------------------------
+
+    @classmethod
+    def from_config(
+        cls,
+        ssp,
+        sfh: str = "dpl",
+        dust: str = "charlot_fall",
+        nebular: str | None = None,
+        agn: str | None = None,
+        redshift: float | str = 0.1,
+        filters: list[str] | None = None,
+        wave_obs=None,
+        priors: dict | None = None,
+        **model_kwargs,
+    ) -> Model:
+        """Build a Model from a grouped configuration dict.
+
+        Reduces boilerplate for the common case: instead of constructing
+        ``ParamSpec``, ``SSPData``, ``Observation``, and ``Model`` separately,
+        provide a single grouped config and receive a fully configured ``Model``.
+
+        Parameters
+        ----------
+        ssp : str or SSPData
+            Path to SSP HDF5 file, or a pre-loaded ``SSPData`` instance.
+        sfh : str
+            SFH family name, e.g. ``"tsnorm"``, ``"dpl"``, ``"dpl+field"``.
+        dust : str
+            Dust attenuation law. ``"charlot_fall"`` (default), ``"calzetti"``, etc.
+        nebular : str or None
+            Nebular emission backend. ``"baked_in"``, ``"cloudy"``, ``"cue"``, or None.
+        agn : str or None
+            AGN model. None (disabled) or any AGN model name.
+        redshift : float or str
+            Fixed redshift (float), or ``"free"`` to add a free redshift parameter.
+        filters : list of str, optional
+            Filter names for photometry, e.g. ``["sdss_u", "sdss_g", "sdss_r"]``.
+        wave_obs : array, optional
+            Observed-frame wavelength array for spectroscopy.
+        priors : dict, optional
+            Parameter priors. Keys may be short names (``"log_peak_sfr"``),
+            universal short names (``"logzsol"``), or full prefixed names.
+            Short names are expanded automatically.
+        **model_kwargs
+            Forwarded to ``Model.__init__()``.
+
+        Returns
+        -------
+        Model
+
+        Examples
+        --------
+        >>> model = tengri.Model.from_config(
+        ...     ssp="data/ssp.h5",
+        ...     sfh="tsnorm",
+        ...     filters=["sdss_u", "sdss_g", "sdss_r"],
+        ...     redshift=0.1,
+        ...     priors=dict(
+        ...         log_peak_sfr=tengri.Uniform(-1, 2.5),
+        ...         logzsol=tengri.Uniform(-2, 0.2),
+        ...     ),
+        ... )
+        """
+        from tengri.core.param_spec import ParamSpec
+        from tengri.core.param_translate import resolve_short_names
+        from tengri.distributions import Uniform
+        from tengri.models.observation.observation import Observation
+        from tengri.models.sps.dsps_wrapper import SSPData, load_ssp_data
+
+        # --- Load SSP data ---
+        if isinstance(ssp, str):
+            ssp_data = load_ssp_data(ssp)
+        elif isinstance(ssp, SSPData):
+            ssp_data = ssp
+        else:
+            raise TypeError(f"ssp must be a file path (str) or SSPData, got {type(ssp)}")
+
+        # --- Expand short names in priors ---
+        expanded = resolve_short_names(sfh, priors or {})
+
+        # --- Inject redshift ---
+        if redshift == "free":
+            if "redshift" not in expanded:
+                expanded["redshift"] = Uniform(0.001, 6.0)
+        else:
+            expanded.setdefault("redshift", float(redshift))
+
+        # --- Inject AGN frac if AGN enabled and not already in priors ---
+        if agn is not None and "agn_frac" not in expanded:
+            expanded["agn_frac"] = Uniform(0.0, 1.0)
+
+        # --- Build ParamSpec ---
+        sfh_tokens = [t.strip() for t in sfh.replace("+", " ").split()]
+
+        spec_kwargs: dict = dict(expanded)
+        spec_kwargs["mean_sfh_type"] = sfh_tokens
+
+        if dust != "charlot_fall":
+            spec_kwargs["dust_law_bc"] = dust
+
+        if nebular is not None:
+            spec_kwargs["nebular_mode"] = nebular
+
+        if agn is not None:
+            spec_kwargs["agn_model"] = agn
+
+        spec = ParamSpec(**spec_kwargs)
+
+        # --- Build Observation ---
+        obs_photometry = None
+        obs_spectroscopy = None
+
+        if filters is not None:
+            try:
+                from tengri.models.observation.photometry_config import Photometry
+
+                obs_photometry = Photometry.from_names(filters)
+            except (ImportError, AttributeError):
+                pass
+
+        if wave_obs is not None:
+            try:
+                from tengri.models.observation.spectroscopy_config import (
+                    SpectroscopyConfig,
+                )
+
+                obs_spectroscopy = SpectroscopyConfig(wave_obs=wave_obs)
+            except (ImportError, AttributeError):
+                pass
+
+        if obs_photometry is not None or obs_spectroscopy is not None:
+            observation = Observation(
+                photometry=obs_photometry,
+                spectroscopy=obs_spectroscopy,
+            )
+        else:
+            observation = None
+
+        return cls(spec, ssp_data, observation=observation, **model_kwargs)
+
+    # -------------------------------------------------------------------
+    # Prior predictive check
+    # -------------------------------------------------------------------
+
+    def prior_predictive(self, n: int = 500, seed: int = 42) -> "PriorPredictive":
+        """Sample from the prior and evaluate the forward model on each draw.
+
+        Returns a ``PriorPredictive`` object with draw arrays and convenience
+        methods for model checking before inference.
+
+        Parameters
+        ----------
+        n : int
+            Number of prior draws. Default 500.
+        seed : int
+            Random seed. Default 42.
+
+        Returns
+        -------
+        PriorPredictive
+            ``ppc.flux`` — shape (n, n_filters) or None.
+            ``ppc.sfh``  — shape (n, n_grid).
+            ``ppc.params`` — dict of (n,) arrays.
+
+        Examples
+        --------
+        >>> ppc = model.prior_predictive(n=500)
+        >>> ppc.check_finite()
+        """
+        key = jax.random.PRNGKey(seed)
+        params_batch = self.spec.sample_batch(key, n)
+
+        # SFH draws
+        sfh_batch = jax.vmap(self.predict_sfh)(params_batch)
+
+        # Photometry draws (if filters present)
+        flux_batch = None
+        if self.filter_waves is not None:
+            try:
+                flux_batch = jax.vmap(self.predict_photometry)(params_batch)
+            except Exception:
+                flux_batch = None
+
+        return PriorPredictive(
+            flux=flux_batch,
+            sfh=sfh_batch,
+            params=params_batch,
+            _model=self,
+        )
+
+    # -------------------------------------------------------------------
     # Convenience fit
     # -------------------------------------------------------------------
 
@@ -1817,3 +2068,90 @@ class Model:
 
         lines.append(sep)
         return "\n".join(lines)
+
+    # -------------------------------------------------------------------
+    # Population fitting
+    # -------------------------------------------------------------------
+
+    def fit_population(
+        self,
+        observations_list: list,
+        method: str = "vi",
+        population_prior: dict | None = None,
+        **kwargs,
+    ):
+        """Fit a population of galaxies with shared PSD hyperparameters.
+
+        Thin wrapper around ``HierarchicalFitter``.
+
+        Parameters
+        ----------
+        observations_list : list
+            Each element is either a ``(flux, noise)`` tuple or a dict
+            with ``"flux_obs"`` and ``"noise"`` keys.
+        method : str
+            Hierarchical inference method. Default ``"vi"``.
+        population_prior : dict or None
+            Hyperpriors on shared PSD parameters.
+        **kwargs
+            Forwarded to ``HierarchicalFitter.run()``.
+
+        Returns
+        -------
+        HierarchicalResult
+        """
+        from tengri.inference.hierarchical import HierarchicalFitter
+
+        # Normalise input
+        galaxies = []
+        for obs in observations_list:
+            if isinstance(obs, (list, tuple)) and len(obs) == 2:
+                flux, noise = obs
+                galaxies.append({"flux_obs": flux, "noise": noise})
+            elif isinstance(obs, dict):
+                galaxies.append(obs)
+            else:
+                raise TypeError(
+                    f"Each element of observations_list must be a (flux, noise) tuple "
+                    f"or a dict with 'flux_obs'/'noise' keys. Got {type(obs)}"
+                )
+
+        # Extract population prior bounds
+        psd_sigma_prior = (0.1, 4.0)
+        psd_tau_prior = (1.0, 300.0)
+        if population_prior:
+            if "psd_sigma" in population_prior:
+                dist = population_prior["psd_sigma"]
+                psd_sigma_prior = getattr(dist, "bounds", psd_sigma_prior)
+            if "psd_tau_myr" in population_prior:
+                dist = population_prior["psd_tau_myr"]
+                psd_tau_prior = getattr(dist, "bounds", psd_tau_prior)
+
+        # Translate canonical → HierarchicalFitter method names
+        _hier_method_map = {
+            "vi": "geovi",
+            "vi_linear": "mgvi",
+            "mcmc_raytrace": "raytrace",
+            "mcmc": "raytrace",
+        }
+        hier_method = _hier_method_map.get(method, method)
+
+        def _model_factory(psd_sigma, psd_tau_myr):
+            from tengri.distributions import Fixed
+
+            new_spec = self.spec.with_params(
+                sfh_field_psd_sigma=Fixed(float(psd_sigma)),
+                sfh_field_psd_tau_myr=Fixed(float(psd_tau_myr)),
+            )
+            m = Model.__new__(Model)
+            m.__dict__.update(self.__dict__)
+            m.spec = new_spec
+            return m
+
+        hfitter = HierarchicalFitter(
+            _model_factory,
+            galaxies,
+            psd_sigma_prior=psd_sigma_prior,
+            psd_tau_prior=psd_tau_prior,
+        )
+        return hfitter.run(hier_method, **kwargs)
