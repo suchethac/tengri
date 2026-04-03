@@ -47,6 +47,7 @@ from tengri.inference.hierarchical import HierarchicalFitter, HierarchicalResult
 from tengri.inference.posterior import Posterior
 from tengri.inference.raytrace import sample_raytrace
 from tengri.inference.vi_config import VIConfig
+from tengri.models.agn.agn_config import AGNConfig
 from tengri.models.dust.attenuation import two_component_dust
 from tengri.models.observation.filters import load_filter_set
 from tengri.models.observation.line_catalog import LineCatalog
@@ -162,6 +163,7 @@ __all__ = [
     # Registry
     "FIELD_MODEL_REGISTRY",
     "SFH_REGISTRY",
+    "AGNConfig",
     "DerivedQuantities",
     "EmissionLines",
     "Fitter",
