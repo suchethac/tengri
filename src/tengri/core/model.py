@@ -1992,6 +1992,124 @@ class Model:
 
         return fitter.run(method, init_from=init_from, **kwargs)
 
+    def fit_catalog(
+        self,
+        catalog,
+        flux_cols: list[str],
+        err_cols: list[str],
+        redshift_col: str | None = None,
+        method: str = "vi",
+        n_workers: int = 1,
+        verbose: bool = True,
+        **kwargs,
+    ) -> list:
+        """Fit a catalog of galaxies, one row at a time.
+
+        Accepts a ``pandas.DataFrame``, an ``astropy.table.Table``, or a
+        list of dicts. Each row becomes one ``Posterior``.
+
+        Parameters
+        ----------
+        catalog : DataFrame, Table, or list of dict
+            Input catalog.
+        flux_cols : list of str
+            Column names for per-band flux values (must match model's filter order).
+        err_cols : list of str
+            Column names for per-band 1-sigma uncertainties.
+        redshift_col : str or None
+            If provided, use this column as per-row redshift via ``spec.with_params()``.
+        method : str
+            Inference method. Default ``"vi"``.
+        n_workers : int
+            Currently ignored (reserved for future multiprocessing). Default 1.
+        verbose : bool
+            Print per-galaxy progress. Default True.
+        **kwargs
+            Forwarded to ``Fitter.run()`` for every galaxy.
+
+        Returns
+        -------
+        list of Posterior
+            Same length as input catalog.
+
+        Examples
+        --------
+        >>> results = model.fit_catalog(
+        ...     catalog_df,
+        ...     flux_cols=["flux_u", "flux_g", "flux_r"],
+        ...     err_cols=["err_u", "err_g", "err_r"],
+        ...     redshift_col="z_spec",
+        ... )
+        """
+        import time
+
+        import jax.numpy as jnp
+
+        from tengri.distributions import Fixed
+        from tengri.inference.fitter import Fitter
+
+        # Normalise catalog to list of dicts
+        rows: list[dict] = []
+        try:
+            import pandas as pd
+
+            if isinstance(catalog, pd.DataFrame):
+                rows = catalog.to_dict(orient="records")
+        except ImportError:
+            pass
+
+        if not rows:
+            try:
+                from astropy.table import Table
+
+                if isinstance(catalog, Table):
+                    rows = [dict(zip(catalog.colnames, row)) for row in catalog]
+            except ImportError:
+                pass
+
+        if not rows and isinstance(catalog, (list, tuple)):
+            rows = list(catalog)
+
+        if not rows:
+            raise TypeError(
+                f"catalog must be a pandas DataFrame, astropy Table, or list of dicts. "
+                f"Got {type(catalog)}"
+            )
+
+        n_gal = len(rows)
+        results: list = []
+        t0 = time.time()
+
+        for i, row in enumerate(rows):
+            t_row = time.time()
+
+            flux_i = jnp.array([float(row[c]) for c in flux_cols])
+            noise_i = jnp.array([float(row[c]) for c in err_cols])
+
+            if redshift_col is not None:
+                row_z = float(row[redshift_col])
+                row_spec = self.spec.with_params(redshift=Fixed(row_z))
+                row_model = Model.__new__(Model)
+                row_model.__dict__.update(self.__dict__)
+                row_model.spec = row_spec
+                fitter_i = Fitter(row_model, flux_i, noise_i)
+            else:
+                fitter_i = Fitter(self, flux_i, noise_i)
+
+            result_i = fitter_i.run(method, **kwargs)
+            results.append(result_i)
+
+            if verbose:
+                dt = time.time() - t_row
+                elapsed = time.time() - t0
+                chi2 = result_i.diagnostics.get("chi2_dof", "?")
+                chi2_str = f"{chi2:.2f}" if isinstance(chi2, float) else str(chi2)
+                print(
+                    f"  [{i + 1}/{n_gal}] chi2/dof={chi2_str}, row={dt:.1f}s, total={elapsed:.0f}s"
+                )
+
+        return results
+
     def summary(self) -> str:
         """Return a human-readable summary of the model configuration.
 
