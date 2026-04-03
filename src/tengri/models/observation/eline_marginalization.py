@@ -353,3 +353,74 @@ def predict_with_marginalized_lines(
         Full model: ``model_continuum + G @ a_hat``.
     """
     return model_continuum + design_matrix @ a_hat
+
+
+def build_line_design_matrix(
+    wave_obs: jnp.ndarray,
+    narrow_wavelengths: jnp.ndarray,
+    broad_wavelengths: jnp.ndarray | None = None,
+    spectral_resolution: float = 2000.0,
+    redshift: float = 0.0,
+    narrow_sigma_kms: float = 0.0,
+    broad_sigma_kms: float = 5000.0,
+    delta_v_kms: float = 0.0,
+) -> jnp.ndarray:
+    """Unified emission line design matrix for narrow and/or broad lines.
+
+    Returns a ``(n_pix, n_narrow + n_broad)`` design matrix suitable for
+    analytical marginalization via ``marginalize_emission_lines()``.
+
+    Narrow line columns come first, broad line columns follow. If no
+    ``broad_wavelengths`` are provided, returns only the narrow columns.
+
+    Parameters
+    ----------
+    wave_obs : array, shape (n_pix,)
+        Observed wavelength grid [Angstrom].
+    narrow_wavelengths : array, shape (n_narrow,)
+        Rest-frame narrow line wavelengths [Angstrom].
+    broad_wavelengths : array or None, shape (n_broad,)
+        Rest-frame broad line wavelengths [Angstrom].
+        If ``None``, only narrow columns are returned.
+    spectral_resolution : float
+        Spectral resolution R = lambda/delta_lambda. Default 2000.
+    redshift : float
+        Redshift for shifting lines to observed frame. Default 0.
+    narrow_sigma_kms : float
+        Intrinsic narrow line width [km/s]. Default 0 (instrument-limited).
+    broad_sigma_kms : float
+        Intrinsic broad line width [km/s]. Default 5000.
+    delta_v_kms : float
+        Systematic velocity offset [km/s]. Default 0.
+
+    Returns
+    -------
+    array, shape (n_pix, n_narrow [+ n_broad])
+        Design matrix. Each column is a normalized Gaussian profile.
+
+    Examples
+    --------
+    >>> A = build_line_design_matrix(wave_obs, DEFAULT_LINE_WAVELENGTHS, redshift=0.1)
+    """
+    A_narrow = build_eline_design_matrix(
+        wave_obs,
+        narrow_wavelengths,
+        spectral_resolution=spectral_resolution,
+        redshift=redshift,
+        eline_sigma_kms=narrow_sigma_kms,
+        eline_delta_v_kms=delta_v_kms,
+    )
+
+    if broad_wavelengths is None:
+        return A_narrow
+
+    A_broad = build_broad_design_matrix(
+        wave_obs,
+        broad_wavelengths,
+        spectral_resolution=spectral_resolution,
+        redshift=redshift,
+        broad_sigma_kms=broad_sigma_kms,
+        eline_delta_v_kms=delta_v_kms,
+    )
+
+    return jnp.concatenate([A_narrow, A_broad], axis=1)
