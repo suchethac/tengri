@@ -152,23 +152,23 @@ class TestAgnNlrCue:
     """Tests for Cue-based AGN NLR emission."""
 
     @requires_cue
-    def test_returns_lines(self, cue_backend, wavelength):
+    def test_returns_lines(self, cue_backend):
         """Should return wavelength and luminosity arrays."""
-        wav, lum = agn_nlr_cue(wavelength, cue_backend, l_acc_erg=1e44)
+        wav, lum = agn_nlr_cue(cue_backend, l_acc_erg=1e44)
         assert len(wav) > 0
         assert len(lum) == len(wav)
 
     @requires_cue
-    def test_nonzero_luminosity(self, cue_backend, wavelength):
+    def test_nonzero_luminosity(self, cue_backend):
         """Line luminosities should be positive and nonzero."""
-        _wav, lum = agn_nlr_cue(wavelength, cue_backend, l_acc_erg=1e44)
+        _wav, lum = agn_nlr_cue(cue_backend, l_acc_erg=1e44)
         assert jnp.all(jnp.isfinite(lum))
         assert jnp.any(lum > 0)
 
     @requires_cue
-    def test_has_oiii_5007(self, cue_backend, wavelength):
+    def test_has_oiii_5007(self, cue_backend):
         """[OIII] 5007 should be present in the output lines."""
-        wav, lum = agn_nlr_cue(wavelength, cue_backend, l_acc_erg=1e44)
+        wav, lum = agn_nlr_cue(cue_backend, l_acc_erg=1e44)
         # Check for a line near 5007 A (within 2 A tolerance)
         oiii_mask = jnp.abs(wav - 5007.0) < 2.0
         assert jnp.any(oiii_mask), "[OIII] 5007 not found in line list"
@@ -176,16 +176,14 @@ class TestAgnNlrCue:
         assert jnp.all(oiii_lum > 0), "[OIII] 5007 has zero luminosity"
 
     @requires_cue
-    def test_covering_fraction_scales(self, cue_backend, wavelength):
+    def test_covering_fraction_scales(self, cue_backend):
         """Doubling covering fraction should double luminosity."""
         _, lum_01 = agn_nlr_cue(
-            wavelength,
             cue_backend,
             l_acc_erg=1e44,
             covering_fraction=0.1,
         )
         _, lum_02 = agn_nlr_cue(
-            wavelength,
             cue_backend,
             l_acc_erg=1e44,
             covering_fraction=0.2,
@@ -194,26 +192,24 @@ class TestAgnNlrCue:
         assert ratio == pytest.approx(2.0, rel=1e-4)
 
     @requires_cue
-    def test_higher_lacc_brighter(self, cue_backend, wavelength):
+    def test_higher_lacc_brighter(self, cue_backend):
         """Higher L_acc should produce brighter NLR emission."""
-        _, lum_low = agn_nlr_cue(wavelength, cue_backend, l_acc_erg=1e43)
-        _, lum_high = agn_nlr_cue(wavelength, cue_backend, l_acc_erg=1e45)
+        _, lum_low = agn_nlr_cue(cue_backend, l_acc_erg=1e43)
+        _, lum_high = agn_nlr_cue(cue_backend, l_acc_erg=1e45)
         assert jnp.sum(lum_high) > jnp.sum(lum_low)
 
     @requires_cue
-    def test_higher_logu_changes_ratios(self, cue_backend, wavelength):
+    def test_higher_logu_changes_ratios(self, cue_backend):
         """Different ionization parameter should change line ratios."""
         _wav, lum_low_u = agn_nlr_cue(
-            wavelength,
             cue_backend,
             l_acc_erg=1e44,
-            gas_logu=-3.5,
+            neb_logU=-3.5,
         )
         _, lum_high_u = agn_nlr_cue(
-            wavelength,
             cue_backend,
             l_acc_erg=1e44,
-            gas_logu=-2.0,
+            neb_logU=-2.0,
         )
         # Normalize both to total luminosity to compare ratios
         norm_low = lum_low_u / jnp.maximum(jnp.sum(lum_low_u), 1e-30)
@@ -236,10 +232,9 @@ class TestDispatcher:
     """Tests for the unified AGN NLR dispatcher."""
 
     @requires_cue
-    def test_cue_backend(self, cue_backend, wavelength):
+    def test_cue_backend(self, cue_backend):
         """backend='cue' should return (wavelengths, luminosities) tuple."""
         result = agn_nlr_emission(
-            wavelength,
             backend="cue",
             cue_backend=cue_backend,
             l_acc_erg=1e44,
@@ -253,14 +248,14 @@ class TestDispatcher:
     def test_cue_without_backend_raises(self, wavelength):
         """backend='cue' without cue_backend should raise ValueError."""
         with pytest.raises(ValueError, match="cue_backend must be provided"):
-            agn_nlr_emission(wavelength, backend="cue", l_acc_erg=1e44)
+            agn_nlr_emission(backend="cue", l_acc_erg=1e44)
 
     def test_feltre_not_implemented(self, wavelength):
         """backend='feltre' should raise NotImplementedError."""
         with pytest.raises(NotImplementedError, match="Feltre"):
-            agn_nlr_emission(wavelength, backend="feltre", l_acc_erg=1e44)
+            agn_nlr_emission(backend="feltre", l_acc_erg=1e44)
 
     def test_invalid_backend_raises(self, wavelength):
         """Unknown backend should raise ValueError."""
         with pytest.raises(ValueError, match="Unknown AGN NLR backend"):
-            agn_nlr_emission(wavelength, backend="invalid", l_acc_erg=1e44)
+            agn_nlr_emission(backend="invalid", l_acc_erg=1e44)
