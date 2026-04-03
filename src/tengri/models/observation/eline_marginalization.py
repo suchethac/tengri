@@ -27,44 +27,10 @@ parameters).
 import jax
 import jax.numpy as jnp
 
-# -------------------------------------------------------------------------
-# Default emission-line list (rest-frame vacuum wavelengths in Angstrom)
-# -------------------------------------------------------------------------
-
-DEFAULT_LINE_NAMES = (
-    "Ly-alpha",
-    "H-delta",
-    "H-gamma",
-    "H-beta",
-    "[OIII]4959",
-    "[OIII]5007",
-    "H-alpha",
-    "[NII]6548",
-    "[NII]6583",
-    "[OII]3726",
-    "[OII]3729",
-    "[SII]6717",
-    "[SII]6731",
+from tengri.models.observation.eline_catalog import (
+    DEFAULT_LINE_NAMES,  # noqa: F401 — re-exported for backward compatibility
+    DEFAULT_LINE_WAVELENGTHS,  # noqa: F401 — re-exported for backward compatibility
 )
-
-DEFAULT_LINE_WAVELENGTHS = jnp.array(
-    [
-        1215.67,  # Ly-alpha
-        4101.73,  # H-delta
-        4340.46,  # H-gamma
-        4861.33,  # H-beta
-        4958.91,  # [OIII]4959
-        5006.84,  # [OIII]5007
-        6562.80,  # H-alpha
-        6548.05,  # [NII]6548
-        6583.45,  # [NII]6583
-        3726.03,  # [OII]3726
-        3728.82,  # [OII]3729
-        6716.44,  # [SII]6717
-        6730.81,  # [SII]6731
-    ]
-)
-
 
 # -------------------------------------------------------------------------
 # Public API

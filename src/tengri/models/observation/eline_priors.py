@@ -21,47 +21,22 @@ References
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.models.observation.eline_catalog import (
+    CLOUDY_LINE_NAMES,  # noqa: F401 — re-exported for backward compatibility
+    CLOUDY_LINE_WAVELENGTHS,
+)
+
 # -------------------------------------------------------------------------
 # CLOUDY reference line ratios (relative to Hbeta = 1.0)
 # -------------------------------------------------------------------------
 
-# Rest-frame vacuum wavelengths (Angstrom) for the reference lines.
-# These must be in the same order as the ratio arrays below.
-CLOUDY_LINE_WAVELENGTHS = jnp.array(
-    [
-        3727.0,  # [OII] 3726+3729 doublet
-        4101.73,  # H-delta
-        4340.46,  # H-gamma
-        4861.33,  # H-beta (reference)
-        4959.0,  # [OIII] 4959
-        5007.0,  # [OIII] 5007
-        6548.0,  # [NII] 6548
-        6563.0,  # H-alpha
-        6583.0,  # [NII] 6583
-        6716.0,  # [SII] 6716
-        6731.0,  # [SII] 6731
-    ]
-)
-
-CLOUDY_LINE_NAMES = (
-    "[OII]3727",
-    "H-delta",
-    "H-gamma",
-    "H-beta",
-    "[OIII]4959",
-    "[OIII]5007",
-    "[NII]6548",
-    "H-alpha",
-    "[NII]6583",
-    "[SII]6716",
-    "[SII]6731",
-)
-
 # Line ratios relative to Hbeta at solar metallicity, logU = -3.
 # Source: standard CLOUDY HII region models (Byler+2017, Levesque+2010).
+# [OII] 3726+3729 total ~2.50; split with 3729/3726 ~ 1.3 (n_e ~ 100 cm^-3).
 _CLOUDY_SOLAR_LOGU3 = jnp.array(
     [
-        2.50,  # [OII] 3727 / Hbeta
+        1.09,  # [OII] 3726 / Hbeta  (2.50 / 2.30)
+        1.41,  # [OII] 3729 / Hbeta  (2.50 * 1.3 / 2.30)
         0.26,  # H-delta / Hbeta (Case B)
         0.47,  # H-gamma / Hbeta (Case B)
         1.00,  # H-beta (reference)
@@ -79,7 +54,8 @@ _CLOUDY_SOLAR_LOGU3 = jnp.array(
 # Metal lines are weaker, Balmer ratios unchanged (Case B).
 _CLOUDY_SUBSOLAR_LOGU3 = jnp.array(
     [
-        1.20,  # [OII] — lower at low Z
+        0.52,  # [OII] 3726 — lower at low Z  (1.20 / 2.30)
+        0.68,  # [OII] 3729 — lower at low Z  (1.20 * 1.3 / 2.30)
         0.26,  # H-delta (Case B, Z-independent)
         0.47,  # H-gamma (Case B, Z-independent)
         1.00,  # H-beta
@@ -97,7 +73,8 @@ _CLOUDY_SUBSOLAR_LOGU3 = jnp.array(
 # [OIII] is stronger, [NII]/[SII] weaker relative to logU=-3.
 _CLOUDY_SOLAR_LOGU2 = jnp.array(
     [
-        1.50,  # [OII] — lower at high U
+        0.65,  # [OII] 3726 — lower at high U  (1.50 / 2.30)
+        0.85,  # [OII] 3729 — lower at high U  (1.50 * 1.3 / 2.30)
         0.26,  # H-delta (Case B)
         0.47,  # H-gamma (Case B)
         1.00,  # H-beta
@@ -108,6 +85,28 @@ _CLOUDY_SOLAR_LOGU2 = jnp.array(
         0.24,  # [NII] 6583 — weaker at high U
         0.12,  # [SII] 6716 — weaker at high U
         0.09,  # [SII] 6731 — weaker at high U
+    ]
+)
+
+# Line ratios at sub-solar metallicity (0.2 Zsun), logU = -2.
+# 4th grid corner required for proper bilinear interpolation.
+# At low Z + high U: less metal cooling → hotter HII region → stronger [OIII];
+# [NII]/[SII] very weak; [OII] suppressed by both high U (ionized to [OIII])
+# and low Z. Values derived from Byler+2017 CLOUDY trends.
+_CLOUDY_SUBSOLAR_LOGU2 = jnp.array(
+    [
+        0.25,  # [OII] 3726 — strongly suppressed (low Z + high U)
+        0.32,  # [OII] 3729 — strongly suppressed (low Z + high U)
+        0.26,  # H-delta (Case B, Z-independent)
+        0.47,  # H-gamma (Case B, Z-independent)
+        1.00,  # H-beta
+        1.80,  # [OIII] 4959 — enhanced (low Z + high U)
+        5.40,  # [OIII] 5007 — strongly enhanced (low Z + high U)
+        0.02,  # [NII] 6548 — very weak (low Z + high U)
+        2.86,  # H-alpha (Case B)
+        0.05,  # [NII] 6583 — very weak (low Z + high U)
+        0.05,  # [SII] 6716 — weak at low Z
+        0.04,  # [SII] 6731 — weak at low Z
     ]
 )
 
@@ -160,18 +159,18 @@ def cloudy_line_priors(
     -----
     For richer priors using a full CLOUDY grid, use ``cloudy_grid_line_priors()``.
     """
-    # Interpolate between metallicity grid points
-    # Linear interp in log_z between sub-solar and solar
+    # Bilinear interpolation over all 4 (Z, logU) grid corners.
+    # Grid: Z ∈ {sub-solar, solar}, logU ∈ {-3, -2}
+    # Without all 4 corners, metallicity becomes a no-op at the logU=-2 boundary.
     z_frac = jnp.clip((log_z - _LOG_Z_SUBSOLAR) / (_LOG_ZSOL - _LOG_Z_SUBSOLAR), 0.0, 1.0)
-    ratios_logU3 = (1.0 - z_frac) * _CLOUDY_SUBSOLAR_LOGU3 + z_frac * _CLOUDY_SOLAR_LOGU3
-
-    # Interpolate between logU grid points (-3 and -2)
     u_frac = jnp.clip((neb_logU - (-3.0)) / ((-2.0) - (-3.0)), 0.0, 1.0)
-    ratios_solar_u = (1.0 - u_frac) * _CLOUDY_SOLAR_LOGU3 + u_frac * _CLOUDY_SOLAR_LOGU2
 
-    # Combine: Z interpolation at the appropriate U
-    # For simplicity, use logU=-3 Z-interpolated ratios and blend with logU=-2
-    prior_means = (1.0 - u_frac) * ratios_logU3 + u_frac * ratios_solar_u
+    prior_means = (
+        (1.0 - z_frac) * (1.0 - u_frac) * _CLOUDY_SUBSOLAR_LOGU3
+        + z_frac * (1.0 - u_frac) * _CLOUDY_SOLAR_LOGU3
+        + (1.0 - z_frac) * u_frac * _CLOUDY_SUBSOLAR_LOGU2
+        + z_frac * u_frac * _CLOUDY_SOLAR_LOGU2
+    )
 
     # Convert dex scatter to linear-space sigma: sigma = mean * (10^width - 1)
     # For small width, this approximates mean * width * ln(10)
@@ -257,7 +256,6 @@ def marginalize_emission_lines_cloudy(
 
     # Shift residual by prior mean (the marginalization assumes zero-mean prior
     # by default; we pre-subtract the prior mean from the residual and add it back)
-    design_matrix.shape[1]
     residual_shifted = residual - design_matrix @ scaled_means
 
     ln_l_marg, a_hat_shifted, a_cov = marginalize_emission_lines(
@@ -369,7 +367,7 @@ def cloudy_grid_line_priors(
 
     # Normalize to Hbeta = 1.0 (find Hbeta by nearest wavelength to 4861 Å)
     grid_wavs = np.array(grid_data.line_wavelengths)
-    hbeta_idx = int(np.argmin(np.abs(grid_wavs - 4861.33)))
+    hbeta_idx = int(np.argmin(np.abs(grid_wavs - 4862.68)))  # vacuum Hβ
     hbeta_lum = lin_lum[hbeta_idx]
     if hbeta_lum < 1e-30:
         hbeta_lum = 1.0  # safety fallback
@@ -449,17 +447,17 @@ def balmer_decrement_prior(
     """
     # Intrinsic Case B ratios (Hα, Hβ, Hγ, Hδ) relative to Hβ=1
     intrinsic = jnp.array([2.86, 1.0, 0.468, 0.259])
-    wavelengths = jnp.array([6562.80, 4861.33, 4340.46, 4101.73])
+    wavelengths = jnp.array([6564.61, 4862.68, 4341.68, 4102.89])  # vacuum
 
-    # Calzetti (2000) k(λ) curve piecewise fit (optical regime)
-    # For λ in [6300, 22000]: k(λ) = 2.659(-1.857 + 1.040/λ_um) + R_V
-    # For λ in [1200, 6300]: k(λ) = 2.659(-2.156 + 1.509/λ_um - 0.198/λ_um^2
-    # + 0.011/λ_um^3) + R_V
-    # λ_um = λ_Angstrom / 1e4
+    # Calzetti (2000) k(λ) piecewise fit. λ_um = λ_Angstrom / 1e4
+    # Red branch [6300, 22000 Å]: k = 2.659(-1.857 + 1.040/λ_um) + R_V
+    # Blue branch [1200, 6300 Å]: k = 2.659(-2.156 + 1.509/λ_um - 0.198/λ_um^2
+    #                                       + 0.011/λ_um^3) + R_V
+    # Hα (6564.61 Å) is above the 6300 Å boundary → red branch.
     lam_um = wavelengths / 1e4
-
-    # All Balmer lines are < 6563 Å, so use the blue piecewise:
-    k_lam = 2.659 * (-2.156 + 1.509 / lam_um - 0.198 / lam_um**2 + 0.011 / lam_um**3) + R_V
+    k_red = 2.659 * (-1.857 + 1.040 / lam_um) + R_V
+    k_blue = 2.659 * (-2.156 + 1.509 / lam_um - 0.198 / lam_um**2 + 0.011 / lam_um**3) + R_V
+    k_lam = jnp.where(wavelengths > 6300.0, k_red, k_blue)
     k_lam = jnp.maximum(k_lam, 0.0)
 
     # E(B-V)_neb from dust_tau_diff
