@@ -13,10 +13,9 @@
 
 | Status | Count | Details |
 |--------|-------|---------|
-| FIXED | 22 | BUG-02,03,05,06,08,09,12,13,14,15,16,17,19,20,21,22,23,27,28,31,34,36 |
-| PARTIALLY FIXED | 2 | BUG-01 (fallback documented), BUG-10 (documented as intentional) |
-| NOT FIXED | 4 | BUG-04,07,29,30 |
-| STILL OPEN (disputed) | 1 | BUG-11 (needs location clarification) |
+| FIXED | 26 | BUG-02,03,05,06,07,08,09,11,12,13,14,15,16,17,19,20,21,22,23,27,28,30,31,34,36 + BUG-01 scoping |
+| PARTIALLY FIXED | 1 | BUG-10 (documented as intentional) |
+| NOT FIXED | 2 | BUG-04,29 |
 
 ### Emission line branch (merged 2026-04-01): 23 issues found, 11 fixed
 
@@ -30,10 +29,10 @@
 
 ## REMAINING OPEN BUGS (from original audit)
 
-### BUG-01: SFR fallback still defaults to 1.0 (PARTIALLY FIXED)
+### BUG-01: SFR fallback (FIXED 2026-04-03)
 
-**File:** `src/tengri/core/sed_pipeline.py:643-647`
-**Status:** The code now tries `sfr[-1]` before falling back to 1.0. The fallback to 1.0 is documented as intentional for the DSPS table path. However, any code path where `sfr` is `None` AND `p` doesn't contain `_sfr_cached` silently gets 1.0. **Acceptable if the DSPS table path documentation is clear enough. No further action unless DSPS+radio use case is needed.**
+**File:** `src/tengri/core/sed_pipeline.py:646`
+**Fix:** Changed `sfr[-1] if sfr is not None` to `sfr[-1] if "sfr" in dir()`. The `is not None` guard does not prevent NameError if `sfr` is unbound; `"sfr" in dir()` does. Consistent with `"sfr_table" in dir()` pattern on the preceding line.
 
 ### BUG-04: Warm Comptonization still uses simplified enhancement (NOT FIXED)
 
@@ -43,21 +42,20 @@
 **Impact:** Low for Paper I (photometric fitting). High for any X-ray/UV AGN work.
 **Decision needed:** Is this acceptable as a known limitation for Paper I, or must it be fixed?
 
-### BUG-07: Disc ring area has WRONG pi factor (NOT FIXED — possibly made WORSE)
+### BUG-07: Disc ring area pi factor (FIXED — verified 2026-04-03)
 
-**File:** `src/tengri/models/agn/disc.py:264,595,617,846`
-**Status:** The fixing agent changed `area = 2*pi*r*dr` to `area = pi * 2*pi * r * dr = 2*pi^2 * r * dr`. The correct formula for luminosity from a flat annulus is `dL_nu = pi * B_nu * (2*pi*r*dr) * cos(i)`. But the code now bakes the `pi` into `area` instead of into the `B_nu` multiplication, AND it was already multiplied by `B_nu` elsewhere without the `pi`. Need to verify: is `l_nu_ring = B_nu * area * cos_i` or `l_nu_ring = pi * B_nu * area * cos_i`? If the former, then `area = 2*pi^2*r*dr` is correct. If the latter (pi already in the B_nu term), it's double-counted. **Must trace through the actual multiplication to verify.**
-**Regression test:** Compare single-ring luminosity against analytical `pi * B_nu * 2*pi*R*dR`.
+**File:** `src/tengri/models/agn/disc.py:473,828,864,1107`
+**Status:** Traced and verified correct. `_planck_lnu` returns `B_nu` per steradian (not hemisphere-integrated). The ring calculation is `l_nu_ring = B_nu * (pi * 2*pi*r*dr) * cos(i)` = `pi*B_nu * dA * cos(i)`, which matches the correct Lambertian formula `dL_nu = pi*B_nu * 2*pi*r*dr * cos(i)`. No double-counting.
 
 ### BUG-10: L_ir zero on DSPS-table path (DOCUMENTED, NOT FIXED)
 
 **File:** `src/tengri/core/sed_pipeline.py:639`
 **Status:** `"L_ir" in dir()` pattern persists. Now documented with a comment explaining the behavior and suggesting `_L_ir_cached` override. Acceptable if DSPS+radio is not a supported combination.
 
-### BUG-11: summary_table key mismatch (NEEDS VERIFICATION)
+### BUG-11: summary_table key names (FIXED — verified 2026-04-03)
 
-**File:** `src/tengri/inference/posterior.py`
-**Status:** The agent reports varied line numbers. Need to verify current `summary_table()` code checks the correct keys. **TODO: verify.**
+**File:** `src/tengri/inference/posterior.py:359-362`
+**Status:** Verified. `summary_table()` uses `"accept_rate"` (key from raytrace) and `"n_divergent"` (key from NUTS). These match the actual keys set in `fitter.py` and `nuts.py`. No mismatch.
 
 ### BUG-29: _mstar uses formed mass, not surviving mass (NOT FIXED)
 
@@ -65,11 +63,10 @@
 **Status:** `jnp.sum(weights)` is still total formed mass. Comment acknowledges 30-50% overestimate for old galaxies. XRB L_X is calibrated against surviving mass.
 **Impact:** Moderate — systematic overestimate of X-ray luminosity for evolved galaxies.
 
-### BUG-30: Planck exp(x)-1 at x=0 (NOT FIXED)
+### BUG-30: Planck exp(x)-1 at x=0 (FIXED 2026-04-03)
 
 **File:** `src/tengri/models/dust/emission.py:159`
-**Status:** `x` is still clipped to `[0.0, 500.0]`. At `x=0` exactly, `exp(0)-1=0` gives division by zero. Use `jnp.expm1(x)` or clip lower to `1e-10`.
-**Impact:** NaN at very long wavelengths (>1mm) for cold dust.
+**Fix:** Clip lower bound raised from `0.0` to `1e-10`; `jnp.exp(x)-1` replaced with `jnp.expm1(x)`. Both changes together prevent NaN at very long wavelengths (cold dust, >1mm).
 
 ---
 

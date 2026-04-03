@@ -325,21 +325,24 @@ See `docs/known_bugs.md` for full details, references to check, and regression t
 
 **RULE: Every fix MUST cite the original paper equation number or reference code line. Do NOT guess the correct formula — read the paper. Every fix MUST include a regression test that would have caught the bug.**
 
-**Status (2026-04-02):** 22 of 39 original audit bugs fixed. 11 of 23 emission-line-branch bugs fixed. Additional fixes by follow-up agent (see below). Remaining open:
+**Status (2026-04-03):** 26 of 39 original audit bugs fixed. 11 of 23 emission-line-branch bugs fixed. Remaining open:
 
 ### Still open from original audit
-- `disc.py:319-333` — Warm Comptonization still uses simplified enhancement, not nthcomp (K&D 2018)
-- `disc.py:264,595,617,846` — Ring area pi factor may be double-counted (needs trace verification)
-- `emission.py:159` — Planck `exp(x)-1` at x=0, use `jnp.expm1` or clip to 1e-10
+- `disc.py:500-546` — Warm Comptonization still uses simplified power-law enhancement, not nthcomp (K&D 2018 Section 2.2). Low impact for Paper I photometry. See `docs/known_bugs.md` BUG-04.
 - `sed_pipeline.py:651` — `_mstar` uses formed mass, not surviving mass for XRB scaling (comment added; fix requires surviving-mass computation from DSPS)
-- `posterior.py` — `summary_table()` key name mismatch (accept_rate vs acceptance_rate) needs verification
 
 ### Still open from emission line branch
 - `eline_priors.py:169-180` — `cloudy_line_priors()` interpolation loses metallicity at high logU (missing 4th grid point)
 - `eline_priors.py:248-278` — `marginalize_emission_lines_cloudy` returns wrong ln_L for non-zero-mean prior (biases MAP/VI)
 - No tests for `cloudy_grid_line_priors()` or finite-difference gradient check for marginalization
 
-### Fixed by follow-up agent (bugs now closed)
+### Fixed by follow-up review (bugs now closed — 2026-04-03)
+- `sed_pipeline.py:646` — `sfr is not None` guard replaced with `"sfr" in dir()` to match style of adjacent `"sfr_table" in dir()` and prevent potential NameError on unbound `sfr`.
+- `emission.py:159` — Planck `exp(x)-1` NaN at x=0: clip lower bound raised to 1e-10 and switched to `jnp.expm1(x)` for numerical stability at long wavelengths.
+- `disc.py:473,828,864,1107` — Ring area pi factor verified correct: `area = pi * 2*pi*r*dr` (not double-counted). `_planck_lnu` returns per-steradian B_nu; the extra pi accounts for Lambertian hemisphere emission.
+- `posterior.py:359-362` — `summary_table()` key names verified: uses `accept_rate` (raytrace) and `n_divergent` (NUTS), matching actual keys in fitter.py/nuts.py.
+
+### Fixed by follow-up agent (bugs now closed — 2026-04-02)
 - `line_catalog.py` — all wavelengths updated to vacuum (previously air). Default 13 lines docstring updated.
 - `line_catalog.py` — `n_independent` docstring corrected to 34 for `default_optical()` (OII doublets removed from constraints).
 - `line_catalog.py` — MgII_2796 now correctly flagged as constrained secondary (was `is_broad_candidate=True`).

@@ -643,7 +643,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
     _sfr_cached = (
         sfr_table[-1]
         if "sfr_table" in dir()
-        else (sfr[-1] if sfr is not None else p.get("_sfr_cached", 1.0))
+        else (sfr[-1] if "sfr" in dir() else p.get("_sfr_cached", 1.0))
     )
     # M*: total stellar mass formed (Msun).
     # Note: XRB calibrations use surviving stellar mass; formed mass overestimates

@@ -156,8 +156,8 @@ def planck_bnu(
     nu = _C_CGS / wavelength_cm
 
     # x = h*nu / (k*T), clipped to avoid overflow in exp
-    x = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * temperature), 0.0, 500.0)
-    return 2.0 * _H_PLANCK * nu**3 / (_C_CGS**2) / (jnp.exp(x) - 1.0)
+    x = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * temperature), 1e-10, 500.0)
+    return 2.0 * _H_PLANCK * nu**3 / (_C_CGS**2) / jnp.expm1(x)
 
 
 # ===================================================================

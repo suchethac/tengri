@@ -72,7 +72,7 @@ from tengri.models.dust.attenuation import precompute_dust_age_weights
 from tengri.models.observation.photometry import ab_mag_from_flux, compute_flux_density
 from tengri.models.observation.spectroscopy import apply_lsf, compute_spectrum
 from tengri.models.sfh.registry import compute_field_gp, resolve_sfh
-from tengri.models.sps.dsps_wrapper import compute_csp_weights
+from tengri.models.sps.dsps_wrapper import csp_age_dt
 from tengri.models.sps.precompute import (
     precompute_photometry,
     precompute_photometry_ztable,
@@ -239,6 +239,7 @@ class Model:
         precompute=True,
         forward_dtype="float64",
         approx=None,
+        csp_integration="trapz",
     ):
         # --- Observation / filters resolution ---
         if filters is not None and observation is not None:
@@ -304,6 +305,14 @@ class Model:
         # SSP grid info
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
         self.ssp_ages_yr = 10.0**self.ssp_log_ages_yr
+
+        # CSP integration method (precompute bin widths once at model init)
+        if csp_integration not in ("trapz", "log_trapz"):
+            raise ValueError(
+                f"csp_integration must be 'trapz' or 'log_trapz', got {csp_integration!r}"
+            )
+        self._csp_integration = csp_integration
+        self._csp_age_dt = csp_age_dt(self.ssp_ages_yr, csp_integration)
 
         # Log-age grid for SFH computation
         n_grid = spec.n_grid if spec.stochastic else 256
@@ -823,7 +832,7 @@ class Model:
         sfr = self._compute_sfr(p)
 
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
+        weights = sfr_on_ssp * self._csp_age_dt
         mass_formed = jnp.sum(weights)
 
         # Surviving mass
@@ -1160,7 +1169,7 @@ class Model:
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        weights = compute_csp_weights(sfr_on_ssp, self.ssp_ages_yr)
+        weights = sfr_on_ssp * self._csp_age_dt
 
         # Metallicity interpolation (single Z, non-evolving path)
         alpha_fe = p.get("alpha_fe", 0.0)
