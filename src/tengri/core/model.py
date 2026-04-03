@@ -1446,6 +1446,62 @@ class Model:
             "sfr_full": sfr_full_lin,
         }
 
+    def predict_hbeta(self, params: dict) -> float:
+        """Predict Hβ luminosity for use with CLOUDY-informed emission line priors.
+
+        Required by ``marginalize_emission_lines_cloudy()`` as the ``l_hbeta``
+        argument, which scales CLOUDY's ratio-relative-to-Hβ priors to physical
+        units.
+
+        Hβ luminosity is computed via the Case B recombination approximation
+        (Leitherer et al. 1999):
+
+        .. math::
+
+            L_{H\\beta} \\approx 52.2 \\times \\text{SFR}_{10} \\; [L_\\odot]
+
+        where :math:`\\text{SFR}_{10}` is the SFR averaged over the last 10 Myr
+        (the ionizing-photon relevant timescale), derived from
+        Q_H ≈ 4.2 × 10⁵³ × SFR [photons/s] and
+        L_Hβ = 4.76 × 10⁻¹³ × Q_H erg/s converted to L_sun.
+
+        Parameters
+        ----------
+        params : dict
+            Model parameters (from ``spec.sample()`` or a ``Posterior``).
+
+        Returns
+        -------
+        float
+            Hβ luminosity [Lsun].
+
+        Examples
+        --------
+        >>> l_hbeta = model.predict_hbeta(params)
+        >>> ln_L = marginalize_emission_lines_cloudy(
+        ...     residual,
+        ...     noise,
+        ...     A,
+        ...     log_z=params["met_logzsol"],
+        ...     neb_logU=-3.0,
+        ...     l_hbeta=l_hbeta,
+        ... )
+
+        See Also
+        --------
+        predict_sfh_quantities : JIT-compatible SFH quantities including sfr_10myr.
+        """
+        # Case B: L_Hbeta [Lsun] = 4.76e-13 * Q_H, Q_H = 4.2e53 * SFR [Msun/yr]
+        # => L_Hbeta = 4.76e-13 * 4.2e53 / 3.828e33 * SFR ≈ 52.2 * SFR
+        _L_HBETA_PER_SFR = 52.2  # Lsun per Msun/yr (Leitherer+1999)
+        try:
+            sfh_q = self.predict_sfh_quantities(params)
+            sfr_10 = float(sfh_q.sfr_10myr)
+            sfr_10 = max(sfr_10, 1e-10)
+            return float(_L_HBETA_PER_SFR * sfr_10)
+        except Exception:
+            return 1.0  # 1 Lsun safe fallback
+
     def predict_derived(self, params):
         """Compute derived physical quantities.
 
