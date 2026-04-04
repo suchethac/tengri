@@ -167,7 +167,6 @@ def build_fused_photometry(model):
             young_mask = (model.ssp_ages_yr < _t_birth).astype(dt)
             old_mask = dt.type(1.0) - young_mask
     flux_scale = dt.type(precomp.flux_scale)
-    ssp_ages_yr = model.ssp_ages_yr.astype(dt)
     _age_dt = model._csp_age_dt.astype(dt)  # precomputed CSP bin widths
     lsun = dt.type(LSUN_ERG_PER_S)
 
@@ -524,7 +523,6 @@ def build_fused_spectrum(model):
             young_mask_spec = (model.ssp_ages_yr < _t_birth_spec).astype(fdt)
             old_mask_spec = fdt.type(1.0) - young_mask_spec
     flux_scale = fdt.type(precomp.flux_scale)
-    ssp_ages_yr = model.ssp_ages_yr.astype(fdt)
     _age_dt_spec = model._csp_age_dt.astype(fdt)  # precomputed CSP bin widths
     lsun = fdt.type(LSUN_ERG_PER_S)
     n_pix = len(wave_obs_pixels)
@@ -910,7 +908,6 @@ def build_fused_photometry_ztable(model):
             _t_birth_zt = 1e7
             young_mask_zt = (model.ssp_ages_yr < _t_birth_zt).astype(fdt)
             old_mask_zt = fdt.type(1.0) - young_mask_zt
-    ssp_ages_yr = model.ssp_ages_yr.astype(fdt)
     _age_dt_zt = model._csp_age_dt.astype(fdt)  # precomputed CSP bin widths
     lsun = fdt.type(LSUN_ERG_PER_S)
 
