@@ -307,12 +307,20 @@ class Model:
         self.ssp_ages_yr = 10.0**self.ssp_log_ages_yr
 
         # CSP integration method (precompute bin widths once at model init)
-        if csp_integration not in ("trapz", "log_trapz"):
+        if csp_integration not in ("trapz", "log_trapz", "log_interp"):
             raise ValueError(
-                f"csp_integration must be 'trapz' or 'log_trapz', got {csp_integration!r}"
+                f"csp_integration must be 'trapz', 'log_trapz', or 'log_interp', "
+                f"got {csp_integration!r}"
             )
         self._csp_integration = csp_integration
-        self._csp_age_dt = csp_age_dt(self.ssp_ages_yr, csp_integration)
+        if csp_integration == "log_interp":
+            from tengri.models.sps.dsps_wrapper import csp_log_interp_matrix
+
+            self._csp_matrix = jnp.array(csp_log_interp_matrix(self.ssp_ages_yr))
+            self._csp_age_dt = None
+        else:
+            self._csp_age_dt = csp_age_dt(self.ssp_ages_yr, csp_integration)
+            self._csp_matrix = None
 
         # Log-age grid for SFH computation
         n_grid = spec.n_grid if spec.stochastic else 256
@@ -832,7 +840,10 @@ class Model:
         sfr = self._compute_sfr(p)
 
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        weights = sfr_on_ssp * self._csp_age_dt
+        if self._csp_integration == "log_interp":
+            weights = self._csp_matrix @ sfr_on_ssp
+        else:
+            weights = sfr_on_ssp * self._csp_age_dt
         mass_formed = jnp.sum(weights)
 
         # Surviving mass
@@ -1169,7 +1180,10 @@ class Model:
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        weights = sfr_on_ssp * self._csp_age_dt
+        if self._csp_integration == "log_interp":
+            weights = self._csp_matrix @ sfr_on_ssp
+        else:
+            weights = sfr_on_ssp * self._csp_age_dt
 
         # Metallicity interpolation (single Z, non-evolving path)
         alpha_fe = p.get("alpha_fe", 0.0)

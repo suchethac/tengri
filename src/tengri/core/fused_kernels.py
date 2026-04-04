@@ -167,7 +167,11 @@ def build_fused_photometry(model):
             young_mask = (model.ssp_ages_yr < _t_birth).astype(dt)
             old_mask = dt.type(1.0) - young_mask
     flux_scale = dt.type(precomp.flux_scale)
-    _age_dt = model._csp_age_dt.astype(dt)  # precomputed CSP bin widths
+    _csp_use_matrix = model._csp_integration == "log_interp"
+    if _csp_use_matrix:
+        _csp_mat = model._csp_matrix.astype(dt)
+    else:
+        _age_dt = model._csp_age_dt.astype(dt)  # precomputed CSP bin widths
     lsun = dt.type(LSUN_ERG_PER_S)
 
     # Capture dust law functions (pure JAX, JIT-traceable)
@@ -347,7 +351,7 @@ def build_fused_photometry(model):
         afe = jnp.asarray(alpha_fe, dtype=dt)
 
         # CSP weights (precomputed bin widths; method set at model init)
-        weights = sfr * _age_dt
+        weights = _csp_mat @ sfr if _csp_use_matrix else sfr * _age_dt
 
         # Metallicity + alpha interpolation
         if _has_alpha:
@@ -523,7 +527,11 @@ def build_fused_spectrum(model):
             young_mask_spec = (model.ssp_ages_yr < _t_birth_spec).astype(fdt)
             old_mask_spec = fdt.type(1.0) - young_mask_spec
     flux_scale = fdt.type(precomp.flux_scale)
-    _age_dt_spec = model._csp_age_dt.astype(fdt)  # precomputed CSP bin widths
+    _csp_use_matrix_spec = model._csp_integration == "log_interp"
+    if _csp_use_matrix_spec:
+        _csp_mat_spec = model._csp_matrix.astype(fdt)
+    else:
+        _age_dt_spec = model._csp_age_dt.astype(fdt)  # precomputed CSP bin widths
     lsun = fdt.type(LSUN_ERG_PER_S)
     n_pix = len(wave_obs_pixels)
     has_sigma_v = model._has_sigma_v
@@ -580,7 +588,7 @@ def build_fused_spectrum(model):
         afe = jnp.asarray(alpha_fe, dtype=fdt)
 
         # CSP weights (precomputed bin widths; method set at model init)
-        weights = sfr * _age_dt_spec
+        weights = _csp_mat_spec @ sfr if _csp_use_matrix_spec else sfr * _age_dt_spec
 
         # Metallicity + alpha interpolation
         if _has_alpha_zt:
@@ -908,7 +916,11 @@ def build_fused_photometry_ztable(model):
             _t_birth_zt = 1e7
             young_mask_zt = (model.ssp_ages_yr < _t_birth_zt).astype(fdt)
             old_mask_zt = fdt.type(1.0) - young_mask_zt
-    _age_dt_zt = model._csp_age_dt.astype(fdt)  # precomputed CSP bin widths
+    _csp_use_matrix_zt = model._csp_integration == "log_interp"
+    if _csp_use_matrix_zt:
+        _csp_mat_zt = model._csp_matrix.astype(fdt)
+    else:
+        _age_dt_zt = model._csp_age_dt.astype(fdt)  # precomputed CSP bin widths
     lsun = fdt.type(LSUN_ERG_PER_S)
 
     _has_alpha_zt = has_alpha_grid(model.ssp_data)
@@ -982,7 +994,7 @@ def build_fused_photometry_ztable(model):
         flux_scale = (1.0 - zf) * flux_scale_table[zi] + zf * flux_scale_table[zi + 1]
 
         # CSP weights (precomputed bin widths; method set at model init)
-        weights = sfr * _age_dt_zt
+        weights = _csp_mat_zt @ sfr if _csp_use_matrix_zt else sfr * _age_dt_zt
 
         # Metallicity + alpha interpolation
         if _has_alpha_zt:

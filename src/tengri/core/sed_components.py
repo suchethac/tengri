@@ -48,14 +48,18 @@ def build_ssp_component(model):
     ssp_lgmet = model.ssp_data.ssp_lgmet.astype(dt)
     use_smooth = model._met_interp == "smooth"
     lgmet_scatter = dt.type(model._lgmet_scatter)
-    _age_dt = model._csp_age_dt.astype(dt)  # precomputed at model init
+    _use_matrix = model._csp_integration == "log_interp"
+    if _use_matrix:
+        _csp_mat = model._csp_matrix.astype(dt)  # precomputed Johnson+2021 matrix
+    else:
+        _age_dt = model._csp_age_dt.astype(dt)   # precomputed bin widths
 
     def ssp_fn(sfr_on_ssp, log_z_abs, alpha_fe=0.0):
         sfr = sfr_on_ssp.astype(dt)
         lz = jnp.asarray(log_z_abs, dtype=dt)
         afe = jnp.asarray(alpha_fe, dtype=dt)
 
-        weights = sfr * _age_dt
+        weights = _csp_mat @ sfr if _use_matrix else sfr * _age_dt
 
         # Effective metallicity with alpha-element shift
         lz_eff = lz + _A2Z * afe

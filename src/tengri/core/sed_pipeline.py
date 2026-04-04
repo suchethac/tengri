@@ -321,10 +321,16 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         weights = _weights
         _use_dsps_table = False
     elif "sfh_t_gyr" in params:
-        weights = sfr_on_ssp * model._csp_age_dt
+        if model._csp_integration == "log_interp":
+            weights = model._csp_matrix @ sfr_on_ssp
+        else:
+            weights = sfr_on_ssp * model._csp_age_dt
     else:
         sfr_on_ssp = jnp.interp(model.ssp_log_ages_yr, model.log_age_grid, sfr)
-        weights = sfr_on_ssp * model._csp_age_dt
+        if model._csp_integration == "log_interp":
+            weights = model._csp_matrix @ sfr_on_ssp
+        else:
+            weights = sfr_on_ssp * model._csp_age_dt
         _use_dsps_table = False
 
     # Alpha-element enhancement

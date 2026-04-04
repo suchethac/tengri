@@ -173,14 +173,95 @@ def csp_age_dt(ssp_ages_yr: jnp.ndarray, method: str = "trapz") -> jnp.ndarray:
     else:
         raise ValueError(
             f"Unknown CSP integration method: {method!r}. "
-            "Valid options: 'trapz' (linear-age), 'log_trapz' (log-age with Jacobian)."
+            "Valid options: 'trapz', 'log_trapz', 'log_interp'."
         )
+
+
+def csp_log_interp_matrix(ssp_ages_yr, n_gl: int = 5):
+    """Johnson+2021 log-linear SSP interpolation weight matrix.
+
+    Returns an N×N matrix A such that ``m = A @ sfr`` gives the CSP mass
+    weights when SSP spectra are interpolated **linearly in log(t)** between
+    grid points and the SFR is assumed **piecewise-linear in t** between SSP
+    ages (Johnson et al. 2021, ApJS 254, 22, Appendix B, Eq. B3).
+
+    The CSP integral is approximated as:
+
+        F_λ = ∫ SFR(t) · S_λ(t) dt
+            ≈ Σ_j m_j · S_λ(t_j)
+
+    where S_λ(t) between grid points is the log-linear interpolant:
+
+        S_λ(t) = a_j(t)·S_λ(t_j) + b_{j+1}(t)·S_λ(t_{j+1}),  t ∈ [t_j, t_{j+1}]
+
+        a_j(t)     = (log t_{j+1} − log t) / (log t_{j+1} − log t_j)   [falls 1→0]
+        b_{j+1}(t) = (log t − log t_j) / (log t_{j+1} − log t_j)       [rises 0→1]
+
+    Substituting a piecewise-linear SFR and integrating each interval gives:
+
+        m_j = Σ_{intervals touching j} ∫ SFR(t) · φ_j(t) dt
+
+    where φ_j is the hat basis function (a_j on the right interval, b_j on
+    the left). This is computed via 5-point Gauss-Legendre quadrature per
+    interval, exact for polynomials up to degree 9.
+
+    The returned matrix is symmetric tridiagonal:
+    - A[j, j-1] = contribution from left interval via b_j
+    - A[j, j]   = sum of right-interval a_j and left-interval b_j contributions
+    - A[j, j+1] = contribution from right interval via a_j (symmetric)
+
+    Parameters
+    ----------
+    ssp_ages_yr : array-like, shape (n_age,)
+        SSP ages in years, sorted ascending.
+    n_gl : int, optional
+        Number of Gauss-Legendre quadrature points per interval. Default 5
+        (exact for degree-9 polynomials; more than sufficient).
+
+    Returns
+    -------
+    ndarray, shape (n_age, n_age)
+        Weight matrix A. Use as ``weights = A @ sfr_on_ssp``.
+    """
+    import numpy as np
+
+    ages = np.asarray(ssp_ages_yr, dtype=float)
+    N = len(ages)
+    A = np.zeros((N, N))
+
+    # 5-point Gauss-Legendre nodes on [-1,1], mapped to [0,1]
+    xi, wi = np.polynomial.legendre.leggauss(n_gl)
+    p_nodes = (xi + 1.0) / 2.0    # in [0, 1]
+    p_weights = wi / 2.0           # sum = 1
+
+    for j in range(N - 1):
+        t_lo, t_hi = ages[j], ages[j + 1]
+        delta_t = t_hi - t_lo
+        delta_u = np.log10(t_hi) - np.log10(t_lo)  # always > 0
+
+        # Quadrature points in linear t
+        t_q = t_lo + p_nodes * delta_t
+
+        # Log-linear basis functions at quadrature points
+        a_j = (np.log10(t_hi) - np.log10(t_q)) / delta_u   # falls 1→0
+        b_j1 = 1.0 - a_j                                     # rises 0→1
+
+        # SFR(t_q) = SFR_j*(1-p) + SFR_{j+1}*p  (piecewise-linear in t)
+        # Contribution to m_j (integrate SFR · a_j dt over [t_j, t_{j+1}]):
+        A[j,     j    ] += delta_t * np.dot(p_weights, (1.0 - p_nodes) * a_j)
+        A[j,     j + 1] += delta_t * np.dot(p_weights, p_nodes          * a_j)
+        # Contribution to m_{j+1} (integrate SFR · b_{j+1} dt):
+        A[j + 1, j    ] += delta_t * np.dot(p_weights, (1.0 - p_nodes) * b_j1)
+        A[j + 1, j + 1] += delta_t * np.dot(p_weights, p_nodes          * b_j1)
+
+    return A
 
 
 def compute_csp_weights(
     sfr_on_ssp_ages: jnp.ndarray,
     ssp_ages_yr: jnp.ndarray,
     method: str = "trapz",
+    _log_interp_matrix=None,
 ) -> jnp.ndarray:
     """Compute SFH weights (mass formed per SSP age bin).
 
@@ -196,16 +277,27 @@ def compute_csp_weights(
         Star formation rate at each SSP age (Msun/yr).
     ssp_ages_yr : array, shape (n_age,)
         SSP ages in years.
-    method : {"trapz", "log_trapz"}
+    method : {"trapz", "log_trapz", "log_interp"}
         Integration method. See :func:`csp_age_dt` for details.
         Default ``"trapz"`` is the DSPS-compatible linear-age trapezoid rule.
-        ``"log_trapz"`` applies the log-age Jacobian (Johnson et al. 2021).
+        ``"log_trapz"`` applies the log-age Jacobian.
+        ``"log_interp"`` uses Johnson+2021 log-linear interpolation (matrix
+        multiply); requires ``_log_interp_matrix`` to be supplied.
+    _log_interp_matrix : array, shape (n_age, n_age), optional
+        Precomputed weight matrix from :func:`csp_log_interp_matrix`.
+        Required when ``method="log_interp"``.
 
     Returns
     -------
     array, shape (n_age,)
         Mass formed per age bin (Msun). Sum = total mass formed.
     """
+    if method == "log_interp":
+        if _log_interp_matrix is None:
+            _log_interp_matrix = jnp.array(
+                csp_log_interp_matrix(ssp_ages_yr), dtype=sfr_on_ssp_ages.dtype
+            )
+        return _log_interp_matrix @ sfr_on_ssp_ages
     dt = csp_age_dt(ssp_ages_yr, method)
     return sfr_on_ssp_ages * dt
 
