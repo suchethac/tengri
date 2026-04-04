@@ -6,12 +6,12 @@ possible fits from your setup.
 ## Quick start: fastest possible fit
 
 ```python
-from tengri import Model, ParamSpec, Uniform, Fitter, Observation, Photometry, load_ssp_data
+from tengri import SEDModel, Parameters, Uniform, Fitter, Observation, Photometry, load_ssp_data
 
 ssp = load_ssp_data("data/ssp.h5")
 obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
@@ -29,11 +29,11 @@ spec = ParamSpec(
 #   2. Fused JIT kernel (auto when precompute is on)
 #   3. Precomputed dust age weights (always)
 #   4. XLA compilation cache (always)
-model = Model(spec, ssp, observation=obs, forward_dtype="float32")
+model = SEDModel(spec, ssp, observation=obs, forward_dtype="float32")
 
 # Fit
 fitter = Fitter(model, obs_flux, obs_err)
-posterior = fitter.run("native_geovi")
+posterior = fitter.run("vi")
 ```
 
 The key ingredients: fixed redshift, observation with photometry provided at init, and `forward_dtype="float32"`.
@@ -59,7 +59,7 @@ It is automatic. When you create a `Model` with a fixed redshift and an observat
 fused kernel is built during `__init__`:
 
 ```python
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 # model._fused_photometry is now a compiled JIT function
 
 flux = model.predict_photometry(params)  # uses fused kernel
@@ -101,8 +101,8 @@ wavelength, which is accurate to ~0.1% over the filter bandwidth for most dust l
 Automatic when redshift is fixed and an observation with photometry is present:
 
 ```python
-spec = ParamSpec(redshift=0.1, ...)  # fixed redshift
-model = Model(spec, ssp, observation=obs)
+spec = Parameters(redshift=0.1, ...)  # fixed redshift
+model = SEDModel(spec, ssp, observation=obs)
 # predict_photometry() uses the fast path automatically
 ```
 
@@ -116,7 +116,7 @@ model = Model(spec, ssp, observation=obs)
 
 :::{warning}
 Photometry precomputation requires a **fixed** redshift. If redshift is a free
-parameter in your `ParamSpec`, the exact path is used automatically.
+parameter in your `Parameters`, the exact path is used automatically.
 :::
 
 ## Optimization 3: Mixed precision
@@ -133,10 +133,10 @@ The forward model is numerically stable in float32. With `forward_dtype="float32
 
 ```python
 # Default: float64
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 
 # Mixed precision: float32 forward, float64 likelihood
-model = Model(spec, ssp, observation=obs, forward_dtype="float32")
+model = SEDModel(spec, ssp, observation=obs, forward_dtype="float32")
 ```
 
 ### Accuracy
@@ -173,7 +173,7 @@ dust function skips the log/sigmoid entirely.
 Automatic. The Model always precomputes dust age weights:
 
 ```python
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 # model._dust_age_weights is a 1D array of precomputed sigmoid values
 ```
 

@@ -6,7 +6,7 @@ passing `filters=`, `data_type=`, and noise parameters separately, you declare
 **what you observed** once and let tengri handle the rest.
 
 ```python
-from tengri import Observation, Photometry, SpectroscopyConfig, NoiseConfig
+from tengri import Observation, Photometry, Spectroscopy, NoiseModel
 ```
 
 ## Why Observation?
@@ -14,7 +14,7 @@ from tengri import Observation, Photometry, SpectroscopyConfig, NoiseConfig
 - **One object, full configuration.** Photometry, spectroscopy, noise, and calibration
   are declared together. No more remembering which arguments go where.
 - **Automatic parameter injection.** Calibration polynomial coefficients and noise model
-  parameters are generated from the Observation and merged into `ParamSpec` automatically.
+  parameters are generated from the Observation and merged into `Parameters` automatically.
 - **Safe data handling.** `pack_data()` and `unpack_prediction()` validate shapes and
   enforce canonical ordering (photometry first, spectroscopy second).
 - **Data type inference.** The `Fitter` reads `obs.data_type` directly --- no need for
@@ -27,8 +27,8 @@ from tengri import Observation, Photometry, SpectroscopyConfig, NoiseConfig
 | Field | Type | Purpose |
 |-------|------|---------|
 | `photometry` | `Photometry` | Filter transmission curves |
-| `spectroscopy` | `SpectroscopyConfig` | Wavelength grid, resolution, calibration |
-| `noise` | `NoiseConfig` | Calibration floor, Student-t likelihood |
+| `spectroscopy` | `Spectroscopy` | Wavelength grid, resolution, calibration |
+| `noise` | `NoiseModel` | Calibration floor, Student-t likelihood |
 
 At least one of `photometry` or `spectroscopy` must be provided.
 

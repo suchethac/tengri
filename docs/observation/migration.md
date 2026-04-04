@@ -33,7 +33,7 @@ obs = Observation(
         ["sdss_u", "sdss_g", "sdss_r"]
     ),
 )
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 fitter = Fitter(model, data, noise)
 ```
 ::::
@@ -49,7 +49,7 @@ The `Fitter` infers `data_type="photometry"` from the observation automatically.
 ::::{grid-item}
 **Old API**
 ```python
-model = Model(
+model = SEDModel(
     spec, ssp,
     wave_obs=wave_obs,
     resolution=1000,
@@ -65,12 +65,12 @@ fitter = Fitter(
 **New API**
 ```python
 obs = Observation(
-    spectroscopy=SpectroscopyConfig(
+    spectroscopy=Spectroscopy(
         wave_obs=wave_obs,
         resolution=1000,
     ),
 )
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 fitter = Fitter(model, data, noise)
 ```
 ::::
@@ -86,7 +86,7 @@ fitter = Fitter(model, data, noise)
 ```python
 import jax.numpy as jnp
 
-model = Model(
+model = SEDModel(
     spec, ssp,
     filters=filters,
     wave_obs=wave_obs,
@@ -105,12 +105,12 @@ fitter = Fitter(
 ```python
 obs = Observation(
     photometry=Photometry.from_names([...]),
-    spectroscopy=SpectroscopyConfig(wave_obs),
+    spectroscopy=Spectroscopy(wave_obs),
 )
 data = obs.pack_data(phot=phot, spec=spec)
 noise = obs.pack_data(phot=phot_n, spec=spec_n)
 
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 fitter = Fitter(model, data, noise)
 ```
 ::::
@@ -126,7 +126,7 @@ The new API validates array shapes and enforces canonical ordering via `pack_dat
 ::::{grid-item}
 **Old API**
 ```python
-spec = ParamSpec(
+spec = Parameters(
     ...,
     noise_frac_cal=Uniform(0.01, 0.15),
 )
@@ -138,7 +138,7 @@ spec = ParamSpec(
 ```python
 obs = Observation(
     photometry=Photometry.from_names([...]),
-    noise=NoiseConfig(
+    noise=NoiseModel(
         calibration_floor=Uniform(0.01, 0.15),
     ),
 )

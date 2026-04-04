@@ -11,7 +11,7 @@ both the speed of the sampler and the quality of its exploration.
 
 ESS (effective sample size) measures how many independent draws a correlated chain is
 worth. For MCMC methods (NUTS, Ray Tracing), ESS is computed from autocorrelation. For
-VI methods (native_geovi), the posterior samples are approximately independent by
+VI methods (`vi`), the posterior samples are approximately independent by
 construction, so ESS approaches the nominal sample count.
 
 ## Comparison table
@@ -21,12 +21,12 @@ Measured with `analysis/bench_inference_quality.py --quick` on Apple M-series CP
 
 | Method | Total (s) | Runtime (s) | Samples | ESS_min | ESS/s | \|Bias\| | Cov_68 | Best for |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|---|
-| MAP | 0.5 | 0.5 | --- | --- | --- | 0.37 | --- | Initialization |
-| native_geovi | 72.5 | 0.5 | 50 | 24 | 52.5 | 0.52 | 82% | Default |
-| Ray Tracing | 0.8 | 0.6 | 200 | 200 | 326.1 | 0.43 | 53% | Exact MCMC |
-| NUTS | 8.7 | 7.7 | 200 | 200 | 25.9 | 0.46 | 53% | Validation (low-D) |
-| geovi_nuts | 53.6 | 4.0 | 100 | 50 | 12.4 | 0.46 | 53% | Best of both |
-| NSS | ~30 | ~30 | 1000 | --- | --- | --- | --- | Evidence (log Z) |
+| `map` | 0.5 | 0.5 | --- | --- | --- | 0.37 | --- | Initialization |
+| `vi` | 72.5 | 0.5 | 50 | 24 | 52.5 | 0.52 | 82% | Default |
+| `mcmc_raytrace` | 0.8 | 0.6 | 200 | 200 | 326.1 | 0.43 | 53% | Exact MCMC |
+| `mcmc_nuts` | 8.7 | 7.7 | 200 | 200 | 25.9 | 0.46 | 53% | Validation (low-D) |
+| `vi` → `refine("mcmc_nuts")` | 53.6 | 4.0 | 100 | 50 | 12.4 | 0.46 | 53% | Best of both |
+| `evidence` | ~30 | ~30 | 1000 | --- | --- | --- | --- | Evidence (log Z) |
 
 *ESS/s = ESS_min / runtime. These are `--quick` mode results with reduced samples.
 Full benchmarks with more samples will sharpen these numbers.*
@@ -45,12 +45,12 @@ Use NUTS. It provides exact posterior samples with well-understood convergence
 diagnostics. At low D, the cost is manageable (minutes, not hours).
 
 **D < 20 and need speed:**
-Use native_geovi. Compilation is amortized over the catalog, and per-galaxy runtime
+Use `vi`. Compilation is amortized over the catalog, and per-galaxy runtime
 is sub-second. Posterior quality is good for most applications.
 
 **D > 20:**
-Use native_geovi. NUTS becomes impractically slow in high dimensions because
-leapfrog trajectory length must grow with D. native_geovi scales gracefully.
+Use `vi`. NUTS becomes impractically slow in high dimensions because
+leapfrog trajectory length must grow with D. `vi` scales gracefully.
 
 **Need exact posterior (any D):**
 Use Ray Tracing. It is a genuine MCMC method (asymptotically exact) that handles
@@ -62,12 +62,12 @@ the MAP solution. This avoids wasting warmup iterations exploring low-probabilit
 regions.
 
 **Need the best of both worlds:**
-Use geovi_nuts, which runs geoVI optimization to learn the posterior geometry, then
-draws NUTS samples from the optimized variational approximation. This combines the
-speed of VI with the exactness of MCMC.
+Use `vi` first, then call `result.refine("mcmc_nuts")`. This runs geoVI optimization
+to learn the posterior geometry, then draws NUTS samples from the optimized variational
+approximation. This combines the speed of VI with the exactness of MCMC.
 
 **Need Bayesian evidence for model comparison (D ≤ 30):**
-Use NSS (Nested Slice Sampling). It computes the marginal likelihood log Z, enabling
+Use `evidence` (Nested Slice Sampling). It computes the marginal likelihood log Z, enabling
 Bayes factor comparisons between competing models (e.g., different SFH parametrizations
 or dust laws). NSS also produces posterior samples as a byproduct. Restricted to smooth
 (non-stochastic) models. See the [model comparison notebook](../_notebooks/demonstrations/13_model_comparison) for a worked example.

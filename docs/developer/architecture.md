@@ -14,7 +14,7 @@ src/tengri/
 │
 ├── core/                    # Forward model
 │   ├── model.py             # Model class (thin orchestrator)
-│   ├── param_spec.py        # ParamSpec: parameter definitions + validation
+│   ├── param_spec.py        # Parameters: parameter definitions + validation
 │   ├── param_translate.py   # Public → internal param mapping + unit conversion
 │   ├── fused_kernels.py     # JIT kernel factory functions
 │   ├── sed_pipeline.py      # Core SED computation engine
@@ -24,7 +24,7 @@ src/tengri/
 │
 ├── inference/               # All fitting + results
 │   ├── fitter.py            # Fitter: MAP, Ray Tracing, NUTS, geoVI, MGVI
-│   ├── hierarchical.py      # HierarchicalFitter: shared PSD
+│   ├── hierarchical.py      # PopulationFitter: shared PSD
 │   ├── standardized.py      # StandardizedForwardModel: xi → observables
 │   ├── posterior.py          # Posterior: summary, corner, ESS
 │   ├── raytrace.py          # Ray Tracing Sampler (Behroozi 2025)
@@ -88,6 +88,20 @@ methods that need it. The forward model, distributions, and non-VI samplers
 must work without NIFTy installed.
 ```
 
+## Class naming conventions
+
+Each class suffix has a specific meaning — these are enforced across the codebase:
+
+| Suffix | Meaning | Examples |
+|--------|---------|---------|
+| *(none)* | Data container / physics object | `Photometry`, `Spectroscopy`, `Observation` |
+| `Model` | A physical forward model | `SEDModel`, `NoiseModel` |
+| `Parameters` | Prior specification — what gets fitted | `Parameters` (formerly `ParamSpec`) |
+| `Fitter` | Runs inference | `Fitter`, `PopulationFitter` |
+| `Posterior` | Result of inference (samples + diagnostics) | `Posterior`, `PopulationPosterior` |
+| `Config` | Static structural choice (not a fitted param) | `AGNConfig`, `VIConfig` |
+| `Backend` | Interchangeable computation engine | `CueBackend`, `CloudyGridBackend` |
+
 ## Module dependency direction
 
 Dependencies flow in one direction:
@@ -104,7 +118,7 @@ depends on both `core/` and `models/`.
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  User API:  ParamSpec → Model → Fitter → Posterior   │
+│  User API:  Parameters → SEDModel → Fitter → Posterior   │
 ├──────────────────────────────────────────────────────┤
 │  Forward Model: SFH → SPS → Dust → Photometry       │
 ├──────────────────────────────────────────────────────┤
@@ -119,11 +133,11 @@ implements one physical component: PSD models, GP generation, mean SFH,
 dust attenuation, SPS integrals, photometry. These are `@jax.jit`-decorated,
 accept arrays and scalars, and compose via standard function calls.
 
-**Layer 2 -- Forward model.** `Model` composes the low-level functions into
+**Layer 2 -- Forward model.** `SEDModel` composes the low-level functions into
 a single differentiable pipeline (see [Data flow](#data-flow) below).
 
 **Layer 3 -- User API.** Four classes provide the high-level interface:
-`ParamSpec`, `Model`, `Fitter`, and `Posterior`. Each has a `.summary()`
+`Parameters`, `SEDModel`, `Fitter`, and `Posterior`. Each has a `.summary()`
 method for quick inspection.
 
 ## Core principle: full standardization
@@ -143,7 +157,7 @@ No separate prior penalty terms. No per-distribution special cases.
 The full parameter-to-observable pipeline:
 
 ```
-User defines ParamSpec:
+User defines Parameters:
   sfh_alpha = Uniform(0.5, 3.0)         # Distribution object
   met_logzsol = Gaussian(-0.5, 0.3)
   psd_sigma = LogNormal(0.0, 0.8)       # free or fixed
@@ -275,7 +289,7 @@ unstandardize transforms, creating a natural PSD-field coupling.
 
 ## Stochastic vs parametric mode
 
-tengri supports two SFH modes controlled by the `ParamSpec`:
+tengri supports two SFH modes controlled by `Parameters`:
 
 **Parametric** (`stochastic=False`): The SFH is a smooth double power law
 with 4 parameters. Low-dimensional (7--11 free parameters), suitable for

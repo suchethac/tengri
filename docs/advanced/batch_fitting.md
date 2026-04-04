@@ -1,8 +1,21 @@
 # Batch Fitting
 
-Fitting catalogs of galaxies efficiently. This page covers the `fit_batch` API,
-mock catalog generation, result aggregation, and practical considerations for
-real survey data.
+Fitting catalogs of galaxies efficiently. This page covers `fit_batch` (independent
+fits) and `fit_population` (hierarchical, shared hyperparameters), mock catalog
+generation, result aggregation, and practical considerations for real survey data.
+
+:::{important}
+**fit_batch vs fit_population — choose the right one:**
+
+| Use case | Method | Returns |
+|----------|--------|---------|
+| N independent galaxy fits, no shared parameters | `model.fit_batch(observations)` | `list[Posterior]` |
+| N galaxies jointly, shared PSD / dust prior | `model.fit_population(observations)` | `PopulationPosterior` |
+
+`fit_batch` is fast and parallelisable. `fit_population` learns the population-level
+burstiness prior from data — use it when you want to constrain the PSD hyperparameters
+rather than assuming them.
+:::
 
 ## The batch API
 
@@ -10,9 +23,9 @@ real survey data.
 cache so that only the first galaxy pays the compile cost:
 
 ```python
-from tengri import Model, ParamSpec, Fitter
+from tengri import SEDModel, Parameters, Fitter
 
-model = Model(spec, ssp)
+model = SEDModel(spec, ssp)
 fitter = Fitter(model, flux_obs, noise)  # template fitter
 
 galaxies = [
@@ -20,21 +33,21 @@ galaxies = [
     for flux_array_i, noise_array_i in zip(catalog_flux, catalog_noise)
 ]
 
-results = fitter.fit_batch(galaxies, method="native_geovi", n_iterations=15)
+results = fitter.fit_batch(galaxies, method="vi", n_iterations=15)
 ```
 
 **Key points:**
 - The first galaxy takes ~15s (XLA compilation). Subsequent galaxies take ~2ms each
-  with `native_geovi` thanks to the persistent XLA cache at `~/.cache/tengri_jax_cache`.
-- Any inference method works: `native_geovi` (default), `raytrace`, `nuts`, etc.
-- For `native_*` methods, `n_seeds=5` is set automatically to improve robustness.
+  with `vi` thanks to the persistent XLA cache at `~/.cache/tengri_jax_cache`.
+- Any inference method works: `vi` (default), `mcmc_raytrace`, `mcmc_nuts`, etc.
+- `n_seeds=5` is set automatically for the `vi` family to improve robustness.
 
 ### Parameters
 
 ```python
 results = fitter.fit_batch(
     galaxies,                   # list of {"flux_obs": ..., "noise": ...}
-    method="native_geovi",      # any method from fitter.run()
+    method="vi",                # any method from fitter.run()
     key=jax.random.PRNGKey(42), # reproducibility
     verbose=True,               # progress printing
     n_iterations=15,            # passed through to run()
@@ -121,11 +134,11 @@ print(f"{n_converged}/{len(results)} galaxies converged")
 
 :::{tip}
 For galaxies that fail convergence, try re-fitting with more iterations, a
-different method (e.g., `raytrace`), or MAP initialization:
+different method (e.g., `mcmc_raytrace`), or MAP initialization:
 
 ```python
 result_map = fitter_i.run("map", n_steps=1500)
-result = fitter_i.run("native_geovi", init_from=result_map, n_iterations=25)
+result = fitter_i.run("vi", init_from=result_map, n_iterations=25)
 ```
 :::
 
@@ -134,9 +147,9 @@ result = fitter_i.run("native_geovi", init_from=result_map, n_iterations=25)
 ### SDSS photometry
 
 ```python
-from tengri import Model, ParamSpec, Uniform, Fitter, Observation, Photometry
+from tengri import SEDModel, Parameters, Uniform, Fitter, Observation, Photometry
 
-spec = ParamSpec(
+spec = Parameters(
     redshift=0.05,       # fixed redshift from spectroscopic catalog
     sfh="field",         # stochastic SFH
     dust=True,
@@ -145,7 +158,7 @@ spec = ParamSpec(
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 fitter = Fitter(model, flux_obs, noise)
 results = fitter.fit_batch(sdss_galaxies)
 ```
@@ -159,10 +172,10 @@ High-redshift JWST fitting introduces specific challenges:
 - **Fewer rest-frame constraints**: at z > 6, optical rest-frame shifts to
   mid-IR. Fewer filters constrain the SFH, so priors matter more.
 - **Wider priors**: young galaxies may need wider metallicity and dust priors.
-- **Nebular emission**: strong at high-z. Enable with `nebular=True` in `ParamSpec`.
+- **Nebular emission**: strong at high-z. Enable with `nebular=True` in `Parameters`.
 
 ```python
-spec = ParamSpec(
+spec = Parameters(
     redshift=7.5,
     sfh="field",
     dust=True,
@@ -173,7 +186,7 @@ obs = Observation(photometry=Photometry.from_names(
     ["jwst_f115w", "jwst_f150w", "jwst_f200w",
      "jwst_f277w", "jwst_f356w", "jwst_f444w"]
 ))
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 ```
 
 :::{note}
@@ -186,24 +199,24 @@ catalogs particularly efficient.
 
 | Catalog size | Method | First galaxy | Subsequent | Total (approx) |
 |-------------|--------|-------------|-----------|----------------|
-| 100 | native_geovi | ~15s | ~2ms | ~15s |
-| 1000 | native_geovi | ~15s | ~2ms | ~17s |
-| 100 | raytrace | ~15s | ~10s | ~17 min |
+| 100 | vi | ~15s | ~2ms | ~15s |
+| 1000 | vi | ~15s | ~2ms | ~17s |
+| 100 | mcmc_raytrace | ~15s | ~10s | ~17 min |
 
 The XLA compilation cache persists across Python sessions (stored at
 `~/.cache/tengri_jax_cache`), so restarting the kernel does not re-trigger compilation
 for the same model configuration.
 
-## When to use batch vs. hierarchical
+## When to use fit_batch vs. fit_population
 
 | Scenario | Use |
 |----------|-----|
-| Independent fits, no shared parameters | `fitter.fit_batch()` |
-| Shared PSD parameters across population | `HierarchicalFitter` |
-| Quick catalog exploration | `fit_batch` with `native_geovi` |
-| Population-level SFH burstiness constraints | `HierarchicalFitter` |
+| Independent fits, no shared parameters | `model.fit_batch(observations)` |
+| Shared PSD / dust prior across population | `model.fit_population(observations)` |
+| Quick catalog exploration | `fit_batch` with `vi` |
+| Population-level SFH burstiness constraints | `fit_population` → `PopulationPosterior` |
 
-See {doc}`hierarchical` for population-level inference with shared PSD parameters.
+See {doc}`hierarchical` for population-level inference with `PopulationFitter`.
 
 See the demonstration notebooks for worked examples:
 {doc}`../demonstrations/index` --- especially notebooks 02 (photometric catalogs),

@@ -7,20 +7,20 @@ Implementation details for contributors working on tengri's core subsystems.
 The `Fitter.run(method)` method routes to internal dispatch functions based
 on the method name:
 
-| Dispatch function | Methods handled |
-|-------------------|----------------|
-| `_run_native_vi` | `native_geovi`, `native_mgvi` |
-| `_run_fast_vi` | `geovi`, `fast_geovi`, `mgvi`, `fast_mgvi`, `geovi_nuts`, `mgvi_nuts` |
-| `_run_nifty_vi` | `nifty_geovi`, `nifty_mgvi` |
-| `_run_map` | `map` |
-| `_run_nuts` | `nuts` |
-| `_run_raytrace` | `raytrace` |
-| `_run_nss` | `nss` |
-| `_run_laplace` | `laplace` |
-| `_run_pathfinder` | `pathfinder` |
-| `_run_elliptical_slice` | `elliptical_slice` |
+| Dispatch function | Canonical methods | Old names (deprecated) |
+|-------------------|-------------------|------------------------|
+| `_run_native_vi` | `vi`, `vi_linear` | `native_geovi`, `native_mgvi` |
+| `_run_fast_vi` | `vi`, `vi_linear` | `geovi`, `fast_geovi`, `mgvi`, `fast_mgvi`, `geovi_nuts`, `mgvi_nuts` |
+| `_run_nifty_vi` | `vi_nifty`, `vi_nifty_linear` | `nifty_geovi`, `nifty_mgvi` |
+| `_run_map` | `map` | — |
+| `_run_nuts` | `mcmc_nuts` | `nuts` |
+| `_run_raytrace` | `mcmc_raytrace` | `raytrace` |
+| `_run_nss` | `evidence` | `nss` |
+| `_run_laplace` | `laplace` | — |
+| `_run_pathfinder` | `pathfinder` | — |
+| `_run_elliptical_slice` | `mcmc_ess` | `elliptical_slice` |
 
-**`native_geovi`** is the default going forward. It is a JIT-compiled geoVI
+**`vi`** is the default going forward. It is a JIT-compiled geoVI
 with a resample+update schedule and nonlinear posterior draws. Ray Tracing
 validates exact posteriors. NUTS validates low-dimensional problems. MAP
 provides initialization.
@@ -29,16 +29,15 @@ provides initialization.
 
 | Method | Module | Extra dependency | Exact? | Best dimensionality |
 |--------|--------|-----------------|--------|---------------------|
-| MAP | `inference/map_optimizer.py` | optax | No (point estimate) | Any |
-| native_geovi | `inference/fitter.py` | nifty8.re | Approximate | Up to ~100,000 |
-| Ray Tracing | `inference/raytrace.py` | -- | Yes | Up to ~300 |
-| NUTS | `inference/nuts.py` | blackjax | Yes | Up to ~20 |
-| Laplace | `inference/laplace.py` | -- | Approximate (Gaussian) | Any |
-| Pathfinder | `inference/pathfinder.py` | blackjax | Approximate | Up to ~100 |
-| Elliptical Slice | `inference/elliptical_slice.py` | -- | Yes | Any (Gaussian prior) |
-| NSS | `inference/ns/nss.py` | -- | Yes + evidence | Up to ~30 |
-| geoVI | `inference/geovi.py` | nifty8.re | Approximate | Up to ~100,000 |
-| MGVI | `inference/fitter.py` | nifty8.re | Approximate | Up to ~1,000,000 |
+| `map` | `inference/map_optimizer.py` | optax | No (point estimate) | Any |
+| `vi` | `inference/fitter.py` | nifty8.re | Approximate | Up to ~100,000 |
+| `vi_linear` | `inference/fitter.py` | nifty8.re | Approximate | Up to ~1,000,000 |
+| `mcmc_raytrace` | `inference/raytrace.py` | -- | Yes | Up to ~300 |
+| `mcmc_nuts` | `inference/nuts.py` | blackjax | Yes | Up to ~20 |
+| `mcmc_ess` | `inference/elliptical_slice.py` | -- | Yes | Any (Gaussian prior) |
+| `laplace` | `inference/laplace.py` | -- | Approximate (Gaussian) | Any |
+| `pathfinder` | `inference/pathfinder.py` | blackjax | Approximate | Up to ~100 |
+| `evidence` | `inference/ns/nss.py` | -- | Yes + evidence | Up to ~30 |
 
 ### Removed method names
 
@@ -79,7 +78,7 @@ parameter names, applying unit conversions where needed:
 | `sfh_field_psd_tau_myr` | `psd_tau_yr` | `* 1e6` (Myr to yr) |
 
 ```{note}
-ParamSpec free params use full prefixes: `sfh_dpl_alpha`,
+`Parameters` free params use full prefixes: `sfh_dpl_alpha`,
 `sfh_dpl_log_peak_sfr`, `sfh_field_psd_sigma`, `sfh_field_xi` -- not
 shorthand like `sfh_alpha` or `psd_xi`. Check with `spec.free_params`
 and `spec.sample(key).keys()`.
@@ -107,11 +106,11 @@ the same model configuration.
 **Compile-once-run-many.** The forward model and its gradient compile once
 on the first call. Subsequent calls reuse the compiled XLA graph.
 
-**Mixed precision.** `Model(spec, ssp, forward_dtype="float32")` halves
+**Mixed precision.** `SEDModel(spec, ssp, forward_dtype="float32")` halves
 memory usage and provides roughly 1.5x speed with less than 0.1% error.
 
 **Precomputed dust age weights.** The sigmoid of `log10(age)` used for
-birth-cloud vs diffuse dust is computed once at `Model.__init__`, not per
+birth-cloud vs diffuse dust is computed once at `SEDModel.__init__`, not per
 forward call.
 
 **Photometry precomputation.** When redshift is fixed and filters are
@@ -128,7 +127,7 @@ wavelengths when the wavelength grid is fixed.
 |-----------|-------------|-------------------|
 | Forward model | 140 us | 356 us |
 | Gradient | 56 us | 63 us |
-| `native_geovi` (10 iter) | 56s compile + 0.3s run | 56s compile + 0.8s run |
+| `vi` (10 iter) | 56s compile + 0.3s run | 56s compile + 0.8s run |
 
 ## Standardized forward model
 
@@ -145,18 +144,18 @@ correlated field to `Model`, bypassing the internal GP computation.
 
 ## Hierarchical inference
 
-`HierarchicalFitter` shares PSD hyperparameters across N galaxies while each
+`PopulationFitter` shares PSD hyperparameters across N galaxies while each
 galaxy retains its own latent field `xi_i` and physical parameters. Total
 dimensionality: `2 + N * (n_grid + n_phys)`.
 
 Three approaches are available:
 
-1. **CorrelatedFieldMaker + native_geovi** (default, recommended): PSD
+1. **CorrelatedFieldMaker + `vi`** (default, recommended): PSD
    hyperparameters are part of the generative model.
-2. **native_mgvi**: Same but faster per iteration for very large N.
-3. **Ray Tracing**: Flat vector with MAP initialization per galaxy for small N.
+2. **`vi_linear`**: Same but faster per iteration for very large N.
+3. **`mcmc_raytrace`**: Flat vector with MAP initialization per galaxy for small N.
 
-Batch fitting: `fitter.fit_batch(galaxies)` -- default method is `native_geovi`.
+Batch fitting: `fitter.fit_batch(galaxies)` — default method is `vi`.
 
 ## Convergence diagnostics
 
@@ -186,8 +185,8 @@ abs(hash(x)) % (2**31)
 
 ### No Model creation inside gradient tape
 
-`ParamSpec.__init__` with JAX-traced values fails. Always create `Model` and
-`ParamSpec` objects outside differentiable functions.
+`Parameters.__init__` with JAX-traced values fails. Always create `SEDModel` and
+`Parameters` objects outside differentiable functions.
 
 ### JAX Metal (Apple GPU)
 
@@ -229,7 +228,7 @@ Eberle+2025, Roth+2024, Terveer+2026).
 
 The SSP metallicity grid is `log10(Z)` absolute, not `log10(Z/Zsun)`.
 CLOUDY grid metallicities are also converted to absolute at load time.
-User-facing `neb_logZ_gas` in ParamSpec is `Z/Zsun` (the param_map adds
+User-facing `neb_logZ_gas` in `Parameters` is `Z/Zsun` (the param_map adds
 `LOG10_ZSUN`).
 
 ### macOS timeout

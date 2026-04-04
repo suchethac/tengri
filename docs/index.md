@@ -50,12 +50,12 @@ Any SSP template set can be used — the only requirement is the DSPS HDF5 schem
 │                                       ▲                 │
 │                                  Model(spec, ssp)       │
 │                                  ▲           ▲          │
-│                              ParamSpec     SSP grid     │
+│                              Parameters    SSP grid     │
 │                              (physics)    (templates)   │
 └─────────────────────────────────────────────────────────┘
 ```
 
-**ParamSpec** declares the free parameters and their priors (SFH shape, dust, metallicity, redshift). **SSP grid** holds the pre-computed stellar population spectra (any DSPS-compatible HDF5 file). **Model** combines them into a differentiable forward model that maps physical parameters to predicted photometry or spectra. **Fitter** runs inference (MAP, VI, MCMC) and returns a **Posterior** with posterior samples, summary statistics, and convergence diagnostics.
+**Parameters** declares the free parameters and their priors (SFH shape, dust, metallicity, redshift). **SSP grid** holds the pre-computed stellar population spectra (any DSPS-compatible HDF5 file). **SEDModel** combines them into a differentiable forward model that maps physical parameters to predicted photometry or spectra. **Fitter** runs inference (MAP, VI, MCMC) and returns a **Posterior** with posterior samples, summary statistics, and convergence diagnostics.
 
 ## Start here
 
@@ -72,7 +72,7 @@ Any SSP template set can be used — the only requirement is the DSPS HDF5 schem
 ## Quick start
 
 ```python
-from tengri import Model, ParamSpec, Fitter, Uniform, Gaussian
+from tengri import SEDModel, Parameters, Fitter, Uniform, Gaussian
 from tengri import Observation, Photometry, load_ssp_data
 
 ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
@@ -80,7 +80,7 @@ obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
     sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
     sfh_tsnorm_width_gyr=Uniform(0.5, 5),
@@ -91,9 +91,9 @@ spec = ParamSpec(
     redshift=0.1,
 )
 
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 fitter = Fitter(model, data, noise)
-result = fitter.run("native_geovi")  # or "raytrace", "nuts", "map", "laplace", "nss"
+result = fitter.run("vi")  # or "mcmc_raytrace", "mcmc_nuts", "map", "laplace", "evidence"
 print(result.summary_table())
 ```
 
@@ -101,15 +101,16 @@ print(result.summary_table())
 
 | Method | Command | Best for |
 |--------|---------|----------|
-| MAP | `fitter.run("map")` | Point estimates |
-| native_geovi | `fitter.run("native_geovi")` | **Default.** JIT-compiled geoVI, nonlinear posteriors |
-| Ray Tracing | `fitter.run("raytrace")` | Exact MCMC, stochastic-gradient resilient |
-| NUTS | `fitter.run("nuts")` | Gold-standard validation (low-D) |
-| Laplace | `fitter.run("laplace")` | Instant Gaussian posterior from Hessian at MAP |
-| Pathfinder | `fitter.run("pathfinder")` | Fast approximate posterior, good NUTS initializer |
-| Elliptical Slice | `fitter.run("elliptical_slice")` | Exact MCMC for Gaussian-prior latent models |
-| NSS | `fitter.run("nss")` | Bayesian evidence for model comparison (D ≲ 30) |
-| Hierarchical | `HierarchicalFitter(factory, data).run()` | Shared PSD across populations |
+| `map` | `fitter.run("map")` | Point estimates |
+| `vi` | `fitter.run("vi")` | **Default.** geoVI via NIFTy, nonlinear posteriors |
+| `vi_linear` | `fitter.run("vi_linear")` | Linear MGVI, very high D or catalog fitting |
+| `mcmc_raytrace` | `fitter.run("mcmc_raytrace")` | Exact MCMC, stochastic-gradient resilient |
+| `mcmc_nuts` | `fitter.run("mcmc_nuts")` | Gold-standard validation (D ≲ 30) |
+| `laplace` | `fitter.run("laplace")` | Instant Gaussian posterior from Hessian at MAP |
+| `pathfinder` | `fitter.run("pathfinder")` | Fast approximate posterior, good NUTS initializer |
+| `mcmc_ess` | `fitter.run("mcmc_ess")` | Exact MCMC for Gaussian-prior latent models |
+| `evidence` | `fitter.run("evidence")` | Bayesian evidence for model comparison (D ≲ 30) |
+| Population | `model.fit_population(observations)` | Shared PSD across populations (`PopulationPosterior`) |
 
 ## Performance
 

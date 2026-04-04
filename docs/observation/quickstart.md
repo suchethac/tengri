@@ -3,7 +3,7 @@
 A minimal example: five SDSS bands, from observation to inference.
 
 ```python
-from tengri import Model, ParamSpec, Fitter, Uniform, Gaussian
+from tengri import SEDModel, Parameters, Fitter, Uniform, Gaussian
 from tengri import Observation, Photometry, load_ssp_data
 
 # Load SSP grid
@@ -13,7 +13,7 @@ ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
 obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
 
 # Define parameters
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
     sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
     sfh_tsnorm_width_gyr=Uniform(0.5, 5),
@@ -25,11 +25,11 @@ spec = ParamSpec(
 )
 
 # Build model --- observation drives filter precomputation and data_type
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 
 # Fit --- data_type is inferred from obs, no need to specify it
 fitter = Fitter(model, flux_obs, noise_obs)
-result = fitter.run("geovi")
+result = fitter.run("vi")
 print(result.summary_table())
 ```
 

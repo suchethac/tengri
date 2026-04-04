@@ -113,14 +113,14 @@ This is explicitly NOT the default when 4D grids are loaded. Use
 
 ```python
 # Global [α/Fe] (same for all ages)
-spec = ParamSpec(
+spec = Parameters(
     met_logzsol=Uniform(-2.0, 0.2),       # total metallicity [M/H]
     met_alpha_fe=Uniform(-0.2, 0.6),       # [α/Fe], uniform across ages
     ...
 )
 
 # Time-evolving [α/Fe] (old stars more α-enhanced)
-spec = ParamSpec(
+spec = Parameters(
     met_logzsol=Uniform(-2.0, 0.2),
     met_alpha_fe_old=Uniform(0.0, 0.6),    # [α/Fe] of oldest stars
     met_alpha_fe_young=Fixed(0.0),          # [α/Fe] at present day

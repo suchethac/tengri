@@ -28,7 +28,7 @@ produce many samples but little new information.
 - **ESS < 50**: posterior summaries are unreliable. Run longer chains or switch methods.
 
 ```python
-result = fitter.run("raytrace", n_steps=2000, n_burnin=200)
+result = fitter.run("mcmc_raytrace", n_steps=2000, n_burnin=200)
 
 # Per-parameter ESS
 ess = result.effective_sample_size()
@@ -55,7 +55,7 @@ may be unreliable in those regions.
   Consider reparametrization or switching to Ray Tracing.
 
 ```python
-result = fitter.run("nuts", n_warmup=500, n_burnin=50)
+result = fitter.run("mcmc_nuts", n_warmup=500, n_burnin=50)
 n_div = result.diagnostics.get("n_divergent", 0)
 n_total = result.diagnostics.get("n_samples", 1)
 print(f"Divergences: {n_div}/{n_total} ({100 * n_div / n_total:.1f}%)")
@@ -109,7 +109,7 @@ convergence checking.
 ```python
 from _plot_style import convergence_check
 
-result = fitter.run("raytrace", n_steps=2000, n_burnin=200)
+result = fitter.run("mcmc_raytrace", n_steps=2000, n_burnin=200)
 info = convergence_check(result, method_name="RT")
 ```
 
@@ -166,7 +166,7 @@ directly apply. Instead, check:
    plateau. Oscillation or increase indicates instability.
 
    ```python
-   result = fitter.run("native_geovi", n_iterations=15)
+   result = fitter.run("vi", n_iterations=15)
    print(result.diagnostics.get("loss_history"))
    ```
 
@@ -186,7 +186,7 @@ when possible. This is the most reliable way to validate variational results.
 The most basic goodness-of-fit diagnostic, available for all methods:
 
 ```python
-result = fitter.run("native_geovi", n_iterations=15)
+result = fitter.run("vi", n_iterations=15)
 print(f"chi2/dof = {result.diagnostics['chi2_dof']:.2f}")
 ```
 
@@ -207,7 +207,7 @@ bounds. This often indicates the data prefers values outside the allowed range.
 # "Parameters near bounds: dust_tau_bc, met_logzsol. Consider widening the prior."
 ```
 
-If you see this warning, widen the prior in your `ParamSpec` and re-fit.
+If you see this warning, widen the prior in your `Parameters` and re-fit.
 
 ## When to worry vs. when it is OK
 

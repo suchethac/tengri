@@ -134,7 +134,7 @@ The `select()` method uses nearest-match, so these will still work, but the exam
 **Regression test:**
 ```python
 def test_n_independent_matches_docstring():
-    cat = LineCatalog.default_optical()
+    cat = LineList.default_optical()
     assert cat.n_independent == cat.n_lines - len(cat.doublets)
     # After OII doublet removal: 39 lines - 5 doublets = 34
     assert cat.n_independent == 34
@@ -154,11 +154,11 @@ def test_cloudy_grid_priors_clamped_at_grid_edge():
     """Inputs outside grid should be clamped, not extrapolated."""
 ```
 
-### NEW-08: `eline_broad` must be set independently in ParamSpec and SpectroscopyConfig (DESIGN ISSUE)
+### NEW-08: `eline_broad` must be set independently in Parameters and Spectroscopy (DESIGN ISSUE)
 
 **File:** `src/tengri/core/param_spec.py:1186`, `src/tengri/models/observation/spectroscopy_config.py`
-**Status:** User must set `eline_broad=True` in BOTH `ParamSpec(eline_broad=True)` AND `SpectroscopyConfig(eline_broad=True)`. No consistency check. If they forget one, the broad component silently does nothing (no error).
-**Fix:** Either (a) have `Fitter.__init__` cross-check and warn, or (b) have `Model.__init__` propagate `spectroscopy.eline_broad` to `ParamSpec` automatically.
+**Status:** User must set `eline_broad=True` in BOTH `Parameters(eline_broad=True)` AND `Spectroscopy(eline_broad=True)`. No consistency check. If they forget one, the broad component silently does nothing (no error).
+**Fix:** Either (a) have `Fitter.__init__` cross-check and warn, or (b) have `SEDModel.__init__` propagate `spectroscopy.eline_broad` to `Parameters` automatically.
 
 ### NEW-09: Gradient test only checks `isfinite`, not correctness (WEAK TEST)
 

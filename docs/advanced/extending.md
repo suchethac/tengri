@@ -61,12 +61,12 @@ def my_custom_sfh(t_lookback, params):
 - Returns an array of the same shape as `t_lookback`.
 - All parameters accessed from the `params` dict.
 
-Register your custom parameters in `ParamSpec`:
+Register your custom parameters in `Parameters`:
 
 ```python
-from tengri import ParamSpec, Uniform
+from tengri import Parameters, Uniform
 
-spec = ParamSpec(
+spec = Parameters(
     sfh="custom",
     custom_sfh_fn=my_custom_sfh,
     custom_params={
@@ -119,7 +119,7 @@ are available: `BakedIn` (simple scaling), `CLOUDY` (grid interpolation), and
 
 1. Write a function that takes ionizing photon rate Q(H) and gas-phase
    metallicity, returning an emission spectrum.
-2. Register it as a nebular backend in `ParamSpec`.
+2. Register it as a nebular backend in `Parameters`.
 
 The key interface requirement is that the function must be JIT-compatible
 and differentiable with respect to its parameters.

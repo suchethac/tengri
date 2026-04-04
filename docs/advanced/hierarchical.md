@@ -1,8 +1,9 @@
 # Hierarchical Inference
 
 Population-level inference with shared PSD parameters. Instead of fitting each
-galaxy independently, hierarchical inference constrains the burstiness prior
-(PSD amplitude and timescale) jointly across a population.
+galaxy independently, `PopulationFitter` constrains the burstiness prior
+(PSD amplitude and timescale) jointly across a population, returning a
+`PopulationPosterior`.
 
 ## What is hierarchical PSD inference?
 
@@ -25,14 +26,14 @@ ensemble. The constraint on shared parameters improves as sqrt(N).
 ## Usage
 
 ```python
-from tengri import Model, ParamSpec, HierarchicalFitter, Observation, Photometry
+from tengri import SEDModel, Parameters, PopulationFitter, Observation, Photometry
 import jax
 
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
 
-spec = ParamSpec(
+spec = Parameters(
     redshift=0.1,
     sfh="field",
     dust=True,
@@ -40,9 +41,9 @@ spec = ParamSpec(
 
 ssp = ...  # load SSP data
 
-hfitter = HierarchicalFitter(
-    model_factory=lambda sigma, tau: Model(
-        ParamSpec(redshift=0.1, sfh="field", dust=True),
+hfitter = PopulationFitter(
+    model_factory=lambda sigma, tau: SEDModel(
+        Parameters(redshift=0.1, sfh="field", dust=True),
         ssp,
         observation=obs,
         psd_sigma=sigma,
@@ -56,16 +57,16 @@ hfitter = HierarchicalFitter(
     psd_tau_prior=(1.0, 300.0),   # Myr
 )
 
-result = hfitter.run("geovi", key=jax.random.PRNGKey(0), n_iterations=25)
+result = hfitter.run("vi", key=jax.random.PRNGKey(0), n_iterations=25)
 ```
 
 ### Available methods
 
 | Method | Description |
 |--------|-------------|
-| `geovi` | geoVI with CorrelatedFieldMaker (recommended) |
-| `mgvi` | MGVI --- faster per iteration, for very large N |
-| `raytrace` | Ray Tracing on flat parameter vector |
+| `vi` | geoVI with CorrelatedFieldMaker (recommended) |
+| `vi_linear` | MGVI --- faster per iteration, for very large N |
+| `mcmc_raytrace` | Ray Tracing on flat parameter vector |
 
 ## The block Gibbs structure
 
@@ -132,22 +133,22 @@ recovers both sets of PSD parameters when run on each population separately.
 
 ```python
 # Population A: quiescent (low sigma, long tau)
-hfitter_a = HierarchicalFitter(
+hfitter_a = PopulationFitter(
     model_factory=factory,
     galaxies=quiescent_galaxies,
     psd_sigma_prior=(0.1, 4.0),
     psd_tau_prior=(1.0, 300.0),
 )
-result_a = hfitter_a.run("geovi", n_iterations=25)
+result_a = hfitter_a.run("vi", n_iterations=25)
 
 # Population B: bursty (high sigma, short tau)
-hfitter_b = HierarchicalFitter(
+hfitter_b = PopulationFitter(
     model_factory=factory,
     galaxies=bursty_galaxies,
     psd_sigma_prior=(0.1, 4.0),
     psd_tau_prior=(1.0, 300.0),
 )
-result_b = hfitter_b.run("geovi", n_iterations=25)
+result_b = hfitter_b.run("vi", n_iterations=25)
 
 # Compare recovered PSD parameters
 print(f"Pop A: sigma={result_a.psd_sigma:.2f}, tau={result_a.psd_tau_myr:.1f} Myr")
@@ -162,7 +163,7 @@ print(f"Pop B: sigma={result_b.psd_sigma:.2f}, tau={result_b.psd_tau_myr:.1f} My
 - N > 10 galaxies and you care about population-level SFH properties.
 - You are writing a paper about SFH burstiness.
 
-**Use individual fitting (`fit_batch`) when:**
+**Use `fit_batch` (independent fitting) when:**
 - You want quick per-galaxy results and do not need population constraints.
 - Your sample is heterogeneous (mixed redshifts, mass ranges).
 - N < 10 --- too few galaxies to constrain shared parameters.
@@ -194,6 +195,6 @@ minutes. The XLA cache at `~/.cache/tengri_jax_cache` persists this across sessi
 - Edenhofer, G. et al. (2024). "Re-envisioning Numerical Information Field Theory
   (NIFTy.re)." arXiv:2402.16683
 
-See {doc}`../demonstrations/index` for the hierarchical inference demonstration
+See {doc}`../demonstrations/index` for the `PopulationFitter` demonstration
 (notebook 04) with full worked examples including convergence checks and
 population recovery plots.

@@ -10,14 +10,14 @@ Pass both `photometry` and `spectroscopy` to `Observation`:
 
 ```python
 import jax.numpy as jnp
-from tengri import Observation, Photometry, SpectroscopyConfig, NoiseConfig, Uniform
+from tengri import Observation, Photometry, Spectroscopy, NoiseModel, Uniform
 
 wave_obs = jnp.linspace(6000, 25000, 500)
 
 obs = Observation(
     photometry=Photometry.from_names(["jwst_f200w", "jwst_f356w", "jwst_f444w"]),
-    spectroscopy=SpectroscopyConfig.nirspec_prism(wave_obs, calibration_order=3),
-    noise=NoiseConfig(calibration_floor=Uniform(0.01, 0.10)),
+    spectroscopy=Spectroscopy.nirspec_prism(wave_obs, calibration_order=3),
+    noise=NoiseModel(calibration_floor=Uniform(0.01, 0.10)),
 )
 
 print(obs.is_joint)     # True
@@ -75,8 +75,8 @@ A joint observation may generate several automatic parameters:
 
 | Source | Parameters |
 |--------|-----------|
-| `SpectroscopyConfig(calibration_order=3)` | `cal_c1`, `cal_c2`, `cal_c3` |
-| `NoiseConfig(calibration_floor=Uniform(...))` | `noise_frac_cal` |
+| `Spectroscopy(calibration_order=3)` | `cal_c1`, `cal_c2`, `cal_c3` |
+| `NoiseModel(calibration_floor=Uniform(...))` | `noise_frac_cal` |
 
 All auto-generated parameters are visible via:
 
@@ -86,7 +86,7 @@ print(obs.get_all_params())
 #  'cal_c3': Gaussian(0, 0.1), 'noise_frac_cal': Uniform(0.01, 0.1)}
 ```
 
-These are merged into `ParamSpec` automatically when `Model` is constructed.
+These are merged into `Parameters` automatically when `SEDModel` is constructed.
 
 ## Observation summary
 

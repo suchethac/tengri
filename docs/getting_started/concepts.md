@@ -50,16 +50,16 @@ Given observed photometry or a spectrum and its noise, inference finds the poste
 over all physical parameters. Because the forward model is differentiable, gradient-based methods
 work across the full high-dimensional space:
 
-- **geovi / native_geovi** (default): Geometric Variational Inference (Frank et al. 2021) fits a
-  nonlinear Gaussian approximation in the whitened latent space. Fast and reliable for
-  catalog-scale fitting.
-- **Ray Tracing** (Behroozi 2025): Exact MCMC with radiance tracking. The gold standard for
+- **vi** (default): Geometric Variational Inference via NIFTy (Frank et al. 2021). NIFTy is the
+  computational library implementing geoVI; `vi` uses its fast path. Fits a nonlinear Gaussian
+  approximation in the whitened latent space. Fast and reliable for catalog-scale fitting.
+- **mcmc_raytrace** (Behroozi 2025): Exact MCMC with radiance tracking. The gold standard for
   high-dimensional posteriors when compute allows.
-- **NUTS**: Hamiltonian Monte Carlo via BlackJAX. Best for low-dimensional validation (D ≲ 30).
+- **mcmc_nuts**: Hamiltonian Monte Carlo via BlackJAX. Best for low-dimensional validation (D ≲ 30).
 
 The **PSD parameters σ and τ** can be treated as free per-galaxy parameters, or inferred
-hierarchically across a population. Hierarchical inference (HierarchicalFitter) recovers the
-shared PSD of a galaxy population with uncertainty that shrinks as 1/√N — quantifying
-population-level burstiness from photometric data alone.
+hierarchically across a population. `PopulationFitter` recovers the shared PSD of a galaxy
+population with uncertainty that shrinks as 1/√N — quantifying population-level burstiness
+from photometric data alone.
 
 For a schematic diagram of the full pipeline, see Figure 1 of the tengri paper.

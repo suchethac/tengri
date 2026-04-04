@@ -1,11 +1,11 @@
 # Noise Model
 
-The `NoiseConfig` class configures the noise model for the likelihood. By default,
-tengri uses a standard Gaussian likelihood --- `NoiseConfig` is only needed when you
+The `NoiseModel` class (formerly `NoiseConfig`) configures the noise model for the likelihood. By default,
+tengri uses a standard Gaussian likelihood --- `NoiseModel` is only needed when you
 want a calibration floor or a heavy-tailed likelihood.
 
 ```python
-from tengri import NoiseConfig, Uniform
+from tengri import NoiseModel, Uniform
 ```
 
 ## Default: Gaussian likelihood
@@ -32,7 +32,7 @@ $$
 Pass a float to fix the floor to a known value:
 
 ```python
-noise = NoiseConfig(calibration_floor=0.05)  # 5% floor, fixed
+noise = NoiseModel(calibration_floor=0.05)  # 5% floor, fixed
 ```
 
 This creates a `Fixed(0.05)` parameter internally.
@@ -42,10 +42,10 @@ This creates a `Fixed(0.05)` parameter internally.
 Pass a `Distribution` to make it a free parameter during inference:
 
 ```python
-noise = NoiseConfig(calibration_floor=Uniform(0.01, 0.15))
+noise = NoiseModel(calibration_floor=Uniform(0.01, 0.15))
 ```
 
-This adds `noise_frac_cal` as a free parameter in `ParamSpec` with the specified
+This adds `noise_frac_cal` as a free parameter in `Parameters` with the specified
 prior. The sampler will explore values between 1% and 15%.
 
 ## Student-t likelihood
@@ -55,7 +55,7 @@ provides heavier tails than a Gaussian. Set `student_t_dof` to the desired degre
 of freedom:
 
 ```python
-noise = NoiseConfig(student_t_dof=5.0)
+noise = NoiseModel(student_t_dof=5.0)
 ```
 
 Lower degrees of freedom mean heavier tails (more outlier tolerance). As
@@ -71,7 +71,7 @@ Values below 2 give undefined variance, which can cause inference issues.
 Calibration floor and Student-t likelihood can be used together:
 
 ```python
-noise = NoiseConfig(
+noise = NoiseModel(
     calibration_floor=Uniform(0.01, 0.10),
     student_t_dof=5.0,
 )
@@ -81,12 +81,12 @@ obs = Observation(
 )
 ```
 
-## How noise parameters flow into ParamSpec
+## How noise parameters flow into Parameters
 
-When an `Observation` with a `NoiseConfig` is passed to `Model`, the parameters
-are automatically generated and merged into `ParamSpec`:
+When an `Observation` with a `NoiseModel` is passed to `SEDModel`, the parameters
+are automatically generated and merged into `Parameters`:
 
-| NoiseConfig setting | Generated parameter | Type |
+| `NoiseModel` setting | Generated parameter | Type |
 |--------------------|--------------------|------|
 | `calibration_floor=0.05` | `noise_frac_cal = Fixed(0.05)` | Fixed |
 | `calibration_floor=Uniform(0.01, 0.15)` | `noise_frac_cal = Uniform(0.01, 0.15)` | Free |
@@ -100,7 +100,7 @@ obs.get_all_params()
 ```
 
 :::{note}
-You do not need to add `noise_frac_cal` or `noise_dof` to `ParamSpec` manually.
+You do not need to add `noise_frac_cal` or `noise_dof` to `Parameters` manually.
 The `Observation` handles this automatically via `obs.get_all_params()`, which is
-called during `Model.__init__`.
+called during `SEDModel.__init__`.
 :::

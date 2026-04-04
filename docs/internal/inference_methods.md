@@ -39,44 +39,47 @@ parameters that could produce similar-looking data --- that is the **posterior**
 
 tengri provides five families of inference methods to explore this posterior:
 
-| Family | Methods | Posterior type | Best for |
-|--------|---------|---------------|----------|
-| **MAP** | `map` | Point estimate | Initialization, quick look |
-| **Variational (linear)** | `native_mgvi`, `mgvi`, `fast_mgvi`, `nifty_mgvi` | Approximate Gaussian | Very high D (>10^5), speed |
-| **Variational (nonlinear)** | `native_geovi` (default), `native_evi`, `geovi`, `fast_geovi`, `evi`, `fast_evi`, `nifty_geovi` | Non-Gaussian VI | Most problems |
-| **Hybrid** | `geovi_nuts`, `mgvi_nuts` | VI optimization + MCMC samples | Best of both worlds |
-| **MCMC** | `raytrace`, `nuts` | Exact posterior | Validation, low-D |
+| Family | Canonical method | Old names (deprecated) | Posterior type | Best for |
+|--------|-----------------|----------------------|---------------|----------|
+| **MAP** | `map` | — | Point estimate | Initialization, quick look |
+| **Variational (linear)** | `vi_linear` | `mgvi`, `native_mgvi`, `fast_mgvi`, `nifty_mgvi` | Approximate Gaussian | Very high D (>10^5), speed |
+| **Variational (nonlinear)** | `vi` (default) | `native_geovi`, `geovi`, `fast_geovi`, `native_evi`, `evi`, `nifty_geovi` | Non-Gaussian VI | Most problems |
+| **Hybrid** | `vi` → `.refine("mcmc_nuts")` | `geovi_nuts`, `mgvi_nuts` | VI optimization + MCMC samples | Best of both worlds |
+| **MCMC (high-D)** | `mcmc_raytrace` | `raytrace` | Exact posterior | Validation, high-D |
+| **MCMC (low-D)** | `mcmc_nuts` | `nuts` | Exact posterior | Gold standard, D ≤ 30 |
+
+NIFTy is the computational library implementing geoVI; the `vi` method uses its fast path by default.
 
 ### When to Use What
 
 | Problem | D | Recommended | Fallback |
 |---------|--:|-------------|----------|
-| Smooth SFH, few bands | ~7 | `native_geovi` (15 iter) | `raytrace` |
-| Stochastic SFH, photometry | ~137 | `native_geovi` (15 iter) | `native_evi` (20 iter) |
-| Stochastic SFH, spectrum | ~200 | `native_evi` (20 iter) | `native_geovi` (25 iter) |
-| Hierarchical, 10 galaxies | ~1,400 | `native_evi` (25 iter) | `native_geovi` |
-| Catalog, 100+ galaxies | ~7/gal | `native_geovi` via `fit_batch` | `native_mgvi` |
-| Validation (low-D) | <20 | `nuts` | `raytrace` |
-| Validation (high-D) | >20 | `raytrace` | `geovi_nuts` |
+| Smooth SFH, few bands | ~7 | `vi` (15 iter) | `mcmc_raytrace` |
+| Stochastic SFH, photometry | ~137 | `vi` (15 iter) | `vi_linear` (20 iter) |
+| Stochastic SFH, spectrum | ~200 | `vi_linear` (20 iter) | `vi` (25 iter) |
+| Hierarchical, 10 galaxies | ~1,400 | `vi_linear` (25 iter) | `vi` |
+| Catalog, 100+ galaxies | ~7/gal | `vi` via `fit_batch` | `vi_linear` |
+| Validation (low-D) | <20 | `mcmc_nuts` | `mcmc_raytrace` |
+| Validation (high-D) | >20 | `mcmc_raytrace` | `vi` + `.refine("mcmc_nuts")` |
 
 ### Usage
 
 All methods are accessed through `Fitter.run()`:
 
 ```python
-from tengri import Model, ParamSpec, Fitter
+from tengri import SEDModel, Parameters, Fitter
 
-model = Model(spec, ssp)
+model = SEDModel(spec, ssp)
 fitter = Fitter(model, data, noise)
 
-# Simple (native_geovi is the default)
-result = fitter.run("native_geovi", n_iterations=15)
+# Simple (vi is the default)
+result = fitter.run("vi", n_iterations=15)
 
 # With initialization from MAP
 result_map = fitter.run("map", n_steps=1500)
-result = fitter.run("native_geovi", init_from=result_map)
+result = fitter.run("vi", init_from=result_map)
 
-# Batch fitting (default method: native_geovi)
+# Batch fitting (default method: vi)
 results = fitter.fit_batch(galaxies)
 
 # Access results
@@ -307,7 +310,7 @@ New random keys every iteration.
 **Scout analogy**: Send brand-new scouts in random directions each round. They walk in
 straight lines from the pin.
 
-**When to use**: Pure MGVI (`fitter.run("mgvi")`). Fast, good for very high-D problems
+**When to use**: `fitter.run("vi_linear")`. Fast, good for very high-D problems
 where the posterior is nearly Gaussian. Also used for the "cheap" first phase of EVI.
 
 **Implementation**: CG solve of `M @ r = J^T sqrt(N^{-1}) eta_lh + eta_pr` with fresh
@@ -401,7 +404,7 @@ adjustment cannot fully compensate. The KL value plateaus or slowly drifts.
 The optimal strategy combines both: deterministic refinement (update) for stability,
 with periodic fresh samples (resample) to prevent staleness.
 
-When you call `fitter.run("native_geovi")` (the default), this is what happens internally:
+When you call `fitter.run("vi")` (the default), this is what happens internally:
 
 ```
 Iteration  1:  nonlinear_resample   <-- fresh curved scouts (establish)
@@ -424,7 +427,7 @@ Fresh scouts every 5 iterations. Deterministic refinement in between. This gives
 - **Good posterior quality** (nonlinear curving captures banana shapes)
 
 The refresh interval of 5 is the default (`_RESAMPLE_EVERY = 5` in `fitter.py`). It can
-be adjusted via `OptimizationSchedule.geovi(resample_every=N)`.
+be adjusted via `OptimizationSchedule.vi(resample_every=N)`.
 
 ---
 
@@ -435,22 +438,26 @@ off between diagnostic richness and raw speed.
 
 ### Internal Dispatch
 
-| Internal method | Public names |
-|----------------|-------------|
-| `_run_evi_jit` | native_geovi, native_mgvi, native_evi |
-| `_run_fast_vi` | geovi, fast_geovi, mgvi, fast_mgvi, evi, fast_evi, geovi_nuts, mgvi_nuts |
-| `_run_nifty_vi` | nifty_geovi, nifty_mgvi |
-| `_run_map` | map |
-| `_run_nuts` | nuts |
-| `_run_raytrace` | raytrace |
+| Internal method | Canonical name | Old names (deprecated) |
+|----------------|---------------|----------------------|
+| `_run_fast_vi` | `vi` (default) | `native_geovi`, `geovi`, `fast_geovi`, `evi`, `fast_evi`, `native_evi` |
+| `_run_fast_vi` | `vi_linear` | `native_mgvi`, `mgvi`, `fast_mgvi` |
+| `_run_nifty_vi` | `vi_nifty` | `nifty_geovi` |
+| `_run_nifty_vi` | `vi_nifty_linear` | `nifty_mgvi` |
+| `_run_map` | `map` | — |
+| `_run_nuts` | `mcmc_nuts` | `nuts` |
+| `_run_raytrace` | `mcmc_raytrace` | `raytrace` |
 
-**Removed names**: `geovi_nifty` -> `nifty_geovi`, `mgvi_nifty` -> `nifty_mgvi`,
-`geovi_full` -> `nifty_geovi`, `mgvi_full` -> `nifty_mgvi`, `fit_catalog` -> `fit_batch`.
+**Removed names**: `geovi_nifty` → `vi_nifty`, `mgvi_nifty` → `vi_nifty_linear`,
+`geovi_full` → `vi_nifty`, `mgvi_full` → `vi_nifty_linear`, `fit_catalog` → `fit_batch`.
+Hybrid `geovi_nuts`/`mgvi_nuts` replaced by chaining: `result.refine("mcmc_nuts")`.
 
-### 6.1 native_geovi (Default)
+### 6.1 vi (Default)
+
+Formerly `native_geovi`. Old name still works but emits a `DeprecationWarning`.
 
 ```python
-result = fitter.run("native_geovi", n_iterations=15)
+result = fitter.run("vi", n_iterations=15)
 ```
 
 **Backend**: Pure JAX, fully XLA-compiled. The entire optimization loop runs inside
@@ -484,23 +491,23 @@ especially catalog fitting via `fitter.fit_batch(galaxies)`.
 points. The best result (lowest Hamiltonian) is returned. Seeds that disagree by >10%
 in Hamiltonian trigger a multimodality warning.
 
-### 6.2 native_mgvi / native_evi
+### 6.2 vi_linear
+
+Formerly `native_mgvi` / `native_evi`. Old names still work but emit a `DeprecationWarning`.
 
 ```python
-result = fitter.run("native_mgvi", n_iterations=15)
-result = fitter.run("native_evi", n_iterations=20)
+result = fitter.run("vi_linear", n_iterations=15)
 ```
 
-Same JIT-compiled backend as `native_geovi` but with different sample modes.
-`native_mgvi` uses linear resampling. `native_evi` runs MGVI for the first half,
-then switches to geoVI for the second half.
+Same JIT-compiled backend as `vi` but uses linear resampling throughout. Faster per
+iteration; use when geoVI nonlinear resampling is too expensive or for very large N.
 
-### 6.3 fast_geovi / geovi
+### 6.3 vi_nifty
+
+Formerly `nifty_geovi` / `fast_geovi` / `geovi`. Old names still work but emit a `DeprecationWarning`.
 
 ```python
-result = fitter.run("geovi", n_iterations=15)
-# equivalent to:
-result = fitter.run("fast_geovi", n_iterations=15)
+result = fitter.run("vi_nifty", n_iterations=15)
 ```
 
 **Backend**: NIFTy's `OptimizeVI.update` in a tight Python loop.
@@ -521,25 +528,23 @@ via the JIT engine. This captures non-Gaussian shapes that linear CG samples mis
 
 **Speed**: ~12s/galaxy for smooth SFH (D~7), ~30s for stochastic SFH (D~137).
 
-### 6.4 fast_mgvi / mgvi
+### 6.4 vi_nifty_linear
+
+Formerly `nifty_mgvi` / `fast_mgvi` / `mgvi`. Old names still work but emit a `DeprecationWarning`.
 
 ```python
-result = fitter.run("mgvi", n_iterations=15)
+result = fitter.run("vi_nifty_linear", n_iterations=15)
 ```
 
-Same as `geovi` but uses `linear_resample` every iteration. Faster per iteration
+Same as `vi_nifty` but uses `linear_resample` every iteration. Faster per iteration
 (no Newton-CG curving), but the Gaussian approximation misses nonlinear degeneracies.
 
 Posterior samples are linear CG draws (Gaussian).
 
-### 6.5 fast_evi / evi
+### 6.5 vi (Expansion-point schedule)
 
-```python
-result = fitter.run("evi", n_iterations=20)
-```
-
-**EVI = Expansion-point Variational Inference**: runs MGVI (linear) for the first half
-of iterations, then switches to geoVI (nonlinear) for the second half.
+The `vi` method automatically uses an expansion-point schedule: runs linear resampling
+for the first half of iterations, then switches to nonlinear geoVI for the second half.
 
 Rationale: early iterations explore far from the optimum, where nonlinear curving adds
 cost but little benefit. Once the expansion point is roughly converged, the nonlinear
@@ -547,10 +552,10 @@ correction becomes valuable.
 
 The transition point is controlled by `VIConfig.evi_linear_fraction` (default 0.5).
 
-### 6.6 nifty_geovi / nifty_mgvi
+### 6.6 vi_nifty (full logging)
 
 ```python
-result = fitter.run("nifty_geovi", n_iterations=15)
+result = fitter.run("vi_nifty", n_iterations=15)
 ```
 
 **Backend**: Full `jft.optimize_kl` with all NIFTy diagnostics, logging, and minisanity
@@ -561,15 +566,16 @@ need detailed per-iteration diagnostics that the fast backend strips.
 
 **Speed**: ~18s/galaxy (roughly 35% slower than the fast backend due to Python overhead).
 
-### 6.7 geovi_nuts / mgvi_nuts (Hybrid)
+### 6.7 VI → MCMC chaining (formerly geovi_nuts)
 
 ```python
-result = fitter.run("geovi_nuts", n_iterations=10, n_posterior_samples=500)
+result = fitter.run("vi", n_iterations=10)
+result_exact = result.refine("mcmc_nuts", n_posterior_samples=500)
 ```
 
-**What it does**: Runs geoVI (or MGVI) optimization to find the posterior mode and
-approximate covariance, then draws posterior samples via BlackJAX NUTS starting from
-the converged position.
+**What it does**: Runs `vi` optimization to find the posterior mode and approximate
+covariance, then draws posterior samples via BlackJAX NUTS starting from the converged
+position.
 
 **When to use**: When you want exact (MCMC) posterior samples but need a good starting
 point. The VI phase provides initialization and mass matrix for NUTS, dramatically
@@ -578,10 +584,12 @@ reducing warmup time.
 **Posterior samples**: Independent MCMC samples via NUTS. Not restricted to the Gaussian
 or geoVI-curved approximation.
 
-### 6.8 raytrace
+### 6.8 mcmc_raytrace
+
+Formerly `raytrace`. Old name still works but emits a `DeprecationWarning`.
 
 ```python
-result = fitter.run("raytrace", n_burnin=100, n_steps=500, n_leapfrog_steps=10)
+result = fitter.run("mcmc_raytrace", n_burnin=100, n_steps=500, n_leapfrog_steps=10)
 ```
 
 **Ray Tracing Sampler** (Behroozi 2025). Propagates light rays through a medium where
@@ -601,10 +609,12 @@ stochastic gradients.
 - Acceptance rate: 30-70% ideal; >90% means barely moving
 - ESS (bulk): >100 per parameter, >400 total (Vehtari et al. 2021)
 
-### 6.9 nuts
+### 6.9 mcmc_nuts
+
+Formerly `nuts`. Old name still works but emits a `DeprecationWarning`.
 
 ```python
-result = fitter.run("nuts", n_warmup=500, n_samples=1000)
+result = fitter.run("mcmc_nuts", n_warmup=500, n_samples=1000)
 ```
 
 **NUTS** (No-U-Turn Sampler) via BlackJAX. The gold standard for low-dimensional
@@ -642,7 +652,7 @@ starting point that dramatically improves convergence:
 
 ```python
 result_map = fitter.run("map", n_steps=1000)
-result = fitter.run("native_geovi", init_from=result_map, n_iterations=10)
+result = fitter.run("vi", init_from=result_map, n_iterations=10)
 ```
 
 ---
@@ -661,7 +671,7 @@ of **static arguments**. In tengri, the following are static:
 | `n_samples` (int) | Recompiles if changed |
 
 This means:
-- `fitter.run("native_geovi", n_iterations=15, n_samples=3)` compiles once
+- `fitter.run("vi", n_iterations=15, n_samples=3)` compiles once
 - Calling again with the same settings is instant
 - Calling with `n_iterations=20` triggers recompilation
 
@@ -696,7 +706,7 @@ fitter.compile(
 )
 
 # Now all runs are instant
-result = fitter.run("native_geovi")  # no compilation delay
+result = fitter.run("vi")  # no compilation delay
 ```
 
 `fitter.compile()` pre-compiles:
@@ -715,7 +725,7 @@ result = fitter.run("native_geovi")  # no compilation delay
 | Posterior draw (200 samples) | ~1s | CG-based residual drawing |
 | `"geovi"` mode (lax.cond) | ~56s | Traces both resample and update branches |
 
-The `"geovi"` sample mode (used by `native_geovi`, the default) uses `jax.lax.cond`
+The `"geovi"` sample mode (used by `vi`, the default) uses `jax.lax.cond`
 to dynamically choose between resample and update. This traces both branches, incurring
 the full 56s cost. The fast/NIFTy backends avoid this by dispatching in Python.
 
@@ -736,13 +746,13 @@ All benchmarks on MacBook Pro M-series, CPU (`JAX_PLATFORMS=cpu`).
 
 | Method | D=7 (smooth) | D=137 (stochastic) | Notes |
 |--------|-------------|-------------------|-------|
-| MAP (1000 steps) | ~3s | ~5s | Adam optimizer |
-| fast_geovi (10 iter) | ~12s | ~30s | NIFTy exact math |
-| nifty_geovi (10 iter) | ~18s | ~45s | Full NIFTy with logging |
-| native_geovi (10 iter) | 56s compile + 0.3s run | 56s compile + 0.8s run | First call only |
-| EVI (10 iter, 2000 samp) | 11s | 14s | JIT-compiled |
-| Ray Tracing (500 steps) | ~10s | ~120s | Depends on step_size |
-| NUTS (500+1000) | ~30s | ~300s+ | Expensive for high-D |
+| `map` (1000 steps) | ~3s | ~5s | Adam optimizer |
+| `vi_nifty` (10 iter) | ~12s | ~30s | NIFTy exact math |
+| `vi_nifty` full logging (10 iter) | ~18s | ~45s | Full NIFTy with logging |
+| `vi` (10 iter) | 56s compile + 0.3s run | 56s compile + 0.8s run | First call only |
+| `vi_linear` (10 iter, 2000 samp) | 11s | 14s | JIT-compiled |
+| `mcmc_raytrace` (500 steps) | ~10s | ~120s | Depends on step_size |
+| `mcmc_nuts` (500+1000) | ~30s | ~300s+ | Expensive for high-D |
 
 ### 8.3 Catalog Fitting Estimates
 

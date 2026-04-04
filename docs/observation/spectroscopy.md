@@ -1,10 +1,10 @@
 # Spectroscopy
 
-The `SpectroscopyConfig` class declares the spectroscopic instrument: wavelength grid,
+The `Spectroscopy` class (formerly `SpectroscopyConfig`) declares the spectroscopic instrument: wavelength grid,
 resolution profile, calibration polynomial, and emission-line marginalization settings.
 
 ```python
-from tengri import SpectroscopyConfig
+from tengri import Spectroscopy
 ```
 
 ## Basic usage
@@ -15,7 +15,7 @@ At minimum, provide an observed-frame wavelength grid:
 import jax.numpy as jnp
 
 wave_obs = jnp.linspace(6000, 25000, 500)  # Angstrom
-spec_config = SpectroscopyConfig(wave_obs=wave_obs)
+spec_config = Spectroscopy(wave_obs=wave_obs)
 ```
 
 This creates a spectroscopy configuration with no LSF convolution, no calibration
@@ -28,20 +28,20 @@ wavelength-dependent resolution profile:
 
 ```python
 # JWST NIRSpec PRISM (R ~ 30-330, Jakobsen+2022)
-spec_config = SpectroscopyConfig.nirspec_prism(wave_obs)
+spec_config = Spectroscopy.nirspec_prism(wave_obs)
 
 # JWST NIRSpec G140M (R ~ 1000)
-spec_config = SpectroscopyConfig.nirspec_g140m(wave_obs)
+spec_config = Spectroscopy.nirspec_g140m(wave_obs)
 
 # Any constant-R spectrograph
-spec_config = SpectroscopyConfig.constant_r(wave_obs, R=3000)
+spec_config = Spectroscopy.constant_r(wave_obs, R=3000)
 ```
 
 All factories accept additional keyword arguments that are forwarded to the
-`SpectroscopyConfig` constructor (e.g. `calibration_order`, `eline_marginalize`):
+`Spectroscopy` constructor (e.g. `calibration_order`, `eline_marginalize`):
 
 ```python
-spec_config = SpectroscopyConfig.nirspec_prism(
+spec_config = Spectroscopy.nirspec_prism(
     wave_obs,
     calibration_order=3,
     eline_marginalize=True,
@@ -78,7 +78,7 @@ Setting `calibration_order > 0` adds a Chebyshev polynomial correction with free
 coefficients:
 
 ```python
-spec_config = SpectroscopyConfig(
+spec_config = Spectroscopy(
     wave_obs=wave_obs,
     resolution=1000,
     calibration_order=3,    # adds cal_c1, cal_c2, cal_c3
@@ -86,8 +86,8 @@ spec_config = SpectroscopyConfig(
 ```
 
 This generates three free parameters (`cal_c1`, `cal_c2`, `cal_c3`), each with a
-`Gaussian(0, 0.1)` prior. These are automatically injected into `ParamSpec` when the
-`Observation` is passed to `Model`.
+`Gaussian(0, 0.1)` prior. These are automatically injected into `Parameters` when the
+`Observation` is passed to `SEDModel`.
 
 :::{note}
 `calibration_order=0` (the default) means no calibration correction. For most
@@ -101,7 +101,7 @@ during the likelihood computation. This avoids fitting individual line amplitude
 while still accounting for their contribution to the residuals.
 
 ```python
-spec_config = SpectroscopyConfig(
+spec_config = Spectroscopy(
     wave_obs=wave_obs,
     eline_marginalize=True,
     eline_prior_sigma=100.0,        # prior width (default)

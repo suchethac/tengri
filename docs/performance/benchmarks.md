@@ -65,10 +65,11 @@ Use the exact path or spectroscopy for SMC-dominated fits.
 
 ## Inference methods
 
-### native_geovi (default)
+### vi (default)
 
-`native_geovi` is a JIT-compiled geoVI implementation with a resample+update schedule
-and nonlinear posterior draws.
+`vi` is a JIT-compiled geoVI implementation with a resample+update schedule
+and nonlinear posterior draws. NIFTy is the computational library implementing geoVI;
+the `vi` method uses its fast path by default.
 
 | Configuration | Compile time | Runtime | Posterior samples |
 |--------------|:------------:|:-------:|:-----------------:|
@@ -95,10 +96,10 @@ galaxies. After the first galaxy, each additional fit takes only the runtime cos
 
 | Method | Best for | Typical wall time (D=7) |
 |--------|----------|:-----------------------:|
-| MAP | Point estimates, initialization | seconds |
-| native_geovi | Default posterior inference | 56s compile + 0.3s run |
-| NUTS | Gold-standard validation (low-D) | minutes |
-| Ray Tracing | Exact MCMC, stochastic-gradient resilient | minutes |
+| `map` | Point estimates, initialization | seconds |
+| `vi` | Default posterior inference | 56s compile + 0.3s run |
+| `mcmc_nuts` | Gold-standard validation (low-D) | minutes |
+| `mcmc_raytrace` | Exact MCMC, stochastic-gradient resilient | minutes |
 
 ## Nebular and AGN components
 

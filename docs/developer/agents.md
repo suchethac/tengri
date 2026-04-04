@@ -53,7 +53,7 @@ differentiable, and vmap-able.
 
 ## Parameter dictionary convention
 
-The `Model` class uses **public parameter names** (via `ParamSpec`).
+The `SEDModel` class uses **public parameter names** (via `Parameters`).
 For a DPL + GP field model:
 
 ```python
@@ -89,13 +89,13 @@ params = {
 ### Generate a mock galaxy SED
 
 ```python
-from tengri import Model, ParamSpec, Uniform, Observation, Photometry, load_ssp_data
+from tengri import SEDModel, Parameters, Uniform, Observation, Photometry, load_ssp_data
 
 ssp = load_ssp_data("path/to/ssp_templates.h5")
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
-spec = ParamSpec(
+spec = Parameters(
     mean_sfh_type=["dpl", "field"],
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -105,7 +105,7 @@ spec = ParamSpec(
     sfh_field_psd_tau_myr=Uniform(10, 500),
     redshift=0.1,
 )
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 params = spec.sample(jax.random.PRNGKey(0))
 mock = model.mock(params, snr=20.0, key=jax.random.PRNGKey(1))
 ```
