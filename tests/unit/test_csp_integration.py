@@ -39,6 +39,7 @@ jax.config.update("jax_enable_x64", True)
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def make_log_spaced_ages(n=107, t_min_yr=1e6, t_max_yr=1.4e10):
     """Make a log-spaced SSP age grid (typical FSPS/MIST grid)."""
     return jnp.array(np.geomspace(t_min_yr, t_max_yr, n))
@@ -73,6 +74,7 @@ def analytic_integral(sfr_fn, t_min, t_max, n_ref=10_000):
 # ---------------------------------------------------------------------------
 # Unit tests: csp_age_dt correctness
 # ---------------------------------------------------------------------------
+
 
 class TestCspAgeDt:
     def test_trapz_shapes(self):
@@ -125,6 +127,7 @@ class TestCspAgeDt:
 # ---------------------------------------------------------------------------
 # Accuracy comparison: trapz vs log_trapz vs dense reference
 # ---------------------------------------------------------------------------
+
 
 class TestCspIntegrationAccuracy:
     """Compare both methods against a dense-grid reference integral."""
@@ -198,6 +201,7 @@ class TestCspIntegrationAccuracy:
 # Difference visualization (run with pytest -s to see output)
 # ---------------------------------------------------------------------------
 
+
 def test_print_weight_differences(capsys):
     """Print bin-by-bin weight differences between trapz and log_trapz.
 
@@ -214,8 +218,7 @@ def test_print_weight_differences(capsys):
     with capsys.disabled():
         print("\n\nCSP bin width comparison (trapz vs log_trapz):")
         print(
-            f"{'Age (Gyr)':>12} {'dt_trapz (yr)':>16}"
-            f" {'dt_log (yr)':>16} {'ratio log/trapz':>16}"
+            f"{'Age (Gyr)':>12} {'dt_trapz (yr)':>16} {'dt_log (yr)':>16} {'ratio log/trapz':>16}"
         )
         print("-" * 64)
         for i in range(len(ages)):
@@ -235,6 +238,7 @@ def test_print_weight_differences(capsys):
 # ---------------------------------------------------------------------------
 # Benchmark: precomputed dt vs inline computation
 # ---------------------------------------------------------------------------
+
 
 class TestCspBenchmark:
     """Benchmark: precomputed _csp_age_dt vs computing inline.
@@ -265,11 +269,13 @@ class TestCspBenchmark:
 
         @jax.jit
         def weights_inline(sfr, ages):
-            dt = jnp.concatenate([
-                jnp.array([0.5 * (ages[1] - ages[0])]),
-                0.5 * (ages[2:] - ages[:-2]),
-                jnp.array([0.5 * (ages[-1] - ages[-2])]),
-            ])
+            dt = jnp.concatenate(
+                [
+                    jnp.array([0.5 * (ages[1] - ages[0])]),
+                    0.5 * (ages[2:] - ages[:-2]),
+                    jnp.array([0.5 * (ages[-1] - ages[-2])]),
+                ]
+            )
             return sfr * dt
 
         # Compile
@@ -351,7 +357,7 @@ class TestCspLogInterpMatrix:
             for j in range(len(ages)):
                 if abs(i - j) > 1:
                     assert abs(A[i, j]) < 1e-14, (
-                        f"Non-zero off-tridiag entry A[{i},{j}]={A[i,j]:.2e}"
+                        f"Non-zero off-tridiag entry A[{i},{j}]={A[i, j]:.2e}"
                     )
 
     def test_constant_sfr_recovery(self):

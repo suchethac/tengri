@@ -58,7 +58,7 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool]] = [
     ("SiIII_1892", 1892.03, "Si3", False, False),
     ("CIII_1908", 1908.73, "C3", False, True),
     ("MgII_2796", 2796.35, "Mg2", False, False),  # constrained secondary of MgII_2803
-    ("MgII_2803", 2803.53, "Mg2", False, True),
+    ("MgII_2803", 2803.53, "Mg2", False, False),
     ("NeV_3346", 3347.78, "Ne5", False, False),
     ("NeV_3426", 3427.94, "Ne5", False, False),
     # Optical lines (3700-6800 Å)
@@ -168,7 +168,7 @@ class LineCatalog:
 
     Use a custom wavelength subset from a line-finding step::
 
-        detected = cat.select(wavelengths=[6562.8, 4861.3, 5006.8])
+        detected = cat.select(wavelengths=[6564.61, 4862.68, 5008.24])
     """
 
     names: tuple[str, ...]

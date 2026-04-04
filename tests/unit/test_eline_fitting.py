@@ -181,3 +181,33 @@ class TestMarginalization:
         ln_l, a_hat, _a_cov = run(data, noise_arr)
         assert jnp.isfinite(ln_l)
         assert a_hat.shape == (3,)
+
+    def test_gradient_matches_finite_difference(self):
+        """AD gradient of -ln_L w.r.t. continuum level must match finite-difference.
+
+        Regression for NEW-09: isfinite alone does not catch wrong sign, missing
+        terms, or off-by-constant errors in the marginalization formula.
+        Tolerance 1% is well within JAX float64 accuracy.
+        """
+        wave = jnp.linspace(6400, 6700, 200)
+        ha = jnp.array([6564.61])
+        noise_arr = jnp.full_like(wave, 0.1)
+        G = build_eline_design_matrix(wave, ha, 2000.0, 0.0)
+        data = G @ jnp.array([5.0]) + 1.0
+
+        def neg_log_like(level):
+            residual = data - level * jnp.ones_like(wave)
+            prior_var = jnp.full(1, 100.0**2)
+            ln_l, _, _ = marginalize_emission_lines(
+                residual, noise_arr, G, prior_variance=prior_var
+            )
+            return -ln_l
+
+        eps = 1e-5
+        fd_grad = (neg_log_like(1.0 + eps) - neg_log_like(1.0 - eps)) / (2 * eps)
+        ad_grad = float(jax.grad(neg_log_like)(1.0))
+        fd_val = float(fd_grad)
+        denom = max(abs(fd_val), 1e-10)
+        assert abs(ad_grad - fd_val) / denom < 0.01, (
+            f"AD grad {ad_grad:.6g} vs FD grad {fd_val:.6g} — relative error too large"
+        )

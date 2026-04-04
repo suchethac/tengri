@@ -17,12 +17,12 @@
 | PARTIALLY FIXED | 1 | BUG-10 (documented as intentional) |
 | NOT FIXED | 2 | BUG-04,29 |
 
-### Emission line branch (merged 2026-04-01): 23 issues found, 11 fixed
+### Emission line branch (merged 2026-04-01): 23 issues found, 20 fixed
 
 | Status | Count | Details |
 |--------|-------|---------|
-| FIXED | 11 | S1-S6 (showstoppers), #9,10,11,12,14 (serious) |
-| NOT FIXED | 9 | NEW-01 through NEW-09 below |
+| FIXED | 20 | S1-S6, #9,10,11,12,14 (original 11) + NEW-01 through NEW-09 (2026-04-03/04) |
+| NOT FIXED | 0 | — |
 | NEEDS VERIFICATION | 3 | NEW-10,11,12 |
 
 ---
@@ -105,75 +105,40 @@ def test_cloudy_marg_lnl_varies_with_prior_mean():
     assert abs(float(ln_l_solar - ln_l_subsolar)) > 0.01
 ```
 
-### NEW-03: `default_13()` docstring shows air wavelengths (NOT FIXED)
+### NEW-03: `default_13()` docstring shows air wavelengths (FIXED 2026-04-04)
 
 **File:** `src/tengri/models/observation/line_catalog.py:247-250`
-**Status:** The docstring for `default_13()` lists wavelengths like `Hbeta (4861.33)`, `OIII_5007 (5006.84)`, `Halpha (6562.80)` — these are the OLD air values. The actual data in `_DEFAULT_13_LINES` was correctly updated to vacuum values (4862.68, 5008.24, 6564.61), but the docstring was not updated.
-**Fix:** Update docstring to show vacuum values.
+**Fix:** Verified already updated to vacuum values (4862.68, 5008.24, 6564.61) when the line data was corrected.
 
-### NEW-04: `select(wavelengths=[...])` docstring example uses air wavelengths (NOT FIXED)
+### NEW-04: `select(wavelengths=[...])` docstring example uses air wavelengths (FIXED 2026-04-04)
 
-**File:** `src/tengri/models/observation/line_catalog.py:171,385`
-**Status:** Two docstring examples still use air wavelengths:
-- Line 171: `cat.select(wavelengths=[6562.8, 4861.3, 5006.8])`
-- Line 385: `cat.select(wavelengths=[6562.80, 4861.33, 5006.84, 6583.45])`
-The `select()` method uses nearest-match, so these will still work, but the examples are misleading documentation.
-**Fix:** Update to vacuum values.
+**File:** `src/tengri/models/observation/line_catalog.py:171`
+**Fix:** Updated line 171 to vacuum wavelengths `[6564.61, 4862.68, 5008.24]`. Line 385 was already correct.
 
-### NEW-05: `MgII_2803` (doublet secondary) has `is_broad_candidate=True` (NOT FIXED)
+### NEW-05: `MgII_2803` (doublet secondary) has `is_broad_candidate=True` (FIXED 2026-04-04)
 
 **File:** `src/tengri/models/observation/line_catalog.py:61`
-**Status:** `MgII_2803` is the secondary of the MgII doublet (constrained to MgII_2796's amplitude / 1.0). But it's marked `is_broad_candidate=True`. If downstream code builds a broad design matrix for all `is_broad_candidate` lines and treats them as independent, MgII_2803 would get an independent broad amplitude even though its narrow amplitude is constrained. Logic conflict.
-**Fix:** Set `is_broad_candidate=False` for MgII_2803 (the secondary), or ensure the broad design matrix also applies doublet constraints.
+**Fix:** Set `is_broad_candidate=False` for MgII_2803 in `_DEFAULT_OPTICAL_LINES`. As a constrained secondary, it cannot have an independent broad amplitude.
 
-### NEW-06: `n_independent == 32` docstring comment may be wrong after OII removal from doublets
+### NEW-06: `n_independent == 32` docstring comment may be wrong after OII removal from doublets (FIXED 2026-04-03)
 
 **File:** `src/tengri/models/observation/line_catalog.py:232`
-**Status:** Comment says `n_independent == 32` with 39 lines. After removing OII 3726/3729 and OII 7320/7330 from doublet ratios, there are now only 5 doublet constraints (OIII, NII, NeV, MgII, SIII). So `n_independent = 39 - 5 = 34`, not 32. **The docstring count is wrong.**
-**Fix:** Update to `n_independent == 34`.
-**Regression test:**
-```python
-def test_n_independent_matches_docstring():
-    cat = LineList.default_optical()
-    assert cat.n_independent == cat.n_lines - len(cat.doublets)
-    # After OII doublet removal: 39 lines - 5 doublets = 34
-    assert cat.n_independent == 34
-```
+**Fix:** Updated to `n_independent == 34` (39 lines - 5 doublet constraints).
 
-### NEW-07: No tests for `cloudy_grid_line_priors()` (MISSING TESTS)
+### NEW-07: No tests for `cloudy_grid_line_priors()` (FIXED 2026-04-04)
 
 **File:** `src/tengri/models/observation/eline_priors.py`
-**Status:** `cloudy_grid_line_priors()` (trilinear interpolation over CLOUDY HDF5) has zero test coverage. No corner tests, no edge-case tests, no normalization tests.
-**Fix:** Add tests:
-```python
-def test_cloudy_grid_priors_hbeta_is_one():
-    """Hbeta ratio should be 1.0 (it's the reference)."""
-def test_cloudy_grid_priors_returns_correct_shape():
-    """Output shape should match grid n_lines."""
-def test_cloudy_grid_priors_clamped_at_grid_edge():
-    """Inputs outside grid should be clamped, not extrapolated."""
-```
+**Fix:** Added 8 tests in `TestCloudyGridLinePriors` class in `tests/unit/test_eline_priors.py`.
 
-### NEW-08: `eline_broad` must be set independently in Parameters and Spectroscopy (DESIGN ISSUE)
+### NEW-08: `eline_broad` must be set independently in Parameters and Spectroscopy (FIXED 2026-04-03)
 
-**File:** `src/tengri/core/param_spec.py:1186`, `src/tengri/models/observation/spectroscopy_config.py`
-**Status:** User must set `eline_broad=True` in BOTH `Parameters(eline_broad=True)` AND `Spectroscopy(eline_broad=True)`. No consistency check. If they forget one, the broad component silently does nothing (no error).
-**Fix:** Either (a) have `Fitter.__init__` cross-check and warn, or (b) have `SEDModel.__init__` propagate `spectroscopy.eline_broad` to `Parameters` automatically.
+**File:** `src/tengri/inference/fitter.py:217-227`
+**Fix:** `Fitter.__init__` cross-checks SpectroscopyConfig.eline_broad vs ParamSpec.eline_broad and emits a warning if mismatched.
 
-### NEW-09: Gradient test only checks `isfinite`, not correctness (WEAK TEST)
+### NEW-09: Gradient test only checks `isfinite`, not correctness (FIXED 2026-04-04)
 
-**File:** `tests/unit/test_eline_fitting.py:122-138`
-**Status:** `test_gradient_through_marginalization` only asserts `jnp.isfinite(g)`. Would pass with wrong sign, missing terms, or any finite but incorrect gradient. Doesn't catch NEW-02 (wrong ln_L normalization).
-**Fix:** Add finite-difference gradient check:
-```python
-def test_gradient_matches_finite_difference():
-    eps = 1e-5
-    f_plus = neg_log_like(1.0 + eps)
-    f_minus = neg_log_like(1.0 - eps)
-    fd_grad = (f_plus - f_minus) / (2 * eps)
-    ad_grad = jax.grad(neg_log_like)(1.0)
-    assert abs(ad_grad - fd_grad) / max(abs(fd_grad), 1e-10) < 0.01
-```
+**File:** `tests/unit/test_eline_fitting.py`
+**Fix:** Added `test_gradient_matches_finite_difference` — computes central-difference FD gradient at level=1.0 and checks AD/FD relative error < 1%.
 
 ---
 

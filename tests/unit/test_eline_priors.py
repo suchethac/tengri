@@ -250,6 +250,41 @@ class TestMarginalizeEmissionLinesCloudy:
         ratio = a_hat_10 / jnp.maximum(jnp.abs(a_hat_1), 1e-30)
         assert jnp.all(ratio > 5.0), "l_hbeta=10 should give ~10x larger amplitudes"
 
+    def test_lnl_varies_with_prior_mean(self, mock_spectral_data):
+        """ln_L must change when the CLOUDY prior mean changes (different log_z).
+
+        Regression for NEW-02: the shift-marginalize-unshift trick is mathematically
+        exact (the marginal likelihood is shift-invariant), but this test guards against
+        any future implementation that breaks that invariance — e.g. by returning the
+        zero-mean-prior ln_L without applying the residual shift.
+        If the shift is missing, solar and sub-solar will give identical ln_L values.
+        """
+        d = mock_spectral_data
+        # Inject a signal so the prior mean matters
+        signal = d["design_matrix"] @ jnp.array([1.0, 1.34, 2.86])
+        residual_with_signal = d["residual"] + signal
+
+        ln_l_solar, _, _ = marginalize_emission_lines_cloudy(
+            residual_with_signal,
+            d["noise"],
+            d["design_matrix"],
+            log_z=0.0,
+            neb_logU=-3.0,
+            line_wavelengths=d["line_wavelengths"],
+        )
+        ln_l_subsolar, _, _ = marginalize_emission_lines_cloudy(
+            residual_with_signal,
+            d["noise"],
+            d["design_matrix"],
+            log_z=-0.7,
+            neb_logU=-3.0,
+            line_wavelengths=d["line_wavelengths"],
+        )
+        assert abs(float(ln_l_solar - ln_l_subsolar)) > 0.01, (
+            "ln_L must differ between solar and sub-solar metallicity priors; "
+            "may indicate residual shift (prior mean) is not applied"
+        )
+
 
 # ---------------------------------------------------------------------------
 # balmer_decrement_prior tests

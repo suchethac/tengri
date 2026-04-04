@@ -52,7 +52,7 @@ def build_ssp_component(model):
     if _use_matrix:
         _csp_mat = model._csp_matrix.astype(dt)  # precomputed Johnson+2021 matrix
     else:
-        _age_dt = model._csp_age_dt.astype(dt)   # precomputed bin widths
+        _age_dt = model._csp_age_dt.astype(dt)  # precomputed bin widths
 
     def ssp_fn(sfr_on_ssp, log_z_abs, alpha_fe=0.0):
         sfr = sfr_on_ssp.astype(dt)
