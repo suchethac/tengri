@@ -17,7 +17,6 @@ import jax.numpy as jnp
 from tengri.models.dust.attenuation import single_component_dust_fast, two_component_dust_fast
 from tengri.models.sps.dsps_wrapper import (
     compute_csp_sed,
-    compute_csp_weights,
     compute_log_z_evolving,
     effective_metallicity,
     has_alpha_grid,
@@ -322,10 +321,10 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         weights = _weights
         _use_dsps_table = False
     elif "sfh_t_gyr" in params:
-        weights = compute_csp_weights(sfr_on_ssp, model.ssp_ages_yr)
+        weights = sfr_on_ssp * model._csp_age_dt
     else:
         sfr_on_ssp = jnp.interp(model.ssp_log_ages_yr, model.log_age_grid, sfr)
-        weights = compute_csp_weights(sfr_on_ssp, model.ssp_ages_yr)
+        weights = sfr_on_ssp * model._csp_age_dt
         _use_dsps_table = False
 
     # Alpha-element enhancement

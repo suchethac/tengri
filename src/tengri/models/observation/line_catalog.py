@@ -48,7 +48,7 @@ _DOUBLET_RATIOS: dict[tuple[str, str], float] = {
 
 _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool]] = [
     # UV lines (1200-3000 Å)
-    ("Lya", 1215.67, "H1", False, True),
+    ("Lya", 1215.67, "H1", False, False),
     ("NV_1240", 1240.81, "N5", False, False),
     ("OI_1304", 1304.35, "O1", False, False),
     ("SiIV_1396", 1396.76, "Si4", False, False),
@@ -98,7 +98,7 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool]] = [
 # ---------------------------------------------------------------------------
 
 _DEFAULT_13_LINES: list[tuple[str, float, str, bool, bool]] = [
-    ("Lya", 1215.67, "H1", False, True),
+    ("Lya", 1215.67, "H1", False, False),
     ("Hdelta", 4102.89, "H1", True, True),
     ("Hgamma", 4341.68, "H1", True, True),
     ("Hbeta", 4862.68, "H1", True, True),
@@ -513,7 +513,7 @@ class LineCatalog:
         Constrain [OIII] doublet so 5007/4959 ratio is fixed at 2.98::
 
             cat = LineCatalog.default_optical()
-            C = cat.build_constraint_matrix()  # shape (39, 32)
+            C = cat.build_constraint_matrix()  # shape (39, 34)
             G_eff = G_full @ C  # (n_pix, n_independent)
 
         For [OIII] 5007 (primary, idx=p) / 4959 (secondary, idx=s), ratio=2.98:

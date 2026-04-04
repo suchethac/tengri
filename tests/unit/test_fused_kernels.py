@@ -23,6 +23,18 @@ from tengri.models.sps.precompute import (
 jax.config.update("jax_enable_x64", True)
 
 
+def setup_module(_module):
+    """Clear XLA JIT cache before this module runs.
+
+    Some earlier test (in random pytest ordering) may leave compiled
+    functions with different shapes/dtypes in the in-process cache.
+    The fused kernel tests use synthetic data with specific shapes;
+    a stale cache entry causes shape-mismatch failures that only appear
+    when pytest randomly places certain tests before this module.
+    """
+    jax.clear_caches()
+
+
 # ---------------------------------------------------------------------------
 # Fixtures: synthetic SSP-like data
 # ---------------------------------------------------------------------------

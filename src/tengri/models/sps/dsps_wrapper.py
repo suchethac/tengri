@@ -116,8 +116,72 @@ def load_ssp_data_dsps(filepath: str) -> SSPData:
         return load_ssp_data(filepath)
 
 
-@jax.jit
-def compute_csp_weights(sfr_on_ssp_ages: jnp.ndarray, ssp_ages_yr: jnp.ndarray) -> jnp.ndarray:
+def csp_age_dt(ssp_ages_yr: jnp.ndarray, method: str = "trapz") -> jnp.ndarray:
+    """Compute CSP quadrature bin widths for a given integration method.
+
+    Both methods implement trapezoidal integration of the CSP integral
+    ∫ SFR(t) dt, but differ in the quadrature variable:
+
+    ``"trapz"`` — standard trapezoidal rule in **linear age**:
+
+        dt_i = 0.5 * (t_{i+1} - t_{i-1})   [interior]
+        dt_0 = 0.5 * (t_1 - t_0)            [left endpoint]
+        dt_N = 0.5 * (t_N - t_{N-1})        [right endpoint]
+
+    ``"log_trapz"`` — trapezoidal rule in **log₁₀-age** with Jacobian:
+
+        dt_i = t_i * ln(10) * d(log₁₀ t)_i
+
+    where d(log₁₀ t)_i are the half-widths in log₁₀-age space.
+    This is equivalent to the substitution x = log₁₀(t), dt = t·ln(10)·dx
+    (Johnson et al. 2021, Appendix B). For log-spaced SSP grids (equal
+    Δ(log₁₀ t) per bin), this achieves uniform quadrature accuracy across
+    all ages, while linear trapz over-resolves old stars and under-resolves
+    young stars.
+
+    Parameters
+    ----------
+    ssp_ages_yr : array, shape (n_age,)
+        SSP ages in years, sorted ascending.
+    method : {"trapz", "log_trapz"}
+        Integration scheme. Default ``"trapz"`` matches DSPS.
+
+    Returns
+    -------
+    array, shape (n_age,)
+        Effective linear-age bin widths (years). Multiply by SFR (Msun/yr)
+        to get mass formed per bin (Msun).
+    """
+    if method == "trapz":
+        return jnp.concatenate(
+            [
+                jnp.array([0.5 * (ssp_ages_yr[1] - ssp_ages_yr[0])]),
+                0.5 * (ssp_ages_yr[2:] - ssp_ages_yr[:-2]),
+                jnp.array([0.5 * (ssp_ages_yr[-1] - ssp_ages_yr[-2])]),
+            ]
+        )
+    elif method == "log_trapz":
+        log10_ages = jnp.log10(ssp_ages_yr)
+        d_log10 = jnp.concatenate(
+            [
+                jnp.array([0.5 * (log10_ages[1] - log10_ages[0])]),
+                0.5 * (log10_ages[2:] - log10_ages[:-2]),
+                jnp.array([0.5 * (log10_ages[-1] - log10_ages[-2])]),
+            ]
+        )
+        return ssp_ages_yr * jnp.log(10.0) * d_log10
+    else:
+        raise ValueError(
+            f"Unknown CSP integration method: {method!r}. "
+            "Valid options: 'trapz' (linear-age), 'log_trapz' (log-age with Jacobian)."
+        )
+
+
+def compute_csp_weights(
+    sfr_on_ssp_ages: jnp.ndarray,
+    ssp_ages_yr: jnp.ndarray,
+    method: str = "trapz",
+) -> jnp.ndarray:
     """Compute SFH weights (mass formed per SSP age bin).
 
     Returns the stellar mass formed in each age bin (Msun), NOT
@@ -132,23 +196,17 @@ def compute_csp_weights(sfr_on_ssp_ages: jnp.ndarray, ssp_ages_yr: jnp.ndarray) 
         Star formation rate at each SSP age (Msun/yr).
     ssp_ages_yr : array, shape (n_age,)
         SSP ages in years.
+    method : {"trapz", "log_trapz"}
+        Integration method. See :func:`csp_age_dt` for details.
+        Default ``"trapz"`` is the DSPS-compatible linear-age trapezoid rule.
+        ``"log_trapz"`` applies the log-age Jacobian (Johnson et al. 2021).
 
     Returns
     -------
     array, shape (n_age,)
         Mass formed per age bin (Msun). Sum = total mass formed.
     """
-    # Trapezoidal half-widths for each age bin (standard trapezoid rule bin widths).
-    # Endpoint bins use half their one-sided width; interior bins use the average of
-    # the two adjacent spacings. Using full width for endpoints over-weights the
-    # youngest and oldest SSP bins.
-    dt = jnp.concatenate(
-        [
-            jnp.array([0.5 * (ssp_ages_yr[1] - ssp_ages_yr[0])]),
-            0.5 * (ssp_ages_yr[2:] - ssp_ages_yr[:-2]),
-            jnp.array([0.5 * (ssp_ages_yr[-1] - ssp_ages_yr[-2])]),
-        ]
-    )
+    dt = csp_age_dt(ssp_ages_yr, method)
     return sfr_on_ssp_ages * dt
 
 

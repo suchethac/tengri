@@ -46,24 +46,16 @@ def build_ssp_component(model):
     dt = model._forward_dtype
     ssp_flux = model.ssp_data.ssp_flux.astype(dt)
     ssp_lgmet = model.ssp_data.ssp_lgmet.astype(dt)
-    ssp_ages_yr = model.ssp_ages_yr.astype(dt)
     use_smooth = model._met_interp == "smooth"
     lgmet_scatter = dt.type(model._lgmet_scatter)
+    _age_dt = model._csp_age_dt.astype(dt)  # precomputed at model init
 
     def ssp_fn(sfr_on_ssp, log_z_abs, alpha_fe=0.0):
         sfr = sfr_on_ssp.astype(dt)
         lz = jnp.asarray(log_z_abs, dtype=dt)
         afe = jnp.asarray(alpha_fe, dtype=dt)
 
-        # CSP weights (trapezoidal rule, consistent with fused kernel)
-        age_dt = jnp.concatenate(
-            [
-                jnp.array([0.5 * (ssp_ages_yr[1] - ssp_ages_yr[0])]),
-                0.5 * (ssp_ages_yr[2:] - ssp_ages_yr[:-2]),
-                jnp.array([0.5 * (ssp_ages_yr[-1] - ssp_ages_yr[-2])]),
-            ]
-        )
-        weights = sfr * age_dt
+        weights = sfr * _age_dt
 
         # Effective metallicity with alpha-element shift
         lz_eff = lz + _A2Z * afe
