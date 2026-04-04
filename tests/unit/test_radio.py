@@ -1,0 +1,469 @@
+"""Tests for the three-mode SFR radio physics models.
+
+Covers:
+- radio_sfr_bell2003 (backward-compat alias for radio_star_forming)
+- radio_sfr_delvecchio2021 (mass+z dependent FIRRC at 1.4 GHz)
+- radio_sfr_mccheyne2022  (mass+z dependent FIRRC at 150 MHz)
+- _synchrotron_suppression (Bell+2003 helper)
+- radio_total dispatcher (sfr_mode selection)
+"""
+
+import jax
+import jax.numpy as jnp
+import pytest
+
+from tengri.models.radio import (
+    _L0_SYNCH_LSUN_HZ,
+    _synchrotron_suppression,
+    radio_sfr_bell2003,
+    radio_sfr_delvecchio2021,
+    radio_sfr_mccheyne2022,
+    radio_star_forming,
+    radio_total,
+    radio_total_dpl,
+)
+
+jax.config.update("jax_enable_x64", True)
+
+_C_AA = 2.99792458e18  # Angstrom/s
+
+# Wavelengths: 10 MHz – 300 GHz, all safely in the radio band (> 1e7 A)
+_WAVE_RADIO = _C_AA / jnp.logspace(7.0, 11.0, 200)  # Angstrom
+# Convenient single-frequency arrays
+_WAVE_14GHZ = jnp.array([_C_AA / 1.4e9])
+_WAVE_150MHZ = jnp.array([_C_AA / 1.5e8])
+
+_L_IR = 1e11  # Lsun, typical LIRG
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatibility
+# ---------------------------------------------------------------------------
+
+
+class TestBackwardCompat:
+    """radio_sfr_bell2003 must be identical to the old radio_star_forming."""
+
+    def test_alias_identical_output(self):
+        """radio_sfr_bell2003 == radio_star_forming for identical inputs."""
+        L_old = radio_star_forming(_WAVE_RADIO, _L_IR)
+        L_new = radio_sfr_bell2003(_WAVE_RADIO, _L_IR)
+        assert jnp.allclose(L_old, L_new, rtol=0.0, atol=0.0)
+
+    def test_dispatcher_bell2003_matches_direct_call(self):
+        """radio_total(sfr_mode='bell2003') matches radio_sfr_bell2003."""
+        L_direct = radio_sfr_bell2003(_WAVE_RADIO, _L_IR)
+        L_dispatch = radio_total(_WAVE_RADIO, L_ir=_L_IR, L_agn_bol=0.0)
+        assert jnp.allclose(L_direct, L_dispatch, rtol=1e-12)
+
+    def test_invalid_sfr_mode_raises(self):
+        """Unknown sfr_mode raises ValueError."""
+        with pytest.raises(ValueError, match="Unknown sfr_mode"):
+            radio_total(_WAVE_RADIO, L_ir=_L_IR, sfr_mode="bogus")
+
+
+# ---------------------------------------------------------------------------
+# Bell+2003 synchrotron suppression
+# ---------------------------------------------------------------------------
+
+
+class TestSynchrotronSuppression:
+    """Bell+2003 suppression helper: L_corr = L / (1 + (L0/L)^2)."""
+
+    def test_bright_source_unchanged(self):
+        """At L >> L0, L_corr ≈ L (suppression negligible)."""
+        L_bright = jnp.array(1e6 * _L0_SYNCH_LSUN_HZ)  # 1e6 × L0
+        L_corr = _synchrotron_suppression(L_bright)
+        ratio = float(L_corr / L_bright)
+        assert abs(ratio - 1.0) < 1e-3, f"Bright source ratio {ratio:.6f} should be ~1"
+
+    def test_faint_source_suppressed(self):
+        """At L << L0, L_corr ≈ L^3 / L0^2 (quadratic suppression)."""
+        L_faint = jnp.array(1e-6 * _L0_SYNCH_LSUN_HZ)  # 1e-6 × L0
+        L_corr = _synchrotron_suppression(L_faint)
+        # Expected: L_corr ≈ L / (L0/L)^2 = L^3 / L0^2
+        expected = float(L_faint) ** 3 / float(_L0_SYNCH_LSUN_HZ) ** 2
+        assert abs(float(L_corr) - expected) / expected < 0.02, (
+            f"Faint source L_corr {float(L_corr):.4e} != expected {expected:.4e}"
+        )
+
+    def test_suppression_monotonic(self):
+        """Correction factor increases monotonically with L."""
+        L_vals = jnp.logspace(-10, 2, 100) * _L0_SYNCH_LSUN_HZ
+        L_corr = _synchrotron_suppression(L_vals)
+        factors = L_corr / L_vals
+        # All factors should be < 1 and increasing
+        assert jnp.all(factors <= 1.0 + 1e-12), "Suppression factor must be <= 1"
+        assert jnp.all(jnp.diff(factors) >= 0.0), "Factor should increase monotonically"
+
+    def test_suppression_at_zero_safe(self):
+        """L=0 should not produce NaN."""
+        L_corr = _synchrotron_suppression(jnp.array(0.0))
+        assert jnp.isfinite(L_corr), "Suppression at L=0 must not be NaN/Inf"
+
+
+# ---------------------------------------------------------------------------
+# Delvecchio+2021 model
+# ---------------------------------------------------------------------------
+
+
+class TestDelvecchio2021:
+    """Tests for radio_sfr_delvecchio2021."""
+
+    def test_q_at_fiducial_mass_z0(self):
+        """At log(M★)=10, z=0: q = q0 × 1^z_slope - 0 = 2.743."""
+        # L_1.4GHz = L_IR / (3.75e12 × 10^q)
+        # At log(M★)=10, z=0: q = 2.743
+        expected_q = 2.743
+        L_ref_expected = _L_IR / (3.75e12 * 10.0**expected_q)
+        L = radio_sfr_delvecchio2021(
+            _WAVE_14GHZ,
+            _L_IR,
+            log_mstar=10.0,
+            redshift=0.0,
+            apply_suppression=False,
+        )
+        # L at 1.4 GHz (nu_ref) equals L_ref_expected: (nu/nu_ref)^-alpha = 1 at nu_ref
+        L_ref_computed = float(L[0])
+        assert abs(L_ref_computed - L_ref_expected) / L_ref_expected < 1e-6, (
+            f"q at fiducial: computed L_ref {L_ref_computed:.4e} != expected {L_ref_expected:.4e}"
+        )
+
+    def test_massive_galaxy_more_radio(self):
+        """Higher M★ → lower q → more radio luminosity per unit L_IR."""
+        L_low_mass = radio_sfr_delvecchio2021(
+            _WAVE_14GHZ, _L_IR, log_mstar=9.0, redshift=0.0, apply_suppression=False
+        )
+        L_high_mass = radio_sfr_delvecchio2021(
+            _WAVE_14GHZ, _L_IR, log_mstar=11.0, redshift=0.0, apply_suppression=False
+        )
+        assert float(L_high_mass[0]) > float(L_low_mass[0]), (
+            "Massive galaxy should be more radio-bright per unit L_IR"
+        )
+
+    def test_q_mass_dependence_correct_magnitude(self):
+        """Δq over 2 dex in M★ should be 2 × mass_slope = 0.468."""
+        L_m10 = radio_sfr_delvecchio2021(
+            _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
+        )
+        L_m12 = radio_sfr_delvecchio2021(
+            _WAVE_14GHZ, _L_IR, log_mstar=12.0, redshift=0.0, apply_suppression=False
+        )
+        # L ∝ 10^(-q), so Δlog(L) = Δq = 2 × 0.234 = 0.468
+        delta_log_L = jnp.log10(L_m12[0]) - jnp.log10(L_m10[0])
+        assert abs(float(delta_log_L) - 0.468) < 0.01, (
+            f"Δlog(L) = {float(delta_log_L):.4f} expected 0.468"
+        )
+
+    def test_z_evolution_mild(self):
+        """z_slope = -0.025: q decreases mildly from z=0 to z=4."""
+        L_z0 = radio_sfr_delvecchio2021(
+            _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
+        )
+        L_z4 = radio_sfr_delvecchio2021(
+            _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=4.0, apply_suppression=False
+        )
+        # q(z=4) = 2.743 * 5^(-0.025) ≈ 2.743 * 0.9604 ≈ 2.634
+        # Δq ≈ 0.109 → L_z4 / L_z0 ≈ 10^0.109 ≈ 1.285
+        ratio = float(L_z4[0] / L_z0[0])
+        assert 1.2 < ratio < 1.4, f"z=4 / z=0 radio ratio {ratio:.3f}, expected ~1.28"
+
+    def test_hierarchical_param_q0_increases_L(self):
+        """Higher q0 → higher q → lower L_radio (L ∝ 10^{-q})."""
+        L_lo = radio_sfr_delvecchio2021(
+            _WAVE_14GHZ,
+            _L_IR,
+            log_mstar=10.0,
+            redshift=0.0,
+            q0=3.0,
+            apply_suppression=False,
+        )
+        L_hi = radio_sfr_delvecchio2021(
+            _WAVE_14GHZ,
+            _L_IR,
+            log_mstar=10.0,
+            redshift=0.0,
+            q0=2.0,
+            apply_suppression=False,
+        )
+        assert float(L_hi[0]) > float(L_lo[0]), "Lower q0 should give higher L_radio"
+
+    def test_spectral_index_0p7_default(self):
+        """Default alpha_sf=0.7: S(150MHz)/S(1.4GHz) ≈ (150/1400)^{-0.7} ≈ 5.9."""
+        L_14ghz = radio_sfr_delvecchio2021(
+            _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
+        )
+        L_150mhz = radio_sfr_delvecchio2021(
+            _WAVE_150MHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
+        )
+        expected_ratio = (150.0e6 / 1.4e9) ** (-0.7)  # ≈ 5.87
+        actual_ratio = float(L_150mhz[0] / L_14ghz[0])
+        assert abs(actual_ratio - expected_ratio) / expected_ratio < 0.01, (
+            f"150MHz/1.4GHz ratio {actual_ratio:.4f} != expected {expected_ratio:.4f}"
+        )
+
+    def test_suppression_reduces_faint_source(self):
+        """apply_suppression=True must reduce L for a faint source."""
+        L_ir_faint = 1e6  # very low L_IR -> very faint radio
+        L_nosuppr = radio_sfr_delvecchio2021(
+            _WAVE_14GHZ,
+            L_ir_faint,
+            log_mstar=8.0,
+            redshift=0.0,
+            apply_suppression=False,
+        )
+        L_suppr = radio_sfr_delvecchio2021(
+            _WAVE_14GHZ,
+            L_ir_faint,
+            log_mstar=8.0,
+            redshift=0.0,
+            apply_suppression=True,
+        )
+        assert float(L_suppr[0]) < float(L_nosuppr[0]), (
+            "Suppression should reduce L for faint sources"
+        )
+
+    def test_jit_compatible(self):
+        jitted = jax.jit(radio_sfr_delvecchio2021, static_argnames=["apply_suppression"])
+        L = jitted(_WAVE_RADIO, _L_IR, 10.0, 0.0, apply_suppression=False)
+        assert L.shape == _WAVE_RADIO.shape
+        assert jnp.all(jnp.isfinite(L))
+
+    def test_gradients_flow_through_log_mstar_and_redshift(self):
+        """Gradients should be finite and nonzero w.r.t. log_mstar, redshift."""
+
+        def _loss(log_mstar, redshift):
+            return jnp.sum(
+                radio_sfr_delvecchio2021(
+                    _WAVE_14GHZ, _L_IR, log_mstar, redshift, apply_suppression=False
+                )
+            )
+
+        g_mstar, g_z = jax.grad(_loss, argnums=(0, 1))(10.0, 0.5)
+        assert jnp.isfinite(g_mstar) and float(g_mstar) != 0.0
+        assert jnp.isfinite(g_z) and float(g_z) != 0.0
+
+
+# ---------------------------------------------------------------------------
+# McCheyne+2022 model
+# ---------------------------------------------------------------------------
+
+
+class TestMcCheyne2022:
+    """Tests for radio_sfr_mccheyne2022."""
+
+    def test_q_at_fiducial_mass_z0(self):
+        """At log(M★)=10, z=0: q = q0 + mass_slope × 0 = 1.98."""
+        expected_q = 1.98
+        L_ref_expected = _L_IR / (3.75e12 * 10.0**expected_q)
+        L = radio_sfr_mccheyne2022(
+            _WAVE_150MHZ,
+            _L_IR,
+            log_mstar=10.0,
+            redshift=0.0,
+            apply_suppression=False,
+        )
+        L_ref_computed = float(L[0])
+        assert abs(L_ref_computed - L_ref_expected) / L_ref_expected < 1e-5, (
+            f"L at fiducial {L_ref_computed:.4e} != expected {L_ref_expected:.4e}"
+        )
+
+    def test_massive_galaxy_more_radio(self):
+        """Higher M★ → lower q (mass_slope=-0.22) → more L_radio."""
+        L_low = radio_sfr_mccheyne2022(
+            _WAVE_150MHZ, _L_IR, log_mstar=9.0, redshift=0.0, apply_suppression=False
+        )
+        L_high = radio_sfr_mccheyne2022(
+            _WAVE_150MHZ, _L_IR, log_mstar=11.0, redshift=0.0, apply_suppression=False
+        )
+        assert float(L_high[0]) > float(L_low[0]), (
+            "Higher M★ should give more radio emission (mass_slope < 0)"
+        )
+
+    def test_mass_slope_magnitude(self):
+        """Δq over 2 dex M★ = 2 × |mass_slope| = 0.44."""
+        L_m10 = radio_sfr_mccheyne2022(
+            _WAVE_150MHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
+        )
+        L_m12 = radio_sfr_mccheyne2022(
+            _WAVE_150MHZ, _L_IR, log_mstar=12.0, redshift=0.0, apply_suppression=False
+        )
+        delta_log_L = float(jnp.log10(L_m12[0]) - jnp.log10(L_m10[0]))
+        # mass_slope = -0.22, so Δq = -0.22 * 2 = -0.44 → ΔlogL = +0.44
+        assert abs(delta_log_L - 0.44) < 0.01, f"Δlog(L) = {delta_log_L:.4f}, expected 0.44"
+
+    def test_hierarchical_param_monotonic(self):
+        """q0 override: higher q0 → lower L_radio."""
+        L_lo_q0 = radio_sfr_mccheyne2022(
+            _WAVE_150MHZ,
+            _L_IR,
+            log_mstar=10.0,
+            redshift=0.0,
+            q0=2.5,
+            apply_suppression=False,
+        )
+        L_hi_q0 = radio_sfr_mccheyne2022(
+            _WAVE_150MHZ,
+            _L_IR,
+            log_mstar=10.0,
+            redshift=0.0,
+            q0=1.5,
+            apply_suppression=False,
+        )
+        assert float(L_hi_q0[0]) > float(L_lo_q0[0]), "Lower q0 → more L_radio"
+
+    def test_spectral_index_0p7_default(self):
+        """At 150 MHz reference, extrapolating to 1.4 GHz with α=0.7."""
+        L_150mhz = radio_sfr_mccheyne2022(
+            _WAVE_150MHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
+        )
+        L_14ghz = radio_sfr_mccheyne2022(
+            _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
+        )
+        # At 1.4 GHz: L = L_ref * (1.4e9 / 1.5e8)^{-0.7}
+        expected_ratio = (1.5e8 / 1.4e9) ** (-0.7)  # > 1 (150 MHz brighter)
+        actual_ratio = float(L_150mhz[0] / L_14ghz[0])
+        assert abs(actual_ratio - expected_ratio) / expected_ratio < 0.01, (
+            f"150MHz/1.4GHz ratio {actual_ratio:.4f} != expected {expected_ratio:.4f}"
+        )
+
+    def test_jit_compatible(self):
+        jitted = jax.jit(radio_sfr_mccheyne2022, static_argnames=["apply_suppression"])
+        L = jitted(_WAVE_RADIO, _L_IR, 10.0, 0.0, apply_suppression=False)
+        assert L.shape == _WAVE_RADIO.shape
+        assert jnp.all(jnp.isfinite(L))
+
+    def test_gradients_flow(self):
+        def _loss(log_mstar, redshift):
+            return jnp.sum(
+                radio_sfr_mccheyne2022(
+                    _WAVE_150MHZ, _L_IR, log_mstar, redshift, apply_suppression=False
+                )
+            )
+
+        g_mstar, g_z = jax.grad(_loss, argnums=(0, 1))(10.0, 0.3)
+        assert jnp.isfinite(g_mstar) and float(g_mstar) != 0.0
+        assert jnp.isfinite(g_z)
+
+
+# ---------------------------------------------------------------------------
+# radio_total dispatcher
+# ---------------------------------------------------------------------------
+
+
+class TestRadioTotalDispatcher:
+    """radio_total correctly dispatches to all three SFR modes."""
+
+    def test_bell2003_mode_zero_agn(self):
+        """With L_agn_bol=0, bell2003 total == radio_sfr_bell2003."""
+        L_direct = radio_sfr_bell2003(_WAVE_RADIO, _L_IR)
+        L_via_total = radio_total(_WAVE_RADIO, L_ir=_L_IR, L_agn_bol=0.0, sfr_mode="bell2003")
+        assert jnp.allclose(L_direct, L_via_total, rtol=1e-12)
+
+    def test_delvecchio2021_mode_dispatches(self):
+        """delvecchio2021 mode should return different L than bell2003 (log_mstar != 10)."""
+        L_bell = radio_total(
+            _WAVE_14GHZ,
+            L_ir=_L_IR,
+            L_agn_bol=0.0,
+            sfr_mode="bell2003",
+        )
+        L_delv = radio_total(
+            _WAVE_14GHZ,
+            L_ir=_L_IR,
+            L_agn_bol=0.0,
+            sfr_mode="delvecchio2021",
+            log_mstar=11.0,
+            redshift=1.0,
+            apply_suppression=False,
+        )
+        assert float(L_delv[0]) != float(L_bell[0]), (
+            "Delvecchio mode should give different L than Bell2003 for M★=11, z=1"
+        )
+
+    def test_mccheyne2022_mode_dispatches(self):
+        """mccheyne2022 mode should return finite nonzero values."""
+        L = radio_total(
+            _WAVE_150MHZ,
+            L_ir=_L_IR,
+            L_agn_bol=0.0,
+            sfr_mode="mccheyne2022",
+            log_mstar=10.5,
+            redshift=0.5,
+            apply_suppression=False,
+        )
+        assert float(L[0]) > 0.0 and jnp.isfinite(L[0])
+
+    def test_hierarchical_params_override_in_dispatcher(self):
+        """q0 passed to radio_total is forwarded to the physics model."""
+        L_default = radio_total(
+            _WAVE_14GHZ,
+            L_ir=_L_IR,
+            L_agn_bol=0.0,
+            sfr_mode="delvecchio2021",
+            log_mstar=10.0,
+            redshift=0.0,
+            apply_suppression=False,
+        )
+        L_override = radio_total(
+            _WAVE_14GHZ,
+            L_ir=_L_IR,
+            L_agn_bol=0.0,
+            sfr_mode="delvecchio2021",
+            log_mstar=10.0,
+            redshift=0.0,
+            q0=2.5,
+            apply_suppression=False,
+        )
+        # q0=2.5 < 2.743 default → L should be higher (L ∝ 10^{-q})
+        assert float(L_override[0]) > float(L_default[0])
+
+    def test_total_dpl_bell2003_backward_compat(self):
+        """radio_total_dpl with sfr_mode='bell2003' == old behavior."""
+        from tengri.models.radio import radio_agn_dpl
+
+        wave = _WAVE_RADIO
+        L_via_total = radio_total_dpl(
+            wave,
+            L_ir=_L_IR,
+            L_agn_bol=1e11,
+            radio_loudness=1.0,
+            sfr_mode="bell2003",
+        )
+        L_sf = radio_sfr_bell2003(wave, _L_IR)
+        L_agn = radio_agn_dpl(wave, 1e11, radio_loudness=1.0)
+        assert jnp.allclose(L_via_total, L_sf + L_agn, rtol=1e-12)
+
+    def test_jit_all_modes(self):
+        """All sfr_mode options trace under jax.jit (static_argnames)."""
+        for mode in ("bell2003", "delvecchio2021", "mccheyne2022"):
+            jitted = jax.jit(
+                radio_total,
+                static_argnames=["sfr_mode", "apply_suppression"],
+            )
+            L = jitted(
+                _WAVE_RADIO,
+                L_ir=_L_IR,
+                L_agn_bol=0.0,
+                sfr_mode=mode,
+                log_mstar=10.0,
+                redshift=0.0,
+                apply_suppression=False,
+            )
+            assert L.shape == _WAVE_RADIO.shape, f"Shape mismatch for mode={mode}"
+            assert jnp.all(jnp.isfinite(L)), f"Non-finite values for mode={mode}"
+
+    def test_only_radio_band_emits(self):
+        """All three modes must return zero at optical/UV wavelengths."""
+        wave_optical = jnp.logspace(3.0, 6.9, 50)  # 1000 A – 8e6 A (below 1 mm)
+        for mode in ("bell2003", "delvecchio2021", "mccheyne2022"):
+            L = radio_total(
+                wave_optical,
+                L_ir=_L_IR,
+                L_agn_bol=0.0,
+                sfr_mode=mode,
+                log_mstar=10.0,
+                redshift=0.0,
+                apply_suppression=False,
+            )
+            assert jnp.all(L == 0.0), f"Non-zero optical flux for mode={mode}"
