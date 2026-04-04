@@ -231,8 +231,8 @@ def csp_log_interp_matrix(ssp_ages_yr, n_gl: int = 5):
 
     # 5-point Gauss-Legendre nodes on [-1,1], mapped to [0,1]
     xi, wi = np.polynomial.legendre.leggauss(n_gl)
-    p_nodes = (xi + 1.0) / 2.0    # in [0, 1]
-    p_weights = wi / 2.0           # sum = 1
+    p_nodes = (xi + 1.0) / 2.0  # in [0, 1]
+    p_weights = wi / 2.0  # sum = 1
 
     for j in range(N - 1):
         t_lo, t_hi = ages[j], ages[j + 1]
@@ -243,18 +243,252 @@ def csp_log_interp_matrix(ssp_ages_yr, n_gl: int = 5):
         t_q = t_lo + p_nodes * delta_t
 
         # Log-linear basis functions at quadrature points
-        a_j = (np.log10(t_hi) - np.log10(t_q)) / delta_u   # falls 1→0
-        b_j1 = 1.0 - a_j                                     # rises 0→1
+        a_j = (np.log10(t_hi) - np.log10(t_q)) / delta_u  # falls 1→0
+        b_j1 = 1.0 - a_j  # rises 0→1
 
         # SFR(t_q) = SFR_j*(1-p) + SFR_{j+1}*p  (piecewise-linear in t)
         # Contribution to m_j (integrate SFR · a_j dt over [t_j, t_{j+1}]):
-        A[j,     j    ] += delta_t * np.dot(p_weights, (1.0 - p_nodes) * a_j)
-        A[j,     j + 1] += delta_t * np.dot(p_weights, p_nodes          * a_j)
+        A[j, j] += delta_t * np.dot(p_weights, (1.0 - p_nodes) * a_j)
+        A[j, j + 1] += delta_t * np.dot(p_weights, p_nodes * a_j)
         # Contribution to m_{j+1} (integrate SFR · b_{j+1} dt):
-        A[j + 1, j    ] += delta_t * np.dot(p_weights, (1.0 - p_nodes) * b_j1)
-        A[j + 1, j + 1] += delta_t * np.dot(p_weights, p_nodes          * b_j1)
+        A[j + 1, j] += delta_t * np.dot(p_weights, (1.0 - p_nodes) * b_j1)
+        A[j + 1, j + 1] += delta_t * np.dot(p_weights, p_nodes * b_j1)
 
     return A
+
+
+def compute_dsps_native_weights(
+    sfr_on_ssp_ages: jnp.ndarray,
+    ssp_ages_yr: jnp.ndarray,
+    ssp_lgmet: jnp.ndarray,
+    ssp_lg_age_gyr: jnp.ndarray,
+    ssp_flux: jnp.ndarray,
+    t_obs_gyr: float,
+    lgmet: float,
+    lgmet_scatter: float = 0.2,
+) -> tuple:
+    """Compute CSP age weights and metallicity-marginalized SSP flux via DSPS.
+
+    **This is tengri's primary (recommended) CSP integration mode**,
+    selected via ``Model(..., csp_integration="dsps_native")``.
+
+    Uses DSPS's triweight metallicity kernel (Hearin et al. 2023, Eq. 10)
+    to convolve the stellar metallicity distribution with SSP templates,
+    then integrates the SFH via DSPS's trapezoidal scheme on cosmic time.
+    Age and metallicity integration are performed in a single DSPS call,
+    eliminating the need for a separate :func:`compute_csp_weights` +
+    ``interp_metallicity`` step.
+
+    Unlike the trapezoidal quadrature modes (``trapz``, ``log_trapz``),
+    this method computes the CSP on **cosmic** (not lookback) time, which
+    avoids endpoint-weighting errors at young ages.  The metallicity
+    distribution is a lognormal (Gaussian in log10 Z) with scatter
+    ``lgmet_scatter``, matching the Prospector/DSPS convention
+    (Johnson et al. 2021).  The resulting ``ssp_flux_at_z`` is already
+    marginalized over the full metallicity PDF and flows into tengri's
+    existing dust and AGN pipeline unchanged.
+
+    Parameters
+    ----------
+    sfr_on_ssp_ages : array, shape (n_age,)
+        Star formation rate (Msun/yr) evaluated at each SSP lookback age,
+        sorted **ascending by age** (youngest = index 0).
+    ssp_ages_yr : array, shape (n_age,)
+        SSP lookback ages in years (ascending).
+    ssp_lgmet : array, shape (n_met,)
+        log10(Z) metallicity grid of the SSP library (absolute, not Z/Zsun).
+    ssp_lg_age_gyr : array, shape (n_age,)
+        log10(age/Gyr) of SSP templates.
+    ssp_flux : array, shape (n_met, n_age, n_wave)
+        SSP spectra in Lsun/Hz/Msun.
+    t_obs_gyr : float
+        Age of the universe in Gyr at the observation redshift.
+        Computed from tengri's cosmology (not DSPS's DEFAULT_COSMOLOGY).
+    lgmet : float
+        log10(Z) metallicity of the galaxy (absolute, same units as ssp_lgmet).
+    lgmet_scatter : float, optional
+        Gaussian scatter in log10(Z) (dex). Default 0.2 dex, matching DSPS
+        and Prospector conventions (Conroy & van Dokkum 2009; Johnson+2021).
+
+    Returns
+    -------
+    age_weights_msun : array, shape (n_age,)
+        Mass formed per SSP age bin (Msun), sorted ascending by age.
+        Sum = total stellar mass formed.  Directly replaces the output of
+        :func:`compute_csp_weights`.
+    ssp_flux_at_z : array, shape (n_age, n_wave)
+        SSP flux marginalized over the metallicity distribution
+        (Lsun/Hz/Msun).  Replaces the output of
+        ``interp_met_alpha_dispatch``.
+
+    Notes
+    -----
+    SSP ages in tengri are **lookback times** (youngest = smallest).  DSPS
+    needs **cosmic times** sorted ascending.  The conversion is::
+
+        t_cosmic_gyr = clip(t_obs_gyr - ssp_ages_yr / 1e9, min=1e-3)
+
+    Reversal (youngest→oldest in tengri ↔ oldest→youngest in cosmic time)
+    is handled internally; the returned ``age_weights_msun`` is sorted
+    back to tengri's ascending-age convention.
+
+    Requires ``dsps`` to be installed (``pip install dsps``).
+
+    References
+    ----------
+    Hearin et al. 2023, arXiv:2112.08423, Eq. 10 (triweight kernel).
+    """
+    try:
+        from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
+    except ImportError:
+        raise ImportError(
+            "dsps is required for csp_integration='dsps_native'. Install with: pip install dsps"
+        ) from None
+
+    # SSP ages are lookback times (young→old, ascending).
+    # DSPS needs cosmic times (old→young = ascending cosmic time).
+    # Reverse so that gal_t_table is sorted ascending for DSPS.
+    ssp_age_gyr = ssp_ages_yr / 1e9
+    t_cosmic_gyr = jnp.clip(t_obs_gyr - ssp_age_gyr, min=1e-3)
+
+    # Flip to ascending cosmic time (oldest universe-age first).
+    t_cosmic_asc = t_cosmic_gyr[::-1]
+    sfr_asc = sfr_on_ssp_ages[::-1]
+
+    result = calc_rest_sed_sfh_table_lognormal_mdf(
+        gal_t_table=t_cosmic_asc,
+        gal_sfr_table=sfr_asc,
+        gal_lgmet=lgmet,
+        gal_lgmet_scatter=lgmet_scatter,
+        ssp_lgmet=ssp_lgmet,
+        ssp_lg_age_gyr=ssp_lg_age_gyr,
+        ssp_flux=ssp_flux,
+        t_obs=t_obs_gyr,
+    )
+
+    # result.age_weights is normalized (sum=1, DSPS convention).
+    # Scale to absolute mass (Msun) using trapezoidal integral of SFR dt.
+    total_mass = jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9)
+    # age_weights from DSPS are in reversed (ascending cosmic time) order.
+    # Flip back to tengri's ascending-age convention.
+    age_weights_msun = result.age_weights[::-1] * jnp.maximum(total_mass, 0.0)
+
+    # Metallicity-marginalized SSP flux per age bin.
+    # result.lgmet_weights shape: (n_met,) — fractional weights summing to 1.
+    lgmet_w = result.lgmet_weights  # (n_met,)
+    lgmet_w_safe = lgmet_w / jnp.maximum(lgmet_w.sum(), 1e-30)
+    # Broadcast over age axis: ssp_flux shape is (n_met, n_age, n_wave).
+    ssp_flux_at_z = jnp.einsum("m,maw->aw", lgmet_w_safe, ssp_flux)  # (n_age, n_wave)
+
+    return age_weights_msun, ssp_flux_at_z
+
+
+def compute_dsps_met_table_weights(
+    sfr_on_ssp_ages: jnp.ndarray,
+    lgmet_on_ssp_ages: jnp.ndarray,
+    ssp_ages_yr: jnp.ndarray,
+    ssp_lgmet: jnp.ndarray,
+    ssp_lg_age_gyr: jnp.ndarray,
+    ssp_flux: jnp.ndarray,
+    t_obs_gyr: float,
+    lgmet_scatter: float = 0.2,
+) -> tuple:
+    """Compute CSP age weights and metallicity-marginalized SSP flux via DSPS
+    with a per-age metallicity table (time-evolving Z(t)).
+
+    Selected via ``Model(..., csp_integration="dsps_met_table")``.  Unlike
+    :func:`compute_dsps_native_weights` which uses a single scalar ``lgmet``
+    with a lognormal MDF, this function accepts a per-SSP-age metallicity
+    array so each age bin can have its own metallicity and lognormal scatter
+    (Hearin et al. 2023, Eq. 11).  This is the natural mode for models with
+    an evolving chemical history (``_evolving_metallicity=True``).
+
+    For a constant-metallicity model, pass a uniform array
+    ``jnp.full_like(ssp_ages_yr, log_z_abs)``; the result is numerically
+    equivalent to :func:`compute_dsps_native_weights` but computed via the
+    met-table DSPS path.
+
+    Parameters
+    ----------
+    sfr_on_ssp_ages : array, shape (n_age,)
+        Star formation rate (Msun/yr) at each SSP lookback age,
+        sorted **ascending by age** (youngest = index 0).
+    lgmet_on_ssp_ages : array, shape (n_age,)
+        log10(Z) metallicity at each SSP lookback age (absolute, not Z/Zsun),
+        sorted ascending by age (youngest = index 0).
+    ssp_ages_yr : array, shape (n_age,)
+        SSP lookback ages in years (ascending).
+    ssp_lgmet : array, shape (n_met,)
+        log10(Z) metallicity grid of the SSP library (absolute).
+    ssp_lg_age_gyr : array, shape (n_age,)
+        log10(age/Gyr) of SSP templates.
+    ssp_flux : array, shape (n_met, n_age, n_wave)
+        SSP spectra in Lsun/Hz/Msun.
+    t_obs_gyr : float
+        Age of the universe in Gyr at the observation redshift.
+    lgmet_scatter : float, optional
+        Gaussian scatter in log10(Z) per age bin (dex). Default 0.2 dex.
+
+    Returns
+    -------
+    age_weights_msun : array, shape (n_age,)
+        Mass formed per SSP age bin (Msun), ascending by age (youngest first).
+    ssp_flux_at_z : array, shape (n_age, n_wave)
+        SSP flux marginalized over the per-age metallicity distribution
+        (Lsun/Hz/Msun), ascending by age.
+
+    Notes
+    -----
+    DSPS returns ``lgmet_weights`` with shape ``(n_met, n_age)`` in ascending
+    **cosmic** time order (oldest first).  We flip the age axis back with
+    ``lgmet_weights[:, ::-1]`` before the ``"ma,maw->aw"`` einsum so the
+    metallicity weights are correctly paired with tengri's youngest-first SSP
+    convention.
+
+    References
+    ----------
+    Hearin et al. 2023, arXiv:2112.08423, Eq. 11 (met-table kernel).
+    """
+    try:
+        from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
+    except ImportError:
+        raise ImportError(
+            "dsps is required for csp_integration='dsps_met_table'. Install with: pip install dsps"
+        ) from None
+
+    # SSP ages are lookback times (young→old, ascending).
+    # DSPS needs cosmic times sorted ascending (oldest first).
+    ssp_age_gyr = ssp_ages_yr / 1e9
+    t_cosmic_gyr = jnp.clip(t_obs_gyr - ssp_age_gyr, min=1e-3)
+
+    t_cosmic_asc = t_cosmic_gyr[::-1]  # oldest first
+    sfr_asc = sfr_on_ssp_ages[::-1]
+    lgmet_asc = lgmet_on_ssp_ages[::-1]  # metallicity aligned with cosmic time
+
+    result = calc_rest_sed_sfh_table_met_table(
+        gal_t_table=t_cosmic_asc,
+        gal_sfr_table=sfr_asc,
+        gal_lgmet_table=lgmet_asc,
+        gal_lgmet_scatter=lgmet_scatter,
+        ssp_lgmet=ssp_lgmet,
+        ssp_lg_age_gyr=ssp_lg_age_gyr,
+        ssp_flux=ssp_flux,
+        t_obs=t_obs_gyr,
+    )
+
+    # Scale normalized age weights to absolute mass (Msun).
+    total_mass = jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9)
+    # result.age_weights is in ascending cosmic time (oldest first) → flip back.
+    age_weights_msun = result.age_weights[::-1] * jnp.maximum(total_mass, 0.0)
+
+    # lgmet_weights: (n_met, n_age) in ascending cosmic time (oldest first).
+    # Flip age axis → youngest first, matching tengri's ssp_flux axis order.
+    lgmet_w = result.lgmet_weights[:, ::-1]  # (n_met, n_age)
+    lgmet_w_safe = lgmet_w / jnp.maximum(jnp.sum(lgmet_w, axis=0, keepdims=True), 1e-30)
+    # Per-age metallicity-marginalized SSP flux.
+    ssp_flux_at_z = jnp.einsum("ma,maw->aw", lgmet_w_safe, ssp_flux)  # (n_age, n_wave)
+
+    return age_weights_msun, ssp_flux_at_z
 
 
 def compute_csp_weights(

@@ -317,26 +317,41 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
     else:
         sfr = model._compute_sfr(p)
 
+    _dsps_mode = model._csp_integration in ("dsps_native", "dsps_met_table")
+
     if _weights is not None:
         weights = _weights
         _use_dsps_table = False
     elif "sfh_t_gyr" in params:
         if model._csp_integration == "log_interp":
             weights = model._csp_matrix @ sfr_on_ssp
+        elif _dsps_mode:
+            weights = None  # computed in metallicity dispatch block below
         else:
             weights = sfr_on_ssp * model._csp_age_dt
     else:
         sfr_on_ssp = jnp.interp(model.ssp_log_ages_yr, model.log_age_grid, sfr)
         if model._csp_integration == "log_interp":
             weights = model._csp_matrix @ sfr_on_ssp
+        elif _dsps_mode:
+            weights = None  # computed in metallicity dispatch block below
         else:
             weights = sfr_on_ssp * model._csp_age_dt
         _use_dsps_table = False
 
     # Alpha-element enhancement
     # When 4D alpha-enhanced SSPs are loaded, proper bilinear (Z, [α/Fe])
-    # interpolation is used. Otherwise falls back to effective_metallicity.
+    # interpolation is used. Otherwise falls back to effective_metallicity,
+    # but ONLY when the user explicitly opts in by making met_alpha_fe a free
+    # parameter (or enabling alpha_fe_evolving). When alpha_fe is Fixed(0),
+    # effective_metallicity correction is skipped and plain interp_metallicity
+    # is used instead.
     _has_alpha = has_alpha_grid(model.ssp_data)
+    _use_alpha_fe = (
+        _has_alpha
+        or getattr(model.spec, "alpha_fe_evolving", False)
+        or "met_alpha_fe" in model.spec.free_params
+    )
 
     # Resolve [α/Fe]: either global scalar or per-age evolving ramp
     _alpha_evolving = getattr(model, "_alpha_fe_evolving", False)
@@ -412,9 +427,12 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         _total_mass_formed = jnp.trapezoid(sfr_table, t_cosmic_gyr * 1e9)
         weights = dsps_age_w * _total_mass_formed  # (n_age,) Msun
 
-        # Metallicity + alpha: dispatch to 4D bilinear or 3D + effective_met
+        # Metallicity: dispatch to 4D bilinear or plain interp (opt-in alpha correction)
         log_z_solar = p.get("log_z_abs", -1.8477)
-        ssp_flux_at_z = interp_met_alpha_dispatch(model, log_z_solar, alpha_fe)
+        if _use_alpha_fe:
+            ssp_flux_at_z = interp_met_alpha_dispatch(model, log_z_solar, alpha_fe)
+        else:
+            ssp_flux_at_z = interp_metallicity(model, log_z_solar)
 
     # Metallicity interpolation (non-table path)
     # Priority: met_history (array) > evolving_metallicity > single Z
@@ -439,7 +457,10 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
             met_table[::-1],
         )
         log_z_abs = log_z_on_ssp + (-1.8477)  # solar offset
-        ssp_flux_at_z = interp_met_alpha_evolving_dispatch(model, log_z_abs, alpha_fe)
+        if _use_alpha_fe:
+            ssp_flux_at_z = interp_met_alpha_evolving_dispatch(model, log_z_abs, alpha_fe)
+        else:
+            ssp_flux_at_z = interp_metallicity_evolving(model, log_z_abs)
     elif model._evolving_metallicity:
         z = p.get("redshift", 0.0)
         t_universe_gyr = model._t_universe_gyr(z)
@@ -449,7 +470,24 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
             p["log_z_abs_final"],
             t_universe_gyr,
         )
-        ssp_flux_at_z = interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe)
+        if model._csp_integration == "dsps_met_table":
+            from tengri.models.sps.dsps_wrapper import compute_dsps_met_table_weights
+
+            lgmet_scatter = float(p.get("lgmet_scatter", getattr(model, "_lgmet_scatter", 0.2)))
+            weights, ssp_flux_at_z = compute_dsps_met_table_weights(
+                sfr_on_ssp,
+                log_z_per_age,
+                model.ssp_ages_yr,
+                model.ssp_data.ssp_lgmet,
+                model.ssp_data.ssp_lg_age_gyr,
+                model.ssp_data.ssp_flux,
+                t_universe_gyr,
+                lgmet_scatter,
+            )
+        elif _use_alpha_fe:
+            ssp_flux_at_z = interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe)
+        else:
+            ssp_flux_at_z = interp_metallicity_evolving(model, log_z_per_age)
     elif getattr(model, "_chem_evol_enabled", False):
         # Chemical evolution: derive Z(t) from SFH via gas-regulator model
         from tengri.models.sfh.chemical_evolution import chem_evol_metallicity_on_ssp_grid
@@ -463,9 +501,68 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
             f_gas_init=p.get("chem_f_gas_init", 0.9),
             return_frac=p.get("chem_return_frac", 0.4),
         )
-        ssp_flux_at_z = interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe)
+        if model._csp_integration == "dsps_met_table":
+            from tengri.models.sps.dsps_wrapper import compute_dsps_met_table_weights
+
+            z = p.get("redshift", 0.0)
+            _has_t_uni = hasattr(model, "_t_universe_gyr")
+            t_universe_gyr = model._t_universe_gyr(z) if _has_t_uni else 13.7
+            lgmet_scatter = float(p.get("lgmet_scatter", getattr(model, "_lgmet_scatter", 0.2)))
+            weights, ssp_flux_at_z = compute_dsps_met_table_weights(
+                sfr_on_ssp,
+                log_z_per_age,
+                model.ssp_ages_yr,
+                model.ssp_data.ssp_lgmet,
+                model.ssp_data.ssp_lg_age_gyr,
+                model.ssp_data.ssp_flux,
+                t_universe_gyr,
+                lgmet_scatter,
+            )
+        elif _use_alpha_fe:
+            ssp_flux_at_z = interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe)
+        else:
+            ssp_flux_at_z = interp_metallicity_evolving(model, log_z_per_age)
     else:
-        ssp_flux_at_z = interp_met_alpha_dispatch(model, p["log_z_abs"], alpha_fe)
+        if model._csp_integration == "dsps_native":
+            from tengri.models.sps.dsps_wrapper import compute_dsps_native_weights
+
+            z = p.get("redshift", 0.0)
+            _has_t_uni = hasattr(model, "_t_universe_gyr")
+            t_universe_gyr = model._t_universe_gyr(z) if _has_t_uni else 13.7
+            lgmet = p.get("log_z_abs", -1.8477)
+            lgmet_scatter = float(p.get("lgmet_scatter", getattr(model, "_lgmet_scatter", 0.2)))
+            weights, ssp_flux_at_z = compute_dsps_native_weights(
+                sfr_on_ssp,
+                model.ssp_ages_yr,
+                model.ssp_data.ssp_lgmet,
+                model.ssp_data.ssp_lg_age_gyr,
+                model.ssp_data.ssp_flux,
+                t_universe_gyr,
+                lgmet,
+                lgmet_scatter,
+            )
+        elif model._csp_integration == "dsps_met_table":
+            from tengri.models.sps.dsps_wrapper import compute_dsps_met_table_weights
+
+            z = p.get("redshift", 0.0)
+            _has_t_uni = hasattr(model, "_t_universe_gyr")
+            t_universe_gyr = model._t_universe_gyr(z) if _has_t_uni else 13.7
+            lgmet_scatter = float(p.get("lgmet_scatter", getattr(model, "_lgmet_scatter", 0.2)))
+            lgmet_per_age = jnp.full_like(model.ssp_ages_yr, p.get("log_z_abs", -1.8477))
+            weights, ssp_flux_at_z = compute_dsps_met_table_weights(
+                sfr_on_ssp,
+                lgmet_per_age,
+                model.ssp_ages_yr,
+                model.ssp_data.ssp_lgmet,
+                model.ssp_data.ssp_lg_age_gyr,
+                model.ssp_data.ssp_flux,
+                t_universe_gyr,
+                lgmet_scatter,
+            )
+        elif _use_alpha_fe:
+            ssp_flux_at_z = interp_met_alpha_dispatch(model, p["log_z_abs"], alpha_fe)
+        else:
+            ssp_flux_at_z = interp_metallicity(model, p["log_z_abs"])
 
         # --- Fast JIT path: dust + einsum in one compiled kernel ---
         # Eliminates ~78% Python dispatch overhead (4-14x speedup).

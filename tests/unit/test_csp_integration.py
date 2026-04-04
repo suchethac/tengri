@@ -26,7 +26,11 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.models.sps.dsps_wrapper import csp_age_dt, compute_csp_weights
+from tengri.models.sps.dsps_wrapper import (
+    compute_csp_weights,
+    csp_age_dt,
+    csp_log_interp_matrix,
+)
 
 jax.config.update("jax_enable_x64", True)
 
@@ -185,7 +189,9 @@ class TestCspIntegrationAccuracy:
             w = compute_csp_weights(sfr, ages, method=method)
             mass = float(jnp.sum(w))
             rel_err = abs(mass - expected_mass) / expected_mass
-            assert rel_err < 0.02, f"{method}: mass error {rel_err:.2%} (expected ~{expected_mass:.3e})"
+            assert rel_err < 0.02, (
+                f"{method}: mass error {rel_err:.2%} (expected ~{expected_mass:.3e})"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +213,10 @@ def test_print_weight_differences(capsys):
 
     with capsys.disabled():
         print("\n\nCSP bin width comparison (trapz vs log_trapz):")
-        print(f"{'Age (Gyr)':>12} {'dt_trapz (yr)':>16} {'dt_log (yr)':>16} {'ratio log/trapz':>16}")
+        print(
+            f"{'Age (Gyr)':>12} {'dt_trapz (yr)':>16}"
+            f" {'dt_log (yr)':>16} {'ratio log/trapz':>16}"
+        )
         print("-" * 64)
         for i in range(len(ages)):
             age_gyr = float(ages[i]) / 1e9
@@ -313,3 +322,104 @@ class TestCspBenchmark:
 
         # Should be within 2x of each other (XLA kernel is identical)
         assert max(t_trapz, t_log) / min(t_trapz, t_log) < 3.0
+
+
+# ---------------------------------------------------------------------------
+# Johnson+2021 log_interp matrix tests
+# ---------------------------------------------------------------------------
+
+
+class TestCspLogInterpMatrix:
+    """Tests for csp_log_interp_matrix (Johnson+2021 Appendix B)."""
+
+    def test_shape(self):
+        ages = make_log_spaced_ages(107)
+        A = csp_log_interp_matrix(ages)
+        assert A.shape == (107, 107)
+
+    def test_all_nonnegative(self):
+        """All matrix entries must be >= 0 (they are integrals of positive functions)."""
+        ages = make_log_spaced_ages(107)
+        A = csp_log_interp_matrix(ages)
+        assert np.all(A >= -1e-14), f"Negative entry found: {A.min():.2e}"
+
+    def test_tridiagonal_structure(self):
+        """A should be tridiagonal: entries more than 1 off-diagonal are zero."""
+        ages = make_log_spaced_ages(20)
+        A = csp_log_interp_matrix(ages)
+        for i in range(len(ages)):
+            for j in range(len(ages)):
+                if abs(i - j) > 1:
+                    assert abs(A[i, j]) < 1e-14, (
+                        f"Non-zero off-tridiag entry A[{i},{j}]={A[i,j]:.2e}"
+                    )
+
+    def test_constant_sfr_recovery(self):
+        """For constant SFR=1, log_interp should recover total mass within 2%."""
+        ages = make_log_spaced_ages(107)
+        sfr = np.ones(len(ages))
+        A = csp_log_interp_matrix(ages)
+        t_min, t_max = float(ages[0]), float(ages[-1])
+        expected = t_max - t_min
+
+        mass = float(np.sum(A @ sfr))
+        rel_err = abs(mass - expected) / expected
+        assert rel_err < 0.02, f"log_interp mass error {rel_err:.2%} for constant SFR"
+
+    def test_comparable_to_trapz_for_bursty(self):
+        """For young-bursty SFH, log_interp should be within ~5x of trapz.
+
+        Johnson+2021 target SFHs with strong subgrid variation between SSP
+        points. For a fine log-spaced 107-point grid with τ=50 Myr, all
+        methods are already reasonably accurate. log_interp may not beat
+        log_trapz on this specific grid (log_trapz benefits from equal Δlog t
+        per bin), but it should not be wildly worse than linear trapz.
+        """
+        ages = make_log_spaced_ages(107)
+        sfr_arr = np.asarray(sfr_bursty_young(jnp.array(ages)), dtype=np.float64)
+        t_min, t_max = float(ages[0]), float(ages[-1])
+        ref = analytic_integral(sfr_bursty_young, t_min, t_max)
+
+        A = csp_log_interp_matrix(ages)
+        dt_trapz = np.array(csp_age_dt(jnp.array(ages), "trapz"))
+
+        mass_li = float(np.sum(A @ sfr_arr))
+        mass_trapz = float(np.sum(sfr_arr * dt_trapz))
+
+        err_li = abs(mass_li - ref) / abs(ref)
+        err_trapz = abs(mass_trapz - ref) / abs(ref)
+
+        print(f"\n  Reference:         {ref:.4e} Msun")
+        print(f"  log_interp error:  {err_li:.4%}")
+        print(f"  trapz error:       {err_trapz:.4%}")
+
+        # log_interp should be within 5x of linear trapz
+        assert err_li <= max(err_trapz * 5.0, 0.05), (
+            f"log_interp ({err_li:.2%}) much worse than trapz ({err_trapz:.2%})"
+        )
+
+    def test_compute_csp_weights_log_interp(self):
+        """compute_csp_weights with method='log_interp' uses matrix multiply."""
+        ages = jnp.array(make_log_spaced_ages(107))
+        sfr = sfr_exponential(ages)
+        A = jnp.array(csp_log_interp_matrix(ages))
+
+        w_direct = A @ sfr
+        w_via_fn = compute_csp_weights(sfr, ages, method="log_interp", _log_interp_matrix=A)
+        assert_allclose(np.array(w_direct), np.array(w_via_fn), rtol=1e-10)
+
+    def test_gl_convergence(self):
+        """Increasing GL quadrature points should converge (n_gl=5 vs n_gl=20)."""
+        ages = make_log_spaced_ages(107)
+        sfr = np.asarray(sfr_bursty_young(jnp.array(ages)), dtype=np.float64)
+
+        A5 = csp_log_interp_matrix(ages, n_gl=5)
+        A20 = csp_log_interp_matrix(ages, n_gl=20)
+
+        mass5 = float(np.sum(A5 @ sfr))
+        mass20 = float(np.sum(A20 @ sfr))
+
+        # 5-point GL is already very accurate — should agree to 0.01%
+        assert abs(mass5 - mass20) / abs(mass20) < 1e-4, (
+            f"GL convergence issue: n_gl=5 gives {mass5:.6e}, n_gl=20 gives {mass20:.6e}"
+        )

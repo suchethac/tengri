@@ -307,10 +307,10 @@ class Model:
         self.ssp_ages_yr = 10.0**self.ssp_log_ages_yr
 
         # CSP integration method (precompute bin widths once at model init)
-        if csp_integration not in ("trapz", "log_trapz", "log_interp"):
+        _valid_csp = ("trapz", "log_trapz", "log_interp", "dsps_native", "dsps_met_table")
+        if csp_integration not in _valid_csp:
             raise ValueError(
-                f"csp_integration must be 'trapz', 'log_trapz', or 'log_interp', "
-                f"got {csp_integration!r}"
+                f"csp_integration must be one of {_valid_csp}, got {csp_integration!r}"
             )
         self._csp_integration = csp_integration
         if csp_integration == "log_interp":
@@ -318,6 +318,10 @@ class Model:
 
             self._csp_matrix = jnp.array(csp_log_interp_matrix(self.ssp_ages_yr))
             self._csp_age_dt = None
+        elif csp_integration in ("dsps_native", "dsps_met_table"):
+            # No precomputed bin widths; DSPS handles integration internally.
+            self._csp_age_dt = None
+            self._csp_matrix = None
         else:
             self._csp_age_dt = csp_age_dt(self.ssp_ages_yr, csp_integration)
             self._csp_matrix = None
@@ -842,6 +846,51 @@ class Model:
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
         if self._csp_integration == "log_interp":
             weights = self._csp_matrix @ sfr_on_ssp
+        elif self._csp_integration == "dsps_native":
+            # For stellar_mass(), only age_weights matter (not ssp_flux_at_z).
+            from tengri.models.sps.dsps_wrapper import compute_dsps_native_weights
+
+            z_val = p.get("redshift", 0.1)
+            t_obs_gyr = self._t_universe_gyr(z_val)
+            lgmet = p.get("log_z_abs", -1.8477)
+            lgmet_scatter = float(p.get("lgmet_scatter", self._lgmet_scatter))
+            weights, _ = compute_dsps_native_weights(
+                sfr_on_ssp,
+                self.ssp_ages_yr,
+                self.ssp_data.ssp_lgmet,
+                self.ssp_data.ssp_lg_age_gyr,
+                self.ssp_data.ssp_flux,
+                t_obs_gyr,
+                lgmet,
+                lgmet_scatter,
+            )
+        elif self._csp_integration == "dsps_met_table":
+            from tengri.models.sps.dsps_wrapper import compute_dsps_met_table_weights
+
+            z_val = p.get("redshift", 0.1)
+            t_obs_gyr = self._t_universe_gyr(z_val)
+            lgmet_scatter = float(p.get("lgmet_scatter", self._lgmet_scatter))
+            if self._evolving_metallicity:
+                from tengri.models.sps.dsps_wrapper import compute_log_z_evolving
+
+                lgmet_per_age = compute_log_z_evolving(
+                    self.ssp_data.ssp_lg_age_gyr,
+                    p["log_z_abs_initial"],
+                    p["log_z_abs_final"],
+                    t_obs_gyr,
+                )
+            else:
+                lgmet_per_age = jnp.full_like(self.ssp_ages_yr, p.get("log_z_abs", -1.8477))
+            weights, _ = compute_dsps_met_table_weights(
+                sfr_on_ssp,
+                lgmet_per_age,
+                self.ssp_ages_yr,
+                self.ssp_data.ssp_lgmet,
+                self.ssp_data.ssp_lg_age_gyr,
+                self.ssp_data.ssp_flux,
+                t_obs_gyr,
+                lgmet_scatter,
+            )
         else:
             weights = sfr_on_ssp * self._csp_age_dt
         mass_formed = jnp.sum(weights)
@@ -1175,19 +1224,78 @@ class Model:
         array, shape (n_wave,)
             Rest-frame SED in erg/s/Hz.
         """
-        from tengri.core.sed_pipeline import interp_met_alpha_dispatch
+        from tengri.core.sed_pipeline import interp_met_alpha_dispatch, interp_metallicity
 
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
         if self._csp_integration == "log_interp":
             weights = self._csp_matrix @ sfr_on_ssp
+        elif self._csp_integration == "dsps_native":
+            from tengri.models.sps.dsps_wrapper import compute_dsps_native_weights
+
+            z_val = p.get("redshift", 0.0)
+            t_obs_gyr = self._t_universe_gyr(z_val) if hasattr(self, "_t_universe_gyr") else 13.7
+            lgmet = p.get("log_z_abs", -1.8477)
+            lgmet_scatter = float(p.get("lgmet_scatter", self._lgmet_scatter))
+            weights, ssp_flux_at_z = compute_dsps_native_weights(
+                sfr_on_ssp,
+                self.ssp_ages_yr,
+                self.ssp_data.ssp_lgmet,
+                self.ssp_data.ssp_lg_age_gyr,
+                self.ssp_data.ssp_flux,
+                t_obs_gyr,
+                lgmet,
+                lgmet_scatter,
+            )
+            if self._xray_enabled:
+                p = {**p, "_sfr_current": sfr[-1]}
+            return self._fused_rest_sed(weights, ssp_flux_at_z, p)
+        elif self._csp_integration == "dsps_met_table":
+            from tengri.models.sps.dsps_wrapper import compute_dsps_met_table_weights
+
+            z_val = p.get("redshift", 0.0)
+            t_obs_gyr = self._t_universe_gyr(z_val) if hasattr(self, "_t_universe_gyr") else 13.7
+            lgmet_scatter = float(p.get("lgmet_scatter", self._lgmet_scatter))
+            if self._evolving_metallicity:
+                from tengri.models.sps.dsps_wrapper import compute_log_z_evolving
+
+                lgmet_per_age = compute_log_z_evolving(
+                    self.ssp_data.ssp_lg_age_gyr,
+                    p["log_z_abs_initial"],
+                    p["log_z_abs_final"],
+                    t_obs_gyr,
+                )
+            else:
+                lgmet_per_age = jnp.full_like(self.ssp_ages_yr, p.get("log_z_abs", -1.8477))
+            weights, ssp_flux_at_z = compute_dsps_met_table_weights(
+                sfr_on_ssp,
+                lgmet_per_age,
+                self.ssp_ages_yr,
+                self.ssp_data.ssp_lgmet,
+                self.ssp_data.ssp_lg_age_gyr,
+                self.ssp_data.ssp_flux,
+                t_obs_gyr,
+                lgmet_scatter,
+            )
+            if self._xray_enabled:
+                p = {**p, "_sfr_current": sfr[-1]}
+            return self._fused_rest_sed(weights, ssp_flux_at_z, p)
         else:
             weights = sfr_on_ssp * self._csp_age_dt
 
-        # Metallicity interpolation (single Z, non-evolving path)
-        alpha_fe = p.get("alpha_fe", 0.0)
-        ssp_flux_at_z = interp_met_alpha_dispatch(self, p["log_z_abs"], alpha_fe)
+        # Metallicity interpolation (single Z, non-evolving path).
+        # effective_metallicity alpha correction is opt-in: only applied when
+        # met_alpha_fe is explicitly a free parameter.
+        _use_alpha_fe = (
+            getattr(self.spec, "alpha_fe_evolving", False)
+            or "met_alpha_fe" in self.spec.free_params
+        )
+        if _use_alpha_fe:
+            alpha_fe = p.get("alpha_fe", 0.0)
+            ssp_flux_at_z = interp_met_alpha_dispatch(self, p["log_z_abs"], alpha_fe)
+        else:
+            ssp_flux_at_z = interp_metallicity(self, p["log_z_abs"])
 
         # Enrich p with current SFR for X-ray model
         if self._xray_enabled:
