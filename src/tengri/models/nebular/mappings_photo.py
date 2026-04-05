@@ -431,6 +431,7 @@ class MappingsPhotoStellarBackend:
             raise ValueError("ionizing_source_warning must be 'raise', 'warn', or 'suppress'")
         _emit_mappings_stellar_ionizing_warning(model, ionizing_source_warning)
 
+        self.has_continuum = False
         self.model = model
         self.density = density
         self.sfh_mode = sfh_mode
@@ -685,6 +686,7 @@ class MappingsPhotoAGNBackend:
             raise ValueError("ionizing_source_warning must be 'raise', 'warn', or 'suppress'")
         if ionizing_source_warning != "suppress":
             _emit_mappings_agn_ionizing_warning(ionizing_source_warning)
+        self.has_continuum = False
         self.density = density
         self.grid = _load_agn_grid(grid_path, density)
 

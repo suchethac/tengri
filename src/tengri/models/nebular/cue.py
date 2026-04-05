@@ -588,6 +588,7 @@ class CueBackend:
     ) -> None:
         self.name = "cue"
         self.has_free_params = True
+        self.has_continuum = True
         self.weights = load_cue_weights(weights_path)
         self.default_gas_logqion = default_gas_logqion
 

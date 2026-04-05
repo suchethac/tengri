@@ -96,3 +96,92 @@ def neb_logzsol_to_cloudy_logoh(logzsol: jnp.ndarray) -> jnp.ndarray:
 def neb_logzsol_to_mappings_zeta(logzsol: jnp.ndarray) -> jnp.ndarray:
     """log10(Z/Zsun) -> zeta_O solar-relative (MAPPINGS V convention)."""
     return 10.0**logzsol
+
+
+# ---------------------------------------------------------------------------
+# Continuum fallback
+# ---------------------------------------------------------------------------
+
+
+class NebularContinuumFallback:
+    """Wrapper that provides continuum for line-only nebular backends.
+
+    When a backend has ``has_continuum = False``, wrap it with this class
+    to automatically supply nebular continuum via a secondary backend or
+    analytic approximation.
+
+    Parameters
+    ----------
+    primary : object
+        The line-only backend (CB19, MappingsPhotoStellar, MappingsPhotoAGN,
+        ShockEmission wrapper, etc.).
+    fallback : object or None
+        A continuum-capable backend (CueBackend or CloudyGridBackend).
+        Takes priority over ``fallback_mode`` if provided.
+    fallback_mode : str
+        One of ``"error"`` (raise NebularContinuumUnavailableError) or
+        ``"warn"`` (warn and return zeros). Default ``"error"``.
+
+    Notes
+    -----
+    The analytic nebular continuum (free-free + free-bound + two-photon) is
+    NOT implemented here yet — that is Phase N-4b. For now, line-only backends
+    can pass a secondary Cue/CloudyGrid instance as ``fallback``.
+    """
+
+    def __init__(
+        self,
+        primary,
+        fallback=None,
+        fallback_mode: str = "error",
+    ) -> None:
+        if fallback_mode not in ("error", "warn"):
+            raise ValueError("fallback_mode must be 'error' or 'warn'")
+        self.primary = primary
+        self.fallback = fallback
+        self.fallback_mode = fallback_mode
+        # Delegate attribute access to the primary backend
+        self.has_continuum = fallback is not None
+        self.has_free_params = getattr(primary, "has_free_params", False)
+        self.name = f"fallback({getattr(primary, 'name', type(primary).__name__)})"
+
+    def __getattr__(self, name: str):
+        """Delegate all unknown attributes and methods to the primary backend."""
+        return getattr(self.primary, name)
+
+    def predict_nebular_sed(self, *args, **kwargs) -> jnp.ndarray:
+        """Lines from primary backend + continuum from fallback (if configured).
+
+        The primary backend's ``predict_nebular_sed`` returns line emission only.
+        If a fallback is configured, its continuum is added. Otherwise, this
+        returns the primary result (lines only, no continuum).
+
+        Returns
+        -------
+        jnp.ndarray
+            Nebular SED on the SSP wavelength grid (Lsun/Hz).
+        """
+        from tengri.models.nebular._protocol import NebularContinuumUnavailableError
+
+        lines_sed = self.primary.predict_nebular_sed(*args, **kwargs)
+
+        if self.fallback is not None and hasattr(self.fallback, "predict_nebular_sed"):
+            cont_sed = self.fallback.predict_nebular_sed(*args, **kwargs)
+            return lines_sed + cont_sed
+
+        if self.fallback_mode == "error":
+            raise NebularContinuumUnavailableError(
+                f"{type(self.primary).__name__} provides no nebular continuum. "
+                "Pass fallback=CueBackend(...) or fallback=CloudyGridBackend(...) "
+                "to NebularContinuumFallback."
+            )
+        # fallback_mode == "warn"
+        import warnings
+
+        warnings.warn(
+            f"{type(self.primary).__name__} has no nebular continuum — returning "
+            "lines only. Pass fallback= to NebularContinuumFallback to add continuum.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return lines_sed

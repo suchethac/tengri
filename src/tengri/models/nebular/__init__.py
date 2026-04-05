@@ -62,12 +62,20 @@ Usage::
 
 from pathlib import Path
 
-from tengri.models.nebular.baked_in import BakedInBackend
-from tengri.models.nebular.cloudy_cb19 import CB19Backend
+from tengri.models.nebular._protocol import NebularBackend, NebularContinuumUnavailableError
+from tengri.models.nebular._shared import NebularContinuumFallback
+from tengri.models.nebular.baked_in import BakedInBackend, BakedInNebularWarning
+from tengri.models.nebular.cloudy_cb19 import (
+    CB19Backend,
+    CB19IonizingSpectrumWarning,
+    CB19NoContinuumWarning,
+)
 from tengri.models.nebular.cloudy_grid import CloudyGridBackend
 from tengri.models.nebular.cue import CueBackend
 from tengri.models.nebular.dig import mix_dig_emission
 from tengri.models.nebular.mappings_photo import (
+    IonizingSpectrumInconsistencyError,
+    IonizingSpectrumInconsistencyWarning,
     MappingsPhotoAGNBackend,
     MappingsPhotoStellarBackend,
 )
@@ -78,11 +86,19 @@ _DEFAULT_CUE_WEIGHTS_PATH = Path(__file__).resolve().parents[4] / "data" / "cue_
 __all__ = [
     "_DEFAULT_CUE_WEIGHTS_PATH",
     "BakedInBackend",
+    "BakedInNebularWarning",
     "CB19Backend",
+    "CB19IonizingSpectrumWarning",
+    "CB19NoContinuumWarning",
     "CloudyGridBackend",
     "CueBackend",
+    "IonizingSpectrumInconsistencyError",
+    "IonizingSpectrumInconsistencyWarning",
     "MappingsPhotoAGNBackend",
     "MappingsPhotoStellarBackend",
+    "NebularBackend",
+    "NebularContinuumFallback",
+    "NebularContinuumUnavailableError",
     "mix_dig_emission",
     "shock_emission_sed",
     "shock_line_ratios",

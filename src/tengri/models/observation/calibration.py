@@ -38,13 +38,11 @@ References
 Johnson et al. (2021) — Prospector calibration model.
 """
 
-import functools
-
 import jax
 import jax.numpy as jnp
 
 
-@functools.partial(jax.jit, static_argnums=(1,), static_argnames=("order",))
+@jax.jit(static_argnums=(1,), static_argnames=("order",))
 def chebyshev_basis(
     wavelength: jnp.ndarray,
     order: int,
@@ -145,7 +143,7 @@ def calibration_polynomial(
     return 1.0 + x * b1 - b2
 
 
-@functools.partial(jax.jit, static_argnames=("n_poly",))
+@jax.jit(static_argnames=("n_poly",))
 def marginalize_calibration(
     model_flux: jnp.ndarray,
     obs_flux: jnp.ndarray,

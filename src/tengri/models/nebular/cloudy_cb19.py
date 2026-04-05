@@ -394,6 +394,7 @@ class CB19Backend:
     ) -> None:
         _emit_cb19_warnings(ionizing_source_warning, continuum_warning)
 
+        self.has_continuum = False
         self.sed_type = sed_type
         self.imf = imf
         self.mup = mup

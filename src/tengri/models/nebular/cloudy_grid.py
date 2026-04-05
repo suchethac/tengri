@@ -180,6 +180,7 @@ class CloudyGridBackend:
     def __init__(self, grid_path: str, ssp_data=None) -> None:
         self.name = "cloudy_grid"
         self.has_free_params = True
+        self.has_continuum = True
         self.grid = load_cloudy_grid(grid_path)
 
         # Max age for nebular emission: 100 Myr (conservative).
