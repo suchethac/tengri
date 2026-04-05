@@ -445,15 +445,16 @@ class Fixed(Distribution):
 
     Parameters
     ----------
-    value : float
-        The fixed value.
+    value : float | str
+        The fixed value. Strings are allowed for categorical parameters
+        (e.g. ``Fixed("solar")`` for shock abundance).
     """
 
-    def __init__(self, value: float):
-        self._value = float(value)
+    def __init__(self, value: float | str):
+        self._value = value if isinstance(value, str) else float(value)
 
     @property
-    def value(self) -> float:
+    def value(self) -> float | str:
         return self._value
 
     @property
@@ -461,17 +462,23 @@ class Fixed(Distribution):
         return True
 
     @property
-    def bounds(self) -> tuple[float, float]:
+    def bounds(self) -> tuple[float, float] | tuple[None, None]:
+        if isinstance(self._value, str):
+            return (None, None)
         return (self._value, self._value)
 
-    def sample(self, key: jax.Array) -> jnp.ndarray:
+    def sample(self, key: jax.Array) -> jnp.ndarray | str:
+        if isinstance(self._value, str):
+            return self._value
         return jnp.array(self._value)
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
         return jnp.array(0.0)
 
-    def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray:
+    def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray | str:
         """Fixed: always returns the fixed value (ignores ξ)."""
+        if isinstance(self._value, str):
+            return self._value
         return jnp.array(self._value)
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
@@ -479,6 +486,8 @@ class Fixed(Distribution):
         return jnp.array(0.0)
 
     def __repr__(self) -> str:
+        if isinstance(self._value, str):
+            return f"Fixed({self._value!r})"
         return f"Fixed({self._value})"
 
     def __eq__(self, other) -> bool:
