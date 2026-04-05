@@ -18,8 +18,10 @@ from tengri.models.dust.attenuation import single_component_dust_fast, two_compo
 from tengri.models.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_log_z_evolving,
+    compute_surviving_mass,
     effective_metallicity,
     has_alpha_grid,
+    interpolate_mass_remaining,
     interpolate_met_alpha,
     interpolate_met_alpha_evolving,
     interpolate_metallicity,
@@ -747,10 +749,22 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         if "sfr_table" in dir()
         else (sfr[-1] if "sfr" in dir() else p.get("_sfr_cached", 1.0))
     )
-    # M*: total stellar mass formed (Msun).
-    # Note: XRB calibrations use surviving stellar mass; formed mass overestimates
-    # by ~30-50% for old stellar populations (known limitation).
-    _mstar = jnp.sum(weights) if weights is not None else p.get("_mstar_cached", 1e10)
+    # M*: formed and surviving stellar mass (Msun).
+    # XRB calibrations (Lehmer+2010, Mineo+2012) are normalised to surviving
+    # stellar mass (living stars + remnants). Using formed mass overestimates
+    # XRB luminosity by ~30-50% for old galaxies (BUG-29 fix).
+    _mstar_formed = jnp.sum(weights) if weights is not None else p.get("_mstar_cached", 1e10)
+    if weights is not None and model.ssp_data.ssp_mass_remaining is not None:
+        _mass_remaining = interpolate_mass_remaining(
+            model.ssp_data.ssp_mass_remaining,
+            model.ssp_data.ssp_lgmet,
+            p.get("log_z_abs", -1.8477),
+        )
+        _mstar_surviving = compute_surviving_mass(weights, _mass_remaining)
+    else:
+        # Fallback when SSP file lacks mass-remaining grid (treat formed == surviving).
+        _mstar_surviving = _mstar_formed
+    _mstar = _mstar_surviving  # backward-compat alias used by XRB below
 
     # Radio emission (synchrotron from SF + AGN jets)
     if model._radio_enabled:
@@ -791,4 +805,6 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         "sfr": sfr,
         "p": p,
         "agn_bol_erg": agn_bol_erg,
+        "mstar_formed": _mstar_formed,
+        "mstar_surviving": _mstar_surviving,
     }
