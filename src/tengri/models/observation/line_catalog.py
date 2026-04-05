@@ -139,7 +139,7 @@ class DoubletConstraint:
 
 
 @dataclasses.dataclass(frozen=True)
-class LineCatalog:
+class LineList:
     """Immutable registry of emission lines for spectroscopic fitting.
 
     Parameters
@@ -162,7 +162,7 @@ class LineCatalog:
     --------
     Build the default DESI-like catalog and select BPT lines::
 
-        cat = LineCatalog.default_optical()
+        cat = LineList.default_optical()
         bpt = cat.select(names=["Halpha", "Hbeta", "OIII_5007", "NII_6584"])
         C = bpt.build_constraint_matrix()  # (n_lines, n_independent)
 
@@ -215,12 +215,12 @@ class LineCatalog:
     # ------------------------------------------------------------------
 
     @classmethod
-    def default_optical(cls) -> LineCatalog:
+    def default_optical(cls) -> LineList:
         """FastSpecFit-equivalent ~40-line catalog for optical/NIR spectroscopy.
 
         Returns
         -------
-        LineCatalog
+        LineList
             Catalog of ~40 lines sorted by wavelength with doublet constraints
             auto-detected from ``_DOUBLET_RATIOS``.
 
@@ -228,14 +228,14 @@ class LineCatalog:
         --------
         ::
 
-            cat = LineCatalog.default_optical()
+            cat = LineList.default_optical()
             # cat.n_lines == 39, cat.n_independent == 34
         """
         lines = sorted(_DEFAULT_OPTICAL_LINES, key=lambda t: t[1])
         return cls._from_line_tuples(lines)
 
     @classmethod
-    def default_13(cls) -> LineCatalog:
+    def default_13(cls) -> LineList:
         """Backward-compatible 13-line catalog (existing default).
 
         Uses the same wavelengths as ``DEFAULT_LINE_WAVELENGTHS`` in
@@ -251,21 +251,21 @@ class LineCatalog:
 
         Returns
         -------
-        LineCatalog
+        LineList
             13-line catalog with doublet constraints where applicable.
 
         Examples
         --------
         ::
 
-            cat = LineCatalog.default_13()
+            cat = LineList.default_13()
             # Backward-compatible with DEFAULT_LINE_WAVELENGTHS in eline_marginalization.py
             # cat.n_lines == 13
         """
         return cls._from_line_tuples(_DEFAULT_13_LINES)
 
     @classmethod
-    def from_cloudy_grid(cls, filepath: str) -> LineCatalog:
+    def from_cloudy_grid(cls, filepath: str) -> LineList:
         """Load all lines from a CLOUDY HDF5 grid file.
 
         Reads ``lines/names`` and ``lines/wavelength`` datasets, parses
@@ -279,7 +279,7 @@ class LineCatalog:
 
         Returns
         -------
-        LineCatalog
+        LineList
             Catalog populated from the CLOUDY grid.
 
         Raises
@@ -341,7 +341,7 @@ class LineCatalog:
         species: Sequence[str] | None = None,
         names: Sequence[str] | None = None,
         wavelengths: Sequence[float] | None = None,
-    ) -> LineCatalog:
+    ) -> LineList:
         """Return a filtered copy of the catalog.
 
         Parameters
@@ -362,7 +362,7 @@ class LineCatalog:
 
         Returns
         -------
-        LineCatalog
+        LineList
             New catalog containing only lines satisfying all given criteria (AND logic).
             Doublet constraints are rebuilt with updated indices; constraints
             where either member is filtered out are dropped.
@@ -377,7 +377,7 @@ class LineCatalog:
         --------
         Select BPT diagram lines by name::
 
-            cat = LineCatalog.default_optical()
+            cat = LineList.default_optical()
             bpt = cat.select(names=["Halpha", "Hbeta", "OIII_5007", "NII_6584"])
 
         Select by observed wavelengths (e.g. from a line-finding algorithm)::
@@ -438,7 +438,7 @@ class LineCatalog:
             kept_indices &= matched_indices
 
         if not kept_indices:
-            return LineCatalog(
+            return LineList(
                 names=(),
                 wavelengths=jnp.array([]),
                 species=(),
@@ -471,7 +471,7 @@ class LineCatalog:
                     )
                 )
 
-        return LineCatalog(
+        return LineList(
             names=new_names,
             wavelengths=new_waves,
             species=new_species,
@@ -512,7 +512,7 @@ class LineCatalog:
         --------
         Constrain [OIII] doublet so 5007/4959 ratio is fixed at 2.98::
 
-            cat = LineCatalog.default_optical()
+            cat = LineList.default_optical()
             C = cat.build_constraint_matrix()  # shape (39, 34)
             G_eff = G_full @ C  # (n_pix, n_independent)
 
@@ -550,8 +550,8 @@ class LineCatalog:
     def _from_line_tuples(
         cls,
         lines: list[tuple[str, float, str, bool, bool]],
-    ) -> LineCatalog:
-        """Construct a LineCatalog from a list of ``(name, wave, species, balmer, broad)`` tuples.
+    ) -> LineList:
+        """Construct a LineList from a list of ``(name, wave, species, balmer, broad)`` tuples.
 
         Doublet constraints are auto-detected from ``_DOUBLET_RATIOS`` by
         matching line names in the list.
@@ -563,7 +563,7 @@ class LineCatalog:
 
         Returns
         -------
-        LineCatalog
+        LineList
         """
         names_list = [t[0] for t in lines]
         name_to_idx: dict[str, int] = {n: i for i, n in enumerate(names_list)}
@@ -731,3 +731,28 @@ def _detect_doublets_by_proximity(
             break
 
     return tuple(doublets)
+
+
+# ---------------------------------------------------------------------------
+# Deprecated alias — removed in tengri v1.0
+# ---------------------------------------------------------------------------
+
+
+def _make_deprecated_line_catalog():
+    import warnings
+
+    class LineCatalog(LineList):
+        def __init__(self, *args, **kwargs):
+            warnings.warn(
+                "LineCatalog is deprecated. Use LineList instead. Will be removed in tengri v1.0.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            super().__init__(*args, **kwargs)
+
+    LineCatalog.__name__ = "LineCatalog"
+    LineCatalog.__qualname__ = "LineCatalog"
+    return LineCatalog
+
+
+LineCatalog = _make_deprecated_line_catalog()

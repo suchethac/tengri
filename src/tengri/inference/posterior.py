@@ -270,7 +270,7 @@ class Posterior:
     # Summary statistics
     # -------------------------------------------------------------------
 
-    def summary(self) -> dict:
+    def stats(self) -> dict:
         """Median and 68% credible intervals for all parameters.
 
         Returns
@@ -301,6 +301,18 @@ class Posterior:
                     }
 
         return result
+
+    def summary(self) -> dict:
+        """Deprecated. Use stats() instead."""
+        import warnings
+
+        warnings.warn(
+            "Posterior.summary() is deprecated. Use Posterior.stats() instead. "
+            "Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.stats()
 
     def summary_table(self) -> str:
         """Return a formatted string table of parameter summaries.

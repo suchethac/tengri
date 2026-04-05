@@ -33,7 +33,7 @@ from tengri.core.noise import (
     uses_student_t,
     variable_noise_hamiltonian,
 )
-from tengri.core.param_spec import ParamSpec
+from tengri.core.param_spec import Parameters, ParamSpec
 from tengri.core.prediction import (
     DerivedQuantities,
     EmissionLines,
@@ -43,18 +43,23 @@ from tengri.core.prediction import (
 )
 from tengri.distributions import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
 from tengri.inference.fitter import Fitter
-from tengri.inference.hierarchical import HierarchicalFitter, HierarchicalResult
+from tengri.inference.hierarchical import (
+    HierarchicalFitter,
+    HierarchicalResult,
+    PopulationFitter,
+    PopulationPosterior,
+)
 from tengri.inference.posterior import Posterior
 from tengri.inference.raytrace import sample_raytrace
 from tengri.inference.vi_config import VIConfig
 from tengri.models.agn.agn_config import AGNConfig
 from tengri.models.dust.attenuation import two_component_dust
 from tengri.models.observation.filters import load_filter_set
-from tengri.models.observation.line_catalog import LineCatalog
-from tengri.models.observation.noise_config import NoiseConfig
+from tengri.models.observation.line_catalog import LineCatalog, LineList
+from tengri.models.observation.noise_config import NoiseConfig, NoiseModel
 from tengri.models.observation.observation import Observation
 from tengri.models.observation.photometry_config import Photometry
-from tengri.models.observation.spectroscopy_config import SpectroscopyConfig
+from tengri.models.observation.spectroscopy_config import Spectroscopy, SpectroscopyConfig
 from tengri.models.sfh.gp_sfh import (
     compute_sqrt_power_drw,
     generate_gp_batch,

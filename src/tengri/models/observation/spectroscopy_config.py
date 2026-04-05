@@ -15,7 +15,7 @@ from tengri.distributions import Distribution, Gaussian
 
 
 @dataclasses.dataclass(frozen=True)
-class SpectroscopyConfig:
+class Spectroscopy:
     """Spectroscopic observation configuration.
 
     Parameters
@@ -164,7 +164,7 @@ class SpectroscopyConfig:
         sigma_lib_kms: float = 70.0,
         calibration_order: int = 0,
         **kwargs,
-    ) -> SpectroscopyConfig:
+    ) -> Spectroscopy:
         """Shared constructor for instrument factories.
 
         Parameters
@@ -178,9 +178,9 @@ class SpectroscopyConfig:
         calibration_order : int
             Chebyshev calibration order. Default: 0.
         **kwargs
-            Passed to ``SpectroscopyConfig``.
+            Passed to ``Spectroscopy``.
         """
-        return SpectroscopyConfig(
+        return Spectroscopy(
             wave_obs=jnp.asarray(wave_obs),
             resolution=resolution,
             sigma_lib_kms=sigma_lib_kms,
@@ -189,7 +189,7 @@ class SpectroscopyConfig:
         )
 
     @staticmethod
-    def nirspec_prism(wave_obs: jnp.ndarray, **kwargs) -> SpectroscopyConfig:
+    def nirspec_prism(wave_obs: jnp.ndarray, **kwargs) -> Spectroscopy:
         """JWST NIRSpec PRISM: variable R ~ 30-330 (Jakobsen+2022)."""
         from tengri.models.observation.spectroscopy import nirspec_prism_resolution
 
@@ -198,7 +198,7 @@ class SpectroscopyConfig:
         return SpectroscopyConfig._from_resolution(wave_jax, resolution, **kwargs)
 
     @staticmethod
-    def nirspec_g140m(wave_obs: jnp.ndarray, **kwargs) -> SpectroscopyConfig:
+    def nirspec_g140m(wave_obs: jnp.ndarray, **kwargs) -> Spectroscopy:
         """JWST NIRSpec G140M: roughly constant R ~ 1000."""
         from tengri.models.observation.spectroscopy import nirspec_g140m_resolution
 
@@ -207,14 +207,14 @@ class SpectroscopyConfig:
         return SpectroscopyConfig._from_resolution(wave_jax, resolution, **kwargs)
 
     @staticmethod
-    def constant_r(wave_obs: jnp.ndarray, R: float, **kwargs) -> SpectroscopyConfig:
+    def constant_r(wave_obs: jnp.ndarray, R: float, **kwargs) -> Spectroscopy:
         """Constant-resolution spectrograph."""
         return SpectroscopyConfig._from_resolution(wave_obs, float(R), **kwargs)
 
     @classmethod
     def desi_like(
         cls, wave_obs: jnp.ndarray, resolution: float = 2500.0, **kwargs
-    ) -> SpectroscopyConfig:
+    ) -> Spectroscopy:
         """DESI-like spectroscopic configuration with full line fitting.
 
         Pre-configured with:
@@ -231,7 +231,7 @@ class SpectroscopyConfig:
         resolution : float
             Spectral resolution R = lambda/delta_lambda. Default: 2500 (DESI).
         **kwargs
-            Additional fields passed to ``SpectroscopyConfig``.
+            Additional fields passed to ``Spectroscopy``.
 
         Returns
         -------
@@ -269,3 +269,29 @@ class SpectroscopyConfig:
         if self.eline_mode != "off":
             parts.append(f"eline={self.eline_mode}")
         return ", ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Deprecated alias — removed in tengri v1.0
+# ---------------------------------------------------------------------------
+
+
+def _make_deprecated_spectroscopy_config():
+    import warnings
+
+    class SpectroscopyConfig(Spectroscopy):
+        def __init__(self, *args, **kwargs):
+            warnings.warn(
+                "SpectroscopyConfig is deprecated. Use Spectroscopy instead. "
+                "Will be removed in tengri v1.0.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            super().__init__(*args, **kwargs)
+
+    SpectroscopyConfig.__name__ = "SpectroscopyConfig"
+    SpectroscopyConfig.__qualname__ = "SpectroscopyConfig"
+    return SpectroscopyConfig
+
+
+SpectroscopyConfig = _make_deprecated_spectroscopy_config()

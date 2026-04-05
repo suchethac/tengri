@@ -9,7 +9,7 @@ The total parameter vector is:
 where φ_shared = {σ_PSD, τ_PSD} (or more generally, the PSD shape).
 
 Usage:
-    hfitter = HierarchicalFitter(model_template, galaxies)
+    hfitter = PopulationFitter(model_template, galaxies)
     result = hfitter.run("geovi", n_iterations=25)
     result.shared_params  # posterior on (σ_PSD, τ_PSD)
 """
@@ -27,7 +27,7 @@ from tengri.utils.transforms import to_bounded, to_unbounded
 
 
 @dataclass
-class HierarchicalResult:
+class PopulationPosterior:
     """Results from hierarchical PSD inference.
 
     Attributes
@@ -68,7 +68,7 @@ class HierarchicalResult:
     def __repr__(self) -> str:
         n = next(iter(self.shared_samples.values())).shape[0]
         return (
-            f"HierarchicalResult(method='{self.method}', "
+            f"PopulationPosterior(method='{self.method}', "
             f"n_samples={n}, "
             f"wall_time={self.wall_time_s:.1f}s)"
         )
@@ -134,7 +134,7 @@ class HierarchicalResult:
         return ax
 
 
-class HierarchicalFitter:
+class PopulationFitter:
     """Hierarchical inference for shared PSD parameters.
 
     Parameters
@@ -612,7 +612,7 @@ class HierarchicalFitter:
             )
             print(f"  σ_PSD = {s['psd_sigma']:.2f}, τ_PSD = {s['psd_tau_myr']:.1f} Myr")
 
-        return HierarchicalResult(
+        return PopulationPosterior(
             shared_samples=shared_samples,
             shared_params=shared_params,
             individual_samples=individual_samples,
@@ -913,7 +913,7 @@ class HierarchicalFitter:
                 f"slope = {shared_params.get('psd_loglogavgslope', '?'):.2f}"
             )
 
-        return HierarchicalResult(
+        return PopulationPosterior(
             shared_samples=shared_samples,
             shared_params=shared_params,
             method="Hierarchical geoVI (CorrelatedFieldMaker)",
@@ -1179,7 +1179,7 @@ class HierarchicalFitter:
             print(f"  Hierarchical geoVI complete in {wall_time:.1f}s, {n_post} samples")
             print(f"  σ_PSD = {s['psd_sigma']:.2f}, τ_PSD = {s['psd_tau_myr']:.1f} Myr")
 
-        return HierarchicalResult(
+        return PopulationPosterior(
             shared_samples=shared_samples,
             shared_params=shared_params,
             method="Hierarchical geoVI",
@@ -1367,7 +1367,7 @@ class HierarchicalFitter:
                 f"τ_PSD = {shared_params['psd_tau_myr']:.1f} Myr"
             )
 
-        return HierarchicalResult(
+        return PopulationPosterior(
             shared_samples=shared_samples,
             shared_params=shared_params,
             method="Hierarchical Ray Tracing",
@@ -1381,3 +1381,50 @@ class HierarchicalFitter:
                 "D_total": D,
             },
         )
+
+
+# ---------------------------------------------------------------------------
+# Deprecated aliases — removed in tengri v1.0
+# ---------------------------------------------------------------------------
+
+
+def _make_deprecated_hierarchical_result():
+    import warnings
+
+    class HierarchicalResult(PopulationPosterior):
+        def __init__(self, *args, **kwargs):
+            warnings.warn(
+                "HierarchicalResult is deprecated. Use PopulationPosterior instead. "
+                "Will be removed in tengri v1.0.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            super().__init__(*args, **kwargs)
+
+    HierarchicalResult.__name__ = "HierarchicalResult"
+    HierarchicalResult.__qualname__ = "HierarchicalResult"
+    return HierarchicalResult
+
+
+HierarchicalResult = _make_deprecated_hierarchical_result()
+
+
+def _make_deprecated_hierarchical_fitter():
+    import warnings
+
+    class HierarchicalFitter(PopulationFitter):
+        def __init__(self, *args, **kwargs):
+            warnings.warn(
+                "HierarchicalFitter is deprecated. Use PopulationFitter instead. "
+                "Will be removed in tengri v1.0.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            super().__init__(*args, **kwargs)
+
+    HierarchicalFitter.__name__ = "HierarchicalFitter"
+    HierarchicalFitter.__qualname__ = "HierarchicalFitter"
+    return HierarchicalFitter
+
+
+HierarchicalFitter = _make_deprecated_hierarchical_fitter()

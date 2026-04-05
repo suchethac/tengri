@@ -783,7 +783,7 @@ def _build_param_registry(
 # ---------------------------------------------------------------------------
 
 
-class ParamSpec:
+class Parameters:
     """Parameter specification defining model parameters and their priors.
 
     Parameters are specified as keyword arguments.  Each can be:
@@ -1636,7 +1636,7 @@ class ParamSpec:
         return "\n".join(lines)
 
     def __repr__(self) -> str:
-        lines = [f"ParamSpec(mean_sfh_type={self._mean_sfh_type},"]
+        lines = [f"Parameters(mean_sfh_type={self._mean_sfh_type},"]
         for name in sorted(self._distributions.keys()):
             dist = self._distributions[name]
             lines.append(f"    {name:30s} = {dist!r},")
@@ -1644,3 +1644,28 @@ class ParamSpec:
             lines.append(f"    {'n_grid':30s} = {self._n_grid},")
         lines.append(")")
         return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Deprecated alias — removed in tengri v1.0
+# ---------------------------------------------------------------------------
+
+
+def _make_deprecated_paramspec():
+    import warnings
+
+    class ParamSpec(Parameters):
+        def __init__(self, *args, **kwargs):
+            warnings.warn(
+                "ParamSpec is deprecated. Use Parameters instead. Will be removed in tengri v1.0.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            super().__init__(*args, **kwargs)
+
+    ParamSpec.__name__ = "ParamSpec"
+    ParamSpec.__qualname__ = "ParamSpec"
+    return ParamSpec
+
+
+ParamSpec = _make_deprecated_paramspec()
