@@ -1,0 +1,98 @@
+"""Shared utilities for nebular emission backends.
+
+Functions extracted from individual backends to eliminate duplication.
+"""
+
+from __future__ import annotations
+
+import jax
+import jax.numpy as jnp
+
+from tengri.models.nebular._constants import (
+    _C_CGS,
+    _H_PLANCK,
+    _LOG10_ZSUN,
+    _LOG_OH_OFFSET,
+    _LSUN_ERG,
+    _LYMAN_LIMIT,
+)
+
+# ---------------------------------------------------------------------------
+# Ionizing photon rate
+# ---------------------------------------------------------------------------
+
+
+@jax.jit
+def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
+    """Compute ionizing photon rate Q_H from a single SSP spectrum.
+
+    Q_H = integral_{0}^{912A} [L_nu / (h * nu)] d_nu
+
+    Parameters
+    ----------
+    ssp_wave : array, shape (n_wave,)
+        SSP wavelength grid in Angstrom (increasing).
+    ssp_flux : array, shape (n_wave,)
+        SSP flux in Lsun/Hz/Msun.
+
+    Returns
+    -------
+    float
+        Q_H in photons/s/Msun.
+    """
+    nu = _C_CGS / (ssp_wave * 1e-8)  # Hz
+    l_nu = ssp_flux * _LSUN_ERG  # erg/s/Hz/Msun
+    photon_rate = l_nu / (_H_PLANCK * nu)
+    mask = ssp_wave < _LYMAN_LIMIT
+    integrand = jnp.where(mask, photon_rate, 0.0)
+    qh = -jnp.trapezoid(integrand, nu)
+    return jnp.maximum(qh, 0.0)
+
+
+# Vectorized over (metallicity, age) grid dimensions
+compute_qh_grid = jax.vmap(
+    jax.vmap(compute_qh, in_axes=(None, 0)),
+    in_axes=(None, 0),
+)
+
+
+# ---------------------------------------------------------------------------
+# Grid interpolation
+# ---------------------------------------------------------------------------
+
+
+def _interp_index_weight(
+    x: float,
+    grid: jnp.ndarray,
+) -> tuple[int, float]:
+    """Find bracketing index and interpolation weight for 1D grid.
+
+    Returns (i, w) such that value ≈ grid[i]*(1-w) + grid[i+1]*w.
+    Clips to grid bounds.
+    """
+    x_clipped = jnp.clip(x, grid[0], grid[-1])
+    idx = jnp.searchsorted(grid, x_clipped, side="right") - 1
+    idx = jnp.clip(idx, 0, len(grid) - 2)
+    dx = grid[idx + 1] - grid[idx]
+    w = jnp.where(dx > 0, (x_clipped - grid[idx]) / dx, 0.0)
+    return idx, w
+
+
+# ---------------------------------------------------------------------------
+# Metallicity convention converters
+# ---------------------------------------------------------------------------
+
+
+def neb_logzsol_to_log_z_abs(logzsol: jnp.ndarray) -> jnp.ndarray:
+    """log10(Z/Zsun) -> log10(Z) absolute (DSPS/CloudyGrid convention)."""
+    return logzsol + _LOG10_ZSUN
+
+
+def neb_logzsol_to_cloudy_logoh(logzsol: jnp.ndarray) -> jnp.ndarray:
+    """log10(Z/Zsun) -> log10(O/H) on CLOUDY c17.01 solar scale (CB19 convention)."""
+    return logzsol + _LOG10_ZSUN - _LOG_OH_OFFSET
+
+
+def neb_logzsol_to_mappings_zeta(logzsol: jnp.ndarray) -> jnp.ndarray:
+    """log10(Z/Zsun) -> zeta_O solar-relative (MAPPINGS V convention)."""
+    return 10.0**logzsol
