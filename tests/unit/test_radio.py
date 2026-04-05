@@ -6,6 +6,8 @@ Covers:
 - radio_sfr_mccheyne2022  (mass+z dependent FIRRC at 150 MHz)
 - _synchrotron_suppression (Bell+2003 helper)
 - radio_total dispatcher (sfr_mode selection)
+- radio_freefree (Murphy+2011 thermal bremsstrahlung)
+- radio_components (component decomposition)
 """
 
 import jax
@@ -15,6 +17,8 @@ import pytest
 from tengri.models.radio import (
     _L0_SYNCH_LSUN_HZ,
     _synchrotron_suppression,
+    radio_components,
+    radio_freefree,
     radio_sfr_bell2003,
     radio_sfr_delvecchio2021,
     radio_sfr_mccheyne2022,
@@ -467,3 +471,229 @@ class TestRadioTotalDispatcher:
                 apply_suppression=False,
             )
             assert jnp.all(L == 0.0), f"Non-zero optical flux for mode={mode}"
+
+
+# Module-level kwargs reused across TestRadioComponents
+_RC_KW: dict = dict(L_ir=_L_IR, L_agn_bol=1e12, sfr_mode="bell2003", apply_suppression=False)
+
+
+# ---------------------------------------------------------------------------
+# radio_freefree — Murphy+2011 thermal bremsstrahlung
+# ---------------------------------------------------------------------------
+
+
+class TestFreeFree:
+    """Murphy+2011 thermal free-free calibration and spectral behavior."""
+
+    def test_calibration_1p4ghz_murphy2011(self):
+        """At 1.4 GHz, Te=1e4: L_ff ≈ 5.49e-7 Lsun/Hz per M☉/yr.
+
+        Derivation: SFR=1 M☉/yr → L_ff = C_ff × 1.4^{-0.1} ≈ 5.49e-7.
+        """
+        sfr = 1.0  # M☉/yr
+        _SFR_IR_KENNICUTT = 1.73e10
+        L_ir_1sfr = sfr * _SFR_IR_KENNICUTT  # Lsun
+        L = radio_freefree(_WAVE_14GHZ, L_ir_1sfr, T_e=1e4)
+        val = float(L[0])
+        assert 5.0e-7 < val < 6.5e-7, (
+            f"Murphy+2011 calibration: L_ff(1.4 GHz) = {val:.3e} Lsun/Hz, expected 5.0e-7 – 6.5e-7"
+        )
+
+    def test_spectral_slope(self):
+        """Spectral slope is alpha_ff = -0.1: ratio = (150MHz/1.4GHz)^{0.1}."""
+        L_14ghz = radio_freefree(_WAVE_14GHZ, _L_IR)
+        L_150mhz = radio_freefree(_WAVE_150MHZ, _L_IR)
+        expected_ratio = (150.0e6 / 1.4e9) ** 0.1  # > 1, 150 MHz slightly brighter
+        actual_ratio = float(L_14ghz[0] / L_150mhz[0])
+        assert abs(actual_ratio - expected_ratio) / expected_ratio < 0.01, (
+            f"Slope ratio {actual_ratio:.4f} != expected {expected_ratio:.4f}"
+        )
+
+    def test_steeper_alpha_ff(self):
+        """alpha_ff = -0.3 at 1.4 GHz gives less emission than alpha_ff = -0.1.
+
+        L_ν ∝ (ν/GHz)^{alpha_ff}. At ν > 1 GHz (like 1.4 GHz), more negative
+        alpha_ff yields a smaller exponent result, so L_ff is lower.
+        """
+        L_flat = radio_freefree(_WAVE_14GHZ, _L_IR, alpha_ff=-0.1)
+        L_steep = radio_freefree(_WAVE_14GHZ, _L_IR, alpha_ff=-0.3)
+        # At 1.4 GHz (above 1 GHz ref), more negative alpha_ff → less emission
+        assert float(L_steep[0]) < float(L_flat[0])
+
+    def test_te_dependence(self):
+        """L_ff ∝ T_e^{0.45}: doubling T_e raises L by factor 2^{0.45}."""
+        L_1e4 = radio_freefree(_WAVE_14GHZ, _L_IR, T_e=1e4)
+        L_2e4 = radio_freefree(_WAVE_14GHZ, _L_IR, T_e=2e4)
+        ratio = float(L_2e4[0] / L_1e4[0])
+        expected = 2.0**0.45
+        assert abs(ratio - expected) / expected < 0.01, (
+            f"Te ratio {ratio:.4f} != (2)^0.45 = {expected:.4f}"
+        )
+
+    def test_scales_linearly_with_l_ir(self):
+        """L_ff ∝ L_ir (via SFR = L_ir / K98)."""
+        L_lo = radio_freefree(_WAVE_14GHZ, _L_IR)
+        L_hi = radio_freefree(_WAVE_14GHZ, 10.0 * _L_IR)
+        ratio = float(L_hi[0] / L_lo[0])
+        assert abs(ratio - 10.0) < 1e-6, f"Linearity: ratio {ratio:.6f} != 10"
+
+    def test_zero_below_radio_cutoff(self):
+        """Free-free must vanish at optical/UV wavelengths."""
+        wave_optical = jnp.logspace(3.0, 6.9, 50)
+        L = radio_freefree(wave_optical, _L_IR)
+        assert jnp.all(L == 0.0)
+
+    def test_positive_in_radio_band(self):
+        """All radio-band wavelengths give positive L_ff."""
+        L = radio_freefree(_WAVE_RADIO, _L_IR)
+        assert jnp.all(L > 0.0)
+
+    def test_jit_compatible(self):
+        """radio_freefree traces cleanly under jax.jit."""
+        jitted = jax.jit(radio_freefree)
+        L = jitted(_WAVE_RADIO, _L_IR)
+        assert L.shape == _WAVE_RADIO.shape
+        assert jnp.all(jnp.isfinite(L))
+
+    def test_gradients_flow_through_l_ir(self):
+        """JAX gradient w.r.t. L_ir is finite and nonzero."""
+        grad = jax.grad(lambda l: jnp.sum(radio_freefree(_WAVE_14GHZ, l)))(_L_IR)
+        assert jnp.isfinite(grad) and float(grad) != 0.0
+
+    def test_gradients_flow_through_te(self):
+        """JAX gradient w.r.t. T_e is finite and nonzero."""
+        grad = jax.grad(lambda t: jnp.sum(radio_freefree(_WAVE_14GHZ, _L_IR, T_e=t)))(1e4)
+        assert jnp.isfinite(grad) and float(grad) != 0.0
+
+
+# ---------------------------------------------------------------------------
+# radio_components — diagnostic component decomposition
+# ---------------------------------------------------------------------------
+
+
+class TestRadioComponents:
+    """radio_components returns a dict with correct keys, values, and sum."""
+
+    def test_dict_keys_present(self):
+        comps = radio_components(_WAVE_RADIO, **_RC_KW)
+        assert set(comps.keys()) == {"synchrotron", "freefree", "agn", "total"}
+
+    def test_values_sum_to_total(self):
+        comps = radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=True)
+        recon = comps["synchrotron"] + comps["freefree"] + comps["agn"]
+        assert jnp.allclose(recon, comps["total"], rtol=1e-12)
+
+    def test_freefree_zero_when_disabled(self):
+        comps = radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=False)
+        assert jnp.all(comps["freefree"] == 0.0)
+
+    def test_freefree_positive_when_enabled(self):
+        comps = radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=True)
+        assert jnp.all(comps["freefree"] > 0.0)
+
+    def test_total_includes_freefree_when_enabled(self):
+        comps_off = radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=False)
+        comps_on = radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=True)
+        assert jnp.all(comps_on["total"] > comps_off["total"])
+
+    def test_thermal_fraction_milky_way_like(self):
+        """Thermal fraction at 1.4 GHz for L_ir=1e10 Lsun: 2–25% (Bell+2003 FIRRC ~5%)."""
+        comps = radio_components(
+            _WAVE_14GHZ, L_ir=1e10, L_agn_bol=0.0, include_freefree=True, apply_suppression=False
+        )
+        total = float(comps["total"][0])
+        ff = float(comps["freefree"][0])
+        f_thermal = ff / total
+        assert 0.02 < f_thermal < 0.25, f"Thermal fraction {f_thermal:.3f} outside expected 2–25%"
+
+    def test_shape_matches_wavelength(self):
+        comps = radio_components(_WAVE_RADIO, **_RC_KW)
+        for key in ("synchrotron", "freefree", "agn", "total"):
+            assert comps[key].shape == _WAVE_RADIO.shape, f"Shape mismatch for {key}"
+
+    def test_all_finite(self):
+        comps = radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=True)
+        for key, arr in comps.items():
+            assert jnp.all(jnp.isfinite(arr)), f"Non-finite values in {key}"
+
+
+# ---------------------------------------------------------------------------
+# TestLayerConsistency — radio_total == components summed
+# ---------------------------------------------------------------------------
+
+
+class TestLayerConsistency:
+    """radio_total output equals component-wise sum from radio_components."""
+
+    def _check_consistency(self, sfr_mode, wave, include_freefree, **kw):
+        total_direct = radio_total(
+            wave,
+            L_ir=_L_IR,
+            L_agn_bol=0.0,
+            sfr_mode=sfr_mode,
+            include_freefree=include_freefree,
+            apply_suppression=False,
+            **kw,
+        )
+        comps = radio_components(
+            wave,
+            L_ir=_L_IR,
+            L_agn_bol=0.0,
+            sfr_mode=sfr_mode,
+            include_freefree=include_freefree,
+            apply_suppression=False,
+            **kw,
+        )
+        assert jnp.allclose(total_direct, comps["total"], rtol=1e-12)
+
+    def test_bell2003_no_freefree_no_agn(self):
+        self._check_consistency("bell2003", _WAVE_RADIO, include_freefree=False)
+
+    def test_bell2003_with_freefree_no_agn(self):
+        self._check_consistency("bell2003", _WAVE_RADIO, include_freefree=True)
+
+    def test_delvecchio2021_no_freefree_no_agn(self):
+        self._check_consistency(
+            "delvecchio2021",
+            _WAVE_14GHZ,
+            include_freefree=False,
+            log_mstar=10.5,
+            redshift=1.0,
+        )
+
+    def test_mccheyne2022_no_freefree_no_agn(self):
+        self._check_consistency(
+            "mccheyne2022",
+            _WAVE_150MHZ,
+            include_freefree=False,
+            log_mstar=10.5,
+            redshift=0.5,
+        )
+
+    def test_bell2003_with_agn_no_freefree(self):
+        """SF + AGN total equals components["total"] with nonzero AGN."""
+        total = radio_total(
+            _WAVE_RADIO,
+            L_ir=_L_IR,
+            L_agn_bol=1e12,
+            radio_loudness=2.0,
+            sfr_mode="bell2003",
+            include_freefree=False,
+            apply_suppression=False,
+        )
+        comps = radio_components(
+            _WAVE_RADIO,
+            L_ir=_L_IR,
+            L_agn_bol=1e12,
+            radio_loudness=2.0,
+            sfr_mode="bell2003",
+            include_freefree=False,
+            apply_suppression=False,
+        )
+        assert jnp.allclose(total, comps["total"], rtol=1e-12)
+
+    def test_backward_compat_include_freefree_false_default(self):
+        """Default include_freefree=False must give bit-for-bit old output."""
+        L_old = radio_sfr_bell2003(_WAVE_RADIO, _L_IR)
+        L_new = radio_total(_WAVE_RADIO, L_ir=_L_IR, L_agn_bol=0.0)
+        assert jnp.allclose(L_old, L_new, rtol=1e-12)

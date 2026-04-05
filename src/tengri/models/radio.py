@@ -3,9 +3,10 @@
 Predicts radio SED from star formation rate (via FIR-radio correlation)
 and AGN (via radio-loudness parameter).
 
-The total radio luminosity has two components:
-1. Star-forming: synchrotron from supernova remnants, scaled via FIRRC
-2. AGN: radio jets/lobes, parameterized by radio-loudness R
+The total radio luminosity has three components:
+1. Star-forming synchrotron: from supernova remnants, scaled via FIRRC
+2. Thermal free-free: bremsstrahlung from HII regions (Murphy+2011)
+3. AGN: radio jets/lobes, parameterized by radio-loudness R
 
 Three SFR physics models are available (select via ``sfr_mode`` in
 ``radio_total`` / ``radio_total_dpl``):
@@ -56,6 +57,15 @@ _L0_SYNCH_LSUN_HZ: float = 3.0e28 / _LSUN  # ≈ 7.84e-6 Lsun/Hz
 
 # Wavelength boundary separating radio from IR (1 mm = 1e7 Angstrom = 300 GHz)
 _RADIO_WAVE_MIN_AA: float = 1.0e7
+
+# Murphy+2011 Eq. 11 free-free calibration constant [Lsun/Hz per (M☉/yr) at 1 GHz, Te=1e4 K]
+# Derivation: SFR/(M☉/yr) = 4.6e-28 × (Te/1e4)^{-0.45} × (ν/GHz)^{0.1} × L_ν[erg/s/Hz]
+# → L_ν[Lsun/Hz] = SFR × (Te/1e4)^{0.45} × (ν/GHz)^{-0.1} / (4.6e-28 × _LSUN)
+# At 1.4 GHz, Te=1e4: 5.68e-7 × (1.4)^{-0.1} ≈ 5.49e-7 Lsun/Hz per M☉/yr
+_C_FF_LSUN_HZ: float = 1.0 / (4.6e-28 * _LSUN)  # ≈ 5.68e-7
+
+# Kennicutt+1998 IR-SFR calibration: L_IR [Lsun] → SFR [M☉/yr]
+_SFR_IR_KENNICUTT: float = 1.73e10
 
 
 def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:
@@ -305,6 +315,146 @@ def radio_sfr_mccheyne2022(
     return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
 
 
+def radio_freefree(
+    wavelength: jnp.ndarray,
+    L_ir: float,
+    T_e: float = 1e4,
+    alpha_ff: float = -0.1,
+) -> jnp.ndarray:
+    """Thermal free-free (bremsstrahlung) emission from HII regions.
+
+    Traces instantaneous SFR via the Kennicutt+1998 IR calibration and the
+    Murphy+2011 radio-SFR relation (Eq. 11).  At 1.4 GHz a typical star-forming
+    galaxy contributes ~5–15% of its total radio flux from free-free, depending
+    on the FIRRC calibration used for the synchrotron component.
+
+    .. math::
+
+        L_\\nu^{\\rm ff} = C_{\\rm ff} \\, (T_e / 10^4\\,{\\rm K})^{0.45}
+        \\left(\\frac{\\nu}{\\rm GHz}\\right)^{\\alpha_{\\rm ff}}
+        \\frac{L_{\\rm IR}}{L_{\\rm IR,\\odot}}
+
+    where :math:`C_{\\rm ff} = 1 / (4.6 \\times 10^{-28} \\, L_\\odot)
+    \\approx 5.68 \\times 10^{-7}` Lsun/Hz per M☉/yr at 1 GHz and
+    :math:`L_{\\rm IR,\\odot} = 1.73 \\times 10^{10}` Lsun (Kennicutt+1998).
+
+    Parameters
+    ----------
+    wavelength : array (n_wave,)
+        Wavelength in Angstrom.
+    L_ir : float
+        Total infrared luminosity (8-1000 μm) in Lsun.
+    T_e : float
+        Electron temperature in K. Default 1e4.
+        Prior suggestion: LogUniform(5e3, 2e4).
+    alpha_ff : float
+        Free-free spectral index (L_ν ∝ ν^{α_ff}). Default −0.1 (nearly flat).
+        Prior suggestion: Uniform(−0.15, 0.0).
+
+    Returns
+    -------
+    array (n_wave,)
+        L_nu in Lsun/Hz.
+
+    Notes
+    -----
+    Calibration check: at 1.4 GHz, Te=1e4 K, L_IR=1e10 Lsun (SFR≈0.58 M☉/yr):
+    L_ff ≈ 5.49e-7 × 0.58 ≈ 3.2e-7 Lsun/Hz (Murphy+2011 Table 1 consistent).
+
+    References
+    ----------
+    - Murphy et al. 2011, ApJ, 737, 67 (Eq. 11)
+    - Condon 1992, ARA&A, 30, 575
+    - Kennicutt 1998, ARA&A, 36, 189
+    """
+    nu = _C_AA / wavelength  # Hz
+    nu_ghz = nu / 1.0e9  # GHz
+    sfr = L_ir / _SFR_IR_KENNICUTT  # M☉/yr
+    # Murphy+2011 Eq. 11 inverted; (T_e/1e4)^0.45 factor from ionized gas physics
+    L_nu = _C_FF_LSUN_HZ * (T_e / 1.0e4) ** 0.45 * nu_ghz**alpha_ff * sfr
+    return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
+
+
+def _dispatch_sfr(
+    wavelength: jnp.ndarray,
+    L_ir: float,
+    sfr_mode: str,
+    q_ir: float,
+    alpha_sf: float,
+    log_mstar: float,
+    redshift: float,
+    q0: float | None,
+    mass_slope: float | None,
+    z_slope: float | None,
+    apply_suppression: bool,
+) -> jnp.ndarray:
+    """Dispatch SFR synchrotron component by mode (private helper).
+
+    Eliminates duplicated ``if/elif sfr_mode`` blocks in ``radio_total`` and
+    ``radio_total_dpl``.  Only the FIRRC normalization (Layer 1) differs between
+    modes; the spectral shape machinery (Layer 3) is shared inside each wrapper.
+
+    Parameters
+    ----------
+    wavelength : array
+        Wavelength in Angstrom.
+    L_ir : float
+        IR luminosity in Lsun.
+    sfr_mode : str
+        One of ``"bell2003"``, ``"delvecchio2021"``, ``"mccheyne2022"``.
+    q_ir : float
+        Fixed q_IR (bell2003 mode only).
+    alpha_sf : float
+        Synchrotron spectral index.
+    log_mstar : float
+        log10(M★/M⊙).
+    redshift : float
+        Galaxy redshift.
+    q0 : float or None
+        FIRRC normalization override (None = use mode default).
+    mass_slope : float or None
+        Mass slope override.
+    z_slope : float or None
+        Redshift slope override.
+    apply_suppression : bool
+        Apply Bell+2003 synchrotron suppression.
+
+    Returns
+    -------
+    array
+        L_nu in Lsun/Hz.
+    """
+    if sfr_mode == "bell2003":
+        return radio_sfr_bell2003(wavelength, L_ir, q_ir, alpha_sf)
+    elif sfr_mode == "delvecchio2021":
+        kw = {}
+        if q0 is not None:
+            kw["q0"] = q0
+        if mass_slope is not None:
+            kw["mass_slope"] = mass_slope
+        if z_slope is not None:
+            kw["z_slope"] = z_slope
+        return radio_sfr_delvecchio2021(
+            wavelength, L_ir, log_mstar, redshift, apply_suppression=apply_suppression, **kw
+        )
+    elif sfr_mode == "mccheyne2022":
+        kw = {}
+        if q0 is not None:
+            kw["q0"] = q0
+        if mass_slope is not None:
+            kw["mass_slope"] = mass_slope
+        if z_slope is not None:
+            kw["z_slope"] = z_slope
+        return radio_sfr_mccheyne2022(
+            wavelength, L_ir, log_mstar, redshift, apply_suppression=apply_suppression, **kw
+        )
+    else:
+        raise ValueError(
+            f"Unknown sfr_mode {sfr_mode!r}. "
+            "Choose 'bell2003', 'delvecchio2021', or 'mccheyne2022'."
+        )
+
+
 def radio_agn(
     wavelength: jnp.ndarray,
     L_agn_bol: float,
@@ -455,9 +605,12 @@ def radio_total(
     mass_slope: float | None = None,
     z_slope: float | None = None,
     apply_suppression: bool = True,
+    include_freefree: bool = False,
+    T_e: float = 1e4,
+    alpha_ff: float = -0.1,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Total radio emission (star-forming + AGN power-law).
+    """Total radio emission (star-forming synchrotron + optional free-free + AGN power-law).
 
     Parameters
     ----------
@@ -493,44 +646,35 @@ def radio_total(
         Redshift slope override. None uses the mode's literature default.
     apply_suppression : bool
         Apply Bell+2003 synchrotron suppression (delvecchio/mccheyne modes).
+    include_freefree : bool
+        Add thermal free-free component (Murphy+2011). Default False to preserve
+        backward-compatible behavior.
+    T_e : float
+        Electron temperature [K] for free-free component. Default 1e4.
+    alpha_ff : float
+        Free-free spectral index (L_ν ∝ ν^{α}). Default -0.1.
 
     Returns
     -------
     array (n_wave,)
         L_nu in Lsun/Hz.
     """
-    if sfr_mode == "bell2003":
-        sf = radio_sfr_bell2003(wavelength, L_ir, q_ir, alpha_sf)
-    elif sfr_mode == "delvecchio2021":
-        kw = {}
-        if q0 is not None:
-            kw["q0"] = q0
-        if mass_slope is not None:
-            kw["mass_slope"] = mass_slope
-        if z_slope is not None:
-            kw["z_slope"] = z_slope
-        sf = radio_sfr_delvecchio2021(
-            wavelength, L_ir, log_mstar, redshift, apply_suppression=apply_suppression, **kw
-        )
-    elif sfr_mode == "mccheyne2022":
-        kw = {}
-        if q0 is not None:
-            kw["q0"] = q0
-        if mass_slope is not None:
-            kw["mass_slope"] = mass_slope
-        if z_slope is not None:
-            kw["z_slope"] = z_slope
-        sf = radio_sfr_mccheyne2022(
-            wavelength, L_ir, log_mstar, redshift, apply_suppression=apply_suppression, **kw
-        )
-    else:
-        raise ValueError(
-            f"Unknown sfr_mode {sfr_mode!r}. "
-            "Choose 'bell2003', 'delvecchio2021', or 'mccheyne2022'."
-        )
-
+    sf = _dispatch_sfr(
+        wavelength,
+        L_ir,
+        sfr_mode,
+        q_ir,
+        alpha_sf,
+        log_mstar,
+        redshift,
+        q0,
+        mass_slope,
+        z_slope,
+        apply_suppression,
+    )
     agn = radio_agn(wavelength, L_agn_bol, radio_loudness, alpha_agn)
-    return sf + agn
+    ff = radio_freefree(wavelength, L_ir, T_e, alpha_ff) if include_freefree else 0.0
+    return sf + ff + agn
 
 
 def radio_total_dpl(
@@ -551,12 +695,15 @@ def radio_total_dpl(
     mass_slope: float | None = None,
     z_slope: float | None = None,
     apply_suppression: bool = True,
+    include_freefree: bool = False,
+    T_e: float = 1e4,
+    alpha_ff: float = -0.1,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Total radio emission: star-forming + AGN double power-law.
+    """Total radio emission: star-forming + optional free-free + AGN double power-law.
 
-    Combines the SFR component (dispatched by ``sfr_mode``) with the
-    AGNfitter-rx double power-law AGN component.
+    Combines the SFR component (dispatched by ``sfr_mode``) with the optional
+    thermal free-free component and the AGNfitter-rx double power-law AGN component.
 
     Parameters
     ----------
@@ -594,49 +741,123 @@ def radio_total_dpl(
         Redshift slope override.
     apply_suppression : bool
         Apply Bell+2003 synchrotron suppression.
+    include_freefree : bool
+        Add thermal free-free component (Murphy+2011). Default False.
+    T_e : float
+        Electron temperature [K] for free-free component. Default 1e4.
+    alpha_ff : float
+        Free-free spectral index. Default -0.1.
 
     Returns
     -------
     array (n_wave,)
         L_nu in Lsun/Hz.
     """
-    if sfr_mode == "bell2003":
-        sf = radio_sfr_bell2003(wavelength, L_ir, q_ir, alpha_sf)
-    elif sfr_mode == "delvecchio2021":
-        kw = {}
-        if q0 is not None:
-            kw["q0"] = q0
-        if mass_slope is not None:
-            kw["mass_slope"] = mass_slope
-        if z_slope is not None:
-            kw["z_slope"] = z_slope
-        sf = radio_sfr_delvecchio2021(
-            wavelength, L_ir, log_mstar, redshift, apply_suppression=apply_suppression, **kw
-        )
-    elif sfr_mode == "mccheyne2022":
-        kw = {}
-        if q0 is not None:
-            kw["q0"] = q0
-        if mass_slope is not None:
-            kw["mass_slope"] = mass_slope
-        if z_slope is not None:
-            kw["z_slope"] = z_slope
-        sf = radio_sfr_mccheyne2022(
-            wavelength, L_ir, log_mstar, redshift, apply_suppression=apply_suppression, **kw
-        )
-    else:
-        raise ValueError(
-            f"Unknown sfr_mode {sfr_mode!r}. "
-            "Choose 'bell2003', 'delvecchio2021', or 'mccheyne2022'."
-        )
-
-    agn = radio_agn_dpl(
+    sf = _dispatch_sfr(
         wavelength,
-        L_agn_bol,
-        radio_loudness,
-        alpha1,
-        alpha2,
-        log_nu_t,
-        log_nu_cut,
+        L_ir,
+        sfr_mode,
+        q_ir,
+        alpha_sf,
+        log_mstar,
+        redshift,
+        q0,
+        mass_slope,
+        z_slope,
+        apply_suppression,
     )
-    return sf + agn
+    agn = radio_agn_dpl(
+        wavelength, L_agn_bol, radio_loudness, alpha1, alpha2, log_nu_t, log_nu_cut
+    )
+    ff = radio_freefree(wavelength, L_ir, T_e, alpha_ff) if include_freefree else 0.0
+    return sf + ff + agn
+
+
+def radio_components(
+    wavelength: jnp.ndarray,
+    L_ir: float = 0.0,
+    L_agn_bol: float = 0.0,
+    q_ir: float = 2.64,
+    alpha_sf: float = 0.8,
+    radio_loudness: float = 0.0,
+    alpha_agn: float = 0.7,
+    sfr_mode: str = "bell2003",
+    log_mstar: float = 10.0,
+    redshift: float = 0.0,
+    q0: float | None = None,
+    mass_slope: float | None = None,
+    z_slope: float | None = None,
+    apply_suppression: bool = True,
+    include_freefree: bool = True,
+    T_e: float = 1e4,
+    alpha_ff: float = -0.1,
+    **_kwargs,
+) -> dict:
+    """Decompose total radio emission into physical components.
+
+    Returns a dict with individual component SEDs and their sum. Useful for
+    visualizing the relative contribution of synchrotron, free-free, and AGN,
+    and for computing thermal fractions (f_ff = freefree / total).
+
+    Parameters
+    ----------
+    wavelength : array (n_wave,)
+        Wavelength in Angstrom.
+    L_ir : float
+        IR luminosity (Lsun).
+    L_agn_bol : float
+        AGN bolometric luminosity (Lsun).
+    q_ir : float
+        FIR-radio q_IR (bell2003 mode only).
+    alpha_sf : float
+        Synchrotron spectral index.
+    radio_loudness : float
+        AGN radio-loudness log10(L_5GHz/L_B).
+    alpha_agn : float
+        AGN spectral index.
+    sfr_mode : str
+        SFR physics mode. See ``radio_total`` for options.
+    log_mstar : float
+        log10(M★/M⊙).
+    redshift : float
+        Galaxy redshift.
+    q0, mass_slope, z_slope : float or None
+        FIRRC parameter overrides.
+    apply_suppression : bool
+        Apply Bell+2003 synchrotron suppression.
+    include_freefree : bool
+        Include free-free component. Default True (diagnostic function).
+    T_e : float
+        Electron temperature for free-free. Default 1e4 K.
+    alpha_ff : float
+        Free-free spectral index. Default -0.1.
+
+    Returns
+    -------
+    dict with keys:
+        ``"synchrotron"`` : array (n_wave,) — SFR synchrotron L_nu [Lsun/Hz]
+        ``"freefree"`` : array (n_wave,) — thermal free-free L_nu [Lsun/Hz]
+        ``"agn"`` : array (n_wave,) — AGN radio L_nu [Lsun/Hz]
+        ``"total"`` : array (n_wave,) — sum of above [Lsun/Hz]
+    """
+    synchrotron = _dispatch_sfr(
+        wavelength,
+        L_ir,
+        sfr_mode,
+        q_ir,
+        alpha_sf,
+        log_mstar,
+        redshift,
+        q0,
+        mass_slope,
+        z_slope,
+        apply_suppression,
+    )
+    agn = radio_agn(wavelength, L_agn_bol, radio_loudness, alpha_agn)
+    ff = (
+        radio_freefree(wavelength, L_ir, T_e, alpha_ff)
+        if include_freefree
+        else jnp.zeros_like(wavelength)
+    )
+    total = synchrotron + ff + agn
+    return {"synchrotron": synchrotron, "freefree": ff, "agn": agn, "total": total}
