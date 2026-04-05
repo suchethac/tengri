@@ -1867,82 +1867,21 @@ class Model:
         ...     ),
         ... )
         """
-        from tengri.core.param_spec import ParamSpec
-        from tengri.core.param_translate import resolve_short_names
-        from tengri.distributions import Uniform
-        from tengri.models.observation.observation import Observation
-        from tengri.models.sps.dsps_wrapper import SSPData, load_ssp_data
+        from tengri.core.convenience import build_model_from_config
 
-        # --- Load SSP data ---
-        if isinstance(ssp, str):
-            ssp_data = load_ssp_data(ssp)
-        elif isinstance(ssp, SSPData):
-            ssp_data = ssp
-        else:
-            raise TypeError(f"ssp must be a file path (str) or SSPData, got {type(ssp)}")
-
-        # --- Expand short names in priors ---
-        expanded = resolve_short_names(sfh, priors or {})
-
-        # --- Inject redshift ---
-        if redshift == "free":
-            if "redshift" not in expanded:
-                expanded["redshift"] = Uniform(0.001, 6.0)
-        else:
-            expanded.setdefault("redshift", float(redshift))
-
-        # --- Inject AGN frac if AGN enabled and not already in priors ---
-        if agn is not None and "agn_frac" not in expanded:
-            expanded["agn_frac"] = Uniform(0.0, 1.0)
-
-        # --- Build ParamSpec ---
-        sfh_tokens = [t.strip() for t in sfh.replace("+", " ").split()]
-
-        spec_kwargs: dict = dict(expanded)
-        spec_kwargs["mean_sfh_type"] = sfh_tokens
-
-        if dust != "charlot_fall":
-            spec_kwargs["dust_law_bc"] = dust
-
-        if nebular is not None:
-            spec_kwargs["nebular_mode"] = nebular
-
-        if agn is not None:
-            spec_kwargs["agn_model"] = agn
-
-        spec = ParamSpec(**spec_kwargs)
-
-        # --- Build Observation ---
-        obs_photometry = None
-        obs_spectroscopy = None
-
-        if filters is not None:
-            try:
-                from tengri.models.observation.photometry_config import Photometry
-
-                obs_photometry = Photometry.from_names(filters)
-            except (ImportError, AttributeError):
-                pass
-
-        if wave_obs is not None:
-            try:
-                from tengri.models.observation.spectroscopy_config import (
-                    SpectroscopyConfig,
-                )
-
-                obs_spectroscopy = SpectroscopyConfig(wave_obs=wave_obs)
-            except (ImportError, AttributeError):
-                pass
-
-        if obs_photometry is not None or obs_spectroscopy is not None:
-            observation = Observation(
-                photometry=obs_photometry,
-                spectroscopy=obs_spectroscopy,
-            )
-        else:
-            observation = None
-
-        return cls(spec, ssp_data, observation=observation, **model_kwargs)
+        return build_model_from_config(
+            cls,
+            ssp,
+            sfh=sfh,
+            dust=dust,
+            nebular=nebular,
+            agn=agn,
+            redshift=redshift,
+            filters=filters,
+            wave_obs=wave_obs,
+            priors=priors,
+            **model_kwargs,
+        )
 
     # -------------------------------------------------------------------
     # Prior predictive check
@@ -2012,49 +1951,19 @@ class Model:
         >>> result = model.fit(flux_obs, noise, init="map")
         >>> result = model.fit(flux_obs, noise).refine("mcmc_raytrace")
         """
-        from tengri.inference.fitter import Fitter
+        from tengri.core.convenience import fit_model
 
-        # --- Resolve data arrays ---
-        if photometry is not None or spectrum is not None:
-            import jax.numpy as jnp
-
-            if photometry is not None and spectrum is not None:
-                flux_p, noise_p = photometry
-                flux_s, noise_s = spectrum
-                data = jnp.concatenate([jnp.asarray(flux_p), jnp.asarray(flux_s)])
-                noise = jnp.concatenate([jnp.asarray(noise_p), jnp.asarray(noise_s)])
-                data_type = data_type or "joint"
-            elif photometry is not None:
-                data, noise = photometry
-                data_type = data_type or "photometry"
-            else:
-                data, noise = spectrum
-                data_type = data_type or "spectroscopy"
-        else:
-            if data is None or noise is None:
-                raise ValueError(
-                    "Provide either positional (data, noise) or keyword "
-                    "photometry=(flux, noise) / spectrum=(flux, noise)."
-                )
-
-        # --- Infer data_type if still None ---
-        if data_type is None:
-            obs = getattr(self, "observation", None)
-            if obs is not None:
-                data_type = obs.data_type
-            else:
-                data_type = "photometry"
-
-        # --- Build fitter ---
-        fitter = Fitter(self, data, noise, data_type=data_type)
-        self.fitter_ = fitter
-
-        # --- Optional MAP warm start ---
-        init_from = None
-        if init == "map":
-            init_from = fitter.run("map")
-
-        return fitter.run(method, init_from=init_from, **kwargs)
+        return fit_model(
+            self,
+            data=data,
+            noise=noise,
+            method=method,
+            data_type=data_type,
+            photometry=photometry,
+            spectrum=spectrum,
+            init=init,
+            **kwargs,
+        )
 
     def fit_catalog(
         self,
