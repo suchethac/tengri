@@ -369,3 +369,12 @@ See `AGENTS.md` for comprehensive AI agent documentation.
 See `HANDOFF.md` for full project status, paper figures, and what needs doing next.
 See `docs/dev/design_philosophy.md` for architecture and design decisions.
 See `docs/dev/REFACTOR.md` for the prioritized refactor plan (7 phases, 7 subagent scopes — not yet executed).
+
+## Docs layout
+
+User-facing Sphinx docs: `getting_started/`, `observation/`, `advanced/`, `performance/`, `api/`, `developer/`.
+Internal/non-Sphinx (not published): `docs/dev/` — design notes and the refactor plan live here.
+- `docs/dev/design/` — design rationale docs (compositional SED, unified AGN, alpha enhancement, SSP grids)
+- `docs/dev/roadmap/` — zero-code future model specs (adaf, themis, shock, etc.) — not yet implemented
+- `docs/dev/sessions/` — AI session plans and agent briefings (historical, dated by filename)
+- `implementation_plans/` no longer exists — moved into `docs/dev/sessions/`
