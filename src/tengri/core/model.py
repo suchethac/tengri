@@ -98,6 +98,52 @@ class MockData(NamedTuple):
     noise: jnp.ndarray  # 1-sigma uncertainties
     params: dict  # input parameters
 
+    def plot(self, filter_names=None, ax=None):
+        """Plot mock photometry with errorbars.
+
+        Parameters
+        ----------
+        filter_names : list of str, optional
+            Filter labels for the x-axis. Falls back to integer indices.
+        ax : matplotlib Axes, optional
+            Axes to plot on. Creates new figure if None.
+
+        Returns
+        -------
+        fig : matplotlib Figure
+        """
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+        fig = None
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(7, 4))
+        else:
+            fig = ax.get_figure()
+
+        n = len(self.flux_true)
+        x = np.arange(n)
+        labels = filter_names if filter_names is not None else [str(i) for i in x]
+
+        ax.errorbar(
+            x,
+            np.array(self.flux_obs),
+            yerr=np.array(self.noise),
+            fmt="o",
+            color="C0",
+            label="observed (noisy)",
+            capsize=3,
+            zorder=3,
+        )
+        ax.plot(x, np.array(self.flux_true), "s--", color="C1", label="true (noiseless)", zorder=2)
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=9)
+        ax.set_ylabel(r"$F_\nu$ [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]", fontsize=11)
+        ax.legend(fontsize=10, frameon=False)
+        ax.set_title("Mock Photometry", fontsize=11)
+        fig.tight_layout()
+        return fig
+
 
 # ---------------------------------------------------------------------------
 # PriorPredictive container

@@ -869,6 +869,170 @@ class Posterior:
         plt.tight_layout()
         return fig
 
+    def plot_sed(self, n_draws=200, wave_range=(1000, 30000), ax=None):
+        """Plot posterior predictive SED with credible interval.
+
+        Draws ``n_draws`` parameter samples from the posterior, computes
+        the rest-frame SED for each, and shades the 16th–84th percentile
+        band around the median.
+
+        Parameters
+        ----------
+        n_draws : int
+            Number of posterior draws to use for the band. Ignored for
+            MAP results (plots single SED).
+        wave_range : (float, float)
+            Wavelength range in Angstrom to display.
+        ax : matplotlib Axes, optional
+            Axes to plot on. Creates new figure if None.
+
+        Returns
+        -------
+        fig : matplotlib Figure
+        """
+        import matplotlib.pyplot as plt
+
+        if self._model is None:
+            raise ValueError("plot_sed requires a model reference (produced by model.fit())")
+
+        fig = None
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 4))
+        else:
+            fig = ax.get_figure()
+
+        model = self._model
+
+        if self.samples is not None and n_draws > 1:
+            key = jax.random.PRNGKey(0)
+            n_samples = next(iter(self.samples.values())).shape[0]
+            idx = jax.random.choice(
+                key, n_samples, shape=(min(n_draws, n_samples),), replace=False
+            )
+            seds = []
+            for i in np.array(idx):
+                p = {
+                    k: float(v[i]) if v.ndim == 1 else np.array(v[i])
+                    for k, v in self.samples.items()
+                }
+                try:
+                    sed = np.array(model.predict_sed(p))
+                    seds.append(sed)
+                except Exception:
+                    pass
+            if seds:
+                seds = np.stack(seds, axis=0)
+                wave = np.array(model.wavelengths)
+                mask = (wave >= wave_range[0]) & (wave <= wave_range[1])
+                wave_m = wave[mask]
+                lo = np.percentile(seds[:, mask], 16, axis=0)
+                med = np.percentile(seds[:, mask], 50, axis=0)
+                hi = np.percentile(seds[:, mask], 84, axis=0)
+                norm = float(med[np.argmin(np.abs(wave_m - 5500))]) or 1.0
+                ax.fill_between(
+                    wave_m,
+                    lo * wave_m / norm,
+                    hi * wave_m / norm,
+                    alpha=0.3,
+                    color="C0",
+                    label="16–84%",
+                )
+                ax.plot(wave_m, med * wave_m / norm, color="C0", lw=1.8, label="median")
+        else:
+            wave = np.array(model.wavelengths)
+            mask = (wave >= wave_range[0]) & (wave <= wave_range[1])
+            sed = np.array(model.predict_sed(self.params))
+            norm = float(sed[np.argmin(np.abs(wave - 5500))]) or 1.0
+            ax.plot(
+                wave[mask], sed[mask] * wave[mask] / norm, color="C0", lw=1.8, label="best-fit"
+            )
+
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlabel(r"Wavelength [$\AA$]", fontsize=11)
+        ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)", fontsize=11)
+        ax.legend(fontsize=10, frameon=False)
+        ax.set_title("Posterior Predictive SED", fontsize=11)
+        fig.tight_layout()
+        return fig
+
+    def plot_sfh(self, n_draws=200, ax=None):
+        """Plot posterior SFH with credible interval.
+
+        Parameters
+        ----------
+        n_draws : int
+            Number of posterior draws. Ignored for MAP (plots single SFH).
+        ax : matplotlib Axes, optional
+            Axes to plot on. Creates new figure if None.
+
+        Returns
+        -------
+        fig : matplotlib Figure
+        """
+        import matplotlib.pyplot as plt
+
+        if self._model is None:
+            raise ValueError("plot_sfh requires a model reference (produced by model.fit())")
+
+        fig = None
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(7, 4))
+        else:
+            fig = ax.get_figure()
+
+        model = self._model
+
+        if self.samples is not None and n_draws > 1:
+            key = jax.random.PRNGKey(1)
+            n_samples = next(iter(self.samples.values())).shape[0]
+            idx = jax.random.choice(
+                key, n_samples, shape=(min(n_draws, n_samples),), replace=False
+            )
+            sfhs_mean, sfhs_full, t_gyr = [], [], None
+            for i in np.array(idx):
+                p = {
+                    k: float(v[i]) if v.ndim == 1 else np.array(v[i])
+                    for k, v in self.samples.items()
+                }
+                try:
+                    sfh_dict = model.predict_sfh(p)
+                    if t_gyr is None:
+                        t_gyr = np.array(sfh_dict["t_gyr"])
+                    sfhs_mean.append(np.array(sfh_dict["sfr_mean"]))
+                    sfhs_full.append(np.array(sfh_dict["sfr_full"]))
+                except Exception:
+                    pass
+            if sfhs_mean and t_gyr is not None:
+                sfhs_mean = np.stack(sfhs_mean, axis=0)
+                sfhs_full = np.stack(sfhs_full, axis=0)
+                lo = np.percentile(sfhs_full, 16, axis=0)
+                med = np.percentile(sfhs_full, 50, axis=0)
+                hi = np.percentile(sfhs_full, 84, axis=0)
+                ax.fill_between(t_gyr, lo, hi, alpha=0.3, color="C0", label="16–84%")
+                ax.plot(t_gyr, med, color="C0", lw=1.8, label="median (stochastic)")
+                med_mean = np.percentile(sfhs_mean, 50, axis=0)
+                ax.plot(t_gyr, med_mean, color="0.5", lw=1.2, ls="--", label="median (smooth)")
+        else:
+            sfh_dict = model.predict_sfh(self.params)
+            t_gyr = np.array(sfh_dict["t_gyr"])
+            ax.plot(t_gyr, np.array(sfh_dict["sfr_full"]), color="C0", lw=1.8, label="best-fit")
+            ax.plot(
+                t_gyr,
+                np.array(sfh_dict["sfr_mean"]),
+                color="0.5",
+                lw=1.2,
+                ls="--",
+                label="smooth component",
+            )
+
+        ax.set_xlabel("Lookback time [Gyr]", fontsize=11)
+        ax.set_ylabel(r"SFR [$M_\odot$ yr$^{-1}$]", fontsize=11)
+        ax.legend(fontsize=10, frameon=False)
+        ax.set_title("Star Formation History", fontsize=11)
+        fig.tight_layout()
+        return fig
+
     # -------------------------------------------------------------------
     # Display
     # -------------------------------------------------------------------

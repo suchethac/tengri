@@ -610,3 +610,536 @@ GALAXY_ANNOTATIONS = {
     (2, 0): "Extreme dwarf",
     (2, 2): "Post-starburst",
 }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Visual language specification — import from here for consistency
+# ═══════════════════════════════════════════════════════════════════
+
+SED_XLIM = (912, 1e7)  # Å, rest-frame
+SED_XSCALE = "log"
+SED_YLABEL = r"$\lambda F_\lambda$ (normalized at 5500 Å)"
+SED_XLABEL = r"Rest-frame wavelength (Å)"
+
+SFH_XLABEL = "Lookback time (Gyr)"
+SFH_YLABEL = r"SFR (M$_\odot$ yr$^{-1}$)"
+
+SWEEP_CMAPS = {
+    "dust": "YlOrRd",  # yellow→red for reddening
+    "agn": "PuRd",  # purple→red for AGN dominance
+    "sfh": "Blues",  # light→dark for SFH variation
+    "nebular": "Greens",  # for ionization
+    "radio": "cool",  # blue→purple for radio
+    "redshift": "plasma",  # for redshift sweeps
+}
+
+REFERENCE_STYLE = dict(color="0.75", lw=1.5, zorder=0, label="reference")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Sweep utilities — the engine behind all gallery notebooks
+# ═══════════════════════════════════════════════════════════════════
+
+
+def sweep_parameter(
+    model,
+    param_name: str,
+    values,
+    *,
+    ax=None,
+    cmap: str = "viridis",
+    label_fmt: str = "{:.2f}",
+    unit: str = "",
+    log_scale: bool = False,
+    components: bool = False,
+    reference_idx: int | None = None,
+    wave_range: tuple[float, float] | None = None,
+    normalize_at: float | None = 5500.0,
+) -> tuple:
+    """Sweep one parameter across values, plot resulting SEDs colormapped low→high.
+
+    Parameters
+    ----------
+    model : tengri.Model
+        Model instance with a ``predict`` or ``sed`` callable.
+    param_name : str
+        Full parameter name (e.g. ``"dust_tau_bc"``).
+    values : sequence of float
+        Parameter values to sweep.
+    ax : Axes, optional
+        Existing axes to plot into. Creates new figure if None.
+    cmap : str
+        Matplotlib colormap name. Use SWEEP_CMAPS[key] for standard sweeps.
+    label_fmt : str
+        Format string for legend labels, e.g. ``"τ_BC = {:.1f}"``.
+    unit : str
+        Unit string appended to label, e.g. ``"K"``.
+    log_scale : bool
+        If True, log-scale the y-axis.
+    components : bool
+        If True, also overplot individual SED components as dashed lines.
+    reference_idx : int or None
+        Index into ``values`` to plot in REFERENCE_STYLE (gray). Others in cmap.
+    wave_range : (lo, hi) or None
+        Wavelength range in Å to plot. Defaults to SED_XLIM.
+    normalize_at : float or None
+        Normalize SEDs at this rest-frame wavelength (Å). None = no normalization.
+
+    Returns
+    -------
+    fig, ax : Figure, Axes
+    """
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+    else:
+        fig = ax.get_figure()
+
+    cmap_obj = plt.get_cmap(cmap)
+    n = len(values)
+    colors = [cmap_obj(i / max(n - 1, 1)) for i in range(n)]
+
+    xlim = wave_range if wave_range is not None else SED_XLIM
+
+    for i, val in enumerate(values):
+        # Override single parameter; use model defaults for rest
+        override = {param_name: float(val)}
+        try:
+            wave, lnu = model.sed(override)
+        except Exception:
+            # Fallback: try predict interface
+            pred = model.predict(override)
+            wave = np.asarray(pred.wavelengths)
+            lnu = np.asarray(pred.lnu)
+
+        wave = np.asarray(wave)
+        lnu = np.asarray(lnu)
+
+        # Normalize
+        if normalize_at is not None:
+            idx_norm = int(np.argmin(np.abs(wave - normalize_at)))
+            norm = lnu[idx_norm]
+            if norm > 0:
+                lnu = lnu / norm
+
+        # λF_λ = ν F_ν ∝ (c/λ²) × F_ν ∝ F_ν / λ * const → for normalized SEDs use lnu * (c/λ)
+        # approximate: plot lnu × wave (proportional to λ F_λ)
+        y = lnu * wave
+
+        mask = (wave >= xlim[0]) & (wave <= xlim[1])
+        if mask.sum() == 0:
+            continue
+
+        style = REFERENCE_STYLE.copy() if i == reference_idx else {"color": colors[i], "lw": 1.8}
+        label_str = label_fmt.format(val)
+        if unit:
+            label_str += f" {unit}"
+        ax.plot(wave[mask], y[mask], label=label_str, **style)
+
+    ax.set_xscale(SED_XSCALE)
+    if log_scale:
+        ax.set_yscale("log")
+    ax.set_xlabel(SED_XLABEL)
+    ax.set_ylabel(SED_YLABEL)
+    ax.set_xlim(xlim)
+    ax.legend(fontsize=10, ncol=2)
+    return fig, ax
+
+
+def parameter_gallery(
+    model,
+    param_sweep_specs: list[dict],
+    *,
+    ncols: int = 3,
+    figsize_per_panel: tuple[float, float] = (4, 3),
+) -> "plt.Figure":
+    """Multi-panel gallery: one panel per entry in param_sweep_specs.
+
+    Parameters
+    ----------
+    model : tengri.Model
+    param_sweep_specs : list of dict
+        Each dict: ``{"param": "dust_tau_bc", "values": [...], "label": "τ_BC",
+        "cmap": "YlOrRd", "label_fmt": "{:.1f}"}``.
+    ncols : int
+        Number of columns in the grid.
+    figsize_per_panel : (w, h)
+        Size per panel in inches.
+
+    Returns
+    -------
+    fig : Figure
+    """
+    n = len(param_sweep_specs)
+    nrows = (n + ncols - 1) // ncols
+    fig, axes = plt.subplots(
+        nrows,
+        ncols,
+        figsize=(figsize_per_panel[0] * ncols, figsize_per_panel[1] * nrows),
+        squeeze=False,
+    )
+
+    for idx, spec in enumerate(param_sweep_specs):
+        row, col = divmod(idx, ncols)
+        ax = axes[row][col]
+        sweep_parameter(
+            model,
+            spec["param"],
+            spec["values"],
+            ax=ax,
+            cmap=spec.get("cmap", "viridis"),
+            label_fmt=spec.get("label_fmt", "{:.2f}"),
+            unit=spec.get("unit", ""),
+        )
+        ax.set_title(spec.get("label", spec["param"]), fontsize=12)
+
+    # Hide unused panels
+    for idx in range(n, nrows * ncols):
+        row, col = divmod(idx, ncols)
+        axes[row][col].set_visible(False)
+
+    fig.tight_layout()
+    return fig
+
+
+def sfh_sed_comparison(
+    model,
+    param_name: str,
+    values,
+    *,
+    cmap: str = "plasma",
+    n_stochastic: int = 0,
+    key=None,
+) -> "plt.Figure":
+    """Two-panel figure: SFH realizations (left) + corresponding SEDs (right).
+
+    Essential for the SFH gallery and burstiness story.
+
+    Parameters
+    ----------
+    model : tengri.Model
+    param_name : str
+        Parameter to sweep across ``values``.
+    values : sequence
+        Parameter values.
+    cmap : str
+        Colormap for the sweep.
+    n_stochastic : int
+        If > 0, draw this many stochastic SFH samples per value (thin, alpha=0.2).
+    key : jax.random.PRNGKey, optional
+        Required when n_stochastic > 0.
+
+    Returns
+    -------
+    fig : Figure  (two-panel, figsize=(12, 4))
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    ax_sfh, ax_sed = axes
+
+    cmap_obj = plt.get_cmap(cmap)
+    n = len(values)
+    colors = [cmap_obj(i / max(n - 1, 1)) for i in range(n)]
+
+    for i, val in enumerate(values):
+        override = {param_name: float(val)}
+        color = colors[i]
+        label = f"{param_name} = {val:.2g}"
+
+        # SFH panel
+        try:
+            t_lookback, sfr = model.sfh(override)
+            ax_sfh.plot(np.asarray(t_lookback), np.asarray(sfr), color=color, lw=1.8, label=label)
+        except Exception:
+            pass  # model may not support sfh() — skip
+
+        # SED panel
+        try:
+            wave, lnu = model.sed(override)
+            wave = np.asarray(wave)
+            lnu = np.asarray(lnu)
+            idx_norm = int(np.argmin(np.abs(wave - 5500.0)))
+            norm = lnu[idx_norm]
+            if norm > 0:
+                lnu = lnu / norm
+            y = lnu * wave
+            mask = (wave >= SED_XLIM[0]) & (wave <= SED_XLIM[1])
+            ax_sed.plot(wave[mask], y[mask], color=color, lw=1.8, label=label)
+        except Exception:
+            pass
+
+    ax_sfh.set_xlabel(SFH_XLABEL)
+    ax_sfh.set_ylabel(SFH_YLABEL)
+    ax_sfh.legend(fontsize=9)
+
+    ax_sed.set_xscale(SED_XSCALE)
+    ax_sed.set_xlabel(SED_XLABEL)
+    ax_sed.set_ylabel(SED_YLABEL)
+    ax_sed.set_xlim(SED_XLIM)
+
+    fig.tight_layout()
+    return fig
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Convenience methods for MockData and Posterior
+# ═══════════════════════════════════════════════════════════════════
+
+
+def mock_plot(mock, ax=None):
+    """Plot mock photometry and true SED.
+
+    Convenience function for MockData.plot() — shows observed photometry
+    with errorbars and the true noiseless SED as a line.
+
+    Parameters
+    ----------
+    mock : MockData
+        Mock observation from model.mock().
+    ax : matplotlib Axes, optional
+        Axes to plot on. If None, creates a new figure.
+
+    Returns
+    -------
+    fig : matplotlib Figure
+    ax : matplotlib Axes
+    """
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(7, 4))
+    else:
+        fig = ax.get_figure()
+
+    # Index for photometric bands (x-axis as indices)
+    n_bands = len(mock.flux_true)
+    x_phot = np.arange(n_bands)
+
+    # Plot true SED as a line connecting the noiseless fluxes
+    ax.plot(x_phot, np.array(mock.flux_true), "-", color="gray", lw=2, label="True SED")
+
+    # Plot observed photometry with noise errorbars
+    ax.errorbar(
+        x_phot,
+        np.array(mock.flux_obs),
+        yerr=np.array(mock.noise),
+        fmt="o",
+        color="k",
+        ms=6,
+        ecolor="k",
+        capsize=3,
+        label="Observed",
+    )
+
+    ax.set_xlabel("Band index")
+    ax.set_ylabel("Flux density [erg/s/cm²/Hz]")
+    ax.set_yscale("log")
+    ax.legend(frameon=False)
+
+    return fig, ax
+
+
+def posterior_plot_sed(result, mock=None, ax=None):
+    """Plot SED posterior with optional mock data.
+
+    Convenience function for Posterior.plot_sed() — creates a two-panel
+    figure showing the posterior SED band and the star formation history
+    over lookback time.
+
+    Parameters
+    ----------
+    result : Posterior
+        Posterior inference result with model reference.
+    mock : MockData, optional
+        Mock observation to overlay. If provided, shows observed
+        photometry with errorbars.
+    ax : matplotlib Axes or array of Axes, optional
+        Axes to plot on. If None, creates a new figure.
+
+    Returns
+    -------
+    fig : matplotlib Figure
+    axes : array of matplotlib Axes
+
+    Raises
+    ------
+    RuntimeError
+        If model reference is not available.
+    """
+    if result._model is None:
+        raise RuntimeError("plot_sed() requires model reference")
+
+    if ax is None:
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    else:
+        if isinstance(ax, np.ndarray):
+            axes = ax
+            fig = axes.flat[0].get_figure()
+        else:
+            axes = np.array([[ax]])
+            fig = ax.get_figure()
+
+    ax_sed = axes.flat[0]
+    ax_sfh = axes.flat[1]
+
+    # Left panel: SED
+    if result.samples is not None:
+        # Compute SED for each sample
+        n_samples = next(iter(result.samples.values())).shape[0]
+        sed_samples = []
+        for i in range(n_samples):
+            sample_i = {k: v[i] for k, v in result.samples.items()}
+            sed_i = result._model.predict_sed(sample_i)
+            sed_samples.append(sed_i)
+        sed_array = np.array(sed_samples)
+
+        # Get wavelengths
+        wave_rest = np.array(result._model.ssp_data.ssp_wave)
+
+        # Plot posterior band (16th to 84th percentile)
+        sed_lo = np.percentile(sed_array, 16, axis=0)
+        sed_hi = np.percentile(sed_array, 84, axis=0)
+        ax_sed.fill_between(
+            wave_rest, sed_lo, sed_hi, alpha=0.3, color="C0", label="68% credible region"
+        )
+
+        # Plot MAP SED
+        sed_map = result._model.predict_sed(result.params)
+        ax_sed.plot(wave_rest, sed_map, "-", color="C0", lw=2, label="MAP SED")
+    else:
+        # MAP only: just plot the best fit
+        wave_rest = np.array(result._model.ssp_data.ssp_wave)
+        sed_map = result._model.predict_sed(result.params)
+        ax_sed.plot(wave_rest, sed_map, "-", color="C0", lw=2, label="Best fit")
+
+    # Overlay mock data if provided
+    if mock is not None:
+        n_bands = len(mock.flux_true)
+        x_phot = np.arange(n_bands)
+        ax_sed.errorbar(
+            x_phot,
+            np.array(mock.flux_obs),
+            yerr=np.array(mock.noise),
+            fmt="o",
+            color="k",
+            ms=6,
+            ecolor="k",
+            capsize=3,
+            label="Observed",
+        )
+
+    ax_sed.set_xlabel("Wavelength [Å]")
+    ax_sed.set_ylabel("Flux density [erg/s/cm²/Hz]")
+    ax_sed.set_yscale("log")
+    ax_sed.legend(frameon=False)
+
+    # Right panel: SFH
+    sfh_map = result._model.predict_sfh(result.params)
+    t_gyr = np.array(sfh_map["t_gyr"])
+    sfr_mean = np.array(sfh_map["sfr_mean"])
+
+    if result.samples is not None:
+        # Compute SFH for each sample
+        sfh_samples = []
+        for i in range(n_samples):
+            sample_i = {k: v[i] for k, v in result.samples.items()}
+            sfh_i = result._model.predict_sfh(sample_i)
+            sfh_samples.append(np.array(sfh_i["sfr_mean"]))
+        sfh_array = np.array(sfh_samples)
+
+        # Plot posterior band
+        sfr_lo = np.percentile(sfh_array, 16, axis=0)
+        sfr_hi = np.percentile(sfh_array, 84, axis=0)
+        ax_sfh.fill_between(
+            t_gyr, sfr_lo, sfr_hi, alpha=0.3, color="C0", label="68% credible region"
+        )
+
+    ax_sfh.plot(t_gyr, sfr_mean, "-", color="C0", lw=2, label="Posterior median")
+
+    # Overlay truth SFH if available in mock
+    if mock is not None:
+        try:
+            sfh_true = result._model.predict_sfh(mock.params)
+            t_gyr_true = np.array(sfh_true["t_gyr"])
+            sfr_true = np.array(sfh_true["sfr_mean"])
+            ax_sfh.plot(t_gyr_true, sfr_true, "--", color="k", lw=2, label="Truth")
+        except Exception:
+            pass
+
+    ax_sfh.set_xlabel("Lookback time [Gyr]")
+    ax_sfh.set_ylabel("SFR [M☉/yr]")
+    ax_sfh.set_title("Star Formation History")
+    ax_sfh.legend(frameon=False)
+
+    plt.tight_layout()
+    return fig, axes
+
+
+def posterior_plot_sfh(result, truth_sfh=None, ax=None):
+    """Plot SFH posterior with optional truth.
+
+    Convenience function for Posterior.plot_sfh() — shows posterior median
+    and 68% credible band over lookback time.
+
+    Parameters
+    ----------
+    result : Posterior
+        Posterior inference result with model reference.
+    truth_sfh : dict, optional
+        Truth SFH parameters to plot as dashed line. Should be a
+        parameter dict (will be passed to model.predict_sfh).
+    ax : matplotlib Axes, optional
+        Axes to plot on. If None, creates a new figure.
+
+    Returns
+    -------
+    fig : matplotlib Figure
+    ax : matplotlib Axes
+
+    Raises
+    ------
+    RuntimeError
+        If model reference is not available.
+    """
+    if result._model is None:
+        raise RuntimeError("plot_sfh() requires model reference")
+
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+    else:
+        fig = ax.get_figure()
+
+    # Compute SFH for MAP
+    sfh_map = result._model.predict_sfh(result.params)
+    t_gyr = np.array(sfh_map["t_gyr"])
+    sfr_mean = np.array(sfh_map["sfr_mean"])
+
+    # If samples available, compute posterior band
+    if result.samples is not None:
+        n_samples = next(iter(result.samples.values())).shape[0]
+        sfh_samples = []
+        for i in range(n_samples):
+            sample_i = {k: v[i] for k, v in result.samples.items()}
+            sfh_i = result._model.predict_sfh(sample_i)
+            sfh_samples.append(np.array(sfh_i["sfr_mean"]))
+        sfh_array = np.array(sfh_samples)
+
+        # Plot posterior band
+        sfr_lo = np.percentile(sfh_array, 16, axis=0)
+        sfr_hi = np.percentile(sfh_array, 84, axis=0)
+        ax.fill_between(t_gyr, sfr_lo, sfr_hi, alpha=0.3, color="C0", label="68% credible region")
+
+    # Plot posterior median
+    ax.plot(t_gyr, sfr_mean, "-", color="C0", lw=2, label="Posterior median")
+
+    # Overlay truth if provided
+    if truth_sfh is not None:
+        try:
+            sfh_true = result._model.predict_sfh(truth_sfh)
+            t_gyr_true = np.array(sfh_true["t_gyr"])
+            sfr_true = np.array(sfh_true["sfr_mean"])
+            ax.plot(t_gyr_true, sfr_true, "--", color="k", lw=2, label="Truth")
+        except Exception:
+            pass
+
+    ax.set_xlabel("Lookback time [Gyr]")
+    ax.set_ylabel("SFR [M☉/yr]")
+    ax.legend(frameon=False)
+
+    return fig, ax
