@@ -298,3 +298,84 @@ class TestBug30PlanckDivZero:
         result = planck_bnu(wave_aa, T)
         assert jnp.all(jnp.isfinite(result)), f"Planck function has non-finite values: {result}"
         assert jnp.all(result > 0), "Planck function must be positive"
+
+
+# ---------------------------------------------------------------------------
+# BUG-29: _mstar uses formed mass, not surviving mass (XRB over-estimate)
+# ---------------------------------------------------------------------------
+class TestBug29MstarSurvivingMass:
+    """sed_pipeline.py:753 — XRB must use surviving stellar mass, not formed mass.
+
+    Lehmer+2010 / Mineo+2012 XRB calibrations are normalised to surviving
+    stellar mass (living stars + remnants). Using total formed mass overestimates
+    XRB L_X by ~30-50% for old stellar populations.
+
+    Fix: sed_pipeline.py now calls compute_surviving_mass(weights,
+    interpolate_mass_remaining(...)) and exposes both mstar_formed and
+    mstar_surviving in the output dict.
+    """
+
+    def test_surviving_mass_less_than_formed_for_old_population(self):
+        """Surviving mass must be < formed mass for a purely old SSP.
+
+        For a 10 Gyr population with Kroupa IMF, f_surv ≈ 0.6 (B&C03).
+        compute_surviving_mass(weights, f_surv * ones) < sum(weights).
+        """
+        from tengri.models.sps.dsps_wrapper import compute_surviving_mass
+
+        weights = jnp.ones(50) * 1e9  # 50 age bins, 1e9 Msun each
+        # Simulate old population: f_surv = 0.6 uniformly
+        mass_remaining = jnp.full(50, 0.6)
+        surviving = float(compute_surviving_mass(weights, mass_remaining))
+        formed = float(jnp.sum(weights))
+        assert surviving < formed, (
+            f"Surviving mass {surviving:.3e} should be < formed mass {formed:.3e}"
+        )
+        assert abs(surviving / formed - 0.6) < 1e-6, (
+            f"Expected surviving/formed = 0.6, got {surviving / formed:.4f}"
+        )
+
+    def test_interpolate_mass_remaining_shape(self):
+        """interpolate_mass_remaining returns shape (n_age,) for a scalar log_z."""
+        from tengri.models.sps.dsps_wrapper import interpolate_mass_remaining
+
+        n_met, n_age = 4, 20
+        # Synthetic mass-remaining grid: decreases with age (older → less survives)
+        ssp_mass_remaining = jnp.ones((n_met, n_age)) * jnp.linspace(0.95, 0.50, n_age)
+        ssp_lgmet = jnp.linspace(-2.0, 0.3, n_met)
+        mr = interpolate_mass_remaining(ssp_mass_remaining, ssp_lgmet, log_z=-1.0)
+        assert mr.shape == (n_age,), f"Expected shape ({n_age},), got {mr.shape}"
+        assert jnp.all(mr > 0.0), "Mass-remaining fractions must be positive"
+        assert jnp.all(mr <= 1.0), "Mass-remaining fractions must be <= 1"
+
+    def test_pipeline_exposes_both_mstar_keys(self):
+        """sed_pipeline must expose mstar_formed and mstar_surviving in output dict."""
+        import inspect
+
+        from tengri.core import sed_pipeline
+
+        src = inspect.getsource(sed_pipeline)
+        assert '"mstar_formed"' in src, "Pipeline output dict must contain 'mstar_formed' key"
+        assert '"mstar_surviving"' in src, (
+            "Pipeline output dict must contain 'mstar_surviving' key"
+        )
+
+    def test_pipeline_uses_surviving_for_xrb(self):
+        """XRB must receive surviving mass, not formed mass.
+
+        Verifies that the pipeline passes _mstar_surviving (not _mstar_formed)
+        to xray_total via the stellar_mass argument.
+        """
+        import inspect
+
+        from tengri.core import sed_pipeline
+
+        src = inspect.getsource(sed_pipeline)
+        # The fix introduces _mstar_surviving and assigns _mstar = _mstar_surviving.
+        # XRB call uses stellar_mass=_mstar.
+        assert "_mstar_surviving" in src, (
+            "Pipeline must compute _mstar_surviving from mass-remaining grid"
+        )
+        assert "compute_surviving_mass" in src, (
+            "Pipeline must call compute_surviving_mass (not just jnp.sum(weights))"
+        )

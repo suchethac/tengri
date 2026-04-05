@@ -13,9 +13,9 @@
 
 | Status | Count | Details |
 |--------|-------|---------|
-| FIXED | 26 | BUG-02,03,05,06,07,08,09,11,12,13,14,15,16,17,19,20,21,22,23,27,28,30,31,34,36 + BUG-01 scoping |
+| FIXED | 27 | BUG-02,03,05,06,07,08,09,11,12,13,14,15,16,17,19,20,21,22,23,27,28,29,30,31,34,36 + BUG-01 scoping |
 | PARTIALLY FIXED | 1 | BUG-10 (documented as intentional) |
-| NOT FIXED | 2 | BUG-04,29 |
+| NOT FIXED | 1 | BUG-04 |
 
 ### Emission line branch (merged 2026-04-01): 23 issues found, 20 fixed
 
@@ -57,11 +57,17 @@
 **File:** `src/tengri/inference/posterior.py:359-362`
 **Status:** Verified. `summary_table()` uses `"accept_rate"` (key from raytrace) and `"n_divergent"` (key from NUTS). These match the actual keys set in `fitter.py` and `nuts.py`. No mismatch.
 
-### BUG-29: _mstar uses formed mass, not surviving mass (NOT FIXED)
+### BUG-29: _mstar uses formed mass, not surviving mass (FIXED 2026-04-04)
 
-**File:** `src/tengri/core/sed_pipeline.py:651`
-**Status:** `jnp.sum(weights)` is still total formed mass. Comment acknowledges 30-50% overestimate for old galaxies. XRB L_X is calibrated against surviving mass.
-**Impact:** Moderate — systematic overestimate of X-ray luminosity for evolved galaxies.
+**File:** `src/tengri/core/sed_pipeline.py:751`
+**Fix:** When `model.ssp_data.ssp_mass_remaining` is available, the pipeline now calls
+`compute_surviving_mass(weights, interpolate_mass_remaining(...))` instead of
+`jnp.sum(weights)`. Both `mstar_formed` and `mstar_surviving` are returned in the
+output dict. XRB uses `_mstar_surviving` (aliased as `_mstar`) for the
+`stellar_mass` argument to `xray_total`. Fallback to formed mass when the SSP file
+lacks the mass-remaining grid.
+**Reference:** Lehmer+2010 ApJS 189 1 Table 2 (HMXB/LMXB calibration vs M*);
+Mineo+2012 MNRAS 419 2095 §3.1 (surviving mass definition).
 
 ### BUG-30: Planck exp(x)-1 at x=0 (FIXED 2026-04-03)
 
