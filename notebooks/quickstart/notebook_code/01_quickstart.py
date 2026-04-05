@@ -39,7 +39,7 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
     Uniform,
     load_ssp_data,
@@ -99,7 +99,7 @@ print(
 
 # %%
 # Define the parameter specification
-spec_param = ParamSpec(
+spec_param = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -235,7 +235,7 @@ t_compile = time.perf_counter() - t0_compile
 # Inference runtime (this is what you pay per galaxy after compilation)
 t0 = time.perf_counter()
 result_geovi_param = fitter_param.run(
-    "native_geovi",
+    "vi",
     n_iterations=15,
     n_samples=6,
     n_seeds=5,
@@ -314,7 +314,7 @@ plot_sfh(
     true_params=true_params_param,
     ax=ax,
     color=COLORS["geovi"],
-    label="native_geovi",
+    label="vi",
     method="geoVI",
 )
 ax.set_title("SFH Recovery — Parametric (D = 7)")
@@ -379,7 +379,7 @@ plt.show()
 # Run NUTS from MAP initialization
 t0 = time.perf_counter()
 result_nuts_param = fitter_param.run(
-    "nuts",
+    "mcmc_nuts",
     n_warmup=500,
     n_samples=1000,
     init_from=result_map_param,
@@ -389,7 +389,7 @@ t_nuts = time.perf_counter() - t0
 print(f"NUTS: {t_nuts:.1f}s")
 
 # Convergence diagnostics
-ct = convergence_table({"native_geovi": result_geovi_param, "NUTS": result_nuts_param})
+ct = convergence_table({"vi": result_geovi_param, "NUTS": result_nuts_param})
 
 # %% [markdown]
 # ### Parameter recovery
@@ -407,7 +407,7 @@ for name in spec_param.free_params:
 # --- FIGURE 5: native_geovi vs NUTS ---
 fig = plot_corner_comparison(
     [result_geovi_param, result_nuts_param],
-    labels=["native_geovi", "NUTS"],
+    labels=["vi", "NUTS"],
     colors=[COLORS["geovi"], COLORS["nuts"]],
     truths=true_params_param,
 )
@@ -424,7 +424,7 @@ plt.show()
 print("\n  Method         | Wall Clock | Effective Samples | ESS/sec")
 print("  " + "-" * 60)
 for name, res, t in [
-    ("native_geovi", result_geovi_param, t_geovi),
+    ("vi", result_geovi_param, t_geovi),
     ("NUTS", result_nuts_param, t_nuts),
 ]:
     n_samp = len(next(iter(res.samples.values()))) if res.samples else 0
@@ -455,7 +455,7 @@ for name, res, t in [
 
 # %%
 # Define the stochastic parameter specification
-spec_stoch = ParamSpec(
+spec_stoch = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -567,7 +567,7 @@ t_compile_s = time.perf_counter() - t0_compile_s
 # Inference runtime
 t0 = time.perf_counter()
 result_geovi_stoch = fitter_stoch.run(
-    "native_geovi",
+    "vi",
     n_iterations=20,
     n_samples=6,
     n_seeds=5,
@@ -592,7 +592,7 @@ plot_sfh(
     true_params=true_params_stoch,
     ax=ax,
     color=COLORS["geovi"],
-    label="native_geovi",
+    label="vi",
     method="geoVI",
     show_mean_sfh=True,
 )
@@ -706,7 +706,7 @@ plt.show()
 # Ray Tracing on the stochastic model
 t0 = time.perf_counter()
 result_rt_stoch = fitter_stoch.run(
-    "raytrace",
+    "mcmc_raytrace",
     init_from=result_map_stoch,
     n_burnin=200,
     n_steps=2000,
@@ -721,7 +721,7 @@ print(f"Ray Tracing: {t_rt_s:.1f}s, acceptance = {acc:.1%}")
 
 # %%
 # Convergence diagnostics for D=137 methods
-ct_stoch = convergence_table({"native_geovi": result_geovi_stoch, "Ray Tracing": result_rt_stoch})
+ct_stoch = convergence_table({"vi": result_geovi_stoch, "Ray Tracing": result_rt_stoch})
 
 # %%
 # --- FIGURE 10: All methods on one plot ---

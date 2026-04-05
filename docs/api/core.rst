@@ -11,10 +11,10 @@ Model
    :members:
    :show-inheritance:
 
-ParamSpec
----------
+Parameters
+----------
 
-.. autoclass:: tengri.ParamSpec
+.. autoclass:: tengri.Parameters
    :members:
    :show-inheritance:
 
@@ -79,17 +79,17 @@ Photometry
    :members:
    :show-inheritance:
 
-SpectroscopyConfig
-------------------
+Spectroscopy
+-------------
 
-.. autoclass:: tengri.SpectroscopyConfig
+.. autoclass:: tengri.Spectroscopy
    :members:
    :show-inheritance:
 
-NoiseConfig
------------
+NoiseModel
+----------
 
-.. autoclass:: tengri.NoiseConfig
+.. autoclass:: tengri.NoiseModel
    :members:
    :show-inheritance:
 

@@ -48,9 +48,9 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
-    SpectroscopyConfig,
+    Spectroscopy,
     Uniform,
     load_ssp_data,
 )
@@ -96,7 +96,7 @@ ssp_data = load_ssp_data(
 #
 # The `Observation` class bundles photometry and spectroscopy into a single
 # declarative object. Pass `Photometry` for broadband filters and
-# `SpectroscopyConfig` for the wavelength grid and instrument settings.
+# `Spectroscopy` for the wavelength grid and instrument settings.
 # The model will produce predictions for both in a single forward pass.
 
 # %%
@@ -106,7 +106,7 @@ obs = Observation(
     photometry=Photometry.from_names(
         ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
     ),
-    spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS, resolution=100),
+    spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, resolution=100),
 )
 
 print(obs.summary())
@@ -121,7 +121,7 @@ print(f"n_data:   {obs.n_data}  ({obs.n_data_phot} phot + {obs.n_data_spec} spec
 # parameters produce both data vectors simultaneously.
 
 # %%
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -303,7 +303,7 @@ result_phot = fitter_phot.run("map", n_steps=500, verbose=False)
 
 # Spectroscopy-only model and fit
 obs_spec = Observation(
-    spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS, resolution=100),
+    spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, resolution=100),
 )
 model_spec = Model(spec, ssp_data, observation=obs_spec)
 fitter_spec = Fitter(model_spec, mock_spec.flux_obs, mock_spec.noise)
@@ -358,7 +358,7 @@ k_post, k_lap, k_pf = jax.random.split(jax.random.PRNGKey(99), 3)
 
 t0 = time.perf_counter()
 result_geovi = fitter.run(
-    "native_geovi", key=k_post,
+    "vi", key=k_post,
     n_iterations=15, n_samples=6, n_seeds=5,
     n_posterior_samples=2000, verbose=False,
 )
@@ -396,7 +396,7 @@ truths_dict = {p: float(true_params[p]) for p in spec.free_params}
 
 fig = plot_corner_comparison(
     [result_laplace, result_geovi],
-    labels=["Laplace", "native_geovi"],
+    labels=["Laplace", "vi"],
     colors=[COLORS["laplace"], COLORS["geovi"]],
     truths=truths_dict,
 )
@@ -413,12 +413,12 @@ plt.show()
 k_phot_vi, k_spec_vi = jax.random.split(jax.random.PRNGKey(77), 2)
 
 result_geovi_phot = fitter_phot.run(
-    "native_geovi", key=k_phot_vi,
+    "vi", key=k_phot_vi,
     n_iterations=15, n_samples=6, n_seeds=5,
     n_posterior_samples=2000, verbose=False,
 )
 result_geovi_spec = fitter_spec.run(
-    "native_geovi", key=k_spec_vi,
+    "vi", key=k_spec_vi,
     n_iterations=15, n_samples=6, n_seeds=5,
     n_posterior_samples=2000, verbose=False,
 )

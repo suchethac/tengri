@@ -21,7 +21,7 @@ from tengri.models.observation.eline_priors import (
     cloudy_line_priors,
     marginalize_emission_lines_cloudy,
 )
-from tengri.models.observation.noise_config import NoiseConfig
+from tengri.models.observation.noise_config import NoiseConfig, NoiseModel
 from tengri.models.observation.observation import Observation
 from tengri.models.observation.photometry_config import Photometry
 from tengri.models.observation.spectroscopy import (
@@ -31,7 +31,7 @@ from tengri.models.observation.spectroscopy import (
     nirspec_g140m_resolution,
     nirspec_prism_resolution,
 )
-from tengri.models.observation.spectroscopy_config import SpectroscopyConfig
+from tengri.models.observation.spectroscopy_config import Spectroscopy, SpectroscopyConfig
 
 __all__ = [
     "CLOUDY_LINE_NAMES",
@@ -40,8 +40,10 @@ __all__ = [
     "DEFAULT_LINE_WAVELENGTHS",
     "SSP_LIBRARY_RESOLUTIONS",
     "NoiseConfig",
+    "NoiseModel",
     "Observation",
     "Photometry",
+    "Spectroscopy",
     "SpectroscopyConfig",
     "apply_calibration",
     "apply_lsf",

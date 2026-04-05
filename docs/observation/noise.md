@@ -1,6 +1,6 @@
 # Noise Model
 
-The `NoiseModel` class (formerly `NoiseConfig`) configures the noise model for the likelihood. By default,
+The `NoiseModel` class (the canonical name; `NoiseConfig` is a deprecated alias) configures the noise model for the likelihood. By default,
 tengri uses a standard Gaussian likelihood --- `NoiseModel` is only needed when you
 want a calibration floor or a heavy-tailed likelihood.
 
@@ -83,7 +83,7 @@ obs = Observation(
 
 ## How noise parameters flow into Parameters
 
-When an `Observation` with a `NoiseModel` is passed to `SEDModel`, the parameters
+When an `Observation` with a `NoiseModel` is passed to `Model`, the parameters
 are automatically generated and merged into `Parameters`:
 
 | `NoiseModel` setting | Generated parameter | Type |
@@ -102,5 +102,5 @@ obs.get_all_params()
 :::{note}
 You do not need to add `noise_frac_cal` or `noise_dof` to `Parameters` manually.
 The `Observation` handles this automatically via `obs.get_all_params()`, which is
-called during `SEDModel.__init__`.
+called during `Model.__init__`.
 :::

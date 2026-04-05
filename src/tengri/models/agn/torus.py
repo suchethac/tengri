@@ -22,6 +22,8 @@ References
 - Draine 2003, ARA&A, 41, 241 (silicate opacity)
 """
 
+import warnings
+
 import jax.numpy as jnp
 
 from tengri.models.agn._phys import (
@@ -85,6 +87,13 @@ def simple_torus(
     array, shape (n_wave,)
         Specific luminosity L_nu [Lsun Hz^-1].
     """
+    warnings.warn(
+        "simple_torus is a toy model (single-temperature MBB, not radiative transfer) "
+        "and should NOT be used for science. Use skirtor_analytic from "
+        "tengri.models.agn.skirtor for production work.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
     nu = _wavelength_to_nu(wavelength)
 
@@ -159,6 +168,13 @@ def two_temperature_torus(
     array, shape (n_wave,)
         Specific luminosity L_nu [Lsun Hz^-1].
     """
+    warnings.warn(
+        "two_temperature_torus is a toy model (two-temperature MBB, not radiative transfer) "
+        "and should NOT be used for science. Use skirtor_analytic from "
+        "tengri.models.agn.skirtor for production work.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
     nu = _wavelength_to_nu(wavelength)
 

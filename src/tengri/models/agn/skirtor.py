@@ -451,14 +451,11 @@ def skirtor_analytic(*args, **kwargs):
 
     This function uses the tabulated Stalevski+2016 template grid
     (data/skirtor_templates.npz) with 5D multilinear interpolation.
-    If templates are not found, falls back to a 3-temperature analytic
-    approximation with a warning.
 
     See ``create_skirtor_from_grid`` for parameters.
     """
     global _skirtor_default
     if _skirtor_default is None:
-        import warnings
         from pathlib import Path
 
         for candidate in [
@@ -471,13 +468,11 @@ def skirtor_analytic(*args, **kwargs):
                 _skirtor_default = create_skirtor_from_grid(str(candidate))
                 break
         if _skirtor_default is None:
-            warnings.warn(
-                "SKIRTOR templates not found. Falling back to 3-temperature "
-                "analytic approximation (NOT suitable for science — "
-                "hand-tuned blackbodies, not radiative transfer). "
+            raise FileNotFoundError(
+                "SKIRTOR templates not found (skirtor_templates_v2.h5 or skirtor_templates.npz). "
+                "The analytic fallback has been removed because it produced scientifically "
+                "incorrect results (3-temperature MBB, not radiative transfer). "
                 "Download from: https://sites.google.com/site/skirtorus/sed-library "
-                "or run: python scripts/download_skirtor_templates.py",
-                stacklevel=2,
+                "or run: python scripts/download_skirtor_templates.py"
             )
-            _skirtor_default = _skirtor_analytic_fallback
     return _skirtor_default(*args, **kwargs)

@@ -296,7 +296,7 @@ plt.show()
 # 1. **Sampled** as free parameters with Gaussian priors (adds $N_{\rm poly}$
 #    dimensions to the posterior):
 #    ```python
-#    spec = ParamSpec(cal_c1=Gaussian(0, 0.1), cal_c2=Gaussian(0, 0.1), ...)
+#    spec = Parameters(cal_c1=Gaussian(0, 0.1), cal_c2=Gaussian(0, 0.1), ...)
 #    ```
 #
 # 2. **Marginalized analytically** via `marginalize_calibration()` in a

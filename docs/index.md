@@ -55,7 +55,7 @@ Any SSP template set can be used — the only requirement is the DSPS HDF5 schem
 └─────────────────────────────────────────────────────────┘
 ```
 
-**Parameters** declares the free parameters and their priors (SFH shape, dust, metallicity, redshift). **SSP grid** holds the pre-computed stellar population spectra (any DSPS-compatible HDF5 file). **SEDModel** combines them into a differentiable forward model that maps physical parameters to predicted photometry or spectra. **Fitter** runs inference (MAP, VI, MCMC) and returns a **Posterior** with posterior samples, summary statistics, and convergence diagnostics.
+**Parameters** declares the free parameters and their priors (SFH shape, dust, metallicity, redshift). **SSP grid** holds the pre-computed stellar population spectra (any DSPS-compatible HDF5 file). **Model** combines them into a differentiable forward model that maps physical parameters to predicted photometry or spectra. **Fitter** runs inference (MAP, VI, MCMC) and returns a **Posterior** with posterior samples, summary statistics, and convergence diagnostics.
 
 ## Start here
 
@@ -72,7 +72,7 @@ Any SSP template set can be used — the only requirement is the DSPS HDF5 schem
 ## Quick start
 
 ```python
-from tengri import Model, ParamSpec, Fitter, Uniform, Gaussian
+from tengri import Model, Parameters, Fitter, Uniform, Gaussian
 from tengri import Observation, Photometry, load_ssp_data
 
 ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
@@ -80,7 +80,7 @@ obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
     sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
     sfh_tsnorm_width_gyr=Uniform(0.5, 5),

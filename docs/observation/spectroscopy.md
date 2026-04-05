@@ -1,6 +1,6 @@
 # Spectroscopy
 
-The `Spectroscopy` class (formerly `SpectroscopyConfig`) declares the spectroscopic instrument: wavelength grid,
+The `Spectroscopy` class (the canonical name; `SpectroscopyConfig` is a deprecated alias) declares the spectroscopic instrument: wavelength grid,
 resolution profile, calibration polynomial, and emission-line marginalization settings.
 
 ```python

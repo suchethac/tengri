@@ -48,7 +48,7 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
     Uniform,
     load_ssp_data,
@@ -151,7 +151,7 @@ if HAS_DATA:
 
 # %%
 if HAS_DATA:
-    spec = ParamSpec(
+    spec = Parameters(
         sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -195,7 +195,7 @@ if HAS_DATA:
 
     t0_run = time.perf_counter()
     result_sdss = fitter.run(
-        "native_geovi", n_iterations=10, n_samples=6, n_seeds=3, verbose=False
+        "vi", n_iterations=10, n_samples=6, n_seeds=3, verbose=False
     )
     t_run = time.perf_counter() - t0_run
 
@@ -353,7 +353,7 @@ if HAS_DATA:
 # %%
 if HAS_DATA:
     # Free-redshift model
-    spec_free_z = ParamSpec(
+    spec_free_z = Parameters(
         sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),

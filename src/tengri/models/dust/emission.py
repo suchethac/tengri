@@ -49,11 +49,9 @@ References
 - Jones et al. 2017, A&A, 602, A46 (THEMIS dust model)
 """
 
-import warnings
 from collections.abc import Callable
 from pathlib import Path
 
-import jax
 import jax.numpy as jnp
 
 # ===================================================================
@@ -1411,24 +1409,7 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
         # Interpolate normalized template onto target wavelength grid
         sed = jnp.interp(wavelength_aa, tmpl_wave, template_norm, left=0.0, right=0.0)
 
-        # Fallback: if template is zero (e.g. qpah beyond valid grid range),
-        # use the analytic approximation to avoid returning all-zero SED.
-        sed_fallback = _draine_li2014_analytic_fallback(
-            wavelength_aa,
-            L_absorbed,
-            dust_umin=dust_umin,
-            dust_gamma_dl=dust_gamma_dl,
-            dust_qpah=dust_qpah,
-            dust_alpha_dl14=dust_alpha_dl14,
-        )
-        template_max = jnp.max(jnp.abs(template))
-        sed_out = jax.lax.cond(
-            template_max < 1e-20,
-            lambda: sed_fallback,
-            lambda: L_absorbed * sed,
-        )
-
-        return sed_out
+        return L_absorbed * sed
 
     return dl14_tabulated
 
@@ -2721,7 +2702,6 @@ def _make_lazy_loader(
     name: str,
     template_filename: str,
     loader_fn_name: str,
-    fallback_fn: Callable,
 ) -> Callable:
     """Create a lazy-loading wrapper that auto-loads templates on first call.
 
@@ -2733,8 +2713,6 @@ def _make_lazy_loader(
         Filename to search for in data/ (e.g. ``"dl07_templates.npz"``).
     loader_fn_name : str
         Name of the ``create_*_from_grid`` function in this module.
-    fallback_fn : Callable
-        The analytic fallback function.
     """
 
     def _lazy_wrapper(*args, **kwargs):
@@ -2744,29 +2722,17 @@ def _make_lazy_loader(
             h5_name = template_filename.rsplit(".", 1)[0] + ".h5"
             path = _find_data_file(h5_name) or _find_data_file(template_filename)
             if path is not None:
-                try:
-                    loader = globals()[loader_fn_name]
-                    tabulated = loader(path)
-                    DUST_EMISSION_MODELS[name] = tabulated
-                    return tabulated(*args, **kwargs)
-                except Exception as e:
-                    warnings.warn(
-                        f"Failed to load {template_filename}: {e}. "
-                        f"Falling back to analytic {name} (NOT suitable for "
-                        f"science — crude analytic approximation).",
-                        stacklevel=2,
-                    )
-                    DUST_EMISSION_MODELS[name] = fallback_fn
+                loader = globals()[loader_fn_name]
+                tabulated = loader(path)
+                DUST_EMISSION_MODELS[name] = tabulated
+                return tabulated(*args, **kwargs)
             else:
-                warnings.warn(
+                raise FileNotFoundError(
                     f"Template file '{template_filename}' not found in data/. "
-                    f"Falling back to analytic {name} (NOT suitable for "
-                    f"science — crude analytic approximation with hand-tuned "
-                    f"temperatures). Download templates or set the path "
-                    f"manually via register_*_tabulated().",
-                    stacklevel=2,
+                    f"The analytic fallback for {name} has been removed because it "
+                    f"produced scientifically incorrect results. Download templates "
+                    f"or register manually via register_*_tabulated()."
                 )
-                DUST_EMISSION_MODELS[name] = fallback_fn
         return DUST_EMISSION_MODELS[name](*args, **kwargs)
 
     _lazy_wrapper.__name__ = name
@@ -2792,27 +2758,17 @@ def _dl07_lazy_wrapper(*args, **kwargs):
         _resolved.add("draine_li2007")
         path = _find_dl07_templates()
         if path is not None:
-            try:
-                tabulated = create_dl07_from_grid(path)
-                DUST_EMISSION_MODELS["draine_li2007"] = tabulated
-                DUST_EMISSION_MODELS["dl07_tabulated"] = tabulated
-                return tabulated(*args, **kwargs)
-            except Exception as e:
-                warnings.warn(
-                    f"Failed to load DL07 templates: {e}. "
-                    f"Falling back to analytic DL07 (NOT suitable for "
-                    f"science — crude single-Gaussian PAH approximation).",
-                    stacklevel=2,
-                )
-                DUST_EMISSION_MODELS["draine_li2007"] = _draine_li2007_analytic_fallback
+            tabulated = create_dl07_from_grid(path)
+            DUST_EMISSION_MODELS["draine_li2007"] = tabulated
+            DUST_EMISSION_MODELS["dl07_tabulated"] = tabulated
+            return tabulated(*args, **kwargs)
         else:
-            warnings.warn(
-                "DL07 template files (dl07_templates.npz/.h5) not found "
-                "in data/. Falling back to analytic DL07 (NOT suitable "
-                "for science). Run: python scripts/convert_dl07_templates.py",
-                stacklevel=2,
+            raise FileNotFoundError(
+                "DL07 template files (dl07_templates.npz/.h5) not found in data/. "
+                "The analytic fallback has been removed because it produced "
+                "scientifically incorrect results (single-Gaussian PAH approximation). "
+                "Run: python scripts/convert_dl07_templates.py"
             )
-            DUST_EMISSION_MODELS["draine_li2007"] = _draine_li2007_analytic_fallback
     return DUST_EMISSION_MODELS["draine_li2007"](*args, **kwargs)
 
 
@@ -2824,36 +2780,26 @@ DUST_EMISSION_MODELS["dale2014"] = _make_lazy_loader(
     "dale2014",
     "dale2014_templates.npz",
     "create_dale2014_from_grid",
-    _dale2014_analytic_fallback,
 )
 
 
 # --- DL14: tries dl14_templates_v2.h5 (improved grid) before dl14_templates.h5 ---
 def _dl14_lazy_wrapper(*args, **kwargs):
-    """Lazy loader for DL14: prioritizes v2 grid, falls back to legacy, then analytic."""
+    """Lazy loader for DL14: prioritizes v2 grid, falls back to legacy grid."""
     global _dl14_fn
     if _dl14_fn is None:
         for fname in ("dl14_templates_v2.h5", "dl14_templates.h5"):
             path = _find_data_file(fname)
             if path is not None:
-                try:
-                    _dl14_fn = create_dl14_from_grid(path)
-                    DUST_EMISSION_MODELS["draine_li2014"] = _dl14_fn
-                    break
-                except Exception as e:
-                    import warnings
-
-                    warnings.warn(f"Failed to load DL14 from {fname}: {e}", stacklevel=2)
+                _dl14_fn = create_dl14_from_grid(path)
+                DUST_EMISSION_MODELS["draine_li2014"] = _dl14_fn
+                break
         if _dl14_fn is None:
-            import warnings
-
-            warnings.warn(
+            raise FileNotFoundError(
                 "DL14 template files not found (dl14_templates_v2.h5 or dl14_templates.h5). "
-                "Falling back to analytic draine_li2014 (NOT suitable for science).",
-                stacklevel=2,
+                "The analytic fallback has been removed because it produced scientifically "
+                "incorrect results. Run: python scripts/download_dl14_templates.py"
             )
-            _dl14_fn = _draine_li2014_analytic_fallback
-            DUST_EMISSION_MODELS["draine_li2014"] = _dl14_fn
     return _dl14_fn(*args, **kwargs)
 
 
@@ -2866,7 +2812,6 @@ DUST_EMISSION_MODELS["astrodust"] = _make_lazy_loader(
     "astrodust",
     "astrodust_templates.npz",
     "create_astrodust_from_grid",
-    _astrodust_analytic_fallback,
 )
 
 
@@ -2875,7 +2820,6 @@ DUST_EMISSION_MODELS["bosa"] = _make_lazy_loader(
     "bosa",
     "bosa_templates.npz",
     "create_bosa_from_grid",
-    _bosa_analytic_fallback,
 )
 
 
@@ -2884,7 +2828,6 @@ DUST_EMISSION_MODELS["themis"] = _make_lazy_loader(
     "themis",
     "themis_templates.npz",
     "create_themis_from_grid",
-    _themis_analytic_fallback,
 )
 
 

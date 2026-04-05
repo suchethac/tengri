@@ -36,7 +36,7 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
     Uniform,
     load_ssp_data,
@@ -76,7 +76,7 @@ WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 
 # %%
 # Good prior
-spec_good = ParamSpec(
+spec_good = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -182,7 +182,7 @@ plt.show()
 
 # %%
 # Bad prior: dust way too wide
-spec_bad = ParamSpec(
+spec_bad = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -245,7 +245,7 @@ plt.show()
 # How do PSD priors affect the burstiness range?
 
 # %%
-spec_stoch = ParamSpec(
+spec_stoch = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),

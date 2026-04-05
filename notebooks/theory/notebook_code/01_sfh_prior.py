@@ -1098,6 +1098,7 @@ plt.show()
 #   H-alpha + UV) can constrain multiple timescales simultaneously.
 
 # %% [markdown]
+#
 
 # %% [markdown]
 # ## Physical Interpretation

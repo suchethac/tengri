@@ -45,7 +45,7 @@ from tengri import (
     Fitter,
     Fixed,
     Model,
-    ParamSpec,
+    Parameters,
     Uniform,
     load_filter_set,
     load_ssp_data,
@@ -87,7 +87,7 @@ ssp_data = load_ssp_data(
 )
 filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -167,7 +167,7 @@ print(f"Pathfinder: {timings['Pathfinder']:.1f}s")
 # %%
 t0 = time.perf_counter()
 result_ess = fitter.run(
-    "elliptical_slice", init_from=result_map,
+    "mcmc_ess", init_from=result_map,
     n_samples=5000, n_burnin=500, verbose=False,
 )
 timings["ESS"] = time.perf_counter() - t0
@@ -181,14 +181,14 @@ fitter.compile(verbose=False)
 
 t0 = time.perf_counter()
 result_geovi = fitter.run(
-    "native_geovi", n_iterations=15, n_samples=6, n_seeds=5,
+    "vi", n_iterations=15, n_samples=6, n_seeds=5,
     n_posterior_samples=5000, verbose=False,
 )
 timings["geoVI"] = time.perf_counter() - t0
 
 t0 = time.perf_counter()
 result_nuts = fitter.run(
-    "nuts", n_warmup=500, n_samples=5000,
+    "mcmc_nuts", n_warmup=500, n_samples=5000,
     init_from=result_map, verbose=False,
 )
 timings["NUTS"] = time.perf_counter() - t0
@@ -447,14 +447,14 @@ plt.show()
 # %%
 t0 = time.perf_counter()
 result_nuts_cold = fitter.run(
-    "nuts", n_warmup=500, n_samples=2000, verbose=False,
+    "mcmc_nuts", n_warmup=500, n_samples=2000, verbose=False,
 )
 t_cold = time.perf_counter() - t0
 
 t0 = time.perf_counter()
 result_pf_init = fitter.run("pathfinder", n_samples=100, maxiter=20, verbose=False)
 result_nuts_warm = fitter.run(
-    "nuts", n_warmup=200, n_samples=2000, init_from=result_pf_init, verbose=False,
+    "mcmc_nuts", n_warmup=200, n_samples=2000, init_from=result_pf_init, verbose=False,
 )
 t_warm = time.perf_counter() - t0
 
@@ -466,7 +466,7 @@ print(f"Speedup: {t_cold / t_warm:.1f}x")
 # ## 13. Stochastic Model (D ~ 137)
 
 # %%
-spec_stoch = ParamSpec(
+spec_stoch = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -505,7 +505,7 @@ timings_s = {}
 
 t0 = time.perf_counter()
 result_ess_s = fitter_stoch.run(
-    "elliptical_slice", init_from=result_map_s,
+    "mcmc_ess", init_from=result_map_s,
     n_samples=2000, n_burnin=500, verbose=False,
 )
 timings_s["ESS"] = time.perf_counter() - t0
@@ -513,7 +513,7 @@ timings_s["ESS"] = time.perf_counter() - t0
 fitter_stoch.compile(verbose=False)
 t0 = time.perf_counter()
 result_geovi_s = fitter_stoch.run(
-    "native_geovi", n_iterations=20, n_samples=6, n_seeds=5,
+    "vi", n_iterations=20, n_samples=6, n_seeds=5,
     n_posterior_samples=2000, verbose=False,
 )
 timings_s["geoVI"] = time.perf_counter() - t0
@@ -521,7 +521,7 @@ timings_s["geoVI"] = time.perf_counter() - t0
 # RT: step_size=0.03, n_leapfrog=100 for D~137
 t0 = time.perf_counter()
 result_rt_s = fitter_stoch.run(
-    "raytrace", init_from=result_map_s,
+    "mcmc_raytrace", init_from=result_map_s,
     n_burnin=200, n_steps=2000,
     step_size=0.03, n_leapfrog_steps=100,
     verbose=False,

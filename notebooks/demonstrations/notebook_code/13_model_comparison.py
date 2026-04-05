@@ -49,7 +49,7 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
     Uniform,
     load_ssp_data,
@@ -108,7 +108,7 @@ obs = Observation(
 
 # %%
 # --- Model A: Double power law (simple, 5 free params) ---
-spec_A = ParamSpec(
+spec_A = Parameters(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
@@ -122,7 +122,7 @@ spec_A = ParamSpec(
 model_A = Model(spec_A, ssp_data, observation=obs)
 
 # --- Model B: Truncated skew-normal (complex, 7 free params) ---
-spec_B = ParamSpec(
+spec_B = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -160,7 +160,7 @@ print(f"Mock photometry: {len(mock.flux_obs)} bands, SNR ≈ 20")
 # %% [markdown]
 # ## Running NSS
 #
-# NSS is invoked via `fitter.run("nss")`. Key parameters:
+# NSS is invoked via `fitter.run("evidence")`. Key parameters:
 #
 # | Parameter | Default | Description |
 # |-----------|---------|-------------|
@@ -179,7 +179,7 @@ fitter_B = Fitter(model_B, mock.flux_obs, mock.noise)
 
 print("Running NSS on Model A (double power law)...")
 result_A = fitter_A.run(
-    "nss",
+    "evidence",
     n_live=500,
     num_delete=50,
     key=jax.random.PRNGKey(0),
@@ -188,7 +188,7 @@ result_A = fitter_A.run(
 # %%
 print("\nRunning NSS on Model B (truncated skew-normal)...")
 result_B = fitter_B.run(
-    "nss",
+    "evidence",
     n_live=500,
     num_delete=50,
     key=jax.random.PRNGKey(0),
@@ -309,7 +309,7 @@ t_compile_geovi = time.perf_counter() - t0_compile_geovi
 
 t0_run_geovi = time.perf_counter()
 result_geovi_A = fitter_A.run(
-    "native_geovi",
+    "vi",
     n_iterations=15,
     n_samples=6,
     n_seeds=3,
@@ -326,7 +326,7 @@ print(f"  NSS wall time: {result_A.wall_time_s:.1f}s")
 # --- FIGURE 3: NSS vs geoVI corner comparison ---
 fig = plot_corner_comparison(
     [result_A, result_geovi_A],
-    labels=["NSS", "native_geovi"],
+    labels=["NSS", "vi"],
     colors=[COLORS["rt"], COLORS["geovi"]],
     truths=true_params_A,
 )

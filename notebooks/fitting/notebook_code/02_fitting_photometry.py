@@ -37,7 +37,7 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
     Uniform,
     load_ssp_data,
@@ -75,7 +75,7 @@ obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
 )
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -133,7 +133,7 @@ _ = fitter_single.run("map", n_steps=300, verbose=False)
 
 t0 = time.perf_counter()
 res_single = fitter_single.run(
-    "native_geovi",
+    "vi",
     n_iterations=8,
     n_samples=6,
     n_seeds=3,
@@ -192,7 +192,7 @@ for i in range(min(10, N_CAT)):
     fitter_i = Fitter(model, mocks[i].flux_obs, mocks[i].noise)
     _ = fitter_i.run("map", n_steps=500, verbose=False)
     res_i = fitter_i.run(
-        "native_geovi",
+        "vi",
         n_iterations=8,
         n_samples=6,
         n_seeds=3,
@@ -263,7 +263,7 @@ print(f"\nvmap photometry for 1000 galaxies: {t_batch:.1f} ms")
 # ---
 # ## A. Photometry Precomputation (21.6× Speedup)
 #
-# When `redshift=Fixed(...)` is set in ParamSpec **and** photometry filters
+# When `redshift=Fixed(...)` is set in Parameters **and** photometry filters
 # are present, `Model` automatically precomputes SSP fluxes through the
 # filter set at initialization time. Subsequent calls to `predict_photometry`
 # skip this integration entirely — the SSP×filter integrals are cached.
@@ -290,7 +290,7 @@ t_precomputed = (time.perf_counter() - t0) / 100 * 1e6
 print(f"Precomputed photometry: {t_precomputed:.1f} μs per call")
 
 # Baseline without precomputation — free redshift disables the cache
-spec_nopre = ParamSpec(
+spec_nopre = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -383,7 +383,7 @@ galaxy_list = [{"flux_obs": m.flux_obs, "noise": m.noise} for m in mocks[:10]]
 fitter_batch = Fitter(model, galaxy_list[0]["flux_obs"], galaxy_list[0]["noise"])
 batch_results = fitter_batch.fit_batch(
     galaxy_list,
-    method="geovi",
+    method="vi",
     n_iterations=8,
     n_samples=6,
     n_seeds=2,
@@ -443,7 +443,7 @@ plt.show()
 #
 # | Technique | Speedup | When active |
 # |-----------|---------|-------------|
-# | Photometry precomputation | 21.6× | `redshift=Fixed(...)` in ParamSpec |
+# | Photometry precomputation | 21.6× | `redshift=Fixed(...)` in Parameters |
 # | Fused JIT kernels | ~2.5× | Always (standard Model) |
 # | vmap batch forward | Near-linear | `jax.vmap(model.predict_photometry)` |
 # | `fit_batch` | Sequential | Full posterior per galaxy in catalog |

@@ -37,7 +37,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri import Fixed, Model, Observation, ParamSpec, Photometry, Uniform, load_ssp_data
+from tengri import Fixed, Model, Observation, Parameters, Photometry, Uniform, load_ssp_data
 from tengri.models.igm import igm_transmission
 
 import sys, os  # noqa: E401
@@ -71,8 +71,8 @@ if os.path.exists(_ssp_path):
     _ssp = load_ssp_data(_ssp_path)
     wave_rest = jnp.array(_ssp.ssp_wave)
     # Luminosity-weighted SED: weights peak at ~1 Gyr (typical intermediate-age galaxy)
-    _ages_gyr = jnp.array(_ssp.ssp_age) / 1e9
-    _weights = jnp.exp(-0.5 * (jnp.log10(_ages_gyr + 0.01) - 0.0) ** 2)
+    _ages_gyr = 10 ** jnp.array(_ssp.ssp_lg_age_gyr)
+    _weights = jnp.exp(-0.5 * (jnp.array(_ssp.ssp_lg_age_gyr) - 0.0) ** 2)
     _weights = _weights / _weights.sum()
     # Use solar-metallicity SSPs (index 3 ~ [Z/H]≈0 for MILES)
     sed_stellar = jnp.einsum("a,wa->w", _weights, _ssp.ssp_flux[3])

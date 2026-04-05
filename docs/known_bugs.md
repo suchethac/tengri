@@ -30,7 +30,7 @@
 
 | ID | Description | Status |
 |----|-------------|--------|
-| IMP-01 | AGN torus toy models (MBB, not RT) | NOT FIXED — explicit toy; use SKIRTOR |
+| IMP-01 | AGN torus toy models (MBB, not RT) | FIXED 2026-04-04 — `DeprecationWarning` added to both functions |
 | IMP-02 | Feltre+2016 NLR backend | NOT FIXED — `NotImplementedError` stub |
 | IMP-03 | `eline_mode="fitted"` | NOT FIXED — `NotImplementedError` stub |
 | IMP-04 | Dust emission analytic fallbacks — dead code | PARTIALLY FIXED — `fallback_fn` param removed from `_make_lazy_loader`; fallback functions retained (still used in notebooks/crossval) |
@@ -176,15 +176,13 @@ def test_cloudy_marg_lnl_varies_with_prior_mean():
 
 These are not numerical bugs but missing or placeholder implementations that produce wrong or no results for the advertised feature. The same fix rules apply: read the reference, write a regression test, cite the source.
 
-### IMP-01: AGN torus — toy MBB models (NOT FIXED)
+### IMP-01: AGN torus — toy MBB models (FIXED 2026-04-04)
 
 **File:** `src/tengri/models/agn/torus.py`
 **Functions:** `simple_torus`, `two_temperature_torus`
-**Status:** Both are explicitly flagged as toy models in the module docstring: "1-2 temperature modified blackbodies. NOT radiative transfer. Should NOT be used for science." They exist only for fast prototyping and unit testing.
-**Impact:** Any pipeline using `dust_emission_model="simple_torus"` or `"two_temperature_torus"` will produce an IR SED that bears no physical resemblance to real torus emission. The silicate feature at 9.7 μm is crudely approximated with a single Gaussian opacity term.
-**Fix:** Replace with SKIRTOR tabulated templates (`skirtor_analytic`, which now raises `FileNotFoundError` if templates are absent). CLUMPY (Nenkova+2008) would be an alternative; no implementation exists yet.
+**Fix:** Both functions now emit `DeprecationWarning` at call time, directing users to `skirtor_analytic`. Regression tests in `tests/unit/test_torus_deprecation.py` (8 tests) verify: warning is emitted, message mentions `skirtor_analytic`, output is still finite/non-negative, shape differs from featureless MBB (silicate opacity present).
+**Note:** The toy models still exist for testing and fast prototyping. A full RT implementation (SKIRTOR or CLUMPY) remains future work.
 **Reference:** Stalevski et al. 2012, MNRAS 420, 2756 (SKIRTOR); Nenkova et al. 2008, ApJ 685, 147 (CLUMPY).
-**Regression test required:** `test_torus_not_mbb` — assert that `simple_torus` output does not match a plain MBB at the same temperature (i.e., confirm it at least applies silicate opacity correctly). Also assert a `DeprecationWarning` is emitted.
 
 ---
 
@@ -202,9 +200,9 @@ These are not numerical bugs but missing or placeholder implementations that pro
 ### IMP-03: `eline_mode="fitted"` — `NotImplementedError` stub (NOT FIXED)
 
 **File:** `src/tengri/models/observation/spectroscopy_config.py:88`
-**Status:** `SpectroscopyConfig(eline_mode="fitted")` raises `NotImplementedError("eline_mode='fitted' (free MCMC line amplitudes) is not yet implemented.")`. The three other modes (`"off"`, `"fixed"`, `"marginalized"`) work.
+**Status:** `Spectroscopy(eline_mode="fitted")` raises `NotImplementedError("eline_mode='fitted' (free MCMC line amplitudes) is not yet implemented.")`. The three other modes (`"off"`, `"fixed"`, `"marginalized"`) work.
 **Impact:** Free-amplitude emission line fitting (where line amplitudes are explicit latent parameters sampled by MCMC/VI) is completely unavailable.
-**Fix:** Implement the fitted mode: add line amplitudes to the ParamSpec free-parameter list, include them in the forward model output, and wire them into the likelihood. The design pattern is the same as the marginalized mode minus the analytic marginalization step.
+**Fix:** Implement the fitted mode: add line amplitudes to the Parameters free-parameter list, include them in the forward model output, and wire them into the likelihood. The design pattern is the same as the marginalized mode minus the analytic marginalization step.
 **Reference:** See `observation/eline_fitting.py` for the existing design matrix and amplitude conventions.
 **Regression test required:** `test_fitted_mode_produces_posterior_line_amplitudes` — run a short inference pass with `eline_mode="fitted"` and check that line amplitude posteriors are returned with non-zero variance.
 

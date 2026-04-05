@@ -106,11 +106,11 @@ the same model configuration.
 **Compile-once-run-many.** The forward model and its gradient compile once
 on the first call. Subsequent calls reuse the compiled XLA graph.
 
-**Mixed precision.** `SEDModel(spec, ssp, forward_dtype="float32")` halves
+**Mixed precision.** `Model(spec, ssp, forward_dtype="float32")` halves
 memory usage and provides roughly 1.5x speed with less than 0.1% error.
 
 **Precomputed dust age weights.** The sigmoid of `log10(age)` used for
-birth-cloud vs diffuse dust is computed once at `SEDModel.__init__`, not per
+birth-cloud vs diffuse dust is computed once at `Model.__init__`, not per
 forward call.
 
 **Photometry precomputation.** When redshift is fixed and filters are
@@ -185,7 +185,7 @@ abs(hash(x)) % (2**31)
 
 ### No Model creation inside gradient tape
 
-`Parameters.__init__` with JAX-traced values fails. Always create `SEDModel` and
+`Parameters.__init__` with JAX-traced values fails. Always create `Model` and
 `Parameters` objects outside differentiable functions.
 
 ### JAX Metal (Apple GPU)

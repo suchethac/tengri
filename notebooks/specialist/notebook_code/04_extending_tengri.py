@@ -34,7 +34,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fixed,
     Model,
-    ParamSpec,
+    Parameters,
     Uniform,
     load_filter_set,
     load_ssp_data,
@@ -302,5 +302,5 @@ plt.show()
 # | SSP | `load_ssp_data("path")` | BPASS, C3K |
 # | Filters | `load_filter_set(names)` | JWST, HST |
 #
-# The inference code never changes — `fitter.run("native_geovi")` works
+# The inference code never changes — `fitter.run("vi")` works
 # with any combination of components.

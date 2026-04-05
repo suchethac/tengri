@@ -37,7 +37,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri import Fixed, Model, ParamSpec, load_ssp_data
+from tengri import Fixed, Model, Parameters, load_ssp_data
 from tengri.models.igm import igm_transmission, igm_transmission_patchy
 from tengri.models.nebular.shock import (
     shock_line_ratios,
@@ -466,7 +466,7 @@ SSP_WNE_PATH = Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
 if SSP_WNE_PATH.exists():
     _ssp = load_ssp_data(str(SSP_WNE_PATH))
-    _spec = ParamSpec(
+    _spec = Parameters(
         sfh_tsnorm_log_peak_sfr=Fixed(1.5),
         sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),
         sfh_tsnorm_width_gyr=Fixed(0.5),

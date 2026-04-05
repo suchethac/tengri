@@ -23,9 +23,9 @@ rather than assuming them.
 cache so that only the first galaxy pays the compile cost:
 
 ```python
-from tengri import SEDModel, Parameters, Fitter
+from tengri import Model, Parameters, Fitter
 
-model = SEDModel(spec, ssp)
+model = Model(spec, ssp)
 fitter = Fitter(model, flux_obs, noise)  # template fitter
 
 galaxies = [

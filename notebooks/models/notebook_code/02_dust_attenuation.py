@@ -1173,7 +1173,7 @@ plt.show()
 # fitting. An old, low-dust galaxy and a young, dusty galaxy can have identical
 # broadband colors in SDSS. This figure shows the degeneracy direction in
 # tau_diff vs stellar age space — the motivation for multiwavelength fitting.
-
+#
 # ## 5. Dust Parameter Degeneracies
 #
 # The age-dust degeneracy is one of the most important systematics in SED
@@ -1182,7 +1182,7 @@ plt.show()
 
 # %%
 # Additional imports needed for age-dust degeneracy section
-from tengri import Fixed, Model, Observation, ParamSpec, Photometry, Uniform, load_ssp_data
+from tengri import Fixed, Model, Observation, Parameters, Photometry, Uniform, load_ssp_data
 
 ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 
@@ -1198,7 +1198,7 @@ color_grid = np.zeros((len(tau_range), len(age_range)))
 
 for i_t, tau in enumerate(tau_range):
     for i_a, age in enumerate(age_range):
-        spec_grid = ParamSpec(
+        spec_grid = Parameters(
             sfh_tsnorm_log_peak_sfr=Fixed(1.0),
             sfh_tsnorm_peak_lbt_gyr=Fixed(float(age)),
             sfh_tsnorm_width_gyr=Fixed(2.0),
@@ -1237,3 +1237,4 @@ plt.savefig(os.path.join(FIGDIR, "03_age_dust_degeneracy.png"), bbox_inches="tig
 plt.show()
 
 # %% [markdown]
+#

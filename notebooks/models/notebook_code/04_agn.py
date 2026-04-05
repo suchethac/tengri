@@ -84,7 +84,7 @@ try:
 except ImportError:
     # unified_agn may not be exported at top-level; use unified_nlr_blr as alias
     unified_agn = unified_nlr_blr
-from tengri import Fixed, Model, ParamSpec, Uniform, load_ssp_data
+from tengri import Fixed, Model, Parameters, Uniform, load_ssp_data
 from tengri.models.agn.disc import _isco_radius
 
 try:
@@ -687,6 +687,7 @@ fig.savefig(os.path.join(FIGDIR, "17_adaf_disc.png"), dpi=150, bbox_inches="tigh
 plt.show()
 
 # %% [markdown]
+#
 
 # %% [markdown]
 # ## 2. Kubota & Done Multi-Color Disc
@@ -1330,6 +1331,7 @@ fig.savefig(os.path.join(FIGDIR, "17_nlr_emission.png"), dpi=150, bbox_inches="t
 plt.show()
 
 # %% [markdown]
+#
 
 # %% [markdown]
 # ## 5. Unified NLR/BLR Model: Type 1 vs Type 2
@@ -1537,6 +1539,7 @@ fig.savefig(os.path.join(FIGDIR, "17_covering_factor.png"), dpi=150, bbox_inches
 plt.show()
 
 # %% [markdown]
+#
 
 # %% [markdown]
 # ## 4. Galaxy + AGN SED
@@ -1548,7 +1551,7 @@ plt.show()
 ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 
 # Pure stellar SED
-spec_stellar = ParamSpec(
+spec_stellar = Parameters(
     sfh_tsnorm_log_peak_sfr=Fixed(1.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
     sfh_tsnorm_width_gyr=Fixed(2.0),

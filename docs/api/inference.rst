@@ -18,17 +18,17 @@ Posterior
    :members:
    :show-inheritance:
 
-HierarchicalFitter
-------------------
+PopulationFitter
+----------------
 
-.. autoclass:: tengri.HierarchicalFitter
+.. autoclass:: tengri.PopulationFitter
    :members:
    :show-inheritance:
 
-HierarchicalResult
-------------------
+PopulationPosterior
+-------------------
 
-.. autoclass:: tengri.HierarchicalResult
+.. autoclass:: tengri.PopulationPosterior
    :members:
    :show-inheritance:
 

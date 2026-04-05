@@ -59,8 +59,8 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
-    SpectroscopyConfig,
+    Parameters,
+    Spectroscopy,
     Uniform,
     load_ssp_data,
 )
@@ -143,7 +143,7 @@ SPECTRAL_RESOLUTION = 2000.0  # R = lambda / delta_lambda
 SNR = 30.0
 
 # Star-forming galaxy: positive skew, peak at ~3 Gyr lookback
-spec = ParamSpec(
+spec = Parameters(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
@@ -156,7 +156,7 @@ spec = ParamSpec(
 )
 
 obs = Observation(
-    spectroscopy=SpectroscopyConfig(
+    spectroscopy=Spectroscopy(
         wave_obs=WAVE_OBS,
         resolution=SPECTRAL_RESOLUTION,
     ),

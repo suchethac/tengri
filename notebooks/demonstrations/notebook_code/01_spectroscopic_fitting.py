@@ -40,12 +40,12 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
     Uniform,
     load_ssp_data,
 )
-from tengri.models.observation import SpectroscopyConfig
+from tengri.models.observation import Spectroscopy
 
 import sys, os  # noqa: E401, E402
 
@@ -87,14 +87,14 @@ WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 FILTER_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 obs_joint = Observation(
     photometry=Photometry.from_names(FILTER_NAMES),
-    spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS),
+    spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
 )
 obs_phot = Observation(photometry=Photometry.from_names(FILTER_NAMES))
-obs_spec = Observation(spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS))
+obs_spec = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS))
 
 # %%
 # Parametric model (D = 7)
-spec_param = ParamSpec(
+spec_param = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -174,7 +174,7 @@ result_map = fitter_spec.run("map", n_steps=500, verbose=False)
 
 t0 = time.perf_counter()
 result_geovi_spec = fitter_spec.run(
-    "native_geovi",
+    "vi",
     n_iterations=15,
     n_samples=6,
     n_seeds=5,
@@ -357,7 +357,7 @@ for name in spec_param.free_params:
 
 # %%
 # Stochastic model
-spec_stoch = ParamSpec(
+spec_stoch = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -401,7 +401,7 @@ _ = fitter_stoch_spec.run("map", n_steps=1000, verbose=False)
 
 t0 = time.perf_counter()
 result_stoch_spec = fitter_stoch_spec.run(
-    "native_geovi",
+    "vi",
     n_iterations=20,
     n_samples=6,
     n_seeds=5,
@@ -463,7 +463,7 @@ model_stoch_phot = Model(spec_stoch, ssp_data, observation=obs_phot)
 fitter_stoch_phot = Fitter(model_stoch_phot, mock_phot_s.flux_obs, mock_phot_s.noise)
 _ = fitter_stoch_phot.run("map", n_steps=1000, verbose=False)
 result_stoch_phot = fitter_stoch_phot.run(
-    "native_geovi",
+    "vi",
     n_iterations=20,
     n_samples=6,
     n_seeds=5,
@@ -527,7 +527,7 @@ for snr in [10, 30, 100]:
     fitter_snr = Fitter(model_param_spec, mock_snr.flux_obs, mock_snr.noise)
     _ = fitter_snr.run("map", n_steps=500, verbose=False)
     res_snr = fitter_snr.run(
-        "native_geovi",
+        "vi",
         n_iterations=15,
         n_samples=6,
         n_seeds=3,

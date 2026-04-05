@@ -40,9 +40,9 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
-    SpectroscopyConfig,
+    Spectroscopy,
     Uniform,
     load_ssp_data,
 )
@@ -96,10 +96,10 @@ REDSHIFT = 0.05  # known spectroscopic redshift
 
 obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
-    spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS),
+    spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
 )
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -165,7 +165,7 @@ fitter.compile(verbose=False)
 t_compile = time.perf_counter() - t0_c
 t0 = time.perf_counter()
 result = fitter.run(
-    "native_geovi",
+    "vi",
     n_iterations=15,
     n_samples=6,
     n_seeds=5,
@@ -214,7 +214,7 @@ plt.savefig(os.path.join(FIGDIR, "fig02_spectral_fit.png"), dpi=150, bbox_inches
 plt.show()
 
 # %%
-convergence_table({"native_geovi": result})
+convergence_table({"vi": result})
 
 # %%
 # --- Residual distribution (should be ~N(0,1) if model adequate) ---
@@ -235,7 +235,7 @@ plt.show()
 # %%
 # --- FIGURE 3: SFH posterior ---
 fig, ax = plt.subplots(figsize=(8, 4))
-plot_sfh(model, result, ax=ax, color=COLORS["geovi"], label="native_geovi", method="geoVI")
+plot_sfh(model, result, ax=ax, color=COLORS["geovi"], label="vi", method="geoVI")
 ax.set_title("Star Formation History")
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig03_sfh.png"), dpi=150, bbox_inches="tight")

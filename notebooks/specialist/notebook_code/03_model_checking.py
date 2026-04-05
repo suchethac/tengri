@@ -45,7 +45,7 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
     Uniform,
     load_filter_set,
@@ -87,7 +87,7 @@ WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 
 # %%
 # Good prior
-spec_good = ParamSpec(
+spec_good = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -211,7 +211,7 @@ plt.show()
 
 # %%
 # Bad prior: dust way too wide
-spec_bad = ParamSpec(
+spec_bad = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -285,7 +285,7 @@ plt.show()
 # by σ_PS — the amplitude of stochastic variability.
 
 # %%
-spec_stoch = ParamSpec(
+spec_stoch = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -351,7 +351,7 @@ TRUTH = {
     "redshift": 0.1,
 }
 
-spec_full = ParamSpec(
+spec_full = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -363,6 +363,9 @@ spec_full = ParamSpec(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
 )
+
+ALL_FILTERS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+all_filters = load_filter_set(ALL_FILTERS)
 
 # Generate full 5-band mock
 model_full = Model(spec_full, ssp_data, filters=all_filters)
@@ -404,7 +407,7 @@ for stage in STAGES:
     # MAP initialization
     result_map = fitter.run("map", n_steps=500, learning_rate=0.02)
     # geoVI
-    result = fitter.run("native_geovi", n_iterations=8, n_samples=4, init_from=result_map)
+    result = fitter.run("vi", n_iterations=8, n_samples=4, init_from=result_map)
     results_stages[stage["name"]] = result
     print(f"  Wall time: {result.wall_time_s:.1f}s")
 
@@ -537,7 +540,7 @@ spec_mock = model_spec.mock_spectrum(TRUTH, WAVE_OBS, snr=30.0, key=jax.random.P
 fitter_spec = Fitter(model_spec, spec_mock.flux_obs, spec_mock.noise, data_type="spectroscopy")
 result_map_spec = fitter_spec.run("map", n_steps=500, learning_rate=0.02)
 result_spec = fitter_spec.run(
-    "native_geovi",
+    "vi",
     n_iterations=8,
     n_samples=4,
     init_from=result_map_spec,

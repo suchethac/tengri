@@ -3,7 +3,7 @@
 A minimal example: five SDSS bands, from observation to inference.
 
 ```python
-from tengri import SEDModel, Parameters, Fitter, Uniform, Gaussian
+from tengri import Model, Parameters, Fitter, Uniform, Gaussian
 from tengri import Observation, Photometry, load_ssp_data
 
 # Load SSP grid
@@ -24,10 +24,10 @@ spec = Parameters(
     redshift=0.1,
 )
 
-# Build model --- observation drives filter precomputation and data_type
-model = SEDModel(spec, ssp, observation=obs)
+# Build model --- observation drives filter precomputation
+model = Model(spec, ssp, observation=obs)
 
-# Fit --- data_type is inferred from obs, no need to specify it
+# Fit
 fitter = Fitter(model, flux_obs, noise_obs)
 result = fitter.run("vi")
 print(result.summary_table())

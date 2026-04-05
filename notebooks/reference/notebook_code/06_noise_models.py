@@ -44,7 +44,7 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
     Uniform,
     load_ssp_data,
@@ -193,8 +193,8 @@ obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 )
 
-# ParamSpec with noise model
-spec_noise = ParamSpec(
+# Parameters with noise model
+spec_noise = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -208,8 +208,8 @@ spec_noise = ParamSpec(
     noise_frac_cal=Uniform(0.01, 0.2),
 )
 
-# ParamSpec without noise model (for comparison)
-spec_no_noise = ParamSpec(
+# Parameters without noise model (for comparison)
+spec_no_noise = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),

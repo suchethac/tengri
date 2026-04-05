@@ -36,9 +36,9 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
-    SpectroscopyConfig,
+    Spectroscopy,
     Uniform,
     load_ssp_data,
 )
@@ -73,10 +73,10 @@ ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 
 obs = Observation(
-    spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS),
+    spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
 )
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -109,7 +109,7 @@ fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="spectroscopy")
 t0 = time.perf_counter()
 result_map = fitter.run("map", n_steps=500, verbose=False)
 result = fitter.run(
-    "native_geovi",
+    "vi",
     n_iterations=12,
     n_samples=6,
     n_seeds=3,
@@ -185,7 +185,7 @@ print(convergence_table({"geoVI": result}, verbose=True))
 obs_phot = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 )
-spec_phot = ParamSpec(
+spec_phot = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),

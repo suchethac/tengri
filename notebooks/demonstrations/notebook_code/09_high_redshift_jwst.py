@@ -38,7 +38,7 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
     Uniform,
     load_ssp_data,
@@ -105,7 +105,7 @@ Z_HIGH = 6.0
 
 # %%
 # Stochastic model at z = 6
-spec_stoch = ParamSpec(
+spec_stoch = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.1, 1.0),  # at z=6, universe is ~1 Gyr old
     sfh_tsnorm_width_gyr=Uniform(0.05, 0.5),
@@ -124,7 +124,7 @@ spec_stoch = ParamSpec(
 model_stoch = Model(spec_stoch, ssp_data, observation=obs)
 
 # Parametric comparison model
-spec_param = ParamSpec(
+spec_param = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.1, 1.0),
     sfh_tsnorm_width_gyr=Uniform(0.05, 0.5),
@@ -220,7 +220,7 @@ t_compile_stoch = time.perf_counter() - t0_compile
 # Inference runtime (per-galaxy cost)
 t0_run = time.perf_counter()
 result_stoch = fitter_stoch.run(
-    "native_geovi",
+    "vi",
     n_iterations=15,
     n_samples=6,
     n_seeds=5,
@@ -285,7 +285,7 @@ t_compile_param = time.perf_counter() - t0_compile_p
 
 t0_run_p = time.perf_counter()
 result_param = fitter_param.run(
-    "native_geovi",
+    "vi",
     n_iterations=15,
     n_samples=6,
     n_seeds=3,

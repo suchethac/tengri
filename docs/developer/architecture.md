@@ -95,8 +95,8 @@ Each class suffix has a specific meaning — these are enforced across the codeb
 | Suffix | Meaning | Examples |
 |--------|---------|---------|
 | *(none)* | Data container / physics object | `Photometry`, `Spectroscopy`, `Observation` |
-| `Model` | A physical forward model | `SEDModel`, `NoiseModel` |
-| `Parameters` | Prior specification — what gets fitted | `Parameters` (formerly `ParamSpec`) |
+| `Model` | A physical forward model | `Model`, `NoiseModel` |
+| `Parameters` | Prior specification — what gets fitted | `Parameters` |
 | `Fitter` | Runs inference | `Fitter`, `PopulationFitter` |
 | `Posterior` | Result of inference (samples + diagnostics) | `Posterior`, `PopulationPosterior` |
 | `Config` | Static structural choice (not a fitted param) | `AGNConfig`, `VIConfig` |
@@ -118,7 +118,7 @@ depends on both `core/` and `models/`.
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  User API:  Parameters → SEDModel → Fitter → Posterior   │
+│  User API:  Parameters → Model → Fitter → Posterior   │
 ├──────────────────────────────────────────────────────┤
 │  Forward Model: SFH → SPS → Dust → Photometry       │
 ├──────────────────────────────────────────────────────┤
@@ -133,11 +133,11 @@ implements one physical component: PSD models, GP generation, mean SFH,
 dust attenuation, SPS integrals, photometry. These are `@jax.jit`-decorated,
 accept arrays and scalars, and compose via standard function calls.
 
-**Layer 2 -- Forward model.** `SEDModel` composes the low-level functions into
+**Layer 2 -- Forward model.** `Model` composes the low-level functions into
 a single differentiable pipeline (see [Data flow](#data-flow) below).
 
 **Layer 3 -- User API.** Four classes provide the high-level interface:
-`Parameters`, `SEDModel`, `Fitter`, and `Posterior`. Each has a `.summary()`
+`Parameters`, `Model`, `Fitter`, and `Posterior`. Each has a `.summary()`
 method for quick inspection.
 
 ## Core principle: full standardization

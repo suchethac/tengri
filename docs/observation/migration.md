@@ -33,7 +33,7 @@ obs = Observation(
         ["sdss_u", "sdss_g", "sdss_r"]
     ),
 )
-model = SEDModel(spec, ssp, observation=obs)
+model = Model(spec, ssp, observation=obs)
 fitter = Fitter(model, data, noise)
 ```
 ::::
@@ -70,7 +70,7 @@ obs = Observation(
         resolution=1000,
     ),
 )
-model = SEDModel(spec, ssp, observation=obs)
+model = Model(spec, ssp, observation=obs)
 fitter = Fitter(model, data, noise)
 ```
 ::::
@@ -110,7 +110,7 @@ obs = Observation(
 data = obs.pack_data(phot=phot, spec=spec)
 noise = obs.pack_data(phot=phot_n, spec=spec_n)
 
-model = SEDModel(spec, ssp, observation=obs)
+model = Model(spec, ssp, observation=obs)
 fitter = Fitter(model, data, noise)
 ```
 ::::

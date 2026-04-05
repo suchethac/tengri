@@ -26,7 +26,7 @@ ensemble. The constraint on shared parameters improves as sqrt(N).
 ## Usage
 
 ```python
-from tengri import SEDModel, Parameters, PopulationFitter, Observation, Photometry
+from tengri import Model, Parameters, PopulationFitter, Observation, Photometry
 import jax
 
 obs = Observation(photometry=Photometry.from_names(
@@ -42,7 +42,7 @@ spec = Parameters(
 ssp = ...  # load SSP data
 
 hfitter = PopulationFitter(
-    model_factory=lambda sigma, tau: SEDModel(
+    model_factory=lambda sigma, tau: Model(
         Parameters(redshift=0.1, sfh="field", dust=True),
         ssp,
         observation=obs,

@@ -37,12 +37,12 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
     Uniform,
     load_ssp_data,
 )
-from tengri.models.observation import SpectroscopyConfig
+from tengri.models.observation import Spectroscopy
 
 import sys, os  # noqa: E401
 
@@ -82,10 +82,10 @@ setup_style()
 ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 FILTER_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-obs_spec = Observation(spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS))
+obs_spec = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS))
 obs_joint = Observation(
     photometry=Photometry.from_names(FILTER_NAMES),
-    spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS),
+    spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
 )
 
 # %% [markdown]
@@ -106,7 +106,7 @@ REGIMES = [
     {"sigma": 3.0, "tau": 5, "label": "Extreme"},
 ]
 
-spec_stoch = ParamSpec(
+spec_stoch = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -178,7 +178,7 @@ for reg in REGIMES:
     fitter = Fitter(model_stoch, mock.flux_obs, mock.noise)
     _ = fitter.run("map", n_steps=1000, verbose=False)
     res = fitter.run(
-        "native_geovi",
+        "vi",
         n_iterations=15,
         n_samples=6,
         n_seeds=3,
@@ -199,7 +199,7 @@ for ax, reg in zip(axes.flat, REGIMES):
         true_params=true_p,
         ax=ax,
         color=COLORS["geovi"],
-        label="native_geovi",
+        label="vi",
         method="geoVI",
         show_mean_sfh=True,
     )
@@ -265,7 +265,7 @@ bursty_mock_ess = model_stoch.mock_spectrum(
 fitter_ess = Fitter(model_stoch, bursty_mock_ess.flux_obs, bursty_mock_ess.noise)
 _ = fitter_ess.run("map", n_steps=1000, verbose=False)
 result_ess = fitter_ess.run(
-    "elliptical_slice",
+    "mcmc_ess",
     n_samples=2000,
     n_burnin=300,
     verbose=False,
@@ -284,7 +284,7 @@ plot_sfh(
     true_params=bursty_true_p,
     ax=ax_gv,
     color=COLORS["geovi"],
-    label="native_geovi",
+    label="vi",
     method="geoVI",
     show_mean_sfh=True,
 )
@@ -343,7 +343,7 @@ print(
 
 # %%
 # Fit the "Bursty" regime mock with a PARAMETRIC model
-spec_param = ParamSpec(
+spec_param = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -370,7 +370,7 @@ bursty_mock = model_stoch.mock_spectrum(
 fitter_wrong = Fitter(model_param, bursty_mock.flux_obs, bursty_mock.noise)
 _ = fitter_wrong.run("map", n_steps=500, verbose=False)
 result_wrong = fitter_wrong.run(
-    "native_geovi",
+    "vi",
     n_iterations=15,
     n_samples=6,
     n_seeds=3,
@@ -591,7 +591,7 @@ Z_HIGH = 6.0
 
 # %%
 # Stochastic model at z = 6
-spec_stoch = ParamSpec(
+spec_stoch = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.1, 1.0),  # at z=6, universe is ~1 Gyr old
     sfh_tsnorm_width_gyr=Uniform(0.05, 0.5),
@@ -610,7 +610,7 @@ spec_stoch = ParamSpec(
 model_stoch = Model(spec_stoch, ssp_data, observation=obs)
 
 # Parametric comparison model
-spec_param = ParamSpec(
+spec_param = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.1, 1.0),
     sfh_tsnorm_width_gyr=Uniform(0.05, 0.5),
@@ -706,7 +706,7 @@ t_compile_stoch = time.perf_counter() - t0_compile
 # Inference runtime (per-galaxy cost)
 t0_run = time.perf_counter()
 result_stoch = fitter_stoch.run(
-    "native_geovi",
+    "vi",
     n_iterations=15,
     n_samples=6,
     n_seeds=5,
@@ -771,7 +771,7 @@ t_compile_param = time.perf_counter() - t0_compile_p
 
 t0_run_p = time.perf_counter()
 result_param = fitter_param.run(
-    "native_geovi",
+    "vi",
     n_iterations=15,
     n_samples=6,
     n_seeds=3,

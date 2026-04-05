@@ -40,12 +40,12 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    HierarchicalFitter,
+    PopulationFitter,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
-    SpectroscopyConfig,
+    Spectroscopy,
     Uniform,
     load_ssp_data,
 )
@@ -89,7 +89,7 @@ ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
-    spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS),
+    spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
 )
 
 # True shared PSD parameters
@@ -103,8 +103,8 @@ PHOT_SNR = 20.0
 # %%
 # Model factory for hierarchical inference
 def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
-    """Create a Model with fixed PSD — called by HierarchicalFitter."""
-    spec = ParamSpec(
+    """Create a Model with fixed PSD — called by PopulationFitter."""
+    spec = Parameters(
         sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -186,7 +186,7 @@ plt.show()
 
 # %%
 # Individual native_geovi fits with FREE PSD
-spec_free = ParamSpec(
+spec_free = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -218,7 +218,7 @@ for i in range(min(4, N_GAL)):
     t_compile = time.perf_counter() - t0_c
     t0 = time.perf_counter()
     res_i = fitter_i.run(
-        "native_geovi",
+        "vi",
         n_iterations=15,
         n_samples=6,
         n_seeds=3,
@@ -266,7 +266,7 @@ plt.show()
 # Hierarchical native_geovi on SPECTROSCOPIC data
 print(f"\nHierarchical fit: {N_GAL} galaxies (spectroscopy)...")
 t0 = time.perf_counter()
-hfitter_spec = HierarchicalFitter(
+hfitter_spec = PopulationFitter(
     model_factory,
     galaxies_spec,
     psd_sigma_prior=(0.1, 4.0),
@@ -334,7 +334,7 @@ plt.show()
 # Hierarchical native_geovi on PHOTOMETRIC data
 print(f"\nHierarchical fit: {N_GAL} galaxies (photometry)...")
 t0 = time.perf_counter()
-hfitter_phot = HierarchicalFitter(
+hfitter_phot = PopulationFitter(
     model_factory,
     galaxies_phot,
     psd_sigma_prior=(0.1, 4.0),
@@ -401,7 +401,7 @@ print("  " + "-" * 55)
 
 for n in N_VALUES:
     gals_sub = galaxies_spec[:n]
-    hf = HierarchicalFitter(
+    hf = PopulationFitter(
         model_factory,
         gals_sub,
         psd_sigma_prior=(0.1, 4.0),
@@ -486,7 +486,7 @@ for pop_name, cfg in POP_CONFIGS.items():
         gals.append({"flux_obs": mock.flux_obs, "noise": mock.noise})
 
     # Hierarchical fit
-    hf = HierarchicalFitter(
+    hf = PopulationFitter(
         model_factory,
         gals,
         psd_sigma_prior=(0.1, 4.0),

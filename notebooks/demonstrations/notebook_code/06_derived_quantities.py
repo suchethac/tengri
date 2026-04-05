@@ -37,9 +37,9 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
-    SpectroscopyConfig,
+    Spectroscopy,
     Uniform,
     load_ssp_data,
 )
@@ -75,10 +75,10 @@ ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
-    spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS),
+    spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
 )
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -113,7 +113,7 @@ fitter.compile(verbose=False)
 t_compile = time.perf_counter() - t0_c
 t0 = time.perf_counter()
 result = fitter.run(
-    "native_geovi",
+    "vi",
     n_iterations=15,
     n_samples=6,
     n_seeds=3,
@@ -126,7 +126,7 @@ print(f"native_geovi: {t_run:.1f}s <- runtime per galaxy")
 print(f"Samples: {len(list(result.samples.values())[0])}")
 
 # %%
-convergence_table({"native_geovi": result})
+convergence_table({"vi": result})
 
 # %%
 # --- SFH recovery figure ---

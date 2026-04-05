@@ -37,7 +37,7 @@ from tengri import (
     Fixed,
     Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
     Uniform,
     load_ssp_data,
@@ -75,7 +75,7 @@ obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
 )
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -133,7 +133,7 @@ _ = fitter_single.run("map", n_steps=300, verbose=False)
 
 t0 = time.perf_counter()
 res_single = fitter_single.run(
-    "native_geovi",
+    "vi",
     n_iterations=8,
     n_samples=6,
     n_seeds=3,
@@ -192,7 +192,7 @@ for i in range(min(10, N_CAT)):
     fitter_i = Fitter(model, mocks[i].flux_obs, mocks[i].noise)
     _ = fitter_i.run("map", n_steps=500, verbose=False)
     res_i = fitter_i.run(
-        "native_geovi",
+        "vi",
         n_iterations=8,
         n_samples=6,
         n_seeds=3,
