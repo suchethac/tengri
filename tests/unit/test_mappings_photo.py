@@ -12,13 +12,12 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.models.nebular._shared import _interp_index_weight, compute_qh
 from tengri.models.nebular.mappings_photo import (
     MappingsAGNGridData,
     MappingsPhotoAGNBackend,
     MappingsPhotoStellarBackend,
     MappingsStellarGridData,
-    _compute_qh,
-    _interp_index_weight,
     _interp_stellar_grid,
     _log_z_abs_to_zo,
 )
@@ -139,14 +138,14 @@ class TestComputeQH:
         # All flux above Lyman limit — Q_H should be zero
         wave = jnp.linspace(1000.0, 10000.0, 500)
         flux = jnp.ones_like(wave)
-        qh = _compute_qh(wave, flux)
+        qh = compute_qh(wave, flux)
         assert float(qh) == pytest.approx(0.0, abs=1e-10)
 
     def test_nonzero_below_lyman_limit(self):
         # Flux below 912 Å → Q_H > 0
         wave = jnp.linspace(100.0, 2000.0, 1000)
         flux = jnp.ones_like(wave)
-        qh = _compute_qh(wave, flux)
+        qh = compute_qh(wave, flux)
         assert float(qh) > 0.0
 
 
