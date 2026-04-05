@@ -55,9 +55,9 @@ class TestBackwardCompat:
         assert jnp.allclose(L_old, L_new, rtol=0.0, atol=0.0)
 
     def test_dispatcher_bell2003_matches_direct_call(self):
-        """radio_total(sfr_mode='bell2003') matches radio_sfr_bell2003."""
+        """radio_total(sfr_mode='bell2003', no ff, no AGN) matches radio_sfr_bell2003."""
         L_direct = radio_sfr_bell2003(_WAVE_RADIO, _L_IR)
-        L_dispatch = radio_total(_WAVE_RADIO, L_ir=_L_IR, L_agn_bol=0.0)
+        L_dispatch = radio_total(_WAVE_RADIO, L_ir=_L_IR, L_agn_bol=0.0, include_freefree=False)
         assert jnp.allclose(L_direct, L_dispatch, rtol=1e-12)
 
     def test_invalid_sfr_mode_raises(self):
@@ -359,9 +359,11 @@ class TestRadioTotalDispatcher:
     """radio_total correctly dispatches to all three SFR modes."""
 
     def test_bell2003_mode_zero_agn(self):
-        """With L_agn_bol=0, bell2003 total == radio_sfr_bell2003."""
+        """With L_agn_bol=0 and no ff, bell2003 total == radio_sfr_bell2003."""
         L_direct = radio_sfr_bell2003(_WAVE_RADIO, _L_IR)
-        L_via_total = radio_total(_WAVE_RADIO, L_ir=_L_IR, L_agn_bol=0.0, sfr_mode="bell2003")
+        L_via_total = radio_total(
+            _WAVE_RADIO, L_ir=_L_IR, L_agn_bol=0.0, sfr_mode="bell2003", include_freefree=False
+        )
         assert jnp.allclose(L_direct, L_via_total, rtol=1e-12)
 
     def test_delvecchio2021_mode_dispatches(self):
@@ -433,6 +435,7 @@ class TestRadioTotalDispatcher:
             L_agn_bol=1e11,
             radio_loudness=1.0,
             sfr_mode="bell2003",
+            include_freefree=False,
         )
         L_sf = radio_sfr_bell2003(wave, _L_IR)
         L_agn = radio_agn_dpl(wave, 1e11, radio_loudness=1.0)
@@ -692,8 +695,8 @@ class TestLayerConsistency:
         )
         assert jnp.allclose(total, comps["total"], rtol=1e-12)
 
-    def test_backward_compat_include_freefree_false_default(self):
-        """Default include_freefree=False must give bit-for-bit old output."""
+    def test_backward_compat_include_freefree_false(self):
+        """include_freefree=False gives synchrotron-only output (no free-free)."""
         L_old = radio_sfr_bell2003(_WAVE_RADIO, _L_IR)
-        L_new = radio_total(_WAVE_RADIO, L_ir=_L_IR, L_agn_bol=0.0)
+        L_new = radio_total(_WAVE_RADIO, L_ir=_L_IR, L_agn_bol=0.0, include_freefree=False)
         assert jnp.allclose(L_old, L_new, rtol=1e-12)
