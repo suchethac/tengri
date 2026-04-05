@@ -285,6 +285,57 @@ class TestMarginalizeEmissionLinesCloudy:
             "may indicate residual shift (prior mean) is not applied"
         )
 
+    def test_gradient_is_finite(self, mock_spectral_data):
+        """Gradient of marginalized ln_L wrt log_z must be finite.
+
+        Regression for NEW-09: ensures log_z gradient is computable and finite.
+        """
+        d = mock_spectral_data
+
+        def ln_l_fn(log_z):
+            result = marginalize_emission_lines_cloudy(
+                d["residual"],
+                d["noise"],
+                d["design_matrix"],
+                log_z=log_z,
+                neb_logU=-3.0,
+                line_wavelengths=d["line_wavelengths"],
+            )
+            return result[0]
+
+        g = jax.grad(ln_l_fn)(0.0)
+        assert jnp.isfinite(g), f"Gradient not finite: {g}"
+
+    def test_gradient_matches_finite_difference(self, mock_spectral_data):
+        """Analytic gradient must match finite-difference to 0.1% precision.
+
+        Regression for NEW-09: verifies that marginalize_emission_lines_cloudy
+        correctly handles the Gaussian prior normalization when the prior mean
+        is non-zero (i.e., when log_z != 0).
+        """
+        d = mock_spectral_data
+
+        def ln_l_fn(log_z):
+            result = marginalize_emission_lines_cloudy(
+                d["residual"],
+                d["noise"],
+                d["design_matrix"],
+                log_z=log_z,
+                neb_logU=-3.0,
+                line_wavelengths=d["line_wavelengths"],
+            )
+            return result[0]
+
+        eps = 1e-4
+        g_analytic = float(jax.grad(ln_l_fn)(0.0))
+        g_fd = float((ln_l_fn(eps) - ln_l_fn(-eps)) / (2 * eps))
+
+        rel_err = abs(g_analytic - g_fd) / (abs(g_fd) + 1e-10)
+        assert rel_err < 0.001, (
+            f"Gradient mismatch: analytic={g_analytic:.6f}, FD={g_fd:.6f}, "
+            f"relative error={rel_err:.4f}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # balmer_decrement_prior tests
