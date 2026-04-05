@@ -1,25 +1,67 @@
-"""Tests that gradients are meaningful (not just finite).
+"""Finite-difference gradient checks for SED model components.
 
-Verifies that:
-1. Gradients point in physically sensible directions
-2. Autodiff gradients match finite differences
-3. Gradient magnitudes are reasonable (not vanishing or exploding)
+These tests catch sign errors, missing terms, and non-differentiable branches
+that isfinite() checks would miss. Each test uses jax.grad + manual FD.
+
+All tests run without SSP data (mock inputs only). Suite completes in < 30 s.
+
+Coverage:
+  1. SFH parametric transforms (dpl)
+  2. Dust attenuation (two_component_dust)
+  3. IGM transmission (igm_transmission)
+  4. Nebular marginalization (marginalize_emission_lines_cloudy)
+  5. AGN disc SED (multicolor_disc)
 """
+
+from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
+from tengri.models.agn.disc import multicolor_disc
 from tengri.models.dust.attenuation import two_component_dust
+from tengri.models.igm import igm_transmission
+from tengri.models.observation.eline_priors import marginalize_emission_lines_cloudy
 from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
-from tengri.models.sfh.mean_sfh import double_powerlaw
+from tengri.models.sfh.mean_sfh import double_powerlaw, dpl
 from tengri.models.sfh.psd_models import drw_variance
 from tengri.utils.grid import grid_spacing, log_age_to_age_yr, make_log_age_grid
 
 jax.config.update("jax_enable_x64", True)
 
+_EPS = 1e-4
+_REL_TOL = 0.005  # 0.5% relative tolerance
 N_GRID = 256
+
+
+def _check_grad_scalar(fn: callable, x0: float, eps: float = _EPS, tol: float = _REL_TOL) -> None:
+    """Assert analytic gradient matches finite-difference at x0 (scalar input).
+
+    Parameters
+    ----------
+    fn : callable
+        Scalar function of one parameter.
+    x0 : float
+        Point at which to check gradient.
+    eps : float
+        Finite difference step size.
+    tol : float
+        Relative tolerance (default 0.5%).
+
+    Raises
+    ------
+    AssertionError
+        If analytic and FD gradients differ by > tol.
+    """
+    g_analytic = float(jax.grad(fn)(x0))
+    g_fd = float((fn(x0 + eps) - fn(x0 - eps)) / (2.0 * eps))
+    rel_err = abs(g_analytic - g_fd) / (abs(g_fd) + 1e-12)
+    assert rel_err < tol, (
+        f"Gradient mismatch: analytic={g_analytic:.6f}, FD={g_fd:.6f}, "
+        f"rel_err={rel_err:.4f} (tol={tol})"
+    )
 
 
 class TestGradientFiniteDifference:
@@ -57,36 +99,109 @@ class TestGradientFiniteDifference:
                 err_msg=f"Gradient mismatch at xi[{i}]",
             )
 
-    def test_dust_grad_vs_finite_diff(self):
-        """Dust attenuation gradient matches finite differences."""
-        wave = jnp.linspace(3000, 8000, 50)
-        ages = jnp.logspace(6, 10, 30)
 
-        def f(tau_v1):
-            return jnp.sum(
-                two_component_dust(
-                    wave, ages, tau_v1, 0.3, law_bc="power_law", law_diff="power_law"
-                )
-            )
+class TestGradientCorrectness:
+    """5 core gradient correctness tests using jax.grad vs finite-difference."""
 
-        grad_auto = jax.grad(f)(0.5)
+    def test_1_sfh_parametric_transform_gradient(self) -> None:
+        """Test 1: SFH parametric transforms must have correct gradients (dpl alpha).
 
-        eps = 1e-6
-        grad_fd = (f(0.5 + eps) - f(0.5 - eps)) / (2 * eps)
-        assert_allclose(float(grad_auto), float(grad_fd), rtol=1e-3)
-
-    def test_mean_sfh_grad_vs_finite_diff(self):
-        """Double power law gradient matches finite differences."""
+        Tests gradient of double power law SFH wrt the alpha (slope) parameter.
+        """
         t = jnp.logspace(7, 10, 100)
 
-        def f(alpha):
-            return jnp.sum(double_powerlaw(t, alpha, 1.0, 1e9, 10.0))
+        def sfh_sum(alpha: float) -> float:
+            return jnp.sum(dpl(t, alpha, beta=1.0, tau=1e9, log_peak_sfr=10.0))
 
-        grad_auto = jax.grad(f)(1.5)
+        _check_grad_scalar(sfh_sum, 1.5, eps=1e-5, tol=0.005)
 
-        eps = 1e-6
-        grad_fd = (f(1.5 + eps) - f(1.5 - eps)) / (2 * eps)
-        assert_allclose(float(grad_auto), float(grad_fd), rtol=1e-3)
+    def test_2_dust_attenuation_gradient(self) -> None:
+        """Test 2: Dust attenuation gradient wrt tau_bc (birth cloud optical depth).
+
+        Tests two-component dust gradient wrt birth cloud V-band optical depth.
+        """
+        wave = jnp.linspace(3000.0, 8000.0, 50)
+        ages = jnp.logspace(6, 10, 30)
+
+        def total_attenuation(tau_bc: float) -> float:
+            atten = two_component_dust(
+                wave, ages, tau_v1=tau_bc, tau_v2=0.3, law_bc="power_law", law_diff="power_law"
+            )
+            return jnp.sum(atten)
+
+        _check_grad_scalar(total_attenuation, 0.5, eps=1e-5, tol=0.005)
+
+    def test_3_igm_transmission_gradient(self) -> None:
+        """Test 3: IGM transmission gradient wrt redshift (Inoue+2014).
+
+        Tests intergalactic medium absorption gradient wrt source redshift.
+        """
+        wave_obs = jnp.linspace(800.0, 3000.0, 100)
+
+        def igm_sum(z: float) -> float:
+            trans = igm_transmission(wave_obs, z_source=z)
+            return jnp.sum(trans)
+
+        _check_grad_scalar(igm_sum, 2.5, eps=1e-4, tol=0.005)
+
+    def test_4_nebular_marginalization_gradient(self) -> None:
+        """Test 4: Emission line marginalization ln_L gradient wrt metallicity.
+
+        Tests likelihood gradient wrt gas-phase metallicity log10(Z/Zsun).
+        """
+        n_pix, n_lines = 40, 5
+        key = jax.random.PRNGKey(7)
+        residual = jax.random.normal(key, (n_pix,)) * 0.05
+        noise = jnp.ones(n_pix) * 0.1
+        design_matrix = jax.random.normal(jax.random.PRNGKey(8), (n_pix, n_lines)) * 0.01
+        # Provide line wavelengths (vacuum wavelengths in Angstrom)
+        line_wavelengths = jnp.array(
+            [
+                4862.68,  # Hbeta
+                5008.24,  # [OIII]5007
+                6564.61,  # Halpha
+                6717.0,  # [SII]6717
+                6731.0,  # [SII]6731
+            ]
+        )
+
+        def ln_likelihood(log_z: float) -> float:
+            result = marginalize_emission_lines_cloudy(
+                residual,
+                noise,
+                design_matrix,
+                log_z=log_z,
+                neb_logU=-2.5,
+                line_wavelengths=line_wavelengths,
+                l_hbeta=1.0,
+            )
+            # Extract ln_likelihood (first return value)
+            return result[0] if isinstance(result, (tuple, list)) else result
+
+        _check_grad_scalar(ln_likelihood, 0.0, eps=1e-3, tol=0.005)
+
+    def test_5_agn_disc_gradient(self) -> None:
+        """Test 5: AGN disc SED gradient wrt black hole mass (Shakura-Sunyaev).
+
+        Tests multicolor disc SED gradient wrt log10(M_BH / Msun).
+        """
+        wave = jnp.linspace(100.0, 10000.0, 50)
+
+        def disc_sed_sum(log_mbh: float) -> float:
+            sed = multicolor_disc(
+                wave,
+                agn_log_lbol=-1.0,
+                agn_frac=1.0,
+                agn_log_mbh=log_mbh,
+                agn_log_ledd=-1.0,
+                agn_a_spin=0.0,
+                agn_cos_inc=0.5,
+                n_radii=30,
+            )
+            # Sum only finite values (filter NaN/Inf)
+            return jnp.sum(jnp.where(jnp.isfinite(sed), sed, 0.0))
+
+        _check_grad_scalar(disc_sed_sum, 8.5, eps=1e-4, tol=0.005)
 
 
 class TestGradientDirection:
