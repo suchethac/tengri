@@ -38,7 +38,6 @@ import dataclasses
 import warnings
 from typing import ClassVar, NamedTuple
 
-import jax
 import jax.numpy as jnp
 
 from tengri.core.fused_kernels import (
@@ -1774,114 +1773,33 @@ class Model:
     # -------------------------------------------------------------------
 
     def mock(self, params, snr=20.0, key=None):
-        """Generate mock photometric observation."""
-        flux_true = self.predict_photometry(params)
-        noise = flux_true / snr
+        from tengri.core.convenience import mock as _fn
 
-        if key is not None:
-            flux_obs = flux_true + noise * jax.random.normal(key, shape=flux_true.shape)
-        else:
-            flux_obs = flux_true
-
-        return MockData(
-            flux_true=flux_true,
-            flux_obs=flux_obs,
-            noise=noise,
-            params=params,
-        )
+        return _fn(self, params, snr=snr, key=key)
 
     def mock_spectrum(self, params, wave_obs, snr=30.0, key=None):
-        """Generate mock spectroscopic observation.
+        from tengri.core.convenience import mock_spectrum as _fn
 
-        Parameters
-        ----------
-        params : dict
-            Parameter values.
-        wave_obs : array
-            Observed wavelength grid (Angstrom).
-        snr : float
-            Signal-to-noise ratio per pixel.
-        key : PRNGKey, optional
-            Random key for noise. If None, returns noiseless.
-
-        Returns
-        -------
-        MockData
-            Mock spectroscopic observation.
-        """
-        flux_true = self.predict_spectrum(params, wave_obs)
-        noise = jnp.abs(flux_true) / snr
-
-        if key is not None:
-            flux_obs = flux_true + noise * jax.random.normal(key, shape=flux_true.shape)
-        else:
-            flux_obs = flux_true
-
-        return MockData(
-            flux_true=flux_true,
-            flux_obs=flux_obs,
-            noise=noise,
-            params=params,
-        )
+        return _fn(self, params, wave_obs, snr=snr, key=key)
 
     def mock_batch(self, params_batch, snr=20.0, key=None):
-        """Generate batch of mock observations."""
-        first_key = next(iter(params_batch))
-        n_batch = params_batch[first_key].shape[0]
+        from tengri.core.convenience import mock_batch as _fn
 
-        def _get_single(i):
-            return {k: v[i] for k, v in params_batch.items()}
-
-        if key is not None:
-            noise_keys = jax.random.split(key, n_batch)
-        else:
-            noise_keys = [None] * n_batch
-
-        results = [self.mock(_get_single(i), snr=snr, key=noise_keys[i]) for i in range(n_batch)]
-
-        return MockData(
-            flux_true=jnp.stack([r.flux_true for r in results]),
-            flux_obs=jnp.stack([r.flux_obs for r in results]),
-            noise=jnp.stack([r.noise for r in results]),
-            params=params_batch,
-        )
+        return _fn(self, params_batch, snr=snr, key=key)
 
     # -------------------------------------------------------------------
     # Batch predictions (vmap over galaxies)
     # -------------------------------------------------------------------
 
     def predict_photometry_batch(self, params_batch):
-        """Compute photometry for a batch of galaxies via jax.vmap.
+        from tengri.core.convenience import predict_photometry_batch as _fn
 
-        Parameters
-        ----------
-        params_batch : dict of arrays
-            Each value has a leading batch dimension: shape (N, ...).
-            E.g. ``{"sfh_dpl_alpha": array([1.0, 1.5, 2.0]), ...}``
-
-        Returns
-        -------
-        array, shape (N, n_filters)
-            Photometric flux for each galaxy.
-        """
-        return jax.vmap(self.predict_photometry)(params_batch)
+        return _fn(self, params_batch)
 
     def predict_spectrum_batch(self, params_batch):
-        """Compute spectra for a batch of galaxies via jax.vmap.
+        from tengri.core.convenience import predict_spectrum_batch as _fn
 
-        Requires ``precompute_spectroscopy()`` to have been called.
-
-        Parameters
-        ----------
-        params_batch : dict of arrays
-            Each value has leading batch dimension.
-
-        Returns
-        -------
-        array, shape (N, n_pix)
-            Spectral flux for each galaxy.
-        """
-        return jax.vmap(self.predict_spectrum)(params_batch)
+        return _fn(self, params_batch)
 
     # -------------------------------------------------------------------
     # Factory classmethod
@@ -2031,50 +1949,9 @@ class Model:
     # -------------------------------------------------------------------
 
     def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
-        """Sample from the prior and evaluate the forward model on each draw.
+        from tengri.core.convenience import prior_predictive as _fn
 
-        Returns a ``PriorPredictive`` object with draw arrays and convenience
-        methods for model checking before inference.
-
-        Parameters
-        ----------
-        n : int
-            Number of prior draws. Default 500.
-        seed : int
-            Random seed. Default 42.
-
-        Returns
-        -------
-        PriorPredictive
-            ``ppc.flux`` — shape (n, n_filters) or None.
-            ``ppc.sfh``  — shape (n, n_grid).
-            ``ppc.params`` — dict of (n,) arrays.
-
-        Examples
-        --------
-        >>> ppc = model.prior_predictive(n=500)
-        >>> ppc.check_finite()
-        """
-        key = jax.random.PRNGKey(seed)
-        params_batch = self.spec.sample_batch(key, n)
-
-        # SFH draws
-        sfh_batch = jax.vmap(self.predict_sfh)(params_batch)
-
-        # Photometry draws (if filters present)
-        flux_batch = None
-        if self.filter_waves is not None:
-            try:
-                flux_batch = jax.vmap(self.predict_photometry)(params_batch)
-            except Exception:
-                flux_batch = None
-
-        return PriorPredictive(
-            flux=flux_batch,
-            sfh=sfh_batch,
-            params=params_batch,
-            _model=self,
-        )
+        return _fn(self, n=n, seed=seed)
 
     # -------------------------------------------------------------------
     # Convenience fit
@@ -2190,112 +2067,19 @@ class Model:
         verbose: bool = True,
         **kwargs,
     ) -> list:
-        """Fit a catalog of galaxies, one row at a time.
+        from tengri.core.convenience import fit_catalog as _fn
 
-        Accepts a ``pandas.DataFrame``, an ``astropy.table.Table``, or a
-        list of dicts. Each row becomes one ``Posterior``.
-
-        Parameters
-        ----------
-        catalog : DataFrame, Table, or list of dict
-            Input catalog.
-        flux_cols : list of str
-            Column names for per-band flux values (must match model's filter order).
-        err_cols : list of str
-            Column names for per-band 1-sigma uncertainties.
-        redshift_col : str or None
-            If provided, use this column as per-row redshift via ``spec.with_params()``.
-        method : str
-            Inference method. Default ``"vi"``.
-        n_workers : int
-            Currently ignored (reserved for future multiprocessing). Default 1.
-        verbose : bool
-            Print per-galaxy progress. Default True.
-        **kwargs
-            Forwarded to ``Fitter.run()`` for every galaxy.
-
-        Returns
-        -------
-        list of Posterior
-            Same length as input catalog.
-
-        Examples
-        --------
-        >>> results = model.fit_catalog(
-        ...     catalog_df,
-        ...     flux_cols=["flux_u", "flux_g", "flux_r"],
-        ...     err_cols=["err_u", "err_g", "err_r"],
-        ...     redshift_col="z_spec",
-        ... )
-        """
-        import time
-
-        import jax.numpy as jnp
-
-        from tengri.distributions import Fixed
-        from tengri.inference.fitter import Fitter
-
-        # Normalise catalog to list of dicts
-        rows: list[dict] = []
-        try:
-            import pandas as pd
-
-            if isinstance(catalog, pd.DataFrame):
-                rows = catalog.to_dict(orient="records")
-        except ImportError:
-            pass
-
-        if not rows:
-            try:
-                from astropy.table import Table
-
-                if isinstance(catalog, Table):
-                    rows = [dict(zip(catalog.colnames, row)) for row in catalog]
-            except ImportError:
-                pass
-
-        if not rows and isinstance(catalog, (list, tuple)):
-            rows = list(catalog)
-
-        if not rows:
-            raise TypeError(
-                f"catalog must be a pandas DataFrame, astropy Table, or list of dicts. "
-                f"Got {type(catalog)}"
-            )
-
-        n_gal = len(rows)
-        results: list = []
-        t0 = time.time()
-
-        for i, row in enumerate(rows):
-            t_row = time.time()
-
-            flux_i = jnp.array([float(row[c]) for c in flux_cols])
-            noise_i = jnp.array([float(row[c]) for c in err_cols])
-
-            if redshift_col is not None:
-                row_z = float(row[redshift_col])
-                row_spec = self.spec.with_params(redshift=Fixed(row_z))
-                row_model = Model.__new__(Model)
-                row_model.__dict__.update(self.__dict__)
-                row_model.spec = row_spec
-                fitter_i = Fitter(row_model, flux_i, noise_i)
-            else:
-                fitter_i = Fitter(self, flux_i, noise_i)
-
-            result_i = fitter_i.run(method, **kwargs)
-            results.append(result_i)
-
-            if verbose:
-                dt = time.time() - t_row
-                elapsed = time.time() - t0
-                chi2 = result_i.diagnostics.get("chi2_dof", "?")
-                chi2_str = f"{chi2:.2f}" if isinstance(chi2, float) else str(chi2)
-                print(
-                    f"  [{i + 1}/{n_gal}] chi2/dof={chi2_str}, row={dt:.1f}s, total={elapsed:.0f}s"
-                )
-
-        return results
+        return _fn(
+            self,
+            catalog,
+            flux_cols,
+            err_cols,
+            redshift_col=redshift_col,
+            method=method,
+            n_workers=n_workers,
+            verbose=verbose,
+            **kwargs,
+        )
 
     def _method_recommendation(self) -> tuple[str, str]:
         """Return (method_name, reason) for the recommended inference method."""
@@ -2538,78 +2322,12 @@ class Model:
         population_prior: dict | None = None,
         **kwargs,
     ):
-        """Fit a population of galaxies with shared PSD hyperparameters.
+        from tengri.core.convenience import fit_population as _fn
 
-        Thin wrapper around ``HierarchicalFitter``.
-
-        Parameters
-        ----------
-        observations_list : list
-            Each element is either a ``(flux, noise)`` tuple or a dict
-            with ``"flux_obs"`` and ``"noise"`` keys.
-        method : str
-            Hierarchical inference method. Default ``"vi"``.
-        population_prior : dict or None
-            Hyperpriors on shared PSD parameters.
-        **kwargs
-            Forwarded to ``HierarchicalFitter.run()``.
-
-        Returns
-        -------
-        HierarchicalResult
-        """
-        from tengri.inference.hierarchical import HierarchicalFitter
-
-        # Normalise input
-        galaxies = []
-        for obs in observations_list:
-            if isinstance(obs, (list, tuple)) and len(obs) == 2:
-                flux, noise = obs
-                galaxies.append({"flux_obs": flux, "noise": noise})
-            elif isinstance(obs, dict):
-                galaxies.append(obs)
-            else:
-                raise TypeError(
-                    f"Each element of observations_list must be a (flux, noise) tuple "
-                    f"or a dict with 'flux_obs'/'noise' keys. Got {type(obs)}"
-                )
-
-        # Extract population prior bounds
-        psd_sigma_prior = (0.1, 4.0)
-        psd_tau_prior = (1.0, 300.0)
-        if population_prior:
-            if "psd_sigma" in population_prior:
-                dist = population_prior["psd_sigma"]
-                psd_sigma_prior = getattr(dist, "bounds", psd_sigma_prior)
-            if "psd_tau_myr" in population_prior:
-                dist = population_prior["psd_tau_myr"]
-                psd_tau_prior = getattr(dist, "bounds", psd_tau_prior)
-
-        # Translate canonical → HierarchicalFitter method names
-        _hier_method_map = {
-            "vi": "geovi",
-            "vi_linear": "mgvi",
-            "mcmc_raytrace": "raytrace",
-            "mcmc": "raytrace",
-        }
-        hier_method = _hier_method_map.get(method, method)
-
-        def _model_factory(psd_sigma, psd_tau_myr):
-            from tengri.distributions import Fixed
-
-            new_spec = self.spec.with_params(
-                sfh_field_psd_sigma=Fixed(float(psd_sigma)),
-                sfh_field_psd_tau_myr=Fixed(float(psd_tau_myr)),
-            )
-            m = Model.__new__(Model)
-            m.__dict__.update(self.__dict__)
-            m.spec = new_spec
-            return m
-
-        hfitter = HierarchicalFitter(
-            _model_factory,
-            galaxies,
-            psd_sigma_prior=psd_sigma_prior,
-            psd_tau_prior=psd_tau_prior,
+        return _fn(
+            self,
+            observations_list,
+            method=method,
+            population_prior=population_prior,
+            **kwargs,
         )
-        return hfitter.run(hier_method, **kwargs)
