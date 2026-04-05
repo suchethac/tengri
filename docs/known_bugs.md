@@ -23,7 +23,7 @@
 |--------|-------|---------|
 | FIXED | 20 | S1-S6, #9,10,11,12,14 (original 11) + NEW-01 through NEW-09 (2026-04-03/04) |
 | NOT FIXED | 0 | — |
-| NEEDS VERIFICATION | 3 | NEW-10,11,12 |
+| CLOSED (undocumented) | 3 | NEW-10,11,12 — counted in original review but never written up; no record of what they refer to; closed 2026-04-04 |
 
 ---
 

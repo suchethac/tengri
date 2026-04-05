@@ -79,7 +79,7 @@ fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 fitter.run("map", n_steps=300, verbose=False)
 fitter.compile(verbose=False)
 posterior = fitter.run(
-    "native_geovi",
+    "vi",
     n_iterations=10,
     n_samples=4,
     n_seeds=3,

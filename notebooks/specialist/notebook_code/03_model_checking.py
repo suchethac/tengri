@@ -16,10 +16,18 @@
 # %% [markdown]
 # # Checking Your Model Before Fitting
 #
-# Before fitting, ask: does my model produce plausible galaxies? A prior
-# predictive check samples from the prior and runs the forward model. If the
-# predicted SEDs don't look like real galaxies, the priors need adjustment —
-# no amount of inference can fix a bad model.
+# Two questions to answer before running inference:
+#
+# 1. **Does my model produce plausible galaxies?** → Prior predictive check.
+#    Sample from the prior, run the forward model, and verify the predicted
+#    SEDs look like real galaxies. No amount of inference fixes a bad prior.
+#
+# 2. **How much does my data actually constrain each parameter?** →
+#    Information content analysis. Fit the same mock with 1, 3, 5 bands,
+#    then spectroscopy. Watch the posteriors tighten — or not.
+#
+# Key result previewed: spectroscopy provides ~1–2 orders of magnitude more
+# information than broadband photometry for metallicity and stellar age.
 
 # %%
 import warnings
@@ -190,7 +198,13 @@ plt.savefig(os.path.join(FIGDIR, "fig03_prior_sfhs.png"), dpi=150, bbox_inches="
 plt.show()
 
 # %% [markdown]
-# ## Diagnosing Bad Priors
+# ## 1. Prior Predictive: Parametric Model
+#
+# 200 galaxies drawn from the prior. Spectra colored by u−r. The color–color
+# diagram should overlap the observed SDSS galaxy locus.
+
+# %% [markdown]
+# ## 2. Diagnosing Bad Priors
 #
 # An intentionally bad configuration: dust τ_bc prior too wide (0, 10)
 # instead of (0, 2). Many galaxies become absurdly extinguished.
@@ -265,9 +279,10 @@ plt.savefig(os.path.join(FIGDIR, "fig04_bad_prior.png"), dpi=150, bbox_inches="t
 plt.show()
 
 # %% [markdown]
-# ## Stochastic Model Prior Predictive
+# ## 3. Stochastic Prior Predictive
 #
-# How do PSD priors affect the burstiness range?
+# How do PSD priors affect the burstiness range? SFH realizations colored
+# by σ_PS — the amplitude of stochastic variability.
 
 # %%
 spec_stoch = ParamSpec(
@@ -312,37 +327,11 @@ plt.savefig(os.path.join(FIGDIR, "fig05_stochastic_prior_sfhs.png"), dpi=150, bb
 plt.show()
 
 # %% [markdown]
-# ## Summary
-#
-# The prior predictive check costs seconds and catches configuration errors
-# before you waste hours fitting. Make it a habit:
-#
-# 1. **Sample from the prior** — do the SEDs look like real galaxies?
-# 2. **Check color–color** — do they fall on the observed locus?
-# 3. **Inspect SFHs** — are they astrophysically reasonable?
-# 4. **Diagnose bad priors** — if predictions are pathological, fix the prior.
-#
-# This completes the tutorial track. You're now ready for the
-# **demonstrations/** and **reference/** notebooks.
-
-# %% [markdown]
 # ---
-# # Part 2 — Information Content Analysis
+# ## 4. Generate a Mock Galaxy for Information Content Analysis
 #
-# How much does each data type (1 band, 3 bands, 5 bands, spectroscopy)
-# constrain each physical parameter? This section makes the information
-# gain quantitative using Fisher analysis and posterior width comparisons.
-#
-# Key result: spectroscopy provides 1-2 orders of magnitude more information
-# for metallicity and stellar age than broadband photometry.
-
-# %%
-ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-ALL_FILTERS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-all_filters = load_filter_set(ALL_FILTERS)
-
-# %% [markdown]
-# ## 1. Generate a Mock Galaxy
+# We use a single parametric mock (tsnorm SFH, z=0.1) throughout the second
+# half. The same galaxy is fit with increasing amounts of data.
 #
 # We create a single parametric mock (tsnorm SFH) at z = 0.1 and use it
 # throughout.
@@ -382,7 +371,7 @@ flux_obs_all = mock.flux_obs
 noise_all = mock.noise
 
 # %% [markdown]
-# ## 2. Progressive Data Reveal
+# ## 5. Progressive Data Reveal
 #
 # We fit the same galaxy with 1, 3, and 5 photometric bands, then add
 # spectroscopy. For each configuration we run native_geovi.
@@ -420,7 +409,7 @@ for stage in STAGES:
     print(f"  Wall time: {result.wall_time_s:.1f}s")
 
 # %% [markdown]
-# ## 3. Progressive Reveal Figure
+# ## 6. Progressive Reveal Figure
 #
 # Each row shows the SED fit and posterior SFH for one data stage.
 
@@ -487,7 +476,7 @@ plt.savefig(os.path.join(FIGDIR, "02_progressive_reveal.png"), bbox_inches="tigh
 plt.show()
 
 # %% [markdown]
-# ## 4. Posterior Width vs Number of Bands
+# ## 7. Posterior Width vs Number of Bands
 #
 # Quantify how parameter uncertainties shrink with more data.
 
@@ -532,7 +521,7 @@ plt.savefig(os.path.join(FIGDIR, "02_posterior_width_vs_data.png"), bbox_inches=
 plt.show()
 
 # %% [markdown]
-# ## 5. Spectroscopic Data Stage
+# ## 8. Spectroscopic Data Stage
 #
 # Adding a spectrum provides continuous wavelength coverage and dramatically
 # tightens constraints on metallicity and dust parameters.
@@ -578,7 +567,7 @@ plt.savefig(os.path.join(FIGDIR, "02_spectrum_fit.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## 6. Comparison: Photometry vs Spectroscopy
+# ## 9. Comparison: Photometry vs Spectroscopy
 #
 # Direct comparison of posterior widths between 5-band photometry and
 # spectroscopy.
@@ -614,7 +603,7 @@ plt.savefig(os.path.join(FIGDIR, "02_phot_vs_spec.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## 7. Information Content Summary
+# ## 10. Information Content Summary
 #
 # | Data type | $N_{\rm data}$ | Constrains best | Weak on |
 # |-----------|---------------|-----------------|---------|
@@ -655,7 +644,7 @@ plt.savefig(os.path.join(FIGDIR, "02_information_gain.png"), bbox_inches="tight"
 plt.show()
 
 # %% [markdown]
-# ## 8. Convergence Check
+# ## 11. Convergence Check
 
 # %%
 # --- FIGURE 6-8: Corner plots for stages ---
@@ -689,7 +678,20 @@ for stage_name in ["1 band (r)", "5 bands (ugriz)"]:
 # %% [markdown]
 # ## Summary
 #
-# More data narrows posteriors, but with diminishing returns. The biggest
-# jump comes from going 1-band to 3-band photometry (breaks the most basic
-# degeneracies). Spectroscopy provides another order-of-magnitude improvement,
-# especially for metallicity and dust parameters.
+# **Prior predictive checks (§1–§3):**
+# - Parametric priors (tsnorm DPL) produce physically plausible SFHs across
+#   the prior volume; corner plots reveal parameter degeneracies before fitting.
+# - Stochastic (PSD-field) priors produce bursty SFHs whose amplitude scales
+#   with σ_PS; high σ drives SFRs 1–2 dex above the secular backbone.
+# - Bad priors (overly wide τ_peak, uninformative logzsol) produce SED
+#   distributions inconsistent with observed galaxy populations.
+#
+# **Information content (§4–§11):**
+# - More data narrows posteriors, but with diminishing returns. The biggest
+#   single jump comes from 1→3 bands (breaks the coarsest degeneracies).
+# - 5-band photometry tightens SFH shape constraints but leaves
+#   the dust–metallicity degeneracy largely unresolved.
+# - Spectroscopy provides ~1–2 orders of magnitude more information on
+#   metallicity and dust slope, breaking the age–dust–metallicity degeneracy.
+# - Fisher information grows ~linearly with the number of spectral pixels
+#   at fixed S/N, making deep spectra the gold standard for physical inference.

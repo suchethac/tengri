@@ -2,7 +2,7 @@
 MAP vs geoVI Posterior Comparison
 =================================
 
-Compares point-estimate (MAP) and variational (native_geovi) inference
+Compares point-estimate (MAP) and variational (vi/geoVI) inference
 on mock 5-band photometry. Overlays posteriors as a corner plot.
 """
 
@@ -84,10 +84,10 @@ mock = model.mock(true_params, snr=20.0, key=key)
 fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 result_map = fitter.run("map", n_steps=300, verbose=False)
 
-# --- Fit: native_geovi (quick settings) ---
+# --- Fit: vi/geoVI (quick settings) ---
 fitter.compile(verbose=False)
 result_geovi = fitter.run(
-    "native_geovi",
+    "vi",
     n_iterations=10,
     n_samples=4,
     n_seeds=3,
@@ -108,7 +108,7 @@ if fig is not None:
             axes[i, j].axhline(map_vals[i], color="C3", ls="--", lw=0.8)
             axes[i, j].axvline(map_vals[j], color="C3", ls="--", lw=0.8)
     axes[0, 0].legend(fontsize=7)
-    fig.suptitle("MAP (dashed red) vs native_geovi posteriors", y=1.02)
+    fig.suptitle("MAP (dashed red) vs geoVI posteriors", y=1.02)
 
 outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
 outdir.mkdir(parents=True, exist_ok=True)

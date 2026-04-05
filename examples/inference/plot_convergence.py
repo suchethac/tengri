@@ -78,12 +78,12 @@ true_params["sfh_tsnorm_log_peak_sfr"] = 1.0
 true_params["sfh_tsnorm_skew"] = 0.3  # Positive skew = recent star formation
 mock = model.mock(true_params, snr=20.0, key=key)
 
-# --- Fit with native_geovi ---
+# --- Fit with vi (geoVI) ---
 fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 fitter.run("map", n_steps=300, verbose=False)
 fitter.compile(verbose=False)
 posterior = fitter.run(
-    "native_geovi",
+    "vi",
     n_iterations=10,
     n_samples=4,
     n_seeds=3,

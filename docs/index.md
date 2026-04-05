@@ -72,7 +72,7 @@ Any SSP template set can be used — the only requirement is the DSPS HDF5 schem
 ## Quick start
 
 ```python
-from tengri import SEDModel, Parameters, Fitter, Uniform, Gaussian
+from tengri import Model, ParamSpec, Fitter, Uniform, Gaussian
 from tengri import Observation, Photometry, load_ssp_data
 
 ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
@@ -80,7 +80,7 @@ obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
 
-spec = Parameters(
+spec = ParamSpec(
     sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
     sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
     sfh_tsnorm_width_gyr=Uniform(0.5, 5),
@@ -91,7 +91,7 @@ spec = Parameters(
     redshift=0.1,
 )
 
-model = SEDModel(spec, ssp, observation=obs)
+model = Model(spec, ssp, observation=obs)
 fitter = Fitter(model, data, noise)
 result = fitter.run("vi")  # or "mcmc_raytrace", "mcmc_nuts", "map", "laplace", "evidence"
 print(result.summary_table())
@@ -154,9 +154,6 @@ MIT
 :hidden:
 
 getting_started/index
-the_model/index
-inference/index
-worked_examples/index
 examples
 performance/index
 advanced/index

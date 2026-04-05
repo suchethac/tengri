@@ -1,0 +1,54 @@
+# Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# JAX/XLA compilation cache
+.cache/
+~/.cache/tengri_jax_cache/
+
+# Jupyter artifacts
+.ipynb_checkpoints/
+*.ipynb
+
+# Large data files
+data/*.h5
+data/*.npz
+data/*.fits
+data/*.npy
+
+# Test/coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# Lock files
+*.lock
+uv.lock
+poetry.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Docs build output
+docs/_build/
+site/
+
+# Figures / plots (generated outputs)
+*.png
+*.pdf
+*.svg
+plot_*.png

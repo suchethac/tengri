@@ -189,6 +189,11 @@ def build_fused_photometry(model):
     if _has_alpha:
         ssp_alpha_fe = model.ssp_data.ssp_alpha_fe.astype(dt)
 
+    # effective_metallicity correction is opt-in: only applied when the user
+    # explicitly makes met_alpha_fe (or evolving variant) a free parameter.
+    # When alpha_fe is Fixed(0), skip the dispatch and use plain interpolation.
+    _use_alpha_fe = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
+
     # Metallicity interpolation mode for fused kernel
     _use_smooth_z = model._met_interp == "smooth"
     _lgmet_scat = dt.type(model._lgmet_scatter)
@@ -370,8 +375,10 @@ def build_fused_photometry(model):
                 + fz * fa * ssp_phot[iz + 1, ia + 1]
             )
         else:
-            # 3D: effective_metallicity fallback
-            lz = lz + _A2Z * afe
+            # 3D grid: apply effective_metallicity correction only when alpha_fe
+            # is explicitly a free parameter (opt-in, not default).
+            if _use_alpha_fe:
+                lz = lz + _A2Z * afe
             if _use_smooth_z:
                 zw = _clw(lz, ssp_lgmet, _lgmet_scat)
                 ssp_at_z = jnp.einsum("m,maf->af", zw, ssp_phot)
@@ -515,6 +522,7 @@ def build_fused_spectrum(model):
     _has_alpha_zt = has_alpha_grid(model.ssp_data)
     if _has_alpha_zt:
         ssp_alpha_fe_zt = model.ssp_data.ssp_alpha_fe.astype(fdt)
+    _use_alpha_fe_spec = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
     wave_obs_pixels = precomp.wave_obs_pixels.astype(fdt)
     wave_rest_pixels = precomp.wave_rest_pixels.astype(fdt)
     _is_single_dust_spec = model._dust_model == "single_component"
@@ -606,7 +614,8 @@ def build_fused_spectrum(model):
                 + fz * fa * ssp_on_pixels[iz + 1, ia + 1]
             )
         else:
-            lz = lz + _A2Z * afe
+            if _use_alpha_fe_spec:
+                lz = lz + _A2Z * afe
             log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
             idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
             frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
@@ -926,6 +935,7 @@ def build_fused_photometry_ztable(model):
     _has_alpha_zt = has_alpha_grid(model.ssp_data)
     if _has_alpha_zt:
         ssp_alpha_fe_zt = model.ssp_data.ssp_alpha_fe.astype(fdt)
+    _use_alpha_fe_zt = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
 
     # IGM: precomputed on z-grid when apply_igm + approx["igm"]
     igm_trans_table = zt.igm_trans_table.astype(fdt)
@@ -1012,7 +1022,8 @@ def build_fused_photometry_ztable(model):
                 + fz * fa * ssp_phot[iz + 1, ia + 1]
             )
         else:
-            lz = lz + _A2Z * afe
+            if _use_alpha_fe_zt:
+                lz = lz + _A2Z * afe
             if _use_smooth_z_zt:
                 zw = _clw_zt(lz, ssp_lgmet, _lgmet_scat_zt)
                 ssp_at_z = jnp.einsum("m,maf->af", zw, ssp_phot)
@@ -1600,10 +1611,17 @@ def build_fused_tier2_photometry(model):
         return None
 
     from tengri.core.param_translate import get_internal_params
-    from tengri.core.sed_pipeline import interp_met_alpha_dispatch
+    from tengri.core.sed_pipeline import interp_met_alpha_dispatch, interp_metallicity
     from tengri.models.observation.photometry import compute_flux_density
     from tengri.models.sfh.registry import compute_field_gp
     from tengri.models.sps.dsps_wrapper import compute_csp_weights
+
+    _use_dsps_native = model._csp_integration == "dsps_native"
+    if _use_dsps_native:
+        from tengri.models.sps.dsps_wrapper import compute_dsps_native_weights
+
+    # effective_metallicity correction is opt-in (see fused_kernels tier1 note).
+    _use_alpha_fe_t2 = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
 
     # Capture model state at build time
     rest_sed_kernel = model._fused_rest_sed
@@ -1625,10 +1643,23 @@ def build_fused_tier2_photometry(model):
     filter_trans = model.filter_trans
     apply_igm = model._apply_igm
 
+    # dsps_native: capture SSP arrays for DSPS triweight kernel
+    if _use_dsps_native:
+        _ssp_lgmet = model.ssp_data.ssp_lgmet
+        _ssp_lg_age_gyr = model.ssp_data.ssp_lg_age_gyr
+        _ssp_flux = model.ssp_data.ssp_flux
+        _lgmet_scatter_native = float(model._lgmet_scatter)
+        from tengri.utils.cosmology import age_at_z as _age_at_z_fn
+
     # Redshift: fixed (precompute IGM once) or free (traced through)
     z_fixed = model._z_fixed
     dl_cm_fixed = model._dl_cm_fixed
     is_free_z = z_fixed is None
+
+    # For dsps_native + fixed z: precompute t_obs_gyr once at closure build
+    _t_obs_gyr_fixed = None
+    if _use_dsps_native and not is_free_z:
+        _t_obs_gyr_fixed = float(_age_at_z_fn(z_fixed) / 1e9)
 
     # IGM at full wavelength grid (only for fixed z)
     igm_trans_full = None
@@ -1665,10 +1696,29 @@ def build_fused_tier2_photometry(model):
         sfr = sfh_fn(age_yr, **kw)
 
         sfr_on_ssp = jnp.interp(ssp_log_ages_yr, log_age_grid, sfr)
-        weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
 
-        alpha_fe = p.get("alpha_fe", 0.0)
-        ssp_flux_at_z = interp_met_alpha_dispatch(model, p["log_z_abs"], alpha_fe)
+        if _use_dsps_native:
+            z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
+            t_obs_gyr = _t_obs_gyr_fixed if _t_obs_gyr_fixed is not None else _age_at_z_fn(z) / 1e9
+            lgmet = p.get("log_z_abs", -1.8477)
+            lgmet_scatter = float(p.get("lgmet_scatter", _lgmet_scatter_native))
+            weights, ssp_flux_at_z = compute_dsps_native_weights(
+                sfr_on_ssp,
+                ssp_ages_yr,
+                _ssp_lgmet,
+                _ssp_lg_age_gyr,
+                _ssp_flux,
+                t_obs_gyr,
+                lgmet,
+                lgmet_scatter,
+            )
+        else:
+            weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
+            if _use_alpha_fe_t2:
+                alpha_fe = p.get("alpha_fe", 0.0)
+                ssp_flux_at_z = interp_met_alpha_dispatch(model, p["log_z_abs"], alpha_fe)
+            else:
+                ssp_flux_at_z = interp_metallicity(model, p["log_z_abs"])
 
         if xray_enabled:
             p = {**p, "_sfr_current": sfr[-1]}
@@ -1735,10 +1785,18 @@ def build_fused_tier2_spectrum(model):
         return None
 
     from tengri.core.param_translate import get_internal_params
-    from tengri.core.sed_pipeline import interp_met_alpha_dispatch
+    from tengri.core.sed_pipeline import interp_met_alpha_dispatch, interp_metallicity
     from tengri.models.observation.spectroscopy import compute_spectrum
     from tengri.models.sfh.registry import compute_field_gp
     from tengri.models.sps.dsps_wrapper import compute_csp_weights
+
+    _use_dsps_native_spec = model._csp_integration == "dsps_native"
+    if _use_dsps_native_spec:
+        from tengri.models.sps.dsps_wrapper import compute_dsps_native_weights
+
+    # effective_metallicity correction is opt-in: only applied when the user
+    # explicitly makes met_alpha_fe (or evolving variant) a free parameter.
+    _use_alpha_fe_spec2 = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
 
     # Must have a wavelength grid
     wave_obs = None
@@ -1766,9 +1824,20 @@ def build_fused_tier2_spectrum(model):
     ssp_wave = model.ssp_data.ssp_wave
     xray_enabled = model._xray_enabled
 
+    if _use_dsps_native_spec:
+        _ssp_lgmet_spec = model.ssp_data.ssp_lgmet
+        _ssp_lg_age_gyr_spec = model.ssp_data.ssp_lg_age_gyr
+        _ssp_flux_spec = model.ssp_data.ssp_flux
+        _lgmet_scatter_spec = float(model._lgmet_scatter)
+        from tengri.utils.cosmology import age_at_z as _age_at_z_spec
+
     z_fixed = model._z_fixed
     dl_cm_fixed = model._dl_cm_fixed
     is_free_z = z_fixed is None
+
+    _t_obs_gyr_fixed_spec = None
+    if _use_dsps_native_spec and not is_free_z:
+        _t_obs_gyr_fixed_spec = float(_age_at_z_spec(z_fixed) / 1e9)
 
     if is_free_z:
         from tengri.utils.cosmology import luminosity_distance as _lum_dist_spec
@@ -1790,9 +1859,32 @@ def build_fused_tier2_spectrum(model):
             kw["k0_half"] = k0_half
         sfr = sfh_fn(age_yr, **kw)
         sfr_on_ssp = jnp.interp(ssp_log_ages_yr, log_age_grid, sfr)
-        weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
-        alpha_fe = p.get("alpha_fe", 0.0)
-        ssp_flux_at_z = interp_met_alpha_dispatch(model, p["log_z_abs"], alpha_fe)
+        if _use_dsps_native_spec:
+            z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
+            t_obs_gyr = (
+                _t_obs_gyr_fixed_spec
+                if _t_obs_gyr_fixed_spec is not None
+                else _age_at_z_spec(z) / 1e9
+            )
+            lgmet = p.get("log_z_abs", -1.8477)
+            lgmet_scatter = float(p.get("lgmet_scatter", _lgmet_scatter_spec))
+            weights, ssp_flux_at_z = compute_dsps_native_weights(
+                sfr_on_ssp,
+                ssp_ages_yr,
+                _ssp_lgmet_spec,
+                _ssp_lg_age_gyr_spec,
+                _ssp_flux_spec,
+                t_obs_gyr,
+                lgmet,
+                lgmet_scatter,
+            )
+        else:
+            weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
+            if _use_alpha_fe_spec2:
+                alpha_fe = p.get("alpha_fe", 0.0)
+                ssp_flux_at_z = interp_met_alpha_dispatch(model, p["log_z_abs"], alpha_fe)
+            else:
+                ssp_flux_at_z = interp_metallicity(model, p["log_z_abs"])
         if xray_enabled:
             p = {**p, "_sfr_current": sfr[-1]}
         rest_sed = rest_sed_kernel(weights, ssp_flux_at_z, p)

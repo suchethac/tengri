@@ -83,7 +83,7 @@ ages_yr = 10**log_ages
 ages_gyr = ages_yr / 1e9
 
 # %% [markdown]
-# ## The Power Spectral Density
+# ## 1. The Power Spectral Density
 #
 # The PSD answers: how much variability power exists at each timescale?
 # It fully specifies the Gaussian process prior. We use a Damped Random
@@ -193,7 +193,7 @@ plt.savefig(os.path.join(FIGDIR, "fig02_parameter_sweeps.png"), dpi=150, bbox_in
 plt.show()
 
 # %% [markdown]
-# ## Building an SFH from Scratch
+# ## 2. Building an SFH from Scratch
 #
 # The magic of standardization: start with uncorrelated Gaussian noise
 # ξ ~ N(0, I), filter with √P to get correlated field x(t), combine with
@@ -324,7 +324,7 @@ plt.savefig(os.path.join(FIGDIR, "fig05_lognormal_correction.png"), dpi=150, bbo
 plt.show()
 
 # %% [markdown]
-# ## The Secular Backbone
+# ## 3. The Secular Backbone
 #
 # The GP has zero mean by construction, so we need a separate smooth secular
 # component. tengri supports 8 parametric shapes (plus tabulated). The
@@ -383,7 +383,7 @@ plt.savefig(os.path.join(FIGDIR, "fig06_tsnorm_variations.png"), dpi=150, bbox_i
 plt.show()
 
 # %% [markdown]
-# ## The Burstiness Plane
+# ## 4. The Burstiness Plane
 #
 # The (σ, τ) parameter space spans the full range of SFH variability.
 
@@ -428,7 +428,7 @@ plt.savefig(os.path.join(FIGDIR, "fig07_burstiness_plane.png"), dpi=150, bbox_in
 plt.show()
 
 # %% [markdown]
-# ## Observable Connection
+# ## 5. Observable Connection
 #
 # Different spectral tracers average over different lookback timescales:
 # Hα ~ few Myr, UV ~ 10–100 Myr, Balmer break ~ 100 Myr – 1 Gyr. The PSD
@@ -466,19 +466,7 @@ plt.savefig(os.path.join(FIGDIR, "fig08_observable_diagnostics.png"), dpi=150, b
 plt.show()
 
 # %% [markdown]
-# ---
-# ## Green's Functions: Connecting PSD Parameters to Observations
-#
-# The Green's function G_λ(t_age) is the luminosity per solar mass at wavelength
-# λ as a function of stellar age. Different tracers probe different timescales:
-# - Hα: SFR on 10 Myr timescales
-# - UV continuum: 100 Myr average SFR
-# - D4000 and Balmer break: Gyr-old stellar populations
-#
-# The ratio of these tracers diagnoses the PSD parameters: Hα/UV → τ_PS;
-# Hα/optical → σ_PS.
-
-# ## 4. Green's Functions and Window Functions
+# ## 6. Green's Functions and Window Functions
 #
 # The Green's function $G_\lambda(t_{\rm age})$ is the luminosity produced by
 # $1\,M_\odot$ of stars formed at age $t_{\rm age}$, observed at wavelength
@@ -668,7 +656,7 @@ plt.show()
 # improves PSD constraints because it provides a narrow time probe.
 
 # %% [markdown]
-# ## 5. Observable Diagnostics
+# ## 7. Observable Diagnostics
 #
 # The PSD parameters leave imprints on observable diagnostics. Higher $\sigma$
 # increases the scatter in sSFR and Ha/UV ratio at fixed stellar mass.
@@ -756,7 +744,7 @@ plt.savefig(os.path.join(FIGDIR, "01_ssfr_diagnostics.png"), bbox_inches="tight"
 plt.show()
 
 # %% [markdown]
-# ## 6. Effect of $\tau_{\rm PS}$ on SFH Character
+# ## 8. Effect of $\tau_{\rm PS}$ on SFH Character
 #
 # The damping timescale sets the *duration* of star-formation bursts.
 # Short $\tau$ produces rapid flickers; long $\tau$ produces extended
@@ -798,7 +786,7 @@ plt.savefig(os.path.join(FIGDIR, "01_tau_effect.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## 7. Literature Mapping Table
+# ## 9. Literature Mapping Table
 #
 # Connecting tengri PSD parameters to published SFH variability studies.
 
@@ -846,7 +834,7 @@ plt.savefig(os.path.join(FIGDIR, "01_literature_table.png"), bbox_inches="tight"
 plt.show()
 
 # %% [markdown]
-# ## 8. Alternative PSD Models
+# ## 10. Alternative PSD Models
 #
 # The DRW is the default PSD in tengri, but the package also provides two
 # alternative models for situations where different spectral behaviour is

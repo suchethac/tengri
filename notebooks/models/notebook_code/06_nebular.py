@@ -95,6 +95,18 @@ os.makedirs(FIGDIR, exist_ok=True)
 CUE_WEIGHTS_PATH = Path("data/cue_weights.npz")
 
 # %% [markdown]
+# ## Backend Decision Table
+#
+# | Backend | Free params | Use when | Limitation |
+# |---------|-------------|----------|------------|
+# | `BakedIn` | 0 | Photometric fitting; logU fixed | logU/metallicity hardcoded |
+# | `CloudyGrid` | 3 (logU, Z, n_H) | Spectroscopy with ionization variation | Grid interpolation only |
+# | `Cue` | 12 | Abundance ratios (N/O, C/O) or non-stellar ionizing sources | Requires CUE install |
+#
+# **Rule**: Use BakedIn for photometry. CloudyGrid for standard spectroscopy. Cue when
+# you need [N/O], [C/O], or AGN/shock ionizing spectrum shapes.
+
+# %% [markdown]
 # ## 1. Nebular Emission
 #
 # ### 1.1 CLOUDY Grid: line ratios vs log(U)
@@ -446,22 +458,7 @@ plt.savefig(os.path.join(FIGDIR, "19_dig_mixing.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# # Nebular Emission Gallery
-#
-# ## Backend Decision Table
-#
-# | Backend | Free params | Use when | Limitation |
-# |---------|-------------|----------|------------|
-# | `BakedIn` | 0 | Photometric fitting; logU fixed | logU/metallicity hardcoded |
-# | `CloudyGrid` | 3 (logU, Z, n_H) | Spectroscopy with ionization variation | Grid interpolation only |
-# | `Cue` | 12 | Abundance ratios (N/O, C/O) or non-stellar ionizing sources | Requires CUE install |
-#
-# **Rule**: Use BakedIn for photometry. CloudyGrid for standard spectroscopy. Cue when
-# you need [N/O], [C/O], or AGN/shock ionizing spectrum shapes.
-
-
-# %% [markdown]
-# ## Q_H: The Link Between Stars and Nebular Emission
+# ## 2. Q_H: The Link Between Stars and Nebular Emission
 
 # %%
 # SSP data path and shared nebular-emission SED used in Q_H and shock sections
@@ -501,7 +498,7 @@ else:
     wave = None
 
 # %% [markdown]
-# ### Q_H: Ionizing Photon Rate
+# ### 2.1 Q_H: Ionizing Photon Rate
 #
 # The key physical link between the SSP and nebular emission is $Q_H$ --
 # the rate of hydrogen-ionizing photons (below the Lyman limit at 911.8 A):
@@ -528,10 +525,7 @@ else:
     print("Typical values: Q_H ~ 10^47 photons/s/Msun (young), ~10^40 (old)")
 
 # %% [markdown]
-# ## Shock BPT Diagnostics
-
-# %% [markdown]
-# ## 5. Shock Emission Lines (MAPPINGS V)
+# ## 3. Shock Emission Lines (MAPPINGS V)
 #
 # Radiative shocks from supernovae, AGN outflows, and mergers produce emission
 # spectra that are distinct from HII regions. The key signatures are enhanced
@@ -603,7 +597,7 @@ plt.savefig(os.path.join(FIGDIR, "05_shock_line_ratios.png"), bbox_inches="tight
 plt.show()
 
 # %% [markdown]
-# ## 6. Shock-HII Mixing
+# ## 4. Shock-HII Mixing
 #
 # In real galaxies, the observed emission is a composite of HII regions and
 # shock-heated gas. The shock fraction $f_{\rm shock}$ controls the relative
@@ -679,10 +673,7 @@ plt.savefig(os.path.join(FIGDIR, "05_shock_hii_mixing.png"), bbox_inches="tight"
 plt.show()
 
 # %% [markdown]
-# ## DIG Contamination
-
-# %% [markdown]
-# ## 7. Diffuse Ionized Gas (DIG) Mixing
+# ## 5. Diffuse Ionized Gas (DIG) Mixing
 #
 # The diffuse ionized gas (DIG) permeating galaxies has a lower ionization
 # parameter ($\log U \sim -4$) than HII regions ($\log U \sim -2.5$ to $-3$).

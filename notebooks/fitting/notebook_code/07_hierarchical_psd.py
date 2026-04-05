@@ -179,7 +179,7 @@ plt.savefig(os.path.join(FIGDIR, "fig01_galaxy_diversity.png"), dpi=150, bbox_in
 plt.show()
 
 # %% [markdown]
-# ## Individual Fits: Weak Constraints
+# ## 1. Individual Fits: Weak Constraints
 #
 # When we fit each galaxy individually (with PSD parameters free), σ_PS is
 # roughly constrained but τ_PS is nearly unconstrained — it spans the prior.
@@ -256,7 +256,7 @@ plt.savefig(os.path.join(FIGDIR, "fig02_individual_psd.png"), dpi=150, bbox_inch
 plt.show()
 
 # %% [markdown]
-# ## Hierarchical Inference
+# ## 2. Hierarchical Inference
 #
 # The hierarchical model shares σ_PS and τ_PS across all N galaxies while
 # allowing each galaxy its own physical parameters and GP field. This pools
@@ -328,7 +328,7 @@ plt.savefig(
 plt.show()
 
 # %% [markdown]
-# ## Spectroscopy vs Photometry for Population PSD
+# ## 3. Photometric Hierarchical: Spectroscopy vs Photometry
 
 # %%
 # Hierarchical native_geovi on PHOTOMETRIC data
@@ -385,7 +385,7 @@ plt.savefig(os.path.join(FIGDIR, "fig04_spec_vs_phot.png"), dpi=150, bbox_inches
 plt.show()
 
 # %% [markdown]
-# ## √N Scaling
+# ## 4. √N Scaling
 #
 # As we add more galaxies, the posterior on shared PSD parameters tightens
 # as 1/√N — the Bayesian analog of the central limit theorem.
@@ -459,7 +459,7 @@ plt.savefig(os.path.join(FIGDIR, "fig05_sqrt_n_scaling.png"), dpi=150, bbox_inch
 plt.show()
 
 # %% [markdown]
-# ## Distinguishing Populations
+# ## 5. Distinguishing Populations
 #
 # The hierarchical framework can separate galaxy populations with different
 # burstiness properties — for example, bursty dwarfs vs smooth disk galaxies.
@@ -579,7 +579,7 @@ plt.savefig(os.path.join(FIGDIR, "fig07_hierarchical_sfh.png"), dpi=150, bbox_in
 plt.show()
 
 # %% [markdown]
-# ## Convergence Diagnostics
+# ## 6. Convergence Diagnostics
 
 # %%
 # Convergence table for individual fits
@@ -681,56 +681,15 @@ plt.savefig(
 plt.show()
 
 # %% [markdown]
-# ## Summary
+# ## 7. Spectroscopic Hierarchical Inference
 #
-# | Experiment | σ_PS | τ_PS | N | Data | Wall time |
-# |-----------|------|------|---|------|-----------|
-# | Individual | wide | unconstrained | 1 | spec | ~5s |
-# | Hierarchical (spec) | tight | constrained | 10 | spec | ~60s |
-# | Hierarchical (phot) | moderate | weakly constrained | 10 | phot | ~30s |
-# | Population distinction | separated | separated | 8+8 | spec | ~2×60s |
+# Photometry (§1–§6) constrains σ_PS but leaves τ_PS weakly constrained —
+# 5 broadband fluxes lack the spectral resolution to pin down burstiness
+# timescales. With ~200 spectral pixels per galaxy, continuum features
+# (D4000, Balmer lines, UV slope) encode SFH at multiple timescales and
+# break the σ–τ degeneracy that photometry alone cannot resolve.
 #
-# **Key results:**
-# 1. Individual galaxies constrain σ_PS but not τ_PS.
-# 2. Hierarchical inference recovers both, with posterior width ∝ 1/√N.
-# 3. Spectroscopy constrains τ_PS far better than photometry.
-# 4. Two distinct populations are cleanly separated in (σ, τ) space.
-
-# %% [markdown]
-# ---
-# # Part 2 — Spectroscopic Hierarchical Inference
-#
-# Demo 04 showed hierarchical PSD recovery from **photometry** (5 SDSS bands).
-# While σ_PS is reasonably constrained, τ_PS remains poorly constrained —
-# 5 broadband fluxes lack the spectral resolution to pin down burstiness timescales.
-#
-# **Spectroscopy changes everything.** With ~200 pixels per galaxy (~40× more data
-# points), spectral features encode SFH at multiple timescales. This section shows
-# that hierarchical spectroscopic inference breaks the σ–τ degeneracy that
-# photometry alone cannot resolve.
-
-# %% [markdown]
-# ## 1. Motivation
-#
-# Photometry provides only $\sim$5 data points per galaxy. Even with
-# hierarchical pooling across a population, the PSD timescale $\tau_{\rm PS}$
-# spans most of its prior (demo 04). Spectroscopy offers $\sim$40x more
-# constraints per galaxy through:
-#
-# - **D4000 break**: age-sensitive absorption feature
-# - **Balmer lines** ($H\beta$, $H\gamma$, $H\delta$): trace recent SF on
-#   100 Myr timescales
-# - **UV slope**: sensitive to current-to-past SFR ratio
-# - **Metal absorption lines**: break age-metallicity degeneracy
-#
-# The hierarchical model shares PSD hyperparameters
-# $\phi = (\sigma_{\rm PS}, \tau_{\rm PS})$ across the population while
-# fitting per-galaxy latent variables: GP field $\xi_i$ (128 dims) and
-# physical parameters $\theta_i$ (8 dims). Total dimensionality for
-# $N$ galaxies: $D = N \times 136 + 2$ shared.
-
-# %% [markdown]
-# ## 2. Setup: Population and Model
+# **Same population, same hierarchical model — now fit with spectra.**
 
 # %%
 # Load SSP data
@@ -821,7 +780,7 @@ print(
 )
 
 # %% [markdown]
-# ## 3. Mock Spectra
+# ## 8. Mock Spectra
 #
 # Each galaxy has a unique SFH drawn from the shared PSD prior. The
 # stochastic GP fluctuations create diverse spectral shapes that encode
@@ -874,7 +833,7 @@ plt.savefig(
 plt.show()
 
 # %% [markdown]
-# ## 4. Individual EVI Fits
+# ## 9. Individual Spectroscopic Fits
 #
 # First, fit each galaxy independently with PSD parameters **free**.
 # This establishes the per-galaxy constraining power before hierarchical
@@ -969,7 +928,7 @@ plt.savefig(
 plt.show()
 
 # %% [markdown]
-# ## 5. Hierarchical EVI: Spectroscopy
+# ## 10. Hierarchical Spectroscopic Inference
 #
 # The hierarchical model shares $\sigma_{\rm PS}$ and $\tau_{\rm PS}$ across
 # all $N$ galaxies while allowing each galaxy its own physical parameters and
@@ -1083,7 +1042,7 @@ plt.savefig(
 plt.show()
 
 # %% [markdown]
-# ## 6. Key Result: Spectroscopy vs Photometry
+# ## 11. Key Result: Spectroscopy vs Photometry
 #
 # This is the central comparison. We run hierarchical EVI on the **same
 # galaxies** using photometry only, then overlay the PSD posteriors.
@@ -1222,7 +1181,7 @@ for label, s_arr, t_arr in [
 print(f"\nTruth: sigma = {TRUE_SIGMA}, tau = {TRUE_TAU} Myr")
 
 # %% [markdown]
-# ## 7. SFH Recovery
+# ## 12. SFH Recovery
 #
 # The hierarchical spectroscopic posterior also recovers individual galaxy
 # SFHs. The shared PSD prior acts as a physically-motivated regularizer,
@@ -1308,7 +1267,7 @@ plt.savefig(
 plt.show()
 
 # %% [markdown]
-# ## 8. Posterior Width Scaling: $\propto 1/\sqrt{N}$
+# ## 13. Posterior Width Scaling: $\propto 1/\sqrt{N}$
 #
 # The shared PSD posterior should shrink as we add more galaxies to the
 # population. This is the Bayesian analog of the central limit theorem:
@@ -1433,7 +1392,7 @@ plt.savefig(
 plt.show()
 
 # %% [markdown]
-# ## 9. Validation and Diagnostics
+# ## 14. Convergence and Diagnostics
 #
 # Convergence checks and quantitative PSD recovery assessment.
 
@@ -1495,28 +1454,40 @@ else:
 # %% [markdown]
 # ## Summary
 #
-# | Experiment | $\sigma_{\rm PS}$ | $\tau_{\rm PS}$ | N | Data | Info/galaxy |
-# |-----------|-------------------|-----------------|---|------|-------------|
-# | Individual | wide | unconstrained | 1 | spec (200 pix) | high |
-# | Hierarchical (spec) | **tight** | **constrained** | 10 | spec (200 pix) | high |
-# | Hierarchical (phot) | moderate | weakly constrained | 10 | phot (5 bands) | low |
+# **Photometric hierarchical inference (§1–§6):**
 #
-# **Key findings:**
+# | Experiment | $\sigma_{\rm PS}$ | $\tau_{\rm PS}$ | N | Data |
+# |-----------|-------------------|-----------------|---|------|
+# | Individual (phot) | wide | unconstrained | 1 | 5 bands |
+# | Hierarchical (phot) | moderate | weakly constrained | 10 | 5 bands |
 #
-# 1. **Spectroscopy breaks the $\sigma$--$\tau$ degeneracy.** With ~40x more
-#    data points per galaxy, spectral features (D4000, Balmer lines, UV slope)
-#    encode burstiness at multiple timescales.
+# - Individual photometric fits constrain $\sigma_{\rm PS}$ weakly; $\tau_{\rm PS}$
+#   is essentially unconstrained by 5 broadband fluxes.
+# - Hierarchical pooling over $N = 10$ galaxies improves $\sigma_{\rm PS}$
+#   recovery but leaves $\tau_{\rm PS}$ broad.
+# - Two distinct populations are separable in $(\sigma, \tau)$ space given
+#   sufficient $N$, but the $\sigma$–$\tau$ degeneracy persists.
+#
+# **Spectroscopic hierarchical inference (§7–§14):**
+#
+# | Experiment | $\sigma_{\rm PS}$ | $\tau_{\rm PS}$ | N | Data |
+# |-----------|-------------------|-----------------|---|------|
+# | Individual (spec) | good | partially constrained | 1 | 200 pixels |
+# | Hierarchical (spec) | **tight** | **constrained** | 10 | 200 pixels |
+#
+# 1. **Spectroscopy breaks the $\sigma$--$\tau$ degeneracy.** Spectral features
+#    (D4000, Balmer lines, UV slope) encode burstiness at multiple timescales;
+#    photometry cannot.
 #
 # 2. **Hierarchical pooling compounds the advantage.** Individual spectroscopic
-#    fits constrain $\sigma_{\rm PS}$ but not $\tau_{\rm PS}$. The hierarchical
+#    fits constrain $\sigma_{\rm PS}$ but not $\tau_{\rm PS}$; the hierarchical
 #    model recovers both, with posterior width $\propto 1/\sqrt{N}$.
 #
-# 3. **Photometry alone is insufficient for $\tau_{\rm PS}$.** Even with 10
-#    galaxies, the photometric hierarchical posterior on $\tau_{\rm PS}$ remains
-#    broad. Spectroscopy is essential for constraining burstiness timescales.
+# 3. **SFH recovery benefits from the shared prior.** The hierarchical PSD
+#    prior acts as a physically-motivated regularizer, sharpening individual
+#    galaxy SFH posteriors without over-smoothing.
 #
-# 4. **Posterior predictive checks confirm good fits** ($\chi^2/\nu \approx 1$),
-#    indicating the model correctly captures the spectral information content.
+# 4. **Posterior predictive checks confirm good fits** ($\chi^2/\nu \approx 1$).
 #
 # **Implication for surveys:** spectroscopic surveys (DESI, PFS, MOONS) will
 # enable population-level burstiness constraints that photometric surveys

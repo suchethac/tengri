@@ -367,4 +367,5 @@ See `docs/known_bugs.md` for full details, references to check, and regression t
 
 See `AGENTS.md` for comprehensive AI agent documentation.
 See `HANDOFF.md` for full project status, paper figures, and what needs doing next.
-See `docs/design_philosophy.md` for architecture and design decisions.
+See `docs/dev/design_philosophy.md` for architecture and design decisions.
+See `docs/dev/REFACTOR.md` for the prioritized refactor plan (7 phases, 7 subagent scopes — not yet executed).
