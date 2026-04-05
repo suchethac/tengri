@@ -31,9 +31,15 @@ References
 - Beloborodov 1999, ApJ, 510, L123 (self-consistent Gamma_hot)
 """
 
+import warnings
+
 import jax
 import jax.numpy as jnp
 
+from tengri.models.agn._nthcomp import (
+    _TABLE_AVAILABLE as _NTHCOMP_AVAILABLE,
+    nthcomp_lnu_interp as _nthcomp_lnu_interp,
+)
 from tengri.models.agn._phys import (
     C_LIGHT as _C_LIGHT,
     H_PLANCK as _H_PLANCK,
@@ -42,6 +48,9 @@ from tengri.models.agn._phys import (
     planck_lnu as _planck_lnu,
     wavelength_to_nu as _wavelength_to_nu,
 )
+
+# keV/K — used to convert ring temperature to nthcomp seed energy
+_K_BOLTZ_KEV = 8.617333262e-8
 
 # ===================================================================
 # Physical constants (CGS)
@@ -677,8 +686,10 @@ def kubota_done_disc(
     1. **Outer standard disc** (r > R_warm): Shakura-Sunyaev blackbody.
        Produces the optical/UV big blue bump.
     2. **Warm Comptonization** (R_hot < r < R_warm): Optically thick,
-       warm electrons. Produces the soft X-ray excess. SED is a modified
-       blackbody: B_nu(T(r)) * (nu/nu_warm)^(Gamma_warm - 1).
+       warm electrons. Produces the soft X-ray excess. SED is computed via
+       the nthcomp Kompaneets solver (K&D 2018 Eq. 2.2) when templates are
+       available (run ``scripts/build_nthcomp_templates.py``), otherwise
+       uses a simplified modified-blackbody proxy.
     3. **Hot corona** (R_ISCO < r < R_hot): Optically thin, hot electrons.
        Produces hard X-ray power law with exponential cutoff.
 
@@ -833,6 +844,15 @@ def kubota_done_disc(
     # ===============================================================
     # Zone 2: Warm Comptonization (R_hot < r < R_warm)
     # ===============================================================
+    if not _NTHCOMP_AVAILABLE:
+        warnings.warn(
+            "nthcomp templates not found — warm Comptonization zone uses the "
+            "simplified modified-blackbody proxy (BUG-04 workaround). "
+            "Run `python scripts/build_nthcomp_templates.py` for the full "
+            "K&D (2018) Kompaneets treatment.",
+            stacklevel=3,
+        )
+
     log_r_hot = jnp.log10(r_hot_cm)
     log_r_warm_grid = jnp.linspace(log_r_hot, log_r_warm, n_radii)
     r_warm_grid = 10.0**log_r_warm_grid
@@ -848,21 +868,36 @@ def kubota_done_disc(
     sort_nu = jnp.argsort(nu)
     nu_sorted = nu[sort_nu]
 
-    def _warm_ring(r_cm, t_ring, dr_ring):
-        b_nu_plain = _planck_lnu(nu, t_ring)
-        b_nu_mod = _warm_comptonization_lnu(nu, t_ring, nu_warm, agn_gamma_warm)
-        # Per-annulus energy conservation: renormalize the Comptonized spectrum
-        # so each annulus emits the same bolometric power as the NT blackbody.
-        # qsosed (Quera-Bofarull, sed.py warm_flux_r) does this explicitly via
-        # ratio = disk_flux / energy_flux_r_integrated. Without renormalization
-        # the power-law enhancement adds luminosity above the seed frequency,
-        # artificially boosting the soft-X / EUV relative to the UV.
-        p_plain = jnp.abs(jnp.trapezoid(b_nu_plain[sort_nu], nu_sorted))
-        p_comp = jnp.abs(jnp.trapezoid(b_nu_mod[sort_nu], nu_sorted))
-        renorm = p_plain / jnp.maximum(p_comp, 1e-100)
-        # dL_nu = pi * B_nu_mod * dA * cos(i) (Rybicki & Lightman 1979, Eq. 1.6)
-        area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
-        return b_nu_mod * renorm * area * jnp.maximum(agn_cos_inc, 0.01)
+    if _NTHCOMP_AVAILABLE:
+        # Full nthcomp path (K&D 2018 Section 2.2): solve the Kompaneets equation
+        # per annulus via trilinear table interpolation.  Each annulus emits the
+        # same bolometric power as the NT blackbody (energy conservation), but the
+        # spectral shape is the actual Comptonized spectrum rather than a modified
+        # blackbody.
+        # Reference: agnsed.py _do_warm_annuli (scotthgn/pyAGNSED)
+        def _warm_ring(r_cm, t_ring, dr_ring):
+            b_nu_plain = _planck_lnu(nu, t_ring)
+            p_plain = jnp.abs(jnp.trapezoid(b_nu_plain[sort_nu], nu_sorted))
+            area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
+            l_total = p_plain * area * jnp.maximum(agn_cos_inc, 0.01)
+            kTbb_keV = _K_BOLTZ_KEV * t_ring
+            shape = _nthcomp_lnu_interp(nu, agn_gamma_warm, agn_kt_warm, kTbb_keV)
+            p_shape = jnp.abs(jnp.trapezoid(shape[sort_nu], nu_sorted))
+            shape_norm = shape / jnp.maximum(p_shape, 1e-100)
+            return shape_norm * l_total
+    else:
+        # Simplified fallback: modified blackbody proxy (QSOSED/Synthesizer style).
+        # Accurate for optical/UV photometric fitting (Paper I).
+        # Run scripts/build_nthcomp_templates.py for the full K&D (2018) treatment.
+        def _warm_ring(r_cm, t_ring, dr_ring):
+            b_nu_plain = _planck_lnu(nu, t_ring)
+            b_nu_mod = _warm_comptonization_lnu(nu, t_ring, nu_warm, agn_gamma_warm)
+            p_plain = jnp.abs(jnp.trapezoid(b_nu_plain[sort_nu], nu_sorted))
+            p_comp = jnp.abs(jnp.trapezoid(b_nu_mod[sort_nu], nu_sorted))
+            renorm = p_plain / jnp.maximum(p_comp, 1e-100)
+            # dL_nu = pi * B_nu_mod * dA * cos(i) (Rybicki & Lightman 1979, Eq. 1.6)
+            area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
+            return b_nu_mod * renorm * area * jnp.maximum(agn_cos_inc, 0.01)
 
     l_nu_warm = jnp.sum(jax.vmap(_warm_ring)(r_warm_grid, t_warm, dr_warm), axis=0)
 
@@ -1038,7 +1073,6 @@ def adaf_disc(
     # --- Bremsstrahlung component ---
     # Non-relativistic bremsstrahlung is spectrally flat (nu^0) below the exponential
     # cutoff at kT_e/h (Rybicki & Lightman Ch. 5; Mahadevan 1997 Eq. 3).
-    # The nu^{-0.5} index is wrong.
     nu_brem = _K_BOLTZ * t_e / _H_PLANCK
     nu_ratio_brem = nu / jnp.maximum(nu_brem, 1.0)
     brem_shape = jnp.exp(-jnp.clip(nu_ratio_brem, 0.0, 500.0))  # flat spectrum (nu^0)

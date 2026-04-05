@@ -379,3 +379,152 @@ class TestBug29MstarSurvivingMass:
         assert "compute_surviving_mass" in src, (
             "Pipeline must call compute_surviving_mass (not just jnp.sum(weights))"
         )
+
+
+# ---------------------------------------------------------------------------
+# BUG-04: Warm Comptonization uses simplified power-law, not nthcomp
+# ---------------------------------------------------------------------------
+
+
+class TestBug04WarmComptonization:
+    """disc.py — warm zone must use nthcomp (K&D 2018 §2.2), not a modified BB.
+
+    The full fix requires precomputed templates (build_nthcomp_templates.py).
+    These tests verify:
+    1. The nthcomp numpy solver produces physically correct spectra.
+    2. kubota_done_disc emits a warning when templates are absent.
+    3. When templates are present, the warm zone SED differs from the
+       simplified proxy (confirming the two paths are distinct).
+    4. The nthcomp spectrum peaks at higher frequency than the seed BB
+       (the defining signature of Comptonization).
+
+    Reference: Kubota & Done (2018) MNRAS 480 1247 §2.2;
+               Zdziarski, Johnson & Magdziarz (1996) MNRAS 283 193.
+    """
+
+    def test_donthcomp_nu_returns_finite_nonnegative(self):
+        """nthcomp solver returns finite, non-negative spectral shape."""
+        from tengri.models.agn._nthcomp import donthcomp_nu
+
+        nu = np.logspace(13, 19, 200)
+        # K&D 2018 default warm zone: Gamma=2.5, kTe=0.2 keV, kTbb=10 eV = 0.01 keV
+        shape = donthcomp_nu(nu, gamma=2.5, kTe_keV=0.2, kTbb_keV=0.01)
+        assert shape.shape == nu.shape
+        assert np.all(np.isfinite(shape)), "nthcomp shape must be finite everywhere"
+        assert np.all(shape >= 0.0), "nthcomp shape must be non-negative"
+        assert np.any(shape > 0), "nthcomp shape must be non-zero somewhere"
+
+    def test_nthcomp_spectrum_peaks_above_seed_temperature(self):
+        """Comptonized spectrum peak must be at higher nu than the seed BB.
+
+        For warm Comptonization, photons are scattered to higher energies
+        than the seed blackbody.  The nthcomp peak should be at significantly
+        higher frequency than the seed BB peak (Wien: nu_peak = 2.82 kT/h).
+        """
+        from tengri.models.agn._nthcomp import donthcomp_nu
+
+        kTbb_keV = 0.01  # 10 eV seed
+        kTe_keV = 0.2
+        gamma = 2.5
+        _KEV_TO_ERG = 1.602176634e-9
+        _H_PLANCK = 6.62607015e-27
+        nu_seed_peak = 2.82 * kTbb_keV * _KEV_TO_ERG / _H_PLANCK  # Hz
+
+        nu = np.logspace(13, 19, 500)
+        shape = donthcomp_nu(nu, gamma=gamma, kTe_keV=kTe_keV, kTbb_keV=kTbb_keV)
+
+        # Centroid of nthcomp power should be well above seed BB peak
+        power = shape * nu  # weight by nu for energy centroid
+        if power.sum() > 0:
+            nu_centroid = np.average(nu, weights=power)
+            assert nu_centroid > nu_seed_peak * 5, (
+                f"nthcomp centroid {nu_centroid:.2e} Hz should be > 5x seed BB "
+                f"peak {nu_seed_peak:.2e} Hz — Comptonization must shift photons up"
+            )
+
+    def test_nthcomp_gamma_effect(self):
+        """Harder Gamma (steeper spectrum) reduces soft X-ray relative to UV.
+
+        Larger Gamma → steeper power-law → less energy at high nu.
+        The ratio of X-ray to UV flux must decrease as Gamma increases.
+        """
+        from tengri.models.agn._nthcomp import donthcomp_nu
+
+        nu = np.logspace(13, 19, 300)
+        nu_uv = nu[(nu > 1e15) & (nu < 3e15)]  # UV band
+        nu_xray = nu[(nu > 5e17) & (nu < 2e18)]  # soft X-ray band
+
+        def xray_uv_ratio(gamma):
+            shape = donthcomp_nu(nu, gamma=gamma, kTe_keV=0.2, kTbb_keV=0.01)
+            f_uv = np.trapezoid(np.interp(nu_uv, nu, shape), nu_uv)
+            f_xray = np.trapezoid(np.interp(nu_xray, nu, shape), nu_xray)
+            return f_xray / max(f_uv, 1e-300)
+
+        ratio_soft = xray_uv_ratio(gamma=2.0)  # softer spectrum
+        ratio_hard = xray_uv_ratio(gamma=3.0)  # harder spectrum
+        assert ratio_hard < ratio_soft, (
+            f"Harder Gamma=3.0 (ratio={ratio_hard:.4f}) should have less X-ray "
+            f"relative to UV than Gamma=2.0 (ratio={ratio_soft:.4f})"
+        )
+
+    def test_kubota_done_disc_warns_without_templates(self):
+        """kubota_done_disc must warn when nthcomp templates are absent."""
+        import warnings as _warnings
+
+        from tengri.models.agn._nthcomp import _TABLE_AVAILABLE
+        from tengri.models.agn.disc import kubota_done_disc
+
+        if _TABLE_AVAILABLE:
+            pytest.skip("nthcomp templates present — fallback warning not emitted")
+
+        wavelength = jnp.linspace(1000.0, 50000.0, 100)
+        with _warnings.catch_warnings(record=True) as w:
+            _warnings.simplefilter("always")
+            result = kubota_done_disc(wavelength, agn_log_lbol=46.0)
+        warning_msgs = [str(x.message) for x in w]
+        assert any("nthcomp" in m for m in warning_msgs), (
+            "kubota_done_disc must warn that nthcomp templates are absent"
+        )
+        assert jnp.all(jnp.isfinite(result)), "Fallback must still return a finite SED"
+
+    def test_kubota_done_disc_uses_nthcomp_when_templates_present(self):
+        """When templates present, warm zone SED differs from simplified proxy.
+
+        This is the key regression: the old (buggy) code multiplied B_nu by
+        (nu/nu_seed)^(Gamma-1).  The nthcomp Kompaneets solution produces a
+        qualitatively different spectrum (correct soft X-ray excess shape).
+        The two results must differ by > 1% in X-ray bands.
+        """
+        from tengri.models.agn._nthcomp import _TABLE_AVAILABLE
+
+        if not _TABLE_AVAILABLE:
+            pytest.skip("nthcomp templates absent — run scripts/build_nthcomp_templates.py")
+
+        from tengri.models.agn import disc as disc_mod
+
+        # Build a high-nu wavelength grid (soft X-ray: 10-100 Å = 1-10 keV)
+        wav_xray = jnp.linspace(10.0, 200.0, 80)  # Angstrom (soft X-ray / EUV)
+
+        # nthcomp path (templates present → _NTHCOMP_AVAILABLE=True)
+        result_nthcomp = disc_mod.kubota_done_disc(wav_xray, agn_log_lbol=46.0)
+
+        # Temporarily monkey-patch _NTHCOMP_AVAILABLE to test the fallback
+        _orig = disc_mod._NTHCOMP_AVAILABLE
+        disc_mod._NTHCOMP_AVAILABLE = False
+        try:
+            import warnings as _warnings
+
+            with _warnings.catch_warnings():
+                _warnings.simplefilter("ignore")
+                result_simplified = disc_mod.kubota_done_disc(wav_xray, agn_log_lbol=46.0)
+        finally:
+            disc_mod._NTHCOMP_AVAILABLE = _orig
+
+        # The two spectra must differ (nthcomp ≠ power-law proxy)
+        rel_diff = jnp.abs(result_nthcomp - result_simplified) / jnp.maximum(
+            jnp.abs(result_simplified), 1e-100
+        )
+        assert float(jnp.max(rel_diff)) > 0.01, (
+            "nthcomp and simplified warm Compton spectra must differ by > 1% — "
+            "if they are identical the nthcomp path is not being used"
+        )

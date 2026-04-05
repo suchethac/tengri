@@ -1,4 +1,4 @@
-# Known Bugs — Audit 2026-03-31 (Updated 2026-04-02)
+# Known Bugs — Audit 2026-03-31 (Updated 2026-04-04)
 
 **Every fix MUST:**
 1. Read the original paper or reference code cited below. Do NOT guess the formula.
@@ -15,7 +15,8 @@
 |--------|-------|---------|
 | FIXED | 27 | BUG-02,03,05,06,07,08,09,11,12,13,14,15,16,17,19,20,21,22,23,27,28,29,30,31,34,36 + BUG-01 scoping |
 | PARTIALLY FIXED | 1 | BUG-10 (documented as intentional) |
-| NOT FIXED | 1 | BUG-04 |
+| CONDITIONALLY FIXED | 1 | BUG-04 (nthcomp templates required; graceful fallback otherwise) |
+| NOT FIXED | 0 | — |
 
 ### Emission line branch (merged 2026-04-01): 23 issues found, 20 fixed
 
@@ -24,6 +25,16 @@
 | FIXED | 20 | S1-S6, #9,10,11,12,14 (original 11) + NEW-01 through NEW-09 (2026-04-03/04) |
 | NOT FIXED | 0 | — |
 | CLOSED (undocumented) | 3 | NEW-10,11,12 — counted in original review but never written up; no record of what they refer to; closed 2026-04-04 |
+
+### Incomplete implementations audit (2026-04-04): 5 identified
+
+| ID | Description | Status |
+|----|-------------|--------|
+| IMP-01 | AGN torus toy models (MBB, not RT) | NOT FIXED — explicit toy; use SKIRTOR |
+| IMP-02 | Feltre+2016 NLR backend | NOT FIXED — `NotImplementedError` stub |
+| IMP-03 | `eline_mode="fitted"` | NOT FIXED — `NotImplementedError` stub |
+| IMP-04 | Dust emission analytic fallbacks — dead code | PARTIALLY FIXED — `fallback_fn` param removed from `_make_lazy_loader`; fallback functions retained (still used in notebooks/crossval) |
+| IMP-05 | ADAF bremsstrahlung stale comment | FIXED 2026-04-04 — stale comment deleted |
 
 ---
 
@@ -34,13 +45,26 @@
 **File:** `src/tengri/core/sed_pipeline.py:646`
 **Fix:** Changed `sfr[-1] if sfr is not None` to `sfr[-1] if "sfr" in dir()`. The `is not None` guard does not prevent NameError if `sfr` is unbound; `"sfr" in dir()` does. Consistent with `"sfr_table" in dir()` pattern on the preceding line.
 
-### BUG-04: Warm Comptonization still uses simplified enhancement (NOT FIXED)
+### BUG-04: Warm Comptonization — nthcomp template implementation (CONDITIONALLY FIXED 2026-04-04)
 
-**File:** `src/tengri/models/agn/disc.py:319-333`
-**Status:** Still multiplies `B_nu(T)` by `(nu/nu_seed)^(Gamma_warm-1)` capped at `(nu_warm/nu_seed)^(Gamma_warm-1)`. This is not nthcomp. The warm zone is indistinguishable from the outer disc at optical/UV wavelengths. The whole point of K&D 2018 is missing.
-**Reference:** Kubota & Done (2018) MNRAS 480 1247 Section 2.2; QSOSED source code.
-**Impact:** Low for Paper I (photometric fitting). High for any X-ray/UV AGN work.
-**Decision needed:** Is this acceptable as a known limitation for Paper I, or must it be fixed?
+**File:** `src/tengri/models/agn/disc.py`; `src/tengri/models/agn/_nthcomp.py`
+**Reference:** Kubota & Done (2018) MNRAS 480 1247 Section 2.2; Zdziarski, Johnson & Magdziarz (1996) MNRAS 283 193.
+
+**Root cause:** The old `_warm_comptonization_lnu` multiplied `B_nu(T)` by `(nu/nu_seed)^(Gamma_warm-1)`. This was wrong in two ways: (1) nthcomp **replaces** the blackbody, it does not scale it; (2) the exponent sign was inverted — nthcomp gives `L_nu ∝ ν^(1-Γ)`, not `ν^(Γ-1)`.
+
+**Fix:** Implemented Kompaneets equation solver (`_thermlc` / `_thcompton` / `donthcomp_nu`) ported from scotthgn/RELAGN (pyNTHCOMP.py, credit A.D. Thomas), solving Zdziarski et al. 1996.
+
+**Template build dependency:** The solver is numpy-sequential (tridiagonal back-substitution) and not JAX-compatible. Instead, precompute spectral shapes on an 11×8×25 grid (gamma, kTe, kTbb) and store in `data/nthcomp_templates.npz`. At runtime, JAX trilinear interpolation replaces the per-call Kompaneets solve. Build with:
+
+```bash
+python scripts/build_nthcomp_templates.py  # ~30-120 s one-time cost
+```
+
+**Fallback behavior:** When `data/nthcomp_templates.npz` is absent, `kubota_done_disc` emits a `UserWarning` and falls back to the QSOSED-style power-law proxy (`_warm_comptonization_lnu`). This is acceptable for Paper I photometric fitting (the warm zone contribution to broadband photometry is minor). The fallback is identical to the original code and is retained as the simplified-mode path.
+
+**Tests:** `tests/unit/test_audit_regressions.py::TestBug04WarmComptonization` (5 tests).
+
+**Impact:** Low for Paper I. High for X-ray/UV AGN SED work where warm Comptonization shape matters.
 
 ### BUG-07: Disc ring area pi factor (FIXED — verified 2026-04-03)
 
@@ -145,6 +169,62 @@ def test_cloudy_marg_lnl_varies_with_prior_mean():
 
 **File:** `tests/unit/test_eline_fitting.py`
 **Fix:** Added `test_gradient_matches_finite_difference` — computes central-difference FD gradient at level=1.0 and checks AD/FD relative error < 1%.
+
+---
+
+## INCOMPLETE IMPLEMENTATIONS (audit 2026-04-04)
+
+These are not numerical bugs but missing or placeholder implementations that produce wrong or no results for the advertised feature. The same fix rules apply: read the reference, write a regression test, cite the source.
+
+### IMP-01: AGN torus — toy MBB models (NOT FIXED)
+
+**File:** `src/tengri/models/agn/torus.py`
+**Functions:** `simple_torus`, `two_temperature_torus`
+**Status:** Both are explicitly flagged as toy models in the module docstring: "1-2 temperature modified blackbodies. NOT radiative transfer. Should NOT be used for science." They exist only for fast prototyping and unit testing.
+**Impact:** Any pipeline using `dust_emission_model="simple_torus"` or `"two_temperature_torus"` will produce an IR SED that bears no physical resemblance to real torus emission. The silicate feature at 9.7 μm is crudely approximated with a single Gaussian opacity term.
+**Fix:** Replace with SKIRTOR tabulated templates (`skirtor_analytic`, which now raises `FileNotFoundError` if templates are absent). CLUMPY (Nenkova+2008) would be an alternative; no implementation exists yet.
+**Reference:** Stalevski et al. 2012, MNRAS 420, 2756 (SKIRTOR); Nenkova et al. 2008, ApJ 685, 147 (CLUMPY).
+**Regression test required:** `test_torus_not_mbb` — assert that `simple_torus` output does not match a plain MBB at the same temperature (i.e., confirm it at least applies silicate opacity correctly). Also assert a `DeprecationWarning` is emitted.
+
+---
+
+### IMP-02: Feltre+2016 NLR backend — `NotImplementedError` stub (NOT FIXED)
+
+**File:** `src/tengri/models/nebular/agn_nebular.py:365`
+**Status:** `agn_nlr_emission(backend="feltre")` raises `NotImplementedError("Feltre+2016 grid backend not yet implemented. Use 'cue'.")`. The module docstring calls it a placeholder. No grid data, no interpolation logic, nothing.
+**Impact:** Any model configured with `agn_nlr_backend="feltre"` will crash at inference time.
+**Fix:** Implement Feltre et al. (2016) photoionization grid interpolation, analogous to the existing CUE and CLOUDY backends. Grid data must be obtained from the original authors or VizieR.
+**Reference:** Feltre, Charlot & Gutkin (2016), MNRAS 456, 3354.
+**Regression test required:** `test_feltre_nlr_returns_finite_sed` — basic smoke test that `agn_nlr_emission(backend="feltre", ...)` returns a finite, positive L_nu array.
+
+---
+
+### IMP-03: `eline_mode="fitted"` — `NotImplementedError` stub (NOT FIXED)
+
+**File:** `src/tengri/models/observation/spectroscopy_config.py:88`
+**Status:** `SpectroscopyConfig(eline_mode="fitted")` raises `NotImplementedError("eline_mode='fitted' (free MCMC line amplitudes) is not yet implemented.")`. The three other modes (`"off"`, `"fixed"`, `"marginalized"`) work.
+**Impact:** Free-amplitude emission line fitting (where line amplitudes are explicit latent parameters sampled by MCMC/VI) is completely unavailable.
+**Fix:** Implement the fitted mode: add line amplitudes to the ParamSpec free-parameter list, include them in the forward model output, and wire them into the likelihood. The design pattern is the same as the marginalized mode minus the analytic marginalization step.
+**Reference:** See `observation/eline_fitting.py` for the existing design matrix and amplitude conventions.
+**Regression test required:** `test_fitted_mode_produces_posterior_line_amplitudes` — run a short inference pass with `eline_mode="fitted"` and check that line amplitude posteriors are returned with non-zero variance.
+
+---
+
+### IMP-04: Dust emission analytic fallbacks — dead code not deleted (PARTIALLY FIXED 2026-04-04)
+
+**File:** `src/tengri/models/dust/emission.py`
+**Functions:** `_dale2014_analytic_fallback`, `_draine_li2007_analytic_fallback`, `_draine_li2014_analytic_fallback`, `_astrodust_analytic_fallback`, `_bosa_analytic_fallback`, `_themis_analytic_fallback`; also `_skirtor_analytic_fallback` in `src/tengri/models/agn/skirtor.py`.
+**Status:** `_make_lazy_loader`'s unused `fallback_fn` parameter removed and all 4 call sites updated (2026-04-04). The fallback functions themselves are retained because they are still referenced in notebooks (`03_dust_emission.py`, `16_model_gallery_dust_emission.py`), examples (`plot_dust_emission_models.py`), and crossval tests. Public API path now always raises `FileNotFoundError` — `test_no_analytic_fallbacks.py` verifies this.
+**Remaining:** The fallback function bodies still exist. A future cleanup can delete them once notebooks/crossval tests are updated to use template-backed functions or skip when templates absent.
+**Impact:** No runtime impact. `_make_lazy_loader` interface is now clean.
+
+---
+
+### IMP-05: ADAF bremsstrahlung — stale wrong-label comment (FIXED 2026-04-04)
+
+**File:** `src/tengri/models/agn/disc.py:1076`
+**Fix:** Deleted the stale `# The nu^{-0.5} index is wrong.` comment. The code on the next line (`brem_shape = jnp.exp(...)`) was already correct (flat nu^0 spectrum per Mahadevan 1997 Eq. 3); the comment was the original bug report that was never removed after the fix was applied.
+**Reference:** Mahadevan (1997) ApJ 477, 585 Eq. 3.
 
 ---
 
