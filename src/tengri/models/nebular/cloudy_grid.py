@@ -23,16 +23,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-# Physical constants
-_H_PLANCK = 6.62607015e-27  # erg s
-_C_CGS = 2.99792458e10  # cm/s
-_LSUN_ERG = 3.828e33  # erg/s
-_LYMAN_LIMIT = 911.76  # Angstrom (physical: 911.7633 A)
-
-# Solar metallicity: log10(Zsun) = log10(0.0142) (Asplund+2009)
-# SSP grids store absolute log10(Z); CLOUDY HDF5 files store log10(Z/Zsun).
-# We convert CLOUDY to absolute at load time so both share the same convention.
-_LOG10_ZSUN = -1.8477116556169435
+from tengri.models.nebular._constants import _C_CGS, _LOG10_ZSUN
+from tengri.models.nebular._shared import _interp_index_weight, compute_qh
 
 
 class CloudyGridData(NamedTuple):
@@ -100,48 +92,6 @@ def load_cloudy_grid(filepath: str) -> CloudyGridData:
 # Q_H computation (ionizing photon rate)
 # ---------------------------------------------------------------------------
 
-
-@jax.jit
-def compute_qh(
-    ssp_wave: jnp.ndarray,
-    ssp_flux: jnp.ndarray,
-) -> float:
-    """Compute ionizing photon rate Q_H from an SSP spectrum.
-
-    Q_H = integral_{0}^{912A} [L_nu / (h * nu)] d_nu
-
-    Parameters
-    ----------
-    ssp_wave : array, shape (n_wave,)
-        SSP wavelength grid in Angstrom (increasing).
-    ssp_flux : array, shape (n_wave,)
-        SSP flux in Lsun/Hz/Msun.
-
-    Returns
-    -------
-    float
-        Q_H in photons/s/Msun.
-    """
-    # Convert wavelength to frequency
-    nu = _C_CGS / (ssp_wave * 1e-8)  # Hz
-
-    # L_nu in erg/s/Hz/Msun
-    l_nu = ssp_flux * _LSUN_ERG
-
-    # Photon rate density: L_nu / (h * nu)
-    photon_rate = l_nu / (_H_PLANCK * nu)
-
-    # Mask to ionizing wavelengths only (below Lyman limit)
-    mask = ssp_wave < _LYMAN_LIMIT
-
-    # Integrate over frequency (nu decreases as wave increases)
-    # Use negative sign because we integrate in wave space (increasing)
-    integrand = jnp.where(mask, photon_rate, 0.0)
-    qh = -jnp.trapezoid(integrand, nu)
-
-    return jnp.maximum(qh, 0.0)
-
-
 # Vectorized over metallicity and age dimensions
 _compute_qh_grid = jax.vmap(
     jax.vmap(compute_qh, in_axes=(None, 0)),
@@ -152,29 +102,6 @@ _compute_qh_grid = jax.vmap(
 # ---------------------------------------------------------------------------
 # Grid interpolation (trilinear in logZ, logAge, logU)
 # ---------------------------------------------------------------------------
-
-
-def _interp_index_weight(
-    x: float,
-    grid: jnp.ndarray,
-) -> tuple[int, float]:
-    """Find bracketing index and interpolation weight for 1D grid.
-
-    Returns (i, w) such that value = grid[i]*(1-w) + grid[i+1]*w.
-    Clips to grid bounds.
-    """
-    # Clip to grid range
-    x_clipped = jnp.clip(x, grid[0], grid[-1])
-
-    # Find index
-    idx = jnp.searchsorted(grid, x_clipped, side="right") - 1
-    idx = jnp.clip(idx, 0, len(grid) - 2)
-
-    # Interpolation weight
-    dx = grid[idx + 1] - grid[idx]
-    w = jnp.where(dx > 0, (x_clipped - grid[idx]) / dx, 0.0)
-
-    return idx, w
 
 
 def _trilinear_interp(

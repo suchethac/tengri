@@ -45,6 +45,7 @@ References
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import NamedTuple
 
@@ -53,14 +54,62 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-# Shared constants — same as cloudy_grid.py to stay in sync
-_H_PLANCK = 6.62607015e-27  # erg s
-_C_CGS = 2.99792458e10  # cm/s
-_LSUN_ERG = 3.828e33  # erg/s
-_LYMAN_LIMIT = 911.76  # Angstrom
+from tengri.models.nebular._constants import _C_CGS, _LOG10_ZSUN, _LSUN_ERG
+from tengri.models.nebular._shared import _interp_index_weight, compute_qh
 
-# Asplund+2009 solar metallicity — same as cloudy_grid.py / tengri convention
-_LOG10_ZSUN = -1.8477116556169435  # log10(0.01413)
+# ---------------------------------------------------------------------------
+# Ionizing spectrum warnings
+# ---------------------------------------------------------------------------
+
+
+class IonizingSpectrumInconsistencyError(Exception):
+    """Raised when the nebular ionizing source is inconsistent with the DSPS SSPs.
+
+    The stellar continuum and the nebular line predictions would be driven by
+    different stellar population models. Suppress with
+    ``ionizing_source_warning='warn'`` or ``'suppress'`` if you have verified
+    this is acceptable for your science case.
+    """
+
+
+class IonizingSpectrumInconsistencyWarning(UserWarning):
+    """Warning variant of IonizingSpectrumInconsistencyError."""
+
+
+def _emit_mappings_agn_ionizing_warning(mode: str) -> None:
+    """Emit warning about MappingsPhotoAGNBackend Q_H source requirement."""
+    msg = (
+        "MappingsPhotoAGNBackend: Q_H must be supplied by the AGN disc model — "
+        "it is not self-consistently derived from SSPs. Ensure you are passing "
+        "log_l_ion_erg from an AGN disc model (e.g. kubota_done_full). "
+        "The ionizing shape is a power law; for a composite starburst+AGN region, "
+        "use a mixed-source model. "
+        "To suppress: pass ionizing_source_warning='suppress'."
+    )
+    if mode == "raise":
+        raise IonizingSpectrumInconsistencyError(msg)
+    warnings.warn(msg, IonizingSpectrumInconsistencyWarning, stacklevel=3)
+
+
+def _emit_mappings_stellar_ionizing_warning(model: str, mode: str) -> None:
+    """Emit error/warning about MappingsPhotoStellarBackend ionizing source mismatch."""
+    msg = (
+        f"MappingsPhotoStellarBackend (model='{model}'): the ionizing radiation field "
+        "used to compute nebular line predictions is from a "
+        f"{'Starburst99' if model == 'sb99' else 'BPASS v2.2'} grid embedded in "
+        "MAPPINGS V — this is NOT derived from your DSPS SSPs. The stellar continuum "
+        "and the nebular lines are driven by DIFFERENT stellar population models. "
+        "This inconsistency can bias predicted line ratios at ages < 20 Myr and for "
+        "non-solar metallicity. For self-consistent nebular emission, use "
+        "CloudyGridBackend or CueBackend instead. "
+        "To suppress: pass ionizing_source_warning='warn' or 'suppress'."
+    )
+    if mode == "raise":
+        raise IonizingSpectrumInconsistencyError(msg)
+    if mode == "warn":
+        warnings.warn(msg, IonizingSpectrumInconsistencyWarning, stacklevel=3)
+    # mode == "suppress": silent
+
 
 # Age cut for nebular emission (same as CloudyGridBackend)
 _MAX_NEB_LOG_AGE_YR = 8.0  # log10(100 Myr in yr)
@@ -216,47 +265,7 @@ def _load_agn_grid(filepath: str | Path, density: str) -> MappingsAGNGridData:
 # Q_H computation (identical to cloudy_grid.py)
 # ---------------------------------------------------------------------------
 
-
-@jax.jit
-def _compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
-    """Integrate ionizing photon rate below the Lyman limit.
-
-    Parameters
-    ----------
-    ssp_wave : array, (n_wave,), Angstrom
-    ssp_flux : array, (n_wave,), Lsun/Hz/Msun
-
-    Returns
-    -------
-    float
-        Q_H in photons/s/Msun.
-    """
-    nu = _C_CGS / (ssp_wave * 1e-8)  # Hz
-    l_nu = ssp_flux * _LSUN_ERG  # erg/s/Hz
-    photon_rate = l_nu / (_H_PLANCK * nu)
-    mask = ssp_wave < _LYMAN_LIMIT
-    integrand = jnp.where(mask, photon_rate, 0.0)
-    return jnp.maximum(-jnp.trapezoid(integrand, nu), 0.0)
-
-
-_compute_qh_grid = jax.vmap(jax.vmap(_compute_qh, in_axes=(None, 0)), in_axes=(None, 0))
-
-
-# ---------------------------------------------------------------------------
-# 1-D interpolation helper (shared with cloudy_grid.py pattern)
-# ---------------------------------------------------------------------------
-
-
-def _interp_index_weight(x: float, grid: jnp.ndarray) -> tuple:
-    """Find bracketing index and linear weight for 1-D sorted grid.
-
-    Returns (idx, w) such that value ≈ grid[idx]*(1-w) + grid[idx+1]*w.
-    """
-    x_clipped = jnp.clip(x, grid[0], grid[-1])
-    idx = jnp.clip(jnp.searchsorted(grid, x_clipped, side="right") - 1, 0, grid.shape[0] - 2)
-    dx = grid[idx + 1] - grid[idx]
-    w = jnp.where(dx > 0, (x_clipped - grid[idx]) / dx, 0.0)
-    return idx, w
+_compute_qh_grid = jax.vmap(jax.vmap(compute_qh, in_axes=(None, 0)), in_axes=(None, 0))
 
 
 # ---------------------------------------------------------------------------
@@ -412,11 +421,15 @@ class MappingsPhotoStellarBackend:
         density: str = "cpr",
         ssp_data=None,
         sfh_mode: str = "inst",
+        ionizing_source_warning: str = "raise",
     ) -> None:
         if model not in ("sb99", "bpass"):
             raise ValueError(f"model must be 'sb99' or 'bpass', got {model!r}")
         if density not in ("cpr", "cdn"):
             raise ValueError(f"density must be 'cpr' or 'cdn', got {density!r}")
+        if ionizing_source_warning not in ("raise", "warn", "suppress"):
+            raise ValueError("ionizing_source_warning must be 'raise', 'warn', or 'suppress'")
+        _emit_mappings_stellar_ionizing_warning(model, ionizing_source_warning)
 
         self.model = model
         self.density = density
@@ -523,8 +536,12 @@ class MappingsPhotoStellarBackend:
         zo_val = _log_z_abs_to_zo(neb_logZ_gas)
 
         young_idx = self._young_idx
-        young_ages = ssp_log_ages_yr[young_idx]
-        young_weights = ssp_weights[young_idx]
+        if young_idx is None:
+            young_ages = ssp_log_ages_yr
+            young_weights = ssp_weights
+        else:
+            young_ages = ssp_log_ages_yr[young_idx]
+            young_weights = ssp_weights[young_idx]
 
         def _contrib_one_age(log_age_i, weight_i):
             qh_i = self._get_qh_at(log_z, log_age_i)
@@ -660,9 +677,14 @@ class MappingsPhotoAGNBackend:
         self,
         grid_path: str | Path = _DEFAULT_GRID_PATH,
         density: str = "cpr",
+        ionizing_source_warning: str = "warn",
     ) -> None:
         if density not in ("cpr", "cdn"):
             raise ValueError(f"density must be 'cpr' or 'cdn', got {density!r}")
+        if ionizing_source_warning not in ("raise", "warn", "suppress"):
+            raise ValueError("ionizing_source_warning must be 'raise', 'warn', or 'suppress'")
+        if ionizing_source_warning != "suppress":
+            _emit_mappings_agn_ionizing_warning(ionizing_source_warning)
         self.density = density
         self.grid = _load_agn_grid(grid_path, density)
 

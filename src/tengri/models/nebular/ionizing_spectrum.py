@@ -26,12 +26,12 @@ References
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.models.nebular._constants import _C_AA, _H_PLANCK
+
 # numpy < 2.0 compat
 _np_trapz = getattr(np, "trapezoid", np.trapz)
 
 # Physical constants
-_C_AA = 2.9979e18  # c in Angstrom/s
-_H_PLANCK = 6.626e-27  # erg s
 _LSUN = 3.828e33  # erg/s
 
 # Ionization edges (Angstrom) — from cue/constants.py

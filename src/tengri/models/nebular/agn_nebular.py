@@ -26,15 +26,12 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.models.nebular._constants import _C_CGS, _H_PLANCK
 from tengri.models.nebular.ionizing_spectrum import _CLIP_RANGES, SEGMENT_EDGES
 
 # ---------------------------------------------------------------------------
 # Physical constants
 # ---------------------------------------------------------------------------
-_C_CGS = 2.9979e10  # Speed of light [cm s^-1]
-_H_PLANCK = 6.626e-27  # Planck constant [erg s]
-_LSUN_ERG = 3.828e33  # Solar luminosity [erg s^-1]
-_C_AA = 2.9979e18  # Speed of light [Angstrom s^-1]
 _NU_LYMAN = _C_CGS / (911.76e-8)  # Lyman limit frequency [Hz]
 _RYDBERG_ERG = 2.1799e-11  # 13.6 eV in erg
 
