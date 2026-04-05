@@ -336,8 +336,9 @@ class Fitter:
         # Available methods
         lines.append("")
         lines.append(
-            "  Methods:     map, raytrace, nuts, geovi, mgvi, geovi_nuts, "
-            "laplace, pathfinder, elliptical_slice"
+            "  Methods:     map, vi, vi_linear, vi_native, vi_native_linear, "
+            "vi_nifty, vi_nifty_linear, mcmc, mcmc_raytrace, mcmc_nuts, mcmc_ess, "
+            "laplace, pathfinder, evidence, auto"
         )
 
         lines.append(sep)
@@ -537,7 +538,7 @@ class Fitter:
         ...         "nonlinear_resample",
         ...     )
         ... )
-        >>> result = fitter.run("native_geovi")  # instant
+        >>> result = fitter.run("vi_native")  # instant
         """
         dummy_pos = self._initialize_unbounded(jax.random.PRNGKey(0))
         if self._jit_sampler is None:

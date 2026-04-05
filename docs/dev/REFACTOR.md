@@ -1,11 +1,10 @@
-# Tengri Refactor Plan: Lessons from Organic Growth
+# Tengri Refactor: Lessons and Ground-Up Design
 
-## Why This Document Exists
-
-Tengri grew organically without a design contract. The physics and math are excellent (geoVI,
-PSD-correlated SFH, differentiable Ray Tracing). The engineering structure is fragmented. This
-document records the root causes, what should have been done upfront, and a prioritized refactor
-plan with scoped subagent tasks.
+> What we did, what went wrong, what we would do differently if starting from scratch.
+> Companion to [`docs/dev/20260404-refactor.md`](20260404-refactor.md) (the executed 7-phase plan). That doc is the *what*.
+> This doc is the *why* and the *before* — what a clean-sheet design would look like.
+>
+> **Last updated**: 2026-04-05 — synthesized from updated module inventory in `20260404-refactor.md`.
 
 ---
 
@@ -37,479 +36,285 @@ Parameters = *scalars with priors that get fitted* — in gradient tape.
 
 These are fundamentally different types. They were conflated in `ParamSpec` and `Model.__init__`,
 making both enormous. `DustConfig`, `NebularConfig`, `AGNConfig` were designed as frozen
-dataclasses much later and retrofitted. This is the single largest structural mistake.
+dataclasses much later and retrofitted.
 
-### 3. Physics categories accumulated without defaults or selection guidance
+In JAX-based code this distinction is especially critical: settings are Python-level dispatch
+resolved *before* JIT; parameters are JAX arrays passed *into* JIT. Conflating them causes
+`if nebular:` branches inside compiled functions, forcing recompilation per configuration change
+or tracing incorrectly.
+
+### 3. Physics categories accumulated without defaults or deprecation discipline
 
 - SFH models: 8+ (dpl, tsnorm, snorm, norm, lnorm, exp, dexp, const, field, field+burst)
 - Dust attenuation: 6 laws
 - Dust emission: 5+ models
-- AGN: 4 models (multicolor_disc, unified_nlr_blr, kubota_done_full, qsogen)
+- AGN: 4 models
 - Inference: 14+ named methods for 5 distinct algorithms
 
-No guidance on which to use. No recommended defaults. Each was added as "another option" rather
-than replacing or superseding a prior option.
+No guidance on which to use. No recommended defaults. Each was added as "another option"
+rather than replacing or superseding a prior one. The correct default rule is the inverse:
+**every new model supersedes a prior one unless explicitly documented otherwise**.
 
-### 4. The "tier 2" SED path was never built
+For SFH models: `field` subsumes `dpl` in expressive power but `dpl` was never deprecated
+because it was faster. Fine — but that decision should have been documented at the time `field`
+was added: "dpl remains as the fast parametric option; field is the flexible default; the
+others are legacy." Instead all eight are equal options with no guidance.
+
+### 4. The "tier 2" SED path was never built (later fixed in Phase 5)
 
 - **Tier 1**: Fused photometry (fixed-z + fixed filters) → ~140 µs, 20× speedup
-- **Tier 2**: Compositional rest-frame SED (all physics, free-z, JIT'd) → ~300–500 µs ← **MISSING**
+- **Tier 2**: Compositional rest-frame SED (all physics, free-z, JIT'd) → ~300–500 µs
 - **Tier 3**: Exact fallback (tabulated SFH, evolving Z, Python dispatch) → ~500–1000 µs
 
-Designed in `docs/design_compositional_sed.md`. Never implemented. All non-tier-1 work falls
-through to slow tier 3.
+All non-tier-1 work fell through to slow tier 3 because the tier-2 architecture was designed
+but never implemented. Performance tiers need to be designed and at least stubbed before
+the pipeline hardens.
 
 ### 5. Gradient correctness was never systematically tested
 
-All gradient tests check `isfinite()` only. They would pass with wrong signs or missing terms. The
-CLOUDY marginalization bug (wrong ln_L, biases MAP/VI gradients) passed all tests.
-`cloudy_grid_line_priors()` has zero coverage.
+All gradient tests checked `isfinite()` only. They pass with wrong signs or missing terms.
+The CLOUDY marginalization bug (wrong `ln_L`, biasing MAP/VI gradients) passed all tests.
+`cloudy_grid_line_priors()` had zero coverage.
+
+`isfinite()` is not a gradient test. For differentiable scientific code, the only meaningful
+test is agreement with finite differences: does `jax.grad` agree with `(f(x+ε) - f(x-ε)) / 2ε`
+to within `eps=1e-5`? This is what catches sign errors, missing terms, and wrong normalizations.
 
 ### 6. External dependency traps
 
-NIFTy had 99.8% Python overhead (partial wrapping, type checking, dict dispatch). Required full
-reimplementation in JAX primitives. The lesson: isolate external library APIs behind internal
-abstractions from day one; do not let NIFTy types leak into inference logic.
+NIFTy had 99.8% Python overhead (partial wrapping, type checking, dict dispatch). Required
+full reimplementation in JAX primitives. The lesson: isolate external library APIs behind
+internal abstractions from day one; do not let NIFTy types leak into inference logic.
 
 ### 7. Documentation outran implementation
 
-`docs/models/` has full write-ups for: chemical evolution Z(t), shock emission (MAPPINGS), ADAF
-disc, MAGPHYS dust, THEMIS dust, patchy IGM reionization, alpha-enhanced SSPs — all with zero or
-near-zero code. Creates false scope expectations and makes the project feel unmanageable.
+`docs/models/` had full write-ups for: chemical evolution Z(t), shock emission (MAPPINGS),
+ADAF disc, MAGPHYS dust, THEMIS dust, patchy IGM reionization, alpha-enhanced SSPs — all
+with zero or near-zero code. Creates false scope expectations and makes the project feel
+unmanageable.
 
 ---
 
-## What Should Have Been Done First (Pre-Implementation Checklist)
+## What Should Have Been Done First
 
-### Step 0A — Write 3 usage archetypes as runnable scripts
+These are not bureaucratic gates. Each prevents a specific class of failure that compounds
+over time. Skipping any one of them produces a known category of debt.
 
-The scripts define every class name, method name, and parameter name before implementation. Run
-them as the "north star."
+### Step 0A — Write three failing API scripts before any class definitions
+
+The scripts define every class name, method name, and parameter name before implementation.
+Commit them. They are CI — the API cannot regress.
 
 ```python
-# Grad student: photometric fit, parametric SFH
+# grad_student.py — photometric fit, parametric SFH
 model = SEDModel.from_config(
     ssp="fsps_default", sfh="dpl", dust="charlot_fall",
     filters=["sdss_u", "sdss_g", "sdss_r"], redshift=0.1,
 )
 result = model.fit(flux, noise)
+result.plot()
 
-# Expert: stochastic SFH, spectroscopy, MCMC validation
-params = Parameters(sfh="field", dust="two_component", nebular="cloudy")
+# expert.py — stochastic SFH, spectroscopy, MCMC validation
+settings = ModelConfig(
+    sfh=FieldSFHConfig(n_grid=50),
+    nebular=NebularConfig(backend="cloudy", grid_path="..."),
+)
+params = Parameters()
 params.add("sfh_field_psd_sigma", LogUniform(0.1, 3.0))
-result = SEDModel(ssp=grid, settings=settings, params=params, obs=obs).fit().refine("mcmc")
+result = SEDModel(ssp=grid, settings=settings, params=params, obs=obs).fit()
+result.refine("mcmc_raytrace", n_steps=1000)
 
-# Population: hierarchical PSD hyperparameters
+# population.py — hierarchical PSD hyperparameters
 pop = SEDModel.fit_population(
     obs_list, shared=["sfh_field_psd_sigma", "sfh_field_psd_tau_myr"]
 )
 pop.plot_population()
 ```
 
+The failure mode prevented: API sprawl. If you commit to `model.fit(flux, noise)` as the
+one-liner, you can never accidentally require the simple case to construct a `Fitter` manually.
+
 ### Step 0B — Write the suffix convention table before any class definitions
 
-| Suffix      | Meaning                                          | Examples                          |
-|-------------|--------------------------------------------------|-----------------------------------|
-| (none)      | Concrete class with behavior                     | `SEDModel`, `Fitter`, `Posterior` |
-| `Config`    | Frozen settings, NOT in gradient tape            | `DustConfig`, `NebularConfig`     |
-| `Backend`   | Swappable physics implementation                 | `CloudyBackend`, `CueBackend`     |
-| `Model`     | Statistical model                                | `NoiseModel`, `CalibrationModel`  |
-| `List`      | Registry/catalog                                 | `LineList`, `FilterList`          |
-| `-er` suffix | Active orchestrator                             | `Fitter`, `PopulationFitter`      |
+| Suffix        | Meaning                                        | Examples                            |
+|---------------|------------------------------------------------|-------------------------------------|
+| (none)        | Concrete class with behavior                   | `SEDModel`, `Fitter`, `Posterior`   |
+| `Config`      | Frozen settings, NOT in gradient tape          | `DustConfig`, `NebularConfig`       |
+| `Backend`     | Swappable physics implementation               | `CloudyBackend`, `CueBackend`       |
+| `Model`       | Statistical model                              | `NoiseModel`, `CalibrationModel`    |
+| `List`        | Registry / catalog                             | `LineList`, `FilterList`            |
+| `-er` suffix  | Active orchestrator                            | `Fitter`, `PopulationFitter`        |
 
 Forbidden: `Spec` (vague), `Config` on data containers, `Result` (use `Posterior`).
 
-### Step 0C — Define the unit contract table
+These suffixes communicate the *role* of a class — what you need when reading unfamiliar
+code under time pressure.
 
-Every parameter docstring must state: user-facing unit / internal unit / conversion.
+### Step 0C — Write the unit contract table before any parameter code
 
-| Parameter           | User-facing | Internal   | Conversion  |
-|---------------------|------------|------------|-------------|
-| `sfh_field_psd_tau` | Myr        | yr         | × 10⁶       |
-| `sfh_*_tau_peak`    | Gyr        | yr         | × 10⁹       |
-| `met_logzsol`       | log(Z/Z☉)  | log(Z) abs | + LOG10_ZSUN |
+Every parameter must state: user-facing unit / internal unit / conversion. Populate this
+table before writing `param_translate.py`.
 
-### Step 0D — Draw the module boundary tree with ownership rules
+| Parameter            | User-facing   | Internal     | Conversion     |
+|----------------------|---------------|--------------|----------------|
+| `sfh_field_psd_tau`  | Myr           | yr           | × 10⁶          |
+| `sfh_*_tau_peak`     | Gyr           | yr           | × 10⁹          |
+| `met_logzsol`        | log(Z/Z☉)     | log(Z) abs   | + LOG10_ZSUN   |
+| `dust_tau_bc`        | optical depth | optical depth | (none)         |
+
+In JAX, unit errors do not throw exceptions — they produce wrong numbers at plausible
+magnitudes. A unit contract table forces enumeration of every conversion at the
+public/internal boundary before any silent bugs can accumulate.
+
+### Step 0D — Draw the module boundary tree with explicit import rules
 
 ```
 tengri/
 ├── core/
-│   ├── model.py         < 300 lines: thin orchestrator, no physics
-│   ├── parameters.py    parameter registry + prior definitions only
-│   ├── settings.py      DustConfig, NebularConfig, AGNConfig
-│   ├── param_map.py     name translation (one layer: public → internal)
-│   ├── fused_kernels.py JIT kernel builders
-│   ├── sed_pipeline.py  SED computation engine
-│   └── noise.py         NoiseModel
+│   ├── model.py          < 300 lines: thin orchestrator, no physics
+│   ├── parameters.py     parameter registry + prior definitions only
+│   ├── settings.py       DustConfig, NebularConfig, AGNConfig (frozen dataclasses)
+│   ├── param_map.py      name translation (one layer: public → internal)
+│   ├── fused_kernels.py  JIT kernel builders
+│   ├── sed_pipeline.py   SED computation engine
+│   └── noise.py          NoiseModel
 ├── inference/
-│   ├── fitter.py        < 150 lines: dispatch table only
-│   ├── map.py           MAP + optimizer
-│   ├── vi.py            geoVI + MGVI (JIT path + NIFTy path)
-│   ├── mcmc.py          NUTS + Ray Tracing + ESS
-│   ├── evidence.py      Nested Slice Sampling
-│   ├── population.py    PopulationFitter
-│   └── posterior.py     Posterior + PopulationPosterior
-└── models/              physics (unchanged structure, but with 1 default per category)
+│   ├── fitter.py         < 150 lines: dispatch table only
+│   ├── map.py            MAP + optimizer
+│   ├── vi.py             geoVI + MGVI (JIT path + NIFTy path)
+│   ├── mcmc.py           NUTS + Ray Tracing + ESS
+│   ├── evidence.py       Nested Slice Sampling
+│   ├── population.py     PopulationFitter
+│   └── posterior.py      Posterior + PopulationPosterior
+└── models/               physics (unchanged structure, but 1 default per category)
 ```
 
-**Dependency rule**: `core/` never imports from `inference/`. `inference/` never imports from
-`models/` directly (only through `core/`). Physics modules only import from `utils/`.
+**Explicit dependency rules** (write these in each `__init__.py` as comments, enforce in CI):
+
+- `core/` never imports from `inference/`
+- `inference/` never imports from `models/` directly — only through `core/`
+- `models/` only imports from `utils/`
+- `utils/` imports only from stdlib and third-party (jax, numpy, etc.)
+
+Without these rules written down, every "just this once" cross-boundary import is locally
+justified and globally corrosive.
 
 ### Step 0E — Define the parameter namespace before any Parameters code
 
 ```
-{sfh_type}_{param}      sfh_dpl_alpha, sfh_field_psd_sigma
-met_{param}             met_logzsol
-dust_{param}            dust_tau_bc, dust_tau_diff, dust_slope
-neb_{param}             neb_logU, neb_logZ_gas, neb_fesc
-agn_{submodel}_{param}  agn_disc_log_mbh, agn_torus_frac
-eline_{param}           eline_broad
-noise_{param}           noise_f_cal, noise_dof
+{sfh_type}_{param}       sfh_dpl_alpha, sfh_field_psd_sigma
+met_{param}              met_logzsol
+dust_{param}             dust_tau_bc, dust_tau_diff, dust_slope
+neb_{param}              neb_logU, neb_logZ_gas, neb_fesc
+agn_{submodel}_{param}   agn_disc_log_mbh, agn_torus_frac
+eline_{param}            eline_broad
+noise_{param}            noise_f_cal, noise_dof
 ```
 
-No short names in the public API except `logzsol` → `met_logzsol` (documented explicitly). No
-internal names that shadow public names.
+No short names in the public API except those explicitly documented in the alias table.
+No internal names that shadow public names. Enforce with a regex CI check:
+`^(sfh_|met_|dust_|neb_|agn_|eline_|noise_)` — anything not matching is legacy or a bug.
 
----
+### Step 0F — Write finite-difference gradient tests before each physics function
 
-## Prioritized Refactor Plan
-
-### Phase 1 — Structural Naming Contract (P0, Non-Breaking)
-
-Add new names alongside old with `DeprecationWarning`. Remove old names in v1.0.
-
-| Current                  | Rename to             | Reason                                          |
-|--------------------------|-----------------------|-------------------------------------------------|
-| `ParamSpec`              | `Parameters`          | Vague abbreviation                              |
-| `SpectroscopyConfig`     | `Spectroscopy`        | Data container, not config                      |
-| `NoiseConfig`            | `NoiseModel`          | It's a statistical model                        |
-| `HierarchicalFitter`     | `PopulationFitter`    | "Hierarchical" is an implementation detail      |
-| `HierarchicalResult`     | `PopulationPosterior` | "Hierarchical" is an implementation detail      |
-| `LineCatalog`            | `LineList`            | Sounds like a database table                    |
-| `Posterior.summary()`    | `Posterior.stats()`   | Returns dict (inconsistent with other `.summary()` → str) |
-
-**Files**: `core/param_spec.py`, `inference/fitter.py`, `inference/posterior.py`,
-`inference/hierarchical.py`, `models/observation/line_catalog.py`, `__init__.py`
-
----
-
-### Phase 2 — Split God Files (P0)
-
-#### 2A: Split `fitter.py` (4305 lines) → inference subpackage
-
-Dispatch table in `fitter.py` (< 150 lines). Each algorithm in its own file:
-
-- `inference/map.py` — MAP + optax optimizers (extract from `map_optimizer.py` + fitter internals)
-- `inference/vi.py` — geoVI + MGVI, JIT fast path + NIFTy backend (extract `_run_fast_vi`,
-  `_run_native_vi`, `_run_nifty_vi`)
-- `inference/mcmc.py` — NUTS + Ray Tracing + ESS (extract `_run_raytrace`, `_run_nuts`,
-  `_run_elliptical_slice`)
-- `inference/evidence.py` — NSS (extract `_run_nss`)
-- `inference/population.py` — extract from `hierarchical.py`
-
-#### 2B: Split `core/model.py` (2538 lines)
-
-- `core/model.py` — thin orchestrator (< 300 lines): `__init__`, `from_config()`, `fit()`,
-  dispatch to `sed_pipeline`
-- `core/convenience.py` — `prior_predictive()`, `fit_batch()`, `fit_population()`,
-  `fit_catalog()` wrappers
-- `core/mock.py` — mock galaxy generation (already partially extracted)
-
----
-
-### Phase 3 — Settings/Parameters Split (P0, Breaking)
-
-Introduce explicit `core/settings.py` with frozen dataclasses. Migrate sub-model selection out of
-`ParamSpec.__init__`.
+For every function that will go inside a JIT boundary, write the FD test first.
+The test defines the numerical contract. The docstring describes the physics. The code
+satisfies both.
 
 ```python
-# Before (conflated)
-spec = ParamSpec(sfh="field", nebular=True, cloudy_grid_path="...")
-spec.add("neb_logU", Uniform(-4, -1))
-
-# After (explicit split)
-settings = ModelConfig(
-    sfh=FieldSFHConfig(n_grid=50),
-    nebular=NebularConfig(backend="cloudy", grid_path="..."),
-)
-params = Parameters()
-params.add("neb_logU", Uniform(-4, -1))
-model = SEDModel(ssp=grid, settings=settings, params=params, obs=obs)
+# Template for any new differentiable function
+def test_my_function_gradient():
+    x = jnp.array([...])
+    eps = 1e-5
+    grad_auto = jax.grad(my_function)(x)
+    grad_fd = (my_function(x + eps) - my_function(x - eps)) / (2 * eps)
+    np.testing.assert_allclose(grad_auto, grad_fd, rtol=1e-4)
 ```
 
-`AGNConfig`, `DustConfig`, `NebularConfig` already exist — the work is making them the *primary*
-interface rather than a retrofit. Move all sub-model selection flags out of `ParamSpec.__init__`
-entirely.
-
-**Files**: `core/param_spec.py` (split into `parameters.py` + `settings.py`), `core/model.py`
-
----
-
-### Phase 4 — Canonical Method Names (DONE — do not change)
-
-The canonical inference method strings are settled and documented. They are **not** candidates
-for further collapse into a `method+backend` flag API.
-
-**Current canonical names** (as of 2026-04-02):
-
-| Canonical string  | Algorithm                          | Deprecated aliases removed in v1.0      |
-|-------------------|------------------------------------|-----------------------------------------|
-| `"vi"`            | geoVI (NIFTy fast path, default)   | `geovi`, `native_geovi`, `fast_geovi`   |
-| `"vi_linear"`     | MGVI / EVI (linear response)       | `mgvi`, `native_mgvi`, `fast_mgvi`      |
-| `"vi_nifty"`      | NIFTy geoVI with full logging      | `nifty_geovi`                           |
-| `"vi_nifty_linear"` | NIFTy MGVI with full logging     | `nifty_mgvi`                            |
-| `"mcmc_raytrace"` | Ray Tracing HMC (Behroozi 2025)    | `raytrace`                              |
-| `"mcmc_nuts"`     | No-U-Turn Sampler (blackjax)       | `nuts`                                  |
-| `"mcmc_ess"`      | Elliptical Slice Sampling          | `elliptical_slice`                      |
-| `"evidence"`      | Nested Slice Sampling (log Z)      | `nss`                                   |
-| `"map"`           | MAP point estimate                 | —                                       |
-
-**Why this design is better than `method="vi", backend="nifty"`:**
-
-1. **Strings are unambiguous.** `fitter.run("vi_nifty")` is self-documenting in a notebook cell or
-   log line. `fitter.run("vi", backend="nifty")` requires the reader to hold two arguments in mind
-   simultaneously and understand the cross-product of valid `(method, backend)` combinations.
-
-2. **Not all combinations are valid.** `method="mcmc", sampler="nuts"` and
-   `method="mcmc", sampler="raytrace"` differ in more than the sampler — they have different keyword
-   arguments (`n_warmup` vs `n_steps`, `step_size`, etc.). Flattening them into a shared namespace
-   creates an argument collision problem. String dispatch keeps the call signatures independent.
-
-3. **Paper reproducibility.** MCMC results in the paper are cited as "mcmc\_raytrace with
-   `n_steps=1000`". That string appears in notebooks, CLAUDE.md, and the methods section. Changing
-   it to `method="mcmc", sampler="raytrace"` would break that traceability without benefit.
-
-4. **The proliferation was already solved.** The 14+ old method strings were aliases for 5 distinct
-   algorithms. The aliases are now deprecated with `DeprecationWarning` and removed in v1.0. What
-   remains is 9 canonical strings for 9 distinct dispatch paths — not proliferation.
-
-**Action:** Remove `_DEPRECATED_METHOD_ALIASES` dict from `fitter.py` in v1.0. Update any
-remaining alias callsites in `tests/` and `notebooks/` at that time. No API change needed now.
-
----
-
-### Phase 5 — Build Tier 2 SED Path (P1)
-
-Implement `build_fused_rest_sed(settings)` factory in `core/fused_kernels.py`:
-
-- Produces rest-frame SED at SSP resolution, end-to-end JIT'd (~300–500 µs)
-- Supports ALL physics components (unlike tier 1 which requires fixed-z)
-- Called at `SEDModel.__init__` with graceful tier-3 fallback
-- Dispatch logic: tier-1 check (fixed-z + photometry) → tier-2 check (all components JIT-able?)
-  → tier-3 exact fallback
-
-Component subfunctions to extract from `core/sed_pipeline.py`:
-
-```python
-_compute_stellar_sed(params, ssp, sfh_weights)
-_apply_dust_attenuation(sed, params, config)
-_add_dust_emission(sed, params, config)
-_add_agn(sed, params, config)
-_add_nebular(sed, params, config, nebular_backend)
-```
-
-**Files**: `core/fused_kernels.py`, `core/sed_pipeline.py`, `core/model.py`
-
----
-
-### Phase 6 — Science Correctness Fixes (P0, Run in Parallel with Phases 1–2)
-
-**6A: CLOUDY 2D interpolation** (`models/nebular/cloudy_grid.py:169–180`)
-
-- Bug: `cloudy_line_priors()` does 1D interpolation over Z only; misses logU dimension
-- Fix: Replace with 2D bilinear interpolation over (Z, logU) grid
-- Test: Interpolated values match reference grid values at grid points
-
-**6B: Marginalization ln_L normalization** (`models/observation/eline_priors.py:248–278`)
-
-- Bug: `marginalize_emission_lines_cloudy` missing `+0.5 × (μ² / σ²)` normalization term for
-  non-zero-mean prior — biases MAP/VI gradients; MCMC unaffected (uses likelihood ratios)
-- Fix: Add normalization term; add finite-difference gradient test
-
-**6C: Gradient correctness test infrastructure** (`tests/unit/test_gradients.py`)
-
-- Every transform inside a JIT boundary needs a finite-difference test
-- Minimum suite: `test_dust_attenuation_gradient`, `test_nebular_marginalization_gradient`,
-  `test_sfh_transform_gradient`, `test_igm_transmission_gradient`
-
----
-
-### Phase 7 — Prune Documentation (P2)
-
-Move any model documented with zero code from `docs/models/` → `ROADMAP.md`:
-
-- `docs/models/chemical_evolution.md`
-- `docs/models/shock_emission.md`
-- `docs/models/adaf_disc.md`
-- `docs/models/magphys_dust.md`
-- `docs/models/themis_dust.md`
-- `docs/models/patchy_igm.md`
-- `docs/models/pah_features.md` (partial: keep API design, move implementation section)
-
----
-
-## Subagent Scopes
-
-All scopes are independent except G (depends on C completing first).
-
-### Subagent A — Naming Refactor (Phase 1)
-
-**Scope**: Rename `ParamSpec→Parameters`, `SpectroscopyConfig→Spectroscopy`,
-`NoiseConfig→NoiseModel`, `HierarchicalFitter→PopulationFitter`,
-`HierarchicalResult→PopulationPosterior`, `LineCatalog→LineList`,
-`Posterior.summary()→Posterior.stats()`.
-
-**Strategy**: Add new names with `DeprecationWarning` on old; update `__init__.py` exports;
-update all tests, notebooks, and CLAUDE.md.
-
-**Files**: `core/param_spec.py`, `inference/fitter.py`, `inference/posterior.py`,
-`inference/hierarchical.py`, `models/observation/line_catalog.py`, `__init__.py`, `tests/`,
-`notebooks/`
-
-**Constraint**: Non-breaking — old names still work, just warn.
-
----
-
-### Subagent B — Split fitter.py (Phase 2A)
-
-**Scope**: Extract `_run_fast_vi` + `_run_native_vi` + `_run_nifty_vi` →
-`inference/vi.py`; extract `_run_raytrace` + `_run_nuts` + `_run_elliptical_slice` →
-`inference/mcmc.py`; extract `_run_nss` → `inference/evidence.py`; extract MAP logic →
-`inference/map.py`. Leave `fitter.py` as a < 150-line dispatch table.
-
-**Files**: `inference/fitter.py`, `inference/vi.py` (new), `inference/mcmc.py` (new),
-`inference/evidence.py` (new), `inference/map.py` (new), `inference/__init__.py`
-
-**Constraint**: All 1764 existing tests must pass. Zero behavior changes.
-
----
-
-### Subagent C — Split model.py (Phase 2B)
-
-**Scope**: Extract convenience methods (`prior_predictive`, `fit_batch`, `fit_population`,
-`fit_catalog`) → `core/convenience.py`. Leave `model.py` as thin orchestrator < 400 lines.
-
-**Files**: `core/model.py`, `core/convenience.py` (new), `core/__init__.py`
-
-**Constraint**: Public API unchanged. All tests pass.
-
----
-
-### Subagent D — Science Fix: CLOUDY 2D Interpolation (Phase 6A)
-
-**Scope**: Fix `cloudy_line_priors()` in `models/observation/eline_priors.py:169–180` to
-perform true bilinear interpolation over the (logZ_gas, logU) grid.
-
-**Root cause**: The function blends `ratios_logU3` (Z-varying, logU=-3) with
-`ratios_solar_u` (solar Z only, logU=-2). At `u_frac=1` (logU=-2) the result is pure solar
-regardless of `log_z` — the metallicity dimension is completely dropped at one grid edge.
-The fix is adding a fourth grid point `_CLOUDY_SUBSOLAR_LOGU2` and wiring proper bilinear
-interpolation:
-```python
-ratios_logu3 = lerp(subsolar_u3, solar_u3, z_frac)   # Z interpolation at logU=-3
-ratios_logu2 = lerp(subsolar_u2, solar_u2, z_frac)   # Z interpolation at logU=-2
-result = lerp(ratios_logu3, ratios_logu2, u_frac)    # logU interpolation
-```
-
-**Files**: `models/observation/eline_priors.py`, `tests/unit/test_eline_priors.py`
-
-**Note**: This is NOT in `models/nebular/cloudy_grid.py` — that file handles the HDF5 grid
-interpolation via `cloudy_grid_line_priors()`, which is a separate function. The bug is in
-the simpler analytic prior `cloudy_line_priors()` in `eline_priors.py`.
-
-**Constraint**: New interpolation path must pass finite-difference gradient check. Regression
-test from `docs/known_bugs.md` (NEW-01) must be green after fix:
-```python
-def test_cloudy_priors_metallicity_effect_at_high_logu():
-    means_solar, _ = cloudy_line_priors(log_z=0.0, neb_logU=-2.0)
-    means_subsolar, _ = cloudy_line_priors(log_z=-0.7, neb_logU=-2.0)
-    assert means_subsolar[8] < 0.5 * means_solar[8]  # [NII]6583 weaker at sub-solar Z
-```
-
----
-
-### Subagent E — Science Fix: Marginalization ln_L (Phase 6B)
-
-**Scope**: Fix `marginalize_emission_lines_cloudy` in `models/observation/eline_priors.py` to
-include missing `+0.5 × μ² / σ²` normalization term in ln_L for non-zero-mean prior.
-
-**Files**: `models/observation/eline_priors.py`, `tests/unit/test_eline_priors.py`
-
-**Constraint**: MCMC is unaffected (likelihood ratios cancel normalization). MAP/VI gradients
-must be correct per finite-difference check after fix.
-
----
-
-### Subagent F — Gradient Test Infrastructure (Phase 6C)
-
-**Scope**: Create `tests/unit/test_gradients.py` with finite-difference gradient checks for:
-(1) CSP mass weights, (2) dust attenuation transforms, (3) nebular emission marginalization,
-(4) IGM transmission, (5) AGN disc spectrum. Use `jax.test_util.check_grads` or manual FD
-with `eps=1e-5`.
-
-**Files**: `tests/unit/test_gradients.py` (new)
-
-**Constraint**: Tests must run without SSP data (use mock inputs). Full suite must complete in
-< 30 s.
-
----
-
-### Subagent G — Tier 2 SED Path (Phase 5, depends on Subagent C)
-
-**Scope**: Implement `build_fused_rest_sed(settings)` factory in `core/fused_kernels.py`.
-Extract 5 component subfunctions from `core/sed_pipeline.py`. Wire tier-2 dispatch in
-`core/model.py`. Add benchmark test asserting free-z forward pass < 600 µs on CPU.
-
-**Files**: `core/fused_kernels.py`, `core/sed_pipeline.py`, `core/model.py`
-
-**Constraint**: Tier-1 (precomputed photometry) behavior unchanged. Tier-3 fallback still works
-for tabulated SFH and evolving metallicity.
+The failure mode prevented: the CLOUDY marginalization bug, where wrong `ln_L` normalization
+biased MAP/VI gradients for months while passing all `isfinite()` checks.
 
 ---
 
 ---
 
-## Items Not Covered Above
+## Current State (as of 2026-04-05)
 
-### BUG-29: `_mstar` uses formed mass, not surviving mass (`sed_pipeline.py:651`)
+This section captures honest status against the original plan, based on the module inventory
+in `20260404-refactor.md`. Not everything marked "complete" in the original plan is actually
+at target line counts.
 
-`jnp.sum(weights)` is total formed stellar mass. XRB luminosity is calibrated against
-surviving stellar mass (which is ~30–50% lower for old galaxies). This causes systematic
-X-ray overestimation for evolved systems. Fix requires computing surviving mass fraction
-from DSPS output. Moderate impact; not blocking Paper I but needs tracking.
+### Execution status
 
-**Not assigned to any subagent above.** Add to a future science-correctness subagent or fix
-inline when touching `sed_pipeline.py` for Phase 5.
+| Phase | Description | Plan status | Reality |
+|-------|-------------|-------------|---------|
+| 1 | Naming contract | ✅ Complete | Old names still work with `DeprecationWarning` — will be removed v1.0 |
+| 2A | Split `fitter.py` | ✅ Complete | `fitter.py` 4305 → 1064 lines. Target was < 150. Inline runners and loss builders still present |
+| 2B | Split `model.py` | ⚠️ Partial | 2538 → 2115 lines. Extracted `convenience.py`, `display.py`, `sed_components.py`. `__init__` and `from_config` still contain physics-adjacent setup logic |
+| 3 | Settings/Parameters split | ⚠️ Partial | `settings.py` exists (244 lines). `param_spec.py` still 1760 lines — still accepts model selection flags that belong in `ModelConfig` |
+| 4 | Canonical method names | ✅ Complete | Now 13 canonical strings (was 9 planned — organic growth added `laplace`, `pathfinder`, `vi_native`, `vi_native_linear`) |
+| 5 | Tier 2 SED path | ✅ Complete | `build_fused_rest_sed` + `sed_components.py` (433 lines). Tier dispatch working |
+| 6A/B/C | Science fixes + gradient tests | ✅ Complete | CLOUDY 2D interp, ln_L normalization, FD test suite all done |
+| 7 | Prune stub docs | ✅ Complete | `docs/models/` removed |
 
-### Phase 7 clarification: what to do with each stub doc
+### What remains (unfinished refactor work)
 
-"Move to ROADMAP.md" is underspecified. Concrete rule:
+**`fitter.py` (~1064 lines, original target < 150 — not met):**
+- **Delegated already:** loss/prior/loglik builders in `loss_functions.py` (Fitter only caches them); MAP / laplace / pathfinder in `map_dispatch.py`; MCMC in `mcmc.py`; native VI in `vi.py`; NIFTy VI via `vi.run_nifty_vi`; JIT engine in `jit_engine.py`.
+- **Still here:** large `__init__`, `_data_args`, `compile()`, `run()` dispatch, `fit_batch()`, and VI posterior-sample helpers (`_draw_jit_*`, `_draw_blackjax_samples`, etc.).
+- **Next (optional):** move compile + draw helpers behind `vi`/`fitter_support` modules; move init/unbounded helpers to a tiny `init_params` or `common` — realistic goal is shrinking toward **< 600 lines**, not < 150.
 
-- **Delete** the implementation section entirely (code examples, parameter tables).
-- **Keep** a 1–3 sentence physical motivation blurb in `ROADMAP.md` under a `## Planned
-  Physics Modules` heading.
-- **Keep** the API design section only if the interface contract was agreed on and is stable
-  (e.g. if a `NebularConfig` already exists that would wrap it).
+**`model.py` (2115 lines, target < 500):**
+- `__init__` contains extensive setup: tier selection, kernel building, dust age weight
+  precomputation, CSP matrix setup, parameter map construction
+- `from_config()` is a large factory method branching over all physics options
+- `predict_photometry()`, `predict_spectrum()`, `predict_sed()` contain tier dispatch + fallback logic
+- Fix: extract `__init__` setup into a `_ModelBuilder` or separate `_init_*.py` modules
 
-Files affected: `docs/models/chemical_evolution.md`, `shock_emission.md`, `adaf_disc.md`,
-`magphys_dust.md`, `themis_dust.md`, `patchy_igm.md`, `pah_features.md` (partial).
+**`param_spec.py` (1760 lines, target: split into `parameters.py` + settings moved out):**
+- `ParamSpec.__init__` still accepts `mean_sfh_type`, `nebular`, `dust_emission`, `radio`, `igm` flags
+- These flags belong in `ModelConfig` / `SFHConfig` / `NebularConfig` / `MultiwavelengthConfig`
+- Fix: deprecate model selection flags in `ParamSpec.__init__` once migration noise is manageable; remove in v1.0 (deferred — see `20260404-refactor.md` Phase 3 migration path)
 
-### Phase 6C gradient test gaps
+### Organic growth since the original plan
 
-The listed tests in Subagent F are the minimum. Also missing:
-- `cloudy_grid_line_priors()` — zero test coverage (NEW-07 in `docs/known_bugs.md`)
-- `marginalize_emission_lines_cloudy` finite-difference gradient (NEW-09)
-- `cloudy_line_priors` bilinear interpolation gradient (needed after Subagent D fix)
+The inference layer gained exactly what the physics layer gained before it: new options added
+alongside old ones without deprecation discipline.
+
+| New file | Lines | Notes |
+|----------|-------|-------|
+| `inference/sbi.py` | 396 | SBI infrastructure — not in original plan |
+| `inference/laplace.py` | 151 | Laplace approximation |
+| `inference/pathfinder.py` | 134 | BlackJAX Pathfinder |
+| `inference/geovi_nuts.py` | — | geoVI-NUTS hybrid |
+| `inference/standardized.py` | — | Standardized parameter space |
+| `inference/jit_engine.py` | — | JIT compilation engine |
+| `core/precompute_templates.py` | 279 | Template precomputation |
+| `core/display.py` | 257 | Introspection helpers |
+
+The canonical method count grew from 9 planned to 13. `vi_native` emerged as 500× faster than
+the NIFTy default — but has not been validated across all model configurations. The default
+remains `vi` (NIFTy) until validation is complete. This is the correct decision, but it means
+the faster path exists without users knowing it.
 
 ---
 
-## Rule for New Features Going Forward
+## Rules for New Features Going Forward
 
 Before adding any new model or inference method:
 
 1. **Write the docstring first.** If you cannot describe it in 3 lines, the abstraction is wrong.
+
 2. **Add the parameter to the namespace table** in `docs/parameter_reference.md`. If the name
    clashes or doesn't fit the prefix scheme, rename before writing code.
-3. **Write a finite-difference gradient test.** If the transform is not differentiable, it cannot
-   go inside a JIT boundary.
-4. **If the code does not exist, do not document it in `docs/models/`.** Put it in `ROADMAP.md`.
+
+3. **Write a finite-difference gradient test.** If the transform is not differentiable, it
+   cannot go inside a JIT boundary.
+
+4. **Designate one default per physics category.** If adding a new SFH model, document which
+   prior model it supersedes and why both still exist (if they do).
+
+5. **If the code does not exist, do not document it in `docs/`.** Put it in `ROADMAP.md`.
+
+6. **Isolate external libraries behind internal abstractions from day one.** Never let
+   external types (NIFTy dicts, bagpipes arrays) leak into internal function signatures.
