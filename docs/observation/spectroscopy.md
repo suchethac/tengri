@@ -87,7 +87,7 @@ spec_config = Spectroscopy(
 
 This generates three free parameters (`cal_c1`, `cal_c2`, `cal_c3`), each with a
 `Gaussian(0, 0.1)` prior. These are automatically injected into `Parameters` when the
-`Observation` is passed to `SEDModel`.
+`Observation` is passed to `Model`.
 
 :::{note}
 `calibration_order=0` (the default) means no calibration correction. For most

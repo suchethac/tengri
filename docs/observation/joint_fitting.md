@@ -86,7 +86,7 @@ print(obs.get_all_params())
 #  'cal_c3': Gaussian(0, 0.1), 'noise_frac_cal': Uniform(0.01, 0.1)}
 ```
 
-These are merged into `Parameters` automatically when `SEDModel` is constructed.
+These are merged into `Parameters` automatically when `Model` is constructed.
 
 ## Observation summary
 

@@ -6,7 +6,7 @@ possible fits from your setup.
 ## Quick start: fastest possible fit
 
 ```python
-from tengri import SEDModel, Parameters, Uniform, Fitter, Observation, Photometry, load_ssp_data
+from tengri import Model, Parameters, Uniform, Fitter, Observation, Photometry, load_ssp_data
 
 ssp = load_ssp_data("data/ssp.h5")
 obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
@@ -29,7 +29,7 @@ spec = Parameters(
 #   2. Fused JIT kernel (auto when precompute is on)
 #   3. Precomputed dust age weights (always)
 #   4. XLA compilation cache (always)
-model = SEDModel(spec, ssp, observation=obs, forward_dtype="float32")
+model = Model(spec, ssp, observation=obs, forward_dtype="float32")
 
 # Fit
 fitter = Fitter(model, obs_flux, obs_err)
@@ -59,7 +59,7 @@ It is automatic. When you create a `Model` with a fixed redshift and an observat
 fused kernel is built during `__init__`:
 
 ```python
-model = SEDModel(spec, ssp, observation=obs)
+model = Model(spec, ssp, observation=obs)
 # model._fused_photometry is now a compiled JIT function
 
 flux = model.predict_photometry(params)  # uses fused kernel
@@ -102,7 +102,7 @@ Automatic when redshift is fixed and an observation with photometry is present:
 
 ```python
 spec = Parameters(redshift=0.1, ...)  # fixed redshift
-model = SEDModel(spec, ssp, observation=obs)
+model = Model(spec, ssp, observation=obs)
 # predict_photometry() uses the fast path automatically
 ```
 
@@ -133,10 +133,10 @@ The forward model is numerically stable in float32. With `forward_dtype="float32
 
 ```python
 # Default: float64
-model = SEDModel(spec, ssp, observation=obs)
+model = Model(spec, ssp, observation=obs)
 
 # Mixed precision: float32 forward, float64 likelihood
-model = SEDModel(spec, ssp, observation=obs, forward_dtype="float32")
+model = Model(spec, ssp, observation=obs, forward_dtype="float32")
 ```
 
 ### Accuracy
@@ -173,7 +173,7 @@ dust function skips the log/sigmoid entirely.
 Automatic. The Model always precomputes dust age weights:
 
 ```python
-model = SEDModel(spec, ssp, observation=obs)
+model = Model(spec, ssp, observation=obs)
 # model._dust_age_weights is a 1D array of precomputed sigmoid values
 ```
 

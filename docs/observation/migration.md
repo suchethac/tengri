@@ -49,7 +49,7 @@ The `Fitter` infers `data_type="photometry"` from the observation automatically.
 ::::{grid-item}
 **Old API**
 ```python
-model = SEDModel(
+model = Model(
     spec, ssp,
     wave_obs=wave_obs,
     resolution=1000,
@@ -86,7 +86,7 @@ fitter = Fitter(model, data, noise)
 ```python
 import jax.numpy as jnp
 
-model = SEDModel(
+model = Model(
     spec, ssp,
     filters=filters,
     wave_obs=wave_obs,

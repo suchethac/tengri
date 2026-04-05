@@ -147,7 +147,7 @@ result = fitter_i.run("vi", init_from=result_map, n_iterations=25)
 ### SDSS photometry
 
 ```python
-from tengri import SEDModel, Parameters, Uniform, Fitter, Observation, Photometry
+from tengri import Model, Parameters, Uniform, Fitter, Observation, Photometry
 
 spec = Parameters(
     redshift=0.05,       # fixed redshift from spectroscopic catalog
@@ -158,7 +158,7 @@ spec = Parameters(
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
-model = SEDModel(spec, ssp, observation=obs)
+model = Model(spec, ssp, observation=obs)
 fitter = Fitter(model, flux_obs, noise)
 results = fitter.fit_batch(sdss_galaxies)
 ```
@@ -186,7 +186,7 @@ obs = Observation(photometry=Photometry.from_names(
     ["jwst_f115w", "jwst_f150w", "jwst_f200w",
      "jwst_f277w", "jwst_f356w", "jwst_f444w"]
 ))
-model = SEDModel(spec, ssp, observation=obs)
+model = Model(spec, ssp, observation=obs)
 ```
 
 :::{note}

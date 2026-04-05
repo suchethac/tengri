@@ -163,7 +163,7 @@ def test_cloudy_marg_lnl_varies_with_prior_mean():
 ### NEW-08: `eline_broad` must be set independently in Parameters and Spectroscopy (FIXED 2026-04-03)
 
 **File:** `src/tengri/inference/fitter.py:217-227`
-**Fix:** `Fitter.__init__` cross-checks SpectroscopyConfig.eline_broad vs ParamSpec.eline_broad and emits a warning if mismatched.
+**Fix:** `Fitter.__init__` cross-checks Spectroscopy.eline_broad vs Parameters.eline_broad and emits a warning if mismatched.
 
 ### NEW-09: Gradient test only checks `isfinite`, not correctness (FIXED 2026-04-04)
 

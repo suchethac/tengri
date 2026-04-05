@@ -143,7 +143,7 @@ operations after JIT warmup:
 ```python
 import jax
 import jax.numpy as jnp
-from tengri import SEDModel, Parameters, Uniform, Observation, Photometry, load_ssp_data
+from tengri import Model, Parameters, Uniform, Observation, Photometry, load_ssp_data
 
 ssp = load_ssp_data("data/ssp.h5")
 obs = Observation(photometry=Photometry.from_names(
@@ -161,7 +161,7 @@ spec = Parameters(
     redshift=0.1,
     mean_sfh_type="dpl",
 )
-model = SEDModel(spec, ssp, observation=obs)
+model = Model(spec, ssp, observation=obs)
 
 # Sample parameters and warm up the JIT
 key = jax.random.PRNGKey(0)
@@ -296,7 +296,7 @@ To inspect the optimized computation graph:
 ```bash
 XLA_FLAGS="--xla_dump_to=/tmp/xla_dump" python -c "
 import jax
-from tengri import SEDModel, Parameters, Observation, Photometry, load_ssp_data
+from tengri import Model, Parameters, Observation, Photometry, load_ssp_data
 # ... set up model and run predict_photometry
 "
 ```
