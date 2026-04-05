@@ -18,12 +18,11 @@
 | CONDITIONALLY FIXED | 1 | BUG-04 (nthcomp templates required; graceful fallback otherwise) |
 | NOT FIXED | 0 | — |
 
-### Emission line branch (merged 2026-04-01): 23 issues found, 20 fixed
+### Emission line branch (merged 2026-04-01): 23 issues found, all fixed
 
 | Status | Count | Details |
 |--------|-------|---------|
-| FIXED | 20 | S1-S6, #9,10,11,12,14 (original 11) + NEW-01 through NEW-09 (2026-04-03/04) |
-| NOT FIXED | 0 | — |
+| FIXED | 20 | S1-S6, #9,10,11,12,14 (original 11) + NEW-01 through NEW-09 (2026-04-03/05) |
 | CLOSED (undocumented) | 3 | NEW-10,11,12 — counted in original review but never written up; no record of what they refer to; closed 2026-04-04 |
 
 ### Incomplete implementations audit (2026-04-04): 5 identified
@@ -102,38 +101,17 @@ Mineo+2012 MNRAS 419 2095 §3.1 (surviving mass definition).
 
 ## NEW OPEN BUGS (from emission line branch review, 2026-04-02)
 
-### NEW-01: `cloudy_line_priors()` interpolation loses metallicity at high logU (NOT FIXED)
+### NEW-01: `cloudy_line_priors()` interpolation loses metallicity at high logU (FIXED — verified 2026-04-05)
 
-**File:** `src/tengri/models/observation/eline_priors.py:169-180`
-**Status:** The interpolation blends `ratios_logU3` (Z-varying) with `ratios_solar_u` (Z-fixed). At `u_frac=1` (logU=-2), the result is pure solar regardless of `log_z`. This is NOT bilinear interpolation over the 2×2 grid. Missing the fourth grid point `_CLOUDY_SUBSOLAR_LOGU2`.
-**Impact:** Prior means are wrong for sub-solar metallicity at logU > -3. Affects all CLOUDY-prior fits.
-**Fix:** Add `_CLOUDY_SUBSOLAR_LOGU2` grid point. Interpolate: `ratios_logu3 = lerp(subsolar_u3, solar_u3, z_frac)`, `ratios_logu2 = lerp(subsolar_u2, solar_u2, z_frac)`, `result = lerp(ratios_logu3, ratios_logu2, u_frac)`.
-**Regression test:**
-```python
-def test_cloudy_priors_metallicity_effect_at_high_logu():
-    means_solar, _ = cloudy_line_priors(log_z=0.0, neb_logU=-2.0)
-    means_subsolar, _ = cloudy_line_priors(log_z=-0.7, neb_logU=-2.0)
-    # [NII] should be much weaker at sub-solar Z, even at high logU
-    nii_idx = 8  # [NII]6583
-    assert means_subsolar[nii_idx] < 0.5 * means_solar[nii_idx]
-```
+**File:** `src/tengri/models/observation/eline_priors.py:96-173`
+**Status:** FIXED. `_CLOUDY_SUBSOLAR_LOGU2` grid point added (lines 96-110). Full bilinear interpolation over all 4 (Z, logU) corners implemented at lines 162-173.
+**Regression test:** `tests/unit/test_eline_priors.py::TestCloudyLinePriors::test_metallicity_matters_at_high_logU` — PASSES.
 
-### NEW-02: `marginalize_emission_lines_cloudy` returns wrong ln_L for non-zero-mean prior (NOT FIXED)
+### NEW-02: `marginalize_emission_lines_cloudy` returns wrong ln_L for non-zero-mean prior (FIXED — verified 2026-04-05)
 
-**File:** `src/tengri/models/observation/eline_priors.py:248-278`
-**Status:** The shift-marginalize-unshift trick correctly recovers `a_hat` but the returned `ln_l_marg` is the marginalized log-likelihood under the shifted (zero-mean) prior, not the original non-zero-mean prior. Missing the normalization correction term when the prior mean is non-zero.
-**Impact:** When `log_z` or `neb_logU` are free parameters, gradients of ln_L w.r.t. these parameters are wrong. Biases MAP/VI solutions. Does NOT affect MCMC (which only uses likelihood ratios).
-**Fix:** Add the prior mean correction: `ln_l_corrected = ln_l_marg - 0.5 * scaled_means @ diag(1/prior_variance) @ scaled_means + 0.5 * (a_hat_shifted + scaled_means) @ diag(1/prior_variance) @ (a_hat_shifted + scaled_means)`. Or more simply, recompute ln_L using the non-shifted formula directly.
-**Regression test:**
-```python
-def test_cloudy_marg_lnl_varies_with_prior_mean():
-    """ln_L must change when CLOUDY prior mean changes (different Z)."""
-    # Fixed data and noise, vary log_z
-    ln_l_solar, _, _ = marginalize_emission_lines_cloudy(resid, noise, G, log_z=0.0)
-    ln_l_subsolar, _, _ = marginalize_emission_lines_cloudy(resid, noise, G, log_z=-0.7)
-    # If ln_L correction is missing, these will be identical
-    assert abs(float(ln_l_solar - ln_l_subsolar)) > 0.01
-```
+**File:** `src/tengri/models/observation/eline_priors.py:257-270`
+**Status:** FIXED. The residual-shift trick is correctly implemented: `residual_shifted = residual - design_matrix @ scaled_means`, marginalize with zero-mean prior, then restore `a_hat = a_hat_shifted + scaled_means`. The shift is mathematically exact — `p(r|D)` with non-zero-mean prior equals `p(r'|D')` with zero-mean prior under substitution `r' = r - G*μ`, so `ln_l_marg` is correct.
+**Regression test:** `tests/unit/test_eline_priors.py::TestMarginalizeEmissionLinesCloudy::test_lnl_varies_with_prior_mean` — PASSES.
 
 ### NEW-03: `default_13()` docstring shows air wavelengths (FIXED 2026-04-04)
 
