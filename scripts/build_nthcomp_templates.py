@@ -99,13 +99,13 @@ def build_table(
                     x = h_planck_erg * nu_grid / (k_boltz_erg * T_K)
                     x_safe = np.clip(x, 1e-10, 500.0)
                     bnu = nu_grid**3 / (np.exp(x_safe) - 1.0)
-                    norm = np.trapz(bnu, nu_grid)
+                    norm = np.trapezoid(bnu, nu_grid)
                     if norm > 0:
                         table[ig, it, ib] = (bnu / norm).astype(np.float32)
                     continue
 
                 shape = donthcomp_nu(nu_grid, gamma, kte, ktbb)
-                norm = np.trapz(shape, nu_grid)
+                norm = np.trapezoid(shape, nu_grid)
                 if norm > 0:
                     table[ig, it, ib] = (shape / norm).astype(np.float32)
 
