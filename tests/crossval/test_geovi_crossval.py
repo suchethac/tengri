@@ -36,7 +36,7 @@ pytestmark = pytest.mark.crossval
 
 jft = pytest.importorskip("nifty8.re", reason="nifty8.re not installed")
 
-from tengri.core.param_spec import ParamSpec
+from tengri.core.parameters import ParamSpec
 from tengri.distributions import Uniform
 from tengri.models.observation.filters import load_filter_set
 from tengri.models.sps.dsps_wrapper import load_ssp_data

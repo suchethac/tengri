@@ -82,11 +82,15 @@ def register_dust_law(name: str) -> Callable:
     return decorator
 
 
-def get_dust_law(name: str) -> Callable:
+def resolve_dust_law(name: str) -> Callable:
     """Get a registered dust law by name."""
     if name not in DUST_LAWS:
         raise ValueError(f"Unknown dust law '{name}'. Available: {list(DUST_LAWS.keys())}")
     return DUST_LAWS[name]
+
+
+# Backward compatibility alias
+get_dust_law = resolve_dust_law
 
 
 # ===================================================================
@@ -882,8 +886,8 @@ def two_component_dust(
     array, shape (n_ages, n_wave)
         Multiplicative attenuation factor in [0, 1].
     """
-    k_bc = get_dust_law(law_bc)(wavelength, **law_params)
-    k_diff = get_dust_law(law_diff)(wavelength, **law_params)
+    k_bc = resolve_dust_law(law_bc)(wavelength, **law_params)
+    k_diff = resolve_dust_law(law_diff)(wavelength, **law_params)
 
     log_age = jnp.log10(jnp.maximum(age_grid, 1.0))
     log_t_birth = jnp.log10(t_birth)
@@ -920,7 +924,7 @@ def two_component_dust_separable(
     tau_v1, tau_v2 : float
         Birth cloud and diffuse ISM optical depths.
     law_bc_fn, law_diff_fn : callable
-        Pre-resolved dust law functions (e.g. ``get_dust_law("calzetti")``).
+        Pre-resolved dust law functions (e.g. ``resolve_dust_law("calzetti")``).
     f_obscuration : float
         Unattenuated fraction [0, 1].
     **law_params
@@ -989,8 +993,8 @@ def two_component_dust_fast(
     array, shape (n_ages, n_wave)
         Multiplicative attenuation factor in [0, 1].
     """
-    k_bc = get_dust_law(law_bc)(wavelengths, **law_params)
-    k_diff = get_dust_law(law_diff)(wavelengths, **law_params)
+    k_bc = resolve_dust_law(law_bc)(wavelengths, **law_params)
+    k_diff = resolve_dust_law(law_diff)(wavelengths, **law_params)
 
     tau_lambda = dust_age_weights[:, None] * tau_v1 * k_bc[None, :] + tau_v2 * k_diff[None, :]
 
@@ -1034,7 +1038,7 @@ def single_component_dust(
     array, shape (n_wave,)
         Multiplicative transmission factor in [0, 1].
     """
-    k = get_dust_law(law)(wavelength, **law_params)
+    k = resolve_dust_law(law)(wavelength, **law_params)
     return f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau_v * k)
 
 
@@ -1134,7 +1138,7 @@ def wg00_shell(
     ----------
     Witt & Gordon 2000, ApJ, 528, 799 (Section 3.1)
     """
-    k = get_dust_law(law)(wavelength, **law_params)
+    k = resolve_dust_law(law)(wavelength, **law_params)
     return jnp.exp(-tau_v * k)
 
 
@@ -1191,7 +1195,7 @@ def wg00_cloudy(
     Calzetti, Kinney & Storchi-Bergmann 1994, ApJ, 429, 582
     Witt & Gordon 2000, ApJ, 528, 799 (Section 3.2, "homogeneous" model)
     """
-    k = get_dust_law(law)(wavelength, **law_params)
+    k = resolve_dust_law(law)(wavelength, **law_params)
     tau_k = tau_v * k
 
     # Numerically stable: for small tau_k, use Taylor expansion
@@ -1262,6 +1266,6 @@ def wg00_dusty(
     Hobson & Padman 1993, MNRAS, 264, 161
     Witt & Gordon 2000, ApJ, 528, 799 (Section 3.3, "clumpy" model)
     """
-    k = get_dust_law(law)(wavelength, **law_params)
+    k = resolve_dust_law(law)(wavelength, **law_params)
     tau_clump = tau_v / jnp.maximum(n_clumps, 1e-10)
     return jnp.exp(-n_clumps * (1.0 - jnp.exp(-tau_clump * k)))

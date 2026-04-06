@@ -274,17 +274,17 @@ class TestAdafRegistry:
         assert "adaf" in AGN_MODELS
 
     def test_get_agn_model_adaf(self):
-        """get_agn_model('adaf') returns a callable."""
-        from tengri.models.agn.unified import get_agn_model
+        """resolve_agn_model('adaf') returns a callable."""
+        from tengri.models.agn.unified import resolve_agn_model
 
-        model_fn = get_agn_model("adaf")
+        model_fn = resolve_agn_model("adaf")
         assert callable(model_fn)
 
     def test_registered_model_runs(self, optical_wavelength):
         """The registered 'adaf' model produces finite output."""
-        from tengri.models.agn.unified import get_agn_model
+        from tengri.models.agn.unified import resolve_agn_model
 
-        model_fn = get_agn_model("adaf")
+        model_fn = resolve_agn_model("adaf")
         l_nu = model_fn(optical_wavelength, agn_log_lbol=42.0)
         assert jnp.all(jnp.isfinite(l_nu))
         assert l_nu.shape == optical_wavelength.shape

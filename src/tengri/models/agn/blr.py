@@ -226,7 +226,7 @@ def _fe2_pseudo_continuum(
     return fe2_strength * fe2_template / opt_flux
 
 
-def blr_emission(
+def compute_blr_sed(
     wavelength: jnp.ndarray,
     l_disc_bol_erg: float,
     covering_fraction: float = 0.1,
@@ -293,3 +293,7 @@ def blr_emission(
     l_nu_blr = l_nu_blr + l_hbeta * fe2_spectrum
 
     return l_nu_blr
+
+
+# Backward compatibility alias
+blr_emission = compute_blr_sed

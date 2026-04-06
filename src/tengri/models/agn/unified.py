@@ -12,10 +12,10 @@ Three pre-registered configurations:
 
 Usage::
 
-    from tengri.models.agn.unified import unified_agn, get_agn_model
+    from tengri.models.agn.unified import unified_agn, resolve_agn_model
 
     # Use a named configuration
-    model_fn = get_agn_model("simple")
+    model_fn = resolve_agn_model("simple")
     l_nu = model_fn(wavelength, agn_log_lbol=44.0, agn_frac=0.1, ...)
 
     # Or use the generic combiner directly
@@ -57,7 +57,7 @@ def register_agn_model(name: str) -> Callable:
     return decorator
 
 
-def get_agn_model(name: str) -> Callable:
+def resolve_agn_model(name: str) -> Callable:
     """Retrieve a registered AGN model by name.
 
     Parameters
@@ -78,6 +78,10 @@ def get_agn_model(name: str) -> Callable:
     if name not in AGN_MODELS:
         raise ValueError(f"Unknown AGN model '{name}'. Available: {list(AGN_MODELS.keys())}")
     return AGN_MODELS[name]
+
+
+# Backward compatibility alias
+get_agn_model = resolve_agn_model
 
 
 # ===================================================================

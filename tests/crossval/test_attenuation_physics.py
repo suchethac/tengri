@@ -58,9 +58,9 @@ class TestAllCurvesUniversalPhysics:
         ]
     )
     def curve(self, request):
-        from tengri.models.dust.attenuation import get_dust_law
+        from tengri.models.dust.attenuation import resolve_dust_law
 
-        return request.param, get_dust_law(request.param)
+        return request.param, resolve_dust_law(request.param)
 
     def test_k_at_5500_equals_one(self, curve):
         """k(5500A) = 1.0 for all curves (normalization convention)."""

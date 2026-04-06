@@ -84,11 +84,6 @@ class Spectroscopy:
         _valid_modes = ("off", "fixed", "marginalized", "fitted")
         if self.eline_mode not in _valid_modes:
             raise ValueError(f"eline_mode must be one of {_valid_modes}, got {self.eline_mode!r}")
-        if self.eline_mode == "fitted":
-            raise NotImplementedError(
-                "eline_mode='fitted' (free MCMC line amplitudes) is not yet implemented. "
-                "Use 'marginalized' for analytic marginalization instead."
-            )
         if self.resolution is not None and not isinstance(self.resolution, (int, float)):
             res_arr = jnp.asarray(self.resolution)
             if res_arr.ndim > 0 and res_arr.shape[0] != len(self.wave_obs):
@@ -130,7 +125,7 @@ class Spectroscopy:
         LineCatalog
             The active line catalog.
         """
-        from tengri.models.observation.line_catalog import LineCatalog
+        from tengri.models.observation.line_list import LineCatalog
 
         if self.eline_catalog is not None:
             return self.eline_catalog
@@ -238,7 +233,7 @@ class Spectroscopy:
         SpectroscopyConfig
             Configured for DESI-like spectroscopic fitting.
         """
-        from tengri.models.observation.line_catalog import LineCatalog
+        from tengri.models.observation.line_list import LineCatalog
 
         return cls(
             wave_obs=wave_obs,

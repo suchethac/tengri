@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import types
+
 import jax
 import jax.numpy as jnp
 
@@ -13,7 +15,8 @@ from tengri.models.observation.eline_marginalization import (
     expand_constrained_amplitudes,
     marginalize_emission_lines,
 )
-from tengri.models.observation.line_catalog import LineCatalog
+from tengri.models.observation.line_list import LineCatalog
+from tengri.models.observation.spectroscopy_config import Spectroscopy
 
 
 class TestDesignMatrix:
@@ -210,4 +213,248 @@ class TestMarginalization:
         denom = max(abs(fd_val), 1e-10)
         assert abs(ad_grad - fd_val) / denom < 0.01, (
             f"AD grad {ad_grad:.6g} vs FD grad {fd_val:.6g} — relative error too large"
+        )
+
+
+class TestFittedMode:
+    """Regression tests for eline_mode='fitted' (IMP-03).
+
+    Uses a SimpleNamespace mock model to avoid SSP data dependencies.
+    """
+
+    def _wave(self, n: int = 300) -> jnp.ndarray:
+        return jnp.linspace(4000.0, 7000.0, n)
+
+    def _make_spec(self):
+        """Minimal Parameters with one free SFH param, rest fixed."""
+        import warnings
+
+        from tengri.core.parameters import Parameters
+        from tengri.distributions import Fixed, Uniform
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            return Parameters(
+                mean_sfh_type="dpl",
+                sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+                met_logzsol=Fixed(-0.3),
+                dust_tau_bc=Fixed(0.1),
+                dust_tau_diff=Fixed(0.1),
+                redshift=Fixed(0.1),
+            )
+
+    def _make_model(self, wave, model_spec, spec_cfg):
+        """Minimal model mock as a SimpleNamespace."""
+        continuum = jnp.ones(len(wave)) * 10.0
+        return types.SimpleNamespace(
+            spec=model_spec,
+            _wave_obs=wave,
+            _spectral_resolution=2000.0,
+            _spectroscopy_config=spec_cfg,
+            predict_spectrum=lambda params, w: continuum,
+            observation=None,
+        )
+
+    # ------------------------------------------------------------------
+    # Config-level tests (no SSP, no Fitter)
+    # ------------------------------------------------------------------
+
+    def test_spectroscopy_fitted_mode_no_error(self):
+        """Spectroscopy(eline_mode='fitted') must not raise NotImplementedError."""
+        wave = self._wave()
+        cfg = Spectroscopy(wave_obs=wave, eline_mode="fitted")
+        assert cfg.eline_mode == "fitted"
+
+    def test_has_eline_fitting_true_for_fitted(self):
+        """has_eline_fitting property must return True for 'fitted' mode."""
+        wave = self._wave()
+        cfg = Spectroscopy(wave_obs=wave, eline_mode="fitted")
+        assert cfg.has_eline_fitting is True
+
+    # ------------------------------------------------------------------
+    # ParamSpec-level test
+    # ------------------------------------------------------------------
+
+    def test_merge_observation_params_adds_free_params(self):
+        """merge_observation_params must add params to free_params and leave original intact."""
+        from tengri.core.parameters import Parameters
+        from tengri.distributions import Fixed, Uniform
+
+        spec = Parameters(mean_sfh_type="dpl", redshift=Fixed(0.1))
+        n_before = len(spec.free_params)
+
+        aug = spec.merge_observation_params(eline_amp_Halpha=Uniform(-1000.0, 1000.0))
+
+        assert len(aug.free_params) == n_before + 1
+        assert "eline_amp_Halpha" in aug.free_params
+        # Original spec must be unmodified
+        assert "eline_amp_Halpha" not in spec.free_params
+        assert "eline_amp_Halpha" not in spec._valid_param_names
+
+    # ------------------------------------------------------------------
+    # Fitter-level tests (mock model, no SSP)
+    # ------------------------------------------------------------------
+
+    def test_fitter_sets_eline_fitted_flag(self):
+        """Fitter must set _eline_fitted=True when eline_mode='fitted'."""
+        from tengri.inference.fitter import Fitter
+
+        wave = self._wave()
+        cfg = Spectroscopy(wave_obs=wave, eline_mode="fitted")
+        model = self._make_model(wave, self._make_spec(), cfg)
+
+        fitter = Fitter(model, jnp.ones(len(wave)) * 10.0, jnp.ones(len(wave)) * 0.1,
+                        data_type="spectroscopy")
+
+        assert fitter._eline_fitted is True
+        assert len(fitter._eline_amplitude_names) > 0
+        assert all(nm.startswith("eline_amp_") for nm in fitter._eline_amplitude_names)
+
+    def test_amplitude_params_appear_in_free_names(self):
+        """Every amplitude param registered in Fitter must appear in _free_names."""
+        from tengri.inference.fitter import Fitter
+
+        wave = self._wave()
+        cfg = Spectroscopy(wave_obs=wave, eline_mode="fitted")
+        model = self._make_model(wave, self._make_spec(), cfg)
+
+        fitter = Fitter(model, jnp.ones(len(wave)) * 10.0, jnp.ones(len(wave)) * 0.1,
+                        data_type="spectroscopy")
+
+        for amp_name in fitter._eline_amplitude_names:
+            assert amp_name in fitter._free_names, (
+                f"{amp_name!r} missing from _free_names; present: {sorted(fitter._free_names)[:6]}"
+            )
+
+    def test_amplitude_count_matches_independent_lines(self):
+        """Number of amplitude params must equal n_independent in the catalog."""
+        from tengri.inference.fitter import Fitter
+
+        wave = self._wave()
+        cat = LineCatalog.default_13()
+        cfg = Spectroscopy(wave_obs=wave, eline_mode="fitted", eline_catalog=cat,
+                           eline_fix_doublets=True)
+        model = self._make_model(wave, self._make_spec(), cfg)
+
+        fitter = Fitter(model, jnp.ones(len(wave)) * 10.0, jnp.ones(len(wave)) * 0.1,
+                        data_type="spectroscopy")
+
+        assert len(fitter._eline_amplitude_names) == cat.n_independent
+
+    def test_loss_fn_finite_with_zero_amplitudes(self):
+        """Loss function must return a finite scalar when all amplitudes are zero."""
+        from tengri.inference.fitter import Fitter
+
+        wave = self._wave()
+        cfg = Spectroscopy(wave_obs=wave, eline_mode="fitted")
+        model = self._make_model(wave, self._make_spec(), cfg)
+
+        n_pix = len(wave)
+        data = jnp.ones(n_pix) * 10.0
+        noise = jnp.ones(n_pix) * 0.1
+        fitter = Fitter(model, data, noise, data_type="spectroscopy")
+
+        loss_fn = fitter._build_loss_fn()
+        params_u = {nm: jnp.array(0.0) for nm in fitter._free_names}
+        loss_val = loss_fn(params_u, {"data": data, "noise": noise})
+
+        assert jnp.isfinite(loss_val), f"Loss is not finite: {loss_val}"
+
+    def test_loglikelihood_fn_finite(self):
+        """Log-likelihood function must return a finite scalar."""
+        from tengri.inference.fitter import Fitter
+
+        wave = self._wave()
+        cfg = Spectroscopy(wave_obs=wave, eline_mode="fitted")
+        model = self._make_model(wave, self._make_spec(), cfg)
+
+        n_pix = len(wave)
+        data = jnp.ones(n_pix) * 10.0
+        noise = jnp.ones(n_pix) * 0.1
+        fitter = Fitter(model, data, noise, data_type="spectroscopy")
+
+        ll_fn = fitter._build_loglikelihood_fn()
+        params_u = {nm: jnp.array(0.0) for nm in fitter._free_names}
+        ll_val = ll_fn(params_u, {"data": data, "noise": noise})
+
+        assert jnp.isfinite(ll_val), f"Log-likelihood is not finite: {ll_val}"
+
+    def test_loss_lower_with_true_amplitude(self):
+        """Loss must decrease when the Hα amplitude matches the injected signal.
+
+        Physical check: Fitter with correct line amplitude should fit the data
+        better (lower chi2) than Fitter with zero amplitudes when an Hα feature
+        is present in the spectrum.
+
+        Uses a fine wavelength grid centred on Hα (0.3 Å/pix) so the line
+        profile is well-sampled even at R=2000 (σ≈1.4 Å).
+        """
+        from tengri.inference.fitter import Fitter
+        from tengri.utils.transforms import to_unbounded
+
+        # Fine grid centred on Hα: 0.3 Å/pix → line well-sampled at R=2000
+        wave = jnp.linspace(6500.0, 6630.0, 440)
+        cat = LineCatalog.default_13()
+        cfg = Spectroscopy(wave_obs=wave, eline_mode="fitted", eline_catalog=cat,
+                           eline_fix_doublets=True)
+
+        # Build G_eff to inject Hα into the mock spectrum
+        G_full = build_eline_design_matrix(wave, cat.wavelengths, 2000.0, 0.0)
+        C = cat.build_constraint_matrix()
+        G_eff = apply_doublet_constraints(G_full, C)
+
+        # Locate Hα column in G_eff (independent lines, same order as amplitude names)
+        secondary_indices = {dc.secondary_idx for dc in cat.doublets}
+        independent_names = [nm for i, nm in enumerate(cat.names) if i not in secondary_indices]
+        ha_col = independent_names.index("Halpha")
+
+        true_amp = 50.0
+        continuum = jnp.ones(len(wave)) * 10.0
+        true_spectrum = continuum + G_eff[:, ha_col] * true_amp
+        noise = jnp.ones(len(wave)) * 0.5
+
+        # Mock model returns the flat continuum (lines not included in predict_spectrum)
+        # Use redshift=0.0 so the loss function builds G at z=0, matching signal injection above.
+        import warnings
+
+        from tengri.core.parameters import Parameters
+        from tengri.distributions import Fixed, Uniform
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            model_spec = Parameters(
+                mean_sfh_type="dpl",
+                sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+                met_logzsol=Fixed(-0.3),
+                dust_tau_bc=Fixed(0.1),
+                dust_tau_diff=Fixed(0.1),
+                redshift=Fixed(0.0),  # z=0 so Hα stays at 6564 Å, within the wave grid
+            )
+        model = types.SimpleNamespace(
+            spec=model_spec,
+            _wave_obs=wave,
+            _spectral_resolution=2000.0,
+            _spectroscopy_config=cfg,
+            predict_spectrum=lambda params, w: continuum,
+            observation=None,
+        )
+
+        fitter = Fitter(model, true_spectrum, noise, data_type="spectroscopy")
+        loss_fn = fitter._build_loss_fn()
+        data_args = {"data": true_spectrum, "noise": noise}
+
+        # Loss with all amplitudes at zero (midpoint of bounded range)
+        params_zero = {nm: jnp.array(0.0) for nm in fitter._free_names}
+        loss_zero = float(loss_fn(params_zero, data_args))
+
+        # Loss with Hα amplitude set to the injected value (convert to unbounded space)
+        ha_amp_name = "eline_amp_Halpha"
+        amp_bound = 10.0 * cfg.eline_prior_sigma  # 1000.0
+        u_ha = float(to_unbounded(jnp.array(true_amp), -amp_bound, amp_bound))
+        params_true = {**params_zero, ha_amp_name: jnp.array(u_ha)}
+        loss_true = float(loss_fn(params_true, data_args))
+
+        assert loss_true < loss_zero, (
+            f"Expected loss_true ({loss_true:.3f}) < loss_zero ({loss_zero:.3f}) "
+            f"when amplitude matches injected Hα signal"
         )

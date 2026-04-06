@@ -55,9 +55,9 @@ class TestDL07Tabulated:
 
     def test_energy_conservation(self, ir_wave):
         """Total emitted luminosity should equal L_absorbed (energy balance)."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dl07 = get_emission_model("draine_li2007")
+        dl07 = resolve_emission_model("draine_li2007")
         L_abs = 1e10
         sed = dl07(ir_wave, L_abs, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
 
@@ -72,9 +72,9 @@ class TestDL07Tabulated:
 
     def test_output_is_l_nu(self, ir_wave):
         """Output should be in L_nu (Lsun/Hz) units, not L_lambda."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dl07 = get_emission_model("draine_li2007")
+        dl07 = resolve_emission_model("draine_li2007")
         sed = dl07(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
 
         # L_nu should peak in the FIR (30-300 um = 3e5 - 3e6 Angstrom)
@@ -86,9 +86,9 @@ class TestDL07Tabulated:
 
     def test_umin_shifts_peak(self, ir_wave):
         """Higher U_min should shift peak to shorter wavelengths (warmer dust)."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dl07 = get_emission_model("draine_li2007")
+        dl07 = resolve_emission_model("draine_li2007")
         L_abs = 1e10
 
         sed_low = dl07(ir_wave, L_abs, dust_umin=0.5, dust_gamma_dl=0.01, dust_qpah=2.5)
@@ -104,9 +104,9 @@ class TestDL07Tabulated:
 
     def test_gamma_boosts_warm(self, ir_wave):
         """Higher gamma should boost warm PDR component (10-60 um)."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dl07 = get_emission_model("draine_li2007")
+        dl07 = resolve_emission_model("draine_li2007")
         L_abs = 1e10
 
         sed_low_g = dl07(ir_wave, L_abs, dust_umin=1.0, dust_gamma_dl=0.001, dust_qpah=2.5)
@@ -132,9 +132,9 @@ class TestDL07Tabulated:
 
     def test_qpah_affects_mir(self, ir_wave):
         """Different q_PAH values should change the MIR (3-20 um) emission."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dl07 = get_emission_model("draine_li2007")
+        dl07 = resolve_emission_model("draine_li2007")
         L_abs = 1e10
 
         sed_low_q = dl07(ir_wave, L_abs, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=0.5)
@@ -151,17 +151,17 @@ class TestDL07Tabulated:
 
     def test_positive_output(self, ir_wave):
         """SED should be non-negative everywhere."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dl07 = get_emission_model("draine_li2007")
+        dl07 = resolve_emission_model("draine_li2007")
         sed = dl07(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
         assert jnp.all(sed >= 0), "DL07 SED should be non-negative"
 
     def test_finite_output(self, ir_wave):
         """SED should be finite for all reasonable parameters."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dl07 = get_emission_model("draine_li2007")
+        dl07 = resolve_emission_model("draine_li2007")
         for umin in [0.1, 1.0, 10.0, 25.0]:
             for gamma in [0.001, 0.01, 0.1, 0.5]:
                 for qpah in [0.5, 2.5, 4.5]:
@@ -178,9 +178,9 @@ class TestDL07Tabulated:
 
     def test_jit_compatible(self, ir_wave):
         """DL07 tabulated should work under jax.jit."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dl07 = get_emission_model("draine_li2007")
+        dl07 = resolve_emission_model("draine_li2007")
         dl07_jit = jax.jit(dl07, static_argnames=[])
 
         sed = dl07_jit(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
@@ -189,9 +189,9 @@ class TestDL07Tabulated:
 
     def test_differentiable(self, ir_wave):
         """DL07 tabulated should be differentiable w.r.t. parameters."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dl07 = get_emission_model("draine_li2007")
+        dl07 = resolve_emission_model("draine_li2007")
 
         def total_flux(umin):
             sed = dl07(ir_wave, 1e10, dust_umin=umin, dust_gamma_dl=0.01, dust_qpah=2.5)
@@ -203,9 +203,9 @@ class TestDL07Tabulated:
 
     def test_l_absorbed_scaling(self, ir_wave):
         """Doubling L_absorbed should double the SED."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dl07 = get_emission_model("draine_li2007")
+        dl07 = resolve_emission_model("draine_li2007")
         sed_1 = dl07(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
         sed_2 = dl07(ir_wave, 2e10, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
 
@@ -233,9 +233,9 @@ class TestDale2014Tabulated:
 
     def test_energy_conservation(self, ir_wave):
         """Total emitted luminosity should equal L_absorbed."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dale = get_emission_model("dale2014")
+        dale = resolve_emission_model("dale2014")
         L_abs = 1e10
         sed = dale(ir_wave, L_abs, dust_alpha_dale=2.0)
 
@@ -247,9 +247,9 @@ class TestDale2014Tabulated:
 
     def test_alpha_shifts_spectrum(self, ir_wave):
         """Low alpha should produce warmer SED, high alpha cooler."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dale = get_emission_model("dale2014")
+        dale = resolve_emission_model("dale2014")
         L_abs = 1e10
 
         sed_low = dale(ir_wave, L_abs, dust_alpha_dale=1.0)
@@ -265,9 +265,9 @@ class TestDale2014Tabulated:
 
     def test_different_alphas_different_spectra(self, ir_wave):
         """Different alpha values should produce different SEDs."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dale = get_emission_model("dale2014")
+        dale = resolve_emission_model("dale2014")
         L_abs = 1e10
 
         seds = []
@@ -282,27 +282,27 @@ class TestDale2014Tabulated:
 
     def test_positive_output(self, ir_wave):
         """SED should be non-negative."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dale = get_emission_model("dale2014")
+        dale = resolve_emission_model("dale2014")
         for alpha in [0.5, 1.0, 2.0, 3.0, 4.0]:
             sed = dale(ir_wave, 1e10, dust_alpha_dale=alpha)
             assert jnp.all(sed >= 0), f"Dale2014 SED negative for alpha={alpha}"
 
     def test_jit_compatible(self, ir_wave):
         """Dale2014 should work under jax.jit."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dale = get_emission_model("dale2014")
+        dale = resolve_emission_model("dale2014")
         dale_jit = jax.jit(dale)
         sed = dale_jit(ir_wave, 1e10, dust_alpha_dale=2.0)
         assert jnp.all(jnp.isfinite(sed))
 
     def test_differentiable(self, ir_wave):
         """Dale2014 should be differentiable w.r.t. alpha."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dale = get_emission_model("dale2014")
+        dale = resolve_emission_model("dale2014")
 
         def total_flux(alpha):
             return jnp.sum(dale(ir_wave, 1e10, dust_alpha_dale=alpha))
@@ -379,18 +379,18 @@ class TestRegistryAndLazyLoading:
 
     def test_get_emission_model_works(self):
         """get_emission_model should return callable for all registered names."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
         for name in ["modified_blackbody", "draine_li2007", "dale2014", "draine_li2014"]:
-            fn = get_emission_model(name)
+            fn = resolve_emission_model(name)
             assert callable(fn), f"{name} is not callable"
 
     def test_unknown_model_raises(self):
         """Requesting unknown model should raise ValueError."""
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
         with pytest.raises(ValueError, match="Unknown dust emission model"):
-            get_emission_model("nonexistent_model_xyz")
+            resolve_emission_model("nonexistent_model_xyz")
 
     def test_dl07_tabulated_alias(self):
         """After DL07 loads, 'dl07_tabulated' should also be available."""

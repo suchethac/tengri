@@ -23,6 +23,7 @@ from tengri.models.dust.attenuation import (
     precompute_dust_age_mask,
     precompute_dust_age_weights,
     register_dust_law,
+    resolve_dust_law,
     single_component_dust,
     single_component_dust_fast,
     two_component_dust,
@@ -64,6 +65,7 @@ from tengri.models.dust.emission import (
     register_dl14_tabulated,
     register_emission_model,
     register_themis_tabulated,
+    resolve_emission_model,
     themis,
 )
 from tengri.models.dust.priors import (

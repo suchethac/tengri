@@ -5,7 +5,7 @@ arrays (SSP grids, dust weights, effective wavelengths) at build time.
 The returned functions take only per-call parameters (SFR weights, dust
 params) as arguments.
 
-Extracted from ``Model`` methods to keep model.py focused on orchestration.
+Extracted from ``SEDModel`` methods to keep model.py focused on orchestration.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def is_fused_compatible(model):
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The model instance to check.
 
     Returns
@@ -138,7 +138,7 @@ def build_fused_photometry(model):
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The model instance providing config and precomputed arrays.
 
     Returns
@@ -147,7 +147,7 @@ def build_fused_photometry(model):
         JIT-compiled function: (sfr_on_ssp, log_z_abs, tau_bc, tau_diff,
         dust_slope, ...) -> photometry array.
     """
-    from tengri.models.dust.attenuation import get_dust_law
+    from tengri.models.dust.attenuation import resolve_dust_law
     from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = model._forward_dtype
@@ -175,9 +175,9 @@ def build_fused_photometry(model):
     lsun = dt.type(LSUN_ERG_PER_S)
 
     # Capture dust law functions (pure JAX, JIT-traceable)
-    law_bc_fn = get_dust_law(model._dust_law_bc)
+    law_bc_fn = resolve_dust_law(model._dust_law_bc)
     if not _is_single_dust:
-        law_diff_fn = get_dust_law(model._dust_law_diff)
+        law_diff_fn = resolve_dust_law(model._dust_law_diff)
 
     from tengri.models.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
@@ -216,9 +216,9 @@ def build_fused_photometry(model):
     # AGN: capture model function for evaluation at effective wavelengths
     has_agn = model._agn_model is not None and model._agn_parametric
     if has_agn:
-        from tengri.models.agn import get_agn_model
+        from tengri.models.agn import resolve_agn_model
 
-        agn_model_fn = get_agn_model(model._agn_model)
+        agn_model_fn = resolve_agn_model(model._agn_model)
 
     # Single-component: signature is (sfr, log_z, tau_v, dust_slope, ...)
     # Two-component:    signature is (sfr, log_z, tau_bc, tau_diff, dust_slope, ...)
@@ -498,7 +498,7 @@ def build_fused_spectrum(model):
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The model instance providing config and precomputed arrays.
 
     Returns
@@ -507,7 +507,7 @@ def build_fused_spectrum(model):
         JIT-compiled function: (sfr_on_ssp, log_z_abs, tau_bc, tau_diff,
         dust_slope, ...) -> spectrum array.
     """
-    from tengri.models.dust.attenuation import get_dust_law
+    from tengri.models.dust.attenuation import resolve_dust_law
     from tengri.models.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
         LSUN_ERG_PER_S,
@@ -545,9 +545,9 @@ def build_fused_spectrum(model):
     has_sigma_v = model._has_sigma_v
 
     # Capture dust law functions
-    law_bc_fn_spec = get_dust_law(model._dust_law_bc)
+    law_bc_fn_spec = resolve_dust_law(model._dust_law_bc)
     if not _is_single_dust_spec:
-        law_diff_fn_spec = get_dust_law(model._dust_law_diff)
+        law_diff_fn_spec = resolve_dust_law(model._dust_law_diff)
 
     # Precompute FFT frequencies for velocity broadening (only if needed)
     if has_sigma_v:
@@ -558,9 +558,9 @@ def build_fused_spectrum(model):
     # AGN: capture model function for evaluation at pixel wavelengths
     has_agn = model._agn_model is not None and model._agn_parametric
     if has_agn:
-        from tengri.models.agn import get_agn_model
+        from tengri.models.agn import resolve_agn_model
 
-        agn_model_fn = get_agn_model(model._agn_model)
+        agn_model_fn = resolve_agn_model(model._agn_model)
 
     def _fused_spec_body(
         sfr_on_ssp,
@@ -791,7 +791,7 @@ def build_exact_sed(model):
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The model instance providing config and precomputed arrays.
 
     Returns
@@ -893,7 +893,7 @@ def build_fused_photometry_ztable(model):
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The model instance providing config and precomputed arrays.
 
     Returns
@@ -902,7 +902,7 @@ def build_fused_photometry_ztable(model):
         JIT-compiled function: (sfr_on_ssp, log_z_abs, tau_bc, tau_diff,
         dust_slope, redshift, ...) -> photometry array.
     """
-    from tengri.models.dust.attenuation import get_dust_law
+    from tengri.models.dust.attenuation import resolve_dust_law
     from tengri.models.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
         LSUN_ERG_PER_S,
@@ -941,9 +941,9 @@ def build_fused_photometry_ztable(model):
     igm_trans_table = zt.igm_trans_table.astype(fdt)
     has_igm_ztable = bool(model._apply_igm and model._approx.get("igm", True))
 
-    law_bc_fn_zt = get_dust_law(model._dust_law_bc)
+    law_bc_fn_zt = resolve_dust_law(model._dust_law_bc)
     if not _is_single_dust_zt:
-        law_diff_fn_zt = get_dust_law(model._dust_law_diff)
+        law_diff_fn_zt = resolve_dust_law(model._dust_law_diff)
 
     # Metallicity interpolation mode (ztable variant)
     _use_smooth_z_zt = model._met_interp == "smooth"
@@ -956,9 +956,9 @@ def build_fused_photometry_ztable(model):
     # AGN: capture model function for evaluation at effective wavelengths
     has_agn = model._agn_model is not None and model._agn_parametric
     if has_agn:
-        from tengri.models.agn import get_agn_model
+        from tengri.models.agn import resolve_agn_model
 
-        agn_model_fn = get_agn_model(model._agn_model)
+        agn_model_fn = resolve_agn_model(model._agn_model)
 
     def _fused_zt_body(
         sfr_on_ssp,
@@ -1191,7 +1191,7 @@ def is_tier2_compatible(model):
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The model instance to check.
 
     Returns
@@ -1220,7 +1220,7 @@ def build_fused_rest_sed(model):
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The model instance providing config and precomputed arrays.
 
     Returns
@@ -1231,7 +1231,7 @@ def build_fused_rest_sed(model):
         where ``p_dict`` contains internal dust/AGN/nebular/radio/X-ray
         parameters.
     """
-    from tengri.models.dust.attenuation import get_dust_law
+    from tengri.models.dust.attenuation import resolve_dust_law
     from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = model._forward_dtype
@@ -1248,9 +1248,9 @@ def build_fused_rest_sed(model):
     lsun = dt.type(LSUN_ERG_PER_S)
 
     # Capture dust law functions (pure JAX, JIT-traceable)
-    law_bc_fn = get_dust_law(model._dust_law_bc)
+    law_bc_fn = resolve_dust_law(model._dust_law_bc)
     if not _is_single_dust:
-        law_diff_fn = get_dust_law(model._dust_law_diff)
+        law_diff_fn = resolve_dust_law(model._dust_law_diff)
         same_law = model._dust_law_bc == model._dust_law_diff
 
     # --- Optional components (Python if at trace time) ---
@@ -1273,17 +1273,17 @@ def build_fused_rest_sed(model):
     # Dust emission
     has_dust_em = model._dust_emission_model is not None
     if has_dust_em:
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
-        dust_emission_fn = get_emission_model(model._dust_emission_model)
+        dust_emission_fn = resolve_emission_model(model._dust_emission_model)
 
     # AGN
     has_agn = model._agn_model is not None
     agn_parametric = model._agn_parametric if has_agn else False
     if has_agn:
-        from tengri.models.agn import get_agn_model
+        from tengri.models.agn import resolve_agn_model
 
-        agn_model_fn = get_agn_model(model._agn_model)
+        agn_model_fn = resolve_agn_model(model._agn_model)
 
     # Radio
     has_radio = model._radio_enabled
@@ -1595,7 +1595,7 @@ def build_fused_tier2_photometry(model):
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         Fully initialized Model with filters and fixed redshift.
 
     Returns
@@ -1773,7 +1773,7 @@ def build_fused_tier2_spectrum(model):
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         Fully initialized Model with spectroscopy config.
 
     Returns

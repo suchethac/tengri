@@ -62,7 +62,7 @@ def run_nss(
     if fitter.spec.stochastic:
         raise ValueError(
             "NSS not supported for stochastic SFH models (D~137). "
-            "Use 'geovi' or 'raytrace' instead."
+            "Use 'vi' or 'mcmc_raytrace' instead."
         )
 
     logprior_fn = fitter._build_logprior_fn()

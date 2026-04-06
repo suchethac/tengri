@@ -12,11 +12,11 @@ Usage
 -----
 Generate training data::
 
-    from tengri import Model, ParamSpec, Uniform
+    from tengri import SEDModel, ParamSpec, Uniform
     from tengri.inference.sbi import generate_sbi_training_data, save_sbi_training_data
 
     spec = ParamSpec(...)
-    model = Model(spec, ssp, filters=filters)
+    model = SEDModel(spec, ssp, filters=filters)
     data = generate_sbi_training_data(model, spec, n_samples=100_000)
     save_sbi_training_data(data, "sbi_training.h5")
 
@@ -42,7 +42,7 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 
-from tengri.core.param_spec import ParamSpec
+from tengri.core.parameters import ParamSpec
 
 
 def generate_sbi_training_data(

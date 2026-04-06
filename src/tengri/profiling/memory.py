@@ -336,7 +336,7 @@ def profile_memory_scaling(
     """
     import warnings
 
-    from tengri import Model
+    from tengri import SEDModel
 
     if dimension_values is None:
         dimension_values = [64, 128, 256, 512]
@@ -346,7 +346,7 @@ def profile_memory_scaling(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = spec_factory(dim)
-            m = Model(spec, ssp, filters=filters, precompute=True)
+            m = SEDModel(spec, ssp, filters=filters, precompute=True)
             report = profile_memory(m)
             results.append((dim, report))
             print(f"  D={dim:>4d}: {report.total_f64_mb:.1f} MB (RSS: {report.rss_mb:.0f} MB)")

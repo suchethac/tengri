@@ -14,10 +14,10 @@ into a unified AGN SED. Three complexity levels:
 
 Usage::
 
-    from tengri.models.agn import get_agn_model, unified_agn
+    from tengri.models.agn import resolve_agn_model, unified_agn
 
     # Named model
-    model_fn = get_agn_model("simple")
+    model_fn = resolve_agn_model("simple")
     l_nu = model_fn(wavelength, agn_log_lbol=44.0, agn_frac=0.1)
 
     # Generic combiner
@@ -33,7 +33,7 @@ References
 - Temple, Hewett & Banerji 2021, MNRAS, 508, 737
 """
 
-from tengri.models.agn.blr import blr_emission
+from tengri.models.agn.blr import blr_emission, compute_blr_sed
 from tengri.models.agn.disc import (
     adaf_disc,
     beloborodov_gamma_hot,
@@ -42,10 +42,10 @@ from tengri.models.agn.disc import (
     multicolor_disc,
     powerlaw_disc,
 )
-from tengri.models.agn.nlr import nlr_emission
+from tengri.models.agn.nlr import compute_nlr_sed, nlr_emission
 
 # QSOgen must be imported after unified (needs register_agn_model)
-from tengri.models.agn.qsogen import qsogen, qsogen_sed
+from tengri.models.agn.qsogen import compute_qsogen_sed, qsogen, qsogen_sed
 from tengri.models.agn.skirtor import create_skirtor_from_grid, skirtor_analytic
 from tengri.models.agn.torus import simple_torus, two_temperature_torus
 from tengri.models.agn.unified import (
@@ -54,35 +54,34 @@ from tengri.models.agn.unified import (
     get_agn_model,
     kubota_done_full_agn,
     register_agn_model,
+    resolve_agn_model,
     unified_agn,
     unified_nlr_blr,
 )
 
 __all__ = [
-    # Registry
     "AGN_MODELS",
     "adaf_agn",
     "adaf_disc",
     "beloborodov_gamma_hot",
     "blr_emission",
+    "compute_blr_sed",
     "compute_l2500",
+    "compute_nlr_sed",
+    "compute_qsogen_sed",
     "create_skirtor_from_grid",
     "get_agn_model",
-    # Disc models
     "kubota_done_disc",
     "kubota_done_full_agn",
     "multicolor_disc",
-    # Line region models
     "nlr_emission",
     "powerlaw_disc",
-    # QSOgen
     "qsogen",
     "qsogen_sed",
     "register_agn_model",
-    # Torus models
+    "resolve_agn_model",
     "simple_torus",
     "two_temperature_torus",
-    # Unified
     "unified_agn",
     "unified_nlr_blr",
 ]

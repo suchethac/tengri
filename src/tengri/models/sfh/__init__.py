@@ -13,11 +13,15 @@ from tengri.models.sfh.mean_sfh import (
     double_powerlaw,
     dpl,
     exponential_sfh,
+    gaussian_sfh,
     lnorm,
+    lognormal_sfh,
     norm,
     powerlaw_sfh,
+    skewnormal_sfh,
     snorm,
     triweight_burst,
+    truncated_skewnormal_sfh,
     tsnorm,
 )
 from tengri.models.sfh.nonparametric import (

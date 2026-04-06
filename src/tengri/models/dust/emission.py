@@ -101,7 +101,7 @@ def register_emission_model(name: str) -> Callable:
     return decorator
 
 
-def get_emission_model(name: str) -> Callable:
+def resolve_emission_model(name: str) -> Callable:
     """Get a registered emission model by name.
 
     Parameters
@@ -125,6 +125,10 @@ def get_emission_model(name: str) -> Callable:
             f"Unknown dust emission model '{name}'. Available: {list(DUST_EMISSION_MODELS.keys())}"
         )
     return DUST_EMISSION_MODELS[name]
+
+
+# Backward compatibility alias
+get_emission_model = resolve_emission_model
 
 
 # ===================================================================
@@ -1418,7 +1422,7 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
     """Load and register the tabulated DL14 model in the emission registry.
 
     After calling this, the model is available via
-    ``get_emission_model("dl14_tabulated")`` and can be used as the
+    ``resolve_emission_model("dl14_tabulated")`` and can be used as the
     ``dust_emission_model`` in ``Model()``.
 
     Parameters
@@ -1673,7 +1677,7 @@ def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated"
     """Load and register the tabulated Dale+2014 model in the emission registry.
 
     After calling this, the model is available via
-    ``get_emission_model("dale2014_tabulated")`` and can be used as the
+    ``resolve_emission_model("dale2014_tabulated")`` and can be used as the
     ``dust_emission_model`` in ``Model()``.
 
     Parameters
@@ -1691,7 +1695,7 @@ def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> Non
     """Load and register the tabulated DL07 model in the emission registry.
 
     After calling this, the model is available via
-    ``get_emission_model("dl07_tabulated")`` and can be used as the
+    ``resolve_emission_model("dl07_tabulated")`` and can be used as the
     ``dust_emission_model`` in ``Model()``.
 
     Parameters
@@ -2675,7 +2679,7 @@ def apply_dust_emission(
     array, shape (n_wave,)
         Dust emission L_nu in Lsun/Hz.
     """
-    model_fn = get_emission_model(model_name)
+    model_fn = resolve_emission_model(model_name)
     return model_fn(wavelength_aa, L_absorbed, **params)
 
 

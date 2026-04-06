@@ -1,6 +1,6 @@
 """Display / introspection helpers extracted from core/model.py.
 
-Each function takes a Model instance as its first argument so that model.py
+Each function takes an SEDModel instance as its first argument so that model.py
 delegates to a one-liner stub and stays focused on the forward model.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from tengri.core.model import Model
+    from tengri.core.model import SEDModel
 
 
 # ---------------------------------------------------------------------------
@@ -17,12 +17,12 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def method_recommendation(model: Model) -> tuple[str, str]:
+def method_recommendation(model: SEDModel) -> tuple[str, str]:
     """Return (method_name, reason) for the recommended inference method.
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         Configured model instance.
 
     Returns
@@ -49,7 +49,7 @@ def method_recommendation(model: Model) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def tree(model: Model) -> str:
+def tree(model: SEDModel) -> str:
     """Return a human-readable physics tree showing the model hierarchy.
 
     Shows the active sub-models at each physical layer (SFH, SPS, Dust,
@@ -58,7 +58,7 @@ def tree(model: Model) -> str:
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         Configured model instance.
 
     Returns
@@ -176,12 +176,12 @@ def tree(model: Model) -> str:
 # ---------------------------------------------------------------------------
 
 
-def summary(model: Model) -> str:
+def summary(model: SEDModel) -> str:
     """Return a human-readable summary of the model configuration.
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         Configured model instance.
 
     Returns

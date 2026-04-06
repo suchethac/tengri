@@ -28,9 +28,9 @@ class TestSKIRTORRegistration:
         assert "skirtor" in AGN_MODELS
 
     def test_get_agn_model_skirtor(self):
-        from tengri.models.agn import get_agn_model
+        from tengri.models.agn import resolve_agn_model
 
-        model_fn = get_agn_model("skirtor")
+        model_fn = resolve_agn_model("skirtor")
         assert callable(model_fn)
 
     def test_skirtor_analytic_importable(self):

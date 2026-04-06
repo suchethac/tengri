@@ -402,26 +402,32 @@ class TestBug04WarmComptonization:
                Zdziarski, Johnson & Magdziarz (1996) MNRAS 283 193.
     """
 
-    def test_donthcomp_nu_returns_finite_nonnegative(self):
-        """nthcomp solver returns finite, non-negative spectral shape."""
-        from tengri.models.agn._nthcomp import donthcomp_nu
+    def test_nthcomp_template_returns_finite_nonnegative(self):
+        """nthcomp template interpolation returns finite, non-negative shape."""
+        from tengri.models.agn._nthcomp import _TABLE_AVAILABLE, nthcomp_lnu_interp
 
-        nu = np.logspace(13, 19, 200)
+        if not _TABLE_AVAILABLE:
+            pytest.skip("nthcomp templates absent — run scripts/build_nthcomp_templates.py")
+
+        nu = jnp.array(np.logspace(13, np.log10(5e18), 200))
         # K&D 2018 default warm zone: Gamma=2.5, kTe=0.2 keV, kTbb=10 eV = 0.01 keV
-        shape = donthcomp_nu(nu, gamma=2.5, kTe_keV=0.2, kTbb_keV=0.01)
+        shape = nthcomp_lnu_interp(nu, gamma=2.5, kTe_keV=0.2, kTbb_keV=0.01)
         assert shape.shape == nu.shape
-        assert np.all(np.isfinite(shape)), "nthcomp shape must be finite everywhere"
-        assert np.all(shape >= 0.0), "nthcomp shape must be non-negative"
-        assert np.any(shape > 0), "nthcomp shape must be non-zero somewhere"
+        assert jnp.all(jnp.isfinite(shape)), "nthcomp template shape must be finite everywhere"
+        assert jnp.all(shape >= 0.0), "nthcomp template shape must be non-negative"
+        assert jnp.any(shape > 0), "nthcomp template shape must be non-zero somewhere"
 
     def test_nthcomp_spectrum_peaks_above_seed_temperature(self):
         """Comptonized spectrum peak must be at higher nu than the seed BB.
 
         For warm Comptonization, photons are scattered to higher energies
-        than the seed blackbody.  The nthcomp peak should be at significantly
-        higher frequency than the seed BB peak (Wien: nu_peak = 2.82 kT/h).
+        than the seed blackbody.  The nthcomp template peak should be at
+        significantly higher frequency than the seed BB peak (Wien: nu_peak = 2.82 kT/h).
         """
-        from tengri.models.agn._nthcomp import donthcomp_nu
+        from tengri.models.agn._nthcomp import _TABLE_AVAILABLE, nthcomp_lnu_interp
+
+        if not _TABLE_AVAILABLE:
+            pytest.skip("nthcomp templates absent — run scripts/build_nthcomp_templates.py")
 
         kTbb_keV = 0.01  # 10 eV seed
         kTe_keV = 0.2
@@ -430,13 +436,13 @@ class TestBug04WarmComptonization:
         _H_PLANCK = 6.62607015e-27
         nu_seed_peak = 2.82 * kTbb_keV * _KEV_TO_ERG / _H_PLANCK  # Hz
 
-        nu = np.logspace(13, 19, 500)
-        shape = donthcomp_nu(nu, gamma=gamma, kTe_keV=kTe_keV, kTbb_keV=kTbb_keV)
+        nu = jnp.array(np.logspace(13, np.log10(5e18), 300))
+        shape = np.array(nthcomp_lnu_interp(nu, gamma=gamma, kTe_keV=kTe_keV, kTbb_keV=kTbb_keV))
+        nu_np = np.array(nu)
 
-        # Centroid of nthcomp power should be well above seed BB peak
-        power = shape * nu  # weight by nu for energy centroid
+        power = shape * nu_np  # weight by nu for energy centroid
         if power.sum() > 0:
-            nu_centroid = np.average(nu, weights=power)
+            nu_centroid = np.average(nu_np, weights=power)
             assert nu_centroid > nu_seed_peak * 5, (
                 f"nthcomp centroid {nu_centroid:.2e} Hz should be > 5x seed BB "
                 f"peak {nu_seed_peak:.2e} Hz — Comptonization must shift photons up"
@@ -448,14 +454,19 @@ class TestBug04WarmComptonization:
         Larger Gamma → steeper power-law → less energy at high nu.
         The ratio of X-ray to UV flux must decrease as Gamma increases.
         """
-        from tengri.models.agn._nthcomp import donthcomp_nu
+        from tengri.models.agn._nthcomp import _TABLE_AVAILABLE, nthcomp_lnu_interp
 
-        nu = np.logspace(13, 19, 300)
+        if not _TABLE_AVAILABLE:
+            pytest.skip("nthcomp templates absent — run scripts/build_nthcomp_templates.py")
+
+        nu = np.logspace(13, np.log10(5e18), 300)
         nu_uv = nu[(nu > 1e15) & (nu < 3e15)]  # UV band
         nu_xray = nu[(nu > 5e17) & (nu < 2e18)]  # soft X-ray band
 
         def xray_uv_ratio(gamma):
-            shape = donthcomp_nu(nu, gamma=gamma, kTe_keV=0.2, kTbb_keV=0.01)
+            shape = np.array(
+                nthcomp_lnu_interp(jnp.array(nu), gamma=gamma, kTe_keV=0.2, kTbb_keV=0.01)
+            )
             f_uv = np.trapezoid(np.interp(nu_uv, nu, shape), nu_uv)
             f_xray = np.trapezoid(np.interp(nu_xray, nu, shape), nu_xray)
             return f_xray / max(f_uv, 1e-300)

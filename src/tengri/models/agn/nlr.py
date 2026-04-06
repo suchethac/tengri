@@ -124,7 +124,7 @@ def _gaussian_line_profile(
     return phi_nu
 
 
-def nlr_emission(
+def compute_nlr_sed(
     wavelength: jnp.ndarray,
     l_disc_bol_erg: float,
     covering_fraction: float = 0.1,
@@ -187,3 +187,7 @@ def nlr_emission(
     l_nu_cont = l_cont_total * cont_shape / integral_safe
 
     return l_nu_lines + l_nu_cont
+
+
+# Backward compatibility alias
+nlr_emission = compute_nlr_sed

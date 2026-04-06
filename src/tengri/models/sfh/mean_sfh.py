@@ -9,15 +9,18 @@ All functions are pure JAX and JIT-compatible.
 
 Models
 ------
-- **tsnorm** (truncated skew-normal): Bellstedt+2020, Robotham+2020 snorm_trunc.
+Canonical names (short name alias in parentheses):
+
+- **truncated_skewnormal_sfh** (tsnorm): Bellstedt+2020, Robotham+2020 snorm_trunc.
   Most flexible smooth model — 5 params: peak location, width, skew, truncation.
-- **snorm** (skew-normal): tsnorm without truncation (4 params).
-- **norm** (Gaussian): snorm with skew=0 (3 params).
-- **lnorm** (log-normal): Gaussian in log10(age) space (3 params).
-- **dpl** (double power law): Carnall+2018 BAGPIPES parameterization (4 params).
-- **const** (constant): flat SFR between start and end times (3 params).
-- **exp** (exponential): declining exponential from start (3 params).
-- **dexp** (delayed exponential): peaks at start + tau (3 params).
+- **skewnormal_sfh** (snorm): truncated_skewnormal_sfh without truncation (4 params).
+- **gaussian_sfh** (norm): skewnormal_sfh with skew=0 (3 params).
+- **lognormal_sfh** (lnorm): Gaussian in log10(age) space (3 params).
+- **dpl** (canonical): Carnall+2018 BAGPIPES parameterization with log_peak_sfr (4 params).
+- **double_powerlaw**: Low-level implementation used by dpl.
+- **constant_sfh** (const): flat SFR between start and end times (3 params).
+- **exponential_sfh** (exp): declining exponential from start (3 params).
+- **delayed_exponential_sfh** (dexp): peaks at start + tau (3 params).
 - **triweight_burst**: compact triweight kernel in log-age for burst component.
 
 References
@@ -95,7 +98,7 @@ def _skewed_gaussian_kernel(
 # ---------------------------------------------------------------------------
 
 
-def tsnorm(
+def truncated_skewnormal_sfh(
     t_lookback: jnp.ndarray,
     log_peak_sfr: float,
     peak_lbt: float,
@@ -148,7 +151,11 @@ def tsnorm(
     return jnp.maximum(sfr, 0.0)
 
 
-def snorm(
+# Alias for backward compatibility and registry
+tsnorm = truncated_skewnormal_sfh
+
+
+def skewnormal_sfh(
     t_lookback: jnp.ndarray,
     log_peak_sfr: float,
     peak_lbt: float,
@@ -157,7 +164,7 @@ def snorm(
 ) -> jnp.ndarray:
     """Skew-normal SFH (Robotham+2020).
 
-    Like tsnorm but without truncation.
+    Like truncated_skewnormal_sfh but without truncation.
 
     Parameters
     ----------
@@ -183,13 +190,17 @@ def snorm(
     return jnp.maximum(peak_sfr * kernel, 0.0)
 
 
-def norm(
+# Alias for backward compatibility and registry
+snorm = skewnormal_sfh
+
+
+def gaussian_sfh(
     t_lookback: jnp.ndarray,
     log_peak_sfr: float,
     peak_lbt: float,
     width: float,
 ) -> jnp.ndarray:
-    """Gaussian (normal) SFH — snorm with skew=0.
+    """Gaussian (normal) SFH — skewnormal_sfh with skew=0.
 
     Parameters
     ----------
@@ -207,10 +218,14 @@ def norm(
     array
         SFR (Msun/yr), non-negative.
     """
-    return snorm(t_lookback, log_peak_sfr, peak_lbt, width, skew=0.0)
+    return skewnormal_sfh(t_lookback, log_peak_sfr, peak_lbt, width, skew=0.0)
 
 
-def lnorm(
+# Alias for backward compatibility and registry
+norm = gaussian_sfh
+
+
+def lognormal_sfh(
     t_lookback: jnp.ndarray,
     log_peak_sfr: float,
     peak_lbt: float,
@@ -245,6 +260,10 @@ def lnorm(
     log_peak = jnp.log10(jnp.maximum(peak_lbt, 1e5))
     exponent = -0.5 * ((log_age - log_peak) / width) ** 2
     return jnp.maximum(peak_sfr * jnp.exp(exponent), 0.0)
+
+
+# Alias for backward compatibility and registry
+lnorm = lognormal_sfh
 
 
 def double_powerlaw(
@@ -295,7 +314,7 @@ def dpl(
     tau: float,
     log_peak_sfr: float,
 ) -> jnp.ndarray:
-    """Double power law with log_peak_sfr parameterization.
+    """Double power law with log_peak_sfr parameterization (canonical: dpl).
 
     Registry-compatible wrapper around the Carnall+2018 DPL.
     Uses log10(peak_sfr) instead of linear norm for consistency

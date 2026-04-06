@@ -15,7 +15,7 @@ from tengri.core.fused_kernels import (
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,
 )
-from tengri.core.param_spec import ParamSpec
+from tengri.core.parameters import ParamSpec
 from tengri.distributions import Uniform
 from tengri.models.sps.dsps_wrapper import SSPData
 

@@ -1,7 +1,7 @@
-"""Convenience methods delegated from Model.
+"""Convenience methods delegated from SEDModel.
 
 Extracted from core/model.py to keep model.py focused on the forward model.
-Each function takes (model, ...) where model is a Model instance.
+Each function takes (model, ...) where model is an SEDModel instance.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import jax
 import jax.numpy as jnp
 
 if TYPE_CHECKING:
-    from tengri.core.model import MockData, Model, PriorPredictive
+    from tengri.core.model import MockData, PriorPredictive, SEDModel
 
 
 # ---------------------------------------------------------------------------
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def mock(model: Model, params, snr=20.0, key=None) -> MockData:
+def mock(model: SEDModel, params, snr=20.0, key=None) -> MockData:
     """Generate mock photometric observation."""
     from tengri.core.model import MockData
 
@@ -40,7 +40,7 @@ def mock(model: Model, params, snr=20.0, key=None) -> MockData:
     )
 
 
-def mock_spectrum(model: Model, params, wave_obs, snr=30.0, key=None) -> MockData:
+def mock_spectrum(model: SEDModel, params, wave_obs, snr=30.0, key=None) -> MockData:
     """Generate mock spectroscopic observation.
 
     Parameters
@@ -77,7 +77,7 @@ def mock_spectrum(model: Model, params, wave_obs, snr=30.0, key=None) -> MockDat
     )
 
 
-def mock_batch(model: Model, params_batch, snr=20.0, key=None) -> MockData:
+def mock_batch(model: SEDModel, params_batch, snr=20.0, key=None) -> MockData:
     """Generate batch of mock observations."""
     from tengri.core.model import MockData
 
@@ -92,7 +92,7 @@ def mock_batch(model: Model, params_batch, snr=20.0, key=None) -> MockData:
     else:
         noise_keys = [None] * n_batch
 
-    results = [mock(_get_single(i), snr=snr, key=noise_keys[i]) for i in range(n_batch)]
+    results = [mock(model, _get_single(i), snr=snr, key=noise_keys[i]) for i in range(n_batch)]
 
     return MockData(
         flux_true=jnp.stack([r.flux_true for r in results]),
@@ -107,7 +107,7 @@ def mock_batch(model: Model, params_batch, snr=20.0, key=None) -> MockData:
 # ---------------------------------------------------------------------------
 
 
-def predict_photometry_batch(model: Model, params_batch):
+def predict_photometry_batch(model: SEDModel, params_batch):
     """Compute photometry for a batch of galaxies via jax.vmap.
 
     Parameters
@@ -124,7 +124,7 @@ def predict_photometry_batch(model: Model, params_batch):
     return jax.vmap(model.predict_photometry)(params_batch)
 
 
-def predict_spectrum_batch(model: Model, params_batch):
+def predict_spectrum_batch(model: SEDModel, params_batch):
     """Compute spectra for a batch of galaxies via jax.vmap.
 
     Requires ``precompute_spectroscopy()`` to have been called.
@@ -147,7 +147,7 @@ def predict_spectrum_batch(model: Model, params_batch):
 # ---------------------------------------------------------------------------
 
 
-def prior_predictive(model: Model, n: int = 500, seed: int = 42) -> PriorPredictive:
+def prior_predictive(model: SEDModel, n: int = 500, seed: int = 42) -> PriorPredictive:
     """Sample from the prior and evaluate the forward model on each draw.
 
     Returns a ``PriorPredictive`` object with draw arrays and convenience
@@ -202,7 +202,7 @@ def prior_predictive(model: Model, n: int = 500, seed: int = 42) -> PriorPredict
 
 
 def fit_catalog(
-    model: Model,
+    model: SEDModel,
     catalog,
     flux_cols: list[str],
     err_cols: list[str],
@@ -323,7 +323,7 @@ def fit_catalog(
 
 
 def fit_population(
-    model: Model,
+    model: SEDModel,
     observations_list: list,
     method: str = "vi",
     population_prior: dict | None = None,
@@ -424,9 +424,9 @@ def build_model_from_config(
     priors: dict | None = None,
     **model_kwargs,
 ):
-    """Build a Model from a grouped configuration.  See ``Model.from_config``."""
-    from tengri.core.param_spec import ParamSpec
+    """Build a SEDModel from a grouped configuration.  See ``SEDModel.from_config``."""
     from tengri.core.param_translate import resolve_short_names
+    from tengri.core.parameters import ParamSpec
     from tengri.distributions import Uniform
     from tengri.models.observation.observation import Observation
     from tengri.models.sps.dsps_wrapper import SSPData, load_ssp_data
@@ -518,7 +518,7 @@ def fit_model(
     init: str | None = None,
     **kwargs,
 ):
-    """Fit observed data.  See ``Model.fit``."""
+    """Fit observed data.  See ``SEDModel.fit``."""
     from tengri.inference.fitter import Fitter
 
     # --- Resolve data arrays ---

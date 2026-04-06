@@ -312,7 +312,7 @@ class TestDL14Emission:
 
     def test_dl14_param_spec_registered(self):
         """dust_alpha_dl14 should be in the parameter spec."""
-        from tengri.core.param_spec import _DUST_EMISSION_PARAMS
+        from tengri.core.parameters import _DUST_EMISSION_PARAMS
 
         assert "dust_alpha_dl14" in _DUST_EMISSION_PARAMS
 

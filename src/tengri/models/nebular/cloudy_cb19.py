@@ -213,7 +213,7 @@ def load_cb19_grid(
 
     with h5py.File(filepath, "r") as f:
         if group_key not in f:
-            available = sorted(k for k in f["grids"].keys()) if "grids" in f else []
+            available = sorted(k for k in f["grids"]) if "grids" in f else []
             raise KeyError(
                 f"CB_19 group '{group_key}' not in HDF5. "
                 f"Available top-level SED groups: {available}"

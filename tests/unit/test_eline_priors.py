@@ -134,6 +134,49 @@ class TestCloudyLinePriors:
         assert means.shape == (12,)
         assert jnp.all(jnp.isfinite(means))
 
+    def test_gradient_matches_finite_difference_log_z(self):
+        """AD gradient wrt log_z matches finite-difference at interior grid point.
+
+        Regression for Phase 6C: verifies that the bilinear interpolation over
+        all 4 (Z, logU) corners is correctly differentiable. Tests at an interior
+        point (-0.4, -2.5) away from clip boundaries so all 4 corners contribute.
+        """
+        eps = 1e-4
+        log_z0 = -0.4  # interior point, well away from subsolar (-0.7) and solar (0.0) edges
+
+        def sum_means(log_z: float) -> float:
+            means, _ = cloudy_line_priors(log_z=log_z, neb_logU=-2.5)
+            return jnp.sum(means)
+
+        g_analytic = float(jax.grad(sum_means)(log_z0))
+        g_fd = float((sum_means(log_z0 + eps) - sum_means(log_z0 - eps)) / (2.0 * eps))
+        rel_err = abs(g_analytic - g_fd) / (abs(g_fd) + 1e-12)
+        assert rel_err < 0.001, (
+            f"log_z gradient mismatch: analytic={g_analytic:.6f}, FD={g_fd:.6f}, "
+            f"rel_err={rel_err:.4f} — bilinear z_frac term may be missing"
+        )
+
+    def test_gradient_matches_finite_difference_neb_logU(self):
+        """AD gradient wrt neb_logU matches finite-difference at interior grid point.
+
+        Regression for Phase 6C: verifies the u_frac term in the bilinear
+        interpolation is correctly differentiated.
+        """
+        eps = 1e-4
+        logU0 = -2.5  # interior point between grid nodes -3.0 and -2.0
+
+        def sum_means(neb_logU: float) -> float:
+            means, _ = cloudy_line_priors(log_z=-0.4, neb_logU=neb_logU)
+            return jnp.sum(means)
+
+        g_analytic = float(jax.grad(sum_means)(logU0))
+        g_fd = float((sum_means(logU0 + eps) - sum_means(logU0 - eps)) / (2.0 * eps))
+        rel_err = abs(g_analytic - g_fd) / (abs(g_fd) + 1e-12)
+        assert rel_err < 0.001, (
+            f"neb_logU gradient mismatch: analytic={g_analytic:.6f}, FD={g_fd:.6f}, "
+            f"rel_err={rel_err:.4f} — bilinear u_frac term may be missing"
+        )
+
 
 # ---------------------------------------------------------------------------
 # marginalize_emission_lines_cloudy integration tests

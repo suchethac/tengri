@@ -18,7 +18,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.core.param_spec import ParamSpec
+from tengri.core.parameters import ParamSpec
 from tengri.distributions import Fixed, Uniform
 from tengri.models.sfh.chemical_evolution import (
     Z_SUN,

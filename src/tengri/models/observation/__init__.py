@@ -21,7 +21,7 @@ from tengri.models.observation.eline_priors import (
     cloudy_line_priors,
     marginalize_emission_lines_cloudy,
 )
-from tengri.models.observation.noise_config import NoiseConfig, NoiseModel
+from tengri.models.observation.noise_model import NoiseConfig, NoiseModel
 from tengri.models.observation.observation import Observation
 from tengri.models.observation.photometry_config import Photometry
 from tengri.models.observation.spectroscopy import (

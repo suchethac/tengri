@@ -149,6 +149,41 @@ _NEBULAR_PARAMS = {
     ),
 }
 
+# ---- CB_19 extra parameters (added when nebular == "cb19") ----
+# CB_19 extends the base CLOUDY grid with three additional continuous axes:
+# density, C/O ratio, and ΔN/O. These have no counterpart in the FSPS/Byler grid.
+#
+# Unit convention reminder: CB_19 stores L_line/L_Hβ (dimensionless ratios).
+# The CB19Backend converts to L_sun/Q_H using L_Hβ/Q_H = 4.78e-13 erg/photon
+# (Case B, T_e=10^4 K; Osterbrock & Ferland 2006, Table 4.4).
+_CB19_PARAMS = {
+    "neb_log_nH": (
+        "Log hydrogen density log10(n_H / cm⁻³) for CB_19 grid [grid range: 1–4]",
+        lambda lo, hi: lo >= 0 and hi <= 6,
+        "must be in [0, 6] (CB_19 grid: 1–4; extrapolated outside)",
+        Fixed(2.0),  # n_H = 100 cm⁻³, typical HII region
+    ),
+    "neb_co": (
+        "Log C/O abundance ratio log10(C/O) for CB_19 grid [grid range: −1 to 0.15]",
+        lambda lo, hi: lo >= -3 and hi <= 2,
+        "must be in [−3, 2]",
+        Fixed(-0.36),  # near-solar C/O (CLOUDY c17 default)
+    ),
+    "neb_dno": (
+        "ΔN/O offset (log10) from default N/O–O/H scaling [grid range: −0.25 to 0.25]",
+        lambda lo, hi: lo >= -1 and hi <= 1,
+        "must be in [−1, 1]",
+        Fixed(0.0),  # solar N/O scaling (Nicholls+2017)
+    ),
+    "neb_hbfrac": (
+        "HbFrac: L_Hβ(matter-bounded)/L_Hβ(radiation-bounded) for CB_19 [0–1]. "
+        "HbFrac=1 = fully radiation-bounded; escape fraction ≈ 1 − HbFrac",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1]",
+        Fixed(1.0),  # radiation-bounded (default)
+    ),
+}
+
 # ---- Emission line velocity parameters ----
 _ELINE_PARAMS = {
     "eline_sigma_kms": (
@@ -458,16 +493,35 @@ _SHOCK_PARAMS = {
         Fixed(0.0),
     ),
     "shock_velocity": (
-        "Shock velocity in km/s (Allen+2008 grid: 100-1000)",
+        "Shock velocity in km/s (100-1000 for MAPPINGS III; 200-1000 for MAPPINGS V)",
         lambda lo, hi: lo >= 100 and hi <= 1000,
         "must be in [100, 1000]",
         Fixed(300.0),
     ),
     "shock_log_density": (
-        "Log10 pre-shock density in cm^-3 (reserved for future grids)",
+        "Log10 pre-shock density in cm^-3; snapped to nearest grid point",
         lambda lo, hi: True,
         "",
         Fixed(0.0),
+    ),
+    "shock_b_over_sqrt_n": (
+        "B/sqrt(n) in uG cm^(3/2) (MAPPINGS III) or absolute B in uG (MAPPINGS V); "
+        "snapped to nearest grid point",
+        lambda lo, hi: True,
+        "",
+        Fixed(1.0),
+    ),
+    "shock_abundance": (
+        "Abundance set: solar | 2xsolar | dopita2005 | lmc | smc",
+        lambda lo, hi: True,
+        "",
+        Fixed("solar"),
+    ),
+    "shock_component": (
+        "Emission component: shock | precursor | combined",
+        lambda lo, hi: True,
+        "",
+        Fixed("combined"),
     ),
 }
 
@@ -709,9 +763,15 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Nebular params (CLOUDY or Cue — not BakedIn/ssp/off)
-    if nebular in ("cloudy", "cue"):
+    # Nebular params (CLOUDY, Cue, or CB_19 — not BakedIn/ssp/off)
+    if nebular in ("cloudy", "cue", "cb19"):
         for pname, (desc, check, err, default) in _NEBULAR_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+
+    # CB_19-specific extra axes (density, C/O, ΔN/O, HbFrac)
+    if nebular == "cb19":
+        for pname, (desc, check, err, default) in _CB19_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
@@ -1476,12 +1536,41 @@ class Parameters:
         return self._distributions[name]
 
     def get_fixed_values(self) -> dict[str, float]:
-        """Get a dict of {name: value} for all fixed parameters."""
-        return {
-            name: float(dist.bounds[0])
-            for name, dist in self._distributions.items()
-            if dist.is_fixed
-        }
+        """Get a dict of {name: value} for all numeric fixed parameters.
+
+        String-valued Fixed parameters (categorical config, e.g. shock_abundance)
+        are excluded because they cannot be represented as float.
+        """
+        result: dict[str, float] = {}
+        for name, dist in self._distributions.items():
+            if dist.is_fixed:
+                v = dist.bounds[0]
+                if v is not None:
+                    result[name] = float(v)
+        return result
+
+    def merge_observation_params(self, **extra_params: Distribution) -> Parameters:
+        """Return a copy augmented with extra observation-level parameters.
+
+        Used by ``Fitter`` to inject emission-line amplitude parameters so they
+        flow through bounds, prior penalty loops, and summary output without
+        requiring special-casing in downstream code.
+
+        Parameters
+        ----------
+        **extra_params : Distribution
+            Mapping of parameter name → Distribution to add.
+
+        Returns
+        -------
+        Parameters
+            New ``Parameters`` instance with ``extra_params`` included in
+            ``free_params``. The original instance is not modified.
+        """
+        new_spec = copy.copy(self)
+        new_spec._distributions = {**self._distributions, **extra_params}
+        new_spec._valid_param_names = self._valid_param_names | frozenset(extra_params.keys())
+        return new_spec
 
     def sample(self, key: jax.Array) -> dict[str, jnp.ndarray]:
         """Draw one sample from all parameter distributions.

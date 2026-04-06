@@ -400,8 +400,8 @@ def profile_pipeline(
 
     Parameters
     ----------
-    model : Model
-        A tengri Model instance.
+    model : SEDModel
+        A tengri SEDModel instance.
     params : dict
         Parameter values (public names).
     n : int
@@ -462,18 +462,18 @@ def compare_paths(
     """
     import warnings
 
-    from tengri import Model
+    from tengri import SEDModel
 
     params = spec.sample(jax.random.PRNGKey(42))
 
     # Exact path
-    model_exact = Model(spec, ssp, filters=filters, precompute=False)
+    model_exact = SEDModel(spec, ssp, filters=filters, precompute=False)
     exact = profile_pipeline(model_exact, params, n=n, config_name="exact")
 
     # Fused path
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        model_fused = Model(spec, ssp, filters=filters, precompute=True)
+        model_fused = SEDModel(spec, ssp, filters=filters, precompute=True)
     fused = profile_pipeline(model_fused, params, n=n, config_name="fused")
 
     # Print comparison
@@ -515,7 +515,7 @@ def profile_configurations(
     """
     import warnings
 
-    from tengri import Model
+    from tengri import SEDModel
 
     reports = []
     print(f"\n{'Configuration':<42s} {'Forward':>10s} {'Gradient':>10s} {'D':>4s} {'Path':>8s}")
@@ -526,7 +526,7 @@ def profile_configurations(
             warnings.simplefilter("ignore")
             try:
                 precomp = kwargs.pop("precompute", True)
-                m = Model(spec, ssp, filters=filters, precompute=precomp, **kwargs)
+                m = SEDModel(spec, ssp, filters=filters, precompute=precomp, **kwargs)
                 par = spec.sample(jax.random.PRNGKey(42))
 
                 report = profile_pipeline(m, par, n=n, config_name=name)

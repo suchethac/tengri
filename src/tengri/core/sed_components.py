@@ -27,7 +27,7 @@ def build_ssp_component(model):
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The model instance providing config and precomputed arrays.
 
     Returns
@@ -195,9 +195,9 @@ def build_dust_emission_component(model):
     if model._dust_emission_model is None:
         return None
 
-    from tengri.models.dust.emission import get_emission_model
+    from tengri.models.dust.emission import resolve_emission_model
 
-    emission_fn = get_emission_model(model._dust_emission_model)
+    emission_fn = resolve_emission_model(model._dust_emission_model)
     wave = model.ssp_data.ssp_wave
 
     def dust_em_fn(
@@ -249,9 +249,9 @@ def build_agn_component(model):
     if model._agn_model is None:
         return None
 
-    from tengri.models.agn import get_agn_model
+    from tengri.models.agn import resolve_agn_model
 
-    agn_model_fn = get_agn_model(model._agn_model)
+    agn_model_fn = resolve_agn_model(model._agn_model)
     wave = model.ssp_data.ssp_wave
     is_parametric = model._agn_parametric
 

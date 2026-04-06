@@ -297,10 +297,10 @@ class TestAGNPredictSED:
         agn_log_lbol controls the AGN luminosity as expected.
         Avoids synthetic SSP normalization issues in unit tests.
         """
-        from tengri.models.agn import get_agn_model
+        from tengri.models.agn import resolve_agn_model
 
         wave = jnp.linspace(3000.0, 10000.0, 100)
-        agn_fn = get_agn_model("simple")
+        agn_fn = resolve_agn_model("simple")
 
         # AGN with high L_bol
         lnu_high = agn_fn(

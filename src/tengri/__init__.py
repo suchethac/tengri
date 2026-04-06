@@ -23,9 +23,19 @@ jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
 
 __version__ = "0.1.0"
 
+# --- Exception hierarchy ---
+from tengri.core.exceptions import (
+    BackendError,
+    ConfigError,
+    InferenceError,
+    ParameterError,
+    TengriError,
+    TengriIOError,
+)
+
 # --- New high-level API ---
 from tengri.core.mock import MockData, generate_mock
-from tengri.core.model import Model, PriorPredictive
+from tengri.core.model import Model, PriorPredictive, SEDModel
 from tengri.core.noise import (
     compute_effective_noise,
     compute_std_inv,
@@ -33,7 +43,7 @@ from tengri.core.noise import (
     uses_student_t,
     variable_noise_hamiltonian,
 )
-from tengri.core.param_spec import Parameters, ParamSpec
+from tengri.core.parameters import Parameters, ParamSpec
 from tengri.core.prediction import (
     DerivedQuantities,
     EmissionLines,
@@ -62,8 +72,8 @@ from tengri.inference.vi_config import VIConfig
 from tengri.models.agn.agn_config import AGNConfig
 from tengri.models.dust.attenuation import two_component_dust
 from tengri.models.observation.filters import load_filter_set
-from tengri.models.observation.line_catalog import LineCatalog, LineList
-from tengri.models.observation.noise_config import NoiseConfig, NoiseModel
+from tengri.models.observation.line_list import LineCatalog, LineList
+from tengri.models.observation.noise_model import NoiseConfig, NoiseModel
 from tengri.models.observation.observation import Observation
 from tengri.models.observation.photometry_config import Photometry
 from tengri.models.observation.spectroscopy_config import Spectroscopy, SpectroscopyConfig
@@ -82,10 +92,14 @@ from tengri.models.sfh.mean_sfh import (
     double_powerlaw,
     dpl,
     exponential_sfh,
+    gaussian_sfh,
     lnorm,
+    lognormal_sfh,
     norm,
+    skewnormal_sfh,
     snorm,
     triweight_burst,
+    truncated_skewnormal_sfh,
     tsnorm,
 )
 from tengri.models.sfh.psd_models import drw_acf, drw_variance, psd_drw
@@ -176,6 +190,9 @@ __all__ = [
     "FIELD_MODEL_REGISTRY",
     "SFH_REGISTRY",
     "AGNConfig",
+    # Exceptions
+    "BackendError",
+    "ConfigError",
     "DerivedQuantities",
     "DustConfig",
     "EmissionLines",
@@ -184,6 +201,7 @@ __all__ = [
     "Gaussian",
     "HierarchicalFitter",
     "HierarchicalResult",
+    "InferenceError",
     "LineCatalog",
     "LineList",
     "LogNormal",
@@ -197,6 +215,7 @@ __all__ = [
     "NoiseModel",
     "Observation",
     "ParamSpec",
+    "ParameterError",
     "Parameters",
     "Photometry",
     "PopulationFitter",
@@ -204,6 +223,7 @@ __all__ = [
     "Posterior",
     "Prediction",
     "PriorPredictive",
+    "SEDModel",
     "SEDQuantities",
     "SFHConfig",
     "SFHQuantities",
@@ -211,6 +231,8 @@ __all__ = [
     "Spectroscopy",
     "SpectroscopyConfig",
     "StudentT",
+    "TengriError",
+    "TengriIOError",
     "Uniform",
     "VIConfig",
     "compute_effective_noise",
@@ -226,6 +248,7 @@ __all__ = [
     "drw_acf",
     "drw_variance",
     "exponential_sfh",
+    "gaussian_sfh",
     "generate_gp_batch",
     "generate_gp_fourier",
     "generate_mock",
@@ -234,14 +257,17 @@ __all__ = [
     "lnorm",
     "load_filter_set",
     "load_ssp_data",
+    "lognormal_sfh",
     "make_log_age_grid",
     "norm",
     "posteriors_to_dataframe",
     "psd_drw",
     "resolve_sfh",
     "sample_raytrace",
+    "skewnormal_sfh",
     "snorm",
     "triweight_burst",
+    "truncated_skewnormal_sfh",
     "tsnorm",
     "two_component_dust",
     "uses_student_t",

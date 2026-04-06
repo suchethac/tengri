@@ -14,7 +14,11 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tengri.models.dust.attenuation import single_component_dust_fast, two_component_dust_fast
+from tengri.models.dust.attenuation import (
+    resolve_dust_law,
+    single_component_dust_fast,
+    two_component_dust_fast,
+)
 from tengri.models.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_log_z_evolving,
@@ -666,6 +670,9 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         shock_frac = p.get("shock_frac", 0.0)
         shock_velocity = p.get("shock_velocity", 300.0)
         shock_log_density = p.get("shock_log_density", 0.0)
+        shock_b_over_sqrt_n = p.get("shock_b_over_sqrt_n", 1.0)
+        shock_abundance = p.get("shock_abundance", "solar")
+        shock_component = p.get("shock_component", "combined")
 
         # Estimate L_halpha from the SED near 6563 A as a proxy.
         # Use a fraction of the bolometric luminosity scaled by shock_frac.
@@ -681,19 +688,40 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
             shock_velocity,
             l_shock_halpha,
             shock_log_density=shock_log_density,
+            shock_b_over_sqrt_n=shock_b_over_sqrt_n,
+            shock_abundance=shock_abundance,
+            shock_component=shock_component,
         )
+
+        # Apply diffuse ISM attenuation to shock emission.
+        # Galactic-scale shocks are embedded in the ISM, so their line
+        # emission traverses the same diffuse dust screen as old stellar
+        # populations.  Birth-cloud attenuation is NOT applied because
+        # shocks typically occur outside star-forming birth clouds (AGN jets,
+        # merger-driven turbulence, evolved superwinds).
+        tau_diff = p.get("tau_diff", 0.0)
+        if tau_diff > 0.0 and hasattr(model, "_dust_law_diff"):
+            n_slope = p.get("dust_slope", -0.7)
+            dust_bump_strength = p.get("dust_bump_strength", 0.0)
+            k_diff = resolve_dust_law(model._dust_law_diff)(
+                model.ssp_data.ssp_wave,
+                n_slope=n_slope,
+                dust_bump_strength=dust_bump_strength,
+            )
+            shock_sed = shock_sed * jnp.exp(-tau_diff * k_diff)
+
         sed = sed + shock_sed
 
     # Dust IR emission (energy-balanced)
     if model._dust_emission_model is not None and sed_intrinsic is not None:
-        from tengri.models.dust.emission import get_emission_model
+        from tengri.models.dust.emission import resolve_emission_model
 
         _c_aa_em = 2.99792458e18  # c in Angstrom/s
         nu_em = _c_aa_em / model.ssp_data.ssp_wave
         L_absorbed = -jnp.trapezoid(sed_intrinsic - sed_attenuated, nu_em)
         eta_balance = p.get("dust_eta_balance", 1.0)
         L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
-        dust_ir = get_emission_model(model._dust_emission_model)(
+        dust_ir = resolve_emission_model(model._dust_emission_model)(
             model.ssp_data.ssp_wave,
             L_ir,
             dust_T=p.get("dust_T", 35.0),
@@ -709,7 +737,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
     # AGN contribution
     agn_bol_erg = 0.0
     if model._agn_model is not None:
-        from tengri.models.agn import get_agn_model
+        from tengri.models.agn import resolve_agn_model
 
         if model._agn_parametric:
             agn_log_lbol = p.get("agn_log_lbol", 10.0)
@@ -722,7 +750,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
             L_bol_stellar = -jnp.trapezoid(sed, nu)
             agn_log_lbol = jnp.log10(jnp.maximum(L_bol_stellar * agn_frac_for_model, 1e-50))
             agn_bol_erg = L_bol_stellar * agn_frac_for_model
-        agn_sed = get_agn_model(model._agn_model)(
+        agn_sed = resolve_agn_model(model._agn_model)(
             model.ssp_data.ssp_wave,
             agn_log_lbol=agn_log_lbol,
             agn_frac=agn_frac_for_model,

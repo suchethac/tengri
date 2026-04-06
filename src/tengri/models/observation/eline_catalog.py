@@ -17,6 +17,19 @@ import jax.numpy as jnp
 
 # name: (rest_wavelength_aa, line_type, default_prior_width_dex)
 EMISSION_LINES: dict[str, tuple[float, str, float]] = {
+    # UV lines (Flury+2024, arXiv:2412.06763)
+    "NIV1483": (1483.34, "forbidden", 0.3),
+    "NIV1486": (1486.50, "forbidden", 0.3),
+    "CIV1548": (1548.20, "resonance", 0.3),
+    "CIV1550": (1550.78, "resonance", 0.3),
+    "HeII1640": (1640.42, "recombination", 0.15),
+    "OIII1660": (1660.81, "forbidden", 0.15),
+    "OIII1666": (1666.15, "forbidden", 0.15),
+    "NIII1747": (1747.65, "forbidden", 0.3),
+    "NIII1754": (1754.05, "forbidden", 0.3),
+    "CIII1907": (1906.68, "forbidden", 0.3),
+    "CIII1909": (1908.73, "forbidden", 0.3),
+    # Optical lines
     "Lya": (1215.67, "recombination", 0.3),
     "OII3726": (3727.09, "forbidden", 0.3),
     "OII3729": (3729.88, "forbidden", 0.3),
@@ -38,6 +51,25 @@ EMISSION_LINES: dict[str, tuple[float, str, float]] = {
 # ---------------------------------------------------------------------------
 
 LINE_GROUPS: dict[str, list[str]] = {
+    "uv_narrow": [
+        "NIV1483",
+        "NIV1486",
+        "CIV1548",
+        "CIV1550",
+        "HeII1640",
+        "OIII1660",
+        "OIII1666",
+        "NIII1747",
+        "NIII1754",
+        "CIII1907",
+        "CIII1909",
+    ],
+    # Flury+2024 diagnostics (arXiv:2412.06763)
+    "flury_niii_ciii": ["NIII1747", "NIII1754", "CIII1907", "CIII1909"],
+    "flury_niv_ciii": ["NIV1483", "NIV1486", "CIII1907", "CIII1909"],
+    "flury_oiii_heii": ["OIII1660", "OIII1666", "HeII1640"],
+    "flury_niii_oiii": ["NIII1747", "NIII1754", "OIII1660", "OIII1666"],
+    "flury_civ_ciii": ["CIV1548", "CIV1550", "CIII1907", "CIII1909"],
     "optical_narrow": [
         "OII3726",
         "OII3729",

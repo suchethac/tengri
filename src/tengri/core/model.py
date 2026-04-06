@@ -207,7 +207,7 @@ class PriorPredictive:
 # ---------------------------------------------------------------------------
 
 
-class Model:
+class SEDModel:
     """Differentiable forward model with clean parameter API.
 
     The SFH is computed via a registry-driven composed function that
@@ -401,13 +401,13 @@ class Model:
         self._dust_law_bc = spec.dust_law_bc
         self._dust_law_diff = spec.dust_law_diff
         # Cache resolved dust law functions (avoid dict lookup per forward call)
-        from tengri.models.dust.attenuation import get_dust_law
+        from tengri.models.dust.attenuation import resolve_dust_law
 
-        self._dust_law_bc_fn = get_dust_law(self._dust_law_bc)
+        self._dust_law_bc_fn = resolve_dust_law(self._dust_law_bc)
         if self._dust_model == "single_component":
             self._dust_law_diff_fn = self._dust_law_bc_fn  # not used, keep consistent
         else:
-            self._dust_law_diff_fn = get_dust_law(self._dust_law_diff)
+            self._dust_law_diff_fn = resolve_dust_law(self._dust_law_diff)
 
         # IGM absorption (Inoue+2014)
         self._apply_igm = spec.apply_igm
@@ -2113,3 +2113,7 @@ class Model:
             population_prior=population_prior,
             **kwargs,
         )
+
+
+# Backward-compatibility alias
+Model = SEDModel

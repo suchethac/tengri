@@ -200,7 +200,7 @@ def run_nuts(
             f"Stochastic SFH with NUTS: sampling {n_total} dimensions "
             f"({fitter.spec.n_grid} psd_xi + {fitter.spec.n_free} physical). "
             f"This is computationally expensive. "
-            f"Recommended: method='geovi' (10-100x faster).",
+            f"Recommended: method='vi' (10-100x faster).",
             stacklevel=3,
         )
 

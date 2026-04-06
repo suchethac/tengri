@@ -21,7 +21,7 @@ from tests.crossval.conftest import SSP_EXISTS
 jax.config.update("jax_enable_x64", True)
 
 from tengri.core.model import Model
-from tengri.core.param_spec import ParamSpec
+from tengri.core.parameters import ParamSpec
 from tengri.distributions import Uniform
 
 pytestmark = [

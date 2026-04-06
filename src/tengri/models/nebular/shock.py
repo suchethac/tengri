@@ -1,210 +1,497 @@
-"""MAPPINGS V shock emission line model.
+"""MAPPINGS III + V shock emission line model.
 
-Interpolates Allen+2008 (ApJS, 178, 20) Table 5 shock model tabulations
-(solar abundance, pre-shock density n=1 cm^-3) to compute emission line
-luminosities as a function of shock velocity. Lines are placed on an
-arbitrary wavelength grid as Gaussians or delta functions.
+Loads Allen+2008 (ApJS 178 20) MAPPINGS III and Alarie & Morisset 2019
+(3MdBs, RMxAA 55 279) MAPPINGS V grids from ``data/mappings_templates.h5``
+and interpolates line ratios across the full 4-D grid:
 
-The key diagnostic signatures of shock-heated gas vs HII regions:
-- Enhanced [NII], [SII], [OI] at low/moderate velocities
-- [OIII] peaks at intermediate velocities (~300-400 km/s)
-- Halpha/Hbeta slightly above Case B due to collisional excitation
+    (v_shock, B/√n or B, log_density, abundance)
+
+If the HDF5 file is missing, falls back to the Allen+2008 Table 5
+hardcoded arrays (solar, n=1 cm⁻³, 8 velocity points, 10 lines) with a
+``DeprecationWarning``.  Build the grid with::
+
+    python scripts/download_mappings_templates.py
+
+Interpolation strategy
+----------------------
+- velocity     : ``jnp.interp`` — continuous linear, JIT-compatible
+- B-field      : ``jnp.searchsorted`` nearest-neighbor (log-spaced discrete)
+- log_density  : ``jnp.searchsorted`` nearest-neighbor (log-spaced discrete)
+- abundance, component, version : Python string → integer index (static)
 
 References
 ----------
-- Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shock models)
-- Rich et al. 2011, ApJ, 734, 87 (shock diagnostics in galaxies)
+- Allen et al. 2008, ApJS, 178, 20         (MAPPINGS III)
+- Sutherland & Dopita 2017, ApJS, 229, 34  (MAPPINGS V)
+- Alarie & Morisset 2019, RMxAA, 55, 279  (3MdBs / Zenodo 14140949)
 """
 
+from __future__ import annotations
+
+import warnings
+from pathlib import Path
+
 import jax.numpy as jnp
+import numpy as np
 
 # Physical constants
 _C_CGS = 2.99792458e10  # cm/s
-_LSUN_ERG = 3.828e33  # erg/s
 
-# -----------------------------------------------------------------------
-# Allen+2008 Table 5 shock model grid (solar abundance, n=1 cm^-3)
-# -----------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Legacy hardcoded fallback — Allen+2008 Table 5 (solar, n=1 cm⁻³)
+# ---------------------------------------------------------------------------
 
-# Shock velocities [km/s] for interpolation grid
-_SHOCK_V = jnp.array([100.0, 150.0, 200.0, 300.0, 400.0, 500.0, 750.0, 1000.0])
+# 8-point velocity grid [km/s]
+_FALLBACK_V = jnp.array([100.0, 150.0, 200.0, 300.0, 400.0, 500.0, 750.0, 1000.0])
 
-# Line ratios relative to Hbeta (Allen+2008 Table 5, solar, n=1)
-# [OII] 3727 / Hbeta
-_R_OII = jnp.array([3.5, 5.2, 4.8, 3.1, 2.4, 1.9, 1.2, 0.8])
-# [OIII] 5007 / Hbeta
-_R_OIII = jnp.array([0.3, 1.5, 4.2, 5.8, 6.1, 5.5, 3.8, 2.5])
-# [OI] 6300 / Hbeta
-_R_OI = jnp.array([0.8, 1.2, 0.9, 0.5, 0.3, 0.2, 0.15, 0.1])
-# [NII] 6583 / Hbeta
-_R_NII = jnp.array([2.5, 3.8, 3.2, 2.1, 1.6, 1.3, 0.9, 0.6])
-# [SII] 6716+6731 / Hbeta
-_R_SII = jnp.array([2.8, 4.5, 3.5, 2.0, 1.4, 1.0, 0.6, 0.4])
-# Halpha / Hbeta (Case B + collisional enhancement)
-_R_HA = jnp.array([3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7])
+# Line ratios relative to Hβ (Table 5)
+_FALLBACK_R_OII = jnp.array([3.5, 5.2, 4.8, 3.1, 2.4, 1.9, 1.2, 0.8])
+_FALLBACK_R_OIII = jnp.array([0.3, 1.5, 4.2, 5.8, 6.1, 5.5, 3.8, 2.5])
+_FALLBACK_R_OI = jnp.array([0.8, 1.2, 0.9, 0.5, 0.3, 0.2, 0.15, 0.1])
+_FALLBACK_R_NII = jnp.array([2.5, 3.8, 3.2, 2.1, 1.6, 1.3, 0.9, 0.6])
+_FALLBACK_R_SII = jnp.array([2.8, 4.5, 3.5, 2.0, 1.4, 1.0, 0.6, 0.4])
+_FALLBACK_R_HA = jnp.array([3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7])
 
-# Rest-frame line wavelengths [Angstrom]
-_SHOCK_LINE_WAVELENGTHS = {
-    "OII_3727": 3727.0,
-    "Hbeta": 4861.0,
-    "OIII_4959": 4959.0,  # = OIII_5007 / 2.98
-    "OIII_5007": 5007.0,
-    "OI_6300": 6300.0,
-    "NII_6548": 6548.0,  # = NII_6583 / 2.94
-    "Halpha": 6563.0,
-    "NII_6583": 6583.0,
-    "SII_6716": 6716.0,
-    "SII_6731": 6731.0,
+# Doublet splitting (atomic physics, independent of shock model)
+_OIII_DOUBLET_RATIO = 2.98  # 5007 / 4959
+_NII_DOUBLET_RATIO = 2.94  # 6583 / 6548
+
+# PyNeb-format line names and vacuum wavelengths for the fallback lines
+_FALLBACK_LINE_NAMES = [
+    "OII_3726A",
+    "OII_3729A",
+    "Hb_4861A",
+    "O3_4959A",
+    "O3_5007A",
+    "OI_6300A",
+    "HA_6563A",
+    "NII_6548A",
+    "NII_6583A",
+    "SII_6716A",
+    "SII_6731A",
+]
+_FALLBACK_LINE_WAVES = jnp.array(
+    [
+        3726.0,
+        3729.0,
+        4861.0,
+        4959.0,
+        5007.0,
+        6300.0,
+        6563.0,
+        6548.0,
+        6583.0,
+        6716.0,
+        6731.0,
+    ]
+)
+
+# ---------------------------------------------------------------------------
+# Abundance short-name aliases (param_spec uses short names; DB uses full names)
+# ---------------------------------------------------------------------------
+
+_ABUNDANCE_ALIASES: dict[str, str] = {
+    "solar": "Allen2008_Solar",
+    "2xsolar": "Allen2008_TwiceSolar",
+    "twice_solar": "Allen2008_TwiceSolar",
+    "dopita2005": "Allen2008_Dopita2005",
+    "lmc": "Allen2008_LMC",
+    "smc": "Allen2008_SMC",
 }
 
-# Doublet splitting ratios (atomic physics)
-_OIII_DOUBLET_RATIO = 2.98  # 5007/4959
-_NII_DOUBLET_RATIO = 2.94  # 6583/6548
-_SII_DOUBLET_RATIO = 1.0  # 6716/6731 ~ 1 at low density
 
-# Pre-sorted arrays for JIT-compatible line placement
-_LINE_NAMES = list(_SHOCK_LINE_WAVELENGTHS.keys())
-_LINE_WAVES = jnp.array([_SHOCK_LINE_WAVELENGTHS[n] for n in _LINE_NAMES])
-_N_LINES = len(_LINE_NAMES)
+def _resolve_abundance(name: str, available: list[str]) -> int:
+    """Return axis index for *name*, resolving short aliases.
+
+    Raises
+    ------
+    ValueError
+        If *name* (or its alias) is not found in *available*.
+    """
+    resolved = _ABUNDANCE_ALIASES.get(name, name)
+    if resolved in available:
+        return available.index(resolved)
+    if name in available:
+        return available.index(name)
+    short_keys = sorted(_ABUNDANCE_ALIASES)
+    raise ValueError(
+        f"shock_abundance={name!r} is not available. "
+        f"Valid short names: {short_keys}. "
+        f"Full DB names: {available}."
+    )
+
+
+_VALID_COMPONENTS = frozenset({"shock", "precursor", "combined"})
+
+
+def _validate_shock_params(
+    shock_velocity: float,
+    shock_log_density: float,
+    shock_b_over_sqrt_n: float,
+    shock_abundance: str,
+    shock_component: str,
+    g: dict,
+) -> None:
+    """Raise ``ValueError`` for any shock parameter that is out of range.
+
+    Discrete parameters (density, B-field, abundance, component) are always
+    validated because they must be concrete values (they are never JAX-traced
+    in normal use — they are Fixed in ParamSpec).
+
+    Velocity is validated only when it is a concrete Python number; when called
+    inside ``jax.jit`` with a traced velocity, the check is skipped so that JIT
+    compilation succeeds.
+    """
+    if shock_component not in _VALID_COMPONENTS:
+        raise ValueError(
+            f"shock_component={shock_component!r} is invalid. "
+            f"Choose from {sorted(_VALID_COMPONENTS)}."
+        )
+
+    log_den_grid = np.asarray(g["log_density_cm3"])
+    if not (log_den_grid[0] <= shock_log_density <= log_den_grid[-1]):
+        raise ValueError(
+            f"shock_log_density={shock_log_density:.2f} is outside the grid "
+            f"[{log_den_grid[0]:.2f}, {log_den_grid[-1]:.2f}] log10(cm⁻³). "
+            "Use a value within this range (nearest grid point is used)."
+        )
+
+    b_arr = np.asarray(g["b_axis"])
+    if not (b_arr[0] <= shock_b_over_sqrt_n <= b_arr[-1]):
+        raise ValueError(
+            f"shock_b_over_sqrt_n={shock_b_over_sqrt_n:.4g} μG is outside the "
+            f"grid [{b_arr[0]:.4g}, {b_arr[-1]:.4g}] μG. "
+            "Use a value within this range (nearest grid point is used)."
+        )
+
+    # Velocity: skip validation when traced under jax.jit (float() raises there).
+    # Use try/except/else so the ValueError from bounds check is NOT swallowed.
+    v_arr = np.asarray(g["velocities_kms"])
+    try:
+        v = float(shock_velocity)
+    except Exception:
+        pass  # traced value — validation deferred to prior bounds
+    else:
+        if not (v_arr[0] <= v <= v_arr[-1]):
+            raise ValueError(
+                f"shock_velocity={v:.1f} km/s is outside the grid "
+                f"[{v_arr[0]:.1f}, {v_arr[-1]:.1f}] km/s."
+            )
+
+
+# ---------------------------------------------------------------------------
+# HDF5 grid cache
+# ---------------------------------------------------------------------------
+
+_MAPPINGS_GRIDS: dict | None = None
+_MAPPINGS_GRIDS_LOADED: bool = False
+
+
+def _load_mappings_grids() -> dict | None:
+    """Load MAPPINGS III + V grids from ``data/mappings_templates.h5``.
+
+    Returns the cached grid dict on subsequent calls.  Returns ``None`` and
+    emits ``DeprecationWarning`` if the file is absent.
+    """
+    global _MAPPINGS_GRIDS, _MAPPINGS_GRIDS_LOADED
+    if _MAPPINGS_GRIDS_LOADED:
+        return _MAPPINGS_GRIDS
+
+    _MAPPINGS_GRIDS_LOADED = True
+
+    # Locate HDF5 relative to the package root (…/tengri/src/tengri → …/tengri)
+    _here = Path(__file__).parents[4]
+    h5_path = _here / "data" / "mappings_templates.h5"
+
+    if not h5_path.exists():
+        warnings.warn(
+            "MAPPINGS grid file not found; using hardcoded Allen+2008 Table 5 "
+            "subset (solar, n=1 cm⁻³, 8 velocity points, 10 lines). "
+            "Run scripts/download_mappings_templates.py to enable the full grid.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        _MAPPINGS_GRIDS = None
+        return None
+
+    import h5py  # optional dependency — only needed when HDF5 exists
+
+    def _decode(arr: object) -> list[str]:
+        return [n.decode() if isinstance(n, bytes) else str(n) for n in arr]
+
+    grids: dict = {}
+    with h5py.File(h5_path, "r") as f:
+        if "mappings5" not in f:
+            _MAPPINGS_GRIDS = None
+            return None
+        g = f["mappings5"]
+        grids["mappings5"] = {
+            "velocities_kms": jnp.array(g["velocities_kms"][:], dtype=jnp.float32),
+            "b_axis": jnp.array(g["b_field_uG"][:], dtype=jnp.float32),
+            "log_density_cm3": jnp.array(g["log_density_cm3"][:], dtype=jnp.float32),
+            "abundance_names": _decode(g["abundance_names"][:]),
+            "line_names": _decode(g["line_names"][:]),
+            "line_wavelengths_aa": jnp.array(g["line_wavelengths_aa"][:], dtype=jnp.float32),
+            # Shape: (N_abund, N_n, N_v, N_B, N_lines)
+            "shock_ratios": jnp.array(g["shock_ratios"][:], dtype=jnp.float32),
+            "precursor_ratios": jnp.array(g["precursor_ratios"][:], dtype=jnp.float32),
+            "combined_ratios": jnp.array(g["combined_ratios"][:], dtype=jnp.float32),
+            "hbeta_log_lum_erg_s": jnp.array(g["hbeta_log_lum_erg_s"][:], dtype=jnp.float32),
+        }
+
+    _MAPPINGS_GRIDS = grids
+    return grids
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 def shock_line_ratios(
     shock_velocity: float,
-    shock_log_density: float = 1.0,
+    shock_log_density: float = 0.0,
+    shock_b_over_sqrt_n: float = 1.0,
+    shock_abundance: str = "solar",
+    shock_component: str = "combined",
 ) -> dict[str, float]:
-    """Return line luminosity ratios relative to Hbeta.
+    """Return emission line luminosity ratios relative to Hβ.
 
-    Interpolates Allen+2008 MAPPINGS V shock model tabulations
-    (solar abundance, pre-shock density n=1 cm^-3). The density
-    parameter is reserved for future grid extension.
+    Loads the MAPPINGS V (3MdBs) grid from ``data/mappings_templates.h5``.
+    If the file is missing, falls back to the Allen+2008 Table 5 hardcoded
+    subset with a ``DeprecationWarning``.
 
     Parameters
     ----------
     shock_velocity : float
-        Shock velocity in km/s (clipped to [100, 1000]).
+        Shock velocity in km/s.  Must be within the grid range
+        (100–1000 km/s fallback; 200–1000 km/s HDF5).  Raises ``ValueError``
+        if out of range.  Continuously interpolated — safe under ``jax.jit``.
     shock_log_density : float
-        Log10 pre-shock density in cm^-3. Currently unused (grid is
-        for n=1 only). Reserved for future multi-density grids.
+        Log10 pre-shock density in cm⁻³ (e.g. ``0.0`` = 1 cm⁻³).
+        Must be within ``[0, 3]``.  Snapped to the nearest grid point.
+        Raises ``ValueError`` if out of range.
+    shock_b_over_sqrt_n : float
+        Absolute B-field strength in μG (3MdBs MAPPINGS V convention).
+        Must be within ``[0.0001, 10]`` μG.  Snapped to nearest grid point.
+        Raises ``ValueError`` if out of range.
+    shock_abundance : str
+        Abundance pattern.  Accepted short names:
+        ``"solar"``, ``"2xsolar"`` / ``"twice_solar"``, ``"dopita2005"``,
+        ``"lmc"``, ``"smc"``.  Full 3MdBs DB names (e.g.
+        ``"Allen2008_Solar"``) also accepted.  Raises ``ValueError`` for
+        unknown names.
+    shock_component : str
+        Which emission component to return.  One of ``"shock"``,
+        ``"precursor"``, ``"combined"`` (default).  Raises ``ValueError``
+        for unknown values.
 
     Returns
     -------
-    dict
-        Line name -> luminosity ratio relative to Hbeta.
-    """
-    v_clip = jnp.clip(shock_velocity, 100.0, 1000.0)
+    dict[str, float]
+        PyNeb-format line name → luminosity ratio relative to Hβ.
 
-    r_oiii_5007 = jnp.interp(v_clip, _SHOCK_V, _R_OIII)
-    r_nii_6583 = jnp.interp(v_clip, _SHOCK_V, _R_NII)
-    r_sii_total = jnp.interp(v_clip, _SHOCK_V, _R_SII)
+    Raises
+    ------
+    ValueError
+        If any parameter is outside the grid bounds or invalid.
+
+    Examples
+    --------
+    >>> ratios = shock_line_ratios(300.0)  # solar, combined, 300 km/s
+    >>> ratios = shock_line_ratios(500.0, shock_component="precursor")
+    >>> ratios = shock_line_ratios(400.0, shock_abundance="lmc", shock_log_density=1.0)
+    """
+    grids = _load_mappings_grids()
+
+    # ------------------------------------------------------------------ #
+    # HDF5 grid path
+    # ------------------------------------------------------------------ #
+    if grids is not None and "mappings5" in grids:
+        g = grids["mappings5"]
+
+        # Validate before any indexing — raises ValueError for out-of-range inputs
+        _validate_shock_params(
+            shock_velocity,
+            shock_log_density,
+            shock_b_over_sqrt_n,
+            shock_abundance,
+            shock_component,
+            g,
+        )
+
+        # --- static string → integer index (outside JIT tracing) ---
+        i_abund = _resolve_abundance(shock_abundance, g["abundance_names"])
+
+        component_map = {
+            "shock": "shock_ratios",
+            "precursor": "precursor_ratios",
+            "combined": "combined_ratios",
+        }
+        ratio_array = g[component_map.get(shock_component, "combined_ratios")]
+        # shape: (N_abund, N_n, N_v, N_B, N_lines)
+
+        # --- nearest-neighbor snap for discrete log-spaced axes ---
+        v_grid = g["velocities_kms"]
+        v_clip = jnp.clip(shock_velocity, v_grid[0], v_grid[-1])
+
+        log_den_grid = g["log_density_cm3"]
+        # Use numpy (not jnp) so these remain concrete ints under jax.jit
+        i_n = int(np.argmin(np.abs(np.asarray(log_den_grid) - shock_log_density)))
+
+        b_grid = g["b_axis"]
+        i_b = int(np.argmin(np.abs(np.asarray(b_grid) - shock_b_over_sqrt_n)))
+
+        # Slice to fixed (abund, density, B) — shape (N_v, N_lines)
+        slice_vlines = ratio_array[i_abund, i_n, :, i_b, :]
+
+        # --- continuous velocity interpolation ---
+        # Interpolate each line independently along the velocity axis
+        def _interp_line(col: jnp.ndarray) -> jnp.ndarray:
+            return jnp.interp(v_clip, v_grid, col, left=col[0], right=col[-1])
+
+        ratios_vec = jnp.stack(
+            [_interp_line(slice_vlines[:, j]) for j in range(slice_vlines.shape[1])]
+        )
+
+        return {name: ratios_vec[j] for j, name in enumerate(g["line_names"])}
+
+    # ------------------------------------------------------------------ #
+    # Fallback path — hardcoded Allen+2008 Table 5
+    # ------------------------------------------------------------------ #
+    v_clip = jnp.clip(shock_velocity, 100.0, 1000.0)
+    r_oiii = jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_OIII)
+    r_nii = jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_NII)
+    r_sii = jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_SII)
 
     return {
-        "OII_3727": jnp.interp(v_clip, _SHOCK_V, _R_OII),
-        "Hbeta": jnp.array(1.0),
-        "OIII_4959": r_oiii_5007 / _OIII_DOUBLET_RATIO,
-        "OIII_5007": r_oiii_5007,
-        "OI_6300": jnp.interp(v_clip, _SHOCK_V, _R_OI),
-        "NII_6548": r_nii_6583 / _NII_DOUBLET_RATIO,
-        "Halpha": jnp.interp(v_clip, _SHOCK_V, _R_HA),
-        "NII_6583": r_nii_6583,
-        "SII_6716": r_sii_total / (1.0 + 1.0 / _SII_DOUBLET_RATIO),
-        "SII_6731": r_sii_total / (1.0 + _SII_DOUBLET_RATIO),
+        "OII_3726A": jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_OII) / 2.0,
+        "OII_3729A": jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_OII) / 2.0,
+        "Hb_4861A": jnp.array(1.0),
+        "O3_4959A": r_oiii / _OIII_DOUBLET_RATIO,
+        "O3_5007A": r_oiii,
+        "OI_6300A": jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_OI),
+        "HA_6563A": jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_HA),
+        "NII_6548A": r_nii / _NII_DOUBLET_RATIO,
+        "NII_6583A": r_nii,
+        "SII_6716A": r_sii / 2.0,
+        "SII_6731A": r_sii / 2.0,
     }
 
 
-def _shock_line_luminosities_array(
+def _shock_line_arrays(
     shock_velocity: float,
     l_shock_halpha: float,
-    shock_log_density: float = 1.0,
-) -> jnp.ndarray:
-    """Compute absolute line luminosities as a flat array.
+    shock_log_density: float = 0.0,
+    shock_b_over_sqrt_n: float = 1.0,
+    shock_abundance: str = "solar",
+    shock_component: str = "combined",
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Compute shock line wavelengths and absolute luminosities.
 
-    Returns luminosities in Lsun, ordered by ``_LINE_NAMES``.
-    This is the JIT-friendly version used internally by
-    ``shock_emission_sed``.
+    Returns a ``(wavelengths_aa, luminosities_lsun)`` tuple, both shape
+    ``(N_lines,)``, ordered consistently with the active grid or fallback.
 
-    Parameters
-    ----------
-    shock_velocity : float
-        Shock velocity in km/s.
-    l_shock_halpha : float
-        Total shock Halpha luminosity in Lsun.
-    shock_log_density : float
-        Log10 pre-shock density (reserved).
-
-    Returns
-    -------
-    array, shape (n_lines,)
-        Line luminosities in Lsun.
+    The absolute scaling anchors on ``l_shock_halpha``:
+    ``L_line = (ratio / r_ha) * l_shock_halpha``.
     """
-    ratios = shock_line_ratios(shock_velocity, shock_log_density)
+    ratios = shock_line_ratios(
+        shock_velocity,
+        shock_log_density=shock_log_density,
+        shock_b_over_sqrt_n=shock_b_over_sqrt_n,
+        shock_abundance=shock_abundance,
+        shock_component=shock_component,
+    )
 
-    # Convert from Hbeta-relative to Halpha-relative, then scale
-    r_ha = ratios["Halpha"]
-    # L_line = (ratio / r_ha) * L_halpha
-    luminosities = jnp.array([ratios[name] / r_ha * l_shock_halpha for name in _LINE_NAMES])
-    return luminosities
+    grids = _load_mappings_grids()
+    if grids is not None and "mappings5" in grids:
+        line_waves = grids["mappings5"]["line_wavelengths_aa"]
+        line_names = grids["mappings5"]["line_names"]
+    else:
+        line_waves = _FALLBACK_LINE_WAVES
+        line_names = _FALLBACK_LINE_NAMES
+
+    # Halpha key in PyNeb format
+    ha_key = "HA_6563A"
+    r_ha = ratios.get(ha_key, jnp.array(3.0))
+
+    lums = jnp.array([ratios.get(n, jnp.array(0.0)) / r_ha * l_shock_halpha for n in line_names])
+    return line_waves, lums
 
 
-def shock_emission_sed(
+def compute_shock_sed(
     wavelength: jnp.ndarray,
     shock_velocity: float,
     l_shock_halpha: float,
-    shock_log_density: float = 1.0,
+    shock_log_density: float = 0.0,
+    shock_b_over_sqrt_n: float = 1.0,
+    shock_abundance: str = "solar",
+    shock_component: str = "combined",
     line_sigma_aa: float = 0.0,
 ) -> jnp.ndarray:
     """Compute shock emission line SED.
 
-    Places MAPPINGS V shock emission lines on an arbitrary wavelength
-    grid. Lines are represented as Gaussians (if ``line_sigma_aa > 0``)
-    or delta functions added to the nearest pixel.
+    Places MAPPINGS V (3MdBs) shock emission lines on an arbitrary wavelength
+    grid as Gaussians (``line_sigma_aa > 0``) or delta functions.
 
     Parameters
     ----------
     wavelength : array, shape (n_wave,)
-        Wavelength grid in Angstrom (rest-frame, increasing).
+        Wavelength grid in Å (rest-frame, increasing).
     shock_velocity : float
-        Shock velocity in km/s (100-1000).
+        Shock velocity in km/s.
     l_shock_halpha : float
-        Total shock Halpha luminosity in Lsun.
+        Total shock Hα luminosity in Lsun (normalization anchor).
     shock_log_density : float
-        Log10 pre-shock density in cm^-3 (reserved, default 1.0).
+        Log10 pre-shock density in cm⁻³.
+    shock_b_over_sqrt_n : float
+        Absolute B-field in μG (3MdBs MAPPINGS V).  Snapped to nearest grid point.
+    shock_abundance : str
+        Abundance set (see ``shock_line_ratios``).
+    shock_component : str
+        ``"shock"``, ``"precursor"``, or ``"combined"``.
     line_sigma_aa : float
-        Gaussian line width in Angstrom. 0 = delta function
-        (added to nearest wavelength pixel).
+        Gaussian line width in Å.  ``0`` → delta function into nearest pixel.
 
     Returns
     -------
     array, shape (n_wave,)
         Shock emission SED in Lsun/Hz.
     """
-    line_lum = _shock_line_luminosities_array(shock_velocity, l_shock_halpha, shock_log_density)
+    line_waves, line_lums = _shock_line_arrays(
+        shock_velocity,
+        l_shock_halpha,
+        shock_log_density=shock_log_density,
+        shock_b_over_sqrt_n=shock_b_over_sqrt_n,
+        shock_abundance=shock_abundance,
+        shock_component=shock_component,
+    )
 
-    sed = jnp.zeros_like(wavelength)
+    n_lines = line_waves.shape[0]
     n_wave = wavelength.shape[0]
+    sed = jnp.zeros_like(wavelength)
 
     if line_sigma_aa > 0:
-        # Gaussian profiles
-        for j in range(_N_LINES):
-            lw = _LINE_WAVES[j]
-            ll = line_lum[j]
-            # sigma_nu = sigma_lambda[cm] * c[cm/s] / lambda[cm]^2
-            # line_sigma_aa is in Å; convert to cm with 1e-8 before using in CGS formula.
+        for j in range(n_lines):
+            lw = line_waves[j]
+            ll = line_lums[j]
+            # σ_ν = σ_λ[cm] × c / λ[cm]²  (λ→cm: ×1e-8)
             sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (lw * 1e-8) ** 2
             profile = jnp.exp(-0.5 * ((wavelength - lw) / line_sigma_aa) ** 2)
             profile = profile / (jnp.sqrt(2.0 * jnp.pi) * sigma_nu)
-            # profile [Hz^{-1}], ll [Lsun] -> contribution [Lsun/Hz] (no unit conversion needed)
             sed = sed + ll * profile
     else:
-        # Delta functions: add to nearest pixel
-        for j in range(_N_LINES):
-            lw = _LINE_WAVES[j]
-            ll = line_lum[j]
+        for j in range(n_lines):
+            lw = line_waves[j]
+            ll = line_lums[j]
             idx = jnp.argmin(jnp.abs(wavelength - lw))
             idx = jnp.clip(idx, 1, n_wave - 2)
-            # Approximate delta_nu from pixel width
             dwave = jnp.abs(wavelength[idx + 1] - wavelength[idx - 1]) / 2.0
             dnu = _C_CGS / (wavelength[idx] * 1e-8) ** 2 * dwave * 1e-8
-            line_flux_density = ll / dnu  # Lsun/Hz
-            sed = sed.at[idx].add(line_flux_density)
+            sed = sed.at[idx].add(ll / dnu)
 
     return sed
+
+
+# Backward compatibility alias
+shock_emission_sed = compute_shock_sed

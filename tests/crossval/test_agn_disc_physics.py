@@ -503,9 +503,9 @@ class TestUnifiedAGNPhysics:
 
     def test_simple_model_finite(self):
         """Simple AGN model produces finite positive SED."""
-        from tengri.models.agn import get_agn_model
+        from tengri.models.agn import resolve_agn_model
 
-        model_fn = get_agn_model("simple")
+        model_fn = resolve_agn_model("simple")
         l_nu = model_fn(WAVE, agn_log_lbol=11.0)
         assert jnp.all(jnp.isfinite(l_nu))
         assert float(jnp.sum(l_nu)) > 0

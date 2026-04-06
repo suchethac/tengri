@@ -563,7 +563,7 @@ def _lbol_to_m_i(log_lbol_lsun: float) -> float:
     return -2.5 * (log_lbol_lsun - 12.5) + _BENORM
 
 
-def qsogen_sed(
+def compute_qsogen_sed(
     wavelength: jnp.ndarray,
     agn_plslp1: float = _DEFAULT_PLSLP1,
     agn_plslp2: float = _DEFAULT_PLSLP2,
@@ -703,12 +703,12 @@ def qsogen(
 ) -> jnp.ndarray:
     """QSOgen quasar SED (Temple+2021) — registered model entry point.
 
-    Thin wrapper around ``qsogen_sed`` matching the AGN_MODELS registry
+    Thin wrapper around ``compute_qsogen_sed`` matching the AGN_MODELS registry
     signature: ``fn(wavelength, agn_log_lbol, **kwargs) -> L_nu``.
 
-    See ``qsogen_sed`` for full parameter documentation.
+    See ``compute_qsogen_sed`` for full parameter documentation.
     """
-    return qsogen_sed(
+    return compute_qsogen_sed(
         wavelength,
         agn_plslp1=agn_plslp1,
         agn_plslp2=agn_plslp2,
@@ -721,3 +721,7 @@ def qsogen(
         agn_frac=agn_frac,
         agn_bcnorm=agn_bcnorm,
     )
+
+
+# Backward compatibility alias
+qsogen_sed = compute_qsogen_sed

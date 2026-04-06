@@ -37,10 +37,10 @@ class TestRegistration:
 
         assert "energy_balance_split" in DUST_EMISSION_MODELS
 
-    def test_get_emission_model(self):
-        from tengri.models.dust.emission import get_emission_model
+    def test_resolve_emission_model(self):
+        from tengri.models.dust.emission import resolve_emission_model
 
-        fn = get_emission_model("energy_balance_split")
+        fn = resolve_emission_model("energy_balance_split")
         assert callable(fn)
 
 

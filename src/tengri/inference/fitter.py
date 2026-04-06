@@ -1,11 +1,11 @@
 """Inference engine: fit observed data using MAP, NUTS, Ray Tracing, or geoVI.
 
 The Fitter separates inference strategy from the forward model. It builds
-a loss function from the Model's predictions and the ParamSpec's priors,
+a loss function from the SEDModel's predictions and the ParamSpec's priors,
 then runs the chosen optimizer/sampler.
 
 Usage:
-    from tengri import Model, Fitter
+    from tengri import SEDModel, Fitter
 
     fitter = Fitter(model, data, noise)
     result_map = fitter.run("map", n_steps=1500)
@@ -21,6 +21,7 @@ import warnings
 import jax
 import jax.numpy as jnp
 
+from tengri.core.exceptions import ParameterError
 from tengri.distributions import Gaussian, Uniform
 from tengri.inference.jit_engine import build_jit_engine
 from tengri.inference.loss_functions import (
@@ -59,6 +60,82 @@ _MCMC_AUTO_D_THRESHOLD = 20
 
 # Threshold for "auto" method selection.
 _AUTO_D_THRESHOLDS = (15, 50)  # (laplace_max, vi_linear_max)
+
+# Canonical method names
+_CANONICAL_METHODS = {
+    "map",
+    "laplace",
+    "pathfinder",
+    "vi",
+    "vi_linear",
+    "vi_nifty",
+    "vi_nifty_linear",
+    "mcmc",
+    "mcmc_raytrace",
+    "mcmc_nuts",
+    "mcmc_ess",
+    "evidence",
+    "auto",
+}
+
+
+def resolve_method(method: str, emit_warning: bool = True) -> str:
+    """Resolve method string to canonical name.
+
+    Maps deprecated aliases to their canonical names, emitting a
+    DeprecationWarning if an alias is used. Validates that the final
+    method is canonical or "auto".
+
+    Parameters
+    ----------
+    method : str
+        Method name (canonical, deprecated alias, "auto", or invalid).
+    emit_warning : bool, optional
+        If True (default), emit DeprecationWarning for deprecated aliases.
+
+    Returns
+    -------
+    str
+        Canonical method name.
+
+    Raises
+    ------
+    ParameterError
+        If method is not canonical, not a recognized alias, and not "auto".
+
+    Examples
+    --------
+    >>> resolve_method("vi")
+    'vi'
+    >>> resolve_method("geovi")  # doctest: +SKIP
+    'vi'  # and emits DeprecationWarning
+    >>> resolve_method("invalid_method")
+    ParameterError: Unknown method ...
+    """
+    # If already canonical or "auto", return as-is
+    if method in _CANONICAL_METHODS:
+        return method
+
+    # Check if deprecated alias
+    if method in _DEPRECATED_METHOD_ALIASES:
+        canonical = _DEPRECATED_METHOD_ALIASES[method]
+        if emit_warning:
+            warnings.warn(
+                f"Method '{method}' is deprecated. Use '{canonical}' instead. "
+                f"Old names will be removed in tengri v1.0.",
+                DeprecationWarning,
+                stacklevel=3,  # Caller's caller (skip resolve_method frame)
+            )
+        return canonical
+
+    # Invalid method
+    canonical_list = ", ".join(sorted(_CANONICAL_METHODS))
+    raise ParameterError(
+        f"Unknown method: '{method}'. "
+        f"Valid canonical names: {canonical_list}. "
+        f"Deprecated aliases: {', '.join(sorted(_DEPRECATED_METHOD_ALIASES.keys()))}. "
+        f"See Fitter.run() docstring for details."
+    )
 
 
 class Fitter:
@@ -163,7 +240,7 @@ class Fitter:
 
         # Precompute static arrays for emission line fitting
         if self._eline_marginalize or self._eline_fitted:
-            from tengri.models.observation.line_catalog import LineCatalog
+            from tengri.models.observation.line_list import LineCatalog
 
             if _spec_config is not None and _spec_config.eline_catalog is not None:
                 _catalog = _spec_config.effective_catalog
@@ -822,19 +899,8 @@ class Fitter:
         # Pop vi_flavor before forwarding kwargs
         vi_flavor = kwargs.pop("vi_flavor", None)
 
-        # Resolve deprecated aliases
-        if method in _DEPRECATED_METHOD_ALIASES:
-            canonical = _DEPRECATED_METHOD_ALIASES[method]
-            warnings.warn(
-                f"Method '{method}' is deprecated. Use '{canonical}' instead. "
-                f"Old names will be removed in tengri v1.0.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            # Special case: geovi_nuts was a hybrid; map to vi with blackjax posterior
-            if method == "geovi_nuts":
-                kwargs.setdefault("posterior_method", "blackjax")
-            method = canonical
+        # Resolve deprecated aliases and validate method
+        method = resolve_method(method)
 
         # --- "auto" method: dimensionality-based selection ---
         if method == "auto":
@@ -949,7 +1015,7 @@ class Fitter:
         self,
         batch,
         *,
-        method="native_geovi",
+        method="vi",
         key=None,
         verbose=True,
         **kwargs,
@@ -960,7 +1026,7 @@ class Fitter:
         The first galaxy pays compile cost; subsequent galaxies load
         from the persistent XLA cache (milliseconds each).
 
-        Works with any inference method — native_geovi (default) gives
+        Works with any inference method — vi (default) gives
         the best speed. Also usable for hierarchical individual fits.
 
         Parameters
@@ -968,7 +1034,7 @@ class Fitter:
         batch : list of dict
             Each dict has "flux_obs" and "noise" arrays.
         method : str
-            Default "native_geovi". Any method from run().
+            Default "vi". Any method from run().
         key : PRNGKey, optional
         verbose : bool
         **kwargs
@@ -982,7 +1048,7 @@ class Fitter:
         -------
         >>> galaxies = [{"flux_obs": f, "noise": n} for f, n in zip(fluxes, noises)]
         >>> results = fitter.fit_batch(galaxies)
-        >>> # First: ~15s compile. Rest: ~2ms each (native_geovi).
+        >>> # First: ~15s compile. Rest: ~2ms each (vi).
         """
         if key is None:
             key = jax.random.PRNGKey(42)

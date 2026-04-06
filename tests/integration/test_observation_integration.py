@@ -12,10 +12,10 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri.core.model import Model
-from tengri.core.param_spec import ParamSpec
+from tengri.core.parameters import ParamSpec
 from tengri.distributions import Fixed, Uniform
 from tengri.inference.fitter import Fitter
-from tengri.models.observation.noise_config import NoiseConfig
+from tengri.models.observation.noise_model import NoiseConfig
 from tengri.models.observation.observation import Observation
 from tengri.models.observation.photometry import FilterCurve
 from tengri.models.observation.photometry_config import Photometry

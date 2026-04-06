@@ -128,117 +128,121 @@ def _register(spec: SFHModelSpec) -> None:
 # Register smooth (additive) models
 # ---------------------------------------------------------------------------
 
-# --- tsnorm (truncated skew-normal) ---
-_register(
-    SFHModelSpec(
-        name="tsnorm",
-        fn=tsnorm,
-        params={
-            "sfh_tsnorm_log_peak_sfr": ParamDef(
-                "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
-            ),
-            "sfh_tsnorm_peak_lbt_gyr": ParamDef(
-                "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
-            ),
-            "sfh_tsnorm_width_gyr": ParamDef(
-                "Gaussian width (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.2, 5.0)
-            ),
-            "sfh_tsnorm_skew": ParamDef("Skewness", _always_true, "", Uniform(-1.0, 1.0)),
-            "sfh_tsnorm_trunc": ParamDef(
-                "Truncation sharpness", _lo_positive, "must have lo > 0", Uniform(1.0, 10.0)
-            ),
-        },
-        settings={},
-        internal_param_map={
-            "sfh_tsnorm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
-            "sfh_tsnorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
-            "sfh_tsnorm_width_gyr": ("width", 1e9, 0.0),
-            "sfh_tsnorm_skew": ("skew", 1.0, 0.0),
-            "sfh_tsnorm_trunc": ("trunc", 1.0, 0.0),
-        },
-        composition_type="additive",
-    )
+# --- tsnorm (truncated skew-normal) — canonical: truncated_skewnormal_sfh ---
+_tsnorm_spec = SFHModelSpec(
+    name="tsnorm",
+    fn=tsnorm,
+    params={
+        "sfh_tsnorm_log_peak_sfr": ParamDef(
+            "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
+        ),
+        "sfh_tsnorm_peak_lbt_gyr": ParamDef(
+            "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
+        ),
+        "sfh_tsnorm_width_gyr": ParamDef(
+            "Gaussian width (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.2, 5.0)
+        ),
+        "sfh_tsnorm_skew": ParamDef("Skewness", _always_true, "", Uniform(-1.0, 1.0)),
+        "sfh_tsnorm_trunc": ParamDef(
+            "Truncation sharpness", _lo_positive, "must have lo > 0", Uniform(1.0, 10.0)
+        ),
+    },
+    settings={},
+    internal_param_map={
+        "sfh_tsnorm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_tsnorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_tsnorm_width_gyr": ("width", 1e9, 0.0),
+        "sfh_tsnorm_skew": ("skew", 1.0, 0.0),
+        "sfh_tsnorm_trunc": ("trunc", 1.0, 0.0),
+    },
+    composition_type="additive",
 )
+_register(_tsnorm_spec)
+# Register canonical name (same spec object, just different key)
+SFH_REGISTRY["truncated_skewnormal_sfh"] = _tsnorm_spec
 
-# --- snorm (skew-normal) ---
-_register(
-    SFHModelSpec(
-        name="snorm",
-        fn=snorm,
-        params={
-            "sfh_snorm_log_peak_sfr": ParamDef(
-                "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
-            ),
-            "sfh_snorm_peak_lbt_gyr": ParamDef(
-                "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
-            ),
-            "sfh_snorm_width_gyr": ParamDef(
-                "Gaussian width (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.2, 5.0)
-            ),
-            "sfh_snorm_skew": ParamDef("Skewness", _always_true, "", Uniform(-1.0, 1.0)),
-        },
-        settings={},
-        internal_param_map={
-            "sfh_snorm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
-            "sfh_snorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
-            "sfh_snorm_width_gyr": ("width", 1e9, 0.0),
-            "sfh_snorm_skew": ("skew", 1.0, 0.0),
-        },
-        composition_type="additive",
-    )
+# --- snorm (skew-normal) — canonical: skewnormal_sfh ---
+_snorm_spec = SFHModelSpec(
+    name="snorm",
+    fn=snorm,
+    params={
+        "sfh_snorm_log_peak_sfr": ParamDef(
+            "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
+        ),
+        "sfh_snorm_peak_lbt_gyr": ParamDef(
+            "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
+        ),
+        "sfh_snorm_width_gyr": ParamDef(
+            "Gaussian width (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.2, 5.0)
+        ),
+        "sfh_snorm_skew": ParamDef("Skewness", _always_true, "", Uniform(-1.0, 1.0)),
+    },
+    settings={},
+    internal_param_map={
+        "sfh_snorm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_snorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_snorm_width_gyr": ("width", 1e9, 0.0),
+        "sfh_snorm_skew": ("skew", 1.0, 0.0),
+    },
+    composition_type="additive",
 )
+_register(_snorm_spec)
+# Register canonical name (same spec object, just different key)
+SFH_REGISTRY["skewnormal_sfh"] = _snorm_spec
 
-# --- norm (Gaussian) ---
-_register(
-    SFHModelSpec(
-        name="norm",
-        fn=norm,
-        params={
-            "sfh_norm_log_peak_sfr": ParamDef(
-                "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
-            ),
-            "sfh_norm_peak_lbt_gyr": ParamDef(
-                "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
-            ),
-            "sfh_norm_width_gyr": ParamDef(
-                "Gaussian width (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.2, 5.0)
-            ),
-        },
-        settings={},
-        internal_param_map={
-            "sfh_norm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
-            "sfh_norm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
-            "sfh_norm_width_gyr": ("width", 1e9, 0.0),
-        },
-        composition_type="additive",
-    )
+# --- norm (Gaussian) — canonical: gaussian_sfh ---
+_norm_spec = SFHModelSpec(
+    name="norm",
+    fn=norm,
+    params={
+        "sfh_norm_log_peak_sfr": ParamDef(
+            "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
+        ),
+        "sfh_norm_peak_lbt_gyr": ParamDef(
+            "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
+        ),
+        "sfh_norm_width_gyr": ParamDef(
+            "Gaussian width (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.2, 5.0)
+        ),
+    },
+    settings={},
+    internal_param_map={
+        "sfh_norm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_norm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_norm_width_gyr": ("width", 1e9, 0.0),
+    },
+    composition_type="additive",
 )
+_register(_norm_spec)
+# Register canonical name (same spec object, just different key)
+SFH_REGISTRY["gaussian_sfh"] = _norm_spec
 
-# --- lnorm (log-normal) ---
-_register(
-    SFHModelSpec(
-        name="lnorm",
-        fn=lnorm,
-        params={
-            "sfh_lnorm_log_peak_sfr": ParamDef(
-                "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
-            ),
-            "sfh_lnorm_peak_lbt_gyr": ParamDef(
-                "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
-            ),
-            "sfh_lnorm_width_gyr": ParamDef(
-                "Log-space width (dex)", _lo_positive, "must have lo > 0", Uniform(0.1, 2.0)
-            ),
-        },
-        settings={},
-        internal_param_map={
-            "sfh_lnorm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
-            "sfh_lnorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
-            "sfh_lnorm_width_gyr": ("width", 1.0, 0.0),  # already in dex
-        },
-        composition_type="additive",
-    )
+# --- lnorm (log-normal) — canonical: lognormal_sfh ---
+_lnorm_spec = SFHModelSpec(
+    name="lnorm",
+    fn=lnorm,
+    params={
+        "sfh_lnorm_log_peak_sfr": ParamDef(
+            "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
+        ),
+        "sfh_lnorm_peak_lbt_gyr": ParamDef(
+            "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
+        ),
+        "sfh_lnorm_width_gyr": ParamDef(
+            "Log-space width (dex)", _lo_positive, "must have lo > 0", Uniform(0.1, 2.0)
+        ),
+    },
+    settings={},
+    internal_param_map={
+        "sfh_lnorm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_lnorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_lnorm_width_gyr": ("width", 1.0, 0.0),  # already in dex
+    },
+    composition_type="additive",
 )
+_register(_lnorm_spec)
+# Register canonical name (same spec object, just different key)
+SFH_REGISTRY["lognormal_sfh"] = _lnorm_spec
 
 # --- dpl (double power law) ---
 _register(
