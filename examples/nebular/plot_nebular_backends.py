@@ -60,10 +60,14 @@ cloudy_path = next(
 )
 sed_cloudy = None
 if cloudy_path is not None:
-    from tengri.models.nebular import CloudyGridBackend
-
-    spec_cloudy = ParamSpec(**shared_params, neb_logU=Fixed(-3.0), neb_logZ_gas=Fixed(-0.3))
-    model_cloudy = Model(spec_cloudy, ssp_data, nebular_backend=CloudyGridBackend(cloudy_path))
+    spec_cloudy = ParamSpec(
+        **shared_params,
+        nebular=True,
+        cloudy_grid_path=cloudy_path,
+        neb_logU=Fixed(-3.0),
+        neb_logZ_gas=Fixed(-0.3),
+    )
+    model_cloudy = Model(spec_cloudy, ssp_data)
     params_cloudy = {k: float(v.value) for k, v in shared_params.items()}
     params_cloudy.update({"neb_logU": -3.0, "neb_logZ_gas": -0.3})
     sed_cloudy = model_cloudy.predict_sed(params_cloudy)

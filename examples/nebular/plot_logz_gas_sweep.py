@@ -12,14 +12,12 @@ are used to measure oxygen abundances in star-forming galaxies.
 from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
-import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Model, ParamSpec, Uniform, load_ssp_data
-from tengri.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
+from tengri import Fixed, Model, ParamSpec, load_ssp_data
+from tengri.plotting import setup_style, sweep_parameter
 
 setup_style()
 
@@ -46,6 +44,7 @@ ssp = load_ssp_data(SSP_PATH)
 
 # --- Build model: young star-forming galaxy ---
 spec = ParamSpec(
+    nebular_cue=True,
     sfh_tsnorm_log_peak_sfr=Fixed(1.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),  # Peak ~500 Myr ago (young)
     sfh_tsnorm_width_gyr=Fixed(0.3),

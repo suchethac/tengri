@@ -58,6 +58,32 @@ _LSUN_ERG = 3.828e33
 _C_AA = 2.99792458e18
 
 
+def _filter_waves_and_trans(filters):
+    """Return (waves, trans) from ``load_filter_set`` output or FilterCurve sequence.
+
+    ``load_filter_set`` returns ``(filter_waves, filter_trans, filter_curves)``;
+    callers may pass that tuple, or only the list of ``FilterCurve`` objects.
+    """
+    if isinstance(filters, tuple) and len(filters) >= 2:
+        waves, trans = filters[0], filters[1]
+        if (
+            isinstance(waves, (list, tuple))
+            and isinstance(trans, (list, tuple))
+            and len(waves) == len(trans)
+            and len(waves) > 0
+        ):
+            return list(waves), list(trans)
+    try:
+        filter_waves = [f.wave for f in filters]
+        filter_trans = [f.trans for f in filters]
+    except (TypeError, AttributeError) as exc:
+        raise TypeError(
+            "filters must be the tuple returned by load_filter_set(names) or a sequence "
+            "of FilterCurve objects (e.g. load_filter_set(names)[2])."
+        ) from exc
+    return filter_waves, filter_trans
+
+
 # ===================================================================
 # Core: SED from tabulated SFH
 # ===================================================================
@@ -198,8 +224,9 @@ def photometry_from_sfh(
         SFR in Msun/yr.
     ssp_data : SSPData
         SSP templates.
-    filters : list of FilterCurve
-        Filter set from ``load_filter_set()``.
+    filters
+        Either the full return value of ``load_filter_set(names)`` — ``(waves, trans, curves)``
+        — or a sequence of ``FilterCurve`` objects (e.g. the third element of that tuple).
     log_z : float or array
         Metallicity (scalar or history).
     redshift : float
@@ -245,8 +272,7 @@ def photometry_from_sfh(
     dl_cm = luminosity_distance(redshift) if redshift > 0 else 1.0
 
     # Filter convolution
-    filter_waves = [f.wave for f in filters]
-    filter_trans = [f.trans for f in filters]
+    filter_waves, filter_trans = _filter_waves_and_trans(filters)
 
     fluxes = []
     for fw, ft in zip(filter_waves, filter_trans):
