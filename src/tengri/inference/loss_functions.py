@@ -85,12 +85,12 @@ def build_loss_fn(fitter):
 
         # Forward model prediction
         if data_type == "photometry":
-            predicted = model.predict_photometry(params)
+            predicted = model.predict_photometry(params, approx=True)
         elif data_type == "spectroscopy":
-            predicted = model.predict_spectrum(params, model._wave_obs)
+            predicted = model.predict_spectrum(params, model._wave_obs, approx=True)
         elif data_type == "joint":
-            pred_phot = model.predict_photometry(params)
-            pred_spec = model.predict_spectrum(params, model._wave_obs)
+            pred_phot = model.predict_photometry(params, approx=True)
+            pred_spec = model.predict_spectrum(params, model._wave_obs, approx=True)
             predicted = jnp.concatenate([pred_phot, pred_spec])
         else:
             raise ValueError(f"Unknown data_type: {data_type}")
@@ -164,7 +164,7 @@ def build_loss_fn(fitter):
             sigma_kms = params.get("eline_sigma_kms", 0.0)
             delta_v = params.get("eline_delta_v_kms", 0.0)
             resolution = getattr(model, "_spectral_resolution", None) or 2000.0
-            n_phot = model.predict_photometry(params).shape[0]
+            n_phot = model.predict_photometry(params, approx=True).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -233,7 +233,7 @@ def build_loss_fn(fitter):
                 marginalize_calibration,
             )
 
-            n_phot = model.predict_photometry(params).shape[0]
+            n_phot = model.predict_photometry(params, approx=True).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -307,7 +307,7 @@ def build_loss_fn(fitter):
             sigma_kms = params.get("eline_sigma_kms", 0.0)
             delta_v = params.get("eline_delta_v_kms", 0.0)
             resolution = getattr(model, "_spectral_resolution", None) or 2000.0
-            n_phot = model.predict_photometry(params).shape[0]
+            n_phot = model.predict_photometry(params, approx=True).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -382,7 +382,7 @@ def build_loss_fn(fitter):
             sigma_kms = params.get("eline_sigma_kms", 0.0)
             delta_v = params.get("eline_delta_v_kms", 0.0)
             resolution = getattr(model, "_spectral_resolution", None) or 2000.0
-            n_phot = model.predict_photometry(params).shape[0]
+            n_phot = model.predict_photometry(params, approx=True).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -513,12 +513,12 @@ def build_loglikelihood_fn(fitter):
 
         # Forward model prediction
         if data_type == "photometry":
-            predicted = model.predict_photometry(params)
+            predicted = model.predict_photometry(params, approx=True)
         elif data_type == "spectroscopy":
-            predicted = model.predict_spectrum(params, model._wave_obs)
+            predicted = model.predict_spectrum(params, model._wave_obs, approx=True)
         elif data_type == "joint":
-            pred_phot = model.predict_photometry(params)
-            pred_spec = model.predict_spectrum(params, model._wave_obs)
+            pred_phot = model.predict_photometry(params, approx=True)
+            pred_spec = model.predict_spectrum(params, model._wave_obs, approx=True)
             predicted = jnp.concatenate([pred_phot, pred_spec])
         else:
             raise ValueError(f"Unknown data_type: {data_type}")
@@ -592,7 +592,7 @@ def build_loglikelihood_fn(fitter):
             sigma_kms = params.get("eline_sigma_kms", 0.0)
             delta_v = params.get("eline_delta_v_kms", 0.0)
             resolution = getattr(model, "_spectral_resolution", None) or 2000.0
-            n_phot = model.predict_photometry(params).shape[0]
+            n_phot = model.predict_photometry(params, approx=True).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -659,7 +659,7 @@ def build_loglikelihood_fn(fitter):
                 marginalize_calibration,
             )
 
-            n_phot = model.predict_photometry(params).shape[0]
+            n_phot = model.predict_photometry(params, approx=True).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -733,7 +733,7 @@ def build_loglikelihood_fn(fitter):
             sigma_kms = params.get("eline_sigma_kms", 0.0)
             delta_v = params.get("eline_delta_v_kms", 0.0)
             resolution = getattr(model, "_spectral_resolution", None) or 2000.0
-            n_phot = model.predict_photometry(params).shape[0]
+            n_phot = model.predict_photometry(params, approx=True).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -808,7 +808,7 @@ def build_loglikelihood_fn(fitter):
             sigma_kms = params.get("eline_sigma_kms", 0.0)
             delta_v = params.get("eline_delta_v_kms", 0.0)
             resolution = getattr(model, "_spectral_resolution", None) or 2000.0
-            n_phot = model.predict_photometry(params).shape[0]
+            n_phot = model.predict_photometry(params, approx=True).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]

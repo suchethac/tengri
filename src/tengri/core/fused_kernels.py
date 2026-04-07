@@ -1260,6 +1260,9 @@ def build_fused_rest_sed(model):
     )
     # Full-precision wavelength array for components that need float64
     ssp_wave_f64 = model.ssp_data.ssp_wave
+    # Panchromatic grid for Zone 2 (may differ from ssp_wave when radio/xray enabled)
+    rest_wave_f64 = model._rest_wavelength
+    _needs_extension = rest_wave_f64 is not model.ssp_data.ssp_wave
 
     if has_nebular:
         nebular_backend = model._nebular_backend
@@ -1398,29 +1401,18 @@ def build_fused_rest_sed(model):
             )
             sed = sed + shock_sed
 
-        # --- 4. Dust IR emission (energy-balanced) ---
+        # --- 4. Energy balance + AGN L_bol on SSP grid (before interp) ---
         if has_dust_em:
             nu_em = _c_aa / ssp_wave.astype(jnp.float64)
             L_absorbed = -jnp.trapezoid(sed_intr - sed_atten, nu_em)
             eta_balance = p.get("dust_eta_balance", 1.0)
             L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
-            dust_ir = dust_emission_fn(
-                ssp_wave_f64,
-                L_ir,
-                dust_T=p.get("dust_T", 35.0),
-                dust_beta_ir=p.get("dust_beta_ir", 1.6),
-                dust_alpha_mir=p.get("dust_alpha_mir", 2.0),
-                dust_alpha_dale=p.get("dust_alpha_dale", 2.0),
-                dust_umin=p.get("dust_umin", 1.0),
-                dust_gamma_dl=p.get("dust_gamma_dl", 0.01),
-                dust_qpah=p.get("dust_qpah", 2.5),
-            )
-            sed = sed + dust_ir
         else:
             L_ir = jnp.float64(0.0)
 
-        # --- 5. AGN ---
         agn_bol_erg = jnp.float64(0.0)
+        agn_log_lbol = jnp.float64(0.0)
+        agn_frac_val = jnp.float64(0.0)
         if has_agn:
             if agn_parametric:
                 agn_log_lbol = p.get("agn_log_lbol", 10.0)
@@ -1432,8 +1424,35 @@ def build_fused_rest_sed(model):
                 L_bol_stellar = -jnp.trapezoid(sed, nu_agn)
                 agn_log_lbol = jnp.log10(jnp.maximum(L_bol_stellar * agn_frac_val, 1e-50))
                 agn_bol_erg = L_bol_stellar * agn_frac_val
+
+        # --- 5. Interpolate to panchromatic grid if needed ---
+        if _needs_extension:
+            from tengri.utils.wavelength import interpolate_sed_to_grid
+
+            sed = interpolate_sed_to_grid(ssp_wave_f64, sed, rest_wave_f64)
+
+        # Zone 2 wavelength grid (panchromatic or SSP)
+        wave_z2 = rest_wave_f64
+
+        # --- 6. Dust IR emission (energy-balanced) ---
+        if has_dust_em:
+            dust_ir = dust_emission_fn(
+                wave_z2,
+                L_ir,
+                dust_T=p.get("dust_T", 35.0),
+                dust_beta_ir=p.get("dust_beta_ir", 1.6),
+                dust_alpha_mir=p.get("dust_alpha_mir", 2.0),
+                dust_alpha_dale=p.get("dust_alpha_dale", 2.0),
+                dust_umin=p.get("dust_umin", 1.0),
+                dust_gamma_dl=p.get("dust_gamma_dl", 0.01),
+                dust_qpah=p.get("dust_qpah", 2.5),
+            )
+            sed = sed + dust_ir
+
+        # --- 7. AGN ---
+        if has_agn:
             agn_sed = agn_model_fn(
-                ssp_wave_f64,
+                wave_z2,
                 agn_log_lbol=agn_log_lbol,
                 agn_frac=agn_frac_val,
                 agn_alpha=p.get("agn_alpha", -1.0),
@@ -1445,10 +1464,10 @@ def build_fused_rest_sed(model):
             )
             sed = sed + agn_sed
 
-        # --- 6. Radio ---
+        # --- 8. Radio ---
         if has_radio:
             radio_sed = radio_total(
-                ssp_wave_f64,
+                wave_z2,
                 L_ir=L_ir,
                 L_agn_bol=agn_bol_erg,
                 q_ir=p.get("radio_q_ir", 2.64),
@@ -1458,13 +1477,12 @@ def build_fused_rest_sed(model):
             )
             sed = sed + radio_sed
 
-        # --- 7. X-ray ---
+        # --- 9. X-ray ---
         if has_xray:
-            # SFR: use last weight as proxy for current SFR
             sfr_current = p.get("_sfr_current", 1.0)
             mstar = jnp.sum(weights)
             xray_sed = xray_total(
-                ssp_wave_f64,
+                wave_z2,
                 sfr=sfr_current,
                 stellar_mass=mstar,
                 L_agn_bol=agn_bol_erg,
@@ -1567,7 +1585,7 @@ def observe_spectrum_from_rest_sed(
     array, shape (n_pix,)
         Spectral flux density in erg/s/cm^2/Hz.
     """
-    from tengri.models.observation.spectroscopy import compute_spectrum
+    from tengri.models.observation.spectrum import compute_spectrum
 
     return compute_spectrum(rest_sed, wave_rest, wave_obs, z, dl_cm)
 
@@ -1786,7 +1804,7 @@ def build_fused_tier2_spectrum(model):
 
     from tengri.core.param_translate import get_internal_params
     from tengri.core.sed_pipeline import interp_met_alpha_dispatch, interp_metallicity
-    from tengri.models.observation.spectroscopy import compute_spectrum
+    from tengri.models.observation.spectrum import compute_spectrum
     from tengri.models.sfh.registry import compute_field_gp
     from tengri.models.sps.dsps_wrapper import compute_csp_weights
 
