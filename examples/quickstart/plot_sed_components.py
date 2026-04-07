@@ -69,13 +69,13 @@ model = Model(spec, ssp, observation=obs)
 params = spec.sample(jax.random.PRNGKey(0))
 
 # --- Compute SEDs: with and without dust ---
-sed_total = model.predict_sed(params)
+sed_total = model.predict_rest_sed(params).sed
 
 # Remove dust to get intrinsic SED
 params_nodust = {k: v for k, v in params.items()}
 params_nodust["dust_tau_bc"] = jnp.array(0.0)
 params_nodust["dust_tau_diff"] = jnp.array(0.0)
-sed_intrinsic = model.predict_sed(params_nodust)
+sed_intrinsic = model.predict_rest_sed(params_nodust).sed
 
 wave = np.array(ssp.ssp_wave)
 sed_total_np = np.array(sed_total)

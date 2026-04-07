@@ -168,7 +168,7 @@ class TestTier2VsTier3:
 
         # Disable Tier 1 (fused photometry) to test Tier 2 path
         # Get Tier 3 reference by calling predict_sed + manual integration
-        sed_tier3 = model.predict_sed(simple_params)
+        sed_tier3 = model.predict_rest_sed(simple_params).sed
         z = model._get_redshift(simple_params)
         dl_cm = model._get_dl_cm(simple_params)
 
@@ -188,7 +188,7 @@ class TestTier2VsTier3:
     def test_spectrum_matches_exact(self, synthetic_ssp, simple_spec, simple_params):
         """Tier 2 spectrum matches Tier 3 spectrum."""
         from tengri.core.model import Model
-        from tengri.models.observation.spectroscopy import compute_spectrum
+        from tengri.models.observation.spectrum import compute_spectrum
 
         model = Model(simple_spec, synthetic_ssp)
 
@@ -196,7 +196,7 @@ class TestTier2VsTier3:
         wave_obs = jnp.linspace(4000.0, 9000.0, 100)
 
         # Tier 3: exact path
-        sed_tier3 = model.predict_sed(simple_params)
+        sed_tier3 = model.predict_rest_sed(simple_params).sed
         z = model._get_redshift(simple_params)
         dl_cm = model._get_dl_cm(simple_params)
         spec_tier3 = compute_spectrum(sed_tier3, model.ssp_data.ssp_wave, wave_obs, z, dl_cm)
@@ -345,7 +345,7 @@ class TestObservationWrappers:
     def test_observe_spectrum(self, synthetic_ssp, simple_spec, simple_params):
         """observe_spectrum_from_rest_sed matches compute_spectrum."""
         from tengri.core.model import Model
-        from tengri.models.observation.spectroscopy import compute_spectrum
+        from tengri.models.observation.spectrum import compute_spectrum
 
         model = Model(simple_spec, synthetic_ssp)
         rest_sed = model._compute_rest_sed_tier2(simple_params)
@@ -380,7 +380,7 @@ class TestFallbacks:
         }
 
         # This should work (falls back to Tier 3)
-        sed = model.predict_sed(params_tab)
+        sed = model.predict_rest_sed(params_tab).sed
         assert sed.shape == (len(model.ssp_data.ssp_wave),)
         assert jnp.all(jnp.isfinite(sed))
 

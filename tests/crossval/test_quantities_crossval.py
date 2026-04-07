@@ -279,7 +279,7 @@ class TestSEDShapeCrossval:
 
         # tengri — predict rest-frame SED
         params = _tengri_smooth_params()
-        sed_ds = np.asarray(tengri_model.predict_sed(params))
+        sed_ds = np.asarray(tengri_model.predict_rest_sed(params).sed)
         wave_ds = np.asarray(tengri_model.ssp_data.ssp_wave)
         # Restrict to optical range
         mask = (wave_ds > 1000) & (wave_ds < 20000)

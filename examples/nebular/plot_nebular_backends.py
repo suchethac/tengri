@@ -50,7 +50,7 @@ shared_params = dict(
 spec_baked = ParamSpec(**shared_params)
 model_baked = Model(spec_baked, ssp_data)
 params_baked = {k: float(v.value) for k, v in shared_params.items()}
-sed_baked = model_baked.predict_sed(params_baked)
+sed_baked = model_baked.predict_rest_sed(params_baked).sed
 wave = ssp_data.ssp_wave
 
 # --- Backend 2: CloudyGrid (if available) ---
@@ -70,7 +70,7 @@ if cloudy_path is not None:
     model_cloudy = Model(spec_cloudy, ssp_data)
     params_cloudy = {k: float(v.value) for k, v in shared_params.items()}
     params_cloudy.update({"neb_logU": -3.0, "neb_logZ_gas": -0.3})
-    sed_cloudy = model_cloudy.predict_sed(params_cloudy)
+    sed_cloudy = model_cloudy.predict_rest_sed(params_cloudy).sed
 
 # --- Plot: optical emission line region ---
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))

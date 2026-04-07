@@ -444,8 +444,8 @@ class TestDustEmissionForwardModel:
         # Dust emission should add IR flux, so SED should be >= stellar-only
         # (W3 at 12 um may not show large effect at z=0.1 with T_dust=35K
         #  since the peak is at ~80um, but the total should increase)
-        sed_em = model.predict_sed(params_em)
-        sed_no = model_no.predict_sed({})
+        sed_em = model.predict_rest_sed(params_em).sed
+        sed_no = model_no.predict_rest_sed({}).sed
         max_diff = float(jnp.max(sed_em - sed_no))
         assert max_diff > 0, "Dust emission should add positive flux somewhere"
 

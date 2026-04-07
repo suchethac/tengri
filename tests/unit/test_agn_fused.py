@@ -182,7 +182,7 @@ class TestAGNFusedPhotometry:
                 )
 
     def test_agn_lbol_affects_photometry(self, parametric_agn_spec, synthetic_ssp, simple_filters):
-        """Changing agn_log_lbol changes the photometry."""
+        """Changing agn_log_lbol changes the photometry (approx path)."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model = Model(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
@@ -190,13 +190,16 @@ class TestAGNFusedPhotometry:
         key = jax.random.PRNGKey(42)
         params = parametric_agn_spec.sample(key)
 
+        # Use approx=True to test the fused kernel AGN path specifically.
+        # The exact path evaluates AGN on the full SSP grid where simple_agn
+        # contribution is negligible at optical wavelengths for a synthetic SSP.
         # Low AGN luminosity
         params_low = {**params, "agn_log_lbol": 8.0}
-        phot_low = model.predict_photometry(params_low)
+        phot_low = model.predict_photometry(params_low, approx=True)
 
         # High AGN luminosity
         params_high = {**params, "agn_log_lbol": 12.0}
-        phot_high = model.predict_photometry(params_high)
+        phot_high = model.predict_photometry(params_high, approx=True)
 
         # Higher L_bol should produce brighter photometry
         assert jnp.all(phot_high > phot_low), (
@@ -285,7 +288,7 @@ class TestAGNPredictSED:
 
         key = jax.random.PRNGKey(42)
         params = parametric_agn_spec.sample(key)
-        sed = model.predict_sed(params)
+        sed = model.predict_rest_sed(params).sed
 
         assert jnp.all(jnp.isfinite(sed)), "SED contains non-finite values"
         assert sed.shape == (len(synthetic_ssp.ssp_wave),)

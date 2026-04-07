@@ -122,15 +122,15 @@ def typical_params(parametric_spec):
 
 class TestPredictSed:
     def test_shape(self, parametric_model, typical_params):
-        sed = parametric_model.predict_sed(typical_params)
+        sed = parametric_model.predict_rest_sed(typical_params).sed
         assert sed.shape == parametric_model.ssp_data.ssp_wave.shape
 
     def test_finite(self, parametric_model, typical_params):
-        sed = parametric_model.predict_sed(typical_params)
+        sed = parametric_model.predict_rest_sed(typical_params).sed
         assert jnp.all(jnp.isfinite(sed))
 
     def test_positive(self, parametric_model, typical_params):
-        sed = parametric_model.predict_sed(typical_params)
+        sed = parametric_model.predict_rest_sed(typical_params).sed
         assert jnp.all(sed >= 0)
 
 
@@ -195,7 +195,7 @@ class TestPredictDerived:
 class TestStochastic:
     def test_predict_sed_works(self, stochastic_model, stochastic_spec):
         params = stochastic_spec.sample(jax.random.PRNGKey(42))
-        sed = stochastic_model.predict_sed(params)
+        sed = stochastic_model.predict_rest_sed(params).sed
         assert jnp.all(jnp.isfinite(sed))
 
     def test_sfh_full_differs_from_mean(self, stochastic_model, stochastic_spec):
@@ -458,7 +458,7 @@ class TestPrediction:
     def test_sed_array_matches_predict_sed(self, parametric_model, typical_params):
         pred = parametric_model.predict(typical_params)
         sed_from_pred = pred.sed_array
-        sed_direct = parametric_model.predict_sed(typical_params)
+        sed_direct = parametric_model.predict_rest_sed(typical_params).sed
         np.testing.assert_allclose(np.array(sed_from_pred), np.array(sed_direct), rtol=1e-10)
 
     # --- Backward compatibility ---

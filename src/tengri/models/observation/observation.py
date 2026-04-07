@@ -18,7 +18,7 @@ import jax.numpy as jnp
 from tengri.distributions import Distribution
 from tengri.models.observation.noise_model import NoiseConfig
 from tengri.models.observation.photometry_config import Photometry
-from tengri.models.observation.spectroscopy_config import SpectroscopyConfig
+from tengri.models.observation.spectroscopy import SpectroscopyConfig
 
 
 @dataclasses.dataclass(frozen=True)

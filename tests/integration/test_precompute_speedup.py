@@ -117,15 +117,15 @@ class TestPrecomputeSpeedup:
         data = model_exact.predict_photometry(params)
         noise = data / 20.0
 
-        def make_loss(model):
+        def make_loss(model, approx=False):
             def loss(p):
-                pred = model.predict_photometry(p)
+                pred = model.predict_photometry(p, approx=approx)
                 return jnp.sum(((data - pred) / noise) ** 2)
 
             return jax.jit(jax.value_and_grad(loss))
 
-        grad_fast = make_loss(model_fast)
-        grad_exact = make_loss(model_exact)
+        grad_fast = make_loss(model_fast, approx=True)
+        grad_exact = make_loss(model_exact, approx=False)
 
         # JIT warmup
         _ = grad_fast(params)

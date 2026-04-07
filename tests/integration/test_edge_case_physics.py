@@ -94,7 +94,7 @@ class TestExtremeDust:
             dust_tau_diff=5.0,
             dust_tau_bc=3.0,
         )
-        sed = model.predict_sed(params)
+        sed = model.predict_rest_sed(params).sed
         assert jnp.all(jnp.isfinite(sed)), "SED has NaN/Inf at extreme dust"
         assert jnp.all(sed >= 0), "SED has negative values at extreme dust"
 
@@ -150,7 +150,7 @@ class TestExtremeRedshift:
     def test_very_low_redshift(self, ssp_data, filters):
         """z = 0.001: SED finite, positive, physical photometry."""
         model, params = _make_model(ssp_data, filters, redshift=0.001)
-        sed = model.predict_sed(params)
+        sed = model.predict_rest_sed(params).sed
         assert jnp.all(jnp.isfinite(sed))
         assert jnp.all(sed >= 0)
 
@@ -161,7 +161,7 @@ class TestExtremeRedshift:
     def test_high_redshift(self, ssp_data, filters):
         """z = 3.0: SED finite, positive."""
         model, params = _make_model(ssp_data, filters, redshift=3.0)
-        sed = model.predict_sed(params)
+        sed = model.predict_rest_sed(params).sed
         assert jnp.all(jnp.isfinite(sed))
         assert jnp.all(sed >= 0)
 
@@ -208,7 +208,7 @@ class TestHighBurstiness:
         model = Model(spec, ssp_data, filters=filters)
         params = spec.sample(jax.random.PRNGKey(42))
 
-        sed = model.predict_sed(params)
+        sed = model.predict_rest_sed(params).sed
         assert jnp.all(jnp.isfinite(sed)), "NaN/Inf in SED at psd_sigma=5"
         assert jnp.all(sed >= 0), "Negative SED values at psd_sigma=5"
 
@@ -271,13 +271,13 @@ class TestMetallicityExtremes:
     def test_extreme_low_z_finite(self, ssp_data, filters):
         """Lowest metallicity: SED finite and positive."""
         model, params = _make_model(ssp_data, filters, met_logzsol=-1.5)
-        sed = model.predict_sed(params)
+        sed = model.predict_rest_sed(params).sed
         assert jnp.all(jnp.isfinite(sed))
         assert jnp.all(sed >= 0)
 
     def test_extreme_high_z_finite(self, ssp_data, filters):
         """Highest metallicity: SED finite and positive."""
         model, params = _make_model(ssp_data, filters, met_logzsol=0.2)
-        sed = model.predict_sed(params)
+        sed = model.predict_rest_sed(params).sed
         assert jnp.all(jnp.isfinite(sed))
         assert jnp.all(sed >= 0)

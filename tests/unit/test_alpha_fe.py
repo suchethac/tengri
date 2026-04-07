@@ -188,7 +188,7 @@ class TestAlphaFeForwardModel:
 
     def test_alpha_zero_matches_no_alpha(self, model_with_alpha):
         """alpha_fe=0 should give identical SED as no alpha enhancement."""
-        sed_alpha0 = model_with_alpha.predict_sed({"met_alpha_fe": 0.0})
+        sed_alpha0 = model_with_alpha.predict_rest_sed({"met_alpha_fe": 0.0}).sed
         # Build a model without alpha_fe (defaults to Fixed(0.0))
         from tengri import Fixed, Model, ParamSpec, load_ssp_data
 
@@ -205,13 +205,13 @@ class TestAlphaFeForwardModel:
             mean_sfh_type="dpl",
         )
         model_no = Model(spec_no, ssp, precompute=False)
-        sed_no = model_no.predict_sed({})
+        sed_no = model_no.predict_rest_sed({}).sed
         assert_allclose(sed_alpha0, sed_no, rtol=1e-12)
 
     def test_positive_alpha_changes_sed(self, model_with_alpha):
         """Positive [alpha/Fe] should produce a different SED."""
-        sed_0 = model_with_alpha.predict_sed({"met_alpha_fe": 0.0})
-        sed_pos = model_with_alpha.predict_sed({"met_alpha_fe": 0.3})
+        sed_0 = model_with_alpha.predict_rest_sed({"met_alpha_fe": 0.0}).sed
+        sed_pos = model_with_alpha.predict_rest_sed({"met_alpha_fe": 0.3}).sed
         # SEDs should differ (alpha enhancement shifts metallicity)
         max_diff = float(jnp.max(jnp.abs(sed_pos - sed_0)))
         assert max_diff > 0, "Alpha enhancement should change the SED"
@@ -220,7 +220,7 @@ class TestAlphaFeForwardModel:
         """Gradient w.r.t. met_alpha_fe should be finite."""
 
         def loss(afe):
-            return jnp.sum(model_with_alpha.predict_sed({"met_alpha_fe": afe}))
+            return jnp.sum(model_with_alpha.predict_rest_sed({"met_alpha_fe": afe}).sed)
 
         g = jax.grad(loss)(0.3)
         assert jnp.isfinite(g), "Alpha-Fe gradient should be finite"

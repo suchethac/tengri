@@ -315,7 +315,7 @@ class TestRandomParameterPhysics:
             params = spec.sample(key)
 
             # SED must be finite and positive
-            sed = model.predict_sed(params)
+            sed = model.predict_rest_sed(params).sed
             assert jnp.all(jnp.isfinite(sed)), f"NaN in SED for draw {i}"
             assert jnp.all(sed >= 0), f"Negative SED for draw {i}"
 

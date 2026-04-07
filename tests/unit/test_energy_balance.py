@@ -68,7 +68,7 @@ def _make_model_and_predict(ssp, spec, eta_value):
     key = jax.random.PRNGKey(0)
     params = spec.sample(key)
     params = {**params, "dust_eta_balance": eta_value}
-    sed = model.predict_sed(params)
+    sed = model.predict_rest_sed(params).sed
     return sed
 
 
@@ -121,7 +121,7 @@ class TestEnergyBalanceEta:
         model_no_em = Model(spec_no_dust_em, synthetic_ssp)
         key = jax.random.PRNGKey(0)
         params_no_em = spec_no_dust_em.sample(key)
-        sed_no_em = model_no_em.predict_sed(params_no_em)
+        sed_no_em = model_no_em.predict_rest_sed(params_no_em).sed
 
         sed_eta0 = _make_model_and_predict(synthetic_ssp, base_spec, 0.0)
 
@@ -142,7 +142,7 @@ class TestEnergyBalanceEta:
 
         def _loss(eta):
             p = {**params, "dust_eta_balance": eta}
-            sed = model.predict_sed(p)
+            sed = model.predict_rest_sed(p).sed
             return jnp.sum(sed)
 
         grad_eta = jax.grad(_loss)(1.0)

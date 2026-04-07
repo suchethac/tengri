@@ -69,7 +69,7 @@ from tengri.core.sed_pipeline import (
 )
 from tengri.models.dust.attenuation import precompute_dust_age_weights
 from tengri.models.observation.photometry import ab_mag_from_flux, compute_flux_density
-from tengri.models.observation.spectroscopy import apply_lsf, compute_spectrum
+from tengri.models.observation.spectrum import apply_lsf, compute_spectrum
 from tengri.models.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.models.sps.dsps_wrapper import csp_age_dt
 from tengri.models.sps.precompute import (

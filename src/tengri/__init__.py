@@ -51,6 +51,7 @@ from tengri.core.prediction import (
     SEDQuantities,
     SFHQuantities,
 )
+from tengri.core.sed_result import SEDResult
 from tengri.core.settings import (
     DustConfig,
     ModelConfig,
@@ -76,7 +77,7 @@ from tengri.models.observation.line_list import LineCatalog, LineList
 from tengri.models.observation.noise_model import NoiseConfig, NoiseModel
 from tengri.models.observation.observation import Observation
 from tengri.models.observation.photometry_config import Photometry
-from tengri.models.observation.spectroscopy_config import Spectroscopy, SpectroscopyConfig
+from tengri.models.observation.spectroscopy import Spectroscopy, SpectroscopyConfig
 from tengri.models.sfh.gp_sfh import (
     compute_sqrt_power_drw,
     generate_gp_batch,
