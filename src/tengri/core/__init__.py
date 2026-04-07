@@ -26,6 +26,7 @@ from tengri.core.prediction import (
     SEDQuantities,
     SFHQuantities,
 )
+from tengri.core.sed_result import SEDResult
 
 __all__ = [
     "LOG10_ZSUN",
@@ -41,6 +42,7 @@ __all__ = [
     "Prediction",
     "SEDModel",
     "SEDQuantities",
+    "SEDResult",
     "SFHQuantities",
     "TengriError",
     "TengriIOError",

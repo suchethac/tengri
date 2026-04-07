@@ -916,7 +916,7 @@ class Posterior:
                     for k, v in self.samples.items()
                 }
                 try:
-                    sed = np.array(model.predict_sed(p))
+                    sed = np.array(model.predict_rest_sed(p).sed)
                     seds.append(sed)
                 except Exception:
                     pass
@@ -941,7 +941,7 @@ class Posterior:
         else:
             wave = np.array(model.wavelengths)
             mask = (wave >= wave_range[0]) & (wave <= wave_range[1])
-            sed = np.array(model.predict_sed(self.params))
+            sed = np.array(model.predict_rest_sed(self.params).sed)
             norm = float(sed[np.argmin(np.abs(wave - 5500))]) or 1.0
             ax.plot(
                 wave[mask], sed[mask] * wave[mask] / norm, color="C0", lw=1.8, label="best-fit"

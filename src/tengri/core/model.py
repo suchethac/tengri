@@ -68,7 +68,7 @@ from tengri.core.sed_pipeline import (
     interp_metallicity_evolving,
 )
 from tengri.models.dust.attenuation import precompute_dust_age_weights
-from tengri.models.observation.photometry import ab_mag_from_flux, compute_flux_density
+from tengri.models.observation.photometry import ab_mag_from_flux
 from tengri.models.observation.spectrum import apply_lsf, compute_spectrum
 from tengri.models.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.models.sps.dsps_wrapper import csp_age_dt
@@ -500,6 +500,18 @@ class SEDModel:
             for p in ["xray_gamma_agn", "xray_alpha_ox"]:
                 self._param_map[p] = (p, 1.0, 0.0)
 
+        # Build rest-frame wavelength grid (auto-extend for radio/X-ray)
+        if self._radio_enabled or self._xray_enabled:
+            from tengri.utils.wavelength import make_panchromatic_grid
+
+            self._rest_wavelength = make_panchromatic_grid(
+                ssp_data.ssp_wave,
+                extend_xray=self._xray_enabled,
+                extend_radio=self._radio_enabled,
+            )
+        else:
+            self._rest_wavelength = ssp_data.ssp_wave
+
         # Shock emission (MAPPINGS V)
         self._shock_enabled = getattr(spec, "shock", False)
         if self._shock_enabled:
@@ -762,26 +774,101 @@ class SEDModel:
     # Forward predictions
     # -------------------------------------------------------------------
 
-    def _compute_sed_components(self, params, _sfr=None, _weights=None, need_intrinsic=False):
+    @property
+    def wavelengths(self):
+        """Rest-frame wavelength grid (Angstrom).
+
+        Returns the SSP grid by default, or the extended panchromatic grid
+        when radio or X-ray emission is enabled.
+        """
+        return self._rest_wavelength
+
+    def _compute_sed_components(
+        self, params, _sfr=None, _weights=None, need_intrinsic=False, rest_wavelength=None
+    ):
         """Compute all SED intermediates.
 
         Delegates to :func:`tengri._sed_pipeline.compute_sed_components`.
         """
-        return compute_sed_components(self, params, _sfr, _weights, need_intrinsic)
+        return compute_sed_components(
+            self, params, _sfr, _weights, need_intrinsic, rest_wavelength=rest_wavelength
+        )
 
-    def predict_sed(self, params):
-        """Compute rest-frame luminosity SED.
+    def predict_rest_sed(self, params, wave=None):
+        """Compute rest-frame panchromatic SED.
 
         Parameters
         ----------
         params : dict
             Parameter values (public names).
+        wave : array, optional
+            Custom rest-frame wavelength grid (Angstrom). If None, uses
+            the model's default grid (SSP grid, or auto-extended when
+            radio/xray enabled).
+
+        Returns
+        -------
+        SEDResult
+            NamedTuple with ``wavelength`` (Angstrom) and ``sed`` (erg/s/Hz).
+        """
+        from tengri.core.sed_result import SEDResult
+
+        rest_wave = wave if wave is not None else self._rest_wavelength
+        result = self._compute_sed_components(params, rest_wavelength=rest_wave)
+        return SEDResult(wavelength=result["rest_wavelength"], sed=result["sed_total"])
+
+    def predict_obs_sed(self, params, wave=None):
+        """Compute observed-frame SED (redshifted + IGM absorbed).
+
+        At z=0, identical to ``predict_rest_sed()``.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values (public names).
+        wave : array, optional
+            Custom rest-frame wavelength grid (Angstrom) before redshifting.
+
+        Returns
+        -------
+        SEDResult
+            NamedTuple with ``wavelength`` (observed-frame Angstrom) and
+            ``sed`` (erg/s/Hz).
+        """
+        from tengri.core.sed_result import SEDResult
+
+        rest_result = self.predict_rest_sed(params, wave=wave)
+        z = self._get_redshift(params)
+        wave_obs = rest_result.wavelength * (1.0 + z)
+        sed_obs = rest_result.sed
+        if self._apply_igm:
+            from tengri.models.igm import igm_transmission
+
+            # Always apply IGM when enabled — igm_transmission returns
+            # all-ones at z=0. Avoid z>0 comparison which fails under JIT.
+            igm_trans = igm_transmission(wave_obs, z)
+            sed_obs = sed_obs * igm_trans
+        return SEDResult(wavelength=wave_obs, sed=sed_obs)
+
+    def predict_sed(self, params):
+        """Compute rest-frame luminosity SED.
+
+        .. deprecated::
+            Use :meth:`predict_rest_sed` (returns ``SEDResult``) or
+            :meth:`predict_obs_sed` instead.
 
         Returns
         -------
         array, shape (n_wave,)
-            Rest-frame SED in erg/s/Hz.
+            Rest-frame SED in erg/s/Hz on the SSP wavelength grid.
         """
+        import warnings
+
+        warnings.warn(
+            "predict_sed() is deprecated, use predict_rest_sed()",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self._compute_sed_components(params)["sed_total"]
 
     def predict(self, params):
@@ -1118,17 +1205,19 @@ class SEDModel:
             luminosity_weighted_metallicity=lw_z,
         )
 
-    def predict_photometry(self, params):
+    def predict_photometry(self, params, approx=False):
         """Compute observed photometric flux densities.
-
-        Automatically uses the fast precomputed path (Zacharegkas+2025)
-        when available (redshift fixed + filters present + precompute=True).
-        Falls back to exact wavelength integration otherwise.
 
         Parameters
         ----------
         params : dict
             Parameter values (public names).
+        approx : bool
+            If True, use the precomputed SSP×filter fast path
+            (Zacharegkas+2025). Faster (~10-50x) but evaluates dust, AGN,
+            and IGM at filter effective wavelengths only.
+            If False (default), computes the full panchromatic SED then
+            integrates through filters (exact).
 
         Returns
         -------
@@ -1136,9 +1225,33 @@ class SEDModel:
             Observed flux densities in erg/s/cm^2/Hz.
         """
         if self.filter_waves is None:
-            raise ValueError("No filters set. Pass filters to Model().")
+            raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
 
-        # Tabulated SFH bypasses fused kernel (needs full SED path)
+        if approx:
+            return self._predict_photometry_approx(params)
+
+        # Canonical path: predict_obs_sed → observation.observe_photometry
+        obs_sed = self.predict_obs_sed(params)
+        z = self._get_redshift(params)
+        dl_cm = self._get_dl_cm(params)
+
+        if self.observation is not None:
+            return self.observation.observe_photometry(obs_sed, z, dl_cm)
+
+        # Fallback for legacy filter= init (no Observation object with observe)
+        from tengri.models.observation.photometry import compute_flux_density
+
+        wave_rest = obs_sed.wavelength / (1.0 + z)
+        fluxes = []
+        for fw, ft in zip(self.filter_waves, self.filter_trans):
+            f = compute_flux_density(obs_sed.sed, wave_rest, fw, ft, z, dl_cm)
+            fluxes.append(f)
+        return jnp.array(fluxes)
+
+    def _predict_photometry_approx(self, params):
+        """Precomputed SSP×filter fast path. Bypasses predict_sed entirely."""
+        import warnings
+
         _has_tabulated_sfh = "sfh_t_gyr" in params
 
         if (
@@ -1164,31 +1277,11 @@ class SEDModel:
         ):
             return self._predict_photometry_tier2(params)
 
-        # Tier 3: exact path (Python dispatch)
-        sed = self.predict_sed(params)
-        z = self._get_redshift(params)
-        dl_cm = self._get_dl_cm(params)
-
-        # Apply IGM absorption (acts on observed-frame SED)
-        if self._apply_igm:
-            from tengri.models.igm import igm_transmission
-
-            wave_obs = self.ssp_data.ssp_wave * (1.0 + z)
-            igm_trans = igm_transmission(wave_obs, z)
-            sed = sed * igm_trans
-
-        fluxes = []
-        for fw, ft in zip(self.filter_waves, self.filter_trans):
-            f = compute_flux_density(
-                sed,
-                self.ssp_data.ssp_wave,
-                fw,
-                ft,
-                z,
-                dl_cm,
-            )
-            fluxes.append(f)
-        return jnp.array(fluxes)
+        warnings.warn(
+            "approx=True requested but precomputation not available, using exact path",
+            stacklevel=3,
+        )
+        return self.predict_photometry(params, approx=False)
 
     def _get_dust_kwargs(self, p):
         """Extract dust law + emission kwargs from internal params dict."""
@@ -1483,11 +1576,8 @@ class SEDModel:
         self._fused_photometry_ztable = build_fused_photometry_ztable(self)
         return self
 
-    def predict_spectrum(self, params, wave_obs=None):
+    def predict_spectrum(self, params, wave_obs=None, approx=False):
         """Compute observed spectrum at given wavelengths.
-
-        Uses the fast precomputed path if ``precompute_spectroscopy()``
-        was called, otherwise falls back to exact interpolation.
 
         Parameters
         ----------
@@ -1495,7 +1585,10 @@ class SEDModel:
             Parameter values.
         wave_obs : array, optional
             Observed wavelength grid (Angstrom). If None, uses the
-            grid from ``precompute_spectroscopy()``.
+            grid from ``precompute_spectroscopy()`` or the Observation config.
+        approx : bool
+            If True, use precomputed SSP-on-pixels fast path when available.
+            If False (default), computes the full SED then interpolates.
 
         Returns
         -------
@@ -1509,7 +1602,37 @@ class SEDModel:
         elif wave_obs is None:
             raise ValueError("No wavelength grid. Pass wave_obs or call precompute_spectroscopy()")
 
-        # Tier 1: use fused kernel if available and compatible
+        if approx:
+            return self._predict_spectrum_approx(params, wave_obs)
+
+        # Canonical path: predict_obs_sed → interpolate to pixels
+        obs_sed = self.predict_obs_sed(params)
+        z = self._get_redshift(params)
+        dl_cm = self._get_dl_cm(params)
+
+        if self.observation is not None and self.observation.spectroscopy is not None:
+            flux = self.observation.observe_spectrum(obs_sed, z, dl_cm)
+        else:
+            wave_rest = obs_sed.wavelength / (1.0 + z)
+            flux = compute_spectrum(obs_sed.sed, wave_rest, wave_obs, z, dl_cm)
+
+            resolution = self._lsf_resolution
+            if resolution is not None:
+                flux = apply_lsf(
+                    flux,
+                    wave_obs,
+                    resolution,
+                    sigma_lib_kms=self._sigma_lib_kms,
+                    n_bins=self._lsf_n_bins,
+                )
+
+        return flux
+
+    def _predict_spectrum_approx(self, params, wave_obs):
+        """Precomputed spectrum fast path."""
+        import warnings
+
+        # Tier 1: fused kernel on precomputed pixels
         if self._spec_precomp is not None and self._fused_spectrum is not None:
             return self._predict_spectrum_fast(params)
 
@@ -1523,30 +1646,11 @@ class SEDModel:
         ):
             return self._predict_spectrum_tier2(params, wave_obs)
 
-        # Tier 3: exact path (Python dispatch)
-        sed = self.predict_sed(params)
-        z = self._get_redshift(params)
-        dl_cm = self._get_dl_cm(params)
-        flux = compute_spectrum(
-            sed,
-            self.ssp_data.ssp_wave,
-            wave_obs,
-            z,
-            dl_cm,
+        warnings.warn(
+            "approx=True requested but precomputation not available, using exact path",
+            stacklevel=3,
         )
-
-        # Apply LSF convolution if resolution profile is set
-        resolution = self._lsf_resolution
-        if resolution is not None:
-            flux = apply_lsf(
-                flux,
-                wave_obs,
-                resolution,
-                sigma_lib_kms=self._sigma_lib_kms,
-                n_bins=self._lsf_n_bins,
-            )
-
-        return flux
+        return self.predict_spectrum(params, wave_obs=wave_obs, approx=False)
 
     def _predict_spectrum_fast(self, params):
         """Fast spectrum using fused JIT kernel."""
@@ -1759,7 +1863,7 @@ class SEDModel:
             Rest-frame luminosity in Lsun/Hz.
         """
         LSUN_CGS = 3.828e33  # erg/s (IAU 2015)
-        sed_erg = self.predict_sed(params)
+        sed_erg = self.predict_rest_sed(params).sed
         return sed_erg / LSUN_CGS
 
     def plot_sfh_posterior(

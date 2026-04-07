@@ -230,6 +230,72 @@ class Observation:
         return params
 
     # -------------------------------------------------------------------
+    # Observation projection (rest SED → observed fluxes)
+    # -------------------------------------------------------------------
+
+    def observe_photometry(self, sed_result, z: float, dl_cm: float) -> jnp.ndarray:
+        """Project an observed-frame SED through photometric filters.
+
+        Parameters
+        ----------
+        sed_result : SEDResult
+            Observed-frame SED with ``wavelength`` and ``sed``.
+        z : float
+            Redshift.
+        dl_cm : float
+            Luminosity distance (cm).
+
+        Returns
+        -------
+        jnp.ndarray, shape (n_filters,)
+        """
+        if self.photometry is None:
+            raise ValueError("No photometry configured in this Observation.")
+
+        from tengri.models.observation.photometry import compute_flux_density
+
+        wave_rest = sed_result.wavelength / (1.0 + z)
+        fluxes = []
+        for fw, ft in zip(self.photometry.filter_waves, self.photometry.filter_trans):
+            f = compute_flux_density(sed_result.sed, wave_rest, fw, ft, z, dl_cm)
+            fluxes.append(f)
+        return jnp.array(fluxes)
+
+    def observe_spectrum(self, sed_result, z: float, dl_cm: float) -> jnp.ndarray:
+        """Project an observed-frame SED onto spectroscopic pixel grid.
+
+        Parameters
+        ----------
+        sed_result : SEDResult
+            Observed-frame SED with ``wavelength`` and ``sed``.
+        z : float
+            Redshift.
+        dl_cm : float
+            Luminosity distance (cm).
+
+        Returns
+        -------
+        jnp.ndarray, shape (n_pixels,)
+        """
+        if self.spectroscopy is None:
+            raise ValueError("No spectroscopy configured in this Observation.")
+
+        from tengri.models.observation.spectrum import apply_lsf, compute_spectrum
+
+        wave_rest = sed_result.wavelength / (1.0 + z)
+        wave_obs = self.spectroscopy.wave_obs
+        flux = compute_spectrum(sed_result.sed, wave_rest, wave_obs, z, dl_cm)
+
+        if self.spectroscopy.resolution is not None:
+            flux = apply_lsf(
+                flux,
+                wave_obs,
+                self.spectroscopy.resolution,
+                sigma_lib_kms=self.spectroscopy.sigma_lib_kms,
+            )
+        return flux
+
+    # -------------------------------------------------------------------
     # Display
     # -------------------------------------------------------------------
 

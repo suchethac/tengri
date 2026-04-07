@@ -253,7 +253,9 @@ def get_agn_kwargs(model, p):
     }
 
 
-def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrinsic=False):
+def compute_sed_components(
+    model, params, _sfr=None, _weights=None, need_intrinsic=False, rest_wavelength=None
+):
     """Compute all SED intermediates.
 
     This is the shared computation engine behind ``predict_sed()``,
@@ -712,17 +714,77 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
 
         sed = sed + shock_sed
 
-    # Dust IR emission (energy-balanced)
+    # ── Compute energy balance on SSP grid BEFORE interpolation ──────
+    # L_absorbed is integrated over frequency on the SSP grid where the
+    # stellar SED is exact. This avoids interpolation error in the integral.
+    _c_aa_const = 2.99792458e18  # c in Angstrom/s
+    L_ir = jnp.float64(0.0)
     if model._dust_emission_model is not None and sed_intrinsic is not None:
-        from tengri.models.dust.emission import resolve_emission_model
-
-        _c_aa_em = 2.99792458e18  # c in Angstrom/s
-        nu_em = _c_aa_em / model.ssp_data.ssp_wave
-        L_absorbed = -jnp.trapezoid(sed_intrinsic - sed_attenuated, nu_em)
+        nu_ssp = _c_aa_const / model.ssp_data.ssp_wave
+        L_absorbed = -jnp.trapezoid(sed_intrinsic - sed_attenuated, nu_ssp)
         eta_balance = p.get("dust_eta_balance", 1.0)
         L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
+
+    # ── Compute AGN bolometric luminosity on SSP grid ─────────────────
+    agn_bol_erg = 0.0
+    agn_log_lbol = 0.0
+    agn_frac_for_model = 0.0
+    if model._agn_model is not None:
+        if model._agn_parametric:
+            agn_log_lbol = p.get("agn_log_lbol", 10.0)
+            agn_frac_for_model = 1.0
+            agn_bol_erg = 10.0**agn_log_lbol
+        else:
+            agn_frac_for_model = p.get("agn_frac", 0.0)
+            nu_agn = _c_aa_const / model.ssp_data.ssp_wave
+            L_bol_stellar = -jnp.trapezoid(sed, nu_agn)
+            agn_log_lbol = jnp.log10(jnp.maximum(L_bol_stellar * agn_frac_for_model, 1e-50))
+            agn_bol_erg = L_bol_stellar * agn_frac_for_model
+
+    # ── Populate physical quantities for radio/X-ray ──────────────────
+    _L_ir = L_ir if model._dust_emission_model is not None else p.get("_L_ir_cached", 0.0)
+    _sfr_cached = (
+        sfr_table[-1]
+        if "sfr_table" in dir()
+        else (sfr[-1] if "sfr" in dir() else p.get("_sfr_cached", 1.0))
+    )
+    _mstar_formed = jnp.sum(weights) if weights is not None else p.get("_mstar_cached", 1e10)
+    if weights is not None and model.ssp_data.ssp_mass_remaining is not None:
+        _mass_remaining = interpolate_mass_remaining(
+            model.ssp_data.ssp_mass_remaining,
+            model.ssp_data.ssp_lgmet,
+            p.get("log_z_abs", -1.8477),
+        )
+        _mstar_surviving = compute_surviving_mass(weights, _mass_remaining)
+    else:
+        _mstar_surviving = _mstar_formed
+    _mstar = _mstar_surviving
+
+    # ── Zone 2: Interpolate to panchromatic grid if needed ────────────
+    # Determine output wavelength grid
+    rest_wave_target = (
+        rest_wavelength if rest_wavelength is not None else model.ssp_data.ssp_wave
+    )
+    _needs_extension = rest_wave_target is not model.ssp_data.ssp_wave
+
+    if _needs_extension:
+        from tengri.utils.wavelength import interpolate_sed_to_grid
+
+        ssp_wave = model.ssp_data.ssp_wave
+        sed = interpolate_sed_to_grid(ssp_wave, sed, rest_wave_target)
+        if sed_intrinsic is not None:
+            sed_intrinsic = interpolate_sed_to_grid(ssp_wave, sed_intrinsic, rest_wave_target)
+        sed_attenuated = interpolate_sed_to_grid(ssp_wave, sed_attenuated, rest_wave_target)
+
+    # Use the target grid for all Zone 2 emission components
+    wave_z2 = rest_wave_target
+
+    # ── Dust IR emission (energy-balanced) ────────────────────────────
+    if model._dust_emission_model is not None and L_ir > 0.0:
+        from tengri.models.dust.emission import resolve_emission_model
+
         dust_ir = resolve_emission_model(model._dust_emission_model)(
-            model.ssp_data.ssp_wave,
+            wave_z2,
             L_ir,
             dust_T=p.get("dust_T", 35.0),
             dust_beta_ir=p.get("dust_beta_ir", 1.6),
@@ -734,24 +796,12 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         )
         sed = sed + dust_ir
 
-    # AGN contribution
-    agn_bol_erg = 0.0
+    # ── AGN contribution ──────────────────────────────────────────────
     if model._agn_model is not None:
         from tengri.models.agn import resolve_agn_model
 
-        if model._agn_parametric:
-            agn_log_lbol = p.get("agn_log_lbol", 10.0)
-            agn_frac_for_model = 1.0
-            agn_bol_erg = 10.0**agn_log_lbol
-        else:
-            agn_frac_for_model = p.get("agn_frac", 0.0)
-            _c_aa = 2.99792458e18
-            nu = _c_aa / model.ssp_data.ssp_wave
-            L_bol_stellar = -jnp.trapezoid(sed, nu)
-            agn_log_lbol = jnp.log10(jnp.maximum(L_bol_stellar * agn_frac_for_model, 1e-50))
-            agn_bol_erg = L_bol_stellar * agn_frac_for_model
         agn_sed = resolve_agn_model(model._agn_model)(
-            model.ssp_data.ssp_wave,
+            wave_z2,
             agn_log_lbol=agn_log_lbol,
             agn_frac=agn_frac_for_model,
             agn_alpha=p.get("agn_alpha", -1.0),
@@ -763,43 +813,12 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         )
         sed = sed + agn_sed
 
-    # Populate cached physical quantities for radio/X-ray models
-    # L_ir: total IR luminosity from dust energy balance (Lsun).
-    # NOTE: L_ir is 0 on the DSPS table path (sed_intrinsic is None) because no
-    # dust reemission model runs. Radio SF emission will be 0. Pass _L_ir_cached
-    # in params to override when using the DSPS table path with radio enabled.
-    _L_ir = L_ir if "L_ir" in dir() else p.get("_L_ir_cached", 0.0)
-    # SFR: instantaneous SFR at z_obs (Msun/yr) from the SFH.
-    # Use sfr[-1] for parametric SFH (most recent time bin ≈ current SFR).
-    # sfr_table is only defined for the table-based SFH path.
-    _sfr_cached = (
-        sfr_table[-1]
-        if "sfr_table" in dir()
-        else (sfr[-1] if "sfr" in dir() else p.get("_sfr_cached", 1.0))
-    )
-    # M*: formed and surviving stellar mass (Msun).
-    # XRB calibrations (Lehmer+2010, Mineo+2012) are normalised to surviving
-    # stellar mass (living stars + remnants). Using formed mass overestimates
-    # XRB luminosity by ~30-50% for old galaxies (BUG-29 fix).
-    _mstar_formed = jnp.sum(weights) if weights is not None else p.get("_mstar_cached", 1e10)
-    if weights is not None and model.ssp_data.ssp_mass_remaining is not None:
-        _mass_remaining = interpolate_mass_remaining(
-            model.ssp_data.ssp_mass_remaining,
-            model.ssp_data.ssp_lgmet,
-            p.get("log_z_abs", -1.8477),
-        )
-        _mstar_surviving = compute_surviving_mass(weights, _mass_remaining)
-    else:
-        # Fallback when SSP file lacks mass-remaining grid (treat formed == surviving).
-        _mstar_surviving = _mstar_formed
-    _mstar = _mstar_surviving  # backward-compat alias used by XRB below
-
-    # Radio emission (synchrotron from SF + AGN jets)
+    # ── Radio emission (synchrotron from SF + AGN jets) ───────────────
     if model._radio_enabled:
         from tengri.models.radio import radio_total
 
         radio_sed = radio_total(
-            model.ssp_data.ssp_wave,
+            wave_z2,
             L_ir=_L_ir,
             L_agn_bol=agn_bol_erg,
             q_ir=p.get("radio_q_ir", 2.64),
@@ -809,13 +828,12 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
         )
         sed = sed + radio_sed
 
-    # X-ray emission (XRBs + AGN corona)
+    # ── X-ray emission (XRBs + AGN corona) ────────────────────────────
     if model._xray_enabled:
         from tengri.models.xray import xray_total
 
-        # Use pipeline-computed SFR and M* (populated above)
         xray_sed = xray_total(
-            model.ssp_data.ssp_wave,
+            wave_z2,
             sfr=_sfr_cached,
             stellar_mass=_mstar,
             L_agn_bol=agn_bol_erg,
@@ -826,6 +844,7 @@ def compute_sed_components(model, params, _sfr=None, _weights=None, need_intrins
 
     return {
         "sed_total": sed,
+        "rest_wavelength": rest_wave_target,
         "sed_attenuated": sed_attenuated,
         "sed_intrinsic": sed_intrinsic,
         "ssp_flux_at_z": ssp_flux_at_z,

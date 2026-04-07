@@ -985,12 +985,12 @@ def posterior_plot_sed(result, mock=None, ax=None):
         sed_samples = []
         for i in range(n_samples):
             sample_i = {k: v[i] for k, v in result.samples.items()}
-            sed_i = result._model.predict_sed(sample_i)
+            sed_i = result._model.predict_rest_sed(sample_i).sed
             sed_samples.append(sed_i)
         sed_array = np.array(sed_samples)
 
         # Get wavelengths
-        wave_rest = np.array(result._model.ssp_data.ssp_wave)
+        wave_rest = np.array(result._model.wavelengths)
 
         # Plot posterior band (16th to 84th percentile)
         sed_lo = np.percentile(sed_array, 16, axis=0)
@@ -1000,12 +1000,12 @@ def posterior_plot_sed(result, mock=None, ax=None):
         )
 
         # Plot MAP SED
-        sed_map = result._model.predict_sed(result.params)
+        sed_map = result._model.predict_rest_sed(result.params).sed
         ax_sed.plot(wave_rest, sed_map, "-", color="C0", lw=2, label="MAP SED")
     else:
         # MAP only: just plot the best fit
-        wave_rest = np.array(result._model.ssp_data.ssp_wave)
-        sed_map = result._model.predict_sed(result.params)
+        wave_rest = np.array(result._model.wavelengths)
+        sed_map = result._model.predict_rest_sed(result.params).sed
         ax_sed.plot(wave_rest, sed_map, "-", color="C0", lw=2, label="Best fit")
 
     # Overlay mock data if provided
