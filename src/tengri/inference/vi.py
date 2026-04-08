@@ -468,7 +468,7 @@ def run_native_vi(
 # -------------------------------------------------------------------
 
 
-def run_fast_vi(
+def run_nifty_fast_vi(
     fitter,
     *,
     key,
@@ -525,8 +525,9 @@ def run_fast_vi(
     unflatten = engine["unflatten"]
 
     if engine["run_nifty_jit"] is None:
-        # NIFTy not available, fall back to full _run_nifty_vi
-        return fitter._run_nifty_vi(
+        # NIFTy JIT not available, fall back to full run_nifty_vi
+        return run_nifty_vi(
+            fitter,
             key=key,
             init_from=init_from,
             n_iterations=n_iterations,
@@ -850,7 +851,7 @@ def run_nifty_vi(
 
     t0 = time.time()
 
-    # Resolve sample_mode — same optimal schedule as _run_fast_vi
+    # Resolve sample_mode — same optimal schedule as _run_nifty_fast_vi
     resample_every = 5
     if sample_mode == "evi":
         resolved_mode = evi_sample_mode(n_iterations, cfg.evi_linear_fraction)

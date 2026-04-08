@@ -38,6 +38,18 @@ cd ~/writing-workspace/projects/differentiable_psd_sed_fitting
 latexmk -pdf 0-ms.tex
 ```
 
+## Naming contract (MANDATORY)
+
+**Read `docs/dev/NAMING_CONTRACT.md` before writing any new code, renames, or refactors.** It defines:
+- Class suffix conventions (`Config`, `Backend`, `Model`, `List`, `-er`)
+- Canonical class names (`SEDModel`, `Parameters`, `Spectroscopy`, `NoiseModel`, `LineList`, `PopulationFitter`)
+- Parameter namespace (two layers: user-facing prefixed → internal)
+- Function verb conventions (`compute_*`, `load_*`, `build_*`, `apply_*`, `resolve_*`)
+- Inference method names (13 canonical strings)
+- Module boundary rules
+
+**Key rule:** Use canonical names in all new code. Deprecated aliases (`Model`, `ParamSpec`, `SpectroscopyConfig`, `NoiseConfig`, `LineCatalog`, `HierarchicalFitter`) must never appear in new code.
+
 ## Code style
 
 - **Ruff** enforces linting and formatting — config in `pyproject.toml` under `[tool.ruff]`
@@ -160,31 +172,33 @@ Each class has a `.summary()` method for quick inspection:
 
 ## Inference methods
 
-**Canonical method names** (as of 2026-04-02). Old names (`geovi`, `raytrace`, `nuts`, etc.) still work but emit `DeprecationWarning` and will be removed in v1.0.
+**Canonical method names** (as of 2026-04-07). Old names (`geovi`, `raytrace`, `nuts`, etc.) still work but emit `DeprecationWarning` and will be removed in v1.0.
 
 | Canonical | Old name(s) | Command | Best for |
 |-----------|-------------|---------|----------|
-| **vi** | geovi, native_geovi | `fitter.run("vi")` | **Default.** geoVI — fast for single galaxy (~12s) |
-| vi_linear | mgvi, native_mgvi, evi | `fitter.run("vi_linear")` | MGVI/EVI — linear response variant |
-| vi_nifty | fast_geovi, nifty_geovi | `fitter.run("vi_nifty")` | NIFTy geoVI with full logging (debugging) |
-| vi_nifty_linear | fast_mgvi, nifty_mgvi | `fitter.run("vi_nifty_linear")` | NIFTy MGVI with full logging |
+| **vi** | geovi, vi_nifty, nifty_geovi | `fitter.run("vi")` | **Default.** geoVI via NIFTy optimize_kl (~12s) |
+| vi_linear | mgvi, evi, vi_nifty_linear | `fitter.run("vi_linear")` | MGVI via NIFTy optimize_kl |
+| vi_nifty_fast | — | `fitter.run("vi_nifty_fast")` | geoVI fast path (~35% faster, no logging) |
+| vi_nifty_fast_linear | — | `fitter.run("vi_nifty_fast_linear")` | MGVI fast path (~35% faster, no logging) |
+| vi_native | native_geovi | `fitter.run("vi_native")` | Native JAX geoVI (experimental, multi-seed) |
+| vi_native_linear | native_mgvi, native_evi | `fitter.run("vi_native_linear")` | Native JAX MGVI (experimental, multi-seed) |
 | mcmc_raytrace | raytrace | `fitter.run("mcmc_raytrace", n_steps=300)` | Exact MCMC, stochastic-gradient resilient |
 | mcmc_nuts | nuts | `fitter.run("mcmc_nuts", n_warmup=500)` | Gold-standard validation (low-D only) |
 | mcmc_ess | elliptical_slice | `fitter.run("mcmc_ess", n_burnin=200)` | Exact MCMC for Gaussian-prior latent models (Murray+2010) |
 | mcmc | — | `fitter.run("mcmc")` | Auto: NUTS if D<=20, else Ray Tracing |
-| evidence | nss | `fitter.run("evidence", n_live=500)` | Bayesian evidence (log Z) via Nested Slice Sampling. D <= 30 |
+| nss | evidence | `fitter.run("nss", n_live=500)` | Bayesian evidence (log Z) via Nested Slice Sampling. D <= 30 |
 | laplace | — | `fitter.run("laplace")` | Instant Gaussian posterior from Hessian at MAP |
 | pathfinder | — | `fitter.run("pathfinder", maxiter=30)` | Fast approximate posterior via L-BFGS path (Zhang+2022) |
 | map | — | `fitter.run("map", optimizer="adam")` | Point estimates |
-| auto | — | `fitter.run("auto")` | D<=15: laplace, D<=50: vi_linear, else: vi |
+| auto | — | `fitter.run("auto")` | D<=20: mcmc_nuts, else: vi |
 
 **Method chaining:** `result.refine("mcmc_raytrace", n_steps=1000)` re-runs from the current posterior. `result.validate(n_steps=200)` runs a short MCMC check and reports marginal overlap.
 
-**Internal dispatch:** `_run_fast_vi` handles vi/vi_linear (NIFTy fast path — default). `_run_native_vi` handles native VI (fully JIT — for batch/vmap). `_run_nifty_vi` handles vi_nifty/vi_nifty_linear. `_run_nss` handles evidence. `_run_laplace`/`_run_pathfinder`/`_run_elliptical_slice`/`_run_map`/`_run_nuts`/`_run_raytrace` handle the rest.
+**Internal dispatch:** `_run_vi`/`_run_vi_linear` handle vi/vi_linear (NIFTy optimize_kl — default). `_run_nifty_fast_vi`/`_run_nifty_fast_vi_linear` handle vi_nifty_fast/vi_nifty_fast_linear (NIFTy OptimizeVI.update tight loop). `_run_vi_native`/`_run_vi_native_linear` handle native VI (fully JIT — for batch/vmap). `_run_nss` handles nss. `_run_laplace`/`_run_pathfinder`/`_run_elliptical_slice`/`_run_map`/`_run_nuts`/`_run_raytrace` handle the rest.
 
-**Batch fitting:** `fitter.fit_batch(galaxies)` (NOT `fit_catalog`). Default method is `vi` (NIFTy geoVI). Use `method="vi"` with `native=True` for vmap batch path.
+**Batch fitting:** `fitter.fit_batch(galaxies)` (NOT `fit_catalog`). Default method is `vi` (NIFTy geoVI). Use `method="vi_native"` for vmap batch path.
 
-**Deprecated names (emit warning, removed in v1.0):** `geovi`->`vi`, `native_geovi`->`vi`, `mgvi`->`vi_linear`, `raytrace`->`mcmc_raytrace`, `nuts`->`mcmc_nuts`, `elliptical_slice`->`mcmc_ess`, `nss`->`evidence`, `geovi_nuts`->`vi`. See `_DEPRECATED_METHOD_ALIASES` in fitter.py for full map.
+**Deprecated names (emit warning, removed in v1.0):** `vi_nifty`->`vi`, `vi_nifty_linear`->`vi_linear`, `geovi`->`vi`, `mgvi`->`vi_linear`, `native_geovi`->`vi_native`, `native_evi`->`vi_native_linear`, `native_mgvi`->`vi_native_linear`, `raytrace`->`mcmc_raytrace`, `nuts`->`mcmc_nuts`, `elliptical_slice`->`mcmc_ess`, `evidence`->`nss`. See `_DEPRECATED_METHOD_ALIASES` in fitter.py for full map.
 
 ## Key conventions
 
@@ -220,6 +234,7 @@ Each class has a `.summary()` method for quick inspection:
 - DL14 templates (`draine_li2014`) require running `scripts/download_dl14_templates.py` — analytic fallback only until then.
 - AGN torus models in `torus.py` (`simple_torus`, `two_temperature_torus`) are **toy models** (1-2 temperature MBB, not radiative transfer). Use SKIRTOR (`skirtor_analytic`, auto-loads `data/skirtor_templates.npz`) for science.
 - AGN `multicolor_agn` (formerly `kubota_done`) implements the outer standard disc only. For the full 3-zone Kubota & Done (2018) model with warm Comptonization + hot corona, use `kubota_done_full` (`kubota_done_disc`).
+- nthcomp warm Comptonization templates: stored as HDF5 (`data/nthcomp_templates.h5`, ~14 MB, gitignored). Built by calling RELAGN's `pyNTHCOMP` as external dependency — tengri does NOT ship the solver. Build once: `git clone --depth=1 https://github.com/scotthgn/RELAGN.git /tmp/relagn_ref && python scripts/build_nthcomp_templates.py`. Crossval: `pytest -m crossval tests/crossval/test_nthcomp_relagn_crossval.py`. The (γ=1.7, kTe=0.1, kTbb=0.001) case has 20% max tolerance (dual-exponential Wien+Compton cutoff overlap).
 - AGN disc radiative efficiency is now spin-dependent: `η = 1 - sqrt(1 - 2/(3*r_isco))`. Previous hardcoded η=0.1 was wrong for non-zero spin.
 - BLR line strengths calibrated to Vanden Berk+2001 composite. Fe II pseudo-continuum available via `agn_fe2_strength` parameter (default 0, disabled).
 - Dust geometry functions: `wg00_shell`, `wg00_cloudy`, `wg00_dusty` implement Witt & Gordon (2000) RT-based star-dust geometries. These compute transmission T(λ), not k(λ).
@@ -325,10 +340,9 @@ See `docs/known_bugs.md` for full details, references to check, and regression t
 
 **RULE: Every fix MUST cite the original paper equation number or reference code line. Do NOT guess the correct formula — read the paper. Every fix MUST include a regression test that would have caught the bug.**
 
-**Status (2026-04-03):** 26 of 39 original audit bugs fixed. 11 of 23 emission-line-branch bugs fixed. Remaining open:
+**Status (2026-04-05):** 27 of 39 original audit bugs fixed (BUG-04 conditionally fixed — templates built). 11 of 23 emission-line-branch bugs fixed. Remaining open:
 
 ### Still open from original audit
-- `disc.py:500-546` — Warm Comptonization still uses simplified power-law enhancement, not nthcomp (K&D 2018 Section 2.2). Low impact for Paper I photometry. See `docs/known_bugs.md` BUG-04.
 - `sed_pipeline.py:651` — `_mstar` uses formed mass, not surviving mass for XRB scaling (comment added; fix requires surviving-mass computation from DSPS)
 
 ### Still open from emission line branch
@@ -362,6 +376,28 @@ See `docs/known_bugs.md` for full details, references to check, and regression t
 - `posterior.py` — BPT ratios return NaN for non-detections (not log10(1e-30)).
 - `fitter.py` — `eline_broad` consistency warning if SpectroscopyConfig and ParamSpec disagree.
 - `spectroscopy_config.py` — input validation added in `__post_init__`.
+
+## qmd search (MANDATORY before reading files)
+
+Before reading any file or exploring the codebase, ALWAYS search qmd first using the `tengri` collection:
+
+```json
+// Find a specific symbol or file
+[{ "type": "lex", "query": "symbol_name_here" }]
+
+// Conceptual search
+[{ "type": "vec", "query": "how does X work" }]
+
+// Best recall
+[
+  { "type": "lex", "query": "keyword" },
+  { "type": "vec", "query": "conceptual question about the feature" }
+]
+```
+
+Always scope to the tengri collection: `collections: ["tengri"]`
+
+Only fall back to Read/Glob/Grep if qmd returns insufficient results.
 
 ## Agent guide
 

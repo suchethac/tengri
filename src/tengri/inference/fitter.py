@@ -39,44 +39,54 @@ from tengri.utils.transforms import to_bounded, to_unbounded
 
 # Maps deprecated/old method strings → new canonical names.
 _DEPRECATED_METHOD_ALIASES: dict[str, str] = {
+    # Old nifty-qualified names → clean canonical
+    "vi_nifty": "vi",
+    "vi_nifty_linear": "vi_linear",
+    # Old geoVI names → vi
     "geovi": "vi",
-    "native_geovi": "vi",
+    "fast_geovi": "vi",
+    "nifty_geovi": "vi",
+    "geovi_nuts": "vi",
+    # Old MGVI / linear names → vi_linear
     "mgvi": "vi_linear",
-    "native_mgvi": "vi_linear",
+    "fast_mgvi": "vi_linear",
+    "nifty_mgvi": "vi_linear",
     "evi": "vi_linear",
-    "native_evi": "vi_linear",
-    "fast_geovi": "vi_nifty",
-    "nifty_geovi": "vi_nifty",
-    "fast_mgvi": "vi_nifty_linear",
-    "nifty_mgvi": "vi_nifty_linear",
+    # Old native names → native variants (were wrongly mapping to nifty)
+    "native_geovi": "vi_native",
+    "native_mgvi": "vi_native_linear",
+    "native_evi": "vi_native_linear",
+    # MCMC
     "raytrace": "mcmc_raytrace",
     "nuts": "mcmc_nuts",
     "elliptical_slice": "mcmc_ess",
-    "nss": "evidence",
-    "geovi_nuts": "vi",
+    # Evidence
+    "evidence": "nss",
 }
 
-# Threshold for "mcmc" auto-selection: low-D → NUTS, high-D → Ray Tracing.
+# D threshold for "auto": D <= this → mcmc_nuts, D > this → vi
+_AUTO_D_THRESHOLD = 20
+
+# D threshold for "mcmc": D <= this → NUTS, D > this → Ray Tracing
 _MCMC_AUTO_D_THRESHOLD = 20
 
-# Threshold for "auto" method selection.
-_AUTO_D_THRESHOLD = 20  # D <= this → mcmc_nuts; D > this → vi (nifty geoVI)
-
-# Canonical method names
+# Canonical method names (public API)
 _CANONICAL_METHODS = {
-    "map",
-    "laplace",
-    "pathfinder",
-    "vi",
-    "vi_linear",
-    "vi_nifty",
-    "vi_nifty_linear",
-    "mcmc",
+    "vi",  # geoVI via NIFTy optimize_kl — default
+    "vi_linear",  # MGVI via NIFTy optimize_kl
+    "vi_nifty_fast",  # geoVI via NIFTy OptimizeVI.update (no logging)
+    "vi_nifty_fast_linear",  # MGVI via NIFTy OptimizeVI.update
+    "vi_native",  # Native JAX geoVI (experimental)
+    "vi_native_linear",  # Native JAX MGVI (experimental)
+    "mcmc",  # auto: NUTS (D≤20) or Ray Tracing (D>20)
     "mcmc_raytrace",
     "mcmc_nuts",
     "mcmc_ess",
-    "evidence",
-    "auto",
+    "map",
+    "laplace",
+    "pathfinder",
+    "nss",  # Nested Slice Sampling, log Z (D≤30)
+    "auto",  # auto: mcmc_nuts (D≤20) or vi (D>20)
 }
 
 
@@ -110,13 +120,15 @@ def resolve_method(method: str, emit_warning: bool = True) -> str:
     'vi'
     >>> resolve_method("geovi")  # doctest: +SKIP
     'vi'  # and emits DeprecationWarning
+    >>> resolve_method("vi_nifty")  # doctest: +SKIP
+    'vi'  # and emits DeprecationWarning
     >>> resolve_method("invalid_method")
     ParameterError: Unknown method ...
     """
     if method is None:
         raise ParameterError(
             "method=None is not allowed. Pass an explicit method string "
-            "(e.g. 'vi', 'mcmc_nuts', 'auto') or omit the argument to use "
+            "(e.g. 'vi_nifty', 'mcmc_nuts', 'auto') or omit the argument to use "
             "the default from defaults.toml."
         )
 
@@ -481,9 +493,9 @@ class Fitter:
         # Available methods
         lines.append("")
         lines.append(
-            "  Methods:     map, vi, vi_linear, vi_native, vi_native_linear, "
-            "vi_nifty, vi_nifty_linear, mcmc, mcmc_raytrace, mcmc_nuts, mcmc_ess, "
-            "laplace, pathfinder, evidence, auto"
+            "  Methods:     vi, vi_linear, vi_nifty_fast, vi_nifty_fast_linear, "
+            "vi_native, vi_native_linear, mcmc, mcmc_raytrace, mcmc_nuts, mcmc_ess, "
+            "map, laplace, pathfinder, nss, auto"
         )
 
         lines.append(sep)
@@ -904,10 +916,17 @@ class Fitter:
     # Fully JIT'd EVI optimizer
     # -------------------------------------------------------------------
 
-    def _run_native_vi(self, *, key, **kwargs):
+    def _run_vi_native(self, *, key, init_from=None, **kwargs):
         from tengri.inference.vi import run_native_vi
 
-        return run_native_vi(self, key=key, **kwargs)
+        kwargs.setdefault("sample_mode", "geovi")
+        return run_native_vi(self, key=key, init_from=init_from, **kwargs)
+
+    def _run_vi_native_linear(self, *, key, init_from=None, **kwargs):
+        from tengri.inference.vi import run_native_vi
+
+        kwargs.setdefault("sample_mode", "linear")
+        return run_native_vi(self, key=key, init_from=init_from, **kwargs)
 
     def run(self, method: str = "vi", *, init_from=None, key=None, **kwargs):
         """Run inference.
@@ -915,44 +934,40 @@ class Fitter:
         Parameters
         ----------
         method : str
-            Canonical names (recommended):
-
-            ``"vi"``             — Variational inference (geoVI by default).
-            ``"vi_linear"``      — Linear VI / MGVI.
-            ``"vi_nifty"``       — NIFTy tight-loop geoVI.
-            ``"vi_nifty_linear"``— NIFTy tight-loop MGVI.
-            ``"mcmc"``           — MCMC, auto-selects NUTS (D≤20) or Ray Tracing (D>20).
-            ``"mcmc_raytrace"``  — Ray Tracing explicitly.
-            ``"mcmc_nuts"``      — NUTS via BlackJAX.
-            ``"mcmc_ess"``       — Elliptical Slice Sampling.
-            ``"map"``            — MAP optimization.
-            ``"laplace"``        — Gaussian at MAP.
-            ``"pathfinder"``     — L-BFGS path.
-            ``"evidence"``       — Nested Slice Sampling (log Z).
-            ``"auto"``           — Auto-selects by dimensionality.
-
-            Power-user ``vi_flavor=`` kwarg (only with ``method="vi"``):
-            ``vi_flavor="nifty"``      — NIFTy tight loop.
-            ``vi_flavor="nifty_full"`` — NIFTy with full logging.
-            ``vi_flavor="linear"``     — Linearized geoVI (MGVI).
+            ``"vi"``                   — geoVI via NIFTy (nonlinear, default).
+            ``"vi_linear"``            — MGVI via NIFTy (linearised).
+            ``"vi_nifty_fast"``        — geoVI fast path (~35% faster, no logging).
+            ``"vi_nifty_fast_linear"`` — MGVI fast path (~35% faster, no logging).
+            ``"vi_native"``            — Native JAX geoVI (experimental).
+            ``"vi_native_linear"``     — Native JAX MGVI (experimental).
+            ``"mcmc_nuts"``            — NUTS via BlackJAX (default for D≤20).
+            ``"mcmc_raytrace"``        — Ray Tracing (Behroozi 2025).
+            ``"mcmc"``                 — Auto: NUTS (D≤20) or Ray Tracing (D>20).
+            ``"mcmc_ess"``             — Elliptical Slice Sampling.
+            ``"map"``                  — MAP optimisation.
+            ``"laplace"``              — Gaussian approximation at MAP.
+            ``"pathfinder"``           — L-BFGS path (Zhang+2022).
+            ``"nss"``                  — Nested Slice Sampling, log Z (D≤30).
+            ``"auto"``                 — mcmc_nuts (D≤20) or vi (D>20).
 
             Deprecated aliases (still work, emit DeprecationWarning):
-            ``"geovi"``, ``"native_geovi"`` → ``"vi"``
-            ``"mgvi"``, ``"native_mgvi"``   → ``"vi_linear"``
-            ``"fast_geovi"``, ``"nifty_geovi"`` → ``"vi_nifty"``
-            ``"fast_mgvi"``, ``"nifty_mgvi"``   → ``"vi_nifty_linear"``
-            ``"raytrace"`` → ``"mcmc_raytrace"``
-            ``"nuts"``     → ``"mcmc_nuts"``
+            ``"vi_nifty"``         → ``"vi"``
+            ``"vi_nifty_linear"``  → ``"vi_linear"``
+            ``"geovi"``, ``"fast_geovi"``,
+            ``"nifty_geovi"``      → ``"vi"``
+            ``"mgvi"``, ``"fast_mgvi"``,
+            ``"nifty_mgvi"``       → ``"vi_linear"``
+            ``"native_geovi"``     → ``"vi_native"``
+            ``"native_mgvi"``, ``"native_evi"`` → ``"vi_native_linear"``
+            ``"raytrace"``         → ``"mcmc_raytrace"``
+            ``"nuts"``             → ``"mcmc_nuts"``
             ``"elliptical_slice"`` → ``"mcmc_ess"``
-            ``"nss"``      → ``"evidence"``
+            ``"evidence"``         → ``"nss"``
 
         init_from : Posterior, optional
-            Use a previous result as initialization.
+            Use a previous result as warm-start initialisation.
         key : PRNGKey, optional
-            Random key.
-        vi_flavor : str, optional
-            Backend variant for ``method="vi"`` only.
-            ``"nifty"``, ``"nifty_full"``, or ``"linear"``.
+            Random key (defaults to PRNGKey(42)).
         **kwargs
             Method-specific arguments passed to the underlying sampler.
 
@@ -967,20 +982,16 @@ class Fitter:
         # Resolve deprecated aliases and validate method
         method = resolve_method(method)
 
-        # --- Merge TOML defaults (caller kwargs win) ---
+        # --- Merge TOML method-specific defaults (caller kwargs win) ---
         try:
             from tengri.core.defaults import get_inference_defaults
 
-            _toml_top = get_inference_defaults()   # top-level [inference] keys
-            _toml_method = get_inference_defaults(method)  # [inference.<method>]
-            # vi_flavor from TOML top-level, then caller can override via kwarg
-            _toml_vi_flavor = _toml_top.get("vi_flavor", None)
-            kwargs = {**_toml_method, **kwargs}
+            kwargs = {**get_inference_defaults(method), **kwargs}
         except Exception:
-            _toml_vi_flavor = None
+            pass
 
-        # Pop vi_flavor: caller kwarg > TOML top-level > None
-        vi_flavor = kwargs.pop("vi_flavor", _toml_vi_flavor)
+        # Strip any stale vi_flavor kwarg that callers may pass (no longer used)
+        kwargs.pop("vi_flavor", None)
 
         # --- "auto" method: dimensionality-based selection ---
         if method == "auto":
@@ -988,65 +999,38 @@ class Fitter:
             try:
                 from tengri.core.defaults import get_inference_defaults
 
-                _auto = get_inference_defaults()
-                threshold = int(_auto.get("mcmc_auto_d", _AUTO_D_THRESHOLD))
+                threshold = int(get_inference_defaults().get("mcmc_auto_d", _AUTO_D_THRESHOLD))
             except Exception:
                 threshold = _AUTO_D_THRESHOLD
-            if d <= threshold:
-                method = "mcmc_nuts"
-            else:
-                method = "vi"
+            method = "mcmc_nuts" if d <= threshold else "vi"
 
         # --- Dispatch to underlying _run_* methods ---
         if method == "map":
             result = self._run_map(key=key, init_from=init_from, **kwargs)
 
-        elif method in ("vi", "vi_linear"):
-            # method governs linear vs nonlinear; vi_flavor governs NIFTy vs native backend.
-            # "vi"        = nonlinear geoVI;  "vi_linear" = linear MGVI.
-            # vi_flavor "nifty"/"nifty_full" selects the NIFTy fast path (default).
-            # vi_flavor "linear"/"native"/None falls back to the pure-JAX native path.
-            _linear = method == "vi_linear"
-            if vi_flavor in ("nifty", None):
-                result = self._run_fast_vi(
-                    key=key,
-                    init_from=init_from,
-                    sample_mode="linear_resample" if _linear else "nonlinear_resample",
-                    **({} if _linear else {"posterior_method": "nonlinear"}),
-                    **kwargs,
-                )
-            elif vi_flavor == "nifty_full":
-                result = self._run_nifty_vi(
-                    key=key,
-                    init_from=init_from,
-                    sample_mode="linear_resample" if _linear else "nonlinear_resample",
-                    **kwargs,
-                )
-            else:
-                # "linear" / "native" / unknown → pure-JAX native path
-                result = self._run_native_vi(
-                    key=key,
-                    init_from=init_from,
-                    sample_mode="linear" if _linear else "geovi",
-                    **kwargs,
-                )
+        elif method == "vi":
+            # geoVI via NIFTy optimize_kl (default)
+            result = self._run_vi(key=key, init_from=init_from, **kwargs)
 
-        elif method == "vi_nifty":
-            result = self._run_fast_vi(
-                key=key,
-                init_from=init_from,
-                sample_mode="nonlinear_resample",
-                posterior_method="nonlinear",
-                **kwargs,
-            )
+        elif method == "vi_linear":
+            # MGVI via NIFTy optimize_kl
+            result = self._run_vi_linear(key=key, init_from=init_from, **kwargs)
 
-        elif method == "vi_nifty_linear":
-            result = self._run_fast_vi(
-                key=key,
-                init_from=init_from,
-                sample_mode="linear_resample",
-                **kwargs,
-            )
+        elif method == "vi_nifty_fast":
+            # geoVI fast path — NIFTy OptimizeVI.update, no logging
+            result = self._run_nifty_fast_vi(key=key, init_from=init_from, **kwargs)
+
+        elif method == "vi_nifty_fast_linear":
+            # MGVI fast path — NIFTy OptimizeVI.update, no logging
+            result = self._run_nifty_fast_vi_linear(key=key, init_from=init_from, **kwargs)
+
+        elif method == "vi_native":
+            # Native JAX geoVI — experimental, not production-ready
+            result = self._run_vi_native(key=key, init_from=init_from, **kwargs)
+
+        elif method == "vi_native_linear":
+            # Native JAX MGVI — experimental, not production-ready
+            result = self._run_vi_native_linear(key=key, init_from=init_from, **kwargs)
 
         elif method == "mcmc":
             # Auto-select: NUTS for low-D (exact gold-standard), RT for high-D
@@ -1065,7 +1049,7 @@ class Fitter:
         elif method == "mcmc_ess":
             result = self._run_elliptical_slice(key=key, init_from=init_from, **kwargs)
 
-        elif method == "evidence":
+        elif method == "nss":
             result = self._run_nss(key=key, init_from=init_from, **kwargs)
 
         elif method == "laplace":
@@ -1077,9 +1061,10 @@ class Fitter:
         else:
             raise ValueError(
                 f"Unknown method: '{method}'. "
-                f"Canonical names: 'vi', 'vi_linear', 'vi_nifty', 'vi_nifty_linear', "
-                f"'mcmc', 'mcmc_raytrace', 'mcmc_nuts', 'mcmc_ess', 'map', 'laplace', "
-                f"'pathfinder', 'evidence', 'auto'. "
+                f"Canonical names: 'vi', 'vi_linear', 'vi_nifty_fast', "
+                f"'vi_nifty_fast_linear', 'vi_native', 'vi_native_linear', "
+                f"'mcmc', 'mcmc_raytrace', 'mcmc_nuts', 'mcmc_ess', 'map', "
+                f"'laplace', 'pathfinder', 'nss', 'auto'. "
                 f"See Fitter.run() docstring for deprecated aliases."
             )
 
@@ -1092,10 +1077,29 @@ class Fitter:
 
         return run_nss(self, key=key, **kwargs)
 
-    def _run_fast_vi(self, *, key, **kwargs):
-        from tengri.inference.vi import run_fast_vi
+    def _run_vi(self, *, key, init_from=None, **kwargs):
+        from tengri.inference.vi import run_nifty_vi
 
-        return run_fast_vi(self, key=key, **kwargs)
+        kwargs.setdefault("sample_mode", "nonlinear_resample")
+        return run_nifty_vi(self, key=key, init_from=init_from, **kwargs)
+
+    def _run_vi_linear(self, *, key, init_from=None, **kwargs):
+        from tengri.inference.vi import run_nifty_vi
+
+        kwargs.setdefault("sample_mode", "linear_resample")
+        return run_nifty_vi(self, key=key, init_from=init_from, **kwargs)
+
+    def _run_nifty_fast_vi(self, *, key, init_from=None, **kwargs):
+        from tengri.inference.vi import run_nifty_fast_vi
+
+        kwargs.setdefault("sample_mode", "nonlinear_resample")
+        return run_nifty_fast_vi(self, key=key, init_from=init_from, **kwargs)
+
+    def _run_nifty_fast_vi_linear(self, *, key, init_from=None, **kwargs):
+        from tengri.inference.vi import run_nifty_fast_vi
+
+        kwargs.setdefault("sample_mode", "linear_resample")
+        return run_nifty_fast_vi(self, key=key, init_from=init_from, **kwargs)
 
     def fit_batch(
         self,
@@ -1210,8 +1214,3 @@ class Fitter:
         from tengri.inference.mcmc import run_elliptical_slice
 
         return run_elliptical_slice(self, key=key, **kwargs)
-
-    def _run_nifty_vi(self, *, key, **kwargs):
-        from tengri.inference.vi import run_nifty_vi
-
-        return run_nifty_vi(self, key=key, **kwargs)

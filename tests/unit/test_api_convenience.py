@@ -106,13 +106,16 @@ class TestDeprecationWarnings:
     @pytest.mark.parametrize(
         "old_name,canonical",
         [
+            ("vi_nifty", "vi"),
+            ("vi_nifty_linear", "vi_linear"),
             ("geovi", "vi"),
-            ("native_geovi", "vi"),
+            ("native_geovi", "vi_native"),
+            ("native_evi", "vi_native_linear"),
             ("mgvi", "vi_linear"),
             ("raytrace", "mcmc_raytrace"),
             ("nuts", "mcmc_nuts"),
             ("elliptical_slice", "mcmc_ess"),
-            ("nss", "evidence"),
+            ("evidence", "nss"),
         ],
     )
     def test_alias_maps_to_canonical(self, old_name, canonical):
@@ -125,8 +128,16 @@ class TestDeprecationWarnings:
         from tengri.inference.fitter import Fitter
 
         doc = Fitter.run.__doc__
-        for name in ("vi", "vi_linear", "mcmc_raytrace", "mcmc_nuts", "auto"):
-            assert name in doc, f"'{name}' not found in Fitter.run() docstring"
+        for name in (
+            "vi",
+            "vi_linear",
+            "vi_nifty_fast",
+            "mcmc_raytrace",
+            "mcmc_nuts",
+            "nss",
+            "auto",
+        ):
+            assert name in doc, f"'{name}' not in Fitter.run() docstring"
 
 
 # ---------------------------------------------------------------------------
@@ -422,5 +433,5 @@ class TestModelFitIntegration:
     def test_recommend_method_returns_valid_string(self, model_and_mock):
         model, _ = model_and_mock
         method = model.recommend_method()
-        valid = {"vi", "vi_linear", "laplace", "vi_nifty", "map"}
+        valid = {"vi_nifty", "vi_nifty_linear", "laplace", "map"}
         assert method in valid, f"Unexpected method: {method}"

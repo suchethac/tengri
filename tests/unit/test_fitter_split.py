@@ -2,15 +2,16 @@
 
 
 def test_vi_module_importable():
-    """After split, vi.py must be importable and expose run_fast_vi."""
-    from tengri.inference.vi import run_fast_vi
+    """After split, vi.py must be importable and expose run_nifty_fast_vi."""
+    from tengri.inference.vi import run_nifty_fast_vi
 
-    assert callable(run_fast_vi)
+    assert callable(run_nifty_fast_vi)
 
 
 def test_vi_module_all_functions():
-    from tengri.inference.vi import run_fast_vi, run_native_vi, run_nifty_vi
+    from tengri.inference.vi import run_native_vi, run_nifty_fast_vi, run_nifty_vi
 
+    assert callable(run_nifty_fast_vi)
     assert callable(run_native_vi)
     assert callable(run_nifty_vi)
 

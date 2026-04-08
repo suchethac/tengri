@@ -97,27 +97,19 @@ apply_igm = true
 
 [inference]
 # Default method for model.fit() and fitter.run()
-# Options: "auto" | "vi" | "vi_linear" | "mcmc_raytrace" | "mcmc_nuts" |
-#          "mcmc" | "map" | "laplace" | "pathfinder" | "evidence"
-#
-# Default method for model.fit() and fitter.run()
-# Options: "auto" | "vi" | "mcmc_nuts" | "mcmc_raytrace" | "mcmc" |
-#          "vi_linear" | "map" | "laplace" | "pathfinder" | "evidence"
+# Options: "auto" | "vi" | "vi_linear" | "vi_nifty_fast" | "vi_nifty_fast_linear" |
+#          "vi_native" | "vi_native_linear" |
+#          "mcmc_nuts" | "mcmc_raytrace" | "mcmc" | "mcmc_ess" |
+#          "map" | "laplace" | "pathfinder" | "nss"
 #
 # "auto" dispatch (controlled by mcmc_auto_d below):
-#   D <= mcmc_auto_d → "mcmc_nuts"  (exact NUTS, good for small models)
-#   D >  mcmc_auto_d → "vi"         (NIFTy geoVI, fast for high-D)
+#   D <= mcmc_auto_d → "mcmc_nuts"    (exact NUTS, good for low-D models)
+#   D >  mcmc_auto_d → "vi"           (NIFTy geoVI, fast for high-D)
 method = "auto"
-
-# Default VI flavor when method = "vi" or "vi_linear"
-# "nifty"      = NIFTy tight-loop geoVI (default, faster)
-# "nifty_full" = NIFTy with full logging (useful for debugging)
-# "linear"     = linearised geoVI (MGVI)
-vi_flavor = "nifty"
 
 # "auto" dimensionality threshold:
 #   D <= mcmc_auto_d → mcmc_nuts
-#   D >  mcmc_auto_d → vi (nifty geoVI)
+#   D >  mcmc_auto_d → vi_nifty (NIFTy geoVI)
 mcmc_auto_d = 20
 
 
@@ -138,8 +130,8 @@ refresh_rate = 0.0        # Partial momentum refresh rate (0 = pure ray tracing)
 
 
 [inference.mcmc_nuts]
-n_warmup = 500    # HMC warmup (dual-averaging step-size adaptation)
-n_steps  = 1000   # Posterior samples after warmup
+n_warmup  = 500    # HMC warmup (dual-averaging step-size adaptation)
+n_samples = 1000   # Posterior samples after warmup
 
 
 [inference.mcmc_ess]

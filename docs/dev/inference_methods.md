@@ -440,21 +440,23 @@ off between diagnostic richness and raw speed.
 
 | Internal method | Canonical name | Old names (deprecated) |
 |----------------|---------------|----------------------|
-| `_run_fast_vi` | `vi` (default) | `native_geovi`, `geovi`, `fast_geovi`, `evi`, `fast_evi`, `native_evi` |
-| `_run_fast_vi` | `vi_linear` | `native_mgvi`, `mgvi`, `fast_mgvi` |
-| `_run_nifty_vi` | `vi_nifty` | `nifty_geovi` |
-| `_run_nifty_vi` | `vi_nifty_linear` | `nifty_mgvi` |
+| `_run_vi` | `vi` (default) | `geovi`, `vi_nifty`, `nifty_geovi`, `fast_geovi` |
+| `_run_vi_linear` | `vi_linear` | `mgvi`, `evi`, `vi_nifty_linear`, `nifty_mgvi`, `fast_mgvi` |
+| `_run_nifty_fast_vi` | `vi_nifty_fast` | — |
+| `_run_nifty_fast_vi_linear` | `vi_nifty_fast_linear` | — |
+| `_run_vi_native` | `vi_native` | `native_geovi` |
+| `_run_vi_native_linear` | `vi_native_linear` | `native_mgvi`, `native_evi` |
 | `_run_map` | `map` | — |
 | `_run_nuts` | `mcmc_nuts` | `nuts` |
 | `_run_raytrace` | `mcmc_raytrace` | `raytrace` |
+| `_run_nss` | `nss` | `evidence` |
 
-**Removed names**: `geovi_nifty` → `vi_nifty`, `mgvi_nifty` → `vi_nifty_linear`,
-`geovi_full` → `vi_nifty`, `mgvi_full` → `vi_nifty_linear`, `fit_catalog` → `fit_batch`.
+**Removed names**: `fit_catalog` → `fit_batch`.
 Hybrid `geovi_nuts`/`mgvi_nuts` replaced by chaining: `result.refine("mcmc_nuts")`.
 
 ### 6.1 vi (Default)
 
-Formerly `native_geovi`. Old name still works but emits a `DeprecationWarning`.
+Uses NIFTy's `optimize_kl` for geoVI. Old names (`geovi`, `vi_nifty`) still work but emit a `DeprecationWarning`.
 
 ```python
 result = fitter.run("vi", n_iterations=15)

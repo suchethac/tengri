@@ -171,17 +171,18 @@ The `"geovi"` / `"mgvi"` / `"evi"` methods (without `native_` prefix) use NIFTy'
 
 ### Internal Dispatch
 
-| Internal method | Public names |
-|----------------|-------------|
-| `_run_evi_jit` | native_geovi, native_mgvi, native_evi |
-| `_run_fast_vi` | geovi, fast_geovi, mgvi, fast_mgvi, evi, fast_evi, geovi_nuts, mgvi_nuts |
-| `_run_nifty_vi` | nifty_geovi, nifty_mgvi |
-| `_run_map` | map |
-| `_run_nuts` | nuts |
-| `_run_raytrace` | raytrace |
-
-**Removed names**: `geovi_nifty` -> `nifty_geovi`, `mgvi_nifty` -> `nifty_mgvi`,
-`geovi_full` -> `nifty_geovi`, `mgvi_full` -> `nifty_mgvi`.
+| Internal method | Canonical name | Old names (deprecated) |
+|----------------|---------------|----------------------|
+| `_run_vi` | `vi` | `geovi`, `vi_nifty`, `nifty_geovi`, `fast_geovi` |
+| `_run_vi_linear` | `vi_linear` | `mgvi`, `evi`, `vi_nifty_linear`, `nifty_mgvi`, `fast_mgvi` |
+| `_run_nifty_fast_vi` | `vi_nifty_fast` | — |
+| `_run_nifty_fast_vi_linear` | `vi_nifty_fast_linear` | — |
+| `_run_vi_native` | `vi_native` | `native_geovi` |
+| `_run_vi_native_linear` | `vi_native_linear` | `native_mgvi`, `native_evi` |
+| `_run_map` | `map` | — |
+| `_run_nuts` | `mcmc_nuts` | `nuts` |
+| `_run_raytrace` | `mcmc_raytrace` | `raytrace` |
+| `_run_nss` | `nss` | `evidence` |
 
 ### Block Gibbs API
 

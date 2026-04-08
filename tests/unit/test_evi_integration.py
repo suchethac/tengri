@@ -99,7 +99,7 @@ class TestEVIRuns:
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
         result = fitter.run(
-            "native_evi",
+            "vi_native_linear",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
@@ -119,7 +119,7 @@ class TestEVIRuns:
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
         result = fitter.run(
-            "native_evi",
+            "vi_native_linear",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
@@ -137,7 +137,7 @@ class TestEVIRuns:
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
         result = fitter.run(
-            "native_evi",
+            "vi_native_linear",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
@@ -155,7 +155,7 @@ class TestEVIRuns:
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
         result = fitter.run(
-            "native_evi",
+            "vi_native_linear",
             n_iterations=3,
             n_samples=2,
             n_seeds=3,

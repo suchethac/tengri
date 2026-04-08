@@ -9,19 +9,25 @@ on the method name:
 
 | Dispatch function | Canonical methods | Old names (deprecated) |
 |-------------------|-------------------|------------------------|
-| `_run_native_vi` | `vi`, `vi_linear` | `native_geovi`, `native_mgvi` |
-| `_run_fast_vi` | `vi`, `vi_linear` | `geovi`, `fast_geovi`, `mgvi`, `fast_mgvi`, `geovi_nuts`, `mgvi_nuts` |
-| `_run_nifty_vi` | `vi_nifty`, `vi_nifty_linear` | `nifty_geovi`, `nifty_mgvi` |
+| `_run_vi` | `vi` | `geovi`, `vi_nifty`, `nifty_geovi`, `fast_geovi` |
+| `_run_vi_linear` | `vi_linear` | `mgvi`, `evi`, `vi_nifty_linear`, `nifty_mgvi`, `fast_mgvi` |
+| `_run_nifty_fast_vi` | `vi_nifty_fast` | — |
+| `_run_nifty_fast_vi_linear` | `vi_nifty_fast_linear` | — |
+| `_run_vi_native` | `vi_native` | `native_geovi` |
+| `_run_vi_native_linear` | `vi_native_linear` | `native_mgvi`, `native_evi` |
 | `_run_map` | `map` | — |
 | `_run_nuts` | `mcmc_nuts` | `nuts` |
 | `_run_raytrace` | `mcmc_raytrace` | `raytrace` |
-| `_run_nss` | `evidence` | `nss` |
+| `_run_nss` | `nss` | `evidence` |
 | `_run_laplace` | `laplace` | — |
 | `_run_pathfinder` | `pathfinder` | — |
 | `_run_elliptical_slice` | `mcmc_ess` | `elliptical_slice` |
 
-**`vi`** is the default going forward. It is a JIT-compiled geoVI
-with a resample+update schedule and nonlinear posterior draws. Ray Tracing
+**`vi`** is the default. It uses NIFTy's `optimize_kl` for geoVI
+with a resample+update schedule and nonlinear posterior draws.
+**`vi_nifty_fast`** uses NIFTy's `OptimizeVI.update` in a tight loop
+(~35% faster, no logging). **`vi_native`** is a fully JIT'd native JAX
+implementation (experimental, supports multi-seed). Ray Tracing
 validates exact posteriors. NUTS validates low-dimensional problems. MAP
 provides initialization.
 
@@ -37,7 +43,7 @@ provides initialization.
 | `mcmc_ess` | `inference/elliptical_slice.py` | -- | Yes | Any (Gaussian prior) |
 | `laplace` | `inference/laplace.py` | -- | Approximate (Gaussian) | Any |
 | `pathfinder` | `inference/pathfinder.py` | blackjax | Approximate | Up to ~100 |
-| `evidence` | `inference/ns/nss.py` | -- | Yes + evidence | Up to ~30 |
+| `nss` | `inference/ns/nss.py` | -- | Yes + evidence | Up to ~30 |
 
 ### Removed method names
 
