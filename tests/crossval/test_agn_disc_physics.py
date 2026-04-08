@@ -128,7 +128,9 @@ class TestPowerlawDiscPhysics:
         nu = 2.99792458e10 / (WAVE * 1e-8)
         sort_idx = jnp.argsort(nu)
         l_bol_integrated = float(jnp.trapezoid(l_nu[sort_idx], nu[sort_idx]))
-        l_bol_expected = 10.0**11.0 * 0.5
+        # L_nu is in erg/s/Hz (CGS), so integral is erg/s
+        _LSUN = 3.828e33
+        l_bol_expected = 10.0**11.0 * 0.5 * _LSUN  # erg/s
         # Allow 20% tolerance due to finite wavelength grid
         assert abs(l_bol_integrated / l_bol_expected - 1.0) < 0.2
 

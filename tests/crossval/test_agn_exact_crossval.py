@@ -476,7 +476,9 @@ class TestDiscEnergyConservation:
         nu = 2.99792458e18 / wave
         sort_idx = jnp.argsort(nu)
         l_bol_integrated = float(jnp.trapezoid(l_nu[sort_idx], nu[sort_idx]))
-        l_bol_expected = 10.0**agn_log_lbol * agn_frac
+        # L_nu is erg/s/Hz (CGS), integral is erg/s → compare in erg/s
+        _LSUN = 3.828e33
+        l_bol_expected = 10.0**agn_log_lbol * agn_frac * _LSUN
 
         np.testing.assert_allclose(
             l_bol_integrated,

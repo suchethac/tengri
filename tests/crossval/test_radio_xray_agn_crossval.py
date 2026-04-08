@@ -209,7 +209,7 @@ class TestAGNCrossval:
         l_bol = abs(np.trapezoid(l_nu[::-1], nu[::-1]))
 
         lsun = 3.828e33
-        expected = 10**11.0  # Lsun
+        expected = 10**11.0 * lsun  # erg/s (L_nu is in erg/s/Hz after CGS standardization)
         # Should be within factor 2 (numerical integration over finite grid)
         ratio = l_bol / expected
         assert 0.5 < ratio < 2.0, f"Disc L_bol ratio = {ratio:.2f}"
@@ -243,7 +243,8 @@ class TestAGNCrossval:
         nu = c_cgs / (np.asarray(wave) * 1e-8)
         l_bol = abs(np.trapezoid(l_nu[::-1], nu[::-1]))
 
-        expected = 10**11.0
+        lsun = 3.828e33
+        expected = 10**11.0 * lsun  # erg/s
         ratio = l_bol / expected
         assert 0.3 < ratio < 3.0, f"AGN L_bol ratio = {ratio:.2f}"
 
