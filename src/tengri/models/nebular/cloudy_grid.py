@@ -23,7 +23,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.models.nebular._constants import _C_CGS, _LOG10_ZSUN
+from tengri.models.nebular._constants import _C_CGS, _LOG10_ZSUN, _LSUN_ERG
 from tengri.models.nebular._shared import _interp_index_weight, compute_qh
 
 
@@ -333,7 +333,7 @@ class CloudyGridBackend:
         -------
         wavelength : array, shape (n_wave_cont,)
         luminosity : array, shape (n_wave_cont,)
-            Nebular continuum L_nu (Lsun/Hz).
+            Nebular continuum L_nu (Lsun/Hz, converted to erg/s/Hz at SED assembly).
         """
         if neb_logZ_gas is None:
             neb_logZ_gas = log_z
@@ -408,7 +408,7 @@ class CloudyGridBackend:
         Returns
         -------
         array, shape (n_wave,)
-            Nebular SED in Lsun/Hz on the SSP wavelength grid.
+            Nebular SED in erg/s/Hz on the SSP wavelength grid.
         """
         # Get line luminosities
         line_wave, line_lum = self.predict_nebular_line_luminosities(
@@ -439,14 +439,13 @@ class CloudyGridBackend:
             # Gaussian profiles: spread L_line (Lsun) into L_nu (Lsun/Hz).
             # sigma_nu = sigma_aa * c / lambda^2 converts the wavelength width to frequency.
             # profile / (sqrt(2π) * sigma_nu) normalises to ∫profile dnu = 1 (units: 1/Hz).
-            # DO NOT multiply by _LSUN_ERG: ll is in Lsun, neb_sed is in Lsun/Hz.
             for j in range(len(line_wave)):
                 lw = line_wave[j]
                 ll = line_lum[j]
                 sigma_nu = line_sigma_aa * _C_CGS / (lw * 1e-8) ** 2
                 profile = jnp.exp(-0.5 * ((ssp_wave - lw) / line_sigma_aa) ** 2)
                 profile = profile / (jnp.sqrt(2 * jnp.pi) * sigma_nu)
-                neb_sed = neb_sed + ll * profile  # Lsun * 1/Hz = Lsun/Hz
+                neb_sed = neb_sed + ll * profile
         else:
             # Delta functions: add to nearest pixel
             # Convert line luminosity to flux density: L_line / delta_nu
@@ -458,7 +457,7 @@ class CloudyGridBackend:
                 # Approximate delta_nu from pixel width
                 dwave = jnp.abs(ssp_wave[idx + 1] - ssp_wave[idx - 1]) / 2.0
                 dnu = _C_CGS / (ssp_wave[idx] * 1e-8) ** 2 * dwave * 1e-8
-                line_flux_density = line_lum[j] / dnu  # Lsun/Hz
-                neb_sed = neb_sed.at[idx].add(line_flux_density)
+                neb_sed = neb_sed.at[idx].add(line_lum[j] / dnu)
 
-        return neb_sed
+        # Convert from internal Lsun/Hz to erg/s/Hz
+        return neb_sed * _LSUN_ERG

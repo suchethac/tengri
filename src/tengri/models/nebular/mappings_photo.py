@@ -54,7 +54,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.models.nebular._constants import _C_CGS, _LOG10_ZSUN, _LSUN_ERG
+from tengri.models.nebular._constants import _C_CGS, _LOG10_ZSUN
 from tengri.models.nebular._shared import _interp_index_weight, compute_qh
 
 # ---------------------------------------------------------------------------
@@ -567,9 +567,8 @@ class MappingsPhotoStellarBackend:
             )
 
             # L_line = ratio × 10^{logHB_per_logq} × Q_H  [erg/s]
-            # Convert to Lsun: divide by _LSUN_ERG
             l_hb_per_qh = 10.0**logHB_pq_i  # erg/photon
-            return weight_i * qh_i * l_hb_per_qh * ratios_i * (1.0 - neb_fesc) / _LSUN_ERG
+            return weight_i * qh_i * l_hb_per_qh * ratios_i * (1.0 - neb_fesc)
 
         all_contribs = jax.vmap(_contrib_one_age)(young_ages, young_weights)
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
@@ -602,7 +601,7 @@ class MappingsPhotoStellarBackend:
 
         Returns
         -------
-        array, (n_wave,)  Lsun/Hz on the SSP wavelength grid.
+        array, (n_wave,)  erg/s/Hz on the SSP wavelength grid.
         """
         line_wave, line_lum = self.predict_nebular_line_luminosities(
             ssp_weights,
@@ -757,6 +756,6 @@ class MappingsPhotoAGNBackend:
         # L_line = ratio × L_Hβ / L_sun_erg
         l_hb_frac = 10.0**logHB_pl  # L_Hβ / L_ion (dimensionless)
         l_ion_erg = 10.0**agn_log_l_ion_erg
-        line_lum = ratios * l_hb_frac * l_ion_erg * (1.0 - neb_fesc) / _LSUN_ERG
+        line_lum = ratios * l_hb_frac * l_ion_erg * (1.0 - neb_fesc)
 
         return grid.line_wavelengths, line_lum

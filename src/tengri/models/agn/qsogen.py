@@ -584,7 +584,7 @@ def compute_qsogen_sed(
     empirical emission lines (with Baldwin effect), Balmer continuum,
     and optional SMC-like dust reddening.
 
-    The output is L_nu in Lsun/Hz, normalized via ``agn_log_lbol``.
+    The output is L_nu in erg/s/Hz, normalized via ``agn_log_lbol``.
 
     Pipeline order (matching original qsogen):
     1. Continuum + hot dust (shape SED)
@@ -624,7 +624,7 @@ def compute_qsogen_sed(
     Returns
     -------
     array, shape (n_wave,)
-        L_nu [Lsun Hz^-1].
+        L_nu [erg s^-1 Hz^-1].
     """
     # --- Component 1: Broken power-law continuum ---
     continuum = _broken_powerlaw_continuum(
@@ -648,8 +648,8 @@ def compute_qsogen_sed(
     integral_nu = jnp.trapezoid(f_nu_cont[idx_sort], nu[idx_sort])
     integral_nu = jnp.maximum(jnp.abs(integral_nu), 1e-30)
 
-    l_bol_lsun = 10.0**agn_log_lbol
-    norm_factor = l_bol_lsun / integral_nu
+    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
+    norm_factor = l_bol_erg / integral_nu
     l_nu = f_nu_cont * norm_factor
 
     # --- Component 3: Emission lines (added AFTER normalization) ---

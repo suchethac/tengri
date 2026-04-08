@@ -12,7 +12,7 @@ Two toy models are provided for testing and fast prototyping:
    with silicate opacity. 2 free parameters.
 2. **two_temperature_torus** — hot + warm dust components. 4 free params.
 
-Both return specific luminosity L_nu in Lsun/Hz. All functions are pure
+Both return specific luminosity L_nu in erg/s/Hz. All functions are pure
 JAX and JIT-compilable.
 
 References
@@ -85,7 +85,7 @@ def simple_torus(
     Returns
     -------
     array, shape (n_wave,)
-        Specific luminosity L_nu [Lsun Hz^-1].
+        Specific luminosity L_nu [erg s^-1 Hz^-1].
     """
     warnings.warn(
         "simple_torus is a toy model (single-temperature MBB, not radiative transfer) "
@@ -114,7 +114,7 @@ def simple_torus(
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
     l_nu_erg = l_bol_erg * agn_torus_frac * shape / integral_safe
-    return l_nu_erg / _LSUN_ERG
+    return l_nu_erg
 
 
 # ===================================================================
@@ -166,7 +166,7 @@ def two_temperature_torus(
     Returns
     -------
     array, shape (n_wave,)
-        Specific luminosity L_nu [Lsun Hz^-1].
+        Specific luminosity L_nu [erg s^-1 Hz^-1].
     """
     warnings.warn(
         "two_temperature_torus is a toy model (two-temperature MBB, not radiative transfer) "
@@ -196,4 +196,4 @@ def two_temperature_torus(
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
     l_nu_erg = l_bol_erg * agn_torus_frac * shape / integral_safe
-    return l_nu_erg / _LSUN_ERG
+    return l_nu_erg

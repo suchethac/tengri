@@ -386,11 +386,11 @@ class TestMappingsPhotoAGNBackend:
     def test_expected_luminosity_magnitude(self):
         """Sanity check: typical L_Hβ from a log L_ion=45 AGN."""
         # With ratio=1, logHB_per_lum=-2.4, agn_log_l_ion_erg=45.0:
-        # L = 10^{-2.4} × 10^45 / 3.828e33 ≈ 10^{9.0} Lsun
+        # L = 10^{-2.4} × 10^45 ≈ 10^{42.6} erg/s
         _, lum = self.backend.predict_agn_line_luminosities(agn_log_l_ion_erg=45.0)
-        # All lines = 1.0 × Hβ so each should be ~10^9 Lsun
-        assert float(lum[0]) > 1e6  # sanity floor
-        assert float(lum[0]) < 1e15  # sanity ceiling
+        # All lines = 1.0 × Hβ so each should be ~10^{42.6} erg/s
+        assert float(lum[0]) > 1e39  # sanity floor
+        assert float(lum[0]) < 1e48  # sanity ceiling
 
 
 # ---------------------------------------------------------------------------

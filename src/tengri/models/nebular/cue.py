@@ -497,6 +497,8 @@ def predict_all_lines(
     wav_sorted = weights.nn_line_wav[weights.batched_sort_idx]
 
     # Convert from log10(Lsun/Q_H) to Lsun (gradient-safe)
+    # Internal computation stays in Lsun to avoid exponent overflow;
+    # converted to erg/s at predict_nebular_sed return.
     exponent = log_lum_sorted - gas_logq + gas_logqion - _LOG_LSUN
     exponent_safe = jnp.clip(exponent, -100.0, 100.0)
     luminosities = 10.0**exponent_safe
@@ -533,7 +535,7 @@ def predict_continuum(
     wavelength : array, shape (n_wave,)
         Continuum wavelength grid in Angstrom.
     luminosity : array, shape (n_wave,)
-        Nebular continuum in Lsun/Hz.
+        Nebular continuum in erg/s/Hz.
     """
     log_spec = _speculator_log_spectrum(nn_params, weights.cont_net)
 
@@ -543,9 +545,8 @@ def predict_continuum(
     wav_sorted = weights.cont_wav[sort_idx]
 
     # Convert from log10(Lsun/Hz/Q_H) to Lsun/Hz:
-    # Following Cue emulator.py predict_cont():
-    #   cont = 10**(log_spec - gas_logq + gas_logqion - log10(3.839E33))
-    # Clamp exponent to avoid inf/underflow (gradient-safe)
+    # Internal computation stays in Lsun/Hz to avoid exponent overflow;
+    # converted to erg/s/Hz at predict_nebular_sed return.
     exponent = log_spec_sorted - gas_logq + gas_logqion - _LOG_LSUN
     luminosity = 10.0 ** jnp.clip(exponent, -100.0, 100.0)
 
@@ -1010,7 +1011,7 @@ class CueBackend:
         wavelength : array, shape (n_wave,)
             Wavelength grid in Angstrom.
         luminosity : array, shape (n_wave,)
-            Nebular continuum in Lsun/Hz.
+            Nebular continuum in erg/s/Hz.
         """
         p = self._resolve_cue_params(
             ssp_weights=ssp_weights,
@@ -1080,7 +1081,7 @@ class CueBackend:
         Returns
         -------
         array, shape (n_wave,)
-            Total nebular SED in Lsun/Hz on the SSP wavelength grid.
+            Total nebular SED in erg/s/Hz on the SSP wavelength grid.
         """
         # Resolve params once (avoids double computation for lines + continuum)
         p = self._resolve_cue_params(
@@ -1109,16 +1110,15 @@ class CueBackend:
 
         # Add emission lines
         if line_sigma_aa > 0:
-            # Gaussian profiles: spread L_line (Lsun) into L_nu (Lsun/Hz).
+            # Gaussian profiles: spread L_line (erg/s) into L_nu (erg/s/Hz).
             # profile / (sqrt(2π) * sigma_nu) is normalised so ∫profile dnu = 1 (units: 1/Hz).
-            # DO NOT multiply by _LSUN_ERG: ll is in Lsun, neb_sed is in Lsun/Hz.
             for j in range(len(line_wav)):
                 lw = line_wav[j]
                 ll = line_lum[j]
                 sigma_nu = line_sigma_aa * _C_CGS / (lw * 1e-8) ** 2
                 profile = jnp.exp(-0.5 * ((ssp_wave - lw) / line_sigma_aa) ** 2)
                 profile = profile / (jnp.sqrt(2.0 * jnp.pi) * sigma_nu)
-                neb_sed = neb_sed + ll * profile  # Lsun * 1/Hz = Lsun/Hz
+                neb_sed = neb_sed + ll * profile  # erg/s * 1/Hz = erg/s/Hz
         else:
             # Delta function: add to nearest pixel
             n_wave = ssp_wave.shape[0]
@@ -1128,10 +1128,11 @@ class CueBackend:
                 idx = jnp.clip(idx, 1, n_wave - 2)
                 dwave = jnp.abs(ssp_wave[idx + 1] - ssp_wave[idx - 1]) / 2.0
                 dnu = _C_CGS / (ssp_wave[idx] * 1e-8) ** 2 * dwave * 1e-8
-                line_flux_density = line_lum[j] / dnu  # Lsun/Hz
+                line_flux_density = line_lum[j] / dnu
                 neb_sed = neb_sed.at[idx].add(line_flux_density)
 
-        return neb_sed
+        # Convert from internal Lsun/Hz to erg/s/Hz
+        return neb_sed * _LSUN_ERG
 
 
 # ---------------------------------------------------------------------------

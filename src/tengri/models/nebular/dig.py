@@ -87,7 +87,7 @@ def mix_dig_emission(
     Returns
     -------
     array, shape (n_wave,)
-        Total nebular SED (HII + DIG weighted mixture) in Lsun/Hz.
+        Total nebular SED (HII + DIG weighted mixture) in erg/s/Hz.
     """
     common_kw = dict(
         ssp_wave=ssp_wave,

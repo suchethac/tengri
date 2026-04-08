@@ -140,18 +140,18 @@ class TestXrayAgnCoronaFromDisc:
         We feed the old xray_agn_corona the same alpha_ox that Just+2007
         would predict for a given L_2500, and compare spectra.
         """
-        from tengri.models.xray import _LSUN, xray_agn_corona
+        from tengri.models.xray import xray_agn_corona
 
         l_2500_erg = 1e30
         alpha_ox = float(alpha_ox_from_l2500(l_2500_erg))
 
-        # Old interface needs L_agn_bol. Back out from L_2500:
+        # L_agn_bol in erg/s. Back out from L_2500:
         # L_2500 = L_bol / (BC * nu_2500)  => L_bol = L_2500 * BC * nu_2500
         nu_2500 = 1.199e15
         bc_2500 = 5.15
-        l_bol_lsun = l_2500_erg * bc_2500 * nu_2500 / _LSUN
+        l_bol_erg = l_2500_erg * bc_2500 * nu_2500
 
-        l_old = xray_agn_corona(WAVE_XRAY, L_agn_bol=l_bol_lsun, alpha_ox=alpha_ox)
+        l_old = xray_agn_corona(WAVE_XRAY, L_agn_bol=l_bol_erg, alpha_ox=alpha_ox)
         l_new = xray_agn_corona_from_disc(
             WAVE_XRAY,
             l_2500_erg_hz=l_2500_erg,

@@ -456,7 +456,7 @@ def compute_shock_sed(
     Returns
     -------
     array, shape (n_wave,)
-        Shock emission SED in Lsun/Hz.
+        Shock emission SED in erg/s/Hz.
     """
     line_waves, line_lums = _shock_line_arrays(
         shock_velocity,

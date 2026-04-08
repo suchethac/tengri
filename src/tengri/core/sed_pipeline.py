@@ -733,13 +733,14 @@ def compute_sed_components(
         if model._agn_parametric:
             agn_log_lbol = p.get("agn_log_lbol", 10.0)
             agn_frac_for_model = 1.0
-            agn_bol_erg = 10.0**agn_log_lbol
+            agn_bol_erg = 10.0**agn_log_lbol * 3.828e33  # Lsun → erg/s
         else:
             agn_frac_for_model = p.get("agn_frac", 0.0)
             nu_agn = _c_aa_const / model.ssp_data.ssp_wave
             L_bol_stellar = -jnp.trapezoid(sed, nu_agn)
-            agn_log_lbol = jnp.log10(jnp.maximum(L_bol_stellar * agn_frac_for_model, 1e-50))
             agn_bol_erg = L_bol_stellar * agn_frac_for_model
+            # AGN model functions expect log10(L_bol / Lsun), convert from erg/s
+            agn_log_lbol = jnp.log10(jnp.maximum(agn_bol_erg, 1e-50)) - jnp.log10(3.828e33)
 
     # ── Populate physical quantities for radio/X-ray ──────────────────
     _L_ir = L_ir if model._dust_emission_model is not None else p.get("_L_ir_cached", 0.0)

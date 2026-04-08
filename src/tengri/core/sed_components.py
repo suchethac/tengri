@@ -268,14 +268,15 @@ def build_agn_component(model):
     ):
         if is_parametric:
             frac_for_model = 1.0
-            bol_erg = 10.0**agn_log_lbol
+            bol_erg = 10.0**agn_log_lbol * 3.828e33  # Lsun → erg/s
         else:
             frac_for_model = agn_frac
             _c_aa = 2.99792458e18
             nu = _c_aa / wave
             L_bol_stellar = -jnp.trapezoid(sed_so_far, nu)
-            agn_log_lbol = jnp.log10(jnp.maximum(L_bol_stellar * agn_frac, 1e-50))
             bol_erg = L_bol_stellar * agn_frac
+            # AGN model functions expect log10(L_bol / Lsun), convert from erg/s
+            agn_log_lbol = jnp.log10(jnp.maximum(bol_erg, 1e-50)) - jnp.log10(3.828e33)
 
         agn_sed = agn_model_fn(
             wave,

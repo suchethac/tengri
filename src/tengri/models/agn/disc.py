@@ -14,7 +14,7 @@ Four models are provided:
    (optically thin, radiatively inefficient). Based on Mahadevan (1997)
    and Nemmen+2014.
 
-All return specific luminosity L_nu in Lsun/Hz as a function of rest-frame
+All return specific luminosity L_nu in erg/s/Hz as a function of rest-frame
 wavelength. All functions are pure JAX and JIT-compilable.
 
 Physical constants are in CGS. Wavelength inputs are in Angstrom.
@@ -101,7 +101,7 @@ def powerlaw_disc(
     Returns
     -------
     array, shape (n_wave,)
-        Specific luminosity L_nu [Lsun Hz^-1].
+        Specific luminosity L_nu [erg s^-1 Hz^-1].
     """
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
     nu = _wavelength_to_nu(wavelength)
@@ -118,7 +118,7 @@ def powerlaw_disc(
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
     l_nu_erg = l_bol_erg * agn_frac * shape / integral_safe
-    return l_nu_erg / _LSUN_ERG
+    return l_nu_erg
 
 
 # ===================================================================
@@ -428,7 +428,7 @@ def multicolor_disc(
     Returns
     -------
     array, shape (n_wave,)
-        Specific luminosity L_nu [Lsun Hz^-1].
+        Specific luminosity L_nu [erg s^-1 Hz^-1].
     """
     nu = _wavelength_to_nu(wavelength)
 
@@ -495,7 +495,7 @@ def multicolor_disc(
     l_nu_total_safe = jnp.maximum(jnp.abs(l_nu_total), 1e-100)
     scale = l_bol_requested / l_nu_total_safe
 
-    return l_nu_intrinsic * scale / _LSUN_ERG
+    return l_nu_intrinsic * scale
 
 
 # ===================================================================
@@ -650,12 +650,12 @@ def compute_l2500(
     wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom], need not be sorted.
     l_nu : array, shape (n_wave,)
-        Specific luminosity [Lsun Hz^-1].
+        Specific luminosity [erg s^-1 Hz^-1].
 
     Returns
     -------
     float
-        L_nu at 2500 A [Lsun Hz^-1].
+        L_nu at 2500 A [erg s^-1 Hz^-1].
     """
     sort_idx = jnp.argsort(wavelength)
     return jnp.interp(2500.0, wavelength[sort_idx], l_nu[sort_idx])
@@ -748,7 +748,7 @@ def kubota_done_disc(
     Returns
     -------
     array, shape (n_wave,)
-        Specific luminosity L_nu [Lsun Hz^-1].
+        Specific luminosity L_nu [erg s^-1 Hz^-1].
 
     References
     ----------
@@ -930,7 +930,7 @@ def kubota_done_disc(
     l_nu_integral_safe = jnp.maximum(jnp.abs(l_nu_integral), 1e-100)
     scale = l_bol_requested / l_nu_integral_safe
 
-    return l_nu_total * scale / _LSUN_ERG
+    return l_nu_total * scale
 
 
 # ===================================================================
@@ -1000,7 +1000,7 @@ def adaf_disc(
     Returns
     -------
     array, shape (n_wave,)
-        Specific luminosity L_nu [Lsun Hz^-1].
+        Specific luminosity L_nu [erg s^-1 Hz^-1].
 
     Notes
     -----
@@ -1161,4 +1161,4 @@ def adaf_disc(
     total_integral_safe = jnp.maximum(jnp.abs(total_integral), 1e-100)
     scale = l_bol_requested / total_integral_safe
 
-    return l_nu_total * scale / _LSUN_ERG
+    return l_nu_total * scale

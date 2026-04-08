@@ -1417,13 +1417,15 @@ def build_fused_rest_sed(model):
             if agn_parametric:
                 agn_log_lbol = p.get("agn_log_lbol", 10.0)
                 agn_frac_val = 1.0
-                agn_bol_erg = 10.0**agn_log_lbol
+                agn_bol_erg = 10.0**agn_log_lbol * LSUN_ERG_PER_S
             else:
                 agn_frac_val = p.get("agn_frac", 0.0)
                 nu_agn = _c_aa / ssp_wave.astype(jnp.float64)
                 L_bol_stellar = -jnp.trapezoid(sed, nu_agn)
-                agn_log_lbol = jnp.log10(jnp.maximum(L_bol_stellar * agn_frac_val, 1e-50))
                 agn_bol_erg = L_bol_stellar * agn_frac_val
+                # AGN model functions expect log10(L_bol / Lsun), convert from erg/s
+                _log_lsun = jnp.log10(LSUN_ERG_PER_S)
+                agn_log_lbol = jnp.log10(jnp.maximum(agn_bol_erg, 1e-50)) - _log_lsun
 
         # --- 5. Interpolate to panchromatic grid if needed ---
         if _needs_extension:

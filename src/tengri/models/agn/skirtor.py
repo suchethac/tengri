@@ -144,7 +144,7 @@ def _skirtor_analytic_fallback(
     Returns
     -------
     array, shape (n_wave,)
-        Specific luminosity L_nu [Lsun Hz^-1].
+        Specific luminosity L_nu [erg s^-1 Hz^-1].
     """
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
     nu = _wavelength_to_nu(wavelength)
@@ -240,7 +240,7 @@ def _skirtor_analytic_fallback(
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
     l_nu_erg = l_bol_erg * agn_torus_frac * shape / integral_safe
-    return l_nu_erg / _LSUN_ERG
+    return l_nu_erg
 
 
 # ===================================================================
@@ -330,7 +330,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
 
             fn(wavelength, agn_log_lbol, agn_tau_skirtor, agn_p_skirtor,
                agn_q_skirtor, agn_oa_skirtor, agn_cos_inc,
-               agn_torus_frac, **kwargs) -> L_nu [Lsun Hz^-1]
+               agn_torus_frac, **kwargs) -> L_nu [erg s^-1 Hz^-1]
 
     Raises
     ------
@@ -410,7 +410,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         Returns
         -------
         array, shape (n_wave,)
-            Specific luminosity L_nu [Lsun Hz^-1].
+            Specific luminosity L_nu [erg s^-1 Hz^-1].
         """
         l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
 
@@ -434,7 +434,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
         l_nu_erg = l_bol_erg * agn_torus_frac * sed_resampled / integral_safe
-        return l_nu_erg / _LSUN_ERG
+        return l_nu_erg
 
     return skirtor_grid
 

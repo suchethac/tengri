@@ -28,6 +28,13 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
 
     Q_H = integral_{0}^{912A} [L_nu / (h * nu)] d_nu
 
+    .. warning::
+
+        Returns ~0 for wNE (with Nebular Emission) SSP spectra because
+        ionizing photons are pre-consumed by CLOUDY during SSP generation.
+        This is expected — wNE SSPs already include nebular emission.
+        Use non-nebular SSP files if you need Q_H for custom nebular models.
+
     Parameters
     ----------
     ssp_wave : array, shape (n_wave,)
@@ -159,7 +166,7 @@ class NebularContinuumFallback:
         Returns
         -------
         jnp.ndarray
-            Nebular SED on the SSP wavelength grid (Lsun/Hz).
+            Nebular SED on the SSP wavelength grid (erg/s/Hz).
         """
         from tengri.models.nebular._protocol import NebularContinuumUnavailableError
 

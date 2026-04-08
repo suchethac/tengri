@@ -73,7 +73,7 @@ def xray_xrb(
     Returns
     -------
     array (n_wave,)
-        L_nu in Lsun/Hz.
+        L_nu in erg/s/Hz.
     """
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / (1.6022e-9)  # convert to keV
@@ -99,8 +99,8 @@ def xray_xrb(
     band_int_hmxb = jnp.maximum(jnp.trapezoid(spec_hmxb_fine, nu_fine), 1e-60)
     band_int_lmxb = jnp.maximum(jnp.trapezoid(spec_lmxb_fine, nu_fine), 1e-60)
 
-    L_nu_hmxb = (L_hmxb_ref / _LSUN) / band_int_hmxb * spec_hmxb
-    L_nu_lmxb = (L_lmxb_ref / _LSUN) / band_int_lmxb * spec_lmxb
+    L_nu_hmxb = L_hmxb_ref / band_int_hmxb * spec_hmxb
+    L_nu_lmxb = L_lmxb_ref / band_int_lmxb * spec_lmxb
 
     # X-ray only (E > 0.1 keV = lambda < 124 A)
     xray_mask = wavelength < 124.0
@@ -205,7 +205,7 @@ def xray_agn_corona_from_disc(
     Returns
     -------
     array (n_wave,)
-        L_nu in Lsun/Hz.
+        L_nu in erg/s/Hz.
     """
     # alpha_ox from disc UV luminosity
     alpha_ox = alpha_ox_from_l2500(l_2500_erg_hz) + delta_alpha_ox
@@ -213,8 +213,7 @@ def xray_agn_corona_from_disc(
     # Derive L_2keV from alpha_ox definition:
     #   alpha_ox = 0.384 * log10(L_2keV / L_2500)
     #   => L_2keV = L_2500 * 10^(alpha_ox / 0.384)
-    l_2500_lsun_hz = l_2500_erg_hz / _LSUN
-    l_2kev_lsun_hz = l_2500_lsun_hz * 10.0 ** (alpha_ox / 0.384)
+    l_2kev_erg_hz = l_2500_erg_hz * 10.0 ** (alpha_ox / 0.384)
 
     # Build power-law spectrum with exponential cutoff
     nu = _C_AA / wavelength
@@ -223,7 +222,7 @@ def xray_agn_corona_from_disc(
     spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
 
     # Normalise at 2 keV
-    l_nu = l_2kev_lsun_hz / (_KEV_TO_HZ * E_ref) * spec
+    l_nu = l_2kev_erg_hz / (_KEV_TO_HZ * E_ref) * spec
 
     # X-ray mask (E > 0.1 keV => lambda < 124 A)
     l_nu = jnp.where(wavelength < 124.0, l_nu, 0.0)
@@ -253,7 +252,7 @@ def xray_agn_corona(
     wavelength : array (n_wave,)
         Wavelength in Angstrom.
     L_agn_bol : float
-        AGN bolometric luminosity (Lsun).
+        AGN bolometric luminosity (erg/s).
     gamma : float
         Photon index. Default 1.8. Range: 1.4-2.4.
     E_cut : float
@@ -264,17 +263,17 @@ def xray_agn_corona(
     Returns
     -------
     array (n_wave,)
-        L_nu in Lsun/Hz.
+        L_nu in erg/s/Hz.
     """
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / (1.6022e-9)
 
-    # Monochromatic luminosity density at 2500 A in Lsun/Hz.
+    # Monochromatic luminosity density at 2500 A in erg/s/Hz.
     # L_bol = BC_2500 * nu_2500 * L_nu(2500) => L_nu = L_bol / (BC * nu)
     # BC_2500 ~ 5.15 (Hopkins+2007), nu_2500 = c / 2500 A = 1.199e15 Hz
     _NU_2500 = 1.199e15  # Hz
     _BC_2500 = 5.15  # Hopkins+2007 bolometric correction at 2500 A
-    L_2500 = L_agn_bol * _LSUN / (_BC_2500 * _NU_2500) / _LSUN  # Lsun/Hz
+    L_2500 = L_agn_bol / (_BC_2500 * _NU_2500)  # erg/s/Hz
 
     # alpha_ox = 0.384 * log10(L_2keV / L_2500A)
     # => L_2keV = L_2500 * 10^(alpha_ox / 0.384)

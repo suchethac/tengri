@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri.models.radio import (
-    _L0_SYNCH_LSUN_HZ,
+    _L0_SYNCH,
     _synchrotron_suppression,
     radio_components,
     radio_freefree,
@@ -76,24 +76,24 @@ class TestSynchrotronSuppression:
 
     def test_bright_source_unchanged(self):
         """At L >> L0, L_corr ≈ L (suppression negligible)."""
-        L_bright = jnp.array(1e6 * _L0_SYNCH_LSUN_HZ)  # 1e6 × L0
+        L_bright = jnp.array(1e6 * _L0_SYNCH)  # 1e6 × L0
         L_corr = _synchrotron_suppression(L_bright)
         ratio = float(L_corr / L_bright)
         assert abs(ratio - 1.0) < 1e-3, f"Bright source ratio {ratio:.6f} should be ~1"
 
     def test_faint_source_suppressed(self):
         """At L << L0, L_corr ≈ L^3 / L0^2 (quadratic suppression)."""
-        L_faint = jnp.array(1e-6 * _L0_SYNCH_LSUN_HZ)  # 1e-6 × L0
+        L_faint = jnp.array(1e-6 * _L0_SYNCH)  # 1e-6 × L0
         L_corr = _synchrotron_suppression(L_faint)
         # Expected: L_corr ≈ L / (L0/L)^2 = L^3 / L0^2
-        expected = float(L_faint) ** 3 / float(_L0_SYNCH_LSUN_HZ) ** 2
+        expected = float(L_faint) ** 3 / float(_L0_SYNCH) ** 2
         assert abs(float(L_corr) - expected) / expected < 0.02, (
             f"Faint source L_corr {float(L_corr):.4e} != expected {expected:.4e}"
         )
 
     def test_suppression_monotonic(self):
         """Correction factor increases monotonically with L."""
-        L_vals = jnp.logspace(-10, 2, 100) * _L0_SYNCH_LSUN_HZ
+        L_vals = jnp.logspace(-10, 2, 100) * _L0_SYNCH
         L_corr = _synchrotron_suppression(L_vals)
         factors = L_corr / L_vals
         # All factors should be < 1 and increasing

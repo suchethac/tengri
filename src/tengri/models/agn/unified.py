@@ -47,7 +47,7 @@ def register_agn_model(name: str) -> Callable:
     """Register an AGN model function (decorator factory).
 
     The registered function must have signature:
-        fn(wavelength, agn_log_lbol, **kwargs) -> L_nu [Lsun Hz^-1]
+        fn(wavelength, agn_log_lbol, **kwargs) -> L_nu [erg s^-1 Hz^-1]
     """
 
     def decorator(fn: Callable) -> Callable:
@@ -122,7 +122,7 @@ def unified_agn(
     Returns
     -------
     array, shape (n_wave,)
-        Total AGN L_nu [Lsun Hz^-1] = L_disc + L_torus.
+        Total AGN L_nu [erg s^-1 Hz^-1] = L_disc + L_torus.
     """
     from tengri.models.agn.skirtor import skirtor_analytic
 
@@ -201,7 +201,7 @@ def simple_agn(
     Returns
     -------
     array, shape (n_wave,)
-        L_nu [Lsun Hz^-1].
+        L_nu [erg s^-1 Hz^-1].
     """
     l_nu = unified_agn(
         wavelength,
@@ -261,7 +261,7 @@ def standard_agn(
     Returns
     -------
     array, shape (n_wave,)
-        L_nu [Lsun Hz^-1].
+        L_nu [erg s^-1 Hz^-1].
     """
     l_nu = unified_agn(
         wavelength,
@@ -341,7 +341,7 @@ def multicolor_agn(
     Returns
     -------
     array, shape (n_wave,)
-        L_nu [Lsun Hz^-1].
+        L_nu [erg s^-1 Hz^-1].
     """
     l_nu = unified_agn(
         wavelength,
@@ -453,7 +453,7 @@ def kubota_done_full_agn(
     Returns
     -------
     array, shape (n_wave,)
-        L_nu [Lsun Hz^-1].
+        L_nu [erg s^-1 Hz^-1].
     """
     # 3-zone disc gets (1 - covering_factor) of L_bol
     l_disc = kubota_done_disc(
@@ -535,7 +535,7 @@ def skirtor_agn(
     Returns
     -------
     array, shape (n_wave,)
-        L_nu [Lsun Hz^-1].
+        L_nu [erg s^-1 Hz^-1].
     """
     # Disc gets (1 - covering_factor) of L_bol
     l_disc = powerlaw_disc(
@@ -644,7 +644,7 @@ def adaf_agn(
     Returns
     -------
     array, shape (n_wave,)
-        L_nu [Lsun Hz^-1].
+        L_nu [erg s^-1 Hz^-1].
 
     References
     ----------
@@ -809,7 +809,7 @@ def unified_nlr_blr(
     Returns
     -------
     array, shape (n_wave,)
-        Total AGN L_nu [Lsun Hz^-1].
+        Total AGN L_nu [erg s^-1 Hz^-1].
     """
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
 
@@ -872,7 +872,7 @@ def unified_nlr_blr(
         covering_fraction=agn_covering_nlr,
         fwhm_kms=agn_nlr_fwhm,
     )
-    l_nlr = l_nlr_erg / _LSUN_ERG
+    l_nlr = l_nlr_erg
 
     # --- BLR emission (masked by torus) ---
     l_blr_erg = blr_emission(
@@ -881,7 +881,7 @@ def unified_nlr_blr(
         covering_fraction=agn_covering_blr,
         fwhm_kms=agn_blr_fwhm,
     )
-    l_blr = mask_blr * polar_trans * l_blr_erg / _LSUN_ERG
+    l_blr = mask_blr * polar_trans * l_blr_erg
 
     # --- Total ---
     l_total = l_disc_masked + l_torus + l_nlr + l_blr

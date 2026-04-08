@@ -52,20 +52,20 @@ _LSUN = 3.828e33  # erg/s
 _JY = 1e-23  # erg/s/cm^2/Hz
 
 # Bell+2003 synchrotron suppression threshold at 1.4 GHz reference.
-# L0 = 3e28 erg/s/Hz converted to Lsun/Hz.
-_L0_SYNCH_LSUN_HZ: float = 3.0e28 / _LSUN  # ≈ 7.84e-6 Lsun/Hz
+# L0 = 3e28 erg/s/Hz (Mancuso+2017 / Bell+2003).
+_L0_SYNCH: float = 3.0e28  # erg/s/Hz
 
 # Wavelength boundary separating radio from IR (1 mm = 1e7 Angstrom = 300 GHz)
 _RADIO_WAVE_MIN_AA: float = 1.0e7
 
-# Murphy+2011 Eq. 11 free-free calibration constant [Lsun/Hz per (M☉/yr) at 1 GHz, Te=1e4 K]
+# Murphy+2011 Eq. 11 free-free calibration constant [erg/s/Hz per (M☉/yr) at 1 GHz, Te=1e4 K]
 # Derivation: SFR/(M☉/yr) = 4.6e-28 × (Te/1e4)^{-0.45} × (ν/GHz)^{0.1} × L_ν[erg/s/Hz]
-# → L_ν[Lsun/Hz] = SFR × (Te/1e4)^{0.45} × (ν/GHz)^{-0.1} / (4.6e-28 × _LSUN)
-# At 1.4 GHz, Te=1e4: 5.68e-7 × (1.4)^{-0.1} ≈ 5.49e-7 Lsun/Hz per M☉/yr
-_C_FF_LSUN_HZ: float = 1.0 / (4.6e-28 * _LSUN)  # ≈ 5.68e-7
+# → L_ν[erg/s/Hz] = SFR × (Te/1e4)^{0.45} × (ν/GHz)^{-0.1} / 4.6e-28
+# At 1.4 GHz, Te=1e4: 2.174e27 × (1.4)^{-0.1} ≈ 2.10e27 erg/s/Hz per M☉/yr
+_C_FF: float = 1.0 / 4.6e-28  # ≈ 2.174e27
 
-# Kennicutt+1998 IR-SFR calibration: L_IR [Lsun] → SFR [M☉/yr]
-_SFR_IR_KENNICUTT: float = 1.73e10
+# Kennicutt+1998 IR-SFR calibration: L_IR [erg/s] → SFR [M☉/yr]
+_SFR_IR_KENNICUTT: float = 1.73e10 * 3.828e33  # ≈ 6.62e43 erg/s
 
 
 def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:
@@ -85,12 +85,12 @@ def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:
     Parameters
     ----------
     L_ref : array or float
-        Luminosity density at the reference frequency in Lsun/Hz.
+        Luminosity density at the reference frequency in erg/s/Hz.
 
     Returns
     -------
     array or float
-        Corrected luminosity density in Lsun/Hz.
+        Corrected luminosity density in erg/s/Hz.
 
     Notes
     -----
@@ -99,7 +99,7 @@ def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:
     extrapolation so that the power-law shape is preserved.
     """
     L_safe = jnp.where(L_ref > 0.0, L_ref, 1.0e-40)
-    return L_ref / (1.0 + (_L0_SYNCH_LSUN_HZ / L_safe) ** 2)
+    return L_ref / (1.0 + (_L0_SYNCH / L_safe) ** 2)
 
 
 def radio_sfr_bell2003(
@@ -127,7 +127,7 @@ def radio_sfr_bell2003(
     wavelength : array (n_wave,)
         Wavelength in Angstrom.
     L_ir : float
-        Total infrared luminosity (8-1000 μm) in Lsun.
+        Total infrared luminosity (8-1000 μm) in erg/s.
     q_ir : float
         FIR-radio correlation parameter. Default 2.64 (Bell 2003, z=0).
     alpha_sf : float
@@ -138,10 +138,10 @@ def radio_sfr_bell2003(
     Returns
     -------
     array (n_wave,)
-        L_nu in Lsun/Hz.
+        L_nu in erg/s/Hz.
     """
     nu = _C_AA / wavelength
-    L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # Lsun/Hz at nu_ref
+    L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz at nu_ref
     L_nu = L_ref * (nu / nu_ref) ** (-alpha_sf)
     return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
 
@@ -182,7 +182,7 @@ def radio_sfr_delvecchio2021(
     wavelength : array (n_wave,)
         Wavelength in Angstrom.
     L_ir : float
-        Total infrared luminosity (8-1000 μm) in Lsun.
+        Total infrared luminosity (8-1000 μm) in erg/s.
     log_mstar : float
         log10(M★ / M⊙). Typical range [8, 12].
     redshift : float
@@ -207,7 +207,7 @@ def radio_sfr_delvecchio2021(
     Returns
     -------
     array (n_wave,)
-        L_nu in Lsun/Hz.
+        L_nu in erg/s/Hz.
 
     Notes
     -----
@@ -222,7 +222,7 @@ def radio_sfr_delvecchio2021(
     q_ir = q0 * (1.0 + redshift) ** z_slope - (log_mstar - 10.0) * mass_slope
 
     # L at 1.4 GHz reference from FIRRC definition
-    L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # Lsun/Hz
+    L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz
 
     # Optional Bell+2003 synchrotron suppression (low-SFR galaxies)
     L_ref = jnp.where(apply_suppression, _synchrotron_suppression(L_ref), L_ref)
@@ -267,7 +267,7 @@ def radio_sfr_mccheyne2022(
     wavelength : array (n_wave,)
         Wavelength in Angstrom.
     L_ir : float
-        Total infrared luminosity (8-1000 μm) in Lsun.
+        Total infrared luminosity (8-1000 μm) in erg/s.
     log_mstar : float
         log10(M★ / M⊙). Typical range [10.05, 11.4] per McCheyne+2022.
     redshift : float
@@ -292,7 +292,7 @@ def radio_sfr_mccheyne2022(
     Returns
     -------
     array (n_wave,)
-        L_nu in Lsun/Hz.
+        L_nu in erg/s/Hz.
 
     Notes
     -----
@@ -306,7 +306,7 @@ def radio_sfr_mccheyne2022(
     q_ir = q0 * (1.0 + redshift) ** z_slope + mass_slope * (log_mstar - 10.0)
 
     # L at 150 MHz reference from FIRRC definition
-    L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # Lsun/Hz
+    L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz
 
     # Optional Bell+2003 synchrotron suppression
     L_ref = jnp.where(apply_suppression, _synchrotron_suppression(L_ref), L_ref)
@@ -335,7 +335,7 @@ def radio_freefree(
         \\frac{L_{\\rm IR}}{L_{\\rm IR,\\odot}}
 
     where :math:`C_{\\rm ff} = 1 / (4.6 \\times 10^{-28} \\, L_\\odot)
-    \\approx 5.68 \\times 10^{-7}` Lsun/Hz per M☉/yr at 1 GHz and
+    \\approx 5.68 \\times 10^{-7}` erg/s/Hz per M☉/yr at 1 GHz and
     :math:`L_{\\rm IR,\\odot} = 1.73 \\times 10^{10}` Lsun (Kennicutt+1998).
 
     Parameters
@@ -343,7 +343,7 @@ def radio_freefree(
     wavelength : array (n_wave,)
         Wavelength in Angstrom.
     L_ir : float
-        Total infrared luminosity (8-1000 μm) in Lsun.
+        Total infrared luminosity (8-1000 μm) in erg/s.
     T_e : float
         Electron temperature in K. Default 1e4.
         Prior suggestion: LogUniform(5e3, 2e4).
@@ -354,7 +354,7 @@ def radio_freefree(
     Returns
     -------
     array (n_wave,)
-        L_nu in Lsun/Hz.
+        L_nu in erg/s/Hz.
 
     Notes
     -----
@@ -371,7 +371,7 @@ def radio_freefree(
     nu_ghz = nu / 1.0e9  # GHz
     sfr = L_ir / _SFR_IR_KENNICUTT  # M☉/yr
     # Murphy+2011 Eq. 11 inverted; (T_e/1e4)^0.45 factor from ionized gas physics
-    L_nu = _C_FF_LSUN_HZ * (T_e / 1.0e4) ** 0.45 * nu_ghz**alpha_ff * sfr
+    L_nu = _C_FF * (T_e / 1.0e4) ** 0.45 * nu_ghz**alpha_ff * sfr
     return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
 
 
@@ -399,7 +399,7 @@ def _dispatch_sfr(
     wavelength : array
         Wavelength in Angstrom.
     L_ir : float
-        IR luminosity in Lsun.
+        IR luminosity in erg/s.
     sfr_mode : str
         One of ``"bell2003"``, ``"delvecchio2021"``, ``"mccheyne2022"``.
     q_ir : float
@@ -422,7 +422,7 @@ def _dispatch_sfr(
     Returns
     -------
     array
-        L_nu in Lsun/Hz.
+        L_nu in erg/s/Hz.
     """
     if sfr_mode == "bell2003":
         return radio_sfr_bell2003(wavelength, L_ir, q_ir, alpha_sf)
@@ -474,7 +474,7 @@ def radio_agn(
     wavelength : array (n_wave,)
         Wavelength in Angstrom.
     L_agn_bol : float
-        AGN bolometric luminosity in Lsun.
+        AGN bolometric luminosity in erg/s.
     radio_loudness : float
         log10(L_5GHz / L_B). Default 0 (radio-quiet). Range: -2 to 5.
     alpha_agn : float
@@ -485,19 +485,19 @@ def radio_agn(
     Returns
     -------
     array (n_wave,)
-        L_nu in Lsun/Hz.
+        L_nu in erg/s/Hz.
     """
     nu = _C_AA / wavelength
 
-    # Monochromatic luminosity density at B-band (4400 A) in Lsun/Hz.
+    # Monochromatic luminosity density at B-band (4400 A) in erg/s/Hz.
     # L_bol = BC_B * nu_B * L_nu(4400) => L_nu = L_bol / (BC_B * nu_B)
     # BC_B ~ 5.15 (Hopkins+2007, Table 1), nu_B = c / 4400 A = 6.818e14 Hz
     _NU_B = 6.818e14  # Hz
     _BC_B = 5.15  # Hopkins+2007 bolometric correction at 4400 A
-    L_B = L_agn_bol / (_BC_B * _NU_B)  # Lsun/Hz
+    L_B = L_agn_bol / (_BC_B * _NU_B)  # erg/s/Hz
 
     # L_5GHz from radio-loudness definition
-    L_5GHz = L_B * 10.0**radio_loudness  # Lsun/Hz
+    L_5GHz = L_B * 10.0**radio_loudness  # erg/s/Hz
 
     # Power-law extrapolation from 5 GHz
     nu_5GHz = 5.0e9
@@ -533,7 +533,7 @@ def radio_agn_dpl(
     wavelength : array (n_wave,)
         Wavelength in Angstrom.
     L_agn_bol : float
-        AGN bolometric luminosity in Lsun.
+        AGN bolometric luminosity in erg/s.
     radio_loudness : float
         log10(L_5GHz / L_B). Default 0 (radio-quiet). Range: [-2, 5].
     alpha1 : float
@@ -551,7 +551,7 @@ def radio_agn_dpl(
     Returns
     -------
     array (n_wave,)
-        L_nu in Lsun/Hz.
+        L_nu in erg/s/Hz.
 
     Notes
     -----
@@ -565,10 +565,10 @@ def radio_agn_dpl(
     # B-band luminosity density (same as radio_agn)
     _NU_B = 6.818e14  # Hz
     _BC_B = 5.15  # Hopkins+2007
-    L_B = L_agn_bol * _LSUN / (_BC_B * _NU_B) / _LSUN  # Lsun/Hz
+    L_B = L_agn_bol / (_BC_B * _NU_B)  # erg/s/Hz
 
     # L_5GHz from radio-loudness definition
-    L_5GHz = L_B * 10.0**radio_loudness  # Lsun/Hz
+    L_5GHz = L_B * 10.0**radio_loudness  # erg/s/Hz
 
     nu_t = 10.0**log_nu_t
     nu_cut = 10.0**log_nu_cut
@@ -617,9 +617,9 @@ def radio_total(
     wavelength : array (n_wave,)
         Wavelength in Angstrom.
     L_ir : float
-        Total IR luminosity (Lsun) for SF component.
+        Total IR luminosity (erg/s) for SF component.
     L_agn_bol : float
-        AGN bolometric luminosity (Lsun) for AGN component.
+        AGN bolometric luminosity (erg/s) for AGN component.
     q_ir : float
         FIR-radio correlation parameter (bell2003 mode only).
     alpha_sf : float
@@ -657,7 +657,7 @@ def radio_total(
     Returns
     -------
     array (n_wave,)
-        L_nu in Lsun/Hz.
+        L_nu in erg/s/Hz.
     """
     sf = _dispatch_sfr(
         wavelength,
@@ -710,9 +710,9 @@ def radio_total_dpl(
     wavelength : array (n_wave,)
         Wavelength in Angstrom.
     L_ir : float
-        Total IR luminosity (Lsun) for SF component.
+        Total IR luminosity (erg/s) for SF component.
     L_agn_bol : float
-        AGN bolometric luminosity (Lsun) for AGN component.
+        AGN bolometric luminosity (erg/s) for AGN component.
     q_ir : float
         FIR-radio correlation parameter (bell2003 mode only).
     alpha_sf : float
@@ -751,7 +751,7 @@ def radio_total_dpl(
     Returns
     -------
     array (n_wave,)
-        L_nu in Lsun/Hz.
+        L_nu in erg/s/Hz.
     """
     sf = _dispatch_sfr(
         wavelength,
@@ -804,9 +804,9 @@ def radio_components(
     wavelength : array (n_wave,)
         Wavelength in Angstrom.
     L_ir : float
-        IR luminosity (Lsun).
+        IR luminosity (erg/s).
     L_agn_bol : float
-        AGN bolometric luminosity (Lsun).
+        AGN bolometric luminosity (erg/s).
     q_ir : float
         FIR-radio q_IR (bell2003 mode only).
     alpha_sf : float
@@ -835,10 +835,10 @@ def radio_components(
     Returns
     -------
     dict with keys:
-        ``"synchrotron"`` : array (n_wave,) — SFR synchrotron L_nu [Lsun/Hz]
-        ``"freefree"`` : array (n_wave,) — thermal free-free L_nu [Lsun/Hz]
-        ``"agn"`` : array (n_wave,) — AGN radio L_nu [Lsun/Hz]
-        ``"total"`` : array (n_wave,) — sum of above [Lsun/Hz]
+        ``"synchrotron"`` : array (n_wave,) — SFR synchrotron L_nu [erg/s/Hz]
+        ``"freefree"`` : array (n_wave,) — thermal free-free L_nu [erg/s/Hz]
+        ``"agn"`` : array (n_wave,) — AGN radio L_nu [erg/s/Hz]
+        ``"total"`` : array (n_wave,) — sum of above [erg/s/Hz]
     """
     synchrotron = _dispatch_sfr(
         wavelength,
