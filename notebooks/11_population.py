@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # 11_population
+# # Population Inference
 #
 # Individual galaxies weakly constrain the PSD timescale τ_PS. A population
 # sharing the same burstiness physics can break this degeneracy. No other
@@ -47,6 +47,7 @@ if os.path.isdir(os.path.join(_src, "tengri")):
 sys.path.insert(0, _repo_root)
 sys.path.insert(0, _nb_dir)
 
+import hashlib
 import importlib.util
 
 import jax
@@ -63,7 +64,7 @@ os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.45")
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -166,7 +167,7 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         mean_sfh_type=["tsnorm", "field"],
         n_grid=128,
     )
-    return Model(spec, ssp_data, observation=obs)
+    return SEDModel(spec, ssp_data, observation=obs)
 
 
 # %%
@@ -231,7 +232,7 @@ plt.show()
 # roughly constrained but τ_PS is nearly unconstrained — it spans the prior.
 
 # %%
-# Individual native_geovi fits with FREE PSD
+# Individual vi (geoVI) fits with FREE PSD
 spec_free = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
@@ -248,7 +249,7 @@ spec_free = Parameters(
     mean_sfh_type=["tsnorm", "field"],
     n_grid=128,
 )
-model_free = Model(spec_free, ssp_data, observation=obs)
+model_free = SEDModel(spec_free, ssp_data, observation=obs)
 
 individual_results = []
 print("Fitting individual galaxies (PSD free)...")
@@ -277,7 +278,7 @@ for i in range(min(4, N_GAL)):
     tau_med = float(jnp.median(res_i.samples["sfh_field_psd_tau_myr"]))
     print(f"  Galaxy {i}: σ = {sig_med:.2f}, τ = {tau_med:.0f} Myr")
     print(f"    XLA compile: {t_compile:.1f}s (one-time, cached)")
-    print(f"    native_geovi: {t_run:.1f}s <- runtime per galaxy")
+    print(f"    vi (geoVI): {t_run:.1f}s <- runtime per galaxy")
 
 # %%
 # --- FIGURE 2: Individual PSD posteriors (wide, overlapping) ---
@@ -309,7 +310,7 @@ plt.show()
 # information about the burstiness timescale, dramatically tightening τ_PS.
 
 # %%
-# Hierarchical native_geovi on SPECTROSCOPIC data
+# Hierarchical vi (geoVI) on SPECTROSCOPIC data
 print(f"\nHierarchical fit: {N_GAL} galaxies (spectroscopy)...")
 t0 = time.perf_counter()
 hfitter_spec = PopulationFitter(
@@ -353,10 +354,10 @@ for _i, res in enumerate(individual_results):
 
 # Hierarchical (bold)
 ax_sig.hist(
-    sig_spec, bins=40, alpha=0.7, density=True, color=COLORS["geovi"], label="Hierarchical"
+    sig_spec, bins=40, alpha=0.7, density=True, color=COLORS["vi"], label="Hierarchical"
 )
 ax_tau.hist(
-    tau_spec, bins=40, alpha=0.7, density=True, color=COLORS["geovi"], label="Hierarchical"
+    tau_spec, bins=40, alpha=0.7, density=True, color=COLORS["vi"], label="Hierarchical"
 )
 
 ax_sig.axvline(TRUE_SIGMA, color=COLORS["truth"], lw=2, ls="--", label="Truth")
@@ -377,7 +378,7 @@ plt.show()
 # ## 3. Photometric Hierarchical: Spectroscopy vs Photometry
 
 # %%
-# Hierarchical native_geovi on PHOTOMETRIC data
+# Hierarchical vi (geoVI) on PHOTOMETRIC data
 print(f"\nHierarchical fit: {N_GAL} galaxies (photometry)...")
 t0 = time.perf_counter()
 hfitter_phot = PopulationFitter(
@@ -413,11 +414,11 @@ print(f"  Wall time: {t_hier_phot:.1f}s")
 fig, (ax_sig, ax_tau) = plt.subplots(1, 2, figsize=(10, 4))
 
 ax_sig.hist(sig_spec, bins=40, alpha=0.6, density=True, color=COLORS["rt"], label="Spectroscopy")
-ax_sig.hist(sig_phot, bins=40, alpha=0.6, density=True, color=COLORS["geovi"], label="Photometry")
+ax_sig.hist(sig_phot, bins=40, alpha=0.6, density=True, color=COLORS["vi"], label="Photometry")
 ax_sig.axvline(TRUE_SIGMA, color=COLORS["truth"], lw=2, ls="--", label="Truth")
 
 ax_tau.hist(tau_spec, bins=40, alpha=0.6, density=True, color=COLORS["rt"], label="Spectroscopy")
-ax_tau.hist(tau_phot, bins=40, alpha=0.6, density=True, color=COLORS["geovi"], label="Photometry")
+ax_tau.hist(tau_phot, bins=40, alpha=0.6, density=True, color=COLORS["vi"], label="Photometry")
 ax_tau.axvline(TRUE_TAU, color=COLORS["truth"], lw=2, ls="--", label="Truth")
 
 ax_sig.set_xlabel(r"$\sigma_{\rm PS}$")
@@ -486,7 +487,7 @@ sigma_widths = np.array(sigma_widths)
 
 fig, ax = plt.subplots(figsize=(6, 4))
 ax.scatter(
-    ns, sigma_widths, s=60, color=COLORS["geovi"], zorder=3, label=r"$\sigma_{\rm PS}$ 68% width"
+    ns, sigma_widths, s=60, color=COLORS["vi"], zorder=3, label=r"$\sigma_{\rm PS}$ 68% width"
 )
 
 # 1/sqrt(N) reference
@@ -526,7 +527,7 @@ for pop_name, cfg in POP_CONFIGS.items():
     model_pop = model_factory(psd_sigma=cfg["sigma"], psd_tau_myr=cfg["tau"])
     gals = []
     for i in range(N_PER_POP):
-        k = jax.random.fold_in(jax.random.PRNGKey(hash(pop_name) % 2**31), i)
+        k = jax.random.fold_in(jax.random.PRNGKey(int(hashlib.sha256(pop_name.encode()).hexdigest(), 16) % 2**31), i)
         p = model_pop.spec.sample(k)
         mock = model_pop.mock_spectrum(p, WAVE_OBS, snr=SPEC_SNR, key=jax.random.fold_in(k, 1))
         gals.append({"flux_obs": mock.flux_obs, "noise": mock.noise})
@@ -546,7 +547,7 @@ for pop_name, cfg in POP_CONFIGS.items():
         n_posterior_samples=500,
         n_seeds=10,
         verbose=False,
-        key=jax.random.PRNGKey(abs(hash(pop_name)) % 2**31),
+        key=jax.random.PRNGKey(int(hashlib.sha256(pop_name.encode()).hexdigest(), 16) % 2**31),
     )
     pop_results[pop_name] = res
 
@@ -563,7 +564,7 @@ for pop_name, cfg in POP_CONFIGS.items():
 # --- FIGURE 6: Population distinction ---
 fig, ax = plt.subplots(figsize=(7, 5))
 
-pop_colors = {"Bursty dwarfs": COLORS["geovi"], "Smooth disks": COLORS["rt"]}
+pop_colors = {"Bursty dwarfs": COLORS["vi"], "Smooth disks": COLORS["rt"]}
 for pop_name, res in pop_results.items():
     sig_s = np.array(res.shared_samples["psd_sigma"])
     tau_s = np.array(res.shared_samples["psd_tau_myr"])
@@ -708,9 +709,9 @@ for i, ax in enumerate(axes.flat):
         for j in range(n_draw):
             p_j = {k: v[j] for k, v in res_i.samples.items()}
             phot_j = np.array(model_free.predict_photometry(p_j))
-            ax.plot(band_idx, phot_j, ".", ms=2, color=COLORS["geovi"], alpha=0.15)
+            ax.plot(band_idx, phot_j, ".", ms=2, color=COLORS["vi"], alpha=0.15)
         # Dummy for legend
-        ax.plot([], [], ".", ms=5, color=COLORS["geovi"], label="Posterior draws")
+        ax.plot([], [], ".", ms=5, color=COLORS["vi"], label="Posterior draws")
 
     ax.set_xticks(band_idx)
     ax.set_xticklabels(filter_names)
@@ -790,7 +791,7 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         photometry=Photometry.from_names(FILTER_NAMES),
         spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
     )
-    return Model(spec, ssp_data, observation=obs)
+    return SEDModel(spec, ssp_data, observation=obs)
 
 
 # %%
@@ -887,7 +888,7 @@ plt.show()
 # $\tau_{\rm PS}$ spans much of its prior.
 
 # %%
-# Individual native_geovi fits with FREE PSD
+# Individual vi (geoVI) fits with FREE PSD
 spec_free = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
@@ -908,7 +909,7 @@ obs_spec = Observation(
     spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
     photometry=Photometry.from_names(FILTER_NAMES),
 )
-model_free = Model(spec_free, ssp_data, observation=obs_spec)
+model_free = SEDModel(spec_free, ssp_data, observation=obs_spec)
 
 individual_results = []
 print("Fitting 4 galaxies individually (PSD free)...")
@@ -1053,13 +1054,13 @@ for ax, idx in zip(axes.ravel(), range(min(4, N_GAL))):
             lo,
             hi,
             alpha=0.25,
-            color=COLORS["geovi"],
+            color=COLORS["vi"],
             label="68% CI",
         )
         ax.plot(
             wave_np,
             median_pred,
-            color=COLORS["geovi"],
+            color=COLORS["vi"],
             lw=0.8,
             label="Median",
         )
@@ -1150,7 +1151,7 @@ ax_sig.hist(
     bins=40,
     alpha=0.5,
     density=True,
-    color=COLORS["geovi"],
+    color=COLORS["vi"],
     edgecolor="none",
     label=f"Photometry ({len(FILTER_NAMES)} bands)",
 )
@@ -1176,7 +1177,7 @@ ax_tau.hist(
     bins=40,
     alpha=0.5,
     density=True,
-    color=COLORS["geovi"],
+    color=COLORS["vi"],
     edgecolor="none",
     label="Photometry",
 )
@@ -1271,13 +1272,13 @@ for i, ax in enumerate(axes.flat):
             lo,
             hi,
             alpha=0.25,
-            color=COLORS["geovi"],
+            color=COLORS["vi"],
             label="68% CI",
         )
         ax.plot(
             t_gyr,
             np.median(sfr_arr, axis=0),
-            color=COLORS["geovi"],
+            color=COLORS["vi"],
             lw=1.2,
             ls="--",
             label="Median",
@@ -1406,7 +1407,7 @@ ax_tau.scatter(
     ns,
     tau_widths_arr,
     s=60,
-    color=COLORS["geovi"],
+    color=COLORS["vi"],
     zorder=3,
     label=r"$\tau_{\rm PS}$ 68% width",
 )

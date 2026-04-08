@@ -14,6 +14,8 @@
 # ---
 
 # %% [markdown]
+# # SED Anatomy
+#
 # _sed_anatomy
 #
 # This notebook is a map from **wavelength to physics**: panchromatic plots use

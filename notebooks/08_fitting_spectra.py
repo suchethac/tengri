@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # 08_fitting_spectra
+# # Fitting Spectra
 #
 # Spectra contain orders of magnitude more information than photometry. A
 # 200-pixel spectrum constrains ~40× more than 5-band photometry — breaking
@@ -61,7 +61,7 @@ os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.45")
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -138,6 +138,22 @@ obs_joint = Observation(
 obs_phot = Observation(photometry=Photometry.from_names(FILTER_NAMES))
 obs_spec = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS))
 
+# %% [markdown]
+# ### Spectral resolution effects
+#
+# Low-resolution spectroscopy (R = λ/Δλ < 1000) blurs absorption features
+# and blends emission lines:
+#
+# - **R < 500:** Balmer lines merge with adjacent [N II]/[O III]; only broadband
+#   SED shape constrains age and dust. Similar to photometry.
+# - **R ~ 1000–3000:** Individual lines resolved; metallicity, dust, and age
+#   separable from Balmer decrement and metal-line indices.
+# - **R > 5000:** Velocity dispersion measurable; detailed abundance patterns.
+#
+# The `resolution` parameter in `Spectroscopy(...)` sets the instrumental
+# line-spread function (LSF) FWHM in Å. The model convolves predictions
+# to match before computing the likelihood.
+
 # %%
 # Parametric model (D = 7)
 spec_param = Parameters(
@@ -153,8 +169,8 @@ spec_param = Parameters(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model_param = Model(spec_param, ssp_data, observation=obs_joint)
-model_param_spec = Model(spec_param, ssp_data, observation=obs_spec)
+model_param = SEDModel(spec_param, ssp_data, observation=obs_joint)
+model_param_spec = SEDModel(spec_param, ssp_data, observation=obs_spec)
 
 key = jax.random.PRNGKey(42)
 true_param = spec_param.sample(key)
@@ -209,7 +225,7 @@ fig.tight_layout()
 plt.show()
 
 # %%
-# Fit parametric model with native_geovi
+# Fit parametric model with vi (geoVI)
 fitter_spec = Fitter(model_param_spec, mock_spec.flux_obs, mock_spec.noise)
 
 t0_compile = time.perf_counter()
@@ -229,7 +245,7 @@ result_geovi_spec = fitter_spec.run(
 )
 t_run = time.perf_counter() - t0
 print(f"XLA compile: {t_compile:.1f}s (one-time, cached on disk)")
-print(f"native_geovi: {t_run:.1f}s <- runtime per galaxy")
+print(f"vi (geoVI): {t_run:.1f}s <- runtime per galaxy")
 
 # %%
 # --- FIGURE 2: Spectral fit + residuals ---
@@ -255,8 +271,8 @@ ax_f.errorbar(
     alpha=0.4,
 )
 for s in spec_draws[:50]:
-    ax_f.plot(w, s, color=COLORS["geovi"], alpha=0.03, lw=0.5)
-ax_f.plot(w, spec_med, color=COLORS["geovi"], lw=1.5, label="Posterior median")
+    ax_f.plot(w, s, color=COLORS["vi"], alpha=0.03, lw=0.5)
+ax_f.plot(w, spec_med, color=COLORS["vi"], lw=1.5, label="Posterior median")
 ax_f.plot(w, np.array(mock_spec.flux_true), color=COLORS["truth"], lw=1, ls="--", label="Truth")
 ax_f.legend(fontsize=8)
 ax_f.set_ylabel("Flux density")
@@ -284,7 +300,7 @@ plot_sfh(
     result_geovi_spec,
     true_params=true_param,
     ax=ax,
-    color=COLORS["geovi"],
+    color=COLORS["vi"],
     label="Spectroscopy",
     method="geoVI",
 )
@@ -343,7 +359,7 @@ print(f"geoVI:      {result_geovi_spec.wall_time_s:.1f}s")
 fig = plot_corner_comparison(
     [result_laplace, result_pathfinder, result_geovi_spec],
     labels=["Laplace", "Pathfinder", "geoVI"],
-    colors=[COLORS["laplace"], COLORS["pathfinder"], COLORS["geovi"]],
+    colors=[COLORS["laplace"], COLORS["pathfinder"], COLORS["vi"]],
     truths=true_param,
 )
 if fig is not None:
@@ -366,7 +382,7 @@ _axes = np.array(axes).reshape(-1) if len(_free) > 1 else [axes]
 for ax, pname in zip(_axes, _free):
     tv = float(true_param[pname])
     for label, res, color, ls in [
-        ("geoVI", result_geovi_spec, COLORS["geovi"], "-"),
+        ("geoVI", result_geovi_spec, COLORS["vi"], "-"),
         ("Laplace", result_laplace, COLORS["laplace"], "--"),
         ("Pathfinder", result_pathfinder, COLORS["pathfinder"], "-."),
     ]:
@@ -439,8 +455,8 @@ spec_stoch = Parameters(
     mean_sfh_type=["tsnorm", "field"],
     n_grid=128,
 )
-model_stoch = Model(spec_stoch, ssp_data, observation=obs_joint)
-model_stoch_spec = Model(spec_stoch, ssp_data, observation=obs_spec)
+model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs_joint)
+model_stoch_spec = SEDModel(spec_stoch, ssp_data, observation=obs_spec)
 
 true_stoch = spec_stoch.sample(jax.random.PRNGKey(77))
 # Override to a typical star-forming galaxy with burstiness
@@ -477,7 +493,7 @@ result_stoch_spec = fitter_stoch_spec.run(
 t_run = time.perf_counter() - t0
 print(f"Stochastic spectroscopic fit (D = {spec_stoch.n_free}):")
 print(f"  XLA compile: {t_compile:.1f}s (one-time, cached on disk)")
-print(f"  native_geovi: {t_run:.1f}s <- runtime per galaxy")
+print(f"  vi (geoVI): {t_run:.1f}s <- runtime per galaxy")
 
 # %%
 # --- FIGURE 5: Bursty SFH recovery from spectroscopy ---
@@ -487,7 +503,7 @@ plot_sfh(
     result_stoch_spec,
     true_params=true_stoch,
     ax=ax,
-    color=COLORS["geovi"],
+    color=COLORS["vi"],
     label="Spectroscopy",
     method="geoVI",
     show_mean_sfh=True,
@@ -525,7 +541,7 @@ plt.show()
 
 # %%
 # Fit photometry — separate model with photometry-only observation
-model_stoch_phot = Model(spec_stoch, ssp_data, observation=obs_phot)
+model_stoch_phot = SEDModel(spec_stoch, ssp_data, observation=obs_phot)
 fitter_stoch_phot = Fitter(model_stoch_phot, mock_phot_s.flux_obs, mock_phot_s.noise)
 _ = fitter_stoch_phot.run("map", n_steps=1000, verbose=False)
 result_stoch_phot = fitter_stoch_phot.run(
@@ -543,7 +559,7 @@ phys_params = [p for p in spec_stoch.free_params if "xi" not in p]
 fig = plot_corner_comparison(
     [result_stoch_phot, result_stoch_spec],
     labels=["Photometry (5 bands)", "Spectroscopy (200 px)"],
-    colors=[COLORS["rt"], COLORS["geovi"]],
+    colors=[COLORS["rt"], COLORS["vi"]],
     truths=true_stoch,
     params=phys_params,
 )
@@ -559,7 +575,7 @@ plt.show()
 fig = plot_corner_comparison(
     [result_stoch_phot, result_stoch_spec],
     labels=["Photometry", "Spectroscopy"],
-    colors=[COLORS["rt"], COLORS["geovi"]],
+    colors=[COLORS["rt"], COLORS["vi"]],
     truths=true_stoch,
     params=psd_params,
 )
@@ -612,7 +628,7 @@ for ax, snr in zip(axes, [10, 30, 100]):
         snr_results[snr],
         true_params=true_param,
         ax=ax,
-        color=COLORS["geovi"],
+        color=COLORS["vi"],
         label=f"SNR = {snr}",
         method="geoVI",
     )
@@ -653,7 +669,7 @@ for ax, z, survey, (wlo, whi) in zip(axes, redshifts, surveys, windows):
                 color="grey",
             )
 
-    ax.axvspan(wlo, whi, alpha=0.1, color=COLORS["geovi"])
+    ax.axvspan(wlo, whi, alpha=0.1, color=COLORS["vi"])
     ax.set_xlabel("Observed wavelength [Å]")
     ax.set_title(f"z = {z} — {survey}", fontsize=9)
     ax.set_xlim(wlo * 0.9, whi * 1.1)

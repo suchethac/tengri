@@ -14,6 +14,8 @@
 # ---
 
 # %% [markdown]
+# # Star Formation History Gallery
+#
 # _sfh_gallery
 #
 # ## When to Use Which SFH Model
@@ -695,6 +697,22 @@ add_multi_sfh_inset(ax, t_gyr, series_tw, linestyles=lss, ylabel="Kernel")
 fig.tight_layout()
 # plt.savefig(os.path.join(FIGDIR, "sfh_triweight_burst.png"), bbox_inches="tight")
 plt.show()
+
+# %% [markdown]
+# ### Which SFH model should I use?
+#
+# | Science case | Recommended model | Why |
+# |-------------|-------------------|-----|
+# | Quick look / catalog fitting | Double power law (`dpl`) | Flexible, 4–5 params, fast |
+# | Star-forming main sequence | Delayed-tau or lognormal | Natural rise-and-fall shape |
+# | Post-starburst / quenching | Truncated skew-normal (`tsnorm`) | Captures abrupt truncation |
+# | Dwarf irregulars / starbursts | Stochastic GP (`field`) | Allows rapid SFR fluctuations |
+# | Simulation calibration | Tabulated (`tabulated`) | Matches hydro output directly |
+# | Agnostic / model comparison | Non-parametric bins (`continuity`) | Minimal SFH assumptions |
+#
+# **When in doubt:** start with `dpl` (double power law). If residuals show
+# structure, try `tsnorm` or `field`. The stochastic GP model is the most
+# flexible but requires more samples for convergence.
 
 # %% [markdown]
 # ## 2. Non-Parametric SFH Models

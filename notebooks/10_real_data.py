@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # 10_real_data
+# # Fitting Real Data
 #
 # **Tour:** Optional notebook — left out of the default `00_quickstart` sequence
 # for now; open when you want an end-to-end “my spectrum” workflow sketch.
@@ -61,7 +61,7 @@ os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.45")
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -158,7 +158,7 @@ spec = Parameters(
     redshift=Fixed(REDSHIFT),
     mean_sfh_type="tsnorm",
 )
-model = Model(spec, ssp_data, observation=obs)
+model = SEDModel(spec, ssp_data, observation=obs)
 
 # Generate a "real" galaxy (in practice, load from file)
 true_params = spec.sample(jax.random.PRNGKey(42))
@@ -205,7 +205,7 @@ fitter = Fitter(model, flux_obs, noise, data_type="spectroscopy")
 # MAP initialization
 result_map = fitter.run("map", n_steps=500, verbose=False)
 
-# Compile + run native_geovi with timing separation
+# Compile + run vi (geoVI) with timing separation
 t0_c = time.perf_counter()
 fitter.compile(verbose=False)
 t_compile = time.perf_counter() - t0_c
@@ -220,7 +220,7 @@ result = fitter.run(
 )
 t_run = time.perf_counter() - t0
 print(f"XLA compile: {t_compile:.1f}s (one-time, cached)")
-print(f"native_geovi: {t_run:.1f}s <- runtime per galaxy")
+print(f"vi (geoVI): {t_run:.1f}s <- runtime per galaxy")
 
 # %%
 # --- FIGURE 2: Spectral fit ---
@@ -240,8 +240,8 @@ ax_f.errorbar(
     w, np.array(flux_obs), yerr=np.array(noise), fmt=".", ms=2, color=COLORS["data"], alpha=0.4
 )
 for d in draws[:30]:
-    ax_f.plot(w, d, color=COLORS["geovi"], alpha=0.04, lw=0.5)
-ax_f.plot(w, med, color=COLORS["geovi"], lw=1.5, label="Posterior median")
+    ax_f.plot(w, d, color=COLORS["vi"], alpha=0.04, lw=0.5)
+ax_f.plot(w, med, color=COLORS["vi"], lw=1.5, label="Posterior median")
 ax_f.legend(fontsize=8)
 ax_f.set_ylabel("Flux density")
 
@@ -266,7 +266,7 @@ convergence_table({"vi": result})
 # --- Residual distribution (should be ~N(0,1) if model adequate) ---
 residuals = (np.array(flux_obs) - med) / np.array(noise)
 fig, ax = plt.subplots(figsize=(6, 3))
-ax.hist(residuals, bins=30, density=True, alpha=0.7, color=COLORS["geovi"])
+ax.hist(residuals, bins=30, density=True, alpha=0.7, color=COLORS["vi"])
 x = np.linspace(-4, 4, 100)
 ax.plot(x, np.exp(-(x**2) / 2) / np.sqrt(2 * np.pi), "k--", lw=1.5, label="N(0,1)")
 ax.set_xlabel(r"Residual ($\sigma$)")
@@ -281,7 +281,7 @@ plt.show()
 # %%
 # --- FIGURE 3: SFH posterior ---
 fig, ax = plt.subplots(figsize=(8, 4))
-plot_sfh(model, result, ax=ax, color=COLORS["geovi"], label="vi", method="geoVI")
+plot_sfh(model, result, ax=ax, color=COLORS["vi"], label="vi", method="geoVI")
 ax.set_title("Star Formation History")
 fig.tight_layout()
 # plt.savefig(os.path.join(FIGDIR, "fig03_sfh.png"), dpi=150, bbox_inches="tight")
@@ -296,6 +296,27 @@ if fig is not None:
 plt.show()
 
 # %% [markdown]
+# ### Practical considerations for real data
+#
+# **Inverse variance → noise conversion:**
+# ```python
+# ivar = hdu[1].data["ivar"]
+# good = (ivar > 0) & np.isfinite(ivar) & np.isfinite(flux)
+# noise = np.sqrt(1.0 / ivar[good])
+# ```
+# Always guard against `ivar ≤ 0` (bad pixels, masked regions).
+#
+# **Telluric absorption:** Mask 6860–6960 Å (B-band), 7580–7700 Å (A-band),
+# and 9300–9700 Å (water). These introduce systematic residuals if unmasked.
+#
+# **Flux calibration floor:** Real spectra have ~5–10% calibration uncertainty
+# (standard star errors, slit losses). Consider adding a noise floor:
+# `noise_effective = np.sqrt(noise**2 + (0.05 * flux)**2)`.
+#
+# **Wavelength calibration:** Typical ±1 Å residual for survey spectra (SDSS, DESI).
+# This propagates into velocity/redshift uncertainty of ±50 km/s at z ~ 0.
+
+# %% [markdown]
 # ## Loading Your Own Data
 #
 # Replace the mock generation with your data loader:
@@ -306,23 +327,24 @@ plt.show()
 # hdu = fits.open("my_spectrum.fits")
 # wave_obs = hdu[1].data["wavelength"]  # observed-frame Angstrom
 # flux_obs = hdu[1].data["flux"]
-# noise = hdu[1].data["ivar"]**(-0.5)   # convert inverse variance to sigma
-#
-# # Mask bad pixels
-# good = (noise > 0) & (noise < 1e10) & np.isfinite(flux_obs)
-# wave_obs = jnp.array(wave_obs[good])
-# flux_obs = jnp.array(flux_obs[good])
-# noise = jnp.array(noise[good])
+# ivar = hdu[1].data["ivar"]
+# good = (ivar > 0) & np.isfinite(ivar) & np.isfinite(flux_obs)
+# noise = np.sqrt(1.0 / ivar[good])
+# flux_obs, wave_obs = flux_obs[good], wave_obs[good]
 # ```
 #
-# Then proceed with `Model`, `Fitter`, and `native_geovi` as above.
+# Then proceed with `Model`, `Fitter`, and `vi` (geoVI) as above.
 
 # %% [markdown]
 # ## Caveats
 #
 # 1. **Noise model**: Real data has wavelength-dependent systematics.
-#    Consider the calibration floor noise model (reference/06).
-# 2. **Emission lines**: Strong emitters may need line marginalization
-#    or masking (reference/05).
-# 3. **Resolution**: Convolve templates to match data spectral resolution.
+#    Consider adding a calibration floor parameter via `NoiseModel` or
+#    the `noise_floor` argument to `Fitter`.
+# 2. **Emission lines**: Strong emitters (e.g., Hα, [OIII]) may need line
+#    marginalization (set `eline_mode="marginalized"` in `Spectroscopy`)
+#    or masking via spectral windows.
+# 3. **Resolution**: Convolve templates to match data spectral resolution
+#    using the `spectral_resolution` argument to `Spectroscopy`.
 # 4. **Model adequacy**: Check residuals for systematic patterns.
+#    Use `result.validate()` for a short MCMC check.

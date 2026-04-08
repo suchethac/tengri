@@ -21,9 +21,9 @@ COLORS = {
     # Sampler colors (consistent across all notebooks)
     "map": "#888888",  # grey — point estimate
     "rt": "#1f77b4",  # blue — Ray Tracing (exact MCMC)
-    "geovi": "#ff7f0e",  # orange — geoVI (variational)
-    "nuts": "#2ca02c",  # green — NUTS (gold standard)
-    "mgvi": "#9467bd",  # purple — MGVI (linear VI)
+    "vi": "#ff7f0e",  # orange — VI (variational)
+    "mcmc_nuts": "#2ca02c",  # green — NUTS (gold standard)
+    "vi_linear": "#9467bd",  # purple — VI Linear (linear VI)
     "pathfinder": "#8c564b",  # brown — Pathfinder (approximate)
     "ess": "#e377c2",  # pink — Elliptical Slice Sampling
     "laplace": "#bcbd22",  # olive/yellow-green — Laplace
@@ -49,9 +49,9 @@ COLORS = {
 SAMPLER_STYLE = {
     "MAP": {"color": COLORS["map"], "ls": "--", "lw": 1.5, "alpha": 1.0},
     "RT": {"color": COLORS["rt"], "ls": "-", "lw": 1.5, "alpha": 1.0},
-    "geoVI": {"color": COLORS["geovi"], "ls": "-", "lw": 1.5, "alpha": 1.0},
-    "NUTS": {"color": COLORS["nuts"], "ls": "-", "lw": 1.5, "alpha": 1.0},
-    "MGVI": {"color": COLORS["mgvi"], "ls": "-", "lw": 1.5, "alpha": 1.0},
+    "VI": {"color": COLORS["vi"], "ls": "-", "lw": 1.5, "alpha": 1.0},
+    "MCMC NUTS": {"color": COLORS["mcmc_nuts"], "ls": "-", "lw": 1.5, "alpha": 1.0},
+    "VI Linear": {"color": COLORS["vi_linear"], "ls": "-", "lw": 1.5, "alpha": 1.0},
     "Pathfinder": {"color": COLORS["pathfinder"], "ls": "-.", "lw": 1.5, "alpha": 1.0},
     "ESS": {"color": COLORS["ess"], "ls": "-", "lw": 1.5, "alpha": 1.0},
     "Laplace": {"color": COLORS["laplace"], "ls": ":", "lw": 2.0, "alpha": 1.0},
@@ -180,7 +180,7 @@ def plot_sfh(
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
     posterior : Posterior
     true_params : dict, optional
     ax : Axes, optional
@@ -345,7 +345,7 @@ def plot_sfh_comparison(model, results, true_params=None, methods=None, figsize=
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
     results : dict of {method_name: Posterior}
     true_params : dict, optional
     methods : list of str, optional — order of panels
@@ -613,9 +613,9 @@ def plot_corner_comparison(posteriors, labels, colors=None, truths=None, params=
     if colors is None:
         default_colors = [
             COLORS["rt"],
-            COLORS["geovi"],
-            COLORS["nuts"],
-            COLORS["mgvi"],
+            COLORS["vi"],
+            COLORS["mcmc_nuts"],
+            COLORS["vi_linear"],
             COLORS["map"],
         ]
         colors = default_colors[: len(posteriors)]
@@ -992,15 +992,15 @@ def plot_autocorrelation(result, params=None, max_lag=None, figsize=None):
 # ═══════════════════════════════════════════════════════════════════
 
 SPECTRAL_FEATURES = {
-    r"Ly$\alpha$": 1216.0,
-    "D4000": 4000.0,
-    r"H$\delta$": 4102.0,
-    r"H$\gamma$": 4340.0,
-    r"H$\beta$": 4861.0,
-    "[O III]": 5007.0,
-    "Mg b": 5175.0,
-    "Na D": 5893.0,
-    r"H$\alpha$": 6563.0,
+    r"Ly$\alpha$": 1215.67,  # vacuum (eline_catalog.py)
+    "D4000": 4000.0,  # Balmer break (feature, not a line)
+    r"H$\delta$": 4102.89,  # vacuum (eline_catalog.py)
+    r"H$\gamma$": 4341.68,  # vacuum (eline_catalog.py)
+    r"H$\beta$": 4862.68,  # vacuum (eline_catalog.py)
+    "[O III]": 5008.24,  # vacuum (eline_catalog.py, [OIII]5007)
+    "Mg b": 5175.4,  # vacuum (Mg I triplet, NIST)
+    "Na D": 5891.6,  # vacuum (Na I doublet midpoint, NIST)
+    r"H$\alpha$": 6564.61,  # vacuum (eline_catalog.py)
 }
 
 

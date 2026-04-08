@@ -14,6 +14,8 @@
 # ---
 
 # %% [markdown]
+# # Nebular Emission Gallery
+#
 # _nebular_gallery
 #
 # Visual catalogue aligned with the model-track notebook: **nebular** backends
@@ -51,7 +53,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri import Fixed, Model, Parameters, load_ssp_data
+from tengri import Fixed, SEDModel, Parameters, load_ssp_data
 from tengri.models.igm import igm_transmission, igm_transmission_patchy
 from tengri.models.nebular.shock import (
     _R_HA,
@@ -76,7 +78,7 @@ from tengri.models.observation.eline_marginalization import (
     DEFAULT_LINE_WAVELENGTHS,
     build_eline_design_matrix,
 )
-from tengri.models.observation.spectroscopy import (
+from tengri.models.observation.spectrum import (
     apply_lsf,
     nirspec_prism_resolution,
 )
@@ -228,7 +230,7 @@ ax.set_title(r"[SII] / H$\alpha$")
 
 # Panel 5: Halpha/Hbeta (Balmer decrement)
 ax = axes[1, 1]
-ax.plot(logU_grid, r_ha_hb, color=COLORS["geovi"], lw=2)
+ax.plot(logU_grid, r_ha_hb, color=COLORS["vi"], lw=2)
 ax.set_xlabel(r"$\log U$")
 ax.set_ylabel(r"H$\alpha$ / H$\beta$")
 ax.set_title(r"Balmer decrement (Case B $\approx 2.86$)")
@@ -340,7 +342,7 @@ if CUE_WEIGHTS_PATH.exists():
         },
     }
     ionspec_markers = ["o", "s", "^"]
-    ionspec_colors = [COLORS["rt"], COLORS["geovi"], COLORS.get("nuts", "#888888")]
+    ionspec_colors = [COLORS["rt"], COLORS["vi"], COLORS.get("mcmc_nuts", "#888888")]
 
     bpt_nii_ha = {}
     bpt_oiii_hb = {}
@@ -357,7 +359,7 @@ if CUE_WEIGHTS_PATH.exists():
     axes[0].set_ylabel(r"[NII]6583 / H$\alpha$", fontsize=9)
     axes[0].set_title(r"N/O effect on [NII]/H$\alpha$")
 
-    axes[1].plot(logco_grid, ciii_hb, color=COLORS["geovi"], lw=2.0)
+    axes[1].plot(logco_grid, ciii_hb, color=COLORS["vi"], lw=2.0)
     axes[1].set_xlabel("[C/O] = log(C/O)", fontsize=9)
     axes[1].set_ylabel(r"[CIII]1909 / H$\beta$", fontsize=9)
     axes[1].set_title(r"C/O effect on [CIII]1909/H$\beta$")
@@ -409,7 +411,7 @@ for arr, name, color in [
     (_R_NII, r"[NII]6583/H$\beta$", COLORS["seq"][3]),
     (_R_SII, r"[SII]/H$\beta$", COLORS["seq"][4]),
     (_R_OII, r"[OII]3727/H$\beta$", COLORS["rt"]),
-    (_R_OI, r"[OI]6300/H$\beta$", COLORS["geovi"]),
+    (_R_OI, r"[OI]6300/H$\beta$", COLORS["vi"]),
 ]:
     ax.plot(velocities, np.array(arr), "o-", lw=1.5, ms=4, label=name, color=color)
 ax.set_xlabel("Shock velocity [km/s]")
@@ -548,7 +550,7 @@ if SSP_WNE_PATH.exists():
         dust_slope=Fixed(-0.7),
         redshift=Fixed(0.0),
     )
-    _model = Model(_spec, _ssp)
+    _model = SEDModel(_spec, _ssp)
     _params = {
         "sfh_tsnorm_log_peak_sfr": 1.5,
         "sfh_tsnorm_peak_lbt_gyr": 0.5,
@@ -655,7 +657,7 @@ panels = [
 
 for ax, ratio, ylabel, hii_val in panels:
     ax.plot(velocities, ratio, color=COLORS["rt"], lw=2.0, label="Shock (MAPPINGS V)")
-    ax.axhline(hii_val, color=COLORS["geovi"], ls="--", lw=1.5, label="HII region (typical)")
+    ax.axhline(hii_val, color=COLORS["vi"], ls="--", lw=1.5, label="HII region (typical)")
     ax.set_ylabel(ylabel)
     ax.legend(fontsize=7, frameon=False)
 
@@ -807,7 +809,7 @@ panels_dig = [
 
 for ax, ratio, ylabel in panels_dig:
     ax.plot(dig_fracs, ratio, "o-", color=COLORS["rt"], lw=2.0, ms=5)
-    ax.axhline(ratio[0], ls="--", color=COLORS["geovi"], lw=1.0, alpha=0.6, label="Pure HII")
+    ax.axhline(ratio[0], ls="--", color=COLORS["vi"], lw=1.0, alpha=0.6, label="Pure HII")
     ax.set_xlabel("$f_{\\rm DIG}$")
     ax.set_ylabel(ylabel)
     ax.legend(fontsize=7, frameon=False)

@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # 09_degeneracies
+# # Age-Dust-Metallicity Degeneracies
 #
 # **Tour:** Optional notebook — left out of the default `00_quickstart` sequence
 # for now; open when you want the dedicated age–dust–metallicity story.
@@ -69,7 +69,7 @@ os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.45")
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -211,7 +211,7 @@ if HAS_DATA:
         redshift=Fixed(0.1),
         mean_sfh_type="tsnorm",
     )
-    model_sdss = Model(spec, ssp_data, observation=obs_sdss)
+    model_sdss = SEDModel(spec, ssp_data, observation=obs_sdss)
 
     # Fix truth values that clearly show the degeneracy
     key = jax.random.PRNGKey(42)
@@ -231,7 +231,7 @@ if HAS_DATA:
     )
 
 # %%
-# Fit with MAP + native_geovi
+# Fit with MAP + vi (geoVI)
 if HAS_DATA:
     fitter = Fitter(model_sdss, mock.flux_obs, mock.noise)
     _ = fitter.run("map", n_steps=500, verbose=False)
@@ -308,8 +308,8 @@ if HAS_DATA:
     noise_sdss = jnp.abs(model_sdss.predict_photometry(true_params)) / 20.0
 
     # Build models for each filter configuration
-    model_nir = Model(spec, ssp_data, observation=obs_nir)
-    model_mir = Model(spec, ssp_data, observation=obs_mir)
+    model_nir = SEDModel(spec, ssp_data, observation=obs_nir)
+    model_mir = SEDModel(spec, ssp_data, observation=obs_mir)
 
     noise_nir = jnp.abs(model_nir.predict_photometry(true_params)) / 20.0
     noise_mir = jnp.abs(model_mir.predict_photometry(true_params)) / 20.0
@@ -411,7 +411,7 @@ if HAS_DATA:
         redshift=Uniform(0.01, 0.5),
         mean_sfh_type="tsnorm",
     )
-    model_free_z = Model(spec_free_z, ssp_data, observation=obs_sdss)
+    model_free_z = SEDModel(spec_free_z, ssp_data, observation=obs_sdss)
 
     # Fisher with redshift included — use public param names
     fim_fixed_z, _ = compute_fisher_matrix(
@@ -478,10 +478,10 @@ if HAS_DATA:
     fig.subplots_adjust(hspace=0.05)
 
     for draw in posterior_phot:
-        ax_top.plot(wave_eff, draw, "-", color=COLORS["geovi"], alpha=0.08, lw=0.8)
+        ax_top.plot(wave_eff, draw, "-", color=COLORS["vi"], alpha=0.08, lw=0.8)
     median_pred = np.median(posterior_phot, axis=0)
     ax_top.plot(
-        wave_eff, median_pred, "s", ms=5, color=COLORS["geovi"], zorder=4, label="Model (median)"
+        wave_eff, median_pred, "s", ms=5, color=COLORS["vi"], zorder=4, label="Model (median)"
     )
     ax_top.errorbar(
         wave_eff,
@@ -556,7 +556,7 @@ if HAS_DATA:
         posterior_widths,
         width_bar,
         label="Posterior width (84th - 16th)",
-        color=COLORS["geovi"],
+        color=COLORS["vi"],
         alpha=0.85,
     )
     ax.set_xticks(x)
@@ -581,7 +581,7 @@ if HAS_DATA:
         result_sdss,
         true_params=true_params,
         ax=ax,
-        color=COLORS["geovi"],
+        color=COLORS["vi"],
         label="SDSS geoVI",
         method="geoVI",
     )
@@ -642,6 +642,9 @@ if HAS_DATA:
 #
 # **Next steps:**
 #
-# - See **Demo 05** (Inference Methods) for convergence diagnostics
-# - See **Reference 02** (Data Information Content) for Fisher forecasting
-# - See **Reference 07** (Gradient Sensitivity) for per-parameter Jacobian maps
+# - Use `result.check_convergence()` or `convergence_table({"method": result})`
+#   from `_plot_style.py` for convergence diagnostics.
+# - Use `diagnostics.fisher_matrix()` to forecast how additional observations
+#   (redshift priors, spectroscopy, narrow filters) break degeneracies.
+# - Use `diagnostics.gradient_jacobian()` to map parameter sensitivity
+#   per wavelength band.

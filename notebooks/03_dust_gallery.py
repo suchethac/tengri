@@ -14,11 +14,12 @@
 # ---
 
 # %% [markdown]
+# # Dust Attenuation Gallery
+#
 # _dust_gallery
 #
 # ## Part 1: Attenuation curves
 #
-# # Model gallery: dust attenuation curves
 #
 # Visual reference for the attenuation laws registered in
 # ``tengri.models.dust.attenuation.DUST_LAWS``. Each law is obtained with
@@ -271,15 +272,15 @@ ax.plot(np.array(wave_uv), np.array(k_c00), color=COLORS["rt"], lw=2.5, label="C
 ax.plot(
     np.array(wave_uv),
     np.array(k_l02),
-    color=COLORS["geovi"],
+    color=COLORS["vi"],
     lw=2.5,
     ls="--",
     label="Leitherer (L02)",
 )
 
 # Highlight the L02 extension region
-ax.axvspan(970, 1200, alpha=0.15, color=COLORS["geovi"], label="L02 extension (970--1200 A)")
-ax.axvspan(1200, 1800, alpha=0.08, color=COLORS["geovi"])
+ax.axvspan(970, 1200, alpha=0.15, color=COLORS["vi"], label="L02 extension (970--1200 A)")
+ax.axvspan(1200, 1800, alpha=0.08, color=COLORS["vi"])
 
 ax.axvline(1200, color="grey", ls=":", alpha=0.4)
 ax.annotate(
@@ -339,8 +340,8 @@ fig, (ax_main, ax_zoom) = plt.subplots(1, 2, figsize=(10, 4), width_ratios=[2, 1
 for k_arr, label, color, ls in [
     (k_c00, "Calzetti (reference)", "grey", ":"),
     (k_kc13, r"KC13: base$\times$slope + bump", COLORS["rt"], "-"),
-    (k_n09, r"N09: (base + bump)$\times$slope", COLORS["geovi"], "--"),
-    (k_sbl18, r"SBL18: base$\times$slope + bump (+ L02)", COLORS["nuts"], "-."),
+    (k_n09, r"N09: (base + bump)$\times$slope", COLORS["vi"], "--"),
+    (k_sbl18, r"SBL18: base$\times$slope + bump (+ L02)", COLORS["mcmc_nuts"], "-."),
 ]:
     ax_main.plot(np.array(wave_mod), np.array(k_arr), label=label, color=color, ls=ls, lw=2)
 
@@ -357,8 +358,8 @@ uv_mask = np.array(wave_mod) < 4000
 for k_arr, label, color, ls in [
     (k_c00, "C00", "grey", ":"),
     (k_kc13, "KC13", COLORS["rt"], "-"),
-    (k_n09, "N09", COLORS["geovi"], "--"),
-    (k_sbl18, "SBL18", COLORS["nuts"], "-."),
+    (k_n09, "N09", COLORS["vi"], "--"),
+    (k_sbl18, "SBL18", COLORS["mcmc_nuts"], "-."),
 ]:
     ax_zoom.plot(
         np.array(wave_mod)[uv_mask],
@@ -413,8 +414,8 @@ fig, ax = plt.subplots(figsize=(8, 5))
 ax.plot(
     np.array(wave_ext), np.array(k_mw), color=COLORS["rt"], lw=2.5, label="MW (CCM89, R_V=3.1)"
 )
-ax.plot(np.array(wave_ext), np.array(k_smc), color=COLORS["geovi"], lw=2.5, label="SMC (Pei 1992)")
-ax.plot(np.array(wave_ext), np.array(k_lmc), color=COLORS["nuts"], lw=2.5, label="LMC (Pei 1992)")
+ax.plot(np.array(wave_ext), np.array(k_smc), color=COLORS["vi"], lw=2.5, label="SMC (Pei 1992)")
+ax.plot(np.array(wave_ext), np.array(k_lmc), color=COLORS["mcmc_nuts"], lw=2.5, label="LMC (Pei 1992)")
 
 # Highlight the bump region
 ax.axvspan(2050, 2300, alpha=0.1, color="purple", label=r"2175 $\AA$ bump region")
@@ -434,16 +435,16 @@ ax.annotate(
     xy=(2175, np.float64(k_smc[np.argmin(np.abs(np.array(wave_ext) - 2175))])),
     xytext=(3500, 4.0),
     fontsize=8,
-    arrowprops={"arrowstyle": "->", "color": COLORS["geovi"]},
-    color=COLORS["geovi"],
+    arrowprops={"arrowstyle": "->", "color": COLORS["vi"]},
+    color=COLORS["vi"],
 )
 ax.annotate(
     "Weak bump",
     xy=(2175, np.float64(k_lmc[np.argmin(np.abs(np.array(wave_ext) - 2175))])),
     xytext=(3200, 5.2),
     fontsize=8,
-    arrowprops={"arrowstyle": "->", "color": COLORS["nuts"]},
-    color=COLORS["nuts"],
+    arrowprops={"arrowstyle": "->", "color": COLORS["mcmc_nuts"]},
+    color=COLORS["mcmc_nuts"],
 )
 
 ax.set_xlabel(r"Wavelength ($\AA$)")
@@ -709,9 +710,9 @@ fig, ax = plt.subplots(figsize=(8, 5))
 
 for name, label, color, ls in [
     ("calzetti", "Calzetti (C00)", COLORS["rt"], "-"),
-    ("smc", "SMC (Pei 1992)", COLORS["geovi"], "--"),
-    ("lmc", "LMC (Pei 1992)", COLORS["nuts"], "-."),
-    ("cardelli", "MW (CCM89)", COLORS["mgvi"], ":"),
+    ("smc", "SMC (Pei 1992)", COLORS["vi"], "--"),
+    ("lmc", "LMC (Pei 1992)", COLORS["mcmc_nuts"], "-."),
+    ("cardelli", "MW (CCM89)", COLORS["vi_linear"], ":"),
 ]:
     k = resolve_dust_law(name)(wave_uv_zoom)
     ax.plot(np.array(wave_uv_zoom), np.array(k), color=color, ls=ls, lw=2.5, label=label)
@@ -829,11 +830,11 @@ plt.show()
 fig, ax = plt.subplots(figsize=(10, 5))
 _presets = [
     ("MW-like", dict(dust_c1=6.0, dust_c2=4.0, dust_c3=2.0, dust_c4=0.04), COLORS["rt"], "-"),
-    ("SMC-like", dict(dust_c1=5.0, dust_c2=5.5, dust_c3=1.5, dust_c4=0.0), COLORS["geovi"], "--"),
+    ("SMC-like", dict(dust_c1=5.0, dust_c2=5.5, dust_c3=1.5, dust_c4=0.0), COLORS["vi"], "--"),
     (
         "Calzetti-like",
         dict(dust_c1=3.5, dust_c2=2.5, dust_c3=3.0, dust_c4=0.0),
-        COLORS["nuts"],
+        COLORS["mcmc_nuts"],
         "-.",
     ),
 ]
@@ -884,8 +885,8 @@ fig, axes = plt.subplots(1, 3, figsize=(16, 5), sharey=True)
 
 geom_colors = {
     "Shell": COLORS["rt"],
-    "Cloudy": COLORS["geovi"],
-    "Dusty": COLORS["nuts"],
+    "Cloudy": COLORS["vi"],
+    "Dusty": COLORS["mcmc_nuts"],
 }
 
 for i, tau_val in enumerate(tau_vals):
@@ -1301,7 +1302,6 @@ plt.show()
 # %% [markdown]
 #
 # %% [markdown]
-# # Dust Emission Model Gallery
 #
 # tengri implements **10 dust emission models** spanning simple analytic
 # modified blackbodies through physically-motivated template libraries.

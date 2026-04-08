@@ -14,6 +14,8 @@
 # ---
 
 # %% [markdown]
+# # Fitting Photometry
+#
 # _fitting_photometry
 #
 # For astronomers: **photometric SED fitting** asks which combinations of star formation history,
@@ -71,7 +73,7 @@ os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.45")
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -145,6 +147,27 @@ obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
 )
 
+# %% [markdown]
+# ### Choosing priors
+#
+# The prior ranges below reflect conservative constraints for optically-selected
+# galaxies at z < 1:
+#
+# | Parameter | Range | Physical motivation |
+# |-----------|-------|---------------------|
+# | `sfh_tsnorm_log_peak_sfr` | [−1, 2.5] | Covers dwarf irregulars to ULIRGs |
+# | `sfh_tsnorm_peak_lbt_gyr` | [0.5, 12] | Excludes unphysical futures; allows old populations |
+# | `met_logzsol` | [−2, 0.2] | Metal-poor halos to super-solar starbursts |
+# | `dust_tau_diff` | [0, 2] | Balmer-decrement surveys give τ_V ~ 0.5–1.5 typical |
+#
+# **Rule of thumb:** wider priors = slower convergence but less bias risk.
+# Narrower priors = faster fits but dangerous if truth falls outside.
+#
+# **Noise model:** All examples here use Gaussian noise. For spectra with
+# outliers (cosmic rays, bad sky subtraction), use `NoiseModel("student_t", dof=3)`
+# which down-weights extreme residuals.
+
+# %%
 spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
@@ -159,7 +182,7 @@ spec = Parameters(
     mean_sfh_type="tsnorm",
 )
 
-model = Model(spec, ssp_data, observation=obs)
+model = SEDModel(spec, ssp_data, observation=obs)
 
 # Generate mock galaxy with PRNGKey=42 (same as quickstart)
 key = jax.random.PRNGKey(42)
@@ -236,15 +259,15 @@ ax_sed.scatter(
     pred_median,
     marker="D",
     s=40,
-    color=COLORS.get("geovi", "C1"),
+    color=COLORS.get("vi", "C1"),
     zorder=5,
     label="Posterior median",
 )
 ax_sed.fill_between(
-    wave_eff, pred_lo68, pred_hi68, alpha=0.3, color=COLORS.get("geovi", "C1"), label="68% CI"
+    wave_eff, pred_lo68, pred_hi68, alpha=0.3, color=COLORS.get("vi", "C1"), label="68% CI"
 )
 ax_sed.fill_between(
-    wave_eff, pred_lo95, pred_hi95, alpha=0.1, color=COLORS.get("geovi", "C1"), label="95% CI"
+    wave_eff, pred_lo95, pred_hi95, alpha=0.1, color=COLORS.get("vi", "C1"), label="95% CI"
 )
 
 ax_sed.set_xlabel("Wavelength [Å]")
@@ -258,7 +281,7 @@ plot_sfh(
     result,
     true_params=true_params,
     ax=ax_sfh,
-    color=COLORS.get("geovi", "C1"),
+    color=COLORS.get("vi", "C1"),
     label="Posterior",
     method="geoVI",
 )
@@ -293,7 +316,7 @@ data_joint = obs_joint.pack_data(phot=mock.flux_obs, spec=mock_spec_data.flux_ob
 noise_joint = obs_joint.pack_data(phot=mock.noise, spec=mock_spec_data.noise)
 
 # Joint fit
-model_joint = Model(spec, ssp_data, observation=obs_joint)
+model_joint = SEDModel(spec, ssp_data, observation=obs_joint)
 fitter_joint = Fitter(model_joint, data_joint, noise_joint)
 fitter_joint.compile(verbose=False)
 
@@ -311,7 +334,7 @@ result_joint = fitter_joint.run(
 obs_phot = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
 )
-model_phot = Model(spec, ssp_data, observation=obs_phot)
+model_phot = SEDModel(spec, ssp_data, observation=obs_phot)
 fitter_phot = Fitter(model_phot, mock.flux_obs, mock.noise)
 fitter_phot.compile(verbose=False)
 _ = fitter_phot.run("map", n_steps=300, verbose=False)
@@ -354,7 +377,7 @@ for i, pname in enumerate(params_list):
         np.array(result_joint.samples[pname]),
         bins=30,
         alpha=0.6,
-        color=COLORS.get("geovi", "C1"),
+        color=COLORS.get("vi", "C1"),
         density=True,
     )
     ax_j.axvline(tv, color="red", lw=1.5, label="Truth")
@@ -515,7 +538,7 @@ posteriors_by_config = {}
 
 for config_name, filter_names in configs.items():
     obs_cfg = Observation(photometry=Photometry.from_names(filter_names))
-    model_cfg = Model(spec, ssp_data, observation=obs_cfg)
+    model_cfg = SEDModel(spec, ssp_data, observation=obs_cfg)
 
     # Generate mock with all filters, then fit with subset
     key_cfg = jax.random.PRNGKey(99)
@@ -555,7 +578,7 @@ for ax, (config_name, result) in zip(axes, posteriors_by_config.items()):
         hi = float(np.percentile(result.samples[pname], 84))
         widths.append(hi - lo)
 
-    ax.bar(labels_plot, widths, color=COLORS.get("geovi", "C1"), alpha=0.7, edgecolor="k")
+    ax.bar(labels_plot, widths, color=COLORS.get("vi", "C1"), alpha=0.7, edgecolor="k")
     ax.set_ylabel("68% CI Width")
     ax.set_title(config_name)
     ax.grid(axis="y", alpha=0.3)

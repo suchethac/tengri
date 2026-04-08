@@ -14,6 +14,7 @@
 # ---
 
 # %% [markdown]
+# # AGN Emission Gallery
 #
 # _agn_gallery
 #
@@ -80,7 +81,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri import Fixed, Model, Parameters, Uniform, load_ssp_data
+from tengri import Fixed, SEDModel, Parameters, Uniform, load_ssp_data
 from tengri.models.agn import (
     AGN_MODELS,
     adaf_agn,
@@ -324,8 +325,8 @@ l_total = l_disc + l_torus + l_blr + l_nlr
 # Plot each component
 ax.loglog(wave_um, l_disc * nu_arr, color=COLORS["rt"], lw=1.8, label="Accretion disc")
 ax.loglog(wave_um, l_torus * nu_arr, color=COLORS["model"], lw=1.8, label="Dust torus")
-ax.loglog(wave_um, l_blr * nu_arr, color=COLORS["nuts"], lw=1.5, ls="--", label="BLR + Fe II")
-ax.loglog(wave_um, l_nlr * nu_arr, color=COLORS["mgvi"], lw=1.5, ls=":", label="NLR")
+ax.loglog(wave_um, l_blr * nu_arr, color=COLORS["mcmc_nuts"], lw=1.5, ls="--", label="BLR + Fe II")
+ax.loglog(wave_um, l_nlr * nu_arr, color=COLORS["vi_linear"], lw=1.5, ls=":", label="NLR")
 ax.loglog(wave_um, l_total * nu_arr, color=COLORS["truth"], lw=2.5, label="Total", alpha=0.7)
 
 # Reference wavelengths
@@ -380,7 +381,7 @@ fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
 # (a) Vary alpha
 alphas = [-0.5, -1.0, -1.5]
-alpha_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"]]
+alpha_colors = [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"]]
 for alpha, c in zip(alphas, alpha_colors):
     lnu = np.asarray(powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_alpha=alpha))
     axes[0].loglog(wave_um, lnu, color=c, lw=1.8, label=rf"$\alpha={alpha}$")
@@ -395,7 +396,7 @@ axes[0].legend(fontsize=8)
 
 # (b) Vary T_max (UV cutoff)
 t_maxs = [1e4, 5e4, 1e5, 1e6]
-t_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
+t_colors = [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"], COLORS["vi_linear"]]
 for t_max, c in zip(t_maxs, t_colors):
     lnu = np.asarray(powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_alpha=-1.0, agn_T_max=t_max))
     axes[1].loglog(
@@ -425,7 +426,7 @@ fig, axes = plt.subplots(2, 2, figsize=(10, 7.5))
 
 # (a) Vary M_BH
 log_mbhs = [6.0, 7.0, 8.0, 9.0]
-mbh_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
+mbh_colors = [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"], COLORS["vi_linear"]]
 for log_mbh, c in zip(log_mbhs, mbh_colors):
     lnu = np.asarray(
         multicolor_disc(wavelength, agn_log_lbol=44.0, agn_log_mbh=log_mbh, agn_log_ledd=-1.0)
@@ -447,7 +448,7 @@ axes[0, 0].legend(fontsize=7)
 
 # (b) Vary L/L_Edd
 log_ledds = [-2.0, -1.0, -0.5, 0.0]
-ledd_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
+ledd_colors = [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"], COLORS["vi_linear"]]
 for log_ledd, c in zip(log_ledds, ledd_colors):
     lnu = np.asarray(
         multicolor_disc(wavelength, agn_log_lbol=44.0, agn_log_mbh=8.0, agn_log_ledd=log_ledd)
@@ -469,7 +470,7 @@ axes[0, 1].legend(fontsize=7)
 
 # (c) Vary spin
 spins = [0.0, 0.5, 0.9, 0.998]
-spin_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
+spin_colors = [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"], COLORS["vi_linear"]]
 for a_spin, c in zip(spins, spin_colors):
     lnu = np.asarray(
         multicolor_disc(
@@ -614,7 +615,7 @@ axes[0].legend(fontsize=7)
 
 # (b) Vary f_hard (corona fraction)
 f_hards = [0.005, 0.02, 0.05, 0.1]
-fh_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
+fh_colors = [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"], COLORS["vi_linear"]]
 for f_hard, c in zip(f_hards, fh_colors):
     lnu = np.asarray(
         kubota_done_disc(
@@ -722,7 +723,7 @@ test_cases = [
         label=r"$\Gamma=2.5$, $kT_e=0.3$, $kT_{bb}=0.005$ keV",
     ),
 ]
-nc_colors = [COLORS["model"], COLORS["rt"], COLORS["nuts"], COLORS["mgvi"]]
+nc_colors = [COLORS["model"], COLORS["rt"], COLORS["mcmc_nuts"], COLORS["vi_linear"]]
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 
@@ -933,7 +934,7 @@ axes[0].legend(fontsize=7)
 
 # (b) Vary truncation radius
 r_trs = [30.0, 100.0, 300.0, 1000.0]
-rtr_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
+rtr_colors = [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"], COLORS["vi_linear"]]
 for r_tr, c in zip(r_trs, rtr_colors):
     lnu = np.asarray(
         adaf_disc(
@@ -981,7 +982,7 @@ fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), sharey=True)
 # (a) Vary BH spin
 for a, c, lb in zip(
     [0.0, 0.5, 0.998],
-    [COLORS["rt"], COLORS["nuts"], COLORS["model"]],
+    [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"]],
     ["$a=0$", "$a=0.5$", "$a=0.998$"],
 ):
     lnu = multicolor_disc(
@@ -999,7 +1000,7 @@ axes[0].legend(fontsize=8)
 # (b) Vary Eddington ratio
 for le, c, lb in zip(
     [-2.0, -1.0, -0.5],
-    [COLORS["rt"], COLORS["nuts"], COLORS["model"]],
+    [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"]],
     [r"$\log\lambda=-2$", r"$\log\lambda=-1$", r"$\log\lambda=-0.5$"],
 ):
     lnu = multicolor_disc(
@@ -1119,7 +1120,7 @@ if _qsogen_available:
 
     # (b) Vary E(B-V) reddening
     ebvs = [0.0, 0.1, 0.3, 0.5]
-    ebv_colors = [COLORS["truth"], COLORS["rt"], COLORS["nuts"], COLORS["model"]]
+    ebv_colors = [COLORS["truth"], COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"]]
     for ebv, c in zip(ebvs, ebv_colors):
         lnu = np.asarray(qsogen_sed(wave_qso, agn_log_lbol=45.0, agn_ebv=ebv))
         axes[0, 1].loglog(
@@ -1139,7 +1140,7 @@ if _qsogen_available:
 
     # (c) Vary blue slope plslp1
     plslp1s = [-1.5, -0.5, -0.349, 0.5]
-    plslp1_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
+    plslp1_colors = [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"], COLORS["vi_linear"]]
     for plslp1, c in zip(plslp1s, plslp1_colors):
         lnu = np.asarray(qsogen_sed(wave_qso, agn_log_lbol=45.0, agn_plslp1=plslp1))
         axes[1, 0].loglog(
@@ -1159,7 +1160,7 @@ if _qsogen_available:
 
     # (d) Vary hot dust temperature
     tbbs = [800, 1000, 1240, 1500]
-    tbb_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
+    tbb_colors = [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"], COLORS["vi_linear"]]
     for tbb, c in zip(tbbs, tbb_colors):
         lnu = np.asarray(qsogen_sed(wave_qso, agn_log_lbol=45.0, agn_tbb=float(tbb)))
         axes[1, 1].loglog(
@@ -1208,7 +1209,7 @@ fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
 
 # (a) Vary temperature
 temps = [500, 800, 1000, 1500]
-t_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
+t_colors = [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"], COLORS["vi_linear"]]
 for t, c in zip(temps, t_colors):
     lnu = np.asarray(simple_torus(wavelength, agn_log_lbol=44.0, agn_T_torus=float(t)))
     axes[0].loglog(wave_um, lnu, color=c, lw=1.8, label=rf"$T={t}$ K")
@@ -1223,7 +1224,7 @@ axes[0].legend(fontsize=8)
 
 # (b) Vary optical depth
 taus = [1.0, 3.0, 5.0, 10.0]
-tau_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
+tau_colors = [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"], COLORS["vi_linear"]]
 for tau, c in zip(taus, tau_colors):
     lnu = np.asarray(simple_torus(wavelength, agn_log_lbol=44.0, agn_tau_torus=tau))
     axes[1].loglog(wave_um, lnu, color=c, lw=1.8, label=rf"$\tau_{{9.7}}={tau:.0f}$")
@@ -1248,7 +1249,7 @@ plt.show()
 fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
 
 # (a) Vary optical depth
-for tau, c in zip([1.0, 5.0, 10.0], [COLORS["rt"], COLORS["nuts"], COLORS["model"]]):
+for tau, c in zip([1.0, 5.0, 10.0], [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"]]):
     lnu = np.asarray(two_temperature_torus(wavelength, agn_log_lbol=44.0, agn_tau_torus=tau))
     axes[0].loglog(wave_um, lnu, color=c, label=rf"$\tau_{{9.7}}={tau:.0f}$", lw=1.8)
 axes[0].axvline(9.7, color="gray", ls=":", alpha=0.5)
@@ -1262,7 +1263,7 @@ axes[0].legend(fontsize=8)
 
 # (b) Hot dust fraction
 for fh, c in zip(
-    [0.1, 0.3, 0.5, 0.7], [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]]
+    [0.1, 0.3, 0.5, 0.7], [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"], COLORS["vi_linear"]]
 ):
     lnu = np.asarray(two_temperature_torus(wavelength, agn_log_lbol=44.0, agn_frac_hot=fh))
     axes[1].loglog(wave_um, lnu, color=c, label=rf"$f_{{\rm hot}}={fh}$", lw=1.8)
@@ -1293,7 +1294,7 @@ try:
     skirtor_fn = get_agn_model("skirtor")
     for ci, c, lb in zip(
         [0.95, 0.7, 0.5, 0.1],
-        [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]],
+        [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"], COLORS["vi_linear"]],
         [
             r"Face-on ($\cos i=0.95$, Type 1)",
             r"$\cos i=0.7$",
@@ -1310,7 +1311,7 @@ except Exception as e:
 
     for ci, c, lb in zip(
         [0.95, 0.7, 0.5, 0.1],
-        [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]],
+        [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"], COLORS["vi_linear"]],
         [
             r"Face-on ($\cos i=0.95$)",
             r"$\cos i=0.7$",
@@ -1401,7 +1402,7 @@ axes[0, 0].set(
 
 # (b) Fe II pseudo-continuum at R_Fe = 0, 1, 2
 fe2_values = [0.0, 0.5, 1.0, 2.0]
-fe2_colors = [COLORS["truth"], COLORS["rt"], COLORS["nuts"], COLORS["model"]]
+fe2_colors = [COLORS["truth"], COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"]]
 fe2_labels = [
     r"$R_{\rm Fe}=0$ (no Fe II)",
     r"$R_{\rm Fe}=0.5$",
@@ -1446,7 +1447,7 @@ axes[0, 1].legend(fontsize=7)
 
 # (c) FWHM effect
 fwhms = [2000, 5000, 10000]
-fwhm_colors = [COLORS["rt"], COLORS["nuts"], COLORS["model"]]
+fwhm_colors = [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"]]
 for fwhm, c in zip(fwhms, fwhm_colors):
     l_fwhm = np.asarray(
         blr_emission(
@@ -1520,7 +1521,7 @@ fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 l_nlr_spec = np.asarray(
     nlr_emission(wave_nlr, l_disc_bol_erg=_l_disc_bol, covering_fraction=0.1, fwhm_kms=500.0)
 )
-axes[0].plot(np.asarray(wave_nlr), l_nlr_spec, color=COLORS["mgvi"], lw=1.2)
+axes[0].plot(np.asarray(wave_nlr), l_nlr_spec, color=COLORS["vi_linear"], lw=1.2)
 
 nlr_line_labels = {
     "[O II] 3727": 3727.0,
@@ -1584,7 +1585,7 @@ axes[1].plot(
 axes[1].plot(
     np.asarray(wave_comp),
     l_nlr_norm,
-    color=COLORS["mgvi"],
+    color=COLORS["vi_linear"],
     lw=1.5,
     label="NLR (FWHM = 500 km/s)",
     alpha=0.8,
@@ -1623,7 +1624,7 @@ plt.show()
 fig, ax = plt.subplots(figsize=(8, 5))
 for ci, c, lb in zip(
     [0.95, 0.5, 0.1],
-    [COLORS["rt"], COLORS["nuts"], COLORS["model"]],
+    [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"]],
     ["Type 1 (face-on)", "Intermediate", "Type 2 (edge-on)"],
 ):
     lnu = unified_nlr_blr(
@@ -1662,7 +1663,7 @@ fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 # (a) Type 1 vs Type 2
 for ci, c, lb in zip(
     [0.95, 0.5, 0.1],
-    [COLORS["rt"], COLORS["nuts"], COLORS["model"]],
+    [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"]],
     ["Type 1 (face-on, cos i=0.95)", "Intermediate (cos i=0.5)", "Type 2 (edge-on, cos i=0.1)"],
 ):
     lnu = np.asarray(
@@ -1692,7 +1693,7 @@ from tengri.models.agn.unified import _sigmoid_mask
 cos_inc_grid = np.linspace(0.0, 1.0, 200)
 for theta, c, lb in zip(
     [20.0, 30.0, 45.0, 60.0],
-    [COLORS["rt"], COLORS["nuts"], COLORS["model"], COLORS["mgvi"]],
+    [COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"], COLORS["vi_linear"]],
     [r"$\theta=20^\circ$", r"$\theta=30^\circ$", r"$\theta=45^\circ$", r"$\theta=60^\circ$"],
 ):
     mask_vals = np.array([float(_sigmoid_mask(ci, theta)) for ci in cos_inc_grid])
@@ -1737,7 +1738,7 @@ plt.show()
 # %%
 fig, ax = plt.subplots(figsize=(7, 4))
 ebv_values = [0.0, 0.1, 0.3, 0.5]
-ebv_colors = [COLORS["truth"], COLORS["rt"], COLORS["nuts"], COLORS["model"]]
+ebv_colors = [COLORS["truth"], COLORS["rt"], COLORS["mcmc_nuts"], COLORS["model"]]
 for ebv, c in zip(ebv_values, ebv_colors):
     lnu = np.asarray(
         unified_nlr_blr(
@@ -1842,7 +1843,7 @@ spec_stellar = Parameters(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.0),
 )
-model_stellar = Model(spec_stellar, ssp_data)
+model_stellar = SEDModel(spec_stellar, ssp_data)
 params_stellar = {
     k: v.value if hasattr(v, "value") else v
     for k, v in {

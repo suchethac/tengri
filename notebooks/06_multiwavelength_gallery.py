@@ -14,6 +14,8 @@
 # ---
 
 # %% [markdown]
+# # Multiwavelength Extensions
+#
 # _multiwavelength_gallery
 #
 # Beyond the UV-optical, three additional physics windows extend tengri's
@@ -373,10 +375,10 @@ L_mcc = radio_sfr_mccheyne2022(_WAVE_PLOT, _L_IR, _LOG_MSTAR, _Z, apply_suppress
 
 ax.loglog(_NU_PLOT, np.array(L_bell[_sort_idx]), color=COLORS["rt"], lw=1.5, label="Bell+2003")
 ax.loglog(
-    _NU_PLOT, np.array(L_delv[_sort_idx]), color=COLORS["geovi"], lw=1.5, label="Delvecchio+2021"
+    _NU_PLOT, np.array(L_delv[_sort_idx]), color=COLORS["vi"], lw=1.5, label="Delvecchio+2021"
 )
 ax.loglog(
-    _NU_PLOT, np.array(L_mcc[_sort_idx]), color=COLORS["nuts"], lw=1.5, label="McCheyne+2022"
+    _NU_PLOT, np.array(L_mcc[_sort_idx]), color=COLORS["mcmc_nuts"], lw=1.5, label="McCheyne+2022"
 )
 ax.axvline(1.4, ls=":", color="grey", lw=0.8, alpha=0.7)
 ax.axvline(0.15, ls="--", color="grey", lw=0.8, alpha=0.7)
@@ -400,8 +402,8 @@ q_mcc = 1.98 * (1.0 + _Z) ** 0.02 + (-0.22) * (log_mstar_arr - 10.0)
 q_bell = np.full_like(log_mstar_arr, 2.64)
 
 ax2.plot(log_mstar_arr, q_bell, color=COLORS["rt"], lw=1.5, ls="--", label="Bell+2003 (fixed)")
-ax2.plot(log_mstar_arr, q_delv, color=COLORS["geovi"], lw=1.5, label="Delvecchio+2021 @ 1.4 GHz")
-ax2.plot(log_mstar_arr, q_mcc, color=COLORS["nuts"], lw=1.5, label="McCheyne+2022 @ 150 MHz")
+ax2.plot(log_mstar_arr, q_delv, color=COLORS["vi"], lw=1.5, label="Delvecchio+2021 @ 1.4 GHz")
+ax2.plot(log_mstar_arr, q_mcc, color=COLORS["mcmc_nuts"], lw=1.5, label="McCheyne+2022 @ 150 MHz")
 ax2.set_xlabel(r"log(M$_\star$ / M$_\odot$)")
 ax2.set_ylabel(r"$q_{\rm IR}$")
 ax2.set_title(f"q$_{{\\rm IR}}$(M★) at z={_Z}")
@@ -476,7 +478,7 @@ L_synch = radio_sfr_bell2003(_WAVE_PLOT, _L_IR)
 L_ff = radio_freefree(_WAVE_PLOT, _L_IR, T_e=1e4)
 
 ax.loglog(_NU_PLOT, np.array(L_synch[_sort_idx]), color=COLORS["rt"], lw=1.5, label="Synchrotron")
-ax.loglog(_NU_PLOT, np.array(L_ff[_sort_idx]), color=COLORS["geovi"], lw=1.5, label="Free-free")
+ax.loglog(_NU_PLOT, np.array(L_ff[_sort_idx]), color=COLORS["vi"], lw=1.5, label="Free-free")
 ax.loglog(
     _NU_PLOT,
     np.array((L_synch + L_ff)[_sort_idx]),
@@ -497,7 +499,7 @@ ax.legend(fontsize=8, frameon=False)
 # Panel B: Thermal fraction vs frequency
 ax2 = axes[1]
 Te_values = [5e3, 1e4, 2e4]
-te_colors = [COLORS["nuts"], COLORS["geovi"], COLORS["rt"]]
+te_colors = [COLORS["mcmc_nuts"], COLORS["vi"], COLORS["rt"]]
 for T_e, color in zip(Te_values, te_colors):
     L_ff_te = radio_freefree(_WAVE_PLOT, _L_IR, T_e=T_e)
     L_total_te = L_synch + L_ff_te
@@ -557,7 +559,7 @@ ax.legend(fontsize=8, frameon=False, title="log R")
 # Panel B: Double power-law shapes at fixed R=2
 ax2 = axes[1]
 log_nu_t_values = [8.0, 9.0, 10.0]  # transition freq: 100 MHz, 1 GHz, 10 GHz
-dpl_colors = [COLORS["nuts"], COLORS["geovi"], COLORS["rt"]]
+dpl_colors = [COLORS["mcmc_nuts"], COLORS["vi"], COLORS["rt"]]
 
 for log_nu_t, color in zip(log_nu_t_values, dpl_colors):
     L_dpl = radio_agn_dpl(_WAVE_PLOT, L_agn_bol, radio_loudness=2.0, log_nu_t=log_nu_t)
@@ -634,14 +636,14 @@ ax.loglog(
 ax.loglog(
     _NU_PLOT,
     np.array(comps["freefree"][_sort_idx]),
-    color=COLORS["geovi"],
+    color=COLORS["vi"],
     lw=1.4,
     label="Free-free (thermal)",
 )
 ax.loglog(
     _NU_PLOT,
     np.array(comps["agn"][_sort_idx]),
-    color=COLORS["nuts"],
+    color=COLORS["mcmc_nuts"],
     lw=1.4,
     label="AGN (R=1)",
 )
@@ -742,8 +744,8 @@ ax.plot(
 
 for z, color, ls in [
     (1.0, COLORS["rt"], "-"),
-    (3.0, COLORS["geovi"], "-"),
-    (6.0, COLORS["nuts"], "-"),
+    (3.0, COLORS["vi"], "-"),
+    (6.0, COLORS["mcmc_nuts"], "-"),
 ]:
     wave_obs_z = wave_fine * (1 + z)
     trans = igm_transmission(wave_obs_z, z, add_cgm=True)

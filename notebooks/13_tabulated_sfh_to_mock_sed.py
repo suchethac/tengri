@@ -14,16 +14,16 @@
 # ---
 
 # %% [markdown]
-# # 13_tabulated_sfh_to_mock_sed
+# # Tabulated SFH to Mock SED
 #
 # **Spine:** run after [`02_sfh_gallery.py`](02_sfh_gallery.py) (parametric and GP priors) and
 # [`01_sed_anatomy.py`](01_sed_anatomy.py) (full forward model). This notebook is for **known**
 # $(t,\mathrm{SFR})$ tables — e.g. from hydrodynamic simulations, semi-analytic models, or custom
-# mocks — **without** `Parameters` or `Model.mock`.
+# mocks — **without** `Parameters` or `SEDModel.mock`.
 #
 # The [`tengri.simulate`](https://github.com/suchethac/tengri/blob/main/src/tengri/simulate.py)
 # helpers call the same CSP machinery as the rest of tengri (paper §3.1). To **infer** physical
-# parameters from data, use `Model` + `Fitter` as in [`07_fitting_photometry.py`](07_fitting_photometry.py).
+# parameters from data, use `SEDModel` + `Fitter` as in [`07_fitting_photometry.py`](07_fitting_photometry.py).
 
 # %%
 import os
@@ -128,17 +128,17 @@ sfh_library = {
     },
     "Delayed-tau": {
         "sfr": 15.0 * (t_gyr / 3.0) * np.exp(-t_gyr / 3.0),
-        "color": COLORS["geovi"],
+        "color": COLORS["vi"],
         "log_z": -0.5,
     },
     "Late-time burst": {
         "sfr": 5.0 * np.exp(-t_gyr / 5.0) + 50.0 * np.exp(-0.5 * ((t_gyr - 10.0) / 0.5) ** 2),
-        "color": COLORS["nuts"],
+        "color": COLORS["mcmc_nuts"],
         "log_z": -0.2,
     },
     "Constant + quench": {
         "sfr": 10.0 * np.where(t_gyr < 8.0, 1.0, np.exp(-(t_gyr - 8.0) / 0.5)),
-        "color": COLORS.get("mgvi", "C4"),
+        "color": COLORS.get("vi_linear", "C4"),
         "log_z": -0.1,
     },
 }
@@ -193,7 +193,7 @@ plt.show()
 #
 # `photometry_from_sfh` convolves the SED through filters,
 # applies IGM transmission, and scales by luminosity distance. Use the result as **truth** fluxes
-# for mock challenges, then fit with `Model` + `Fitter`.
+# for mock challenges, then fit with `SEDModel` + `Fitter`.
 
 # %%
 z_demo = 0.1
@@ -218,7 +218,7 @@ print("Filter fluxes (erg/s/cm²/Hz):", np.array(phot["flux"]))
 fig, ax = plt.subplots(figsize=(6, 4))
 band_names = ["u", "g", "r", "i", "z"]
 x = np.arange(len(band_names))
-ax.bar(x, np.array(phot["flux"]), color=[COLORS["geovi"]] * len(band_names), alpha=0.85)
+ax.bar(x, np.array(phot["flux"]), color=[COLORS["vi"]] * len(band_names), alpha=0.85)
 ax.set_xticks(x)
 ax.set_xticklabels(band_names)
 ax.set_ylabel(r"Observed $f_\nu$ [cgs]")

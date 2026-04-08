@@ -14,6 +14,8 @@
 # ---
 
 # %% [markdown]
+# # Quickstart
+#
 # _quickstart
 #
 # In one glance you will see a **galaxy SED from X-ray to radio** (forward model),
@@ -70,7 +72,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Spectroscopy,
@@ -138,6 +140,26 @@ from _plot_style import (
 
 setup_style()
 
+# %% [markdown]
+# ## Key Concepts
+#
+# **IFT correlated fields** — Information Field Theory prior that generates smooth,
+# continuous star formation histories by correlating SFR values across adjacent
+# time bins. This avoids unphysical step-function SFHs.
+#
+# **PSD burstiness** — The Power Spectral Density (PSD) controls the temporal
+# roughness of the SFH. High PSD amplitude (σ) = bursty (rapid SFR fluctuations);
+# low σ = smooth secular evolution. The PSD timescale (τ) sets the characteristic
+# duration of bursts.
+#
+# **logU (ionization parameter)** — log₁₀ of the ratio of ionizing photon density to
+# gas density, Q(H⁰)/n_H. Ranges from ~−4 (diffuse ISM) to ~−1 (dense H II regions).
+# Higher logU produces stronger high-ionization lines ([O III], [Ne III]).
+#
+# **Baked-in nebular** — Nebular continuum and line emission pre-computed from the
+# ionizing spectrum of the stellar population, assuming photoionization equilibrium.
+# No separate nebular parameters needed (but less flexible than CLOUDY grids).
+
 # %%
 # Load SSP templates; spectroscopy-only observation for Parts A–B (Fitter uses model.observation.data_type)
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)  # SDSS-like, 200 pixels
@@ -183,7 +205,7 @@ spec_pan = Parameters(
     radio_q_ir=Fixed(2.64),
     redshift=Fixed(_z_q),
 )
-model_pan = Model(spec_pan, ssp_data, observation=None)
+model_pan = SEDModel(spec_pan, ssp_data, observation=None)
 params_pan = spec_pan.sample(jax.random.PRNGKey(101))
 wave_pan = jnp.logspace(0.8, 7.15, 900)
 sed_pan = model_pan.predict_spectrum(params_pan, wave_pan)
@@ -232,7 +254,7 @@ for name in spec_param.free_params:
 
 # %%
 # Create the model with spectroscopic precomputation (grid matches obs.spectroscopy)
-model_param = Model(spec_param, ssp_data, observation=obs)
+model_param = SEDModel(spec_param, ssp_data, observation=obs)
 model_param.precompute_spectroscopy(WAVE_OBS)
 print(f"Model created: {spec_param.n_free} free parameters, {len(WAVE_OBS)} spectral pixels")
 
@@ -394,9 +416,9 @@ ax_fit.errorbar(
     zorder=1,
 )
 for s in spec_samples[:50]:
-    ax_fit.plot(wave_np, s, color=COLORS["geovi"], alpha=0.03, lw=0.5, zorder=2)
+    ax_fit.plot(wave_np, s, color=COLORS["vi"], alpha=0.03, lw=0.5, zorder=2)
 ax_fit.plot(
-    wave_np, spec_median, color=COLORS["geovi"], lw=1.5, label="vi (geoVI) median", zorder=3
+    wave_np, spec_median, color=COLORS["vi"], lw=1.5, label="vi (geoVI) median", zorder=3
 )
 ax_fit.plot(wave_np, true_np, color=COLORS["truth"], lw=1, ls="--", label="Truth", zorder=4)
 ax_fit.legend(fontsize=8)
@@ -426,7 +448,7 @@ plot_sfh(
     result_geovi_param,
     true_params=true_params_param,
     ax=ax,
-    color=COLORS["geovi"],
+    color=COLORS["vi"],
     label="vi",
     method="geoVI",
 )
@@ -450,14 +472,14 @@ if hasattr(t_gyr_p, "__len__") and np.any(mask_200):
         sfh_arr = np.array(sfh_draws)
         lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
         median = np.median(sfh_arr, axis=0)
-        inset.fill_between(t_inset, lo, hi, color=COLORS["geovi"], alpha=0.3, lw=0)
-        inset.plot(t_inset, median, color=COLORS["geovi"], lw=1.2, label="Posterior")
+        inset.fill_between(t_inset, lo, hi, color=COLORS["vi"], alpha=0.3, lw=0)
+        inset.plot(t_inset, median, color=COLORS["vi"], lw=1.2, label="Posterior")
     else:
         sfh_fit = model_param.predict_sfh(result_geovi_param.params)
         inset.plot(
             t_inset,
             np.array(sfh_fit[sfr_key_p])[mask_200],
-            color=COLORS["geovi"],
+            color=COLORS["vi"],
             lw=1.2,
             ls="--",
             label="MAP",
@@ -521,7 +543,7 @@ for name in spec_param.free_params:
 fig = plot_corner_comparison(
     [result_geovi_param, result_nuts_param],
     labels=["vi", "NUTS"],
-    colors=[COLORS["geovi"], COLORS["nuts"]],
+    colors=[COLORS["vi"], COLORS["mcmc_nuts"]],
     truths=true_params_param,
 )
 if fig is not None:
@@ -590,7 +612,7 @@ print(f"  GP latent: {len([p for p in spec_stoch.free_params if 'xi' in p])}")
 
 # %%
 # Create stochastic model with spectroscopic precomputation
-model_stoch = Model(spec_stoch, ssp_data, observation=obs)
+model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs)
 model_stoch.precompute_spectroscopy(WAVE_OBS)
 
 # %%
@@ -704,7 +726,7 @@ plot_sfh(
     result_geovi_stoch,
     true_params=true_params_stoch,
     ax=ax,
-    color=COLORS["geovi"],
+    color=COLORS["vi"],
     label="vi",
     method="geoVI",
     show_mean_sfh=True,
@@ -731,14 +753,14 @@ if hasattr(t_gyr_s, "__len__") and np.any(mask_200):
         sfh_arr = np.array(sfh_draws)
         lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
         median = np.median(sfh_arr, axis=0)
-        inset.fill_between(t_inset, lo, hi, color=COLORS["geovi"], alpha=0.3, lw=0)
-        inset.plot(t_inset, median, color=COLORS["geovi"], lw=1.2, label="Posterior")
+        inset.fill_between(t_inset, lo, hi, color=COLORS["vi"], alpha=0.3, lw=0)
+        inset.plot(t_inset, median, color=COLORS["vi"], lw=1.2, label="Posterior")
     else:
         sfh_fit = model_stoch.predict_sfh(result_geovi_stoch.params)
         inset.plot(
             t_inset,
             np.array(sfh_fit[sfr_key_s])[mask_200],
-            color=COLORS["geovi"],
+            color=COLORS["vi"],
             lw=1.2,
             ls="--",
             label="MAP",
@@ -773,8 +795,8 @@ true_s = np.array(mock_stoch.flux_true)
 
 ax_fit.errorbar(wave_np, obs_s, yerr=noise_s, fmt=".", ms=2, color=COLORS["data"], alpha=0.4)
 for s in spec_samples_s[:50]:
-    ax_fit.plot(wave_np, s, color=COLORS["geovi"], alpha=0.03, lw=0.5)
-ax_fit.plot(wave_np, spec_median_s, color=COLORS["geovi"], lw=1.5, label="vi (geoVI) median")
+    ax_fit.plot(wave_np, s, color=COLORS["vi"], alpha=0.03, lw=0.5)
+ax_fit.plot(wave_np, spec_median_s, color=COLORS["vi"], lw=1.5, label="vi (geoVI) median")
 ax_fit.plot(wave_np, true_s, color=COLORS["truth"], lw=1, ls="--", label="Truth")
 ax_fit.legend(fontsize=8)
 ax_fit.set_ylabel("Flux density")
@@ -858,7 +880,7 @@ ax.plot(
 
 # Overlay each method's posterior SFH as 68% CI band
 for result, color, label in [
-    (result_geovi_stoch, COLORS["geovi"], f"vi (geoVI) ({t_geovi_s:.1f}s)"),
+    (result_geovi_stoch, COLORS["vi"], f"vi (geoVI) ({t_geovi_s:.1f}s)"),
     (result_rt_stoch, COLORS["rt"], f"Ray Tracing ({t_rt_s:.1f}s)"),
 ]:
     if result.samples is not None:
@@ -886,7 +908,7 @@ mask_cmp = t_gyr_cmp < 0.2
 if np.any(mask_cmp):
     t_inset = t_gyr_cmp[mask_cmp] * 1e3
     for result, color, label in [
-        (result_geovi_stoch, COLORS["geovi"], "geoVI"),
+        (result_geovi_stoch, COLORS["vi"], "geoVI"),
         (result_rt_stoch, COLORS["rt"], "RT"),
     ]:
         if result.samples is not None:

@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # 14_joint_photometry_spectroscopy
+# # Joint Photometry + Spectroscopy
 #
 # **Spine:** [`08_fitting_spectra.py`](08_fitting_spectra.py) compares photometry vs spectroscopy;
 # this notebook adds the **three-way** posterior comparison (phot-only, spec-only, joint) on the
@@ -65,7 +65,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -130,6 +130,22 @@ from _plot_style import (
 
 setup_style()
 
+# %% [markdown]
+# ### Aperture mismatch
+#
+# When combining photometry and spectroscopy from different instruments, a common
+# pitfall is **aperture mismatch**: photometric apertures (e.g., 3″ Kron) typically
+# capture more flux than spectroscopic slits (e.g., 1″ fiber). This creates a
+# flux normalization offset between the two data types.
+#
+# **Solutions:**
+# 1. Measure photometry within the spectroscopic aperture (requires imaging)
+# 2. Fit a free flux-calibration polynomial (use `marginalize_calibration`)
+# 3. Increase photometric error bars to absorb the mismatch
+#
+# This notebook uses synthetic data with matched apertures. For real data,
+# approach 2 is recommended — see `observation/calibration.py`.
+
 # %%
 ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 
@@ -175,7 +191,7 @@ spec = Parameters(
     mean_sfh_type="tsnorm",
 )
 
-model = Model(spec, ssp_data, observation=obs)
+model = SEDModel(spec, ssp_data, observation=obs)
 
 key = jax.random.PRNGKey(42)
 true_params = spec.sample(key)
@@ -294,7 +310,7 @@ ax_p.errorbar(
     color=COLORS["data"],
     alpha=0.7,
 )
-ax_p.scatter(wave_eff, pred_phot, marker="D", s=30, color=COLORS["geovi"], zorder=5, label="MAP")
+ax_p.scatter(wave_eff, pred_phot, marker="D", s=30, color=COLORS["vi"], zorder=5, label="MAP")
 ax_p.scatter(
     wave_eff,
     np.array(mock_phot.flux_true),
@@ -327,7 +343,7 @@ ax_s.errorbar(
     color=COLORS["data"],
     alpha=0.3,
 )
-ax_s.plot(w, pred_spec, color=COLORS["geovi"], lw=1.2, label="MAP")
+ax_s.plot(w, pred_spec, color=COLORS["vi"], lw=1.2, label="MAP")
 ax_s.plot(w, np.array(mock_spec.flux_true), color=COLORS["truth"], lw=0.8, ls="--", label="Truth")
 ax_s.set_title("Spectroscopy")
 ax_s.legend(fontsize=7)
@@ -363,7 +379,7 @@ plt.show()
 obs_phot = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
 )
-model_phot = Model(spec, ssp_data, observation=obs_phot)
+model_phot = SEDModel(spec, ssp_data, observation=obs_phot)
 fitter_phot = Fitter(model_phot, mock_phot.flux_obs, mock_phot.noise)
 fitter_phot.compile(verbose=False)
 result_phot = fitter_phot.run("map", n_steps=500, verbose=False)
@@ -372,7 +388,7 @@ result_phot = fitter_phot.run("map", n_steps=500, verbose=False)
 obs_spec = Observation(
     spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, resolution=100),
 )
-model_spec = Model(spec, ssp_data, observation=obs_spec)
+model_spec = SEDModel(spec, ssp_data, observation=obs_spec)
 fitter_spec = Fitter(model_spec, mock_spec.flux_obs, mock_spec.noise)
 fitter_spec.compile(verbose=False)
 result_spec = fitter_spec.run("map", n_steps=500, verbose=False)
@@ -389,7 +405,7 @@ param_names = spec.free_params
 true_vals = {p: float(true_params[p]) for p in param_names}
 
 fig, axes = plt.subplots(1, len(param_names), figsize=(2.5 * len(param_names), 3.5))
-colors_list = [COLORS.get("data", "C0"), COLORS.get("truth", "C1"), COLORS.get("geovi", "C2")]
+colors_list = [COLORS.get("data", "C0"), COLORS.get("truth", "C1"), COLORS.get("vi", "C2")]
 
 for i, pname in enumerate(param_names):
     ax = axes[i]
@@ -465,7 +481,7 @@ plot_sfh(
     result_geovi,
     true_params=true_params,
     ax=ax,
-    color=COLORS["geovi"],
+    color=COLORS["vi"],
     label="vi (joint)",
     method="geoVI",
 )
@@ -481,7 +497,7 @@ truths_dict = {p: float(true_params[p]) for p in spec.free_params}
 fig = plot_corner_comparison(
     [result_laplace, result_geovi],
     labels=["Laplace", "vi"],
-    colors=[COLORS["laplace"], COLORS["geovi"]],
+    colors=[COLORS["laplace"], COLORS["vi"]],
     truths=truths_dict,
 )
 if fig is not None:
@@ -519,7 +535,7 @@ result_geovi_spec = fitter_spec.run(
 fig = plot_corner_comparison(
     [result_geovi_phot, result_geovi_spec, result_geovi],
     labels=["Phot-only", "Spec-only", "Joint"],
-    colors=[COLORS["rt"], COLORS["nuts"], COLORS["geovi"]],
+    colors=[COLORS["rt"], COLORS["mcmc_nuts"], COLORS["vi"]],
     truths=truths_dict,
 )
 if fig is not None:

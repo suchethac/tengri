@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # 12_extending_tengri
+# # Extending tengri
 #
 # **Why extend?** Survey science often needs a prior that encodes your specific selection (e.g. a
 # truncated IMF-related parameter), a dust law tied to radiative-transfer mocks, or an SFH kernel
@@ -54,7 +54,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri import (
     Fixed,
-    Model,
+    SEDModel,
     Parameters,
     Uniform,
     load_filter_set,
@@ -181,7 +181,7 @@ xi_grid = jnp.linspace(-3, 3, 200)
 theta_grid = jax.vmap(cauchy_prior.unstandardize)(xi_grid)
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
-ax1.plot(np.array(xi_grid), np.array(theta_grid), color=COLORS["geovi"], lw=1.5)
+ax1.plot(np.array(xi_grid), np.array(theta_grid), color=COLORS["vi"], lw=1.5)
 ax1.set_xlabel("ξ (latent)")
 ax1.set_ylabel("θ (physical)")
 ax1.set_title("TruncatedCauchy Transform")
@@ -189,7 +189,7 @@ ax1.set_title("TruncatedCauchy Transform")
 # Implied density
 theta_dense = np.linspace(-2.0, 0.2, 500)
 lp = np.array([float(cauchy_prior.log_prob(jnp.array(t))) for t in theta_dense])
-ax2.plot(theta_dense, np.exp(lp - np.max(lp)), color=COLORS["geovi"], lw=1.5, label="Cauchy")
+ax2.plot(theta_dense, np.exp(lp - np.max(lp)), color=COLORS["vi"], lw=1.5, label="Cauchy")
 # Compare with Uniform
 ax2.axhline(1.0 / 2.2, color="grey", ls="--", lw=0.8, label="Uniform")
 ax2.set_xlabel("θ")
@@ -238,10 +238,10 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
 freqs = np.array(jnp.fft.rfftfreq(N_GRID, d=d_log_age))
 ax1.loglog(freqs[1:], np.array(sqrt_drw[1:]) ** 2, color=COLORS["rt"], lw=1.5, label="DRW (ν=∞)")
 ax1.loglog(
-    freqs[1:], np.array(sqrt_m15[1:]) ** 2, color=COLORS["geovi"], lw=1.5, label="Matérn ν=1.5"
+    freqs[1:], np.array(sqrt_m15[1:]) ** 2, color=COLORS["vi"], lw=1.5, label="Matérn ν=1.5"
 )
 ax1.loglog(
-    freqs[1:], np.array(sqrt_m05[1:]) ** 2, color=COLORS["nuts"], lw=1.5, label="Matérn ν=0.5"
+    freqs[1:], np.array(sqrt_m05[1:]) ** 2, color=COLORS["mcmc_nuts"], lw=1.5, label="Matérn ν=0.5"
 )
 ax1.set_xlabel("Frequency")
 ax1.set_ylabel("P(ω)")
@@ -254,8 +254,8 @@ gp_m15 = np.array(gp_from_xi(xi, sqrt_m15, N_GRID))
 gp_m05 = np.array(gp_from_xi(xi, sqrt_m05, N_GRID))
 
 ax2.plot(ages_gyr, gp_drw, color=COLORS["rt"], lw=1, label="DRW", alpha=0.8)
-ax2.plot(ages_gyr, gp_m15, color=COLORS["geovi"], lw=1, label="Matérn ν=1.5", alpha=0.8)
-ax2.plot(ages_gyr, gp_m05, color=COLORS["nuts"], lw=1, label="Matérn ν=0.5", alpha=0.8)
+ax2.plot(ages_gyr, gp_m15, color=COLORS["vi"], lw=1, label="Matérn ν=1.5", alpha=0.8)
+ax2.plot(ages_gyr, gp_m05, color=COLORS["mcmc_nuts"], lw=1, label="Matérn ν=0.5", alpha=0.8)
 ax2.set_xlim(0, 13.5)
 ax2.set_xlabel("Lookback time [Gyr]")
 ax2.set_ylabel("GP field x(t)")
@@ -294,7 +294,7 @@ atten_calz = np.exp(-tau_v * k_calz / 4.05)
 
 fig, ax = plt.subplots(figsize=(8, 4))
 ax.plot(wave, atten_pl, color=COLORS["rt"], lw=1.5, label="Power-law (n=−0.7)")
-ax.plot(wave, atten_calz, color=COLORS["geovi"], lw=1.5, label="Calzetti (2000)")
+ax.plot(wave, atten_calz, color=COLORS["vi"], lw=1.5, label="Calzetti (2000)")
 ax.set_xlabel("Wavelength [Å]")
 ax.set_ylabel("Transmission (e^{-τ})")
 ax.legend(fontsize=8)
