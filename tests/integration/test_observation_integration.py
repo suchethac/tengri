@@ -19,7 +19,7 @@ from tengri.models.observation.noise_model import NoiseConfig
 from tengri.models.observation.observation import Observation
 from tengri.models.observation.photometry import FilterCurve
 from tengri.models.observation.photometry_config import Photometry
-from tengri.models.observation.spectroscopy_config import SpectroscopyConfig
+from tengri.models.observation.spectroscopy import SpectroscopyConfig
 from tengri.models.sps.dsps_wrapper import load_ssp_data
 
 # ---------------------------------------------------------------------------

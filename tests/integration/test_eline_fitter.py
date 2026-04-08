@@ -9,7 +9,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri.models.observation.line_list import LineCatalog
-from tengri.models.observation.spectroscopy_config import SpectroscopyConfig
+from tengri.models.observation.spectroscopy import SpectroscopyConfig
 
 
 @pytest.fixture

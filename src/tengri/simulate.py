@@ -324,7 +324,7 @@ def spectrum_from_sfh(
         "sed" : array (n_wave,) — rest-frame SED
         "stellar_mass" : float
     """
-    from tengri.models.observation.spectroscopy import compute_spectrum
+    from tengri.models.observation.spectrum import compute_spectrum
 
     result = sed_from_sfh(
         t_gyr,
@@ -353,7 +353,7 @@ def spectrum_from_sfh(
 
     # Velocity broadening
     if sigma_v > 0:
-        from tengri.models.observation.spectroscopy import velocity_broaden
+        from tengri.models.observation.spectrum import velocity_broaden
 
         flux = velocity_broaden(flux, wave_obs, sigma_v)
 

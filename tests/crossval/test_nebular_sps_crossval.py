@@ -494,7 +494,7 @@ class TestVelocityBroadening:
 
     def test_broadening_width(self):
         """Measure the FWHM of a broadened delta function."""
-        from tengri.models.observation.spectroscopy import velocity_broaden
+        from tengri.models.observation.spectrum import velocity_broaden
 
         sigma_v = 300.0  # km/s
         lam_center = 5000.0
@@ -538,7 +538,7 @@ class TestVelocityBroadening:
 
     def test_broadening_preserves_flux(self):
         """Velocity broadening should conserve total flux (area under curve)."""
-        from tengri.models.observation.spectroscopy import velocity_broaden
+        from tengri.models.observation.spectrum import velocity_broaden
 
         n_pix = 2048
         wave = jnp.linspace(4000.0, 6000.0, n_pix)

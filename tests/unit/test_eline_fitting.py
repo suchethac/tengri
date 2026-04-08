@@ -16,7 +16,7 @@ from tengri.models.observation.eline_marginalization import (
     marginalize_emission_lines,
 )
 from tengri.models.observation.line_list import LineCatalog
-from tengri.models.observation.spectroscopy_config import Spectroscopy
+from tengri.models.observation.spectroscopy import Spectroscopy
 
 
 class TestDesignMatrix:

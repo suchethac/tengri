@@ -484,7 +484,7 @@ def build_model_from_config(
 
     if wave_obs is not None:
         try:
-            from tengri.models.observation.spectroscopy_config import SpectroscopyConfig
+            from tengri.models.observation.spectroscopy import SpectroscopyConfig
 
             obs_spectroscopy = SpectroscopyConfig(wave_obs=wave_obs)
         except (ImportError, AttributeError):

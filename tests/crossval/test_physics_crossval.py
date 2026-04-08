@@ -232,7 +232,7 @@ class TestSpectroscopyCrossval:
 
     def test_broadening_widens_line(self):
         """Velocity broadening should widen a spectral line."""
-        from tengri.models.observation.spectroscopy import velocity_broaden
+        from tengri.models.observation.spectrum import velocity_broaden
 
         wave = jnp.linspace(4800, 4920, 1000)
         spec = jnp.exp(-0.5 * ((wave - 4861) / 0.5) ** 2)
@@ -248,7 +248,7 @@ class TestSpectroscopyCrossval:
 
     def test_broadening_conserves_flux(self):
         """Total flux should be approximately conserved."""
-        from tengri.models.observation.spectroscopy import velocity_broaden
+        from tengri.models.observation.spectrum import velocity_broaden
 
         wave = jnp.linspace(4700, 5000, 2000)
         spec = jnp.exp(-0.5 * ((wave - 4861) / 2.0) ** 2)

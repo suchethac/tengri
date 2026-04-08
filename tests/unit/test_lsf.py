@@ -14,7 +14,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.models.observation.spectroscopy import (
+from tengri.models.observation.spectrum import (
     _C_KM_S,
     _FWHM_TO_SIGMA,
     SSP_LIBRARY_RESOLUTIONS,
