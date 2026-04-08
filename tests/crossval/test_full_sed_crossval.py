@@ -1201,13 +1201,9 @@ class TestTauSFHCrossVal:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
-        wave, sed = _build_tengri_tau_sed_table(
-            ssp_data, tau_gyr=2.0, age_gyr=8.0, logzsol=-1.0
-        )
+        wave, sed = _build_tengri_tau_sed_table(ssp_data, tau_gyr=2.0, age_gyr=8.0, logzsol=-1.0)
         tengri_color = _band_avg(wave, sed, 2800.0) / _band_avg(wave, sed, 5500.0)
-        fsps_color = (
-            _band_avg(ref_wave, ref[key], 2800.0) / _band_avg(ref_wave, ref[key], 5500.0)
-        )
+        fsps_color = _band_avg(ref_wave, ref[key], 2800.0) / _band_avg(ref_wave, ref[key], 5500.0)
         ratio = tengri_color / fsps_color
         assert 0.75 <= ratio <= 1.25, (
             f"tengri tau=2 Gyr [Z/H]=-1 UV/V color ratio vs FSPS = {ratio:.3f} "
@@ -1226,9 +1222,7 @@ class TestTauSFHCrossVal:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
-        wave, sed = _build_tengri_tau_sed_table(
-            ssp_data, tau_gyr=2.0, age_gyr=8.0, logzsol=-1.0
-        )
+        wave, sed = _build_tengri_tau_sed_table(ssp_data, tau_gyr=2.0, age_gyr=8.0, logzsol=-1.0)
         l_tengri = _band_avg(wave, sed, 5500.0)
         l_fsps = _band_avg(ref_wave, ref[key], 5500.0)
         ratio = l_tengri / max(l_fsps, 1e-40)
@@ -1249,13 +1243,9 @@ class TestTauSFHCrossVal:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
-        wave, sed = _build_tengri_tau_sed_table(
-            ssp_data, tau_gyr=0.5, age_gyr=2.0, tau_bc=1.5
-        )
+        wave, sed = _build_tengri_tau_sed_table(ssp_data, tau_gyr=0.5, age_gyr=2.0, tau_bc=1.5)
         tengri_color = _band_avg(wave, sed, 2800.0) / _band_avg(wave, sed, 5500.0)
-        fsps_color = (
-            _band_avg(ref_wave, ref[key], 2800.0) / _band_avg(ref_wave, ref[key], 5500.0)
-        )
+        fsps_color = _band_avg(ref_wave, ref[key], 2800.0) / _band_avg(ref_wave, ref[key], 5500.0)
         ratio = tengri_color / fsps_color
         assert 0.70 <= ratio <= 1.30, (
             f"tengri tau=0.5 Gyr dusty UV/V color ratio vs FSPS = {ratio:.3f} "
@@ -1274,9 +1264,7 @@ class TestTauSFHCrossVal:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
-        wave, sed = _build_tengri_tau_sed_table(
-            ssp_data, tau_gyr=0.5, age_gyr=2.0, tau_bc=1.5
-        )
+        wave, sed = _build_tengri_tau_sed_table(ssp_data, tau_gyr=0.5, age_gyr=2.0, tau_bc=1.5)
         l_tengri = _band_avg(wave, sed, 5500.0)
         l_fsps = _band_avg(ref_wave, ref[key], 5500.0)
         ratio = l_tengri / max(l_fsps, 1e-40)
@@ -1292,17 +1280,15 @@ class TestTauSFHCrossVal:
         tau_bc=1.5, tau_diff=0.6 is a very dusty galaxy.  Power-law dust is
         steeper in UV than V, so UV/V must drop substantially (>20%).
         """
-        wave_clean, sed_clean = _build_tengri_tau_sed(
-            ssp_data, tau_gyr=0.5, age_gyr=2.0
-        )
+        wave_clean, sed_clean = _build_tengri_tau_sed(ssp_data, tau_gyr=0.5, age_gyr=2.0)
         wave_dusty, sed_dusty = _build_tengri_tau_sed(
             ssp_data, tau_gyr=0.5, age_gyr=2.0, tau_bc=1.5, tau_diff=0.6
         )
-        color_clean = (
-            _band_avg(wave_clean, sed_clean, 2800.0) / _band_avg(wave_clean, sed_clean, 5500.0)
+        color_clean = _band_avg(wave_clean, sed_clean, 2800.0) / _band_avg(
+            wave_clean, sed_clean, 5500.0
         )
-        color_dusty = (
-            _band_avg(wave_dusty, sed_dusty, 2800.0) / _band_avg(wave_dusty, sed_dusty, 5500.0)
+        color_dusty = _band_avg(wave_dusty, sed_dusty, 2800.0) / _band_avg(
+            wave_dusty, sed_dusty, 5500.0
         )
         assert color_dusty < color_clean, (
             f"Dust must redden UV/V: dusty={color_dusty:.4f} >= clean={color_clean:.4f}. "
@@ -1321,9 +1307,7 @@ class TestTauSFHCrossVal:
         attenuation fraction is smaller than UV attenuation fraction.
         This confirms the wavelength-dependence of the power-law dust curve.
         """
-        wave_clean, sed_clean = _build_tengri_tau_sed(
-            ssp_data, tau_gyr=0.5, age_gyr=2.0
-        )
+        wave_clean, sed_clean = _build_tengri_tau_sed(ssp_data, tau_gyr=0.5, age_gyr=2.0)
         wave_dusty, sed_dusty = _build_tengri_tau_sed(
             ssp_data, tau_gyr=0.5, age_gyr=2.0, tau_bc=1.5, tau_diff=0.6
         )
@@ -1463,7 +1447,9 @@ def _build_tengri_nebular_sed(
     return wave, sed / m_formed
 
 
-def _line_peak(wave: np.ndarray, sed: np.ndarray, center_aa: float, half_width: float = 50.0) -> float:
+def _line_peak(
+    wave: np.ndarray, sed: np.ndarray, center_aa: float, half_width: float = 50.0
+) -> float:
     """Max flux in a ±half_width Å window around center_aa (for emission line amplitude)."""
     mask = np.abs(wave - center_aa) <= half_width
     return float(np.max(sed[mask])) if mask.any() else 0.0
@@ -1542,9 +1528,7 @@ class TestNebularTengri:
 
         wave, sed = _build_tengri_nebular_sed(ssp_data, age_gyr=0.1, logU=-2.0)
         tengri_color = _band_avg(wave, sed, 2800.0) / _band_avg(wave, sed, 5500.0)
-        fsps_color = (
-            _band_avg(ref_wave, ref[key], 2800.0) / _band_avg(ref_wave, ref[key], 5500.0)
-        )
+        fsps_color = _band_avg(ref_wave, ref[key], 2800.0) / _band_avg(ref_wave, ref[key], 5500.0)
         ratio = tengri_color / fsps_color
         assert 0.65 <= ratio <= 1.35, (
             f"tengri nebular UV/V color ratio vs FSPS = {ratio:.3f} (expect 0.65–1.35). "
@@ -3487,12 +3471,12 @@ class TestTabularSFHTengri:
     - step_bursty:    bin_edges=[0,0.05,0.2,1.0,5.0] Gyr, sfr=[8.0,0.5,2.0,0.3], logzsol=-0.5
     """
 
-    _RISING_EDGES = [0.0, 0.1, 0.5, 2.0, 6.0]
-    _RISING_SFR = [5.0, 2.0, 0.8, 0.2]
-    _QUENCH_EDGES = [0.0, 0.1, 0.5, 2.0, 6.0]
-    _QUENCH_SFR = [0.2, 1.0, 3.0, 5.0]
-    _BURSTY_EDGES = [0.0, 0.05, 0.2, 1.0, 5.0]
-    _BURSTY_SFR = [8.0, 0.5, 2.0, 0.3]
+    _RISING_EDGES = (0.0, 0.1, 0.5, 2.0, 6.0)
+    _RISING_SFR = (5.0, 2.0, 0.8, 0.2)
+    _QUENCH_EDGES = (0.0, 0.1, 0.5, 2.0, 6.0)
+    _QUENCH_SFR = (0.2, 1.0, 3.0, 5.0)
+    _BURSTY_EDGES = (0.0, 0.05, 0.2, 1.0, 5.0)
+    _BURSTY_SFR = (8.0, 0.5, 2.0, 0.3)
 
     def test_tengri_table_rising_bluer_than_quenching(self, ssp_data):
         """Rising SFH must be bluer (higher UV/V) than quenching SFH (tengri internal).
@@ -3501,12 +3485,8 @@ class TestTabularSFHTengri:
         Quenching toward present = old stellar population dominates = redder UV/V.
         This is a sign-convention check: a reversed time axis would invert the trend.
         """
-        wave_r, sed_r = _build_tengri_step_sed(
-            ssp_data, self._RISING_EDGES, self._RISING_SFR
-        )
-        wave_q, sed_q = _build_tengri_step_sed(
-            ssp_data, self._QUENCH_EDGES, self._QUENCH_SFR
-        )
+        wave_r, sed_r = _build_tengri_step_sed(ssp_data, self._RISING_EDGES, self._RISING_SFR)
+        wave_q, sed_q = _build_tengri_step_sed(ssp_data, self._QUENCH_EDGES, self._QUENCH_SFR)
         color_rising = _band_avg(wave_r, sed_r, 2800.0) / _band_avg(wave_r, sed_r, 5500.0)
         color_quench = _band_avg(wave_q, sed_q, 2800.0) / _band_avg(wave_q, sed_q, 5500.0)
         assert color_rising > color_quench, (
@@ -3527,9 +3507,7 @@ class TestTabularSFHTengri:
 
         wave, sed = _build_tengri_step_sed(ssp_data, self._RISING_EDGES, self._RISING_SFR)
         tengri_color = _band_avg(wave, sed, 2800.0) / _band_avg(wave, sed, 5500.0)
-        fsps_color = (
-            _band_avg(ref_wave, ref[key], 2800.0) / _band_avg(ref_wave, ref[key], 5500.0)
-        )
+        fsps_color = _band_avg(ref_wave, ref[key], 2800.0) / _band_avg(ref_wave, ref[key], 5500.0)
         ratio = tengri_color / fsps_color
         assert 0.75 <= ratio <= 1.25, (
             f"tengri step_rising UV/V color ratio vs FSPS = {ratio:.3f} (expect 0.75–1.25). "
@@ -3544,9 +3522,7 @@ class TestTabularSFHTengri:
 
         wave, sed = _build_tengri_step_sed(ssp_data, self._QUENCH_EDGES, self._QUENCH_SFR)
         tengri_color = _band_avg(wave, sed, 2800.0) / _band_avg(wave, sed, 5500.0)
-        fsps_color = (
-            _band_avg(ref_wave, ref[key], 2800.0) / _band_avg(ref_wave, ref[key], 5500.0)
-        )
+        fsps_color = _band_avg(ref_wave, ref[key], 2800.0) / _band_avg(ref_wave, ref[key], 5500.0)
         ratio = tengri_color / fsps_color
         assert 0.75 <= ratio <= 1.25, (
             f"tengri step_quenching UV/V color ratio vs FSPS = {ratio:.3f} (expect 0.75–1.25). "
@@ -3639,9 +3615,7 @@ class TestTabularSFHTengri:
             ssp_data, self._BURSTY_EDGES, self._BURSTY_SFR, logzsol=-0.5
         )
         tengri_color = _band_avg(wave, sed, 2800.0) / _band_avg(wave, sed, 5500.0)
-        fsps_color = (
-            _band_avg(ref_wave, ref[key], 2800.0) / _band_avg(ref_wave, ref[key], 5500.0)
-        )
+        fsps_color = _band_avg(ref_wave, ref[key], 2800.0) / _band_avg(ref_wave, ref[key], 5500.0)
         ratio = tengri_color / fsps_color
         assert 0.70 <= ratio <= 1.30, (
             f"tengri step_bursty UV/V color ratio vs FSPS = {ratio:.3f} (expect 0.70–1.30). "
