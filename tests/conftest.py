@@ -1,7 +1,16 @@
 """Shared test fixtures for tengri test suite."""
 
+import os
+
 import jax
 import pytest
+
+# Suppress background JIT compilation in the test suite.  Without this,
+# every Fitter() instantiation spawns a compilation thread; with many test
+# files each creating multiple Fitters the process floods with concurrent
+# XLA compilations and exhausts memory.  Individual tests that exercise
+# the compilation machinery clear this env var themselves.
+os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
 from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw
 from tengri.utils.grid import grid_spacing, make_log_age_grid

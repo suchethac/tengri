@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """Build precomputed nthcomp warm Comptonization templates for tengri.
 
-Solves the Kompaneets equation (Zdziarski, Johnson & Magdziarz 1996,
-MNRAS 283, 193) on a 4-D grid of (gamma, kTe, kTbb, nu) and saves the
-normalised spectral shapes to ``data/nthcomp_templates.npz``.
+Calls RELAGN's ``pyNTHCOMP.donthcomp`` (scotthgn/RELAGN, credit A.D. Thomas,
+ported from XSpec donthcomp.f) to solve the Kompaneets equation on a 4-D grid
+of (gamma, kTe, kTbb, nu) and saves the normalised spectral shapes to
+``data/nthcomp_templates.h5`` (HDF5).
 
 Once built, tengri loads the table at import and uses JAX trilinear
-interpolation in place of the per-call Kompaneets solve.  Build time is
+interpolation in place of a per-call Kompaneets solve.  Build time is
 ~30–120 s depending on grid density and CPU speed.
+
+Requirements
+------------
+Clone RELAGN before running::
+
+    git clone --depth=1 https://github.com/scotthgn/RELAGN.git /tmp/relagn_ref
 
 Usage
 -----
@@ -15,7 +22,9 @@ Usage
 
 Options
 -------
-    --output PATH       Output npz file (default: data/nthcomp_templates.npz)
+    --output PATH       Output HDF5 file (default: data/nthcomp_templates.h5)
+    --relagn-path PATH  Path to RELAGN python_version dir
+                        (default: /tmp/relagn_ref/src/python_version)
     --n-gamma INT       Number of gamma grid points (default: 11, range 1.5–3.5)
     --n-kte INT         Number of kTe grid points (default: 8, range 0.05–0.5 keV)
     --n-ktbb INT        Number of kTbb grid points (default: 25, log-spaced)
@@ -32,12 +41,79 @@ import sys
 import time
 from pathlib import Path
 
+import h5py
 import numpy as np
 
-# Add project root to path so we can import the solver
-sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
+_DEFAULT_RELAGN_PATH = Path("/tmp/relagn_ref/src/python_version")
 
-from tengri.models.agn._nthcomp import donthcomp_nu
+_KEV_TO_HZ = 1.602176634e-9 / 6.62607015e-27  # keV → Hz via E=hν
+
+
+def _setup_relagn(relagn_path: Path) -> None:
+    """Add RELAGN to sys.path; exit with instructions if not found."""
+    if not relagn_path.exists():
+        sys.exit(
+            f"RELAGN not found at {relagn_path}.\n"
+            "Clone with:\n"
+            "  git clone --depth=1 https://github.com/scotthgn/RELAGN.git /tmp/relagn_ref"
+        )
+    if str(relagn_path) not in sys.path:
+        sys.path.insert(0, str(relagn_path))
+    try:
+        import pyNTHCOMP  # noqa: F401
+    except ImportError as exc:
+        sys.exit(f"Cannot import pyNTHCOMP from {relagn_path}: {exc}")
+
+
+def _relagn_fnu(
+    nu_hz: np.ndarray,
+    gamma: float,
+    kTe_keV: float,
+    kTbb_keV: float,
+    n_ear: int = 2000,
+) -> np.ndarray:
+    """Return F_nu shape using RELAGN's pyNTHCOMP.donthcomp.
+
+    RELAGN returns photon counts in XSpec energy bins.  Convert to F_nu via:
+
+        F_nu ∝ E_mid * photar[i] / ΔE
+
+    where E_mid is the bin-centre energy [keV] and ΔE the bin width [keV].
+    The result is interpolated onto the requested ``nu_hz`` grid.
+
+    Parameters
+    ----------
+    nu_hz : ndarray
+        Output frequency grid [Hz].
+    gamma, kTe_keV, kTbb_keV : float
+        Photon index, electron temperature [keV], seed BB temperature [keV].
+    n_ear : int
+        Number of energy bin edges for RELAGN (higher → smoother F_nu).
+
+    Returns
+    -------
+    fnu : ndarray
+        Non-negative spectral shape in F_nu units (unnormalised).
+    """
+    import pyNTHCOMP as nthcomp
+
+    # Log-spaced energy bin right-edges [keV]
+    ear = np.logspace(-3, 2, n_ear)
+    photar = nthcomp.donthcomp(ear, [gamma, kTe_keV, kTbb_keV, 0, 0.0])
+
+    # XSpec convention: photar[i] = counts in bin i = (ear[i-1], ear[i])
+    # photar[0] is unused (no left edge for first bin), so start from index 1
+    E_mid = 0.5 * (ear[1:] + ear[:-1])  # keV
+    dE = ear[1:] - ear[:-1]  # keV
+    nu_mid = E_mid * _KEV_TO_HZ  # Hz
+
+    fnu = np.zeros(len(E_mid))
+    mask = photar[1:] > 0
+    if mask.sum() == 0:
+        return np.zeros_like(nu_hz)
+    fnu[mask] = E_mid[mask] * photar[1:][mask] / dE[mask]
+
+    return np.interp(nu_hz, nu_mid, fnu, left=0.0, right=0.0)
 
 
 def build_table(
@@ -104,7 +180,7 @@ def build_table(
                         table[ig, it, ib] = (bnu / norm).astype(np.float32)
                     continue
 
-                shape = donthcomp_nu(nu_grid, gamma, kte, ktbb)
+                shape = _relagn_fnu(nu_grid, gamma, kte, ktbb)
                 norm = np.trapezoid(shape, nu_grid)
                 if norm > 0:
                     table[ig, it, ib] = (shape / norm).astype(np.float32)
@@ -123,14 +199,21 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--output",
-        default=str(Path(__file__).parents[1] / "data" / "nthcomp_templates.npz"),
-        help="Output npz file path",
+        default=str(Path(__file__).parents[1] / "data" / "nthcomp_templates.h5"),
+        help="Output HDF5 file path",
+    )
+    parser.add_argument(
+        "--relagn-path",
+        default=str(_DEFAULT_RELAGN_PATH),
+        help="Path to RELAGN python_version directory",
     )
     parser.add_argument("--n-gamma", type=int, default=11)
     parser.add_argument("--n-kte", type=int, default=8)
     parser.add_argument("--n-ktbb", type=int, default=25)
     parser.add_argument("--n-nu", type=int, default=300)
     args = parser.parse_args()
+
+    _setup_relagn(Path(args.relagn_path))
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -140,10 +223,19 @@ def main() -> None:
         f"Building nthcomp table: gamma={args.n_gamma} × kTe={args.n_kte} "
         f"× kTbb={args.n_ktbb} × nu={args.n_nu} = {args.n_gamma * args.n_kte * args.n_ktbb} solves"
     )
+    print(f"Using RELAGN pyNTHCOMP from {args.relagn_path}")
 
     result = build_table(*grid)
 
-    np.savez_compressed(out_path, **result)
+    with h5py.File(out_path, "w") as f:
+        f.attrs["description"] = "nthcomp warm Comptonization precomputed templates for tengri"
+        f.attrs["relagn_path"] = str(args.relagn_path)
+        f.attrs["n_gamma"] = args.n_gamma
+        f.attrs["n_kte"] = args.n_kte
+        f.attrs["n_ktbb"] = args.n_ktbb
+        f.attrs["n_nu"] = args.n_nu
+        for key, arr in result.items():
+            f.create_dataset(key, data=arr, compression="gzip", compression_opts=6)
     size_mb = out_path.stat().st_size / 1e6
     print(f"Saved {out_path}  ({size_mb:.1f} MB)")
     print("Reload tengri to use the new templates.")

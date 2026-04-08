@@ -43,7 +43,7 @@ Output HDF5 structure
   └── agn_oxaf/
       ├── cpr/
       │   ├── z_axis, logU_axis, logmbh_axis, logedd_axis, logn_axis
-      │   ├── logHB_per_logq  (N_z,N_mbh,N_edd,N_u,N_n)
+      │   ├── logHB_per_lum   (N_z,N_mbh,N_edd,N_u,N_n)  log10(L_Hβ/L_ion)
       │   └── line_ratios     (N_z,N_mbh,N_edd,N_u,N_n,N_lines)
       └── cdn/
 

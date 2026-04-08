@@ -361,7 +361,7 @@ class TestModelTree:
         method = smooth_model.recommend_method()
         assert isinstance(method, str)
         # Smooth DPL with ~6 free params → should recommend laplace or vi_linear
-        assert method in ("laplace", "vi_linear", "vi")
+        assert method in ("laplace", "vi_nifty_linear", "vi_nifty")
 
     def test_recommend_method_used_in_fit(self, smooth_model):
         """recommend_method() output should be accepted by model.fit()."""
