@@ -218,6 +218,6 @@ for the same model configuration.
 
 See {doc}`hierarchical` for population-level inference with `PopulationFitter`.
 
-See the demonstration notebooks for worked examples:
-{doc}`../demonstrations/index` --- especially notebooks 02 (photometric catalogs),
-08 (real data), and 09 (high-z JWST).
+Worked examples: [`07_fitting_photometry.py`](https://github.com/suchethac/tengri/blob/main/notebooks/07_fitting_photometry.py) (catalog batching),
+[`10_real_data.py`](https://github.com/suchethac/tengri/blob/main/notebooks/10_real_data.py), and
+[`08_fitting_spectra.py`](https://github.com/suchethac/tengri/blob/main/notebooks/08_fitting_spectra.py) (redshift / spectral coverage).

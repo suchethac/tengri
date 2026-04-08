@@ -1,6 +1,6 @@
-/* tengri docs — minimal overrides */
+/* tengri docs — custom overrides for Furo theme */
 
-/* Notebook output: neutral background instead of pink */
+/* ── Notebook output: neutral background ────────────────────────────── */
 .nboutput .output_area pre {
     background-color: var(--color-code-background);
     color: var(--color-code-foreground);
@@ -8,6 +8,7 @@
 .nboutput .output_area.stderr pre {
     background-color: var(--color-code-background);
     color: var(--color-code-foreground);
+    opacity: 0.7;
 }
 
 /* Notebook text selectable */
@@ -15,4 +16,76 @@
 .nbinput .input_area pre {
     user-select: text;
     -webkit-user-select: text;
+}
+
+/* ── Notebook cell styling ──────────────────────────────────────────── */
+
+/* Subtle border and spacing for input cells */
+.nbinput {
+    margin-bottom: 0.5rem;
+}
+.nbinput .input_area {
+    border-left: 3px solid var(--color-brand-primary);
+    border-radius: 0 4px 4px 0;
+}
+
+/* Output cells: slightly indented, muted */
+.nboutput {
+    margin-bottom: 1rem;
+}
+.nboutput .output_area {
+    border-left: 3px solid var(--color-background-border);
+    border-radius: 0 4px 4px 0;
+    padding-left: 0.5rem;
+}
+
+/* Output images: centered with subtle shadow */
+.nboutput .output_area img,
+.nboutput .output_png img {
+    display: block;
+    margin: 1rem auto;
+    max-width: 100%;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Table styling: cleaner borders ─────────────────────────────────── */
+table.docutils {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+}
+table.docutils th {
+    background-color: var(--color-background-secondary);
+    font-weight: 600;
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 2px solid var(--color-background-border);
+}
+table.docutils td {
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--color-background-border);
+}
+
+/* ── Code block improvements ────────────────────────────────────────── */
+
+/* Inline code: softer styling */
+code.literal {
+    font-size: 0.85em;
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+}
+
+/* ── Admonition styling ─────────────────────────────────────────────── */
+.admonition {
+    margin: 1rem 0;
+    border-radius: 4px;
+}
+
+/* ── Print / PDF ────────────────────────────────────────────────────── */
+@media print {
+    .nboutput .output_area img {
+        box-shadow: none;
+        border: 1px solid #ccc;
+    }
 }

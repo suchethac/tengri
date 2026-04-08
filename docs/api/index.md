@@ -1,3 +1,7 @@
+---
+orphan: true
+---
+
 # API Reference
 
 Auto-generated from docstrings. The public API is importable directly from

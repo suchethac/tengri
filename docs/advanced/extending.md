@@ -6,8 +6,7 @@ and AGN templates.
 
 :::{note}
 This page gives a concise overview of the extension points. For full worked
-examples with code, see demonstration notebook 07
-({doc}`../demonstrations/index`).
+examples with code, see [`12_extending_tengri.py`](https://github.com/suchethac/tengri/blob/main/notebooks/12_extending_tengri.py) on the reader spine.
 :::
 
 ## Architecture overview
@@ -151,6 +150,4 @@ continuum before dust attenuation (for Type 1) or after (for Type 2/torus).
 - **Testing**: add tests in `tests/unit/` for any new module. Run `pytest tests/ -q`
   and `ruff check src/` before committing.
 
-See {doc}`../demonstrations/index` for the full extending-tengri demonstration
-(notebook 07), which walks through a complete custom SFH implementation with
-fitting and validation.
+See [`12_extending_tengri.py`](https://github.com/suchethac/tengri/blob/main/notebooks/12_extending_tengri.py) for a full extending walk-through with fitting and validation.

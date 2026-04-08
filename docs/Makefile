@@ -2,28 +2,26 @@ SPHINXOPTS    ?=
 SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     = .
 BUILDDIR      = _build
-NOTEBOOKDIR   = ../notebooks
-NBCOPYDIR     = _notebooks
 
 help:
 	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS)
 
-notebooks:
-	@mkdir -p $(NBCOPYDIR)/quickstart $(NBCOPYDIR)/fitting $(NBCOPYDIR)/theory \
-	           $(NBCOPYDIR)/models $(NBCOPYDIR)/specialist
-	@cp $(NOTEBOOKDIR)/quickstart/*.ipynb $(NBCOPYDIR)/quickstart/ 2>/dev/null || true
-	@cp $(NOTEBOOKDIR)/fitting/*.ipynb $(NBCOPYDIR)/fitting/ 2>/dev/null || true
-	@cp $(NOTEBOOKDIR)/theory/*.ipynb $(NBCOPYDIR)/theory/ 2>/dev/null || true
-	@cp $(NOTEBOOKDIR)/models/*.ipynb $(NBCOPYDIR)/models/ 2>/dev/null || true
-	@cp $(NOTEBOOKDIR)/specialist/*.ipynb $(NBCOPYDIR)/specialist/ 2>/dev/null || true
+# Jupytext --sync spine .py ↔ notebooks/*.ipynb, copy into docs/spine/, nbconvert --inplace
+spine-ipynb:
+	@python ../scripts/sync_spine_notebooks_for_docs.py
 
-html: notebooks
+# Optional: after `make html`, run this to dump nbconvert HTML next to the site
+export-notebooks-html: spine-ipynb
+	@mkdir -p "$(BUILDDIR)/html/nbconvert"
+	@jupyter nbconvert spine/*.ipynb --to html --output-dir="$(BUILDDIR)/html/nbconvert"
+
+html: spine-ipynb
 	@$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS)
 
 clean:
-	rm -rf $(BUILDDIR) $(NBCOPYDIR)
+	rm -rf $(BUILDDIR)
 
-livehtml: notebooks
+livehtml: spine-ipynb
 	sphinx-autobuild "$(SOURCEDIR)" "$(BUILDDIR)/html" $(SPHINXOPTS) --watch ../src/tengri --watch ../notebooks
 
-.PHONY: help notebooks html clean livehtml
+.PHONY: help spine-ipynb export-notebooks-html html clean livehtml

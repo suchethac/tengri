@@ -10,16 +10,17 @@ A fast, modular JAX framework for Bayesian galaxy SED fitting. Scalable from ind
 
 > **Status:** v0.1.0, active development. Core pipeline fully functional with 1221 tests. Paper in preparation.
 
-## Highlights
-
 - **IFT-based SFH model**: Star formation history as a continuous 1D field reconstructed from noisy SED data via Information Field Theory (Ensslin 2019). The PSD encodes the amplitude and timescale of burstiness.
 - **Fully differentiable**: Pure JAX from PSD parameters through to predicted photometry. Gradients via autodiff enable HMC, variational inference, and gradient-based optimization.
 - **GPU-native**: All operations are JIT-compiled and run on GPU/TPU. Designed for catalog-scale inference.
-- **Modular forward model**: Every component (SFH, dust, SPS, AGN, nebular, observation) is a swappable pure function. The forward model is the primary product; inference is one application of it.
+- **Modular forward model**: Every component (SFH, dust, SPS, AGN, nebular, observation) is a swappable pure function.
+- **Inference as first-class**: Exact autodiff through the full model powers **geoVI** (`vi`), **Ray Tracing**, **NUTS**, evidence sampling, and hierarchical fits on the **same** standardized loss—not a bolt-on optimizer per method.
 - **Multiple inference backends**: MAP, Ray Tracing (Behroozi 2025), NUTS ([BlackJAX](https://github.com/blackjax-devs/blackjax)), geoVI/MGVI ([NIFTy.re](https://gitlab.mpcdf.mpg.de/ift/nifty)), Laplace, Pathfinder (Zhang+2022), Elliptical Slice Sampling (Murray+2010), Nested Slice Sampling (Yallup+2026) for Bayesian evidence, and hierarchical population fitting.
 - **DSPS-powered SPS**: Differentiable stellar population synthesis via [DSPS](https://github.com/ArgonneCPAC/dsps) (Hearin et al. 2023). Accepts any SSP template in HDF5 format.
 
-## Installation
+Tutorials are the spine notebooks below (Jupytext `.py` in [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks)). Refresh `docs/spine/*.ipynb` with `python scripts/sync_spine_notebooks_for_docs.py`. Optional [API Reference](api/index.md) (built, not listed in the sidebar).
+
+**Installation**
 
 ```bash
 pip install -e .              # core install (JAX, DSPS, NIFTy)
@@ -29,7 +30,7 @@ pip install -e ".[dev]"       # + pytest, ruff, jupytext
 
 **Requirements:** Python >= 3.10, JAX >= 0.4.20, DSPS >= 0.3, NIFTy.re >= 8.5
 
-## SSP grids
+**SSP grids**
 
 tengri requires pre-computed Simple Stellar Population (SSP) grids in DSPS-compatible HDF5 format. A [repository of pre-formatted templates](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/) from BC03, BPASS, FSPS, and ProGeny is publicly available.
 
@@ -40,39 +41,10 @@ wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/ssp_fsps_v3.2.h5 -P
 
 Any SSP template set can be used — the only requirement is the DSPS HDF5 schema (age, metallicity, wavelength, spectra arrays). This enables SPS uncertainty testing across different stellar libraries and IMFs.
 
-## How it works
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    tengri architecture                  │
-│                                                         │
-│   Observations ──────────────────► Fitter ─► Posterior │
-│                                       ▲                 │
-│                                  Model(spec, ssp)       │
-│                                  ▲           ▲          │
-│                              Parameters    SSP grid     │
-│                              (physics)    (templates)   │
-└─────────────────────────────────────────────────────────┘
-```
-
-**Parameters** declares the free parameters and their priors (SFH shape, dust, metallicity, redshift). **SSP grid** holds the pre-computed stellar population spectra (any DSPS-compatible HDF5 file). **Model** combines them into a differentiable forward model that maps physical parameters to predicted photometry or spectra. **Fitter** runs inference (MAP, VI, MCMC) and returns a **Posterior** with posterior samples, summary statistics, and convergence diagnostics.
-
-## Start here
-
-| I want to... | Go to |
-|---|---|
-| Fit my first galaxy in 10 minutes | `quickstart/01_quickstart` notebook |
-| Understand why tengri beats parametric SFH codes | `quickstart/03_bursty_sfh_recovery` notebook |
-| Fit a photometric catalog efficiently | `fitting/02_fitting_photometry` notebook |
-| Understand the SFH prior and PSD parameters | `theory/01_sfh_prior` notebook |
-| See all available dust, AGN, and nebular models | `models/` track notebooks |
-| Choose the right inference method | `fitting/06_advanced_inference` notebook |
-| Infer population-level SFH statistics | `fitting/07_hierarchical_psd` notebook |
-
-## Quick start
+**Quick start**
 
 ```python
-from tengri import Model, Parameters, Fitter, Uniform, Gaussian
+from tengri import SEDModel, Parameters, Fitter, Uniform, Gaussian
 from tengri import Observation, Photometry, load_ssp_data
 
 ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
@@ -91,13 +63,13 @@ spec = Parameters(
     redshift=0.1,
 )
 
-model = Model(spec, ssp, observation=obs)
-fitter = Fitter(model, data, noise)
+model = SEDModel(spec, ssp, observation=obs)
+fitter = Fitter(model, obs_flux, obs_noise)
 result = fitter.run("vi")  # or "mcmc_raytrace", "mcmc_nuts", "map", "laplace", "evidence"
 print(result.summary_table())
 ```
 
-## Inference methods
+**Inference methods**
 
 | Method | Command | Best for |
 |--------|---------|----------|
@@ -112,7 +84,7 @@ print(result.summary_table())
 | `evidence` | `fitter.run("evidence")` | Bayesian evidence for model comparison (D ≲ 30) |
 | Population | `model.fit_population(observations)` | Shared PSD across populations (`PopulationPosterior`) |
 
-## Performance
+**Performance**
 
 Forward model timings on Apple M-series CPU:
 
@@ -121,7 +93,7 @@ Forward model timings on Apple M-series CPU:
 | Forward model | 140 μs | 356 μs |
 | Gradient | 56 μs | 63 μs |
 
-## Dependencies
+**Dependencies**
 
 | Package | Role | Required |
 |---------|------|----------|
@@ -134,7 +106,7 @@ Forward model timings on Apple M-series CPU:
 | [BlackJAX](https://github.com/blackjax-devs/blackjax) | NUTS / HMC | Optional |
 | [optax](https://github.com/google-deepmind/optax) | MAP optimization | Optional |
 
-## References
+**References**
 
 - Frank, P. et al. (2021). *Geometric Variational Inference.* [arXiv:2105.10470](https://arxiv.org/abs/2105.10470)
 - Hearin, A. P. et al. (2023). *DSPS: Differentiable Stellar Population Synthesis.* [arXiv:2112.08423](https://arxiv.org/abs/2112.08423)
@@ -145,20 +117,41 @@ Forward model timings on Apple M-series CPU:
 - Murray, I., Adams, R. P. & MacKay, D. J. C. (2010). *Elliptical Slice Sampling.* [arXiv:1001.0175](https://arxiv.org/abs/1001.0175)
 - Ensslin, T. A. (2019). *Information field theory.* [arXiv:1804.03350](https://arxiv.org/abs/1804.03350)
 
-## License
+**License:** MIT
 
-MIT
+```{eval-rst}
+.. toctree::
+   :maxdepth: 1
+   :caption: Getting Started
 
-```{toctree}
-:maxdepth: 1
-:hidden:
+   spine/00_quickstart
 
-getting_started/index
-examples
-performance/index
-advanced/index
-observation/index
-developer/index
-api/index
-changelog
+.. toctree::
+   :maxdepth: 1
+   :caption: Physics Gallery
+
+   spine/01_sed_anatomy
+   spine/02_sfh_gallery
+   spine/03_dust_gallery
+   spine/04_nebular_gallery
+   spine/05_agn_gallery
+   spine/06_multiwavelength_gallery
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Fitting & Inference
+
+   spine/07_fitting_photometry
+   spine/08_fitting_spectra
+   spine/09_degeneracies
+   spine/10_real_data
+   spine/14_joint_photometry_spectroscopy
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Advanced
+
+   spine/11_population
+   spine/12_extending_tengri
+   spine/13_tabulated_sfh_to_mock_sed
 ```

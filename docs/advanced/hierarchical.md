@@ -195,6 +195,4 @@ minutes. The XLA cache at `~/.cache/tengri_jax_cache` persists this across sessi
 - Edenhofer, G. et al. (2024). "Re-envisioning Numerical Information Field Theory
   (NIFTy.re)." arXiv:2402.16683
 
-See {doc}`../demonstrations/index` for the `PopulationFitter` demonstration
-(notebook 04) with full worked examples including convergence checks and
-population recovery plots.
+See [`11_population.py`](https://github.com/suchethac/tengri/blob/main/notebooks/11_population.py) for `PopulationFitter` with convergence checks and population recovery plots.

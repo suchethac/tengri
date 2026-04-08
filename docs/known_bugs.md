@@ -1,4 +1,4 @@
-# Known Bugs — Audit 2026-03-31 (Updated 2026-04-04)
+# Known Bugs — Audit 2026-03-31 (Updated 2026-04-05)
 
 **Every fix MUST:**
 1. Read the original paper or reference code cited below. Do NOT guess the formula.
@@ -31,7 +31,7 @@
 |----|-------------|--------|
 | IMP-01 | AGN torus toy models (MBB, not RT) | FIXED 2026-04-04 — `DeprecationWarning` added to both functions |
 | IMP-02 | Feltre+2016 NLR backend | NOT FIXED — `NotImplementedError` stub |
-| IMP-03 | `eline_mode="fitted"` | NOT FIXED — `NotImplementedError` stub |
+| IMP-03 | `eline_mode="fitted"` | FIXED 2026-04-05 — line amplitudes as explicit free params, full VI/MCMC path |
 | IMP-04 | Dust emission analytic fallbacks — dead code | PARTIALLY FIXED — `fallback_fn` param removed from `_make_lazy_loader`; fallback functions retained (still used in notebooks/crossval) |
 | IMP-05 | ADAF bremsstrahlung stale comment | FIXED 2026-04-04 — stale comment deleted |
 
@@ -51,15 +51,18 @@
 
 **Root cause:** The old `_warm_comptonization_lnu` multiplied `B_nu(T)` by `(nu/nu_seed)^(Gamma_warm-1)`. This was wrong in two ways: (1) nthcomp **replaces** the blackbody, it does not scale it; (2) the exponent sign was inverted — nthcomp gives `L_nu ∝ ν^(1-Γ)`, not `ν^(Γ-1)`.
 
-**Fix:** Implemented Kompaneets equation solver (`_thermlc` / `_thcompton` / `donthcomp_nu`) ported from scotthgn/RELAGN (pyNTHCOMP.py, credit A.D. Thomas), solving Zdziarski et al. 1996.
+**Fix:** Templates precomputed by calling RELAGN's `pyNTHCOMP.donthcomp` (scotthgn/RELAGN, credit A.D. Thomas, ported from XSpec `donthcomp.f`) as an external build-time dependency over a 3-D parameter grid (γ × kTe × kTbb = 20 × 15 × 50 = 15 000 Kompaneets solves). tengri does **not** ship the solver itself (copyright A.D. Thomas / RELAGN). At runtime, JAX trilinear **log-space** interpolation replaces the per-call Kompaneets solve. Log-space interpolation significantly reduces error in the exponentially varying Wien seed-BB tail compared to linear interpolation.
 
-**Template build dependency:** The solver is numpy-sequential (tridiagonal back-substitution) and not JAX-compatible. Instead, precompute spectral shapes on an 11×8×25 grid (gamma, kTe, kTbb) and store in `data/nthcomp_templates.npz`. At runtime, JAX trilinear interpolation replaces the per-call Kompaneets solve. Build with:
+**Template format:** HDF5 (`data/nthcomp_templates.h5`, ~14 MB, gzip-compressed). Build with:
 
 ```bash
-python scripts/build_nthcomp_templates.py  # ~30-120 s one-time cost
+git clone --depth=1 https://github.com/scotthgn/RELAGN.git /tmp/relagn_ref
+python scripts/build_nthcomp_templates.py  # ~47 s one-time cost
 ```
 
-**Fallback behavior:** When `data/nthcomp_templates.npz` is absent, `kubota_done_disc` emits a `UserWarning` and falls back to the QSOSED-style power-law proxy (`_warm_comptonization_lnu`). This is acceptable for Paper I photometric fitting (the warm zone contribution to broadband photometry is minor). The fallback is identical to the original code and is retained as the simplified-mode path.
+**Fallback behavior:** When `data/nthcomp_templates.h5` is absent, `kubota_done_disc` emits a `UserWarning` and falls back to the QSOSED-style power-law proxy. This is acceptable for Paper I photometric fitting; high-priority for X-ray/UV spectral work.
+
+**Cross-validation:** `tests/crossval/test_nthcomp_relagn_crossval.py` (requires RELAGN). Most parameter sets agree to < 5% max / 4% p95. The extreme (γ=1.7, kTe=0.1, kTbb=0.001) case has ~18% max / 10% p95 near the Wien cutoff where two simultaneously exponential features fall between grid points; its crossval tolerance is set to 20% max / 10% p95.
 
 **Tests:** `tests/unit/test_audit_regressions.py::TestBug04WarmComptonization` (5 tests).
 
@@ -175,14 +178,11 @@ These are not numerical bugs but missing or placeholder implementations that pro
 
 ---
 
-### IMP-03: `eline_mode="fitted"` — `NotImplementedError` stub (NOT FIXED)
+### IMP-03: `eline_mode="fitted"` — `NotImplementedError` stub (FIXED 2026-04-05)
 
-**File:** `src/tengri/models/observation/spectroscopy_config.py:88`
-**Status:** `Spectroscopy(eline_mode="fitted")` raises `NotImplementedError("eline_mode='fitted' (free MCMC line amplitudes) is not yet implemented.")`. The three other modes (`"off"`, `"fixed"`, `"marginalized"`) work.
-**Impact:** Free-amplitude emission line fitting (where line amplitudes are explicit latent parameters sampled by MCMC/VI) is completely unavailable.
-**Fix:** Implement the fitted mode: add line amplitudes to the Parameters free-parameter list, include them in the forward model output, and wire them into the likelihood. The design pattern is the same as the marginalized mode minus the analytic marginalization step.
-**Reference:** See `observation/eline_fitting.py` for the existing design matrix and amplitude conventions.
-**Regression test required:** `test_fitted_mode_produces_posterior_line_amplitudes` — run a short inference pass with `eline_mode="fitted"` and check that line amplitude posteriors are returned with non-zero variance.
+**File:** `src/tengri/models/observation/spectroscopy_config.py:88`; `src/tengri/inference/fitter.py:150`; `src/tengri/inference/loss_functions.py:350`
+**Fix:** Fully implemented. `Fitter.__init__` detects `eline_mode="fitted"`, builds `_eline_amplitude_names` for each independent line, and calls `spec.merge_observation_params(**_amp_priors)` to add amplitude parameters as free latent variables with broad Gaussian priors. `loss_functions.py` handles the `"spectroscopy"` and `"joint"` branches: builds the design matrix, applies doublet constraints via `build_constraint_matrix()`, and computes chi² with explicit amplitude params. The `NotImplementedError` stub in `spectroscopy_config.py` was removed by the `__post_init__` validation refactor (validation now raises `ValueError` only for truly unsupported values; `"fitted"` is now accepted).
+**Tests:** `tests/unit/test_eline_fitting.py` — `TestFittedMode` (8 tests): no NotImplementedError, `has_eline_fitting=True`, `merge_observation_params` called, fitter flag set, amplitude params in `free_names`, amplitude count matches `n_independent`, loss function finite, log-likelihood finite with true amplitudes lower than perturbed. All 21 tests in file pass.
 
 ---
 
@@ -201,6 +201,68 @@ These are not numerical bugs but missing or placeholder implementations that pro
 **File:** `src/tengri/models/agn/disc.py:1076`
 **Fix:** Deleted the stale `# The nu^{-0.5} index is wrong.` comment. The code on the next line (`brem_shape = jnp.exp(...)`) was already correct (flat nu^0 spectrum per Mahadevan 1997 Eq. 3); the comment was the original bug report that was never removed after the fix was applied.
 **Reference:** Mahadevan (1997) ApJ 477, 585 Eq. 3.
+
+---
+
+## API CONSISTENCY BUGS
+
+### BUG-API-01: `simulate.sed_from_sfh` returns erg/s/Hz; all other modules return Lsun/Hz (OPEN)
+
+**File:** `src/tengri/simulate.py` — `sed_from_sfh`, `photometry_from_sfh`, `spectrum_from_sfh`
+**Root cause:** `sed_from_sfh` is a thin wrapper around DSPS's `calc_rest_sed`, which works in CGS
+(erg/s/Hz). Every other physics module in tengri (`disc.py`, `xray.py`, `radio.py`, `emission.py`,
+`shock.py`, `igm.py`) returns Lsun/Hz. Any code that sums or compares outputs from `sed_from_sfh`
+with outputs from these modules will silently produce values ~3.8×10^33 × too large for the
+stellar component.
+
+**Fix/Workaround:** Divide the `"sed"` key of the returned dict by `LSUN = 3.828e33 erg/s` before
+combining with other components:
+
+```python
+LSUN = 3.828e33  # erg / s
+result = sed_from_sfh(t_gyr, sfr, ssp, ...)
+lnu_lsun = np.array(result["sed"]) / LSUN   # erg/s/Hz → Lsun/Hz
+```
+
+**Proper fix:** `sed_from_sfh` should return Lsun/Hz (divide internally and update docstring), or
+add a `unit="lsun"` parameter (default `"lsun"`, legacy `"cgs"`) and a deprecation warning. The
+dict key `"sed"` should clearly document the unit.
+
+**Regression test required:** `tests/unit/test_simulate_units.py::test_sed_from_sfh_unit_lsun` —
+checks that the peak of `result["sed"]` for a 10^10 Msun galaxy falls in the physically plausible
+range 10^9–10^12 Lsun/Hz (not ~10^42–10^45 erg/s/Hz treated as Lsun/Hz).
+
+**Impact:** Any user-facing script or notebook that mixes `sed_from_sfh` with disc/dust/radio
+components will silently show the wrong relative amplitudes. Discovered during `multiwavelength_sed.py`
+development (2026-04-06).
+
+### BUG-API-02: `compute_qh` returns ~0 for `wNE` SSP spectra (OPEN)
+
+**File:** `src/tengri/models/nebular/_shared.py` — `compute_qh`
+**Root cause:** `compute_qh` estimates Q_H by integrating `L_ν / (hν)` below 912 Å. SSP files with
+the `wNE` prefix (with Nebular Emission) have had their Lyman-continuum photons pre-consumed by the
+CLOUDY nebular model: the spectrum below 912 Å is set to ~0 and the energy reappears as optical
+emission lines and nebular continuum. Calling `compute_qh` on a `wNE` SSP therefore returns ~0
+regardless of the SFR, making any nebular emission derived from it invisible.
+
+**Fix/Workaround:** Use a direct SFR → Q_H calibration instead of integrating the SED:
+
+```python
+# Murphy+2011 (Chabrier IMF): Q_H [phot/s] = SFR [Msun/yr] × 3.9e53
+_Q_H = sfr_now_msun_yr * 3.9e53
+```
+
+**Proper fix:** `compute_qh` docstring should warn that it requires a non-nebular (no `wNE`) SSP.
+Alternatively, provide `compute_qh_from_sfr(sfr, imf="chabrier")` as a calibration-based alternative
+exported from `tengri.models.nebular._shared`.
+
+**Regression test required:** `tests/unit/test_nebular_qh.py::test_compute_qh_wne_returns_zero` —
+verify that `compute_qh` on a `wNE` SSP spectrum gives Q_H ≈ 0, and that the SFR-based calibration
+gives a physically plausible Q_H (~10^53–10^54 phot/s for SFR=1–10 Msun/yr).
+
+**Impact:** Any script or notebook that calls `compute_qh` on a tengri SSP file (all of which are
+`wNE`) will silently produce Q_H ≈ 0 and invisible nebular emission lines. Discovered during
+`multiwavelength_sed.py` development (2026-04-06).
 
 ---
 

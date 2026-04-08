@@ -251,4 +251,5 @@ missing physics (e.g., AGN contribution, nebular emission).
 - Frank, P., Leike, R., Ensslin, T.A. (2021). "Geometric Variational Inference."
   *Entropy* 23(7):853.
 
-See {doc}`../demonstrations/index` for worked examples that include convergence checks.
+Worked examples with convergence checks: [`00_quickstart.py`](https://github.com/suchethac/tengri/blob/main/notebooks/00_quickstart.py),
+[`11_population.py`](https://github.com/suchethac/tengri/blob/main/notebooks/11_population.py).

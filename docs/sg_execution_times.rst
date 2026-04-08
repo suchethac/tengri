@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:03.169** total execution time for 29 files **from all galleries**:
+**00:10.318** total execution time for 46 files **from all galleries**:
 
 .. container::
 
@@ -32,14 +32,65 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_advanced_plot_joint_fit.py` (``../examples/advanced/plot_joint_fit.py``)
-     - 00:01.883
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_inference_plot_hierarchical_convergence.py` (``../examples/inference/plot_hierarchical_convergence.py``)
-     - 00:00.768
+     - 00:04.658
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_advanced_plot_joint_fit.py` (``../examples/advanced/plot_joint_fit.py``)
+     - 00:02.521
      - 0.0
    * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectrum_fit.py` (``../examples/spectroscopy/plot_spectrum_fit.py``)
-     - 00:00.518
+     - 00:00.696
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_sigma_sweep.py` (``../examples/sfh/plot_psd_sigma_sweep.py``)
+     - 00:00.403
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_lnorm_peak_sweep.py` (``../examples/sfh/plot_lnorm_peak_sweep.py``)
+     - 00:00.353
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_tau_sweep.py` (``../examples/sfh/plot_psd_tau_sweep.py``)
+     - 00:00.350
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_dpl_alpha_sweep.py` (``../examples/sfh/plot_dpl_alpha_sweep.py``)
+     - 00:00.348
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_dexp_tau_sweep.py` (``../examples/sfh/plot_dexp_tau_sweep.py``)
+     - 00:00.338
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_dpl_beta_sweep.py` (``../examples/sfh/plot_dpl_beta_sweep.py``)
+     - 00:00.336
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_plot_dust_slope_sweep.py` (``../examples/dust/plot_dust_slope_sweep.py``)
+     - 00:00.076
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_plot_tau_diff_sweep.py` (``../examples/dust/plot_tau_diff_sweep.py``)
+     - 00:00.065
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_plot_tau_bc_sweep.py` (``../examples/dust/plot_tau_bc_sweep.py``)
+     - 00:00.064
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_plot_qpah_sweep.py` (``../examples/dust/plot_qpah_sweep.py``)
+     - 00:00.016
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_logu_sweep.py` (``../examples/nebular/plot_logu_sweep.py``)
+     - 00:00.014
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_logz_gas_sweep.py` (``../examples/nebular/plot_logz_gas_sweep.py``)
+     - 00:00.014
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_plot_dust_T_sweep.py` (``../examples/dust/plot_dust_T_sweep.py``)
+     - 00:00.014
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_sweep.py` (``../examples/nebular/plot_fesc_sweep.py``)
+     - 00:00.013
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_dig_frac_sweep.py` (``../examples/nebular/plot_dig_frac_sweep.py``)
+     - 00:00.013
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_plot_umin_sweep.py` (``../examples/dust/plot_umin_sweep.py``)
+     - 00:00.013
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_line_sigma_sweep.py` (``../examples/nebular/plot_line_sigma_sweep.py``)
+     - 00:00.012
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000

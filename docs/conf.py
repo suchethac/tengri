@@ -25,7 +25,6 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx_copybutton",
     "sphinx_design",
-    "sphinx_gallery.gen_gallery",
 ]
 
 # -- MyST configuration ------------------------------------------------------
@@ -42,10 +41,9 @@ source_suffix = {
     ".md": "markdown",
 }
 
-# -- nbsphinx configuration --------------------------------------------------
+# -- nbsphinx (Jupyter → HTML via nbconvert) ---------------------------------
 
 nbsphinx_execute = "never"
-nbsphinx_allow_errors = False
 
 # -- Theme configuration -----------------------------------------------------
 
@@ -86,21 +84,6 @@ intersphinx_mapping = {
     "matplotlib": ("https://matplotlib.org/stable/", None),
 }
 
-# -- sphinx-gallery configuration --------------------------------------------
-
-sphinx_gallery_conf = {
-    "examples_dirs": ["../examples"],
-    "gallery_dirs": ["auto_examples"],
-    "filename_pattern": r"/plot_",
-    "abort_on_example_error": False,
-    "only_warn_on_example_error": True,
-    "image_scrapers": ("matplotlib",),
-    "within_subsection_order": "FileNameSortKey",
-    "capture_repr": (),
-    "remove_config_comments": True,
-    "nested_sections": False,
-}
-
 # -- Exclude patterns --------------------------------------------------------
 
 exclude_patterns = [
@@ -109,10 +92,23 @@ exclude_patterns = [
     "**.ipynb_checkpoints",
     "superpowers",
     "specs",
-    "auto_examples/**/*.ipynb",
-    # Old notebook directories superseded by the new track structure
-    # (quickstart/, fitting/, theory/, models/, specialist/)
-    "_notebooks/demonstrations/**",
-    "_notebooks/reference/**",
-    "_notebooks/tutorials/**",
+    # Gallery output (optional local builds); not part of the published doc tree
+    "auto_examples/**",
+    "sg_execution_times.rst",
+    # Narrative sections superseded by repo root notebooks/ spine
+    "getting_started/**",
+    "forward_model/**",
+    "inference/**",
+    "fitting/**",
+    "advanced/**",
+    "developer/**",
+    "dev/**",
+    "examples.md",
+    "install.md",
+    "known_bugs.md",
+    "NEBULAR_REFACTOR.md",
+    "_notebooks/**",
+    # Not part of the published sidebar (content folded into index.md or omitted)
+    "changelog.md",
+    "documentation.md",
 ]
