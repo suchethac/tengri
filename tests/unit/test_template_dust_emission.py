@@ -439,3 +439,72 @@ class TestToyModelWarnings:
         # (Only test the warning mechanism, not actual fallback)
         # This test just verifies the warning path exists in the code
         assert "warning" in skirtor.skirtor_analytic.__doc__.lower() or True
+
+
+# =====================================================================
+# Draine & Li 2014 — extended parameter range and alpha parameter
+# (Migrated from test_new_physics.py during test audit 2026-04-08)
+# =====================================================================
+
+
+class TestDL14ExtendedRange:
+    """DL14-specific features not covered by the generic template tests."""
+
+    @pytest.fixture
+    def ir_wave(self):
+        return jnp.logspace(jnp.log10(1e4), jnp.log10(1e7), 300)
+
+    def test_dl14_alpha_affects_spectrum(self, ir_wave):
+        """Different alpha values should produce different spectra."""
+        from tengri.models.dust.emission import draine_li2014
+
+        L_abs = 1e10
+        sed_low_alpha = draine_li2014(ir_wave, L_abs, dust_alpha_dl14=1.5, dust_gamma_dl=0.1)
+        sed_high_alpha = draine_li2014(ir_wave, L_abs, dust_alpha_dl14=2.5, dust_gamma_dl=0.1)
+        assert not jnp.allclose(sed_low_alpha, sed_high_alpha), (
+            "Different alpha values should give different spectra"
+        )
+
+    def test_dl14_extended_qpah_range(self, ir_wave):
+        """DL14 should handle extended q_PAH range (up to 7.32%)."""
+        from tengri.models.dust.emission import draine_li2014
+
+        sed = draine_li2014(ir_wave, 1e10, dust_qpah=7.0)
+        assert jnp.all(jnp.isfinite(sed)), "DL14 should handle q_PAH=7.0%"
+        assert float(jnp.max(sed)) > 0
+
+    def test_dl14_extended_umin_range(self, ir_wave):
+        """DL14 should handle extended U_min range (up to 50)."""
+        from tengri.models.dust.emission import draine_li2014
+
+        sed = draine_li2014(ir_wave, 1e10, dust_umin=40.0)
+        assert jnp.all(jnp.isfinite(sed)), "DL14 should handle U_min=40"
+        assert float(jnp.max(sed)) > 0
+
+    def test_dl14_gradients(self, ir_wave):
+        """DL14 should have finite gradients for all parameters."""
+        from tengri.models.dust.emission import draine_li2014
+
+        def loss(umin, gamma, qpah, alpha):
+            return jnp.sum(
+                draine_li2014(
+                    ir_wave,
+                    1e10,
+                    dust_umin=umin,
+                    dust_gamma_dl=gamma,
+                    dust_qpah=qpah,
+                    dust_alpha_dl14=alpha,
+                )
+            )
+
+        grads = jax.grad(loss, argnums=(0, 1, 2, 3))(1.0, 0.05, 2.5, 2.0)
+        for i, name in enumerate(["umin", "gamma", "qpah", "alpha"]):
+            assert jnp.isfinite(grads[i]), f"NaN gradient for {name}"
+            if name == "alpha":
+                assert abs(float(grads[i])) > 0, "alpha gradient should be nonzero with gamma=0.05"
+
+    def test_dl14_param_spec_registered(self):
+        """dust_alpha_dl14 should be in the parameter spec."""
+        from tengri.core.parameters import _DUST_EMISSION_PARAMS
+
+        assert "dust_alpha_dl14" in _DUST_EMISSION_PARAMS

@@ -470,3 +470,64 @@ class TestFusedKernelSpeedup:
         assert t_fused < t_unfused * 2.0, (
             f"Fused not faster: {t_fused * 1e6:.1f}μs vs {t_unfused * 1e6:.1f}μs"
         )
+
+
+# ---------------------------------------------------------------------------
+# Regression: CSP trapezoidal endpoint weights (2026-04 bug fix)
+# ---------------------------------------------------------------------------
+
+
+class TestCSPEndpointWeights:
+    """Regression: CSP endpoint weights must be half-width, not full-width.
+
+    Previously the youngest and oldest SSP bins had full-width trapezoidal
+    weights, over-counting their contribution by ~2x. Fixed in csp_age_dt().
+    """
+
+    def test_uniform_grid_endpoints_are_half_interior(self):
+        """On a uniform grid, endpoints dt should be half the interior dt."""
+        from tengri.models.sps.dsps_wrapper import csp_age_dt
+
+        ages = jnp.linspace(1e6, 1e10, 100)
+        dt = csp_age_dt(ages, method="trapz")
+        interior = dt[1:-1]
+        assert_allclose(
+            float(dt[0]),
+            float(interior[0]) / 2.0,
+            rtol=1e-10,
+            err_msg="Left endpoint should be half interior width",
+        )
+        assert_allclose(
+            float(dt[-1]),
+            float(interior[-1]) / 2.0,
+            rtol=1e-10,
+            err_msg="Right endpoint should be half interior width",
+        )
+
+    def test_log_grid_endpoints_are_half_interior(self):
+        """On a log grid with log_trapz, same half-width rule holds."""
+        from tengri.models.sps.dsps_wrapper import csp_age_dt
+
+        ages = jnp.logspace(6, 10, 100)
+        dt = csp_age_dt(ages, method="log_trapz")
+        # First and last should be ~half of their nearest interior neighbors
+        ratio_left = float(dt[0] / dt[1])
+        ratio_right = float(dt[-1] / dt[-2])
+        assert 0.4 < ratio_left < 0.6, f"Left endpoint ratio {ratio_left:.3f}, expected ~0.5"
+        assert 0.4 < ratio_right < 0.6, f"Right endpoint ratio {ratio_right:.3f}, expected ~0.5"
+
+    def test_constant_sfr_mass_integral_accurate(self):
+        """With constant SFR=1 Msun/yr, total mass = age span in years."""
+        from tengri.models.sps.dsps_wrapper import compute_csp_weights
+
+        ages = jnp.logspace(6, 10, 200)
+        sfr = jnp.ones_like(ages)  # 1 Msun/yr
+        weights = compute_csp_weights(sfr, ages, method="trapz")
+        total_mass = float(jnp.sum(weights))
+        expected = float(ages[-1] - ages[0])  # years
+        assert_allclose(
+            total_mass,
+            expected,
+            rtol=0.01,
+            err_msg=f"Total mass {total_mass:.2e} != age span {expected:.2e}",
+        )

@@ -37,6 +37,7 @@ from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
 from tengri.models.sfh.mean_sfh import (
     AGEMAX_YR,
     constant_sfh,
+    declining_exponential_sfh,
     delayed_exponential_sfh,
     dpl,
     exponential_sfh,
@@ -166,9 +167,7 @@ _snorm_spec = SFHModelSpec(
     name="snorm",
     fn=snorm,
     params={
-        "sfh_snorm_log_peak_sfr": ParamDef(
-            "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
-        ),
+        "sfh_snorm_log_peak_sfr": ParamDef("log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)),
         "sfh_snorm_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
         ),
@@ -195,9 +194,7 @@ _norm_spec = SFHModelSpec(
     name="norm",
     fn=norm,
     params={
-        "sfh_norm_log_peak_sfr": ParamDef(
-            "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
-        ),
+        "sfh_norm_log_peak_sfr": ParamDef("log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)),
         "sfh_norm_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
         ),
@@ -222,9 +219,7 @@ _lnorm_spec = SFHModelSpec(
     name="lnorm",
     fn=lnorm,
     params={
-        "sfh_lnorm_log_peak_sfr": ParamDef(
-            "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
-        ),
+        "sfh_lnorm_log_peak_sfr": ParamDef("log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)),
         "sfh_lnorm_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
         ),
@@ -282,20 +277,25 @@ _register(
         params={
             "sfh_const_log_sfr": ParamDef("log10 SFR", _always_true, "", Uniform(-1.0, 3.0)),
             "sfh_const_start_gyr": ParamDef(
-                "Start lookback (Gyr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
-            ),
-            "sfh_const_end_gyr": ParamDef(
-                "End lookback (Gyr)",
+                "Lookback to SF onset (Gyr): when did SF start?",
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(AGEMAX_YR / 1e9),
+            ),
+            "sfh_const_end_gyr": ParamDef(
+                "Lookback to SF cessation (Gyr): when did SF stop? (0 = ongoing)",
+                _lo_nonneg,
+                "must have lo >= 0",
+                Fixed(0.0),
             ),
         },
         settings={},
         internal_param_map={
             "sfh_const_log_sfr": ("log_sfr", 1.0, 0.0),
-            "sfh_const_start_gyr": ("start", 1e9, 0.0),
-            "sfh_const_end_gyr": ("end", 1e9, 0.0),
+            # User's "start" (when SF began) = older lookback = internal "end"
+            # User's "end" (when SF stopped) = younger lookback = internal "start"
+            "sfh_const_start_gyr": ("end", 1e9, 0.0),
+            "sfh_const_end_gyr": ("start", 1e9, 0.0),
         },
         composition_type="additive",
     )
@@ -348,6 +348,37 @@ _register(
             "sfh_dexp_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
             "sfh_dexp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_dexp_start_gyr": ("start", 1e9, 0.0),
+        },
+        composition_type="additive",
+    )
+)
+
+# --- tau (declining exponential, matches FSPS sfh=1 / bagpipes 'exponential') ---
+# SFR(t_lb) = peak * exp(-(age - t_lb)/tau): highest at galaxy formation (t_lb=age),
+# declining to present (t_lb=0).  See declining_exponential_sfh for full derivation.
+_register(
+    SFHModelSpec(
+        name="tau",
+        fn=declining_exponential_sfh,
+        params={
+            "sfh_tau_log_peak_sfr": ParamDef(
+                "log10 peak SFR at formation (Msun/yr)", _always_true, "", Uniform(-1.0, 3.0)
+            ),
+            "sfh_tau_tau_gyr": ParamDef(
+                "e-folding timescale (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.1, 10.0)
+            ),
+            "sfh_tau_age_gyr": ParamDef(
+                "Galaxy age / lookback time of formation (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 13.0),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_tau_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+            "sfh_tau_tau_gyr": ("tau", 1e9, 0.0),
+            "sfh_tau_age_gyr": ("age", 1e9, 0.0),
         },
         composition_type="additive",
     )

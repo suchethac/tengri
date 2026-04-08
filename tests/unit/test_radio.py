@@ -45,6 +45,20 @@ _L_IR = 1e11  # Lsun, typical LIRG
 # ---------------------------------------------------------------------------
 
 
+class TestRadioConstantsCGS:
+    """Regression: radio constants must be in CGS (erg/s/Hz), not Lsun/Hz."""
+
+    def test_l0_synch_cgs_value(self):
+        """_L0_SYNCH must be 3.0e28 erg/s/Hz (Bell 2003 synchrotron turnover).
+
+        Previously named _L0_SYNCH_LSUN_HZ and in Lsun/Hz. Renamed to _L0_SYNCH
+        in erg/s/Hz as part of the CGS standardization (2026-04-08).
+        """
+        assert abs(_L0_SYNCH - 3.0e28) < 1e26, (
+            f"_L0_SYNCH = {_L0_SYNCH:.2e}, expected 3.0e28 erg/s/Hz"
+        )
+
+
 class TestBackwardCompat:
     """radio_sfr_bell2003 must be identical to the old radio_star_forming."""
 

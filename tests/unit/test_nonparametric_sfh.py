@@ -309,3 +309,73 @@ class TestRegistryIntegration:
         sfr = fn(AGE_YR, **internal_kw)
         assert sfr.shape == AGE_YR.shape
         assert jnp.all(jnp.isfinite(sfr))
+
+
+# ---------------------------------------------------------------------------
+# Regression: step-function behavior (searchsorted fix, 2026-04)
+# ---------------------------------------------------------------------------
+
+
+class TestStepFunctionRegression:
+    """Regression: continuity/dirichlet SFH must be piecewise-constant (Leja+2019).
+
+    Previously used linear interpolation on bin centers, giving smoothly varying
+    SFR instead of the intended step function. Fixed by using searchsorted on bin
+    edges.
+    """
+
+    def test_continuity_constant_within_bins(self):
+        """SFR must be constant within each age bin (step function)."""
+        bin_edges = jnp.array([0.0, 0.1, 0.5, 1.0, 3.0, 6.0, 10.0, 13.7])
+        bin_edges_yr = bin_edges * 1e9
+
+        # Two ages well inside the same bin (e.g., bin 3: 1.0-3.0 Gyr)
+        age_mid1 = jnp.array([1.5e9])
+        age_mid2 = jnp.array([2.5e9])
+
+        kwargs = {f"ratio_{i}": 0.3 * (i - 3) for i in range(7)}
+        sfr1 = continuity_sfh(age_mid1, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
+        sfr2 = continuity_sfh(age_mid2, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
+
+        assert float(jnp.abs(sfr1[0] - sfr2[0])) < 1e-10, (
+            f"SFR should be constant within a bin: {float(sfr1[0]):.6e} vs {float(sfr2[0]):.6e}"
+        )
+
+    def test_dirichlet_constant_within_bins(self):
+        """Dirichlet SFR must also be step-function within bins."""
+        bin_edges = jnp.array([0.0, 0.1, 0.5, 1.0, 3.0, 6.0, 10.0, 13.7])
+
+        age_mid1 = jnp.array([1.5e9])
+        age_mid2 = jnp.array([2.5e9])
+
+        kwargs = {f"z_frac_{i}": 0.3 + 0.1 * i for i in range(7)}
+        sfr1 = dirichlet_sfh(age_mid1, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
+        sfr2 = dirichlet_sfh(age_mid2, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs)
+
+        assert float(jnp.abs(sfr1[0] - sfr2[0])) < 1e-10, (
+            "Dirichlet SFR should be constant within a bin"
+        )
+
+    def test_sfr_changes_across_bin_boundary(self):
+        """SFR must change across bin boundaries (not interpolated)."""
+        bin_edges = jnp.array([0.0, 0.1, 0.5, 1.0, 3.0, 6.0, 10.0, 13.7])
+
+        # Ages straddling the 1.0 Gyr boundary between bin 2 (0.5-1.0) and bin 3 (1.0-3.0)
+        age_before = jnp.array([0.99e9])
+        age_after = jnp.array([1.01e9])
+
+        # ratio_i = log(SFR_{i+1} / SFR_i). Setting ratio_2 = 1.0 makes
+        # SFR in bin 3 = 10^1.0 × SFR in bin 2 — a clear step.
+        kwargs = {f"ratio_{i}": 1.0 if i == 2 else 0.0 for i in range(7)}
+        sfr_before = continuity_sfh(
+            age_before, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs
+        )
+        sfr_after = continuity_sfh(
+            age_after, log_total_mass=10.0, bin_edges_gyr=bin_edges, **kwargs
+        )
+
+        # With ratio_2 = 1.0, SFR should differ by ~10x across the boundary
+        assert float(jnp.abs(sfr_before[0] - sfr_after[0])) > 1e-3, (
+            f"SFR should change discontinuously at bin boundaries: "
+            f"before={float(sfr_before[0]):.4e}, after={float(sfr_after[0]):.4e}"
+        )

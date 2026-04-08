@@ -481,3 +481,80 @@ class TestPrediction:
             float(d["stellar_mass"]), float(pred.sfh.stellar_mass), rtol=1e-8
         )
         np.testing.assert_allclose(float(d["sfr_100myr"]), float(pred.sfh.sfr_100myr), rtol=1e-8)
+
+
+# ---------------------------------------------------------------------------
+# Dust emission wiring in forward model
+# (Migrated from test_new_physics.py during test audit 2026-04-08)
+# ---------------------------------------------------------------------------
+
+
+class TestDustEmissionForwardModel:
+    """Test dust emission wired into the full model."""
+
+    @pytest.fixture(scope="class")
+    def ssp(self):
+        return load_ssp_data(str(_SSP_FILE))
+
+    def test_dust_emission_adds_ir_flux(self, ssp):
+        from tengri.distributions import Fixed
+
+        filters = load_filter_set(["sdss_r", "wise_w3"])
+        spec = ParamSpec(
+            sfh_dpl_alpha=Fixed(1.0),
+            sfh_dpl_beta=Fixed(1.5),
+            sfh_dpl_tau_gyr=Fixed(8.0),
+            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            met_logzsol=Fixed(-0.3),
+            dust_tau_bc=Fixed(1.0),
+            dust_tau_diff=Fixed(0.5),
+            dust_T=Uniform(20.0, 60.0),
+            redshift=Fixed(0.1),
+            mean_sfh_type="dpl",
+            dust_emission="modified_blackbody",
+        )
+        model = Model(spec, ssp, filters=filters, precompute=False)
+        params_em = {"dust_T": 35.0, "dust_beta_ir": 1.6}
+
+        spec_no = ParamSpec(
+            sfh_dpl_alpha=Fixed(1.0),
+            sfh_dpl_beta=Fixed(1.5),
+            sfh_dpl_tau_gyr=Fixed(8.0),
+            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            met_logzsol=Fixed(-0.3),
+            dust_tau_bc=Fixed(1.0),
+            dust_tau_diff=Fixed(0.5),
+            redshift=Fixed(0.1),
+            mean_sfh_type="dpl",
+        )
+        model_no = Model(spec_no, ssp, filters=filters, precompute=False)
+
+        sed_em = model.predict_rest_sed(params_em).sed
+        sed_no = model_no.predict_rest_sed({}).sed
+        max_diff = float(jnp.max(sed_em - sed_no))
+        assert max_diff > 0, "Dust emission should add positive flux somewhere"
+
+    def test_dust_emission_gradient(self, ssp):
+        from tengri.distributions import Fixed
+
+        filters = load_filter_set(["wise_w3"])
+        spec = ParamSpec(
+            sfh_dpl_alpha=Fixed(1.0),
+            sfh_dpl_beta=Fixed(1.5),
+            sfh_dpl_tau_gyr=Fixed(8.0),
+            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            met_logzsol=Fixed(-0.3),
+            dust_tau_bc=Fixed(1.0),
+            dust_tau_diff=Fixed(0.5),
+            dust_T=Uniform(20.0, 60.0),
+            redshift=Fixed(0.1),
+            mean_sfh_type="dpl",
+            dust_emission="modified_blackbody",
+        )
+        model = Model(spec, ssp, filters=filters, precompute=False)
+
+        def loss(T):
+            return model.predict_photometry({"dust_T": T})[0]
+
+        g = jax.grad(loss)(35.0)
+        assert jnp.isfinite(g), "dust_T gradient should be finite"

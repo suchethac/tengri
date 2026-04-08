@@ -150,18 +150,31 @@ class TestXrayCrossval:
 
         np.testing.assert_allclose(l2 / l1, 2.0, rtol=0.01)
 
-    def test_grimm_relation(self):
-        """HMXB L_X should match Grimm+2003: L_X = 2.6e39 * SFR erg/s."""
+    def test_grimm_relation_integrated(self):
+        """HMXB integrated 2-10 keV L_X should match Grimm+2003 within 20%.
+
+        Grimm+2003: L_HMXB(2-10 keV) = 2.6e39 erg/s per Msun/yr.
+        We integrate the spectral model over the reference band.
+        """
         from tengri.models.xray import xray_xrb
 
-        # At SFR=1 Msun/yr, L_HMXB(2-10 keV) = 2.6e39 erg/s = 6.79e5 Lsun
-        # The spectral shape spreads this over energy, so the total integrated
-        # L_X should be close to this value
-        wave = jnp.linspace(0.5, 6.2, 1000)  # 2-25 keV range
+        # 2-10 keV in Angstrom: E=hc/λ → λ = 12398.4/E(eV)
+        # 2 keV → 6.199 A, 10 keV → 1.240 A
+        wave = jnp.linspace(1.24, 6.20, 500)  # 2-10 keV band
         l_nu = np.asarray(xray_xrb(wave, sfr=1.0, stellar_mass=0.0))
 
-        # Verify non-zero emission in X-ray band
-        assert np.any(l_nu > 0), "Should have X-ray emission for SFR=1"
+        # Integrate L_nu over frequency to get L_bol in 2-10 keV
+        c_aa = 2.99792458e18
+        nu = c_aa / np.asarray(wave)
+        l_band = abs(np.trapezoid(l_nu[::-1], nu[::-1]))
+
+        # Grimm+2003 reference: 2.6e39 erg/s
+        np.testing.assert_allclose(
+            l_band,
+            2.6e39,
+            rtol=0.20,
+            err_msg=f"HMXB 2-10 keV L_X = {l_band:.2e}, expected 2.6e39 erg/s (Grimm+2003)",
+        )
 
     def test_xray_exponential_cutoff(self):
         """X-ray spectrum should have exponential cutoff at high energies."""
@@ -199,7 +212,7 @@ class TestAGNCrossval:
         expected = 10**11.0  # Lsun
         # Should be within factor 2 (numerical integration over finite grid)
         ratio = l_bol / expected
-        assert 0.3 < ratio < 3.0, f"Disc L_bol ratio = {ratio:.2f}"
+        assert 0.5 < ratio < 2.0, f"Disc L_bol ratio = {ratio:.2f}"
 
     def test_torus_peaks_in_mir(self):
         """Torus at T=1000K should peak at ~3 um (Wien's law)."""
@@ -232,7 +245,7 @@ class TestAGNCrossval:
 
         expected = 10**11.0
         ratio = l_bol / expected
-        assert 0.1 < ratio < 10.0, f"AGN L_bol ratio = {ratio:.2f}"
+        assert 0.3 < ratio < 3.0, f"AGN L_bol ratio = {ratio:.2f}"
 
     def test_type1_vs_type2_covering(self):
         """Higher torus covering should shift UV→IR balance."""

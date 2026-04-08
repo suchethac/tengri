@@ -464,14 +464,6 @@ class TestUVSlopeBetaAnalytic:
         beta = float(compute_uv_slope_beta(sed, wave))
         np.testing.assert_allclose(beta, -2.0, atol=0.02)
 
-    def test_power_law_fnu_alpha0(self, wave):
-        """f_nu ~ nu^0 (flat in f_nu) → beta = -2.0."""
-        from tengri.utils.sed_quantities import compute_uv_slope_beta
-
-        sed = jnp.ones_like(wave) * 1e30
-        beta = float(compute_uv_slope_beta(sed, wave))
-        np.testing.assert_allclose(beta, -2.0, atol=0.02)
-
     def test_power_law_fnu_alpha1(self, wave):
         """f_nu ~ nu^1 (blue spectrum) → beta = -3.0.
 

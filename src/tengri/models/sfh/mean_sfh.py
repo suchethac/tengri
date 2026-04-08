@@ -21,6 +21,7 @@ Canonical names (short name alias in parentheses):
 - **constant_sfh** (const): flat SFR between start and end times (3 params).
 - **exponential_sfh** (exp): declining exponential from start (3 params).
 - **delayed_exponential_sfh** (dexp): peaks at start + tau (3 params).
+- **declining_exponential_sfh** (tau): FSPS/bagpipes tau model in lookback time (3 params).
 - **triweight_burst**: compact triweight kernel in log-age for burst component.
 
 References
@@ -358,14 +359,26 @@ def constant_sfh(
     log_sfr : float
         log10 of constant SFR (Msun/yr).
     start : float
-        Start lookback time (yr). Default: 0 (present).
+        Younger lookback boundary (yr). 0 = present. This is where SF
+        *stopped* (or 0 if still ongoing). Mapped from the user-facing
+        ``sfh_const_end_gyr``.
     end : float
-        End lookback time (yr). Default: AGEMAX_YR.
+        Older lookback boundary (yr). Default: AGEMAX_YR (Big Bang).
+        This is where SF *began*. Mapped from the user-facing
+        ``sfh_const_start_gyr``.
 
     Returns
     -------
     array
         SFR (Msun/yr), flat between start and end, zero outside.
+
+    Notes
+    -----
+    Internal convention: ``start <= t_lookback <= end`` (both in lookback
+    time). The user-facing API swaps the names to be chronologically
+    intuitive: ``sfh_const_start_gyr`` (when SF began, large lookback)
+    maps to ``end``, and ``sfh_const_end_gyr`` (when SF stopped, small
+    lookback) maps to ``start``.
     """
     sfr = 10.0**log_sfr
     mask = (t_lookback >= start) & (t_lookback <= end)
@@ -436,6 +449,51 @@ def delayed_exponential_sfh(
     ratio = dt / tau
     sfr = peak_sfr * ratio * jnp.exp(-ratio + 1.0)
     return jnp.where(dt >= 0, jnp.maximum(sfr, 0.0), 0.0)
+
+
+def declining_exponential_sfh(
+    t_lookback: jnp.ndarray,
+    log_peak_sfr: float,
+    tau: float,
+    age: float,
+) -> jnp.ndarray:
+    """Declining tau SFH in lookback time — matches FSPS sfh=1 / bagpipes 'exponential'.
+
+    In cosmic time T, the standard tau model is SFR(T) = peak * exp(-T/tau) for
+    0 <= T <= age.  Converting T = age - t_lb gives:
+
+        SFR(t_lb) = peak * exp(-(age - t_lb) / tau)  for  0 <= t_lb <= age
+
+    The SFR *increases* going back in lookback time (galaxy formed with highest SFR,
+    declining to the present).  This is the *opposite* sign convention to
+    ``exponential_sfh``, which models a rising-to-present exponential.
+
+    Parameters
+    ----------
+    t_lookback : array
+        Lookback time (yr).
+    log_peak_sfr : float
+        log10 of peak SFR at galaxy formation, i.e. at t_lb = age (Msun/yr).
+    tau : float
+        e-folding timescale (yr).  Larger tau → slower decline (more extended SFH).
+    age : float
+        Galaxy age (yr): lookback time of galaxy formation.  SFR is zero for
+        t_lb > age (before galaxy formed) and for t_lb < 0.
+
+    Returns
+    -------
+    array
+        SFR (Msun/yr).
+
+    References
+    ----------
+    - Conroy & Gunn (2010) — FSPS sfh=1 (tau model)
+    - Carnall+2018 (bagpipes) — 'exponential' SFH
+    """
+    peak_sfr = 10.0**log_peak_sfr
+    dt = age - t_lookback  # cosmic time elapsed since galaxy formation
+    sfr = peak_sfr * jnp.exp(-dt / tau)
+    return jnp.where((t_lookback >= 0) & (t_lookback <= age), sfr, 0.0)
 
 
 def triweight_burst(
