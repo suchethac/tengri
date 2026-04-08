@@ -25,11 +25,11 @@ Feature groups covered
 STELLAR    — const SFH + CF00 dust         bagpipes + FSPS
 EXPSFH     — exponential declining SFH      bagpipes + FSPS
 NEBULAR    — stellar + nebular emission     bagpipes + FSPS
-CALZETTI   — Calzetti dust law              FSPS only
-DUSTEM     — DL07 dust emission (IR)        FSPS only  (extended 1000–3e5 Å grid)
+CALZETTI   — Calzetti dust law              FSPS only + pCIGALE
+DUSTEM     — DL07 dust emission (IR)        FSPS only + pCIGALE (extended 1000–3e5 Å grid)
 TABSFH     — non-parametric step SFH        FSPS sfh=3 tabular
 IGM        — high-z galaxy + IGM            FSPS only
-AGN        — Nenkova torus contribution     FSPS only
+AGN        — Nenkova torus (FSPS) + SKIRTOR2016 (pCIGALE)
 """
 
 from __future__ import annotations
@@ -306,6 +306,54 @@ IGM_CASES: list[dict] = [
         dust_tau_bc=0.0,
         dust_tau_diff=0.0,
         dust_slope=-0.7,
+    ),
+]
+
+CIGALE_AGN_CASES: list[dict] = [
+    # SKIRTOR2016 AGN torus — both tengri and pCIGALE use the same template library,
+    # enabling a direct shape comparison at ~20% tolerance.
+    # i=30 → Type 1 (face-on), i=70 → Type 2 (edge-on); fracAGN = AGN IR fraction.
+    dict(
+        name="skirtor_type1",
+        age_gyr=3.0,
+        logzsol=0.0,
+        ebv_stars=0.10,
+        t=3,  # torus optical depth at 9.7 μm
+        pl=1.0,  # radial dust density slope
+        q=1.0,  # angular dust density slope
+        oa=40,  # half-opening angle (degrees)
+        R=20,  # outer/inner radius ratio
+        Mcl=0.97,  # fraction of mass in clumps
+        i=30,  # inclination (Type 1 = face-on)
+        fracAGN=0.30,
+    ),
+    dict(
+        name="skirtor_type2",
+        age_gyr=3.0,
+        logzsol=0.0,
+        ebv_stars=0.10,
+        t=3,
+        pl=1.0,
+        q=1.0,
+        oa=40,
+        R=20,
+        Mcl=0.97,
+        i=70,  # Type 2 = edge-on
+        fracAGN=0.30,
+    ),
+    dict(
+        name="skirtor_highfrac",
+        age_gyr=3.0,
+        logzsol=0.0,
+        ebv_stars=0.10,
+        t=5,
+        pl=1.0,
+        q=1.0,
+        oa=40,
+        R=20,
+        Mcl=0.97,
+        i=30,
+        fracAGN=0.60,
     ),
 ]
 
@@ -820,16 +868,172 @@ def generate_agn_fsps(cases: list[dict]) -> dict[str, np.ndarray]:
 
 
 # ===========================================================================
-# CIGALE stub — not on PyPI; structure ready for future plug-in
+# pCIGALE runners — BC03/Chabrier, graceful ImportError if not installed
+# Install from https://cigale.lam.fr (not on PyPI)
 # ===========================================================================
-def generate_cigale_sed(case: dict) -> np.ndarray | None:
-    """CIGALE (BC03/Chabrier) — not currently installed; returns None."""
+_CIGALE_NM_TO_AA = 10.0  # nm → Angstrom conversion factor
+
+
+def _run_cigale_cases(
+    cases: list[dict],
+    build_fn: Callable,
+    wave_grid: np.ndarray = WAVE_GRID,
+) -> dict[str, np.ndarray]:
+    """Run pCIGALE for a list of cases via build_fn(case) → list of module instances.
+
+    Each module instance must implement .process(sed) → sed, following the
+    standard pCIGALE pipeline: SFH → SSP → attenuation → (dust emission) → AGN.
+    SED wavelengths are in nm; luminosity is L_lambda in W/nm.
+    Output is interpolated to wave_grid in Å and converted to L_nu erg/s/Hz/Msun.
+    """
     try:
-        from pcigale.sed import SED  # noqa: F401
+        from pcigale.sed_modules import get_module  # noqa: F401
     except ImportError:
-        return None
-    # TODO: implement when pcigale becomes available
-    return None
+        print("  [cigale] pcigale not installed — skipping all cases")
+        return {}
+
+    results: dict[str, np.ndarray] = {}
+    for case in cases:
+        try:
+            modules = build_fn(case)
+            sed = None
+            for mod in modules:
+                sed = mod.process(sed)
+            # sed.wavelength_grid [nm], sed.luminosity [W/nm] = L_lambda per Msun_formed
+            wave_nm = np.asarray(sed.wavelength_grid)
+            l_lam_wnm = np.asarray(sed.luminosity)
+            wave_aa = wave_nm * _CIGALE_NM_TO_AA
+            # L_nu [erg/s/Hz] = L_lambda [erg/s/Å] × λ² / c  with L_lambda [W/nm] → [erg/s/Å] × 1e6
+            l_nu = l_lam_wnm * 1e6 * wave_aa**2 / _C_AA_PER_S
+            results[case["name"]] = _interp_to_grid(wave_aa, l_nu, wave_grid)
+        except Exception as exc:
+            print(f"  [cigale] failed for {case['name']}: {exc}")
+    return results
+
+
+# ---------------------------------------------------------------------------
+# pCIGALE builder helpers
+# ---------------------------------------------------------------------------
+
+
+def _cigale_sfh_bc03(case: dict):
+    """Return (sfh_module, bc03_module) for a delayed-τ SFH + BC03 SSPs.
+
+    Normalised to 1 Msun_formed (normalise=True in sfhdelayed).
+    Metallicity: logzsol=0 → 0.02 absolute Z (solar).
+    """
+    from pcigale.sed_modules import get_module
+
+    tau_myr = max(float(case["age_gyr"]) * 1000.0 * 10.0, 1.0)  # τ >> age → rising SFH
+    age_myr = float(case["age_gyr"]) * 1000.0
+    metallicity = 10.0 ** float(case["logzsol"]) * 0.02  # logzsol=0 → Z=0.02
+
+    sfh_mod = get_module("sfhdelayed")(
+        tau_main=tau_myr,
+        tau_burst=50.0,
+        f_burst=0.0,
+        age=age_myr,
+        sfr_0=1.0,
+        normalise=True,
+    )
+    bc03_mod = get_module("bc03")(
+        imf=1,  # 1 = Chabrier (matching tengri/bagpipes/FSPS)
+        metallicity=metallicity,
+        separation_age=10,  # Myr: boundary between young/old populations
+    )
+    return [sfh_mod, bc03_mod]
+
+
+def _cigale_build_calzetti(case: dict) -> list:
+    """SFH + BC03 + Calzetti attenuation."""
+    from pcigale.sed_modules import get_module
+
+    mods = _cigale_sfh_bc03(case)
+    mods.append(
+        get_module("dustatt_calzleit")(
+            E_BVs_young=float(case["ebv_stars"]),
+            E_BVs_old_factor=0.44,  # Calzetti+2000: E(B-V)_old = 0.44 × E(B-V)_young
+            uv_bump_amplitude=0.0,  # pure Calzetti: no UV bump
+            powerlaw_slope=0.0,  # no extra slope modification
+            Ext_law_emission_lines=1,
+            filters="V_B90 & FUV",  # required for some pCIGALE versions; ignored if not
+        )
+    )
+    return mods
+
+
+def _cigale_build_dustem(case: dict) -> list:
+    """SFH + BC03 + Calzetti + DL07 dust emission."""
+    from pcigale.sed_modules import get_module
+
+    mods = _cigale_build_calzetti(
+        dict(case, ebv_stars=case["dust_tau_diff"] * 1.086 / 4.05)  # τ_diff → E(B-V)
+    )
+    mods.append(
+        get_module("dl2007")(
+            qpah=float(case["duste_qpah"]),
+            umin=float(case["duste_umin"]),
+            alpha=2.0,
+            gamma=float(case["duste_gamma"]),
+        )
+    )
+    return mods
+
+
+def _cigale_build_skirtor(case: dict) -> list:
+    """SFH + BC03 + light Calzetti + SKIRTOR2016 AGN torus."""
+    from pcigale.sed_modules import get_module
+
+    mods = _cigale_build_calzetti(case)
+    mods.append(
+        get_module("skirtor2016")(
+            t=int(case["t"]),
+            pl=float(case["pl"]),
+            q=float(case["q"]),
+            oa=int(case["oa"]),
+            R=int(case["R"]),
+            Mcl=float(case["Mcl"]),
+            i=int(case["i"]),
+            fracAGN=float(case["fracAGN"]),
+            lambda_fracAGN="1.0/1000.0",  # bolometric AGN fraction
+            tau97=0.0,  # no polar dust
+            delta=-0.36,  # Calzetti-like polar attenuation
+            break_wave_polar=5500.0,
+        )
+    )
+    return mods
+
+
+# ---------------------------------------------------------------------------
+# pCIGALE wrapper functions
+# ---------------------------------------------------------------------------
+
+
+def generate_cigale_calzetti(cases: list[dict]) -> dict[str, np.ndarray]:
+    """pCIGALE Calzetti dust law SEDs (BC03/Chabrier)."""
+    return _run_cigale_cases(cases, _cigale_build_calzetti, WAVE_GRID)
+
+
+def generate_cigale_dustem(cases: list[dict]) -> dict[str, np.ndarray]:
+    """pCIGALE DL07 dust emission SEDs (BC03/Chabrier + Calzetti + dl2007)."""
+    return _run_cigale_cases(cases, _cigale_build_dustem, WAVE_GRID_IR)
+
+
+def generate_cigale_skirtor(cases: list[dict]) -> dict[str, np.ndarray]:
+    """pCIGALE SKIRTOR2016 AGN torus SEDs — paired with no-AGN variant."""
+    results_agn = _run_cigale_cases(cases, _cigale_build_skirtor, WAVE_GRID)
+
+    def _build_noagn(case: dict) -> list:
+        # No AGN: same stellar + attenuation, fracAGN=0
+        return _cigale_build_calzetti(case)
+
+    results_noagn = _run_cigale_cases(cases, _build_noagn, WAVE_GRID)
+    out: dict[str, np.ndarray] = {}
+    for k, v in results_agn.items():
+        out[k] = v
+    for k, v in results_noagn.items():
+        out[f"{k}_noagn"] = v
+    return out
 
 
 # ===========================================================================
@@ -871,8 +1075,8 @@ def main() -> None:
         "wave_grid_ir": WAVE_GRID_IR,
     }
 
-    RUNNERS: list[tuple[str, str, list[dict], Callable, Callable | None, np.ndarray]] = [
-        # (group_tag, display_name, cases, bagpipes_fn, fsps_fn, wave_grid)
+    RUNNERS: list[tuple] = [
+        # (group_tag, display_name, cases, bagpipes_fn, fsps_fn, wave_grid[, cigale_fn])
         (
             "stellar",
             "STELLAR (const SFH + CF00)",
@@ -923,9 +1127,41 @@ def main() -> None:
         ),
         ("igm", "IGM (high-z + Inoue 2014, FSPS)", IGM_CASES, None, generate_igm_fsps, WAVE_GRID),
         ("agn", "AGN (Nenkova torus, FSPS only)", AGN_CASES, None, generate_agn_fsps, WAVE_GRID),
+        # pCIGALE groups — keyed as cigale_{group}_{name}
+        (
+            "calzetti",
+            "CALZETTI (Calzetti law, pCIGALE BC03/Chabrier)",
+            CALZETTI_CASES,
+            None,
+            None,
+            WAVE_GRID,
+            generate_cigale_calzetti,
+        ),
+        (
+            "dustem",
+            "DUSTEM (DL07 IR, pCIGALE)",
+            DUSTEM_CASES,
+            None,
+            None,
+            WAVE_GRID_IR,
+            generate_cigale_dustem,
+        ),
+        (
+            "agn",
+            "AGN (SKIRTOR2016, pCIGALE)",
+            CIGALE_AGN_CASES,
+            None,
+            None,
+            WAVE_GRID,
+            generate_cigale_skirtor,
+        ),
     ]
 
-    for group, display, cases, bp_fn, fsps_fn, wgrid in RUNNERS:
+    for entry in RUNNERS:
+        # Support optional 7th element: cigale_fn
+        group, display, cases, bp_fn, fsps_fn, wgrid = entry[:6]
+        cigale_fn = entry[6] if len(entry) > 6 else None
+
         print(f"=== {display} ===")
 
         if bp_fn is not None:
@@ -939,6 +1175,11 @@ def main() -> None:
             # For groups that return paired variants (igm_noigm, agn_noagn),
             # the inner loop in _print_group_results handles them.
             arrays.update(_print_group_results("fsps", group, res, cases, wgrid))
+
+        if cigale_fn is not None:
+            print("  [cigale]")
+            res = cigale_fn(cases)
+            arrays.update(_print_group_results("cigale", group, res, cases, wgrid))
 
         print()
 
