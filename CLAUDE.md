@@ -20,7 +20,7 @@ ruff format --check src/ tests/     # format check — must pass
 ruff check --fix src/ tests/        # auto-fix safe violations
 ruff format src/ tests/             # auto-format
 
-# Run all tests (~1764 tests, ~120 seconds)
+# Run all tests (~2224 tests, ~295 seconds)
 pytest tests/ -q
 
 # Run specific test module
@@ -58,7 +58,7 @@ latexmk -pdf 0-ms.tex
 - Numpydoc docstrings
 - snake_case naming
 - Immutable arrays (use `.at[].set()`)
-- Units: years (time), Angstrom (wavelength), Msun/yr (SFR)
+- Units: years (time), Angstrom (wavelength), Msun/yr (SFR), **erg/s/Hz** (SED luminosity L_ν)
 - 64-bit precision enabled globally via `jax.config.update("jax_enable_x64", True)`
 - Line length limit: 99 characters
 - Greek letters (σ, ξ, θ) allowed in docstrings and comments (scientific notation)
@@ -207,7 +207,9 @@ Each class has a `.summary()` method for quick inspection:
 - GP latent vector `psd_xi` has shape `(n_grid,)` and prior `ξ ~ N(0, I)`
 - PSD timescale in high-level API is in **Myr** (`psd_tau_myr`); internal is in **years** (`psd_tau_yr`)
 - **Short-name aliases**: `resolve_short_names(sfh_type, priors)` expands short names to full prefixed names. E.g., `alpha` → `sfh_dpl_alpha` for DPL, `logzsol` → `met_logzsol` universally. See `param_translate.py` for the full table.
-- **AGN shared physics**: `_planck_lnu` and constants now in `models/agn/_phys.py` (shared by disc.py, torus.py, skirtor.py). Do NOT duplicate Planck function in AGN modules.
+- **Physical constants**: All CGS constants live in `utils/physics_constants.py` (CODATA 2018 / IAU 2015 values with documented SI→CGS derivations). Import from there — do NOT define local constant literals. Exception: `L_SUN_CUE = 3.839e33` in `cue.py` is intentional (Cue neural-net training convention, NOT IAU 2015) — never replace it.
+- **Nebular constants facade**: `models/nebular/_constants.py` re-exports `_C_CGS`, `_H_PLANCK`, `_LSUN_ERG`, `_C_AA`, `_AA_TO_CM` from `physics_constants`. All nebular submodules (`_shared.py`, `cue.py`, etc.) import from `_constants.py` — do not break these re-exports when editing `_constants.py`.
+- **AGN shared physics**: `_planck_lnu` and base constants in `models/agn/_phys.py` (shared by disc.py, torus.py, skirtor.py). Disc-specific extras (`G_GRAV`, `SIGMA_T`, `M_PROTON`, etc.) imported directly from `utils/physics_constants`. Do NOT duplicate the Planck function in AGN modules.
 - **NLR API**: `agn_nlr_emission()` always returns `(wavelengths, luminosities)` tuple. Parameter is `neb_logU` (not `gas_logu`).
 
 ## Gotchas
@@ -250,10 +252,13 @@ Each class has a `.summary()` method for quick inspection:
 - CSP trapezoidal weights now use correct half-widths at both endpoints (previously full-width, over-weighting youngest and oldest SSP bins by ~2x). All three paths updated: `fused_kernels.py`, `sed_components.py`, `dsps_wrapper.compute_csp_weights`.
 - `continuity_sfh` / `dirichlet_sfh` now assign ages to bins via `searchsorted` on bin edges (step function per Leja+2019), not `interp` on bin centers. Also use `.shape[0]` instead of `len()` to avoid `ConcretizationTypeError` under JIT.
 - `Posterior.bpt_nii()` returns `jnp.nan` for non-detected lines (negative amplitudes). Previous behaviour clamped to 1e-30, giving log10 ≈ −30 and corrupting BPT diagrams.
-- Nebular line profile unit bug fixed: `cloudy_grid.py`, `cue.py`, `shock.py` no longer multiply by `_LSUN_ERG`. The profile is already in Lsun/Hz when `ll` [Lsun] × profile [Hz⁻¹].
+- **CGS unit standardization (2026-04-08):** All SED component functions now return **erg/s/Hz** throughout. Previously AGN (`disc.py`, `torus.py`, `skirtor.py`, `unified.py`, `qsogen.py`), radio (`radio.py`), X-ray (`xray.py`), and nebular backends (`cloudy_grid.py`, `cue.py`, `mappings_photo.py`) returned Lsun/Hz. The CSP assembly (`fused_kernels.py`, `sed_pipeline.py`) always output erg/s/Hz via `* LSUN_ERG_PER_S` — so the mismatch was partially self-cancelling but numerically wrong. All returns now produce erg/s/Hz without conversion.
+- **`agn_log_lbol` convention:** This parameter is always **log10(L_bol / L_sun)** at the API level (comfortable galaxy-scale numbers, e.g. 10–12 for AGN). AGN functions internally convert to erg/s for physics (`* _LSUN_ERG`). The non-parametric AGN path in `fused_kernels.py`, `sed_pipeline.py`, `sed_components.py` now correctly converts: `agn_log_lbol = log10(L_bol_erg) - log10(LSUN_ERG_PER_S)` before passing to AGN functions. The parametric path correctly does `agn_bol_erg = 10**agn_log_lbol * LSUN_ERG_PER_S`.
+- **Radio constants renamed (2026-04-08):** `_L0_SYNCH_LSUN_HZ` → `_L0_SYNCH` (3.0e28 erg/s/Hz), `_C_FF_LSUN_HZ` → `_C_FF` (1/4.6e-28). Test imports and references updated accordingly.
+- Nebular line profile unit bug fixed: `cloudy_grid.py`, `cue.py`, `shock.py` no longer have spurious `* _LSUN_ERG` on the Gaussian profile. The continuum SED (erg/s/Hz) is returned at `predict_nebular_sed` via a single `* _LSUN_ERG` at the return site. Cue internal computation stays in Lsun to avoid float64 overflow in `10^(exponent + 33)`.
 - Shock `sigma_nu` fixed: `line_sigma_aa` is in Å and must be converted to cm (×1e-8) before the CGS `c/λ²` formula. Previous SEDs had sigma_nu ~1e8× too large, so line widths were ~1e8× too narrow.
 - XRB (`xray.py`) normalization fixed: spectral shape is now integrated over the 2–10 keV reference band (200-point grid) before normalizing. Previous single-point normalization at E_ref gave ~2–3× error in absolute luminosity.
-- Radio `L_B` calculation fixed: spurious `_LSUN / _LSUN` cancel that was a no-op has been removed; expression now reads `L_B = L_agn_bol / (BC_B * nu_B)` in Lsun/Hz directly.
+- Radio `L_B` calculation fixed: spurious `_LSUN / _LSUN` cancel removed; expression now reads `L_B = L_agn_bol / (BC_B * nu_B)` in erg/s/Hz.
 - `narayanan_z` (`attenuation.py`) uses tolerance comparison `abs(x - default) < 1e-6` instead of `==` for float equality on potentially traced values.
 - IGM LAF opacity (`igm.py`) clamps `z_obs >= 0` before fractional-exponent power laws to avoid NaN for photons shortward of the Lyman limit.
 - Lya in `LineCatalog.default_13()` and `default_optical()` has `is_broad_candidate=False` — Lya is a resonance line with complex radiative transfer, not suitable for the standard Gaussian broad-component model.
@@ -307,7 +312,7 @@ The forward model uses several optimizations for speed:
 **Every code change MUST include pytest tests.** Run before committing:
 
 ```bash
-pytest tests/ -q                    # full suite (~1764 tests, ~120s)
+pytest tests/ -q                    # full suite (~2224 tests, ~295s)
 ruff check src/ tests/              # lint
 ruff format --check src/ tests/     # format
 ```
@@ -330,6 +335,27 @@ SPS_HOME=~/Projects/fsps pytest -m crossval  # includes FSPS tests
 - Use `/tmp/tf_env` venv for TF/CUE reference generation (separate from main .venv)
 - CUE reference outputs in `data/cue_reference_outputs.npz` (generated by `scripts/generate_cue_reference.py`)
 - DL07 tabulated templates in `data/dl07_templates.npz` (extracted from bagpipes)
+
+### Comprehensive SED crossval suite (`tests/crossval/test_full_sed_crossval.py`)
+
+26 test classes against pre-generated reference SEDs in `data/external_sed_reference.npz`.
+Run by default (no `-m crossval` needed — uses pre-built npz, no external code required).
+
+**Strategy:** shape-normalized UV/V color `SED(2800)/SED(5500)` removes SSP amplitude
+differences between MILES (tengri/FSPS) and BC03 (bagpipes). Cross-code amplitude tests use
+factor-of-2 tolerance; internal tengri-only tests use ≤25% tolerance.
+
+Key test classes:
+- `TestTauSFHCrossVal` — exp-τ SFH: UV/V color ±25%, V-band amplitude ±2×, dusty variants ±30%
+- `TestNebularTengri` — CLOUDY pdva pipeline: Hα/Hβ plausibility, logU trend, dust reddening
+- `TestTabularSFHTengri` — table-mode step SFH: rising/quenching/bursty shapes vs FSPS
+- Groups also covered: `TestStellarContinuum`, `TestMetallicityGrid`, `TestDustAttenuation`,
+  `TestNebularEmission`, `TestHighRedshift`, `TestIMFComparison`, `TestAGNCrossVal`,
+  `TestExtinctionCurveCrossVal` (SMC/LMC Gordon+2003, CCM Cardelli+1989)
+
+Reference data generated by `scripts/generate_external_sed_reference.py` (run once with
+bagpipes+FSPS+synthesizer installed). Visualization via `analysis/crossval_external_seds.py`
+(`--only stellar|metallicity|sfh|nebular|dust_laws|summary`).
 
 For performance changes: add benchmark tests that assert speedup thresholds
 (see `tests/unit/test_dust_precompute.py`, `tests/unit/test_fused_kernels.py`).
