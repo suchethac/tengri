@@ -224,7 +224,7 @@ class TestTotalDPL:
     """Test the combined SF + AGN DPL function."""
 
     def test_total_dpl_combines_sf_and_agn(self):
-        """radio_total_dpl == radio_star_forming + radio_agn_dpl."""
+        """radio_total_dpl == radio_star_forming + radio_agn_dpl (no free-free)."""
         wave = _WAVE_RADIO
         L_ir = 1e11
         total = radio_total_dpl(
@@ -236,6 +236,7 @@ class TestTotalDPL:
             alpha2=-0.1,
             log_nu_t=10.0,
             log_nu_cut=13.0,
+            include_freefree=False,
         )
         sf = radio_star_forming(wave, L_ir)
         agn = radio_agn_dpl(

@@ -251,7 +251,7 @@ class TestFittedMode:
             _wave_obs=wave,
             _spectral_resolution=2000.0,
             _spectroscopy_config=spec_cfg,
-            predict_spectrum=lambda params, w: continuum,
+            predict_spectrum=lambda params, w, **kwargs: continuum,
             observation=None,
         )
 
@@ -435,7 +435,7 @@ class TestFittedMode:
             _wave_obs=wave,
             _spectral_resolution=2000.0,
             _spectroscopy_config=cfg,
-            predict_spectrum=lambda params, w: continuum,
+            predict_spectrum=lambda params, w, **kwargs: continuum,
             observation=None,
         )
 

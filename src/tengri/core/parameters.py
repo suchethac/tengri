@@ -1090,9 +1090,13 @@ class Parameters:
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
 
         # Backward compat: old string-style flags
+        self._nebular_cb19 = False
         if nebular == "cue":
             nebular_cue = True
             nebular = False
+        elif nebular == "cb19":
+            self._nebular_cb19 = True
+            nebular = False  # handle separately below
         elif nebular == "cloudy":
             nebular = True
 
@@ -1119,6 +1123,8 @@ class Parameters:
                 from tengri.models.nebular import _DEFAULT_CUE_WEIGHTS_PATH
 
                 self.cue_weights_path = str(_DEFAULT_CUE_WEIGHTS_PATH)
+        elif self._nebular_cb19:
+            self.nebular_mode = "cb19"
         elif nebular:
             self.nebular_mode = "cloudy"
             if self.cloudy_grid_path is None:
