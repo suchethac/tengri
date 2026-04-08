@@ -98,6 +98,23 @@ _GROUP_NEBULAR: list[tuple[str, str]] = [
     ("nebular_neb_dusty_u25", "Dusty (τ_BC=1), logU=−2.5"),
 ]
 
+# Extinction curve comparisons — FSPS vs bagpipes only.
+# tengri uses the same Pei (1992) curves (SMC/LMC) and Cardelli (CCM) but
+# within a two-component Charlot & Fall geometry (τ_BC / τ_diff), not a screen
+# model.  Comparing tengri directly here would conflate SSP differences with
+# dust-model geometry differences.
+_GROUP_DUST_LAWS: list[tuple[str, str]] = [
+    ("smc_smc_av02", "SMC Gordon+2003: A_V=0.2"),
+    ("smc_smc_av10", "SMC Gordon+2003: A_V=1.0"),
+    ("smc_smc_av20", "SMC Gordon+2003: A_V=2.0"),
+    ("lmc_lmc_av02", "LMC Gordon+2003: A_V=0.2"),
+    ("lmc_lmc_av10", "LMC Gordon+2003: A_V=1.0"),
+    ("lmc_lmc_av20", "LMC Gordon+2003: A_V=2.0"),
+    ("ccm_ccm_av02", "CCM Cardelli+1989 (MW, R_V=3.1): A_V=0.2"),
+    ("ccm_ccm_av10", "CCM Cardelli+1989 (MW, R_V=3.1): A_V=1.0"),
+    ("ccm_ccm_av30", "CCM Cardelli+1989 (MW, R_V=3.1): A_V=3.0"),
+]
+
 
 # ---------------------------------------------------------------------------
 # tengri SED builders
@@ -591,6 +608,7 @@ def _print_consistency_report(ref: dict, wave: np.ndarray) -> None:
             ("metallicity", _GROUP_METALLICITY),
             ("sfh", _GROUP_SFH),
             ("nebular", _GROUP_NEBULAR),
+            ("dust_laws", _GROUP_DUST_LAWS),
         ]
         for s, _ in cases
     ]
@@ -627,6 +645,10 @@ def _print_consistency_report(ref: dict, wave: np.ndarray) -> None:
     print("      recent past. Comparing them would show SFH shape mismatch, not code errors.")
     print("      See docs/known_bugs.md CROSSVAL-02.")
     print("    - nebular_*: requires separate SSP with ionising-photon table.")
+    print("    - smc_*/lmc_*/ccm_*: FSPS/bagpipes use a single-component screen model.")
+    print("      tengri uses the same Pei (1992) / Cardelli (1989) extinction curves but")
+    print("      within a two-component Charlot & Fall geometry (τ_BC/τ_diff), so a")
+    print("      direct screen-model comparison would conflate code vs. geometry differences.")
     print()
 
 
@@ -643,7 +665,7 @@ def main() -> None:
     parser.add_argument("--show", action="store_true", help="Show interactive plots")
     parser.add_argument(
         "--only",
-        choices=["stellar", "metallicity", "sfh", "nebular", "summary"],
+        choices=["stellar", "metallicity", "sfh", "nebular", "dust_laws", "summary"],
         default=None,
         help="Produce only one figure group",
     )
@@ -724,6 +746,12 @@ def main() -> None:
         _GROUP_NEBULAR,
         "Nebular emission — FSPS vs bagpipes (BakedIn) [tengri nebular crossval pending]",
         fs=(13, 16),
+    )
+    _maybe_make(
+        "dust_laws",
+        _GROUP_DUST_LAWS,
+        "Extinction laws: SMC / LMC (Gordon+2003) and CCM (Cardelli+1989) — FSPS vs bagpipes",
+        fs=(13, 29),
     )
 
     # Summary figure
