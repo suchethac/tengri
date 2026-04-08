@@ -410,22 +410,33 @@ def fit_population(
 # from_config factory
 # ---------------------------------------------------------------------------
 
+from tengri.core.defaults import UNSET as _UNSET  # re-export for back-compat
+
 
 def build_model_from_config(
     model_cls,
     ssp,
-    sfh: str = "dpl",
-    dust: str = "charlot_fall",
-    nebular: str | None = None,
-    agn: str | None = None,
-    redshift: float | str = 0.1,
+    sfh=_UNSET,
+    dust=_UNSET,
+    nebular=_UNSET,
+    agn=_UNSET,
+    redshift=_UNSET,
     filters: list[str] | None = None,
     wave_obs=None,
     priors: dict | None = None,
     **model_kwargs,
 ):
     """Build a SEDModel from a grouped configuration.  See ``SEDModel.from_config``."""
+    from tengri.core.defaults import get_from_config_defaults
     from tengri.core.param_translate import resolve_short_names
+
+    # Resolve each argument: use caller value if supplied, else read from TOML.
+    _defs = get_from_config_defaults()
+    sfh = _defs["sfh"] if sfh is _UNSET else sfh
+    dust = _defs["dust"] if dust is _UNSET else dust
+    nebular = _defs["nebular"] if nebular is _UNSET else nebular
+    agn = _defs["agn"] if agn is _UNSET else agn
+    redshift = _defs["redshift"] if redshift is _UNSET else redshift
     from tengri.core.parameters import ParamSpec
     from tengri.distributions import Uniform
     from tengri.models.observation.observation import Observation
@@ -510,7 +521,7 @@ def fit_model(
     model,
     data=None,
     noise=None,
-    method: str = "vi",
+    method=_UNSET,
     data_type: str | None = None,
     *,
     photometry: tuple | None = None,
@@ -519,7 +530,18 @@ def fit_model(
     **kwargs,
 ):
     """Fit observed data.  See ``SEDModel.fit``."""
+    from tengri.core.defaults import get_inference_defaults
     from tengri.inference.fitter import Fitter
+
+    if method is None:
+        from tengri.core.exceptions import ParameterError
+        raise ParameterError(
+            "method=None is not allowed. Pass an explicit method string "
+            "(e.g. 'vi', 'mcmc_nuts', 'auto') or omit the argument to use "
+            "the default from defaults.toml."
+        )
+    if method is _UNSET:
+        method = get_inference_defaults().get("method", "vi")
 
     # --- Resolve data arrays ---
     if photometry is not None or spectrum is not None:

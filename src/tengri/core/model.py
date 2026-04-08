@@ -1959,11 +1959,11 @@ class SEDModel:
     def from_config(
         cls,
         ssp,
-        sfh: str = "dpl",
-        dust: str = "charlot_fall",
-        nebular: str | None = None,
-        agn: str | None = None,
-        redshift: float | str = 0.1,
+        sfh=...,
+        dust=...,
+        nebular=...,
+        agn=...,
+        redshift=...,
         filters: list[str] | None = None,
         wave_obs=None,
         priors: dict | None = None,
@@ -2018,15 +2018,21 @@ class SEDModel:
         ... )
         """
         from tengri.core.convenience import build_model_from_config
+        from tengri.core.defaults import UNSET
+
+        # Map Ellipsis (signature placeholder) → UNSET so build_model_from_config
+        # knows to fall back to defaults.toml instead of hard-coded values.
+        def _r(v):
+            return UNSET if v is ... else v
 
         return build_model_from_config(
             cls,
             ssp,
-            sfh=sfh,
-            dust=dust,
-            nebular=nebular,
-            agn=agn,
-            redshift=redshift,
+            sfh=_r(sfh),
+            dust=_r(dust),
+            nebular=_r(nebular),
+            agn=_r(agn),
+            redshift=_r(redshift),
             filters=filters,
             wave_obs=wave_obs,
             priors=priors,

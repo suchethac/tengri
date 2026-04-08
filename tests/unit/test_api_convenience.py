@@ -317,13 +317,19 @@ class TestModelFromConfigInterface:
     def test_from_config_signature(self):
         import inspect
 
+        from tengri.core.defaults import get_from_config_defaults
         from tengri.core.model import Model
 
         sig = inspect.signature(Model.from_config)
         assert "ssp" in sig.parameters
         assert "sfh" in sig.parameters
         assert "priors" in sig.parameters
-        assert sig.parameters["sfh"].default == "dpl"
+        # Defaults now come from defaults.toml, not hardcoded in the signature.
+        # The signature uses Ellipsis as a sentinel; verify TOML drives the value.
+        assert sig.parameters["sfh"].default is ...
+        defs = get_from_config_defaults()
+        assert isinstance(defs["sfh"], str)
+        assert len(defs["sfh"]) > 0
 
 
 # ---------------------------------------------------------------------------

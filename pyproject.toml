@@ -20,6 +20,8 @@ dependencies = [
     "dsps>=0.3",
     "h5py>=3.0",
     "nifty8[re]>=8.5",
+    "astroquery>=0.4",
+    "tomli>=2.0; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
@@ -40,14 +42,22 @@ crossval = [
 ]
 docs = [
     "sphinx>=7.0",
-    "sphinx-book-theme>=1.0",
-    "numpydoc>=1.5",
-    "nbsphinx>=0.9",
+    "furo>=2024.0",
     "myst-parser>=2.0",
+    "nbsphinx>=0.9",
+    "nbconvert>=7.0",
+    "jupyter>=1.0",
+    "jupytext>=1.16",
+    "numpydoc>=1.5",
+    "sphinx-copybutton>=0.5",
+    "sphinx-design>=0.5",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+tengri = ["defaults.toml"]
 
 [tool.ruff]
 target-version = "py310"

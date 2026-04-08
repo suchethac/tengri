@@ -15,6 +15,7 @@ Usage:
 
 from __future__ import annotations
 
+import threading
 import time
 import warnings
 
@@ -59,7 +60,7 @@ _DEPRECATED_METHOD_ALIASES: dict[str, str] = {
 _MCMC_AUTO_D_THRESHOLD = 20
 
 # Threshold for "auto" method selection.
-_AUTO_D_THRESHOLDS = (15, 50)  # (laplace_max, vi_linear_max)
+_AUTO_D_THRESHOLD = 20  # D <= this → mcmc_nuts; D > this → vi (nifty geoVI)
 
 # Canonical method names
 _CANONICAL_METHODS = {
@@ -112,6 +113,13 @@ def resolve_method(method: str, emit_warning: bool = True) -> str:
     >>> resolve_method("invalid_method")
     ParameterError: Unknown method ...
     """
+    if method is None:
+        raise ParameterError(
+            "method=None is not allowed. Pass an explicit method string "
+            "(e.g. 'vi', 'mcmc_nuts', 'auto') or omit the argument to use "
+            "the default from defaults.toml."
+        )
+
     # If already canonical or "auto", return as-is
     if method in _CANONICAL_METHODS:
         return method
@@ -329,6 +337,53 @@ class Fitter:
         # compiles lazily on first VI run.
         self._jit_sampler = None
 
+        # Background compilation state — XLA C++ releases the GIL, so the
+        # 54s of compilation runs in genuine parallel with the caller's setup.
+        self._compilation_event = threading.Event()
+        self._compilation_error: Exception | None = None
+        self._compilation_lock = threading.Lock()
+        self._compilation_thread: threading.Thread | None = None
+        self._start_background_compilation()
+
+    def _start_background_compilation(self) -> None:
+        """Spawn a daemon thread to pre-compile the JIT engine.
+
+        XLA C++ compilation releases the GIL, so this runs in genuine
+        parallel with the caller's Python setup code.  The
+        ``_compilation_event`` is set before the first ``run("vi")``
+        call can proceed past ``_get_or_build_engine``.
+
+        Set ``TENGRI_NO_BACKGROUND_COMPILE=1`` to disable (used in tests
+        to avoid spawning dozens of concurrent compilations per session).
+        """
+        import os
+
+        if os.environ.get("TENGRI_NO_BACKGROUND_COMPILE"):
+            # In test environments, skip background compilation entirely.
+            # _get_or_build_engine will compile lazily on first run() call.
+            self._compilation_event.set()
+            return
+
+        def _worker() -> None:
+            try:
+                with self._compilation_lock:
+                    cache_key = self._engine_cache_key()
+                    if not hasattr(self.model, "_jit_engine_cache"):
+                        self.model._jit_engine_cache = {}
+                    if cache_key not in self.model._jit_engine_cache:
+                        self.compile(
+                            modes=("linear_resample", "nonlinear_update"),
+                            verbose=False,
+                        )
+            except Exception as exc:
+                self._compilation_error = exc
+            finally:
+                self._compilation_event.set()
+
+        thread = threading.Thread(target=_worker, daemon=True)
+        self._compilation_thread = thread
+        thread.start()
+
     def _engine_cache_key(self):
         """Return a hashable key identifying the JIT engine shape.
 
@@ -358,7 +413,20 @@ class Fitter:
         Engines are cached on the Model object so that multiple Fitters
         created with the same Model (but different data) share the same
         compiled XLA programs.
+
+        Blocks until the background compilation thread (started in
+        ``__init__``) has finished.  On an XLA cache hit the wait is
+        effectively instant (<1 s).
         """
+        # Skip the wait if called from the background compilation thread
+        # itself (via compile() → _get_or_build_engine) to avoid deadlock.
+        if threading.current_thread() is not self._compilation_thread:
+            self._compilation_event.wait()
+            if self._compilation_error is not None:
+                raise RuntimeError(
+                    "Background JIT compilation failed."
+                ) from self._compilation_error
+
         if self._jit_sampler is not None:
             return self._jit_sampler
 
@@ -896,20 +964,36 @@ class Fitter:
         if key is None:
             key = jax.random.PRNGKey(42)
 
-        # Pop vi_flavor before forwarding kwargs
-        vi_flavor = kwargs.pop("vi_flavor", None)
-
         # Resolve deprecated aliases and validate method
         method = resolve_method(method)
+
+        # --- Merge TOML defaults (caller kwargs win) ---
+        try:
+            from tengri.core.defaults import get_inference_defaults
+
+            _toml_top = get_inference_defaults()   # top-level [inference] keys
+            _toml_method = get_inference_defaults(method)  # [inference.<method>]
+            # vi_flavor from TOML top-level, then caller can override via kwarg
+            _toml_vi_flavor = _toml_top.get("vi_flavor", None)
+            kwargs = {**_toml_method, **kwargs}
+        except Exception:
+            _toml_vi_flavor = None
+
+        # Pop vi_flavor: caller kwarg > TOML top-level > None
+        vi_flavor = kwargs.pop("vi_flavor", _toml_vi_flavor)
 
         # --- "auto" method: dimensionality-based selection ---
         if method == "auto":
             d = self.spec.n_free
-            lo, hi = _AUTO_D_THRESHOLDS
-            if d <= lo:
-                method = "laplace"
-            elif d <= hi:
-                method = "vi_linear"
+            try:
+                from tengri.core.defaults import get_inference_defaults
+
+                _auto = get_inference_defaults()
+                threshold = int(_auto.get("mcmc_auto_d", _AUTO_D_THRESHOLD))
+            except Exception:
+                threshold = _AUTO_D_THRESHOLD
+            if d <= threshold:
+                method = "mcmc_nuts"
             else:
                 method = "vi"
 
@@ -918,30 +1002,32 @@ class Fitter:
             result = self._run_map(key=key, init_from=init_from, **kwargs)
 
         elif method in ("vi", "vi_linear"):
-            # vi_flavor overrides method for power users
-            if vi_flavor == "nifty":
+            # method governs linear vs nonlinear; vi_flavor governs NIFTy vs native backend.
+            # "vi"        = nonlinear geoVI;  "vi_linear" = linear MGVI.
+            # vi_flavor "nifty"/"nifty_full" selects the NIFTy fast path (default).
+            # vi_flavor "linear"/"native"/None falls back to the pure-JAX native path.
+            _linear = method == "vi_linear"
+            if vi_flavor in ("nifty", None):
                 result = self._run_fast_vi(
                     key=key,
                     init_from=init_from,
-                    sample_mode="nonlinear_resample",
-                    posterior_method="nonlinear",
+                    sample_mode="linear_resample" if _linear else "nonlinear_resample",
+                    **({} if _linear else {"posterior_method": "nonlinear"}),
                     **kwargs,
                 )
             elif vi_flavor == "nifty_full":
-                result = self._run_nifty_vi(key=key, init_from=init_from, **kwargs)
-            elif vi_flavor == "linear" or method == "vi_linear":
-                result = self._run_native_vi(
+                result = self._run_nifty_vi(
                     key=key,
                     init_from=init_from,
-                    sample_mode="linear",
+                    sample_mode="linear_resample" if _linear else "nonlinear_resample",
                     **kwargs,
                 )
             else:
-                # Default "vi": geoVI (nonlinear, most accurate)
+                # "linear" / "native" / unknown → pure-JAX native path
                 result = self._run_native_vi(
                     key=key,
                     init_from=init_from,
-                    sample_mode="geovi",
+                    sample_mode="linear" if _linear else "geovi",
                     **kwargs,
                 )
 

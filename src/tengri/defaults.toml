@@ -1,0 +1,165 @@
+# tengri default model configuration
+# ─────────────────────────────────────────────────────────────────────────────
+# This file controls what Model.from_config() uses when arguments are omitted.
+#
+# To customise without editing the package, copy this file to:
+#   ~/.tengri/defaults.toml
+# and change any values there.  Your copy takes full precedence.
+#
+# Empty string ("") represents None / disabled.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[from_config]
+# SFH family: "tsnorm" | "dpl" | "dpl+field" | "tsnorm+field" | ...
+sfh = "tsnorm"
+
+# Dust attenuation shorthand: "charlot_fall" | "calzetti" | "smc" | ...
+dust = "charlot_fall"
+
+# Nebular emission backend: "" (off) | "baked_in" | "cloudy" | "cue"
+nebular = ""
+
+# AGN model: "" (disabled) | any AGN model name
+agn = ""
+
+# Default redshift when none is specified
+redshift = 0.1
+
+
+[sfh]
+# GP latent grid size (only relevant when "field" is in sfh type)
+n_grid = 64
+
+# Replace met_logzsol with a two-endpoint metallicity ramp
+evolving_metallicity = false
+
+# Enable [α/Fe] evolution with lookback time
+alpha_fe_evolving = false
+
+# Derive Z(t) from SFH via gas-regulator model
+chem_evol = false
+
+# Metallicity interpolation: "smooth" (triweight) | "linear" (FSPS-compatible)
+met_interp = "smooth"
+
+# Triweight kernel bandwidth in dex (met_interp = "smooth")
+lgmet_scatter = 0.1
+
+
+[dust]
+# Geometry: "two_component" (Charlot & Fall) | "single_component" (screen)
+model = "two_component"
+
+# Birth-cloud attenuation law:
+# "power_law" | "calzetti" | "kriek_conroy" | "smc" | "cardelli" | "salim" | "li08"
+law_bc = "power_law"
+
+# Diffuse ISM law: "" = same as law_bc
+law_diff = ""
+
+# IR dust emission: "modified_blackbody" | "casey2012" |
+#                   "dale2014" | "draine_li2007" | "draine_li2014" | "" (off)
+emission = "modified_blackbody"
+
+# Use fused (approximate) photometry path — faster, <0.1% error
+approx = true
+
+
+[nebular]
+# Ionization source for Cue backend
+ionization = "ssp"
+
+# Emission line treatment: "off" | "fixed" | "marginalized"
+eline_mode = "off"
+
+# Enable broad AGN emission line component
+eline_broad = false
+
+
+[multiwavelength]
+# Enable radio synchrotron + AGN jet emission
+radio = false
+
+# Enable X-ray (XRB + AGN corona) emission
+xray = false
+
+# Enable shock emission (MAPPINGS III)
+shock = false
+
+# Apply Inoue+2014 IGM absorption
+apply_igm = true
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Inference defaults
+# Parameters used by Fitter.run() when not explicitly passed by the caller.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[inference]
+# Default method for model.fit() and fitter.run()
+# Options: "auto" | "vi" | "vi_linear" | "mcmc_raytrace" | "mcmc_nuts" |
+#          "mcmc" | "map" | "laplace" | "pathfinder" | "evidence"
+#
+# Default method for model.fit() and fitter.run()
+# Options: "auto" | "vi" | "mcmc_nuts" | "mcmc_raytrace" | "mcmc" |
+#          "vi_linear" | "map" | "laplace" | "pathfinder" | "evidence"
+#
+# "auto" dispatch (controlled by mcmc_auto_d below):
+#   D <= mcmc_auto_d → "mcmc_nuts"  (exact NUTS, good for small models)
+#   D >  mcmc_auto_d → "vi"         (NIFTy geoVI, fast for high-D)
+method = "auto"
+
+# Default VI flavor when method = "vi" or "vi_linear"
+# "nifty"      = NIFTy tight-loop geoVI (default, faster)
+# "nifty_full" = NIFTy with full logging (useful for debugging)
+# "linear"     = linearised geoVI (MGVI)
+vi_flavor = "nifty"
+
+# "auto" dimensionality threshold:
+#   D <= mcmc_auto_d → mcmc_nuts
+#   D >  mcmc_auto_d → vi (nifty geoVI)
+mcmc_auto_d = 20
+
+
+[inference.vi]
+# Variational inference (geoVI / MGVI)
+n_iterations = 15    # KL minimisation iterations
+n_samples    = 4     # Posterior samples per iteration (4-12 recommended)
+
+
+[inference.mcmc_raytrace]
+n_burnin          = 100   # Burn-in steps (discarded)
+n_steps           = 500   # Post-burn-in samples to collect
+n_leapfrog_steps  = 10    # Leapfrog integration steps per trajectory
+# step_size: leave absent to use the adaptive default (0.01 for D > 10)
+# Uncomment and set to override:
+# step_size = 0.03
+refresh_rate = 0.0        # Partial momentum refresh rate (0 = pure ray tracing)
+
+
+[inference.mcmc_nuts]
+n_warmup = 500    # HMC warmup (dual-averaging step-size adaptation)
+n_steps  = 1000   # Posterior samples after warmup
+
+
+[inference.mcmc_ess]
+n_burnin  = 200   # Elliptical Slice Sampling burn-in steps
+n_samples = 500   # Posterior samples after burn-in
+
+
+[inference.map]
+n_steps       = 1000   # Adam optimisation steps
+learning_rate = 0.01   # Adam learning rate
+
+
+[inference.evidence]
+# Nested Slice Sampling (Yallup+2026); use only for D ≲ 30
+n_live             = 500
+num_delete         = 50
+log_evidence_tol   = -3.0
+max_iterations     = 10000
+n_posterior_samples = 1000
+
+
+[inference.pathfinder]
+maxiter = 30    # L-BFGS path iterations
