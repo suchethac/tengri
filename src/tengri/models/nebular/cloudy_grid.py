@@ -25,6 +25,7 @@ import numpy as np
 
 from tengri.models.nebular._constants import _C_CGS, _LOG10_ZSUN, _LSUN_ERG
 from tengri.models.nebular._shared import _interp_index_weight, compute_qh
+from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
 
 class CloudyGridData(NamedTuple):
@@ -157,6 +158,55 @@ def _trilinear_interp(
     return c0 * (1 - wz) + c1 * wz
 
 
+def _trilinear_interp_smooth(
+    data: jnp.ndarray,
+    grid_z: jnp.ndarray,
+    grid_age: jnp.ndarray,
+    grid_u: jnp.ndarray,
+    z_val: float,
+    age_val: float,
+    u_val: float,
+    scatter: float = 0.2,
+    edges_z: jnp.ndarray | None = None,
+    edges_age: jnp.ndarray | None = None,
+    edges_u: jnp.ndarray | None = None,
+) -> jnp.ndarray:
+    """Smooth triweight-kernel interpolation on a 3-D CLOUDY grid.
+
+    Replaces :func:`_trilinear_interp` for ``grid_interp="triweight"``.
+    Returns C²-continuous gradients through grid nodes; no kinks.
+
+    Uses :func:`_shared.compute_grid_weights` on each axis independently,
+    then contracts all three weight vectors against the full grid array
+    via ``tensordot`` — equivalent to the outer-product weighted sum
+
+        result = Σ_{z,a,u} wz[z] · wa[a] · wu[u] · data[z, a, u, ...]
+
+    The trailing dimensions of ``data`` (e.g. n_lines or n_wave) pass through
+    unchanged.
+
+    Parameters
+    ----------
+    data : array, shape (n_z, n_age, n_u, ...)
+    grid_z, grid_age, grid_u : array
+        Sorted axis values.
+    z_val, age_val, u_val : float
+        Query point.
+    scatter : float
+        Triweight kernel bandwidth (same units as each axis).  Default 0.2.
+    edges_z, edges_age, edges_u : array or None
+        Precomputed bin edges from :func:`edges_for_grid`.  When ``None``,
+        edges are computed on the fly.
+    """
+    wz = compute_grid_weights(z_val, grid_z, scatter, edges=edges_z)
+    wa = compute_grid_weights(age_val, grid_age, scatter, edges=edges_age)
+    wu = compute_grid_weights(u_val, grid_u, scatter, edges=edges_u)
+    result = jnp.tensordot(wz, data, axes=([0], [0]))  # (n_age, n_u, ...)
+    result = jnp.tensordot(wa, result, axes=([0], [0]))  # (n_u, ...)
+    result = jnp.tensordot(wu, result, axes=([0], [0]))  # (...)
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Main backend class
 # ---------------------------------------------------------------------------
@@ -166,8 +216,8 @@ class CloudyGridBackend:
     """CLOUDY grid-based nebular emission backend.
 
     Loads a precomputed CLOUDY grid and computes nebular emission
-    (lines + continuum) at arbitrary (logU, logZ_gas) via trilinear
-    interpolation. Q_H is computed on-the-fly from the SSP spectrum.
+    (lines + continuum) at arbitrary (logU, logZ_gas) via grid interpolation.
+    Q_H is computed on-the-fly from the SSP spectrum.
 
     Parameters
     ----------
@@ -175,12 +225,36 @@ class CloudyGridBackend:
         Path to tengri-format CLOUDY HDF5 grid.
     ssp_data : SSPData
         SSP templates (for Q_H computation).
+    grid_interp : {"linear", "triweight"}
+        Interpolation mode for the CLOUDY grid axes (logZ_gas, log_age, logU).
+
+        ``"linear"`` (default) — piecewise-linear trilinear interpolation.
+        Fast; exact at grid nodes; kinks in the gradient at node boundaries.
+
+        ``"triweight"`` — smooth triweight-kernel interpolation (Hearin et al.
+        2023 Eq. 10).  C²-continuous gradients through every node; all three
+        axes use the same kernel bandwidth ``grid_scatter``.  Slightly slower
+        than linear (~3× tensordot cost vs 8-corner lookup) but fully
+        differentiable everywhere.
+    grid_scatter : float
+        Triweight kernel bandwidth in the natural units of each axis (dex).
+        Only used when ``grid_interp="triweight"``.  Default 0.2.
     """
 
-    def __init__(self, grid_path: str, ssp_data=None) -> None:
+    def __init__(
+        self,
+        grid_path: str,
+        ssp_data=None,
+        grid_interp: str = "linear",
+        grid_scatter: float = 0.2,
+    ) -> None:
+        if grid_interp not in ("linear", "triweight"):
+            raise ValueError(f"grid_interp must be 'linear' or 'triweight', got {grid_interp!r}")
         self.name = "cloudy_grid"
         self.has_free_params = True
         self.has_continuum = True
+        self._grid_interp = grid_interp
+        self._grid_scatter = grid_scatter
         self.grid = load_cloudy_grid(grid_path)
 
         # Max age for nebular emission: 100 Myr (conservative).
@@ -188,6 +262,15 @@ class CloudyGridBackend:
         # ~100 Myr from post-AGB/HB stars. Beyond 100 Myr, Q_H drops
         # >6 orders of magnitude below peak — safe to ignore.
         self._max_neb_log_age = 8.0  # log10(100 Myr in yr)
+
+        # Precompute triweight bin edges (static grid, avoids rebuilding in JIT)
+        if grid_interp == "triweight":
+            self._edges_z_line = edges_for_grid(self.grid.line_log_met)
+            self._edges_age_line = edges_for_grid(self.grid.line_log_age)
+            self._edges_u_line = edges_for_grid(self.grid.line_log_U)
+            self._edges_z_cont = edges_for_grid(self.grid.cont_log_met)
+            self._edges_age_cont = edges_for_grid(self.grid.cont_log_age)
+            self._edges_u_cont = edges_for_grid(self.grid.cont_log_U)
 
         # Precompute Q_H table and young-age index from SSP if provided
         self._qh_table = None
@@ -236,6 +319,41 @@ class CloudyGridBackend:
         q0 = q00 * (1 - wa) + q01 * wa
         q1 = q10 * (1 - wa) + q11 * wa
         return q0 * (1 - wz) + q1 * wz
+
+    def _make_interp_fn(
+        self,
+        data: jnp.ndarray,
+        grid_z: jnp.ndarray,
+        grid_age: jnp.ndarray,
+        grid_u: jnp.ndarray,
+        edges_z: jnp.ndarray | None = None,
+        edges_age: jnp.ndarray | None = None,
+        edges_u: jnp.ndarray | None = None,
+    ):
+        """Build an interpolation closure for the configured grid_interp mode."""
+        if self._grid_interp == "triweight":
+            s = self._grid_scatter
+
+            def _interp(z, a, u):
+                return _trilinear_interp_smooth(
+                    data,
+                    grid_z,
+                    grid_age,
+                    grid_u,
+                    z,
+                    a,
+                    u,
+                    s,
+                    edges_z=edges_z,
+                    edges_age=edges_age,
+                    edges_u=edges_u,
+                )
+        else:
+
+            def _interp(z, a, u):
+                return _trilinear_interp(data, grid_z, grid_age, grid_u, z, a, u)
+
+        return _interp
 
     def predict_nebular_line_luminosities(
         self,
@@ -289,17 +407,19 @@ class CloudyGridBackend:
         young_ages = ssp_log_ages_yr[young_idx]
         young_weights = ssp_weights[young_idx]
 
+        _interp_lines = self._make_interp_fn(
+            grid.line_luminosity,
+            grid.line_log_met,
+            grid.line_log_age,
+            grid.line_log_U,
+            edges_z=getattr(self, "_edges_z_line", None),
+            edges_age=getattr(self, "_edges_age_line", None),
+            edges_u=getattr(self, "_edges_u_line", None),
+        )
+
         def _line_contrib_one_age(log_age_i, weight_i):
             qh_i = self._get_qh_at(log_z, log_age_i)
-            log_lum_per_qh = _trilinear_interp(
-                grid.line_luminosity,
-                grid.line_log_met,
-                grid.line_log_age,
-                grid.line_log_U,
-                neb_logZ_gas,
-                log_age_i,
-                neb_logU,
-            )
+            log_lum_per_qh = _interp_lines(neb_logZ_gas, log_age_i, neb_logU)
             return weight_i * qh_i * (10.0**log_lum_per_qh) * (1.0 - neb_fesc)
 
         # vmap over young age bins only, then sum
@@ -346,17 +466,19 @@ class CloudyGridBackend:
         young_ages = ssp_log_ages_yr[young_idx]
         young_weights = ssp_weights[young_idx]
 
+        _interp_cont = self._make_interp_fn(
+            grid.cont_luminosity,
+            grid.cont_log_met,
+            grid.cont_log_age,
+            grid.cont_log_U,
+            edges_z=getattr(self, "_edges_z_cont", None),
+            edges_age=getattr(self, "_edges_age_cont", None),
+            edges_u=getattr(self, "_edges_u_cont", None),
+        )
+
         def _cont_contrib_one_age(log_age_i, weight_i):
             qh_i = self._get_qh_at(log_z, log_age_i)
-            log_cont_per_qh = _trilinear_interp(
-                grid.cont_luminosity,
-                grid.cont_log_met,
-                grid.cont_log_age,
-                grid.cont_log_U,
-                neb_logZ_gas,
-                log_age_i,
-                neb_logU,
-            )
+            log_cont_per_qh = _interp_cont(neb_logZ_gas, log_age_i, neb_logU)
             return weight_i * qh_i * (10.0**log_cont_per_qh) * (1.0 - neb_fesc)
 
         all_contribs = jax.vmap(_cont_contrib_one_age)(

@@ -881,38 +881,16 @@ def interpolate_metallicity(
 _LGMET_LO = -4.0
 _LGMET_HI = 0.5
 
-
-@jax.jit
-def _tw_cuml_kern(x, m, h):
-    """Triweight kernel CDF (same as DSPS _tw_cuml_kern).
-
-    Cumulative distribution of the triweight kernel with support |z| < 3.
-    Returns 0 for z < -3, 1 for z > 3, smooth polynomial between.
-    """
-    z = (x - m) / h
-    val = -5.0 * z**7 / 69984.0 + 7.0 * z**5 / 2592.0 - 35.0 * z**3 / 864.0 + 35.0 * z / 96.0 + 0.5
-    val = jnp.where(z < -3.0, 0.0, val)
-    val = jnp.where(z > 3.0, 1.0, val)
-    return val
-
-
-@jax.jit
-def _get_lgmet_bin_edges(grid, lo=_LGMET_LO, hi=_LGMET_HI):
-    """Bin edges from midpoints, matching DSPS convention.
-
-    Uses half-spacing on each side, with outer edges clamped.
-    """
-    edges = jnp.concatenate([jnp.array([lo]), 0.5 * (grid[:-1] + grid[1:]), jnp.array([hi])])
-    return edges
+# Triweight kernel internals now live in utils.interpolation.
+from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
 
 @jax.jit
 def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=0.1):
     """Metallicity weights via triweight CDF integration (DSPS-compatible).
 
-    Integrates the triweight kernel CDF between bin edges, exactly
-    matching the DSPS ``triweighted_histogram`` approach. The kernel
-    has support at |z| < 3σ, giving smooth multi-bin weights.
+    Thin wrapper around :func:`~tengri.utils.interpolation.compute_grid_weights`
+    with the DSPS fixed-boundary convention (``lo=-4.0, hi=0.5``).
 
     Parameters
     ----------
@@ -927,20 +905,8 @@ def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=0.1):
     -------
     array (n_met,) — normalized weights summing to 1.
     """
-    edges = _get_lgmet_bin_edges(ssp_lgmet)
-    # CDF difference: probability mass in each bin
-    # Note: CDF(lo) - CDF(hi) gives the mass between lo and hi
-    # because _tw_cuml_kern returns CDF of the flipped kernel.
-    # DSPS convention: _tw_cuml_kern(x, lo, sig) - _tw_cuml_kern(x, hi, sig)
-    # where x is the galaxy metallicity, lo/hi are bin edges.
-    cdf_lo = _tw_cuml_kern(log_z, edges[:-1], lgmet_scatter)
-    cdf_hi = _tw_cuml_kern(log_z, edges[1:], lgmet_scatter)
-    raw = cdf_lo - cdf_hi
-
-    total = jnp.sum(raw)
-    nearest = jnp.argmin(jnp.abs(ssp_lgmet - log_z))
-    fallback = jnp.zeros_like(raw).at[nearest].set(1.0)
-    return jnp.where(total > 0, raw / total, fallback)
+    edges = edges_for_grid(ssp_lgmet, lo=_LGMET_LO, hi=_LGMET_HI)
+    return compute_grid_weights(log_z, ssp_lgmet, lgmet_scatter, edges=edges)
 
 
 @jax.jit

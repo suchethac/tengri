@@ -90,7 +90,13 @@ def test_cloudy_grid_grad_logu():
             )
         )
 
-    logU = jnp.array(-2.5)
+    # Use a non-grid-point logU value.  The CLOUDY grid nodes are at
+    # -4, -3.5, -3, -2.5, -2, -1.5, -1.  At a grid node the piecewise-
+    # linear interpolation has a kink: JAX AD returns the right-slope
+    # while central FD averages left and right slopes.  When those slopes
+    # differ (as they do for dominant lines), FD ≠ AD even though both
+    # are mathematically valid.  Testing inside a grid cell avoids this.
+    logU = jnp.array(-2.25)  # interior of the [-2.5, -2.0] cell
     try:
         fd = _fd_grad(fn, logU)
         ad = jax.grad(fn)(logU)
@@ -102,6 +108,89 @@ def test_cloudy_grid_grad_logu():
     assert jnp.abs(fd - ad) / (jnp.abs(fd) + 1e-10) < _FD_RTOL, (
         f"FD/AD mismatch: FD={float(fd):.4g}, AD={float(ad):.4g}"
     )
+
+
+@pytest.mark.skipif(not _CLOUDY_GRID_PATH.exists(), reason="CLOUDY grid not present")
+def test_cloudy_grid_triweight_runs():
+    """Triweight mode produces finite output for both lines and continuum."""
+    from tengri.models.nebular import CloudyGridBackend
+
+    mock_ssp = _make_mock_ssp()
+    backend = CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp, grid_interp="triweight")
+
+    n_age = len(mock_ssp.ssp_lg_age_gyr)
+    ssp_wave = jnp.array(mock_ssp.ssp_wave)
+    ssp_weights = jnp.ones(n_age) * 1e8
+    ssp_log_ages = jnp.array(mock_ssp.ssp_lg_age_gyr + 9.0)
+    log_z = -1.848
+
+    try:
+        sed = backend.predict_nebular_sed(
+            ssp_wave=ssp_wave,
+            ssp_weights=ssp_weights,
+            ssp_log_ages_yr=ssp_log_ages,
+            log_z=log_z,
+            neb_logU=-2.5,  # on a grid node — triweight handles this smoothly
+        )
+    except Exception as e:
+        pytest.skip(f"Backend call failed (likely shape mismatch with mock SSP): {e}")
+
+    assert jnp.all(jnp.isfinite(sed)), "Triweight mode produced non-finite SED"
+    assert jnp.any(sed > 0.0), "Triweight mode produced all-zero SED"
+
+
+@pytest.mark.skipif(not _CLOUDY_GRID_PATH.exists(), reason="CLOUDY grid not present")
+def test_cloudy_grid_triweight_grad_at_grid_node():
+    """Triweight mode: FD ≈ AD even when logU lands exactly on a grid node.
+
+    This is the key advantage over linear mode — the smooth C²-continuous kernel
+    eliminates the piecewise-linear kink, so FD and AD agree everywhere.
+    """
+    from tengri.models.nebular import CloudyGridBackend
+
+    mock_ssp = _make_mock_ssp()
+    backend = CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp, grid_interp="triweight")
+
+    n_age = len(mock_ssp.ssp_lg_age_gyr)
+    ssp_wave = jnp.array(mock_ssp.ssp_wave)
+    ssp_weights = jnp.ones(n_age) * 1e8
+    ssp_log_ages = jnp.array(mock_ssp.ssp_lg_age_gyr + 9.0)
+    log_z = -1.848
+
+    def fn(logU):
+        return jnp.sum(
+            backend.predict_nebular_sed(
+                ssp_wave=ssp_wave,
+                ssp_weights=ssp_weights,
+                ssp_log_ages_yr=ssp_log_ages,
+                log_z=log_z,
+                neb_logU=logU,
+            )
+        )
+
+    # Grid node — triweight kernel is C² so FD = AD here (unlike linear mode)
+    logU = jnp.array(-2.5)
+    try:
+        fd = _fd_grad(fn, logU)
+        ad = jax.grad(fn)(logU)
+    except Exception as e:
+        pytest.skip(f"Backend call failed (likely shape mismatch with mock SSP): {e}")
+
+    assert jnp.isfinite(fd), "FD gradient is not finite"
+    assert jnp.isfinite(ad), "AD gradient is not finite"
+    assert jnp.abs(fd - ad) / (jnp.abs(fd) + 1e-10) < _FD_RTOL, (
+        f"Triweight FD/AD mismatch at grid node: FD={float(fd):.4g}, AD={float(ad):.4g}"
+    )
+
+
+@pytest.mark.skipif(not _CLOUDY_GRID_PATH.exists(), reason="CLOUDY grid not present")
+def test_cloudy_grid_invalid_interp_mode():
+    """Unknown grid_interp raises ValueError at construction time."""
+    from tengri.models.nebular import CloudyGridBackend
+
+    mock_ssp = _make_mock_ssp()
+    with pytest.raises(ValueError, match="grid_interp"):
+        CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp, grid_interp="cubic")
 
 
 # ---------------------------------------------------------------------------

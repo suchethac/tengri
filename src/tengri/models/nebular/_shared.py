@@ -64,7 +64,7 @@ compute_qh_grid = jax.vmap(
 
 
 # ---------------------------------------------------------------------------
-# Grid interpolation
+# Grid interpolation — piecewise-linear
 # ---------------------------------------------------------------------------
 
 
@@ -84,6 +84,17 @@ def _interp_index_weight(
     w = jnp.where(dx > 0, (x_clipped - grid[idx]) / dx, 0.0)
     return idx, w
 
+
+# ---------------------------------------------------------------------------
+# Grid interpolation — triweight kernel (smooth, C²)
+# Re-exported from utils.interpolation for backward compatibility.
+# ---------------------------------------------------------------------------
+
+from tengri.utils.interpolation import (
+    compute_grid_weights,  # noqa: F401
+    edges_for_grid,  # noqa: F401
+    tw_cuml_kern as _tw_cuml_kern,  # noqa: F401
+)
 
 # ---------------------------------------------------------------------------
 # Metallicity convention converters

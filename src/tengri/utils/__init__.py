@@ -42,6 +42,7 @@ from tengri.utils.cosmology import (
     z_at_lookback_time,
 )
 from tengri.utils.grid import log_age_to_age_yr, make_log_age_grid
+from tengri.utils.interpolation import compute_grid_weights, edges_for_grid, tw_cuml_kern
 from tengri.utils.magnitudes import (
     AB_VEGA_OFFSETS,
     ab_mag_to_fnu,
@@ -82,10 +83,13 @@ __all__ = [
     "comoving_distance",
     "comoving_distance_mpc",
     "comoving_volume_element",
+    # Interpolation
+    "compute_grid_weights",
     "cosmological_dimming",
     "distance_modulus",
     "distance_modulus_from_dl",
     "distance_modulus_from_dl_mpc",
+    "edges_for_grid",
     "erg_per_s_to_lsun",
     "flambda_to_fnu",
     "fnu_to_ab_mag",
@@ -116,6 +120,7 @@ __all__ = [
     "sigmoid",
     "surface_brightness_to_mag",
     "tau_to_attenuation",
+    "tw_cuml_kern",
     "ujy_to_fnu",
     "vacuum_to_air",
     "vega_to_ab",
