@@ -54,9 +54,6 @@ from tengri.utils.cosmology import luminosity_distance
 # Constants
 # ===================================================================
 
-_LSUN_ERG = 3.828e33
-_C_AA = 2.99792458e18
-
 
 def _filter_waves_and_trans(filters):
     """Return (waves, trans) from ``load_filter_set`` output or FilterCurve sequence.

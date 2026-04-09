@@ -38,21 +38,15 @@ References
 import jax
 import jax.numpy as jnp
 
-# ---------------------------------------------------------------------------
-# Physical constants
-# ---------------------------------------------------------------------------
+from tengri.utils.magnitudes import fnu_to_ab_mag, lnu_to_absolute_ab_mag
+from tengri.utils.physics_constants import C_AA, L_SUN as LSUN_ERG, PC_CM
 
-C_AA = 2.99792458e18
-"""Speed of light in Angstrom/s."""
-
-LSUN_ERG = 3.828e33
-"""Solar luminosity in erg/s (IAU 2015 nominal)."""
-
-PC_CM = 3.0856775814913674e18
-"""Parsec in cm."""
-
-AB_ZEROPOINT = -48.6
-"""AB magnitude zeropoint: m_AB = -2.5 log10(f_ν) - 48.6."""
+# Re-export for backward compatibility
+__all__ = [
+    "C_AA",
+    "LSUN_ERG",
+    "PC_CM",
+]
 
 # ---------------------------------------------------------------------------
 # Key emission line wavelengths (rest-frame, Angstrom)
@@ -452,9 +446,7 @@ def compute_m_uv(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
         M_UV in AB magnitudes.
     """
     l_nu = _mean_flux_in_band(sed, wave, 1450.0, 1550.0)
-    d_10pc_cm = 10.0 * PC_CM
-    f_nu = l_nu / (4.0 * jnp.pi * d_10pc_cm**2)
-    return -2.5 * jnp.log10(jnp.maximum(f_nu, 1e-50)) + AB_ZEROPOINT
+    return lnu_to_absolute_ab_mag(l_nu)
 
 
 def compute_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
@@ -520,8 +512,8 @@ def compute_rest_uv_color(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     """
     f_u = _mean_flux_in_band(sed, wave, 3200.0, 3900.0)
     f_v = _mean_flux_in_band(sed, wave, 5000.0, 5800.0)
-    mag_u = -2.5 * jnp.log10(jnp.maximum(f_u, 1e-50))
-    mag_v = -2.5 * jnp.log10(jnp.maximum(f_v, 1e-50))
+    mag_u = fnu_to_ab_mag(f_u)
+    mag_v = fnu_to_ab_mag(f_v)
     return mag_u - mag_v
 
 

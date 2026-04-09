@@ -18,13 +18,11 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -155,8 +153,12 @@ class TestInterp6D:
         """_interp_6d should return (n_lines,) for any query point."""
         grid = fake_grid_data
         grids = (
-            grid.log_OH_grid, grid.log_age_grid, grid.log_U_grid,
-            grid.log_nH_grid, grid.log_CO_grid, grid.dNO_grid,
+            grid.log_OH_grid,
+            grid.log_age_grid,
+            grid.log_U_grid,
+            grid.log_nH_grid,
+            grid.log_CO_grid,
+            grid.dNO_grid,
         )
         vals = (-3.2, 7.0, -3.0, 2.0, -0.36, 0.0)
         result = cb19_module._interp_6d(grid.log_line_ratios, grids, vals)
@@ -167,8 +169,12 @@ class TestInterp6D:
         """Interpolation on a constant grid (all 0.0) returns 0.0 everywhere."""
         grid = fake_grid_data
         grids = (
-            grid.log_OH_grid, grid.log_age_grid, grid.log_U_grid,
-            grid.log_nH_grid, grid.log_CO_grid, grid.dNO_grid,
+            grid.log_OH_grid,
+            grid.log_age_grid,
+            grid.log_U_grid,
+            grid.log_nH_grid,
+            grid.log_CO_grid,
+            grid.dNO_grid,
         )
         vals = (-3.0, 7.0, -3.0, 2.0, -0.36, 0.0)
         result = cb19_module._interp_6d(grid.log_line_ratios, grids, vals)
@@ -178,8 +184,12 @@ class TestInterp6D:
         """Result must be finite at an interior point."""
         grid = fake_grid_data
         grids = (
-            grid.log_OH_grid, grid.log_age_grid, grid.log_U_grid,
-            grid.log_nH_grid, grid.log_CO_grid, grid.dNO_grid,
+            grid.log_OH_grid,
+            grid.log_age_grid,
+            grid.log_U_grid,
+            grid.log_nH_grid,
+            grid.log_CO_grid,
+            grid.dNO_grid,
         )
         vals = (-3.5, 7.0, -2.5, 2.0, -0.5, 0.1)
         result = cb19_module._interp_6d(grid.log_line_ratios, grids, vals)
@@ -212,7 +222,7 @@ class TestCB19BackendMocked:
         return backend
 
     def test_predict_line_lums_shape(self, backend_with_fake_grid):
-        """predict_nebular_line_luminosities returns (wavelengths, luminosities) of correct shape."""
+        """predict_nebular_line_luminosities returns (wavelengths, luminosities) of correct shape."""  # noqa: E501
         backend = backend_with_fake_grid
         n_age = 10
         n_lines = backend.grid.line_wavelengths.shape[0]
@@ -244,7 +254,7 @@ class TestCB19BackendMocked:
         backend = backend_with_fake_grid
         # Single young age bin with weight=1, Q_H=1 (no precomputed table → uses 1.0)
         ssp_weights = jnp.array([1.0])
-        ssp_log_ages = jnp.array([7.0])   # 10 Myr — young
+        ssp_log_ages = jnp.array([7.0])  # 10 Myr — young
 
         _, lums = backend.predict_nebular_line_luminosities(
             ssp_weights, ssp_log_ages, log_z=-1.848
@@ -252,8 +262,10 @@ class TestCB19BackendMocked:
         expected_per_line = cb19_module._HB_PER_QH_LSUN
         # All lines should equal _HB_PER_QH_LSUN (ratio=1, Q_H=1, weight=1, fesc=0)
         np.testing.assert_allclose(
-            np.array(lums), expected_per_line, rtol=1e-4,
-            err_msg="Hβ conversion factor not correctly applied"
+            np.array(lums),
+            expected_per_line,
+            rtol=1e-4,
+            err_msg="Hβ conversion factor not correctly applied",
         )
 
     def test_fesc_suppresses_lines(self, backend_with_fake_grid):
@@ -294,7 +306,7 @@ class TestCB19BackendMocked:
     def test_continuum_is_zero(self, backend_with_fake_grid):
         """CB_19 has no continuum grid — predict_nebular_continuum returns zeros."""
         backend = backend_with_fake_grid
-        wave, cont = backend.predict_nebular_continuum(jnp.ones(3), jnp.ones(3), -1.848)
+        _wave, cont = backend.predict_nebular_continuum(jnp.ones(3), jnp.ones(3), -1.848)
         assert jnp.all(cont == 0.0), "Continuum must be zero for CB_19"
 
     def test_predict_sed_shape(self, backend_with_fake_grid):
@@ -306,6 +318,65 @@ class TestCB19BackendMocked:
             jnp.ones(3), ssp_wave, jnp.array([7.0, 7.5, 8.0]), log_z=-1.848
         )
         assert sed.shape == (n_wave,)
+
+    def test_predict_sed_units_are_erg_s_hz(self, backend_with_fake_grid, cb19_module):
+        """predict_nebular_sed must return erg/s/Hz, not Lsun/Hz.
+
+        Regression test: prior to the fix, ``return neb_sed`` returned Lsun/Hz.
+        The correct return is ``neb_sed * _LSUN_ERG``.  We verify by monkey-patching
+        predict_nebular_line_luminosities to return a known 1-Lsun line, then checking
+        the integrated SED has a peak ≈ 3.828e33 erg/s/Hz (not ≈ 1 Lsun/Hz).
+        """
+        from tengri.models.nebular._constants import _LSUN_ERG
+
+        backend = backend_with_fake_grid
+        # Wavelength grid centred on Hα (6564.61 Å) with line_sigma_aa > 0
+        n_wave = 200
+        ssp_wave = jnp.linspace(5000.0, 8000.0, n_wave)
+
+        # A single line at 6564.61 Å with luminosity 1.0 Lsun
+        _known_wave = jnp.array([6564.61])
+        _known_lum = jnp.array([1.0])  # 1 Lsun
+
+        original_fn = backend.predict_nebular_line_luminosities
+
+        def _stub(*args, **kwargs):
+            return _known_wave, _known_lum
+
+        backend.predict_nebular_line_luminosities = _stub
+        try:
+            sed = backend.predict_nebular_sed(
+                jnp.ones(1),
+                ssp_wave,
+                jnp.array([7.0]),
+                log_z=-1.848,
+                line_sigma_aa=10.0,
+            )
+        finally:
+            backend.predict_nebular_line_luminosities = original_fn
+
+        # Integrated line (trapezoid over freq) should equal 1 Lsun erg/s ≈ 3.828e33 erg/s.
+        # Convert wavelength grid (Å) to frequency (Hz) for integration.
+        _C_CGS = 2.998e18  # Å/s
+        nu = _C_CGS / ssp_wave  # decreasing
+        # sed is on ssp_wave grid; integrate |dnu| = integrate along reversed axis
+        sed_np = np.array(sed)
+        nu_np = np.array(nu)
+        # Flip so nu is increasing, then trapezoid
+        total_lum = float(np.trapezoid(sed_np[::-1], nu_np[::-1]))
+
+        # Should be within a factor of 2 of 1 Lsun (≈ 3.828e33 erg/s)
+        # A large fraction of the line power sits within our wavelength window.
+        assert total_lum > 0.1 * _LSUN_ERG, (
+            f"Integrated nebular luminosity {total_lum:.3e} erg/s is too low — "
+            f"expected ~{_LSUN_ERG:.3e} erg/s (1 Lsun). "
+            f"This likely means the Lsun→erg/s/Hz conversion is missing from "
+            f"CB19Backend.predict_nebular_sed (unit bug reverted)."
+        )
+        assert total_lum < 10.0 * _LSUN_ERG, (
+            f"Integrated nebular luminosity {total_lum:.3e} erg/s is too high — "
+            f"expected ~{_LSUN_ERG:.3e} erg/s (1 Lsun)."
+        )
 
     def test_repr(self, backend_with_fake_grid):
         assert "CB19Backend" in repr(backend_with_fake_grid)
@@ -322,14 +393,19 @@ class TestJITCompatibility:
         """_interp_6d must trace without errors under jax.jit."""
         grid = fake_grid_data
         grids = (
-            grid.log_OH_grid, grid.log_age_grid, grid.log_U_grid,
-            grid.log_nH_grid, grid.log_CO_grid, grid.dNO_grid,
+            grid.log_OH_grid,
+            grid.log_age_grid,
+            grid.log_U_grid,
+            grid.log_nH_grid,
+            grid.log_CO_grid,
+            grid.dNO_grid,
         )
 
         @jax.jit
         def _call(log_oh):
             return cb19_module._interp_6d(
-                grid.log_line_ratios, grids,
+                grid.log_line_ratios,
+                grids,
                 (log_oh, 7.0, -3.0, 2.0, -0.36, 0.0),
             )
 
@@ -368,12 +444,12 @@ class TestJITCompatibility:
 class TestMissingH5:
     def test_load_raises_file_not_found(self, cb19_module):
         """load_cb19_grid raises FileNotFoundError with helpful message."""
-        with pytest.raises(FileNotFoundError, match="cb19_templates.h5"):
+        with pytest.raises(FileNotFoundError, match=r"cb19_templates\.h5"):
             cb19_module.load_cb19_grid(filepath="/nonexistent/path/cb19_templates.h5")
 
     def test_backend_init_raises_file_not_found(self, cb19_module):
         """CB19Backend init raises FileNotFoundError when HDF5 missing."""
-        with pytest.raises(FileNotFoundError, match="cb19_templates.h5"):
+        with pytest.raises(FileNotFoundError, match=r"cb19_templates\.h5"):
             cb19_module.CB19Backend(grid_path="/nonexistent/path/cb19_templates.h5")
 
 
@@ -424,13 +500,13 @@ class TestParamSpec:
         defaults = spec._defaults
 
         assert isinstance(defaults["neb_log_nH"], Fixed)
-        assert abs(float(defaults["neb_log_nH"].value) - 2.0) < 1e-6   # n_H=100
+        assert abs(float(defaults["neb_log_nH"].value) - 2.0) < 1e-6  # n_H=100
 
         assert isinstance(defaults["neb_co"], Fixed)
-        assert abs(float(defaults["neb_co"].value) - (-0.36)) < 1e-6   # near-solar
+        assert abs(float(defaults["neb_co"].value) - (-0.36)) < 1e-6  # near-solar
 
         assert isinstance(defaults["neb_hbfrac"], Fixed)
-        assert abs(float(defaults["neb_hbfrac"].value) - 1.0) < 1e-6   # radiation-bounded
+        assert abs(float(defaults["neb_hbfrac"].value) - 1.0) < 1e-6  # radiation-bounded
 
 
 # ---------------------------------------------------------------------------
@@ -442,11 +518,9 @@ class TestParamSpec:
 class TestCB19WithRealH5:
     def test_load_default_group(self, cb19_module):
         """Load SSP/Kroupa01/mu100 group and verify shapes."""
-        grid = cb19_module.load_cb19_grid(
-            sed_type="SSP", imf="Kroupa01", mup=100.0, hbfrac=1.0
-        )
+        grid = cb19_module.load_cb19_grid(sed_type="SSP", imf="Kroupa01", mup=100.0, hbfrac=1.0)
         assert grid.log_line_ratios.ndim == 7
-        n_oh, n_age, n_u, n_nh, n_co, n_dno, n_lines = grid.log_line_ratios.shape
+        n_oh, _n_age, n_u, n_nh, _n_co, _n_dno, _n_lines = grid.log_line_ratios.shape
         assert n_oh == 7
         assert n_u == 6
         assert n_nh == 4
@@ -484,6 +558,4 @@ class TestCB19WithRealH5:
         waves = np.array(grid.line_wavelengths)
         hb_idx = np.argmin(np.abs(waves - 4862.68))
         hb_log_ratio = float(grid.log_line_ratios[3, 10, 2, 1, 1, 1, hb_idx])
-        assert abs(hb_log_ratio - 0.0) < 0.05, (
-            f"Hβ log10(ratio) = {hb_log_ratio:.3f} ≠ 0.0"
-        )
+        assert abs(hb_log_ratio - 0.0) < 0.05, f"Hβ log10(ratio) = {hb_log_ratio:.3f} ≠ 0.0"

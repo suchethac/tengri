@@ -29,6 +29,7 @@ def _fd_grad(fn, x, eps=1e-3):
 # Minimal mock SSP data for backend initialization
 # ---------------------------------------------------------------------------
 
+
 def _make_mock_ssp(n_met=3, n_age=10, n_wave=50):
     """Create a minimal mock SSP dataset for backend initialization.
 
@@ -60,9 +61,7 @@ def _make_mock_ssp(n_met=3, n_age=10, n_wave=50):
 # CloudyGridBackend
 # ---------------------------------------------------------------------------
 
-_CLOUDY_GRID_PATH = Path(
-    "/Users/suchethacooray/Projects/tengri/data/cloudy_grid_mist.h5"
-)
+_CLOUDY_GRID_PATH = Path("/Users/suchethacooray/Projects/tengri/data/cloudy_grid_mist.h5")
 
 
 @pytest.mark.skipif(not _CLOUDY_GRID_PATH.exists(), reason="CLOUDY grid not present")
@@ -109,9 +108,7 @@ def test_cloudy_grid_grad_logu():
 # CueBackend
 # ---------------------------------------------------------------------------
 
-_CUE_WEIGHTS_PATH = Path(
-    "/Users/suchethacooray/Projects/tengri/data/cue_weights.npz"
-)
+_CUE_WEIGHTS_PATH = Path("/Users/suchethacooray/Projects/tengri/data/cue_weights.npz")
 
 
 @pytest.mark.skipif(not _CUE_WEIGHTS_PATH.exists(), reason="Cue weights not present")

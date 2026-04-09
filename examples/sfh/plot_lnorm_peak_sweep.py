@@ -1,0 +1,66 @@
+"""
+Log-Normal SFH: Peak Lookback Time
+===================================
+
+When did this galaxy form most of its stars? The peak lookback time shifts
+the SFH and changes UV slope, 4000 Å break, and NIR mass.
+"""
+
+# sphinx_gallery_thumbnail_number = 1
+
+from pathlib import Path
+
+import jax
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
+import numpy as np
+
+jax.config.update("jax_enable_x64", True)
+
+from tengri import Fixed, Model, ParamSpec, Uniform, load_ssp_data, setup_style
+from tengri.plotting import sfh_sed_comparison
+
+setup_style()
+
+
+def _find_ssp():
+    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    for p in [
+        Path("data") / name,
+        Path("../data") / name,
+        Path("../../data") / name,
+        Path("../../../data") / name,
+    ]:
+        if p.exists():
+            return str(p)
+    return None
+
+
+SSP_PATH = _find_ssp()
+if SSP_PATH is None:
+    raise FileNotFoundError("SSP data not found — skipping example")
+
+ssp = load_ssp_data(SSP_PATH)
+
+# Build ParamSpec with log-normal SFH
+spec = ParamSpec(
+    mean_sfh_type="lnorm",
+    sfh_lnorm_log_peak_sfr=Fixed(1.0),
+    sfh_lnorm_peak_lbt_gyr=Uniform(1.0, 11.0),  # will be overridden
+    sfh_lnorm_width_gyr=Fixed(0.3),
+    met_logzsol=Fixed(-0.3),
+    dust_tau_bc=Fixed(0.3),
+    dust_tau_diff=Fixed(0.2),
+    dust_slope=Fixed(-0.7),
+    redshift=Fixed(0.1),
+)
+
+model = Model(spec, ssp)
+
+# Sweep parameter
+values = [1.0, 3.0, 5.0, 8.0, 11.0]
+fig = sfh_sed_comparison(model, "sfh_lnorm_peak_lbt_gyr", values, cmap="Purples")
+fig.suptitle("Log-Normal SFH: Peak Lookback Time", fontsize=12, y=1.00)
+plt.tight_layout()
+plt.savefig("plot_lnorm_peak_sweep.png", dpi=150, bbox_inches="tight")
+plt.show()

@@ -77,12 +77,12 @@ def _find_data_file(filename: str) -> str | None:
 # Physical constants (CGS)
 # ===================================================================
 
-_H_PLANCK = 6.62607015e-27  # erg s
-_K_BOLTZMANN = 1.380649e-16  # erg / K
-_C_CGS = 2.99792458e10  # cm / s
-_LSUN_ERG = 3.828e33  # erg / s  (IAU 2015)
-_AA_TO_CM = 1.0e-8  # Angstrom -> cm
-
+from tengri.utils.physics_constants import (
+    AA_TO_CM as _AA_TO_CM,
+    C_CGS as _C_CGS,
+    H_PLANCK as _H_PLANCK,
+    K_BOLTZ as _K_BOLTZMANN,
+)
 
 # ===================================================================
 # Emission model registry
@@ -368,7 +368,10 @@ def modified_blackbody(
     wavelength_aa : array, shape (n_wave,)
         Wavelength grid in Angstrom (sorted ascending).
     L_absorbed : float
-        Total absorbed luminosity in Lsun (sets the normalization).
+        Total absorbed luminosity.  Unit-agnostic: the output L_nu will be
+        in the same units per Hz (e.g. pass erg/s → get erg/s/Hz; pass
+        Lsun → get Lsun/Hz).  In ``sed_pipeline.py`` the pipeline passes
+        erg/s (from a frequency-integrated trapezoid) and receives erg/s/Hz.
     dust_T : float
         Dust temperature in Kelvin.  Typical range: 20--60 K.
     dust_beta_ir : float
@@ -380,7 +383,7 @@ def modified_blackbody(
     Returns
     -------
     array, shape (n_wave,)
-        Dust emission L_nu in Lsun/Hz.
+        Dust emission L_nu in ``[L_absorbed units] / Hz``.
     """
     # CMB correction: always applied. At z=0 this is a no-op since
     # T_cmb(z=0) terms cancel and B_nu(T_cmb)/B_nu(T_dust) ~ 0.

@@ -48,20 +48,15 @@ from tengri.models.agn._phys import (
     planck_lnu as _planck_lnu,
     wavelength_to_nu as _wavelength_to_nu,
 )
-
-# keV/K — used to convert ring temperature to nthcomp seed energy
-_K_BOLTZ_KEV = 8.617333262e-8
-
-# ===================================================================
-# Physical constants (CGS)
-# ===================================================================
-
-_SIGMA_SB = 5.670374419e-5  # Stefan-Boltzmann [erg cm^-2 s^-1 K^-4]
-_MSUN_G = 1.989e33  # Solar mass [g]
-_G_GRAV = 6.674e-8  # Gravitational constant [cm^3 g^-1 s^-2]
-_SIGMA_T = 6.6524e-25  # Thomson cross section [cm^2]
-_M_PROTON = 1.6726e-24  # Proton mass [g]
-
+from tengri.utils.physics_constants import (
+    G_GRAV as _G_GRAV,
+    K_BOLTZ_KEV as _K_BOLTZ_KEV,
+    KEV_TO_ERG as _KEV_TO_ERG,
+    M_PROTON as _M_PROTON,
+    M_SUN as _MSUN_G,
+    SIGMA_SB as _SIGMA_SB,
+    SIGMA_T as _SIGMA_T,
+)
 
 # ===================================================================
 # Model 1: Simple power-law disc + UV cutoff
@@ -501,9 +496,6 @@ def multicolor_disc(
 # ===================================================================
 # Model 3: Kubota & Done (2018) 3-zone disc
 # ===================================================================
-
-# keV -> erg conversion
-_KEV_TO_ERG = 1.602176634e-9
 
 
 def _warm_comptonization_lnu(

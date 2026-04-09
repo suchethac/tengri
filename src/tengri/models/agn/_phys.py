@@ -2,21 +2,33 @@
 
 Extracted from disc.py, torus.py, and skirtor.py to eliminate
 three identical copies of the Planck function and related helpers.
+
+Fundamental constants are imported from :mod:`tengri.utils.physics`,
+which documents their SI→CGS derivations and CODATA 2018 / IAU 2015 sources.
 """
 
 from __future__ import annotations
 
 import jax.numpy as jnp
 
-# ---------------------------------------------------------------------------
-# Physical constants (CGS)
-# ---------------------------------------------------------------------------
+from tengri.utils.physics_constants import (
+    AA_TO_CM as ANGSTROM_CM,
+    C_CGS as C_LIGHT,
+    H_PLANCK,
+    K_BOLTZ,
+    L_SUN as LSUN_ERG,
+)
 
-H_PLANCK: float = 6.62607015e-27  # Planck constant [erg s]
-K_BOLTZ: float = 1.380649e-16  # Boltzmann constant [erg K^-1]
-C_LIGHT: float = 2.99792458e10  # Speed of light [cm s^-1]
-ANGSTROM_CM: float = 1e-8  # Ångström → cm
-LSUN_ERG: float = 3.828e33  # Solar luminosity [erg s^-1]
+__all__ = [
+    "ANGSTROM_CM",
+    "C_LIGHT",
+    "H_PLANCK",
+    "K_BOLTZ",
+    "LSUN_ERG",
+    "lines_to_sed",
+    "planck_lnu",
+    "wavelength_to_nu",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -94,8 +106,9 @@ def lines_to_sed(
     array, shape (n_wave,)
         L_nu on ``wave_obs`` grid [erg s^-1 Hz^-1].
     """
-    # sigma = FWHM / (2*sqrt(2*ln2)) in Angstrom at each line centre
-    fwhm_aa = line_wavelengths * fwhm_kms / 2.99792458e5  # c in km/s
+    from tengri.utils.physics_constants import C_KM_S
+
+    fwhm_aa = line_wavelengths * fwhm_kms / C_KM_S
     sigma_aa = fwhm_aa / 2.3548200450309493  # 2*sqrt(2*ln2)
 
     # Gaussian profiles: shape (n_wave, n_lines)

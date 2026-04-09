@@ -303,8 +303,9 @@ class TestFittedMode:
         cfg = Spectroscopy(wave_obs=wave, eline_mode="fitted")
         model = self._make_model(wave, self._make_spec(), cfg)
 
-        fitter = Fitter(model, jnp.ones(len(wave)) * 10.0, jnp.ones(len(wave)) * 0.1,
-                        data_type="spectroscopy")
+        fitter = Fitter(
+            model, jnp.ones(len(wave)) * 10.0, jnp.ones(len(wave)) * 0.1, data_type="spectroscopy"
+        )
 
         assert fitter._eline_fitted is True
         assert len(fitter._eline_amplitude_names) > 0
@@ -318,8 +319,9 @@ class TestFittedMode:
         cfg = Spectroscopy(wave_obs=wave, eline_mode="fitted")
         model = self._make_model(wave, self._make_spec(), cfg)
 
-        fitter = Fitter(model, jnp.ones(len(wave)) * 10.0, jnp.ones(len(wave)) * 0.1,
-                        data_type="spectroscopy")
+        fitter = Fitter(
+            model, jnp.ones(len(wave)) * 10.0, jnp.ones(len(wave)) * 0.1, data_type="spectroscopy"
+        )
 
         for amp_name in fitter._eline_amplitude_names:
             assert amp_name in fitter._free_names, (
@@ -332,12 +334,14 @@ class TestFittedMode:
 
         wave = self._wave()
         cat = LineCatalog.default_13()
-        cfg = Spectroscopy(wave_obs=wave, eline_mode="fitted", eline_catalog=cat,
-                           eline_fix_doublets=True)
+        cfg = Spectroscopy(
+            wave_obs=wave, eline_mode="fitted", eline_catalog=cat, eline_fix_doublets=True
+        )
         model = self._make_model(wave, self._make_spec(), cfg)
 
-        fitter = Fitter(model, jnp.ones(len(wave)) * 10.0, jnp.ones(len(wave)) * 0.1,
-                        data_type="spectroscopy")
+        fitter = Fitter(
+            model, jnp.ones(len(wave)) * 10.0, jnp.ones(len(wave)) * 0.1, data_type="spectroscopy"
+        )
 
         assert len(fitter._eline_amplitude_names) == cat.n_independent
 
@@ -395,8 +399,9 @@ class TestFittedMode:
         # Fine grid centred on Hα: 0.3 Å/pix → line well-sampled at R=2000
         wave = jnp.linspace(6500.0, 6630.0, 440)
         cat = LineCatalog.default_13()
-        cfg = Spectroscopy(wave_obs=wave, eline_mode="fitted", eline_catalog=cat,
-                           eline_fix_doublets=True)
+        cfg = Spectroscopy(
+            wave_obs=wave, eline_mode="fitted", eline_catalog=cat, eline_fix_doublets=True
+        )
 
         # Build G_eff to inject Hα into the mock spectrum
         G_full = build_eline_design_matrix(wave, cat.wavelengths, 2000.0, 0.0)

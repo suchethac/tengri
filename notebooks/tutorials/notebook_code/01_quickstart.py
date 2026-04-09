@@ -266,8 +266,8 @@ ax_fit.errorbar(
     alpha=0.4, zorder=1,
 )
 for s in spec_samples[:50]:
-    ax_fit.plot(wave_np, s, color=COLORS["geovi"], alpha=0.03, lw=0.5, zorder=2)
-ax_fit.plot(wave_np, spec_median, color=COLORS["geovi"], lw=1.5, label="native_geovi median", zorder=3)
+    ax_fit.plot(wave_np, s, color=COLORS["vi"], alpha=0.03, lw=0.5, zorder=2)
+ax_fit.plot(wave_np, spec_median, color=COLORS["vi"], lw=1.5, label="native_geovi median", zorder=3)
 ax_fit.plot(wave_np, true_np, color=COLORS["truth"], lw=1, ls="--", label="Truth", zorder=4)
 ax_fit.legend(fontsize=8)
 ax_fit.set_ylabel("Flux density")
@@ -292,7 +292,7 @@ plt.show()
 # --- FIGURE 3: SFH Recovery ---
 fig, ax = plt.subplots(figsize=(8, 4))
 plot_sfh(model_param, result_geovi_param, true_params=true_params_param, ax=ax,
-         color=COLORS["geovi"], label="vi", method="geoVI")
+         color=COLORS["vi"], label="vi", method="geoVI")
 ax.set_title("SFH Recovery — Parametric (D = 7)")
 # 200 Myr inset — truth + posterior SFH draws
 sfh_true_param = model_param.predict_sfh(true_params_param)
@@ -313,11 +313,11 @@ if hasattr(t_gyr_p, "__len__") and np.any(mask_200):
         sfh_arr = np.array(sfh_draws)
         lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
         median = np.median(sfh_arr, axis=0)
-        inset.fill_between(t_inset, lo, hi, color=COLORS["geovi"], alpha=0.3, lw=0)
-        inset.plot(t_inset, median, color=COLORS["geovi"], lw=1.2, label="Posterior")
+        inset.fill_between(t_inset, lo, hi, color=COLORS["vi"], alpha=0.3, lw=0)
+        inset.plot(t_inset, median, color=COLORS["vi"], lw=1.2, label="Posterior")
     else:
         sfh_fit = model_param.predict_sfh(result_geovi_param.params)
-        inset.plot(t_inset, np.array(sfh_fit[sfr_key_p])[mask_200], color=COLORS["geovi"], lw=1.2, ls="--", label="MAP")
+        inset.plot(t_inset, np.array(sfh_fit[sfr_key_p])[mask_200], color=COLORS["vi"], lw=1.2, ls="--", label="MAP")
     inset.plot(t_inset, sfr_true_p[mask_200], color=COLORS["truth"], lw=1.5, label="Truth")
     inset.set_xlabel("Lookback [Myr]", fontsize=6)
     inset.set_ylabel("SFR", fontsize=6)
@@ -379,7 +379,7 @@ for name in spec_param.free_params:
 fig = plot_corner_comparison(
     [result_geovi_param, result_nuts_param],
     labels=["vi", "NUTS"],
-    colors=[COLORS["geovi"], COLORS["nuts"]],
+    colors=[COLORS["vi"], COLORS["mcmc_nuts"]],
     truths=true_params_param,
 )
 if fig is not None:
@@ -552,7 +552,7 @@ print(f"  native_geovi: {t_geovi_s:.1f}s  ← runtime per galaxy")
 fig, ax = plt.subplots(figsize=(8, 4))
 plot_sfh(
     model_stoch, result_geovi_stoch, true_params=true_params_stoch,
-    ax=ax, color=COLORS["geovi"], label="vi", method="geoVI",
+    ax=ax, color=COLORS["vi"], label="vi", method="geoVI",
     show_mean_sfh=True,
 )
 ax.set_title(
@@ -577,11 +577,11 @@ if hasattr(t_gyr_s, "__len__") and np.any(mask_200):
         sfh_arr = np.array(sfh_draws)
         lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
         median = np.median(sfh_arr, axis=0)
-        inset.fill_between(t_inset, lo, hi, color=COLORS["geovi"], alpha=0.3, lw=0)
-        inset.plot(t_inset, median, color=COLORS["geovi"], lw=1.2, label="Posterior")
+        inset.fill_between(t_inset, lo, hi, color=COLORS["vi"], alpha=0.3, lw=0)
+        inset.plot(t_inset, median, color=COLORS["vi"], lw=1.2, label="Posterior")
     else:
         sfh_fit = model_stoch.predict_sfh(result_geovi_stoch.params)
-        inset.plot(t_inset, np.array(sfh_fit[sfr_key_s])[mask_200], color=COLORS["geovi"], lw=1.2, ls="--", label="MAP")
+        inset.plot(t_inset, np.array(sfh_fit[sfr_key_s])[mask_200], color=COLORS["vi"], lw=1.2, ls="--", label="MAP")
     inset.plot(t_inset, sfr_true_s[mask_200], color=COLORS["truth"], lw=1.5, label="Truth")
     inset.set_xlabel("Lookback [Myr]", fontsize=6)
     inset.set_ylabel("SFR", fontsize=6)
@@ -612,8 +612,8 @@ true_s = np.array(mock_stoch.flux_true)
 
 ax_fit.errorbar(wave_np, obs_s, yerr=noise_s, fmt=".", ms=2, color=COLORS["data"], alpha=0.4)
 for s in spec_samples_s[:50]:
-    ax_fit.plot(wave_np, s, color=COLORS["geovi"], alpha=0.03, lw=0.5)
-ax_fit.plot(wave_np, spec_median_s, color=COLORS["geovi"], lw=1.5, label="native_geovi median")
+    ax_fit.plot(wave_np, s, color=COLORS["vi"], alpha=0.03, lw=0.5)
+ax_fit.plot(wave_np, spec_median_s, color=COLORS["vi"], lw=1.5, label="native_geovi median")
 ax_fit.plot(wave_np, true_s, color=COLORS["truth"], lw=1, ls="--", label="Truth")
 ax_fit.legend(fontsize=8)
 ax_fit.set_ylabel("Flux density")
@@ -689,7 +689,7 @@ ax.plot(t_gyr_cmp, sfh_true_cmp["sfr_mean"], color=COLORS["truth"],
 
 # Overlay each method's posterior SFH as 68% CI band
 for result, color, label in [
-    (result_geovi_stoch, COLORS["geovi"], f"native_geovi ({t_geovi_s:.1f}s)"),
+    (result_geovi_stoch, COLORS["vi"], f"native_geovi ({t_geovi_s:.1f}s)"),
     (result_rt_stoch, COLORS["rt"], f"Ray Tracing ({t_rt_s:.1f}s)"),
 ]:
     if result.samples is not None:
@@ -717,7 +717,7 @@ mask_cmp = t_gyr_cmp < 0.2
 if np.any(mask_cmp):
     t_inset = t_gyr_cmp[mask_cmp] * 1e3
     for result, color, label in [
-        (result_geovi_stoch, COLORS["geovi"], "geoVI"),
+        (result_geovi_stoch, COLORS["vi"], "geoVI"),
         (result_rt_stoch, COLORS["rt"], "RT"),
     ]:
         if result.samples is not None:

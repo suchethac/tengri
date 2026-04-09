@@ -271,6 +271,72 @@ class TestAGNFusedVsExact:
             f"Fused: {phot_fused}, Exact: {phot_exact}"
         )
 
+    def test_fused_vs_exact_parametric_agn(self, synthetic_ssp, simple_filters):
+        """Fused kernel with FREE agn_log_lbol (_agn_parametric=True) is within
+        tolerance of exact path.
+
+        Regression test for the AGN unit bug: fused kernels were adding
+        agn_lnu [erg/s/Hz] directly to flux_total [Lsun], off by a factor
+        of LSUN_ERG_PER_S ≈ 3.828e33.  Before the fix, this test would fail
+        with a relative error of ~3.8e33 rather than the expected <50%.
+
+        The critical difference from test_fused_vs_exact_simple_agn is that
+        agn_log_lbol is a *free* Uniform parameter here.  That sets
+        _agn_parametric=True, which enables the `has_agn=True` branch inside
+        the fused kernel — the only path where the unit bug fired.
+        """
+        spec = ParamSpec(
+            mean_sfh_type="dpl",
+            sfh_dpl_alpha=Fixed(1.5),
+            sfh_dpl_beta=Fixed(1.0),
+            sfh_dpl_tau_gyr=Fixed(5.0),
+            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            met_logzsol=Fixed(-0.5),
+            dust_tau_bc=Fixed(0.3),
+            dust_tau_diff=Fixed(0.2),
+            dust_slope=Fixed(-0.7),
+            redshift=Fixed(0.1),
+            agn_model="simple",
+            agn_log_lbol=Uniform(8.0, 12.0),  # FREE → _agn_parametric=True
+            agn_alpha=Fixed(-1.0),
+            agn_T_torus=Fixed(1000.0),
+            agn_torus_frac=Fixed(0.5),
+        )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            model_fused = Model(spec, synthetic_ssp, filters=simple_filters, approx=True)
+            model_exact = Model(spec, synthetic_ssp, filters=simple_filters, approx=False)
+
+        assert model_fused._agn_parametric is True, (
+            "Expected _agn_parametric=True with free agn_log_lbol"
+        )
+
+        key = jax.random.PRNGKey(77)
+        params = spec.sample(key)
+        # Fix AGN luminosity to a concrete mid-range value so the AGN
+        # contribution is clearly visible above the stellar baseline.
+        params = {**params, "agn_log_lbol": 11.0}
+
+        phot_fused = model_fused.predict_photometry(params)
+        phot_exact = model_exact.predict_photometry(params)
+
+        assert jnp.all(jnp.isfinite(phot_fused)), f"Non-finite fused photometry: {phot_fused}"
+        assert jnp.all(jnp.isfinite(phot_exact)), f"Non-finite exact photometry: {phot_exact}"
+        assert jnp.all(phot_fused > 0), f"Non-positive fused photometry: {phot_fused}"
+        assert jnp.all(phot_exact > 0), f"Non-positive exact photometry: {phot_exact}"
+
+        # Before the fix: relative error ≈ 3.828e33 (unit mismatch).
+        # After the fix: relative error should be within the normal
+        # effective-wavelength approximation error (~50%).
+        rel_error = jnp.abs(phot_fused - phot_exact) / (phot_exact + 1e-30)
+        max_rel_error = float(jnp.max(rel_error))
+        assert max_rel_error < 0.5, (
+            f"Parametric AGN fused vs exact max relative error = {max_rel_error:.2%}. "
+            f"Fused: {phot_fused}, Exact: {phot_exact}. "
+            "If error >> 1 this likely indicates the agn_lnu / lsun unit fix was reverted."
+        )
+
 
 # ---------------------------------------------------------------------------
 # Tests: predict_sed parametric AGN

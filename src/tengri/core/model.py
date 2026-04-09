@@ -428,6 +428,7 @@ class SEDModel:
                 "dust_gamma_dl",
                 "dust_qpah",
                 "dust_eta_balance",
+                "dust_alpha_dl14",
             ]:
                 self._param_map[p] = (p, 1.0, 0.0)
 
@@ -478,6 +479,7 @@ class SEDModel:
             frac_is_free = agn_frac_dist is not None and not agn_frac_dist.is_fixed
             self._agn_parametric = lbol_is_free and not frac_is_free
             for p in [
+                # Core AGN params
                 "agn_frac",
                 "agn_log_lbol",
                 "agn_alpha",
@@ -486,18 +488,55 @@ class SEDModel:
                 "agn_torus_frac",
                 "agn_log_mbh",
                 "agn_log_ledd",
+                # SKIRTOR clumpy torus (were in _AGN_PARAMS but missing from loop)
+                "agn_tau_skirtor",
+                "agn_p_skirtor",
+                "agn_q_skirtor",
+                "agn_oa_skirtor",
+                # Inclination (was in _AGN_PARAMS but missing from loop)
+                "agn_cos_inc",
+                # BH spin + two-temperature torus (multicolor_agn, kubota_done_full)
+                "agn_a_spin",
+                "agn_T_hot",
+                "agn_T_warm",
+                "agn_frac_hot",
+                # Full K&D 3-zone disc (kubota_done_full only)
+                "agn_f_hard",
+                "agn_gamma_warm",
+                "agn_kt_warm",
+                "agn_gamma_hard",
+                "agn_kt_hot",
+                "agn_r_warm_ratio",
+                # Polar dust screen on AGN disc
+                "agn_polar_ebv",
+                "agn_polar_oa",
             ]:
                 self._param_map[p] = (p, 1.0, 0.0)
 
         # Radio and X-ray
         self._radio_enabled = getattr(spec, "radio", False)
         if self._radio_enabled:
-            for p in ["radio_q_ir", "radio_alpha_sf", "radio_loudness", "radio_alpha_agn"]:
+            for p in [
+                "radio_q_ir",
+                "radio_alpha_sf",
+                "radio_loudness",
+                "radio_alpha_agn",
+                "radio_T_e",
+                "radio_alpha_ff",
+            ]:
                 self._param_map[p] = (p, 1.0, 0.0)
+            self._radio_include_freefree = getattr(spec, "radio_include_freefree", True)
+            self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
 
         self._xray_enabled = getattr(spec, "xray", False)
         if self._xray_enabled:
-            for p in ["xray_gamma_agn", "xray_alpha_ox"]:
+            for p in [
+                "xray_gamma_agn",
+                "xray_alpha_ox",
+                "xray_gamma_hmxb",
+                "xray_gamma_lmxb",
+                "xray_E_cut",
+            ]:
                 self._param_map[p] = (p, 1.0, 0.0)
 
         # Build rest-frame wavelength grid (auto-extend for radio/X-ray)
@@ -515,7 +554,7 @@ class SEDModel:
         # Shock emission (MAPPINGS V)
         self._shock_enabled = getattr(spec, "shock", False)
         if self._shock_enabled:
-            for p in ["shock_frac", "shock_velocity", "shock_log_density"]:
+            for p in ["shock_frac", "shock_velocity", "shock_log_density", "shock_b_over_sqrt_n"]:
                 self._param_map[p] = (p, 1.0, 0.0)
 
         # Nebular emission backend + params
@@ -667,7 +706,7 @@ class SEDModel:
     def _t_universe_gyr(z):
         """Age of the universe at redshift z in Gyr.
 
-        Thin wrapper around age_at_z (which returns years).
+        Thin wrapper around age_at_z.
 
         Parameters
         ----------
@@ -679,7 +718,7 @@ class SEDModel:
         float
             Age of universe in Gyr.
         """
-        return age_at_z(z) / 1e9
+        return age_at_z(z)
 
     def _interp_metallicity(self, log_z):
         """Dispatch metallicity interpolation (single Z value)."""
@@ -1828,11 +1867,12 @@ class SEDModel:
 
         try:
             from dsps import calc_obs_mag
-            from dsps.cosmology import DEFAULT_COSMOLOGY
+
+            from tengri.utils.cosmology import DEFAULT_COSMO
 
             sed_lsun = self.predict_luminosity(params)
             z = self._get_redshift(params)
-            cosmo = DEFAULT_COSMOLOGY
+            cosmo = DEFAULT_COSMO
 
             mags = []
             for fw, ft in zip(self.filter_waves, self.filter_trans):

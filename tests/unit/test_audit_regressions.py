@@ -478,15 +478,20 @@ class TestBug04WarmComptonization:
             f"relative to UV than Gamma=2.0 (ratio={ratio_soft:.4f})"
         )
 
-    def test_kubota_done_disc_warns_without_templates(self):
-        """kubota_done_disc must warn when nthcomp templates are absent."""
+    def test_kubota_done_disc_warns_without_templates(self, monkeypatch):
+        """kubota_done_disc must warn when nthcomp templates are absent.
+
+        Uses monkeypatch to simulate absent templates regardless of whether
+        data/nthcomp_templates.h5 is present on this machine.
+        """
         import warnings as _warnings
 
-        from tengri.models.agn._nthcomp import _TABLE_AVAILABLE
+        import tengri.models.agn._nthcomp as _nthcomp_mod
+        import tengri.models.agn.disc as _disc_mod
         from tengri.models.agn.disc import kubota_done_disc
 
-        if _TABLE_AVAILABLE:
-            pytest.skip("nthcomp templates present — fallback warning not emitted")
+        monkeypatch.setattr(_nthcomp_mod, "_TABLE_AVAILABLE", False)
+        monkeypatch.setattr(_disc_mod, "_NTHCOMP_AVAILABLE", False)
 
         wavelength = jnp.linspace(1000.0, 50000.0, 100)
         with _warnings.catch_warnings(record=True) as w:

@@ -635,7 +635,7 @@ class CB19Backend:
         Returns
         -------
         array, shape (n_wave,)
-            Nebular emission SED in Lsun/Hz on the SSP wavelength grid.
+            Nebular emission SED in erg/s/Hz on the SSP wavelength grid.
         """
         line_wave, line_lum = self.predict_nebular_line_luminosities(
             ssp_weights,
@@ -657,7 +657,7 @@ class CB19Backend:
             for j in range(len(line_wave)):
                 lw = line_wave[j]
                 ll = line_lum[j]
-                sigma_nu = line_sigma_aa * _C_CGS / (lw * 1e-8) ** 2  # Hz
+                sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (lw * 1e-8) ** 2  # Hz
                 profile = jnp.exp(-0.5 * ((ssp_wave - lw) / line_sigma_aa) ** 2)
                 profile = profile / (jnp.sqrt(2 * jnp.pi) * sigma_nu)
                 neb_sed = neb_sed + ll * profile  # Lsun/Hz
@@ -669,7 +669,7 @@ class CB19Backend:
                 dnu = _C_CGS / (ssp_wave[idx] * 1e-8) ** 2 * dwave * 1e-8
                 neb_sed = neb_sed.at[idx].add(line_lum[j] / dnu)
 
-        return neb_sed
+        return neb_sed * _LSUN_ERG  # convert Lsun/Hz → erg/s/Hz, matching CloudyGridBackend
 
     def __repr__(self) -> str:
         return (

@@ -205,8 +205,9 @@ class CloudyGridBackend:
 
         # Compute Q_H for each (met, age) — vectorized
         self._qh_table = _compute_qh_grid(ssp_wave, ssp_flux)
-        self._qh_log_met = ssp_data.ssp_lgmet
-        self._qh_log_age = ssp_data.ssp_lg_age_gyr + 9.0  # log(age/yr)
+        # Store as JAX arrays so dynamic indexing works inside jax.grad/vmap
+        self._qh_log_met = jnp.asarray(ssp_data.ssp_lgmet)
+        self._qh_log_age = jnp.asarray(ssp_data.ssp_lg_age_gyr + 9.0)  # log(age/yr)
 
         # Precompute indices of young SSP age bins (only these produce
         # ionizing photons and contribute to nebular emission)
@@ -437,12 +438,12 @@ class CloudyGridBackend:
         # Add emission lines
         if line_sigma_aa > 0:
             # Gaussian profiles: spread L_line (Lsun) into L_nu (Lsun/Hz).
-            # sigma_nu = sigma_aa * c / lambda^2 converts the wavelength width to frequency.
+            # sigma_nu = sigma_aa[Å→cm] * c[cm/s] / lambda[cm]^2  (wavelength→frequency width).
             # profile / (sqrt(2π) * sigma_nu) normalises to ∫profile dnu = 1 (units: 1/Hz).
             for j in range(len(line_wave)):
                 lw = line_wave[j]
                 ll = line_lum[j]
-                sigma_nu = line_sigma_aa * _C_CGS / (lw * 1e-8) ** 2
+                sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (lw * 1e-8) ** 2
                 profile = jnp.exp(-0.5 * ((ssp_wave - lw) / line_sigma_aa) ** 2)
                 profile = profile / (jnp.sqrt(2 * jnp.pi) * sigma_nu)
                 neb_sed = neb_sed + ll * profile

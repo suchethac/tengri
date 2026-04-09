@@ -72,9 +72,9 @@ def make_panchromatic_grid(
         if wave_min < wave_max:
             n_decades = np.log10(wave_max) - np.log10(wave_min)
             n_pts = max(int(n_decades * n_per_decade), 2)
-            radio_wing = np.logspace(
-                np.log10(wave_min), np.log10(wave_max), n_pts, endpoint=True
-            )[1:]  # skip first point (== ssp_wave[-1])
+            radio_wing = np.logspace(np.log10(wave_min), np.log10(wave_max), n_pts, endpoint=True)[
+                1:
+            ]  # skip first point (== ssp_wave[-1])
             parts.append(radio_wing)
 
     grid = np.concatenate(parts)

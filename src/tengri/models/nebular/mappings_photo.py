@@ -621,7 +621,7 @@ class MappingsPhotoStellarBackend:
             for j in range(len(line_wave)):
                 lw = line_wave[j]
                 ll = line_lum[j]
-                sigma_nu = line_sigma_aa * _C_CGS / (lw * 1e-8) ** 2
+                sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (lw * 1e-8) ** 2
                 profile = jnp.exp(-0.5 * ((ssp_wave - lw) / line_sigma_aa) ** 2)
                 profile = profile / (jnp.sqrt(2 * jnp.pi) * sigma_nu)
                 neb_sed = neb_sed + ll * profile

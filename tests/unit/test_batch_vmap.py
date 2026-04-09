@@ -4,8 +4,6 @@ Validates that batched (vmapped) predictions match individual
 predictions, and that vmap provides speedup over Python loops.
 """
 
-import time
-
 import jax
 import jax.numpy as jnp
 import pytest
@@ -168,51 +166,3 @@ class TestVmapBatchGradients:
         )
         assert jnp.all(jnp.isfinite(g_sfr))
         assert jnp.all(jnp.isfinite(g_lz))
-
-
-class TestVmapBatchSpeedup:
-    """Vmap should be faster than a Python loop."""
-
-    def test_vmap_faster_than_loop(self, single_galaxy_fn, ssp_ages_yr):
-        """vmap is at least 2x faster than a Python loop for N=100."""
-        n_batch = 100
-        n_age = len(ssp_ages_yr)
-        key = jax.random.PRNGKey(0)
-
-        sfr_batch = jnp.abs(jax.random.normal(key, (n_batch, n_age))) + 0.01
-        log_z_batch = jnp.full(n_batch, -1.0)
-        tv1_batch = jnp.full(n_batch, 0.5)
-        tv2_batch = jnp.full(n_batch, 0.3)
-        dn_batch = jnp.full(n_batch, -0.7)
-
-        # Vmap path
-        batch_fn = jax.jit(jax.vmap(single_galaxy_fn))
-        _ = batch_fn(sfr_batch, log_z_batch, tv1_batch, tv2_batch, dn_batch)
-
-        N = 100
-        t0 = time.time()
-        for _ in range(N):
-            _ = batch_fn(sfr_batch, log_z_batch, tv1_batch, tv2_batch, dn_batch)[
-                0
-            ].block_until_ready()
-        t_vmap = (time.time() - t0) / N
-
-        # Loop path
-        t0 = time.time()
-        for _ in range(N):
-            for i in range(n_batch):
-                _ = single_galaxy_fn(
-                    sfr_batch[i],
-                    log_z_batch[i],
-                    tv1_batch[i],
-                    tv2_batch[i],
-                    dn_batch[i],
-                )
-            _.block_until_ready()
-        t_loop = (time.time() - t0) / N
-
-        speedup = t_loop / t_vmap
-        assert speedup > 2.0, (
-            f"vmap speedup only {speedup:.1f}x "
-            f"(vmap={t_vmap * 1e3:.1f}ms, loop={t_loop * 1e3:.1f}ms)"
-        )

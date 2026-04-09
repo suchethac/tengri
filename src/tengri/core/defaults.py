@@ -16,7 +16,7 @@ Usage
 
     # High-level API defaults (the [from_config] section)
     fc = get_from_config_defaults()
-    sfh_type = fc["sfh"]          # "dpl" unless overridden
+    sfh_type = fc["sfh"]  # "dpl" unless overridden
 
     # Full config tree
     raw = load_defaults()
@@ -41,6 +41,7 @@ else:
             tomllib = None  # type: ignore[assignment]
 
 # ── Sentinel ─────────────────────────────────────────────────────────────────
+
 
 class _UnsetType:
     """Singleton sentinel distinguishing 'not provided' from any real value."""
@@ -131,8 +132,7 @@ def load_defaults() -> dict[str, Any]:
     """
     if tomllib is None:
         raise ImportError(
-            "TOML parsing is unavailable.  Install tomli for Python < 3.11:\n"
-            "    pip install tomli"
+            "TOML parsing is unavailable.  Install tomli for Python < 3.11:\n    pip install tomli"
         )
 
     path = _active_path()

@@ -11,12 +11,14 @@ from tengri.models.nebular.shock import (
     shock_line_ratios,
 )
 
+
 # Number of lines in the active backend (HDF5 when present, else fallback)
 def _n_lines() -> int:
     grids = _load_mappings_grids()
     if grids is not None and "mappings5" in grids:
         return len(grids["mappings5"]["line_names"])
     return len(_FALLBACK_LINE_NAMES)
+
 
 # ---------------------------------------------------------------------------
 # shock_line_ratios — fallback path (no HDF5 file in test environment)

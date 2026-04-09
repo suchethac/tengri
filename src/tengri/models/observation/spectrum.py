@@ -18,6 +18,8 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.conversions import lnu_to_fnu
+
 # ---------------------------------------------------------------------------
 # SSP library spectral resolutions (velocity dispersion in km/s)
 # ---------------------------------------------------------------------------
@@ -334,7 +336,8 @@ def compute_spectrum(
     # Interpolate rest-frame SED
     sed_at_pixels = jnp.interp(wave_rest_query, wave_rest, sed_rest, left=0.0, right=0.0)
 
-    flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm**2)
+    # Scale using lnu_to_fnu conversion for consistency with cosmological flux formula
+    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
     return flux_scale * sed_at_pixels
 
 

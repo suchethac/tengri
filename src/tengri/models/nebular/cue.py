@@ -46,8 +46,11 @@ import numpy as np
 # ---------------------------------------------------------------------------
 # Physical constants
 # ---------------------------------------------------------------------------
-_C_CGS = 2.9979e10  # cm/s
-_LSUN_ERG = 3.839e33  # erg/s  (Cue convention, NOT IAU 2015)
+from tengri.utils.physics_constants import (
+    C_CGS as _C_CGS,
+    L_SUN_CUE as _LSUN_ERG,  # 3.839e33 — Cue training convention, NOT IAU 2015
+)
+
 _LOG_LSUN = jnp.log10(_LSUN_ERG)
 _LOG_4PI = jnp.log10(4.0 * jnp.pi)
 _LOG_C = jnp.log10(_C_CGS)
@@ -1115,7 +1118,7 @@ class CueBackend:
             for j in range(len(line_wav)):
                 lw = line_wav[j]
                 ll = line_lum[j]
-                sigma_nu = line_sigma_aa * _C_CGS / (lw * 1e-8) ** 2
+                sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (lw * 1e-8) ** 2
                 profile = jnp.exp(-0.5 * ((ssp_wave - lw) / line_sigma_aa) ** 2)
                 profile = profile / (jnp.sqrt(2.0 * jnp.pi) * sigma_nu)
                 neb_sed = neb_sed + ll * profile  # erg/s * 1/Hz = erg/s/Hz

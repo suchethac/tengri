@@ -8,6 +8,7 @@ from tengri.models.sfh.chemical_evolution import (
 from tengri.models.sfh.mean_sfh import (
     AGEMAX_YR,
     constant_sfh,
+    declining_exponential_sfh,
     delayed_exponential_sfh,
     delayed_tau,
     double_powerlaw,

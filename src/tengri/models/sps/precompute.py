@@ -35,6 +35,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.utils.conversions import lnu_to_fnu
+
 # numpy >= 2.0 uses trapezoid; older versions used trapz
 _np_trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
@@ -212,7 +214,7 @@ def precompute_photometry(
             ssp_phot_np[:, :, f_idx] = num / max(denom, 1e-30)
         ssp_phot = jnp.array(ssp_phot_np)
 
-    flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm**2)
+    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
 
     return PhotometricPrecomputation(
         ssp_phot=ssp_phot,
@@ -260,7 +262,7 @@ def precompute_spectroscopy(
     ssp_on_pixels_np = _vectorized_interp(wave_rest_np, wave_ssp_np, ssp_flux_np)
     ssp_on_pixels = jnp.array(ssp_on_pixels_np)
 
-    flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm**2)
+    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
 
     return SpectroscopicPrecomputation(
         ssp_on_pixels=ssp_on_pixels,

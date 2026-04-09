@@ -20,14 +20,21 @@ Parameters (latent xi + physical params)
     │       ▼
     │   Full SFR(t) = SFR_mean * exp(x - K(0)/2)
     │       │
-    ├─► SPS integral (dsps_wrapper.py)     → intrinsic SED L(lambda)
-    ├─► Dust attenuation (charlot_fall.py) → attenuated SED
+    ├─► SPS integral (dsps_wrapper.py)     → intrinsic SED [erg/s/Hz]
+    ├─► Dust attenuation (attenuation.py)  → attenuated SED [erg/s/Hz]
+    ├─► Nebular emission (nebular/)        → +nebular continuum + lines [erg/s/Hz]
+    ├─► AGN (agn/)                         → +AGN disc/torus/BLR/NLR [erg/s/Hz]
+    ├─► Radio (radio.py)                   → +synchrotron/free-free [erg/s/Hz]
+    ├─► X-ray (xray.py)                    → +XRB/corona [erg/s/Hz]
+    ├─► Dust emission (dust/emission.py)   → +IR emission [erg/s/Hz]
     │       │
     │       ▼
     └─► Observables
-        ├─► Photometry (photometry.py)     → flux per filter band
-        └─► Spectroscopy (spectroscopy.py) → flux per wavelength pixel
+        ├─► Photometry (photometry.py)     → flux per filter band [erg/s/cm²/Hz]
+        └─► Spectroscopy (spectroscopy.py) → flux per wavelength pixel [erg/s/cm²/Å]
 ```
+
+**All SED components return erg/s/Hz (CGS).** The CSP assembly multiplies SSP templates (Lsun/Hz/Msun) by `LSUN_ERG_PER_S` to produce erg/s/Hz. All multiwavelength components (AGN, radio, X-ray, nebular) were standardized to erg/s/Hz in the 2026-04-08 unit refactor.
 
 **All operations are pure JAX functions.** The entire pipeline is JIT-compilable, differentiable, and vmap-able.
 
@@ -35,15 +42,19 @@ Parameters (latent xi + physical params)
 
 | File | Purpose | When to read |
 |------|---------|--------------|
-| `src/tengri/model.py` | High-level Model class | Understanding the forward model |
+| `src/tengri/core/model.py` | High-level Model class | Understanding the forward model |
+| `src/tengri/core/fused_kernels.py` | JIT kernel factory — CSP + AGN + dust assembly | Core forward model |
+| `src/tengri/core/sed_pipeline.py` | SED computation engine (non-fused path) | Tracing SED assembly |
+| `src/tengri/core/parameters.py` | ParamSpec: parameter defs, validation | Parameter handling |
 | `src/tengri/models/sfh/gp_sfh.py` | GP generation from PSD | Core IFT machinery |
 | `src/tengri/models/sfh/psd_models.py` | PSD definitions (DRW, Matern) | Understanding the burstiness prior |
-| `src/tengri/models/sfh/mean_sfh.py` | Parametric mean SFH | The smooth secular envelope |
-| `src/tengri/models/dust/charlot_fall.py` | Dust attenuation | Dust modeling |
+| `src/tengri/models/dust/attenuation.py` | Two-component dust attenuation | Dust modeling (charlot_fall.py removed) |
 | `src/tengri/models/sps/dsps_wrapper.py` | DSPS CSP integral | SPS integration |
-| `src/tengri/utils/transforms.py` | Bounded/unbounded parameter maps | Parameter handling |
-| `src/tengri/utils/devices.py` | JAX hardware configuration | GPU/CPU setup |
-| `src/tengri/utils/optimizations.py` | Hartley transform, approx photometry | Performance |
+| `src/tengri/models/agn/disc.py` | AGN disc models (K&D 3-zone, powerlaw, multicolor) | AGN |
+| `src/tengri/models/agn/unified.py` | Unified AGN (disc + torus + BLR/NLR + polar dust) | AGN assembly |
+| `src/tengri/models/nebular/cue.py` | Cue NN nebular emulator | Nebular emission |
+| `src/tengri/models/radio.py` | Radio emission (synchrotron, free-free, AGN) | Radio |
+| `src/tengri/models/xray.py` | X-ray emission (XRB, AGN corona) | X-ray |
 | `tests/conftest.py` | Test fixtures, grid setup | Understanding test patterns |
 
 ## Parameter dictionary convention
@@ -197,7 +208,7 @@ All tests use `jax.config.update("jax_enable_x64", True)` for numerical precisio
 
 1. **Pure functions**: All model components are stateless pure JAX functions. No global state.
 2. **Immutability**: Never mutate arrays. Use `jnp.ndarray.at[].set()` for updates.
-3. **Units**: Times in **years** internally. Wavelengths in **Angstrom**. SFR in **Msun/yr**.
+3. **Units**: Times in **years** internally. Wavelengths in **Angstrom**. SFR in **Msun/yr**. SED luminosity (L_ν) in **erg/s/Hz** throughout — all component functions (AGN, radio, X-ray, nebular, CSP) return erg/s/Hz. The `agn_log_lbol` parameter is the one exception: it is log10(L_bol / L_sun) at the API boundary, with conversion to erg/s inside each function.
 4. **Grid**: 256-point uniform grid in log10(age/yr) from 6.0 to 10.14.
 5. **Naming**: `snake_case` everywhere. PSD params use `sigma_ps`, `tau_ps` (not sigma_PS).
 6. **Docstrings**: Numpydoc format with Parameters/Returns sections.
@@ -240,11 +251,26 @@ print(result)
 - Use the old `_build_nb*.py` / `_nb_helper.py` system (deleted)
 - Create new notebooks as `.ipynb` — always create as `.py` in percent format
 
-## What's NOT implemented yet
+## What IS implemented (current state as of 2026-04-08)
 
-- NIFTy.re inference wrapper (geoVI/MGVI)
-- BlackJAX NUTS wrapper with GPU-parallel chains
-- Nebular emission, dust emission, AGN components
-- Config-driven model building (YAML)
-- Population-level hierarchical model (shared PSD parameters)
-- Sphinx documentation website
+All major components are implemented and tested:
+
+- **SFH models**: double power law, tsnorm, continuity, dirichlet, GP field (IFT correlated field with DRW/Matern PSD)
+- **Stellar populations**: DSPS CSP integral, MILES/C3K SSP templates, alpha-enhancement
+- **Dust attenuation**: Charlot & Fall two-component (`two_component_dust`), Calzetti, Reddy, SMC/LMC (Pei 1992), Narayanan+2018 mass-dependent, WG00 geometries
+- **Dust emission**: Draine & Li 2007 (tabulated), Dale+2014 (tabulated), Casey 2012 MBB+power law
+- **Nebular emission**: BakedIn (H-line scaling), CLOUDY grid interpolation, Cue emulator (NN), MAPPINGS shock+precursor, Feltre+2016 (stub)
+- **AGN**: K&D 3-zone disc (powerlaw, multicolor, kubota_done_3zone, ADAF), SKIRTOR torus (skirtor2016_torus, skirtor_analytic), BLR/NLR (unified_nlr_blr with polar dust), QSOgen, nthcomp warm Comptonization (HDF5 templates)
+- **Radio**: synchrotron + free-free + AGN compact (Condon+92, Krolik & Chen+91)
+- **X-ray**: XRB (HMXB+LMXB), AGN corona (α_ox, nthcomp power law)
+- **Observation layer**: photometry (broadband, precomputed), spectroscopy (wavelength grid, emission line fitting/marginalization), calibration polynomial marginalization
+- **Inference**: MAP (Adam/AdamW/SGD), Ray Tracing, NUTS, geoVI, MGVI, ESS, NSS, Laplace, Pathfinder, vi_native, vi_native_linear — 13 canonical methods
+- **Hierarchical**: HierarchicalFitter with NIFTy CorrelatedFieldMaker (shared PSD)
+- **Docs**: Sphinx + Furo site with Sphinx Gallery examples, GitHub Pages
+
+## What is NOT yet implemented
+
+- `eline_mode="fitted"` full posterior — line amplitudes as free params works for MAP/VI but broad component model still has rough edges
+- Feltre+2016 NLR backend (`NotImplementedError` stub in `nlr.py`)
+- GPU benchmarks (all timing numbers are CPU)
+- ADAF model equations verified against Mahadevan (1997) — flagged for rewrite

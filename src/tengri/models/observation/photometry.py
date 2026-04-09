@@ -9,6 +9,9 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.conversions import lnu_to_fnu
+from tengri.utils.magnitudes import fnu_to_ab_mag
+
 
 class FilterCurve(NamedTuple):
     """A photometric filter transmission curve.
@@ -72,8 +75,8 @@ def compute_flux_density(
     numerator = jnp.trapezoid(sed_on_filter * filter_trans * filter_wave, filter_wave)
     denominator = jnp.trapezoid(filter_trans * filter_wave, filter_wave)
 
-    # Scale: (1+z) / (4 pi dL^2) for flux density
-    flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm**2)
+    # Scale: (1+z) / (4 pi dL^2) for flux density using lnu_to_fnu conversion
+    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
 
     return flux_scale * numerator / jnp.maximum(denominator, 1e-30)
 
@@ -110,5 +113,9 @@ def compute_photometry(
 
 @jax.jit
 def ab_mag_from_flux(flux_cgs: jnp.ndarray) -> jnp.ndarray:
-    """Convert flux density (erg/s/cm^2/Hz) to AB magnitude."""
-    return -2.5 * jnp.log10(jnp.maximum(flux_cgs, 1e-50)) - 48.6
+    """Convert flux density (erg/s/cm^2/Hz) to AB magnitude.
+
+    This is a backward-compatibility wrapper that delegates to
+    :func:`tengri.utils.magnitudes.fnu_to_ab_mag`.
+    """
+    return fnu_to_ab_mag(flux_cgs)

@@ -67,7 +67,7 @@ from tengri import Fitter, Model, ParamSpec, Uniform
 from tengri.core.fused_kernels import (
     observe_spectrum_from_rest_sed,
 )
-from tengri.models.observation.spectroscopy import compute_spectrum
+from tengri.models.observation.spectrum import compute_spectrum
 from tengri.utils.cosmology import luminosity_distance
 
 setup_matplotlib()

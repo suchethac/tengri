@@ -535,6 +535,7 @@ def fit_model(
 
     if method is None:
         from tengri.core.exceptions import ParameterError
+
         raise ParameterError(
             "method=None is not allowed. Pass an explicit method string "
             "(e.g. 'vi_nifty', 'mcmc_nuts', 'auto') or omit the argument to use "

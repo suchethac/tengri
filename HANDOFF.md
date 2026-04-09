@@ -1,6 +1,6 @@
 # tengri Development Handoff
 
-**Last updated:** 2026-04-01 (session 4)
+**Last updated:** 2026-04-08 (session 5)
 **Repo:** `~/Projects/tengri/`
 **Paper draft:** `~/writing-workspace/projects/differentiable_psd_sed_fitting/`
 
@@ -28,12 +28,16 @@ jupyter lab notebooks/              # 14 demonstration notebooks, 5 tutorial not
 **Key dependencies:** JAX ≥0.4.20, DSPS ≥0.3, NIFTy8.re ≥8.5, BlackJAX ≥1.3, optax ≥0.2, h5py, matplotlib, scipy
 
 **What's done:**
-- Complete code with 12+ inference methods (MAP, Ray Tracing, NUTS, geoVI/MGVI, NSS, Laplace, Pathfinder, Elliptical Slice, native variants), 1615 tests passing
-- 14 demonstration notebooks + 5 tutorial notebooks, all executing; Sphinx Gallery docs site
-- Paper I draft complete (20 pages, compiles), all sections written
-- All 8 paper figures generated from analysis scripts and wired into LaTeX
+- Complete code with 13 canonical inference methods (MAP, Ray Tracing, NUTS, geoVI/MGVI, NSS, Laplace, Pathfinder, Elliptical Slice, native variants), 2211 tests passing
+- Full multiwavelength SED: AGN (K&D 3-zone disc, SKIRTOR torus, BLR/NLR, nthcomp warm Compton), radio, X-ray (XRB+corona), nebular (BakedIn/CLOUDY/Cue/MAPPINGS), dust emission (DL07, Dale+2014, Casey 2012), WG00 dust geometries
+- **CGS unit standardization (2026-04-08)**: all SED component functions now return erg/s/Hz throughout; previous Lsun/Hz returns in AGN/radio/X-ray/nebular modules were corrected; `agn_log_lbol` API boundary convention documented
+- 14 demonstration notebooks + 5 tutorial notebooks (jupytext percent-format), Sphinx Gallery docs site (Sphinx+Furo, GitHub Pages)
+- Comprehensive filter registry (SDSS, HSC, CFHT, DES, Euclid, JWST, Spitzer, Herschel, AKARI, 2MASS, GALEX, WISE, and more)
+- nthcomp warm Comptonization HDF5 templates (build once via RELAGN, ~14 MB)
+- Paper I draft complete (20 pages, compiles), all sections written; all 8 paper figures generated and wired into LaTeX
 - Hierarchical PSD inference via NIFTy CorrelatedFieldMaker implemented
 - Notebook/docs refactor complete (Phases 1–8): jupytext sync, Sphinx Gallery, restructured docs
+- 39-bug audit complete (27/39 fixed from original audit; all 23 emission-line-branch issues fixed)
 
 **What the paper needs before submission:**
 1. **Production figure runs** — fig04 currently uses 10 mocks per regime (re-running; 50-100 ideal for final). fig05/06 updated.
@@ -44,7 +48,7 @@ jupyter lab notebooks/              # 14 demonstration notebooks, 5 tutorial not
 
 ---
 
-**Status:** 1615 tests pass. 14 demo + 5 tutorial notebooks execute. 12+ inference methods. Hierarchical PSD via NIFTy CFM. Paper draft complete (20 pages). All 8 paper figures generated and wired into LaTeX. Sphinx docs site with Sphinx Gallery complete.
+**Status:** 2211 tests pass. 14 demo + 5 tutorial notebooks execute. 13 canonical inference methods. Full multiwavelength SED (AGN/radio/X-ray/nebular/dust emission). All components return erg/s/Hz (CGS). Hierarchical PSD via NIFTy CFM. Paper draft complete (20 pages). All 8 paper figures generated and wired into LaTeX. Sphinx docs site with Sphinx Gallery complete.
 
 ---
 
@@ -201,6 +205,7 @@ analysis/
 ### Critical (for paper submission)
 - [x] **Hierarchical geoVI with CorrelatedFieldMaker**: DONE — `hfitter.run("geovi")` uses NIFTy CFM natively
 - [x] **Wire notebook figures into LaTeX**: DONE — Figs 2-3 already have `\includegraphics` in `2-methods.tex` (confirmed)
+- [x] **CGS unit standardization**: DONE (2026-04-08) — all SED components return erg/s/Hz; `agn_log_lbol` convention documented
 - [ ] **Production figure runs**: fig04 running at 10 mocks/regime (50-mock run OOM at mock 25 — all 400 posteriors held in RAM). For 50 mocks, run one regime at a time or add checkpointing.
 - [x] **Fig 1 schematic**: ✅ Done — `analysis/fig01_framework_schematic.py`, saved to `analysis/figures/fig01_overview.pdf`
 - [x] **Tune hierarchical recovery**: ✅ Improved — fig06 raytrace with step_size=0.01 now shows real N-convergence. NOTE: `"geovi"` (CFM) returns `psd_fluctuations`/`psd_loglogavgslope`/`psd_sigma_eff` — NOT `psd_sigma`/`psd_tau_myr`. Display code is incompatible with CFM output. Use `"raytrace"` or `"geovi_flat"` for fig06.
@@ -229,6 +234,7 @@ analysis/
 8. **Sigmoid transform** — k=1.0, x0=0 so sampler can reach prior edges
 9. **Metallicity offset** — log10(Zsun)=-1.848 in PARAM_MAP for DSPS grid compatibility
 10. **Photometry precomputation** — Zacharegkas+2025, 21.6× gradient speedup
+11. **CGS throughout** — all SED component returns are erg/s/Hz. `agn_log_lbol` is the one API boundary in log10(Lsun) (galaxy-scale numbers); every function internally converts to erg/s for physics and returns erg/s/Hz
 
 ---
 
@@ -269,7 +275,7 @@ optax>=0.2       (MAP)
 ```bash
 cd ~/Projects/tengri
 source .venv/bin/activate
-pytest tests/ -q                    # should show 1615 passed
+pytest tests/ -q                    # should show 2211 passed (1 flaky timing test may fail)
 python -c "from tengri import Model, ParamSpec, Uniform, Fitter, Posterior, HierarchicalFitter, sample_raytrace"
 
 # Generate paper figures

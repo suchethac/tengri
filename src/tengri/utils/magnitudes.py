@@ -1,0 +1,515 @@
+"""Pure JAX magnitude system utilities (AB, Vega, absolute, apparent, surface brightness).
+
+Provides JIT-compatible functions for common magnitude conversions in observational
+astronomy. All functions are pure, immutable, and GPU-compatible.
+
+Conventions
+-----------
+- Magnitude system: AB (Oke & Gunn 1983) by default
+- Flux unit: erg s⁻¹ cm⁻² Hz⁻¹ (CGS)
+- Luminosity unit: erg s⁻¹ Hz⁻¹ (CGS)
+- Distance: cm (CGS) unless otherwise specified
+- Wavelength: Ångström
+
+References
+----------
+Oke & Gunn 1983, ApJ, 266, 713 — AB magnitude zeropoint
+Blanton & Roweis 2007 — Vega offsets (Table 3, 5)
+"""
+
+from __future__ import annotations
+
+import jax
+import jax.numpy as jnp
+
+from tengri.utils.physics_constants import (
+    MAGGIES_ZP_CGS,
+    MPC_CM,
+    TEN_PC_CM,
+)
+
+__all__ = [
+    "AB_VEGA_OFFSETS",
+    "ab_mag_to_fnu",
+    "ab_to_vega",
+    "absolute_ab_mag_to_lnu",
+    "absolute_to_apparent",
+    "apparent_to_absolute",
+    "cosmological_dimming",
+    "distance_modulus_from_dl",
+    "distance_modulus_from_dl_mpc",
+    "fnu_to_ab_mag",
+    "lnu_to_absolute_ab_mag",
+    "mag_to_surface_brightness",
+    "surface_brightness_to_mag",
+    "vega_to_ab",
+]
+
+
+# ---------------------------------------------------------------------------
+# AB Magnitude System
+# ---------------------------------------------------------------------------
+
+
+@jax.jit
+def fnu_to_ab_mag(fnu_cgs: jnp.ndarray) -> jnp.ndarray:
+    r"""Convert flux density to AB magnitude.
+
+    Computes the AB magnitude from a flux density using the relation:
+
+    .. math::
+
+        m_{\mathrm{AB}} = -2.5 \log_{10}(f_\nu / f_0)
+
+    where f_ν is in erg s⁻¹ cm⁻² Hz⁻¹ and f_0 = 3.631e-20 erg s⁻¹ cm⁻² Hz⁻¹
+    is the AB zeropoint flux.
+
+    The AB system is defined so that m_AB = 0 corresponds to f_ν = 3631 Jy.
+
+    Parameters
+    ----------
+    fnu_cgs : jnp.ndarray
+        Flux density in erg s⁻¹ cm⁻² Hz⁻¹. Shape: arbitrary.
+
+    Returns
+    -------
+    jnp.ndarray
+        AB magnitude. Same shape as input. For fnu → 0, result → ∞.
+
+    Notes
+    -----
+    Uses `jnp.maximum(fnu_cgs, 1e-300)` to guard the logarithm against
+    negative or zero values (which would produce NaN or -inf).
+
+    References
+    ----------
+    Oke & Gunn 1983, ApJ, 266, 713 — definition of AB system
+    """
+    fnu_safe = jnp.maximum(fnu_cgs, 1e-300)
+    return -2.5 * jnp.log10(fnu_safe / MAGGIES_ZP_CGS)
+
+
+@jax.jit
+def ab_mag_to_fnu(mag_ab: jnp.ndarray) -> jnp.ndarray:
+    r"""Convert AB magnitude to flux density.
+
+    Inverts :func:`fnu_to_ab_mag`:
+
+    .. math::
+
+        f_\nu = f_0 \times 10^{-0.4 m_{\mathrm{AB}}}
+
+    where f_0 = 3.631e-20 erg s⁻¹ cm⁻² Hz⁻¹ is the AB zeropoint flux.
+
+    Parameters
+    ----------
+    mag_ab : jnp.ndarray
+        AB magnitude. Shape: arbitrary.
+
+    Returns
+    -------
+    jnp.ndarray
+        Flux density in erg s⁻¹ cm⁻² Hz⁻¹. Same shape as input.
+
+    Examples
+    --------
+    A zero-magnitude AB source:
+
+    >>> fnu = ab_mag_to_fnu(jnp.array(0.0))
+    >>> jnp.allclose(fnu, 3.631e-20)
+    True
+
+    References
+    ----------
+    Oke & Gunn 1983, ApJ, 266, 713
+    """
+    return MAGGIES_ZP_CGS * 10.0 ** (-0.4 * mag_ab)
+
+
+@jax.jit
+def lnu_to_absolute_ab_mag(lnu: jnp.ndarray) -> jnp.ndarray:
+    r"""Convert monochromatic luminosity to absolute AB magnitude.
+
+    Computes the absolute magnitude at 10 pc by calculating the flux density
+    at that distance and converting to AB magnitude.
+
+    .. math::
+
+        m_{\mathrm{AB}}(10 \text{ pc}) = -2.5 \log_{10}
+        \left( \frac{L_\nu}{4\pi (10 \text{ pc})^2} \right) - 48.6
+
+    Parameters
+    ----------
+    lnu : jnp.ndarray
+        Monochromatic luminosity in erg s⁻¹ Hz⁻¹. Shape: arbitrary.
+
+    Returns
+    -------
+    jnp.ndarray
+        Absolute AB magnitude. Same shape as input.
+
+    Notes
+    -----
+    The distance 10 pc is defined in `tengri.utils.physics_constants.TEN_PC_CM`.
+
+    References
+    ----------
+    Oke & Gunn 1983, ApJ, 266, 713
+    """
+    # f_ν = L_ν / (4π d²)
+    distance_factor = 4.0 * jnp.pi * TEN_PC_CM**2
+    fnu_at_10pc = lnu / distance_factor
+    return fnu_to_ab_mag(fnu_at_10pc)
+
+
+@jax.jit
+def absolute_ab_mag_to_lnu(mag_abs: jnp.ndarray) -> jnp.ndarray:
+    r"""Convert absolute AB magnitude to monochromatic luminosity.
+
+    Inverts :func:`lnu_to_absolute_ab_mag`.
+
+    Parameters
+    ----------
+    mag_abs : jnp.ndarray
+        Absolute AB magnitude. Shape: arbitrary.
+
+    Returns
+    -------
+    jnp.ndarray
+        Monochromatic luminosity in erg s⁻¹ Hz⁻¹. Same shape as input.
+
+    Notes
+    -----
+    The distance 10 pc is defined in `tengri.utils.physics_constants.TEN_PC_CM`.
+
+    References
+    ----------
+    Oke & Gunn 1983, ApJ, 266, 713
+    """
+    # f_ν = 10^(-0.4(M + 48.6))
+    fnu_at_10pc = ab_mag_to_fnu(mag_abs)
+    # L_ν = f_ν × 4π d²
+    distance_factor = 4.0 * jnp.pi * TEN_PC_CM**2
+    return fnu_at_10pc * distance_factor
+
+
+# ---------------------------------------------------------------------------
+# Apparent ↔ Absolute Magnitude
+# ---------------------------------------------------------------------------
+
+
+@jax.jit
+def apparent_to_absolute(m_app: jnp.ndarray, dist_modulus: jnp.ndarray) -> jnp.ndarray:
+    r"""Convert apparent to absolute magnitude via distance modulus.
+
+    .. math::
+
+        M = m - \mu
+
+    Parameters
+    ----------
+    m_app : jnp.ndarray
+        Apparent magnitude. Shape: arbitrary.
+    dist_modulus : jnp.ndarray
+        Distance modulus μ. Same shape as m_app, or broadcastable.
+
+    Returns
+    -------
+    jnp.ndarray
+        Absolute magnitude. Shape: broadcast of m_app and dist_modulus.
+
+    Notes
+    -----
+    The distance modulus encodes both luminosity distance and any
+    cosmological dimming effects.
+    """
+    return m_app - dist_modulus
+
+
+@jax.jit
+def absolute_to_apparent(m_abs: jnp.ndarray, dist_modulus: jnp.ndarray) -> jnp.ndarray:
+    r"""Convert absolute to apparent magnitude via distance modulus.
+
+    .. math::
+
+        m = M + \mu
+
+    Parameters
+    ----------
+    m_abs : jnp.ndarray
+        Absolute magnitude. Shape: arbitrary.
+    dist_modulus : jnp.ndarray
+        Distance modulus μ. Same shape as m_abs, or broadcastable.
+
+    Returns
+    -------
+    jnp.ndarray
+        Apparent magnitude. Shape: broadcast of m_abs and dist_modulus.
+    """
+    return m_abs + dist_modulus
+
+
+@jax.jit
+def distance_modulus_from_dl(dl_cm: jnp.ndarray) -> jnp.ndarray:
+    r"""Compute distance modulus from luminosity distance.
+
+    .. math::
+
+        \mu = 5 \log_{10}(d_L / 10 \text{ pc})
+
+    Parameters
+    ----------
+    dl_cm : jnp.ndarray
+        Luminosity distance in cm. Shape: arbitrary.
+
+    Returns
+    -------
+    jnp.ndarray
+        Distance modulus in magnitudes. Same shape as input.
+
+    Notes
+    -----
+    In a Euclidean geometry (z → 0), μ = 5 log10(d/10 pc).
+    At nonzero redshift, d_L is the cosmological luminosity distance
+    (as provided by DSPS or similar).
+
+    The reference distance 10 pc is defined in
+    `tengri.utils.physics_constants.TEN_PC_CM`.
+
+    For distance → 0, returns -∞ (as expected mathematically).
+    """
+    # Don't guard against zero; let it naturally produce -inf at zero distance
+    return 5.0 * jnp.log10(dl_cm / TEN_PC_CM)
+
+
+@jax.jit
+def distance_modulus_from_dl_mpc(dl_mpc: jnp.ndarray) -> jnp.ndarray:
+    r"""Compute distance modulus from luminosity distance in Mpc.
+
+    Convenience wrapper that converts input from Mpc to cm, then calls
+    :func:`distance_modulus_from_dl`.
+
+    Parameters
+    ----------
+    dl_mpc : jnp.ndarray
+        Luminosity distance in Mpc. Shape: arbitrary.
+
+    Returns
+    -------
+    jnp.ndarray
+        Distance modulus in magnitudes. Same shape as input.
+
+    Notes
+    -----
+    DSPS and most cosmological codes return distances in Mpc.
+    The conversion factor (1 Mpc = 3.0856...e24 cm) is defined in
+    `tengri.utils.physics_constants.MPC_CM`.
+    """
+    dl_cm = dl_mpc * MPC_CM
+    return distance_modulus_from_dl(dl_cm)
+
+
+# ---------------------------------------------------------------------------
+# Cosmological Dimming
+# ---------------------------------------------------------------------------
+
+
+@jax.jit
+def cosmological_dimming(dist_modulus: jnp.ndarray, redshift: jnp.ndarray) -> jnp.ndarray:
+    r"""Account for cosmological dimming (bandwidth compression) in high-z observations.
+
+    The observed-frame magnitude of a high-redshift source differs from the
+    rest-frame absolute magnitude by both the luminosity distance (in dist_modulus)
+    and the (1+z) dimming factor:
+
+    .. math::
+
+        m_{\mathrm{obs}} = M_{\mathrm{rest}} + \mu - 2.5 \log_{10}(1 + z)
+
+    This function computes the effective distance modulus after accounting for
+    bandwidth compression.
+
+    Parameters
+    ----------
+    dist_modulus : jnp.ndarray
+        Distance modulus μ. Shape: arbitrary.
+    redshift : jnp.ndarray
+        Redshift z. Same shape as dist_modulus, or broadcastable.
+
+    Returns
+    -------
+    jnp.ndarray
+        Effective distance modulus including (1+z) dimming. Shape: broadcast.
+
+    Notes
+    -----
+    This is the DSPS convention for K-correction. See Hogg et al. 1998,
+    ApJ, 504, 788 for discussion of the (1+z) factor.
+
+    The (1+z) term accounts for the fact that the observed filter integrates
+    over frequencies (not wavelengths), and observed frequencies are redshifted
+    by (1+z) compared to rest-frame frequencies.
+    """
+    dimming = 2.5 * jnp.log10(1.0 + redshift)
+    return dist_modulus - dimming
+
+
+# ---------------------------------------------------------------------------
+# Vega Magnitude System
+# ---------------------------------------------------------------------------
+
+AB_VEGA_OFFSETS: dict[str, float] = {
+    "U": 0.79,
+    "B": -0.09,
+    "V": 0.02,
+    "R": 0.21,
+    "I": 0.45,
+    "J": 0.91,
+    "H": 1.39,
+    "K": 1.85,
+    "u": 0.91,
+    "g": -0.08,
+    "r": 0.16,
+    "i": 0.37,
+    "z": 0.54,
+}
+"""Vega-to-AB magnitude offsets for common filters.
+
+These are the zero-magnitude offsets: mag_Vega = mag_AB - offset.
+
+Sources
+-------
+Blanton & Roweis 2007, AJ, 133, 734 — Table 3, 5 (SDSS and Johnson/Bessel).
+"""
+
+
+@jax.jit
+def ab_to_vega(mag_ab: jnp.ndarray, ab_vega_offset: float) -> jnp.ndarray:
+    r"""Convert AB magnitude to Vega magnitude.
+
+    .. math::
+
+        m_{\mathrm{Vega}} = m_{\mathrm{AB}} - \text{offset}
+
+    Parameters
+    ----------
+    mag_ab : jnp.ndarray
+        AB magnitude. Shape: arbitrary.
+    ab_vega_offset : float
+        Zero-magnitude offset for this band (from `AB_VEGA_OFFSETS` dict).
+
+    Returns
+    -------
+    jnp.ndarray
+        Vega magnitude. Same shape as input.
+
+    Examples
+    --------
+    Convert a V-band AB magnitude to Vega:
+
+    >>> mag_ab = jnp.array(20.0)
+    >>> mag_vega = ab_to_vega(mag_ab, AB_VEGA_OFFSETS["V"])
+    >>> mag_vega
+    Array(19.98, dtype=float32)
+
+    References
+    ----------
+    Blanton & Roweis 2007, AJ, 133, 734
+    """
+    return mag_ab - ab_vega_offset
+
+
+@jax.jit
+def vega_to_ab(mag_vega: jnp.ndarray, ab_vega_offset: float) -> jnp.ndarray:
+    r"""Convert Vega magnitude to AB magnitude.
+
+    .. math::
+
+        m_{\mathrm{AB}} = m_{\mathrm{Vega}} + \text{offset}
+
+    Parameters
+    ----------
+    mag_vega : jnp.ndarray
+        Vega magnitude. Shape: arbitrary.
+    ab_vega_offset : float
+        Zero-magnitude offset for this band (from `AB_VEGA_OFFSETS` dict).
+
+    Returns
+    -------
+    jnp.ndarray
+        AB magnitude. Same shape as input.
+
+    References
+    ----------
+    Blanton & Roweis 2007, AJ, 133, 734
+    """
+    return mag_vega + ab_vega_offset
+
+
+# ---------------------------------------------------------------------------
+# Surface Brightness
+# ---------------------------------------------------------------------------
+
+
+@jax.jit
+def mag_to_surface_brightness(mag: jnp.ndarray, area_arcsec2: jnp.ndarray) -> jnp.ndarray:
+    r"""Convert total magnitude to surface brightness.
+
+    Surface brightness (magnitude per unit area) is derived from the total
+    magnitude by diluting the flux over the object's area:
+
+    .. math::
+
+        \mu = m + 2.5 \log_{10}(A)
+
+    where A is the area in arcsec².
+
+    Parameters
+    ----------
+    mag : jnp.ndarray
+        Total magnitude. Shape: arbitrary.
+    area_arcsec2 : jnp.ndarray
+        Area in arcsec². Same shape as mag, or broadcastable.
+
+    Returns
+    -------
+    jnp.ndarray
+        Surface brightness in mag/arcsec². Shape: broadcast.
+
+    Notes
+    -----
+    A 1 arcsec² source has μ = mag (no dilution).
+    A larger source (e.g., 10 arcsec²) is dimmer per arcsec².
+
+    References
+    ----------
+    Binney & Merrifield 1998, Galactic Astronomy (Section 2.1)
+    """
+    area_safe = jnp.maximum(area_arcsec2, 1e-300)
+    return mag + 2.5 * jnp.log10(area_safe)
+
+
+@jax.jit
+def surface_brightness_to_mag(mu: jnp.ndarray, area_arcsec2: jnp.ndarray) -> jnp.ndarray:
+    r"""Convert surface brightness to total magnitude.
+
+    Inverts :func:`mag_to_surface_brightness`.
+
+    Parameters
+    ----------
+    mu : jnp.ndarray
+        Surface brightness in mag/arcsec². Shape: arbitrary.
+    area_arcsec2 : jnp.ndarray
+        Area in arcsec². Same shape as mu, or broadcastable.
+
+    Returns
+    -------
+    jnp.ndarray
+        Total magnitude. Shape: broadcast.
+
+    References
+    ----------
+    Binney & Merrifield 1998, Galactic Astronomy (Section 2.1)
+    """
+    area_safe = jnp.maximum(area_arcsec2, 1e-300)
+    return mu - 2.5 * jnp.log10(area_safe)

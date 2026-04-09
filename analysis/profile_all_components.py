@@ -534,7 +534,7 @@ print(format_row("Photometry (1 filter)", t_1f))
 
 # --- Spectroscopy ---
 print()
-from tengri.models.observation.spectroscopy import (
+from tengri.models.observation.spectrum import (
     blend_emission_lines,
     compute_spectrum,
     velocity_broaden,

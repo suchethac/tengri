@@ -32,7 +32,7 @@ from tengri.models.nebular._constants import _C_AA, _H_PLANCK
 _np_trapz = getattr(np, "trapezoid", np.trapz)
 
 # Physical constants
-_LSUN = 3.828e33  # erg/s
+from tengri.utils.physics_constants import L_SUN as _LSUN
 
 # Ionization edges (Angstrom) — from cue/constants.py
 HEII_EDGE = 1e8 / 438908.8789  # 227.84 A

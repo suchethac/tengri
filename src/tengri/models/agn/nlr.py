@@ -25,11 +25,11 @@ import jax.numpy as jnp
 # ===================================================================
 # Physical constants
 # ===================================================================
-
-_C_LIGHT_KMS = 2.99792458e5  # Speed of light [km/s]
-_LSUN_ERG = 3.828e33  # Solar luminosity [erg s^-1]
-_C_LIGHT = 2.99792458e10  # Speed of light [cm s^-1]
-_ANGSTROM_CM = 1e-8  # Angstrom -> cm
+from tengri.utils.physics_constants import (
+    AA_TO_CM as _ANGSTROM_CM,
+    C_CGS as _C_LIGHT,
+    C_KM_S as _C_LIGHT_KMS,
+)
 
 # ===================================================================
 # NLR emission-line template

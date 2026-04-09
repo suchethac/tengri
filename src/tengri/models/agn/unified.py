@@ -680,7 +680,7 @@ def adaf_agn(
 # Geometric masking (smooth sigmoid for differentiability)
 # ===================================================================
 
-_LSUN_ERG = 3.828e33  # Solar luminosity [erg s^-1]
+from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 
 def _sigmoid_mask(

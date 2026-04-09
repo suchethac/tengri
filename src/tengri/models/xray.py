@@ -25,12 +25,11 @@ References
 
 import jax.numpy as jnp
 
-# Physical constants
-_C_AA = 2.99792458e18  # Angstrom/s
-_H_PLANCK = 6.62607015e-27  # erg s
-_K_BOLTZ = 1.380649e-16  # erg/K
-_KEV_TO_HZ = 2.418e17  # 1 keV = 2.418e17 Hz
-_LSUN = 3.828e33  # erg/s
+from tengri.utils.physics_constants import (
+    C_AA as _C_AA,
+    H_PLANCK as _H_PLANCK,
+    KEV_TO_HZ as _KEV_TO_HZ,
+)
 
 
 def xray_xrb(
@@ -311,7 +310,7 @@ def xray_total(
     stellar_mass : float
         Stellar mass (Msun).
     L_agn_bol : float
-        AGN bolometric luminosity (Lsun). 0 = no AGN X-ray.
+        AGN bolometric luminosity (erg/s). 0 = no AGN X-ray.
     """
     xrb = xray_xrb(wavelength, sfr, stellar_mass, gamma_hmxb, gamma_lmxb, E_cut)
     agn = xray_agn_corona(wavelength, L_agn_bol, gamma_agn, E_cut, alpha_ox)

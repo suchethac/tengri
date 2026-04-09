@@ -468,6 +468,18 @@ _RADIO_PARAMS = {
         "must be >= 0",
         Fixed(0.7),
     ),
+    "radio_T_e": (
+        "Electron temperature [K] for thermal free-free emission (typical 1e4)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(1e4),
+    ),
+    "radio_alpha_ff": (
+        "Thermal free-free spectral index (typical -0.1)",
+        lambda lo, hi: True,
+        "",
+        Fixed(-0.1),
+    ),
 }
 
 _XRAY_PARAMS = {
@@ -482,6 +494,24 @@ _XRAY_PARAMS = {
         lambda lo, hi: True,
         "",
         Fixed(-1.4),
+    ),
+    "xray_gamma_hmxb": (
+        "HMXB photon index (typical 2.0)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(2.0),
+    ),
+    "xray_gamma_lmxb": (
+        "LMXB photon index (typical 1.6)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(1.6),
+    ),
+    "xray_E_cut": (
+        "Exponential cutoff energy [keV] for AGN X-ray spectrum (typical 100-500)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(300.0),
     ),
 }
 
@@ -604,6 +634,81 @@ _AGN_PARAMS = {
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
         Fixed(0.5),
+    ),
+    # BH spin + two-temperature torus (kubota_done_full, multicolor_agn)
+    "agn_a_spin": (
+        "BH spin parameter a* in [0, 0.998) — controls ISCO and radiative efficiency",
+        lambda lo, hi: lo >= 0 and hi < 1,
+        "must be in [0, 1)",
+        Fixed(0.0),
+    ),
+    "agn_T_hot": (
+        "Two-temperature torus: hot dust component temperature [K]",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(1200.0),
+    ),
+    "agn_T_warm": (
+        "Two-temperature torus: warm dust component temperature [K]",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(300.0),
+    ),
+    "agn_frac_hot": (
+        "Two-temperature torus: hot-to-warm dust luminosity fraction [0, 1]",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1]",
+        Fixed(0.3),
+    ),
+    # Full Kubota & Done (2018) 3-zone disc parameters (kubota_done_full only)
+    "agn_f_hard": (
+        "Coronal luminosity fraction (fraction of disc power to hot corona)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(0.02),
+    ),
+    "agn_gamma_warm": (
+        "Warm Comptonization photon index (soft X-ray excess)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(2.5),
+    ),
+    "agn_kt_warm": (
+        "Warm Comptonization electron temperature [keV]",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(0.2),
+    ),
+    "agn_gamma_hard": (
+        "Hard X-ray photon index (hot corona power law)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(1.8),
+    ),
+    "agn_kt_hot": (
+        "Hot corona electron temperature [keV]",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(100.0),
+    ),
+    "agn_r_warm_ratio": (
+        "Ratio R_warm / R_hot (warm Comptonization region size)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(2.0),
+    ),
+    # Polar dust reddening of AGN disc (Type 1 SMC-law screen)
+    "agn_polar_ebv": (
+        "Polar dust reddening E(B-V) applied to AGN disc (SMC law); 0 = disabled",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(0.0),
+    ),
+    "agn_polar_oa": (
+        "Polar dust half-opening angle [degrees] — sets covering fraction",
+        lambda lo, hi: lo > 0 and hi <= 90,
+        "must be in (0, 90]",
+        Fixed(45.0),
     ),
 }
 

@@ -418,7 +418,7 @@ for sigma in sig_range:
     sfr_scatter_100.append(np.std(np.log10(np.clip(sfrs_100, 1e-5, None))))
 
 fig, ax = plt.subplots(figsize=(6, 4))
-ax.plot(sig_range, sfr_scatter_100, "o-", color=COLORS["geovi"], lw=1.5)
+ax.plot(sig_range, sfr_scatter_100, "o-", color=COLORS["vi"], lw=1.5)
 ax.axhline(0.3, color="grey", ls="--", lw=0.8, label="Speagle+2014 MS scatter")
 ax.set_xlabel(r"$\sigma_{\rm PS}$")
 ax.set_ylabel(r"$\sigma(\log_{10}$ SFR$_{100\rm Myr})$ [dex]")

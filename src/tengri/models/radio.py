@@ -45,11 +45,7 @@ References
 
 import jax.numpy as jnp
 
-# Physical constants
-_C_CGS = 2.99792458e10  # cm/s
-_C_AA = 2.99792458e18  # Angstrom/s
-_LSUN = 3.828e33  # erg/s
-_JY = 1e-23  # erg/s/cm^2/Hz
+from tengri.utils.physics_constants import C_AA as _C_AA
 
 # Bell+2003 synchrotron suppression threshold at 1.4 GHz reference.
 # L0 = 3e28 erg/s/Hz (Mancuso+2017 / Bell+2003).

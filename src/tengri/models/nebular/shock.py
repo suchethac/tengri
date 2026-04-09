@@ -35,7 +35,7 @@ import jax.numpy as jnp
 import numpy as np
 
 # Physical constants
-_C_CGS = 2.99792458e10  # cm/s
+from tengri.utils.physics_constants import C_CGS as _C_CGS
 
 # ---------------------------------------------------------------------------
 # Legacy hardcoded fallback — Allen+2008 Table 5 (solar, n=1 cm⁻³)
@@ -441,7 +441,7 @@ def compute_shock_sed(
     shock_velocity : float
         Shock velocity in km/s.
     l_shock_halpha : float
-        Total shock Hα luminosity in Lsun (normalization anchor).
+        Total shock Hα luminosity in erg/s (normalization anchor).
     shock_log_density : float
         Log10 pre-shock density in cm⁻³.
     shock_b_over_sqrt_n : float

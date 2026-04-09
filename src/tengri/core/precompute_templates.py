@@ -16,10 +16,10 @@ import jax
 import jax.numpy as jnp
 
 # Physical constants (CGS)
-_C_CGS = 2.99792458e10  # cm/s
-_AA_TO_CM = 1e-8
-_LSUN_ERG = 3.828e33  # erg/s
-
+from tengri.utils.physics_constants import (
+    AA_TO_CM as _AA_TO_CM,
+    C_CGS as _C_CGS,
+)
 
 # -------------------------------------------------------------------
 # DL07 / DL14 template photometry precomputation

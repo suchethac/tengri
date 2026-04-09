@@ -13,6 +13,8 @@ Key optimizations:
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.conversions import lnu_to_fnu
+
 # ---------------------------------------------------------------------------
 # 1. Hartley transform (from NIFTy.re)
 # ---------------------------------------------------------------------------
@@ -243,7 +245,7 @@ def approximate_photometry(
     """
     # Weighted sum with dust
     flux_intrinsic = jnp.sum(weights * ssp_phot * dust_atten_at_eff)
-    flux_scale = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm**2)
+    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
     return flux_scale * flux_intrinsic
 
 

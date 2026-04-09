@@ -469,12 +469,11 @@ def build_fused_photometry(model):
                 agn_log_mbh=agn_log_mbh,
                 agn_log_ledd=agn_log_ledd,
             )
-            # agn_lnu is in Lsun/Hz, flux_total is in Lsun at eff wavelengths
-            # Convert: L_nu [Lsun/Hz] -> add to broadband flux [Lsun]
-            # The precomp SSP photometry is L_nu*dnu integrated through
-            # the filter, so AGN L_nu is treated the same way (evaluated
-            # at the effective wavelength as a representative value).
-            flux_total = flux_total + agn_lnu
+            # agn_lnu is in erg/s/Hz; flux_total is in Lsun.
+            # Divide by lsun to convert to Lsun/Hz before adding.
+            # AGN L_nu is evaluated at the filter effective wavelength as a
+            # monochromatic approximation for the filter-integrated flux.
+            flux_total = flux_total + agn_lnu / lsun
 
         # IGM absorption (precomputed at effective wavelengths)
         if has_igm:
@@ -661,7 +660,8 @@ def build_fused_spectrum(model):
                 agn_log_mbh=agn_log_mbh,
                 agn_log_ledd=agn_log_ledd,
             )
-            flux = flux + agn_lnu
+            # agn_lnu is in erg/s/Hz; flux is in Lsun/Hz. Divide by lsun.
+            flux = flux + agn_lnu / lsun
 
         flux = flux_scale * flux * lsun
 
@@ -1077,7 +1077,8 @@ def build_fused_photometry_ztable(model):
                 agn_log_mbh=agn_log_mbh,
                 agn_log_ledd=agn_log_ledd,
             )
-            flux_lsun = flux_lsun + agn_lnu
+            # agn_lnu is in erg/s/Hz; flux_lsun is in Lsun. Divide by lsun.
+            flux_lsun = flux_lsun + agn_lnu / lsun
 
         # IGM absorption (interpolated from precomputed z-table)
         if has_igm_ztable:
@@ -1679,7 +1680,7 @@ def build_fused_tier2_photometry(model):
     # For dsps_native + fixed z: precompute t_obs_gyr once at closure build
     _t_obs_gyr_fixed = None
     if _use_dsps_native and not is_free_z:
-        _t_obs_gyr_fixed = float(_age_at_z_fn(z_fixed) / 1e9)
+        _t_obs_gyr_fixed = float(_age_at_z_fn(z_fixed))
 
     # IGM at full wavelength grid (only for fixed z)
     igm_trans_full = None
@@ -1719,7 +1720,7 @@ def build_fused_tier2_photometry(model):
 
         if _use_dsps_native:
             z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
-            t_obs_gyr = _t_obs_gyr_fixed if _t_obs_gyr_fixed is not None else _age_at_z_fn(z) / 1e9
+            t_obs_gyr = _t_obs_gyr_fixed if _t_obs_gyr_fixed is not None else _age_at_z_fn(z)
             lgmet = p.get("log_z_abs", -1.8477)
             lgmet_scatter = float(p.get("lgmet_scatter", _lgmet_scatter_native))
             weights, ssp_flux_at_z = compute_dsps_native_weights(
@@ -1857,7 +1858,7 @@ def build_fused_tier2_spectrum(model):
 
     _t_obs_gyr_fixed_spec = None
     if _use_dsps_native_spec and not is_free_z:
-        _t_obs_gyr_fixed_spec = float(_age_at_z_spec(z_fixed) / 1e9)
+        _t_obs_gyr_fixed_spec = float(_age_at_z_spec(z_fixed))
 
     if is_free_z:
         from tengri.utils.cosmology import luminosity_distance as _lum_dist_spec
@@ -1882,9 +1883,7 @@ def build_fused_tier2_spectrum(model):
         if _use_dsps_native_spec:
             z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
             t_obs_gyr = (
-                _t_obs_gyr_fixed_spec
-                if _t_obs_gyr_fixed_spec is not None
-                else _age_at_z_spec(z) / 1e9
+                _t_obs_gyr_fixed_spec if _t_obs_gyr_fixed_spec is not None else _age_at_z_spec(z)
             )
             lgmet = p.get("log_z_abs", -1.8477)
             lgmet_scatter = float(p.get("lgmet_scatter", _lgmet_scatter_spec))

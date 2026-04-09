@@ -122,7 +122,7 @@ depends on both `core/` and `models/`.
 ├──────────────────────────────────────────────────────┤
 │  Forward Model: SFH → SPS → Dust → Photometry       │
 ├──────────────────────────────────────────────────────┤
-│  Low-level JAX functions: PSD, GP, DPL, Charlot+Fall │
+│  Low-level JAX functions: PSD, GP, SFH, attenuation   │
 ├──────────────────────────────────────────────────────┤
 │  JAX runtime: JIT, vmap, grad, autodiff              │
 └──────────────────────────────────────────────────────┘
@@ -199,8 +199,9 @@ In more detail, the forward model evaluates:
 xi, theta_PSD -> sqrt(P) * FFT(xi) -> x(t)                    [GP realization]
              -> mean_SFH(t) * exp(x(t) - sigma^2/2)           [lognormal SFH]
              -> interpolate to SSP ages -> CSP weights          [mass history]
-             -> sum(weights * SSP_flux * dust_atten)            [composite SED]
-             -> filter convolution * (1+z) / (4 pi d_L^2)      [observed flux]
+             -> sum(weights * SSP_flux * dust_atten) * LSUN_ERG  [composite SED, erg/s/Hz]
+             -> + AGN / radio / X-ray / nebular components       [all erg/s/Hz]
+             -> filter convolution * (1+z) / (4 pi d_L^2)       [observed flux, erg/s/cm²/Hz]
 ```
 
 The lognormal correction `exp(-sigma^2/2)` ensures that `E[SFR] = mean_SFR`

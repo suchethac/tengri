@@ -25,6 +25,13 @@
 | FIXED | 20 | S1-S6, #9,10,11,12,14 (original 11) + NEW-01 through NEW-09 (2026-04-03/05) |
 | CLOSED (undocumented) | 3 | NEW-10,11,12 — counted in original review but never written up; no record of what they refer to; closed 2026-04-04 |
 
+### Cross-validation audit (2026-04-08): 2 open discrepancies
+
+| ID | Description | Status |
+|----|-------------|--------|
+| CROSSVAL-01 | `stellar_dusty_sfg` NUV +29% vs FSPS; no regression test | OPEN |
+| CROSSVAL-02 | tengri has no declining-tau SFH; EXPSFH crossval not possible | OPEN (design gap) |
+
 ### Incomplete implementations audit (2026-04-04): 5 identified
 
 | ID | Description | Status |
@@ -206,35 +213,30 @@ These are not numerical bugs but missing or placeholder implementations that pro
 
 ## API CONSISTENCY BUGS
 
-### BUG-API-01: `simulate.sed_from_sfh` returns erg/s/Hz; all other modules return Lsun/Hz (OPEN)
+### BUG-API-01: `simulate.sed_from_sfh` returns erg/s/Hz; all other modules return Lsun/Hz (FIXED 2026-04-08)
 
 **File:** `src/tengri/simulate.py` — `sed_from_sfh`, `photometry_from_sfh`, `spectrum_from_sfh`
 **Root cause:** `sed_from_sfh` is a thin wrapper around DSPS's `calc_rest_sed`, which works in CGS
-(erg/s/Hz). Every other physics module in tengri (`disc.py`, `xray.py`, `radio.py`, `emission.py`,
-`shock.py`, `igm.py`) returns Lsun/Hz. Any code that sums or compares outputs from `sed_from_sfh`
-with outputs from these modules will silently produce values ~3.8×10^33 × too large for the
-stellar component.
+(erg/s/Hz). All other physics modules in tengri previously returned Lsun/Hz. The mismatch meant
+any code summing stellar + AGN/radio/X-ray outputs had a ~3.8×10^33 unit error in the non-stellar
+components.
 
-**Fix/Workaround:** Divide the `"sed"` key of the returned dict by `LSUN = 3.828e33 erg/s` before
-combining with other components:
+**Fix (2026-04-08):** All physics modules (`disc.py`, `xray.py`, `radio.py`, `emission.py`,
+`shock.py`, `cue.py`, `cloudy_grid.py`, `mappings_photo.py`, `unified.py`, `torus.py`,
+`skirtor.py`, `qsogen.py`) now return **erg/s/Hz**. The `/ _LSUN_ERG` divisions at their return
+statements were removed. `simulate.sed_from_sfh` was already correct; the other modules were
+standardized to match it. `agn_log_lbol` remains the one API-level boundary in log10(Lsun).
 
+**Workaround (historical, no longer needed):**
 ```python
+# Do NOT do this after 2026-04-08 — all modules now return erg/s/Hz
 LSUN = 3.828e33  # erg / s
 result = sed_from_sfh(t_gyr, sfr, ssp, ...)
-lnu_lsun = np.array(result["sed"]) / LSUN   # erg/s/Hz → Lsun/Hz
+lnu_lsun = np.array(result["sed"]) / LSUN   # was needed before the unit refactor
 ```
 
-**Proper fix:** `sed_from_sfh` should return Lsun/Hz (divide internally and update docstring), or
-add a `unit="lsun"` parameter (default `"lsun"`, legacy `"cgs"`) and a deprecation warning. The
-dict key `"sed"` should clearly document the unit.
-
-**Regression test required:** `tests/unit/test_simulate_units.py::test_sed_from_sfh_unit_lsun` —
-checks that the peak of `result["sed"]` for a 10^10 Msun galaxy falls in the physically plausible
-range 10^9–10^12 Lsun/Hz (not ~10^42–10^45 erg/s/Hz treated as Lsun/Hz).
-
-**Impact:** Any user-facing script or notebook that mixes `sed_from_sfh` with disc/dust/radio
-components will silently show the wrong relative amplitudes. Discovered during `multiwavelength_sed.py`
-development (2026-04-06).
+**Impact:** Resolved. All SED component functions now return erg/s/Hz. The assembled SED
+(stellar + AGN + radio + X-ray + nebular) is consistently in erg/s/Hz throughout the pipeline.
 
 ### BUG-API-02: `compute_qh` returns ~0 for `wNE` SSP spectra (OPEN)
 
@@ -266,6 +268,64 @@ gives a physically plausible Q_H (~10^53–10^54 phot/s for SFR=1–10 Msun/yr).
 
 ---
 
+## CROSSVAL DISCREPANCIES (from cross-validation audit 2026-04-08)
+
+### CROSSVAL-01: `stellar_dusty_sfg` NUV +29% vs FSPS — no regression test (OPEN)
+
+**Measured:** tengri/FSPS NUV ratio (2650–2950 Å) = 1.291 (+29%) for the dusty star-forming case
+(const SFH 0–3 Gyr, τ_BC=1, τ_diff=0.5, solar Z). V-band is fine at ratio = 1.094 (+9%, within ±15% test threshold).
+**Threshold:** Same-SSP tolerance is ±20% for NUV. This case fails that threshold.
+
+**Root cause (likely):** The FSPS `dust1`/`dust2` system maps to Charlot & Fall τ_BC/τ_diff differently
+at short wavelengths. FSPS `dust1` attenuates birth-cloud emission only; `dust2` attenuates total.
+The power-law index (−0.7) applies differently in FSPS vs tengri's `two_component_dust`. UV is more
+strongly attenuated in tengri than in FSPS for the same τ parameters. Needs investigation with
+wavelength-resolved attenuation curves from both codes.
+
+**Missing test:** There is no `test_tengri_vs_fsps_nuv` for the dusty SFG case. Only V-band
+(`test_tengri_vs_fsps_vband`, threshold 0.85–1.15) is tested for `TestDustySFG`.
+
+**Reference to check:** Charlot & Fall (2000) ApJ 539, 718 Eq. 1–3; FSPS dust documentation
+(dust1/dust2 vs tau_bc/tau_diff mapping convention).
+
+**Fix required:**
+1. Investigate the dust law mapping discrepancy at UV wavelengths.
+2. Add `test_tengri_vs_fsps_nuv_dusty` to `tests/crossval/test_full_sed_crossval.py::TestDustySFG`
+   with appropriate threshold (±30% initially, tighten once root cause is resolved).
+
+**Impact:** Medium. Paper I photometric fitting uses Charlot & Fall dust; UV photometry bands
+(NUV, u-band) will have a systematic ~30% offset vs FSPS-based reference estimates for dusty galaxies.
+
+---
+
+### CROSSVAL-02: tengri has no declining-tau SFH — EXPSFH crossval not possible (OPEN)
+
+**Status:** Design gap, not a bug. EXPSFH comparison skipped in `analysis/crossval_external_seds.py`.
+
+**Context:** FSPS and bagpipes natively support the "tau model" (or "delayed tau"): `SFR(T_cosmic) ∝ exp(-T_cosmic/τ)`, where `T_cosmic` is cosmic time measured from galaxy formation. This is a **declining** SFH in cosmic time — most stars form early and the rate falls exponentially.
+
+In DSPS's lookback-time convention used by tengri, a declining tau model in cosmic time corresponds to an **increasing** SFR with lookback time (SFR is highest at large t_lb = galaxy formation epoch). Tengri's `exp` SFH (`SFR ∝ exp(-t_lb/τ)`) represents the **opposite** — a SFH that is highest at the present and decreases going back in time (a rising SFH in cosmic time, appropriate for recently-starburst galaxies). Tengri's `dexp` SFH peaks at t_lb = start + τ, representing a galaxy that peaked in the recent past, also not equivalent to a declining tau model from long ago.
+
+There is no SFH type in tengri's current registry that maps cleanly to the FSPS/bagpipes declining tau model for arbitrary age and τ combinations.
+
+**Impact:** Cannot directly cross-validate the EXPSFH spectral shapes between tengri and FSPS/bagpipes. This means:
+- Old, passively-evolving galaxies (typically fitted with declining tau) cannot be forward-modelled with tengri's current SFH types — only `const`, `dpl`, or `dexp` can approximate them (poorly for large age/τ ratios).
+- Paper I SFH comparison vs FSPS is limited to const and DPL cases.
+
+**Fix required (before Paper II real-data fitting):**
+Add a `declining_exp_sfh` function to `models/sfh/mean_sfh.py`:
+```python
+def declining_exp_sfh(t_lookback, log_peak_sfr, tau, age):
+    """Declining tau model: SFR = peak * exp(-(age - t_lb)/tau) for 0 <= t_lb <= age."""
+    peak_sfr = 10.0**log_peak_sfr
+    dt = age - t_lookback  # cosmic time elapsed since galaxy formation
+    sfr = peak_sfr * jnp.exp(-dt / tau)
+    return jnp.where((t_lookback >= 0) & (t_lookback <= age), sfr, 0.0)
+```
+Register as `sfh_type = "tau"` with params `sfh_tau_log_peak_sfr`, `sfh_tau_gyr`, `sfh_tau_age_gyr`.
+
+---
+
 ## BUGS CONFIRMED FIXED (for reference)
 
 ### From original audit (22 fixed):
@@ -273,7 +333,7 @@ gives a physically plausible Q_H (~10^53–10^54 phot/s for SFR=1–10 Msun/yr).
 - **BUG-03**: ADAF T_e — now includes m_dot dependence
 - **BUG-05**: Beloborodov Gamma — correct formula per K&D 2018 Eq. 6
 - **BUG-06**: Balmer tau — corrected to `(wavbe/wavelength)^3`
-- **BUG-08**: Shock units — both branches now consistent Lsun/Hz
+- **BUG-08**: Shock units — both branches now consistent erg/s/Hz (updated 2026-04-08 after CGS refactor)
 - **BUG-09**: Mean photon energy — correct denominator exponent
 - **BUG-12**: Calibration determinant — signs corrected
 - **BUG-13**: nonparametric `len()` — uses `.shape[0]`

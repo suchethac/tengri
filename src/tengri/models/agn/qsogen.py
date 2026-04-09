@@ -102,13 +102,13 @@ from tengri.models.dust.attenuation import smc as smc_curve
 # ===================================================================
 # Physical constants (CGS)
 # ===================================================================
-
-_H_PLANCK = 6.62607015e-27  # Planck constant [erg s]
-_K_BOLTZ = 1.380649e-16  # Boltzmann constant [erg K^-1]
-_C_LIGHT = 2.99792458e10  # Speed of light [cm s^-1]
-_C_LIGHT_KMS = 2.99792458e5  # Speed of light [km/s]
-_LSUN_ERG = 3.828e33  # Solar luminosity [erg s^-1]
-_ANGSTROM_CM = 1e-8  # Angstrom -> cm
+from tengri.utils.physics_constants import (
+    AA_TO_CM as _ANGSTROM_CM,
+    C_CGS as _C_LIGHT,
+    H_PLANCK as _H_PLANCK,
+    K_BOLTZ as _K_BOLTZ,
+    L_SUN as _LSUN_ERG,
+)
 
 # Normalization wavelength
 _LAMBDA_NORM = 5500.0  # Angstrom

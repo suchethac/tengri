@@ -24,6 +24,7 @@ from tengri.models.observation.eline_priors import (
 from tengri.models.observation.noise_model import NoiseConfig, NoiseModel
 from tengri.models.observation.observation import Observation
 from tengri.models.observation.photometry_config import Photometry
+from tengri.models.observation.spectroscopy import Spectroscopy, SpectroscopyConfig
 from tengri.models.observation.spectrum import (
     SSP_LIBRARY_RESOLUTIONS,
     apply_lsf,
@@ -31,7 +32,6 @@ from tengri.models.observation.spectrum import (
     nirspec_g140m_resolution,
     nirspec_prism_resolution,
 )
-from tengri.models.observation.spectroscopy import Spectroscopy, SpectroscopyConfig
 
 __all__ = [
     "CLOUDY_LINE_NAMES",
