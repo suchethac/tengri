@@ -293,6 +293,7 @@ def compute_sed_components(
     """
     p = model._get_internal_params(params)
 
+    _LSUN = 3.828e33  # erg/s/Hz per Lsun — used in stellar + polar-dust blocks
     _dsps_weights_2d = None  # set by DSPS table path if used
     _use_dsps_table = False
 
@@ -607,7 +608,6 @@ def compute_sed_components(
 
         dust_atten = _compute_dust_atten(model, wave_dt, p)
 
-        _LSUN = 3.828e33
         sed_attenuated = (
             _LSUN
             * jnp.einsum(
@@ -650,24 +650,65 @@ def compute_sed_components(
 
     sed = sed_attenuated
 
+    # Component tracking for decomposition plots
+    _neb_sed = jnp.zeros_like(sed_attenuated)
+    _shock_sed = jnp.zeros_like(sed_attenuated)
+
     # Nebular emission (if backend provides it)
     if model._nebular_backend is not None and model._nebular_backend.has_free_params:
-        neb_sed = model._nebular_backend.predict_nebular_sed(
-            ssp_weights=weights,
-            ssp_wave=model.ssp_data.ssp_wave,
-            ssp_log_ages_yr=model.ssp_log_ages_yr,
-            log_z=p["log_z_abs"],
-            neb_logU=p.get("neb_logU", -3.0),
-            neb_logZ_gas=p.get("neb_logZ_gas", None),
-            neb_fesc=p.get("neb_fesc", 0.0),
-            neb_fesc_lya=p.get("neb_fesc_lya", 0.0),
+        # Compute SFR-based Q_H: Q_H = 4.2e53 × SFR (Leitherer+1999, Chabrier IMF).
+        _sfr_for_neb = (
+            sfr_table[-1] if "sfr_table" in dir() else (sfr[-1] if "sfr" in dir() else 1.0)
         )
+        _qh_from_sfr = 4.2e53 * _sfr_for_neb
+        _gas_logqion_sfr = jnp.log10(jnp.maximum(_qh_from_sfr, 1.0))
+
+        # Detect wNE SSPs: if SSP-derived Q_H is < 1% of SFR-based Q_H,
+        # the SSP ionizing spectrum is absorbed. In that case, skip
+        # ssp_weights so Cue uses default ionspec (avoids garbage shape).
+        _ssp_qh_ok = True
+        if hasattr(model._nebular_backend, "_compute_weighted_cue_params"):
+            _derived = model._nebular_backend._compute_weighted_cue_params(
+                weights,
+                model.ssp_log_ages_yr,
+                p["log_z_abs"],
+                neb_logU=p.get("neb_logU", -3.0),
+            )
+            _ssp_logqion = _derived.get("gas_logqion", 0.0)
+            _ssp_qh_ok = _ssp_logqion > _gas_logqion_sfr - 2.0  # within 1%
+
+        if _ssp_qh_ok:
+            # SSP ionizing spectrum is reliable — use it for line ratios
+            neb_sed = model._nebular_backend.predict_nebular_sed(
+                ssp_weights=weights,
+                ssp_wave=model.ssp_data.ssp_wave,
+                ssp_log_ages_yr=model.ssp_log_ages_yr,
+                log_z=p["log_z_abs"],
+                neb_logU=p.get("neb_logU", -3.0),
+                neb_logZ_gas=p.get("neb_logZ_gas", None),
+                neb_fesc=p.get("neb_fesc", 0.0),
+                neb_fesc_lya=p.get("neb_fesc_lya", 0.0),
+                gas_logqion=_gas_logqion_sfr,
+            )
+        else:
+            # wNE SSP: ionizing spectrum unreliable. Use low-level Cue mode
+            # with default ionspec + SFR-based Q_H.
+            neb_sed = model._nebular_backend.predict_nebular_sed(
+                ssp_wave=model.ssp_data.ssp_wave,
+                log_z=p["log_z_abs"],
+                neb_logU=p.get("neb_logU", -3.0),
+                neb_logZ_gas=p.get("neb_logZ_gas", None),
+                neb_fesc=p.get("neb_fesc", 0.0),
+                neb_fesc_lya=p.get("neb_fesc_lya", 0.0),
+                gas_logqion=_gas_logqion_sfr,
+            )
+        _neb_sed = neb_sed
         sed = sed + neb_sed
 
     # Shock emission (MAPPINGS V — Allen+2008)
     # Mix: replace shock_frac of nebular Halpha with shock emission lines
     if getattr(model, "_shock_enabled", False):
-        from tengri.models.nebular.shock import shock_emission_sed
+        from tengri.models.nebular.shock import compute_shock_sed
 
         shock_frac = p.get("shock_frac", 0.0)
         shock_velocity = p.get("shock_velocity", 300.0)
@@ -685,7 +726,7 @@ def compute_sed_components(
         l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
         l_shock_halpha = shock_frac * l_halpha_approx
 
-        shock_sed = shock_emission_sed(
+        shock_sed = compute_shock_sed(
             model.ssp_data.ssp_wave,
             shock_velocity,
             l_shock_halpha,
@@ -712,6 +753,7 @@ def compute_sed_components(
             )
             shock_sed = shock_sed * jnp.exp(-tau_diff * k_diff)
 
+        _shock_sed = shock_sed
         sed = sed + shock_sed
 
     # ── Compute energy balance on SSP grid BEFORE interpolation ──────
@@ -763,9 +805,7 @@ def compute_sed_components(
 
     # ── Zone 2: Interpolate to panchromatic grid if needed ────────────
     # Determine output wavelength grid
-    rest_wave_target = (
-        rest_wavelength if rest_wavelength is not None else model.ssp_data.ssp_wave
-    )
+    rest_wave_target = rest_wavelength if rest_wavelength is not None else model.ssp_data.ssp_wave
     _needs_extension = rest_wave_target is not model.ssp_data.ssp_wave
 
     if _needs_extension:
@@ -776,9 +816,16 @@ def compute_sed_components(
         if sed_intrinsic is not None:
             sed_intrinsic = interpolate_sed_to_grid(ssp_wave, sed_intrinsic, rest_wave_target)
         sed_attenuated = interpolate_sed_to_grid(ssp_wave, sed_attenuated, rest_wave_target)
+        _neb_sed = interpolate_sed_to_grid(ssp_wave, _neb_sed, rest_wave_target)
+        _shock_sed = interpolate_sed_to_grid(ssp_wave, _shock_sed, rest_wave_target)
 
     # Use the target grid for all Zone 2 emission components
     wave_z2 = rest_wave_target
+    _n_z2 = len(wave_z2)
+    _dust_ir_sed = jnp.zeros(_n_z2)
+    _agn_sed = jnp.zeros(_n_z2)
+    _radio_sed = jnp.zeros(_n_z2)
+    _xray_sed = jnp.zeros(_n_z2)
 
     # ── Dust IR emission (energy-balanced) ────────────────────────────
     if model._dust_emission_model is not None and L_ir > 0.0:
@@ -794,7 +841,9 @@ def compute_sed_components(
             dust_umin=p.get("dust_umin", 1.0),
             dust_gamma_dl=p.get("dust_gamma_dl", 0.01),
             dust_qpah=p.get("dust_qpah", 2.5),
+            dust_alpha_dl14=p.get("dust_alpha_dl14", 2.0),
         )
+        _dust_ir_sed = dust_ir
         sed = sed + dust_ir
 
     # ── AGN contribution ──────────────────────────────────────────────
@@ -811,7 +860,44 @@ def compute_sed_components(
             agn_torus_frac=p.get("agn_torus_frac", 0.5),
             agn_log_mbh=p.get("agn_log_mbh", 7.0),
             agn_log_ledd=p.get("agn_log_ledd", -1.0),
+            # BH spin + inclination
+            agn_a_spin=p.get("agn_a_spin", 0.0),
+            agn_cos_inc=p.get("agn_cos_inc", 0.5),
+            # SKIRTOR clumpy torus
+            agn_tau_skirtor=p.get("agn_tau_skirtor", 7.0),
+            agn_p_skirtor=p.get("agn_p_skirtor", 1.0),
+            agn_q_skirtor=p.get("agn_q_skirtor", 1.0),
+            agn_oa_skirtor=p.get("agn_oa_skirtor", 40.0),
+            # Two-temperature torus (multicolor_agn, kubota_done_full)
+            agn_T_hot=p.get("agn_T_hot", 1200.0),
+            agn_T_warm=p.get("agn_T_warm", 300.0),
+            agn_frac_hot=p.get("agn_frac_hot", 0.3),
+            # Full K&D 3-zone disc (kubota_done_full only; **_kwargs absorbs for others)
+            agn_f_hard=p.get("agn_f_hard", 0.02),
+            agn_gamma_warm=p.get("agn_gamma_warm", 2.5),
+            agn_kt_warm=p.get("agn_kt_warm", 0.2),
+            agn_gamma_hard=p.get("agn_gamma_hard", 1.8),
+            agn_kt_hot=p.get("agn_kt_hot", 100.0),
+            agn_r_warm_ratio=p.get("agn_r_warm_ratio", 2.0),
         )
+
+        # Polar dust reddening of AGN disc (SMC law; Type 1 AGN orientation)
+        # Only applied when agn_polar_ebv > 0 (default Fixed(0.0) → skipped).
+        _agn_polar_ebv = p.get("agn_polar_ebv", 0.0)
+        if _agn_polar_ebv > 0.0:
+            from tengri.models.agn.polar_dust import polar_dust_total as _polar_dust_fn
+
+            _agn_lsun = agn_sed / _LSUN
+            _agn_att_lsun, _agn_reemit_lsun = _polar_dust_fn(
+                _agn_lsun,
+                wave_z2,
+                cos_inc=p.get("agn_cos_inc", 0.5),
+                opening_angle_deg=p.get("agn_polar_oa", 45.0),
+                ebv=_agn_polar_ebv,
+            )
+            agn_sed = (_agn_att_lsun + _agn_reemit_lsun) * _LSUN
+
+        _agn_sed = agn_sed
         sed = sed + agn_sed
 
     # ── Radio emission (synchrotron from SF + AGN jets) ───────────────
@@ -826,7 +912,14 @@ def compute_sed_components(
             alpha_sf=p.get("radio_alpha_sf", 0.8),
             radio_loudness=p.get("radio_loudness", 0.0),
             alpha_agn=p.get("radio_alpha_agn", 0.7),
+            sfr_mode=model._radio_sfr_mode,
+            log_mstar=float(jnp.log10(jnp.maximum(_mstar, 1e4))),
+            redshift=float(getattr(model, "_redshift", 0.0)),
+            include_freefree=model._radio_include_freefree,
+            T_e=p.get("radio_T_e", 1e4),
+            alpha_ff=p.get("radio_alpha_ff", -0.1),
         )
+        _radio_sed = radio_sed
         sed = sed + radio_sed
 
     # ── X-ray emission (XRBs + AGN corona) ────────────────────────────
@@ -840,7 +933,11 @@ def compute_sed_components(
             L_agn_bol=agn_bol_erg,
             gamma_agn=p.get("xray_gamma_agn", 1.8),
             alpha_ox=p.get("xray_alpha_ox", -1.4),
+            gamma_hmxb=p.get("xray_gamma_hmxb", 2.0),
+            gamma_lmxb=p.get("xray_gamma_lmxb", 1.6),
+            E_cut=p.get("xray_E_cut", 300.0),
         )
+        _xray_sed = xray_sed
         sed = sed + xray_sed
 
     return {
@@ -855,4 +952,11 @@ def compute_sed_components(
         "agn_bol_erg": agn_bol_erg,
         "mstar_formed": _mstar_formed,
         "mstar_surviving": _mstar_surviving,
+        # Component SEDs (all erg/s/Hz on rest_wavelength grid)
+        "sed_nebular": _neb_sed,
+        "sed_shock": _shock_sed,
+        "sed_dust_ir": _dust_ir_sed,
+        "sed_agn": _agn_sed,
+        "sed_radio": _radio_sed,
+        "sed_xray": _xray_sed,
     }
