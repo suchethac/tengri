@@ -410,10 +410,20 @@ class SEDModel:
             self._dust_law_diff_fn = resolve_dust_law(self._dust_law_diff)
 
         # Nebular dust attenuation mode:
-        #   "stellar" (default) = same BC + diffuse as stellar (Charlot & Fall 2000)
-        #   "diffuse_only"      = diffuse ISM only (no birth-cloud dust)
-        #   "none"              = no dust on nebular emission
-        self._neb_dust = getattr(spec, "neb_dust", "stellar")
+        #   "bc"   (default) = same BC + diffuse laws as stellar (Charlot & Fall 2000)
+        #   "diff"           = diffuse ISM only (no birth-cloud dust on nebular)
+        #   "neb"            = separate BC law for nebular (spec.neb_dust_law_bc)
+        #                      + same diffuse law as stellar
+        #   "none"           = no dust on nebular emission
+        self._neb_dust = getattr(spec, "neb_dust", "bc")
+        # Optional separate BC law for nebular (only used when _neb_dust == "neb")
+        _neb_bc_law_name = getattr(spec, "neb_dust_law_bc", None)
+        if _neb_bc_law_name is not None:
+            from tengri.models.dust.attenuation import resolve_dust_law as _rdl
+
+            self._neb_dust_law_bc_fn = _rdl(_neb_bc_law_name)
+        else:
+            self._neb_dust_law_bc_fn = self._dust_law_bc_fn
 
         # IGM absorption (Inoue+2014)
         self._apply_igm = spec.apply_igm

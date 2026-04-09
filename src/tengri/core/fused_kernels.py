@@ -1268,7 +1268,8 @@ def build_fused_rest_sed(model):
     if has_nebular:
         nebular_backend = model._nebular_backend
         ssp_log_ages_yr = model.ssp_log_ages_yr
-        _neb_dust_mode = getattr(model, "_neb_dust", "stellar")
+        _neb_dust_mode = getattr(model, "_neb_dust", "bc")
+        _neb_bc_fn = getattr(model, "_neb_dust_law_bc_fn", law_bc_fn)
 
     # Shock emission
     has_shock = getattr(model, "_shock_enabled", False)
@@ -1393,15 +1394,19 @@ def build_fused_rest_sed(model):
             )
 
             # Nebular dust attenuation (configurable via model._neb_dust)
+            # "bc": BC + diffuse, "diff": diffuse only, "neb": separate BC law + diffuse
             if _neb_dust_mode != "none":
                 _neb_kw = {
                     "n_slope": p.get("dust_slope", -0.7),
                     "dust_bump_strength": p.get("dust_bump_strength", 0.0),
                 }
-                if _neb_dust_mode == "stellar" and not _is_single_dust:
+                # Birth-cloud (modes "bc" and "neb")
+                if _neb_dust_mode in ("bc", "neb") and not _is_single_dust:
                     _tau_bc_neb = p.get("tau_bc", p.get("tau_v", 0.0))
-                    k_bc_neb = law_bc_fn(ssp_wave_f64, **_neb_kw)
+                    _bc_fn = _neb_bc_fn if _neb_dust_mode == "neb" else law_bc_fn
+                    k_bc_neb = _bc_fn(ssp_wave_f64, **_neb_kw)
                     neb_sed = neb_sed * jnp.exp(-_tau_bc_neb * k_bc_neb)
+                # Diffuse ISM (all modes except "none")
                 if not _is_single_dust:
                     _tau_diff_neb = p.get("tau_diff", 0.0)
                     k_diff_neb = law_diff_fn(ssp_wave_f64, **_neb_kw)
