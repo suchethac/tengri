@@ -21,10 +21,12 @@ import jax.numpy as jnp
 from tengri.models.dust.attenuation import smc as smc_extinction_curve
 
 # Physical constants (CGS / Angstrom-compatible)
-_H_PLANCK = 6.62607015e-27  # erg s
-_K_BOLTZ = 1.380649e-16  # erg / K
-_C_CGS = 2.99792458e10  # cm / s
-_C_AA = 2.99792458e18  # Angstrom / s
+from tengri.utils.physics_constants import (
+    C_AA as _C_AA,
+    C_CGS as _C_CGS,
+    H_PLANCK as _H_PLANCK,
+    K_BOLTZ as _K_BOLTZ,
+)
 
 # SMC R_V from Pei (1992)
 _RV_SMC = 2.93
@@ -216,7 +218,8 @@ def polar_dust_total(
     Parameters
     ----------
     l_nu_disc : array, shape (n_wave,)
-        Input AGN disc luminosity density [Lsun/Hz].
+        Input AGN disc luminosity density.  Unit-agnostic: output units
+        match input (e.g. erg/s/Hz in → erg/s/Hz out).
     wavelength : array, shape (n_wave,)
         Wavelength in Angstrom.
     cos_inc : float
@@ -239,9 +242,9 @@ def polar_dust_total(
     Returns
     -------
     l_nu_attenuated : array, shape (n_wave,)
-        Attenuated disc luminosity.
+        Attenuated disc luminosity (same units as input).
     l_nu_reemit : array, shape (n_wave,)
-        Greybody reemission from polar dust.
+        Greybody reemission from polar dust (same units as input).
     """
     l_nu_attenuated, l_absorbed = polar_dust_extinction(
         l_nu_disc, wavelength, cos_inc, opening_angle_deg, ebv, law, sharpness
