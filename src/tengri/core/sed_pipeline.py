@@ -15,7 +15,6 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from tengri.models.dust.attenuation import (
-    resolve_dust_law,
     single_component_dust_fast,
     two_component_dust_fast,
 )
@@ -654,148 +653,93 @@ def compute_sed_components(
     _neb_sed = jnp.zeros_like(sed_attenuated)
     _shock_sed = jnp.zeros_like(sed_attenuated)
 
-    # Nebular emission (if backend provides it)
+    # ── Emission components via shared helpers (emission_helpers.py) ────
+    from tengri.core.emission_helpers import (
+        attenuate_emission,
+        nebular_emission,
+        shock_emission,
+    )
+
+    _ssp_wave = model.ssp_data.ssp_wave
+    _law_bc_fn = getattr(model, "_dust_law_bc_fn", None)
+    _law_diff_fn = getattr(model, "_dust_law_diff_fn", None)
+    _neb_bc_fn = getattr(model, "_neb_dust_law_bc_fn", _law_bc_fn)
+    _neb_dust_mode = getattr(model, "_neb_dust", "bc")
+    _dust_kw = {
+        "dust_slope": p.get("dust_slope", -0.7),
+        "dust_bump_strength": p.get("dust_bump_strength", 0.0),
+    }
+    _tau_bc = p.get("tau_bc", p.get("tau_v", 0.0))
+    _tau_diff = p.get("tau_diff", 0.0)
+
+    # Track absorbed luminosity for energy balance
+    L_absorbed_extra = jnp.float64(0.0)
+
+    # Nebular emission
     if model._nebular_backend is not None and model._nebular_backend.has_free_params:
-        # Compute SFR-based Q_H: Q_H = 4.2e53 × SFR (Leitherer+1999, Chabrier IMF).
         _sfr_for_neb = (
             sfr_table[-1] if "sfr_table" in dir() else (sfr[-1] if "sfr" in dir() else 1.0)
         )
-        _qh_from_sfr = 4.2e53 * _sfr_for_neb
-        _gas_logqion_sfr = jnp.log10(jnp.maximum(_qh_from_sfr, 1.0))
-
-        # Detect wNE SSPs: if SSP-derived Q_H is < 1% of SFR-based Q_H,
-        # the SSP ionizing spectrum is absorbed. In that case, skip
-        # ssp_weights so Cue uses default ionspec (avoids garbage shape).
-        _ssp_qh_ok = True
-        if hasattr(model._nebular_backend, "_compute_weighted_cue_params"):
-            _derived = model._nebular_backend._compute_weighted_cue_params(
-                weights,
-                model.ssp_log_ages_yr,
-                p["log_z_abs"],
-                neb_logU=p.get("neb_logU", -3.0),
-            )
-            _ssp_logqion = _derived.get("gas_logqion", 0.0)
-            _ssp_qh_ok = _ssp_logqion > _gas_logqion_sfr - 2.0  # within 1%
-
-        if _ssp_qh_ok:
-            # SSP ionizing spectrum is reliable — use it for line ratios
-            neb_sed = model._nebular_backend.predict_nebular_sed(
-                ssp_weights=weights,
-                ssp_wave=model.ssp_data.ssp_wave,
-                ssp_log_ages_yr=model.ssp_log_ages_yr,
-                log_z=p["log_z_abs"],
-                neb_logU=p.get("neb_logU", -3.0),
-                neb_logZ_gas=p.get("neb_logZ_gas", None),
-                neb_fesc=p.get("neb_fesc", 0.0),
-                neb_fesc_lya=p.get("neb_fesc_lya", 0.0),
-                gas_logqion=_gas_logqion_sfr,
-            )
-        else:
-            # wNE SSP: ionizing spectrum unreliable. Use low-level Cue mode
-            # with default ionspec + SFR-based Q_H.
-            neb_sed = model._nebular_backend.predict_nebular_sed(
-                ssp_wave=model.ssp_data.ssp_wave,
-                log_z=p["log_z_abs"],
-                neb_logU=p.get("neb_logU", -3.0),
-                neb_logZ_gas=p.get("neb_logZ_gas", None),
-                neb_fesc=p.get("neb_fesc", 0.0),
-                neb_fesc_lya=p.get("neb_fesc_lya", 0.0),
-                gas_logqion=_gas_logqion_sfr,
-            )
-        # Apply dust attenuation to nebular emission.
-        # Configurable via model._neb_dust:
-        #   "bc"   (default): same BC + diffuse as stellar (Charlot & Fall 2000)
-        #   "diff": diffuse ISM only
-        #   "neb":  separate BC law (model._neb_dust_law_bc_fn) + same diffuse
-        #   "none": no dust on nebular
-        _neb_dust_mode = getattr(model, "_neb_dust", "bc")
-        if _neb_dust_mode != "none":
-            _neb_dust_kw = {
-                "n_slope": p.get("dust_slope", -0.7),
-                "dust_bump_strength": p.get("dust_bump_strength", 0.0),
-            }
-            _wave = model.ssp_data.ssp_wave
-            # Birth-cloud attenuation (modes "bc" and "neb")
-            if _neb_dust_mode in ("bc", "neb"):
-                tau_bc_neb = p.get("tau_bc", p.get("tau_v", 0.0))
-                if tau_bc_neb > 0.0:
-                    if _neb_dust_mode == "neb" and hasattr(model, "_neb_dust_law_bc_fn"):
-                        k_bc = model._neb_dust_law_bc_fn(_wave, **_neb_dust_kw)
-                    elif hasattr(model, "_dust_law_bc"):
-                        k_bc = resolve_dust_law(model._dust_law_bc)(_wave, **_neb_dust_kw)
-                    else:
-                        k_bc = None
-                    if k_bc is not None:
-                        neb_sed = neb_sed * jnp.exp(-tau_bc_neb * k_bc)
-            # Diffuse ISM attenuation (modes "bc", "diff", "neb")
-            if hasattr(model, "_dust_law_diff"):
-                tau_diff_neb = p.get("tau_diff", 0.0)
-                if tau_diff_neb > 0.0:
-                    k_diff = resolve_dust_law(model._dust_law_diff)(_wave, **_neb_dust_kw)
-                    neb_sed = neb_sed * jnp.exp(-tau_diff_neb * k_diff)
-
+        neb_raw = nebular_emission(
+            model._nebular_backend,
+            weights,
+            _ssp_wave,
+            model.ssp_log_ages_yr,
+            p["log_z_abs"],
+            _sfr_for_neb,
+            neb_logU=p.get("neb_logU", -3.0),
+            neb_logZ_gas=p.get("neb_logZ_gas", None),
+            neb_fesc=p.get("neb_fesc", 0.0),
+            neb_fesc_lya=p.get("neb_fesc_lya", 0.0),
+        )
+        neb_sed, L_abs_neb = attenuate_emission(
+            neb_raw,
+            _ssp_wave,
+            _neb_dust_mode,
+            _tau_bc,
+            _tau_diff,
+            _law_bc_fn,
+            _law_diff_fn,
+            neb_bc_fn=_neb_bc_fn,
+            **_dust_kw,
+        )
+        L_absorbed_extra = L_absorbed_extra + L_abs_neb
         _neb_sed = neb_sed
         sed = sed + neb_sed
 
-    # Shock emission (MAPPINGS V — Allen+2008)
-    # Mix: replace shock_frac of nebular Halpha with shock emission lines
+    # Shock emission (diffuse dust only — shocks outside birth clouds)
     if getattr(model, "_shock_enabled", False):
-        from tengri.models.nebular.shock import compute_shock_sed
-
-        shock_frac = p.get("shock_frac", 0.0)
-        shock_velocity = p.get("shock_velocity", 300.0)
-        shock_log_density = p.get("shock_log_density", 0.0)
-        shock_b_over_sqrt_n = p.get("shock_b_over_sqrt_n", 1.0)
-        shock_abundance = p.get("shock_abundance", "solar")
-        shock_component = p.get("shock_component", "combined")
-
-        # Estimate L_halpha from the SED near 6563 A as a proxy.
-        # Use a fraction of the bolometric luminosity scaled by shock_frac.
-        _c_aa_shock = 2.99792458e18  # c in Angstrom/s
-        _nu_shock = _c_aa_shock / model.ssp_data.ssp_wave
-        l_bol = -jnp.trapezoid(sed, _nu_shock)
-        # Approximate: L_Halpha ~ 1e-3 * L_bol for a star-forming galaxy
-        l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
-        l_shock_halpha = shock_frac * l_halpha_approx
-
-        shock_sed = compute_shock_sed(
-            model.ssp_data.ssp_wave,
-            shock_velocity,
-            l_shock_halpha,
-            shock_log_density=shock_log_density,
-            shock_b_over_sqrt_n=shock_b_over_sqrt_n,
-            shock_abundance=shock_abundance,
-            shock_component=shock_component,
+        shock_raw = shock_emission(
+            _ssp_wave,
+            sed,
+            shock_frac=p.get("shock_frac", 0.0),
+            shock_velocity=p.get("shock_velocity", 300.0),
+            shock_log_density=p.get("shock_log_density", 0.0),
+            shock_b_over_sqrt_n=p.get("shock_b_over_sqrt_n", 1.0),
+            shock_abundance=p.get("shock_abundance", "solar"),
+            shock_component=p.get("shock_component", "combined"),
         )
-
-        # Apply diffuse ISM attenuation to shock emission.
-        # Galactic-scale shocks are embedded in the ISM, so their line
-        # emission traverses the same diffuse dust screen as old stellar
-        # populations.  Birth-cloud attenuation is NOT applied because
-        # shocks typically occur outside star-forming birth clouds (AGN jets,
-        # merger-driven turbulence, evolved superwinds).
-        tau_diff = p.get("tau_diff", 0.0)
-        if tau_diff > 0.0 and hasattr(model, "_dust_law_diff"):
-            n_slope = p.get("dust_slope", -0.7)
-            dust_bump_strength = p.get("dust_bump_strength", 0.0)
-            k_diff = resolve_dust_law(model._dust_law_diff)(
-                model.ssp_data.ssp_wave,
-                n_slope=n_slope,
-                dust_bump_strength=dust_bump_strength,
-            )
-            shock_sed = shock_sed * jnp.exp(-tau_diff * k_diff)
-
+        shock_sed, _ = attenuate_emission(
+            shock_raw,
+            _ssp_wave,
+            "diff",
+            0.0,
+            _tau_diff,
+            _law_bc_fn,
+            _law_diff_fn,
+            **_dust_kw,
+        )
         _shock_sed = shock_sed
         sed = sed + shock_sed
 
-    # ── Compute energy balance on SSP grid BEFORE interpolation ──────
-    # L_absorbed is integrated over frequency on the SSP grid where the
-    # stellar SED is exact. This avoids interpolation error in the integral.
-    _c_aa_const = 2.99792458e18  # c in Angstrom/s
+    # ── Energy balance on SSP grid BEFORE interpolation ──────────────
+    # L_absorbed = stellar absorption + nebular/shock dust absorption
+    _c_aa_const = 2.99792458e18
     L_ir = jnp.float64(0.0)
     if model._dust_emission_model is not None and sed_intrinsic is not None:
-        nu_ssp = _c_aa_const / model.ssp_data.ssp_wave
-        L_absorbed = -jnp.trapezoid(sed_intrinsic - sed_attenuated, nu_ssp)
+        nu_ssp = _c_aa_const / _ssp_wave
+        L_absorbed_stellar = -jnp.trapezoid(sed_intrinsic - sed_attenuated, nu_ssp)
+        L_absorbed = jnp.maximum(L_absorbed_stellar + L_absorbed_extra, 0.0)
         eta_balance = p.get("dust_eta_balance", 1.0)
         L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
 
@@ -859,11 +803,20 @@ def compute_sed_components(
     _radio_sed = jnp.zeros(_n_z2)
     _xray_sed = jnp.zeros(_n_z2)
 
+    # ── Emission components via shared helpers ──────────────────────────
+    from tengri.core.emission_helpers import (
+        agn_emission,
+        dust_ir_emission,
+        radio_emission,
+        xray_emission,
+    )
+
     # ── Dust IR emission (energy-balanced) ────────────────────────────
     if model._dust_emission_model is not None and L_ir > 0.0:
         from tengri.models.dust.emission import resolve_emission_model
 
-        dust_ir = resolve_emission_model(model._dust_emission_model)(
+        dust_ir = dust_ir_emission(
+            resolve_emission_model(model._dust_emission_model),
             wave_z2,
             L_ir,
             dust_T=p.get("dust_T", 35.0),
@@ -882,29 +835,28 @@ def compute_sed_components(
     if model._agn_model is not None:
         from tengri.models.agn import resolve_agn_model
 
-        agn_sed = resolve_agn_model(model._agn_model)(
+        agn_sed = agn_emission(
+            resolve_agn_model(model._agn_model),
             wave_z2,
             agn_log_lbol=agn_log_lbol,
             agn_frac=agn_frac_for_model,
+            agn_polar_ebv=p.get("agn_polar_ebv", 0.0),
+            agn_cos_inc=p.get("agn_cos_inc", 0.5),
+            agn_polar_oa=p.get("agn_polar_oa", 45.0),
             agn_alpha=p.get("agn_alpha", -1.0),
             agn_T_torus=p.get("agn_T_torus", 1000.0),
             agn_tau_torus=p.get("agn_tau_torus", 5.0),
             agn_torus_frac=p.get("agn_torus_frac", 0.5),
             agn_log_mbh=p.get("agn_log_mbh", 7.0),
             agn_log_ledd=p.get("agn_log_ledd", -1.0),
-            # BH spin + inclination
             agn_a_spin=p.get("agn_a_spin", 0.0),
-            agn_cos_inc=p.get("agn_cos_inc", 0.5),
-            # SKIRTOR clumpy torus
             agn_tau_skirtor=p.get("agn_tau_skirtor", 7.0),
             agn_p_skirtor=p.get("agn_p_skirtor", 1.0),
             agn_q_skirtor=p.get("agn_q_skirtor", 1.0),
             agn_oa_skirtor=p.get("agn_oa_skirtor", 40.0),
-            # Two-temperature torus (multicolor_agn, kubota_done_full)
             agn_T_hot=p.get("agn_T_hot", 1200.0),
             agn_T_warm=p.get("agn_T_warm", 300.0),
             agn_frac_hot=p.get("agn_frac_hot", 0.3),
-            # Full K&D 3-zone disc (kubota_done_full only; **_kwargs absorbs for others)
             agn_f_hard=p.get("agn_f_hard", 0.02),
             agn_gamma_warm=p.get("agn_gamma_warm", 2.5),
             agn_kt_warm=p.get("agn_kt_warm", 0.2),
@@ -912,31 +864,12 @@ def compute_sed_components(
             agn_kt_hot=p.get("agn_kt_hot", 100.0),
             agn_r_warm_ratio=p.get("agn_r_warm_ratio", 2.0),
         )
-
-        # Polar dust reddening of AGN disc (SMC law; Type 1 AGN orientation)
-        # Only applied when agn_polar_ebv > 0 (default Fixed(0.0) → skipped).
-        _agn_polar_ebv = p.get("agn_polar_ebv", 0.0)
-        if _agn_polar_ebv > 0.0:
-            from tengri.models.agn.polar_dust import polar_dust_total as _polar_dust_fn
-
-            _agn_lsun = agn_sed / _LSUN
-            _agn_att_lsun, _agn_reemit_lsun = _polar_dust_fn(
-                _agn_lsun,
-                wave_z2,
-                cos_inc=p.get("agn_cos_inc", 0.5),
-                opening_angle_deg=p.get("agn_polar_oa", 45.0),
-                ebv=_agn_polar_ebv,
-            )
-            agn_sed = (_agn_att_lsun + _agn_reemit_lsun) * _LSUN
-
         _agn_sed = agn_sed
         sed = sed + agn_sed
 
     # ── Radio emission (synchrotron from SF + AGN jets) ───────────────
     if model._radio_enabled:
-        from tengri.models.radio import radio_total
-
-        radio_sed = radio_total(
+        radio_sed = radio_emission(
             wave_z2,
             L_ir=_L_ir,
             L_agn_bol=agn_bol_erg,
@@ -956,9 +889,7 @@ def compute_sed_components(
 
     # ── X-ray emission (XRBs + AGN corona) ────────────────────────────
     if model._xray_enabled:
-        from tengri.models.xray import xray_total
-
-        xray_sed = xray_total(
+        xray_sed = xray_emission(
             wave_z2,
             sfr=_sfr_cached,
             stellar_mass=_mstar,

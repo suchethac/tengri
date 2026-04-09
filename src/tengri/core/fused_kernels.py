@@ -1266,6 +1266,8 @@ def build_fused_rest_sed(model):
     _needs_extension = rest_wave_f64 is not model.ssp_data.ssp_wave
 
     if has_nebular:
+        from tengri.core.emission_helpers import attenuate_emission, nebular_emission
+
         nebular_backend = model._nebular_backend
         ssp_log_ages_yr = model.ssp_log_ages_yr
         _neb_dust_mode = getattr(model, "_neb_dust", "bc")
@@ -1274,11 +1276,12 @@ def build_fused_rest_sed(model):
     # Shock emission
     has_shock = getattr(model, "_shock_enabled", False)
     if has_shock:
-        from tengri.models.nebular.shock import shock_emission_sed
+        from tengri.core.emission_helpers import shock_emission
 
     # Dust emission
     has_dust_em = model._dust_emission_model is not None
     if has_dust_em:
+        from tengri.core.emission_helpers import dust_ir_emission
         from tengri.models.dust.emission import resolve_emission_model
 
         dust_emission_fn = resolve_emission_model(model._dust_emission_model)
@@ -1287,6 +1290,7 @@ def build_fused_rest_sed(model):
     has_agn = model._agn_model is not None
     agn_parametric = model._agn_parametric if has_agn else False
     if has_agn:
+        from tengri.core.emission_helpers import agn_emission
         from tengri.models.agn import resolve_agn_model
 
         agn_model_fn = resolve_agn_model(model._agn_model)
@@ -1294,12 +1298,16 @@ def build_fused_rest_sed(model):
     # Radio
     has_radio = model._radio_enabled
     if has_radio:
-        from tengri.models.radio import radio_total
+        from tengri.core.emission_helpers import radio_emission
+
+        _radio_sfr_mode = model._radio_sfr_mode
+        _include_freefree = model._radio_include_freefree
+        _redshift = float(getattr(model, "_redshift", 0.0))
 
     # X-ray
     has_xray = model._xray_enabled
     if has_xray:
-        from tengri.models.xray import xray_total
+        from tengri.core.emission_helpers import xray_emission
 
     # Constants for energy balance
     _c_aa = dt.type(2.99792458e18)  # c in Angstrom/s
@@ -1374,71 +1382,76 @@ def build_fused_rest_sed(model):
         sed = sed_atten
 
         # --- 2. Nebular emission ---
+        L_abs_neb = jnp.float64(0.0)  # Initialize for energy balance
         if has_nebular:
-            # SFR-based Q_H fallback for wNE SSPs
-            _sfr_last = weights[-1]  # approximate current SFR from youngest bin
-            # More robust: sum weights in young bins as proxy
-            _qh_sfr = 4.2e53 * jnp.maximum(_sfr_last, 0.0)
-            _gas_logqion_sfr = jnp.log10(jnp.maximum(_qh_sfr, 1.0))
-
-            neb_sed = nebular_backend.predict_nebular_sed(
-                ssp_weights=weights,
-                ssp_wave=ssp_wave_f64,
-                ssp_log_ages_yr=ssp_log_ages_yr,
-                log_z=p["log_z_abs"],
+            _sfr_last = weights[-1]  # approximate current SFR
+            neb_raw = nebular_emission(
+                nebular_backend,
+                weights,
+                ssp_wave_f64,
+                ssp_log_ages_yr,
+                p["log_z_abs"],
+                _sfr_last,
                 neb_logU=p.get("neb_logU", -3.0),
                 neb_logZ_gas=p.get("neb_logZ_gas", None),
                 neb_fesc=p.get("neb_fesc", 0.0),
                 neb_fesc_lya=p.get("neb_fesc_lya", 0.0),
-                gas_logqion=_gas_logqion_sfr,
             )
-
-            # Nebular dust attenuation (configurable via model._neb_dust)
-            # "bc": BC + diffuse, "diff": diffuse only, "neb": separate BC law + diffuse
-            if _neb_dust_mode != "none":
-                _neb_kw = {
-                    "n_slope": p.get("dust_slope", -0.7),
-                    "dust_bump_strength": p.get("dust_bump_strength", 0.0),
-                }
-                # Birth-cloud (modes "bc" and "neb")
-                if _neb_dust_mode in ("bc", "neb") and not _is_single_dust:
-                    _tau_bc_neb = p.get("tau_bc", p.get("tau_v", 0.0))
-                    _bc_fn = _neb_bc_fn if _neb_dust_mode == "neb" else law_bc_fn
-                    k_bc_neb = _bc_fn(ssp_wave_f64, **_neb_kw)
-                    neb_sed = neb_sed * jnp.exp(-_tau_bc_neb * k_bc_neb)
-                # Diffuse ISM (all modes except "none")
-                if not _is_single_dust:
-                    _tau_diff_neb = p.get("tau_diff", 0.0)
-                    k_diff_neb = law_diff_fn(ssp_wave_f64, **_neb_kw)
-                    neb_sed = neb_sed * jnp.exp(-_tau_diff_neb * k_diff_neb)
-                elif _is_single_dust:
-                    _tau_v_neb = p.get("tau_v", 0.0)
-                    k_neb = law_bc_fn(ssp_wave_f64, **_neb_kw)
-                    neb_sed = neb_sed * jnp.exp(-_tau_v_neb * k_neb)
-
+            _tau_bc = p.get("tau_bc", p.get("tau_v", 0.0))
+            _tau_diff = p.get("tau_diff", 0.0)
+            _dust_kw = {
+                "dust_slope": p.get("dust_slope", -0.7),
+                "dust_bump_strength": p.get("dust_bump_strength", 0.0),
+            }
+            neb_sed, L_abs_neb = attenuate_emission(
+                neb_raw,
+                ssp_wave_f64,
+                _neb_dust_mode,
+                _tau_bc,
+                _tau_diff,
+                law_bc_fn,
+                law_diff_fn if not _is_single_dust else law_bc_fn,
+                neb_bc_fn=_neb_bc_fn,
+                **_dust_kw,
+            )
             sed = sed + neb_sed
 
         # --- 3. Shock emission ---
         if has_shock:
-            shock_frac = p.get("shock_frac", 0.0)
-            shock_velocity = p.get("shock_velocity", 300.0)
-            shock_log_density = p.get("shock_log_density", 0.0)
-            nu_shock = _c_aa / ssp_wave.astype(jnp.float64)
-            l_bol = -jnp.trapezoid(sed, nu_shock)
-            l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
-            l_shock_halpha = shock_frac * l_halpha_approx
-            shock_sed = shock_emission_sed(
+            shock_raw = shock_emission(
                 ssp_wave_f64,
-                shock_velocity,
-                l_shock_halpha,
-                shock_log_density=shock_log_density,
+                sed,
+                shock_frac=p.get("shock_frac", 0.0),
+                shock_velocity=p.get("shock_velocity", 300.0),
+                shock_log_density=p.get("shock_log_density", 0.0),
+                shock_b_over_sqrt_n=p.get("shock_b_over_sqrt_n", 1.0),
+                shock_abundance=p.get("shock_abundance", "solar"),
+                shock_component=p.get("shock_component", "combined"),
+            )
+            _tau_diff_s = p.get("tau_diff", 0.0)
+            _dust_kw_s = {
+                "dust_slope": p.get("dust_slope", -0.7),
+                "dust_bump_strength": p.get("dust_bump_strength", 0.0),
+            }
+            shock_sed, _ = attenuate_emission(
+                shock_raw,
+                ssp_wave_f64,
+                "diff",
+                0.0,
+                _tau_diff_s,
+                law_bc_fn,
+                law_diff_fn if not _is_single_dust else law_bc_fn,
+                **_dust_kw_s,
             )
             sed = sed + shock_sed
 
         # --- 4. Energy balance + AGN L_bol on SSP grid (before interp) ---
         if has_dust_em:
             nu_em = _c_aa / ssp_wave.astype(jnp.float64)
-            L_absorbed = -jnp.trapezoid(sed_intr - sed_atten, nu_em)
+            L_absorbed_stellar = -jnp.trapezoid(sed_intr - sed_atten, nu_em)
+            L_absorbed = L_absorbed_stellar
+            if has_nebular:
+                L_absorbed = L_absorbed + L_abs_neb
             eta_balance = p.get("dust_eta_balance", 1.0)
             L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
         else:
@@ -1472,7 +1485,8 @@ def build_fused_rest_sed(model):
 
         # --- 6. Dust IR emission (energy-balanced) ---
         if has_dust_em:
-            dust_ir = dust_emission_fn(
+            dust_ir = dust_ir_emission(
+                dust_emission_fn,
                 wave_z2,
                 L_ir,
                 dust_T=p.get("dust_T", 35.0),
@@ -1487,22 +1501,41 @@ def build_fused_rest_sed(model):
 
         # --- 7. AGN ---
         if has_agn:
-            agn_sed = agn_model_fn(
+            agn_sed = agn_emission(
+                agn_model_fn,
                 wave_z2,
                 agn_log_lbol=agn_log_lbol,
                 agn_frac=agn_frac_val,
+                agn_polar_ebv=p.get("agn_polar_ebv", 0.0),
+                agn_cos_inc=p.get("agn_cos_inc", 0.5),
+                agn_polar_oa=p.get("agn_polar_oa", 45.0),
                 agn_alpha=p.get("agn_alpha", -1.0),
                 agn_T_torus=p.get("agn_T_torus", 1000.0),
                 agn_tau_torus=p.get("agn_tau_torus", 5.0),
                 agn_torus_frac=p.get("agn_torus_frac", 0.5),
                 agn_log_mbh=p.get("agn_log_mbh", 7.0),
                 agn_log_ledd=p.get("agn_log_ledd", -1.0),
+                agn_a_spin=p.get("agn_a_spin", 0.0),
+                agn_tau_skirtor=p.get("agn_tau_skirtor", 7.0),
+                agn_p_skirtor=p.get("agn_p_skirtor", 1.0),
+                agn_q_skirtor=p.get("agn_q_skirtor", 1.0),
+                agn_oa_skirtor=p.get("agn_oa_skirtor", 40.0),
+                agn_T_hot=p.get("agn_T_hot", 1200.0),
+                agn_T_warm=p.get("agn_T_warm", 300.0),
+                agn_frac_hot=p.get("agn_frac_hot", 0.3),
+                agn_f_hard=p.get("agn_f_hard", 0.02),
+                agn_gamma_warm=p.get("agn_gamma_warm", 2.5),
+                agn_kt_warm=p.get("agn_kt_warm", 0.2),
+                agn_gamma_hard=p.get("agn_gamma_hard", 1.8),
+                agn_kt_hot=p.get("agn_kt_hot", 100.0),
+                agn_r_warm_ratio=p.get("agn_r_warm_ratio", 2.0),
             )
             sed = sed + agn_sed
 
         # --- 8. Radio ---
         if has_radio:
-            radio_sed = radio_total(
+            _log_mstar = jnp.log10(jnp.maximum(jnp.sum(weights), 1e-10))
+            radio_sed = radio_emission(
                 wave_z2,
                 L_ir=L_ir,
                 L_agn_bol=agn_bol_erg,
@@ -1510,6 +1543,12 @@ def build_fused_rest_sed(model):
                 alpha_sf=p.get("radio_alpha_sf", 0.8),
                 radio_loudness=p.get("radio_loudness", 0.0),
                 alpha_agn=p.get("radio_alpha_agn", 0.7),
+                sfr_mode=_radio_sfr_mode,
+                log_mstar=_log_mstar,
+                redshift=_redshift,
+                include_freefree=_include_freefree,
+                T_e=p.get("radio_T_e", 1e4),
+                alpha_ff=p.get("radio_alpha_ff", -0.1),
             )
             sed = sed + radio_sed
 
@@ -1517,13 +1556,16 @@ def build_fused_rest_sed(model):
         if has_xray:
             sfr_current = p.get("_sfr_current", 1.0)
             mstar = jnp.sum(weights)
-            xray_sed = xray_total(
+            xray_sed = xray_emission(
                 wave_z2,
                 sfr=sfr_current,
                 stellar_mass=mstar,
                 L_agn_bol=agn_bol_erg,
                 gamma_agn=p.get("xray_gamma_agn", 1.8),
                 alpha_ox=p.get("xray_alpha_ox", -1.4),
+                gamma_hmxb=p.get("xray_gamma_hmxb", 2.0),
+                gamma_lmxb=p.get("xray_gamma_lmxb", 1.6),
+                E_cut=p.get("xray_E_cut", 300.0),
             )
             sed = sed + xray_sed
 
