@@ -167,56 +167,179 @@ model_full = SEDModel(spec_full, ssp_data, observation=None)
 params = spec_full.sample(jax.random.PRNGKey(42))
 
 # %% [markdown]
-# ## Section 1: X-ray to radio in one plot
+# ## Section 1: Panchromatic SED decomposition (X-ray → radio)
 #
-# `predict_spectrum` returns the **observed-frame** flux density
-# (erg/s/cm²/Hz) including distance and IGM handling inside the pipeline. The
-# curve includes stellar+nebular (from the SSP), dust attenuation, dust IR
-# re-radiation, and the empirical radio / X-ray extensions.
+# We use `SEDModel._compute_sed_components()` to obtain each physical emission
+# channel in a **single** consistent pipeline call.  All outputs are in
+# erg s⁻¹ Hz⁻¹ (CGS); we convert to νL_ν [L☉] for the plot so different
+# wavelength decades are directly comparable.
+#
+# The figure style follows `analysis/multiwavelength_sed_v2.py`:
+# electromagnetic band shading, filled component areas, twin frequency axis,
+# and annotated spectral breaks.
 
 # %%
-wave_obs = jnp.logspace(0.5, 7.15, 2000)
-sed_total = model_full.predict_spectrum(params, wave_obs)
+import matplotlib.ticker as ticker
 
-fig, ax = plt.subplots(figsize=(14, 5))
-w = np.array(wave_obs)
-s = np.array(sed_total)
-ok = np.isfinite(s) & (s > 0)
-ax.loglog(w[ok], s[ok], color=COLORS.get("model", "C0"), lw=1.5, label="Total SED")
+# ── Wavelength / frequency grids ────────────────────────────────────────────
+_C_AA_S = 2.99792458e18            # speed of light in Å s⁻¹
+_LSUN_ERG = 3.828e33               # IAU 2015 nominal solar luminosity [erg/s]
 
-features = {
-    20: "Soft X-ray",
-    912: "Lyman break",
-    4000: "4000 Å break",
-    1.6e4: "NIR bump",
-    3.3e4: "PAH",
-    100e4: "FIR peak",
-    1e7: "Radio",
-}
-for wave_feature, label in features.items():
-    if w[ok][0] < wave_feature < w[ok][-1]:
-        sed_at = float(np.interp(wave_feature, w[ok], s[ok]))
-        ax.annotate(
-            label,
-            xy=(wave_feature, sed_at),
-            xytext=(wave_feature * 1.35, sed_at * 2.5),
-            fontsize=9,
-            color="darkred",
-            arrowprops=dict(arrowstyle="->", color="darkred", lw=0.8),
-        )
+# 0.12 Å (≈100 keV hard X-ray) → 3×10^11 Å (≈300 MHz radio)
+_WAVE_AA = np.logspace(np.log10(0.12), np.log10(3e11), 3000)
+_WAVE_UM = _WAVE_AA * 1e-4         # μm  (primary axis)
+_NU_HZ   = _C_AA_S / _WAVE_AA     # Hz
 
-ax.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]", fontsize=11)
-ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]", fontsize=11)
-ax.set_title(
-    "Anatomy of a galaxy SED (observed frame, all enabled components)",
-    fontsize=12,
-    fontweight="bold",
+# ── Compute all SED components at z = 0 (rest-frame) ────────────────────────
+_params_z0 = {**params, "redshift": jnp.array(0.0)}
+_comp = model_full._compute_sed_components(
+    _params_z0, need_intrinsic=True, rest_wavelength=jnp.array(_WAVE_AA)
 )
-ax.set_xlim(float(w[ok].min()), float(w[ok].max()))
-ax.grid(True, alpha=0.3)
-ax.legend(loc="upper right", fontsize=8)
+
+def _nulnu(lnu):
+    """L_nu [erg/s/Hz] → νL_ν [L☉], floored at zero."""
+    return np.maximum(np.array(lnu) * _NU_HZ / _LSUN_ERG, 0.0)
+
+_nl = {
+    "intrinsic": _nulnu(_comp["sed_intrinsic"]),
+    "stellar":   _nulnu(_comp["sed_attenuated"]),
+    "nebular":   _nulnu(_comp["sed_nebular"]),
+    "dust_ir":   _nulnu(_comp["sed_dust_ir"]),
+    "xray":      _nulnu(_comp["sed_xray"]),
+    "radio":     _nulnu(_comp["sed_radio"]),
+    "total":     _nulnu(_comp["sed_total"]),
+}
+
+# ── Colour palette (perceptually ordered, colourblind-safe) ─────────────────
+_C = {
+    "intrinsic": "#aaaaaa",
+    "stellar":   "#4c78a8",
+    "nebular":   "#17becf",
+    "dust_ir":   "#f58518",
+    "xray":      "#9467bd",
+    "radio":     "#54a24b",
+    "total":     "#1a1a1a",
+}
+
+# ── Figure ───────────────────────────────────────────────────────────────────
+_Y_MIN, _Y_MAX = 4.0, 13.0
+_XLIM_UM = (1e-4, 1e6)
+
+fig, ax = plt.subplots(1, 1, figsize=(13, 8))
+
+# Band shading
+_BANDS = [
+    (1e-4, 0.010, "Hard\nX-ray", "#e8d0f5", 0.97),
+    (0.010, 0.020, "Soft\nX-ray", "#d9edf7", 0.97),
+    (0.020, 0.091, "EUV",        "#f5e6d3", 0.88),
+    (0.091, 0.20,  "FUV",        "#fff0a0", 0.97),
+    (0.20,  0.40,  "UV",         "#faf3c0", 0.88),
+    (0.40,  0.70,  "Optical",    "#e0f5e0", 0.97),
+    (0.70,  2.5,   "NIR",        "#fde8d0", 0.88),
+    (2.5,   30.0,  "MIR",        "#fdd9b0", 0.97),
+    (30.0,  1e3,   "FIR",        "#fcc890", 0.88),
+    (1e3,   1e6,   "Radio",      "#dce8f5", 0.97),
+]
+for _lo, _hi, _lbl, _col, _yfrac in _BANDS:
+    ax.axvspan(_lo, _hi, color=_col, alpha=0.35, zorder=0)
+    _lc = np.sqrt(_lo * _hi)
+    _yp = 10 ** (_Y_MIN + _yfrac * (_Y_MAX - _Y_MIN))
+    ax.text(_lc, _yp, _lbl, ha="center", va="top", fontsize=8,
+            color="#444444", style="italic", zorder=5)
+
+# Plotting helpers
+_thresh = 10 ** (_Y_MIN - 0.5)
+
+def _splot(x, y, **kw):
+    mask = y > _thresh
+    if mask.any():
+        ax.plot(x[mask], y[mask], **kw)
+
+def _sfill(x, y, **kw):
+    floor = np.full_like(y, 10 ** _Y_MIN)
+    ym = np.where(y > _thresh, y, np.nan)
+    ax.fill_between(x, floor, ym, **kw)
+
+# ── Components ───────────────────────────────────────────────────────────────
+_splot(_WAVE_UM, _nl["intrinsic"],
+       color=_C["intrinsic"], lw=1.5, ls="--", alpha=0.7, zorder=2,
+       label="Stars (intrinsic, no dust)")
+
+_splot(_WAVE_UM, _nl["nebular"],
+       color=_C["nebular"], lw=1.5, zorder=4,
+       label="Nebular emission (baked-in SSP)")
+
+_sfill(_WAVE_UM, _nl["stellar"], color=_C["stellar"], alpha=0.22, zorder=2)
+_splot(_WAVE_UM, _nl["stellar"],
+       color=_C["stellar"], lw=2.0, zorder=3,
+       label="Stellar continuum (attenuated)")
+
+_sfill(_WAVE_UM, _nl["dust_ir"], color=_C["dust_ir"], alpha=0.22, zorder=2)
+_splot(_WAVE_UM, _nl["dust_ir"],
+       color=_C["dust_ir"], lw=2.0, zorder=3,
+       label=r"Dust IR (DL07, $q_{\rm PAH}=2.5\%$)")
+
+_sfill(_WAVE_UM, _nl["xray"], color=_C["xray"], alpha=0.22, zorder=2)
+_splot(_WAVE_UM, _nl["xray"],
+       color=_C["xray"], lw=2.0, ls="-.", zorder=3,
+       label="X-ray (XRBs)")
+
+_sfill(_WAVE_UM, _nl["radio"], color=_C["radio"], alpha=0.22, zorder=2)
+_splot(_WAVE_UM, _nl["radio"],
+       color=_C["radio"], lw=2.0, zorder=3,
+       label="Radio (SF synchrotron)")
+
+_splot(_WAVE_UM, _nl["total"],
+       color=_C["total"], lw=3.0, zorder=6,
+       label="Total SED")
+
+# ── Axes ─────────────────────────────────────────────────────────────────────
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(*_XLIM_UM)
+ax.set_ylim(10 ** _Y_MIN, 10 ** _Y_MAX)
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mu$m]", fontsize=12)
+ax.set_ylabel(r"$\nu L_\nu$ [$L_\odot$]", fontsize=12)
+ax.set_title(
+    r"SED anatomy: component decomposition (star-forming galaxy, $z=0$)",
+    fontsize=13, fontweight="bold",
+)
+
+# Twin frequency axis on top
+_ax_top = ax.twiny()
+_ax_top.set_xscale("log")
+_ax_top.set_xlim(*_XLIM_UM)
+_nu_ticks = np.array([1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18])
+_lam_ticks = (_C_AA_S / _nu_ticks) * 1e-4
+_in_range = (_lam_ticks >= _XLIM_UM[0]) & (_lam_ticks <= _XLIM_UM[1])
+_ax_top.set_xticks(_lam_ticks[_in_range])
+_ax_top.set_xticklabels(
+    [rf"$10^{{{int(np.log10(nu))}}}$" for nu in _nu_ticks[_in_range]],
+    fontsize=9,
+)
+_ax_top.set_xlabel(r"Rest-frame frequency $\nu$ [Hz]", fontsize=11, labelpad=8)
+
+ax.yaxis.set_minor_locator(ticker.LogLocator(subs=np.arange(2, 10)))
+ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+
+ax.legend(
+    loc="upper center", bbox_to_anchor=(0.5, -0.10),
+    ncol=3, fontsize=10, framealpha=0.9, edgecolor="#888888",
+)
+
+# Spectral break markers
+for _wbreak, _wlabel, _xside in [
+    (912e-4,  "Lyman limit\n(912 Å)",   "right"),
+    (3646e-4, "Balmer break\n(3646 Å)", "left"),
+]:
+    ax.axvline(_wbreak, color="#555555", lw=1.0, ls=":", alpha=0.6, zorder=1)
+    _xoff = _wbreak * (0.88 if _xside == "left" else 1.12)
+    ax.text(_xoff, 10 ** 5.4, _wlabel, fontsize=8, color="#555555",
+            va="bottom", ha=_xside,
+            bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.7))
+
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "01_sed_anatomy_full.png"), dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "01_sed_decomposition.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 print("→ Next: build the SED in steps using separate forward models (same SSP, toggled modules).")
