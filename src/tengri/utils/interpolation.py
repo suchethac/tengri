@@ -1,8 +1,12 @@
 """Smooth grid interpolation via the triweight kernel (Hearin et al. 2023).
 
 Provides C²-continuous weights for interpolating over 1-D grid axes.
-Used by both the SSP metallicity interpolation (DSPS-compatible) and the
-CLOUDY nebular grid interpolation.
+Used by the CLOUDY nebular grid interpolation and available for any
+future grid-based model component.
+
+Note: the DSPS/SPS metallicity interpolation in ``dsps_wrapper.py``
+keeps its own triweight kernel — that code mirrors upstream DSPS exactly
+and should not be replaced.
 
 References
 ----------
@@ -51,17 +55,12 @@ def tw_cuml_kern(x: float, m: float, h: float) -> float:
     return val
 
 
-def edges_for_grid(
-    grid: jnp.ndarray,
-    lo: float | None = None,
-    hi: float | None = None,
-) -> jnp.ndarray:
+def edges_for_grid(grid: jnp.ndarray) -> jnp.ndarray:
     """Compute bin edges from grid midpoints for triweight interpolation.
 
     Returns ``n + 1`` edges bracketing ``n`` grid nodes.  Interior edges are
-    midpoints between adjacent nodes.  Boundary edges default to half-spacing
-    beyond the outermost nodes, but can be overridden with fixed ``lo``/``hi``
-    values (e.g. the DSPS metallicity convention uses ``lo=-4.0, hi=0.5``).
+    midpoints between adjacent nodes.  Boundary edges use half-spacing
+    beyond the outermost nodes.
 
     Precompute once per static grid and pass to :func:`compute_grid_weights`
     to avoid rebuilding inside a JIT trace.
@@ -70,21 +69,15 @@ def edges_for_grid(
     ----------
     grid : array, shape (n,)
         Sorted grid node values (ascending).
-    lo : float or None
-        Lower boundary edge.  ``None`` → ``grid[0] - (grid[1]-grid[0])/2``.
-    hi : float or None
-        Upper boundary edge.  ``None`` → ``grid[-1] + (grid[-1]-grid[-2])/2``.
 
     Returns
     -------
     array, shape (n + 1,)
         Bin edges.
     """
-    lo_val = grid[0] - (grid[1] - grid[0]) / 2.0 if lo is None else lo
-    hi_val = grid[-1] + (grid[-1] - grid[-2]) / 2.0 if hi is None else hi
-    return jnp.concatenate(
-        [jnp.array([lo_val]), (grid[:-1] + grid[1:]) / 2.0, jnp.array([hi_val])]
-    )
+    half_lo = (grid[1] - grid[0]) / 2.0
+    half_hi = (grid[-1] - grid[-2]) / 2.0
+    return jnp.concatenate([grid[:1] - half_lo, (grid[:-1] + grid[1:]) / 2.0, grid[-1:] + half_hi])
 
 
 def compute_grid_weights(
