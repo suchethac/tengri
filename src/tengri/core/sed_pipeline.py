@@ -702,6 +702,25 @@ def compute_sed_components(
                 neb_fesc_lya=p.get("neb_fesc_lya", 0.0),
                 gas_logqion=_gas_logqion_sfr,
             )
+        # Apply dust attenuation to nebular emission.
+        # Default: birth-cloud + diffuse ISM (Charlot & Fall 2000).
+        # Nebular photons originate in HII regions (birth clouds) and
+        # traverse both the birth cloud and the diffuse ISM.
+        tau_bc = p.get("tau_bc", p.get("tau_v", 0.0))
+        tau_diff_neb = p.get("tau_diff", 0.0)
+        _neb_dust_kw = {
+            "n_slope": p.get("dust_slope", -0.7),
+            "dust_bump_strength": p.get("dust_bump_strength", 0.0),
+        }
+        if tau_bc > 0.0 and hasattr(model, "_dust_law_bc"):
+            k_bc = resolve_dust_law(model._dust_law_bc)(model.ssp_data.ssp_wave, **_neb_dust_kw)
+            neb_sed = neb_sed * jnp.exp(-tau_bc * k_bc)
+        if tau_diff_neb > 0.0 and hasattr(model, "_dust_law_diff"):
+            k_diff = resolve_dust_law(model._dust_law_diff)(
+                model.ssp_data.ssp_wave, **_neb_dust_kw
+            )
+            neb_sed = neb_sed * jnp.exp(-tau_diff_neb * k_diff)
+
         _neb_sed = neb_sed
         sed = sed + neb_sed
 
