@@ -76,8 +76,9 @@ src/tengri/
 │   ├── model.py             # Model class (thin orchestrator)
 │   ├── param_spec.py        # ParamSpec: parameter definitions + validation
 │   ├── param_translate.py   # Public→internal param mapping + unit conversion
-│   ├── fused_kernels.py     # JIT kernel factory functions
-│   ├── sed_pipeline.py      # Core SED computation engine
+│   ├── emission_helpers.py   # Shared emission physics (nebular, shock, AGN, dust IR, radio, xray, IGM)
+│   ├── fused_kernels.py     # JIT kernel factory — calls emission_helpers
+│   ├── sed_pipeline.py      # Non-fused SED engine — calls emission_helpers
 │   ├── prediction.py        # Lazy Prediction object
 │   ├── noise.py             # Noise model handling
 │   └── mock.py              # Mock galaxy generation
@@ -287,6 +288,31 @@ due to the age-dust-metallicity degeneracy. This is a physical limitation, not a
 For geoVI/MGVI: check KL convergence across iterations and compare to RT posteriors when possible.
 
 **Autocorrelation plot**: `plot_autocorrelation(result)` from `_plot_style.py` shows ACF vs lag for each parameter with the Sokal window marked.
+
+## Emission helpers architecture
+
+Both the non-fused pipeline (`sed_pipeline.py`) and the fused JIT kernel (`fused_kernels.py`) call the same shared physics functions from `emission_helpers.py`. This guarantees identical emission computation across code paths:
+
+| Helper | Physics | Key feature |
+|--------|---------|-------------|
+| `nebular_emission()` | Cue/CLOUDY lines + continuum | wNE SSP detection: falls back to SFR-based Q_H when SSP ionizing flux ≈ 0 |
+| `attenuate_emission()` | Dust on nebular/shock | Returns `(sed, L_absorbed)` for energy balance; modes: `"bc"`, `"diff"`, `"neb"`, `"none"` |
+| `shock_emission()` | MAPPINGS V line emission | 6 params (velocity, density, B-field, abundance, component) |
+| `agn_emission()` | K&D 3-zone disc + torus + polar dust | 20+ params including spin, SKIRTOR, warm Comptonization |
+| `dust_ir_emission()` | DL07/DL14/Dale/MBB templates | Energy-balanced: `L_ir = L_absorbed_stellar + L_absorbed_nebular` |
+| `radio_emission()` | SF synchrotron + AGN jets + free-free | 12 params including sfr_mode, freefree toggle |
+| `xray_emission()` | XRBs (HMXB+LMXB) + AGN corona | 5 params (photon indices, cutoff energy) |
+| `igm_absorption()` | Inoue+2014 IGM transmission | Wraps `igm_transmission(wave_obs, z)` |
+
+**Nebular dust attenuation** (configurable via `Parameters(neb_dust=...)`):
+- `"bc"` (default): birth-cloud + diffuse ISM (Charlot & Fall 2000)
+- `"diff"`: diffuse ISM only (when CLOUDY grid already includes internal HII dust)
+- `"neb"`: separate BC law for nebular (`neb_dust_law_bc="smc"`) + same diffuse as stellar
+- `"none"`: no dust on nebular emission
+
+**Energy conservation**: `L_absorbed = L_absorbed_stellar + L_absorbed_nebular`, so dust IR re-emission accounts for all absorbed photons (both stellar and nebular).
+
+**SSP templates**: Pure-continuum SSPs (no nebular baked in) are preferred. Available at `halos.as.arizona.edu/suchethacooray/ssp-spectra/`. The `wNE` prefix in old SSP filenames means "with Nebular Emission" — these have ionizing photons pre-absorbed, causing Q_H ≈ 0 from the SSP spectrum. The pipeline detects this and falls back to SFR-based Q_H automatically.
 
 ## Performance optimizations
 

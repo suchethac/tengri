@@ -238,7 +238,7 @@ lnu_lsun = np.array(result["sed"]) / LSUN   # was needed before the unit refacto
 **Impact:** Resolved. All SED component functions now return erg/s/Hz. The assembled SED
 (stellar + AGN + radio + X-ray + nebular) is consistently in erg/s/Hz throughout the pipeline.
 
-### BUG-API-02: `compute_qh` returns ~0 for `wNE` SSP spectra (OPEN)
+### BUG-API-02: `compute_qh` returns ~0 for `wNE` SSP spectra (FIXED 2026-04-08)
 
 **File:** `src/tengri/models/nebular/_shared.py` — `compute_qh`
 **Root cause:** `compute_qh` estimates Q_H by integrating `L_ν / (hν)` below 912 Å. SSP files with
@@ -254,17 +254,18 @@ regardless of the SFR, making any nebular emission derived from it invisible.
 _Q_H = sfr_now_msun_yr * 3.9e53
 ```
 
-**Proper fix:** `compute_qh` docstring should warn that it requires a non-nebular (no `wNE`) SSP.
-Alternatively, provide `compute_qh_from_sfr(sfr, imf="chabrier")` as a calibration-based alternative
-exported from `tengri.models.nebular._shared`.
+**Fix (2026-04-08):** Implemented in `emission_helpers.py::nebular_emission()`. The pipeline now:
+1. Computes SFR-based Q_H: `Q_H = 4.2e53 × SFR` (Leitherer+1999, Chabrier IMF)
+2. Compares against SSP-derived Q_H from the Cue backend
+3. If SSP Q_H < 1% of SFR Q_H (wNE indicator), falls back to low-level Cue mode
+   with default ionizing spectrum shape + SFR-based Q_H normalization.
+Both `sed_pipeline.py` and `fused_kernels.py` use this logic via the shared helper.
 
-**Regression test required:** `tests/unit/test_nebular_qh.py::test_compute_qh_wne_returns_zero` —
-verify that `compute_qh` on a `wNE` SSP spectrum gives Q_H ≈ 0, and that the SFR-based calibration
-gives a physically plausible Q_H (~10^53–10^54 phot/s for SFR=1–10 Msun/yr).
+**Preferred solution:** Use pure-continuum SSP templates (no `wNE` prefix) from
+`halos.as.arizona.edu/suchethacooray/ssp-spectra/`. These have intact Lyman continuum,
+so SSP-derived Q_H and ionizing spectrum shape are both correct.
 
-**Impact:** Any script or notebook that calls `compute_qh` on a tengri SSP file (all of which are
-`wNE`) will silently produce Q_H ≈ 0 and invisible nebular emission lines. Discovered during
-`multiwavelength_sed.py` development (2026-04-06).
+**Impact:** Resolved. Nebular emission now appears correctly for all SSP types.
 
 ---
 

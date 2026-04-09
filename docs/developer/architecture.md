@@ -16,8 +16,9 @@ src/tengri/
 │   ├── model.py             # Model class (thin orchestrator)
 │   ├── param_spec.py        # Parameters: parameter definitions + validation
 │   ├── param_translate.py   # Public → internal param mapping + unit conversion
-│   ├── fused_kernels.py     # JIT kernel factory functions
-│   ├── sed_pipeline.py      # Core SED computation engine
+│   ├── emission_helpers.py   # Shared emission physics (nebular, shock, AGN, dust IR, radio, xray, IGM)
+│   ├── fused_kernels.py     # JIT kernel factory — calls emission_helpers
+│   ├── sed_pipeline.py      # Non-fused SED engine — calls emission_helpers
 │   ├── prediction.py        # Lazy Prediction object
 │   ├── noise.py             # Noise model handling
 │   └── mock.py              # Mock galaxy generation
@@ -151,6 +152,46 @@ H(xi) = 1/2 chi^2(data, f(xi)) + 1/2 xi^T xi
 ```
 
 No separate prior penalty terms. No per-distribution special cases.
+
+## Emission physics architecture
+
+Both the non-fused pipeline (`sed_pipeline.py`) and the fused JIT kernel
+(`fused_kernels.py`) call the same pure functions from `emission_helpers.py`.
+This guarantees identical physics across code paths:
+
+```
+emission_helpers.py          ← single source of truth
+    nebular_emission()         wNE SSP detection + SFR-based Q_H fallback
+    attenuate_emission()       dust on nebular/shock; returns L_absorbed
+    shock_emission()           MAPPINGS V line emission
+    agn_emission()             K&D 3-zone + SKIRTOR + polar dust
+    dust_ir_emission()         DL07/DL14/Dale/MBB (energy-balanced)
+    radio_emission()           SF synchrotron + AGN jets + free-free
+    xray_emission()            XRBs + AGN corona
+    igm_absorption()           Inoue+2014
+
+sed_pipeline.py              ← non-fused orchestrator
+    branching + component tracking + return dict
+
+fused_kernels.py             ← fused JIT orchestrator
+    closure captures at build time, calls same helpers inside @jax.jit
+```
+
+**Adding a new parameter:** update the helper function signature in
+`emission_helpers.py` → both paths inherit the change automatically.
+
+**Energy conservation:** `L_absorbed = L_absorbed_stellar + L_absorbed_nebular`.
+The `attenuate_emission()` helper returns the absorbed luminosity as a side
+output, which feeds into the dust IR energy balance.
+
+**Nebular dust attenuation** (configurable via `Parameters(neb_dust=...)`):
+
+| Mode | Birth-cloud | Diffuse ISM | Use case |
+|------|:-----------:|:-----------:|----------|
+| `"bc"` (default) | Yes | Yes | Charlot & Fall (2000) |
+| `"diff"` | No | Yes | CLOUDY grids with internal HII dust |
+| `"neb"` | Custom law | Yes | Different grain properties in HII regions |
+| `"none"` | No | No | Debugging |
 
 ## Data flow
 
