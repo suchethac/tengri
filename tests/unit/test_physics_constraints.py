@@ -220,8 +220,7 @@ class TestAgeOfUniverseConstraint:
         """Age of universe at z=0 ~ 13.8 Gyr (Planck 2018)."""
         from tengri.utils.cosmology import age_at_z
 
-        age_yr = float(age_at_z(0.0))
-        age_gyr = age_yr / 1e9
+        age_gyr = float(age_at_z(0.0))
         np.testing.assert_allclose(
             age_gyr,
             13.8,
@@ -240,7 +239,7 @@ class TestAgeOfUniverseConstraint:
         """Age at z=1 ~ 5.9 Gyr (Planck 2018)."""
         from tengri.utils.cosmology import age_at_z
 
-        age_gyr = float(age_at_z(1.0)) / 1e9
+        age_gyr = float(age_at_z(1.0))
         np.testing.assert_allclose(
             age_gyr,
             5.9,
@@ -580,17 +579,13 @@ class TestLuminosityDistancePhysics:
 
     def test_dl_low_z_hubble_law(self):
         """At low z, dL ~ c*z/H0 (Hubble law)."""
-        from tengri.utils.cosmology import (
-            C_KM_S,
-            DEFAULT_H0,
-            MPC_TO_CM,
-            luminosity_distance,
-        )
+        from tengri.utils.cosmology import DEFAULT_H0, luminosity_distance
+        from tengri.utils.physics_constants import C_KM_S, MPC_CM
 
         z = 0.01
         dl = float(luminosity_distance(z))
         # Hubble law: dL = c*z*(1+z)/H0  (first-order, flat)
-        dl_hubble = C_KM_S * z * (1 + z) / DEFAULT_H0 * MPC_TO_CM
+        dl_hubble = C_KM_S * z * (1 + z) / DEFAULT_H0 * MPC_CM
         np.testing.assert_allclose(
             dl, dl_hubble, rtol=0.02, err_msg="Low-z dL should match Hubble law"
         )

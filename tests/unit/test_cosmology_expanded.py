@@ -31,6 +31,8 @@ from tengri.utils.cosmology import (
     luminosity_distance,
     luminosity_distance_mpc,
 )
+from numpy.testing import assert_allclose
+
 from tengri.utils.physics_constants import MPC_CM, PC_CM
 
 
@@ -482,3 +484,108 @@ class TestNumericalStability:
         assert jnp.all(diffs > 0.0)  # Monotonically increasing
         # At low z, steps can be ~1 mag per 0.06 dz, so allow larger step sizes
         assert jnp.all(diffs < 2.0)  # Reasonable step size
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Redshift inversion: z_at_cosmic_time and z_at_lookback_time
+# ─────────────────────────────────────────────────────────────────────
+
+class TestZAtCosmicTime:
+    """Tests for z_at_cosmic_time (inverse of age_at_z)."""
+
+    def test_round_trip_scalar(self):
+        """z_at_cosmic_time(age_at_z(z)) ≈ z for scalar z."""
+        from tengri.utils.cosmology import age_at_z, z_at_cosmic_time
+
+        for z_true in [0.0, 0.5, 1.0, 2.0, 5.0, 10.0]:
+            t = float(age_at_z(z_true))
+            z_rec = float(z_at_cosmic_time(t))
+            assert_allclose(z_rec, z_true, atol=0.01, rtol=0.01)
+
+    def test_round_trip_array(self):
+        """z_at_cosmic_time works with array input."""
+        from tengri.utils.cosmology import age_at_z, z_at_cosmic_time
+
+        z_true = jnp.array([0.5, 1.0, 2.0, 5.0])
+        t_arr = jnp.array([float(age_at_z(z)) for z in z_true])
+        z_rec = z_at_cosmic_time(t_arr)
+        assert_allclose(z_rec, z_true, atol=0.01, rtol=0.01)
+
+    def test_z_at_t0_is_zero(self):
+        """Cosmic time = age of universe → z = 0."""
+        from tengri.utils.cosmology import age_at_z0, z_at_cosmic_time
+
+        t0 = age_at_z0()
+        z = float(z_at_cosmic_time(t0))
+        assert_allclose(z, 0.0, atol=0.01)
+
+    def test_early_times_give_high_z(self):
+        """Very early cosmic time → high redshift."""
+        from tengri.utils.cosmology import z_at_cosmic_time
+
+        z = float(z_at_cosmic_time(0.5))  # 0.5 Gyr after Big Bang
+        assert z > 5.0, f"z at 0.5 Gyr should be > 5, got {z}"
+
+    def test_monotonic(self):
+        """z decreases as cosmic time increases."""
+        from tengri.utils.cosmology import z_at_cosmic_time
+
+        t_grid = jnp.linspace(0.5, 13.0, 20)
+        z_grid = z_at_cosmic_time(t_grid)
+        diffs = jnp.diff(z_grid)
+        assert jnp.all(diffs < 0), "z should decrease with cosmic time"
+
+    def test_flexible_api(self):
+        """Accepts h0/om0 kwargs and cosmo object."""
+        from tengri.utils.cosmology import PLANCK18, z_at_cosmic_time
+
+        z1 = float(z_at_cosmic_time(5.0))
+        z2 = float(z_at_cosmic_time(5.0, cosmo=PLANCK18))
+        z3 = float(z_at_cosmic_time(5.0, h0=67.4, om0=0.315))
+        assert_allclose(z1, z2, rtol=1e-10)
+        assert_allclose(z1, z3, rtol=0.01)
+
+
+class TestZAtLookbackTime:
+    """Tests for z_at_lookback_time (inverse of lookback_time)."""
+
+    def test_round_trip_scalar(self):
+        """z_at_lookback_time(lookback_time(z)) ≈ z."""
+        from tengri.utils.cosmology import lookback_time, z_at_lookback_time
+
+        for z_true in [0.0, 0.5, 1.0, 2.0, 5.0]:
+            t_lb = float(lookback_time(z_true))
+            z_rec = float(z_at_lookback_time(t_lb))
+            assert_allclose(z_rec, z_true, atol=0.01, rtol=0.01)
+
+    def test_zero_lookback_is_z0(self):
+        """Lookback time = 0 → z = 0 (now)."""
+        from tengri.utils.cosmology import z_at_lookback_time
+
+        z = float(z_at_lookback_time(0.0))
+        assert_allclose(z, 0.0, atol=0.01)
+
+    def test_large_lookback_is_high_z(self):
+        """Large lookback time → high redshift."""
+        from tengri.utils.cosmology import z_at_lookback_time
+
+        z = float(z_at_lookback_time(12.5))  # 12.5 Gyr ago
+        assert z > 3.0, f"z at 12.5 Gyr lookback should be > 3, got {z}"
+
+    def test_monotonic(self):
+        """z increases with lookback time."""
+        from tengri.utils.cosmology import z_at_lookback_time
+
+        t_lb = jnp.linspace(0.0, 12.0, 20)
+        z_grid = z_at_lookback_time(t_lb)
+        diffs = jnp.diff(z_grid)
+        assert jnp.all(diffs > 0), "z should increase with lookback time"
+
+    def test_array_input(self):
+        """Works with array input."""
+        from tengri.utils.cosmology import z_at_lookback_time
+
+        t_lb = jnp.array([0.0, 5.0, 8.0, 12.0])
+        z_arr = z_at_lookback_time(t_lb)
+        assert z_arr.shape == (4,)
+        assert jnp.all(jnp.isfinite(z_arr))

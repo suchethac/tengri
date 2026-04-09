@@ -54,6 +54,8 @@ __all__ = [
     "lookback_time",
     "luminosity_distance",
     "luminosity_distance_mpc",
+    "z_at_cosmic_time",
+    "z_at_lookback_time",
 ]
 
 
@@ -530,3 +532,103 @@ def kpc_per_arcsec(
     da_mpc = angular_diameter_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
     # Inverse of arcsec_per_kpc
     return (da_mpc * 1000.0) / 206265.0
+
+
+def z_at_cosmic_time(
+    t_gyr: float,
+    h0: float | None = None,
+    om0: float | None = None,
+    *,
+    cosmo: CosmoParams | None = None,
+    z_max: float = 30.0,
+    n_grid: int = 512,
+) -> float:
+    """Redshift at a given cosmic time (age of universe).
+
+    Numerically inverts age_at_z(z) = t using a pre-built lookup table
+    with linear interpolation. Useful for converting SFH time grids to
+    redshift grids for CSFR reconstruction.
+
+    Parameters
+    ----------
+    t_gyr : float or array
+        Cosmic time (age of universe) in Gyr. Must be between 0 and
+        age_at_z0. Values outside this range are clipped.
+    h0 : float, optional
+        Hubble constant in km/s/Mpc.
+    om0 : float, optional
+        Matter density parameter Ω_m.
+    cosmo : CosmoParams, optional
+        Full cosmology parameter set (keyword-only).
+    z_max : float
+        Maximum redshift for the lookup table (default: 30).
+    n_grid : int
+        Number of points in the lookup table (default: 512).
+
+    Returns
+    -------
+    float or array
+        Redshift corresponding to the given cosmic time. Returns z_max
+        for t < age(z_max), and 0 for t >= age(0).
+    """
+    if h0 is not None or om0 is not None:
+        cosmo = None
+    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+
+    # Build lookup table: z_grid → t_grid (decreasing in t)
+    z_grid = jnp.linspace(0.0, z_max, n_grid)
+    t_grid = _dsps_age_at_z(z_grid, c.Om0, c.w0, c.wa, c.h)
+
+    # t_grid is decreasing (age decreases with z). Flip for interp.
+    t_flip = t_grid[::-1]  # now increasing
+    z_flip = z_grid[::-1]  # corresponding z (now decreasing)
+
+    return jnp.interp(t_gyr, t_flip, z_flip)
+
+
+def z_at_lookback_time(
+    t_lookback_gyr: float,
+    h0: float | None = None,
+    om0: float | None = None,
+    *,
+    cosmo: CosmoParams | None = None,
+    z_max: float = 30.0,
+    n_grid: int = 512,
+) -> float:
+    """Redshift at a given lookback time.
+
+    Numerically inverts lookback_time(z) = t using a pre-built lookup table
+    with linear interpolation.
+
+    Parameters
+    ----------
+    t_lookback_gyr : float or array
+        Lookback time in Gyr. 0 = now, age_at_z0 = Big Bang.
+    h0 : float, optional
+        Hubble constant in km/s/Mpc.
+    om0 : float, optional
+        Matter density parameter Ω_m.
+    cosmo : CosmoParams, optional
+        Full cosmology parameter set (keyword-only).
+    z_max : float
+        Maximum redshift for the lookup table (default: 30).
+    n_grid : int
+        Number of points in the lookup table (default: 512).
+
+    Returns
+    -------
+    float or array
+        Redshift corresponding to the given lookback time. Returns 0
+        for t_lookback=0, z_max for t_lookback >= lookback(z_max).
+    """
+    if h0 is not None or om0 is not None:
+        cosmo = None
+    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+
+    # Build lookup table: z_grid → t_lookback_grid (increasing)
+    z_grid = jnp.linspace(0.0, z_max, n_grid)
+    t0 = _dsps_age_at_z0(c.Om0, c.w0, c.wa, c.h)
+    t_age = _dsps_age_at_z(z_grid, c.Om0, c.w0, c.wa, c.h)
+    t_lookback_grid = t0 - t_age  # increasing with z
+
+    return jnp.interp(t_lookback_gyr, t_lookback_grid, z_grid)
