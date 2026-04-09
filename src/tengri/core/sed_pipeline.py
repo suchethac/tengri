@@ -703,23 +703,30 @@ def compute_sed_components(
                 gas_logqion=_gas_logqion_sfr,
             )
         # Apply dust attenuation to nebular emission.
-        # Default: birth-cloud + diffuse ISM (Charlot & Fall 2000).
-        # Nebular photons originate in HII regions (birth clouds) and
-        # traverse both the birth cloud and the diffuse ISM.
-        tau_bc = p.get("tau_bc", p.get("tau_v", 0.0))
-        tau_diff_neb = p.get("tau_diff", 0.0)
-        _neb_dust_kw = {
-            "n_slope": p.get("dust_slope", -0.7),
-            "dust_bump_strength": p.get("dust_bump_strength", 0.0),
-        }
-        if tau_bc > 0.0 and hasattr(model, "_dust_law_bc"):
-            k_bc = resolve_dust_law(model._dust_law_bc)(model.ssp_data.ssp_wave, **_neb_dust_kw)
-            neb_sed = neb_sed * jnp.exp(-tau_bc * k_bc)
-        if tau_diff_neb > 0.0 and hasattr(model, "_dust_law_diff"):
-            k_diff = resolve_dust_law(model._dust_law_diff)(
-                model.ssp_data.ssp_wave, **_neb_dust_kw
-            )
-            neb_sed = neb_sed * jnp.exp(-tau_diff_neb * k_diff)
+        # Configurable via model._neb_dust:
+        #   "stellar" (default): BC + diffuse (Charlot & Fall 2000)
+        #   "diffuse_only": diffuse ISM only
+        #   "none": no dust on nebular
+        _neb_dust_mode = getattr(model, "_neb_dust", "stellar")
+        if _neb_dust_mode != "none":
+            _neb_dust_kw = {
+                "n_slope": p.get("dust_slope", -0.7),
+                "dust_bump_strength": p.get("dust_bump_strength", 0.0),
+            }
+            if _neb_dust_mode == "stellar" and hasattr(model, "_dust_law_bc"):
+                tau_bc_neb = p.get("tau_bc", p.get("tau_v", 0.0))
+                if tau_bc_neb > 0.0:
+                    k_bc = resolve_dust_law(model._dust_law_bc)(
+                        model.ssp_data.ssp_wave, **_neb_dust_kw
+                    )
+                    neb_sed = neb_sed * jnp.exp(-tau_bc_neb * k_bc)
+            if hasattr(model, "_dust_law_diff"):
+                tau_diff_neb = p.get("tau_diff", 0.0)
+                if tau_diff_neb > 0.0:
+                    k_diff = resolve_dust_law(model._dust_law_diff)(
+                        model.ssp_data.ssp_wave, **_neb_dust_kw
+                    )
+                    neb_sed = neb_sed * jnp.exp(-tau_diff_neb * k_diff)
 
         _neb_sed = neb_sed
         sed = sed + neb_sed

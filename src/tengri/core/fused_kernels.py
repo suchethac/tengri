@@ -1268,6 +1268,7 @@ def build_fused_rest_sed(model):
     if has_nebular:
         nebular_backend = model._nebular_backend
         ssp_log_ages_yr = model.ssp_log_ages_yr
+        _neb_dust_mode = getattr(model, "_neb_dust", "stellar")
 
     # Shock emission
     has_shock = getattr(model, "_shock_enabled", False)
@@ -1373,6 +1374,12 @@ def build_fused_rest_sed(model):
 
         # --- 2. Nebular emission ---
         if has_nebular:
+            # SFR-based Q_H fallback for wNE SSPs
+            _sfr_last = weights[-1]  # approximate current SFR from youngest bin
+            # More robust: sum weights in young bins as proxy
+            _qh_sfr = 4.2e53 * jnp.maximum(_sfr_last, 0.0)
+            _gas_logqion_sfr = jnp.log10(jnp.maximum(_qh_sfr, 1.0))
+
             neb_sed = nebular_backend.predict_nebular_sed(
                 ssp_weights=weights,
                 ssp_wave=ssp_wave_f64,
@@ -1382,7 +1389,28 @@ def build_fused_rest_sed(model):
                 neb_logZ_gas=p.get("neb_logZ_gas", None),
                 neb_fesc=p.get("neb_fesc", 0.0),
                 neb_fesc_lya=p.get("neb_fesc_lya", 0.0),
+                gas_logqion=_gas_logqion_sfr,
             )
+
+            # Nebular dust attenuation (configurable via model._neb_dust)
+            if _neb_dust_mode != "none":
+                _neb_kw = {
+                    "n_slope": p.get("dust_slope", -0.7),
+                    "dust_bump_strength": p.get("dust_bump_strength", 0.0),
+                }
+                if _neb_dust_mode == "stellar" and not _is_single_dust:
+                    _tau_bc_neb = p.get("tau_bc", p.get("tau_v", 0.0))
+                    k_bc_neb = law_bc_fn(ssp_wave_f64, **_neb_kw)
+                    neb_sed = neb_sed * jnp.exp(-_tau_bc_neb * k_bc_neb)
+                if not _is_single_dust:
+                    _tau_diff_neb = p.get("tau_diff", 0.0)
+                    k_diff_neb = law_diff_fn(ssp_wave_f64, **_neb_kw)
+                    neb_sed = neb_sed * jnp.exp(-_tau_diff_neb * k_diff_neb)
+                elif _is_single_dust:
+                    _tau_v_neb = p.get("tau_v", 0.0)
+                    k_neb = law_bc_fn(ssp_wave_f64, **_neb_kw)
+                    neb_sed = neb_sed * jnp.exp(-_tau_v_neb * k_neb)
+
             sed = sed + neb_sed
 
         # --- 3. Shock emission ---

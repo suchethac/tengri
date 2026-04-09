@@ -409,6 +409,12 @@ class SEDModel:
         else:
             self._dust_law_diff_fn = resolve_dust_law(self._dust_law_diff)
 
+        # Nebular dust attenuation mode:
+        #   "stellar" (default) = same BC + diffuse as stellar (Charlot & Fall 2000)
+        #   "diffuse_only"      = diffuse ISM only (no birth-cloud dust)
+        #   "none"              = no dust on nebular emission
+        self._neb_dust = getattr(spec, "neb_dust", "stellar")
+
         # IGM absorption (Inoue+2014)
         self._apply_igm = spec.apply_igm
 
