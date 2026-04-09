@@ -55,16 +55,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri import Fixed, SEDModel, Parameters, load_ssp_data
 from tengri.models.igm import igm_transmission, igm_transmission_patchy
-from tengri.models.nebular.shock import (
-    _R_HA,
-    _R_NII,
-    _R_OI,
-    _R_OII,
-    _R_OIII,
-    _R_SII,
-    _SHOCK_V,
-    shock_line_ratios,
-)
+from tengri.models.nebular.shock import shock_line_ratios
 from tengri.models.observation.calibration import (
     calibration_polynomial,
     chebyshev_basis,
@@ -402,18 +393,29 @@ else:
 # %%
 fig, axes = plt.subplots(1, 2, figsize=(9, 3.5))
 
-velocities = np.array(_SHOCK_V)
+# Compute line ratios via public API across a velocity grid
+_shock_velocities = [100.0, 150.0, 200.0, 300.0, 400.0, 500.0, 750.0, 1000.0]
+_shock_grid = [shock_line_ratios(v) for v in _shock_velocities]
+
+velocities = np.array(_shock_velocities)
+_r_oiii = np.array([r["O3_5007A"] for r in _shock_grid])
+_r_nii = np.array([r["NII_6583A"] for r in _shock_grid])
+_r_sii = np.array([r["SII_6716A"] + r["SII_6731A"] for r in _shock_grid])
+_r_oii = np.array([r["OII_3726A"] + r["OII_3729A"] for r in _shock_grid])
+_r_oi = np.array([r["OI_6300A"] for r in _shock_grid])
+_r_ha = np.array([r["HA_6563A"] for r in _shock_grid])
+_r_hb = np.ones(len(_shock_velocities))  # ratios already relative to Hβ
 
 # Panel A: Line ratios vs velocity
 ax = axes[0]
 for arr, name, color in [
-    (_R_OIII, r"[OIII]5007/H$\beta$", COLORS["seq"][2]),
-    (_R_NII, r"[NII]6583/H$\beta$", COLORS["seq"][3]),
-    (_R_SII, r"[SII]/H$\beta$", COLORS["seq"][4]),
-    (_R_OII, r"[OII]3727/H$\beta$", COLORS["rt"]),
-    (_R_OI, r"[OI]6300/H$\beta$", COLORS["vi"]),
+    (_r_oiii, r"[OIII]5007/H$\beta$", COLORS["seq"][2]),
+    (_r_nii, r"[NII]6583/H$\beta$", COLORS["seq"][3]),
+    (_r_sii, r"[SII]/H$\beta$", COLORS["seq"][4]),
+    (_r_oii, r"[OII]3727/H$\beta$", COLORS["rt"]),
+    (_r_oi, r"[OI]6300/H$\beta$", COLORS["model"]),
 ]:
-    ax.plot(velocities, np.array(arr), "o-", lw=1.5, ms=4, label=name, color=color)
+    ax.plot(velocities, arr, "o-", lw=1.5, ms=4, label=name, color=color)
 ax.set_xlabel("Shock velocity [km/s]")
 ax.set_ylabel(r"Line ratio / H$\beta$")
 ax.set_title("Shock Line Ratios (Allen+2008)")
@@ -423,8 +425,8 @@ ax.set_yscale("log")
 # Panel B: BPT for shocks vs HII
 ax = axes[1]
 # Shock track
-nii_ha_shock = np.array(_R_NII) / np.array(_R_HA)
-oiii_hb_shock = np.array(_R_OIII)
+nii_ha_shock = _r_nii / _r_ha
+oiii_hb_shock = _r_oiii
 ax.plot(
     np.log10(nii_ha_shock),
     np.log10(oiii_hb_shock),
@@ -619,11 +621,11 @@ ratios_oiii_hb = []
 
 for v in velocities:
     r = shock_line_ratios(float(v))
-    ha = float(r["Halpha"])
-    ratios_nii_ha.append(float(r["NII_6583"]) / ha)
-    ratios_sii_ha.append(float(r["SII_6716"] + r["SII_6731"]) / ha)
-    ratios_oi_ha.append(float(r["OI_6300"]) / ha)
-    ratios_oiii_hb.append(float(r["OIII_5007"]))  # already relative to Hbeta
+    ha = float(r["HA_6563A"])
+    ratios_nii_ha.append(float(r["NII_6583A"]) / ha)
+    ratios_sii_ha.append(float(r["SII_6716A"] + r["SII_6731A"]) / ha)
+    ratios_oi_ha.append(float(r["OI_6300A"]) / ha)
+    ratios_oiii_hb.append(float(r["O3_5007A"]))  # already relative to Hbeta
 
 ratios_nii_ha = np.array(ratios_nii_ha)
 ratios_sii_ha = np.array(ratios_sii_ha)

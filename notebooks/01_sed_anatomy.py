@@ -64,12 +64,13 @@ warnings.filterwarnings(
 )
 
 from tengri import (
-    Fitter,
     Fixed,
+    Model,
     Observation,
     Parameters,
     SEDModel,
     Spectroscopy,
+    Uniform,
     load_ssp_data,
 )
 
@@ -386,9 +387,29 @@ mock_optical = sed_optical.mock_spectrum(
     params_optical, WAVE_FIT, snr=40.0, key=jax.random.fold_in(_key_opt, 1)
 )
 
-fitter_optical = Fitter(sed_optical, mock_optical.flux_obs, mock_optical.noise)
-_ = fitter_optical.compile(verbose=False)
-_ = fitter_optical.run("map", n_steps=300, verbose=False)
+# Use the high-level Model.from_config() API for fitting. Short-name priors
+# (log_peak_sfr, logzsol, etc.) are auto-expanded to their full prefixed names.
+# wave_obs is passed directly so Model builds the Observation internally.
+model_fit = Model.from_config(
+    ssp=SSP_PATH,
+    sfh="tsnorm",
+    redshift=0.05,
+    wave_obs=WAVE_FIT,
+    priors=dict(
+        log_peak_sfr=Uniform(-1.0, 3.0),
+        peak_lbt_gyr=Uniform(0.5, 10.0),
+        width_gyr=Uniform(0.2, 6.0),
+        logzsol=Uniform(-2.0, 0.4),
+        dust_tau_bc=Uniform(0.0, 3.0),
+        dust_tau_diff=Uniform(0.0, 1.5),
+    ),
+)
+result_optical = model_fit.fit(
+    spectrum=(mock_optical.flux_obs, mock_optical.noise),
+    method="map",
+    n_steps=300,
+    verbose=False,
+)
 
 pred_truth = sed_optical.predict_spectrum(params_optical, WAVE_FIT)
 resid_sigma = (mock_optical.flux_obs - pred_truth) / mock_optical.noise

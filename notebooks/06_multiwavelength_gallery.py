@@ -718,7 +718,7 @@ if os.path.isfile(_ssp_path_igm):
     _ages_gyr = 10 ** jnp.array(_ssp_igm.ssp_lg_age_gyr)
     _weights = jnp.exp(-0.5 * (jnp.array(_ssp_igm.ssp_lg_age_gyr) - 0.0) ** 2)
     _weights = _weights / _weights.sum()
-    sed_stellar_igm = jnp.einsum("a,wa->w", _weights, _ssp_igm.ssp_flux[3])
+    sed_stellar_igm = jnp.einsum("a,aw->w", _weights, _ssp_igm.ssp_flux[3])
 else:
     wave_rest_igm = jnp.linspace(800.0, 50000.0, 3000)
     sed_stellar_igm = (wave_rest_igm / 5500.0) ** (-1.5)
