@@ -159,7 +159,7 @@ AGN_COS_INC = 0.7  # forwarded to kubota_done_full_agn + polar_dust_total
 # ════════════════════════════════════════════════════════════════════════════
 
 _DATA = _REPO / "data"
-_SSP_FILE = str(_DATA / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
+_SSP_FILE = str(_DATA / "fsps_prsc_miles_chabrier.h5")
 
 print("Loading SSP data …", flush=True)
 ssp = load_ssp_data(_SSP_FILE)
