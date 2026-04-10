@@ -478,7 +478,11 @@ def build_model_from_config(
         spec_kwargs["dust_law_bc"] = dust
 
     if nebular is not None:
-        spec_kwargs["nebular_mode"] = nebular
+        spec_kwargs["nebular"] = nebular
+
+    # Pass CLOUDY grid path to Parameters if provided in model_kwargs
+    if "cloudy_grid_path" in model_kwargs:
+        spec_kwargs["cloudy_grid_path"] = model_kwargs.pop("cloudy_grid_path")
 
     if agn is not None:
         spec_kwargs["agn_model"] = agn
