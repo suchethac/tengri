@@ -435,8 +435,18 @@ def xray_emission(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def igm_absorption(wave_obs: jnp.ndarray, z: float) -> jnp.ndarray:
-    """Compute IGM transmission (Inoue+2014).
+def igm_absorption(
+    wave_obs: jnp.ndarray,
+    z: float,
+    igm_x_HI: float = 0.0,
+    igm_bubble_mpc: float = 10.0,
+    igm_patchy: bool = False,
+) -> jnp.ndarray:
+    """Compute IGM transmission (Inoue+2014, optionally patchy).
+
+    When ``igm_patchy=True`` and ``igm_x_HI > 0``, applies the
+    Miralda-Escudé (1998) / Mason+2018 damping wing model on top
+    of the mean Inoue+2014 transmission.
 
     Parameters
     ----------
@@ -444,12 +454,25 @@ def igm_absorption(wave_obs: jnp.ndarray, z: float) -> jnp.ndarray:
         Observed-frame wavelength in Å.
     z : float
         Redshift.
+    igm_x_HI : float
+        Volume-averaged neutral hydrogen fraction (0–1).
+        Only used when ``igm_patchy=True``.
+    igm_bubble_mpc : float
+        Ionized bubble radius in proper Mpc.
+        Only used when ``igm_patchy=True``.
+    igm_patchy : bool
+        If True, apply patchy reionization damping wing.
 
     Returns
     -------
     array (n_wave,)
         Transmission fraction (0–1).
     """
+    if igm_patchy and igm_x_HI > 0.0:
+        from tengri.models.igm import igm_transmission_patchy
+
+        return igm_transmission_patchy(wave_obs, z, x_HI=igm_x_HI, R_bubble=igm_bubble_mpc)
+
     from tengri.models.igm import igm_transmission
 
     return igm_transmission(wave_obs, z)

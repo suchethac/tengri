@@ -1443,15 +1443,33 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
 # Model 5: MAGPHYS 4-component (da Cunha, Charlot & Elbaz 2008)
 # ===================================================================
 
-# PAH Drude profile parameters (Smith+2007, Table 1).
-# Each tuple: (center_um, fwhm_um, relative_strength).
+# PAH Drude profile parameters from Smith+2007, Table 2 (17 features).
+# Keep 3.3 μm feature (C-H stretch, outside Smith+2007's 5-38 μm IRS coverage).
+# Additional 17 features from Smith+2007 Table 2 covering 5.27-14.04 μm.
+# Each tuple: (center_um, absolute_fwhm_um, relative_strength).
+# FWHM computed as: absolute_fwhm = center_um * gamma_k (fractional FWHM).
+# Relative strengths from PAHFIT SINGS median (7.60 μm = 1.0 reference).
 _PAH_FEATURES = (
-    (3.3, 0.05, 0.06),  # 3.3 μm C-H stretch
-    (6.2, 0.19, 0.25),  # 6.2 μm C-C stretch
-    (7.7, 0.93, 1.00),  # 7.7 μm C-C stretch (strongest)
-    (8.6, 0.36, 0.33),  # 8.6 μm C-H in-plane bend
-    (11.3, 0.36, 0.52),  # 11.3 μm C-H out-of-plane bend
-    (12.7, 0.53, 0.17),  # 12.7 μm C-H out-of-plane bend
+    # 3.3 μm feature (real PAH C-H stretch, outside Smith+2007 coverage)
+    (3.3, 0.05, 0.06),
+    # Smith+2007 Table 2: 17 features (5.27-14.04 μm)
+    (5.27, 5.27 * 0.034, 0.04),  # λ=5.27, γ=0.034
+    (5.70, 5.70 * 0.035, 0.03),  # λ=5.70, γ=0.035
+    (6.22, 6.22 * 0.030, 0.30),  # λ=6.22, γ=0.030
+    (6.69, 6.69 * 0.070, 0.02),  # λ=6.69, γ=0.070
+    (7.42, 7.42 * 0.126, 0.15),  # λ=7.42, γ=0.126
+    (7.60, 7.60 * 0.044, 1.00),  # λ=7.60, γ=0.044 (strongest)
+    (7.85, 7.85 * 0.053, 0.45),  # λ=7.85, γ=0.053
+    (8.33, 8.33 * 0.050, 0.05),  # λ=8.33, γ=0.050
+    (8.61, 8.61 * 0.039, 0.33),  # λ=8.61, γ=0.039
+    (10.68, 10.68 * 0.020, 0.02),  # λ=10.68, γ=0.020
+    (11.23, 11.23 * 0.012, 0.20),  # λ=11.23, γ=0.012
+    (11.33, 11.33 * 0.032, 0.45),  # λ=11.33, γ=0.032
+    (11.99, 11.99 * 0.045, 0.05),  # λ=11.99, γ=0.045
+    (12.62, 12.62 * 0.042, 0.15),  # λ=12.62, γ=0.042
+    (12.69, 12.69 * 0.013, 0.05),  # λ=12.69, γ=0.013
+    (13.48, 13.48 * 0.040, 0.03),  # λ=13.48, γ=0.040
+    (14.04, 14.04 * 0.016, 0.02),  # λ=14.04, γ=0.016
 )
 
 # Pre-pack into JAX arrays for JIT compatibility.
@@ -1572,7 +1590,7 @@ def magphys_dc08(
     L_absorbed: float,
     dust_T_warm: float = 45.0,
     dust_T_cold: float = 20.0,
-    dust_T_hot: float = 180.0,
+    dust_T_hot: float = 250.0,
     dust_xi_pah: float = 0.06,
     dust_xi_mir: float = 0.07,
     dust_xi_warm: float = 0.25,
@@ -1583,8 +1601,8 @@ def magphys_dc08(
 
     Decomposes dust emission into four components:
 
-    1. **PAH features** — sum of Drude profiles at 3.3, 6.2, 7.7, 8.6,
-       11.3, and 12.7 μm (Smith+2007 template).
+    1. **PAH features** — sum of 18 Drude profiles: 3.3 μm (C-H stretch)
+       plus 17 features from Smith+2007 Table 2 (5.27–14.04 μm).
     2. **Hot MIR continuum** — modified blackbody at ``dust_T_hot``,
        β = 1.5.  Very small grains near young stars.
     3. **Warm birth-cloud grains** — modified blackbody at ``dust_T_warm``,
@@ -1615,7 +1633,7 @@ def magphys_dc08(
     dust_T_cold : float
         Cold ISM grain temperature in Kelvin.  Default 20 K.
     dust_T_hot : float
-        Hot MIR grain temperature in Kelvin.  Default 180 K.
+        Hot MIR grain temperature in Kelvin.  Default 250 K (da Cunha+2008 Table 1).
     dust_xi_pah : float
         Fractional luminosity in PAH features.  Default 0.06.
     dust_xi_mir : float
@@ -2286,7 +2304,13 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
         # Interpolate onto target wavelength grid
         sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
-        return L_absorbed * sed
+        # CMB contrast correction at high redshift
+        # Use representative cold dust temperature (25 K) since BOSA doesn't have U_min
+        T_eff_approx = 25.0
+        T_eff = cmb_corrected_temperature(T_eff_approx, redshift, 2.0)
+        contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
+
+        return L_absorbed * sed * contrast
 
     return bosa_emission
 

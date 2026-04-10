@@ -615,6 +615,9 @@ class SEDModel:
         else:
             self._rest_wavelength = ssp_data.ssp_wave
 
+        # Patchy IGM reionization (Miralda-Escudé 1998 / Mason+2018)
+        self._igm_patchy = getattr(spec, "igm_patchy", False)
+
         # Shock emission (MAPPINGS V)
         self._shock_enabled = getattr(spec, "shock", False)
         if self._shock_enabled:
@@ -1002,11 +1005,17 @@ class SEDModel:
         wave_obs = rest_result.wavelength * (1.0 + z)
         sed_obs = rest_result.sed
         if self._apply_igm:
-            from tengri.models.igm import igm_transmission
+            from tengri.core.emission_helpers import igm_absorption
 
             # Always apply IGM when enabled — igm_transmission returns
             # all-ones at z=0. Avoid z>0 comparison which fails under JIT.
-            igm_trans = igm_transmission(wave_obs, z)
+            igm_trans = igm_absorption(
+                wave_obs,
+                z,
+                igm_x_HI=params.get("igm_x_HI", 0.0),
+                igm_bubble_mpc=params.get("igm_bubble_mpc", 10.0),
+                igm_patchy=getattr(self, "_igm_patchy", False),
+            )
             sed_obs = sed_obs * igm_trans
         return SEDResult(wavelength=wave_obs, sed=sed_obs)
 

@@ -382,6 +382,23 @@ _DUST_EXTRA_PARAMS = {
     ),
 }
 
+# IGM patchy reionization params (only when igm_patchy=True)
+_IGM_PATCHY_PARAMS = {
+    "igm_x_HI": (
+        "Volume-averaged neutral hydrogen fraction for patchy IGM "
+        "(Miralda-Escude 1998; 0 = fully ionized, 1 = fully neutral)",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1]",
+        Fixed(0.0),
+    ),
+    "igm_bubble_mpc": (
+        "Ionized bubble radius in proper Mpc for patchy IGM (Mason+2018; 0.1-100)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(10.0),
+    ),
+}
+
 _DUST_EMISSION_PARAMS = {
     "dust_T": (
         "Dust temperature (K) for greybody/Casey emission",
@@ -440,6 +457,54 @@ _DUST_EMISSION_PARAMS = {
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         Fixed(1.0),
+    ),
+    "dust_T_hot": (
+        "Hot MIR grain temperature (K) for MAGPHYS (da Cunha+2008; default 250K)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(250.0),
+    ),
+    "dust_T_warm": (
+        "Warm birth-cloud grain temperature (K) for MAGPHYS (30-60K)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(45.0),
+    ),
+    "dust_T_cold": (
+        "Cold ISM grain temperature (K) for MAGPHYS (15-25K)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(20.0),
+    ),
+    "dust_xi_pah": (
+        "MAGPHYS PAH fractional luminosity (da Cunha+2008: 0-0.5)",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1]",
+        Fixed(0.06),
+    ),
+    "dust_xi_mir": (
+        "MAGPHYS hot MIR fractional luminosity (da Cunha+2008: 0-0.3)",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1]",
+        Fixed(0.07),
+    ),
+    "dust_xi_warm": (
+        "MAGPHYS warm dust fractional luminosity (da Cunha+2008: 0-0.5)",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1]",
+        Fixed(0.25),
+    ),
+    "dust_qhac": (
+        "THEMIS small hydrocarbon grain fraction (Jones+2017, 0-15%)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(0.17),
+    ),
+    "dust_log_ssfr": (
+        "log10(sSFR/yr^-1) for BOSA template selection (Boquien & Salim 2021)",
+        lambda lo, hi: True,
+        "",
+        Fixed(-10.0),
     ),
 }
 
@@ -793,6 +858,7 @@ def _build_param_registry(
     radio=False,
     xray=False,
     shock=False,
+    igm_patchy=False,
     evolving_metallicity=False,
     alpha_fe_evolving=False,
     chem_evol=False,
@@ -928,6 +994,12 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
+    # Patchy IGM params (only when igm_patchy=True)
+    if igm_patchy:
+        for pname, (desc, check, err, default) in _IGM_PATCHY_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+
     # Emission line velocity parameters (registered when eline_mode is active)
     if eline_mode in ("marginalized", "fitted"):
         for pname, (desc, check, err, default) in _ELINE_PARAMS.items():
@@ -984,7 +1056,8 @@ class Parameters:
     dust_emission : str or None
         IR emission model.  Default: ``None`` (disabled).
         Options: ``"modified_blackbody"``, ``"casey2012"``, ``"dale2014"``,
-        ``"draine_li2007"``, ``"draine_li2014"``, ``"dl07_tabulated"``.
+        ``"draine_li2007"``, ``"draine_li2014"``, ``"dl07_tabulated"``,
+        ``"astrodust"``, ``"bosa"``, ``"themis"``, ``"magphys"``.
     dl07_grid_path : str
         Path to DL07 HDF5 template grid (for ``"dl07_tabulated"``).
 
@@ -1309,6 +1382,9 @@ class Parameters:
         self.dust_emission = kwargs.pop("dust_emission", None)
         self.dl07_grid_path = kwargs.pop("dl07_grid_path", None)
 
+        # Patchy IGM: False (default), True — enables igm_x_HI and igm_bubble_mpc parameters
+        self.igm_patchy = kwargs.pop("igm_patchy", False)
+
         # AGN model: None (default), "simple", "standard", "kubota_done", "unified_nlr_blr"
         self.agn_model = kwargs.pop("agn_model", None)
 
@@ -1410,6 +1486,7 @@ class Parameters:
             radio=self.radio,
             xray=self.xray,
             shock=self.shock,
+            igm_patchy=self.igm_patchy,
             evolving_metallicity=self.evolving_metallicity,
             alpha_fe_evolving=self.alpha_fe_evolving,
             chem_evol=self.chem_evol,

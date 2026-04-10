@@ -42,6 +42,33 @@
 | IMP-04 | Dust emission analytic fallbacks — dead code | PARTIALLY FIXED — `fallback_fn` param removed from `_make_lazy_loader`; fallback functions retained (still used in notebooks/crossval) |
 | IMP-05 | ADAF bremsstrahlung stale comment | FIXED 2026-04-04 — stale comment deleted |
 
+### Models status update (2026-04-10): Unimplemented models audit
+
+Previously listed as "unimplemented" in `UNIMPLEMENTED_MODELS_GUIDE_DETAILS.MD.md`.
+Most already had working code; the gap was parameter registry wiring and physics fixes.
+
+| Model | Code Existed | Wired | Physics Fixed | Tests Added |
+|-------|-------------|-------|---------------|-------------|
+| Astrodust+PAH (Hensley & Draine 2023) | ✓ | ✓ (docstring update) | ✓ (no issues) | ✓ parity tests |
+| THEMIS (Jones+2017) | ✓ | ✓ (dust_qhac registered) | ✓ (no issues) | ✓ limit tests |
+| BOSA (Boquien & Salim 2021) | ✓ | ✓ (dust_log_ssfr registered) | ✓ (CMB correction added) | ✓ limit tests |
+| MAGPHYS (da Cunha+2008) | ✓ | ✓ (6 params registered) | ✓ (17 PAH features from Smith+2007 Table 2; T_hot=250K) | ✓ Smith+2007 parity |
+| Patchy IGM (Miralda-Escudé 1998) | ✓ | ✓ (igm_x_HI, igm_bubble_mpc; dispatcher updated) | ✓ (constants verified) | ✓ M-E 1998 limits |
+| TEA attenuation (Haskell+2024) | ✓ | ✓ (already done) | ✓ | — |
+| Chemical evolution Z(t) (Bellstedt+2020) | ✓ | ✓ (already done) | ✓ | — |
+| ADAF disc (Mahadevan 1997) | ✓ | ✓ (already done) | ✓ | — |
+| MAPPINGS V shocks (Allen+2008) | ✓ | ✓ (already done) | ✓ | — |
+| f_esc Chisholm+2022 | ✓ (NEW) | ✓ | N/A | ✓ calibration tests |
+| Dust D/G ratio Rémy-Ruyer+2014 | ✓ (NEW) | ✓ | N/A | ✓ scaling tests |
+
+**Physics fixes applied:**
+- MAGPHYS: Expanded from 6 averaged PAH complexes to 18 individual Drude profiles (17 from Smith+2007 Table 2 + 3.3 μm C-H stretch). Fixed dust_T_hot default from 180K to 250K (da Cunha+2008 Table 1).
+- BOSA: Added da Cunha+2013 CMB contrast correction for consistency with Astrodust and THEMIS models at high redshift.
+
+**New implementations:**
+- `src/tengri/models/nebular/fesc_model.py`: Chisholm+2022 LyC escape fraction model (f_esc from UV slope β)
+- `src/tengri/models/dust/attenuation.py`: Rémy-Ruyer+2014 metallicity-dependent dust-to-gas ratio scaling
+
 ---
 
 ## REMAINING OPEN BUGS (from original audit)

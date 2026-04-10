@@ -1269,3 +1269,37 @@ def wg00_dusty(
     k = resolve_dust_law(law)(wavelength, **law_params)
     tau_clump = tau_v / jnp.maximum(n_clumps, 1e-10)
     return jnp.exp(-n_clumps * (1.0 - jnp.exp(-tau_clump * k)))
+
+
+# ===================================================================
+# Dust-to-gas ratio scaling
+# ===================================================================
+
+
+def dust_to_gas_scaling_remy_ruyer(logzsol: float) -> float:
+    """Metallicity-dependent dust-to-gas ratio scaling (Rémy-Ruyer+2014).
+
+    Returns multiplicative factor for dust optical depths relative to solar.
+    Broken power law: linear above 0.1 Z_sun, quadratic below.
+
+    Parameters
+    ----------
+    logzsol : float
+        log10(Z / Z_sun).
+
+    Returns
+    -------
+    float
+        D/G ratio relative to solar (1.0 at solar metallicity).
+
+    References
+    ----------
+    Rémy-Ruyer et al. 2014, A&A, 563, A31, Table 1.
+    """
+    z_ratio = 10.0**logzsol
+    scaling = jnp.where(
+        z_ratio > 0.1,
+        z_ratio,
+        0.1 * (z_ratio / 0.1) ** 2.0,
+    )
+    return scaling
