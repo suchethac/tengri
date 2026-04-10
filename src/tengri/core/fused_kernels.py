@@ -1042,7 +1042,73 @@ def build_hybrid_photometry(model):
 
         return stellar_phot + non_stellar_phot
 
-    return hybrid_phot
+    # --- Fused end-to-end wrapper: params dict → photometry ---
+    # Fuse param translation + SFH computation into the JIT scope,
+    # eliminating ~240 μs of Python dispatch overhead per call.
+    from tengri.core.param_translate import get_internal_params
+    from tengri.models.sfh.registry import compute_field_gp
+
+    param_map = model._param_map
+    spec = model.spec
+    has_field = model._has_field
+    sfh_fn = model._sfh_fn
+    sfh_internal_names = model._sfh_internal_names
+    field_model = model._field_model
+    n_grid = model._n_grid
+    d_log_age = float(model.d_log_age)
+    ssp_log_ages_yr_cap = model.ssp_log_ages_yr
+    log_age_grid = model.log_age_grid
+    age_yr = model.age_yr
+
+    @jax.jit
+    def hybrid_phot_fused(params):
+        """params dict → photometry (end-to-end JIT, no Python dispatch)."""
+        p = get_internal_params(params, param_map, spec, has_field)
+
+        # SFH computation (same as build_fused_tier2_photometry)
+        kw = {k: v for k, v in p.items() if k in sfh_internal_names}
+        if has_field and "xi" in p:
+            gp_x, k0_half = compute_field_gp(
+                xi=p["xi"],
+                psd_sigma=p["psd_sigma"],
+                psd_tau_yr=p["psd_tau_yr"],
+                n_grid=n_grid,
+                d_log_age=d_log_age,
+                field_model=field_model,
+            )
+            kw["gp_x"] = gp_x
+            kw["k0_half"] = k0_half
+        sfr = sfh_fn(age_yr, **kw)
+        sfr_on_ssp = jnp.interp(ssp_log_ages_yr_cap, log_age_grid, sfr)
+
+        # Dispatch to the inner kernel (already defined above)
+        if _is_single_dust:
+            return hybrid_phot(
+                sfr_on_ssp, p["log_z_abs"],
+                p.get("tau_v", 0.0), p.get("dust_slope", -0.7),
+                **{k: p.get(k, v) for k, v in [
+                    ("f_obscuration", 0.0), ("dust_bump_strength", 0.0),
+                    ("dust_delta", 0.0), ("dust_Rv", 3.1), ("alpha_fe", 0.0),
+                    ("dust_T", 35.0), ("dust_beta_ir", 1.6), ("dust_eta_balance", 1.0),
+                    ("agn_log_lbol", 10.0), ("agn_alpha", -1.0),
+                    ("agn_T_torus", 1000.0), ("agn_tau_torus", 5.0),
+                    ("agn_torus_frac", 0.5), ("agn_log_mbh", 7.0), ("agn_log_ledd", -1.0),
+                ]},
+            )
+        return hybrid_phot(
+            sfr_on_ssp, p["log_z_abs"],
+            p.get("tau_bc", 0.0), p.get("tau_diff", 0.0), p.get("dust_slope", -0.7),
+            **{k: p.get(k, v) for k, v in [
+                ("f_obscuration", 0.0), ("dust_bump_strength", 0.0),
+                ("dust_delta", 0.0), ("dust_Rv", 3.1), ("alpha_fe", 0.0),
+                ("dust_T", 35.0), ("dust_beta_ir", 1.6), ("dust_eta_balance", 1.0),
+                ("agn_log_lbol", 10.0), ("agn_alpha", -1.0),
+                ("agn_T_torus", 1000.0), ("agn_tau_torus", 5.0),
+                ("agn_torus_frac", 0.5), ("agn_log_mbh", 7.0), ("agn_log_ledd", -1.0),
+            ]},
+        )
+
+    return hybrid_phot_fused
 
 
 # Exact-path SED kernel

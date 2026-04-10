@@ -1472,36 +1472,14 @@ class SEDModel:
 
         Uses precomputed SSP×filter for stellar (~0.4% error), and
         emission_helpers at full wavelength for non-stellar (exact).
+
+        The kernel is fully fused: params dict → photometry in one JIT
+        call (no Python-side SFH or param translation overhead).
         """
         if self._hybrid.photometry is None:
-            # Fall back to auto if hybrid kernel not available
             return self._predict_photometry_auto(params)
 
-        p = self._get_internal_params(params)
-        sfr = self._compute_sfr(p)
-        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-
-        # Build kwargs: dust + AGN (same as precomputed) + non-stellar extras
-        kw = self._get_dust_kwargs(p)
-        kw.update(self._get_agn_kwargs(p))
-        kw.update(self._get_non_stellar_kwargs(p))
-
-        if self._dust_model == "single_component":
-            return self._hybrid.photometry(
-                sfr_on_ssp,
-                p["log_z_abs"],
-                p["tau_v"],
-                p["dust_slope"],
-                **kw,
-            )
-        return self._hybrid.photometry(
-            sfr_on_ssp,
-            p["log_z_abs"],
-            p["tau_bc"],
-            p["tau_diff"],
-            p["dust_slope"],
-            **kw,
-        )
+        return self._hybrid.photometry(params)
 
     def _get_non_stellar_kwargs(self, p):
         """Extract non-stellar kwargs from internal params for hybrid kernel."""
@@ -1561,7 +1539,7 @@ class SEDModel:
 
         _has_tabulated_sfh = "sfh_t_gyr" in params
 
-        # Compositional: full-resolution JIT (fastest, bit-exact)
+        # Compositional: full-resolution JIT (bit-exact, default)
         if (
             self._compositional.photometry is not None
             and not _has_tabulated_sfh
@@ -1570,7 +1548,7 @@ class SEDModel:
         ):
             return self._predict_photometry_compositional(params)
 
-        # Hybrid: precomputed SSP + exact non-stellar (fallback)
+        # Hybrid: precomputed SSP×filter (faster but ~0.2% approx, fallback)
         if self._hybrid.photometry is not None and not _has_tabulated_sfh:
             return self._predict_photometry_hybrid(params)
 
