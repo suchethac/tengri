@@ -163,7 +163,7 @@ class TestObservationWithModel:
         )
         model = Model(base_spec, ssp, observation=obs)
         # _spec_precomp should be set
-        assert model._spec_precomp is not None
+        assert model._precomputed.spectroscopy is not None
 
     def test_no_precompute_when_z_free(self, ssp):
         """Free z → spectroscopy precomputation does NOT auto-trigger."""
@@ -182,7 +182,7 @@ class TestObservationWithModel:
             spectroscopy=SpectroscopyConfig(wave_obs=wave_obs),
         )
         model = Model(spec, ssp, observation=obs)
-        assert model._spec_precomp is None
+        assert model._precomputed.spectroscopy is None
 
     def test_lsf_settings_from_observation(self, ssp, base_spec):
         """LSF resolution/sigma_lib from SpectroscopyConfig override spec attrs."""
