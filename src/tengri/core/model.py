@@ -1390,13 +1390,13 @@ class SEDModel:
             Prediction mode. One of:
 
             - ``"auto"`` (default) — pick the fastest available mode
-              (hybrid → precomputed → compositional → exact).
-            - ``"precomputed"`` — SSP×filter at effective wavelengths.
-              Fast (~30x) but approximate for non-stellar components.
-            - ``"compositional"`` — full-resolution SED from all
-              components, then integrate through filters. Exact.
-            - ``"hybrid"`` — precomputed SSP stellar + compositional
-              non-stellar. Fast and exact for non-stellar (PR 2).
+              (compositional → hybrid → exact).
+            - ``"compositional"`` — full-resolution JIT SED from all
+              components, then integrate through filters. Exact and
+              fastest (XLA fuses entire graph). Preferred.
+            - ``"hybrid"`` — precomputed SSP stellar + exact
+              non-stellar at full wavelength. Fallback when
+              compositional is unavailable.
             - ``"exact"`` — raw pipeline, no JIT kernel.
         approx : bool, optional
             **Deprecated.** Use ``mode="auto"`` (True) or
@@ -1533,23 +1533,31 @@ class SEDModel:
         return kw
 
     def _predict_photometry_auto(self, params):
-        """Auto mode: pick fastest available (Hybrid → Compositional → Exact)."""
+        """Auto mode: pick fastest available (Compositional → Hybrid → Exact).
+
+        Compositional is preferred over hybrid because XLA fuses the
+        entire graph (SFH → SED → filter integration) into one optimized
+        kernel, which is faster than splitting into precomputed stellar
+        + Python-dispatched non-stellar filter integration.  Hybrid is
+        the fallback when compositional is unavailable (e.g. evolving
+        metallicity or chemical evolution).
+        """
         import warnings
 
         _has_tabulated_sfh = "sfh_t_gyr" in params
 
-        # Hybrid: precomputed SSP + exact non-stellar (fastest exact path)
-        if self._hybrid.photometry is not None and not _has_tabulated_sfh:
-            return self._predict_photometry_hybrid(params)
-
-        # Level 2: Compositional rest-frame SED + observation wrapper
+        # Compositional: full-resolution JIT (fastest, bit-exact)
         if (
-            self._compositional.rest_sed is not None
+            self._compositional.photometry is not None
             and not _has_tabulated_sfh
             and not self._evolving_metallicity
             and not getattr(self, "_chem_evol_enabled", False)
         ):
             return self._predict_photometry_compositional(params)
+
+        # Hybrid: precomputed SSP + exact non-stellar (fallback)
+        if self._hybrid.photometry is not None and not _has_tabulated_sfh:
+            return self._predict_photometry_hybrid(params)
 
         warnings.warn(
             "mode='auto' requested but no fast path available, using exact path",
