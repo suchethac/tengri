@@ -53,6 +53,12 @@ from tengri.core.fused_kernels import (
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,
 )
+
+# Alias new names → old functions during transition (PR 1: naming only)
+build_hybrid_photometry = build_fused_photometry  # will be rewritten in PR 2
+build_hybrid_photometry_ztable = build_fused_photometry_ztable  # will be rewritten in PR 2
+build_hybrid_spectrum = build_fused_spectrum  # will be rewritten in PR 2
+is_hybrid_compatible = is_fused_compatible  # will be simplified in PR 2
 from tengri.core.param_translate import (
     _EVOLVING_ALPHA_PARAM_MAP,
     _EVOLVING_MET_PARAM_MAP,
@@ -203,6 +209,56 @@ class PriorPredictive:
 
 
 # ---------------------------------------------------------------------------
+# Kernel hierarchy dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass
+class PrecomputedData:
+    """Level 1: Precomputed SSP tensors pre-integrated through filters.
+
+    Data only — no JIT kernels. Built once at ``SEDModel.__init__`` and
+    updated by ``precompute_spectroscopy()`` / ``precompute_ztable()``.
+    """
+
+    photometry: object | None = None  # PhotometricPrecomputation (fixed z)
+    photometry_ztable: object | None = None  # PhotometricZTable (free z)
+    spectroscopy: object | None = None  # SpectroscopicPrecomputation
+    dust_age_weights: jnp.ndarray | None = None  # sigmoid weights for two-component dust
+    igm_at_effective_wavelengths: jnp.ndarray | None = None  # IGM T(λ_eff) for fixed z
+
+
+@dataclasses.dataclass
+class FusedKernels:
+    """Level 2: Full-resolution JIT-compiled kernels.
+
+    These compute entire SEDs at full wavelength resolution. The ``rest_sed``
+    kernel is the compositional engine; ``photometry`` and ``spectrum`` wrap
+    it with params translation + filter/wavelength integration.
+    """
+
+    rest_sed: object | None = None  # build_fused_rest_sed
+    photometry: object | None = None  # build_fused_tier2_photometry (renamed)
+    spectrum: object | None = None  # build_fused_tier2_spectrum (renamed)
+    exact_sed: object | None = None  # build_exact_sed
+
+
+@dataclasses.dataclass
+class HybridKernels:
+    """Level 3: Precomputed SSP stellar + exact non-stellar.
+
+    Stellar photometry uses the precomputed SSP×filter einsum (fast).
+    Non-stellar components use ``emission_helpers.py`` at full wavelength
+    resolution, then integrate through filters.  This will be rewritten
+    in PR 2 — currently aliases the old Tier 1 effective-wavelength kernels.
+    """
+
+    photometry: object | None = None  # build_hybrid_photometry
+    photometry_ztable: object | None = None  # build_hybrid_photometry_ztable
+    spectrum: object | None = None  # build_hybrid_spectrum
+
+
+# ---------------------------------------------------------------------------
 # Model class
 # ---------------------------------------------------------------------------
 
@@ -224,8 +280,9 @@ class SEDModel:
         Filter transmission curves. Accepts either:
         - 3-tuple from load_filter_set(): (filter_waves, filter_trans, filter_curves)
         - List of FilterCurve namedtuples
-    precompute : bool or dict, optional
-        Precomputation settings. True (default) = automatic.
+    precompute : bool, optional
+        Whether to precompute SSP photometry at initialization. True (default)
+        activates the Zacharegkas+2025 fast-photometry path.
     forward_dtype : str or jnp.dtype, optional
         Dtype for forward model computation. ``"float32"`` halves memory
         and gives ~1.5x speedup with <0.1% accuracy loss. Default
@@ -629,70 +686,32 @@ class SEDModel:
             self._dl_cm_fixed = None
             self._z_fixed = None
 
-        # Photometry precomputation (Zacharegkas+2025 Section 3)
-        self._precomp = None
-        if precompute is True and self._z_fixed is not None and self.filter_waves is not None:
-            self._precomp = precompute_photometry(
-                ssp_data,
-                self.filter_waves,
-                self.filter_trans,
-                self._z_fixed,
-                self._dl_cm_fixed,
-            )
+        # =================================================================
+        # Three-level kernel hierarchy: Precomputed → Fused → Hybrid
+        # =================================================================
 
-        # Precompute dust age weights (sigmoid depends only on age grid)
-        # Dust precomputation depends on model and approximation mode
-        if self._dust_model == "single_component":
-            self._dust_age_weights = None
-        elif self._dust_approx == "exact":
-            # Smooth sigmoid weights for exact two-component dust
-            self._dust_age_weights = precompute_dust_age_weights(self.ssp_ages_yr)
-        else:
-            # Fast mode: age weights not used (two-CSP decomposition in fused kernel)
-            self._dust_age_weights = None
+        # Level 1: Precomputed data (SSP tensors, dust weights, IGM)
+        self._precomputed = self._build_precomputed_data(ssp_data, precompute)
 
-        # Precompute IGM at effective wavelengths (for fused kernel)
-        self._igm_at_eff = None
-        if (
-            self._apply_igm
-            and self._approx["igm"]
-            and self._precomp is not None
-            and self._z_fixed is not None
-        ):
-            from tengri.models.igm import igm_transmission
+        # Backward-compat aliases needed by fused_kernels.py builders
+        self._precomp = self._precomputed.photometry
+        self._dust_age_weights = self._precomputed.dust_age_weights
+        self._igm_at_eff = self._precomputed.igm_at_effective_wavelengths
+        self._spec_precomp = self._precomputed.spectroscopy
+        self._ztable = self._precomputed.photometry_ztable
 
-            eff_obs = self._precomp.effective_wavelengths
-            self._igm_at_eff = igm_transmission(eff_obs, self._z_fixed)
+        # Level 2: Fused kernels (full-resolution JIT)
+        self._fused = self._build_fused_kernels()
+        self._jit_exact_sed = self._fused.exact_sed
+        self._fused_rest_sed = self._fused.rest_sed
+        self._fused_tier2_phot = self._fused.photometry
+        self._fused_tier2_spec = self._fused.spectrum
 
-        # Build fused JIT kernels for fast photometry/spectroscopy
-        self._fused_photometry = None
-        if self._precomp is not None and is_fused_compatible(self):
-            self._fused_photometry = build_fused_photometry(self)
-
-        # JIT-compiled exact-path SED kernel (eliminates Python dispatch overhead)
-        self._jit_exact_sed = build_exact_sed(self)
-
-        # Tier 2: Compositional rest-frame SED kernel (all components, JIT'd)
-        self._fused_rest_sed = None
-        if is_tier2_compatible(self):
-            try:
-                self._fused_rest_sed = build_fused_rest_sed(self)
-            except Exception as e:
-                warnings.warn(
-                    f"Compositional SED kernel (Tier 2) build failed: {e}",
-                    UserWarning,
-                    stacklevel=2,
-                )
-
-        # Fused Tier 2 end-to-end photometry (params → photometry in one JIT)
-        self._fused_tier2_phot = None
-        self._fused_tier2_spec = None
-        if self._fused_rest_sed is not None and self.filter_waves is not None:
-            with contextlib.suppress(Exception):
-                self._fused_tier2_phot = build_fused_tier2_photometry(self)
-
-        # Spectroscopy precomputation (same idea: pre-interpolate SSPs)
-        self._spec_precomp = None
+        # Level 3: Hybrid kernels (precomputed SSP + exact non-stellar)
+        self._hybrid = self._build_hybrid_kernels()
+        self._fused_photometry = self._hybrid.photometry
+        self._fused_photometry_ztable = self._hybrid.photometry_ztable
+        self._fused_spectrum = self._hybrid.spectrum
 
         # Auto-precompute spectroscopy from Observation config
         if (
@@ -703,9 +722,88 @@ class SEDModel:
         ):
             self.precompute_spectroscopy(observation.spectroscopy.wave_obs)
 
-        # Z-table precomputation (for free-redshift fitting)
-        self._ztable = None
-        self._fused_photometry_ztable = None
+    # -------------------------------------------------------------------
+    # Kernel hierarchy builders
+    # -------------------------------------------------------------------
+
+    def _build_precomputed_data(self, ssp_data, precompute):
+        """Build Level 1: precomputed SSP tensors."""
+        # Photometry precomputation (Zacharegkas+2025 Section 3)
+        phot = None
+        if precompute and self._z_fixed is not None and self.filter_waves is not None:
+            phot = precompute_photometry(
+                ssp_data,
+                self.filter_waves,
+                self.filter_trans,
+                self._z_fixed,
+                self._dl_cm_fixed,
+            )
+
+        # Dust age weights (sigmoid, for exact two-component dust)
+        dust_age_w = None
+        if self._dust_model != "single_component" and self._dust_approx == "exact":
+            dust_age_w = precompute_dust_age_weights(self.ssp_ages_yr)
+
+        # IGM at filter effective wavelengths (for hybrid kernel, fixed z)
+        igm_eff = None
+        if (
+            self._apply_igm
+            and self._approx["igm"]
+            and phot is not None
+            and self._z_fixed is not None
+        ):
+            from tengri.models.igm import igm_transmission
+
+            igm_eff = igm_transmission(phot.effective_wavelengths, self._z_fixed)
+
+        return PrecomputedData(
+            photometry=phot,
+            dust_age_weights=dust_age_w,
+            igm_at_effective_wavelengths=igm_eff,
+        )
+
+    def _build_fused_kernels(self):
+        """Build Level 2: full-resolution JIT-compiled kernels."""
+        exact_sed = build_exact_sed(self)
+
+        rest_sed = None
+        if is_tier2_compatible(self):
+            try:
+                rest_sed = build_fused_rest_sed(self)
+            except Exception as e:
+                warnings.warn(
+                    f"Fused rest-SED kernel build failed: {e}",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+        # Set alias before building tier2 photometry (it reads model._fused_rest_sed)
+        self._fused_rest_sed = rest_sed
+
+        fused_phot = None
+        fused_spec = None
+        if rest_sed is not None and self.filter_waves is not None:
+            with contextlib.suppress(Exception):
+                fused_phot = build_fused_tier2_photometry(self)
+
+        return FusedKernels(
+            rest_sed=rest_sed,
+            photometry=fused_phot,
+            spectrum=fused_spec,
+            exact_sed=exact_sed,
+        )
+
+    def _build_hybrid_kernels(self):
+        """Build Level 3: precomputed SSP + exact non-stellar kernels.
+
+        Currently aliases the old Tier 1 effective-wavelength kernels.
+        Will be rewritten in PR 2 to use emission_helpers at full resolution.
+        """
+        hybrid_phot = None
+        if self._precomputed.photometry is not None and is_hybrid_compatible(self):
+            hybrid_phot = build_hybrid_photometry(self)
+
+        return HybridKernels(photometry=hybrid_phot)
 
     # -------------------------------------------------------------------
     # Internal parameter translation
@@ -1572,23 +1670,31 @@ class SEDModel:
         """
         if self._z_fixed is None:
             raise ValueError("Spectroscopy precomputation requires fixed redshift")
-        self._spec_precomp = precompute_spectroscopy(
+        spec_precomp = precompute_spectroscopy(
             self.ssp_data,
             jnp.asarray(wave_obs),
             self._z_fixed,
             self._dl_cm_fixed,
         )
+        self._precomputed.spectroscopy = spec_precomp
         self._wave_obs = jnp.asarray(wave_obs)
-        if is_fused_compatible(self):
-            self._fused_spectrum = build_fused_spectrum(self)
-        else:
-            self._fused_spectrum = None
 
-        # Build fused Tier 2 spectrum (end-to-end JIT)
-        self._fused_tier2_spec = None
-        if self._fused_rest_sed is not None:
+        # Hybrid spectrum kernel (precomputed SSP + exact non-stellar)
+        if is_hybrid_compatible(self):
+            self._hybrid.spectrum = build_hybrid_spectrum(self)
+        else:
+            self._hybrid.spectrum = None
+
+        # Fused spectrum kernel (full-resolution end-to-end JIT)
+        self._fused.spectrum = None
+        if self._fused.rest_sed is not None:
             with contextlib.suppress(Exception):
-                self._fused_tier2_spec = build_fused_tier2_spectrum(self)
+                self._fused.spectrum = build_fused_tier2_spectrum(self)
+
+        # Backward-compatible aliases (removed in PR 3)
+        self._spec_precomp = self._precomputed.spectroscopy
+        self._fused_spectrum = self._hybrid.spectrum
+        self._fused_tier2_spec = self._fused.spectrum
         return self
 
     def precompute_ztable(self, z_grid=None, z_min=0.001, z_max=3.0, n_z=100):
@@ -1618,7 +1724,7 @@ class SEDModel:
         """
         if self.filter_waves is None:
             raise ValueError("Z-table precomputation requires filters to be set")
-        self._ztable = precompute_photometry_ztable(
+        ztable = precompute_photometry_ztable(
             self.ssp_data,
             self.filter_waves,
             self.filter_trans,
@@ -1628,7 +1734,12 @@ class SEDModel:
             n_z=n_z,
             apply_igm=self._apply_igm and self._approx.get("igm", True),
         )
-        self._fused_photometry_ztable = build_fused_photometry_ztable(self)
+        self._precomputed.photometry_ztable = ztable
+        self._hybrid.photometry_ztable = build_hybrid_photometry_ztable(self)
+
+        # Backward-compatible aliases (removed in PR 3)
+        self._ztable = self._precomputed.photometry_ztable
+        self._fused_photometry_ztable = self._hybrid.photometry_ztable
         return self
 
     def predict_spectrum(self, params, wave_obs=None, approx=False):
