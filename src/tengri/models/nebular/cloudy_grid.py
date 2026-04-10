@@ -362,7 +362,11 @@ class CloudyGridBackend:
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
 
         # Compute Q_H for each (met, age) — vectorized
-        self._qh_table = _compute_qh_grid(ssp_wave, ssp_flux)
+        qh_raw = _compute_qh_grid(ssp_wave, ssp_flux)
+        # Sanitize: replace Inf/NaN with 0 (can arise from SSP grids
+        # with incomplete UV coverage or numerical overflow in the
+        # ionizing photon integral).
+        self._qh_table = jnp.where(jnp.isfinite(qh_raw), qh_raw, 0.0)
         # Store as JAX arrays so dynamic indexing works inside jax.grad/vmap
         self._qh_log_met = jnp.asarray(ssp_data.ssp_lgmet)
         self._qh_log_age = jnp.asarray(ssp_data.ssp_lg_age_gyr + 9.0)  # log(age/yr)
@@ -393,7 +397,9 @@ class CloudyGridBackend:
 
         q0 = q00 * (1 - wa) + q01 * wa
         q1 = q10 * (1 - wa) + q11 * wa
-        return q0 * (1 - wz) + q1 * wz
+        # Floor to 0: prevents negative/NaN Q_H from metallicity grid
+        # extrapolation when SSP grid doesn't fully cover CLOUDY range.
+        return jnp.maximum(q0 * (1 - wz) + q1 * wz, 0.0)
 
     def _make_interp_fn(
         self,
