@@ -231,7 +231,8 @@ class Fitter:
             and getattr(model, "_z_fixed", None) is not None
             and getattr(model, "filter_waves", None) is not None
         ):
-            from tengri.core.fused_kernels import build_fused_photometry, is_fused_compatible
+            import contextlib
+
             from tengri.models.sps.precompute import precompute_photometry
 
             model._precomputed.photometry = precompute_photometry(
@@ -241,8 +242,8 @@ class Fitter:
                 model._z_fixed,
                 model._dl_cm_fixed,
             )
-            if is_fused_compatible(model):
-                model._precomputed_kernels.photometry = build_fused_photometry(model)
+            with contextlib.suppress(Exception):
+                model._hybrid = model._build_hybrid_kernels()
 
         self.spec = model.spec
 

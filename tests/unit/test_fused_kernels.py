@@ -107,7 +107,7 @@ def sfr_on_ssp(n_age):
 
 
 # ---------------------------------------------------------------------------
-# Build fused photometry kernel (mimics Model._build_fused_photometry)
+# Build compositional photometry kernel
 # ---------------------------------------------------------------------------
 
 

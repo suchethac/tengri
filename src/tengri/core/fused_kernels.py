@@ -10,11 +10,8 @@ Extracted from ``SEDModel`` methods to keep model.py focused on orchestration.
 
 from __future__ import annotations
 
-import warnings
-
 import jax
 import jax.numpy as jnp
-
 
 # -------------------------------------------------------------------
 # Hybrid kernel: precomputed SSP + exact non-stellar
@@ -176,15 +173,6 @@ def build_hybrid_photometry(model):
     n_filters = len(model.filter_waves) if model.filter_waves else 0
     filter_waves_list = model.filter_waves if model.filter_waves else []
     filter_trans_list = model.filter_trans if model.filter_trans else []
-
-    # Check if any non-stellar component is enabled
-    has_any_non_stellar = (
-        has_nebular or has_dust_em_full or has_agn_full or has_shock or has_radio or has_xray
-    )
-
-    # If no non-stellar components, fall back to precomputed kernel
-    if not has_any_non_stellar:
-        return build_fused_photometry(model)
 
     # === Define kernel signatures (single vs two-component dust) ===
 
@@ -962,7 +950,6 @@ def build_exact_sed(model):
         return sed_atten, sed_intr
 
     return exact_sed
-
 
 
 def is_tier2_compatible(model):

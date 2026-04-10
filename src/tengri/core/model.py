@@ -42,14 +42,10 @@ import jax.numpy as jnp
 
 from tengri.core.fused_kernels import (
     build_exact_sed,
-    build_fused_photometry,
-    build_fused_photometry_ztable,
     build_fused_rest_sed,
-    build_fused_spectrum,
     build_fused_tier2_photometry,
     build_fused_tier2_spectrum,
     build_hybrid_photometry,
-    is_fused_compatible,
     is_tier2_compatible,
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,
@@ -237,20 +233,6 @@ class CompositionalKernels:
     photometry: object | None = None  # build_fused_tier2_photometry (renamed)
     spectrum: object | None = None  # build_fused_tier2_spectrum (renamed)
     exact_sed: object | None = None  # build_exact_sed
-
-
-@dataclasses.dataclass
-class PrecomputedKernels:
-    """Level 1: Kernels using precomputed data at effective wavelengths.
-
-    These evaluate dust, AGN, and other components at filter effective
-    wavelengths only — fast but approximate.  Will be superseded by
-    HybridKernels (Mode 3) in PR 2.
-    """
-
-    photometry: object | None = None  # build_fused_photometry
-    photometry_ztable: object | None = None  # build_fused_photometry_ztable
-    spectrum: object | None = None  # build_fused_spectrum
 
 
 @dataclasses.dataclass
@@ -705,9 +687,6 @@ class SEDModel:
         # Level 2: Compositional kernels (full-resolution JIT)
         self._compositional = self._build_compositional_kernels()
 
-        # Level 1 legacy: Precomputed kernels at effective wavelengths (old Tier 1)
-        self._precomputed_kernels = self._build_precomputed_kernels()
-
         # Level 3: Hybrid kernels (precomputed SSP + exact non-stellar)
         self._hybrid = self._build_hybrid_kernels()
 
@@ -816,30 +795,6 @@ class SEDModel:
             photometry=fused_phot,
             spectrum=fused_spec,
             exact_sed=exact_sed,
-        )
-
-    def _build_precomputed_kernels(self):
-        """Build Level 1: precomputed data kernels at effective wavelengths.
-
-        Currently uses old Tier 1 effective-wavelength kernels.
-        Will be superseded by HybridKernels in PR 2.
-        """
-        precomp_phot = None
-        if self._precomputed.photometry is not None and is_fused_compatible(self):
-            precomp_phot = build_fused_photometry(self)
-
-        precomp_phot_ztable = None
-        if self._precomputed.photometry_ztable is not None and is_fused_compatible(self):
-            precomp_phot_ztable = build_fused_photometry_ztable(self)
-
-        precomp_spec = None
-        if self._precomputed.spectroscopy is not None and is_fused_compatible(self):
-            precomp_spec = build_fused_spectrum(self)
-
-        return PrecomputedKernels(
-            photometry=precomp_phot,
-            photometry_ztable=precomp_phot_ztable,
-            spectrum=precomp_spec,
         )
 
     def _build_hybrid_kernels(self):
@@ -1460,7 +1415,10 @@ class SEDModel:
         if mode == "hybrid":
             return self._predict_photometry_hybrid(params)
         if mode == "precomputed":
-            return self._predict_photometry_precomputed(params)
+            raise ValueError(
+                "Precomputed mode has been removed. Use mode='hybrid' for fast "
+                "approximate photometry or mode='compositional' for exact JIT."
+            )
         if mode == "compositional":
             return self._predict_photometry_compositional(params)
 
@@ -1566,7 +1524,7 @@ class SEDModel:
         return kw
 
     def _predict_photometry_auto(self, params):
-        """Auto mode: pick fastest available (Hybrid → Precomputed → Compositional → Exact)."""
+        """Auto mode: pick fastest available (Hybrid → Compositional → Exact)."""
         import warnings
 
         _has_tabulated_sfh = "sfh_t_gyr" in params
@@ -1574,21 +1532,6 @@ class SEDModel:
         # Hybrid: precomputed SSP + exact non-stellar (fastest exact path)
         if self._hybrid.photometry is not None and not _has_tabulated_sfh:
             return self._predict_photometry_hybrid(params)
-
-        # Precomputed: everything at effective wavelengths (fast but approximate)
-        if (
-            self._precomputed.photometry is not None
-            and self._precomputed_kernels.photometry is not None
-            and not _has_tabulated_sfh
-        ):
-            return self._predict_photometry_precomputed(params)
-
-        if (
-            self._precomputed.photometry_ztable is not None
-            and self._precomputed_kernels.photometry_ztable is not None
-            and not _has_tabulated_sfh
-        ):
-            return self._predict_photometry_precomputed_ztable(params)
 
         # Level 2: Compositional rest-frame SED + observation wrapper
         if (
@@ -1612,57 +1555,6 @@ class SEDModel:
     def _get_agn_kwargs(self, p):
         """Extract AGN kwargs from internal params dict for fused kernel."""
         return get_agn_kwargs(self, p)
-
-    def _predict_photometry_precomputed(self, params):
-        """Fast photometry using fused JIT kernel (fixed z)."""
-        p = self._get_internal_params(params)
-        sfr = self._compute_sfr(p)
-        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        if self._dust_model == "single_component":
-            return self._precomputed_kernels.photometry(
-                sfr_on_ssp,
-                p["log_z_abs"],
-                p["tau_v"],
-                p["dust_slope"],
-                **self._get_dust_kwargs(p),
-                **self._get_agn_kwargs(p),
-            )
-        return self._precomputed_kernels.photometry(
-            sfr_on_ssp,
-            p["log_z_abs"],
-            p["tau_bc"],
-            p["tau_diff"],
-            p["dust_slope"],
-            **self._get_dust_kwargs(p),
-            **self._get_agn_kwargs(p),
-        )
-
-    def _predict_photometry_precomputed_ztable(self, params):
-        """Fast photometry using z-table interpolation (free z)."""
-        p = self._get_internal_params(params)
-        sfr = self._compute_sfr(p)
-        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        z = self._get_redshift(params)
-        if self._dust_model == "single_component":
-            return self._precomputed_kernels.photometry_ztable(
-                sfr_on_ssp,
-                p["log_z_abs"],
-                p["tau_v"],
-                p["dust_slope"],
-                z,
-                **self._get_dust_kwargs(p),
-                **self._get_agn_kwargs(p),
-            )
-        return self._precomputed_kernels.photometry_ztable(
-            sfr_on_ssp,
-            p["log_z_abs"],
-            p["tau_bc"],
-            p["tau_diff"],
-            p["dust_slope"],
-            z,
-            **self._get_dust_kwargs(p),
-            **self._get_agn_kwargs(p),
-        )
 
     # -------------------------------------------------------------------
     # Level 2: Compositional rest-frame SED dispatch
@@ -1848,12 +1740,6 @@ class SEDModel:
         self._precomputed.spectroscopy = spec_precomp
         self._wave_obs = jnp.asarray(wave_obs)
 
-        # Precomputed spectrum kernel (old Tier 1 effective-wavelength)
-        if is_fused_compatible(self):
-            self._precomputed_kernels.spectrum = build_fused_spectrum(self)
-        else:
-            self._precomputed_kernels.spectrum = None
-
         # Compositional spectrum kernel (full-resolution end-to-end JIT)
         self._compositional.spectrum = None
         if self._compositional.rest_sed is not None:
@@ -1900,7 +1786,6 @@ class SEDModel:
             apply_igm=self._apply_igm and self._approx.get("igm", True),
         )
         self._precomputed.photometry_ztable = ztable
-        self._precomputed_kernels.photometry_ztable = build_fused_photometry_ztable(self)
 
         return self
 
@@ -1942,7 +1827,10 @@ class SEDModel:
         if mode == "auto":
             return self._predict_spectrum_auto(params, wave_obs)
         if mode == "precomputed":
-            return self._predict_spectrum_precomputed(params)
+            raise ValueError(
+                "Precomputed mode has been removed. Use mode='compositional' for fast "
+                "JIT spectrum or mode='exact' for full SED pipeline."
+            )
         if mode == "compositional":
             return self._predict_spectrum_compositional(params, wave_obs)
         if mode == "hybrid":
@@ -1955,13 +1843,6 @@ class SEDModel:
     def _predict_spectrum_auto(self, params, wave_obs):
         """Auto mode: pick fastest available spectrum path."""
         import warnings
-
-        # Precomputed kernel (effective wavelengths, fastest)
-        if (
-            self._precomputed.spectroscopy is not None
-            and self._precomputed_kernels.spectrum is not None
-        ):
-            return self._predict_spectrum_precomputed(params)
 
         # Compositional (full resolution)
         _has_tabulated_sfh = "sfh_t_gyr" in params
@@ -2000,49 +1881,6 @@ class SEDModel:
                 sigma_lib_kms=self._sigma_lib_kms,
                 n_bins=self._lsf_n_bins,
             )
-        return flux
-
-    def _predict_spectrum_precomputed(self, params):
-        """Fast spectrum using fused JIT kernel."""
-        p = self._get_internal_params(params)
-        sfr = self._compute_sfr(p)
-        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        sigma_v = params.get("sigma_v", 0.0) if self._has_sigma_v else 0.0
-        if self._dust_model == "single_component":
-            flux = self._precomputed_kernels.spectrum(
-                sfr_on_ssp,
-                p["log_z_abs"],
-                p["tau_v"],
-                p["dust_slope"],
-                sigma_v,
-                **self._get_dust_kwargs(p),
-                **self._get_agn_kwargs(p),
-            )
-        else:
-            flux = self._precomputed_kernels.spectrum(
-                sfr_on_ssp,
-                p["log_z_abs"],
-                p["tau_bc"],
-                p["tau_diff"],
-                p["dust_slope"],
-                sigma_v,
-                **self._get_dust_kwargs(p),
-                **self._get_agn_kwargs(p),
-            )
-
-        # Apply LSF convolution if resolution profile is set
-        # (applied after the fused kernel, which handles velocity broadening)
-        resolution = self._lsf_resolution
-        if resolution is not None:
-            wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
-            flux = apply_lsf(
-                flux,
-                wave_obs,
-                resolution,
-                sigma_lib_kms=self._sigma_lib_kms,
-                n_bins=self._lsf_n_bins,
-            )
-
         return flux
 
     def predict_sfh(self, params, n_linear=1000):

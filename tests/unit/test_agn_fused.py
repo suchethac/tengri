@@ -125,19 +125,20 @@ class TestAGNModeDetection:
             model = Model(legacy_agn_spec, synthetic_ssp, filters=simple_filters)
         assert model._agn_parametric is False
 
-    def test_parametric_enables_fused(self, parametric_agn_spec, synthetic_ssp, simple_filters):
-        """Parametric AGN allows fused kernel (not forced to exact path)."""
+    def test_parametric_enables_hybrid(self, parametric_agn_spec, synthetic_ssp, simple_filters):
+        """Parametric AGN allows hybrid kernel."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model = Model(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
-        assert model._precomputed_kernels.photometry is not None
+        assert model._hybrid.photometry is not None
 
-    def test_legacy_forces_exact(self, legacy_agn_spec, synthetic_ssp, simple_filters):
-        """Legacy AGN forces exact path (fused kernel disabled)."""
+    def test_legacy_still_builds_hybrid(self, legacy_agn_spec, synthetic_ssp, simple_filters):
+        """Legacy AGN still builds hybrid kernel (non-stellar at full res)."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model = Model(legacy_agn_spec, synthetic_ssp, filters=simple_filters)
-        assert model._precomputed_kernels.photometry is None
+        # Hybrid handles all AGN modes (frac computed from broadband L_bol)
+        assert model._hybrid.photometry is not None
 
 
 # ---------------------------------------------------------------------------
