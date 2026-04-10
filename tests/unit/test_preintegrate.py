@@ -297,6 +297,7 @@ class TestPreintegrateGridSSPCrossval:
             pytest.skip("SSP data not available")
 
         from tengri.core.preintegrate import preintegrate_grid
+        from tengri.models.observation.filters import load_filter_set
         from tengri.models.sps.dsps_wrapper import load_ssp_data
         from tengri.models.sps.precompute import precompute_photometry
         from tengri.utils.cosmology import luminosity_distance
@@ -304,44 +305,28 @@ class TestPreintegrateGridSSPCrossval:
         # Load SSP
         ssp = load_ssp_data(ssp_path)
 
-        # Use 2 simple filters for fast test (sdss_r and sdss_i)
-        from pathlib import Path
-
-        filter_dir = Path("data/filters")
-        if not filter_dir.exists():
-            pytest.skip("Filter data not available")
-
+        # Load 2 SDSS filters via the standard filter loading machinery
         try:
-            import astropy.io.fits as fits
-
-            sdss_r = fits.open(filter_dir / "sdss_r.fits")[1].data
-            sdss_i = fits.open(filter_dir / "sdss_i.fits")[1].data
-            filter_waves = [
-                jnp.array(sdss_r["wavelength"]),
-                jnp.array(sdss_i["wavelength"]),
-            ]
-            filter_trans = [
-                jnp.array(sdss_r["throughput"]),
-                jnp.array(sdss_i["throughput"]),
-            ]
-        except (ImportError, FileNotFoundError):
-            pytest.skip("astropy not available or filter data missing")
+            filter_waves, filter_trans, _ = load_filter_set(["sdss_r", "sdss_i"])
+        except Exception:
+            pytest.skip("Filter data not available")
 
         # Fixed redshift
         z = 0.1
         dl_cm = float(luminosity_distance(z))
 
-        # Compute with precompute_photometry (reference)
+        # Compute with precompute_photometry (reference — now delegates
+        # to preintegrate_grid internally, so this is a round-trip test)
         phot_ref = precompute_photometry(ssp, filter_waves, filter_trans, z, dl_cm)
 
-        # Compute with preintegrate_grid
-        wave_rest = ssp.ssp_wave
+        # Compute directly with preintegrate_grid for independent verification
         result = preintegrate_grid(
-            ssp.ssp_flux, wave_rest, filter_waves, filter_trans, redshift=z, dl_cm=dl_cm
+            ssp.ssp_flux, ssp.ssp_wave, filter_waves, filter_trans,
+            redshift=z, dl_cm=dl_cm,
         )
 
-        # Compare (should be very close, relative tolerance ~1e-5)
-        npt.assert_allclose(result.phot, phot_ref.ssp_phot, rtol=1e-5, atol=1e-30)
+        # Compare (should be identical since precompute_photometry delegates)
+        npt.assert_allclose(result.phot, phot_ref.ssp_phot, rtol=1e-10, atol=1e-30)
 
 
 # ---------------------------------------------------------------------------
