@@ -13,6 +13,7 @@ tracking, wavelength interpolation) stays in the caller.
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -277,10 +278,12 @@ def agn_emission(
         **agn_params,
     )
 
-    if agn_polar_ebv > 0.0:
-        from tengri.models.agn.polar_dust import polar_dust_total
+    # Polar dust: use jax.lax.cond for JIT compatibility (agn_polar_ebv
+    # is a traced value inside @jit, so Python `if` would fail).
+    from tengri.models.agn.polar_dust import polar_dust_total
 
-        agn_lsun = agn_sed / _LSUN
+    def _apply_polar_dust(sed):
+        agn_lsun = sed / _LSUN
         att_lsun, reemit_lsun = polar_dust_total(
             agn_lsun,
             wave,
@@ -288,7 +291,14 @@ def agn_emission(
             opening_angle_deg=agn_polar_oa,
             ebv=agn_polar_ebv,
         )
-        agn_sed = (att_lsun + reemit_lsun) * _LSUN
+        return (att_lsun + reemit_lsun) * _LSUN
+
+    agn_sed = jax.lax.cond(
+        jnp.asarray(agn_polar_ebv) > 0.0,
+        _apply_polar_dust,
+        lambda sed: sed,
+        agn_sed,
+    )
 
     return agn_sed
 

@@ -48,13 +48,14 @@ from tengri.core.fused_kernels import (
     build_fused_spectrum,
     build_fused_tier2_photometry,
     build_fused_tier2_spectrum,
+    build_hybrid_photometry,
     is_fused_compatible,
     is_tier2_compatible,
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,
 )
 
-# Alias new names → old functions during transition (PR 1: naming only)
+# Alias new names → old functions during transition
 build_precomputed_photometry = build_fused_photometry  # old Tier 1
 build_precomputed_photometry_ztable = build_fused_photometry_ztable  # old Tier 1
 build_precomputed_spectrum = build_fused_spectrum  # old Tier 1
@@ -728,8 +729,8 @@ class SEDModel:
         )
         self._fused_spectrum = self._precomputed_kernels.spectrum  # backward-compat
 
-        # Level 3: Hybrid kernels (precomputed SSP + exact non-stellar) — Populated in PR 2
-        self._hybrid = HybridKernels()
+        # Level 3: Hybrid kernels (precomputed SSP + exact non-stellar)
+        self._hybrid = self._build_hybrid_kernels()
 
         # Auto-precompute spectroscopy from Observation config
         if (
@@ -834,6 +835,21 @@ class SEDModel:
             photometry_ztable=precomp_phot_ztable,
             spectrum=precomp_spec,
         )
+
+    def _build_hybrid_kernels(self):
+        """Build Level 3: precomputed SSP + exact non-stellar kernels.
+
+        The hybrid kernel uses precomputed SSP×filter photometry for stellar
+        (fast, ~0.4% error) and evaluates all non-stellar components at full
+        wavelength resolution via emission_helpers.py, then integrates
+        through filters (exact).
+        """
+        hybrid_phot = None
+        if self._precomputed.photometry is not None and self._z_fixed is not None:
+            with contextlib.suppress(Exception):
+                hybrid_phot = build_hybrid_photometry(self)
+
+        return HybridKernels(photometry=hybrid_phot)
 
     # -------------------------------------------------------------------
     # Internal parameter translation
@@ -1464,16 +1480,84 @@ class SEDModel:
         return jnp.array(fluxes)
 
     def _predict_photometry_hybrid(self, params):
-        """Hybrid photometry: precomputed SSP + compositional non-stellar.
+        """Hybrid photometry: precomputed SSP + exact non-stellar.
 
-        Not yet implemented — falls back to auto mode.
-        Will be implemented in PR 2.
+        Uses precomputed SSP×filter for stellar (~0.4% error), and
+        emission_helpers at full wavelength for non-stellar (exact).
         """
-        if getattr(self, "_hybrid", None) and self._hybrid.photometry is not None:
-            # PR 2: call self._hybrid.photometry(params)
-            pass
-        # Fall back to auto for now
-        return self._predict_photometry_auto(params)
+        if self._hybrid.photometry is None:
+            # Fall back to auto if hybrid kernel not available
+            return self._predict_photometry_auto(params)
+
+        p = self._get_internal_params(params)
+        sfr = self._compute_sfr(p)
+        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+
+        # Build kwargs: dust + AGN (same as precomputed) + non-stellar extras
+        kw = self._get_dust_kwargs(p)
+        kw.update(self._get_agn_kwargs(p))
+        kw.update(self._get_non_stellar_kwargs(p))
+
+        if self._dust_model == "single_component":
+            return self._hybrid.photometry(
+                sfr_on_ssp,
+                p["log_z_abs"],
+                p["tau_v"],
+                p["dust_slope"],
+                **kw,
+            )
+        return self._hybrid.photometry(
+            sfr_on_ssp,
+            p["log_z_abs"],
+            p["tau_bc"],
+            p["tau_diff"],
+            p["dust_slope"],
+            **kw,
+        )
+
+    def _get_non_stellar_kwargs(self, p):
+        """Extract non-stellar kwargs from internal params for hybrid kernel."""
+        kw = {}
+        # Nebular
+        if self._nebular_backend is not None and getattr(
+            self._nebular_backend, "has_free_params", False
+        ):
+            kw["neb_logU"] = p.get("neb_logU", -3.0)
+            kw["neb_logZ_gas"] = p.get("neb_logZ_gas", None)
+            kw["neb_fesc"] = p.get("neb_fesc", 0.0)
+            kw["neb_fesc_lya"] = p.get("neb_fesc_lya", 0.0)
+        # Shock
+        if getattr(self, "_shock_enabled", False):
+            kw["shock_frac"] = p.get("shock_frac", 0.0)
+            kw["shock_velocity"] = p.get("shock_velocity", 300.0)
+            kw["shock_log_density"] = p.get("shock_log_density", 0.0)
+            kw["shock_b_over_sqrt_n"] = p.get("shock_b_over_sqrt_n", 1.0)
+        # Dust emission (all models, not just MBB)
+        if self._dust_emission_model is not None:
+            kw["dust_T"] = p.get("dust_T", 35.0)
+            kw["dust_beta_ir"] = p.get("dust_beta_ir", 1.6)
+            kw["dust_eta_balance"] = p.get("dust_eta_balance", 1.0)
+            kw["dust_alpha_mir"] = p.get("dust_alpha_mir", 2.0)
+            kw["dust_alpha_dale"] = p.get("dust_alpha_dale", 2.0)
+            kw["dust_umin"] = p.get("dust_umin", 1.0)
+            kw["dust_gamma_dl"] = p.get("dust_gamma_dl", 0.01)
+            kw["dust_qpah"] = p.get("dust_qpah", 2.5)
+        # AGN (full params for exact evaluation)
+        if self._agn_model is not None:
+            kw["agn_polar_ebv"] = p.get("agn_polar_ebv", 0.0)
+            kw["agn_cos_inc"] = p.get("agn_cos_inc", 0.5)
+            kw["agn_polar_oa"] = p.get("agn_polar_oa", 45.0)
+            kw["agn_frac"] = p.get("agn_frac", 0.0)
+            kw["agn_a_spin"] = p.get("agn_a_spin", 0.0)
+            kw["agn_tau_skirtor"] = p.get("agn_tau_skirtor", 7.0)
+            kw["agn_p_skirtor"] = p.get("agn_p_skirtor", 1.0)
+            kw["agn_q_skirtor"] = p.get("agn_q_skirtor", 1.0)
+            kw["agn_oa_skirtor"] = p.get("agn_oa_skirtor", 40.0)
+        # Radio
+        if self._radio_enabled:
+            kw["radio_loudness"] = p.get("radio_loudness", 0.0)
+            kw["log_mstar"] = jnp.log10(jnp.maximum(p.get("mstar", 1e10), 1e-10))
+        return kw
 
     def _predict_photometry_auto(self, params):
         """Auto mode: pick fastest available (Hybrid → Precomputed → Compositional → Exact)."""
@@ -1481,6 +1565,11 @@ class SEDModel:
 
         _has_tabulated_sfh = "sfh_t_gyr" in params
 
+        # Hybrid: precomputed SSP + exact non-stellar (fastest exact path)
+        if self._hybrid.photometry is not None and not _has_tabulated_sfh:
+            return self._predict_photometry_hybrid(params)
+
+        # Precomputed: everything at effective wavelengths (fast but approximate)
         if (
             self._precomp is not None
             and self._fused_photometry is not None

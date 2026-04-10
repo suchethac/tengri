@@ -155,6 +155,10 @@ def build_fused_photometry(model):
     ssp_phot = precomp.ssp_phot.astype(dt)
     ssp_lgmet = model.ssp_data.ssp_lgmet.astype(dt)
     eff_waves_rest = precomp.effective_wavelengths_rest.astype(dt)
+    # Taylor correction: Ψ tensor captures SSP–dust covariance to first order
+    _use_taylor = precomp.ssp_phot_moment is not None
+    if _use_taylor:
+        ssp_phot_moment = precomp.ssp_phot_moment.astype(dt)
     _is_single_dust = model._dust_model == "single_component"
     _dust_exact = getattr(model, "_dust_approx", "fast") == "exact"
     if not _is_single_dust:
@@ -404,8 +408,9 @@ def build_fused_photometry(model):
             flux_attenuated = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
         else:
             # Fast two-CSP decomposition (Charlot & Fall hard threshold):
-            #   flux = trans_diff * (trans_bc * CSP_young + CSP_old)
-            # Two 1D einsums + 1D dust — no (n_ages, n_wave) intermediate.
+            #   flux = A_young · CSP_young + A_old · CSP_old
+            # With optional Taylor correction for SSP–dust covariance:
+            #   flux ≈ A · Φ + A' · Ψ  (reduces factorization error ~5×)
             k_bc = law_bc_fn(eff_waves_rest, **_law_kw)
             k_diff = law_diff_fn(eff_waves_rest, **_law_kw)
             trans_bc = jnp.exp(-tv1 * k_bc)  # (n_filt,)
@@ -414,7 +419,51 @@ def build_fused_photometry(model):
             csp_young = jnp.einsum("i,if->f", weights * young_mask, ssp_at_z)
             csp_old = jnp.einsum("i,if->f", weights * old_mask, ssp_at_z)
 
-            flux_no_geom = trans_diff * (trans_bc * csp_young + csp_old)
+            if _use_taylor:
+                # Taylor correction: f ≈ A·Φ + A'·Ψ
+                # A' via central finite differences (works for any dust law)
+                _dl = dt.type(1.0)  # 1 Å step
+                k_bc_p = law_bc_fn(eff_waves_rest + _dl, **_law_kw)
+                k_bc_m = law_bc_fn(eff_waves_rest - _dl, **_law_kw)
+                k_diff_p = law_diff_fn(eff_waves_rest + _dl, **_law_kw)
+                k_diff_m = law_diff_fn(eff_waves_rest - _dl, **_law_kw)
+
+                # Metallicity-interpolate the moment tensor (same as ssp_at_z)
+                if _has_alpha:
+                    ssp_moment_at_z = (
+                        (1 - fz) * (1 - fa) * ssp_phot_moment[iz, ia]
+                        + fz * (1 - fa) * ssp_phot_moment[iz + 1, ia]
+                        + (1 - fz) * fa * ssp_phot_moment[iz, ia + 1]
+                        + fz * fa * ssp_phot_moment[iz + 1, ia + 1]
+                    )
+                elif _use_smooth_z:
+                    ssp_moment_at_z = jnp.einsum("m,maf->af", zw, ssp_phot_moment)
+                else:
+                    ssp_moment_at_z = (1.0 - frac) * ssp_phot_moment[idx] + frac * ssp_phot_moment[
+                        idx + 1
+                    ]
+
+                csp_young_m = jnp.einsum("i,if->f", weights * young_mask, ssp_moment_at_z)
+                csp_old_m = jnp.einsum("i,if->f", weights * old_mask, ssp_moment_at_z)
+
+                # A(λ) and A'(λ) for young (bc+diff) and old (diff only)
+                A_young = trans_bc * trans_diff
+                A_young_deriv = (
+                    jnp.exp(-tv1 * k_bc_p) * jnp.exp(-tv2 * k_diff_p)
+                    - jnp.exp(-tv1 * k_bc_m) * jnp.exp(-tv2 * k_diff_m)
+                ) / (2 * _dl)
+                A_old = trans_diff
+                A_old_deriv = (jnp.exp(-tv2 * k_diff_p) - jnp.exp(-tv2 * k_diff_m)) / (2 * _dl)
+
+                flux_no_geom = (
+                    A_young * csp_young
+                    + A_young_deriv * csp_young_m
+                    + A_old * csp_old
+                    + A_old_deriv * csp_old_m
+                )
+            else:
+                flux_no_geom = trans_diff * (trans_bc * csp_young + csp_old)
+
             flux_intrinsic_for_geom = csp_young + csp_old
             flux_attenuated = f_obs * flux_intrinsic_for_geom + (1.0 - f_obs) * flux_no_geom
 
@@ -482,6 +531,826 @@ def build_fused_photometry(model):
         return (flux_scale * flux_total * lsun).astype(jnp.float64)
 
     return fused_phot
+
+
+# -------------------------------------------------------------------
+# Hybrid kernel: precomputed SSP + exact non-stellar
+# -------------------------------------------------------------------
+
+
+def build_hybrid_photometry(model):
+    """Build hybrid photometry kernel: precomputed stellar + exact non-stellar.
+
+    Stellar CSP evaluated via precomputed SSP×filter einsum (fast, ~0.4% error).
+    Non-stellar components evaluated at full wavelength resolution via
+    emission_helpers, then integrated through filters (exact).
+
+    This kernel bridges Tier 1 (fast but approximate) and Tier 2 (exact but slow):
+    - Use for science models where stellar photometry speed matters but non-stellar
+      accuracy is critical (nebular lines, AGN variability, etc.)
+    - Non-stellar components must be available for full-wavelength evaluation
+      (emission_helpers functions)
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model instance providing config and precomputed arrays.
+
+    Returns
+    -------
+    callable
+        JIT-compiled function: (sfr_on_ssp, log_z_abs, tau_bc, tau_diff,
+        dust_slope, ..., neb_logU=..., shock_frac=..., etc.)
+        -> photometry array (n_filters,) in erg/s/cm^2/Hz.
+    """
+    from tengri.core.emission_helpers import (
+        agn_emission,
+        attenuate_emission,
+        dust_ir_emission,
+        nebular_emission,
+        radio_emission,
+        shock_emission,
+        xray_emission,
+    )
+    from tengri.models.dust.attenuation import resolve_dust_law
+    from tengri.models.observation.photometry import compute_flux_density
+    from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+
+    dt = model._forward_dtype
+    precomp = model._precomp
+    ssp_phot = precomp.ssp_phot.astype(dt)
+    ssp_lgmet = model.ssp_data.ssp_lgmet.astype(dt)
+    eff_waves_rest = precomp.effective_wavelengths_rest.astype(dt)
+    _use_taylor = precomp.ssp_phot_moment is not None
+    if _use_taylor:
+        ssp_phot_moment = precomp.ssp_phot_moment.astype(dt)
+    _is_single_dust = model._dust_model == "single_component"
+    _dust_exact = getattr(model, "_dust_approx", "fast") == "exact"
+    if not _is_single_dust:
+        if _dust_exact:
+            dust_age_w = model._dust_age_weights.astype(dt)
+        else:
+            _t_birth = 1e7
+            young_mask = (model.ssp_ages_yr < _t_birth).astype(dt)
+            old_mask = dt.type(1.0) - young_mask
+    flux_scale = dt.type(precomp.flux_scale)
+    _csp_use_matrix = model._csp_integration == "log_interp"
+    if _csp_use_matrix:
+        _csp_mat = model._csp_matrix.astype(dt)
+    else:
+        _age_dt = model._csp_age_dt.astype(dt)
+    lsun = dt.type(LSUN_ERG_PER_S)
+
+    # Capture dust law functions
+    law_bc_fn = resolve_dust_law(model._dust_law_bc)
+    if not _is_single_dust:
+        law_diff_fn = resolve_dust_law(model._dust_law_diff)
+
+    from tengri.models.sps.dsps_wrapper import (
+        _ALPHA_TO_Z_COEFF as _A2Z,
+        has_alpha_grid,
+    )
+
+    _has_alpha = has_alpha_grid(model.ssp_data)
+    if _has_alpha:
+        ssp_alpha_fe = model.ssp_data.ssp_alpha_fe.astype(dt)
+
+    _use_alpha_fe = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
+
+    _use_smooth_z = model._met_interp == "smooth"
+    _lgmet_scat = dt.type(model._lgmet_scatter)
+    if _use_smooth_z:
+        from tengri.models.sps.dsps_wrapper import compute_lgmet_weights as _clw
+
+    # IGM: precomputed at effective wavelengths
+    has_igm = model._igm_at_eff is not None
+    if has_igm:
+        igm_trans = model._igm_at_eff.astype(dt)
+
+    # Note: has_dust_em flag checked for stellar L_absorbed only; full-wavelength
+    # dust emission happens in non-stellar section
+    # AGN at effective wavelengths (parametric mode only) — not used in hybrid
+    # since non-stellar AGN is evaluated at full wavelength
+
+    # === Non-stellar components (full wavelength) ===
+    ssp_wave_f64 = model.ssp_data.ssp_wave
+    rest_wave_f64 = model._rest_wavelength
+    _needs_extension = rest_wave_f64 is not model.ssp_data.ssp_wave
+
+    # Nebular
+    has_nebular = model._nebular_backend is not None and getattr(
+        model._nebular_backend, "has_free_params", False
+    )
+    if has_nebular:
+        nebular_backend = model._nebular_backend
+        ssp_log_ages_yr = model.ssp_log_ages_yr
+        _neb_dust_mode = getattr(model, "_neb_dust", "bc")
+        _neb_bc_fn = getattr(model, "_neb_dust_law_bc_fn", law_bc_fn)
+
+    # Shock
+    has_shock = getattr(model, "_shock_enabled", False)
+
+    # Dust emission (full wavelength)
+    has_dust_em_full = model._dust_emission_model is not None
+    if has_dust_em_full:
+        from tengri.models.dust.emission import resolve_emission_model
+
+        dust_emission_fn = resolve_emission_model(model._dust_emission_model)
+
+    # AGN (full wavelength)
+    has_agn_full = model._agn_model is not None
+    agn_parametric = model._agn_parametric if has_agn_full else False
+    if has_agn_full:
+        from tengri.models.agn import resolve_agn_model
+
+        agn_model_fn_full = resolve_agn_model(model._agn_model)
+
+    # Radio
+    has_radio = model._radio_enabled
+    if has_radio:
+        _radio_sfr_mode = model._radio_sfr_mode
+        _include_freefree = model._radio_include_freefree
+        _redshift = float(getattr(model, "_redshift", 0.0))
+
+    # X-ray
+    has_xray = model._xray_enabled
+
+    # Constants for energy balance
+    _c_aa = dt.type(2.99792458e18)
+
+    # Redshift for filter integration
+    z_fixed = model._z_fixed
+    dl_cm_fixed = model._dl_cm_fixed
+
+    # Filter information
+    n_filters = len(model.filter_waves) if model.filter_waves else 0
+    filter_waves_list = model.filter_waves if model.filter_waves else []
+    filter_trans_list = model.filter_trans if model.filter_trans else []
+
+    # Check if any non-stellar component is enabled
+    has_any_non_stellar = (
+        has_nebular or has_dust_em_full or has_agn_full or has_shock or has_radio or has_xray
+    )
+
+    # If no non-stellar components, fall back to precomputed kernel
+    if not has_any_non_stellar:
+        return build_fused_photometry(model)
+
+    # === Define kernel signatures (single vs two-component dust) ===
+
+    if _is_single_dust:
+
+        @jax.jit
+        def hybrid_phot(
+            sfr_on_ssp,
+            log_z_abs,
+            tau_v,
+            dust_slope,
+            f_obscuration=0.0,
+            dust_bump_strength=0.0,
+            dust_delta=0.0,
+            dust_Rv=3.1,
+            alpha_fe=0.0,
+            dust_T=35.0,
+            dust_beta_ir=1.6,
+            dust_eta_balance=1.0,
+            agn_log_lbol=10.0,
+            agn_alpha=-1.0,
+            agn_T_torus=1000.0,
+            agn_tau_torus=5.0,
+            agn_torus_frac=0.5,
+            agn_log_mbh=7.0,
+            agn_log_ledd=-1.0,
+            # Non-stellar parameters
+            neb_logU=-3.0,
+            neb_logZ_gas=None,
+            neb_fesc=0.0,
+            neb_fesc_lya=0.0,
+            shock_frac=0.0,
+            shock_velocity=300.0,
+            shock_log_density=0.0,
+            shock_b_over_sqrt_n=1.0,
+            shock_abundance="solar",
+            shock_component="combined",
+            dust_alpha_mir=2.0,
+            dust_alpha_dale=2.0,
+            dust_umin=1.0,
+            dust_gamma_dl=0.01,
+            dust_qpah=2.5,
+            agn_polar_ebv=0.0,
+            agn_cos_inc=0.5,
+            agn_polar_oa=45.0,
+            agn_a_spin=0.0,
+            agn_tau_skirtor=7.0,
+            agn_p_skirtor=1.0,
+            agn_q_skirtor=1.0,
+            agn_oa_skirtor=40.0,
+            agn_frac=0.0,
+            agn_T_hot=1200.0,
+            agn_T_warm=300.0,
+            agn_frac_hot=0.3,
+            agn_f_hard=0.02,
+            agn_gamma_warm=2.5,
+            agn_kt_warm=0.2,
+            agn_gamma_hard=1.8,
+            agn_kt_hot=100.0,
+            agn_r_warm_ratio=2.0,
+            radio_q_ir=2.64,
+            radio_alpha_sf=0.8,
+            radio_loudness=0.0,
+            radio_alpha_agn=0.7,
+            radio_T_e=1e4,
+            radio_alpha_ff=-0.1,
+            xray_gamma_agn=1.8,
+            xray_alpha_ox=-1.4,
+            xray_gamma_hmxb=2.0,
+            xray_gamma_lmxb=1.6,
+            xray_E_cut=300.0,
+        ):
+            return _hybrid_phot_body(
+                sfr_on_ssp,
+                log_z_abs,
+                0.0,
+                0.0,
+                dust_slope,
+                f_obscuration,
+                dust_bump_strength,
+                dust_delta,
+                dust_Rv,
+                alpha_fe,
+                dust_T,
+                dust_beta_ir,
+                dust_eta_balance,
+                agn_log_lbol,
+                agn_alpha,
+                agn_T_torus,
+                agn_tau_torus,
+                agn_torus_frac,
+                agn_log_mbh,
+                agn_log_ledd,
+                neb_logU,
+                neb_logZ_gas,
+                neb_fesc,
+                neb_fesc_lya,
+                shock_frac,
+                shock_velocity,
+                shock_log_density,
+                shock_b_over_sqrt_n,
+                shock_abundance,
+                shock_component,
+                dust_alpha_mir,
+                dust_alpha_dale,
+                dust_umin,
+                dust_gamma_dl,
+                dust_qpah,
+                agn_polar_ebv,
+                agn_cos_inc,
+                agn_polar_oa,
+                agn_frac,
+                agn_a_spin,
+                agn_tau_skirtor,
+                agn_p_skirtor,
+                agn_q_skirtor,
+                agn_oa_skirtor,
+                agn_T_hot,
+                agn_T_warm,
+                agn_frac_hot,
+                agn_f_hard,
+                agn_gamma_warm,
+                agn_kt_warm,
+                agn_gamma_hard,
+                agn_kt_hot,
+                agn_r_warm_ratio,
+                radio_q_ir,
+                radio_alpha_sf,
+                radio_loudness,
+                radio_alpha_agn,
+                radio_T_e,
+                radio_alpha_ff,
+                xray_gamma_agn,
+                xray_alpha_ox,
+                xray_gamma_hmxb,
+                xray_gamma_lmxb,
+                xray_E_cut,
+                tau_v=tau_v,
+            )
+
+    else:
+
+        @jax.jit
+        def hybrid_phot(
+            sfr_on_ssp,
+            log_z_abs,
+            tau_bc,
+            tau_diff,
+            dust_slope,
+            f_obscuration=0.0,
+            dust_bump_strength=0.0,
+            dust_delta=0.0,
+            dust_Rv=3.1,
+            alpha_fe=0.0,
+            dust_T=35.0,
+            dust_beta_ir=1.6,
+            dust_eta_balance=1.0,
+            agn_log_lbol=10.0,
+            agn_alpha=-1.0,
+            agn_T_torus=1000.0,
+            agn_tau_torus=5.0,
+            agn_torus_frac=0.5,
+            agn_log_mbh=7.0,
+            agn_log_ledd=-1.0,
+            # Non-stellar parameters
+            neb_logU=-3.0,
+            neb_logZ_gas=None,
+            neb_fesc=0.0,
+            neb_fesc_lya=0.0,
+            shock_frac=0.0,
+            shock_velocity=300.0,
+            shock_log_density=0.0,
+            shock_b_over_sqrt_n=1.0,
+            shock_abundance="solar",
+            shock_component="combined",
+            dust_alpha_mir=2.0,
+            dust_alpha_dale=2.0,
+            dust_umin=1.0,
+            dust_gamma_dl=0.01,
+            dust_qpah=2.5,
+            agn_polar_ebv=0.0,
+            agn_cos_inc=0.5,
+            agn_polar_oa=45.0,
+            agn_a_spin=0.0,
+            agn_tau_skirtor=7.0,
+            agn_p_skirtor=1.0,
+            agn_q_skirtor=1.0,
+            agn_oa_skirtor=40.0,
+            agn_frac=0.0,
+            agn_T_hot=1200.0,
+            agn_T_warm=300.0,
+            agn_frac_hot=0.3,
+            agn_f_hard=0.02,
+            agn_gamma_warm=2.5,
+            agn_kt_warm=0.2,
+            agn_gamma_hard=1.8,
+            agn_kt_hot=100.0,
+            agn_r_warm_ratio=2.0,
+            radio_q_ir=2.64,
+            radio_alpha_sf=0.8,
+            radio_loudness=0.0,
+            radio_alpha_agn=0.7,
+            radio_T_e=1e4,
+            radio_alpha_ff=-0.1,
+            xray_gamma_agn=1.8,
+            xray_alpha_ox=-1.4,
+            xray_gamma_hmxb=2.0,
+            xray_gamma_lmxb=1.6,
+            xray_E_cut=300.0,
+        ):
+            return _hybrid_phot_body(
+                sfr_on_ssp,
+                log_z_abs,
+                tau_bc,
+                tau_diff,
+                dust_slope,
+                f_obscuration,
+                dust_bump_strength,
+                dust_delta,
+                dust_Rv,
+                alpha_fe,
+                dust_T,
+                dust_beta_ir,
+                dust_eta_balance,
+                agn_log_lbol,
+                agn_alpha,
+                agn_T_torus,
+                agn_tau_torus,
+                agn_torus_frac,
+                agn_log_mbh,
+                agn_log_ledd,
+                neb_logU,
+                neb_logZ_gas,
+                neb_fesc,
+                neb_fesc_lya,
+                shock_frac,
+                shock_velocity,
+                shock_log_density,
+                shock_b_over_sqrt_n,
+                shock_abundance,
+                shock_component,
+                dust_alpha_mir,
+                dust_alpha_dale,
+                dust_umin,
+                dust_gamma_dl,
+                dust_qpah,
+                agn_polar_ebv,
+                agn_cos_inc,
+                agn_polar_oa,
+                agn_frac,
+                agn_a_spin,
+                agn_tau_skirtor,
+                agn_p_skirtor,
+                agn_q_skirtor,
+                agn_oa_skirtor,
+                agn_T_hot,
+                agn_T_warm,
+                agn_frac_hot,
+                agn_f_hard,
+                agn_gamma_warm,
+                agn_kt_warm,
+                agn_gamma_hard,
+                agn_kt_hot,
+                agn_r_warm_ratio,
+                radio_q_ir,
+                radio_alpha_sf,
+                radio_loudness,
+                radio_alpha_agn,
+                radio_T_e,
+                radio_alpha_ff,
+                xray_gamma_agn,
+                xray_alpha_ox,
+                xray_gamma_hmxb,
+                xray_gamma_lmxb,
+                xray_E_cut,
+            )
+
+    def _hybrid_phot_body(
+        sfr_on_ssp,
+        log_z_abs,
+        tau_bc,
+        tau_diff,
+        dust_slope,
+        f_obscuration,
+        dust_bump_strength,
+        dust_delta,
+        dust_Rv,
+        alpha_fe,
+        dust_T,
+        dust_beta_ir,
+        dust_eta_balance,
+        agn_log_lbol,
+        agn_alpha,
+        agn_T_torus,
+        agn_tau_torus,
+        agn_torus_frac,
+        agn_log_mbh,
+        agn_log_ledd,
+        neb_logU,
+        neb_logZ_gas,
+        neb_fesc,
+        neb_fesc_lya,
+        shock_frac,
+        shock_velocity,
+        shock_log_density,
+        shock_b_over_sqrt_n,
+        shock_abundance,
+        shock_component,
+        dust_alpha_mir,
+        dust_alpha_dale,
+        dust_umin,
+        dust_gamma_dl,
+        dust_qpah,
+        agn_polar_ebv,
+        agn_cos_inc,
+        agn_polar_oa,
+        agn_frac,
+        agn_a_spin,
+        agn_tau_skirtor,
+        agn_p_skirtor,
+        agn_q_skirtor,
+        agn_oa_skirtor,
+        agn_T_hot,
+        agn_T_warm,
+        agn_frac_hot,
+        agn_f_hard,
+        agn_gamma_warm,
+        agn_kt_warm,
+        agn_gamma_hard,
+        agn_kt_hot,
+        agn_r_warm_ratio,
+        radio_q_ir,
+        radio_alpha_sf,
+        radio_loudness,
+        radio_alpha_agn,
+        radio_T_e,
+        radio_alpha_ff,
+        xray_gamma_agn,
+        xray_alpha_ox,
+        xray_gamma_hmxb,
+        xray_gamma_lmxb,
+        xray_E_cut,
+        tau_v=0.0,
+    ):
+        """Hybrid kernel body: stellar (precomputed) + non-stellar (exact)."""
+        # === STEP 1: Stellar photometry (COPIED from _fused_phot_body) ===
+        sfr = sfr_on_ssp.astype(dt)
+        lz = jnp.asarray(log_z_abs, dtype=dt)
+        tv1 = jnp.asarray(tau_bc, dtype=dt)
+        tv2 = jnp.asarray(tau_diff, dtype=dt)
+        tv = jnp.asarray(tau_v, dtype=dt)
+        dn = jnp.asarray(dust_slope, dtype=dt)
+        f_obs = jnp.asarray(f_obscuration, dtype=dt)
+        bump = jnp.asarray(dust_bump_strength, dtype=dt)
+        delta = jnp.asarray(dust_delta, dtype=dt)
+        rv = jnp.asarray(dust_Rv, dtype=dt)
+        afe = jnp.asarray(alpha_fe, dtype=dt)
+
+        # CSP weights
+        weights = _csp_mat @ sfr if _csp_use_matrix else sfr * _age_dt
+
+        # Metallicity + alpha interpolation
+        if _has_alpha:
+            lz_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
+            iz = jnp.clip(jnp.searchsorted(ssp_lgmet, lz_c) - 1, 0, len(ssp_lgmet) - 2)
+            fz = (lz_c - ssp_lgmet[iz]) / (ssp_lgmet[iz + 1] - ssp_lgmet[iz])
+            afe_c = jnp.clip(afe, ssp_alpha_fe[0], ssp_alpha_fe[-1])
+            ia = jnp.clip(jnp.searchsorted(ssp_alpha_fe, afe_c) - 1, 0, len(ssp_alpha_fe) - 2)
+            fa = (afe_c - ssp_alpha_fe[ia]) / (ssp_alpha_fe[ia + 1] - ssp_alpha_fe[ia])
+            ssp_at_z = (
+                (1 - fz) * (1 - fa) * ssp_phot[iz, ia]
+                + fz * (1 - fa) * ssp_phot[iz + 1, ia]
+                + (1 - fz) * fa * ssp_phot[iz, ia + 1]
+                + fz * fa * ssp_phot[iz + 1, ia + 1]
+            )
+        else:
+            if _use_alpha_fe:
+                lz = lz + _A2Z * afe
+            if _use_smooth_z:
+                zw = _clw(lz, ssp_lgmet, _lgmet_scat)
+                ssp_at_z = jnp.einsum("m,maf->af", zw, ssp_phot)
+            else:
+                log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
+                idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
+                frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
+                ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
+
+        # Dust at effective wavelengths
+        _law_kw = dict(n_slope=dn, dust_bump_strength=bump, dust_delta=delta, dust_Rv=rv)
+        if _is_single_dust:
+            k = law_bc_fn(eff_waves_rest, **_law_kw)
+            trans_1d = f_obs + (1.0 - f_obs) * jnp.exp(-tv * k)
+            flux_attenuated = jnp.einsum("i,if->f", weights, ssp_at_z) * trans_1d
+        elif _dust_exact:
+            k_bc = law_bc_fn(eff_waves_rest, **_law_kw)
+            k_diff = law_diff_fn(eff_waves_rest, **_law_kw)
+            tau = dust_age_w[:, None] * tv1 * k_bc[None, :] + tv2 * k_diff[None, :]
+            dust = f_obs + (1.0 - f_obs) * jnp.exp(-tau)
+            flux_attenuated = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
+        else:
+            # Fast two-CSP decomposition
+            k_bc = law_bc_fn(eff_waves_rest, **_law_kw)
+            k_diff = law_diff_fn(eff_waves_rest, **_law_kw)
+            trans_bc = jnp.exp(-tv1 * k_bc)
+            trans_diff = jnp.exp(-tv2 * k_diff)
+
+            csp_young = jnp.einsum("i,if->f", weights * young_mask, ssp_at_z)
+            csp_old = jnp.einsum("i,if->f", weights * old_mask, ssp_at_z)
+
+            if _use_taylor:
+                _dl = dt.type(1.0)
+                k_bc_p = law_bc_fn(eff_waves_rest + _dl, **_law_kw)
+                k_bc_m = law_bc_fn(eff_waves_rest - _dl, **_law_kw)
+                k_diff_p = law_diff_fn(eff_waves_rest + _dl, **_law_kw)
+                k_diff_m = law_diff_fn(eff_waves_rest - _dl, **_law_kw)
+
+                if _has_alpha:
+                    ssp_moment_at_z = (
+                        (1 - fz) * (1 - fa) * ssp_phot_moment[iz, ia]
+                        + fz * (1 - fa) * ssp_phot_moment[iz + 1, ia]
+                        + (1 - fz) * fa * ssp_phot_moment[iz, ia + 1]
+                        + fz * fa * ssp_phot_moment[iz + 1, ia + 1]
+                    )
+                elif _use_smooth_z:
+                    ssp_moment_at_z = jnp.einsum("m,maf->af", zw, ssp_phot_moment)
+                else:
+                    ssp_moment_at_z = (1.0 - frac) * ssp_phot_moment[idx] + frac * ssp_phot_moment[
+                        idx + 1
+                    ]
+
+                csp_young_m = jnp.einsum("i,if->f", weights * young_mask, ssp_moment_at_z)
+                csp_old_m = jnp.einsum("i,if->f", weights * old_mask, ssp_moment_at_z)
+
+                A_young = trans_bc * trans_diff
+                A_young_deriv = (
+                    jnp.exp(-tv1 * k_bc_p) * jnp.exp(-tv2 * k_diff_p)
+                    - jnp.exp(-tv1 * k_bc_m) * jnp.exp(-tv2 * k_diff_m)
+                ) / (2 * _dl)
+                A_old = trans_diff
+                A_old_deriv = (jnp.exp(-tv2 * k_diff_p) - jnp.exp(-tv2 * k_diff_m)) / (2 * _dl)
+
+                flux_no_geom = (
+                    A_young * csp_young
+                    + A_young_deriv * csp_young_m
+                    + A_old * csp_old
+                    + A_old_deriv * csp_old_m
+                )
+            else:
+                flux_no_geom = trans_diff * (trans_bc * csp_young + csp_old)
+
+            flux_intrinsic_for_geom = csp_young + csp_old
+            flux_attenuated = f_obs * flux_intrinsic_for_geom + (1.0 - f_obs) * flux_no_geom
+
+        # Estimate L_absorbed from stellar broadband
+        flux_intrinsic = jnp.einsum("i,if->f", weights, ssp_at_z)
+        L_absorbed_stellar = jnp.sum(flux_intrinsic - flux_attenuated) * lsun
+        L_absorbed_stellar = jnp.maximum(L_absorbed_stellar, dt.type(0.0))
+
+        # === STEP 2: Non-stellar SED at full wavelength resolution ===
+        non_stellar_sed = jnp.zeros_like(ssp_wave_f64)
+        L_abs_neb = jnp.float64(0.0)
+
+        # 2a: Nebular emission
+        if has_nebular:
+            _sfr_last = weights[-1]
+            neb_raw = nebular_emission(
+                nebular_backend,
+                weights,
+                ssp_wave_f64,
+                ssp_log_ages_yr,
+                jnp.float64(log_z_abs),
+                _sfr_last,
+                neb_logU=neb_logU,
+                neb_logZ_gas=neb_logZ_gas,
+                neb_fesc=neb_fesc,
+                neb_fesc_lya=neb_fesc_lya,
+            )
+            _tau_bc_neb = tau_bc if not _is_single_dust else tau_v
+            _tau_diff_neb = tau_diff if not _is_single_dust else jnp.float64(0.0)
+            _dust_kw_neb = {
+                "dust_slope": jnp.float64(dust_slope),
+                "dust_bump_strength": jnp.float64(dust_bump_strength),
+            }
+            neb_sed, L_abs_neb = attenuate_emission(
+                neb_raw,
+                ssp_wave_f64,
+                _neb_dust_mode,
+                _tau_bc_neb,
+                _tau_diff_neb,
+                law_bc_fn,
+                law_diff_fn if not _is_single_dust else law_bc_fn,
+                neb_bc_fn=_neb_bc_fn,
+                **_dust_kw_neb,
+            )
+            non_stellar_sed = non_stellar_sed + neb_sed
+
+        # 2b: Shock emission
+        if has_shock:
+            shock_raw = shock_emission(
+                ssp_wave_f64,
+                non_stellar_sed,
+                shock_frac=shock_frac,
+                shock_velocity=shock_velocity,
+                shock_log_density=shock_log_density,
+                shock_b_over_sqrt_n=shock_b_over_sqrt_n,
+                shock_abundance=shock_abundance,
+                shock_component=shock_component,
+            )
+            _tau_diff_shock = tau_diff if not _is_single_dust else jnp.float64(0.0)
+            _dust_kw_shock = {
+                "dust_slope": jnp.float64(dust_slope),
+                "dust_bump_strength": jnp.float64(dust_bump_strength),
+            }
+            shock_sed, _ = attenuate_emission(
+                shock_raw,
+                ssp_wave_f64,
+                "diff",
+                jnp.float64(0.0),
+                _tau_diff_shock,
+                law_bc_fn,
+                law_diff_fn if not _is_single_dust else law_bc_fn,
+                **_dust_kw_shock,
+            )
+            non_stellar_sed = non_stellar_sed + shock_sed
+
+        # 2c: Dust IR emission (energy-balanced)
+        if has_dust_em_full:
+            L_ir = jnp.maximum(
+                (L_absorbed_stellar + L_abs_neb) * jnp.float64(dust_eta_balance), 0.0
+            )
+            dust_ir = dust_ir_emission(
+                dust_emission_fn,
+                rest_wave_f64,
+                L_ir,
+                dust_T=jnp.float64(dust_T),
+                dust_beta_ir=jnp.float64(dust_beta_ir),
+                dust_alpha_mir=jnp.float64(dust_alpha_mir),
+                dust_alpha_dale=jnp.float64(dust_alpha_dale),
+                dust_umin=jnp.float64(dust_umin),
+                dust_gamma_dl=jnp.float64(dust_gamma_dl),
+                dust_qpah=jnp.float64(dust_qpah),
+            )
+            # Interpolate to panchromatic grid if needed
+            if _needs_extension:
+                from tengri.utils.wavelength import interpolate_sed_to_grid
+
+                dust_ir = interpolate_sed_to_grid(rest_wave_f64, dust_ir, rest_wave_f64)
+            non_stellar_sed = non_stellar_sed + dust_ir
+        else:
+            L_ir = jnp.float64(0.0)
+
+        # 2d: AGN emission
+        if has_agn_full:
+            if agn_parametric:
+                _agn_lbol = agn_log_lbol
+                _agn_frac = 1.0
+            else:
+                _agn_frac = jnp.float64(0.0)  # Not parametric in hybrid
+                _agn_lbol = 10.0
+            agn_sed = agn_emission(
+                agn_model_fn_full,
+                rest_wave_f64,
+                agn_log_lbol=_agn_lbol,
+                agn_frac=_agn_frac,
+                agn_polar_ebv=jnp.float64(agn_polar_ebv),
+                agn_cos_inc=jnp.float64(agn_cos_inc),
+                agn_polar_oa=jnp.float64(agn_polar_oa),
+                agn_alpha=jnp.float64(agn_alpha),
+                agn_T_torus=jnp.float64(agn_T_torus),
+                agn_tau_torus=jnp.float64(agn_tau_torus),
+                agn_torus_frac=jnp.float64(agn_torus_frac),
+                agn_log_mbh=jnp.float64(agn_log_mbh),
+                agn_log_ledd=jnp.float64(agn_log_ledd),
+                agn_a_spin=jnp.float64(agn_a_spin),
+                agn_tau_skirtor=jnp.float64(agn_tau_skirtor),
+                agn_p_skirtor=jnp.float64(agn_p_skirtor),
+                agn_q_skirtor=jnp.float64(agn_q_skirtor),
+                agn_oa_skirtor=jnp.float64(agn_oa_skirtor),
+                agn_T_hot=jnp.float64(agn_T_hot),
+                agn_T_warm=jnp.float64(agn_T_warm),
+                agn_frac_hot=jnp.float64(agn_frac_hot),
+                agn_f_hard=jnp.float64(agn_f_hard),
+                agn_gamma_warm=jnp.float64(agn_gamma_warm),
+                agn_kt_warm=jnp.float64(agn_kt_warm),
+                agn_gamma_hard=jnp.float64(agn_gamma_hard),
+                agn_kt_hot=jnp.float64(agn_kt_hot),
+                agn_r_warm_ratio=jnp.float64(agn_r_warm_ratio),
+            )
+            non_stellar_sed = non_stellar_sed + agn_sed
+
+        # 2e: Radio emission
+        if has_radio:
+            _L_ir = L_ir
+            _agn_bol = (
+                10.0 ** (jnp.float64(agn_log_lbol)) * LSUN_ERG_PER_S if has_agn_full else 0.0
+            )
+            _log_mstar = jnp.log10(jnp.maximum(jnp.sum(weights), 1e-10))
+            radio_sed = radio_emission(
+                rest_wave_f64,
+                L_ir=_L_ir,
+                L_agn_bol=_agn_bol,
+                q_ir=jnp.float64(radio_q_ir),
+                alpha_sf=jnp.float64(radio_alpha_sf),
+                radio_loudness=jnp.float64(radio_loudness),
+                alpha_agn=jnp.float64(radio_alpha_agn),
+                sfr_mode=_radio_sfr_mode,
+                log_mstar=_log_mstar,
+                redshift=_redshift,
+                include_freefree=_include_freefree,
+                T_e=jnp.float64(radio_T_e),
+                alpha_ff=jnp.float64(radio_alpha_ff),
+            )
+            non_stellar_sed = non_stellar_sed + radio_sed
+
+        # 2f: X-ray emission
+        if has_xray:
+            sfr_now = weights[-1]
+            mstar = jnp.sum(weights)
+            _agn_bol_xray = (
+                10.0 ** (jnp.float64(agn_log_lbol)) * LSUN_ERG_PER_S if has_agn_full else 0.0
+            )
+            xray_sed = xray_emission(
+                rest_wave_f64,
+                sfr=sfr_now,
+                stellar_mass=mstar,
+                L_agn_bol=_agn_bol_xray,
+                gamma_agn=jnp.float64(xray_gamma_agn),
+                alpha_ox=jnp.float64(xray_alpha_ox),
+                gamma_hmxb=jnp.float64(xray_gamma_hmxb),
+                gamma_lmxb=jnp.float64(xray_gamma_lmxb),
+                E_cut=jnp.float64(xray_E_cut),
+            )
+            non_stellar_sed = non_stellar_sed + xray_sed
+
+        # === STEP 3: Integrate non-stellar through filters ===
+        non_stellar_phot = jnp.zeros(n_filters, dtype=jnp.float64)
+
+        # Loop over filters (unrolled by JAX tracer)
+        ns_fluxes = []
+        for fw, ft in zip(filter_waves_list, filter_trans_list):
+            f = compute_flux_density(non_stellar_sed, ssp_wave_f64, fw, ft, z_fixed, dl_cm_fixed)
+            ns_fluxes.append(f)
+        if n_filters > 0:
+            non_stellar_phot = jnp.array(ns_fluxes)
+
+        # === STEP 4: Combine stellar + non-stellar ===
+        stellar_phot = flux_attenuated
+        if has_igm:
+            stellar_phot = stellar_phot * igm_trans
+
+        # Scale stellar to erg/s/cm^2/Hz
+        stellar_phot = (flux_scale * stellar_phot * lsun).astype(jnp.float64)
+
+        return stellar_phot + non_stellar_phot
+
+    return hybrid_phot
 
 
 # -------------------------------------------------------------------
