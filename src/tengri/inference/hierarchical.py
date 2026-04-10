@@ -681,7 +681,7 @@ class PopulationFitter:
 
         if verbose:
             print(f"Hierarchical geoVI (CorrelatedFieldMaker): {n_gal} galaxies, n_grid={n_grid}")
-            if model._precomp is not None:
+            if model._precomputed.photometry is not None:
                 print("  Photometry precomputation: ACTIVE")
 
         t0 = time.time()
@@ -1015,7 +1015,7 @@ class PopulationFitter:
         model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
 
         # Verify precomputation is active
-        if model._precomp is not None and verbose:
+        if model._precomputed.photometry is not None and verbose:
             print("  Photometry precomputation: ACTIVE (21.6x speedup)")
         elif verbose:
             print("  WARNING: Photometry precomputation NOT active")

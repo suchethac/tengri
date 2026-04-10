@@ -226,8 +226,8 @@ class TestTier2Dispatch:
             redshift=0.1,  # Fixed, not free
         )
         # Check that tier-2 kernel was built
-        assert model._fused_rest_sed is not None, "Tier-2 SED kernel not built"
-        assert model._fused_tier2_phot is not None, "Tier-2 photometry kernel not built"
+        assert model._compositional.rest_sed is not None, "Tier-2 SED kernel not built"
+        assert model._compositional.photometry is not None, "Tier-2 photometry kernel not built"
 
     def test_tier2_photometry_via_method_call(self):
         """Verify _predict_photometry_compositional is called correctly."""

@@ -73,7 +73,7 @@ def is_fused_compatible(model):
         reasons.append("igm approx disabled by user")
 
     if reasons:
-        if model._precomp is not None:
+        if model._precomputed.photometry is not None:
             warnings.warn(
                 "Fused kernel disabled, using exact path (slower). "
                 f"Reasons: {'; '.join(reasons)}. "
@@ -151,7 +151,7 @@ def build_fused_photometry(model):
     from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = model._forward_dtype
-    precomp = model._precomp
+    precomp = model._precomputed.photometry
     ssp_phot = precomp.ssp_phot.astype(dt)
     ssp_lgmet = model.ssp_data.ssp_lgmet.astype(dt)
     eff_waves_rest = precomp.effective_wavelengths_rest.astype(dt)
@@ -164,7 +164,7 @@ def build_fused_photometry(model):
     if not _is_single_dust:
         if _dust_exact:
             # Smooth sigmoid weights for exact two-component dust
-            dust_age_w = model._dust_age_weights.astype(dt)
+            dust_age_w = model._precomputed.dust_age_weights.astype(dt)
         else:
             # Hard threshold for fast two-CSP decomposition (default)
             _t_birth = 1e7  # 10 Myr — Charlot & Fall (2000)
@@ -205,9 +205,9 @@ def build_fused_photometry(model):
         from tengri.models.sps.dsps_wrapper import compute_lgmet_weights as _clw
 
     # IGM: precomputed at effective wavelengths (constant for fixed z)
-    has_igm = model._igm_at_eff is not None
+    has_igm = model._precomputed.igm_at_effective_wavelengths is not None
     if has_igm:
-        igm_trans = model._igm_at_eff.astype(dt)
+        igm_trans = model._precomputed.igm_at_effective_wavelengths.astype(dt)
 
     # Dust emission: precompute constants for MBB at effective wavelengths
     has_dust_em = model._dust_emission_model in ("modified_blackbody", "dale2014")
@@ -577,7 +577,7 @@ def build_hybrid_photometry(model):
     from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = model._forward_dtype
-    precomp = model._precomp
+    precomp = model._precomputed.photometry
     ssp_phot = precomp.ssp_phot.astype(dt)
     ssp_lgmet = model.ssp_data.ssp_lgmet.astype(dt)
     eff_waves_rest = precomp.effective_wavelengths_rest.astype(dt)
@@ -588,7 +588,7 @@ def build_hybrid_photometry(model):
     _dust_exact = getattr(model, "_dust_approx", "fast") == "exact"
     if not _is_single_dust:
         if _dust_exact:
-            dust_age_w = model._dust_age_weights.astype(dt)
+            dust_age_w = model._precomputed.dust_age_weights.astype(dt)
         else:
             _t_birth = 1e7
             young_mask = (model.ssp_ages_yr < _t_birth).astype(dt)
@@ -623,9 +623,9 @@ def build_hybrid_photometry(model):
         from tengri.models.sps.dsps_wrapper import compute_lgmet_weights as _clw
 
     # IGM: precomputed at effective wavelengths
-    has_igm = model._igm_at_eff is not None
+    has_igm = model._precomputed.igm_at_effective_wavelengths is not None
     if has_igm:
-        igm_trans = model._igm_at_eff.astype(dt)
+        igm_trans = model._precomputed.igm_at_effective_wavelengths.astype(dt)
 
     # Note: has_dust_em flag checked for stellar L_absorbed only; full-wavelength
     # dust emission happens in non-stellar section
@@ -1383,7 +1383,7 @@ def build_fused_spectrum(model):
     )
 
     fdt = model._forward_dtype
-    precomp = model._spec_precomp
+    precomp = model._precomputed.spectroscopy
     ssp_on_pixels = precomp.ssp_on_pixels.astype(fdt)
     ssp_lgmet = model.ssp_data.ssp_lgmet.astype(fdt)
 
@@ -1397,7 +1397,7 @@ def build_fused_spectrum(model):
     _dust_exact_spec = getattr(model, "_dust_approx", "fast") == "exact"
     if not _is_single_dust_spec:
         if _dust_exact_spec:
-            dust_age_w = model._dust_age_weights.astype(fdt)
+            dust_age_w = model._precomputed.dust_age_weights.astype(fdt)
         else:
             _t_birth_spec = 1e7
             young_mask_spec = (model.ssp_ages_yr < _t_birth_spec).astype(fdt)
@@ -1681,7 +1681,7 @@ def build_exact_sed(model):
     _dust_exact_sed = getattr(model, "_dust_approx", "fast") == "exact"
     if not _is_single_dust_exact:
         if _dust_exact_sed:
-            dust_age_w = model._dust_age_weights.astype(dt)
+            dust_age_w = model._precomputed.dust_age_weights.astype(dt)
         else:
             _t_birth_exact = 1e7
             young_mask_exact = (model.ssp_ages_yr < _t_birth_exact).astype(dt)
@@ -1779,7 +1779,7 @@ def build_fused_photometry_ztable(model):
     )
 
     fdt = model._forward_dtype
-    zt = model._ztable
+    zt = model._precomputed.photometry_ztable
     ssp_phot_table = zt.ssp_phot_table.astype(fdt)
     eff_rest_table = zt.eff_waves_rest_table.astype(fdt)
     flux_scale_table = zt.flux_scale_table.astype(fdt)
@@ -1789,7 +1789,7 @@ def build_fused_photometry_ztable(model):
     _dust_exact_zt = getattr(model, "_dust_approx", "fast") == "exact"
     if not _is_single_dust_zt:
         if _dust_exact_zt:
-            dust_age_w = model._dust_age_weights.astype(fdt)
+            dust_age_w = model._precomputed.dust_age_weights.astype(fdt)
         else:
             _t_birth_zt = 1e7
             young_mask_zt = (model.ssp_ages_yr < _t_birth_zt).astype(fdt)
@@ -2110,7 +2110,7 @@ def build_fused_rest_sed(model):
     _dust_exact = getattr(model, "_dust_approx", "fast") == "exact"
     if not _is_single_dust:
         if _dust_exact:
-            dust_age_w = model._dust_age_weights.astype(dt)
+            dust_age_w = model._precomputed.dust_age_weights.astype(dt)
         else:
             _t_birth = 1e7  # 10 Myr — Charlot & Fall (2000)
             young_mask = (model.ssp_ages_yr < _t_birth).astype(dt)
@@ -2570,7 +2570,7 @@ def build_fused_tier2_photometry(model):
         Returns None if prerequisites are not met (no filters, no
         fixed z, no Tier 2 kernel).
     """
-    if model._fused_rest_sed is None:
+    if model._compositional.rest_sed is None:
         return None
     if model.filter_waves is None:
         return None
@@ -2589,7 +2589,7 @@ def build_fused_tier2_photometry(model):
     _use_alpha_fe_t2 = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
 
     # Capture model state at build time
-    rest_sed_kernel = model._fused_rest_sed
+    rest_sed_kernel = model._compositional.rest_sed
     param_map = model._param_map
     spec = model.spec
     has_field = model._has_field
@@ -2746,7 +2746,7 @@ def build_fused_tier2_spectrum(model):
     callable or None
         JIT-compiled function: ``params_dict -> spectrum_array``.
     """
-    if model._fused_rest_sed is None:
+    if model._compositional.rest_sed is None:
         return None
 
     from tengri.core.param_translate import get_internal_params
@@ -2765,15 +2765,15 @@ def build_fused_tier2_spectrum(model):
 
     # Must have a wavelength grid
     wave_obs = None
-    if model._spec_precomp is not None:
-        wave_obs = model._spec_precomp.wave_obs_pixels
+    if model._precomputed.spectroscopy is not None:
+        wave_obs = model._precomputed.spectroscopy.wave_obs_pixels
     elif hasattr(model, "_wave_obs"):
         wave_obs = model._wave_obs
     if wave_obs is None:
         return None
 
     # Capture model state
-    rest_sed_kernel = model._fused_rest_sed
+    rest_sed_kernel = model._compositional.rest_sed
     param_map = model._param_map
     spec = model.spec
     has_field = model._has_field

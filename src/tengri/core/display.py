@@ -150,7 +150,7 @@ def tree(model: SEDModel) -> str:
     z_info = f"z={z_fixed:.4f} [fixed]" if z_fixed is not None else "z [free]"
     if filter_waves is not None:
         n_filt = len(filter_waves)
-        precomp = getattr(model, "_precomp", None)
+        precomp = model._precomputed.photometry
         precomp_str = "YES (21.6x speedup)" if precomp is not None else "NO"
         lines.append(f"{last} Observation: Photometry [{n_filt} bands] at {z_info}")
         lines.append(f"    Precomputed: {precomp_str}")
@@ -217,16 +217,16 @@ def summary(model: SEDModel) -> str:
     # Dtype and precomputation
     lines.append(f"  Dtype:       {model._forward_dtype}")
     precomp_parts: list[str] = []
-    if model._precomp is not None:
+    if model._precomputed.photometry is not None:
         precomp_parts.append("photometry")
-    if model._spec_precomp is not None:
+    if model._precomputed.spectroscopy is not None:
         precomp_parts.append("spectroscopy")
-    if model._ztable is not None:
+    if model._precomputed.photometry_ztable is not None:
         precomp_parts.append("z-table")
     lines.append(f"  Precomputed: {', '.join(precomp_parts) if precomp_parts else 'none'}")
 
     # Fused kernel status
-    fused = "active" if model._fused_photometry is not None else "off"
+    fused = "active" if model._precomputed_kernels.photometry is not None else "off"
     lines.append(f"  Fused kernel: {fused}")
 
     # Enabled components

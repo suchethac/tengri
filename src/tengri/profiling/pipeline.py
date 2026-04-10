@@ -424,7 +424,11 @@ def profile_pipeline(
     _ = model.predict_photometry(params)
     _sync(model.predict_photometry(params))
 
-    is_fused = model._precomp is not None and getattr(model, "_fused_photometry", None) is not None
+    is_fused = (
+        model._precomputed.photometry is not None
+        and getattr(model, "_precomputed_kernels", None) is not None
+        and getattr(model._precomputed_kernels, "photometry", None) is not None
+    )
 
     if is_fused:
         report = _profile_fused_path(model, params, n=n)

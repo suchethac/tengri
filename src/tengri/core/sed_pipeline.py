@@ -209,8 +209,8 @@ def _compute_dust_atten(model, wave_dt, p):
     # (this path is only hit for evolving-Z etc., not performance-critical)
     from tengri.models.dust.attenuation import precompute_dust_age_weights
 
-    if model._dust_age_weights is not None:
-        dust_age_w = model._dust_age_weights.astype(wave_dt.dtype)
+    if model._precomputed.dust_age_weights is not None:
+        dust_age_w = model._precomputed.dust_age_weights.astype(wave_dt.dtype)
     else:
         dust_age_w = precompute_dust_age_weights(model.ssp_ages_yr).astype(wave_dt.dtype)
     return two_component_dust_fast(
@@ -577,9 +577,9 @@ def compute_sed_components(
         if (
             _dsps_weights_2d is None
             and not model._evolving_metallicity
-            and model._jit_exact_sed is not None
+            and model._compositional.exact_sed is not None
         ):
-            sed_attenuated, sed_intrinsic_jit = model._jit_exact_sed(
+            sed_attenuated, sed_intrinsic_jit = model._compositional.exact_sed(
                 weights,
                 ssp_flux_at_z,
                 p.get("tau_bc", 0.0),

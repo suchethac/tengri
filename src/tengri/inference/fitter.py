@@ -220,6 +220,30 @@ class Fitter:
                 data_type = "photometry"  # backward compat default
 
         self.data_type = data_type
+
+        # Auto-trigger photometry precomputation when conditions are met:
+        # fixed redshift + filters present + not yet precomputed.
+        # This lets users create a Model without precompute=True and still get
+        # the fast fused path when they construct a Fitter for fitting.
+        if (
+            data_type in ("photometry", "joint")
+            and model._precomputed.photometry is None
+            and getattr(model, "_z_fixed", None) is not None
+            and getattr(model, "filter_waves", None) is not None
+        ):
+            from tengri.core.fused_kernels import build_fused_photometry, is_fused_compatible
+            from tengri.models.sps.precompute import precompute_photometry
+
+            model._precomputed.photometry = precompute_photometry(
+                model.ssp_data,
+                model.filter_waves,
+                model.filter_trans,
+                model._z_fixed,
+                model._dl_cm_fixed,
+            )
+            if is_fused_compatible(model):
+                model._precomputed_kernels.photometry = build_fused_photometry(model)
+
         self.spec = model.spec
 
         # Calibration marginalization settings
@@ -1150,6 +1174,22 @@ class Fitter:
         if verbose:
             print(f"fit_batch: {n_gal} galaxies, method={method}")
 
+        # vmap batch MAP: vectorize optimization over all galaxies in one JIT call.
+        # Enabled when: method="map", precomp is set (same model for all galaxies),
+        # and all galaxies have the same data shape.
+        _use_vmap_map = (
+            method == "map"
+            and self.model._precomputed.photometry is not None
+            and n_gal > 1
+            and all(
+                jnp.asarray(g["flux_obs"]).shape == jnp.asarray(batch[0]["flux_obs"]).shape
+                for g in batch
+            )
+        )
+
+        if _use_vmap_map:
+            return self._fit_batch_vmap_map(batch, key=key, verbose=verbose, **kwargs)
+
         results = []
         t0 = time.time()
 
@@ -1175,6 +1215,104 @@ class Fitter:
         t_total = time.time() - t0
         if verbose:
             print(f"  Done: {n_gal} galaxies in {t_total:.1f}s ({t_total / n_gal:.1f}s/galaxy)")
+
+        return results
+
+    def _fit_batch_vmap_map(self, batch, *, key, verbose=True, **kwargs):
+        """Vectorized MAP optimization over a batch using jax.vmap.
+
+        All galaxies share the same compiled XLA kernel — parameters and
+        optimizer states are batched across the first axis. A single
+        ``jax.jit(jax.vmap(step))`` call optimizes all galaxies in parallel.
+
+        Requirements: same model (precomp set), same data shape per galaxy.
+        """
+        try:
+            import optax
+        except ImportError:
+            raise ImportError("optax required for MAP: pip install optax") from None
+
+        from tengri.inference.posterior import Posterior
+
+        n_steps = kwargs.get("n_steps", 1000)
+        learning_rate = kwargs.get("learning_rate", 0.02)
+        optimizer = kwargs.get("optimizer", "adam")
+        print_every = kwargs.get("print_every", 200)
+
+        n_gal = len(batch)
+        t0 = time.time()
+
+        # Stack galaxy data into batch arrays (n_gal, n_obs)
+        flux_batch = jnp.stack([jnp.asarray(g["flux_obs"]) for g in batch])
+        noise_batch = jnp.stack([jnp.asarray(g["noise"]) for g in batch])
+        noise_inv_batch = 1.0 / noise_batch**2
+        batch_data_args = {
+            "data": flux_batch,
+            "noise": noise_batch,
+            "noise_inv": noise_inv_batch,
+            "sqrt_noise_inv": jnp.sqrt(noise_inv_batch),
+        }
+
+        # Initialize params for each galaxy independently
+        init_keys = jax.random.split(key, n_gal)
+        init_params_list = [self._initialize_unbounded(k) for k in init_keys]
+        # Stack param dicts: each leaf becomes (n_gal, ...)
+        params_batch = jax.tree.map(lambda *xs: jnp.stack(xs), *init_params_list)
+
+        # Build optimizer and batch optimizer states
+        if isinstance(optimizer, str):
+            _opt_builders = {
+                "adam": lambda: optax.adam(learning_rate),
+                "adamw": lambda: optax.adamw(learning_rate),
+                "sgd": lambda: optax.sgd(learning_rate, momentum=0.9),
+            }
+            opt = _opt_builders[optimizer]()
+        else:
+            opt = optimizer
+
+        opt_states_batch = jax.vmap(opt.init)(params_batch)
+
+        # Loss function for a single galaxy
+        loss_fn = self._get_or_build_loss_fn()
+
+        def single_step(params, opt_state, data_args_i):
+            loss, grads = jax.value_and_grad(lambda p: loss_fn(p, data_args_i))(params)
+            updates, new_opt_state = opt.update(grads, opt_state, params)
+            new_params = optax.apply_updates(params, updates)
+            return new_params, new_opt_state, loss
+
+        # vmap over galaxy dimension; data_args leaves mapped over axis 0
+        batch_step = jax.jit(jax.vmap(single_step))
+
+        params = params_batch
+        opt_states = opt_states_batch
+
+        if verbose:
+            print(f"  vmap MAP: {n_gal} galaxies × {n_steps} steps (single JIT kernel)")
+
+        for i in range(n_steps):
+            params, opt_states, losses = batch_step(params, opt_states, batch_data_args)
+            if verbose and (i % print_every == 0 or i == n_steps - 1):
+                mean_loss = float(losses.mean())
+                print(f"  Step {i:5d}/{n_steps}: mean loss = {mean_loss:.4f}")
+
+        t_total = time.time() - t0
+        if verbose:
+            print(f"  Done: {n_gal} galaxies in {t_total:.1f}s ({t_total / n_gal:.2f}s/galaxy)")
+
+        # Unstack results and build Posterior objects
+        results = []
+        for g_idx in range(n_gal):
+            params_i = jax.tree.map(lambda x, idx=g_idx: x[idx], params)
+            bounded_i = self._bounded_from_unbounded(params_i)
+            result_i = Posterior(
+                samples=bounded_i,
+                log_weights=None,
+                fitter=self,
+                method="map",
+                diagnostics={"loss": float(losses[g_idx]), "n_steps": n_steps},
+            )
+            results.append(result_i)
 
         return results
 

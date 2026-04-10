@@ -110,7 +110,7 @@ def build_dust_atten_component(model):
 
     dt = model._forward_dtype
     ssp_wave = model.ssp_data.ssp_wave.astype(dt)
-    dust_age_w = model._dust_age_weights.astype(dt)
+    dust_age_w = model._precomputed.dust_age_weights.astype(dt)
     lsun = dt.type(LSUN_ERG_PER_S)
     law_bc_fn = model._dust_law_bc_fn
     law_diff_fn = model._dust_law_diff_fn

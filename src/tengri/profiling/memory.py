@@ -205,8 +205,8 @@ def profile_memory(model) -> MemoryReport:
         )
 
     # --- Precomputed photometry ---
-    if model._precomp is not None:
-        pc = model._precomp
+    if model._precomputed.photometry is not None:
+        pc = model._precomputed.photometry
         f64 = _arr_mb(pc.ssp_phot)
         entries.append(
             MemoryEntry(
@@ -228,8 +228,8 @@ def profile_memory(model) -> MemoryReport:
             )
 
     # --- Precomputed spectroscopy ---
-    if hasattr(model, "_spec_precomp") and model._spec_precomp is not None:
-        sp = model._spec_precomp
+    if hasattr(model, "_precomputed") and model._precomputed.spectroscopy is not None:
+        sp = model._precomputed.spectroscopy
         f64 = _arr_mb(sp.ssp_on_pixels)
         entries.append(
             MemoryEntry(
@@ -242,8 +242,8 @@ def profile_memory(model) -> MemoryReport:
         )
 
     # --- Z-table ---
-    if hasattr(model, "_ztable") and model._ztable is not None:
-        zt = model._ztable
+    if hasattr(model, "_precomputed") and model._precomputed.photometry_ztable is not None:
+        zt = model._precomputed.photometry_ztable
         f64 = _arr_mb(zt.ssp_phot_table)
         entries.append(
             MemoryEntry(
@@ -256,12 +256,12 @@ def profile_memory(model) -> MemoryReport:
         )
 
     # --- Dust age weights ---
-    if hasattr(model, "_dust_age_weights") and model._dust_age_weights is not None:
+    if hasattr(model, "_precomputed") and model._precomputed.dust_age_weights is not None:
         entries.append(
             MemoryEntry(
                 name="Dust age weights (precomp)",
-                shape=_shape_str(model._dust_age_weights),
-                f64_mb=_arr_mb(model._dust_age_weights),
+                shape=_shape_str(model._precomputed.dust_age_weights),
+                f64_mb=_arr_mb(model._precomputed.dust_age_weights),
                 category="dust",
             )
         )

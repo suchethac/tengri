@@ -130,14 +130,14 @@ class TestAGNModeDetection:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model = Model(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
-        assert model._fused_photometry is not None
+        assert model._precomputed_kernels.photometry is not None
 
     def test_legacy_forces_exact(self, legacy_agn_spec, synthetic_ssp, simple_filters):
         """Legacy AGN forces exact path (fused kernel disabled)."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model = Model(legacy_agn_spec, synthetic_ssp, filters=simple_filters)
-        assert model._fused_photometry is None
+        assert model._precomputed_kernels.photometry is None
 
 
 # ---------------------------------------------------------------------------

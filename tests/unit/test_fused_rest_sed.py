@@ -107,7 +107,7 @@ class TestTier2Compatibility:
         from tengri.core.model import Model
 
         model = Model(simple_spec, synthetic_ssp)
-        assert model._fused_rest_sed is not None
+        assert model._compositional.rest_sed is not None
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +232,7 @@ class TestComponentCombinations:
             redshift=0.1,
         )
         model = Model(spec, synthetic_ssp)
-        assert model._fused_rest_sed is not None
+        assert model._compositional.rest_sed is not None
 
         params = {
             "sfh_dpl_alpha": 1.5,
@@ -269,7 +269,7 @@ class TestComponentCombinations:
             redshift=0.1,
         )
         model = Model(spec, synthetic_ssp)
-        assert model._fused_rest_sed is not None
+        assert model._compositional.rest_sed is not None
 
         tier3 = model._compute_sed_components(simple_params)["sed_total"]
         tier2 = model._compute_rest_sed_compositional(simple_params)
@@ -297,7 +297,7 @@ class TestComponentCombinations:
             redshift=0.1,
         )
         model = Model(spec, synthetic_ssp)
-        assert model._fused_rest_sed is not None
+        assert model._compositional.rest_sed is not None
 
         # Sample params including GP latent vector
         params = spec.sample(jax.random.PRNGKey(7))
@@ -370,7 +370,7 @@ class TestFallbacks:
         from tengri.core.model import Model
 
         model = Model(simple_spec, synthetic_ssp)
-        assert model._fused_rest_sed is not None
+        assert model._compositional.rest_sed is not None
 
         # Add tabulated SFH params — should skip Tier 2
         params_tab = {
@@ -389,7 +389,7 @@ class TestFallbacks:
         from tengri.core.model import Model
 
         model = Model(simple_spec, synthetic_ssp)
-        assert model._fused_rest_sed is not None
+        assert model._compositional.rest_sed is not None
 
         # Call twice — second should use cached JIT
         sed1 = model._compute_rest_sed_compositional(simple_params)
@@ -482,7 +482,7 @@ class TestFusedTier2Photometry:
             for i, c in enumerate([4000.0, 6000.0, 8000.0])
         ]
         model = Model(simple_spec, synthetic_ssp, filters=filters)
-        assert model._fused_tier2_phot is not None
+        assert model._compositional.photometry is not None
 
     def test_fused_tier2_phot_matches_unfused(self, synthetic_ssp, simple_spec, simple_params):
         """Fused Tier 2 photometry matches unfused path."""
@@ -500,10 +500,10 @@ class TestFusedTier2Photometry:
         model = Model(simple_spec, synthetic_ssp, filters=filters)
 
         # Fused path
-        phot_fused = model._fused_tier2_phot(simple_params)
+        phot_fused = model._compositional.photometry(simple_params)
 
         # Unfused: force through _compute_rest_sed_compositional + filter loop
-        model._fused_tier2_phot = None
+        model._compositional.photometry = None
         phot_unfused = model._predict_photometry_compositional(simple_params)
 
         assert_allclose(phot_fused, phot_unfused, rtol=1e-10)
@@ -521,7 +521,7 @@ class TestFusedTier2Photometry:
             )
         ]
         model = Model(simple_spec, synthetic_ssp, filters=filters)
-        assert model._fused_tier2_phot is not None
+        assert model._compositional.photometry is not None
 
         def loss(dust_tau_bc):
             params = {
@@ -535,7 +535,7 @@ class TestFusedTier2Photometry:
                 "dust_slope": -0.7,
                 "redshift": 0.1,
             }
-            return jnp.sum(model._fused_tier2_phot(params))
+            return jnp.sum(model._compositional.photometry(params))
 
         grad = jax.grad(loss)(1.0)
         assert jnp.isfinite(grad)
@@ -565,9 +565,9 @@ class TestFusedTier2Photometry:
             )
         ]
         model = Model(spec, synthetic_ssp, filters=filters)
-        assert model._fused_tier2_phot is not None
+        assert model._compositional.photometry is not None
 
         params = spec.sample(jax.random.PRNGKey(42))
-        phot = model._fused_tier2_phot(params)
+        phot = model._compositional.photometry(params)
         assert phot.shape == (1,)
         assert jnp.all(jnp.isfinite(phot))
