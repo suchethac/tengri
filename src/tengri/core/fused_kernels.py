@@ -708,191 +708,199 @@ def build_hybrid_photometry(model):
         )
 
         # === STEP 2: Non-stellar SED at full wavelength resolution ===
-        non_stellar_sed = jnp.zeros_like(ssp_wave_f64)
-        L_abs_neb = jnp.float64(0.0)
+        # Check if any non-stellar components are active
+        _has_any_nonstell = (
+            has_nebular or has_shock or has_dust_em_full or has_agn_full or has_radio or has_xray
+        )
 
-        # 2a: Nebular emission
-        if has_nebular:
-            _sfr_last = weights[-1]
-            neb_raw = nebular_emission(
-                nebular_backend,
-                weights,
-                ssp_wave_f64,
-                ssp_log_ages_yr,
-                jnp.float64(log_z_abs),
-                _sfr_last,
-                neb_logU=neb_logU,
-                neb_logZ_gas=neb_logZ_gas,
-                neb_fesc=neb_fesc,
-                neb_fesc_lya=neb_fesc_lya,
-            )
-            _tau_bc_neb = tau_bc if not _is_single_dust else tau_v
-            _tau_diff_neb = tau_diff if not _is_single_dust else jnp.float64(0.0)
-            _dust_kw_neb = {
-                "dust_slope": jnp.float64(dust_slope),
-                "dust_bump_strength": jnp.float64(dust_bump_strength),
-            }
-            neb_sed, L_abs_neb = attenuate_emission(
-                neb_raw,
-                ssp_wave_f64,
-                _neb_dust_mode,
-                _tau_bc_neb,
-                _tau_diff_neb,
-                law_bc_fn,
-                law_diff_fn if not _is_single_dust else law_bc_fn,
-                neb_bc_fn=_neb_bc_fn,
-                **_dust_kw_neb,
-            )
-            non_stellar_sed = non_stellar_sed + neb_sed
-
-        # 2b: Shock emission
-        if has_shock:
-            shock_raw = shock_emission(
-                ssp_wave_f64,
-                non_stellar_sed,
-                shock_frac=shock_frac,
-                shock_velocity=shock_velocity,
-                shock_log_density=shock_log_density,
-                shock_b_over_sqrt_n=shock_b_over_sqrt_n,
-                shock_abundance=shock_abundance,
-                shock_component=shock_component,
-            )
-            _tau_diff_shock = tau_diff if not _is_single_dust else jnp.float64(0.0)
-            _dust_kw_shock = {
-                "dust_slope": jnp.float64(dust_slope),
-                "dust_bump_strength": jnp.float64(dust_bump_strength),
-            }
-            shock_sed, _ = attenuate_emission(
-                shock_raw,
-                ssp_wave_f64,
-                "diff",
-                jnp.float64(0.0),
-                _tau_diff_shock,
-                law_bc_fn,
-                law_diff_fn if not _is_single_dust else law_bc_fn,
-                **_dust_kw_shock,
-            )
-            non_stellar_sed = non_stellar_sed + shock_sed
-
-        # 2c: Dust IR emission (energy-balanced)
-        if has_dust_em_full:
-            L_ir = jnp.maximum(
-                (L_absorbed_stellar + L_abs_neb) * jnp.float64(dust_eta_balance), 0.0
-            )
-            dust_ir = dust_ir_emission(
-                dust_emission_fn,
-                rest_wave_f64,
-                L_ir,
-                dust_T=jnp.float64(dust_T),
-                dust_beta_ir=jnp.float64(dust_beta_ir),
-                dust_alpha_mir=jnp.float64(dust_alpha_mir),
-                dust_alpha_dale=jnp.float64(dust_alpha_dale),
-                dust_umin=jnp.float64(dust_umin),
-                dust_gamma_dl=jnp.float64(dust_gamma_dl),
-                dust_qpah=jnp.float64(dust_qpah),
-            )
-            # Interpolate to panchromatic grid if needed
-            if _needs_extension:
-                from tengri.utils.wavelength import interpolate_sed_to_grid
-
-                dust_ir = interpolate_sed_to_grid(rest_wave_f64, dust_ir, rest_wave_f64)
-            non_stellar_sed = non_stellar_sed + dust_ir
-        else:
-            L_ir = jnp.float64(0.0)
-
-        # 2d: AGN emission
-        if has_agn_full:
-            if agn_parametric:
-                _agn_lbol = agn_log_lbol
-                _agn_frac = 1.0
-            else:
-                _agn_frac = jnp.float64(0.0)  # Not parametric in hybrid
-                _agn_lbol = 10.0
-            agn_sed = agn_emission(
-                agn_model_fn_full,
-                rest_wave_f64,
-                agn_log_lbol=_agn_lbol,
-                agn_frac=_agn_frac,
-                agn_polar_ebv=jnp.float64(agn_polar_ebv),
-                agn_cos_inc=jnp.float64(agn_cos_inc),
-                agn_polar_oa=jnp.float64(agn_polar_oa),
-                agn_alpha=jnp.float64(agn_alpha),
-                agn_T_torus=jnp.float64(agn_T_torus),
-                agn_tau_torus=jnp.float64(agn_tau_torus),
-                agn_torus_frac=jnp.float64(agn_torus_frac),
-                agn_log_mbh=jnp.float64(agn_log_mbh),
-                agn_log_ledd=jnp.float64(agn_log_ledd),
-                agn_a_spin=jnp.float64(agn_a_spin),
-                agn_tau_skirtor=jnp.float64(agn_tau_skirtor),
-                agn_p_skirtor=jnp.float64(agn_p_skirtor),
-                agn_q_skirtor=jnp.float64(agn_q_skirtor),
-                agn_oa_skirtor=jnp.float64(agn_oa_skirtor),
-                agn_T_hot=jnp.float64(agn_T_hot),
-                agn_T_warm=jnp.float64(agn_T_warm),
-                agn_frac_hot=jnp.float64(agn_frac_hot),
-                agn_f_hard=jnp.float64(agn_f_hard),
-                agn_gamma_warm=jnp.float64(agn_gamma_warm),
-                agn_kt_warm=jnp.float64(agn_kt_warm),
-                agn_gamma_hard=jnp.float64(agn_gamma_hard),
-                agn_kt_hot=jnp.float64(agn_kt_hot),
-                agn_r_warm_ratio=jnp.float64(agn_r_warm_ratio),
-            )
-            non_stellar_sed = non_stellar_sed + agn_sed
-
-        # 2e: Radio emission
-        if has_radio:
-            _L_ir = L_ir
-            _agn_bol = (
-                10.0 ** (jnp.float64(agn_log_lbol)) * LSUN_ERG_PER_S if has_agn_full else 0.0
-            )
-            _log_mstar = jnp.log10(jnp.maximum(jnp.sum(weights), 1e-10))
-            radio_sed = radio_emission(
-                rest_wave_f64,
-                L_ir=_L_ir,
-                L_agn_bol=_agn_bol,
-                q_ir=jnp.float64(radio_q_ir),
-                alpha_sf=jnp.float64(radio_alpha_sf),
-                radio_loudness=jnp.float64(radio_loudness),
-                alpha_agn=jnp.float64(radio_alpha_agn),
-                sfr_mode=_radio_sfr_mode,
-                log_mstar=_log_mstar,
-                redshift=_redshift,
-                include_freefree=_include_freefree,
-                T_e=jnp.float64(radio_T_e),
-                alpha_ff=jnp.float64(radio_alpha_ff),
-            )
-            non_stellar_sed = non_stellar_sed + radio_sed
-
-        # 2f: X-ray emission
-        if has_xray:
-            sfr_now = weights[-1]
-            mstar = jnp.sum(weights)
-            _agn_bol_xray = (
-                10.0 ** (jnp.float64(agn_log_lbol)) * LSUN_ERG_PER_S if has_agn_full else 0.0
-            )
-            xray_sed = xray_emission(
-                rest_wave_f64,
-                sfr=sfr_now,
-                stellar_mass=mstar,
-                L_agn_bol=_agn_bol_xray,
-                gamma_agn=jnp.float64(xray_gamma_agn),
-                alpha_ox=jnp.float64(xray_alpha_ox),
-                gamma_hmxb=jnp.float64(xray_gamma_hmxb),
-                gamma_lmxb=jnp.float64(xray_gamma_lmxb),
-                E_cut=jnp.float64(xray_E_cut),
-            )
-            non_stellar_sed = non_stellar_sed + xray_sed
-
-        # === STEP 3: Integrate non-stellar through filters ===
         non_stellar_phot = jnp.zeros(n_filters, dtype=jnp.float64)
 
-        # Loop over filters (unrolled by JAX tracer)
-        ns_fluxes = []
-        for fw, ft in zip(filter_waves_list, filter_trans_list):
-            f = compute_flux_density(non_stellar_sed, ssp_wave_f64, fw, ft, z_fixed, dl_cm_fixed)
-            ns_fluxes.append(f)
-        if n_filters > 0:
-            non_stellar_phot = jnp.array(ns_fluxes)
+        if _has_any_nonstell:
+            non_stellar_sed = jnp.zeros_like(ssp_wave_f64)
+            L_abs_neb = jnp.float64(0.0)
+
+            # 2a: Nebular emission
+            if has_nebular:
+                _sfr_last = weights[-1]
+                neb_raw = nebular_emission(
+                    nebular_backend,
+                    weights,
+                    ssp_wave_f64,
+                    ssp_log_ages_yr,
+                    jnp.float64(log_z_abs),
+                    _sfr_last,
+                    neb_logU=neb_logU,
+                    neb_logZ_gas=neb_logZ_gas,
+                    neb_fesc=neb_fesc,
+                    neb_fesc_lya=neb_fesc_lya,
+                )
+                _tau_bc_neb = tau_bc if not _is_single_dust else tau_v
+                _tau_diff_neb = tau_diff if not _is_single_dust else jnp.float64(0.0)
+                _dust_kw_neb = {
+                    "dust_slope": jnp.float64(dust_slope),
+                    "dust_bump_strength": jnp.float64(dust_bump_strength),
+                }
+                neb_sed, L_abs_neb = attenuate_emission(
+                    neb_raw,
+                    ssp_wave_f64,
+                    _neb_dust_mode,
+                    _tau_bc_neb,
+                    _tau_diff_neb,
+                    law_bc_fn,
+                    law_diff_fn if not _is_single_dust else law_bc_fn,
+                    neb_bc_fn=_neb_bc_fn,
+                    **_dust_kw_neb,
+                )
+                non_stellar_sed = non_stellar_sed + neb_sed
+
+            # 2b: Shock emission
+            if has_shock:
+                shock_raw = shock_emission(
+                    ssp_wave_f64,
+                    non_stellar_sed,
+                    shock_frac=shock_frac,
+                    shock_velocity=shock_velocity,
+                    shock_log_density=shock_log_density,
+                    shock_b_over_sqrt_n=shock_b_over_sqrt_n,
+                    shock_abundance=shock_abundance,
+                    shock_component=shock_component,
+                )
+                _tau_diff_shock = tau_diff if not _is_single_dust else jnp.float64(0.0)
+                _dust_kw_shock = {
+                    "dust_slope": jnp.float64(dust_slope),
+                    "dust_bump_strength": jnp.float64(dust_bump_strength),
+                }
+                shock_sed, _ = attenuate_emission(
+                    shock_raw,
+                    ssp_wave_f64,
+                    "diff",
+                    jnp.float64(0.0),
+                    _tau_diff_shock,
+                    law_bc_fn,
+                    law_diff_fn if not _is_single_dust else law_bc_fn,
+                    **_dust_kw_shock,
+                )
+                non_stellar_sed = non_stellar_sed + shock_sed
+
+            # 2c: Dust IR emission (energy-balanced)
+            if has_dust_em_full:
+                L_ir = jnp.maximum(
+                    (L_absorbed_stellar + L_abs_neb) * jnp.float64(dust_eta_balance), 0.0
+                )
+                dust_ir = dust_ir_emission(
+                    dust_emission_fn,
+                    rest_wave_f64,
+                    L_ir,
+                    dust_T=jnp.float64(dust_T),
+                    dust_beta_ir=jnp.float64(dust_beta_ir),
+                    dust_alpha_mir=jnp.float64(dust_alpha_mir),
+                    dust_alpha_dale=jnp.float64(dust_alpha_dale),
+                    dust_umin=jnp.float64(dust_umin),
+                    dust_gamma_dl=jnp.float64(dust_gamma_dl),
+                    dust_qpah=jnp.float64(dust_qpah),
+                )
+                # Interpolate to panchromatic grid if needed
+                if _needs_extension:
+                    from tengri.utils.wavelength import interpolate_sed_to_grid
+
+                    dust_ir = interpolate_sed_to_grid(rest_wave_f64, dust_ir, rest_wave_f64)
+                non_stellar_sed = non_stellar_sed + dust_ir
+            else:
+                L_ir = jnp.float64(0.0)
+
+            # 2d: AGN emission
+            if has_agn_full:
+                if agn_parametric:
+                    _agn_lbol = agn_log_lbol
+                    _agn_frac = 1.0
+                else:
+                    _agn_frac = jnp.float64(0.0)  # Not parametric in hybrid
+                    _agn_lbol = 10.0
+                agn_sed = agn_emission(
+                    agn_model_fn_full,
+                    rest_wave_f64,
+                    agn_log_lbol=_agn_lbol,
+                    agn_frac=_agn_frac,
+                    agn_polar_ebv=jnp.float64(agn_polar_ebv),
+                    agn_cos_inc=jnp.float64(agn_cos_inc),
+                    agn_polar_oa=jnp.float64(agn_polar_oa),
+                    agn_alpha=jnp.float64(agn_alpha),
+                    agn_T_torus=jnp.float64(agn_T_torus),
+                    agn_tau_torus=jnp.float64(agn_tau_torus),
+                    agn_torus_frac=jnp.float64(agn_torus_frac),
+                    agn_log_mbh=jnp.float64(agn_log_mbh),
+                    agn_log_ledd=jnp.float64(agn_log_ledd),
+                    agn_a_spin=jnp.float64(agn_a_spin),
+                    agn_tau_skirtor=jnp.float64(agn_tau_skirtor),
+                    agn_p_skirtor=jnp.float64(agn_p_skirtor),
+                    agn_q_skirtor=jnp.float64(agn_q_skirtor),
+                    agn_oa_skirtor=jnp.float64(agn_oa_skirtor),
+                    agn_T_hot=jnp.float64(agn_T_hot),
+                    agn_T_warm=jnp.float64(agn_T_warm),
+                    agn_frac_hot=jnp.float64(agn_frac_hot),
+                    agn_f_hard=jnp.float64(agn_f_hard),
+                    agn_gamma_warm=jnp.float64(agn_gamma_warm),
+                    agn_kt_warm=jnp.float64(agn_kt_warm),
+                    agn_gamma_hard=jnp.float64(agn_gamma_hard),
+                    agn_kt_hot=jnp.float64(agn_kt_hot),
+                    agn_r_warm_ratio=jnp.float64(agn_r_warm_ratio),
+                )
+                non_stellar_sed = non_stellar_sed + agn_sed
+
+            # 2e: Radio emission
+            if has_radio:
+                _L_ir = L_ir
+                _agn_bol = (
+                    10.0 ** (jnp.float64(agn_log_lbol)) * LSUN_ERG_PER_S if has_agn_full else 0.0
+                )
+                _log_mstar = jnp.log10(jnp.maximum(jnp.sum(weights), 1e-10))
+                radio_sed = radio_emission(
+                    rest_wave_f64,
+                    L_ir=_L_ir,
+                    L_agn_bol=_agn_bol,
+                    q_ir=jnp.float64(radio_q_ir),
+                    alpha_sf=jnp.float64(radio_alpha_sf),
+                    radio_loudness=jnp.float64(radio_loudness),
+                    alpha_agn=jnp.float64(radio_alpha_agn),
+                    sfr_mode=_radio_sfr_mode,
+                    log_mstar=_log_mstar,
+                    redshift=_redshift,
+                    include_freefree=_include_freefree,
+                    T_e=jnp.float64(radio_T_e),
+                    alpha_ff=jnp.float64(radio_alpha_ff),
+                )
+                non_stellar_sed = non_stellar_sed + radio_sed
+
+            # 2f: X-ray emission
+            if has_xray:
+                sfr_now = weights[-1]
+                mstar = jnp.sum(weights)
+                _agn_bol_xray = (
+                    10.0 ** (jnp.float64(agn_log_lbol)) * LSUN_ERG_PER_S if has_agn_full else 0.0
+                )
+                xray_sed = xray_emission(
+                    rest_wave_f64,
+                    sfr=sfr_now,
+                    stellar_mass=mstar,
+                    L_agn_bol=_agn_bol_xray,
+                    gamma_agn=jnp.float64(xray_gamma_agn),
+                    alpha_ox=jnp.float64(xray_alpha_ox),
+                    gamma_hmxb=jnp.float64(xray_gamma_hmxb),
+                    gamma_lmxb=jnp.float64(xray_gamma_lmxb),
+                    E_cut=jnp.float64(xray_E_cut),
+                )
+                non_stellar_sed = non_stellar_sed + xray_sed
+
+            # === STEP 3: Integrate non-stellar through filters ===
+            # Loop over filters (unrolled by JAX tracer)
+            ns_fluxes = []
+            for fw, ft in zip(filter_waves_list, filter_trans_list):
+                f = compute_flux_density(
+                    non_stellar_sed, ssp_wave_f64, fw, ft, z_fixed, dl_cm_fixed
+                )
+                ns_fluxes.append(f)
+            if n_filters > 0:
+                non_stellar_phot = jnp.array(ns_fluxes)
 
         # === STEP 4: Combine stellar + non-stellar ===
         stellar_phot = flux_attenuated
