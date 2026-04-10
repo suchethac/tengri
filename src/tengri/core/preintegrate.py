@@ -32,6 +32,7 @@ __all__ = [
     "interp_nd_triweight",
     "preintegrate_grid",
     "preintegrate_lines",
+    "slice_fixed_axes",
 ]
 
 # numpy >= 2.0 uses trapezoid; older versions used trapz
@@ -445,3 +446,73 @@ def interp_nd_triweight(
 
     # Contract grid with weights
     return _tensor_contract(grid, weights_per_axis)
+
+
+def slice_fixed_axes(
+    preint: PreintegratedGrid,
+    fixed: dict[int, float],
+) -> PreintegratedGrid:
+    """Collapse fixed axes in a preintegrated grid via triweight interpolation.
+
+    When a grid parameter is fixed (not free during inference), its axis
+    can be collapsed at init time.  This reduces the grid dimensionality
+    and makes runtime interpolation cheaper.
+
+    For example, if a CLOUDY grid has axes (logZ, log_age, logU) and
+    logU is Fixed(-3.0), calling ``slice_fixed_axes(preint, {2: -3.0})``
+    returns a grid with axes (logZ, log_age) — the logU axis is removed
+    by triweight-interpolating to -3.0.
+
+    Parameters
+    ----------
+    preint : PreintegratedGrid
+        The preintegrated grid to slice.
+    fixed : dict[int, float]
+        Mapping of axis index → fixed value.  Axes are numbered from 0.
+        E.g. ``{2: -3.0}`` collapses axis 2 at value -3.0.
+
+    Returns
+    -------
+    PreintegratedGrid
+        New grid with reduced dimensionality.  Axes and edges for the
+        fixed dimensions are removed.
+    """
+    if not fixed:
+        return preint
+
+    phot = preint.phot
+    moment = preint.moment
+    axes = list(preint.axes)
+    edges = list(preint.edges)
+
+    # Process in reverse order so axis indices remain valid after each slice
+    for axis_idx in sorted(fixed.keys(), reverse=True):
+        value = fixed[axis_idx]
+        ax = axes[axis_idx]
+        ed = edges[axis_idx]
+
+        # Compute triweight weights at the fixed value
+        w = compute_grid_weights(value, ax, scatter=0.5 * float(ax[1] - ax[0]), edges=ed)
+
+        # Contract phot along this axis using einsum-style contraction.
+        # tensordot(w, phot, ([0], [axis_idx])) removes axis_idx from phot,
+        # preserving the order of all other axes.
+        phot = jnp.tensordot(w, phot, axes=([0], [axis_idx]))
+
+        if moment is not None:
+            moment = jnp.tensordot(w, moment, axes=([0], [axis_idx]))
+
+        # Remove from axes and edges lists
+        axes.pop(axis_idx)
+        edges.pop(axis_idx)
+
+    return PreintegratedGrid(
+        phot=phot,
+        moment=moment,
+        axes=tuple(axes),
+        edges=tuple(edges),
+        effective_wavelengths=preint.effective_wavelengths,
+        effective_wavelengths_rest=preint.effective_wavelengths_rest,
+        flux_scale=preint.flux_scale,
+        n_filters=preint.n_filters,
+    )

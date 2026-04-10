@@ -13,6 +13,7 @@ Validates:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import numpy.testing as npt
 import pytest
 
@@ -705,3 +706,95 @@ class TestEdgeCasesAndStability:
         result = interp_nd_triweight(grid_values, axes, edges, (10.0,))
 
         assert jnp.all(jnp.isfinite(result))
+
+
+# ---------------------------------------------------------------------------
+# Tests: slice_fixed_axes()
+# ---------------------------------------------------------------------------
+
+
+class TestSliceFixedAxes:
+    """slice_fixed_axes() reduces grid dimensionality for fixed parameters."""
+
+    def test_slice_removes_axis(self, synthetic_template_3d, tophat_filters):
+        """Slicing one axis reduces grid ndim by 1."""
+        from tengri.core.preintegrate import preintegrate_grid, slice_fixed_axes
+
+        template, wave = synthetic_template_3d
+        filter_waves, filter_trans = tophat_filters
+        n_met, n_age, _ = template.shape
+
+        result = preintegrate_grid(
+            template, wave, filter_waves, filter_trans,
+            redshift=0.0, dl_cm=1e28,
+            axes=(np.linspace(-2, 0, n_met), np.linspace(6, 10, n_age)),
+        )
+        assert result.phot.shape == (n_met, n_age, len(filter_waves))
+        assert len(result.axes) == 2
+
+        # Slice axis 0 (metallicity) at value -1.0
+        sliced = slice_fixed_axes(result, {0: -1.0})
+        assert sliced.phot.shape == (n_age, len(filter_waves))
+        assert len(sliced.axes) == 1
+
+    def test_slice_preserves_values(self, synthetic_template_3d, tophat_filters):
+        """Slicing at a grid node gives approximately that node's values."""
+        from tengri.core.preintegrate import preintegrate_grid, slice_fixed_axes
+
+        template, wave = synthetic_template_3d
+        filter_waves, filter_trans = tophat_filters
+        n_met, n_age, _ = template.shape
+        met_grid = np.linspace(-2, 0, n_met)
+
+        result = preintegrate_grid(
+            template, wave, filter_waves, filter_trans,
+            redshift=0.0, dl_cm=1e28,
+            axes=(met_grid, np.linspace(6, 10, n_age)),
+        )
+
+        # Slice at the middle grid node
+        mid_idx = n_met // 2
+        sliced = slice_fixed_axes(result, {0: float(met_grid[mid_idx])})
+
+        # Should approximate the middle slice of the original
+        npt.assert_allclose(sliced.phot, result.phot[mid_idx], rtol=0.15)
+
+    def test_slice_multiple_axes(self, tophat_filters):
+        """Slicing multiple axes at once works."""
+        from tengri.core.preintegrate import preintegrate_grid, slice_fixed_axes
+
+        filter_waves, filter_trans = tophat_filters
+        n_a, n_b, n_c, n_wave = 4, 3, 5, 200
+        template = np.random.default_rng(42).uniform(1e-20, 1e-18, (n_a, n_b, n_c, n_wave))
+        wave = np.linspace(3000, 8000, n_wave)
+        ax_a = np.linspace(0, 1, n_a)
+        ax_b = np.linspace(0, 1, n_b)
+        ax_c = np.linspace(0, 1, n_c)
+
+        result = preintegrate_grid(
+            template, wave, filter_waves, filter_trans,
+            redshift=0.0, dl_cm=1e28,
+            axes=(ax_a, ax_b, ax_c),
+        )
+        assert result.phot.shape == (n_a, n_b, n_c, len(filter_waves))
+
+        # Slice axes 0 and 2 simultaneously
+        sliced = slice_fixed_axes(result, {0: 0.5, 2: 0.5})
+        assert sliced.phot.shape == (n_b, len(filter_waves))
+        assert len(sliced.axes) == 1
+        assert jnp.all(jnp.isfinite(sliced.phot))
+
+    def test_empty_fixed_returns_same(self, synthetic_template_3d, tophat_filters):
+        """Empty fixed dict returns the same grid."""
+        from tengri.core.preintegrate import preintegrate_grid, slice_fixed_axes
+
+        template, wave = synthetic_template_3d
+        filter_waves, filter_trans = tophat_filters
+
+        result = preintegrate_grid(
+            template, wave, filter_waves, filter_trans,
+            redshift=0.0, dl_cm=1e28,
+            axes=(np.linspace(-2, 0, template.shape[0]),),
+        )
+        sliced = slice_fixed_axes(result, {})
+        assert sliced is result
