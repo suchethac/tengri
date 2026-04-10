@@ -7,75 +7,88 @@ The forward model computes galaxy SEDs from physical parameters. For inference
 millions of times. Wall-clock time is dominated by the forward pass, so
 optimization matters.
 
-The key insight: **only the stellar CSP einsum is expensive** (O(n_age x n_wave)
+The key insight: **only the stellar CSP einsum is expensive** (O(n_age × n_wave)
 = ~658,000 ops). Every other component — nebular, dust IR, AGN, radio, X-ray —
 is O(n_wave) = ~7,000 ops. This 94x cost ratio drives the entire optimization
 strategy.
 
-## The Four Prediction Modes
+The second insight: **precomputation reduces memory**, not just latency.
+The stellar CSP operates on `(n_age, n_wave)` arrays (~94 × 7000 = 658k
+elements). With preintegration through filters, this becomes
+`(n_age, n_filters)` (~94 × 5 = 470 elements) — a 1,400x reduction.
+When vmapping over hundreds of galaxies in batch inference, the
+`(n_galaxies, n_age, n_wave)` tensor hits memory limits much sooner than
+`(n_galaxies, n_age, n_filters)`.
 
-```
+## Prediction Modes
+
+```python
 model.predict_photometry(params, mode="...")
 
-  "exact"          Raw pipeline, no JIT.           Reference path.
+  "auto"           Compositional → Hybrid → Exact (default).
   "compositional"  Full-resolution JIT kernel.     Bit-identical to exact.
-  "hybrid"         Precomputed SSP + exact non-stellar. Fast AND exact non-stellar.
-  "auto"           Picks fastest available (hybrid → compositional → exact).
+  "hybrid"         Precomputed SSP + exact non-stellar. Fast, ~0.2% error.
+  "exact"          Raw pipeline, no JIT.           Reference path.
 ```
 
-### Performance (SDSS ugriz, Apple M-series CPU, post-JIT)
+**Auto mode** routes to compositional (0% error). Use `mode="hybrid"` when
+the speed/accuracy trade-off is acceptable (batch inference, initial
+exploration, real-time visualization).
 
-**Stellar only (DPL SFH + two-component dust):**
+## Benchmarks (Apple M-series CPU, post-JIT warmup)
 
-| Mode           | Latency | Speedup | Error vs exact |
-|----------------|---------|---------|----------------|
-| hybrid         |  277 us |    34x  | 0.16%          |
-| precomputed    |  274 us |    34x  | 0.16%          |
-| compositional  |  940 us |    10x  | 0.000000       |
-| exact          | 9544 us |     1x  | reference      |
+### Pure SSP (`bpss_stars_c3k_a_chabrier.h5`, SDSS ugriz)
 
-**Stellar + AGN (frac mode):**
+| Config         | Mode           | Latency | Speedup | Error  |
+|----------------|----------------|---------|---------|--------|
+| Stellar only   | exact          |  3.5 ms |      1x | ref    |
+|                | compositional  |   68 μs |    51x  | 0.000% |
+|                | **hybrid**     | **17 μs** | **206x** | **0.16%** |
+| + CLOUDY       | exact          |  145 ms |      1x | ref    |
+|                | compositional  |  117 μs | 1,239x  | 0.000% |
+|                | hybrid         |  371 μs |   391x  | 0.16%  |
 
-| Mode           | Latency | Speedup | Error vs exact | Status  |
-|----------------|---------|---------|----------------|---------|
-| hybrid         |  515 us |   126x  | 1.04%          | OK      |
-| precomputed    |      —  |      —  | —              | BLOCKED |
-| compositional  | 1010 us |    64x  | 0.000000       | OK      |
-| exact          |64705 us |     1x  | reference      | OK      |
+### wNE SSP (`ssp_mist_c3k_a_chabrier_wNE`, SDSS ugriz)
 
-**Stellar + AGN (parametric):**
+| Config         | Mode           | Latency | Speedup | Error  |
+|----------------|----------------|---------|---------|--------|
+| Stellar only   | exact          |  9.8 ms |      1x | ref    |
+|                | compositional  |   68 μs |   144x  | 0.000% |
+|                | hybrid         |   17 μs |   576x  | 0.16%  |
+| + AGN (param.) | exact          |   63 ms |      1x | ref    |
+|                | compositional  |  502 μs |   126x  | 0.000% |
+|                | **hybrid**     |  **55 μs** | **1,151x** | **0.004%** |
+| + CLOUDY       | exact          |  155 ms |      1x | ref    |
+|                | compositional  |  722 μs |   215x  | 0.000% |
+|                | hybrid         |  371 μs |   418x  | 0.15%  |
 
-| Mode           | Latency | Speedup | Error vs exact | Status  |
-|----------------|---------|---------|----------------|---------|
-| hybrid         |  553 us |   117x  | 1.04%          | OK      |
-| precomputed    |      —  |      —  | —              | BLOCKED |
-| compositional  | 1006 us |    64x  | 0.000000       | OK      |
-| exact          |64846 us |     1x  | reference      | OK      |
+### Why hybrid is fast
 
-Note: precomputed is BLOCKED for AGN because `from_config(agn=...)` injects
-`agn_frac=Uniform(0,1)` which forces frac mode. The hybrid path handles all
-AGN configurations correctly.
+Both compositional and hybrid are fully fused `@jax.jit` kernels
+(params dict → photometry, no Python dispatch). The difference:
 
-**Panchromatic (21 bands UV-to-submm: GALEX + SDSS + 2MASS + WISE + Herschel + SCUBA2):**
+- **Compositional**: computes full SED at ~7000 wavelengths, then
+  integrates through filters. `einsum("i,iw->w")` over `(n_age, n_wave)`.
+- **Hybrid**: stellar photometry via preintegrated SSP×filter tensor.
+  `einsum("i,if->f")` over `(n_age, n_filters)`. 1,400x fewer elements.
 
-Full physics: DPL SFH + two-component dust + MBB dust emission + parametric AGN.
+For models with non-stellar components, hybrid still computes the
+non-stellar SED at full wavelength and integrates through filters.
+This is why CLOUDY hybrid (371 μs) is slower than stellar-only hybrid
+(17 μs) — the non-stellar filter loop dominates.
 
-| Mode           | Latency | Speedup | Max error | Mean error | Status  |
-|----------------|---------|---------|-----------|------------|---------|
-| hybrid         | 1073 us |    61x  | 2.9%      | 0.8%       | OK      |
-| compositional  | 1114 us |    59x  | 0.000000  | 0.000000   | OK      |
-| exact          |65339 us |     1x  | reference | reference  | OK      |
+### Why hybrid is approximate
 
-Note: The old "precomputed" mode (effective-wavelength-only kernels) has been
-deleted. It was catastrophically broken for panchromatic filter sets (MBB at
-effective wavelengths → wildly incorrect far-IR normalization). The hybrid mode
-replaces it with <3% error across UV-to-submm by computing non-stellar
-emission at full wavelength resolution via emission_helpers.
+Dust attenuation is evaluated at one effective wavelength per filter
+(not across the full bandpass). The Taylor correction captures the
+first-order SSP-dust covariance:
 
-**L_absorbed broadband estimate:** Uses Voronoi frequency bandwidth weighting
-to convert the per-band sum into a proper ∫L_ν dν quadrature. Without this
-weighting, the estimate is off by orders of magnitude for UV-to-submm filter
-sets (the naive sum has wrong units: erg/s/Hz × n_filters, not erg/s).
+```
+f_b ≈ A(λ_eff) · Φ + A'(λ_eff) · Ψ
+```
+
+Reduces factorization error from ~1.3% to ~0.26% (SDSS g worst case).
+See paper appendix §B.3 for derivation and accuracy table.
 
 ## Architecture: Three Data/Kernel Layers
 
@@ -83,299 +96,148 @@ sets (the naive sum has wrong units: erg/s/Hz × n_filters, not erg/s).
 @dataclass
 class PrecomputedData:
     """Tensors pre-integrated through filters. No kernels."""
-    photometry           # SSP x filter (n_met, n_age, n_filt)
-    photometry_ztable    # SSP x filter on z-grid (free redshift)
-    spectroscopy         # SSP rebinned to wave_obs pixels
-    dust_age_weights     # sigmoid weights for two-component dust
-    igm_at_effective_wavelengths  # IGM T(lambda_eff) for fixed z
-    effective_bandwidths_hz       # Voronoi Δν per filter (Hz)
+    photometry                   # SSP × filter (n_met, n_age, n_filt)
+    photometry_ztable            # SSP × filter on z-grid (free redshift)
+    spectroscopy                 # SSP rebinned to wave_obs pixels
+    dust_age_weights             # sigmoid weights for two-component dust
+    igm_at_effective_wavelengths # IGM T(λ_eff) for fixed z
+    effective_bandwidths_hz      # Voronoi Δν per filter (Hz)
 
 @dataclass
 class CompositionalKernels:
-    """Mode 2: Full-resolution JIT kernels."""
-    rest_sed             # build_fused_rest_sed (core engine)
-    photometry           # params -> photometry (end-to-end JIT)
-    spectrum             # params -> spectrum (end-to-end JIT)
-    exact_sed            # build_exact_sed (JIT wrapper for exact path)
+    """Full-resolution JIT kernels (0% error)."""
+    rest_sed                     # build_fused_rest_sed (core engine)
+    photometry                   # params → photometry (end-to-end JIT)
+    spectrum                     # params → spectrum (end-to-end JIT)
+    exact_sed                    # build_exact_sed (JIT wrapper for exact path)
 
 @dataclass
 class HybridKernels:
-    """Mode 3: Precomputed SSP stellar + exact non-stellar."""
-    photometry           # build_hybrid_photometry
-    photometry_ztable    # (planned)
-    spectrum             # (planned)
+    """Precomputed SSP + exact non-stellar (~0.2% error)."""
+    photometry                   # params → photometry (end-to-end JIT)
+    photometry_ztable            # (planned)
+    spectrum                     # (planned)
 ```
 
-Dispatch priority in `mode="auto"`:
-**Hybrid -> Compositional -> Exact**
+## Generic Template Preintegration (`core/preintegrate.py`)
 
-## Optimization 1: JIT Compilation (Compositional Mode)
+Universal module for collapsing the wavelength dimension of ANY template
+grid through photometric filters. One function handles SSP, CLOUDY,
+DL07, Dale, SKIRTOR, Astrodust, BOSA, THEMIS — any template with
+shape `(*grid_dims, n_wave)`.
 
-All forward model operations are pure JAX functions with no Python side
-effects. The `@jax.jit` decorator compiles the entire computation graph into
-a single fused XLA kernel. This eliminates:
+### Functions
 
-- Python interpreter overhead between operations
-- Intermediate array materializations
-- Memory allocation/deallocation per step
+| Function | Purpose |
+|----------|---------|
+| `preintegrate_grid()` | Collapse `(*grid_dims, n_wave)` → `(*grid_dims, n_filters)` |
+| `preintegrate_lines()` | Point-sample emission lines through filters (exact) |
+| `interp_nd_triweight()` | N-dimensional C²-smooth interpolation |
+| `slice_fixed_axes()` | Collapse fixed parameters to reduce grid dimensionality |
+| `precompute_template_photometry()` | Generic entry point with L_λ → L_ν conversion |
 
-The compositional kernel (`build_fused_rest_sed`) captures all physics
-functions (dust laws, nebular backend, AGN model, etc.) in a Python closure.
-At JIT trace time, Python `if` branches on captured booleans are resolved
-statically — XLA only sees the active code path.
+### Triweight interpolation (C² gradients)
 
-**Cost:** First call compiles (~56 seconds for full model). Subsequent calls
-dispatch the cached XLA executable in ~microseconds. The persistent XLA cache
-at `~/.cache/tengri_jax_cache` survives across Python sessions, so
-recompilation only happens when the model configuration changes.
+All grid interpolation uses the triweight kernel (Hearin et al. 2023)
+from `utils/interpolation.py`. This gives C²-continuous gradients,
+critical for gradient-based inference. Piecewise-linear interpolation
+has kinks at grid nodes that slow VI/MAP optimizers.
 
-**Result:** 9x speedup over exact path, bit-identical physics.
+Used by: SSP metallicity, DL07 (qpah, umin), SKIRTOR (5D), CLOUDY
+(Z_gas, age, logU), z-table (redshift).
 
-## Optimization 2: Photometric Precomputation (Precomputed Mode)
+### Taylor correction scope
 
-Reference: Zacharegkas+2025 (arXiv:2506.19919), Section 3.
+The spectral moment Ψ corrects the dust factorization error for
+**multiplicative operators** only (dust attenuation, IGM absorption).
+It does NOT apply to additive components (nebular, AGN, dust IR) —
+these should be preintegrated directly or evaluated at full wavelength.
 
-The broadband photometry integral is:
-```
-c_gal(band) = Integral[ T(lambda) * L_gal(lambda) * lambda ] d_lambda
-```
+### Preintegration status by component
 
-where `L_gal = Sum_age[ SFR(age) * SSP(age, Z, lambda) * dust(lambda, age) ]`.
+| Component | Has templates? | Preintegrated at init? | Used at hybrid runtime? |
+|-----------|---------------|----------------------|------------------------|
+| SSP stellar | Yes (n_met, n_age, n_wave) | **Yes** | **Yes** (einsum) |
+| CLOUDY continuum | Yes (n_Z, n_age, n_logU, n_wave) | **Yes** | No (full-wave) |
+| CLOUDY lines | Yes (n_Z, n_age, n_logU, n_lines) | **Yes** | No (full-wave) |
+| DL07 dust IR | Yes (n_qpah, n_umin, n_wave) | **Yes** | No (full-wave) |
+| SKIRTOR torus | Yes (5D, n_wave) | **Yes** | No (full-wave) |
+| Cue (neural net) | No | N/A | N/A (always full-wave) |
+| AGN disc | No (parametric) | N/A | Full-wave |
+| Radio/X-ray | No (power laws) | N/A | Full-wave |
 
-The key observation: `SSP(age, Z, lambda)` and `T(lambda)` don't depend on
-the sampled parameters (SFH, dust). Only `SFR(age)` and `dust(lambda)` change
-per sample. If we pull the dust curve outside the integral (approximating it
-as constant across each filter bandpass), the wavelength integration becomes
-precomputable:
+Non-stellar preintegrated runtime wiring is infrastructure-ready but
+not yet enabled. The nebular case requires separate age-bin handling
+(CLOUDY age grid ≠ SSP age grid).
 
-```
-c_SSP(age, Z, band) = Integral[ T(lambda) * SSP(age, Z, lambda) * lambda ] d_lambda
-```
+## Other Optimizations
 
-This is computed once at model init. At runtime, photometry reduces to:
-```
-c_gal(band) = Sum_age[ SFR(age) * c_SSP(age, Z, band) ] * dust(lambda_eff)
-```
+### Spectroscopic precomputation
 
-A ~94-element dot product per filter instead of ~658,000 multiply-adds.
-
-**Taylor correction** (optional): The first-order moment tensor captures the
-SSP-dust covariance to first order, reducing the factorization error ~5x:
-```
-c_gal ~ A(lambda_eff) * Phi + A'(lambda_eff) * Psi
-```
-
-where Phi is the SSP photometry and Psi is the SSP first moment.
-
-**Accuracy:** <0.4% for most dust laws, ~7% for SMC in u-band (steep UV rise).
-
-**Speedup:** 30-50x over exact path.
-
-**Limitations:** Non-stellar components (nebular lines, AGN continuum, dust IR
-emission) are either approximated at effective wavelengths or BLOCKED entirely:
-
-| Component    | Handling in precomputed mode          | Issue                    |
-|-------------|--------------------------------------|--------------------------|
-| Dust atten.  | Evaluated at ~5 effective wavelengths | <3% err (36% for SMC)    |
-| Dust IR      | MBB reimplemented at eff. wavelengths | Approximate L_absorbed   |
-| AGN (param.) | Evaluated at eff. wavelengths         | 10-20% error             |
-| AGN (frac)   | BLOCKED                              | Needs full SED integral  |
-| Nebular      | BLOCKED                              | Lines are sharp features |
-| Shock        | BLOCKED                              | Not reimplemented        |
-| Radio        | BLOCKED                              | Not reimplemented        |
-| X-ray        | BLOCKED                              | Not reimplemented        |
-
-The `is_fused_compatible()` gate checks which components are active and
-falls back to the exact path if any blocked component is enabled.
-
-## Optimization 3: Hybrid Mode (NEW)
-
-The hybrid kernel combines precomputed stellar with exact non-stellar:
-
-```
-                     params
-                       |
-            +----------+----------+
-            |                     |
-       STELLAR (fast)       NON-STELLAR (exact)
-            |                     |
-       precomputed SSP       emission_helpers.py
-       x filter einsum       at full wavelength
-       + dust at eff.        + filter integration
-            |                     |
-       stellar_phot(b)      non_stellar_phot(b)
-            |                     |
-            +----------+----------+
-                       |
-                 total_phot(b)
-```
-
-**Why this works:** Non-stellar functions don't need the full stellar SED.
-They need `weights` (CSP from SFH), `ssp_wave`, `sfr`, and `L_absorbed`.
-All available without computing the expensive stellar einsum at full
-wavelength resolution.
-
-**L_absorbed estimation:** Broadband approximation from precomputed fluxes:
-```
-L_absorbed_stellar ~ Sum_bands(flux_intrinsic - flux_attenuated) * LSUN
-```
-Nebular L_absorbed is exact (from `attenuate_emission()` at full resolution).
-
-**Filter integration for non-stellar:** The non-stellar SED (computed at
-full wavelength resolution) is integrated through each filter via
-`compute_flux_density()`. The Python for-loop over filters is unrolled by
-JAX at trace time into a single XLA graph.
-
-**IGM handling:**
-- Stellar: precomputed at effective wavelengths (fast)
-- Non-stellar: applied at full wavelength resolution before filter integration
-
-**Result:** Same ~36x speedup as precomputed mode, but:
-- Nebular emission: EXACT (previously blocked)
-- AGN (all modes): EXACT (previously 10-20% error or blocked)
-- Dust IR: EXACT template shapes (previously MBB approximation)
-- Radio, X-ray, shock: EXACT (previously blocked)
-- No `is_fused_compatible()` gate needed
-
-## Optimization 4: Spectroscopic Precomputation
-
-For spectroscopic fitting, SSP templates are pre-interpolated to the observed
-wavelength grid at fixed redshift:
-
+SSP templates pre-interpolated to observed wavelength grid at fixed z:
 ```python
 model.precompute_spectroscopy(wave_obs)
 ```
+Replaces per-call wavelength interpolation with precomputed lookup (~20x).
 
-This replaces per-call wavelength interpolation with a precomputed lookup,
-giving ~20x speedup for spectroscopic inference.
+### Free-redshift z-table
 
-## Optimization 5: Free-Redshift Z-Table
-
-For free-redshift fitting, SSP photometry is precomputed on a redshift grid:
-
+SSP photometry precomputed on a redshift grid:
 ```python
 model.precompute_ztable(z_min=0.001, z_max=3.0, n_z=100)
 ```
+Interpolated to current z at inference time (<0.01% error at 100 points).
 
-At inference time, the table is interpolated to the current z. 100 points
-gives <0.01% interpolation error.
-
-## Optimization 6: Mixed Precision
+### Mixed precision
 
 ```python
 model = Model(spec, ssp, forward_dtype="float32")
 ```
+Halves memory, ~1.5x speedup, <0.01% error vs float64.
 
-Halves memory, ~1.5x speedup, <0.01% error vs float64. Single precision is
-sufficient for photometric inference.
+### Persistent XLA cache
 
-## Optimization 7: Persistent XLA Cache
-
-```python
-# Auto-enabled on import
-import jax
-jax.config.update("jax_compilation_cache_dir", "~/.cache/tengri_jax_cache")
-```
-
-Compiled XLA executables persist across Python sessions. Eliminates the ~56s
-first-call compilation cost on subsequent runs with the same model config.
+Auto-enabled at `~/.cache/tengri_jax_cache`. Compiled XLA executables
+persist across Python sessions, eliminating ~56s first-call compilation.
 
 ## What the Paper Uses
 
-The paper (Paper II: Stochastic SFH + Hierarchical PSD) uses the following
-forward model configuration for all figures:
+Paper II (Stochastic SFH + Hierarchical PSD) uses a minimal model:
+DPL SFH + two-component dust + baked-in nebular, D ~ 136.
+Inference: Ray Tracing (Behroozi 2025) + geoVI (NIFTy) + NUTS.
+The full non-stellar emission components are implemented but not
+exercised in Paper II.
 
-| Component        | Model                              | Paper reference          |
-|------------------|------------------------------------|--------------------------|
-| SSP templates    | FSPS/MIST/C3K, Chabrier IMF       | Conroy+2009, Choi+2016   |
-| Mean SFH         | Double power law                   | Carnall+2018             |
-| Stochastic SFH   | GP field with DRW PSD              | This work                |
-| Dust attenuation | Two-component Charlot & Fall       | Charlot & Fall 2000      |
-| Dust curve       | Power law (n free)                 | Charlot & Fall 2000      |
-| Nebular          | Baked into SSP (fixed logU)        | —                        |
-| AGN              | None                               | —                        |
-| Dust emission    | None                               | —                        |
-| Radio/X-ray      | None                               | —                        |
-| IGM              | None (low-z mocks)                 | —                        |
+## What's Left to Do
 
-**Dimensionality:** D ~ 136 (128 GP latent + 4 DPL mean SFH + 1 metallicity
-+ 3 dust parameters).
+### Preintegrated non-stellar runtime (high priority)
 
-**Inference methods used:**
-- MAP (Adam optimizer) for initialization
-- Ray Tracing (Behroozi 2025) for individual galaxy posteriors
-- geoVI (NIFTy, Frank+2021) for hierarchical population inference
-- NUTS (BlackJAX) for gold-standard validation (D <= 20 only)
+Wire preintegrated CLOUDY/DL07/SKIRTOR data into the hybrid kernel's
+runtime path. Currently the hybrid kernel computes non-stellar at full
+wavelength and integrates through filters (slow for CLOUDY: 371 μs).
+With preintegrated runtime, non-stellar components produce `(n_filters,)`
+directly — no filter loop needed. Expected: hybrid ~20 μs for all configs.
 
-## What the Paper Does NOT Use (but tengri implements)
+**Challenge:** CLOUDY nebular requires age-sum with Q_H scaling, and
+CLOUDY grid ages differ from SSP grid ages. Need separate precomputation
+of the age-weighted nebular contribution.
 
-The paper deliberately uses a minimal forward model (stellar + dust only) to
-isolate the SFH recovery question. The following components are implemented
-in the code but not exercised in Paper II figures:
+### NaN with pure SSP + non-stellar components
 
-| Category         | Implemented models                           | Status   |
-|------------------|----------------------------------------------|----------|
-| Nebular          | CLOUDY CB19, Cue, MAPPINGS Photo/Shock       | Complete |
-| AGN              | K&D 3-zone disc, SKIRTOR torus, BLR/NLR      | Complete |
-| Dust emission    | DL07, Dale+2014, Casey 2012, MBB             | Complete |
-| Radio            | Bell 2003, Delvecchio+2021, AGN jets          | Complete |
-| X-ray            | Grimm+2003 XRB, AGN corona                   | Complete |
-| IGM              | Inoue+2014                                    | Complete |
-| Dust curves      | Calzetti, K&C, SMC, LMC, Cardelli, TEA, etc. | Complete |
-| Non-param SFH    | Continuity (Leja+2019), Dirichlet             | Complete |
+The pure SSP (`bpss_stars_c3k_a_chabrier.h5`) combined with dust emission
+or AGN produces NaN in some configurations. Root cause: Q_H overflow in
+`_compute_qh_grid()` (fixed for CLOUDY via Inf→0 sanitization), but
+similar overflow may affect other emission components that depend on
+the stellar SED at extreme metallicities.
 
-## Roadmap Models (Not Yet Implemented)
+### Hybrid spectrum mode
 
-These are documented as specs in `docs/dev/roadmap/` but have no code:
+`HybridKernels.spectrum` is not yet implemented. The pattern is
+analogous to photometry: precomputed SSP on spectral pixels + exact
+non-stellar at full wavelength.
 
-| Model             | Reference                | Purpose                         |
-|-------------------|--------------------------|---------------------------------|
-| PAH features      | PAHFIT decomposition     | Mid-IR spectral decomposition   |
-| Chemical evolution| Z(t) time-dependent      | Mass-metallicity evolution      |
-| BOSA templates    | Boquien & Salim 2021     | sSFR-parameterized dust         |
-| MAGPHYS dust      | da Cunha+2013            | Multi-temperature starburst     |
-| Astrodust+PAH     | Hensley & Draine 2023    | Next-gen dust grain model       |
-| THEMIS dust       | Jones+2017               | European dust model             |
-| Patchy IGM        | Stochastic transmission  | Sightline-to-sightline scatter  |
-| Shock emission    | MAPPINGS V full grids    | Beyond current simple model     |
-| TEA attenuation   | Haskell+2024             | NIHAO-SKIRT empirical curve     |
+### Hybrid z-table mode
 
-## Testing the Hybrid Kernel
-
-**Current test configuration:** The hybrid kernel was tested with the same
-minimal model the paper uses (DPL SFH + two-component dust, no non-stellar
-components). In this configuration, the hybrid kernel produces identical
-results to the precomputed kernel (~0.4% error vs exact), since the
-non-stellar contribution is zero.
-
-**Tested with non-stellar (2026-04-10):**
-- Stellar + AGN (parametric): 0.006% max error, 690 μs (90x speedup)
-- Non-stellar components evaluated at full wavelength via emission_helpers
-  and integrated through filters → exact for non-stellar, ~0.5% for stellar
-
-**What needs testing:**
-- Stellar + CLOUDY nebular + dust emission (the common real-data config)
-- Full panchromatic: stellar + nebular + AGN + dust IR + radio + X-ray
-
-## Generic Template Preintegration (2026-04-10)
-
-The `core/preintegrate.py` module provides universal preintegration:
-
-- `preintegrate_grid()`: collapses wavelength dimension of ANY template grid
-  (SSP, CLOUDY, DL07, SKIRTOR) into filter-integrated photometry
-- `preintegrate_lines()`: exact point-sampling of emission lines through filters
-- `interp_nd_triweight()`: N-dimensional smooth interpolation using the triweight
-  kernel from `utils/interpolation.py` (C²-continuous gradients)
-
-The SSP photometric precomputation (`sps/precompute.py:precompute_photometry`)
-now delegates to `preintegrate_grid()`. Same output, ~75 fewer lines.
-
-**Taylor correction applicability:** The first spectral moment Ψ corrects the
-dust factorization error (pulling A(λ) outside the filter integral). This is
-specific to **multiplicative operators** (dust attenuation, IGM absorption).
-Additive components (nebular, AGN, dust IR, radio, X-ray) don't multiply the
-SSP template and therefore don't benefit from Taylor correction — they should
-be preintegrated directly or evaluated at full wavelength.
-
-**Cue backend:** Not preintegratable (neural network emulator, no fixed template
-grid). Always evaluated at full wavelength resolution on the exact path.
+`HybridKernels.photometry_ztable` for free-redshift inference with
+the hybrid kernel. Requires preintegrating the z-table through the
+hybrid kernel's stellar path.
