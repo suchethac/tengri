@@ -24,14 +24,38 @@ model.predict_photometry(params, mode="...")
   "auto"           Picks fastest available.
 ```
 
-### Performance (5-band DPL, Apple M-series CPU, post-JIT)
+### Performance (SDSS ugriz, Apple M-series CPU, post-JIT)
 
-| Mode           | Latency | Speedup | Stellar error | Non-stellar error |
-|----------------|---------|---------|---------------|-------------------|
-| exact          | ~10 ms  | 1x      | 0             | 0                 |
-| compositional  | ~1.1 ms | 9x      | 0             | 0                 |
-| precomputed    | ~280 us | 36x     | 0.4%          | 10-20% (AGN), BLOCKED (nebular) |
-| hybrid         | ~280 us | 36x     | 0.4%          | 0                 |
+**Stellar only (DPL SFH + two-component dust):**
+
+| Mode           | Latency | Speedup | Error vs exact |
+|----------------|---------|---------|----------------|
+| hybrid         |  277 us |    34x  | 0.16%          |
+| precomputed    |  274 us |    34x  | 0.16%          |
+| compositional  |  940 us |    10x  | 0.000000       |
+| exact          | 9544 us |     1x  | reference      |
+
+**Stellar + AGN (frac mode):**
+
+| Mode           | Latency | Speedup | Error vs exact | Status  |
+|----------------|---------|---------|----------------|---------|
+| hybrid         |  515 us |   126x  | 1.04%          | OK      |
+| precomputed    |      —  |      —  | —              | BLOCKED |
+| compositional  | 1010 us |    64x  | 0.000000       | OK      |
+| exact          |64705 us |     1x  | reference      | OK      |
+
+**Stellar + AGN (parametric):**
+
+| Mode           | Latency | Speedup | Error vs exact | Status  |
+|----------------|---------|---------|----------------|---------|
+| hybrid         |  553 us |   117x  | 1.04%          | OK      |
+| precomputed    |      —  |      —  | —              | BLOCKED |
+| compositional  | 1006 us |    64x  | 0.000000       | OK      |
+| exact          |64846 us |     1x  | reference      | OK      |
+
+Note: precomputed is BLOCKED for AGN because `from_config(agn=...)` injects
+`agn_frac=Uniform(0,1)` which forces frac mode. The hybrid path handles all
+AGN configurations correctly.
 
 ## Architecture: Four Data/Kernel Layers
 
