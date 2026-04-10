@@ -159,15 +159,18 @@ def attenuate_emission(
     dust_kw = {"n_slope": dust_slope, "dust_bump_strength": dust_bump_strength}
     sed_out = sed
 
-    # Birth-cloud attenuation (modes "bc" and "neb")
-    if mode in ("bc", "neb") and tau_bc > 0.0:
+    # Birth-cloud attenuation (modes "bc" and "neb").
+    # Always compute (exp(-0*k)=1 is a no-op); avoids Python boolean
+    # conversion on traced tau_bc which fails inside @jax.jit.
+    if mode in ("bc", "neb"):
         bc_fn = neb_bc_fn if (mode == "neb" and neb_bc_fn is not None) else law_bc_fn
         if bc_fn is not None:
             k_bc = bc_fn(wave, **dust_kw)
             sed_out = sed_out * jnp.exp(-tau_bc * k_bc)
 
-    # Diffuse ISM attenuation (all modes except "none")
-    if tau_diff > 0.0 and law_diff_fn is not None:
+    # Diffuse ISM attenuation (all modes except "none").
+    # Same: always compute, let XLA optimize exp(-0*k)=1.
+    if law_diff_fn is not None:
         k_diff = law_diff_fn(wave, **dust_kw)
         sed_out = sed_out * jnp.exp(-tau_diff * k_diff)
 
