@@ -348,11 +348,34 @@ components). In this configuration, the hybrid kernel produces identical
 results to the precomputed kernel (~0.4% error vs exact), since the
 non-stellar contribution is zero.
 
-**What needs testing:** Models with non-stellar components enabled:
+**Tested with non-stellar (2026-04-10):**
+- Stellar + AGN (parametric): 0.006% max error, 690 μs (90x speedup)
+- Non-stellar components evaluated at full wavelength via emission_helpers
+  and integrated through filters → exact for non-stellar, ~0.5% for stellar
+
+**What needs testing:**
 - Stellar + CLOUDY nebular + dust emission (the common real-data config)
-- Stellar + AGN (parametric and frac modes)
 - Full panchromatic: stellar + nebular + AGN + dust IR + radio + X-ray
 
-The hybrid kernel should produce results within <1% of exact for stellar
-(precomputed approximation) and within floating-point precision for all
-non-stellar components.
+## Generic Template Preintegration (2026-04-10)
+
+The `core/preintegrate.py` module provides universal preintegration:
+
+- `preintegrate_grid()`: collapses wavelength dimension of ANY template grid
+  (SSP, CLOUDY, DL07, SKIRTOR) into filter-integrated photometry
+- `preintegrate_lines()`: exact point-sampling of emission lines through filters
+- `interp_nd_triweight()`: N-dimensional smooth interpolation using the triweight
+  kernel from `utils/interpolation.py` (C²-continuous gradients)
+
+The SSP photometric precomputation (`sps/precompute.py:precompute_photometry`)
+now delegates to `preintegrate_grid()`. Same output, ~75 fewer lines.
+
+**Taylor correction applicability:** The first spectral moment Ψ corrects the
+dust factorization error (pulling A(λ) outside the filter integral). This is
+specific to **multiplicative operators** (dust attenuation, IGM absorption).
+Additive components (nebular, AGN, dust IR, radio, X-ray) don't multiply the
+SSP template and therefore don't benefit from Taylor correction — they should
+be preintegrated directly or evaluated at full wavelength.
+
+**Cue backend:** Not preintegratable (neural network emulator, no fixed template
+grid). Always evaluated at full wavelength resolution on the exact path.
