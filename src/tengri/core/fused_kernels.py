@@ -450,7 +450,7 @@ def build_hybrid_photometry(model):
                 xray_E_cut,
             )
 
-    def _hybrid_phot_body(
+    def _stellar_phot(
         sfr_on_ssp,
         log_z_abs,
         tau_bc,
@@ -461,64 +461,49 @@ def build_hybrid_photometry(model):
         dust_delta,
         dust_Rv,
         alpha_fe,
-        dust_T,
-        dust_beta_ir,
-        dust_eta_balance,
-        agn_log_lbol,
-        agn_alpha,
-        agn_T_torus,
-        agn_tau_torus,
-        agn_torus_frac,
-        agn_log_mbh,
-        agn_log_ledd,
-        neb_logU,
-        neb_logZ_gas,
-        neb_fesc,
-        neb_fesc_lya,
-        shock_frac,
-        shock_velocity,
-        shock_log_density,
-        shock_b_over_sqrt_n,
-        shock_abundance,
-        shock_component,
-        dust_alpha_mir,
-        dust_alpha_dale,
-        dust_umin,
-        dust_gamma_dl,
-        dust_qpah,
-        agn_polar_ebv,
-        agn_cos_inc,
-        agn_polar_oa,
-        agn_frac,
-        agn_a_spin,
-        agn_tau_skirtor,
-        agn_p_skirtor,
-        agn_q_skirtor,
-        agn_oa_skirtor,
-        agn_T_hot,
-        agn_T_warm,
-        agn_frac_hot,
-        agn_f_hard,
-        agn_gamma_warm,
-        agn_kt_warm,
-        agn_gamma_hard,
-        agn_kt_hot,
-        agn_r_warm_ratio,
-        radio_q_ir,
-        radio_alpha_sf,
-        radio_loudness,
-        radio_alpha_agn,
-        radio_T_e,
-        radio_alpha_ff,
-        xray_gamma_agn,
-        xray_alpha_ox,
-        xray_gamma_hmxb,
-        xray_gamma_lmxb,
-        xray_E_cut,
         tau_v=0.0,
     ):
-        """Hybrid kernel body: stellar (precomputed) + non-stellar (exact)."""
-        # === STEP 1: Stellar photometry (COPIED from _fused_phot_body) ===
+        """Preintegrated stellar photometry + L_absorbed estimate.
+
+        Computes stellar CSP through preintegrated SSP×filter tensor with
+        metallicity + alpha interpolation, dust attenuation at effective
+        wavelengths (single/two-component, exact/fast, with Taylor expansion),
+        and L_absorbed estimation via Voronoi bandwidth weighting.
+
+        Parameters
+        ----------
+        sfr_on_ssp : array-like
+            SFR weights on SSP grid.
+        log_z_abs : float
+            log10(Z) absolute metallicity.
+        tau_bc : float
+            Birth-cloud optical depth (for two-component dust).
+        tau_diff : float
+            Diffuse ISM optical depth (for two-component dust).
+        dust_slope : float
+            Dust law power-law index.
+        f_obscuration : float
+            Obscured fraction (geometry).
+        dust_bump_strength : float
+            2175 Å bump strength.
+        dust_delta : float
+            Mid-UV dust delta parameter.
+        dust_Rv : float
+            Dust extinction curve Rv parameter.
+        alpha_fe : float
+            Alpha-to-iron enhancement ratio.
+        tau_v : float, optional
+            Optical depth (single-component dust case).
+
+        Returns
+        -------
+        flux_attenuated : (n_filters,) array
+            Stellar photometry in Lsun/Hz units.
+        L_absorbed_stellar : scalar
+            Absorbed stellar luminosity in erg/s.
+        weights : (n_ages,) array
+            CSP weights (needed for non-stellar calculations).
+        """
         sfr = sfr_on_ssp.astype(dt)
         lz = jnp.asarray(log_z_abs, dtype=dt)
         tv1 = jnp.asarray(tau_bc, dtype=dt)
@@ -636,6 +621,91 @@ def build_hybrid_photometry(model):
         else:
             L_absorbed_stellar = jnp.sum(diff_flux)  # fallback (wrong units)
         L_absorbed_stellar = jnp.maximum(L_absorbed_stellar, dt.type(0.0))
+
+        return flux_attenuated, L_absorbed_stellar, weights
+
+    def _hybrid_phot_body(
+        sfr_on_ssp,
+        log_z_abs,
+        tau_bc,
+        tau_diff,
+        dust_slope,
+        f_obscuration,
+        dust_bump_strength,
+        dust_delta,
+        dust_Rv,
+        alpha_fe,
+        dust_T,
+        dust_beta_ir,
+        dust_eta_balance,
+        agn_log_lbol,
+        agn_alpha,
+        agn_T_torus,
+        agn_tau_torus,
+        agn_torus_frac,
+        agn_log_mbh,
+        agn_log_ledd,
+        neb_logU,
+        neb_logZ_gas,
+        neb_fesc,
+        neb_fesc_lya,
+        shock_frac,
+        shock_velocity,
+        shock_log_density,
+        shock_b_over_sqrt_n,
+        shock_abundance,
+        shock_component,
+        dust_alpha_mir,
+        dust_alpha_dale,
+        dust_umin,
+        dust_gamma_dl,
+        dust_qpah,
+        agn_polar_ebv,
+        agn_cos_inc,
+        agn_polar_oa,
+        agn_frac,
+        agn_a_spin,
+        agn_tau_skirtor,
+        agn_p_skirtor,
+        agn_q_skirtor,
+        agn_oa_skirtor,
+        agn_T_hot,
+        agn_T_warm,
+        agn_frac_hot,
+        agn_f_hard,
+        agn_gamma_warm,
+        agn_kt_warm,
+        agn_gamma_hard,
+        agn_kt_hot,
+        agn_r_warm_ratio,
+        radio_q_ir,
+        radio_alpha_sf,
+        radio_loudness,
+        radio_alpha_agn,
+        radio_T_e,
+        radio_alpha_ff,
+        xray_gamma_agn,
+        xray_alpha_ox,
+        xray_gamma_hmxb,
+        xray_gamma_lmxb,
+        xray_E_cut,
+        tau_v=0.0,
+    ):
+        """Hybrid kernel body: stellar (precomputed) + non-stellar (exact)."""
+        # === STEP 1: Stellar photometry ===
+        flux_attenuated, L_absorbed_stellar, weights = _stellar_phot(
+            sfr_on_ssp,
+            log_z_abs,
+            tau_bc,
+            tau_diff,
+            dust_slope,
+            f_obscuration,
+            dust_bump_strength,
+            dust_delta,
+            dust_Rv,
+            alpha_fe,
+            tau_v=tau_v,
+        )
 
         # === STEP 2: Non-stellar SED at full wavelength resolution ===
         non_stellar_sed = jnp.zeros_like(ssp_wave_f64)
