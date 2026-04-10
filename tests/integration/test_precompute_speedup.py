@@ -68,8 +68,8 @@ class TestPrecomputeAccuracy:
         model_fast = Model(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
         model_exact = Model(smooth_spec, ssp_data, filters=sdss_filters, precompute=False)
 
-        assert model_fast._precomp is not None
-        assert model_exact._precomp is None
+        assert model_fast._precomputed.photometry is not None
+        assert model_exact._precomputed.photometry is None
 
         key = jax.random.PRNGKey(42)
         params = smooth_spec.sample(key)

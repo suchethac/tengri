@@ -57,6 +57,27 @@ Note: precomputed is BLOCKED for AGN because `from_config(agn=...)` injects
 `agn_frac=Uniform(0,1)` which forces frac mode. The hybrid path handles all
 AGN configurations correctly.
 
+**Panchromatic (21 bands UV-to-submm: GALEX + SDSS + 2MASS + WISE + Herschel + SCUBA2):**
+
+Full physics: DPL SFH + two-component dust + MBB dust emission + parametric AGN.
+
+| Mode           | Latency | Speedup | Max error | Mean error | Status  |
+|----------------|---------|---------|-----------|------------|---------|
+| hybrid         | 1073 us |    61x  | 2.9%      | 0.8%       | OK      |
+| precomputed    |  668 us |    98x  | >1e14%    | >1e13%     | BROKEN  |
+| compositional  | 1114 us |    59x  | 0.000000  | 0.000000   | OK      |
+| exact          |65339 us |     1x  | reference | reference  | OK      |
+
+Note: precomputed mode is catastrophically broken for panchromatic filter sets
+because MBB dust emission evaluated at effective wavelengths produces wildly
+incorrect normalization in the far-IR. The hybrid mode handles this correctly
+by computing dust IR emission at full wavelength resolution via emission_helpers.
+
+**L_absorbed broadband estimate:** Uses Voronoi frequency bandwidth weighting
+to convert the per-band sum into a proper ∫L_ν dν quadrature. Without this
+weighting, the estimate is off by orders of magnitude for UV-to-submm filter
+sets (the naive sum has wrong units: erg/s/Hz × n_filters, not erg/s).
+
 ## Architecture: Four Data/Kernel Layers
 
 ```python

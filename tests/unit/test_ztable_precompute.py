@@ -16,6 +16,7 @@ from numpy.testing import assert_allclose
 from tengri.models.sps.dsps_wrapper import SSPData
 from tengri.models.sps.precompute import (
     interpolate_ztable,
+    interpolate_ztable_smooth,
     precompute_photometry,
     precompute_photometry_ztable,
 )
@@ -234,6 +235,168 @@ class TestZTableGradients:
                 zt.flux_scale_table,
                 zt.z_grid,
                 z,
+            )
+
+        ssp_phot, _eff_rest, _flux_scale = fn(0.5)
+        assert jnp.all(jnp.isfinite(ssp_phot))
+
+
+# ---------------------------------------------------------------------------
+# Tests: smooth (triweight) interpolation
+# ---------------------------------------------------------------------------
+
+
+class TestZTableSmoothInterpolation:
+    """interpolate_ztable_smooth: C²-continuous triweight kernel for gradient-based inference."""
+
+    @staticmethod
+    def _scatter(zt) -> float:
+        return 1.5 * float(zt.z_grid[1] - zt.z_grid[0])
+
+    def test_output_shapes(self, ssp_data, filters):
+        """Smooth interpolation returns the same shapes as interpolate_ztable."""
+        fw, ft = filters
+        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20)
+        ssp_phot, eff_rest, flux_scale = interpolate_ztable_smooth(
+            zt.ssp_phot_table,
+            zt.eff_waves_rest_table,
+            zt.flux_scale_table,
+            zt.z_grid,
+            0.5,
+            self._scatter(zt),
+        )
+        assert ssp_phot.shape == (3, 20, 3)
+        assert eff_rest.shape == (3,)
+        assert jnp.ndim(flux_scale) == 0
+
+    def test_all_values_finite(self, ssp_data, filters):
+        """Smooth interpolation returns only finite values."""
+        fw, ft = filters
+        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20)
+        ssp_phot, eff_rest, flux_scale = interpolate_ztable_smooth(
+            zt.ssp_phot_table,
+            zt.eff_waves_rest_table,
+            zt.flux_scale_table,
+            zt.z_grid,
+            0.5,
+            self._scatter(zt),
+        )
+        assert jnp.all(jnp.isfinite(ssp_phot))
+        assert jnp.all(jnp.isfinite(eff_rest))
+        assert jnp.isfinite(flux_scale)
+
+    def test_gradient_wrt_z_finite(self, ssp_data, filters):
+        """Gradient w.r.t. z is finite (z is differentiable through the kernel)."""
+        fw, ft = filters
+        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20)
+        scatter = self._scatter(zt)
+
+        def loss(z):
+            ssp_phot, eff_rest, flux_scale = interpolate_ztable_smooth(
+                zt.ssp_phot_table,
+                zt.eff_waves_rest_table,
+                zt.flux_scale_table,
+                zt.z_grid,
+                z,
+                scatter,
+            )
+            return jnp.sum(ssp_phot) + jnp.sum(eff_rest) + flux_scale
+
+        g = jax.grad(loss)(0.5)
+        assert jnp.isfinite(g), f"Gradient w.r.t. z is not finite: {g}"
+
+    def test_gradient_smoother_than_linear(self, ssp_data, filters):
+        """d(flux)/dz has lower variation than piecewise-linear across grid nodes.
+
+        Linear interpolation has discontinuous first derivative at every grid node —
+        each boundary appears as a sudden jump in d(flux)/dz. The triweight kernel
+        spreads weight smoothly across neighbours (C²), so the gradient signal
+        should be much quieter (lower std of consecutive differences).
+        """
+        fw, ft = filters
+        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20)
+        scatter = self._scatter(zt)
+
+        # Dense z sweep covering 6 full grid intervals
+        z_vals = jnp.linspace(float(zt.z_grid[2]), float(zt.z_grid[8]), 80)
+
+        def loss_linear(z):
+            ssp_phot, _, _ = interpolate_ztable(
+                zt.ssp_phot_table,
+                zt.eff_waves_rest_table,
+                zt.flux_scale_table,
+                zt.z_grid,
+                z,
+            )
+            return jnp.sum(ssp_phot)
+
+        def loss_smooth(z):
+            ssp_phot, _, _ = interpolate_ztable_smooth(
+                zt.ssp_phot_table,
+                zt.eff_waves_rest_table,
+                zt.flux_scale_table,
+                zt.z_grid,
+                z,
+                scatter,
+            )
+            return jnp.sum(ssp_phot)
+
+        grad_linear = jax.vmap(jax.grad(loss_linear))(z_vals)
+        grad_smooth = jax.vmap(jax.grad(loss_smooth))(z_vals)
+
+        variation_linear = float(jnp.std(jnp.diff(grad_linear)))
+        variation_smooth = float(jnp.std(jnp.diff(grad_smooth)))
+        assert variation_smooth < variation_linear, (
+            f"Smooth variation ({variation_smooth:.4f}) should be less than "
+            f"linear ({variation_linear:.4f})"
+        )
+
+    def test_accuracy_within_tolerance(self, ssp_data, filters):
+        """Smooth interpolation stays within a reasonable error bound.
+
+        The triweight kernel deliberately spreads weight across ~3 neighbouring
+        grid nodes (scatter = 1.5 × dz) to achieve C²-continuous gradients.
+        This blurring trades some pointwise accuracy for gradient smoothness.
+        With n_z=200 and scatter=1.5*dz, the max error is typically < 30%.
+        The key property is smooth gradients, not sub-percent accuracy —
+        use a dense grid (n_z ≥ 200) in production to keep errors small.
+        """
+        fw, ft = filters
+        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=200)
+        scatter = self._scatter(zt)
+
+        z_test = 0.15
+        dl_cm = luminosity_distance(z_test)
+        fixed = precompute_photometry(ssp_data, fw, ft, z_test, dl_cm)
+
+        ssp_phot, _, _ = interpolate_ztable_smooth(
+            zt.ssp_phot_table,
+            zt.eff_waves_rest_table,
+            zt.flux_scale_table,
+            zt.z_grid,
+            z_test,
+            scatter,
+        )
+        frac_err = jnp.abs(ssp_phot - fixed.ssp_phot) / jnp.maximum(jnp.abs(fixed.ssp_phot), 1e-30)
+        # With n_z=200 and scatter=1.5*dz, the blurring window covers ~3 nodes
+        # (±4.5 Δz ≈ ±0.067 at z~0.15), so max errors < 30% are expected.
+        assert float(jnp.max(frac_err)) < 0.30, f"Max error: {float(jnp.max(frac_err)):.4f}"
+
+    def test_jit_compatible(self, ssp_data, filters):
+        """Smooth interpolation works inside jax.jit."""
+        fw, ft = filters
+        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20)
+        scatter = self._scatter(zt)
+
+        @jax.jit
+        def fn(z):
+            return interpolate_ztable_smooth(
+                zt.ssp_phot_table,
+                zt.eff_waves_rest_table,
+                zt.flux_scale_table,
+                zt.z_grid,
+                z,
+                scatter,
             )
 
         ssp_phot, _eff_rest, _flux_scale = fn(0.5)

@@ -212,10 +212,9 @@ t_compile = time.perf_counter() - t0_c
 t0 = time.perf_counter()
 result = fitter.run(
     "vi",
-    n_iterations=15,
-    n_samples=6,
-    n_seeds=5,
-    n_posterior_samples=5000,
+    n_iterations=8,
+    n_samples=4,
+    n_posterior_samples=500,
     verbose=False,
 )
 t_run = time.perf_counter() - t0

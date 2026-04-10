@@ -286,7 +286,7 @@ def plot_results(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--n-max", type=int, default=30, help="Maximum N for convergence test")
-    parser.add_argument("--method", type=str, default="raytrace", choices=["raytrace", "geovi"])
+    parser.add_argument("--method", type=str, default="mcmc_raytrace", choices=["mcmc_raytrace", "vi"])
     args = parser.parse_args()
 
     ssp = get_ssp()
@@ -296,11 +296,11 @@ def main():
     key = jax.random.PRNGKey(7)
 
     # Method-specific kwargs.
-    # NOTE: "geovi" (CFM) uses NIFTy's CorrelatedFieldMaker and returns
+    # NOTE: "vi" (CFM) uses NIFTy's CorrelatedFieldMaker and returns
     # psd_fluctuations / psd_loglogavgslope / psd_sigma_eff — not psd_sigma/psd_tau_myr.
-    # This script's display code expects the raytrace flat parametrization.
-    # Use "raytrace" for publishable results; geovi_flat works too.
-    if args.method == "raytrace":
+    # This script's display code expects the mcmc_raytrace flat parametrization.
+    # Use "mcmc_raytrace" for publishable results; vi_linear works too.
+    if args.method == "mcmc_raytrace":
         # Hierarchical model D ≈ N × D_galaxy + 2 ≫ single-galaxy D~137.
         # Much smaller step_size needed to stay on the viable side of the acceptance cliff.
         fit_kwargs = dict(n_burnin=150, n_steps=600, n_leapfrog_steps=20, step_size=0.01)

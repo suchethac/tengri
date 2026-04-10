@@ -178,6 +178,11 @@ def build_fused_photometry(model):
         _age_dt = model._csp_age_dt.astype(dt)  # precomputed CSP bin widths
     lsun = dt.type(LSUN_ERG_PER_S)
 
+    # Voronoi frequency bandwidths for L_absorbed estimate
+    _eff_bw_precomp = model._precomputed.effective_bandwidths_hz
+    if _eff_bw_precomp is not None:
+        _eff_bw_precomp = _eff_bw_precomp.astype(dt)
+
     # Capture dust law functions (pure JAX, JIT-traceable)
     law_bc_fn = resolve_dust_law(model._dust_law_bc)
     if not _is_single_dust:
@@ -471,9 +476,12 @@ def build_fused_photometry(model):
             # Approximate dust emission in the fused kernel:
             # 1. L_stellar (intrinsic, no dust) at effective wavelengths
             flux_intrinsic = jnp.einsum("i,if->f", weights, ssp_at_z)
-            # 2. L_absorbed ~ sum(L_intrinsic - L_attenuated) across bands
-            #    This is an approximation -- exact would integrate over full SED
-            L_absorbed_approx = jnp.sum(flux_intrinsic - flux_attenuated) * lsun
+            # 2. L_absorbed ~ ∫(L_intr - L_atten) dν via Voronoi bandwidth weights
+            diff_flux_precomp = (flux_intrinsic - flux_attenuated) * lsun
+            if _eff_bw_precomp is not None:
+                L_absorbed_approx = jnp.sum(diff_flux_precomp * _eff_bw_precomp)
+            else:
+                L_absorbed_approx = jnp.sum(diff_flux_precomp)  # fallback
             L_absorbed_approx = jnp.maximum(L_absorbed_approx, dt.type(0.0))
             L_ir = L_absorbed_approx * jnp.asarray(dust_eta_balance, dtype=dt)
 
@@ -600,6 +608,13 @@ def build_hybrid_photometry(model):
     else:
         _age_dt = model._csp_age_dt.astype(dt)
     lsun = dt.type(LSUN_ERG_PER_S)
+
+    # Voronoi frequency bandwidths for L_absorbed broadband estimate (Hz).
+    # Without these weights, sum(L_ν) is dimensionally wrong and
+    # catastrophically underestimates L_absorbed for panchromatic filter sets.
+    _eff_bw = model._precomputed.effective_bandwidths_hz
+    if _eff_bw is not None:
+        _eff_bw = _eff_bw.astype(dt)
 
     # Capture dust law functions
     law_bc_fn = resolve_dust_law(model._dust_law_bc)
@@ -1148,9 +1163,15 @@ def build_hybrid_photometry(model):
             flux_intrinsic_for_geom = csp_young + csp_old
             flux_attenuated = f_obs * flux_intrinsic_for_geom + (1.0 - f_obs) * flux_no_geom
 
-        # Estimate L_absorbed from stellar broadband
+        # Estimate L_absorbed from stellar broadband.
+        # Weight each filter by its Voronoi frequency bandwidth to convert
+        # the sum of L_ν values into a proper ∫L_ν dν quadrature (erg/s).
         flux_intrinsic = jnp.einsum("i,if->f", weights, ssp_at_z)
-        L_absorbed_stellar = jnp.sum(flux_intrinsic - flux_attenuated) * lsun
+        diff_flux = (flux_intrinsic - flux_attenuated) * lsun  # erg/s/Hz per band
+        if _eff_bw is not None:
+            L_absorbed_stellar = jnp.sum(diff_flux * _eff_bw)  # erg/s
+        else:
+            L_absorbed_stellar = jnp.sum(diff_flux)  # fallback (wrong units)
         L_absorbed_stellar = jnp.maximum(L_absorbed_stellar, dt.type(0.0))
 
         # === STEP 2: Non-stellar SED at full wavelength resolution ===

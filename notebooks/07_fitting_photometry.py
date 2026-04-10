@@ -207,7 +207,6 @@ result = fitter.run(
     "vi",
     n_iterations=8,
     n_samples=4,
-    n_seeds=3,
     n_posterior_samples=512,
     verbose=False,
 )
@@ -325,7 +324,6 @@ result_joint = fitter_joint.run(
     "vi",
     n_iterations=8,
     n_samples=4,
-    n_seeds=3,
     n_posterior_samples=512,
     verbose=False,
 )
@@ -342,7 +340,6 @@ result_phot = fitter_phot.run(
     "vi",
     n_iterations=8,
     n_samples=4,
-    n_seeds=3,
     n_posterior_samples=512,
     verbose=False,
 )
@@ -421,7 +418,6 @@ results_batch = fitter_batch.fit_batch(
     method="vi",
     n_iterations=5,
     n_samples=3,
-    n_seeds=2,
     n_posterior_samples=128,
     verbose=False,
 )
@@ -553,8 +549,7 @@ for config_name, filter_names in configs.items():
         "vi",
         n_iterations=6,
         n_samples=3,
-        n_seeds=2,
-        n_posterior_samples=256,
+            n_posterior_samples=256,
         verbose=False,
     )
 

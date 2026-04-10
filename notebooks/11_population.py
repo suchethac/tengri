@@ -74,6 +74,12 @@ from tengri import (
     load_ssp_data,
 )
 
+# Pre-warm nifty8 import to avoid _DeadlockError when running VI in a loop
+try:
+    import nifty8.re.evi  # noqa: F401
+except Exception:
+    pass
+
 _repo_data_root = None
 _spec_tengri = importlib.util.find_spec("tengri")
 if _spec_tengri is not None and _spec_tengri.origin:
@@ -261,15 +267,13 @@ for i in range(min(4, N_GAL)):
         data_type="spectroscopy",
     )
     t0_c = time.perf_counter()
-    fitter_i.compile(verbose=False)
     t_compile = time.perf_counter() - t0_c
     t0 = time.perf_counter()
     res_i = fitter_i.run(
         "vi",
-        n_iterations=15,
+        n_iterations=8,
         n_samples=6,
-        n_seeds=3,
-        n_posterior_samples=500,
+            n_posterior_samples=500,
         verbose=False,
     )
     t_run = time.perf_counter() - t0
@@ -321,11 +325,10 @@ hfitter_spec = PopulationFitter(
     data_type="spectroscopy",
 )
 result_hier_spec = hfitter_spec.run(
-    "vi_linear",
-    n_iterations=50,
-    n_samples=6,
+    "mgvi",
+    n_iterations=10,
+    n_samples=4,
     n_posterior_samples=500,
-    n_seeds=10,
     verbose=False,
     key=jax.random.PRNGKey(0),
 )
@@ -389,11 +392,10 @@ hfitter_phot = PopulationFitter(
     data_type="photometry",
 )
 result_hier_phot = hfitter_phot.run(
-    "vi_linear",
-    n_iterations=50,
-    n_samples=6,
+    "mgvi",
+    n_iterations=10,
+    n_samples=4,
     n_posterior_samples=500,
-    n_seeds=10,
     verbose=False,
     key=jax.random.PRNGKey(1),
 )
@@ -457,12 +459,11 @@ for n in N_VALUES:
     )
     t0 = time.perf_counter()
     res = hf.run(
-        "vi_linear",
-        n_iterations=50,
+        "mgvi",
+        n_iterations=10,
         n_samples=6,
         n_posterior_samples=500,
-        n_seeds=10,
-        verbose=False,
+            verbose=False,
         key=jax.random.PRNGKey(n),
     )
     dt = time.perf_counter() - t0
@@ -541,12 +542,11 @@ for pop_name, cfg in POP_CONFIGS.items():
         data_type="spectroscopy",
     )
     res = hf.run(
-        "vi_linear",
-        n_iterations=50,
+        "mgvi",
+        n_iterations=10,
         n_samples=6,
         n_posterior_samples=500,
-        n_seeds=10,
-        verbose=False,
+            verbose=False,
         key=jax.random.PRNGKey(int(hashlib.sha256(pop_name.encode()).hexdigest(), 16) % 2**31),
     )
     pop_results[pop_name] = res
@@ -923,10 +923,9 @@ for i in range(min(4, N_GAL)):
     )
     res_i = fitter_i.run(
         "vi",
-        n_iterations=15,
+        n_iterations=8,
         n_samples=6,
-        n_seeds=3,
-        n_posterior_samples=500,
+            n_posterior_samples=500,
         verbose=False,
     )
     dt = time.perf_counter() - t0
@@ -994,11 +993,10 @@ hfitter_spec = PopulationFitter(
     data_type="spectroscopy",
 )
 result_hier_spec = hfitter_spec.run(
-    "vi_linear",
-    n_iterations=50,
-    n_samples=6,
+    "mgvi",
+    n_iterations=10,
+    n_samples=4,
     n_posterior_samples=500,
-    n_seeds=10,
     verbose=False,
     key=jax.random.PRNGKey(0),
 )
@@ -1108,11 +1106,10 @@ hfitter_phot = PopulationFitter(
     data_type="photometry",
 )
 result_hier_phot = hfitter_phot.run(
-    "vi_linear",
-    n_iterations=50,
-    n_samples=6,
+    "mgvi",
+    n_iterations=10,
+    n_samples=4,
     n_posterior_samples=500,
-    n_seeds=10,
     verbose=False,
     key=jax.random.PRNGKey(1),
 )
@@ -1344,12 +1341,11 @@ for n_sub in N_VALUES:
     )
     t0 = time.perf_counter()
     res_sub = hf_sub.run(
-        "vi_linear",
-        n_iterations=50,
+        "mgvi",
+        n_iterations=10,
         n_samples=6,
         n_posterior_samples=500,
-        n_seeds=10,
-        verbose=False,
+            verbose=False,
         key=jax.random.PRNGKey(n_sub),
     )
     dt = time.perf_counter() - t0

@@ -82,7 +82,7 @@ print(f"  3. CSP weights (trapz):       {t_weights:8.1f} μs")
 
 # 4. Metallicity interpolation
 t_met, ssp_at_z = bench(
-    "Met interp", lambda: interpolate_metallicity(ssp.ssp_flux, ssp.ssp_lgmet, p["log_z"])
+    "Met interp", lambda: interpolate_metallicity(ssp.ssp_flux, ssp.ssp_lgmet, p["log_z_abs"])
 )
 print(f"  4. Metallicity interpolation: {t_met:8.1f} μs")
 
@@ -92,11 +92,11 @@ t_dust_pl, dust_pl = bench(
     lambda: two_component_dust(
         ssp.ssp_wave,
         model.ssp_ages_yr,
-        p["tau_v1"],
-        p["tau_v2"],
+        p["tau_bc"],
+        p["tau_diff"],
         law_bc="power_law",
         law_diff="power_law",
-        n_slope=p["dust_n"],
+        n_slope=p["dust_slope"],
     ),
 )
 print(f"  5a. Dust (power_law):         {t_dust_pl:8.1f} μs")
@@ -107,11 +107,11 @@ t_dust_cal, dust_cal = bench(
     lambda: two_component_dust(
         ssp.ssp_wave,
         model.ssp_ages_yr,
-        p["tau_v1"],
-        p["tau_v2"],
+        p["tau_bc"],
+        p["tau_diff"],
         law_bc="calzetti",
         law_diff="calzetti",
-        n_slope=p["dust_n"],
+        n_slope=p["dust_slope"],
     ),
 )
 print(f"  5b. Dust (calzetti):          {t_dust_cal:8.1f} μs")
@@ -122,11 +122,11 @@ t_dust_kc, _ = bench(
     lambda: two_component_dust(
         ssp.ssp_wave,
         model.ssp_ages_yr,
-        p["tau_v1"],
-        p["tau_v2"],
+        p["tau_bc"],
+        p["tau_diff"],
         law_bc="kriek_conroy",
         law_diff="kriek_conroy",
-        n_slope=p["dust_n"],
+        n_slope=p["dust_slope"],
     ),
 )
 print(f"  5c. Dust (kriek_conroy):      {t_dust_kc:8.1f} μs")
@@ -137,11 +137,11 @@ t_dust_smc, _ = bench(
     lambda: two_component_dust(
         ssp.ssp_wave,
         model.ssp_ages_yr,
-        p["tau_v1"],
-        p["tau_v2"],
+        p["tau_bc"],
+        p["tau_diff"],
         law_bc="smc",
         law_diff="smc",
-        n_slope=p["dust_n"],
+        n_slope=p["dust_slope"],
     ),
 )
 print(f"  5d. Dust (smc):               {t_dust_smc:8.1f} μs")

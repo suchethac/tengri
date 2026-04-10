@@ -131,9 +131,9 @@ def main():
 
     n_vi_iter = 5 if args.quick else 15
     n_samples = 50 if args.quick else 200
-    print(f"  native_geovi (n_iter={n_vi_iter}, n_samples={n_samples})...")
+    print(f"  vi_native (n_iter={n_vi_iter}, n_samples={n_samples})...")
     vi_post = fitter.run(
-        "native_geovi",
+        "vi_native",
         n_iterations=n_vi_iter,
         n_posterior_samples=n_samples,
         verbose=False,

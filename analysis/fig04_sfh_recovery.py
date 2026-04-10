@@ -180,11 +180,11 @@ def main():
     parser.add_argument(
         "--method",
         type=str,
-        default="raytrace",
-        choices=["raytrace", "geovi", "nuts"],
+        default="mcmc_raytrace",
+        choices=["mcmc_raytrace", "vi", "mcmc_nuts"],
         help="Inference method",
     )
-    parser.add_argument("--n-steps", type=int, default=400, help="MCMC steps for raytrace/nuts")
+    parser.add_argument("--n-steps", type=int, default=400, help="MCMC steps for mcmc_raytrace/mcmc_nuts")
     parser.add_argument("--n-grid", type=int, default=128, help="GP grid points")
     args = parser.parse_args()
 
@@ -193,11 +193,11 @@ def main():
 
     # Build fit kwargs based on method
     fit_kwargs = {}
-    if args.method == "raytrace":
+    if args.method == "mcmc_raytrace":
         fit_kwargs = dict(n_steps=args.n_steps, n_leapfrog_steps=50, n_burnin=200, step_size=0.05)
-    elif args.method == "geovi":
+    elif args.method == "vi":
         fit_kwargs = dict(n_iterations=15, n_posterior_samples=80)
-    elif args.method == "nuts":
+    elif args.method == "mcmc_nuts":
         fit_kwargs = dict(n_warmup=300, n_samples=200)
 
     results_phot = {}

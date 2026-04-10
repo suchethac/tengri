@@ -64,9 +64,9 @@ def run_benchmarks(n_repeats: int = 3):
     # Methods and their kwargs
     methods = {
         "MAP (Adam)": ("map", dict(n_steps=2000, learning_rate=0.03)),
-        "Ray Tracing": ("raytrace", dict(n_steps=400, n_leapfrog_steps=10, n_burnin=100)),
-        "NUTS": ("nuts", dict(n_warmup=300, n_samples=200, target_accept_rate=0.85)),
-        "geoVI": ("geovi", dict(n_iterations=15, n_posterior_samples=80)),
+        "Ray Tracing": ("mcmc_raytrace", dict(n_steps=400, n_leapfrog_steps=10, n_burnin=100)),
+        "NUTS": ("mcmc_nuts", dict(n_warmup=300, n_samples=200, target_accept_rate=0.85)),
+        "geoVI": ("vi", dict(n_iterations=15, n_posterior_samples=80)),
     }
 
     results = {}
@@ -84,7 +84,7 @@ def run_benchmarks(n_repeats: int = 3):
 
         for method_name, (method, kwargs) in methods.items():
             # Skip NUTS on stochastic (too slow)
-            if method == "nuts" and "Stochastic" in config_name:
+            if method == "mcmc_nuts" and "Stochastic" in config_name:
                 print(f"  {method_name}: SKIPPED (too slow for {config_name})")
                 results[config_name][method_name] = {
                     "times": [np.nan] * n_repeats,

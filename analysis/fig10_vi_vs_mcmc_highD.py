@@ -88,7 +88,7 @@ def run_comparison(model, n_rt_steps=2000, n_rt_burnin=200, n_vi_iter=15, quick=
     print(f"  Ray Tracing (n_steps={n_rt_steps})...", flush=True)
     t0 = time.time()
     rt_posterior = fitter.run(
-        "raytrace",
+        "mcmc_raytrace",
         init_from=map_result,
         n_burnin=n_rt_burnin,
         n_steps=n_rt_steps,
@@ -106,10 +106,10 @@ def run_comparison(model, n_rt_steps=2000, n_rt_burnin=200, n_vi_iter=15, quick=
     # geoVI
     if quick:
         n_vi_iter = 5
-    print(f"  native_geovi (n_iter={n_vi_iter})...", flush=True)
+    print(f"  vi_native (n_iter={n_vi_iter})...", flush=True)
     t0 = time.time()
     vi_posterior = fitter.run(
-        "native_geovi",
+        "vi_native",
         n_iterations=n_vi_iter,
         n_posterior_samples=200 if not quick else 50,
         verbose=False,

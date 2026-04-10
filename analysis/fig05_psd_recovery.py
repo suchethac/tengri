@@ -131,13 +131,13 @@ def plot_psd_corner(results_phot, results_spec):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--method", type=str, default="raytrace", choices=["raytrace", "geovi"])
+    parser.add_argument("--method", type=str, default="mcmc_raytrace", choices=["mcmc_raytrace", "vi"])
     args = parser.parse_args()
 
     fit_kwargs = {}
-    if args.method == "raytrace":
+    if args.method == "mcmc_raytrace":
         fit_kwargs = dict(n_steps=2000, n_leapfrog_steps=50, n_burnin=200, step_size=0.05)
-    elif args.method == "geovi":
+    elif args.method == "vi":
         fit_kwargs = dict(n_iterations=50, n_posterior_samples=100)
 
     key = jax.random.PRNGKey(123)

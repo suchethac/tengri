@@ -221,6 +221,7 @@ class PrecomputedData:
     spectroscopy: object | None = None  # SpectroscopicPrecomputation
     dust_age_weights: jnp.ndarray | None = None  # sigmoid weights for two-component dust
     igm_at_effective_wavelengths: jnp.ndarray | None = None  # IGM T(λ_eff) for fixed z
+    effective_bandwidths_hz: jnp.ndarray | None = None  # Voronoi Δν per filter (Hz)
 
 
 @dataclasses.dataclass
@@ -753,10 +754,33 @@ class SEDModel:
 
             igm_eff = igm_transmission(phot.effective_wavelengths, self._z_fixed)
 
+        # Voronoi frequency bandwidths for L_absorbed broadband estimate.
+        # Each filter is assigned a non-overlapping frequency interval via
+        # Voronoi tessellation at the filter effective frequencies.  This
+        # converts the naive sum(L_ν) into a proper ∫L_ν dν quadrature.
+        eff_bw = None
+        if phot is not None and self._z_fixed is not None:
+            _c_aa = 2.998e18  # speed of light in Angstrom/s
+            eff_rest = phot.effective_wavelengths / (1.0 + self._z_fixed)
+            eff_nu = _c_aa / eff_rest  # Hz, decreasing order (UV first)
+
+            sort_idx = jnp.argsort(eff_nu)
+            nu_sorted = eff_nu[sort_idx]
+            midpoints = 0.5 * (nu_sorted[:-1] + nu_sorted[1:])
+            lower = nu_sorted[0] - 0.5 * (nu_sorted[1] - nu_sorted[0])
+            upper = nu_sorted[-1] + 0.5 * (nu_sorted[-1] - nu_sorted[-2])
+            edges = jnp.concatenate(
+                [jnp.array([jnp.maximum(lower, 0.0)]), midpoints, jnp.array([upper])]
+            )
+            dnu_sorted = edges[1:] - edges[:-1]
+            unsort_idx = jnp.argsort(sort_idx)
+            eff_bw = dnu_sorted[unsort_idx]
+
         return PrecomputedData(
             photometry=phot,
             dust_age_weights=dust_age_w,
             igm_at_effective_wavelengths=igm_eff,
+            effective_bandwidths_hz=eff_bw,
         )
 
     def _build_compositional_kernels(self):

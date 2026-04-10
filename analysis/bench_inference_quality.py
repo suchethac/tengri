@@ -96,13 +96,13 @@ def get_method_configs(quick: bool):
             "MAP": ("map", dict(
                 n_steps=500, learning_rate=0.03,
             )),
-            "native_geovi": ("geovi", dict(
+            "vi_native": ("vi_native", dict(
                 n_iterations=5, n_posterior_samples=50,
             )),
-            "Ray Tracing": ("raytrace", dict(
+            "Ray Tracing": ("mcmc_raytrace", dict(
                 n_steps=200, n_burnin=50, n_leapfrog_steps=10,
             )),
-            "NUTS": ("nuts", dict(
+            "NUTS": ("mcmc_nuts", dict(
                 n_warmup=200, n_samples=200,
                 target_accept_rate=0.85,
             )),
@@ -114,13 +114,13 @@ def get_method_configs(quick: bool):
         "MAP": ("map", dict(
             n_steps=2000, learning_rate=0.03,
         )),
-        "native_geovi": ("geovi", dict(
+        "vi_native": ("vi_native", dict(
             n_iterations=10, n_posterior_samples=100,
         )),
-        "Ray Tracing": ("raytrace", dict(
+        "Ray Tracing": ("mcmc_raytrace", dict(
             n_steps=500, n_burnin=100, n_leapfrog_steps=10,
         )),
-        "NUTS": ("nuts", dict(
+        "NUTS": ("mcmc_nuts", dict(
             n_warmup=500, n_samples=500,
             target_accept_rate=0.85,
         )),
@@ -389,7 +389,7 @@ def plot_ess_per_sec(all_metrics):
 
     colors = {
         "MAP": "#999999",
-        "native_geovi": "#d62728",
+        "vi_native": "#d62728",
         "Ray Tracing": "#ff7f0e",
         "NUTS": "#2ca02c",
         "geovi_nuts": "#9467bd",

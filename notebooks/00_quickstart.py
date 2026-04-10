@@ -69,6 +69,9 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
+os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.45")
+
 from tengri import (
     Fitter,
     Fixed,
@@ -362,24 +365,17 @@ t0 = time.perf_counter()
 result_map_param = fitter_param.run("map", n_steps=500, verbose=False)
 t_map = time.perf_counter() - t0
 
-# XLA compilation (one-time cost, cached on disk for future sessions)
-t0_compile = time.perf_counter()
-fitter_param.compile(verbose=False)
-t_compile = time.perf_counter() - t0_compile
-
-# Inference runtime (this is what you pay per galaxy after compilation)
+# Inference runtime
 t0 = time.perf_counter()
 result_geovi_param = fitter_param.run(
     "vi",
-    n_iterations=15,
-    n_samples=6,
-    n_seeds=5,
-    n_posterior_samples=10000,
+    n_iterations=8,
+    n_samples=4,
+    n_posterior_samples=500,
     verbose=False,
 )
 t_geovi = time.perf_counter() - t0
 
-print(f"XLA compile: {t_compile:.1f}s (one-time, cached)")
 print(f"MAP init:    {t_map:.1f}s")
 print(f"vi (geoVI): {t_geovi:.1f}s  ← runtime per galaxy")
 
@@ -516,7 +512,7 @@ t0 = time.perf_counter()
 result_nuts_param = fitter_param.run(
     "mcmc_nuts",
     n_warmup=500,
-    n_samples=1000,
+    n_samples=300,
     init_from=result_map_param,
     verbose=False,
 )
@@ -691,22 +687,16 @@ fitter_stoch = Fitter(
 )
 
 t0 = time.perf_counter()
-result_map_stoch = fitter_stoch.run("map", n_steps=1000, verbose=False)
+result_map_stoch = fitter_stoch.run("map", n_steps=500, verbose=False)
 t_map_s = time.perf_counter() - t0
-
-# XLA compilation (one-time cost, cached on disk)
-t0_compile_s = time.perf_counter()
-fitter_stoch.compile(verbose=False)
-t_compile_s = time.perf_counter() - t0_compile_s
 
 # Inference runtime
 t0 = time.perf_counter()
 result_geovi_stoch = fitter_stoch.run(
     "vi",
-    n_iterations=20,
-    n_samples=6,
-    n_seeds=5,
-    n_posterior_samples=10000,
+    n_iterations=8,
+    n_samples=4,
+    n_posterior_samples=500,
     verbose=False,
 )
 t_geovi_s = time.perf_counter() - t0
@@ -714,7 +704,6 @@ t_geovi_s = time.perf_counter() - t0
 print(f"\n{'=' * 55}")
 print(f"  137-dimensional posterior in {t_geovi_s:.1f}s runtime")
 print(f"{'=' * 55}")
-print(f"  XLA compile: {t_compile_s:.1f}s (one-time, cached)")
 print(f"  MAP init:    {t_map_s:.1f}s")
 print(f"  vi (geoVI): {t_geovi_s:.1f}s  ← runtime per galaxy")
 
@@ -949,13 +938,13 @@ print("  " + "=" * 75)
 print(f"  {'Model':<20s} {'D':>4s}  {'Method':<16s} {'Compile':>8s} {'Runtime':>8s}  Notes")
 print("  " + "-" * 75)
 print(
-    f"  {'Parametric':<20s} {'7':>4s}  {'vi (geoVI)':<16s} {t_compile:>7.1f}s {t_geovi:>7.1f}s  Default"
+    f"  {'Parametric':<20s} {'7':>4s}  {'vi (geoVI)':<16s} {'N/A':>7s} {t_geovi:>7.1f}s  Default"
 )
 print(
     f"  {'Parametric':<20s} {'7':>4s}  {'NUTS':<16s} {'':>8s} {t_nuts:>7.1f}s  Exact, gold standard"
 )
 print(
-    f"  {'Stochastic':<20s} {'137':>4s}  {'vi (geoVI)':<16s} {t_compile_s:>7.1f}s {t_geovi_s:>7.1f}s  Default"
+    f"  {'Stochastic':<20s} {'137':>4s}  {'vi (geoVI)':<16s} {'N/A':>7s} {t_geovi_s:>7.1f}s  Default"
 )
 print(
     f"  {'Stochastic':<20s} {'137':>4s}  {'Ray Tracing':<16s} {'':>8s} {t_rt_s:>7.1f}s  Exact (Behroozi 2025)"

@@ -237,10 +237,9 @@ result_map = fitter_spec.run("map", n_steps=500, verbose=False)
 t0 = time.perf_counter()
 result_geovi_spec = fitter_spec.run(
     "vi",
-    n_iterations=15,
-    n_samples=6,
-    n_seeds=5,
-    n_posterior_samples=5000,
+    n_iterations=8,
+    n_samples=4,
+    n_posterior_samples=500,
     verbose=False,
 )
 t_run = time.perf_counter() - t0
@@ -340,14 +339,14 @@ result_laplace = fitter_spec.run(
     "laplace",
     key=jax.random.PRNGKey(10),
     init_from=result_map,
-    n_samples=5000,
+    n_samples=300,
     verbose=False,
 )
 result_pathfinder = fitter_spec.run(
     "pathfinder",
     key=jax.random.PRNGKey(11),
     init_from=result_map,
-    n_samples=5000,
+    n_samples=300,
     verbose=False,
 )
 print(f"Laplace:    {result_laplace.wall_time_s:.1f}s")
@@ -479,15 +478,14 @@ t0_compile = time.perf_counter()
 fitter_stoch_spec.compile(verbose=False)
 t_compile = time.perf_counter() - t0_compile
 
-_ = fitter_stoch_spec.run("map", n_steps=1000, verbose=False)
+_ = fitter_stoch_spec.run("map", n_steps=500, verbose=False)
 
 t0 = time.perf_counter()
 result_stoch_spec = fitter_stoch_spec.run(
     "vi",
-    n_iterations=20,
-    n_samples=6,
-    n_seeds=5,
-    n_posterior_samples=5000,
+    n_iterations=8,
+    n_samples=4,
+    n_posterior_samples=500,
     verbose=False,
 )
 t_run = time.perf_counter() - t0
@@ -543,13 +541,12 @@ plt.show()
 # Fit photometry — separate model with photometry-only observation
 model_stoch_phot = SEDModel(spec_stoch, ssp_data, observation=obs_phot)
 fitter_stoch_phot = Fitter(model_stoch_phot, mock_phot_s.flux_obs, mock_phot_s.noise)
-_ = fitter_stoch_phot.run("map", n_steps=1000, verbose=False)
+_ = fitter_stoch_phot.run("map", n_steps=500, verbose=False)
 result_stoch_phot = fitter_stoch_phot.run(
     "vi",
-    n_iterations=20,
-    n_samples=6,
-    n_seeds=5,
-    n_posterior_samples=5000,
+    n_iterations=8,
+    n_samples=4,
+    n_posterior_samples=500,
     verbose=False,
 )
 
@@ -610,10 +607,9 @@ for snr in [10, 30, 100]:
     _ = fitter_snr.run("map", n_steps=500, verbose=False)
     res_snr = fitter_snr.run(
         "vi",
-        n_iterations=15,
-        n_samples=6,
-        n_seeds=3,
-        n_posterior_samples=2000,
+        n_iterations=8,
+        n_samples=4,
+        n_posterior_samples=400,
         verbose=False,
     )
     snr_results[snr] = res_snr

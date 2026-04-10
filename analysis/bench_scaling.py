@@ -291,7 +291,7 @@ def bench_catalog_scaling(ssp, n_vi_iter, quick):
         fitter_first = Fitter(model, batch[0]["flux_obs"], batch[0]["noise"])
         t0_compile = time.perf_counter()
         _ = fitter_first.run(
-            "native_geovi",
+            "vi_native",
             n_iterations=n_vi_iter,
             verbose=False,
             key=jax.random.PRNGKey(99),
@@ -302,7 +302,7 @@ def bench_catalog_scaling(ssp, n_vi_iter, quick):
         t0_batch = time.perf_counter()
         _ = fitter_first.fit_batch(
             batch,
-            method="native_geovi",
+            method="vi_native",
             n_iterations=n_vi_iter,
             verbose=False,
             key=jax.random.PRNGKey(100),

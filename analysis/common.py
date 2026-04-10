@@ -247,7 +247,7 @@ class FitResult:
 def fit_galaxy(
     model: Model,
     galaxy: MockGalaxy,
-    method: str = "raytrace",
+    method: str = "mcmc_raytrace",
     data_type: str = "photometry",
     **kwargs,
 ) -> FitResult:
@@ -260,7 +260,7 @@ def fit_galaxy(
     galaxy : MockGalaxy
         Mock data.
     method : str
-        "map", "raytrace", "nuts", or "geovi".
+        "map", "mcmc_raytrace", "mcmc_nuts", or "vi".
     data_type : str
         "photometry" or "spectroscopy".
     **kwargs
@@ -286,7 +286,7 @@ def fit_galaxy(
     t0 = time.time()
     key = kwargs.pop("key", jax.random.PRNGKey(42))
 
-    if method in ("raytrace", "nuts", "geovi"):
+    if method in ("mcmc_raytrace", "mcmc_nuts", "vi", "vi_linear"):
         result_map = fitter.run("map", n_steps=1000, learning_rate=0.03, verbose=False, key=key)
         key = jax.random.fold_in(key, 1)
         posterior = fitter.run(method, init_from=result_map, key=key, verbose=False, **kwargs)

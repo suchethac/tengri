@@ -62,6 +62,9 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
+os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.45")
+
 from tengri import (
     Fitter,
     Fixed,
@@ -277,7 +280,6 @@ plt.show()
 # %%
 fitter = Fitter(model, data_joint, noise_joint)
 print(f"Fitter data_type: {fitter.data_type}")
-fitter.compile(verbose=False)
 
 t0 = time.perf_counter()
 result_map = fitter.run("map", n_steps=500, verbose=False)
@@ -381,7 +383,6 @@ obs_phot = Observation(
 )
 model_phot = SEDModel(spec, ssp_data, observation=obs_phot)
 fitter_phot = Fitter(model_phot, mock_phot.flux_obs, mock_phot.noise)
-fitter_phot.compile(verbose=False)
 result_phot = fitter_phot.run("map", n_steps=500, verbose=False)
 
 # Spectroscopy-only model and fit
@@ -390,7 +391,6 @@ obs_spec = Observation(
 )
 model_spec = SEDModel(spec, ssp_data, observation=obs_spec)
 fitter_spec = Fitter(model_spec, mock_spec.flux_obs, mock_spec.noise)
-fitter_spec.compile(verbose=False)
 result_spec = fitter_spec.run("map", n_steps=500, verbose=False)
 
 # %%
@@ -441,10 +441,9 @@ t0 = time.perf_counter()
 result_geovi = fitter.run(
     "vi",
     key=k_post,
-    n_iterations=15,
-    n_samples=6,
-    n_seeds=5,
-    n_posterior_samples=2000,
+    n_iterations=8,
+    n_samples=4,
+    n_posterior_samples=400,
     verbose=False,
 )
 t_geovi = time.perf_counter() - t0
@@ -454,7 +453,7 @@ result_laplace = fitter.run(
     "laplace",
     key=k_lap,
     init_from=result_map,
-    n_samples=2000,
+    n_samples=300,
     verbose=False,
 )
 t_laplace = time.perf_counter() - t0
@@ -516,19 +515,17 @@ k_phot_vi, k_spec_vi = jax.random.split(jax.random.PRNGKey(77), 2)
 result_geovi_phot = fitter_phot.run(
     "vi",
     key=k_phot_vi,
-    n_iterations=15,
-    n_samples=6,
-    n_seeds=5,
-    n_posterior_samples=2000,
+    n_iterations=8,
+    n_samples=4,
+    n_posterior_samples=400,
     verbose=False,
 )
 result_geovi_spec = fitter_spec.run(
     "vi",
     key=k_spec_vi,
-    n_iterations=15,
-    n_samples=6,
-    n_seeds=5,
-    n_posterior_samples=2000,
+    n_iterations=8,
+    n_samples=4,
+    n_posterior_samples=400,
     verbose=False,
 )
 

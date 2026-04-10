@@ -172,7 +172,7 @@ def main():
     n_burnin = 50 if args.quick else 200
     print(f"  Ray Tracing (n_steps={n_steps})...")
     rt_post = fitter.run(
-        "raytrace",
+        "mcmc_raytrace",
         init_from=map_result,
         n_burnin=n_burnin,
         n_steps=n_steps,

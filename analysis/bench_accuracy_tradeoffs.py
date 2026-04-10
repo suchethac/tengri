@@ -199,7 +199,7 @@ def study_rt_acceptance(ssp, obs, *, n_steps=50, n_burnin=10):
         t0 = time.perf_counter()
         try:
             post = fitter.run(
-                "raytrace",
+                "mcmc_raytrace",
                 key=run_key,
                 n_burnin=n_burnin,
                 n_steps=n_steps,
