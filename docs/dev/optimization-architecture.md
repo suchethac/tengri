@@ -19,9 +19,8 @@ model.predict_photometry(params, mode="...")
 
   "exact"          Raw pipeline, no JIT.           Reference path.
   "compositional"  Full-resolution JIT kernel.     Bit-identical to exact.
-  "precomputed"    SSP x filter at eff. wavelengths. Fast, ~0.4% error (stellar).
   "hybrid"         Precomputed SSP + exact non-stellar. Fast AND exact non-stellar.
-  "auto"           Picks fastest available.
+  "auto"           Picks fastest available (hybrid → compositional → exact).
 ```
 
 ### Performance (SDSS ugriz, Apple M-series CPU, post-JIT)
@@ -64,21 +63,21 @@ Full physics: DPL SFH + two-component dust + MBB dust emission + parametric AGN.
 | Mode           | Latency | Speedup | Max error | Mean error | Status  |
 |----------------|---------|---------|-----------|------------|---------|
 | hybrid         | 1073 us |    61x  | 2.9%      | 0.8%       | OK      |
-| precomputed    |  668 us |    98x  | >1e14%    | >1e13%     | BROKEN  |
 | compositional  | 1114 us |    59x  | 0.000000  | 0.000000   | OK      |
 | exact          |65339 us |     1x  | reference | reference  | OK      |
 
-Note: precomputed mode is catastrophically broken for panchromatic filter sets
-because MBB dust emission evaluated at effective wavelengths produces wildly
-incorrect normalization in the far-IR. The hybrid mode handles this correctly
-by computing dust IR emission at full wavelength resolution via emission_helpers.
+Note: The old "precomputed" mode (effective-wavelength-only kernels) has been
+deleted. It was catastrophically broken for panchromatic filter sets (MBB at
+effective wavelengths → wildly incorrect far-IR normalization). The hybrid mode
+replaces it with <3% error across UV-to-submm by computing non-stellar
+emission at full wavelength resolution via emission_helpers.
 
 **L_absorbed broadband estimate:** Uses Voronoi frequency bandwidth weighting
 to convert the per-band sum into a proper ∫L_ν dν quadrature. Without this
 weighting, the estimate is off by orders of magnitude for UV-to-submm filter
 sets (the naive sum has wrong units: erg/s/Hz × n_filters, not erg/s).
 
-## Architecture: Four Data/Kernel Layers
+## Architecture: Three Data/Kernel Layers
 
 ```python
 @dataclass
@@ -89,13 +88,7 @@ class PrecomputedData:
     spectroscopy         # SSP rebinned to wave_obs pixels
     dust_age_weights     # sigmoid weights for two-component dust
     igm_at_effective_wavelengths  # IGM T(lambda_eff) for fixed z
-
-@dataclass
-class PrecomputedKernels:
-    """Mode 1: JIT kernels evaluating everything at filter effective wavelengths."""
-    photometry           # build_fused_photometry
-    photometry_ztable    # build_fused_photometry_ztable
-    spectrum             # build_fused_spectrum
+    effective_bandwidths_hz       # Voronoi Δν per filter (Hz)
 
 @dataclass
 class CompositionalKernels:
@@ -114,7 +107,7 @@ class HybridKernels:
 ```
 
 Dispatch priority in `mode="auto"`:
-**Hybrid -> Precomputed -> Compositional -> Exact**
+**Hybrid -> Compositional -> Exact**
 
 ## Optimization 1: JIT Compilation (Compositional Mode)
 
