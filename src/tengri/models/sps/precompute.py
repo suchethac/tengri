@@ -35,6 +35,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.core.preintegrate import preintegrate_grid
 from tengri.utils.conversions import lnu_to_fnu
 
 # numpy >= 2.0 uses trapezoid; older versions used trapz
@@ -191,83 +192,27 @@ def precompute_photometry(
     PhotometricPrecomputation
         Pre-computed data for the fused photometry kernel.
     """
-    n_filters = len(filter_waves)
-
-    # Detect 4D alpha-enhanced grid
-    _is_4d = ssp_data.ssp_flux.ndim == 4
-
-    # Redshift SSP wavelengths to observed frame
-    wave_obs = ssp_data.ssp_wave * (1.0 + redshift)
-
-    # Effective wavelengths per filter
-    eff_waves = []
-    for fw, ft in zip(filter_waves, filter_trans):
-        lam_eff = jnp.trapezoid(ft * fw**2, fw) / jnp.trapezoid(ft * fw, fw)
-        eff_waves.append(lam_eff)
-    eff_waves = jnp.array(eff_waves)
-    eff_waves_rest = eff_waves / (1.0 + redshift)
-
-    # Pre-integrate SSP through each filter
-    # Φ_{ijb} = ∫ SSP · T · λ dλ / ∫ T · λ dλ
-    # Ψ_{ijb} = ∫ SSP · (λ - λ_eff) · T · λ dλ / ∫ T · λ dλ  (Taylor moment)
-    import numpy as np
-
-    ssp_flux_np = np.asarray(ssp_data.ssp_flux)
-    wave_obs_np = np.asarray(wave_obs)
-    eff_waves_np = np.asarray(eff_waves)
-
-    if _is_4d:
-        n_met, n_alpha, n_age, _ = ssp_flux_np.shape
-        ssp_flat = ssp_flux_np.reshape(n_met * n_alpha, n_age, -1)
-        ssp_phot_flat = np.zeros((n_met * n_alpha, n_age, n_filters))
-        ssp_moment_flat = np.zeros((n_met * n_alpha, n_age, n_filters))
-        for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-            fw_np, ft_np = np.asarray(fw), np.asarray(ft)
-            denom = _np_trapezoid(ft_np * fw_np, fw_np)
-            ssp_on_filt = _vectorized_interp(fw_np, wave_obs_np, ssp_flat)
-            weight = ft_np[None, None, :] * fw_np[None, None, :]
-            integrand = ssp_on_filt * weight
-            num = _np_trapezoid(integrand, fw_np, axis=-1)
-            ssp_phot_flat[:, :, f_idx] = num / max(denom, 1e-30)
-            if taylor_correction:
-                dlam = (fw_np - eff_waves_np[f_idx])[None, None, :]
-                num_moment = _np_trapezoid(ssp_on_filt * dlam * weight, fw_np, axis=-1)
-                ssp_moment_flat[:, :, f_idx] = num_moment / max(denom, 1e-30)
-        ssp_phot = jnp.array(ssp_phot_flat.reshape(n_met, n_alpha, n_age, n_filters))
-        ssp_moment = (
-            jnp.array(ssp_moment_flat.reshape(n_met, n_alpha, n_age, n_filters))
-            if taylor_correction
-            else None
-        )
-    else:
-        n_met, n_age, _ = ssp_flux_np.shape
-        ssp_phot_np = np.zeros((n_met, n_age, n_filters))
-        ssp_moment_np = np.zeros((n_met, n_age, n_filters))
-        for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-            fw_np, ft_np = np.asarray(fw), np.asarray(ft)
-            denom = _np_trapezoid(ft_np * fw_np, fw_np)
-            ssp_on_filt = _vectorized_interp(fw_np, wave_obs_np, ssp_flux_np)
-            weight = ft_np[None, None, :] * fw_np[None, None, :]
-            integrand = ssp_on_filt * weight
-            num = _np_trapezoid(integrand, fw_np, axis=-1)
-            ssp_phot_np[:, :, f_idx] = num / max(denom, 1e-30)
-            if taylor_correction:
-                dlam = (fw_np - eff_waves_np[f_idx])[None, None, :]
-                num_moment = _np_trapezoid(ssp_on_filt * dlam * weight, fw_np, axis=-1)
-                ssp_moment_np[:, :, f_idx] = num_moment / max(denom, 1e-30)
-        ssp_phot = jnp.array(ssp_phot_np)
-        ssp_moment = jnp.array(ssp_moment_np) if taylor_correction else None
-
-    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
+    # Delegate to preintegrate_grid, which handles all wavelength integration
+    # for arbitrary grid dimensionality (2D for normal SSP, 4D for alpha-enhanced).
+    preint = preintegrate_grid(
+        templates=np.asarray(ssp_data.ssp_flux),
+        wave_rest=np.asarray(ssp_data.ssp_wave),
+        filter_waves=[np.asarray(fw) for fw in filter_waves],
+        filter_trans=[np.asarray(ft) for ft in filter_trans],
+        redshift=redshift,
+        dl_cm=dl_cm,
+        axes=(np.asarray(ssp_data.ssp_lgmet),),
+        taylor=taylor_correction,
+    )
 
     return PhotometricPrecomputation(
-        ssp_phot=ssp_phot,
-        ssp_phot_moment=ssp_moment,
-        effective_wavelengths=eff_waves,
-        effective_wavelengths_rest=eff_waves_rest,
-        flux_scale=float(flux_scale),
+        ssp_phot=preint.phot,
+        ssp_phot_moment=preint.moment,
+        effective_wavelengths=preint.effective_wavelengths,
+        effective_wavelengths_rest=preint.effective_wavelengths_rest,
+        flux_scale=preint.flux_scale,
         redshift=float(redshift),
-        n_filters=n_filters,
+        n_filters=preint.n_filters,
     )
 
 
