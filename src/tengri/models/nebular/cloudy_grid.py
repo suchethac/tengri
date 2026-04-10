@@ -316,9 +316,11 @@ class CloudyGridBackend:
         """
         from tengri.core.preintegrate import preintegrate_grid, preintegrate_lines
 
-        # Convert continuum from log10 to linear Lsun_Hz/Q_H
-        # Note: grid has floor of 10^{-95} for log(0), so 10^(-95) ≈ 0 in practice
-        cont_linear = 10.0 ** np.asarray(self.grid.cont_luminosity)
+        # Convert continuum from log10 to linear Lsun_Hz/Q_H.
+        # The CLOUDY grid uses a floor of log10 = -95 for zero luminosity.
+        # Clip to zero below -90 to avoid 1e-95 polluting the filter integral.
+        cont_log = np.asarray(self.grid.cont_luminosity)
+        cont_linear = np.where(cont_log > -90.0, 10.0**cont_log, 0.0)
 
         # Preintegrate continuum through filters
         self._preint_continuum = preintegrate_grid(

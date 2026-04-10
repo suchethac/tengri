@@ -128,11 +128,33 @@ def build_hybrid_photometry(model):
     has_nebular = model._nebular_backend is not None and getattr(
         model._nebular_backend, "has_free_params", False
     )
+    # Check if preintegrated nebular data is available
+    _has_preint_neb = has_nebular and getattr(
+        model._nebular_backend, "_has_preint_photometry", False
+    )
     if has_nebular:
         nebular_backend = model._nebular_backend
         ssp_log_ages_yr = model.ssp_log_ages_yr
         _neb_dust_mode = getattr(model, "_neb_dust", "bc")
         _neb_bc_fn = getattr(model, "_neb_dust_law_bc_fn", law_bc_fn)
+    if _has_preint_neb:
+        # Capture preintegrated CLOUDY data for fast nebular photometry
+        from tengri.core.preintegrate import interp_nd_triweight
+
+        _neb_cont_phot = nebular_backend._preint_continuum.phot  # (n_Z, n_age, n_logU, n_filt)
+        _neb_cont_axes = nebular_backend._preint_continuum.axes
+        _neb_cont_edges = nebular_backend._preint_continuum.edges
+        _neb_line_weights = nebular_backend._preint_lines.line_filter_weights  # (n_lines, n_filt)
+        _neb_line_axes = nebular_backend._preint_lines.axes
+        _neb_line_edges = nebular_backend._preint_lines.edges
+        # Line luminosity grid (still in log10 space for triweight interp)
+        _neb_line_lum = nebular_backend.grid.line_luminosity  # (n_Z, n_age, n_logU, n_lines)
+        # Young SSP indices and CLOUDY age grid for age-sum
+        _neb_young_idx = jnp.array(nebular_backend._young_idx)
+        _neb_qh_table = nebular_backend._qh_table  # (n_met_ssp, n_age_ssp)
+        _neb_qh_log_met = nebular_backend._qh_log_met
+        _neb_qh_log_age = nebular_backend._qh_log_age
+        _neb_lya_idx = int(jnp.argmin(jnp.abs(nebular_backend.grid.line_wavelengths - 1215.67)))
 
     # Shock
     has_shock = getattr(model, "_shock_enabled", False)
@@ -624,6 +646,112 @@ def build_hybrid_photometry(model):
 
         return flux_attenuated, L_absorbed_stellar, weights
 
+    def _nebular_phot_preintegrated(
+        weights,
+        log_z_abs,
+        neb_logU,
+        neb_logZ_gas,
+        neb_fesc,
+        neb_fesc_lya,
+        tau_bc,
+        tau_diff,
+        dust_slope,
+        dust_bump_strength,
+        tau_v=0.0,
+    ):
+        """Preintegrated nebular photometry (continuum + lines).
+
+        Same pattern as _stellar_phot: age-weighted sum over preintegrated
+        grid, with dust at effective wavelengths.  Operates on (n_filters,)
+        instead of (n_wave,) — no filter integration loop needed.
+        """
+        _gas_z = jnp.where(neb_logZ_gas is None, log_z_abs, neb_logZ_gas)
+
+        # --- Nebular continuum: age-sum over preintegrated CLOUDY grid ---
+        # For each young SSP age, interp CLOUDY grid at (Z_gas, age, logU)
+        # to get (n_filters,) per Q_H, then scale by Q_H × weight × (1-fesc)
+        cont_phot = jnp.zeros(n_filters, dtype=jnp.float64)
+
+        # Q_H interpolation helper (bilinear in SSP met × age)
+        def _get_qh(log_z, log_age_yr):
+            iz = jnp.clip(
+                jnp.searchsorted(_neb_qh_log_met, log_z) - 1, 0, len(_neb_qh_log_met) - 2
+            )
+            ia = jnp.clip(
+                jnp.searchsorted(_neb_qh_log_age, log_age_yr) - 1, 0, len(_neb_qh_log_age) - 2
+            )
+            fz = (log_z - _neb_qh_log_met[iz]) / jnp.maximum(
+                _neb_qh_log_met[iz + 1] - _neb_qh_log_met[iz], 1e-30
+            )
+            fa = (log_age_yr - _neb_qh_log_age[ia]) / jnp.maximum(
+                _neb_qh_log_age[ia + 1] - _neb_qh_log_age[ia], 1e-30
+            )
+            fz = jnp.clip(fz, 0.0, 1.0)
+            fa = jnp.clip(fa, 0.0, 1.0)
+            return (
+                (1 - fz) * (1 - fa) * _neb_qh_table[iz, ia]
+                + (1 - fz) * fa * _neb_qh_table[iz, ia + 1]
+                + fz * (1 - fa) * _neb_qh_table[iz + 1, ia]
+                + fz * fa * _neb_qh_table[iz + 1, ia + 1]
+            )
+
+        # Continuum: vmap over young ages
+        young_ages = ssp_log_ages_yr[_neb_young_idx]
+        young_weights = weights[_neb_young_idx]
+
+        def _cont_one_age(log_age_i, weight_i):
+            qh_i = _get_qh(log_z_abs, log_age_i)
+            # Triweight interp in (Z_gas, age_cloudy, logU) → (n_filters,) per Q_H
+            # The preint grid is in log10 linear space (10^log10_lum was done at preint time)
+            phot_per_qh = interp_nd_triweight(
+                _neb_cont_phot, _neb_cont_axes, _neb_cont_edges,
+                (_gas_z, log_age_i, neb_logU),
+            )
+            return weight_i * qh_i * phot_per_qh * (1.0 - neb_fesc)
+
+        cont_contribs = jax.vmap(_cont_one_age)(young_ages, young_weights)
+        cont_phot = jnp.sum(cont_contribs, axis=0)  # (n_filters,)
+
+        # --- Lines: same age-sum but on (n_lines,), then project to filters ---
+        def _line_one_age(log_age_i, weight_i):
+            qh_i = _get_qh(log_z_abs, log_age_i)
+            # Interp line luminosities in (Z_gas, age, logU) → (n_lines,) log10
+            log_lum_per_qh = interp_nd_triweight(
+                _neb_line_lum, _neb_line_axes, _neb_line_edges,
+                (_gas_z, log_age_i, neb_logU),
+            )
+            return weight_i * qh_i * (10.0**log_lum_per_qh) * (1.0 - neb_fesc)
+
+        line_contribs = jax.vmap(_line_one_age)(young_ages, young_weights)
+        total_line_lum = jnp.sum(line_contribs, axis=0)  # (n_lines,)
+
+        # Lya escape fraction correction
+        lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(1.0 - neb_fesc, 1e-10)
+        total_line_lum = total_line_lum.at[_neb_lya_idx].multiply(lya_scale)
+
+        # Project lines to filter space: (n_lines,) × (n_lines, n_filt) → (n_filt,)
+        line_phot = jnp.einsum("l,lf->f", total_line_lum, _neb_line_weights)
+
+        # Total nebular photometry (before dust)
+        neb_phot = cont_phot + line_phot
+
+        # Apply nebular dust at effective wavelengths
+        # (same approximation as stellar: evaluate dust curve at λ_eff per filter)
+        _law_kw = {"n_slope": dust_slope, "dust_bump_strength": dust_bump_strength}
+        _tau_bc_neb = tau_bc if not _is_single_dust else tau_v
+        _tau_diff_neb = tau_diff if not _is_single_dust else jnp.float64(0.0)
+        if _neb_dust_mode in ("bc", "neb"):
+            k_bc_neb = law_bc_fn(eff_waves_rest, **_law_kw)
+            neb_phot = neb_phot * jnp.exp(-_tau_bc_neb * k_bc_neb)
+        if _neb_dust_mode != "none":
+            if not _is_single_dust:
+                k_diff_neb = law_diff_fn(eff_waves_rest, **_law_kw)
+            else:
+                k_diff_neb = law_bc_fn(eff_waves_rest, **_law_kw)
+            neb_phot = neb_phot * jnp.exp(-_tau_diff_neb * k_diff_neb)
+
+        return neb_phot
+
     def _hybrid_phot_body(
         sfr_on_ssp,
         log_z_abs,
@@ -708,7 +836,10 @@ def build_hybrid_photometry(model):
         )
 
         # === STEP 2: Non-stellar SED at full wavelength resolution ===
-        # Check if any non-stellar components are active
+        # TODO: preintegrated non-stellar paths (CLOUDY, DL07, SKIRTOR)
+        # are implemented in _nebular_phot_preintegrated() but need
+        # calibration verification before enabling. For now, all
+        # non-stellar components use the full-wavelength path.
         _has_any_nonstell = (
             has_nebular or has_shock or has_dust_em_full or has_agn_full or has_radio or has_xray
         )
@@ -719,7 +850,6 @@ def build_hybrid_photometry(model):
             non_stellar_sed = jnp.zeros_like(ssp_wave_f64)
             L_abs_neb = jnp.float64(0.0)
 
-            # 2a: Nebular emission
             if has_nebular:
                 _sfr_last = weights[-1]
                 neb_raw = nebular_emission(
