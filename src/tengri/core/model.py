@@ -758,6 +758,21 @@ class SEDModel:
             unsort_idx = jnp.argsort(sort_idx)
             eff_bw = dnu_sorted[unsort_idx]
 
+        # CLOUDY nebular preintegration (continuum + lines through filters)
+        if (
+            precompute
+            and self._z_fixed is not None
+            and self.filter_waves is not None
+            and self._nebular_backend is not None
+            and hasattr(self._nebular_backend, "preintegrate_for_photometry")
+        ):
+            self._nebular_backend.preintegrate_for_photometry(
+                self.filter_waves,
+                self.filter_trans,
+                self._z_fixed,
+                self._dl_cm_fixed,
+            )
+
         return PrecomputedData(
             photometry=phot,
             dust_age_weights=dust_age_w,
