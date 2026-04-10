@@ -55,10 +55,10 @@ from tengri.core.fused_kernels import (
 )
 
 # Alias new names → old functions during transition (PR 1: naming only)
-build_hybrid_photometry = build_fused_photometry  # will be rewritten in PR 2
-build_hybrid_photometry_ztable = build_fused_photometry_ztable  # will be rewritten in PR 2
-build_hybrid_spectrum = build_fused_spectrum  # will be rewritten in PR 2
-is_hybrid_compatible = is_fused_compatible  # will be simplified in PR 2
+build_precomputed_photometry = build_fused_photometry  # old Tier 1
+build_precomputed_photometry_ztable = build_fused_photometry_ztable  # old Tier 1
+build_precomputed_spectrum = build_fused_spectrum  # old Tier 1
+is_precomputed_compatible = is_fused_compatible  # old Tier 1
 from tengri.core.param_translate import (
     _EVOLVING_ALPHA_PARAM_MAP,
     _EVOLVING_MET_PARAM_MAP,
@@ -229,7 +229,7 @@ class PrecomputedData:
 
 
 @dataclasses.dataclass
-class FusedKernels:
+class CompositionalKernels:
     """Level 2: Full-resolution JIT-compiled kernels.
 
     These compute entire SEDs at full wavelength resolution. The ``rest_sed``
@@ -244,18 +244,31 @@ class FusedKernels:
 
 
 @dataclasses.dataclass
-class HybridKernels:
-    """Level 3: Precomputed SSP stellar + exact non-stellar.
+class PrecomputedKernels:
+    """Level 1: Kernels using precomputed data at effective wavelengths.
 
-    Stellar photometry uses the precomputed SSP×filter einsum (fast).
-    Non-stellar components use ``emission_helpers.py`` at full wavelength
-    resolution, then integrate through filters.  This will be rewritten
-    in PR 2 — currently aliases the old Tier 1 effective-wavelength kernels.
+    These evaluate dust, AGN, and other components at filter effective
+    wavelengths only — fast but approximate.  Will be superseded by
+    HybridKernels (Mode 3) in PR 2.
     """
 
-    photometry: object | None = None  # build_hybrid_photometry
-    photometry_ztable: object | None = None  # build_hybrid_photometry_ztable
-    spectrum: object | None = None  # build_hybrid_spectrum
+    photometry: object | None = None  # build_precomputed_photometry
+    photometry_ztable: object | None = None  # build_precomputed_photometry_ztable
+    spectrum: object | None = None  # build_precomputed_spectrum
+
+
+@dataclasses.dataclass
+class HybridKernels:
+    """Mode 3: Precomputed SSP stellar + compositional non-stellar.
+
+    Stellar photometry uses the precomputed SSP×filter einsum (fast).
+    Non-stellar components use emission_helpers.py at full wavelength
+    resolution, then integrate through filters. Populated in PR 2.
+    """
+
+    photometry: object | None = None
+    photometry_ztable: object | None = None
+    spectrum: object | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -687,7 +700,7 @@ class SEDModel:
             self._z_fixed = None
 
         # =================================================================
-        # Three-level kernel hierarchy: Precomputed → Fused → Hybrid
+        # Three-level kernel hierarchy: PrecomputedData → CompositionalKernels → HybridKernels
         # =================================================================
 
         # Level 1: Precomputed data (SSP tensors, dust weights, IGM)
@@ -700,18 +713,23 @@ class SEDModel:
         self._spec_precomp = self._precomputed.spectroscopy
         self._ztable = self._precomputed.photometry_ztable
 
-        # Level 2: Fused kernels (full-resolution JIT)
-        self._fused = self._build_fused_kernels()
-        self._jit_exact_sed = self._fused.exact_sed
-        self._fused_rest_sed = self._fused.rest_sed
-        self._fused_tier2_phot = self._fused.photometry
-        self._fused_tier2_spec = self._fused.spectrum
+        # Level 2: Compositional kernels (full-resolution JIT)
+        self._compositional = self._build_compositional_kernels()
+        self._jit_exact_sed = self._compositional.exact_sed
+        self._fused_rest_sed = self._compositional.rest_sed  # backward-compat alias
+        self._fused_tier2_phot = self._compositional.photometry  # backward-compat alias
+        self._fused_tier2_spec = self._compositional.spectrum  # backward-compat alias
 
-        # Level 3: Hybrid kernels (precomputed SSP + exact non-stellar)
-        self._hybrid = self._build_hybrid_kernels()
-        self._fused_photometry = self._hybrid.photometry
-        self._fused_photometry_ztable = self._hybrid.photometry_ztable
-        self._fused_spectrum = self._hybrid.spectrum
+        # Level 1 legacy: Precomputed kernels at effective wavelengths (old Tier 1)
+        self._precomputed_kernels = self._build_precomputed_kernels()
+        self._fused_photometry = self._precomputed_kernels.photometry  # backward-compat
+        self._fused_photometry_ztable = (  # backward-compat
+            self._precomputed_kernels.photometry_ztable
+        )
+        self._fused_spectrum = self._precomputed_kernels.spectrum  # backward-compat
+
+        # Level 3: Hybrid kernels (precomputed SSP + exact non-stellar) — Populated in PR 2
+        self._hybrid = HybridKernels()
 
         # Auto-precompute spectroscopy from Observation config
         if (
@@ -762,7 +780,7 @@ class SEDModel:
             igm_at_effective_wavelengths=igm_eff,
         )
 
-    def _build_fused_kernels(self):
+    def _build_compositional_kernels(self):
         """Build Level 2: full-resolution JIT-compiled kernels."""
         exact_sed = build_exact_sed(self)
 
@@ -772,7 +790,7 @@ class SEDModel:
                 rest_sed = build_fused_rest_sed(self)
             except Exception as e:
                 warnings.warn(
-                    f"Fused rest-SED kernel build failed: {e}",
+                    f"Compositional rest-SED kernel build failed: {e}",
                     UserWarning,
                     stacklevel=2,
                 )
@@ -786,24 +804,36 @@ class SEDModel:
             with contextlib.suppress(Exception):
                 fused_phot = build_fused_tier2_photometry(self)
 
-        return FusedKernels(
+        return CompositionalKernels(
             rest_sed=rest_sed,
             photometry=fused_phot,
             spectrum=fused_spec,
             exact_sed=exact_sed,
         )
 
-    def _build_hybrid_kernels(self):
-        """Build Level 3: precomputed SSP + exact non-stellar kernels.
+    def _build_precomputed_kernels(self):
+        """Build Level 1: precomputed data kernels at effective wavelengths.
 
-        Currently aliases the old Tier 1 effective-wavelength kernels.
-        Will be rewritten in PR 2 to use emission_helpers at full resolution.
+        Currently uses old Tier 1 effective-wavelength kernels.
+        Will be superseded by HybridKernels in PR 2.
         """
-        hybrid_phot = None
-        if self._precomputed.photometry is not None and is_hybrid_compatible(self):
-            hybrid_phot = build_hybrid_photometry(self)
+        precomp_phot = None
+        if self._precomputed.photometry is not None and is_precomputed_compatible(self):
+            precomp_phot = build_precomputed_photometry(self)
 
-        return HybridKernels(photometry=hybrid_phot)
+        precomp_phot_ztable = None
+        if self._precomputed.photometry_ztable is not None and is_precomputed_compatible(self):
+            precomp_phot_ztable = build_precomputed_photometry_ztable(self)
+
+        precomp_spec = None
+        if self._precomputed.spectroscopy is not None and is_precomputed_compatible(self):
+            precomp_spec = build_precomputed_spectrum(self)
+
+        return PrecomputedKernels(
+            photometry=precomp_phot,
+            photometry_ztable=precomp_phot_ztable,
+            spectrum=precomp_spec,
+        )
 
     # -------------------------------------------------------------------
     # Internal parameter translation
@@ -1358,19 +1388,33 @@ class SEDModel:
             luminosity_weighted_metallicity=lw_z,
         )
 
-    def predict_photometry(self, params, approx=False):
+    # Valid prediction modes
+    _PREDICTION_MODES: ClassVar[frozenset] = frozenset(
+        {"auto", "precomputed", "compositional", "hybrid", "exact"}
+    )
+
+    def predict_photometry(self, params, mode="exact", approx=None):
         """Compute observed photometric flux densities.
 
         Parameters
         ----------
         params : dict
             Parameter values (public names).
-        approx : bool
-            If True, use the precomputed SSP×filter fast path
-            (Zacharegkas+2025). Faster (~10-50x) but evaluates dust, AGN,
-            and IGM at filter effective wavelengths only.
-            If False (default), computes the full panchromatic SED then
-            integrates through filters (exact).
+        mode : str
+            Prediction mode. One of:
+
+            - ``"auto"`` (default) — pick the fastest available mode
+              (hybrid → precomputed → compositional → exact).
+            - ``"precomputed"`` — SSP×filter at effective wavelengths.
+              Fast (~30x) but approximate for non-stellar components.
+            - ``"compositional"`` — full-resolution SED from all
+              components, then integrate through filters. Exact.
+            - ``"hybrid"`` — precomputed SSP stellar + compositional
+              non-stellar. Fast and exact for non-stellar (PR 2).
+            - ``"exact"`` — raw pipeline, no JIT kernel.
+        approx : bool, optional
+            **Deprecated.** Use ``mode="auto"`` (True) or
+            ``mode="exact"`` (False) instead.
 
         Returns
         -------
@@ -1380,10 +1424,29 @@ class SEDModel:
         if self.filter_waves is None:
             raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
 
-        if approx:
-            return self._predict_photometry_approx(params)
+        # Handle deprecated approx parameter
+        if approx is not None:
+            mode = "auto" if approx else "exact"
 
-        # Canonical path: predict_obs_sed → observation.observe_photometry
+        if mode not in self._PREDICTION_MODES:
+            raise ValueError(
+                f"Unknown mode {mode!r}. Choose from: {sorted(self._PREDICTION_MODES)}"
+            )
+
+        if mode == "auto":
+            return self._predict_photometry_auto(params)
+        if mode == "hybrid":
+            return self._predict_photometry_hybrid(params)
+        if mode == "precomputed":
+            return self._predict_photometry_precomputed(params)
+        if mode == "compositional":
+            return self._predict_photometry_compositional(params)
+
+        # mode == "exact"
+        return self._predict_photometry_exact(params)
+
+    def _predict_photometry_exact(self, params):
+        """Exact photometry: full SED pipeline + filter integration."""
         obs_sed = self.predict_obs_sed(params)
         z = self._get_redshift(params)
         dl_cm = self._get_dl_cm(params)
@@ -1391,7 +1454,6 @@ class SEDModel:
         if self.observation is not None:
             return self.observation.observe_photometry(obs_sed, z, dl_cm)
 
-        # Fallback for legacy filter= init (no Observation object with observe)
         from tengri.models.observation.photometry import compute_flux_density
 
         wave_rest = obs_sed.wavelength / (1.0 + z)
@@ -1401,8 +1463,20 @@ class SEDModel:
             fluxes.append(f)
         return jnp.array(fluxes)
 
-    def _predict_photometry_approx(self, params):
-        """Precomputed SSP×filter fast path. Bypasses predict_sed entirely."""
+    def _predict_photometry_hybrid(self, params):
+        """Hybrid photometry: precomputed SSP + compositional non-stellar.
+
+        Not yet implemented — falls back to auto mode.
+        Will be implemented in PR 2.
+        """
+        if getattr(self, "_hybrid", None) and self._hybrid.photometry is not None:
+            # PR 2: call self._hybrid.photometry(params)
+            pass
+        # Fall back to auto for now
+        return self._predict_photometry_auto(params)
+
+    def _predict_photometry_auto(self, params):
+        """Auto mode: pick fastest available (Hybrid → Precomputed → Compositional → Exact)."""
         import warnings
 
         _has_tabulated_sfh = "sfh_t_gyr" in params
@@ -1412,29 +1486,29 @@ class SEDModel:
             and self._fused_photometry is not None
             and not _has_tabulated_sfh
         ):
-            return self._predict_photometry_fast(params)
+            return self._predict_photometry_precomputed(params)
 
         if (
             self._ztable is not None
             and self._fused_photometry_ztable is not None
             and not _has_tabulated_sfh
         ):
-            return self._predict_photometry_ztable(params)
+            return self._predict_photometry_precomputed_ztable(params)
 
-        # Tier 2: compositional rest-frame SED + observation wrapper
+        # Level 2: Compositional rest-frame SED + observation wrapper
         if (
             self._fused_rest_sed is not None
             and not _has_tabulated_sfh
             and not self._evolving_metallicity
             and not getattr(self, "_chem_evol_enabled", False)
         ):
-            return self._predict_photometry_tier2(params)
+            return self._predict_photometry_compositional(params)
 
         warnings.warn(
-            "approx=True requested but precomputation not available, using exact path",
+            "mode='auto' requested but no fast path available, using exact path",
             stacklevel=3,
         )
-        return self.predict_photometry(params, approx=False)
+        return self._predict_photometry_exact(params)
 
     def _get_dust_kwargs(self, p):
         """Extract dust law + emission kwargs from internal params dict."""
@@ -1444,7 +1518,7 @@ class SEDModel:
         """Extract AGN kwargs from internal params dict for fused kernel."""
         return get_agn_kwargs(self, p)
 
-    def _predict_photometry_fast(self, params):
+    def _predict_photometry_precomputed(self, params):
         """Fast photometry using fused JIT kernel (fixed z)."""
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
@@ -1468,7 +1542,7 @@ class SEDModel:
             **self._get_agn_kwargs(p),
         )
 
-    def _predict_photometry_ztable(self, params):
+    def _predict_photometry_precomputed_ztable(self, params):
         """Fast photometry using z-table interpolation (free z)."""
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
@@ -1496,14 +1570,14 @@ class SEDModel:
         )
 
     # -------------------------------------------------------------------
-    # Tier 2: Compositional rest-frame SED dispatch
+    # Level 2: Compositional rest-frame SED dispatch
     # -------------------------------------------------------------------
 
-    def _compute_rest_sed_tier2(self, params):
-        """Compute rest-frame SED via the compositional JIT kernel (Tier 2).
+    def _compute_rest_sed_compositional(self, params):
+        """Compute rest-frame SED via the compositional JIT kernel.
 
         Handles SFH computation, metallicity interpolation, and delegates
-        the rest (dust, nebular, AGN, radio, X-ray) to the fused kernel.
+        the rest (dust, nebular, AGN, radio, X-ray) to the compositional kernel.
 
         Parameters
         ----------
@@ -1594,17 +1668,17 @@ class SEDModel:
 
         return self._fused_rest_sed(weights, ssp_flux_at_z, p)
 
-    def _predict_photometry_tier2(self, params):
-        """Photometry via Tier 2: compositional rest SED + filter integration.
+    def _predict_photometry_compositional(self, params):
+        """Photometry via Compositional: rest SED + filter integration.
 
-        Uses the fused end-to-end JIT kernel when available (eliminates
+        Uses the compositional end-to-end JIT kernel when available (eliminates
         Python dispatch between SFH, metallicity, SED, and filter steps).
-        Falls back to unfused path otherwise.
+        Falls back to exact path otherwise.
         """
         if self._fused_tier2_phot is not None:
             return self._fused_tier2_phot(params)
 
-        rest_sed = self._compute_rest_sed_tier2(params)
+        rest_sed = self._compute_rest_sed_compositional(params)
         z = self._get_redshift(params)
         dl_cm = self._get_dl_cm(params)
         return observe_photometry_from_rest_sed(
@@ -1617,12 +1691,12 @@ class SEDModel:
             apply_igm=self._apply_igm,
         )
 
-    def _predict_spectrum_tier2(self, params, wave_obs):
-        """Spectrum via Tier 2: compositional rest SED + interpolation.
+    def _predict_spectrum_compositional(self, params, wave_obs):
+        """Spectrum via Compositional: rest SED + interpolation.
 
-        Uses the fused end-to-end JIT kernel when available and the
+        Uses the compositional end-to-end JIT kernel when available and the
         wave_obs grid matches the precomputed grid. Falls back to
-        unfused path otherwise.
+        exact path otherwise.
         """
         if (
             self._fused_tier2_spec is not None
@@ -1632,7 +1706,7 @@ class SEDModel:
             flux = self._fused_tier2_spec(params)
             # Apply LSF if needed (below)
         else:
-            rest_sed = self._compute_rest_sed_tier2(params)
+            rest_sed = self._compute_rest_sed_compositional(params)
             z = self._get_redshift(params)
             dl_cm = self._get_dl_cm(params)
             flux = observe_spectrum_from_rest_sed(
@@ -1679,22 +1753,22 @@ class SEDModel:
         self._precomputed.spectroscopy = spec_precomp
         self._wave_obs = jnp.asarray(wave_obs)
 
-        # Hybrid spectrum kernel (precomputed SSP + exact non-stellar)
-        if is_hybrid_compatible(self):
-            self._hybrid.spectrum = build_hybrid_spectrum(self)
+        # Precomputed spectrum kernel (old Tier 1 effective-wavelength)
+        if is_precomputed_compatible(self):
+            self._precomputed_kernels.spectrum = build_precomputed_spectrum(self)
         else:
-            self._hybrid.spectrum = None
+            self._precomputed_kernels.spectrum = None
 
-        # Fused spectrum kernel (full-resolution end-to-end JIT)
-        self._fused.spectrum = None
-        if self._fused.rest_sed is not None:
+        # Compositional spectrum kernel (full-resolution end-to-end JIT)
+        self._compositional.spectrum = None
+        if self._compositional.rest_sed is not None:
             with contextlib.suppress(Exception):
-                self._fused.spectrum = build_fused_tier2_spectrum(self)
+                self._compositional.spectrum = build_fused_tier2_spectrum(self)
 
-        # Backward-compatible aliases (removed in PR 3)
+        # Backward-compatible aliases
         self._spec_precomp = self._precomputed.spectroscopy
-        self._fused_spectrum = self._hybrid.spectrum
-        self._fused_tier2_spec = self._fused.spectrum
+        self._fused_spectrum = self._precomputed_kernels.spectrum
+        self._fused_tier2_spec = self._compositional.spectrum
         return self
 
     def precompute_ztable(self, z_grid=None, z_min=0.001, z_max=3.0, n_z=100):
@@ -1735,14 +1809,14 @@ class SEDModel:
             apply_igm=self._apply_igm and self._approx.get("igm", True),
         )
         self._precomputed.photometry_ztable = ztable
-        self._hybrid.photometry_ztable = build_hybrid_photometry_ztable(self)
+        self._precomputed_kernels.photometry_ztable = build_precomputed_photometry_ztable(self)
 
-        # Backward-compatible aliases (removed in PR 3)
+        # Backward-compatible aliases
         self._ztable = self._precomputed.photometry_ztable
-        self._fused_photometry_ztable = self._hybrid.photometry_ztable
+        self._fused_photometry_ztable = self._precomputed_kernels.photometry_ztable
         return self
 
-    def predict_spectrum(self, params, wave_obs=None, approx=False):
+    def predict_spectrum(self, params, wave_obs=None, mode="exact", approx=None):
         """Compute observed spectrum at given wavelengths.
 
         Parameters
@@ -1752,9 +1826,10 @@ class SEDModel:
         wave_obs : array, optional
             Observed wavelength grid (Angstrom). If None, uses the
             grid from ``precompute_spectroscopy()`` or the Observation config.
-        approx : bool
-            If True, use precomputed SSP-on-pixels fast path when available.
-            If False (default), computes the full SED then interpolates.
+        mode : str
+            Prediction mode — same as :meth:`predict_photometry`.
+        approx : bool, optional
+            **Deprecated.** Use ``mode=`` instead.
 
         Returns
         -------
@@ -1768,41 +1843,36 @@ class SEDModel:
         elif wave_obs is None:
             raise ValueError("No wavelength grid. Pass wave_obs or call precompute_spectroscopy()")
 
-        if approx:
-            return self._predict_spectrum_approx(params, wave_obs)
+        if approx is not None:
+            mode = "auto" if approx else "exact"
 
-        # Canonical path: predict_obs_sed → interpolate to pixels
-        obs_sed = self.predict_obs_sed(params)
-        z = self._get_redshift(params)
-        dl_cm = self._get_dl_cm(params)
+        if mode not in self._PREDICTION_MODES:
+            raise ValueError(
+                f"Unknown mode {mode!r}. Choose from: {sorted(self._PREDICTION_MODES)}"
+            )
 
-        if self.observation is not None and self.observation.spectroscopy is not None:
-            flux = self.observation.observe_spectrum(obs_sed, z, dl_cm)
-        else:
-            wave_rest = obs_sed.wavelength / (1.0 + z)
-            flux = compute_spectrum(obs_sed.sed, wave_rest, wave_obs, z, dl_cm)
+        if mode == "auto":
+            return self._predict_spectrum_auto(params, wave_obs)
+        if mode == "precomputed":
+            return self._predict_spectrum_precomputed(params)
+        if mode == "compositional":
+            return self._predict_spectrum_compositional(params, wave_obs)
+        if mode == "hybrid":
+            # Not yet implemented (PR 2) — fall back to auto
+            return self._predict_spectrum_auto(params, wave_obs)
 
-            resolution = self._lsf_resolution
-            if resolution is not None:
-                flux = apply_lsf(
-                    flux,
-                    wave_obs,
-                    resolution,
-                    sigma_lib_kms=self._sigma_lib_kms,
-                    n_bins=self._lsf_n_bins,
-                )
+        # mode == "exact"
+        return self._predict_spectrum_exact(params, wave_obs)
 
-        return flux
-
-    def _predict_spectrum_approx(self, params, wave_obs):
-        """Precomputed spectrum fast path."""
+    def _predict_spectrum_auto(self, params, wave_obs):
+        """Auto mode: pick fastest available spectrum path."""
         import warnings
 
-        # Tier 1: fused kernel on precomputed pixels
+        # Precomputed kernel (effective wavelengths, fastest)
         if self._spec_precomp is not None and self._fused_spectrum is not None:
-            return self._predict_spectrum_fast(params)
+            return self._predict_spectrum_precomputed(params)
 
-        # Tier 2: compositional rest-frame SED + observation wrapper
+        # Compositional (full resolution)
         _has_tabulated_sfh = "sfh_t_gyr" in params
         if (
             self._fused_rest_sed is not None
@@ -1810,15 +1880,38 @@ class SEDModel:
             and not self._evolving_metallicity
             and not getattr(self, "_chem_evol_enabled", False)
         ):
-            return self._predict_spectrum_tier2(params, wave_obs)
+            return self._predict_spectrum_compositional(params, wave_obs)
 
         warnings.warn(
-            "approx=True requested but precomputation not available, using exact path",
+            "mode='auto' requested but no fast path available, using exact path",
             stacklevel=3,
         )
-        return self.predict_spectrum(params, wave_obs=wave_obs, approx=False)
+        return self._predict_spectrum_exact(params, wave_obs)
 
-    def _predict_spectrum_fast(self, params):
+    def _predict_spectrum_exact(self, params, wave_obs):
+        """Exact spectrum: full SED pipeline + interpolation."""
+        obs_sed = self.predict_obs_sed(params)
+        z = self._get_redshift(params)
+        dl_cm = self._get_dl_cm(params)
+
+        if self.observation is not None and self.observation.spectroscopy is not None:
+            return self.observation.observe_spectrum(obs_sed, z, dl_cm)
+
+        wave_rest = obs_sed.wavelength / (1.0 + z)
+        flux = compute_spectrum(obs_sed.sed, wave_rest, wave_obs, z, dl_cm)
+
+        resolution = self._lsf_resolution
+        if resolution is not None:
+            flux = apply_lsf(
+                flux,
+                wave_obs,
+                resolution,
+                sigma_lib_kms=self._sigma_lib_kms,
+                n_bins=self._lsf_n_bins,
+            )
+        return flux
+
+    def _predict_spectrum_precomputed(self, params):
         """Fast spectrum using fused JIT kernel."""
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)

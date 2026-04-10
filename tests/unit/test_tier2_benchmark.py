@@ -48,17 +48,17 @@ class TestTier2DispatchWiring:
     def test_predict_photometry_has_tier2_path(self):
         from tengri.core.model import Model
 
-        assert hasattr(Model, "_predict_photometry_tier2")
+        assert hasattr(Model, "_predict_photometry_compositional")
 
-    def test_compute_rest_sed_tier2_exists(self):
+    def test_compute_rest_sed_fused_exists(self):
         from tengri.core.model import Model
 
-        assert hasattr(Model, "_compute_rest_sed_tier2")
+        assert hasattr(Model, "_compute_rest_sed_compositional")
 
-    def test_predict_spectrum_tier2_exists(self):
+    def test_predict_spectrum_fused_exists(self):
         from tengri.core.model import Model
 
-        assert hasattr(Model, "_predict_spectrum_tier2")
+        assert hasattr(Model, "_predict_spectrum_compositional")
 
     def test_is_tier2_compatible_importable(self):
         from tengri.core.fused_kernels import is_tier2_compatible
@@ -230,7 +230,7 @@ class TestTier2Dispatch:
         assert model._fused_tier2_phot is not None, "Tier-2 photometry kernel not built"
 
     def test_tier2_photometry_via_method_call(self):
-        """Verify _predict_photometry_tier2 is called correctly."""
+        """Verify _predict_photometry_compositional is called correctly."""
         import tengri
 
         model = tengri.Model.from_config(

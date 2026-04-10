@@ -129,7 +129,7 @@ class TestTier2VsTier3:
         sed_tier3 = tier3_result["sed_total"]
 
         # Tier 2: compositional kernel
-        sed_tier2 = model._compute_rest_sed_tier2(simple_params)
+        sed_tier2 = model._compute_rest_sed_compositional(simple_params)
 
         assert_allclose(sed_tier2, sed_tier3, rtol=1e-3, atol=1e-30)
 
@@ -181,7 +181,7 @@ class TestTier2VsTier3:
         )
 
         # Tier 2 path
-        phot_tier2 = model._predict_photometry_tier2(simple_params)
+        phot_tier2 = model._predict_photometry_compositional(simple_params)
 
         assert_allclose(phot_tier2, phot_tier3, rtol=1e-3, atol=1e-30)
 
@@ -202,7 +202,7 @@ class TestTier2VsTier3:
         spec_tier3 = compute_spectrum(sed_tier3, model.ssp_data.ssp_wave, wave_obs, z, dl_cm)
 
         # Tier 2 path
-        spec_tier2 = model._predict_spectrum_tier2(simple_params, wave_obs)
+        spec_tier2 = model._predict_spectrum_compositional(simple_params, wave_obs)
 
         assert_allclose(spec_tier2, spec_tier3, rtol=1e-3, atol=1e-30)
 
@@ -247,7 +247,7 @@ class TestComponentCombinations:
 
         # Tier 2 should produce the same as Tier 3
         tier3 = model._compute_sed_components(params)["sed_total"]
-        tier2 = model._compute_rest_sed_tier2(params)
+        tier2 = model._compute_rest_sed_compositional(params)
 
         assert_allclose(tier2, tier3, rtol=1e-3, atol=1e-30)
 
@@ -272,7 +272,7 @@ class TestComponentCombinations:
         assert model._fused_rest_sed is not None
 
         tier3 = model._compute_sed_components(simple_params)["sed_total"]
-        tier2 = model._compute_rest_sed_tier2(simple_params)
+        tier2 = model._compute_rest_sed_compositional(simple_params)
 
         assert_allclose(tier2, tier3, rtol=1e-3, atol=1e-30)
 
@@ -303,7 +303,7 @@ class TestComponentCombinations:
         params = spec.sample(jax.random.PRNGKey(7))
 
         tier3 = model._compute_sed_components(params)["sed_total"]
-        tier2 = model._compute_rest_sed_tier2(params)
+        tier2 = model._compute_rest_sed_compositional(params)
 
         assert_allclose(tier2, tier3, rtol=1e-3, atol=1e-30)
 
@@ -320,7 +320,7 @@ class TestObservationWrappers:
         from tengri.models.observation.photometry import compute_flux_density
 
         model = Model(simple_spec, synthetic_ssp)
-        rest_sed = model._compute_rest_sed_tier2(simple_params)
+        rest_sed = model._compute_rest_sed_compositional(simple_params)
         wave_rest = model.ssp_data.ssp_wave
         z = model._get_redshift(simple_params)
         dl_cm = model._get_dl_cm(simple_params)
@@ -348,7 +348,7 @@ class TestObservationWrappers:
         from tengri.models.observation.spectrum import compute_spectrum
 
         model = Model(simple_spec, synthetic_ssp)
-        rest_sed = model._compute_rest_sed_tier2(simple_params)
+        rest_sed = model._compute_rest_sed_compositional(simple_params)
         wave_rest = model.ssp_data.ssp_wave
         wave_obs = jnp.linspace(5000.0, 8000.0, 50)
         z = model._get_redshift(simple_params)
@@ -392,8 +392,8 @@ class TestFallbacks:
         assert model._fused_rest_sed is not None
 
         # Call twice — second should use cached JIT
-        sed1 = model._compute_rest_sed_tier2(simple_params)
-        sed2 = model._compute_rest_sed_tier2(simple_params)
+        sed1 = model._compute_rest_sed_compositional(simple_params)
+        sed2 = model._compute_rest_sed_compositional(simple_params)
 
         assert_allclose(sed1, sed2, rtol=0.0, atol=0.0)
 
@@ -420,8 +420,8 @@ class TestFallbacks:
             "met_logzsol": 0.0,
         }
 
-        sed1 = model._compute_rest_sed_tier2(params1)
-        sed2 = model._compute_rest_sed_tier2(params2)
+        sed1 = model._compute_rest_sed_compositional(params1)
+        sed2 = model._compute_rest_sed_compositional(params2)
 
         # Different params should give different SEDs
         assert not jnp.allclose(sed1, sed2)
@@ -451,7 +451,7 @@ class TestGradients:
                 "dust_slope": -0.7,
                 "redshift": 0.1,
             }
-            sed = model._compute_rest_sed_tier2(params)
+            sed = model._compute_rest_sed_compositional(params)
             return jnp.sum(sed)
 
         grad = jax.grad(loss_fn)(1.0)
@@ -502,9 +502,9 @@ class TestFusedTier2Photometry:
         # Fused path
         phot_fused = model._fused_tier2_phot(simple_params)
 
-        # Unfused: force through _compute_rest_sed_tier2 + filter loop
+        # Unfused: force through _compute_rest_sed_compositional + filter loop
         model._fused_tier2_phot = None
-        phot_unfused = model._predict_photometry_tier2(simple_params)
+        phot_unfused = model._predict_photometry_compositional(simple_params)
 
         assert_allclose(phot_fused, phot_unfused, rtol=1e-10)
 
