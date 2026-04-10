@@ -278,6 +278,79 @@ class CloudyGridBackend:
         if ssp_data is not None:
             self._precompute_qh(ssp_data)
 
+        # Photometry preintegration storage
+        self._preint_continuum = None
+        self._preint_lines = None
+        self._has_preint_photometry = False
+
+    def preintegrate_for_photometry(
+        self,
+        filter_waves: list,
+        filter_trans: list,
+        redshift: float,
+        dl_cm: float,
+    ) -> None:
+        """Preintegrate CLOUDY continuum + lines through photometric filters.
+
+        After calling this, the backend can compute nebular photometry
+        via fast grid interpolation instead of full-wavelength evaluation.
+
+        The continuum grid is converted from log10(Lsun_Hz/Q_H) to linear
+        Lsun_Hz/Q_H, then preintegrated through filters. The line wavelengths
+        are point-sampled through filters for exact line contributions.
+
+        Results stored in:
+        - self._preint_continuum: PreintegratedGrid (n_met, n_age, n_logU, n_filters)
+        - self._preint_lines: PreintegratedLines (n_lines, n_filters)
+
+        Parameters
+        ----------
+        filter_waves : list
+            List of filter wavelength arrays (Angstrom).
+        filter_trans : list
+            List of filter transmission curves.
+        redshift : float
+            Redshift for redshifting observed-frame wavelengths.
+        dl_cm : float
+            Luminosity distance (cm).
+        """
+        from tengri.core.preintegrate import preintegrate_grid, preintegrate_lines
+
+        # Convert continuum from log10 to linear Lsun_Hz/Q_H
+        # Note: grid has floor of 10^{-95} for log(0), so 10^(-95) ≈ 0 in practice
+        cont_linear = 10.0 ** np.asarray(self.grid.cont_luminosity)
+
+        # Preintegrate continuum through filters
+        self._preint_continuum = preintegrate_grid(
+            cont_linear,
+            np.asarray(self.grid.cont_wavelength),
+            filter_waves,
+            filter_trans,
+            redshift,
+            dl_cm,
+            axes=(
+                np.asarray(self.grid.cont_log_met),
+                np.asarray(self.grid.cont_log_age),
+                np.asarray(self.grid.cont_log_U),
+            ),
+        )
+
+        # Preintegrate lines through filters
+        self._preint_lines = preintegrate_lines(
+            np.asarray(self.grid.line_wavelengths),
+            filter_waves,
+            filter_trans,
+            redshift,
+            axes=(
+                np.asarray(self.grid.line_log_met),
+                np.asarray(self.grid.line_log_age),
+                np.asarray(self.grid.line_log_U),
+            ),
+        )
+
+        # Set flag
+        self._has_preint_photometry = True
+
     def _precompute_qh(self, ssp_data) -> None:
         """Precompute Q_H(metallicity, age) table from SSP spectra.
 
