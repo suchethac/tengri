@@ -154,10 +154,17 @@ def planck_bnu(
     array
         B_nu in erg / s / cm^2 / Hz / sr.
     """
-    wavelength_cm = wavelength_aa * _AA_TO_CM
+    # Cast to float64 before computing nu to prevent nu**3 overflow.
+    # float32 max is ~3.4e38; at 5.6 Å, nu = 5.35e17 Hz so nu**3 ~ 1.5e53 —
+    # far beyond float32 range. JAX weak-type promotion keeps float32 arrays
+    # float32 even when combined with Python float scalars, so the cast must
+    # be explicit even though x64 is enabled globally.
+    wavelength_cm = jnp.asarray(wavelength_aa, dtype=jnp.float64) * _AA_TO_CM
     nu = _C_CGS / wavelength_cm
 
-    # x = h*nu / (k*T), clipped to avoid overflow in exp
+    # Clamp x = hν/kT to [1e-10, 500].  At x=500, expm1 ≈ 1.4e217
+    # (finite in float64).  The clamp avoids both expm1 overflow and
+    # division-by-zero, and keeps gradients finite everywhere.
     x = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * temperature), 1e-10, 500.0)
     return 2.0 * _H_PLANCK * nu**3 / (_C_CGS**2) / jnp.expm1(x)
 

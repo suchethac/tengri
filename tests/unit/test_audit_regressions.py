@@ -299,6 +299,31 @@ class TestBug30PlanckDivZero:
         assert jnp.all(jnp.isfinite(result)), f"Planck function has non-finite values: {result}"
         assert jnp.all(result > 0), "Planck function must be positive"
 
+    def test_planck_finite_with_float32_uv_input(self):
+        """B_nu must be finite when given float32 input at short UV wavelengths.
+
+        Root cause: ssp_wave is stored as float32 in HDF5 files. With JAX's
+        weak-type promotion, ``float32_array * Python_float`` stays float32 even
+        with x64 enabled globally. At 5.6 Å, nu = 5.35e17 Hz and nu**3 ~ 1.5e53,
+        far beyond float32 max (~3.4e38). Without an explicit float64 cast inside
+        planck_bnu, nu**3 overflows to Inf and expm1(x) = Inf, giving Inf/Inf = NaN.
+        """
+        try:
+            from tengri.models.dust.emission import planck_bnu
+        except ImportError:
+            pytest.skip("planck_bnu not available")
+
+        # Mimic the actual SSP wavelength array dtype (float32 from HDF5)
+        wave_aa = jnp.array([5.6, 10.0, 50.0, 100.0, 1000.0, 5000.0], dtype=jnp.float32)
+        T = 35.0
+
+        result = planck_bnu(wave_aa, T)
+        assert jnp.all(jnp.isfinite(result)), (
+            f"planck_bnu returned non-finite values for float32 input: {result}. "
+            "Check float64 cast inside planck_bnu."
+        )
+        assert jnp.all(result >= 0), "Planck function must be non-negative"
+
 
 # ---------------------------------------------------------------------------
 # BUG-29: _mstar uses formed mass, not surviving mass (XRB over-estimate)

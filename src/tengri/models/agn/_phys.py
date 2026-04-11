@@ -57,11 +57,17 @@ def planck_lnu(
     array
         B_nu(T) [erg s^-1 cm^-2 Hz^-1 sr^-1].
     """
-    t_safe = jnp.maximum(temperature, 1.0)
-    x = H_PLANCK * nu / (K_BOLTZ * t_safe)
-    x_clip = jnp.clip(x, 0.0, 500.0)
-    prefactor = 2.0 * H_PLANCK * nu**3 / C_LIGHT**2
-    return prefactor / (jnp.exp(x_clip) - 1.0)
+    # Cast to float64 to prevent nu**3 overflow.  At λ ~ 100 Å,
+    # ν ≈ 3×10¹⁷ Hz so ν³ ≈ 2.7×10⁵² — fine in float64 but far
+    # beyond float32 max (~3.4×10³⁸).
+    nu64 = jnp.asarray(nu, dtype=jnp.float64)
+    t_safe = jnp.maximum(jnp.asarray(temperature, dtype=jnp.float64), 1.0)
+
+    # Clamp x = hν/kT to [1e-10, 500].  At x=500, expm1 ≈ 1.4e217
+    # (finite in float64).  The clamp avoids both expm1 overflow and
+    # division-by-zero, and keeps gradients finite everywhere.
+    x = jnp.clip(H_PLANCK * nu64 / (K_BOLTZ * t_safe), 1e-10, 500.0)
+    return 2.0 * H_PLANCK * nu64**3 / C_LIGHT**2 / jnp.expm1(x)
 
 
 # ---------------------------------------------------------------------------

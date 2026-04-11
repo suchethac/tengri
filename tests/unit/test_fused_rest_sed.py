@@ -11,7 +11,6 @@ import pytest
 from numpy.testing import assert_allclose
 
 from tengri.core.fused_kernels import (
-    is_tier2_compatible,
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,
 )
@@ -97,16 +96,10 @@ def simple_params():
 
 
 class TestTier2Compatibility:
-    def test_is_tier2_compatible(self, synthetic_ssp, simple_spec):
-        from tengri.core.model import Model
-
-        model = Model(simple_spec, synthetic_ssp)
-        assert is_tier2_compatible(model)
-
     def test_tier2_kernel_builds(self, synthetic_ssp, simple_spec):
-        from tengri.core.model import Model
+        from tengri.core.model import SEDModel
 
-        model = Model(simple_spec, synthetic_ssp)
+        model = SEDModel(simple_spec, synthetic_ssp)
         assert model._compositional.rest_sed is not None
 
 

@@ -60,11 +60,6 @@ class TestTier2DispatchWiring:
 
         assert hasattr(Model, "_predict_spectrum_compositional")
 
-    def test_is_tier2_compatible_importable(self):
-        from tengri.core.fused_kernels import is_tier2_compatible
-
-        assert callable(is_tier2_compatible)
-
     def test_build_fused_rest_sed_importable(self):
         from tengri.core.fused_kernels import build_fused_rest_sed
 
