@@ -143,8 +143,11 @@ class TestPrecomputeSpeedup:
         t_exact = (time.time() - t0) / N
 
         speedup = t_exact / t_fast
-        assert speedup > 5.0, (
-            f"Gradient speedup {speedup:.1f}x < 5x "
+        # Auto mode now picks compositional (bit-exact JIT) over the old
+        # precomputed path.  Compositional fuses the full SED einsum, so
+        # the speedup is ~3-10x (not the ~30x from precomputed).
+        assert speedup > 2.0, (
+            f"Gradient speedup {speedup:.1f}x < 2x "
             f"(fast={t_fast * 1e3:.2f}ms, exact={t_exact * 1e3:.2f}ms)"
         )
 
