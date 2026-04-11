@@ -375,8 +375,10 @@ class TestDenseBasisRegistry:
         assert pmap["sfh_db_tx_frac_0"] == ("tx_frac_0", 1.0, 0.0)
 
     def test_composition_with_burst(self) -> None:
+        """Auto-swaps to dense_basis_pure when burst is present."""
         _fn, params, _, _ = resolve_sfh(["dense_basis", "burst"])
-        assert "sfh_db_log_total_mass" in params
+        assert "sfh_dbp_log_total_mass" in params
+        assert "sfh_db_log_sfr_inst" not in params
         assert "sfh_burst_log_fburst" in params
 
     def test_composition_with_field(self) -> None:
