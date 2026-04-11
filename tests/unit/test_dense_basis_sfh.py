@@ -474,3 +474,86 @@ class TestDenseBasisEdgeCases:
         )
         assert jnp.all(jnp.isfinite(sfr))
         assert jnp.all(sfr >= 0)
+
+
+class TestJITNaNRegression:
+    """Regression tests for JIT-only NaN bug in gp_interpolate.
+
+    When log_sfr_inst is large, all three SFR constraint time points clip to
+    the same upper bound (0.999), making the GP kernel matrix singular.
+    jnp.linalg.solve returns NaN silently under JIT but raises a RuntimeError
+    in eager mode — causing a JIT-only phantom NaN in the forward model.
+
+    The fix: distinct clip bounds per SFR constraint point (0.997, 0.998, 0.999)
+    and a 1e-8 nugget on the kernel diagonal.
+    """
+
+    def test_high_sfr_no_nan_jit(self) -> None:
+        """log_sfr_inst=2.93 (near prior upper bound) must not produce NaN under JIT."""
+        jit_sfh = jax.jit(
+            lambda log_sfr: dense_basis_sfh(
+                AGE_YR,
+                log_total_mass=10.0,
+                log_sfr_inst=log_sfr,
+                tx_frac_0=0.408,
+                tx_frac_1=0.610,
+            )
+        )
+        sfr = jit_sfh(2.93)
+        assert jnp.all(jnp.isfinite(sfr)), "NaN from high log_sfr_inst under JIT"
+
+    def test_very_high_sfr_no_nan_jit(self) -> None:
+        """Extreme SFR (log=3.0) must not produce NaN under JIT."""
+        jit_sfh = jax.jit(
+            lambda log_sfr: dense_basis_sfh(
+                AGE_YR,
+                log_total_mass=8.0,
+                log_sfr_inst=log_sfr,
+                tx_frac_0=0.3,
+                tx_frac_1=0.6,
+            )
+        )
+        sfr = jit_sfh(3.0)
+        assert jnp.all(jnp.isfinite(sfr)), "NaN from extreme log_sfr_inst under JIT"
+
+    def test_low_sfr_no_nan_jit(self) -> None:
+        """log_sfr_inst=-2.0 (prior lower bound) must not produce NaN under JIT."""
+        jit_sfh = jax.jit(
+            lambda log_sfr: dense_basis_sfh(
+                AGE_YR,
+                log_total_mass=12.0,
+                log_sfr_inst=log_sfr,
+                tx_frac_0=0.3,
+                tx_frac_1=0.6,
+                tx_frac_2=0.85,
+            )
+        )
+        sfr = jit_sfh(-2.0)
+        assert jnp.all(jnp.isfinite(sfr)), "NaN from low log_sfr_inst under JIT"
+
+    def test_random_prior_samples_no_nan_jit(self) -> None:
+        """50 random prior samples must produce zero NaN under JIT."""
+        key = jax.random.PRNGKey(42)
+        jit_sfh = jax.jit(
+            lambda lm, ls, t0, t1, t2: dense_basis_sfh(
+                AGE_YR,
+                log_total_mass=lm,
+                log_sfr_inst=ls,
+                tx_frac_0=t0,
+                tx_frac_1=t1,
+                tx_frac_2=t2,
+            )
+        )
+        n_nan = 0
+        for _ in range(50):
+            key, k1, k2, k3, k4, k5 = jax.random.split(key, 6)
+            sfr = jit_sfh(
+                float(jax.random.uniform(k1, minval=8.0, maxval=12.0)),
+                float(jax.random.uniform(k2, minval=-2.0, maxval=3.0)),
+                float(jax.random.uniform(k3, minval=0.05, maxval=0.95)),
+                float(jax.random.uniform(k4, minval=0.05, maxval=0.95)),
+                float(jax.random.uniform(k5, minval=0.05, maxval=0.95)),
+            )
+            if jnp.any(jnp.isnan(sfr)):
+                n_nan += 1
+        assert n_nan == 0, f"{n_nan}/50 prior samples produced NaN under JIT"

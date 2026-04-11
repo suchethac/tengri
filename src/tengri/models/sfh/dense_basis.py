@@ -118,6 +118,11 @@ def gp_interpolate(
     """GP conditional mean: μ* = K* (K + σ²I)⁻¹ y."""
     k_train = combined_kernel(x_train, x_train, variance, length_scale)
     k_train = k_train + jnp.diag(y_err**2)
+    # Nugget for numerical stability: prevents singular matrix when training
+    # points are coincident (e.g., SFR constraint points all clip to the same
+    # x-value under JIT). Without this, jnp.linalg.solve returns NaN silently
+    # under JIT while raising a runtime error in eager mode.
+    k_train = k_train + 1e-8 * jnp.eye(k_train.shape[0])
     k_eval = combined_kernel(x_eval, x_train, variance, length_scale)
     alpha = jnp.linalg.solve(k_train, y_train)
     return k_eval @ alpha
@@ -208,12 +213,20 @@ def _build_quantile_points(
     age_yr = age_universe_yr
     const_vals = jnp.array([0.97, 0.98, 0.99])
 
+    # Use distinct clip bounds per constraint point so the three times are
+    # always distinct. When SFR is very high all unclipped values approach 1.0;
+    # without distinct upper bounds they all collapse to 0.999, making the GP
+    # kernel matrix singular and causing jnp.linalg.solve to return NaN under
+    # JIT (which is silent, unlike the RuntimeError raised in eager mode).
+    # Lower bounds are also distinct to avoid collision with the BB point at 0.01.
+    lower_bounds = [0.013, 0.014, 0.015]
+    upper_bounds = [0.997, 0.998, 0.999]
     sfr_time_q = []
     sfr_mass_q = []
-    for cv in const_vals:
+    for cv, lo, hi in zip(const_vals, lower_bounds, upper_bounds):
         delta_mstar = total_mass * (1.0 - cv)
         delta_t = 1.0 - delta_mstar / (sfr_inst * age_yr)
-        delta_t = jnp.clip(delta_t, 0.01, 0.999)
+        delta_t = jnp.clip(delta_t, lo, hi)
         sfr_time_q.append(delta_t)
         sfr_mass_q.append(cv)
 
