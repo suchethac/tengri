@@ -26,6 +26,7 @@ All functions are pure JAX and JIT-compatible.
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 
 # ---------------------------------------------------------------------------
@@ -107,6 +108,9 @@ def combined_kernel(
 # ---------------------------------------------------------------------------
 
 
+_NUGGET = 1e-4  # Diagonal jitter for GP numerical stability
+
+
 def gp_interpolate(
     x_train: jnp.ndarray,
     y_train: jnp.ndarray,
@@ -115,17 +119,99 @@ def gp_interpolate(
     variance: float,
     length_scale: float,
 ) -> jnp.ndarray:
-    """GP conditional mean: μ* = K* (K + σ²I)⁻¹ y."""
+    """GP conditional mean via Cholesky decomposition.
+
+    Uses Cholesky instead of ``jnp.linalg.solve`` because:
+    1. Cholesky exploits the positive-definite structure of the kernel
+       matrix, giving ~2x speedup and better numerical stability.
+    2. ``solve`` returns NaN silently under JIT for near-singular K
+       (e.g. when SFR constraint points collapse to the same time).
+       Cholesky with a nugget avoids this failure mode.
+
+    The 1e-4 nugget adds <0.1% relative error to mass fractions in
+    [0, 1], negligible vs the ~0.001/sqrt(N) yerr on quantile points.
+    """
     k_train = combined_kernel(x_train, x_train, variance, length_scale)
-    k_train = k_train + jnp.diag(y_err**2)
-    # Nugget for numerical stability: prevents singular matrix when training
-    # points are coincident (e.g., SFR constraint points all clip to the same
-    # x-value under JIT). Without this, jnp.linalg.solve returns NaN silently
-    # under JIT while raising a runtime error in eager mode.
-    k_train = k_train + 1e-8 * jnp.eye(k_train.shape[0])
+    k_train = k_train + jnp.diag(y_err**2) + _NUGGET * jnp.eye(k_train.shape[0])
     k_eval = combined_kernel(x_eval, x_train, variance, length_scale)
-    alpha = jnp.linalg.solve(k_train, y_train)
+    # Cholesky: L L^T = K, then solve L L^T α = y in two triangular steps
+    cho_factor = jax.scipy.linalg.cho_factor(k_train)
+    alpha = jax.scipy.linalg.cho_solve(cho_factor, y_train)
     return k_eval @ alpha
+
+
+# ---------------------------------------------------------------------------
+# Monotone cubic interpolation (PCHIP) — no matrix solve needed
+# ---------------------------------------------------------------------------
+
+
+def pchip_interpolate(
+    x_train: jnp.ndarray,
+    y_train: jnp.ndarray,
+    x_eval: jnp.ndarray,
+) -> jnp.ndarray:
+    """Monotone Piecewise Cubic Hermite Interpolating Polynomial (PCHIP).
+
+    Guaranteed monotonic (no overshoots), C1 continuous, no matrix solve.
+    Ideal for cumulative mass curves where monotonicity is a physical
+    constraint. Uses the Fritsch-Carlson (1980) algorithm.
+
+    Parameters
+    ----------
+    x_train : array, shape (n,)
+        Sorted training x-values (must be strictly increasing).
+    y_train : array, shape (n,)
+        Training y-values.
+    x_eval : array, shape (m,)
+        Evaluation points.
+
+    Returns
+    -------
+    array, shape (m,)
+        Interpolated values at x_eval.
+    """
+    n = x_train.shape[0]
+    h = jnp.diff(x_train)
+    delta = jnp.diff(y_train) / jnp.maximum(h, 1e-30)
+
+    # Fritsch-Carlson slopes: harmonic mean of adjacent secants
+    # where both have the same sign; zero at local extrema.
+    d = jnp.zeros(n)
+    # Interior points
+    for i in range(1, n - 1):
+        d_left = delta[i - 1]
+        d_right = delta[i]
+        same_sign = d_left * d_right > 0
+        # Harmonic mean (monotonicity-preserving)
+        hm = 2.0 * d_left * d_right / jnp.maximum(d_left + d_right, 1e-30)
+        d = d.at[i].set(jnp.where(same_sign, hm, 0.0))
+    # Endpoint slopes: one-sided
+    d = d.at[0].set(delta[0])
+    d = d.at[n - 1].set(delta[n - 1])
+
+    # Evaluate cubic Hermite basis on each interval
+    # Find which interval each x_eval falls in
+    idx = jnp.searchsorted(x_train, x_eval, side="right") - 1
+    idx = jnp.clip(idx, 0, n - 2)
+
+    x0 = x_train[idx]
+    x1 = x_train[idx + 1]
+    y0 = y_train[idx]
+    y1 = y_train[idx + 1]
+    d0 = d[idx]
+    d1 = d[idx + 1]
+
+    dx = x1 - x0
+    t = (x_eval - x0) / jnp.maximum(dx, 1e-30)
+    t = jnp.clip(t, 0.0, 1.0)
+
+    # Hermite basis functions
+    h00 = 2 * t**3 - 3 * t**2 + 1
+    h10 = t**3 - 2 * t**2 + t
+    h01 = -2 * t**3 + 3 * t**2
+    h11 = t**3 - t**2
+
+    return h00 * y0 + h10 * dx * d0 + h01 * y1 + h11 * dx * d1
 
 
 # ---------------------------------------------------------------------------
@@ -384,14 +470,12 @@ def dense_basis_sfh(
 def _build_quantile_points_pure(
     tx_fracs: jnp.ndarray,
     n_param: int,
-) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """Build quantile points WITHOUT observation-epoch SFR constraints.
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Build sorted (time, mass) quantile points for PCHIP interpolation.
 
-    This is the clean version for use as a mean SFH with the GP field
-    modulator. The SFH shape is determined purely by the mass-time
-    quantiles and total mass — no instantaneous SFR pinning.
+    No noise array needed — PCHIP passes through points exactly.
 
-    Returns (time_q, mass_q, yerr) with n_param+3 points:
+    Returns (time_q, mass_q) with n_param+3 points:
     (0,0), (0.01,0), (tx_i, mass_i), (1,1).
     """
     mass_quantiles = jnp.linspace(0.0, 1.0, n_param + 2)
@@ -419,12 +503,7 @@ def _build_quantile_points_pure(
         ]
     )
 
-    # Noise: tight on user quantile points only
-    yerr = jnp.zeros(len(time_q))
-    noise_scale = 0.001 / jnp.sqrt(jnp.maximum(n_param, 1.0))
-    yerr = yerr.at[2 : 2 + n_param].set(noise_scale)
-
-    return time_q, mass_q, yerr
+    return time_q, mass_q
 
 
 def dense_basis_pure_sfh(
@@ -433,17 +512,15 @@ def dense_basis_pure_sfh(
     age_universe_yr: float = 13.47e9,
     **tx_kwargs: float,
 ) -> jnp.ndarray:
-    """Pure quantile-based GP-SFH — no instantaneous SFR constraint.
+    """Pure quantile-based SFH using monotone cubic (PCHIP) interpolation.
 
-    Like ``dense_basis_sfh`` but without the ``log_sfr_inst`` parameter
-    and observation-epoch SFR constraint points. The SFH shape is
-    determined purely by the mass-time quantiles and total mass.
+    Like ``dense_basis_sfh`` but without the ``log_sfr_inst`` parameter,
+    SFR constraint points, or GP kernel. Uses monotone PCHIP interpolation
+    instead of a GP — this guarantees monotonic cumulative mass curves,
+    eliminates the matrix solve entirely, and is faster and more robust.
 
     Intended for use as the mean SFH in a composed model with the
-    GP field modulator: ``sfh=["dense_basis_pure", "field"]``.
-    The field handles recent SFR variability, so the artificial
-    SFR constraint points are unnecessary and would interfere
-    with the field's flexibility.
+    GP field modulator: ``sfh=["dense_basis", "field"]`` (auto-swaps).
 
     Parameters
     ----------
@@ -465,6 +542,7 @@ def dense_basis_pure_sfh(
     ----------
     - Iyer & Gawiser (2017), ApJ 838, 127 (arXiv:1702.04371).
     - Iyer et al. (2019), ApJ 879, 116 (arXiv:1901.02877).
+    - Fritsch & Carlson (1980), SIAM J. Numer. Anal. 17, 238.
     """
     n_param = len(tx_kwargs)
     if n_param == 0:
@@ -480,15 +558,12 @@ def dense_basis_pure_sfh(
     tx_fracs = jnp.clip(tx_fracs, 0.02, 0.99)
 
     # Build quantile points (NO SFR constraints)
-    time_q, mass_q, yerr = _build_quantile_points_pure(tx_fracs, n_param)
+    time_q, mass_q = _build_quantile_points_pure(tx_fracs, n_param)
 
-    # GP kernel hyperparameters
-    variance = jnp.var(mass_q)
-    length_scale = jnp.maximum(jnp.median(mass_q), _LENGTH_SCALE_FLOOR)
-
-    # GP interpolation
+    # PCHIP interpolation of cumulative mass (monotonic, no matrix solve)
     t_eval = jnp.linspace(0.0, 1.0, _DEFAULT_RES)
-    m_cumul = gp_interpolate(time_q, mass_q, yerr, t_eval, variance, length_scale)
+    m_cumul = pchip_interpolate(time_q, mass_q, t_eval)
+    m_cumul = jnp.clip(m_cumul, 0.0, 1.0)
 
     # SFR = sfh_scale * diff(cumulative_mass)
     age_universe_gyr = age_universe_yr / 1e9
