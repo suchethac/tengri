@@ -1207,6 +1207,914 @@ def build_hybrid_photometry(model):
     return hybrid_phot_fused
 
 
+def build_hybrid_photometry_ztable(model):
+    """Build hybrid photometry kernel for free-z inference using a z-table.
+
+    Like build_hybrid_photometry but with SSP photometry interpolated from
+    a precomputed redshift grid instead of fixed at model.redshift.
+    Stellar photometry uses precomputed SSP×filter einsum (fast, ~0.4% error).
+    Non-stellar components evaluated at full wavelength resolution via
+    emission_helpers, then integrated through filters (exact).
+
+    For free-redshift inference, this kernel interpolates the precomputed
+    z-table to the current redshift at each step, maintaining the same
+    speedup as fixed-z precomputation while allowing z to vary.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model instance providing config and precomputed z-table arrays.
+
+    Returns
+    -------
+    callable
+        JIT-compiled function: (params_dict) -> photometry array (n_filters,)
+        in erg/s/cm^2/Hz. Parameters include redshift as a free variable.
+
+    Raises
+    ------
+    ValueError
+        If photometry_ztable has not been precomputed via model.precompute_ztable().
+    """
+    from tengri.core.emission_helpers import (
+        agn_emission,
+        attenuate_emission,
+        dust_ir_emission,
+        nebular_emission,
+        radio_emission,
+        shock_emission,
+        xray_emission,
+    )
+    from tengri.core.param_translate import get_internal_params
+    from tengri.models.dust.attenuation import resolve_dust_law
+    from tengri.models.sfh.registry import compute_field_gp, resolve_sfh
+    from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.models.sps.precompute import interpolate_ztable
+
+    # Validate that z-table has been precomputed
+    if model._precomputed.photometry_ztable is None:
+        raise ValueError("Z-table not precomputed. Call model.precompute_ztable() first.")
+
+    dt = model._forward_dtype
+    ztable = model._precomputed.photometry_ztable
+    ssp_lgmet = model.ssp_data.ssp_lgmet.astype(dt)
+    _is_single_dust = model._dust_model == "single_component"
+    _dust_exact = getattr(model, "_dust_approx", "fast") == "exact"
+    if not _is_single_dust:
+        if _dust_exact:
+            dust_age_w = model._precomputed.dust_age_weights.astype(dt)
+        else:
+            _t_birth = 1e7
+            young_mask = (model.ssp_ages_yr < _t_birth).astype(dt)
+            old_mask = dt.type(1.0) - young_mask
+    _csp_use_matrix = model._csp_integration == "log_interp"
+    if _csp_use_matrix:
+        _csp_mat = model._csp_matrix.astype(dt)
+    else:
+        _age_dt = model._csp_age_dt.astype(dt)
+    lsun = dt.type(LSUN_ERG_PER_S)
+
+    # Voronoi frequency bandwidths for L_absorbed broadband estimate (Hz).
+    _eff_bw = model._precomputed.effective_bandwidths_hz
+    if _eff_bw is not None:
+        _eff_bw = _eff_bw.astype(dt)
+
+    # Capture dust law functions
+    law_bc_fn = resolve_dust_law(model._dust_law_bc)
+    if not _is_single_dust:
+        law_diff_fn = resolve_dust_law(model._dust_law_diff)
+
+    from tengri.models.sps.dsps_wrapper import (
+        _ALPHA_TO_Z_COEFF as _A2Z,
+        has_alpha_grid,
+    )
+
+    _has_alpha = has_alpha_grid(model.ssp_data)
+    if _has_alpha:
+        ssp_alpha_fe = model.ssp_data.ssp_alpha_fe.astype(dt)
+
+    _use_alpha_fe = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
+
+    _use_smooth_z = model._met_interp == "smooth"
+    _lgmet_scat = dt.type(model._lgmet_scatter)
+    if _use_smooth_z:
+        from tengri.models.sps.dsps_wrapper import compute_lgmet_weights as _clw
+
+    # IGM: precomputed on z-table
+    has_igm = ztable.igm_trans_table is not None
+    if has_igm:
+        # Ensure igm_trans_table is all ones (expected for z-table)
+        # Full wavelength IGM will be evaluated in non-stellar section
+        pass
+
+    # === Non-stellar components (full wavelength) ===
+    ssp_wave_f64 = model.ssp_data.ssp_wave
+    rest_wave_f64 = model._rest_wavelength
+    _needs_extension = rest_wave_f64 is not model.ssp_data.ssp_wave
+
+    # Nebular
+    has_nebular = model._nebular_backend is not None and getattr(
+        model._nebular_backend, "has_free_params", False
+    )
+    if has_nebular:
+        nebular_backend = model._nebular_backend
+        _neb_dust_mode = getattr(model, "_neb_dust", "bc")
+        _neb_bc_fn = getattr(model, "_neb_dust_law_bc_fn", law_bc_fn)
+    _has_preint_neb = has_nebular and getattr(
+        model._nebular_backend, "_has_preint_photometry", False
+    )
+    if _has_preint_neb:
+        _neb_cont_phot = nebular_backend._preint_continuum.phot
+        _neb_cont_axes = nebular_backend._preint_continuum.axes
+        _neb_cont_edges = nebular_backend._preint_continuum.edges
+        _neb_line_weights = nebular_backend._preint_lines.line_filter_weights
+        _neb_line_axes = nebular_backend._preint_lines.axes
+        _neb_line_edges = nebular_backend._preint_lines.edges
+        _neb_line_lum = nebular_backend.grid.line_luminosity
+        _neb_young_idx = jnp.array(nebular_backend._young_idx)
+        _neb_qh_table = nebular_backend._qh_table
+        _neb_qh_log_met = nebular_backend._qh_log_met
+        _neb_qh_log_age = nebular_backend._qh_log_age
+        _neb_lya_idx = int(jnp.argmin(jnp.abs(nebular_backend.grid.line_wavelengths - 1215.67)))
+
+    # Shock
+    has_shock = getattr(model, "_shock_enabled", False)
+
+    # Dust emission (full wavelength or preintegrated)
+    has_dust_em_full = model._dust_emission_model is not None
+    _dust_model_name = model._dust_emission_model if has_dust_em_full else None
+    if has_dust_em_full:
+        from tengri.models.dust.emission import resolve_emission_model
+
+        resolve_emission_model(model._dust_emission_model)
+
+    # AGN (full wavelength)
+    has_agn_full = model._agn_model is not None
+    if has_agn_full:
+        from tengri.models.agn import resolve_agn_model
+
+        agn_model_fn_full = resolve_agn_model(model._agn_model)
+
+    # Radio
+    has_radio = model._radio_enabled
+    if has_radio:
+        _radio_sfr_mode = model._radio_sfr_mode
+        _include_freefree = model._radio_include_freefree
+
+    # X-ray
+    has_xray = model._xray_enabled
+
+    # Constants for energy balance
+    _c_aa = dt.type(2.99792458e18)
+
+    # Filter information
+    n_filters = len(model.filter_waves) if model.filter_waves else 0
+    filter_waves_list = model.filter_waves if model.filter_waves else []
+    filter_trans_list = model.filter_trans if model.filter_trans else []
+
+    # Build SFH function and parameters from model
+    spec = model.spec
+    param_map = model._param_map
+    age_yr = model._age_yr
+    log_age_grid = model._log_age_grid
+    d_log_age = model._d_log_age
+    ssp_log_ages_yr_cap = model._ssp_log_ages_yr_cap
+    has_field = "xi" in model.spec.free_params
+    sfh_internal_names = model._sfh_internal_names
+    n_grid = model._age_grid_n_pts
+    field_model = model._field_model
+    sfh_fn = resolve_sfh(model._sfh_model)
+
+    # === Define kernel signature (parametric-style, same as fixed-z) ===
+
+    if _is_single_dust:
+
+        @jax.jit
+        def hybrid_phot_ztable(
+            sfr_on_ssp,
+            log_z_abs,
+            redshift,
+            tau_v,
+            dust_slope,
+            f_obscuration=0.0,
+            dust_bump_strength=0.0,
+            dust_delta=0.0,
+            dust_Rv=3.1,
+            alpha_fe=0.0,
+            dust_T=35.0,
+            dust_beta_ir=1.6,
+            dust_eta_balance=1.0,
+            agn_log_lbol=10.0,
+            agn_alpha=-1.0,
+            agn_T_torus=1000.0,
+            agn_tau_torus=5.0,
+            agn_torus_frac=0.5,
+            agn_log_mbh=7.0,
+            agn_log_ledd=-1.0,
+            # Non-stellar parameters
+            neb_logU=-3.0,
+            neb_logZ_gas=None,
+            neb_fesc=0.0,
+            neb_fesc_lya=0.0,
+            shock_frac=0.0,
+            shock_velocity=300.0,
+            shock_log_density=0.0,
+            shock_b_over_sqrt_n=1.0,
+            shock_abundance="solar",
+            shock_component="combined",
+            dust_alpha_mir=2.0,
+            dust_alpha_dale=2.0,
+            dust_umin=1.0,
+            dust_gamma_dl=0.01,
+            dust_qpah=2.5,
+            agn_polar_ebv=0.0,
+            agn_cos_inc=0.5,
+            agn_polar_oa=45.0,
+            agn_a_spin=0.0,
+            agn_tau_skirtor=7.0,
+            agn_p_skirtor=1.0,
+            agn_q_skirtor=1.0,
+            agn_oa_skirtor=40.0,
+            agn_frac=0.0,
+            agn_T_hot=1200.0,
+            agn_T_warm=300.0,
+            agn_frac_hot=0.3,
+            agn_f_hard=0.02,
+            agn_gamma_warm=2.5,
+            agn_kt_warm=0.2,
+            agn_gamma_hard=1.8,
+            agn_kt_hot=100.0,
+            agn_r_warm_ratio=2.0,
+            radio_q_ir=2.64,
+            radio_alpha_sf=0.8,
+            radio_loudness=0.0,
+            radio_alpha_agn=0.7,
+            radio_T_e=1e4,
+            radio_alpha_ff=-0.1,
+            xray_gamma_agn=1.8,
+            xray_alpha_ox=-1.4,
+            xray_gamma_hmxb=2.0,
+            xray_gamma_lmxb=1.6,
+            xray_E_cut=300.0,
+        ):
+            return _hybrid_phot_ztable_body(
+                sfr_on_ssp,
+                log_z_abs,
+                redshift,
+                0.0,
+                0.0,
+                dust_slope,
+                f_obscuration,
+                dust_bump_strength,
+                dust_delta,
+                dust_Rv,
+                alpha_fe,
+                dust_T,
+                dust_beta_ir,
+                dust_eta_balance,
+                agn_log_lbol,
+                agn_alpha,
+                agn_T_torus,
+                agn_tau_torus,
+                agn_torus_frac,
+                agn_log_mbh,
+                agn_log_ledd,
+                neb_logU,
+                neb_logZ_gas,
+                neb_fesc,
+                neb_fesc_lya,
+                shock_frac,
+                shock_velocity,
+                shock_log_density,
+                shock_b_over_sqrt_n,
+                shock_abundance,
+                shock_component,
+                dust_alpha_mir,
+                dust_alpha_dale,
+                dust_umin,
+                dust_gamma_dl,
+                dust_qpah,
+                agn_polar_ebv,
+                agn_cos_inc,
+                agn_polar_oa,
+                agn_frac,
+                agn_a_spin,
+                agn_tau_skirtor,
+                agn_p_skirtor,
+                agn_q_skirtor,
+                agn_oa_skirtor,
+                agn_T_hot,
+                agn_T_warm,
+                agn_frac_hot,
+                agn_f_hard,
+                agn_gamma_warm,
+                agn_kt_warm,
+                agn_gamma_hard,
+                agn_kt_hot,
+                agn_r_warm_ratio,
+                radio_q_ir,
+                radio_alpha_sf,
+                radio_loudness,
+                radio_alpha_agn,
+                radio_T_e,
+                radio_alpha_ff,
+                xray_gamma_agn,
+                xray_alpha_ox,
+                xray_gamma_hmxb,
+                xray_gamma_lmxb,
+                xray_E_cut,
+                tau_v=tau_v,
+            )
+
+    else:
+
+        @jax.jit
+        def hybrid_phot_ztable(
+            sfr_on_ssp,
+            log_z_abs,
+            redshift,
+            tau_bc,
+            tau_diff,
+            dust_slope,
+            f_obscuration=0.0,
+            dust_bump_strength=0.0,
+            dust_delta=0.0,
+            dust_Rv=3.1,
+            alpha_fe=0.0,
+            dust_T=35.0,
+            dust_beta_ir=1.6,
+            dust_eta_balance=1.0,
+            agn_log_lbol=10.0,
+            agn_alpha=-1.0,
+            agn_T_torus=1000.0,
+            agn_tau_torus=5.0,
+            agn_torus_frac=0.5,
+            agn_log_mbh=7.0,
+            agn_log_ledd=-1.0,
+            # Non-stellar parameters
+            neb_logU=-3.0,
+            neb_logZ_gas=None,
+            neb_fesc=0.0,
+            neb_fesc_lya=0.0,
+            shock_frac=0.0,
+            shock_velocity=300.0,
+            shock_log_density=0.0,
+            shock_b_over_sqrt_n=1.0,
+            shock_abundance="solar",
+            shock_component="combined",
+            dust_alpha_mir=2.0,
+            dust_alpha_dale=2.0,
+            dust_umin=1.0,
+            dust_gamma_dl=0.01,
+            dust_qpah=2.5,
+            agn_polar_ebv=0.0,
+            agn_cos_inc=0.5,
+            agn_polar_oa=45.0,
+            agn_a_spin=0.0,
+            agn_tau_skirtor=7.0,
+            agn_p_skirtor=1.0,
+            agn_q_skirtor=1.0,
+            agn_oa_skirtor=40.0,
+            agn_frac=0.0,
+            agn_T_hot=1200.0,
+            agn_T_warm=300.0,
+            agn_frac_hot=0.3,
+            agn_f_hard=0.02,
+            agn_gamma_warm=2.5,
+            agn_kt_warm=0.2,
+            agn_gamma_hard=1.8,
+            agn_kt_hot=100.0,
+            agn_r_warm_ratio=2.0,
+            radio_q_ir=2.64,
+            radio_alpha_sf=0.8,
+            radio_loudness=0.0,
+            radio_alpha_agn=0.7,
+            radio_T_e=1e4,
+            radio_alpha_ff=-0.1,
+            xray_gamma_agn=1.8,
+            xray_alpha_ox=-1.4,
+            xray_gamma_hmxb=2.0,
+            xray_gamma_lmxb=1.6,
+            xray_E_cut=300.0,
+        ):
+            return _hybrid_phot_ztable_body(
+                sfr_on_ssp,
+                log_z_abs,
+                redshift,
+                tau_bc,
+                tau_diff,
+                dust_slope,
+                f_obscuration,
+                dust_bump_strength,
+                dust_delta,
+                dust_Rv,
+                alpha_fe,
+                dust_T,
+                dust_beta_ir,
+                dust_eta_balance,
+                agn_log_lbol,
+                agn_alpha,
+                agn_T_torus,
+                agn_tau_torus,
+                agn_torus_frac,
+                agn_log_mbh,
+                agn_log_ledd,
+                neb_logU,
+                neb_logZ_gas,
+                neb_fesc,
+                neb_fesc_lya,
+                shock_frac,
+                shock_velocity,
+                shock_log_density,
+                shock_b_over_sqrt_n,
+                shock_abundance,
+                shock_component,
+                dust_alpha_mir,
+                dust_alpha_dale,
+                dust_umin,
+                dust_gamma_dl,
+                dust_qpah,
+                agn_polar_ebv,
+                agn_cos_inc,
+                agn_polar_oa,
+                agn_frac,
+                agn_a_spin,
+                agn_tau_skirtor,
+                agn_p_skirtor,
+                agn_q_skirtor,
+                agn_oa_skirtor,
+                agn_T_hot,
+                agn_T_warm,
+                agn_frac_hot,
+                agn_f_hard,
+                agn_gamma_warm,
+                agn_kt_warm,
+                agn_gamma_hard,
+                agn_kt_hot,
+                agn_r_warm_ratio,
+                radio_q_ir,
+                radio_alpha_sf,
+                radio_loudness,
+                radio_alpha_agn,
+                radio_T_e,
+                radio_alpha_ff,
+                xray_gamma_agn,
+                xray_alpha_ox,
+                xray_gamma_hmxb,
+                xray_gamma_lmxb,
+                xray_E_cut,
+            )
+
+    def _stellar_phot_ztable(
+        sfr_on_ssp,
+        log_z_abs,
+        redshift,
+        tau_bc,
+        tau_diff,
+        dust_slope,
+        f_obscuration,
+        dust_bump_strength,
+        dust_delta,
+        dust_Rv,
+        alpha_fe,
+        tau_v=0.0,
+    ):
+        """Stellar photometry from z-table: metallicity interp + z-table lookup.
+
+        Interpolates precomputed z-table to the current redshift and
+        metallicity to get SSP photometry, then applies dust attenuation
+        and computes L_absorbed estimate (same as fixed-z version).
+        """
+        sfr = sfr_on_ssp.astype(dt)
+        lz = jnp.asarray(log_z_abs, dtype=dt)
+        z = jnp.asarray(redshift, dtype=dt)
+        tv1 = jnp.asarray(tau_bc, dtype=dt)
+        tv2 = jnp.asarray(tau_diff, dtype=dt)
+        tv = jnp.asarray(tau_v, dtype=dt)
+        dn = jnp.asarray(dust_slope, dtype=dt)
+        f_obs = jnp.asarray(f_obscuration, dtype=dt)
+        bump = jnp.asarray(dust_bump_strength, dtype=dt)
+        delta = jnp.asarray(dust_delta, dtype=dt)
+        rv = jnp.asarray(dust_Rv, dtype=dt)
+        afe = jnp.asarray(alpha_fe, dtype=dt)
+
+        # CSP weights
+        weights = _csp_mat @ sfr if _csp_use_matrix else sfr * _age_dt
+
+        # === Interpolate z-table to current redshift ===
+        ssp_phot_at_z, eff_waves_rest, _flux_scale = interpolate_ztable(
+            ztable.ssp_phot_table,
+            ztable.eff_waves_rest_table,
+            ztable.flux_scale_table,
+            ztable.z_grid,
+            z,
+        )
+        # ssp_phot_at_z: shape (n_met, n_age, n_filters)
+        # eff_waves_rest: shape (n_filters,)
+        # _flux_scale: scalar (not used in z-table, photometry already scaled)
+
+        # === Interpolate metallicity ===
+        if _has_alpha:
+            lz_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
+            iz = jnp.clip(jnp.searchsorted(ssp_lgmet, lz_c) - 1, 0, len(ssp_lgmet) - 2)
+            fz = (lz_c - ssp_lgmet[iz]) / (ssp_lgmet[iz + 1] - ssp_lgmet[iz])
+            afe_c = jnp.clip(afe, ssp_alpha_fe[0], ssp_alpha_fe[-1])
+            ia = jnp.clip(jnp.searchsorted(ssp_alpha_fe, afe_c) - 1, 0, len(ssp_alpha_fe) - 2)
+            fa = (afe_c - ssp_alpha_fe[ia]) / (ssp_alpha_fe[ia + 1] - ssp_alpha_fe[ia])
+            ssp_at_z_met = (
+                (1 - fz) * (1 - fa) * ssp_phot_at_z[iz, ia]
+                + fz * (1 - fa) * ssp_phot_at_z[iz + 1, ia]
+                + (1 - fz) * fa * ssp_phot_at_z[iz, ia + 1]
+                + fz * fa * ssp_phot_at_z[iz + 1, ia + 1]
+            )
+        else:
+            if _use_alpha_fe:
+                lz = lz + _A2Z * afe
+            if _use_smooth_z:
+                zw = _clw(lz, ssp_lgmet, _lgmet_scat)
+                ssp_at_z_met = jnp.einsum("m,maf->af", zw, ssp_phot_at_z)
+            else:
+                log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
+                idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
+                frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
+                ssp_at_z_met = (1.0 - frac) * ssp_phot_at_z[idx] + frac * ssp_phot_at_z[idx + 1]
+
+        # Dust at effective wavelengths (same as fixed-z)
+        _law_kw = dict(n_slope=dn, dust_bump_strength=bump, dust_delta=delta, dust_Rv=rv)
+        if _is_single_dust:
+            k = law_bc_fn(eff_waves_rest.astype(dt), **_law_kw)
+            trans_1d = f_obs + (1.0 - f_obs) * jnp.exp(-tv * k)
+            flux_attenuated = jnp.einsum("i,if->f", weights, ssp_at_z_met) * trans_1d
+        elif _dust_exact:
+            k_bc = law_bc_fn(eff_waves_rest.astype(dt), **_law_kw)
+            k_diff = law_diff_fn(eff_waves_rest.astype(dt), **_law_kw)
+            tau = dust_age_w[:, None] * tv1 * k_bc[None, :] + tv2 * k_diff[None, :]
+            dust = f_obs + (1.0 - f_obs) * jnp.exp(-tau)
+            flux_attenuated = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z_met)
+        else:
+            # Fast two-component dust (same as fixed-z)
+            k_bc = law_bc_fn(eff_waves_rest.astype(dt), **_law_kw)
+            k_diff = law_diff_fn(eff_waves_rest.astype(dt), **_law_kw)
+            trans_bc = jnp.exp(-tv1 * k_bc)
+            trans_diff = jnp.exp(-tv2 * k_diff)
+
+            csp_young = jnp.einsum("i,if->f", weights * young_mask, ssp_at_z_met)
+            csp_old = jnp.einsum("i,if->f", weights * old_mask, ssp_at_z_met)
+
+            flux_no_geom = trans_diff * (trans_bc * csp_young + csp_old)
+            flux_intrinsic_for_geom = csp_young + csp_old
+            flux_attenuated = f_obs * flux_intrinsic_for_geom + (1.0 - f_obs) * flux_no_geom
+
+        # Estimate L_absorbed
+        flux_intrinsic = jnp.einsum("i,if->f", weights, ssp_at_z_met)
+        diff_flux = (flux_intrinsic - flux_attenuated) * lsun  # erg/s/Hz per band
+        if _eff_bw is not None:
+            L_absorbed_stellar = jnp.sum(diff_flux * _eff_bw)
+        else:
+            L_absorbed_stellar = jnp.sum(diff_flux)
+
+        return flux_attenuated, L_absorbed_stellar, weights
+
+    def _hybrid_phot_ztable_body(
+        sfr_on_ssp,
+        log_z_abs,
+        redshift,
+        tau_bc,
+        tau_diff,
+        dust_slope,
+        f_obscuration,
+        dust_bump_strength,
+        dust_delta,
+        dust_Rv,
+        alpha_fe,
+        dust_T,
+        dust_beta_ir,
+        dust_eta_balance,
+        agn_log_lbol,
+        agn_alpha,
+        agn_T_torus,
+        agn_tau_torus,
+        agn_torus_frac,
+        agn_log_mbh,
+        agn_log_ledd,
+        neb_logU,
+        neb_logZ_gas,
+        neb_fesc,
+        neb_fesc_lya,
+        shock_frac,
+        shock_velocity,
+        shock_log_density,
+        shock_b_over_sqrt_n,
+        shock_abundance,
+        shock_component,
+        dust_alpha_mir,
+        dust_alpha_dale,
+        dust_umin,
+        dust_gamma_dl,
+        dust_qpah,
+        agn_polar_ebv,
+        agn_cos_inc,
+        agn_polar_oa,
+        agn_frac,
+        agn_a_spin,
+        agn_tau_skirtor,
+        agn_p_skirtor,
+        agn_q_skirtor,
+        agn_oa_skirtor,
+        agn_T_hot,
+        agn_T_warm,
+        agn_frac_hot,
+        agn_f_hard,
+        agn_gamma_warm,
+        agn_kt_warm,
+        agn_gamma_hard,
+        agn_kt_hot,
+        agn_r_warm_ratio,
+        radio_q_ir,
+        radio_alpha_sf,
+        radio_loudness,
+        radio_alpha_agn,
+        radio_T_e,
+        radio_alpha_ff,
+        xray_gamma_agn,
+        xray_alpha_ox,
+        xray_gamma_hmxb,
+        xray_gamma_lmxb,
+        xray_E_cut,
+        tau_v=0.0,
+    ):
+        """Hybrid z-table kernel body: stellar + exact non-stellar."""
+        # === STEP 1: Stellar photometry from z-table ===
+        flux_attenuated, L_absorbed_stellar, weights = _stellar_phot_ztable(
+            sfr_on_ssp,
+            log_z_abs,
+            redshift,
+            tau_bc,
+            tau_diff,
+            dust_slope,
+            f_obscuration,
+            dust_bump_strength,
+            dust_delta,
+            dust_Rv,
+            alpha_fe,
+            tau_v=tau_v,
+        )
+
+        # === STEP 2: Non-stellar SED (same as build_hybrid_photometry) ===
+        # NOTE: This is exact same non-stellar computation as the fixed-z hybrid.
+        # The only difference is that stellar photometry is interpolated from
+        # z-table at each step, while fixed-z version uses precomputed values.
+        _has_any_nonstell = (
+            has_nebular or has_shock or has_dust_em_full or has_agn_full or has_radio or has_xray
+        )
+
+        non_stellar_phot = jnp.zeros(n_filters, dtype=jnp.float64)
+
+        if _has_any_nonstell:
+            non_stellar_sed = jnp.zeros_like(ssp_wave_f64)
+            L_abs_neb = jnp.float64(0.0)
+
+            if has_nebular:
+                _sfr_last = weights[-1]
+                neb_sed, _neb_lines = nebular_emission(
+                    sfr_on_ssp=sfr_on_ssp,
+                    logU=neb_logU,
+                    log_z=log_z_abs,
+                    fesc=neb_fesc,
+                    fesc_lya=neb_fesc_lya,
+                    backend=nebular_backend,
+                    return_lines=True,
+                )
+                non_stellar_sed = non_stellar_sed + neb_sed
+
+            if has_shock:
+                shock_sed = shock_emission(
+                    frac=shock_frac,
+                    velocity=shock_velocity,
+                    log_density=shock_log_density,
+                    b_over_sqrt_n=shock_b_over_sqrt_n,
+                    abundance=shock_abundance,
+                    component=shock_component,
+                )
+                non_stellar_sed = non_stellar_sed + shock_sed
+
+            if has_agn_full:
+                agn_sed = agn_emission(
+                    log_lbol=agn_log_lbol,
+                    alpha=agn_alpha,
+                    T_torus=agn_T_torus,
+                    tau_torus=agn_tau_torus,
+                    torus_frac=agn_torus_frac,
+                    log_mbh=agn_log_mbh,
+                    log_ledd=agn_log_ledd,
+                    polar_ebv=agn_polar_ebv,
+                    cos_inc=agn_cos_inc,
+                    polar_oa=agn_polar_oa,
+                    frac=agn_frac,
+                    a_spin=agn_a_spin,
+                    tau_skirtor=agn_tau_skirtor,
+                    p_skirtor=agn_p_skirtor,
+                    q_skirtor=agn_q_skirtor,
+                    oa_skirtor=agn_oa_skirtor,
+                    T_hot=agn_T_hot,
+                    T_warm=agn_T_warm,
+                    frac_hot=agn_frac_hot,
+                    f_hard=agn_f_hard,
+                    gamma_warm=agn_gamma_warm,
+                    kt_warm=agn_kt_warm,
+                    gamma_hard=agn_gamma_hard,
+                    kt_hot=agn_kt_hot,
+                    r_warm_ratio=agn_r_warm_ratio,
+                    func=agn_model_fn_full,
+                )
+                non_stellar_sed = non_stellar_sed + agn_sed
+
+            if has_radio:
+                mstar = jnp.exp(10.0 * jnp.log(10.0))  # dummy, not used in hybrid
+                radio_sed = radio_emission(
+                    sfr=weights[-1],
+                    mstar=mstar,
+                    log_lbol_agn=agn_log_lbol if has_agn_full else 10.0,
+                    frac_agn=agn_frac if has_agn_full else 0.0,
+                    mode=_radio_sfr_mode,
+                    q_ir=radio_q_ir,
+                    alpha_sf=radio_alpha_sf,
+                    loudness=radio_loudness,
+                    alpha_agn=radio_alpha_agn,
+                    T_e=radio_T_e,
+                    freefree=_include_freefree,
+                    alpha_ff=radio_alpha_ff,
+                    z=redshift,
+                )
+                non_stellar_sed = non_stellar_sed + radio_sed
+
+            if has_xray:
+                mstar = jnp.exp(10.0 * jnp.log(10.0))  # dummy
+                xray_sed = xray_emission(
+                    sfr=weights[-1],
+                    mstar=mstar,
+                    log_lbol_agn=agn_log_lbol if has_agn_full else 10.0,
+                    gamma_agn=xray_gamma_agn,
+                    alpha_ox=xray_alpha_ox,
+                    gamma_hmxb=xray_gamma_hmxb,
+                    gamma_lmxb=xray_gamma_lmxb,
+                    E_cut=xray_E_cut,
+                )
+                non_stellar_sed = non_stellar_sed + xray_sed
+
+            # Dust attenuation on non-stellar
+            if has_nebular or has_shock:
+                attenuated_nonstell_sed, L_abs_neb = attenuate_emission(
+                    non_stellar_sed,
+                    dust_tau_bc=tau_bc,
+                    dust_tau_diff=tau_diff,
+                    dust_slope=dust_slope,
+                    dust_bump=dust_bump_strength,
+                    dust_delta=dust_delta,
+                    dust_Rv=dust_Rv,
+                    redshift=redshift,
+                    law_bc_fn=_neb_bc_fn,
+                    law_diff_fn=law_diff_fn if not _is_single_dust else None,
+                    mode=_neb_dust_mode,
+                )
+                non_stellar_sed = attenuated_nonstell_sed
+            else:
+                L_abs_neb = jnp.float64(0.0)
+
+            # Dust IR emission (uses L_absorbed)
+            if has_dust_em_full:
+                L_abs_total = L_absorbed_stellar + L_abs_neb
+                ir_sed = dust_ir_emission(
+                    L_absorbed=L_abs_total,
+                    T=dust_T,
+                    beta_ir=dust_beta_ir,
+                    eta=dust_eta_balance,
+                    alpha_mir=dust_alpha_mir,
+                    alpha_dale=dust_alpha_dale,
+                    umin=dust_umin,
+                    gamma_dl=dust_gamma_dl,
+                    qpah=dust_qpah,
+                    model=_dust_model_name,
+                )
+                non_stellar_sed = non_stellar_sed + ir_sed
+
+            # Integrate non-stellar through filters
+            # Interpolate non-stellar SED to observed frame + filter integration
+            from tengri.models.observation.photometry import compute_flux_density
+
+            non_stellar_phot = compute_flux_density(
+                wave_rest=ssp_wave_f64,
+                sed=non_stellar_sed,
+                filter_waves=filter_waves_list,
+                filter_trans=filter_trans_list,
+                redshift=redshift,
+                use_wave_res=False,
+            )
+
+        # === STEP 3: Combine and convert to erg/s/cm²/Hz ===
+        # Interpolate z-table to get flux_scale at current z
+        _, _, flux_scale = interpolate_ztable(
+            ztable.ssp_phot_table,
+            ztable.eff_waves_rest_table,
+            ztable.flux_scale_table,
+            ztable.z_grid,
+            jnp.asarray(redshift, dtype=dt),
+        )
+        flux_scale = jnp.asarray(flux_scale, dtype=jnp.float64)
+
+        # Stellar contribution: flux_attenuated is in Lsun/Hz (from einsum)
+        stellar_phot = flux_scale * flux_attenuated * lsun  # erg/s/cm²/Hz
+
+        # Total photometry
+        total_phot = stellar_phot + non_stellar_phot
+
+        return total_phot
+
+    @jax.jit
+    def hybrid_phot_ztable_fused(params):
+        """params dict → photometry (end-to-end JIT for z-table path)."""
+        p = get_internal_params(params, param_map, spec, has_field)
+
+        # SFH computation
+        kw = {k: v for k, v in p.items() if k in sfh_internal_names}
+        if has_field and "xi" in p:
+            gp_x, k0_half = compute_field_gp(
+                xi=p["xi"],
+                psd_sigma=p["psd_sigma"],
+                psd_tau_yr=p["psd_tau_yr"],
+                n_grid=n_grid,
+                d_log_age=d_log_age,
+                field_model=field_model,
+            )
+            kw["gp_x"] = gp_x
+            kw["k0_half"] = k0_half
+        sfr = sfh_fn(age_yr, **kw)
+        sfr_on_ssp = jnp.interp(ssp_log_ages_yr_cap, log_age_grid, sfr)
+
+        # Get redshift from params
+        z = p.get("redshift", 0.1)
+
+        # Dispatch to the inner kernel
+        if _is_single_dust:
+            return hybrid_phot_ztable(
+                sfr_on_ssp,
+                p["log_z_abs"],
+                z,
+                p.get("tau_v", 0.0),
+                p.get("dust_slope", -0.7),
+                **{
+                    k: p.get(k, v)
+                    for k, v in [
+                        ("f_obscuration", 0.0),
+                        ("dust_bump_strength", 0.0),
+                        ("dust_delta", 0.0),
+                        ("dust_Rv", 3.1),
+                        ("alpha_fe", 0.0),
+                        ("dust_T", 35.0),
+                        ("dust_beta_ir", 1.6),
+                        ("dust_eta_balance", 1.0),
+                        ("agn_log_lbol", 10.0),
+                        ("agn_alpha", -1.0),
+                        ("agn_T_torus", 1000.0),
+                        ("agn_tau_torus", 5.0),
+                        ("agn_torus_frac", 0.5),
+                        ("agn_log_mbh", 7.0),
+                        ("agn_log_ledd", -1.0),
+                    ]
+                },
+            )
+        return hybrid_phot_ztable(
+            sfr_on_ssp,
+            p["log_z_abs"],
+            z,
+            p.get("tau_bc", 0.0),
+            p.get("tau_diff", 0.0),
+            p.get("dust_slope", -0.7),
+            **{
+                k: p.get(k, v)
+                for k, v in [
+                    ("f_obscuration", 0.0),
+                    ("dust_bump_strength", 0.0),
+                    ("dust_delta", 0.0),
+                    ("dust_Rv", 3.1),
+                    ("alpha_fe", 0.0),
+                    ("dust_T", 35.0),
+                    ("dust_beta_ir", 1.6),
+                    ("dust_eta_balance", 1.0),
+                    ("agn_log_lbol", 10.0),
+                    ("agn_alpha", -1.0),
+                    ("agn_T_torus", 1000.0),
+                    ("agn_tau_torus", 5.0),
+                    ("agn_torus_frac", 0.5),
+                    ("agn_log_mbh", 7.0),
+                    ("agn_log_ledd", -1.0),
+                ]
+            },
+        )
+
+    return hybrid_phot_ztable_fused
+
+
 # Exact-path SED kernel
 # -------------------------------------------------------------------
 

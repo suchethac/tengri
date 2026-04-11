@@ -46,6 +46,7 @@ from tengri.core.fused_kernels import (
     build_fused_tier2_photometry,
     build_fused_tier2_spectrum,
     build_hybrid_photometry,
+    build_hybrid_photometry_ztable,
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,
 )
@@ -2071,6 +2072,20 @@ class SEDModel:
             apply_igm=self._apply_igm and self._approx.get("igm", True),
         )
         self._precomputed.photometry_ztable = ztable
+
+        # Build hybrid z-table kernel if using hybrid mode
+        if self._hybrid.photometry is not None or any(
+            (
+                getattr(self._nebular_backend, "has_free_params", False),
+                getattr(self._shock_backend, "has_free_params", False),
+                self._has_dust_ir_full,
+                self._has_agn_full,
+                self._has_radio,
+                self._has_xray,
+            )
+        ):
+            with contextlib.suppress(Exception):
+                self._hybrid.photometry = build_hybrid_photometry_ztable(self)
 
         return self
 
