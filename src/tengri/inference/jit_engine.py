@@ -75,6 +75,8 @@ def build_jit_engine(fitter, pos_dict):
     noise_dof = get_noise_dof(fitter.spec) if uses_student_t(fitter.spec) else None
 
     # --- Signal response (physics only) ---
+    # NOT JIT'd — must remain traceable so that jax.jvp/vjp (in metric_vec)
+    # and jax.value_and_grad (in hamiltonian) can differentiate through it.
     def signal_response(primals):
         params = {}
         for name in free_names:
@@ -85,11 +87,11 @@ def build_jit_engine(fitter, pos_dict):
         if stochastic and "psd_xi" in primals:
             params["psd_xi"] = primals["psd_xi"]
         if data_type == "photometry":
-            return model.predict_photometry(params)
+            return model.predict_photometry(params, mode="_traceable")
         elif data_type == "spectroscopy":
             return model.predict_spectrum(params, model._wave_obs)
         elif data_type == "joint":
-            p = model.predict_photometry(params)
+            p = model.predict_photometry(params, mode="_traceable")
             s = model.predict_spectrum(params, model._wave_obs)
             return jnp.concatenate([p, s])
         raise ValueError(f"Unknown data_type: {data_type}")
@@ -108,11 +110,11 @@ def build_jit_engine(fitter, pos_dict):
             if stochastic and "psd_xi" in primals:
                 params["psd_xi"] = primals["psd_xi"]
             if data_type == "photometry":
-                predicted = model.predict_photometry(params)
+                predicted = model.predict_photometry(params, mode="_traceable")
             elif data_type == "spectroscopy":
                 predicted = model.predict_spectrum(params, model._wave_obs)
             elif data_type == "joint":
-                p = model.predict_photometry(params)
+                p = model.predict_photometry(params, mode="_traceable")
                 s = model.predict_spectrum(params, model._wave_obs)
                 predicted = jnp.concatenate([p, s])
             else:
@@ -929,8 +931,7 @@ def build_jit_engine(fitter, pos_dict):
                 nifty_likelihood = jft.Gaussian(fitter.data, fitter._data_args["noise_inv"]).amend(
                     _nifty_model
                 )
-            # Build OptimizeVI with vmap and JIT
-            # (this pre-compiles all the internal functions)
+            # Build OptimizeVI with vmap and JIT.
             nifty_opt_vi = OptimizeVI(
                 nifty_likelihood,
                 n_total_iterations=50,  # max, actual controlled by caller
@@ -980,37 +981,15 @@ def build_jit_engine(fitter, pos_dict):
         pos_d = converged.tree if hasattr(converged, "tree") else dict(converged)
         return flatten(pos_d), samples
 
-    # Compile the core functions with dummy data.
-    # data_args is passed as argument (not closed over) to all JIT'd
-    # functions so the same compiled XLA program can be reused with
-    # different data of the same shape.
-    dummy_pos = flatten(pos_dict)
-    dummy_keys = jax.random.split(jax.random.PRNGKey(0), 2)
-    dummy_data_args = fitter._data_args
-
-    # Pre-compile posterior sampler
+    # Wrap core functions in JIT but do NOT pre-compile (no dummy calls).
+    # Compilation happens lazily on first real call — avoids the 2+ GB
+    # protobuf size limit that eager compilation can hit when the forward
+    # model is large.  signal_response is already JIT'd above so it
+    # won't be re-traced into these scopes.
     draw_samples_jit = jax.jit(draw_residuals)
-    _ = draw_samples_jit(dummy_pos, dummy_keys, dummy_data_args)
 
-    # Pre-compile native optimizer (for n_iterations=10, n_samples=3)
-    # n_iterations is DYNAMIC (while_loop handles it). n_samples is
-    # STATIC (determines array shapes in draw_residuals).
     run_evi_jit = jax.jit(run_evi, static_argnames=("n_samples",))
-    _ = run_evi_jit(
-        dummy_pos,
-        jax.random.PRNGKey(0),
-        dummy_data_args,
-        n_iterations=2,
-        n_samples=2,
-        kl_rtol=1e-2,
-    )
 
-    # Pre-compile native geoVI optimizer.
-    # sample_mode is STATIC: JAX compiles a separate XLA program per mode.
-    # "linear" compiles in ~0.03s, "nonlinear_*" in ~56s (one-time cost).
-    # n_iterations is DYNAMIC: the while_loop handles variable counts
-    # without recompilation. n_samples is STATIC because it determines
-    # array shapes (residuals, sample keys) that JAX needs at trace time.
     run_evi_geovi_jit = jax.jit(
         run_evi_geovi,
         static_argnames=("n_samples", "sample_mode"),

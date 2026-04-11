@@ -235,6 +235,7 @@ def build_hybrid_photometry(model):
 
     if _is_single_dust:
 
+
         def hybrid_phot(
             sfr_on_ssp,
             log_z_abs,
@@ -370,6 +371,7 @@ def build_hybrid_photometry(model):
             )
 
     else:
+
 
         def hybrid_phot(
             sfr_on_ssp,
@@ -1163,9 +1165,8 @@ def build_hybrid_photometry(model):
     log_age_grid = model.log_age_grid
     age_yr = model.age_yr
 
-    @jax.jit
     def hybrid_phot_fused(params):
-        """params dict → photometry (end-to-end JIT, no Python dispatch)."""
+        """params dict → photometry (end-to-end, JIT'd by caller)."""
         p = get_internal_params(params, param_map, spec, has_field)
 
         # SFH computation (same as build_fused_tier2_photometry)
@@ -1425,6 +1426,7 @@ def build_hybrid_photometry_ztable(model):
 
     if _is_single_dust:
 
+
         def hybrid_phot_ztable(
             sfr_on_ssp,
             log_z_abs,
@@ -1562,6 +1564,7 @@ def build_hybrid_photometry_ztable(model):
             )
 
     else:
+
 
         def hybrid_phot_ztable(
             sfr_on_ssp,
@@ -2064,7 +2067,7 @@ def build_hybrid_photometry_ztable(model):
 
         return total_phot
 
-    @jax.jit
+
     def hybrid_phot_ztable_fused(params):
         """params dict → photometry (end-to-end JIT for z-table path)."""
         p = get_internal_params(params, param_map, spec, has_field)
@@ -2207,6 +2210,7 @@ def build_exact_sed(model):
     if not _is_single_dust_exact:
         law_diff_fn = model._dust_law_diff_fn
         same_law = model._dust_law_bc == model._dust_law_diff
+
 
     def exact_sed(
         weights,
@@ -2630,7 +2634,7 @@ def build_fused_tier2_photometry(model):
 
     if is_free_z:
 
-        @jax.jit
+
         def fused_tier2_phot(sfr_on_ssp, params):
             """sfr_on_ssp, params dict → observed photometry (free z)."""
             rest_sed, z = _compute_rest_sed(sfr_on_ssp, params)
@@ -2648,7 +2652,7 @@ def build_fused_tier2_photometry(model):
 
     else:
 
-        @jax.jit
+
         def fused_tier2_phot(sfr_on_ssp, params):
             """sfr_on_ssp, params dict → observed photometry (fixed z)."""
             rest_sed, _z = _compute_rest_sed(sfr_on_ssp, params)
@@ -2771,7 +2775,7 @@ def build_fused_tier2_spectrum(model):
 
     if is_free_z:
 
-        @jax.jit
+
         def fused_tier2_spec(sfr_on_ssp, params):
             """sfr_on_ssp, params dict → observed spectrum (free z)."""
             rest_sed, z = _compute_rest_sed_spec(sfr_on_ssp, params)
@@ -2780,7 +2784,7 @@ def build_fused_tier2_spectrum(model):
 
     else:
 
-        @jax.jit
+
         def fused_tier2_spec(sfr_on_ssp, params):
             """sfr_on_ssp, params dict → observed spectrum (fixed z)."""
             rest_sed, _z = _compute_rest_sed_spec(sfr_on_ssp, params)
@@ -2924,7 +2928,7 @@ def build_hybrid_spectrum(model):
 
     if _is_single_dust:
 
-        @jax.jit
+
         def hybrid_spec(sfr_on_ssp, params):
             """Single-dust hybrid spectrum."""
             p = get_internal_params(params, param_map, spec, has_field)
@@ -2932,7 +2936,7 @@ def build_hybrid_spectrum(model):
 
     else:
 
-        @jax.jit
+
         def hybrid_spec(sfr_on_ssp, params):
             """Two-dust hybrid spectrum."""
             p = get_internal_params(params, param_map, spec, has_field)

@@ -38,6 +38,7 @@ import dataclasses
 import warnings
 from typing import ClassVar, NamedTuple
 
+import jax
 import jax.numpy as jnp
 
 from tengri.core.fused_kernels import (
@@ -696,11 +697,11 @@ class SEDModel:
         # Level 1: Precomputed data (SSP tensors, dust weights, IGM)
         self._precomputed = self._build_precomputed_data(ssp_data, precompute)
 
-        # Level 2: Compositional kernels (full-resolution JIT)
-        self._compositional = self._build_compositional_kernels()
-
-        # Level 3: Hybrid kernels (precomputed SSP + exact non-stellar)
-        self._hybrid = self._build_hybrid_kernels()
+        # Level 2 & 3: Eagerly build kernels at init (not lazy) so they
+        # are never constructed inside a JIT scope (which causes tracer leaks
+        # when NIFTy/VI traces through predict_photometry).
+        self.__compositional = self._build_compositional_kernels()
+        self.__hybrid = self._build_hybrid_kernels()
 
         # Auto-precompute spectroscopy from Observation config
         if (
@@ -710,6 +711,29 @@ class SEDModel:
             and precompute is not False
         ):
             self.precompute_spectroscopy(observation.spectroscopy.wave_obs)
+
+    # -------------------------------------------------------------------
+    # Lazy kernel properties
+    # -------------------------------------------------------------------
+
+    @property
+    def _compositional(self):
+        """Lazily build compositional kernels on first access."""
+        if self.__compositional is None:
+            self.__compositional = self._build_compositional_kernels()
+        return self.__compositional
+
+    @property
+    def _hybrid(self):
+        """Lazily build hybrid kernels on first access."""
+        if self.__hybrid is None:
+            self.__hybrid = self._build_hybrid_kernels()
+        return self.__hybrid
+
+    def _invalidate_kernels(self):
+        """Reset cached kernels so they're rebuilt on next access."""
+        self.__compositional = None
+        self.__hybrid = None
 
     # -------------------------------------------------------------------
     # Kernel hierarchy builders
@@ -1046,23 +1070,28 @@ class SEDModel:
 
         # Store partial result so build_fused_tier2_photometry can read
         # model._compositional.rest_sed during construction.
-        self._compositional = CompositionalKernels(
+        self.__compositional = CompositionalKernels(
             rest_sed=rest_sed,
             exact_sed=exact_sed,
         )
 
         fused_phot = None
+        fused_phot_raw = None
         fused_spec = None
         if rest_sed is not None and self.filter_waves is not None:
             with contextlib.suppress(Exception):
-                fused_phot = build_fused_tier2_photometry(self)
+                fused_phot_raw = build_fused_tier2_photometry(self)
+                fused_phot = jax.jit(fused_phot_raw) if fused_phot_raw is not None else None
 
-        return CompositionalKernels(
+        ck = CompositionalKernels(
             rest_sed=rest_sed,
             photometry=fused_phot,
             spectrum=fused_spec,
             exact_sed=exact_sed,
         )
+        # Store raw (un-JIT'd) versions for NIFTy tracing
+        ck._photometry_raw = fused_phot_raw
+        return ck
 
     def _build_hybrid_kernels(self):
         """Build Level 3: precomputed SSP + exact non-stellar kernels.
@@ -1073,11 +1102,15 @@ class SEDModel:
         through filters (exact).
         """
         hybrid_phot = None
+        hybrid_phot_raw = None
         if self._precomputed.photometry is not None and self._z_fixed is not None:
             with contextlib.suppress(Exception):
-                hybrid_phot = build_hybrid_photometry(self)
+                hybrid_phot_raw = build_hybrid_photometry(self)
+                hybrid_phot = jax.jit(hybrid_phot_raw) if hybrid_phot_raw is not None else None
 
-        return HybridKernels(photometry=hybrid_phot)
+        hk = HybridKernels(photometry=hybrid_phot)
+        hk._photometry_raw = hybrid_phot_raw
+        return hk
 
     # -------------------------------------------------------------------
     # Internal parameter translation
@@ -1643,7 +1676,7 @@ class SEDModel:
         {"auto", "precomputed", "compositional", "hybrid", "exact"}
     )
 
-    def predict_photometry(self, params, mode="exact", approx=None):
+    def predict_photometry(self, params, mode="auto", approx=None):
         """Compute observed photometric flux densities.
 
         Parameters
@@ -1677,6 +1710,10 @@ class SEDModel:
         # Handle deprecated approx parameter
         if approx is not None:
             mode = "auto" if approx else "exact"
+
+        # _traceable: un-JIT'd path for NIFTy/VI tracing (not user-facing)
+        if mode == "_traceable":
+            return self._predict_photometry_traceable(params)
 
         if mode not in self._PREDICTION_MODES:
             raise ValueError(
@@ -1729,6 +1766,34 @@ class SEDModel:
             return self._predict_photometry_auto(params)
 
         return self._hybrid.photometry(params)
+
+    def _predict_photometry_traceable(self, params):
+        """Un-JIT'd photometry for use inside JAX tracing (NIFTy VI).
+
+        Returns the same result as hybrid/compositional but without
+        @jax.jit on the outer wrapper, so it can be traced by an
+        enclosing jax.jit (e.g. NIFTy's signal_response).
+
+        IMPORTANT: uses __hybrid/__compositional directly (not the lazy
+        property) to avoid building kernels inside a JIT scope.
+        """
+        # Prefer hybrid raw (already built at init)
+        if self.__hybrid is not None:
+            raw = getattr(self.__hybrid, "_photometry_raw", None)
+            if raw is not None:
+                return raw(params)
+        # Fall back to compositional raw
+        if self.__compositional is not None:
+            raw = getattr(self.__compositional, "_photometry_raw", None)
+            if raw is not None:
+                p = self._get_internal_params(params)
+                sfr = self._compute_sfr(p)
+                sfr_on_ssp = jnp.interp(
+                    self.ssp_log_ages_yr, self.log_age_grid, sfr
+                )
+                return raw(sfr_on_ssp, params)
+        # Last resort: exact (slow but always works)
+        return self._predict_photometry_exact(params)
 
     def _get_non_stellar_kwargs(self, p):
         """Extract non-stellar kwargs from internal params for hybrid kernel."""
@@ -2059,17 +2124,20 @@ class SEDModel:
         self._precomputed.spectroscopy = spec_precomp
         self._wave_obs = jnp.asarray(wave_obs)
 
-        # Compositional spectrum kernel (full-resolution end-to-end JIT)
-        self._compositional.spectrum = None
-        if self._compositional.rest_sed is not None:
-            with contextlib.suppress(Exception):
-                self._compositional.spectrum = build_fused_tier2_spectrum(self)
+        # Invalidate cached kernels to rebuild spectrum metadata
+        self._invalidate_kernels()
 
-        # Hybrid spectrum kernel (precomputed SSP + exact non-stellar)
-        self._hybrid.spectrum = None
+        # Rebuild compositional spectrum kernel (full-resolution end-to-end JIT)
         if self._compositional.rest_sed is not None:
             with contextlib.suppress(Exception):
-                self._hybrid.spectrum = build_hybrid_spectrum(self)
+                _raw = build_fused_tier2_spectrum(self)
+                self._compositional.spectrum = jax.jit(_raw) if _raw else None
+
+        # Rebuild hybrid spectrum kernel (precomputed SSP + exact non-stellar)
+        if self._compositional.rest_sed is not None:
+            with contextlib.suppress(Exception):
+                _raw = build_hybrid_spectrum(self)
+                self._hybrid.spectrum = jax.jit(_raw) if _raw else None
 
         return self
 
@@ -2124,11 +2192,12 @@ class SEDModel:
             )
         ):
             with contextlib.suppress(Exception):
-                self._hybrid.photometry = build_hybrid_photometry_ztable(self)
+                _raw = build_hybrid_photometry_ztable(self)
+                self._hybrid.photometry = jax.jit(_raw) if _raw else None
 
         return self
 
-    def predict_spectrum(self, params, wave_obs=None, mode="exact", approx=None):
+    def predict_spectrum(self, params, wave_obs=None, mode="auto", approx=None):
         """Compute observed spectrum at given wavelengths.
 
         Parameters
