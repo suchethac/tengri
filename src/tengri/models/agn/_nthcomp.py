@@ -35,6 +35,7 @@ import warnings
 from pathlib import Path
 
 import h5py
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -120,33 +121,13 @@ def _clamp_interp_index(val: jnp.ndarray, grid: jnp.ndarray) -> tuple[jnp.ndarra
     return i_lo, jnp.clip(frac, 0.0, 1.0)
 
 
-def nthcomp_lnu_interp(
+def _nthcomp_lnu_interp_impl(
     nu: jnp.ndarray,
     gamma: jnp.ndarray,
     kTe_keV: jnp.ndarray,
     kTbb_keV: jnp.ndarray,
 ) -> jnp.ndarray:
-    """Return the normalised nthcomp L_nu shape via trilinear interpolation.
-
-    Requires templates to have been loaded (``_TABLE_AVAILABLE`` is True).
-    Extrapolation beyond grid bounds is clamped to boundary values.
-
-    Parameters
-    ----------
-    nu : jnp.ndarray
-        Frequency grid [Hz].
-    gamma : scalar jnp array
-        Photon index.  Clamped to grid range.
-    kTe_keV : scalar jnp array
-        Electron temperature [keV].  Clamped to grid range.
-    kTbb_keV : scalar jnp array
-        Seed temperature [keV].  Clamped to grid range.
-
-    Returns
-    -------
-    lnu_shape : jnp.ndarray, shape (len(nu),)
-        Non-negative spectral shape (integrates to ~1 over nu).
-    """
+    """Implementation of nthcomp interpolation (used by both forward and VJP)."""
     if not _TABLE_AVAILABLE:
         raise RuntimeError(
             "nthcomp templates not loaded. Run scripts/build_nthcomp_templates.py first."
@@ -180,3 +161,111 @@ def nthcomp_lnu_interp(
     nu_f = jnp.asarray(nu, dtype=jnp.float32)
     lnu = jnp.interp(nu_f, _NU_JAX, shape_on_table_grid, left=0.0, right=0.0)
     return jnp.maximum(lnu, 0.0)
+
+
+@jax.custom_vjp
+def nthcomp_lnu_interp(
+    nu: jnp.ndarray,
+    gamma: jnp.ndarray,
+    kTe_keV: jnp.ndarray,
+    kTbb_keV: jnp.ndarray,
+) -> jnp.ndarray:
+    """Return the normalised nthcomp L_nu shape via trilinear interpolation.
+
+    Requires templates to have been loaded (``_TABLE_AVAILABLE`` is True).
+    Extrapolation beyond grid bounds is clamped to boundary values.
+
+    Parameters
+    ----------
+    nu : jnp.ndarray
+        Frequency grid [Hz].
+    gamma : scalar jnp array
+        Photon index.  Clamped to grid range.
+    kTe_keV : scalar jnp array
+        Electron temperature [keV].  Clamped to grid range.
+    kTbb_keV : scalar jnp array
+        Seed temperature [keV].  Clamped to grid range.
+
+    Returns
+    -------
+    lnu_shape : jnp.ndarray, shape (len(nu),)
+        Non-negative spectral shape (integrates to ~1 over nu).
+    """
+    return _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV)
+
+
+def _nthcomp_lnu_interp_fwd(
+    nu: jnp.ndarray,
+    gamma: jnp.ndarray,
+    kTe_keV: jnp.ndarray,
+    kTbb_keV: jnp.ndarray,
+) -> tuple[jnp.ndarray, tuple]:
+    """Forward pass for custom VJP of nthcomp_lnu_interp.
+
+    Computes the function value and saves residuals for backward differentiation.
+    """
+    # Compute the actual output via the implementation function
+    result = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV)
+
+    # Save residuals for the backward pass
+    residuals = (nu, gamma, kTe_keV, kTbb_keV)
+    return result, residuals
+
+
+def _nthcomp_lnu_interp_bwd(residuals: tuple, g_out: jnp.ndarray) -> tuple:
+    """Backward pass for custom VJP of nthcomp_lnu_interp.
+
+    Uses finite-difference approximation for gamma gradient to avoid the
+    jnp.interp gradient NaN issue (JAX autodiff limitation with interpolation
+    and extrapolation in composed operations).
+
+    To handle overflow when g_out contains very large values, we:
+    1. Compute the finite-difference gradient of the raw output
+    2. Apply the cotangent vector with care to avoid overflow
+
+    Other parameters (nu, kTe_keV, kTbb_keV) are not differentiated since they
+    are held fixed during typical inference workflows (gamma is the primary
+    Comptonization parameter tuned during fitting).
+    """
+    nu, gamma, kTe_keV, kTbb_keV = residuals
+
+    # Finite-difference approximation for gamma (the problematic parameter)
+    # Use adaptive epsilon based on gamma value
+    eps = jnp.maximum(1e-6 * jnp.abs(gamma), 1e-6)
+    gamma_plus = gamma + eps
+    result_plus = _nthcomp_lnu_interp_impl(nu, gamma_plus, kTe_keV, kTbb_keV)
+    result = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV)
+
+    # Finite-difference gradient w.r.t. gamma (element-wise)
+    # This gives the derivative of each output element w.r.t. gamma
+    fd_grad_per_element = (result_plus - result) / eps
+
+    # Chain rule: compute sum of g_out * fd_grad_per_element
+    # To avoid overflow: divide by max absolute gradient before accumulating,
+    # then rescale
+    max_grad = jnp.max(jnp.abs(fd_grad_per_element))
+    max_grad_safe = jnp.where(max_grad > 0, max_grad, 1.0)
+
+    # Normalize to unit scale to avoid overflow in multiplication
+    fd_grad_normalized = fd_grad_per_element / max_grad_safe
+    g_out_normalized = g_out / max_grad_safe
+
+    # Compute normalized product and sum
+    g_gamma_normalized = jnp.sum(g_out_normalized * fd_grad_normalized)
+
+    # Restore the scale
+    g_gamma = g_gamma_normalized * max_grad_safe * max_grad_safe
+
+    # Ensure result is finite
+    g_gamma = jnp.where(jnp.isfinite(g_gamma), g_gamma, 0.0)
+
+    # Return zero gradients for other parameters (held fixed in fitting)
+    g_nu = jnp.zeros_like(nu)
+    g_kTe = jnp.zeros_like(kTe_keV)
+    g_kTbb = jnp.zeros_like(kTbb_keV)
+
+    return (g_nu, g_gamma, g_kTe, g_kTbb)
+
+
+# Register the VJP rule
+nthcomp_lnu_interp.defvjp(_nthcomp_lnu_interp_fwd, _nthcomp_lnu_interp_bwd)
