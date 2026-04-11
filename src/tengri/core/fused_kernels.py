@@ -117,9 +117,7 @@ def build_hybrid_photometry(model):
         from tengri.models.igm import igm_transmission
 
         _wave_obs_igm = model.ssp_data.ssp_wave * (1.0 + _z_for_igm)
-        igm_trans_full = jnp.asarray(
-            igm_transmission(_wave_obs_igm, _z_for_igm), dtype=dt
-        )
+        igm_trans_full = jnp.asarray(igm_transmission(_wave_obs_igm, _z_for_igm), dtype=dt)
         # Per-filter effective IGM (for stellar preintegrated photometry)
         igm_trans_eff = model._precomputed.igm_at_effective_wavelengths
         if igm_trans_eff is not None:
@@ -237,7 +235,6 @@ def build_hybrid_photometry(model):
 
     if _is_single_dust:
 
-        @jax.jit
         def hybrid_phot(
             sfr_on_ssp,
             log_z_abs,
@@ -374,7 +371,6 @@ def build_hybrid_photometry(model):
 
     else:
 
-        @jax.jit
         def hybrid_phot(
             sfr_on_ssp,
             log_z_abs,
@@ -1429,7 +1425,6 @@ def build_hybrid_photometry_ztable(model):
 
     if _is_single_dust:
 
-        @jax.jit
         def hybrid_phot_ztable(
             sfr_on_ssp,
             log_z_abs,
@@ -1568,7 +1563,6 @@ def build_hybrid_photometry_ztable(model):
 
     else:
 
-        @jax.jit
         def hybrid_phot_ztable(
             sfr_on_ssp,
             log_z_abs,
@@ -2214,7 +2208,6 @@ def build_exact_sed(model):
         law_diff_fn = model._dust_law_diff_fn
         same_law = model._dust_law_bc == model._dust_law_diff
 
-    @jax.jit
     def exact_sed(
         weights,
         ssp_at_z,
@@ -2331,7 +2324,6 @@ def build_fused_rest_sed(model):
         model, law_bc_fn, _law_diff_for_nonstell, ssp_wave_f64, rest_wave_f64
     )
 
-    @jax.jit
     def rest_sed_kernel(weights, ssp_flux_at_z, p):
         """Compute rest-frame SED from CSP weights and Z-interpolated SSP.
 
@@ -2726,7 +2718,6 @@ def build_fused_tier2_spectrum(model):
     ssp_ages_yr = model.ssp_ages_yr
     # Panchromatic wavelength grid (extended if radio/xray enabled)
     rest_wave = model._rest_wavelength
-
 
     if _use_dsps_native_spec:
         _ssp_lgmet_spec = model.ssp_data.ssp_lgmet
