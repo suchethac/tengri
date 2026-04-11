@@ -881,7 +881,8 @@ def build_hybrid_photometry(model):
             L_abs_neb = jnp.float64(0.0)
 
             if has_nebular:
-                _sfr_last = weights[-1]
+                # Use SFR (Msun/yr), NOT CSP mass weight (Msun).
+                _sfr_last = sfr_on_ssp[-1]
                 neb_raw = nebular_emission(
                     nebular_backend,
                     weights,
@@ -1074,7 +1075,7 @@ def build_hybrid_photometry(model):
 
             # 2f: X-ray emission
             if has_xray:
-                sfr_now = weights[-1]
+                sfr_now = sfr_on_ssp[-1]  # SFR (Msun/yr), not mass weight
                 mstar = jnp.sum(weights)
                 _agn_bol_xray = (
                     10.0 ** (jnp.float64(agn_log_lbol)) * LSUN_ERG_PER_S if has_agn_full else 0.0
@@ -1855,7 +1856,7 @@ def build_hybrid_photometry_ztable(model):
     ):
         """Hybrid z-table kernel body: stellar + exact non-stellar."""
         # === STEP 1: Stellar photometry from z-table ===
-        flux_attenuated, L_absorbed_stellar, weights = _stellar_phot_ztable(
+        flux_attenuated, L_absorbed_stellar, _weights = _stellar_phot_ztable(
             sfr_on_ssp,
             log_z_abs,
             redshift,
@@ -1885,7 +1886,7 @@ def build_hybrid_photometry_ztable(model):
             L_abs_neb = jnp.float64(0.0)
 
             if has_nebular:
-                _sfr_last = weights[-1]
+                _sfr_last = sfr_on_ssp[-1]  # SFR (Msun/yr), not mass weight
                 neb_sed, _neb_lines = nebular_emission(
                     sfr_on_ssp=sfr_on_ssp,
                     logU=neb_logU,
@@ -1942,7 +1943,7 @@ def build_hybrid_photometry_ztable(model):
             if has_radio:
                 mstar = jnp.exp(10.0 * jnp.log(10.0))  # dummy, not used in hybrid
                 radio_sed = radio_emission(
-                    sfr=weights[-1],
+                    sfr=sfr_on_ssp[-1],
                     mstar=mstar,
                     log_lbol_agn=agn_log_lbol if has_agn_full else 10.0,
                     frac_agn=agn_frac if has_agn_full else 0.0,
@@ -1961,7 +1962,7 @@ def build_hybrid_photometry_ztable(model):
             if has_xray:
                 mstar = jnp.exp(10.0 * jnp.log(10.0))  # dummy
                 xray_sed = xray_emission(
-                    sfr=weights[-1],
+                    sfr=sfr_on_ssp[-1],
                     mstar=mstar,
                     log_lbol_agn=agn_log_lbol if has_agn_full else 10.0,
                     gamma_agn=xray_gamma_agn,
