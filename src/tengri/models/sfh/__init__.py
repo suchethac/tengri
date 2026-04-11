@@ -5,7 +5,7 @@ from tengri.models.sfh.chemical_evolution import (
     closed_box_metallicity,
     closed_box_metallicity_anchored,
 )
-from tengri.models.sfh.dense_basis import dense_basis_sfh
+from tengri.models.sfh.dense_basis import dense_basis_pure_sfh, dense_basis_sfh
 from tengri.models.sfh.mean_sfh import (
     AGEMAX_YR,
     constant_sfh,

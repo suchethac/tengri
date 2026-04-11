@@ -361,3 +361,134 @@ def dense_basis_sfh(
     # --- Interpolate onto the requested age grid ---
     result = jnp.interp(age_yr, t_lookback_yr, sfr)
     return jnp.maximum(result, 0.0)
+
+
+# ---------------------------------------------------------------------------
+# Pure quantile-only variant (no SFR constraint — for use with field)
+# ---------------------------------------------------------------------------
+
+
+def _build_quantile_points_pure(
+    tx_fracs: jnp.ndarray,
+    n_param: int,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Build quantile points WITHOUT observation-epoch SFR constraints.
+
+    This is the clean version for use as a mean SFH with the GP field
+    modulator. The SFH shape is determined purely by the mass-time
+    quantiles and total mass — no instantaneous SFR pinning.
+
+    Returns (time_q, mass_q, yerr) with n_param+3 points:
+    (0,0), (0.01,0), (tx_i, mass_i), (1,1).
+    """
+    mass_quantiles = jnp.linspace(0.0, 1.0, n_param + 2)
+    time_quantiles = jnp.concatenate(
+        [
+            jnp.array([0.0]),
+            tx_fracs,
+            jnp.array([1.0]),
+        ]
+    )
+
+    # Big Bang constraint
+    time_q = jnp.concatenate(
+        [
+            time_quantiles[:1],
+            jnp.array([0.01]),
+            time_quantiles[1:],
+        ]
+    )
+    mass_q = jnp.concatenate(
+        [
+            mass_quantiles[:1],
+            jnp.array([0.0]),
+            mass_quantiles[1:],
+        ]
+    )
+
+    # Noise: tight on user quantile points only
+    yerr = jnp.zeros(len(time_q))
+    noise_scale = 0.001 / jnp.sqrt(jnp.maximum(n_param, 1.0))
+    yerr = yerr.at[2 : 2 + n_param].set(noise_scale)
+
+    return time_q, mass_q, yerr
+
+
+def dense_basis_pure_sfh(
+    age_yr: jnp.ndarray,
+    log_total_mass: float = 10.0,
+    age_universe_yr: float = 13.47e9,
+    **tx_kwargs: float,
+) -> jnp.ndarray:
+    """Pure quantile-based GP-SFH — no instantaneous SFR constraint.
+
+    Like ``dense_basis_sfh`` but without the ``log_sfr_inst`` parameter
+    and observation-epoch SFR constraint points. The SFH shape is
+    determined purely by the mass-time quantiles and total mass.
+
+    Intended for use as the mean SFH in a composed model with the
+    GP field modulator: ``sfh=["dense_basis_pure", "field"]``.
+    The field handles recent SFR variability, so the artificial
+    SFR constraint points are unnecessary and would interfere
+    with the field's flexibility.
+
+    Parameters
+    ----------
+    age_yr : array (n_age,)
+        Lookback time grid in years.
+    log_total_mass : float
+        log10(total stellar mass formed / Msun).
+    age_universe_yr : float
+        Age of the universe at observation epoch (yr).
+    **tx_kwargs
+        ``tx_frac_0``, ``tx_frac_1``, ...: cosmic time fractions.
+
+    Returns
+    -------
+    array (n_age,)
+        SFR at each lookback time (Msun/yr), non-negative.
+
+    References
+    ----------
+    - Iyer & Gawiser (2017), ApJ 838, 127 (arXiv:1702.04371).
+    - Iyer et al. (2019), ApJ 879, 116 (arXiv:1901.02877).
+    """
+    n_param = len(tx_kwargs)
+    if n_param == 0:
+        raise ValueError("dense_basis_pure_sfh requires at least one tx_frac_*")
+    for i in range(n_param):
+        key = f"tx_frac_{i}"
+        if key not in tx_kwargs:
+            raise ValueError(
+                f"Missing required parameter '{key}'. Got keys: {sorted(tx_kwargs.keys())}."
+            )
+    tx_fracs = jnp.array([tx_kwargs[f"tx_frac_{i}"] for i in range(n_param)])
+    tx_fracs = jnp.sort(tx_fracs)
+    tx_fracs = jnp.clip(tx_fracs, 0.02, 0.99)
+
+    # Build quantile points (NO SFR constraints)
+    time_q, mass_q, yerr = _build_quantile_points_pure(tx_fracs, n_param)
+
+    # GP kernel hyperparameters
+    variance = jnp.var(mass_q)
+    length_scale = jnp.maximum(jnp.median(mass_q), _LENGTH_SCALE_FLOOR)
+
+    # GP interpolation
+    t_eval = jnp.linspace(0.0, 1.0, _DEFAULT_RES)
+    m_cumul = gp_interpolate(time_q, mass_q, yerr, t_eval, variance, length_scale)
+
+    # SFR = sfh_scale * diff(cumulative_mass)
+    age_universe_gyr = age_universe_yr / 1e9
+    sfh_scale = 10.0**log_total_mass / (age_universe_gyr * 1e9 / _DEFAULT_RES)
+    sfr = jnp.diff(m_cumul) * sfh_scale
+    sfr = jnp.maximum(sfr, 0.0)
+    sfr = jnp.concatenate([jnp.array([0.0]), sfr])
+
+    # Cosmic time → lookback time
+    t_cosmic_yr = t_eval * age_universe_yr
+    t_lookback_yr = age_universe_yr - t_cosmic_yr
+    t_lookback_yr = t_lookback_yr[::-1]
+    sfr = sfr[::-1]
+
+    result = jnp.interp(age_yr, t_lookback_yr, sfr)
+    return jnp.maximum(result, 0.0)
