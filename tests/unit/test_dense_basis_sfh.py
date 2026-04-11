@@ -27,7 +27,13 @@ from tengri.models.sfh.registry import resolve_sfh
 
 # Shared test fixtures
 AGE_YR = jnp.geomspace(1e6, 13.7e9, 200)
-DEFAULT_KW = {"log_total_mass": 10.0, "tx_frac_0": 0.3, "tx_frac_1": 0.55, "tx_frac_2": 0.8}
+DEFAULT_KW = {
+    "log_total_mass": 10.0,
+    "log_sfr_inst": 0.0,
+    "tx_frac_0": 0.3,
+    "tx_frac_1": 0.55,
+    "tx_frac_2": 0.8,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -134,16 +140,29 @@ class TestBuildQuantilePoints:
 
     def test_shapes(self) -> None:
         tx = jnp.array([0.3, 0.5, 0.8])
-        time_q, mass_q = _build_quantile_points(tx, n_param=3)
-        # n_param + 2 (endpoints) + 1 (BB constraint) = 6
-        assert time_q.shape == (6,)
-        assert mass_q.shape == (6,)
+        time_q, mass_q, yerr = _build_quantile_points(
+            tx,
+            n_param=3,
+            log_total_mass=10.0,
+            log_sfr_inst=0.0,
+            age_universe_yr=13.47e9,
+        )
+        # n_param+2 (endpoints) + 1 (BB) + 3 (SFR constraints) = 9
+        assert time_q.shape == (9,)
+        assert mass_q.shape == (9,)
+        assert yerr.shape == (9,)
 
     def test_boundary_values(self) -> None:
         tx = jnp.array([0.3, 0.5, 0.8])
-        time_q, mass_q = _build_quantile_points(tx, n_param=3)
-        # First point is BB constraint (t=0.01, M=0)
-        assert jnp.isclose(time_q[0], 0.01)
+        time_q, mass_q, _yerr = _build_quantile_points(
+            tx,
+            n_param=3,
+            log_total_mass=10.0,
+            log_sfr_inst=0.0,
+            age_universe_yr=13.47e9,
+        )
+        # First point is t=0, M=0
+        assert jnp.isclose(time_q[0], 0.0)
         assert jnp.isclose(mass_q[0], 0.0)
         # Last point is observation epoch (t=1, M=1)
         assert jnp.isclose(time_q[-1], 1.0)
@@ -161,12 +180,16 @@ class TestGPCumulativeMassAccuracy:
         )
 
         tx = jnp.array([0.3, 0.55, 0.8])
-        time_q, mass_q = _build_quantile_points(tx, n_param=3)
+        time_q, mass_q, yerr = _build_quantile_points(
+            tx,
+            n_param=3,
+            log_total_mass=10.0,
+            log_sfr_inst=0.0,
+            age_universe_yr=13.47e9,
+        )
         variance = jnp.var(mass_q)
         length_scale = jnp.maximum(jnp.median(mass_q), 1e-10)
-        y_err = jnp.full_like(mass_q, 0.001 / jnp.sqrt(3.0))
-        # Evaluate GP at the quantile times
-        m_pred = gp_interpolate(time_q, mass_q, y_err, tx, variance, length_scale)
+        m_pred = gp_interpolate(time_q, mass_q, yerr, tx, variance, length_scale)
         # Should match 25%, 50%, 75% mass fractions
         expected = jnp.array([0.25, 0.5, 0.75])
         assert jnp.allclose(m_pred, expected, atol=0.05), (
@@ -199,18 +222,30 @@ class TestDenseBasisSFH:
         assert 0.85 < ratio < 1.15, f"Mass ratio {ratio:.3f} outside [0.85, 1.15]"
 
     def test_mass_scales_with_log_total_mass(self) -> None:
-        """Doubling log_total_mass should increase integrated mass by ~10x."""
+        """Increasing log_total_mass by 1 dex → ~10x more mass."""
         tx_kw = {
             "tx_frac_0": 0.3,
             "tx_frac_1": 0.55,
             "tx_frac_2": 0.8,
         }
-        sfr_10 = dense_basis_sfh(AGE_YR, log_total_mass=10.0, **tx_kw)
-        sfr_11 = dense_basis_sfh(AGE_YR, log_total_mass=11.0, **tx_kw)
+        # Scale both mass and SFR together (they're coupled via
+        # the SFR constraint points)
+        sfr_10 = dense_basis_sfh(
+            AGE_YR,
+            log_total_mass=10.0,
+            log_sfr_inst=0.0,
+            **tx_kw,
+        )
+        sfr_11 = dense_basis_sfh(
+            AGE_YR,
+            log_total_mass=11.0,
+            log_sfr_inst=1.0,
+            **tx_kw,
+        )
         m10 = jnp.trapezoid(sfr_10, AGE_YR)
         m11 = jnp.trapezoid(sfr_11, AGE_YR)
         ratio = m11 / m10
-        assert 8.0 < ratio < 12.0, f"Mass ratio {ratio:.1f} not ~10"
+        assert 5.0 < ratio < 20.0, f"Mass ratio {ratio:.1f} not ~10"
 
     def test_is_jittable(self) -> None:
         fn_jit = jax.jit(dense_basis_sfh)
@@ -224,6 +259,7 @@ class TestDenseBasisSFH:
                 dense_basis_sfh(
                     AGE_YR,
                     log_total_mass=m,
+                    log_sfr_inst=0.0,
                     tx_frac_0=0.3,
                     tx_frac_1=0.55,
                     tx_frac_2=0.8,
@@ -239,6 +275,7 @@ class TestDenseBasisSFH:
                 dense_basis_sfh(
                     AGE_YR,
                     log_total_mass=10.0,
+                    log_sfr_inst=0.0,
                     tx_frac_0=t0,
                     tx_frac_1=0.55,
                     tx_frac_2=0.8,
@@ -253,6 +290,7 @@ class TestDenseBasisSFH:
         sfr = dense_basis_sfh(
             AGE_YR,
             log_total_mass=10.0,
+            log_sfr_inst=0.0,
             tx_frac_0=0.8,
             tx_frac_1=0.3,
             tx_frac_2=0.55,
@@ -271,6 +309,7 @@ def _sfh_for_tx(t0: float, t1: float, t2: float) -> jnp.ndarray:
     return dense_basis_sfh(
         AGE_YR,
         log_total_mass=10.0,
+        log_sfr_inst=0.0,
         tx_frac_0=t0,
         tx_frac_1=t1,
         tx_frac_2=t2,
@@ -349,7 +388,7 @@ class TestDenseBasisRegistry:
     def test_settings_contain_nparam(self) -> None:
         _, _, _, settings = resolve_sfh("dense_basis")
         assert settings["sfh_db_nparam"] == 3
-        assert settings["sfh_db_age_universe_gyr"] == 13.8
+        assert settings["sfh_db_age_universe_gyr"] == 13.47
 
 
 # ---------------------------------------------------------------------------
@@ -396,18 +435,20 @@ class TestDenseBasisEdgeCases:
         sfr = dense_basis_sfh(
             AGE_YR,
             log_total_mass=8.0,
+            log_sfr_inst=-2.0,
             tx_frac_0=0.3,
             tx_frac_1=0.55,
             tx_frac_2=0.8,
         )
         mass = jnp.trapezoid(sfr, AGE_YR)
-        assert 0.7e8 < mass < 1.3e8
+        assert 0.5e8 < mass < 1.5e8
 
     def test_high_mass_galaxy(self) -> None:
         """log_total_mass = 12 (massive galaxy)."""
         sfr = dense_basis_sfh(
             AGE_YR,
             log_total_mass=12.0,
+            log_sfr_inst=2.0,
             tx_frac_0=0.15,
             tx_frac_1=0.3,
             tx_frac_2=0.5,

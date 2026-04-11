@@ -127,12 +127,14 @@ _SFH_SHORT_NAMES: dict[str, dict[str, str]] = {
     },
     "dense_basis": {
         "log_total_mass": "sfh_db_log_total_mass",
+        "log_sfr_inst": "sfh_db_log_sfr_inst",
         "tx_frac_0": "sfh_db_tx_frac_0",
         "tx_frac_1": "sfh_db_tx_frac_1",
         "tx_frac_2": "sfh_db_tx_frac_2",
     },
     "db": {
         "log_total_mass": "sfh_db_log_total_mass",
+        "log_sfr_inst": "sfh_db_log_sfr_inst",
         "tx_frac_0": "sfh_db_tx_frac_0",
         "tx_frac_1": "sfh_db_tx_frac_1",
         "tx_frac_2": "sfh_db_tx_frac_2",

@@ -487,6 +487,12 @@ _register(
                 "",
                 Uniform(8.0, 12.0),
             ),
+            "sfh_db_log_sfr_inst": ParamDef(
+                "log10 instantaneous SFR at observation (Msun/yr)",
+                _always_true,
+                "",
+                Uniform(-2.0, 3.0),
+            ),
             **{
                 f"sfh_db_tx_frac_{i}": ParamDef(
                     f"Cosmic time fraction at {(i + 1) * 25}% mass",
@@ -499,10 +505,11 @@ _register(
         },
         settings={
             "sfh_db_nparam": 3,
-            "sfh_db_age_universe_gyr": 13.8,
+            "sfh_db_age_universe_gyr": 13.47,
         },
         internal_param_map={
             "sfh_db_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            "sfh_db_log_sfr_inst": ("log_sfr_inst", 1.0, 0.0),
             **{f"sfh_db_tx_frac_{i}": (f"tx_frac_{i}", 1.0, 0.0) for i in range(3)},
         },
         composition_type="additive",

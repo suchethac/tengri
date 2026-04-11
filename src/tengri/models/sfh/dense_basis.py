@@ -17,20 +17,11 @@ This is a clean-room JAX reimplementation of the algorithm described in:
 
 The original implementation uses the ``george`` GP library with fixed kernel
 hyperparameters. We reimplement the kernel math in pure JAX for JIT
-compilation and automatic differentiation.
+compilation and automatic differentiation. The algorithm follows
+``dense_basis.gp_sfh.tuple_to_sfh()`` step-for-step.
 
 Convention: t_lookback in years, SFR returned in Msun/yr.
 All functions are pure JAX and JIT-compatible.
-
-Implementation notes
---------------------
-- Kernel hyperparameters follow the dense_basis convention (george GP):
-  ``variance = np.var(y)``, ``length_scale = np.median(y)`` where y is the
-  mass-quantile array. These are fixed, not optimized.
-- SFR is computed via ``jnp.gradient()`` (central finite differences) on
-  the GP-interpolated cumulative mass curve. This is a numerical
-  approximation; the analytical GP derivative dK/dt @ α would be more
-  principled but is not needed at 1000-point resolution (<0.1% error).
 """
 
 from __future__ import annotations
@@ -43,16 +34,14 @@ import jax.numpy as jnp
 
 _SQRT3 = jnp.sqrt(3.0)
 _LENGTH_SCALE_FLOOR = 1e-10
-_DT_FLOOR = 1e-20
-_GP_NOISE_NUMERATOR = 0.001  # dense_basis: yerr = 0.001 / sqrt(Nparam)
 
-# Big Bang constraint: cosmic time fraction where we place a (t, M=0) anchor
-# to enforce SFR=0 at early times. tx_frac values are clipped to be above
-# this threshold to prevent non-monotonic quantile placement.
-_BB_CONSTRAINT_FRAC = 0.01
-
-# Default GP interpolation resolution (number of points in cosmic time)
+# GP interpolation resolution (matching dense_basis default: 1000 points)
 _DEFAULT_RES = 1000
+
+
+# ---------------------------------------------------------------------------
+# GP Kernel functions
+# ---------------------------------------------------------------------------
 
 
 def matern32_kernel(
@@ -65,12 +54,12 @@ def matern32_kernel(
 
     K(r) = σ² (1 + √3 r / ℓ) exp(-√3 r / ℓ)
 
+    Matches ``george.kernels.Matern32Kernel(metric=ℓ²)``.
+
     Parameters
     ----------
     x1 : array, shape (n1,)
-        First set of input points.
     x2 : array, shape (n2,)
-        Second set of input points.
     variance : float
         Signal variance σ².
     length_scale : float
@@ -79,7 +68,6 @@ def matern32_kernel(
     Returns
     -------
     array, shape (n1, n2)
-        Covariance matrix.
     """
     r = jnp.abs(x1[:, None] - x2[None, :])
     sqrt3_r_l = _SQRT3 * r / jnp.maximum(length_scale, _LENGTH_SCALE_FLOOR)
@@ -96,24 +84,7 @@ def linear_kernel(
 
     K(x1, x2) = σ² x1 x2 / ℓ²
 
-    This matches ``george.kernels.LinearKernel`` with ``order=2``
-    (which is actually a polynomial degree-1 kernel in george's convention).
-
-    Parameters
-    ----------
-    x1 : array, shape (n1,)
-        First set of input points.
-    x2 : array, shape (n2,)
-        Second set of input points.
-    variance : float
-        Signal variance σ².
-    length_scale : float
-        Length scale ℓ.
-
-    Returns
-    -------
-    array, shape (n1, n2)
-        Covariance matrix.
+    Matches ``george.kernels.LinearKernel(order=2, log_gamma2=ln(ℓ))``.
     """
     ls_sq = jnp.maximum(length_scale, _LENGTH_SCALE_FLOOR) ** 2
     return variance * (x1[:, None] * x2[None, :]) / ls_sq
@@ -125,20 +96,7 @@ def combined_kernel(
     variance: float,
     length_scale: float,
 ) -> jnp.ndarray:
-    """Matérn 3/2 + Linear kernel (matches dense_basis george configuration).
-
-    Parameters
-    ----------
-    x1, x2 : array
-        Input points.
-    variance, length_scale : float
-        Shared kernel hyperparameters.
-
-    Returns
-    -------
-    array, shape (n1, n2)
-        Combined covariance matrix.
-    """
+    """Matérn 3/2 + Linear kernel (matches dense_basis george config)."""
     return matern32_kernel(x1, x2, variance, length_scale) + linear_kernel(
         x1, x2, variance, length_scale
     )
@@ -157,31 +115,7 @@ def gp_interpolate(
     variance: float,
     length_scale: float,
 ) -> jnp.ndarray:
-    """GP conditional mean prediction at evaluation points.
-
-    Computes the posterior mean of the GP conditioned on training data:
-        μ* = K(x*, x_train) @ (K(x_train, x_train) + diag(σ²))⁻¹ @ y_train
-
-    Parameters
-    ----------
-    x_train : array, shape (n_train,)
-        Training input points.
-    y_train : array, shape (n_train,)
-        Training output values.
-    y_err : array, shape (n_train,)
-        Observation noise standard deviation at each training point.
-    x_eval : array, shape (n_eval,)
-        Evaluation points where GP mean is predicted.
-    variance : float
-        Kernel signal variance.
-    length_scale : float
-        Kernel length scale.
-
-    Returns
-    -------
-    array, shape (n_eval,)
-        GP posterior mean at evaluation points.
-    """
+    """GP conditional mean: μ* = K* (K + σ²I)⁻¹ y."""
     k_train = combined_kernel(x_train, x_train, variance, length_scale)
     k_train = k_train + jnp.diag(y_err**2)
     k_eval = combined_kernel(x_eval, x_train, variance, length_scale)
@@ -190,35 +124,49 @@ def gp_interpolate(
 
 
 # ---------------------------------------------------------------------------
-# Quantile → cumulative mass → SFR
+# Quantile point construction (matching dense_basis exactly)
 # ---------------------------------------------------------------------------
 
 
 def _build_quantile_points(
     tx_fracs: jnp.ndarray,
     n_param: int,
-) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Build (time, mass) quantile points from tx fractions.
+    log_total_mass: float,
+    log_sfr_inst: float,
+    age_universe_yr: float,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Build (time, mass, yerr) quantile points — matching dense_basis.
 
-    Creates N_param + 2 quantile pairs: Big Bang (0, 0), intermediate
-    quantiles from tx_fracs, and observation epoch (1, 1).
-
-    Adds a constraint point near t=0 to enforce SFR=0 at the Big Bang.
+    Constructs (in order):
+    1. Endpoint: (0, 0)
+    2. Big Bang constraint: (0.01, 0) — enforces SFR=0 at early times
+    3. Intermediate quantiles from tx_fracs: (tx_i, mass_i)
+    4. Endpoint: (1, 1)
+    5. Observation-epoch SFR constraints: 3 points near t=1 that
+       pin the cumulative mass curve to be consistent with the
+       instantaneous SFR at observation (dense_basis lines 140-152).
 
     Parameters
     ----------
     tx_fracs : array, shape (n_param,)
-        Cosmic time fractions (0 = Big Bang, 1 = observation epoch).
-        Must be sorted and in (0, 1).
+        Cosmic time fractions in (0, 1), sorted.
     n_param : int
         Number of intermediate quantile parameters.
+    log_total_mass : float
+        log10(total stellar mass / Msun).
+    log_sfr_inst : float
+        log10(instantaneous SFR at observation / Msun/yr).
+    age_universe_yr : float
+        Age of the universe at observation epoch (yr).
 
     Returns
     -------
-    time_q : array, shape (n_param + 3,)
-        Time fractions including Big Bang constraint at t=0.01.
-    mass_q : array, shape (n_param + 3,)
-        Corresponding cumulative mass fractions.
+    time_q : array
+        Time fractions for GP training.
+    mass_q : array
+        Cumulative mass fractions for GP training.
+    yerr : array
+        Noise standard deviations for each training point.
     """
     # Mass quantiles: evenly spaced from 0 to 1
     mass_quantiles = jnp.linspace(0.0, 1.0, n_param + 2)
@@ -232,59 +180,70 @@ def _build_quantile_points(
         ]
     )
 
-    # Add Big Bang constraint: (t≈0, M=0) to enforce SFR=0 at birth
-    # (matching dense_basis convention)
-    time_q = jnp.concatenate([jnp.array([_BB_CONSTRAINT_FRAC]), time_quantiles])
-    mass_q = jnp.concatenate([jnp.array([0.0]), mass_quantiles])
+    # Insert Big Bang constraint at position 1: (t=0.01, M=0)
+    # (dense_basis lines 135-136)
+    time_q = jnp.concatenate(
+        [
+            time_quantiles[:1],  # t=0
+            jnp.array([0.01]),  # BB constraint
+            time_quantiles[1:],  # tx_0, ..., tx_N, 1.0
+        ]
+    )
+    mass_q = jnp.concatenate(
+        [
+            mass_quantiles[:1],  # M=0
+            jnp.array([0.0]),  # BB constraint M=0
+            mass_quantiles[1:],  # intermediate + 1.0
+        ]
+    )
 
-    return time_q, mass_q
+    # --- Observation-epoch SFR constraints (dense_basis lines 140-152) ---
+    # Three points at 97%, 98%, 99% cumulative mass, timed to be
+    # consistent with the instantaneous SFR at observation.
+    # delta_mstar = M* * (1 - const_val)
+    # delta_t_frac = 1 - delta_mstar / (SFR_inst * age_universe_yr)
+    # These are inserted BEFORE the final (1, 1) endpoint.
+    total_mass = 10.0**log_total_mass
+    sfr_inst = 10.0**log_sfr_inst
+    age_yr = age_universe_yr
+    const_vals = jnp.array([0.97, 0.98, 0.99])
 
+    sfr_time_q = []
+    sfr_mass_q = []
+    for cv in const_vals:
+        delta_mstar = total_mass * (1.0 - cv)
+        delta_t = 1.0 - delta_mstar / (sfr_inst * age_yr)
+        delta_t = jnp.clip(delta_t, 0.01, 0.999)
+        sfr_time_q.append(delta_t)
+        sfr_mass_q.append(cv)
 
-def _cumulative_mass_to_sfr(
-    t_cosmic_frac: jnp.ndarray,
-    m_cumul_frac: jnp.ndarray,
-    age_universe_yr: float,
-    total_mass: float,
-) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Convert cumulative mass fraction curve to SFR in lookback time.
+    # Insert SFR constraints BEFORE the final (1.0, 1.0) endpoint
+    # (matching dense_basis point ordering)
+    time_q = jnp.concatenate(
+        [
+            time_q[:-1],  # all except last
+            jnp.array(sfr_time_q),  # SFR constraints
+            time_q[-1:],  # final (1.0)
+        ]
+    )
+    mass_q = jnp.concatenate(
+        [
+            mass_q[:-1],  # all except last
+            jnp.array(sfr_mass_q),  # SFR constraints
+            mass_q[-1:],  # final (1.0)
+        ]
+    )
 
-    Parameters
-    ----------
-    t_cosmic_frac : array, shape (res,)
-        Cosmic time fractions (0 = Big Bang, 1 = observation epoch).
-    m_cumul_frac : array, shape (res,)
-        Cumulative mass fraction (0 to ~1).
-    age_universe_yr : float
-        Age of the universe at observation epoch (yr).
-    total_mass : float
-        Total stellar mass formed (Msun).
+    # --- Noise array (dense_basis gp_interpolator lines 63-68) ---
+    # yerr = 0 everywhere except user quantile points (indices 2..2+Nparam)
+    # which get 0.001/sqrt(Nparam). SFR constraint points get yerr=0
+    # (tight constraint, matching dense_basis decouple_sfr=False).
+    n_total = time_q.shape[0]
+    yerr = jnp.zeros(n_total)
+    noise_scale = 0.001 / jnp.sqrt(jnp.maximum(n_param, 1.0))
+    yerr = yerr.at[2 : 2 + n_param].set(noise_scale)
 
-    Returns
-    -------
-    t_lookback_yr : array, shape (res,)
-        Lookback time in years (reversed: 0 = now, large = old).
-    sfr : array, shape (res,)
-        Star formation rate in Msun/yr, non-negative.
-    """
-    # Clip cumulative mass to [0, 1] and enforce monotonicity
-    m_cumul_frac = jnp.clip(m_cumul_frac, 0.0, 1.0)
-
-    # Convert cosmic time fraction to years
-    t_cosmic_yr = t_cosmic_frac * age_universe_yr
-
-    # SFR = dM/dt_cosmic (derivative of cumulative mass w.r.t. cosmic time)
-    dt = jnp.gradient(t_cosmic_yr)
-    dm = jnp.gradient(m_cumul_frac * total_mass)
-    sfr = dm / jnp.maximum(dt, _DT_FLOOR)
-
-    # Convert cosmic time to lookback time: t_lb = age_universe - t_cosmic
-    t_lookback_yr = age_universe_yr - t_cosmic_yr
-
-    # Reverse so lookback time is increasing (0 = present → large = old)
-    t_lookback_yr = t_lookback_yr[::-1]
-    sfr = sfr[::-1]
-
-    return t_lookback_yr, jnp.maximum(sfr, 0.0)
+    return time_q, mass_q, yerr
 
 
 # ---------------------------------------------------------------------------
@@ -295,17 +254,16 @@ def _cumulative_mass_to_sfr(
 def dense_basis_sfh(
     age_yr: jnp.ndarray,
     log_total_mass: float = 10.0,
-    age_universe_yr: float = 13.8e9,
+    log_sfr_inst: float = 0.0,
+    age_universe_yr: float = 13.47e9,
     **tx_kwargs: float,
 ) -> jnp.ndarray:
     """Non-parametric GP-SFH via mass-time quantiles (Iyer+2017, 2019).
 
-    Parameterizes the SFH using a small number of mass-time quantile pairs:
-    tx_frac_i is the cosmic time fraction at which the galaxy has formed
-    (i+1)/(N+1) of its total stellar mass.
-
-    A Gaussian Process with Matérn 3/2 + Linear kernel smoothly interpolates
-    the cumulative mass curve. The SFR is the time derivative.
+    Faithfully reimplements ``dense_basis.gp_sfh.tuple_to_sfh()`` in JAX.
+    The SFR is derived from the GP-interpolated cumulative mass curve
+    using the same ``sfh_scale * np.diff(mass_interp)`` approach as
+    the original, NOT ``jnp.gradient()``.
 
     Parameters
     ----------
@@ -313,14 +271,17 @@ def dense_basis_sfh(
         Lookback time grid in years.
     log_total_mass : float
         log10(total stellar mass formed / Msun).
+    log_sfr_inst : float
+        log10(instantaneous SFR at observation / Msun/yr).
+        Used to add 3 constraint points near t=1 that pin the
+        recent SFH shape (dense_basis lines 140-152).
+        Default: 0.0 (1 Msun/yr).
     age_universe_yr : float
-        Age of the universe at observation epoch (yr). Default: 13.8e9 (z≈0).
-        Override for higher redshifts.
+        Age of the universe at observation epoch (yr).
+        Default: 13.47e9 (FlatLambdaCDM H0=70, Om0=0.3 at z=0).
     **tx_kwargs
-        Keyword arguments named ``tx_frac_0``, ``tx_frac_1``, ...,
-        ``tx_frac_{N-1}`` containing cosmic time fractions in (0, 1).
-        These are the times (as fraction of cosmic age) when the galaxy
-        formed 25%, 50%, 75%, ... of its total stellar mass (for N=3).
+        Keyword arguments ``tx_frac_0``, ``tx_frac_1``, ...,
+        ``tx_frac_{N-1}``: cosmic time fractions in (0, 1).
 
     Returns
     -------
@@ -329,25 +290,20 @@ def dense_basis_sfh(
 
     Notes
     -----
-    The tx fractions are sorted internally via ``jnp.sort()`` to enforce
-    monotonicity of the cumulative mass curve. This is differentiable.
+    Default ``age_universe_yr=13.47e9`` matches the dense_basis cosmology
+    (FlatLambdaCDM H0=70, Om0=0.3). Override for other cosmologies or
+    redshifts.
 
-    Currently only N=3 quantile parameters are supported via the registry
-    (matching Iyer+2019 defaults). The function itself accepts any N.
-
-    Kernel hyperparameters follow the dense_basis/george convention:
-    ``variance = np.var(mass_quantiles)``,
-    ``length_scale = np.median(mass_quantiles)``.
-    These are fixed (not optimized), making the GP a smooth deterministic
-    interpolator. See ``gp_sfh.py`` in the dense_basis package,
-    lines 89-95 (v0.1.9).
+    The SFR derivative uses ``np.diff`` on the cumulative mass curve
+    (matching dense_basis lines 165-168), scaled by
+    ``sfh_scale = 10^logM / (age_universe_gyr * 1e9 / res)``.
 
     References
     ----------
     - Iyer & Gawiser (2017), ApJ 838, 127 (arXiv:1702.04371).
     - Iyer et al. (2019), ApJ 879, 116 (arXiv:1901.02877).
     """
-    # Collect tx fractions from kwargs, validating keys
+    # --- Validate and collect tx fractions ---
     n_param = len(tx_kwargs)
     if n_param == 0:
         raise ValueError("dense_basis_sfh requires at least one tx_frac_* parameter")
@@ -361,37 +317,47 @@ def dense_basis_sfh(
             )
     tx_fracs = jnp.array([tx_kwargs[f"tx_frac_{i}"] for i in range(n_param)])
 
-    # Enforce ordering (differentiable via JAX sort gradients)
-    # Clip above BB constraint to prevent non-monotonic quantile placement
+    # Enforce ordering and physical bounds
     tx_fracs = jnp.sort(tx_fracs)
-    tx_fracs = jnp.clip(tx_fracs, _BB_CONSTRAINT_FRAC + 0.01, 0.99)
+    tx_fracs = jnp.clip(tx_fracs, 0.02, 0.99)
 
-    # Build quantile points
-    time_q, mass_q = _build_quantile_points(tx_fracs, n_param)
+    # --- Build quantile points (matching dense_basis) ---
+    time_q, mass_q, yerr = _build_quantile_points(
+        tx_fracs, n_param, log_total_mass, log_sfr_inst, age_universe_yr
+    )
 
-    # Kernel hyperparameters (matching dense_basis/george convention):
+    # --- GP kernel hyperparameters (dense_basis convention) ---
     # variance = np.var(y), length_scale = np.median(y)
-    # where y is the mass-quantile array (range 0-1).
-    # These are FIXED, not optimized — the GP is a smooth interpolator.
+    # where y = mass_quantiles (the training y-values)
     variance = jnp.var(mass_q)
     length_scale = jnp.maximum(jnp.median(mass_q), _LENGTH_SCALE_FLOOR)
 
-    # Noise floor: tight on quantile points (matching dense_basis)
-    noise_scale = _GP_NOISE_NUMERATOR / jnp.sqrt(jnp.maximum(n_param, 1.0))
-    y_err = jnp.full_like(mass_q, noise_scale)
+    # --- GP interpolation on dense grid ---
+    # x_pred = linspace(0, 1, res) — cosmic time fraction
+    # (dense_basis gp_interpolator line 88)
+    t_eval = jnp.linspace(0.0, 1.0, _DEFAULT_RES)
+    m_cumul = gp_interpolate(time_q, mass_q, yerr, t_eval, variance, length_scale)
 
-    # Dense evaluation grid in cosmic time fraction
-    t_eval = jnp.linspace(_BB_CONSTRAINT_FRAC, 1.0, _DEFAULT_RES)
+    # --- SFR = sfh_scale * diff(cumulative_mass) ---
+    # (dense_basis lines 165-168)
+    # sfh_scale = 10^logM / (age_gyr * 1e9 / res)
+    age_universe_gyr = age_universe_yr / 1e9
+    sfh_scale = 10.0**log_total_mass / (age_universe_gyr * 1e9 / _DEFAULT_RES)
+    sfr = jnp.diff(m_cumul) * sfh_scale
+    sfr = jnp.maximum(sfr, 0.0)
+    # Prepend zero for the Big Bang bin (matching dense_basis line 168)
+    sfr = jnp.concatenate([jnp.array([0.0]), sfr])
 
-    # GP interpolation of cumulative mass fraction
-    m_cumul_frac = gp_interpolate(time_q, mass_q, y_err, t_eval, variance, length_scale)
+    # --- Convert cosmic time fraction → lookback time ---
+    # dense_basis: timeax = time_arr_interp * cosmo.age(z).value
+    # This is COSMIC time (0=BB, age=now). We convert to lookback.
+    t_cosmic_yr = t_eval * age_universe_yr
+    t_lookback_yr = age_universe_yr - t_cosmic_yr
 
-    # Convert cumulative mass to SFR on lookback time grid
-    total_mass = 10.0**log_total_mass
-    t_lookback_yr, sfr_dense = _cumulative_mass_to_sfr(
-        t_eval, m_cumul_frac, age_universe_yr, total_mass
-    )
+    # Reverse to get ascending lookback (0=present → large=old)
+    t_lookback_yr = t_lookback_yr[::-1]
+    sfr = sfr[::-1]
 
-    # Interpolate onto the requested age grid
-    sfr = jnp.interp(age_yr, t_lookback_yr, sfr_dense)
-    return jnp.maximum(sfr, 0.0)
+    # --- Interpolate onto the requested age grid ---
+    result = jnp.interp(age_yr, t_lookback_yr, sfr)
+    return jnp.maximum(result, 0.0)
