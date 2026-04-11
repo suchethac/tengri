@@ -39,6 +39,7 @@ dev = [
 ]
 crossval = [
     "bagpipes>=1.0",
+    "dense_basis>=0.1.9",
 ]
 docs = [
     "sphinx>=7.0",

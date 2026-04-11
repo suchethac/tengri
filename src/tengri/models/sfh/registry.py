@@ -33,6 +33,7 @@ from typing import Any, NamedTuple
 import jax.numpy as jnp
 
 from tengri.distributions import Distribution, Fixed, Uniform
+from tengri.models.sfh.dense_basis import dense_basis_sfh
 from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
 from tengri.models.sfh.mean_sfh import (
     AGEMAX_YR,
@@ -472,6 +473,42 @@ _register(
         composition_type="additive",
     )
 )
+
+
+# --- dense_basis (Iyer+2017, 2019): GP-SFH via mass-time quantiles ---
+_register(
+    SFHModelSpec(
+        name="dense_basis",
+        fn=dense_basis_sfh,
+        params={
+            "sfh_db_log_total_mass": ParamDef(
+                "log10 total stellar mass formed (Msun)",
+                _always_true,
+                "",
+                Uniform(8.0, 12.0),
+            ),
+            **{
+                f"sfh_db_tx_frac_{i}": ParamDef(
+                    f"Cosmic time fraction at {(i + 1) * 25}% mass",
+                    lambda lo, hi: lo >= 0 and hi <= 1,
+                    "must be in [0, 1]",
+                    Uniform(0.05, 0.95),
+                )
+                for i in range(3)  # default Nparam=3 → 3 quantile parameters
+            },
+        },
+        settings={
+            "sfh_db_nparam": 3,
+            "sfh_db_age_universe_gyr": 13.8,
+        },
+        internal_param_map={
+            "sfh_db_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            **{f"sfh_db_tx_frac_{i}": (f"tx_frac_{i}", 1.0, 0.0) for i in range(3)},
+        },
+        composition_type="additive",
+    )
+)
+SFH_REGISTRY["db"] = SFH_REGISTRY["dense_basis"]
 
 
 # ---------------------------------------------------------------------------
