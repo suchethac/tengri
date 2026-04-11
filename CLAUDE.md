@@ -331,6 +331,20 @@ The forward model uses several optimizations for speed:
 5. **Photometry precomputation**: SSP through filters computed once (Zacharegkas+2025), 21.6x speedup
 6. **Spectroscopy precomputation**: SSPs pre-interpolated to observed wavelengths
 
+**Benchmark script**: Run `scripts/benchmark_forward_model.py` to evaluate forward model speed and accuracy across all prediction modes (exact, compositional, hybrid), model configurations (stellar-only through full kitchen-sink), and SFH types (DPL, dense_basis, stochastic field). Always run this after any change to `fused_kernels.py`, `model.py`, `photometry.py`, or the inference paths.
+
+```bash
+JAX_PLATFORMS=cpu python scripts/benchmark_forward_model.py
+```
+
+**Inference memory test**: Run `scripts/test_vi_memory_hybrid.py` to verify MAP + VI + NUTS + Raytrace peak RSS stays under ~5 GB.
+
+```bash
+JAX_PLATFORMS=cpu python scripts/test_vi_memory_hybrid.py
+```
+
+**Prediction modes in inference**: All inference internals use `mode="_traceable"` (raw un-JIT'd kernels safe inside any JIT scope). User-facing `predict_photometry()`/`predict_spectrum()` default to `mode="auto"` (picks JIT'd compositional or hybrid). See `docs/dev/sessions/2026-04-11-memory-investigation.md` for the full investigation.
+
 **Benchmark (MacBook Pro M-series, CPU):**
 
 | Operation | Smooth (D=7) | Stochastic (D=137) |
