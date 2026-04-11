@@ -120,6 +120,17 @@ def build_hybrid_photometry(model):
     # since non-stellar AGN is evaluated at full wavelength
 
     # === Non-stellar components (full wavelength) ===
+    # TODO(refactor): The inline per-component blocks below (~200 lines) mirror
+    # the pattern that build_fused_rest_sed was refactored away from via
+    # build_nonstell_fn() in core/nonstell.py.  Migrating this kernel is deferred
+    # because _hybrid_phot_body has two preintegrated photometry-level shortcuts —
+    # dust-IR triweight lookup (_has_preint_dust_ir) and nebular preintegration
+    # (_has_preint_neb) — that return filter-integrated quantities rather than a
+    # per-wavelength SED.  build_nonstell_fn() returns a full-wavelength SED, so
+    # the preintegrated paths cannot be incorporated without either (a) dropping
+    # the fast paths (performance loss) or (b) extending build_nonstell_fn to
+    # optionally return photometry shortcuts.  Revisit once the preintegrated paths
+    # are verified and stabilised.  Tracked in docs/dev/sessions/.
     ssp_wave_f64 = model.ssp_data.ssp_wave
     rest_wave_f64 = model._rest_wavelength
     _needs_extension = rest_wave_f64 is not model.ssp_data.ssp_wave
@@ -2516,7 +2527,7 @@ def build_fused_tier2_photometry(model):
     ssp_ages_yr = model.ssp_ages_yr
     # Panchromatic wavelength grid (extended if radio/xray enabled)
     rest_wave = model._rest_wavelength
-    xray_enabled = model._xray_enabled
+
     filter_waves = model.filter_waves
     filter_trans = model.filter_trans
     apply_igm = model._apply_igm
@@ -2588,8 +2599,8 @@ def build_fused_tier2_photometry(model):
             else:
                 ssp_flux_at_z = interp_metallicity(model, p["log_z_abs"])
 
-        if xray_enabled:
-            p = {**p, "_sfr_current": sfr_on_ssp[-1]}
+        # Always pass current SFR — needed by nebular (Q_H scaling) and X-ray.
+        p = {**p, "_sfr_current": sfr_on_ssp[-1]}
 
         rest_sed = rest_sed_kernel(weights, ssp_flux_at_z, p)
         z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
@@ -2685,7 +2696,7 @@ def build_fused_tier2_spectrum(model):
     ssp_ages_yr = model.ssp_ages_yr
     # Panchromatic wavelength grid (extended if radio/xray enabled)
     rest_wave = model._rest_wavelength
-    xray_enabled = model._xray_enabled
+
 
     if _use_dsps_native_spec:
         _ssp_lgmet_spec = model.ssp_data.ssp_lgmet
@@ -2732,8 +2743,7 @@ def build_fused_tier2_spectrum(model):
                 ssp_flux_at_z = interp_met_alpha_dispatch(model, p["log_z_abs"], alpha_fe)
             else:
                 ssp_flux_at_z = interp_metallicity(model, p["log_z_abs"])
-        if xray_enabled:
-            p = {**p, "_sfr_current": sfr_on_ssp[-1]}
+        p = {**p, "_sfr_current": sfr_on_ssp[-1]}
         rest_sed = rest_sed_kernel(weights, ssp_flux_at_z, p)
         z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
         return rest_sed, z

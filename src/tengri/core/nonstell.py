@@ -209,7 +209,9 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
 
         # 1. Nebular emission (on SSP grid)
         if has_nebular:
-            _sfr_last = weights[-1]
+            # Current SFR from params (set by caller), NOT weights[-1] which
+            # is total mass in the youngest bin (Msun), not SFR (Msun/yr).
+            _sfr_last = p.get("_sfr_current", weights[-1])
             neb_raw = nebular_emission(
                 nebular_backend,
                 weights,
