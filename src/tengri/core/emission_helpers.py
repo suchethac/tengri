@@ -68,35 +68,15 @@ def nebular_emission(
     qh_from_sfr = _QH_PER_SFR * sfr_current
     gas_logqion_sfr = jnp.log10(jnp.maximum(qh_from_sfr, 1.0))
 
-    # Detect wNE SSPs: if SSP-derived Q_H < 1% of SFR-based Q_H,
-    # the ionizing spectrum is pre-absorbed → fall back to low-level mode.
-    ssp_qh_ok = True
-    if hasattr(backend, "_compute_weighted_cue_params"):
-        derived = backend._compute_weighted_cue_params(
-            weights,
-            ssp_log_ages_yr,
-            log_z_abs,
-            neb_logU=neb_logU,
-        )
-        ssp_logqion = derived.get("gas_logqion", 0.0)
-        ssp_qh_ok = ssp_logqion > gas_logqion_sfr - 2.0  # within 1%
-
-    if ssp_qh_ok:
-        # SSP ionizing spectrum reliable — use for line ratios
-        return backend.predict_nebular_sed(
-            ssp_weights=weights,
-            ssp_wave=ssp_wave,
-            ssp_log_ages_yr=ssp_log_ages_yr,
-            log_z=log_z_abs,
-            neb_logU=neb_logU,
-            neb_logZ_gas=neb_logZ_gas,
-            neb_fesc=neb_fesc,
-            neb_fesc_lya=neb_fesc_lya,
-            gas_logqion=gas_logqion_sfr,
-        )
-    # wNE fallback: low-level mode (default ionspec)
+    # Always use SSP-derived ionizing spectrum when available.
+    # The wNE detection (SSP Q_H << SFR Q_H) previously branched with
+    # a Python `if`, which fails inside @jax.jit.  Instead, always
+    # pass ssp_weights — the backend handles the wNE case internally
+    # (Cue uses default ionspec when SSP Q_H is negligible).
     return backend.predict_nebular_sed(
+        ssp_weights=weights,
         ssp_wave=ssp_wave,
+        ssp_log_ages_yr=ssp_log_ages_yr,
         log_z=log_z_abs,
         neb_logU=neb_logU,
         neb_logZ_gas=neb_logZ_gas,

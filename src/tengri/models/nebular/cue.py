@@ -837,36 +837,40 @@ class CueBackend:
                 "interface.  Pass ssp_data= to the constructor."
             )
 
-        # Young age bins only (< 100 Myr)
-        young_mask = ssp_log_ages_yr <= _MAX_NEB_LOG_AGE
-        young_ages = ssp_log_ages_yr[young_mask]
-        young_weights = ssp_weights[young_mask]
+        # Vectorized, JIT-safe computation over all age bins.
+        # Use jnp.where masks instead of boolean fancy indexing.
+        young_mask = ssp_log_ages_yr <= _MAX_NEB_LOG_AGE  # (n_age,) bool
 
-        # Sum mass-weighted Q_H (per Msun) over young age bins
-        total_qh = 0.0
-        best_qh_weight = -1.0
-        best_age_idx = 0
-        for i in range(len(young_ages)):
-            w_i = float(young_weights[i])
-            if w_i <= 0:
-                continue
-            _, logqion_i = self.get_ionizing_params_at(log_z, float(young_ages[i]))
-            if logqion_i is None:
-                continue
-            qh_i = 10.0 ** float(logqion_i)
-            total_qh += w_i * qh_i
-            if w_i * qh_i > best_qh_weight:
-                best_qh_weight = w_i * qh_i
-                best_age_idx = i
+        # Vectorize interpolate_ionizing_params over all ages at once.
+        # ionspec_table is (n_met, n_age, 7), logqion_table is (n_met, n_age).
+        # We need logqion at each age bin for the given metallicity.
+        from tengri.models.nebular.ionizing_spectrum import interpolate_ionizing_params
 
-        if total_qh <= 0:
-            total_logqion = -99.0
-        else:
-            total_logqion = np.log10(total_qh)
+        # Vectorize over age axis: get (ionspec_7, logqion) for each age
+        def _get_params_at_age(log_age_yr):
+            return interpolate_ionizing_params(
+                self._ionspec_table, self._logqion_table,
+                self._ssp_lgmet, self._ssp_log_age_yr,
+                log_z, log_age_yr,
+            )
 
-        # Ionizing spectrum shape from dominant age bin
-        ionspec_7, _ = self.get_ionizing_params_at(log_z, float(young_ages[best_age_idx]))
-        i7 = np.array(ionspec_7) if ionspec_7 is not None else np.zeros(7)
+        # vmap over age bins → ionspec_all (n_age, 7), logqion_all (n_age,)
+        ionspec_all, logqion_all = jax.vmap(_get_params_at_age)(ssp_log_ages_yr)
+
+        # Q_H per bin, masked to young bins with positive weights
+        qh_per_bin = 10.0 ** logqion_all  # (n_age,)
+        weighted_qh = ssp_weights * qh_per_bin  # (n_age,)
+        # Zero out old bins and non-positive weights
+        weighted_qh = jnp.where(young_mask & (ssp_weights > 0), weighted_qh, 0.0)
+
+        total_qh = jnp.sum(weighted_qh)
+        total_logqion = jnp.where(total_qh > 0, jnp.log10(total_qh), -99.0)
+
+        # Dominant age bin: highest weighted Q_H contribution
+        best_age_idx = jnp.argmax(weighted_qh)
+
+        # Ionizing spectrum shape from dominant bin
+        i7 = ionspec_all[best_age_idx]
 
         # Gas metallicity: convert absolute → Z/Zsun for Cue
         gas_logz = neb_logZ_gas if neb_logZ_gas is not None else log_z
@@ -879,13 +883,13 @@ class CueBackend:
             gas_logno=gas_logno,
             gas_logco=gas_logco,
             gas_logqion=total_logqion,
-            ionspec_index1=float(i7[0]),
-            ionspec_index2=float(i7[1]),
-            ionspec_index3=float(i7[2]),
-            ionspec_index4=float(i7[3]),
-            ionspec_logLratio1=float(i7[4]),
-            ionspec_logLratio2=float(i7[5]),
-            ionspec_logLratio3=float(i7[6]),
+            ionspec_index1=i7[0],
+            ionspec_index2=i7[1],
+            ionspec_index3=i7[2],
+            ionspec_index4=i7[3],
+            ionspec_logLratio1=i7[4],
+            ionspec_logLratio2=i7[5],
+            ionspec_logLratio3=i7[6],
         )
 
     def predict_nebular_line_luminosities(
