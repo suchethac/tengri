@@ -92,15 +92,6 @@ def main():
     rss4 = rss_gb()
     print(f"[4] After fitter build: {rss4:.2f} GB")
 
-    # --- Override prediction mode for inference ---
-    if mode != "auto":
-        original_predict = model.predict_photometry
-
-        def patched_predict(params, mode_override=mode, approx=None):
-            return original_predict(params, mode=mode_override, approx=approx)
-
-        model.predict_photometry = patched_predict
-
     # --- MAP ---
     t0 = time.perf_counter()
     fitter.run("map", n_steps=200, verbose=False)
@@ -122,6 +113,31 @@ def main():
     rss6 = rss_gb()
     print(f"[6] After VI (6 iter, 3 samples): {rss6:.2f} GB  ({t_vi:.1f}s)")
 
+    # --- NUTS ---
+    t0 = time.perf_counter()
+    fitter.run(
+        "mcmc_nuts",
+        n_warmup=50,
+        n_samples=50,
+        verbose=False,
+    )
+    t_nuts = time.perf_counter() - t0
+
+    rss7 = rss_gb()
+    print(f"[7] After NUTS (50+50): {rss7:.2f} GB  ({t_nuts:.1f}s)")
+
+    # --- Raytrace ---
+    t0 = time.perf_counter()
+    fitter.run(
+        "mcmc_raytrace",
+        n_steps=100,
+        verbose=False,
+    )
+    t_rt = time.perf_counter() - t0
+
+    rss8 = rss_gb()
+    print(f"[8] After Raytrace (100 steps): {rss8:.2f} GB  ({t_rt:.1f}s)")
+
     # --- Summary ---
     print()
     print(f"{'Stage':<35} {'RSS (GB)':>10} {'Time':>10}")
@@ -133,9 +149,11 @@ def main():
     print(f"{'After fitter build':<35} {rss4:>10.2f}")
     print(f"{'After MAP (200 steps)':<35} {rss5:>10.2f} {t_map:>9.1f}s")
     print(f"{'After VI (6 iter, 3 samples)':<35} {rss6:>10.2f} {t_vi:>9.1f}s")
+    print(f"{'After NUTS (50+50)':<35} {rss7:>10.2f} {t_nuts:>9.1f}s")
+    print(f"{'After Raytrace (100 steps)':<35} {rss8:>10.2f} {t_rt:>9.1f}s")
     print()
-    print(f"Mode: {mode}")
-    print(f"Total memory delta (VI - baseline): {rss6 - rss0:.2f} GB")
+    print(f"Peak RSS: {rss8:.2f} GB")
+    print(f"Total memory delta: {rss8 - rss0:.2f} GB")
 
 
 if __name__ == "__main__":

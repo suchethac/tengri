@@ -753,12 +753,12 @@ def run_nifty_vi(
     def _predict(params):
         """Dispatch forward model by data type."""
         if data_type == "photometry":
-            return model.predict_photometry(params)
+            return model.predict_photometry(params, mode="_traceable")
         elif data_type == "spectroscopy":
-            return model.predict_spectrum(params, model._wave_obs)
+            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
         elif data_type == "joint":
-            p = model.predict_photometry(params)
-            s = model.predict_spectrum(params, model._wave_obs)
+            p = model.predict_photometry(params, mode="_traceable")
+            s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
             return jnp.concatenate([p, s])
         else:
             raise ValueError(f"Unknown data_type: {data_type}")

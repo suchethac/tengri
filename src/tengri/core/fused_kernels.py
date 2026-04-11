@@ -53,7 +53,10 @@ def build_hybrid_photometry(model):
         xray_emission,
     )
     from tengri.models.dust.attenuation import resolve_dust_law
-    from tengri.models.observation.photometry import compute_flux_density
+    from tengri.models.observation.photometry import (
+        compute_flux_density_batch,
+        pad_filters,
+    )
     from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = model._forward_dtype
@@ -226,10 +229,14 @@ def build_hybrid_photometry(model):
     z_fixed = model._z_fixed
     dl_cm_fixed = model._dl_cm_fixed
 
-    # Filter information
+    # Filter information — pad to common length for vmap
     n_filters = len(model.filter_waves) if model.filter_waves else 0
     filter_waves_list = model.filter_waves if model.filter_waves else []
     filter_trans_list = model.filter_trans if model.filter_trans else []
+    if n_filters > 0:
+        fw_padded, ft_padded, _filt_n_valid = pad_filters(
+            filter_waves_list, filter_trans_list
+        )
 
     # === Define kernel signatures (single vs two-component dust) ===
 
@@ -1120,16 +1127,12 @@ def build_hybrid_photometry(model):
                 else:
                     non_stellar_sed = non_stellar_sed * igm_trans_full
 
-            # === STEP 3: Integrate non-stellar through filters ===
-            # Loop over filters (unrolled by JAX tracer)
-            ns_fluxes = []
-            for fw, ft in zip(filter_waves_list, filter_trans_list):
-                f = compute_flux_density(
-                    non_stellar_sed, rest_wave_f64, fw, ft, z_fixed, dl_cm_fixed
-                )
-                ns_fluxes.append(f)
+            # === STEP 3: Integrate non-stellar through filters (vectorized) ===
             if n_filters > 0:
-                non_stellar_phot = jnp.array(ns_fluxes)
+                non_stellar_phot = compute_flux_density_batch(
+                    non_stellar_sed, rest_wave_f64,
+                    fw_padded, ft_padded, z_fixed, dl_cm_fixed,
+                )
 
         # === STEP 4: Combine stellar + non-stellar ===
         stellar_phot = flux_attenuated
@@ -2444,7 +2447,10 @@ def observe_photometry_from_rest_sed(
     array, shape (n_filters,)
         Observed flux densities in erg/s/cm^2/Hz.
     """
-    from tengri.models.observation.photometry import compute_flux_density
+    from tengri.models.observation.photometry import (
+        compute_flux_density_batch,
+        pad_filters,
+    )
 
     sed = rest_sed
     if apply_igm:
@@ -2454,11 +2460,8 @@ def observe_photometry_from_rest_sed(
         igm_trans = igm_transmission(wave_obs, z)
         sed = sed * igm_trans
 
-    fluxes = []
-    for fw, ft in zip(filter_waves, filter_trans):
-        f = compute_flux_density(sed, wave_rest, fw, ft, z, dl_cm)
-        fluxes.append(f)
-    return jnp.array(fluxes)
+    fw_pad, ft_pad, _n_valid = pad_filters(filter_waves, filter_trans)
+    return compute_flux_density_batch(sed, wave_rest, fw_pad, ft_pad, z, dl_cm)
 
 
 def observe_spectrum_from_rest_sed(
@@ -2535,7 +2538,10 @@ def build_fused_tier2_photometry(model):
 
     from tengri.core.param_translate import get_internal_params
     from tengri.core.sed_pipeline import interp_met_alpha_dispatch, interp_metallicity
-    from tengri.models.observation.photometry import compute_flux_density
+    from tengri.models.observation.photometry import (
+        compute_flux_density_batch,
+        pad_filters,
+    )
     from tengri.models.sps.dsps_wrapper import compute_csp_weights
 
     _use_dsps_native = model._csp_integration == "dsps_native"
@@ -2557,6 +2563,8 @@ def build_fused_tier2_photometry(model):
     filter_waves = model.filter_waves
     filter_trans = model.filter_trans
     apply_igm = model._apply_igm
+    # Pad filters for vectorized integration
+    fw_padded_t2, ft_padded_t2, _filt_nv_t2 = pad_filters(filter_waves, filter_trans)
 
     # dsps_native: capture SSP arrays for DSPS triweight kernel
     if _use_dsps_native:
@@ -2644,11 +2652,9 @@ def build_fused_tier2_photometry(model):
                 wave_obs = rest_wave * (1.0 + z)
                 rest_sed = rest_sed * _igm_fn(wave_obs, z)
 
-            fluxes = []
-            for fw, ft in zip(filter_waves, filter_trans):
-                f = compute_flux_density(rest_sed, rest_wave, fw, ft, z, dl_cm)
-                fluxes.append(f)
-            return jnp.array(fluxes)
+            return compute_flux_density_batch(
+                rest_sed, rest_wave, fw_padded_t2, ft_padded_t2, z, dl_cm,
+            )
 
     else:
 
@@ -2660,11 +2666,9 @@ def build_fused_tier2_photometry(model):
             if igm_trans_full is not None:
                 rest_sed = rest_sed * igm_trans_full
 
-            fluxes = []
-            for fw, ft in zip(filter_waves, filter_trans):
-                f = compute_flux_density(rest_sed, rest_wave, fw, ft, z_fixed, dl_cm_fixed)
-                fluxes.append(f)
-            return jnp.array(fluxes)
+            return compute_flux_density_batch(
+                rest_sed, rest_wave, fw_padded_t2, ft_padded_t2, z_fixed, dl_cm_fixed,
+            )
 
     return fused_tier2_phot
 

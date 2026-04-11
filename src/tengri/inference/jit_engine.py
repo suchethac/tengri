@@ -89,10 +89,10 @@ def build_jit_engine(fitter, pos_dict):
         if data_type == "photometry":
             return model.predict_photometry(params, mode="_traceable")
         elif data_type == "spectroscopy":
-            return model.predict_spectrum(params, model._wave_obs)
+            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
         elif data_type == "joint":
             p = model.predict_photometry(params, mode="_traceable")
-            s = model.predict_spectrum(params, model._wave_obs)
+            s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
             return jnp.concatenate([p, s])
         raise ValueError(f"Unknown data_type: {data_type}")
 
@@ -112,10 +112,10 @@ def build_jit_engine(fitter, pos_dict):
             if data_type == "photometry":
                 predicted = model.predict_photometry(params, mode="_traceable")
             elif data_type == "spectroscopy":
-                predicted = model.predict_spectrum(params, model._wave_obs)
+                predicted = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
             elif data_type == "joint":
                 p = model.predict_photometry(params, mode="_traceable")
-                s = model.predict_spectrum(params, model._wave_obs)
+                s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
                 predicted = jnp.concatenate([p, s])
             else:
                 raise ValueError(f"Unknown data_type: {data_type}")

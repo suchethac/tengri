@@ -301,8 +301,8 @@ class PopulationFitter:
 
         def _predict(params):
             if data_type == "photometry":
-                return model.predict_photometry(params)
-            return model.predict_spectrum(params, model._wave_obs)
+                return model.predict_photometry(params, mode="_traceable")
+            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
 
         # --- Hierarchical signal_response (vmapped) ---
         def signal_response(p):
@@ -694,8 +694,8 @@ class PopulationFitter:
 
         def _predict_cfm(params):
             if data_type == "photometry":
-                return model.predict_photometry(params)
-            return model.predict_spectrum(params, model._wave_obs)
+                return model.predict_photometry(params, mode="_traceable")
+            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
 
         if verbose:
             print(f"Hierarchical geoVI (CorrelatedFieldMaker): {n_gal} galaxies, n_grid={n_grid}")
@@ -1041,9 +1041,9 @@ class PopulationFitter:
         def _predict_single(params):
             """Single-galaxy forward model (for vmap)."""
             if data_type == "photometry":
-                return model.predict_photometry(params)
+                return model.predict_photometry(params, mode="_traceable")
             else:
-                return model.predict_spectrum(params, model._wave_obs)
+                return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
 
         def signal_response(primals):
             # Shared PSD params (bounded)
@@ -1293,8 +1293,8 @@ class PopulationFitter:
 
         def _predict_rt(params):
             if data_type == "photometry":
-                return model.predict_photometry(params)
-            return model.predict_spectrum(params, model._wave_obs)
+                return model.predict_photometry(params, mode="_traceable")
+            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
 
         def log_prob(flat_params):
             p = unravel_fn(flat_params)
