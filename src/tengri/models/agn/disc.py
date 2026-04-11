@@ -135,12 +135,23 @@ def _isco_radius(a_spin: float) -> float:
     -------
     float
         r_isco / R_g.
+
+    Notes
+    -----
+    To ensure finite gradients at the Schwarzschild limit (a=0), we clamp
+    the argument to the final square root to a small positive value (1e-20).
+    The BPT72 formula has a gradient singularity at a=0 where (3-z1)→0,
+    which makes sqrt((3-z1)*(3+z1+2*z2)) undefined in AD. The physical
+    limit is correct (r_isco=6 for a=0), but the gradient path must be
+    stabilized for JAX autodiff to work.
     """
     # Clamp spin to physical range
     a = jnp.clip(a_spin, 0.0, 0.998)
     z1 = 1.0 + (1.0 - a**2) ** (1.0 / 3.0) * ((1.0 + a) ** (1.0 / 3.0) + (1.0 - a) ** (1.0 / 3.0))
     z2 = jnp.sqrt(3.0 * a**2 + z1**2)
-    return 3.0 + z2 - jnp.sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2))
+    # Clamp sqrt argument to avoid zero-to-zero gradient singularity at a=0
+    sqrt_arg = jnp.maximum((3.0 - z1) * (3.0 + z1 + 2.0 * z2), 1e-20)
+    return 3.0 + z2 - jnp.sqrt(sqrt_arg)
 
 
 def _eddington_luminosity(log_mbh: float) -> float:
@@ -323,7 +334,11 @@ def _l_seed_geometric(
     f_nt = _SIGMA_SB * t_r**4  # [erg s^-1 cm^-2]
 
     # Geometric covering factor Θ(R)/π (K&D 2018 Eq. 4), H = R_hot
-    sin_th0 = jnp.clip(r_hot_cm / r, 0.0, 1.0)
+    # Clamp sin_th0 to avoid infinite gradients at arcsin boundaries (±1).
+    # The interior points are r >> r_hot, so sin_th0 << 1. Only the first
+    # point (r ≈ r_hot) can approach 1. We use (0.001, 0.999) to avoid
+    # gradient singularities while maintaining physical correctness.
+    sin_th0 = jnp.clip(r_hot_cm / r, 0.001, 0.999)
     th0 = jnp.arcsin(sin_th0)  # θ_0 in [0, π/2]
     theta_r = th0 - 0.5 * jnp.sin(2.0 * th0)  # Θ(R) = θ_0 - (1/2)sin(2θ_0)
     covering = theta_r / jnp.pi  # Θ(R)/π ∈ [0, 0.5]
