@@ -169,17 +169,17 @@ obs = Observation(
 
 # %%
 spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-3.0, 3.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
+    sfh_db_log_total_mass=Uniform(8, 12),
+    sfh_db_log_sfr_inst=Uniform(-2, 3),
+    sfh_db_tx_frac_0=Uniform(0.05, 0.95),
+    sfh_db_tx_frac_1=Uniform(0.05, 0.95),
+    sfh_db_tx_frac_2=Uniform(0.05, 0.95),
     met_logzsol=Uniform(-2.0, 0.2),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 1.5),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    mean_sfh_type="tsnorm",
+    mean_sfh_type="dense_basis",
 )
 
 model = SEDModel(spec, ssp_data, observation=obs)
@@ -549,7 +549,7 @@ for config_name, filter_names in configs.items():
         "vi",
         n_iterations=6,
         n_samples=3,
-            n_posterior_samples=256,
+        n_posterior_samples=256,
         verbose=False,
     )
 

@@ -124,9 +124,9 @@ from tengri import Model, ParamSpec, Uniform, Fitter, HierarchicalFitter
 ```python
 # Build model from config with short-name priors
 model = Model.from_config(
-    ssp="data/ssp.h5", sfh="tsnorm", filters=["sdss_u", "sdss_g", "sdss_r"],
+    ssp="data/ssp.h5", sfh="dense_basis", filters=["sdss_u", "sdss_g", "sdss_r"],
     redshift=0.1,
-    priors=dict(log_peak_sfr=Uniform(-1, 2.5), logzsol=Uniform(-2, 0.2)),
+    priors=dict(log_total_mass=Uniform(9, 11), log_sfr_inst=Uniform(-2, 2), tx_frac_0=Uniform(0.1, 0.9), tx_frac_1=Uniform(0.1, 0.9), tx_frac_2=Uniform(0.1, 0.9)),
 )
 
 # Fit (default: geoVI variational inference)
@@ -149,9 +149,9 @@ pop_result.plot_population()
 
 ### Model.from_config()
 
-Factory classmethod: `Model.from_config(ssp, sfh="dpl", dust="charlot_fall", nebular=None, agn=None, redshift=0.1, filters=None, priors={})`
+Factory classmethod: `Model.from_config(ssp, sfh="dense_basis", dust="charlot_fall", nebular=None, agn=None, redshift=0.1, filters=None, priors={})`
 
-- Short-name priors auto-expanded: `log_peak_sfr` → `sfh_tsnorm_log_peak_sfr`, `logzsol` → `met_logzsol`
+- Short-name priors auto-expanded: `log_total_mass` → `sfh_db_log_total_mass`, `log_sfr_inst` → `sfh_db_log_sfr_inst`, `logzsol` → `met_logzsol`
 - `redshift="free"` makes redshift a free parameter
 - Builds ParamSpec + Observation internally
 
@@ -213,7 +213,7 @@ Each class has a `.summary()` method for quick inspection:
 - GP latent vector `psd_xi` has shape `(n_grid,)` and prior `ξ ~ N(0, I)`
 - PSD timescale in high-level API is in **Myr** (`psd_tau_myr`); internal is in **years** (`psd_tau_yr`)
 - **Short-name aliases**: `resolve_short_names(sfh_type, priors)` expands short names to full prefixed names. E.g., `alpha` → `sfh_dpl_alpha` for DPL, `logzsol` → `met_logzsol` universally. See `param_translate.py` for the full table.
-- **SFH models**: `sfh="dpl"` (DPL), `sfh="tsnorm"` (truncated Sersic-like), `sfh="exponential"`, `sfh="delayed"`, `sfh="continuity"`, `sfh="dirichlet"`, `sfh="field"` (stochastic PSD-driven), `sfh="dense_basis"` or `"db"` (Iyer+2017, 2019, non-parametric via mass-time quantiles with 4 params: `sfh_db_log_total_mass`, `sfh_db_tx_frac_0/1/2`). Stellar mass is a direct parameter for dense_basis.
+- **SFH models**: `sfh="dense_basis"` or `"db"` (Iyer+2017, 2019, non-parametric via mass-time quantiles with 4 params: `sfh_db_log_total_mass`, `sfh_db_tx_frac_0/1/2`, default), `sfh="dpl"` (DPL), `sfh="tsnorm"` (truncated Sersic-like), `sfh="exponential"`, `sfh="delayed"`, `sfh="continuity"`, `sfh="dirichlet"`, `sfh="field"` (stochastic PSD-driven). Stellar mass is a direct parameter for dense_basis.
 - **Physical constants**: All CGS constants live in `utils/physics_constants.py` (CODATA 2018 / IAU 2015 values with documented SI→CGS derivations). Import from there — do NOT define local constant literals. Exception: `L_SUN_CUE = 3.839e33` in `cue.py` is intentional (Cue neural-net training convention, NOT IAU 2015) — never replace it.
 - **Nebular constants facade**: `models/nebular/_constants.py` re-exports `_C_CGS`, `_H_PLANCK`, `_LSUN_ERG`, `_C_AA`, `_AA_TO_CM` from `physics_constants`. All nebular submodules (`_shared.py`, `cue.py`, etc.) import from `_constants.py` — do not break these re-exports when editing `_constants.py`.
 - **AGN shared physics**: `_planck_lnu` and base constants in `models/agn/_phys.py` (shared by disc.py, torus.py, skirtor.py). Disc-specific extras (`G_GRAV`, `SIGMA_T`, `M_PROTON`, etc.) imported directly from `utils/physics_constants`. Do NOT duplicate the Planck function in AGN modules.

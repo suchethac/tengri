@@ -16,7 +16,7 @@ Usage
 
     # High-level API defaults (the [from_config] section)
     fc = get_from_config_defaults()
-    sfh_type = fc["sfh"]  # "dpl" unless overridden
+    sfh_type = fc["sfh"]  # "dense_basis" unless overridden
 
     # Full config tree
     raw = load_defaults()

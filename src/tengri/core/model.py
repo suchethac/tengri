@@ -2534,11 +2534,12 @@ class SEDModel:
         --------
         >>> model = tengri.Model.from_config(
         ...     ssp="data/ssp.h5",
-        ...     sfh="tsnorm",
+        ...     sfh="dense_basis",
         ...     filters=["sdss_u", "sdss_g", "sdss_r"],
         ...     redshift=0.1,
         ...     priors=dict(
-        ...         log_peak_sfr=tengri.Uniform(-1, 2.5),
+        ...         log_total_mass=tengri.Uniform(8, 12),
+        ...         log_sfr_inst=tengri.Uniform(-2, 3),
         ...         logzsol=tengri.Uniform(-2, 0.2),
         ...     ),
         ... )

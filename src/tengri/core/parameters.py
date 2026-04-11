@@ -10,14 +10,14 @@ dust, redshift) are always present.
 
 Usage
 -----
-Default (tsnorm + GP field)::
+Default (dense_basis + GP field)::
 
     spec = ParamSpec(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
-        sfh_tsnorm_width_gyr=Uniform(0.5, 5),
-        sfh_tsnorm_skew=Uniform(-1, 1),
-        sfh_tsnorm_trunc=Uniform(1, 10),
+        sfh_db_log_total_mass=Uniform(8, 12),
+        sfh_db_log_sfr_inst=Uniform(-2, 3),
+        sfh_db_tx_frac_0=Uniform(0.05, 0.95),
+        sfh_db_tx_frac_1=Uniform(0.05, 0.95),
+        sfh_db_tx_frac_2=Uniform(0.05, 0.95),
         sfh_field_psd_sigma=Uniform(0.01, 1.0),
         sfh_field_psd_tau_myr=Uniform(10, 500),
         met_logzsol=Gaussian(-0.3, 0.2),
@@ -25,11 +25,15 @@ Default (tsnorm + GP field)::
         redshift=0.1,
     )
 
-Parametric only (no GP)::
+Legacy tsnorm (backward compatible)::
 
     spec = ParamSpec(
         mean_sfh_type = "tsnorm",
         sfh_tsnorm_log_peak_sfr = Uniform(-1, 2),
+        sfh_tsnorm_peak_lbt_gyr = Uniform(1, 12),
+        sfh_tsnorm_width_gyr = Uniform(0.5, 5),
+        sfh_tsnorm_skew = Uniform(-1, 1),
+        sfh_tsnorm_trunc = Uniform(1, 10),
         ...
     )
 

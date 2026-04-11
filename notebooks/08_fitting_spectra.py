@@ -157,30 +157,30 @@ obs_spec = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS))
 # %%
 # Parametric model (D = 7)
 spec_param = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-3.0, 3.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
+    sfh_db_log_total_mass=Uniform(8, 12),
+    sfh_db_log_sfr_inst=Uniform(-2, 3),
+    sfh_db_tx_frac_0=Uniform(0.05, 0.95),
+    sfh_db_tx_frac_1=Uniform(0.05, 0.95),
+    sfh_db_tx_frac_2=Uniform(0.05, 0.95),
     met_logzsol=Uniform(-2.0, 0.2),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 1.5),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    mean_sfh_type="tsnorm",
+    mean_sfh_type="dense_basis",
 )
 model_param = SEDModel(spec_param, ssp_data, observation=obs_joint)
 model_param_spec = SEDModel(spec_param, ssp_data, observation=obs_spec)
 
 key = jax.random.PRNGKey(42)
 true_param = spec_param.sample(key)
-# Override tsnorm to a typical star-forming galaxy (still forming stars now)
+# Override dense_basis to a typical star-forming galaxy (still forming stars now)
 true_param = {**true_param}
-true_param["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
-true_param["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
-true_param["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
-true_param["sfh_tsnorm_skew"] = jnp.array(0.3)
-true_param["sfh_tsnorm_trunc"] = jnp.array(2.0)
+true_param["sfh_db_log_total_mass"] = jnp.array(10.5)
+true_param["sfh_db_log_sfr_inst"] = jnp.array(0.8)
+true_param["sfh_db_tx_frac_0"] = jnp.array(0.25)
+true_param["sfh_db_tx_frac_1"] = jnp.array(0.35)
+true_param["sfh_db_tx_frac_2"] = jnp.array(0.4)
 mock_spec = model_param.mock_spectrum(true_param, WAVE_OBS, snr=30.0, key=key)
 mock_phot = model_param.mock(true_param, snr=20.0, key=jax.random.fold_in(key, 1))
 
@@ -439,11 +439,10 @@ for name in spec_param.free_params:
 # %%
 # Stochastic model
 spec_stoch = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-3.0, 3.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
+    sfh_dbp_log_total_mass=Uniform(8, 12),
+    sfh_dbp_tx_frac_0=Uniform(0.05, 0.95),
+    sfh_dbp_tx_frac_1=Uniform(0.05, 0.95),
+    sfh_dbp_tx_frac_2=Uniform(0.05, 0.95),
     sfh_field_psd_sigma=Uniform(0.1, 4.0),
     sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
     met_logzsol=Uniform(-2.0, 0.2),
@@ -451,7 +450,7 @@ spec_stoch = Parameters(
     dust_tau_diff=Uniform(0.0, 1.5),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    mean_sfh_type=["tsnorm", "field"],
+    mean_sfh_type=["dense_basis", "field"],
     n_grid=128,
 )
 model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs_joint)
@@ -460,11 +459,10 @@ model_stoch_spec = SEDModel(spec_stoch, ssp_data, observation=obs_spec)
 true_stoch = spec_stoch.sample(jax.random.PRNGKey(77))
 # Override to a typical star-forming galaxy with burstiness
 true_stoch = {**true_stoch}
-true_stoch["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
-true_stoch["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
-true_stoch["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
-true_stoch["sfh_tsnorm_skew"] = jnp.array(0.3)
-true_stoch["sfh_tsnorm_trunc"] = jnp.array(2.0)
+true_stoch["sfh_dbp_log_total_mass"] = jnp.array(10.5)
+true_stoch["sfh_dbp_tx_frac_0"] = jnp.array(0.25)
+true_stoch["sfh_dbp_tx_frac_1"] = jnp.array(0.35)
+true_stoch["sfh_dbp_tx_frac_2"] = jnp.array(0.4)
 true_stoch["sfh_field_psd_sigma"] = jnp.array(2.0)
 true_stoch["sfh_field_psd_tau_myr"] = jnp.array(20.0)
 
