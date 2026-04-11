@@ -598,8 +598,9 @@ def _hot_corona_lnu(
     shape = nu ** (1.0 - gamma_hard) * jnp.exp(-x_clip)
 
     # Normalize: integrate shape over frequency
-    sort_idx = jnp.argsort(nu)
-    integral = jnp.trapezoid(shape[sort_idx], nu[sort_idx])
+    # Note: trapezoid() works with unsorted x values; we avoid explicit
+    # sorting/indexing to prevent NaN gradients in JAX autodiff.
+    integral = jnp.trapezoid(shape, nu)
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
     return l_hot_erg * shape / integral_safe
@@ -871,10 +872,6 @@ def kubota_done_disc(
     d_log_r_warm = log_r_warm_grid[1] - log_r_warm_grid[0]
     dr_warm = r_warm_grid * jnp.log(10.0) * d_log_r_warm
 
-    # Pre-sort nu for per-annulus trapezoid integrals (shared by warm ring + L_seed).
-    sort_nu = jnp.argsort(nu)
-    nu_sorted = nu[sort_nu]
-
     if _NTHCOMP_AVAILABLE:
         # Full nthcomp path (K&D 2018 Section 2.2): solve the Kompaneets equation
         # per annulus via trilinear table interpolation.  Each annulus emits the
@@ -882,14 +879,17 @@ def kubota_done_disc(
         # spectral shape is the actual Comptonized spectrum rather than a modified
         # blackbody.
         # Reference: agnsed.py _do_warm_annuli (scotthgn/pyAGNSED)
+        # Note: trapezoid() works with unsorted x values; we avoid explicit
+        # sorting/indexing to prevent NaN gradients in JAX autodiff (gather ops
+        # on float32 data from interpolation can produce NaN during backprop).
         def _warm_ring(r_cm, t_ring, dr_ring):
             b_nu_plain = _planck_lnu(nu, t_ring)
-            p_plain = jnp.abs(jnp.trapezoid(b_nu_plain[sort_nu], nu_sorted))
+            p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
             area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
             l_total = p_plain * area * jnp.maximum(agn_cos_inc, 0.01)
             kTbb_keV = _K_BOLTZ_KEV * t_ring
             shape = _nthcomp_lnu_interp(nu, agn_gamma_warm, agn_kt_warm, kTbb_keV)
-            p_shape = jnp.abs(jnp.trapezoid(shape[sort_nu], nu_sorted))
+            p_shape = jnp.abs(jnp.trapezoid(shape, nu))
             shape_norm = shape / jnp.maximum(p_shape, 1e-100)
             return shape_norm * l_total
     else:
@@ -899,8 +899,8 @@ def kubota_done_disc(
         def _warm_ring(r_cm, t_ring, dr_ring):
             b_nu_plain = _planck_lnu(nu, t_ring)
             b_nu_mod = _warm_comptonization_lnu(nu, t_ring, nu_warm, agn_gamma_warm)
-            p_plain = jnp.abs(jnp.trapezoid(b_nu_plain[sort_nu], nu_sorted))
-            p_comp = jnp.abs(jnp.trapezoid(b_nu_mod[sort_nu], nu_sorted))
+            p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
+            p_comp = jnp.abs(jnp.trapezoid(b_nu_mod, nu))
             renorm = p_plain / jnp.maximum(p_comp, 1e-100)
             # dL_nu = pi * B_nu_mod * dA * cos(i) (Rybicki & Lightman 1979, Eq. 1.6)
             area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
@@ -933,7 +933,7 @@ def kubota_done_disc(
 
     # Normalize all 3 zones to L_bol * agn_frac
     l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_frac
-    l_nu_integral = jnp.trapezoid(l_nu_total[sort_nu], nu_sorted)
+    l_nu_integral = jnp.trapezoid(l_nu_total, nu)
     l_nu_integral_safe = jnp.maximum(jnp.abs(l_nu_integral), 1e-100)
     scale = l_bol_requested / l_nu_integral_safe
 
