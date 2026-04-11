@@ -159,12 +159,20 @@ def build_hybrid_photometry(model):
     # Shock
     has_shock = getattr(model, "_shock_enabled", False)
 
-    # Dust emission (full wavelength)
+    # Dust emission (full wavelength or preintegrated)
     has_dust_em_full = model._dust_emission_model is not None
+    _has_preint_dust_ir = False
+    _dust_model_name = None
     if has_dust_em_full:
         from tengri.models.dust.emission import resolve_emission_model
 
         dust_emission_fn = resolve_emission_model(model._dust_emission_model)
+
+        # Check if preintegrated dust IR lookup is available (for fast photometry)
+        if model._precomputed.dust_ir_lookup is not None:
+            _has_preint_dust_ir = True
+            _dust_ir_lookup = model._precomputed.dust_ir_lookup
+            _dust_model_name = model._dust_emission_model
 
     # AGN (full wavelength)
     has_agn_full = model._agn_model is not None
@@ -921,28 +929,73 @@ def build_hybrid_photometry(model):
                 non_stellar_sed = non_stellar_sed + shock_sed
 
             # 2c: Dust IR emission (energy-balanced)
+            dust_ir_phot_preint = jnp.zeros(n_filters, dtype=jnp.float64)
             if has_dust_em_full:
                 L_ir = jnp.maximum(
                     (L_absorbed_stellar + L_abs_neb) * jnp.float64(dust_eta_balance), 0.0
                 )
-                dust_ir = dust_ir_emission(
-                    dust_emission_fn,
-                    rest_wave_f64,
-                    L_ir,
-                    dust_T=jnp.float64(dust_T),
-                    dust_beta_ir=jnp.float64(dust_beta_ir),
-                    dust_alpha_mir=jnp.float64(dust_alpha_mir),
-                    dust_alpha_dale=jnp.float64(dust_alpha_dale),
-                    dust_umin=jnp.float64(dust_umin),
-                    dust_gamma_dl=jnp.float64(dust_gamma_dl),
-                    dust_qpah=jnp.float64(dust_qpah),
-                )
-                # Interpolate to panchromatic grid if needed
-                if _needs_extension:
-                    from tengri.utils.wavelength import interpolate_sed_to_grid
 
-                    dust_ir = interpolate_sed_to_grid(rest_wave_f64, dust_ir, rest_wave_f64)
-                non_stellar_sed = non_stellar_sed + dust_ir
+                if _has_preint_dust_ir:
+                    # Use preintegrated template lookup (fast triweight interp)
+                    # Signature varies by dust model
+                    if _dust_model_name == "draine_li2007":
+                        # DL07: (L_absorbed, dust_umin, dust_gamma_dl, dust_qpah)
+                        dust_ir_phot_preint = _dust_ir_lookup(
+                            L_ir,
+                            jnp.float64(dust_umin),
+                            jnp.float64(dust_gamma_dl),
+                            jnp.float64(dust_qpah),
+                        )
+                    elif _dust_model_name == "dale2014":
+                        # Dale2014: (L_absorbed, dust_alpha_dale)
+                        dust_ir_phot_preint = _dust_ir_lookup(
+                            L_ir,
+                            jnp.float64(dust_alpha_dale),
+                        )
+                    else:
+                        # Generic template model: (L_absorbed, *grid_params)
+                        # For now, fall back to full-wavelength for other models
+                        dust_ir = dust_ir_emission(
+                            dust_emission_fn,
+                            rest_wave_f64,
+                            L_ir,
+                            dust_T=jnp.float64(dust_T),
+                            dust_beta_ir=jnp.float64(dust_beta_ir),
+                            dust_alpha_mir=jnp.float64(dust_alpha_mir),
+                            dust_alpha_dale=jnp.float64(dust_alpha_dale),
+                            dust_umin=jnp.float64(dust_umin),
+                            dust_gamma_dl=jnp.float64(dust_gamma_dl),
+                            dust_qpah=jnp.float64(dust_qpah),
+                        )
+                        if _needs_extension:
+                            from tengri.utils.wavelength import (
+                                interpolate_sed_to_grid,
+                            )
+
+                            dust_ir = interpolate_sed_to_grid(
+                                rest_wave_f64, dust_ir, rest_wave_f64
+                            )
+                        non_stellar_sed = non_stellar_sed + dust_ir
+                else:
+                    # Full-wavelength computation (fallback or if preintegration disabled)
+                    dust_ir = dust_ir_emission(
+                        dust_emission_fn,
+                        rest_wave_f64,
+                        L_ir,
+                        dust_T=jnp.float64(dust_T),
+                        dust_beta_ir=jnp.float64(dust_beta_ir),
+                        dust_alpha_mir=jnp.float64(dust_alpha_mir),
+                        dust_alpha_dale=jnp.float64(dust_alpha_dale),
+                        dust_umin=jnp.float64(dust_umin),
+                        dust_gamma_dl=jnp.float64(dust_gamma_dl),
+                        dust_qpah=jnp.float64(dust_qpah),
+                    )
+                    # Interpolate to panchromatic grid if needed
+                    if _needs_extension:
+                        from tengri.utils.wavelength import interpolate_sed_to_grid
+
+                        dust_ir = interpolate_sed_to_grid(rest_wave_f64, dust_ir, rest_wave_f64)
+                    non_stellar_sed = non_stellar_sed + dust_ir
             else:
                 L_ir = jnp.float64(0.0)
 
@@ -1047,6 +1100,12 @@ def build_hybrid_photometry(model):
 
         # Scale stellar to erg/s/cm^2/Hz
         stellar_phot = (flux_scale * stellar_phot * lsun).astype(jnp.float64)
+
+        # Add preintegrated dust IR photometry if available.
+        # The lookup returns L_ν (erg/s/Hz); convert to flux density
+        # (erg/s/cm²/Hz) with the same (1+z)/(4π d_L²) scaling as stellar.
+        if _has_preint_dust_ir:
+            non_stellar_phot = non_stellar_phot + dust_ir_phot_preint * flux_scale
 
         return stellar_phot + non_stellar_phot
 

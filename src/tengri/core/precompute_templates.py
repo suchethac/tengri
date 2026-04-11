@@ -130,6 +130,7 @@ def precompute_dl07_photometry(
     templates: dict,
     filter_waves: list[jnp.ndarray],
     filter_trans: list[jnp.ndarray],
+    redshift: float = 0.0,
 ) -> dict:
     """Pre-integrate DL07 templates through filter curves.
 
@@ -179,7 +180,7 @@ def precompute_dl07_photometry(
         wave_rest=np.asarray(tmpl_wave),
         filter_waves=[np.asarray(fw) for fw in filter_waves],
         filter_trans=[np.asarray(ft) for ft in filter_trans],
-        redshift=0.0,
+        redshift=redshift,
         dl_cm=1.0,
         axes=(np.asarray(qpah_grid), np.asarray(umin_grid)),
         energy_normalize=True,
@@ -190,7 +191,7 @@ def precompute_dl07_photometry(
         wave_rest=np.asarray(tmpl_wave),
         filter_waves=[np.asarray(fw) for fw in filter_waves],
         filter_trans=[np.asarray(ft) for ft in filter_trans],
-        redshift=0.0,
+        redshift=redshift,
         dl_cm=1.0,
         axes=(np.asarray(qpah_grid), np.asarray(umin_grid)),
         energy_normalize=True,
