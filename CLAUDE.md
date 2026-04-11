@@ -345,13 +345,31 @@ JAX_PLATFORMS=cpu python scripts/test_vi_memory_hybrid.py
 
 **Prediction modes in inference**: All inference internals use `mode="_traceable"` (raw un-JIT'd kernels safe inside any JIT scope). User-facing `predict_photometry()`/`predict_spectrum()` default to `mode="auto"` (picks JIT'd compositional or hybrid). See `docs/dev/sessions/2026-04-11-memory-investigation.md` for the full investigation.
 
-**Benchmark (MacBook Pro M-series, CPU):**
+**Benchmark (MacBook Pro M-series, CPU, SDSS ugriz, z=0.1, float64):**
 
-| Operation | Smooth (D=7) | Stochastic (D=137) |
-|-----------|-------------|-------------------|
-| Forward model | 140 μs | 356 μs |
-| Gradient | 56 μs | 63 μs |
-| native_geovi (10 iter) | 56s compile + 0.3s run | 56s compile + 0.8s run |
+Forward model per-call (after JIT warmup):
+
+| Config | Mode | DPL (D=6) | Dense Basis (D=8) | Stochastic (D~137) |
+|--------|------|-----------|-------------------|-------------------|
+| Stellar only | exact | 6,635 μs | 9,300 μs | 10,559 μs |
+| | compositional | 981 μs | 3,332 μs | 4,548 μs |
+| | **hybrid** | **32 μs** | **69 μs** | **52 μs** |
+| Full (neb+MBB+radio+xray) | exact | 10,052 μs | 12,785 μs | 13,716 μs |
+| | compositional | 1,380 μs | 3,384 μs | 5,124 μs |
+| | **hybrid** | **254 μs** | **264 μs** | **359 μs** |
+
+Hybrid max error vs exact: <0.4% (dust attenuation at filter effective wavelengths).
+Compositional is bit-exact (0.000% error).
+
+Gradient (d/d(dust_tau_diff)):
+
+| Config | compositional | hybrid | speedup |
+|--------|--------------|--------|---------|
+| DPL stellar | 152 μs | 20 μs | 7.5x |
+| Dense basis full | 389 μs | 214 μs | 1.8x |
+| Stochastic full | 403 μs | 210 μs | 1.9x |
+
+Inference memory (MAP + VI + NUTS + Raytrace, one process): **4.95 GB peak** (was 30.8 GB before `_traceable` + hybrid fixes).
 
 ## Testing mandate
 

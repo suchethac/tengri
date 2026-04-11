@@ -35,56 +35,74 @@ model.predict_photometry(params, mode="...")
 the speed/accuracy trade-off is acceptable (batch inference, initial
 exploration, real-time visualization).
 
-## Benchmarks (Apple M-series CPU, post-JIT warmup)
+## Benchmarks (Apple M-series CPU, post-JIT warmup, SDSS ugriz, z=0.1, float64)
 
-### By component (pgny SSP, stochastic SFH, SDSS ugriz, z=0.1)
+Run `scripts/benchmark_forward_model.py` to regenerate these numbers.
 
-| Config | exact | compositional | speedup | error | hybrid | speedup | error |
-|--------|-------|--------------|---------|-------|--------|---------|-------|
-| Stellar only | 12.8 ms | 2,616 μs | 5x | 0.000% | 35 μs | **369x** | 0.46% |
-| + Cue nebular | 1,026 ms | 4,316 μs | **238x** | 0.000% | 795 μs | **1,289x** | 0.33% |
-| + THEMIS dust | 19.6 ms | 3,202 μs | 6x | 0.000% | 239 μs | 82x | 0.21% |
-| + AGN (simple) | 79.3 ms | 3,332 μs | 24x | 0.000% | 178 μs | **445x** | 0.01% |
-| + AGN (K&D full) | 122 ms | 8,623 μs | 14x | 0.000% | 3,986 μs | 31x | 0.01% |
-| + DL07 dust | 19.3 ms | 3,424 μs | 6x | 0.000% | 37 μs | **521x** | 47%¹ |
-| Cue+THEMIS+K&D full | 1,151 ms | 10.4 ms | **111x** | 0.000% | 5.0 ms | **231x** | 0.02% |
-| **Full kitchen-sink²** | **1,227 ms** | **11.7 ms** | **105x** | **0.000%** | **5.3 ms** | **231x** | **0.01%** |
+### By component and SFH type
 
-¹ DL07 hybrid error at z=0.1 is from template wavelength boundary overlap
-  with SDSS z-band; negligible in absolute flux. Not present with IR filters.
-² Full = Cue + THEMIS + K&D full AGN + radio + X-ray + stochastic SFH (D=10).
+**DPL (parametric, D=6):**
 
-### By redshift (full kitchen-sink, SDSS ugriz)
+| Config | exact | compositional | speedup | hybrid | speedup | error |
+|--------|-------|--------------|---------|--------|---------|-------|
+| Stellar only | 6,635 μs | 981 μs | 7x | **32 μs** | **211x** | 0.38% |
+| + baked-in nebular | 6,854 μs | 975 μs | 7x | **32 μs** | **214x** | 0.38% |
+| + dust emission (MBB) | 8,165 μs | 1,288 μs | 6x | **155 μs** | **53x** | 0.12% |
+| + radio | 8,860 μs | 1,307 μs | 7x | **207 μs** | **43x** | 0.33% |
+| + xray | 8,916 μs | 1,228 μs | 7x | **217 μs** | **41x** | 0.38% |
+| + radio + xray | 8,866 μs | 1,280 μs | 7x | **222 μs** | **40x** | 0.33% |
+| **Full (neb+MBB+radio+xray)** | **10,052 μs** | **1,380 μs** | **7x** | **254 μs** | **40x** | **0.12%** |
 
-| z | exact | compositional | speedup | error | hybrid | speedup | error |
-|---|-------|--------------|---------|-------|--------|---------|-------|
-| 0.01 | 1,236 ms | 11.9 ms | 104x | 0.00001% | 3.0 ms | **406x** | 0.014% |
-| 0.1 | 1,281 ms | 11.6 ms | 110x | 0.00001% | 3.1 ms | **419x** | 0.013% |
-| 0.5 | 1,329 ms | 11.7 ms | 114x | 0.000005% | 3.1 ms | **424x** | 0.026% |
-| 1.0 | 1,037 ms | 13.8 ms | 75x | 0.00001% | 3.2 ms | **327x** | 0.055% |
-| 2.0 | 1,797 ms | 12.0 ms | 149x | 0.000002% | 3.1 ms | **584x** | 0.018% |
-| 3.0 | 1,196 ms | 12.3 ms | 97x | 0.000008% | 3.1 ms | **386x** | 0.002% |
-| 5.0 | 1,058 ms | 11.9 ms | 89x | 0.00001% | 2.9 ms | **368x** | 0.001% |
-| 8.0 | 1,026 ms | 15.5 ms | 66x | 0.00001% | 3.5 ms | **295x** | 0.001% |
+**Dense Basis (D=8):**
 
-**Compositional is bit-exact at all redshifts.** Hybrid error < 0.06% across
-z = 0.01–8.0 for the most complex model (every component enabled).
+| Config | exact | compositional | speedup | hybrid | speedup | error |
+|--------|-------|--------------|---------|--------|---------|-------|
+| Stellar only | 9,300 μs | 3,332 μs | 3x | **69 μs** | **135x** | 0.33% |
+| + baked-in nebular | 9,275 μs | 2,871 μs | 3x | **56 μs** | **164x** | 0.33% |
+| + dust emission (MBB) | 11,186 μs | 3,287 μs | 3x | **170 μs** | **66x** | 0.11% |
+| + radio + xray | 11,576 μs | 3,516 μs | 3x | **251 μs** | **46x** | 0.27% |
+| **Full (neb+MBB+radio+xray)** | **12,785 μs** | **3,384 μs** | **4x** | **264 μs** | **48x** | **0.10%** |
 
-### Where the time goes (exact mode, full model)
+**Stochastic Field (D~137):**
 
-| Step | Time | % of total |
-|------|------|-----------|
-| Parameter translation | 637 μs | 0.06% |
-| SFH computation | 327 μs | 0.03% |
-| CSP weights | 328 μs | 0.03% |
-| **Rest-frame SED** | **1,092 ms** | **99.8%** |
-| Filter integration | 117 μs | 0.01% |
+| Config | exact | compositional | speedup | hybrid | speedup | error |
+|--------|-------|--------------|---------|--------|---------|-------|
+| Stellar only | 10,559 μs | 4,548 μs | 2x | **52 μs** | **204x** | 0.25% |
+| + baked-in nebular | 10,438 μs | 4,619 μs | 2x | **52 μs** | **201x** | 0.25% |
+| + dust emission (MBB) | 11,502 μs | 4,717 μs | 2x | **177 μs** | **65x** | 0.11% |
+| + radio + xray | 12,828 μs | 4,668 μs | 3x | **238 μs** | **54x** | 0.31% |
+| **Full (neb+MBB+radio+xray)** | **13,716 μs** | **5,124 μs** | **3x** | **359 μs** | **38x** | **0.10%** |
 
-99.8% of the time is in the rest-frame SED. This includes Cue neural net
-(4 forward passes), K&D 3-zone AGN (nthcomp template interpolation),
-THEMIS templates, radio synchrotron, and X-ray emission. The compositional
-kernel fuses all of this into one XLA graph, eliminating Python dispatch
-overhead and intermediate array allocations.
+Compositional is bit-exact (0.000% error). Hybrid error <0.4% across all
+configurations (dust attenuation approximation at filter effective wavelengths).
+
+### Gradient timing (d/d(dust_tau_diff), JIT'd)
+
+| SFH | Config | compositional | hybrid | speedup |
+|-----|--------|--------------|--------|---------|
+| DPL | Stellar only | 152 μs | **20 μs** | 7.5x |
+| DPL | Full | 385 μs | **185 μs** | 2.1x |
+| Dense Basis | Stellar only | 179 μs | **43 μs** | 4.1x |
+| Dense Basis | Full | 389 μs | **214 μs** | 1.8x |
+| Stochastic | Stellar only | 178 μs | **47 μs** | 3.8x |
+| Stochastic | Full | 403 μs | **210 μs** | 1.9x |
+
+### Inference memory (MAP + VI + NUTS + Raytrace, one process)
+
+| Stage | RSS (GB) | Time |
+|-------|----------|------|
+| After imports + SSP load | 0.46 | — |
+| After MAP (200 steps) | **0.97** | 0.9s |
+| After VI (6 iter, 3 samples) | **5.10** | 49s |
+| After NUTS (50+50) | **5.30** | 9.4s |
+| After Raytrace (100 steps) | **5.35** | 1.1s |
+
+Peak RSS: **5.35 GB** (was 30.8 GB before `_traceable` + hybrid fixes).
+All inference internals use `mode="_traceable"` (raw un-JIT'd kernels safe
+inside any JIT scope). The hybrid precomputed path is selected automatically
+when available, shrinking the CSP einsum from (n_age, n_wave)=658k to
+(n_age, n_filters)=470 elements. Run `scripts/test_vi_memory_hybrid.py`
+to verify.
 
 ## Why hybrid is fast
 
@@ -98,8 +116,10 @@ Both compositional and hybrid are fully fused `@jax.jit` kernels
   Non-stellar components still computed at full wavelength.
 
 For models with non-stellar components, hybrid computes the non-stellar
-SED at full wavelength and integrates through filters. This is why the
-full model hybrid (5.3 ms) is slower than stellar-only hybrid (35 μs).
+SED at full wavelength and integrates through filters via `jax.vmap` over
+padded filter arrays (`compute_flux_density_batch`). This is why the full
+model hybrid (~260 μs) is slower than stellar-only hybrid (~50 μs).
+Filter integration is vectorized — no Python for-loops in the XLA graph.
 
 ## Why hybrid is approximate
 
