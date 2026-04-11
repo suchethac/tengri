@@ -380,8 +380,11 @@ class TestDenseBasisRegistry:
         assert "sfh_burst_log_fburst" in params
 
     def test_composition_with_field(self) -> None:
+        """Auto-swaps to dense_basis_pure when field is present."""
         _fn, params, _, settings = resolve_sfh(["dense_basis", "field"])
-        assert "sfh_db_log_total_mass" in params
+        # Auto-swapped to pure variant (sfh_dbp_ prefix, no log_sfr_inst)
+        assert "sfh_dbp_log_total_mass" in params
+        assert "sfh_db_log_sfr_inst" not in params
         assert "sfh_field_psd_sigma" in params
         assert "sfh_field_ngrid" in settings
 

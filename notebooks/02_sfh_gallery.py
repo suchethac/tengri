@@ -34,12 +34,16 @@
 # | `delayed_tau` | Rising-then-falling; widely used baseline | 2 | No |
 # | `continuity` | Non-parametric piecewise; flexible | N_bins | No |
 # | `dirichlet` | Non-parametric with Dirichlet prior | N_bins | No |
+# | **`dense_basis`** | **GP-SFH via mass-time quantiles (default)** | **5** | **No** |
+# | `dense_basis` + field | **Stochastic GP on top of quantile SFH (default field mode)** | 4 + 2 + N_grid | **Yes** |
 # | `dpl` + field | Stochastic bursty GP field on top of DPL | 4 + 2 + N_grid | **Yes** |
 # | `tsnorm` + field | Stochastic bursty GP field on top of tsnorm | 5 + 2 + N_grid | **Yes** |
 #
-# **Rule of thumb**: Use `tsnorm` for smooth galaxies at z < 2. Use `dpl` + stochastic
-# field for bursty/dwarf galaxies or any galaxy at z > 4. Use non-parametric models
-# when you want maximum flexibility at the cost of fewer physical priors.
+# **Rule of thumb**: Use `dense_basis` (the default) for most galaxies — stellar mass
+# is a direct parameter, and the quantile-based shape is flexible enough for rising,
+# declining, quenched, and multi-episode SFHs. Add `+field` for stochastic burstiness
+# (auto-swaps to `dense_basis_pure`). Use `tsnorm` or `dpl` when you want a specific
+# parametric functional form.
 #
 # **Tabulated $(t,\mathrm{SFR})$ from simulations?** Use [`13_tabulated_sfh_to_mock_sed.py`](13_tabulated_sfh_to_mock_sed.py)
 # (`sed_from_sfh` / `photometry_from_sfh`) to generate SEDs and mock fluxes without a parametric prior.
@@ -51,8 +55,8 @@
 #
 # 1. **Parametric** -- smooth analytic functions (tsnorm, snorm, norm, lnorm,
 #    dpl, dexp, exp, const, triweight_burst, delayed_tau).
-# 2. **Non-parametric** -- piecewise-constant models with flexible priors
-#    (continuity, dirichlet).
+# 2. **Non-parametric** -- flexible models without a fixed functional form
+#    (dense_basis, continuity, dirichlet).
 # 3. **Stochastic (GP)** -- Gaussian-process modulation governed by a PSD
 #    (DRW, Extended Regulator, Matern).
 # 4. **Composition** -- additive, burst-mixture, and field-modulator
@@ -110,6 +114,7 @@ from tengri import (
     tsnorm,
 )
 from tengri.models.sfh.chemical_evolution import closed_box_metallicity
+from tengri.models.sfh.dense_basis import dense_basis_sfh
 from tengri.models.sfh.nonparametric import continuity_sfh, dirichlet_sfh
 from tengri.models.sfh.psd_models import psd_extended_regulator, psd_matern
 from tengri.utils.grid import grid_spacing
@@ -703,16 +708,17 @@ plt.show()
 #
 # | Science case | Recommended model | Why |
 # |-------------|-------------------|-----|
-# | Quick look / catalog fitting | Double power law (`dpl`) | Flexible, 4–5 params, fast |
-# | Star-forming main sequence | Delayed-tau or lognormal | Natural rise-and-fall shape |
+# | General galaxy fitting | **Dense basis (`dense_basis`)** | **Default. M★ is direct param, flexible shape** |
+# | Stochastic / bursty SFH | `dense_basis` + field | Auto-swaps to `dense_basis_pure` + GP modulation |
+# | Quick look / catalog fitting | Double power law (`dpl`) | Parametric, 4 params, fast |
 # | Post-starburst / quenching | Truncated skew-normal (`tsnorm`) | Captures abrupt truncation |
 # | Dwarf irregulars / starbursts | Stochastic GP (`field`) | Allows rapid SFR fluctuations |
 # | Simulation calibration | Tabulated (`tabulated`) | Matches hydro output directly |
 # | Agnostic / model comparison | Non-parametric bins (`continuity`) | Minimal SFH assumptions |
 #
-# **When in doubt:** start with `dpl` (double power law). If residuals show
-# structure, try `tsnorm` or `field`. The stochastic GP model is the most
-# flexible but requires more samples for convergence.
+# **When in doubt:** use `dense_basis` (the default). It handles rising, declining,
+# quenched, and double-peaked SFHs with just 5 parameters, and stellar mass is a
+# direct parameter (not derived from SFR integration).
 
 # %% [markdown]
 # ## 2. Non-Parametric SFH Models
@@ -877,6 +883,86 @@ add_multi_sfh_inset(
 )
 fig.tight_layout()
 # plt.savefig(os.path.join(FIGDIR, "sfh_dirichlet_sfh.png"), bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ### 2.3 Dense Basis GP-SFH (Iyer & Gawiser 2017; Iyer et al. 2019)
+#
+# The **default SFH model** in tengri. Parameterises the SFH via mass-time
+# quantiles: tx_frac_i is the cosmic time fraction at which the galaxy has
+# formed (i+1)/(N+1) of its total stellar mass. A GP with Matérn 3/2 +
+# Linear kernel smoothly interpolates the cumulative mass curve.
+#
+# **Key advantage**: stellar mass is a *direct parameter* (not derived from
+# SFR integration), making inference more efficient.
+#
+# When composed with `field` (stochastic GP), automatically swaps to
+# `dense_basis_pure` (no SFR constraint points) so the field has full
+# control over recent SFR variability.
+
+# %%
+age_yr_db = np.linspace(10**6.0, 13.47e9, 1200)
+age_gyr_db = age_yr_db / 1e9
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 3.5))
+
+# --- Left panel: 6 canonical tutorial shapes (Iyer+2019) ---
+ax = axes[0]
+tutorial_shapes = {
+    "Rising / starburst": (0.5, 0.7, 0.85),
+    "Regular star-forming": (0.3, 0.55, 0.8),
+    "Post-starburst": (0.5, 0.8, 0.9),
+    "Old quenched": (0.15, 0.3, 0.5),
+    "Double-peaked (SF)": (0.25, 0.30, 0.7),
+    "Double-peaked (Q)": (0.1, 0.6, 0.7),
+}
+for label, (t0, t1, t2) in tutorial_shapes.items():
+    sfr = dense_basis_sfh(
+        jnp.array(age_yr_db),
+        log_total_mass=10.0,
+        log_sfr_inst=0.0,
+        tx_frac_0=t0,
+        tx_frac_1=t1,
+        tx_frac_2=t2,
+    )
+    ax.plot(age_gyr_db, np.array(sfr), lw=1.5, label=label)
+
+ax.set_xlabel(r"Lookback time [Gyr]")
+ax.set_ylabel(r"SFR [M$_\odot$/yr]")
+ax.set_title(
+    "Dense Basis GP-SFH (Iyer+2017, 2019)\n"
+    r"$\log M_\star = 10$, $N_{\rm param} = 3$"
+)
+ax.legend(fontsize=6.5, frameon=False, ncol=2)
+ax.set_xlim(0.0, float(age_gyr_db[-1]))
+
+# --- Right panel: varying log_total_mass ---
+ax = axes[1]
+for log_m, log_sfr in [(9.0, -1.0), (10.0, 0.0), (11.0, 1.0)]:
+    sfr = dense_basis_sfh(
+        jnp.array(age_yr_db),
+        log_total_mass=log_m,
+        log_sfr_inst=log_sfr,
+        tx_frac_0=0.3,
+        tx_frac_1=0.55,
+        tx_frac_2=0.8,
+    )
+    ax.plot(
+        age_gyr_db,
+        np.array(sfr),
+        lw=1.5,
+        label=rf"$\log M_\star = {log_m:.0f}$",
+    )
+
+ax.set_yscale("log")
+ax.set_xlabel(r"Lookback time [Gyr]")
+ax.set_ylabel(r"SFR [M$_\odot$/yr]")
+ax.set_title("Dense Basis: varying stellar mass")
+ax.legend(fontsize=7, frameon=False)
+ax.set_xlim(0.0, float(age_gyr_db[-1]))
+
+fig.tight_layout()
+# plt.savefig(os.path.join(FIGDIR, "sfh_dense_basis.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -1333,6 +1419,8 @@ plt.show()
 # | `const` | Parametric | 1-3 (log_sfr, start, end) | Constant |
 # | `exp` | Parametric | 2-3 (log_peak, $\tau$, start) | Declining tau |
 # | `triweight_burst` | Parametric | 2 (log_tpeak, log_tmax) | Zacharegkas+2025 |
+# | **`dense_basis`** | **Non-parametric** | **5 (log_mass, log_sfr, tx×3)** | **Iyer+2017, 2019 (default)** |
+# | `dense_basis_pure` | Non-parametric | 4 (log_mass, tx×3) | Iyer+2017 (auto for field) |
 # | `continuity` | Non-parametric | 7 (log_mass + 6 ratios) | Leja+2019 |
 # | `dirichlet` | Non-parametric | 7 (log_mass + 6 z_frac) | Leja+2017 |
 # | `field` (DRW) | Stochastic | 2 + $N_{\rm grid}$ ($\sigma$, $\tau$, $\xi$) | Munoz+2026 |
@@ -1343,7 +1431,8 @@ plt.show()
 # **Composition rules:**
 # - At least one additive model required.
 # - At most one burst (mixture) and one field (modulator).
-# - Example: `["tsnorm", "burst", "field"]` = smooth backbone + burst + GP stochasticity.
+# - `dense_basis` auto-swaps to `dense_basis_pure` when `field` is present.
+# - Example: `["dense_basis", "burst", "field"]` = quantile SFH + burst + GP stochasticity.
 
 # %%
 print("SFH gallery notebook complete.")

@@ -658,6 +658,14 @@ def resolve_sfh(
     if isinstance(mean_sfh_type, str):
         mean_sfh_type = [mean_sfh_type]
 
+    # Auto-swap: dense_basis → dense_basis_pure when field is present.
+    # The SFR constraint points in dense_basis interfere with the GP
+    # field modulator, so we use the pure quantile-only variant instead.
+    has_field = any(n in ("field",) for n in mean_sfh_type)
+    _DB_TO_PURE = {"dense_basis": "dense_basis_pure", "db": "dbp"}
+    if has_field:
+        mean_sfh_type = [_DB_TO_PURE.get(n, n) for n in mean_sfh_type]
+
     # Look up models
     specs = []
     for name in mean_sfh_type:

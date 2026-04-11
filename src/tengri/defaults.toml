@@ -10,8 +10,11 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 [from_config]
-# SFH family: "tsnorm" | "dpl" | "dpl+field" | "tsnorm+field" | ...
-sfh = "tsnorm"
+# SFH family: "dense_basis" | "dense_basis+field" | "tsnorm" | "dpl" | ...
+# dense_basis (Iyer+2017, 2019): GP-SFH via mass-time quantiles.
+# Stellar mass is a direct parameter. When composed with "+field",
+# auto-swaps to dense_basis_pure (no SFR constraint points).
+sfh = "dense_basis"
 
 # Dust attenuation shorthand: "charlot_fall" | "calzetti" | "smc" | ...
 dust = "charlot_fall"
