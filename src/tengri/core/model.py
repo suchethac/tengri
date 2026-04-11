@@ -1673,7 +1673,7 @@ class SEDModel:
 
     # Valid prediction modes
     _PREDICTION_MODES: ClassVar[frozenset] = frozenset(
-        {"auto", "precomputed", "compositional", "hybrid", "exact"}
+        {"auto", "precomputed", "compositional", "hybrid", "exact", "_traceable"}
     )
 
     def predict_photometry(self, params, mode="auto", approx=None):
@@ -1721,6 +1721,11 @@ class SEDModel:
             )
 
         if mode == "auto":
+            return self._predict_photometry_auto(params)
+        if mode == "_traceable":
+            # Raw un-JIT'd path for use inside inference JIT scopes.
+            # Picks hybrid (precomputed, tiny graph) if available,
+            # otherwise falls back to auto.
             return self._predict_photometry_auto(params)
         if mode == "hybrid":
             return self._predict_photometry_hybrid(params)
@@ -2233,6 +2238,9 @@ class SEDModel:
             )
 
         if mode == "auto":
+            return self._predict_spectrum_auto(params, wave_obs)
+        if mode == "_traceable":
+            # Raw un-JIT'd path for use inside inference JIT scopes.
             return self._predict_spectrum_auto(params, wave_obs)
         if mode == "precomputed":
             raise ValueError(
