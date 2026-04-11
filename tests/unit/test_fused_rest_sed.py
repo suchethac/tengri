@@ -492,12 +492,14 @@ class TestFusedTier2Photometry:
         ]
         model = Model(simple_spec, synthetic_ssp, filters=filters)
 
-        # Fused path
-        phot_fused = model._compositional.photometry(simple_params)
+        # Fused path (sfr_on_ssp computed outside JIT, passed as traced arg)
+        phot_fused = model._predict_photometry_compositional(simple_params)
 
         # Unfused: force through _compute_rest_sed_compositional + filter loop
+        saved_phot = model._compositional.photometry
         model._compositional.photometry = None
         phot_unfused = model._predict_photometry_compositional(simple_params)
+        model._compositional.photometry = saved_phot
 
         assert_allclose(phot_fused, phot_unfused, rtol=1e-10)
 
@@ -528,7 +530,7 @@ class TestFusedTier2Photometry:
                 "dust_slope": -0.7,
                 "redshift": 0.1,
             }
-            return jnp.sum(model._compositional.photometry(params))
+            return jnp.sum(model._predict_photometry_compositional(params))
 
         grad = jax.grad(loss)(1.0)
         assert jnp.isfinite(grad)
@@ -561,6 +563,6 @@ class TestFusedTier2Photometry:
         assert model._compositional.photometry is not None
 
         params = spec.sample(jax.random.PRNGKey(42))
-        phot = model._compositional.photometry(params)
+        phot = model._predict_photometry_compositional(params)
         assert phot.shape == (1,)
         assert jnp.all(jnp.isfinite(phot))
