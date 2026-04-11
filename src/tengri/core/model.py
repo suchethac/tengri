@@ -47,6 +47,7 @@ from tengri.core.fused_kernels import (
     build_fused_tier2_spectrum,
     build_hybrid_photometry,
     build_hybrid_photometry_ztable,
+    build_hybrid_spectrum,
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,
 )
@@ -1999,6 +2000,38 @@ class SEDModel:
 
         return flux
 
+    def _predict_spectrum_hybrid(self, params, wave_obs):
+        """Hybrid spectrum: precomputed SSP + exact non-stellar.
+
+        Uses precomputed SSP templates on spectral pixels for stellar
+        (exact on the grid), and emission_helpers at full wavelength
+        for non-stellar (exact).
+
+        The kernel is fully fused: params dict → spectrum in one JIT call.
+        """
+        if self._hybrid.spectrum is None:
+            return self._predict_spectrum_auto(params, wave_obs)
+
+        p = self._get_internal_params(params)
+        sfr = self._compute_sfr(p)
+        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+        flux = self._hybrid.spectrum(sfr_on_ssp, params, **self._get_non_stellar_kwargs(p))
+
+        # Apply LSF if needed
+        resolution = self._lsf_resolution
+        if resolution is not None:
+            from tengri.models.observation.spectrum import apply_lsf
+
+            flux = apply_lsf(
+                flux,
+                wave_obs,
+                resolution,
+                sigma_lib_kms=self._sigma_lib_kms,
+                n_bins=self._lsf_n_bins,
+            )
+
+        return flux
+
     def precompute_spectroscopy(self, wave_obs):
         """Pre-interpolate SSP templates to observed wavelength grid.
 
@@ -2031,6 +2064,12 @@ class SEDModel:
         if self._compositional.rest_sed is not None:
             with contextlib.suppress(Exception):
                 self._compositional.spectrum = build_fused_tier2_spectrum(self)
+
+        # Hybrid spectrum kernel (precomputed SSP + exact non-stellar)
+        self._hybrid.spectrum = None
+        if self._compositional.rest_sed is not None:
+            with contextlib.suppress(Exception):
+                self._hybrid.spectrum = build_hybrid_spectrum(self)
 
         return self
 
@@ -2134,8 +2173,7 @@ class SEDModel:
         if mode == "compositional":
             return self._predict_spectrum_compositional(params, wave_obs)
         if mode == "hybrid":
-            # Not yet implemented (PR 2) — fall back to auto
-            return self._predict_spectrum_auto(params, wave_obs)
+            return self._predict_spectrum_hybrid(params, wave_obs)
 
         # mode == "exact"
         return self._predict_spectrum_exact(params, wave_obs)

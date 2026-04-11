@@ -2757,3 +2757,160 @@ def build_fused_tier2_spectrum(model):
             return compute_spectrum(rest_sed, rest_wave, wave_obs, z_fixed, dl_cm_fixed)
 
     return fused_tier2_spec
+
+
+def build_hybrid_spectrum(model):
+    """Build hybrid spectrum kernel: precomputed SSP stellar + exact non-stellar.
+
+    Stellar spectrum evaluated via precomputed SSP interpolated to spectral
+    pixels (exact on the pixel grid). Non-stellar components evaluated at
+    full wavelength resolution via rest_sed_kernel, then interpolated to
+    spectral pixels.
+
+    This kernel bridges precomputed stellar (fast) and exact non-stellar
+    (accurate):
+    - Stellar CSP: precomputed on spectral pixels, no wavelength integral
+    - Non-stellar: rest_sed_kernel at full wavelength, interpolated to pixels
+    - Use for science models where non-stellar accuracy is critical
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model instance with spectroscopy precomputation.
+
+    Returns
+    -------
+    callable or None
+        JIT-compiled function: (sfr_on_ssp, params) → spectrum array.
+        Returns None if spectroscopy is not precomputed.
+    """
+    if model._precomputed.spectroscopy is None:
+        return None
+
+    from tengri.core.param_translate import get_internal_params
+    from tengri.core.sed_pipeline import (
+        interp_met_alpha_dispatch,
+        interp_metallicity,
+    )
+    from tengri.models.dust.attenuation import resolve_dust_law
+    from tengri.models.sps.dsps_wrapper import compute_csp_weights
+    from tengri.utils.conversions import lnu_to_fnu
+
+    # Precomputed spectroscopic data
+    precomp_spec = model._precomputed.spectroscopy
+    ssp_on_pixels = precomp_spec.ssp_on_pixels.astype(model._forward_dtype)
+    wave_rest_pixels = precomp_spec.wave_rest_pixels
+    z_fixed = model._z_fixed
+    dl_cm_fixed = model._dl_cm_fixed
+
+    # Model configuration
+    ssp_ages_yr = model.ssp_ages_yr
+    _is_single_dust = model._dust_model == "single_component"
+    law_bc_fn = resolve_dust_law(model._dust_law_bc)
+    if not _is_single_dust:
+        law_diff_fn = resolve_dust_law(model._dust_law_diff)
+
+    # Alpha enhancement
+    _use_alpha_fe = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
+    if _use_alpha_fe:
+        from tengri.models.sps.dsps_wrapper import has_alpha_grid
+
+        _has_alpha = has_alpha_grid(model.ssp_data)
+    else:
+        _has_alpha = False
+
+    # Non-stellar kernel
+    rest_sed_kernel = model._compositional.rest_sed
+    param_map = model._param_map
+    spec = model.spec
+    has_field = model._has_field
+    rest_wave = model._rest_wavelength
+
+    # Redshift handling
+    is_free_z = z_fixed is None
+    if is_free_z:
+        from tengri.utils.cosmology import luminosity_distance as _lum_dist
+
+    # === Core kernel body (shared for single and two-component dust) ===
+
+    def _hybrid_spec_body(
+        sfr_on_ssp,
+        params,
+        log_z_abs,
+        dust_params,  # tuple: (tau_bc,) or (tau_bc, tau_diff)
+        alpha_fe=0.0,
+    ):
+        """Compute hybrid spectrum: precomputed stellar + non-stellar."""
+        p = get_internal_params(params, param_map, spec, has_field)
+        weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
+
+        # Metallicity interpolation
+        if _use_alpha_fe and _has_alpha:
+            alpha_fe_val = p.get("alpha_fe", 0.0)
+            ssp_flux_at_z = interp_met_alpha_dispatch(model, p["log_z_abs"], alpha_fe_val)
+        else:
+            ssp_flux_at_z = interp_metallicity(model, p["log_z_abs"])
+
+        # Stellar spectrum on pixels
+        stellar_spec = jnp.dot(weights, ssp_on_pixels[0])  # (n_pix,)
+
+        # Apply dust attenuation to stellar spectrum
+        if _is_single_dust:
+            k_lambda = law_bc_fn(wave_rest_pixels)
+            atten = jnp.exp(-dust_params[0] * k_lambda)
+        else:
+            k_bc = law_bc_fn(wave_rest_pixels)
+            k_diff = law_diff_fn(wave_rest_pixels)
+            atten = jnp.exp(-dust_params[0] * k_bc - dust_params[1] * k_diff)
+
+        stellar_spec_dust = stellar_spec * atten
+
+        # Non-stellar SED at full wavelength
+        p_ns = p.copy()
+        if model._xray_enabled:
+            p_ns["_sfr_current"] = sfr_on_ssp[-1]
+        rest_sed_full = rest_sed_kernel(weights, ssp_flux_at_z, p_ns)
+
+        # Interpolate to spectral pixels
+        non_stellar_spec_rest = jnp.interp(
+            wave_rest_pixels, rest_wave, rest_sed_full, left=0.0, right=0.0
+        )
+
+        # Combine stellar + non-stellar
+        total_spec_rest = stellar_spec_dust + non_stellar_spec_rest
+
+        # Cosmological scaling
+        if is_free_z:
+            z = p.get("redshift", 0.0)
+            dl_cm = _lum_dist(z)
+        else:
+            z = z_fixed
+            dl_cm = dl_cm_fixed
+
+        flux_scale = lnu_to_fnu(1.0, dl_cm, z)
+        return flux_scale * total_spec_rest
+
+    # === Define kernel with correct dust signature ===
+
+    if _is_single_dust:
+
+        @jax.jit
+        def hybrid_spec(sfr_on_ssp, params):
+            """Single-dust hybrid spectrum."""
+            p = get_internal_params(params, param_map, spec, has_field)
+            return _hybrid_spec_body(sfr_on_ssp, params, p["log_z_abs"], (p.get("tau_v", 0.0),))
+
+    else:
+
+        @jax.jit
+        def hybrid_spec(sfr_on_ssp, params):
+            """Two-dust hybrid spectrum."""
+            p = get_internal_params(params, param_map, spec, has_field)
+            return _hybrid_spec_body(
+                sfr_on_ssp,
+                params,
+                p["log_z_abs"],
+                (p.get("tau_bc", 0.0), p.get("tau_diff", 0.0)),
+            )
+
+    return hybrid_spec
