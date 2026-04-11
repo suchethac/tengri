@@ -94,6 +94,11 @@ src/tengri/
 │
 ├── models/                  # physics modules
 │   ├── sfh/                 # SFH models, PSD, GP generation
+│   │   ├── dense_basis.py   # Dense Basis GP-SFH (Iyer+2017, 2019)
+│   │   ├── mean_sfh.py      # Parametric SFH (DPL, exponential, delayed, etc.)
+│   │   ├── nonparametric.py # Continuity + Dirichlet SFH
+│   │   ├── gp_sfh.py        # GP generation for stochastic SFH
+│   │   └── psd_models.py    # PSD kernel functions
 │   ├── dust/                # Two-component attenuation + IR emission + WG00 geometries
 │   ├── agn/                 # AGN disc (incl. K&D 3-zone) + torus + BLR/NLR + QSOgen + _phys.py (shared constants)
 │   ├── nebular/             # Nebular emission (BakedIn, CLOUDY, Cue)
@@ -203,11 +208,12 @@ Each class has a `.summary()` method for quick inspection:
 
 ## Key conventions
 
-- High-level params: `sfh_alpha`, `sfh_tau_peak_gyr`, `psd_sigma`, `psd_tau_myr`, `met_logzsol`, `dust_tau_bc`
+- High-level params: `sfh_alpha`, `sfh_tau_peak_gyr`, `sfh_db_log_total_mass`, `sfh_db_tx_frac_0/1/2`, `psd_sigma`, `psd_tau_myr`, `met_logzsol`, `dust_tau_bc`
 - Internal params: `alpha`, `tau_sfh`, `psd_sigma`, `psd_tau_yr`, `log_z_abs`, `tau_bc`, `tau_diff`, `dust_slope`
 - GP latent vector `psd_xi` has shape `(n_grid,)` and prior `ξ ~ N(0, I)`
 - PSD timescale in high-level API is in **Myr** (`psd_tau_myr`); internal is in **years** (`psd_tau_yr`)
 - **Short-name aliases**: `resolve_short_names(sfh_type, priors)` expands short names to full prefixed names. E.g., `alpha` → `sfh_dpl_alpha` for DPL, `logzsol` → `met_logzsol` universally. See `param_translate.py` for the full table.
+- **SFH models**: `sfh="dpl"` (DPL), `sfh="tsnorm"` (truncated Sersic-like), `sfh="exponential"`, `sfh="delayed"`, `sfh="continuity"`, `sfh="dirichlet"`, `sfh="field"` (stochastic PSD-driven), `sfh="dense_basis"` or `"db"` (Iyer+2017, 2019, non-parametric via mass-time quantiles with 4 params: `sfh_db_log_total_mass`, `sfh_db_tx_frac_0/1/2`). Stellar mass is a direct parameter for dense_basis.
 - **Physical constants**: All CGS constants live in `utils/physics_constants.py` (CODATA 2018 / IAU 2015 values with documented SI→CGS derivations). Import from there — do NOT define local constant literals. Exception: `L_SUN_CUE = 3.839e33` in `cue.py` is intentional (Cue neural-net training convention, NOT IAU 2015) — never replace it.
 - **Nebular constants facade**: `models/nebular/_constants.py` re-exports `_C_CGS`, `_H_PLANCK`, `_LSUN_ERG`, `_C_AA`, `_AA_TO_CM` from `physics_constants`. All nebular submodules (`_shared.py`, `cue.py`, etc.) import from `_constants.py` — do not break these re-exports when editing `_constants.py`.
 - **AGN shared physics**: `_planck_lnu` and base constants in `models/agn/_phys.py` (shared by disc.py, torus.py, skirtor.py). Disc-specific extras (`G_GRAV`, `SIGMA_T`, `M_PROTON`, etc.) imported directly from `utils/physics_constants`. Do NOT duplicate the Planck function in AGN modules.

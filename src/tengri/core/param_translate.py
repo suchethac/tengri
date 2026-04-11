@@ -125,6 +125,18 @@ _SFH_SHORT_NAMES: dict[str, dict[str, str]] = {
         "psd_sigma": "sfh_field_psd_sigma",
         "psd_tau_myr": "sfh_field_psd_tau_myr",
     },
+    "dense_basis": {
+        "log_total_mass": "sfh_db_log_total_mass",
+        "tx_frac_0": "sfh_db_tx_frac_0",
+        "tx_frac_1": "sfh_db_tx_frac_1",
+        "tx_frac_2": "sfh_db_tx_frac_2",
+    },
+    "db": {
+        "log_total_mass": "sfh_db_log_total_mass",
+        "tx_frac_0": "sfh_db_tx_frac_0",
+        "tx_frac_1": "sfh_db_tx_frac_1",
+        "tx_frac_2": "sfh_db_tx_frac_2",
+    },
 }
 
 # Universal short names valid for any SFH type
