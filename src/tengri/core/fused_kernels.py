@@ -109,10 +109,25 @@ def build_hybrid_photometry(model):
     if _use_smooth_z:
         from tengri.models.sps.dsps_wrapper import compute_lgmet_weights as _clw
 
-    # IGM: precomputed at effective wavelengths
-    has_igm = model._precomputed.igm_at_effective_wavelengths is not None
+    # IGM: full-wavelength transmission (compositional-quality, not approximate).
+    # Precompute once at init on the rest-frame wavelength grid.
+    _z_for_igm = model._z_fixed
+    has_igm = model._apply_igm and _z_for_igm is not None
     if has_igm:
-        igm_trans = model._precomputed.igm_at_effective_wavelengths.astype(dt)
+        from tengri.models.igm import igm_transmission
+
+        _wave_obs_igm = model.ssp_data.ssp_wave * (1.0 + _z_for_igm)
+        igm_trans_full = jnp.asarray(
+            igm_transmission(_wave_obs_igm, _z_for_igm), dtype=dt
+        )
+        # Per-filter effective IGM (for stellar preintegrated photometry)
+        igm_trans_eff = model._precomputed.igm_at_effective_wavelengths
+        if igm_trans_eff is not None:
+            igm_trans_eff = igm_trans_eff.astype(dt)
+        else:
+            igm_trans_eff = jnp.ones(
+                len(model.filter_waves) if model.filter_waves else 0, dtype=dt
+            )
 
     # Note: has_dust_em flag checked for stellar L_absorbed only; full-wavelength
     # dust emission happens in non-stellar section
@@ -1093,6 +1108,20 @@ def build_hybrid_photometry(model):
                 )
                 non_stellar_sed = non_stellar_sed + xray_sed
 
+            # Apply IGM absorption at full wavelength before filter integration.
+            # This is compositional-quality IGM (not the per-filter approximation).
+            if has_igm:
+                # Extend igm_trans_full to panchromatic grid if needed
+                if _needs_extension:
+                    from tengri.utils.wavelength import interpolate_sed_to_grid
+
+                    _igm_panch = interpolate_sed_to_grid(
+                        ssp_wave_f64, igm_trans_full, rest_wave_f64
+                    )
+                    non_stellar_sed = non_stellar_sed * _igm_panch
+                else:
+                    non_stellar_sed = non_stellar_sed * igm_trans_full
+
             # === STEP 3: Integrate non-stellar through filters ===
             # Loop over filters (unrolled by JAX tracer)
             ns_fluxes = []
@@ -1107,7 +1136,7 @@ def build_hybrid_photometry(model):
         # === STEP 4: Combine stellar + non-stellar ===
         stellar_phot = flux_attenuated
         if has_igm:
-            stellar_phot = stellar_phot * igm_trans
+            stellar_phot = stellar_phot * igm_trans_eff
 
         # Scale stellar to erg/s/cm^2/Hz
         stellar_phot = (flux_scale * stellar_phot * lsun).astype(jnp.float64)
