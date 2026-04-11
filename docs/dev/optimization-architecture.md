@@ -170,6 +170,83 @@ Non-stellar preintegrated runtime wiring is infrastructure-ready but
 not yet enabled. The nebular case requires separate age-bin handling
 (CLOUDY age grid ≠ SSP age grid).
 
+## Optimization 3: Dust IR Template Preintegration
+
+Template-based dust models (DL07, Dale2014, DL14, Astrodust, BOSA, THEMIS)
+are preintegrated through filters at model init, enabling fast triweight
+interpolation at runtime.
+
+### Why it matters
+
+Full-wavelength dust IR evaluation requires:
+1. Load template grid point(s)
+2. Interpolate template to filter wavelengths
+3. Integrate through each filter: ∫ L_ν(λ) T_b(λ) dν
+4. Repeat thousands of times during inference
+
+With preintegration, steps 1–3 become one-time computation. Runtime reduces to:
+- Triweight interpolation in grid parameter space (~10 μs)
+- Scalar multiply by L_absorbed (~1 μs)
+- Total: ~15x speedup
+
+### Performance (DL07, SDSS ugriz, Apple M-series CPU)
+
+| Path | Time | Speedup |
+|------|------|---------|
+| Full-wavelength | 667 μs | 1x |
+| Preintegrated | 41 μs | **16.3x** |
+
+### Energy balance and physical accuracy
+
+Dust IR emission is scaled by absorbed stellar and nebular luminosity:
+
+```
+L_ir = (L_absorbed_stellar + L_absorbed_nebular) × dust_eta_balance
+```
+
+Precomputed templates are energy-normalized (unit bolometric luminosity),
+so preintegration factors out L_ir as a scalar multiplier — templates
+never need recomputation.
+
+### Why optical bands show tiny gradients
+
+Optical SDSS bands (u–z) detect dust IR emission via the Wien tail:
+λ_obs << λ_peak (far-IR), so L_ν ∝ exp(-hν/kT) is exponentially suppressed.
+
+Result: **Small parameter changes produce vanishingly small flux changes**.
+For example, changing dust_qpah by 0.01 produces ∂(f_u)/∂qpah ~ 1e-26 erg/s/cm²/Hz.
+
+**This is not a bug.** It correctly reflects the physics: dust IR parameters
+have tiny leverage on optical bands. Gradients are large for IR filters
+(Spitzer, WISE, Herschel), as expected.
+
+### Supported models
+
+| Model | Status |
+|-------|--------|
+| DL07 | ✓ Active (2D triweight: qpah, umin) |
+| Dale2014 | ✓ Active (1D triweight: alpha_dale) |
+| DL14, Astrodust, BOSA, THEMIS | Planned (N-D triweight) |
+| Modified Blackbody, Casey2012 | N/A (analytic, no preintegration) |
+
+### Automatic activation
+
+Dust IR preintegration is **on by default** when:
+- Dust emission model is template-based
+- Templates are found in `data/` directory
+- Redshift is fixed (not free)
+- No exceptions during precomputation
+
+Falls back gracefully to full-wavelength if templates unavailable.
+
+### Reference
+
+See [dust-preintegration.md](dust-preintegration.md) for:
+- Detailed DL07/Dale2014 math
+- Redshift treatment
+- Gradient verification
+- Troubleshooting and tests
+
 ## Other Optimizations
 
 ### Spectroscopic precomputation

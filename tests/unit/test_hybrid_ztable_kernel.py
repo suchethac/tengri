@@ -16,11 +16,9 @@ import os
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.core.fused_kernels import build_hybrid_photometry_ztable
 from tengri.models.sps.dsps_wrapper import SSPData
 from tengri.models.sps.precompute import (
     interpolate_ztable,
@@ -85,7 +83,7 @@ class TestZTableBasic:
         fixed = precompute_photometry(ssp_data, fw, ft, z_test, dl_cm)
 
         # Interpolate z-table
-        ssp_phot_interp, eff_rest_interp, flux_scale_interp = interpolate_ztable(
+        ssp_phot_interp, _, flux_scale_interp = interpolate_ztable(
             ztable.ssp_phot_table,
             ztable.eff_waves_rest_table,
             ztable.flux_scale_table,
