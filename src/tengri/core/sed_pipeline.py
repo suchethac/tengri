@@ -739,6 +739,8 @@ def compute_sed_components(
     if model._dust_emission_model is not None and sed_intrinsic is not None:
         nu_ssp = _c_aa_const / _ssp_wave
         L_absorbed_stellar = -jnp.trapezoid(sed_intrinsic - sed_attenuated, nu_ssp)
+        # Guard against NaN/Inf from pure SSPs with zero continuum
+        L_absorbed_stellar = jnp.where(jnp.isfinite(L_absorbed_stellar), L_absorbed_stellar, 0.0)
         L_absorbed = jnp.maximum(L_absorbed_stellar + L_absorbed_extra, 0.0)
         eta_balance = p.get("dust_eta_balance", 1.0)
         L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
@@ -812,13 +814,15 @@ def compute_sed_components(
     )
 
     # ── Dust IR emission (energy-balanced) ────────────────────────────
-    if model._dust_emission_model is not None and L_ir > 0.0:
+    if model._dust_emission_model is not None:
         from tengri.models.dust.emission import resolve_emission_model
 
+        # Ensure L_ir is finite before passing to dust emission model
+        L_ir_safe = jnp.where(jnp.isfinite(L_ir) & (L_ir > 0.0), L_ir, 0.0)
         dust_ir = dust_ir_emission(
             resolve_emission_model(model._dust_emission_model),
             wave_z2,
-            L_ir,
+            L_ir_safe,
             dust_T=p.get("dust_T", 35.0),
             dust_beta_ir=p.get("dust_beta_ir", 1.6),
             dust_alpha_mir=p.get("dust_alpha_mir", 2.0),

@@ -711,12 +711,21 @@ class SEDModel:
         # Photometry precomputation (Zacharegkas+2025 Section 3)
         phot = None
         if precompute and self._z_fixed is not None and self.filter_waves is not None:
+            # Extract fixed SSP grid parameters and map to axis indices
+            # SSP grid axes: [lgmet, lg_age_gyr]
+            fixed_ssp = {}
+            if "met_logzsol" in self.spec.fixed_params:
+                # met_logzsol is fixed → collapse axis 0 (lgmet)
+                dist = self.spec._distributions["met_logzsol"]
+                fixed_ssp[0] = float(dist.value)
+
             phot = precompute_photometry(
                 ssp_data,
                 self.filter_waves,
                 self.filter_trans,
                 self._z_fixed,
                 self._dl_cm_fixed,
+                fixed=fixed_ssp if fixed_ssp else None,
             )
 
         # Dust age weights (sigmoid, for exact two-component dust)
@@ -766,11 +775,24 @@ class SEDModel:
             and self._nebular_backend is not None
             and hasattr(self._nebular_backend, "preintegrate_for_photometry")
         ):
+            # Extract fixed grid parameters and map to axis indices
+            # CLOUDY grid axes: [log_met, log_age, log_U]
+            fixed_cloudy = {}
+            if "met_logzsol" in self.spec.fixed_params:
+                # met_logzsol is fixed → collapse axis 0 (log_met)
+                dist = self.spec._distributions["met_logzsol"]
+                fixed_cloudy[0] = float(dist.value)
+            if "neb_logU" in self.spec.fixed_params:
+                # neb_logU is fixed → collapse axis 2 (log_U)
+                dist = self.spec._distributions["neb_logU"]
+                fixed_cloudy[2] = float(dist.value)
+
             self._nebular_backend.preintegrate_for_photometry(
                 self.filter_waves,
                 self.filter_trans,
                 self._z_fixed,
                 self._dl_cm_fixed,
+                fixed=fixed_cloudy if fixed_cloudy else None,
             )
 
         return PrecomputedData(
@@ -1680,7 +1702,7 @@ class SEDModel:
         dl_cm = self._get_dl_cm(params)
         return observe_photometry_from_rest_sed(
             rest_sed,
-            self.ssp_data.ssp_wave,
+            self._rest_wavelength,
             z,
             dl_cm,
             self.filter_waves,
@@ -1707,7 +1729,7 @@ class SEDModel:
             z = self._get_redshift(params)
             dl_cm = self._get_dl_cm(params)
             flux = observe_spectrum_from_rest_sed(
-                rest_sed, self.ssp_data.ssp_wave, wave_obs, z, dl_cm
+                rest_sed, self._rest_wavelength, wave_obs, z, dl_cm
             )
 
         # Apply LSF convolution if resolution profile is set

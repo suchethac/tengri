@@ -642,6 +642,10 @@ def build_hybrid_photometry(model):
             L_absorbed_stellar = jnp.sum(diff_flux * _eff_bw)  # erg/s
         else:
             L_absorbed_stellar = jnp.sum(diff_flux)  # fallback (wrong units)
+        # Guard against NaN/Inf from pure SSPs with zero/negligible continuum
+        L_absorbed_stellar = jnp.where(
+            jnp.isfinite(L_absorbed_stellar), L_absorbed_stellar, dt.type(0.0)
+        )
         L_absorbed_stellar = jnp.maximum(L_absorbed_stellar, dt.type(0.0))
 
         return flux_attenuated, L_absorbed_stellar, weights
@@ -704,7 +708,9 @@ def build_hybrid_photometry(model):
             # Triweight interp in (Z_gas, age_cloudy, logU) → (n_filters,) per Q_H
             # The preint grid is in log10 linear space (10^log10_lum was done at preint time)
             phot_per_qh = interp_nd_triweight(
-                _neb_cont_phot, _neb_cont_axes, _neb_cont_edges,
+                _neb_cont_phot,
+                _neb_cont_axes,
+                _neb_cont_edges,
                 (_gas_z, log_age_i, neb_logU),
             )
             return weight_i * qh_i * phot_per_qh * (1.0 - neb_fesc)
@@ -717,7 +723,9 @@ def build_hybrid_photometry(model):
             qh_i = _get_qh(log_z_abs, log_age_i)
             # Interp line luminosities in (Z_gas, age, logU) → (n_lines,) log10
             log_lum_per_qh = interp_nd_triweight(
-                _neb_line_lum, _neb_line_axes, _neb_line_edges,
+                _neb_line_lum,
+                _neb_line_axes,
+                _neb_line_edges,
                 (_gas_z, log_age_i, neb_logU),
             )
             return weight_i * qh_i * (10.0**log_lum_per_qh) * (1.0 - neb_fesc)
@@ -1084,28 +1092,57 @@ def build_hybrid_photometry(model):
         # Dispatch to the inner kernel (already defined above)
         if _is_single_dust:
             return hybrid_phot(
-                sfr_on_ssp, p["log_z_abs"],
-                p.get("tau_v", 0.0), p.get("dust_slope", -0.7),
-                **{k: p.get(k, v) for k, v in [
-                    ("f_obscuration", 0.0), ("dust_bump_strength", 0.0),
-                    ("dust_delta", 0.0), ("dust_Rv", 3.1), ("alpha_fe", 0.0),
-                    ("dust_T", 35.0), ("dust_beta_ir", 1.6), ("dust_eta_balance", 1.0),
-                    ("agn_log_lbol", 10.0), ("agn_alpha", -1.0),
-                    ("agn_T_torus", 1000.0), ("agn_tau_torus", 5.0),
-                    ("agn_torus_frac", 0.5), ("agn_log_mbh", 7.0), ("agn_log_ledd", -1.0),
-                ]},
+                sfr_on_ssp,
+                p["log_z_abs"],
+                p.get("tau_v", 0.0),
+                p.get("dust_slope", -0.7),
+                **{
+                    k: p.get(k, v)
+                    for k, v in [
+                        ("f_obscuration", 0.0),
+                        ("dust_bump_strength", 0.0),
+                        ("dust_delta", 0.0),
+                        ("dust_Rv", 3.1),
+                        ("alpha_fe", 0.0),
+                        ("dust_T", 35.0),
+                        ("dust_beta_ir", 1.6),
+                        ("dust_eta_balance", 1.0),
+                        ("agn_log_lbol", 10.0),
+                        ("agn_alpha", -1.0),
+                        ("agn_T_torus", 1000.0),
+                        ("agn_tau_torus", 5.0),
+                        ("agn_torus_frac", 0.5),
+                        ("agn_log_mbh", 7.0),
+                        ("agn_log_ledd", -1.0),
+                    ]
+                },
             )
         return hybrid_phot(
-            sfr_on_ssp, p["log_z_abs"],
-            p.get("tau_bc", 0.0), p.get("tau_diff", 0.0), p.get("dust_slope", -0.7),
-            **{k: p.get(k, v) for k, v in [
-                ("f_obscuration", 0.0), ("dust_bump_strength", 0.0),
-                ("dust_delta", 0.0), ("dust_Rv", 3.1), ("alpha_fe", 0.0),
-                ("dust_T", 35.0), ("dust_beta_ir", 1.6), ("dust_eta_balance", 1.0),
-                ("agn_log_lbol", 10.0), ("agn_alpha", -1.0),
-                ("agn_T_torus", 1000.0), ("agn_tau_torus", 5.0),
-                ("agn_torus_frac", 0.5), ("agn_log_mbh", 7.0), ("agn_log_ledd", -1.0),
-            ]},
+            sfr_on_ssp,
+            p["log_z_abs"],
+            p.get("tau_bc", 0.0),
+            p.get("tau_diff", 0.0),
+            p.get("dust_slope", -0.7),
+            **{
+                k: p.get(k, v)
+                for k, v in [
+                    ("f_obscuration", 0.0),
+                    ("dust_bump_strength", 0.0),
+                    ("dust_delta", 0.0),
+                    ("dust_Rv", 3.1),
+                    ("alpha_fe", 0.0),
+                    ("dust_T", 35.0),
+                    ("dust_beta_ir", 1.6),
+                    ("dust_eta_balance", 1.0),
+                    ("agn_log_lbol", 10.0),
+                    ("agn_alpha", -1.0),
+                    ("agn_T_torus", 1000.0),
+                    ("agn_tau_torus", 5.0),
+                    ("agn_torus_frac", 0.5),
+                    ("agn_log_mbh", 7.0),
+                    ("agn_log_ledd", -1.0),
+                ]
+            },
         )
 
     return hybrid_phot_fused
@@ -1776,7 +1813,8 @@ def build_fused_tier2_photometry(model):
     log_age_grid = model.log_age_grid
     age_yr = model.age_yr
     ssp_ages_yr = model.ssp_ages_yr
-    ssp_wave = model.ssp_data.ssp_wave
+    # Panchromatic wavelength grid (extended if radio/xray enabled)
+    rest_wave = model._rest_wavelength
     xray_enabled = model._xray_enabled
     filter_waves = model.filter_waves
     filter_trans = model.filter_trans
@@ -1801,11 +1839,12 @@ def build_fused_tier2_photometry(model):
         _t_obs_gyr_fixed = float(_age_at_z_fn(z_fixed))
 
     # IGM at full wavelength grid (only for fixed z)
+    # Use panchromatic grid if available (when radio/xray enabled), else SSP grid
     igm_trans_full = None
     if apply_igm and not is_free_z:
         from tengri.models.igm import igm_transmission
 
-        wave_obs_full = ssp_wave * (1.0 + z_fixed)
+        wave_obs_full = rest_wave * (1.0 + z_fixed)
         igm_trans_full = igm_transmission(wave_obs_full, z_fixed)
 
     # For free-z: need luminosity_distance inside JIT
@@ -1875,12 +1914,12 @@ def build_fused_tier2_photometry(model):
             dl_cm = _lum_dist(z)
 
             if apply_igm:
-                wave_obs = ssp_wave * (1.0 + z)
+                wave_obs = rest_wave * (1.0 + z)
                 rest_sed = rest_sed * _igm_fn(wave_obs, z)
 
             fluxes = []
             for fw, ft in zip(filter_waves, filter_trans):
-                f = compute_flux_density(rest_sed, ssp_wave, fw, ft, z, dl_cm)
+                f = compute_flux_density(rest_sed, rest_wave, fw, ft, z, dl_cm)
                 fluxes.append(f)
             return jnp.array(fluxes)
 
@@ -1896,7 +1935,7 @@ def build_fused_tier2_photometry(model):
 
             fluxes = []
             for fw, ft in zip(filter_waves, filter_trans):
-                f = compute_flux_density(rest_sed, ssp_wave, fw, ft, z_fixed, dl_cm_fixed)
+                f = compute_flux_density(rest_sed, rest_wave, fw, ft, z_fixed, dl_cm_fixed)
                 fluxes.append(f)
             return jnp.array(fluxes)
 
@@ -1960,7 +1999,8 @@ def build_fused_tier2_spectrum(model):
     log_age_grid = model.log_age_grid
     age_yr = model.age_yr
     ssp_ages_yr = model.ssp_ages_yr
-    ssp_wave = model.ssp_data.ssp_wave
+    # Panchromatic wavelength grid (extended if radio/xray enabled)
+    rest_wave = model._rest_wavelength
     xray_enabled = model._xray_enabled
 
     if _use_dsps_native_spec:
@@ -2035,7 +2075,7 @@ def build_fused_tier2_spectrum(model):
             """params dict → observed spectrum (free z)."""
             rest_sed, z = _compute_rest_sed_spec(params)
             dl_cm = _lum_dist_spec(z)
-            return compute_spectrum(rest_sed, ssp_wave, wave_obs, z, dl_cm)
+            return compute_spectrum(rest_sed, rest_wave, wave_obs, z, dl_cm)
 
     else:
 
@@ -2043,6 +2083,6 @@ def build_fused_tier2_spectrum(model):
         def fused_tier2_spec(params):
             """params dict → observed spectrum (fixed z)."""
             rest_sed, _z = _compute_rest_sed_spec(params)
-            return compute_spectrum(rest_sed, ssp_wave, wave_obs, z_fixed, dl_cm_fixed)
+            return compute_spectrum(rest_sed, rest_wave, wave_obs, z_fixed, dl_cm_fixed)
 
     return fused_tier2_spec

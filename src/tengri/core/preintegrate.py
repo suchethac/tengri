@@ -449,9 +449,9 @@ def interp_nd_triweight(
 
 
 def slice_fixed_axes(
-    preint: PreintegratedGrid,
+    preint: PreintegratedGrid | PreintegratedLines,
     fixed: dict[int, float],
-) -> PreintegratedGrid:
+) -> PreintegratedGrid | PreintegratedLines:
     """Collapse fixed axes in a preintegrated grid via triweight interpolation.
 
     When a grid parameter is fixed (not free during inference), its axis
@@ -463,56 +463,92 @@ def slice_fixed_axes(
     returns a grid with axes (logZ, log_age) — the logU axis is removed
     by triweight-interpolating to -3.0.
 
+    Works for both PreintegratedGrid and PreintegratedLines.
+
     Parameters
     ----------
-    preint : PreintegratedGrid
-        The preintegrated grid to slice.
+    preint : PreintegratedGrid or PreintegratedLines
+        The preintegrated data to slice.
     fixed : dict[int, float]
         Mapping of axis index → fixed value.  Axes are numbered from 0.
         E.g. ``{2: -3.0}`` collapses axis 2 at value -3.0.
 
     Returns
     -------
-    PreintegratedGrid
-        New grid with reduced dimensionality.  Axes and edges for the
+    PreintegratedGrid or PreintegratedLines
+        New object with reduced dimensionality.  Axes and edges for the
         fixed dimensions are removed.
     """
     if not fixed:
         return preint
 
-    phot = preint.phot
-    moment = preint.moment
     axes = list(preint.axes)
     edges = list(preint.edges)
 
-    # Process in reverse order so axis indices remain valid after each slice
-    for axis_idx in sorted(fixed.keys(), reverse=True):
-        value = fixed[axis_idx]
-        ax = axes[axis_idx]
-        ed = edges[axis_idx]
+    # Handle PreintegratedGrid (has phot and moment)
+    if isinstance(preint, PreintegratedGrid):
+        phot = preint.phot
+        moment = preint.moment
 
-        # Compute triweight weights at the fixed value
-        w = compute_grid_weights(value, ax, scatter=0.5 * float(ax[1] - ax[0]), edges=ed)
+        # Process in reverse order so axis indices remain valid after each slice
+        for axis_idx in sorted(fixed.keys(), reverse=True):
+            value = fixed[axis_idx]
+            ax = axes[axis_idx]
+            ed = edges[axis_idx]
 
-        # Contract phot along this axis using einsum-style contraction.
-        # tensordot(w, phot, ([0], [axis_idx])) removes axis_idx from phot,
-        # preserving the order of all other axes.
-        phot = jnp.tensordot(w, phot, axes=([0], [axis_idx]))
+            # Compute triweight weights at the fixed value
+            w = compute_grid_weights(value, ax, scatter=0.5 * float(ax[1] - ax[0]), edges=ed)
 
-        if moment is not None:
-            moment = jnp.tensordot(w, moment, axes=([0], [axis_idx]))
+            # Contract phot along this axis using einsum-style contraction.
+            # tensordot(w, phot, ([0], [axis_idx])) removes axis_idx from phot,
+            # preserving the order of all other axes.
+            phot = jnp.tensordot(w, phot, axes=([0], [axis_idx]))
 
-        # Remove from axes and edges lists
-        axes.pop(axis_idx)
-        edges.pop(axis_idx)
+            if moment is not None:
+                moment = jnp.tensordot(w, moment, axes=([0], [axis_idx]))
 
-    return PreintegratedGrid(
-        phot=phot,
-        moment=moment,
-        axes=tuple(axes),
-        edges=tuple(edges),
-        effective_wavelengths=preint.effective_wavelengths,
-        effective_wavelengths_rest=preint.effective_wavelengths_rest,
-        flux_scale=preint.flux_scale,
-        n_filters=preint.n_filters,
-    )
+            # Remove from axes and edges lists
+            axes.pop(axis_idx)
+            edges.pop(axis_idx)
+
+        return PreintegratedGrid(
+            phot=phot,
+            moment=moment,
+            axes=tuple(axes),
+            edges=tuple(edges),
+            effective_wavelengths=preint.effective_wavelengths,
+            effective_wavelengths_rest=preint.effective_wavelengths_rest,
+            flux_scale=preint.flux_scale,
+            n_filters=preint.n_filters,
+        )
+
+    # Handle PreintegratedLines (has line_filter_weights)
+    elif isinstance(preint, PreintegratedLines):
+        line_filter_weights = preint.line_filter_weights
+
+        # Process in reverse order
+        for axis_idx in sorted(fixed.keys(), reverse=True):
+            value = fixed[axis_idx]
+            ax = axes[axis_idx]
+            ed = edges[axis_idx]
+
+            # Compute triweight weights at the fixed value
+            w = compute_grid_weights(value, ax, scatter=0.5 * float(ax[1] - ax[0]), edges=ed)
+
+            # Contract line_filter_weights along this axis.
+            # Shape (*grid_dims, n_lines, n_filters) → (*reduced_grid_dims, n_lines, n_filters)
+            # Note: axis_idx indexes the grid dimensions (not n_lines or n_filters)
+            line_filter_weights = jnp.tensordot(w, line_filter_weights, axes=([0], [axis_idx]))
+
+            # Remove from axes and edges lists
+            axes.pop(axis_idx)
+            edges.pop(axis_idx)
+
+        return PreintegratedLines(
+            line_filter_weights=line_filter_weights,
+            axes=tuple(axes),
+            edges=tuple(edges),
+        )
+
+    else:
+        raise TypeError(f"Unsupported type: {type(preint)}")

@@ -7,7 +7,8 @@ Provides two approaches:
    9.7 um.  No external data required.  This is the default.
 
 2. **Template grid interpolation** (``create_skirtor_from_grid``) -- loads the
-   full SKIRTOR SED library and performs 5D multilinear interpolation in JAX.
+   full SKIRTOR SED library and performs 5D triweight kernel interpolation in JAX.
+   Provides C²-continuous gradients for smooth inference (VI, MAP, NUTS).
    Requires a prior download of the template grid (~1 GB).
 
 The analytic model captures the key SKIRTOR phenomenology:
@@ -34,11 +35,13 @@ from collections.abc import Callable
 import jax
 import jax.numpy as jnp
 
+from tengri.core.preintegrate import interp_nd_triweight
 from tengri.models.agn._phys import (
     LSUN_ERG as _LSUN_ERG,
     planck_lnu as _planck_lnu,
     wavelength_to_nu as _wavelength_to_nu,
 )
+from tengri.utils.interpolation import edges_for_grid
 
 # ===================================================================
 # Physical constants (CGS)
@@ -253,7 +256,12 @@ def _multilinear_interp_5d(
     axes: tuple,
     point: tuple,
 ) -> jnp.ndarray:
-    """5D multilinear interpolation on a regular grid.
+    """5D multilinear interpolation on a regular grid (deprecated).
+
+    .. deprecated::
+        This function uses piecewise-linear interpolation with discontinuous
+        first derivatives at grid nodes. Use `interp_nd_triweight` instead
+        for C²-continuous gradients suitable for gradient-based inference.
 
     Parameters
     ----------
@@ -314,7 +322,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     and can be used as a drop-in replacement.
 
     Grid dimensions: tau (5) x p (4) x q (4) x oa (5) x inc (10) x wave.
-    Interpolation: 5D multilinear in JAX (JIT-compatible).
+    Interpolation: 5D triweight kernel in JAX (JIT-compatible, C²-continuous gradients).
 
     Parameters
     ----------
@@ -390,6 +398,9 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         jnp.array(cos_inc_raw),
     )
 
+    # Precompute bin edges for triweight interpolation
+    edges = tuple(edges_for_grid(ax) for ax in axes)
+
     def skirtor_grid(
         wavelength: jnp.ndarray,
         agn_log_lbol: float = 44.0,
@@ -414,7 +425,8 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         """
         l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
 
-        # Interpolate template SED from grid
+        # Interpolate template SED from grid using triweight kernel
+        # Provides C²-continuous gradients for smooth inference
         point = (
             agn_tau_skirtor,
             agn_p_skirtor,
@@ -422,7 +434,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
             agn_oa_skirtor,
             agn_cos_inc,
         )
-        template = _multilinear_interp_5d(grid_jax, axes, point)
+        template = interp_nd_triweight(grid_jax, axes, edges, point)
 
         # Resample onto requested wavelength via linear interpolation
         sed_resampled = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)

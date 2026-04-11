@@ -333,9 +333,12 @@ def dust_ir_emission(
     array (n_wave,)
         Dust IR SED in erg/s/Hz.
     """
+    # Guard against NaN/Inf L_ir (can occur with pure SSPs)
+    L_ir_safe = jnp.where(jnp.isfinite(L_ir), L_ir, 0.0)
+
     return emission_fn(
         wave,
-        L_ir,
+        L_ir_safe,
         dust_T=dust_params.get("dust_T", 35.0),
         dust_beta_ir=dust_params.get("dust_beta_ir", 1.6),
         dust_alpha_mir=dust_params.get("dust_alpha_mir", 2.0),

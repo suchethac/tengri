@@ -155,6 +155,7 @@ def precompute_photometry(
     redshift,
     dl_cm,
     taylor_correction: bool = True,
+    fixed: dict[int, float] | None = None,
 ) -> PhotometricPrecomputation:
     """Pre-compute SSP broadband fluxes for all filters.
 
@@ -186,14 +187,22 @@ def precompute_photometry(
         dust correction (default True).  Adds one tensor of the same shape
         as Φ; inference cost is negligible (one extra dust derivative per
         filter, computed via finite differences).
+    fixed : dict[int, float], optional
+        Mapping of axis index → fixed value. Axes are numbered from 0:
+        - 0: lgmet (metallicity)
+        If provided, these axes are collapsed at init time via triweight
+        interpolation. Default None.
 
     Returns
     -------
     PhotometricPrecomputation
         Pre-computed data for the fused photometry kernel.
     """
+    from tengri.core.preintegrate import slice_fixed_axes
+
     # Delegate to preintegrate_grid, which handles all wavelength integration
     # for arbitrary grid dimensionality (2D for normal SSP, 4D for alpha-enhanced).
+    # Grid axes: (n_met, n_age, n_wave) → axes are (lgmet, lg_age_gyr)
     preint = preintegrate_grid(
         templates=np.asarray(ssp_data.ssp_flux),
         wave_rest=np.asarray(ssp_data.ssp_wave),
@@ -201,9 +210,16 @@ def precompute_photometry(
         filter_trans=[np.asarray(ft) for ft in filter_trans],
         redshift=redshift,
         dl_cm=dl_cm,
-        axes=(np.asarray(ssp_data.ssp_lgmet),),
+        axes=(
+            np.asarray(ssp_data.ssp_lgmet),
+            np.asarray(ssp_data.ssp_lg_age_gyr),
+        ),
         taylor=taylor_correction,
     )
+
+    # Collapse fixed axes if provided
+    if fixed:
+        preint = slice_fixed_axes(preint, fixed)
 
     return PhotometricPrecomputation(
         ssp_phot=preint.phot,

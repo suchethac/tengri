@@ -480,9 +480,20 @@ def build_model_from_config(
     if nebular is not None:
         spec_kwargs["nebular"] = nebular
 
-    # Pass CLOUDY grid path to Parameters if provided in model_kwargs
-    if "cloudy_grid_path" in model_kwargs:
-        spec_kwargs["cloudy_grid_path"] = model_kwargs.pop("cloudy_grid_path")
+    # Pass component kwargs to Parameters (not to Model.__init__)
+    # These control the param registry and forward model configuration
+    _component_kwargs = [
+        "cloudy_grid_path",
+        "dust_emission",
+        "dl07_grid_path",
+        "radio",
+        "xray",
+        "igm_patchy",
+        "shock",
+    ]
+    for kwarg in _component_kwargs:
+        if kwarg in model_kwargs:
+            spec_kwargs[kwarg] = model_kwargs.pop(kwarg)
 
     if agn is not None:
         spec_kwargs["agn_model"] = agn

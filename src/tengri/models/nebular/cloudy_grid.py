@@ -289,6 +289,7 @@ class CloudyGridBackend:
         filter_trans: list,
         redshift: float,
         dl_cm: float,
+        fixed: dict[int, float] | None = None,
     ) -> None:
         """Preintegrate CLOUDY continuum + lines through photometric filters.
 
@@ -303,6 +304,9 @@ class CloudyGridBackend:
         - self._preint_continuum: PreintegratedGrid (n_met, n_age, n_logU, n_filters)
         - self._preint_lines: PreintegratedLines (n_lines, n_filters)
 
+        If any axes are fixed, they are collapsed via triweight interpolation
+        at initialization time, reducing grid dimensionality.
+
         Parameters
         ----------
         filter_waves : list
@@ -313,8 +317,18 @@ class CloudyGridBackend:
             Redshift for redshifting observed-frame wavelengths.
         dl_cm : float
             Luminosity distance (cm).
+        fixed : dict[int, float], optional
+            Mapping of axis index → fixed value. Axes are numbered from 0:
+            - 0: log_met (metallicity)
+            - 1: log_age (age in years)
+            - 2: log_U (ionization parameter)
+            If provided, these axes are collapsed at init time. Default None.
         """
-        from tengri.core.preintegrate import preintegrate_grid, preintegrate_lines
+        from tengri.core.preintegrate import (
+            preintegrate_grid,
+            preintegrate_lines,
+            slice_fixed_axes,
+        )
 
         # Convert continuum from log10 to linear Lsun_Hz/Q_H.
         # The CLOUDY grid uses a floor of log10 = -95 for zero luminosity.
@@ -349,6 +363,11 @@ class CloudyGridBackend:
                 np.asarray(self.grid.line_log_U),
             ),
         )
+
+        # Collapse fixed axes if provided
+        if fixed:
+            self._preint_continuum = slice_fixed_axes(self._preint_continuum, fixed)
+            self._preint_lines = slice_fixed_axes(self._preint_lines, fixed)
 
         # Set flag
         self._has_preint_photometry = True
