@@ -169,7 +169,10 @@ def build_hybrid_photometry(model):
         dust_emission_fn = resolve_emission_model(model._dust_emission_model)
 
         # Check if preintegrated dust IR lookup is available (for fast photometry)
-        if model._precomputed.dust_ir_lookup is not None:
+        # NOTE: Disable preintegration if radio/X-ray is enabled, since dust IR
+        # must be computed on the panchromatic grid to match other non-stellar
+        # components. Preintegrated lookup was computed on SSP grid only.
+        if model._precomputed.dust_ir_lookup is not None and not _needs_extension:
             _has_preint_dust_ir = True
             _dust_ir_lookup = model._precomputed.dust_ir_lookup
             _dust_model_name = model._dust_emission_model
@@ -928,6 +931,15 @@ def build_hybrid_photometry(model):
                 )
                 non_stellar_sed = non_stellar_sed + shock_sed
 
+            # 2b5: Extend to panchromatic grid if radio/X-ray enabled
+            # (before components that need extended wavelength range)
+            if _needs_extension:
+                from tengri.utils.wavelength import interpolate_sed_to_grid
+
+                non_stellar_sed = interpolate_sed_to_grid(
+                    ssp_wave_f64, non_stellar_sed, rest_wave_f64
+                )
+
             # 2c: Dust IR emission (energy-balanced)
             dust_ir_phot_preint = jnp.zeros(n_filters, dtype=jnp.float64)
             if has_dust_em_full:
@@ -967,14 +979,6 @@ def build_hybrid_photometry(model):
                             dust_gamma_dl=jnp.float64(dust_gamma_dl),
                             dust_qpah=jnp.float64(dust_qpah),
                         )
-                        if _needs_extension:
-                            from tengri.utils.wavelength import (
-                                interpolate_sed_to_grid,
-                            )
-
-                            dust_ir = interpolate_sed_to_grid(
-                                rest_wave_f64, dust_ir, rest_wave_f64
-                            )
                         non_stellar_sed = non_stellar_sed + dust_ir
                 else:
                     # Full-wavelength computation (fallback or if preintegration disabled)
@@ -990,11 +994,6 @@ def build_hybrid_photometry(model):
                         dust_gamma_dl=jnp.float64(dust_gamma_dl),
                         dust_qpah=jnp.float64(dust_qpah),
                     )
-                    # Interpolate to panchromatic grid if needed
-                    if _needs_extension:
-                        from tengri.utils.wavelength import interpolate_sed_to_grid
-
-                        dust_ir = interpolate_sed_to_grid(rest_wave_f64, dust_ir, rest_wave_f64)
                     non_stellar_sed = non_stellar_sed + dust_ir
             else:
                 L_ir = jnp.float64(0.0)
@@ -1087,7 +1086,7 @@ def build_hybrid_photometry(model):
             ns_fluxes = []
             for fw, ft in zip(filter_waves_list, filter_trans_list):
                 f = compute_flux_density(
-                    non_stellar_sed, ssp_wave_f64, fw, ft, z_fixed, dl_cm_fixed
+                    non_stellar_sed, rest_wave_f64, fw, ft, z_fixed, dl_cm_fixed
                 )
                 ns_fluxes.append(f)
             if n_filters > 0:
