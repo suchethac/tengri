@@ -777,7 +777,7 @@ def build_jit_engine(fitter, pos_dict):
         m_new, kl_value, new_residuals, used_keys
         """
         # Key handling: _resample = fresh keys, _sample = reuse prev keys
-        if sample_mode.endswith("_resample") or sample_mode == "geovi":
+        if sample_mode.endswith("_resample") or sample_mode == "vi":
             sample_keys = jax.random.split(subkey, n_samples)
         elif sample_mode == "nonlinear_update":
             sample_keys = prev_keys
@@ -785,7 +785,7 @@ def build_jit_engine(fitter, pos_dict):
             sample_keys = prev_keys
 
         # Python if — only the used branch is traced by JAX
-        if sample_mode == "geovi":
+        if sample_mode == "vi":
             # Optimal schedule: resample at iter 0 and every
             # _RESAMPLE_EVERY, nonlinear_update in between.
             # Uses jax.lax.cond (traces both branches, executes one).

@@ -365,9 +365,13 @@ class CloudyGridBackend:
         )
 
         # Collapse fixed axes if provided
+        # Note: only collapse continuum grid, not lines. PreintegratedLines.line_filter_weights
+        # is shape (n_lines, n_filters) with no grid dimensions. The axes/edges stored in
+        # PreintegratedLines are metadata for interpolating the line luminosity grid
+        # (nebular_backend.grid.line_luminosity) elsewhere, which we do NOT reshape here.
+        # TODO: Properly handle fixed axis collapsing for line_luminosity grid and axes/edges.
         if fixed:
             self._preint_continuum = slice_fixed_axes(self._preint_continuum, fixed)
-            self._preint_lines = slice_fixed_axes(self._preint_lines, fixed)
 
         # Set flag
         self._has_preint_photometry = True

@@ -5,7 +5,7 @@ provides summary statistics, derived quantities, and can convert to ArviZ
 format or back to a ParamSpec for mock generation.
 
 Usage:
-    result = model.fit(data, noise, method="nuts")
+    result = model.fit(data, noise, method="mcmc_nuts")
     print(result.summary())
     sfh_draws = [model.predict_sfh(result.resample(key)) for ...]
     idata = result.to_arviz()

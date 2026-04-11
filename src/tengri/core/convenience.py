@@ -6,6 +6,7 @@ Each function takes (model, ...) where model is an SEDModel instance.
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 import jax
@@ -201,7 +202,7 @@ def prior_predictive(model: SEDModel, n: int = 500, seed: int = 42) -> PriorPred
 # ---------------------------------------------------------------------------
 
 
-def fit_catalog(
+def fit_batch(
     model: SEDModel,
     catalog,
     flux_cols: list[str],
@@ -212,7 +213,7 @@ def fit_catalog(
     verbose: bool = True,
     **kwargs,
 ) -> list:
-    """Fit a catalog of galaxies, one row at a time.
+    """Fit a batch of galaxies, one row at a time.
 
     Accepts a ``pandas.DataFrame``, an ``astropy.table.Table``, or a
     list of dicts. Each row becomes one ``Posterior``.
@@ -243,7 +244,7 @@ def fit_catalog(
 
     Examples
     --------
-    >>> results = model.fit_catalog(
+    >>> results = model.fit_batch(
     ...     catalog_df,
     ...     flux_cols=["flux_u", "flux_g", "flux_r"],
     ...     err_cols=["err_u", "err_g", "err_r"],
@@ -315,6 +316,40 @@ def fit_catalog(
             print(f"  [{i + 1}/{n_gal}] chi2/dof={chi2_str}, row={dt:.1f}s, total={elapsed:.0f}s")
 
     return results
+
+
+def fit_catalog(
+    model: SEDModel,
+    catalog,
+    flux_cols: list[str],
+    err_cols: list[str],
+    redshift_col: str | None = None,
+    method: str = "vi",
+    n_workers: int = 1,
+    verbose: bool = True,
+    **kwargs,
+) -> list:
+    """Deprecated alias for fit_batch.
+
+    .. deprecated:: 0.5.0
+        Use :func:`fit_batch` instead.
+    """
+    warnings.warn(
+        "fit_catalog is deprecated. Use fit_batch instead. Will be removed in tengri v1.0.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return fit_batch(
+        model,
+        catalog,
+        flux_cols,
+        err_cols,
+        redshift_col=redshift_col,
+        method=method,
+        n_workers=n_workers,
+        verbose=verbose,
+        **kwargs,
+    )
 
 
 # ---------------------------------------------------------------------------

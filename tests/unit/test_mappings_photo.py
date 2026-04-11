@@ -394,6 +394,105 @@ class TestMappingsPhotoAGNBackend:
 
 
 # ---------------------------------------------------------------------------
+# Q_H sanitization regression (commit 3996aba parity)
+# ---------------------------------------------------------------------------
+
+
+class _MockSSPData:
+    """Minimal SSP data object for _precompute_qh tests."""
+
+    def __init__(self, ssp_wave, ssp_flux, n_met=3, n_age=4):
+        self.ssp_wave = ssp_wave
+        self.ssp_flux = ssp_flux  # (n_met, n_age, n_wave)
+        self.ssp_lgmet = jnp.linspace(-3.0, -1.0, n_met)
+        self.ssp_lg_age_gyr = jnp.array([-3.0, -2.5, -2.0, -1.5])[:n_age]  # log(age/Gyr)
+
+
+class TestMappingsQHSanitization:
+    """Regression: _precompute_qh must sanitize Inf/NaN from pure-SSP overflow.
+
+    cloudy_grid.py received the same fix in commit 3996aba. These tests verify
+    mappings_photo.py is now consistent.
+    """
+
+    def _make_backend_shell(self) -> MappingsPhotoStellarBackend:
+        """Backend shell without a loaded grid (enough for _precompute_qh)."""
+        backend = MappingsPhotoStellarBackend.__new__(MappingsPhotoStellarBackend)
+        backend.model = "sb99"
+        backend.density = "cpr"
+        backend.sfh_mode = "inst"
+        backend.grid = _make_stellar_grid()
+        backend._sfh_idx = 1
+        backend._qh_table = None
+        backend._qh_log_met = None
+        backend._qh_log_age = None
+        backend._young_idx = None
+        return backend
+
+    def test_qh_table_finite_with_inf_uv_flux(self):
+        """_qh_table must be finite even when raw Q_H overflows to Inf.
+
+        Simulates a pure-SSP row with extreme UV flux below the Lyman limit —
+        the kind of flux that causes `compute_qh` to return Inf via
+        `jnp.trapezoid(L_nu / (h * nu))` accumulation.
+        """
+        n_met, n_age, n_wave = 3, 4, 200
+        ssp_wave = jnp.linspace(100.0, 10000.0, n_wave)
+
+        # Normal flux everywhere, but one SSP row has extreme UV (→ Inf Q_H)
+        ssp_flux = jnp.ones((n_met, n_age, n_wave)) * 1e30
+        # Inject a truly huge UV spike on one row to guarantee Inf from trapezoid
+        ssp_flux = ssp_flux.at[0, 0, :50].set(jnp.inf)  # n_wave[:50] < 912 Å region
+
+        ssp_data = _MockSSPData(ssp_wave, ssp_flux, n_met=n_met, n_age=n_age)
+        backend = self._make_backend_shell()
+        backend._precompute_qh(ssp_data)
+
+        assert backend._qh_table is not None
+        assert jnp.all(jnp.isfinite(backend._qh_table)), (
+            "_qh_table contains Inf/NaN after precomputation with extreme UV flux; "
+            "jnp.where(jnp.isfinite(qh_raw), qh_raw, 0.0) sanitization is missing"
+        )
+
+    def test_qh_table_nonnegative(self):
+        """_qh_table values must be ≥ 0 for any SSP input."""
+        n_met, n_age, n_wave = 3, 4, 200
+        ssp_wave = jnp.linspace(500.0, 10000.0, n_wave)
+        ssp_flux = jnp.abs(jnp.ones((n_met, n_age, n_wave)))
+
+        ssp_data = _MockSSPData(ssp_wave, ssp_flux, n_met=n_met, n_age=n_age)
+        backend = self._make_backend_shell()
+        backend._precompute_qh(ssp_data)
+
+        assert jnp.all(backend._qh_table >= 0.0)
+
+    def test_get_qh_at_nonnegative_with_normal_table(self):
+        """_get_qh_at must return ≥ 0 after bilinear interpolation."""
+        backend = _make_stellar_backend_with_qh()
+
+        # Query at multiple (log_z, log_age) points including boundary extrapolation
+        test_points = [
+            (-3.5, 5.5),  # below both grid edges
+            (-2.0, 6.5),  # mid-grid
+            (-0.5, 8.0),  # above both grid edges
+        ]
+        for log_z, log_age in test_points:
+            result = backend._get_qh_at(log_z, log_age)
+            assert float(result) >= 0.0, (
+                f"_get_qh_at({log_z}, {log_age}) = {result} < 0; "
+                "jnp.maximum(..., 0.0) floor is missing"
+            )
+
+    def test_get_qh_at_zero_when_table_has_zero_entries(self):
+        """When _qh_table is all zeros, _get_qh_at must return 0.0."""
+        backend = _make_stellar_backend_with_qh()
+        backend._qh_table = jnp.zeros_like(backend._qh_table)
+
+        result = backend._get_qh_at(-2.0, 6.5)
+        assert float(result) == pytest.approx(0.0, abs=1e-30)
+
+
+# ---------------------------------------------------------------------------
 # __init__.py exports
 # ---------------------------------------------------------------------------
 

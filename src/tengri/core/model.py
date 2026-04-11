@@ -46,7 +46,6 @@ from tengri.core.fused_kernels import (
     build_fused_tier2_photometry,
     build_fused_tier2_spectrum,
     build_hybrid_photometry,
-    is_tier2_compatible,
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,
 )
@@ -75,6 +74,7 @@ from tengri.models.sps.precompute import (
     precompute_spectroscopy,
 )
 from tengri.utils.cosmology import age_at_z, luminosity_distance
+from tengri.utils.deprecation import deprecated_class_alias
 from tengri.utils.grid import (
     grid_spacing,
     interpolate_to_linear_time,
@@ -481,6 +481,12 @@ class SEDModel:
         # now auto-loads tabulated templates on first call.
         self._dust_emission_model = getattr(spec, "dust_emission", None)
         if self._dust_emission_model == "dl07_tabulated":
+            warnings.warn(
+                "'dl07_tabulated' is deprecated. Use 'draine_li2007' instead. "
+                "Will be removed in tengri v1.0.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
             self._dust_emission_model = "draine_li2007"
         if self._dust_emission_model:
             for p in [
@@ -807,15 +813,14 @@ class SEDModel:
         exact_sed = build_exact_sed(self)
 
         rest_sed = None
-        if is_tier2_compatible(self):
-            try:
-                rest_sed = build_fused_rest_sed(self)
-            except Exception as e:
-                warnings.warn(
-                    f"Compositional rest-SED kernel build failed: {e}",
-                    UserWarning,
-                    stacklevel=2,
-                )
+        try:
+            rest_sed = build_fused_rest_sed(self)
+        except Exception as e:
+            warnings.warn(
+                f"Compositional rest-SED kernel build failed: {e}",
+                UserWarning,
+                stacklevel=2,
+            )
 
         # Store partial result so build_fused_tier2_photometry can read
         # model._compositional.rest_sed during construction.
@@ -1554,24 +1559,22 @@ class SEDModel:
         entire graph (SFH → SED → filter integration) into one optimized
         kernel, which is faster than splitting into precomputed stellar
         + Python-dispatched non-stellar filter integration.  Hybrid is
-        the fallback when compositional is unavailable (e.g. evolving
-        metallicity or chemical evolution).
+        the fallback when compositional is unavailable.
+
+        Tabulated SFH and standard parametric SFH are both handled by the
+        compositional path: SFH is evaluated in Python before JIT entry, so
+        the JIT closure is SFH-type-independent.  Evolving-metallicity and
+        chem-evol models fall back inside ``_predict_photometry_compositional``.
         """
         import warnings
 
-        _has_tabulated_sfh = "sfh_t_gyr" in params
-
         # Compositional: full-resolution JIT (bit-exact, default)
-        if (
-            self._compositional.photometry is not None
-            and not _has_tabulated_sfh
-            and not self._evolving_metallicity
-            and not getattr(self, "_chem_evol_enabled", False)
-        ):
+        if self._compositional.photometry is not None:
             return self._predict_photometry_compositional(params)
 
         # Hybrid: precomputed SSP×filter (faster but ~0.2% approx, fallback)
-        if self._hybrid.photometry is not None and not _has_tabulated_sfh:
+        # Tabulated SFH not supported in hybrid (variable-size arrays).
+        if self._hybrid.photometry is not None and "sfh_t_gyr" not in params:
             return self._predict_photometry_hybrid(params)
 
         warnings.warn(
@@ -1690,12 +1693,36 @@ class SEDModel:
     def _predict_photometry_compositional(self, params):
         """Photometry via Compositional: rest SED + filter integration.
 
-        Uses the compositional end-to-end JIT kernel when available (eliminates
-        Python dispatch between SFH, metallicity, SED, and filter steps).
-        Falls back to exact path otherwise.
+        Uses the compositional end-to-end JIT kernel when available.  SFH is
+        evaluated in Python (before JIT entry) and passed as a traced array, so
+        the JIT closure is SFH-type-independent and does not recompile on SFH
+        type changes.
+
+        Evolving-metallicity and chem-evol models cannot use the single-Z JIT
+        and fall back to ``_compute_rest_sed_compositional`` + Python filter
+        integration.
         """
         if self._compositional.photometry is not None:
-            return self._compositional.photometry(params)
+            # Evolving-Z / chem-evol: the end-to-end JIT has no met-table path;
+            # fall back to the REST-SED kernel + Python filter integration.
+            if self._evolving_metallicity or getattr(self, "_chem_evol_enabled", False):
+                rest_sed = self._compute_rest_sed_compositional(params)
+                z = self._get_redshift(params)
+                dl_cm = self._get_dl_cm(params)
+                return observe_photometry_from_rest_sed(
+                    rest_sed,
+                    self._rest_wavelength,
+                    z,
+                    dl_cm,
+                    self.filter_waves,
+                    self.filter_trans,
+                    apply_igm=self._apply_igm,
+                )
+            # Standard path: compute sfr_on_ssp in Python, pass into JIT.
+            p = self._get_internal_params(params)
+            sfr = self._compute_sfr(p)
+            sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+            return self._compositional.photometry(sfr_on_ssp, params)
 
         rest_sed = self._compute_rest_sed_compositional(params)
         z = self._get_redshift(params)
@@ -1714,15 +1741,21 @@ class SEDModel:
         """Spectrum via Compositional: rest SED + interpolation.
 
         Uses the compositional end-to-end JIT kernel when available and the
-        wave_obs grid matches the precomputed grid. Falls back to
-        exact path otherwise.
+        wave_obs grid matches the precomputed grid.  SFH is evaluated in Python
+        before JIT entry and passed as a traced array.  Evolving-metallicity and
+        chem-evol models fall back to the rest-SED kernel path.
         """
         if (
             self._compositional.spectrum is not None
             and self._precomputed.spectroscopy is not None
             and wave_obs is self._precomputed.spectroscopy.wave_obs_pixels
+            and not self._evolving_metallicity
+            and not getattr(self, "_chem_evol_enabled", False)
         ):
-            flux = self._compositional.spectrum(params)
+            p = self._get_internal_params(params)
+            sfr = self._compute_sfr(p)
+            sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+            flux = self._compositional.spectrum(sfr_on_ssp, params)
             # Apply LSF if needed (below)
         else:
             rest_sed = self._compute_rest_sed_compositional(params)
@@ -1873,17 +1906,16 @@ class SEDModel:
         return self._predict_spectrum_exact(params, wave_obs)
 
     def _predict_spectrum_auto(self, params, wave_obs):
-        """Auto mode: pick fastest available spectrum path."""
+        """Auto mode: pick fastest available spectrum path.
+
+        The compositional path now handles all SFH types (including tabulated)
+        because SFH is evaluated outside the JIT.  Evolving-metallicity and
+        chem-evol models fall back inside ``_predict_spectrum_compositional``.
+        """
         import warnings
 
         # Compositional (full resolution)
-        _has_tabulated_sfh = "sfh_t_gyr" in params
-        if (
-            self._compositional.rest_sed is not None
-            and not _has_tabulated_sfh
-            and not self._evolving_metallicity
-            and not getattr(self, "_chem_evol_enabled", False)
-        ):
+        if self._compositional.rest_sed is not None:
             return self._predict_spectrum_compositional(params, wave_obs)
 
         warnings.warn(
@@ -2342,6 +2374,31 @@ class SEDModel:
             **kwargs,
         )
 
+    def fit_batch(
+        self,
+        catalog,
+        flux_cols: list[str],
+        err_cols: list[str],
+        redshift_col: str | None = None,
+        method: str = "vi",
+        n_workers: int = 1,
+        verbose: bool = True,
+        **kwargs,
+    ) -> list:
+        from tengri.core.convenience import fit_batch as _fn
+
+        return _fn(
+            self,
+            catalog,
+            flux_cols,
+            err_cols,
+            redshift_col=redshift_col,
+            method=method,
+            n_workers=n_workers,
+            verbose=verbose,
+            **kwargs,
+        )
+
     def fit_catalog(
         self,
         catalog,
@@ -2353,10 +2410,17 @@ class SEDModel:
         verbose: bool = True,
         **kwargs,
     ) -> list:
-        from tengri.core.convenience import fit_catalog as _fn
+        """Deprecated alias for fit_batch.
 
-        return _fn(
-            self,
+        .. deprecated:: 0.5.0
+            Use :meth:`fit_batch` instead.
+        """
+        warnings.warn(
+            "fit_catalog is deprecated. Use fit_batch instead. Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.fit_batch(
             catalog,
             flux_cols,
             err_cols,
@@ -2447,4 +2511,4 @@ class SEDModel:
 
 
 # Backward-compatibility alias
-Model = SEDModel
+Model = deprecated_class_alias("Model", SEDModel)

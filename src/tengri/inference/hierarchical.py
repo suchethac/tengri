@@ -10,7 +10,7 @@ where φ_shared = {σ_PSD, τ_PSD} (or more generally, the PSD shape).
 
 Usage:
     hfitter = PopulationFitter(model_template, galaxies)
-    result = hfitter.run("geovi", n_iterations=25)
+    result = hfitter.run("vi", n_iterations=25)
     result.shared_params  # posterior on (σ_PSD, τ_PSD)
 """
 
@@ -23,6 +23,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.inference.fitter import resolve_method
 from tengri.utils.transforms import to_bounded, to_unbounded
 
 
@@ -178,16 +179,16 @@ class PopulationFitter:
             if n not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
         ]
 
-    def run(self, method="geovi", *, key=None, **kwargs):
+    def run(self, method="vi", *, key=None, **kwargs):
         """Run hierarchical inference.
 
         Parameters
         ----------
         method : str
-            "geovi" — geoVI with CorrelatedFieldMaker for native PSD learning.
-            "mgvi" — MGVI (faster per iteration, for very large N).
+            "vi" — geoVI with CorrelatedFieldMaker for native PSD learning.
+            "vi_linear" — MGVI (faster per iteration, for very large N).
             "geovi_flat" — flat parameter vector (legacy approach).
-            "raytrace" — Ray Tracing on flat vector (fast but needs tuning).
+            "mcmc_raytrace" — Ray Tracing on flat vector (fast but needs tuning).
         key : PRNGKey
         **kwargs
             Passed to the inference method.
@@ -195,28 +196,45 @@ class PopulationFitter:
         if key is None:
             key = jax.random.PRNGKey(0)
 
-        if method == "evi":
-            return self._run_evi_jit(key=key, **kwargs)
-        elif method == "evi_nifty":
-            return self._run_geovi_cfm(key=key, sample_mode="evi", **kwargs)
-        elif method == "geovi":
-            return self._run_geovi_cfm(key=key, **kwargs)
-        elif method == "mgvi":
-            return self._run_geovi_cfm(
-                key=key,
-                sample_mode="linear_resample",
-                **kwargs,
-            )
-        elif method == "geovi_flat":
-            return self._run_geovi(key=key, **kwargs)
-        elif method == "raytrace":
+        # Resolve old method names to canonical names, emitting deprecation warnings
+        method = resolve_method(method, emit_warning=True)
+
+        # Map canonical names to internal PopulationFitter method names
+        _method_map = {
+            "vi": ("geovi", None),
+            "vi_linear": ("mgvi", "linear_resample"),
+            "mcmc_raytrace": ("raytrace", None),
+            "mcmc_ess": ("evi", None),
+        }
+
+        if method not in _method_map:
+            # Handle legacy flat-vector methods
+            if method == "geovi_flat":
+                return self._run_geovi(key=key, **kwargs)
+            elif method == "evi":
+                return self._run_evi_jit(key=key, **kwargs)
+            elif method == "evi_nifty":
+                return self._run_geovi_cfm(key=key, sample_mode="evi", **kwargs)
+            else:
+                raise ValueError(
+                    f"Unknown method: {method}. "
+                    f"Use 'vi', 'vi_linear', 'geovi_flat', or 'mcmc_raytrace'."
+                )
+
+        cfm_method, sample_mode = _method_map[method]
+        if cfm_method == "geovi":
+            if sample_mode is None:
+                return self._run_geovi_cfm(key=key, **kwargs)
+            else:
+                return self._run_geovi_cfm(key=key, sample_mode=sample_mode, **kwargs)
+        elif cfm_method == "mgvi":
+            return self._run_geovi_cfm(key=key, sample_mode="linear_resample", **kwargs)
+        elif cfm_method == "raytrace":
             return self._run_raytrace(key=key, **kwargs)
+        elif cfm_method == "evi":
+            return self._run_evi_jit(key=key, **kwargs)
         else:
-            raise ValueError(
-                f"Unknown method: {method}. "
-                f"Use 'evi', 'evi_nifty', 'geovi', 'mgvi', "
-                f"'geovi_flat', or 'raytrace'."
-            )
+            raise ValueError(f"Unmapped method: {method}")
 
     def _run_evi_jit(
         self,

@@ -51,7 +51,11 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
     l_nu = ssp_flux * _LSUN_ERG  # erg/s/Hz/Msun
     photon_rate = l_nu / (_H_PLANCK * nu)
     mask = ssp_wave < _LYMAN_LIMIT
-    integrand = jnp.where(mask, photon_rate, 0.0)
+    # Clamp per-element to prevent float64 trapezoid accumulation overflow for
+    # young pure SSPs.  The cap is loose enough (~1e306) that it never fires for
+    # physically realistic rates (~1e31) — it only prevents rate×dnu overflow.
+    safe_max = jnp.finfo(jnp.float64).max / ssp_wave.shape[0]
+    integrand = jnp.where(mask, jnp.minimum(photon_rate, safe_max), 0.0)
     qh = -jnp.trapezoid(integrand, nu)
     return jnp.maximum(qh, 0.0)
 

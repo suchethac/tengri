@@ -22,6 +22,7 @@ Usage::
     l_nu = unified_agn(wavelength, agn_log_lbol=44.0, disc_model="powerlaw", ...)
 """
 
+import warnings
 from collections.abc import Callable
 
 import jax
@@ -77,6 +78,16 @@ def resolve_agn_model(name: str) -> Callable:
     """
     if name not in AGN_MODELS:
         raise ValueError(f"Unknown AGN model '{name}'. Available: {list(AGN_MODELS.keys())}")
+
+    # Emit deprecation warning for old model names
+    if name == "kubota_done":
+        warnings.warn(
+            "'kubota_done' is deprecated. Use 'multicolor_agn' instead. "
+            "Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
     return AGN_MODELS[name]
 
 

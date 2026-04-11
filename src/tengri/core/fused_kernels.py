@@ -1263,30 +1263,6 @@ def build_exact_sed(model):
     return exact_sed
 
 
-def is_tier2_compatible(model):
-    """Check if the compositional rest-frame SED kernel can be built.
-
-    Tier 2 supports ALL physics components (unlike Tier 1 fused kernels).
-    It only falls back when the model uses features that require non-standard
-    SFH/metallicity paths (tabulated SFH, DSPS table, evolving Z).
-
-    Parameters
-    ----------
-    model : SEDModel
-        The model instance to check.
-
-    Returns
-    -------
-    bool
-        True if Tier 2 kernel can be built.
-    """
-    # Evolving metallicity needs per-age Z interpolation — complex but supported
-    # Chemical evolution derives Z(t) from SFH — self-referential, supported
-    # The only hard blockers are DSPS table path and tabulated SFH
-    # (those are detected at call time, not build time)
-    return True
-
-
 def build_fused_rest_sed(model):
     """Build a JIT'd function: internal params -> rest-frame SED.
 
@@ -1334,63 +1310,19 @@ def build_fused_rest_sed(model):
         law_diff_fn = resolve_dust_law(model._dust_law_diff)
         same_law = model._dust_law_bc == model._dust_law_diff
 
-    # --- Optional components (Python if at trace time) ---
-    # Nebular
-    has_nebular = model._nebular_backend is not None and getattr(
-        model._nebular_backend, "has_free_params", False
-    )
-    # Full-precision wavelength array for components that need float64
+    # Full-precision wavelength arrays for non-stellar components
     ssp_wave_f64 = model.ssp_data.ssp_wave
-    # Panchromatic grid for Zone 2 (may differ from ssp_wave when radio/xray enabled)
     rest_wave_f64 = model._rest_wavelength
     _needs_extension = rest_wave_f64 is not model.ssp_data.ssp_wave
 
-    if has_nebular:
-        from tengri.core.emission_helpers import attenuate_emission, nebular_emission
+    # Build the non-stellar sub-closure once (outside JIT).
+    # All per-component flags, imports, and callables are captured inside.
+    from tengri.core.nonstell import build_nonstell_fn
 
-        nebular_backend = model._nebular_backend
-        ssp_log_ages_yr = model.ssp_log_ages_yr
-        _neb_dust_mode = getattr(model, "_neb_dust", "bc")
-        _neb_bc_fn = getattr(model, "_neb_dust_law_bc_fn", law_bc_fn)
-
-    # Shock emission
-    has_shock = getattr(model, "_shock_enabled", False)
-    if has_shock:
-        from tengri.core.emission_helpers import shock_emission
-
-    # Dust emission
-    has_dust_em = model._dust_emission_model is not None
-    if has_dust_em:
-        from tengri.core.emission_helpers import dust_ir_emission
-        from tengri.models.dust.emission import resolve_emission_model
-
-        dust_emission_fn = resolve_emission_model(model._dust_emission_model)
-
-    # AGN
-    has_agn = model._agn_model is not None
-    agn_parametric = model._agn_parametric if has_agn else False
-    if has_agn:
-        from tengri.core.emission_helpers import agn_emission
-        from tengri.models.agn import resolve_agn_model
-
-        agn_model_fn = resolve_agn_model(model._agn_model)
-
-    # Radio
-    has_radio = model._radio_enabled
-    if has_radio:
-        from tengri.core.emission_helpers import radio_emission
-
-        _radio_sfr_mode = model._radio_sfr_mode
-        _include_freefree = model._radio_include_freefree
-        _redshift = float(getattr(model, "_redshift", 0.0))
-
-    # X-ray
-    has_xray = model._xray_enabled
-    if has_xray:
-        from tengri.core.emission_helpers import xray_emission
-
-    # Constants for energy balance
-    _c_aa = dt.type(2.99792458e18)  # c in Angstrom/s
+    _law_diff_for_nonstell = law_diff_fn if not _is_single_dust else law_bc_fn
+    nonstell_fn = build_nonstell_fn(
+        model, law_bc_fn, _law_diff_for_nonstell, ssp_wave_f64, rest_wave_f64
+    )
 
     @jax.jit
     def rest_sed_kernel(weights, ssp_flux_at_z, p):
@@ -1459,197 +1391,10 @@ def build_fused_rest_sed(model):
             )
             sed_intr = (lsun * flux_intr).astype(jnp.float64)
 
-        sed = sed_atten
-
-        # --- 2. Nebular emission ---
-        L_abs_neb = jnp.float64(0.0)  # Initialize for energy balance
-        if has_nebular:
-            _sfr_last = weights[-1]  # approximate current SFR
-            neb_raw = nebular_emission(
-                nebular_backend,
-                weights,
-                ssp_wave_f64,
-                ssp_log_ages_yr,
-                p["log_z_abs"],
-                _sfr_last,
-                neb_logU=p.get("neb_logU", -3.0),
-                neb_logZ_gas=p.get("neb_logZ_gas", None),
-                neb_fesc=p.get("neb_fesc", 0.0),
-                neb_fesc_lya=p.get("neb_fesc_lya", 0.0),
-            )
-            _tau_bc = p.get("tau_bc", p.get("tau_v", 0.0))
-            _tau_diff = p.get("tau_diff", 0.0)
-            _dust_kw = {
-                "dust_slope": p.get("dust_slope", -0.7),
-                "dust_bump_strength": p.get("dust_bump_strength", 0.0),
-            }
-            neb_sed, L_abs_neb = attenuate_emission(
-                neb_raw,
-                ssp_wave_f64,
-                _neb_dust_mode,
-                _tau_bc,
-                _tau_diff,
-                law_bc_fn,
-                law_diff_fn if not _is_single_dust else law_bc_fn,
-                neb_bc_fn=_neb_bc_fn,
-                **_dust_kw,
-            )
-            sed = sed + neb_sed
-
-        # --- 3. Shock emission ---
-        if has_shock:
-            shock_raw = shock_emission(
-                ssp_wave_f64,
-                sed,
-                shock_frac=p.get("shock_frac", 0.0),
-                shock_velocity=p.get("shock_velocity", 300.0),
-                shock_log_density=p.get("shock_log_density", 0.0),
-                shock_b_over_sqrt_n=p.get("shock_b_over_sqrt_n", 1.0),
-                shock_abundance=p.get("shock_abundance", "solar"),
-                shock_component=p.get("shock_component", "combined"),
-            )
-            _tau_diff_s = p.get("tau_diff", 0.0)
-            _dust_kw_s = {
-                "dust_slope": p.get("dust_slope", -0.7),
-                "dust_bump_strength": p.get("dust_bump_strength", 0.0),
-            }
-            shock_sed, _ = attenuate_emission(
-                shock_raw,
-                ssp_wave_f64,
-                "diff",
-                0.0,
-                _tau_diff_s,
-                law_bc_fn,
-                law_diff_fn if not _is_single_dust else law_bc_fn,
-                **_dust_kw_s,
-            )
-            sed = sed + shock_sed
-
-        # --- 4. Energy balance + AGN L_bol on SSP grid (before interp) ---
-        if has_dust_em:
-            nu_em = _c_aa / ssp_wave.astype(jnp.float64)
-            L_absorbed_stellar = -jnp.trapezoid(sed_intr - sed_atten, nu_em)
-            L_absorbed = L_absorbed_stellar
-            if has_nebular:
-                L_absorbed = L_absorbed + L_abs_neb
-            eta_balance = p.get("dust_eta_balance", 1.0)
-            L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
-        else:
-            L_ir = jnp.float64(0.0)
-
-        agn_bol_erg = jnp.float64(0.0)
-        agn_log_lbol = jnp.float64(0.0)
-        agn_frac_val = jnp.float64(0.0)
-        if has_agn:
-            if agn_parametric:
-                agn_log_lbol = p.get("agn_log_lbol", 10.0)
-                agn_frac_val = 1.0
-                agn_bol_erg = 10.0**agn_log_lbol * LSUN_ERG_PER_S
-            else:
-                agn_frac_val = p.get("agn_frac", 0.0)
-                nu_agn = _c_aa / ssp_wave.astype(jnp.float64)
-                L_bol_stellar = -jnp.trapezoid(sed, nu_agn)
-                agn_bol_erg = L_bol_stellar * agn_frac_val
-                # AGN model functions expect log10(L_bol / Lsun), convert from erg/s
-                _log_lsun = jnp.log10(LSUN_ERG_PER_S)
-                agn_log_lbol = jnp.log10(jnp.maximum(agn_bol_erg, 1e-50)) - _log_lsun
-
-        # --- 5. Interpolate to panchromatic grid if needed ---
-        if _needs_extension:
-            from tengri.utils.wavelength import interpolate_sed_to_grid
-
-            sed = interpolate_sed_to_grid(ssp_wave_f64, sed, rest_wave_f64)
-
-        # Zone 2 wavelength grid (panchromatic or SSP)
-        wave_z2 = rest_wave_f64
-
-        # --- 6. Dust IR emission (energy-balanced) ---
-        if has_dust_em:
-            dust_ir = dust_ir_emission(
-                dust_emission_fn,
-                wave_z2,
-                L_ir,
-                dust_T=p.get("dust_T", 35.0),
-                dust_beta_ir=p.get("dust_beta_ir", 1.6),
-                dust_alpha_mir=p.get("dust_alpha_mir", 2.0),
-                dust_alpha_dale=p.get("dust_alpha_dale", 2.0),
-                dust_umin=p.get("dust_umin", 1.0),
-                dust_gamma_dl=p.get("dust_gamma_dl", 0.01),
-                dust_qpah=p.get("dust_qpah", 2.5),
-            )
-            sed = sed + dust_ir
-
-        # --- 7. AGN ---
-        if has_agn:
-            agn_sed = agn_emission(
-                agn_model_fn,
-                wave_z2,
-                agn_log_lbol=agn_log_lbol,
-                agn_frac=agn_frac_val,
-                agn_polar_ebv=p.get("agn_polar_ebv", 0.0),
-                agn_cos_inc=p.get("agn_cos_inc", 0.5),
-                agn_polar_oa=p.get("agn_polar_oa", 45.0),
-                agn_alpha=p.get("agn_alpha", -1.0),
-                agn_T_torus=p.get("agn_T_torus", 1000.0),
-                agn_tau_torus=p.get("agn_tau_torus", 5.0),
-                agn_torus_frac=p.get("agn_torus_frac", 0.5),
-                agn_log_mbh=p.get("agn_log_mbh", 7.0),
-                agn_log_ledd=p.get("agn_log_ledd", -1.0),
-                agn_a_spin=p.get("agn_a_spin", 0.0),
-                agn_tau_skirtor=p.get("agn_tau_skirtor", 7.0),
-                agn_p_skirtor=p.get("agn_p_skirtor", 1.0),
-                agn_q_skirtor=p.get("agn_q_skirtor", 1.0),
-                agn_oa_skirtor=p.get("agn_oa_skirtor", 40.0),
-                agn_T_hot=p.get("agn_T_hot", 1200.0),
-                agn_T_warm=p.get("agn_T_warm", 300.0),
-                agn_frac_hot=p.get("agn_frac_hot", 0.3),
-                agn_f_hard=p.get("agn_f_hard", 0.02),
-                agn_gamma_warm=p.get("agn_gamma_warm", 2.5),
-                agn_kt_warm=p.get("agn_kt_warm", 0.2),
-                agn_gamma_hard=p.get("agn_gamma_hard", 1.8),
-                agn_kt_hot=p.get("agn_kt_hot", 100.0),
-                agn_r_warm_ratio=p.get("agn_r_warm_ratio", 2.0),
-            )
-            sed = sed + agn_sed
-
-        # --- 8. Radio ---
-        if has_radio:
-            _log_mstar = jnp.log10(jnp.maximum(jnp.sum(weights), 1e-10))
-            radio_sed = radio_emission(
-                wave_z2,
-                L_ir=L_ir,
-                L_agn_bol=agn_bol_erg,
-                q_ir=p.get("radio_q_ir", 2.64),
-                alpha_sf=p.get("radio_alpha_sf", 0.8),
-                radio_loudness=p.get("radio_loudness", 0.0),
-                alpha_agn=p.get("radio_alpha_agn", 0.7),
-                sfr_mode=_radio_sfr_mode,
-                log_mstar=_log_mstar,
-                redshift=_redshift,
-                include_freefree=_include_freefree,
-                T_e=p.get("radio_T_e", 1e4),
-                alpha_ff=p.get("radio_alpha_ff", -0.1),
-            )
-            sed = sed + radio_sed
-
-        # --- 9. X-ray ---
-        if has_xray:
-            sfr_current = p.get("_sfr_current", 1.0)
-            mstar = jnp.sum(weights)
-            xray_sed = xray_emission(
-                wave_z2,
-                sfr=sfr_current,
-                stellar_mass=mstar,
-                L_agn_bol=agn_bol_erg,
-                gamma_agn=p.get("xray_gamma_agn", 1.8),
-                alpha_ox=p.get("xray_alpha_ox", -1.4),
-                gamma_hmxb=p.get("xray_gamma_hmxb", 2.0),
-                gamma_lmxb=p.get("xray_gamma_lmxb", 1.6),
-                E_cut=p.get("xray_E_cut", 300.0),
-            )
-            sed = sed + xray_sed
-
-        return sed
+        # --- 2–9. All non-stellar components (nebular, shock, dust IR, AGN, radio, X-ray) ---
+        # nonstell_fn was built once at closure time by build_nonstell_fn(); calling it
+        # here adds all enabled components and returns the full panchromatic SED.
+        return nonstell_fn(weights, p, sed_atten, sed_intr)
 
     return rest_sed_kernel
 
@@ -1754,20 +1499,19 @@ def observe_spectrum_from_rest_sed(
 
 
 def build_fused_tier2_photometry(model):
-    """Build a single JIT function: params dict → observed photometry.
+    """Build a single JIT function: (sfr_on_ssp, params dict) → observed photometry.
 
-    Fuses the entire Tier 2 pipeline into one ``@jax.jit`` scope:
+    Fuses the Tier 2 pipeline into one ``@jax.jit`` scope.  SFH is evaluated
+    *outside* the JIT (caller computes ``sfr_on_ssp`` and passes it as a traced
+    array), which avoids re-triggering XLA recompilation when the SFH type changes.
+
+    Steps inside the JIT:
 
     1. Parameter translation (public → internal names + unit conversion)
-    2. SFH computation (registry-dispatched composed function)
-    3. Metallicity interpolation (linear or smooth, single-Z)
-    4. Compositional rest-frame SED kernel (dust, nebular, AGN, ...)
-    5. Filter integration (loop unrolled by JAX tracer)
-    6. Optional IGM absorption
-
-    Eliminates all Python dispatch overhead between steps. The filter
-    loop executes 5 ``compute_flux_density`` calls in Python, but the
-    JAX tracer unrolls them into a single XLA program.
+    2. Metallicity interpolation (linear or smooth, single-Z)
+    3. Compositional rest-frame SED kernel (dust, nebular, AGN, ...)
+    4. Filter integration (loop unrolled by JAX tracer)
+    5. Optional IGM absorption
 
     Parameters
     ----------
@@ -1777,7 +1521,7 @@ def build_fused_tier2_photometry(model):
     Returns
     -------
     callable or None
-        JIT-compiled function: ``params_dict -> photometry_array``.
+        JIT-compiled function: ``(sfr_on_ssp, params_dict) -> photometry_array``.
         Returns None if prerequisites are not met (no filters, no
         fixed z, no Tier 2 kernel).
     """
@@ -1789,7 +1533,6 @@ def build_fused_tier2_photometry(model):
     from tengri.core.param_translate import get_internal_params
     from tengri.core.sed_pipeline import interp_met_alpha_dispatch, interp_metallicity
     from tengri.models.observation.photometry import compute_flux_density
-    from tengri.models.sfh.registry import compute_field_gp
     from tengri.models.sps.dsps_wrapper import compute_csp_weights
 
     _use_dsps_native = model._csp_integration == "dsps_native"
@@ -1804,14 +1547,6 @@ def build_fused_tier2_photometry(model):
     param_map = model._param_map
     spec = model.spec
     has_field = model._has_field
-    sfh_fn = model._sfh_fn
-    sfh_internal_names = model._sfh_internal_names
-    field_model = model._field_model
-    n_grid = model._n_grid
-    d_log_age = float(model.d_log_age)
-    ssp_log_ages_yr = model.ssp_log_ages_yr
-    log_age_grid = model.log_age_grid
-    age_yr = model.age_yr
     ssp_ages_yr = model.ssp_ages_yr
     # Panchromatic wavelength grid (extended if radio/xray enabled)
     rest_wave = model._rest_wavelength
@@ -1854,26 +1589,15 @@ def build_fused_tier2_photometry(model):
         if apply_igm:
             from tengri.models.igm import igm_transmission as _igm_fn
 
-    # --- Shared SFH + SED computation (used by both fixed-z and free-z) ---
-    def _compute_rest_sed(params):
-        """params → (rest_sed, redshift_value)."""
+    # --- Shared SED computation (sfr_on_ssp pre-computed by caller) ---
+    def _compute_rest_sed(sfr_on_ssp, params):
+        """sfr_on_ssp, params → (rest_sed, redshift_value).
+
+        ``sfr_on_ssp`` is the SFH already evaluated on the SSP age grid.
+        Keeping SFH outside this function prevents the SFH type from entering
+        the JIT closure, so switching SFH models does not cause recompilation.
+        """
         p = get_internal_params(params, param_map, spec, has_field)
-
-        kw = {k: v for k, v in p.items() if k in sfh_internal_names}
-        if has_field and "xi" in p:
-            gp_x, k0_half = compute_field_gp(
-                xi=p["xi"],
-                psd_sigma=p["psd_sigma"],
-                psd_tau_yr=p["psd_tau_yr"],
-                n_grid=n_grid,
-                d_log_age=d_log_age,
-                field_model=field_model,
-            )
-            kw["gp_x"] = gp_x
-            kw["k0_half"] = k0_half
-        sfr = sfh_fn(age_yr, **kw)
-
-        sfr_on_ssp = jnp.interp(ssp_log_ages_yr, log_age_grid, sfr)
 
         if _use_dsps_native:
             z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
@@ -1899,7 +1623,7 @@ def build_fused_tier2_photometry(model):
                 ssp_flux_at_z = interp_metallicity(model, p["log_z_abs"])
 
         if xray_enabled:
-            p = {**p, "_sfr_current": sfr[-1]}
+            p = {**p, "_sfr_current": sfr_on_ssp[-1]}
 
         rest_sed = rest_sed_kernel(weights, ssp_flux_at_z, p)
         z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
@@ -1908,9 +1632,9 @@ def build_fused_tier2_photometry(model):
     if is_free_z:
 
         @jax.jit
-        def fused_tier2_phot(params):
-            """params dict → observed photometry (free z)."""
-            rest_sed, z = _compute_rest_sed(params)
+        def fused_tier2_phot(sfr_on_ssp, params):
+            """sfr_on_ssp, params dict → observed photometry (free z)."""
+            rest_sed, z = _compute_rest_sed(sfr_on_ssp, params)
             dl_cm = _lum_dist(z)
 
             if apply_igm:
@@ -1926,9 +1650,9 @@ def build_fused_tier2_photometry(model):
     else:
 
         @jax.jit
-        def fused_tier2_phot(params):
-            """params dict → observed photometry (fixed z)."""
-            rest_sed, _z = _compute_rest_sed(params)
+        def fused_tier2_phot(sfr_on_ssp, params):
+            """sfr_on_ssp, params dict → observed photometry (fixed z)."""
+            rest_sed, _z = _compute_rest_sed(sfr_on_ssp, params)
 
             if igm_trans_full is not None:
                 rest_sed = rest_sed * igm_trans_full
@@ -1943,9 +1667,12 @@ def build_fused_tier2_photometry(model):
 
 
 def build_fused_tier2_spectrum(model):
-    """Build a single JIT function: params dict → observed spectrum.
+    """Build a single JIT function: (sfr_on_ssp, params dict) → observed spectrum.
 
     Like :func:`build_fused_tier2_photometry` but for spectroscopy.
+    SFH is evaluated *outside* the JIT; the caller passes ``sfr_on_ssp``
+    as a traced array so the JIT closure is SFH-type-independent.
+
     Requires ``precompute_spectroscopy()`` to have been called (for
     the wavelength grid) or an Observation with spectroscopy config.
 
@@ -1957,7 +1684,7 @@ def build_fused_tier2_spectrum(model):
     Returns
     -------
     callable or None
-        JIT-compiled function: ``params_dict -> spectrum_array``.
+        JIT-compiled function: ``(sfr_on_ssp, params_dict) -> spectrum_array``.
     """
     if model._compositional.rest_sed is None:
         return None
@@ -1965,7 +1692,6 @@ def build_fused_tier2_spectrum(model):
     from tengri.core.param_translate import get_internal_params
     from tengri.core.sed_pipeline import interp_met_alpha_dispatch, interp_metallicity
     from tengri.models.observation.spectrum import compute_spectrum
-    from tengri.models.sfh.registry import compute_field_gp
     from tengri.models.sps.dsps_wrapper import compute_csp_weights
 
     _use_dsps_native_spec = model._csp_integration == "dsps_native"
@@ -1990,14 +1716,6 @@ def build_fused_tier2_spectrum(model):
     param_map = model._param_map
     spec = model.spec
     has_field = model._has_field
-    sfh_fn = model._sfh_fn
-    sfh_internal_names = model._sfh_internal_names
-    field_model = model._field_model
-    n_grid = model._n_grid
-    d_log_age = float(model.d_log_age)
-    ssp_log_ages_yr = model.ssp_log_ages_yr
-    log_age_grid = model.log_age_grid
-    age_yr = model.age_yr
     ssp_ages_yr = model.ssp_ages_yr
     # Panchromatic wavelength grid (extended if radio/xray enabled)
     rest_wave = model._rest_wavelength
@@ -2021,23 +1739,9 @@ def build_fused_tier2_spectrum(model):
     if is_free_z:
         from tengri.utils.cosmology import luminosity_distance as _lum_dist_spec
 
-    # Shared SFH+SED (same as photometry)
-    def _compute_rest_sed_spec(params):
+    # Shared SED computation (sfr_on_ssp pre-computed by caller)
+    def _compute_rest_sed_spec(sfr_on_ssp, params):
         p = get_internal_params(params, param_map, spec, has_field)
-        kw = {k: v for k, v in p.items() if k in sfh_internal_names}
-        if has_field and "xi" in p:
-            gp_x, k0_half = compute_field_gp(
-                xi=p["xi"],
-                psd_sigma=p["psd_sigma"],
-                psd_tau_yr=p["psd_tau_yr"],
-                n_grid=n_grid,
-                d_log_age=d_log_age,
-                field_model=field_model,
-            )
-            kw["gp_x"] = gp_x
-            kw["k0_half"] = k0_half
-        sfr = sfh_fn(age_yr, **kw)
-        sfr_on_ssp = jnp.interp(ssp_log_ages_yr, log_age_grid, sfr)
         if _use_dsps_native_spec:
             z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
             t_obs_gyr = (
@@ -2063,7 +1767,7 @@ def build_fused_tier2_spectrum(model):
             else:
                 ssp_flux_at_z = interp_metallicity(model, p["log_z_abs"])
         if xray_enabled:
-            p = {**p, "_sfr_current": sfr[-1]}
+            p = {**p, "_sfr_current": sfr_on_ssp[-1]}
         rest_sed = rest_sed_kernel(weights, ssp_flux_at_z, p)
         z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
         return rest_sed, z
@@ -2071,18 +1775,18 @@ def build_fused_tier2_spectrum(model):
     if is_free_z:
 
         @jax.jit
-        def fused_tier2_spec(params):
-            """params dict → observed spectrum (free z)."""
-            rest_sed, z = _compute_rest_sed_spec(params)
+        def fused_tier2_spec(sfr_on_ssp, params):
+            """sfr_on_ssp, params dict → observed spectrum (free z)."""
+            rest_sed, z = _compute_rest_sed_spec(sfr_on_ssp, params)
             dl_cm = _lum_dist_spec(z)
             return compute_spectrum(rest_sed, rest_wave, wave_obs, z, dl_cm)
 
     else:
 
         @jax.jit
-        def fused_tier2_spec(params):
-            """params dict → observed spectrum (fixed z)."""
-            rest_sed, _z = _compute_rest_sed_spec(params)
+        def fused_tier2_spec(sfr_on_ssp, params):
+            """sfr_on_ssp, params dict → observed spectrum (fixed z)."""
+            rest_sed, _z = _compute_rest_sed_spec(sfr_on_ssp, params)
             return compute_spectrum(rest_sed, rest_wave, wave_obs, z_fixed, dl_cm_fixed)
 
     return fused_tier2_spec

@@ -466,7 +466,9 @@ class MappingsPhotoStellarBackend:
         """Precompute Q_H(metallicity, age) table from SSP spectra."""
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
-        self._qh_table = _compute_qh_grid(ssp_wave, ssp_flux)
+        qh_raw = _compute_qh_grid(ssp_wave, ssp_flux)
+        # Sanitize: replace Inf/NaN with 0 (same fix as cloudy_grid.py commit 3996aba)
+        self._qh_table = jnp.where(jnp.isfinite(qh_raw), qh_raw, 0.0)
         self._qh_log_met = ssp_data.ssp_lgmet
         self._qh_log_age = ssp_data.ssp_lg_age_gyr + 9.0  # log(age/yr)
 
@@ -485,7 +487,7 @@ class MappingsPhotoStellarBackend:
         q11 = self._qh_table[iz + 1, ia + 1]
         q0 = q00 * (1 - wa) + q01 * wa
         q1 = q10 * (1 - wa) + q11 * wa
-        return q0 * (1 - wz) + q1 * wz
+        return jnp.maximum(q0 * (1 - wz) + q1 * wz, 0.0)
 
     def predict_nebular_line_luminosities(
         self,

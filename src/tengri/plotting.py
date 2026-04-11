@@ -26,6 +26,12 @@ COLORS = {
     # Sampler colors (consistent across all notebooks)
     "map": "#888888",  # grey — point estimate
     "rt": "#1f77b4",  # blue — Ray Tracing (exact MCMC)
+    # Canonical names
+    "vi": "#ff7f0e",  # orange — geoVI (variational)
+    "vi_linear": "#9467bd",  # purple — MGVI (linear VI)
+    "mcmc_nuts": "#2ca02c",  # green — NUTS (gold standard)
+    "mcmc_raytrace": "#1f77b4",  # blue — Ray Tracing (exact MCMC)
+    # Legacy names (deprecated but still supported)
     "geovi": "#ff7f0e",  # orange — geoVI (variational)
     "nuts": "#2ca02c",  # green — NUTS (gold standard)
     "mgvi": "#9467bd",  # purple — MGVI (linear VI)
@@ -51,6 +57,11 @@ COLORS = {
 SAMPLER_STYLE = {
     "MAP": {"color": COLORS["map"], "ls": "--", "lw": 1.5, "alpha": 1.0},
     "RT": {"color": COLORS["rt"], "ls": "-", "lw": 1.5, "alpha": 1.0},
+    # Canonical names
+    "VI": {"color": COLORS["vi"], "ls": "-", "lw": 1.5, "alpha": 1.0},
+    "VI_Linear": {"color": COLORS["vi_linear"], "ls": "-", "lw": 1.5, "alpha": 1.0},
+    "MCMC_NUTS": {"color": COLORS["mcmc_nuts"], "ls": "-", "lw": 1.5, "alpha": 1.0},
+    # Legacy names (deprecated but still supported)
     "geoVI": {"color": COLORS["geovi"], "ls": "-", "lw": 1.5, "alpha": 1.0},
     "NUTS": {"color": COLORS["nuts"], "ls": "-", "lw": 1.5, "alpha": 1.0},
     "MGVI": {"color": COLORS["mgvi"], "ls": "-", "lw": 1.5, "alpha": 1.0},
