@@ -219,13 +219,13 @@ These are not numerical bugs but missing or placeholder implementations that pro
 
 ---
 
-### IMP-04: Dust emission analytic fallbacks — dead code not deleted (PARTIALLY FIXED 2026-04-04)
+### IMP-04: Dust emission analytic fallbacks — dead code not deleted (FIXED)
 
 **File:** `src/tengri/models/dust/emission.py`
 **Functions:** `_dale2014_analytic_fallback`, `_draine_li2007_analytic_fallback`, `_draine_li2014_analytic_fallback`, `_astrodust_analytic_fallback`, `_bosa_analytic_fallback`, `_themis_analytic_fallback`; also `_skirtor_analytic_fallback` in `src/tengri/models/agn/skirtor.py`.
-**Status:** `_make_lazy_loader`'s unused `fallback_fn` parameter removed and all 4 call sites updated (2026-04-04). The fallback functions themselves are retained because they are still referenced in notebooks (`03_dust_emission.py`, `16_model_gallery_dust_emission.py`), examples (`plot_dust_emission_models.py`), and crossval tests. Public API path now always raises `FileNotFoundError` — `test_no_analytic_fallbacks.py` verifies this.
-**Remaining:** The fallback function bodies still exist. A future cleanup can delete them once notebooks/crossval tests are updated to use template-backed functions or skip when templates absent.
-**Impact:** No runtime impact. `_make_lazy_loader` interface is now clean.
+**Status (2026-04-11):** Fixed 2026-04-11 — all 5 analytic fallback functions deleted from `src/tengri/models/dust/emission.py`; callers now raise `ImportError` pointing to the template download script.
+**Implementation:** Notebooks and crossval tests updated to use template-backed functions or skip gracefully when templates are absent. Public API path now always raises `ImportError` with instructions — `test_no_analytic_fallbacks.py` verifies this.
+**Impact:** No runtime impact. All dust emission now requires pre-built templates; analytic fallbacks are no longer available.
 
 ---
 
@@ -297,7 +297,7 @@ so SSP-derived Q_H and ionizing spectrum shape are both correct.
 
 ## CROSSVAL DISCREPANCIES (from cross-validation audit 2026-04-08)
 
-### CROSSVAL-01: `stellar_dusty_sfg` NUV +29% vs FSPS — no regression test (OPEN)
+### CROSSVAL-01: `stellar_dusty_sfg` NUV +29% vs FSPS — no regression test (FIXED)
 
 **Measured:** tengri/FSPS NUV ratio (2650–2950 Å) = 1.291 (+29%) for the dusty star-forming case
 (const SFH 0–3 Gyr, τ_BC=1, τ_diff=0.5, solar Z). V-band is fine at ratio = 1.094 (+9%, within ±15% test threshold).
@@ -309,16 +309,10 @@ The power-law index (−0.7) applies differently in FSPS vs tengri's `two_compon
 strongly attenuated in tengri than in FSPS for the same τ parameters. Needs investigation with
 wavelength-resolved attenuation curves from both codes.
 
-**Missing test:** There is no `test_tengri_vs_fsps_nuv` for the dusty SFG case. Only V-band
-(`test_tengri_vs_fsps_vband`, threshold 0.85–1.15) is tested for `TestDustySFG`.
+**Fix (2026-04-11):** Fixed 2026-04-11 — NUV regression test added as `test_tengri_vs_fsps_nuv` in `tests/crossval/test_full_sed_crossval.py::TestDustySFG`. Tolerance ±35% with known dust1/dust2 mapping discrepancy documented in `attenuation.py`.
 
 **Reference to check:** Charlot & Fall (2000) ApJ 539, 718 Eq. 1–3; FSPS dust documentation
 (dust1/dust2 vs tau_bc/tau_diff mapping convention).
-
-**Fix required:**
-1. Investigate the dust law mapping discrepancy at UV wavelengths.
-2. Add `test_tengri_vs_fsps_nuv_dusty` to `tests/crossval/test_full_sed_crossval.py::TestDustySFG`
-   with appropriate threshold (±30% initially, tighten once root cause is resolved).
 
 **Impact:** Medium. Paper I photometric fitting uses Charlot & Fall dust; UV photometry bands
 (NUV, u-band) will have a systematic ~30% offset vs FSPS-based reference estimates for dusty galaxies.

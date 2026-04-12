@@ -129,10 +129,6 @@ class TestTier2Functionality:
 
 
 @_needs_ssp
-@pytest.mark.xfail(
-    reason="Forward model ~60-140ms after physics additions; threshold needs recalibration",
-    strict=False,
-)
 class TestTier2Performance:
     """Benchmark tier-2 forward pass performance."""
 

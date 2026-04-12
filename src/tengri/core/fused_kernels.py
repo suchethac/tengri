@@ -191,6 +191,67 @@ def build_hybrid_photometry(model):
 
     # Dust emission (full wavelength or preintegrated)
     has_dust_em_full = model._dust_emission_model is not None
+
+    # Coarse SSP grid for energy-balance L_absorbed_stellar in hybrid kernel.
+    # The Voronoi filter-band sum only covers filter wavelengths (e.g. ugriz at z=0.1
+    # covers rest-frame ~2600–8800 Å), missing all UV absorption where dust peaks.
+    # A 200-point log-spaced coarse grid captures the full SED at ~35x lower cost
+    # than the full ~7000-point grid, matching the exact/compositional path formula
+    # in nonstell.py:279: L_absorbed = -trapz(sed_intr - sed_att, nu).
+    if has_dust_em_full:
+        import numpy as _np  # factory-time only — not on JAX trace path
+
+        _ssp_wave_full_np = _np.asarray(model.ssp_data.ssp_wave)
+        _ssp_lnu_full_np = _np.asarray(model.ssp_data.ssp_flux)  # Lsun/Hz/Msun
+        _N_COARSE = 200
+        _wave_coarse_np = _np.geomspace(
+            float(_ssp_wave_full_np[0]), float(_ssp_wave_full_np[-1]), _N_COARSE
+        )
+        _nu_coarse = jnp.asarray(2.99792458e18 / _wave_coarse_np, dtype=jnp.float64)
+        _wave_coarse = jnp.asarray(_wave_coarse_np, dtype=jnp.float64)
+        _ssp_lgmet_f64 = jnp.asarray(model.ssp_data.ssp_lgmet, dtype=jnp.float64)
+        if _has_alpha:
+            # ssp_flux shape: (n_met, n_alpha, n_age, n_wave)
+            _nm, _na_fe, _na, _nw = _ssp_lnu_full_np.shape
+            _ssp_lnu_coarse = jnp.asarray(
+                _np.array([
+                    [
+                        [
+                            _np.interp(
+                                _wave_coarse_np,
+                                _ssp_wave_full_np,
+                                _ssp_lnu_full_np[m, a_fe, a],
+                            )
+                            * LSUN_ERG_PER_S
+                            for a in range(_na)
+                        ]
+                        for a_fe in range(_na_fe)
+                    ]
+                    for m in range(_nm)
+                ]),
+                dtype=jnp.float64,
+            )  # (n_met, n_alpha, n_age, 200) erg/s/Hz/Msun
+        else:
+            # ssp_flux shape: (n_met, n_age, n_wave)
+            _nm, _na, _nw = _ssp_lnu_full_np.shape
+            _ssp_lnu_coarse = jnp.asarray(
+                _np.array([
+                    [
+                        _np.interp(
+                            _wave_coarse_np,
+                            _ssp_wave_full_np,
+                            _ssp_lnu_full_np[m, a],
+                        )
+                        * LSUN_ERG_PER_S
+                        for a in range(_na)
+                    ]
+                    for m in range(_nm)
+                ]),
+                dtype=jnp.float64,
+            )  # (n_met, n_age, 200) erg/s/Hz/Msun
+        if not _is_single_dust and _dust_exact:
+            _dust_age_w_f64 = dust_age_w.astype(jnp.float64)
+
     _has_preint_dust_ir = False
     _dust_model_name = None
     if has_dust_em_full:
@@ -544,12 +605,14 @@ def build_hybrid_photometry(model):
         alpha_fe,
         tau_v=0.0,
     ):
-        """Preintegrated stellar photometry + L_absorbed estimate.
+        """Preintegrated stellar photometry + L_absorbed_stellar.
 
         Computes stellar CSP through preintegrated SSP×filter tensor with
         metallicity + alpha interpolation, dust attenuation at effective
         wavelengths (single/two-component, exact/fast, with Taylor expansion),
-        and L_absorbed estimation via Voronoi bandwidth weighting.
+        and L_absorbed_stellar via coarse 200-point trapz when dust emission
+        is enabled (same formula as nonstell.py:279; replaces Voronoi band sum
+        that missed UV absorption where dust attenuation peaks).
 
         Parameters
         ----------
@@ -702,20 +765,95 @@ def build_hybrid_photometry(model):
             flux_intrinsic_for_geom = csp_young + csp_old
             flux_attenuated = f_obs * flux_intrinsic_for_geom + (1.0 - f_obs) * flux_no_geom
 
-        # Estimate L_absorbed from stellar broadband.
-        # Weight each filter by its Voronoi frequency bandwidth to convert
-        # the sum of L_ν values into a proper ∫L_ν dν quadrature (erg/s).
-        flux_intrinsic = jnp.einsum("i,if->f", weights, ssp_at_z)
-        diff_flux = (flux_intrinsic - flux_attenuated) * lsun  # erg/s/Hz per band
-        if _eff_bw is not None:
-            L_absorbed_stellar = jnp.sum(diff_flux * _eff_bw)  # erg/s
+        # Compute L_absorbed_stellar via coarse SSP wavelength grid.
+        # Replaces Voronoi-bandwidth filter-band sum, which only covered filter
+        # wavelengths and missed UV absorption where dust attenuation peaks.
+        # Same trapz formula as the exact/compositional path: nonstell.py:279.
+        if has_dust_em_full:
+            weights_f64 = weights.astype(jnp.float64)
+            _kw_f64 = dict(
+                n_slope=jnp.float64(dust_slope),
+                dust_bump_strength=jnp.float64(dust_bump_strength),
+                dust_delta=jnp.float64(dust_delta),
+                dust_Rv=jnp.float64(dust_Rv),
+            )
+            f_obs_f64 = jnp.float64(f_obscuration)
+
+            # Metallicity interpolation on coarse grid.
+            # lz is already alpha-fe-corrected when _use_alpha_fe was applied above.
+            if _has_alpha:
+                # iz, fz, ia, fa computed above in the met+alpha interp block
+                ssp_z_coarse = (
+                    (1 - fz) * (1 - fa) * _ssp_lnu_coarse[iz, ia]
+                    + fz * (1 - fa) * _ssp_lnu_coarse[iz + 1, ia]
+                    + (1 - fz) * fa * _ssp_lnu_coarse[iz, ia + 1]
+                    + fz * fa * _ssp_lnu_coarse[iz + 1, ia + 1]
+                )  # (n_age, 200) erg/s/Hz/Msun
+            elif _use_smooth_z:
+                # zw computed above in the smooth met-interp block
+                ssp_z_coarse = jnp.einsum(
+                    "m,maw->aw", zw.astype(jnp.float64), _ssp_lnu_coarse
+                )  # (n_age, 200)
+            else:
+                lz_f64 = jnp.float64(lz)
+                lz_c64 = jnp.clip(lz_f64, _ssp_lgmet_f64[0], _ssp_lgmet_f64[-1])
+                _ic = jnp.clip(
+                    jnp.searchsorted(_ssp_lgmet_f64, lz_c64) - 1,
+                    0,
+                    _ssp_lgmet_f64.shape[0] - 2,
+                )
+                _fc = (lz_c64 - _ssp_lgmet_f64[_ic]) / (
+                    _ssp_lgmet_f64[_ic + 1] - _ssp_lgmet_f64[_ic]
+                )
+                ssp_z_coarse = (
+                    (1.0 - _fc) * _ssp_lnu_coarse[_ic] + _fc * _ssp_lnu_coarse[_ic + 1]
+                )  # (n_age, 200)
+
+            # Attenuated CSP on coarse grid — same dust formula as filter-band path
+            if _is_single_dust:
+                csp_intr_coarse = jnp.einsum("i,iw->w", weights_f64, ssp_z_coarse)
+                k_c = law_bc_fn(_wave_coarse, **_kw_f64)
+                trans_c = f_obs_f64 + (1.0 - f_obs_f64) * jnp.exp(
+                    -jnp.float64(tau_v) * k_c
+                )
+                csp_att_coarse = csp_intr_coarse * trans_c
+            elif _dust_exact:
+                k_bc_c = law_bc_fn(_wave_coarse, **_kw_f64)
+                k_diff_c = law_diff_fn(_wave_coarse, **_kw_f64)
+                tau_c = (
+                    _dust_age_w_f64[:, None] * jnp.float64(tau_bc) * k_bc_c[None, :]
+                    + jnp.float64(tau_diff) * k_diff_c[None, :]
+                )
+                dust_c = f_obs_f64 + (1.0 - f_obs_f64) * jnp.exp(-tau_c)
+                csp_intr_coarse = jnp.einsum("i,iw->w", weights_f64, ssp_z_coarse)
+                csp_att_coarse = jnp.einsum("i,iw,iw->w", weights_f64, dust_c, ssp_z_coarse)
+            else:
+                # Fast two-CSP decomposition: young (BC + ISM) + old (ISM only)
+                k_bc_c = law_bc_fn(_wave_coarse, **_kw_f64)
+                k_diff_c = law_diff_fn(_wave_coarse, **_kw_f64)
+                tv1_f64 = jnp.float64(tau_bc)
+                tv2_f64 = jnp.float64(tau_diff)
+                ym_f64 = young_mask.astype(jnp.float64)
+                om_f64 = old_mask.astype(jnp.float64)
+                csp_young_c = jnp.einsum("i,iw->w", weights_f64 * ym_f64, ssp_z_coarse)
+                csp_old_c = jnp.einsum("i,iw->w", weights_f64 * om_f64, ssp_z_coarse)
+                csp_intr_coarse = csp_young_c + csp_old_c
+                trans_young_c = jnp.exp(-tv1_f64 * k_bc_c) * jnp.exp(-tv2_f64 * k_diff_c)
+                trans_old_c = jnp.exp(-tv2_f64 * k_diff_c)
+                csp_att_coarse = f_obs_f64 * csp_intr_coarse + (1.0 - f_obs_f64) * (
+                    trans_young_c * csp_young_c + trans_old_c * csp_old_c
+                )
+
+            L_absorbed_stellar = -jnp.trapezoid(
+                csp_intr_coarse - csp_att_coarse, _nu_coarse
+            )
+            L_absorbed_stellar = jnp.where(
+                jnp.isfinite(L_absorbed_stellar), L_absorbed_stellar, jnp.float64(0.0)
+            )
+            L_absorbed_stellar = jnp.maximum(L_absorbed_stellar, jnp.float64(0.0))
         else:
-            L_absorbed_stellar = jnp.sum(diff_flux)  # fallback (wrong units)
-        # Guard against NaN/Inf from pure SSPs with zero/negligible continuum
-        L_absorbed_stellar = jnp.where(
-            jnp.isfinite(L_absorbed_stellar), L_absorbed_stellar, dt.type(0.0)
-        )
-        L_absorbed_stellar = jnp.maximum(L_absorbed_stellar, dt.type(0.0))
+            # Dust emission disabled; L_absorbed_stellar not used downstream.
+            L_absorbed_stellar = dt.type(0.0)
 
         return flux_attenuated, L_absorbed_stellar, weights
 

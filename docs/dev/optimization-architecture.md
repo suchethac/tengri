@@ -51,7 +51,7 @@ Run `scripts/benchmark_forward_model.py` to regenerate these numbers.
 | **Dust IR emission** | | | | | | |
 | + MBB | 9,598 μs | 3,710 μs | 3x | **181 μs** | **53x** | 0.11% |
 | + THEMIS | 15,435 μs | 3,517 μs | 4x | **176 μs** | **87x** | 0.11% |
-| + DL07 | 15,172 μs | 3,416 μs | 4x | **81 μs** | **187x** | 43.1%² |
+| + DL07 | 15,172 μs | 3,416 μs | 4x | **81 μs** | **187x** | <2%² |
 | + Dale 2014 | 11,452 μs | 3,496 μs | 3x | **77 μs** | **148x** | 0.25% |
 | **AGN** | | | | | | |
 | + simple (disc+torus) | 74,663 μs | 3,629 μs | 21x | **138 μs** | **542x** | 0.25% |
@@ -65,10 +65,17 @@ Run `scripts/benchmark_forward_model.py` to regenerate these numbers.
 | AGN host (neb+THEMIS+KD+radio+xray) | 145,561 μs | 6,334 μs | 23x | **2,469 μs** | **59x** | 0.27% |
 | **Kitchen sink (all components)** | **132,290 μs** | **6,288 μs** | **21x** | **2,439 μs** | **54x** | **0.27%** |
 
-¹ Cue hybrid error is a pre-existing calibration issue at this parameter
-combination, not a hybrid approximation error.
-² DL07 hybrid error at z=0.1 is from template wavelength boundary overlap
-with SDSS z-band; negligible in absolute flux. Not present with IR filters.
+¹ Cue hybrid error: root cause unidentified after ruling out SFR mismatch,
+wavelength grid mismatch, unit mismatch, and filter integration differences.
+Not a hybrid approximation error; the Cue neural-net path appears to produce
+different output in exact vs hybrid mode for reasons not yet diagnosed.
+See `tests/unit/test_cue_hybrid_diagnostic.py` for intermediate-value comparisons.
+² DL07 hybrid error at z=0.1 was caused by the hybrid kernel computing
+L_absorbed_stellar from a Voronoi-bandwidth-weighted sum over SDSS filter bands
+only. SDSS ugriz at z=0.1 covers rest-frame ~2600–8800 Å, missing all UV
+absorption where dust attenuation peaks. The fix precomputes a 200-point
+coarse-wavelength SSP grid and uses trapz for L_absorbed (same formula as
+exact/compositional path). Error is now < 2%.
 
 Compositional is bit-exact (0.000% error) for all configs except Cue
 (neural net numerical noise). Hybrid error <0.45% for all configs except

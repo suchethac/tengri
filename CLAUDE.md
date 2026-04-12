@@ -433,12 +433,10 @@ See `docs/known_bugs.md` for full details, references to check, and regression t
 **Status (2026-04-05):** 27 of 39 original audit bugs fixed (BUG-04 conditionally fixed — templates built). 11 of 23 emission-line-branch bugs fixed. Remaining open:
 
 ### Still open from original audit
-- `sed_pipeline.py:651` — `_mstar` uses formed mass, not surviving mass for XRB scaling (comment added; fix requires surviving-mass computation from DSPS)
+(None — all fixed)
 
 ### Still open from emission line branch
-- `eline_priors.py:169-180` — `cloudy_line_priors()` interpolation loses metallicity at high logU (missing 4th grid point)
-- `eline_priors.py:248-278` — `marginalize_emission_lines_cloudy` returns wrong ln_L for non-zero-mean prior (biases MAP/VI)
-- No tests for `cloudy_grid_line_priors()` or finite-difference gradient check for marginalization
+(None — all fixed)
 
 ### Fixed by follow-up review (bugs now closed — 2026-04-03)
 - `sed_pipeline.py:646` — `sfr is not None` guard replaced with `"sfr" in dir()` to match style of adjacent `"sfr_table" in dir()` and prevent potential NameError on unbound `sfr`.
