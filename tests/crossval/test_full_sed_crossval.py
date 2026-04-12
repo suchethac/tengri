@@ -422,6 +422,39 @@ class TestDustySFG:
             f"tengri={l_tengri:.3e}, bagpipes={l_bagpipes:.3e} erg/s/Hz/Msun."
         )
 
+    def test_tengri_vs_fsps_nuv(self, tengri_dusty, ref, ref_wave, ssp_data):
+        """NUV/V shape ratio at 2700 Å is within ±35% of FSPS (CROSSVAL-01).
+
+        Uses shape ratio SED(2700)/SED(5500) to remove SSP amplitude differences.
+        The power_law() birth-cloud attenuation at 2700 Å gives k ≈ 1.365 (36.5%
+        above V-band), and the dust1 mapping tau_bc=1.0 → dust1=1.086 introduces
+        a known ~8.6% factor vs. FSPS dust1.  Together these cause up to ~29% NUV
+        excess relative to FSPS, so the tolerance is deliberately set at 35%.
+        """
+        key = "fsps_stellar_dusty_sfg"
+        if key not in ref:
+            pytest.skip(f"Reference key {key!r} not in npz")
+
+        wave = np.asarray(ssp_data.ssp_wave)
+
+        # Shape ratio: NUV(2700 Å) / V(5500 Å)
+        nuv_tengri = _band_avg(wave, tengri_dusty, 2700.0, half_width=100.0)
+        v_tengri = _band_avg(wave, tengri_dusty, 5500.0)
+        color_tengri = nuv_tengri / v_tengri
+
+        nuv_fsps = _band_avg(ref_wave, ref[key], 2700.0, half_width=100.0)
+        v_fsps = _band_avg(ref_wave, ref[key], 5500.0)
+        color_fsps = nuv_fsps / v_fsps
+
+        ratio = color_tengri / color_fsps
+        assert 0.65 <= ratio <= 1.35, (
+            f"NUV/V colour ratio tengri/FSPS = {ratio:.3f}. "
+            f"tengri NUV/V={color_tengri:.3f}, FSPS NUV/V={color_fsps:.3f}. "
+            "Known discrepancy up to ~29% from tau_bc=1.0→dust1=1.086 mapping "
+            "(see CROSSVAL-01 in docs/known_bugs.md). If >35%, check power_law "
+            "k(2700 Å)=1.365 normalisation in attenuation.py."
+        )
+
 
 # ---------------------------------------------------------------------------
 # Cross-case sanity: colour trends

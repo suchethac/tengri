@@ -5,6 +5,7 @@ Tests cover:
 - build_nonstell_fn() round-trip: pure-stellar model returns stellar_sed unchanged
 - build_nonstell_fn() returns a callable with correct output shape
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace

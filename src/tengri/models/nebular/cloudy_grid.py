@@ -16,6 +16,7 @@ References
 - diffhtwo (ArgonneCPAC) for JAX grid interpolation patterns
 """
 
+import warnings
 from typing import NamedTuple
 
 import h5py
@@ -23,9 +24,45 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.models.nebular._constants import _C_CGS, _LOG10_ZSUN, _LSUN_ERG
-from tengri.models.nebular._shared import _interp_index_weight, compute_qh
+from tengri.models.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
+from tengri.models.nebular._shared import _interp_index_weight, compute_qh, place_line_profiles
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
+
+# ---------------------------------------------------------------------------
+# Ionizing-spectrum warnings
+# ---------------------------------------------------------------------------
+
+
+class CloudyGridWNESSPWarning(UserWarning):
+    """Warning: the SSP passed to CloudyGridBackend may have baked-in nebular emission.
+
+    SSP grids labelled 'wNE' (with Nebular Emission) pre-absorb ionizing photons,
+    so Q_H computed from the SSP spectrum is effectively zero. Nebular luminosities
+    will be severely under-predicted. Use a pure-continuum SSP instead.
+    """
+
+
+class CloudyGridIonizingSpectrumWarning(UserWarning):
+    """Warning: CLOUDY grid ionizing SED shape is BPASS v2.1, not your DSPS SSPs.
+
+    The CLOUDY photoionization grid was computed with BPASS v2.1 binary stellar
+    populations as the ionizing source.  Q_H is re-normalized to your DSPS SSPs at
+    runtime (correct for stellar mass accounting), but the *shape* of the EUV
+    spectrum driving line ratios is fixed to BPASS.  If your SSPs have a
+    significantly harder or softer ionizing SED (e.g., single-star models,
+    stripped-star prescriptions, non-standard IMF), predicted line ratios will be
+    biased.  Use CueBackend if ionizing SED shape variation matters for your science.
+    """
+
+
+# log10(Q_H) threshold for wNE SSP detection (linear, not log10 space).
+# Normal bare O/B stars at < 10 Myr: Q_H per Msun ~ 10^47–10^50.
+# wNE SSPs: Q_H ≈ 0 after internal absorption.
+# Threshold 10^44 gives > 3 dex headroom below the physical floor.
+_WNE_QH_THRESHOLD: float = 1e44
+
+# Age cutoff (log10 yr) for young SSP bins used in the wNE check.
+_YOUNG_LOG_AGE_MAX_WNE: float = 7.0  # 10 Myr
 
 
 class CloudyGridData(NamedTuple):
@@ -247,9 +284,29 @@ class CloudyGridBackend:
         ssp_data=None,
         grid_interp: str = "linear",
         grid_scatter: float = 0.2,
+        ionizing_source_warning: str = "warn",
     ) -> None:
         if grid_interp not in ("linear", "triweight"):
             raise ValueError(f"grid_interp must be 'linear' or 'triweight', got {grid_interp!r}")
+        if ionizing_source_warning not in ("raise", "warn", "suppress"):
+            raise ValueError(
+                "ionizing_source_warning must be 'raise', 'warn', or 'suppress', "
+                f"got {ionizing_source_warning!r}"
+            )
+        if ionizing_source_warning != "suppress":
+            msg = (
+                "CloudyGridBackend: Q_H is computed from your DSPS SSPs (correct for "
+                "stellar mass accounting), but the ionizing spectral shape used to "
+                "compute the CLOUDY grid was BPASS v2.1 binary stars. If your SSPs "
+                "have a significantly harder/softer ionizing SED than BPASS (e.g., "
+                "single-star models, stripped-star prescriptions, very young/old "
+                "populations), predicted line ratios will be biased. Use CueBackend "
+                "if ionizing SED shape variation matters for your science. "
+                "To suppress: pass ionizing_source_warning='suppress'."
+            )
+            if ionizing_source_warning == "raise":
+                raise ValueError(msg)
+            warnings.warn(msg, CloudyGridIonizingSpectrumWarning, stacklevel=2)
         self.name = "cloudy_grid"
         self.has_free_params = True
         self.has_continuum = True
@@ -400,6 +457,24 @@ class CloudyGridBackend:
         young_mask = ssp_log_ages <= self._max_neb_log_age
         self._young_idx = np.where(young_mask)[0]
         self._n_young = len(self._young_idx)
+
+        # wNE SSP detection: bare O/B stars at < 10 Myr give Q_H ~ 10^47–10^50
+        # per Msun.  If all young bins have Q_H < 10^44, the SSP likely has
+        # baked-in nebular emission (wNE) and predictions will be unreliable.
+        very_young_mask = ssp_log_ages <= _YOUNG_LOG_AGE_MAX_WNE
+        if very_young_mask.any():
+            qh_young = np.array(self._qh_table)[:, very_young_mask]
+            if float(qh_young.max()) < _WNE_QH_THRESHOLD:
+                warnings.warn(
+                    "CloudyGridBackend: the SSP grid passed via ssp_data appears to "
+                    "contain baked-in nebular emission ('wNE' SSPs). The maximum Q_H "
+                    f"for SSP bins younger than 10 Myr is {float(qh_young.max()):.2e}, "
+                    "well below the expected ~10^47–10^50 for bare stellar populations. "
+                    "Nebular luminosities will be severely under-predicted. "
+                    "Use a pure-continuum SSP (no baked-in nebular emission).",
+                    CloudyGridWNESSPWarning,
+                    stacklevel=3,
+                )
 
     def _get_qh_at(
         self,
@@ -662,29 +737,9 @@ class CloudyGridBackend:
         neb_sed = jnp.interp(ssp_wave, cont_wave, cont_lum, left=0.0, right=0.0)
 
         # Add emission lines
-        if line_sigma_aa > 0:
-            # Gaussian profiles: spread L_line (Lsun) into L_nu (Lsun/Hz).
-            # sigma_nu = sigma_aa[Å→cm] * c[cm/s] / lambda[cm]^2  (wavelength→frequency width).
-            # profile / (sqrt(2π) * sigma_nu) normalises to ∫profile dnu = 1 (units: 1/Hz).
-            for j in range(len(line_wave)):
-                lw = line_wave[j]
-                ll = line_lum[j]
-                sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (lw * 1e-8) ** 2
-                profile = jnp.exp(-0.5 * ((ssp_wave - lw) / line_sigma_aa) ** 2)
-                profile = profile / (jnp.sqrt(2 * jnp.pi) * sigma_nu)
-                neb_sed = neb_sed + ll * profile
-        else:
-            # Delta functions: add to nearest pixel
-            # Convert line luminosity to flux density: L_line / delta_nu
-            n_wave = ssp_wave.shape[0]
-            for j in range(len(line_wave)):
-                idx = jnp.argmin(jnp.abs(ssp_wave - line_wave[j]))
-                # Clamp to [1, n_wave-2] so both idx-1 and idx+1 are valid
-                idx = jnp.clip(idx, 1, n_wave - 2)
-                # Approximate delta_nu from pixel width
-                dwave = jnp.abs(ssp_wave[idx + 1] - ssp_wave[idx - 1]) / 2.0
-                dnu = _C_CGS / (ssp_wave[idx] * 1e-8) ** 2 * dwave * 1e-8
-                neb_sed = neb_sed.at[idx].add(line_lum[j] / dnu)
+        neb_sed = neb_sed + place_line_profiles(
+            jnp.asarray(line_wave), jnp.asarray(line_lum), ssp_wave, line_sigma_aa
+        )
 
         # Convert from internal Lsun/Hz to erg/s/Hz
         return neb_sed * _LSUN_ERG

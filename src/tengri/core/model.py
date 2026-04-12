@@ -222,6 +222,7 @@ class PrecomputedData:
     igm_at_effective_wavelengths: jnp.ndarray | None = None  # IGM T(λ_eff) for fixed z
     effective_bandwidths_hz: jnp.ndarray | None = None  # Voronoi Δν per filter (Hz)
     dust_ir_lookup: object | None = None  # Preintegrated template-based dust IR photometry
+    kd_preintegrated: object | None = None  # KDPreintegratedData for K&D AGN disc
 
 
 @dataclasses.dataclass
@@ -1046,12 +1047,31 @@ class SEDModel:
         ):
             dust_ir_lookup = self._precompute_dust_ir_photometry()
 
+        # K&D 2018 AGN disc preintegration (for hybrid kernel, fixed z, K&D models)
+        # Pre-integrate the three K&D disc zones through filters at init time
+        # for fast runtime filter-level lookup instead of wavelength-level computation.
+        kd_preint = None
+        if (
+            precompute
+            and self._z_fixed is not None
+            and self.filter_waves is not None
+            and self._agn_model in ("kubota_done_full", "kubota_done_disc")
+        ):
+            from tengri.models.agn.kd_preintegrate import preintegrate_kd_components
+
+            kd_preint = preintegrate_kd_components(
+                self.filter_waves,
+                self.filter_trans,
+                self._z_fixed,
+            )
+
         return PrecomputedData(
             photometry=phot,
             dust_age_weights=dust_age_w,
             igm_at_effective_wavelengths=igm_eff,
             effective_bandwidths_hz=eff_bw,
             dust_ir_lookup=dust_ir_lookup,
+            kd_preintegrated=kd_preint,
         )
 
     def _build_compositional_kernels(self):
@@ -1793,9 +1813,7 @@ class SEDModel:
             if raw is not None:
                 p = self._get_internal_params(params)
                 sfr = self._compute_sfr(p)
-                sfr_on_ssp = jnp.interp(
-                    self.ssp_log_ages_yr, self.log_age_grid, sfr
-                )
+                sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
                 return raw(sfr_on_ssp, params)
         # Last resort: exact (slow but always works)
         return self._predict_photometry_exact(params)
@@ -1970,11 +1988,34 @@ class SEDModel:
             getattr(self.spec, "alpha_fe_evolving", False)
             or "met_alpha_fe" in self.spec.free_params
         )
+        # For evolving-Z / chem-evol with a non-dsps_met_table integration method,
+        # the compositional kernel expects a single ssp_flux_at_z (no per-age grid),
+        # so we derive a representative single metallicity.
+        if self._evolving_metallicity:
+            # Use the final (present-day) metallicity as the representative value.
+            _log_z = p.get("log_z_abs_final", p.get("log_z_abs", -1.8477))
+        elif self._chem_evol_enabled:
+            from tengri.models.sfh.chemical_evolution import chem_evol_metallicity_on_ssp_grid
+
+            _log_z_per_age = chem_evol_metallicity_on_ssp_grid(
+                self.ssp_log_ages_yr,
+                self.log_age_grid,
+                sfr,
+                yield_y=p.get("chem_yield", 0.03),
+                eta_outflow=p.get("chem_eta_outflow", 0.0),
+                f_gas_init=p.get("chem_f_gas_init", 0.9),
+                return_frac=p.get("chem_return_frac", 0.4),
+            )
+            _log_z = jnp.sum(weights * _log_z_per_age) / jnp.maximum(
+                jnp.sum(weights), 1e-30
+            )
+        else:
+            _log_z = p["log_z_abs"]
         if _use_alpha_fe:
             alpha_fe = p.get("alpha_fe", 0.0)
-            ssp_flux_at_z = interp_met_alpha_dispatch(self, p["log_z_abs"], alpha_fe)
+            ssp_flux_at_z = interp_met_alpha_dispatch(self, _log_z, alpha_fe)
         else:
-            ssp_flux_at_z = interp_metallicity(self, p["log_z_abs"])
+            ssp_flux_at_z = interp_metallicity(self, _log_z)
 
         # Enrich p with current SFR for X-ray model
         if self._xray_enabled:

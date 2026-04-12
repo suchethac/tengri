@@ -73,25 +73,35 @@ def nebular_emission(
     # (default ionspec).  Use jax.lax.cond for JIT-safe branching.
     if hasattr(backend, "_compute_weighted_cue_params"):
         derived = backend._compute_weighted_cue_params(
-            weights, ssp_log_ages_yr, log_z_abs, neb_logU=neb_logU,
+            weights,
+            ssp_log_ages_yr,
+            log_z_abs,
+            neb_logU=neb_logU,
         )
         ssp_logqion = derived.get("gas_logqion", jnp.float64(0.0))
         ssp_qh_ok = ssp_logqion > gas_logqion_sfr - 2.0  # within 1%
 
         def _ssp_path(_):
             return backend.predict_nebular_sed(
-                ssp_weights=weights, ssp_wave=ssp_wave,
-                ssp_log_ages_yr=ssp_log_ages_yr, log_z=log_z_abs,
-                neb_logU=neb_logU, neb_logZ_gas=neb_logZ_gas,
-                neb_fesc=neb_fesc, neb_fesc_lya=neb_fesc_lya,
+                ssp_weights=weights,
+                ssp_wave=ssp_wave,
+                ssp_log_ages_yr=ssp_log_ages_yr,
+                log_z=log_z_abs,
+                neb_logU=neb_logU,
+                neb_logZ_gas=neb_logZ_gas,
+                neb_fesc=neb_fesc,
+                neb_fesc_lya=neb_fesc_lya,
                 gas_logqion=gas_logqion_sfr,
             )
 
         def _fallback_path(_):
             return backend.predict_nebular_sed(
-                ssp_wave=ssp_wave, log_z=log_z_abs,
-                neb_logU=neb_logU, neb_logZ_gas=neb_logZ_gas,
-                neb_fesc=neb_fesc, neb_fesc_lya=neb_fesc_lya,
+                ssp_wave=ssp_wave,
+                log_z=log_z_abs,
+                neb_logU=neb_logU,
+                neb_logZ_gas=neb_logZ_gas,
+                neb_fesc=neb_fesc,
+                neb_fesc_lya=neb_fesc_lya,
                 gas_logqion=gas_logqion_sfr,
             )
 
@@ -99,10 +109,14 @@ def nebular_emission(
 
     # Non-Cue backends: always pass ssp_weights
     return backend.predict_nebular_sed(
-        ssp_weights=weights, ssp_wave=ssp_wave,
-        ssp_log_ages_yr=ssp_log_ages_yr, log_z=log_z_abs,
-        neb_logU=neb_logU, neb_logZ_gas=neb_logZ_gas,
-        neb_fesc=neb_fesc, neb_fesc_lya=neb_fesc_lya,
+        ssp_weights=weights,
+        ssp_wave=ssp_wave,
+        ssp_log_ages_yr=ssp_log_ages_yr,
+        log_z=log_z_abs,
+        neb_logU=neb_logU,
+        neb_logZ_gas=neb_logZ_gas,
+        neb_fesc=neb_fesc,
+        neb_fesc_lya=neb_fesc_lya,
         gas_logqion=gas_logqion_sfr,
     )
 

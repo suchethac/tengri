@@ -77,6 +77,7 @@ def _find_data_file(filename: str) -> str | None:
 # Physical constants (CGS)
 # ===================================================================
 
+from tengri.models.dust.drude_profiles import pah_template as _pah_template
 from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
     C_CGS as _C_CGS,
@@ -581,251 +582,6 @@ def _dale_component_temperature(alpha: float) -> tuple[float, float, float]:
     return T_cold, T_warm, f_warm
 
 
-def _dale2014_analytic_fallback(
-    wavelength_aa: jnp.ndarray,
-    L_absorbed: float,
-    dust_alpha_dale: float = 2.0,
-    redshift: float = 0.0,
-    **_kwargs,
-) -> jnp.ndarray:
-    """Dale et al. (2014) ANALYTIC FALLBACK — not for science.
-
-    .. deprecated::
-        This crude approximation replaces the full Dale template library
-        with two hand-tuned modified blackbodies.  Use the tabulated
-        version (the default ``"dale2014"`` registry entry, which
-        auto-loads ``data/dale2014_templates.npz``).
-
-    Only used when template files are not found.
-    """
-    wavelength_cm = wavelength_aa * _AA_TO_CM
-    nu = _C_CGS / wavelength_cm
-
-    T_cold, T_warm, f_warm = _dale_component_temperature(dust_alpha_dale)
-
-    # Both components have beta_ir = 1.8 (typical grain emissivity)
-    beta_ir = 1.8
-
-    # CMB correction: always applied (no-op at z=0)
-    T_cold = cmb_corrected_temperature(T_cold, redshift, beta_ir)
-    T_warm = cmb_corrected_temperature(T_warm, redshift, beta_ir)
-
-    nu_ref = _C_CGS / (250.0e-4)
-    emissivity = (nu / nu_ref) ** beta_ir
-
-    bnu_cold = planck_bnu(wavelength_aa, T_cold)
-    bnu_warm = planck_bnu(wavelength_aa, T_warm)
-
-    shape = emissivity * ((1.0 - f_warm) * bnu_cold + f_warm * bnu_warm)
-
-    # nu is descending, negate for positive integral
-    integral = -jnp.trapezoid(shape, nu)
-
-    norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
-
-    result = norm * shape
-
-    # CMB contrast using luminosity-weighted effective T
-    T_eff_avg = (1.0 - f_warm) * T_cold + f_warm * T_warm
-    contrast = cmb_contrast_factor(wavelength_aa, T_eff_avg, redshift)
-
-    return result * contrast
-
-
-# ===================================================================
-# Model 3: Draine & Li 2007 (3 parameters) — analytic approximation
-# ===================================================================
-
-
-def _draine_li_umin_to_temperature(U_min: float) -> float:
-    """Convert minimum radiation field intensity to effective dust temperature.
-
-    The Draine & Li (2007) model uses a local ISRF intensity U
-    (in units of the Mathis et al. 1983 ISRF).  The equilibrium grain
-    temperature scales roughly as T ~ 18 * U^(1/6) K for silicate grains.
-    """
-    return 18.0 * U_min ** (1.0 / 6.0)
-
-
-def _pdr_temperature(U_min: float) -> float:
-    """Effective temperature for the PDR (photo-dissociation region) component.
-
-    Grains in PDRs are exposed to U >> U_min.  We use a characteristic
-    temperature corresponding to the geometric mean of U_min and U_max,
-    where U_max ~ 1e6 (Draine & Li 2007 default).
-    """
-    U_eff = jnp.sqrt(U_min * 1.0e6)
-    return 18.0 * U_eff ** (1.0 / 6.0)
-
-
-def _measure_dl07_pah_fraction(grid_path: str) -> float:
-    """Measure the PAH luminosity fraction from tabulated DL07 templates.
-
-    Computes the fraction of total L_nu in the 5--15 um PAH band for the
-    reference parameters qpah=2.5%, umin=1.0, gamma=0.01.  This value
-    calibrates the analytic DL07 model's PAH component.
-
-    Parameters
-    ----------
-    grid_path : str
-        Path to ``dl07_templates.npz`` (or ``.h5``).
-
-    Returns
-    -------
-    float
-        PAH luminosity fraction (integrated 5--15 um / total).
-    """
-    import numpy as np
-
-    data = np.load(grid_path)
-    wavs = data["wavelength"]
-    umin_grid = data["umin_grid"]
-    qpah_grid = data["qpah_grid"]
-    single_u = data["templates_umin_only"]
-    powerlaw = data["templates_umin_umax"]
-
-    # Reference indices: qpah ~ 2.5%, umin ~ 1.0
-    i_q = int(np.argmin(np.abs(qpah_grid - 2.5)))
-    i_u = int(np.argmin(np.abs(umin_grid - 1.0)))
-
-    # Mixed template: (1-gamma)*single_u + gamma*powerlaw, gamma=0.01
-    tmpl = 0.99 * single_u[i_q, i_u] + 0.01 * powerlaw[i_q, i_u]
-
-    # Normalize in L_lambda space
-    norm = np.trapezoid(tmpl, wavs)
-    if norm > 0:
-        tmpl = tmpl / norm
-
-    # Convert to L_nu: L_nu = L_lambda * lambda^2 / c
-    wave_cm = wavs * 1.0e-8
-    nu = 2.99792458e10 / wave_cm
-    tmpl_lnu = tmpl * wave_cm**2 / 2.99792458e10
-
-    # Normalize in L_nu space (nu descending -> negate)
-    int_lnu = -np.trapezoid(tmpl_lnu, nu)
-    if int_lnu > 0:
-        tmpl_lnu = tmpl_lnu / int_lnu
-
-    # PAH band: 5-15 um (50000-150000 Angstrom)
-    pah_mask = (wavs >= 50000) & (wavs <= 150000)
-    pah_frac = float(-np.trapezoid(tmpl_lnu[pah_mask], nu[pah_mask]))
-
-    return pah_frac
-
-
-# Lazy-loaded calibration: measured from DL07 tabulated templates at
-# the reference point qpah=2.5%, umin=1.0, gamma=0.01.
-# Call calibrate_dl07_pah_fraction() to update from your grid file.
-_DL07_PAH_FRAC_REF: float | None = None
-
-# Reference qpah for the calibration measurement
-_DL07_QPAH_REF: float = 2.5
-
-
-def calibrate_dl07_pah_fraction(grid_path: str) -> float:
-    """Measure and cache the DL07 PAH fraction from tabulated templates.
-
-    After calling this, the analytic ``draine_li2007()`` will use the
-    calibrated f_pah instead of the default approximation.
-
-    Parameters
-    ----------
-    grid_path : str
-        Path to ``dl07_templates.npz`` (or ``.h5``).
-
-    Returns
-    -------
-    float
-        The measured PAH luminosity fraction at qpah=2.5%, umin=1.0.
-    """
-    global _DL07_PAH_FRAC_REF
-    _DL07_PAH_FRAC_REF = _measure_dl07_pah_fraction(grid_path)
-    return _DL07_PAH_FRAC_REF
-
-
-def _get_dl07_pah_frac_at_ref() -> float:
-    """Return the calibrated PAH fraction, or a reasonable default.
-
-    The default (0.10) is a conservative estimate that produces FIR-dominated
-    emission consistent with the tabulated templates.  For accurate results,
-    call ``calibrate_dl07_pah_fraction()`` with the DL07 grid path.
-    """
-    if _DL07_PAH_FRAC_REF is not None:
-        return _DL07_PAH_FRAC_REF
-    # Fallback: measured from DL07 templates (qpah=2.5%, umin=1.0, gamma=0.01)
-    # PAH band (5-15 um) contains ~10% of total L_nu.  The old value of 0.25
-    # was too high, pulling the centroid to ~40 um vs the correct ~100-200 um.
-    return 0.10
-
-
-def _draine_li2007_analytic_fallback(
-    wavelength_aa: jnp.ndarray,
-    L_absorbed: float,
-    dust_umin: float = 1.0,
-    dust_gamma_dl: float = 0.01,
-    dust_qpah: float = 2.5,
-    **_kwargs,
-) -> jnp.ndarray:
-    """Draine & Li (2007) ANALYTIC FALLBACK — not for science.
-
-    .. deprecated::
-        This crude approximation models the entire PAH feature complex as
-        a single Gaussian at 7.7 μm and uses hand-tuned temperature
-        formulas.  Use the tabulated version (the default ``"draine_li2007"``
-        registry entry, which auto-loads ``data/dl07_templates.npz``).
-
-    Only used when template files are not found.
-    """
-    wavelength_cm = wavelength_aa * _AA_TO_CM
-    nu = _C_CGS / wavelength_cm
-
-    beta_ir = 2.0  # DL07 uses beta~2 for large grains
-    nu_ref = _C_CGS / (250.0e-4)
-    emissivity = (nu / nu_ref) ** beta_ir
-
-    # --- Component 1: Diffuse ISM (FIR continuum) ---
-    T_diff = _draine_li_umin_to_temperature(dust_umin)
-    shape_diff = emissivity * planck_bnu(wavelength_aa, T_diff)
-
-    # --- Component 2: PDR warm continuum ---
-    T_pdr = _pdr_temperature(dust_umin)
-    shape_pdr = emissivity * planck_bnu(wavelength_aa, T_pdr)
-
-    # --- Component 3: PAH mid-IR feature complex ---
-    # Approximate the blended 6.2, 7.7, 8.6, 11.3, 12.7 um features
-    # as a Gaussian centered on 7.7 um with ~3 um width.
-    lambda_pah = 7.7e4  # 7.7 um in Angstrom
-    sigma_pah = 3.0e4  # ~3 um width (blends 6.2-12.7 um)
-    shape_pah = jnp.exp(-0.5 * ((wavelength_aa - lambda_pah) / sigma_pah) ** 2)
-
-    # --- Luminosity fractions ---
-    # PAH fraction calibrated against tabulated DL07 templates:
-    # At the reference point (qpah=2.5%, umin=1.0, gamma=0.01), the
-    # 5-15 um PAH band contains ~10% of total L_nu.  Scale linearly
-    # with qpah relative to the reference qpah.
-    f_pah_ref = _get_dl07_pah_frac_at_ref()
-    f_pah = (dust_qpah / _DL07_QPAH_REF) * f_pah_ref
-    f_pdr = dust_gamma_dl
-    f_diff = 1.0 - f_pah - f_pdr
-
-    # For the PAH component (defined in wavelength-space as a Gaussian),
-    # convert to L_nu: L_nu = L_lambda * lambda^2 / c, then normalize.
-    shape_pah_lnu = shape_pah * (wavelength_cm**2) / _C_CGS
-
-    # Normalize all 3 components at once: negate because nu is descending
-    int_diff = -jnp.trapezoid(shape_diff, nu)
-    int_pdr = -jnp.trapezoid(shape_pdr, nu)
-    int_pah = -jnp.trapezoid(shape_pah_lnu, nu)
-
-    l_nu = (
-        f_diff * jnp.where(int_diff > 0.0, shape_diff / int_diff, shape_diff)
-        + f_pdr * jnp.where(int_pdr > 0.0, shape_pdr / int_pdr, shape_pdr)
-        + f_pah * jnp.where(int_pah > 0.0, shape_pah_lnu / int_pah, shape_pah_lnu)
-    )
-
-    return L_absorbed * l_nu
-
-
 # ===================================================================
 # Template-based DL07: create from grid file
 # ===================================================================
@@ -1149,107 +905,6 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
 
 
 # ===================================================================
-# Model 4: Draine & Li 2014 (4 parameters) — analytic approximation
-# ===================================================================
-
-
-def _pdr_temperature_dl14(U_min: float, U_max: float = 1.0e7) -> float:
-    """Effective temperature for the PDR component (DL14).
-
-    Like DL07 but with U_max = 10^7 instead of 10^6.
-    """
-    U_eff = jnp.sqrt(U_min * U_max)
-    return 18.0 * U_eff ** (1.0 / 6.0)
-
-
-def _alpha_warm_fraction_correction(alpha: float) -> float:
-    """Correction to the warm/PDR fraction based on the alpha slope.
-
-    In DL07, alpha is fixed at 2.0. In DL14, alpha controls how much
-    dust mass is exposed to high-U radiation fields:
-    - Low alpha (steep): more dust at high U -> warmer emission
-    - High alpha (shallow): less dust at high U -> cooler emission
-
-    The warm fraction scales roughly as 1/(alpha - 1) for the integral
-    of U^{-alpha} from U_min to U_max, normalized relative to alpha=2.
-    """
-    # Relative to alpha=2.0 (DL07 default), the luminosity-weighted
-    # warm fraction scales approximately as (alpha-1)^{-1} / (2-1)^{-1}
-    # = 1/(alpha-1).  Clip to avoid divergence near alpha=1.
-    alpha_safe = jnp.clip(alpha, 1.01, 5.0)
-    return 1.0 / (alpha_safe - 1.0)
-
-
-def _draine_li2014_analytic_fallback(
-    wavelength_aa: jnp.ndarray,
-    L_absorbed: float,
-    dust_umin: float = 1.0,
-    dust_gamma_dl: float = 0.01,
-    dust_qpah: float = 2.5,
-    dust_alpha_dl14: float = 2.0,
-    **_kwargs,
-) -> jnp.ndarray:
-    """Draine & Li (2014 update) ANALYTIC FALLBACK — not for science.
-
-    .. deprecated::
-        This crude approximation uses single-Gaussian PAH and hand-tuned
-        temperature formulas.  Use the tabulated version (the default
-        ``"draine_li2014"`` registry entry, which auto-loads
-        ``data/dl14_templates.h5``).
-
-    Only used when template files are not found.
-    """
-    wavelength_cm = wavelength_aa * _AA_TO_CM
-    nu = _C_CGS / wavelength_cm
-
-    beta_ir = 2.0  # Grain emissivity index
-    nu_ref = _C_CGS / (250.0e-4)
-    emissivity = (nu / nu_ref) ** beta_ir
-
-    # --- Component 1: Diffuse ISM (FIR continuum) ---
-    T_diff = _draine_li_umin_to_temperature(dust_umin)
-    shape_diff = emissivity * planck_bnu(wavelength_aa, T_diff)
-
-    # --- Component 2: PDR warm continuum ---
-    # Effective temperature depends on alpha: lower alpha means the
-    # luminosity-weighted <U> is higher, so use a scaled T_pdr.
-    T_pdr_base = _pdr_temperature_dl14(dust_umin)
-    # Modulate: for alpha < 2 dust is warmer; for alpha > 2 it is cooler.
-    alpha_corr = _alpha_warm_fraction_correction(dust_alpha_dl14)
-    # T scales as U_eff^(1/6), and U_eff ~ alpha_corr, so:
-    T_pdr = T_pdr_base * alpha_corr ** (1.0 / 6.0)
-    shape_pdr = emissivity * planck_bnu(wavelength_aa, T_pdr)
-
-    # --- Component 3: PAH mid-IR feature complex ---
-    lambda_pah = 7.7e4  # 7.7 um in Angstrom
-    sigma_pah = 3.0e4  # ~3 um width (blends 6.2-12.7 um)
-    shape_pah = jnp.exp(-0.5 * ((wavelength_aa - lambda_pah) / sigma_pah) ** 2)
-
-    # --- Luminosity fractions ---
-    # PAH fraction calibrated against DL07 tabulated templates (same
-    # grain model).  See calibrate_dl07_pah_fraction() and draine_li2007().
-    f_pah_ref = _get_dl07_pah_frac_at_ref()
-    f_pah = (dust_qpah / _DL07_QPAH_REF) * f_pah_ref
-    f_pdr = dust_gamma_dl
-    f_diff = 1.0 - f_pah - f_pdr
-
-    shape_pah_lnu = shape_pah * (wavelength_cm**2) / _C_CGS
-
-    # Normalize all 3 components: negate because nu is descending
-    int_diff = -jnp.trapezoid(shape_diff, nu)
-    int_pdr = -jnp.trapezoid(shape_pdr, nu)
-    int_pah = -jnp.trapezoid(shape_pah_lnu, nu)
-
-    l_nu = (
-        f_diff * jnp.where(int_diff > 0.0, shape_diff / int_diff, shape_diff)
-        + f_pdr * jnp.where(int_pdr > 0.0, shape_pdr / int_pdr, shape_pdr)
-        + f_pah * jnp.where(int_pah > 0.0, shape_pah_lnu / int_pah, shape_pah_lnu)
-    )
-
-    return L_absorbed * l_nu
-
-
-# ===================================================================
 # Template-based DL14: create from grid file
 # ===================================================================
 
@@ -1450,87 +1105,13 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
 # Model 5: MAGPHYS 4-component (da Cunha, Charlot & Elbaz 2008)
 # ===================================================================
 
-# PAH Drude profile parameters from Smith+2007, Table 2 (17 features).
-# Keep 3.3 μm feature (C-H stretch, outside Smith+2007's 5-38 μm IRS coverage).
-# Additional 17 features from Smith+2007 Table 2 covering 5.27-14.04 μm.
-# Each tuple: (center_um, absolute_fwhm_um, relative_strength).
-# FWHM computed as: absolute_fwhm = center_um * gamma_k (fractional FWHM).
-# Relative strengths from PAHFIT SINGS median (7.60 μm = 1.0 reference).
-_PAH_FEATURES = (
-    # 3.3 μm feature (real PAH C-H stretch, outside Smith+2007 coverage)
-    (3.3, 0.05, 0.06),
-    # Smith+2007 Table 2: 17 features (5.27-14.04 μm)
-    (5.27, 5.27 * 0.034, 0.04),  # λ=5.27, γ=0.034
-    (5.70, 5.70 * 0.035, 0.03),  # λ=5.70, γ=0.035
-    (6.22, 6.22 * 0.030, 0.30),  # λ=6.22, γ=0.030
-    (6.69, 6.69 * 0.070, 0.02),  # λ=6.69, γ=0.070
-    (7.42, 7.42 * 0.126, 0.15),  # λ=7.42, γ=0.126
-    (7.60, 7.60 * 0.044, 1.00),  # λ=7.60, γ=0.044 (strongest)
-    (7.85, 7.85 * 0.053, 0.45),  # λ=7.85, γ=0.053
-    (8.33, 8.33 * 0.050, 0.05),  # λ=8.33, γ=0.050
-    (8.61, 8.61 * 0.039, 0.33),  # λ=8.61, γ=0.039
-    (10.68, 10.68 * 0.020, 0.02),  # λ=10.68, γ=0.020
-    (11.23, 11.23 * 0.012, 0.20),  # λ=11.23, γ=0.012
-    (11.33, 11.33 * 0.032, 0.45),  # λ=11.33, γ=0.032
-    (11.99, 11.99 * 0.045, 0.05),  # λ=11.99, γ=0.045
-    (12.62, 12.62 * 0.042, 0.15),  # λ=12.62, γ=0.042
-    (12.69, 12.69 * 0.013, 0.05),  # λ=12.69, γ=0.013
-    (13.48, 13.48 * 0.040, 0.03),  # λ=13.48, γ=0.040
-    (14.04, 14.04 * 0.016, 0.02),  # λ=14.04, γ=0.016
-)
-
-# Pre-pack into JAX arrays for JIT compatibility.
-_PAH_CENTER_UM = jnp.array([f[0] for f in _PAH_FEATURES])
-_PAH_FWHM_UM = jnp.array([f[1] for f in _PAH_FEATURES])
-_PAH_STRENGTH = jnp.array([f[2] for f in _PAH_FEATURES])
+# PAH Drude profiles and feature table are now in drude_profiles.py.
+# _pah_template and _SMITH2007_PAH_FEATURES are imported at the top of this file.
+# The private wrappers below delegate to the public module for backward compat.
 
 
-def _drude_profile(
-    wavelength_um: jnp.ndarray,
-    center_um: jnp.ndarray,
-    fwhm_um: jnp.ndarray,
-    strength: jnp.ndarray,
-) -> jnp.ndarray:
-    """Sum of Drude profiles for PAH emission features.
-
-    The Drude profile for each feature *i* is::
-
-        D_i(λ) = S_i * (γ_i / λ_{0,i})^2
-                 / ((λ / λ_{0,i} - λ_{0,i} / λ)^2 + (γ_i / λ_{0,i})^2)
-
-    where γ_i = FWHM_i.
-
-    Parameters
-    ----------
-    wavelength_um : array, shape (n_wave,)
-        Wavelength grid in microns.
-    center_um : array, shape (n_feat,)
-        Central wavelengths of features in microns.
-    fwhm_um : array, shape (n_feat,)
-        FWHM of each feature in microns.
-    strength : array, shape (n_feat,)
-        Relative strength of each feature.
-
-    Returns
-    -------
-    array, shape (n_wave,)
-        Summed Drude profile (energy-density units, unnormalized).
-    """
-    # Broadcast: wavelength (n_wave, 1) vs features (1, n_feat)
-    lam = wavelength_um[:, None]  # (n_wave, n_feat)
-    lam0 = center_um[None, :]
-    gamma = fwhm_um[None, :]
-    s = strength[None, :]
-
-    gamma_over_lam0 = gamma / lam0
-    x = lam / lam0 - lam0 / lam
-    profile = s * gamma_over_lam0**2 / (x**2 + gamma_over_lam0**2)
-
-    return jnp.sum(profile, axis=1)
-
-
-def _pah_template(wavelength_aa: jnp.ndarray) -> jnp.ndarray:
-    """PAH emission template from summed Drude profiles (Smith+2007).
+def _pah_template_aa(wavelength_aa: jnp.ndarray) -> jnp.ndarray:
+    """PAH emission template (Å input wrapper around drude_profiles.pah_template).
 
     Parameters
     ----------
@@ -1540,11 +1121,9 @@ def _pah_template(wavelength_aa: jnp.ndarray) -> jnp.ndarray:
     Returns
     -------
     array, shape (n_wave,)
-        PAH emission template (L_nu-like, unnormalized).  Normalized to
-        integrate to unity over frequency by the caller.
+        PAH emission template (L_lambda-like, unnormalized).
     """
-    wavelength_um = wavelength_aa * 1.0e-4  # Å -> μm
-    return _drude_profile(wavelength_um, _PAH_CENTER_UM, _PAH_FWHM_UM, _PAH_STRENGTH)
+    return _pah_template(wavelength_aa * 1.0e-4)  # Å -> μm
 
 
 def _modified_blackbody_component(
@@ -1668,7 +1247,7 @@ def magphys_dc08(
     # Must convert to L_nu before normalizing: L_nu = L_lambda * lambda^2 / c.
     # Normalizing L_lambda directly against dnu mixes unit spaces and gives
     # wrong fractional luminosities for the PAH vs MBB components.
-    pah_shape = _pah_template(wavelength_aa)  # L_lambda-like (Drude in wavelength)
+    pah_shape = _pah_template_aa(wavelength_aa)  # L_lambda-like (Drude in wavelength)
     pah_lnu = pah_shape * (wavelength_cm**2) / _C_CGS  # convert to L_nu
     pah_integral = -jnp.trapezoid(pah_lnu, nu)
     pah_norm = jnp.where(pah_integral > 0.0, 1.0 / pah_integral, 0.0)
@@ -1740,35 +1319,6 @@ def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> Non
 # ===================================================================
 # Model 6: Astrodust+PAH (Hensley & Draine 2023) — template-based
 # ===================================================================
-
-
-def _astrodust_analytic_fallback(
-    wavelength_aa: jnp.ndarray,
-    L_absorbed: float,
-    dust_umin: float = 1.0,
-    dust_gamma_dl: float = 0.01,
-    dust_qpah: float = 3.0,
-    redshift: float = 0.0,
-    **_kwargs,
-) -> jnp.ndarray:
-    """Astrodust+PAH ANALYTIC FALLBACK — not for science.
-
-    .. deprecated::
-        This reuses the DL07 analytic fallback as a placeholder.
-        Use the tabulated version (the default ``"astrodust"`` registry
-        entry, which auto-loads ``data/astrodust_templates.npz``).
-        Download templates via ``scripts/download_astrodust_templates.py``.
-
-    Only used when template files are not found.
-    """
-    return _draine_li2007_analytic_fallback(
-        wavelength_aa,
-        L_absorbed,
-        dust_umin=dust_umin,
-        dust_gamma_dl=dust_gamma_dl,
-        dust_qpah=dust_qpah,
-        **_kwargs,
-    )
 
 
 def load_astrodust_templates(filepath: str) -> dict:
@@ -2097,39 +1647,6 @@ def register_astrodust_tabulated(grid_path: str, name: str = "astrodust_tabulate
 # ===================================================================
 
 
-def _bosa_analytic_fallback(
-    wavelength_aa: jnp.ndarray,
-    L_absorbed: float,
-    dust_log_ssfr: float = -10.0,
-    redshift: float = 0.0,
-    **_kwargs,
-) -> jnp.ndarray:
-    """BOSA ANALYTIC FALLBACK — not for science.
-
-    .. deprecated::
-        This crude approximation models the BOSA template library as a
-        single modified blackbody whose temperature depends on sSFR.
-        Use the tabulated version (the default ``"bosa"`` registry entry,
-        which auto-loads ``data/bosa_templates.npz``).
-        Download templates via ``scripts/download_bosa_templates.py``.
-
-    Only used when template files are not found.
-    """
-    # Map sSFR to dust temperature: higher sSFR -> warmer dust
-    # Empirical calibration from Boquien & Salim (2021) Fig. 8:
-    # log(sSFR) ~ -10 -> T_dust ~ 25 K; log(sSFR) ~ -8 -> T_dust ~ 45 K
-    T_dust = 25.0 + 10.0 * (dust_log_ssfr + 10.0)
-    T_dust = jnp.clip(T_dust, 15.0, 60.0)
-
-    return modified_blackbody(
-        wavelength_aa,
-        L_absorbed,
-        dust_T=T_dust,
-        dust_beta_ir=1.8,
-        redshift=redshift,
-    )
-
-
 def load_bosa_templates(filepath: str) -> dict:
     """Load BOSA template grid from NPZ or HDF5.
 
@@ -2339,38 +1856,6 @@ def register_bosa_tabulated(grid_path: str, name: str = "bosa_tabulated") -> Non
 # ===================================================================
 # Model 8: THEMIS (Jones et al. 2017) — template-based
 # ===================================================================
-
-
-def _themis_analytic_fallback(
-    wavelength_aa: jnp.ndarray,
-    L_absorbed: float,
-    dust_umin: float = 1.0,
-    dust_gamma_dl: float = 0.01,
-    dust_qhac: float = 0.17,
-    redshift: float = 0.0,
-    **_kwargs,
-) -> jnp.ndarray:
-    """THEMIS ANALYTIC FALLBACK — not for science.
-
-    .. deprecated::
-        This reuses the DL07 analytic fallback as a placeholder.
-        Use the tabulated version (the default ``"themis"`` registry
-        entry, which auto-loads ``data/themis_templates.npz``).
-        Download templates via ``scripts/download_themis_templates.py``.
-
-    Only used when template files are not found.
-    """
-    # Map qhac to an approximate qpah for the DL07 fallback:
-    # THEMIS qhac ~ 0.17 is roughly equivalent to DL07 qpah ~ 3%
-    qpah_equiv = dust_qhac * 18.0  # crude linear scaling
-    return _draine_li2007_analytic_fallback(
-        wavelength_aa,
-        L_absorbed,
-        dust_umin=dust_umin,
-        dust_gamma_dl=dust_gamma_dl,
-        dust_qpah=qpah_equiv,
-        **_kwargs,
-    )
 
 
 def load_themis_templates(filepath: str) -> dict:

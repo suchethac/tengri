@@ -32,12 +32,18 @@ from tengri.models.dust.attenuation import (
     wg00_dusty,
     wg00_shell,
 )
+from tengri.models.dust.drude_profiles import (
+    N_PAH_FEATURES,
+    SMITH2007_PAH_FEATURES,
+    decompose_pah,
+    drude_profile,
+    pah_template,
+)
 from tengri.models.dust.emission import (
     DUST_EMISSION_MODELS,
     apply_dust_emission,
     astrodust,
     bosa,
-    calibrate_dl07_pah_fraction,
     casey2012,
     cmb_contrast_factor,
     cmb_corrected_temperature,

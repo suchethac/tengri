@@ -12,6 +12,7 @@ import jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
 from dsps.cosmology import CosmoParams
+from numpy.testing import assert_allclose
 
 from tengri.utils.cosmology import (
     DEFAULT_H0,
@@ -31,8 +32,6 @@ from tengri.utils.cosmology import (
     luminosity_distance,
     luminosity_distance_mpc,
 )
-from numpy.testing import assert_allclose
-
 from tengri.utils.physics_constants import MPC_CM, PC_CM
 
 
@@ -489,6 +488,7 @@ class TestNumericalStability:
 # ─────────────────────────────────────────────────────────────────────
 # Redshift inversion: z_at_cosmic_time and z_at_lookback_time
 # ─────────────────────────────────────────────────────────────────────
+
 
 class TestZAtCosmicTime:
     """Tests for z_at_cosmic_time (inverse of age_at_z)."""

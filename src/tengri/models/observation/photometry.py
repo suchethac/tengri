@@ -120,22 +120,16 @@ def _compute_flux_density_padded(
     so no masking is needed.
     """
     wave_obs = wave_rest * (1.0 + redshift)
-    sed_on_filter = jnp.interp(
-        filter_wave_padded, wave_obs, sed_rest, left=0.0, right=0.0
-    )
+    sed_on_filter = jnp.interp(filter_wave_padded, wave_obs, sed_rest, left=0.0, right=0.0)
     numerator = jnp.trapezoid(
         sed_on_filter * filter_trans_padded * filter_wave_padded, filter_wave_padded
     )
-    denominator = jnp.trapezoid(
-        filter_trans_padded * filter_wave_padded, filter_wave_padded
-    )
+    denominator = jnp.trapezoid(filter_trans_padded * filter_wave_padded, filter_wave_padded)
     flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
     return flux_scale * numerator / jnp.maximum(denominator, 1e-30)
 
 
-def compute_flux_density_batch(
-    sed_rest, wave_rest, fw_padded, ft_padded, redshift, dl_cm
-):
+def compute_flux_density_batch(sed_rest, wave_rest, fw_padded, ft_padded, redshift, dl_cm):
     """Compute flux densities through all filters at once via vmap.
 
     Parameters
@@ -158,9 +152,9 @@ def compute_flux_density_batch(
     array, shape (n_filters,)
         Observed flux density per filter.
     """
-    return jax.vmap(
-        _compute_flux_density_padded, in_axes=(None, None, 0, 0, None, None)
-    )(sed_rest, wave_rest, fw_padded, ft_padded, redshift, dl_cm)
+    return jax.vmap(_compute_flux_density_padded, in_axes=(None, None, 0, 0, None, None))(
+        sed_rest, wave_rest, fw_padded, ft_padded, redshift, dl_cm
+    )
 
 
 def compute_photometry(

@@ -62,6 +62,9 @@ def build_hybrid_photometry(model):
     dt = model._forward_dtype
     precomp = model._precomputed.photometry
     ssp_phot = precomp.ssp_phot.astype(dt)
+    # True when metallicity axis was pre-collapsed at precompute time (fixed met_logzsol).
+    # In that case ssp_phot has shape (n_age, n_filters) instead of (n_met, n_age, n_filters).
+    _met_precomputed = ssp_phot.ndim == 2
     ssp_lgmet = model.ssp_data.ssp_lgmet.astype(dt)
     eff_waves_rest = precomp.effective_wavelengths_rest.astype(dt)
     _use_taylor = precomp.ssp_phot_moment is not None
@@ -204,13 +207,31 @@ def build_hybrid_photometry(model):
             _dust_ir_lookup = model._precomputed.dust_ir_lookup
             _dust_model_name = model._dust_emission_model
 
-    # AGN (full wavelength)
+    # AGN (full wavelength or preintegrated K&D disc)
     has_agn_full = model._agn_model is not None
     agn_parametric = model._agn_parametric if has_agn_full else False
+    _has_preint_kd = False
+    _kd_data_fn = None
     if has_agn_full:
         from tengri.models.agn import resolve_agn_model
 
         agn_model_fn_full = resolve_agn_model(model._agn_model)
+
+        # Check if K&D disc preintegration is available (for fast photometry).
+        # Preintegrated K&D is only valid when redshift is fixed and filters present.
+        # Disable if radio/X-ray enabled, since K&D must be computed on panchromatic
+        # grid to match other non-stellar components. Preintegration was computed on
+        # SSP grid only.
+        if (
+            model._agn_model == "kubota_done_full"
+            and model._precomputed.kd_preintegrated is not None
+            and not _needs_extension
+        ):
+            _has_preint_kd = True
+            from tengri.models.agn.kd_preintegrate import kubota_done_disc_preintegrated
+
+            _kd_data_fn = kubota_done_disc_preintegrated
+            _kd_data = model._precomputed.kd_preintegrated
 
     # Radio
     has_radio = model._radio_enabled
@@ -234,14 +255,11 @@ def build_hybrid_photometry(model):
     filter_waves_list = model.filter_waves if model.filter_waves else []
     filter_trans_list = model.filter_trans if model.filter_trans else []
     if n_filters > 0:
-        fw_padded, ft_padded, _filt_n_valid = pad_filters(
-            filter_waves_list, filter_trans_list
-        )
+        fw_padded, ft_padded, _filt_n_valid = pad_filters(filter_waves_list, filter_trans_list)
 
     # === Define kernel signatures (single vs two-component dust) ===
 
     if _is_single_dust:
-
 
         def hybrid_phot(
             sfr_on_ssp,
@@ -378,7 +396,6 @@ def build_hybrid_photometry(model):
             )
 
     else:
-
 
         def hybrid_phot(
             sfr_on_ssp,
@@ -598,16 +615,23 @@ def build_hybrid_photometry(model):
                 + fz * fa * ssp_phot[iz + 1, ia + 1]
             )
         else:
-            if _use_alpha_fe:
-                lz = lz + _A2Z * afe
-            if _use_smooth_z:
-                zw = _clw(lz, ssp_lgmet, _lgmet_scat)
-                ssp_at_z = jnp.einsum("m,maf->af", zw, ssp_phot)
+            if _met_precomputed:
+                # Metallicity axis already collapsed at precompute time (fixed met_logzsol).
+                # ssp_phot has shape (n_age, n_filters) — use directly.
+                ssp_at_z = ssp_phot
             else:
-                log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
-                idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
-                frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
-                ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
+                if _use_alpha_fe:
+                    lz = lz + _A2Z * afe
+                if _use_smooth_z:
+                    zw = _clw(lz, ssp_lgmet, _lgmet_scat)
+                    ssp_at_z = jnp.einsum("m,maf->af", zw, ssp_phot)
+                else:
+                    log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
+                    idx = jnp.clip(
+                        jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2
+                    )
+                    frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
+                    ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
 
         # Dust at effective wavelengths
         _law_kw = dict(n_slope=dn, dust_bump_strength=bump, dust_delta=delta, dust_Rv=rv)
@@ -645,12 +669,15 @@ def build_hybrid_photometry(model):
                         + (1 - fz) * fa * ssp_phot_moment[iz, ia + 1]
                         + fz * fa * ssp_phot_moment[iz + 1, ia + 1]
                     )
+                elif _met_precomputed:
+                    # Metallicity axis pre-collapsed — moment grid is also (n_age, n_filters).
+                    ssp_moment_at_z = ssp_phot_moment
                 elif _use_smooth_z:
                     ssp_moment_at_z = jnp.einsum("m,maf->af", zw, ssp_phot_moment)
                 else:
-                    ssp_moment_at_z = (1.0 - frac) * ssp_phot_moment[idx] + frac * ssp_phot_moment[
-                        idx + 1
-                    ]
+                    ssp_moment_at_z = (
+                        (1.0 - frac) * ssp_phot_moment[idx] + frac * ssp_phot_moment[idx + 1]
+                    )
 
                 csp_young_m = jnp.einsum("i,if->f", weights * young_mask, ssp_moment_at_z)
                 csp_old_m = jnp.einsum("i,if->f", weights * old_mask, ssp_moment_at_z)
@@ -1030,7 +1057,8 @@ def build_hybrid_photometry(model):
             else:
                 L_ir = jnp.float64(0.0)
 
-            # 2d: AGN emission
+            # 2d: AGN emission (full wavelength or preintegrated K&D disc)
+            agn_phot_preint = jnp.zeros(n_filters, dtype=jnp.float64)
             if has_agn_full:
                 if agn_parametric:
                     _agn_lbol = agn_log_lbol
@@ -1038,6 +1066,33 @@ def build_hybrid_photometry(model):
                 else:
                     _agn_frac = jnp.float64(0.0)  # Not parametric in hybrid
                     _agn_lbol = 10.0
+
+                # Fast path: preintegrated K&D disc (if available).
+                # Computes filter-integrated photometry directly, bypassing full-wavelength
+                # computation for the outer disc component only. Torus, NLR, BLR still
+                # use full-wavelength path via agn_emission below.
+                if _has_preint_kd:
+                    kd_disc_lnu = _kd_data_fn(
+                        _kd_data,
+                        agn_log_lbol=jnp.float64(_agn_lbol),
+                        agn_frac=jnp.float64(_agn_frac),
+                        agn_log_mbh=jnp.float64(agn_log_mbh),
+                        agn_log_ledd=jnp.float64(agn_log_ledd),
+                        agn_a_spin=jnp.float64(agn_a_spin),
+                        agn_cos_inc=jnp.float64(agn_cos_inc),
+                        agn_f_hard=jnp.float64(agn_f_hard),
+                        agn_gamma_warm=jnp.float64(agn_gamma_warm),
+                        agn_kt_warm=jnp.float64(agn_kt_warm),
+                        agn_gamma_hard=jnp.float64(agn_gamma_hard),
+                        agn_kt_hot=jnp.float64(agn_kt_hot),
+                        agn_r_warm_ratio=jnp.float64(agn_r_warm_ratio),
+                    )
+                    # Convert L_nu (erg/s/Hz) to flux density (erg/s/cm^2/Hz)
+                    agn_phot_preint = kd_disc_lnu * flux_scale
+
+                # Full-wavelength path: always computed to get torus, NLR, BLR, and
+                # hot corona. When K&D disc is preintegrated, this includes all AGN
+                # components except the outer disc (whose contribution is in agn_phot_preint).
                 agn_sed = agn_emission(
                     agn_model_fn_full,
                     rest_wave_f64,
@@ -1130,8 +1185,12 @@ def build_hybrid_photometry(model):
             # === STEP 3: Integrate non-stellar through filters (vectorized) ===
             if n_filters > 0:
                 non_stellar_phot = compute_flux_density_batch(
-                    non_stellar_sed, rest_wave_f64,
-                    fw_padded, ft_padded, z_fixed, dl_cm_fixed,
+                    non_stellar_sed,
+                    rest_wave_f64,
+                    fw_padded,
+                    ft_padded,
+                    z_fixed,
+                    dl_cm_fixed,
                 )
 
         # === STEP 4: Combine stellar + non-stellar ===
@@ -1147,6 +1206,10 @@ def build_hybrid_photometry(model):
         # (erg/s/cm²/Hz) with the same (1+z)/(4π d_L²) scaling as stellar.
         if _has_preint_dust_ir:
             non_stellar_phot = non_stellar_phot + dust_ir_phot_preint * flux_scale
+
+        # Add preintegrated K&D disc photometry if available (already flux-scaled).
+        if _has_preint_kd:
+            non_stellar_phot = non_stellar_phot + agn_phot_preint
 
         return stellar_phot + non_stellar_phot
 
@@ -1429,7 +1492,6 @@ def build_hybrid_photometry_ztable(model):
 
     if _is_single_dust:
 
-
         def hybrid_phot_ztable(
             sfr_on_ssp,
             log_z_abs,
@@ -1567,7 +1629,6 @@ def build_hybrid_photometry_ztable(model):
             )
 
     else:
-
 
         def hybrid_phot_ztable(
             sfr_on_ssp,
@@ -2070,7 +2131,6 @@ def build_hybrid_photometry_ztable(model):
 
         return total_phot
 
-
     def hybrid_phot_ztable_fused(params):
         """params dict → photometry (end-to-end JIT for z-table path)."""
         p = get_internal_params(params, param_map, spec, has_field)
@@ -2213,7 +2273,6 @@ def build_exact_sed(model):
     if not _is_single_dust_exact:
         law_diff_fn = model._dust_law_diff_fn
         same_law = model._dust_law_bc == model._dust_law_diff
-
 
     def exact_sed(
         weights,
@@ -2642,7 +2701,6 @@ def build_fused_tier2_photometry(model):
 
     if is_free_z:
 
-
         def fused_tier2_phot(sfr_on_ssp, params):
             """sfr_on_ssp, params dict → observed photometry (free z)."""
             rest_sed, z = _compute_rest_sed(sfr_on_ssp, params)
@@ -2653,11 +2711,15 @@ def build_fused_tier2_photometry(model):
                 rest_sed = rest_sed * _igm_fn(wave_obs, z)
 
             return compute_flux_density_batch(
-                rest_sed, rest_wave, fw_padded_t2, ft_padded_t2, z, dl_cm,
+                rest_sed,
+                rest_wave,
+                fw_padded_t2,
+                ft_padded_t2,
+                z,
+                dl_cm,
             )
 
     else:
-
 
         def fused_tier2_phot(sfr_on_ssp, params):
             """sfr_on_ssp, params dict → observed photometry (fixed z)."""
@@ -2667,7 +2729,12 @@ def build_fused_tier2_photometry(model):
                 rest_sed = rest_sed * igm_trans_full
 
             return compute_flux_density_batch(
-                rest_sed, rest_wave, fw_padded_t2, ft_padded_t2, z_fixed, dl_cm_fixed,
+                rest_sed,
+                rest_wave,
+                fw_padded_t2,
+                ft_padded_t2,
+                z_fixed,
+                dl_cm_fixed,
             )
 
     return fused_tier2_phot
@@ -2779,7 +2846,6 @@ def build_fused_tier2_spectrum(model):
 
     if is_free_z:
 
-
         def fused_tier2_spec(sfr_on_ssp, params):
             """sfr_on_ssp, params dict → observed spectrum (free z)."""
             rest_sed, z = _compute_rest_sed_spec(sfr_on_ssp, params)
@@ -2787,7 +2853,6 @@ def build_fused_tier2_spectrum(model):
             return compute_spectrum(rest_sed, rest_wave, wave_obs, z, dl_cm)
 
     else:
-
 
         def fused_tier2_spec(sfr_on_ssp, params):
             """sfr_on_ssp, params dict → observed spectrum (fixed z)."""
@@ -2932,14 +2997,12 @@ def build_hybrid_spectrum(model):
 
     if _is_single_dust:
 
-
         def hybrid_spec(sfr_on_ssp, params):
             """Single-dust hybrid spectrum."""
             p = get_internal_params(params, param_map, spec, has_field)
             return _hybrid_spec_body(sfr_on_ssp, params, p["log_z_abs"], (p.get("tau_v", 0.0),))
 
     else:
-
 
         def hybrid_spec(sfr_on_ssp, params):
             """Two-dust hybrid spectrum."""

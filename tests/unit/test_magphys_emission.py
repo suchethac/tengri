@@ -10,7 +10,7 @@ import pytest
 
 from tengri.models.dust.emission import (
     _modified_blackbody_component,
-    _pah_template,
+    _pah_template_aa as _pah_template,
     magphys_dc08,
 )
 

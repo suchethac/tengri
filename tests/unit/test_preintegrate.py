@@ -322,8 +322,12 @@ class TestPreintegrateGridSSPCrossval:
 
         # Compute directly with preintegrate_grid for independent verification
         result = preintegrate_grid(
-            ssp.ssp_flux, ssp.ssp_wave, filter_waves, filter_trans,
-            redshift=z, dl_cm=dl_cm,
+            ssp.ssp_flux,
+            ssp.ssp_wave,
+            filter_waves,
+            filter_trans,
+            redshift=z,
+            dl_cm=dl_cm,
         )
 
         # Compare (should be identical since precompute_photometry delegates)
@@ -725,8 +729,12 @@ class TestSliceFixedAxes:
         n_met, n_age, _ = template.shape
 
         result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans,
-            redshift=0.0, dl_cm=1e28,
+            template,
+            wave,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            dl_cm=1e28,
             axes=(np.linspace(-2, 0, n_met), np.linspace(6, 10, n_age)),
         )
         assert result.phot.shape == (n_met, n_age, len(filter_waves))
@@ -747,8 +755,12 @@ class TestSliceFixedAxes:
         met_grid = np.linspace(-2, 0, n_met)
 
         result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans,
-            redshift=0.0, dl_cm=1e28,
+            template,
+            wave,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            dl_cm=1e28,
             axes=(met_grid, np.linspace(6, 10, n_age)),
         )
 
@@ -772,8 +784,12 @@ class TestSliceFixedAxes:
         ax_c = np.linspace(0, 1, n_c)
 
         result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans,
-            redshift=0.0, dl_cm=1e28,
+            template,
+            wave,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            dl_cm=1e28,
             axes=(ax_a, ax_b, ax_c),
         )
         assert result.phot.shape == (n_a, n_b, n_c, len(filter_waves))
@@ -792,8 +808,12 @@ class TestSliceFixedAxes:
         filter_waves, filter_trans = tophat_filters
 
         result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans,
-            redshift=0.0, dl_cm=1e28,
+            template,
+            wave,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            dl_cm=1e28,
             axes=(np.linspace(-2, 0, template.shape[0]),),
         )
         sliced = slice_fixed_axes(result, {})

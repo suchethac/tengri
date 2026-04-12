@@ -31,6 +31,12 @@ def _model_src() -> str:
     return inspect.getsource(model_mod)
 
 
+def _emission_helpers_src() -> str:
+    from tengri.core import emission_helpers
+
+    return inspect.getsource(emission_helpers)
+
+
 def _params_src() -> str:
     from tengri.core import parameters
 
@@ -153,10 +159,16 @@ class TestPolarDustForwarding:
         assert '"agn_polar_oa"' in src
 
     def test_polar_dust_guard_present(self):
-        """Pipeline must guard polar dust application on agn_polar_ebv > 0."""
-        src = _pipeline_src()
-        assert "_agn_polar_ebv > 0.0" in src, (
-            "sed_pipeline.py must skip polar dust when agn_polar_ebv == 0"
+        """Pipeline must guard polar dust application on agn_polar_ebv > 0.
+
+        The guard lives in emission_helpers.agn_emission() which is called by
+        sed_pipeline.py.  We check the helpers module because the refactor
+        moved the polar-dust block there (sed_pipeline.py only forwards the
+        parameter value via agn_polar_ebv=p.get(...)).
+        """
+        src = _emission_helpers_src()
+        assert "agn_polar_ebv) > 0.0" in src, (
+            "emission_helpers.py must skip polar dust when agn_polar_ebv == 0"
         )
 
     def test_polar_dust_block_uses_cos_inc(self):
@@ -166,8 +178,22 @@ class TestPolarDustForwarding:
         )
 
     def test_polar_dust_block_uses_opening_angle(self):
-        src = _pipeline_src()
-        assert 'opening_angle_deg=p.get("agn_polar_oa"' in src
+        """opening_angle_deg must be forwarded from agn_polar_oa.
+
+        sed_pipeline.py passes agn_polar_oa=p.get("agn_polar_oa", ...) to
+        agn_emission(), which translates it to opening_angle_deg=agn_polar_oa
+        inside emission_helpers.py.  We verify both sides of the indirection.
+        """
+        # sed_pipeline.py must forward the parameter to agn_emission()
+        pipeline_src = _pipeline_src()
+        assert 'agn_polar_oa=p.get("agn_polar_oa"' in pipeline_src, (
+            "sed_pipeline.py must forward agn_polar_oa to agn_emission()"
+        )
+        # emission_helpers.py must pass it through as opening_angle_deg
+        helpers_src = _emission_helpers_src()
+        assert "opening_angle_deg=agn_polar_oa" in helpers_src, (
+            "emission_helpers.agn_emission must pass opening_angle_deg=agn_polar_oa"
+        )
 
 
 # ---------------------------------------------------------------------------

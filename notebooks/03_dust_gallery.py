@@ -1346,28 +1346,24 @@ FIGDIR = os.path.join("models", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 # %%
+from tengri.models.dust.drude_profiles import SMITH2007_PAH_FEATURES, pah_template
 from tengri.models.dust.emission import (
     DUST_EMISSION_MODELS,
-    _draine_li2007_analytic_fallback,
-    _draine_li2014_analytic_fallback,
-    _dale2014_analytic_fallback,
-    _astrodust_analytic_fallback,
-    _bosa_analytic_fallback,
-    _themis_analytic_fallback,
-    _pah_template,
-    _PAH_CENTER_UM,
-    _drude_profile,
-    _PAH_FWHM_UM,
-    _PAH_STRENGTH,
     _modified_blackbody_component,
+    astrodust,
+    bosa,
+    casey2012,
     cmb_corrected_temperature,
     cmb_contrast_factor,
+    dale2014,
+    draine_li2007,
+    draine_li2014,
     energy_balance_split,
     get_emission_model,
     magphys_dc08,
     modified_blackbody,
-    casey2012,
     planck_bnu,
+    themis,
 )
 
 # %% [markdown]
@@ -1439,8 +1435,8 @@ def _set_reasonable_log_ylim(ax, pad_log=0.12):
 # ## 1. Overview -- All Models at T=35 K
 #
 # A single plot comparing every emission model at `L_absorbed = 1e10 Lsun`
-# and T=35 K (where applicable). Template-based models use their
-# analytic fallbacks here for guaranteed availability.
+# and T=35 K (where applicable). Template-based models auto-load tabulated
+# grids from `data/` on first call.
 
 # %%
 fig, ax = plt.subplots(figsize=(9, 5.5))
@@ -1496,8 +1492,8 @@ ax.plot(
     label=MODEL_LABELS["energy_balance_split"],
 )
 
-# --- Template-based models (analytic fallbacks for guaranteed availability) ---
-lnu_dl07 = _draine_li2007_analytic_fallback(
+# --- Template-based models ---
+lnu_dl07 = draine_li2007(
     wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5
 )
 ax.plot(
@@ -1505,10 +1501,10 @@ ax.plot(
     np.array(lnu_dl07),
     color=MODEL_COLORS["draine_li2007"],
     lw=2.0,
-    label=f"{MODEL_LABELS['draine_li2007']} (fallback)",
+    label=MODEL_LABELS["draine_li2007"],
 )
 
-lnu_dl14 = _draine_li2014_analytic_fallback(
+lnu_dl14 = draine_li2014(
     wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5, dust_alpha_dl14=2.0
 )
 ax.plot(
@@ -1516,19 +1512,19 @@ ax.plot(
     np.array(lnu_dl14),
     color=MODEL_COLORS["draine_li2014"],
     lw=2.0,
-    label=f"{MODEL_LABELS['draine_li2014']} (fallback)",
+    label=MODEL_LABELS["draine_li2014"],
 )
 
-lnu_dale = _dale2014_analytic_fallback(wave_aa, L_ABS, dust_alpha_dale=2.0)
+lnu_dale = dale2014(wave_aa, L_ABS, dust_alpha_dale=2.0)
 ax.plot(
     wave_um,
     np.array(lnu_dale),
     color=MODEL_COLORS["dale2014"],
     lw=2.0,
-    label=f"{MODEL_LABELS['dale2014']} (fallback)",
+    label=MODEL_LABELS["dale2014"],
 )
 
-lnu_astro = _astrodust_analytic_fallback(
+lnu_astro = astrodust(
     wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=3.0
 )
 ax.plot(
@@ -1537,19 +1533,19 @@ ax.plot(
     color=MODEL_COLORS["astrodust"],
     lw=2.0,
     ls="-.",
-    label=f"{MODEL_LABELS['astrodust']} (fallback)",
+    label=MODEL_LABELS["astrodust"],
 )
 
-lnu_bosa = _bosa_analytic_fallback(wave_aa, L_ABS, dust_log_ssfr=-10.0)
+lnu_bosa = bosa(wave_aa, L_ABS, dust_log_ssfr=-10.0)
 ax.plot(
     wave_um,
     np.array(lnu_bosa),
     color=MODEL_COLORS["bosa"],
     lw=2.0,
-    label=f"{MODEL_LABELS['bosa']} (fallback)",
+    label=MODEL_LABELS["bosa"],
 )
 
-lnu_themis = _themis_analytic_fallback(
+lnu_themis = themis(
     wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qhac=0.17
 )
 ax.plot(
@@ -1558,7 +1554,7 @@ ax.plot(
     color=MODEL_COLORS["themis"],
     lw=2.0,
     ls="--",
-    label=f"{MODEL_LABELS['themis']} (fallback)",
+    label=MODEL_LABELS["themis"],
 )
 
 ax.set_xscale("log")
@@ -1736,7 +1732,7 @@ wavelength_cm = wave_aa * 1e-8
 nu = 2.99792458e10 / wavelength_cm
 
 # PAH component
-pah_shape = _pah_template(wave_aa)
+pah_shape = pah_template(wave_aa * 1e-4)
 pah_integral = -jnp.trapezoid(pah_shape, nu)
 pah_norm = jnp.where(pah_integral > 0.0, 1.0 / pah_integral, 0.0)
 pah_component = pah_shape * pah_norm
@@ -1809,13 +1805,13 @@ ax = axes[0, 1]
 wave_pah_aa = jnp.linspace(2e4, 15e4, 1000)  # 2--15 um
 wave_pah_um = wave_pah_aa * 1e-4
 
-pah_emission = _pah_template(wave_pah_aa)
+pah_emission = pah_template(wave_pah_aa * 1e-4)
 ax.plot(wave_pah_um, np.array(pah_emission), lw=2.0, color="#d62728")
 
 # Annotate each feature
 pah_labels = ["3.3", "6.2", "7.7", "8.6", "11.3", "12.7"]
 for j, lbl in enumerate(pah_labels):
-    center = float(_PAH_CENTER_UM[j])
+    center = float(SMITH2007_PAH_FEATURES[j].wave_um)
     ax.axvline(center, color="grey", ls=":", lw=0.8, alpha=0.7)
     ax.text(
         center,
@@ -1890,9 +1886,7 @@ plt.show()
 # ## 3. Template-Based Models
 #
 # Template-based models auto-load tabulated grids from `data/` on first
-# call. If templates are not found, they fall back to crude analytic
-# approximations (shown here with "(fallback)" labels). The fallbacks
-# are NOT suitable for science.
+# call.
 #
 # ### 3a. Draine & Li 2007
 #
@@ -1908,7 +1902,7 @@ qpah_values = [0.47, 1.5, 2.5, 4.58]
 cmap = plt.cm.YlOrRd
 for i, qp in enumerate(qpah_values):
     color = cmap(0.25 + 0.65 * i / (len(qpah_values) - 1))
-    lnu = _draine_li2007_analytic_fallback(
+    lnu = draine_li2007(
         wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=qp
     )
     ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=f"$q_{{PAH}}$ = {qp}%")
@@ -1930,7 +1924,7 @@ umin_values = [0.5, 1.0, 5.0, 10.0]
 cmap = plt.cm.Blues
 for i, um in enumerate(umin_values):
     color = cmap(0.3 + 0.6 * i / (len(umin_values) - 1))
-    lnu = _draine_li2007_analytic_fallback(
+    lnu = draine_li2007(
         wave_aa, L_ABS, dust_umin=um, dust_gamma_dl=0.01, dust_qpah=2.5
     )
     ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=f"$U_{{min}}$ = {um}")
@@ -1952,7 +1946,7 @@ gamma_values = [0.001, 0.01, 0.05, 0.20]
 cmap = plt.cm.Greens
 for i, gam in enumerate(gamma_values):
     color = cmap(0.3 + 0.6 * i / (len(gamma_values) - 1))
-    lnu = _draine_li2007_analytic_fallback(
+    lnu = draine_li2007(
         wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=gam, dust_qpah=2.5
     )
     ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=rf"$\gamma$ = {gam}")
@@ -1983,7 +1977,7 @@ plt.show()
 fig, ax = plt.subplots(figsize=(7, 4))
 
 # DL07 reference
-lnu_dl07 = _draine_li2007_analytic_fallback(
+lnu_dl07 = draine_li2007(
     wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.05, dust_qpah=2.5
 )
 ax.plot(
@@ -1995,7 +1989,7 @@ alpha_values = [1.5, 2.0, 2.5, 3.0]
 cmap = plt.cm.plasma
 for i, alpha in enumerate(alpha_values):
     color = cmap(0.15 + 0.7 * i / (len(alpha_values) - 1))
-    lnu = _draine_li2014_analytic_fallback(
+    lnu = draine_li2014(
         wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.05, dust_qpah=2.5, dust_alpha_dl14=alpha
     )
     ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=rf"DL14 $\alpha$ = {alpha:.1f}")
@@ -2030,7 +2024,7 @@ alpha_dale_values = [1.0, 1.5, 2.0, 2.5, 3.0]
 cmap = plt.cm.RdYlBu_r
 for i, alpha in enumerate(alpha_dale_values):
     color = cmap(0.1 + 0.8 * i / (len(alpha_dale_values) - 1))
-    lnu = _dale2014_analytic_fallback(wave_aa, L_ABS, dust_alpha_dale=alpha)
+    lnu = dale2014(wave_aa, L_ABS, dust_alpha_dale=alpha)
     ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=rf"$\alpha$ = {alpha:.1f}")
 
 ax.set_xscale("log")
@@ -2048,7 +2042,7 @@ ax.annotate(
     "warm (intense UV)",
     xy=(
         30,
-        np.max(np.array(_dale2014_analytic_fallback(wave_aa, L_ABS, dust_alpha_dale=1.0))) * 0.8,
+        np.max(np.array(dale2014(wave_aa, L_ABS, dust_alpha_dale=1.0))) * 0.8,
     ),
     fontsize=9,
     color=cmap(0.1),
@@ -2058,7 +2052,7 @@ ax.annotate(
     "cold (weak UV)",
     xy=(
         200,
-        np.max(np.array(_dale2014_analytic_fallback(wave_aa, L_ABS, dust_alpha_dale=3.0))) * 0.5,
+        np.max(np.array(dale2014(wave_aa, L_ABS, dust_alpha_dale=3.0))) * 0.5,
     ),
     fontsize=9,
     color=cmap(0.9),
@@ -2082,10 +2076,10 @@ plt.show()
 fig, ax = plt.subplots(figsize=(7, 4))
 
 # Compare DL07 and Astrodust at same parameters
-lnu_dl07 = _draine_li2007_analytic_fallback(
+lnu_dl07 = draine_li2007(
     wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5
 )
-lnu_astro = _astrodust_analytic_fallback(
+lnu_astro = astrodust(
     wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=3.0
 )
 
@@ -2106,7 +2100,7 @@ ax.plot(
 
 # Show qPAH variation for Astrodust
 for qp, ls in [(1.0, ":"), (5.0, "-.")]:
-    lnu = _astrodust_analytic_fallback(
+    lnu = astrodust(
         wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=qp
     )
     ax.plot(
@@ -2147,11 +2141,11 @@ ssfr_values = [-11.0, -10.0, -9.5, -9.0, -8.5]
 cmap = plt.cm.hot_r
 for i, ssfr in enumerate(ssfr_values):
     color = cmap(0.15 + 0.7 * i / (len(ssfr_values) - 1))
-    lnu = _bosa_analytic_fallback(wave_aa, L_ABS, dust_log_ssfr=ssfr)
+    lnu = bosa(wave_aa, L_ABS, dust_log_ssfr=ssfr)
     ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=f"log sSFR = {ssfr:.1f}")
 
 # Reference DL07
-lnu_dl07 = _draine_li2007_analytic_fallback(
+lnu_dl07 = draine_li2007(
     wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5
 )
 ax.plot(wave_um, np.array(lnu_dl07), lw=1.5, ls="--", color="grey", label="DL07 reference")
@@ -2183,10 +2177,10 @@ fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
 # --- Panel 1: THEMIS vs DL07 ---
 ax = axes[0]
-lnu_dl07 = _draine_li2007_analytic_fallback(
+lnu_dl07 = draine_li2007(
     wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5
 )
-lnu_themis = _themis_analytic_fallback(
+lnu_themis = themis(
     wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qhac=0.17
 )
 
@@ -2222,7 +2216,7 @@ qhac_values = [0.05, 0.10, 0.17, 0.25, 0.30]
 cmap = plt.cm.Oranges
 for i, qh in enumerate(qhac_values):
     color = cmap(0.25 + 0.65 * i / (len(qhac_values) - 1))
-    lnu = _themis_analytic_fallback(
+    lnu = themis(
         wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qhac=qh
     )
     ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=f"$q_{{hac}}$ = {qh:.2f}")
@@ -2544,9 +2538,8 @@ plt.show()
 # ## Notes
 #
 # - Template-based models (DL07, DL14, Dale+2014, Astrodust, BOSA, THEMIS)
-#   auto-load tabulated grids from `data/` on first call. If templates
-#   are not found, crude analytic fallbacks are used with a warning.
-#   The fallbacks shown in this notebook are **not suitable for science**.
+#   auto-load tabulated grids from `data/` on first call. Templates are
+#   required; see `scripts/download_*.py` for the download scripts.
 #
 # - All models enforce energy balance: the frequency integral of the
 #   emission SED equals `L_absorbed` (the total luminosity absorbed by

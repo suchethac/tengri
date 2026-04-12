@@ -6,6 +6,7 @@ import pytest
 
 from tengri.models.nebular.shock import (
     _FALLBACK_LINE_NAMES,
+    ShockBackend,
     _load_mappings_grids,
     shock_emission_sed,
     shock_line_ratios,
@@ -262,3 +263,66 @@ class TestShockParamSpec:
 
         with pytest.raises(ValueError):
             ParamSpec(shock=True, shock_velocity=(50.0, 1000.0))
+
+
+# ---------------------------------------------------------------------------
+# ShockBackend protocol compliance and delegation
+# ---------------------------------------------------------------------------
+
+
+class TestShockBackend:
+    """Tests for the ShockBackend dataclass (Phase 6b)."""
+
+    _WAVE = jnp.linspace(3000.0, 9000.0, 500)
+
+    def test_protocol_attributes(self):
+        """ShockBackend satisfies the NebularBackend Protocol attributes."""
+        from tengri.models.nebular._protocol import NebularBackend
+
+        b = ShockBackend()
+        assert isinstance(b, NebularBackend)
+        assert b.has_continuum is False
+        assert b.has_free_params is True
+        assert b.name == "shock"
+
+    def test_default_abundance_and_component(self):
+        b = ShockBackend()
+        assert b.shock_abundance == "solar"
+        assert b.shock_component == "combined"
+
+    def test_custom_abundance(self):
+        b = ShockBackend(shock_abundance="lmc", shock_component="shock")
+        assert b.shock_abundance == "lmc"
+        assert b.shock_component == "shock"
+
+    def test_predict_nebular_sed_delegates_to_compute_shock_sed(self):
+        """predict_nebular_sed and compute_shock_sed return identical arrays."""
+        from tengri.models.nebular.shock import compute_shock_sed
+
+        b = ShockBackend()
+        v = 300.0
+        l_ha = 1e40
+        sed_backend = b.predict_nebular_sed(self._WAVE, v, l_ha)
+        sed_direct = compute_shock_sed(self._WAVE, v, l_ha)
+        assert jnp.allclose(sed_backend, sed_direct, atol=0.0, rtol=0.0)
+
+    def test_predict_nebular_sed_returns_finite_sed(self):
+        b = ShockBackend()
+        sed = b.predict_nebular_sed(self._WAVE, 300.0, 1e40)
+        assert sed.shape == (self._WAVE.shape[0],)
+        assert jnp.all(jnp.isfinite(sed))
+        assert jnp.all(sed >= 0.0)
+
+    def test_predict_nebular_sed_extra_kwargs_ignored(self):
+        """**_kwargs allows protocol-uniform call sites to pass extra args."""
+        b = ShockBackend()
+        sed = b.predict_nebular_sed(self._WAVE, 300.0, 1e40, ssp_weights=None, log_z=0.0)
+        assert jnp.all(jnp.isfinite(sed))
+
+    def test_has_continuum_and_has_free_params_not_settable_via_init(self):
+        """has_continuum and has_free_params are fixed; init=False in dataclass."""
+        # These fields are fixed by the class — init=False means they cannot
+        # be overridden at construction.
+        b = ShockBackend(shock_abundance="smc")
+        assert b.has_continuum is False
+        assert b.has_free_params is True

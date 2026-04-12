@@ -22,7 +22,7 @@ from tengri.utils.grid import grid_spacing, make_log_age_grid
 jax.config.update("jax_enable_x64", True)
 
 
-def pytest_configure(config):  # noqa: ARG001
+def pytest_configure(config):
     """Create minimal synthetic CB19 grid fixture before test collection.
 
     @pytest.mark.skipif(not path.exists(), ...) is evaluated at collection
@@ -52,25 +52,28 @@ def pytest_configure(config):  # noqa: ARG001
 
     with h5py.File(cb19_path, "w") as f:
         ax = f.create_group("axes")
-        ax.create_dataset(
-            "log_OH_total", data=np.linspace(-5.06, -2.58, n_oh).astype(np.float32)
-        )
+        ax.create_dataset("log_OH_total", data=np.linspace(-5.06, -2.58, n_oh).astype(np.float32))
         ax.create_dataset("log_age_yr_ssp", data=log_age)
         ax.create_dataset("log_U", data=log_u)
-        ax.create_dataset(
-            "log_nH", data=np.linspace(1.0, 4.0, n_nh).astype(np.float32)
-        )
-        ax.create_dataset(
-            "log_CO", data=np.linspace(-1.0, 0.15, n_co).astype(np.float32)
-        )
-        ax.create_dataset(
-            "dNO", data=np.linspace(-0.25, 0.25, n_dno).astype(np.float32)
-        )
+        ax.create_dataset("log_nH", data=np.linspace(1.0, 4.0, n_nh).astype(np.float32))
+        ax.create_dataset("log_CO", data=np.linspace(-1.0, 0.15, n_co).astype(np.float32))
+        ax.create_dataset("dNO", data=np.linspace(-0.25, 0.25, n_dno).astype(np.float32))
         ax.create_dataset("HbFrac", data=np.array([0.0, 1.0], dtype=np.float32))
 
         # Line wavelengths — must include Hβ=4862.68 Å and Hα=6564.61 Å
         line_waves = np.array(
-            [1215.67, 1549.0, 3727.0, 4340.47, 4862.68, 5008.24, 6300.30, 6548.05, 6564.61, 6583.45],
+            [
+                1215.67,
+                1549.0,
+                3727.0,
+                4340.47,
+                4862.68,
+                5008.24,
+                6300.30,
+                6548.05,
+                6564.61,
+                6583.45,
+            ],
             dtype=np.float32,
         )
         f.create_dataset("line_wavelengths_aa", data=line_waves)

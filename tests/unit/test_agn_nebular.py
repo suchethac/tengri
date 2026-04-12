@@ -250,9 +250,9 @@ class TestDispatcher:
         with pytest.raises(ValueError, match="cue_backend must be provided"):
             agn_nlr_emission(backend="cue", l_acc_erg=1e44)
 
-    def test_feltre_not_implemented(self, wavelength):
-        """backend='feltre' should raise NotImplementedError."""
-        with pytest.raises(NotImplementedError, match="Feltre"):
+    def test_feltre_without_backend_raises(self, wavelength):
+        """backend='feltre' without feltre_backend should raise ValueError."""
+        with pytest.raises(ValueError, match="feltre_backend must be provided"):
             agn_nlr_emission(backend="feltre", l_acc_erg=1e44)
 
     def test_invalid_backend_raises(self, wavelength):

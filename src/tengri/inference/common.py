@@ -134,12 +134,16 @@ def build_loss_fn(forward_model, data, noise, prior_config=None, data_type="phot
             predicted = forward_model.predict_photometry(params, mode="_traceable")
         elif data_type == "spectroscopy":
             predicted = forward_model.predict_spectrum(
-                params, forward_model._wave_obs, mode="_traceable",
+                params,
+                forward_model._wave_obs,
+                mode="_traceable",
             )
         elif data_type == "joint":
             pred_phot = forward_model.predict_photometry(params, mode="_traceable")
             pred_spec = forward_model.predict_spectrum(
-                params, forward_model._wave_obs, mode="_traceable",
+                params,
+                forward_model._wave_obs,
+                mode="_traceable",
             )
             predicted = jnp.concatenate([pred_phot, pred_spec])
         else:

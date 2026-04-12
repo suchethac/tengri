@@ -864,7 +864,13 @@ def two_component_dust(
     age_grid : array, shape (n_ages,)
         Stellar population ages (yr).
     tau_v1 : float
-        V-band optical depth of birth cloud.
+        V-band optical depth of birth cloud.  Note: FSPS uses a different
+        mapping convention (``dust1 = tau_bc * 1.0``) whereas tengri maps
+        ``tau_bc=1.0 → tau_v1=1.086`` due to the definition of the CF00
+        birth-cloud normalisation.  This ~8.6% factor causes a ~29% NUV
+        excess relative to FSPS at tau_bc=1.0 because the power_law attenuation
+        curve gives k(2700 Å)≈1.365 (36.5% above V-band).  See CROSSVAL-01
+        in docs/known_bugs.md and test_tengri_vs_fsps_nuv in test_full_sed_crossval.py.
     tau_v2 : float
         V-band optical depth of diffuse ISM.
     law_bc : str

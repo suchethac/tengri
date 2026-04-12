@@ -54,8 +54,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.models.nebular._constants import _C_CGS, _LOG10_ZSUN
-from tengri.models.nebular._shared import _interp_index_weight, compute_qh
+from tengri.models.nebular._constants import _LOG10_ZSUN
+from tengri.models.nebular._shared import _interp_index_weight, compute_qh, place_line_profiles
 
 # ---------------------------------------------------------------------------
 # Ionizing spectrum warnings
@@ -403,6 +403,15 @@ class MappingsPhotoStellarBackend:
     Uses constant logn across all age bins. If your application requires
     density to vary with age, use the direct interpolation API instead.
 
+    This backend has ``has_continuum = False`` (MAPPINGS V provides only line
+    emission, not nebular continuum).  For applications that need continuum,
+    wrap with :class:`~tengri.models.nebular._shared.NebularContinuumFallback`::
+
+        from tengri.models.nebular._shared import NebularContinuumFallback
+
+        backend = MappingsPhotoStellarBackend(...)
+        with_cont = NebularContinuumFallback(backend, fallback_mode="warn")
+
     Example
     -------
     >>> backend = MappingsPhotoStellarBackend("data/flury2024_grids.h5", "sb99", "cpr")
@@ -616,26 +625,9 @@ class MappingsPhotoStellarBackend:
             neb_fesc_lya=neb_fesc_lya,
         )
 
-        neb_sed = jnp.zeros_like(ssp_wave)
-        n_wave = ssp_wave.shape[0]
-
-        if line_sigma_aa > 0:
-            for j in range(len(line_wave)):
-                lw = line_wave[j]
-                ll = line_lum[j]
-                sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (lw * 1e-8) ** 2
-                profile = jnp.exp(-0.5 * ((ssp_wave - lw) / line_sigma_aa) ** 2)
-                profile = profile / (jnp.sqrt(2 * jnp.pi) * sigma_nu)
-                neb_sed = neb_sed + ll * profile
-        else:
-            for j in range(len(line_wave)):
-                idx = jnp.argmin(jnp.abs(ssp_wave - line_wave[j]))
-                idx = jnp.clip(idx, 1, n_wave - 2)
-                dwave = jnp.abs(ssp_wave[idx + 1] - ssp_wave[idx - 1]) / 2.0
-                dnu = _C_CGS / (ssp_wave[idx] * 1e-8) ** 2 * dwave * 1e-8
-                neb_sed = neb_sed.at[idx].add(line_lum[j] / dnu)
-
-        return neb_sed
+        return place_line_profiles(
+            jnp.asarray(line_wave), jnp.asarray(line_lum), ssp_wave, line_sigma_aa
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -652,6 +644,15 @@ class MappingsPhotoAGNBackend:
     Unlike the stellar backend, Q_H is *not* derived from SSP spectra — the
     AGN SED provides the ionizing photons. Call `predict_agn_line_luminosities`
     with an externally computed Q_H (photons/s) from the AGN disc model.
+
+    This backend has ``has_continuum = False``.  For applications that need
+    nebular continuum, wrap with
+    :class:`~tengri.models.nebular._shared.NebularContinuumFallback`::
+
+        from tengri.models.nebular._shared import NebularContinuumFallback
+
+        backend = MappingsPhotoAGNBackend(...)
+        with_cont = NebularContinuumFallback(backend, fallback_mode="warn")
 
     Parameters
     ----------

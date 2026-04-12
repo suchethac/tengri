@@ -14,9 +14,10 @@ hardcoded arrays (solar, n=1 cm⁻³, 8 velocity points, 10 lines) with a
 
 Interpolation strategy
 ----------------------
-- velocity     : ``jnp.interp`` — continuous linear, JIT-compatible
-- B-field      : ``jnp.searchsorted`` nearest-neighbor (log-spaced discrete)
-- log_density  : ``jnp.searchsorted`` nearest-neighbor (log-spaced discrete)
+- velocity, B-field, log_density : ``interp_nd_triweight`` — C²-continuous
+  triweight kernel (Hearin et al. 2023 / DSPS), jointly interpolated across
+  all three continuous axes.  Bin edges are precomputed at grid load time via
+  ``edges_for_grid`` to avoid rebuilding inside JIT traces.
 - abundance, component, version : Python string → integer index (static)
 
 References
@@ -29,13 +30,16 @@ References
 from __future__ import annotations
 
 import warnings
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
 
 # Physical constants
-from tengri.utils.physics_constants import C_CGS as _C_CGS
+from tengri.core.preintegrate import interp_nd_triweight as _interp_nd_triweight
+from tengri.models.nebular._shared import place_line_profiles as _place_line_profiles
+from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 
 # ---------------------------------------------------------------------------
 # Legacy hardcoded fallback — Allen+2008 Table 5 (solar, n=1 cm⁻³)
@@ -153,7 +157,7 @@ def _validate_shock_params(
         raise ValueError(
             f"shock_log_density={shock_log_density:.2f} is outside the grid "
             f"[{log_den_grid[0]:.2f}, {log_den_grid[-1]:.2f}] log10(cm⁻³). "
-            "Use a value within this range (nearest grid point is used)."
+            "Use a value within this range."
         )
 
     b_arr = np.asarray(g["b_axis"])
@@ -161,7 +165,7 @@ def _validate_shock_params(
         raise ValueError(
             f"shock_b_over_sqrt_n={shock_b_over_sqrt_n:.4g} μG is outside the "
             f"grid [{b_arr[0]:.4g}, {b_arr[-1]:.4g}] μG. "
-            "Use a value within this range (nearest grid point is used)."
+            "Use a value within this range."
         )
 
     # Velocity: skip validation when traced under jax.jit (float() raises there).
@@ -225,6 +229,20 @@ def _load_mappings_grids() -> dict | None:
             _MAPPINGS_GRIDS = None
             return None
         g = f["mappings5"]
+
+        def _load_ratios(arr: np.ndarray) -> jnp.ndarray:
+            """Load ratio array, replacing NaN with 0.0.
+
+            The MAPPINGS V grid is sparse: not all (abundance, density, B-field)
+            combinations have MAPPINGS V model outputs.  Positions without models
+            are stored as NaN in the rectangular HDF5 array.  Replacing NaN with
+            0.0 here ensures that triweight interpolation smoothly returns zero
+            emission in unphysical/unmodelled regions rather than propagating NaN.
+            """
+            raw = np.asarray(arr[:], dtype=np.float32)
+            raw = np.where(np.isnan(raw), 0.0, raw)
+            return jnp.array(raw, dtype=jnp.float32)
+
         grids["mappings5"] = {
             "velocities_kms": jnp.array(g["velocities_kms"][:], dtype=jnp.float32),
             "b_axis": jnp.array(g["b_field_uG"][:], dtype=jnp.float32),
@@ -232,12 +250,18 @@ def _load_mappings_grids() -> dict | None:
             "abundance_names": _decode(g["abundance_names"][:]),
             "line_names": _decode(g["line_names"][:]),
             "line_wavelengths_aa": jnp.array(g["line_wavelengths_aa"][:], dtype=jnp.float32),
-            # Shape: (N_abund, N_n, N_v, N_B, N_lines)
-            "shock_ratios": jnp.array(g["shock_ratios"][:], dtype=jnp.float32),
-            "precursor_ratios": jnp.array(g["precursor_ratios"][:], dtype=jnp.float32),
-            "combined_ratios": jnp.array(g["combined_ratios"][:], dtype=jnp.float32),
-            "hbeta_log_lum_erg_s": jnp.array(g["hbeta_log_lum_erg_s"][:], dtype=jnp.float32),
+            # Shape: (N_abund, N_n, N_v, N_B, N_lines) — NaN-filled cells → 0.0
+            "shock_ratios": _load_ratios(g["shock_ratios"]),
+            "precursor_ratios": _load_ratios(g["precursor_ratios"]),
+            "combined_ratios": _load_ratios(g["combined_ratios"]),
+            "hbeta_log_lum_erg_s": _load_ratios(g["hbeta_log_lum_erg_s"]),
         }
+
+    # Precompute bin edges for triweight interpolation (static, avoids rebuilding in JIT)
+    g5 = grids["mappings5"]
+    g5["v_edges"] = _edges_for_grid(g5["velocities_kms"])
+    g5["b_edges"] = _edges_for_grid(g5["b_axis"])
+    g5["n_edges"] = _edges_for_grid(g5["log_density_cm3"])
 
     _MAPPINGS_GRIDS = grids
     return grids
@@ -269,12 +293,13 @@ def shock_line_ratios(
         if out of range.  Continuously interpolated — safe under ``jax.jit``.
     shock_log_density : float
         Log10 pre-shock density in cm⁻³ (e.g. ``0.0`` = 1 cm⁻³).
-        Must be within ``[0, 3]``.  Snapped to the nearest grid point.
-        Raises ``ValueError`` if out of range.
+        Must be within ``[0, 3]``.  Continuously interpolated via triweight
+        kernel — safe under ``jax.jit``.  Raises ``ValueError`` if out of range.
     shock_b_over_sqrt_n : float
         Absolute B-field strength in μG (3MdBs MAPPINGS V convention).
-        Must be within ``[0.0001, 10]`` μG.  Snapped to nearest grid point.
-        Raises ``ValueError`` if out of range.
+        Must be within ``[0.0001, 10]`` μG.  Continuously interpolated via
+        triweight kernel — safe under ``jax.jit``.  Raises ``ValueError`` if
+        out of range.
     shock_abundance : str
         Abundance pattern.  Accepted short names:
         ``"solar"``, ``"2xsolar"`` / ``"twice_solar"``, ``"dopita2005"``,
@@ -331,28 +356,24 @@ def shock_line_ratios(
         ratio_array = g[component_map.get(shock_component, "combined_ratios")]
         # shape: (N_abund, N_n, N_v, N_B, N_lines)
 
-        # --- nearest-neighbor snap for discrete log-spaced axes ---
+        # Clip all three continuous axes to grid bounds before interpolation
         v_grid = g["velocities_kms"]
-        v_clip = jnp.clip(shock_velocity, v_grid[0], v_grid[-1])
-
-        log_den_grid = g["log_density_cm3"]
-        # Use numpy (not jnp) so these remain concrete ints under jax.jit
-        i_n = int(np.argmin(np.abs(np.asarray(log_den_grid) - shock_log_density)))
-
         b_grid = g["b_axis"]
-        i_b = int(np.argmin(np.abs(np.asarray(b_grid) - shock_b_over_sqrt_n)))
+        log_den_grid = g["log_density_cm3"]
+        v_q = jnp.clip(shock_velocity, v_grid[0], v_grid[-1])
+        b_q = jnp.clip(shock_b_over_sqrt_n, b_grid[0], b_grid[-1])
+        n_q = jnp.clip(shock_log_density, log_den_grid[0], log_den_grid[-1])
 
-        # Slice to fixed (abund, density, B) — shape (N_v, N_lines)
-        slice_vlines = ratio_array[i_abund, i_n, :, i_b, :]
+        # Slice out categorical abundance axis → (N_n, N_v, N_B, N_lines)
+        # Transpose to (N_v, N_B, N_n, N_lines) so leading dims match axes order
+        grid_abund = ratio_array[i_abund]  # (N_n, N_v, N_B, N_lines)
+        grid_vbn = jnp.transpose(grid_abund, (1, 2, 0, 3))  # (N_v, N_B, N_n, N_lines)
 
-        # --- continuous velocity interpolation ---
-        # Interpolate each line independently along the velocity axis
-        def _interp_line(col: jnp.ndarray) -> jnp.ndarray:
-            return jnp.interp(v_clip, v_grid, col, left=col[0], right=col[-1])
-
-        ratios_vec = jnp.stack(
-            [_interp_line(slice_vlines[:, j]) for j in range(slice_vlines.shape[1])]
-        )
+        # --- C²-continuous triweight interpolation across all 3 continuous axes ---
+        axes = (v_grid, b_grid, log_den_grid)
+        edges = (g["v_edges"], g["b_edges"], g["n_edges"])
+        ratios_vec = _interp_nd_triweight(grid_vbn, axes, edges, (v_q, b_q, n_q))
+        # ratios_vec: shape (N_lines,)
 
         return {name: ratios_vec[j] for j, name in enumerate(g["line_names"])}
 
@@ -414,8 +435,13 @@ def _shock_line_arrays(
     # Halpha key in PyNeb format
     ha_key = "HA_6563A"
     r_ha = ratios.get(ha_key, jnp.array(3.0))
+    # Guard against zero Hα (e.g. query in unmodelled sparse-grid region): when r_ha=0,
+    # all other ratios are also 0, so dividing by 1.0 still gives zero luminosities.
+    r_ha_safe = jnp.where(r_ha > 0.0, r_ha, jnp.ones_like(r_ha))
 
-    lums = jnp.array([ratios.get(n, jnp.array(0.0)) / r_ha * l_shock_halpha for n in line_names])
+    lums = jnp.array(
+        [ratios.get(n, jnp.array(0.0)) / r_ha_safe * l_shock_halpha for n in line_names]
+    )
     return line_waves, lums
 
 
@@ -467,31 +493,91 @@ def compute_shock_sed(
         shock_component=shock_component,
     )
 
-    n_lines = line_waves.shape[0]
-    n_wave = wavelength.shape[0]
-    sed = jnp.zeros_like(wavelength)
-
-    if line_sigma_aa > 0:
-        for j in range(n_lines):
-            lw = line_waves[j]
-            ll = line_lums[j]
-            # σ_ν = σ_λ[cm] × c / λ[cm]²  (λ→cm: ×1e-8)
-            sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (lw * 1e-8) ** 2
-            profile = jnp.exp(-0.5 * ((wavelength - lw) / line_sigma_aa) ** 2)
-            profile = profile / (jnp.sqrt(2.0 * jnp.pi) * sigma_nu)
-            sed = sed + ll * profile
-    else:
-        for j in range(n_lines):
-            lw = line_waves[j]
-            ll = line_lums[j]
-            idx = jnp.argmin(jnp.abs(wavelength - lw))
-            idx = jnp.clip(idx, 1, n_wave - 2)
-            dwave = jnp.abs(wavelength[idx + 1] - wavelength[idx - 1]) / 2.0
-            dnu = _C_CGS / (wavelength[idx] * 1e-8) ** 2 * dwave * 1e-8
-            sed = sed.at[idx].add(ll / dnu)
-
-    return sed
+    return _place_line_profiles(line_waves, line_lums, wavelength, line_sigma_aa)
 
 
 # Backward compatibility alias
 shock_emission_sed = compute_shock_sed
+
+
+# ---------------------------------------------------------------------------
+# Protocol-conformant backend class
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ShockBackend:
+    """MAPPINGS V shock emission backend satisfying the NebularBackend Protocol.
+
+    Wraps :func:`compute_shock_sed` as an object-oriented backend so that shock
+    emission can be stored and dispatched using the same interface as other
+    nebular backends (CueBackend, CloudyGridBackend, etc.).
+
+    Static (non-traced) configuration is stored as dataclass fields.
+    JAX-traced continuous parameters (velocity, density, B-field, Hα luminosity)
+    are passed as arguments to :meth:`predict_nebular_sed`.
+
+    Parameters
+    ----------
+    shock_abundance : str
+        Abundance set name: ``"solar"``, ``"2xsolar"``, ``"lmc"``, ``"smc"``, etc.
+    shock_component : str
+        ``"shock"``, ``"precursor"``, or ``"combined"``.
+    has_continuum : bool
+        Always ``False`` — MAPPINGS V provides line emission only.
+    has_free_params : bool
+        Always ``True`` — velocity, density, B-field are differentiable parameters.
+    name : str
+        Backend identifier string.
+    """
+
+    shock_abundance: str = "solar"
+    shock_component: str = "combined"
+    has_continuum: bool = field(default=False, init=False)
+    has_free_params: bool = field(default=True, init=False)
+    name: str = field(default="shock", init=False)
+
+    def predict_nebular_sed(
+        self,
+        wavelength: jnp.ndarray,
+        shock_velocity: float,
+        l_shock_halpha: float,
+        shock_log_density: float = 0.0,
+        shock_b_over_sqrt_n: float = 1.0,
+        line_sigma_aa: float = 0.0,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        """Compute shock emission line SED on a wavelength grid.
+
+        Parameters
+        ----------
+        wavelength : array, shape (n_wave,)
+            Wavelength grid in Å (rest-frame, increasing).
+        shock_velocity : float
+            Shock velocity in km/s.
+        l_shock_halpha : float
+            Total shock Hα luminosity in erg/s (normalization anchor).
+        shock_log_density : float
+            Log10 pre-shock density in cm⁻³.
+        shock_b_over_sqrt_n : float
+            Absolute B-field in μG.
+        line_sigma_aa : float
+            Gaussian line width in Å.  ``0`` → delta function into nearest pixel.
+        **_kwargs
+            Extra keyword arguments silently ignored for protocol compatibility.
+
+        Returns
+        -------
+        array, shape (n_wave,)
+            Shock emission SED in erg/s/Hz.
+        """
+        return compute_shock_sed(
+            wavelength,
+            shock_velocity,
+            l_shock_halpha,
+            shock_log_density=shock_log_density,
+            shock_b_over_sqrt_n=shock_b_over_sqrt_n,
+            shock_abundance=self.shock_abundance,
+            shock_component=self.shock_component,
+            line_sigma_aa=line_sigma_aa,
+        )

@@ -8,10 +8,7 @@ Tests cover:
 - JIT compatibility
 - Differentiability
 - Registry integration
-- Fallback warnings when templates not found
 """
-
-import warnings
 
 import jax
 import jax.numpy as jnp
@@ -21,9 +18,6 @@ from numpy.testing import assert_allclose
 
 from tengri.models.dust.emission import (
     DUST_EMISSION_MODELS,
-    _astrodust_analytic_fallback,
-    _bosa_analytic_fallback,
-    _themis_analytic_fallback,
     create_astrodust_from_grid,
     create_bosa_from_grid,
     create_themis_from_grid,
@@ -400,7 +394,7 @@ class TestTHEMIS:
 
 
 class TestRegistry:
-    """Tests for model registration and lazy loading."""
+    """Tests for model registration."""
 
     def test_astrodust_registered(self):
         """Astrodust is registered in DUST_EMISSION_MODELS."""
@@ -413,47 +407,3 @@ class TestRegistry:
     def test_themis_registered(self):
         """THEMIS is registered in DUST_EMISSION_MODELS."""
         assert "themis" in DUST_EMISSION_MODELS
-
-    def test_astrodust_fallback_warns(self, wavelength):
-        """Astrodust fallback emits a warning about not being for science."""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            _astrodust_analytic_fallback(wavelength, 1e10)
-            # The fallback itself doesn't warn, but calling via registry does.
-            # Just check the fallback runs without error.
-
-    def test_bosa_fallback_warns(self, wavelength):
-        """BOSA fallback emits a warning about not being for science."""
-        with warnings.catch_warnings(record=True):
-            warnings.simplefilter("always")
-            result = _bosa_analytic_fallback(wavelength, 1e10)
-            assert result.shape == wavelength.shape
-
-    def test_themis_fallback_warns(self, wavelength):
-        """THEMIS fallback runs without error."""
-        with warnings.catch_warnings(record=True):
-            warnings.simplefilter("always")
-            result = _themis_analytic_fallback(wavelength, 1e10)
-            assert result.shape == wavelength.shape
-
-    def test_fallback_output_nonnegative(self, wavelength):
-        """All fallback models produce non-negative output."""
-        for fallback in (
-            _astrodust_analytic_fallback,
-            _bosa_analytic_fallback,
-            _themis_analytic_fallback,
-        ):
-            result = fallback(wavelength, 1e10)
-            assert jnp.all(result >= 0.0), f"{fallback.__name__} produced negative values"
-
-    def test_fallback_scales_with_luminosity(self, wavelength):
-        """All fallbacks scale with L_absorbed."""
-        for fallback in (
-            _astrodust_analytic_fallback,
-            _bosa_analytic_fallback,
-            _themis_analytic_fallback,
-        ):
-            r1 = fallback(wavelength, 1e10)
-            r2 = fallback(wavelength, 2e10)
-            ratio = jnp.sum(r2) / jnp.sum(r1)
-            assert_allclose(float(ratio), 2.0, rtol=0.01, err_msg=fallback.__name__)

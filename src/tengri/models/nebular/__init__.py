@@ -64,13 +64,18 @@ from pathlib import Path
 
 from tengri.models.nebular._protocol import NebularBackend, NebularContinuumUnavailableError
 from tengri.models.nebular._shared import NebularContinuumFallback
+from tengri.models.nebular.agn_nebular import FeltreNLRBackend
 from tengri.models.nebular.baked_in import BakedInBackend, BakedInNebularWarning
 from tengri.models.nebular.cloudy_cb19 import (
     CB19Backend,
     CB19IonizingSpectrumWarning,
     CB19NoContinuumWarning,
 )
-from tengri.models.nebular.cloudy_grid import CloudyGridBackend
+from tengri.models.nebular.cloudy_grid import (
+    CloudyGridBackend,
+    CloudyGridIonizingSpectrumWarning,
+    CloudyGridWNESSPWarning,
+)
 from tengri.models.nebular.cue import CueBackend
 from tengri.models.nebular.dig import mix_dig_emission
 from tengri.models.nebular.mappings_photo import (
@@ -79,7 +84,7 @@ from tengri.models.nebular.mappings_photo import (
     MappingsPhotoAGNBackend,
     MappingsPhotoStellarBackend,
 )
-from tengri.models.nebular.shock import shock_emission_sed, shock_line_ratios
+from tengri.models.nebular.shock import ShockBackend, shock_emission_sed, shock_line_ratios
 
 _DEFAULT_CUE_WEIGHTS_PATH = Path(__file__).resolve().parents[4] / "data" / "cue_weights.npz"
 
@@ -91,7 +96,10 @@ __all__ = [
     "CB19IonizingSpectrumWarning",
     "CB19NoContinuumWarning",
     "CloudyGridBackend",
+    "CloudyGridIonizingSpectrumWarning",
+    "CloudyGridWNESSPWarning",
     "CueBackend",
+    "FeltreNLRBackend",
     "IonizingSpectrumInconsistencyError",
     "IonizingSpectrumInconsistencyWarning",
     "MappingsPhotoAGNBackend",
@@ -99,6 +107,7 @@ __all__ = [
     "NebularBackend",
     "NebularContinuumFallback",
     "NebularContinuumUnavailableError",
+    "ShockBackend",
     "mix_dig_emission",
     "shock_emission_sed",
     "shock_line_ratios",

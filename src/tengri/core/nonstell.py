@@ -14,6 +14,7 @@ Both :func:`build_fused_rest_sed` (compositional kernel) and future refactors of
 the hybrid kernel can call :func:`build_nonstell_fn` instead of duplicating the
 ~165-line per-component dispatch blocks.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

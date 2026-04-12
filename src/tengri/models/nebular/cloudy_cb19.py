@@ -67,8 +67,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.models.nebular._constants import _C_CGS, _LOG_OH_OFFSET, _LSUN_ERG
-from tengri.models.nebular._shared import compute_qh
+from tengri.models.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
+from tengri.models.nebular._shared import compute_qh, place_line_profiles
 
 # ---------------------------------------------------------------------------
 # Physical and grid constants
@@ -306,9 +306,15 @@ def _interp_6d(
     """
     coords = [_frac_idx(v, g) for v, g in zip(vals, grids)]
 
+    # Cast to float64 before interpolation so gradients stay float64 throughout.
+    # Without this, `log_ratios_i.astype(float64)` in lum_per_qh has a VJP that casts
+    # the cotangent back to float32.  At the scale of _LSUN_ERG (~3.8e33) the upstream
+    # gradient reaches ~1e44, overflowing float32 max (~3.4e38) → +inf → NaN in backward.
+    data_f64 = data.astype(jnp.float64)
+
     # vmap over the lines axis (last): each call to map_coordinates handles one line
     # over the 6D continuous axes.
-    data_lines_first = jnp.moveaxis(data, -1, 0)  # (N_lines, N_OH, N_age, N_U, N_nH, N_CO, N_dNO)
+    data_lines_first = jnp.moveaxis(data_f64, -1, 0)  # (N_lines, N_OH, ...)
 
     def _interp_one(d6: jnp.ndarray) -> jnp.ndarray:
         return jax.scipy.ndimage.map_coordinates(d6, coords, order=1, mode="nearest")
@@ -355,9 +361,21 @@ class CB19Backend:
     the ionizing photon rate from the actual DSPS SSP spectrum.
 
     **Note on nebular continuum**: CB_19 provides only line ratios, not a nebular
-    continuum. ``predict_nebular_continuum`` returns zeros. If the nebular continuum
-    is important for your application, combine this backend with ``CloudyGridBackend``
-    (use CB_19 for lines, FSPS/Byler grid for the continuum).
+    continuum (``has_continuum = False``).  For applications that need nebular
+    continuum, wrap this backend with
+    :class:`~tengri.models.nebular._shared.NebularContinuumFallback`:
+
+    - For analytic free-free + two-photon continuum (fast, no extra data)::
+
+        from tengri.models.nebular._shared import NebularContinuumFallback
+
+        cb19 = CB19Backend(ssp_data=ssp)
+        backend = NebularContinuumFallback(cb19, fallback_mode="warn")
+
+    - For full CLOUDY continuum (highest fidelity)::
+
+        cloudy = CloudyGridBackend(grid_path, ssp_data=ssp)
+        backend = NebularContinuumFallback(cb19, fallback=cloudy)
 
     Parameters
     ----------
@@ -433,8 +451,10 @@ class CB19Backend:
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
 
         self._qh_table = _compute_qh_grid(ssp_wave, ssp_flux)
-        self._qh_log_met = ssp_data.ssp_lgmet  # log10(Z) absolute
-        self._qh_log_age = ssp_data.ssp_lg_age_gyr + 9.0  # log10(age/yr)
+        # Store as JAX arrays so they can be indexed with traced integers
+        # inside jax.vmap (numpy arrays fail when indexed with traced values).
+        self._qh_log_met = jnp.array(ssp_data.ssp_lgmet)  # log10(Z) absolute
+        self._qh_log_age = jnp.array(ssp_data.ssp_lg_age_gyr + 9.0)  # log10(age/yr)
 
         ssp_log_ages = np.array(self._qh_log_age)
         young_mask = ssp_log_ages <= self._max_neb_log_age
@@ -551,7 +571,10 @@ class CB19Backend:
             )
             # Convert: ratio → L_line/Q_H → L_line
             # log(L/Q_H) = log_ratio + log(_HB_PER_QH_LSUN)
-            lum_per_qh = 10.0 ** (log_ratios_i + self._log_hb_per_qh)
+            # Cast to float64 before exponentiation: _log_hb_per_qh ≈ -45.9 and
+            # log_ratios_i is stored as float32 in the grid, so the sum ≈ -45.9
+            # underflows to 0.0 in float32 (subnormal min ≈ 1.4e-45 > 10^-45.9).
+            lum_per_qh = 10.0 ** (log_ratios_i.astype(jnp.float64) + self._log_hb_per_qh)
             return weight_i * qh_i * lum_per_qh * (1.0 - neb_fesc)
 
         # vmap over young age bins, then sum
@@ -650,24 +673,9 @@ class CB19Backend:
             neb_dno=neb_dno,
         )
 
-        neb_sed = jnp.zeros_like(ssp_wave)
-        n_wave = ssp_wave.shape[0]
-
-        if line_sigma_aa > 0:
-            for j in range(len(line_wave)):
-                lw = line_wave[j]
-                ll = line_lum[j]
-                sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (lw * 1e-8) ** 2  # Hz
-                profile = jnp.exp(-0.5 * ((ssp_wave - lw) / line_sigma_aa) ** 2)
-                profile = profile / (jnp.sqrt(2 * jnp.pi) * sigma_nu)
-                neb_sed = neb_sed + ll * profile  # Lsun/Hz
-        else:
-            for j in range(len(line_wave)):
-                idx = jnp.argmin(jnp.abs(ssp_wave - line_wave[j]))
-                idx = jnp.clip(idx, 1, n_wave - 2)
-                dwave = jnp.abs(ssp_wave[idx + 1] - ssp_wave[idx - 1]) / 2.0
-                dnu = _C_CGS / (ssp_wave[idx] * 1e-8) ** 2 * dwave * 1e-8
-                neb_sed = neb_sed.at[idx].add(line_lum[j] / dnu)
+        neb_sed = place_line_profiles(
+            jnp.asarray(line_wave), jnp.asarray(line_lum), ssp_wave, line_sigma_aa
+        )
 
         return neb_sed * _LSUN_ERG  # convert Lsun/Hz → erg/s/Hz, matching CloudyGridBackend
 

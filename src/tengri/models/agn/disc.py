@@ -562,6 +562,16 @@ def _warm_comptonization_lnu(
     return b_nu * enhancement
 
 
+# Fixed internal frequency grid for corona normalization.
+# Matches RELAGN (scotthgn/RELAGN) default: [1e-4, 1e4] keV → [2.418e13, 2.418e21] Hz.
+# Using a fixed grid makes the normalization integral grid-independent,
+# so the corona's optical flux doesn't change with the caller's wavelength grid.
+# The bare power-law nu^(1-Gamma) diverges at low frequencies for Gamma > 1;
+# a fixed lower bound removes this ambiguity.  2000 log-spaced points match
+# RELAGN's resolution.
+_CORONA_NU_GRID = jnp.geomspace(2.418e13, 2.418e21, 2000)
+
+
 def _hot_corona_lnu(
     nu: jnp.ndarray,
     l_hot_erg: float,
@@ -575,6 +585,12 @@ def _hot_corona_lnu(
         L_nu ~ nu^(1 - Gamma_hard) * exp(-h*nu / kT_hot)
 
     Normalized so that the frequency-integrated luminosity = l_hot_erg.
+
+    The normalization integral is computed on a fixed internal frequency
+    grid matching RELAGN's default [1e-4, 1e4] keV.  This makes the
+    result independent of the caller's wavelength grid, fixing a
+    long-standing bug where the corona's optical contribution varied by
+    factors of 2-4x depending on grid extent.
 
     Parameters
     ----------
@@ -591,16 +607,24 @@ def _hot_corona_lnu(
     -------
     array
         L_nu [erg s^-1 Hz^-1].
+
+    References
+    ----------
+    RELAGN (scotthgn/RELAGN) ``do_nonrelHotCompSpec``: normalizes on a fixed
+    [1e-4, 1e4] keV grid.
     """
-    # Power law with exponential cutoff
-    x = _H_PLANCK * nu / jnp.maximum(kt_hot_erg, 1e-30)
+    kt_safe = jnp.maximum(kt_hot_erg, 1e-30)
+
+    # Evaluate shape on the caller's frequency grid (for output)
+    x = _H_PLANCK * nu / kt_safe
     x_clip = jnp.clip(x, 0.0, 500.0)
     shape = nu ** (1.0 - gamma_hard) * jnp.exp(-x_clip)
 
-    # Normalize: integrate shape over frequency
-    # Note: trapezoid() works with unsorted x values; we avoid explicit
-    # sorting/indexing to prevent NaN gradients in JAX autodiff.
-    integral = jnp.trapezoid(shape, nu)
+    # Normalize on the fixed internal grid (grid-independent)
+    x_norm = _H_PLANCK * _CORONA_NU_GRID / kt_safe
+    x_norm_clip = jnp.clip(x_norm, 0.0, 500.0)
+    shape_norm = _CORONA_NU_GRID ** (1.0 - gamma_hard) * jnp.exp(-x_norm_clip)
+    integral = jnp.trapezoid(shape_norm, _CORONA_NU_GRID)
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
     return l_hot_erg * shape / integral_safe
@@ -873,15 +897,13 @@ def kubota_done_disc(
     dr_warm = r_warm_grid * jnp.log(10.0) * d_log_r_warm
 
     if _NTHCOMP_AVAILABLE:
-        # Full nthcomp path (K&D 2018 Section 2.2): solve the Kompaneets equation
-        # per annulus via trilinear table interpolation.  Each annulus emits the
-        # same bolometric power as the NT blackbody (energy conservation), but the
-        # spectral shape is the actual Comptonized spectrum rather than a modified
-        # blackbody.
+        # Full nthcomp path (K&D 2018 Section 2.2): each annulus emits the same
+        # bolometric power as the NT blackbody (energy conservation) but with the
+        # Comptonized spectral shape from the trilinear nthcomp table.
+        # Gradients are safe: _nthcomp_lnu_interp has a finite-difference custom VJP
+        # registered in _nthcomp.py that avoids NaN from jnp.interp in composition
+        # with large scalars (see _nthcomp.py:166-271).
         # Reference: agnsed.py _do_warm_annuli (scotthgn/pyAGNSED)
-        # Note: trapezoid() works with unsorted x values; we avoid explicit
-        # sorting/indexing to prevent NaN gradients in JAX autodiff (gather ops
-        # on float32 data from interpolation can produce NaN during backprop).
         def _warm_ring(r_cm, t_ring, dr_ring):
             b_nu_plain = _planck_lnu(nu, t_ring)
             p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
@@ -889,9 +911,7 @@ def kubota_done_disc(
             l_total = p_plain * area * jnp.maximum(agn_cos_inc, 0.01)
             kTbb_keV = _K_BOLTZ_KEV * t_ring
             shape = _nthcomp_lnu_interp(nu, agn_gamma_warm, agn_kt_warm, kTbb_keV)
-            p_shape = jnp.abs(jnp.trapezoid(shape, nu))
-            shape_norm = shape / jnp.maximum(p_shape, 1e-100)
-            return shape_norm * l_total
+            return shape * l_total
     else:
         # Simplified fallback: modified blackbody proxy (QSOSED/Synthesizer style).
         # Accurate for optical/UV photometric fitting (Paper I).
@@ -931,11 +951,37 @@ def kubota_done_disc(
     # ===============================================================
     l_nu_total = l_nu_outer + l_nu_warm + l_nu_hot
 
-    # Normalize all 3 zones to L_bol * agn_frac
+    # Normalize all 3 zones to L_bol * agn_frac.
+    #
+    # The bolometric luminosity is computed analytically from the radial
+    # integration, not from the spectral integral on the caller's grid.
+    # This makes the result grid-independent:
+    #
+    # - Outer disc:  L_outer = Σ σ T^4 × dA × cos(i)
+    # - Warm zone:   L_warm  = Σ σ T^4 × dA × cos(i)  (nthcomp conserves energy)
+    # - Hot corona:  L_hot   = f_hard × L_Edd (capped at 0.5 L_bol)
+    #
+    # This matches RELAGN's approach where Lhot = Ldiss + Lseed is computed
+    # from the radial integration, not from int[L_nu dnu].
+    #
+    # Reference: RELAGN do_nonrelHotCompSpec normalises Lhot analytically;
+    # the spectral trapezoid integral was grid-dependent (varying by factors
+    # of 2-4x for the corona power-law contribution).
+    l_bol_outer = jnp.sum(
+        _SIGMA_SB * t_outer**4 * 2.0 * jnp.pi * r_outer * dr_outer * jnp.maximum(agn_cos_inc, 0.01)
+    )
+    l_bol_warm = jnp.sum(
+        _SIGMA_SB
+        * t_warm**4
+        * 2.0
+        * jnp.pi
+        * r_warm_grid
+        * dr_warm
+        * jnp.maximum(agn_cos_inc, 0.01)
+    )
+    l_bol_unnorm = l_bol_outer + l_bol_warm + l_hot_erg
     l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_frac
-    l_nu_integral = jnp.trapezoid(l_nu_total, nu)
-    l_nu_integral_safe = jnp.maximum(jnp.abs(l_nu_integral), 1e-100)
-    scale = l_bol_requested / l_nu_integral_safe
+    scale = l_bol_requested / jnp.maximum(l_bol_unnorm, 1e-100)
 
     return l_nu_total * scale
 

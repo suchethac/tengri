@@ -30,14 +30,14 @@
 | ID | Description | Status |
 |----|-------------|--------|
 | CROSSVAL-01 | `stellar_dusty_sfg` NUV +29% vs FSPS; no regression test | OPEN |
-| CROSSVAL-02 | tengri has no declining-tau SFH; EXPSFH crossval not possible | OPEN (design gap) |
+| CROSSVAL-02 | tengri has no declining-tau SFH; EXPSFH crossval not possible | FIXED (2026-04-10) |
 
 ### Incomplete implementations audit (2026-04-04): 5 identified
 
 | ID | Description | Status |
 |----|-------------|--------|
 | IMP-01 | AGN torus toy models (MBB, not RT) | FIXED 2026-04-04 — `DeprecationWarning` added to both functions |
-| IMP-02 | Feltre+2016 NLR backend | NOT FIXED — `NotImplementedError` stub |
+| IMP-02 | Feltre+2016 NLR backend | FIXED 2026-04-11 — `FeltreNLRBackend` class implemented; grid data acquisition documented |
 | IMP-03 | `eline_mode="fitted"` | FIXED 2026-04-05 — line amplitudes as explicit free params, full VI/MCMC path |
 | IMP-04 | Dust emission analytic fallbacks — dead code | PARTIALLY FIXED — `fallback_fn` param removed from `_make_lazy_loader`; fallback functions retained (still used in notebooks/crossval) |
 | IMP-05 | ADAF bremsstrahlung stale comment | FIXED 2026-04-04 — stale comment deleted |
@@ -201,14 +201,13 @@ These are not numerical bugs but missing or placeholder implementations that pro
 
 ---
 
-### IMP-02: Feltre+2016 NLR backend — `NotImplementedError` stub (NOT FIXED)
+### IMP-02: Feltre+2016 NLR backend — `NotImplementedError` stub (FIXED 2026-04-11)
 
-**File:** `src/tengri/models/nebular/agn_nebular.py:365`
-**Status:** `agn_nlr_emission(backend="feltre")` raises `NotImplementedError("Feltre+2016 grid backend not yet implemented. Use 'cue'.")`. The module docstring calls it a placeholder. No grid data, no interpolation logic, nothing.
-**Impact:** Any model configured with `agn_nlr_backend="feltre"` will crash at inference time.
-**Fix:** Implement Feltre et al. (2016) photoionization grid interpolation, analogous to the existing CUE and CLOUDY backends. Grid data must be obtained from the original authors or VizieR.
+**File:** `src/tengri/models/nebular/agn_nebular.py`
+**Fix:** `FeltreNLRBackend` class fully implemented. Grid axes: α_pl (4 discrete, nearest-neighbor), log U_S (4 continuous), log n_H (3 continuous), Z (16 continuous), ξ_d (3 discrete, nearest-neighbor). Continuous axes use `interp_nd_triweight` for C²-continuous, VI/MAP-safe gradients. `agn_nlr_emission(backend="feltre")` dispatcher updated to route to new class.
+**Grid data:** VizieR catalog J/MNRAS/456/3354 was not deposited. Acquisition path documented in `scripts/download_feltre_grid.py`. When `data/feltre_grid.h5` is absent, `FeltreNLRBackend.__init__` raises `FileNotFoundError` with instructions rather than crashing at inference time.
+**Tests:** `tests/unit/test_feltre_nlr.py` — 13 tests: 6 data-independent (import, FileNotFoundError, nearest-idx, dispatcher routing) always pass; 7 smoke/physics tests skip when `data/feltre_grid.h5` absent.
 **Reference:** Feltre, Charlot & Gutkin (2016), MNRAS 456, 3354.
-**Regression test required:** `test_feltre_nlr_returns_finite_sed` — basic smoke test that `agn_nlr_emission(backend="feltre", ...)` returns a finite, positive L_nu array.
 
 ---
 
@@ -326,31 +325,15 @@ wavelength-resolved attenuation curves from both codes.
 
 ---
 
-### CROSSVAL-02: tengri has no declining-tau SFH — EXPSFH crossval not possible (OPEN)
+### CROSSVAL-02: tengri has no declining-tau SFH — EXPSFH crossval not possible (FIXED 2026-04-10)
 
-**Status:** Design gap, not a bug. EXPSFH comparison skipped in `analysis/crossval_external_seds.py`.
+**Status:** Fixed. `declining_exponential_sfh` registered as `sfh_type = "tau"` in `src/tengri/models/sfh/registry.py:357-386`.
 
 **Context:** FSPS and bagpipes natively support the "tau model" (or "delayed tau"): `SFR(T_cosmic) ∝ exp(-T_cosmic/τ)`, where `T_cosmic` is cosmic time measured from galaxy formation. This is a **declining** SFH in cosmic time — most stars form early and the rate falls exponentially.
 
-In DSPS's lookback-time convention used by tengri, a declining tau model in cosmic time corresponds to an **increasing** SFR with lookback time (SFR is highest at large t_lb = galaxy formation epoch). Tengri's `exp` SFH (`SFR ∝ exp(-t_lb/τ)`) represents the **opposite** — a SFH that is highest at the present and decreases going back in time (a rising SFH in cosmic time, appropriate for recently-starburst galaxies). Tengri's `dexp` SFH peaks at t_lb = start + τ, representing a galaxy that peaked in the recent past, also not equivalent to a declining tau model from long ago.
+In DSPS's lookback-time convention used by tengri, a declining tau model in cosmic time corresponds to an **increasing** SFR with lookback time (SFR is highest at large t_lb = galaxy formation epoch). `declining_exponential_sfh` implements `SFR(t_lb) = peak * exp(-(age - t_lb)/tau)` which is highest at t_lb=age (galaxy formation) and declines to the present — matching the FSPS/bagpipes convention exactly.
 
-There is no SFH type in tengri's current registry that maps cleanly to the FSPS/bagpipes declining tau model for arbitrary age and τ combinations.
-
-**Impact:** Cannot directly cross-validate the EXPSFH spectral shapes between tengri and FSPS/bagpipes. This means:
-- Old, passively-evolving galaxies (typically fitted with declining tau) cannot be forward-modelled with tengri's current SFH types — only `const`, `dpl`, or `dexp` can approximate them (poorly for large age/τ ratios).
-- Paper I SFH comparison vs FSPS is limited to const and DPL cases.
-
-**Fix required (before Paper II real-data fitting):**
-Add a `declining_exp_sfh` function to `models/sfh/mean_sfh.py`:
-```python
-def declining_exp_sfh(t_lookback, log_peak_sfr, tau, age):
-    """Declining tau model: SFR = peak * exp(-(age - t_lb)/tau) for 0 <= t_lb <= age."""
-    peak_sfr = 10.0**log_peak_sfr
-    dt = age - t_lookback  # cosmic time elapsed since galaxy formation
-    sfr = peak_sfr * jnp.exp(-dt / tau)
-    return jnp.where((t_lookback >= 0) & (t_lookback <= age), sfr, 0.0)
-```
-Register as `sfh_type = "tau"` with params `sfh_tau_log_peak_sfr`, `sfh_tau_gyr`, `sfh_tau_age_gyr`.
+**Verification:** `src/tengri/models/sfh/registry.py:357-386` registers `"tau"` with params `sfh_tau_log_peak_sfr`, `sfh_tau_tau_gyr`, `sfh_tau_age_gyr`.
 
 ---
 

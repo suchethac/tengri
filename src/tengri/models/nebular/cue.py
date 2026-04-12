@@ -37,6 +37,7 @@ Notes
 All functions are JIT-compatible and differentiable through JAX.
 """
 
+import warnings
 from typing import ClassVar, NamedTuple
 
 import jax
@@ -560,6 +561,35 @@ def predict_continuum(
 
 
 # ---------------------------------------------------------------------------
+# Ionizing-spectrum warnings
+# ---------------------------------------------------------------------------
+
+
+class CueWNESSPWarning(UserWarning):
+    """Warning: the SSP passed to CueBackend may have baked-in nebular emission.
+
+    SSP grids labelled 'wNE' (with Nebular Emission) pre-absorb the ionizing
+    photons internally, so Q_H computed from the SSP spectrum is effectively
+    zero.  Cue's ionizing spectrum shape fit will be unreliable and nebular
+    luminosities will be severely under-predicted.
+
+    Use a pure-continuum SSP (no baked-in nebular emission) instead.
+    See https://halos.as.arizona.edu/suchethacooray/ssp-spectra/ for pre-built
+    wC (without Continuum) templates.
+    """
+
+
+# log10(Q_H) threshold below which an SSP is suspected to be wNE.
+# Normal bare O/B stars at < 10 Myr give log10(Q_H) ~ 47–50 per Msun.
+# wNE SSPs: ionizing photons pre-absorbed → Q_H ≈ 0 → log10 stored as –99.
+# Threshold at 44 gives > 3 dex headroom below the physical floor.
+_WNE_LOGQH_THRESHOLD: float = 44.0
+
+# Age cutoff (log10 yr) for young SSP bins used in the wNE check.
+_YOUNG_LOG_AGE_MAX: float = 7.0  # 10 Myr
+
+
+# ---------------------------------------------------------------------------
 # Backend class (matches CloudyGridBackend interface)
 # ---------------------------------------------------------------------------
 
@@ -626,6 +656,29 @@ class CueBackend:
         self._logqion_table = jnp.array(result["logqion_table"])
         self._ssp_lgmet = jnp.array(ssp_data.ssp_lgmet)
         self._ssp_log_age_yr = jnp.array(ssp_data.ssp_lg_age_gyr) + 9.0
+
+        # wNE SSP detection: young stellar populations (< 10 Myr) in a bare SSP
+        # produce log10(Q_H) ~ 47–50.  If the maximum across all metallicities for
+        # young bins is below the threshold, the SSP likely has baked-in nebular
+        # emission (wNE), making Cue's ionizing-spectrum fit unreliable.
+        log_age_yr_np = np.array(self._ssp_log_age_yr)
+        young_mask = log_age_yr_np <= _YOUNG_LOG_AGE_MAX
+        if young_mask.any():
+            logqion_np = np.array(self._logqion_table)  # (n_met, n_age)
+            max_logqion_young = float(logqion_np[:, young_mask].max())
+            if max_logqion_young < _WNE_LOGQH_THRESHOLD:
+                warnings.warn(
+                    "CueBackend: the SSP grid passed via ssp_data appears to contain "
+                    "baked-in nebular emission ('wNE' SSPs). The maximum log10(Q_H) "
+                    f"for SSP bins younger than 10 Myr is {max_logqion_young:.1f}, "
+                    f"well below the expected ~47–50 for bare stellar populations. "
+                    "Cue's ionizing-spectrum-shape fit will be unreliable and nebular "
+                    "luminosities will be severely under-predicted. "
+                    "Use a pure-continuum SSP (no baked-in nebular emission). "
+                    "Suppress with: CueBackend(ssp_data=None) and provide Q_H externally.",
+                    CueWNESSPWarning,
+                    stacklevel=3,
+                )
 
     def get_ionizing_params_at(
         self,
@@ -849,16 +902,19 @@ class CueBackend:
         # Vectorize over age axis: get (ionspec_7, logqion) for each age
         def _get_params_at_age(log_age_yr):
             return interpolate_ionizing_params(
-                self._ionspec_table, self._logqion_table,
-                self._ssp_lgmet, self._ssp_log_age_yr,
-                log_z, log_age_yr,
+                self._ionspec_table,
+                self._logqion_table,
+                self._ssp_lgmet,
+                self._ssp_log_age_yr,
+                log_z,
+                log_age_yr,
             )
 
         # vmap over age bins → ionspec_all (n_age, 7), logqion_all (n_age,)
         ionspec_all, logqion_all = jax.vmap(_get_params_at_age)(ssp_log_ages_yr)
 
         # Q_H per bin, masked to young bins with positive weights
-        qh_per_bin = 10.0 ** logqion_all  # (n_age,)
+        qh_per_bin = 10.0**logqion_all  # (n_age,)
         weighted_qh = ssp_weights * qh_per_bin  # (n_age,)
         # Zero out old bins and non-positive weights
         weighted_qh = jnp.where(young_mask & (ssp_weights > 0), weighted_qh, 0.0)
@@ -1115,28 +1171,22 @@ class CueBackend:
         # Interpolate continuum onto SSP grid
         neb_sed = jnp.interp(ssp_wave, cont_wav, cont_lum, left=0.0, right=0.0)
 
-        # Add emission lines
+        # Add emission lines (vectorised — no Python for-loop in JIT trace)
         if line_sigma_aa > 0:
-            # Gaussian profiles: spread L_line (erg/s) into L_nu (erg/s/Hz).
-            # profile / (sqrt(2π) * sigma_nu) is normalised so ∫profile dnu = 1 (units: 1/Hz).
-            for j in range(len(line_wav)):
-                lw = line_wav[j]
-                ll = line_lum[j]
-                sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (lw * 1e-8) ** 2
-                profile = jnp.exp(-0.5 * ((ssp_wave - lw) / line_sigma_aa) ** 2)
-                profile = profile / (jnp.sqrt(2.0 * jnp.pi) * sigma_nu)
-                neb_sed = neb_sed + ll * profile  # erg/s * 1/Hz = erg/s/Hz
+            # Gaussian profiles: broadcast (n_wave, 1) × (n_lines,)
+            sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (line_wav * 1e-8) ** 2
+            dw = ssp_wave[:, None] - line_wav[None, :]
+            profiles = jnp.exp(-0.5 * (dw / line_sigma_aa) ** 2)
+            profiles = profiles / (jnp.sqrt(2.0 * jnp.pi) * sigma_nu[None, :])
+            neb_sed = neb_sed + jnp.sum(line_lum[None, :] * profiles, axis=1)
         else:
-            # Delta function: add to nearest pixel
+            # Delta function: vectorised nearest-pixel scatter-add
             n_wave = ssp_wave.shape[0]
-            for j in range(len(line_wav)):
-                idx = jnp.argmin(jnp.abs(ssp_wave - line_wav[j]))
-                # Clamp to [1, n_wave-2] so both idx-1 and idx+1 are valid
-                idx = jnp.clip(idx, 1, n_wave - 2)
-                dwave = jnp.abs(ssp_wave[idx + 1] - ssp_wave[idx - 1]) / 2.0
-                dnu = _C_CGS / (ssp_wave[idx] * 1e-8) ** 2 * dwave * 1e-8
-                line_flux_density = line_lum[j] / dnu
-                neb_sed = neb_sed.at[idx].add(line_flux_density)
+            indices = jnp.argmin(jnp.abs(ssp_wave[:, None] - line_wav[None, :]), axis=0)
+            indices = jnp.clip(indices, 1, n_wave - 2)
+            dwave = jnp.abs(ssp_wave[indices + 1] - ssp_wave[indices - 1]) / 2.0
+            dnu = _C_CGS / (ssp_wave[indices] * 1e-8) ** 2 * dwave * 1e-8
+            neb_sed = neb_sed.at[indices].add(line_lum / dnu)
 
         # Convert from internal Lsun/Hz to erg/s/Hz
         return neb_sed * _LSUN_ERG
