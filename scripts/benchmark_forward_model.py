@@ -2,8 +2,9 @@
 """Comprehensive forward model benchmark: all modes × all configs × SFH types.
 
 Measures per-call timing and approximation error for exact, compositional,
-and hybrid prediction modes across increasing model complexity. Tests both
-parametric (dense_basis, D=8) and stochastic (field, D~137) SFH types.
+and hybrid prediction modes across all implemented model components. Tests
+parametric (DPL, D=6), non-parametric (dense_basis, D=8), and stochastic
+(field, D~137) SFH types.
 
 Usage:
     source .venv/bin/activate
@@ -80,22 +81,17 @@ def bench_config(label, model, params):
         return f"{us:>8.0f}us  {spd}  {e}"
 
     print(
-        f"  {label:<35} {ex_us:>8.0f}us  "
+        f"  {label:<40} {ex_us:>8.0f}us  "
         f"{fmt(comp_us, comp_err, ex_us)}  "
         f"{fmt(hyb_us, hyb_err, ex_us)}"
     )
 
 
 def bench_gradient(label, model, params):
-    """Benchmark gradient computation across modes.
-
-    Differentiates sum(photometry) w.r.t. a single scalar parameter
-    (dust_tau_diff) to avoid dict-of-tracers issues.
-    """
-    # Pick a parameter to differentiate w.r.t.
+    """Benchmark gradient computation across modes."""
     diff_key = "dust_tau_diff"
     if diff_key not in params:
-        print(f"  {label:<35}   (skipped — no {diff_key})")
+        print(f"  {label:<40}   (skipped — no {diff_key})")
         return
 
     results = {}
@@ -108,7 +104,6 @@ def bench_gradient(label, model, params):
 
             grad_fn = jax.jit(jax.grad(_loss))
             val = params[diff_key]
-            # warmup
             for _ in range(N_WARMUP):
                 grad_fn(val).block_until_ready()
             t0 = time.perf_counter()
@@ -124,7 +119,7 @@ def bench_gradient(label, model, params):
     comp_str = f"{comp:>8.0f}us" if comp else "      N/A"
     hyb_str = f"{hyb:>8.0f}us" if hyb else "      N/A"
     spd = f"{comp / hyb:>5.1f}x" if comp and hyb else "  N/A"
-    print(f"  {label:<35} {comp_str}  {hyb_str}  {spd}")
+    print(f"  {label:<40} {comp_str}  {hyb_str}  {spd}")
 
 
 def build_model(sfh_type, spec_kwargs):
@@ -151,7 +146,6 @@ def build_model(sfh_type, spec_kwargs):
             sfh_db_tx_frac_2=Uniform(0.05, 0.95),
         )
     elif sfh_type == "field":
-        # Stochastic SFH uses dbp (dense_basis+perturbation) prefix
         base_kwargs.update(
             mean_sfh_type=["dense_basis", "field"],
             sfh_dbp_log_total_mass=Uniform(8, 12),
@@ -179,23 +173,23 @@ def build_model(sfh_type, spec_kwargs):
 
 def print_header(title):
     print()
-    print(f"{'=' * 120}")
+    print("=" * 125)
     print(f"  {title}")
-    print(f"{'=' * 120}")
+    print("=" * 125)
     print(
-        f"  {'Config':<35} {'exact':>10}  "
+        f"  {'Config':<40} {'exact':>10}  "
         f"{'compositional':>10}  {'spdup':>5}  {'error':>8}  "
         f"{'hybrid':>10}  {'spdup':>5}  {'error':>8}"
     )
-    print(f"  {'-' * 113}")
+    print(f"  {'-' * 118}")
 
 
 def print_grad_header(title):
     print()
     print(f"  {title}")
-    print(f"  {'-' * 65}")
-    print(f"  {'Config':<35} {'compositional':>10}  {'hybrid':>10}  {'ratio':>5}")
-    print(f"  {'-' * 65}")
+    print(f"  {'-' * 70}")
+    print(f"  {'Config':<40} {'compositional':>10}  {'hybrid':>10}  {'ratio':>5}")
+    print(f"  {'-' * 70}")
 
 
 # ============================================================
@@ -205,31 +199,130 @@ def print_grad_header(title):
 if __name__ == "__main__":
     ssp_data = load_ssp_data(SSP_PATH)
 
-    configs = [
+    # -----------------------------------------------------------------
+    # Component configs — each adds one component to stellar-only base
+    # -----------------------------------------------------------------
+    individual_components = [
         ("Stellar only", {}),
-        ("+ baked-in nebular", dict(nebular_ssp=True)),
+        # --- Nebular ---
+        ("+ nebular (baked-in SSP)", dict(nebular_ssp=True)),
         (
-            "+ dust emission (MBB)",
-            dict(dust_emission="modified_blackbody", dust_T=Fixed(35.0)),
-        ),
-        ("+ radio", dict(radio=True, radio_q_ir=Fixed(2.64))),
-        ("+ xray", dict(xray=True)),
-        (
-            "+ radio + xray",
-            dict(radio=True, xray=True, radio_q_ir=Fixed(2.64)),
+            "+ nebular (CLOUDY grid)",
+            dict(nebular="cloudy"),
         ),
         (
-            "Full: neb+MBB+radio+xray",
+            "+ nebular (Cue emulator)",
+            dict(nebular_cue=True),
+        ),
+        # --- Dust emission ---
+        (
+            "+ dust IR (MBB)",
             dict(
-                nebular_ssp=True,
                 dust_emission="modified_blackbody",
                 dust_T=Fixed(35.0),
+            ),
+        ),
+        (
+            "+ dust IR (THEMIS)",
+            dict(
+                dust_emission="themis",
+                dust_qpah=Fixed(2.5),
+                dust_umin=Fixed(1.0),
+            ),
+        ),
+        (
+            "+ dust IR (DL07)",
+            dict(
+                dust_emission="draine_li2007",
+                dust_qpah=Fixed(2.5),
+                dust_umin=Fixed(1.0),
+                dust_gamma_dl=Fixed(0.01),
+            ),
+        ),
+        (
+            "+ dust IR (Dale 2014)",
+            dict(
+                dust_emission="dale2014",
+                dust_alpha_dale=Fixed(2.0),
+            ),
+        ),
+        # --- AGN ---
+        (
+            "+ AGN (simple disc+torus)",
+            dict(agn_model="simple", agn_log_lbol=Fixed(10.0)),
+        ),
+        (
+            "+ AGN (K&D 3-zone full)",
+            dict(agn_model="kubota_done_full", agn_log_lbol=Fixed(10.0)),
+        ),
+        (
+            "+ AGN (QSOgen)",
+            dict(agn_model="qsogen", agn_log_lbol=Fixed(10.0)),
+        ),
+        # --- Multi-wavelength ---
+        ("+ radio (SF + AGN)", dict(radio=True, radio_q_ir=Fixed(2.64))),
+        ("+ X-ray (XRB + corona)", dict(xray=True)),
+    ]
+
+    # -----------------------------------------------------------------
+    # Composite configs — realistic science combinations
+    # -----------------------------------------------------------------
+    composite_configs = [
+        (
+            "Typical: neb+THEMIS+radio+xray",
+            dict(
+                nebular_ssp=True,
+                dust_emission="themis",
+                dust_qpah=Fixed(2.5),
+                dust_umin=Fixed(1.0),
+                radio=True,
+                xray=True,
+                radio_q_ir=Fixed(2.64),
+            ),
+        ),
+        (
+            "AGN host: neb+THEMIS+KD+radio+xray",
+            dict(
+                nebular_ssp=True,
+                dust_emission="themis",
+                dust_qpah=Fixed(2.5),
+                dust_umin=Fixed(1.0),
+                agn_model="kubota_done_full",
+                agn_log_lbol=Fixed(10.0),
+                radio=True,
+                xray=True,
+                radio_q_ir=Fixed(2.64),
+            ),
+        ),
+        (
+            "Cue+DL07+simple AGN",
+            dict(
+                nebular_cue=True,
+                dust_emission="draine_li2007",
+                dust_qpah=Fixed(2.5),
+                dust_umin=Fixed(1.0),
+                dust_gamma_dl=Fixed(0.01),
+                agn_model="simple",
+                agn_log_lbol=Fixed(10.0),
+            ),
+        ),
+        (
+            "Kitchen sink (all components)",
+            dict(
+                nebular_ssp=True,
+                dust_emission="themis",
+                dust_qpah=Fixed(2.5),
+                dust_umin=Fixed(1.0),
+                agn_model="kubota_done_full",
+                agn_log_lbol=Fixed(10.0),
                 radio=True,
                 xray=True,
                 radio_q_ir=Fixed(2.64),
             ),
         ),
     ]
+
+    all_configs = individual_components + composite_configs
 
     sfh_types = [
         ("DPL (parametric, D=6)", "dpl"),
@@ -249,18 +342,25 @@ if __name__ == "__main__":
     # --- Forward model speed by SFH type ---
     for sfh_label, sfh_type in sfh_types:
         print_header(f"Forward: {sfh_label}")
-        for cfg_label, cfg_kwargs in configs:
-            model, params, spec = build_model(sfh_type, cfg_kwargs)
-            bench_config(cfg_label, model, params)
+        for cfg_label, cfg_kwargs in all_configs:
+            try:
+                model, params, spec = build_model(sfh_type, cfg_kwargs)
+                bench_config(cfg_label, model, params)
+            except Exception as exc:
+                print(f"  {cfg_label:<40} SKIPPED ({type(exc).__name__}: {exc!s:.60s})")
 
-    # --- Gradient speed ---
+    # --- Gradient speed (stellar-only and kitchen-sink) ---
+    grad_configs = [all_configs[0], all_configs[-1]]
     for sfh_label, sfh_type in sfh_types:
         print_grad_header(f"Gradient: {sfh_label}")
-        for cfg_label, cfg_kwargs in [configs[0], configs[-1]]:
-            model, params, spec = build_model(sfh_type, cfg_kwargs)
-            bench_gradient(cfg_label, model, params)
+        for cfg_label, cfg_kwargs in grad_configs:
+            try:
+                model, params, spec = build_model(sfh_type, cfg_kwargs)
+                bench_gradient(cfg_label, model, params)
+            except Exception as exc:
+                print(f"  {cfg_label:<40} SKIPPED ({type(exc).__name__})")
 
     print()
-    print("=" * 120)
+    print("=" * 125)
     print("  Done.")
-    print("=" * 120)
+    print("=" * 125)
