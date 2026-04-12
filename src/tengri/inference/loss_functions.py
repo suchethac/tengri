@@ -410,14 +410,23 @@ def build_loss_fn(fitter):
             chi2 = jnp.sum(((data - predicted) / noise) ** 2)
             e_lh = 0.5 * chi2
 
-        # Prior contributions
+        # Prior contributions (IFT Hamiltonian: H = -log L + 0.5 * ξᵀξ)
+        # All unbounded parameters get a standard normal prior because
+        # the sigmoid transform maps N(0,1) → Uniform(lo, hi). Without
+        # this term, MCMC chains drift to ±∞ in unbounded space for
+        # weakly-constrained parameters.
         prior_penalty = 0.0
+
+        # Standard normal prior on ALL unbounded parameters
+        for name in free_names:
+            prior_penalty += params_unbounded[name] ** 2
 
         # Standard normal prior on psd_xi
         if stochastic and "psd_xi" in params_unbounded:
             prior_penalty += jnp.sum(params_unbounded["psd_xi"] ** 2)
 
         # Additional prior contributions for non-Uniform distributions
+        # (replace the implicit N(0,1) → Uniform with the actual prior)
         for name in free_names:
             dist = spec.get_distribution(name)
             if isinstance(dist, Gaussian):
@@ -425,7 +434,6 @@ def build_loss_fn(fitter):
                 prior_penalty -= 2.0 * dist.log_prob(val)
             elif isinstance(dist, LogUniform):
                 val = params[name]
-                # LogUniform correction: log_prob difference from Uniform
                 uniform_lp = -jnp.log(dist.hi - dist.lo)
                 prior_penalty -= 2.0 * (dist.log_prob(val) - uniform_lp)
 
