@@ -154,9 +154,9 @@ def run_nuts(
     *,
     key,
     init_from=None,
-    n_warmup=500,
-    n_burnin=200,
-    n_samples=2000,
+    n_warmup=300,
+    n_burnin=100,
+    n_samples=1000,
     target_accept_rate=0.85,
     max_num_doublings=10,
     dense_mass_matrix=True,
@@ -174,14 +174,14 @@ def run_nuts(
        200-step MAP optimization to find the posterior mode. Starts
        warmup near the mode instead of the prior, reducing warmup
        time by ~5x and improving mass matrix quality.
-    2. **Warmup** (500 steps): BlackJAX window adaptation tunes
+    2. **Warmup** (300 steps): BlackJAX window adaptation tunes
        step size and mass matrix.  Dense mass matrix (default)
        captures parameter correlations — critical for the
        age-dust-metallicity degeneracy.
-    3. **Burn-in** (200 steps): post-warmup samples discarded.
+    3. **Burn-in** (100 steps): post-warmup samples discarded.
        Lets the chain diffuse away from the MAP point estimate
        to the typical set of the posterior.
-    4. **Sampling** (2000 steps): posterior samples collected.
+    4. **Sampling** (1000 steps): posterior samples collected.
 
     Convergence criterion: N > 5τ for all parameters (Sokal/Behroozi).
     Check with ``result.check_convergence()``.
@@ -194,17 +194,16 @@ def run_nuts(
         a previous result.
     n_warmup : int
         Warmup/adaptation steps (tunes step size and mass matrix).
-        500 is sufficient for D≤15. Increase for high-D or difficult
-        geometries.
+        300 is sufficient for D≤15 with MAP init. Increase for
+        high-D or difficult geometries.
     n_burnin : int
         Post-warmup burn-in steps (discarded). Lets the chain forget
-        the MAP initialization and reach the typical set. 200 is
-        conservative; set to 0 if init_from is already a Posterior
-        from a converged chain.
+        the MAP initialization and reach the typical set. Set to 0
+        if init_from is already a Posterior from a converged chain.
     n_samples : int
-        Posterior samples to collect. 2000 gives ESS>100 for most
-        parameters at D≤10. Increase if ``check_convergence()``
-        reports unconverged parameters.
+        Posterior samples to collect. 1000 gives convergence for
+        most SED fitting scenarios at D≤10. Increase if
+        ``check_convergence()`` reports unconverged parameters.
     target_accept_rate : float
         Target acceptance rate for step size adaptation. 0.85 is
         slightly more conservative than the Stan default (0.8),
