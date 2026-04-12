@@ -281,14 +281,25 @@ def run_nuts(
 
     t0 = time.time()
 
-    # Window adaptation with target acceptance rate
-    # Dense mass matrix captures parameter correlations and reduces
-    # divergences in degenerate posteriors (age-dust-metallicity).
+    # Auto-select mass matrix type based on dimensionality.
+    # Dense: O(D²) per step, captures correlations. Good for D≤30.
+    # Diagonal: O(D) per step, sufficient when init_from=Posterior
+    #   (VI already decorrelated) or D>30.
+    n_dim = len(init_flat)
+    use_dense = dense_mass_matrix
+    if dense_mass_matrix and n_dim > 30:
+        use_dense = False
+        if verbose:
+            print(
+                f"  Auto-switching to diagonal mass matrix (D={n_dim}>30). "
+                f"Dense would be O({n_dim}²)={n_dim**2} per step."
+            )
+
     key, warmup_key = jax.random.split(key)
     warmup = blackjax.window_adaptation(
         blackjax.nuts,
         log_posterior_flat,
-        is_mass_matrix_diagonal=not dense_mass_matrix,
+        is_mass_matrix_diagonal=not use_dense,
         target_acceptance_rate=target_accept_rate,
     )
     (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
