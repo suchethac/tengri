@@ -81,46 +81,98 @@ def run_map(
 
     opt_state = opt.init(init_params)
 
-    @jax.jit
-    def step(params, opt_state, data_args):
+    def _step_body(params, opt_state):
         loss, grads = jax.value_and_grad(lambda p: loss_fn(p, data_args))(params)
         updates, new_opt_state = opt.update(grads, opt_state, params)
         new_params = optax.apply_updates(params, updates)
         return new_params, new_opt_state, loss
 
-    params = init_params
-    loss_history = []
-    best_loss = float("inf")
-    steps_without_improvement = 0
+    # Fused scan: runs all steps inside XLA with zero Python dispatch.
+    # Early stopping is handled via a converged flag in the carry —
+    # once converged, subsequent steps are no-ops (params unchanged).
+    patience_i32 = jnp.int32(patience)
+    rtol_f = jnp.float64(rtol)
+
+    @jax.jit
+    def _run_scan(init_params, opt_state):
+        def scan_body(carry, _x):
+            params, ostate, best_loss, stale, converged = carry
+            # If already converged, skip (return same state)
+            new_params, new_ostate, loss = _step_body(params, ostate)
+            # Update early stopping counters
+            improved = loss < best_loss * (1.0 - rtol_f)
+            new_best = jnp.where(improved, loss, best_loss)
+            new_stale = jnp.where(improved, jnp.int32(0), stale + 1)
+            new_converged = converged | (new_stale >= patience_i32)
+            # If converged, keep old params (don't take the step)
+            out_params = jax.lax.cond(converged, lambda: params, lambda: new_params)
+            out_ostate = jax.lax.cond(converged, lambda: ostate, lambda: new_ostate)
+            out_loss = jax.lax.cond(converged, lambda: best_loss, lambda: loss)
+            new_carry = (
+                out_params,
+                out_ostate,
+                jnp.where(converged, best_loss, new_best),
+                jnp.where(converged, stale, new_stale),
+                new_converged,
+            )
+            return new_carry, out_loss
+
+        init_carry = (
+            init_params,
+            opt_state,
+            jnp.float64(jnp.inf),  # best_loss
+            jnp.int32(0),  # steps without improvement
+            jnp.bool_(not early_stopping),  # converged (skip ES if disabled)
+        )
+        final_carry, loss_history = jax.lax.scan(scan_body, init_carry, xs=None, length=n_steps)
+        final_params = final_carry[0]
+        final_converged = final_carry[4]
+        final_stale = final_carry[3]
+        return final_params, loss_history, final_converged, final_stale
+
     t0 = time.time()
-
-    for i in range(n_steps):
-        params, opt_state, loss_val = step(params, opt_state, data_args)
-        current_loss = float(loss_val)
-        loss_history.append(current_loss)
-
-        if verbose and (i % print_every == 0 or i == n_steps - 1):
-            print(f"  Step {i:5d}/{n_steps}: loss = {loss_val:.4f}")
-
-        # Early stopping
-        if early_stopping:
-            if current_loss < best_loss * (1 - rtol):
-                best_loss = current_loss
-                steps_without_improvement = 0
-            else:
-                steps_without_improvement += 1
-                if steps_without_improvement >= patience:
-                    if verbose:
-                        print(
-                            f"  Early stopping at step {i} (no improvement for {patience} steps)"
-                        )
-                    break
-
+    params, loss_arr, _converged, _stale_count = _run_scan(init_params, opt_state)
+    # Block until done (single sync at the end, not per-step)
+    loss_arr.block_until_ready()
     wall_time = time.time() - t0
+
+    # Find actual number of steps taken (before convergence).
+    # Single bulk transfer from device to host (not per-element).
+    import numpy as np
+
+    loss_np = np.asarray(loss_arr)
+
+    if early_stopping:
+        # Loss history has real values up to convergence, then repeats
+        n_actual = n_steps
+        best_l = np.inf
+        stale = 0
+        for i in range(n_steps):
+            l_val = loss_np[i]
+            if l_val < best_l * (1 - rtol):
+                best_l = l_val
+                stale = 0
+            else:
+                stale += 1
+                if stale >= patience:
+                    n_actual = i + 1
+                    break
+        loss_np = loss_np[:n_actual]
+    else:
+        n_actual = n_steps
+
     best_params = fitter._to_physical(params)
 
+    final_loss = float(loss_np[-1]) if len(loss_np) > 0 else float("nan")
+
     if verbose:
-        print(f"  MAP ({opt_name}) complete in {wall_time:.1f}s, {len(loss_history)} steps")
+        es_msg = ""
+        if early_stopping and n_actual < n_steps:
+            es_msg = f" (early stop at {n_actual})"
+        print(
+            f"  MAP ({opt_name}) complete in {wall_time:.1f}s, "
+            f"{n_actual} steps{es_msg}, loss={final_loss:.4f}"
+        )
 
     return Posterior(
         samples=None,
@@ -128,11 +180,11 @@ def run_map(
         method=f"MAP ({opt_name})",
         wall_time_s=wall_time,
         diagnostics={
-            "n_steps": len(loss_history),
-            "final_loss": loss_history[-1],
+            "n_steps": n_actual,
+            "final_loss": final_loss,
             "optimizer": opt_name,
         },
-        loss_history=jnp.array(loss_history),
+        loss_history=jnp.asarray(loss_np),
         _model=fitter.model,
     )
 
