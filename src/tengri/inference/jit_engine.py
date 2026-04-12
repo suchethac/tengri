@@ -368,7 +368,7 @@ def build_jit_engine(fitter, pos_dict):
         custom_gradnorm=None,
         maxiter=10,
         miniter=0,
-        xtol=1e-5,
+        xtol=1e-3,
         energy_reduction_factor=0.1,
     ):
         """Newton-CG with successive-halving line search.
@@ -665,7 +665,7 @@ def build_jit_engine(fitter, pos_dict):
             m,
             maxiter=10,
             miniter=0,
-            xtol=1e-5,
+            xtol=1e-3,  # match NIFTy default (vi_config.py)
             energy_reduction_factor=0.1,
         )
         return m_opt, kl_val
@@ -738,7 +738,7 @@ def build_jit_engine(fitter, pos_dict):
             m,
             maxiter=10,
             miniter=0,
-            xtol=1e-5,
+            xtol=1e-3,  # match NIFTy default (vi_config.py)
             energy_reduction_factor=0.1,
         )
 

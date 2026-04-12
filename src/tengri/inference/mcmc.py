@@ -159,6 +159,7 @@ def run_nuts(
     n_samples=1000,
     target_accept_rate=0.8,
     max_num_doublings=10,
+    dense_mass_matrix=True,
     verbose=True,
 ):
     """NUTS sampling via BlackJAX.
@@ -183,6 +184,10 @@ def run_nuts(
         Higher = smaller steps = fewer divergences but slower mixing.
     max_num_doublings : int
         Maximum tree depth for NUTS trajectory (2^max_num_doublings leapfrog steps).
+    dense_mass_matrix : bool
+        Use a dense (not diagonal) mass matrix. Captures parameter
+        correlations (e.g. age-dust-metallicity degeneracy) and
+        dramatically reduces divergences. Default True.
     verbose : bool
         Print progress.
     """
@@ -230,10 +235,13 @@ def run_nuts(
     t0 = time.time()
 
     # Window adaptation with target acceptance rate
+    # Dense mass matrix captures parameter correlations and reduces
+    # divergences in degenerate posteriors (age-dust-metallicity).
     key, warmup_key = jax.random.split(key)
     warmup = blackjax.window_adaptation(
         blackjax.nuts,
         log_posterior_flat,
+        is_mass_matrix_diagonal=not dense_mass_matrix,
         target_acceptance_rate=target_accept_rate,
     )
     (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
