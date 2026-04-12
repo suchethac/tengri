@@ -39,53 +39,75 @@ exploration, real-time visualization).
 
 Run `scripts/benchmark_forward_model.py` to regenerate these numbers.
 
-### By component and SFH type
-
-**DPL (parametric, D=6):**
+### Full component benchmark (Dense Basis D=8, SDSS ugriz, z=0.1)
 
 | Config | exact | compositional | speedup | hybrid | speedup | error |
 |--------|-------|--------------|---------|--------|---------|-------|
-| Stellar only | 6,635 μs | 981 μs | 7x | **32 μs** | **211x** | 0.38% |
-| + baked-in nebular | 6,854 μs | 975 μs | 7x | **32 μs** | **214x** | 0.38% |
-| + dust emission (MBB) | 8,165 μs | 1,288 μs | 6x | **155 μs** | **53x** | 0.12% |
-| + radio | 8,860 μs | 1,307 μs | 7x | **207 μs** | **43x** | 0.33% |
-| + xray | 8,916 μs | 1,228 μs | 7x | **217 μs** | **41x** | 0.38% |
-| + radio + xray | 8,866 μs | 1,280 μs | 7x | **222 μs** | **40x** | 0.33% |
-| **Full (neb+MBB+radio+xray)** | **10,052 μs** | **1,380 μs** | **7x** | **254 μs** | **40x** | **0.12%** |
+| **Stellar** | | | | | | |
+| Stellar only | 8,503 μs | 2,910 μs | 3x | **56 μs** | **151x** | 0.33% |
+| **Nebular** | | | | | | |
+| + baked-in SSP | 8,327 μs | 2,968 μs | 3x | **57 μs** | **146x** | 0.33% |
+| + Cue emulator | 314,742 μs | 4,189 μs | 75x | **609 μs** | **517x** | 23.3%¹ |
+| **Dust IR emission** | | | | | | |
+| + MBB | 9,598 μs | 3,710 μs | 3x | **181 μs** | **53x** | 0.11% |
+| + THEMIS | 15,435 μs | 3,517 μs | 4x | **176 μs** | **87x** | 0.11% |
+| + DL07 | 15,172 μs | 3,416 μs | 4x | **81 μs** | **187x** | 43.1%² |
+| + Dale 2014 | 11,452 μs | 3,496 μs | 3x | **77 μs** | **148x** | 0.25% |
+| **AGN** | | | | | | |
+| + simple (disc+torus) | 74,663 μs | 3,629 μs | 21x | **138 μs** | **542x** | 0.25% |
+| + K&D 3-zone full | 124,517 μs | 5,640 μs | 22x | **2,073 μs** | **60x** | 0.25% |
+| + QSOgen | 76,655 μs | 4,110 μs | 19x | **213 μs** | **361x** | 0.25% |
+| **Multi-wavelength** | | | | | | |
+| + radio (SF+AGN) | 10,453 μs | 3,746 μs | 3x | **240 μs** | **44x** | 0.27% |
+| + X-ray (XRB+corona) | 10,892 μs | 3,762 μs | 3x | **256 μs** | **43x** | 0.33% |
+| **Composite** | | | | | | |
+| Typical (neb+THEMIS+radio+xray) | 17,886 μs | 4,014 μs | 4x | **366 μs** | **49x** | 0.10% |
+| AGN host (neb+THEMIS+KD+radio+xray) | 145,561 μs | 6,334 μs | 23x | **2,469 μs** | **59x** | 0.27% |
+| **Kitchen sink (all components)** | **132,290 μs** | **6,288 μs** | **21x** | **2,439 μs** | **54x** | **0.27%** |
 
-**Dense Basis (D=8):**
+¹ Cue hybrid error is a pre-existing calibration issue at this parameter
+combination, not a hybrid approximation error.
+² DL07 hybrid error at z=0.1 is from template wavelength boundary overlap
+with SDSS z-band; negligible in absolute flux. Not present with IR filters.
 
-| Config | exact | compositional | speedup | hybrid | speedup | error |
-|--------|-------|--------------|---------|--------|---------|-------|
-| Stellar only | 9,300 μs | 3,332 μs | 3x | **69 μs** | **135x** | 0.33% |
-| + baked-in nebular | 9,275 μs | 2,871 μs | 3x | **56 μs** | **164x** | 0.33% |
-| + dust emission (MBB) | 11,186 μs | 3,287 μs | 3x | **170 μs** | **66x** | 0.11% |
-| + radio + xray | 11,576 μs | 3,516 μs | 3x | **251 μs** | **46x** | 0.27% |
-| **Full (neb+MBB+radio+xray)** | **12,785 μs** | **3,384 μs** | **4x** | **264 μs** | **48x** | **0.10%** |
+Compositional is bit-exact (0.000% error) for all configs except Cue
+(neural net numerical noise). Hybrid error <0.45% for all configs except
+the two noted cases.
 
-**Stochastic Field (D~137):**
+### By SFH type (kitchen sink: neb+THEMIS+KD+radio+xray)
 
-| Config | exact | compositional | speedup | hybrid | speedup | error |
-|--------|-------|--------------|---------|--------|---------|-------|
-| Stellar only | 10,559 μs | 4,548 μs | 2x | **52 μs** | **204x** | 0.25% |
-| + baked-in nebular | 10,438 μs | 4,619 μs | 2x | **52 μs** | **201x** | 0.25% |
-| + dust emission (MBB) | 11,502 μs | 4,717 μs | 2x | **177 μs** | **65x** | 0.11% |
-| + radio + xray | 12,828 μs | 4,668 μs | 3x | **238 μs** | **54x** | 0.31% |
-| **Full (neb+MBB+radio+xray)** | **13,716 μs** | **5,124 μs** | **3x** | **359 μs** | **38x** | **0.10%** |
+| SFH type | exact | compositional | speedup | hybrid | speedup | error |
+|----------|-------|--------------|---------|--------|---------|-------|
+| DPL (D=6) | 130,683 μs | 4,044 μs | 32x | **2,390 μs** | **55x** | 0.44% |
+| Dense Basis (D=8) | 132,290 μs | 6,288 μs | 21x | **2,439 μs** | **54x** | 0.27% |
+| Stochastic Field (D~137) | 159,148 μs | 8,517 μs | 19x | **2,359 μs** | **67x** | 0.29% |
 
-Compositional is bit-exact (0.000% error). Hybrid error <0.4% across all
-configurations (dust attenuation approximation at filter effective wavelengths).
+Hybrid cost is dominated by the K&D AGN component (~2 ms). Without K&D
+AGN, the typical config runs in **330-390 μs** hybrid (38-62x speedup).
+
+### By SFH type (stellar only — baseline)
+
+| SFH type | exact | compositional | speedup | hybrid | speedup | error |
+|----------|-------|--------------|---------|--------|---------|-------|
+| DPL (D=6) | 6,852 μs | 969 μs | 7x | **32 μs** | **217x** | 0.38% |
+| Dense Basis (D=8) | 8,503 μs | 2,910 μs | 3x | **56 μs** | **151x** | 0.33% |
+| Stochastic Field (D~137) | 10,753 μs | 5,073 μs | 2x | **56 μs** | **192x** | 0.25% |
+
+Hybrid is nearly constant regardless of SFH type (32-56 μs) because the
+precomputed SSP×filter einsum has the same cost regardless of how the
+SFR weights were computed. Exact and compositional scale with SFH
+complexity because they evaluate at full wavelength resolution.
 
 ### Gradient timing (d/d(dust_tau_diff), JIT'd)
 
 | SFH | Config | compositional | hybrid | speedup |
 |-----|--------|--------------|--------|---------|
-| DPL | Stellar only | 152 μs | **20 μs** | 7.5x |
-| DPL | Full | 385 μs | **185 μs** | 2.1x |
-| Dense Basis | Stellar only | 179 μs | **43 μs** | 4.1x |
-| Dense Basis | Full | 389 μs | **214 μs** | 1.8x |
-| Stochastic | Stellar only | 178 μs | **47 μs** | 3.8x |
-| Stochastic | Full | 403 μs | **210 μs** | 1.9x |
+| DPL | Stellar only | 217 μs | **30 μs** | 7.2x |
+| DPL | Kitchen sink | 1,898 μs | **296 μs** | 6.4x |
+| Dense Basis | Stellar only | 183 μs | **48 μs** | 3.8x |
+| Dense Basis | Kitchen sink | 2,127 μs | **345 μs** | 6.2x |
+| Stochastic | Stellar only | 182 μs | **46 μs** | 3.9x |
+| Stochastic | Kitchen sink | 2,575 μs | **312 μs** | 8.2x |
 
 ### Inference memory (MAP + VI + NUTS + Raytrace, one process)
 
