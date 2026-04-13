@@ -141,21 +141,46 @@ Kernels built lazily on first access. Eager pre-compilation of JIT wrappers with
 - **No API changes.** `model.predict_photometry()`, `model.predict_spectrum()`, `fitter.run("vi")` all work the same.
 - **NIFTy internals not modified.** NIFTy's 4 JIT scopes still exist, but they now trace through a tiny hybrid kernel instead of the full-wavelength SED.
 
+## Additional Fixes (2026-04-12)
+
+### Fix G: Standard normal prior on all unbounded parameters
+
+**Critical bug.** The loss function for MAP/NUTS/Raytrace was missing the
+standard normal prior `0.5 * ξᵀξ` on Uniform-prior parameters. In the IFT
+framework, the sigmoid transform maps N(0,1) → Uniform(lo,hi), so the
+Hamiltonian must include the prior energy. Without it, MCMC chains drifted
+to ±10^11 in unbounded space for weakly-constrained parameters (std=0 in
+bounded space). The prior was already present for psd_xi and Gaussian priors.
+
+**Impact:** NUTS with 5-band photometry went from 6/8 parameters stuck at
+prior boundaries to all 8 converged with sensible posteriors.
+
+### Fix H: Scan-fused MAP optimizer (10x speedup)
+
+Replaced Python for-loop with `jax.lax.scan`. Early stopping via converged
+flag in scan carry. Bulk `np.asarray` for loss history transfer.
+500 steps: 5s → 0.46s.
+
+### Fix I: Native VI xtol aligned with NIFTy
+
+Newton-CG `xtol` was 1e-5 in native vs 1e-3 in NIFTy. Both now use 1e-3.
+Both implementations are deterministic (same seed → same result).
+
+### Fix J: NUTS robust defaults
+
+MAP init → dense mass matrix warmup (300 steps) → burn-in (100) → 1000
+samples. Dense mass matrix auto-switches to diagonal for D>30.
+target_accept=0.85 (conservative for SED degeneracy banana).
+
 ## Remaining Work (optional improvements)
 
-**A. Disable NIFTy internal JIT (`kl_jit=False, residual_jit=False`)**
-- In `jit_engine.py:934-941`, the `OptimizeVI` constructor takes `kl_jit` and `residual_jit` flags
-- Setting both to `False` would make NIFTy use Python-loop CG/Newton-CG instead of JIT'd versions
-- Trade: ~5-10x slower iterations but ~10x less memory
-- Easy to test: change lines 937-938
+**A. Native VI as default** — 2.4x faster than NIFTy at runtime (13s vs 33s),
+fully JIT'd via `jax.lax.while_loop`. Already works; keep as option alongside
+NIFTy until validated on more science cases.
 
-**B. Use `vi_native` instead of `vi` (NIFTy)**
-- `fitter.run("vi_native")` uses pure JAX geoVI from `jit_engine.py`
-- **Status: NOT COMPLETE.** The native JAX VI implementation is experimental and missing features.
-- The engine's `run_evi_geovi` is a single JIT scope containing hamiltonian + CG + Newton-CG
-- This was hitting the 2 GB protobuf limit before (2.7 GB). With eager pre-compilation removed, it will compile on first call.
-- May still hit protobuf limit. If so, need to split into smaller JIT scopes.
-- Completing native VI would be the long-term solution: full control over JIT boundaries, no NIFTy dependency.
+**B. NUTS warmup from VI posterior** — Use VI result as mass matrix
+initialization for NUTS. VI learns the posterior geometry; NUTS refines
+with exact sampling. Would make the diagonal mass matrix sufficient.
 
 **C. Split the jit_engine into smaller JIT scopes**
 - Currently `draw_residuals` is one JIT scope containing: hamiltonian (forward + grad) + metric_vec (JVP + VJP) + CG solver (while_loop)
