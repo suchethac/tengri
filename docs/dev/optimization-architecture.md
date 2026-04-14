@@ -51,7 +51,7 @@ Run `scripts/benchmark_forward_model.py` to regenerate these numbers.
 | **Dust IR emission** | | | | | | |
 | + MBB | 9,598 μs | 3,710 μs | 3x | **181 μs** | **53x** | 0.11% |
 | + THEMIS | 15,435 μs | 3,517 μs | 4x | **176 μs** | **87x** | 0.11% |
-| + DL07 | 15,172 μs | 3,416 μs | 4x | **81 μs** | **187x** | <2%² |
+| + DL07 | 15,172 μs | 3,416 μs | 4x | **81 μs** | **187x** | <1%² |
 | + Dale 2014 | 11,452 μs | 3,496 μs | 3x | **77 μs** | **148x** | 0.25% |
 | **AGN** | | | | | | |
 | + simple (disc+torus) | 74,663 μs | 3,629 μs | 21x | **138 μs** | **542x** | 0.25% |
@@ -75,7 +75,7 @@ L_absorbed_stellar from a Voronoi-bandwidth-weighted sum over SDSS filter bands
 only. SDSS ugriz at z=0.1 covers rest-frame ~2600–8800 Å, missing all UV
 absorption where dust attenuation peaks. The fix precomputes a 200-point
 coarse-wavelength SSP grid and uses trapz for L_absorbed (same formula as
-exact/compositional path). Error is now < 2%.
+exact/compositional path). This is now fixed; error is < 1%.
 
 Compositional is bit-exact (0.000% error) for all configs except Cue
 (neural net numerical noise). Hybrid error <0.45% for all configs except

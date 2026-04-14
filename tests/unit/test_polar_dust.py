@@ -2,6 +2,7 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
@@ -11,6 +12,12 @@ from tengri.models.agn.polar_dust import (
     polar_dust_extinction,
     polar_dust_total,
 )
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 # Shared test wavelength grid: 500 A to 10 mm (log-spaced, 500 points)
 WAVELENGTH = jnp.logspace(jnp.log10(500.0), jnp.log10(1e8), 500)
@@ -167,26 +174,61 @@ class TestPolarDustTotal:
 
         def loss_ebv(ebv):
             l_a, l_r = polar_dust_total(L_NU_DISC, WAVELENGTH, 1.0, 40.0, ebv, temperature=100.0)
-            return jnp.sum(l_a) + jnp.sum(l_r)
+            return float(jnp.sum(l_a) + jnp.sum(l_r))
 
         def loss_cos_inc(cos_inc):
             l_a, l_r = polar_dust_total(
                 L_NU_DISC, WAVELENGTH, cos_inc, 40.0, 0.2, temperature=100.0
             )
-            return jnp.sum(l_a) + jnp.sum(l_r)
+            return float(jnp.sum(l_a) + jnp.sum(l_r))
 
         def loss_temp(temperature):
             l_a, l_r = polar_dust_total(
                 L_NU_DISC, WAVELENGTH, 1.0, 40.0, 0.2, temperature=temperature
             )
+            return float(jnp.sum(l_a) + jnp.sum(l_r))
+
+        def grad_fn_ebv(ebv):
+            l_a, l_r = polar_dust_total(L_NU_DISC, WAVELENGTH, 1.0, 40.0, ebv, temperature=100.0)
             return jnp.sum(l_a) + jnp.sum(l_r)
 
-        grad_ebv = jax.grad(loss_ebv)(0.2)
-        grad_cos = jax.grad(loss_cos_inc)(0.8)
-        grad_temp = jax.grad(loss_temp)(100.0)
+        grad_ebv_jax = float(jax.grad(grad_fn_ebv)(0.2))
+        grad_ebv_fd = fd_grad(loss_ebv, 0.2)
+        np.testing.assert_allclose(
+            grad_ebv_jax,
+            grad_ebv_fd,
+            rtol=1e-3,
+            err_msg=f"ebv: autodiff={grad_ebv_jax:.4e}, FD={grad_ebv_fd:.4e}",
+        )
 
-        assert jnp.isfinite(grad_ebv)
-        assert jnp.isfinite(grad_cos)
-        assert jnp.isfinite(grad_temp)
+        def grad_fn_cos(cos_inc):
+            l_a, l_r = polar_dust_total(
+                L_NU_DISC, WAVELENGTH, cos_inc, 40.0, 0.2, temperature=100.0
+            )
+            return jnp.sum(l_a) + jnp.sum(l_r)
+
+        grad_cos_jax = float(jax.grad(grad_fn_cos)(0.8))
+        grad_cos_fd = fd_grad(loss_cos_inc, 0.8)
+        np.testing.assert_allclose(
+            grad_cos_jax,
+            grad_cos_fd,
+            rtol=1e-3,
+            err_msg=f"cos_inc: autodiff={grad_cos_jax:.4e}, FD={grad_cos_fd:.4e}",
+        )
+
+        def grad_fn_temp(temperature):
+            l_a, l_r = polar_dust_total(
+                L_NU_DISC, WAVELENGTH, 1.0, 40.0, 0.2, temperature=temperature
+            )
+            return jnp.sum(l_a) + jnp.sum(l_r)
+
+        grad_temp_jax = float(jax.grad(grad_fn_temp)(100.0))
+        grad_temp_fd = fd_grad(loss_temp, 100.0)
+        np.testing.assert_allclose(
+            grad_temp_jax,
+            grad_temp_fd,
+            rtol=1e-3,
+            err_msg=f"temperature: autodiff={grad_temp_jax:.4e}, FD={grad_temp_fd:.4e}",
+        )
         # ebv gradient should be non-zero (more ebv = more extinction)
-        assert jnp.abs(grad_ebv) > 0.0
+        assert abs(grad_ebv_jax) > 0.0

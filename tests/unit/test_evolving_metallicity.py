@@ -10,6 +10,7 @@ Verifies:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -23,6 +24,11 @@ from tengri.models.sps.dsps_wrapper import (
 )
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 # ---------------------------------------------------------------------------
@@ -251,20 +257,40 @@ class TestEvolvingMetallicityGradients:
         """Gradients w.r.t. ramp parameters (initial, final) should flow."""
         t_universe_gyr = 13.0
 
-        def loss(log_z_initial, log_z_final):
+        def loss_init(log_z_initial):
             log_z_per_age = compute_log_z_evolving(
-                ssp_lg_age_gyr, log_z_initial, log_z_final, t_universe_gyr
+                ssp_lg_age_gyr, log_z_initial, -0.5, t_universe_gyr
             )
             flux = interpolate_metallicity_evolving(ssp_flux, ssp_lgmet, log_z_per_age)
             return jnp.sum(flux**2)
 
-        grad_fn = jax.grad(loss, argnums=(0, 1))
-        g_init, g_final = grad_fn(-2.0, -0.5)
+        def loss_final(log_z_final):
+            log_z_per_age = compute_log_z_evolving(
+                ssp_lg_age_gyr, -2.0, log_z_final, t_universe_gyr
+            )
+            flux = interpolate_metallicity_evolving(ssp_flux, ssp_lgmet, log_z_per_age)
+            return jnp.sum(flux**2)
 
-        assert jnp.isfinite(g_init), "Gradient w.r.t. initial Z must be finite"
-        assert jnp.isfinite(g_final), "Gradient w.r.t. final Z must be finite"
-        assert g_init != 0.0, "Gradient w.r.t. initial Z must be non-zero"
-        assert g_final != 0.0, "Gradient w.r.t. final Z must be non-zero"
+        g_jax_init = float(jax.grad(loss_init)(-2.0))
+        g_fd_init = fd_grad(loss_init, -2.0)
+        np.testing.assert_allclose(
+            g_jax_init,
+            g_fd_init,
+            rtol=1e-3,
+            err_msg=f"autodiff={g_jax_init:.4e}, FD={g_fd_init:.4e}",
+        )
+
+        g_jax_final = float(jax.grad(loss_final)(-0.5))
+        g_fd_final = fd_grad(loss_final, -0.5)
+        np.testing.assert_allclose(
+            g_jax_final,
+            g_fd_final,
+            rtol=1e-3,
+            err_msg=f"autodiff={g_jax_final:.4e}, FD={g_fd_final:.4e}",
+        )
+
+        assert g_jax_init != 0.0, "Gradient w.r.t. initial Z must be non-zero"
+        assert g_jax_final != 0.0, "Gradient w.r.t. final Z must be non-zero"
 
     def test_grad_autodiff_vs_finite_diff(self, ssp_flux, ssp_lgmet, ssp_lg_age_gyr):
         """Autodiff gradient matches central finite differences."""

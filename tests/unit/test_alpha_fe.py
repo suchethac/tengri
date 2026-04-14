@@ -10,6 +10,7 @@ Verifies:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -20,6 +21,11 @@ from tengri.models.sps.dsps_wrapper import (
 )
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +228,9 @@ class TestAlphaFeForwardModel:
         def loss(afe):
             return jnp.sum(model_with_alpha.predict_rest_sed({"met_alpha_fe": afe}).sed)
 
-        g = jax.grad(loss)(0.3)
-        assert jnp.isfinite(g), "Alpha-Fe gradient should be finite"
-        assert abs(float(g)) > 0, "Alpha-Fe gradient should be non-zero"
+        grad_jax = float(jax.grad(loss)(0.3))
+        grad_fd = fd_grad(loss, 0.3)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=5e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
+        assert abs(grad_jax) > 0, "Alpha-Fe gradient should be non-zero"

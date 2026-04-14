@@ -10,8 +10,15 @@ Tests cover:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 from tengri.models.sfh.nonparametric import (
     DEFAULT_BIN_EDGES_GYR,
@@ -121,11 +128,74 @@ class TestContinuitySFH:
             return jnp.sum(sfr)
 
         ratios = jnp.zeros(6)
-        grad_ratios, grad_mass = jax.grad(loss, argnums=(0, 1))(ratios, 10.0)
+        grad_ratios, _grad_mass = jax.grad(loss, argnums=(0, 1))(ratios, 10.0)
 
         assert grad_ratios.shape == (6,)
-        assert jnp.all(jnp.isfinite(grad_ratios))
-        assert jnp.isfinite(grad_mass)
+
+        # FD check on ratio_0 (one representative component)
+        def f_r0(r0):
+            return float(
+                jnp.sum(
+                    continuity_sfh(
+                        AGE_YR,
+                        log_total_mass=10.0,
+                        ratio_0=r0,
+                        ratio_1=0.0,
+                        ratio_2=0.0,
+                        ratio_3=0.0,
+                        ratio_4=0.0,
+                        ratio_5=0.0,
+                    )
+                )
+            )
+
+        g_r0 = float(
+            jax.grad(
+                lambda r0: jnp.sum(
+                    continuity_sfh(
+                        AGE_YR,
+                        log_total_mass=10.0,
+                        ratio_0=r0,
+                        ratio_1=0.0,
+                        ratio_2=0.0,
+                        ratio_3=0.0,
+                        ratio_4=0.0,
+                        ratio_5=0.0,
+                    )
+                )
+            )(0.0)
+        )
+        np.testing.assert_allclose(
+            g_r0,
+            fd_grad(f_r0, 0.0),
+            rtol=1e-3,
+            err_msg="continuity_sfh: FD check ∂/∂ratio_0",
+        )
+
+        # FD check on log_total_mass
+        _zero_ratios = dict(
+            ratio_0=0.0,
+            ratio_1=0.0,
+            ratio_2=0.0,
+            ratio_3=0.0,
+            ratio_4=0.0,
+            ratio_5=0.0,
+        )
+
+        def f_m(m):
+            return float(jnp.sum(continuity_sfh(AGE_YR, log_total_mass=m, **_zero_ratios)))
+
+        g_m = float(
+            jax.grad(lambda m: jnp.sum(continuity_sfh(AGE_YR, log_total_mass=m, **_zero_ratios)))(
+                10.0
+            )
+        )
+        np.testing.assert_allclose(
+            g_m,
+            fd_grad(f_m, 10.0),
+            rtol=1e-3,
+            err_msg="continuity_sfh: FD check ∂/∂log_total_mass",
+        )
 
 
 class TestContinuityPrior:

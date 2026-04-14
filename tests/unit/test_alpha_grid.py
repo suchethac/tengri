@@ -14,9 +14,15 @@ support including:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 @pytest.fixture
@@ -245,7 +251,14 @@ class TestInterpolateMetAlpha:
         assert jnp.all(jnp.isfinite(result))
 
     def test_differentiable_wrt_log_z(self, alpha_ssp_grid):
-        """Gradient w.r.t. log_z should be finite."""
+        """Gradient w.r.t. log_z should be finite and match FD.
+
+        Evaluated at log_z=-0.7, an interior point of the first metallicity cell
+        [-1.5, -0.5].  Must NOT be a grid boundary: at boundary values like -0.5,
+        jnp.searchsorted lands in different cells for (x+eps) vs (x-eps), so FD
+        crosses a cell boundary while autodiff stays within one cell → they
+        legitimately differ.  Interior points avoid this and must agree exactly.
+        """
         from tengri.models.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
@@ -261,11 +274,20 @@ class TestInterpolateMetAlpha:
                 )
             )
 
-        grad = jax.grad(total_flux)(-0.5)
-        assert jnp.isfinite(grad)
+        grad_jax = float(jax.grad(total_flux)(-0.7))
+        grad_fd = fd_grad(total_flux, -0.7)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
 
     def test_differentiable_wrt_alpha_fe(self, alpha_ssp_grid):
-        """Gradient w.r.t. [α/Fe] should be finite."""
+        """Gradient w.r.t. [α/Fe] should be finite and match FD.
+
+        Evaluated at alpha_fe=0.1, an interior point of the alpha cell [0.0, 0.2].
+        Must NOT be a grid boundary: at boundary values like 0.2, jnp.searchsorted
+        lands in different cells for (x+eps) vs (x-eps), causing FD/autodiff mismatch.
+        Interior points must agree exactly.
+        """
         from tengri.models.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
@@ -276,13 +298,16 @@ class TestInterpolateMetAlpha:
                     g["ssp_flux"],
                     g["ssp_lgmet"],
                     g["ssp_alpha_fe"],
-                    log_z=-0.5,
+                    log_z=-0.7,
                     alpha_fe=afe,
                 )
             )
 
-        grad = jax.grad(total_flux)(0.2)
-        assert jnp.isfinite(grad)
+        grad_jax = float(jax.grad(total_flux)(0.1))
+        grad_fd = fd_grad(total_flux, 0.1)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
 
 
 # ===================================================================
@@ -428,7 +453,7 @@ class TestComputeAlphaFeEvolving:
         assert jnp.allclose(result, 0.3, atol=1e-10)
 
     def test_differentiable(self):
-        """Should be differentiable w.r.t. alpha_fe_old."""
+        """Should be differentiable w.r.t. alpha_fe_old and match FD."""
         from tengri.models.sps.dsps_wrapper import compute_alpha_fe_evolving
 
         lg_ages = jnp.linspace(-2.0, 1.1, 20)
@@ -436,9 +461,12 @@ class TestComputeAlphaFeEvolving:
         def total(alpha_old):
             return jnp.sum(compute_alpha_fe_evolving(lg_ages, alpha_old, 0.0, 13.7))
 
-        grad = jax.grad(total)(0.4)
-        assert jnp.isfinite(grad)
-        assert float(grad) > 0  # more alpha_old → higher total
+        grad_jax = float(jax.grad(total)(0.4))
+        grad_fd = fd_grad(total, 0.4)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
+        assert grad_jax > 0  # more alpha_old → higher total
 
 
 # ===================================================================

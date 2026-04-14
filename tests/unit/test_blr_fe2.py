@@ -2,6 +2,7 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 jax.config.update("jax_enable_x64", True)
@@ -11,6 +12,11 @@ from tengri.models.agn.blr import (
     _fe2_pseudo_continuum,
     blr_emission,
 )
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 @pytest.fixture()
@@ -77,10 +83,12 @@ class TestFe2PseudoContinuum:
             fe2 = _fe2_pseudo_continuum(wavelength, fwhm_kms=3000.0, fe2_strength=strength)
             return jnp.sum(fe2)
 
-        grad_fn = jax.grad(loss)
-        g = grad_fn(1.0)
-        assert jnp.isfinite(g)
-        assert g > 0.0  # Positive gradient since more strength = more flux
+        grad_jax = float(jax.grad(loss)(1.0))
+        grad_fd = fd_grad(loss, 1.0)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
+        assert grad_jax > 0.0  # Positive gradient since more strength = more flux
 
 
 class TestBlrEmissionWithFe2:

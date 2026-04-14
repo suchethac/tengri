@@ -15,6 +15,7 @@ Verifies:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -28,6 +29,11 @@ from tengri.models.sfh.chemical_evolution import (
 )
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 # ---------------------------------------------------------------------------
@@ -173,10 +179,16 @@ class TestJAXCompatibility:
             log_z = closed_box_metallicity(age_grid, constant_sfr, yield_y=y)
             return jnp.mean(log_z)
 
-        grad_fn = jax.grad(loss)
-        g = grad_fn(0.03)
-        assert jnp.isfinite(g), "Gradient wrt yield should be finite"
-        assert g > 0, "Higher yield should increase mean Z"
+        grad_jax = float(jax.grad(loss)(0.03))
+        grad_fd = fd_grad(loss, 0.03)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
+        assert grad_jax > 0, "Higher yield should increase mean Z"
 
     def test_gradient_wrt_sfr(self, age_grid):
         """Gradient of Z wrt SFR should exist."""
@@ -197,10 +209,16 @@ class TestJAXCompatibility:
             log_z = closed_box_metallicity(age_grid, constant_sfr, eta_outflow=eta)
             return jnp.mean(log_z)
 
-        grad_fn = jax.grad(loss)
-        g = grad_fn(1.0)
-        assert jnp.isfinite(g), "Gradient wrt eta should be finite"
-        assert g < 0, "More outflows should decrease mean Z"
+        grad_jax = float(jax.grad(loss)(1.0))
+        grad_fd = fd_grad(loss, 1.0)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
+        assert grad_jax < 0, "More outflows should decrease mean Z"
 
     def test_jit_chem_evol_on_ssp_grid(self):
         """chem_evol_metallicity_on_ssp_grid should be JIT-compilable."""

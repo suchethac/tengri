@@ -104,10 +104,11 @@ def test_cloudy_grid_grad_logu():
     except Exception as e:
         pytest.skip(f"Backend call failed (likely shape mismatch with mock SSP): {e}")
 
-    assert jnp.isfinite(fd), "FD gradient is not finite"
-    assert jnp.isfinite(ad), "AD gradient is not finite"
-    assert jnp.abs(fd - ad) / (jnp.abs(fd) + 1e-10) < _FD_RTOL, (
-        f"FD/AD mismatch: FD={float(fd):.4g}, AD={float(ad):.4g}"
+    np.testing.assert_allclose(
+        float(ad),
+        float(fd),
+        rtol=_FD_RTOL,
+        err_msg="CloudyGridBackend (linear): FD/AD mismatch at interior logU",
     )
 
 
@@ -177,10 +178,62 @@ def test_cloudy_grid_triweight_grad_at_grid_node():
     except Exception as e:
         pytest.skip(f"Backend call failed (likely shape mismatch with mock SSP): {e}")
 
-    assert jnp.isfinite(fd), "FD gradient is not finite"
-    assert jnp.isfinite(ad), "AD gradient is not finite"
-    assert jnp.abs(fd - ad) / (jnp.abs(fd) + 1e-10) < _FD_RTOL, (
-        f"Triweight FD/AD mismatch at grid node: FD={float(fd):.4g}, AD={float(ad):.4g}"
+    np.testing.assert_allclose(
+        float(ad),
+        float(fd),
+        rtol=_FD_RTOL,
+        err_msg="CloudyGridBackend (triweight): FD/AD mismatch at grid node logU",
+    )
+
+
+@pytest.mark.skipif(not _CLOUDY_GRID_PATH.exists(), reason="CLOUDY grid not present")
+def test_logu_ordering():
+    """Higher logU → harder ionization → higher [OIII]5007/Hβ ratio.
+
+    Veilleux & Osterbrock (1987, ApJS 63, 295): [OIII]5007/Hβ is the primary
+    BPT diagnostic for the ionization parameter.  A harder radiation field
+    (higher logU) excites more O++ relative to recombination, raising the ratio.
+    This tests the physical ordering directly against the CLOUDY grid.
+
+    Line order in CLOUDY_LINE_NAMES: Hβ at index 4 (4862.68 Å),
+    [OIII]5007 at index 6 (5008.24 Å) — vacuum wavelengths.
+    """
+    from tengri.models.nebular import CloudyGridBackend
+
+    mock_ssp = _make_mock_ssp()
+    backend = CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp)
+
+    n_age = len(mock_ssp.ssp_lg_age_gyr)
+    ssp_weights = jnp.ones(n_age) * 1e8
+    ssp_log_ages = jnp.array(mock_ssp.ssp_lg_age_gyr + 9.0)  # log(age/yr)
+    log_z = -1.848  # solar metallicity in absolute log10(Z)
+
+    try:
+        # Use grid extremes (-4.0 and -1.0) for maximum [OIII]/Hβ contrast.
+        # The mock SSP triggers the SFR-based Q_H fallback, which washes out
+        # small logU differences; the full grid span gives a clear signal.
+        _, lum_low = backend.predict_nebular_line_luminosities(
+            ssp_weights=ssp_weights,
+            ssp_log_ages_yr=ssp_log_ages,
+            log_z=log_z,
+            neb_logU=-4.0,
+        )
+        _, lum_high = backend.predict_nebular_line_luminosities(
+            ssp_weights=ssp_weights,
+            ssp_log_ages_yr=ssp_log_ages,
+            log_z=log_z,
+            neb_logU=-1.0,
+        )
+    except Exception as e:
+        pytest.skip(f"Backend call failed (likely shape mismatch with mock SSP): {e}")
+
+    # Hβ at index 4, [OIII]5007 at index 6 (CLOUDY_LINE_NAMES order)
+    ratio_low = float(lum_low[6]) / float(lum_low[4])
+    ratio_high = float(lum_high[6]) / float(lum_high[4])
+
+    assert ratio_high > ratio_low, (
+        f"logU ordering violated: [OIII]/Hβ at logU=-1 ({ratio_high:.3f}) "
+        f"≤ logU=-4 ({ratio_low:.3f}) — Veilleux & Osterbrock 1987"
     )
 
 
@@ -242,10 +295,11 @@ def test_cue_grad_logu():
     except Exception as e:
         pytest.skip(f"Backend call failed (likely shape mismatch with mock SSP): {e}")
 
-    assert jnp.isfinite(fd), "FD gradient is not finite"
-    assert jnp.isfinite(ad), "AD gradient is not finite"
-    assert jnp.abs(fd - ad) / (jnp.abs(fd) + 1e-10) < _FD_RTOL, (
-        f"FD/AD mismatch: FD={float(fd):.4g}, AD={float(ad):.4g}"
+    np.testing.assert_allclose(
+        float(ad),
+        float(fd),
+        rtol=_FD_RTOL,
+        err_msg="CueBackend: FD/AD mismatch for ∂/∂logU",
     )
 
 
@@ -299,10 +353,11 @@ def test_cb19_grad_logu():
     except Exception as e:
         pytest.skip(f"Backend call failed (likely shape mismatch with mock SSP): {e}")
 
-    assert jnp.isfinite(fd), "FD gradient is not finite"
-    assert jnp.isfinite(ad), "AD gradient is not finite"
-    assert jnp.abs(fd - ad) / (jnp.abs(fd) + 1e-10) < _FD_RTOL, (
-        f"FD/AD mismatch: FD={float(fd):.4g}, AD={float(ad):.4g}"
+    np.testing.assert_allclose(
+        float(ad),
+        float(fd),
+        rtol=_FD_RTOL,
+        err_msg="CB19Backend: FD/AD mismatch for ∂/∂logU at interior grid point",
     )
 
 
@@ -350,10 +405,11 @@ def test_mappings_grad_velocity():
     except Exception as e:
         pytest.skip(f"Backend call failed (likely missing MAPPINGS grid): {e}")
 
-    assert jnp.isfinite(fd), "FD gradient is not finite"
-    assert jnp.isfinite(ad), "AD gradient is not finite"
-    assert jnp.abs(fd - ad) / (jnp.abs(fd) + 1e-10) < _FD_RTOL, (
-        f"FD/AD mismatch: FD={float(fd):.4g}, AD={float(ad):.4g}"
+    np.testing.assert_allclose(
+        float(ad),
+        float(fd),
+        rtol=_FD_RTOL,
+        err_msg="ShockBackend (MAPPINGS V): FD/AD mismatch for ∂/∂velocity",
     )
 
 

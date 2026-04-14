@@ -2,6 +2,7 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -10,6 +11,11 @@ from tengri.models.dust.attenuation import two_component_dust
 jax.config.update("jax_enable_x64", True)
 
 _CF_KWARGS = {"law_bc": "power_law", "law_diff": "power_law"}
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient of scalar f at x."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 def _charlot_fall_hard(wavelength, age_grid, tau_v1, tau_v2, n_slope=-0.7, t_birth=1e7):
@@ -90,14 +96,31 @@ class TestCharlotFall:
         assert atten.shape == (50, 100)
 
     def test_has_gradients(self, wavelength, age_grid):
-        """Gradients exist for dust parameters."""
+        """Gradients of two_component_dust match central FD w.r.t. tau_v1 and tau_v2."""
 
         def loss(tau_v1, tau_v2):
             return jnp.sum(two_component_dust(wavelength, age_grid, tau_v1, tau_v2, **_CF_KWARGS))
 
         g1, g2 = jax.grad(loss, argnums=(0, 1))(0.5, 0.3)
-        assert jnp.isfinite(g1)
-        assert jnp.isfinite(g2)
+
+        def f1(tau_v1: float) -> float:
+            return float(loss(tau_v1, 0.3))
+
+        def f2(tau_v2: float) -> float:
+            return float(loss(0.5, tau_v2))
+
+        np.testing.assert_allclose(
+            float(g1),
+            fd_grad(f1, 0.5),
+            rtol=1e-3,
+            err_msg="two_component_dust: FD check ∂(∑atten)/∂tau_bc",
+        )
+        np.testing.assert_allclose(
+            float(g2),
+            fd_grad(f2, 0.3),
+            rtol=1e-3,
+            err_msg="two_component_dust: FD check ∂(∑atten)/∂tau_diff",
+        )
 
 
 class TestCharlotFallHard:

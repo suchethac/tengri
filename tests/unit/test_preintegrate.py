@@ -20,6 +20,11 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 # ---------------------------------------------------------------------------
 # Fixtures: synthetic templates and filters
 # ---------------------------------------------------------------------------
@@ -604,8 +609,14 @@ class TestGradientAndJIT:
             result = interp_nd_triweight(grid_values, axes, edges, (x,))
             return jnp.sum(result)
 
-        grad = jax.grad(loss)(0.5)
-        assert jnp.isfinite(grad)
+        grad_jax = float(jax.grad(loss)(0.5))
+        grad_fd = fd_grad(loss, 0.5)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg="interp_nd_triweight: FD check ∂/∂x",
+        )
 
     def test_interp_1d_jit_compatible(self):
         """interp_nd_triweight works inside jax.jit."""

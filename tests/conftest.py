@@ -22,6 +22,32 @@ from tengri.utils.grid import grid_spacing, make_log_age_grid
 jax.config.update("jax_enable_x64", True)
 
 
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference gradient for scalar functions.
+
+    Provides O(eps^2) accurate gradient estimate. Use to verify JAX autodiff:
+
+        grad_jax = float(jax.grad(f)(jnp.array(x)))
+        grad_fd  = fd_grad(f, x)
+        np.testing.assert_allclose(grad_jax, grad_fd, rtol=1e-3)
+
+    Parameters
+    ----------
+    f : callable
+        Scalar function float -> float (or jnp.array scalar -> scalar).
+    x : float
+        Point at which to estimate the gradient.
+    eps : float
+        Step size. 1e-4 is appropriate for float64; use 1e-3 for float32.
+
+    Returns
+    -------
+    float
+        Finite-difference gradient estimate (f(x+eps) - f(x-eps)) / (2*eps).
+    """
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 def pytest_configure(config):
     """Create minimal synthetic CB19 grid fixture before test collection.
 

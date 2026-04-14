@@ -955,9 +955,11 @@ class SEDModel:
             # SSP grid axes: [lgmet, lg_age_gyr]
             fixed_ssp = {}
             if "met_logzsol" in self.spec.fixed_params:
-                # met_logzsol is fixed → collapse axis 0 (lgmet)
+                # met_logzsol is fixed → collapse axis 0 (lgmet).
+                # ssp_lgmet is in absolute log10(Z); convert met_logzsol
+                # (log10 Z/Zsun) to absolute by adding LOG10_ZSUN.
                 dist = self.spec._distributions["met_logzsol"]
-                fixed_ssp[0] = float(dist.value)
+                fixed_ssp[0] = float(dist.value) + LOG10_ZSUN
 
             phot = precompute_photometry(
                 ssp_data,
@@ -1019,9 +1021,11 @@ class SEDModel:
             # CLOUDY grid axes: [log_met, log_age, log_U]
             fixed_cloudy = {}
             if "met_logzsol" in self.spec.fixed_params:
-                # met_logzsol is fixed → collapse axis 0 (log_met)
+                # met_logzsol is fixed → collapse axis 0 (log_met).
+                # CLOUDY grid log_met is absolute log10(Z); convert
+                # met_logzsol (log10 Z/Zsun) by adding LOG10_ZSUN.
                 dist = self.spec._distributions["met_logzsol"]
-                fixed_cloudy[0] = float(dist.value)
+                fixed_cloudy[0] = float(dist.value) + LOG10_ZSUN
             if "neb_logU" in self.spec.fixed_params:
                 # neb_logU is fixed → collapse axis 2 (log_U)
                 dist = self.spec._distributions["neb_logU"]
@@ -1098,10 +1102,16 @@ class SEDModel:
         fused_phot = None
         fused_phot_raw = None
         fused_spec = None
+        fused_spec_raw = None
         if rest_sed is not None and self.filter_waves is not None:
             with contextlib.suppress(Exception):
                 fused_phot_raw = build_fused_tier2_photometry(self)
                 fused_phot = jax.jit(fused_phot_raw) if fused_phot_raw is not None else None
+
+        if rest_sed is not None:
+            with contextlib.suppress(Exception):
+                fused_spec_raw = build_fused_tier2_spectrum(self)
+                fused_spec = jax.jit(fused_spec_raw) if fused_spec_raw is not None else None
 
         ck = CompositionalKernels(
             rest_sed=rest_sed,
@@ -1111,6 +1121,7 @@ class SEDModel:
         )
         # Store raw (un-JIT'd) versions for NIFTy tracing
         ck._photometry_raw = fused_phot_raw
+        ck._spectrum_raw = fused_spec_raw
         return ck
 
     def _build_hybrid_kernels(self):
@@ -1128,8 +1139,16 @@ class SEDModel:
                 hybrid_phot_raw = build_hybrid_photometry(self)
                 hybrid_phot = jax.jit(hybrid_phot_raw) if hybrid_phot_raw is not None else None
 
-        hk = HybridKernels(photometry=hybrid_phot)
+        hybrid_spec = None
+        hybrid_spec_raw = None
+        if self._precomputed.spectroscopy is not None and self._z_fixed is not None:
+            with contextlib.suppress(Exception):
+                hybrid_spec_raw = build_hybrid_spectrum(self)
+                hybrid_spec = jax.jit(hybrid_spec_raw) if hybrid_spec_raw is not None else None
+
+        hk = HybridKernels(photometry=hybrid_phot, spectrum=hybrid_spec)
         hk._photometry_raw = hybrid_phot_raw
+        hk._spectrum_raw = hybrid_spec_raw
         return hk
 
     # -------------------------------------------------------------------
@@ -1818,6 +1837,28 @@ class SEDModel:
         # Last resort: exact (slow but always works)
         return self._predict_photometry_exact(params)
 
+    def _predict_spectrum_traceable(self, params, wave_obs=None):
+        """Un-JIT'd spectrum for use inside JAX tracing (NIFTy VI).
+
+        Mirrors _predict_photometry_traceable: uses the hybrid spectrum kernel
+        (precomputed SSPs on pixel grid, ~200 pts) rather than the full
+        compositional rest-SED path (~10k wavelengths).  This reduces the
+        XLA graph size during VI by ~50×.
+
+        Requires spectroscopy precomputation.  Falls back to the compositional
+        auto path if no precomputed spectrum kernel is available.
+        """
+        # Prefer hybrid spectrum raw (precomputed SSP on pixel grid)
+        if self.__hybrid is not None:
+            raw = getattr(self.__hybrid, "_spectrum_raw", None)
+            if raw is not None:
+                p = self._get_internal_params(params)
+                sfr = self._compute_sfr(p)
+                sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+                return raw(sfr_on_ssp, params)
+        # Fall back to auto path (compositional rest-SED)
+        return self._predict_spectrum_auto(params, wave_obs)
+
     def _get_non_stellar_kwargs(self, p):
         """Extract non-stellar kwargs from internal params for hybrid kernel."""
         kw = {}
@@ -2006,9 +2047,7 @@ class SEDModel:
                 f_gas_init=p.get("chem_f_gas_init", 0.9),
                 return_frac=p.get("chem_return_frac", 0.4),
             )
-            _log_z = jnp.sum(weights * _log_z_per_age) / jnp.maximum(
-                jnp.sum(weights), 1e-30
-            )
+            _log_z = jnp.sum(weights * _log_z_per_age) / jnp.maximum(jnp.sum(weights), 1e-30)
         else:
             _log_z = p["log_z_abs"]
         if _use_alpha_fe:
@@ -2282,7 +2321,9 @@ class SEDModel:
             return self._predict_spectrum_auto(params, wave_obs)
         if mode == "_traceable":
             # Raw un-JIT'd path for use inside inference JIT scopes.
-            return self._predict_spectrum_auto(params, wave_obs)
+            # Uses hybrid (precomputed SSP on pixel grid) when available —
+            # ~50× smaller XLA graph than the full rest-SED compositional path.
+            return self._predict_spectrum_traceable(params, wave_obs)
         if mode == "precomputed":
             raise ValueError(
                 "Precomputed mode has been removed. Use mode='compositional' for fast "

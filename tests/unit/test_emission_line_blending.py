@@ -10,12 +10,19 @@ Verifies:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
 from tengri.models.observation.spectrum import blend_emission_lines
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 # Speed of light in Angstrom/s
 _C_AA = 2.99792458e18
@@ -199,9 +206,15 @@ class TestJAXCompatibility:
             lum = jnp.array([lum_val])
             return jnp.sum(blend_emission_lines(lam, lum, 500.0, wave))
 
-        g = jax.grad(loss)(1.0)
-        assert jnp.isfinite(g), "Gradient w.r.t. luminosity should be finite"
-        assert float(g) > 0, "More luminosity should increase total flux"
+        g_jax = float(jax.grad(loss)(1.0))
+        g_fd = fd_grad(loss, 1.0)
+        np.testing.assert_allclose(
+            g_jax,
+            g_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={g_jax:.4e}, FD={g_fd:.4e}",
+        )
+        assert g_jax > 0, "More luminosity should increase total flux"
 
     def test_gradient_wrt_resolution(self, halpha):
         """Gradient w.r.t. spectral resolution should be finite."""
@@ -211,8 +224,14 @@ class TestJAXCompatibility:
         def loss(R):
             return jnp.sum(blend_emission_lines(lam, lum, R, wave))
 
-        g = jax.grad(loss)(500.0)
-        assert jnp.isfinite(g), "Gradient w.r.t. R should be finite"
+        g_jax = float(jax.grad(loss)(500.0))
+        g_fd = fd_grad(loss, 500.0)
+        np.testing.assert_allclose(
+            g_jax,
+            g_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={g_jax:.4e}, FD={g_fd:.4e}",
+        )
 
     def test_gradient_wrt_redshift(self, halpha):
         """Gradient w.r.t. redshift should be finite."""
@@ -222,8 +241,14 @@ class TestJAXCompatibility:
         def loss(z):
             return jnp.sum(blend_emission_lines(lam, lum, 500.0, wave, redshift=z))
 
-        g = jax.grad(loss)(0.03)
-        assert jnp.isfinite(g), "Gradient w.r.t. redshift should be finite"
+        g_jax = float(jax.grad(loss)(0.03))
+        g_fd = fd_grad(loss, 0.03)
+        np.testing.assert_allclose(
+            g_jax,
+            g_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={g_jax:.4e}, FD={g_fd:.4e}",
+        )
 
     def test_vmap_over_batch(self, halpha):
         """Should work with vmap over a batch of luminosities."""

@@ -5,8 +5,14 @@ Reference: Rémy-Ruyer et al. 2014, A&A, 563, A31, Table 1.
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 class TestDustToGasScaling:
@@ -76,6 +82,8 @@ class TestDustToGasScaling:
         """Gradient w.r.t. logzsol is finite."""
         from tengri.models.dust.attenuation import dust_to_gas_scaling_remy_ruyer
 
-        grad_fn = jax.grad(dust_to_gas_scaling_remy_ruyer)
-        g = grad_fn(0.0)
-        assert jnp.isfinite(g)
+        grad_jax = float(jax.grad(dust_to_gas_scaling_remy_ruyer)(0.0))
+        grad_fd = fd_grad(lambda x: float(dust_to_gas_scaling_remy_ruyer(x)), 0.0)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )

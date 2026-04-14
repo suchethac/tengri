@@ -9,6 +9,7 @@ import time
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -21,6 +22,11 @@ from tengri.models.sps.precompute import (
 )
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 def setup_module(_module):
@@ -300,9 +306,48 @@ class TestFusedPhotometryGradients:
         def loss(log_z, tau_v1, tau_v2):
             return jnp.sum(fused(sfr_on_ssp, log_z, tau_v1, tau_v2, -0.7))
 
-        grads = jax.grad(loss, argnums=(0, 1, 2))(-1.0, 0.5, 0.3)
-        for g in grads:
-            assert jnp.isfinite(g), f"Non-finite gradient: {g}"
+        # Use -1.2 (interior of [-1.5, -1.0] cell), NOT -1.0 (an exact grid node).
+        # At grid nodes, jnp.searchsorted places x+eps and x-eps in different cells,
+        # so FD straddles a kink in the bilinear interpolant while autodiff stays within
+        # one cell — giving systematically different values (~30% mismatch is typical).
+        grads = jax.grad(loss, argnums=(0, 1, 2))(-1.2, 0.5, 0.3)
+
+        # Test each gradient against FD approximation
+        def loss_lz(lz):
+            return jnp.sum(fused(sfr_on_ssp, lz, 0.5, 0.3, -0.7))
+
+        def loss_tv1(tv1):
+            return jnp.sum(fused(sfr_on_ssp, -1.2, tv1, 0.3, -0.7))
+
+        def loss_tv2(tv2):
+            return jnp.sum(fused(sfr_on_ssp, -1.2, 0.5, tv2, -0.7))
+
+        grad_lz_jax = float(grads[0])
+        grad_lz_fd = fd_grad(loss_lz, -1.2)
+        np.testing.assert_allclose(
+            grad_lz_jax,
+            grad_lz_fd,
+            rtol=1e-3,
+            err_msg=f"log_z: autodiff={grad_lz_jax:.4e}, FD={grad_lz_fd:.4e}",
+        )
+
+        grad_tv1_jax = float(grads[1])
+        grad_tv1_fd = fd_grad(loss_tv1, 0.5)
+        np.testing.assert_allclose(
+            grad_tv1_jax,
+            grad_tv1_fd,
+            rtol=1e-3,
+            err_msg=f"tau_v1: autodiff={grad_tv1_jax:.4e}, FD={grad_tv1_fd:.4e}",
+        )
+
+        grad_tv2_jax = float(grads[2])
+        grad_tv2_fd = fd_grad(loss_tv2, 0.3)
+        np.testing.assert_allclose(
+            grad_tv2_jax,
+            grad_tv2_fd,
+            rtol=1e-3,
+            err_msg=f"tau_v2: autodiff={grad_tv2_jax:.4e}, FD={grad_tv2_fd:.4e}",
+        )
 
     def test_gradients_match_unfused(
         self,

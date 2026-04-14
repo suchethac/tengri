@@ -2,6 +2,7 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from tengri.models.nebular.shock import (
@@ -11,6 +12,11 @@ from tengri.models.nebular.shock import (
     shock_emission_sed,
     shock_line_ratios,
 )
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 # Number of lines in the active backend (HDF5 when present, else fallback)
@@ -102,6 +108,26 @@ class TestShockLineRatios:
         assert 2.5 <= nii_ratio <= 3.3, (
             f"[NII] 6583/6548={nii_ratio:.3f} outside physically plausible range [2.5, 3.3]"
         )
+
+    def test_balmer_decrement_elevated_above_case_b(self):
+        """Shock Hα/Hβ must exceed the Case B recombination ratio of 2.86.
+
+        Osterbrock & Ferland 2006, Astrophysics of Gaseous Nebulae, §4.2:
+        Case B recombination gives Hα/Hβ = 2.86 at T=10^4 K, n_e=100 cm^-3.
+        Shocks produce ELEVATED Balmer ratios relative to Case B due to:
+        (1) collisional excitation of Hα in post-shock warm gas,
+        (2) partial Lya opacity trapping (Mathis 1986), and
+        (3) large velocity widths broadening and merging line ratios differently.
+        The MAPPINGS V grid yields Hα/Hβ typically 3.0–5.0 depending on velocity.
+        We assert only the strict lower bound: ratio > 2.86 (must exceed Case B).
+        """
+        for v in [200.0, 300.0, 500.0]:
+            ratios = shock_line_ratios(v)
+            ha_hb = float(ratios["HA_6563A"]) / float(ratios["Hb_4861A"])
+            assert ha_hb > 2.86, (
+                f"Shock Hα/Hβ={ha_hb:.3f} at v={v} km/s — must exceed Case B ratio 2.86 "
+                f"(Osterbrock & Ferland 2006 §4.2)"
+            )
 
     def test_sii_total_positive(self):
         """Sum of [SII] doublet should be positive and physically plausible.
@@ -210,9 +236,15 @@ class TestShockDifferentiable:
         def _total_flux(v):
             return jnp.sum(shock_emission_sed(wave, v, 1e6, line_sigma_aa=2.0))
 
-        g = jax.grad(_total_flux)(300.0)
-        assert jnp.isfinite(g)
-        assert float(g) != 0.0
+        grad_jax = float(jax.grad(_total_flux)(300.0))
+        grad_fd = fd_grad(_total_flux, 300.0)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=2e-1,
+            err_msg="shock_emission_sed: FD check ∂/∂velocity",
+        )
+        assert grad_jax != 0.0
 
     def test_grad_wrt_luminosity(self):
         wave = jnp.linspace(3000.0, 8000.0, 500)
@@ -220,9 +252,15 @@ class TestShockDifferentiable:
         def _total_flux(lum):
             return jnp.sum(shock_emission_sed(wave, 300.0, lum, line_sigma_aa=2.0))
 
-        g = jax.grad(_total_flux)(1e6)
-        assert jnp.isfinite(g)
-        assert float(g) != 0.0
+        grad_jax = float(jax.grad(_total_flux)(1e6))
+        grad_fd = fd_grad(_total_flux, 1e6)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=2e-1,
+            err_msg="shock_emission_sed: FD check ∂/∂luminosity",
+        )
+        assert grad_jax != 0.0
 
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,12 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 # ---------------------------------------------------------------------------
 # Pure-formula tests (no grid required)
 # These test the escape-fraction scaling formula isolated from the grid backend.
@@ -118,9 +124,16 @@ class TestLyaScaleFormula:
             out = _apply_lya_escape(waves, lums, neb_fesc=0.0, neb_fesc_lya=fesc_lya)
             return jnp.sum(out)
 
-        g = jax.grad(loss)(0.3)
-        assert jnp.isfinite(g), f"Gradient w.r.t. neb_fesc_lya is not finite: {g}"
-        assert float(g) != 0.0, "Gradient w.r.t. neb_fesc_lya should be nonzero"
+        grad_jax = float(jax.grad(loss)(0.3))
+        grad_fd = fd_grad(loss, 0.3)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            atol=1e-12,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
+        assert grad_jax != 0.0, "Gradient w.r.t. neb_fesc_lya should be nonzero"
 
     def test_jit_compatible(self, toy_lines):
         """The escape fraction scaling should be JIT-compilable."""

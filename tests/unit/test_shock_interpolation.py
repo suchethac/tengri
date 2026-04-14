@@ -16,6 +16,12 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 # --- conditional import: skip entire module if grid file is absent ---
 
 from tengri.models.nebular.shock import (
@@ -177,49 +183,73 @@ class TestGradients:
     """
 
     def test_gradient_wrt_velocity_is_finite(self):
-        """d(sum_ratios)/d(velocity) is finite and non-NaN."""
+        """FD check: ∂(∑ratios)/∂velocity. Triweight interpolation must give nonzero grad."""
         g = _get_grid()
         b_mid = float(_midpoint(g["b_axis"]))
         n_mid = float(_midpoint(g["log_density_cm3"]))
         v_mid = float(_midpoint(g["velocities_kms"]))
 
-        def sum_ratios(v):
+        def sum_ratios_scalar(v):
             r = shock_line_ratios(v, shock_log_density=n_mid, shock_b_over_sqrt_n=b_mid)
             return sum(r.values())
 
-        g_v = jax.grad(sum_ratios)(jnp.array(v_mid))
-        assert jnp.isfinite(g_v), f"Non-finite gradient w.r.t. velocity: {g_v}"
+        def f(v):
+            return float(sum_ratios_scalar(jnp.array(v)))
+
+        g_v = float(jax.grad(sum_ratios_scalar)(jnp.array(v_mid)))
+        np.testing.assert_allclose(
+            g_v,
+            fd_grad(f, v_mid, eps=1.0),
+            rtol=1e-3,
+            err_msg="shock_line_ratios: FD check ∂/∂velocity",
+        )
 
     def test_gradient_wrt_b_field_is_finite(self):
-        """d(sum_ratios)/d(shock_b_over_sqrt_n) is finite (was zero with nearest-neighbor)."""
+        """FD check: ∂(∑ratios)/∂b_field. Was zero under nearest-neighbor."""
         g = _get_grid()
         b_mid = float(_midpoint(g["b_axis"]))
         n_mid = float(_midpoint(g["log_density_cm3"]))
         v_mid = float(_midpoint(g["velocities_kms"]))
 
-        def sum_ratios(b):
+        def sum_ratios_scalar(b):
             r = shock_line_ratios(v_mid, shock_log_density=n_mid, shock_b_over_sqrt_n=b)
             return sum(r.values())
 
-        g_b = jax.grad(sum_ratios)(jnp.array(b_mid))
-        assert jnp.isfinite(g_b), f"Non-finite gradient w.r.t. b_field: {g_b}"
+        def f(b):
+            return float(sum_ratios_scalar(jnp.array(b)))
+
+        g_b = float(jax.grad(sum_ratios_scalar)(jnp.array(b_mid)))
+        np.testing.assert_allclose(
+            g_b,
+            fd_grad(f, b_mid, eps=b_mid * 1e-3),
+            rtol=1e-3,
+            err_msg="shock_line_ratios: FD check ∂/∂b_field",
+        )
 
     def test_gradient_wrt_log_density_is_finite(self):
-        """d(sum_ratios)/d(shock_log_density) is finite (was zero with nearest-neighbor)."""
+        """FD check: ∂(∑ratios)/∂log_density. Was zero under nearest-neighbor."""
         g = _get_grid()
         b_mid = float(_midpoint(g["b_axis"]))
         n_mid = float(_midpoint(g["log_density_cm3"]))
         v_mid = float(_midpoint(g["velocities_kms"]))
 
-        def sum_ratios(n):
+        def sum_ratios_scalar(n):
             r = shock_line_ratios(v_mid, shock_log_density=n, shock_b_over_sqrt_n=b_mid)
             return sum(r.values())
 
-        g_n = jax.grad(sum_ratios)(jnp.array(n_mid))
-        assert jnp.isfinite(g_n), f"Non-finite gradient w.r.t. log_density: {g_n}"
+        def f(n):
+            return float(sum_ratios_scalar(jnp.array(n)))
+
+        g_n = float(jax.grad(sum_ratios_scalar)(jnp.array(n_mid)))
+        np.testing.assert_allclose(
+            g_n,
+            fd_grad(f, n_mid, eps=1e-3),
+            rtol=1e-3,
+            err_msg="shock_line_ratios: FD check ∂/∂log_density",
+        )
 
     def test_joint_gradient_all_three_axes(self):
-        """Joint gradient w.r.t. (velocity, b_field, log_density) is all finite."""
+        """Joint gradients (velocity, b_field, log_density) all agree with FD."""
         g = _get_grid()
         b_mid = float(_midpoint(g["b_axis"]))
         n_mid = float(_midpoint(g["log_density_cm3"]))
@@ -233,6 +263,17 @@ class TestGradients:
         params = jnp.array([v_mid, b_mid, n_mid])
         grads = jax.grad(sum_ratios)(params)
         assert jnp.all(jnp.isfinite(grads)), f"Non-finite joint gradient: {grads}"
+
+        # FD check on each component individually
+        def f_v(v):
+            return float(sum_ratios(jnp.array([v, b_mid, n_mid])))
+
+        np.testing.assert_allclose(
+            float(grads[0]),
+            fd_grad(f_v, v_mid, eps=1.0),
+            rtol=1e-3,
+            err_msg="shock_line_ratios joint: FD check ∂/∂velocity",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -284,5 +325,13 @@ class TestComputeShockSed:
                 )
             )
 
-        g_v = jax.grad(total_flux)(jnp.array(v_mid))
-        assert jnp.isfinite(g_v), f"Non-finite SED gradient w.r.t. velocity: {g_v}"
+        def f(v):
+            return float(total_flux(jnp.array(v)))
+
+        g_v = float(jax.grad(total_flux)(jnp.array(v_mid)))
+        np.testing.assert_allclose(
+            g_v,
+            fd_grad(f, v_mid, eps=1.0),
+            rtol=1e-3,
+            err_msg="compute_shock_sed: FD check ∂(∑SED)/∂velocity",
+        )

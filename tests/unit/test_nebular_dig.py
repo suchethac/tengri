@@ -13,9 +13,16 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from tengri.models.nebular.dig import mix_dig_emission
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 # ---------------------------------------------------------------------------
 # Minimal mock backend
@@ -211,9 +218,16 @@ def test_dig_grad_wrt_frac_finite(mock_backend, common_kw):
             mix_dig_emission(mock_backend, neb_logU=-3.0, neb_dig_frac=frac, **common_kw)
         )
 
-    frac = jnp.array(0.5)
-    grad = jax.grad(fn)(frac)
-    assert jnp.isfinite(grad), f"Gradient w.r.t. neb_dig_frac is not finite: {grad}"
+    grad_jax = float(jax.grad(fn)(jnp.array(0.5)))
+    grad_fd = fd_grad(
+        lambda f: float(
+            jnp.sum(mix_dig_emission(mock_backend, neb_logU=-3.0, neb_dig_frac=f, **common_kw))
+        ),
+        0.5,
+    )
+    np.testing.assert_allclose(
+        grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+    )
 
 
 # ---------------------------------------------------------------------------

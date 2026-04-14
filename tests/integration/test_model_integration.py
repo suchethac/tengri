@@ -256,20 +256,43 @@ class TestMock:
 # ===================================================================
 
 
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 class TestGradients:
     def test_photometry_gradient(self, parametric_model, typical_params):
         def loss(p):
             return jnp.sum(parametric_model.predict_photometry(p))
 
-        grad = jax.grad(loss)(typical_params)
-        assert jnp.isfinite(grad["sfh_tsnorm_log_peak_sfr"])
+        grad_jax = float(jax.grad(loss)(typical_params)["sfh_tsnorm_log_peak_sfr"])
+
+        def loss_scalar(x):
+            p = dict(typical_params)
+            p["sfh_tsnorm_log_peak_sfr"] = x
+            return float(jnp.sum(parametric_model.predict_photometry(p)))
+
+        grad_fd = fd_grad(loss_scalar, float(typical_params["sfh_tsnorm_log_peak_sfr"]))
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
 
     def test_derived_gradient(self, parametric_model, typical_params):
         def loss(p):
             return parametric_model.predict_derived(p)["stellar_mass"]
 
-        grad = jax.grad(loss)(typical_params)
-        assert jnp.isfinite(grad["sfh_tsnorm_log_peak_sfr"])
+        grad_jax = float(jax.grad(loss)(typical_params)["sfh_tsnorm_log_peak_sfr"])
+
+        def loss_scalar(x):
+            p = dict(typical_params)
+            p["sfh_tsnorm_log_peak_sfr"] = x
+            return float(parametric_model.predict_derived(p)["stellar_mass"])
+
+        grad_fd = fd_grad(loss_scalar, float(typical_params["sfh_tsnorm_log_peak_sfr"]))
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
 
 
 # ===================================================================
@@ -556,5 +579,12 @@ class TestDustEmissionForwardModel:
         def loss(T):
             return model.predict_photometry({"dust_T": T})[0]
 
-        g = jax.grad(loss)(35.0)
-        assert jnp.isfinite(g), "dust_T gradient should be finite"
+        grad_jax = float(jax.grad(loss)(35.0))
+        grad_fd = float((loss(35.0 + 1e-4) - loss(35.0 - 1e-4)) / (2.0 * 1e-4))
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg=f"dust_T: autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )

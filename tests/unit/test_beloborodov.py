@@ -8,7 +8,14 @@ Covers:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 from tengri.models.agn.disc import (
     _eddington_luminosity,
@@ -64,11 +71,19 @@ class TestBeloborodovGammaHot:
         assert jnp.isclose(gamma, expected, atol=1e-6)
 
     def test_gradient(self):
-        """Gradient w.r.t. l_diss_hot is finite and nonzero."""
-        grad_fn = jax.grad(lambda x: beloborodov_gamma_hot(x, 1.0))
-        g = grad_fn(1.0)
-        assert jnp.isfinite(g)
-        assert g != 0.0
+        """Gradient w.r.t. l_diss_hot agrees with FD (nonzero)."""
+
+        def f(x: float) -> float:
+            return float(beloborodov_gamma_hot(x, 1.0))
+
+        grad_jax = float(jax.grad(lambda x: beloborodov_gamma_hot(x, 1.0))(1.0))
+        np.testing.assert_allclose(
+            grad_jax,
+            fd_grad(f, 1.0),
+            rtol=1e-3,
+            err_msg="beloborodov_gamma_hot: FD check ∂γ_hot/∂l_diss_hot",
+        )
+        assert grad_jax != 0.0
 
 
 # ===================================================================

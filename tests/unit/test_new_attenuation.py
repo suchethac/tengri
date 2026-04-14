@@ -2,6 +2,7 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -16,6 +17,11 @@ from tengri.models.dust.attenuation import (
 )
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 @pytest.fixture
@@ -97,8 +103,11 @@ class TestTEA:
         def loss(delta):
             return jnp.sum(tea(wavelength, dust_delta=delta))
 
-        grad = jax.grad(loss)(-0.2)
-        assert jnp.isfinite(grad)
+        grad_jax = float(jax.grad(loss)(-0.2))
+        grad_fd = fd_grad(loss, -0.2)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
 
 
 # ===================================================================
@@ -208,14 +217,31 @@ class TestConroy2010:
         assert_allclose(k_eager, k_jit, rtol=1e-12)
 
     def test_gradient_compatible(self, wavelength):
-        """conroy2010 supports JAX gradients w.r.t. Rv and n_slope."""
+        """conroy2010 gradients match central FD w.r.t. Rv and n_slope."""
 
         def loss(rv, n):
             return jnp.sum(conroy2010(wavelength, dust_Rv=rv, n_slope=n))
 
         g_rv, g_n = jax.grad(loss, argnums=(0, 1))(3.1, -0.7)
-        assert jnp.isfinite(g_rv)
-        assert jnp.isfinite(g_n)
+
+        def f_rv(rv: float) -> float:
+            return float(loss(rv, -0.7))
+
+        def f_n(n: float) -> float:
+            return float(loss(3.1, n))
+
+        np.testing.assert_allclose(
+            float(g_rv),
+            fd_grad(f_rv, 3.1),
+            rtol=1e-3,
+            err_msg="conroy2010: FD check ∂(∑k)/∂dust_Rv",
+        )
+        np.testing.assert_allclose(
+            float(g_n),
+            fd_grad(f_n, -0.7),
+            rtol=1e-3,
+            err_msg="conroy2010: FD check ∂(∑k)/∂n_slope",
+        )
 
     def test_uv_bump_present(self):
         """MW component introduces a 2175 A bump feature in the UV."""

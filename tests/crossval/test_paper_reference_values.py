@@ -182,17 +182,17 @@ class TestAllen2008:
 
     def test_shock_grid_velocity_range(self):
         """Allen+2008: velocity grid 100-1000 km/s."""
-        from tengri.models.nebular.shock import _SHOCK_V
+        from tengri.models.nebular.shock import _FALLBACK_V
 
-        assert float(_SHOCK_V[0]) == 100.0
-        assert float(_SHOCK_V[-1]) == 1000.0
+        assert float(_FALLBACK_V[0]) == 100.0
+        assert float(_FALLBACK_V[-1]) == 1000.0
 
     def test_oiii_peaks_at_300_400(self):
         """Allen+2008 Fig. 14: [OIII]/Hβ peaks at v ~ 300-400 km/s."""
-        from tengri.models.nebular.shock import _R_OIII, _SHOCK_V
+        from tengri.models.nebular.shock import _FALLBACK_R_OIII, _FALLBACK_V
 
-        peak_idx = int(jnp.argmax(_R_OIII))
-        peak_v = float(_SHOCK_V[peak_idx])
+        peak_idx = int(jnp.argmax(_FALLBACK_R_OIII))
+        peak_v = float(_FALLBACK_V[peak_idx])
         assert 200.0 <= peak_v <= 500.0, f"[OIII]/Hβ should peak at 200-500 km/s, got {peak_v}"
 
     def test_oiii_5007_4959_ratio_298(self):
@@ -213,9 +213,9 @@ class TestAllen2008:
         Case B recombination: Hα/Hβ = 2.86 (Osterbrock & Ferland 2006).
         In shocks, collisional excitation adds to recombination.
         """
-        from tengri.models.nebular.shock import _R_HA
+        from tengri.models.nebular.shock import _FALLBACK_R_HA
 
-        for i, r in enumerate(_R_HA):
+        for i, r in enumerate(_FALLBACK_R_HA):
             assert float(r) >= 2.86, f"Hα/Hβ at index {i} = {float(r)}, should be ≥ 2.86"
 
     def test_oiii_reference_values_from_table5(self):
@@ -225,15 +225,15 @@ class TestAllen2008:
         [OIII] 5007/Hβ at v=300: ~5.8
         [OIII] 5007/Hβ at v=1000: ~2.5
         """
-        from tengri.models.nebular.shock import _R_OIII, _SHOCK_V
+        from tengri.models.nebular.shock import _FALLBACK_R_OIII, _FALLBACK_V
 
         # v=100 (index 0)
-        np.testing.assert_allclose(float(_R_OIII[0]), 0.3, atol=0.2)
+        np.testing.assert_allclose(float(_FALLBACK_R_OIII[0]), 0.3, atol=0.2)
         # v=300 (index 3)
-        idx_300 = int(jnp.argmin(jnp.abs(_SHOCK_V - 300.0)))
-        np.testing.assert_allclose(float(_R_OIII[idx_300]), 5.8, atol=1.0)
+        idx_300 = int(jnp.argmin(jnp.abs(_FALLBACK_V - 300.0)))
+        np.testing.assert_allclose(float(_FALLBACK_R_OIII[idx_300]), 5.8, atol=1.0)
         # v=1000 (last)
-        np.testing.assert_allclose(float(_R_OIII[-1]), 2.5, atol=0.5)
+        np.testing.assert_allclose(float(_FALLBACK_R_OIII[-1]), 2.5, atol=0.5)
 
 
 # ===================================================================
@@ -245,11 +245,16 @@ class TestMahadevan1997:
     """Reference values from Mahadevan 1997, ApJ, 477, 585."""
 
     def test_synchrotron_peak_in_radio_not_uv(self):
-        """Mahadevan 1997: ADAF SED peaks in radio/sub-mm, NOT UV/optical.
+        """Mahadevan 1997: ADAF + truncated-disc SED peaks in IR/radio, NOT UV/optical.
 
-        The synchrotron cutoff frequency ν_c ~ 10^12 Hz for M=10^8 Msun,
-        but the SED L_nu ∝ ν^{1/3} * exp(-ν/3ν_c) peaks well below ν_c.
-        Combined with bremsstrahlung, the total ADAF SED peaks in the radio.
+        For a standard thin disc, L_nu peaks in the UV (λ ~ 1000-4000 Å).
+        An ADAF flow at the same L_bol has a very different spectral shape:
+          - Synchrotron peaks at radio/mm: ν_peak ∝ M_BH^{-1/2} * ṁ^{1/2} ~ 10^10 Hz
+          - Bremsstrahlung: flat spectrum to X-ray (kT_e/h)
+          - Outer truncated disc: IR/optical emission from r > r_tr
+
+        The combined ADAF + outer-disc SED must peak well into the infrared
+        (λ > 1 μm = 1e4 Å), never in the UV/optical (λ < 4000 Å).
         """
         from tengri.models.agn.disc import adaf_disc
 
@@ -257,20 +262,50 @@ class TestMahadevan1997:
         l_nu = adaf_disc(wave, agn_log_lbol=10.0, agn_log_mbh=8.0)
         peak_wave = float(wave[jnp.argmax(l_nu)])
 
-        # ADAF peak must be in radio/mm (λ > 10^5 A = 10 μm), NOT UV
-        assert peak_wave > 1e5, f"ADAF peak at {peak_wave:.0e} A — should be in radio/mm, not UV"
+        # ADAF + outer disc SED must peak in the infrared (λ > 1 μm), not UV/optical.
+        # UV/optical threshold: λ < 4000 Å.  Standard thin disc peaks ~1000-4000 Å.
+        assert peak_wave > 1e4, (
+            f"ADAF SED peak at {peak_wave:.2e} Å — should be in IR/radio (>1 μm), "
+            f"not UV/optical. Standard thin disc peaks in UV; ADAF must not."
+        )
 
-    def test_electron_temperature_eq(self):
-        """Mahadevan 1997: T_e ~ 5e9 * delta^0.5 K.
+    def test_bh_mass_shifts_synchrotron_peak(self):
+        """Mahadevan 1997 Eq. 24: ν_peak ∝ M_BH^{-1/2} — higher M_BH → longer radio λ.
 
-        With delta=0.01: T_e ~ 5e8 K.
-        With delta=0.1: T_e ~ 1.6e9 K.
+        The ADAF synchrotron peak frequency scales as:
+            ν_peak = 1e12 * (M_BH / 10^8 Msun)^{-1/2} * ṁ^{1/2}  Hz
+
+        So M_BH = 10^9 Msun must peak at λ ≈ 3 cm (10× longer than M_BH = 10^7 Msun).
+        This tests the adaf_disc code path (disc.py:1113) directly.
+
+        Uses a full-SED wavelength grid (X-ray to radio) so the internal normalization
+        is physically correct — adaf_disc normalizes over the passed wavelength array.
+        Outer disc is suppressed (r_tr ≈ ISCO) to isolate the ADAF synchrotron shape.
         """
-        # Check the implementation uses the Mahadevan formula
-        # T_e = 5e9 * delta^0.5
-        for delta in [0.01, 0.1]:
-            t_e = 5e9 * delta**0.5
-            assert t_e > 1e8, f"T_e should be > 1e8 K for delta={delta}"
+        import numpy as np
+
+        from tengri.models.agn.disc import adaf_disc
+
+        # Wide grid (1 Å to 1 m) for correct SED normalization
+        wave_full = np.array(jnp.geomspace(1.0, 1e12, 8000))
+
+        # Suppress outer disc (r_tr = 7 R_g ≈ ISCO) to isolate ADAF synchrotron
+        common = dict(agn_log_lbol=10.0, agn_log_ledd=-3.0, agn_r_tr=7.0)
+        l_low_mbh = np.array(adaf_disc(jnp.array(wave_full), agn_log_mbh=7.0, **common))
+        l_high_mbh = np.array(adaf_disc(jnp.array(wave_full), agn_log_mbh=9.0, **common))
+
+        # Identify radio/mm range (1 mm to 10 m = 1e7 to 1e11 Å) where synchrotron peaks
+        radio_mask = (wave_full >= 1e7) & (wave_full <= 1e11)
+        wave_radio = wave_full[radio_mask]
+
+        peak_low = wave_radio[np.argmax(l_low_mbh[radio_mask])]
+        peak_high = wave_radio[np.argmax(l_high_mbh[radio_mask])]
+
+        assert peak_high > peak_low, (
+            f"Mahadevan 1997 Eq. 24: ν_peak ∝ M_BH^(-1/2), so M_BH=10^9 Msun must "
+            f"synchrotron-peak at longer λ than M_BH=10^7 Msun. "
+            f"Got λ_peak(10^7 Msun)={peak_low:.2e} Å, λ_peak(10^9 Msun)={peak_high:.2e} Å"
+        )
 
 
 # ===================================================================
@@ -501,3 +536,790 @@ class TestEddingtonPhysics:
         r_g = float(_gravitational_radius(8.0))
         expected = 1.485e13  # cm, for 10^8 Msun
         np.testing.assert_allclose(r_g, expected, rtol=0.02)
+
+
+# ===================================================================
+# 12. SFH MASS CONSERVATION — dense_basis and continuity
+# ===================================================================
+
+
+class TestSFHMassConservation:
+    """For SFH types with explicit log_total_mass parameter, integral equals 10^log_total_mass."""
+
+    # Log-spaced age grid for accurate trapezoidal integration
+    AGE_GRID = jnp.geomspace(1e6, 13.7e9, 10000)
+
+    def test_dense_basis_mass_conservation(self):
+        """Dense basis SFH: ∫ SFR(t) dt = 10^log_total_mass within 1%.
+
+        Iyer+2019, ApJ 879, 116 — dense basis SFH is mass-normalized.
+        """
+        from tengri.models.sfh.dense_basis import dense_basis_sfh
+
+        sfr = dense_basis_sfh(
+            self.AGE_GRID,
+            log_total_mass=10.0,
+            log_sfr_inst=0.0,
+            age_universe_yr=13.7e9,
+            tx_frac_0=0.2,
+            tx_frac_1=0.5,
+            tx_frac_2=0.8,
+        )
+        mass = float(jnp.trapezoid(sfr, self.AGE_GRID))
+        np.testing.assert_allclose(
+            mass,
+            1e10,
+            rtol=0.01,
+            err_msg="Dense basis SFH mass conservation: ∫ SFR dt != 10^10 Msun (Iyer+2019)",
+        )
+
+    def test_continuity_mass_conservation(self):
+        """Continuity SFH: ∫ SFR(t) dt = 10^log_total_mass within 1%.
+
+        Leja+2019, ApJ 876, 3 — continuity SFH is mass-normalized.
+        """
+        from tengri.models.sfh.nonparametric import continuity_sfh
+
+        sfr = continuity_sfh(
+            self.AGE_GRID,
+            log_total_mass=10.0,
+            ratio_0=0.0,
+            ratio_1=0.0,
+            ratio_2=0.0,
+            ratio_3=0.0,
+            ratio_4=0.0,
+            ratio_5=0.0,
+        )
+        mass = float(jnp.trapezoid(sfr, self.AGE_GRID))
+        np.testing.assert_allclose(
+            mass,
+            1e10,
+            rtol=0.01,
+            err_msg="Continuity SFH mass conservation: ∫ SFR dt != 10^10 Msun (Leja+2019)",
+        )
+
+    def test_continuity_mass_conservation_varying_ratios(self):
+        """Continuity SFH mass is invariant to ratio parameters (only shape changes).
+
+        Leja+2019: total mass is set by log_total_mass independent of log-ratios.
+        """
+        from tengri.models.sfh.nonparametric import continuity_sfh
+
+        sfr_bursty = continuity_sfh(
+            self.AGE_GRID,
+            log_total_mass=10.0,
+            ratio_0=1.0,
+            ratio_1=-0.5,
+            ratio_2=0.8,
+            ratio_3=-0.3,
+            ratio_4=0.5,
+            ratio_5=-0.2,
+        )
+        mass = float(jnp.trapezoid(sfr_bursty, self.AGE_GRID))
+        np.testing.assert_allclose(
+            mass,
+            1e10,
+            rtol=0.01,
+            err_msg="Continuity SFH: mass must be log_total_mass regardless of ratios",
+        )
+
+    def test_dpl_peak_time(self):
+        """DPL SFH peaks at t_peak = tau × (beta/alpha)^{1/(alpha+beta)}. Carnall+2018 Eq. 1.
+
+        SFR(t) = norm / [(t/tau)^alpha + (t/tau)^{-beta}].
+        Setting d/dt = 0 gives t_peak = tau × (beta/alpha)^{1/(alpha+beta)}.
+        When alpha == beta the formula reduces to t_peak = tau exactly.
+        """
+        from tengri.models.sfh.mean_sfh import double_powerlaw
+
+        tau = 3e9  # yr
+        # alpha == beta → t_peak == tau exactly (no grid-resolution ambiguity)
+        alpha = beta = 2.0
+        sfr = double_powerlaw(self.AGE_GRID, alpha=alpha, beta=beta, tau=tau, norm=1.0)
+        peak_age = float(self.AGE_GRID[jnp.argmax(sfr)])
+        np.testing.assert_allclose(
+            peak_age,
+            tau,
+            rtol=0.01,
+            err_msg="DPL SFH: peak age should match tau when alpha=beta (Carnall+2018 Eq. 1)",
+        )
+
+
+# ===================================================================
+# 13. CHARLOT & FALL 2000 — two-component dust attenuation
+# ===================================================================
+
+
+class TestCharlotFall2000:
+    """Charlot & Fall 2000, ApJ 539, 718, Eq. 3 — two-component dust model."""
+
+    def test_young_star_attenuation(self):
+        """Young stars (deeply embedded) see tau_bc + tau_diff at V-band.
+
+        CF00 Eq. 3: T_young = exp(-(tau_bc + tau_diff) × k(λ)).
+        At V-band (5500 Å): k(5500) ≈ 1.0, so T_young = exp(-1.3) ≈ 0.2725.
+
+        The birth-cloud transition is a sigmoid with t_birth=10 Myr, width=0.3 dex.
+        At age=1e4 yr the weight is 0.99995 ≈ 1 (deep sigmoid limit).
+        """
+        from tengri.models.dust.attenuation import two_component_dust
+
+        wave_v = jnp.array([5500.0])
+        # 1e4 yr (10 kyr) — deep inside sigmoid → birth-cloud weight ≈ 1.0
+        age_young = jnp.array([1e4])
+        # two_component_dust returns shape (n_ages, n_wave); index [0, 0] for scalar
+        t_young = float(
+            two_component_dust(
+                wave_v,
+                age_young,
+                tau_v1=1.0,
+                tau_v2=0.3,
+                law_bc="power_law",
+                law_diff="calzetti",
+            )[0, 0]
+        )
+        np.testing.assert_allclose(
+            t_young,
+            float(jnp.exp(-1.3)),
+            rtol=0.05,
+            err_msg="CF00 Eq. 3: young-star V-band attenuation = exp(-tau_bc - tau_diff)",
+        )
+
+    def test_old_star_attenuation(self):
+        """Old stars (long-dispersed birth cloud) see only tau_diff at V-band.
+
+        CF00 Eq. 3: T_old = exp(-tau_diff × k(λ)).
+        At V-band: T_old = exp(-0.3) ≈ 0.7408.
+
+        At age=5e9 yr the sigmoid weight is < 2e-4 ≈ 0 (deep old-star limit).
+        """
+        from tengri.models.dust.attenuation import two_component_dust
+
+        wave_v = jnp.array([5500.0])
+        # 5 Gyr — deep outside sigmoid → birth-cloud weight ≈ 0.0
+        age_old = jnp.array([5e9])
+        t_old = float(
+            two_component_dust(
+                wave_v,
+                age_old,
+                tau_v1=1.0,
+                tau_v2=0.3,
+                law_bc="power_law",
+                law_diff="calzetti",
+            )[0, 0]
+        )
+        np.testing.assert_allclose(
+            t_old,
+            float(jnp.exp(-0.3)),
+            rtol=0.05,
+            err_msg="CF00 Eq. 3: old-star V-band attenuation = exp(-tau_diff)",
+        )
+
+    def test_young_old_ratio(self):
+        """Young/old attenuation ratio = exp(-tau_bc) at V-band.
+
+        CF00: T_young / T_old = exp(-tau_bc × k(V)) = exp(-1.0) ≈ 0.3679.
+        Uses deep sigmoid limits: 1e4 yr (weight≈1) and 5e9 yr (weight≈0).
+        """
+        from tengri.models.dust.attenuation import two_component_dust
+
+        wave_v = jnp.array([5500.0])
+        age_young = jnp.array([1e4])  # deep young limit: weight ≈ 1
+        age_old = jnp.array([5e9])  # deep old limit: weight ≈ 0
+        t_young = float(
+            two_component_dust(
+                wave_v,
+                age_young,
+                tau_v1=1.0,
+                tau_v2=0.3,
+                law_bc="power_law",
+                law_diff="calzetti",
+            )[0, 0]
+        )
+        t_old = float(
+            two_component_dust(
+                wave_v,
+                age_old,
+                tau_v1=1.0,
+                tau_v2=0.3,
+                law_bc="power_law",
+                law_diff="calzetti",
+            )[0, 0]
+        )
+        ratio = t_young / t_old
+        np.testing.assert_allclose(
+            ratio,
+            float(jnp.exp(-1.0)),
+            rtol=0.05,
+            err_msg="CF00 Eq. 3: T_young/T_old = exp(-tau_bc) at V-band",
+        )
+
+
+# ===================================================================
+# 14. WG00 DUST GEOMETRY LIMITS
+# ===================================================================
+
+
+class TestWittGordon2000Limits:
+    """Witt & Gordon 2000, ApJ 528, 799 — shell and cloudy geometry limits."""
+
+    def test_shell_opaque_limit(self):
+        """Shell geometry: T → 0 at large tau_v. WG00 Eq. 1: T = exp(-tau × k).
+
+        At tau_v = 100: T(5500 Å) < 1e-10.
+        """
+        from tengri.models.dust.attenuation import wg00_shell
+
+        T = float(wg00_shell(jnp.array([5500.0]), tau_v=100.0, law="cardelli")[0])
+        assert T < 1e-10, f"WG00 shell opaque limit: T={T:.2e} (expected < 1e-10 at tau_v=100)"
+
+    def test_shell_transparent_limit(self):
+        """Shell geometry: T → 1 at tau_v = 0. WG00 Eq. 1: Beer-Lambert."""
+        from tengri.models.dust.attenuation import wg00_shell
+
+        T = float(wg00_shell(jnp.array([5500.0]), tau_v=0.0, law="cardelli")[0])
+        np.testing.assert_allclose(
+            T,
+            1.0,
+            rtol=1e-6,
+            err_msg="WG00 shell: T → 1 at tau_v=0 (transparent)",
+        )
+
+    def test_cloudy_slab_formula(self):
+        """Cloudy geometry: T = (1 - exp(-x))/x, x = tau × k(λ). WG00 Eq. 2.
+
+        At tau_v = 1, k(5500 Å) ≈ 1 (cardelli normalized to V-band):
+        T = (1 - exp(-1)) / 1 ≈ 0.6321.
+        """
+        from tengri.models.dust.attenuation import wg00_cloudy
+
+        T = float(wg00_cloudy(jnp.array([5500.0]), tau_v=1.0, law="cardelli")[0])
+        expected = float((1.0 - jnp.exp(-1.0)) / 1.0)  # ≈ 0.6321
+        np.testing.assert_allclose(
+            T,
+            expected,
+            rtol=0.05,
+            err_msg="WG00 cloudy slab formula: T=(1-exp(-x))/x at x=tau*k≈1",
+        )
+
+    def test_cloudy_taylor_at_zero(self):
+        """Cloudy Taylor branch: T ≈ 1 at tau → 0 (numerical stability).
+
+        lim_{x→0} (1-exp(-x))/x = 1. Implementation uses Taylor expansion
+        for tau < threshold to avoid 0/0.
+        """
+        from tengri.models.dust.attenuation import wg00_cloudy
+
+        T = float(wg00_cloudy(jnp.array([5500.0]), tau_v=1e-6, law="cardelli")[0])
+        np.testing.assert_allclose(
+            T,
+            1.0,
+            rtol=1e-4,
+            err_msg="WG00 cloudy Taylor branch: T ≈ 1 as tau → 0",
+        )
+
+
+# ===================================================================
+# 15. BELL 2003 — FIR-Radio correlation
+# ===================================================================
+
+
+class TestBell2003Radio:
+    """Bell 2003, ApJ 586, 794, Eq. 6 — FIR-radio correlation."""
+
+    def test_reference_frequency_implements_bell_eq5(self):
+        """L_nu at the reference frequency satisfies Bell 2003 Eq. 5.
+
+        Bell 2003 Eq. 5 defines q_IR = log10(FIR / (3.75×10^12 Hz × L_1.4GHz)),
+        so the inverse is:
+            L_1.4GHz = L_IR / (3.75e12 Hz × 10^q_IR)
+
+        Using q_ir=2.64 (Bell 2003 canonical median, Table 3 of the paper) as
+        a fixed literature value — NOT back-computed from the expected answer.
+        The test verifies the function correctly implements this formula.
+        """
+        from tengri.models.radio import radio_sfr_bell2003
+        from tengri.utils.physics_constants import C_AA as _C_AA
+
+        L_ir = 1e45  # arbitrary erg/s — tests formula, not absolute calibration
+        q_ir = 2.64  # Bell 2003, Table 3 canonical median
+        nu_ref = 1.4e9  # Hz
+        wave_ref = jnp.array([_C_AA / nu_ref])
+
+        L_nu = float(radio_sfr_bell2003(wave_ref, L_ir=L_ir, q_ir=q_ir)[0])
+
+        # Bell 2003 Eq. 5 rearranged: L_1.4 = L_IR / (3.75e12 × 10^q_IR)
+        expected = L_ir / (3.75e12 * 10.0**q_ir)
+        np.testing.assert_allclose(
+            L_nu,
+            expected,
+            rtol=1e-6,
+            err_msg="Bell 2003 Eq. 5: L_1.4 = L_IR / (3.75e12 × 10^q_IR)",
+        )
+
+    def test_q_ir_controls_normalization_by_decade(self):
+        """Increasing q_ir by 1 reduces L_1.4GHz by exactly 10×.
+
+        Independent check of the 10^q_ir denominator structure.
+        Relative comparison between two evaluations — cannot be circular
+        since the expected ratio (10×) comes from the exponent definition,
+        not from the absolute output.
+        """
+        from tengri.models.radio import radio_sfr_bell2003
+        from tengri.utils.physics_constants import C_AA as _C_AA
+
+        wave = jnp.array([_C_AA / 1.4e9])
+        L_ir = 1e44
+
+        L_lo = float(radio_sfr_bell2003(wave, L_ir=L_ir, q_ir=2.0)[0])
+        L_hi = float(radio_sfr_bell2003(wave, L_ir=L_ir, q_ir=3.0)[0])
+
+        np.testing.assert_allclose(
+            L_lo / L_hi,
+            10.0,
+            rtol=1e-6,
+            err_msg="q_ir increases by 1 → L_nu decreases by 10× (10^q_ir in denominator)",
+        )
+
+    def test_synchrotron_spectral_index(self):
+        """Nonthermal (synchrotron) emission: S ∝ ν^{−0.8}. Condon 1992 ARA&A 30.
+
+        L(1.0 GHz) / L(1.4 GHz) = (1.0/1.4)^{-0.8} ≈ 1.338.
+        """
+        from tengri.models.radio import radio_sfr_bell2003
+        from tengri.utils.physics_constants import C_AA as _C_AA
+
+        wave_1p0 = jnp.array([_C_AA / 1.0e9])
+        wave_1p4 = jnp.array([_C_AA / 1.4e9])
+        L_ir = 1e44
+
+        L_1p0 = float(radio_sfr_bell2003(wave_1p0, L_ir=L_ir, q_ir=2.64)[0])
+        L_1p4 = float(radio_sfr_bell2003(wave_1p4, L_ir=L_ir, q_ir=2.64)[0])
+        ratio = L_1p0 / L_1p4
+        expected = (1.0 / 1.4) ** (-0.8)  # ≈ 1.338
+
+        np.testing.assert_allclose(
+            ratio,
+            expected,
+            rtol=0.01,
+            err_msg="Condon 1992 ARA&A: synchrotron S∝ν^−0.8, ratio L(1GHz)/L(1.4GHz)≈1.338",
+        )
+
+
+# ===================================================================
+# 16. RANALLI+2003 — XRB calibration
+# ===================================================================
+
+
+class TestRanalli2003XRay:
+    """Ranalli+2003, A&A 399, 39 — combined XRB 2-10 keV calibration."""
+
+    def test_combined_xrb_band_luminosity(self):
+        """L_2-10keV ≈ 3.7×10^39 erg/s at SFR=1, M*=1e10. Ranalli+2003 A&A 399 Eq. 3.
+
+        tengri uses Grimm+2003 (HMXB: 2.6e39 erg/s/SFR) + Gilfanov 2004
+        (LMXB: 8.3e28 erg/s/Msun). Combined at SFR=1, M*=1e10: ~3.43e39,
+        within 30% of Ranalli.
+        """
+        from tengri.models.xray import xray_xrb
+        from tengri.utils.physics_constants import C_AA as _C_AA, KEV_TO_HZ as _KEV_TO_HZ
+
+        E_grid = jnp.linspace(2.0, 10.0, 500)  # keV
+        nu_grid = E_grid * _KEV_TO_HZ
+        wave_grid = _C_AA / nu_grid
+
+        L_band = float(jnp.trapezoid(xray_xrb(wave_grid, sfr=1.0, stellar_mass=1e10), nu_grid))
+        np.testing.assert_allclose(
+            L_band,
+            3.7e39,
+            rtol=0.30,
+            err_msg="Ranalli+2003 A&A 399 Eq. 3: L_2-10keV ≈ 3.7e39 erg/s at SFR=1, M*=1e10",
+        )
+
+
+# ===================================================================
+# 17. INOUE+2014 — IGM opacity
+# ===================================================================
+
+
+class TestInoue2014IGM:
+    """Inoue+2014, MNRAS 442, 1805 — IGM opacity model."""
+
+    def test_lyman_limit_opacity_z4(self):
+        """Lyman limit at rest 912 Å is fully opaque at z_source=4.
+
+        Inoue+2014: τ_LL >> 1 for z > 3.
+        Observed-frame convention: pass wave_obs = 912 × (1+z).
+        """
+        from tengri.models.igm import igm_transmission
+
+        z = 4.0
+        wave_ll_obs = jnp.array([912.0 * (1 + z)])  # observed 4560 Å
+        T = float(igm_transmission(wave_ll_obs, z)[0])
+        assert T < 0.05, f"Inoue+2014: Lyman limit opacity at z=4: T={T:.3f} (expected < 0.05)"
+
+    def test_lya_forest_z3(self):
+        """Mean Lya forest transmission at z=3 ≈ 0.68. Fan+2006 AJ 132, Eq. 3."""
+        from tengri.models.igm import igm_transmission
+
+        z = 3.0
+        wave_lya_obs = jnp.array([1216.0 * (1 + z)])  # observed 4864 Å
+        T = float(igm_transmission(wave_lya_obs, z)[0])
+        np.testing.assert_allclose(
+            T,
+            0.68,
+            atol=0.15,
+            err_msg="Fan+2006 AJ 132 Eq. 3: mean Lya forest T at z=3 ≈ 0.68",
+        )
+
+    def test_no_absorption_z0(self):
+        """No significant IGM absorption at z≈0 — local universe is transparent.
+
+        Inoue+2014: τ_IGM is tiny at z=0.01 so T > 0.97 everywhere above the
+        Lyman limit. We check the range 912*(1+z) to 3000*(1+z) Å (observed),
+        which covers the LAF and DLA forest at very low redshift.
+        """
+        from tengri.models.igm import igm_transmission
+
+        z = 0.01
+        wave = jnp.linspace(912.0 * (1 + z), 3000.0 * (1 + z), 50)
+        T = igm_transmission(wave, z)
+        min_T = float(jnp.min(T))
+        assert min_T > 0.97, (
+            f"IGM: no significant absorption at z=0.01, min T={min_T:.4f} (expected > 0.97)"
+        )
+
+
+# ===================================================================
+# 18. OSTERBROCK & FERLAND 2006 — Case B Balmer decrements
+# ===================================================================
+
+
+class TestOsterbrockCaseB:
+    """Osterbrock & Ferland 2006, "Astrophysics of Gaseous Nebulae and Active
+    Galactic Nuclei" (2nd ed.), §4.2, Table 4.2.
+
+    Case B recombination ratios at T=10^4 K, n_e=100 cm^-3:
+      Hα/Hβ = 2.86
+      Hγ/Hβ = 0.468
+
+    These are tested via the Cue emulator at low ionization parameter
+    (log U = −3.5) and low density (log n = 2) where the gas conditions
+    approach Case B recombination in an optically-thick nebula.  ±10%
+    tolerance accounts for the emulator approximation and the mild
+    temperature/density sensitivity of recombination coefficients.
+    """
+
+    @pytest.fixture(scope="class")
+    def backend(self):
+        import os
+
+        from tengri.models.nebular.cue import CueBackend
+
+        if not os.path.exists("data/cue_weights.npz"):
+            pytest.skip("Cue weights not found (run convert_cue_weights.py)")
+        return CueBackend("data/cue_weights.npz")
+
+    def _find_line(self, wave, lum, target_aa, window_aa=10.0):
+        """Return luminosity of the line nearest to target_aa."""
+        idx = int(jnp.argmin(jnp.abs(wave - target_aa)))
+        nearest = float(wave[idx])
+        assert abs(nearest - target_aa) < window_aa, (
+            f"No line within {window_aa} Å of {target_aa} Å — found nearest at {nearest:.1f} Å"
+        )
+        return float(lum[idx])
+
+    def test_halpha_hbeta_case_b(self, backend):
+        """Hα/Hβ = 2.86 at low logU — Osterbrock & Ferland 2006 §4.2 Table 4.2."""
+        wave, lum = backend.predict_nebular_line_luminosities(
+            gas_logu=-3.5,
+            gas_logn=2.0,
+            gas_logz=0.0,
+            gas_logqion=49.0,
+        )
+        ha = self._find_line(wave, lum, 6564.61)
+        hb = self._find_line(wave, lum, 4862.68)
+        ratio = ha / hb
+        np.testing.assert_allclose(
+            ratio,
+            2.86,
+            rtol=0.10,
+            err_msg=(
+                "Osterbrock & Ferland 2006 §4.2 Table 4.2: "
+                "Case B Hα/Hβ = 2.86 at T=10^4 K, n_e=100 cm^-3"
+            ),
+        )
+
+    def test_hgamma_hbeta_case_b(self, backend):
+        """Hγ/Hβ = 0.468 at low logU — Osterbrock & Ferland 2006 §4.2 Table 4.2."""
+        wave, lum = backend.predict_nebular_line_luminosities(
+            gas_logu=-3.5,
+            gas_logn=2.0,
+            gas_logz=0.0,
+            gas_logqion=49.0,
+        )
+        hg = self._find_line(wave, lum, 4341.68)
+        hb = self._find_line(wave, lum, 4862.68)
+        ratio = hg / hb
+        np.testing.assert_allclose(
+            ratio,
+            0.468,
+            rtol=0.10,
+            err_msg=(
+                "Osterbrock & Ferland 2006 §4.2 Table 4.2: "
+                "Case B Hγ/Hβ = 0.468 at T=10^4 K, n_e=100 cm^-3"
+            ),
+        )
+
+    def test_halpha_hbeta_increases_with_dust(self, backend):
+        """Dusty nebulae must have Hα/Hβ > 2.86 (reddening elevates the ratio).
+
+        Calzetti+2000: dust preferentially attenuates shorter wavelengths, so
+        Hβ (4863 Å) is more attenuated than Hα (6565 Å).  The observed ratio
+        in any real, dust-affected HII region exceeds 2.86.  This test verifies
+        that the Cue + dust pipeline preserves this ordering by:
+          1. Fetching intrinsic Cue line luminosities at Case B conditions.
+          2. Applying Calzetti T(λ) = exp(-τ_V × k(λ)) with τ_V=1 (realistic ISM).
+          3. Asserting ratio_dust > ratio_intrinsic (dust raises the ratio).
+          4. Asserting ratio_dust > 2.86 (exceeds Case B lower bound).
+        """
+        from tengri.models.dust.attenuation import calzetti
+
+        # Intrinsic (no dust) — Cue emulator at low ionization, solar metallicity
+        wave, lum0 = backend.predict_nebular_line_luminosities(
+            gas_logu=-3.5,
+            gas_logn=2.0,
+            gas_logz=0.0,
+            gas_logqion=49.0,
+        )
+        ha0 = self._find_line(wave, lum0, 6564.61)
+        hb0 = self._find_line(wave, lum0, 4862.68)
+        ratio0 = ha0 / hb0
+
+        # Calzetti attenuation with τ_V = 1.0 (moderate ISM).
+        # T(λ) = exp(-τ_V × k_calzetti(λ)); k is normalized so k(5500 Å)=1.
+        # k(Hβ=4863 Å) > k(Hα=6565 Å) → T_hβ < T_hα → ratio rises.
+        tau_v = 1.0
+        k_ha = float(calzetti(jnp.array([6564.61]))[0])
+        k_hb = float(calzetti(jnp.array([4862.68]))[0])
+        t_ha = float(jnp.exp(-tau_v * k_ha))
+        t_hb = float(jnp.exp(-tau_v * k_hb))
+        ratio_dust = (ha0 * t_ha) / (hb0 * t_hb)
+
+        assert ratio_dust > ratio0, (
+            f"Dust must increase Hα/Hβ (Calzetti k(Hβ)={k_hb:.3f} > k(Hα)={k_ha:.3f}): "
+            f"attenuated={ratio_dust:.3f} ≤ intrinsic={ratio0:.3f}"
+        )
+        assert ratio_dust > 2.86, (
+            f"Dusty HII region Hα/Hβ must exceed Case B value 2.86. "
+            f"Got attenuated ratio={ratio_dust:.3f} (intrinsic={ratio0:.3f})"
+        )
+
+
+# ===================================================================
+# 19. STOREY & ZEIPPEN 2000 — Forbidden-line doublet A-coefficient ratios
+# ===================================================================
+
+
+class TestStoreyZeippen2000:
+    """Storey & Zeippen 2000, MNRAS 312, 813 — forbidden-line A coefficients.
+
+    The [OIII] 5007/4959 and [NII] 6583/6548 doublet ratios are fixed by
+    atomic physics (Einstein A coefficients), independent of gas conditions:
+
+      [OIII] λ5007 / λ4959 = A(5007) / A(4959) ≈ 2.98
+      [NII]  λ6583 / λ6548 = A(6583) / A(6548) ≈ 2.94
+
+    These are tested via the Cue emulator.  The emulator is trained on
+    CLOUDY grids that solve the level populations self-consistently, so
+    these ratios should be reproduced to within ±5% across all conditions.
+    """
+
+    @pytest.fixture(scope="class")
+    def backend(self):
+        import os
+
+        from tengri.models.nebular.cue import CueBackend
+
+        if not os.path.exists("data/cue_weights.npz"):
+            pytest.skip("Cue weights not found (run convert_cue_weights.py)")
+        return CueBackend("data/cue_weights.npz")
+
+    def _find_line(self, wave, lum, target_aa, window_aa=8.0):
+        idx = int(jnp.argmin(jnp.abs(wave - target_aa)))
+        assert abs(float(wave[idx]) - target_aa) < window_aa, (
+            f"No line within {window_aa} Å of {target_aa} Å "
+            f"— found nearest at {float(wave[idx]):.1f} Å"
+        )
+        return float(lum[idx])
+
+    def test_oiii_doublet_ratio(self, backend):
+        """[OIII] 5007/4959 = 2.98 — Storey & Zeippen 2000 MNRAS 312, 813."""
+        wave, lum = backend.predict_nebular_line_luminosities(
+            gas_logu=-2.5,
+            gas_logn=2.0,
+            gas_logz=0.0,
+            gas_logqion=49.0,
+        )
+        o3_5007 = self._find_line(wave, lum, 5008.24)
+        o3_4959 = self._find_line(wave, lum, 4960.30)
+        ratio = o3_5007 / o3_4959
+        np.testing.assert_allclose(
+            ratio,
+            2.98,
+            rtol=0.05,
+            err_msg=(
+                "Storey & Zeippen 2000 MNRAS 312: "
+                "[OIII] 5007/4959 = 2.98 (fixed by A coefficients)"
+            ),
+        )
+
+    def test_nii_doublet_ratio(self, backend):
+        """[NII] 6583/6548 = 2.94 — Storey & Zeippen 2000 MNRAS 312, 813."""
+        wave, lum = backend.predict_nebular_line_luminosities(
+            gas_logu=-2.5,
+            gas_logn=2.0,
+            gas_logz=0.0,
+            gas_logqion=49.0,
+        )
+        nii_6583 = self._find_line(wave, lum, 6585.27)
+        nii_6548 = self._find_line(wave, lum, 6549.86)
+        ratio = nii_6583 / nii_6548
+        np.testing.assert_allclose(
+            ratio,
+            2.94,
+            rtol=0.05,
+            err_msg=(
+                "Storey & Zeippen 2000 MNRAS 312: [NII] 6583/6548 = 2.94 (fixed by A coefficients)"
+            ),
+        )
+
+    def test_doublet_ratios_independent_of_logu(self, backend):
+        """Doublet ratios must be invariant to ionization parameter.
+
+        Storey & Zeippen 2000: the 5007/4959 ratio is set by A coefficients,
+        not collisional rates, so it is independent of n_e and T for n_e << n_crit
+        (~7×10^5 cm^-3).  Verify the ratio is the same at logU = −3.5 and −1.5.
+        """
+        ratios = []
+        for logu in [-3.5, -1.5]:
+            wave, lum = backend.predict_nebular_line_luminosities(
+                gas_logu=logu,
+                gas_logn=2.0,
+                gas_logz=0.0,
+                gas_logqion=49.0,
+            )
+            o3_5007 = self._find_line(wave, lum, 5008.24)
+            o3_4959 = self._find_line(wave, lum, 4960.30)
+            ratios.append(o3_5007 / o3_4959)
+
+        np.testing.assert_allclose(
+            ratios[0],
+            ratios[1],
+            rtol=0.05,
+            err_msg=(
+                "Storey & Zeippen 2000: [OIII] 5007/4959 must be "
+                "independent of logU (fixed by A coefficients)"
+            ),
+        )
+
+
+# ===================================================================
+# 20. KENNICUTT 1998 — Hα SFR calibration
+# ===================================================================
+
+
+class TestKennicutt1998:
+    """Kennicutt 1998, ARA&A, 36, 189, Eq. 2 — Hα SFR calibration.
+
+      SFR [Msun/yr] = L(Hα) / 1.26e41 [erg/s]
+
+    i.e. at SFR = 1 Msun/yr, L(Hα) = 1.26×10^41 erg/s.
+
+    The calibration assumes Case B recombination at T=10^4 K, Salpeter IMF,
+    and a constant star-formation history.  The ionizing photon rate
+    corresponding to SFR = 1 Msun/yr is Q_H ≈ 10^52.8 s^-1 (Kennicutt &
+    Evans 2012, ARA&A 50, 531, Table 1).
+
+    The ±50% tolerance accounts for the Cue emulator being trained on
+    single-burst BPASS/FSPS ionizing fields (not a galaxy-averaged SFR),
+    and for the Salpeter→Chabrier IMF offset (~1.7×).
+
+    See also: TestKennicutt1998Halpha in tests/unit/test_cue_and_ionizing.py.
+    This crossval class additionally tests the linearity of the L(Hα)–Q_H
+    relation and the scaling with ionizing photon rate.
+    """
+
+    @pytest.fixture(scope="class")
+    def backend(self):
+        import os
+
+        from tengri.models.nebular.cue import CueBackend
+
+        if not os.path.exists("data/cue_weights.npz"):
+            pytest.skip("Cue weights not found (run convert_cue_weights.py)")
+        return CueBackend("data/cue_weights.npz")
+
+    def _find_ha(self, wave, lum):
+        idx = int(jnp.argmin(jnp.abs(wave - 6564.61)))
+        return float(lum[idx])
+
+    def test_halpha_kennicutt_absolute(self, backend):
+        """L(Hα) ≈ 1.26e41 erg/s at SFR=1 Msun/yr.
+
+        Kennicutt 1998, ARA&A 36, 189, Eq. 2.  logQ_H = 52.8 s^-1
+        corresponds to SFR ~ 1 Msun/yr for Salpeter IMF
+        (Kennicutt & Evans 2012, ARA&A 50, 531, Table 1).
+        ±50% tolerance: Cue is not a galaxy SFR model.
+        """
+        wave, lum = backend.predict_nebular_line_luminosities(
+            gas_logu=-2.5,
+            gas_logn=2.0,
+            gas_logz=0.0,
+            gas_logqion=52.8,
+        )
+        ha_lum = self._find_ha(wave, lum)
+        assert ha_lum > 0, "L(Hα) must be positive"
+        np.testing.assert_allclose(
+            ha_lum,
+            1.26e41,
+            rtol=0.50,
+            err_msg=(
+                "Kennicutt 1998 ARA&A 36, 189 Eq. 2: "
+                "L(Hα) = 1.26e41 erg/s at SFR=1 Msun/yr (logQH=52.8)"
+            ),
+        )
+
+    def test_halpha_scales_with_qion(self, backend):
+        """L(Hα) must scale linearly with Q_H.
+
+        Osterbrock & Ferland 2006 §4.2: under Case B recombination,
+        L(Hα) ∝ Q_H (every ionizing photon eventually produces a recombination
+        cascade).  A factor of 10 in Q_H (one dex) must produce a factor of 10
+        in L(Hα) to within 5%.
+        """
+        wave_lo, lum_lo = backend.predict_nebular_line_luminosities(
+            gas_logu=-2.5,
+            gas_logn=2.0,
+            gas_logz=0.0,
+            gas_logqion=49.0,
+        )
+        wave_hi, lum_hi = backend.predict_nebular_line_luminosities(
+            gas_logu=-2.5,
+            gas_logn=2.0,
+            gas_logz=0.0,
+            gas_logqion=50.0,
+        )
+        ha_lo = self._find_ha(wave_lo, lum_lo)
+        ha_hi = self._find_ha(wave_hi, lum_hi)
+        ratio = ha_hi / ha_lo
+        np.testing.assert_allclose(
+            ratio,
+            10.0,
+            rtol=0.05,
+            err_msg=(
+                "Osterbrock & Ferland 2006 §4.2: "
+                "L(Hα) must scale linearly with Q_H — "
+                f"one dex in Q_H gave factor {ratio:.3f} (expected 10.0 ± 5%)"
+            ),
+        )

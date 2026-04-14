@@ -6,8 +6,15 @@ import types
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 from tengri.models.observation.eline_marginalization import (
     apply_doublet_constraints,
@@ -149,22 +156,40 @@ class TestMarginalization:
             return -ln_l
 
         # At correct continuum, gradient is near zero (minimum of -ln_L)
-        g_at_true = jax.grad(neg_log_like)(1.0)
-        assert jnp.isfinite(g_at_true), f"Non-finite gradient at true continuum: {g_at_true}"
-        assert abs(float(g_at_true)) < 2.0, f"Gradient too large at true continuum: {g_at_true}"
+        g_at_true_jax = float(jax.grad(neg_log_like)(1.0))
+        g_at_true_fd = fd_grad(neg_log_like, 1.0)
+        np.testing.assert_allclose(
+            g_at_true_jax,
+            g_at_true_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={g_at_true_jax:.4e}, FD={g_at_true_fd:.4e}",
+        )
+        assert abs(g_at_true_jax) < 2.0, f"Gradient too large at true continuum: {g_at_true_jax}"
 
         # Under-subtracted: d(-ln_L)/d(level) < 0
-        g_low = jax.grad(neg_log_like)(0.0)
-        assert jnp.isfinite(g_low), f"Non-finite gradient at under-subtracted level: {g_low}"
-        assert float(g_low) < 0.0, (
-            f"Expected negative gradient when continuum under-subtracted, got {float(g_low):.4f}"
+        g_low_jax = float(jax.grad(neg_log_like)(0.0))
+        g_low_fd = fd_grad(neg_log_like, 0.0)
+        np.testing.assert_allclose(
+            g_low_jax,
+            g_low_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={g_low_jax:.4e}, FD={g_low_fd:.4e}",
+        )
+        assert g_low_jax < 0.0, (
+            f"Expected negative gradient when continuum under-subtracted, got {g_low_jax:.4f}"
         )
 
         # Over-subtracted: d(-ln_L)/d(level) > 0
-        g_high = jax.grad(neg_log_like)(3.0)
-        assert jnp.isfinite(g_high), f"Non-finite gradient at over-subtracted level: {g_high}"
-        assert float(g_high) > 0.0, (
-            f"Expected positive gradient when continuum over-subtracted, got {float(g_high):.4f}"
+        g_high_jax = float(jax.grad(neg_log_like)(3.0))
+        g_high_fd = fd_grad(neg_log_like, 3.0)
+        np.testing.assert_allclose(
+            g_high_jax,
+            g_high_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={g_high_jax:.4e}, FD={g_high_fd:.4e}",
+        )
+        assert g_high_jax > 0.0, (
+            f"Expected positive gradient when continuum over-subtracted, got {g_high_jax:.4f}"
         )
 
     def test_jit_compiles(self):

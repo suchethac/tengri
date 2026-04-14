@@ -214,50 +214,60 @@ def build_hybrid_photometry(model):
             # ssp_flux shape: (n_met, n_alpha, n_age, n_wave)
             _nm, _na_fe, _na, _nw = _ssp_lnu_full_np.shape
             _ssp_lnu_coarse = jnp.asarray(
-                _np.array([
+                _np.array(
                     [
                         [
-                            _np.interp(
-                                _wave_coarse_np,
-                                _ssp_wave_full_np,
-                                _ssp_lnu_full_np[m, a_fe, a],
-                            )
-                            * LSUN_ERG_PER_S
-                            for a in range(_na)
+                            [
+                                _np.interp(
+                                    _wave_coarse_np,
+                                    _ssp_wave_full_np,
+                                    _ssp_lnu_full_np[m, a_fe, a],
+                                )
+                                * LSUN_ERG_PER_S
+                                for a in range(_na)
+                            ]
+                            for a_fe in range(_na_fe)
                         ]
-                        for a_fe in range(_na_fe)
+                        for m in range(_nm)
                     ]
-                    for m in range(_nm)
-                ]),
+                ),
                 dtype=jnp.float64,
             )  # (n_met, n_alpha, n_age, 200) erg/s/Hz/Msun
         else:
             # ssp_flux shape: (n_met, n_age, n_wave)
             _nm, _na, _nw = _ssp_lnu_full_np.shape
             _ssp_lnu_coarse = jnp.asarray(
-                _np.array([
+                _np.array(
                     [
-                        _np.interp(
-                            _wave_coarse_np,
-                            _ssp_wave_full_np,
-                            _ssp_lnu_full_np[m, a],
-                        )
-                        * LSUN_ERG_PER_S
-                        for a in range(_na)
+                        [
+                            _np.interp(
+                                _wave_coarse_np,
+                                _ssp_wave_full_np,
+                                _ssp_lnu_full_np[m, a],
+                            )
+                            * LSUN_ERG_PER_S
+                            for a in range(_na)
+                        ]
+                        for m in range(_nm)
                     ]
-                    for m in range(_nm)
-                ]),
+                ),
                 dtype=jnp.float64,
             )  # (n_met, n_age, 200) erg/s/Hz/Msun
-        if not _is_single_dust and _dust_exact:
+        # Always precompute exact age weights for energy-balance trapz,
+        # regardless of whether photometry uses the fast young/old split.
+        if not _is_single_dust:
             _dust_age_w_f64 = dust_age_w.astype(jnp.float64)
 
     _has_preint_dust_ir = False
     _dust_model_name = None
     if has_dust_em_full:
-        from tengri.models.dust.emission import resolve_emission_model
+        from tengri.models.dust.emission import preload_emission_model
 
-        dust_emission_fn = resolve_emission_model(model._dust_emission_model)
+        # preload_emission_model forces lazy template loading to happen NOW,
+        # outside any JIT scope.  This prevents jnp.array() inside the loader
+        # from creating DynamicJaxprTracers that would escape into closures and
+        # cause UnexpectedTracerError when the JIT kernel is later called.
+        dust_emission_fn = preload_emission_model(model._dust_emission_model)
 
         # Check if preintegrated dust IR lookup is available (for fast photometry)
         # NOTE: Disable preintegration if radio/X-ray is enabled, since dust IR
@@ -690,9 +700,7 @@ def build_hybrid_photometry(model):
                     ssp_at_z = jnp.einsum("m,maf->af", zw, ssp_phot)
                 else:
                     log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
-                    idx = jnp.clip(
-                        jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2
-                    )
+                    idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
                     frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
                     ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
 
@@ -738,9 +746,9 @@ def build_hybrid_photometry(model):
                 elif _use_smooth_z:
                     ssp_moment_at_z = jnp.einsum("m,maf->af", zw, ssp_phot_moment)
                 else:
-                    ssp_moment_at_z = (
-                        (1.0 - frac) * ssp_phot_moment[idx] + frac * ssp_phot_moment[idx + 1]
-                    )
+                    ssp_moment_at_z = (1.0 - frac) * ssp_phot_moment[idx] + frac * ssp_phot_moment[
+                        idx + 1
+                    ]
 
                 csp_young_m = jnp.einsum("i,if->f", weights * young_mask, ssp_moment_at_z)
                 csp_old_m = jnp.einsum("i,if->f", weights * old_mask, ssp_moment_at_z)
@@ -789,6 +797,22 @@ def build_hybrid_photometry(model):
                     + (1 - fz) * fa * _ssp_lnu_coarse[iz, ia + 1]
                     + fz * fa * _ssp_lnu_coarse[iz + 1, ia + 1]
                 )  # (n_age, 200) erg/s/Hz/Msun
+            elif _met_precomputed:
+                # Fixed metallicity: lz is a constant; interpolate coarse grid directly.
+                # (zw is not computed when _met_precomputed=True — mirrors Taylor block.)
+                lz_f64 = jnp.float64(lz)
+                lz_c64 = jnp.clip(lz_f64, _ssp_lgmet_f64[0], _ssp_lgmet_f64[-1])
+                _ic = jnp.clip(
+                    jnp.searchsorted(_ssp_lgmet_f64, lz_c64) - 1,
+                    0,
+                    _ssp_lgmet_f64.shape[0] - 2,
+                )
+                _fc = (lz_c64 - _ssp_lgmet_f64[_ic]) / (
+                    _ssp_lgmet_f64[_ic + 1] - _ssp_lgmet_f64[_ic]
+                )
+                ssp_z_coarse = (1.0 - _fc) * _ssp_lnu_coarse[_ic] + _fc * _ssp_lnu_coarse[
+                    _ic + 1
+                ]  # (n_age, 200)
             elif _use_smooth_z:
                 # zw computed above in the smooth met-interp block
                 ssp_z_coarse = jnp.einsum(
@@ -805,17 +829,15 @@ def build_hybrid_photometry(model):
                 _fc = (lz_c64 - _ssp_lgmet_f64[_ic]) / (
                     _ssp_lgmet_f64[_ic + 1] - _ssp_lgmet_f64[_ic]
                 )
-                ssp_z_coarse = (
-                    (1.0 - _fc) * _ssp_lnu_coarse[_ic] + _fc * _ssp_lnu_coarse[_ic + 1]
-                )  # (n_age, 200)
+                ssp_z_coarse = (1.0 - _fc) * _ssp_lnu_coarse[_ic] + _fc * _ssp_lnu_coarse[
+                    _ic + 1
+                ]  # (n_age, 200)
 
             # Attenuated CSP on coarse grid — same dust formula as filter-band path
             if _is_single_dust:
                 csp_intr_coarse = jnp.einsum("i,iw->w", weights_f64, ssp_z_coarse)
                 k_c = law_bc_fn(_wave_coarse, **_kw_f64)
-                trans_c = f_obs_f64 + (1.0 - f_obs_f64) * jnp.exp(
-                    -jnp.float64(tau_v) * k_c
-                )
+                trans_c = f_obs_f64 + (1.0 - f_obs_f64) * jnp.exp(-jnp.float64(tau_v) * k_c)
                 csp_att_coarse = csp_intr_coarse * trans_c
             elif _dust_exact:
                 k_bc_c = law_bc_fn(_wave_coarse, **_kw_f64)
@@ -828,25 +850,21 @@ def build_hybrid_photometry(model):
                 csp_intr_coarse = jnp.einsum("i,iw->w", weights_f64, ssp_z_coarse)
                 csp_att_coarse = jnp.einsum("i,iw,iw->w", weights_f64, dust_c, ssp_z_coarse)
             else:
-                # Fast two-CSP decomposition: young (BC + ISM) + old (ISM only)
+                # Energy balance requires accurate L_absorbed: always use exact
+                # per-age dust_age_w weighting even when photometry uses the fast
+                # young/old split.  The fast split underestimates UV absorption by
+                # ~22% (binary threshold vs continuous sigmoid).
                 k_bc_c = law_bc_fn(_wave_coarse, **_kw_f64)
                 k_diff_c = law_diff_fn(_wave_coarse, **_kw_f64)
-                tv1_f64 = jnp.float64(tau_bc)
-                tv2_f64 = jnp.float64(tau_diff)
-                ym_f64 = young_mask.astype(jnp.float64)
-                om_f64 = old_mask.astype(jnp.float64)
-                csp_young_c = jnp.einsum("i,iw->w", weights_f64 * ym_f64, ssp_z_coarse)
-                csp_old_c = jnp.einsum("i,iw->w", weights_f64 * om_f64, ssp_z_coarse)
-                csp_intr_coarse = csp_young_c + csp_old_c
-                trans_young_c = jnp.exp(-tv1_f64 * k_bc_c) * jnp.exp(-tv2_f64 * k_diff_c)
-                trans_old_c = jnp.exp(-tv2_f64 * k_diff_c)
-                csp_att_coarse = f_obs_f64 * csp_intr_coarse + (1.0 - f_obs_f64) * (
-                    trans_young_c * csp_young_c + trans_old_c * csp_old_c
+                tau_c = (
+                    _dust_age_w_f64[:, None] * jnp.float64(tau_bc) * k_bc_c[None, :]
+                    + jnp.float64(tau_diff) * k_diff_c[None, :]
                 )
+                dust_c = f_obs_f64 + (1.0 - f_obs_f64) * jnp.exp(-tau_c)
+                csp_intr_coarse = jnp.einsum("i,iw->w", weights_f64, ssp_z_coarse)
+                csp_att_coarse = jnp.einsum("i,iw,iw->w", weights_f64, dust_c, ssp_z_coarse)
 
-            L_absorbed_stellar = -jnp.trapezoid(
-                csp_intr_coarse - csp_att_coarse, _nu_coarse
-            )
+            L_absorbed_stellar = -jnp.trapezoid(csp_intr_coarse - csp_att_coarse, _nu_coarse)
             L_absorbed_stellar = jnp.where(
                 jnp.isfinite(L_absorbed_stellar), L_absorbed_stellar, jnp.float64(0.0)
             )
@@ -1585,9 +1603,9 @@ def build_hybrid_photometry_ztable(model):
     has_dust_em_full = model._dust_emission_model is not None
     _dust_model_name = model._dust_emission_model if has_dust_em_full else None
     if has_dust_em_full:
-        from tengri.models.dust.emission import resolve_emission_model
+        from tengri.models.dust.emission import preload_emission_model
 
-        resolve_emission_model(model._dust_emission_model)
+        preload_emission_model(model._dust_emission_model)
 
     # AGN (full wavelength)
     has_agn_full = model._agn_model is not None

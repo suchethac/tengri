@@ -19,6 +19,11 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 # ---------------------------------------------------------------------------
 # Helpers: synthetic filters
 # ---------------------------------------------------------------------------
@@ -303,10 +308,16 @@ class TestKDPreintegrationPipeline:
             )
             return jnp.sum(phot)
 
-        grad_fn = jax.grad(_loss)
-        g = grad_fn(11.0)
-        assert jnp.isfinite(g), f"Gradient not finite: {g}"
-        assert g != 0.0, "Gradient is zero (no sensitivity)"
+        grad_jax = float(jax.grad(_loss)(11.0))
+        grad_fd = fd_grad(_loss, 11.0)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            atol=1e-12,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
+        assert grad_jax != 0.0, "Gradient is zero (no sensitivity)"
 
     def test_preintegrated_jit_compatible(self):
         """Preintegrated K&D should work under JIT."""

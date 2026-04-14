@@ -10,9 +10,16 @@ Validates that DL07 and Dale+2014 tabulated templates:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 # Physical constants
 _C_AA_S = 2.99792458e18  # c in Angstrom/s
@@ -197,9 +204,16 @@ class TestDL07Tabulated:
             sed = dl07(ir_wave, 1e10, dust_umin=umin, dust_gamma_dl=0.01, dust_qpah=2.5)
             return jnp.sum(sed)
 
-        grad_fn = jax.grad(total_flux)
-        g = grad_fn(1.0)
-        assert jnp.isfinite(g), "DL07 gradient should be finite"
+        grad_jax = float(jax.grad(total_flux)(1.0))
+        grad_fd = fd_grad(total_flux, 1.0)
+
+        # Relax tolerance for tabulated grids (finite difference can be noisy)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=0.1,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
     def test_l_absorbed_scaling(self, ir_wave):
         """Doubling L_absorbed should double the SED."""
@@ -307,8 +321,16 @@ class TestDale2014Tabulated:
         def total_flux(alpha):
             return jnp.sum(dale(ir_wave, 1e10, dust_alpha_dale=alpha))
 
-        g = jax.grad(total_flux)(2.0)
-        assert jnp.isfinite(g), "Dale2014 gradient should be finite"
+        grad_jax = float(jax.grad(total_flux)(2.0))
+        grad_fd = fd_grad(total_flux, 2.0)
+
+        # Relax tolerance for tabulated grids (finite difference can be noisy)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=0.1,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
 
 # ===================================================================
@@ -497,11 +519,39 @@ class TestDL14ExtendedRange:
                 )
             )
 
-        grads = jax.grad(loss, argnums=(0, 1, 2, 3))(1.0, 0.05, 2.5, 2.0)
-        for i, name in enumerate(["umin", "gamma", "qpah", "alpha"]):
-            assert jnp.isfinite(grads[i]), f"NaN gradient for {name}"
+        grads_jax = jax.grad(loss, argnums=(0, 1, 2, 3))(1.0, 0.05, 2.5, 2.0)
+        param_vals = [1.0, 0.05, 2.5, 2.0]
+        param_names = ["umin", "gamma", "qpah", "alpha"]
+
+        def make_loss_single(idx):
+            def loss_single(x):
+                kwargs = {
+                    "dust_umin": param_vals[0],
+                    "dust_gamma_dl": param_vals[1],
+                    "dust_qpah": param_vals[2],
+                    "dust_alpha_dl14": param_vals[3],
+                }
+                kwargs[f"dust_{param_names[idx]}"] = x
+                return float(jnp.sum(draine_li2014(ir_wave, 1e10, **kwargs)))
+
+            return loss_single
+
+        for i, name in enumerate(param_names):
+            grad_jax = float(grads_jax[i])
+            loss_single = make_loss_single(i)
+            grad_fd = fd_grad(loss_single, param_vals[i])
+            # Relax tolerance for tabulated grids (finite difference can be noisy)
+            # Use atol to handle cases where FD gives 0 but JAX gives small nonzero
+            atol = 0.05 if abs(grad_jax) < 0.05 else 0
+            np.testing.assert_allclose(
+                grad_jax,
+                grad_fd,
+                rtol=0.3,
+                atol=atol,
+                err_msg=f"{name}: autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+            )
             if name == "alpha":
-                assert abs(float(grads[i])) > 0, "alpha gradient should be nonzero with gamma=0.05"
+                assert abs(grad_jax) > 0, "alpha gradient should be nonzero with gamma=0.05"
 
     def test_dl14_param_spec_registered(self):
         """dust_alpha_dl14 should be in the parameter spec."""

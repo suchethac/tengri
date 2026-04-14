@@ -16,6 +16,7 @@ import os
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -28,6 +29,12 @@ from tengri.models.sps.precompute import (
 from tengri.utils.cosmology import luminosity_distance
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 # Suppress JAX Metal warnings on macOS
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
@@ -110,9 +117,16 @@ class TestZTableBasic:
             )
             return jnp.sum(ssp_phot) + flux_scale
 
-        g = jax.grad(loss)(0.3)
-        assert jnp.isfinite(g), f"Gradient w.r.t. z is not finite: {g}"
-        assert abs(float(g)) > 1e-10, "Gradient w.r.t. z should be nonzero"
+        grad_jax = float(jax.grad(loss)(0.3))
+        grad_fd = fd_grad(loss, 0.3)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=5e-3,
+            atol=1e-10,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
+        assert abs(grad_jax) > 1e-10, "Gradient w.r.t. z should be nonzero"
 
 
 class TestZTableInterpolationSmoothnessAndMonotonicity:

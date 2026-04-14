@@ -152,8 +152,18 @@ class TestQSOGenCrossval:
             sed = qsogen_sed(wave, agn_plslp1=slp)
             return jnp.sum(sed)
 
-        grad = jax.grad(loss)(-0.349)
-        assert jnp.isfinite(grad), "QSOGen gradient should be finite"
+        def fd_grad_local(f, x: float, eps: float = 1e-4) -> float:
+            """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+            return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+        grad_jax = float(jax.grad(loss)(-0.349))
+        grad_fd = fd_grad_local(loss, -0.349)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg=f"QSOGen autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
 
 # ===================================================================
@@ -314,8 +324,18 @@ class TestSKIRTORCrossval:
                 )
             )
 
-        grad = jax.grad(loss)(7.0)
-        assert jnp.isfinite(grad), "SKIRTOR gradient w.r.t. tau should be finite"
+        def fd_grad_local(f, x: float, eps: float = 1e-4) -> float:
+            """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+            return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+        grad_jax = float(jax.grad(loss)(7.0))
+        grad_fd = fd_grad_local(loss, 7.0)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg=f"SKIRTOR autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
 
 # ===================================================================

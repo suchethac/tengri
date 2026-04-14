@@ -26,6 +26,11 @@ from tengri.models.dust.emission import (
 jax.config.update("jax_enable_x64", True)
 
 
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 # ===================================================================
 # Fixtures: synthetic template grids for testing
 # ===================================================================
@@ -232,9 +237,18 @@ class TestAstrodust:
         def loss(l_abs):
             return jnp.sum(fn(wavelength, l_abs, dust_umin=1.0))
 
-        grad = jax.grad(loss)(1e10)
-        assert jnp.isfinite(grad)
-        assert grad > 0.0  # more absorbed -> more emission
+        grad_jax = float(jax.grad(loss)(1e10))
+        grad_fd = fd_grad(loss, 1e10)
+        # For very small gradients (<1e-10), use atol; otherwise use rtol
+        atol = 1e-12 if abs(grad_jax) < 1e-10 else 0
+        assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-2,
+            atol=atol,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
+        assert grad_jax > 0.0  # more absorbed -> more emission
 
 
 # ===================================================================
@@ -311,8 +325,14 @@ class TestBOSA:
         def loss(log_ssfr):
             return jnp.sum(fn(wavelength, 1e10, dust_log_ssfr=log_ssfr))
 
-        grad = jax.grad(loss)(-10.0)
-        assert jnp.isfinite(grad)
+        grad_jax = float(jax.grad(loss)(-10.0))
+        grad_fd = fd_grad(loss, -10.0)
+        assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
 
 # ===================================================================
@@ -383,9 +403,18 @@ class TestTHEMIS:
         def loss(l_abs):
             return jnp.sum(fn(wavelength, l_abs, dust_umin=1.0, dust_qhac=0.17))
 
-        grad = jax.grad(loss)(1e10)
-        assert jnp.isfinite(grad)
-        assert grad > 0.0
+        grad_jax = float(jax.grad(loss)(1e10))
+        grad_fd = fd_grad(loss, 1e10)
+        # For very small gradients (<1e-10), use atol; otherwise use rtol
+        atol = 1e-12 if abs(grad_jax) < 1e-10 else 0
+        assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-2,
+            atol=atol,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
+        assert grad_jax > 0.0
 
 
 # ===================================================================

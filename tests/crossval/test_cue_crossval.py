@@ -218,9 +218,17 @@ class TestCueInternalConsistency:
             )
             return jnp.sum(lum)
 
-        grad = jax.grad(loss_fn)(float(params["gas_logu"]))
-        assert jnp.isfinite(grad), "Gradient should be finite"
-        assert grad != 0.0, "Gradient should be non-zero"
+        def fd_grad_local(f, x: float, eps: float = 1e-4) -> float:
+            """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+            return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+        grad_jax = float(jax.grad(loss_fn)(float(params["gas_logu"])))
+        grad_fd = fd_grad_local(loss_fn, float(params["gas_logu"]))
+        # CUE has slightly noisy gradients from neural network, use 5e-3
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=5e-3, err_msg=f"Cue autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
+        assert abs(grad_jax) > 0.0, "Gradient should be non-zero"
 
     def test_line_wavelengths_sorted_ascending(self, cue_backend):
         """Line wavelengths from cloudyfsps_only should be sorted."""

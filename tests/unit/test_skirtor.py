@@ -19,6 +19,11 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 class TestSKIRTORRegistration:
     """Test that SKIRTOR is properly registered."""
 
@@ -224,42 +229,82 @@ class TestSKIRTORGradients:
         return jnp.logspace(2, 7, 300)
 
     def test_gradient_tau(self, wave):
+        """FD check: ∂(∑SED)/∂tau_skirtor. Optical depth gradient."""
         from tengri.models.agn.skirtor import skirtor_analytic
 
-        g = jax.grad(lambda tau: jnp.sum(skirtor_analytic(wave, agn_tau_skirtor=tau)))(7.0)
-        assert jnp.isfinite(g), "tau gradient should be finite"
-        assert abs(float(g)) > 0, "tau gradient should be nonzero"
+        def f(tau):
+            return float(jnp.sum(skirtor_analytic(wave, agn_tau_skirtor=tau)))
+
+        g = float(jax.grad(lambda tau: jnp.sum(skirtor_analytic(wave, agn_tau_skirtor=tau)))(7.0))
+        np.testing.assert_allclose(
+            g,
+            fd_grad(f, 7.0, eps=0.1),
+            rtol=1e-3,
+            err_msg="skirtor_analytic: FD check ∂/∂tau_skirtor",
+        )
 
     def test_gradient_p(self, wave):
+        """FD check: ∂(∑SED)/∂p_skirtor. Radial dust gradient."""
         from tengri.models.agn.skirtor import skirtor_analytic
 
-        g = jax.grad(lambda p: jnp.sum(skirtor_analytic(wave, agn_p_skirtor=p)))(1.0)
-        assert jnp.isfinite(g), "p gradient should be finite"
-        assert abs(float(g)) > 0, "p gradient should be nonzero"
+        def f(p):
+            return float(jnp.sum(skirtor_analytic(wave, agn_p_skirtor=p)))
+
+        g = float(jax.grad(lambda p: jnp.sum(skirtor_analytic(wave, agn_p_skirtor=p)))(1.0))
+        np.testing.assert_allclose(
+            g,
+            fd_grad(f, 1.0),
+            rtol=1e-3,
+            err_msg="skirtor_analytic: FD check ∂/∂p_skirtor",
+        )
 
     def test_gradient_q(self, wave):
+        """FD check: ∂(∑SED)/∂q_skirtor. Angular dust gradient."""
         from tengri.models.agn.skirtor import skirtor_analytic
 
-        g = jax.grad(lambda q: jnp.sum(skirtor_analytic(wave, agn_q_skirtor=q)))(1.0)
-        assert jnp.isfinite(g), "q gradient should be finite"
-        assert abs(float(g)) > 0, "q gradient should be nonzero"
+        def f(q):
+            return float(jnp.sum(skirtor_analytic(wave, agn_q_skirtor=q)))
+
+        g = float(jax.grad(lambda q: jnp.sum(skirtor_analytic(wave, agn_q_skirtor=q)))(1.0))
+        np.testing.assert_allclose(
+            g,
+            fd_grad(f, 1.0),
+            rtol=1e-3,
+            err_msg="skirtor_analytic: FD check ∂/∂q_skirtor",
+        )
 
     def test_gradient_oa(self, wave):
+        """FD check: ∂(∑SED)/∂oa_skirtor. Opening angle gradient."""
         from tengri.models.agn.skirtor import skirtor_analytic
 
-        g = jax.grad(lambda oa: jnp.sum(skirtor_analytic(wave, agn_oa_skirtor=oa)))(40.0)
-        assert jnp.isfinite(g), "oa gradient should be finite"
-        assert abs(float(g)) > 0, "oa gradient should be nonzero"
+        def f(oa):
+            return float(jnp.sum(skirtor_analytic(wave, agn_oa_skirtor=oa)))
+
+        g = float(jax.grad(lambda oa: jnp.sum(skirtor_analytic(wave, agn_oa_skirtor=oa)))(40.0))
+        np.testing.assert_allclose(
+            g,
+            fd_grad(f, 40.0, eps=0.1),
+            rtol=1e-3,
+            err_msg="skirtor_analytic: FD check ∂/∂oa_skirtor",
+        )
 
     def test_gradient_cos_inc(self, wave):
+        """FD check: ∂(∑SED)/∂cos_inc. Inclination gradient."""
         from tengri.models.agn.skirtor import skirtor_analytic
 
-        g = jax.grad(lambda ci: jnp.sum(skirtor_analytic(wave, agn_cos_inc=ci)))(0.5)
-        assert jnp.isfinite(g), "cos_inc gradient should be finite"
-        assert abs(float(g)) > 0, "cos_inc gradient should be nonzero"
+        def f(ci):
+            return float(jnp.sum(skirtor_analytic(wave, agn_cos_inc=ci)))
+
+        g = float(jax.grad(lambda ci: jnp.sum(skirtor_analytic(wave, agn_cos_inc=ci)))(0.5))
+        np.testing.assert_allclose(
+            g,
+            fd_grad(f, 0.5),
+            rtol=1e-3,
+            err_msg="skirtor_analytic: FD check ∂/∂cos_inc",
+        )
 
     def test_gradient_all_params_simultaneously(self, wave):
-        """All 5 SKIRTOR gradients should be finite and nonzero simultaneously."""
+        """All 5 SKIRTOR gradients agree with FD simultaneously."""
         from tengri.models.agn.skirtor import skirtor_analytic
 
         def loss(tau, p, q, oa, ci):
@@ -275,10 +320,27 @@ class TestSKIRTORGradients:
             )
 
         grads = jax.grad(loss, argnums=(0, 1, 2, 3, 4))(7.0, 1.0, 1.0, 40.0, 0.5)
-        names = ["tau", "p", "q", "oa", "cos_inc"]
-        for i, name in enumerate(names):
-            assert jnp.isfinite(grads[i]), f"{name} gradient is not finite"
-            assert abs(float(grads[i])) > 0, f"{name} gradient is zero"
+        params = [
+            ("tau", 7.0, 0.1),
+            ("p", 1.0, 1e-4),
+            ("q", 1.0, 1e-4),
+            ("oa", 40.0, 0.1),
+            ("cos_inc", 0.5, 1e-4),
+        ]
+        fs = [
+            lambda tau: float(loss(tau, 1.0, 1.0, 40.0, 0.5)),
+            lambda p: float(loss(7.0, p, 1.0, 40.0, 0.5)),
+            lambda q: float(loss(7.0, 1.0, q, 40.0, 0.5)),
+            lambda oa: float(loss(7.0, 1.0, 1.0, oa, 0.5)),
+            lambda ci: float(loss(7.0, 1.0, 1.0, 40.0, ci)),
+        ]
+        for i, (name, x0, eps) in enumerate(params):
+            np.testing.assert_allclose(
+                float(grads[i]),
+                fd_grad(fs[i], x0, eps=eps),
+                rtol=1e-3,
+                err_msg=f"skirtor_analytic joint: FD check ∂/∂{name}",
+            )
 
     def test_gradient_registered_model(self, wave):
         """Gradient should flow through the registered 'skirtor' model."""
@@ -297,8 +359,25 @@ class TestSKIRTORGradients:
             )
 
         g_tau, g_ci = jax.grad(loss, argnums=(0, 1))(7.0, 0.5)
-        assert jnp.isfinite(g_tau) and abs(float(g_tau)) > 0
-        assert jnp.isfinite(g_ci) and abs(float(g_ci)) > 0
+
+        def f_tau(tau: float) -> float:
+            return float(loss(tau, 0.5))
+
+        def f_ci(ci: float) -> float:
+            return float(loss(7.0, ci))
+
+        np.testing.assert_allclose(
+            float(g_tau),
+            fd_grad(f_tau, 7.0),
+            rtol=5e-3,
+            err_msg="skirtor (registry): FD check ∂/∂agn_tau_skirtor",
+        )
+        np.testing.assert_allclose(
+            float(g_ci),
+            fd_grad(f_ci, 0.5),
+            rtol=5e-3,
+            err_msg="skirtor (registry): FD check ∂/∂agn_cos_inc",
+        )
 
 
 class TestSKIRTORJIT:
@@ -335,12 +414,21 @@ class TestSKIRTORJIT:
         assert jnp.all(jnp.isfinite(sed))
 
     def test_jit_grad_combined(self, wave):
-        """JIT of grad should work."""
+        """JIT of grad agrees with FD for agn_tau_skirtor."""
         from tengri.models.agn.skirtor import skirtor_analytic
 
         fn = jax.jit(jax.grad(lambda tau: jnp.sum(skirtor_analytic(wave, agn_tau_skirtor=tau))))
-        g = fn(7.0)
-        assert jnp.isfinite(g)
+        grad_jax = float(fn(7.0))
+
+        def f_scalar(tau: float) -> float:
+            return float(jnp.sum(skirtor_analytic(wave, agn_tau_skirtor=tau)))
+
+        np.testing.assert_allclose(
+            grad_jax,
+            fd_grad(f_scalar, 7.0),
+            rtol=5e-3,
+            err_msg="skirtor_analytic: FD check ∂(∑SED)/∂agn_tau_skirtor",
+        )
 
 
 class TestSKIRTOREdgeCases:
@@ -399,3 +487,80 @@ class TestSKIRTOREdgeCases:
 
         sed = skirtor_analytic(wave, agn_p_skirtor=1.5, agn_q_skirtor=1.5)
         assert jnp.all(jnp.isfinite(sed))
+
+
+class TestNovikovThorneEfficiency:
+    """Spin-dependent radiative efficiency from Novikov & Thorne (1973).
+
+    The accretion efficiency η = 1 - sqrt(1 - 2/(3 r_isco)) is the fraction of
+    rest-mass energy radiated by matter falling from the ISCO to the event horizon
+    (Novikov & Thorne 1973, Black Holes, Les Houches; eq. 5.6.23).
+
+    r_isco shrinks with increasing prograde spin, raising η.  Reference values:
+    - Schwarzschild (a=0):   r_isco = 6 R_g, η ≈ 0.0572  (Bardeen+1972)
+    - Near-maximal (a=0.998): η ≈ 0.321                  (Thorne 1974)
+    """
+
+    def test_schwarzschild_isco(self):
+        """At a=0 (Schwarzschild BH): r_isco = 6 R_g exactly (Bardeen+1972)."""
+        from tengri.models.agn.disc import _isco_radius
+
+        r_isco_0 = float(_isco_radius(0.0))
+        np.testing.assert_allclose(
+            r_isco_0,
+            6.0,
+            rtol=1e-5,
+            err_msg="Schwarzschild ISCO: r_isco = 6 R_g (Bardeen, Press & Teukolsky 1972)",
+        )
+
+    def test_schwarzschild_efficiency(self):
+        """At a=0: η = 1 - sqrt(8/9) ≈ 0.0572."""
+        from tengri.models.agn.disc import _isco_radius
+
+        r_isco_0 = float(_isco_radius(0.0))
+        eta_0 = 1.0 - float(jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_0)))
+        np.testing.assert_allclose(
+            eta_0,
+            0.0572,
+            rtol=0.01,
+            err_msg="Novikov-Thorne: η(a=0) ≈ 0.0572 (Schwarzschild)",
+        )
+
+    def test_maximal_spin_efficiency(self):
+        """At a=0.998 (near-maximal prograde spin): η ≈ 0.321 (Thorne 1974 limit)."""
+        from tengri.models.agn.disc import _isco_radius
+
+        r_isco_998 = float(_isco_radius(0.998))
+        eta_998 = 1.0 - float(jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_998)))
+        np.testing.assert_allclose(
+            eta_998,
+            0.321,
+            rtol=0.05,
+            err_msg="Novikov-Thorne: η(a=0.998) ≈ 0.321 (Thorne 1974)",
+        )
+
+    def test_higher_spin_higher_efficiency(self):
+        """Monotonicity: higher prograde spin → smaller ISCO → higher η."""
+        from tengri.models.agn.disc import _isco_radius
+
+        def eta_from_spin(a: float) -> float:
+            r = float(_isco_radius(a))
+            return 1.0 - float(jnp.sqrt(1.0 - 2.0 / (3.0 * r)))
+
+        r_0 = float(_isco_radius(0.0))
+        r_5 = float(_isco_radius(0.5))
+        r_9 = float(_isco_radius(0.9))
+
+        assert r_0 > r_5 > r_9, (
+            f"ISCO must shrink with prograde spin: "
+            f"r(0)={r_0:.4f}, r(0.5)={r_5:.4f}, r(0.9)={r_9:.4f}"
+        )
+
+        eta_0 = eta_from_spin(0.0)
+        eta_5 = eta_from_spin(0.5)
+        eta_9 = eta_from_spin(0.9)
+
+        assert eta_9 > eta_5 > eta_0, (
+            f"Efficiency must grow with prograde spin: "
+            f"η(0)={eta_0:.4f}, η(0.5)={eta_5:.4f}, η(0.9)={eta_9:.4f}"
+        )

@@ -5,6 +5,7 @@ Tests alpha_ox_from_l2500, xray_anisotropy, and xray_agn_corona_from_disc.
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.models.xray import (
     alpha_ox_from_l2500,
@@ -15,6 +16,12 @@ from tengri.models.xray import (
 
 # Enable 64-bit for precise comparisons
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 # X-ray wavelength grid: 0.1-124 A (0.1-100 keV)
 WAVE_XRAY = jnp.linspace(0.5, 120.0, 200)
@@ -206,16 +213,25 @@ class TestXrayAgnCoronaFromDisc:
         assert jnp.all(jnp.isfinite(result))
 
     def test_gradient(self):
-        """Gradient through the function should be finite."""
+        """Gradient through the function agrees with FD (more UV → more X-ray)."""
 
         def total_flux(l_2500):
             l_nu = xray_agn_corona_from_disc(WAVE_XRAY, l_2500, apply_anisotropy=True)
             return jnp.sum(l_nu)
 
-        grad_fn = jax.grad(total_flux)
-        g = grad_fn(1e30)
-        assert jnp.isfinite(g)
-        assert g > 0  # more UV => more X-ray
+        x0 = 1e30
+        grad_jax = float(jax.grad(total_flux)(x0))
+
+        def f_scalar(l_2500: float) -> float:
+            return float(total_flux(l_2500))
+
+        np.testing.assert_allclose(
+            grad_jax,
+            fd_grad(f_scalar, x0, eps=1e24),
+            rtol=1e-3,
+            err_msg="xray_agn_corona_from_disc: FD check ∂(∑L_ν)/∂L_2500",
+        )
+        assert grad_jax > 0  # more UV => more X-ray
 
     def test_physically_sensible_lx(self):
         """L_nu at 2 keV should be consistent with alpha_ox prediction.

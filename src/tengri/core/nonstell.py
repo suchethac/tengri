@@ -159,9 +159,11 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
     has_dust_em = model._dust_emission_model is not None
     if has_dust_em:
         from tengri.core.emission_helpers import dust_ir_emission
-        from tengri.models.dust.emission import resolve_emission_model
+        from tengri.models.dust.emission import preload_emission_model
 
-        dust_emission_fn = resolve_emission_model(model._dust_emission_model)
+        # preload_emission_model ensures templates are loaded outside JIT,
+        # preventing DynamicJaxprTracer leaks into closures.
+        dust_emission_fn = preload_emission_model(model._dust_emission_model)
 
     # --- AGN ---
     has_agn = model._agn_model is not None

@@ -19,6 +19,12 @@ from tengri.core.noise import (
     variable_noise_metric_vec,
 )
 
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 # ---------------------------------------------------------------------------
 # compute_effective_noise
 # ---------------------------------------------------------------------------
@@ -78,9 +84,15 @@ class TestComputeEffectiveNoise:
             sigma = compute_effective_noise(jnp.array([0.1]), jnp.array([10.0]), f_cal)
             return jnp.sum(sigma**2)
 
-        grad = jax.grad(loss)(0.05)
-        assert jnp.isfinite(grad)
-        assert grad > 0  # increasing f_cal increases σ_eff
+        grad_jax = float(jax.grad(loss)(0.05))
+        grad_fd = fd_grad(loss, 0.05)
+        npt.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
+        assert grad_jax > 0  # increasing f_cal increases σ_eff
 
     def test_grad_through_model_flux(self):
         """Gradient through model flux is well-defined."""
@@ -89,8 +101,14 @@ class TestComputeEffectiveNoise:
             sigma = compute_effective_noise(jnp.array([0.1]), model_flux, 0.05)
             return jnp.sum(sigma**2)
 
-        grad = jax.grad(loss)(jnp.array([10.0]))
-        assert jnp.isfinite(grad[0])
+        grad_jax = float(jax.grad(loss)(jnp.array([10.0]))[0])
+        grad_fd = fd_grad(lambda mf: float(loss(jnp.array([mf]))), 10.0)
+        npt.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -265,8 +283,17 @@ class TestVariableNoiseHamiltonian:
         def energy(f_cal):
             return variable_noise_hamiltonian(data, noise_obs, predicted, f_cal)
 
-        grad = jax.grad(energy)(0.05)
-        assert jnp.isfinite(grad)
+        grad_jax = float(jax.grad(energy)(0.05))
+        grad_fd = fd_grad(
+            lambda f_cal: float(variable_noise_hamiltonian(data, noise_obs, predicted, f_cal)),
+            0.05,
+        )
+        npt.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -329,8 +356,19 @@ class TestStudentTEnergy:
         def energy(f_cal):
             return variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=2.0)
 
-        grad = jax.grad(energy)(0.05)
-        assert jnp.isfinite(grad)
+        grad_jax = float(jax.grad(energy)(0.05))
+        grad_fd = fd_grad(
+            lambda f_cal: float(
+                variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=2.0)
+            ),
+            0.05,
+        )
+        npt.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
 
 class TestUsesStudentT:

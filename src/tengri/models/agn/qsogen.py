@@ -333,7 +333,9 @@ def _hot_dust_blackbody(
     Returns
     -------
     array, shape (n_wave,)
-        Hot dust f_lambda contribution (same units as continuum_flam).
+        Hot dust f_lambda **component only** (not the total SED).
+        Returns zero everywhere when ``bbnorm=0``.
+        The caller (``qsogen_sed``) adds this to the other components.
     """
     # B_nu as function of wavelength (matching original bb() exactly):
     #   bb(T, wav) = wav^{-3} / (exp(hc/kT*wav) - 1)
@@ -386,7 +388,9 @@ def _balmer_continuum(
     Returns
     -------
     array, shape (n_wave,)
-        Balmer continuum f_lambda contribution.
+        Balmer continuum f_lambda **component only** (not the total SED).
+        Returns zero everywhere when ``bcnorm=0`` or above the Balmer edge.
+        The caller (``qsogen_sed``) adds this to the other components.
     """
     # B_nu as function of wavelength (matching original bb() convention)
     # bb(T, wav) = wav^{-3} / (exp(hc/kT*wav) - 1)

@@ -2,9 +2,15 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 # ---------------------------------------------------------------------------
@@ -124,10 +130,13 @@ class TestSingleComponentDust:
         def loss(tau_v):
             return jnp.sum(single_component_dust(wavelengths, tau_v=tau_v))
 
-        grad = jax.grad(loss)(1.0)
-        assert jnp.isfinite(grad)
+        grad_jax = float(jax.grad(loss)(1.0))
+        grad_fd = fd_grad(loss, 1.0)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
         # More dust -> less total transmission -> negative gradient
-        assert grad < 0.0
+        assert grad_jax < 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -190,9 +199,12 @@ class TestSingleComponentDustFast:
         def loss(tau_v):
             return jnp.sum(single_component_dust_fast(wavelengths, n_ages=n_ages, tau_v=tau_v))
 
-        grad = jax.grad(loss)(1.0)
-        assert jnp.isfinite(grad)
-        assert grad < 0.0
+        grad_jax = float(jax.grad(loss)(1.0))
+        grad_fd = fd_grad(loss, 1.0)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
+        assert grad_jax < 0.0
 
     @pytest.mark.parametrize(
         "law_name",

@@ -19,6 +19,11 @@ from tengri.models.sps.dsps_wrapper import SSPData
 jax.config.update("jax_enable_x64", True)
 
 
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -145,9 +150,12 @@ class TestEnergyBalanceEta:
             sed = model.predict_rest_sed(p).sed
             return jnp.sum(sed)
 
-        grad_eta = jax.grad(_loss)(1.0)
-        assert jnp.isfinite(grad_eta), f"Gradient is not finite: {grad_eta}"
-        assert float(grad_eta) != 0.0, "Gradient is zero — eta has no effect"
+        grad_jax = float(jax.grad(_loss)(1.0))
+        grad_fd = fd_grad(_loss, 1.0)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
+        assert grad_jax != 0.0, "Gradient is zero — eta has no effect"
 
     def test_paramspec_accepts_eta_as_free(self):
         """ParamSpec should accept dust_eta_balance=Uniform(0.5, 2.0)."""

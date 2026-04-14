@@ -12,9 +12,16 @@ Tests cover:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 from tengri.models.observation.eline_priors import (
     cloudy_line_priors,
@@ -346,8 +353,15 @@ class TestMarginalizeEmissionLinesCloudy:
             )
             return result[0]
 
-        g = jax.grad(ln_l_fn)(0.0)
-        assert jnp.isfinite(g), f"Gradient not finite: {g}"
+        grad_jax = float(jax.grad(ln_l_fn)(0.0))
+        grad_fd = fd_grad(ln_l_fn, 0.0)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            atol=1e-12,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
     def test_gradient_matches_finite_difference(self, mock_spectral_data):
         """Analytic gradient must match finite-difference to 0.1% precision.

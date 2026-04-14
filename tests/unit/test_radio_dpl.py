@@ -2,6 +2,7 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from tengri.models.radio import (
@@ -12,6 +13,12 @@ from tengri.models.radio import (
 
 # Enable 64-bit precision
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 # Constants
 _C_AA = 2.99792458e18  # Angstrom/s
@@ -211,13 +218,36 @@ class TestJAXCompatibility:
             )
             return jnp.sum(L)
 
-        grad_fn = jax.grad(_loss, argnums=(0, 1))
-        g_alpha1, g_log_nu_t = grad_fn(-0.75, 10.0)
-        assert jnp.isfinite(g_alpha1), "Gradient w.r.t. alpha1 not finite"
-        assert jnp.isfinite(g_log_nu_t), "Gradient w.r.t. log_nu_t not finite"
-        # Gradients should be nonzero for these parameters
-        assert abs(float(g_alpha1)) > 0.0, "alpha1 gradient is zero"
-        assert abs(float(g_log_nu_t)) > 0.0, "log_nu_t gradient is zero"
+        # Test alpha1 gradient
+        def _loss_alpha1(alpha1):
+            return _loss(alpha1, 10.0)
+
+        grad_alpha1_jax = float(jax.grad(_loss_alpha1)(-0.75))
+        grad_alpha1_fd = fd_grad(_loss_alpha1, -0.75)
+        np.testing.assert_allclose(
+            grad_alpha1_jax,
+            grad_alpha1_fd,
+            rtol=1e-3,
+            atol=1e-12,
+            err_msg=f"alpha1: autodiff={grad_alpha1_jax:.4e}, FD={grad_alpha1_fd:.4e}",
+        )
+
+        # Test log_nu_t gradient
+        def _loss_log_nu_t(log_nu_t):
+            return _loss(-0.75, log_nu_t)
+
+        grad_log_nu_t_jax = float(jax.grad(_loss_log_nu_t)(10.0))
+        grad_log_nu_t_fd = fd_grad(_loss_log_nu_t, 10.0)
+        np.testing.assert_allclose(
+            grad_log_nu_t_jax,
+            grad_log_nu_t_fd,
+            rtol=1e-3,
+            atol=1e-12,
+            err_msg=f"log_nu_t: autodiff={grad_log_nu_t_jax:.4e}, " + f"FD={grad_log_nu_t_fd:.4e}",
+        )
+        # Verify gradients are nonzero
+        assert abs(grad_alpha1_jax) > 0.0, "alpha1 gradient is zero"
+        assert abs(grad_log_nu_t_jax) > 0.0, "log_nu_t gradient is zero"
 
 
 class TestTotalDPL:

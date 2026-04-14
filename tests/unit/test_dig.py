@@ -2,11 +2,17 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from tengri.models.nebular.dig import mix_dig_emission
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 class MockNebularBackend:
@@ -171,11 +177,12 @@ class TestMixDigEmission:
             )
             return jnp.sum(sed)
 
-        grad_fn = jax.grad(scalar_fn)
-        grad_val = grad_fn(-1.0)
-        # Gradient should be finite and non-zero
-        assert jnp.isfinite(grad_val)
-        assert not jnp.allclose(grad_val, 0.0)
+        grad_jax = float(jax.grad(scalar_fn)(-1.0))
+        grad_fd = fd_grad(scalar_fn, -1.0)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
+        assert not jnp.allclose(grad_jax, 0.0)
 
     def test_kwargs_forwarded_to_backend(self, common_kw):
         """Extra kwargs should be forwarded to the backend."""

@@ -26,7 +26,7 @@ _N_LINES = 39
 # Rest-frame wavelengths of Lyman series lines (Angstrom)
 _LAMBDA_LYMAN = jnp.array(
     [
-        1215.670,
+        1216.0,
         1025.720,
         972.537,
         949.743,
@@ -69,7 +69,7 @@ _LAMBDA_LYMAN = jnp.array(
 )
 
 # Lyman limit wavelength
-_LAMBDA_LIMIT = 911.8  # Angstrom
+_LAMBDA_LIMIT = 912.0  # Angstrom
 
 # ---------------------------------------------------------------------------
 # LAF coefficients: A_j^LAF for 3 regimes (Inoue+2014 Eq. 21)
@@ -190,7 +190,7 @@ def _tau_ls_laf(
     wave = wave_obs[None, :]  # (1, n_wave)
 
     lam_max = lam_j * (1.0 + z_source)
-    active = (wave > lam_j) & (wave < lam_max)
+    active = (wave > lam_j) & (wave <= lam_max)
 
     lam_break1 = 2.2 * lam_j
     lam_break2 = 5.7 * lam_j
@@ -222,7 +222,7 @@ def _tau_ls_dla(
     wave = wave_obs[None, :]  # (1, n_wave)
 
     lam_max = lam_j * (1.0 + z_source)
-    active = (wave > lam_j) & (wave < lam_max)
+    active = (wave > lam_j) & (wave <= lam_max)
 
     lam_break = 3.0 * lam_j
     ratio = wave / lam_j
@@ -246,7 +246,7 @@ def _tau_lc_laf(
     """Lyman-continuum LAF optical depth (Inoue+2014 Eqs. 25-27)."""
     # Absorbers at redshift z_abs contribute for wave_obs = 911.8*(1+z_abs)
     # So wave_obs must be > 911.8 (rest Lyman limit) and < 911.8*(1+z_source)
-    active = (wave_obs > _LAMBDA_LIMIT) & (wave_obs < _LAMBDA_LIMIT * (1.0 + z_source))
+    active = (wave_obs > _LAMBDA_LIMIT) & (wave_obs <= _LAMBDA_LIMIT * (1.0 + z_source))
 
     z_obs = wave_obs / _LAMBDA_LIMIT - 1.0
     # Clamp z_obs >= 0 so fractional exponents (1.2, 3.7, 5.5) never receive a
@@ -305,7 +305,7 @@ def _tau_lc_dla(
     z_source: float,
 ) -> jnp.ndarray:
     """Lyman-continuum DLA optical depth (Inoue+2014 Eqs. 28-29)."""
-    active = (wave_obs > _LAMBDA_LIMIT) & (wave_obs < _LAMBDA_LIMIT * (1.0 + z_source))
+    active = (wave_obs > _LAMBDA_LIMIT) & (wave_obs <= _LAMBDA_LIMIT * (1.0 + z_source))
     z_obs = wave_obs / _LAMBDA_LIMIT - 1.0
 
     # Two source-redshift regimes

@@ -12,8 +12,15 @@ References
 
 import jax
 import jax.numpy as jnp
+from numpy.testing import assert_allclose
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 from tengri.models.sfh.dense_basis import (
     _build_quantile_points,
@@ -266,8 +273,17 @@ class TestDenseBasisSFH:
                 )
             )
 
-        g = jax.grad(_sfr_sum)(10.0)
-        assert jnp.isfinite(g)
+        g_val = float(jax.grad(_sfr_sum)(10.0))
+
+        def f_scalar(m):
+            return float(_sfr_sum(m))
+
+        assert_allclose(
+            g_val,
+            fd_grad(f_scalar, 10.0, eps=0.01),
+            rtol=1e-3,
+            err_msg="dense_basis_sfh: FD check ∂(∑SFR)/∂log_total_mass",
+        )
 
     def test_has_gradient_tx_frac(self) -> None:
         def _sfr_sum(t0: float) -> float:
@@ -282,8 +298,68 @@ class TestDenseBasisSFH:
                 )
             )
 
-        g = jax.grad(_sfr_sum)(0.3)
-        assert jnp.isfinite(g)
+        g_val = float(jax.grad(_sfr_sum)(0.3))
+
+        def f_scalar(t0):
+            return float(_sfr_sum(t0))
+
+        assert_allclose(
+            g_val,
+            fd_grad(f_scalar, 0.3, eps=0.01),
+            rtol=5e-3,  # dense_basis uses GP-style spline interp; 0.5% agreement is sufficient
+            err_msg="dense_basis_sfh: FD check ∂(∑SFR)/∂tx_frac_0",
+        )
+
+    def test_dense_basis_tx_ordering(self) -> None:
+        """Mass assembly times must be monotone: t(20%) < t(50%) < t(80%).
+
+        Iyer et al. 2019, ApJ 879, 116: tx_frac_i are cumulative-mass quantiles,
+        so the times at which those mass fractions are reached must be ordered.
+        """
+        AGE_GRID = jnp.geomspace(1e6, 13.7e9, 10000)
+        sfr = dense_basis_sfh(
+            AGE_GRID,
+            log_total_mass=10.0,
+            log_sfr_inst=0.0,
+            age_universe_yr=13.7e9,
+            tx_frac_0=0.2,
+            tx_frac_1=0.5,
+            tx_frac_2=0.8,
+        )
+        dt = jnp.diff(AGE_GRID, prepend=AGE_GRID[0])
+        cum_mass = jnp.cumsum(sfr * dt)
+        total = float(cum_mass[-1])
+        t20 = float(AGE_GRID[int(jnp.searchsorted(cum_mass / total, 0.2))])
+        t50 = float(AGE_GRID[int(jnp.searchsorted(cum_mass / total, 0.5))])
+        t80 = float(AGE_GRID[int(jnp.searchsorted(cum_mass / total, 0.8))])
+        assert t20 < t50 < t80, (
+            f"Dense basis: mass assembly times not monotone: "
+            f"t20={t20 / 1e9:.2f} Gyr, t50={t50 / 1e9:.2f} Gyr, t80={t80 / 1e9:.2f} Gyr"
+        )
+
+    def test_dense_basis_mass_conservation(self) -> None:
+        """Integral of SFR over time must equal 10^log_total_mass within 1%.
+
+        Iyer et al. 2019, ApJ 879, 116: dense_basis_sfh is normalized so that
+        ∫ SFR(t) dt = 10^log_total_mass Msun.
+        """
+        AGE_GRID = jnp.geomspace(1e6, 13.7e9, 10000)
+        sfr = dense_basis_sfh(
+            AGE_GRID,
+            log_total_mass=10.0,
+            log_sfr_inst=0.0,
+            age_universe_yr=13.7e9,
+            tx_frac_0=0.2,
+            tx_frac_1=0.5,
+            tx_frac_2=0.8,
+        )
+        mass = float(jnp.trapezoid(sfr, AGE_GRID))
+        assert_allclose(
+            mass,
+            1e10,
+            rtol=0.01,
+            err_msg="dense_basis_sfh: ∫SFR dt != 10^10 Msun (mass conservation violated)",
+        )
 
     def test_ordering_enforced(self) -> None:
         """Passing unordered tx fractions should still produce valid output."""

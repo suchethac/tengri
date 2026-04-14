@@ -754,10 +754,39 @@ class TestGradientFlowComplete:
             return jnp.sum(model.predict_photometry(params))
 
         g_T, g_tau = jax.grad(loss, argnums=(0, 1))(35.0, 1.0)
-        assert jnp.isfinite(g_T), "Gradient w.r.t. dust_T is NaN/Inf"
-        assert jnp.isfinite(g_tau), "Gradient w.r.t. dust_tau_bc is NaN/Inf"
-        assert abs(float(g_T)) > 0, "dust_T gradient is zero — disconnected?"
-        assert abs(float(g_tau)) > 0, "dust_tau_bc gradient is zero — disconnected?"
+
+        # Test dust_T gradient
+        def loss_T(dust_T):
+            params = {"dust_T": dust_T, "dust_beta_ir": 1.6, "dust_tau_bc": 1.0}
+            return jnp.sum(model.predict_photometry(params))
+
+        grad_jax_T = float(g_T)
+        grad_fd_T = float((loss_T(35.0 + 1e-4) - loss_T(35.0 - 1e-4)) / (2.0 * 1e-4))
+        # Use atol for near-zero gradients, rtol for larger gradients
+        np.testing.assert_allclose(
+            grad_jax_T,
+            grad_fd_T,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg=f"dust_T: autodiff={grad_jax_T:.4e}, FD={grad_fd_T:.4e}",
+        )
+        assert abs(grad_jax_T) > 0, "dust_T gradient is zero — disconnected?"
+
+        # Test dust_tau_bc gradient
+        def loss_tau(tau_bc):
+            params = {"dust_T": 35.0, "dust_beta_ir": 1.6, "dust_tau_bc": tau_bc}
+            return jnp.sum(model.predict_photometry(params))
+
+        grad_jax_tau = float(g_tau)
+        grad_fd_tau = float((loss_tau(1.0 + 1e-4) - loss_tau(1.0 - 1e-4)) / (2.0 * 1e-4))
+        np.testing.assert_allclose(
+            grad_jax_tau,
+            grad_fd_tau,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg=f"dust_tau_bc: autodiff={grad_jax_tau:.4e}, FD={grad_fd_tau:.4e}",
+        )
+        assert abs(grad_jax_tau) > 0, "dust_tau_bc gradient is zero — disconnected?"
 
 
 # ===================================================================

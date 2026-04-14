@@ -139,11 +139,29 @@ class TestTransformsCrossval:
         """Transforms should have finite gradients."""
         from tengri.utils.transforms import to_bounded, to_unbounded
 
-        grad_ub = jax.grad(lambda x: to_unbounded(x, 0.0, 1.0))(0.5)
-        grad_b = jax.grad(lambda u: to_bounded(u, 0.0, 1.0))(0.0)
+        def fd_grad_local(f, x: float, eps: float = 1e-4) -> float:
+            """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+            return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
-        assert jnp.isfinite(grad_ub) and grad_ub > 0
-        assert jnp.isfinite(grad_b) and grad_b > 0
+        grad_ub_jax = float(jax.grad(lambda x: to_unbounded(x, 0.0, 1.0))(0.5))
+        grad_ub_fd = fd_grad_local(lambda x: to_unbounded(x, 0.0, 1.0), 0.5)
+        np.testing.assert_allclose(
+            grad_ub_jax,
+            grad_ub_fd,
+            rtol=1e-3,
+            err_msg=f"to_unbounded autodiff={grad_ub_jax:.4e}, FD={grad_ub_fd:.4e}",
+        )
+        assert grad_ub_jax > 0, "to_unbounded gradient should be > 0"
+
+        grad_b_jax = float(jax.grad(lambda u: to_bounded(u, 0.0, 1.0))(0.0))
+        grad_b_fd = fd_grad_local(lambda u: to_bounded(u, 0.0, 1.0), 0.0)
+        np.testing.assert_allclose(
+            grad_b_jax,
+            grad_b_fd,
+            rtol=1e-3,
+            err_msg=f"to_bounded autodiff={grad_b_jax:.4e}, FD={grad_b_fd:.4e}",
+        )
+        assert grad_b_jax > 0, "to_bounded gradient should be > 0"
 
     def test_jacobian_positive(self):
         """Transform Jacobian should be positive (monotonic mapping)."""

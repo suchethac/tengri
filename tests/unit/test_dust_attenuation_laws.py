@@ -19,9 +19,16 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 from tengri.models.dust.attenuation import (
     DUST_LAWS,
     calzetti,
+    cardelli,
     leitherer02,
     noll09,
     salim_sbl18,
@@ -84,9 +91,16 @@ class TestLeitherer02:
         def loss(wav):
             return jnp.sum(leitherer02(wav))
 
-        grad_fn = jax.grad(loss)
-        g = grad_fn(jnp.array([1500.0]))
-        assert jnp.isfinite(g).all()
+        def f_scalar(wav0: float) -> float:
+            return float(loss(jnp.array([wav0])))
+
+        grad_jax = float(jax.grad(loss)(jnp.array([1500.0]))[0])
+        np.testing.assert_allclose(
+            grad_jax,
+            fd_grad(f_scalar, 1500.0, eps=1.0),
+            rtol=5e-3,
+            err_msg="leitherer02: FD check ∂(∑k)/∂wavelength",
+        )
 
 
 class TestNoll09:
@@ -155,14 +169,31 @@ class TestNoll09:
         assert result.shape == WAVS.shape
 
     def test_gradient_wrt_params(self):
-        """Gradients w.r.t. bump and slope should be finite."""
+        """Gradients of noll09 match central FD w.r.t. bump strength and slope."""
 
         def loss(ampl, delta):
             return jnp.sum(noll09(jnp.array(WAVS), dust_bump_strength=ampl, dust_delta=delta))
 
         g_ampl, g_delta = jax.grad(loss, argnums=(0, 1))(1.0, -0.1)
-        assert jnp.isfinite(g_ampl)
-        assert jnp.isfinite(g_delta)
+
+        def f_ampl(ampl: float) -> float:
+            return float(loss(ampl, -0.1))
+
+        def f_delta(delta: float) -> float:
+            return float(loss(1.0, delta))
+
+        np.testing.assert_allclose(
+            float(g_ampl),
+            fd_grad(f_ampl, 1.0),
+            rtol=1e-3,
+            err_msg="noll09: FD check ∂(∑k)/∂dust_bump_strength",
+        )
+        np.testing.assert_allclose(
+            float(g_delta),
+            fd_grad(f_delta, -0.1),
+            rtol=1e-3,
+            err_msg="noll09: FD check ∂(∑k)/∂dust_delta",
+        )
 
 
 class TestSalimSBL18:
@@ -227,11 +258,83 @@ class TestSalimSBL18:
         assert result.shape == WAVS.shape
 
     def test_gradient_wrt_params(self):
-        """Gradients w.r.t. bump and slope should be finite."""
+        """Gradients of salim_sbl18 match central FD w.r.t. bump strength and slope."""
 
         def loss(ampl, delta):
             return jnp.sum(salim_sbl18(jnp.array(WAVS), dust_bump_strength=ampl, dust_delta=delta))
 
         g_ampl, g_delta = jax.grad(loss, argnums=(0, 1))(1.0, -0.1)
-        assert jnp.isfinite(g_ampl)
-        assert jnp.isfinite(g_delta)
+
+        def f_ampl(ampl: float) -> float:
+            return float(loss(ampl, -0.1))
+
+        def f_delta(delta: float) -> float:
+            return float(loss(1.0, delta))
+
+        np.testing.assert_allclose(
+            float(g_ampl),
+            fd_grad(f_ampl, 1.0),
+            rtol=1e-3,
+            err_msg="salim_sbl18: FD check ∂(∑k)/∂dust_bump_strength",
+        )
+        np.testing.assert_allclose(
+            float(g_delta),
+            fd_grad(f_delta, -0.1),
+            rtol=1e-3,
+            err_msg="salim_sbl18: FD check ∂(∑k)/∂dust_delta",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Physics reference tests
+# ---------------------------------------------------------------------------
+
+
+class TestCalzettiPhysics:
+    """Reference value tests for Calzetti+2000 attenuation curve."""
+
+    def test_calzetti_rv_normalization(self) -> None:
+        """k(5500 Å) = 1.0 by the R_V = 4.05 normalization convention.
+
+        Calzetti et al. 2000, ApJ 533, 682, Eq. 4: the curve is normalized at
+        V-band so that one unit of tau_V produces one e-folding at 5500 Å.
+        """
+        k_v = float(calzetti(jnp.array([5500.0]))[0])
+        np.testing.assert_allclose(
+            k_v,
+            1.0,
+            atol=0.01,
+            err_msg="Calzetti+2000 Eq. 4: k(5500 Å) = 1.0 by R_V=4.05 normalization",
+        )
+
+    def test_calzetti_uv_slope(self) -> None:
+        """Extinction increases steeply into the UV: k(1500) > k(3000) > k(5500).
+
+        Calzetti et al. 2000, ApJ 533, 682: the attenuation curve rises monotonically
+        from the optical to the far-UV.
+        """
+        k = calzetti(jnp.array([1500.0, 3000.0, 5500.0]))
+        assert float(k[0]) > float(k[1]) > float(k[2]), (
+            f"Calzetti UV slope: k(1500)={float(k[0]):.3f}, "
+            f"k(3000)={float(k[1]):.3f}, k(5500)={float(k[2]):.3f} — must be decreasing"
+        )
+
+
+class TestCardelli2175Bump:
+    """Reference value tests for Cardelli+Clayton+Mathis 1989 extinction curve."""
+
+    def test_ccm_2175_bump(self) -> None:
+        """CCM curve has a local maximum at the 2175 Å UV bump.
+
+        Cardelli, Clayton & Mathis 1989, ApJ 345, 245: the 2175 Å feature is the
+        strongest interstellar extinction feature in the UV. k(2175) must exceed
+        both the adjacent continuum at 2000 Å and 2500 Å.
+        """
+        wave = jnp.array([2000.0, 2175.0, 2500.0])
+        k = cardelli(wave)
+        assert float(k[1]) > float(k[0]), (
+            f"CCM 2175 Å bump: k(2175)={float(k[1]):.3f} should exceed k(2000)={float(k[0]):.3f}"
+        )
+        assert float(k[1]) > float(k[2]), (
+            f"CCM 2175 Å bump: k(2175)={float(k[1]):.3f} should exceed k(2500)={float(k[2]):.3f}"
+        )

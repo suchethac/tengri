@@ -11,6 +11,7 @@ Validates that:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -25,6 +26,11 @@ from tengri.models.observation.spectrum import (
 )
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 # ---------------------------------------------------------------------------
@@ -299,8 +305,11 @@ class TestLSFGradients:
         def loss(R):
             return jnp.sum(apply_lsf(delta_spectrum, wave, resolution=R) ** 2)
 
-        g = jax.grad(loss)(100.0)
-        assert jnp.isfinite(g)
+        grad_jax = float(jax.grad(loss)(100.0))
+        grad_fd = fd_grad(loss, 100.0)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=5e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
 
     def test_jit_constant_r(self, wave, delta_spectrum):
         """JIT compilation works for constant R."""

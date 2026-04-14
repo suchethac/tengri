@@ -15,6 +15,11 @@ import numpy as np
 import pytest
 
 
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 # ---------------------------------------------------------------------------
 # BUG-01: SFR hardcoded to 1.0 Msun/yr
 # ---------------------------------------------------------------------------
@@ -271,9 +276,15 @@ class TestBug23WG00Gradient:
         def f(tau_v):
             return jnp.sum(wg00_cloudy(wave, dust_tau_v=tau_v))
 
-        grad_fn = jax.grad(f)
-        g = grad_fn(0.0)
-        assert jnp.isfinite(g), f"Gradient is {g} (expected finite)"
+        grad_jax = float(jax.grad(f)(0.0))
+        grad_fd = fd_grad(f, 0.0)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            atol=1e-12,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
 
 # ---------------------------------------------------------------------------

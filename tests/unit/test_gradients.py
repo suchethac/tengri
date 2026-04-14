@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -30,6 +31,12 @@ from tengri.models.sfh.psd_models import drw_variance
 from tengri.utils.grid import grid_spacing, log_age_to_age_yr, make_log_age_grid
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 _EPS = 1e-4
 _REL_TOL = 0.005  # 0.5% relative tolerance
@@ -272,13 +279,26 @@ class TestGradientThroughPipeline:
 
         xi = jax.random.normal(jax.random.PRNGKey(0), shape=(N_GRID,))
 
-        # Gradient w.r.t. xi
+        # Gradient w.r.t. xi — check one representative component with FD
         grad_xi = jax.grad(pipeline, argnums=0)(xi, 1.0)
-        assert jnp.all(jnp.isfinite(grad_xi)), "Gradient w.r.t. xi not finite"
+        assert grad_xi.shape == xi.shape
+
+        xi0_val = float(xi[0])
+
+        def pipeline_xi0(xi0_scalar):
+            xi_mod = xi.at[0].set(xi0_scalar)
+            return float(pipeline(xi_mod, 1.0))
+
+        fd_xi0 = (pipeline_xi0(xi0_val + _EPS) - pipeline_xi0(xi0_val - _EPS)) / (2.0 * _EPS)
+        assert_allclose(
+            float(grad_xi[0]),
+            fd_xi0,
+            rtol=_REL_TOL,
+            err_msg="full_pipeline: FD check ∂/∂xi[0]",
+        )
 
         # Gradient w.r.t. sigma_ps
-        grad_sigma = jax.grad(pipeline, argnums=1)(xi, 1.0)
-        assert jnp.isfinite(grad_sigma), "Gradient w.r.t. sigma_ps not finite"
+        _check_grad_scalar(lambda sigma: pipeline(xi, sigma), 1.0, eps=0.01)
 
     def test_dust_in_pipeline_gradient(self):
         """Gradient flows through SFH -> dust -> attenuated SED."""
@@ -299,6 +319,57 @@ class TestGradientThroughPipeline:
             return jnp.sum(atten)
 
         grads = jax.grad(pipeline, argnums=(0, 1, 2))(0.5, 0.3, -0.7)
-        for i, g in enumerate(grads):
-            assert jnp.isfinite(g), f"Gradient {i} not finite: {g}"
-            assert float(jnp.abs(g)) > 1e-10, f"Gradient {i} vanishing: {g}"
+
+        # Test tau_v1 gradient
+        def pipeline_tau_v1(tau_v1):
+            atten = two_component_dust(
+                wave, ages, tau_v1, 0.3, law_bc="power_law", law_diff="power_law", n_slope=-0.7
+            )
+            return jnp.sum(atten)
+
+        grad_jax_tau1 = float(grads[0])
+        grad_fd_tau1 = fd_grad(pipeline_tau_v1, 0.5)
+        np.testing.assert_allclose(
+            grad_jax_tau1,
+            grad_fd_tau1,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg=f"tau_v1: autodiff={grad_jax_tau1:.4e}, FD={grad_fd_tau1:.4e}",
+        )
+        assert float(jnp.abs(grads[0])) > 1e-10, f"Gradient 0 vanishing: {grads[0]}"
+
+        # Test tau_v2 gradient
+        def pipeline_tau_v2(tau_v2):
+            atten = two_component_dust(
+                wave, ages, 0.5, tau_v2, law_bc="power_law", law_diff="power_law", n_slope=-0.7
+            )
+            return jnp.sum(atten)
+
+        grad_jax_tau2 = float(grads[1])
+        grad_fd_tau2 = fd_grad(pipeline_tau_v2, 0.3)
+        np.testing.assert_allclose(
+            grad_jax_tau2,
+            grad_fd_tau2,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg=f"tau_v2: autodiff={grad_jax_tau2:.4e}, FD={grad_fd_tau2:.4e}",
+        )
+        assert float(jnp.abs(grads[1])) > 1e-10, f"Gradient 1 vanishing: {grads[1]}"
+
+        # Test dust_n gradient
+        def pipeline_dust_n(dust_n):
+            atten = two_component_dust(
+                wave, ages, 0.5, 0.3, law_bc="power_law", law_diff="power_law", n_slope=dust_n
+            )
+            return jnp.sum(atten)
+
+        grad_jax_n = float(grads[2])
+        grad_fd_n = fd_grad(pipeline_dust_n, -0.7)
+        np.testing.assert_allclose(
+            grad_jax_n,
+            grad_fd_n,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg=f"dust_n: autodiff={grad_jax_n:.4e}, FD={grad_fd_n:.4e}",
+        )
+        assert float(jnp.abs(grads[2])) > 1e-10, f"Gradient 2 vanishing: {grads[2]}"

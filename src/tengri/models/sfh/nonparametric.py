@@ -73,8 +73,8 @@ def continuity_sfh(
 
     n_bins = bin_edges_gyr.shape[0] - 1  # len() raises ConcretizationTypeError under JIT
 
-    # Collect ratios from kwargs in order
-    log_sfr_ratios = jnp.array([ratio_kwargs[f"ratio_{i}"] for i in range(n_bins - 1)])
+    # Collect ratios from kwargs in order (default 0.0 = flat SFH)
+    log_sfr_ratios = jnp.array([ratio_kwargs.get(f"ratio_{i}", 0.0) for i in range(n_bins - 1)])
 
     # Convert ratios to absolute log-SFR.
     # Oldest bin is the reference (log_sfr = 0). Each younger bin

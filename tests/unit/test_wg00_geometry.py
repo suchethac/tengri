@@ -2,6 +2,7 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -10,6 +11,12 @@ from tengri.models.dust.attenuation import (
     wg00_dusty,
     wg00_shell,
 )
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 jax.config.update("jax_enable_x64", True)
 
@@ -74,13 +81,34 @@ class TestWG00Shell:
         assert_allclose(result, expected, rtol=1e-12)
 
     def test_differentiable(self):
-        """Gradients exist with respect to tau_V."""
+        """FD check: ∂(∑T)/∂tau_V for wg00_shell. Gradient should be negative."""
         wave = jnp.array([3000.0, 5500.0, 10000.0])
-        grad_fn = jax.grad(lambda t: jnp.sum(wg00_shell(wave, t, law="cardelli")))
-        grad_val = grad_fn(1.0)
-        assert jnp.isfinite(grad_val)
-        # Gradient should be negative (more dust -> less transmission)
-        assert float(grad_val) < 0.0
+
+        def f(t):
+            return float(jnp.sum(wg00_shell(wave, t, law="cardelli")))
+
+        grad_jax = float(jax.grad(lambda t: jnp.sum(wg00_shell(wave, t, law="cardelli")))(1.0))
+        grad_fd = fd_grad(f, 1.0, eps=1e-4)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg="wg00_shell: autodiff vs FD gradient w.r.t. tau_V",
+        )
+        assert grad_jax < 0.0, "wg00_shell: ∂T/∂tau_V should be negative"
+
+    def test_shell_opaque_limit(self):
+        """At tau_V=100, T must be < 1e-10 (Beer-Lambert opaque regime).
+
+        Witt & Gordon 2000, ApJ 528, 799: in the shell (foreground screen) geometry
+        the transmission is exp(-tau * k(lambda)), which decays exponentially at
+        large tau. At tau_V=100 and V-band, T ≈ exp(-100) ≈ 3.7e-44, which is
+        numerically zero. Even at shorter wavelengths where k < 1 (NIR end), the
+        value must be far below 1e-10. This test guards against incorrect
+        geometry implementations that saturate at a finite floor.
+        """
+        T = float(wg00_shell(jnp.array([5500.0]), tau_v=100.0, law="cardelli")[0])
+        assert T < 1e-10, f"WG00 shell opaque limit: T={T:.2e} at tau_V=100 (expected <1e-10)"
 
 
 # ===================================================================
@@ -149,12 +177,21 @@ class TestWG00Cloudy:
         assert_allclose(result, expected, rtol=1e-12)
 
     def test_differentiable(self):
-        """Gradients exist with respect to tau_V."""
+        """FD check: ∂(∑T)/∂tau_V for wg00_cloudy. Gradient should be negative."""
         wave = jnp.array([3000.0, 5500.0, 10000.0])
-        grad_fn = jax.grad(lambda t: jnp.sum(wg00_cloudy(wave, t, law="cardelli")))
-        grad_val = grad_fn(1.0)
-        assert jnp.isfinite(grad_val)
-        assert float(grad_val) < 0.0
+
+        def f(t):
+            return float(jnp.sum(wg00_cloudy(wave, t, law="cardelli")))
+
+        grad_jax = float(jax.grad(lambda t: jnp.sum(wg00_cloudy(wave, t, law="cardelli")))(1.0))
+        grad_fd = fd_grad(f, 1.0, eps=1e-4)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg="wg00_cloudy: autodiff vs FD gradient w.r.t. tau_V",
+        )
+        assert grad_jax < 0.0, "wg00_cloudy: ∂T/∂tau_V should be negative"
 
 
 # ===================================================================
@@ -242,19 +279,41 @@ class TestWG00Dusty:
         assert_allclose(result, expected, rtol=1e-12)
 
     def test_differentiable_tau(self):
-        """Gradients exist with respect to tau_V."""
+        """FD check: ∂(∑T)/∂tau_V for wg00_dusty. Gradient should be negative."""
         wave = jnp.array([3000.0, 5500.0, 10000.0])
-        grad_fn = jax.grad(lambda t: jnp.sum(wg00_dusty(wave, t, law="cardelli", n_clumps=10.0)))
-        grad_val = grad_fn(1.0)
-        assert jnp.isfinite(grad_val)
-        assert float(grad_val) < 0.0
+
+        def f(t):
+            return float(jnp.sum(wg00_dusty(wave, t, law="cardelli", n_clumps=10.0)))
+
+        grad_jax = float(
+            jax.grad(lambda t: jnp.sum(wg00_dusty(wave, t, law="cardelli", n_clumps=10.0)))(1.0)
+        )
+        grad_fd = fd_grad(f, 1.0, eps=1e-4)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg="wg00_dusty: autodiff vs FD gradient w.r.t. tau_V",
+        )
+        assert grad_jax < 0.0, "wg00_dusty: ∂T/∂tau_V should be negative"
 
     def test_differentiable_n_clumps(self):
-        """Gradients exist with respect to n_clumps."""
+        """FD check: ∂(∑T)/∂n_clumps for wg00_dusty."""
         wave = jnp.array([3000.0, 5500.0, 10000.0])
-        grad_fn = jax.grad(lambda n: jnp.sum(wg00_dusty(wave, 2.0, law="cardelli", n_clumps=n)))
-        grad_val = grad_fn(10.0)
-        assert jnp.isfinite(grad_val)
+
+        def f(n):
+            return float(jnp.sum(wg00_dusty(wave, 2.0, law="cardelli", n_clumps=n)))
+
+        grad_jax = float(
+            jax.grad(lambda n: jnp.sum(wg00_dusty(wave, 2.0, law="cardelli", n_clumps=n)))(10.0)
+        )
+        grad_fd = fd_grad(f, 10.0, eps=0.1)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg="wg00_dusty: autodiff vs FD gradient w.r.t. n_clumps",
+        )
 
 
 # ===================================================================

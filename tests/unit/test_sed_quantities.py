@@ -11,6 +11,12 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 from tengri.utils.sed_quantities import (
     C_AA,
     LSUN_ERG,
@@ -406,25 +412,43 @@ class TestLuminosityWeighted:
 
 class TestJAXCompat:
     def test_grad_through_l_bol(self, wave):
-        """Gradient flows through bolometric luminosity."""
+        """Gradient flows through bolometric luminosity and matches FD."""
 
         def f(scale):
             sed = jnp.ones_like(wave) * scale
             return compute_bolometric_luminosity(sed, wave)
 
-        grad = jax.grad(f)(1e30)
-        assert jnp.isfinite(grad)
-        assert grad > 0
+        # x0=1.0, not 1e30: at x0=1e30 eps/x0 < float64 machine epsilon so FD cancels to 0
+        x0 = 1.0
+        grad_jax = float(jax.grad(f)(x0))
+        grad_fd = fd_grad(f, x0)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
+        assert grad_jax > 0
 
     def test_grad_through_beta(self, wave):
-        """Gradient flows through UV slope."""
+        """Gradient flows through UV slope and matches FD.
+
+        For a scale-invariant quantity like UV slope beta (computed from log-log ratios),
+        d(beta)/d(scale) = 0. Both autodiff and FD give 0 — use atol to handle near-zero.
+        """
 
         def f(scale):
             sed = jnp.ones_like(wave) * scale
             return compute_uv_slope_beta(sed, wave)
 
-        grad = jax.grad(f)(1e30)
-        assert jnp.isfinite(grad)
+        # x0=1.0, not 1e30: at x0=1e30 eps/x0 < float64 machine epsilon so FD cancels to 0
+        x0 = 1.0
+        grad_jax = float(jax.grad(f)(x0))
+        grad_fd = fd_grad(f, x0)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            atol=1e-6,
+            rtol=5e-3,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
     def test_jit_compatible(self, wave, flat_sed):
         """All key functions work under jax.jit."""

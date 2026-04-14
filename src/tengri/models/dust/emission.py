@@ -49,6 +49,7 @@ References
 - Jones et al. 2017, A&A, 602, A46 (THEMIS dust model)
 """
 
+import contextlib
 from collections.abc import Callable
 from pathlib import Path
 
@@ -130,6 +131,43 @@ def resolve_emission_model(name: str) -> Callable:
 
 # Backward compatibility alias
 get_emission_model = resolve_emission_model
+
+
+def preload_emission_model(name: str) -> Callable:
+    """Force lazy template loading outside any JAX JIT scope.
+
+    Template-based emission models use lazy loaders that fire on first call.
+    If the first call happens inside a ``@jax.jit`` scope, ``jnp.array()``
+    inside the loader creates ``DynamicJaxprTracer`` objects that escape into
+    closures, causing ``UnexpectedTracerError`` on subsequent non-JIT calls.
+
+    Call this function at factory time (outside JIT) so templates are loaded
+    into ``DUST_EMISSION_MODELS[name]`` as regular ``DeviceArray`` objects.
+    Dynamic JAX indexing inside JIT then works correctly.
+
+    Parameters
+    ----------
+    name : str
+        Registry name (e.g. ``"draine_li2007"``).
+
+    Returns
+    -------
+    Callable
+        The loaded (real) emission function — NOT a lazy wrapper.
+    """
+    if name not in DUST_EMISSION_MODELS:
+        raise ValueError(
+            f"Unknown emission model '{name}'. Available: {list(DUST_EMISSION_MODELS.keys())}"
+        )
+    if name not in _resolved:
+        # Trigger lazy loading with dummy inputs; ignore computation output —
+        # we only want the side effect of loading templates into the registry.
+        import numpy as _np
+
+        _dummy_wave = _np.linspace(1e3, 1e7, 5, dtype=_np.float64)
+        with contextlib.suppress(Exception):
+            DUST_EMISSION_MODELS[name](_dummy_wave, 1.0)
+    return DUST_EMISSION_MODELS[name]
 
 
 # ===================================================================
@@ -448,9 +486,17 @@ def casey2012(
 
     Combines a modified blackbody (FIR peak from cold/warm dust) with a
     mid-IR power law (Wien-side excess from warm dust continuum), joined
-    by a smooth sigmoid transition function.  The key advantage over a
-    pure modified blackbody is capturing the 8--40 μm excess seen in real
-    galaxy SEDs.
+    by a smooth sigmoid transition function.
+
+    .. note::
+
+        The mid-IR power-law contribution is only significant for **warm/hot
+        dust** (T ≳ 60 K).  For typical cold ISM dust (T = 25–60 K) the Wien
+        cutoff exp(-hν/kT) kills the power-law component at 8–40 μm (x ≈ 10–51
+        at those wavelengths), so the model produces *less* 8–40 μm flux than a
+        pure MBB normalised to the same L_absorbed.  The 8–40 μm advantage
+        described in Casey (2012) applies to warmer starburst / AGN-heated dust
+        components where T ≳ 80–100 K.
 
     The implemented model uses the following convention (see code comments)::
 
@@ -696,7 +742,7 @@ def load_draine_li_templates(filepath: str) -> dict:
     Parameters
     ----------
     filepath : str
-        Path to template file (.h5 or .npz).
+        Path to template file (.h5).
 
     Returns
     -------
@@ -723,11 +769,11 @@ def load_draine_li_templates(filepath: str) -> dict:
                     powerlaw[i, j] /= norm
 
         return {
-            "wavelength": jnp.array(wavs),
-            "umin_grid": jnp.array(data["umin_grid"]),
-            "qpah_grid": jnp.array(data["qpah_grid"]),
-            "single_u": jnp.array(single_u),
-            "powerlaw": jnp.array(powerlaw),
+            "wavelength": jnp.array(wavs, dtype=jnp.float64),
+            "umin_grid": jnp.array(data["umin_grid"], dtype=jnp.float64),
+            "qpah_grid": jnp.array(data["qpah_grid"], dtype=jnp.float64),
+            "single_u": jnp.array(single_u, dtype=jnp.float64),
+            "powerlaw": jnp.array(powerlaw, dtype=jnp.float64),
         }
 
     # HDF5 format
@@ -753,19 +799,19 @@ def load_draine_li_templates(filepath: str) -> dict:
                     if norm > 0:
                         powerlaw[i, j] /= norm
             return {
-                "wavelength": jnp.array(wavs),
-                "umin_grid": jnp.array(f["grid"]["umin"][:]),
-                "qpah_grid": jnp.array(f["grid"]["qpah"][:]),
-                "single_u": jnp.array(single_u),
-                "powerlaw": jnp.array(powerlaw),
+                "wavelength": jnp.array(wavs, dtype=jnp.float64),
+                "umin_grid": jnp.array(f["grid"]["umin"][:], dtype=jnp.float64),
+                "qpah_grid": jnp.array(f["grid"]["qpah"][:], dtype=jnp.float64),
+                "single_u": jnp.array(single_u, dtype=jnp.float64),
+                "powerlaw": jnp.array(powerlaw, dtype=jnp.float64),
             }
         # Legacy flat format
         return {
-            "wavelength": jnp.array(f["wavelength"][:]),
-            "umin_grid": jnp.array(f["umin_grid"][:]),
-            "qpah_grid": jnp.array(f["qpah_grid"][:]),
-            "single_u": jnp.array(f["single_u"][:]),
-            "powerlaw": jnp.array(f["powerlaw"][:]),
+            "wavelength": jnp.array(f["wavelength"][:], dtype=jnp.float64),
+            "umin_grid": jnp.array(f["umin_grid"][:], dtype=jnp.float64),
+            "qpah_grid": jnp.array(f["qpah_grid"][:], dtype=jnp.float64),
+            "single_u": jnp.array(f["single_u"][:], dtype=jnp.float64),
+            "powerlaw": jnp.array(f["powerlaw"][:], dtype=jnp.float64),
         }
 
 
@@ -793,7 +839,7 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
     Parameters
     ----------
     grid_path : str
-        Path to ``dale2014_templates.npz``.
+        Path to ``dale2014_templates_v2.h5`` or ``dale2014_templates.h5``.
 
     Returns
     -------
@@ -803,7 +849,7 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
 
     Example
     -------
-    >>> dale = create_dale2014_from_grid("data/dale2014_templates.npz")
+    >>> dale = create_dale2014_from_grid("data/dale2014_templates_v2.h5")
     >>> DUST_EMISSION_MODELS["dale2014_tabulated"] = dale
     >>> sed = dale(wav, L_abs, dust_alpha_dale=1.5)
     """
@@ -833,18 +879,20 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
                 f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
             )
 
-    tmpl_wave = jnp.array(tmpl_wave_raw)
-    alpha_grid = jnp.array(alpha_grid_raw)
+    tmpl_wave_np = np.asarray(tmpl_wave_raw, dtype=np.float64)
+    alpha_grid_np = np.asarray(alpha_grid_raw, dtype=np.float64)
     # Handle both (n_alpha, n_wave) and (n_wave, n_alpha) layouts
-    if templates_raw.shape[0] == len(tmpl_wave) and templates_raw.shape[1] == len(alpha_grid):
+    if templates_raw.shape[0] == len(tmpl_wave_np) and templates_raw.shape[1] == len(
+        alpha_grid_np
+    ):
         templates_raw = templates_raw.T  # -> (n_alpha, n_wave)
 
     if already_lnu:
         # Templates are pre-normalized in L_nu convention — use directly
-        templates = jnp.array(templates_raw)
+        templates_np = np.asarray(templates_raw, dtype=np.float64)
     else:
         # Convert from L_lambda to L_nu: L_nu = L_lambda * lambda^2 / c
-        wave_cm = np.array(tmpl_wave) * _AA_TO_CM
+        wave_cm = tmpl_wave_np * _AA_TO_CM
         nu = _C_CGS / wave_cm  # descending for ascending wavelengths
 
         templates_lnu = templates_raw * (wave_cm**2)[None, :] / _C_CGS
@@ -856,7 +904,14 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
             if integral > 0:
                 templates_lnu[i] /= integral
 
-        templates = jnp.array(templates_lnu)  # (n_alpha, n_wave)
+        templates_np = np.asarray(templates_lnu, dtype=np.float64)  # (n_alpha, n_wave)
+
+    # Use jnp.array so that dynamic JAX indexing works inside JIT.
+    # preload_emission_model() must be called at factory time (outside JIT) to
+    # avoid DynamicJaxprTracer leaks.
+    tmpl_wave = jnp.array(tmpl_wave_np, dtype=jnp.float64)
+    alpha_grid = jnp.array(alpha_grid_np, dtype=jnp.float64)
+    templates = jnp.array(templates_np, dtype=jnp.float64)
 
     def dale2014_tabulated(
         wavelength_aa: jnp.ndarray,
@@ -925,46 +980,49 @@ def load_dl14_templates(filepath: str) -> dict:
         powerlaw has shape (n_qpah, n_umin, n_alpha, n_wave).
     """
     import h5py as _h5py
+    import numpy as _np_dl14
 
     with _h5py.File(filepath, "r") as f:
         if "grid" in f and "spectra" in f:
             # v2 standardized format: /grid/*, /spectra/*
-            wavelength = jnp.array(f["wavelength"][:])
-            umin_grid = jnp.array(f["grid"]["umin"][:])
-            qpah_grid = jnp.array(f["grid"]["qpah"][:])
-            alpha_grid = jnp.array(f["grid"]["alpha"][:])
-            raw_single = jnp.array(f["spectra"]["single_u"][:])
+            wavelength = _np_dl14.asarray(f["wavelength"][:], dtype=_np_dl14.float64)
+            umin_grid = _np_dl14.asarray(f["grid"]["umin"][:], dtype=_np_dl14.float64)
+            qpah_grid = _np_dl14.asarray(f["grid"]["qpah"][:], dtype=_np_dl14.float64)
+            alpha_grid = _np_dl14.asarray(f["grid"]["alpha"][:], dtype=_np_dl14.float64)
+            raw_single = _np_dl14.asarray(f["spectra"]["single_u"][:], dtype=_np_dl14.float64)
             single_u = raw_single[0]  # alpha-independent
-            raw_pdr = jnp.array(f["spectra"]["pdr"][:])
-            powerlaw = jnp.transpose(raw_pdr, (1, 2, 0, 3))
+            raw_pdr = _np_dl14.asarray(f["spectra"]["pdr"][:], dtype=_np_dl14.float64)
+            powerlaw = _np_dl14.transpose(raw_pdr, (1, 2, 0, 3))
         elif "single_u" in f:
             # Legacy flat format with correct key names
-            wavelength = jnp.array(f["wavelength"][:])
-            umin_grid = jnp.array(f["umin_grid"][:])
-            qpah_grid = jnp.array(f["qpah_grid"][:])
-            alpha_grid = jnp.array(f["alpha_grid"][:])
-            single_u = jnp.array(f["single_u"][:])
-            powerlaw = jnp.array(f["powerlaw"][:])
+            wavelength = _np_dl14.asarray(f["wavelength"][:], dtype=_np_dl14.float64)
+            umin_grid = _np_dl14.asarray(f["umin_grid"][:], dtype=_np_dl14.float64)
+            qpah_grid = _np_dl14.asarray(f["qpah_grid"][:], dtype=_np_dl14.float64)
+            alpha_grid = _np_dl14.asarray(f["alpha_grid"][:], dtype=_np_dl14.float64)
+            single_u = _np_dl14.asarray(f["single_u"][:], dtype=_np_dl14.float64)
+            powerlaw = _np_dl14.asarray(f["powerlaw"][:], dtype=_np_dl14.float64)
         elif "templates_single_u" in f:
             # Older format with templates_single_u/templates_pdr keys
-            wavelength = jnp.array(f["wavelength"][:])
-            umin_grid = jnp.array(f["umin_grid"][:])
-            qpah_grid = jnp.array(f["qpah_grid"][:])
-            alpha_grid = jnp.array(f["alpha_grid"][:])
-            raw_single = jnp.array(f["templates_single_u"][:])
+            wavelength = _np_dl14.asarray(f["wavelength"][:], dtype=_np_dl14.float64)
+            umin_grid = _np_dl14.asarray(f["umin_grid"][:], dtype=_np_dl14.float64)
+            qpah_grid = _np_dl14.asarray(f["qpah_grid"][:], dtype=_np_dl14.float64)
+            alpha_grid = _np_dl14.asarray(f["alpha_grid"][:], dtype=_np_dl14.float64)
+            raw_single = _np_dl14.asarray(f["templates_single_u"][:], dtype=_np_dl14.float64)
             single_u = raw_single[0]
-            raw_pdr = jnp.array(f["templates_pdr"][:])
-            powerlaw = jnp.transpose(raw_pdr, (1, 2, 0, 3))
+            raw_pdr = _np_dl14.asarray(f["templates_pdr"][:], dtype=_np_dl14.float64)
+            powerlaw = _np_dl14.transpose(raw_pdr, (1, 2, 0, 3))
         else:
             raise KeyError(f"DL14 HDF5 missing expected keys. Found: {list(f.keys())}")
 
+    # Use jnp.array so dynamic JAX indexing works inside JIT.
+    # Call preload_emission_model() at factory time (outside JIT) to avoid tracer leaks.
     return {
-        "wavelength": wavelength,
-        "umin_grid": umin_grid,
-        "qpah_grid": qpah_grid,
-        "alpha_grid": alpha_grid,
-        "single_u": single_u,
-        "powerlaw": powerlaw,
+        "wavelength": jnp.array(wavelength, dtype=jnp.float64),
+        "umin_grid": jnp.array(umin_grid, dtype=jnp.float64),
+        "qpah_grid": jnp.array(qpah_grid, dtype=jnp.float64),
+        "alpha_grid": jnp.array(alpha_grid, dtype=jnp.float64),
+        "single_u": jnp.array(single_u, dtype=jnp.float64),
+        "powerlaw": jnp.array(powerlaw, dtype=jnp.float64),
     }
 
 
@@ -1290,7 +1348,7 @@ def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated"
     Parameters
     ----------
     grid_path : str
-        Path to ``dale2014_templates.npz``.
+        Path to ``dale2014_templates_v2.h5`` or ``dale2014_templates.h5``.
     name : str
         Registry name. Default ``"dale2014_tabulated"``.
     """
@@ -1308,7 +1366,7 @@ def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> Non
     Parameters
     ----------
     grid_path : str
-        Path to ``dl07_templates.npz`` or ``.h5``.
+        Path to ``dl07_templates_v2.h5`` or ``dl07_templates.h5``.
     name : str
         Registry name. Default ``"dl07_tabulated"``.
     """
@@ -1335,7 +1393,7 @@ def load_astrodust_templates(filepath: str) -> dict:
     Parameters
     ----------
     filepath : str
-        Path to ``astrodust_templates.npz`` or ``.h5``.
+        Path to ``astrodust_templates_v2.h5`` or ``astrodust_templates.h5``.
 
     Returns
     -------
@@ -1401,12 +1459,14 @@ def load_astrodust_templates(filepath: str) -> dict:
                     else:
                         arr[i, j] = lnu
 
+    # Use jnp.array so dynamic JAX indexing works inside JIT.
+    # Call preload_emission_model() at factory time (outside JIT) to avoid tracer leaks.
     return {
-        "wavelength_aa": jnp.array(wavs_aa),
-        "umin_grid": jnp.array(umin_grid),
-        "qpah_grid": jnp.array(qpah_grid),
-        "single_u": jnp.array(single_u),
-        "powerlaw": jnp.array(powerlaw),
+        "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
+        "umin_grid": jnp.array(umin_grid, dtype=jnp.float64),
+        "qpah_grid": jnp.array(qpah_grid, dtype=jnp.float64),
+        "single_u": jnp.array(single_u, dtype=jnp.float64),
+        "powerlaw": jnp.array(powerlaw, dtype=jnp.float64),
     }
 
 
@@ -1453,13 +1513,14 @@ def _normalize_dl07_like_grid(raw: dict, q_key: str = "qpah_grid") -> dict:
                 else:
                     arr[i, j] = lnu
 
+    # Use jnp.array so dynamic JAX indexing works inside JIT.
     result = {
-        "wavelength_aa": jnp.array(wavs_aa),
-        "umin_grid": jnp.array(raw["umin_grid"]),
-        "single_u": jnp.array(single_u),
-        "powerlaw": jnp.array(powerlaw),
+        "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
+        "umin_grid": jnp.array(np.asarray(raw["umin_grid"]), dtype=jnp.float64),
+        "single_u": jnp.array(single_u, dtype=jnp.float64),
+        "powerlaw": jnp.array(powerlaw, dtype=jnp.float64),
     }
-    result[q_key] = jnp.array(raw[q_key])
+    result[q_key] = jnp.array(np.asarray(raw[q_key]), dtype=jnp.float64)
     return result
 
 
@@ -1499,11 +1560,12 @@ def _normalize_bosa_grid(raw: dict) -> dict:
             else:
                 spectra[i, j] = lnu
 
+    # Use jnp.array so dynamic JAX indexing works inside JIT.
     return {
-        "wavelength_aa": jnp.array(wavs_aa),
-        "log_ltir_grid": jnp.array(raw["log_ltir_grid"]),
-        "log_ssfr_grid": jnp.array(raw["log_ssfr_grid"]),
-        "spectra": jnp.array(spectra),
+        "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
+        "log_ltir_grid": jnp.array(np.asarray(raw["log_ltir_grid"]), dtype=jnp.float64),
+        "log_ssfr_grid": jnp.array(np.asarray(raw["log_ssfr_grid"]), dtype=jnp.float64),
+        "spectra": jnp.array(spectra, dtype=jnp.float64),
     }
 
 
@@ -1634,7 +1696,7 @@ def register_astrodust_tabulated(grid_path: str, name: str = "astrodust_tabulate
     Parameters
     ----------
     grid_path : str
-        Path to ``astrodust_templates.npz`` or ``.h5``.
+        Path to ``astrodust_templates_v2.h5`` or ``astrodust_templates.h5``.
     name : str
         Registry name.  Default ``"astrodust_tabulated"``.
     """
@@ -1648,7 +1710,7 @@ def register_astrodust_tabulated(grid_path: str, name: str = "astrodust_tabulate
 
 
 def load_bosa_templates(filepath: str) -> dict:
-    """Load BOSA template grid from NPZ or HDF5.
+    """Load BOSA template grid from HDF5.
 
     The template file must contain:
 
@@ -1660,7 +1722,7 @@ def load_bosa_templates(filepath: str) -> dict:
     Parameters
     ----------
     filepath : str
-        Path to ``bosa_templates.npz`` or ``.h5``.
+        Path to ``bosa_templates_v2.h5`` or ``bosa_templates.h5``.
 
     Returns
     -------
@@ -1719,11 +1781,12 @@ def load_bosa_templates(filepath: str) -> dict:
                 else:
                     spectra[i, j] = lnu
 
+    # Use jnp.array so dynamic JAX indexing works inside JIT.
     return {
-        "wavelength_aa": jnp.array(wavs_aa),
-        "log_ltir_grid": jnp.array(log_ltir_grid),
-        "log_ssfr_grid": jnp.array(log_ssfr_grid),
-        "spectra": jnp.array(spectra),
+        "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
+        "log_ltir_grid": jnp.array(log_ltir_grid, dtype=jnp.float64),
+        "log_ssfr_grid": jnp.array(log_ssfr_grid, dtype=jnp.float64),
+        "spectra": jnp.array(spectra, dtype=jnp.float64),
     }
 
 
@@ -1845,7 +1908,7 @@ def register_bosa_tabulated(grid_path: str, name: str = "bosa_tabulated") -> Non
     Parameters
     ----------
     grid_path : str
-        Path to ``bosa_templates.npz`` or ``.h5``.
+        Path to ``bosa_templates_v2.h5`` or ``bosa_templates.h5``.
     name : str
         Registry name.  Default ``"bosa_tabulated"``.
     """
@@ -1859,7 +1922,7 @@ def register_bosa_tabulated(grid_path: str, name: str = "bosa_tabulated") -> Non
 
 
 def load_themis_templates(filepath: str) -> dict:
-    """Load THEMIS template grid from NPZ or HDF5.
+    """Load THEMIS template grid from HDF5.
 
     The template file must contain:
 
@@ -1872,7 +1935,7 @@ def load_themis_templates(filepath: str) -> dict:
     Parameters
     ----------
     filepath : str
-        Path to ``themis_templates.npz`` or ``.h5``.
+        Path to ``themis_templates_v2.h5`` or ``themis_templates.h5``.
 
     Returns
     -------
@@ -1936,12 +1999,14 @@ def load_themis_templates(filepath: str) -> dict:
                     else:
                         arr[i, j] = lnu
 
+    # Use jnp.array so dynamic JAX indexing works inside JIT.
+    # Call preload_emission_model() at factory time (outside JIT) to avoid tracer leaks.
     return {
-        "wavelength_aa": jnp.array(wavs_aa),
-        "umin_grid": jnp.array(umin_grid),
-        "qhac_grid": jnp.array(qhac_grid),
-        "single_u": jnp.array(single_u),
-        "powerlaw": jnp.array(powerlaw),
+        "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
+        "umin_grid": jnp.array(umin_grid, dtype=jnp.float64),
+        "qhac_grid": jnp.array(qhac_grid, dtype=jnp.float64),
+        "single_u": jnp.array(single_u, dtype=jnp.float64),
+        "powerlaw": jnp.array(powerlaw, dtype=jnp.float64),
     }
 
 
@@ -2066,7 +2131,7 @@ def register_themis_tabulated(grid_path: str, name: str = "themis_tabulated") ->
     Parameters
     ----------
     grid_path : str
-        Path to ``themis_templates.npz`` or ``.h5``.
+        Path to ``themis_templates_v2.h5`` or ``themis_templates.h5``.
     name : str
         Registry name.  Default ``"themis_tabulated"``.
     """
@@ -2231,9 +2296,10 @@ def _make_lazy_loader(
     Parameters
     ----------
     name : str
-        Registry name (e.g. ``"draine_li2007"``).
+        Registry name (e.g. ``"dale2014"``).
     template_filename : str
-        Filename to search for in data/ (e.g. ``"dl07_templates.npz"``).
+        Canonical HDF5 filename to search for in data/ (e.g. ``"dale2014_templates.h5"``).
+        The v2 variant (``"*_v2.h5"``) is tried first if present.
     loader_fn_name : str
         Name of the ``create_*_from_grid`` function in this module.
     """
@@ -2241,9 +2307,10 @@ def _make_lazy_loader(
     def _lazy_wrapper(*args, **kwargs):
         if name not in _resolved:
             _resolved.add(name)
-            # Try HDF5 first (standardized, pre-normalized), then NPZ/v2
-            h5_name = template_filename.rsplit(".", 1)[0] + ".h5"
-            path = _find_data_file(h5_name) or _find_data_file(template_filename)
+            # Try v2 HDF5 first (improved grid), then canonical HDF5
+            stem = template_filename.rsplit(".", 1)[0]
+            v2_name = stem + "_v2.h5"
+            path = _find_data_file(v2_name) or _find_data_file(template_filename)
             if path is not None:
                 loader = globals()[loader_fn_name]
                 tabulated = loader(path)
@@ -2261,14 +2328,14 @@ def _make_lazy_loader(
     _lazy_wrapper.__name__ = name
     _lazy_wrapper.__doc__ = (
         f"Lazy-loading wrapper for {name}. Auto-loads tabulated templates "
-        f"from data/{template_filename} on first call."
+        f"from data/{template_filename} on first call (v2 grid preferred if present)."
     )
     return _lazy_wrapper
 
 
-# --- DL07: tries v2 HDF5 first, then legacy .npz/.h5 ---
+# --- DL07: tries v2 HDF5 first, then legacy .h5 ---
 def _find_dl07_templates() -> str | None:
-    for fn in ("dl07_templates_v2.h5", "dl07_templates.npz", "dl07_templates.h5"):
+    for fn in ("dl07_templates_v2.h5", "dl07_templates.h5"):
         path = _find_data_file(fn)
         if path is not None:
             return path
@@ -2287,7 +2354,8 @@ def _dl07_lazy_wrapper(*args, **kwargs):
             return tabulated(*args, **kwargs)
         else:
             raise FileNotFoundError(
-                "DL07 template files (dl07_templates.npz/.h5) not found in data/. "
+                "DL07 template files (dl07_templates_v2.h5 / dl07_templates.h5) "
+                "not found in data/. "
                 "The analytic fallback has been removed because it produced "
                 "scientifically incorrect results (single-Gaussian PAH approximation). "
                 "Run: python scripts/convert_dl07_templates.py"
@@ -2298,10 +2366,10 @@ def _dl07_lazy_wrapper(*args, **kwargs):
 DUST_EMISSION_MODELS["draine_li2007"] = _dl07_lazy_wrapper
 
 
-# --- Dale+2014: tries dale2014_templates.npz ---
+# --- Dale+2014: tries dale2014_templates_v2.h5 / dale2014_templates.h5 ---
 DUST_EMISSION_MODELS["dale2014"] = _make_lazy_loader(
     "dale2014",
-    "dale2014_templates.npz",
+    "dale2014_templates.h5",
     "create_dale2014_from_grid",
 )
 
@@ -2330,26 +2398,26 @@ _dl14_fn = None
 DUST_EMISSION_MODELS["draine_li2014"] = _dl14_lazy_wrapper
 
 
-# --- Astrodust+PAH (Hensley & Draine 2023): tries astrodust_templates.npz ---
+# --- Astrodust+PAH (Hensley & Draine 2023): tries astrodust_templates_v2.h5 / .h5 ---
 DUST_EMISSION_MODELS["astrodust"] = _make_lazy_loader(
     "astrodust",
-    "astrodust_templates.npz",
+    "astrodust_templates.h5",
     "create_astrodust_from_grid",
 )
 
 
-# --- BOSA (Boquien & Salim 2021): tries bosa_templates.npz ---
+# --- BOSA (Boquien & Salim 2021): tries bosa_templates_v2.h5 / bosa_templates.h5 ---
 DUST_EMISSION_MODELS["bosa"] = _make_lazy_loader(
     "bosa",
-    "bosa_templates.npz",
+    "bosa_templates.h5",
     "create_bosa_from_grid",
 )
 
 
-# --- THEMIS (Jones+2017): tries themis_templates.npz ---
+# --- THEMIS (Jones+2017): tries themis_templates_v2.h5 / themis_templates.h5 ---
 DUST_EMISSION_MODELS["themis"] = _make_lazy_loader(
     "themis",
-    "themis_templates.npz",
+    "themis_templates.h5",
     "create_themis_from_grid",
 )
 

@@ -5,8 +5,14 @@ Reference: Chisholm et al. 2022, ApJ, 931, 37 (LzLCS).
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 class TestFescChisholm:
@@ -78,12 +84,19 @@ class TestFescChisholm:
         assert jnp.isfinite(result)
 
     def test_differentiable(self):
-        """Gradient w.r.t. β is finite."""
+        """Gradient w.r.t. β agrees with FD (Chisholm+2022)."""
         from tengri.models.nebular.fesc_model import fesc_chisholm2022
 
-        grad_fn = jax.grad(fesc_chisholm2022)
-        g = grad_fn(-2.0)
-        assert jnp.isfinite(g)
+        def f(beta: float) -> float:
+            return float(fesc_chisholm2022(beta))
+
+        grad_jax = float(jax.grad(fesc_chisholm2022)(-2.0))
+        np.testing.assert_allclose(
+            grad_jax,
+            fd_grad(f, -2.0),
+            rtol=1e-3,
+            err_msg="fesc_chisholm2022: FD check ∂f_esc/∂β",
+        )
 
 
 class TestComputeUVSlope:

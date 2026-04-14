@@ -18,9 +18,16 @@ References
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 _WAVE = jnp.logspace(2.5, 8.0, 500)  # 316 A to 10 cm, broad grid
 
@@ -531,8 +538,14 @@ class TestAttenuationFloatEqualitySafe:
             k = narayanan_z(wave, dust_delta=delta, dust_bump_strength=0.5, redshift=0.3)
             return jnp.sum(k)
 
-        g = jax.grad(_sum)(-0.3)
-        assert jnp.isfinite(g), f"gradient is {g} (NaN suggests == comparison in JIT)"
+        g_jax = float(jax.grad(_sum)(-0.3))
+        g_fd = fd_grad(_sum, -0.3)
+        np.testing.assert_allclose(
+            g_jax,
+            g_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={g_jax:.4e}, FD={g_fd:.4e}",
+        )
 
 
 # ============================================================
@@ -693,18 +706,32 @@ class TestWG00CloudyGradient:
             return jnp.sum(wg00_cloudy(wave, tau_v=tau_v))
 
         # Test near zero — old code had dead gradient here
-        g = jax.grad(_sum_transmission)(1e-6)
-        assert jnp.isfinite(g), f"gradient is {g} (NaN/Inf near tau_v=0)"
-        assert g != 0.0, "gradient is zero near tau_v=0 (disconnected)"
+        g_jax = float(jax.grad(_sum_transmission)(1e-6))
+        g_fd = fd_grad(_sum_transmission, 1e-6)
+        np.testing.assert_allclose(
+            g_jax,
+            g_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={g_jax:.4e}, FD={g_fd:.4e}",
+        )
+        assert g_jax != 0.0, "gradient is zero near tau_v=0 (disconnected)"
 
     def test_gradient_finite_at_large_tau(self):
-        """Gradient should also be finite at larger tau values."""
+        """Gradient at large tau agrees with FD (wg00_cloudy)."""
         from tengri.models.dust.attenuation import wg00_cloudy
 
         wave = jnp.linspace(3000.0, 10000.0, 50)
 
-        g = jax.grad(lambda t: jnp.sum(wg00_cloudy(wave, tau_v=t)))(2.0)
-        assert jnp.isfinite(g)
+        def _sum_transmission(tau_v):
+            return jnp.sum(wg00_cloudy(wave, tau_v=tau_v))
+
+        g_jax = float(jax.grad(_sum_transmission)(2.0))
+        np.testing.assert_allclose(
+            g_jax,
+            fd_grad(lambda t: float(_sum_transmission(t)), 2.0),
+            rtol=1e-3,
+            err_msg=f"wg00_cloudy large tau: autodiff={g_jax:.4e}",
+        )
 
 
 # ============================================================

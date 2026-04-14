@@ -2,6 +2,7 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -14,6 +15,11 @@ from tengri.models.sfh.psd_models import (
 )
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient of scalar f at x."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 class TestPSDDRW:
@@ -78,16 +84,32 @@ class TestPSDDRW:
         assert p.shape == (50,)
 
     def test_psd_drw_has_gradients(self):
-        """PSD function has well-defined gradients w.r.t. params."""
+        """PSD gradients match central FD w.r.t. sigma and tau."""
+        omega = jnp.linspace(0.01, 10, 50)
 
         def loss(psd_sigma, psd_tau_yr):
-            omega = jnp.linspace(0.01, 10, 50)
             return jnp.sum(psd_drw(omega, psd_sigma, psd_tau_yr))
 
-        grad_fn = jax.grad(loss, argnums=(0, 1))
-        g_sigma, g_tau = grad_fn(1.0, 1e8)
-        assert jnp.isfinite(g_sigma)
-        assert jnp.isfinite(g_tau)
+        g_sigma, g_tau = jax.grad(loss, argnums=(0, 1))(1.0, 1e8)
+
+        def f_sigma(s: float) -> float:
+            return float(loss(s, 1e8))
+
+        def f_tau(t: float) -> float:
+            return float(loss(1.0, t))
+
+        np.testing.assert_allclose(
+            float(g_sigma),
+            fd_grad(f_sigma, 1.0),
+            rtol=1e-3,
+            err_msg="psd_drw: FD check ∂(∑PSD)/∂psd_sigma",
+        )
+        np.testing.assert_allclose(
+            float(g_tau),
+            fd_grad(f_tau, 1e8, eps=1e4),
+            rtol=1e-3,
+            err_msg="psd_drw: FD check ∂(∑PSD)/∂psd_tau_yr",
+        )
 
 
 class TestDRWACF:

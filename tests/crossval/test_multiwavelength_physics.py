@@ -332,21 +332,38 @@ class TestSEDQuantitiesPhysics:
         beta = float(compute_uv_slope_beta(sed, wave))
         np.testing.assert_allclose(beta, -2.0, atol=0.1)
 
-    def test_irx_positive_for_dusty_galaxy(self):
-        """IRX = log10(L_TIR / L_UV) should be positive for dusty galaxies."""
+    def test_irx_analytic_value(self):
+        """IRX = log10(L_TIR_erg / L_UV_erg): exact value for known input ratio.
+
+        l_tir = 1e11 Lsun = 3.828e44 erg/s; l_uv = 3.828e43 erg/s (=1e10 Lsun).
+        Ratio = 10 → IRX = log10(10) = 1.0 exactly.
+        """
         from tengri.utils.sed_quantities import compute_irx
 
-        # Dusty galaxy: L_TIR >> L_UV
+        _LSUN_ERG = 3.828e33
         l_tir = jnp.array(1e11)  # Lsun
-        l_uv = jnp.array(1e10 * 3.828e33)  # erg/s (10^10 Lsun)
+        l_uv = jnp.array(1e10 * _LSUN_ERG)  # erg/s
         irx = float(compute_irx(l_tir, l_uv))
-        assert irx > 0, f"IRX should be positive for dusty galaxy, got {irx:.2f}"
+        np.testing.assert_allclose(
+            irx,
+            1.0,
+            atol=1e-6,
+            err_msg=f"IRX = log10(10) = 1.0 exactly, got {irx:.6f}",
+        )
 
-    def test_irx_increases_with_more_dust(self):
-        """More dust → higher L_TIR/L_UV → higher IRX."""
+    def test_irx_decade_increase(self):
+        """Each decade of L_TIR (fixed L_UV) increases IRX by exactly 1.0.
+
+        l_uv fixed at 3.828e43 erg/s (=1e10 Lsun).
+        l_tir_low = 1e10 Lsun → IRX = log10(1) = 0.0.
+        l_tir_high = 1e12 Lsun → IRX = log10(100) = 2.0.
+        """
         from tengri.utils.sed_quantities import compute_irx
 
-        l_uv = jnp.array(1e10 * 3.828e33)  # fixed UV
-        irx_low = float(compute_irx(jnp.array(1e10), l_uv))  # low dust
-        irx_high = float(compute_irx(jnp.array(1e12), l_uv))  # high dust
-        assert irx_high > irx_low, "More dust should increase IRX"
+        _LSUN_ERG = 3.828e33
+        l_uv = jnp.array(1e10 * _LSUN_ERG)  # erg/s — fixed UV luminosity
+        irx_low = float(compute_irx(jnp.array(1e10), l_uv))
+        irx_high = float(compute_irx(jnp.array(1e12), l_uv))
+
+        np.testing.assert_allclose(irx_low, 0.0, atol=1e-6, err_msg="IRX(L_TIR=L_UV) = 0")
+        np.testing.assert_allclose(irx_high, 2.0, atol=1e-6, err_msg="IRX(100×L_UV) = 2")

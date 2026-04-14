@@ -1034,12 +1034,13 @@ class CueBackend:
             ionspec_logLratio2=ionspec_logLratio2,
             ionspec_logLratio3=ionspec_logLratio3,
         )
-        return self._forward_lines(
+        wav, lum = self._forward_lines(
             p,
             cloudyfsps_only=cloudyfsps_only,
             neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
         )
+        return wav, lum * _LSUN_ERG
 
     def predict_nebular_continuum(
         self,

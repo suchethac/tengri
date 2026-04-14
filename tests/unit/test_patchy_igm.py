@@ -2,9 +2,15 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 # ---------------------------------------------------------------------------
@@ -198,10 +204,16 @@ class TestPatchyIGMJitGrad:
                 )
             )
 
-        grad = jax.grad(_loss)(0.5)
-        assert jnp.isfinite(grad)
+        grad_jax = float(jax.grad(_loss)(0.5))
+        grad_fd = fd_grad(_loss, 0.5)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg="igm_transmission_patchy: FD check ∂/∂x_HI",
+        )
         # Gradient should be negative: more neutral -> less transmission
-        assert grad < 0.0
+        assert grad_jax < 0.0
 
     def test_gradient_wrt_r_bubble(self, wave_obs_lya_region):
         """Gradient w.r.t. R_bubble is finite."""
@@ -217,7 +229,13 @@ class TestPatchyIGMJitGrad:
                 )
             )
 
-        grad = jax.grad(_loss)(1.0)
-        assert jnp.isfinite(grad)
+        grad_jax = float(jax.grad(_loss)(1.0))
+        grad_fd = fd_grad(_loss, 1.0)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg="igm_transmission_patchy: FD check ∂/∂R_bubble",
+        )
         # Gradient should be positive: larger bubble -> more transmission
-        assert grad > 0.0
+        assert grad_jax > 0.0

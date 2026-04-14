@@ -29,6 +29,11 @@ from tengri.models.dust.emission import casey2012, cmb_corrected_temperature
 _C_AA_S = 2.99792458e18  # c in Angstrom/s
 
 
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 @pytest.fixture
 def ir_wave():
     """IR wavelength grid 1-1000 μm (10^4 – 10^7 Å)."""
@@ -178,17 +183,50 @@ class TestCasey2012Differentiability:
         assert jnp.all(jnp.isfinite(sed))
 
     def test_gradient_dust_T(self, ir_wave):
-        g = jax.grad(lambda T: jnp.sum(casey2012(ir_wave, 1e10, dust_T=T)))(35.0)
-        assert jnp.isfinite(g), f"Gradient w.r.t. dust_T is not finite: {g}"
-        assert float(g) != 0.0, "Gradient w.r.t. dust_T should be nonzero"
+        def loss(T):
+            return float(jnp.sum(casey2012(ir_wave, 1e10, dust_T=T)))
+
+        grad_jax = float(jax.grad(lambda T: jnp.sum(casey2012(ir_wave, 1e10, dust_T=T)))(35.0))
+        grad_fd = fd_grad(loss, 35.0)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
+        assert grad_jax != 0.0, "Gradient w.r.t. dust_T should be nonzero"
 
     def test_gradient_beta(self, ir_wave):
-        g = jax.grad(lambda b: jnp.sum(casey2012(ir_wave, 1e10, dust_beta_ir=b)))(1.8)
-        assert jnp.isfinite(g), f"Gradient w.r.t. dust_beta_ir is not finite: {g}"
+        def loss(b):
+            return float(jnp.sum(casey2012(ir_wave, 1e10, dust_beta_ir=b)))
+
+        def grad_fn(b):
+            return jnp.sum(casey2012(ir_wave, 1e10, dust_beta_ir=b))
+
+        grad_jax = float(jax.grad(grad_fn)(1.8))
+        grad_fd = fd_grad(loss, 1.8)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
     def test_gradient_alpha_mir(self, ir_wave):
-        g = jax.grad(lambda a: jnp.sum(casey2012(ir_wave, 1e10, dust_alpha_mir=a)))(2.0)
-        assert jnp.isfinite(g), f"Gradient w.r.t. dust_alpha_mir is not finite: {g}"
+        def loss(a):
+            return float(jnp.sum(casey2012(ir_wave, 1e10, dust_alpha_mir=a)))
+
+        def grad_fn(a):
+            return jnp.sum(casey2012(ir_wave, 1e10, dust_alpha_mir=a))
+
+        grad_jax = float(jax.grad(grad_fn)(2.0))
+        grad_fd = fd_grad(loss, 2.0)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
     def test_all_gradients_jointly(self, ir_wave):
         """All parameter gradients at once via argnums."""
@@ -196,6 +234,32 @@ class TestCasey2012Differentiability:
         def loss(T, b, a):
             return jnp.sum(casey2012(ir_wave, 1e10, dust_T=T, dust_beta_ir=b, dust_alpha_mir=a))
 
-        grads = jax.grad(loss, argnums=(0, 1, 2))(35.0, 1.8, 2.0)
-        for name, g in zip(["dust_T", "dust_beta_ir", "dust_alpha_mir"], grads):
-            assert jnp.isfinite(g), f"NaN gradient for {name}"
+        def make_loss_single(idx, param_vals):
+            def loss_single(x):
+                T, b, a = param_vals[0], param_vals[1], param_vals[2]
+                if idx == 0:
+                    T = x
+                elif idx == 1:
+                    b = x
+                else:
+                    a = x
+                return float(
+                    jnp.sum(casey2012(ir_wave, 1e10, dust_T=T, dust_beta_ir=b, dust_alpha_mir=a))
+                )
+
+            return loss_single
+
+        grads_jax = jax.grad(loss, argnums=(0, 1, 2))(35.0, 1.8, 2.0)
+        param_vals = [35.0, 1.8, 2.0]
+        param_names = ["dust_T", "dust_beta_ir", "dust_alpha_mir"]
+
+        for idx, name in enumerate(param_names):
+            grad_jax = float(grads_jax[idx])
+            loss_single = make_loss_single(idx, param_vals)
+            grad_fd = fd_grad(loss_single, param_vals[idx])
+            np.testing.assert_allclose(
+                grad_jax,
+                grad_fd,
+                rtol=1e-3,
+                err_msg=f"{name}: autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+            )

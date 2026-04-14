@@ -17,6 +17,11 @@ from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
 jax.config.update("jax_enable_x64", True)
 
 
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 # ---------------------------------------------------------------------------
 # Fixtures: synthetic SSP data
 # ---------------------------------------------------------------------------
@@ -287,6 +292,9 @@ class TestMixedPrecisionGradients:
             return jnp.sum(k32(sfr_on_ssp, log_z, tau_v1, tau_v2, -0.7))
 
         grads = jax.grad(loss, argnums=(0, 1, 2))(-1.0, 0.5, 0.3)
+        # FD is unreliable for float32 kernels because f32 truncation in the
+        # function evaluations dominates the finite-difference step — the meaningful
+        # accuracy test is test_gradients_agree_with_f64 below.
         for g in grads:
             assert jnp.isfinite(g)
 

@@ -9,6 +9,7 @@ Validates that:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -20,6 +21,11 @@ from tengri.models.sps.precompute import (
 )
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 # ---------------------------------------------------------------------------
@@ -209,8 +215,14 @@ class TestIGMGradients:
         def loss(z):
             return jnp.sum(interpolate_igm_ztable(zt.igm_trans_table, zt.z_grid, z))
 
-        g = jax.grad(loss)(1.0)
-        assert jnp.isfinite(g), f"Gradient w.r.t. z is not finite: {g}"
+        g_jax = float(jax.grad(loss)(1.0))
+        g_fd = fd_grad(loss, 1.0)
+        np.testing.assert_allclose(
+            g_jax,
+            g_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={g_jax:.4e}, FD={g_fd:.4e}",
+        )
 
     def test_gradient_nonzero_at_high_z(self, ssp_data):
         """At high z where IGM matters, gradient should be nonzero.
@@ -248,8 +260,14 @@ class TestIGMGradients:
             flux = jnp.sum(ssp_phot, axis=(0, 1))  # (n_filters,)
             return jnp.sum(flux * igm_trans)
 
-        g = jax.grad(loss)(1.0)
-        assert jnp.isfinite(g), f"Combined gradient not finite: {g}"
+        g_jax = float(jax.grad(loss)(1.0))
+        g_fd = fd_grad(loss, 1.0)
+        np.testing.assert_allclose(
+            g_jax,
+            g_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={g_jax:.4e}, FD={g_fd:.4e}",
+        )
 
     def test_jit_compatible(self, ssp_data, filters):
         """IGM interpolation works inside jax.jit."""

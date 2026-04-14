@@ -7,6 +7,7 @@ all supported component combinations.
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -19,6 +20,11 @@ from tengri.distributions import Uniform
 from tengri.models.sps.dsps_wrapper import SSPData
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 # ---------------------------------------------------------------------------
@@ -427,7 +433,7 @@ class TestFallbacks:
 
 class TestGradients:
     def test_gradient_through_tier2(self, synthetic_ssp, simple_spec):
-        """Gradients propagate through Tier 2 rest SED kernel."""
+        """Gradients through Tier 2 rest SED kernel match FD."""
         from tengri.core.model import Model
 
         model = Model(simple_spec, synthetic_ssp)
@@ -447,10 +453,14 @@ class TestGradients:
             sed = model._compute_rest_sed_compositional(params)
             return jnp.sum(sed)
 
-        grad = jax.grad(loss_fn)(1.0)
-        assert jnp.isfinite(grad)
+        x0 = 1.0
+        grad_jax = float(jax.grad(loss_fn)(x0))
+        grad_fd = fd_grad(loss_fn, x0)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=5e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
         # More dust absorption → lower total flux → non-positive gradient
-        assert grad <= 0.0
+        assert grad_jax <= 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -504,7 +514,7 @@ class TestFusedTier2Photometry:
         assert_allclose(phot_fused, phot_unfused, rtol=1e-10)
 
     def test_fused_tier2_phot_gradient(self, synthetic_ssp, simple_spec):
-        """Gradients propagate through fused Tier 2 photometry."""
+        """Gradients through fused Tier 2 photometry match FD."""
         from tengri.core.model import Model
         from tengri.models.observation.filters import FilterCurve
 
@@ -532,8 +542,12 @@ class TestFusedTier2Photometry:
             }
             return jnp.sum(model._predict_photometry_compositional(params))
 
-        grad = jax.grad(loss)(1.0)
-        assert jnp.isfinite(grad)
+        x0 = 1.0
+        grad_jax = float(jax.grad(loss)(x0))
+        grad_fd = fd_grad(loss, x0)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=5e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
 
     def test_free_z_builds(self, synthetic_ssp):
         """Fused Tier 2 photometry builds even with free redshift."""

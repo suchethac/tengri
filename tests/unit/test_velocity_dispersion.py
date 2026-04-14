@@ -11,12 +11,18 @@ Validates that:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
 from tengri.models.observation.spectrum import velocity_broaden
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 @pytest.fixture
@@ -110,8 +116,14 @@ class TestVelocityBroadenGradients:
         def loss(sigma):
             return jnp.sum(velocity_broaden(sharp_spectrum, wave, sigma) ** 2)
 
-        g = jax.grad(loss)(150.0)
-        assert jnp.isfinite(g)
+        grad_jax = float(jax.grad(loss)(150.0))
+        grad_fd = fd_grad(loss, 150.0)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg="velocity_broaden: FD check ∂/∂sigma_v",
+        )
 
     def test_gradient_wrt_flux_finite(self, wave):
         """Gradient w.r.t. input flux is finite."""

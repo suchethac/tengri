@@ -307,8 +307,24 @@ class TestDerivedGradients:
 
         grad = jax.grad(loss)(fiducial_params)
         g = grad["sfh_dpl_log_peak_sfr"]
-        assert jnp.isfinite(g), "Gradient w.r.t. log_peak_sfr not finite"
-        assert float(g) > 0.0, "Increasing log_peak_sfr should increase M*"
+
+        # Test with finite difference for peak_sfr
+        def loss_scalar(log_peak_sfr):
+            params = dict(fiducial_params)
+            params["sfh_dpl_log_peak_sfr"] = log_peak_sfr
+            return float(model.predict_sfh_quantities(params).stellar_mass)
+
+        grad_jax = float(g)
+        x0 = float(fiducial_params["sfh_dpl_log_peak_sfr"])
+        grad_fd = (loss_scalar(x0 + 1e-4) - loss_scalar(x0 - 1e-4)) / (2.0 * 1e-4)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg=f"log_peak_sfr: autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
+        assert grad_jax > 0.0, "Increasing log_peak_sfr should increase M*"
 
     def test_sfr_gradient_wrt_peak_sfr(self, model, fiducial_params):
         def loss(p):
@@ -317,4 +333,21 @@ class TestDerivedGradients:
 
         grad = jax.grad(loss)(fiducial_params)
         g = grad["sfh_dpl_log_peak_sfr"]
-        assert jnp.isfinite(g), "Gradient not finite"
+
+        # Test with finite difference for peak_sfr
+        def loss_scalar(log_peak_sfr):
+            params = dict(fiducial_params)
+            params["sfh_dpl_log_peak_sfr"] = log_peak_sfr
+            sfh = model.predict_sfh_quantities(params)
+            return float(sfh.stellar_mass + sfh.sfr_100myr)
+
+        grad_jax = float(g)
+        x0 = float(fiducial_params["sfh_dpl_log_peak_sfr"])
+        grad_fd = (loss_scalar(x0 + 1e-4) - loss_scalar(x0 - 1e-4)) / (2.0 * 1e-4)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg=f"log_peak_sfr: autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )

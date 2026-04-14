@@ -21,6 +21,12 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri.models.dust.attenuation import DUST_LAWS, li08
 
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 WAVS = jnp.array([912.0, 1216.0, 1500.0, 2175.0, 3000.0, 5500.0, 10000.0, 20000.0])
 
 # Default params: c1=6, c2=4, c3=2, c4=0.04
@@ -143,15 +149,21 @@ class TestJAXCompatibility:
         def loss(c1):
             return li08(WAVS, dust_c1=c1).sum()
 
-        g = jax.grad(loss)(6.0)
-        assert jnp.isfinite(g)
+        grad_jax = float(jax.grad(loss)(6.0))
+        grad_fd = fd_grad(loss, 6.0)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
 
     def test_gradient_wrt_c4(self):
         def loss(c4):
             return li08(WAVS, dust_c4=c4).sum()
 
-        g = jax.grad(loss)(0.04)
-        assert jnp.isfinite(g)
+        grad_jax = float(jax.grad(loss)(0.04))
+        grad_fd = fd_grad(loss, 0.04)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
 
     def test_vmap_over_wavelengths(self):
         """Should work with vmap for batched evaluation."""
@@ -165,6 +177,31 @@ class TestJAXCompatibility:
         def loss(c1, c2, c3, c4):
             return li08(WAVS, dust_c1=c1, dust_c2=c2, dust_c3=c3, dust_c4=c4).sum()
 
-        grads = jax.grad(loss, argnums=(0, 1, 2, 3))(6.0, 4.0, 2.0, 0.04)
-        for i, g in enumerate(grads):
-            assert jnp.isfinite(g), f"Gradient w.r.t. param {i} is not finite"
+        def loss_c1_only(c1):
+            return li08(WAVS, dust_c1=c1, dust_c2=4.0, dust_c3=2.0, dust_c4=0.04).sum()
+
+        def loss_c2_only(c2):
+            return li08(WAVS, dust_c1=6.0, dust_c2=c2, dust_c3=2.0, dust_c4=0.04).sum()
+
+        def loss_c3_only(c3):
+            return li08(WAVS, dust_c1=6.0, dust_c2=4.0, dust_c3=c3, dust_c4=0.04).sum()
+
+        def loss_c4_only(c4):
+            return li08(WAVS, dust_c1=6.0, dust_c2=4.0, dust_c3=2.0, dust_c4=c4).sum()
+
+        losses = [loss_c1_only, loss_c2_only, loss_c3_only, loss_c4_only]
+        x_vals = [6.0, 4.0, 2.0, 0.04]
+        param_names = ["c1", "c2", "c3", "c4"]
+
+        for i, (loss_fn, x_val, name) in enumerate(zip(losses, x_vals, param_names)):
+            grad_jax = float(jax.grad(loss_fn)(x_val))
+            grad_fd = fd_grad(loss_fn, x_val)
+            np.testing.assert_allclose(
+                grad_jax,
+                grad_fd,
+                rtol=1e-3,
+                err_msg=(
+                    f"Gradient w.r.t. param {i} ({name}): "
+                    f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+                ),
+            )

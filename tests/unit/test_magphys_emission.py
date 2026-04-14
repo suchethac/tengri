@@ -6,6 +6,7 @@ locations, energy conservation, JIT compatibility, and differentiability.
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from tengri.models.dust.emission import (
@@ -15,6 +16,12 @@ from tengri.models.dust.emission import (
 )
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 # Broad wavelength grid: 1 μm to 1 mm in Angstrom
 _WAVE_AA = jnp.logspace(jnp.log10(1e4), jnp.log10(1e8), 5000)
@@ -195,7 +202,7 @@ class TestMagphysDifferentiability:
         ["dust_T_warm", "dust_T_cold", "dust_T_hot", "dust_xi_pah", "dust_xi_mir", "dust_xi_warm"],
     )
     def test_gradient_wrt_param(self, param_name):
-        """Gradient of summed L_nu w.r.t. each parameter is finite."""
+        """Gradient of summed L_nu w.r.t. each parameter matches FD."""
 
         def loss_fn(val):
             kwargs = {param_name: val}
@@ -210,18 +217,32 @@ class TestMagphysDifferentiability:
             "dust_xi_mir": 0.07,
             "dust_xi_warm": 0.25,
         }
-        grad_val = jax.grad(loss_fn)(default_vals[param_name])
-        assert jnp.isfinite(grad_val), f"Gradient w.r.t. {param_name} is not finite: {grad_val}"
+        x0 = default_vals[param_name]
+        grad_jax = float(jax.grad(loss_fn)(x0))
+        grad_fd = fd_grad(loss_fn, x0)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=5e-3,
+            err_msg=f"Gradient w.r.t. {param_name}: autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
     def test_gradient_wrt_L_absorbed(self):
-        """Gradient w.r.t. L_absorbed should be finite and positive."""
+        """Gradient w.r.t. L_absorbed should match FD and be positive."""
 
         def loss_fn(l_abs):
             return jnp.sum(magphys_dc08(_WAVE_AA, l_abs))
 
-        grad_val = jax.grad(loss_fn)(1e10)
-        assert jnp.isfinite(grad_val)
-        assert grad_val > 0.0
+        x0 = 1e10
+        grad_jax = float(jax.grad(loss_fn)(x0))
+        grad_fd = fd_grad(loss_fn, x0)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=5e-3,
+            err_msg=f"Gradient w.r.t. L_absorbed: autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
+        assert grad_jax > 0.0
 
 
 class TestMagphysRegistry:

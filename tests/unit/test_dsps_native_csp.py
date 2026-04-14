@@ -22,6 +22,11 @@ from tengri.models.sps.dsps_wrapper import (
 jax.config.update("jax_enable_x64", True)
 
 
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 # ---------------------------------------------------------------------------
 # Minimal synthetic SSP grid (no file I/O)
 # ---------------------------------------------------------------------------
@@ -221,8 +226,11 @@ def test_grad_wrt_lgmet():
         )
         return jnp.sum(aw)
 
-    grad = jax.grad(total_mass)(jnp.array(LGMET))
-    assert jnp.isfinite(grad), f"Non-finite gradient: {grad}"
+    grad_jax = float(jax.grad(total_mass)(jnp.array(LGMET)))
+    grad_fd = fd_grad(lambda x: float(total_mass(x)), LGMET)
+    np.testing.assert_allclose(
+        grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+    )
 
 
 # ---------------------------------------------------------------------------

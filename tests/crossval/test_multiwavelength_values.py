@@ -62,16 +62,27 @@ class TestRadioAbsoluteValues:
         # Absolute range check: ~2e28 erg/s/Hz for SFR~1
         assert 1e27 < l_14 < 1e29, f"L_1.4GHz = {l_14:.2e}, expected ~2e28 erg/s/Hz"
 
-    def test_bell2003_q_ir_roundtrip(self):
-        """q_TIR = log10(L_TIR / (3.75e12 × L_1.4GHz)) recovers input q."""
+    def test_bell2003_q_ir_slope(self):
+        """q_IR controls normalization: each unit increase halves L_1.4GHz by 10x.
+
+        Cross-checks the 10^q_IR denominator using two independent q values
+        from the observed distribution (Bell 2003, Table 3: median 2.64, spread ~0.2).
+        Ratio test is non-circular: expected ratio (10^1.0 = 10) comes from
+        the exponent definition, not from the function output.
+        """
         from tengri.models.radio import radio_star_forming
 
         wave = jnp.array([_C_AA / 1.4e9])
-        q_input = 2.64
-        l_14 = float(radio_star_forming(wave, L_ir=_L_IR_SFR10, q_ir=q_input)[0])
+        l_lo = float(radio_star_forming(wave, L_ir=_L_IR_SFR10, q_ir=2.44)[0])
+        l_hi = float(radio_star_forming(wave, L_ir=_L_IR_SFR10, q_ir=3.44)[0])
 
-        q_recovered = np.log10(_L_IR_SFR10 / (3.75e12 * l_14))
-        np.testing.assert_allclose(q_recovered, q_input, atol=0.01)
+        # Δq = 1.0 → L_lo/L_hi = 10 exactly (Bell 2003 Eq. 5 denominator)
+        np.testing.assert_allclose(
+            l_lo / l_hi,
+            10.0,
+            rtol=1e-6,
+            err_msg="Δq_IR = 1 should change L_1.4GHz by exactly 10× (Bell 2003 Eq. 5)",
+        )
 
     def test_free_free_absolute_at_1p4ghz(self):
         """Murphy+2011 Eq. 11: free-free L_nu at 1.4 GHz for SFR=1.

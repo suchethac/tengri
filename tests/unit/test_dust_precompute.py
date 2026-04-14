@@ -9,6 +9,7 @@ import time
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -19,6 +20,11 @@ from tengri.models.dust.attenuation import (
 )
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient of scalar f at x."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +228,7 @@ class TestFastDustGradients:
     """Gradients through the fast dust function are correct."""
 
     def test_gradients_finite(self, filter_wavelengths, dust_age_weights):
-        """All gradients are finite."""
+        """Gradients of two_component_dust_fast match central FD."""
 
         def loss(tau_v1, tau_v2):
             atten = two_component_dust_fast(
@@ -235,8 +241,25 @@ class TestFastDustGradients:
             return jnp.sum(atten)
 
         g1, g2 = jax.grad(loss, argnums=(0, 1))(0.5, 0.3)
-        assert jnp.isfinite(g1)
-        assert jnp.isfinite(g2)
+
+        def f1(tau_v1: float) -> float:
+            return float(loss(tau_v1, 0.3))
+
+        def f2(tau_v2: float) -> float:
+            return float(loss(0.5, tau_v2))
+
+        np.testing.assert_allclose(
+            float(g1),
+            fd_grad(f1, 0.5),
+            rtol=1e-3,
+            err_msg="two_component_dust_fast: FD check ∂(∑atten)/∂tau_bc",
+        )
+        np.testing.assert_allclose(
+            float(g2),
+            fd_grad(f2, 0.3),
+            rtol=1e-3,
+            err_msg="two_component_dust_fast: FD check ∂(∑atten)/∂tau_diff",
+        )
 
     def test_gradients_match_original(self, age_grid, filter_wavelengths, dust_age_weights):
         """Autodiff gradients match between fast and original."""

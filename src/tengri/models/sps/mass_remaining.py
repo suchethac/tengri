@@ -189,12 +189,11 @@ def _turnoff_mass(age_gyr: jnp.ndarray) -> jnp.ndarray:
     m_guess = jnp.clip(m_guess, 0.1, 150.0)
 
     # Newton iterations to solve t_MS(m) = age
+    # Analytic derivative: d/dm [10*m^{-2.5} + 0.1*m^{-0.75}] = -25*m^{-3.5} - 0.075*m^{-1.75}
     m = m_guess
     for _ in range(10):
         t_ms = _ms_lifetime_gyr(m)
-        # Numerical derivative: dt/dm via finite difference
-        dm = m * 1e-4
-        dt_dm = (_ms_lifetime_gyr(m + dm) - t_ms) / dm
+        dt_dm = -25.0 * m ** (-3.5) - 0.075 * m ** (-1.75)
         dt_dm_safe = jnp.where(jnp.abs(dt_dm) > 1e-30, dt_dm, -1e-30)
         m = m - (t_ms - t_safe) / dt_dm_safe
         m = jnp.clip(m, 0.08, 300.0)
@@ -211,9 +210,9 @@ def _remnant_mass(m_init: jnp.ndarray) -> jnp.ndarray:
     """Stellar remnant mass as a function of initial mass.
 
     - m < 0.5 Msun: He WD, m_rem ~ m_init (doesn't evolve in Hubble time)
-    - 0.5-8 Msun: CO WD via Kalirai+2008 IFMR: m_WD = 0.394 + 0.109 * m_init
-    - 8-25 Msun: neutron star, m_rem = 1.4 Msun
-    - > 25 Msun: black hole, m_rem = 0.4 * m_init (Fryer+2012 approx.)
+    - 0.5 <= m < 8 Msun: CO WD via Kalirai+2008 IFMR: m_WD = 0.394 + 0.109 * m_init
+    - 8 <= m < 25 Msun: neutron star, m_rem = 1.4 Msun (boundary: m < 25 strict)
+    - m >= 25 Msun: black hole, m_rem = 0.4 * m_init (Fryer+2012 approx.)
 
     Parameters
     ----------

@@ -1149,9 +1149,10 @@ def adaf_disc(
     adaf_shape = sync_weight * sync_shape + brem_weight * brem_shape + ic_weight * ic_shape
 
     # Normalize ADAF to l_adaf_erg
-    sort_idx = jnp.argsort(nu)
-    adaf_integral = jnp.trapezoid(adaf_shape[sort_idx], nu[sort_idx])
-    adaf_integral_safe = jnp.maximum(jnp.abs(adaf_integral), 1e-100)
+    # nu is descending (wavelength ascending), so [::-1] gives ascending order for trapz.
+    # Avoids jnp.argsort + gather which causes gradient instability (see commit d42f298).
+    adaf_integral = jnp.trapezoid(adaf_shape[::-1], nu[::-1])
+    adaf_integral_safe = jnp.maximum(adaf_integral, 1e-100)
     l_nu_adaf = l_adaf_erg * adaf_shape / adaf_integral_safe
 
     # ===============================================================
@@ -1202,16 +1203,13 @@ def adaf_disc(
     # ===============================================================
     # Disc luminosity: L_bol * (1 - r_isco/r_tr) [remaining after ADAF]
     l_disc_erg = l_bol_erg * (1.0 - adaf_efficiency)
-    disc_integral = jnp.trapezoid(l_nu_disc[sort_idx], nu[sort_idx])
-    disc_integral_safe = jnp.maximum(jnp.abs(disc_integral), 1e-100)
+    disc_integral = jnp.trapezoid(l_nu_disc[::-1], nu[::-1])
+    disc_integral_safe = jnp.maximum(disc_integral, 1e-100)
     l_nu_disc_norm = l_disc_erg * l_nu_disc / disc_integral_safe
 
     l_nu_total = l_nu_adaf + l_nu_disc_norm
 
-    # Apply overall AGN fraction scaling
-    l_bol_requested = l_bol_erg * agn_frac
-    total_integral = jnp.trapezoid(l_nu_total[sort_idx], nu[sort_idx])
-    total_integral_safe = jnp.maximum(jnp.abs(total_integral), 1e-100)
-    scale = l_bol_requested / total_integral_safe
-
-    return l_nu_total * scale
+    # Each component is already normalized to its energy (l_adaf_erg + l_disc_erg = l_bol_erg),
+    # so trapz(l_nu_total, nu) = l_bol_erg and the AGN fraction scale is just agn_frac.
+    # Avoids a trapz → quotient that introduces catastrophic cancellation in gradients.
+    return l_nu_total * agn_frac

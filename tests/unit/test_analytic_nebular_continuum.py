@@ -2,8 +2,15 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.models.nebular._shared import compute_analytic_nebular_continuum
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 # Default test wavelength grid covering UV through NIR
 _WAVE_AA = jnp.linspace(912.0, 10000.0, 4000)
@@ -178,9 +185,16 @@ class TestAnalyticNebularContinuumDifferentiability:
         def total_flux(q_h):
             return jnp.sum(compute_analytic_nebular_continuum(wave, q_h, log_z_abs=-1.848))
 
-        g = jax.grad(total_flux)(_Q_H_REF)
-        assert jnp.isfinite(g), f"Gradient is not finite: {g}"
-        assert float(g) > 0.0, f"Expected positive gradient w.r.t. Q_H, got {float(g)}"
+        grad_jax = float(jax.grad(total_flux)(_Q_H_REF))
+        grad_fd = fd_grad(total_flux, float(_Q_H_REF))
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            atol=1e-12,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
+        assert grad_jax > 0.0, f"Expected positive gradient w.r.t. Q_H, got {grad_jax}"
 
     def test_grad_wrt_temperature_finite(self):
         """Gradient w.r.t. temperature must be finite."""
@@ -193,8 +207,15 @@ class TestAnalyticNebularContinuumDifferentiability:
                 )
             )
 
-        g = jax.grad(total_flux)(1e4)
-        assert jnp.isfinite(g), f"Gradient w.r.t. temperature is not finite: {g}"
+        grad_jax = float(jax.grad(total_flux)(1e4))
+        grad_fd = fd_grad(total_flux, 1e4)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            atol=1e-12,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
     def test_jit_compatible(self):
         """Function must be JIT-compilable."""

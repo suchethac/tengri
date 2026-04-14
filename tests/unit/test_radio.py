@@ -12,7 +12,14 @@ Covers:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 from tengri.models.radio import (
     _L0_SYNCH,
@@ -258,8 +265,25 @@ class TestDelvecchio2021:
             )
 
         g_mstar, g_z = jax.grad(_loss, argnums=(0, 1))(10.0, 0.5)
-        assert jnp.isfinite(g_mstar) and float(g_mstar) != 0.0
-        assert jnp.isfinite(g_z) and float(g_z) != 0.0
+
+        def f_mstar(log_mstar: float) -> float:
+            return float(_loss(log_mstar, 0.5))
+
+        def f_z(redshift: float) -> float:
+            return float(_loss(10.0, redshift))
+
+        np.testing.assert_allclose(
+            float(g_mstar),
+            fd_grad(f_mstar, 10.0),
+            rtol=1e-3,
+            err_msg="radio_sfr_delvecchio2021: FD check ∂/∂log_mstar",
+        )
+        np.testing.assert_allclose(
+            float(g_z),
+            fd_grad(f_z, 0.5),
+            rtol=1e-3,
+            err_msg="radio_sfr_delvecchio2021: FD check ∂/∂redshift",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -360,8 +384,25 @@ class TestMcCheyne2022:
             )
 
         g_mstar, g_z = jax.grad(_loss, argnums=(0, 1))(10.0, 0.3)
-        assert jnp.isfinite(g_mstar) and float(g_mstar) != 0.0
-        assert jnp.isfinite(g_z)
+
+        def f_mstar(log_mstar: float) -> float:
+            return float(_loss(log_mstar, 0.3))
+
+        def f_z(redshift: float) -> float:
+            return float(_loss(10.0, redshift))
+
+        np.testing.assert_allclose(
+            float(g_mstar),
+            fd_grad(f_mstar, 10.0),
+            rtol=1e-3,
+            err_msg="radio_sfr_mccheyne2022: FD check ∂/∂log_mstar",
+        )
+        np.testing.assert_allclose(
+            float(g_z),
+            fd_grad(f_z, 0.3),
+            rtol=1e-3,
+            err_msg="radio_sfr_mccheyne2022: FD check ∂/∂redshift",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -573,14 +614,36 @@ class TestFreeFree:
         assert jnp.all(jnp.isfinite(L))
 
     def test_gradients_flow_through_l_ir(self):
-        """JAX gradient w.r.t. L_ir is finite and nonzero."""
-        grad = jax.grad(lambda l: jnp.sum(radio_freefree(_WAVE_14GHZ, l)))(_L_IR)
-        assert jnp.isfinite(grad) and float(grad) != 0.0
+        """FD check: ∂(∑L_ff)/∂L_ir. Murphy+2011 linear calibration."""
+
+        def f(l):
+            return float(jnp.sum(radio_freefree(_WAVE_14GHZ, l)))
+
+        grad_jax = float(jax.grad(lambda l: jnp.sum(radio_freefree(_WAVE_14GHZ, l)))(_L_IR))
+        grad_fd = fd_grad(f, _L_IR, eps=1e7)  # eps=1e7 Lsun for scale
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg="radio_freefree: FD check ∂/∂L_ir",
+        )
 
     def test_gradients_flow_through_te(self):
-        """JAX gradient w.r.t. T_e is finite and nonzero."""
-        grad = jax.grad(lambda t: jnp.sum(radio_freefree(_WAVE_14GHZ, _L_IR, T_e=t)))(1e4)
-        assert jnp.isfinite(grad) and float(grad) != 0.0
+        """FD check: ∂(∑L_ff)/∂T_e. Thermal bremsstrahlung temperature dependence."""
+
+        def f(t):
+            return float(jnp.sum(radio_freefree(_WAVE_14GHZ, _L_IR, T_e=t)))
+
+        grad_jax = float(
+            jax.grad(lambda t: jnp.sum(radio_freefree(_WAVE_14GHZ, _L_IR, T_e=t)))(1e4)
+        )
+        grad_fd = fd_grad(f, 1e4, eps=10.0)  # eps=10 K for scale
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1e-3,
+            err_msg="radio_freefree: FD check ∂/∂T_e",
+        )
 
 
 # ---------------------------------------------------------------------------

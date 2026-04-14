@@ -30,6 +30,11 @@ _GRID_AVAILABLE = _grid_available = _GRID_PATH.exists()
 pytestmark = pytest.mark.unit
 
 
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
 # ---------------------------------------------------------------------------
 # Tests that do NOT require grid data
 # ---------------------------------------------------------------------------
@@ -157,8 +162,11 @@ def test_feltre_gradient_logU_is_finite() -> None:
         )
         return jnp.sum(lum)
 
-    grad = jax.grad(total_lum)(-2.0)
-    assert jnp.isfinite(grad), f"Gradient w.r.t. neb_logU is not finite: {grad}"
+    grad_jax = float(jax.grad(total_lum)(-2.0))
+    grad_fd = fd_grad(total_lum, -2.0)
+    np.testing.assert_allclose(
+        grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+    )
 
 
 @pytest.mark.skipif(not _GRID_AVAILABLE, reason="data/feltre_grid.h5 not found")
@@ -179,8 +187,11 @@ def test_feltre_gradient_logZ_is_finite() -> None:
         )
         return jnp.sum(lum)
 
-    grad = jax.grad(total_lum)(-1.8477)
-    assert jnp.isfinite(grad), f"Gradient w.r.t. neb_logZ_gas is not finite: {grad}"
+    grad_jax = float(jax.grad(total_lum)(-1.8477))
+    grad_fd = fd_grad(total_lum, -1.8477)
+    np.testing.assert_allclose(
+        grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+    )
 
 
 @pytest.mark.skipif(not _GRID_AVAILABLE, reason="data/feltre_grid.h5 not found")

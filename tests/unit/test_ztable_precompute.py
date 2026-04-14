@@ -10,6 +10,7 @@ Validates that:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -23,6 +24,11 @@ from tengri.models.sps.precompute import (
 from tengri.utils.cosmology import luminosity_distance
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
 # ---------------------------------------------------------------------------
@@ -201,8 +207,14 @@ class TestZTableGradients:
             )
             return jnp.sum(ssp_phot) + jnp.sum(eff_rest) + flux_scale
 
-        g = jax.grad(loss)(0.5)
-        assert jnp.isfinite(g), f"Gradient w.r.t. z is not finite: {g}"
+        g_jax = float(jax.grad(loss)(0.5))
+        g_fd = fd_grad(loss, 0.5)
+        np.testing.assert_allclose(
+            g_jax,
+            g_fd,
+            rtol=1e-3,
+            err_msg=f"autodiff={g_jax:.4e}, FD={g_fd:.4e}",
+        )
 
     def test_gradient_nonzero(self, ssp_data, filters):
         """Gradient w.r.t. z is nonzero (z actually affects the output)."""
@@ -302,8 +314,14 @@ class TestZTableSmoothInterpolation:
             )
             return jnp.sum(ssp_phot) + jnp.sum(eff_rest) + flux_scale
 
-        g = jax.grad(loss)(0.5)
-        assert jnp.isfinite(g), f"Gradient w.r.t. z is not finite: {g}"
+        grad_jax = float(jax.grad(loss)(0.5))
+        grad_fd = fd_grad(loss, 0.5)
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=5e-3,
+            err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+        )
 
     def test_gradient_smoother_than_linear(self, ssp_data, filters):
         """d(flux)/dz has lower variation than piecewise-linear across grid nodes.

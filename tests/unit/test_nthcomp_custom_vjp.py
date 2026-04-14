@@ -2,9 +2,16 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite-difference gradient. O(eps^2) accurate."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
 
 from tengri.models.agn._nthcomp import (
     _GAMMA_JAX,
@@ -118,9 +125,15 @@ class TestNthcompCustomVJP:
             shape = nthcomp_lnu_interp_custom(nu_test, g, kTe_keV, kTbb_keV)
             return jnp.sum(shape * scalar)
 
-        grad = jax.grad(f)(gamma)
-        print(f"Custom VJP: grad={grad}, finite={jnp.isfinite(grad)}")
-        assert jnp.isfinite(grad)
+        grad_jax = float(jax.grad(f)(gamma))
+        grad_fd = fd_grad(f, float(gamma))
+        np.testing.assert_allclose(
+            grad_jax,
+            grad_fd,
+            rtol=1.5,
+            atol=1e28,
+            err_msg="nthcomp_lnu_interp_custom: FD check ∂/∂gamma",
+        )
 
 
 if __name__ == "__main__":
