@@ -67,12 +67,6 @@ os.makedirs(FIGDIR, exist_ok=True)
 # %%
 from tengri.models.dust.emission import (
     DUST_EMISSION_MODELS,
-    _draine_li2007_analytic_fallback,
-    _draine_li2014_analytic_fallback,
-    _dale2014_analytic_fallback,
-    _astrodust_analytic_fallback,
-    _bosa_analytic_fallback,
-    _themis_analytic_fallback,
     _pah_template,
     _PAH_CENTER_UM,
     _drude_profile,
@@ -88,6 +82,21 @@ from tengri.models.dust.emission import (
     casey2012,
     planck_bnu,
 )
+
+# NOTE: The six analytic fallback functions below were removed from emission.py
+# (commit bd38832). This archive notebook still references them; stub them out
+# so the file doesn't crash at import time. The affected cells will produce
+# zeros rather than meaningful SEDs.
+def _dead_fallback(*args, **kwargs):
+    import jax.numpy as _jnp
+    return _jnp.zeros_like(args[0])
+
+_draine_li2007_analytic_fallback = _dead_fallback
+_draine_li2014_analytic_fallback = _dead_fallback
+_dale2014_analytic_fallback = _dead_fallback
+_astrodust_analytic_fallback = _dead_fallback
+_bosa_analytic_fallback = _dead_fallback
+_themis_analytic_fallback = _dead_fallback
 
 # %% [markdown]
 # ## Shared Setup
