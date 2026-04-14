@@ -3,26 +3,20 @@ Dust Emission Models: Overview
 ================================
 
 All tengri dust emission models evaluated at L_absorbed = 1e10 L☉ and
-T = 35 K. Template-based models (DL07, DL14, Dale+2014) use their
-analytic fallbacks when data files are unavailable.
+T = 35 K. Template-based models (DL07, DL14, Dale+2014) are shown only
+when data files are present; they are skipped gracefully otherwise.
 """
-
-import warnings
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-warnings.filterwarnings("ignore", message=".*template.*not found.*")
-warnings.filterwarnings("ignore", message=".*DL07.*")
-warnings.filterwarnings("ignore", message=".*Failed to load.*")
-
 from tengri import setup_style
 from tengri.models.dust.emission import (
-    _dale2014_analytic_fallback,
-    _draine_li2007_analytic_fallback,
-    _draine_li2014_analytic_fallback,
     casey2012,
+    dale2014,
+    draine_li2007,
+    draine_li2014,
     energy_balance_split,
     magphys_dc08,
     modified_blackbody,
@@ -35,45 +29,67 @@ wave_aa = jnp.logspace(np.log10(1e4), np.log10(1e7), 2000)
 wave_um = np.array(wave_aa) * 1e-4
 L_ABS = 1e10  # Lsun
 
+
 def _mbb():
     return modified_blackbody(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8)
+
 
 def _casey():
     return casey2012(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8, dust_alpha_mir=2.0)
 
+
 def _magphys():
-    return magphys_dc08(wave_aa, L_ABS, dust_T_warm=35.0, dust_T_cold=20.0,
-                        dust_T_hot=180.0, dust_xi_pah=0.06,
-                        dust_xi_mir=0.07, dust_xi_warm=0.25)
+    return magphys_dc08(
+        wave_aa,
+        L_ABS,
+        dust_T_warm=35.0,
+        dust_T_cold=20.0,
+        dust_T_hot=180.0,
+        dust_xi_pah=0.06,
+        dust_xi_mir=0.07,
+        dust_xi_warm=0.25,
+    )
+
 
 def _ebs():
     return energy_balance_split(wave_aa, L_ABS, dust_T_warm=35.0, dust_T_cold=20.0)
 
+
 def _dl07():
-    return _draine_li2007_analytic_fallback(
-        wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5
-    )
+    try:
+        return draine_li2007(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
+    except FileNotFoundError:
+        return None
+
 
 def _dl14():
-    return _draine_li2014_analytic_fallback(
-        wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5
-    )
+    try:
+        return draine_li2014(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
+    except FileNotFoundError:
+        return None
+
 
 def _dale():
-    return _dale2014_analytic_fallback(wave_aa, L_ABS, dust_alpha_dale=2.0)
+    try:
+        return dale2014(wave_aa, L_ABS, dust_alpha_dale=2.0)
+    except FileNotFoundError:
+        return None
+
 
 MODELS = [
-    ("Modified BB",          "C0", _mbb()),
-    ("Casey (2012)",         "C1", _casey()),
-    ("MAGPHYS (dC+08)",      "C2", _magphys()),
-    ("Energy balance",       "C3", _ebs()),
-    ("DL07 (fallback)",      "C4", _dl07()),
-    ("DL14 (fallback)",      "C5", _dl14()),
-    ("Dale+2014 (fallback)", "C6", _dale()),
+    ("Modified BB", "C0", _mbb()),
+    ("Casey (2012)", "C1", _casey()),
+    ("MAGPHYS (dC+08)", "C2", _magphys()),
+    ("Energy balance", "C3", _ebs()),
+    ("DL07", "C4", _dl07()),
+    ("DL14", "C5", _dl14()),
+    ("Dale+2014", "C6", _dale()),
 ]
 
 fig, ax = plt.subplots(figsize=(9, 5.5))
 for label, color, lnu in MODELS:
+    if lnu is None:
+        continue
     y = np.array(lnu)
     mask = (wave_um > 1) & (y > 0)
     ax.loglog(wave_um[mask], y[mask], color=color, lw=1.8, label=label)
