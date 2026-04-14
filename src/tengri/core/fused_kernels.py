@@ -676,10 +676,10 @@ def build_hybrid_photometry(model):
         # Metallicity + alpha interpolation
         if _has_alpha:
             lz_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
-            iz = jnp.clip(jnp.searchsorted(ssp_lgmet, lz_c) - 1, 0, len(ssp_lgmet) - 2)
+            iz = jnp.clip(jnp.searchsorted(ssp_lgmet, lz_c) - 1, 0, ssp_lgmet.shape[0] - 2)
             fz = (lz_c - ssp_lgmet[iz]) / (ssp_lgmet[iz + 1] - ssp_lgmet[iz])
             afe_c = jnp.clip(afe, ssp_alpha_fe[0], ssp_alpha_fe[-1])
-            ia = jnp.clip(jnp.searchsorted(ssp_alpha_fe, afe_c) - 1, 0, len(ssp_alpha_fe) - 2)
+            ia = jnp.clip(jnp.searchsorted(ssp_alpha_fe, afe_c) - 1, 0, ssp_alpha_fe.shape[0] - 2)
             fa = (afe_c - ssp_alpha_fe[ia]) / (ssp_alpha_fe[ia + 1] - ssp_alpha_fe[ia])
             ssp_at_z = (
                 (1 - fz) * (1 - fa) * ssp_phot[iz, ia]
@@ -700,7 +700,8 @@ def build_hybrid_photometry(model):
                     ssp_at_z = jnp.einsum("m,maf->af", zw, ssp_phot)
                 else:
                     log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
-                    idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
+                    n_met = ssp_lgmet.shape[0]
+                    idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, n_met - 2)
                     frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
                     ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
 
@@ -1973,10 +1974,10 @@ def build_hybrid_photometry_ztable(model):
         # === Interpolate metallicity ===
         if _has_alpha:
             lz_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
-            iz = jnp.clip(jnp.searchsorted(ssp_lgmet, lz_c) - 1, 0, len(ssp_lgmet) - 2)
+            iz = jnp.clip(jnp.searchsorted(ssp_lgmet, lz_c) - 1, 0, ssp_lgmet.shape[0] - 2)
             fz = (lz_c - ssp_lgmet[iz]) / (ssp_lgmet[iz + 1] - ssp_lgmet[iz])
             afe_c = jnp.clip(afe, ssp_alpha_fe[0], ssp_alpha_fe[-1])
-            ia = jnp.clip(jnp.searchsorted(ssp_alpha_fe, afe_c) - 1, 0, len(ssp_alpha_fe) - 2)
+            ia = jnp.clip(jnp.searchsorted(ssp_alpha_fe, afe_c) - 1, 0, ssp_alpha_fe.shape[0] - 2)
             fa = (afe_c - ssp_alpha_fe[ia]) / (ssp_alpha_fe[ia + 1] - ssp_alpha_fe[ia])
             ssp_at_z_met = (
                 (1 - fz) * (1 - fa) * ssp_phot_at_z[iz, ia]
@@ -1992,7 +1993,7 @@ def build_hybrid_photometry_ztable(model):
                 ssp_at_z_met = jnp.einsum("m,maf->af", zw, ssp_phot_at_z)
             else:
                 log_z_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
-                idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
+                idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, ssp_lgmet.shape[0] - 2)
                 frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
                 ssp_at_z_met = (1.0 - frac) * ssp_phot_at_z[idx] + frac * ssp_phot_at_z[idx + 1]
 

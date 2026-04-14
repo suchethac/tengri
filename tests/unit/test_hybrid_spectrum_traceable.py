@@ -130,3 +130,31 @@ def test_compositional_spectrum_raw_built(model_with_spec):
     ck = model._SEDModel__compositional
     assert hasattr(ck, "_spectrum_raw"), "ck._spectrum_raw attribute missing"
     # May be None if build_fused_tier2_spectrum failed, but attr must exist
+
+
+def test_precompute_spectroscopy_clears_fitter_cache(model_with_spec):
+    """precompute_spectroscopy() must clear any stale fitter loss-fn cache.
+
+    If the cache is not cleared, a Fitter that compiled its loss function
+    before precompute_spectroscopy() was called will keep using the slow
+    full-SED path even after spectroscopy is precomputed.
+    """
+    model, wave_obs = model_with_spec
+
+    # Simulate a previously cached loss function on the model object.
+    model._loss_fn_cache = {"some_key": lambda p, d: 0.0}
+    model._jit_engine_cache = {"some_key": object()}
+    model._loglik_fn_cache = {"some_key": lambda p, d: 0.0}
+
+    # Calling precompute_spectroscopy again should clear all three caches.
+    model.precompute_spectroscopy(wave_obs)
+
+    assert not hasattr(model, "_loss_fn_cache"), (
+        "_loss_fn_cache not cleared after precompute_spectroscopy"
+    )
+    assert not hasattr(model, "_jit_engine_cache"), (
+        "_jit_engine_cache not cleared after precompute_spectroscopy"
+    )
+    assert not hasattr(model, "_loglik_fn_cache"), (
+        "_loglik_fn_cache not cleared after precompute_spectroscopy"
+    )

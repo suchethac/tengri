@@ -2209,8 +2209,12 @@ class SEDModel:
         self._precomputed.spectroscopy = spec_precomp
         self._wave_obs = jnp.asarray(wave_obs)
 
-        # Invalidate cached kernels to rebuild spectrum metadata
+        # Invalidate cached kernels and fitter loss-fn caches so any attached
+        # Fitter picks up the new precomputed spectroscopy path on next run().
         self._invalidate_kernels()
+        for _attr in ("_loss_fn_cache", "_jit_engine_cache", "_loglik_fn_cache"):
+            if hasattr(self, _attr):
+                delattr(self, _attr)
 
         # Rebuild compositional spectrum kernel (full-resolution end-to-end JIT)
         if self._compositional.rest_sed is not None:
@@ -2264,6 +2268,12 @@ class SEDModel:
             apply_igm=self._apply_igm and self._approx.get("igm", True),
         )
         self._precomputed.photometry_ztable = ztable
+
+        # Invalidate fitter loss-fn caches so any attached Fitter uses the
+        # new ztable interpolation path on next run().
+        for _attr in ("_loss_fn_cache", "_jit_engine_cache", "_loglik_fn_cache"):
+            if hasattr(self, _attr):
+                delattr(self, _attr)
 
         # Build hybrid z-table kernel if using hybrid mode
         if self._hybrid.photometry is not None or any(
