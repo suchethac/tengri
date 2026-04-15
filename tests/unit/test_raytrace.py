@@ -60,17 +60,28 @@ class TestSampleRaytraceGaussian:
 
         # Discard burn-in
         chain_post = chain[20:]
+        n_post = chain_post.shape[0]  # 80 samples
 
-        # Check recovered mean is within ~0.5 of truth for each dim
+        # Mean recovery: tolerance = 5 × SE_mean = 5 × (std / sqrt(N))
+        # true std = 0.5, N = 80 → SE_mean ≈ 0.056 → atol ≈ 0.28
+        # atol=0.5 (= 1 full std) was far too loose (~9σ) — this catches broken samplers.
         recovered_mean = jnp.mean(chain_post, axis=0)
-        assert jnp.allclose(recovered_mean, true_mean, atol=0.5), (
-            f"Recovered mean {recovered_mean} too far from truth {true_mean}"
+        se_mean = 0.5 / float(jnp.sqrt(n_post))  # std / sqrt(N)
+        atol_mean = 5.0 * se_mean  # 5σ guard — robust to random variation
+        assert jnp.allclose(recovered_mean, true_mean, atol=atol_mean), (
+            f"Recovered mean {recovered_mean} too far from truth {true_mean} "
+            f"(atol={atol_mean:.3f} = 5×SE_mean, true std=0.5, N={n_post})"
         )
 
-        # Check recovered std is in a reasonable range (true std = 0.5)
+        # Std recovery: true std = 0.5; accept [0.25, 1.0] (factor-of-2 band)
+        # Previous bounds (0.1, 2.0) allowed 4× error each direction.
         recovered_std = jnp.std(chain_post, axis=0)
-        assert jnp.all(recovered_std > 0.1), f"Recovered std {recovered_std} unreasonably small"
-        assert jnp.all(recovered_std < 2.0), f"Recovered std {recovered_std} unreasonably large"
+        assert jnp.all(recovered_std > 0.25), (
+            f"Recovered std {recovered_std} < 0.25 — sampler may be stuck (true std=0.5)"
+        )
+        assert jnp.all(recovered_std < 1.0), (
+            f"Recovered std {recovered_std} > 1.0 — sampler may not be converging (true std=0.5)"
+        )
 
 
 class TestSampleRaytraceAcceptance:

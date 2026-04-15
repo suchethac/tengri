@@ -223,10 +223,15 @@ class TestGeoVIRuns:
             assert bool(jnp.all(jnp.isfinite(vals))), f"NaN/Inf in {name}"
 
     def test_geovi_vs_mgvi_different_posteriors(self, fitter_and_mock):
-        """geoVI and MGVI produce different expansion points.
+        """geoVI and MGVI produce non-identical posterior widths.
 
-        They should generally agree on the mode but differ in posterior
-        width (geoVI captures nonlinear geometry).
+        geoVI uses a nonlinear coordinate transform; MGVI linearizes.
+        Even with few iterations they must not produce bit-identical samples —
+        if they do, the routing logic has collapsed to a single code path.
+
+        We compare per-parameter posterior stds.  They need not agree within
+        any particular tolerance (convergence is not expected at n_iterations=5),
+        but they must differ, confirming two distinct algorithms ran.
         """
         fitter, _, _ = fitter_and_mock
         key = jax.random.PRNGKey(12)
@@ -250,9 +255,19 @@ class TestGeoVIRuns:
             key=key,
         )
 
-        # Both should have samples
+        # Both must have samples
         assert len(result_mgvi.samples) > 0
         assert len(result_geovi.samples) > 0
+
+        # Posterior widths must not be bit-identical — if they are, both ran
+        # the same algorithm (routing broken) or one path was silently skipped.
+        shared = [p for p in result_geovi.samples if p in result_mgvi.samples]
+        geovi_stds = jnp.array([jnp.std(result_geovi.samples[p]) for p in shared])
+        mgvi_stds = jnp.array([jnp.std(result_mgvi.samples[p]) for p in shared])
+        assert not jnp.allclose(geovi_stds, mgvi_stds, rtol=1e-8), (
+            "geoVI and MGVI posterior widths are bit-identical — "
+            "method routing may have collapsed to a single code path."
+        )
 
     def test_posterior_predictive_check(self, fitter_and_mock):
         """Posterior predictive: predicted data should bracket observed data.

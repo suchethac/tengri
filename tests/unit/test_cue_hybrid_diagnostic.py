@@ -1,16 +1,16 @@
-"""Diagnostic test for the Cue hybrid photometry discrepancy.
+"""Tests for the Cue hybrid photometry energy-balance fix.
 
-The Cue nebular emulator shows ~23% hybrid error vs exact in some configurations.
-Root cause is currently unidentified.  Ruled out:
-- SFR propagation: identical in both paths (sfr_on_ssp[-1])
-- Wavelength grid: same ssp_wave_f64 in both
-- Unit conventions: same erg/s/Hz
-- Filter integration: identical trapz + interp in both compute_flux_density paths
+Previously showed ~23% hybrid error vs exact.  Root cause was the same as the DL07
+hybrid bug: L_absorbed_stellar was computed from a Voronoi-bandwidth-weighted sum over
+SDSS filter bands only, missing all UV absorption where dust attenuation peaks.  Fixed
+by replacing the Voronoi sum with a 200-point coarse-wavelength trapz.
 
-This test documents the known discrepancy and will be promoted to a passing test
-once the root cause is found and fixed.
+These tests verify:
+1. Cue hybrid error < 5% per SDSS band at z=0.1 (was ~23%).
+2. Hybrid photometry is finite and positive.
+3. Exact photometry is finite (sanity check).
 
-See docs/dev/optimization-architecture.md footnote ① for context.
+All tests require SSP data on disk; they are skipped gracefully when missing.
 """
 
 from __future__ import annotations
@@ -101,41 +101,27 @@ def cue_params(cue_spec):
 
 
 class TestCueHybridDiagnostic:
-    """Document and bound the known Cue hybrid error.
+    """Cue hybrid photometry error-bound and sanity checks."""
 
-    These tests are marked xfail because the root cause of the ~23% Cue
-    hybrid error is unidentified.  They become passing assertions once fixed.
-    """
-
-    @pytest.mark.xfail(
-        reason=(
-            "Cue hybrid error ~23%: root cause unidentified after ruling out "
-            "SFR, wavelength grid, units, and filter integration differences. "
-            "Promote to passing once fixed."
-        ),
-        strict=False,
-    )
     def test_cue_hybrid_error_below_5pct(self, cue_model, cue_params):
-        """Cue hybrid photometry should agree with exact within 5% per band.
+        """Cue hybrid photometry agrees with exact within 5% per band.
 
-        Currently fails with ~23% error in some configurations.
-        This test documents the known failure mode so it does not go unnoticed.
+        Previously failed with ~23% error (root cause: L_absorbed_stellar computed
+        from Voronoi-bandwidth-weighted sum over SDSS filter bands, missing UV absorption).
+        Fixed alongside DL07 hybrid: replaced Voronoi sum with 200-point coarse-wavelength
+        trapz, matching the exact/compositional path.
         """
         flux_hybrid = cue_model.predict_photometry(cue_params, mode="hybrid")
         flux_exact = cue_model.predict_photometry(cue_params, mode="exact")
 
         err = jnp.abs(flux_hybrid - flux_exact) / (jnp.abs(flux_exact) + 1e-50)
         max_err_pct = float(jnp.max(err)) * 100.0
-
-        # Diagnostic: print per-band errors to help future debugging
-        band_errs = [float(e) * 100.0 for e in err]
-        bands = _FILTER_NAMES
-        print("\nCue hybrid vs exact per-band error:")
-        for b, e in zip(bands, band_errs):
-            print(f"  {b}: {e:.2f}%")
+        band_errs = {b: float(e) * 100.0 for b, e in zip(_FILTER_NAMES, err)}
+        per_band = "  ".join(f"{b}:{v:.1f}%" for b, v in band_errs.items())
 
         assert max_err_pct < 5.0, (
             f"Cue hybrid max per-band error {max_err_pct:.1f}% exceeds 5%. "
+            f"Per-band: {per_band}. "
             "See test_cue_hybrid_diagnostic.py for investigation notes."
         )
 

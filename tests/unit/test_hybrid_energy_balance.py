@@ -222,3 +222,66 @@ class TestStellarOnlyNonRegression:
         assert max_err < 1.0, (
             f"Stellar-only hybrid max per-band error {max_err:.2f}% regressed past 1%."
         )
+
+
+# ---------------------------------------------------------------------------
+# DL07 worst-case: young, heavily-dusty galaxy
+# UV absorption peaks at <2000 Å — the original Voronoi-sum bug missed this
+# band entirely (SDSS ugriz at z=0.1 covers rest ~2600–8800 Å).
+# ---------------------------------------------------------------------------
+
+
+class TestDL07EnergyBalanceWorstCase:
+    """DL07 hybrid error < 2% for young high-dust galaxy (max UV absorption gap).
+
+    The original bug (Voronoi sum over SDSS bands → missed UV) produces the
+    largest error for galaxies with:
+    - Rapid recent star formation (high UV output to attenuate)
+    - High dust optical depth (τ_bc >> 1 → strong UV absorption)
+    A fixed test at a single prior draw may happen to be a low-UV-absorption
+    galaxy and pass even if the fix is reverted.  This class pins the
+    worst-case regime explicitly.
+    """
+
+    @pytest.fixture(scope="class")
+    def dl07_spec_young_dusty(self):
+        if not _DL07_FILE.is_file():
+            pytest.skip("DL07 template file not found")
+        return ParamSpec(
+            mean_sfh_type="dpl",
+            sfh_dpl_alpha=Fixed(3.0),  # steep rise — young burst
+            sfh_dpl_beta=Fixed(0.3),  # slow decline — sustained recent SFR
+            sfh_dpl_tau_gyr=Fixed(0.5),  # peak at 500 Myr → strong UV
+            sfh_dpl_log_peak_sfr=Fixed(2.0),  # 100 Msun/yr peak
+            met_logzsol=Fixed(-1.5),
+            dust_tau_bc=Fixed(1.5),  # heavy birth-cloud dust → large UV attenuation
+            dust_tau_diff=Fixed(0.5),
+            dust_slope=Fixed(-0.7),
+            dust_emission="draine_li2007",
+            redshift=0.1,
+        )
+
+    @pytest.fixture(scope="class")
+    def dl07_model_young_dusty(self, ssp_data, filters, dl07_spec_young_dusty):
+        return Model(dl07_spec_young_dusty, ssp_data, filters=filters)
+
+    @pytest.fixture(scope="class")
+    def dl07_params_young_dusty(self, dl07_spec_young_dusty):
+        return dl07_spec_young_dusty.sample(_KEY)
+
+    def test_dl07_worst_case_hybrid_error_below_2pct(
+        self, dl07_model_young_dusty, dl07_params_young_dusty
+    ):
+        """Young high-dust DL07: hybrid error < 2% per band.
+
+        This is the worst-case for the Voronoi-sum UV absorption bug.
+        τ_bc=1.5 → exp(-1.5) ≈ 22% UV transmission, large L_absorbed_stellar.
+        If the coarse-grid trapz fix is reverted the error will reappear here first.
+        """
+        err = _photometry_error(dl07_model_young_dusty, dl07_params_young_dusty)
+        max_err = float(jnp.max(err)) * 100.0
+        assert max_err < 2.0, (
+            f"Young/dusty DL07 hybrid max per-band error {max_err:.1f}% exceeds 2%. "
+            "This probes the UV-absorption gap that caused the original 43% error — "
+            "the coarse-grid trapz fix for L_absorbed_stellar may have been reverted."
+        )

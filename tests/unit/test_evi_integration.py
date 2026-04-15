@@ -108,10 +108,24 @@ class TestEVIRuns:
             key=jax.random.PRNGKey(0),
         )
 
-        # Check it returned something
         assert result is not None
         assert hasattr(result, "samples")
         assert hasattr(result, "diagnostics")
+
+        # All Uniform-prior samples must be within prior support.
+        # A broken transform (wrong unbounding) pushes samples outside [low, high].
+        for name in simple_spec.free_params:
+            dist = simple_spec.get_distribution(name)
+            if hasattr(dist, "low") and hasattr(dist, "high"):
+                samples = result.samples[name]
+                assert bool(jnp.all(samples >= dist.low)), (
+                    f"{name}: samples below prior lower bound {dist.low}; "
+                    f"min={float(jnp.min(samples)):.4f}"
+                )
+                assert bool(jnp.all(samples <= dist.high)), (
+                    f"{name}: samples above prior upper bound {dist.high}; "
+                    f"max={float(jnp.max(samples)):.4f}"
+                )
 
     def test_evi_samples_have_correct_keys(self, model_and_mock, simple_spec):
         """Posterior samples contain all free parameter names."""
@@ -168,36 +182,78 @@ class TestEVIRuns:
 
 
 class TestGeoVIMGVIRouting:
-    """native_geovi and native_mgvi route through JIT engine."""
+    """native_geovi and native_mgvi deprecated aliases route through JIT engine."""
 
     def test_native_geovi_runs(self, model_and_mock):
-        """Method 'native_geovi' runs (JIT geoVI engine)."""
+        """Deprecated 'native_geovi' alias routes to vi_native; emits DeprecationWarning."""
+        import warnings
+
         model, mock, _ = model_and_mock
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
-        result = fitter.run(
-            "native_geovi",
-            n_iterations=3,
-            n_samples=2,
-            n_seeds=1,
-            n_posterior_samples=10,
-            verbose=False,
-            key=jax.random.PRNGKey(10),
-        )
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = fitter.run(
+                "native_geovi",
+                n_iterations=3,
+                n_samples=2,
+                n_seeds=1,
+                n_posterior_samples=10,
+                verbose=False,
+                key=jax.random.PRNGKey(10),
+            )
+
+        # Must have routed correctly: finite samples for all params
         assert result is not None
+        for name, vals in result.samples.items():
+            assert bool(jnp.all(jnp.isfinite(vals))), (
+                f"native_geovi routing: non-finite samples for {name}"
+            )
+
+        # Deprecated alias must emit a warning that mentions the alias name
+        alias_warnings = [
+            x
+            for x in w
+            if issubclass(x.category, DeprecationWarning)
+            and "native_geovi" in str(x.message).lower()
+        ]
+        assert len(alias_warnings) > 0, (
+            "Expected DeprecationWarning mentioning 'native_geovi' — none raised. "
+            f"All captured: {[str(x.message) for x in w]}"
+        )
 
     def test_native_mgvi_runs(self, model_and_mock):
-        """Method 'native_mgvi' runs (JIT MGVI engine)."""
+        """Deprecated 'native_mgvi' alias routes to vi_native_linear; emits DeprecationWarning."""
+        import warnings
+
         model, mock, _ = model_and_mock
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
-        result = fitter.run(
-            "native_mgvi",
-            n_iterations=3,
-            n_samples=2,
-            n_seeds=1,
-            n_posterior_samples=10,
-            verbose=False,
-            key=jax.random.PRNGKey(11),
-        )
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = fitter.run(
+                "native_mgvi",
+                n_iterations=3,
+                n_samples=2,
+                n_seeds=1,
+                n_posterior_samples=10,
+                verbose=False,
+                key=jax.random.PRNGKey(11),
+            )
+
         assert result is not None
+        for name, vals in result.samples.items():
+            assert bool(jnp.all(jnp.isfinite(vals))), (
+                f"native_mgvi routing: non-finite samples for {name}"
+            )
+
+        alias_warnings = [
+            x
+            for x in w
+            if issubclass(x.category, DeprecationWarning)
+            and "native_mgvi" in str(x.message).lower()
+        ]
+        assert len(alias_warnings) > 0, (
+            "Expected DeprecationWarning mentioning 'native_mgvi' — none raised. "
+            f"All captured: {[str(x.message) for x in w]}"
+        )
