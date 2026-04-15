@@ -491,7 +491,7 @@ class FeltreNLRBackend:
         luminosities : (n_lines,) array
             Emission line luminosities [Lsun].
         """
-        from tengri.core.preintegrate import interp_nd_triweight
+        from tengri.forward.precompute.grid import interp_nd_triweight
 
         grid = self.grid
 

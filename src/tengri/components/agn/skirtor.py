@@ -17,7 +17,7 @@ from collections.abc import Callable
 
 import jax.numpy as jnp
 
-from tengri.core.preintegrate import interp_nd_triweight
+from tengri.forward.precompute.grid import interp_nd_triweight
 from tengri.components.agn._phys import (
     LSUN_ERG as _LSUN_ERG,
     wavelength_to_nu as _wavelength_to_nu,

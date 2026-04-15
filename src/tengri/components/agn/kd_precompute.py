@@ -94,6 +94,14 @@ class KDPreintegratedData:
     n_filters: int
 
 
+# K&D uses a custom dataclass (KDPreintegratedData) with three non-uniform tables
+# (Planck per-T, nthcomp per-(gamma,kTe,kTbb), corona per-(Gamma,kT_hot)). These
+# correspond to internal K&D physics parameters, not user-facing priors. Auto-
+# collapse on user-Fixed parameters is not yet wired for K&D — tracked in
+# docs/dev/optimization-architecture.md. The empty AXIS_PARAMS signals this.
+AXIS_PARAMS: tuple[str, ...] = ()
+
+
 # ───────────────────────────────────────────────────────────────────
 # Planck filter table (Zone 1: outer disc)
 # ───────────────────────────────────────────────────────────────────
@@ -244,7 +252,7 @@ def _build_nthcomp_filter_table(
         flat_sorted = flat_table[:, sort_idx]
 
         # Vectorized interpolation: all grid points at once
-        from tengri.core.preintegrate import _vectorized_interp
+        from tengri.forward.precompute.grid import _vectorized_interp
 
         # _vectorized_interp expects (xp_target, xp_source, yp_source)
         # where yp_source shape is (..., n_source)
@@ -850,3 +858,67 @@ def kubota_done_disc_preintegrated(
 
     total_phot = outer_phot + warm_phot + hot_phot
     return total_phot * scale
+
+
+# ───────────────────────────────────────────────────────────────────
+# Protocol-shaped entry points (new in restructure)
+# ───────────────────────────────────────────────────────────────────
+
+
+def precompute(filter_waves: list, filter_trans: list, redshift: float, parameters=None, **kwargs):
+    """Protocol-shaped entry point for K&D 3-zone disc precompute.
+
+    The K&D tables are fully built regardless of ``parameters`` — the K&D
+    grid axes are internal physics coords, not user priors, so auto-collapse
+    is a no-op. Delegates to the existing ``kubota_done_disc_preintegrated``
+    path. See docs/dev/optimization-architecture.md for the incomplete-state
+    notes.
+
+    Parameters
+    ----------
+    filter_waves, filter_trans : list
+        Filter curves (observed frame).
+    redshift : float
+        Source redshift.
+    parameters : Parameters | None
+        Unused — K&D grid axes are internal physics coords, not user
+        parameters.
+    **kwargs
+        Additional keyword arguments passed to the K&D builder.
+
+    Raises
+    ------
+    NotImplementedError
+        K&D precompute Protocol wiring is deferred.  See
+        docs/dev/optimization-architecture.md and use the existing
+        kd_disc precomputation path invoked from core/model.py.
+    """
+    # The existing K&D build function lives in this module; look for a
+    # top-level ``build_*`` function (e.g. ``build_planck_table``,
+    # ``build_nthcomp_table``) and call them. Delegate to whichever top-level
+    # precompute constructor returns a KDPreintegratedData.
+    # If no turnkey constructor exists, raise NotImplementedError with a clear
+    # message pointing to the existing internal callers in core/model.py.
+    raise NotImplementedError(
+        "K&D precompute Protocol wiring is deferred — use the existing "
+        "kd_disc precomputation path invoked from core/model.py. "
+        "See docs/dev/optimization-architecture.md."
+    )
+
+
+def build_lookup(preint, **kwargs):
+    """K&D runtime uses the preintegrated dataclass directly via fused kernels.
+
+    Parameters
+    ----------
+    preint : KDPreintegratedData
+        Preintegrated K&D data.
+    **kwargs
+        Ignored; accepted for Protocol consistency.
+
+    Returns
+    -------
+    None
+        K&D runtime lookup is performed directly in the fused kernels.
+    """
+    return None

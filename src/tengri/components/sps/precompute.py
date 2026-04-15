@@ -35,8 +35,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.core.preintegrate import preintegrate_grid
+from tengri.forward.precompute.grid import preintegrate_grid
 from tengri.utils.conversions import lnu_to_fnu
+
+# SSP precompute grid axes: (lgmet, lg_age_gyr). The age axis is never user-fixed
+# (ages are determined by the SFH). Only metallicity may be Fixed.
+AXIS_PARAMS: tuple[str, ...] = ("met_logzsol",)
 
 # numpy >= 2.0 uses trapezoid; older versions used trapz
 _np_trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
@@ -198,7 +202,7 @@ def precompute_photometry(
     PhotometricPrecomputation
         Pre-computed data for the fused photometry kernel.
     """
-    from tengri.core.preintegrate import slice_fixed_axes
+    from tengri.forward.precompute.grid import slice_fixed_axes
 
     # Delegate to preintegrate_grid, which handles all wavelength integration
     # for arbitrary grid dimensionality (2D for normal SSP, 4D for alpha-enhanced).
@@ -633,3 +637,82 @@ def interpolate_igm_ztable(igm_trans_table, z_grid, z):
     idx = jnp.clip(jnp.searchsorted(z_grid, z_clamped) - 1, 0, len(z_grid) - 2)
     frac = (z_clamped - z_grid[idx]) / (z_grid[idx + 1] - z_grid[idx])
     return (1.0 - frac) * igm_trans_table[idx] + frac * igm_trans_table[idx + 1]
+
+
+# ───────────────────────────────────────────────────────────────────
+# Protocol-shaped entry points (new in restructure)
+# ───────────────────────────────────────────────────────────────────
+
+
+def precompute(
+    filter_waves: list,
+    filter_trans: list,
+    redshift: float,
+    parameters=None,
+    *,
+    ssp_data,
+    dl_cm: float,
+    taylor_correction: bool = True,
+):
+    """Protocol-shaped wrapper around :func:`precompute_photometry`.
+
+    Auto-collapses the metallicity axis if ``met_logzsol`` is Fixed in
+    ``parameters``.
+
+    Parameters
+    ----------
+    filter_waves, filter_trans : list
+        Filter curves (observed frame).
+    redshift : float
+        Source redshift.
+    parameters : Parameters | None
+        Parameter spec, used to detect Fixed-axis parameters.
+    ssp_data : dict
+        SSP data (wavelength, metallicity grid, age grid, SSP spectra).
+    dl_cm : float
+        Luminosity distance in cm.
+    taylor_correction : bool, optional
+        If True, compute and include SSP first-moment correction for dust
+        attenuation. Default True.
+
+    Returns
+    -------
+    PhotometricPrecomputation
+        Precomputed SSP photometry, optionally collapsed for Fixed parameters.
+    """
+    fixed: dict[int, float] | None = None
+    if parameters is not None and parameters.is_fixed("met_logzsol"):
+        # Convert met_logzsol (log10(Z/Zsun)) to absolute log10(Z) via LOG10_ZSUN.
+        from tengri.core.param_translate import LOG10_ZSUN
+
+        met_logz_abs = float(parameters.fixed_value("met_logzsol")) + LOG10_ZSUN
+        fixed = {0: met_logz_abs}
+    return precompute_photometry(
+        ssp_data=ssp_data,
+        filter_waves=filter_waves,
+        filter_trans=filter_trans,
+        redshift=redshift,
+        dl_cm=dl_cm,
+        taylor_correction=taylor_correction,
+        fixed=fixed,
+    )
+
+
+def build_lookup(preint, **kwargs):
+    """SSP photometry is consumed directly by the fused kernels — no JIT
+    lookup returned here; this is a Protocol placeholder.
+
+    Parameters
+    ----------
+    preint : PhotometricPrecomputation
+        Precomputed SSP photometry.
+    **kwargs
+        Ignored; accepted for Protocol consistency.
+
+    Returns
+    -------
+    None
+        SSP photometry is used directly in the fused kernels without a
+        separate JIT lookup function.
+    """
+    return None

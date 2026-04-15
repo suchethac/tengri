@@ -381,7 +381,7 @@ class CloudyGridBackend:
             - 2: log_U (ionization parameter)
             If provided, these axes are collapsed at init time. Default None.
         """
-        from tengri.core.preintegrate import (
+        from tengri.forward.precompute.grid import (
             preintegrate_grid,
             preintegrate_lines,
             slice_fixed_axes,

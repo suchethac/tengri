@@ -754,7 +754,7 @@ class SEDModel:
             a callable ``(L_absorbed, *grid_params) -> phot_array (n_filters,)``.
             Otherwise None (falls back to full-wavelength evaluation).
         """
-        from tengri.core.precompute_templates import (
+        from tengri.components.dust.dust_emission_precompute import (
             build_dl07_photometry_lookup,
             build_template_photometry_lookup,
             precompute_dl07_photometry,
@@ -1061,7 +1061,7 @@ class SEDModel:
             and self.filter_waves is not None
             and self._agn_model in ("kubota_done_full", "kubota_done_disc")
         ):
-            from tengri.components.agn.kd_preintegrate import preintegrate_kd_components
+            from tengri.components.agn.kd_precompute import preintegrate_kd_components
 
             kd_preint = preintegrate_kd_components(
                 self.filter_waves,

@@ -58,7 +58,7 @@ class TestPlanckFilterTable:
     """Test that filter-integrated Planck matches direct computation."""
 
     def test_planck_table_shape(self):
-        from tengri.components.agn.kd_preintegrate import _build_planck_filter_table
+        from tengri.components.agn.kd_precompute import _build_planck_filter_table
 
         T_grid = np.geomspace(1000, 1e6, 50)
         fw, ft = _make_sdss_like_filters()
@@ -68,7 +68,7 @@ class TestPlanckFilterTable:
 
     def test_planck_table_monotonic_in_T(self):
         """Hotter temperatures should give more flux in bluer filters."""
-        from tengri.components.agn.kd_preintegrate import _build_planck_filter_table
+        from tengri.components.agn.kd_precompute import _build_planck_filter_table
 
         T_grid = np.geomspace(1e4, 1e6, 100)
         fw, ft = _make_sdss_like_filters()
@@ -79,7 +79,7 @@ class TestPlanckFilterTable:
 
     def test_planck_lookup_matches_direct(self):
         """Lookup at exact grid temperatures should match table values."""
-        from tengri.components.agn.kd_preintegrate import (
+        from tengri.components.agn.kd_precompute import (
             _build_planck_filter_table,
             _lookup_planck_filter,
         )
@@ -96,7 +96,7 @@ class TestPlanckFilterTable:
 
     def test_planck_lookup_interpolation(self):
         """Lookup between grid points should be smooth."""
-        from tengri.components.agn.kd_preintegrate import (
+        from tengri.components.agn.kd_precompute import (
             _build_planck_filter_table,
             _lookup_planck_filter,
         )
@@ -131,7 +131,7 @@ class TestCoronaFilterTable:
     """Test the hot corona preintegration."""
 
     def test_corona_table_shape(self):
-        from tengri.components.agn.kd_preintegrate import _build_corona_filter_table
+        from tengri.components.agn.kd_precompute import _build_corona_filter_table
 
         Gamma_grid = np.linspace(1.4, 3.0, 10)
         kT_grid = np.geomspace(10, 500, 8)
@@ -141,7 +141,7 @@ class TestCoronaFilterTable:
 
     def test_corona_harder_gives_less_optical(self):
         """Steeper Gamma (softer) should give MORE optical flux."""
-        from tengri.components.agn.kd_preintegrate import _build_corona_filter_table
+        from tengri.components.agn.kd_precompute import _build_corona_filter_table
 
         Gamma_grid = np.linspace(1.4, 3.0, 20)
         kT_grid = np.array([100.0])
@@ -169,7 +169,7 @@ class TestNthcompFilterTable:
         if not _TABLE_AVAILABLE:
             pytest.skip("nthcomp templates not available")
 
-        from tengri.components.agn.kd_preintegrate import _build_nthcomp_filter_table
+        from tengri.components.agn.kd_precompute import _build_nthcomp_filter_table
 
         fw, ft = _make_sdss_like_filters()
         table, _gamma, _kTe, _kTbb = _build_nthcomp_filter_table(fw, ft, redshift=0.1)
@@ -183,7 +183,7 @@ class TestNthcompFilterTable:
         if not _TABLE_AVAILABLE:
             pytest.skip("nthcomp templates not available")
 
-        from tengri.components.agn.kd_preintegrate import (
+        from tengri.components.agn.kd_precompute import (
             _build_nthcomp_filter_table,
             _lookup_nthcomp_filter,
         )
@@ -218,7 +218,7 @@ class TestKDPreintegrationPipeline:
     """End-to-end test comparing preintegrated vs full-wavelength K&D."""
 
     def test_preintegrate_builds(self):
-        from tengri.components.agn.kd_preintegrate import preintegrate_kd_components
+        from tengri.components.agn.kd_precompute import preintegrate_kd_components
 
         fw, ft = _make_sdss_like_filters()
         kd = preintegrate_kd_components(fw, ft, redshift=0.1)
@@ -233,7 +233,7 @@ class TestKDPreintegrationPipeline:
         for typical AGN parameters at z=0.1 with SDSS-like filters.
         """
         from tengri.components.agn.disc import kubota_done_disc
-        from tengri.components.agn.kd_preintegrate import (
+        from tengri.components.agn.kd_precompute import (
             kubota_done_disc_preintegrated,
             preintegrate_kd_components,
         )
@@ -291,7 +291,7 @@ class TestKDPreintegrationPipeline:
 
     def test_preintegrated_gradient_finite(self):
         """Gradients of preintegrated K&D should be finite."""
-        from tengri.components.agn.kd_preintegrate import (
+        from tengri.components.agn.kd_precompute import (
             kubota_done_disc_preintegrated,
             preintegrate_kd_components,
         )
@@ -321,7 +321,7 @@ class TestKDPreintegrationPipeline:
 
     def test_preintegrated_jit_compatible(self):
         """Preintegrated K&D should work under JIT."""
-        from tengri.components.agn.kd_preintegrate import (
+        from tengri.components.agn.kd_precompute import (
             kubota_done_disc_preintegrated,
             preintegrate_kd_components,
         )

@@ -85,7 +85,7 @@ class TestPreintegrateGridBasic:
 
     def test_output_shape(self, synthetic_template_3d, tophat_filters):
         """Output shape is (n_met, n_age, n_filters) with wavelength collapsed."""
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
 
         template, wave = synthetic_template_3d
         filter_waves, filter_trans = tophat_filters
@@ -102,7 +102,7 @@ class TestPreintegrateGridBasic:
 
     def test_output_finiteness(self, synthetic_template_3d, tophat_filters):
         """All output values are finite (no NaN/Inf)."""
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
 
         template, wave = synthetic_template_3d
         filter_waves, filter_trans = tophat_filters
@@ -120,7 +120,7 @@ class TestPreintegrateGridBasic:
 
     def test_flux_scale_positive(self, synthetic_template_3d, tophat_filters):
         """flux_scale is positive."""
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
 
         template, wave = synthetic_template_3d
         filter_waves, filter_trans = tophat_filters
@@ -133,7 +133,7 @@ class TestPreintegrateGridBasic:
 
     def test_effective_wavelengths_in_filter_range(self, synthetic_template_3d, tophat_filters):
         """Effective wavelengths lie within their respective filter ranges."""
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
 
         template, wave = synthetic_template_3d
         filter_waves, filter_trans = tophat_filters
@@ -148,7 +148,7 @@ class TestPreintegrateGridBasic:
 
     def test_photometry_positive(self, synthetic_template_3d, tophat_filters):
         """Photometry values are positive (for positive templates)."""
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
 
         template, wave = synthetic_template_3d
         filter_waves, filter_trans = tophat_filters
@@ -170,7 +170,7 @@ class TestPreintegrateGridEnergyNormalization:
 
     def test_energy_normalize_output_shape(self, synthetic_template_3d, tophat_filters):
         """Output shape unchanged with energy_normalize=True."""
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
 
         template, wave = synthetic_template_3d
         filter_waves, filter_trans = tophat_filters
@@ -192,7 +192,7 @@ class TestPreintegrateGridEnergyNormalization:
 
         The sum over filters (weighted by bandwidth) should be roughly constant.
         """
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
 
         template, wave = synthetic_template_3d
         filter_waves, filter_trans = tophat_filters
@@ -228,7 +228,7 @@ class TestPreintegrateGridTaylorMoment:
 
     def test_taylor_moment_output_shape(self, synthetic_template_3d, tophat_filters):
         """Taylor moment has same shape as photometry."""
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
 
         template, wave = synthetic_template_3d
         filter_waves, filter_trans = tophat_filters
@@ -242,7 +242,7 @@ class TestPreintegrateGridTaylorMoment:
 
     def test_taylor_moment_finiteness(self, synthetic_template_3d, tophat_filters):
         """Taylor moment values are finite."""
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
 
         template, wave = synthetic_template_3d
         filter_waves, filter_trans = tophat_filters
@@ -260,7 +260,7 @@ class TestPreintegrateGridTaylorMoment:
         For flat SED, this is ∝ ∫ (λ - λ_eff) × T(λ) dλ, which is ~0
         by definition of λ_eff.
         """
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
 
         # Flat template (constant SED)
         template = jnp.ones((2, 3, 100))
@@ -302,7 +302,7 @@ class TestPreintegrateGridSSPCrossval:
         if not os.path.exists(ssp_path):
             pytest.skip("SSP data not available")
 
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
         from tengri.observation.filters import load_filter_set
         from tengri.components.sps.dsps_wrapper import load_ssp_data
         from tengri.components.sps.precompute import precompute_photometry
@@ -349,7 +349,7 @@ class TestPreintegrateLines:
 
     def test_output_shape(self, tophat_filters, line_wavelengths):
         """Output shape is (n_lines, n_filters)."""
-        from tengri.core.preintegrate import preintegrate_lines
+        from tengri.forward.precompute.grid import preintegrate_lines
 
         filter_waves, filter_trans = tophat_filters
         lines = line_wavelengths
@@ -362,7 +362,7 @@ class TestPreintegrateLines:
 
     def test_output_nonnegative(self, tophat_filters, line_wavelengths):
         """Line weights are non-negative."""
-        from tengri.core.preintegrate import preintegrate_lines
+        from tengri.forward.precompute.grid import preintegrate_lines
 
         filter_waves, filter_trans = tophat_filters
         lines = line_wavelengths
@@ -373,7 +373,7 @@ class TestPreintegrateLines:
 
     def test_output_finite(self, tophat_filters, line_wavelengths):
         """Line weights are finite."""
-        from tengri.core.preintegrate import preintegrate_lines
+        from tengri.forward.precompute.grid import preintegrate_lines
 
         filter_waves, filter_trans = tophat_filters
         lines = line_wavelengths
@@ -384,7 +384,7 @@ class TestPreintegrateLines:
 
     def test_lines_outside_filters_have_small_weight(self, tophat_filters):
         """Lines far outside filter ranges have near-zero weight."""
-        from tengri.core.preintegrate import preintegrate_lines
+        from tengri.forward.precompute.grid import preintegrate_lines
 
         filter_waves, filter_trans = tophat_filters
         # Line far below minimum filter wavelength
@@ -397,7 +397,7 @@ class TestPreintegrateLines:
 
     def test_line_in_single_filter_has_nonzero_weight(self):
         """A line inside a filter has nonzero weight in that filter only."""
-        from tengri.core.preintegrate import preintegrate_lines
+        from tengri.forward.precompute.grid import preintegrate_lines
 
         # Single filter from 4000-5000 Angstrom
         filter_waves = [jnp.linspace(4000.0, 5000.0, 50)]
@@ -412,7 +412,7 @@ class TestPreintegrateLines:
 
     def test_line_transmission_weighted(self):
         """Line weight is proportional to transmission at line wavelength."""
-        from tengri.core.preintegrate import preintegrate_lines
+        from tengri.forward.precompute.grid import preintegrate_lines
 
         # Filter with variable transmission
         wave = jnp.linspace(4000.0, 5000.0, 100)
@@ -444,7 +444,7 @@ class TestInterpNdTriweight1D:
 
     def test_query_at_grid_node_returns_value(self):
         """Querying at a grid node returns approximately that node's value."""
-        from tengri.core.preintegrate import interp_nd_triweight
+        from tengri.forward.precompute.grid import interp_nd_triweight
         from tengri.utils.interpolation import edges_for_grid
 
         # 1D grid: 5 nodes, 3 values per node
@@ -468,7 +468,7 @@ class TestInterpNdTriweight1D:
 
     def test_query_between_nodes_smooth(self):
         """Querying between nodes gives smooth interpolation."""
-        from tengri.core.preintegrate import interp_nd_triweight
+        from tengri.forward.precompute.grid import interp_nd_triweight
         from tengri.utils.interpolation import edges_for_grid
 
         # Simple 1D linear grid
@@ -492,7 +492,7 @@ class TestInterpNdTriweight1D:
 
     def test_output_shape_1d(self):
         """1D interpolation returns correct output shape."""
-        from tengri.core.preintegrate import interp_nd_triweight
+        from tengri.forward.precompute.grid import interp_nd_triweight
         from tengri.utils.interpolation import edges_for_grid
 
         axes = (jnp.linspace(0.0, 1.0, 10),)
@@ -505,7 +505,7 @@ class TestInterpNdTriweight1D:
 
     def test_output_finite_1d(self):
         """1D interpolation produces finite values."""
-        from tengri.core.preintegrate import interp_nd_triweight
+        from tengri.forward.precompute.grid import interp_nd_triweight
         from tengri.utils.interpolation import edges_for_grid
 
         axes = (jnp.linspace(0.0, 1.0, 20),)
@@ -527,7 +527,7 @@ class TestInterpNdTriweight2D:
 
     def test_output_shape_2d(self):
         """2D interpolation returns correct output shape."""
-        from tengri.core.preintegrate import interp_nd_triweight
+        from tengri.forward.precompute.grid import interp_nd_triweight
         from tengri.utils.interpolation import edges_for_grid
 
         axes = (
@@ -543,7 +543,7 @@ class TestInterpNdTriweight2D:
 
     def test_query_at_grid_corner_2d(self):
         """Querying at a 2D grid corner returns approximately that corner's value."""
-        from tengri.core.preintegrate import interp_nd_triweight
+        from tengri.forward.precompute.grid import interp_nd_triweight
         from tengri.utils.interpolation import edges_for_grid
 
         axes = (
@@ -568,7 +568,7 @@ class TestInterpNdTriweight2D:
 
     def test_output_finite_2d(self):
         """2D interpolation produces finite values."""
-        from tengri.core.preintegrate import interp_nd_triweight
+        from tengri.forward.precompute.grid import interp_nd_triweight
         from tengri.utils.interpolation import edges_for_grid
 
         axes = (
@@ -598,7 +598,7 @@ class TestGradientAndJIT:
 
     def test_interp_1d_gradient(self):
         """interp_nd_triweight is differentiable w.r.t. query position."""
-        from tengri.core.preintegrate import interp_nd_triweight
+        from tengri.forward.precompute.grid import interp_nd_triweight
         from tengri.utils.interpolation import edges_for_grid
 
         axes = (jnp.linspace(0.0, 1.0, 10),)
@@ -620,7 +620,7 @@ class TestGradientAndJIT:
 
     def test_interp_1d_jit_compatible(self):
         """interp_nd_triweight works inside jax.jit."""
-        from tengri.core.preintegrate import interp_nd_triweight
+        from tengri.forward.precompute.grid import interp_nd_triweight
         from tengri.utils.interpolation import edges_for_grid
 
         axes = (jnp.linspace(0.0, 1.0, 15),)
@@ -646,7 +646,7 @@ class TestEdgeCasesAndStability:
 
     def test_very_small_template_values(self, tophat_filters):
         """Very small template values (near machine epsilon) are handled."""
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
 
         template = jnp.ones((2, 3, 100)) * 1e-30
         wave = jnp.linspace(1000.0, 10000.0, 100)
@@ -661,7 +661,7 @@ class TestEdgeCasesAndStability:
 
     def test_very_large_template_values(self, tophat_filters):
         """Very large template values are handled without overflow."""
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
 
         template = jnp.ones((2, 3, 100)) * 1e30
         wave = jnp.linspace(1000.0, 10000.0, 100)
@@ -676,7 +676,7 @@ class TestEdgeCasesAndStability:
 
     def test_narrow_filter_bandwidth(self):
         """Narrow filter (small bandwidth) is handled correctly."""
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
 
         template = jnp.ones((2, 3, 1000))
         wave = jnp.linspace(1000.0, 10000.0, 1000)
@@ -694,7 +694,7 @@ class TestEdgeCasesAndStability:
 
     def test_single_wavelength_per_filter(self):
         """Single wavelength per filter (delta function approx)."""
-        from tengri.core.preintegrate import preintegrate_grid
+        from tengri.forward.precompute.grid import preintegrate_grid
 
         template = jnp.ones((2, 3, 100))
         wave = jnp.linspace(1000.0, 10000.0, 100)
@@ -710,7 +710,7 @@ class TestEdgeCasesAndStability:
 
     def test_interp_query_outside_grid_range(self):
         """Interpolation query outside grid range is handled gracefully."""
-        from tengri.core.preintegrate import interp_nd_triweight
+        from tengri.forward.precompute.grid import interp_nd_triweight
         from tengri.utils.interpolation import edges_for_grid
 
         axes = (jnp.array([0.0, 1.0, 2.0, 3.0, 4.0]),)
@@ -733,7 +733,7 @@ class TestSliceFixedAxes:
 
     def test_slice_removes_axis(self, synthetic_template_3d, tophat_filters):
         """Slicing one axis reduces grid ndim by 1."""
-        from tengri.core.preintegrate import preintegrate_grid, slice_fixed_axes
+        from tengri.forward.precompute.grid import preintegrate_grid, slice_fixed_axes
 
         template, wave = synthetic_template_3d
         filter_waves, filter_trans = tophat_filters
@@ -758,7 +758,7 @@ class TestSliceFixedAxes:
 
     def test_slice_preserves_values(self, synthetic_template_3d, tophat_filters):
         """Slicing at a grid node gives approximately that node's values."""
-        from tengri.core.preintegrate import preintegrate_grid, slice_fixed_axes
+        from tengri.forward.precompute.grid import preintegrate_grid, slice_fixed_axes
 
         template, wave = synthetic_template_3d
         filter_waves, filter_trans = tophat_filters
@@ -784,7 +784,7 @@ class TestSliceFixedAxes:
 
     def test_slice_multiple_axes(self, tophat_filters):
         """Slicing multiple axes at once works."""
-        from tengri.core.preintegrate import preintegrate_grid, slice_fixed_axes
+        from tengri.forward.precompute.grid import preintegrate_grid, slice_fixed_axes
 
         filter_waves, filter_trans = tophat_filters
         n_a, n_b, n_c, n_wave = 4, 3, 5, 200
@@ -813,7 +813,7 @@ class TestSliceFixedAxes:
 
     def test_empty_fixed_returns_same(self, synthetic_template_3d, tophat_filters):
         """Empty fixed dict returns the same grid."""
-        from tengri.core.preintegrate import preintegrate_grid, slice_fixed_axes
+        from tengri.forward.precompute.grid import preintegrate_grid, slice_fixed_axes
 
         template, wave = synthetic_template_3d
         filter_waves, filter_trans = tophat_filters
