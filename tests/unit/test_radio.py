@@ -21,7 +21,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-from tengri.components.radio import (
+from tengri.components.radio.radio import (
     _L0_SYNCH,
     _synchrotron_suppression,
     radio_components,

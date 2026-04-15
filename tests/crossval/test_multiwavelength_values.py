@@ -160,7 +160,7 @@ class TestRadioAbsoluteValues:
 
         Tests the _synchrotron_suppression helper directly with CGS inputs.
         """
-        from tengri.components.radio import _L0_SYNCH, _synchrotron_suppression
+        from tengri.components.radio.radio import _L0_SYNCH, _synchrotron_suppression
 
         # At L >> L0: correction ≈ 1 (no suppression)
         L_bright = jnp.array(100 * _L0_SYNCH)

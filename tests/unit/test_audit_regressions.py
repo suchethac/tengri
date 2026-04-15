@@ -34,7 +34,7 @@ class TestBug01SfrCached:
         """Verify that the SFR pipeline code selects sfr[-1] for parametric path."""
         import inspect
 
-        from tengri.core import sed_pipeline
+        from tengri.forward import pipeline as sed_pipeline
 
         src = inspect.getsource(sed_pipeline)
         # The fix: sfr[-1] is used as the instantaneous SFR
@@ -388,7 +388,7 @@ class TestBug29MstarSurvivingMass:
         """sed_pipeline must expose mstar_formed and mstar_surviving in output dict."""
         import inspect
 
-        from tengri.core import sed_pipeline
+        from tengri.forward import pipeline as sed_pipeline
 
         src = inspect.getsource(sed_pipeline)
         assert '"mstar_formed"' in src, "Pipeline output dict must contain 'mstar_formed' key"
@@ -404,7 +404,7 @@ class TestBug29MstarSurvivingMass:
         """
         import inspect
 
-        from tengri.core import sed_pipeline
+        from tengri.forward import pipeline as sed_pipeline
 
         src = inspect.getsource(sed_pipeline)
         # The fix introduces _mstar_surviving and assigns _mstar = _mstar_surviving.

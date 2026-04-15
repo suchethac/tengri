@@ -20,25 +20,25 @@ import pytest
 
 
 def _pipeline_src() -> str:
-    from tengri.core import sed_pipeline
+    from tengri.forward import pipeline as sed_pipeline
 
     return inspect.getsource(sed_pipeline)
 
 
 def _model_src() -> str:
-    from tengri.core import model as model_mod
+    from tengri.forward import sed_model as model_mod
 
     return inspect.getsource(model_mod)
 
 
 def _emission_helpers_src() -> str:
-    from tengri.core import emission_helpers
+    from tengri.forward import emission_helpers
 
     return inspect.getsource(emission_helpers)
 
 
 def _params_src() -> str:
-    from tengri.core import parameters
+    from tengri.parameters import parameters
 
     return inspect.getsource(parameters)
 
