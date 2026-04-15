@@ -303,9 +303,9 @@ class TestPreintegrateGridSSPCrossval:
             pytest.skip("SSP data not available")
 
         from tengri.core.preintegrate import preintegrate_grid
-        from tengri.models.observation.filters import load_filter_set
-        from tengri.models.sps.dsps_wrapper import load_ssp_data
-        from tengri.models.sps.precompute import precompute_photometry
+        from tengri.observation.filters import load_filter_set
+        from tengri.components.sps.dsps_wrapper import load_ssp_data
+        from tengri.components.sps.precompute import precompute_photometry
         from tengri.utils.cosmology import luminosity_distance
 
         # Load SSP

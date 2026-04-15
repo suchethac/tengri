@@ -28,7 +28,7 @@ class TestIonizingSpectrumFit:
         return load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
 
     def test_fit_returns_7_params(self, ssp):
-        from tengri.models.nebular.ionizing_spectrum import fit_ionizing_spectrum
+        from tengri.components.nebular.ionizing_spectrum import fit_ionizing_spectrum
 
         wave = np.array(ssp.ssp_wave)
         flux = np.array(ssp.ssp_flux[7, 10, :])  # solar Z, young
@@ -40,7 +40,7 @@ class TestIonizingSpectrumFit:
         assert result["powerlaw_params"].shape == (4, 2)
 
     def test_fit_within_cue_ranges(self, ssp):
-        from tengri.models.nebular.ionizing_spectrum import _CLIP_RANGES, fit_ionizing_spectrum
+        from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES, fit_ionizing_spectrum
 
         wave = np.array(ssp.ssp_wave)
         flux = np.array(ssp.ssp_flux[7, 10, :])
@@ -50,7 +50,7 @@ class TestIonizingSpectrumFit:
 
     def test_qion_reasonable(self, ssp):
         """Q_H should be ~10^46-10^48 for young SSPs."""
-        from tengri.models.nebular.ionizing_spectrum import fit_ionizing_spectrum
+        from tengri.components.nebular.ionizing_spectrum import fit_ionizing_spectrum
 
         wave = np.array(ssp.ssp_wave)
         flux = np.array(ssp.ssp_flux[7, 10, :])
@@ -61,7 +61,7 @@ class TestIonizingSpectrumFit:
 
     def test_index1_steep(self, ssp):
         """The extreme UV slope (index1) should be steep (>5)."""
-        from tengri.models.nebular.ionizing_spectrum import fit_ionizing_spectrum
+        from tengri.components.nebular.ionizing_spectrum import fit_ionizing_spectrum
 
         wave = np.array(ssp.ssp_wave)
         flux = np.array(ssp.ssp_flux[7, 10, :])
@@ -72,7 +72,7 @@ class TestIonizingSpectrumFit:
 
     def test_index4_shallow(self, ssp):
         """The optical slope (index4, near Lyman limit) should be shallower."""
-        from tengri.models.nebular.ionizing_spectrum import fit_ionizing_spectrum
+        from tengri.components.nebular.ionizing_spectrum import fit_ionizing_spectrum
 
         wave = np.array(ssp.ssp_wave)
         flux = np.array(ssp.ssp_flux[7, 10, :])
@@ -97,7 +97,7 @@ class TestIonizingParamsTable:
         return load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
 
     def test_interpolation_within_bounds(self, ssp):
-        from tengri.models.nebular.ionizing_spectrum import (
+        from tengri.components.nebular.ionizing_spectrum import (
             interpolate_ionizing_params,
             precompute_ionizing_params_table,
         )
@@ -131,7 +131,7 @@ class TestCueBackend:
     def backend(self):
         import os
 
-        from tengri.models.nebular.cue import CueBackend
+        from tengri.components.nebular.cue import CueBackend
 
         weights_path = "data/cue_weights.npz"
         if not os.path.exists(weights_path):
@@ -241,7 +241,7 @@ class TestCueWithSSP:
         import os
 
         from tengri import load_ssp_data
-        from tengri.models.nebular.cue import CueBackend
+        from tengri.components.nebular.cue import CueBackend
 
         if not os.path.exists("data/cue_weights.npz"):
             pytest.skip("Cue weights not found")
@@ -300,7 +300,7 @@ class TestKennicutt1998Halpha:
     def backend(self):
         import os
 
-        from tengri.models.nebular.cue import CueBackend
+        from tengri.components.nebular.cue import CueBackend
 
         if not os.path.exists("data/cue_weights.npz"):
             pytest.skip("Cue weights not found (run convert_cue_weights.py)")

@@ -66,12 +66,12 @@ from tengri.core.sed_pipeline import (
     interp_metallicity,
     interp_metallicity_evolving,
 )
-from tengri.models.dust.attenuation import precompute_dust_age_weights
-from tengri.models.observation.photometry import ab_mag_from_flux
-from tengri.models.observation.spectrum import apply_lsf, compute_spectrum
-from tengri.models.sfh.registry import compute_field_gp, resolve_sfh
-from tengri.models.sps.dsps_wrapper import csp_age_dt
-from tengri.models.sps.precompute import (
+from tengri.components.dust.attenuation import precompute_dust_age_weights
+from tengri.observation.photometry import ab_mag_from_flux
+from tengri.observation.spectrum import apply_lsf, compute_spectrum
+from tengri.components.sfh.registry import compute_field_gp, resolve_sfh
+from tengri.components.sps.dsps_wrapper import csp_age_dt
+from tengri.components.sps.precompute import (
     precompute_photometry,
     precompute_photometry_ztable,
     precompute_spectroscopy,
@@ -347,7 +347,7 @@ class SEDModel:
             )
 
         if observation is not None or filters is not None:
-            from tengri.models.observation.observation import Observation
+            from tengri.observation.observation import Observation
 
         if observation is not None:
             if not isinstance(observation, Observation):
@@ -359,7 +359,7 @@ class SEDModel:
                 spec = spec.with_params(**obs_params)
 
         elif filters is not None:
-            from tengri.models.observation.photometry_config import Photometry
+            from tengri.observation.photometry_config import Photometry
 
             observation = Observation(photometry=Photometry.from_filter_set(filters))
 
@@ -412,7 +412,7 @@ class SEDModel:
             )
         self._csp_integration = csp_integration
         if csp_integration == "log_interp":
-            from tengri.models.sps.dsps_wrapper import csp_log_interp_matrix
+            from tengri.components.sps.dsps_wrapper import csp_log_interp_matrix
 
             self._csp_matrix = jnp.array(csp_log_interp_matrix(self.ssp_ages_yr))
             self._csp_age_dt = None
@@ -454,7 +454,7 @@ class SEDModel:
         self._dust_law_bc = spec.dust_law_bc
         self._dust_law_diff = spec.dust_law_diff
         # Cache resolved dust law functions (avoid dict lookup per forward call)
-        from tengri.models.dust.attenuation import resolve_dust_law
+        from tengri.components.dust.attenuation import resolve_dust_law
 
         self._dust_law_bc_fn = resolve_dust_law(self._dust_law_bc)
         if self._dust_model == "single_component":
@@ -472,7 +472,7 @@ class SEDModel:
         # Optional separate BC law for nebular (only used when _neb_dust == "neb")
         _neb_bc_law_name = getattr(spec, "neb_dust_law_bc", None)
         if _neb_bc_law_name is not None:
-            from tengri.models.dust.attenuation import resolve_dust_law as _rdl
+            from tengri.components.dust.attenuation import resolve_dust_law as _rdl
 
             self._neb_dust_law_bc_fn = _rdl(_neb_bc_law_name)
         else:
@@ -644,19 +644,19 @@ class SEDModel:
 
         self._nebular_backend = None
         if spec.nebular_mode == "cue":
-            from tengri.models.nebular import CueBackend
+            from tengri.components.nebular import CueBackend
 
             self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
         elif spec.nebular_mode == "cloudy":
-            from tengri.models.nebular import CloudyGridBackend
+            from tengri.components.nebular import CloudyGridBackend
 
             self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
         elif spec.nebular_mode == "ssp":
-            from tengri.models.nebular import BakedInBackend
+            from tengri.components.nebular import BakedInBackend
 
             self._nebular_backend = BakedInBackend()
         else:
-            from tengri.models.nebular import BakedInBackend
+            from tengri.components.nebular import BakedInBackend
 
             self._nebular_backend = BakedInBackend()
 
@@ -760,7 +760,7 @@ class SEDModel:
             precompute_dl07_photometry,
             precompute_template_photometry,
         )
-        from tengri.models.dust.emission import (
+        from tengri.components.dust.emission import (
             _find_data_file,
             load_astrodust_templates,
             load_bosa_templates,
@@ -777,7 +777,7 @@ class SEDModel:
         try:
             if model_name == "draine_li2007":
                 # DL07: 2D grid (qpah, umin), with gamma_dl as linear mixing parameter
-                from tengri.models.dust.emission import _find_dl07_templates
+                from tengri.components.dust.emission import _find_dl07_templates
 
                 path = _find_dl07_templates()
                 if path is None:
@@ -983,7 +983,7 @@ class SEDModel:
             and phot is not None
             and self._z_fixed is not None
         ):
-            from tengri.models.igm import igm_transmission
+            from tengri.components.igm import igm_transmission
 
             igm_eff = igm_transmission(phot.effective_wavelengths, self._z_fixed)
 
@@ -1061,7 +1061,7 @@ class SEDModel:
             and self.filter_waves is not None
             and self._agn_model in ("kubota_done_full", "kubota_done_disc")
         ):
-            from tengri.models.agn.kd_preintegrate import preintegrate_kd_components
+            from tengri.components.agn.kd_preintegrate import preintegrate_kd_components
 
             kd_preint = preintegrate_kd_components(
                 self.filter_waves,
@@ -1485,7 +1485,7 @@ class SEDModel:
             weights = self._csp_matrix @ sfr_on_ssp
         elif self._csp_integration == "dsps_native":
             # For stellar_mass(), only age_weights matter (not ssp_flux_at_z).
-            from tengri.models.sps.dsps_wrapper import compute_dsps_native_weights
+            from tengri.components.sps.dsps_wrapper import compute_dsps_native_weights
 
             z_val = p.get("redshift", 0.1)
             t_obs_gyr = self._t_universe_gyr(z_val)
@@ -1502,13 +1502,13 @@ class SEDModel:
                 lgmet_scatter,
             )
         elif self._csp_integration == "dsps_met_table":
-            from tengri.models.sps.dsps_wrapper import compute_dsps_met_table_weights
+            from tengri.components.sps.dsps_wrapper import compute_dsps_met_table_weights
 
             z_val = p.get("redshift", 0.1)
             t_obs_gyr = self._t_universe_gyr(z_val)
             lgmet_scatter = float(p.get("lgmet_scatter", self._lgmet_scatter))
             if self._evolving_metallicity:
-                from tengri.models.sps.dsps_wrapper import compute_log_z_evolving
+                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
 
                 lgmet_per_age = compute_log_z_evolving(
                     self.ssp_data.ssp_lg_age_gyr,
@@ -1534,7 +1534,7 @@ class SEDModel:
 
         # Surviving mass
         if self.ssp_data.ssp_mass_remaining is not None:
-            from tengri.models.sps.dsps_wrapper import (
+            from tengri.components.sps.dsps_wrapper import (
                 compute_surviving_mass,
                 interpolate_mass_remaining,
             )
@@ -1788,7 +1788,7 @@ class SEDModel:
         if self.observation is not None:
             return self.observation.observe_photometry(obs_sed, z, dl_cm)
 
-        from tengri.models.observation.photometry import compute_flux_density
+        from tengri.observation.photometry import compute_flux_density
 
         wave_rest = obs_sed.wavelength / (1.0 + z)
         fluxes = []
@@ -1970,7 +1970,7 @@ class SEDModel:
         if self._csp_integration == "log_interp":
             weights = self._csp_matrix @ sfr_on_ssp
         elif self._csp_integration == "dsps_native":
-            from tengri.models.sps.dsps_wrapper import compute_dsps_native_weights
+            from tengri.components.sps.dsps_wrapper import compute_dsps_native_weights
 
             z_val = p.get("redshift", 0.0)
             t_obs_gyr = self._t_universe_gyr(z_val) if hasattr(self, "_t_universe_gyr") else 13.7
@@ -1990,13 +1990,13 @@ class SEDModel:
                 p = {**p, "_sfr_current": sfr[-1]}
             return self._compositional.rest_sed(weights, ssp_flux_at_z, p)
         elif self._csp_integration == "dsps_met_table":
-            from tengri.models.sps.dsps_wrapper import compute_dsps_met_table_weights
+            from tengri.components.sps.dsps_wrapper import compute_dsps_met_table_weights
 
             z_val = p.get("redshift", 0.0)
             t_obs_gyr = self._t_universe_gyr(z_val) if hasattr(self, "_t_universe_gyr") else 13.7
             lgmet_scatter = float(p.get("lgmet_scatter", self._lgmet_scatter))
             if self._evolving_metallicity:
-                from tengri.models.sps.dsps_wrapper import compute_log_z_evolving
+                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
 
                 lgmet_per_age = compute_log_z_evolving(
                     self.ssp_data.ssp_lg_age_gyr,
@@ -2036,7 +2036,7 @@ class SEDModel:
             # Use the final (present-day) metallicity as the representative value.
             _log_z = p.get("log_z_abs_final", p.get("log_z_abs", -1.8477))
         elif self._chem_evol_enabled:
-            from tengri.models.sfh.chemical_evolution import chem_evol_metallicity_on_ssp_grid
+            from tengri.components.sfh.chemical_evolution import chem_evol_metallicity_on_ssp_grid
 
             _log_z_per_age = chem_evol_metallicity_on_ssp_grid(
                 self.ssp_log_ages_yr,
@@ -2170,7 +2170,7 @@ class SEDModel:
         # Apply LSF if needed
         resolution = self._lsf_resolution
         if resolution is not None:
-            from tengri.models.observation.spectrum import apply_lsf
+            from tengri.observation.spectrum import apply_lsf
 
             flux = apply_lsf(
                 flux,

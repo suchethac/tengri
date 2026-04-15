@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.models.nebular.dig import mix_dig_emission
+from tengri.components.nebular.dig import mix_dig_emission
 
 jax.config.update("jax_enable_x64", True)
 

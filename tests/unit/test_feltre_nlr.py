@@ -42,7 +42,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 def test_import_feltre_nlr_backend() -> None:
     """FeltreNLRBackend should be importable even without the data file."""
-    from tengri.models.nebular.agn_nebular import FeltreNLRBackend
+    from tengri.components.nebular.agn_nebular import FeltreNLRBackend
 
     assert FeltreNLRBackend.name == "feltre"
     assert FeltreNLRBackend.has_continuum is False
@@ -51,12 +51,12 @@ def test_import_feltre_nlr_backend() -> None:
 
 def test_feltre_backend_export_from_init() -> None:
     """FeltreNLRBackend should be exported from the nebular __init__."""
-    from tengri.models.nebular import FeltreNLRBackend  # noqa: F401
+    from tengri.components.nebular import FeltreNLRBackend  # noqa: F401
 
 
 def test_feltre_backend_filenotfound_when_missing(tmp_path: Path) -> None:
     """Constructor raises FileNotFoundError when grid file does not exist."""
-    from tengri.models.nebular.agn_nebular import FeltreNLRBackend
+    from tengri.components.nebular.agn_nebular import FeltreNLRBackend
 
     nonexistent = tmp_path / "no_such_file.h5"
     with pytest.raises(FileNotFoundError, match="feltre_grid"):
@@ -65,7 +65,7 @@ def test_feltre_backend_filenotfound_when_missing(tmp_path: Path) -> None:
 
 def test_nearest_idx_basic() -> None:
     """_nearest_idx returns correct nearest index."""
-    from tengri.models.nebular.agn_nebular import _nearest_idx
+    from tengri.components.nebular.agn_nebular import _nearest_idx
 
     axis = jnp.array([-1.2, -1.4, -1.7, -2.0])
 
@@ -77,7 +77,7 @@ def test_nearest_idx_basic() -> None:
 
 def test_dispatcher_requires_feltre_backend() -> None:
     """agn_nlr_emission raises ValueError when feltre_backend is None."""
-    from tengri.models.nebular.agn_nebular import agn_nlr_emission
+    from tengri.components.nebular.agn_nebular import agn_nlr_emission
 
     with pytest.raises(ValueError, match="feltre_backend must be provided"):
         agn_nlr_emission(backend="feltre", feltre_backend=None)
@@ -85,7 +85,7 @@ def test_dispatcher_requires_feltre_backend() -> None:
 
 def test_dispatcher_unknown_backend() -> None:
     """agn_nlr_emission raises ValueError for an unknown backend name."""
-    from tengri.models.nebular.agn_nebular import agn_nlr_emission
+    from tengri.components.nebular.agn_nebular import agn_nlr_emission
 
     with pytest.raises(ValueError, match="Unknown AGN NLR backend"):
         agn_nlr_emission(backend="nonexistent_backend")
@@ -99,7 +99,7 @@ def test_dispatcher_unknown_backend() -> None:
 @pytest.mark.skipif(not _GRID_AVAILABLE, reason="data/feltre_grid.h5 not found")
 def test_feltre_backend_loads_grid() -> None:
     """Backend loads grid without error and exposes correct attributes."""
-    from tengri.models.nebular.agn_nebular import FeltreNLRBackend
+    from tengri.components.nebular.agn_nebular import FeltreNLRBackend
 
     backend = FeltreNLRBackend(_GRID_PATH)
     g = backend.grid
@@ -126,7 +126,7 @@ def test_feltre_backend_loads_grid() -> None:
 @pytest.mark.skipif(not _GRID_AVAILABLE, reason="data/feltre_grid.h5 not found")
 def test_feltre_predict_returns_finite() -> None:
     """predict_agn_nlr_lines returns finite wavelengths and luminosities."""
-    from tengri.models.nebular.agn_nebular import FeltreNLRBackend
+    from tengri.components.nebular.agn_nebular import FeltreNLRBackend
 
     backend = FeltreNLRBackend(_GRID_PATH)
     wave, lum = backend.predict_agn_nlr_lines(
@@ -147,7 +147,7 @@ def test_feltre_predict_returns_finite() -> None:
 @pytest.mark.skipif(not _GRID_AVAILABLE, reason="data/feltre_grid.h5 not found")
 def test_feltre_gradient_logU_is_finite() -> None:
     """Gradient of total luminosity w.r.t. neb_logU is finite (triweight interpolation)."""
-    from tengri.models.nebular.agn_nebular import FeltreNLRBackend
+    from tengri.components.nebular.agn_nebular import FeltreNLRBackend
 
     backend = FeltreNLRBackend(_GRID_PATH)
 
@@ -172,7 +172,7 @@ def test_feltre_gradient_logU_is_finite() -> None:
 @pytest.mark.skipif(not _GRID_AVAILABLE, reason="data/feltre_grid.h5 not found")
 def test_feltre_gradient_logZ_is_finite() -> None:
     """Gradient of total luminosity w.r.t. neb_logZ_gas is finite."""
-    from tengri.models.nebular.agn_nebular import FeltreNLRBackend
+    from tengri.components.nebular.agn_nebular import FeltreNLRBackend
 
     backend = FeltreNLRBackend(_GRID_PATH)
 
@@ -197,7 +197,7 @@ def test_feltre_gradient_logZ_is_finite() -> None:
 @pytest.mark.skipif(not _GRID_AVAILABLE, reason="data/feltre_grid.h5 not found")
 def test_feltre_alpha_nearest_neighbor_snap() -> None:
     """Tiny perturbation to alpha_pl within the nearest-neighbor bin gives same result."""
-    from tengri.models.nebular.agn_nebular import FeltreNLRBackend
+    from tengri.components.nebular.agn_nebular import FeltreNLRBackend
 
     backend = FeltreNLRBackend(_GRID_PATH)
 
@@ -229,7 +229,7 @@ def test_feltre_alpha_nearest_neighbor_snap() -> None:
 @pytest.mark.skipif(not _GRID_AVAILABLE, reason="data/feltre_grid.h5 not found")
 def test_feltre_fesc_scales_luminosity() -> None:
     """Photon escape fraction reduces line luminosities proportionally."""
-    from tengri.models.nebular.agn_nebular import FeltreNLRBackend
+    from tengri.components.nebular.agn_nebular import FeltreNLRBackend
 
     backend = FeltreNLRBackend(_GRID_PATH)
 
@@ -256,7 +256,7 @@ def test_feltre_fesc_scales_luminosity() -> None:
 
 def test_agn_ionspec_returns_all_keys() -> None:
     """agn_ionspec_from_alpha_pl returns a dict with all 7 Cue keys."""
-    from tengri.models.nebular.agn_nebular import agn_ionspec_from_alpha_pl
+    from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
 
     result = agn_ionspec_from_alpha_pl(-1.7)
 
@@ -282,8 +282,8 @@ def test_agn_ionspec_log_ratios_match_reference() -> None:
     This catches bugs in: wrong alpha sign, wrong exponent, wrong log base,
     wrong segment edge indexing, or wrong diff direction.
     """
-    from tengri.models.nebular.agn_nebular import agn_ionspec_from_alpha_pl
-    from tengri.models.nebular.ionizing_spectrum import SEGMENT_EDGES, _CLIP_RANGES
+    from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
+    from tengri.components.nebular.ionizing_spectrum import SEGMENT_EDGES, _CLIP_RANGES
 
     alpha_pl = -1.7
     s = -alpha_pl  # wavelength_slope = 1.7
@@ -311,7 +311,7 @@ def test_agn_ionspec_log_ratios_match_reference() -> None:
 
 def test_agn_ionspec_indices_equal_wavelength_slope() -> None:
     """All 4 segment indices equal -alpha_pl for a pure power law."""
-    from tengri.models.nebular.agn_nebular import agn_ionspec_from_alpha_pl
+    from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
 
     alpha_pl = -1.7
     result = agn_ionspec_from_alpha_pl(alpha_pl)
@@ -324,8 +324,8 @@ def test_agn_ionspec_indices_equal_wavelength_slope() -> None:
 
 def test_agn_ionspec_indices_clipped_steep_slope() -> None:
     """Extremely steep slope triggers clip bounds on all indices."""
-    from tengri.models.nebular.agn_nebular import agn_ionspec_from_alpha_pl
-    from tengri.models.nebular.ionizing_spectrum import _CLIP_RANGES
+    from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
+    from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES
 
     # alpha_pl = -50 → wavelength_slope = 50, which exceeds all upper bounds
     result = agn_ionspec_from_alpha_pl(-50.0)
@@ -338,8 +338,8 @@ def test_agn_ionspec_indices_clipped_steep_slope() -> None:
 
 def test_agn_ionspec_indices_clipped_shallow_slope() -> None:
     """Very positive alpha_pl (shallow slope) triggers lower clip bounds."""
-    from tengri.models.nebular.agn_nebular import agn_ionspec_from_alpha_pl
-    from tengri.models.nebular.ionizing_spectrum import _CLIP_RANGES
+    from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
+    from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES
 
     # alpha_pl = +10 → wavelength_slope = -10, below all lower bounds
     result = agn_ionspec_from_alpha_pl(10.0)
@@ -352,7 +352,7 @@ def test_agn_ionspec_indices_clipped_shallow_slope() -> None:
 
 def test_agn_ionspec_log_ratios_vary_with_slope() -> None:
     """Log luminosity ratios change when alpha_pl changes (not constant)."""
-    from tengri.models.nebular.agn_nebular import agn_ionspec_from_alpha_pl
+    from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
 
     r1 = agn_ionspec_from_alpha_pl(-1.0)
     r2 = agn_ionspec_from_alpha_pl(-2.0)
@@ -369,7 +369,7 @@ def test_agn_ionspec_log_ratios_vary_with_slope() -> None:
 
 def test_agn_ionspec_slope_one_no_nan() -> None:
     """alpha_pl = -1.0 gives wavelength_slope = 1.0, hits safe denominator path."""
-    from tengri.models.nebular.agn_nebular import agn_ionspec_from_alpha_pl
+    from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
 
     result = agn_ionspec_from_alpha_pl(-1.0)  # sp1 = s-1 = 0 → hits safe_sp1 branch
 
@@ -381,7 +381,7 @@ def test_agn_ionspec_jit_compatible() -> None:
     """agn_ionspec_from_alpha_pl runs under jax.jit without error."""
     import jax
 
-    from tengri.models.nebular.agn_nebular import agn_ionspec_from_alpha_pl
+    from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
 
     jitted = jax.jit(lambda a: agn_ionspec_from_alpha_pl(a)["ionspec_index1"])
     result = jitted(jnp.array(-1.7))
@@ -400,8 +400,8 @@ def test_log_qh_matches_reference() -> None:
     constants, catching bugs in: wrong sign on ap1, wrong ionizing fraction
     formula, wrong mean photon energy calculation, or wrong log10 application.
     """
-    from tengri.models.nebular._constants import _C_CGS, _H_PLANCK
-    from tengri.models.nebular.agn_nebular import _NU_LYMAN, _RYDBERG_ERG, _log_qh_from_lacc
+    from tengri.components.nebular._constants import _C_CGS, _H_PLANCK
+    from tengri.components.nebular.agn_nebular import _NU_LYMAN, _RYDBERG_ERG, _log_qh_from_lacc
 
     l_acc = 1e45
     a = -1.7
@@ -428,7 +428,7 @@ def test_log_qh_matches_reference() -> None:
 
 def test_log_qh_clamps_at_zero_for_tiny_luminosity() -> None:
     """Vanishingly small L_acc clamps q_h to 1, so log10(q_h) = 0."""
-    from tengri.models.nebular.agn_nebular import _log_qh_from_lacc
+    from tengri.components.nebular.agn_nebular import _log_qh_from_lacc
 
     log_qh = float(_log_qh_from_lacc(1e-20, -1.7))
     assert log_qh == pytest.approx(0.0, abs=1e-6)
@@ -436,7 +436,7 @@ def test_log_qh_clamps_at_zero_for_tiny_luminosity() -> None:
 
 def test_log_qh_linear_in_log_luminosity() -> None:
     """Doubling L_acc increases log_qh by exactly log10(2)."""
-    from tengri.models.nebular.agn_nebular import _log_qh_from_lacc
+    from tengri.components.nebular.agn_nebular import _log_qh_from_lacc
 
     # At high luminosities the clamp at q_h=1 is inactive, so the
     # relationship is purely multiplicative: q_h ∝ L_acc.
@@ -452,7 +452,7 @@ def test_log_qh_shallower_slope_gives_higher_qh() -> None:
     EUV flux above the Lyman limit.  The ionizing fraction f_ion dominates,
     so log_qh(alpha_pl=-0.5) > log_qh(alpha_pl=-2.0) at fixed L_acc.
     """
-    from tengri.models.nebular.agn_nebular import _log_qh_from_lacc
+    from tengri.components.nebular.agn_nebular import _log_qh_from_lacc
 
     l_acc = 1e45
     log_qh_shallow = float(_log_qh_from_lacc(l_acc, -0.5))  # more EUV
@@ -464,7 +464,7 @@ def test_log_qh_shallower_slope_gives_higher_qh() -> None:
 
 def test_log_qh_safe_denominator_path() -> None:
     """alpha_pl = -1.0 hits the safe_ap1 branch (ap1 = 0) without NaN."""
-    from tengri.models.nebular.agn_nebular import _log_qh_from_lacc
+    from tengri.components.nebular.agn_nebular import _log_qh_from_lacc
 
     log_qh = _log_qh_from_lacc(1e45, -1.0)
     assert jnp.isfinite(log_qh), f"alpha_pl=-1 case: log_qh = {log_qh}"
@@ -474,7 +474,7 @@ def test_log_qh_jit_compatible() -> None:
     """_log_qh_from_lacc runs under jax.jit without error."""
     import jax
 
-    from tengri.models.nebular.agn_nebular import _log_qh_from_lacc
+    from tengri.components.nebular.agn_nebular import _log_qh_from_lacc
 
     jitted = jax.jit(_log_qh_from_lacc)
     result = jitted(jnp.array(1e45), jnp.array(-1.7))
@@ -484,7 +484,7 @@ def test_log_qh_jit_compatible() -> None:
 @pytest.mark.skipif(not _GRID_AVAILABLE, reason="data/feltre_grid.h5 not found")
 def test_feltre_dispatcher_route() -> None:
     """agn_nlr_emission correctly routes to FeltreNLRBackend."""
-    from tengri.models.nebular.agn_nebular import FeltreNLRBackend, agn_nlr_emission
+    from tengri.components.nebular.agn_nebular import FeltreNLRBackend, agn_nlr_emission
 
     backend = FeltreNLRBackend(_GRID_PATH)
     wave, lum = agn_nlr_emission(

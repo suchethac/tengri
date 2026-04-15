@@ -14,7 +14,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.models.sps.dsps_wrapper import (
+from tengri.components.sps.dsps_wrapper import (
     compute_dsps_met_table_weights,
     compute_dsps_native_weights,
 )
@@ -257,7 +257,7 @@ def _make_minimal_spec():
 
 
 def _make_minimal_ssp_data():
-    from tengri.models.sps.dsps_wrapper import SSPData
+    from tengri.components.sps.dsps_wrapper import SSPData
 
     return SSPData(
         ssp_wave=jnp.array(np.linspace(3000.0, 10000.0, N_WAVE)),

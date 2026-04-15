@@ -232,7 +232,7 @@ def shock_emission(
     array (n_wave,)
         Shock emission SED in erg/s/Hz (before dust).
     """
-    from tengri.models.nebular.shock import compute_shock_sed
+    from tengri.components.nebular.shock import compute_shock_sed
 
     nu = _C_AA / wave
     l_bol = -jnp.trapezoid(sed_so_far, nu)
@@ -298,7 +298,7 @@ def agn_emission(
 
     # Polar dust: use jax.lax.cond for JIT compatibility (agn_polar_ebv
     # is a traced value inside @jit, so Python `if` would fail).
-    from tengri.models.agn.polar_dust import polar_dust_total
+    from tengri.components.agn.polar_dust import polar_dust_total
 
     def _apply_polar_dust(sed):
         agn_lsun = sed / _LSUN
@@ -393,7 +393,7 @@ def radio_emission(
     array (n_wave,)
         Radio SED in erg/s/Hz.
     """
-    from tengri.models.radio import radio_total
+    from tengri.components.radio import radio_total
 
     return radio_total(
         wave,
@@ -436,7 +436,7 @@ def xray_emission(
     array (n_wave,)
         X-ray SED in erg/s/Hz.
     """
-    from tengri.models.xray import xray_total
+    from tengri.components.xray import xray_total
 
     return xray_total(
         wave,
@@ -490,10 +490,10 @@ def igm_absorption(
         Transmission fraction (0–1).
     """
     if igm_patchy and igm_x_HI > 0.0:
-        from tengri.models.igm import igm_transmission_patchy
+        from tengri.components.igm import igm_transmission_patchy
 
         return igm_transmission_patchy(wave_obs, z, x_HI=igm_x_HI, R_bubble=igm_bubble_mpc)
 
-    from tengri.models.igm import igm_transmission
+    from tengri.components.igm import igm_transmission
 
     return igm_transmission(wave_obs, z)

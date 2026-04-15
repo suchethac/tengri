@@ -52,14 +52,14 @@ setup_style()
 import os; os.makedirs("notebook_figures", exist_ok=True)
 
 # Low-level PSD / GP functions
-from tengri.models.sfh.psd_models import (
+from tengri.components.sfh.psd_models import (
     psd_drw, drw_acf, drw_variance, psd_to_sqrt_power, psd_matern,
 )
-from tengri.models.sfh.gp_sfh import (
+from tengri.components.sfh.gp_sfh import (
     gp_from_xi, generate_gp_fourier, compute_sqrt_power_drw,
     make_log_age_grid,
 )
-from tengri.models.sfh.mean_sfh import double_powerlaw
+from tengri.components.sfh.mean_sfh import double_powerlaw
 from tengri.utils.grid import (
     make_log_age_grid as grid_make, log_age_to_age_gyr, grid_spacing,
 )

@@ -99,8 +99,8 @@ def build_loss_fn(fitter):
         # (eline+cal) are not shadowed by the less-specific cal-only branches.
         if use_eline_marg and use_cal_marg and data_type == "spectroscopy":
             # Both: marginalize lines first, then calibration on line-added prediction
-            from tengri.models.observation.calibration import marginalize_calibration
-            from tengri.models.observation.eline_marginalization import (
+            from tengri.observation.calibration import marginalize_calibration
+            from tengri.observation.eline_marginalization import (
                 apply_doublet_constraints,
                 build_eline_design_matrix,
                 marginalize_emission_lines,
@@ -120,7 +120,7 @@ def build_loss_fn(fitter):
             )
             G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
             if eline_prior_type == "cloudy":
-                from tengri.models.observation.eline_priors import (
+                from tengri.observation.eline_priors import (
                     marginalize_emission_lines_cloudy,
                 )
 
@@ -153,8 +153,8 @@ def build_loss_fn(fitter):
         elif use_eline_marg and use_cal_marg and data_type == "joint":
             # Joint + both: marginalize lines on spec part, then calibration on spec,
             # standard chi2 for photometry
-            from tengri.models.observation.calibration import marginalize_calibration
-            from tengri.models.observation.eline_marginalization import (
+            from tengri.observation.calibration import marginalize_calibration
+            from tengri.observation.eline_marginalization import (
                 apply_doublet_constraints,
                 build_eline_design_matrix,
                 marginalize_emission_lines,
@@ -181,7 +181,7 @@ def build_loss_fn(fitter):
             )
             G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
             if eline_prior_type == "cloudy":
-                from tengri.models.observation.eline_priors import (
+                from tengri.observation.eline_priors import (
                     marginalize_emission_lines_cloudy,
                 )
 
@@ -214,7 +214,7 @@ def build_loss_fn(fitter):
             e_lh = 0.5 * chi2_phot - log_like_spec
         elif use_cal_marg and data_type == "spectroscopy":
             # Analytically marginalize over calibration polynomial
-            from tengri.models.observation.calibration import (
+            from tengri.observation.calibration import (
                 marginalize_calibration,
             )
 
@@ -229,7 +229,7 @@ def build_loss_fn(fitter):
             e_lh = -log_like_spec
         elif use_cal_marg and data_type == "joint":
             # Joint: marginalize spectroscopic part, standard chi2 for photometry
-            from tengri.models.observation.calibration import (
+            from tengri.observation.calibration import (
                 marginalize_calibration,
             )
 
@@ -253,7 +253,7 @@ def build_loss_fn(fitter):
             e_lh = 0.5 * chi2_phot - log_like_spec
         elif use_eline_marg and data_type == "spectroscopy":
             # Analytically marginalize emission line amplitudes
-            from tengri.models.observation.eline_marginalization import (
+            from tengri.observation.eline_marginalization import (
                 apply_doublet_constraints,
                 build_eline_design_matrix,
                 marginalize_emission_lines,
@@ -274,7 +274,7 @@ def build_loss_fn(fitter):
             G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
             residual = data - predicted
             if eline_prior_type == "cloudy":
-                from tengri.models.observation.eline_priors import (
+                from tengri.observation.eline_priors import (
                     marginalize_emission_lines_cloudy,
                 )
 
@@ -297,7 +297,7 @@ def build_loss_fn(fitter):
             e_lh = -ln_l_eline
         elif use_eline_marg and data_type == "joint":
             # Joint: marginalize lines on spectroscopic part, standard chi2 for photometry
-            from tengri.models.observation.eline_marginalization import (
+            from tengri.observation.eline_marginalization import (
                 apply_doublet_constraints,
                 build_eline_design_matrix,
                 marginalize_emission_lines,
@@ -325,7 +325,7 @@ def build_loss_fn(fitter):
             G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
             residual_spec = data_spec - pred_spec
             if eline_prior_type == "cloudy":
-                from tengri.models.observation.eline_priors import (
+                from tengri.observation.eline_priors import (
                     marginalize_emission_lines_cloudy,
                 )
 
@@ -349,7 +349,7 @@ def build_loss_fn(fitter):
             e_lh = 0.5 * chi2_phot - ln_l_eline
         elif use_eline_fitted and data_type == "spectroscopy":
             # Fitted mode: amplitudes are explicit params; add line prediction to continuum
-            from tengri.models.observation.eline_marginalization import (
+            from tengri.observation.eline_marginalization import (
                 apply_doublet_constraints,
                 build_eline_design_matrix,
             )
@@ -373,7 +373,7 @@ def build_loss_fn(fitter):
             e_lh = 0.5 * chi2
         elif use_eline_fitted and data_type == "joint":
             # Joint fitted: add lines to spectroscopic part, standard chi2 for photometry
-            from tengri.models.observation.eline_marginalization import (
+            from tengri.observation.eline_marginalization import (
                 apply_doublet_constraints,
                 build_eline_design_matrix,
             )
@@ -535,8 +535,8 @@ def build_loglikelihood_fn(fitter):
         # (eline+cal) are not shadowed by the less-specific cal-only branches.
         if use_eline_marg and use_cal_marg and data_type == "spectroscopy":
             # Both: marginalize lines first, then calibration on line-added prediction
-            from tengri.models.observation.calibration import marginalize_calibration
-            from tengri.models.observation.eline_marginalization import (
+            from tengri.observation.calibration import marginalize_calibration
+            from tengri.observation.eline_marginalization import (
                 apply_doublet_constraints,
                 build_eline_design_matrix,
                 marginalize_emission_lines,
@@ -556,7 +556,7 @@ def build_loglikelihood_fn(fitter):
             )
             G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
             if eline_prior_type == "cloudy":
-                from tengri.models.observation.eline_priors import (
+                from tengri.observation.eline_priors import (
                     marginalize_emission_lines_cloudy,
                 )
 
@@ -589,8 +589,8 @@ def build_loglikelihood_fn(fitter):
         elif use_eline_marg and use_cal_marg and data_type == "joint":
             # Joint + both: marginalize lines on spec part, then calibration on spec,
             # standard chi2 for photometry
-            from tengri.models.observation.calibration import marginalize_calibration
-            from tengri.models.observation.eline_marginalization import (
+            from tengri.observation.calibration import marginalize_calibration
+            from tengri.observation.eline_marginalization import (
                 apply_doublet_constraints,
                 build_eline_design_matrix,
                 marginalize_emission_lines,
@@ -617,7 +617,7 @@ def build_loglikelihood_fn(fitter):
             )
             G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
             if eline_prior_type == "cloudy":
-                from tengri.models.observation.eline_priors import (
+                from tengri.observation.eline_priors import (
                     marginalize_emission_lines_cloudy,
                 )
 
@@ -649,7 +649,7 @@ def build_loglikelihood_fn(fitter):
             )
             return -0.5 * chi2_phot + log_like_spec
         elif use_cal_marg and data_type == "spectroscopy":
-            from tengri.models.observation.calibration import (
+            from tengri.observation.calibration import (
                 marginalize_calibration,
             )
 
@@ -663,7 +663,7 @@ def build_loglikelihood_fn(fitter):
             )
             return log_like_spec
         elif use_cal_marg and data_type == "joint":
-            from tengri.models.observation.calibration import (
+            from tengri.observation.calibration import (
                 marginalize_calibration,
             )
 
@@ -687,7 +687,7 @@ def build_loglikelihood_fn(fitter):
             return -0.5 * chi2_phot + log_like_spec
         elif use_eline_marg and data_type == "spectroscopy":
             # Analytically marginalize emission line amplitudes
-            from tengri.models.observation.eline_marginalization import (
+            from tengri.observation.eline_marginalization import (
                 apply_doublet_constraints,
                 build_eline_design_matrix,
                 marginalize_emission_lines,
@@ -708,7 +708,7 @@ def build_loglikelihood_fn(fitter):
             G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
             residual = data - predicted
             if eline_prior_type == "cloudy":
-                from tengri.models.observation.eline_priors import (
+                from tengri.observation.eline_priors import (
                     marginalize_emission_lines_cloudy,
                 )
 
@@ -731,7 +731,7 @@ def build_loglikelihood_fn(fitter):
             return ln_l_eline
         elif use_eline_marg and data_type == "joint":
             # Joint: marginalize lines on spectroscopic part, standard chi2 for photometry
-            from tengri.models.observation.eline_marginalization import (
+            from tengri.observation.eline_marginalization import (
                 apply_doublet_constraints,
                 build_eline_design_matrix,
                 marginalize_emission_lines,
@@ -759,7 +759,7 @@ def build_loglikelihood_fn(fitter):
             G_eff = apply_doublet_constraints(G, eline_constraint_matrix)
             residual_spec = data_spec - pred_spec
             if eline_prior_type == "cloudy":
-                from tengri.models.observation.eline_priors import (
+                from tengri.observation.eline_priors import (
                     marginalize_emission_lines_cloudy,
                 )
 
@@ -783,7 +783,7 @@ def build_loglikelihood_fn(fitter):
             return -0.5 * chi2_phot + ln_l_eline
         elif use_eline_fitted and data_type == "spectroscopy":
             # Fitted mode: amplitudes are explicit params; add line prediction to continuum
-            from tengri.models.observation.eline_marginalization import (
+            from tengri.observation.eline_marginalization import (
                 apply_doublet_constraints,
                 build_eline_design_matrix,
             )
@@ -807,7 +807,7 @@ def build_loglikelihood_fn(fitter):
             return -0.5 * chi2
         elif use_eline_fitted and data_type == "joint":
             # Joint fitted: add lines to spectroscopic part, standard chi2 for photometry
-            from tengri.models.observation.eline_marginalization import (
+            from tengri.observation.eline_marginalization import (
                 apply_doublet_constraints,
                 build_eline_design_matrix,
             )

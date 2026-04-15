@@ -52,7 +52,7 @@ class TestDL07TemplatePhysics:
 
     def test_loads_real_templates(self):
         """Model must load templates, not fall back to analytic."""
-        from tengri.models.dust.emission import draine_li2007
+        from tengri.components.dust.emission import draine_li2007
 
         wave = jnp.logspace(4, 7, 500)
         with warnings.catch_warnings(record=True) as w:
@@ -63,7 +63,7 @@ class TestDL07TemplatePhysics:
 
     def test_energy_conservation(self):
         """Integral of L_nu dnu must equal L_absorbed."""
-        from tengri.models.dust.emission import draine_li2007
+        from tengri.components.dust.emission import draine_li2007
 
         wave = jnp.logspace(4, 8, 3000)  # wide range for full integral
         l_absorbed = 1e10
@@ -83,7 +83,7 @@ class TestDL07TemplatePhysics:
         DL07 q_PAH ranges from 0.47% to 4.58%. Higher values mean
         more PAH mass → stronger 7.7 um feature.
         """
-        from tengri.models.dust.emission import draine_li2007
+        from tengri.components.dust.emission import draine_li2007
 
         wave = jnp.logspace(np.log10(5e4), np.log10(2e5), 500)  # 5-20 um
         sed_low = draine_li2007(wave, 1e10, dust_qpah=0.5)
@@ -100,7 +100,7 @@ class TestDL07TemplatePhysics:
 
     def test_higher_umin_warmer_sed(self):
         """Higher U_min → warmer dust → peak at shorter wavelength."""
-        from tengri.models.dust.emission import draine_li2007
+        from tengri.components.dust.emission import draine_li2007
 
         wave = jnp.logspace(4, 7.5, 1000)
 
@@ -117,7 +117,7 @@ class TestDL07TemplatePhysics:
 
     def test_pah_features_present(self):
         """DL07 must show PAH features at 6.2, 7.7, 11.3 um."""
-        from tengri.models.dust.emission import draine_li2007
+        from tengri.components.dust.emission import draine_li2007
 
         wave = jnp.logspace(np.log10(3e4), np.log10(2e5), 2000)  # 3-20 um
         sed = draine_li2007(wave, 1e10, dust_qpah=3.0)
@@ -138,7 +138,7 @@ class TestDL07TemplatePhysics:
 
     def test_gamma_zero_no_pdr(self):
         """gamma=0 means all dust at single U_min, no high-U PDR component."""
-        from tengri.models.dust.emission import draine_li2007
+        from tengri.components.dust.emission import draine_li2007
 
         wave = jnp.logspace(4, 7, 500)
 
@@ -166,7 +166,7 @@ class TestAstrodustTemplatePhysics:
 
     def test_loads_real_templates(self):
         """Must load templates, not analytic fallback."""
-        from tengri.models.dust.emission import astrodust
+        from tengri.components.dust.emission import astrodust
 
         wave = jnp.logspace(4, 7, 500)
         with warnings.catch_warnings(record=True) as w:
@@ -176,7 +176,7 @@ class TestAstrodustTemplatePhysics:
 
     def test_energy_conservation(self):
         """Energy must be conserved to within 10%."""
-        from tengri.models.dust.emission import astrodust
+        from tengri.components.dust.emission import astrodust
 
         wave = jnp.logspace(3.5, 8, 3000)
         l_absorbed = 1e10
@@ -188,7 +188,7 @@ class TestAstrodustTemplatePhysics:
 
     def test_qpah_affects_mir(self):
         """qPAH parameter must change MIR PAH feature strength."""
-        from tengri.models.dust.emission import astrodust
+        from tengri.components.dust.emission import astrodust
 
         wave = jnp.logspace(np.log10(5e4), np.log10(1.5e5), 500)
         sed_low = astrodust(wave, 1e10, dust_qpah=0.5)
@@ -202,7 +202,7 @@ class TestAstrodustTemplatePhysics:
 
     def test_pah_features_present(self):
         """Astrodust must show PAH emission features at 7.7 um."""
-        from tengri.models.dust.emission import astrodust
+        from tengri.components.dust.emission import astrodust
 
         wave = jnp.logspace(np.log10(3e4), np.log10(2e5), 2000)
         sed = astrodust(wave, 1e10, dust_qpah=3.5)
@@ -233,7 +233,7 @@ class TestTHEMISTemplatePhysics:
 
     def test_loads_real_templates(self):
         """Must load templates, not analytic fallback."""
-        from tengri.models.dust.emission import themis
+        from tengri.components.dust.emission import themis
 
         wave = jnp.logspace(4, 7, 500)
         with warnings.catch_warnings(record=True) as w:
@@ -243,7 +243,7 @@ class TestTHEMISTemplatePhysics:
 
     def test_energy_conservation(self):
         """Energy must be conserved to within 10%."""
-        from tengri.models.dust.emission import themis
+        from tengri.components.dust.emission import themis
 
         wave = jnp.logspace(3.5, 8, 3000)
         l_absorbed = 1e10
@@ -260,7 +260,7 @@ class TestTHEMISTemplatePhysics:
         and produce PAH-like MIR features. Higher qhac = more
         small aromatic grains.
         """
-        from tengri.models.dust.emission import themis
+        from tengri.components.dust.emission import themis
 
         wave = jnp.logspace(np.log10(5e4), np.log10(1.5e5), 500)
         sed_low = themis(wave, 1e10, dust_qhac=0.05)
@@ -285,7 +285,7 @@ class TestBOSATemplatePhysics:
 
     def test_loads_real_templates(self):
         """Must load templates, not analytic fallback."""
-        from tengri.models.dust.emission import bosa
+        from tengri.components.dust.emission import bosa
 
         wave = jnp.logspace(4, 7, 500)
         with warnings.catch_warnings(record=True) as w:
@@ -295,7 +295,7 @@ class TestBOSATemplatePhysics:
 
     def test_energy_conservation(self):
         """Total IR emission must equal L_absorbed."""
-        from tengri.models.dust.emission import bosa
+        from tengri.components.dust.emission import bosa
 
         wave = jnp.logspace(3.5, 8, 3000)
         l_absorbed = 1e10
@@ -311,7 +311,7 @@ class TestBOSATemplatePhysics:
         Boquien & Salim 2021: sSFR is an independent parameter
         beyond L_TIR that captures the temperature-SFR connection.
         """
-        from tengri.models.dust.emission import bosa
+        from tengri.components.dust.emission import bosa
 
         wave = jnp.logspace(4, 7.5, 1000)
 
@@ -328,7 +328,7 @@ class TestBOSATemplatePhysics:
 
     def test_linear_scaling_with_luminosity(self):
         """Doubling L_absorbed should approximately double emission."""
-        from tengri.models.dust.emission import bosa
+        from tengri.components.dust.emission import bosa
 
         wave = jnp.logspace(4, 7, 500)
         sed1 = bosa(wave, 1e10, dust_log_ssfr=-10.0)
@@ -354,7 +354,7 @@ class TestDale2014TemplatePhysics:
 
     def test_loads_real_templates(self):
         """Must load templates, not analytic fallback."""
-        from tengri.models.dust.emission import dale2014
+        from tengri.components.dust.emission import dale2014
 
         wave = jnp.logspace(4, 7, 500)
         with warnings.catch_warnings(record=True) as w:
@@ -364,7 +364,7 @@ class TestDale2014TemplatePhysics:
 
     def test_energy_conservation(self):
         """Energy must be conserved."""
-        from tengri.models.dust.emission import dale2014
+        from tengri.components.dust.emission import dale2014
 
         wave = jnp.logspace(3.5, 8, 3000)
         l_absorbed = 1e10
@@ -380,7 +380,7 @@ class TestDale2014TemplatePhysics:
         Higher alpha → more weight at low U → cooler SED.
         Parameter name is dust_alpha_dale (not dust_alpha).
         """
-        from tengri.models.dust.emission import dale2014
+        from tengri.components.dust.emission import dale2014
 
         wave = jnp.logspace(4, 7.5, 1000)
 
@@ -424,7 +424,7 @@ class TestMagphysPhysics:
         da Cunha+2008 Eq. 6: the fractional luminosities sum to unity
         for each component (BC and ISM separately).
         """
-        from tengri.models.dust.emission import magphys_dc08
+        from tengri.components.dust.emission import magphys_dc08
 
         wave = jnp.logspace(4, 7, 500)
 
@@ -434,7 +434,7 @@ class TestMagphysPhysics:
 
     def test_energy_balance_strict(self):
         """Total L_IR must equal L_absorbed to within 5% (da Cunha+2008)."""
-        from tengri.models.dust.emission import magphys_dc08
+        from tengri.components.dust.emission import magphys_dc08
 
         wave = jnp.logspace(3.5, 8, 3000)
         l_absorbed = 1e10
@@ -456,7 +456,7 @@ class TestMagphysPhysics:
 
         Smith+2007: these 6 features are the dominant PAH emission bands.
         """
-        from tengri.models.dust.emission import magphys_dc08
+        from tengri.components.dust.emission import magphys_dc08
 
         wave = jnp.logspace(np.log10(2e4), np.log10(2e5), 3000)  # 2-20 um
         sed = magphys_dc08(
@@ -485,7 +485,7 @@ class TestMagphysPhysics:
 
     def test_temperature_ordering_of_components(self):
         """Wien peaks: T_hot > T_warm > T_cold → λ_hot < λ_warm < λ_cold."""
-        from tengri.models.dust.emission import magphys_dc08
+        from tengri.components.dust.emission import magphys_dc08
 
         wave = jnp.logspace(3.5, 7.5, 2000)
 
@@ -510,7 +510,7 @@ class TestMagphysPhysics:
         At z=5, T_CMB = 2.725*(1+5) = 16.35 K. Cold dust (20K) is significantly
         affected — the peak should shift to shorter wavelengths.
         """
-        from tengri.models.dust.emission import magphys_dc08
+        from tengri.components.dust.emission import magphys_dc08
 
         wave = jnp.logspace(4, 7.5, 1000)
 

@@ -7,8 +7,8 @@ Silent wrong results are worse than visible errors.
 
 import pytest
 
-import tengri.models.agn.skirtor as _skirtor_mod
-import tengri.models.dust.emission as _emission_mod
+import tengri.components.agn.skirtor as _skirtor_mod
+import tengri.components.dust.emission as _emission_mod
 
 # ---------------------------------------------------------------------------
 # Helpers: clear module-level caches between tests so each test starts fresh

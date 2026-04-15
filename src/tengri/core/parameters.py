@@ -62,7 +62,7 @@ from tengri.distributions import (
     Uniform,
     resolve_shorthand,
 )
-from tengri.models.sfh.registry import resolve_sfh
+from tengri.components.sfh.registry import resolve_sfh
 
 # ---------------------------------------------------------------------------
 # Non-SFH parameter registry: always present regardless of mean_sfh_type
@@ -1302,7 +1302,7 @@ class Parameters:
         if nebular_cue:
             self.nebular_mode = "cue"
             if self.cue_weights_path is None:
-                from tengri.models.nebular import _DEFAULT_CUE_WEIGHTS_PATH
+                from tengri.components.nebular import _DEFAULT_CUE_WEIGHTS_PATH
 
                 self.cue_weights_path = str(_DEFAULT_CUE_WEIGHTS_PATH)
         elif self._nebular_cb19:

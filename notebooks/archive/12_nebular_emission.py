@@ -61,14 +61,14 @@ import jax.numpy as jnp
 
 # tengri imports
 from tengri import load_ssp_data, load_filter_set
-from tengri.models.nebular import CloudyGridBackend, BakedInBackend, CueBackend
-from tengri.models.nebular.cloudy_grid import compute_qh, load_cloudy_grid, _compute_qh_grid
-from tengri.models.nebular.ionizing_spectrum import (
+from tengri.components.nebular import CloudyGridBackend, BakedInBackend, CueBackend
+from tengri.components.nebular.cloudy_grid import compute_qh, load_cloudy_grid, _compute_qh_grid
+from tengri.components.nebular.ionizing_spectrum import (
     fit_ionizing_spectrum,
     SEGMENT_EDGES,
     HI_LIMIT,
 )
-from tengri.models.observation.photometry import compute_flux_density
+from tengri.observation.photometry import compute_flux_density
 from tengri.utils.cosmology import luminosity_distance
 
 # ── Plot style ─────────────────────────────────────────────────────

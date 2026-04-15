@@ -17,7 +17,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-from tengri.models.agn.disc import (
+from tengri.components.agn.disc import (
     _eddington_luminosity,
     _gravitational_radius,
     _isco_radius,

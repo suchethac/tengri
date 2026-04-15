@@ -21,7 +21,7 @@ from numpy.testing import assert_allclose
 
 from tengri.core.parameters import ParamSpec
 from tengri.distributions import Fixed, Uniform
-from tengri.models.sfh.chemical_evolution import (
+from tengri.components.sfh.chemical_evolution import (
     Z_SUN,
     chem_evol_metallicity_on_ssp_grid,
     closed_box_metallicity,

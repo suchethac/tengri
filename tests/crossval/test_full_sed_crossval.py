@@ -67,7 +67,7 @@ def ref() -> dict:
 
 @pytest.fixture(scope="module")
 def ssp_data():
-    from tengri.models.sps.dsps_wrapper import load_ssp_data
+    from tengri.components.sps.dsps_wrapper import load_ssp_data
 
     return load_ssp_data(str(_SSP_PATH))
 
@@ -1709,7 +1709,7 @@ class TestCalzettiDust:
             pytest.skip(f"Reference key {key!r} not in npz")
 
         try:
-            from tengri.models.dust.attenuation import calzetti_attenuation
+            from tengri.components.dust.attenuation import calzetti_attenuation
         except ImportError:
             pytest.skip("calzetti_attenuation not importable")
 
@@ -1740,7 +1740,7 @@ class TestCalzettiDust:
             pytest.skip("Both Calzetti and clean FSPS cases needed")
 
         try:
-            from tengri.models.dust.attenuation import calzetti_attenuation
+            from tengri.components.dust.attenuation import calzetti_attenuation
         except ImportError:
             pytest.skip("calzetti_attenuation not importable")
 
@@ -1913,7 +1913,7 @@ class TestTabularSFH:
         Uses the same SFR-per-bin values as TABSFH_CASES in the reference generator.
         """
         try:
-            from tengri.models.sfh.nonparametric import continuity_sfh
+            from tengri.components.sfh.nonparametric import continuity_sfh
         except ImportError:
             pytest.skip("continuity_sfh not importable")
 
@@ -1926,7 +1926,7 @@ class TestTabularSFH:
         def uv_over_v(sfr_bins):
             t_obs, sfr_t = continuity_sfh(bin_edges, sfr_bins, n_pts=200)
             # Compute CSP: approximate as sum of SSPs weighted by SFR dt
-            from tengri.models.sps.dsps_wrapper import compute_csp_weights
+            from tengri.components.sps.dsps_wrapper import compute_csp_weights
 
             weights = compute_csp_weights(t_obs, sfr_t)
             sed = jnp.einsum("t,tw->w", weights, ssp_data.ssp_flux[0])  # solar Z
@@ -2032,7 +2032,7 @@ class TestIGMAttenuation:
             pytest.skip("IGM z=2 reference pair not in npz")
 
         try:
-            from tengri.models.igm import igm_transmission
+            from tengri.components.igm import igm_transmission
         except ImportError:
             pytest.skip("tengri igm_transmission not importable")
 
@@ -2346,7 +2346,7 @@ class TestCIGALESKIRTOR:
     """Cross-validate tengri SKIRTOR against pCIGALE SKIRTOR2016 templates.
 
     pCIGALE keys: cigale_agn_{name}  and  cigale_agn_{name}_noagn
-    tengri: skirtor_analytic() from tengri.models.agn.skirtor
+    tengri: skirtor_analytic() from tengri.components.agn.skirtor
 
     Both codes use the same SKIRTOR2016 template library, so direct shape
     comparison is valid.  Tolerance: 20% in 1–3 μm (10000–30000 Å) where the
@@ -2451,9 +2451,9 @@ class TestCIGALESKIRTOR:
             pytest.skip("cigale skirtor_type1 cases not in reference NPZ")
 
         try:
-            from tengri.models.agn.skirtor import skirtor_analytic
+            from tengri.components.agn.skirtor import skirtor_analytic
         except ImportError:
-            pytest.skip("tengri.models.agn.skirtor not importable")
+            pytest.skip("tengri.components.agn.skirtor not importable")
 
         nir_mask = (ref_wave > 10000.0) & (ref_wave < 30000.0)
         if not nir_mask.any():
@@ -3203,7 +3203,7 @@ class TestSMCLMCDustLaw:
         """
         import jax.numpy as jnp
 
-        from tengri.models.dust.attenuation import power_law, smc
+        from tengri.components.dust.attenuation import power_law, smc
 
         wave = np.linspace(1200.0, 10000.0, 1000)
         wave_jax = jnp.array(wave)
@@ -3234,7 +3234,7 @@ class TestSMCLMCDustLaw:
         """
         import jax.numpy as jnp
 
-        from tengri.models.dust.attenuation import cardelli, smc
+        from tengri.components.dust.attenuation import cardelli, smc
 
         wave = np.linspace(1500.0, 3500.0, 2000)
         wave_jax = jnp.array(wave)

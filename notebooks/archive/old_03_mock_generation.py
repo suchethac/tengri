@@ -62,7 +62,7 @@ os.makedirs("figures", exist_ok=True)
 
 # ---- New high-level API imports ----
 from tengri import Model, ParamSpec, Uniform, Gaussian, Fixed, load_ssp_data, load_filter_set
-from tengri.models.observation.photometry import ab_mag_from_flux
+from tengri.observation.photometry import ab_mag_from_flux
 from tengri.utils.cosmology import luminosity_distance
 
 # ---- Load SSP templates ----

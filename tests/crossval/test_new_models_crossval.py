@@ -51,14 +51,14 @@ class TestBeloborodov1999:
 
     def test_formula_at_unity_ratio(self):
         """At L_diss = L_seed: Gamma = (7/3) * 1^{-0.1} = 7/3 = 2.333."""
-        from tengri.models.agn.disc import beloborodov_gamma_hot
+        from tengri.components.agn.disc import beloborodov_gamma_hot
 
         gamma = float(beloborodov_gamma_hot(1.0, 1.0))
         np.testing.assert_allclose(gamma, 7.0 / 3.0, rtol=0.01)
 
     def test_formula_at_ratio_10(self):
         """At L_diss/L_seed = 10: Gamma = (7/3) * 10^{-0.1} = 2.333 * 0.794 = 1.853."""
-        from tengri.models.agn.disc import beloborodov_gamma_hot
+        from tengri.components.agn.disc import beloborodov_gamma_hot
 
         gamma = float(beloborodov_gamma_hot(10.0, 1.0))
         expected = (7.0 / 3.0) * 10.0 ** (-0.1)
@@ -66,7 +66,7 @@ class TestBeloborodov1999:
 
     def test_formula_at_ratio_0p1(self):
         """At L_diss/L_seed = 0.1: Gamma = (7/3) * 0.1^{-0.1} = 2.333 * 1.259 = 2.937."""
-        from tengri.models.agn.disc import beloborodov_gamma_hot
+        from tengri.components.agn.disc import beloborodov_gamma_hot
 
         gamma = float(beloborodov_gamma_hot(0.1, 1.0))
         expected = (7.0 / 3.0) * 0.1 ** (-0.1)
@@ -78,7 +78,7 @@ class TestBeloborodov1999:
 
         This is the fundamental physics: more coronal heating → harder X-rays.
         """
-        from tengri.models.agn.disc import beloborodov_gamma_hot
+        from tengri.components.agn.disc import beloborodov_gamma_hot
 
         gamma_low = float(beloborodov_gamma_hot(0.1, 1.0))
         gamma_high = float(beloborodov_gamma_hot(10.0, 1.0))
@@ -88,7 +88,7 @@ class TestBeloborodov1999:
 
     def test_clipping_bounds(self):
         """Gamma must be clipped to [1.4, 3.0] (physical range)."""
-        from tengri.models.agn.disc import beloborodov_gamma_hot
+        from tengri.components.agn.disc import beloborodov_gamma_hot
 
         # Very high ratio → very hard
         gamma_extreme = float(beloborodov_gamma_hot(1000.0, 1.0))
@@ -114,7 +114,7 @@ class TestJust2007:
 
     def test_formula_at_log_l2500_30(self):
         """At log10(L_2500) = 30: alpha_ox = -0.137*30 + 2.638 = -1.472."""
-        from tengri.models.xray import alpha_ox_from_l2500
+        from tengri.components.xray import alpha_ox_from_l2500
 
         alpha_ox = float(alpha_ox_from_l2500(1e30))
         expected = -0.137 * 30.0 + 2.638
@@ -122,7 +122,7 @@ class TestJust2007:
 
     def test_formula_at_log_l2500_31(self):
         """At log10(L_2500) = 31: alpha_ox = -0.137*31 + 2.638 = -1.609."""
-        from tengri.models.xray import alpha_ox_from_l2500
+        from tengri.components.xray import alpha_ox_from_l2500
 
         alpha_ox = float(alpha_ox_from_l2500(1e31))
         expected = -0.137 * 31.0 + 2.638
@@ -133,7 +133,7 @@ class TestJust2007:
 
         This is the anti-correlation: L_X/L_UV decreases with L_UV.
         """
-        from tengri.models.xray import alpha_ox_from_l2500
+        from tengri.components.xray import alpha_ox_from_l2500
 
         aox_faint = float(alpha_ox_from_l2500(1e28))
         aox_bright = float(alpha_ox_from_l2500(1e32))
@@ -141,7 +141,7 @@ class TestJust2007:
 
     def test_typical_quasar_range(self):
         """Typical quasars: L_2500 ~ 10^{29-31} erg/s/Hz → alpha_ox ~ -1.3 to -1.6."""
-        from tengri.models.xray import alpha_ox_from_l2500
+        from tengri.components.xray import alpha_ox_from_l2500
 
         for log_l, expected_range in [
             (29, (-1.5, -1.2)),
@@ -167,7 +167,7 @@ class TestYang2022Anisotropy:
 
     def test_face_on_maximum(self):
         """Face-on (cos_inc=1) gives maximum luminosity (factor=1.0)."""
-        from tengri.models.xray import xray_anisotropy
+        from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.ones(10)
         result = xray_anisotropy(l_x, cos_inc=1.0, a1=0.5, a2=0.0)
@@ -178,7 +178,7 @@ class TestYang2022Anisotropy:
 
         With default a1=0.5, a2=0: f(0) = 0.5.
         """
-        from tengri.models.xray import xray_anisotropy
+        from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.ones(10)
         result = xray_anisotropy(l_x, cos_inc=0.0, a1=0.5, a2=0.0)
@@ -186,7 +186,7 @@ class TestYang2022Anisotropy:
 
     def test_formula_at_45_degrees(self):
         """At 45° (cos_inc=0.707): f = 0.5*0.707 + 0 + 0.5 = 0.854."""
-        from tengri.models.xray import xray_anisotropy
+        from tengri.components.xray import xray_anisotropy
 
         cos45 = np.cos(np.radians(45.0))
         l_x = jnp.ones(10)
@@ -196,7 +196,7 @@ class TestYang2022Anisotropy:
 
     def test_a1_a2_formula(self):
         """General formula: f = a1*cos + a2*cos^2 + (1-a1-a2)."""
-        from tengri.models.xray import xray_anisotropy
+        from tengri.components.xray import xray_anisotropy
 
         cos_inc = 0.6
         a1, a2 = 0.3, 0.2
@@ -220,7 +220,7 @@ class TestMartinezRamirez2024:
 
     def test_dpl_produces_radio_emission(self):
         """DPL must produce non-zero radio emission for radio-loud AGN."""
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         wave = jnp.geomspace(1e7, 1e10, 200)  # 1mm - 1m
         l_nu = radio_agn_dpl(wave, L_agn_bol=1e44, radio_loudness=2.0)
@@ -228,7 +228,7 @@ class TestMartinezRamirez2024:
 
     def test_dpl_radio_quiet_faint(self):
         """Radio-quiet (R=0) should be much fainter than radio-loud (R=3)."""
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         wave = jnp.geomspace(1e7, 1e10, 200)
         l_quiet = radio_agn_dpl(wave, L_agn_bol=1e44, radio_loudness=0.0)
@@ -239,7 +239,7 @@ class TestMartinezRamirez2024:
 
     def test_dpl_alpha1_controls_steep_slope(self):
         """alpha1 sets the optically thin slope: more negative → steeper."""
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         wave = jnp.geomspace(1e7, 1e10, 200)
         l_flat = radio_agn_dpl(wave, L_agn_bol=1e44, radio_loudness=2.0, alpha1=-0.3)
@@ -248,7 +248,7 @@ class TestMartinezRamirez2024:
 
     def test_dpl_alpha2_controls_thick_slope(self):
         """alpha2 sets the optically thick slope."""
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         wave = jnp.geomspace(1e7, 1e10, 200)
         l1 = radio_agn_dpl(wave, L_agn_bol=1e44, radio_loudness=2.0, alpha2=-0.5)
@@ -261,7 +261,7 @@ class TestMartinezRamirez2024:
         Below nu_t: spectrum flattens (optically thick).
         Above nu_t: spectrum steepens (optically thin).
         """
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         wave = jnp.geomspace(1e7, 1e10, 200)
         # Low turnover → most of radio range is optically thin
@@ -275,7 +275,7 @@ class TestMartinezRamirez2024:
 
         The DPL renormalizes at 5 GHz, so check shape change not total flux.
         """
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         wave = jnp.geomspace(1e7, 1e10, 200)
         l_no_cut = radio_agn_dpl(wave, L_agn_bol=1e44, radio_loudness=2.0, log_nu_cut=15.0)
@@ -288,7 +288,7 @@ class TestMartinezRamirez2024:
 
     def test_dpl_normalization_at_5ghz(self):
         """L_nu at 5 GHz should equal L_5GHz from radio-loudness definition."""
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         # 5 GHz = 6e9 A
         wave = jnp.array([6e9])  # c/nu = 3e18/5e9 = 6e8... wait
@@ -314,7 +314,7 @@ class TestYang2020PolarDust:
 
     def test_type1_gets_extincted(self):
         """Face-on (Type 1) with E(B-V)>0 should attenuate UV."""
-        from tengri.models.agn.polar_dust import polar_dust_extinction
+        from tengri.components.agn.polar_dust import polar_dust_extinction
 
         wave = jnp.geomspace(1000.0, 30000.0, 200)
         l_nu_in = jnp.ones_like(wave)
@@ -335,7 +335,7 @@ class TestYang2020PolarDust:
 
         Yang+2020: polar dust only affects Type 1 sightlines.
         """
-        from tengri.models.agn.polar_dust import polar_dust_extinction
+        from tengri.components.agn.polar_dust import polar_dust_extinction
 
         wave = jnp.geomspace(1000.0, 30000.0, 200)
         l_nu_in = jnp.ones_like(wave)
@@ -348,7 +348,7 @@ class TestYang2020PolarDust:
 
     def test_zero_ebv_no_extinction(self):
         """E(B-V) = 0 → no extinction regardless of orientation."""
-        from tengri.models.agn.polar_dust import polar_dust_extinction
+        from tengri.components.agn.polar_dust import polar_dust_extinction
 
         wave = jnp.geomspace(1000.0, 30000.0, 200)
         l_nu_in = jnp.ones_like(wave) * 5.0
@@ -361,7 +361,7 @@ class TestYang2020PolarDust:
 
     def test_uses_smc_law(self):
         """Extinction should use SMC law (steep UV, R_V=2.93)."""
-        from tengri.models.agn.polar_dust import polar_dust_extinction
+        from tengri.components.agn.polar_dust import polar_dust_extinction
 
         wave = jnp.geomspace(1000.0, 30000.0, 200)
         l_nu_in = jnp.ones_like(wave)
@@ -380,7 +380,7 @@ class TestYang2020PolarDust:
 
     def test_greybody_energy_conservation(self):
         """Reemitted greybody should integrate to L_absorbed."""
-        from tengri.models.agn.polar_dust import polar_dust_emission
+        from tengri.components.agn.polar_dust import polar_dust_emission
 
         wave = jnp.geomspace(1e4, 1e8, 5000)
         l_absorbed = 1e10  # arbitrary units
@@ -398,7 +398,7 @@ class TestYang2020PolarDust:
 
     def test_greybody_peaks_in_fir(self):
         """T=100K greybody peaks near 30-100 μm."""
-        from tengri.models.agn.polar_dust import polar_dust_emission
+        from tengri.components.agn.polar_dust import polar_dust_emission
 
         wave = jnp.geomspace(1e4, 1e8, 2000)
         l_reemit = polar_dust_emission(1e10, wave, temperature=100.0)
@@ -424,7 +424,7 @@ class TestKDSelfConsistentGamma:
 
     def test_self_consistent_differs_from_fixed(self):
         """Self-consistent Gamma should differ from the fixed default."""
-        from tengri.models.agn.disc import kubota_done_disc
+        from tengri.components.agn.disc import kubota_done_disc
 
         wave = jnp.geomspace(100.0, 1e8, 500)
         l_fixed = kubota_done_disc(wave, agn_log_lbol=11.0, agn_self_consistent_gamma=False)
@@ -435,7 +435,7 @@ class TestKDSelfConsistentGamma:
 
     def test_self_consistent_finite(self):
         """Self-consistent model must produce finite SED."""
-        from tengri.models.agn.disc import kubota_done_disc
+        from tengri.components.agn.disc import kubota_done_disc
 
         wave = jnp.geomspace(100.0, 1e8, 500)
         l_nu = kubota_done_disc(wave, agn_log_lbol=11.0, agn_self_consistent_gamma=True)
@@ -453,7 +453,7 @@ class TestComputeL2500:
 
     def test_flat_spectrum(self):
         """Flat L_nu=1 everywhere → L_2500 = 1."""
-        from tengri.models.agn.disc import compute_l2500
+        from tengri.components.agn.disc import compute_l2500
 
         wave = jnp.linspace(1000.0, 5000.0, 500)
         l_nu = jnp.ones_like(wave)
@@ -462,7 +462,7 @@ class TestComputeL2500:
 
     def test_known_value(self):
         """L_nu = wavelength/2500 → L_2500 = 1.0."""
-        from tengri.models.agn.disc import compute_l2500
+        from tengri.components.agn.disc import compute_l2500
 
         wave = jnp.linspace(1000.0, 5000.0, 500)
         l_nu = wave / 2500.0
@@ -471,7 +471,7 @@ class TestComputeL2500:
 
     def test_unsorted_wavelengths(self):
         """Must work with unsorted wavelength arrays."""
-        from tengri.models.agn.disc import compute_l2500
+        from tengri.components.agn.disc import compute_l2500
 
         wave = jnp.array([5000.0, 1000.0, 2500.0, 3000.0, 2000.0])
         l_nu = jnp.array([5.0, 1.0, 2.5, 3.0, 2.0])
@@ -489,7 +489,7 @@ class TestSelfConsistentCorona:
 
     def test_produces_xray_emission(self):
         """Self-consistent corona must produce X-ray flux."""
-        from tengri.models.xray import xray_agn_corona_from_disc
+        from tengri.components.xray import xray_agn_corona_from_disc
 
         wave = jnp.geomspace(0.1, 200.0, 500)  # X-ray
         l_nu = xray_agn_corona_from_disc(wave, l_2500_erg_hz=1e30)
@@ -498,7 +498,7 @@ class TestSelfConsistentCorona:
 
     def test_brighter_disc_more_xray(self):
         """Higher L_2500 → more X-ray (despite steeper alpha_ox)."""
-        from tengri.models.xray import xray_agn_corona_from_disc
+        from tengri.components.xray import xray_agn_corona_from_disc
 
         wave = jnp.geomspace(0.1, 200.0, 300)
         l_faint = xray_agn_corona_from_disc(wave, l_2500_erg_hz=1e28)
@@ -510,7 +510,7 @@ class TestSelfConsistentCorona:
 
     def test_anisotropy_reduces_edge_on(self):
         """Edge-on viewing should reduce X-ray flux (Yang+2022)."""
-        from tengri.models.xray import xray_agn_corona_from_disc
+        from tengri.components.xray import xray_agn_corona_from_disc
 
         wave = jnp.geomspace(0.1, 200.0, 300)
         l_face = xray_agn_corona_from_disc(wave, l_2500_erg_hz=1e30, cos_inc=1.0)
@@ -521,7 +521,7 @@ class TestSelfConsistentCorona:
 
     def test_delta_alpha_ox_shifts_xray(self):
         """Positive delta_alpha_ox → more X-ray relative to UV."""
-        from tengri.models.xray import xray_agn_corona_from_disc
+        from tengri.components.xray import xray_agn_corona_from_disc
 
         wave = jnp.geomspace(0.1, 200.0, 300)
         l_default = xray_agn_corona_from_disc(wave, l_2500_erg_hz=1e30, delta_alpha_ox=0.0)
@@ -541,7 +541,7 @@ class TestAGNIonSpec:
 
     def test_returns_expected_keys(self):
         """Must return dict with the 7 Cue ionizing spectrum parameters."""
-        from tengri.models.nebular.agn_nebular import agn_ionspec_from_alpha_pl
+        from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
 
         params = agn_ionspec_from_alpha_pl(alpha_pl=-1.7)
         # Should have slope and luminosity ratio keys
@@ -550,7 +550,7 @@ class TestAGNIonSpec:
 
     def test_steeper_slope_different_params(self):
         """Different alpha_pl should produce different parameters."""
-        from tengri.models.nebular.agn_nebular import agn_ionspec_from_alpha_pl
+        from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
 
         p1 = agn_ionspec_from_alpha_pl(alpha_pl=-1.0)
         p2 = agn_ionspec_from_alpha_pl(alpha_pl=-2.0)
@@ -565,7 +565,7 @@ class TestAGNIonSpec:
 
     def test_physical_slope_range(self):
         """Typical AGN EUV slope alpha_pl ~ -1.0 to -2.0 (Telfer+2002)."""
-        from tengri.models.nebular.agn_nebular import agn_ionspec_from_alpha_pl
+        from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
 
         # Should not error for physical range
         for alpha in [-0.5, -1.0, -1.5, -2.0, -2.5]:
@@ -585,7 +585,7 @@ class TestNewModelsParameterSensitivity:
 
     def test_radio_dpl_all_params(self):
         """radio_agn_dpl: all 5 shape params must matter."""
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         wave = jnp.geomspace(1e7, 1e10, 200)
         defaults = {
@@ -613,7 +613,7 @@ class TestNewModelsParameterSensitivity:
 
     def test_xray_corona_from_disc_all_params(self):
         """xray_agn_corona_from_disc: all params must matter."""
-        from tengri.models.xray import xray_agn_corona_from_disc
+        from tengri.components.xray import xray_agn_corona_from_disc
 
         wave = jnp.geomspace(0.1, 200.0, 200)
         defaults = {
@@ -641,7 +641,7 @@ class TestNewModelsParameterSensitivity:
 
     def test_polar_dust_ebv_matters(self):
         """Polar dust: E(B-V) must change the output."""
-        from tengri.models.agn.polar_dust import polar_dust_extinction
+        from tengri.components.agn.polar_dust import polar_dust_extinction
 
         wave = jnp.geomspace(1000.0, 30000.0, 100)
         l_in = jnp.ones_like(wave)
@@ -652,7 +652,7 @@ class TestNewModelsParameterSensitivity:
 
     def test_polar_dust_temperature_matters(self):
         """Greybody temperature must change the emission."""
-        from tengri.models.agn.polar_dust import polar_dust_emission
+        from tengri.components.agn.polar_dust import polar_dust_emission
 
         wave = jnp.geomspace(1e4, 1e8, 200)
         l1 = polar_dust_emission(1e10, wave, temperature=50.0)

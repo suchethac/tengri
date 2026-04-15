@@ -54,22 +54,22 @@ jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri import Fixed, SEDModel, Parameters, load_ssp_data
-from tengri.models.igm import igm_transmission, igm_transmission_patchy
-from tengri.models.nebular.shock import shock_line_ratios
-from tengri.models.observation.calibration import (
+from tengri.components.igm import igm_transmission, igm_transmission_patchy
+from tengri.components.nebular.shock import shock_line_ratios
+from tengri.observation.calibration import (
     calibration_polynomial,
     chebyshev_basis,
 )
-from tengri.models.observation.eline_catalog import (
+from tengri.observation.eline_catalog import (
     CLOUDY_LINE_NAMES,
     CLOUDY_LINE_WAVELENGTHS,
 )
-from tengri.models.observation.eline_marginalization import (
+from tengri.observation.eline_marginalization import (
     DEFAULT_LINE_NAMES,
     DEFAULT_LINE_WAVELENGTHS,
     build_eline_design_matrix,
 )
-from tengri.models.observation.spectrum import (
+from tengri.observation.spectrum import (
     apply_lsf,
     nirspec_prism_resolution,
 )
@@ -258,7 +258,7 @@ plt.show()
 
 # %%
 if CUE_WEIGHTS_PATH.exists():
-    from tengri.models.nebular.cue import (
+    from tengri.components.nebular.cue import (
         load_cue_weights,
         predict_all_lines,
         prepare_nn_params_from_dict,
@@ -582,7 +582,7 @@ else:
 # `compute_qh()` is JIT-compiled and vectorized over the SSP grid.
 
 # %%
-from tengri.models.nebular.cloudy_grid import compute_qh
+from tengri.components.nebular.cloudy_grid import compute_qh
 
 if SSP_WNE_PATH.exists():
     ssp = load_ssp_data(str(SSP_WNE_PATH))
@@ -610,7 +610,7 @@ else:
 # tabulated line ratios as a function of shock velocity (100-1000 km/s).
 
 # %%
-from tengri.models.nebular import shock_emission_sed
+from tengri.components.nebular import shock_emission_sed
 
 # Compute shock line ratios across a velocity grid
 velocities = np.linspace(100.0, 1000.0, 200)
@@ -763,7 +763,7 @@ else:
 # $\Delta\log U \approx -1$ dex).
 
 # %%
-from tengri.models.nebular import mix_dig_emission
+from tengri.components.nebular import mix_dig_emission
 
 # %% [markdown]
 # ### Concept: DIG effect on line ratios
@@ -831,7 +831,7 @@ plt.show()
 # any nebular backend:
 #
 # ```python
-# from tengri.models.nebular import mix_dig_emission, CloudyGridBackend
+# from tengri.components.nebular import mix_dig_emission, CloudyGridBackend
 #
 # backend = CloudyGridBackend("data/cloudy_grid.h5", ssp_data)
 # neb_sed = mix_dig_emission(

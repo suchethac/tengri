@@ -132,7 +132,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
     """
     import jax.numpy as jnp
 
-    from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     _is_single_dust = model._dust_model == "single_component"
     _c_aa = 2.99792458e18  # c in Angstrom/s
@@ -159,7 +159,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
     has_dust_em = model._dust_emission_model is not None
     if has_dust_em:
         from tengri.core.emission_helpers import dust_ir_emission
-        from tengri.models.dust.emission import preload_emission_model
+        from tengri.components.dust.emission import preload_emission_model
 
         # preload_emission_model ensures templates are loaded outside JIT,
         # preventing DynamicJaxprTracer leaks into closures.
@@ -170,7 +170,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
     agn_parametric = model._agn_parametric if has_agn else False
     if has_agn:
         from tengri.core.emission_helpers import agn_emission
-        from tengri.models.agn import resolve_agn_model
+        from tengri.components.agn import resolve_agn_model
 
         agn_model_fn = resolve_agn_model(model._agn_model)
 

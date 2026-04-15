@@ -8,7 +8,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 
-from tengri.models.agn.blr import (
+from tengri.components.agn.blr import (
     _fe2_pseudo_continuum,
     blr_emission,
 )

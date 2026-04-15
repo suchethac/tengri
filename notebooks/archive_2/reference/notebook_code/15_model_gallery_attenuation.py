@@ -50,7 +50,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri.models.dust.attenuation import (
+from tengri.components.dust.attenuation import (
     DUST_LAWS,
     get_dust_law,
     li08,
@@ -642,7 +642,7 @@ plt.show()
 # wrapper) described Li+2008 using separate FUV / UV / optical power-law slopes
 # plus a Drude bump. That is **not** the published L08 parametrization and has
 # been removed. The code now follows Li et al. (2008) Eq. (1) and matches the
-# docstring in `tengri.models.dust.attenuation.li08`.
+# docstring in `tengri.components.dust.attenuation.li08`.
 #
 # Below: (left) one-at-a-time sweeps around the **default** $(c_1,c_2,c_3,c_4)
 # = (6, 4, 2, 0.04); (right) literature **presets** from Markov et al. (2023, 2025)

@@ -65,7 +65,7 @@ FIGDIR = os.path.join("models", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 # %%
-from tengri.models.dust.emission import (
+from tengri.components.dust.emission import (
     DUST_EMISSION_MODELS,
     _draine_li2007_analytic_fallback,
     _draine_li2014_analytic_fallback,

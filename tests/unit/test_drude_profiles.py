@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri.models.dust.drude_profiles import (
+from tengri.components.dust.drude_profiles import (
     N_PAH_FEATURES,
     SMITH2007_PAH_FEATURES,
     decompose_pah,

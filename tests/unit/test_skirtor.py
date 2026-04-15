@@ -28,23 +28,23 @@ class TestSKIRTORRegistration:
     """Test that SKIRTOR is properly registered."""
 
     def test_skirtor_in_agn_models(self):
-        from tengri.models.agn import AGN_MODELS
+        from tengri.components.agn import AGN_MODELS
 
         assert "skirtor" in AGN_MODELS
 
     def test_get_agn_model_skirtor(self):
-        from tengri.models.agn import resolve_agn_model
+        from tengri.components.agn import resolve_agn_model
 
         model_fn = resolve_agn_model("skirtor")
         assert callable(model_fn)
 
     def test_skirtor_analytic_importable(self):
-        from tengri.models.agn import skirtor_analytic
+        from tengri.components.agn import skirtor_analytic
 
         assert callable(skirtor_analytic)
 
     def test_create_skirtor_from_grid_importable(self):
-        from tengri.models.agn import create_skirtor_from_grid
+        from tengri.components.agn import create_skirtor_from_grid
 
         assert callable(create_skirtor_from_grid)
 
@@ -63,20 +63,20 @@ class TestSKIRTORAnalytic:
         return jnp.logspace(4, 7, 300)
 
     def test_output_shape(self, wave):
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave)
         assert sed.shape == wave.shape
 
     def test_output_positive(self, wave):
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave)
         assert jnp.all(sed >= 0), "SKIRTOR SED should be non-negative"
         assert float(jnp.max(sed)) > 0, "SKIRTOR SED should have positive values"
 
     def test_output_finite(self, wave):
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave)
         assert jnp.all(jnp.isfinite(sed)), "SKIRTOR SED should be finite everywhere"
@@ -88,7 +88,7 @@ class TestSKIRTORAnalytic:
         - Different silicate feature behavior (emission vs absorption)
         - Different component weighting (hot dust visibility)
         """
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed_type1 = skirtor_analytic(ir_wave, agn_cos_inc=0.95)  # face-on
         sed_type2 = skirtor_analytic(ir_wave, agn_cos_inc=0.05)  # edge-on
@@ -109,7 +109,7 @@ class TestSKIRTORAnalytic:
 
     def test_silicate_absorption_edge_on(self, ir_wave):
         """Edge-on viewing should show silicate absorption at 9.7 um."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         # High tau, edge-on
         sed = skirtor_analytic(
@@ -136,7 +136,7 @@ class TestSKIRTORAnalytic:
 
     def test_silicate_emission_face_on(self, ir_wave):
         """Face-on viewing should show silicate emission (or at least no deep absorption)."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(
             ir_wave,
@@ -160,7 +160,7 @@ class TestSKIRTORAnalytic:
 
     def test_tau_affects_sed(self, wave):
         """Different tau values should produce different SEDs."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed_low = skirtor_analytic(wave, agn_tau_skirtor=3.0)
         sed_high = skirtor_analytic(wave, agn_tau_skirtor=11.0)
@@ -168,7 +168,7 @@ class TestSKIRTORAnalytic:
 
     def test_p_affects_sed(self, wave):
         """Different p values should produce different SEDs."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed_low = skirtor_analytic(wave, agn_p_skirtor=0.0)
         sed_high = skirtor_analytic(wave, agn_p_skirtor=1.5)
@@ -176,7 +176,7 @@ class TestSKIRTORAnalytic:
 
     def test_q_affects_sed(self, wave):
         """Different q values should produce different SEDs."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed_low = skirtor_analytic(wave, agn_q_skirtor=0.0)
         sed_high = skirtor_analytic(wave, agn_q_skirtor=1.5)
@@ -184,7 +184,7 @@ class TestSKIRTORAnalytic:
 
     def test_oa_affects_sed(self, wave):
         """Different opening angles should produce different SEDs."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed_narrow = skirtor_analytic(wave, agn_oa_skirtor=20.0)
         sed_wide = skirtor_analytic(wave, agn_oa_skirtor=60.0)
@@ -194,7 +194,7 @@ class TestSKIRTORAnalytic:
 
     def test_cos_inc_affects_sed(self, wave):
         """Different inclinations should produce different SEDs."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed_face = skirtor_analytic(wave, agn_cos_inc=0.95)
         sed_edge = skirtor_analytic(wave, agn_cos_inc=0.05)
@@ -204,7 +204,7 @@ class TestSKIRTORAnalytic:
 
     def test_luminosity_scaling(self, wave):
         """SED should scale with bolometric luminosity."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed_low = skirtor_analytic(wave, agn_log_lbol=43.0)
         sed_high = skirtor_analytic(wave, agn_log_lbol=44.0)
@@ -213,7 +213,7 @@ class TestSKIRTORAnalytic:
 
     def test_torus_frac_scaling(self, wave):
         """Torus emission should scale with covering fraction."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed_low = skirtor_analytic(wave, agn_torus_frac=0.2)
         sed_high = skirtor_analytic(wave, agn_torus_frac=0.8)
@@ -230,7 +230,7 @@ class TestSKIRTORGradients:
 
     def test_gradient_tau(self, wave):
         """FD check: ∂(∑SED)/∂tau_skirtor. Optical depth gradient."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         def f(tau):
             return float(jnp.sum(skirtor_analytic(wave, agn_tau_skirtor=tau)))
@@ -245,7 +245,7 @@ class TestSKIRTORGradients:
 
     def test_gradient_p(self, wave):
         """FD check: ∂(∑SED)/∂p_skirtor. Radial dust gradient."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         def f(p):
             return float(jnp.sum(skirtor_analytic(wave, agn_p_skirtor=p)))
@@ -260,7 +260,7 @@ class TestSKIRTORGradients:
 
     def test_gradient_q(self, wave):
         """FD check: ∂(∑SED)/∂q_skirtor. Angular dust gradient."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         def f(q):
             return float(jnp.sum(skirtor_analytic(wave, agn_q_skirtor=q)))
@@ -275,7 +275,7 @@ class TestSKIRTORGradients:
 
     def test_gradient_oa(self, wave):
         """FD check: ∂(∑SED)/∂oa_skirtor. Opening angle gradient."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         def f(oa):
             return float(jnp.sum(skirtor_analytic(wave, agn_oa_skirtor=oa)))
@@ -290,7 +290,7 @@ class TestSKIRTORGradients:
 
     def test_gradient_cos_inc(self, wave):
         """FD check: ∂(∑SED)/∂cos_inc. Inclination gradient."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         def f(ci):
             return float(jnp.sum(skirtor_analytic(wave, agn_cos_inc=ci)))
@@ -305,7 +305,7 @@ class TestSKIRTORGradients:
 
     def test_gradient_all_params_simultaneously(self, wave):
         """All 5 SKIRTOR gradients agree with FD simultaneously."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         def loss(tau, p, q, oa, ci):
             return jnp.sum(
@@ -344,7 +344,7 @@ class TestSKIRTORGradients:
 
     def test_gradient_registered_model(self, wave):
         """Gradient should flow through the registered 'skirtor' model."""
-        from tengri.models.agn import AGN_MODELS
+        from tengri.components.agn import AGN_MODELS
 
         model_fn = AGN_MODELS["skirtor"]
 
@@ -388,7 +388,7 @@ class TestSKIRTORJIT:
         return jnp.logspace(2, 7, 200)
 
     def test_jit_analytic(self, wave):
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         fn = jax.jit(lambda tau, ci: skirtor_analytic(wave, agn_tau_skirtor=tau, agn_cos_inc=ci))
         sed = fn(7.0, 0.5)
@@ -396,7 +396,7 @@ class TestSKIRTORJIT:
         assert jnp.all(jnp.isfinite(sed))
 
     def test_jit_registered_model(self, wave):
-        from tengri.models.agn import AGN_MODELS
+        from tengri.components.agn import AGN_MODELS
 
         model_fn = AGN_MODELS["skirtor"]
         fn = jax.jit(
@@ -415,7 +415,7 @@ class TestSKIRTORJIT:
 
     def test_jit_grad_combined(self, wave):
         """JIT of grad agrees with FD for agn_tau_skirtor."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         fn = jax.jit(jax.grad(lambda tau: jnp.sum(skirtor_analytic(wave, agn_tau_skirtor=tau))))
         grad_jax = float(fn(7.0))
@@ -439,51 +439,51 @@ class TestSKIRTOREdgeCases:
         return jnp.logspace(2, 7, 200)
 
     def test_extreme_tau_low(self, wave):
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_tau_skirtor=3.0)
         assert jnp.all(jnp.isfinite(sed))
 
     def test_extreme_tau_high(self, wave):
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_tau_skirtor=11.0)
         assert jnp.all(jnp.isfinite(sed))
 
     def test_fully_face_on(self, wave):
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_cos_inc=1.0)
         assert jnp.all(jnp.isfinite(sed))
         assert float(jnp.max(sed)) > 0
 
     def test_fully_edge_on(self, wave):
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_cos_inc=0.0)
         assert jnp.all(jnp.isfinite(sed))
         assert float(jnp.max(sed)) > 0
 
     def test_narrow_opening_angle(self, wave):
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_oa_skirtor=20.0)
         assert jnp.all(jnp.isfinite(sed))
 
     def test_wide_opening_angle(self, wave):
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_oa_skirtor=60.0)
         assert jnp.all(jnp.isfinite(sed))
 
     def test_zero_p_and_q(self, wave):
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_p_skirtor=0.0, agn_q_skirtor=0.0)
         assert jnp.all(jnp.isfinite(sed))
 
     def test_max_p_and_q(self, wave):
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_p_skirtor=1.5, agn_q_skirtor=1.5)
         assert jnp.all(jnp.isfinite(sed))
@@ -503,7 +503,7 @@ class TestNovikovThorneEfficiency:
 
     def test_schwarzschild_isco(self):
         """At a=0 (Schwarzschild BH): r_isco = 6 R_g exactly (Bardeen+1972)."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         r_isco_0 = float(_isco_radius(0.0))
         np.testing.assert_allclose(
@@ -515,7 +515,7 @@ class TestNovikovThorneEfficiency:
 
     def test_schwarzschild_efficiency(self):
         """At a=0: η = 1 - sqrt(8/9) ≈ 0.0572."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         r_isco_0 = float(_isco_radius(0.0))
         eta_0 = 1.0 - float(jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_0)))
@@ -528,7 +528,7 @@ class TestNovikovThorneEfficiency:
 
     def test_maximal_spin_efficiency(self):
         """At a=0.998 (near-maximal prograde spin): η ≈ 0.321 (Thorne 1974 limit)."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         r_isco_998 = float(_isco_radius(0.998))
         eta_998 = 1.0 - float(jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_998)))
@@ -541,7 +541,7 @@ class TestNovikovThorneEfficiency:
 
     def test_higher_spin_higher_efficiency(self):
         """Monotonicity: higher prograde spin → smaller ISCO → higher η."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         def eta_from_spin(a: float) -> float:
             r = float(_isco_radius(a))

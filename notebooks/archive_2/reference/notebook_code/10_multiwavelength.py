@@ -39,8 +39,8 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri.models.radio import radio_agn, radio_star_forming, radio_total
-from tengri.models.xray import xray_agn_corona, xray_total, xray_xrb
+from tengri.components.radio import radio_agn, radio_star_forming, radio_total
+from tengri.components.xray import xray_agn_corona, xray_total, xray_xrb
 
 import sys, os  # noqa: E401
 

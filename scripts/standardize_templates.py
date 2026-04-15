@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 def write_dl07(outpath: str) -> None:
     """Standardize DL07 templates."""
-    from tengri.models.dust.emission import load_draine_li_templates
+    from tengri.components.dust.emission import load_draine_li_templates
 
     # Load from NPZ (properly normalized)
     data = load_draine_li_templates("data/dl07_templates.npz")
@@ -56,7 +56,7 @@ def write_dl07(outpath: str) -> None:
 
 def write_dl14(outpath: str) -> None:
     """Standardize DL14 templates."""
-    from tengri.models.dust.emission import load_dl14_templates
+    from tengri.components.dust.emission import load_dl14_templates
 
     data = load_dl14_templates("data/dl14_templates.h5")
 
@@ -83,7 +83,7 @@ def write_dl14(outpath: str) -> None:
 
 def write_dale2014(outpath: str) -> None:
     """Standardize Dale+2014 templates."""
-    from tengri.models.dust.emission import create_dale2014_from_grid
+    from tengri.components.dust.emission import create_dale2014_from_grid
 
     # Load raw — create_dale2014_from_grid normalizes internally
     import numpy as np
@@ -124,7 +124,7 @@ def write_dale2014(outpath: str) -> None:
 
 def write_astrodust(outpath: str) -> None:
     """Standardize Astrodust templates."""
-    from tengri.models.dust.emission import load_astrodust_templates
+    from tengri.components.dust.emission import load_astrodust_templates
 
     data = load_astrodust_templates("data/astrodust_templates.npz")
 
@@ -149,7 +149,7 @@ def write_astrodust(outpath: str) -> None:
 
 def write_themis(outpath: str) -> None:
     """Standardize THEMIS templates."""
-    from tengri.models.dust.emission import load_themis_templates
+    from tengri.components.dust.emission import load_themis_templates
 
     data = load_themis_templates("data/themis_templates.npz")
 
@@ -174,7 +174,7 @@ def write_themis(outpath: str) -> None:
 
 def write_bosa(outpath: str) -> None:
     """Standardize BOSA templates."""
-    from tengri.models.dust.emission import load_bosa_templates
+    from tengri.components.dust.emission import load_bosa_templates
 
     data = load_bosa_templates("data/bosa_templates.npz")
 

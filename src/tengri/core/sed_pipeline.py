@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tengri.models.dust.attenuation import (
+from tengri.components.dust.attenuation import (
     single_component_dust_fast,
     two_component_dust_fast,
 )
-from tengri.models.sps.dsps_wrapper import (
+from tengri.components.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_log_z_evolving,
     compute_surviving_mass,
@@ -207,7 +207,7 @@ def _compute_dust_atten(model, wave_dt, p):
         )
     # For the non-fused fallback path, always use smooth sigmoid weights
     # (this path is only hit for evolving-Z etc., not performance-critical)
-    from tengri.models.dust.attenuation import precompute_dust_age_weights
+    from tengri.components.dust.attenuation import precompute_dust_age_weights
 
     if model._precomputed.dust_age_weights is not None:
         dust_age_w = model._precomputed.dust_age_weights.astype(wave_dt.dtype)
@@ -364,7 +364,7 @@ def compute_sed_components(
     # Resolve [α/Fe]: either global scalar or per-age evolving ramp
     _alpha_evolving = getattr(model, "_alpha_fe_evolving", False)
     if _alpha_evolving:
-        from tengri.models.sps.dsps_wrapper import compute_alpha_fe_evolving
+        from tengri.components.sps.dsps_wrapper import compute_alpha_fe_evolving
 
         alpha_fe_old = p.get("alpha_fe_old", 0.3)
         alpha_fe_young = p.get("alpha_fe_young", 0.0)
@@ -479,7 +479,7 @@ def compute_sed_components(
             t_universe_gyr,
         )
         if model._csp_integration == "dsps_met_table":
-            from tengri.models.sps.dsps_wrapper import compute_dsps_met_table_weights
+            from tengri.components.sps.dsps_wrapper import compute_dsps_met_table_weights
 
             lgmet_scatter = float(p.get("lgmet_scatter", getattr(model, "_lgmet_scatter", 0.2)))
             weights, ssp_flux_at_z = compute_dsps_met_table_weights(
@@ -498,7 +498,7 @@ def compute_sed_components(
             ssp_flux_at_z = interp_metallicity_evolving(model, log_z_per_age)
     elif getattr(model, "_chem_evol_enabled", False):
         # Chemical evolution: derive Z(t) from SFH via gas-regulator model
-        from tengri.models.sfh.chemical_evolution import chem_evol_metallicity_on_ssp_grid
+        from tengri.components.sfh.chemical_evolution import chem_evol_metallicity_on_ssp_grid
 
         log_z_per_age = chem_evol_metallicity_on_ssp_grid(
             model.ssp_log_ages_yr,
@@ -510,7 +510,7 @@ def compute_sed_components(
             return_frac=p.get("chem_return_frac", 0.4),
         )
         if model._csp_integration == "dsps_met_table":
-            from tengri.models.sps.dsps_wrapper import compute_dsps_met_table_weights
+            from tengri.components.sps.dsps_wrapper import compute_dsps_met_table_weights
 
             z = p.get("redshift", 0.0)
             _has_t_uni = hasattr(model, "_t_universe_gyr")
@@ -532,7 +532,7 @@ def compute_sed_components(
             ssp_flux_at_z = interp_metallicity_evolving(model, log_z_per_age)
     else:
         if model._csp_integration == "dsps_native":
-            from tengri.models.sps.dsps_wrapper import compute_dsps_native_weights
+            from tengri.components.sps.dsps_wrapper import compute_dsps_native_weights
 
             z = p.get("redshift", 0.0)
             _has_t_uni = hasattr(model, "_t_universe_gyr")
@@ -550,7 +550,7 @@ def compute_sed_components(
                 lgmet_scatter,
             )
         elif model._csp_integration == "dsps_met_table":
-            from tengri.models.sps.dsps_wrapper import compute_dsps_met_table_weights
+            from tengri.components.sps.dsps_wrapper import compute_dsps_met_table_weights
 
             z = p.get("redshift", 0.0)
             _has_t_uni = hasattr(model, "_t_universe_gyr")
@@ -815,7 +815,7 @@ def compute_sed_components(
 
     # ── Dust IR emission (energy-balanced) ────────────────────────────
     if model._dust_emission_model is not None:
-        from tengri.models.dust.emission import resolve_emission_model
+        from tengri.components.dust.emission import resolve_emission_model
 
         # Ensure L_ir is finite before passing to dust emission model
         L_ir_safe = jnp.where(jnp.isfinite(L_ir) & (L_ir > 0.0), L_ir, 0.0)
@@ -837,7 +837,7 @@ def compute_sed_components(
 
     # ── AGN contribution ──────────────────────────────────────────────
     if model._agn_model is not None:
-        from tengri.models.agn import resolve_agn_model
+        from tengri.components.agn import resolve_agn_model
 
         agn_sed = agn_emission(
             resolve_agn_model(model._agn_model),

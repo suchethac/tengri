@@ -33,7 +33,7 @@ class TestModifiedBlackbodyPhysics:
         With β>0 the peak shifts to shorter λ, but for β=1.8
         the peak is at ~60-80 μm for T=30K.
         """
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         wave = jnp.geomspace(1e4, 1e7, 2000)
         l_nu = modified_blackbody(wave, L_absorbed=1e10, dust_T=30.0, dust_beta_ir=1.8)
@@ -43,7 +43,7 @@ class TestModifiedBlackbodyPhysics:
 
     def test_hotter_peaks_shorter(self):
         """Higher dust temperature → shorter peak wavelength."""
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         wave = jnp.geomspace(1e4, 1e7, 2000)
         l_cool = modified_blackbody(wave, L_absorbed=1e10, dust_T=20.0)
@@ -58,7 +58,7 @@ class TestModifiedBlackbodyPhysics:
 
         At λ >> λ_peak: L_ν ∝ ν^(2+β) (RJ regime).
         """
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         wave = jnp.geomspace(1e4, 1e7, 2000)
         l_low_b = modified_blackbody(wave, L_absorbed=1e10, dust_T=30.0, dust_beta_ir=1.0)
@@ -75,7 +75,7 @@ class TestModifiedBlackbodyPhysics:
 
     def test_energy_conservation(self):
         """Integral of L_ν dν should equal L_absorbed (within ~20%)."""
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         wave = jnp.geomspace(1e3, 1e8, 5000)
         l_absorbed = 1e10  # Lsun
@@ -102,7 +102,7 @@ class TestCasey2012Physics:
 
         At 8-40 μm, Casey2012 should exceed pure MBB.
         """
-        from tengri.models.dust.emission import casey2012, modified_blackbody
+        from tengri.components.dust.emission import casey2012, modified_blackbody
 
         wave = jnp.geomspace(1e4, 1e7, 2000)
         l_mbb = modified_blackbody(wave, L_absorbed=1e10, dust_T=35.0, dust_beta_ir=1.8)
@@ -119,7 +119,7 @@ class TestCasey2012Physics:
 
     def test_alpha_mir_controls_warmth(self):
         """Higher alpha_MIR → steeper mid-IR power-law → less warm dust."""
-        from tengri.models.dust.emission import casey2012
+        from tengri.components.dust.emission import casey2012
 
         wave = jnp.geomspace(1e4, 1e7, 2000)
         l_flat = casey2012(wave, L_absorbed=1e10, dust_alpha_mir=1.5)
@@ -140,7 +140,7 @@ class TestCMBCorrections:
 
     def test_cmb_temperature_z0(self):
         """At z=0: T_CMB = 2.725 K, so T_eff ≈ T_dust (no CMB effect)."""
-        from tengri.models.dust.emission import cmb_corrected_temperature
+        from tengri.components.dust.emission import cmb_corrected_temperature
 
         t_eff = float(cmb_corrected_temperature(T_dust=30.0, redshift=0.0))
         np.testing.assert_allclose(t_eff, 30.0, atol=0.5)
@@ -151,7 +151,7 @@ class TestCMBCorrections:
         T_CMB(z=7) = 2.725 * 8 = 21.8 K.
         For T_dust=30K: T_eff should be > 30K.
         """
-        from tengri.models.dust.emission import cmb_corrected_temperature
+        from tengri.components.dust.emission import cmb_corrected_temperature
 
         t_eff = float(cmb_corrected_temperature(T_dust=30.0, redshift=7.0))
         assert t_eff > 30.0, f"CMB should raise T_eff at z=7, got {t_eff:.1f} K"
@@ -162,7 +162,7 @@ class TestCMBCorrections:
         T_CMB(z=10) = 2.725 * 11 = 30.0 K.
         For T_dust=25K < T_CMB(z=10): T_eff should be ≈ T_CMB.
         """
-        from tengri.models.dust.emission import cmb_corrected_temperature
+        from tengri.components.dust.emission import cmb_corrected_temperature
 
         t_eff = float(cmb_corrected_temperature(T_dust=25.0, redshift=10.0))
         t_cmb = 2.725 * 11.0
@@ -170,7 +170,7 @@ class TestCMBCorrections:
 
     def test_contrast_factor_near_one_at_z0(self):
         """At z=0, contrast factor → 1 (no CMB background to subtract)."""
-        from tengri.models.dust.emission import cmb_contrast_factor
+        from tengri.components.dust.emission import cmb_contrast_factor
 
         wave = jnp.geomspace(1e4, 1e7, 100)
         cf = cmb_contrast_factor(wave, T_eff=30.0, redshift=0.0)
@@ -181,7 +181,7 @@ class TestCMBCorrections:
 
         Contrast factor < 1 when T_eff is close to T_CMB(z).
         """
-        from tengri.models.dust.emission import cmb_contrast_factor
+        from tengri.components.dust.emission import cmb_contrast_factor
 
         wave = jnp.geomspace(1e5, 1e7, 100)  # FIR-mm
         cf_z0 = cmb_contrast_factor(wave, T_eff=30.0, redshift=0.0)
@@ -194,7 +194,7 @@ class TestCMBCorrections:
 
     def test_contrast_factor_bounded(self):
         """Contrast factor must be in [0, 1] (no amplification)."""
-        from tengri.models.dust.emission import cmb_contrast_factor
+        from tengri.components.dust.emission import cmb_contrast_factor
 
         wave = jnp.geomspace(1e4, 1e7, 200)
         for z in [0.0, 2.0, 5.0, 8.0]:

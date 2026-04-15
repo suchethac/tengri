@@ -15,7 +15,7 @@ import pytest
 # the compilation machinery clear this env var themselves.
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
-from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw
 from tengri.utils.grid import grid_spacing, make_log_age_grid
 
 # Enable 64-bit for numerical precision in tests

@@ -30,7 +30,7 @@ class TestUnifiedNLRBLRPhysics:
 
     def test_produces_finite_sed(self):
         """Basic sanity: unified model produces finite positive SED."""
-        from tengri.models.agn.unified import unified_nlr_blr
+        from tengri.components.agn.unified import unified_nlr_blr
 
         l_nu = unified_nlr_blr(WAVE_OPT, agn_log_lbol=44.0)
         assert jnp.all(jnp.isfinite(l_nu))
@@ -42,7 +42,7 @@ class TestUnifiedNLRBLRPhysics:
         The torus does not obscure the BLR at low inclination.
         Check for broad Hα emission at 6563A.
         """
-        from tengri.models.agn.unified import unified_nlr_blr
+        from tengri.components.agn.unified import unified_nlr_blr
 
         wave = jnp.linspace(6400.0, 6700.0, 1000)
         l_type1 = unified_nlr_blr(wave, agn_log_lbol=44.0, agn_cos_inc=0.9)
@@ -55,7 +55,7 @@ class TestUnifiedNLRBLRPhysics:
 
         At high inclination (cos_inc < cos(theta_torus)), the BLR is hidden.
         """
-        from tengri.models.agn.unified import unified_nlr_blr
+        from tengri.components.agn.unified import unified_nlr_blr
 
         wave = jnp.linspace(6400.0, 6700.0, 1000)
         # Type 2: edge-on with small torus opening
@@ -73,7 +73,7 @@ class TestUnifiedNLRBLRPhysics:
 
         [OIII] 5007 should appear in both Type 1 and Type 2.
         """
-        from tengri.models.agn.unified import unified_nlr_blr
+        from tengri.components.agn.unified import unified_nlr_blr
 
         wave = jnp.linspace(4950.0, 5050.0, 500)
         l_type1 = unified_nlr_blr(wave, agn_log_lbol=44.0, agn_cos_inc=0.9)
@@ -87,7 +87,7 @@ class TestUnifiedNLRBLRPhysics:
 
     def test_luminosity_scaling(self):
         """Higher agn_log_lbol → brighter SED."""
-        from tengri.models.agn.unified import unified_nlr_blr
+        from tengri.components.agn.unified import unified_nlr_blr
 
         l_faint = unified_nlr_blr(WAVE_OPT, agn_log_lbol=43.0)
         l_bright = unified_nlr_blr(WAVE_OPT, agn_log_lbol=45.0)
@@ -96,7 +96,7 @@ class TestUnifiedNLRBLRPhysics:
 
     def test_polar_dust_reddens_type1(self):
         """agn_polar_ebv > 0 should redden the Type 1 SED (SMC law)."""
-        from tengri.models.agn.unified import unified_nlr_blr
+        from tengri.components.agn.unified import unified_nlr_blr
 
         l_no_dust = unified_nlr_blr(
             WAVE_OPT, agn_log_lbol=44.0, agn_cos_inc=0.9, agn_polar_ebv=0.0
@@ -121,7 +121,7 @@ class TestQSOgenPhysics:
 
     def test_default_produces_quasar_sed(self):
         """Default parameters reproduce a typical Type 1 quasar SED."""
-        from tengri.models.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import qsogen_sed
 
         l_nu = qsogen_sed(WAVE_OPT)
         assert jnp.all(jnp.isfinite(l_nu))
@@ -133,7 +133,7 @@ class TestQSOgenPhysics:
         Temple+2021 Eq. 1: L_ν ∝ ν^{plslp1} for λ > plbrk.
         More negative plslp1 → redder UV.
         """
-        from tengri.models.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import qsogen_sed
 
         l_blue = qsogen_sed(WAVE_OPT, agn_plslp1=0.0)
         l_red = qsogen_sed(WAVE_OPT, agn_plslp1=-1.0)
@@ -150,7 +150,7 @@ class TestQSOgenPhysics:
 
         Higher bbnorm → stronger NIR bump.
         """
-        from tengri.models.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import qsogen_sed
 
         wave_nir = jnp.geomspace(5000.0, 50000.0, 500)
         l_no_dust = qsogen_sed(wave_nir, agn_bbnorm=0.0)
@@ -166,7 +166,7 @@ class TestQSOgenPhysics:
 
     def test_ebv_reddens_sed(self):
         """SMC reddening (agn_ebv > 0) should suppress UV flux."""
-        from tengri.models.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import qsogen_sed
 
         l_clean = qsogen_sed(WAVE_OPT, agn_ebv=0.0)
         l_red = qsogen_sed(WAVE_OPT, agn_ebv=0.3)
@@ -179,7 +179,7 @@ class TestQSOgenPhysics:
 
     def test_emission_lines_add_flux(self):
         """Temple+2021: emission lines add flux above continuum."""
-        from tengri.models.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import qsogen_sed
 
         l_no_lines = qsogen_sed(WAVE_OPT, agn_emline_scale=0.0)
         l_lines = qsogen_sed(WAVE_OPT, agn_emline_scale=1.0)
@@ -194,7 +194,7 @@ class TestQSOgenPhysics:
 
         bcnorm controls Balmer pseudo-continuum strength.
         """
-        from tengri.models.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(3000.0, 4000.0, 500)
         l_no_bc = qsogen_sed(wave, agn_bcnorm=0.0)
@@ -217,7 +217,7 @@ class TestSKIRTORPhysics:
 
     def test_skirtor_peaks_in_mir(self):
         """Torus emission peaks in mid-IR (T ~ 200-1500K)."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         wave = jnp.geomspace(1000.0, 1e6, 2000)
         l_nu = skirtor_analytic(wave, agn_log_lbol=44.0)
@@ -228,7 +228,7 @@ class TestSKIRTORPhysics:
 
     def test_skirtor_luminosity_scales(self):
         """10x L_bol → ~10x torus emission."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         wave = jnp.geomspace(10000.0, 1e6, 500)
         l_low = skirtor_analytic(wave, agn_log_lbol=43.0)
@@ -239,7 +239,7 @@ class TestSKIRTORPhysics:
 
     def test_skirtor_finite_positive(self):
         """SKIRTOR must produce finite non-negative SED."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         wave = jnp.geomspace(1000.0, 1e6, 500)
         l_nu = skirtor_analytic(wave, agn_log_lbol=44.0)

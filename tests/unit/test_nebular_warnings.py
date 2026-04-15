@@ -12,7 +12,7 @@ import warnings
 
 import pytest
 
-from tengri.models.nebular import (
+from tengri.components.nebular import (
     BakedInBackend,
     BakedInNebularWarning,
     CB19Backend,
@@ -154,10 +154,10 @@ def test_has_continuum_table():
     # CueBackend — skip if weights file missing
     from pathlib import Path
 
-    from tengri.models.nebular import _DEFAULT_CUE_WEIGHTS_PATH
+    from tengri.components.nebular import _DEFAULT_CUE_WEIGHTS_PATH
 
     if Path(_DEFAULT_CUE_WEIGHTS_PATH).exists():
-        from tengri.models.nebular import CueBackend
+        from tengri.components.nebular import CueBackend
 
         c = CueBackend(str(_DEFAULT_CUE_WEIGHTS_PATH))
         assert c.has_continuum is True, "Cue should have continuum"

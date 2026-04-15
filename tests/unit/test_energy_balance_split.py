@@ -39,12 +39,12 @@ class TestRegistration:
     """Verify the model is registered in the emission model registry."""
 
     def test_in_registry(self):
-        from tengri.models.dust.emission import DUST_EMISSION_MODELS
+        from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
         assert "energy_balance_split" in DUST_EMISSION_MODELS
 
     def test_resolve_emission_model(self):
-        from tengri.models.dust.emission import resolve_emission_model
+        from tengri.components.dust.emission import resolve_emission_model
 
         fn = resolve_emission_model("energy_balance_split")
         assert callable(fn)
@@ -59,7 +59,7 @@ class TestFColdExtremes:
     """f_cold=0 gives all warm, f_cold=1 gives all cold."""
 
     def test_f_cold_zero_all_warm(self, wavelengths, L_absorbed):
-        from tengri.models.dust.emission import energy_balance_split, modified_blackbody
+        from tengri.components.dust.emission import energy_balance_split, modified_blackbody
 
         sed = energy_balance_split(
             wavelengths,
@@ -77,7 +77,7 @@ class TestFColdExtremes:
         assert jnp.allclose(sed, expected, rtol=1e-10)
 
     def test_f_cold_one_all_cold(self, wavelengths, L_absorbed):
-        from tengri.models.dust.emission import energy_balance_split, modified_blackbody
+        from tengri.components.dust.emission import energy_balance_split, modified_blackbody
 
         sed = energy_balance_split(
             wavelengths,
@@ -104,7 +104,7 @@ class TestAGNContribution:
     """AGN IR adds extra luminosity beyond stellar absorption."""
 
     def test_agn_adds_luminosity(self, wavelengths, L_absorbed):
-        from tengri.models.dust.emission import energy_balance_split
+        from tengri.components.dust.emission import energy_balance_split
 
         sed_no_agn = energy_balance_split(
             wavelengths,
@@ -124,7 +124,7 @@ class TestAGNContribution:
 
     def test_agn_only(self, wavelengths):
         """If L_absorbed_stellar=0, only AGN contributes."""
-        from tengri.models.dust.emission import energy_balance_split
+        from tengri.components.dust.emission import energy_balance_split
 
         L_agn = 1e10
         sed = energy_balance_split(
@@ -150,7 +150,7 @@ class TestEnergyConservation:
     """Integral of output = eta * L_absorbed + L_agn_ir."""
 
     def test_default_eta(self, wavelengths, L_absorbed):
-        from tengri.models.dust.emission import energy_balance_split
+        from tengri.components.dust.emission import energy_balance_split
 
         sed = energy_balance_split(wavelengths, L_absorbed)
         nu = 2.99792458e10 / (wavelengths * 1e-8)
@@ -158,7 +158,7 @@ class TestEnergyConservation:
         assert jnp.isclose(integral, L_absorbed, rtol=0.05)
 
     def test_eta_half(self, wavelengths, L_absorbed):
-        from tengri.models.dust.emission import energy_balance_split
+        from tengri.components.dust.emission import energy_balance_split
 
         eta = 0.5
         sed = energy_balance_split(wavelengths, L_absorbed, eta_balance=eta)
@@ -168,7 +168,7 @@ class TestEnergyConservation:
         assert jnp.isclose(integral, expected, rtol=0.05)
 
     def test_eta_plus_agn(self, wavelengths, L_absorbed):
-        from tengri.models.dust.emission import energy_balance_split
+        from tengri.components.dust.emission import energy_balance_split
 
         eta = 0.8
         L_agn = 2e9
@@ -193,7 +193,7 @@ class TestJITCompatibility:
     """Model is JIT-compilable."""
 
     def test_jit(self, wavelengths, L_absorbed):
-        from tengri.models.dust.emission import energy_balance_split
+        from tengri.components.dust.emission import energy_balance_split
 
         jitted = jax.jit(energy_balance_split)
         sed = jitted(wavelengths, L_absorbed)
@@ -201,7 +201,7 @@ class TestJITCompatibility:
         assert jnp.all(jnp.isfinite(sed))
 
     def test_vmap(self, wavelengths):
-        from tengri.models.dust.emission import energy_balance_split
+        from tengri.components.dust.emission import energy_balance_split
 
         L_values = jnp.array([1e9, 5e9, 1e10])
         vmapped = jax.vmap(energy_balance_split, in_axes=(None, 0))
@@ -218,7 +218,7 @@ class TestGradientCompatibility:
     """Model is differentiable w.r.t. all continuous parameters."""
 
     def test_grad_L_absorbed(self, wavelengths):
-        from tengri.models.dust.emission import energy_balance_split
+        from tengri.components.dust.emission import energy_balance_split
 
         def loss(L_abs):
             sed = energy_balance_split(wavelengths, L_abs)
@@ -236,7 +236,7 @@ class TestGradientCompatibility:
         assert g_jax > 0.0
 
     def test_grad_f_cold(self, wavelengths, L_absorbed):
-        from tengri.models.dust.emission import energy_balance_split
+        from tengri.components.dust.emission import energy_balance_split
 
         def loss(f_cold):
             sed = energy_balance_split(wavelengths, L_absorbed, f_cold=f_cold)
@@ -250,7 +250,7 @@ class TestGradientCompatibility:
         )
 
     def test_grad_temperatures(self, wavelengths, L_absorbed):
-        from tengri.models.dust.emission import energy_balance_split
+        from tengri.components.dust.emission import energy_balance_split
 
         def loss_warm(T_warm):
             sed = energy_balance_split(
@@ -289,7 +289,7 @@ class TestGradientCompatibility:
         )
 
     def test_grad_eta(self, wavelengths, L_absorbed):
-        from tengri.models.dust.emission import energy_balance_split
+        from tengri.components.dust.emission import energy_balance_split
 
         def loss(eta):
             sed = energy_balance_split(wavelengths, L_absorbed, eta_balance=eta)
@@ -313,20 +313,20 @@ class TestEdgeCases:
     """Edge cases and physical sanity checks."""
 
     def test_zero_luminosity(self, wavelengths):
-        from tengri.models.dust.emission import energy_balance_split
+        from tengri.components.dust.emission import energy_balance_split
 
         sed = energy_balance_split(wavelengths, 0.0)
         assert jnp.allclose(sed, 0.0)
 
     def test_output_non_negative(self, wavelengths, L_absorbed):
-        from tengri.models.dust.emission import energy_balance_split
+        from tengri.components.dust.emission import energy_balance_split
 
         sed = energy_balance_split(wavelengths, L_absorbed)
         assert jnp.all(sed >= 0.0)
 
     def test_warm_peaks_at_shorter_wavelength(self, wavelengths, L_absorbed):
         """Warm component peaks at shorter wavelength than cold."""
-        from tengri.models.dust.emission import energy_balance_split
+        from tengri.components.dust.emission import energy_balance_split
 
         sed_warm_only = energy_balance_split(
             wavelengths,
@@ -362,21 +362,21 @@ class TestPlanckBnu:
         return jnp.logspace(4, 8, 300)
 
     def test_finite_positive(self, wave_ir):
-        from tengri.models.dust.emission import planck_bnu
+        from tengri.components.dust.emission import planck_bnu
 
         bnu = planck_bnu(wave_ir, temperature=30.0)
         assert jnp.all(jnp.isfinite(bnu))
         assert jnp.all(bnu > 0.0)
 
     def test_output_shape(self, wave_ir):
-        from tengri.models.dust.emission import planck_bnu
+        from tengri.components.dust.emission import planck_bnu
 
         bnu = planck_bnu(wave_ir, temperature=30.0)
         assert bnu.shape == wave_ir.shape
 
     def test_hotter_peaks_at_shorter_wavelength(self, wave_ir):
         """Wien's displacement law: hotter BB peaks at shorter λ."""
-        from tengri.models.dust.emission import planck_bnu
+        from tengri.components.dust.emission import planck_bnu
 
         bnu_cold = planck_bnu(wave_ir, temperature=20.0)
         bnu_warm = planck_bnu(wave_ir, temperature=60.0)
@@ -386,7 +386,7 @@ class TestPlanckBnu:
 
     def test_hotter_brighter(self, wave_ir):
         """At fixed wavelength, higher T → higher B_nu (Stefan-Boltzmann)."""
-        from tengri.models.dust.emission import planck_bnu
+        from tengri.components.dust.emission import planck_bnu
 
         bnu_low = planck_bnu(wave_ir, temperature=20.0)
         bnu_high = planck_bnu(wave_ir, temperature=50.0)
@@ -394,7 +394,7 @@ class TestPlanckBnu:
 
     def test_short_wavelengths_finite(self):
         """UV/EUV wavelengths (clipped x) should not overflow."""
-        from tengri.models.dust.emission import planck_bnu
+        from tengri.components.dust.emission import planck_bnu
 
         wave_uv = jnp.array([10.0, 100.0, 1000.0])  # Angstrom
         bnu = planck_bnu(wave_uv, temperature=1e4)
@@ -405,7 +405,7 @@ class TestPlanckBnu:
         """planck_bnu is JIT-compilable."""
         import jax
 
-        from tengri.models.dust.emission import planck_bnu
+        from tengri.components.dust.emission import planck_bnu
 
         jitted = jax.jit(planck_bnu)
         bnu = jitted(wave_ir, 30.0)
@@ -415,7 +415,7 @@ class TestPlanckBnu:
         """FD check: ∂(∑B_nu)/∂T."""
         import jax
 
-        from tengri.models.dust.emission import planck_bnu
+        from tengri.components.dust.emission import planck_bnu
 
         def loss(T):
             return jnp.sum(planck_bnu(wave_ir, T))
@@ -440,21 +440,21 @@ class TestModifiedBlackbody:
         return jnp.logspace(5, 9, 400)
 
     def test_finite_non_negative(self, wave_fir):
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         sed = modified_blackbody(wave_fir, L_absorbed=1e10)
         assert jnp.all(jnp.isfinite(sed))
         assert jnp.all(sed >= 0.0)
 
     def test_output_shape(self, wave_fir):
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         sed = modified_blackbody(wave_fir, L_absorbed=1e10)
         assert sed.shape == wave_fir.shape
 
     def test_energy_conservation(self, wave_fir):
         """Integral of output ≈ L_absorbed (frequency integral)."""
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         L_abs = 1e10
         sed = modified_blackbody(wave_fir, L_absorbed=L_abs, dust_T=30.0)
@@ -463,7 +463,7 @@ class TestModifiedBlackbody:
         np.testing.assert_allclose(float(integral), L_abs, rtol=0.02)
 
     def test_hotter_peaks_shorter_wavelength(self, wave_fir):
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         sed_cold = modified_blackbody(wave_fir, L_absorbed=1e10, dust_T=20.0)
         sed_warm = modified_blackbody(wave_fir, L_absorbed=1e10, dust_T=50.0)
@@ -472,14 +472,14 @@ class TestModifiedBlackbody:
         assert peak_warm < peak_cold
 
     def test_zero_luminosity(self, wave_fir):
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         sed = modified_blackbody(wave_fir, L_absorbed=0.0)
         assert jnp.allclose(sed, 0.0)
 
     def test_higher_beta_steeper_rayleigh_jeans(self, wave_fir):
         """Higher dust_beta_ir → steeper slope on Rayleigh-Jeans side."""
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         # Use radio-wavelength end where RJ slope is dominant
         wave_radio = jnp.logspace(8, 10, 100)  # 1 cm – 1 m
@@ -493,14 +493,14 @@ class TestModifiedBlackbody:
         assert ratio_high < ratio_low
 
     def test_registered_in_models(self):
-        from tengri.models.dust.emission import DUST_EMISSION_MODELS
+        from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
         assert "modified_blackbody" in DUST_EMISSION_MODELS
 
     def test_jit_compatible(self, wave_fir):
         import jax
 
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         jitted = jax.jit(modified_blackbody)
         sed = jitted(wave_fir, 1e10)
@@ -509,7 +509,7 @@ class TestModifiedBlackbody:
     def test_gradient_wrt_L_absorbed(self, wave_fir):
         import jax
 
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         def loss(L_abs):
             return jnp.sum(modified_blackbody(wave_fir, L_abs))
@@ -522,7 +522,7 @@ class TestModifiedBlackbody:
     def test_gradient_wrt_temperature(self, wave_fir):
         import jax
 
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         def loss(T):
             return jnp.sum(modified_blackbody(wave_fir, L_absorbed=1e10, dust_T=T))
@@ -546,26 +546,26 @@ class TestCasey2012:
         return jnp.logspace(4, 9, 500)
 
     def test_registered_in_models(self):
-        from tengri.models.dust.emission import DUST_EMISSION_MODELS
+        from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
         assert "casey2012" in DUST_EMISSION_MODELS
 
     def test_finite_non_negative(self, wave_ir):
-        from tengri.models.dust.emission import casey2012
+        from tengri.components.dust.emission import casey2012
 
         sed = casey2012(wave_ir, L_absorbed=1e10)
         assert jnp.all(jnp.isfinite(sed))
         assert jnp.all(sed >= 0.0)
 
     def test_output_shape(self, wave_ir):
-        from tengri.models.dust.emission import casey2012
+        from tengri.components.dust.emission import casey2012
 
         sed = casey2012(wave_ir, L_absorbed=1e10)
         assert sed.shape == wave_ir.shape
 
     def test_energy_conservation(self, wave_ir):
         """Integral of output ≈ L_absorbed."""
-        from tengri.models.dust.emission import casey2012
+        from tengri.components.dust.emission import casey2012
 
         L_abs = 1e10
         sed = casey2012(wave_ir, L_absorbed=L_abs, dust_T=35.0)
@@ -574,7 +574,7 @@ class TestCasey2012:
         np.testing.assert_allclose(float(integral), L_abs, rtol=0.03)
 
     def test_zero_luminosity(self, wave_ir):
-        from tengri.models.dust.emission import casey2012
+        from tengri.components.dust.emission import casey2012
 
         sed = casey2012(wave_ir, L_absorbed=0.0)
         assert jnp.allclose(sed, 0.0)
@@ -590,7 +590,7 @@ class TestCasey2012:
         The model's value lies in its shape flexibility: alpha_mir controls the
         power-law slope for hotter dust / warmer galaxies.
         """
-        from tengri.models.dust.emission import casey2012, modified_blackbody
+        from tengri.components.dust.emission import casey2012, modified_blackbody
 
         L_abs = 1e10
         sed_casey = casey2012(wave_ir, L_absorbed=L_abs, dust_T=35.0)
@@ -602,7 +602,7 @@ class TestCasey2012:
 
     def test_alpha_affects_mid_ir(self, wave_ir):
         """Larger dust_alpha_mir increases mid-IR power-law contribution."""
-        from tengri.models.dust.emission import casey2012
+        from tengri.components.dust.emission import casey2012
 
         mir_mask = (wave_ir > 8e4) & (wave_ir < 4e5)
         sed_low = casey2012(wave_ir, L_absorbed=1e10, dust_alpha_mir=1.5)
@@ -613,7 +613,7 @@ class TestCasey2012:
     def test_jit_compatible(self, wave_ir):
         import jax
 
-        from tengri.models.dust.emission import casey2012
+        from tengri.components.dust.emission import casey2012
 
         jitted = jax.jit(casey2012)
         sed = jitted(wave_ir, 1e10)
@@ -622,7 +622,7 @@ class TestCasey2012:
     def test_gradient_wrt_L_absorbed(self, wave_ir):
         import jax
 
-        from tengri.models.dust.emission import casey2012
+        from tengri.components.dust.emission import casey2012
 
         def loss(L_abs):
             return jnp.sum(casey2012(wave_ir, L_abs))
@@ -635,7 +635,7 @@ class TestCasey2012:
     def test_gradient_wrt_temperature(self, wave_ir):
         import jax
 
-        from tengri.models.dust.emission import casey2012
+        from tengri.components.dust.emission import casey2012
 
         def loss(T):
             return jnp.sum(casey2012(wave_ir, L_absorbed=1e10, dust_T=T))
@@ -645,7 +645,7 @@ class TestCasey2012:
         np.testing.assert_allclose(g_jax, g_fd, rtol=1e-2)
 
     def test_hotter_peaks_shorter_wavelength(self, wave_ir):
-        from tengri.models.dust.emission import casey2012
+        from tengri.components.dust.emission import casey2012
 
         # Use only FIR range where MBB dominates
         wave_fir = jnp.logspace(5.5, 8, 300)
@@ -666,7 +666,7 @@ class TestCmbCorrectedTemperature:
 
     def test_z0_no_change(self):
         """At z=0 with z=0 CMB, T_eff should equal T_dust."""
-        from tengri.models.dust.emission import cmb_corrected_temperature
+        from tengri.components.dust.emission import cmb_corrected_temperature
 
         T_dust = 35.0
         # At z=0 the CMB terms cancel: T_cmb_z == T_CMB_0, so inner = T_dust^exponent
@@ -675,7 +675,7 @@ class TestCmbCorrectedTemperature:
 
     def test_high_z_raises_temperature(self):
         """At high redshift the CMB floor raises the effective temperature."""
-        from tengri.models.dust.emission import cmb_corrected_temperature
+        from tengri.components.dust.emission import cmb_corrected_temperature
 
         T_dust = 20.0
         T_eff_z0 = float(cmb_corrected_temperature(T_dust, redshift=0.0))
@@ -684,7 +684,7 @@ class TestCmbCorrectedTemperature:
 
     def test_always_finite(self):
         """Finite output even for very cold or hot dust."""
-        from tengri.models.dust.emission import cmb_corrected_temperature
+        from tengri.components.dust.emission import cmb_corrected_temperature
 
         for T_dust in (0.01, 1.0, 50.0, 200.0):
             T_eff = float(cmb_corrected_temperature(T_dust, redshift=2.0))
@@ -693,7 +693,7 @@ class TestCmbCorrectedTemperature:
 
     def test_negative_T_dust_clamped(self):
         """Negative T_dust values are clamped to 1 K — no NaN."""
-        from tengri.models.dust.emission import cmb_corrected_temperature
+        from tengri.components.dust.emission import cmb_corrected_temperature
 
         T_eff = float(cmb_corrected_temperature(-10.0, redshift=0.5))
         assert np.isfinite(T_eff)
@@ -701,7 +701,7 @@ class TestCmbCorrectedTemperature:
 
     def test_beta_ir_affects_result(self):
         """Different beta_ir values give different T_eff."""
-        from tengri.models.dust.emission import cmb_corrected_temperature
+        from tengri.components.dust.emission import cmb_corrected_temperature
 
         T_eff_low = float(cmb_corrected_temperature(30.0, redshift=3.0, beta_ir=1.0))
         T_eff_high = float(cmb_corrected_temperature(30.0, redshift=3.0, beta_ir=2.5))
@@ -709,7 +709,7 @@ class TestCmbCorrectedTemperature:
 
     def test_gradient_wrt_T_dust(self):
         """Gradient of T_eff w.r.t. T_dust is well-defined and positive."""
-        from tengri.models.dust.emission import cmb_corrected_temperature
+        from tengri.components.dust.emission import cmb_corrected_temperature
 
         grad_fn = jax.grad(lambda T: cmb_corrected_temperature(T, redshift=2.0))
         g = float(grad_fn(30.0))
@@ -718,7 +718,7 @@ class TestCmbCorrectedTemperature:
 
     def test_gradient_wrt_redshift(self):
         """Gradient of T_eff w.r.t. redshift is well-defined and positive."""
-        from tengri.models.dust.emission import cmb_corrected_temperature
+        from tengri.components.dust.emission import cmb_corrected_temperature
 
         grad_fn = jax.grad(lambda z: cmb_corrected_temperature(25.0, redshift=z))
         g = float(grad_fn(2.0))
@@ -744,7 +744,7 @@ class TestCmbContrastFactor:
         At very long wavelengths (Rayleigh-Jeans for both), the ratio approaches
         T_cmb/T_eff ≈ 0.07, so we restrict to the MBB peak region only.
         """
-        from tengri.models.dust.emission import cmb_contrast_factor
+        from tengri.components.dust.emission import cmb_contrast_factor
 
         # 50–500 μm = 5e5–5e6 Å: FIR peak of 40 K dust, Wien side of 2.7 K CMB
         wave = jnp.logspace(5.7, 6.7, 100)
@@ -753,7 +753,7 @@ class TestCmbContrastFactor:
 
     def test_high_z_reduces_contrast(self):
         """At high z, contrast factor is appreciably below 1 for cold dust."""
-        from tengri.models.dust.emission import cmb_contrast_factor
+        from tengri.components.dust.emission import cmb_contrast_factor
 
         wave = jnp.logspace(5, 8, 100)
         factor_z5 = cmb_contrast_factor(wave, T_eff=20.0, redshift=5.0)
@@ -762,7 +762,7 @@ class TestCmbContrastFactor:
 
     def test_output_in_unit_interval(self):
         """Contrast factor must be in [0, 1] by construction."""
-        from tengri.models.dust.emission import cmb_contrast_factor
+        from tengri.components.dust.emission import cmb_contrast_factor
 
         for z in (0.0, 2.0, 5.0, 10.0):
             wave = jnp.logspace(4, 8, 200)
@@ -772,7 +772,7 @@ class TestCmbContrastFactor:
 
     def test_all_finite(self):
         """No NaN/Inf values on the output grid."""
-        from tengri.models.dust.emission import cmb_contrast_factor
+        from tengri.components.dust.emission import cmb_contrast_factor
 
         wave = jnp.logspace(3, 9, 300)
         factor = cmb_contrast_factor(wave, T_eff=35.0, redshift=3.0)
@@ -780,7 +780,7 @@ class TestCmbContrastFactor:
 
     def test_gradient_compatible(self):
         """Gradient w.r.t. T_eff is finite and positive."""
-        from tengri.models.dust.emission import cmb_contrast_factor
+        from tengri.components.dust.emission import cmb_contrast_factor
 
         wave = jnp.logspace(5, 8, 50)
 
@@ -802,7 +802,7 @@ class TestComputeAbsorbedLuminosity:
 
     def test_zero_absorption_gives_zero(self):
         """Perfect transmission (T=1) → no absorbed luminosity."""
-        from tengri.models.dust.emission import compute_absorbed_luminosity
+        from tengri.components.dust.emission import compute_absorbed_luminosity
 
         wave = jnp.linspace(1e3, 1e7, 500)
         L_nu = jnp.ones_like(wave)
@@ -811,7 +811,7 @@ class TestComputeAbsorbedLuminosity:
 
     def test_full_absorption_gives_positive(self):
         """Zero transmission (T=0) → all energy absorbed → positive result."""
-        from tengri.models.dust.emission import compute_absorbed_luminosity
+        from tengri.components.dust.emission import compute_absorbed_luminosity
 
         wave = jnp.linspace(1e3, 1e7, 500)
         L_nu = jnp.ones_like(wave)
@@ -820,7 +820,7 @@ class TestComputeAbsorbedLuminosity:
 
     def test_partial_absorption_between_extremes(self):
         """Partial transmission produces result between zero and full-absorption."""
-        from tengri.models.dust.emission import compute_absorbed_luminosity
+        from tengri.components.dust.emission import compute_absorbed_luminosity
 
         wave = jnp.linspace(1e3, 1e7, 500)
         L_nu = jnp.ones_like(wave) * 1e10
@@ -831,7 +831,7 @@ class TestComputeAbsorbedLuminosity:
 
     def test_from_tau_zero_gives_zero(self):
         """tau=0 → exp(-tau)=1 → zero absorbed."""
-        from tengri.models.dust.emission import compute_absorbed_luminosity_from_tau
+        from tengri.components.dust.emission import compute_absorbed_luminosity_from_tau
 
         wave = jnp.linspace(1e3, 1e7, 200)
         L_nu = jnp.ones_like(wave)
@@ -840,7 +840,7 @@ class TestComputeAbsorbedLuminosity:
 
     def test_from_tau_large_tau_matches_full_absorption(self):
         """Very large tau → exp(-tau)≈0 → same as full absorption."""
-        from tengri.models.dust.emission import (
+        from tengri.components.dust.emission import (
             compute_absorbed_luminosity,
             compute_absorbed_luminosity_from_tau,
         )
@@ -855,7 +855,7 @@ class TestComputeAbsorbedLuminosity:
 
     def test_from_tau_gradient(self):
         """Gradient of absorbed luminosity w.r.t. tau is well-defined."""
-        from tengri.models.dust.emission import compute_absorbed_luminosity_from_tau
+        from tengri.components.dust.emission import compute_absorbed_luminosity_from_tau
 
         wave = jnp.linspace(1e3, 1e7, 100)
         L_nu = jnp.ones_like(wave) * 1e9
@@ -880,13 +880,13 @@ class TestRegistryUtilities:
 
     def test_get_emission_model_alias(self):
         """get_emission_model is an alias for resolve_emission_model."""
-        from tengri.models.dust.emission import get_emission_model, resolve_emission_model
+        from tengri.components.dust.emission import get_emission_model, resolve_emission_model
 
         assert get_emission_model is resolve_emission_model
 
     def test_resolve_returns_callable(self):
         """resolve_emission_model returns a callable for known models."""
-        from tengri.models.dust.emission import resolve_emission_model
+        from tengri.components.dust.emission import resolve_emission_model
 
         for name in ("modified_blackbody", "energy_balance_split", "casey2012"):
             fn = resolve_emission_model(name)
@@ -894,35 +894,35 @@ class TestRegistryUtilities:
 
     def test_resolve_unknown_raises_value_error(self):
         """resolve_emission_model raises ValueError for unknown model names."""
-        from tengri.models.dust.emission import resolve_emission_model
+        from tengri.components.dust.emission import resolve_emission_model
 
         with pytest.raises(ValueError, match="Unknown dust emission model"):
             resolve_emission_model("definitely_not_a_model_12345")
 
     def test_preload_unknown_raises_value_error(self):
         """preload_emission_model raises ValueError for unknown model names."""
-        from tengri.models.dust.emission import preload_emission_model
+        from tengri.components.dust.emission import preload_emission_model
 
         with pytest.raises(ValueError, match="Unknown emission model"):
             preload_emission_model("not_registered_xyz")
 
     def test_preload_known_returns_callable(self):
         """preload_emission_model returns a callable for the MBB model (no data needed)."""
-        from tengri.models.dust.emission import preload_emission_model
+        from tengri.components.dust.emission import preload_emission_model
 
         fn = preload_emission_model("modified_blackbody")
         assert callable(fn)
 
     def test_find_data_file_missing(self):
         """_find_data_file returns None for nonexistent files."""
-        from tengri.models.dust.emission import _find_data_file
+        from tengri.components.dust.emission import _find_data_file
 
         result = _find_data_file("__definitely_not_here__.npz")
         assert result is None
 
     def test_find_data_file_present(self, tmp_path, monkeypatch):
         """_find_data_file returns the path when file exists in data/."""
-        from tengri.models.dust import emission as em
+        from tengri.components.dust import emission as em
 
         # Temporarily add tmp_path to search candidates
         original = em._DATA_CANDIDATES[:]
@@ -935,7 +935,7 @@ class TestRegistryUtilities:
 
     def test_all_lazy_models_in_registry(self):
         """All expected lazy-loaded models are present in DUST_EMISSION_MODELS."""
-        from tengri.models.dust.emission import DUST_EMISSION_MODELS
+        from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
         for name in ("draine_li2007", "dale2014", "draine_li2014", "astrodust", "bosa", "themis"):
             assert name in DUST_EMISSION_MODELS, f"'{name}' missing from registry"
@@ -951,7 +951,7 @@ class TestApplyDustEmission:
 
     def test_delegates_to_modified_blackbody(self):
         """apply_dust_emission with 'modified_blackbody' matches direct call."""
-        from tengri.models.dust.emission import apply_dust_emission, modified_blackbody
+        from tengri.components.dust.emission import apply_dust_emission, modified_blackbody
 
         wave = jnp.logspace(5, 8, 100)
         L_abs = 1e10
@@ -962,7 +962,7 @@ class TestApplyDustEmission:
 
     def test_delegates_to_casey2012(self):
         """apply_dust_emission with 'casey2012' matches direct call."""
-        from tengri.models.dust.emission import apply_dust_emission, casey2012
+        from tengri.components.dust.emission import apply_dust_emission, casey2012
 
         wave = jnp.logspace(5, 8, 100)
         L_abs = 5e9
@@ -973,7 +973,7 @@ class TestApplyDustEmission:
 
     def test_unknown_name_raises(self):
         """apply_dust_emission raises ValueError for unknown model names."""
-        from tengri.models.dust.emission import apply_dust_emission
+        from tengri.components.dust.emission import apply_dust_emission
 
         wave = jnp.logspace(5, 8, 50)
         with pytest.raises(ValueError, match="Unknown dust emission model"):
@@ -990,37 +990,37 @@ class TestModuleLevelAliases:
 
     def test_draine_li2007_alias_callable(self):
         """draine_li2007 module-level function is callable."""
-        from tengri.models.dust import emission as em
+        from tengri.components.dust import emission as em
 
         assert callable(em.draine_li2007)
 
     def test_dale2014_alias_callable(self):
         """dale2014 module-level function is callable."""
-        from tengri.models.dust import emission as em
+        from tengri.components.dust import emission as em
 
         assert callable(em.dale2014)
 
     def test_astrodust_alias_callable(self):
         """astrodust module-level function is callable."""
-        from tengri.models.dust import emission as em
+        from tengri.components.dust import emission as em
 
         assert callable(em.astrodust)
 
     def test_bosa_alias_callable(self):
         """bosa module-level function is callable."""
-        from tengri.models.dust import emission as em
+        from tengri.components.dust import emission as em
 
         assert callable(em.bosa)
 
     def test_themis_alias_callable(self):
         """themis module-level function is callable."""
-        from tengri.models.dust import emission as em
+        from tengri.components.dust import emission as em
 
         assert callable(em.themis)
 
     def test_draine_li2014_alias_callable(self):
         """draine_li2014 module-level function is callable."""
-        from tengri.models.dust import emission as em
+        from tengri.components.dust import emission as em
 
         assert callable(em.draine_li2014)
 
@@ -1035,7 +1035,7 @@ class TestMbbWithCmbCorrection:
 
     def test_high_z_sed_differs_from_z0(self):
         """SED at z=5 differs from z=0 due to CMB heating."""
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         wave = jnp.logspace(5, 8, 200)
         sed_z0 = modified_blackbody(wave, 1e10, dust_T=20.0, redshift=0.0)
@@ -1045,7 +1045,7 @@ class TestMbbWithCmbCorrection:
 
     def test_high_z_peaks_at_shorter_wavelength(self):
         """CMB heating at z=5 shifts the MBB peak to shorter wavelengths."""
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         wave = jnp.logspace(5, 8, 500)
         sed_z0 = modified_blackbody(wave, 1e10, dust_T=20.0, redshift=0.0)
@@ -1056,7 +1056,7 @@ class TestMbbWithCmbCorrection:
 
     def test_finite_at_extreme_redshift(self):
         """No NaN/Inf at z=10."""
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         wave = jnp.logspace(4, 9, 200)
         sed = modified_blackbody(wave, 1e10, dust_T=30.0, redshift=10.0)

@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.models.igm import igm_transmission
+from tengri.components.igm import igm_transmission
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:

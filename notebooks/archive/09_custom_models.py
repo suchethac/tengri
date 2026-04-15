@@ -92,12 +92,12 @@ from tengri import (
 )
 from tengri.distributions import Distribution
 from tengri.inference.standardized import StandardizedForwardModel
-from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw
-from tengri.models.sfh.gp_sfh import gp_from_xi
-from tengri.models.sfh.mean_sfh import (
+from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.components.sfh.gp_sfh import gp_from_xi
+from tengri.components.sfh.mean_sfh import (
     double_powerlaw, delayed_tau, constant_sfh, powerlaw_sfh,
 )
-from tengri.models.dust.attenuation import two_component_dust
+from tengri.components.dust.attenuation import two_component_dust
 from tengri.utils.grid import make_log_age_grid
 
 ssp_data = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")

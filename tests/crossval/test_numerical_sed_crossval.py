@@ -48,7 +48,7 @@ _PC_CM = 3.0857e18
 
 @pytest.fixture(scope="module")
 def ssp():
-    from tengri.models.sps.dsps_wrapper import load_ssp_data
+    from tengri.components.sps.dsps_wrapper import load_ssp_data
 
     return load_ssp_data(str(_SSP_PATH))
 
@@ -358,8 +358,8 @@ class TestAbsoluteMagnitudes:
         from tengri.core.model import Model
         from tengri.core.parameters import Parameters
         from tengri.distributions import Fixed
-        from tengri.models.observation.filters import load_filter_set
-        from tengri.models.observation.photometry import ab_mag_from_flux
+        from tengri.observation.filters import load_filter_set
+        from tengri.observation.photometry import ab_mag_from_flux
         from tengri.utils.cosmology import luminosity_distance
 
         filters = load_filter_set(["sdss_r"])
@@ -392,7 +392,7 @@ class TestAbsoluteMagnitudes:
         from tengri.core.model import Model
         from tengri.core.parameters import Parameters
         from tengri.distributions import Fixed
-        from tengri.models.observation.filters import load_filter_set
+        from tengri.observation.filters import load_filter_set
 
         filters = load_filter_set(["sdss_r"])
 
@@ -473,7 +473,7 @@ class TestRedshiftEffects:
         from tengri.core.model import Model
         from tengri.core.parameters import Parameters
         from tengri.distributions import Fixed
-        from tengri.models.observation.filters import load_filter_set
+        from tengri.observation.filters import load_filter_set
 
         filters = load_filter_set(["sdss_r"])
 
@@ -506,7 +506,7 @@ class TestRedshiftEffects:
         from tengri.core.model import Model
         from tengri.core.parameters import Parameters
         from tengri.distributions import Fixed
-        from tengri.models.observation.filters import load_filter_set
+        from tengri.observation.filters import load_filter_set
 
         # u-band (3500 Å) samples rest-frame ~875 Å at z=3 → below Lyman limit
         # g-band (4800 Å) samples rest-frame ~1200 Å at z=3 → near Lyα

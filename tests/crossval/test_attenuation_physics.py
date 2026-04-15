@@ -58,7 +58,7 @@ class TestAllCurvesUniversalPhysics:
         ]
     )
     def curve(self, request):
-        from tengri.models.dust.attenuation import resolve_dust_law
+        from tengri.components.dust.attenuation import resolve_dust_law
 
         return request.param, resolve_dust_law(request.param)
 
@@ -101,7 +101,7 @@ class TestCalzettiPhysics:
 
     def test_rv_is_4p05(self):
         """Calzetti R_V = 4.05 is hardcoded (much grayer than MW R_V=3.1)."""
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         # k(V) = (k'(V) + R_V) / R_V = 1.0 by definition
         k_v = float(calzetti(jnp.array([5500.0]))[0])
@@ -113,14 +113,14 @@ class TestCalzettiPhysics:
         The function returns k = (k' + R_V) / R_V. At 1600A (UV polynomial),
         k ≈ 2.5 (the UV is ~2.5x more attenuated than V-band).
         """
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         k = float(calzetti(jnp.array([1600.0]))[0])
         assert 2.0 < k < 3.5, f"Calzetti k(1600A) should be ~2.5, got {k:.2f}"
 
     def test_ir_optical_transition_smooth(self):
         """No discontinuity at 6300A (IR/optical polynomial boundary)."""
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         wave = jnp.linspace(6000.0, 6600.0, 200)
         k = calzetti(wave)
@@ -140,7 +140,7 @@ class TestCardelliPhysics:
 
     def test_higher_rv_grayer(self):
         """Higher R_V → grayer (flatter) curve (larger grains)."""
-        from tengri.models.dust.attenuation import cardelli
+        from tengri.components.dust.attenuation import cardelli
 
         k_low = cardelli(WAVE, dust_Rv=2.5)
         k_high = cardelli(WAVE, dust_Rv=5.0)
@@ -157,7 +157,7 @@ class TestCardelliPhysics:
 
     def test_2175_bump_present(self):
         """MW curve must have the 2175A UV bump (graphite carrier)."""
-        from tengri.models.dust.attenuation import cardelli
+        from tengri.components.dust.attenuation import cardelli
 
         wave = jnp.linspace(1800.0, 2600.0, 500)
         k = cardelli(wave, dust_Rv=3.1)
@@ -172,7 +172,7 @@ class TestCardelliPhysics:
 
     def test_rv_3p1_b_minus_v(self):
         """By definition: A(B)/A(V) = 1 + 1/R_V. For R_V=3.1: A(B)/A(V) ≈ 1.323."""
-        from tengri.models.dust.attenuation import cardelli
+        from tengri.components.dust.attenuation import cardelli
 
         k = cardelli(jnp.array([4400.0, 5500.0]), dust_Rv=3.1)
         ratio = float(k[0] / k[1])
@@ -190,7 +190,7 @@ class TestExtinctionCurveOrdering:
 
     def test_smc_steeper_than_mw_in_uv(self):
         """SMC has no 2175A bump and steeper UV rise than MW."""
-        from tengri.models.dust.attenuation import cardelli, smc
+        from tengri.components.dust.attenuation import cardelli, smc
 
         wave_fuv = jnp.array([1500.0])
         k_smc = float(smc(wave_fuv)[0])
@@ -200,7 +200,7 @@ class TestExtinctionCurveOrdering:
 
     def test_smc_no_bump(self):
         """SMC has NO 2175A bump (Pei 1992)."""
-        from tengri.models.dust.attenuation import smc
+        from tengri.components.dust.attenuation import smc
 
         wave = jnp.linspace(1800.0, 2600.0, 200)
         k = smc(wave)
@@ -217,7 +217,7 @@ class TestExtinctionCurveOrdering:
 
     def test_lmc_weak_bump(self):
         """LMC has a WEAK 2175A bump (Pei 1992)."""
-        from tengri.models.dust.attenuation import lmc
+        from tengri.components.dust.attenuation import lmc
 
         wave = jnp.linspace(1800.0, 2600.0, 200)
         k = lmc(wave)
@@ -231,7 +231,7 @@ class TestExtinctionCurveOrdering:
 
     def test_calzetti_grayer_than_mw(self):
         """Calzetti (R_V=4.05) is grayer than MW (R_V=3.1): less UV/V contrast."""
-        from tengri.models.dust.attenuation import calzetti, cardelli
+        from tengri.components.dust.attenuation import calzetti, cardelli
 
         k_calz = calzetti(WAVE)
         k_mw = cardelli(WAVE, dust_Rv=3.1)
@@ -254,7 +254,7 @@ class TestKriekConroyPhysics:
 
     def test_zero_params_equals_calzetti(self):
         """E_b=0, delta=0 → pure Calzetti curve."""
-        from tengri.models.dust.attenuation import calzetti, kriek_conroy
+        from tengri.components.dust.attenuation import calzetti, kriek_conroy
 
         k_calz = calzetti(WAVE)
         k_kc = kriek_conroy(WAVE, dust_bump_strength=0.0, dust_delta=0.0)
@@ -262,7 +262,7 @@ class TestKriekConroyPhysics:
 
     def test_bump_strength_adds_2175(self):
         """Positive E_b adds a 2175A bump."""
-        from tengri.models.dust.attenuation import kriek_conroy
+        from tengri.components.dust.attenuation import kriek_conroy
 
         k_no_bump = kriek_conroy(WAVE, dust_bump_strength=0.0)
         k_bump = kriek_conroy(WAVE, dust_bump_strength=3.0)
@@ -274,7 +274,7 @@ class TestKriekConroyPhysics:
 
     def test_negative_delta_steepens_uv(self):
         """Negative delta → steeper UV (more attenuation at short λ)."""
-        from tengri.models.dust.attenuation import kriek_conroy
+        from tengri.components.dust.attenuation import kriek_conroy
 
         k_steep = kriek_conroy(WAVE, dust_delta=-0.5)
         k_flat = kriek_conroy(WAVE, dust_delta=0.5)
@@ -297,7 +297,7 @@ class TestLeitherer02Physics:
 
     def test_matches_calzetti_above_1800(self):
         """L02 and Calzetti should agree for λ > 1800A."""
-        from tengri.models.dust.attenuation import calzetti, leitherer02
+        from tengri.components.dust.attenuation import calzetti, leitherer02
 
         wave_opt = jnp.geomspace(2000.0, 20000.0, 100)
         k_calz = calzetti(wave_opt)
@@ -306,7 +306,7 @@ class TestLeitherer02Physics:
 
     def test_extends_below_1200(self):
         """L02 provides valid values below Calzetti's 1200A limit."""
-        from tengri.models.dust.attenuation import leitherer02
+        from tengri.components.dust.attenuation import leitherer02
 
         wave_fuv = jnp.array([970.0, 1000.0, 1100.0, 1200.0])
         k = leitherer02(wave_fuv)
@@ -324,7 +324,7 @@ class TestModifiedCalzettiPhysics:
 
     def test_noll09_bump_adds_2175(self):
         """Noll09 with positive E_b adds 2175A bump."""
-        from tengri.models.dust.attenuation import noll09
+        from tengri.components.dust.attenuation import noll09
 
         k_no = noll09(WAVE, dust_bump_strength=0.0, dust_delta=0.0)
         k_yes = noll09(WAVE, dust_bump_strength=3.0, dust_delta=0.0)
@@ -334,7 +334,7 @@ class TestModifiedCalzettiPhysics:
 
     def test_salim_sbl18_slope_modification(self):
         """SBL18 negative delta steepens UV slope."""
-        from tengri.models.dust.attenuation import salim_sbl18
+        from tengri.components.dust.attenuation import salim_sbl18
 
         k_steep = salim_sbl18(WAVE, dust_bump_strength=0.0, dust_delta=-0.5)
         k_flat = salim_sbl18(WAVE, dust_bump_strength=0.0, dust_delta=0.5)
@@ -348,7 +348,7 @@ class TestModifiedCalzettiPhysics:
 
     def test_noll09_delta_zero_bump_zero_near_calzetti(self):
         """Noll09 with no modifications should be close to Calzetti+L02."""
-        from tengri.models.dust.attenuation import leitherer02, noll09
+        from tengri.components.dust.attenuation import leitherer02, noll09
 
         wave_opt = jnp.geomspace(1500.0, 20000.0, 100)
         k_l02 = leitherer02(wave_opt)
@@ -366,7 +366,7 @@ class TestLi08Physics:
 
     def test_mw_preset_has_bump(self):
         """MW-like preset (c4>0) must show 2175A bump."""
-        from tengri.models.dust.attenuation import li08
+        from tengri.components.dust.attenuation import li08
 
         wave = jnp.linspace(1800.0, 2600.0, 300)
         k = li08(wave, dust_c1=6.0, dust_c2=4.0, dust_c3=2.0, dust_c4=0.04)
@@ -376,7 +376,7 @@ class TestLi08Physics:
 
     def test_smc_preset_no_bump(self):
         """SMC-like preset (c4=0) must have no bump."""
-        from tengri.models.dust.attenuation import li08
+        from tengri.components.dust.attenuation import li08
 
         wave = jnp.linspace(1800.0, 2600.0, 300)
         k = li08(wave, dust_c1=5.0, dust_c2=5.5, dust_c3=1.5, dust_c4=0.0)
@@ -388,7 +388,7 @@ class TestLi08Physics:
 
     def test_c4_controls_bump_strength(self):
         """Higher c4 → stronger 2175A bump."""
-        from tengri.models.dust.attenuation import li08
+        from tengri.components.dust.attenuation import li08
 
         wave = jnp.array([2175.0])
         k_low = float(li08(wave, dust_c4=0.01)[0])
@@ -397,7 +397,7 @@ class TestLi08Physics:
 
     def test_c2_changes_curve_shape(self):
         """Different c2 values produce measurably different curve shapes."""
-        from tengri.models.dust.attenuation import li08
+        from tengri.components.dust.attenuation import li08
 
         k_low_c2 = li08(WAVE, dust_c2=2.0)
         k_high_c2 = li08(WAVE, dust_c2=6.0)
@@ -422,7 +422,7 @@ class TestWG00GeometryPhysics:
         Shell (foreground screen) gives exp(-tau*k). Cloudy and dusty
         are greyer due to mixed dust-star geometry.
         """
-        from tengri.models.dust.attenuation import wg00_cloudy, wg00_dusty, wg00_shell
+        from tengri.components.dust.attenuation import wg00_cloudy, wg00_dusty, wg00_shell
 
         tau_v = 1.0
         t_shell = wg00_shell(WAVE, tau_v=tau_v)
@@ -435,7 +435,7 @@ class TestWG00GeometryPhysics:
 
     def test_zero_tau_full_transmission(self):
         """τ=0 → T=1 for all geometries (no dust)."""
-        from tengri.models.dust.attenuation import wg00_cloudy, wg00_dusty, wg00_shell
+        from tengri.components.dust.attenuation import wg00_cloudy, wg00_dusty, wg00_shell
 
         for fn in [wg00_shell, wg00_cloudy, wg00_dusty]:
             t = fn(WAVE, tau_v=0.0)
@@ -443,7 +443,7 @@ class TestWG00GeometryPhysics:
 
     def test_transmission_in_zero_one(self):
         """Transmission must be in (0, 1] for finite tau."""
-        from tengri.models.dust.attenuation import wg00_cloudy, wg00_dusty, wg00_shell
+        from tengri.components.dust.attenuation import wg00_cloudy, wg00_dusty, wg00_shell
 
         for fn in [wg00_shell, wg00_cloudy, wg00_dusty]:
             for tau_v in [0.1, 1.0, 5.0]:
@@ -453,7 +453,7 @@ class TestWG00GeometryPhysics:
 
     def test_more_dust_less_transmission(self):
         """Higher tau → lower transmission (monotonic)."""
-        from tengri.models.dust.attenuation import wg00_shell
+        from tengri.components.dust.attenuation import wg00_shell
 
         taus = [0.1, 0.5, 1.0, 2.0, 5.0]
         uv_idx = int(jnp.argmin(jnp.abs(WAVE - 1500.0)))
@@ -474,7 +474,7 @@ class TestNarayananPhysics:
 
     def test_z0_based_on_kriek_conroy(self):
         """At z=0, Narayanan uses K-C with z-dependent delta and bump."""
-        from tengri.models.dust.attenuation import narayanan_z
+        from tengri.components.dust.attenuation import narayanan_z
 
         wave_test = jnp.geomspace(1500.0, 20000.0, 100)
         k_nz = narayanan_z(wave_test, redshift=0.0)
@@ -487,7 +487,7 @@ class TestNarayananPhysics:
 
     def test_redshift_modifies_curve(self):
         """Different redshifts produce different curve shapes."""
-        from tengri.models.dust.attenuation import narayanan_z
+        from tengri.components.dust.attenuation import narayanan_z
 
         k_z0 = narayanan_z(WAVE, redshift=0.0)
         k_z3 = narayanan_z(WAVE, redshift=3.0)
@@ -508,7 +508,7 @@ class TestConroy2010Physics:
 
     def test_output_positive_finite(self):
         """Conroy2010 must produce positive finite values."""
-        from tengri.models.dust.attenuation import conroy2010
+        from tengri.components.dust.attenuation import conroy2010
 
         k = conroy2010(WAVE)
         assert jnp.all(jnp.isfinite(k))
@@ -516,7 +516,7 @@ class TestConroy2010Physics:
 
     def test_uv_bump_present(self):
         """Conroy2010 has MW-like 2175A bump at short wavelengths."""
-        from tengri.models.dust.attenuation import conroy2010
+        from tengri.components.dust.attenuation import conroy2010
 
         wave = jnp.linspace(1800.0, 2600.0, 300)
         k = conroy2010(wave)
@@ -537,7 +537,7 @@ class TestPowerLawPhysics:
 
     def test_analytic_values(self):
         """k(λ) = (λ/5500)^n at specific wavelengths."""
-        from tengri.models.dust.attenuation import power_law
+        from tengri.components.dust.attenuation import power_law
 
         wave = jnp.array([1000.0, 2750.0, 5500.0, 11000.0])
         n = -0.7
@@ -547,7 +547,7 @@ class TestPowerLawPhysics:
 
     def test_slope_controls_steepness(self):
         """More negative slope → steeper UV rise."""
-        from tengri.models.dust.attenuation import power_law
+        from tengri.components.dust.attenuation import power_law
 
         k_steep = power_law(WAVE, n_slope=-1.3)
         k_flat = power_law(WAVE, n_slope=-0.3)

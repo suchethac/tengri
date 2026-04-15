@@ -29,7 +29,7 @@ class TestGPSFHCrossval:
 
     def test_zero_xi_gives_zero_gp(self):
         """Zero latent vector should give zero GP realization."""
-        from tengri.models.sfh.gp_sfh import gp_from_xi
+        from tengri.components.sfh.gp_sfh import gp_from_xi
 
         n_grid = 128
         xi = jnp.zeros(n_grid)
@@ -40,7 +40,7 @@ class TestGPSFHCrossval:
 
     def test_gp_has_correct_length(self):
         """GP output should match n_grid."""
-        from tengri.models.sfh.gp_sfh import gp_from_xi
+        from tengri.components.sfh.gp_sfh import gp_from_xi
 
         for n in [64, 128, 256]:
             xi = jax.random.normal(jax.random.PRNGKey(0), shape=(n,))
@@ -50,7 +50,7 @@ class TestGPSFHCrossval:
 
     def test_gp_variance_scales_with_power(self):
         """Larger sqrt_power should produce larger GP variance."""
-        from tengri.models.sfh.gp_sfh import gp_from_xi
+        from tengri.components.sfh.gp_sfh import gp_from_xi
 
         n = 128
         xi = jax.random.normal(jax.random.PRNGKey(42), shape=(n,))
@@ -64,7 +64,7 @@ class TestGPSFHCrossval:
 
     def test_gp_ensemble_mean_near_zero(self):
         """Ensemble mean of GP realizations should be ~0 (zero-mean process)."""
-        from tengri.models.sfh.gp_sfh import gp_from_xi
+        from tengri.components.sfh.gp_sfh import gp_from_xi
 
         n = 128
         sqrt_power = jnp.ones(n // 2 + 1)
@@ -80,7 +80,7 @@ class TestGPSFHCrossval:
 
     def test_gp_is_differentiable(self):
         """GP generation should be differentiable w.r.t. xi."""
-        from tengri.models.sfh.gp_sfh import gp_from_xi
+        from tengri.components.sfh.gp_sfh import gp_from_xi
 
         n = 64
         sqrt_power = jnp.ones(n // 2 + 1)
@@ -220,7 +220,7 @@ class TestIonizingSpectrumCrossval:
         if not _SSP_PATH.is_file():
             pytest.skip("SSP data not found")
 
-        from tengri.models.sps.dsps_wrapper import load_ssp_data
+        from tengri.components.sps.dsps_wrapper import load_ssp_data
 
         ssp = load_ssp_data(str(_SSP_PATH))
         wave = np.asarray(ssp.ssp_wave)
@@ -245,7 +245,7 @@ class TestIonizingSpectrumCrossval:
         if not _SSP_PATH.is_file():
             pytest.skip("SSP data not found")
 
-        from tengri.models.sps.dsps_wrapper import load_ssp_data
+        from tengri.components.sps.dsps_wrapper import load_ssp_data
 
         ssp = load_ssp_data(str(_SSP_PATH))
         wave = np.asarray(ssp.ssp_wave)
@@ -284,7 +284,7 @@ class TestPrecomputeCrossval:
             pytest.skip("SSP data not found")
 
         from tengri import Model, ParamSpec, Uniform
-        from tengri.models.sps.dsps_wrapper import load_ssp_data
+        from tengri.components.sps.dsps_wrapper import load_ssp_data
 
         try:
             ssp = load_ssp_data(str(_SSP_PATH))

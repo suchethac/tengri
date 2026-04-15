@@ -41,7 +41,7 @@ class TestSFRNotHardcoded:
 
     def test_sfr_varies_with_mass(self):
         """SFR used for X-ray scaling should depend on the SFH, not be 1.0."""
-        from tengri.models.sfh.mean_sfh import double_powerlaw
+        from tengri.components.sfh.mean_sfh import double_powerlaw
 
         # double_powerlaw(t_lookback, alpha, beta, tau, norm)
         # norm scales SFR amplitude, so SFR[-1] should scale with norm
@@ -65,7 +65,7 @@ class TestSFRTrapezoidNonNegative:
 
     def test_sfr_100myr_non_negative(self):
         """sfr_100myr must never be negative regardless of SFH shape."""
-        from tengri.models.sfh.mean_sfh import double_powerlaw
+        from tengri.components.sfh.mean_sfh import double_powerlaw
 
         age_yr = jnp.logspace(6, 10.1, 200)
         for norm in [0.01, 1.0, 100.0]:
@@ -78,7 +78,7 @@ class TestSFRTrapezoidNonNegative:
 
     def test_sfr_10myr_non_negative(self):
         """sfr_10myr must be non-negative."""
-        from tengri.models.sfh.mean_sfh import double_powerlaw
+        from tengri.components.sfh.mean_sfh import double_powerlaw
 
         age_yr = jnp.logspace(6, 10.1, 200)
         sfr = double_powerlaw(age_yr, alpha=0.3, beta=3.0, tau=5e8, norm=10.0)
@@ -103,7 +103,7 @@ class TestRingAreaPi:
 
     def test_multicolor_disc_finite_positive(self):
         """multicolor_disc should return finite, positive SED at all wavelengths."""
-        from tengri.models.agn.disc import multicolor_disc
+        from tengri.components.agn.disc import multicolor_disc
 
         l_nu = multicolor_disc(
             _WAVE, agn_log_lbol=12.0, agn_frac=1.0, agn_log_mbh=8.0, agn_cos_inc=0.5
@@ -113,7 +113,7 @@ class TestRingAreaPi:
 
     def test_kubota_done_disc_finite(self):
         """kubota_done_disc should return finite, positive SED."""
-        from tengri.models.agn.disc import kubota_done_disc
+        from tengri.components.agn.disc import kubota_done_disc
 
         l_nu = kubota_done_disc(
             _WAVE, agn_log_lbol=12.0, agn_frac=1.0, agn_log_mbh=8.0, agn_log_ledd=-1.0
@@ -123,7 +123,7 @@ class TestRingAreaPi:
 
     def test_adaf_disc_finite(self):
         """adaf_disc should return finite, positive SED."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         l_nu = adaf_disc(
             _WAVE, agn_log_lbol=10.0, agn_frac=0.1, agn_log_mbh=8.0, agn_log_ledd=-3.0
@@ -147,7 +147,7 @@ class TestWarmComptonization:
         """With warm Comptonization, the warm zone SED should exceed a pure blackbody
         at intermediate UV/soft-X-ray wavelengths.
         """
-        from tengri.models.agn.disc import _planck_lnu, _warm_comptonization_lnu, _wavelength_to_nu
+        from tengri.components.agn.disc import _planck_lnu, _warm_comptonization_lnu, _wavelength_to_nu
 
         wave_uv = jnp.logspace(2.5, 6.0, 200)  # 316 A - 1 mm
         nu = _wavelength_to_nu(wave_uv)
@@ -172,7 +172,7 @@ class TestWarmComptonization:
 
     def test_warm_comp_finite_positive(self):
         """_warm_comptonization_lnu must return finite, positive values."""
-        from tengri.models.agn.disc import _warm_comptonization_lnu, _wavelength_to_nu
+        from tengri.components.agn.disc import _warm_comptonization_lnu, _wavelength_to_nu
 
         nu = _wavelength_to_nu(_WAVE)
         _KEV_TO_ERG = 1.602176634e-9
@@ -197,7 +197,7 @@ class TestADAFMdotDependence:
         """adaf_disc at different Eddington ratios should give different SED shapes
         (reflecting different T_e and synchrotron peak).
         """
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         l_nu_high = adaf_disc(
             _WAVE, agn_log_lbol=10.0, agn_frac=0.1, agn_log_mbh=8.0, agn_log_ledd=-2.0
@@ -214,7 +214,7 @@ class TestADAFMdotDependence:
 
     def test_adaf_synchrotron_peak_moves_with_mdot(self):
         """Higher m_dot → higher synchrotron peak frequency (Mahadevan 1997 Eq. 24)."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         wave_radio = jnp.logspace(6, 9, 100)  # mm to cm radio
         l_nu_high = adaf_disc(
@@ -268,8 +268,8 @@ class TestBalmerContinuumTauDirection:
 
     def test_qsogen_balmer_continuum_shape(self):
         """Balmer continuum in qsogen should peak near the edge and fall at longer wavelengths."""
-        pytest.importorskip("tengri.models.agn.qsogen")
-        from tengri.models.agn.qsogen import _balmer_continuum
+        pytest.importorskip("tengri.components.agn.qsogen")
+        from tengri.components.agn.qsogen import _balmer_continuum
 
         wave = jnp.linspace(2500.0, 5000.0, 200)
         # Use a flat continuum for the test
@@ -300,7 +300,7 @@ class TestShockEmissionUnits:
         log-spaced wavelength grid (grid spacing ~38 Å at Halpha → sigma/spacing ≈ 5).
         A 3 Å sigma would be unresolved and the integral would underestimate power.
         """
-        from tengri.models.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import shock_emission_sed
 
         # Dense linear grid around optical lines to ensure Gaussian is well-sampled
         wave = jnp.linspace(3500.0, 7500.0, 10000)
@@ -334,7 +334,7 @@ class TestShockEmissionUnits:
         For Halpha luminosity = 1 Lsun, the peak SED value in Lsun/Hz should be
         much smaller than 3.828e33 (which would indicate erg/s/Hz units).
         """
-        from tengri.models.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import shock_emission_sed
 
         wave = jnp.logspace(2.5, 5.0, 500)
         sed = shock_emission_sed(wave, shock_velocity=200.0, l_shock_halpha=1.0, line_sigma_aa=3.0)
@@ -411,7 +411,7 @@ class TestNonparametricJITSafe:
 
     def test_continuity_sfh_jit(self):
         """continuity_sfh should JIT-compile with JAX array bin_edges."""
-        from tengri.models.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR, continuity_sfh
+        from tengri.components.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR, continuity_sfh
 
         age_yr = jnp.linspace(1e7, 13e9, 100)
 
@@ -426,7 +426,7 @@ class TestNonparametricJITSafe:
 
     def test_dirichlet_sfh_jit(self):
         """dirichlet_sfh should JIT-compile with JAX array bin_edges."""
-        from tengri.models.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR, dirichlet_sfh
+        from tengri.components.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR, dirichlet_sfh
 
         age_yr = jnp.linspace(1e7, 13e9, 100)
 
@@ -440,7 +440,7 @@ class TestNonparametricJITSafe:
 
     def test_continuity_sfh_piecewise_constant(self):
         """continuity_sfh should return piecewise-constant SFR (step function per Leja+2019)."""
-        from tengri.models.sfh.nonparametric import continuity_sfh
+        from tengri.components.sfh.nonparametric import continuity_sfh
 
         edges = jnp.array([0.0, 1.0, 5.0, 13.7])  # 3 bins in Gyr
         # Age points within the same bin should have identical SFR
@@ -476,7 +476,7 @@ class TestDIGShortCircuit:
                 call_count["n"] += 1
                 return jnp.zeros(100)
 
-        from tengri.models.nebular.dig import mix_dig_emission
+        from tengri.components.nebular.dig import mix_dig_emission
 
         wave = jnp.linspace(1000.0, 10000.0, 100)
         weights = jnp.ones(10) / 10.0
@@ -510,7 +510,7 @@ class TestAttenuationFloatEqualitySafe:
 
     def test_narayanan_z_jit_safe(self):
         """narayanan_z should JIT-compile and return correct results."""
-        from tengri.models.dust.attenuation import narayanan_z
+        from tengri.components.dust.attenuation import narayanan_z
 
         wave = jnp.linspace(1000.0, 10000.0, 100)
 
@@ -530,7 +530,7 @@ class TestAttenuationFloatEqualitySafe:
 
     def test_narayanan_z_gradient_exists(self):
         """Gradient w.r.t. dust_delta should be finite (not NaN from == comparison)."""
-        from tengri.models.dust.attenuation import narayanan_z
+        from tengri.components.dust.attenuation import narayanan_z
 
         wave = jnp.linspace(1000.0, 10000.0, 50)
 
@@ -560,7 +560,7 @@ class TestElinePriorNoDead:
         """The file should not contain the bare dead-code expression."""
         import inspect
 
-        from tengri.models.observation import eline_priors
+        from tengri.observation import eline_priors
 
         src = inspect.getsource(eline_priors)
         # The dead-code line was 'design_matrix.shape[1]' with no assignment
@@ -581,7 +581,7 @@ class TestBLRFeIINormalization:
 
     def test_fe2_normalization_grid_independent(self):
         """Fe II normalization should not change significantly with wavelength grid resolution."""
-        from tengri.models.agn.blr import blr_emission
+        from tengri.components.agn.blr import blr_emission
 
         wave_coarse = jnp.logspace(2.8, 4.2, 100)
         wave_fine = jnp.logspace(2.8, 4.2, 500)
@@ -624,7 +624,7 @@ class TestContinuitySFHPiecewiseConstant:
 
     def test_sfr_constant_within_bin(self):
         """SFR must be exactly constant within each bin (step function)."""
-        from tengri.models.sfh.nonparametric import continuity_sfh
+        from tengri.components.sfh.nonparametric import continuity_sfh
 
         edges = jnp.array([0.0, 1.0, 5.0, 13.7])  # 3 bins in Gyr
         # All ages within the middle bin [1, 5] Gyr must have identical SFR
@@ -646,7 +646,7 @@ class TestSingleComponentDustFastJITSafe:
 
     def test_jit_compilable(self):
         """single_component_dust_fast should JIT-compile without errors."""
-        from tengri.models.dust.attenuation import single_component_dust_fast
+        from tengri.components.dust.attenuation import single_component_dust_fast
 
         wave = jnp.linspace(1000.0, 10000.0, 50)
         n_ages = 10
@@ -673,7 +673,7 @@ class TestLeithererCutoff:
 
     def test_calzetti_l02_kprime_matches_leitherer02_at_1700A(self):
         """At 1700 A (between 1500 and 1800 A), both implementations should agree."""
-        from tengri.models.dust.attenuation import _calzetti_l02_kprime, leitherer02
+        from tengri.components.dust.attenuation import _calzetti_l02_kprime, leitherer02
 
         wave = jnp.array([1700.0])
         k_helper = _calzetti_l02_kprime(wave)  # was using 0.15 cutoff, now 0.18
@@ -698,7 +698,7 @@ class TestWG00CloudyGradient:
 
     def test_gradient_finite_near_zero(self):
         """Gradient of wg00_cloudy w.r.t. tau_v must be finite and non-zero near tau_v=0."""
-        from tengri.models.dust.attenuation import wg00_cloudy
+        from tengri.components.dust.attenuation import wg00_cloudy
 
         wave = jnp.linspace(3000.0, 10000.0, 50)
 
@@ -718,7 +718,7 @@ class TestWG00CloudyGradient:
 
     def test_gradient_finite_at_large_tau(self):
         """Gradient at large tau agrees with FD (wg00_cloudy)."""
-        from tengri.models.dust.attenuation import wg00_cloudy
+        from tengri.components.dust.attenuation import wg00_cloudy
 
         wave = jnp.linspace(3000.0, 10000.0, 50)
 
@@ -744,7 +744,7 @@ class TestRadioAGNSimplified:
 
     def test_radio_agn_finite(self):
         """radio_agn should return finite values with simplified formula."""
-        from tengri.models.radio import radio_agn
+        from tengri.components.radio import radio_agn
 
         wave = jnp.logspace(7.0, 9.0, 100)  # radio wavelengths
         l_nu = radio_agn(wave, L_agn_bol=1e11, radio_loudness=2.0)
@@ -762,8 +762,8 @@ class TestUnifiedAGNTorusFrac:
 
     def test_unified_agn_jit_safe(self):
         """unified_nlr_blr should JIT-compile without issues from float == comparison."""
-        pytest.importorskip("tengri.models.agn.unified")
-        from tengri.models.agn.unified import unified_nlr_blr
+        pytest.importorskip("tengri.components.agn.unified")
+        from tengri.components.agn.unified import unified_nlr_blr
 
         wave = jnp.logspace(2.5, 5.0, 200)
 
@@ -798,7 +798,7 @@ class TestDustAgeMaskDtype:
 
     def test_float32_input_gives_float32_mask(self):
         """float32 age grid should produce float32 masks, not float64."""
-        from tengri.models.dust.attenuation import precompute_dust_age_mask
+        from tengri.components.dust.attenuation import precompute_dust_age_mask
 
         age_grid_f32 = jnp.linspace(0.0, 1e10, 100, dtype=jnp.float32)
         young, old = precompute_dust_age_mask(age_grid_f32, t_birth=3e8)
@@ -807,7 +807,7 @@ class TestDustAgeMaskDtype:
 
     def test_float64_input_gives_float64_mask(self):
         """float64 age grid should produce float64 masks."""
-        from tengri.models.dust.attenuation import precompute_dust_age_mask
+        from tengri.components.dust.attenuation import precompute_dust_age_mask
 
         age_grid_f64 = jnp.linspace(0.0, 1e10, 100, dtype=jnp.float64)
         young, _old = precompute_dust_age_mask(age_grid_f64, t_birth=3e8)

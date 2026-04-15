@@ -86,7 +86,7 @@ def _gaussian_filters() -> tuple[list[str], list[np.ndarray], list[np.ndarray]]:
 def _load_real_filters(filter_names: list[str]):
     """Load real filter curves via tengri."""
     try:
-        from tengri.models.observation.filters import load_filter_set
+        from tengri.observation.filters import load_filter_set
 
         fw_list, ft_list, _ = load_filter_set(filter_names)
         return filter_names, fw_list, ft_list
@@ -142,7 +142,7 @@ def _approx_phot_nquad(
         dust_avg = float(dust_fn(np.array([lam_eff]))[0])
     else:
         # GL quadrature over the filter bandpass
-        from tengri.models.sps.precompute import _gauss_legendre_nodes_for_filter
+        from tengri.components.sps.precompute import _gauss_legendre_nodes_for_filter
 
         nodes, weights, h = _gauss_legendre_nodes_for_filter(wav_np, n_quad, thr_np)
         t_at_nodes = np.interp(nodes, wav_np, thr_np)
@@ -256,9 +256,9 @@ def run_timing(
     import astropy.units as u
     from astropy.cosmology import FlatLambdaCDM
 
-    from tengri.models.observation.filters import load_filter_set
-    from tengri.models.sps.dsps_wrapper import load_ssp_data
-    from tengri.models.sps.precompute import fast_photometry, precompute_photometry
+    from tengri.observation.filters import load_filter_set
+    from tengri.components.sps.dsps_wrapper import load_ssp_data
+    from tengri.components.sps.precompute import fast_photometry, precompute_photometry
 
     ssp = load_ssp_data(ssp_file)
     fw_list, ft_list, _ = load_filter_set(filter_names)

@@ -42,7 +42,7 @@ def astrodust_data():
     """Load Astrodust templates, skip if file not found."""
     if not ASTRODUST_PATH.exists():
         pytest.skip("Astrodust templates not found; run download script first")
-    from tengri.models.dust.emission import load_astrodust_templates
+    from tengri.components.dust.emission import load_astrodust_templates
 
     return load_astrodust_templates(str(ASTRODUST_PATH))
 
@@ -50,7 +50,7 @@ def astrodust_data():
 @pytest.fixture(scope="module")
 def astrodust_fn(astrodust_data):
     """Create Astrodust emission function."""
-    from tengri.models.dust.emission import create_astrodust_from_grid
+    from tengri.components.dust.emission import create_astrodust_from_grid
 
     return create_astrodust_from_grid(astrodust_data)
 
@@ -158,7 +158,7 @@ def bosa_data():
     """Load BOSA templates, skip if file not found."""
     if not BOSA_PATH.exists():
         pytest.skip("BOSA templates not found; run download script first")
-    from tengri.models.dust.emission import load_bosa_templates
+    from tengri.components.dust.emission import load_bosa_templates
 
     return load_bosa_templates(str(BOSA_PATH))
 
@@ -166,7 +166,7 @@ def bosa_data():
 @pytest.fixture(scope="module")
 def bosa_fn(bosa_data):
     """Create BOSA emission function."""
-    from tengri.models.dust.emission import create_bosa_from_grid
+    from tengri.components.dust.emission import create_bosa_from_grid
 
     return create_bosa_from_grid(bosa_data)
 
@@ -251,7 +251,7 @@ def themis_data():
     """Load THEMIS templates, skip if file not found."""
     if not THEMIS_PATH.exists():
         pytest.skip("THEMIS templates not found; run download script first")
-    from tengri.models.dust.emission import load_themis_templates
+    from tengri.components.dust.emission import load_themis_templates
 
     return load_themis_templates(str(THEMIS_PATH))
 
@@ -259,7 +259,7 @@ def themis_data():
 @pytest.fixture(scope="module")
 def themis_fn(themis_data):
     """Create THEMIS emission function."""
-    from tengri.models.dust.emission import create_themis_from_grid
+    from tengri.components.dust.emission import create_themis_from_grid
 
     return create_themis_from_grid(themis_data)
 
@@ -372,7 +372,7 @@ class TestCrossModelComparison:
 
     def test_astrodust_vs_dl07_same_ballpark(self, astrodust_fn, dl07_available):
         """Astrodust total flux within ~2 dex of DL07 at matched parameters."""
-        from tengri.models.dust.emission import DUST_EMISSION_MODELS
+        from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
         if "draine_li2007" not in DUST_EMISSION_MODELS:
             pytest.skip("DL07 model not registered")
@@ -395,7 +395,7 @@ class TestCrossModelComparison:
 
     def test_themis_vs_dl07_same_ballpark(self, themis_fn, dl07_available):
         """THEMIS total flux within ~2 dex of DL07 at matched parameters."""
-        from tengri.models.dust.emission import DUST_EMISSION_MODELS
+        from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
         if "draine_li2007" not in DUST_EMISSION_MODELS:
             pytest.skip("DL07 model not registered")

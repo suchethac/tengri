@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.models.nebular.dig import mix_dig_emission
+from tengri.components.nebular.dig import mix_dig_emission
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:

@@ -68,7 +68,7 @@ _CLOUDY_GRID_PATH = Path("/Users/suchethacooray/Projects/tengri/data/cloudy_grid
 @pytest.mark.skipif(not _CLOUDY_GRID_PATH.exists(), reason="CLOUDY grid not present")
 def test_cloudy_grid_grad_logu():
     """Test JAX autodiff vs finite difference for CloudyGridBackend."""
-    from tengri.models.nebular import CloudyGridBackend
+    from tengri.components.nebular import CloudyGridBackend
 
     mock_ssp = _make_mock_ssp()
     backend = CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp)
@@ -115,7 +115,7 @@ def test_cloudy_grid_grad_logu():
 @pytest.mark.skipif(not _CLOUDY_GRID_PATH.exists(), reason="CLOUDY grid not present")
 def test_cloudy_grid_triweight_runs():
     """Triweight mode produces finite output for both lines and continuum."""
-    from tengri.models.nebular import CloudyGridBackend
+    from tengri.components.nebular import CloudyGridBackend
 
     mock_ssp = _make_mock_ssp()
     backend = CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp, grid_interp="triweight")
@@ -148,7 +148,7 @@ def test_cloudy_grid_triweight_grad_at_grid_node():
     This is the key advantage over linear mode — the smooth C²-continuous kernel
     eliminates the piecewise-linear kink, so FD and AD agree everywhere.
     """
-    from tengri.models.nebular import CloudyGridBackend
+    from tengri.components.nebular import CloudyGridBackend
 
     mock_ssp = _make_mock_ssp()
     backend = CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp, grid_interp="triweight")
@@ -198,7 +198,7 @@ def test_logu_ordering():
     Line order in CLOUDY_LINE_NAMES: Hβ at index 4 (4862.68 Å),
     [OIII]5007 at index 6 (5008.24 Å) — vacuum wavelengths.
     """
-    from tengri.models.nebular import CloudyGridBackend
+    from tengri.components.nebular import CloudyGridBackend
 
     mock_ssp = _make_mock_ssp()
     backend = CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp)
@@ -240,7 +240,7 @@ def test_logu_ordering():
 @pytest.mark.skipif(not _CLOUDY_GRID_PATH.exists(), reason="CLOUDY grid not present")
 def test_cloudy_grid_invalid_interp_mode():
     """Unknown grid_interp raises ValueError at construction time."""
-    from tengri.models.nebular import CloudyGridBackend
+    from tengri.components.nebular import CloudyGridBackend
 
     mock_ssp = _make_mock_ssp()
     with pytest.raises(ValueError, match="grid_interp"):
@@ -263,8 +263,8 @@ def test_cue_grad_logu():
     We suppress that warning here — it is expected behaviour for mock data and
     is tested separately in test_nebular_warnings.py.
     """
-    from tengri.models.nebular import CueBackend
-    from tengri.models.nebular.cue import CueWNESSPWarning
+    from tengri.components.nebular import CueBackend
+    from tengri.components.nebular.cue import CueWNESSPWarning
 
     mock_ssp = _make_mock_ssp()
     with warnings.catch_warnings():
@@ -318,7 +318,7 @@ def test_cb19_grad_logu():
     that the logU interpolation inside the CB_19 grid is smooth enough for
     autodiff to agree with central finite differences to 5% relative tolerance.
     """
-    from tengri.models.nebular.cloudy_cb19 import CB19Backend
+    from tengri.components.nebular.cloudy_cb19 import CB19Backend
 
     mock_ssp = _make_mock_ssp()
     backend = CB19Backend(
@@ -378,7 +378,7 @@ def test_mappings_grad_velocity():
 
     Physical range: 100–1000 km/s (3MdBs grid).  We test at 350 km/s (mid-range).
     """
-    from tengri.models.nebular.shock import ShockBackend
+    from tengri.components.nebular.shock import ShockBackend
 
     backend = ShockBackend(shock_abundance="solar", shock_component="combined")
 
@@ -424,8 +424,8 @@ def test_neb_logzsol_to_log_z_abs_round_trip():
     At solar metallicity (logzsol=0), the output must equal _LOG10_ZSUN ≈ −1.848.
     Subtracting the same offset recovers the input exactly (round-trip).
     """
-    from tengri.models.nebular._constants import _LOG10_ZSUN
-    from tengri.models.nebular._shared import neb_logzsol_to_log_z_abs
+    from tengri.components.nebular._constants import _LOG10_ZSUN
+    from tengri.components.nebular._shared import neb_logzsol_to_log_z_abs
 
     # Solar metallicity
     logzsol_sun = jnp.array(0.0)
@@ -452,7 +452,7 @@ def test_neb_logzsol_to_cloudy_logoh():
     We test this property rather than an absolute value (which depends on the
     CLOUDY c17.01 solar O/H reference convention).
     """
-    from tengri.models.nebular._shared import neb_logzsol_to_cloudy_logoh
+    from tengri.components.nebular._shared import neb_logzsol_to_cloudy_logoh
 
     logzsol_a = jnp.array(0.0)
     logzsol_b = jnp.array(-1.0)

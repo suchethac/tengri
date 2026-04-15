@@ -71,7 +71,7 @@ from tengri import (
     load_filter_set,
     load_ssp_data,
 )
-from tengri.models.observation.eline_marginalization import (
+from tengri.observation.eline_marginalization import (
     DEFAULT_LINE_NAMES,
     DEFAULT_LINE_WAVELENGTHS,
     build_eline_design_matrix,

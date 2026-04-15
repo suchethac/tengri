@@ -113,10 +113,10 @@ from tengri import (
     triweight_burst,
     tsnorm,
 )
-from tengri.models.sfh.chemical_evolution import closed_box_metallicity
-from tengri.models.sfh.dense_basis import dense_basis_sfh
-from tengri.models.sfh.nonparametric import continuity_sfh, dirichlet_sfh
-from tengri.models.sfh.psd_models import psd_extended_regulator, psd_matern
+from tengri.components.sfh.chemical_evolution import closed_box_metallicity
+from tengri.components.sfh.dense_basis import dense_basis_sfh
+from tengri.components.sfh.nonparametric import continuity_sfh, dirichlet_sfh
+from tengri.components.sfh.psd_models import psd_extended_regulator, psd_matern
 from tengri.utils.grid import grid_spacing
 
 _nbooks = os.path.join(_repo_root, "notebooks")

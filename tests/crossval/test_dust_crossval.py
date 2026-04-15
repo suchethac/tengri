@@ -19,7 +19,7 @@ jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 
-from tengri.models.dust.attenuation import (
+from tengri.components.dust.attenuation import (
     calzetti,
     cardelli,
     kriek_conroy,
@@ -30,7 +30,7 @@ from tengri.models.dust.attenuation import (
     wg00_dusty,
     wg00_shell,
 )
-from tengri.models.dust.emission import (
+from tengri.components.dust.emission import (
     casey2012,
     compute_absorbed_luminosity,
     modified_blackbody,

@@ -99,10 +99,10 @@ from tengri import (
     load_filter_set,
     load_ssp_data,
 )
-from tengri.models.dust.attenuation import DUST_LAWS
-from tengri.models.agn import AGN_MODELS, get_agn_model
-from tengri.models.igm import igm_transmission
-from tengri.models.observation.filters import FILTER_REGISTRY, load_filter
+from tengri.components.dust.attenuation import DUST_LAWS
+from tengri.components.agn import AGN_MODELS, get_agn_model
+from tengri.components.igm import igm_transmission
+from tengri.observation.filters import FILTER_REGISTRY, load_filter
 
 SSP_PATH = "../data/fsps_prsc_miles_chabrier.h5"
 CLOUDY_PATH = "../data/cloudy_grid_mist.h5"

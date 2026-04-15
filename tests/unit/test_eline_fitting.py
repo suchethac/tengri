@@ -16,14 +16,14 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-from tengri.models.observation.eline_marginalization import (
+from tengri.observation.eline_marginalization import (
     apply_doublet_constraints,
     build_eline_design_matrix,
     expand_constrained_amplitudes,
     marginalize_emission_lines,
 )
-from tengri.models.observation.line_list import LineCatalog
-from tengri.models.observation.spectroscopy import Spectroscopy
+from tengri.observation.line_list import LineCatalog
+from tengri.observation.spectroscopy import Spectroscopy
 
 
 class TestDesignMatrix:

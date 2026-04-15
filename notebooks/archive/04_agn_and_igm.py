@@ -38,14 +38,14 @@ from tengri import (
     ParamSpec,
     load_ssp_data,
 )
-from tengri.models.agn import (
+from tengri.components.agn import (
     AGN_MODELS,
     get_agn_model,
     powerlaw_disc,
     simple_torus,
     unified_agn,
 )
-from tengri.models.igm import igm_transmission
+from tengri.components.igm import igm_transmission
 
 import sys, os  # noqa: E401
 

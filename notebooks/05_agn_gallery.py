@@ -82,7 +82,7 @@ jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri import Fixed, SEDModel, Parameters, Uniform, load_ssp_data
-from tengri.models.agn import (
+from tengri.components.agn import (
     AGN_MODELS,
     adaf_agn,
     adaf_disc,
@@ -99,10 +99,10 @@ from tengri.models.agn import (
     two_temperature_torus,
     unified_nlr_blr,
 )
-from tengri.models.agn.disc import _isco_radius
+from tengri.components.agn.disc import _isco_radius
 
 try:
-    from tengri.models.agn import unified_agn
+    from tengri.components.agn import unified_agn
 except ImportError:
     unified_agn = unified_nlr_blr
 
@@ -667,7 +667,7 @@ plt.show()
 import sys
 from pathlib import Path
 
-from tengri.models.agn._nthcomp import _TABLE_AVAILABLE, nthcomp_lnu_interp
+from tengri.components.agn._nthcomp import _TABLE_AVAILABLE, nthcomp_lnu_interp
 
 _RELAGN_PATH = Path("/tmp/relagn_ref/src/python_version")
 _KEV_TO_HZ = 1.602176634e-9 / 6.62607015e-27
@@ -1307,7 +1307,7 @@ try:
     ax.set_title("SKIRTOR: inclination dependence (Type 1 to Type 2)")
 except Exception as e:
     print(f"SKIRTOR unavailable ({e}); showing analytic two-T fallback.")
-    from tengri.models.agn.skirtor import skirtor_analytic
+    from tengri.components.agn.skirtor import skirtor_analytic
 
     for ci, c, lb in zip(
         [0.95, 0.7, 0.5, 0.1],
@@ -1688,7 +1688,7 @@ axes[0].set(
 axes[0].legend(fontsize=7)
 
 # (b) Sigmoid masking transition
-from tengri.models.agn.unified import _sigmoid_mask
+from tengri.components.agn.unified import _sigmoid_mask
 
 cos_inc_grid = np.linspace(0.0, 1.0, 200)
 for theta, c, lb in zip(

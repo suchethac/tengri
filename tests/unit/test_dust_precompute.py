@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.models.dust.attenuation import (
+from tengri.components.dust.attenuation import (
     precompute_dust_age_weights,
     two_component_dust,
     two_component_dust_fast,

@@ -14,8 +14,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.models.sps.dsps_wrapper import SSPData
-from tengri.models.sps.precompute import (
+from tengri.components.sps.dsps_wrapper import SSPData
+from tengri.components.sps.precompute import (
     interpolate_ztable,
     interpolate_ztable_smooth,
     precompute_photometry,

@@ -52,12 +52,12 @@ def build_hybrid_photometry(model):
         shock_emission,
         xray_emission,
     )
-    from tengri.models.dust.attenuation import resolve_dust_law
-    from tengri.models.observation.photometry import (
+    from tengri.components.dust.attenuation import resolve_dust_law
+    from tengri.observation.photometry import (
         compute_flux_density_batch,
         pad_filters,
     )
-    from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = model._forward_dtype
     precomp = model._precomputed.photometry
@@ -99,7 +99,7 @@ def build_hybrid_photometry(model):
     if not _is_single_dust:
         law_diff_fn = resolve_dust_law(model._dust_law_diff)
 
-    from tengri.models.sps.dsps_wrapper import (
+    from tengri.components.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
         has_alpha_grid,
     )
@@ -113,14 +113,14 @@ def build_hybrid_photometry(model):
     _use_smooth_z = model._met_interp == "smooth"
     _lgmet_scat = dt.type(model._lgmet_scatter)
     if _use_smooth_z:
-        from tengri.models.sps.dsps_wrapper import compute_lgmet_weights as _clw
+        from tengri.components.sps.dsps_wrapper import compute_lgmet_weights as _clw
 
     # IGM: full-wavelength transmission (compositional-quality, not approximate).
     # Precompute once at init on the rest-frame wavelength grid.
     _z_for_igm = model._z_fixed
     has_igm = model._apply_igm and _z_for_igm is not None
     if has_igm:
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         _wave_obs_igm = model.ssp_data.ssp_wave * (1.0 + _z_for_igm)
         igm_trans_full = jnp.asarray(igm_transmission(_wave_obs_igm, _z_for_igm), dtype=dt)
@@ -261,7 +261,7 @@ def build_hybrid_photometry(model):
     _has_preint_dust_ir = False
     _dust_model_name = None
     if has_dust_em_full:
-        from tengri.models.dust.emission import preload_emission_model
+        from tengri.components.dust.emission import preload_emission_model
 
         # preload_emission_model forces lazy template loading to happen NOW,
         # outside any JIT scope.  This prevents jnp.array() inside the loader
@@ -284,7 +284,7 @@ def build_hybrid_photometry(model):
     _has_preint_kd = False
     _kd_data_fn = None
     if has_agn_full:
-        from tengri.models.agn import resolve_agn_model
+        from tengri.components.agn import resolve_agn_model
 
         agn_model_fn_full = resolve_agn_model(model._agn_model)
 
@@ -299,7 +299,7 @@ def build_hybrid_photometry(model):
             and not _needs_extension
         ):
             _has_preint_kd = True
-            from tengri.models.agn.kd_preintegrate import kubota_done_disc_preintegrated
+            from tengri.components.agn.kd_preintegrate import kubota_done_disc_preintegrated
 
             _kd_data_fn = kubota_done_disc_preintegrated
             _kd_data = model._precomputed.kd_preintegrated
@@ -1374,7 +1374,7 @@ def build_hybrid_photometry(model):
     # Fuse param translation + SFH computation into the JIT scope,
     # eliminating ~240 μs of Python dispatch overhead per call.
     from tengri.core.param_translate import get_internal_params
-    from tengri.models.sfh.registry import compute_field_gp
+    from tengri.components.sfh.registry import compute_field_gp
 
     param_map = model._param_map
     spec = model.spec
@@ -1506,10 +1506,10 @@ def build_hybrid_photometry_ztable(model):
         xray_emission,
     )
     from tengri.core.param_translate import get_internal_params
-    from tengri.models.dust.attenuation import resolve_dust_law
-    from tengri.models.sfh.registry import compute_field_gp, resolve_sfh
-    from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
-    from tengri.models.sps.precompute import interpolate_ztable
+    from tengri.components.dust.attenuation import resolve_dust_law
+    from tengri.components.sfh.registry import compute_field_gp, resolve_sfh
+    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.components.sps.precompute import interpolate_ztable
 
     # Validate that z-table has been precomputed
     if model._precomputed.photometry_ztable is None:
@@ -1544,7 +1544,7 @@ def build_hybrid_photometry_ztable(model):
     if not _is_single_dust:
         law_diff_fn = resolve_dust_law(model._dust_law_diff)
 
-    from tengri.models.sps.dsps_wrapper import (
+    from tengri.components.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
         has_alpha_grid,
     )
@@ -1558,7 +1558,7 @@ def build_hybrid_photometry_ztable(model):
     _use_smooth_z = model._met_interp == "smooth"
     _lgmet_scat = dt.type(model._lgmet_scatter)
     if _use_smooth_z:
-        from tengri.models.sps.dsps_wrapper import compute_lgmet_weights as _clw
+        from tengri.components.sps.dsps_wrapper import compute_lgmet_weights as _clw
 
     # IGM: precomputed on z-table
     has_igm = ztable.igm_trans_table is not None
@@ -1604,14 +1604,14 @@ def build_hybrid_photometry_ztable(model):
     has_dust_em_full = model._dust_emission_model is not None
     _dust_model_name = model._dust_emission_model if has_dust_em_full else None
     if has_dust_em_full:
-        from tengri.models.dust.emission import preload_emission_model
+        from tengri.components.dust.emission import preload_emission_model
 
         preload_emission_model(model._dust_emission_model)
 
     # AGN (full wavelength)
     has_agn_full = model._agn_model is not None
     if has_agn_full:
-        from tengri.models.agn import resolve_agn_model
+        from tengri.components.agn import resolve_agn_model
 
         agn_model_fn_full = resolve_agn_model(model._agn_model)
 
@@ -2258,7 +2258,7 @@ def build_hybrid_photometry_ztable(model):
 
             # Integrate non-stellar through filters
             # Interpolate non-stellar SED to observed frame + filter integration
-            from tengri.models.observation.photometry import compute_flux_density
+            from tengri.observation.photometry import compute_flux_density
 
             non_stellar_phot = compute_flux_density(
                 wave_rest=ssp_wave_f64,
@@ -2411,7 +2411,7 @@ def build_exact_sed(model):
     -----
     Typical speedup: 4-14x vs un-JIT'd exact path.
     """
-    from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = model._forward_dtype
     ssp_wave = model.ssp_data.ssp_wave.astype(dt)
@@ -2511,8 +2511,8 @@ def build_fused_rest_sed(model):
         where ``p_dict`` contains internal dust/AGN/nebular/radio/X-ray
         parameters.
     """
-    from tengri.models.dust.attenuation import resolve_dust_law
-    from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.components.dust.attenuation import resolve_dust_law
+    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = model._forward_dtype
     ssp_wave = model.ssp_data.ssp_wave.astype(dt)
@@ -2663,14 +2663,14 @@ def observe_photometry_from_rest_sed(
     array, shape (n_filters,)
         Observed flux densities in erg/s/cm^2/Hz.
     """
-    from tengri.models.observation.photometry import (
+    from tengri.observation.photometry import (
         compute_flux_density_batch,
         pad_filters,
     )
 
     sed = rest_sed
     if apply_igm:
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         wave_obs = wave_rest * (1.0 + z)
         igm_trans = igm_transmission(wave_obs, z)
@@ -2710,7 +2710,7 @@ def observe_spectrum_from_rest_sed(
     array, shape (n_pix,)
         Spectral flux density in erg/s/cm^2/Hz.
     """
-    from tengri.models.observation.spectrum import compute_spectrum
+    from tengri.observation.spectrum import compute_spectrum
 
     return compute_spectrum(rest_sed, wave_rest, wave_obs, z, dl_cm)
 
@@ -2754,15 +2754,15 @@ def build_fused_tier2_photometry(model):
 
     from tengri.core.param_translate import get_internal_params
     from tengri.core.sed_pipeline import interp_met_alpha_dispatch, interp_metallicity
-    from tengri.models.observation.photometry import (
+    from tengri.observation.photometry import (
         compute_flux_density_batch,
         pad_filters,
     )
-    from tengri.models.sps.dsps_wrapper import compute_csp_weights
+    from tengri.components.sps.dsps_wrapper import compute_csp_weights
 
     _use_dsps_native = model._csp_integration == "dsps_native"
     if _use_dsps_native:
-        from tengri.models.sps.dsps_wrapper import compute_dsps_native_weights
+        from tengri.components.sps.dsps_wrapper import compute_dsps_native_weights
 
     # effective_metallicity correction is opt-in (see fused_kernels tier1 note).
     _use_alpha_fe_t2 = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
@@ -2804,7 +2804,7 @@ def build_fused_tier2_photometry(model):
     # Use panchromatic grid if available (when radio/xray enabled), else SSP grid
     igm_trans_full = None
     if apply_igm and not is_free_z:
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         wave_obs_full = rest_wave * (1.0 + z_fixed)
         igm_trans_full = igm_transmission(wave_obs_full, z_fixed)
@@ -2814,7 +2814,7 @@ def build_fused_tier2_photometry(model):
         from tengri.utils.cosmology import luminosity_distance as _lum_dist
 
         if apply_igm:
-            from tengri.models.igm import igm_transmission as _igm_fn
+            from tengri.components.igm import igm_transmission as _igm_fn
 
     # --- Shared SED computation (sfr_on_ssp pre-computed by caller) ---
     def _compute_rest_sed(sfr_on_ssp, params):
@@ -2922,12 +2922,12 @@ def build_fused_tier2_spectrum(model):
 
     from tengri.core.param_translate import get_internal_params
     from tengri.core.sed_pipeline import interp_met_alpha_dispatch, interp_metallicity
-    from tengri.models.observation.spectrum import compute_spectrum
-    from tengri.models.sps.dsps_wrapper import compute_csp_weights
+    from tengri.observation.spectrum import compute_spectrum
+    from tengri.components.sps.dsps_wrapper import compute_csp_weights
 
     _use_dsps_native_spec = model._csp_integration == "dsps_native"
     if _use_dsps_native_spec:
-        from tengri.models.sps.dsps_wrapper import compute_dsps_native_weights
+        from tengri.components.sps.dsps_wrapper import compute_dsps_native_weights
 
     # effective_metallicity correction is opt-in: only applied when the user
     # explicitly makes met_alpha_fe (or evolving variant) a free parameter.
@@ -3052,8 +3052,8 @@ def build_hybrid_spectrum(model):
         interp_met_alpha_dispatch,
         interp_metallicity,
     )
-    from tengri.models.dust.attenuation import resolve_dust_law
-    from tengri.models.sps.dsps_wrapper import compute_csp_weights
+    from tengri.components.dust.attenuation import resolve_dust_law
+    from tengri.components.sps.dsps_wrapper import compute_csp_weights
     from tengri.utils.conversions import lnu_to_fnu
 
     # Precomputed spectroscopic data
@@ -3073,7 +3073,7 @@ def build_hybrid_spectrum(model):
     # Alpha enhancement
     _use_alpha_fe = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
     if _use_alpha_fe:
-        from tengri.models.sps.dsps_wrapper import has_alpha_grid
+        from tengri.components.sps.dsps_wrapper import has_alpha_grid
 
         _has_alpha = has_alpha_grid(model.ssp_data)
     else:

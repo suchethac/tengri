@@ -27,10 +27,10 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-from tengri.models.observation.calibration import (
+from tengri.observation.calibration import (
     apply_calibration, calibration_polynomial, chebyshev_basis,
 )
-from tengri.models.observation.spectrum import (
+from tengri.observation.spectrum import (
     SSP_LIBRARY_RESOLUTIONS, apply_lsf, blend_emission_lines,
     nirspec_g140m_resolution, nirspec_prism_resolution, velocity_broaden,
 )
@@ -177,7 +177,7 @@ ax.legend(); fig.tight_layout(); plt.show()
 # Gaussian prior, but without the extra dimensions in MCMC/VI.
 
 # %%
-from tengri.models.observation.calibration import marginalize_calibration
+from tengri.observation.calibration import marginalize_calibration
 
 # Create a synthetic "physical" model spectrum (smooth blackbody + emission lines)
 wave_cal = jnp.linspace(4000.0, 9000.0, 800)

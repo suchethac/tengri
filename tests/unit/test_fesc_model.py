@@ -20,14 +20,14 @@ class TestFescChisholm:
 
     def test_calibration_at_beta_minus2(self):
         """At β=-2, default params → f_esc = fesc_0 = 0.15."""
-        from tengri.models.nebular.fesc_model import fesc_chisholm2022
+        from tengri.components.nebular.fesc_model import fesc_chisholm2022
 
         result = fesc_chisholm2022(-2.0)
         assert jnp.isclose(result, 0.15, atol=1e-6)
 
     def test_blue_slope_high_fesc(self):
         """β = -2.5 (very blue) → higher f_esc than at β = -2."""
-        from tengri.models.nebular.fesc_model import fesc_chisholm2022
+        from tengri.components.nebular.fesc_model import fesc_chisholm2022
 
         fesc_blue = fesc_chisholm2022(-2.5)
         fesc_ref = fesc_chisholm2022(-2.0)
@@ -35,7 +35,7 @@ class TestFescChisholm:
 
     def test_red_slope_low_fesc(self):
         """β = 0 (red) → lower f_esc than at β = -2."""
-        from tengri.models.nebular.fesc_model import fesc_chisholm2022
+        from tengri.components.nebular.fesc_model import fesc_chisholm2022
 
         fesc_red = fesc_chisholm2022(0.0)
         fesc_ref = fesc_chisholm2022(-2.0)
@@ -43,7 +43,7 @@ class TestFescChisholm:
 
     def test_bounded_0_1(self):
         """f_esc always in [0, 1] for a wide range of β values."""
-        from tengri.models.nebular.fesc_model import fesc_chisholm2022
+        from tengri.components.nebular.fesc_model import fesc_chisholm2022
 
         betas = jnp.linspace(-4.0, 2.0, 100)
         for beta in betas:
@@ -52,7 +52,7 @@ class TestFescChisholm:
 
     def test_monotonic_with_beta(self):
         """More negative β → higher f_esc (bluer = more escape)."""
-        from tengri.models.nebular.fesc_model import fesc_chisholm2022
+        from tengri.components.nebular.fesc_model import fesc_chisholm2022
 
         betas = [-3.0, -2.5, -2.0, -1.5, -1.0, -0.5, 0.0]
         fescs = [float(fesc_chisholm2022(b)) for b in betas]
@@ -61,7 +61,7 @@ class TestFescChisholm:
 
     def test_ssfr_dependence_disabled_by_default(self):
         """With a2=0 (default), sSFR has no effect."""
-        from tengri.models.nebular.fesc_model import fesc_chisholm2022
+        from tengri.components.nebular.fesc_model import fesc_chisholm2022
 
         f1 = fesc_chisholm2022(-2.0, log_ssfr=-8.0)
         f2 = fesc_chisholm2022(-2.0, log_ssfr=-12.0)
@@ -69,7 +69,7 @@ class TestFescChisholm:
 
     def test_ssfr_dependence_when_enabled(self):
         """With a2 > 0, higher sSFR → higher f_esc."""
-        from tengri.models.nebular.fesc_model import fesc_chisholm2022
+        from tengri.components.nebular.fesc_model import fesc_chisholm2022
 
         f_high = fesc_chisholm2022(-2.0, log_ssfr=-8.0, a2=0.5)
         f_low = fesc_chisholm2022(-2.0, log_ssfr=-11.0, a2=0.5)
@@ -77,7 +77,7 @@ class TestFescChisholm:
 
     def test_jit_compatible(self):
         """Function can be JIT-compiled."""
-        from tengri.models.nebular.fesc_model import fesc_chisholm2022
+        from tengri.components.nebular.fesc_model import fesc_chisholm2022
 
         jit_fesc = jax.jit(fesc_chisholm2022)
         result = jit_fesc(-2.0)
@@ -85,7 +85,7 @@ class TestFescChisholm:
 
     def test_differentiable(self):
         """Gradient w.r.t. β agrees with FD (Chisholm+2022)."""
-        from tengri.models.nebular.fesc_model import fesc_chisholm2022
+        from tengri.components.nebular.fesc_model import fesc_chisholm2022
 
         def f(beta: float) -> float:
             return float(fesc_chisholm2022(beta))
@@ -104,7 +104,7 @@ class TestComputeUVSlope:
 
     def test_power_law_recovery(self):
         """Recover β from a known power-law spectrum f_λ ∝ λ^β."""
-        from tengri.models.nebular.fesc_model import compute_uv_slope
+        from tengri.components.nebular.fesc_model import compute_uv_slope
 
         beta_true = -2.0
         wave = jnp.linspace(1200.0, 3000.0, 500)
@@ -116,7 +116,7 @@ class TestComputeUVSlope:
 
     def test_steep_slope(self):
         """Recover steep UV slope β = -3."""
-        from tengri.models.nebular.fesc_model import compute_uv_slope
+        from tengri.components.nebular.fesc_model import compute_uv_slope
 
         beta_true = -3.0
         wave = jnp.linspace(1200.0, 3000.0, 500)
@@ -128,7 +128,7 @@ class TestComputeUVSlope:
 
     def test_jit_compatible(self):
         """UV slope computation can be JIT-compiled."""
-        from tengri.models.nebular.fesc_model import compute_uv_slope
+        from tengri.components.nebular.fesc_model import compute_uv_slope
 
         wave = jnp.linspace(1200.0, 3000.0, 500)
         l_nu = jnp.ones_like(wave) * 1e28

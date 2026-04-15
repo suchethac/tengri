@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.models.observation.eline_marginalization import (
+from tengri.observation.eline_marginalization import (
     DEFAULT_LINE_WAVELENGTHS,
     build_eline_design_matrix,
     marginalize_emission_lines,

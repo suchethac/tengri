@@ -37,7 +37,7 @@ _SKIP_NO_H5 = pytest.mark.skipif(
 
 @pytest.fixture(scope="module")
 def cb19_module():
-    return importlib.import_module("tengri.models.nebular.cloudy_cb19")
+    return importlib.import_module("tengri.components.nebular.cloudy_cb19")
 
 
 @pytest.fixture(scope="module")
@@ -92,7 +92,7 @@ class TestHbConversionConstant:
 
     def test_log_oh_offset(self, cb19_module):
         """_LOG_OH_OFFSET = _LOG_OH_SOLAR - _LOG10_ZSUN ≈ -1.222."""
-        from tengri.models.nebular._constants import (
+        from tengri.components.nebular._constants import (
             _LOG10_ZSUN,
             _LOG_OH_OFFSET,
             _LOG_OH_SOLAR,
@@ -102,7 +102,7 @@ class TestHbConversionConstant:
 
     def test_solar_logz_maps_to_solar_logoh(self, cb19_module):
         """At solar metallicity (log10(Z)=_LOG10_ZSUN), log_OH should equal _LOG_OH_SOLAR."""
-        from tengri.models.nebular._constants import (
+        from tengri.components.nebular._constants import (
             _LOG10_ZSUN,
             _LOG_OH_OFFSET,
             _LOG_OH_SOLAR,
@@ -327,7 +327,7 @@ class TestCB19BackendMocked:
         predict_nebular_line_luminosities to return a known 1-Lsun line, then checking
         the integrated SED has a peak ≈ 3.828e33 erg/s/Hz (not ≈ 1 Lsun/Hz).
         """
-        from tengri.models.nebular._constants import _LSUN_ERG
+        from tengri.components.nebular._constants import _LSUN_ERG
 
         backend = backend_with_fake_grid
         # Wavelength grid centred on Hα (6564.61 Å) with line_sigma_aa > 0

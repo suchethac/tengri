@@ -32,7 +32,7 @@ class TestBalmerContinuumTauDirection:
 
     def test_tau_increases_blueward(self):
         """Balmer continuum absorption must be stronger at shorter wavelengths."""
-        from tengri.models.agn.qsogen import _balmer_continuum
+        from tengri.components.agn.qsogen import _balmer_continuum
 
         wave = jnp.linspace(2000.0, 3700.0, 500)
         # Use a flat continuum so any shape comes from the Balmer component
@@ -63,7 +63,7 @@ class TestHotDustNormalization:
 
     def test_hot_dust_scales_with_bbnorm(self):
         """Doubling bbnorm should double the hot dust contribution."""
-        from tengri.models.agn.qsogen import _hot_dust_blackbody
+        from tengri.components.agn.qsogen import _hot_dust_blackbody
 
         wave = jnp.linspace(5000.0, 50000.0, 500)
         # Power-law continuum (simple f_lambda)
@@ -79,7 +79,7 @@ class TestHotDustNormalization:
 
     def test_hot_dust_anchored_at_2um(self):
         """At 2μm, hot dust flux should equal bbnorm × continuum flux."""
-        from tengri.models.agn.qsogen import _hot_dust_blackbody
+        from tengri.components.agn.qsogen import _hot_dust_blackbody
 
         wave = jnp.linspace(5000.0, 30000.0, 1000)
         cont = (wave / 5500.0) ** (-1.5)
@@ -111,7 +111,7 @@ class TestTorusFracGradientContinuity:
 
     def test_gradient_continuous_around_half(self):
         """Gradient of L_total w.r.t. agn_torus_frac must vary smoothly."""
-        from tengri.models.agn.unified import simple_agn
+        from tengri.components.agn.unified import simple_agn
 
         wave = jnp.linspace(500.0, 200000.0, 1000)
 
@@ -157,7 +157,7 @@ class TestShockSigmaNuConversion:
 
     def test_line_width_physical(self):
         """Shock Hα line with sigma=2Å should be ~2Å wide, not sub-mA."""
-        from tengri.models.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import shock_emission_sed
 
         wave = jnp.linspace(6550.0, 6580.0, 1000)
         sigma_aa = 2.0
@@ -194,7 +194,7 @@ class TestVacuumWavelengthConsistency:
 
     def test_halpha_vacuum(self):
         """Hα must be at vacuum wavelength 6564.61 Å, not air 6562.80 Å."""
-        from tengri.models.observation.line_list import LineCatalog
+        from tengri.observation.line_list import LineCatalog
 
         cat = LineCatalog.default_optical()
         ha_idx = cat.names.index("Halpha")
@@ -206,7 +206,7 @@ class TestVacuumWavelengthConsistency:
 
     def test_hbeta_vacuum(self):
         """Hβ must be at vacuum wavelength 4862.68 Å."""
-        from tengri.models.observation.line_list import LineCatalog
+        from tengri.observation.line_list import LineCatalog
 
         cat = LineCatalog.default_optical()
         hb_idx = cat.names.index("Hbeta")
@@ -215,7 +215,7 @@ class TestVacuumWavelengthConsistency:
 
     def test_oiii5007_vacuum(self):
         """[OIII]5007 must be at vacuum wavelength 5008.24 Å."""
-        from tengri.models.observation.line_list import LineCatalog
+        from tengri.observation.line_list import LineCatalog
 
         cat = LineCatalog.default_optical()
         oiii_idx = cat.names.index("OIII_5007")

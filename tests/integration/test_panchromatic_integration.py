@@ -33,8 +33,8 @@ from tengri.core.model import Model
 from tengri.core.parameters import Parameters
 from tengri.core.sed_result import SEDResult
 from tengri.distributions import Fixed
-from tengri.models.observation.filters import load_filter_set
-from tengri.models.sps.dsps_wrapper import load_ssp_data
+from tengri.observation.filters import load_filter_set
+from tengri.components.sps.dsps_wrapper import load_ssp_data
 
 # ---------------------------------------------------------------------------
 # Skip if SSP data not available
@@ -254,7 +254,7 @@ class TestFullPanchromaticSED:
         For a dusty SF galaxy: u-r > 1 (dust reddened), J-Ks < 1 (stellar),
         W3-W4 dominated by dust emission shape.
         """
-        from tengri.models.observation.photometry import ab_mag_from_flux
+        from tengri.observation.photometry import ab_mag_from_flux
 
         phot = dusty_sfg_model.predict_photometry(dusty_params)
         mag = np.array(ab_mag_from_flux(phot))
@@ -683,7 +683,7 @@ class TestDerivedQuantityRanges:
             redshift=0.05,
         )
         model = Model(spec, ssp, filters=sdss_filters, precompute=False)
-        from tengri.models.observation.photometry import ab_mag_from_flux
+        from tengri.observation.photometry import ab_mag_from_flux
 
         phot = model.predict_photometry({})
         mag = np.array(ab_mag_from_flux(phot))
@@ -708,7 +708,7 @@ class TestDerivedQuantityRanges:
             redshift=0.05,
         )
         model = Model(spec, ssp, filters=sdss_filters, precompute=False)
-        from tengri.models.observation.photometry import ab_mag_from_flux
+        from tengri.observation.photometry import ab_mag_from_flux
 
         phot = model.predict_photometry({})
         mag = np.array(ab_mag_from_flux(phot))

@@ -827,8 +827,8 @@ print(f"Single mock:       {t_mock:.2f} ms")
 # vmap the photometry computation (using precomputed SSP-through-filter integrals)
 # This is the FAST path: precomputed SSP photometry + vmap over SFH arrays
 
-from tengri.models.sps.dsps_wrapper import compute_csp_weights, interpolate_metallicity
-from tengri.models.dust.attenuation import two_component_dust
+from tengri.components.sps.dsps_wrapper import compute_csp_weights, interpolate_metallicity
+from tengri.components.dust.attenuation import two_component_dust
 
 ssp_log_ages = ssp.ssp_lg_age_gyr + 9.0
 ssp_ages = 10.0**ssp_log_ages

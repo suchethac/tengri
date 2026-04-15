@@ -41,11 +41,11 @@ import matplotlib.colors as mcolors
 import matplotlib.cm as mcm
 import numpy as np
 
-from tengri.models.agn import AGN_MODELS, get_agn_model, unified_agn
-from tengri.models.agn.disc import powerlaw_disc, multicolor_disc
-from tengri.models.agn.torus import simple_torus, two_temperature_torus
-from tengri.models.igm import igm_transmission
-from tengri.models.observation.filters import load_filter
+from tengri.components.agn import AGN_MODELS, get_agn_model, unified_agn
+from tengri.components.agn.disc import powerlaw_disc, multicolor_disc
+from tengri.components.agn.torus import simple_torus, two_temperature_torus
+from tengri.components.igm import igm_transmission
+from tengri.observation.filters import load_filter
 from tengri import (
     Model, ParamSpec, Uniform, Fixed,
     load_ssp_data, load_filter_set,
@@ -727,10 +727,10 @@ plt.show()
 #
 # | Feature | Module | Key function |
 # |---------|--------|-------------|
-# | AGN disc emission | `tengri.models.agn.disc` | `powerlaw_disc`, `multicolor_disc` |
-# | AGN torus emission | `tengri.models.agn.torus` | `simple_torus`, `two_temperature_torus` |
-# | Unified AGN SED | `tengri.models.agn.unified` | `unified_agn`, `get_agn_model` |
-# | IGM transmission | `tengri.models.igm` | `igm_transmission` |
+# | AGN disc emission | `tengri.components.agn.disc` | `powerlaw_disc`, `multicolor_disc` |
+# | AGN torus emission | `tengri.components.agn.torus` | `simple_torus`, `two_temperature_torus` |
+# | Unified AGN SED | `tengri.components.agn.unified` | `unified_agn`, `get_agn_model` |
+# | IGM transmission | `tengri.components.igm` | `igm_transmission` |
 # | Forward model integration | `tengri.Model` | `agn_model="simple"` in `ParamSpec` |
 #
 # **Key takeaways:**

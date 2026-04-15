@@ -16,7 +16,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.models.nebular._constants import (
+from tengri.components.nebular._constants import (
     _LOG10_ZSUN,
     _LOG_OH_OFFSET,
 )
@@ -66,26 +66,26 @@ class TestPlaceLineProfiles:
 
     def test_gaussian_output_shape(self, obs_wave, single_line_wave, single_line_lum):
         """Output has same shape as obs_wavelengths."""
-        from tengri.models.nebular._shared import place_line_profiles
+        from tengri.components.nebular._shared import place_line_profiles
 
         sed = place_line_profiles(single_line_wave, single_line_lum, obs_wave, line_sigma_aa=10.0)
         assert sed.shape == obs_wave.shape
 
     def test_gaussian_finite(self, obs_wave, single_line_wave, single_line_lum):
-        from tengri.models.nebular._shared import place_line_profiles
+        from tengri.components.nebular._shared import place_line_profiles
 
         sed = place_line_profiles(single_line_wave, single_line_lum, obs_wave, line_sigma_aa=10.0)
         assert jnp.all(jnp.isfinite(sed))
 
     def test_gaussian_non_negative(self, obs_wave, single_line_wave, single_line_lum):
-        from tengri.models.nebular._shared import place_line_profiles
+        from tengri.components.nebular._shared import place_line_profiles
 
         sed = place_line_profiles(single_line_wave, single_line_lum, obs_wave, line_sigma_aa=10.0)
         assert jnp.all(sed >= 0.0)
 
     def test_gaussian_peaks_near_line_center(self, obs_wave, single_line_wave, single_line_lum):
         """Gaussian profile peaks close to the specified line wavelength."""
-        from tengri.models.nebular._shared import place_line_profiles
+        from tengri.components.nebular._shared import place_line_profiles
 
         sed = place_line_profiles(single_line_wave, single_line_lum, obs_wave, line_sigma_aa=10.0)
         peak_wave = float(obs_wave[jnp.argmax(sed)])
@@ -94,7 +94,7 @@ class TestPlaceLineProfiles:
 
     def test_zero_luminosity_gives_zero(self, obs_wave, single_line_wave):
         """Zero line luminosity → zero SED everywhere."""
-        from tengri.models.nebular._shared import place_line_profiles
+        from tengri.components.nebular._shared import place_line_profiles
 
         lum_zero = jnp.array([0.0])
         sed = place_line_profiles(single_line_wave, lum_zero, obs_wave, line_sigma_aa=10.0)
@@ -102,13 +102,13 @@ class TestPlaceLineProfiles:
 
     def test_delta_function_output_shape(self, obs_wave, single_line_wave, single_line_lum):
         """Delta-function path (sigma <= 0) has correct shape."""
-        from tengri.models.nebular._shared import place_line_profiles
+        from tengri.components.nebular._shared import place_line_profiles
 
         sed = place_line_profiles(single_line_wave, single_line_lum, obs_wave, line_sigma_aa=0.0)
         assert sed.shape == obs_wave.shape
 
     def test_delta_function_finite_non_negative(self, obs_wave, single_line_wave, single_line_lum):
-        from tengri.models.nebular._shared import place_line_profiles
+        from tengri.components.nebular._shared import place_line_profiles
 
         sed = place_line_profiles(single_line_wave, single_line_lum, obs_wave, line_sigma_aa=-1.0)
         assert jnp.all(jnp.isfinite(sed))
@@ -116,7 +116,7 @@ class TestPlaceLineProfiles:
 
     def test_multiple_lines(self, obs_wave):
         """Multiple lines with different luminosities are placed independently."""
-        from tengri.models.nebular._shared import place_line_profiles
+        from tengri.components.nebular._shared import place_line_profiles
 
         # Hβ + Hα vacuum
         line_waves = jnp.array([4862.68, 6564.61])
@@ -133,7 +133,7 @@ class TestPlaceLineProfiles:
 
     def test_broader_sigma_spreads_flux(self, obs_wave, single_line_wave, single_line_lum):
         """Wider Gaussian spreads flux over more wavelengths (lower peak, broader wings)."""
-        from tengri.models.nebular._shared import place_line_profiles
+        from tengri.components.nebular._shared import place_line_profiles
 
         sed_narrow = place_line_profiles(
             single_line_wave, single_line_lum, obs_wave, line_sigma_aa=5.0
@@ -146,7 +146,7 @@ class TestPlaceLineProfiles:
 
     def test_luminosity_linearity(self, obs_wave, single_line_wave):
         """Doubling luminosity doubles the SED everywhere."""
-        from tengri.models.nebular._shared import place_line_profiles
+        from tengri.components.nebular._shared import place_line_profiles
 
         lum1 = jnp.array([1.0e39])
         lum2 = jnp.array([2.0e39])
@@ -168,7 +168,7 @@ class TestComputeQh:
 
     def test_non_negative(self):
         """compute_qh always returns a non-negative value."""
-        from tengri.models.nebular._shared import compute_qh
+        from tengri.components.nebular._shared import compute_qh
 
         wave = jnp.linspace(100.0, 2000.0, 500)
         flux = jnp.ones_like(wave)
@@ -177,7 +177,7 @@ class TestComputeQh:
 
     def test_zero_flux_gives_zero(self):
         """Zero flux → Q_H ≈ 0."""
-        from tengri.models.nebular._shared import compute_qh
+        from tengri.components.nebular._shared import compute_qh
 
         wave = jnp.linspace(100.0, 2000.0, 500)
         flux = jnp.zeros_like(wave)
@@ -186,7 +186,7 @@ class TestComputeQh:
 
     def test_flux_only_longward_of_lyman_gives_zero(self):
         """Flux only at λ > 912 Å contributes nothing to Q_H."""
-        from tengri.models.nebular._shared import compute_qh
+        from tengri.components.nebular._shared import compute_qh
 
         wave = jnp.linspace(1000.0, 5000.0, 500)  # all > 912 Å
         flux = jnp.ones_like(wave)
@@ -195,7 +195,7 @@ class TestComputeQh:
 
     def test_ionizing_flux_below_lyman_limit(self):
         """Flux only at λ < 912 Å should give positive Q_H."""
-        from tengri.models.nebular._shared import compute_qh
+        from tengri.components.nebular._shared import compute_qh
 
         # Grid spanning 100–900 Å only
         wave = jnp.linspace(100.0, 900.0, 500)
@@ -205,7 +205,7 @@ class TestComputeQh:
 
     def test_more_flux_more_photons(self):
         """Higher ionizing flux → larger Q_H."""
-        from tengri.models.nebular._shared import compute_qh
+        from tengri.components.nebular._shared import compute_qh
 
         wave = jnp.linspace(100.0, 2000.0, 500)
         flux_low = jnp.where(wave < 912.0, 1e-10, 0.0)
@@ -216,7 +216,7 @@ class TestComputeQh:
 
     def test_jit_compatible(self):
         """compute_qh is already @jax.jit decorated; verify it runs."""
-        from tengri.models.nebular._shared import compute_qh
+        from tengri.components.nebular._shared import compute_qh
 
         wave = jnp.linspace(100.0, 2000.0, 200)
         flux = jnp.ones_like(wave) * 1e-15
@@ -238,28 +238,28 @@ class TestComputeAnalyticNebularContinuum:
         return jnp.linspace(1000.0, 12000.0, 600)
 
     def test_finite_non_negative(self, wave_optical):
-        from tengri.models.nebular._shared import compute_analytic_nebular_continuum
+        from tengri.components.nebular._shared import compute_analytic_nebular_continuum
 
         cont = compute_analytic_nebular_continuum(wave_optical, q_h=1e49, log_z_abs=-1.848)
         assert jnp.all(jnp.isfinite(cont))
         assert jnp.all(cont >= 0.0)
 
     def test_output_shape(self, wave_optical):
-        from tengri.models.nebular._shared import compute_analytic_nebular_continuum
+        from tengri.components.nebular._shared import compute_analytic_nebular_continuum
 
         cont = compute_analytic_nebular_continuum(wave_optical, q_h=1e49, log_z_abs=-1.848)
         assert cont.shape == wave_optical.shape
 
     def test_zero_qh_gives_zero(self, wave_optical):
         """No ionizing photons → no nebular continuum."""
-        from tengri.models.nebular._shared import compute_analytic_nebular_continuum
+        from tengri.components.nebular._shared import compute_analytic_nebular_continuum
 
         cont = compute_analytic_nebular_continuum(wave_optical, q_h=0.0, log_z_abs=-1.848)
         assert jnp.allclose(cont, 0.0, atol=1e-60)
 
     def test_scales_linearly_with_qh(self, wave_optical):
         """Q_H doubles → continuum doubles (linear normalization)."""
-        from tengri.models.nebular._shared import compute_analytic_nebular_continuum
+        from tengri.components.nebular._shared import compute_analytic_nebular_continuum
 
         cont1 = compute_analytic_nebular_continuum(wave_optical, q_h=1e49, log_z_abs=-1.848)
         cont2 = compute_analytic_nebular_continuum(wave_optical, q_h=2e49, log_z_abs=-1.848)
@@ -268,7 +268,7 @@ class TestComputeAnalyticNebularContinuum:
 
     def test_two_photon_longward_of_lya(self, wave_optical):
         """Two-photon emission is only present at λ > 1216 Å (λ_Lyα)."""
-        from tengri.models.nebular._shared import compute_analytic_nebular_continuum
+        from tengri.components.nebular._shared import compute_analytic_nebular_continuum
 
         # Wave grid that straddles Lya
         wave = jnp.linspace(900.0, 2000.0, 300)
@@ -279,7 +279,7 @@ class TestComputeAnalyticNebularContinuum:
 
     def test_temperature_changes_continuum_shape(self, wave_optical):
         """Different electron temperatures produce different SED shapes."""
-        from tengri.models.nebular._shared import compute_analytic_nebular_continuum
+        from tengri.components.nebular._shared import compute_analytic_nebular_continuum
 
         cont_t4 = compute_analytic_nebular_continuum(
             wave_optical, q_h=1e49, log_z_abs=-1.848, temperature=1e4
@@ -291,7 +291,7 @@ class TestComputeAnalyticNebularContinuum:
 
     def test_gradient_wrt_qh(self, wave_optical):
         """FD check: ∂(∑continuum)/∂q_h."""
-        from tengri.models.nebular._shared import compute_analytic_nebular_continuum
+        from tengri.components.nebular._shared import compute_analytic_nebular_continuum
 
         def loss(q_h):
             return jnp.sum(
@@ -305,7 +305,7 @@ class TestComputeAnalyticNebularContinuum:
 
     def test_jit_compatible(self, wave_optical):
         """compute_analytic_nebular_continuum is JIT-compilable."""
-        from tengri.models.nebular._shared import compute_analytic_nebular_continuum
+        from tengri.components.nebular._shared import compute_analytic_nebular_continuum
 
         jitted = jax.jit(compute_analytic_nebular_continuum)
         cont = jitted(wave_optical, 1e49, -1.848)
@@ -354,7 +354,7 @@ class TestNebularContinuumFallback:
 
     def test_invalid_fallback_mode_raises(self, wave):
         """fallback_mode other than 'error'/'warn' raises ValueError."""
-        from tengri.models.nebular._shared import NebularContinuumFallback
+        from tengri.components.nebular._shared import NebularContinuumFallback
 
         primary = _MockLineOnlyBackend(wave)
         with pytest.raises(ValueError, match="fallback_mode must be"):
@@ -362,7 +362,7 @@ class TestNebularContinuumFallback:
 
     def test_has_continuum_true(self, wave):
         """Wrapper always reports has_continuum=True."""
-        from tengri.models.nebular._shared import NebularContinuumFallback
+        from tengri.components.nebular._shared import NebularContinuumFallback
 
         primary = _MockLineOnlyBackend(wave)
         wrapped = NebularContinuumFallback(primary)
@@ -370,7 +370,7 @@ class TestNebularContinuumFallback:
 
     def test_name_attribute(self, wave):
         """Name includes primary backend name."""
-        from tengri.models.nebular._shared import NebularContinuumFallback
+        from tengri.components.nebular._shared import NebularContinuumFallback
 
         primary = _MockLineOnlyBackend(wave)
         wrapped = NebularContinuumFallback(primary)
@@ -378,7 +378,7 @@ class TestNebularContinuumFallback:
 
     def test_tier1_secondary_backend(self, wave):
         """Tier 1: secondary backend continuum is added to primary lines."""
-        from tengri.models.nebular._shared import NebularContinuumFallback
+        from tengri.components.nebular._shared import NebularContinuumFallback
 
         lines = jnp.ones_like(wave) * 1e-30
         cont = jnp.ones_like(wave) * 2e-30
@@ -392,7 +392,7 @@ class TestNebularContinuumFallback:
 
     def test_tier2_analytic_continuum(self, wave):
         """Tier 2: analytic continuum is added when ssp_wave + gas_logqion provided."""
-        from tengri.models.nebular._shared import NebularContinuumFallback
+        from tengri.components.nebular._shared import NebularContinuumFallback
 
         lines = jnp.zeros_like(wave)
         primary = _MockLineOnlyBackend(wave, lines)
@@ -405,8 +405,8 @@ class TestNebularContinuumFallback:
 
     def test_tier3_error_mode_raises(self, wave):
         """Tier 3: fallback_mode='error' raises NebularContinuumUnavailableError."""
-        from tengri.models.nebular._protocol import NebularContinuumUnavailableError
-        from tengri.models.nebular._shared import NebularContinuumFallback
+        from tengri.components.nebular._protocol import NebularContinuumUnavailableError
+        from tengri.components.nebular._shared import NebularContinuumFallback
 
         primary = _MockLineOnlyBackend(wave)
         wrapped = NebularContinuumFallback(primary, fallback_mode="error")
@@ -416,7 +416,7 @@ class TestNebularContinuumFallback:
 
     def test_tier4_warn_mode_returns_lines_only(self, wave):
         """Tier 4: fallback_mode='warn' returns lines only and emits UserWarning."""
-        from tengri.models.nebular._shared import NebularContinuumFallback
+        from tengri.components.nebular._shared import NebularContinuumFallback
 
         lines = jnp.ones_like(wave) * 1e-30
         primary = _MockLineOnlyBackend(wave, lines)
@@ -434,7 +434,7 @@ class TestNebularContinuumFallback:
 
     def test_attribute_delegation(self, wave):
         """Unknown attributes are delegated to the primary backend."""
-        from tengri.models.nebular._shared import NebularContinuumFallback
+        from tengri.components.nebular._shared import NebularContinuumFallback
 
         primary = _MockLineOnlyBackend(wave)
         primary.custom_attr = "test_value"
@@ -443,7 +443,7 @@ class TestNebularContinuumFallback:
 
     def test_tier1_takes_priority_over_tier2(self, wave):
         """When both fallback and ssp_wave+gas_logqion are present, Tier 1 wins."""
-        from tengri.models.nebular._shared import NebularContinuumFallback
+        from tengri.components.nebular._shared import NebularContinuumFallback
 
         lines = jnp.zeros_like(wave)
         cont_tier1 = jnp.ones_like(wave) * 5e-30
@@ -472,7 +472,7 @@ class TestInterpIndexWeight:
 
     def test_midpoint_weight(self):
         """x at midpoint of first cell → idx=0, w≈0.5."""
-        from tengri.models.nebular._shared import _interp_index_weight
+        from tengri.components.nebular._shared import _interp_index_weight
 
         grid = self._grid(5)  # [0, 0.25, 0.5, 0.75, 1.0]
         idx, w = _interp_index_weight(0.125, grid)  # midpoint of [0, 0.25]
@@ -481,7 +481,7 @@ class TestInterpIndexWeight:
 
     def test_at_grid_node_is_zero_weight(self):
         """x exactly at a node → weight = 0 (left edge of cell)."""
-        from tengri.models.nebular._shared import _interp_index_weight
+        from tengri.components.nebular._shared import _interp_index_weight
 
         grid = self._grid(5)
         idx, w = _interp_index_weight(0.25, grid)  # exactly grid[1]
@@ -490,7 +490,7 @@ class TestInterpIndexWeight:
 
     def test_at_last_grid_point(self):
         """x = grid[-1] → idx = n-2, w = 1.0."""
-        from tengri.models.nebular._shared import _interp_index_weight
+        from tengri.components.nebular._shared import _interp_index_weight
 
         grid = self._grid(5)
         idx, w = _interp_index_weight(1.0, grid)
@@ -499,7 +499,7 @@ class TestInterpIndexWeight:
 
     def test_clamp_below_grid(self):
         """x < grid[0] is clamped → idx=0, w=0.0."""
-        from tengri.models.nebular._shared import _interp_index_weight
+        from tengri.components.nebular._shared import _interp_index_weight
 
         grid = self._grid(5)
         idx, w = _interp_index_weight(-10.0, grid)
@@ -508,7 +508,7 @@ class TestInterpIndexWeight:
 
     def test_clamp_above_grid(self):
         """x > grid[-1] is clamped → idx=n-2, w=1.0."""
-        from tengri.models.nebular._shared import _interp_index_weight
+        from tengri.components.nebular._shared import _interp_index_weight
 
         grid = self._grid(5)
         idx, w = _interp_index_weight(100.0, grid)
@@ -517,7 +517,7 @@ class TestInterpIndexWeight:
 
     def test_weight_in_unit_interval(self):
         """w is always in [0, 1] for any x."""
-        from tengri.models.nebular._shared import _interp_index_weight
+        from tengri.components.nebular._shared import _interp_index_weight
 
         grid = self._grid(10)
         for x_val in [-1.0, 0.0, 0.33, 0.67, 1.0, 2.0]:
@@ -526,7 +526,7 @@ class TestInterpIndexWeight:
 
     def test_linear_reconstruction(self):
         """Piecewise-linear interpolation recovers x for f(x) = x."""
-        from tengri.models.nebular._shared import _interp_index_weight
+        from tengri.components.nebular._shared import _interp_index_weight
 
         grid = jnp.linspace(0.0, 1.0, 11)
         x = 0.63
@@ -545,28 +545,28 @@ class TestMetallicityConverters:
 
     def test_log_z_abs_at_solar(self):
         """logzsol=0 → log_z_abs = log10(Z_sun) ≈ -1.848."""
-        from tengri.models.nebular._shared import neb_logzsol_to_log_z_abs
+        from tengri.components.nebular._shared import neb_logzsol_to_log_z_abs
 
         result = float(neb_logzsol_to_log_z_abs(0.0))
         assert result == pytest.approx(_LOG10_ZSUN, rel=1e-6)
 
     def test_log_z_abs_sub_solar(self):
         """logzsol=-1 → log_z_abs shifts by -1 from solar."""
-        from tengri.models.nebular._shared import neb_logzsol_to_log_z_abs
+        from tengri.components.nebular._shared import neb_logzsol_to_log_z_abs
 
         result = float(neb_logzsol_to_log_z_abs(-1.0))
         assert result == pytest.approx(_LOG10_ZSUN - 1.0, rel=1e-6)
 
     def test_log_z_abs_super_solar(self):
         """logzsol=0.3 → log_z_abs = LOG10_ZSUN + 0.3."""
-        from tengri.models.nebular._shared import neb_logzsol_to_log_z_abs
+        from tengri.components.nebular._shared import neb_logzsol_to_log_z_abs
 
         result = float(neb_logzsol_to_log_z_abs(0.3))
         assert result == pytest.approx(_LOG10_ZSUN + 0.3, rel=1e-6)
 
     def test_cloudy_logoh_at_solar(self):
         """logzsol=0 → log(O/H) = _LOG10_ZSUN - _LOG_OH_OFFSET ≈ -3.07."""
-        from tengri.models.nebular._shared import neb_logzsol_to_cloudy_logoh
+        from tengri.components.nebular._shared import neb_logzsol_to_cloudy_logoh
 
         result = float(neb_logzsol_to_cloudy_logoh(0.0))
         expected = _LOG10_ZSUN - _LOG_OH_OFFSET
@@ -574,7 +574,7 @@ class TestMetallicityConverters:
 
     def test_cloudy_logoh_shifts_additively(self):
         """logzsol offset propagates additively to log(O/H)."""
-        from tengri.models.nebular._shared import neb_logzsol_to_cloudy_logoh
+        from tengri.components.nebular._shared import neb_logzsol_to_cloudy_logoh
 
         r0 = float(neb_logzsol_to_cloudy_logoh(0.0))
         r1 = float(neb_logzsol_to_cloudy_logoh(1.0))
@@ -582,28 +582,28 @@ class TestMetallicityConverters:
 
     def test_mappings_zeta_solar(self):
         """logzsol=0 → zeta = 1.0 (solar)."""
-        from tengri.models.nebular._shared import neb_logzsol_to_mappings_zeta
+        from tengri.components.nebular._shared import neb_logzsol_to_mappings_zeta
 
         result = float(neb_logzsol_to_mappings_zeta(0.0))
         assert result == pytest.approx(1.0, rel=1e-6)
 
     def test_mappings_zeta_subsolar(self):
         """logzsol=-1 → zeta = 0.1."""
-        from tengri.models.nebular._shared import neb_logzsol_to_mappings_zeta
+        from tengri.components.nebular._shared import neb_logzsol_to_mappings_zeta
 
         result = float(neb_logzsol_to_mappings_zeta(-1.0))
         assert result == pytest.approx(0.1, rel=1e-5)
 
     def test_mappings_zeta_supersolar(self):
         """logzsol=1 → zeta = 10.0."""
-        from tengri.models.nebular._shared import neb_logzsol_to_mappings_zeta
+        from tengri.components.nebular._shared import neb_logzsol_to_mappings_zeta
 
         result = float(neb_logzsol_to_mappings_zeta(1.0))
         assert result == pytest.approx(10.0, rel=1e-5)
 
     def test_all_converters_return_finite(self):
         """All three converters return finite values for scalar solar input."""
-        from tengri.models.nebular._shared import (
+        from tengri.components.nebular._shared import (
             neb_logzsol_to_cloudy_logoh,
             neb_logzsol_to_log_z_abs,
             neb_logzsol_to_mappings_zeta,

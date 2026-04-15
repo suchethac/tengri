@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.models.dust.emission import (
+from tengri.components.dust.emission import (
     DUST_EMISSION_MODELS,
     create_astrodust_from_grid,
     create_bosa_from_grid,

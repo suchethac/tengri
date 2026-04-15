@@ -66,9 +66,9 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri.models.igm import igm_transmission
-from tengri.models.radio import radio_agn, radio_star_forming
-from tengri.models.xray import xray_agn_corona, xray_xrb
+from tengri.components.igm import igm_transmission
+from tengri.components.radio import radio_agn, radio_star_forming
+from tengri.components.xray import xray_agn_corona, xray_xrb
 
 # Locate ``notebooks/_plot_style.py`` and ``data/`` root (nbclient cwd is often wrong).
 
@@ -333,7 +333,7 @@ plt.show()
 # radio model gallery.
 
 # %%
-from tengri.models.radio import (
+from tengri.components.radio import (
     radio_agn_dpl,
     radio_components,
     radio_freefree,

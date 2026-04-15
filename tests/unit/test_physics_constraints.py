@@ -37,7 +37,7 @@ class TestBalmerDecrementPhysics:
 
     def test_calzetti_differential_reddening(self):
         """Calzetti law predicts Ha/Hb ~ 3.9 at A_V = 1."""
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         wave = jnp.array([4862.76, 6564.72])  # Hb, Ha
         k = calzetti(wave)
@@ -58,7 +58,7 @@ class TestBalmerDecrementPhysics:
 
     def test_zero_dust_intrinsic_ratio(self):
         """At zero dust, differential reddening is zero → ratio stays 2.86."""
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         wave = jnp.array([4862.76, 6564.72])
         k = calzetti(wave)
@@ -70,7 +70,7 @@ class TestBalmerDecrementPhysics:
 
     def test_decrement_increases_with_dust(self):
         """Balmer decrement must increase monotonically with A_V."""
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         wave = jnp.array([4862.76, 6564.72])
         k = calzetti(wave)
@@ -101,7 +101,7 @@ class TestIRXBetaDirection:
 
     def test_dust_increases_irx_and_reddens_beta(self, wave):
         """Adding dust to a UV-bright SED increases IRX and reddens beta."""
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
         from tengri.utils.sed_quantities import (
             compute_irx,
             compute_l_tir,
@@ -305,7 +305,7 @@ class TestDustAttenuationAnalyticValues:
 
     def test_calzetti_vband_normalisation(self):
         """Calzetti k(5500A) ~ 1.0 (normalised at V-band)."""
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         k_v = float(calzetti(jnp.array([5500.0]))[0])
         np.testing.assert_allclose(k_v, 1.0, atol=0.05)
@@ -316,7 +316,7 @@ class TestDustAttenuationAnalyticValues:
         The Calzetti function returns k(lambda) = (k'(lambda)+R_V)/R_V,
         normalised so k(V) ~ 1. At 1500A this gives ~2.5-2.6.
         """
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         k_uv = float(calzetti(jnp.array([1500.0]))[0])
         # Much higher than k(V)=1 (strong UV attenuation)
@@ -325,14 +325,14 @@ class TestDustAttenuationAnalyticValues:
 
     def test_calzetti_nir_low(self):
         """Calzetti k(2.2um) should be small (<0.15)."""
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         k_nir = float(calzetti(jnp.array([22000.0]))[0])
         assert 0.0 <= k_nir < 0.2, f"k(2.2um) = {k_nir:.3f}, expected < 0.2"
 
     def test_power_law_exact(self):
         """Power-law k(lambda) = (lambda/5500)^n must be exact."""
-        from tengri.models.dust.attenuation import power_law
+        from tengri.components.dust.attenuation import power_law
 
         n = -0.7
         for lam in [1500.0, 2800.0, 5500.0, 10000.0]:
@@ -344,14 +344,14 @@ class TestDustAttenuationAnalyticValues:
 
     def test_cardelli_vband_unity(self):
         """Cardelli A(V)/A(V) = 1.0 by definition."""
-        from tengri.models.dust.attenuation import cardelli
+        from tengri.components.dust.attenuation import cardelli
 
         k_v = float(cardelli(jnp.array([5500.0]), dust_Rv=3.1)[0])
         np.testing.assert_allclose(k_v, 1.0, atol=0.05, err_msg=f"Cardelli k(V)={k_v:.3f}")
 
     def test_cardelli_bband(self):
         """Cardelli at B-band: A(B)/A(V) = 1 + 1/R_V = 1.323 for R_V=3.1."""
-        from tengri.models.dust.attenuation import cardelli
+        from tengri.components.dust.attenuation import cardelli
 
         k_b = float(cardelli(jnp.array([4400.0]), dust_Rv=3.1)[0])
         expected = 1.0 + 1.0 / 3.1  # = 1.3226
@@ -375,21 +375,21 @@ class TestDustPhysicalMonotonicity:
 
     def test_calzetti_positive_everywhere(self, optical_uv_wave):
         """k(lambda) >= 0 at all wavelengths."""
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         k = np.asarray(calzetti(optical_uv_wave))
         assert np.all(k >= 0), "Calzetti k(lambda) has negative values"
 
     def test_smc_positive_everywhere(self, optical_uv_wave):
         """SMC k(lambda) >= 0 at all wavelengths."""
-        from tengri.models.dust.attenuation import smc
+        from tengri.components.dust.attenuation import smc
 
         k = np.asarray(smc(optical_uv_wave))
         assert np.all(k >= 0), "SMC k(lambda) has negative values"
 
     def test_calzetti_uv_steeper_than_nir(self):
         """k(UV) must be much larger than k(NIR) for Calzetti."""
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         k = calzetti(jnp.array([1500.0, 5500.0, 10000.0]))
         k_uv, k_v, k_nir = float(k[0]), float(k[1]), float(k[2])
@@ -403,7 +403,7 @@ class TestDustPhysicalMonotonicity:
 
     def test_transmission_bounded(self):
         """Transmission exp(-tau * k) must be in (0, 1] for tau > 0."""
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         wave = jnp.linspace(1500.0, 10000.0, 100)
         k = calzetti(wave)
@@ -415,7 +415,7 @@ class TestDustPhysicalMonotonicity:
 
     def test_smc_steeper_than_calzetti_in_uv(self):
         """SMC curve rises more steeply into the UV than Calzetti."""
-        from tengri.models.dust.attenuation import calzetti, smc
+        from tengri.components.dust.attenuation import calzetti, smc
 
         wave = jnp.array([1500.0, 5500.0])
         calz_ratio = float(calzetti(wave)[0] / calzetti(wave)[1])
@@ -426,7 +426,7 @@ class TestDustPhysicalMonotonicity:
 
     def test_kriek_conroy_bump_increases_2175(self):
         """Kriek-Conroy with E_b > 0 must show enhanced 2175A absorption."""
-        from tengri.models.dust.attenuation import kriek_conroy
+        from tengri.components.dust.attenuation import kriek_conroy
 
         wave = jnp.array([2175.0, 3000.0])
 

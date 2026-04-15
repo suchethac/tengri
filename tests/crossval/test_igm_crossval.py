@@ -30,7 +30,7 @@ bagpipes_igm = pytest.importorskip(
     reason="bagpipes not installed",
 )
 
-from tengri.models.igm import igm_transmission
+from tengri.components.igm import igm_transmission
 
 
 class TestIGMTransmissionCrossval:

@@ -47,7 +47,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri.models.radio import (
+from tengri.components.radio import (
     radio_agn,
     radio_agn_dpl,
     radio_components,

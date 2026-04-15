@@ -36,8 +36,8 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri.models.igm import igm_transmission, igm_transmission_patchy
-from tengri.models.nebular.shock import (
+from tengri.components.igm import igm_transmission, igm_transmission_patchy
+from tengri.components.nebular.shock import (
     shock_line_ratios,
     _SHOCK_V,
     _R_OIII,
@@ -47,20 +47,20 @@ from tengri.models.nebular.shock import (
     _R_OI,
     _R_HA,
 )
-from tengri.models.observation.calibration import (
+from tengri.observation.calibration import (
     calibration_polynomial,
     chebyshev_basis,
 )
-from tengri.models.observation.eline_marginalization import (
+from tengri.observation.eline_marginalization import (
     DEFAULT_LINE_NAMES,
     DEFAULT_LINE_WAVELENGTHS,
     build_eline_design_matrix,
 )
-from tengri.models.observation.eline_priors import (
+from tengri.observation.eline_priors import (
     CLOUDY_LINE_NAMES,
     CLOUDY_LINE_WAVELENGTHS,
 )
-from tengri.models.observation.spectrum import (
+from tengri.observation.spectrum import (
     apply_lsf,
     nirspec_prism_resolution,
 )

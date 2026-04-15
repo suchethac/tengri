@@ -24,7 +24,7 @@ class TestIGMReionCrossval:
         At low redshift, reionization is complete and the patchy model
         should be identical to the standard IGM prescription.
         """
-        from tengri.models.igm import igm_transmission, igm_transmission_patchy
+        from tengri.components.igm import igm_transmission, igm_transmission_patchy
 
         wave_obs = jnp.linspace(800.0, 15000.0, 1000)
         z = 3.0
@@ -43,7 +43,7 @@ class TestIGMReionCrossval:
         measurable absorption at observed wavelengths just redward of
         Lya at the source redshift.
         """
-        from tengri.models.igm import igm_transmission, igm_transmission_patchy
+        from tengri.components.igm import igm_transmission, igm_transmission_patchy
 
         z = 7.0
         lya_obs = 1215.67 * (1.0 + z)  # ~9722.5 A
@@ -89,7 +89,7 @@ class TestIGMReionCrossval:
         should produce significant absorption even at wavelengths
         well redward of Lya.
         """
-        from tengri.models.igm import igm_transmission_patchy
+        from tengri.components.igm import igm_transmission_patchy
 
         z = 8.0
         lya_obs = 1215.67 * (1.0 + z)  # ~10941 A
@@ -107,7 +107,7 @@ class TestIGMReionCrossval:
         The Lorentzian profile falls off as ~1/delta_nu^2, so absorption
         should be stronger close to Lya and weaker far from it.
         """
-        from tengri.models.igm import igm_transmission_patchy
+        from tengri.components.igm import igm_transmission_patchy
 
         z = 7.0
         lya_obs = 1215.67 * (1.0 + z)

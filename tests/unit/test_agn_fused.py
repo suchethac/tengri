@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import Fixed, Model, ParamSpec, Uniform
-from tengri.models.sps.dsps_wrapper import SSPData
+from tengri.components.sps.dsps_wrapper import SSPData
 
 jax.config.update("jax_enable_x64", True)
 
@@ -47,7 +47,7 @@ def synthetic_ssp():
 @pytest.fixture(scope="module")
 def simple_filters():
     """Synthetic 3-band filter set covering the SSP wavelength range."""
-    from tengri.models.observation.photometry import FilterCurve
+    from tengri.observation.photometry import FilterCurve
 
     waves = [
         jnp.linspace(3500.0, 4500.0, 50),
@@ -367,7 +367,7 @@ class TestAGNPredictSED:
         agn_log_lbol controls the AGN luminosity as expected.
         Avoids synthetic SSP normalization issues in unit tests.
         """
-        from tengri.models.agn import resolve_agn_model
+        from tengri.components.agn import resolve_agn_model
 
         wave = jnp.linspace(3000.0, 10000.0, 100)
         agn_fn = resolve_agn_model("simple")

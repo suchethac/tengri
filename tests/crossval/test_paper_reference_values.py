@@ -29,7 +29,7 @@ class TestCalzetti2000:
 
         k(V) = (k'(V) + R_V) / R_V = 1.0 by construction.
         """
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         k_v = float(calzetti(jnp.array([5500.0]))[0])
         np.testing.assert_allclose(k_v, 1.0, atol=0.01)
@@ -45,7 +45,7 @@ class TestCalzetti2000:
            = 2.659 * 2.363 + 4.05 = 6.283 + 4.05 = 10.333
         k = k'/R_V = 10.333/4.05 = 2.551
         """
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         k = float(calzetti(jnp.array([1500.0]))[0])
         # Analytic: k'(1500) = 2.659*(-2.156+1.509*6.667-0.198*6.667^2+0.011*6.667^3)+4.05
@@ -68,7 +68,7 @@ class TestCalzetti2000:
         k' = 2.659(-1.857 + 1.040) + 4.05 = 2.659*(-0.817) + 4.05 = -2.173 + 4.05 = 1.877
         k = 1.877/4.05 = 0.463
         """
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         k = float(calzetti(jnp.array([10000.0]))[0])
         kp = 2.659 * (-1.857 + 1.040 / 1.0) + 4.05
@@ -86,7 +86,7 @@ class TestCardelli1989:
 
     def test_av_over_av_equals_one(self):
         """By definition: A(V)/A(V) = 1.0."""
-        from tengri.models.dust.attenuation import cardelli
+        from tengri.components.dust.attenuation import cardelli
 
         k_v = float(cardelli(jnp.array([5500.0]), dust_Rv=3.1)[0])
         np.testing.assert_allclose(k_v, 1.0, atol=0.02)
@@ -96,7 +96,7 @@ class TestCardelli1989:
 
         For R_V=3.1: A(B)/A(V) = 1 + 1/R_V = 1.323 (by definition of R_V).
         """
-        from tengri.models.dust.attenuation import cardelli
+        from tengri.components.dust.attenuation import cardelli
 
         k = cardelli(jnp.array([4400.0, 5500.0]), dust_Rv=3.1)
         ratio = float(k[0] / k[1])
@@ -112,7 +112,7 @@ class TestCardelli1989:
         a(x) = 1.752 - 0.316*x - 0.104/((x-4.67)^2 + 0.341)
         which peaks at x = 4.595 (λ ≈ 2176 A).
         """
-        from tengri.models.dust.attenuation import cardelli
+        from tengri.components.dust.attenuation import cardelli
 
         wave = jnp.linspace(1900.0, 2400.0, 500)
         k = cardelli(wave, dust_Rv=3.1)
@@ -135,39 +135,39 @@ class TestPei1992:
 
     def test_smc_rv(self):
         """Pei 1992 Table 2: SMC R_V = 2.93."""
-        from tengri.models.dust.attenuation import _SMC_RV
+        from tengri.components.dust.attenuation import _SMC_RV
 
         assert abs(float(_SMC_RV) - 2.93) < 0.01
 
     def test_lmc_rv(self):
         """Pei 1992 Table 2: LMC R_V = 3.16."""
-        from tengri.models.dust.attenuation import _LMC_RV
+        from tengri.components.dust.attenuation import _LMC_RV
 
         assert abs(float(_LMC_RV) - 3.16) < 0.01
 
     def test_smc_normalized_at_v(self):
         """SMC curve normalized to k(5500A) = 1.0."""
-        from tengri.models.dust.attenuation import smc
+        from tengri.components.dust.attenuation import smc
 
         k_v = float(smc(jnp.array([5500.0]))[0])
         np.testing.assert_allclose(k_v, 1.0, atol=0.05)
 
     def test_lmc_normalized_at_v(self):
         """LMC curve normalized to k(5500A) = 1.0."""
-        from tengri.models.dust.attenuation import lmc
+        from tengri.components.dust.attenuation import lmc
 
         k_v = float(lmc(jnp.array([5500.0]))[0])
         np.testing.assert_allclose(k_v, 1.0, atol=0.05)
 
     def test_smc_6_drude_components(self):
         """Pei 1992 Table 4: SMC has 6 Drude components."""
-        from tengri.models.dust.attenuation import _SMC_LAM
+        from tengri.components.dust.attenuation import _SMC_LAM
 
         assert len(_SMC_LAM) == 6
 
     def test_lmc_6_drude_components(self):
         """Pei 1992 Table 4: LMC has 6 Drude components."""
-        from tengri.models.dust.attenuation import _LMC_LAM
+        from tengri.components.dust.attenuation import _LMC_LAM
 
         assert len(_LMC_LAM) == 6
 
@@ -182,14 +182,14 @@ class TestAllen2008:
 
     def test_shock_grid_velocity_range(self):
         """Allen+2008: velocity grid 100-1000 km/s."""
-        from tengri.models.nebular.shock import _FALLBACK_V
+        from tengri.components.nebular.shock import _FALLBACK_V
 
         assert float(_FALLBACK_V[0]) == 100.0
         assert float(_FALLBACK_V[-1]) == 1000.0
 
     def test_oiii_peaks_at_300_400(self):
         """Allen+2008 Fig. 14: [OIII]/Hβ peaks at v ~ 300-400 km/s."""
-        from tengri.models.nebular.shock import _FALLBACK_R_OIII, _FALLBACK_V
+        from tengri.components.nebular.shock import _FALLBACK_R_OIII, _FALLBACK_V
 
         peak_idx = int(jnp.argmax(_FALLBACK_R_OIII))
         peak_v = float(_FALLBACK_V[peak_idx])
@@ -197,13 +197,13 @@ class TestAllen2008:
 
     def test_oiii_5007_4959_ratio_298(self):
         """Storey & Zeippen 2000: [OIII] 5007/4959 = 2.98 (atomic physics)."""
-        from tengri.models.nebular.shock import _OIII_DOUBLET_RATIO
+        from tengri.components.nebular.shock import _OIII_DOUBLET_RATIO
 
         np.testing.assert_allclose(_OIII_DOUBLET_RATIO, 2.98, atol=0.01)
 
     def test_nii_6583_6548_ratio_294(self):
         """Storey & Zeippen 2000: [NII] 6583/6548 = 2.94 (atomic physics)."""
-        from tengri.models.nebular.shock import _NII_DOUBLET_RATIO
+        from tengri.components.nebular.shock import _NII_DOUBLET_RATIO
 
         np.testing.assert_allclose(_NII_DOUBLET_RATIO, 2.94, atol=0.01)
 
@@ -213,7 +213,7 @@ class TestAllen2008:
         Case B recombination: Hα/Hβ = 2.86 (Osterbrock & Ferland 2006).
         In shocks, collisional excitation adds to recombination.
         """
-        from tengri.models.nebular.shock import _FALLBACK_R_HA
+        from tengri.components.nebular.shock import _FALLBACK_R_HA
 
         for i, r in enumerate(_FALLBACK_R_HA):
             assert float(r) >= 2.86, f"Hα/Hβ at index {i} = {float(r)}, should be ≥ 2.86"
@@ -225,7 +225,7 @@ class TestAllen2008:
         [OIII] 5007/Hβ at v=300: ~5.8
         [OIII] 5007/Hβ at v=1000: ~2.5
         """
-        from tengri.models.nebular.shock import _FALLBACK_R_OIII, _FALLBACK_V
+        from tengri.components.nebular.shock import _FALLBACK_R_OIII, _FALLBACK_V
 
         # v=100 (index 0)
         np.testing.assert_allclose(float(_FALLBACK_R_OIII[0]), 0.3, atol=0.2)
@@ -256,7 +256,7 @@ class TestMahadevan1997:
         The combined ADAF + outer-disc SED must peak well into the infrared
         (λ > 1 μm = 1e4 Å), never in the UV/optical (λ < 4000 Å).
         """
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         wave = jnp.geomspace(1e4, 1e10, 2000)
         l_nu = adaf_disc(wave, agn_log_lbol=10.0, agn_log_mbh=8.0)
@@ -284,7 +284,7 @@ class TestMahadevan1997:
         """
         import numpy as np
 
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         # Wide grid (1 Å to 1 m) for correct SED normalization
         wave_full = np.array(jnp.geomspace(1.0, 1e12, 8000))
@@ -318,7 +318,7 @@ class TestBPT1972:
 
     def test_schwarzschild_isco_exactly_6(self):
         """BPT72: r_ISCO(a=0) = 6 R_g (Schwarzschild)."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         r = float(_isco_radius(0.0))
         np.testing.assert_allclose(r, 6.0, atol=0.01)
@@ -328,21 +328,21 @@ class TestBPT1972:
 
         For a=0.998: r_ISCO ≈ 1.237 R_g.
         """
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         r = float(_isco_radius(0.998))
         np.testing.assert_allclose(r, 1.237, atol=0.05)
 
     def test_a_half_isco(self):
         """BPT72: r_ISCO(a=0.5) ≈ 4.233 R_g."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         r = float(_isco_radius(0.5))
         np.testing.assert_allclose(r, 4.233, atol=0.05)
 
     def test_a_09_isco(self):
         """BPT72: r_ISCO(a=0.9) ≈ 2.321 R_g."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         r = float(_isco_radius(0.9))
         np.testing.assert_allclose(r, 2.321, atol=0.05)
@@ -363,7 +363,7 @@ class TestLi2008:
         Term 2: FUV rise (normalization-dependent)
         Term 3: c4 / [(λ/0.2175)^2 + (0.2175/λ)^2 - 1.95] (UV bump)
         """
-        from tengri.models.dust.attenuation import li08
+        from tengri.components.dust.attenuation import li08
 
         # At 2175A (bump center), term 3 should contribute significantly
         wave = jnp.array([2175.0])
@@ -374,14 +374,14 @@ class TestLi2008:
 
     def test_li08_normalized_at_v(self):
         """Li+2008: k(5500A) = 1.0 by normalization."""
-        from tengri.models.dust.attenuation import li08
+        from tengri.components.dust.attenuation import li08
 
         k_v = float(li08(jnp.array([5500.0]))[0])
         np.testing.assert_allclose(k_v, 1.0, atol=0.01)
 
     def test_li08_mw_preset_c4_nonzero(self):
         """Li+2008 / Markov+2023: MW-like preset has c4 ~ 0.04 (bump)."""
-        from tengri.models.dust.attenuation import li08
+        from tengri.components.dust.attenuation import li08
 
         # MW preset: c1=6.0, c2=4.0, c3=2.0, c4=0.04
         wave = jnp.linspace(1800.0, 2600.0, 200)
@@ -408,7 +408,7 @@ class TestVandenBerk2001:
 
     def test_lya_is_strongest_line(self):
         """VB01 Table 2: Lyα has the largest EW of all broad lines."""
-        from tengri.models.agn.blr import _BLR_LINE_STRENGTHS, _BLR_LINE_WAVELENGTHS
+        from tengri.components.agn.blr import _BLR_LINE_STRENGTHS, _BLR_LINE_WAVELENGTHS
 
         max_idx = int(jnp.argmax(_BLR_LINE_STRENGTHS))
         max_wave = float(_BLR_LINE_WAVELENGTHS[max_idx])
@@ -421,7 +421,7 @@ class TestVandenBerk2001:
 
     def test_civ_present(self):
         """VB01: CIV 1549A has EW ~ 24A (prominent broad line)."""
-        from tengri.models.agn.blr import _BLR_LINE_STRENGTHS, _BLR_LINE_WAVELENGTHS
+        from tengri.components.agn.blr import _BLR_LINE_STRENGTHS, _BLR_LINE_WAVELENGTHS
 
         civ_idx = int(jnp.argmin(jnp.abs(_BLR_LINE_WAVELENGTHS - 1549.0)))
         civ_strength = float(_BLR_LINE_STRENGTHS[civ_idx])
@@ -429,7 +429,7 @@ class TestVandenBerk2001:
 
     def test_mgii_present(self):
         """VB01: MgII 2800A has EW ~ 32A (strong UV line)."""
-        from tengri.models.agn.blr import _BLR_LINE_STRENGTHS, _BLR_LINE_WAVELENGTHS
+        from tengri.components.agn.blr import _BLR_LINE_STRENGTHS, _BLR_LINE_WAVELENGTHS
 
         mgii_idx = int(jnp.argmin(jnp.abs(_BLR_LINE_WAVELENGTHS - 2800.0)))
         mgii_strength = float(_BLR_LINE_STRENGTHS[mgii_idx])
@@ -446,7 +446,7 @@ class TestBellstedt2020:
 
     def test_snorm_skew_zero_is_gaussian(self):
         """Bellstedt+2020 Eq. 2: with skew=0, the kernel is a standard Gaussian."""
-        from tengri.models.sfh import norm, snorm
+        from tengri.components.sfh import norm, snorm
 
         t = jnp.geomspace(1e5, 14e9, 500)
         sfr_snorm = snorm(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0)
@@ -455,7 +455,7 @@ class TestBellstedt2020:
 
     def test_tsnorm_trunc_1_minimal_effect(self):
         """Bellstedt+2020: trunc controls CDF suppression. trunc=1 is minimal."""
-        from tengri.models.sfh import snorm, tsnorm
+        from tengri.components.sfh import snorm, tsnorm
 
         t = jnp.geomspace(1e5, 14e9, 500)
         sfr_snorm = snorm(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0)
@@ -476,21 +476,21 @@ class TestLeja2019:
 
     def test_7_bins_default(self):
         """Leja+2019: default is 7 lookback time bins (8 edges)."""
-        from tengri.models.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR, DEFAULT_N_BINS
+        from tengri.components.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR, DEFAULT_N_BINS
 
         assert DEFAULT_N_BINS == 7
         assert len(DEFAULT_BIN_EDGES_GYR) == 8
 
     def test_default_bins_span_cosmic_time(self):
         """Leja+2019: bins span 0 to 13.7 Gyr."""
-        from tengri.models.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR
+        from tengri.components.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR
 
         assert float(DEFAULT_BIN_EDGES_GYR[0]) == pytest.approx(0.0)
         assert float(DEFAULT_BIN_EDGES_GYR[-1]) == pytest.approx(13.7, rel=0.01)
 
     def test_zero_ratios_flat_sfh(self):
         """Leja+2019: all log-ratios = 0 → equal SFR in all bins."""
-        from tengri.models.sfh import continuity_sfh
+        from tengri.components.sfh import continuity_sfh
 
         age = jnp.geomspace(1e8, 13e9, 500)
         sfr = continuity_sfh(
@@ -523,7 +523,7 @@ class TestEddingtonPhysics:
 
         For M = 10^8 Msun: L_Edd = 1.26 × 10^46 erg/s.
         """
-        from tengri.models.agn.disc import _eddington_luminosity
+        from tengri.components.agn.disc import _eddington_luminosity
 
         l_edd = float(_eddington_luminosity(8.0))
         expected = 1.26e38 * 1e8  # 1.26e46 erg/s
@@ -531,7 +531,7 @@ class TestEddingtonPhysics:
 
     def test_gravitational_radius(self):
         """R_g = GM/c^2 = 1.485 × 10^13 * (M/10^8 Msun) cm."""
-        from tengri.models.agn.disc import _gravitational_radius
+        from tengri.components.agn.disc import _gravitational_radius
 
         r_g = float(_gravitational_radius(8.0))
         expected = 1.485e13  # cm, for 10^8 Msun
@@ -554,7 +554,7 @@ class TestSFHMassConservation:
 
         Iyer+2019, ApJ 879, 116 — dense basis SFH is mass-normalized.
         """
-        from tengri.models.sfh.dense_basis import dense_basis_sfh
+        from tengri.components.sfh.dense_basis import dense_basis_sfh
 
         sfr = dense_basis_sfh(
             self.AGE_GRID,
@@ -578,7 +578,7 @@ class TestSFHMassConservation:
 
         Leja+2019, ApJ 876, 3 — continuity SFH is mass-normalized.
         """
-        from tengri.models.sfh.nonparametric import continuity_sfh
+        from tengri.components.sfh.nonparametric import continuity_sfh
 
         sfr = continuity_sfh(
             self.AGE_GRID,
@@ -603,7 +603,7 @@ class TestSFHMassConservation:
 
         Leja+2019: total mass is set by log_total_mass independent of log-ratios.
         """
-        from tengri.models.sfh.nonparametric import continuity_sfh
+        from tengri.components.sfh.nonparametric import continuity_sfh
 
         sfr_bursty = continuity_sfh(
             self.AGE_GRID,
@@ -630,7 +630,7 @@ class TestSFHMassConservation:
         Setting d/dt = 0 gives t_peak = tau × (beta/alpha)^{1/(alpha+beta)}.
         When alpha == beta the formula reduces to t_peak = tau exactly.
         """
-        from tengri.models.sfh.mean_sfh import double_powerlaw
+        from tengri.components.sfh.mean_sfh import double_powerlaw
 
         tau = 3e9  # yr
         # alpha == beta → t_peak == tau exactly (no grid-resolution ambiguity)
@@ -662,7 +662,7 @@ class TestCharlotFall2000:
         The birth-cloud transition is a sigmoid with t_birth=10 Myr, width=0.3 dex.
         At age=1e4 yr the weight is 0.99995 ≈ 1 (deep sigmoid limit).
         """
-        from tengri.models.dust.attenuation import two_component_dust
+        from tengri.components.dust.attenuation import two_component_dust
 
         wave_v = jnp.array([5500.0])
         # 1e4 yr (10 kyr) — deep inside sigmoid → birth-cloud weight ≈ 1.0
@@ -693,7 +693,7 @@ class TestCharlotFall2000:
 
         At age=5e9 yr the sigmoid weight is < 2e-4 ≈ 0 (deep old-star limit).
         """
-        from tengri.models.dust.attenuation import two_component_dust
+        from tengri.components.dust.attenuation import two_component_dust
 
         wave_v = jnp.array([5500.0])
         # 5 Gyr — deep outside sigmoid → birth-cloud weight ≈ 0.0
@@ -721,7 +721,7 @@ class TestCharlotFall2000:
         CF00: T_young / T_old = exp(-tau_bc × k(V)) = exp(-1.0) ≈ 0.3679.
         Uses deep sigmoid limits: 1e4 yr (weight≈1) and 5e9 yr (weight≈0).
         """
-        from tengri.models.dust.attenuation import two_component_dust
+        from tengri.components.dust.attenuation import two_component_dust
 
         wave_v = jnp.array([5500.0])
         age_young = jnp.array([1e4])  # deep young limit: weight ≈ 1
@@ -768,14 +768,14 @@ class TestWittGordon2000Limits:
 
         At tau_v = 100: T(5500 Å) < 1e-10.
         """
-        from tengri.models.dust.attenuation import wg00_shell
+        from tengri.components.dust.attenuation import wg00_shell
 
         T = float(wg00_shell(jnp.array([5500.0]), tau_v=100.0, law="cardelli")[0])
         assert T < 1e-10, f"WG00 shell opaque limit: T={T:.2e} (expected < 1e-10 at tau_v=100)"
 
     def test_shell_transparent_limit(self):
         """Shell geometry: T → 1 at tau_v = 0. WG00 Eq. 1: Beer-Lambert."""
-        from tengri.models.dust.attenuation import wg00_shell
+        from tengri.components.dust.attenuation import wg00_shell
 
         T = float(wg00_shell(jnp.array([5500.0]), tau_v=0.0, law="cardelli")[0])
         np.testing.assert_allclose(
@@ -791,7 +791,7 @@ class TestWittGordon2000Limits:
         At tau_v = 1, k(5500 Å) ≈ 1 (cardelli normalized to V-band):
         T = (1 - exp(-1)) / 1 ≈ 0.6321.
         """
-        from tengri.models.dust.attenuation import wg00_cloudy
+        from tengri.components.dust.attenuation import wg00_cloudy
 
         T = float(wg00_cloudy(jnp.array([5500.0]), tau_v=1.0, law="cardelli")[0])
         expected = float((1.0 - jnp.exp(-1.0)) / 1.0)  # ≈ 0.6321
@@ -808,7 +808,7 @@ class TestWittGordon2000Limits:
         lim_{x→0} (1-exp(-x))/x = 1. Implementation uses Taylor expansion
         for tau < threshold to avoid 0/0.
         """
-        from tengri.models.dust.attenuation import wg00_cloudy
+        from tengri.components.dust.attenuation import wg00_cloudy
 
         T = float(wg00_cloudy(jnp.array([5500.0]), tau_v=1e-6, law="cardelli")[0])
         np.testing.assert_allclose(
@@ -838,7 +838,7 @@ class TestBell2003Radio:
         a fixed literature value — NOT back-computed from the expected answer.
         The test verifies the function correctly implements this formula.
         """
-        from tengri.models.radio import radio_sfr_bell2003
+        from tengri.components.radio import radio_sfr_bell2003
         from tengri.utils.physics_constants import C_AA as _C_AA
 
         L_ir = 1e45  # arbitrary erg/s — tests formula, not absolute calibration
@@ -865,7 +865,7 @@ class TestBell2003Radio:
         since the expected ratio (10×) comes from the exponent definition,
         not from the absolute output.
         """
-        from tengri.models.radio import radio_sfr_bell2003
+        from tengri.components.radio import radio_sfr_bell2003
         from tengri.utils.physics_constants import C_AA as _C_AA
 
         wave = jnp.array([_C_AA / 1.4e9])
@@ -886,7 +886,7 @@ class TestBell2003Radio:
 
         L(1.0 GHz) / L(1.4 GHz) = (1.0/1.4)^{-0.8} ≈ 1.338.
         """
-        from tengri.models.radio import radio_sfr_bell2003
+        from tengri.components.radio import radio_sfr_bell2003
         from tengri.utils.physics_constants import C_AA as _C_AA
 
         wave_1p0 = jnp.array([_C_AA / 1.0e9])
@@ -921,7 +921,7 @@ class TestRanalli2003XRay:
         (LMXB: 8.3e28 erg/s/Msun). Combined at SFR=1, M*=1e10: ~3.43e39,
         within 30% of Ranalli.
         """
-        from tengri.models.xray import xray_xrb
+        from tengri.components.xray import xray_xrb
         from tengri.utils.physics_constants import C_AA as _C_AA, KEV_TO_HZ as _KEV_TO_HZ
 
         E_grid = jnp.linspace(2.0, 10.0, 500)  # keV
@@ -951,7 +951,7 @@ class TestInoue2014IGM:
         Inoue+2014: τ_LL >> 1 for z > 3.
         Observed-frame convention: pass wave_obs = 912 × (1+z).
         """
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         z = 4.0
         wave_ll_obs = jnp.array([912.0 * (1 + z)])  # observed 4560 Å
@@ -960,7 +960,7 @@ class TestInoue2014IGM:
 
     def test_lya_forest_z3(self):
         """Mean Lya forest transmission at z=3 ≈ 0.68. Fan+2006 AJ 132, Eq. 3."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         z = 3.0
         wave_lya_obs = jnp.array([1216.0 * (1 + z)])  # observed 4864 Å
@@ -979,7 +979,7 @@ class TestInoue2014IGM:
         Lyman limit. We check the range 912*(1+z) to 3000*(1+z) Å (observed),
         which covers the LAF and DLA forest at very low redshift.
         """
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         z = 0.01
         wave = jnp.linspace(912.0 * (1 + z), 3000.0 * (1 + z), 50)
@@ -1014,7 +1014,7 @@ class TestOsterbrockCaseB:
     def backend(self):
         import os
 
-        from tengri.models.nebular.cue import CueBackend
+        from tengri.components.nebular.cue import CueBackend
 
         if not os.path.exists("data/cue_weights.npz"):
             pytest.skip("Cue weights not found (run convert_cue_weights.py)")
@@ -1083,7 +1083,7 @@ class TestOsterbrockCaseB:
           3. Asserting ratio_dust > ratio_intrinsic (dust raises the ratio).
           4. Asserting ratio_dust > 2.86 (exceeds Case B lower bound).
         """
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         # Intrinsic (no dust) — Cue emulator at low ionization, solar metallicity
         wave, lum0 = backend.predict_nebular_line_luminosities(
@@ -1139,7 +1139,7 @@ class TestStoreyZeippen2000:
     def backend(self):
         import os
 
-        from tengri.models.nebular.cue import CueBackend
+        from tengri.components.nebular.cue import CueBackend
 
         if not os.path.exists("data/cue_weights.npz"):
             pytest.skip("Cue weights not found (run convert_cue_weights.py)")
@@ -1254,7 +1254,7 @@ class TestKennicutt1998:
     def backend(self):
         import os
 
-        from tengri.models.nebular.cue import CueBackend
+        from tengri.components.nebular.cue import CueBackend
 
         if not os.path.exists("data/cue_weights.npz"):
             pytest.skip("Cue weights not found (run convert_cue_weights.py)")

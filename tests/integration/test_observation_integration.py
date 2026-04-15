@@ -15,12 +15,12 @@ from tengri.core.model import Model
 from tengri.core.parameters import ParamSpec
 from tengri.distributions import Fixed, Uniform
 from tengri.inference.fitter import Fitter
-from tengri.models.observation.noise_model import NoiseConfig
-from tengri.models.observation.observation import Observation
-from tengri.models.observation.photometry import FilterCurve
-from tengri.models.observation.photometry_config import Photometry
-from tengri.models.observation.spectroscopy import SpectroscopyConfig
-from tengri.models.sps.dsps_wrapper import load_ssp_data
+from tengri.observation.noise_model import NoiseConfig
+from tengri.observation.observation import Observation
+from tengri.observation.photometry import FilterCurve
+from tengri.observation.photometry_config import Photometry
+from tengri.observation.spectroscopy import SpectroscopyConfig
+from tengri.components.sps.dsps_wrapper import load_ssp_data
 
 # ---------------------------------------------------------------------------
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"

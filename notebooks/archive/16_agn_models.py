@@ -51,7 +51,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
 
-from tengri.models.agn import AGN_MODELS, get_agn_model
+from tengri.components.agn import AGN_MODELS, get_agn_model
 from tengri import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
@@ -194,7 +194,7 @@ plt.show()
 # four key parameters and their effect on the SED shape.
 
 # %%
-from tengri.models.agn.qsogen import qsogen_sed
+from tengri.components.agn.qsogen import qsogen_sed
 
 fig, axes = plt.subplots(2, 2, figsize=(12, 9))
 
@@ -295,7 +295,7 @@ plt.show()
 # **emission** in face-on (Type 1) views.
 
 # %%
-from tengri.models.agn.skirtor import skirtor_analytic
+from tengri.components.agn.skirtor import skirtor_analytic
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
@@ -766,9 +766,9 @@ plt.show()
 #
 # | Feature | Module | Key API |
 # |---------|--------|---------|
-# | 6 AGN models | `tengri.models.agn` | `AGN_MODELS`, `get_agn_model()` |
-# | QSOgen empirical SED | `tengri.models.agn.qsogen` | `qsogen_sed()` |
-# | SKIRTOR clumpy torus | `tengri.models.agn.skirtor` | `skirtor_analytic()` |
+# | 6 AGN models | `tengri.components.agn` | `AGN_MODELS`, `get_agn_model()` |
+# | QSOgen empirical SED | `tengri.components.agn.qsogen` | `qsogen_sed()` |
+# | SKIRTOR clumpy torus | `tengri.components.agn.skirtor` | `skirtor_analytic()` |
 # | AGN in forward model | `tengri.Model` | `agn_model="simple"` in `ParamSpec` |
 # | AGN inference | `tengri.Fitter` | `fitter.run("native_evi", ...)` |
 #

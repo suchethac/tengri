@@ -65,7 +65,7 @@ FIGDIR = os.path.join(_nb_dir, "..", "figures", "reference")
 os.makedirs(FIGDIR, exist_ok=True)
 
 # %%
-from tengri.models.dust.emission import (
+from tengri.components.dust.emission import (
     DUST_EMISSION_MODELS,
     _pah_template,
     _PAH_CENTER_UM,

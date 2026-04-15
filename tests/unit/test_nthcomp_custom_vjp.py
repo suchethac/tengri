@@ -13,7 +13,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-from tengri.models.agn._nthcomp import (
+from tengri.components.agn._nthcomp import (
     _GAMMA_JAX,
     _KTBB_JAX,
     _KTE_JAX,

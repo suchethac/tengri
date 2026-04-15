@@ -56,7 +56,7 @@ class TestIGMPublishedValues:
         Above the Lyman limit but below Ly-alpha, expect significant
         but not total absorption. T should be in [0.2, 0.9].
         """
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         lam_rest = 1000.0  # Angstrom
         z = 3.0
@@ -70,7 +70,7 @@ class TestIGMPublishedValues:
         Photons below the Lyman limit at the source redshift are
         heavily absorbed by the Lyman continuum.
         """
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         lam_rest = 912.0
         z = 3.0
@@ -83,7 +83,7 @@ class TestIGMPublishedValues:
 
         The Ly-alpha forest is sparse at low redshift.
         """
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         lam_rest = 1216.0
         z = 0.5
@@ -97,7 +97,7 @@ class TestIGMPublishedValues:
         At z>5 the IGM is significantly neutral and the Ly-alpha
         forest becomes a Gunn-Peterson trough.
         """
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         lam_rest = 1216.0
         z = 6.0
@@ -107,7 +107,7 @@ class TestIGMPublishedValues:
 
     def test_transmission_monotonic_with_redshift(self):
         """At fixed rest wavelength, transmission should decrease with z."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         lam_rest = 1100.0
         redshifts = [1.0, 2.0, 3.0, 4.0, 5.0]
@@ -126,7 +126,7 @@ class TestIGMPublishedValues:
 
     def test_transmission_above_lya_is_unity(self):
         """Well above Ly-alpha at any redshift, IGM should be transparent."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         # At z=3, rest-frame 2000 A -> obs 8000 A, well above Ly-alpha at z=3
         wave_obs = jnp.array([8000.0])
@@ -149,7 +149,7 @@ class TestABMagnitudeZeroPoint:
 
     def test_ab_zero_point(self):
         """f_nu = 3.631e-20 erg/s/cm^2/Hz should give m_AB = 0.0."""
-        from tengri.models.observation.photometry import ab_mag_from_flux
+        from tengri.observation.photometry import ab_mag_from_flux
 
         f_nu = 3.631e-20  # erg/s/cm^2/Hz (AB zero point)
         mag = float(ab_mag_from_flux(jnp.array(f_nu)))
@@ -162,7 +162,7 @@ class TestABMagnitudeZeroPoint:
 
     def test_ab_mag_10x_brighter(self):
         """10x brighter flux should be 2.5 mag brighter (more negative)."""
-        from tengri.models.observation.photometry import ab_mag_from_flux
+        from tengri.observation.photometry import ab_mag_from_flux
 
         f1 = jnp.array(1e-20)
         f10 = jnp.array(1e-19)
@@ -195,7 +195,7 @@ class TestPlanckFunction:
         lambda_max = b / T, where b = 2.8977719e7 A K.
         lambda_max = 2.8978e7 / 5778 = 5014 A.
         """
-        from tengri.models.dust.emission import planck_bnu
+        from tengri.components.dust.emission import planck_bnu
 
         T_sun = 5778.0
         # Sample finely around the expected peak
@@ -224,7 +224,7 @@ class TestPlanckFunction:
         We integrate numerically over a wide wavelength range and compare
         to the Stefan-Boltzmann law.
         """
-        from tengri.models.dust.emission import planck_bnu
+        from tengri.components.dust.emission import planck_bnu
 
         T = 5000.0
         # Wide wavelength range to capture most of the emission
@@ -253,7 +253,7 @@ class TestPlanckFunction:
         In wavelength space: B_nu ~ 1/lambda^2 for large lambda.
         So log(B_nu) vs log(lambda) has slope -2.
         """
-        from tengri.models.dust.emission import planck_bnu
+        from tengri.components.dust.emission import planck_bnu
 
         T = 5000.0
         # Very long wavelengths where h*nu << kT
@@ -325,7 +325,7 @@ class TestSalarisRelation:
 
     def test_solar_composition(self):
         """At [Fe/H]=0, [alpha/Fe]=0: [M/H] = 0 exactly."""
-        from tengri.models.sps.dsps_wrapper import salaris_mh_from_feh
+        from tengri.components.sps.dsps_wrapper import salaris_mh_from_feh
 
         mh = salaris_mh_from_feh(0.0, 0.0)
         np.testing.assert_allclose(
@@ -340,7 +340,7 @@ class TestSalarisRelation:
 
         = 0.26462 + 0.03274 = 0.29736
         """
-        from tengri.models.sps.dsps_wrapper import salaris_mh_from_feh
+        from tengri.components.sps.dsps_wrapper import salaris_mh_from_feh
 
         alpha_fe = 0.4
         expected = 0.66154 * alpha_fe + 0.20465 * alpha_fe**2
@@ -354,7 +354,7 @@ class TestSalarisRelation:
 
     def test_round_trip_feh_mh(self):
         """salaris_feh_from_mh should invert salaris_mh_from_feh."""
-        from tengri.models.sps.dsps_wrapper import (
+        from tengri.components.sps.dsps_wrapper import (
             salaris_feh_from_mh,
             salaris_mh_from_feh,
         )
@@ -377,7 +377,7 @@ class TestSalarisRelation:
               = -1.0 + 0.19846 + 0.01842
               = -0.78312
         """
-        from tengri.models.sps.dsps_wrapper import salaris_mh_from_feh
+        from tengri.components.sps.dsps_wrapper import salaris_mh_from_feh
 
         expected = -1.0 + 0.66154 * 0.3 + 0.20465 * 0.3**2
         mh = salaris_mh_from_feh(-1.0, 0.3)
@@ -407,7 +407,7 @@ class TestPhotometryFlatSpectrum:
 
     def test_flat_spectrum_tophat_filter(self):
         """Flat f_nu through a top-hat filter should return f_nu."""
-        from tengri.models.observation.photometry import compute_flux_density
+        from tengri.observation.photometry import compute_flux_density
 
         # Flat spectrum in Lsun/Hz
         n_wave = 1000
@@ -445,7 +445,7 @@ class TestPhotometryFlatSpectrum:
 
     def test_flat_spectrum_gaussian_filter(self):
         """Flat f_nu through a Gaussian filter should also return f_nu."""
-        from tengri.models.observation.photometry import compute_flux_density
+        from tengri.observation.photometry import compute_flux_density
 
         n_wave = 1000
         wave_rest = jnp.linspace(3000.0, 10000.0, n_wave)
@@ -494,7 +494,7 @@ class TestVelocityBroadening:
 
     def test_broadening_width(self):
         """Measure the FWHM of a broadened delta function."""
-        from tengri.models.observation.spectrum import velocity_broaden
+        from tengri.observation.spectrum import velocity_broaden
 
         sigma_v = 300.0  # km/s
         lam_center = 5000.0
@@ -538,7 +538,7 @@ class TestVelocityBroadening:
 
     def test_broadening_preserves_flux(self):
         """Velocity broadening should conserve total flux (area under curve)."""
-        from tengri.models.observation.spectrum import velocity_broaden
+        from tengri.observation.spectrum import velocity_broaden
 
         n_pix = 2048
         wave = jnp.linspace(4000.0, 6000.0, n_pix)
@@ -577,7 +577,7 @@ class TestChebyshevCalibration:
 
     def test_chebyshev_values_at_half(self):
         """Verify T_n(0.5) values: T_1=0.5, T_2=-0.5, T_3=-1.0."""
-        from tengri.models.observation.calibration import calibration_polynomial
+        from tengri.observation.calibration import calibration_polynomial
 
         # Map wavelength so that x=0.5 at our test point
         # x = 2*(lam - lam_min)/(lam_max - lam_min) - 1
@@ -620,7 +620,7 @@ class TestChebyshevCalibration:
 
     def test_calibration_unity_with_zero_coeffs(self):
         """With all zero coefficients, C(lambda) = 1 everywhere."""
-        from tengri.models.observation.calibration import calibration_polynomial
+        from tengri.observation.calibration import calibration_polynomial
 
         wave = jnp.linspace(4000.0, 8000.0, 100)
         coeffs = jnp.array([0.0, 0.0, 0.0])
@@ -634,7 +634,7 @@ class TestChebyshevCalibration:
 
     def test_small_calibration_perturbation(self):
         """With c = [0.1, 0, 0]: C(x=0.5) = 1 + 0.1*0.5 = 1.05."""
-        from tengri.models.observation.calibration import calibration_polynomial
+        from tengri.observation.calibration import calibration_polynomial
 
         wave_min = 4000.0
         wave_max = 8000.0
@@ -665,7 +665,7 @@ class TestCalibrationMarginalization:
 
     def test_recover_known_calibration(self):
         """With exact obs = model * C(lambda), should recover coefficients."""
-        from tengri.models.observation.calibration import (
+        from tengri.observation.calibration import (
             calibration_polynomial,
             marginalize_calibration,
         )
@@ -707,7 +707,7 @@ class TestCalibrationMarginalization:
 
     def test_no_calibration_gives_zero_coeffs(self):
         """When obs = model exactly, should recover c ~ 0."""
-        from tengri.models.observation.calibration import marginalize_calibration
+        from tengri.observation.calibration import marginalize_calibration
 
         n_wave = 200
         wave = jnp.linspace(4000.0, 8000.0, n_wave)
@@ -748,7 +748,7 @@ class TestModifiedBlackbodySlope:
 
     def test_rayleigh_jeans_slope_beta_1p8(self):
         """For beta=1.8, slope in log(L_nu) vs log(nu) should be 2+1.8=3.8."""
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         beta = 1.8
         T_dust = 30.0
@@ -779,7 +779,7 @@ class TestModifiedBlackbodySlope:
 
     def test_rayleigh_jeans_slope_beta_2p0(self):
         """For beta=2.0, slope should be 2+2.0=4.0."""
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         beta = 2.0
         wave_aa = jnp.linspace(5e6, 2e7, 1000)
@@ -814,7 +814,7 @@ class TestCMBCorrection:
 
     def test_z0_no_correction(self):
         """At z=0, T_eff should equal T_dust (CMB terms cancel)."""
-        from tengri.models.dust.emission import cmb_corrected_temperature
+        from tengri.components.dust.emission import cmb_corrected_temperature
 
         T_dust = 35.0
         T_eff = float(cmb_corrected_temperature(T_dust, redshift=0.0, beta_ir=1.8))
@@ -835,7 +835,7 @@ class TestCMBCorrection:
               = (3.513e8)^(1/6)
               = 26.6 K (approximately)
         """
-        from tengri.models.dust.emission import cmb_corrected_temperature
+        from tengri.components.dust.emission import cmb_corrected_temperature
 
         T_dust = 25.0
         beta = 2.0
@@ -857,7 +857,7 @@ class TestCMBCorrection:
 
     def test_cmb_heating_increases_with_z(self):
         """T_eff should monotonically increase with redshift."""
-        from tengri.models.dust.emission import cmb_corrected_temperature
+        from tengri.components.dust.emission import cmb_corrected_temperature
 
         T_dust = 30.0
         redshifts = [0.0, 1.0, 3.0, 5.0, 7.0, 10.0]
@@ -871,7 +871,7 @@ class TestCMBCorrection:
 
     def test_cmb_dominates_at_high_z(self):
         """At z=20 with cold dust (T=15K), T_eff ~ T_CMB(z=20) = 57K."""
-        from tengri.models.dust.emission import cmb_corrected_temperature
+        from tengri.components.dust.emission import cmb_corrected_temperature
 
         T_dust = 15.0
         z = 20.0
@@ -885,7 +885,7 @@ class TestCMBCorrection:
 
     def test_contrast_factor_zero_at_z0(self):
         """At z=0, CMB contrast factor should be ~1 (no suppression)."""
-        from tengri.models.dust.emission import (
+        from tengri.components.dust.emission import (
             cmb_contrast_factor,
             cmb_corrected_temperature,
         )

@@ -58,7 +58,7 @@ class TestMassRemainingCrossval:
 
     def test_internal_matches_fsps_within_10pct(self, sp):
         """Internal Chabrier IMF computation should be within 10% of FSPS."""
-        from tengri.models.sps.mass_remaining import compute_mass_remaining_fraction
+        from tengri.components.sps.mass_remaining import compute_mass_remaining_fraction
 
         ages_gyr = np.array([0.01, 0.1, 0.3, 1.0, 3.0, 5.0, 10.0])
         f_tengri = np.asarray(compute_mass_remaining_fraction(jnp.array(ages_gyr), imf="chabrier"))
@@ -79,7 +79,7 @@ class TestMassRemainingCrossval:
 
     def test_monotonically_decreasing(self, sp):
         """Mass-remaining should decrease with age (more stars die)."""
-        from tengri.models.sps.mass_remaining import compute_mass_remaining_fraction
+        from tengri.components.sps.mass_remaining import compute_mass_remaining_fraction
 
         ages = jnp.array([0.001, 0.01, 0.1, 1.0, 5.0, 13.0])
         f_surv = np.asarray(compute_mass_remaining_fraction(ages, imf="chabrier"))
@@ -87,7 +87,7 @@ class TestMassRemainingCrossval:
 
     def test_all_imfs_physical(self):
         """All IMFs should give f_surviving in (0.3, 1.0) at 10 Gyr."""
-        from tengri.models.sps.mass_remaining import compute_mass_remaining_fraction
+        from tengri.components.sps.mass_remaining import compute_mass_remaining_fraction
 
         ages = jnp.array([10.0])
         for imf in ["chabrier", "salpeter", "kroupa"]:
@@ -103,7 +103,7 @@ class TestMassRemainingCrossval:
         counter-intuitive but correct: the relevant quantity is the
         mass-weighted surviving fraction, not just the high-mass tail.
         """
-        from tengri.models.sps.mass_remaining import compute_mass_remaining_fraction
+        from tengri.components.sps.mass_remaining import compute_mass_remaining_fraction
 
         ages = jnp.array([1.0, 5.0, 10.0])
         f_chab = np.asarray(compute_mass_remaining_fraction(ages, imf="chabrier"))
@@ -129,7 +129,7 @@ class TestDustCF00Crossval:
         FSPS dust_type=0 with dust2=tau_V gives T(V) = exp(-tau_V)
         for old stars. tengri's CF00 should give the same.
         """
-        from tengri.models.dust.attenuation import two_component_dust
+        from tengri.components.dust.attenuation import two_component_dust
 
         for tau_v2 in [0.1, 0.3, 0.5, 1.0, 2.0]:
             # FSPS
@@ -162,7 +162,7 @@ class TestDustCF00Crossval:
 
     def test_wavelength_dependence_matches(self, sp):
         """Attenuation curve shape should match FSPS across wavelengths."""
-        from tengri.models.dust.attenuation import two_component_dust
+        from tengri.components.dust.attenuation import two_component_dust
 
         tau_v2 = 0.5
         sp.params["dust_type"] = 0
@@ -204,7 +204,7 @@ class TestDustCF00Crossval:
 
     def test_birth_cloud_young_stars(self, sp):
         """Young stars should have extra attenuation from birth cloud."""
-        from tengri.models.dust.attenuation import two_component_dust
+        from tengri.components.dust.attenuation import two_component_dust
 
         tau_v1 = 1.0  # birth cloud
         tau_v2 = 0.3  # diffuse
@@ -317,7 +317,7 @@ class TestDustEmissionCrossval:
 
     def test_energy_balance_conserved(self):
         """Absorbed luminosity should equal emitted IR luminosity."""
-        from tengri.models.dust.emission import (
+        from tengri.components.dust.emission import (
             compute_absorbed_luminosity,
             modified_blackbody,
         )
@@ -350,7 +350,7 @@ class TestDustEmissionCrossval:
 
     def test_higher_tau_more_ir(self):
         """More dust attenuation should produce more IR emission."""
-        from tengri.models.dust.emission import (
+        from tengri.components.dust.emission import (
             compute_absorbed_luminosity,
         )
 
@@ -367,7 +367,7 @@ class TestDustEmissionCrossval:
 
     def test_modified_blackbody_peaks_at_physical_wavelength(self):
         """Modified blackbody at 30K should peak around 100 um."""
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         wave = jnp.linspace(10000, 5e6, 5000)  # 1-500 um
         l_nu = modified_blackbody(wave, L_absorbed=1.0, dust_T=30.0)
@@ -380,7 +380,7 @@ class TestDustEmissionCrossval:
 
     def test_dale2014_alpha_dependence(self):
         """Dale alpha < 2 should produce warmer (more peaked) emission."""
-        from tengri.models.dust.emission import dale2014
+        from tengri.components.dust.emission import dale2014
 
         wave = jnp.linspace(10000, 5e6, 5000)
 
@@ -408,7 +408,7 @@ class TestAGNCrossval:
         peaks at long wavelengths. But nu*L_nu ~ nu^{-0.5} peaks at
         short wavelengths. We test that the disc has significant UV flux.
         """
-        from tengri.models.agn.disc import powerlaw_disc
+        from tengri.components.agn.disc import powerlaw_disc
 
         wave = jnp.linspace(500, 50000, 2000)
         l_nu = powerlaw_disc(wave, agn_log_lbol=11.0, agn_alpha=-1.0)
@@ -426,7 +426,7 @@ class TestAGNCrossval:
 
     def test_torus_ir_dominated(self):
         """Torus emission should peak in the IR (1-10 um)."""
-        from tengri.models.agn.torus import simple_torus
+        from tengri.components.agn.torus import simple_torus
 
         wave = jnp.linspace(1000, 200000, 5000)
         l_nu = simple_torus(wave, agn_log_lbol=11.0, agn_T_torus=1000.0)
@@ -437,7 +437,7 @@ class TestAGNCrossval:
 
     def test_unified_has_both_components(self):
         """Unified AGN should have emission in both UV and IR."""
-        from tengri.models.agn.unified import simple_agn
+        from tengri.components.agn.unified import simple_agn
 
         wave = jnp.linspace(500, 200000, 5000)
         l_nu = simple_agn(
@@ -461,7 +461,7 @@ class TestAGNCrossval:
 
     def test_higher_lbol_more_luminous(self):
         """Doubling L_bol should roughly double the AGN SED."""
-        from tengri.models.agn.unified import simple_agn
+        from tengri.components.agn.unified import simple_agn
 
         wave = jnp.linspace(1000, 100000, 2000)
         l_lo = simple_agn(wave, agn_log_lbol=10.0, agn_frac=1.0)
@@ -473,7 +473,7 @@ class TestAGNCrossval:
 
     def test_covering_factor_shifts_uv_ir_balance(self):
         """Higher covering factor should shift power from UV to IR."""
-        from tengri.models.agn.unified import simple_agn
+        from tengri.components.agn.unified import simple_agn
 
         wave = jnp.linspace(500, 200000, 5000)
 

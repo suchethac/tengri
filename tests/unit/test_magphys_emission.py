@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.models.dust.emission import (
+from tengri.components.dust.emission import (
     _modified_blackbody_component,
     _pah_template_aa as _pah_template,
     magphys_dc08,
@@ -249,18 +249,18 @@ class TestMagphysRegistry:
     """Model is properly registered in the emission model registry."""
 
     def test_registered(self):
-        from tengri.models.dust.emission import DUST_EMISSION_MODELS
+        from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
         assert "magphys" in DUST_EMISSION_MODELS
 
     def test_resolve_emission_model(self):
-        from tengri.models.dust.emission import resolve_emission_model
+        from tengri.components.dust.emission import resolve_emission_model
 
         fn = resolve_emission_model("magphys")
         assert fn is magphys_dc08
 
     def test_apply_dust_emission(self):
-        from tengri.models.dust.emission import apply_dust_emission
+        from tengri.components.dust.emission import apply_dust_emission
 
         result = apply_dust_emission("magphys", _WAVE_AA, _L_ABSORBED)
         assert result.shape == _WAVE_AA.shape

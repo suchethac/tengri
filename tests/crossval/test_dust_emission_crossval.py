@@ -46,7 +46,7 @@ class TestEnergyBalanceCrossval:
 
     def test_absorbed_equals_emitted_mbb(self):
         """Modified blackbody emission should equal absorbed luminosity."""
-        from tengri.models.dust.emission import (
+        from tengri.components.dust.emission import (
             compute_absorbed_luminosity,
             modified_blackbody,
         )
@@ -78,7 +78,7 @@ class TestEnergyBalanceCrossval:
 
     def test_absorbed_equals_emitted_dale(self):
         """Dale+2014 emission should equal absorbed luminosity."""
-        from tengri.models.dust.emission import (
+        from tengri.components.dust.emission import (
             compute_absorbed_luminosity,
             dale2014,
         )
@@ -105,7 +105,7 @@ class TestEnergyBalanceCrossval:
 
     def test_absorbed_equals_emitted_draine_li(self):
         """Draine & Li 2007 (analytic) emission should conserve energy."""
-        from tengri.models.dust.emission import (
+        from tengri.components.dust.emission import (
             compute_absorbed_luminosity,
             draine_li2007,
         )
@@ -133,7 +133,7 @@ class TestEnergyBalanceCrossval:
     @pytest.mark.parametrize("tau_v", [0.1, 0.5, 1.0, 2.0])
     def test_more_dust_more_ir(self, tau_v):
         """Higher optical depth should produce more absorbed luminosity."""
-        from tengri.models.dust.emission import compute_absorbed_luminosity
+        from tengri.components.dust.emission import compute_absorbed_luminosity
 
         wave = jnp.linspace(1000, 30000, 2000)
         l_nu = jnp.ones_like(wave) * 1e-10
@@ -290,7 +290,7 @@ class TestDL07ShapeCrossval:
 
     def test_both_peak_in_fir(self):
         """Both implementations should produce FIR-peaked emission."""
-        from tengri.models.dust.emission import draine_li2007
+        from tengri.components.dust.emission import draine_li2007
 
         wavs = np.logspace(np.log10(5000), np.log10(5e6), 1000)
 
@@ -335,7 +335,7 @@ class TestDL07ShapeCrossval:
         produce a monotonic centroid shift for all intermediate umin
         values. We test the extreme endpoints only.
         """
-        from tengri.models.dust.emission import draine_li2007
+        from tengri.components.dust.emission import draine_li2007
 
         wavs = np.logspace(np.log10(5000), np.log10(5e6), 1000)
         jnp_wavs = jnp.array(wavs)

@@ -20,21 +20,21 @@ class TestDustToGasScaling:
 
     def test_solar_returns_one(self):
         """At Z_sun (logzsol=0), scaling = 1.0."""
-        from tengri.models.dust.attenuation import dust_to_gas_scaling_remy_ruyer
+        from tengri.components.dust.attenuation import dust_to_gas_scaling_remy_ruyer
 
         result = dust_to_gas_scaling_remy_ruyer(0.0)
         assert jnp.isclose(result, 1.0, atol=1e-6)
 
     def test_supersolar(self):
         """At 2 Z_sun (logzsol=0.3), scaling > 1.0."""
-        from tengri.models.dust.attenuation import dust_to_gas_scaling_remy_ruyer
+        from tengri.components.dust.attenuation import dust_to_gas_scaling_remy_ruyer
 
         result = dust_to_gas_scaling_remy_ruyer(0.3)
         assert float(result) > 1.0
 
     def test_subsolar_lower(self):
         """At 0.01 Z_sun (logzsol=-2), scaling << 1.0."""
-        from tengri.models.dust.attenuation import dust_to_gas_scaling_remy_ruyer
+        from tengri.components.dust.attenuation import dust_to_gas_scaling_remy_ruyer
 
         result = dust_to_gas_scaling_remy_ruyer(-2.0)
         assert float(result) < 0.01
@@ -45,7 +45,7 @@ class TestDustToGasScaling:
         Rémy-Ruyer+2014: slope steepens from ~1.0 to ~2.0-3.0 below
         12 + log(O/H) ≈ 7.96 (≈ 0.1 Z_sun).
         """
-        from tengri.models.dust.attenuation import dust_to_gas_scaling_remy_ruyer
+        from tengri.components.dust.attenuation import dust_to_gas_scaling_remy_ruyer
 
         # At 0.01 Z_sun: linear would give 0.01, quadratic gives 0.001
         result_01 = dust_to_gas_scaling_remy_ruyer(-2.0)
@@ -54,7 +54,7 @@ class TestDustToGasScaling:
 
     def test_continuity_at_break(self):
         """No discontinuity at 0.1 Z_sun breakpoint."""
-        from tengri.models.dust.attenuation import dust_to_gas_scaling_remy_ruyer
+        from tengri.components.dust.attenuation import dust_to_gas_scaling_remy_ruyer
 
         eps = 1e-4
         above = dust_to_gas_scaling_remy_ruyer(jnp.log10(0.1 + eps))
@@ -63,7 +63,7 @@ class TestDustToGasScaling:
 
     def test_monotonic(self):
         """Higher metallicity → higher D/G ratio."""
-        from tengri.models.dust.attenuation import dust_to_gas_scaling_remy_ruyer
+        from tengri.components.dust.attenuation import dust_to_gas_scaling_remy_ruyer
 
         logzsols = [-3.0, -2.0, -1.0, 0.0, 0.3]
         scalings = [float(dust_to_gas_scaling_remy_ruyer(z)) for z in logzsols]
@@ -72,7 +72,7 @@ class TestDustToGasScaling:
 
     def test_jit_compatible(self):
         """Function can be JIT-compiled."""
-        from tengri.models.dust.attenuation import dust_to_gas_scaling_remy_ruyer
+        from tengri.components.dust.attenuation import dust_to_gas_scaling_remy_ruyer
 
         jit_fn = jax.jit(dust_to_gas_scaling_remy_ruyer)
         result = jit_fn(0.0)
@@ -80,7 +80,7 @@ class TestDustToGasScaling:
 
     def test_differentiable(self):
         """Gradient w.r.t. logzsol is finite."""
-        from tengri.models.dust.attenuation import dust_to_gas_scaling_remy_ruyer
+        from tengri.components.dust.attenuation import dust_to_gas_scaling_remy_ruyer
 
         grad_jax = float(jax.grad(dust_to_gas_scaling_remy_ruyer)(0.0))
         grad_fd = fd_grad(lambda x: float(dust_to_gas_scaling_remy_ruyer(x)), 0.0)

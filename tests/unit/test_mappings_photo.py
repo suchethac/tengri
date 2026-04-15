@@ -12,8 +12,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.models.nebular._shared import _interp_index_weight, compute_qh
-from tengri.models.nebular.mappings_photo import (
+from tengri.components.nebular._shared import _interp_index_weight, compute_qh
+from tengri.components.nebular.mappings_photo import (
     MappingsAGNGridData,
     MappingsPhotoAGNBackend,
     MappingsPhotoStellarBackend,
@@ -219,7 +219,7 @@ class TestInterpStellarGrid:
 def _make_stellar_backend_with_qh() -> MappingsPhotoStellarBackend:
     """Build backend with synthetic grid and injected Q_H table."""
     with patch(
-        "tengri.models.nebular.mappings_photo._load_stellar_grid",
+        "tengri.components.nebular.mappings_photo._load_stellar_grid",
         return_value=_make_stellar_grid(),
     ):
         backend = MappingsPhotoStellarBackend.__new__(MappingsPhotoStellarBackend)
@@ -499,7 +499,7 @@ class TestMappingsQHSanitization:
 
 def test_module_exports():
     """Ensure new backends are exported from the nebular subpackage."""
-    from tengri.models.nebular import MappingsPhotoAGNBackend, MappingsPhotoStellarBackend
+    from tengri.components.nebular import MappingsPhotoAGNBackend, MappingsPhotoStellarBackend
 
     assert MappingsPhotoStellarBackend is not None
     assert MappingsPhotoAGNBackend is not None

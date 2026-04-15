@@ -24,7 +24,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 # --- conditional import: skip entire module if grid file is absent ---
 
-from tengri.models.nebular.shock import (
+from tengri.components.nebular.shock import (
     _load_mappings_grids,
     compute_shock_sed,
     shock_line_ratios,

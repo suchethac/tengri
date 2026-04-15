@@ -40,9 +40,9 @@ from tengri import (
     load_ssp_data,
 )
 from tengri.distributions import Distribution
-from tengri.models.sfh.psd_models import psd_drw
-from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw
-from tengri.models.sfh.gp_sfh import gp_from_xi
+from tengri.components.sfh.psd_models import psd_drw
+from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.components.sfh.gp_sfh import gp_from_xi
 from tengri.utils.grid import make_log_age_grid, grid_spacing
 
 import sys, os  # noqa: E401, E402
@@ -249,7 +249,7 @@ plt.show()
 # ## Mean SFH Shapes
 
 # %%
-from tengri.models.sfh.mean_sfh import tsnorm
+from tengri.components.sfh.mean_sfh import tsnorm
 
 ages_yr = 10**log_ages
 ages_gyr = ages_yr / 1e9

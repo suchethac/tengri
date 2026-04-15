@@ -12,8 +12,8 @@ jax.config.update("jax_enable_x64", True)
 from tengri.core.model import MockData, Model
 from tengri.core.parameters import ParamSpec
 from tengri.distributions import Uniform
-from tengri.models.observation.filters import load_filter_set
-from tengri.models.sps.dsps_wrapper import load_ssp_data
+from tengri.observation.filters import load_filter_set
+from tengri.components.sps.dsps_wrapper import load_ssp_data
 
 # ---------------------------------------------------------------------------
 # Skip if SSP data not available

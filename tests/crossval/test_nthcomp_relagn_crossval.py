@@ -42,7 +42,7 @@ def _require_relagn():
 
 
 def _require_templates():
-    from tengri.models.agn._nthcomp import _TABLE_AVAILABLE
+    from tengri.components.agn._nthcomp import _TABLE_AVAILABLE
 
     if not _TABLE_AVAILABLE:
         pytest.skip("nthcomp templates absent — run scripts/build_nthcomp_templates.py first")
@@ -122,7 +122,7 @@ def test_template_fnu_agrees_with_relagn(gamma, kTe_keV, kTbb_keV):
     _require_relagn()
     _require_templates()
 
-    from tengri.models.agn._nthcomp import nthcomp_lnu_interp
+    from tengri.components.agn._nthcomp import nthcomp_lnu_interp
 
     ear = np.logspace(-3, 2, 2000)
     nu_r, F_nu_r = _relagn_fnu(ear, gamma, kTe_keV, kTbb_keV)
@@ -181,7 +181,7 @@ def test_template_peak_frequency_agrees(gamma, kTe_keV, kTbb_keV):
     _require_relagn()
     _require_templates()
 
-    from tengri.models.agn._nthcomp import nthcomp_lnu_interp
+    from tengri.components.agn._nthcomp import nthcomp_lnu_interp
 
     ear = np.logspace(-3, 2, 2000)
     nu_r, F_nu_r = _relagn_fnu(ear, gamma, kTe_keV, kTbb_keV)
@@ -216,7 +216,7 @@ def test_gamma_tilt_direction_consistent_with_relagn():
 
     import jax.numpy as jnp
 
-    from tengri.models.agn._nthcomp import nthcomp_lnu_interp
+    from tengri.components.agn._nthcomp import nthcomp_lnu_interp
 
     kTe_keV, kTbb_keV = 0.2, 0.01
     nu_uv = np.logspace(15.0, 15.5, 50)  # UV band

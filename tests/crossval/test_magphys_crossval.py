@@ -13,7 +13,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri.models.dust.emission import (
+from tengri.components.dust.emission import (
     _modified_blackbody_component,
     _pah_template,
 )

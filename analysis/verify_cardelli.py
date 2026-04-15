@@ -78,7 +78,7 @@ def cardelli_reference(wavelength_aa: np.ndarray, r_v: float = 3.1) -> np.ndarra
 
 # ── tengri implementation ───────────────────────────────────────────────
 
-from tengri.models.dust.attenuation import cardelli as tengri_cardelli  # noqa: E402
+from tengri.components.dust.attenuation import cardelli as tengri_cardelli  # noqa: E402
 
 
 # ── Comparison ───────────────────────────────────────────────────────────

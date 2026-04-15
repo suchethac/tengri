@@ -19,7 +19,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.models.dust.attenuation import DUST_LAWS, li08
+from tengri.components.dust.attenuation import DUST_LAWS, li08
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:

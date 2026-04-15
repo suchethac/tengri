@@ -14,8 +14,8 @@ from pathlib import Path
 import jax.numpy as jnp
 import pytest
 
-from tengri.models.dust.attenuation import resolve_dust_law
-from tengri.models.nebular.shock import (
+from tengri.components.dust.attenuation import resolve_dust_law
+from tengri.components.nebular.shock import (
     _FALLBACK_V,
     _load_mappings_grids,
     shock_emission_sed,
@@ -229,7 +229,7 @@ def test_precursor_vs_shock_component():
 def test_fallback_without_h5(tmp_path, monkeypatch):
     """When data/mappings_templates.h5 is absent, a DeprecationWarning is emitted
     and shock_line_ratios still returns non-zero ratios."""
-    import tengri.models.nebular.shock as shock_module
+    import tengri.components.nebular.shock as shock_module
 
     # Reset the module-level cache so the load runs fresh
     original_loaded = shock_module._MAPPINGS_GRIDS_LOADED

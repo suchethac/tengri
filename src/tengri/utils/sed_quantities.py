@@ -85,7 +85,7 @@ def compute_mass_weighted_age(weights: jnp.ndarray, ssp_ages_yr: jnp.ndarray) ->
     ----------
     weights : array, shape (n_age,)
         CSP mass weights (Msun per SSP age bin), from
-        :func:`~tengri.models.sps.dsps_wrapper.compute_csp_weights`.
+        :func:`~tengri.components.sps.dsps_wrapper.compute_csp_weights`.
     ssp_ages_yr : array, shape (n_age,)
         SSP isochrone ages in years (lookback time).
 

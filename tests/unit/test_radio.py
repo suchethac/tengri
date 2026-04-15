@@ -21,7 +21,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-from tengri.models.radio import (
+from tengri.components.radio import (
     _L0_SYNCH,
     _synchrotron_suppression,
     radio_components,
@@ -481,7 +481,7 @@ class TestRadioTotalDispatcher:
 
     def test_total_dpl_bell2003_backward_compat(self):
         """radio_total_dpl with sfr_mode='bell2003' == old behavior."""
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         wave = _WAVE_RADIO
         L_via_total = radio_total_dpl(

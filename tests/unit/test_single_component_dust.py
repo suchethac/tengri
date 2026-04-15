@@ -38,26 +38,26 @@ class TestSingleComponentDust:
     """Tests for ``single_component_dust`` (1-D output)."""
 
     def test_shape(self, wavelengths):
-        from tengri.models.dust.attenuation import single_component_dust
+        from tengri.components.dust.attenuation import single_component_dust
 
         trans = single_component_dust(wavelengths, tau_v=1.0)
         assert trans.shape == wavelengths.shape
 
     def test_bounds(self, wavelengths):
-        from tengri.models.dust.attenuation import single_component_dust
+        from tengri.components.dust.attenuation import single_component_dust
 
         trans = single_component_dust(wavelengths, tau_v=2.0)
         assert jnp.all(trans >= 0.0)
         assert jnp.all(trans <= 1.0)
 
     def test_zero_tau_is_unity(self, wavelengths):
-        from tengri.models.dust.attenuation import single_component_dust
+        from tengri.components.dust.attenuation import single_component_dust
 
         trans = single_component_dust(wavelengths, tau_v=0.0)
         assert jnp.allclose(trans, 1.0)
 
     def test_more_dust_less_transmission(self, wavelengths):
-        from tengri.models.dust.attenuation import single_component_dust
+        from tengri.components.dust.attenuation import single_component_dust
 
         t1 = single_component_dust(wavelengths, tau_v=0.5)
         t2 = single_component_dust(wavelengths, tau_v=2.0)
@@ -65,7 +65,7 @@ class TestSingleComponentDust:
 
     def test_bluer_more_attenuated_power_law(self, wavelengths):
         """For power_law with negative slope, blue < red transmission."""
-        from tengri.models.dust.attenuation import single_component_dust
+        from tengri.components.dust.attenuation import single_component_dust
 
         trans = single_component_dust(wavelengths, tau_v=1.0, law="power_law", n_slope=-0.7)
         # Blue end should have lower transmission than red end
@@ -73,7 +73,7 @@ class TestSingleComponentDust:
 
     def test_vband_optical_depth_power_law(self):
         """At 5500A with power_law, tau_v should be recovered exactly."""
-        from tengri.models.dust.attenuation import single_component_dust
+        from tengri.components.dust.attenuation import single_component_dust
 
         tau_v = 1.5
         wave = jnp.array([5500.0])
@@ -84,14 +84,14 @@ class TestSingleComponentDust:
 
     def test_f_obscuration_floor(self, wavelengths):
         """With f_obscuration=0.3, transmission floor is 0.3."""
-        from tengri.models.dust.attenuation import single_component_dust
+        from tengri.components.dust.attenuation import single_component_dust
 
         trans = single_component_dust(wavelengths, tau_v=100.0, f_obscuration=0.3, law="power_law")
         assert jnp.allclose(trans, 0.3, atol=1e-6)
 
     def test_f_obscuration_zero_tau(self, wavelengths):
         """With f_obscuration and zero tau, transmission is 1.0."""
-        from tengri.models.dust.attenuation import single_component_dust
+        from tengri.components.dust.attenuation import single_component_dust
 
         trans = single_component_dust(wavelengths, tau_v=0.0, f_obscuration=0.5, law="power_law")
         assert jnp.allclose(trans, 1.0)
@@ -109,7 +109,7 @@ class TestSingleComponentDust:
         ],
     )
     def test_all_laws_work(self, wavelengths, law_name):
-        from tengri.models.dust.attenuation import single_component_dust
+        from tengri.components.dust.attenuation import single_component_dust
 
         trans = single_component_dust(wavelengths, tau_v=1.0, law=law_name)
         assert trans.shape == wavelengths.shape
@@ -118,14 +118,14 @@ class TestSingleComponentDust:
         assert jnp.all(trans <= 1.0)
 
     def test_jit_compilable(self, wavelengths):
-        from tengri.models.dust.attenuation import single_component_dust
+        from tengri.components.dust.attenuation import single_component_dust
 
         jitted = jax.jit(lambda w, t: single_component_dust(w, tau_v=t))
         trans = jitted(wavelengths, 1.0)
         assert jnp.all(jnp.isfinite(trans))
 
     def test_differentiable(self, wavelengths):
-        from tengri.models.dust.attenuation import single_component_dust
+        from tengri.components.dust.attenuation import single_component_dust
 
         def loss(tau_v):
             return jnp.sum(single_component_dust(wavelengths, tau_v=tau_v))
@@ -148,14 +148,14 @@ class TestSingleComponentDustFast:
     """Tests for ``single_component_dust_fast`` (2-D output)."""
 
     def test_shape(self, wavelengths, n_ages):
-        from tengri.models.dust.attenuation import single_component_dust_fast
+        from tengri.components.dust.attenuation import single_component_dust_fast
 
         trans = single_component_dust_fast(wavelengths, n_ages=n_ages, tau_v=1.0)
         assert trans.shape == (n_ages, len(wavelengths))
 
     def test_all_ages_identical(self, wavelengths, n_ages):
         """Single-component: every age row must be the same."""
-        from tengri.models.dust.attenuation import single_component_dust_fast
+        from tengri.components.dust.attenuation import single_component_dust_fast
 
         trans = single_component_dust_fast(wavelengths, n_ages=n_ages, tau_v=1.5)
         # All rows identical to first row
@@ -164,7 +164,7 @@ class TestSingleComponentDustFast:
 
     def test_matches_base(self, wavelengths, n_ages):
         """Fast version matches base single_component_dust."""
-        from tengri.models.dust.attenuation import (
+        from tengri.components.dust.attenuation import (
             single_component_dust,
             single_component_dust_fast,
         )
@@ -174,27 +174,27 @@ class TestSingleComponentDustFast:
         assert jnp.allclose(fast[0], base, rtol=1e-12)
 
     def test_bounds(self, wavelengths, n_ages):
-        from tengri.models.dust.attenuation import single_component_dust_fast
+        from tengri.components.dust.attenuation import single_component_dust_fast
 
         trans = single_component_dust_fast(wavelengths, n_ages=n_ages, tau_v=2.0)
         assert jnp.all(trans >= 0.0)
         assert jnp.all(trans <= 1.0)
 
     def test_zero_tau_is_unity(self, wavelengths, n_ages):
-        from tengri.models.dust.attenuation import single_component_dust_fast
+        from tengri.components.dust.attenuation import single_component_dust_fast
 
         trans = single_component_dust_fast(wavelengths, n_ages=n_ages, tau_v=0.0)
         assert jnp.allclose(trans, 1.0)
 
     def test_jit_compilable(self, wavelengths, n_ages):
-        from tengri.models.dust.attenuation import single_component_dust_fast
+        from tengri.components.dust.attenuation import single_component_dust_fast
 
         jitted = jax.jit(lambda w, t: single_component_dust_fast(w, n_ages=n_ages, tau_v=t))
         trans = jitted(wavelengths, 1.0)
         assert jnp.all(jnp.isfinite(trans))
 
     def test_differentiable(self, wavelengths, n_ages):
-        from tengri.models.dust.attenuation import single_component_dust_fast
+        from tengri.components.dust.attenuation import single_component_dust_fast
 
         def loss(tau_v):
             return jnp.sum(single_component_dust_fast(wavelengths, n_ages=n_ages, tau_v=tau_v))
@@ -219,7 +219,7 @@ class TestSingleComponentDustFast:
         ],
     )
     def test_all_laws_work(self, wavelengths, n_ages, law_name):
-        from tengri.models.dust.attenuation import single_component_dust_fast
+        from tengri.components.dust.attenuation import single_component_dust_fast
 
         trans = single_component_dust_fast(
             wavelengths,

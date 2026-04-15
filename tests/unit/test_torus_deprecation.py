@@ -10,7 +10,7 @@ import warnings
 import jax.numpy as jnp
 import pytest
 
-from tengri.models.agn.torus import simple_torus, two_temperature_torus
+from tengri.components.agn.torus import simple_torus, two_temperature_torus
 
 
 @pytest.fixture
@@ -38,7 +38,7 @@ class TestSimpleTorusDeprecation:
 
     def test_output_not_plain_mbb(self, wave):
         """Silicate opacity must modify the shape — output != featureless MBB."""
-        from tengri.models.dust.emission import modified_blackbody
+        from tengri.components.dust.emission import modified_blackbody
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)

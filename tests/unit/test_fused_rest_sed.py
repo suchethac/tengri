@@ -17,7 +17,7 @@ from tengri.core.fused_kernels import (
 )
 from tengri.core.parameters import ParamSpec
 from tengri.distributions import Uniform
-from tengri.models.sps.dsps_wrapper import SSPData
+from tengri.components.sps.dsps_wrapper import SSPData
 
 jax.config.update("jax_enable_x64", True)
 
@@ -135,8 +135,8 @@ class TestTier2VsTier3:
     def test_photometry_matches_exact(self, synthetic_ssp, simple_params):
         """Tier 2 photometry matches Tier 3 photometry."""
         from tengri.core.model import Model
-        from tengri.models.observation.filters import FilterCurve
-        from tengri.models.observation.photometry import compute_flux_density
+        from tengri.observation.filters import FilterCurve
+        from tengri.observation.photometry import compute_flux_density
 
         spec = ParamSpec(
             mean_sfh_type="dpl",
@@ -187,7 +187,7 @@ class TestTier2VsTier3:
     def test_spectrum_matches_exact(self, synthetic_ssp, simple_spec, simple_params):
         """Tier 2 spectrum matches Tier 3 spectrum."""
         from tengri.core.model import Model
-        from tengri.models.observation.spectrum import compute_spectrum
+        from tengri.observation.spectrum import compute_spectrum
 
         model = Model(simple_spec, synthetic_ssp)
 
@@ -316,7 +316,7 @@ class TestObservationWrappers:
     def test_observe_photometry(self, synthetic_ssp, simple_spec, simple_params):
         """observe_photometry_from_rest_sed matches manual integration."""
         from tengri.core.model import Model
-        from tengri.models.observation.photometry import compute_flux_density
+        from tengri.observation.photometry import compute_flux_density
 
         model = Model(simple_spec, synthetic_ssp)
         rest_sed = model._compute_rest_sed_compositional(simple_params)
@@ -344,7 +344,7 @@ class TestObservationWrappers:
     def test_observe_spectrum(self, synthetic_ssp, simple_spec, simple_params):
         """observe_spectrum_from_rest_sed matches compute_spectrum."""
         from tengri.core.model import Model
-        from tengri.models.observation.spectrum import compute_spectrum
+        from tengri.observation.spectrum import compute_spectrum
 
         model = Model(simple_spec, synthetic_ssp)
         rest_sed = model._compute_rest_sed_compositional(simple_params)
@@ -474,7 +474,7 @@ class TestFusedTier2Photometry:
     def test_fused_tier2_phot_builds(self, synthetic_ssp, simple_spec):
         """Fused Tier 2 photometry kernel builds for fixed-z + filters."""
         from tengri.core.model import Model
-        from tengri.models.observation.filters import FilterCurve
+        from tengri.observation.filters import FilterCurve
 
         filters = [
             FilterCurve(
@@ -490,7 +490,7 @@ class TestFusedTier2Photometry:
     def test_fused_tier2_phot_matches_unfused(self, synthetic_ssp, simple_spec, simple_params):
         """Fused Tier 2 photometry matches unfused path."""
         from tengri.core.model import Model
-        from tengri.models.observation.filters import FilterCurve
+        from tengri.observation.filters import FilterCurve
 
         filters = [
             FilterCurve(
@@ -516,7 +516,7 @@ class TestFusedTier2Photometry:
     def test_fused_tier2_phot_gradient(self, synthetic_ssp, simple_spec):
         """Gradients through fused Tier 2 photometry match FD."""
         from tengri.core.model import Model
-        from tengri.models.observation.filters import FilterCurve
+        from tengri.observation.filters import FilterCurve
 
         filters = [
             FilterCurve(
@@ -552,7 +552,7 @@ class TestFusedTier2Photometry:
     def test_free_z_builds(self, synthetic_ssp):
         """Fused Tier 2 photometry builds even with free redshift."""
         from tengri.core.model import Model
-        from tengri.models.observation.filters import FilterCurve
+        from tengri.observation.filters import FilterCurve
 
         spec = ParamSpec(
             mean_sfh_type="dpl",

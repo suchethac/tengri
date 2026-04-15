@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.models.nebular._shared import compute_analytic_nebular_continuum
+from tengri.components.nebular._shared import compute_analytic_nebular_continuum
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:

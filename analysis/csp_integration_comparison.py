@@ -44,9 +44,9 @@ from dsps.cosmology import DEFAULT_COSMOLOGY, age_at_z
 from dsps.sed import calc_rest_sed_sfh_table_lognormal_mdf
 from dsps.sed.ssp_weights import calc_age_weights_from_sfh_table
 
-from tengri.models.observation.filters import load_filter_set
-from tengri.models.observation.photometry import compute_flux_density
-from tengri.models.sps.dsps_wrapper import (
+from tengri.observation.filters import load_filter_set
+from tengri.observation.photometry import compute_flux_density
+from tengri.components.sps.dsps_wrapper import (
     LSUN_ERG_PER_S,
     compute_csp_sed,
     compute_csp_weights,

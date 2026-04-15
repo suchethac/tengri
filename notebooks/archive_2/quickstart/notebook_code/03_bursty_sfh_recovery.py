@@ -42,7 +42,7 @@ from tengri import (
     Uniform,
     load_ssp_data,
 )
-from tengri.models.observation import Spectroscopy
+from tengri.observation import Spectroscopy
 
 import sys, os  # noqa: E401
 

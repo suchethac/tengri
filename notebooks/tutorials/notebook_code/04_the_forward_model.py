@@ -41,7 +41,7 @@ from tengri import (
     Uniform,
     load_ssp_data,
 )
-from tengri.models.sps.dsps_wrapper import compute_csp_weights
+from tengri.components.sps.dsps_wrapper import compute_csp_weights
 
 import sys, os  # noqa: E401, E402
 try:

@@ -46,7 +46,7 @@ from tengri import (
     ParamSpec,
     load_ssp_data,
 )
-from tengri.models.nebular import BakedInBackend
+from tengri.components.nebular import BakedInBackend
 
 import sys, os  # noqa: E401
 
@@ -241,7 +241,7 @@ plt.show()
 # tabulated line ratios as a function of shock velocity (100-1000 km/s).
 
 # %%
-from tengri.models.nebular import shock_line_ratios, shock_emission_sed
+from tengri.components.nebular import shock_line_ratios, shock_emission_sed
 
 # Compute shock line ratios across a velocity grid
 velocities = np.linspace(100.0, 1000.0, 200)
@@ -381,7 +381,7 @@ plt.show()
 # $\Delta\log U \approx -1$ dex).
 
 # %%
-from tengri.models.nebular import mix_dig_emission
+from tengri.components.nebular import mix_dig_emission
 
 # %% [markdown]
 # ### Concept: DIG effect on line ratios
@@ -451,7 +451,7 @@ plt.show()
 # any nebular backend:
 #
 # ```python
-# from tengri.models.nebular import mix_dig_emission, CloudyGridBackend
+# from tengri.components.nebular import mix_dig_emission, CloudyGridBackend
 #
 # backend = CloudyGridBackend("data/cloudy_grid.h5", ssp_data)
 # neb_sed = mix_dig_emission(

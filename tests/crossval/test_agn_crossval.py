@@ -48,7 +48,7 @@ class TestISCORadius:
     )
     def test_isco_radius(self, a_spin, r_isco_expected):
         """ISCO radius matches Bardeen+1972 to 4 decimal places."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         r_isco = float(_isco_radius(a_spin))
         np.testing.assert_almost_equal(
@@ -69,7 +69,7 @@ class TestEddingtonLuminosity:
 
     def test_eddington_luminosity_1e8(self):
         """L_Edd for 10^8 Msun should be ~1.26e46 erg/s."""
-        from tengri.models.agn.disc import _eddington_luminosity
+        from tengri.components.agn.disc import _eddington_luminosity
 
         l_edd = float(_eddington_luminosity(8.0))
         # L_Edd = 1.257e38 * (M/Msun) erg/s
@@ -83,7 +83,7 @@ class TestEddingtonLuminosity:
 
     def test_eddington_luminosity_scaling(self):
         """L_Edd should scale linearly with BH mass."""
-        from tengri.models.agn.disc import _eddington_luminosity
+        from tengri.components.agn.disc import _eddington_luminosity
 
         l6 = float(_eddington_luminosity(6.0))
         l8 = float(_eddington_luminosity(8.0))
@@ -113,7 +113,7 @@ class TestRadiativeEfficiency:
     )
     def test_radiative_efficiency(self, a_spin, eta_expected):
         """eta = 1 - sqrt(1 - 2/(3*r_isco)) matches reference values."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         r_isco = float(_isco_radius(a_spin))
         eta = 1.0 - np.sqrt(1.0 - 2.0 / (3.0 * r_isco))
@@ -135,7 +135,7 @@ class TestMulticolorDiscPeak:
 
     def test_disc_peak_uv(self):
         """For 10^8 Msun BH at L/L_Edd=0.1, peak should be in UV (100-500 A)."""
-        from tengri.models.agn.disc import multicolor_disc
+        from tengri.components.agn.disc import multicolor_disc
 
         wavelength = jnp.geomspace(10.0, 50000.0, 2000)
         l_nu = multicolor_disc(
@@ -158,7 +158,7 @@ class TestMulticolorDiscPeak:
 
     def test_peak_shifts_with_mass(self):
         """Higher BH mass -> lower T_in -> longer wavelength peak."""
-        from tengri.models.agn.disc import multicolor_disc
+        from tengri.components.agn.disc import multicolor_disc
 
         wavelength = jnp.geomspace(10.0, 100000.0, 3000)
 
@@ -193,7 +193,7 @@ class TestBLRBalmerDecrement:
 
     def test_halpha_hbeta_ratio(self):
         """Ratio of line strengths should match Vanden Berk+2001."""
-        from tengri.models.agn.blr import _BLR_LINES
+        from tengri.components.agn.blr import _BLR_LINES
 
         lines = np.array(_BLR_LINES)
         # Find H-alpha (6563 A) and H-beta (4861 A) by wavelength
@@ -218,7 +218,7 @@ class TestBLRBalmerDecrement:
 
     def test_blr_emission_produces_flux(self):
         """BLR emission should produce non-zero line flux around H-alpha."""
-        from tengri.models.agn.blr import blr_emission
+        from tengri.components.agn.blr import blr_emission
 
         wavelength = jnp.linspace(6400.0, 6700.0, 500)
         l_bol_erg = 1e44
@@ -241,7 +241,7 @@ class TestNLRLineRatios:
 
     def test_oiii_ratio(self):
         """[OIII] 5007/4959 = 2.98 (Storey & Zeippen 2000)."""
-        from tengri.models.agn.nlr import _NLR_LINES
+        from tengri.components.agn.nlr import _NLR_LINES
 
         lines = np.array(_NLR_LINES)
         oiii_5007 = lines[np.abs(lines[:, 0] - 5007.0) < 5.0, 1]
@@ -261,7 +261,7 @@ class TestNLRLineRatios:
 
     def test_nii_ratio(self):
         """[NII] 6583/6548 ~ 2.94 (Storey & Zeippen 2000)."""
-        from tengri.models.agn.nlr import _NLR_LINES
+        from tengri.components.agn.nlr import _NLR_LINES
 
         lines = np.array(_NLR_LINES)
         nii_6583 = lines[np.abs(lines[:, 0] - 6583.0) < 5.0, 1]
@@ -281,7 +281,7 @@ class TestNLRLineRatios:
 
     def test_nlr_emission_nonzero(self):
         """NLR emission should produce detectable flux at [OIII] 5007."""
-        from tengri.models.agn.nlr import nlr_emission
+        from tengri.components.agn.nlr import nlr_emission
 
         wavelength = jnp.linspace(4900.0, 5100.0, 200)
         l_nu = nlr_emission(wavelength, l_disc_bol_erg=1e44)
@@ -306,7 +306,7 @@ class TestQSOgenPowerLaw:
         In wavelength space: f_nu ~ lambda^(plslp1) = lambda^(-0.349).
         Measuring slope from two points in the UV.
         """
-        from tengri.models.agn.qsogen import _broken_powerlaw_continuum
+        from tengri.components.agn.qsogen import _broken_powerlaw_continuum
 
         # Two UV wavelengths, well below the break at 3880 A
         # but above the EUV break at 1200 A
@@ -328,7 +328,7 @@ class TestQSOgenPowerLaw:
 
     def test_red_slope(self):
         """Red side (lambda > 3880 A): f_nu ~ lambda^(-plslp2) = lambda^(-0.593)."""
-        from tengri.models.agn.qsogen import _broken_powerlaw_continuum
+        from tengri.components.agn.qsogen import _broken_powerlaw_continuum
 
         lam1 = 5000.0
         lam2 = 8000.0
@@ -346,7 +346,7 @@ class TestQSOgenPowerLaw:
 
     def test_continuum_normalized_at_5500(self):
         """Continuum should be ~1.0 at normalization wavelength 5500 A."""
-        from tengri.models.agn.qsogen import _broken_powerlaw_continuum
+        from tengri.components.agn.qsogen import _broken_powerlaw_continuum
 
         wavelength = jnp.array([5500.0])
         f_nu = _broken_powerlaw_continuum(wavelength, plslp1=-0.349, plslp2=0.593, plbrk=3880.0)
@@ -368,21 +368,21 @@ class TestGeometricMasking:
 
     def test_face_on_mask(self):
         """cos_inc=1.0 (face-on): disc fully visible (mask ~ 1)."""
-        from tengri.models.agn.unified import _sigmoid_mask
+        from tengri.components.agn.unified import _sigmoid_mask
 
         mask = float(_sigmoid_mask(cos_inc=1.0, theta_torus=30.0))
         assert mask > 0.95, f"Face-on mask = {mask:.3f}, expected > 0.95 (Type 1)"
 
     def test_edge_on_mask(self):
         """cos_inc=0.0 (edge-on): disc fully obscured (mask ~ 0)."""
-        from tengri.models.agn.unified import _sigmoid_mask
+        from tengri.components.agn.unified import _sigmoid_mask
 
         mask = float(_sigmoid_mask(cos_inc=0.0, theta_torus=30.0))
         assert mask < 0.05, f"Edge-on mask = {mask:.3f}, expected < 0.05 (Type 2)"
 
     def test_transition_at_critical_angle(self):
         """Mask should transition near inc = 90 - theta_torus."""
-        from tengri.models.agn.unified import _sigmoid_mask
+        from tengri.components.agn.unified import _sigmoid_mask
 
         theta_torus = 40.0
         # Critical angle: 90 - 40 = 50 degrees -> cos(50) ~ 0.643
@@ -395,7 +395,7 @@ class TestGeometricMasking:
 
     def test_type1_brighter_than_type2(self):
         """Unified SED should be brighter in UV for Type 1 than Type 2."""
-        from tengri.models.agn.unified import unified_nlr_blr
+        from tengri.components.agn.unified import unified_nlr_blr
 
         wavelength = jnp.linspace(1000.0, 10000.0, 500)
         l_type1 = unified_nlr_blr(
@@ -434,7 +434,7 @@ class TestPolarDust:
         For SMC: R_V = 2.93, k(1500) ~ 4-5.
         So A(1500) ~ 0.1 * 2.93 * 4.5 ~ 1.3 mag -> factor ~ 0.30.
         """
-        from tengri.models.dust.attenuation import smc as smc_curve
+        from tengri.components.dust.attenuation import smc as smc_curve
 
         k_1500 = float(smc_curve(jnp.array([1500.0]))[0])
         rv_smc = 2.93
@@ -449,7 +449,7 @@ class TestPolarDust:
 
     def test_polar_dust_reduces_uv(self):
         """Polar dust E(B-V) > 0 should reduce UV flux relative to E(B-V)=0."""
-        from tengri.models.agn.unified import unified_nlr_blr
+        from tengri.components.agn.unified import unified_nlr_blr
 
         wavelength = jnp.linspace(1000.0, 10000.0, 500)
         l_unreddened = unified_nlr_blr(
@@ -487,7 +487,7 @@ class TestKubotaDone3Zone:
 
         Compare 3-zone disc (with corona) vs plain multicolor disc (no corona).
         """
-        from tengri.models.agn.disc import kubota_done_disc, multicolor_disc
+        from tengri.components.agn.disc import kubota_done_disc, multicolor_disc
 
         wavelength = jnp.geomspace(1.0, 100000.0, 5000)
         params = dict(
@@ -519,7 +519,7 @@ class TestKubotaDone3Zone:
         Both K&D and plain multicolor should produce similar optical flux
         since the outer disc zone is the same physics.
         """
-        from tengri.models.agn.disc import kubota_done_disc, multicolor_disc
+        from tengri.components.agn.disc import kubota_done_disc, multicolor_disc
 
         wavelength = jnp.geomspace(1.0, 100000.0, 5000)
         params = dict(
@@ -546,7 +546,7 @@ class TestKubotaDone3Zone:
         It should have detectable flux from X-ray to optical, spanning
         at least 3 orders of magnitude in wavelength.
         """
-        from tengri.models.agn.disc import kubota_done_disc
+        from tengri.components.agn.disc import kubota_done_disc
 
         wavelength = jnp.geomspace(1.0, 100000.0, 5000)
         l_nu = kubota_done_disc(
@@ -601,7 +601,7 @@ class TestAlphaOxCrossval:
     )
     def test_alpha_ox_just2007(self, l_2500, alpha_ox_expected):
         """alpha_ox matches Just+2007 formula to <0.01."""
-        from tengri.models.xray import alpha_ox_from_l2500
+        from tengri.components.xray import alpha_ox_from_l2500
 
         alpha_ox = float(alpha_ox_from_l2500(l_2500))
         np.testing.assert_allclose(
@@ -616,7 +616,7 @@ class TestAlphaOxCrossval:
 
         Expected: -0.137 * 30 + 2.638 = -1.472.
         """
-        from tengri.models.xray import alpha_ox_from_l2500
+        from tengri.components.xray import alpha_ox_from_l2500
 
         alpha_ox = float(alpha_ox_from_l2500(1e30))
         np.testing.assert_allclose(
@@ -628,7 +628,7 @@ class TestAlphaOxCrossval:
 
     def test_alpha_ox_monotonically_decreasing(self):
         """alpha_ox should decrease (become more negative) with increasing L_2500."""
-        from tengri.models.xray import alpha_ox_from_l2500
+        from tengri.components.xray import alpha_ox_from_l2500
 
         luminosities = [1e28, 1e29, 1e30, 1e31, 1e32]
         alpha_values = [float(alpha_ox_from_l2500(l)) for l in luminosities]
@@ -641,7 +641,7 @@ class TestAlphaOxCrossval:
 
     def test_alpha_ox_physical_range(self):
         """alpha_ox should be in [-2.0, -1.0] for physical L_2500 range."""
-        from tengri.models.xray import alpha_ox_from_l2500
+        from tengri.components.xray import alpha_ox_from_l2500
 
         for l_2500 in [1e27, 1e28, 1e29, 1e30, 1e31, 1e32, 1e33]:
             alpha_ox = float(alpha_ox_from_l2500(l_2500))
@@ -667,7 +667,7 @@ class TestXrayAnisotropyCrossval:
 
         f(30) = 0.5 * cos(30) + 0 + 0.5 = 0.5 * 0.866 + 0.5 = 0.933.
         """
-        from tengri.models.xray import xray_anisotropy
+        from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.array([1.0])
         cos_30 = np.cos(np.radians(30.0))
@@ -685,7 +685,7 @@ class TestXrayAnisotropyCrossval:
 
         f(70) = 0.5 * cos(70) + 0.5 = 0.5 * 0.342 + 0.5 = 0.671.
         """
-        from tengri.models.xray import xray_anisotropy
+        from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.array([1.0])
         cos_70 = np.cos(np.radians(70.0))
@@ -703,7 +703,7 @@ class TestXrayAnisotropyCrossval:
 
         Yang+2022 finds ~1.4x ratio for COSMOS AGN.
         """
-        from tengri.models.xray import xray_anisotropy
+        from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.array([1.0])
         cos_30 = np.cos(np.radians(30.0))
@@ -721,7 +721,7 @@ class TestXrayAnisotropyCrossval:
 
     def test_isotropic_ratio(self):
         """For isotropic (a1=0, a2=0): ratio should be exactly 1.0."""
-        from tengri.models.xray import xray_anisotropy
+        from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.array([1.0])
         cos_30 = np.cos(np.radians(30.0))
@@ -737,7 +737,7 @@ class TestXrayAnisotropyCrossval:
 
     def test_face_on_maximum(self):
         """Face-on (cos_inc=1) should give maximum luminosity."""
-        from tengri.models.xray import xray_anisotropy
+        from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.array([1.0])
         l_face = float(xray_anisotropy(l_x, cos_inc=1.0, a1=0.5, a2=0.0)[0])
@@ -764,8 +764,8 @@ class TestCueInputBoundsCheck:
     )
     def test_physical_alpha_pl_within_bounds(self, alpha_pl):
         """All 7 ionspec params must be within _CLIP_RANGES for physical alpha_pl."""
-        from tengri.models.nebular.agn_nebular import agn_ionspec_from_alpha_pl
-        from tengri.models.nebular.ionizing_spectrum import _CLIP_RANGES
+        from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
+        from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES
 
         params = agn_ionspec_from_alpha_pl(alpha_pl)
         for key, (lo, hi) in _CLIP_RANGES.items():
@@ -781,8 +781,8 @@ class TestCueInputBoundsCheck:
     )
     def test_extreme_alpha_pl_clipped(self, alpha_pl):
         """Extreme/invalid alpha_pl values must still produce clipped outputs."""
-        from tengri.models.nebular.agn_nebular import agn_ionspec_from_alpha_pl
-        from tengri.models.nebular.ionizing_spectrum import _CLIP_RANGES
+        from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
+        from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES
 
         params = agn_ionspec_from_alpha_pl(alpha_pl)
         for key, (lo, hi) in _CLIP_RANGES.items():
@@ -798,7 +798,7 @@ class TestCueInputBoundsCheck:
     )
     def test_log_qh_physical_range(self, l_acc_erg):
         """log10(Q_H) should be in [40, 55] for L_acc in [1e42, 1e48] erg/s."""
-        from tengri.models.nebular.agn_nebular import _log_qh_from_lacc
+        from tengri.components.nebular.agn_nebular import _log_qh_from_lacc
 
         log_qh = float(_log_qh_from_lacc(l_acc_erg, alpha_pl=-1.7))
         assert 40.0 <= log_qh <= 60.0, (
@@ -853,7 +853,7 @@ class TestPolarDustCrossval:
         SMC R_V = 2.93. The extinction curve k(V) = A(V)/E(B-V)/R_V should
         be 1.0 at V-band by definition.
         """
-        from tengri.models.agn.polar_dust import polar_dust_extinction
+        from tengri.components.agn.polar_dust import polar_dust_extinction
 
         wavelength = jnp.linspace(1000.0, 10000.0, 1000)
         l_nu_flat = jnp.ones_like(wavelength)
@@ -888,7 +888,7 @@ class TestPolarDustCrossval:
 
     def test_uv_more_attenuated_than_optical(self):
         """For E(B-V)=0.3: UV (1500A) should be attenuated >2x more than optical."""
-        from tengri.models.agn.polar_dust import polar_dust_extinction
+        from tengri.components.agn.polar_dust import polar_dust_extinction
 
         wavelength = jnp.linspace(1000.0, 10000.0, 1000)
         l_nu_flat = jnp.ones_like(wavelength)
@@ -914,7 +914,7 @@ class TestPolarDustCrossval:
 
     def test_energy_conservation(self):
         """For a flat input spectrum, absorbed energy should equal reemitted."""
-        from tengri.models.agn.polar_dust import polar_dust_total
+        from tengri.components.agn.polar_dust import polar_dust_total
 
         # Use a wide wavelength grid spanning UV to FIR
         wavelength = jnp.geomspace(500.0, 5e6, 5000)
@@ -954,7 +954,7 @@ class TestPolarDustCrossval:
 
     def test_greybody_peak_wavelength(self):
         """At T=100K, greybody peak should be near Wien peak ~ 29 um."""
-        from tengri.models.agn.polar_dust import polar_dust_emission
+        from tengri.components.agn.polar_dust import polar_dust_emission
 
         wavelength = jnp.geomspace(1e4, 1e7, 3000)  # 1 um to 1 mm in Angstrom
         l_nu = polar_dust_emission(
@@ -1014,7 +1014,7 @@ class TestDPLRadioCrossval:
 
     def test_low_freq_flat_spectrum(self):
         """At 1.4 GHz (well below nu_t=10 GHz): index should approach alpha2=-0.1."""
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         # Radio wavelengths: 1 cm to 10 m (1e8 to 1e10 A)
         wavelength = jnp.geomspace(1e8, 1e11, 5000)
@@ -1036,7 +1036,7 @@ class TestDPLRadioCrossval:
 
     def test_high_freq_steep_spectrum(self):
         """At 100 GHz (above nu_t=10 GHz): index should approach alpha1=-0.75."""
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         wavelength = jnp.geomspace(1e7, 1e11, 5000)
         l_nu = radio_agn_dpl(
@@ -1056,7 +1056,7 @@ class TestDPLRadioCrossval:
 
     def test_transition_freq_intermediate(self):
         """Near nu_t=10 GHz: spectral index should be between alpha1 and alpha2."""
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         wavelength = jnp.geomspace(1e7, 1e11, 5000)
         l_nu = radio_agn_dpl(
@@ -1081,7 +1081,7 @@ class TestDPLRadioCrossval:
         For alpha1=-0.75, alpha2=-0.1, nu_t=10 GHz, nu_cut=1e13 Hz:
         At nu=5 GHz (nu_ref): L_nu should equal L_5GHz by normalization.
         """
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         # Use a wavelength corresponding to 5 GHz = 6 cm = 6e8 A
         c_aa = 2.99792458e18
@@ -1111,7 +1111,7 @@ class TestDPLRadioCrossval:
 
     def test_dpl_ratio_low_vs_high(self):
         """Ratio of L_nu at low/high freq should reflect the spectral steepening."""
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         c_aa = 2.99792458e18
         # 1 GHz and 100 GHz
@@ -1152,7 +1152,7 @@ class TestUnitConsistencyAgnToCue:
 
     def test_qh_typical_seyfert(self):
         """For L_acc=1e45 erg/s (typical Seyfert): Q_H ~ 1e55 photons/s."""
-        from tengri.models.nebular.agn_nebular import _log_qh_from_lacc
+        from tengri.components.nebular.agn_nebular import _log_qh_from_lacc
 
         log_qh = float(_log_qh_from_lacc(1e45, alpha_pl=-1.7))
         # For alpha_pl=-1.7, ionizing fraction ~40-60%
@@ -1162,14 +1162,14 @@ class TestUnitConsistencyAgnToCue:
 
     def test_qh_low_lum_agn(self):
         """For L_acc=1e43 erg/s (low-lum AGN): Q_H ~ 1e53 photons/s."""
-        from tengri.models.nebular.agn_nebular import _log_qh_from_lacc
+        from tengri.components.nebular.agn_nebular import _log_qh_from_lacc
 
         log_qh = float(_log_qh_from_lacc(1e43, alpha_pl=-1.7))
         assert 51.0 < log_qh < 55.0, f"log(Q_H)={log_qh:.1f} for L_acc=1e43, expected ~53"
 
     def test_qh_scales_with_luminosity(self):
         """Q_H should scale linearly with L_acc (same alpha_pl)."""
-        from tengri.models.nebular.agn_nebular import _log_qh_from_lacc
+        from tengri.components.nebular.agn_nebular import _log_qh_from_lacc
 
         log_qh_43 = float(_log_qh_from_lacc(1e43, alpha_pl=-1.7))
         log_qh_45 = float(_log_qh_from_lacc(1e45, alpha_pl=-1.7))
@@ -1184,7 +1184,7 @@ class TestUnitConsistencyAgnToCue:
 
     def test_ionizing_fraction_physical(self):
         """Ionizing fraction should be between 0.1 and 0.9 for alpha_pl in [-2, -1.2]."""
-        from tengri.models.nebular.agn_nebular import _log_qh_from_lacc
+        from tengri.components.nebular.agn_nebular import _log_qh_from_lacc
 
         l_acc = 1e44  # erg/s
         h_planck = 6.626e-27
@@ -1211,7 +1211,7 @@ class TestUnitConsistencyAgnToCue:
         A steeper EUV slope means less flux at high energies relative to
         the total, so fewer ionizing photons per unit L_acc.
         """
-        from tengri.models.nebular.agn_nebular import _log_qh_from_lacc
+        from tengri.components.nebular.agn_nebular import _log_qh_from_lacc
 
         l_acc = 1e44
         log_qh_flat = float(_log_qh_from_lacc(l_acc, alpha_pl=-1.0))

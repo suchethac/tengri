@@ -5,12 +5,12 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.models.sfh.gp_sfh import (
+from tengri.components.sfh.gp_sfh import (
     compute_sqrt_power_drw,
     generate_gp_batch,
     gp_from_xi,
 )
-from tengri.models.sfh.psd_models import psd_to_sqrt_power
+from tengri.components.sfh.psd_models import psd_to_sqrt_power
 
 jax.config.update("jax_enable_x64", True)
 

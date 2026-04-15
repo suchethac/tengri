@@ -57,7 +57,7 @@ from tengri import (  # noqa: E402
     Uniform,
     load_ssp_data,
 )
-from tengri.models.observation import SpectroscopyConfig  # noqa: E402
+from tengri.observation import SpectroscopyConfig  # noqa: E402
 
 from _plot_style import (  # noqa: E402
     COLORS,

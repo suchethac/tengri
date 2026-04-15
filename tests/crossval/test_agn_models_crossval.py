@@ -44,7 +44,7 @@ class TestQSOGenCrossval:
         Both tengri and original QSOGen use the same broken power-law
         parameterization, so the trend must match.
         """
-        from tengri.models.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(912, 30000, 3000)
 
@@ -82,7 +82,7 @@ class TestQSOGenCrossval:
         tengri convention: plslp1 > 0 -> more UV flux.
         Original Temple+2021: plslp1 < 0 -> bluer (opposite sign).
         """
-        from tengri.models.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(912, 30000, 3000)
         wave_np = np.asarray(wave)
@@ -99,7 +99,7 @@ class TestQSOGenCrossval:
 
     def test_hot_dust_bump(self):
         """Hot dust should create a bump around 1-3 um."""
-        from tengri.models.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(912, 100000, 5000)
         wave_np = np.asarray(wave)
@@ -120,7 +120,7 @@ class TestQSOGenCrossval:
 
     def test_dust_reddening(self, qsogen_ref):
         """E(B-V) reddening should suppress UV flux."""
-        from tengri.models.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(912, 30000, 3000)
         wave_np = np.asarray(wave)
@@ -144,7 +144,7 @@ class TestQSOGenCrossval:
 
     def test_differentiable(self):
         """QSOGen should be JAX-differentiable."""
-        from tengri.models.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(1000, 30000, 1000)
 
@@ -176,7 +176,7 @@ class TestSKIRTORCrossval:
 
     def test_type1_vs_type2(self):
         """Face-on (Type 1) should show more MIR, less silicate absorption."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(1000, 200000, 5000)
         wave_np = np.asarray(wave)
@@ -206,7 +206,7 @@ class TestSKIRTORCrossval:
 
     def test_silicate_feature(self):
         """Edge-on view should show silicate absorption at 9.7 um."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(50000, 150000, 1000)  # 5-15 um
         wave_np = np.asarray(wave)
@@ -233,7 +233,7 @@ class TestSKIRTORCrossval:
 
     def test_higher_tau_more_absorbed(self):
         """Higher optical depth should produce deeper silicate feature."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(50000, 150000, 500)
         wave_np = np.asarray(wave)
@@ -264,7 +264,7 @@ class TestSKIRTORCrossval:
 
     def test_opening_angle_affects_emission(self):
         """Wider opening angle should change the SED shape."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(5000, 200000, 2000)
 
@@ -289,7 +289,7 @@ class TestSKIRTORCrossval:
 
     def test_torus_peaks_in_ir(self):
         """Torus emission should peak in MIR/FIR (3-50 um)."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(5000, 500000, 5000)
         sed = np.asarray(skirtor_analytic(wave, agn_log_lbol=11.0))
@@ -299,7 +299,7 @@ class TestSKIRTORCrossval:
 
     def test_luminosity_scaling(self):
         """10x L_bol should give ~10x more torus emission."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(10000, 200000, 1000)
 
@@ -311,7 +311,7 @@ class TestSKIRTORCrossval:
 
     def test_all_parameters_differentiable(self):
         """SKIRTOR should be differentiable w.r.t. all continuous params."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(10000, 200000, 500)
 
@@ -355,7 +355,7 @@ class TestFritzVsSKIRTOR:
 
     def test_both_show_type1_type2_dichotomy(self):
         """Both models should differ between face-on and edge-on views."""
-        from tengri.models.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.skirtor import skirtor_analytic
 
         wave = jnp.linspace(10000, 200000, 1000)
 
@@ -382,8 +382,8 @@ class TestFritzVsSKIRTOR:
 
         This is true for both Fritz+2006 (from RT) and SKIRTOR (analytic).
         """
-        from tengri.models.agn.skirtor import skirtor_analytic
-        from tengri.models.agn.torus import simple_torus
+        from tengri.components.agn.skirtor import skirtor_analytic
+        from tengri.components.agn.torus import simple_torus
 
         wave = jnp.linspace(1000, 1000000, 10000)
         wave_np = np.asarray(wave)
@@ -418,7 +418,7 @@ class TestQSOGenPrecision:
 
     def test_continuum_plus_bb_shape(self, manual_ref):
         """Cont + BB (no lines) should match original to <0.5%."""
-        from tengri.models.agn.qsogen import (
+        from tengri.components.agn.qsogen import (
             _broken_powerlaw_continuum,
             _hot_dust_blackbody,
         )
@@ -444,7 +444,7 @@ class TestQSOGenPrecision:
 
     def test_bb_absolute_normalization(self, manual_ref):
         """BB flux at 20000A should equal bbnorm = 3.961 exactly."""
-        from tengri.models.agn.qsogen import _hot_dust_blackbody
+        from tengri.components.agn.qsogen import _hot_dust_blackbody
 
         wave = jnp.array(manual_ref["wave"])
         bb = np.asarray(_hot_dust_blackbody(wave, None, 1243.6, 3.961))
@@ -459,7 +459,7 @@ class TestQSOGenPrecision:
 
     def test_continuum_at_5500_is_one(self):
         """Continuum should be normalized to 1.0 at 5500A."""
-        from tengri.models.agn.qsogen import _broken_powerlaw_continuum
+        from tengri.components.agn.qsogen import _broken_powerlaw_continuum
 
         wave = jnp.linspace(912, 100000, 5000)
         cont = _broken_powerlaw_continuum(wave, -0.349, 0.593, 3880.0)
@@ -485,7 +485,7 @@ class TestQSOGenEmissionLines:
 
     def test_lines_add_flux(self):
         """Emission lines should add positive flux to the continuum."""
-        from tengri.models.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(912, 30000, 5000)
         sed_lines = np.asarray(qsogen_sed(wave))
@@ -501,7 +501,7 @@ class TestQSOGenEmissionLines:
         """Full SED shape should correlate > 0.95 with original."""
         from scipy.stats import pearsonr
 
-        from tengri.models.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import qsogen_sed
 
         wave = jnp.array(line_ref["wave"])
         sed_ds = np.asarray(qsogen_sed(wave))
@@ -520,7 +520,7 @@ class TestQSOGenEmissionLines:
 
     def test_halpha_prominent(self):
         """Hα should be a prominent emission line (well above continuum)."""
-        from tengri.models.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import qsogen_sed
 
         wave = jnp.linspace(4000, 8000, 2000)
         sed_lines = np.asarray(qsogen_sed(wave))

@@ -40,7 +40,7 @@ class TestPatchyIGM:
 
     def test_xhi_zero_matches_inoue(self, wave_obs_broad):
         """x_HI=0 reproduces standard Inoue+2014 exactly."""
-        from tengri.models.igm import igm_transmission, igm_transmission_patchy
+        from tengri.components.igm import igm_transmission, igm_transmission_patchy
 
         z = 6.0
         t_inoue = igm_transmission(wave_obs_broad, z)
@@ -50,7 +50,7 @@ class TestPatchyIGM:
 
     def test_xhi_zero_matches_inoue_z3(self, wave_obs_broad):
         """x_HI=0 matches Inoue+2014 at z=3 (low-z control)."""
-        from tengri.models.igm import igm_transmission, igm_transmission_patchy
+        from tengri.components.igm import igm_transmission, igm_transmission_patchy
 
         z = 3.0
         t_inoue = igm_transmission(wave_obs_broad, z)
@@ -60,7 +60,7 @@ class TestPatchyIGM:
 
     def test_xhi_one_strong_damping_wing(self, wave_obs_lya_region):
         """x_HI=1 produces strong damping wing redward of Lya."""
-        from tengri.models.igm import igm_transmission_patchy
+        from tengri.components.igm import igm_transmission_patchy
 
         z = 7.0
         lya_obs = 1215.67 * (1.0 + z)  # ~9722.5 A
@@ -83,7 +83,7 @@ class TestPatchyIGM:
 
         At z=7, rest 1300 A corresponds to obs 10400 A.
         """
-        from tengri.models.igm import igm_transmission, igm_transmission_patchy
+        from tengri.components.igm import igm_transmission, igm_transmission_patchy
 
         z = 7.0
         # Rest-frame wavelengths around 1200-1400 A
@@ -107,7 +107,7 @@ class TestPatchyIGM:
 
     def test_larger_bubble_reduces_damping(self, wave_obs_lya_region):
         """Larger R_bubble reduces damping wing absorption."""
-        from tengri.models.igm import igm_transmission_patchy
+        from tengri.components.igm import igm_transmission_patchy
 
         z = 7.0
         t_small = igm_transmission_patchy(
@@ -129,7 +129,7 @@ class TestPatchyIGM:
 
     def test_transmission_bounded(self, wave_obs_broad):
         """Transmission is in [0, 1] everywhere."""
-        from tengri.models.igm import igm_transmission_patchy
+        from tengri.components.igm import igm_transmission_patchy
 
         for z in [3.0, 6.0, 8.0, 10.0]:
             for x_hi in [0.0, 0.3, 0.7, 1.0]:
@@ -144,14 +144,14 @@ class TestPatchyIGM:
 
     def test_finite_output(self, wave_obs_broad):
         """Output is finite for all reasonable inputs."""
-        from tengri.models.igm import igm_transmission_patchy
+        from tengri.components.igm import igm_transmission_patchy
 
         t = igm_transmission_patchy(wave_obs_broad, 7.0, x_HI=0.5, R_bubble=1.0)
         assert jnp.all(jnp.isfinite(t))
 
     def test_monotonic_xhi(self, wave_obs_lya_region):
         """Higher x_HI produces lower transmission (more absorption)."""
-        from tengri.models.igm import igm_transmission_patchy
+        from tengri.components.igm import igm_transmission_patchy
 
         z = 7.0
         t_low = igm_transmission_patchy(
@@ -181,7 +181,7 @@ class TestPatchyIGMJitGrad:
 
     def test_jit_compatible(self, wave_obs_broad):
         """igm_transmission_patchy is JIT-compilable."""
-        from tengri.models.igm import igm_transmission_patchy
+        from tengri.components.igm import igm_transmission_patchy
 
         @jax.jit
         def _run(wave, z):
@@ -192,7 +192,7 @@ class TestPatchyIGMJitGrad:
 
     def test_gradient_wrt_xhi(self, wave_obs_lya_region):
         """Gradient w.r.t. x_HI is finite."""
-        from tengri.models.igm import igm_transmission_patchy
+        from tengri.components.igm import igm_transmission_patchy
 
         def _loss(x_hi):
             return jnp.sum(
@@ -217,7 +217,7 @@ class TestPatchyIGMJitGrad:
 
     def test_gradient_wrt_r_bubble(self, wave_obs_lya_region):
         """Gradient w.r.t. R_bubble is finite."""
-        from tengri.models.igm import igm_transmission_patchy
+        from tengri.components.igm import igm_transmission_patchy
 
         def _loss(r_bubble):
             return jnp.sum(

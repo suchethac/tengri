@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.models.radio import (
+from tengri.components.radio import (
     radio_agn_dpl,
     radio_star_forming,
     radio_total_dpl,

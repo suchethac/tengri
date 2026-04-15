@@ -233,7 +233,7 @@ class Fitter:
         ):
             import contextlib
 
-            from tengri.models.sps.precompute import precompute_photometry
+            from tengri.components.sps.precompute import precompute_photometry
 
             model._precomputed.photometry = precompute_photometry(
                 model.ssp_data,
@@ -289,7 +289,7 @@ class Fitter:
 
         # Precompute static arrays for emission line fitting
         if self._eline_marginalize or self._eline_fitted:
-            from tengri.models.observation.line_list import LineCatalog
+            from tengri.observation.line_list import LineCatalog
 
             if _spec_config is not None and _spec_config.eline_catalog is not None:
                 _catalog = _spec_config.effective_catalog

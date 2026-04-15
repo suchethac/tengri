@@ -40,7 +40,7 @@ class TestAdafDisc:
 
     def test_finite_sed(self, wavelength):
         """ADAF produces finite SED values everywhere."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         l_nu = adaf_disc(
             wavelength,
@@ -55,7 +55,7 @@ class TestAdafDisc:
 
     def test_non_negative(self, wavelength):
         """ADAF SED is non-negative everywhere."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         l_nu = adaf_disc(
             wavelength,
@@ -72,7 +72,7 @@ class TestAdafDisc:
         The ADAF synchrotron peak is in the radio/mm regime (~300 um),
         while the standard disc peaks in the UV.
         """
-        from tengri.models.agn.disc import adaf_disc, multicolor_disc
+        from tengri.components.agn.disc import adaf_disc, multicolor_disc
 
         l_adaf = adaf_disc(
             wavelength,
@@ -103,7 +103,7 @@ class TestAdafDisc:
         A larger r_tr means the thin disc starts further out (cooler),
         producing less UV/optical emission.
         """
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         # UV band: 1000-3000 A
         uv_mask = (optical_wavelength > 1000.0) & (optical_wavelength < 3000.0)
@@ -137,7 +137,7 @@ class TestAdafDisc:
         r_tr is small (high accretion) the ADAF is more efficient but
         the disc dominates.
         """
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         # Low Eddington ratio: ADAF regime
         l_low = adaf_disc(
@@ -174,7 +174,7 @@ class TestAdafDisc:
 
     def test_agn_frac_scaling(self, wavelength):
         """agn_frac linearly scales the output."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         l_full = adaf_disc(wavelength, agn_log_lbol=42.0, agn_frac=1.0)
         l_half = adaf_disc(wavelength, agn_log_lbol=42.0, agn_frac=0.5)
@@ -194,7 +194,7 @@ class TestAdafJitGrad:
 
     def test_jit_compatible(self, wavelength):
         """adaf_disc is JIT-compilable."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         @jax.jit
         def _run(wave):
@@ -205,7 +205,7 @@ class TestAdafJitGrad:
 
     def test_gradient_wrt_lbol(self, optical_wavelength):
         """FD check: ∂(∑SED)/∂log_lbol for adaf_disc."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         def loss_fn(lbol):
             return jnp.sum(adaf_disc(optical_wavelength, agn_log_lbol=lbol, agn_frac=0.1))
@@ -220,7 +220,7 @@ class TestAdafJitGrad:
 
     def test_gradient_wrt_r_tr(self, optical_wavelength):
         """FD check: ∂(∑SED)/∂r_tr for adaf_disc. Truncation radius gradient."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         def loss_fn(r_tr):
             return jnp.sum(
@@ -237,7 +237,7 @@ class TestAdafJitGrad:
 
     def test_gradient_wrt_delta(self, optical_wavelength):
         """FD check: ∂(∑SED)/∂delta for adaf_disc. ADAF δ parameter gradient."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         def loss_fn(delta):
             return jnp.sum(
@@ -267,7 +267,7 @@ class TestAdafJitGrad:
     )
     def test_gradient_wrt_beta(self, optical_wavelength):
         """FD check: ∂(∑SED)/∂beta for adaf_disc. ADAF β parameter gradient."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         def loss_fn(beta):
             return jnp.sum(
@@ -293,20 +293,20 @@ class TestAdafRegistry:
 
     def test_registered_as_adaf(self):
         """'adaf' is in AGN_MODELS registry."""
-        from tengri.models.agn.unified import AGN_MODELS
+        from tengri.components.agn.unified import AGN_MODELS
 
         assert "adaf" in AGN_MODELS
 
     def test_get_agn_model_adaf(self):
         """resolve_agn_model('adaf') returns a callable."""
-        from tengri.models.agn.unified import resolve_agn_model
+        from tengri.components.agn.unified import resolve_agn_model
 
         model_fn = resolve_agn_model("adaf")
         assert callable(model_fn)
 
     def test_registered_model_runs(self, optical_wavelength):
         """The registered 'adaf' model produces finite output."""
-        from tengri.models.agn.unified import resolve_agn_model
+        from tengri.components.agn.unified import resolve_agn_model
 
         model_fn = resolve_agn_model("adaf")
         l_nu = model_fn(optical_wavelength, agn_log_lbol=42.0)
@@ -315,7 +315,7 @@ class TestAdafRegistry:
 
     def test_adaf_in_unified_disc_fns(self, optical_wavelength):
         """'adaf' disc type works in unified_agn combiner."""
-        from tengri.models.agn.unified import unified_agn
+        from tengri.components.agn.unified import unified_agn
 
         l_nu = unified_agn(
             optical_wavelength,
@@ -336,7 +336,7 @@ class TestSimpleAgn:
 
     def test_finite_nonneg(self, wavelength):
         """simple_agn produces finite, non-negative SED."""
-        from tengri.models.agn.unified import simple_agn
+        from tengri.components.agn.unified import simple_agn
 
         l_nu = simple_agn(wavelength, agn_log_lbol=44.0)
         assert jnp.all(jnp.isfinite(l_nu))
@@ -345,13 +345,13 @@ class TestSimpleAgn:
 
     def test_registered_as_simple(self):
         """'simple' appears in the AGN_MODELS registry."""
-        from tengri.models.agn.unified import AGN_MODELS
+        from tengri.components.agn.unified import AGN_MODELS
 
         assert "simple" in AGN_MODELS
 
     def test_agn_frac_scales_linearly(self, wavelength):
         """agn_frac multiplies the whole SED linearly."""
-        from tengri.models.agn.unified import simple_agn
+        from tengri.components.agn.unified import simple_agn
 
         l1 = simple_agn(wavelength, agn_log_lbol=44.0, agn_frac=0.1)
         l2 = simple_agn(wavelength, agn_log_lbol=44.0, agn_frac=0.2)
@@ -370,8 +370,8 @@ class TestSimpleAgn:
         must exceed the disc-only (torus_frac=0) case where the powerlaw disc
         carries all the power but is fainter at 1000 K BB wavelengths.
         """
-        from tengri.models.agn.disc import powerlaw_disc
-        from tengri.models.agn.unified import simple_agn
+        from tengri.components.agn.disc import powerlaw_disc
+        from tengri.components.agn.unified import simple_agn
 
         # Near the 1000 K BB peak (Wien: λ_peak = 2.898e7/1000 Å ≈ 29,000 Å)
         nir_mask = (wavelength > 2e4) & (wavelength < 5e4)
@@ -393,7 +393,7 @@ class TestSimpleAgn:
         L_nu ∝ nu^alpha; flatter alpha means relatively more emission at
         high frequencies (UV) compared to a steep, red power law.
         """
-        from tengri.models.agn.unified import simple_agn
+        from tengri.components.agn.unified import simple_agn
 
         uv_mask = (wavelength > 1000.0) & (wavelength < 3000.0)
         # Use torus_frac=0 so we isolate the disc spectrum
@@ -410,7 +410,7 @@ class TestSimpleAgn:
 
         Wien's law: λ_peak = b/T, so T_hot → shorter peak.
         """
-        from tengri.models.agn.unified import simple_agn
+        from tengri.components.agn.unified import simple_agn
 
         ir = wavelength[(wavelength > 5e3) & (wavelength < 2e7)]
         if ir.shape[0] < 10:
@@ -432,7 +432,7 @@ class TestSimpleAgn:
 
     def test_jit_compatible(self, wavelength):
         """simple_agn is JIT-compilable."""
-        from tengri.models.agn.unified import simple_agn
+        from tengri.components.agn.unified import simple_agn
 
         @jax.jit
         def _run(wave):
@@ -442,7 +442,7 @@ class TestSimpleAgn:
 
     def test_gradient_wrt_lbol(self, optical_wavelength):
         """FD check: ∂(∑SED)/∂agn_log_lbol for simple_agn."""
-        from tengri.models.agn.unified import simple_agn
+        from tengri.components.agn.unified import simple_agn
 
         def loss_fn(lbol):
             return jnp.sum(simple_agn(optical_wavelength, agn_log_lbol=lbol))
@@ -466,7 +466,7 @@ class TestStandardAgn:
 
     def test_finite_nonneg(self, wavelength):
         """standard_agn produces finite, non-negative SED."""
-        from tengri.models.agn.unified import standard_agn
+        from tengri.components.agn.unified import standard_agn
 
         l_nu = standard_agn(wavelength, agn_log_lbol=44.0)
         assert jnp.all(jnp.isfinite(l_nu))
@@ -475,13 +475,13 @@ class TestStandardAgn:
 
     def test_registered_as_standard(self):
         """'standard' appears in the AGN_MODELS registry."""
-        from tengri.models.agn.unified import AGN_MODELS
+        from tengri.components.agn.unified import AGN_MODELS
 
         assert "standard" in AGN_MODELS
 
     def test_agn_frac_scales_linearly(self, wavelength):
         """agn_frac multiplies the whole SED linearly."""
-        from tengri.models.agn.unified import standard_agn
+        from tengri.components.agn.unified import standard_agn
 
         l1 = standard_agn(wavelength, agn_log_lbol=44.0, agn_frac=0.1)
         l2 = standard_agn(wavelength, agn_log_lbol=44.0, agn_frac=0.2)
@@ -501,7 +501,7 @@ class TestStandardAgn:
         exceeds the low-Eddington one; integrating a broader window mixes in
         the optical bump where the cooler disc wins.
         """
-        from tengri.models.agn.unified import standard_agn
+        from tengri.components.agn.unified import standard_agn
 
         # Far-UV (<500 Å): hotter disc emits more (further from the Wien cutoff)
         far_uv_mask = (optical_wavelength > 300.0) & (optical_wavelength < 500.0)
@@ -530,7 +530,7 @@ class TestStandardAgn:
         With a hot (1200 K) and warm (300 K) component, there is more near-IR
         (1–5 μm) emission than a cool single-temperature torus would produce.
         """
-        from tengri.models.agn.unified import standard_agn
+        from tengri.components.agn.unified import standard_agn
 
         # Near-IR: 1–5 μm = 10,000–50,000 Å
         nir_mask = (wavelength > 1e4) & (wavelength < 5e4)
@@ -557,7 +557,7 @@ class TestStandardAgn:
 
     def test_jit_compatible(self, wavelength):
         """standard_agn is JIT-compilable."""
-        from tengri.models.agn.unified import standard_agn
+        from tengri.components.agn.unified import standard_agn
 
         @jax.jit
         def _run(wave):
@@ -567,7 +567,7 @@ class TestStandardAgn:
 
     def test_gradient_wrt_lbol(self, optical_wavelength):
         """FD check: ∂(∑SED)/∂agn_log_lbol for standard_agn."""
-        from tengri.models.agn.unified import standard_agn
+        from tengri.components.agn.unified import standard_agn
 
         def loss_fn(lbol):
             return jnp.sum(standard_agn(optical_wavelength, agn_log_lbol=lbol))
@@ -582,7 +582,7 @@ class TestStandardAgn:
 
     def test_gradient_wrt_torus_frac(self, optical_wavelength):
         """FD check: ∂(∑SED)/∂agn_torus_frac for standard_agn."""
-        from tengri.models.agn.unified import standard_agn
+        from tengri.components.agn.unified import standard_agn
 
         def loss_fn(frac):
             return jnp.sum(
@@ -618,7 +618,7 @@ class TestUnifiedAgnCombinations:
     )
     def test_all_combinations_produce_finite_output(self, wavelength, disc_model, torus_model):
         """Every supported disc × torus combination gives finite, non-negative output."""
-        from tengri.models.agn.unified import unified_agn
+        from tengri.components.agn.unified import unified_agn
 
         l_nu = unified_agn(
             wavelength,
@@ -634,14 +634,14 @@ class TestUnifiedAgnCombinations:
 
     def test_unknown_disc_raises(self, wavelength):
         """Unknown disc_model raises KeyError."""
-        from tengri.models.agn.unified import unified_agn
+        from tengri.components.agn.unified import unified_agn
 
         with pytest.raises(KeyError):
             unified_agn(wavelength, agn_log_lbol=44.0, disc_model="nonexistent")
 
     def test_unknown_torus_raises(self, wavelength):
         """Unknown torus_model raises KeyError."""
-        from tengri.models.agn.unified import unified_agn
+        from tengri.components.agn.unified import unified_agn
 
         with pytest.raises(KeyError):
             unified_agn(wavelength, agn_log_lbol=44.0, torus_model="nonexistent")
@@ -653,7 +653,7 @@ class TestUnifiedAgnCombinations:
         giving B_nu ∝ exp(-28.8) ≈ 3e-13 relative to peak.  The disc
         contributes nothing (agn_frac=0).  So IR >> UV by a factor >>1000.
         """
-        from tengri.models.agn.unified import unified_agn
+        from tengri.components.agn.unified import unified_agn
 
         uv_mask = (wavelength > 500.0) & (wavelength < 5000.0)
         ir_mask = (wavelength > 2e4) & (wavelength < 1e6)
@@ -671,8 +671,8 @@ class TestUnifiedAgnCombinations:
         Torus is called with agn_torus_frac=0, so simple_torus returns 0;
         unified_agn output equals disc-only.
         """
-        from tengri.models.agn.disc import powerlaw_disc
-        from tengri.models.agn.unified import unified_agn
+        from tengri.components.agn.disc import powerlaw_disc
+        from tengri.components.agn.unified import unified_agn
 
         l_unified = unified_agn(wavelength, agn_log_lbol=44.0, agn_torus_frac=0.0)
         # Disc gets agn_frac = 1 - 0 = 1.0
@@ -686,7 +686,7 @@ class TestUnifiedAgnCombinations:
 
     def test_jit_over_default_combination(self, wavelength):
         """The default powerlaw+simple combination is JIT-compilable."""
-        from tengri.models.agn.unified import unified_agn
+        from tengri.components.agn.unified import unified_agn
 
         @jax.jit
         def _run(wave):
@@ -696,9 +696,9 @@ class TestUnifiedAgnCombinations:
 
     def test_total_is_disc_plus_torus(self, wavelength):
         """unified_agn output equals disc + torus computed separately."""
-        from tengri.models.agn.disc import powerlaw_disc
-        from tengri.models.agn.torus import simple_torus
-        from tengri.models.agn.unified import unified_agn
+        from tengri.components.agn.disc import powerlaw_disc
+        from tengri.components.agn.torus import simple_torus
+        from tengri.components.agn.unified import unified_agn
 
         frac = 0.3
         l_unified = unified_agn(wavelength, agn_log_lbol=44.0, agn_torus_frac=frac)
@@ -722,14 +722,14 @@ class TestResolveAgn:
 
     def test_unknown_model_raises_value_error(self):
         """resolve_agn_model raises ValueError for unknown names."""
-        from tengri.models.agn.unified import resolve_agn_model
+        from tengri.components.agn.unified import resolve_agn_model
 
         with pytest.raises(ValueError, match="Unknown AGN model"):
             resolve_agn_model("not_a_real_model_xyz_abc")
 
     def test_kubota_done_emits_deprecation_warning(self, wavelength):
         """resolve_agn_model('kubota_done') emits DeprecationWarning."""
-        from tengri.models.agn.unified import resolve_agn_model
+        from tengri.components.agn.unified import resolve_agn_model
 
         with pytest.warns(DeprecationWarning, match="kubota_done.*deprecated"):
             fn = resolve_agn_model("kubota_done")
@@ -739,7 +739,7 @@ class TestResolveAgn:
         """Despite the deprecation warning, the returned function produces finite output."""
         import warnings
 
-        from tengri.models.agn.unified import resolve_agn_model
+        from tengri.components.agn.unified import resolve_agn_model
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
@@ -751,13 +751,13 @@ class TestResolveAgn:
 
     def test_get_agn_model_is_alias(self):
         """get_agn_model is the same object as resolve_agn_model."""
-        from tengri.models.agn.unified import get_agn_model, resolve_agn_model
+        from tengri.components.agn.unified import get_agn_model, resolve_agn_model
 
         assert get_agn_model is resolve_agn_model
 
     def test_all_canonical_models_in_registry(self):
         """All canonical model names appear in AGN_MODELS."""
-        from tengri.models.agn.unified import AGN_MODELS
+        from tengri.components.agn.unified import AGN_MODELS
 
         for name in (
             "simple",
@@ -781,7 +781,7 @@ class TestRegisterAgn:
 
     def test_decorator_adds_model_to_registry(self):
         """register_agn_model adds the decorated function to AGN_MODELS."""
-        from tengri.models.agn.unified import AGN_MODELS, register_agn_model
+        from tengri.components.agn.unified import AGN_MODELS, register_agn_model
 
         @register_agn_model("_test_unit_model_a1b2")
         def _dummy(wavelength, agn_log_lbol, **_kw):
@@ -795,7 +795,7 @@ class TestRegisterAgn:
 
     def test_decorator_returns_original_function(self):
         """The decorator is transparent: the decorated function is returned unchanged."""
-        from tengri.models.agn.unified import AGN_MODELS, register_agn_model
+        from tengri.components.agn.unified import AGN_MODELS, register_agn_model
 
         def _raw(wavelength, agn_log_lbol, **_kw):
             return wavelength * agn_log_lbol
@@ -817,7 +817,7 @@ class TestMulticolorAgn:
 
     def test_finite_nonneg(self, wavelength):
         """multicolor_agn produces finite, non-negative SED."""
-        from tengri.models.agn.unified import multicolor_agn
+        from tengri.components.agn.unified import multicolor_agn
 
         l_nu = multicolor_agn(wavelength, agn_log_lbol=44.0)
         assert jnp.all(jnp.isfinite(l_nu))
@@ -826,19 +826,19 @@ class TestMulticolorAgn:
 
     def test_registered_as_multicolor_agn(self):
         """'multicolor_agn' appears in AGN_MODELS."""
-        from tengri.models.agn.unified import AGN_MODELS
+        from tengri.components.agn.unified import AGN_MODELS
 
         assert "multicolor_agn" in AGN_MODELS
 
     def test_kubota_done_alias_is_same_function(self):
         """AGN_MODELS['kubota_done'] is the same object as multicolor_agn."""
-        from tengri.models.agn.unified import AGN_MODELS, multicolor_agn
+        from tengri.components.agn.unified import AGN_MODELS, multicolor_agn
 
         assert AGN_MODELS["kubota_done"] is multicolor_agn
 
     def test_agn_frac_scales_linearly(self, wavelength):
         """agn_frac multiplies the whole SED linearly."""
-        from tengri.models.agn.unified import multicolor_agn
+        from tengri.components.agn.unified import multicolor_agn
 
         l1 = multicolor_agn(wavelength, agn_log_lbol=44.0, agn_frac=0.1)
         l2 = multicolor_agn(wavelength, agn_log_lbol=44.0, agn_frac=0.2)
@@ -854,7 +854,7 @@ class TestMulticolorAgn:
         allowing the disc to reach temperatures ~3x higher. This shifts the
         Wien peak into the far-UV/EUV (< 500 Å), boosting flux there.
         """
-        from tengri.models.agn.unified import multicolor_agn
+        from tengri.components.agn.unified import multicolor_agn
 
         far_uv = (optical_wavelength > 300.0) & (optical_wavelength < 500.0)
         l_nospin = multicolor_agn(
@@ -868,7 +868,7 @@ class TestMulticolorAgn:
 
     def test_jit_compatible(self, wavelength):
         """multicolor_agn is JIT-compilable."""
-        from tengri.models.agn.unified import multicolor_agn
+        from tengri.components.agn.unified import multicolor_agn
 
         @jax.jit
         def _run(wave):
@@ -887,7 +887,7 @@ class TestKubotaDoneFullAgn:
 
     def test_finite_nonneg(self, wavelength):
         """kubota_done_full_agn produces finite, non-negative SED."""
-        from tengri.models.agn.unified import kubota_done_full_agn
+        from tengri.components.agn.unified import kubota_done_full_agn
 
         l_nu = kubota_done_full_agn(wavelength, agn_log_lbol=44.0)
         assert jnp.all(jnp.isfinite(l_nu))
@@ -896,13 +896,13 @@ class TestKubotaDoneFullAgn:
 
     def test_registered_as_kubota_done_full(self):
         """'kubota_done_full' appears in AGN_MODELS."""
-        from tengri.models.agn.unified import AGN_MODELS
+        from tengri.components.agn.unified import AGN_MODELS
 
         assert "kubota_done_full" in AGN_MODELS
 
     def test_agn_frac_scales_linearly(self, wavelength):
         """agn_frac multiplies the whole SED linearly."""
-        from tengri.models.agn.unified import kubota_done_full_agn
+        from tengri.components.agn.unified import kubota_done_full_agn
 
         l1 = kubota_done_full_agn(wavelength, agn_log_lbol=44.0, agn_frac=0.1)
         l2 = kubota_done_full_agn(wavelength, agn_log_lbol=44.0, agn_frac=0.2)
@@ -918,7 +918,7 @@ class TestKubotaDoneFullAgn:
         At λ < 100 Å, the full model should have non-negligible flux
         while a torus-only comparison has zero disc contribution.
         """
-        from tengri.models.agn.unified import kubota_done_full_agn
+        from tengri.components.agn.unified import kubota_done_full_agn
 
         xray_mask = (wavelength > 1.0) & (wavelength < 100.0)
         if not jnp.any(xray_mask):
@@ -939,7 +939,7 @@ class TestKubotaDoneFullAgn:
         With fixed L_bol, increasing f_hard routes more power to the
         corona power law and less to the disc. The two SEDs must differ.
         """
-        from tengri.models.agn.unified import kubota_done_full_agn
+        from tengri.components.agn.unified import kubota_done_full_agn
 
         l_no_corona = kubota_done_full_agn(
             wavelength, agn_log_lbol=44.0, agn_frac=1.0, agn_f_hard=0.0, agn_torus_frac=0.0
@@ -952,7 +952,7 @@ class TestKubotaDoneFullAgn:
 
     def test_jit_compatible(self, wavelength):
         """kubota_done_full_agn is JIT-compilable."""
-        from tengri.models.agn.unified import kubota_done_full_agn
+        from tengri.components.agn.unified import kubota_done_full_agn
 
         @jax.jit
         def _run(wave):
@@ -971,21 +971,21 @@ class TestSigmoidMask:
 
     def test_face_on_high_visibility(self):
         """Face-on (cos_inc=1) gives visibility close to 1."""
-        from tengri.models.agn.unified import _sigmoid_mask
+        from tengri.components.agn.unified import _sigmoid_mask
 
         mask = _sigmoid_mask(cos_inc=1.0, theta_torus=30.0)
         assert float(mask) > 0.9
 
     def test_edge_on_low_visibility(self):
         """Edge-on (cos_inc=0) gives visibility close to 0 for a wide torus."""
-        from tengri.models.agn.unified import _sigmoid_mask
+        from tengri.components.agn.unified import _sigmoid_mask
 
         mask = _sigmoid_mask(cos_inc=0.0, theta_torus=30.0)
         assert float(mask) < 0.1
 
     def test_output_in_unit_interval(self):
         """Mask value is always in [0, 1]."""
-        from tengri.models.agn.unified import _sigmoid_mask
+        from tengri.components.agn.unified import _sigmoid_mask
 
         for cos_inc in [0.0, 0.25, 0.5, 0.75, 1.0]:
             val = float(_sigmoid_mask(cos_inc=cos_inc, theta_torus=30.0))
@@ -993,7 +993,7 @@ class TestSigmoidMask:
 
     def test_monotone_increasing_with_cos_inc(self):
         """Larger cos_inc (more face-on) → larger visibility."""
-        from tengri.models.agn.unified import _sigmoid_mask
+        from tengri.components.agn.unified import _sigmoid_mask
 
         mask_edge = float(_sigmoid_mask(cos_inc=0.0, theta_torus=30.0))
         mask_mid = float(_sigmoid_mask(cos_inc=0.5, theta_torus=30.0))
@@ -1011,7 +1011,7 @@ class TestSigmoidMask:
           - narrow torus: 45° < 70° → disc visible (mask ≈ 1)
           - wide torus:   45° > 30° → disc blocked (mask ≈ 0)
         """
-        from tengri.models.agn.unified import _sigmoid_mask
+        from tengri.components.agn.unified import _sigmoid_mask
 
         # cos(45 deg) ≈ 0.707
         mask_narrow = float(_sigmoid_mask(cos_inc=0.707, theta_torus=20.0))
@@ -1020,7 +1020,7 @@ class TestSigmoidMask:
 
     def test_jit_compatible(self):
         """_sigmoid_mask is JIT-compilable."""
-        from tengri.models.agn.unified import _sigmoid_mask
+        from tengri.components.agn.unified import _sigmoid_mask
 
         @jax.jit
         def _run(cos_inc):
@@ -1031,7 +1031,7 @@ class TestSigmoidMask:
 
     def test_gradient_wrt_cos_inc(self):
         """_sigmoid_mask has a finite, non-zero gradient w.r.t. cos_inc near transition."""
-        from tengri.models.agn.unified import _sigmoid_mask
+        from tengri.components.agn.unified import _sigmoid_mask
 
         # Near the transition (inc ~ 90 - theta_torus = 60 deg, cos ~ 0.5)
         g = float(jax.grad(_sigmoid_mask)(0.5, theta_torus=30.0))
@@ -1049,7 +1049,7 @@ class TestUnifiedNlrBlr:
 
     def test_finite_nonneg(self, wavelength):
         """unified_nlr_blr produces finite, non-negative SED."""
-        from tengri.models.agn.unified import unified_nlr_blr
+        from tengri.components.agn.unified import unified_nlr_blr
 
         l_nu = unified_nlr_blr(wavelength, agn_log_lbol=44.0)
         assert jnp.all(jnp.isfinite(l_nu))
@@ -1058,13 +1058,13 @@ class TestUnifiedNlrBlr:
 
     def test_registered_as_unified_nlr_blr(self):
         """'unified_nlr_blr' appears in AGN_MODELS."""
-        from tengri.models.agn.unified import AGN_MODELS
+        from tengri.components.agn.unified import AGN_MODELS
 
         assert "unified_nlr_blr" in AGN_MODELS
 
     def test_agn_frac_scales_linearly(self, wavelength):
         """agn_frac multiplies the whole SED linearly."""
-        from tengri.models.agn.unified import unified_nlr_blr
+        from tengri.components.agn.unified import unified_nlr_blr
 
         l1 = unified_nlr_blr(wavelength, agn_log_lbol=44.0, agn_frac=0.1)
         l2 = unified_nlr_blr(wavelength, agn_log_lbol=44.0, agn_frac=0.2)
@@ -1080,7 +1080,7 @@ class TestUnifiedNlrBlr:
         cos_inc=0) has the disc fully obscured, so the UV (disc-dominated)
         band carries much less flux.
         """
-        from tengri.models.agn.unified import unified_nlr_blr
+        from tengri.components.agn.unified import unified_nlr_blr
 
         uv_mask = (optical_wavelength > 1000.0) & (optical_wavelength < 4000.0)
         l_type1 = unified_nlr_blr(
@@ -1104,7 +1104,7 @@ class TestUnifiedNlrBlr:
         NLR is isotropic — the mask is not applied to l_nlr. Even when
         cos_inc=0 fully obscures disc+BLR, the NLR contributes flux.
         """
-        from tengri.models.agn.unified import unified_nlr_blr
+        from tengri.components.agn.unified import unified_nlr_blr
 
         l_type2 = unified_nlr_blr(
             optical_wavelength,
@@ -1121,7 +1121,7 @@ class TestUnifiedNlrBlr:
         SMC extinction law rises steeply toward UV, so the UV/optical ratio
         decreases when polar dust is applied to the disc + BLR.
         """
-        from tengri.models.agn.unified import unified_nlr_blr
+        from tengri.components.agn.unified import unified_nlr_blr
 
         uv_mask = (optical_wavelength > 1000.0) & (optical_wavelength < 3000.0)
         opt_mask = (optical_wavelength > 4500.0) & (optical_wavelength < 6000.0)
@@ -1145,7 +1145,7 @@ class TestUnifiedNlrBlr:
 
     def test_jit_compatible(self, wavelength):
         """unified_nlr_blr is JIT-compilable."""
-        from tengri.models.agn.unified import unified_nlr_blr
+        from tengri.components.agn.unified import unified_nlr_blr
 
         @jax.jit
         def _run(wave):

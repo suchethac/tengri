@@ -3,7 +3,7 @@
 import numpy as np
 
 from tengri.distributions import Gaussian
-from tengri.models.dust.priors import narayanan_prior, narayanan_tau_prior
+from tengri.components.dust.priors import narayanan_prior, narayanan_tau_prior
 
 
 class TestNarayananPrior:

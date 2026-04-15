@@ -43,7 +43,7 @@ class TestShockBPTPhysics:
         In HII regions, log([OI]/Halpha) < -1.5 typically.
         In shocks, log([OI]/Halpha) > -1.0 at v > 150 km/s (Allen+2008).
         """
-        from tengri.models.nebular.shock import shock_line_ratios
+        from tengri.components.nebular.shock import shock_line_ratios
 
         for v in [200.0, 300.0, 500.0]:
             ratios = shock_line_ratios(v)
@@ -58,7 +58,7 @@ class TestShockBPTPhysics:
 
         Allen+2008: Ha/Hb ranges from ~3.0 at 100 km/s to ~3.7 at 1000 km/s.
         """
-        from tengri.models.nebular.shock import shock_line_ratios
+        from tengri.components.nebular.shock import shock_line_ratios
 
         for v in [100.0, 300.0, 500.0, 1000.0]:
             ratios = shock_line_ratios(v)
@@ -71,7 +71,7 @@ class TestShockBPTPhysics:
         HII regions: log([SII]/Halpha) typically < -0.4
         Shocks: log([SII]/Halpha) typically > -0.4 at v >= 150 km/s
         """
-        from tengri.models.nebular.shock import shock_line_ratios
+        from tengri.components.nebular.shock import shock_line_ratios
 
         for v in [200.0, 300.0, 500.0]:
             ratios = shock_line_ratios(v)
@@ -90,7 +90,7 @@ class TestShockBPTPhysics:
         N+ collisional excitation (~1-3e4 K). At higher velocities the
         gas is too hot and nitrogen is further ionised.
         """
-        from tengri.models.nebular.shock import shock_line_ratios
+        from tengri.components.nebular.shock import shock_line_ratios
 
         nii_ha_values = []
         velocities = [100.0, 150.0, 300.0, 1000.0]
@@ -111,7 +111,7 @@ class TestShockBPTPhysics:
         This is post-shock gas temperature from Rankine-Hugoniot jump
         conditions. The line ratios should reflect this scaling.
         """
-        from tengri.models.nebular.shock import shock_line_ratios
+        from tengri.components.nebular.shock import shock_line_ratios
 
         # At 100 km/s: T ~ 1.4e5 K → [OIII] weak (below ionization)
         # At 300 km/s: T ~ 1.3e6 K → [OIII] strong
@@ -144,7 +144,7 @@ class TestADAFSpectralPhysics:
 
         Synchrotron peak at ~10^11-10^12 Hz = 3e4-3e5 um = 3e8-3e9 A.
         """
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         l_nu = adaf_disc(
             wavelength,
@@ -166,7 +166,7 @@ class TestADAFSpectralPhysics:
         At mdot=1e-3, a thin disc would produce L ~ 0.1 * mdot * L_Edd,
         but ADAF produces much less because energy is advected.
         """
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         c_aa = 2.99792458e18
         l_nu = adaf_disc(
@@ -191,7 +191,7 @@ class TestADAFSpectralPhysics:
 
     def test_larger_r_tr_less_disc_emission(self, wavelength):
         """Larger truncation radius means less thin disc area → less UV."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         uv_mask = (wavelength > 500) & (wavelength < 3000)
 
@@ -242,7 +242,7 @@ class TestPatchyIGMQuantitative:
 
     def test_fully_neutral_complete_absorption(self):
         """x_HI=1.0 at z=7 should produce near-complete absorption blueward of Lya."""
-        from tengri.models.igm import igm_transmission_patchy
+        from tengri.components.igm import igm_transmission_patchy
 
         # Lya at z=7: 1216 * 8 = 9728 A
         wave_obs = jnp.linspace(8000.0, 12000.0, 500)
@@ -260,7 +260,7 @@ class TestPatchyIGMQuantitative:
         The red damping wing is the key observational signature that
         distinguishes a partially neutral IGM from a fully ionised one.
         """
-        from tengri.models.igm import igm_transmission_patchy
+        from tengri.components.igm import igm_transmission_patchy
 
         z = 7.0
         lya_obs = 1215.67 * (1 + z)  # ~ 9725 A
@@ -282,7 +282,7 @@ class TestPatchyIGMQuantitative:
 
     def test_larger_bubble_more_transmission(self):
         """Larger ionised bubble → more transmission near Lya."""
-        from tengri.models.igm import igm_transmission_patchy
+        from tengri.components.igm import igm_transmission_patchy
 
         z = 7.0
         lya_obs = 1215.67 * (1 + z)
@@ -297,7 +297,7 @@ class TestPatchyIGMQuantitative:
 
     def test_x_hi_zero_matches_standard(self):
         """x_HI=0 should exactly reproduce standard Inoue+2014 at any z."""
-        from tengri.models.igm import igm_transmission, igm_transmission_patchy
+        from tengri.components.igm import igm_transmission, igm_transmission_patchy
 
         for z in [3.0, 5.0, 7.0]:
             wave = jnp.linspace(3000.0, 15000.0, 200)
@@ -327,7 +327,7 @@ class TestChemEvolAnalyticFormulas:
         (Bellstedt+2021, Eq. 2). Two different SFHs that consume the
         same total gas mass should give the same final metallicity.
         """
-        from tengri.models.sfh.chemical_evolution import closed_box_metallicity
+        from tengri.components.sfh.chemical_evolution import closed_box_metallicity
 
         age_grid = jnp.logspace(6, 10.14, 128)
 
@@ -355,7 +355,7 @@ class TestChemEvolAnalyticFormulas:
         Outflows expel metals, reducing the final metallicity.
         log(Z/Zsun) should be more negative (lower) with outflows.
         """
-        from tengri.models.sfh.chemical_evolution import closed_box_metallicity
+        from tengri.components.sfh.chemical_evolution import closed_box_metallicity
 
         age_grid = jnp.logspace(6, 10.14, 128)
         sfr = jnp.ones_like(age_grid) * 1.0
@@ -374,7 +374,7 @@ class TestChemEvolAnalyticFormulas:
 
     def test_yield_values_chabrier(self):
         """Chabrier IMF yield ~ 0.03 (Vincenzo+2016)."""
-        from tengri.models.sfh.chemical_evolution import closed_box_metallicity
+        from tengri.components.sfh.chemical_evolution import closed_box_metallicity
 
         age_grid = jnp.logspace(6, 10.14, 128)
         sfr = jnp.ones_like(age_grid) * 1.0
@@ -389,7 +389,7 @@ class TestChemEvolAnalyticFormulas:
 
     def test_higher_yield_higher_metallicity(self):
         """Higher nucleosynthetic yield → higher final metallicity."""
-        from tengri.models.sfh.chemical_evolution import closed_box_metallicity
+        from tengri.components.sfh.chemical_evolution import closed_box_metallicity
 
         age_grid = jnp.logspace(6, 10.14, 128)
         sfr = jnp.ones_like(age_grid) * 1.0
@@ -410,7 +410,7 @@ class TestTEABumpSlopePhysics:
 
     def test_eb_formula_at_delta_zero(self):
         """E_b(delta=0) = 2.5 * exp(0) = 2.5 (maximum bump)."""
-        from tengri.models.dust.attenuation import tea
+        from tengri.components.dust.attenuation import tea
 
         wave = jnp.array([2175.0, 5500.0])
         k_tea = tea(wave, dust_delta=0.0, dust_tea_scatter=0.0)
@@ -425,7 +425,7 @@ class TestTEABumpSlopePhysics:
 
         E_b = 2.5 * exp(3.5 * delta). For delta < 0, E_b < 2.5.
         """
-        from tengri.models.dust.attenuation import tea
+        from tengri.components.dust.attenuation import tea
 
         wave = jnp.array([2175.0])
 
@@ -459,7 +459,7 @@ class TestTEABumpSlopePhysics:
 
     def test_tea_matches_kriek_conroy_form(self):
         """TEA uses Kriek-Conroy functional form internally."""
-        from tengri.models.dust.attenuation import kriek_conroy, tea
+        from tengri.components.dust.attenuation import kriek_conroy, tea
 
         wave = jnp.linspace(1200.0, 10000.0, 200)
 
@@ -488,7 +488,7 @@ class TestMagphysWienPeaks:
         Wien: λ_peak = b / T with b = 2898 um*K for standard BB.
         For MBB with β=2: λ_peak ≈ 2898 / T * (4+β)/(3+β) ≈ 174 um.
         """
-        from tengri.models.dust.emission import magphys_dc08
+        from tengri.components.dust.emission import magphys_dc08
 
         wave = jnp.logspace(3, 7.5, 2000)  # 1000 A to 3e7 A
 
@@ -510,7 +510,7 @@ class TestMagphysWienPeaks:
 
     def test_warm_component_peaks_mid_ir(self):
         """Warm dust (T=45K) peaks at ~65 um."""
-        from tengri.models.dust.emission import magphys_dc08
+        from tengri.components.dust.emission import magphys_dc08
 
         wave = jnp.logspace(3, 7, 2000)
 
@@ -532,7 +532,7 @@ class TestMagphysWienPeaks:
 
     def test_hot_component_peaks_near_ir(self):
         """Hot MIR continuum (T=180K) peaks at ~15-20 um."""
-        from tengri.models.dust.emission import magphys_dc08
+        from tengri.components.dust.emission import magphys_dc08
 
         wave = jnp.logspace(3, 6.5, 2000)
 
@@ -563,7 +563,7 @@ class TestPAHDrudeProfilePhysics:
 
     def test_pah_7p7_is_strongest(self):
         """7.7 um complex is the strongest PAH feature (Smith+2007)."""
-        from tengri.models.dust.emission import magphys_dc08
+        from tengri.components.dust.emission import magphys_dc08
 
         wave = jnp.logspace(np.log10(3e4), np.log10(2e5), 2000)  # 3-20 um
 
@@ -625,14 +625,14 @@ class TestLi08AttenuationPhysics:
 
     def test_normalized_at_vband(self):
         """k(5500A) must equal 1.0 (V-band normalization)."""
-        from tengri.models.dust.attenuation import li08
+        from tengri.components.dust.attenuation import li08
 
         k_v = float(li08(jnp.array([5500.0]))[0])
         np.testing.assert_allclose(k_v, 1.0, atol=0.01, err_msg=f"Li08 k(V)={k_v:.4f}")
 
     def test_c2_steepens_far_uv(self):
         """Larger c2 steepens the far-UV more than the near-UV."""
-        from tengri.models.dust.attenuation import li08
+        from tengri.components.dust.attenuation import li08
 
         wave = jnp.array([1000.0, 3000.0])
         k_base = np.asarray(li08(wave, dust_c2=4.0))
@@ -645,7 +645,7 @@ class TestLi08AttenuationPhysics:
 
     def test_mw_preset_has_bump(self):
         """MW-like preset (c4 > 0) enhances k(2175) vs SMC-like (c4 = 0)."""
-        from tengri.models.dust.attenuation import li08
+        from tengri.components.dust.attenuation import li08
 
         wave = jnp.array([2175.0, 3000.0])
         k_mw = li08(wave, dust_c1=6.0, dust_c2=4.0, dust_c3=2.0, dust_c4=0.04)
@@ -658,7 +658,7 @@ class TestLi08AttenuationPhysics:
 
     def test_smc_no_bump(self):
         """SMC-like preset (c4=0) is mostly monotonic through 2175A window."""
-        from tengri.models.dust.attenuation import li08
+        from tengri.components.dust.attenuation import li08
 
         wave = jnp.linspace(1800.0, 2800.0, 100)
         k = np.asarray(li08(wave, dust_c1=5.0, dust_c2=5.5, dust_c3=1.5, dust_c4=0.0))
@@ -668,7 +668,7 @@ class TestLi08AttenuationPhysics:
 
     def test_calzetti_preset_greyer(self):
         """Calzetti-like preset is greyer than MW-like (smaller k_1500 / k_5500)."""
-        from tengri.models.dust.attenuation import li08
+        from tengri.components.dust.attenuation import li08
 
         wave = jnp.array([1500.0, 5500.0])
         k_mw = np.asarray(li08(wave, dust_c1=6.0, dust_c2=4.0, dust_c3=2.0, dust_c4=0.04))
@@ -681,7 +681,7 @@ class TestLi08AttenuationPhysics:
 
     def test_positive_everywhere(self):
         """k(λ) must be non-negative at all wavelengths."""
-        from tengri.models.dust.attenuation import li08
+        from tengri.components.dust.attenuation import li08
 
         wave = jnp.linspace(900.0, 30000.0, 1000)
         k = np.asarray(li08(wave))

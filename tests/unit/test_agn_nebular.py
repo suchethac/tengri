@@ -9,13 +9,13 @@ from pathlib import Path
 import jax.numpy as jnp
 import pytest
 
-from tengri.models.nebular.agn_nebular import (
+from tengri.components.nebular.agn_nebular import (
     _log_qh_from_lacc,
     agn_ionspec_from_alpha_pl,
     agn_nlr_cue,
     agn_nlr_emission,
 )
-from tengri.models.nebular.ionizing_spectrum import _CLIP_RANGES
+from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES
 
 # ---------------------------------------------------------------------------
 # Fixtures and skip conditions
@@ -36,7 +36,7 @@ def cue_backend():
     """Load CueBackend if weights are available."""
     if not CUE_AVAILABLE:
         pytest.skip("Cue weights not found")
-    from tengri.models.nebular.cue import CueBackend
+    from tengri.components.nebular.cue import CueBackend
 
     return CueBackend(str(_CUE_WEIGHTS_PATH))
 

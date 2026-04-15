@@ -217,7 +217,7 @@ class ModelConfig:
         Radio, X-ray, shock, and IGM settings.
     agn_model : str or None
         AGN SED model name.  ``None`` disables AGN (default).
-        See ``tengri.models.agn.unified`` for valid names.
+        See ``tengri.components.agn.unified`` for valid names.
     agn_config : AGNConfig or None
         Detailed AGN sub-model choices.  ``None`` = use defaults when
         ``agn_model`` is set.

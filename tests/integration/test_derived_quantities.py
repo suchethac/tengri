@@ -15,7 +15,7 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri import Model, ParamSpec, Uniform
 from tengri.distributions import Fixed
-from tengri.models.sps.dsps_wrapper import load_ssp_data
+from tengri.components.sps.dsps_wrapper import load_ssp_data
 
 # ---------------------------------------------------------------------------
 # Paths to real SSP data

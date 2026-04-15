@@ -67,7 +67,7 @@ from tengri import Fitter, Model, ParamSpec, Uniform
 from tengri.core.fused_kernels import (
     observe_spectrum_from_rest_sed,
 )
-from tengri.models.observation.spectrum import compute_spectrum
+from tengri.observation.spectrum import compute_spectrum
 from tengri.utils.cosmology import luminosity_distance
 
 setup_matplotlib()
@@ -211,7 +211,7 @@ for name, (model, params, D) in CONFIGS.items():
     # Tier 2 kernel only (no SFH/Z dispatch — pure JIT'd physics)
     if model._fused_rest_sed is not None:
         from tengri.core.sed_pipeline import interp_met_alpha_dispatch
-        from tengri.models.sps.dsps_wrapper import compute_csp_weights
+        from tengri.components.sps.dsps_wrapper import compute_csp_weights
 
         p = model._get_internal_params(params)
         sfr = model._compute_sfr(p)
@@ -356,7 +356,7 @@ for name in names:
 # rest-SED → photometry pipeline as a single function.
 
 # %%
-from tengri.models.observation.photometry import compute_flux_density
+from tengri.observation.photometry import compute_flux_density
 
 # Take Config A as the test case
 model_a, params_a, _Da = CONFIGS["A: Smooth (D~7)"]

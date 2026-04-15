@@ -26,7 +26,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.models.sps.dsps_wrapper import (
+from tengri.components.sps.dsps_wrapper import (
     compute_csp_weights,
     csp_age_dt,
     csp_log_interp_matrix,

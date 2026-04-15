@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.models.observation.filters import (
+from tengri.observation.filters import (
     _C_AA_S,
     FILTER_REGISTRY,
     download_filter,
@@ -17,7 +17,7 @@ from tengri.models.observation.filters import (
     load_filter_set,
     load_tophat_filter,
 )
-from tengri.models.observation.photometry import FilterCurve
+from tengri.observation.photometry import FilterCurve
 
 # ---------------------------------------------------------------------------
 # Fixtures

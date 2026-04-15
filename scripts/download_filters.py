@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Download all key photometric filters from the SVO Filter Profile Service.
 
-Fetches every filter in ``tengri.models.observation.filters.FILTER_REGISTRY``
+Fetches every filter in ``tengri.observation.filters.FILTER_REGISTRY``
 and caches them as two-column text files under ``data/filters/``.  Subsequent
 calls to ``load_filter()`` / ``load_filter_set()`` will use the cache and
 never hit the network.

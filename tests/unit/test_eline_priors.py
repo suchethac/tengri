@@ -23,7 +23,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-from tengri.models.observation.eline_priors import (
+from tengri.observation.eline_priors import (
     cloudy_line_priors,
     marginalize_emission_lines_cloudy,
 )
@@ -404,7 +404,7 @@ class TestBalmerDecrementPrior:
 
     def test_returns_four_lines(self):
         """Should return wavelengths and ratios for 4 Balmer lines."""
-        from tengri.models.observation.eline_priors import balmer_decrement_prior
+        from tengri.observation.eline_priors import balmer_decrement_prior
 
         wavs, ratios = balmer_decrement_prior(dust_tau_diff=0.0)
         assert wavs.shape == (4,)
@@ -412,7 +412,7 @@ class TestBalmerDecrementPrior:
 
     def test_zero_dust_gives_intrinsic_ratios(self):
         """With no dust, ratios should equal intrinsic Case B values."""
-        from tengri.models.observation.eline_priors import balmer_decrement_prior
+        from tengri.observation.eline_priors import balmer_decrement_prior
 
         _wavs, ratios = balmer_decrement_prior(dust_tau_diff=0.0)
         intrinsic = jnp.array([2.86, 1.0, 0.468, 0.259])
@@ -420,7 +420,7 @@ class TestBalmerDecrementPrior:
 
     def test_dust_increases_halpha_hbeta(self):
         """More dust → larger observed Hα/Hβ (Hα is less attenuated than Hβ)."""
-        from tengri.models.observation.eline_priors import balmer_decrement_prior
+        from tengri.observation.eline_priors import balmer_decrement_prior
 
         _wavs, ratios_lo = balmer_decrement_prior(dust_tau_diff=0.3)
         _wavs, ratios_hi = balmer_decrement_prior(dust_tau_diff=1.0)
@@ -436,7 +436,7 @@ class TestBalmerDecrementPrior:
         k than the blue branch at the same wavelength, so Hα is less reddened.
         We verify by checking k(Hα) < k(Hβ) at the same E(B-V).
         """
-        from tengri.models.observation.eline_priors import balmer_decrement_prior
+        from tengri.observation.eline_priors import balmer_decrement_prior
 
         # With dust, Hβ (blue) should be more attenuated than Hα (red branch).
         _wavs, ratios = balmer_decrement_prior(dust_tau_diff=1.0)
@@ -445,7 +445,7 @@ class TestBalmerDecrementPrior:
 
     def test_wavelengths_are_vacuum(self):
         """Returned wavelengths should be vacuum, not air."""
-        from tengri.models.observation.eline_priors import balmer_decrement_prior
+        from tengri.observation.eline_priors import balmer_decrement_prior
 
         wavs, _ = balmer_decrement_prior(dust_tau_diff=0.0)
         # Hα vacuum = 6564.61, air = 6562.80 — must NOT return the air value
@@ -500,7 +500,7 @@ class TestCloudyGridLinePriors:
 
     def test_returns_correct_shape(self):
         """Should return prior means and sigmas for all grid lines by default."""
-        from tengri.models.observation.eline_priors import cloudy_grid_line_priors
+        from tengri.observation.eline_priors import cloudy_grid_line_priors
 
         grid = _MockGridData()
         means, sigmas = cloudy_grid_line_priors(grid, log_z=-1.0, neb_logU=-3.0)
@@ -509,7 +509,7 @@ class TestCloudyGridLinePriors:
 
     def test_hbeta_is_reference(self):
         """Hβ (nearest to 4862.68) must have prior mean = 1.0 after normalization."""
-        from tengri.models.observation.eline_priors import cloudy_grid_line_priors
+        from tengri.observation.eline_priors import cloudy_grid_line_priors
 
         grid = _MockGridData()
         means, _ = cloudy_grid_line_priors(grid, log_z=-1.0, neb_logU=-3.0)
@@ -519,7 +519,7 @@ class TestCloudyGridLinePriors:
 
     def test_all_positive(self):
         """All means and sigmas must be positive."""
-        from tengri.models.observation.eline_priors import cloudy_grid_line_priors
+        from tengri.observation.eline_priors import cloudy_grid_line_priors
 
         grid = _MockGridData()
         means, sigmas = cloudy_grid_line_priors(grid, log_z=0.0, neb_logU=-2.5)
@@ -528,7 +528,7 @@ class TestCloudyGridLinePriors:
 
     def test_target_wavelengths_subset(self):
         """target_wavelengths must return only matched lines."""
-        from tengri.models.observation.eline_priors import cloudy_grid_line_priors
+        from tengri.observation.eline_priors import cloudy_grid_line_priors
 
         grid = _MockGridData()
         target = jnp.array([4862.68, 6564.61])  # Hβ and Hα vacuum
@@ -540,7 +540,7 @@ class TestCloudyGridLinePriors:
 
     def test_oiii_stronger_at_higher_logU(self):
         """[OIII] 5007 must increase monotonically with ionization parameter."""
-        from tengri.models.observation.eline_priors import cloudy_grid_line_priors
+        from tengri.observation.eline_priors import cloudy_grid_line_priors
 
         grid = _MockGridData()
         means_low_u, _ = cloudy_grid_line_priors(grid, log_z=-1.0, neb_logU=-3.5)
@@ -552,7 +552,7 @@ class TestCloudyGridLinePriors:
 
     def test_nii_weaker_at_lower_metallicity(self):
         """[NII] 6583 must be weaker at lower metallicity (less nitrogen)."""
-        from tengri.models.observation.eline_priors import cloudy_grid_line_priors
+        from tengri.observation.eline_priors import cloudy_grid_line_priors
 
         grid = _MockGridData()
         means_solar, _ = cloudy_grid_line_priors(grid, log_z=0.0, neb_logU=-3.0)
@@ -564,7 +564,7 @@ class TestCloudyGridLinePriors:
 
     def test_prior_width_dex_scales_sigmas(self):
         """Wider prior_width_dex must give larger sigmas."""
-        from tengri.models.observation.eline_priors import cloudy_grid_line_priors
+        from tengri.observation.eline_priors import cloudy_grid_line_priors
 
         grid = _MockGridData()
         _, sigmas_narrow = cloudy_grid_line_priors(
@@ -577,7 +577,7 @@ class TestCloudyGridLinePriors:
 
     def test_clamped_to_grid_bounds(self):
         """Out-of-range inputs must clamp without raising."""
-        from tengri.models.observation.eline_priors import cloudy_grid_line_priors
+        from tengri.observation.eline_priors import cloudy_grid_line_priors
 
         grid = _MockGridData()
         # Way outside the grid bounds

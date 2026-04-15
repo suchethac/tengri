@@ -35,7 +35,7 @@ class TestConstantSFHPhysics:
 
     def test_flat_between_boundaries(self):
         """SFR should be constant in the active window."""
-        from tengri.models.sfh import constant_sfh
+        from tengri.components.sfh import constant_sfh
 
         sfr = constant_sfh(T_LOOKBACK, log_sfr=1.0, start=1e9, end=10e9)
         active = (T_LOOKBACK >= 1e9) & (T_LOOKBACK <= 10e9)
@@ -46,7 +46,7 @@ class TestConstantSFHPhysics:
 
     def test_mass_integral_correct(self):
         """Integral of SFR * dt = sfr * (end - start)."""
-        from tengri.models.sfh import constant_sfh
+        from tengri.components.sfh import constant_sfh
 
         sfr_val = 10.0  # log_sfr=1
         start, end = 1e9, 10e9
@@ -72,7 +72,7 @@ class TestExponentialSFHPhysics:
         With start=0, peak is at present and SFR declines into the past.
         We verify the exponential decay behavior.
         """
-        from tengri.models.sfh import exponential_sfh
+        from tengri.components.sfh import exponential_sfh
 
         sfr = exponential_sfh(T_LOOKBACK, log_peak_sfr=1.0, tau=2e9, start=0.0)
         # SFR should be highest at small lookback (near present) and decay
@@ -94,7 +94,7 @@ class TestDelayedExponentialPhysics:
 
     def test_peaks_after_start(self):
         """SFR should NOT peak at start — peak is displaced by tau."""
-        from tengri.models.sfh import delayed_exponential_sfh
+        from tengri.components.sfh import delayed_exponential_sfh
 
         # start=0 means SF begins at lookback=0 (present day). Peak at ~tau.
         tau = 3e9
@@ -117,7 +117,7 @@ class TestDPLPhysics:
 
     def test_peaks_near_tau(self):
         """DPL peaks near t = tau."""
-        from tengri.models.sfh import dpl
+        from tengri.components.sfh import dpl
 
         tau = 5e9
         sfr = dpl(T_LOOKBACK, alpha=2.0, beta=1.0, tau=tau, log_peak_sfr=1.0)
@@ -128,7 +128,7 @@ class TestDPLPhysics:
 
     def test_alpha_controls_decline(self):
         """Larger alpha → steeper decline from peak toward present."""
-        from tengri.models.sfh import dpl
+        from tengri.components.sfh import dpl
 
         tau = 5e9
         sfr_steep = dpl(T_LOOKBACK, alpha=4.0, beta=1.0, tau=tau, log_peak_sfr=1.0)
@@ -142,7 +142,7 @@ class TestDPLPhysics:
 
     def test_symmetric_when_alpha_equals_beta(self):
         """alpha = beta → symmetric SFH around peak (in log-time)."""
-        from tengri.models.sfh import dpl
+        from tengri.components.sfh import dpl
 
         tau = 3e9
         sfr = dpl(T_LOOKBACK, alpha=2.0, beta=2.0, tau=tau, log_peak_sfr=1.0)
@@ -162,7 +162,7 @@ class TestSkewNormalPhysics:
 
     def test_norm_is_symmetric(self):
         """norm (skew=0) should be symmetric around peak_lbt."""
-        from tengri.models.sfh import norm
+        from tengri.components.sfh import norm
 
         peak = 5e9
         width = 2e9
@@ -175,7 +175,7 @@ class TestSkewNormalPhysics:
 
     def test_snorm_skew_changes_shape(self):
         """Non-zero skew should produce different SFH than zero skew."""
-        from tengri.models.sfh import snorm
+        from tengri.components.sfh import snorm
 
         peak = 5e9
         width = 2e9
@@ -188,7 +188,7 @@ class TestSkewNormalPhysics:
 
     def test_tsnorm_truncation_suppresses_recent(self):
         """Truncation reduces SFR at recent times."""
-        from tengri.models.sfh import snorm, tsnorm
+        from tengri.components.sfh import snorm, tsnorm
 
         peak = 5e9
         width = 2e9
@@ -203,7 +203,7 @@ class TestSkewNormalPhysics:
 
     def test_lnorm_asymmetric_in_linear_time(self):
         """Log-normal: Gaussian in log-time → asymmetric in linear time."""
-        from tengri.models.sfh import lnorm
+        from tengri.components.sfh import lnorm
 
         sfr = lnorm(T_LOOKBACK, log_peak_sfr=1.0, peak_lbt=3e9, width=0.5)
         peak_idx = int(jnp.argmax(sfr))
@@ -224,7 +224,7 @@ class TestTriweightBurstPhysics:
 
     def test_compact_in_log_age(self):
         """Triweight burst should be compact (confined to narrow age range)."""
-        from tengri.models.sfh import triweight_burst
+        from tengri.components.sfh import triweight_burst
 
         # log_tpeak_myr=2 → 100 Myr, log_tmax_myr=2.5 → ~316 Myr
         sfr = triweight_burst(T_LOOKBACK, log_tpeak_myr=2.0, log_tmax_myr=2.5)
@@ -248,7 +248,7 @@ class TestContinuitySFHPhysics:
 
     def test_mass_conservation(self):
         """Integrated SFR × dt must equal 10^log_total_mass."""
-        from tengri.models.sfh import continuity_sfh
+        from tengri.components.sfh import continuity_sfh
 
         age_yr = jnp.geomspace(1e6, 13.7e9, 1000)
         sfr = continuity_sfh(
@@ -267,7 +267,7 @@ class TestContinuitySFHPhysics:
 
     def test_flat_sfh_from_zero_ratios(self):
         """All ratios = 0 → flat SFH (constant across all bins)."""
-        from tengri.models.sfh import continuity_sfh
+        from tengri.components.sfh import continuity_sfh
 
         age_yr = jnp.geomspace(1e8, 13e9, 500)
         sfr = continuity_sfh(
@@ -288,7 +288,7 @@ class TestContinuitySFHPhysics:
 
     def test_positive_ratios_rising_sfh(self):
         """Positive ratios → rising SFH (more SF at recent times)."""
-        from tengri.models.sfh import continuity_sfh
+        from tengri.components.sfh import continuity_sfh
 
         age_yr = jnp.geomspace(1e6, 13.7e9, 1000)
         sfr = continuity_sfh(
@@ -320,7 +320,7 @@ class TestDirichletSFHPhysics:
 
     def test_mass_conservation(self):
         """Integrated SFR × dt must equal 10^log_total_mass."""
-        from tengri.models.sfh import dirichlet_sfh
+        from tengri.components.sfh import dirichlet_sfh
 
         age_yr = jnp.geomspace(1e6, 13.7e9, 1000)
         sfr = dirichlet_sfh(
@@ -341,7 +341,7 @@ class TestDirichletSFHPhysics:
 
     def test_sfr_non_negative(self):
         """SFR must be non-negative everywhere."""
-        from tengri.models.sfh import dirichlet_sfh
+        from tengri.components.sfh import dirichlet_sfh
 
         age_yr = jnp.geomspace(1e6, 13.7e9, 1000)
         for z_val in [0.1, 0.5, 0.9]:
@@ -359,7 +359,7 @@ class TestDirichletSFHPhysics:
 
     def test_extreme_z_concentrates_mass(self):
         """z_frac_0 near 1 concentrates mass in youngest bin."""
-        from tengri.models.sfh import dirichlet_sfh
+        from tengri.components.sfh import dirichlet_sfh
 
         age_yr = jnp.geomspace(1e6, 13.7e9, 1000)
         sfr = dirichlet_sfh(
@@ -402,7 +402,7 @@ class TestAllSFHUniversalPhysics:
         return request.param
 
     def _get_fn(self, name):
-        from tengri.models.sfh import dpl, lnorm, norm, snorm, tsnorm
+        from tengri.components.sfh import dpl, lnorm, norm, snorm, tsnorm
 
         return {"tsnorm": tsnorm, "snorm": snorm, "norm": norm, "lnorm": lnorm, "dpl": dpl}[name]
 

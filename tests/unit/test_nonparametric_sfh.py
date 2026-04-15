@@ -20,7 +20,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-from tengri.models.sfh.nonparametric import (
+from tengri.components.sfh.nonparametric import (
     DEFAULT_BIN_EDGES_GYR,
     DEFAULT_N_BINS,
     _stick_breaking,
@@ -28,7 +28,7 @@ from tengri.models.sfh.nonparametric import (
     continuity_sfh,
     dirichlet_sfh,
 )
-from tengri.models.sfh.registry import SFH_REGISTRY, resolve_sfh
+from tengri.components.sfh.registry import SFH_REGISTRY, resolve_sfh
 
 # ---------------------------------------------------------------------------
 # Helpers

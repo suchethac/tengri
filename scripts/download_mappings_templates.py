@@ -496,7 +496,7 @@ def main() -> None:
 
     print("\nDone. Verify with:")
     print(
-        '  python -c "from tengri.models.nebular.shock import shock_line_ratios;'
+        '  python -c "from tengri.components.nebular.shock import shock_line_ratios;'
         ' print(shock_line_ratios(300.0))"'
     )
 

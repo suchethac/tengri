@@ -15,7 +15,7 @@ import pytest
 from numpy.testing import assert_allclose
 
 from tengri.core.parameters import ParamSpec
-from tengri.models.sps.dsps_wrapper import (
+from tengri.components.sps.dsps_wrapper import (
     _ALPHA_TO_Z_COEFF,
     effective_metallicity,
 )

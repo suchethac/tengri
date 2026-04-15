@@ -517,7 +517,7 @@ plt.show()
 # See `06_multiwavelength_gallery.py` for a longer tour.
 
 # %%
-from tengri.models.igm import igm_transmission
+from tengri.components.igm import igm_transmission
 
 wave_obs_igm = jnp.linspace(500.0, 25000.0, 2000)
 fig, ax = plt.subplots(figsize=(9, 3.5))

@@ -24,7 +24,7 @@ from collections.abc import Callable
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
-from tengri.models.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw
 from tengri.utils.grid import make_log_age_grid
 
 

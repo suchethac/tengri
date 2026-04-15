@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.models.observation.spectrum import (
+from tengri.observation.spectrum import (
     _C_KM_S,
     _FWHM_TO_SIGMA,
     SSP_LIBRARY_RESOLUTIONS,

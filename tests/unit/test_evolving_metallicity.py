@@ -15,7 +15,7 @@ import pytest
 from numpy.testing import assert_allclose
 
 from tengri.core.parameters import ParamSpec
-from tengri.models.sps.dsps_wrapper import (
+from tengri.components.sps.dsps_wrapper import (
     compute_log_z_evolving,
     interpolate_mass_remaining,
     interpolate_mass_remaining_evolving,

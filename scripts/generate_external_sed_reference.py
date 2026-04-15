@@ -1025,7 +1025,7 @@ def generate_igm_fsps(cases: list[dict]) -> dict[str, np.ndarray]:
     scale: wave_obs = wave_rest * (1 + zred).
     """
     try:
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
     except ImportError:
         igm_transmission = None
 

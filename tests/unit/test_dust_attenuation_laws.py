@@ -25,7 +25,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-from tengri.models.dust.attenuation import (
+from tengri.components.dust.attenuation import (
     DUST_LAWS,
     calzetti,
     cardelli,

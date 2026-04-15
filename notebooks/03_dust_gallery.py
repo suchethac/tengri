@@ -22,7 +22,7 @@
 #
 #
 # Visual reference for the attenuation laws registered in
-# ``tengri.models.dust.attenuation.DUST_LAWS``. Each law is obtained with
+# ``tengri.components.dust.attenuation.DUST_LAWS``. Each law is obtained with
 # ``resolve_dust_law(name)`` (registry lookup per the naming contract) and
 # evaluated on a common wavelength grid. The forward model applies them through
 # ``two_component_dust`` (Charlot \& Fall--style birth cloud + diffuse ISM).
@@ -76,7 +76,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri.models.dust.attenuation import (
+from tengri.components.dust.attenuation import (
     DUST_LAWS,
     li08,
     precompute_dust_age_weights,
@@ -742,7 +742,7 @@ plt.show()
 # wrapper) described Li+2008 using separate FUV / UV / optical power-law slopes
 # plus a Drude bump. That is **not** the published L08 parametrization and has
 # been removed. The code now follows Li et al. (2008) Eq. (1) and matches the
-# docstring in `tengri.models.dust.attenuation.li08`.
+# docstring in `tengri.components.dust.attenuation.li08`.
 #
 # Below: (left) one-at-a-time sweeps around the **default** $(c_1,c_2,c_3,c_4)
 # = (6, 4, 2, 0.04); (right) literature **presets** from Markov et al. (2023, 2025)
@@ -1346,8 +1346,8 @@ FIGDIR = os.path.join("models", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 # %%
-from tengri.models.dust.drude_profiles import SMITH2007_PAH_FEATURES, pah_template
-from tengri.models.dust.emission import (
+from tengri.components.dust.drude_profiles import SMITH2007_PAH_FEATURES, pah_template
+from tengri.components.dust.emission import (
     DUST_EMISSION_MODELS,
     _modified_blackbody_component,
     astrodust,

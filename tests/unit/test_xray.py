@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.models.xray import xray_agn_corona, xray_total, xray_xrb
+from tengri.components.xray import xray_agn_corona, xray_total, xray_xrb
 from tengri.utils.physics_constants import C_AA as _C_AA, KEV_TO_HZ as _KEV_TO_HZ
 
 

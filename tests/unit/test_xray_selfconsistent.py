@@ -7,7 +7,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.models.xray import (
+from tengri.components.xray import (
     alpha_ox_from_l2500,
     xray_agn_corona_from_disc,
     xray_anisotropy,
@@ -147,7 +147,7 @@ class TestXrayAgnCoronaFromDisc:
         We feed the old xray_agn_corona the same alpha_ox that Just+2007
         would predict for a given L_2500, and compare spectra.
         """
-        from tengri.models.xray import xray_agn_corona
+        from tengri.components.xray import xray_agn_corona
 
         l_2500_erg = 1e30
         alpha_ox = float(alpha_ox_from_l2500(l_2500_erg))

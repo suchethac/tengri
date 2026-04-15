@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.testing import assert_allclose
 
-from tengri.models.sps.precompute import precompute_photometry
+from tengri.components.sps.precompute import precompute_photometry
 
 # ---------------------------------------------------------------------------
 # Minimal fake SSP data

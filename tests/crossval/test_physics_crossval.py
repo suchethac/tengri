@@ -97,7 +97,7 @@ class TestDustLawsCrossval:
 
     def test_calzetti_at_vband(self):
         """Calzetti+2000: k(V) should be ~1 (normalized at V)."""
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         k = float(calzetti(jnp.array([5500.0]))[0])
         np.testing.assert_allclose(k, 1.0, atol=0.05)
@@ -108,7 +108,7 @@ class TestDustLawsCrossval:
         k(lambda) = (k'(lambda) + R_V) / R_V with R_V = 4.05 and
         k'(lambda) from Calzetti+2000 Eq. 4.
         """
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         wave = jnp.array([1500.0, 2800.0, 5500.0, 8000.0])
         k = np.asarray(calzetti(wave))
@@ -119,21 +119,21 @@ class TestDustLawsCrossval:
 
     def test_calzetti_uv_steeper_than_optical(self):
         """UV attenuation > optical for all laws."""
-        from tengri.models.dust.attenuation import calzetti
+        from tengri.components.dust.attenuation import calzetti
 
         k = np.asarray(calzetti(jnp.array([1500.0, 5500.0])))
         assert k[0] > k[1]
 
     def test_cardelli_rv31(self):
         """Cardelli+1989: R_V = 3.1 standard MW curve, positive at V."""
-        from tengri.models.dust.attenuation import cardelli
+        from tengri.components.dust.attenuation import cardelli
 
         k = float(cardelli(jnp.array([5500.0]), Rv=3.1)[0])
         assert k > 0
 
     def test_smc_steeper_than_calzetti(self):
         """SMC curve should be steeper in UV than Calzetti."""
-        from tengri.models.dust.attenuation import calzetti, smc
+        from tengri.components.dust.attenuation import calzetti, smc
 
         wave = jnp.array([1500.0, 5500.0])
         ratio_calz = float(calzetti(wave)[0] / calzetti(wave)[1])
@@ -142,7 +142,7 @@ class TestDustLawsCrossval:
 
     def test_power_law_slope(self):
         """Power-law k(λ) = (λ/5500)^n at 2000A."""
-        from tengri.models.dust.attenuation import power_law
+        from tengri.components.dust.attenuation import power_law
 
         k = np.asarray(power_law(jnp.array([2000.0, 5500.0]), n=-0.7))
         np.testing.assert_allclose(k[1], 1.0, atol=0.01)
@@ -159,7 +159,7 @@ class TestPSDCrossval:
 
     def test_wiener_khinchin_drw(self):
         """Integral of DRW PSD should relate to variance."""
-        from tengri.models.sfh.psd_models import drw_variance, psd_drw
+        from tengri.components.sfh.psd_models import drw_variance, psd_drw
 
         psd_sigma, psd_tau_yr = 1.5, 50e6
         n_grid = 512
@@ -178,7 +178,7 @@ class TestPSDCrossval:
 
     def test_psd_drw_shape(self):
         """DRW PSD should be flat at low freq, drop at high freq."""
-        from tengri.models.sfh.psd_models import psd_drw
+        from tengri.components.sfh.psd_models import psd_drw
 
         freqs = jnp.logspace(-3, 1, 100)
         psd = np.asarray(psd_drw(freqs, psd_sigma=1.0, psd_tau_yr=1e7))
@@ -197,7 +197,7 @@ class TestMeanSFHCrossval:
 
     def test_dpl_peak_location(self):
         """Double power-law should peak near tau."""
-        from tengri.models.sfh.mean_sfh import double_powerlaw
+        from tengri.components.sfh.mean_sfh import double_powerlaw
 
         t = jnp.linspace(0.01, 13.8, 1000)
         sfr = np.asarray(double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0))
@@ -206,7 +206,7 @@ class TestMeanSFHCrossval:
 
     def test_dpl_integral_positive(self):
         """DPL integral should be positive."""
-        from tengri.models.sfh.mean_sfh import double_powerlaw
+        from tengri.components.sfh.mean_sfh import double_powerlaw
 
         t = jnp.linspace(0.01, 13.8, 1000)
         sfr = double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0)
@@ -214,7 +214,7 @@ class TestMeanSFHCrossval:
 
     def test_dpl_norm_scales_linearly(self):
         """Doubling norm should double the SFR."""
-        from tengri.models.sfh.mean_sfh import double_powerlaw
+        from tengri.components.sfh.mean_sfh import double_powerlaw
 
         t = jnp.linspace(0.01, 13.8, 1000)
         sfr1 = double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0)
@@ -232,7 +232,7 @@ class TestSpectroscopyCrossval:
 
     def test_broadening_widens_line(self):
         """Velocity broadening should widen a spectral line."""
-        from tengri.models.observation.spectrum import velocity_broaden
+        from tengri.observation.spectrum import velocity_broaden
 
         wave = jnp.linspace(4800, 4920, 1000)
         spec = jnp.exp(-0.5 * ((wave - 4861) / 0.5) ** 2)
@@ -248,7 +248,7 @@ class TestSpectroscopyCrossval:
 
     def test_broadening_conserves_flux(self):
         """Total flux should be approximately conserved."""
-        from tengri.models.observation.spectrum import velocity_broaden
+        from tengri.observation.spectrum import velocity_broaden
 
         wave = jnp.linspace(4700, 5000, 2000)
         spec = jnp.exp(-0.5 * ((wave - 4861) / 2.0) ** 2)
@@ -270,7 +270,7 @@ class TestBLRNLRCrossval:
 
     def test_blr_has_broad_lines(self):
         """BLR should produce broad emission (FWHM > 1000 km/s)."""
-        from tengri.models.agn.blr import blr_emission
+        from tengri.components.agn.blr import blr_emission
 
         wave = jnp.linspace(4700, 5000, 1000)
         # l_disc_bol_erg = 10^45 erg/s
@@ -289,8 +289,8 @@ class TestBLRNLRCrossval:
 
     def test_nlr_narrower_than_blr(self):
         """NLR lines should be narrower than BLR lines."""
-        from tengri.models.agn.blr import blr_emission
-        from tengri.models.agn.nlr import nlr_emission
+        from tengri.components.agn.blr import blr_emission
+        from tengri.components.agn.nlr import nlr_emission
 
         wave = jnp.linspace(6400, 6700, 1000)
         blr = np.asarray(blr_emission(wave, l_disc_bol_erg=1e45))
@@ -304,7 +304,7 @@ class TestBLRNLRCrossval:
 
     def test_blr_scales_with_luminosity(self):
         """BLR should scale with disc luminosity."""
-        from tengri.models.agn.blr import blr_emission
+        from tengri.components.agn.blr import blr_emission
 
         wave = jnp.linspace(6400, 6700, 500)
         blr_lo = np.asarray(blr_emission(wave, l_disc_bol_erg=1e44))
@@ -339,7 +339,7 @@ class TestFiltersCrossval:
     )
     def test_effective_wavelength(self, filt_name, lambda_eff):
         """Filter effective wavelength should match FSPS to <2%."""
-        from tengri.models.observation.filters import load_filter_set
+        from tengri.observation.filters import load_filter_set
 
         try:
             filter_waves, filter_trans, _filter_curves = load_filter_set([filt_name])

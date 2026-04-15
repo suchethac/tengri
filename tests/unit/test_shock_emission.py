@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.models.nebular.shock import (
+from tengri.components.nebular.shock import (
     _FALLBACK_LINE_NAMES,
     ShockBackend,
     _load_mappings_grids,
@@ -315,7 +315,7 @@ class TestShockBackend:
 
     def test_protocol_attributes(self):
         """ShockBackend satisfies the NebularBackend Protocol attributes."""
-        from tengri.models.nebular._protocol import NebularBackend
+        from tengri.components.nebular._protocol import NebularBackend
 
         b = ShockBackend()
         assert isinstance(b, NebularBackend)
@@ -335,7 +335,7 @@ class TestShockBackend:
 
     def test_predict_nebular_sed_delegates_to_compute_shock_sed(self):
         """predict_nebular_sed and compute_shock_sed return identical arrays."""
-        from tengri.models.nebular.shock import compute_shock_sed
+        from tengri.components.nebular.shock import compute_shock_sed
 
         b = ShockBackend()
         v = 300.0

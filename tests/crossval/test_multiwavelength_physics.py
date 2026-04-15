@@ -30,7 +30,7 @@ class TestRadioPhysics:
 
     def test_radio_sf_scales_with_lir(self):
         """Radio SFR luminosity ∝ L_IR (FIR-radio correlation)."""
-        from tengri.models.radio import radio_star_forming
+        from tengri.components.radio import radio_star_forming
 
         wave = jnp.geomspace(1e7, 1e10, 500)  # radio
         l_low = radio_star_forming(wave, L_ir=1e10)
@@ -44,7 +44,7 @@ class TestRadioPhysics:
         q_IR = log10(L_TIR / (3.75e12 Hz)) - log10(L_1.4GHz / (W Hz^-1))
         Higher q_IR → less radio per unit IR → less radio flux.
         """
-        from tengri.models.radio import radio_star_forming
+        from tengri.components.radio import radio_star_forming
 
         wave = jnp.geomspace(1e7, 1e10, 500)
         l_low_q = radio_star_forming(wave, L_ir=1e10, q_ir=2.0)
@@ -57,7 +57,7 @@ class TestRadioPhysics:
 
     def test_spectral_index_sf(self):
         """Star-forming radio: L_ν ∝ ν^{-α_sf} with α_sf ≈ 0.8."""
-        from tengri.models.radio import radio_star_forming
+        from tengri.components.radio import radio_star_forming
 
         wave = jnp.geomspace(1e8, 1e10, 100)  # radio: 1cm - 1m
         l_nu = radio_star_forming(wave, L_ir=1e10, alpha_sf=0.8)
@@ -76,7 +76,7 @@ class TestRadioPhysics:
 
     def test_radio_agn_spectral_index(self):
         """AGN radio: L_ν ∝ ν^{-α_agn} with α_agn ≈ 0.7."""
-        from tengri.models.radio import radio_agn
+        from tengri.components.radio import radio_agn
 
         wave = jnp.geomspace(1e8, 1e10, 100)
         l_nu = radio_agn(wave, L_agn_bol=1e44, radio_loudness=1.0, alpha_agn=0.7)
@@ -85,7 +85,7 @@ class TestRadioPhysics:
 
     def test_radio_loudness_controls_agn_radio(self):
         """Higher radio_loudness → more radio from AGN."""
-        from tengri.models.radio import radio_agn
+        from tengri.components.radio import radio_agn
 
         wave = jnp.geomspace(1e8, 1e10, 100)
         l_quiet = radio_agn(wave, L_agn_bol=1e44, radio_loudness=0.0)
@@ -105,7 +105,7 @@ class TestXrayPhysics:
 
     def test_hmxb_scales_with_sfr(self):
         """Grimm+2003: L_X(HMXB) ∝ SFR."""
-        from tengri.models.xray import xray_xrb
+        from tengri.components.xray import xray_xrb
 
         wave = jnp.geomspace(1.0, 100.0, 100)  # X-ray: 0.1-12 keV
         l_low = xray_xrb(wave, sfr=1.0, stellar_mass=1e10)
@@ -115,7 +115,7 @@ class TestXrayPhysics:
 
     def test_lmxb_scales_with_mass(self):
         """Gilfanov (2004): L_X(LMXB) ∝ M*."""
-        from tengri.models.xray import xray_xrb
+        from tengri.components.xray import xray_xrb
 
         wave = jnp.geomspace(1.0, 100.0, 100)
         l_low = xray_xrb(wave, sfr=0.01, stellar_mass=1e10)
@@ -125,7 +125,7 @@ class TestXrayPhysics:
 
     def test_agn_corona_spectral_shape(self):
         """AGN X-ray corona: power-law L_ν ∝ ν^{1-Γ} with cutoff."""
-        from tengri.models.xray import xray_agn_corona
+        from tengri.components.xray import xray_agn_corona
 
         wave = jnp.geomspace(0.1, 100.0, 200)  # hard X-ray
         l_nu = xray_agn_corona(wave, L_agn_bol=1e44, gamma=1.8)
@@ -134,7 +134,7 @@ class TestXrayPhysics:
 
     def test_softer_gamma_more_soft_xray(self):
         """Higher Γ → softer spectrum → more flux at soft X-rays."""
-        from tengri.models.xray import xray_agn_corona
+        from tengri.components.xray import xray_agn_corona
 
         wave = jnp.geomspace(1.0, 100.0, 200)
         l_hard = xray_agn_corona(wave, L_agn_bol=1e44, gamma=1.5)
@@ -159,7 +159,7 @@ class TestIGMPhysics:
 
     def test_full_transmission_above_lya(self):
         """Above Lyα in observed frame: T = 1 (no IGM absorption)."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         z = 3.0
         wave_obs = jnp.array([1216.0 * (1 + z) + 100.0])  # just above Lyα
@@ -168,7 +168,7 @@ class TestIGMPhysics:
 
     def test_strong_absorption_below_lyman_limit(self):
         """Below Lyman limit (912A rest): T → 0 at z > 3."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         z = 4.0
         wave_obs = jnp.array([912.0 * (1 + z) - 100.0])  # below LL
@@ -177,7 +177,7 @@ class TestIGMPhysics:
 
     def test_higher_z_more_absorption(self):
         """Higher redshift → more IGM absorption (more neutral H)."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         # Compare at same rest-frame wavelength (1100A = between Lyα and LL)
         wave_rest = 1100.0
@@ -189,7 +189,7 @@ class TestIGMPhysics:
 
     def test_transmission_bounded_0_1(self):
         """Transmission must be in [0, 1]."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         for z in [1.0, 3.0, 6.0]:
             wave_obs = jnp.geomspace(500.0, 20000.0, 500)
@@ -199,7 +199,7 @@ class TestIGMPhysics:
 
     def test_z0_no_absorption(self):
         """At z=0: no IGM absorption (T = 1 everywhere)."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         wave_obs = jnp.geomspace(500.0, 20000.0, 200)
         t = igm_transmission(wave_obs, z_source=0.0)
@@ -216,7 +216,7 @@ class TestPSDPhysics:
 
     def test_drw_low_freq_flat(self):
         """DRW PSD: flat at ω << 1/τ (white noise regime)."""
-        from tengri.models.sfh.psd_models import psd_drw
+        from tengri.components.sfh.psd_models import psd_drw
 
         tau_yr = 1e8  # 100 Myr
         omega = jnp.geomspace(1e-12, 1e-6, 200)
@@ -230,7 +230,7 @@ class TestPSDPhysics:
 
     def test_drw_high_freq_decline(self):
         """DRW PSD: declines as ω^{-2} at ω >> 1/τ (red noise)."""
-        from tengri.models.sfh.psd_models import psd_drw
+        from tengri.components.sfh.psd_models import psd_drw
 
         tau_yr = 1e8
         omega = jnp.geomspace(1e-5, 1e-3, 50)
@@ -241,7 +241,7 @@ class TestPSDPhysics:
 
     def test_matern_nu_half_equals_drw(self):
         """Matérn with ν=0.5 reduces to DRW (exponential ACF)."""
-        from tengri.models.sfh.psd_models import psd_drw, psd_matern
+        from tengri.components.sfh.psd_models import psd_drw, psd_matern
 
         omega = jnp.geomspace(1e-11, 1e-6, 200)
         sigma = 1.0
@@ -260,7 +260,7 @@ class TestPSDPhysics:
 
     def test_higher_matern_nu_smoother(self):
         """Higher Matérn ν → smoother (faster high-freq decline)."""
-        from tengri.models.sfh.psd_models import psd_matern
+        from tengri.components.sfh.psd_models import psd_matern
 
         omega = jnp.geomspace(1e-11, 1e-6, 200)
         psd_rough = psd_matern(omega, variance=1.0, length_scale=1e8, nu=0.5)
@@ -275,7 +275,7 @@ class TestPSDPhysics:
 
     def test_extended_regulator_positive(self):
         """Extended regulator PSD must be positive at all frequencies."""
-        from tengri.models.sfh.psd_models import psd_extended_regulator
+        from tengri.components.sfh.psd_models import psd_extended_regulator
 
         f = jnp.geomspace(1e-12, 1e-6, 200)
         psd = psd_extended_regulator(f, s_reg=1.0, tau_in=1e8, tau_eq=1e9, s_dyn=0.5, tau_dyn=1e7)
@@ -284,7 +284,7 @@ class TestPSDPhysics:
 
     def test_psd_sigma_scales_amplitude(self):
         """Higher psd_sigma → higher PSD amplitude."""
-        from tengri.models.sfh.psd_models import psd_drw
+        from tengri.components.sfh.psd_models import psd_drw
 
         omega = jnp.geomspace(1e-11, 1e-6, 100)
         psd_1 = psd_drw(omega, psd_sigma=1.0, psd_tau_yr=1e8)

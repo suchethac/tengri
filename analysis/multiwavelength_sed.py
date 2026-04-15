@@ -49,13 +49,13 @@ warnings.filterwarnings("ignore")
 # ── imports from tengri ─────────────────────────────────────────────
 from tengri import load_ssp_data
 from tengri.simulate import sed_from_sfh
-from tengri.models.dust.emission import draine_li2007
-from tengri.models.agn.unified import kubota_done_full_agn
-from tengri.models.agn.polar_dust import polar_dust_total
-from tengri.models.xray import xray_xrb
-from tengri.models.radio import radio_sfr_bell2003, radio_agn
-from tengri.models.nebular.cue import CueBackend
-from tengri.models.nebular.shock import compute_shock_sed
+from tengri.components.dust.emission import draine_li2007
+from tengri.components.agn.unified import kubota_done_full_agn
+from tengri.components.agn.polar_dust import polar_dust_total
+from tengri.components.xray import xray_xrb
+from tengri.components.radio import radio_sfr_bell2003, radio_agn
+from tengri.components.nebular.cue import CueBackend
+from tengri.components.nebular.shock import compute_shock_sed
 
 # ════════════════════════════════════════════════════════════════════
 # 0.  Style — presentation mode

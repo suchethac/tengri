@@ -49,7 +49,7 @@ class TestRadioAbsoluteValues:
         L_1.4GHz = 3.828e43 / (3.75e12 × 10^2.64) = 2.34e28 erg/s/Hz.
         Murphy+2011 gives 1.81e28 erg/s/Hz for SFR=1 (Kroupa→Chabrier offset).
         """
-        from tengri.models.radio import radio_star_forming
+        from tengri.components.radio import radio_star_forming
 
         wave = jnp.array([_C_AA / 1.4e9])
         l_14 = float(radio_star_forming(wave, L_ir=_L_IR_SFR1, q_ir=2.64)[0])
@@ -70,7 +70,7 @@ class TestRadioAbsoluteValues:
         Ratio test is non-circular: expected ratio (10^1.0 = 10) comes from
         the exponent definition, not from the function output.
         """
-        from tengri.models.radio import radio_star_forming
+        from tengri.components.radio import radio_star_forming
 
         wave = jnp.array([_C_AA / 1.4e9])
         l_lo = float(radio_star_forming(wave, L_ir=_L_IR_SFR10, q_ir=2.44)[0])
@@ -91,7 +91,7 @@ class TestRadioAbsoluteValues:
         With L_IR = 1e10 Lsun → SFR ≈ 0.58 Msun/yr (Kennicutt 1998).
         Expected: ~1.2e27 erg/s/Hz.
         """
-        from tengri.models.radio import radio_freefree
+        from tengri.components.radio import radio_freefree
 
         wave = jnp.array([_C_AA / 1.4e9])
         l_ff = float(radio_freefree(wave, L_ir=_L_IR_SFR1)[0])
@@ -101,7 +101,7 @@ class TestRadioAbsoluteValues:
 
     def test_free_free_flatter_than_synchrotron(self):
         """Free-free (α_ff ~ -0.1) is flatter than synchrotron (α_sf ~ 0.8)."""
-        from tengri.models.radio import radio_freefree, radio_star_forming
+        from tengri.components.radio import radio_freefree, radio_star_forming
 
         wave_150mhz = jnp.array([_C_AA / 1.5e8])
         wave_10ghz = jnp.array([_C_AA / 1.0e10])
@@ -120,7 +120,7 @@ class TestRadioAbsoluteValues:
 
     def test_thermal_fraction_at_1p4ghz(self):
         """Free-free is ~5-15% of total radio at 1.4 GHz (Condon 1992)."""
-        from tengri.models.radio import radio_freefree, radio_star_forming
+        from tengri.components.radio import radio_freefree, radio_star_forming
 
         wave = jnp.array([_C_AA / 1.4e9])
         l_sync = float(radio_star_forming(wave, L_ir=_L_IR_SFR1)[0])
@@ -133,7 +133,7 @@ class TestRadioAbsoluteValues:
 
     def test_delvecchio_mass_scaling_absolute(self):
         """Delvecchio+2021: Δlog(L) = 0.468 per 2 dex in M* at fixed L_IR."""
-        from tengri.models.radio import radio_sfr_delvecchio2021
+        from tengri.components.radio import radio_sfr_delvecchio2021
 
         wave = jnp.array([_C_AA / 1.4e9])
 
@@ -160,7 +160,7 @@ class TestRadioAbsoluteValues:
 
         Tests the _synchrotron_suppression helper directly with CGS inputs.
         """
-        from tengri.models.radio import _L0_SYNCH, _synchrotron_suppression
+        from tengri.components.radio import _L0_SYNCH, _synchrotron_suppression
 
         # At L >> L0: correction ≈ 1 (no suppression)
         L_bright = jnp.array(100 * _L0_SYNCH)
@@ -186,7 +186,7 @@ class TestXrayAbsoluteValues:
 
     def test_grimm_hmxb_2_10kev(self):
         """Grimm+2003: L_X(HMXB, 2-10 keV) = 2.6e39 × SFR erg/s."""
-        from tengri.models.xray import xray_xrb
+        from tengri.components.xray import xray_xrb
 
         wave = jnp.linspace(1.24, 6.2, 500)  # 2-10 keV
         l_nu = xray_xrb(wave, sfr=1.0, stellar_mass=0.0)
@@ -200,7 +200,7 @@ class TestXrayAbsoluteValues:
 
     def test_gilfanov_lmxb_0p5_8kev(self):
         """Gilfanov 2004: L_X(LMXB) = 9.2e28 × M* erg/s."""
-        from tengri.models.xray import xray_xrb
+        from tengri.components.xray import xray_xrb
 
         wave = jnp.linspace(1.55, 24.8, 500)  # 0.5-8 keV
         l_nu = xray_xrb(wave, sfr=0.0, stellar_mass=1e10)
@@ -214,7 +214,7 @@ class TestXrayAbsoluteValues:
 
     def test_lehmer_combined(self):
         """Lehmer+2010 combined: L_X ≈ 2.7e40 for SFR=10, M*=1e10."""
-        from tengri.models.xray import xray_xrb
+        from tengri.components.xray import xray_xrb
 
         wave = jnp.linspace(1.24, 6.2, 500)
         l_nu = xray_xrb(wave, sfr=10.0, stellar_mass=1e10)
@@ -228,7 +228,7 @@ class TestXrayAbsoluteValues:
 
         L_X = 2.6e39 spread over ~2e18 Hz (2-10 keV) → L_nu ~ 1e21 erg/s/Hz.
         """
-        from tengri.models.xray import xray_xrb
+        from tengri.components.xray import xray_xrb
 
         wave = jnp.array([6.2])  # 2 keV
         l_nu = float(xray_xrb(wave, sfr=1.0, stellar_mass=0.0)[0])
@@ -237,7 +237,7 @@ class TestXrayAbsoluteValues:
 
     def test_photon_index_hardness(self):
         """Higher Γ → softer spectrum → lower hardness ratio."""
-        from tengri.models.xray import xray_xrb
+        from tengri.components.xray import xray_xrb
 
         wave = jnp.linspace(0.5, 25.0, 1000)
         soft_mask = (wave > 6.2) & (wave < 24.8)
@@ -257,7 +257,7 @@ class TestXrayAbsoluteValues:
 
     def test_ecut_suppression(self):
         """E_cut cutoff: 100 keV more suppressed than 10 keV at E_cut=50."""
-        from tengri.models.xray import xray_xrb
+        from tengri.components.xray import xray_xrb
 
         wave = jnp.array([0.124, 1.24])  # 100 keV, 10 keV
         l_cut50 = xray_xrb(wave, sfr=1.0, stellar_mass=0.0, E_cut=50.0)
@@ -275,7 +275,7 @@ class TestXrayAbsoluteValues:
         L_2keV = L_2500 × 10^(alpha_ox/0.384) = 1.62e29 × 2.26e-4 = 3.66e25
         L_nu(2keV) = L_2keV / (KEV_TO_HZ × 2) = 3.66e25 / 4.84e17 ≈ 7.6e7 erg/s/Hz
         """
-        from tengri.models.xray import xray_agn_corona
+        from tengri.components.xray import xray_agn_corona
 
         L_bol = 1e45  # erg/s (bright quasar)
         wave = jnp.array([6.2])  # 2 keV
@@ -298,7 +298,7 @@ class TestXrayAbsoluteValues:
 
     def test_agn_corona_steeper_alpha_ox(self):
         """Steeper alpha_ox → weaker X-rays relative to UV."""
-        from tengri.models.xray import xray_agn_corona
+        from tengri.components.xray import xray_agn_corona
 
         wave = jnp.array([6.2])
         l_14 = float(xray_agn_corona(wave, L_agn_bol=1e45, alpha_ox=-1.4)[0])
@@ -317,7 +317,7 @@ class TestCrossComponentConsistency:
 
     def test_radio_linear_with_lir(self):
         """L_radio ∝ L_IR must hold exactly (built into the model)."""
-        from tengri.models.radio import radio_star_forming
+        from tengri.components.radio import radio_star_forming
 
         wave = jnp.geomspace(1e8, 1e10, 100)
         l_1x = float(jnp.sum(radio_star_forming(wave, L_ir=_L_IR_SFR1)))
@@ -327,8 +327,8 @@ class TestCrossComponentConsistency:
 
     def test_radio_xray_sfr_scaling_parallel(self):
         """10× SFR → 10× radio AND 10× X-ray (both linear with SFR)."""
-        from tengri.models.radio import radio_star_forming
-        from tengri.models.xray import xray_xrb
+        from tengri.components.radio import radio_star_forming
+        from tengri.components.xray import xray_xrb
 
         wave_r = jnp.geomspace(1e8, 1e10, 100)
         wave_x = jnp.linspace(1.24, 6.2, 100)
@@ -346,7 +346,7 @@ class TestCrossComponentConsistency:
 
         Doubling L_IR doubles BOTH components.
         """
-        from tengri.models.radio import radio_freefree, radio_star_forming
+        from tengri.components.radio import radio_freefree, radio_star_forming
 
         wave = jnp.array([_C_AA / 1.4e9])
         sync_1 = float(radio_star_forming(wave, L_ir=_L_IR_SFR1)[0])
@@ -368,7 +368,7 @@ class TestIGMNumericalValues:
 
     def test_lya_forest_opacity_z3(self):
         """At z=3, Lyα forest T at 1050Å rest ~ 0.5-0.85."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         wave_obs = jnp.array([1050.0 * (1 + 3.0)])
         t = float(igm_transmission(wave_obs, z_source=3.0)[0])
@@ -376,7 +376,7 @@ class TestIGMNumericalValues:
 
     def test_gunn_peterson_z6(self):
         """At z=6, below Lyα: T < 0.1 (Gunn-Peterson trough)."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         wave_obs = jnp.array([1100.0 * (1 + 6.0)])
         t = float(igm_transmission(wave_obs, z_source=6.0)[0])
@@ -394,7 +394,7 @@ class TestIGMNumericalValues:
     )
     def test_igm_range(self, z, wave_rest, t_min, t_max):
         """IGM transmission at (z, λ) in expected range."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         wave_obs = jnp.array([wave_rest * (1 + z)])
         t = float(igm_transmission(wave_obs, z_source=z)[0])
@@ -411,7 +411,7 @@ class TestRadioComponentDecomposition:
 
     def test_components_sum_to_total(self):
         """Components must sum to total exactly."""
-        from tengri.models.radio import radio_components, radio_total
+        from tengri.components.radio import radio_components, radio_total
 
         wave = jnp.geomspace(1e8, 1e10, 200)
         kwargs = dict(
@@ -431,7 +431,7 @@ class TestRadioComponentDecomposition:
 
     def test_agn_dominates_radio_loud(self):
         """Radio-loud AGN (loudness=3): AGN > 90% at 1.4 GHz."""
-        from tengri.models.radio import radio_components
+        from tengri.components.radio import radio_components
 
         wave = jnp.array([_C_AA / 1.4e9])
         comps = radio_components(
@@ -447,7 +447,7 @@ class TestRadioComponentDecomposition:
 
     def test_sf_dominates_radio_quiet(self):
         """Radio-quiet with strong SF: SF > 90% at 1.4 GHz."""
-        from tengri.models.radio import radio_components
+        from tengri.components.radio import radio_components
 
         wave = jnp.array([_C_AA / 1.4e9])
         comps = radio_components(
@@ -463,7 +463,7 @@ class TestRadioComponentDecomposition:
 
     def test_synchrotron_absolute_value(self):
         """Synchrotron at 1.4 GHz for SFR~1 should be ~2e28 erg/s/Hz."""
-        from tengri.models.radio import radio_components
+        from tengri.components.radio import radio_components
 
         wave = jnp.array([_C_AA / 1.4e9])
         comps = radio_components(
@@ -477,7 +477,7 @@ class TestRadioComponentDecomposition:
 
     def test_freefree_absolute_value(self):
         """Free-free at 1.4 GHz for SFR~1 should be ~1e27 erg/s/Hz."""
-        from tengri.models.radio import radio_components
+        from tengri.components.radio import radio_components
 
         wave = jnp.array([_C_AA / 1.4e9])
         comps = radio_components(

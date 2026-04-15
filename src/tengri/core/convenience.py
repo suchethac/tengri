@@ -474,8 +474,8 @@ def build_model_from_config(
     redshift = _defs["redshift"] if redshift is _UNSET else redshift
     from tengri.core.parameters import ParamSpec
     from tengri.distributions import Uniform
-    from tengri.models.observation.observation import Observation
-    from tengri.models.sps.dsps_wrapper import SSPData, load_ssp_data
+    from tengri.observation.observation import Observation
+    from tengri.components.sps.dsps_wrapper import SSPData, load_ssp_data
 
     # --- Load SSP data ---
     if isinstance(ssp, str):
@@ -541,7 +541,7 @@ def build_model_from_config(
 
     if filters is not None:
         try:
-            from tengri.models.observation.photometry_config import Photometry
+            from tengri.observation.photometry_config import Photometry
 
             obs_photometry = Photometry.from_names(filters)
         except (ImportError, AttributeError):
@@ -549,7 +549,7 @@ def build_model_from_config(
 
     if wave_obs is not None:
         try:
-            from tengri.models.observation.spectroscopy import SpectroscopyConfig
+            from tengri.observation.spectroscopy import SpectroscopyConfig
 
             obs_spectroscopy = SpectroscopyConfig(wave_obs=wave_obs)
         except (ImportError, AttributeError):

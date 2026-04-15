@@ -33,7 +33,7 @@ class TestShockEmissionSEDPhysics:
 
     def test_sed_has_halpha_peak(self):
         """Shock SED should peak near Hα 6563A (strongest optical line)."""
-        from tengri.models.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import shock_emission_sed
 
         wave = jnp.linspace(3000.0, 8000.0, 5000)
         # l_shock_halpha in Lsun
@@ -48,7 +48,7 @@ class TestShockEmissionSEDPhysics:
 
     def test_sed_scales_with_luminosity(self):
         """10x luminosity → 10x flux."""
-        from tengri.models.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import shock_emission_sed
 
         wave = jnp.linspace(3000.0, 8000.0, 2000)
         l_faint = shock_emission_sed(wave, shock_velocity=300.0, l_shock_halpha=1e7)
@@ -58,7 +58,7 @@ class TestShockEmissionSEDPhysics:
 
     def test_sed_velocity_changes_line_ratios(self):
         """Different velocities produce different line ratio patterns."""
-        from tengri.models.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import shock_emission_sed
 
         wave = jnp.linspace(3000.0, 8000.0, 5000)
         l_slow = shock_emission_sed(wave, shock_velocity=150.0, l_shock_halpha=1e8)
@@ -76,7 +76,7 @@ class TestShockEmissionSEDPhysics:
 
     def test_sed_positive_finite(self):
         """Shock SED must be non-negative and finite at all wavelengths."""
-        from tengri.models.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import shock_emission_sed
 
         wave = jnp.linspace(1000.0, 10000.0, 5000)
         for v in [100.0, 300.0, 700.0, 1000.0]:
@@ -95,7 +95,7 @@ class TestShockLineRatioPhysics:
 
     def test_oiii_peaks_at_intermediate_velocity(self):
         """[OIII]/Hβ peaks at v~300-400 km/s (maximum ionization)."""
-        from tengri.models.nebular.shock import shock_line_ratios
+        from tengri.components.nebular.shock import shock_line_ratios
 
         oiii_hb = []
         velocities = [100.0, 200.0, 300.0, 400.0, 500.0, 750.0, 1000.0]
@@ -109,7 +109,7 @@ class TestShockLineRatioPhysics:
 
     def test_halpha_hbeta_above_case_b(self):
         """In shocks, Hα/Hβ > 2.86 (Case B) due to collisional excitation."""
-        from tengri.models.nebular.shock import shock_line_ratios
+        from tengri.components.nebular.shock import shock_line_ratios
 
         for v in [200.0, 300.0, 500.0]:
             ratios = shock_line_ratios(v)
@@ -120,7 +120,7 @@ class TestShockLineRatioPhysics:
 
     def test_sii_strong_shock_diagnostic(self):
         """[SII]/Hβ must be enhanced in shocks (vs. HII regions ≲ 0.4)."""
-        from tengri.models.nebular.shock import shock_line_ratios
+        from tengri.components.nebular.shock import shock_line_ratios
 
         for v in [200.0, 300.0]:
             ratios = shock_line_ratios(v)
@@ -132,7 +132,7 @@ class TestShockLineRatioPhysics:
 
     def test_velocity_clipping(self):
         """Velocities outside [100, 1000] should be clipped, not error."""
-        from tengri.models.nebular.shock import shock_line_ratios
+        from tengri.components.nebular.shock import shock_line_ratios
 
         # Below minimum
         ratios_low = shock_line_ratios(50.0)
@@ -153,7 +153,7 @@ class TestShockAtomicPhysics:
 
     def test_oiii_doublet(self):
         """[OIII] 5007/4959 = 2.98 (Storey & Zeippen 2000)."""
-        from tengri.models.nebular.shock import shock_line_ratios
+        from tengri.components.nebular.shock import shock_line_ratios
 
         ratios = shock_line_ratios(300.0)
         r = float(ratios["OIII_5007"]) / float(ratios["OIII_4959"])
@@ -161,7 +161,7 @@ class TestShockAtomicPhysics:
 
     def test_nii_doublet(self):
         """[NII] 6583/6548 = 2.94 (Storey & Zeippen 2000)."""
-        from tengri.models.nebular.shock import shock_line_ratios
+        from tengri.components.nebular.shock import shock_line_ratios
 
         ratios = shock_line_ratios(300.0)
         r = float(ratios["NII_6583"]) / float(ratios["NII_6548"])
@@ -178,7 +178,7 @@ class TestNLRLinePhysics:
 
     def test_oiii_5007_4959_ratio_in_template(self):
         """[OIII] 5007/4959 = 2.98 in NLR template."""
-        from tengri.models.agn.nlr import _NLR_LINE_STRENGTHS, _NLR_LINE_WAVELENGTHS
+        from tengri.components.agn.nlr import _NLR_LINE_STRENGTHS, _NLR_LINE_WAVELENGTHS
 
         idx_5007 = int(jnp.argmin(jnp.abs(_NLR_LINE_WAVELENGTHS - 5007.0)))
         idx_4959 = int(jnp.argmin(jnp.abs(_NLR_LINE_WAVELENGTHS - 4959.0)))
@@ -187,7 +187,7 @@ class TestNLRLinePhysics:
 
     def test_nii_6583_6548_ratio_in_template(self):
         """[NII] 6583/6548 = 3.0 in NLR template (atomic physics)."""
-        from tengri.models.agn.nlr import _NLR_LINE_STRENGTHS, _NLR_LINE_WAVELENGTHS
+        from tengri.components.agn.nlr import _NLR_LINE_STRENGTHS, _NLR_LINE_WAVELENGTHS
 
         idx_6583 = int(jnp.argmin(jnp.abs(_NLR_LINE_WAVELENGTHS - 6583.0)))
         idx_6548 = int(jnp.argmin(jnp.abs(_NLR_LINE_WAVELENGTHS - 6548.0)))
@@ -196,7 +196,7 @@ class TestNLRLinePhysics:
 
     def test_nlr_oiii_strongest(self):
         """[OIII] 5007 should be the strongest NLR line."""
-        from tengri.models.agn.nlr import _NLR_LINE_STRENGTHS, _NLR_LINE_WAVELENGTHS
+        from tengri.components.agn.nlr import _NLR_LINE_STRENGTHS, _NLR_LINE_WAVELENGTHS
 
         max_idx = int(jnp.argmax(_NLR_LINE_STRENGTHS))
         max_wave = float(_NLR_LINE_WAVELENGTHS[max_idx])
@@ -206,7 +206,7 @@ class TestNLRLinePhysics:
 
     def test_nlr_has_all_key_lines(self):
         """NLR template must include all standard diagnostic lines."""
-        from tengri.models.agn.nlr import _NLR_LINE_WAVELENGTHS
+        from tengri.components.agn.nlr import _NLR_LINE_WAVELENGTHS
 
         expected_lines = [3727.0, 4861.0, 4959.0, 5007.0, 6300.0, 6548.0, 6563.0, 6583.0]
         for line_wave in expected_lines:
@@ -224,21 +224,21 @@ class TestBLRLinePhysics:
 
     def test_blr_has_lya(self):
         """BLR must include Lyα 1216A (strongest UV emission line)."""
-        from tengri.models.agn.blr import _BLR_LINE_WAVELENGTHS
+        from tengri.components.agn.blr import _BLR_LINE_WAVELENGTHS
 
         min_dist = float(jnp.min(jnp.abs(_BLR_LINE_WAVELENGTHS - 1216.0)))
         assert min_dist < 2.0, "BLR missing Lyα 1216"
 
     def test_blr_has_civ(self):
         """BLR must include CIV 1549A (strong broad line)."""
-        from tengri.models.agn.blr import _BLR_LINE_WAVELENGTHS
+        from tengri.components.agn.blr import _BLR_LINE_WAVELENGTHS
 
         min_dist = float(jnp.min(jnp.abs(_BLR_LINE_WAVELENGTHS - 1549.0)))
         assert min_dist < 2.0, "BLR missing CIV 1549"
 
     def test_blr_halpha_strongest_optical(self):
         """Hα should be the strongest optical BLR line (Vanden Berk+2001)."""
-        from tengri.models.agn.blr import _BLR_LINE_STRENGTHS, _BLR_LINE_WAVELENGTHS
+        from tengri.components.agn.blr import _BLR_LINE_STRENGTHS, _BLR_LINE_WAVELENGTHS
 
         optical = _BLR_LINE_WAVELENGTHS > 4000.0
         if jnp.any(optical):
@@ -253,7 +253,7 @@ class TestBLRLinePhysics:
     def test_blr_halpha_hbeta_ratio(self):
         """Hα/Hβ ~ 2.8 for Type 1 AGN (Vanden Berk+2001 broad: ~260/46 ≈ 5.6 in EW,
         but in relative strength ~1.43/0.50 = 2.86)."""
-        from tengri.models.agn.blr import _BLR_LINE_STRENGTHS, _BLR_LINE_WAVELENGTHS
+        from tengri.components.agn.blr import _BLR_LINE_STRENGTHS, _BLR_LINE_WAVELENGTHS
 
         idx_ha = int(jnp.argmin(jnp.abs(_BLR_LINE_WAVELENGTHS - 6563.0)))
         idx_hb = int(jnp.argmin(jnp.abs(_BLR_LINE_WAVELENGTHS - 4861.0)))
@@ -275,7 +275,7 @@ class TestBPTDiagramPhysics:
         HII regions: log([NII]/Hα) ≲ -0.3
         Shocks: log([NII]/Hα) > -0.3 at intermediate velocities.
         """
-        from tengri.models.nebular.shock import shock_line_ratios
+        from tengri.components.nebular.shock import shock_line_ratios
 
         ratios = shock_line_ratios(300.0)
         nii_ha = float(ratios["NII_6583"]) / float(ratios["Halpha"])
@@ -288,7 +288,7 @@ class TestBPTDiagramPhysics:
         HII regions: log([OI]/Hα) < -1.5
         Shocks: log([OI]/Hα) > -1.0 at v > 100 km/s.
         """
-        from tengri.models.nebular.shock import shock_line_ratios
+        from tengri.components.nebular.shock import shock_line_ratios
 
         for v in [150.0, 300.0]:
             ratios = shock_line_ratios(v)

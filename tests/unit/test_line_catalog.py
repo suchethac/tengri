@@ -8,7 +8,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.models.observation.line_list import LineCatalog
+from tengri.observation.line_list import LineCatalog
 
 
 class TestLineCatalogDefault13:

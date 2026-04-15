@@ -38,7 +38,7 @@ def build_ssp_component(model):
         - ``ssp_flux_at_z``: shape (n_age, n_wave), Z-interpolated SSP.
         - ``weights``: shape (n_age,), CSP mass weights (Msun).
     """
-    from tengri.models.sps.dsps_wrapper import (
+    from tengri.components.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
         compute_lgmet_weights,
     )
@@ -106,7 +106,7 @@ def build_dust_atten_component(model):
 
         All outputs in erg/s/Hz. ``L_absorbed`` is in erg/s (integrated).
     """
-    from tengri.models.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = model._forward_dtype
     ssp_wave = model.ssp_data.ssp_wave.astype(dt)
@@ -195,7 +195,7 @@ def build_dust_emission_component(model):
     if model._dust_emission_model is None:
         return None
 
-    from tengri.models.dust.emission import resolve_emission_model
+    from tengri.components.dust.emission import resolve_emission_model
 
     emission_fn = resolve_emission_model(model._dust_emission_model)
     wave = model.ssp_data.ssp_wave
@@ -249,7 +249,7 @@ def build_agn_component(model):
     if model._agn_model is None:
         return None
 
-    from tengri.models.agn import resolve_agn_model
+    from tengri.components.agn import resolve_agn_model
 
     agn_model_fn = resolve_agn_model(model._agn_model)
     wave = model.ssp_data.ssp_wave
@@ -364,7 +364,7 @@ def build_radio_component(model):
     if not model._radio_enabled:
         return None
 
-    from tengri.models.radio import radio_total
+    from tengri.components.radio import radio_total
 
     wave = model.ssp_data.ssp_wave
 
@@ -411,7 +411,7 @@ def build_xray_component(model):
     if not model._xray_enabled:
         return None
 
-    from tengri.models.xray import xray_total
+    from tengri.components.xray import xray_total
 
     wave = model.ssp_data.ssp_wave
 

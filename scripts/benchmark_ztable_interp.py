@@ -125,7 +125,7 @@ def _make_box_filters(n_filters: int = 5, z_max: float = 3.0) -> tuple[list, lis
 def _try_real_filters(filter_names: list[str]) -> tuple[list, list] | None:
     """Attempt to load real filters via tengri; return None if not available."""
     try:
-        from tengri.models.observation.photometry import load_filter
+        from tengri.observation.photometry import load_filter
 
         fw, ft = [], []
         for name in filter_names:
@@ -180,7 +180,7 @@ def compute_errors(
         all_max_errs : array of shape (n_probe,) — max over (met, age, filt) per z
         probe_zs : array of shape (n_probe,)
     """
-    from tengri.models.sps.precompute import (
+    from tengri.components.sps.precompute import (
         interpolate_ztable_smooth,
         precompute_photometry,
         precompute_photometry_ztable,

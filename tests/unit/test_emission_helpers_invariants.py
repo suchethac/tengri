@@ -266,7 +266,7 @@ class TestEnergyConservation:
 class TestIGMAbsorption:
     def test_igm_at_z0_is_all_ones(self) -> None:
         """At z=0, IGM is transparent: transmission should be ≈ 1 everywhere."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         wave_obs = jnp.linspace(900.0, 10000.0, 100)
         trans = igm_transmission(wave_obs, 0.0)
@@ -278,7 +278,7 @@ class TestIGMAbsorption:
 
     def test_igm_no_nan_short_wavelength(self) -> None:
         """No NaN for short-wavelength photons at moderate z (previously buggy: negative base raised to fractional power)."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         wave_obs = jnp.linspace(100.0, 1000.0, 80)
         trans = igm_transmission(wave_obs, 2.0)
@@ -289,7 +289,7 @@ class TestIGMAbsorption:
 
     def test_igm_transmission_between_0_and_1(self) -> None:
         """IGM transmission is a fraction in [0, 1]."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         wave_obs = jnp.linspace(1000.0, 10000.0, 120)
         trans = igm_transmission(wave_obs, 3.0)
@@ -298,7 +298,7 @@ class TestIGMAbsorption:
 
     def test_igm_increases_opacity_with_redshift(self) -> None:
         """Higher redshift → more IGM absorption → lower average transmission at Lya."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         # Short wavelengths (Lyman-series) — absorbed more at higher z
         wave_obs = jnp.linspace(1000.0, 2000.0, 50)

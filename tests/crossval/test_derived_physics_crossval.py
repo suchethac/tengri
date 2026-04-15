@@ -189,7 +189,7 @@ class TestIGMTransmissionPhysics:
 
     def test_no_igm_below_lyman_limit_at_z0(self):
         """At z=0, no IGM absorption (T=1 everywhere)."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         wave_obs = jnp.linspace(800.0, 10000.0, 500)
         t_igm = np.asarray(igm_transmission(wave_obs, 0.0))
@@ -197,7 +197,7 @@ class TestIGMTransmissionPhysics:
 
     def test_lyman_limit_absorption_at_z3(self):
         """At z=3, rest-frame < 912A should be heavily absorbed."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         # Lyman limit at z=3: 912 * (1+3) = 3648 A observed
         wave_obs = jnp.array([3000.0, 3648.0, 5000.0, 8000.0])
@@ -211,7 +211,7 @@ class TestIGMTransmissionPhysics:
 
     def test_igm_transmission_bounded(self):
         """IGM transmission must be in [0, 1] at all wavelengths."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         for z in [0.5, 1.0, 2.0, 3.0, 5.0]:
             wave_obs = jnp.linspace(500.0, 20000.0, 1000)
@@ -221,7 +221,7 @@ class TestIGMTransmissionPhysics:
 
     def test_igm_increases_with_redshift(self):
         """More IGM absorption at higher redshift (average T decreases)."""
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         wave_obs = jnp.linspace(1000.0, 5000.0, 500)
         mean_t = []
@@ -292,7 +292,7 @@ class TestRandomParameterPhysics:
 
     def test_random_draws_physical(self, ssp_data):
         """10 random parameter sets should give physical derived quantities."""
-        from tengri.models.observation.filters import load_filter_set
+        from tengri.observation.filters import load_filter_set
 
         filters = load_filter_set(["sdss_r"])
         spec = ParamSpec(

@@ -22,7 +22,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-from tengri.models.sfh.dense_basis import (
+from tengri.components.sfh.dense_basis import (
     _build_quantile_points,
     combined_kernel,
     dense_basis_sfh,
@@ -30,7 +30,7 @@ from tengri.models.sfh.dense_basis import (
     linear_kernel,
     matern32_kernel,
 )
-from tengri.models.sfh.registry import resolve_sfh
+from tengri.components.sfh.registry import resolve_sfh
 
 # Shared test fixtures
 AGE_YR = jnp.geomspace(1e6, 13.7e9, 200)
@@ -181,7 +181,7 @@ class TestGPCumulativeMassAccuracy:
 
     def test_cumulative_mass_at_quantile_times(self) -> None:
         """Cumulative mass at tx should match target mass fractions."""
-        from tengri.models.sfh.dense_basis import (
+        from tengri.components.sfh.dense_basis import (
             _build_quantile_points,
             gp_interpolate,
         )

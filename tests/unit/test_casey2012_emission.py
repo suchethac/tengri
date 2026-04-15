@@ -23,7 +23,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.models.dust.emission import casey2012, cmb_corrected_temperature
+from tengri.components.dust.emission import casey2012, cmb_corrected_temperature
 
 # Physical constants
 _C_AA_S = 2.99792458e18  # c in Angstrom/s

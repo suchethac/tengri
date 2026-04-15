@@ -238,7 +238,7 @@ class TestBug13NonparametricJit:
     def test_continuity_sfh_jit(self):
         """continuity_sfh must JIT-compile without ConcretizationTypeError."""
         try:
-            from tengri.models.sfh.nonparametric import continuity_sfh
+            from tengri.components.sfh.nonparametric import continuity_sfh
         except ImportError:
             pytest.skip("nonparametric module not available")
 
@@ -267,7 +267,7 @@ class TestBug23WG00Gradient:
     def test_gradient_finite_at_zero_tau(self):
         """jax.grad through wg00_cloudy must not produce NaN at tau_k=0."""
         try:
-            from tengri.models.dust.attenuation import wg00_cloudy
+            from tengri.components.dust.attenuation import wg00_cloudy
         except ImportError:
             pytest.skip("wg00_cloudy not available")
 
@@ -296,7 +296,7 @@ class TestBug30PlanckDivZero:
     def test_planck_finite_at_long_wavelength(self):
         """B_nu must be finite at very long wavelengths (Rayleigh-Jeans)."""
         try:
-            from tengri.models.dust.emission import planck_bnu
+            from tengri.components.dust.emission import planck_bnu
         except ImportError:
             pytest.skip("planck_bnu not available")
 
@@ -320,7 +320,7 @@ class TestBug30PlanckDivZero:
         planck_bnu, nu**3 overflows to Inf and expm1(x) = Inf, giving Inf/Inf = NaN.
         """
         try:
-            from tengri.models.dust.emission import planck_bnu
+            from tengri.components.dust.emission import planck_bnu
         except ImportError:
             pytest.skip("planck_bnu not available")
 
@@ -357,7 +357,7 @@ class TestBug29MstarSurvivingMass:
         For a 10 Gyr population with Kroupa IMF, f_surv ≈ 0.6 (B&C03).
         compute_surviving_mass(weights, f_surv * ones) < sum(weights).
         """
-        from tengri.models.sps.dsps_wrapper import compute_surviving_mass
+        from tengri.components.sps.dsps_wrapper import compute_surviving_mass
 
         weights = jnp.ones(50) * 1e9  # 50 age bins, 1e9 Msun each
         # Simulate old population: f_surv = 0.6 uniformly
@@ -373,7 +373,7 @@ class TestBug29MstarSurvivingMass:
 
     def test_interpolate_mass_remaining_shape(self):
         """interpolate_mass_remaining returns shape (n_age,) for a scalar log_z."""
-        from tengri.models.sps.dsps_wrapper import interpolate_mass_remaining
+        from tengri.components.sps.dsps_wrapper import interpolate_mass_remaining
 
         n_met, n_age = 4, 20
         # Synthetic mass-remaining grid: decreases with age (older → less survives)
@@ -440,7 +440,7 @@ class TestBug04WarmComptonization:
 
     def test_nthcomp_template_returns_finite_nonnegative(self):
         """nthcomp template interpolation returns finite, non-negative shape."""
-        from tengri.models.agn._nthcomp import _TABLE_AVAILABLE, nthcomp_lnu_interp
+        from tengri.components.agn._nthcomp import _TABLE_AVAILABLE, nthcomp_lnu_interp
 
         if not _TABLE_AVAILABLE:
             pytest.skip("nthcomp templates absent — run scripts/build_nthcomp_templates.py")
@@ -460,7 +460,7 @@ class TestBug04WarmComptonization:
         than the seed blackbody.  The nthcomp template peak should be at
         significantly higher frequency than the seed BB peak (Wien: nu_peak = 2.82 kT/h).
         """
-        from tengri.models.agn._nthcomp import _TABLE_AVAILABLE, nthcomp_lnu_interp
+        from tengri.components.agn._nthcomp import _TABLE_AVAILABLE, nthcomp_lnu_interp
 
         if not _TABLE_AVAILABLE:
             pytest.skip("nthcomp templates absent — run scripts/build_nthcomp_templates.py")
@@ -490,7 +490,7 @@ class TestBug04WarmComptonization:
         Larger Gamma → steeper power-law → less energy at high nu.
         The ratio of X-ray to UV flux must decrease as Gamma increases.
         """
-        from tengri.models.agn._nthcomp import _TABLE_AVAILABLE, nthcomp_lnu_interp
+        from tengri.components.agn._nthcomp import _TABLE_AVAILABLE, nthcomp_lnu_interp
 
         if not _TABLE_AVAILABLE:
             pytest.skip("nthcomp templates absent — run scripts/build_nthcomp_templates.py")
@@ -522,9 +522,9 @@ class TestBug04WarmComptonization:
         """
         import warnings as _warnings
 
-        import tengri.models.agn._nthcomp as _nthcomp_mod
-        import tengri.models.agn.disc as _disc_mod
-        from tengri.models.agn.disc import kubota_done_disc
+        import tengri.components.agn._nthcomp as _nthcomp_mod
+        import tengri.components.agn.disc as _disc_mod
+        from tengri.components.agn.disc import kubota_done_disc
 
         monkeypatch.setattr(_nthcomp_mod, "_TABLE_AVAILABLE", False)
         monkeypatch.setattr(_disc_mod, "_NTHCOMP_AVAILABLE", False)
@@ -547,12 +547,12 @@ class TestBug04WarmComptonization:
         qualitatively different spectrum (correct soft X-ray excess shape).
         The two results must differ by > 1% in X-ray bands.
         """
-        from tengri.models.agn._nthcomp import _TABLE_AVAILABLE
+        from tengri.components.agn._nthcomp import _TABLE_AVAILABLE
 
         if not _TABLE_AVAILABLE:
             pytest.skip("nthcomp templates absent — run scripts/build_nthcomp_templates.py")
 
-        from tengri.models.agn import disc as disc_mod
+        from tengri.components.agn import disc as disc_mod
 
         # Build a high-nu wavelength grid (soft X-ray: 10-100 Å = 1-10 keV)
         wav_xray = jnp.linspace(10.0, 200.0, 80)  # Angstrom (soft X-ray / EUV)

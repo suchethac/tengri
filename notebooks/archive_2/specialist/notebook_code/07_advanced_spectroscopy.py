@@ -327,12 +327,12 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-from tengri.models.observation.calibration import (
+from tengri.observation.calibration import (
     apply_calibration,
     calibration_polynomial,
     chebyshev_basis,
 )
-from tengri.models.observation.spectrum import (
+from tengri.observation.spectrum import (
     SSP_LIBRARY_RESOLUTIONS,
     apply_lsf,
     blend_emission_lines,
@@ -509,7 +509,7 @@ plt.show()
 # Gaussian prior, but without the extra dimensions in MCMC/VI.
 
 # %%
-from tengri.models.observation.calibration import marginalize_calibration
+from tengri.observation.calibration import marginalize_calibration
 
 # Create a synthetic "physical" model spectrum (smooth blackbody + emission lines)
 wave_cal = jnp.linspace(4000.0, 9000.0, 800)
@@ -687,7 +687,7 @@ plt.show()
 # - Effect is strongest for old populations, weak for young hot stars
 
 # %%
-from tengri.models.sps.dsps_wrapper import SSPData
+from tengri.components.sps.dsps_wrapper import SSPData
 
 # Grid dimensions
 n_met, n_alpha, n_age, n_wave = 5, 5, 40, 500
@@ -761,7 +761,7 @@ print(f"Ages: {float(10 ** lg_age_gyr[0]):.3f} to {float(10 ** lg_age_gyr[-1]):.
 # signatures — primarily in absorption line strengths, not the continuum.
 
 # %%
-from tengri.models.sps.dsps_wrapper import has_alpha_grid, interpolate_met_alpha
+from tengri.components.sps.dsps_wrapper import has_alpha_grid, interpolate_met_alpha
 
 assert has_alpha_grid(ssp_4d), "4D grid should be detected"
 
@@ -849,7 +849,7 @@ plt.show()
 # match the solar-scaled (3D) SSP slice.
 
 # %%
-from tengri.models.sps.dsps_wrapper import interpolate_metallicity
+from tengri.components.sps.dsps_wrapper import interpolate_metallicity
 
 # Extract the solar [α/Fe] slice as a 3D grid
 ssp_3d_solar = ssp_4d.ssp_flux[:, 1, :, :]  # α index 1 = [α/Fe] = 0.0
@@ -894,7 +894,7 @@ plt.show()
 # this as a linear ramp in lookback time.
 
 # %%
-from tengri.models.sps.dsps_wrapper import (
+from tengri.components.sps.dsps_wrapper import (
     compute_alpha_fe_evolving,
     interpolate_met_alpha_evolving,
 )
@@ -984,7 +984,7 @@ plt.show()
 # $$ [\text{M/H}] = [\text{Fe/H}] + 0.66154 \times [\alpha/\text{Fe}] + 0.20465 \times [\alpha/\text{Fe}]^2 $$
 
 # %%
-from tengri.models.sps.dsps_wrapper import salaris_feh_from_mh, salaris_mh_from_feh
+from tengri.components.sps.dsps_wrapper import salaris_feh_from_mh, salaris_mh_from_feh
 
 # --- FIGURE 4: Salaris relation ---
 fig, axes = plt.subplots(1, 2, figsize=(12, 4))

@@ -43,21 +43,21 @@ class TestISCOPhysics:
 
     def test_schwarzschild_isco(self):
         """a=0 (Schwarzschild): r_isco = 6 R_g exactly."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         r = float(_isco_radius(0.0))
         assert abs(r - 6.0) < 0.01, f"Schwarzschild ISCO should be 6.0 Rg, got {r}"
 
     def test_maximal_spin_isco(self):
         """a=0.998 (maximal prograde spin): r_isco ≈ 1.24 R_g."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         r = float(_isco_radius(0.998))
         assert 1.0 < r < 1.5, f"Max spin ISCO should be ~1.24 Rg, got {r}"
 
     def test_isco_monotonically_decreases_with_spin(self):
         """Higher prograde spin → smaller ISCO (deeper potential well)."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         spins = [0.0, 0.3, 0.5, 0.7, 0.9, 0.998]
         riscos = [float(_isco_radius(a)) for a in spins]
@@ -69,7 +69,7 @@ class TestISCOPhysics:
 
     def test_novikov_thorne_efficiency_schwarzschild(self):
         """η = 1 - sqrt(1 - 2/(3*r_isco)). For a=0: η ≈ 0.057."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         r_isco = float(_isco_radius(0.0))
         eta = 1.0 - np.sqrt(1.0 - 2.0 / (3.0 * r_isco))
@@ -77,7 +77,7 @@ class TestISCOPhysics:
 
     def test_novikov_thorne_efficiency_maximal_spin(self):
         """For a=0.998: η ≈ 0.32 (much more efficient)."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         r_isco = float(_isco_radius(0.998))
         eta = 1.0 - np.sqrt(1.0 - 2.0 / (3.0 * r_isco))
@@ -94,7 +94,7 @@ class TestEddingtonLuminosity:
 
     def test_eddington_10e8_msun(self):
         """L_Edd(10^8 Msun) ≈ 1.26 × 10^46 erg/s (textbook value)."""
-        from tengri.models.agn.disc import _eddington_luminosity
+        from tengri.components.agn.disc import _eddington_luminosity
 
         l_edd = float(_eddington_luminosity(8.0))
         expected = 1.26e46
@@ -104,7 +104,7 @@ class TestEddingtonLuminosity:
 
     def test_eddington_scales_linearly_with_mass(self):
         """L_Edd ∝ M_BH: doubling mass doubles Eddington luminosity."""
-        from tengri.models.agn.disc import _eddington_luminosity
+        from tengri.components.agn.disc import _eddington_luminosity
 
         l7 = float(_eddington_luminosity(7.0))
         l8 = float(_eddington_luminosity(8.0))
@@ -122,7 +122,7 @@ class TestPowerlawDiscPhysics:
 
     def test_luminosity_normalization(self):
         """Integrated L_nu * dnu should equal L_bol * agn_frac."""
-        from tengri.models.agn.disc import powerlaw_disc
+        from tengri.components.agn.disc import powerlaw_disc
 
         l_nu = powerlaw_disc(WAVE, agn_log_lbol=11.0, agn_frac=0.5)
         nu = 2.99792458e10 / (WAVE * 1e-8)
@@ -140,7 +140,7 @@ class TestPowerlawDiscPhysics:
         L_nu ∝ nu^alpha, so alpha=-0.5 gives more high-frequency (UV) flux
         relative to alpha=-1.5 which falls off steeply.
         """
-        from tengri.models.agn.disc import powerlaw_disc
+        from tengri.components.agn.disc import powerlaw_disc
 
         l_steep = powerlaw_disc(WAVE, agn_log_lbol=11.0, agn_alpha=-1.5)
         l_flat = powerlaw_disc(WAVE, agn_log_lbol=11.0, agn_alpha=-0.5)
@@ -156,7 +156,7 @@ class TestPowerlawDiscPhysics:
 
     def test_higher_tmax_extends_uv(self):
         """Higher T_max pushes emission to shorter wavelengths."""
-        from tengri.models.agn.disc import powerlaw_disc
+        from tengri.components.agn.disc import powerlaw_disc
 
         l_hot = powerlaw_disc(WAVE, agn_log_lbol=11.0, agn_T_max=1e6)
         l_cool = powerlaw_disc(WAVE, agn_log_lbol=11.0, agn_T_max=1e4)
@@ -179,7 +179,7 @@ class TestMulticolorDiscPhysics:
 
         T_in ∝ M^{-1/4} (at fixed L/L_Edd).
         """
-        from tengri.models.agn.disc import multicolor_disc
+        from tengri.components.agn.disc import multicolor_disc
 
         l_low_m = multicolor_disc(WAVE, agn_log_lbol=11.0, agn_log_mbh=7.0)
         l_high_m = multicolor_disc(WAVE, agn_log_lbol=11.0, agn_log_mbh=9.0)
@@ -194,7 +194,7 @@ class TestMulticolorDiscPhysics:
 
     def test_higher_ledd_brighter(self):
         """Higher Eddington ratio → more accretion → brighter disc."""
-        from tengri.models.agn.disc import multicolor_disc
+        from tengri.components.agn.disc import multicolor_disc
 
         l_high = multicolor_disc(WAVE, agn_log_lbol=11.0, agn_log_ledd=-0.5)
         l_low = multicolor_disc(WAVE, agn_log_lbol=11.0, agn_log_ledd=-2.0)
@@ -207,7 +207,7 @@ class TestMulticolorDiscPhysics:
 
     def test_spin_affects_efficiency(self):
         """Higher spin → smaller ISCO → higher η → hotter inner disc."""
-        from tengri.models.agn.disc import multicolor_disc
+        from tengri.components.agn.disc import multicolor_disc
 
         l_no_spin = multicolor_disc(WAVE, agn_log_lbol=11.0, agn_a_spin=0.0)
         l_high_spin = multicolor_disc(WAVE, agn_log_lbol=11.0, agn_a_spin=0.9)
@@ -220,7 +220,7 @@ class TestMulticolorDiscPhysics:
 
     def test_face_on_brighter_than_edge_on(self):
         """cos(i) projection: face-on (cos_i=1) > edge-on (cos_i=0.1)."""
-        from tengri.models.agn.disc import multicolor_disc
+        from tengri.components.agn.disc import multicolor_disc
 
         l_face = multicolor_disc(WAVE, agn_log_lbol=11.0, agn_cos_inc=1.0)
         l_edge = multicolor_disc(WAVE, agn_log_lbol=11.0, agn_cos_inc=0.1)
@@ -241,7 +241,7 @@ class TestKubotaDonePhysics:
 
     def test_three_zone_output_positive(self):
         """Full 3-zone K&D model produces finite positive SED."""
-        from tengri.models.agn.disc import kubota_done_disc
+        from tengri.components.agn.disc import kubota_done_disc
 
         l_nu = kubota_done_disc(WAVE, agn_log_lbol=11.0)
         assert jnp.all(jnp.isfinite(l_nu))
@@ -252,7 +252,7 @@ class TestKubotaDonePhysics:
 
         At ~0.2 keV (62 A), K&D with warm zone should exceed pure multicolor.
         """
-        from tengri.models.agn.disc import kubota_done_disc, multicolor_disc
+        from tengri.components.agn.disc import kubota_done_disc, multicolor_disc
 
         l_kd = kubota_done_disc(WAVE, agn_log_lbol=11.0, agn_kt_warm=0.2)
         l_mc = multicolor_disc(WAVE, agn_log_lbol=11.0)
@@ -264,7 +264,7 @@ class TestKubotaDonePhysics:
 
     def test_corona_fraction_controls_hard_xray(self):
         """Higher f_hard → more hard X-ray emission from corona."""
-        from tengri.models.agn.disc import kubota_done_disc
+        from tengri.components.agn.disc import kubota_done_disc
 
         l_low_f = kubota_done_disc(WAVE, agn_log_lbol=11.0, agn_f_hard=0.01)
         l_high_f = kubota_done_disc(WAVE, agn_log_lbol=11.0, agn_f_hard=0.2)
@@ -294,7 +294,7 @@ class TestADAFPhysics:
 
         For M=10^8 Msun: nu_peak ~ 10^12 Hz → λ ~ 0.3 mm = 3e6 A.
         """
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         l_nu = adaf_disc(WAVE, agn_log_lbol=10.0, agn_log_mbh=8.0)
         peak_wave = float(WAVE[jnp.argmax(l_nu)])
@@ -303,7 +303,7 @@ class TestADAFPhysics:
 
     def test_adaf_larger_rtr_weaker(self):
         """Larger truncation radius → weaker ADAF (more energy advected)."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         l_small_rtr = adaf_disc(WAVE, agn_log_lbol=10.0, agn_r_tr=50.0)
         l_large_rtr = adaf_disc(WAVE, agn_log_lbol=10.0, agn_r_tr=500.0)
@@ -314,7 +314,7 @@ class TestADAFPhysics:
 
     def test_adaf_beta_controls_synchrotron(self):
         """Higher beta (magnetic pressure) → stronger synchrotron emission."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         l_low_b = adaf_disc(WAVE, agn_log_lbol=10.0, agn_adaf_beta=0.1)
         l_high_b = adaf_disc(WAVE, agn_log_lbol=10.0, agn_adaf_beta=0.9)
@@ -331,7 +331,7 @@ class TestADAFPhysics:
 
     def test_synchrotron_peak_scales_with_mass(self):
         """Synchrotron peak ∝ M^{-1/2}: heavier BH → lower peak frequency."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         l_low_m = adaf_disc(WAVE, agn_log_lbol=10.0, agn_log_mbh=7.0)
         l_high_m = adaf_disc(WAVE, agn_log_lbol=10.0, agn_log_mbh=9.0)
@@ -357,7 +357,7 @@ class TestBLRPhysics:
 
     def test_halpha_strongest_optical_line(self):
         """Hα (6563A) should be the strongest BLR line in optical."""
-        from tengri.models.agn.blr import blr_emission
+        from tengri.components.agn.blr import blr_emission
 
         wave_opt = jnp.linspace(4000.0, 8000.0, 5000)
         l_nu = blr_emission(wave_opt, l_disc_bol_erg=self._L_DISC)
@@ -369,7 +369,7 @@ class TestBLRPhysics:
 
     def test_lya_strongest_uv_line(self):
         """Lyα (1216A) should be the strongest BLR line in UV."""
-        from tengri.models.agn.blr import blr_emission
+        from tengri.components.agn.blr import blr_emission
 
         wave_uv = jnp.linspace(1000.0, 2000.0, 5000)
         l_nu = blr_emission(wave_uv, l_disc_bol_erg=self._L_DISC)
@@ -380,7 +380,7 @@ class TestBLRPhysics:
 
     def test_blr_scales_with_luminosity(self):
         """BLR luminosity should increase with AGN luminosity."""
-        from tengri.models.agn.blr import blr_emission
+        from tengri.components.agn.blr import blr_emission
 
         l_faint = blr_emission(WAVE, l_disc_bol_erg=1e43)
         l_bright = blr_emission(WAVE, l_disc_bol_erg=1e45)
@@ -390,7 +390,7 @@ class TestBLRPhysics:
 
     def test_broader_fwhm_spreads_lines(self):
         """Broader FWHM → wider lines → lower peak flux per Hz."""
-        from tengri.models.agn.blr import blr_emission
+        from tengri.components.agn.blr import blr_emission
 
         wave_ha = jnp.linspace(6400.0, 6700.0, 3000)
         l_narrow = blr_emission(wave_ha, l_disc_bol_erg=self._L_DISC, fwhm_kms=2000.0)
@@ -414,7 +414,7 @@ class TestNLRPhysics:
 
     def test_oiii_strongest_nlr_line(self):
         """[OIII] 5007A is the strongest NLR line."""
-        from tengri.models.agn.nlr import nlr_emission
+        from tengri.components.agn.nlr import nlr_emission
 
         wave_opt = jnp.linspace(3500.0, 7000.0, 5000)
         l_nu = nlr_emission(wave_opt, l_disc_bol_erg=self._L_DISC)
@@ -425,7 +425,7 @@ class TestNLRPhysics:
 
     def test_oiii_doublet_ratio(self):
         """[OIII] 5007/4959 ≈ 2.98 (atomic physics, Storey & Zeippen 2000)."""
-        from tengri.models.agn.nlr import _NLR_LINE_STRENGTHS, _NLR_LINE_WAVELENGTHS
+        from tengri.components.agn.nlr import _NLR_LINE_STRENGTHS, _NLR_LINE_WAVELENGTHS
 
         idx_5007 = int(jnp.argmin(jnp.abs(_NLR_LINE_WAVELENGTHS - 5007.0)))
         idx_4959 = int(jnp.argmin(jnp.abs(_NLR_LINE_WAVELENGTHS - 4959.0)))
@@ -434,8 +434,8 @@ class TestNLRPhysics:
 
     def test_nlr_narrower_than_blr(self):
         """NLR lines (~500 km/s) must be narrower than BLR (~5000 km/s)."""
-        from tengri.models.agn.blr import blr_emission
-        from tengri.models.agn.nlr import nlr_emission
+        from tengri.components.agn.blr import blr_emission
+        from tengri.components.agn.nlr import nlr_emission
 
         wave_ha = jnp.linspace(6400.0, 6700.0, 3000)
         l_blr = blr_emission(wave_ha, l_disc_bol_erg=self._L_DISC)
@@ -458,7 +458,7 @@ class TestTorusPhysics:
 
     def test_simple_torus_peaks_in_mir(self):
         """Single-temperature torus at T~1000K peaks near 3 μm = 30000A."""
-        from tengri.models.agn.torus import simple_torus
+        from tengri.components.agn.torus import simple_torus
 
         l_nu = simple_torus(WAVE, agn_log_lbol=11.0, agn_T_torus=1000.0)
         peak_wave = float(WAVE[jnp.argmax(l_nu)])
@@ -469,7 +469,7 @@ class TestTorusPhysics:
 
     def test_hotter_torus_bluer_peak(self):
         """Higher T → shorter peak wavelength (Wien's law)."""
-        from tengri.models.agn.torus import simple_torus
+        from tengri.components.agn.torus import simple_torus
 
         # Use a fine wavelength grid in the IR to resolve peaks properly
         wave_ir = jnp.geomspace(5000.0, 500000.0, 5000)
@@ -482,7 +482,7 @@ class TestTorusPhysics:
 
     def test_two_temp_torus_broader_than_single(self):
         """Two-temperature torus should have broader SED than single-T."""
-        from tengri.models.agn.torus import simple_torus, two_temperature_torus
+        from tengri.components.agn.torus import simple_torus, two_temperature_torus
 
         l_single = simple_torus(WAVE, agn_log_lbol=11.0, agn_T_torus=800.0)
         l_double = two_temperature_torus(
@@ -505,7 +505,7 @@ class TestUnifiedAGNPhysics:
 
     def test_simple_model_finite(self):
         """Simple AGN model produces finite positive SED."""
-        from tengri.models.agn import resolve_agn_model
+        from tengri.components.agn import resolve_agn_model
 
         model_fn = resolve_agn_model("simple")
         l_nu = model_fn(WAVE, agn_log_lbol=11.0)
@@ -514,7 +514,7 @@ class TestUnifiedAGNPhysics:
 
     def test_higher_torus_frac_more_ir(self):
         """Higher torus covering fraction → more MIR, less UV."""
-        from tengri.models.agn.unified import unified_agn
+        from tengri.components.agn.unified import unified_agn
 
         l_low_cf = unified_agn(WAVE, agn_log_lbol=11.0, agn_torus_frac=0.1)
         l_high_cf = unified_agn(WAVE, agn_log_lbol=11.0, agn_torus_frac=0.8)
@@ -529,7 +529,7 @@ class TestUnifiedAGNPhysics:
 
     def test_all_registered_models_produce_valid_sed(self):
         """Every registered AGN model must produce finite positive SED."""
-        from tengri.models.agn import AGN_MODELS
+        from tengri.components.agn import AGN_MODELS
 
         for name in AGN_MODELS:
             model_fn = AGN_MODELS[name]

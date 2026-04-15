@@ -59,7 +59,7 @@ class TestISCOExact:
     @pytest.mark.parametrize("a_spin", [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 0.95, 0.998])
     def test_isco_matches_reference(self, a_spin):
         """tengri ISCO must match BPT72 formula to 0.01%."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         tengri_r = float(_isco_radius(a_spin))
         ref_r = _isco_radius_reference(a_spin)
@@ -88,7 +88,7 @@ class TestEddingtonExact:
     @pytest.mark.parametrize("log_mbh", [6.0, 7.0, 8.0, 9.0, 10.0])
     def test_eddington_matches_astropy(self, log_mbh):
         """Must match to 0.5% (difference from constant precision)."""
-        from tengri.models.agn.disc import _eddington_luminosity
+        from tengri.components.agn.disc import _eddington_luminosity
 
         tengri_l = float(_eddington_luminosity(log_mbh))
         ref_l = _eddington_luminosity_reference(log_mbh)
@@ -117,7 +117,7 @@ class TestGravRadiusExact:
     @pytest.mark.parametrize("log_mbh", [6.0, 7.0, 8.0, 9.0, 10.0])
     def test_rg_matches_astropy(self, log_mbh):
         """Must match to 0.5%."""
-        from tengri.models.agn.disc import _gravitational_radius
+        from tengri.components.agn.disc import _gravitational_radius
 
         tengri_rg = float(_gravitational_radius(log_mbh))
         ref_rg = _gravitational_radius_reference(log_mbh)
@@ -145,7 +145,7 @@ class TestNTEfficiency:
     )
     def test_efficiency_published_values(self, a_spin, expected_eta):
         """Compare η against published values (Thorne 1974 Table 1)."""
-        from tengri.models.agn.disc import _isco_radius
+        from tengri.components.agn.disc import _isco_radius
 
         r_isco = float(_isco_radius(a_spin))
         eta = 1.0 - np.sqrt(1.0 - 2.0 / (3.0 * r_isco))
@@ -178,7 +178,7 @@ class TestPlanckExact:
 
         For T=10000K: ν_peak = 5.88e14 Hz → λ ≈ 5100 A.
         """
-        from tengri.models.agn.disc import _planck_lnu
+        from tengri.components.agn.disc import _planck_lnu
 
         t = 10000.0
         nu_peak = 2.821 * K_BOLTZ * t / H_PLANCK
@@ -197,7 +197,7 @@ class TestPlanckExact:
     )
     def test_planck_at_various(self, nu, temperature):
         """Planck function must match independent calculation to 1e-6."""
-        from tengri.models.agn.disc import _planck_lnu
+        from tengri.components.agn.disc import _planck_lnu
 
         tengri_bnu = float(_planck_lnu(jnp.array([nu]), temperature)[0])
         ref_bnu = _planck_bnu_reference(nu, temperature)
@@ -214,7 +214,7 @@ class TestQSOgenContinuumExact:
 
     def test_normalized_at_5500(self):
         """f_nu(5500A) = 1.0 by construction."""
-        from tengri.models.agn.qsogen import _broken_powerlaw_continuum
+        from tengri.components.agn.qsogen import _broken_powerlaw_continuum
 
         wave = jnp.array([5500.0])
         f = float(_broken_powerlaw_continuum(wave, -0.349, 0.593, 3880.0)[0])
@@ -226,7 +226,7 @@ class TestQSOgenContinuumExact:
         At 8000A (well above 3880A break):
         f_nu(8000) / f_nu(5500) = (8000/5500)^{-0.593}
         """
-        from tengri.models.agn.qsogen import _broken_powerlaw_continuum
+        from tengri.components.agn.qsogen import _broken_powerlaw_continuum
 
         f = _broken_powerlaw_continuum(jnp.array([5500.0, 8000.0]), -0.349, 0.593, 3880.0)
         expected_ratio = (8000.0 / 5500.0) ** (-0.593)
@@ -238,7 +238,7 @@ class TestQSOgenContinuumExact:
 
         Slope should be -plslp1 = 0.349 (positive = bluer at shorter λ).
         """
-        from tengri.models.agn.qsogen import _broken_powerlaw_continuum
+        from tengri.components.agn.qsogen import _broken_powerlaw_continuum
 
         wave = jnp.array([2000.0, 3000.0])
         f = _broken_powerlaw_continuum(wave, -0.349, 0.593, 3880.0)
@@ -250,7 +250,7 @@ class TestQSOgenContinuumExact:
 
     def test_plslp1_zero_flat_blue(self):
         """plslp1=0 → flat f_nu in the blue (no UV rise/decline)."""
-        from tengri.models.agn.qsogen import _broken_powerlaw_continuum
+        from tengri.components.agn.qsogen import _broken_powerlaw_continuum
 
         wave = jnp.linspace(1500.0, 3500.0, 100)
         f = _broken_powerlaw_continuum(wave, 0.0, 0.593, 3880.0)
@@ -269,7 +269,7 @@ class TestQSOgenHotDustExact:
 
     def test_bb_scales_linearly_with_bbnorm(self):
         """BB flux at 2μm must scale linearly with bbnorm."""
-        from tengri.models.agn.qsogen import _broken_powerlaw_continuum, _hot_dust_blackbody
+        from tengri.components.agn.qsogen import _broken_powerlaw_continuum, _hot_dust_blackbody
 
         wave = jnp.linspace(5000.0, 30000.0, 500)
         cont = _broken_powerlaw_continuum(wave, -0.349, 0.593, 3880.0)
@@ -285,7 +285,7 @@ class TestQSOgenHotDustExact:
 
     def test_hotter_dust_peaks_bluer(self):
         """Wien's law: higher T → shorter peak λ."""
-        from tengri.models.agn.qsogen import _broken_powerlaw_continuum, _hot_dust_blackbody
+        from tengri.components.agn.qsogen import _broken_powerlaw_continuum, _hot_dust_blackbody
 
         wave = jnp.linspace(5000.0, 50000.0, 500)
         cont = _broken_powerlaw_continuum(wave, -0.349, 0.593, 3880.0)
@@ -318,7 +318,7 @@ class TestBeloborodovExact:
     )
     def test_exact_formula(self, ratio, expected):
         """Verify against exact Beloborodov (1999) Eq. 1."""
-        from tengri.models.agn.disc import beloborodov_gamma_hot
+        from tengri.components.agn.disc import beloborodov_gamma_hot
 
         gamma = float(beloborodov_gamma_hot(ratio, 1.0))
         expected_clipped = np.clip(expected, 1.4, 3.0)
@@ -336,7 +336,7 @@ class TestJust2007Exact:
     @pytest.mark.parametrize("log_l2500", [27.0, 28.0, 29.0, 30.0, 31.0, 32.0])
     def test_exact_formula(self, log_l2500):
         """Must match the linear relation exactly."""
-        from tengri.models.xray import alpha_ox_from_l2500
+        from tengri.components.xray import alpha_ox_from_l2500
 
         result = float(alpha_ox_from_l2500(10.0**log_l2500))
         expected = -0.137 * log_l2500 + 2.638
@@ -357,7 +357,7 @@ class TestPolarDustExtinctionExact:
         R_V(SMC) = 2.93 (Pei 1992).
         At V-band (5500A): k(V) = 1.0, so τ = 0.921 * E(B-V) * 2.93.
         """
-        from tengri.models.agn.polar_dust import polar_dust_extinction
+        from tengri.components.agn.polar_dust import polar_dust_extinction
 
         wave = jnp.array([5500.0])
         l_nu = jnp.array([1.0])
@@ -373,8 +373,8 @@ class TestPolarDustExtinctionExact:
 
     def test_uv_more_extincted_than_optical(self):
         """SMC: k(1500A) >> k(V) → UV much more extincted."""
-        from tengri.models.agn.polar_dust import polar_dust_extinction
-        from tengri.models.dust.attenuation import smc as smc_curve
+        from tengri.components.agn.polar_dust import polar_dust_extinction
+        from tengri.components.dust.attenuation import smc as smc_curve
 
         wave = jnp.array([1500.0, 5500.0])
         l_nu = jnp.ones(2)
@@ -401,7 +401,7 @@ class TestDiscTemperatureProfile:
 
     def test_temperature_decreases_outward(self):
         """T(r) must decrease with radius (cooler outer disc)."""
-        from tengri.models.agn.disc import _gravitational_radius, _isco_radius
+        from tengri.components.agn.disc import _gravitational_radius, _isco_radius
 
         r_g = _gravitational_radius(8.0)
         r_isco = float(_isco_radius(0.0)) * float(r_g)
@@ -426,7 +426,7 @@ class TestDiscTemperatureProfile:
 
     def test_temperature_scales_r_minus_three_quarters(self):
         """At large r (where torque correction → 1): T ∝ r^{-3/4}."""
-        from tengri.models.agn.disc import _gravitational_radius, _isco_radius
+        from tengri.components.agn.disc import _gravitational_radius, _isco_radius
 
         r_g = _gravitational_radius(8.0)
         r_isco = float(_isco_radius(0.0)) * float(r_g)
@@ -464,7 +464,7 @@ class TestDiscEnergyConservation:
     )
     def test_luminosity_integral(self, model_name, model_fn_kwargs):
         """Integrated L_ν must equal L_bol to 20% (wavelength grid truncation)."""
-        from tengri.models.agn.disc import multicolor_disc, powerlaw_disc
+        from tengri.components.agn.disc import multicolor_disc, powerlaw_disc
 
         fn = {"powerlaw": powerlaw_disc, "multicolor": multicolor_disc}[model_name]
         wave = jnp.geomspace(10.0, 1e8, 5000)
@@ -509,7 +509,7 @@ class TestAnisotropyExact:
     )
     def test_exact_values(self, cos_inc, a1, a2, expected_factor):
         """Anisotropy factor must match analytical formula exactly."""
-        from tengri.models.xray import xray_anisotropy
+        from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.array([1.0])
         result = float(xray_anisotropy(l_x, cos_inc, a1, a2)[0])
@@ -526,7 +526,7 @@ class TestRadioDPLExact:
 
     def test_l5ghz_matches_definition(self):
         """L_nu at 5 GHz must equal L_B * 10^R (radio-loudness definition)."""
-        from tengri.models.radio import radio_agn_dpl
+        from tengri.components.radio import radio_agn_dpl
 
         # 5 GHz → λ = c/ν = 3e10/5e9 = 6 cm = 6e8 A
         wave = jnp.array([6e8])

@@ -9,7 +9,7 @@ Covers uncovered branches in:
 - LineList.select() species= filter and empty-result path (lines 405-448)
 """
 
-from tengri.models.observation.line_list import (
+from tengri.observation.line_list import (
     DoubletConstraint,
     LineList,
     _detect_doublets_by_proximity,

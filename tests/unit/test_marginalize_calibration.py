@@ -7,7 +7,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 
-from tengri.models.observation.calibration import (
+from tengri.observation.calibration import (
     calibration_polynomial,
     marginalize_calibration,
 )

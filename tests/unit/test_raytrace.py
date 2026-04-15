@@ -14,8 +14,8 @@ from tengri.distributions import Uniform
 from tengri.inference.fitter import Fitter
 from tengri.inference.posterior import Posterior
 from tengri.inference.raytrace import sample_hamiltonian, sample_raytrace
-from tengri.models.observation.filters import load_filter_set
-from tengri.models.sps.dsps_wrapper import load_ssp_data
+from tengri.observation.filters import load_filter_set
+from tengri.components.sps.dsps_wrapper import load_ssp_data
 
 # ---------------------------------------------------------------------------
 # Helpers

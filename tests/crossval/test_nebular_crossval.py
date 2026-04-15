@@ -60,7 +60,7 @@ def ssp_wne():
 def cloudy_backend(ssp_data):
     if not _CLOUDY_PRSC_PATH.is_file():
         pytest.skip("CLOUDY PRSC grid not found")
-    from tengri.models.nebular.cloudy_grid import CloudyGridBackend
+    from tengri.components.nebular.cloudy_grid import CloudyGridBackend
 
     return CloudyGridBackend(str(_CLOUDY_PRSC_PATH), ssp_data)
 
@@ -69,7 +69,7 @@ def cloudy_backend(ssp_data):
 def cue_backend(ssp_data):
     if not _CUE_PATH.is_file():
         pytest.skip("Cue weights not found")
-    from tengri.models.nebular.cue import CueBackend
+    from tengri.components.nebular.cue import CueBackend
 
     return CueBackend(str(_CUE_PATH), ssp_data)
 

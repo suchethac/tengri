@@ -70,22 +70,22 @@ from tengri.inference.hierarchical import (
 from tengri.inference.posterior import Posterior
 from tengri.inference.raytrace import sample_raytrace
 from tengri.inference.vi_config import VIConfig
-from tengri.models.agn.agn_config import AGNConfig
-from tengri.models.dust.attenuation import two_component_dust
-from tengri.models.observation.filters import load_filter_set
-from tengri.models.observation.line_list import LineCatalog, LineList
-from tengri.models.observation.noise_model import NoiseConfig, NoiseModel
-from tengri.models.observation.observation import Observation
-from tengri.models.observation.photometry_config import Photometry
-from tengri.models.observation.spectroscopy import Spectroscopy, SpectroscopyConfig
-from tengri.models.sfh.gp_sfh import (
+from tengri.components.agn.agn_config import AGNConfig
+from tengri.components.dust.attenuation import two_component_dust
+from tengri.observation.filters import load_filter_set
+from tengri.observation.line_list import LineCatalog, LineList
+from tengri.observation.noise_model import NoiseConfig, NoiseModel
+from tengri.observation.observation import Observation
+from tengri.observation.photometry_config import Photometry
+from tengri.observation.spectroscopy import Spectroscopy, SpectroscopyConfig
+from tengri.components.sfh.gp_sfh import (
     compute_sqrt_power_drw,
     generate_gp_batch,
     generate_gp_fourier,
     gp_from_xi,
     make_log_age_grid,
 )
-from tengri.models.sfh.mean_sfh import (
+from tengri.components.sfh.mean_sfh import (
     AGEMAX_YR,
     constant_sfh,
     delayed_exponential_sfh,
@@ -103,14 +103,14 @@ from tengri.models.sfh.mean_sfh import (
     truncated_skewnormal_sfh,
     tsnorm,
 )
-from tengri.models.sfh.psd_models import drw_acf, drw_variance, psd_drw
-from tengri.models.sfh.registry import (
+from tengri.components.sfh.psd_models import drw_acf, drw_variance, psd_drw
+from tengri.components.sfh.registry import (
     FIELD_MODEL_REGISTRY,
     SFH_REGISTRY,
     compute_field_gp,
     resolve_sfh,
 )
-from tengri.models.sps.dsps_wrapper import (
+from tengri.components.sps.dsps_wrapper import (
     SSPData,
     effective_metallicity,
     has_alpha_grid,

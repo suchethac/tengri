@@ -26,7 +26,7 @@ import numpy as np
 import pytest
 from scipy.integrate import trapezoid
 
-from tengri.models.sfh.mean_sfh import (
+from tengri.components.sfh.mean_sfh import (
     constant_sfh,
     delayed_exponential_sfh,
     double_powerlaw,

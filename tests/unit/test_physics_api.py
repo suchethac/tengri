@@ -32,15 +32,15 @@ _needs_ssp = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
 
 class TestPlanckLnuExtracted:
     def test_phys_module_exists(self):
-        from tengri.models.agn import _phys  # noqa: F401
+        from tengri.components.agn import _phys  # noqa: F401
 
     def test_planck_lnu_importable(self):
-        from tengri.models.agn._phys import planck_lnu
+        from tengri.components.agn._phys import planck_lnu
 
         assert callable(planck_lnu)
 
     def test_planck_lnu_finite_for_solar_T(self):
-        from tengri.models.agn._phys import planck_lnu
+        from tengri.components.agn._phys import planck_lnu
 
         nu = jnp.linspace(1e12, 1e16, 100)  # UV to far-IR
         result = planck_lnu(nu, 5778.0)  # solar temperature
@@ -48,7 +48,7 @@ class TestPlanckLnuExtracted:
         assert jnp.all(result >= 0.0)
 
     def test_planck_zero_temperature_returns_finite(self):
-        from tengri.models.agn._phys import planck_lnu
+        from tengri.components.agn._phys import planck_lnu
 
         nu = jnp.array([1e14])
         result = planck_lnu(nu, 0.0)  # temperature = 0 → clamp to 1 K
@@ -56,18 +56,18 @@ class TestPlanckLnuExtracted:
 
     def test_disc_still_importable(self):
         """disc.py must still import cleanly after removing local _planck_lnu."""
-        from tengri.models.agn import disc  # noqa: F401
+        from tengri.components.agn import disc  # noqa: F401
 
     def test_torus_still_importable(self):
-        from tengri.models.agn import torus  # noqa: F401
+        from tengri.components.agn import torus  # noqa: F401
 
     def test_skirtor_still_importable(self):
-        from tengri.models.agn import skirtor  # noqa: F401
+        from tengri.components.agn import skirtor  # noqa: F401
 
 
 class TestLinesToSed:
     def test_lines_to_sed_shape(self):
-        from tengri.models.agn._phys import lines_to_sed
+        from tengri.components.agn._phys import lines_to_sed
 
         wave_obs = jnp.linspace(4000.0, 7000.0, 500)
         line_wav = jnp.array([4861.33, 6562.80])  # Hβ, Hα
@@ -80,7 +80,7 @@ class TestLinesToSed:
         assert jnp.any(result > 0.0)
 
     def test_lines_to_sed_peaks_near_line_centres(self):
-        from tengri.models.agn._phys import lines_to_sed
+        from tengri.components.agn._phys import lines_to_sed
 
         wave_obs = jnp.linspace(6400.0, 6700.0, 1000)
         line_wav = jnp.array([6562.80])
@@ -103,7 +103,7 @@ class TestAgnNlrEmissionReturnType:
         """agn_nlr_emission() must NOT have a union return type."""
         import inspect
 
-        from tengri.models.nebular.agn_nebular import agn_nlr_emission
+        from tengri.components.nebular.agn_nebular import agn_nlr_emission
 
         hints = {}
         try:
@@ -123,7 +123,7 @@ class TestAgnNlrEmissionReturnType:
         """agn_nlr_cue() should not take a wavelength parameter."""
         import inspect
 
-        from tengri.models.nebular.agn_nebular import agn_nlr_cue
+        from tengri.components.nebular.agn_nebular import agn_nlr_cue
 
         sig = inspect.signature(agn_nlr_cue)
         assert "wavelength" not in sig.parameters
@@ -132,7 +132,7 @@ class TestAgnNlrEmissionReturnType:
         """agn_nlr_cue() should use neb_logU, not gas_logu."""
         import inspect
 
-        from tengri.models.nebular.agn_nebular import agn_nlr_cue
+        from tengri.components.nebular.agn_nebular import agn_nlr_cue
 
         sig = inspect.signature(agn_nlr_cue)
         assert "neb_logU" in sig.parameters
@@ -148,7 +148,7 @@ class TestLineEfficiencyExposed:
     def test_nlr_emission_has_line_efficiency_param(self):
         import inspect
 
-        from tengri.models.agn.nlr import nlr_emission
+        from tengri.components.agn.nlr import nlr_emission
 
         sig = inspect.signature(nlr_emission)
         assert "line_efficiency" in sig.parameters
@@ -159,7 +159,7 @@ class TestLineEfficiencyExposed:
     def test_blr_emission_has_line_efficiency_param(self):
         import inspect
 
-        from tengri.models.agn.blr import blr_emission
+        from tengri.components.agn.blr import blr_emission
 
         sig = inspect.signature(blr_emission)
         assert "line_efficiency" in sig.parameters
@@ -169,7 +169,7 @@ class TestLineEfficiencyExposed:
 
     def test_nlr_emission_line_efficiency_scales_output(self):
         """Halving line_efficiency should roughly scale NLR luminosity."""
-        from tengri.models.agn.nlr import nlr_emission
+        from tengri.components.agn.nlr import nlr_emission
 
         wave = jnp.linspace(3000.0, 8000.0, 500)
         l1 = jnp.sum(nlr_emission(wave, 1e44, line_efficiency=0.10))
@@ -186,16 +186,16 @@ class TestLineEfficiencyExposed:
 
 class TestEmissionLineCatalog:
     def test_eline_catalog_importable(self):
-        from tengri.models.observation import eline_catalog  # noqa: F401
+        from tengri.observation import eline_catalog  # noqa: F401
 
     def test_emission_lines_dict_has_required_keys(self):
-        from tengri.models.observation.eline_catalog import EMISSION_LINES
+        from tengri.observation.eline_catalog import EMISSION_LINES
 
         for name in ("Hbeta", "Halpha", "OIII5007", "NII6583"):
             assert name in EMISSION_LINES, f"{name} not in EMISSION_LINES"
 
     def test_line_groups_consistent_with_catalog(self):
-        from tengri.models.observation.eline_catalog import EMISSION_LINES, LINE_GROUPS
+        from tengri.observation.eline_catalog import EMISSION_LINES, LINE_GROUPS
 
         for group_name, members in LINE_GROUPS.items():
             for member in members:
@@ -204,7 +204,7 @@ class TestEmissionLineCatalog:
                 )
 
     def test_get_line_wavelengths(self):
-        from tengri.models.observation.eline_catalog import get_line_wavelengths
+        from tengri.observation.eline_catalog import get_line_wavelengths
 
         wav = get_line_wavelengths("bpt")
         assert wav.shape == (4,)
@@ -213,7 +213,7 @@ class TestEmissionLineCatalog:
 
     def test_backward_compat_default_line_arrays(self):
         """Old DEFAULT_LINE_NAMES/WAVELENGTHS still importable from eline_marginalization."""
-        from tengri.models.observation.eline_marginalization import (
+        from tengri.observation.eline_marginalization import (
             DEFAULT_LINE_NAMES,
             DEFAULT_LINE_WAVELENGTHS,
         )
@@ -223,7 +223,7 @@ class TestEmissionLineCatalog:
 
     def test_backward_compat_cloudy_line_arrays(self):
         """Old CLOUDY_LINE_NAMES/WAVELENGTHS still importable from eline_priors."""
-        from tengri.models.observation.eline_priors import (
+        from tengri.observation.eline_priors import (
             CLOUDY_LINE_NAMES,
             CLOUDY_LINE_WAVELENGTHS,
         )
@@ -239,12 +239,12 @@ class TestEmissionLineCatalog:
 
 class TestBuildLineDesignMatrix:
     def test_build_line_design_matrix_importable(self):
-        from tengri.models.observation.eline_marginalization import (
+        from tengri.observation.eline_marginalization import (
             build_line_design_matrix,  # noqa: F401
         )
 
     def test_narrow_only_matches_eline_design_matrix(self):
-        from tengri.models.observation.eline_marginalization import (
+        from tengri.observation.eline_marginalization import (
             build_eline_design_matrix,
             build_line_design_matrix,
         )
@@ -259,7 +259,7 @@ class TestBuildLineDesignMatrix:
         assert jnp.allclose(A_old, A_new, atol=1e-6)
 
     def test_narrow_plus_broad_has_extra_columns(self):
-        from tengri.models.observation.eline_marginalization import build_line_design_matrix
+        from tengri.observation.eline_marginalization import build_line_design_matrix
 
         wave = jnp.linspace(4000.0, 7000.0, 300)
         narrow = jnp.array([4861.33, 6562.80])  # 2 narrow
@@ -282,7 +282,7 @@ class TestAGNConfig:
         assert hasattr(tengri, "AGNConfig")
 
     def test_default_construction(self):
-        from tengri.models.agn.agn_config import AGNConfig
+        from tengri.components.agn.agn_config import AGNConfig
 
         cfg = AGNConfig()
         assert cfg.disc == "multicolor"
@@ -291,27 +291,27 @@ class TestAGNConfig:
         assert cfg.polar_dust is False
 
     def test_custom_construction(self):
-        from tengri.models.agn.agn_config import AGNConfig
+        from tengri.components.agn.agn_config import AGNConfig
 
         cfg = AGNConfig(disc="kubota_done", torus="skirtor", nlr="cue", blr=True, polar_dust=True)
         assert cfg.disc == "kubota_done"
         assert cfg.polar_dust is True
 
     def test_frozen_immutable(self):
-        from tengri.models.agn.agn_config import AGNConfig
+        from tengri.components.agn.agn_config import AGNConfig
 
         cfg = AGNConfig()
         with pytest.raises((AttributeError, TypeError)):
             cfg.disc = "adaf"  # type: ignore[misc]
 
     def test_invalid_disc_raises(self):
-        from tengri.models.agn.agn_config import AGNConfig
+        from tengri.components.agn.agn_config import AGNConfig
 
         with pytest.raises(ValueError, match="disc"):
             AGNConfig(disc="invalid_model")
 
     def test_invalid_torus_raises(self):
-        from tengri.models.agn.agn_config import AGNConfig
+        from tengri.components.agn.agn_config import AGNConfig
 
         with pytest.raises(ValueError, match="torus"):
             AGNConfig(torus="photon_torpedo")

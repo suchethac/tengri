@@ -41,8 +41,8 @@ References
 
 import jax.numpy as jnp
 
-from tengri.models.dust.attenuation import two_component_dust
-from tengri.models.sps.dsps_wrapper import (
+from tengri.components.dust.attenuation import two_component_dust
+from tengri.components.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
     interpolate_metallicity,
@@ -242,7 +242,7 @@ def photometry_from_sfh(
         "sed" : array (n_wave,) — rest-frame SED in erg/s/Hz
         "stellar_mass" : float — total mass formed
     """
-    from tengri.models.observation.photometry import compute_flux_density
+    from tengri.observation.photometry import compute_flux_density
 
     # Compute SED
     result = sed_from_sfh(
@@ -259,7 +259,7 @@ def photometry_from_sfh(
 
     # IGM absorption
     if apply_igm and redshift > 0:
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         wave_obs = wave * (1.0 + redshift)
         igm_trans = igm_transmission(wave_obs, redshift)
@@ -321,7 +321,7 @@ def spectrum_from_sfh(
         "sed" : array (n_wave,) — rest-frame SED
         "stellar_mass" : float
     """
-    from tengri.models.observation.spectrum import compute_spectrum
+    from tengri.observation.spectrum import compute_spectrum
 
     result = sed_from_sfh(
         t_gyr,
@@ -337,7 +337,7 @@ def spectrum_from_sfh(
 
     # IGM
     if apply_igm and redshift > 0:
-        from tengri.models.igm import igm_transmission
+        from tengri.components.igm import igm_transmission
 
         wave_obs_full = wave * (1.0 + redshift)
         igm_trans = igm_transmission(wave_obs_full, redshift)
@@ -350,7 +350,7 @@ def spectrum_from_sfh(
 
     # Velocity broadening
     if sigma_v > 0:
-        from tengri.models.observation.spectrum import velocity_broaden
+        from tengri.observation.spectrum import velocity_broaden
 
         flux = velocity_broaden(flux, wave_obs, sigma_v)
 

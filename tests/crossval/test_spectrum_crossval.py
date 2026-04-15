@@ -50,7 +50,7 @@ def fsps_wave(ref):
 def ssp_data():
     if not _SSP_PATH.is_file():
         pytest.skip("SSP data not found")
-    from tengri.models.sps.dsps_wrapper import load_ssp_data
+    from tengri.components.sps.dsps_wrapper import load_ssp_data
 
     return load_ssp_data(str(_SSP_PATH))
 
@@ -78,7 +78,7 @@ class TestSSPSpectrumCrossval:
 
     def test_ssp_1gyr_solar_optical(self, ssp_data, ref, fsps_wave):
         """SSP 1 Gyr solar: optical/NIR flux within 25% of FSPS."""
-        from tengri.models.sps.dsps_wrapper import interpolate_metallicity
+        from tengri.components.sps.dsps_wrapper import interpolate_metallicity
 
         ssp_flux = np.asarray(
             interpolate_metallicity(ssp_data.ssp_flux, ssp_data.ssp_lgmet, LOG10_ZSUN)
@@ -97,7 +97,7 @@ class TestSSPSpectrumCrossval:
 
     def test_ssp_1gyr_solar_uv(self, ssp_data, ref, fsps_wave):
         """SSP 1 Gyr solar: UV flux within factor 2 (Z-sensitive)."""
-        from tengri.models.sps.dsps_wrapper import interpolate_metallicity
+        from tengri.components.sps.dsps_wrapper import interpolate_metallicity
 
         ssp_flux = np.asarray(
             interpolate_metallicity(ssp_data.ssp_flux, ssp_data.ssp_lgmet, LOG10_ZSUN)
@@ -114,7 +114,7 @@ class TestSSPSpectrumCrossval:
 
     def test_young_ssp_bluer_than_old(self, ssp_data):
         """100 Myr SSP should be bluer than 10 Gyr SSP."""
-        from tengri.models.sps.dsps_wrapper import interpolate_metallicity
+        from tengri.components.sps.dsps_wrapper import interpolate_metallicity
 
         ssp_flux = np.asarray(
             interpolate_metallicity(ssp_data.ssp_flux, ssp_data.ssp_lgmet, LOG10_ZSUN)
@@ -136,7 +136,7 @@ class TestSSPSpectrumCrossval:
 
     def test_metallicity_affects_uv(self, ssp_data):
         """Low-Z SSP should be UV-brighter than high-Z at 1 Gyr."""
-        from tengri.models.sps.dsps_wrapper import interpolate_metallicity
+        from tengri.components.sps.dsps_wrapper import interpolate_metallicity
 
         ssp_wave = np.asarray(ssp_data.ssp_wave)
         ssp_lg_age = np.asarray(ssp_data.ssp_lg_age_gyr)
@@ -164,7 +164,7 @@ class TestDustySpectrumCrossval:
 
     def test_cf00_attenuation_curve(self, ssp_data, ref, fsps_wave):
         """Charlot & Fall attenuation at key wavelengths vs FSPS."""
-        from tengri.models.dust.attenuation import two_component_dust
+        from tengri.components.dust.attenuation import two_component_dust
 
         ssp_wave = np.asarray(ssp_data.ssp_wave)
         tau_v2 = 0.5

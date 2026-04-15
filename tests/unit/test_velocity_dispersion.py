@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.models.observation.spectrum import velocity_broaden
+from tengri.observation.spectrum import velocity_broaden
 
 jax.config.update("jax_enable_x64", True)
 

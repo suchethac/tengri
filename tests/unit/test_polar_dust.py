@@ -6,7 +6,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.models.agn.polar_dust import (
+from tengri.components.agn.polar_dust import (
     _type1_mask,
     polar_dust_emission,
     polar_dust_extinction,
@@ -103,7 +103,7 @@ class TestPolarDustEmission:
         l_reemit = polar_dust_emission(l_absorbed_total, WAVELENGTH, temperature=100.0)
 
         # Integrate over frequency
-        from tengri.models.agn.polar_dust import _C_AA
+        from tengri.components.agn.polar_dust import _C_AA
 
         nu = _C_AA / WAVELENGTH
         delta_nu = jnp.abs(jnp.diff(nu))

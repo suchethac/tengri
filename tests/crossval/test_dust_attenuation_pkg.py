@@ -33,7 +33,7 @@ try:
 except ImportError:
     HAS_DUST_ATT = False
 
-from tengri.models.dust.attenuation import (
+from tengri.components.dust.attenuation import (
     calzetti,
     leitherer02,
     noll09,

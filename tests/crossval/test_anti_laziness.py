@@ -37,7 +37,7 @@ class TestAttenuationParameterSensitivity:
 
     def test_kriek_conroy_bump_not_ignored(self):
         """Verify dust_bump_strength actually changes the 2175A region."""
-        from tengri.models.dust.attenuation import kriek_conroy
+        from tengri.components.dust.attenuation import kriek_conroy
 
         wave = jnp.linspace(1800.0, 2600.0, 200)
         k0 = kriek_conroy(wave, dust_bump_strength=0.0, dust_delta=0.0)
@@ -47,7 +47,7 @@ class TestAttenuationParameterSensitivity:
 
     def test_kriek_conroy_delta_not_ignored(self):
         """Verify dust_delta actually changes the UV slope."""
-        from tengri.models.dust.attenuation import kriek_conroy
+        from tengri.components.dust.attenuation import kriek_conroy
 
         wave = jnp.geomspace(1000.0, 20000.0, 200)
         k_neg = kriek_conroy(wave, dust_delta=-0.5)
@@ -57,7 +57,7 @@ class TestAttenuationParameterSensitivity:
 
     def test_cardelli_rv_not_ignored(self):
         """Verify dust_Rv actually changes the Cardelli curve."""
-        from tengri.models.dust.attenuation import cardelli
+        from tengri.components.dust.attenuation import cardelli
 
         wave = jnp.geomspace(1000.0, 20000.0, 200)
         k25 = cardelli(wave, dust_Rv=2.5)
@@ -67,7 +67,7 @@ class TestAttenuationParameterSensitivity:
 
     def test_power_law_slope_not_ignored(self):
         """Verify n_slope actually changes the power law."""
-        from tengri.models.dust.attenuation import power_law
+        from tengri.components.dust.attenuation import power_law
 
         wave = jnp.geomspace(1000.0, 20000.0, 200)
         k03 = power_law(wave, n_slope=-0.3)
@@ -77,7 +77,7 @@ class TestAttenuationParameterSensitivity:
 
     def test_li08_all_four_params_matter(self):
         """Li08 has 4 coefficients — ALL must affect the output."""
-        from tengri.models.dust.attenuation import li08
+        from tengri.components.dust.attenuation import li08
 
         wave = jnp.geomspace(912.0, 30000.0, 200)
         k_default = li08(wave)
@@ -94,7 +94,7 @@ class TestAttenuationParameterSensitivity:
 
     def test_noll09_both_params_matter(self):
         """Noll09 bump and delta must both affect output."""
-        from tengri.models.dust.attenuation import noll09
+        from tengri.components.dust.attenuation import noll09
 
         wave = jnp.geomspace(912.0, 30000.0, 200)
         k_base = noll09(wave, dust_bump_strength=0.0, dust_delta=0.0)
@@ -107,7 +107,7 @@ class TestAttenuationParameterSensitivity:
 
     def test_salim_sbl18_both_params_matter(self):
         """Salim+2018 bump and delta must both affect output."""
-        from tengri.models.dust.attenuation import salim_sbl18
+        from tengri.components.dust.attenuation import salim_sbl18
 
         wave = jnp.geomspace(912.0, 30000.0, 200)
         k_base = salim_sbl18(wave, dust_bump_strength=0.0, dust_delta=0.0)
@@ -120,7 +120,7 @@ class TestAttenuationParameterSensitivity:
 
     def test_tea_delta_not_ignored(self):
         """TEA attenuation must respond to delta parameter."""
-        from tengri.models.dust.attenuation import tea
+        from tengri.components.dust.attenuation import tea
 
         wave = jnp.geomspace(912.0, 30000.0, 200)
         k1 = tea(wave, dust_delta=-0.5)
@@ -130,7 +130,7 @@ class TestAttenuationParameterSensitivity:
 
     def test_narayanan_redshift_not_ignored(self):
         """Narayanan curve must respond to redshift."""
-        from tengri.models.dust.attenuation import narayanan_z
+        from tengri.components.dust.attenuation import narayanan_z
 
         wave = jnp.geomspace(912.0, 30000.0, 200)
         k0 = narayanan_z(wave, redshift=0.0)
@@ -151,7 +151,7 @@ class TestAGNParameterSensitivity:
 
     def test_powerlaw_alpha_changes_shape(self):
         """Power-law disc alpha must change the SED shape."""
-        from tengri.models.agn.disc import powerlaw_disc
+        from tengri.components.agn.disc import powerlaw_disc
 
         l1 = powerlaw_disc(self._WAVE, agn_log_lbol=11.0, agn_alpha=-0.5)
         l2 = powerlaw_disc(self._WAVE, agn_log_lbol=11.0, agn_alpha=-1.5)
@@ -161,7 +161,7 @@ class TestAGNParameterSensitivity:
 
     def test_powerlaw_tmax_changes_shape(self):
         """Power-law disc T_max must change the UV cutoff."""
-        from tengri.models.agn.disc import powerlaw_disc
+        from tengri.components.agn.disc import powerlaw_disc
 
         l_hot = powerlaw_disc(self._WAVE, agn_log_lbol=11.0, agn_T_max=1e6)
         l_cool = powerlaw_disc(self._WAVE, agn_log_lbol=11.0, agn_T_max=1e4)
@@ -169,7 +169,7 @@ class TestAGNParameterSensitivity:
 
     def test_multicolor_mass_changes_shape(self):
         """BH mass must change the multicolor disc SED shape."""
-        from tengri.models.agn.disc import multicolor_disc
+        from tengri.components.agn.disc import multicolor_disc
 
         l7 = multicolor_disc(self._WAVE, agn_log_lbol=11.0, agn_log_mbh=7.0)
         l9 = multicolor_disc(self._WAVE, agn_log_lbol=11.0, agn_log_mbh=9.0)
@@ -177,7 +177,7 @@ class TestAGNParameterSensitivity:
 
     def test_multicolor_spin_changes_shape(self):
         """BH spin must change the multicolor disc SED."""
-        from tengri.models.agn.disc import multicolor_disc
+        from tengri.components.agn.disc import multicolor_disc
 
         l0 = multicolor_disc(self._WAVE, agn_log_lbol=11.0, agn_a_spin=0.0)
         l9 = multicolor_disc(self._WAVE, agn_log_lbol=11.0, agn_a_spin=0.9)
@@ -185,7 +185,7 @@ class TestAGNParameterSensitivity:
 
     def test_kd_all_unique_params_matter(self):
         """Kubota & Done 3-zone disc: each unique parameter must matter."""
-        from tengri.models.agn.disc import kubota_done_disc
+        from tengri.components.agn.disc import kubota_done_disc
 
         # Note: agn_gamma_warm has negligible effect after total SED
         # renormalization (warm zone is small). This is physical, not lazy.
@@ -207,7 +207,7 @@ class TestAGNParameterSensitivity:
 
     def test_adaf_all_params_matter(self):
         """ADAF model: each parameter must affect the output."""
-        from tengri.models.agn.disc import adaf_disc
+        from tengri.components.agn.disc import adaf_disc
 
         params_to_test = {
             "agn_r_tr": (50.0, 500.0),
@@ -227,7 +227,7 @@ class TestAGNParameterSensitivity:
 
     def test_agn_luminosity_scaling(self):
         """10x L_bol must give ~10x total L_nu for all disc models."""
-        from tengri.models.agn.disc import adaf_disc, multicolor_disc, powerlaw_disc
+        from tengri.components.agn.disc import adaf_disc, multicolor_disc, powerlaw_disc
 
         for name, fn, kwargs in [
             ("powerlaw", powerlaw_disc, {}),
@@ -252,7 +252,7 @@ class TestSFHParameterSensitivity:
 
     def test_dpl_all_params_matter(self):
         """DPL: alpha, beta, tau, log_peak_sfr all must matter."""
-        from tengri.models.sfh import dpl
+        from tengri.components.sfh import dpl
 
         sfr_default = dpl(self._T, alpha=2.0, beta=1.0, tau=5e9, log_peak_sfr=1.0)
 
@@ -266,7 +266,7 @@ class TestSFHParameterSensitivity:
 
     def test_tsnorm_all_params_matter(self):
         """tsnorm: all 5 params must affect the SFH."""
-        from tengri.models.sfh import tsnorm
+        from tengri.components.sfh import tsnorm
 
         defaults = {"log_peak_sfr": 1.0, "peak_lbt": 5e9, "width": 2e9, "skew": 0.5, "trunc": 2.0}
         sfr_default = tsnorm(self._T, **defaults)
@@ -287,7 +287,7 @@ class TestSFHParameterSensitivity:
 
     def test_continuity_ratios_not_ignored(self):
         """Continuity SFH: each ratio must change the SFH."""
-        from tengri.models.sfh import continuity_sfh
+        from tengri.components.sfh import continuity_sfh
 
         age = jnp.geomspace(1e6, 13.7e9, 500)
         defaults = {f"ratio_{i}": 0.0 for i in range(6)}
@@ -302,7 +302,7 @@ class TestSFHParameterSensitivity:
 
     def test_dirichlet_zfracs_not_ignored(self):
         """Dirichlet SFH: each z_frac must change the SFH."""
-        from tengri.models.sfh import dirichlet_sfh
+        from tengri.components.sfh import dirichlet_sfh
 
         age = jnp.geomspace(1e6, 13.7e9, 500)
         defaults = {f"z_frac_{i}": 0.5 for i in range(6)}
@@ -326,7 +326,7 @@ class TestShockParameterSensitivity:
 
     def test_velocity_changes_all_line_ratios(self):
         """Each line ratio must change with velocity."""
-        from tengri.models.nebular.shock import shock_line_ratios
+        from tengri.components.nebular.shock import shock_line_ratios
 
         r_100 = shock_line_ratios(100.0)
         r_500 = shock_line_ratios(500.0)
@@ -340,7 +340,7 @@ class TestShockParameterSensitivity:
 
     def test_shock_sed_velocity_changes_shape(self):
         """Shock SED shape must change with velocity, not just scale."""
-        from tengri.models.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import shock_emission_sed
 
         wave = jnp.linspace(3000.0, 8000.0, 2000)
         l_slow = shock_emission_sed(wave, shock_velocity=150.0, l_shock_halpha=1e8)
@@ -363,7 +363,7 @@ class TestTemplatesAreReal:
 
     def test_dl07_templates_loaded(self):
         """DL07 templates must be loaded from data file, not analytic fallback."""
-        from tengri.models.dust import emission
+        from tengri.components.dust import emission
 
         wave = jnp.geomspace(1e3, 1e7, 500)
         l_absorbed = 1e10  # Lsun
@@ -380,7 +380,7 @@ class TestTemplatesAreReal:
 
     def test_dale2014_alpha_changes_shape(self):
         """Dale2014 dust_alpha_dale must change the SED shape."""
-        from tengri.models.dust import emission
+        from tengri.components.dust import emission
 
         wave = jnp.geomspace(1e3, 1e7, 500)
         l_absorbed = 1e10
@@ -401,7 +401,7 @@ class TestTemplatesAreReal:
         """
         import warnings
 
-        from tengri.models.dust import emission
+        from tengri.components.dust import emission
 
         wave = jnp.geomspace(1e3, 1e7, 500)
         l_absorbed = 1e10
@@ -432,7 +432,7 @@ class TestTemplatesAreReal:
 
     def test_themis_qhac_changes_shape(self):
         """THEMIS qhac must change the SED shape."""
-        from tengri.models.dust import emission
+        from tengri.components.dust import emission
 
         wave = jnp.geomspace(1e3, 1e7, 500)
         l_absorbed = 1e10
@@ -446,7 +446,7 @@ class TestTemplatesAreReal:
 
     def test_bosa_ssfr_changes_shape(self):
         """BOSA sSFR must change the SED shape."""
-        from tengri.models.dust import emission
+        from tengri.components.dust import emission
 
         wave = jnp.geomspace(1e3, 1e7, 500)
         l_absorbed = 1e10
@@ -469,7 +469,7 @@ class TestWavelengthGridIndependence:
 
     def test_attenuation_works_on_any_grid(self):
         """Attenuation curves must return correct shapes for any grid."""
-        from tengri.models.dust.attenuation import calzetti, cardelli, kriek_conroy, smc
+        from tengri.components.dust.attenuation import calzetti, cardelli, kriek_conroy, smc
 
         for fn in [calzetti, cardelli, smc, kriek_conroy]:
             for n in [10, 100, 1000]:
@@ -480,7 +480,7 @@ class TestWavelengthGridIndependence:
 
     def test_agn_disc_works_on_any_grid(self):
         """AGN disc models must work on arbitrary wavelength grids."""
-        from tengri.models.agn.disc import multicolor_disc, powerlaw_disc
+        from tengri.components.agn.disc import multicolor_disc, powerlaw_disc
 
         for fn in [powerlaw_disc, multicolor_disc]:
             for n in [10, 100, 500]:
@@ -500,7 +500,7 @@ class TestNotReturningDummies:
 
     def test_attenuation_not_all_ones(self):
         """k(λ) must vary with wavelength (not all 1.0)."""
-        from tengri.models.dust.attenuation import DUST_LAWS
+        from tengri.components.dust.attenuation import DUST_LAWS
 
         wave = jnp.geomspace(1000.0, 20000.0, 100)
         for name, fn in DUST_LAWS.items():
@@ -510,7 +510,7 @@ class TestNotReturningDummies:
 
     def test_agn_seds_not_all_zeros(self):
         """AGN SEDs must have non-zero flux in their expected bands."""
-        from tengri.models.agn.disc import adaf_disc, multicolor_disc, powerlaw_disc
+        from tengri.components.agn.disc import adaf_disc, multicolor_disc, powerlaw_disc
 
         wave = jnp.geomspace(100.0, 1e8, 500)
         for name, fn, kwargs in [
@@ -526,7 +526,7 @@ class TestNotReturningDummies:
 
     def test_sfh_not_all_zeros(self):
         """SFH models must produce non-zero SFR in some range."""
-        from tengri.models.sfh import dpl, lnorm, norm, snorm, tsnorm
+        from tengri.components.sfh import dpl, lnorm, norm, snorm, tsnorm
 
         t = jnp.geomspace(1e5, 14e9, 500)
         for name, fn, kwargs in [
@@ -561,7 +561,7 @@ class TestEmissionLinesAtCorrectWavelengths:
 
     def test_blr_lines_at_atomic_wavelengths(self):
         """BLR emission must peak at known line wavelengths, not elsewhere."""
-        from tengri.models.agn.blr import blr_emission
+        from tengri.components.agn.blr import blr_emission
 
         l_disc = 3.83e44
         expected_lines = [1216.0, 1549.0, 2800.0, 4861.0, 6563.0]
@@ -576,7 +576,7 @@ class TestEmissionLinesAtCorrectWavelengths:
 
     def test_nlr_lines_at_atomic_wavelengths(self):
         """NLR emission must peak at known forbidden line wavelengths."""
-        from tengri.models.agn.nlr import nlr_emission
+        from tengri.components.agn.nlr import nlr_emission
 
         l_disc = 3.83e44
         expected_lines = [5007.0, 6563.0]
@@ -592,7 +592,7 @@ class TestEmissionLinesAtCorrectWavelengths:
 
     def test_shock_lines_at_atomic_wavelengths(self):
         """Shock emission must produce lines at correct wavelengths."""
-        from tengri.models.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import shock_emission_sed
 
         expected_lines = [4861.0, 5007.0, 6563.0]  # Hβ, [OIII], Hα
         wave = jnp.linspace(4800.0, 6700.0, 5000)
@@ -618,7 +618,7 @@ class TestWG00NotIdentity:
 
     def test_shell_not_identity(self):
         """Shell with tau_v > 0 must attenuate (T < 1)."""
-        from tengri.models.dust.attenuation import wg00_shell
+        from tengri.components.dust.attenuation import wg00_shell
 
         wave = jnp.geomspace(1000.0, 20000.0, 100)
         t = wg00_shell(wave, tau_v=1.0)
@@ -626,7 +626,7 @@ class TestWG00NotIdentity:
 
     def test_cloudy_not_identity(self):
         """Cloudy geometry with tau_v > 0 must attenuate."""
-        from tengri.models.dust.attenuation import wg00_cloudy
+        from tengri.components.dust.attenuation import wg00_cloudy
 
         wave = jnp.geomspace(1000.0, 20000.0, 100)
         t = wg00_cloudy(wave, tau_v=1.0)
@@ -634,7 +634,7 @@ class TestWG00NotIdentity:
 
     def test_dusty_not_identity(self):
         """Dusty geometry with tau_v > 0 must attenuate."""
-        from tengri.models.dust.attenuation import wg00_dusty
+        from tengri.components.dust.attenuation import wg00_dusty
 
         wave = jnp.geomspace(1000.0, 20000.0, 100)
         t = wg00_dusty(wave, tau_v=1.0)

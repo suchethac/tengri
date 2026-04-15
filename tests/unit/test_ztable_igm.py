@@ -13,9 +13,9 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.models.igm import igm_transmission
-from tengri.models.sps.dsps_wrapper import SSPData
-from tengri.models.sps.precompute import (
+from tengri.components.igm import igm_transmission
+from tengri.components.sps.dsps_wrapper import SSPData
+from tengri.components.sps.precompute import (
     interpolate_igm_ztable,
     precompute_photometry_ztable,
 )
