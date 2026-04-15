@@ -743,197 +743,38 @@ class SEDModel:
     def _precompute_dust_ir_photometry(self):
         """Precompute dust IR template photometry for fast hybrid kernel lookup.
 
-        For template-based dust models (DL07, Dale2014, DL14, Astrodust, BOSA, THEMIS),
-        pre-integrate templates through filters at init time. Returns a JIT-compiled
-        lookup function that does fast triweight interpolation at runtime.
+        Delegates to the Precompute Protocol adapter at
+        :mod:`tengri.components.dust.dust_emission_precompute`, which handles
+        template loading, filter preintegration, and (per the Protocol) auto-
+        collapse-on-Fixed for any ``AXIS_PARAMS`` marked :class:`Fixed` in
+        ``self.spec``.  Returns ``None`` when the dust model is analytic
+        (MBB / Casey) or template data is not available on disk — callers
+        fall back to full-wavelength evaluation.
 
         Returns
         -------
         object or None
-            If the dust model is template-based and templates are available:
-            a callable ``(L_absorbed, *grid_params) -> phot_array (n_filters,)``.
-            Otherwise None (falls back to full-wavelength evaluation).
+            JIT-compiled ``(L_absorbed, *grid_params) -> phot[n_filters]``
+            lookup, or ``None`` for analytic / data-missing cases.
         """
         from tengri.components.dust.dust_emission_precompute import (
-            build_dl07_photometry_lookup,
-            build_template_photometry_lookup,
-            precompute_dl07_photometry,
-            precompute_template_photometry,
-        )
-        from tengri.components.dust.emission import (
-            _find_data_file,
-            load_astrodust_templates,
-            load_bosa_templates,
-            load_dl14_templates,
-            load_draine_li_templates,
-            load_themis_templates,
+            build_lookup,
+            precompute_for_model,
         )
 
         model_name = self._dust_emission_model
-        if model_name is None or model_name in ("modified_blackbody", "casey2012"):
-            # Analytic models — no template preintegration available
-            return None
-
         try:
-            if model_name == "draine_li2007":
-                # DL07: 2D grid (qpah, umin), with gamma_dl as linear mixing parameter
-                from tengri.components.dust.emission import _find_dl07_templates
-
-                path = _find_dl07_templates()
-                if path is None:
-                    return None
-
-                templates = load_draine_li_templates(path)
-                precomp = precompute_dl07_photometry(
-                    templates,
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed),
-                )
-                lookup = build_dl07_photometry_lookup(precomp)
-                return lookup
-
-            elif model_name == "dale2014":
-                # Dale2014: 1D grid (alpha_dale)
-                path = _find_data_file("dale2014_templates.npz")
-                if path is None:
-                    return None
-
-                # Load Dale2014 templates manually
-                import numpy as np
-
-                data = np.load(path)
-                tmpl_wave = np.array(data["wavelength_aa"])
-                alpha_grid = np.array(data["alpha_grid"])
-                # (n_alpha, n_wave) or (n_wave, n_alpha)
-                templates = np.array(data["templates_sf"])
-
-                # Ensure shape is (n_alpha, n_wave)
-                if templates.shape[0] == len(tmpl_wave) and templates.shape[1] == len(alpha_grid):
-                    templates = templates.T  # -> (n_alpha, n_wave)
-
-                precomp = precompute_template_photometry(
-                    templates=templates,
-                    wave_rest=tmpl_wave,
-                    filter_waves=self.filter_waves,
-                    filter_trans=self.filter_trans,
-                    axes=(alpha_grid,),
-                    redshift=0.0,
-                    dl_cm=1.0,
-                    energy_normalize=True,
-                    units="llam",
-                )
-                lookup = build_template_photometry_lookup(precomp)
-                return lookup
-
-            elif model_name == "draine_li2014":
-                # DL14: variable grid structure (typically 2D or 4D)
-                path = None
-                for fname in ("dl14_templates_v2.h5", "dl14_templates.h5"):
-                    candidate = _find_data_file(fname)
-                    if candidate is not None:
-                        path = candidate
-                        break
-                if path is None:
-                    return None
-
-                templates = load_dl14_templates(path)
-                # DL14 templates have varying structure; try to extract grid info
-                axes = templates.get("axes", None)
-                grid = templates.get("grid", None)
-                wavelength = templates.get("wavelength", None)
-
-                if axes is None or grid is None or wavelength is None:
-                    return None
-
-                precomp = precompute_template_photometry(
-                    templates=grid,
-                    wave_rest=wavelength,
-                    filter_waves=self.filter_waves,
-                    filter_trans=self.filter_trans,
-                    axes=axes,
-                    redshift=0.0,
-                    dl_cm=1.0,
-                    energy_normalize=True,
-                    units="lnu",
-                )
-                lookup = build_template_photometry_lookup(precomp)
-                return lookup
-
-            elif model_name == "astrodust":
-                path = _find_data_file("astrodust_templates.npz")
-                if path is None:
-                    return None
-                templates = load_astrodust_templates(path)
-                axes = templates.get("axes", None)
-                grid = templates.get("grid", None)
-                wavelength = templates.get("wavelength", None)
-                if axes is None or grid is None or wavelength is None:
-                    return None
-                precomp = precompute_template_photometry(
-                    templates=grid,
-                    wave_rest=wavelength,
-                    filter_waves=self.filter_waves,
-                    filter_trans=self.filter_trans,
-                    axes=axes,
-                    redshift=0.0,
-                    dl_cm=1.0,
-                    energy_normalize=True,
-                    units="lnu",
-                )
-                lookup = build_template_photometry_lookup(precomp)
-                return lookup
-
-            elif model_name == "bosa":
-                path = _find_data_file("bosa_templates.npz")
-                if path is None:
-                    return None
-                templates = load_bosa_templates(path)
-                axes = templates.get("axes", None)
-                grid = templates.get("grid", None)
-                wavelength = templates.get("wavelength", None)
-                if axes is None or grid is None or wavelength is None:
-                    return None
-                precomp = precompute_template_photometry(
-                    templates=grid,
-                    wave_rest=wavelength,
-                    filter_waves=self.filter_waves,
-                    filter_trans=self.filter_trans,
-                    axes=axes,
-                    redshift=0.0,
-                    dl_cm=1.0,
-                    energy_normalize=True,
-                    units="lnu",
-                )
-                lookup = build_template_photometry_lookup(precomp)
-                return lookup
-
-            elif model_name == "themis":
-                path = _find_data_file("themis_templates.npz")
-                if path is None:
-                    return None
-                templates = load_themis_templates(path)
-                axes = templates.get("axes", None)
-                grid = templates.get("grid", None)
-                wavelength = templates.get("wavelength", None)
-                if axes is None or grid is None or wavelength is None:
-                    return None
-                precomp = precompute_template_photometry(
-                    templates=grid,
-                    wave_rest=wavelength,
-                    filter_waves=self.filter_waves,
-                    filter_trans=self.filter_trans,
-                    axes=axes,
-                    redshift=0.0,
-                    dl_cm=1.0,
-                    energy_normalize=True,
-                    units="lnu",
-                )
-                lookup = build_template_photometry_lookup(precomp)
-                return lookup
-
+            precomp = precompute_for_model(
+                model_name,
+                filter_waves=self.filter_waves,
+                filter_trans=self.filter_trans,
+                redshift=float(self._z_fixed) if self._z_fixed is not None else 0.0,
+                parameters=self.spec,
+            )
+            if precomp is None:
+                return None
+            return build_lookup(precomp, model_name=model_name)
         except Exception as e:
-            # Gracefully fall back to full-wavelength evaluation if preintegration fails
             import warnings
 
             warnings.warn(
@@ -943,8 +784,6 @@ class SEDModel:
                 stacklevel=2,
             )
             return None
-
-        return None
 
     def _build_precomputed_data(self, ssp_data, precompute):
         """Build Level 1: precomputed SSP tensors."""

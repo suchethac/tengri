@@ -269,3 +269,124 @@ def build_lookup(preint, *, model_name: str):
         # preint is a dict from precompute_dl07_photometry
         return build_dl07_photometry_lookup(preint)
     return build_template_photometry_lookup(preint)
+
+
+# -------------------------------------------------------------------
+# Turnkey loader + preintegrator — used by SEDModel.__init__
+# -------------------------------------------------------------------
+
+
+def precompute_for_model(
+    model_name: str,
+    filter_waves: list,
+    filter_trans: list,
+    redshift: float,
+    parameters: Any = None,
+) -> Any:
+    """Load templates and preintegrate a dust-IR component from its model name.
+
+    Encapsulates template loading + file discovery + preintegration (+
+    auto-collapse on Fixed) into a single call so :class:`SEDModel` does not
+    need a per-model switch.  Returns ``None`` when required template data
+    is not on disk — callers fall back to full-wavelength evaluation.
+
+    Parameters
+    ----------
+    model_name : str
+        One of ``"draine_li2007"``, ``"dale2014"``, ``"draine_li2014"``,
+        ``"astrodust"``, ``"bosa"``, ``"themis"``.  Other names (``"dl07"``
+        alias, ``"modified_blackbody"``, ``"casey2012"``) return ``None``.
+    filter_waves, filter_trans : list
+        Filter curves (observed frame).
+    redshift : float
+        Source redshift (fixed at init time).
+    parameters : Parameters | None
+        Used for auto-collapse on Fixed parameters (Protocol surface).
+
+    Returns
+    -------
+    dict (DL07) or PreintegratedGrid or None
+        Feed to :func:`build_lookup` with the same ``model_name``.
+    """
+    # Analytic models have no preintegration
+    if model_name in (None, "modified_blackbody", "casey2012"):
+        return None
+
+    from tengri.components.dust.emission import (
+        _find_data_file,
+        load_astrodust_templates,
+        load_bosa_templates,
+        load_dl14_templates,
+        load_draine_li_templates,
+        load_themis_templates,
+    )
+
+    # DL07 has a bespoke template structure (single_U + power-law + gamma mixing)
+    if model_name in ("draine_li2007", "dl07"):
+        from tengri.components.dust.emission import _find_dl07_templates
+
+        path = _find_dl07_templates()
+        if path is None:
+            return None
+        templates = load_draine_li_templates(path)
+        return precompute_dl07_photometry(
+            templates, filter_waves, filter_trans, redshift=redshift
+        )
+
+    # Generic template-based models share a load → extract → preintegrate shape.
+    # The per-model file paths, loader functions, and flux units are the only
+    # differences.
+    _GENERIC_LOADERS: dict[str, tuple[tuple[str, ...], Any, str]] = {
+        "dale2014": (("dale2014_templates.npz",), None, "llam"),
+        "draine_li2014": (("dl14_templates_v2.h5", "dl14_templates.h5"), load_dl14_templates, "lnu"),
+        "astrodust": (("astrodust_templates.npz",), load_astrodust_templates, "lnu"),
+        "bosa": (("bosa_templates.npz",), load_bosa_templates, "lnu"),
+        "themis": (("themis_templates.npz",), load_themis_templates, "lnu"),
+    }
+
+    if model_name not in _GENERIC_LOADERS:
+        return None
+
+    candidate_files, loader, units = _GENERIC_LOADERS[model_name]
+
+    # Find first available data file
+    path = None
+    for fname in candidate_files:
+        candidate = _find_data_file(fname)
+        if candidate is not None:
+            path = candidate
+            break
+    if path is None:
+        return None
+
+    # Dale2014 has a distinct npz layout; extract inline.
+    if model_name == "dale2014":
+        data = np.load(path)
+        tmpl_wave = np.array(data["wavelength_aa"])
+        alpha_grid = np.array(data["alpha_grid"])
+        templates = np.array(data["templates_sf"])
+        # Normalize shape to (n_alpha, n_wave)
+        if templates.shape[0] == len(tmpl_wave) and templates.shape[1] == len(alpha_grid):
+            templates = templates.T
+        grid, axes, wavelength = templates, (alpha_grid,), tmpl_wave
+    else:
+        # DL14, Astrodust, BOSA, THEMIS share a dict layout from their loaders.
+        data = loader(path)
+        grid = data.get("grid", None)
+        axes = data.get("axes", None)
+        wavelength = data.get("wavelength", None)
+        if grid is None or axes is None or wavelength is None:
+            return None
+
+    preint = precompute_template_photometry(
+        templates=grid,
+        wave_rest=wavelength,
+        filter_waves=filter_waves,
+        filter_trans=filter_trans,
+        axes=axes,
+        redshift=0.0 if model_name != "dale2014" else 0.0,  # both use rest-frame templates
+        dl_cm=1.0,
+        energy_normalize=True,
+        units=units,
+    )
+    return _auto_collapse(preint, AXIS_PARAMS.get(model_name, ()), parameters)
