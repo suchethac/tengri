@@ -168,7 +168,7 @@ elif os.path.isdir(os.path.join("..", "data")):
 try:
     from _plot_style import COLORS, add_sfh_inset, setup_style
 except ModuleNotFoundError:
-    from tengri.plotting import setup_style
+    from tengri.analysis.plotting import setup_style
 
     COLORS = {
         "sfh_mean": "C0",

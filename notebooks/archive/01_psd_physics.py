@@ -251,7 +251,7 @@ plt.show()
 from tengri import load_ssp_data
 
 ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-from tengri.diagnostics.green_functions import (
+from tengri.analysis.diagnostics.green_functions import (
     compute_green_function,
     compute_window_function,
 )

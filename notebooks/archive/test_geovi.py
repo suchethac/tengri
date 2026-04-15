@@ -211,7 +211,7 @@ print("Saved: figures/test_geovi_sfh.png")
 # ## Corner Plot — geoVI vs EVI
 
 # %%
-from tengri.plotting import safe_corner
+from tengri.analysis.plotting import safe_corner
 
 param_names = [
     "sfh_dpl_alpha",

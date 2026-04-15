@@ -13,7 +13,7 @@ Usage
 Quick photometry from an SFH array::
 
     from tengri import load_ssp_data, load_filter_set
-    from tengri.simulate import sed_from_sfh, photometry_from_sfh
+    from tengri.analysis.simulate import sed_from_sfh, photometry_from_sfh
 
     ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r"])

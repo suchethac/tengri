@@ -1,4 +1,4 @@
-"""Tests for tengri.diagnostics.fisher.
+"""Tests for tengri.analysis.diagnostics.fisher.
 
 Tests cover the pure-math functions (no forward model required):
 - fisher_parameter_errors: marginal uncertainties from FIM inverse
@@ -10,7 +10,7 @@ are not tested here (integration-level concern).
 
 import jax.numpy as jnp
 
-from tengri.diagnostics.fisher import fisher_correlation_matrix, fisher_parameter_errors
+from tengri.analysis.diagnostics.fisher import fisher_correlation_matrix, fisher_parameter_errors
 
 # ---------------------------------------------------------------------------
 # Helpers

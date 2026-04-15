@@ -48,7 +48,7 @@ warnings.filterwarnings("ignore")
 
 # ── imports from tengri ─────────────────────────────────────────────
 from tengri import load_ssp_data
-from tengri.simulate import sed_from_sfh
+from tengri.analysis.simulate import sed_from_sfh
 from tengri.components.dust.emission import draine_li2007
 from tengri.components.agn.unified import kubota_done_full_agn
 from tengri.components.agn.polar_dust import polar_dust_total

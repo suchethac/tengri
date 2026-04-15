@@ -147,7 +147,7 @@ class TestRayTraceCrossValidation:
 
     def test_autocorrelation_time_reasonable(self, tengri_chain):
         """ACT should be moderate for a well-tuned Gaussian target."""
-        from tengri.diagnostics.autocorrelation import autocorrelation_time
+        from tengri.analysis.diagnostics.autocorrelation import autocorrelation_time
 
         for d in range(tengri_chain["chain"].shape[1]):
             tau = autocorrelation_time(tengri_chain["chain"][:, d])

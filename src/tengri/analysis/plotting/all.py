@@ -10,8 +10,8 @@ and CIGALE (Boquien+2019). Designed for ApJ/MNRAS figures.
 
 Usage::
 
-    from tengri.plotting import plot_sfh, plot_sed_fit, safe_corner
-    from tengri.plotting import COLORS, SDSS_WAVE_EFF
+    from tengri.analysis.plotting import plot_sfh, plot_sed_fit, safe_corner
+    from tengri.analysis.plotting import COLORS, SDSS_WAVE_EFF
 """
 
 import matplotlib.pyplot as plt

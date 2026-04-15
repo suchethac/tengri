@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from tengri.diagnostics.autocorrelation import (
+from tengri.analysis.diagnostics.autocorrelation import (
     autocorrelation_at_lag,
     autocorrelation_time,
     autocorrelation_time_combined,

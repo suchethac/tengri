@@ -1,4 +1,4 @@
-"""Tests for tengri.diagnostics.green_functions.
+"""Tests for tengri.analysis.diagnostics.green_functions.
 
 Tests cover:
 - compute_green_function: filter mode and monochromatic mode
@@ -10,7 +10,7 @@ Tests cover:
 import jax.numpy as jnp
 import pytest
 
-from tengri.diagnostics.green_functions import (
+from tengri.analysis.diagnostics.green_functions import (
     compute_green_function,
     compute_time_sensitivity_matrix,
     compute_window_function,

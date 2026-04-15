@@ -176,7 +176,7 @@ plt.show()
 # ## 5. Corner Plot
 
 # %%
-from tengri.plotting import safe_corner
+from tengri.analysis.plotting import safe_corner
 
 truths = {k: float(true_params[k]) for k in spec.free_params}
 fig = safe_corner(result, params=spec.free_params, truths=truths)

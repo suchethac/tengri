@@ -53,7 +53,7 @@ from tengri import (
     Uniform,
     load_ssp_data,
 )
-from tengri.diagnostics.fisher import compute_fisher_matrix, fisher_parameter_errors
+from tengri.analysis.diagnostics.fisher import compute_fisher_matrix, fisher_parameter_errors
 
 import sys, os  # noqa: E401, E402
 

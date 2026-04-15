@@ -8,7 +8,7 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri import load_filter_set
 from tengri.components.sps.dsps_wrapper import SSPData
-from tengri.simulate import photometry_from_sfh, sed_from_sfh
+from tengri.analysis.simulate import photometry_from_sfh, sed_from_sfh
 
 
 @pytest.fixture(scope="module")
@@ -77,7 +77,7 @@ def test_photometry_accepts_filter_curve_list(synthetic_ssp, sdss_r_only):
 
 def test_filter_waves_invalid_type_raises(synthetic_ssp):
     """_filter_waves_and_trans raises TypeError for non-FilterCurve input."""
-    from tengri.simulate import photometry_from_sfh
+    from tengri.analysis.simulate import photometry_from_sfh
 
     t = jnp.linspace(0.5, 10.0, 20)
     sfr = jnp.ones(20)
@@ -87,7 +87,7 @@ def test_filter_waves_invalid_type_raises(synthetic_ssp):
 
 def test_sed_from_sfh_array_metallicity(synthetic_ssp):
     """sed_from_sfh works with an array log_z history."""
-    from tengri.simulate import sed_from_sfh
+    from tengri.analysis.simulate import sed_from_sfh
 
     t = jnp.linspace(0.5, 10.0, 50)
     sfr = jnp.exp(-t / 3.0) + 0.01
@@ -101,7 +101,7 @@ def test_sed_from_sfh_array_metallicity(synthetic_ssp):
 
 def test_sed_from_sfh_with_dust(synthetic_ssp):
     """sed_from_sfh applies dust attenuation when tau_bc > 0."""
-    from tengri.simulate import sed_from_sfh
+    from tengri.analysis.simulate import sed_from_sfh
 
     t = jnp.linspace(0.5, 10.0, 50)
     sfr = jnp.exp(-t / 3.0) + 0.01
@@ -129,7 +129,7 @@ def test_photometry_with_igm(synthetic_ssp, sdss_r_only):
 
 def test_spectrum_from_sfh_basic(synthetic_ssp):
     """spectrum_from_sfh returns observed spectrum on requested wavelength grid."""
-    from tengri.simulate import spectrum_from_sfh
+    from tengri.analysis.simulate import spectrum_from_sfh
 
     t = jnp.linspace(0.5, 10.0, 50)
     sfr = jnp.exp(-t / 3.0) + 0.01
@@ -142,7 +142,7 @@ def test_spectrum_from_sfh_basic(synthetic_ssp):
 
 def test_spectrum_from_sfh_with_igm(synthetic_ssp):
     """spectrum_from_sfh applies IGM at z>0."""
-    from tengri.simulate import spectrum_from_sfh
+    from tengri.analysis.simulate import spectrum_from_sfh
 
     t = jnp.linspace(0.5, 10.0, 50)
     sfr = jnp.exp(-t / 3.0) + 0.01

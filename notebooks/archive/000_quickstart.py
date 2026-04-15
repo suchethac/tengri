@@ -42,7 +42,7 @@ from tengri import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
-from tengri.plotting import plot_corner_comparison
+from tengri.analysis.plotting import plot_corner_comparison
 
 import sys; sys.path.insert(0, ".")
 from _plot_style import setup_style, COLORS, SDSS_WAVE_EFF, SDSS_BAND_NAMES

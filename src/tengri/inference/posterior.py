@@ -456,7 +456,7 @@ class Posterior:
         if self.samples is None:
             raise ValueError("ESS requires samples (not MAP)")
 
-        from tengri.diagnostics.autocorrelation import effective_sample_size
+        from tengri.analysis.diagnostics.autocorrelation import effective_sample_size
 
         ess_info = effective_sample_size({k: np.asarray(v) for k, v in self.samples.items()})
         return {name: info["ess"] for name, info in ess_info.items()}
@@ -477,7 +477,7 @@ class Posterior:
         if self.samples is None:
             raise ValueError("Autocorrelation time requires samples (not MAP)")
 
-        from tengri.diagnostics.autocorrelation import effective_sample_size
+        from tengri.analysis.diagnostics.autocorrelation import effective_sample_size
 
         return effective_sample_size({k: np.asarray(v) for k, v in self.samples.items()})
 
@@ -500,7 +500,7 @@ class Posterior:
         if self.samples is None:
             raise ValueError("Convergence check requires samples (not MAP)")
 
-        from tengri.diagnostics.autocorrelation import check_chain_length
+        from tengri.analysis.diagnostics.autocorrelation import check_chain_length
 
         return check_chain_length(
             {k: np.asarray(v) for k, v in self.samples.items()},

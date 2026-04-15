@@ -71,7 +71,7 @@ from tengri import (
 )
 
 # Diagnostics: Green's functions and window functions
-from tengri.diagnostics.green_functions import (
+from tengri.analysis.diagnostics.green_functions import (
     compute_green_function, compute_window_function,
     compute_window_function_fourier, compute_time_sensitivity_matrix,
 )

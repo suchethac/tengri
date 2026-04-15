@@ -276,7 +276,7 @@ __all__ = [
 ]
 
 # Plotting utilities
-from tengri.plotting import (
+from tengri.analysis.plotting import (
     COLORS,
     SDSS_WAVE_EFF,
     SPECTRAL_FEATURES,

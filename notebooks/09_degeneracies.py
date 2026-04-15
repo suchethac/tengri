@@ -76,7 +76,7 @@ from tengri import (
     Uniform,
     load_ssp_data,
 )
-from tengri.diagnostics.fisher import compute_fisher_matrix, fisher_parameter_errors
+from tengri.analysis.diagnostics.fisher import compute_fisher_matrix, fisher_parameter_errors
 
 _repo_data_root = None
 _spec_tengri = importlib.util.find_spec("tengri")

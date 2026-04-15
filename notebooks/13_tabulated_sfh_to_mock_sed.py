@@ -54,7 +54,7 @@ jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri import load_filter_set, load_ssp_data
-from tengri.simulate import photometry_from_sfh, sed_from_sfh
+from tengri.analysis.simulate import photometry_from_sfh, sed_from_sfh
 
 import importlib.util
 
