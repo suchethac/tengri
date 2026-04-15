@@ -44,14 +44,14 @@ from tengri.observation.noise import (
     variable_noise_hamiltonian,
 )
 from tengri.parameters.parameters import Parameters, ParamSpec
-from tengri.core.prediction import (
+from tengri.forward.prediction import (
     DerivedQuantities,
     EmissionLines,
     Prediction,
     SEDQuantities,
     SFHQuantities,
 )
-from tengri.core.sed_result import SEDResult
+from tengri.forward.result import SEDResult
 from tengri.runtime.settings import (
     DustConfig,
     ModelConfig,

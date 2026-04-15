@@ -59,7 +59,7 @@ from tengri.parameters.translate import (
     _build_param_map,
     get_internal_params,
 )
-from tengri.core.sed_pipeline import (
+from tengri.forward.pipeline import (
     compute_sed_components,
     get_agn_kwargs,
     get_dust_kwargs,
@@ -1310,7 +1310,7 @@ class SEDModel:
         SEDResult
             NamedTuple with ``wavelength`` (Angstrom) and ``sed`` (erg/s/Hz).
         """
-        from tengri.core.sed_result import SEDResult
+        from tengri.forward.result import SEDResult
 
         rest_wave = wave if wave is not None else self._rest_wavelength
         result = self._compute_sed_components(params, rest_wavelength=rest_wave)
@@ -1334,14 +1334,14 @@ class SEDModel:
             NamedTuple with ``wavelength`` (observed-frame Angstrom) and
             ``sed`` (erg/s/Hz).
         """
-        from tengri.core.sed_result import SEDResult
+        from tengri.forward.result import SEDResult
 
         rest_result = self.predict_rest_sed(params, wave=wave)
         z = self._get_redshift(params)
         wave_obs = rest_result.wavelength * (1.0 + z)
         sed_obs = rest_result.sed
         if self._apply_igm:
-            from tengri.core.emission_helpers import igm_absorption
+            from tengri.forward.emission_helpers import igm_absorption
 
             # Always apply IGM when enabled — igm_transmission returns
             # all-ones at z=0. Avoid z>0 comparison which fails under JIT.
@@ -1425,7 +1425,7 @@ class SEDModel:
         predict_sed_quantities : JIT-compatible SED quantities.
         predict_line_luminosities : JIT-compatible emission lines.
         """
-        from tengri.core.prediction import Prediction
+        from tengri.forward.prediction import Prediction
 
         return Prediction(self, params)
 
@@ -1471,7 +1471,7 @@ class SEDModel:
         predict : Lazy prediction for single-galaxy exploration.
         predict_sed_quantities : JIT-compatible SED quantities.
         """
-        from tengri.core.prediction import SFHQuantities
+        from tengri.forward.prediction import SFHQuantities
         from tengri.utils.sed_quantities import (
             compute_mass_weighted_age,
             compute_mass_weighted_metallicity,
@@ -1637,7 +1637,7 @@ class SEDModel:
         predict : Lazy prediction for single-galaxy exploration.
         predict_sfh_quantities : JIT-compatible SFH quantities.
         """
-        from tengri.core.prediction import SEDQuantities
+        from tengri.forward.prediction import SEDQuantities
         from tengri.utils.sed_quantities import (
             compute_balmer_break,
             compute_bolometric_luminosity,
@@ -1962,7 +1962,7 @@ class SEDModel:
         array, shape (n_wave,)
             Rest-frame SED in erg/s/Hz.
         """
-        from tengri.core.sed_pipeline import interp_met_alpha_dispatch, interp_metallicity
+        from tengri.forward.pipeline import interp_met_alpha_dispatch, interp_metallicity
 
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
@@ -2618,17 +2618,17 @@ class SEDModel:
     # -------------------------------------------------------------------
 
     def mock(self, params, snr=20.0, key=None):
-        from tengri.core.convenience import mock as _fn
+        from tengri.forward.convenience import mock as _fn
 
         return _fn(self, params, snr=snr, key=key)
 
     def mock_spectrum(self, params, wave_obs, snr=30.0, key=None):
-        from tengri.core.convenience import mock_spectrum as _fn
+        from tengri.forward.convenience import mock_spectrum as _fn
 
         return _fn(self, params, wave_obs, snr=snr, key=key)
 
     def mock_batch(self, params_batch, snr=20.0, key=None):
-        from tengri.core.convenience import mock_batch as _fn
+        from tengri.forward.convenience import mock_batch as _fn
 
         return _fn(self, params_batch, snr=snr, key=key)
 
@@ -2637,12 +2637,12 @@ class SEDModel:
     # -------------------------------------------------------------------
 
     def predict_photometry_batch(self, params_batch):
-        from tengri.core.convenience import predict_photometry_batch as _fn
+        from tengri.forward.convenience import predict_photometry_batch as _fn
 
         return _fn(self, params_batch)
 
     def predict_spectrum_batch(self, params_batch):
-        from tengri.core.convenience import predict_spectrum_batch as _fn
+        from tengri.forward.convenience import predict_spectrum_batch as _fn
 
         return _fn(self, params_batch)
 
@@ -2713,7 +2713,7 @@ class SEDModel:
         ...     ),
         ... )
         """
-        from tengri.core.convenience import build_model_from_config
+        from tengri.forward.convenience import build_model_from_config
         from tengri.parameters.defaults import UNSET
 
         # Map Ellipsis (signature placeholder) → UNSET so build_model_from_config
@@ -2740,7 +2740,7 @@ class SEDModel:
     # -------------------------------------------------------------------
 
     def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
-        from tengri.core.convenience import prior_predictive as _fn
+        from tengri.forward.convenience import prior_predictive as _fn
 
         return _fn(self, n=n, seed=seed)
 
@@ -2803,7 +2803,7 @@ class SEDModel:
         >>> result = model.fit(flux_obs, noise, init="map")
         >>> result = model.fit(flux_obs, noise).refine("mcmc_raytrace")
         """
-        from tengri.core.convenience import fit_model
+        from tengri.forward.convenience import fit_model
 
         return fit_model(
             self,
@@ -2828,7 +2828,7 @@ class SEDModel:
         verbose: bool = True,
         **kwargs,
     ) -> list:
-        from tengri.core.convenience import fit_batch as _fn
+        from tengri.forward.convenience import fit_batch as _fn
 
         return _fn(
             self,
@@ -2942,7 +2942,7 @@ class SEDModel:
         population_prior: dict | None = None,
         **kwargs,
     ):
-        from tengri.core.convenience import fit_population as _fn
+        from tengri.forward.convenience import fit_population as _fn
 
         return _fn(
             self,

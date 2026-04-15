@@ -1,4 +1,4 @@
-"""Tests for tengri.core.nonstell (NonStellarSlot registry + build_nonstell_fn factory).
+"""Tests for tengri.forward.nonstell (NonStellarSlot registry + build_nonstell_fn factory).
 
 Tests cover:
 - collect_nonstell() returns the correct ordered slots given model flags
@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.core.nonstell import NonStellarSlot, build_nonstell_fn, collect_nonstell
+from tengri.forward.nonstell import NonStellarSlot, build_nonstell_fn, collect_nonstell
 
 # ---------------------------------------------------------------------------
 # Helpers — minimal model stubs so tests run without SSP data

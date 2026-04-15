@@ -2,7 +2,7 @@
 
 
 def test_convenience_module_importable():
-    from tengri.core.convenience import (
+    from tengri.forward.convenience import (
         fit_catalog,
         fit_population,
         prior_predictive,

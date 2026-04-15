@@ -143,7 +143,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
         model._nebular_backend, "has_free_params", False
     )
     if has_nebular:
-        from tengri.core.emission_helpers import attenuate_emission, nebular_emission
+        from tengri.forward.emission_helpers import attenuate_emission, nebular_emission
 
         nebular_backend = model._nebular_backend
         ssp_log_ages_yr = model.ssp_log_ages_yr
@@ -153,12 +153,12 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
     # --- Shock ---
     has_shock = getattr(model, "_shock_enabled", False)
     if has_shock:
-        from tengri.core.emission_helpers import attenuate_emission as _atten_shock, shock_emission
+        from tengri.forward.emission_helpers import attenuate_emission as _atten_shock, shock_emission
 
     # --- Dust IR ---
     has_dust_em = model._dust_emission_model is not None
     if has_dust_em:
-        from tengri.core.emission_helpers import dust_ir_emission
+        from tengri.forward.emission_helpers import dust_ir_emission
         from tengri.components.dust.emission import preload_emission_model
 
         # preload_emission_model ensures templates are loaded outside JIT,
@@ -169,7 +169,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
     has_agn = model._agn_model is not None
     agn_parametric = model._agn_parametric if has_agn else False
     if has_agn:
-        from tengri.core.emission_helpers import agn_emission
+        from tengri.forward.emission_helpers import agn_emission
         from tengri.components.agn import resolve_agn_model
 
         agn_model_fn = resolve_agn_model(model._agn_model)
@@ -177,7 +177,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
     # --- Radio ---
     has_radio = model._radio_enabled
     if has_radio:
-        from tengri.core.emission_helpers import radio_emission
+        from tengri.forward.emission_helpers import radio_emission
 
         _radio_sfr_mode = model._radio_sfr_mode
         _include_freefree = model._radio_include_freefree
@@ -186,7 +186,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
     # --- X-ray ---
     has_xray = model._xray_enabled
     if has_xray:
-        from tengri.core.emission_helpers import xray_emission
+        from tengri.forward.emission_helpers import xray_emission
 
     def nonstell_fn(weights, p, stellar_sed, stellar_sed_intr):
         """Add all enabled non-stellar SED components.

@@ -20,7 +20,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.core.emission_helpers import (
+from tengri.forward.emission_helpers import (
     _C_AA,
     _LSUN,
     attenuate_emission,

@@ -43,7 +43,7 @@ def build_hybrid_photometry(model):
         dust_slope, ..., neb_logU=..., shock_frac=..., etc.)
         -> photometry array (n_filters,) in erg/s/cm^2/Hz.
     """
-    from tengri.core.emission_helpers import (
+    from tengri.forward.emission_helpers import (
         agn_emission,
         attenuate_emission,
         dust_ir_emission,
@@ -1496,7 +1496,7 @@ def build_hybrid_photometry_ztable(model):
     ValueError
         If photometry_ztable has not been precomputed via model.precompute_ztable().
     """
-    from tengri.core.emission_helpers import (
+    from tengri.forward.emission_helpers import (
         agn_emission,
         attenuate_emission,
         dust_ir_emission,
@@ -2540,7 +2540,7 @@ def build_fused_rest_sed(model):
 
     # Build the non-stellar sub-closure once (outside JIT).
     # All per-component flags, imports, and callables are captured inside.
-    from tengri.core.nonstell import build_nonstell_fn
+    from tengri.forward.nonstell import build_nonstell_fn
 
     _law_diff_for_nonstell = law_diff_fn if not _is_single_dust else law_bc_fn
     nonstell_fn = build_nonstell_fn(
@@ -2753,7 +2753,7 @@ def build_fused_tier2_photometry(model):
         return None
 
     from tengri.parameters.translate import get_internal_params
-    from tengri.core.sed_pipeline import interp_met_alpha_dispatch, interp_metallicity
+    from tengri.forward.pipeline import interp_met_alpha_dispatch, interp_metallicity
     from tengri.observation.photometry import (
         compute_flux_density_batch,
         pad_filters,
@@ -2921,7 +2921,7 @@ def build_fused_tier2_spectrum(model):
         return None
 
     from tengri.parameters.translate import get_internal_params
-    from tengri.core.sed_pipeline import interp_met_alpha_dispatch, interp_metallicity
+    from tengri.forward.pipeline import interp_met_alpha_dispatch, interp_metallicity
     from tengri.observation.spectrum import compute_spectrum
     from tengri.components.sps.dsps_wrapper import compute_csp_weights
 
@@ -3048,7 +3048,7 @@ def build_hybrid_spectrum(model):
         return None
 
     from tengri.parameters.translate import get_internal_params
-    from tengri.core.sed_pipeline import (
+    from tengri.forward.pipeline import (
         interp_met_alpha_dispatch,
         interp_metallicity,
     )

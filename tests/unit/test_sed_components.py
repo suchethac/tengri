@@ -1,4 +1,4 @@
-"""Tests for tengri.core.sed_components closure builders.
+"""Tests for tengri.forward.components_assembly closure builders.
 
 All builder functions take a ``model``-like object and return a pure JAX
 callable (or None when the component is disabled). Tests use
@@ -20,7 +20,7 @@ import types
 import jax.numpy as jnp
 import pytest
 
-from tengri.core.sed_components import (
+from tengri.forward.components_assembly import (
     build_agn_component,
     build_dust_atten_component,
     build_dust_emission_component,

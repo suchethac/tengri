@@ -31,7 +31,7 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri.core.model import Model
 from tengri.parameters.parameters import Parameters
-from tengri.core.sed_result import SEDResult
+from tengri.forward.result import SEDResult
 from tengri.parameters.priors import Fixed
 from tengri.observation.filters import load_filter_set
 from tengri.components.sps.dsps_wrapper import load_ssp_data

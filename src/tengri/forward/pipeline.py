@@ -654,7 +654,7 @@ def compute_sed_components(
     _shock_sed = jnp.zeros_like(sed_attenuated)
 
     # ── Emission components via shared helpers (emission_helpers.py) ────
-    from tengri.core.emission_helpers import (
+    from tengri.forward.emission_helpers import (
         attenuate_emission,
         nebular_emission,
         shock_emission,
@@ -806,7 +806,7 @@ def compute_sed_components(
     _xray_sed = jnp.zeros(_n_z2)
 
     # ── Emission components via shared helpers ──────────────────────────
-    from tengri.core.emission_helpers import (
+    from tengri.forward.emission_helpers import (
         agn_emission,
         dust_ir_emission,
         radio_emission,

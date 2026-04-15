@@ -304,7 +304,7 @@ class TestPrediction:
     """Tests for model.predict() lazy prediction object."""
 
     def test_returns_prediction(self, parametric_model, typical_params):
-        from tengri.core.prediction import Prediction
+        from tengri.forward.prediction import Prediction
 
         pred = parametric_model.predict(typical_params)
         assert isinstance(pred, Prediction)

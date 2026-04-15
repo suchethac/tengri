@@ -649,7 +649,7 @@ class TestCompositionalKernelLAbsorbedGuard:
         import inspect
 
         import tengri.core.fused_kernels as fk
-        import tengri.core.nonstell as ns
+        import tengri.forward.nonstell as ns
 
         fk_count = inspect.getsource(fk).count("jnp.isfinite(L_absorbed_stellar)")
         ns_count = inspect.getsource(ns).count("jnp.isfinite(L_absorbed_stellar)")
