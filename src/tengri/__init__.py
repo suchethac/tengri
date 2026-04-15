@@ -35,7 +35,7 @@ from tengri.runtime.exceptions import (
 
 # --- New high-level API ---
 from tengri.observation.mock import MockData, generate_mock
-from tengri.core.model import Model, PriorPredictive, SEDModel
+from tengri.forward.sed_model import Model, PriorPredictive, SEDModel
 from tengri.observation.noise import (
     compute_effective_noise,
     compute_std_inv,

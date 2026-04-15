@@ -1,8 +1,8 @@
 """SED result container.
 
 Provides the :class:`SEDResult` NamedTuple returned by
-:meth:`~tengri.core.model.SEDModel.predict_rest_sed` and
-:meth:`~tengri.core.model.SEDModel.predict_obs_sed`.
+:meth:`~tengri.forward.sed_model.SEDModel.predict_rest_sed` and
+:meth:`~tengri.forward.sed_model.SEDModel.predict_obs_sed`.
 """
 
 from __future__ import annotations

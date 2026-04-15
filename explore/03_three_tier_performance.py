@@ -64,7 +64,7 @@ from common import (
 )
 
 from tengri import Fitter, Model, ParamSpec, Uniform
-from tengri.core.fused_kernels import (
+from tengri.forward.kernels.assembly import (
     observe_spectrum_from_rest_sed,
 )
 from tengri.observation.spectrum import compute_spectrum

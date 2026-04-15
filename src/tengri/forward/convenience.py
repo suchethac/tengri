@@ -13,7 +13,7 @@ import jax
 import jax.numpy as jnp
 
 if TYPE_CHECKING:
-    from tengri.core.model import MockData, PriorPredictive, SEDModel
+    from tengri.forward.sed_model import MockData, PriorPredictive, SEDModel
 
 
 # ---------------------------------------------------------------------------
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 def mock(model: SEDModel, params, snr=20.0, key=None) -> MockData:
     """Generate mock photometric observation."""
-    from tengri.core.model import MockData
+    from tengri.forward.sed_model import MockData
 
     flux_true = model.predict_photometry(params)
     noise = flux_true / snr
@@ -60,7 +60,7 @@ def mock_spectrum(model: SEDModel, params, wave_obs, snr=30.0, key=None) -> Mock
     MockData
         Mock spectroscopic observation.
     """
-    from tengri.core.model import MockData
+    from tengri.forward.sed_model import MockData
 
     flux_true = model.predict_spectrum(params, wave_obs)
     noise = jnp.abs(flux_true) / snr
@@ -80,7 +80,7 @@ def mock_spectrum(model: SEDModel, params, wave_obs, snr=30.0, key=None) -> Mock
 
 def mock_batch(model: SEDModel, params_batch, snr=20.0, key=None) -> MockData:
     """Generate batch of mock observations."""
-    from tengri.core.model import MockData
+    from tengri.forward.sed_model import MockData
 
     first_key = next(iter(params_batch))
     n_batch = params_batch[first_key].shape[0]
@@ -173,7 +173,7 @@ def prior_predictive(model: SEDModel, n: int = 500, seed: int = 42) -> PriorPred
     >>> ppc = model.prior_predictive(n=500)
     >>> ppc.check_finite()
     """
-    from tengri.core.model import PriorPredictive
+    from tengri.forward.sed_model import PriorPredictive
 
     key = jax.random.PRNGKey(seed)
     params_batch = model.spec.sample_batch(key, n)
@@ -253,7 +253,7 @@ def fit_batch(
     """
     import time
 
-    from tengri.core.model import Model as ModelClass
+    from tengri.forward.sed_model import Model as ModelClass
     from tengri.parameters.priors import Fixed
     from tengri.inference.fitter import Fitter
 
@@ -384,7 +384,7 @@ def fit_population(
     -------
     HierarchicalResult
     """
-    from tengri.core.model import Model as ModelClass
+    from tengri.forward.sed_model import Model as ModelClass
     from tengri.parameters.priors import Fixed
     from tengri.inference.hierarchical import HierarchicalFitter
 

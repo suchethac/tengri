@@ -203,7 +203,7 @@ class TestPriorPredictive:
         assert hasattr(tengri, "PriorPredictive")
 
     def test_check_finite_with_none_flux(self):
-        from tengri.core.model import PriorPredictive
+        from tengri.forward.sed_model import PriorPredictive
 
         ppc = PriorPredictive(flux=None, sfh=jnp.zeros((10, 50)), params={})
         result = ppc.check_finite()
@@ -211,7 +211,7 @@ class TestPriorPredictive:
         assert result["n_nan"] == 0
 
     def test_check_finite_with_nan_flux(self):
-        from tengri.core.model import PriorPredictive
+        from tengri.forward.sed_model import PriorPredictive
 
         flux = jnp.array([[float("nan"), 1.0], [2.0, 3.0]])
         ppc = PriorPredictive(flux=flux, sfh=jnp.zeros((2, 50)), params={})
@@ -320,7 +320,7 @@ class TestModelFromConfigInterface:
     def test_from_config_is_classmethod(self):
         import inspect
 
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
 
         assert hasattr(Model, "from_config")
         assert isinstance(inspect.getattr_static(Model, "from_config"), classmethod)
@@ -329,7 +329,7 @@ class TestModelFromConfigInterface:
         import inspect
 
         from tengri.parameters.defaults import get_from_config_defaults
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
 
         sig = inspect.signature(Model.from_config)
         assert "ssp" in sig.parameters
@@ -400,7 +400,7 @@ class TestModelFitIntegration:
         assert result._fitter is not None
 
     def test_prior_predictive(self, model_and_mock):
-        from tengri.core.model import PriorPredictive
+        from tengri.forward.sed_model import PriorPredictive
 
         model, _ = model_and_mock
         ppc = model.prior_predictive(n=20, seed=0)

@@ -9,7 +9,7 @@ jax.config.update("jax_enable_x64", True)
 
 from pathlib import Path
 
-from tengri.core.model import Model
+from tengri.forward.sed_model import Model
 from tengri.parameters.parameters import ParamSpec
 from tengri.parameters.priors import Uniform
 from tengri.inference.fitter import Fitter

@@ -76,7 +76,7 @@ class TestSSPAbsoluteNormalisation:
 
     def test_young_solar_vband(self, ssp):
         """1 Gyr constant SF, solar Z, no dust: V-band L_nu ~ 2e27 erg/s/Hz per 1e9 Msun."""
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
@@ -113,7 +113,7 @@ class TestSSPAbsoluteNormalisation:
         Both have same SFR=1 Msun/yr and same duration (3 Gyr),
         but the quenched one stopped 5 Gyr ago → its stars have faded.
         """
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
@@ -159,7 +159,7 @@ class TestSSPAbsoluteNormalisation:
 
         At UV (1500 Å) / V-band (5500 Å) ratio: metal-poor > solar.
         """
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
@@ -205,7 +205,7 @@ class TestDustAttenuationAbsolute:
 
     def test_av_from_tau_diff(self, ssp):
         """tau_diff=1.0 should attenuate old-star V-band by factor ~2.7."""
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
@@ -247,7 +247,7 @@ class TestDustAttenuationAbsolute:
 
     def test_uv_more_attenuated_than_nir(self, ssp):
         """UV attenuation must exceed NIR attenuation (Calzetti-like curve)."""
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
@@ -310,7 +310,7 @@ class TestSFRLuminosityCalibrations:
 
         Using constant SFH with SFR=1 Msun/yr for 3 Gyr (equilibrium).
         """
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
@@ -355,7 +355,7 @@ class TestAbsoluteMagnitudes:
 
     def test_mw_like_absolute_magnitude(self, ssp):
         """MW-like galaxy: M_r ~ -20 to -22 (Blanton+2003, Flynn+2006)."""
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
         from tengri.observation.filters import load_filter_set
@@ -389,7 +389,7 @@ class TestAbsoluteMagnitudes:
 
     def test_sfr_makes_galaxy_brighter(self, ssp):
         """Higher SFR → brighter galaxy at fixed age/Z."""
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
         from tengri.observation.filters import load_filter_set
@@ -431,7 +431,7 @@ class TestDustLawComparison:
 
     def test_smc_steeper_than_calzetti_in_uv(self, ssp):
         """SMC curve produces more UV attenuation than Calzetti at fixed tau."""
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
@@ -470,7 +470,7 @@ class TestRedshiftEffects:
 
     def test_higher_z_fainter(self, ssp):
         """Same galaxy at higher z must have lower observed flux."""
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
         from tengri.observation.filters import load_filter_set
@@ -503,7 +503,7 @@ class TestRedshiftEffects:
 
     def test_igm_suppresses_uv_at_high_z(self, ssp):
         """At z=3, IGM should suppress flux blueward of Lyα."""
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
         from tengri.observation.filters import load_filter_set

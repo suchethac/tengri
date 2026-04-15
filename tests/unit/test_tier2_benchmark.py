@@ -46,32 +46,32 @@ class TestTier2DispatchWiring:
     """Verify that tier-2 methods exist on Model (no SSP needed)."""
 
     def test_predict_photometry_has_tier2_path(self):
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
 
         assert hasattr(Model, "_predict_photometry_compositional")
 
     def test_compute_rest_sed_fused_exists(self):
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
 
         assert hasattr(Model, "_compute_rest_sed_compositional")
 
     def test_predict_spectrum_fused_exists(self):
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
 
         assert hasattr(Model, "_predict_spectrum_compositional")
 
     def test_build_fused_rest_sed_importable(self):
-        from tengri.core.fused_kernels import build_fused_rest_sed
+        from tengri.forward.kernels.assembly import build_fused_rest_sed
 
         assert callable(build_fused_rest_sed)
 
     def test_build_fused_tier2_photometry_importable(self):
-        from tengri.core.fused_kernels import build_fused_tier2_photometry
+        from tengri.forward.kernels.assembly import build_fused_tier2_photometry
 
         assert callable(build_fused_tier2_photometry)
 
     def test_build_fused_tier2_spectrum_importable(self):
-        from tengri.core.fused_kernels import build_fused_tier2_spectrum
+        from tengri.forward.kernels.assembly import build_fused_tier2_spectrum
 
         assert callable(build_fused_tier2_spectrum)
 

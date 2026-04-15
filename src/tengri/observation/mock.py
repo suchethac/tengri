@@ -7,7 +7,7 @@ generation. For the ``Model``-based API, use ``Model.mock()`` instead.
 import jax
 
 # Re-export MockData so callers can import from one place
-from tengri.core.model import MockData
+from tengri.forward.sed_model import MockData
 
 __all__ = ["MockData", "generate_mock"]
 

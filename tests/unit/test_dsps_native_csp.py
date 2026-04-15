@@ -269,7 +269,7 @@ def _make_minimal_ssp_data():
 
 def test_model_accepts_dsps_native():
     """Model.__init__ should not raise for csp_integration='dsps_native'."""
-    from tengri.core.model import Model
+    from tengri.forward.sed_model import Model
 
     ssp_data = _make_minimal_ssp_data()
     spec = _make_minimal_spec()
@@ -282,7 +282,7 @@ def test_model_accepts_dsps_native():
 
 def test_model_rejects_unknown_csp_mode():
     """Model.__init__ raises ValueError for unknown csp_integration."""
-    from tengri.core.model import Model
+    from tengri.forward.sed_model import Model
 
     ssp_data = _make_minimal_ssp_data()
     spec = _make_minimal_spec()
@@ -446,7 +446,7 @@ def test_met_table_grad_wrt_lgmet():
 
 def test_model_accepts_dsps_met_table():
     """Model.__init__ should not raise for csp_integration='dsps_met_table'."""
-    from tengri.core.model import Model
+    from tengri.forward.sed_model import Model
 
     ssp_data = _make_minimal_ssp_data()
     spec = _make_minimal_spec()

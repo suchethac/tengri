@@ -108,7 +108,7 @@ def smooth_spec():
 @pytest.fixture(scope="module")
 def model_and_data(smooth_spec, ssp_data, filters):
     """Build Model, generate mock data, return (model, data, noise)."""
-    from tengri.core.model import Model
+    from tengri.forward.sed_model import Model
 
     model = Model(smooth_spec, ssp_data, filters=filters)
 

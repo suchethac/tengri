@@ -317,7 +317,7 @@ class TestTraceableRouting:
 
     def test_traceable_methods_exist(self):
         """Both _predict_*_traceable methods must exist on Model."""
-        from tengri.core.model import SEDModel
+        from tengri.forward.sed_model import SEDModel
 
         assert hasattr(SEDModel, "_predict_photometry_traceable"), (
             "_predict_photometry_traceable missing from SEDModel"

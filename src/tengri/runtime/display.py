@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from tengri.core.model import SEDModel
+    from tengri.forward.sed_model import SEDModel
 
 
 # ---------------------------------------------------------------------------

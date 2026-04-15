@@ -41,7 +41,7 @@ from typing import ClassVar, NamedTuple
 import jax
 import jax.numpy as jnp
 
-from tengri.core.fused_kernels import (
+from tengri.forward.kernels.assembly import (
     build_exact_sed,
     build_fused_rest_sed,
     build_fused_tier2_photometry,

@@ -123,7 +123,7 @@ def _build_tengri_sed(
     SED is divided by M_formed to give erg/s/Hz per Msun.
     """
     from tengri import Parameters
-    from tengri.core.model import SEDModel
+    from tengri.forward.sed_model import SEDModel
     from tengri.parameters.priors import Fixed
 
     spec = Parameters(
@@ -552,7 +552,7 @@ def _build_tengri_sed_raw(
     Returns (wave_Å, L_nu_erg/s/Hz).
     """
     from tengri import Parameters
-    from tengri.core.model import SEDModel
+    from tengri.forward.sed_model import SEDModel
     from tengri.parameters.priors import Fixed
 
     kwargs: dict = {
@@ -1031,7 +1031,7 @@ def _build_tengri_tau_sed_table(
     Returns (wave_Å, L_nu per Msun formed in erg/s/Hz).
     """
     from tengri import Parameters
-    from tengri.core.model import SEDModel
+    from tengri.forward.sed_model import SEDModel
     from tengri.parameters.priors import Fixed
 
     n = 500
@@ -1451,7 +1451,7 @@ def _build_tengri_nebular_sed(
     Galaxy is a constant-SFR burst of duration age_gyr at SFR = 10^log_sfr Msun/yr.
     """
     from tengri import Parameters
-    from tengri.core.model import SEDModel
+    from tengri.forward.sed_model import SEDModel
     from tengri.parameters.priors import Fixed
 
     sfr = 10.0**log_sfr
@@ -3448,7 +3448,7 @@ def _build_tengri_step_sed(
     same independent code path used by TestTauSFHCrossVal table tests.
     """
     from tengri import Parameters
-    from tengri.core.model import SEDModel
+    from tengri.forward.sed_model import SEDModel
     from tengri.parameters.priors import Fixed
 
     age_gyr = float(max(lb_bin_edges_gyr))

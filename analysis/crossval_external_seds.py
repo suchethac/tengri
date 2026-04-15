@@ -133,7 +133,7 @@ def _tengri_const(
     import jax
 
     from tengri import Parameters
-    from tengri.core.model import SEDModel
+    from tengri.forward.sed_model import SEDModel
     from tengri.parameters.priors import Fixed
 
     spec = Parameters(
@@ -169,7 +169,7 @@ def _tengri_dexp(
     import jax
 
     from tengri import Parameters
-    from tengri.core.model import SEDModel
+    from tengri.forward.sed_model import SEDModel
     from tengri.parameters.priors import Fixed
 
     spec = Parameters(
@@ -206,7 +206,7 @@ def _tengri_dpl(
     import jax
 
     from tengri import Parameters
-    from tengri.core.model import SEDModel
+    from tengri.forward.sed_model import SEDModel
     from tengri.parameters.priors import Fixed
 
     spec = Parameters(
