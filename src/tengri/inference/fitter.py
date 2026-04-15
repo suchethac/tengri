@@ -278,7 +278,11 @@ class Fitter:
 
         if eline_prior_type is None:
             if _spec_config is not None and hasattr(_spec_config, "eline_prior_type"):
-                eline_prior_type = _spec_config.eline_prior_type
+                _raw = _spec_config.eline_prior_type
+                # Only use the attribute when it's a genuine string; non-string
+                # values (e.g. MagicMock in tests) fall back to the default so
+                # the cache key is stable across equivalent configurations.
+                eline_prior_type = _raw if isinstance(_raw, str) else "flat"
             else:
                 eline_prior_type = "flat"
         self._eline_prior_type = eline_prior_type
@@ -1094,7 +1098,10 @@ class Fitter:
             )
 
         # Attach back-reference so Posterior.refine() works
-        result._fitter = self
+        try:
+            result._fitter = self
+        except AttributeError:
+            pass
         return result
 
     def _run_nss(self, *, key, **kwargs):

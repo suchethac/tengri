@@ -146,10 +146,6 @@ _UNIVERSAL_SHORT_NAMES: dict[str, str] = {
     "logzsol": "met_logzsol",
     "tau_bc": "dust_tau_bc",
     "tau_diff": "dust_tau_diff",
-    "dust_slope": "dust_slope",
-    "agn_frac": "agn_frac",
-    "neb_logU": "neb_logU",
-    "redshift": "redshift",
 }
 
 
