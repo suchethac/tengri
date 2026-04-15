@@ -5,7 +5,7 @@
 Differentiable SED fitting code in JAX. Models galaxy star formation histories as IFT correlated fields with PSD-governed burstiness priors. Uses DSPS for differentiable stellar population synthesis.
 
 **Code name:** `tengri` is a working name. Final name TBD.
-**Paper draft:** `~/writing-workspace/projects/differentiable_psd_sed_fitting/`
+**Paper draft:** `~/writing-workspace/projects/tengri/` (older `differentiable_psd_sed_fitting/` is superseded)
 **Paper I:** Methods + mock recovery (including hierarchical PSD). **Paper II:** Real data.
 
 ## Build/test commands
@@ -34,7 +34,7 @@ python analysis/fig07_speed_benchmarks.py --n-repeats 2
 cd notebooks && jupytext --sync *.py   # regenerate .ipynb from .py
 
 # Compile paper
-cd ~/writing-workspace/projects/differentiable_psd_sed_fitting
+cd ~/writing-workspace/projects/tengri
 latexmk -pdf 0-ms.tex
 ```
 
@@ -65,51 +65,87 @@ latexmk -pdf 0-ms.tex
 
 ## Package structure
 
+Restructured 2026-04-15 — layout maps to physicist ontology (params → components
+→ forward model → observation → inference → analysis → runtime/utils). Public
+API surface is re-exported at `src/tengri/__init__.py`.
+
 ```
 src/tengri/
-├── __init__.py              # public API re-exports
-├── distributions.py         # Uniform, Gaussian, LogUniform, Fixed
-├── plotting.py              # Visualization utilities
-├── simulate.py              # SED-from-SFH utilities
-│
-├── core/                    # forward model
-│   ├── model.py             # Model class (thin orchestrator)
-│   ├── param_spec.py        # ParamSpec: parameter definitions + validation
-│   ├── param_translate.py   # Public→internal param mapping + unit conversion
-│   ├── emission_helpers.py   # Shared emission physics (nebular, shock, AGN, dust IR, radio, xray, IGM)
-│   ├── fused_kernels.py     # JIT kernel factory — calls emission_helpers
-│   ├── sed_pipeline.py      # Non-fused SED engine — calls emission_helpers
-│   ├── prediction.py        # Lazy Prediction object
-│   ├── noise.py             # Noise model handling
-│   └── mock.py              # Mock galaxy generation
-│
-├── inference/               # all fitting + results
-│   ├── fitter.py            # Fitter: MAP, Ray Tracing, NUTS, geoVI, MGVI, NSS
-│   ├── hierarchical.py      # HierarchicalFitter: shared PSD
-│   ├── posterior.py          # Posterior: summary, corner, ESS, log_evidence
-│   ├── raytrace.py          # Ray Tracing Sampler (Behroozi 2025)
-│   ├── ns/                  # Nested Slice Sampling (Yallup+2026), local port
-│   ├── vi_config.py         # VI settings
-│   ├── common.py, nuts.py, geovi.py, map_optimizer.py
-│
-├── models/                  # physics modules
-│   ├── sfh/                 # SFH models, PSD, GP generation
-│   │   ├── dense_basis.py   # Dense Basis GP-SFH (Iyer+2017, 2019)
-│   │   ├── mean_sfh.py      # Parametric SFH (DPL, exponential, delayed, etc.)
-│   │   ├── nonparametric.py # Continuity + Dirichlet SFH
-│   │   ├── gp_sfh.py        # GP generation for stochastic SFH
-│   │   └── psd_models.py    # PSD kernel functions
-│   ├── dust/                # Two-component attenuation + IR emission + WG00 geometries
-│   ├── agn/                 # AGN disc (incl. K&D 3-zone) + torus + BLR/NLR + QSOgen + _phys.py (shared constants)
-│   ├── nebular/             # Nebular emission (BakedIn, CLOUDY, Cue)
-│   ├── sps/                 # DSPS wrapper, SSP loading, alpha-enhancement
-│   ├── observation/         # Photometry, spectroscopy, calibration marginalization, emission line fitting (line_catalog.py, eline_*.py)
-│   ├── igm.py, radio.py, xray.py
-│
-├── utils/                   # Grid, cosmology, transforms
-├── diagnostics/             # Fisher, saliency, green functions
-└── profiling/               # Pipeline profiling, memory, timers
+├── __init__.py                      # public API re-exports
+
+├── parameters/                      # parameterization layer
+│   ├── parameters.py                # Parameters class (canonical, was ParamSpec)
+│   ├── priors.py                    # Uniform, Gaussian, LogUniform, Fixed (was distributions.py)
+│   ├── translate.py                 # public→internal param mapping + LOG10_ZSUN
+│   └── defaults.py                  # default config / priors
+
+├── components/                      # SED components library (was models/)
+│   ├── sfh/                         # SFH models, PSD, GP generation
+│   ├── sps/                         # DSPS wrapper + SSP precompute (Protocol-compliant)
+│   ├── dust/                        # two-component attenuation + IR emission + dust_emission_precompute.py (DL07/Dale/DL14/Astrodust/BOSA/THEMIS)
+│   ├── nebular/                     # CLOUDY/Cue/shock/agn_nebular + cloudy_precompute.py
+│   ├── agn/                         # disc, torus, SKIRTOR, unified, BLR/NLR, QSOgen + skirtor_precompute.py + kd_precompute.py
+│   ├── igm/igm.py                   # Inoue+2014 IGM transmission (subpackage)
+│   ├── radio/radio.py               # Radio synchrotron + free-free + AGN jets (subpackage)
+│   └── xray/xray.py                 # XRBs + AGN corona (subpackage)
+
+├── forward/                         # forward-model orchestration
+│   ├── sed_model.py                 # SEDModel class (was core/model.py)
+│   ├── pipeline.py                  # non-fused SED engine (was core/sed_pipeline.py)
+│   ├── components_assembly.py       # SED component dispatch (was core/sed_components.py)
+│   ├── emission_helpers.py          # shared emission physics
+│   ├── nonstell.py                  # nonstellar dispatch
+│   ├── prediction.py                # Lazy Prediction object
+│   ├── result.py                    # SEDResult
+│   ├── convenience.py               # high-level helpers
+│   ├── kernels/                     # Fused JIT kernels (currently bundled in assembly.py)
+│   │   └── assembly.py              # 3174L — scheduled for split by fusion strategy
+│   └── precompute/                  # Precompute Protocol + algorithm
+│       ├── grid.py                  # preintegrate_grid, slice_fixed_axes, interp_nd_triweight (was core/preintegrate.py)
+│       ├── protocol.py              # PrecomputeModule Protocol + AXIS_PARAMS convention
+│       ├── registry.py              # explicit component → module registry
+│       └── templates.py             # generic precompute_template_photometry wrapper
+
+├── observation/                     # observational layer
+│   ├── photometry.py, photometry_config.py
+│   ├── spectroscopy.py, spectrum.py
+│   ├── filters.py, line_list.py, calibration.py
+│   ├── eline_catalog.py, eline_marginalization.py, eline_priors.py
+│   ├── observation.py
+│   ├── noise.py, noise_model.py     # was core/noise.py + models/observation/noise_model.py
+│   └── mock.py                      # was core/mock.py
+
+├── inference/                       # fitting
+│   ├── fitter.py, posterior.py, hierarchical.py, common.py
+│   ├── loss_functions.py, jit_engine.py, standardized.py, vi_config.py
+│   ├── vi.py, geovi.py, nuts.py, raytrace.py, elliptical_slice.py, laplace.py, pathfinder.py, map_optimizer.py, map_dispatch.py, evidence.py, sbi.py, mcmc.py
+│   ├── backends/                    # (scaffolded; splits deferred)
+│   │   ├── vi/, mcmc/
+│   └── ns/                          # Nested Slice Sampling (Yallup+2026)
+
+├── analysis/                        # results/diagnostics/plotting
+│   ├── diagnostics/                 # Fisher, saliency, green_functions, autocorrelation
+│   ├── plotting/                    # bundled in all.py (1156L, split deferred)
+│   └── simulate.py                  # SED-from-SFH utilities
+
+├── runtime/                         # cross-cutting plumbing
+│   ├── settings.py                  # JAX flags, cache dirs (was core/settings.py)
+│   ├── exceptions.py                # TengriError hierarchy
+│   ├── display.py                   # __repr__ / summary helpers
+│   └── deprecation.py               # was utils/deprecation.py
+
+├── utils/                           # pure math/cosmology (unchanged)
+│   └── cosmology.py, conversions.py, grid.py, interpolation.py, magnitudes.py, transforms.py, wavelength.py, sed_quantities.py, physics_constants.py, devices.py, optimizations.py
+
+└── profiling/                       # memory.py, pipeline.py, timers.py
 ```
+
+**Deleted / renamed:** `core/` dissolved (contents distributed into `runtime/`,
+`parameters/`, `observation/`, `forward/`). `models/` renamed to `components/`.
+`models/observation/` promoted to top-level `observation/`. Flat
+`models/{igm,radio,xray}.py` promoted to subpackages. Top-level
+`distributions.py` → `parameters/priors.py`. `plotting.py` → `analysis/plotting/all.py`.
+`simulate.py` → `analysis/simulate.py`. `diagnostics/` → `analysis/diagnostics/`.
 
 ## High-level API (preferred)
 
@@ -294,6 +330,42 @@ due to the age-dust-metallicity degeneracy. This is a physical limitation, not a
 For geoVI/MGVI: check KL convergence across iterations and compare to RT posteriors when possible.
 
 **Autocorrelation plot**: `plot_autocorrelation(result)` from `_plot_style.py` shows ACF vs lag for each parameter with the Sokal window marked.
+
+## Precompute Protocol (new, 2026-04-15)
+
+Each precompute-enabled component implements a uniform shape defined at
+`forward/precompute/protocol.py`:
+
+```python
+AXIS_PARAMS: tuple[str, ...] | dict[str, tuple[str, ...]]   # param names per grid axis
+
+def precompute(filter_waves, filter_trans, redshift, parameters, **kwargs) -> Preint: ...
+def build_lookup(preint, **kwargs) -> callable: ...
+```
+
+The explicit registry at `forward/precompute/registry.py` maps component names
+(`"dl07"`, `"skirtor"`, `"kd_disc"`, `"ssp"`, `"cloudy"`, …) to their precompute
+modules. Adding a new precompute-capable physics component = one new
+`<component>_precompute.py` file + one registry line. No edits to `SEDModel`.
+
+**Auto-collapse-on-Fixed:** when a user marks a parameter `Fixed`, the
+corresponding grid axis is collapsed via `slice_fixed_axes` at init time,
+reducing runtime grid dimensionality. Implemented uniformly via the Protocol
+for: DL07, Dale2014, DL14, Astrodust, BOSA, THEMIS, SKIRTOR, SPS. Already
+working in place (not yet via Protocol) for CLOUDY; deferred for K&D 3-zone
+disc (custom dataclass, no user-facing axis params today).
+
+**Incomplete state (tracked for fix):**
+- `SEDModel.__init__` still dispatches dust IR precompute via a hardcoded switch
+  (rather than iterating the registry). Rewrite is deferred to a later session;
+  the current switch imports the new adapter locations and works correctly.
+- The `kd_precompute.precompute()` function raises `NotImplementedError`; K&D
+  preintegration is still invoked directly via the original
+  `kubota_done_disc_preintegrated` path. Full Protocol wiring deferred.
+- Taylor correction (first spectral moment, `taylor=True`) is implemented in
+  `preintegrate_grid` and used by SSP photometry (`ssp_phot_moment`). Not used
+  by template-based adapters (DL07 etc.) — zeroth-order has been sufficient for
+  science to date.
 
 ## Emission helpers architecture
 
