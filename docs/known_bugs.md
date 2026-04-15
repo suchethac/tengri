@@ -42,6 +42,20 @@
 | IMP-04 | Dust emission analytic fallbacks — dead code | PARTIALLY FIXED — `fallback_fn` param removed from `_make_lazy_loader`; fallback functions retained (still used in notebooks/crossval) |
 | IMP-05 | ADAF bremsstrahlung stale comment | FIXED 2026-04-04 — stale comment deleted |
 
+### Restructure follow-up audit (2026-04-15): Precompute Protocol + file-split debts
+
+Opened by the package restructure — all items are architectural completeness
+rather than physics errors. Tracking here because they affect `Model.__init__`
+correctness guarantees and the "Add a new component" developer story.
+
+| ID | Description | Status |
+|----|-------------|--------|
+| IMP-06 | `SEDModel._precompute_dust_ir_photometry` still uses a 200-line hardcoded switch instead of iterating `forward/precompute/registry.py`. Current switch imports the new adapter paths and works; rewrite converts the switch into ~10 lines of registry iteration and centralizes the dispatch. | OPEN — scheduled follow-up |
+| IMP-07 | `components/agn/kd_precompute.precompute()` raises `NotImplementedError`. K&D 3-zone disc preintegration still runs via the original `kubota_done_disc_preintegrated` path. Protocol surface exists as a marker only. Full wiring requires either extending the Protocol to accept a custom `KDPreintegratedData` dataclass or refactoring K&D to use the generic `PreintegratedGrid` shape. | OPEN — scheduled follow-up |
+| IMP-08 | Auto-collapse-on-Fixed gap for legacy callers. Before 2026-04-15, DL07 + SKIRTOR preintegration never collapsed fixed-parameter axes (CLOUDY + SPS did). The new Protocol adapters (`dust_emission_precompute.precompute`, `skirtor_precompute.precompute`) auto-collapse uniformly, but `SEDModel.__init__` still calls the legacy `precompute_dl07_photometry` / `precompute_skirtor_photometry` entry points that do NOT collapse. Fix lands naturally with IMP-06 (registry rewiring in SEDModel).init). | OPEN — resolved by IMP-06 |
+| IMP-09 | Taylor spectral-moment correction (`preintegrate_grid(taylor=True)`) is implemented and used by SSP photometry (`ssp_phot_moment`) but NOT by template-based adapters (DL07, Dale2014, DL14, Astrodust, BOSA, THEMIS, SKIRTOR). Zeroth-order has been "mostly enough" for current validation; a future benchmark study should quantify the gain from enabling Taylor across all template paths, especially at high dust optical depth. | OPEN — deferred (not blocking) |
+| IMP-10 | Large-file splits deferred: `forward/kernels/assembly.py` (3174L) needs splitting by fusion strategy (exact / compositional / hybrid / traceable / dispatch); `forward/sed_model.py` (2957L) needs splitting by lifecycle (6 files); `components/dust/emission.py` (2459L) needs template-loading / application split; `analysis/plotting/all.py` (1156L) split by plot type is in-progress as of this commit. Functional correctness is unaffected; these are maintainability debts against the project's own 800-line coding-style limit. | OPEN — scheduled follow-up |
+
 ### Models status update (2026-04-10): Unimplemented models audit
 
 Previously listed as "unimplemented" in `UNIMPLEMENTED_MODELS_GUIDE_DETAILS.MD.md`.

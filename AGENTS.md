@@ -40,21 +40,37 @@ Parameters (latent xi + physical params)
 
 ## Key files to read
 
+**Package layout rewritten 2026-04-15** (`core/` dissolved; `models/` → `components/`;
+`models/observation/` promoted to top-level `observation/`; `diagnostics/` +
+`plotting.py` + `simulate.py` moved under `analysis/`; `distributions.py` →
+`parameters/priors.py`; new `runtime/` for settings/exceptions/display/deprecation).
+Public API (`from tengri import ...`) unchanged.
+
 | File | Purpose | When to read |
 |------|---------|--------------|
-| `src/tengri/core/model.py` | High-level Model class | Understanding the forward model |
-| `src/tengri/core/fused_kernels.py` | JIT kernel factory — CSP + AGN + dust assembly | Core forward model |
-| `src/tengri/core/sed_pipeline.py` | SED computation engine (non-fused path) | Tracing SED assembly |
-| `src/tengri/core/parameters.py` | ParamSpec: parameter defs, validation | Parameter handling |
-| `src/tengri/models/sfh/gp_sfh.py` | GP generation from PSD | Core IFT machinery |
-| `src/tengri/models/sfh/psd_models.py` | PSD definitions (DRW, Matern) | Understanding the burstiness prior |
-| `src/tengri/models/dust/attenuation.py` | Two-component dust attenuation | Dust modeling (charlot_fall.py removed) |
-| `src/tengri/models/sps/dsps_wrapper.py` | DSPS CSP integral | SPS integration |
-| `src/tengri/models/agn/disc.py` | AGN disc models (K&D 3-zone, powerlaw, multicolor) | AGN |
-| `src/tengri/models/agn/unified.py` | Unified AGN (disc + torus + BLR/NLR + polar dust) | AGN assembly |
-| `src/tengri/models/nebular/cue.py` | Cue NN nebular emulator | Nebular emission |
-| `src/tengri/models/radio.py` | Radio emission (synchrotron, free-free, AGN) | Radio |
-| `src/tengri/models/xray.py` | X-ray emission (XRB, AGN corona) | X-ray |
+| `src/tengri/forward/sed_model.py` | High-level SEDModel class (2957L, split deferred) | Understanding the forward model |
+| `src/tengri/forward/kernels/assembly.py` | JIT kernel factory — CSP + AGN + dust assembly (3174L, split deferred by fusion strategy) | Core forward model |
+| `src/tengri/forward/pipeline.py` | SED computation engine (non-fused path) | Tracing SED assembly |
+| `src/tengri/forward/precompute/` | Precompute Protocol + registry + algorithm (`protocol.py`, `registry.py`, `grid.py`, `templates.py`) | Extending precompute |
+| `src/tengri/parameters/parameters.py` | Parameters class (canonical, was ParamSpec) | Parameter handling |
+| `src/tengri/parameters/priors.py` | Uniform / Gaussian / LogUniform / Fixed | Prior construction |
+| `src/tengri/components/sfh/gp_sfh.py` | GP generation from PSD | Core IFT machinery |
+| `src/tengri/components/sfh/psd_models.py` | PSD definitions (DRW, Matern) | Understanding the burstiness prior |
+| `src/tengri/components/dust/attenuation.py` | Two-component dust attenuation (charlot_fall.py removed) | Dust attenuation |
+| `src/tengri/components/dust/emission.py` | Dust IR emission (DL07/DL14/Dale/Casey/…) — 2459L, split deferred | Dust IR models |
+| `src/tengri/components/dust/dust_emission_precompute.py` | Protocol adapter for template-based dust emission | Dust IR precompute |
+| `src/tengri/components/sps/dsps_wrapper.py` | DSPS CSP integral | SPS integration |
+| `src/tengri/components/sps/precompute.py` | SSP precompute Protocol (reference implementation) | SPS precompute |
+| `src/tengri/components/agn/disc.py` | AGN disc models (K&D 3-zone, powerlaw, multicolor) | AGN |
+| `src/tengri/components/agn/unified.py` | Unified AGN (disc + torus + BLR/NLR + polar dust) | AGN assembly |
+| `src/tengri/components/agn/skirtor_precompute.py` | Protocol adapter for SKIRTOR torus | AGN precompute |
+| `src/tengri/components/agn/kd_precompute.py` | K&D preintegration (Protocol stub; full wiring deferred) | AGN K&D |
+| `src/tengri/components/nebular/cue.py` | Cue NN nebular emulator | Nebular emission |
+| `src/tengri/components/nebular/cloudy_precompute.py` | CLOUDY Protocol marker (auto-collapse inside CloudyGridBackend) | Nebular precompute |
+| `src/tengri/components/radio/radio.py` | Radio emission (synchrotron, free-free, AGN) | Radio |
+| `src/tengri/components/xray/xray.py` | X-ray emission (XRB, AGN corona) | X-ray |
+| `src/tengri/observation/` | Photometry, spectroscopy, filters, line_list, noise, mock | Observation layer |
+| `src/tengri/runtime/` | Settings, exceptions, display, deprecation | Cross-cutting plumbing |
 | `tests/conftest.py` | Test fixtures, grid setup | Understanding test patterns |
 
 ## Parameter dictionary convention
@@ -124,7 +140,7 @@ grads = jax.grad(loss_fn)(params)
 
 ### Add a new dust model
 
-1. Create `src/tengri/models/dust/my_model.py`
+1. Create `src/tengri/components/dust/my_model.py`
 2. Implement a function with signature: `(wavelength, age_grid, **params) -> attenuation_factor`
 3. The function must be pure JAX (jnp operations only, no side effects)
 4. Add tests in `tests/unit/test_dust.py`
@@ -132,11 +148,28 @@ grads = jax.grad(loss_fn)(params)
 
 ### Add a new PSD model
 
-1. Add function to `src/tengri/models/sfh/psd_models.py`
+1. Add function to `src/tengri/components/sfh/psd_models.py`
 2. Signature: `(omega, **params) -> P(omega)` where omega is angular frequency
 3. Must be JIT-compatible and have well-defined gradients
 4. Add corresponding `compute_sqrt_power_*` function in `gp_sfh.py`
 5. Add tests verifying the integral equals the expected variance
+
+### Add a new template-based precompute-enabled component
+
+See the Precompute Protocol at `src/tengri/forward/precompute/protocol.py`.
+
+1. Add the forward-evaluation function at `src/tengri/components/<comp>/<comp>.py`
+   (pure JAX).
+2. Create `src/tengri/components/<comp>/<comp>_precompute.py` exposing the Protocol
+   surface: `AXIS_PARAMS: tuple[str, ...]` (or `dict[str, tuple[str, ...]]` for
+   multi-variant), `precompute(filter_waves, filter_trans, redshift, parameters,
+   **kwargs)`, `build_lookup(preint, **kwargs)`. Auto-collapse via
+   `slice_fixed_axes` whenever any `AXIS_PARAMS` entry is Fixed in `parameters`.
+3. Register in `src/tengri/forward/precompute/registry.py` — one new entry in
+   `_REGISTRY`. That's the full extension surface; `SEDModel` does not need
+   editing.
+4. Add tests in `tests/unit/test_precompute_protocol.py` (the parametrized tests
+   auto-cover your new component via the registry).
 
 ## Dependencies and their roles
 
@@ -274,3 +307,36 @@ All major components are implemented and tested:
 - Feltre+2016 NLR backend (`NotImplementedError` stub in `nlr.py`)
 - GPU benchmarks (all timing numbers are CPU)
 - ADAF model equations verified against Mahadevan (1997) — flagged for rewrite
+
+### Partially implemented — scheduled follow-up (from 2026-04-15 restructure)
+
+- **Precompute Protocol rewiring in SEDModel.** `forward/sed_model.py`'s 200-line
+  `_precompute_dust_ir_photometry` still dispatches via a hardcoded switch on
+  `model_name`. It imports the new adapter locations and works correctly, but
+  does not yet iterate `forward/precompute/registry.py`. Rewrite is a future
+  task (see `docs/known_bugs.md:IMP-06`). The switch has a documented cost: new
+  dust-IR models require editing both the registry AND the switch.
+- **K&D 3-zone disc Protocol wiring.** `components/agn/kd_precompute.py` exposes
+  `AXIS_PARAMS = ()` and `precompute()` raises `NotImplementedError`. Actual
+  K&D preintegration runs via the original `kubota_done_disc_preintegrated`
+  call path from `forward/sed_model.py`. Full Protocol wiring requires either
+  extending the Protocol to accept a custom `KDPreintegratedData` dataclass or
+  refactoring K&D to use the generic `PreintegratedGrid` shape. Tracked as
+  `IMP-07`.
+- **Auto-collapse-on-Fixed gaps pre-restructure.** Before the refactor, only
+  SPS + CLOUDY auto-collapsed on Fixed parameters; DL07/SKIRTOR did not. The
+  Protocol adapters now add this uniformly, but the auto-collapse runs only
+  when callers use the new `precompute()` entry points. Legacy callers of
+  `precompute_dl07_photometry` / `precompute_skirtor_photometry` still skip
+  auto-collapse until SEDModel switches to the registry.
+- **Taylor correction in template adapters.** `preintegrate_grid(taylor=True)`
+  is implemented but opt-in. SSP photometry uses it by default (`ssp_phot_moment`
+  in `components/sps/precompute.py`). Template adapters (DL07/Dale/DL14/…) and
+  SKIRTOR still use zeroth-order only. Enabling Taylor across all template
+  adapters should be a future benchmark study.
+- **Large-file splits.** `forward/kernels/assembly.py` (3174L) and
+  `forward/sed_model.py` (2957L) moved from `core/` unsplit; the planned split
+  by fusion strategy (exact / compositional / hybrid / traceable / dispatch)
+  and by lifecycle (class / factory / fit / predict / summary / precompute)
+  is deferred. `analysis/plotting/all.py` (1156L) and
+  `components/dust/emission.py` (2459L) splits likewise deferred.
