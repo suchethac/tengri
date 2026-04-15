@@ -15,10 +15,10 @@ import dataclasses
 
 import jax.numpy as jnp
 
-from tengri.parameters.priors import Distribution
 from tengri.observation.noise_model import NoiseConfig
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectroscopy import SpectroscopyConfig
+from tengri.parameters.priors import Distribution
 
 
 @dataclasses.dataclass(frozen=True)

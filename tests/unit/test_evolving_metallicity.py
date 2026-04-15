@@ -14,7 +14,6 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.parameters.parameters import ParamSpec
 from tengri.components.sps.dsps_wrapper import (
     compute_log_z_evolving,
     interpolate_mass_remaining,
@@ -22,6 +21,7 @@ from tengri.components.sps.dsps_wrapper import (
     interpolate_metallicity,
     interpolate_metallicity_evolving,
 )
+from tengri.parameters.parameters import ParamSpec
 
 jax.config.update("jax_enable_x64", True)
 

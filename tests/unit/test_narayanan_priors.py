@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from tengri.parameters.priors import Gaussian
 from tengri.components.dust.priors import narayanan_prior, narayanan_tau_prior
+from tengri.parameters.priors import Gaussian
 
 
 class TestNarayananPrior:

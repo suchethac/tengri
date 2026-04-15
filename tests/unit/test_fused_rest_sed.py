@@ -11,13 +11,13 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
+from tengri.components.sps.dsps_wrapper import SSPData
 from tengri.forward.kernels.assembly import (
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,
 )
 from tengri.parameters.parameters import ParamSpec
 from tengri.parameters.priors import Uniform
-from tengri.components.sps.dsps_wrapper import SSPData
 
 jax.config.update("jax_enable_x64", True)
 

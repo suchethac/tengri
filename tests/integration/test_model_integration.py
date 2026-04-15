@@ -9,11 +9,11 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
+from tengri.components.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.sed_model import MockData, Model
+from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import ParamSpec
 from tengri.parameters.priors import Uniform
-from tengri.observation.filters import load_filter_set
-from tengri.components.sps.dsps_wrapper import load_ssp_data
 
 # ---------------------------------------------------------------------------
 # Skip if SSP data not available

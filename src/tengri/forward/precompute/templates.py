@@ -16,7 +16,6 @@ consistent under the Precompute Protocol.
 from __future__ import annotations
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 
 from tengri.forward.precompute.grid import (

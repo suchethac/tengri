@@ -25,7 +25,6 @@ from tengri.forward.precompute.grid import (
 )
 from tengri.utils.interpolation import edges_for_grid
 
-
 # Parameter names corresponding to the 5 SKIRTOR grid axes, in order.
 AXIS_PARAMS: tuple[str, ...] = (
     "agn_tau_skirtor",
@@ -183,9 +182,7 @@ def precompute(
 
     collapsed = slice_fixed_axes(preint, fixed)
     # Rebuild dict view; drop the axes that were collapsed
-    remaining_axes = tuple(
-        ax for i, ax in enumerate(result["axes"]) if i not in fixed
-    )
+    remaining_axes = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed)
     return {
         "grid_phot": collapsed.phot,
         "axes": remaining_axes,

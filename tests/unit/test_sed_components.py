@@ -131,8 +131,8 @@ class TestBuildSspComponentLinear:
         model = _make_model_for_ssp(met_interp="linear")
         fn = build_ssp_component(model)
         sfr = jnp.ones(N_AGE)
-        ssp_at_z_low, _ = fn(sfr, -10.0)   # below grid
-        ssp_at_z_high, _ = fn(sfr, 10.0)   # above grid
+        ssp_at_z_low, _ = fn(sfr, -10.0)  # below grid
+        ssp_at_z_high, _ = fn(sfr, 10.0)  # above grid
         # Flat SSP: all metallicities have flux=1, so clamped values also ≈ 1
         assert jnp.allclose(ssp_at_z_low, 1.0, atol=1e-5)
         assert jnp.allclose(ssp_at_z_high, 1.0, atol=1e-5)
@@ -278,9 +278,7 @@ class TestBuildDustAttenComponent:
         fn = build_dust_atten_component(model)
         ssp_flux_at_z = jnp.ones((N_AGE, N_WAVE))
         weights = jnp.ones(N_AGE)
-        sed_atten, _, _ = fn(
-            ssp_flux_at_z, weights, tau_bc=0.0, tau_diff=0.0, f_obscuration=1.0
-        )
+        sed_atten, _, _ = fn(ssp_flux_at_z, weights, tau_bc=0.0, tau_diff=0.0, f_obscuration=1.0)
         # dust_trans = 1.0 + 0.0 * exp(0) = 1.0, so no change at f_obscuration=1
         # The formula: f_obscuration + (1 - f_obscuration) * exp(-tau)
         # With f_obs=1, tau=0: trans = 1 + 0 = 1 → no attenuation

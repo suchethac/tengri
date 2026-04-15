@@ -56,8 +56,14 @@ class TestDeviceInfo:
     def test_required_keys_present(self):
         """All expected keys are present in the returned dict."""
         info = device_info()
-        required = {"platform", "devices", "n_devices", "default_device", "x64_enabled",
-                    "gpu_memory_mb"}
+        required = {
+            "platform",
+            "devices",
+            "n_devices",
+            "default_device",
+            "x64_enabled",
+            "gpu_memory_mb",
+        }
         assert required <= set(info.keys())
 
     def test_platform_is_string(self):

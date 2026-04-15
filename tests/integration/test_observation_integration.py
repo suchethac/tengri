@@ -11,16 +11,16 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
+from tengri.components.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.sed_model import Model
-from tengri.parameters.parameters import ParamSpec
-from tengri.parameters.priors import Fixed, Uniform
 from tengri.inference.fitter import Fitter
 from tengri.observation.noise_model import NoiseConfig
 from tengri.observation.observation import Observation
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectroscopy import SpectroscopyConfig
-from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.priors import Fixed, Uniform
 
 # ---------------------------------------------------------------------------
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"

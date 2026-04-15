@@ -147,7 +147,11 @@ class TestWarmComptonization:
         """With warm Comptonization, the warm zone SED should exceed a pure blackbody
         at intermediate UV/soft-X-ray wavelengths.
         """
-        from tengri.components.agn.disc import _planck_lnu, _warm_comptonization_lnu, _wavelength_to_nu
+        from tengri.components.agn.disc import (
+            _planck_lnu,
+            _warm_comptonization_lnu,
+            _wavelength_to_nu,
+        )
 
         wave_uv = jnp.logspace(2.5, 6.0, 200)  # 316 A - 1 mm
         nu = _wavelength_to_nu(wave_uv)

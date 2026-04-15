@@ -8,11 +8,12 @@ SSP data files are required.
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from unittest.mock import MagicMock, patch
 
 jax.config.update("jax_enable_x64", True)
 
@@ -180,10 +181,7 @@ class TestRoundtrip:
 
         # Use non-zero xi to exercise the transforms
         rng = np.random.default_rng(42)
-        xi_in = {
-            name: jnp.array(rng.standard_normal())
-            for name in spec.free_params
-        }
+        xi_in = {name: jnp.array(rng.standard_normal()) for name in spec.free_params}
 
         params = smodel.xi_to_params(xi_in)
         xi_out = smodel.params_to_xi(params)
@@ -198,9 +196,9 @@ class TestRoundtrip:
 
     def test_fixed_params_present_in_output(self):
         """Fixed parameters must appear in xi_to_params output."""
-        from tengri.parameters.parameters import Parameters
-        from tengri.parameters.priors import Uniform, Fixed
         from tengri.inference.standardized import StandardizedForwardModel
+        from tengri.parameters.parameters import Parameters
+        from tengri.parameters.priors import Fixed, Uniform
 
         spec = Parameters(
             mean_sfh_type="dpl",
@@ -362,9 +360,7 @@ class TestBuildHierarchicalLoss:
         n_dim = unravel_fn.__self__.n if hasattr(unravel_fn, "__self__") else None
 
         # Determine flat vector size from unravel_fn's template
-        from jax.flatten_util import ravel_pytree
         # Probe dimension by raveling unravel_fn on zero and checking shape
-        import jax
         # Build a flat zero vector of the right size via a test ravel
         xi_test = jnp.zeros(1)  # will fail — use loss gradient shape instead
         # Instead, just call with a zero vector of sufficient size and check finiteness
@@ -495,6 +491,7 @@ class TestCustomPSDModel:
             calls.append((float(sigma), float(tau_yr)))
             # Return a plausible sqrt_power array
             from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw
+
             return compute_sqrt_power_drw(sigma, tau_yr, n_grid, log_ages)
 
         smodel = StandardizedForwardModel(model, psd_model=custom_psd)

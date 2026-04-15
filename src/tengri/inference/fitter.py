@@ -22,8 +22,6 @@ import warnings
 import jax
 import jax.numpy as jnp
 
-from tengri.runtime.exceptions import ParameterError
-from tengri.parameters.priors import Gaussian, Uniform
 from tengri.inference.jit_engine import build_jit_engine
 from tengri.inference.loss_functions import (
     build_loglikelihood_fn,
@@ -31,6 +29,8 @@ from tengri.inference.loss_functions import (
     build_logprior_fn,
     build_loss_fn,
 )
+from tengri.parameters.priors import Gaussian, Uniform
+from tengri.runtime.exceptions import ParameterError
 from tengri.utils.transforms import to_bounded, to_unbounded
 
 # ---------------------------------------------------------------------------

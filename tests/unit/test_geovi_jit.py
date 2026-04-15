@@ -9,9 +9,9 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import Fitter, Fixed, Model, Observation, ParamSpec, Photometry, Uniform
+from tengri.components.sps.dsps_wrapper import SSPData
 from tengri.inference.vi_config import BlockSchedule, BlockStep, OptimizationSchedule
 from tengri.observation.photometry import FilterCurve
-from tengri.components.sps.dsps_wrapper import SSPData
 
 jax.config.update("jax_enable_x64", True)
 

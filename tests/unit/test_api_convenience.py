@@ -54,8 +54,8 @@ def _make_minimal_posterior(method="vi", n_samples=10):
 
 class TestResolveShortNames:
     def test_tsnorm_short_names(self):
-        from tengri.parameters.translate import resolve_short_names
         from tengri.parameters.priors import Uniform
+        from tengri.parameters.translate import resolve_short_names
 
         expanded = resolve_short_names(
             "tsnorm", {"log_peak_sfr": Uniform(-1, 2.5), "logzsol": Uniform(-2, 0.2)}
@@ -65,8 +65,8 @@ class TestResolveShortNames:
         assert "log_peak_sfr" not in expanded
 
     def test_dpl_plus_field_compound(self):
-        from tengri.parameters.translate import resolve_short_names
         from tengri.parameters.priors import Uniform
+        from tengri.parameters.translate import resolve_short_names
 
         expanded = resolve_short_names(
             "dpl+field",
@@ -76,15 +76,15 @@ class TestResolveShortNames:
         assert "sfh_field_psd_sigma" in expanded
 
     def test_full_names_pass_through(self):
-        from tengri.parameters.translate import resolve_short_names
         from tengri.parameters.priors import Uniform
+        from tengri.parameters.translate import resolve_short_names
 
         expanded = resolve_short_names("tsnorm", {"sfh_tsnorm_log_peak_sfr": Uniform(-1, 2.5)})
         assert "sfh_tsnorm_log_peak_sfr" in expanded
 
     def test_list_input(self):
-        from tengri.parameters.translate import resolve_short_names
         from tengri.parameters.priors import Uniform
+        from tengri.parameters.translate import resolve_short_names
 
         r1 = resolve_short_names("tsnorm", {"log_peak_sfr": Uniform(-1, 2.5)})
         r2 = resolve_short_names(["tsnorm"], {"log_peak_sfr": Uniform(-1, 2.5)})
@@ -328,8 +328,8 @@ class TestModelFromConfigInterface:
     def test_from_config_signature(self):
         import inspect
 
-        from tengri.parameters.defaults import get_from_config_defaults
         from tengri.forward.sed_model import Model
+        from tengri.parameters.defaults import get_from_config_defaults
 
         sig = inspect.signature(Model.from_config)
         assert "ssp" in sig.parameters

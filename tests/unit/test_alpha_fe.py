@@ -14,11 +14,11 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.parameters.parameters import ParamSpec
 from tengri.components.sps.dsps_wrapper import (
     _ALPHA_TO_Z_COEFF,
     effective_metallicity,
 )
+from tengri.parameters.parameters import ParamSpec
 
 jax.config.update("jax_enable_x64", True)
 

@@ -41,7 +41,6 @@ from tengri.forward.precompute.templates import (
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import AA_TO_CM as _AA_TO_CM, C_CGS as _C_CGS
 
-
 # Parameter names corresponding to grid axes, per dust-emission model. Order
 # matters — axis i of the preintegrated grid maps to AXIS_PARAMS[model][i].
 AXIS_PARAMS: dict[str, tuple[str, ...]] = {

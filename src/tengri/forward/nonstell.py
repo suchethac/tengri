@@ -153,13 +153,16 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
     # --- Shock ---
     has_shock = getattr(model, "_shock_enabled", False)
     if has_shock:
-        from tengri.forward.emission_helpers import attenuate_emission as _atten_shock, shock_emission
+        from tengri.forward.emission_helpers import (
+            attenuate_emission as _atten_shock,
+            shock_emission,
+        )
 
     # --- Dust IR ---
     has_dust_em = model._dust_emission_model is not None
     if has_dust_em:
-        from tengri.forward.emission_helpers import dust_ir_emission
         from tengri.components.dust.emission import preload_emission_model
+        from tengri.forward.emission_helpers import dust_ir_emission
 
         # preload_emission_model ensures templates are loaded outside JIT,
         # preventing DynamicJaxprTracer leaks into closures.
@@ -169,8 +172,8 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
     has_agn = model._agn_model is not None
     agn_parametric = model._agn_parametric if has_agn else False
     if has_agn:
-        from tengri.forward.emission_helpers import agn_emission
         from tengri.components.agn import resolve_agn_model
+        from tengri.forward.emission_helpers import agn_emission
 
         agn_model_fn = resolve_agn_model(model._agn_model)
 

@@ -32,7 +32,6 @@ from typing import Any, NamedTuple
 
 import jax.numpy as jnp
 
-from tengri.parameters.priors import Distribution, Fixed, Uniform
 from tengri.components.sfh.dense_basis import dense_basis_pure_sfh, dense_basis_sfh
 from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
 from tengri.components.sfh.mean_sfh import (
@@ -50,6 +49,7 @@ from tengri.components.sfh.mean_sfh import (
 )
 from tengri.components.sfh.nonparametric import continuity_sfh, dirichlet_sfh
 from tengri.components.sfh.psd_models import drw_variance
+from tengri.parameters.priors import Distribution, Fixed, Uniform
 
 # ---------------------------------------------------------------------------
 # Data structures

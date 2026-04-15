@@ -9,10 +9,10 @@ jax.config.update("jax_enable_x64", True)
 from pathlib import Path
 
 from tengri.forward.sed_model import Model
-from tengri.parameters.parameters import ParamSpec
-from tengri.parameters.priors import Uniform
 from tengri.inference.fitter import Fitter
 from tengri.inference.posterior import Posterior
+from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.priors import Uniform
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
@@ -34,8 +34,8 @@ def _has_blackjax():
 
 @pytest.fixture(scope="session")
 def fitter_and_mock():
-    from tengri.observation.filters import load_filter_set
     from tengri.components.sps.dsps_wrapper import load_ssp_data
+    from tengri.observation.filters import load_filter_set
 
     ssp = load_ssp_data(str(_SSP_FILE))
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])

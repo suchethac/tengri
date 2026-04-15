@@ -13,12 +13,12 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.parameters.priors import Fixed, Gaussian, Uniform
 from tengri.observation.noise_model import NoiseConfig
 from tengri.observation.observation import Observation
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectroscopy import SpectroscopyConfig
+from tengri.parameters.priors import Fixed, Gaussian, Uniform
 
 # ---------------------------------------------------------------------------
 # Helpers

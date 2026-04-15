@@ -283,7 +283,7 @@ def test_agn_ionspec_log_ratios_match_reference() -> None:
     wrong segment edge indexing, or wrong diff direction.
     """
     from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
-    from tengri.components.nebular.ionizing_spectrum import SEGMENT_EDGES, _CLIP_RANGES
+    from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES, SEGMENT_EDGES
 
     alpha_pl = -1.7
     s = -alpha_pl  # wavelength_slope = 1.7
@@ -298,8 +298,7 @@ def test_agn_ionspec_log_ratios_match_reference() -> None:
     ref_ratios = np.diff(log_integrals)  # shape (3,)
 
     ref_lr = [
-        float(np.clip(ref_ratios[k], *_CLIP_RANGES[f"ionspec_logLratio{k + 1}"]))
-        for k in range(3)
+        float(np.clip(ref_ratios[k], *_CLIP_RANGES[f"ionspec_logLratio{k + 1}"])) for k in range(3)
     ]
 
     result = agn_ionspec_from_alpha_pl(alpha_pl)

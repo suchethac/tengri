@@ -157,12 +157,12 @@ def _time_step(name: str, fn, n: int = 200, grad_fn=None) -> StepTiming:
 def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
     """Profile the exact (non-fused) predict_sed pipeline step by step."""
     from tengri.components.dust.attenuation import two_component_dust
-    from tengri.observation.photometry import compute_flux_density
     from tengri.components.sps.dsps_wrapper import (
         compute_csp_sed,
         compute_csp_weights,
         interpolate_metallicity,
     )
+    from tengri.observation.photometry import compute_flux_density
 
     p = model._get_internal_params(params)
     steps = []

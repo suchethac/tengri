@@ -22,9 +22,6 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.runtime.exceptions import ParameterError
-from tengri.parameters.parameters import Parameters
-from tengri.parameters.priors import Fixed, Uniform
 from tengri.inference.fitter import (
     _AUTO_D_THRESHOLD,
     _CANONICAL_METHODS,
@@ -32,7 +29,9 @@ from tengri.inference.fitter import (
     _MCMC_AUTO_D_THRESHOLD,
     resolve_method,
 )
-
+from tengri.parameters.parameters import Parameters
+from tengri.parameters.priors import Fixed, Uniform
+from tengri.runtime.exceptions import ParameterError
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -90,9 +89,7 @@ class TestResolveMethodDeprecatedAliases:
             warnings.simplefilter("always")
             result = resolve_method(alias, emit_warning=True)
 
-        assert result == expected, (
-            f"resolve_method({alias!r}) → {result!r}, expected {expected!r}"
-        )
+        assert result == expected, f"resolve_method({alias!r}) → {result!r}, expected {expected!r}"
         assert any(issubclass(w.category, DeprecationWarning) for w in caught), (
             f"resolve_method({alias!r}) did not emit DeprecationWarning"
         )
@@ -214,8 +211,10 @@ class TestAutoDispatchRouting:
         )
         fitter = self._build_fitter(low_d_spec)
         sentinel = object()
-        with patch.object(fitter, "_run_nuts", return_value=sentinel) as mock_nuts, \
-             patch.object(fitter, "_run_vi", return_value=sentinel) as mock_vi:
+        with (
+            patch.object(fitter, "_run_nuts", return_value=sentinel) as mock_nuts,
+            patch.object(fitter, "_run_vi", return_value=sentinel) as mock_vi,
+        ):
             result = fitter.run("auto", key=jax.random.PRNGKey(0))
 
         mock_nuts.assert_called_once()
@@ -238,8 +237,10 @@ class TestAutoDispatchRouting:
         fitter = Fitter(mock_model, data, noise, data_type="photometry")
 
         sentinel = object()
-        with patch.object(fitter, "_run_nuts", return_value=sentinel) as mock_nuts, \
-             patch.object(fitter, "_run_vi", return_value=sentinel) as mock_vi:
+        with (
+            patch.object(fitter, "_run_nuts", return_value=sentinel) as mock_nuts,
+            patch.object(fitter, "_run_vi", return_value=sentinel) as mock_vi,
+        ):
             fitter.run("auto", key=jax.random.PRNGKey(0))
 
         mock_vi.assert_called_once()
@@ -266,8 +267,10 @@ class TestMcmcDispatchRouting:
         assert low_d_spec.n_free <= _MCMC_AUTO_D_THRESHOLD
         fitter = self._build_fitter_with_spec(low_d_spec)
         sentinel = object()
-        with patch.object(fitter, "_run_nuts", return_value=sentinel) as mock_nuts, \
-             patch.object(fitter, "_run_raytrace", return_value=sentinel) as mock_rt:
+        with (
+            patch.object(fitter, "_run_nuts", return_value=sentinel) as mock_nuts,
+            patch.object(fitter, "_run_raytrace", return_value=sentinel) as mock_rt,
+        ):
             fitter.run("mcmc", key=jax.random.PRNGKey(0))
 
         mock_nuts.assert_called_once()
@@ -285,8 +288,10 @@ class TestMcmcDispatchRouting:
         fitter = Fitter(mock_model, data, noise, data_type="photometry")
 
         sentinel = object()
-        with patch.object(fitter, "_run_nuts", return_value=sentinel) as mock_nuts, \
-             patch.object(fitter, "_run_raytrace", return_value=sentinel) as mock_rt:
+        with (
+            patch.object(fitter, "_run_nuts", return_value=sentinel) as mock_nuts,
+            patch.object(fitter, "_run_raytrace", return_value=sentinel) as mock_rt,
+        ):
             fitter.run("mcmc", key=jax.random.PRNGKey(0))
 
         mock_rt.assert_called_once()

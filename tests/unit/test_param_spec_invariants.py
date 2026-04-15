@@ -17,19 +17,17 @@ Key invariant (corrected from naive expectation):
 from __future__ import annotations
 
 import jax
-import jax.numpy as jnp
 import pytest
 
 jax.config.update("jax_enable_x64", True)
 
+from tengri.parameters.parameters import Parameters
+from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.translate import (
     _SFH_SHORT_NAMES,
     _UNIVERSAL_SHORT_NAMES,
     resolve_short_names,
 )
-from tengri.parameters.parameters import Parameters
-from tengri.parameters.priors import Fixed, Uniform
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -124,9 +122,7 @@ class TestSampleKeys:
         key = jax.random.PRNGKey(4)
         sample = stochastic_spec.sample(key)
         xi = sample["sfh_field_xi"]
-        assert xi.shape == (16,), (
-            f"sfh_field_xi shape {xi.shape} does not match n_grid=16"
-        )
+        assert xi.shape == (16,), f"sfh_field_xi shape {xi.shape} does not match n_grid=16"
 
     def test_sample_non_stochastic_has_no_xi(self, dpl_spec: Parameters) -> None:
         key = jax.random.PRNGKey(5)
@@ -148,9 +144,7 @@ class TestParamPartitioning:
     def test_free_and_fixed_are_disjoint(self, request, spec_name: str) -> None:
         spec: Parameters = request.getfixturevalue(spec_name)
         overlap = set(spec.free_params) & set(spec.fixed_params)
-        assert overlap == set(), (
-            f"Params appear in both free and fixed: {overlap}"
-        )
+        assert overlap == set(), f"Params appear in both free and fixed: {overlap}"
 
     @pytest.mark.parametrize("spec_name", ["dpl_spec", "db_spec", "stochastic_spec"])
     def test_free_and_fixed_cover_all_params(self, request, spec_name: str) -> None:
@@ -216,9 +210,7 @@ class TestMergeObservationParams:
     def test_merge_original_params_still_present(self, dpl_spec: Parameters) -> None:
         merged = dpl_spec.merge_observation_params(eline_ha_amp=Uniform(0.0, 1.0))
         for name in dpl_spec.all_params:
-            assert name in merged.all_params, (
-                f"Original param {name!r} lost after merge"
-            )
+            assert name in merged.all_params, f"Original param {name!r} lost after merge"
 
 
 # ---------------------------------------------------------------------------

@@ -254,8 +254,8 @@ def fit_batch(
     import time
 
     from tengri.forward.sed_model import Model as ModelClass
-    from tengri.parameters.priors import Fixed
     from tengri.inference.fitter import Fitter
+    from tengri.parameters.priors import Fixed
 
     # Normalise catalog to list of dicts
     rows: list[dict] = []
@@ -385,8 +385,8 @@ def fit_population(
     HierarchicalResult
     """
     from tengri.forward.sed_model import Model as ModelClass
-    from tengri.parameters.priors import Fixed
     from tengri.inference.hierarchical import HierarchicalFitter
+    from tengri.parameters.priors import Fixed
 
     # Normalise input
     galaxies = []
@@ -472,10 +472,10 @@ def build_model_from_config(
     nebular = _defs["nebular"] if nebular is _UNSET else nebular
     agn = _defs["agn"] if agn is _UNSET else agn
     redshift = _defs["redshift"] if redshift is _UNSET else redshift
+    from tengri.components.sps.dsps_wrapper import SSPData, load_ssp_data
+    from tengri.observation.observation import Observation
     from tengri.parameters.parameters import ParamSpec
     from tengri.parameters.priors import Uniform
-    from tengri.observation.observation import Observation
-    from tengri.components.sps.dsps_wrapper import SSPData, load_ssp_data
 
     # --- Load SSP data ---
     if isinstance(ssp, str):
@@ -584,8 +584,8 @@ def fit_model(
     **kwargs,
 ):
     """Fit observed data.  See ``SEDModel.fit``."""
-    from tengri.parameters.defaults import get_inference_defaults
     from tengri.inference.fitter import Fitter
+    from tengri.parameters.defaults import get_inference_defaults
 
     if method is None:
         from tengri.runtime.exceptions import ParameterError

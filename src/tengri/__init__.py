@@ -24,60 +24,8 @@ jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
 __version__ = "0.1.0"
 
 # --- Exception hierarchy ---
-from tengri.runtime.exceptions import (
-    BackendError,
-    ConfigError,
-    InferenceError,
-    ParameterError,
-    TengriError,
-    TengriIOError,
-)
-
-# --- New high-level API ---
-from tengri.observation.mock import MockData, generate_mock
-from tengri.forward.sed_model import Model, PriorPredictive, SEDModel
-from tengri.observation.noise import (
-    compute_effective_noise,
-    compute_std_inv,
-    has_noise_model,
-    uses_student_t,
-    variable_noise_hamiltonian,
-)
-from tengri.parameters.parameters import Parameters, ParamSpec
-from tengri.forward.prediction import (
-    DerivedQuantities,
-    EmissionLines,
-    Prediction,
-    SEDQuantities,
-    SFHQuantities,
-)
-from tengri.forward.result import SEDResult
-from tengri.runtime.settings import (
-    DustConfig,
-    ModelConfig,
-    MultiwavelengthConfig,
-    NebularConfig,
-    SFHConfig,
-)
-from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
-from tengri.inference.fitter import Fitter
-from tengri.inference.hierarchical import (
-    HierarchicalFitter,
-    HierarchicalResult,
-    PopulationFitter,
-    PopulationPosterior,
-)
-from tengri.inference.posterior import Posterior
-from tengri.inference.raytrace import sample_raytrace
-from tengri.inference.vi_config import VIConfig
 from tengri.components.agn.agn_config import AGNConfig
 from tengri.components.dust.attenuation import two_component_dust
-from tengri.observation.filters import load_filter_set
-from tengri.observation.line_list import LineCatalog, LineList
-from tengri.observation.noise_model import NoiseConfig, NoiseModel
-from tengri.observation.observation import Observation
-from tengri.observation.photometry_config import Photometry
-from tengri.observation.spectroscopy import Spectroscopy, SpectroscopyConfig
 from tengri.components.sfh.gp_sfh import (
     compute_sqrt_power_drw,
     generate_gp_batch,
@@ -118,6 +66,58 @@ from tengri.components.sps.dsps_wrapper import (
     load_ssp_data,
     salaris_feh_from_mh,
     salaris_mh_from_feh,
+)
+from tengri.forward.prediction import (
+    DerivedQuantities,
+    EmissionLines,
+    Prediction,
+    SEDQuantities,
+    SFHQuantities,
+)
+from tengri.forward.result import SEDResult
+from tengri.forward.sed_model import Model, PriorPredictive, SEDModel
+from tengri.inference.fitter import Fitter
+from tengri.inference.hierarchical import (
+    HierarchicalFitter,
+    HierarchicalResult,
+    PopulationFitter,
+    PopulationPosterior,
+)
+from tengri.inference.posterior import Posterior
+from tengri.inference.raytrace import sample_raytrace
+from tengri.inference.vi_config import VIConfig
+from tengri.observation.filters import load_filter_set
+from tengri.observation.line_list import LineCatalog, LineList
+
+# --- New high-level API ---
+from tengri.observation.mock import MockData, generate_mock
+from tengri.observation.noise import (
+    compute_effective_noise,
+    compute_std_inv,
+    has_noise_model,
+    uses_student_t,
+    variable_noise_hamiltonian,
+)
+from tengri.observation.noise_model import NoiseConfig, NoiseModel
+from tengri.observation.observation import Observation
+from tengri.observation.photometry_config import Photometry
+from tengri.observation.spectroscopy import Spectroscopy, SpectroscopyConfig
+from tengri.parameters.parameters import Parameters, ParamSpec
+from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
+from tengri.runtime.exceptions import (
+    BackendError,
+    ConfigError,
+    InferenceError,
+    ParameterError,
+    TengriError,
+    TengriIOError,
+)
+from tengri.runtime.settings import (
+    DustConfig,
+    ModelConfig,
+    MultiwavelengthConfig,
+    NebularConfig,
+    SFHConfig,
 )
 
 

@@ -56,13 +56,13 @@ import copy
 import jax
 import jax.numpy as jnp
 
+from tengri.components.sfh.registry import resolve_sfh
 from tengri.parameters.priors import (
     Distribution,
     Fixed,
     Uniform,
     resolve_shorthand,
 )
-from tengri.components.sfh.registry import resolve_sfh
 
 # ---------------------------------------------------------------------------
 # Non-SFH parameter registry: always present regardless of mean_sfh_type

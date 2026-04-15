@@ -8,14 +8,14 @@ jax.config.update("jax_enable_x64", True)
 
 from pathlib import Path
 
+from tengri.components.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.sed_model import Model
-from tengri.parameters.parameters import ParamSpec
-from tengri.parameters.priors import Uniform
 from tengri.inference.fitter import Fitter
 from tengri.inference.posterior import Posterior
 from tengri.inference.raytrace import sample_hamiltonian, sample_raytrace
 from tengri.observation.filters import load_filter_set
-from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.priors import Uniform
 
 # ---------------------------------------------------------------------------
 # Helpers

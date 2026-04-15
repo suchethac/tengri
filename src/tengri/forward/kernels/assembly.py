@@ -43,6 +43,8 @@ def build_hybrid_photometry(model):
         dust_slope, ..., neb_logU=..., shock_frac=..., etc.)
         -> photometry array (n_filters,) in erg/s/cm^2/Hz.
     """
+    from tengri.components.dust.attenuation import resolve_dust_law
+    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
     from tengri.forward.emission_helpers import (
         agn_emission,
         attenuate_emission,
@@ -52,12 +54,10 @@ def build_hybrid_photometry(model):
         shock_emission,
         xray_emission,
     )
-    from tengri.components.dust.attenuation import resolve_dust_law
     from tengri.observation.photometry import (
         compute_flux_density_batch,
         pad_filters,
     )
-    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = model._forward_dtype
     precomp = model._precomputed.photometry
@@ -1373,8 +1373,8 @@ def build_hybrid_photometry(model):
     # --- Fused end-to-end wrapper: params dict → photometry ---
     # Fuse param translation + SFH computation into the JIT scope,
     # eliminating ~240 μs of Python dispatch overhead per call.
-    from tengri.parameters.translate import get_internal_params
     from tengri.components.sfh.registry import compute_field_gp
+    from tengri.parameters.translate import get_internal_params
 
     param_map = model._param_map
     spec = model.spec
@@ -1496,6 +1496,10 @@ def build_hybrid_photometry_ztable(model):
     ValueError
         If photometry_ztable has not been precomputed via model.precompute_ztable().
     """
+    from tengri.components.dust.attenuation import resolve_dust_law
+    from tengri.components.sfh.registry import compute_field_gp, resolve_sfh
+    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.components.sps.precompute import interpolate_ztable
     from tengri.forward.emission_helpers import (
         agn_emission,
         attenuate_emission,
@@ -1506,10 +1510,6 @@ def build_hybrid_photometry_ztable(model):
         xray_emission,
     )
     from tengri.parameters.translate import get_internal_params
-    from tengri.components.dust.attenuation import resolve_dust_law
-    from tengri.components.sfh.registry import compute_field_gp, resolve_sfh
-    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
-    from tengri.components.sps.precompute import interpolate_ztable
 
     # Validate that z-table has been precomputed
     if model._precomputed.photometry_ztable is None:
@@ -2752,13 +2752,13 @@ def build_fused_tier2_photometry(model):
     if model.filter_waves is None:
         return None
 
-    from tengri.parameters.translate import get_internal_params
+    from tengri.components.sps.dsps_wrapper import compute_csp_weights
     from tengri.forward.pipeline import interp_met_alpha_dispatch, interp_metallicity
     from tengri.observation.photometry import (
         compute_flux_density_batch,
         pad_filters,
     )
-    from tengri.components.sps.dsps_wrapper import compute_csp_weights
+    from tengri.parameters.translate import get_internal_params
 
     _use_dsps_native = model._csp_integration == "dsps_native"
     if _use_dsps_native:
@@ -2920,10 +2920,10 @@ def build_fused_tier2_spectrum(model):
     if model._compositional.rest_sed is None:
         return None
 
-    from tengri.parameters.translate import get_internal_params
+    from tengri.components.sps.dsps_wrapper import compute_csp_weights
     from tengri.forward.pipeline import interp_met_alpha_dispatch, interp_metallicity
     from tengri.observation.spectrum import compute_spectrum
-    from tengri.components.sps.dsps_wrapper import compute_csp_weights
+    from tengri.parameters.translate import get_internal_params
 
     _use_dsps_native_spec = model._csp_integration == "dsps_native"
     if _use_dsps_native_spec:
@@ -3047,13 +3047,13 @@ def build_hybrid_spectrum(model):
     if model._precomputed.spectroscopy is None:
         return None
 
-    from tengri.parameters.translate import get_internal_params
+    from tengri.components.dust.attenuation import resolve_dust_law
+    from tengri.components.sps.dsps_wrapper import compute_csp_weights
     from tengri.forward.pipeline import (
         interp_met_alpha_dispatch,
         interp_metallicity,
     )
-    from tengri.components.dust.attenuation import resolve_dust_law
-    from tengri.components.sps.dsps_wrapper import compute_csp_weights
+    from tengri.parameters.translate import get_internal_params
     from tengri.utils.conversions import lnu_to_fnu
 
     # Precomputed spectroscopic data

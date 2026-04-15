@@ -7,8 +7,8 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri import load_filter_set
-from tengri.components.sps.dsps_wrapper import SSPData
 from tengri.analysis.simulate import photometry_from_sfh, sed_from_sfh
+from tengri.components.sps.dsps_wrapper import SSPData
 
 
 @pytest.fixture(scope="module")

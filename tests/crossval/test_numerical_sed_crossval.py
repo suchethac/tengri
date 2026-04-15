@@ -356,10 +356,10 @@ class TestAbsoluteMagnitudes:
     def test_mw_like_absolute_magnitude(self, ssp):
         """MW-like galaxy: M_r ~ -20 to -22 (Blanton+2003, Flynn+2006)."""
         from tengri.forward.sed_model import Model
-        from tengri.parameters.parameters import Parameters
-        from tengri.parameters.priors import Fixed
         from tengri.observation.filters import load_filter_set
         from tengri.observation.photometry import ab_mag_from_flux
+        from tengri.parameters.parameters import Parameters
+        from tengri.parameters.priors import Fixed
         from tengri.utils.cosmology import luminosity_distance
 
         filters = load_filter_set(["sdss_r"])
@@ -390,9 +390,9 @@ class TestAbsoluteMagnitudes:
     def test_sfr_makes_galaxy_brighter(self, ssp):
         """Higher SFR → brighter galaxy at fixed age/Z."""
         from tengri.forward.sed_model import Model
+        from tengri.observation.filters import load_filter_set
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
-        from tengri.observation.filters import load_filter_set
 
         filters = load_filter_set(["sdss_r"])
 
@@ -471,9 +471,9 @@ class TestRedshiftEffects:
     def test_higher_z_fainter(self, ssp):
         """Same galaxy at higher z must have lower observed flux."""
         from tengri.forward.sed_model import Model
+        from tengri.observation.filters import load_filter_set
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
-        from tengri.observation.filters import load_filter_set
 
         filters = load_filter_set(["sdss_r"])
 
@@ -504,9 +504,9 @@ class TestRedshiftEffects:
     def test_igm_suppresses_uv_at_high_z(self, ssp):
         """At z=3, IGM should suppress flux blueward of Lyα."""
         from tengri.forward.sed_model import Model
+        from tengri.observation.filters import load_filter_set
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
-        from tengri.observation.filters import load_filter_set
 
         # u-band (3500 Å) samples rest-frame ~875 Å at z=3 → below Lyman limit
         # g-band (4800 Å) samples rest-frame ~1200 Å at z=3 → near Lyα

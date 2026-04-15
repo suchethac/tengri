@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import pytest
 
-from tengri.forward.precompute.protocol import PrecomputeModule
 from tengri.forward.precompute.registry import (
     _REGISTRY,
     registered_components,
@@ -37,9 +36,7 @@ class TestRegistry:
     def test_every_registered_component_has_protocol_surface(self, name):
         module = resolve(name)
         # Must expose AXIS_PARAMS, precompute, build_lookup
-        assert hasattr(module, "AXIS_PARAMS"), (
-            f"{name}: module missing AXIS_PARAMS"
-        )
+        assert hasattr(module, "AXIS_PARAMS"), f"{name}: module missing AXIS_PARAMS"
         assert callable(getattr(module, "precompute", None)), (
             f"{name}: module missing callable precompute()"
         )

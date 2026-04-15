@@ -41,6 +41,14 @@ from typing import ClassVar, NamedTuple
 import jax
 import jax.numpy as jnp
 
+from tengri.components.dust.attenuation import precompute_dust_age_weights
+from tengri.components.sfh.registry import compute_field_gp, resolve_sfh
+from tengri.components.sps.dsps_wrapper import csp_age_dt
+from tengri.components.sps.precompute import (
+    precompute_photometry,
+    precompute_photometry_ztable,
+    precompute_spectroscopy,
+)
 from tengri.forward.kernels.assembly import (
     build_exact_sed,
     build_fused_rest_sed,
@@ -52,13 +60,6 @@ from tengri.forward.kernels.assembly import (
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,
 )
-from tengri.parameters.translate import (
-    _EVOLVING_ALPHA_PARAM_MAP,
-    _EVOLVING_MET_PARAM_MAP,
-    LOG10_ZSUN,
-    _build_param_map,
-    get_internal_params,
-)
 from tengri.forward.pipeline import (
     compute_sed_components,
     get_agn_kwargs,
@@ -66,18 +67,17 @@ from tengri.forward.pipeline import (
     interp_metallicity,
     interp_metallicity_evolving,
 )
-from tengri.components.dust.attenuation import precompute_dust_age_weights
 from tengri.observation.photometry import ab_mag_from_flux
 from tengri.observation.spectrum import apply_lsf, compute_spectrum
-from tengri.components.sfh.registry import compute_field_gp, resolve_sfh
-from tengri.components.sps.dsps_wrapper import csp_age_dt
-from tengri.components.sps.precompute import (
-    precompute_photometry,
-    precompute_photometry_ztable,
-    precompute_spectroscopy,
+from tengri.parameters.translate import (
+    _EVOLVING_ALPHA_PARAM_MAP,
+    _EVOLVING_MET_PARAM_MAP,
+    LOG10_ZSUN,
+    _build_param_map,
+    get_internal_params,
 )
-from tengri.utils.cosmology import age_at_z, luminosity_distance
 from tengri.runtime.deprecation import deprecated_class_alias
+from tengri.utils.cosmology import age_at_z, luminosity_distance
 from tengri.utils.grid import (
     grid_spacing,
     interpolate_to_linear_time,

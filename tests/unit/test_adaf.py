@@ -1134,12 +1134,8 @@ class TestUnifiedNlrBlr:
         )
 
         assert jnp.any(uv_mask) and jnp.any(opt_mask)
-        uv_ratio = float(
-            jnp.mean(l_dusty[uv_mask] / jnp.maximum(l_nodust[uv_mask], 1e-100))
-        )
-        opt_ratio = float(
-            jnp.mean(l_dusty[opt_mask] / jnp.maximum(l_nodust[opt_mask], 1e-100))
-        )
+        uv_ratio = float(jnp.mean(l_dusty[uv_mask] / jnp.maximum(l_nodust[uv_mask], 1e-100)))
+        opt_ratio = float(jnp.mean(l_dusty[opt_mask] / jnp.maximum(l_nodust[opt_mask], 1e-100)))
         # UV is attenuated more than optical (SMC law steeper at short λ)
         assert uv_ratio < opt_ratio
 
