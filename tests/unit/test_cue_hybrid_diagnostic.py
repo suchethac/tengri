@@ -24,8 +24,8 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri.core.model import Model
-from tengri.core.parameters import ParamSpec
-from tengri.distributions import Fixed, Uniform
+from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.priors import Fixed, Uniform
 from tengri.observation.filters import load_filter_set
 from tengri.components.sps.dsps_wrapper import load_ssp_data
 

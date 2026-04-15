@@ -30,9 +30,9 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri.core.model import Model
-from tengri.core.parameters import Parameters
+from tengri.parameters.parameters import Parameters
 from tengri.core.sed_result import SEDResult
-from tengri.distributions import Fixed
+from tengri.parameters.priors import Fixed
 from tengri.observation.filters import load_filter_set
 from tengri.components.sps.dsps_wrapper import load_ssp_data
 
@@ -213,7 +213,7 @@ class TestFullPanchromaticSED:
             dust_slope=Fixed(-0.7),
             redshift=0.1,
         )
-        from tengri.distributions import Uniform
+        from tengri.parameters.priors import Uniform
 
         spec_agn = Parameters(
             mean_sfh_type="dpl",

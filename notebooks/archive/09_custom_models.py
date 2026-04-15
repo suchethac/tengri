@@ -90,7 +90,7 @@ from tengri import (
     Model, ParamSpec, Uniform, Gaussian, LogUniform, LogNormal,
     StudentT, Fixed, Fitter, load_ssp_data, load_filter_set,
 )
-from tengri.distributions import Distribution
+from tengri.parameters.priors import Distribution
 from tengri.inference.standardized import StandardizedForwardModel
 from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw
 from tengri.components.sfh.gp_sfh import gp_from_xi

@@ -22,13 +22,13 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.core.param_translate import (
+from tengri.parameters.translate import (
     _SFH_SHORT_NAMES,
     _UNIVERSAL_SHORT_NAMES,
     resolve_short_names,
 )
-from tengri.core.parameters import Parameters
-from tengri.distributions import Fixed, Uniform
+from tengri.parameters.parameters import Parameters
+from tengri.parameters.priors import Fixed, Uniform
 
 
 # ---------------------------------------------------------------------------

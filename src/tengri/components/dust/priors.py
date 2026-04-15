@@ -47,7 +47,7 @@ def narayanan_prior(z: float) -> dict:
     >>> from tengri.components.dust.priors import narayanan_prior
     >>> spec = ParamSpec(..., **narayanan_prior(z=2.0))
     """
-    from tengri.distributions import Gaussian
+    from tengri.parameters.priors import Gaussian
 
     # Narayanan+2018 trends (median from SIMBA simulations):
     delta_mean = -0.2 - 0.1 * z  # steeper at high z
@@ -85,7 +85,7 @@ def narayanan_tau_prior(z: float, log_mstar: float = 10.0) -> dict:
     >>> from tengri.components.dust.priors import narayanan_tau_prior
     >>> spec = ParamSpec(..., **narayanan_tau_prior(z=1.5, log_mstar=10.5))
     """
-    from tengri.distributions import Gaussian
+    from tengri.parameters.priors import Gaussian
 
     tau_mean = 0.5 * (10 ** (log_mstar - 10)) ** 0.5 * (1 + z) ** 0.5
     tau_sigma = 0.3 * tau_mean + 0.1

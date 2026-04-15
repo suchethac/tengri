@@ -56,7 +56,7 @@ import copy
 import jax
 import jax.numpy as jnp
 
-from tengri.distributions import (
+from tengri.parameters.priors import (
     Distribution,
     Fixed,
     Uniform,

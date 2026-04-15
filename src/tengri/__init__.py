@@ -24,7 +24,7 @@ jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
 __version__ = "0.1.0"
 
 # --- Exception hierarchy ---
-from tengri.core.exceptions import (
+from tengri.runtime.exceptions import (
     BackendError,
     ConfigError,
     InferenceError,
@@ -34,16 +34,16 @@ from tengri.core.exceptions import (
 )
 
 # --- New high-level API ---
-from tengri.core.mock import MockData, generate_mock
+from tengri.observation.mock import MockData, generate_mock
 from tengri.core.model import Model, PriorPredictive, SEDModel
-from tengri.core.noise import (
+from tengri.observation.noise import (
     compute_effective_noise,
     compute_std_inv,
     has_noise_model,
     uses_student_t,
     variable_noise_hamiltonian,
 )
-from tengri.core.parameters import Parameters, ParamSpec
+from tengri.parameters.parameters import Parameters, ParamSpec
 from tengri.core.prediction import (
     DerivedQuantities,
     EmissionLines,
@@ -52,14 +52,14 @@ from tengri.core.prediction import (
     SFHQuantities,
 )
 from tengri.core.sed_result import SEDResult
-from tengri.core.settings import (
+from tengri.runtime.settings import (
     DustConfig,
     ModelConfig,
     MultiwavelengthConfig,
     NebularConfig,
     SFHConfig,
 )
-from tengri.distributions import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
+from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
 from tengri.inference.fitter import Fitter
 from tengri.inference.hierarchical import (
     HierarchicalFitter,

@@ -683,7 +683,7 @@ def precompute(
     fixed: dict[int, float] | None = None
     if parameters is not None and parameters.is_fixed("met_logzsol"):
         # Convert met_logzsol (log10(Z/Zsun)) to absolute log10(Z) via LOG10_ZSUN.
-        from tengri.core.param_translate import LOG10_ZSUN
+        from tengri.parameters.translate import LOG10_ZSUN
 
         met_logz_abs = float(parameters.fixed_value("met_logzsol")) + LOG10_ZSUN
         fixed = {0: met_logz_abs}

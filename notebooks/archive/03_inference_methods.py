@@ -138,7 +138,7 @@
 import jax.numpy as jnp
 import numpy as np
 import matplotlib.pyplot as plt
-from tengri.distributions import Uniform, Gaussian, LogUniform, LogNormal
+from tengri.parameters.priors import Uniform, Gaussian, LogUniform, LogNormal
 
 # Show how each distribution maps xi ~ N(0,1) to physical space
 xi_grid = jnp.linspace(-3, 3, 200)
@@ -211,7 +211,7 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.distributions import Uniform, Gaussian, LogUniform, LogNormal
+from tengri.parameters.priors import Uniform, Gaussian, LogUniform, LogNormal
 
 xi_grid = jnp.linspace(-4, 4, 300)
 

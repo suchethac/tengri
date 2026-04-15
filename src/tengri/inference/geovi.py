@@ -136,7 +136,7 @@ def fit_geovi(
     use_variable_noise = hasattr(prior_config, "noise_frac_cal")
 
     if use_variable_noise:
-        from tengri.core.noise import compute_std_inv
+        from tengri.observation.noise import compute_std_inv
 
         def signal_response(primals):
             """Map latents → (predicted, std_inv) for variable noise."""

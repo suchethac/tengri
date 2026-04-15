@@ -581,8 +581,8 @@ class Posterior:
         -------
         ParamSpec
         """
-        from tengri.core.parameters import ParamSpec
-        from tengri.distributions import Fixed, Gaussian
+        from tengri.parameters.parameters import ParamSpec
+        from tengri.parameters.priors import Fixed, Gaussian
 
         kwargs = {}
 

@@ -255,7 +255,7 @@ def build_standardized_loss(
     No prior penalty terms beyond ½ξᵀξ. The prior is absorbed into the
     transforms.
     """
-    from tengri.core.noise import (
+    from tengri.observation.noise import (
         get_noise_dof,
         has_noise_model,
         uses_student_t,
@@ -309,7 +309,7 @@ def build_hierarchical_loss(
     the effective noise includes a calibration floor and the
     log-determinant penalty.
     """
-    from tengri.core.noise import compute_effective_noise, has_noise_model
+    from tengri.observation.noise import compute_effective_noise, has_noise_model
 
     use_variable_noise = has_noise_model(smodel.spec)
     n_gal = len(galaxies)

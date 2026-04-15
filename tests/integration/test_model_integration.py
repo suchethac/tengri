@@ -10,8 +10,8 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri.core.model import MockData, Model
-from tengri.core.parameters import ParamSpec
-from tengri.distributions import Uniform
+from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.priors import Uniform
 from tengri.observation.filters import load_filter_set
 from tengri.components.sps.dsps_wrapper import load_ssp_data
 
@@ -520,7 +520,7 @@ class TestDustEmissionForwardModel:
         return load_ssp_data(str(_SSP_FILE))
 
     def test_dust_emission_adds_ir_flux(self, ssp):
-        from tengri.distributions import Fixed
+        from tengri.parameters.priors import Fixed
 
         filters = load_filter_set(["sdss_r", "wise_w3"])
         spec = ParamSpec(
@@ -558,7 +558,7 @@ class TestDustEmissionForwardModel:
         assert max_diff > 0, "Dust emission should add positive flux somewhere"
 
     def test_dust_emission_gradient(self, ssp):
-        from tengri.distributions import Fixed
+        from tengri.parameters.priors import Fixed
 
         filters = load_filter_set(["wise_w3"])
         spec = ParamSpec(

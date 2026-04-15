@@ -19,8 +19,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.core.parameters import ParamSpec
-from tengri.distributions import Fixed, Uniform
+from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.priors import Fixed, Uniform
 from tengri.components.sfh.chemical_evolution import (
     Z_SUN,
     chem_evol_metallicity_on_ssp_grid,

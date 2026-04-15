@@ -731,7 +731,7 @@ def run_nifty_vi(
 
     cfg = vi_config or VIConfig()
 
-    from tengri.core.noise import (
+    from tengri.observation.noise import (
         compute_effective_noise,
         compute_std_inv,
         has_noise_model,

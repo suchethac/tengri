@@ -11,7 +11,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.core.noise import (
+from tengri.observation.noise import (
     compute_effective_noise,
     compute_std_inv,
     has_noise_model,
@@ -377,7 +377,7 @@ class TestUsesStudentT:
     def test_default_no_student_t(self):
         """Default spec uses Gaussian."""
         from tengri import Fixed, ParamSpec, Uniform
-        from tengri.core.noise import uses_student_t
+        from tengri.observation.noise import uses_student_t
 
         spec = ParamSpec(
             mean_sfh_type="dpl",
@@ -394,7 +394,7 @@ class TestUsesStudentT:
     def test_fixed_dof_activates(self):
         """noise_dof=Fixed(2.0) → Student-t active."""
         from tengri import Fixed, ParamSpec, Uniform
-        from tengri.core.noise import uses_student_t
+        from tengri.observation.noise import uses_student_t
 
         spec = ParamSpec(
             mean_sfh_type="dpl",
@@ -413,7 +413,7 @@ class TestUsesStudentT:
     def test_zero_dof_no_student_t(self):
         """noise_dof=Fixed(0.0) → Gaussian (default)."""
         from tengri import Fixed, ParamSpec, Uniform
-        from tengri.core.noise import uses_student_t
+        from tengri.observation.noise import uses_student_t
 
         spec = ParamSpec(
             mean_sfh_type="dpl",

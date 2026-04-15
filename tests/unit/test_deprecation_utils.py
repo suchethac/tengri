@@ -1,4 +1,4 @@
-"""Tests for tengri.utils.deprecation helpers.
+"""Tests for tengri.runtime.deprecation helpers.
 
 Covers:
 - deprecated_alias: DeprecationWarning emitted, return value preserved
@@ -9,7 +9,7 @@ import warnings
 
 import pytest
 
-from tengri.utils.deprecation import deprecated_alias, deprecated_class_alias
+from tengri.runtime.deprecation import deprecated_alias, deprecated_class_alias
 
 # ---------------------------------------------------------------------------
 # deprecated_alias

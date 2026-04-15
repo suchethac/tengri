@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tengri.distributions import Gaussian, LogUniform
+from tengri.parameters.priors import Gaussian, LogUniform
 from tengri.utils.transforms import to_bounded
 
 
@@ -36,7 +36,7 @@ def build_loss_fn(fitter):
     callable
         ``loss_fn(params_unbounded, data_args) -> scalar``
     """
-    from tengri.core.noise import (
+    from tengri.observation.noise import (
         get_noise_dof,
         has_noise_model,
         uses_student_t,
@@ -484,7 +484,7 @@ def build_loglikelihood_fn(fitter):
     callable
         ``loglikelihood_fn(free_params, data_args) -> scalar``
     """
-    from tengri.core.noise import (
+    from tengri.observation.noise import (
         get_noise_dof,
         has_noise_model,
         uses_student_t,

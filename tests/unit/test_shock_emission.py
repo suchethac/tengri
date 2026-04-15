@@ -270,7 +270,7 @@ class TestShockDifferentiable:
 
 class TestShockParamSpec:
     def test_shock_params_registered(self):
-        from tengri.core.parameters import ParamSpec
+        from tengri.parameters.parameters import ParamSpec
 
         spec = ParamSpec(shock=True)
         params = spec.all_params
@@ -279,7 +279,7 @@ class TestShockParamSpec:
         assert "shock_log_density" in params
 
     def test_shock_params_absent_by_default(self):
-        from tengri.core.parameters import ParamSpec
+        from tengri.parameters.parameters import ParamSpec
 
         spec = ParamSpec()
         params = spec.all_params
@@ -287,14 +287,14 @@ class TestShockParamSpec:
         assert "shock_velocity" not in params
 
     def test_shock_frac_zero_default(self):
-        from tengri.core.parameters import ParamSpec
+        from tengri.parameters.parameters import ParamSpec
 
         spec = ParamSpec(shock=True)
         dist = spec.get_distribution("shock_frac")
         assert dist.value == pytest.approx(0.0)
 
     def test_shock_velocity_bounds(self):
-        from tengri.core.parameters import ParamSpec
+        from tengri.parameters.parameters import ParamSpec
 
         spec = ParamSpec(shock=True, shock_velocity=(100.0, 1000.0))
         assert "shock_velocity" in spec.free_params

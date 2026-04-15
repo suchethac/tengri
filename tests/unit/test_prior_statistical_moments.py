@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.distributions import Fixed, Gaussian, LogUniform, Uniform
+from tengri.parameters.priors import Fixed, Gaussian, LogUniform, Uniform
 
 jax.config.update("jax_enable_x64", True)
 

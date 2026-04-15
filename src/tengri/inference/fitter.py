@@ -22,8 +22,8 @@ import warnings
 import jax
 import jax.numpy as jnp
 
-from tengri.core.exceptions import ParameterError
-from tengri.distributions import Gaussian, Uniform
+from tengri.runtime.exceptions import ParameterError
+from tengri.parameters.priors import Gaussian, Uniform
 from tengri.inference.jit_engine import build_jit_engine
 from tengri.inference.loss_functions import (
     build_loglikelihood_fn,
@@ -433,7 +433,7 @@ class Fitter:
         flag, latent dimension, data length, free parameter names, and
         noise model presence).
         """
-        from tengri.core.noise import has_noise_model
+        from tengri.observation.noise import has_noise_model
 
         return (
             self.data_type,
@@ -1013,7 +1013,7 @@ class Fitter:
 
         # --- Merge TOML method-specific defaults (caller kwargs win) ---
         try:
-            from tengri.core.defaults import get_inference_defaults
+            from tengri.parameters.defaults import get_inference_defaults
 
             kwargs = {**get_inference_defaults(method), **kwargs}
         except Exception:
@@ -1026,7 +1026,7 @@ class Fitter:
         if method == "auto":
             d = self.spec.n_free
             try:
-                from tengri.core.defaults import get_inference_defaults
+                from tengri.parameters.defaults import get_inference_defaults
 
                 threshold = int(get_inference_defaults().get("mcmc_auto_d", _AUTO_D_THRESHOLD))
             except Exception:

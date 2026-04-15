@@ -134,7 +134,7 @@ def _tengri_const(
 
     from tengri import Parameters
     from tengri.core.model import SEDModel
-    from tengri.distributions import Fixed
+    from tengri.parameters.priors import Fixed
 
     spec = Parameters(
         mean_sfh_type="const",
@@ -170,7 +170,7 @@ def _tengri_dexp(
 
     from tengri import Parameters
     from tengri.core.model import SEDModel
-    from tengri.distributions import Fixed
+    from tengri.parameters.priors import Fixed
 
     spec = Parameters(
         mean_sfh_type="dexp",
@@ -207,7 +207,7 @@ def _tengri_dpl(
 
     from tengri import Parameters
     from tengri.core.model import SEDModel
-    from tengri.distributions import Fixed
+    from tengri.parameters.priors import Fixed
 
     spec = Parameters(
         mean_sfh_type="dpl",

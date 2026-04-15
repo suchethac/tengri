@@ -11,7 +11,7 @@ The module exposes:
   axes, per dust-emission model.
 - ``precompute(filter_waves, filter_trans, redshift, parameters, *, model_name)``
   — builds the preintegrated grid, auto-collapsing axes whose parameter is
-  :class:`~tengri.distributions.Fixed`.
+  :class:`~tengri.parameters.priors.Fixed`.
 - ``build_lookup(preint, *, model_name)`` — JIT-compiled ``(scale, *free) →
   phot`` runtime callable, with free-parameter count matching the collapsed axes.
 
@@ -208,7 +208,7 @@ def precompute(
     """Build preintegrated grid for a template-based dust-emission model.
 
     Auto-collapses any axis whose corresponding ``AXIS_PARAMS[model_name]``
-    entry is :class:`~tengri.distributions.Fixed` in ``parameters``.
+    entry is :class:`~tengri.parameters.priors.Fixed` in ``parameters``.
 
     Parameters
     ----------

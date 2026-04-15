@@ -12,7 +12,7 @@ Usage
 -----
 ::
 
-    from tengri.core.defaults import get_from_config_defaults, load_defaults
+    from tengri.parameters.defaults import get_from_config_defaults, load_defaults
 
     # High-level API defaults (the [from_config] section)
     fc = get_from_config_defaults()

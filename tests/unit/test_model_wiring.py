@@ -9,7 +9,7 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.core.parameters import Parameters
+from tengri.parameters.parameters import Parameters
 
 
 class TestMagphysWiring:

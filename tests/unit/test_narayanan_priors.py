@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from tengri.distributions import Gaussian
+from tengri.parameters.priors import Gaussian
 from tengri.components.dust.priors import narayanan_prior, narayanan_tau_prior
 
 

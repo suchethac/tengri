@@ -1373,7 +1373,7 @@ def build_hybrid_photometry(model):
     # --- Fused end-to-end wrapper: params dict → photometry ---
     # Fuse param translation + SFH computation into the JIT scope,
     # eliminating ~240 μs of Python dispatch overhead per call.
-    from tengri.core.param_translate import get_internal_params
+    from tengri.parameters.translate import get_internal_params
     from tengri.components.sfh.registry import compute_field_gp
 
     param_map = model._param_map
@@ -1505,7 +1505,7 @@ def build_hybrid_photometry_ztable(model):
         shock_emission,
         xray_emission,
     )
-    from tengri.core.param_translate import get_internal_params
+    from tengri.parameters.translate import get_internal_params
     from tengri.components.dust.attenuation import resolve_dust_law
     from tengri.components.sfh.registry import compute_field_gp, resolve_sfh
     from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
@@ -2752,7 +2752,7 @@ def build_fused_tier2_photometry(model):
     if model.filter_waves is None:
         return None
 
-    from tengri.core.param_translate import get_internal_params
+    from tengri.parameters.translate import get_internal_params
     from tengri.core.sed_pipeline import interp_met_alpha_dispatch, interp_metallicity
     from tengri.observation.photometry import (
         compute_flux_density_batch,
@@ -2920,7 +2920,7 @@ def build_fused_tier2_spectrum(model):
     if model._compositional.rest_sed is None:
         return None
 
-    from tengri.core.param_translate import get_internal_params
+    from tengri.parameters.translate import get_internal_params
     from tengri.core.sed_pipeline import interp_met_alpha_dispatch, interp_metallicity
     from tengri.observation.spectrum import compute_spectrum
     from tengri.components.sps.dsps_wrapper import compute_csp_weights
@@ -3047,7 +3047,7 @@ def build_hybrid_spectrum(model):
     if model._precomputed.spectroscopy is None:
         return None
 
-    from tengri.core.param_translate import get_internal_params
+    from tengri.parameters.translate import get_internal_params
     from tengri.core.sed_pipeline import (
         interp_met_alpha_dispatch,
         interp_metallicity,

@@ -24,7 +24,7 @@ Each `components/<component>/<name>_precompute.py` file defines:
        :func:`tengri.forward.precompute.grid.preintegrate_grid` (or the
        component-specific equivalent — K&D has its own dataclass).
     4. Auto-collapsing axes whose corresponding parameter in ``parameters`` is
-       :class:`~tengri.distributions.Fixed`, via
+       :class:`~tengri.parameters.priors.Fixed`, via
        :func:`tengri.forward.precompute.grid.slice_fixed_axes` (or equivalent).
     5. Returning a precompute result (``PreintegratedGrid`` or component
        dataclass such as ``KDPreintegratedData``).

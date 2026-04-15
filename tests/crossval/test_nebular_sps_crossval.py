@@ -288,7 +288,7 @@ class TestMetallicityConversion:
 
     def test_log10_zsun_value(self):
         """LOG10_ZSUN should match Asplund+2009 Z_sun = 0.0142."""
-        from tengri.core.param_translate import LOG10_ZSUN
+        from tengri.parameters.translate import LOG10_ZSUN
 
         z_sun = 10.0**LOG10_ZSUN
         np.testing.assert_allclose(
@@ -300,7 +300,7 @@ class TestMetallicityConversion:
 
     def test_log10_zsun_exact(self):
         """LOG10_ZSUN should be close to log10(0.0142) = -1.8477."""
-        from tengri.core.param_translate import LOG10_ZSUN
+        from tengri.parameters.translate import LOG10_ZSUN
 
         expected = np.log10(0.0142)
         np.testing.assert_allclose(

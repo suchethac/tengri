@@ -254,8 +254,8 @@ class TestFittedMode:
         """Minimal Parameters with one free SFH param, rest fixed."""
         import warnings
 
-        from tengri.core.parameters import Parameters
-        from tengri.distributions import Fixed, Uniform
+        from tengri.parameters.parameters import Parameters
+        from tengri.parameters.priors import Fixed, Uniform
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
@@ -302,8 +302,8 @@ class TestFittedMode:
 
     def test_merge_observation_params_adds_free_params(self):
         """merge_observation_params must add params to free_params and leave original intact."""
-        from tengri.core.parameters import Parameters
-        from tengri.distributions import Fixed, Uniform
+        from tengri.parameters.parameters import Parameters
+        from tengri.parameters.priors import Fixed, Uniform
 
         spec = Parameters(mean_sfh_type="dpl", redshift=Fixed(0.1))
         n_before = len(spec.free_params)
@@ -447,8 +447,8 @@ class TestFittedMode:
         # Use redshift=0.0 so the loss function builds G at z=0, matching signal injection above.
         import warnings
 
-        from tengri.core.parameters import Parameters
-        from tengri.distributions import Fixed, Uniform
+        from tengri.parameters.parameters import Parameters
+        from tengri.parameters.priors import Fixed, Uniform
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)

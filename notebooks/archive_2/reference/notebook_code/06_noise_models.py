@@ -49,7 +49,7 @@ from tengri import (
     Uniform,
     load_ssp_data,
 )
-from tengri.core.noise import compute_effective_noise
+from tengri.observation.noise import compute_effective_noise
 
 import sys, os  # noqa: E401
 

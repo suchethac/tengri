@@ -93,14 +93,14 @@ class TestResample:
 class TestToParamSpec:
     def test_map_to_param_spec(self, map_posterior):
         spec = map_posterior.to_param_spec()
-        from tengri.distributions import Fixed
+        from tengri.parameters.priors import Fixed
 
         d = spec.get_distribution("sfh_dpl_alpha")
         assert isinstance(d, Fixed)
 
     def test_sampling_to_param_spec(self, sampling_posterior):
         spec = sampling_posterior.to_param_spec()
-        from tengri.distributions import Gaussian
+        from tengri.parameters.priors import Gaussian
 
         d = spec.get_distribution("sfh_dpl_alpha")
         assert isinstance(d, Gaussian)

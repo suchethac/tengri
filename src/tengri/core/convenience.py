@@ -254,7 +254,7 @@ def fit_batch(
     import time
 
     from tengri.core.model import Model as ModelClass
-    from tengri.distributions import Fixed
+    from tengri.parameters.priors import Fixed
     from tengri.inference.fitter import Fitter
 
     # Normalise catalog to list of dicts
@@ -385,7 +385,7 @@ def fit_population(
     HierarchicalResult
     """
     from tengri.core.model import Model as ModelClass
-    from tengri.distributions import Fixed
+    from tengri.parameters.priors import Fixed
     from tengri.inference.hierarchical import HierarchicalFitter
 
     # Normalise input
@@ -445,7 +445,7 @@ def fit_population(
 # from_config factory
 # ---------------------------------------------------------------------------
 
-from tengri.core.defaults import UNSET as _UNSET  # re-export for back-compat
+from tengri.parameters.defaults import UNSET as _UNSET  # re-export for back-compat
 
 
 def build_model_from_config(
@@ -462,8 +462,8 @@ def build_model_from_config(
     **model_kwargs,
 ):
     """Build a SEDModel from a grouped configuration.  See ``SEDModel.from_config``."""
-    from tengri.core.defaults import get_from_config_defaults
-    from tengri.core.param_translate import resolve_short_names
+    from tengri.parameters.defaults import get_from_config_defaults
+    from tengri.parameters.translate import resolve_short_names
 
     # Resolve each argument: use caller value if supplied, else read from TOML.
     _defs = get_from_config_defaults()
@@ -472,8 +472,8 @@ def build_model_from_config(
     nebular = _defs["nebular"] if nebular is _UNSET else nebular
     agn = _defs["agn"] if agn is _UNSET else agn
     redshift = _defs["redshift"] if redshift is _UNSET else redshift
-    from tengri.core.parameters import ParamSpec
-    from tengri.distributions import Uniform
+    from tengri.parameters.parameters import ParamSpec
+    from tengri.parameters.priors import Uniform
     from tengri.observation.observation import Observation
     from tengri.components.sps.dsps_wrapper import SSPData, load_ssp_data
 
@@ -584,11 +584,11 @@ def fit_model(
     **kwargs,
 ):
     """Fit observed data.  See ``SEDModel.fit``."""
-    from tengri.core.defaults import get_inference_defaults
+    from tengri.parameters.defaults import get_inference_defaults
     from tengri.inference.fitter import Fitter
 
     if method is None:
-        from tengri.core.exceptions import ParameterError
+        from tengri.runtime.exceptions import ParameterError
 
         raise ParameterError(
             "method=None is not allowed. Pass an explicit method string "

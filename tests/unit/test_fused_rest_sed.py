@@ -15,8 +15,8 @@ from tengri.core.fused_kernels import (
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,
 )
-from tengri.core.parameters import ParamSpec
-from tengri.distributions import Uniform
+from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.priors import Uniform
 from tengri.components.sps.dsps_wrapper import SSPData
 
 jax.config.update("jax_enable_x64", True)

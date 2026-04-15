@@ -22,9 +22,9 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.core.exceptions import ParameterError
-from tengri.core.parameters import Parameters
-from tengri.distributions import Fixed, Uniform
+from tengri.runtime.exceptions import ParameterError
+from tengri.parameters.parameters import Parameters
+from tengri.parameters.priors import Fixed, Uniform
 from tengri.inference.fitter import (
     _AUTO_D_THRESHOLD,
     _CANONICAL_METHODS,

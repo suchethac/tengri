@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.core.parameters import ParamSpec
+from tengri.parameters.parameters import ParamSpec
 from tengri.components.sps.dsps_wrapper import (
     compute_log_z_evolving,
     interpolate_mass_remaining,
@@ -336,7 +336,7 @@ class TestParamSpecEvolvingMetallicity:
 
     def test_evolving_custom_priors(self):
         """Custom priors should work for evolving metallicity params."""
-        from tengri.distributions import Uniform
+        from tengri.parameters.priors import Uniform
 
         spec = ParamSpec(
             evolving_metallicity=True,

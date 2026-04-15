@@ -13,7 +13,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.distributions import Fixed, Gaussian, Uniform
+from tengri.parameters.priors import Fixed, Gaussian, Uniform
 from tengri.observation.noise_model import NoiseConfig
 from tengri.observation.observation import Observation
 from tengri.observation.photometry import FilterCurve
@@ -416,7 +416,7 @@ class TestObservation:
 class TestParamSpecWithParams:
     @pytest.fixture
     def base_spec(self):
-        from tengri.core.parameters import ParamSpec
+        from tengri.parameters.parameters import ParamSpec
 
         return ParamSpec(
             mean_sfh_type="dpl",

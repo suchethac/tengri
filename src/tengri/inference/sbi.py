@@ -42,7 +42,7 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 
-from tengri.core.parameters import ParamSpec
+from tengri.parameters.parameters import ParamSpec
 
 
 def generate_sbi_training_data(

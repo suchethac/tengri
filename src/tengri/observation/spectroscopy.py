@@ -11,7 +11,7 @@ import dataclasses
 
 import jax.numpy as jnp
 
-from tengri.distributions import Distribution, Gaussian
+from tengri.parameters.priors import Distribution, Gaussian
 
 
 @dataclasses.dataclass(frozen=True)

@@ -124,7 +124,7 @@ def _build_tengri_sed(
     """
     from tengri import Parameters
     from tengri.core.model import SEDModel
-    from tengri.distributions import Fixed
+    from tengri.parameters.priors import Fixed
 
     spec = Parameters(
         mean_sfh_type="const",
@@ -553,7 +553,7 @@ def _build_tengri_sed_raw(
     """
     from tengri import Parameters
     from tengri.core.model import SEDModel
-    from tengri.distributions import Fixed
+    from tengri.parameters.priors import Fixed
 
     kwargs: dict = {
         "mean_sfh_type": sfh_type,
@@ -1032,7 +1032,7 @@ def _build_tengri_tau_sed_table(
     """
     from tengri import Parameters
     from tengri.core.model import SEDModel
-    from tengri.distributions import Fixed
+    from tengri.parameters.priors import Fixed
 
     n = 500
     t_cosmic = np.linspace(0.0, age_gyr, n)  # Gyr, 0 = galaxy formation
@@ -1452,7 +1452,7 @@ def _build_tengri_nebular_sed(
     """
     from tengri import Parameters
     from tengri.core.model import SEDModel
-    from tengri.distributions import Fixed
+    from tengri.parameters.priors import Fixed
 
     sfr = 10.0**log_sfr
     m_formed = sfr * age_gyr * 1e9  # Msun
@@ -3449,7 +3449,7 @@ def _build_tengri_step_sed(
     """
     from tengri import Parameters
     from tengri.core.model import SEDModel
-    from tengri.distributions import Fixed
+    from tengri.parameters.priors import Fixed
 
     age_gyr = float(max(lb_bin_edges_gyr))
     lb_edges = np.asarray(lb_bin_edges_gyr, dtype=float)

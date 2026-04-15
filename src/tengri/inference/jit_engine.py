@@ -44,7 +44,7 @@ def build_jit_engine(fitter, pos_dict):
         Compiled functions: run_evi, run_evi_geovi, run_nifty_jit,
         draw_samples, draw_nonlinear_samples, flatten, unflatten, etc.
     """
-    from tengri.core.noise import (
+    from tengri.observation.noise import (
         compute_std_inv,
         get_noise_dof,
         has_noise_model,

@@ -52,7 +52,7 @@ from tengri.core.fused_kernels import (
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,
 )
-from tengri.core.param_translate import (
+from tengri.parameters.translate import (
     _EVOLVING_ALPHA_PARAM_MAP,
     _EVOLVING_MET_PARAM_MAP,
     LOG10_ZSUN,
@@ -77,7 +77,7 @@ from tengri.components.sps.precompute import (
     precompute_spectroscopy,
 )
 from tengri.utils.cosmology import age_at_z, luminosity_distance
-from tengri.utils.deprecation import deprecated_class_alias
+from tengri.runtime.deprecation import deprecated_class_alias
 from tengri.utils.grid import (
     grid_spacing,
     interpolate_to_linear_time,
@@ -2714,7 +2714,7 @@ class SEDModel:
         ... )
         """
         from tengri.core.convenience import build_model_from_config
-        from tengri.core.defaults import UNSET
+        from tengri.parameters.defaults import UNSET
 
         # Map Ellipsis (signature placeholder) → UNSET so build_model_from_config
         # knows to fall back to defaults.toml instead of hard-coded values.
@@ -2876,7 +2876,7 @@ class SEDModel:
 
     def _method_recommendation(self) -> tuple[str, str]:
         """Return (method_name, reason) for the recommended inference method."""
-        from tengri.core.display import method_recommendation
+        from tengri.runtime.display import method_recommendation
 
         return method_recommendation(self)
 
@@ -2898,7 +2898,7 @@ class SEDModel:
         Model  [D=7, stochastic=False]
         ...
         """
-        from tengri.core.display import tree as _tree
+        from tengri.runtime.display import tree as _tree
 
         return _tree(self)
 
@@ -2927,7 +2927,7 @@ class SEDModel:
             Formatted summary showing SSP grid, filters, precomputation,
             fused kernel status, and enabled components.
         """
-        from tengri.core.display import summary as _summary
+        from tengri.runtime.display import summary as _summary
 
         return _summary(self)
 

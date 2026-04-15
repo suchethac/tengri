@@ -24,8 +24,8 @@ jax.config.update("jax_enable_x64", True)
 
 def _make_spec():
     """Build a minimal DPL Parameters spec with no SSP data needed."""
-    from tengri.core.parameters import Parameters
-    from tengri.distributions import Uniform
+    from tengri.parameters.parameters import Parameters
+    from tengri.parameters.priors import Uniform
 
     return Parameters(
         mean_sfh_type="dpl",
@@ -37,8 +37,8 @@ def _make_spec():
 
 def _make_stochastic_spec(n_grid=16):
     """Build a minimal stochastic-field Parameters spec (DPL smooth + field)."""
-    from tengri.core.parameters import Parameters
-    from tengri.distributions import Uniform
+    from tengri.parameters.parameters import Parameters
+    from tengri.parameters.priors import Uniform
 
     return Parameters(
         mean_sfh_type=["dpl", "field"],
@@ -198,8 +198,8 @@ class TestRoundtrip:
 
     def test_fixed_params_present_in_output(self):
         """Fixed parameters must appear in xi_to_params output."""
-        from tengri.core.parameters import Parameters
-        from tengri.distributions import Uniform, Fixed
+        from tengri.parameters.parameters import Parameters
+        from tengri.parameters.priors import Uniform, Fixed
         from tengri.inference.standardized import StandardizedForwardModel
 
         spec = Parameters(

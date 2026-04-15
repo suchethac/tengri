@@ -39,7 +39,7 @@ from tengri import (
     load_filter_set,
     load_ssp_data,
 )
-from tengri.distributions import Distribution
+from tengri.parameters.priors import Distribution
 from tengri.components.sfh.psd_models import psd_drw
 from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw
 from tengri.components.sfh.gp_sfh import gp_from_xi

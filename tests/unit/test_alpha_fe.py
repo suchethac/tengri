@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.core.parameters import ParamSpec
+from tengri.parameters.parameters import ParamSpec
 from tengri.components.sps.dsps_wrapper import (
     _ALPHA_TO_Z_COEFF,
     effective_metallicity,
@@ -130,7 +130,7 @@ class TestAlphaFeParamSpec:
 
     def test_alpha_fe_free_when_set(self):
         """met_alpha_fe should be free when given a distribution."""
-        from tengri.distributions import Uniform
+        from tengri.parameters.priors import Uniform
 
         spec = ParamSpec(
             mean_sfh_type="dpl",
@@ -153,7 +153,7 @@ class TestAlphaFeParamSpec:
 
     def test_sample_includes_alpha_fe(self):
         """Sampling should include met_alpha_fe."""
-        from tengri.distributions import Uniform
+        from tengri.parameters.priors import Uniform
 
         spec = ParamSpec(
             mean_sfh_type="dpl",

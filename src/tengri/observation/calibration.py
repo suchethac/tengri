@@ -19,7 +19,7 @@ ParamSpec integration example
 -----------------------------
 To add calibration coefficients as free parameters::
 
-    from tengri.distributions import Gaussian
+    from tengri.parameters.priors import Gaussian
 
     spec = ParamSpec(
         ...,

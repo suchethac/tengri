@@ -4,7 +4,7 @@ Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
 SKIRTOR's 5D torus template grid: (tau, p, q, oa, cos_inc).
 
 Auto-collapses any axis whose corresponding parameter is
-:class:`~tengri.distributions.Fixed` in the user's ``Parameters`` — e.g., a
+:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters`` — e.g., a
 user who pins ``agn_tau_skirtor`` and ``agn_p_skirtor`` gets a 3D runtime grid
 instead of the full 5D one, for free.
 """

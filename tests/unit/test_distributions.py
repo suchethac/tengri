@@ -7,7 +7,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.distributions import (
+from tengri.parameters.priors import (
     Fixed,
     Gaussian,
     LogUniform,

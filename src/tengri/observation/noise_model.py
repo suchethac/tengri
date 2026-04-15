@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 
-from tengri.distributions import Distribution, Fixed
+from tengri.parameters.priors import Distribution, Fixed
 
 
 @dataclasses.dataclass(frozen=True)
