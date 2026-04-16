@@ -55,6 +55,13 @@ from pathlib import Path
 
 import jax.numpy as jnp
 
+from tengri.utils.physics_constants import (
+    AA_TO_CM as _AA_TO_CM,
+    C_CGS as _C_CGS,
+    H_PLANCK as _H_PLANCK,
+    K_BOLTZ as _K_BOLTZMANN,
+)
+
 # ===================================================================
 # Template search paths (resolved once, reused for all models)
 # ===================================================================
@@ -75,22 +82,13 @@ def _find_data_file(filename: str) -> str | None:
 
 
 # ===================================================================
-# Physical constants (CGS)
-# ===================================================================
-
-from tengri.components.dust.drude_profiles import pah_template as _pah_template
-from tengri.utils.physics_constants import (
-    AA_TO_CM as _AA_TO_CM,
-    C_CGS as _C_CGS,
-    H_PLANCK as _H_PLANCK,
-    K_BOLTZ as _K_BOLTZMANN,
-)
-
-# ===================================================================
 # Emission model registry
 # ===================================================================
 
 DUST_EMISSION_MODELS: dict[str, Callable] = {}
+
+# Track which lazy loaders have been resolved to avoid duplicate loading
+_resolved: set[str] = set()
 
 
 def register_emission_model(name: str) -> Callable:
@@ -629,1522 +627,47 @@ def _dale_component_temperature(alpha: float) -> tuple[float, float, float]:
 
 
 # ===================================================================
-# Template-based DL07: create from grid file
+# Backward-compatible module-level aliases for direct imports
 # ===================================================================
+# Tests and user code may do ``from tengri.components.dust.emission import draine_li2007``.
+# These aliases point to the lazy wrappers (which auto-load templates on call).
 
 
-def create_dl07_from_grid(grid_path: str) -> Callable:
-    """Create a DL07 emission model function backed by tabulated templates.
-
-    Loads the HDF5 grid once and returns a function matching the emission
-    model registry interface. Use this instead of the analytic approximation
-    for production work.
-
-    Parameters
-    ----------
-    grid_path : str
-        Path to ``dl07_templates.h5`` (from ``scripts/convert_dl07_templates.py``).
-
-    Returns
-    -------
-    Callable
-        Model function with signature
-        ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
-
-    Example
-    -------
-    >>> dl07 = create_dl07_from_grid("data/dl07_templates.h5")
-    >>> DUST_EMISSION_MODELS["dl07_tabulated"] = dl07  # optional: register
-    >>> sed_ir = dl07(wavelength, L_absorbed, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
-    """
-    templates = load_draine_li_templates(grid_path)
-
-    # Pre-extract arrays for the closure
-    single_u = templates["single_u"]  # (n_qpah, n_umin, n_wave)
-    powerlaw = templates["powerlaw"]  # (n_qpah, n_umin, n_wave)
-    tmpl_wave = templates["wavelength"]
-    umin_grid = templates["umin_grid"]
-    qpah_grid = templates["qpah_grid"]
-
-    def dl07_tabulated(
-        wavelength_aa: jnp.ndarray,
-        L_absorbed: float,
-        dust_umin: float = 1.0,
-        dust_gamma_dl: float = 0.01,
-        dust_qpah: float = 2.5,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        """DL07 emission from tabulated templates (Draine & Li 2007).
-
-        j_nu = (1-gamma) * single_U(q_PAH, U_min)
-             + gamma * powerlaw(q_PAH, U_min)
-
-        Templates are in L_lambda convention (normalized to integrate to
-        1 over wavelength).  This function converts to L_nu (Lsun/Hz)
-        and scales by L_absorbed to enforce energy balance.
-
-        Returns L_nu in Lsun/Hz.
-        """
-        dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
-        dust_qpah_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
-
-        # Bilinear interpolation indices
-        i_u = jnp.clip(jnp.searchsorted(umin_grid, dust_umin_c) - 1, 0, len(umin_grid) - 2)
-        i_q = jnp.clip(jnp.searchsorted(qpah_grid, dust_qpah_c) - 1, 0, len(qpah_grid) - 2)
-
-        fu = (dust_umin_c - umin_grid[i_u]) / (umin_grid[i_u + 1] - umin_grid[i_u])
-        fq = (dust_qpah_c - qpah_grid[i_q]) / (qpah_grid[i_q + 1] - qpah_grid[i_q])
-
-        def _bilinear(grid):
-            return (
-                (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
-                + (1.0 - fq) * fu * grid[i_q, i_u + 1]
-                + fq * (1.0 - fu) * grid[i_q + 1, i_u]
-                + fq * fu * grid[i_q + 1, i_u + 1]
-            )
-
-        # Mix single-U and power-law components via gamma
-        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _bilinear(
-            powerlaw
-        )
-
-        # Interpolate template onto target wavelength grid
-        # Template is in L_lambda space (integral over wavelength = 1)
-        sed_llam = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
-
-        # Convert L_lambda -> L_nu: L_nu = L_lambda * lambda^2 / c
-        wavelength_cm = wavelength_aa * _AA_TO_CM
-        nu = _C_CGS / wavelength_cm
-        sed_lnu = sed_llam * (wavelength_cm**2) / _C_CGS
-
-        # Renormalize so that integral(L_nu, d_nu) = L_absorbed
-        # nu is descending (wavelength ascending), so negate
-        integral = -jnp.trapezoid(sed_lnu, nu)
-        norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
-
-        return norm * sed_lnu
-
-    return dl07_tabulated
+def draine_li2007(*args, **kwargs):
+    """Draine & Li (2007) — dispatches to the registry (auto-loads templates)."""
+    return DUST_EMISSION_MODELS["draine_li2007"](*args, **kwargs)
 
 
-def load_draine_li_templates(filepath: str) -> dict:
-    """Load DL07 template grid from HDF5 or NPZ.
+def dale2014(*args, **kwargs):
+    """Dale et al. (2014) — dispatches to the registry (auto-loads templates)."""
+    return DUST_EMISSION_MODELS["dale2014"](*args, **kwargs)
 
-    Supports two formats:
-    - HDF5 with keys: wavelength, umin_grid, qpah_grid, single_u, powerlaw
-    - NPZ with keys: wavelength, umin_grid, qpah_grid,
-      templates_umin_only, templates_umin_umax
 
-    The templates must be pre-normalized so that each template integrates
-    to 1 over wavelength (L_lambda convention). The model function handles
-    the L_absorbed scaling.
+def draine_li2014(*args, **kwargs):
+    """Draine & Li (2014) — dispatches to the registry (auto-loads templates)."""
+    return DUST_EMISSION_MODELS["draine_li2014"](*args, **kwargs)
 
-    Parameters
-    ----------
-    filepath : str
-        Path to template file (.h5).
 
-    Returns
-    -------
-    dict with keys: wavelength, umin_grid, qpah_grid, single_u, powerlaw
-        All arrays are JAX arrays. single_u and powerlaw have shape
-        (n_qpah, n_umin, n_wave).
-    """
-    import numpy as np
+def astrodust(*args, **kwargs):
+    """Astrodust+PAH (Hensley & Draine 2023) — dispatches to the registry."""
+    return DUST_EMISSION_MODELS["astrodust"](*args, **kwargs)
 
-    if filepath.endswith(".npz"):
-        data = np.load(filepath)
-        wavs = data["wavelength"]
-        single_u = data["templates_umin_only"]  # (n_qpah, n_umin, n_wave)
-        powerlaw = data["templates_umin_umax"]
 
-        # Normalize each template to integrate to 1 over wavelength
-        for i in range(single_u.shape[0]):
-            for j in range(single_u.shape[1]):
-                norm = np.trapezoid(single_u[i, j], wavs)
-                if norm > 0:
-                    single_u[i, j] /= norm
-                norm = np.trapezoid(powerlaw[i, j], wavs)
-                if norm > 0:
-                    powerlaw[i, j] /= norm
+def bosa(*args, **kwargs):
+    """BOSA (Boquien & Salim 2021) — dispatches to the registry."""
+    return DUST_EMISSION_MODELS["bosa"](*args, **kwargs)
 
-        return {
-            "wavelength": jnp.array(wavs, dtype=jnp.float64),
-            "umin_grid": jnp.array(data["umin_grid"], dtype=jnp.float64),
-            "qpah_grid": jnp.array(data["qpah_grid"], dtype=jnp.float64),
-            "single_u": jnp.array(single_u, dtype=jnp.float64),
-            "powerlaw": jnp.array(powerlaw, dtype=jnp.float64),
-        }
 
-    # HDF5 format
-    import h5py as _h5py
-
-    with _h5py.File(filepath, "r") as f:
-        # v2 standardized format: /grid/qpah, /grid/umin, /spectra/single_u, /spectra/pdr
-        if "grid" in f and "spectra" in f:
-            wavs = np.array(f["wavelength"][:])
-            # Convert micron to Angstrom if needed
-            wave_unit = f["wavelength"].attrs.get("unit", "Angstrom")
-            if wave_unit == "micron":
-                wavs = wavs * 1e4
-            single_u = np.array(f["spectra"]["single_u"][:])
-            powerlaw = np.array(f["spectra"]["pdr"][:])
-            # Normalize
-            for i in range(single_u.shape[0]):
-                for j in range(single_u.shape[1]):
-                    norm = np.trapezoid(single_u[i, j], wavs)
-                    if norm > 0:
-                        single_u[i, j] /= norm
-                    norm = np.trapezoid(powerlaw[i, j], wavs)
-                    if norm > 0:
-                        powerlaw[i, j] /= norm
-            return {
-                "wavelength": jnp.array(wavs, dtype=jnp.float64),
-                "umin_grid": jnp.array(f["grid"]["umin"][:], dtype=jnp.float64),
-                "qpah_grid": jnp.array(f["grid"]["qpah"][:], dtype=jnp.float64),
-                "single_u": jnp.array(single_u, dtype=jnp.float64),
-                "powerlaw": jnp.array(powerlaw, dtype=jnp.float64),
-            }
-        # Legacy flat format
-        return {
-            "wavelength": jnp.array(f["wavelength"][:], dtype=jnp.float64),
-            "umin_grid": jnp.array(f["umin_grid"][:], dtype=jnp.float64),
-            "qpah_grid": jnp.array(f["qpah_grid"][:], dtype=jnp.float64),
-            "single_u": jnp.array(f["single_u"][:], dtype=jnp.float64),
-            "powerlaw": jnp.array(f["powerlaw"][:], dtype=jnp.float64),
-        }
+def themis(*args, **kwargs):
+    """THEMIS (Jones+2017) — dispatches to the registry."""
+    return DUST_EMISSION_MODELS["themis"](*args, **kwargs)
 
 
 # ===================================================================
-# Template-based Dale+2014: create from grid file
+# Energy-balance decomposition models
 # ===================================================================
 
 
-def create_dale2014_from_grid(grid_path: str) -> Callable:
-    """Create a Dale+2014 emission model backed by tabulated templates.
-
-    Loads the NPZ grid once and returns a function matching the emission
-    model registry interface.  The NPZ file must contain:
-
-    - ``wavelength_aa``: rest-frame wavelength grid in Angstrom (n_wave,)
-    - ``alpha_grid``: array of alpha values (n_alpha,)
-    - ``templates_sf``: star-forming templates (n_alpha, n_wave) in
-      L_lambda units (will be normalized internally so that each
-      template integrates to 1 over frequency).
-
-    The returned function performs 1-D linear interpolation in alpha
-    and normalizes the result so that the frequency integral equals
-    ``L_absorbed``.
-
-    Parameters
-    ----------
-    grid_path : str
-        Path to ``dale2014_templates_v2.h5`` or ``dale2014_templates.h5``.
-
-    Returns
-    -------
-    Callable
-        Model function with signature
-        ``(wavelength_aa, L_absorbed, dust_alpha_dale=2.0, **kw) -> L_nu``.
-
-    Example
-    -------
-    >>> dale = create_dale2014_from_grid("data/dale2014_templates_v2.h5")
-    >>> DUST_EMISSION_MODELS["dale2014_tabulated"] = dale
-    >>> sed = dale(wav, L_abs, dust_alpha_dale=1.5)
-    """
-    import numpy as np
-
-    if grid_path.endswith(".npz"):
-        data = np.load(grid_path)
-        tmpl_wave_raw = np.array(data["wavelength_aa"])
-        alpha_grid_raw = np.array(data["alpha_grid"])
-        templates_raw = np.array(data["templates_sf"])
-        already_lnu = False
-    else:
-        import h5py as _h5py
-
-        with _h5py.File(grid_path, "r") as f:
-            if "grid" in f:
-                # v2 layout
-                tmpl_wave_raw = np.array(f["wavelength"][:])
-                alpha_grid_raw = np.array(f["grid/alpha"][:])
-                templates_raw = np.array(f["spectra/templates"][:])
-            else:
-                tmpl_wave_raw = np.array(f["wavelength_aa"][:])
-                alpha_grid_raw = np.array(f["alpha_grid"][:])
-                templates_raw = np.array(f["templates_sf"][:])
-            # Check if already in L_nu normalized form
-            already_lnu = (
-                f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
-            )
-
-    tmpl_wave_np = np.asarray(tmpl_wave_raw, dtype=np.float64)
-    alpha_grid_np = np.asarray(alpha_grid_raw, dtype=np.float64)
-    # Handle both (n_alpha, n_wave) and (n_wave, n_alpha) layouts
-    if templates_raw.shape[0] == len(tmpl_wave_np) and templates_raw.shape[1] == len(
-        alpha_grid_np
-    ):
-        templates_raw = templates_raw.T  # -> (n_alpha, n_wave)
-
-    if already_lnu:
-        # Templates are pre-normalized in L_nu convention — use directly
-        templates_np = np.asarray(templates_raw, dtype=np.float64)
-    else:
-        # Convert from L_lambda to L_nu: L_nu = L_lambda * lambda^2 / c
-        wave_cm = tmpl_wave_np * _AA_TO_CM
-        nu = _C_CGS / wave_cm  # descending for ascending wavelengths
-
-        templates_lnu = templates_raw * (wave_cm**2)[None, :] / _C_CGS
-
-        # Normalize each template so that integral(L_nu, dnu) = 1
-        # nu is descending, so negate for positive integral
-        for i in range(templates_lnu.shape[0]):
-            integral = -np.trapezoid(templates_lnu[i], nu)
-            if integral > 0:
-                templates_lnu[i] /= integral
-
-        templates_np = np.asarray(templates_lnu, dtype=np.float64)  # (n_alpha, n_wave)
-
-    # Use jnp.array so that dynamic JAX indexing works inside JIT.
-    # preload_emission_model() must be called at factory time (outside JIT) to
-    # avoid DynamicJaxprTracer leaks.
-    tmpl_wave = jnp.array(tmpl_wave_np, dtype=jnp.float64)
-    alpha_grid = jnp.array(alpha_grid_np, dtype=jnp.float64)
-    templates = jnp.array(templates_np, dtype=jnp.float64)
-
-    def dale2014_tabulated(
-        wavelength_aa: jnp.ndarray,
-        L_absorbed: float,
-        dust_alpha_dale: float = 2.0,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        """Dale+2014 emission from tabulated templates.
-
-        Performs 1-D linear interpolation in alpha and normalizes
-        the template so the frequency integral equals L_absorbed.
-
-        Parameters
-        ----------
-        wavelength_aa : array, shape (n_wave,)
-            Target wavelength grid in Angstrom (sorted ascending).
-        L_absorbed : float
-            Total absorbed luminosity in Lsun.
-        dust_alpha_dale : float
-            Power-law slope of the radiation field distribution.
-            Valid range determined by the grid (typically 0.0625--4.0).
-
-        Returns
-        -------
-        array, shape (n_wave,)
-            Dust emission L_nu in Lsun/Hz.
-        """
-        alpha_c = jnp.clip(dust_alpha_dale, alpha_grid[0], alpha_grid[-1])
-
-        # Linear interpolation index
-        i_a = jnp.clip(
-            jnp.searchsorted(alpha_grid, alpha_c) - 1,
-            0,
-            len(alpha_grid) - 2,
-        )
-        fa = (alpha_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
-
-        template = (1.0 - fa) * templates[i_a] + fa * templates[i_a + 1]
-
-        # Interpolate onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
-
-        return L_absorbed * sed
-
-    return dale2014_tabulated
-
-
-# ===================================================================
-# Template-based DL14: create from grid file
-# ===================================================================
-
-
-def load_dl14_templates(filepath: str) -> dict:
-    """Load DL14 template grid from HDF5.
-
-    Parameters
-    ----------
-    filepath : str
-        Path to ``dl14_templates.h5`` (from ``scripts/convert_dl14_templates.py``).
-
-    Returns
-    -------
-    dict with keys:
-        wavelength, umin_grid, qpah_grid, alpha_grid, single_u, powerlaw.
-        single_u has shape (n_qpah, n_umin, n_wave).
-        powerlaw has shape (n_qpah, n_umin, n_alpha, n_wave).
-    """
-    import h5py as _h5py
-    import numpy as _np_dl14
-
-    with _h5py.File(filepath, "r") as f:
-        if "grid" in f and "spectra" in f:
-            # v2 standardized format: /grid/*, /spectra/*
-            wavelength = _np_dl14.asarray(f["wavelength"][:], dtype=_np_dl14.float64)
-            umin_grid = _np_dl14.asarray(f["grid"]["umin"][:], dtype=_np_dl14.float64)
-            qpah_grid = _np_dl14.asarray(f["grid"]["qpah"][:], dtype=_np_dl14.float64)
-            alpha_grid = _np_dl14.asarray(f["grid"]["alpha"][:], dtype=_np_dl14.float64)
-            raw_single = _np_dl14.asarray(f["spectra"]["single_u"][:], dtype=_np_dl14.float64)
-            single_u = raw_single[0]  # alpha-independent
-            raw_pdr = _np_dl14.asarray(f["spectra"]["pdr"][:], dtype=_np_dl14.float64)
-            powerlaw = _np_dl14.transpose(raw_pdr, (1, 2, 0, 3))
-        elif "single_u" in f:
-            # Legacy flat format with correct key names
-            wavelength = _np_dl14.asarray(f["wavelength"][:], dtype=_np_dl14.float64)
-            umin_grid = _np_dl14.asarray(f["umin_grid"][:], dtype=_np_dl14.float64)
-            qpah_grid = _np_dl14.asarray(f["qpah_grid"][:], dtype=_np_dl14.float64)
-            alpha_grid = _np_dl14.asarray(f["alpha_grid"][:], dtype=_np_dl14.float64)
-            single_u = _np_dl14.asarray(f["single_u"][:], dtype=_np_dl14.float64)
-            powerlaw = _np_dl14.asarray(f["powerlaw"][:], dtype=_np_dl14.float64)
-        elif "templates_single_u" in f:
-            # Older format with templates_single_u/templates_pdr keys
-            wavelength = _np_dl14.asarray(f["wavelength"][:], dtype=_np_dl14.float64)
-            umin_grid = _np_dl14.asarray(f["umin_grid"][:], dtype=_np_dl14.float64)
-            qpah_grid = _np_dl14.asarray(f["qpah_grid"][:], dtype=_np_dl14.float64)
-            alpha_grid = _np_dl14.asarray(f["alpha_grid"][:], dtype=_np_dl14.float64)
-            raw_single = _np_dl14.asarray(f["templates_single_u"][:], dtype=_np_dl14.float64)
-            single_u = raw_single[0]
-            raw_pdr = _np_dl14.asarray(f["templates_pdr"][:], dtype=_np_dl14.float64)
-            powerlaw = _np_dl14.transpose(raw_pdr, (1, 2, 0, 3))
-        else:
-            raise KeyError(f"DL14 HDF5 missing expected keys. Found: {list(f.keys())}")
-
-    # Use jnp.array so dynamic JAX indexing works inside JIT.
-    # Call preload_emission_model() at factory time (outside JIT) to avoid tracer leaks.
-    return {
-        "wavelength": jnp.array(wavelength, dtype=jnp.float64),
-        "umin_grid": jnp.array(umin_grid, dtype=jnp.float64),
-        "qpah_grid": jnp.array(qpah_grid, dtype=jnp.float64),
-        "alpha_grid": jnp.array(alpha_grid, dtype=jnp.float64),
-        "single_u": jnp.array(single_u, dtype=jnp.float64),
-        "powerlaw": jnp.array(powerlaw, dtype=jnp.float64),
-    }
-
-
-def create_dl14_from_grid(grid_path: str) -> Callable:
-    """Create a DL14 emission model function backed by tabulated templates.
-
-    Loads the HDF5 grid once and returns a function matching the emission
-    model registry interface. The key difference from DL07: the powerlaw
-    template now depends on alpha too, requiring trilinear interpolation
-    in (q_PAH, U_min, alpha) space instead of bilinear.
-
-    Parameters
-    ----------
-    grid_path : str
-        Path to ``dl14_templates.h5`` (from ``scripts/convert_dl14_templates.py``).
-
-    Returns
-    -------
-    Callable
-        Model function with signature
-        ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
-
-    Example
-    -------
-    >>> dl14 = create_dl14_from_grid("data/dl14_templates.h5")
-    >>> DUST_EMISSION_MODELS["dl14_tabulated"] = dl14
-    >>> sed = dl14(
-    ...     wav, L_abs, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5, dust_alpha_dl14=2.0
-    ... )
-    """
-    templates = load_dl14_templates(grid_path)
-
-    single_u = templates["single_u"]  # (n_qpah, n_umin, n_wave)
-    powerlaw = templates["powerlaw"]  # (n_qpah, n_umin, n_alpha, n_wave)
-    tmpl_wave = templates["wavelength"]
-    umin_grid = templates["umin_grid"]
-    qpah_grid = templates["qpah_grid"]
-    alpha_grid = templates["alpha_grid"]
-
-    def dl14_tabulated(
-        wavelength_aa: jnp.ndarray,
-        L_absorbed: float,
-        dust_umin: float = 1.0,
-        dust_gamma_dl: float = 0.01,
-        dust_qpah: float = 2.5,
-        dust_alpha_dl14: float = 2.0,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        """DL14 emission from tabulated templates.
-
-        j_nu = (1-gamma) * single_U(q_PAH, U_min)
-             + gamma * powerlaw(q_PAH, U_min, alpha)
-
-        Normalized to L_absorbed via energy balance.
-        """
-        # Clip parameters to grid bounds
-        dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
-        dust_qpah_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
-        dust_alpha_c = jnp.clip(dust_alpha_dl14, alpha_grid[0], alpha_grid[-1])
-
-        # Interpolation indices and fractions
-        n_u = len(umin_grid)
-        n_q = len(qpah_grid)
-        n_a = len(alpha_grid)
-
-        i_u = jnp.clip(jnp.searchsorted(umin_grid, dust_umin_c) - 1, 0, n_u - 2)
-        i_q = jnp.clip(jnp.searchsorted(qpah_grid, dust_qpah_c) - 1, 0, n_q - 2)
-        i_a = jnp.clip(jnp.searchsorted(alpha_grid, dust_alpha_c) - 1, 0, n_a - 2)
-
-        fu = (dust_umin_c - umin_grid[i_u]) / (umin_grid[i_u + 1] - umin_grid[i_u])
-        fq = (dust_qpah_c - qpah_grid[i_q]) / (qpah_grid[i_q + 1] - qpah_grid[i_q])
-        fa = (dust_alpha_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
-
-        # Bilinear interpolation for single-U (q_PAH, U_min)
-        def _bilinear(grid):
-            return (
-                (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
-                + (1.0 - fq) * fu * grid[i_q, i_u + 1]
-                + fq * (1.0 - fu) * grid[i_q + 1, i_u]
-                + fq * fu * grid[i_q + 1, i_u + 1]
-            )
-
-        # Trilinear interpolation for powerlaw (q_PAH, U_min, alpha)
-        def _trilinear(grid):
-            # Interpolate at alpha[i_a] and alpha[i_a+1] via bilinear in (q, u)
-            def _bilinear_at_alpha(ia_idx):
-                return (
-                    (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u, ia_idx]
-                    + (1.0 - fq) * fu * grid[i_q, i_u + 1, ia_idx]
-                    + fq * (1.0 - fu) * grid[i_q + 1, i_u, ia_idx]
-                    + fq * fu * grid[i_q + 1, i_u + 1, ia_idx]
-                )
-
-            lo = _bilinear_at_alpha(i_a)
-            hi = _bilinear_at_alpha(i_a + 1)
-            return (1.0 - fa) * lo + fa * hi
-
-        # Mix single-U and power-law components via gamma
-        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _trilinear(
-            powerlaw
-        )
-
-        # Normalize template to enforce energy balance: ∫L_nu dnu = L_absorbed.
-        # Templates may be stored in arbitrary units; normalization makes scaling exact.
-        # (Same approach as DL07 loader; DL14 stores j_nu so no L_lambda→L_nu conversion.)
-        nu_tmpl = _C_CGS / (tmpl_wave * _AA_TO_CM)
-        sort_tmpl = jnp.argsort(nu_tmpl)
-        tmpl_integral = jnp.trapezoid(template[sort_tmpl], nu_tmpl[sort_tmpl])
-        template_norm = template / jnp.maximum(jnp.abs(tmpl_integral), 1e-100)
-
-        # Interpolate normalized template onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template_norm, left=0.0, right=0.0)
-
-        return L_absorbed * sed
-
-    return dl14_tabulated
-
-
-def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> None:
-    """Load and register the tabulated DL14 model in the emission registry.
-
-    After calling this, the model is available via
-    ``resolve_emission_model("dl14_tabulated")`` and can be used as the
-    ``dust_emission_model`` in ``Model()``.
-
-    Parameters
-    ----------
-    grid_path : str
-        Path to ``dl14_templates.h5``.
-    name : str
-        Registry name. Default ``"dl14_tabulated"``.
-    """
-    model_fn = create_dl14_from_grid(grid_path)
-    DUST_EMISSION_MODELS[name] = model_fn
-
-
-# ===================================================================
-# Model 5: MAGPHYS 4-component (da Cunha, Charlot & Elbaz 2008)
-# ===================================================================
-
-# PAH Drude profiles and feature table are now in drude_profiles.py.
-# _pah_template and _SMITH2007_PAH_FEATURES are imported at the top of this file.
-# The private wrappers below delegate to the public module for backward compat.
-
-
-def _pah_template_aa(wavelength_aa: jnp.ndarray) -> jnp.ndarray:
-    """PAH emission template (Å input wrapper around drude_profiles.pah_template).
-
-    Parameters
-    ----------
-    wavelength_aa : array, shape (n_wave,)
-        Wavelength grid in Angstrom.
-
-    Returns
-    -------
-    array, shape (n_wave,)
-        PAH emission template (L_lambda-like, unnormalized).
-    """
-    return _pah_template(wavelength_aa * 1.0e-4)  # Å -> μm
-
-
-def _modified_blackbody_component(
-    wavelength_aa: jnp.ndarray,
-    temperature: float,
-    beta: float,
-    redshift: float,
-) -> jnp.ndarray:
-    """Single MBB component, CMB-corrected and normalized to unit integral.
-
-    Parameters
-    ----------
-    wavelength_aa : array, shape (n_wave,)
-        Wavelength grid in Angstrom (sorted ascending).
-    temperature : float
-        Intrinsic dust temperature in Kelvin.
-    beta : float
-        Emissivity index.
-    redshift : float
-        Source redshift (for CMB correction).
-
-    Returns
-    -------
-    array, shape (n_wave,)
-        MBB L_nu normalized so that ``integral L_nu dnu = 1``.
-    """
-    T_eff = cmb_corrected_temperature(temperature, redshift, beta)
-
-    wavelength_cm = wavelength_aa * _AA_TO_CM
-    nu = _C_CGS / wavelength_cm
-
-    nu_ref = _C_CGS / (250.0e-4)  # 250 μm reference
-    emissivity = (nu / nu_ref) ** beta
-    bnu = planck_bnu(wavelength_aa, T_eff)
-    shape = emissivity * bnu
-
-    # CMB contrast suppression
-    contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
-    shape = shape * contrast
-
-    # Normalize to unit integral over frequency
-    integral = -jnp.trapezoid(shape, nu)
-    norm = jnp.where(integral > 0.0, 1.0 / integral, 0.0)
-    return shape * norm
-
-
-@register_emission_model("magphys")
-def magphys_dc08(
-    wavelength_aa: jnp.ndarray,
-    L_absorbed: float,
-    dust_T_warm: float = 45.0,
-    dust_T_cold: float = 20.0,
-    dust_T_hot: float = 250.0,
-    dust_xi_pah: float = 0.06,
-    dust_xi_mir: float = 0.07,
-    dust_xi_warm: float = 0.25,
-    redshift: float = 0.0,
-    **_kwargs,
-) -> jnp.ndarray:
-    """MAGPHYS 4-component dust emission (da Cunha, Charlot & Elbaz 2008).
-
-    Decomposes dust emission into four components:
-
-    1. **PAH features** — sum of 18 Drude profiles: 3.3 μm (C-H stretch)
-       plus 17 features from Smith+2007 Table 2 (5.27–14.04 μm).
-    2. **Hot MIR continuum** — modified blackbody at ``dust_T_hot``,
-       β = 1.5.  Very small grains near young stars.
-    3. **Warm birth-cloud grains** — modified blackbody at ``dust_T_warm``,
-       β = 1.5.
-    4. **Cold ISM grains** — modified blackbody at ``dust_T_cold``,
-       β = 2.0.
-
-    The total emission is::
-
-        L_nu = L_absorbed * [
-            xi_PAH * PAH(λ)
-            + xi_MIR * MBB(λ, T_hot, β=1.5)
-            + xi_W * MBB(λ, T_warm, β=1.5)
-            + (1 - xi_PAH - xi_MIR - xi_W) * MBB(λ, T_cold, β=2.0)
-        ]
-
-    Each component is independently normalized to unit integral before
-    weighting, so the total integrates to ``L_absorbed``.
-
-    Parameters
-    ----------
-    wavelength_aa : array, shape (n_wave,)
-        Wavelength grid in Angstrom (sorted ascending).
-    L_absorbed : float
-        Total absorbed luminosity in Lsun (energy-balance normalization).
-    dust_T_warm : float
-        Warm birth-cloud grain temperature in Kelvin.  Default 45 K.
-    dust_T_cold : float
-        Cold ISM grain temperature in Kelvin.  Default 20 K.
-    dust_T_hot : float
-        Hot MIR grain temperature in Kelvin.  Default 250 K (da Cunha+2008 Table 1).
-    dust_xi_pah : float
-        Fractional luminosity in PAH features.  Default 0.06.
-    dust_xi_mir : float
-        Fractional luminosity in hot MIR continuum.  Default 0.07.
-    dust_xi_warm : float
-        Fractional luminosity in warm grains.  Default 0.25.
-    redshift : float
-        Source redshift.  CMB corrections applied to all MBB components.
-
-    Returns
-    -------
-    array, shape (n_wave,)
-        Dust emission L_nu in Lsun/Hz.
-
-    References
-    ----------
-    da Cunha, Charlot & Elbaz 2008, MNRAS, 388, 1595.
-    Smith et al. 2007, ApJ, 656, 770 (PAH Drude profiles).
-    """
-    wavelength_cm = wavelength_aa * _AA_TO_CM
-    nu = _C_CGS / wavelength_cm
-
-    # --- Component 1: PAH template (no CMB correction — features are MIR) ---
-    # _pah_template returns Drude profiles in L_lambda space (Smith+2007 convention).
-    # Must convert to L_nu before normalizing: L_nu = L_lambda * lambda^2 / c.
-    # Normalizing L_lambda directly against dnu mixes unit spaces and gives
-    # wrong fractional luminosities for the PAH vs MBB components.
-    pah_shape = _pah_template_aa(wavelength_aa)  # L_lambda-like (Drude in wavelength)
-    pah_lnu = pah_shape * (wavelength_cm**2) / _C_CGS  # convert to L_nu
-    pah_integral = -jnp.trapezoid(pah_lnu, nu)
-    pah_norm = jnp.where(pah_integral > 0.0, 1.0 / pah_integral, 0.0)
-    pah_component = pah_lnu * pah_norm  # normalized L_nu
-
-    # --- Component 2: hot MIR continuum (β = 1.5) ---
-    hot_component = _modified_blackbody_component(wavelength_aa, dust_T_hot, 1.5, redshift)
-
-    # --- Component 3: warm birth-cloud grains (β = 1.5) ---
-    warm_component = _modified_blackbody_component(wavelength_aa, dust_T_warm, 1.5, redshift)
-
-    # --- Component 4: cold ISM grains (β = 2.0) ---
-    cold_component = _modified_blackbody_component(wavelength_aa, dust_T_cold, 2.0, redshift)
-
-    # Fractional weights (cold is the remainder)
-    xi_cold = 1.0 - dust_xi_pah - dust_xi_mir - dust_xi_warm
-
-    L_nu = L_absorbed * (
-        dust_xi_pah * pah_component
-        + dust_xi_mir * hot_component
-        + dust_xi_warm * warm_component
-        + xi_cold * cold_component
-    )
-
-    return L_nu
-
-
-# ===================================================================
-# Convenience: apply emission model by name
-# ===================================================================
-
-
-def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated") -> None:
-    """Load and register the tabulated Dale+2014 model in the emission registry.
-
-    After calling this, the model is available via
-    ``resolve_emission_model("dale2014_tabulated")`` and can be used as the
-    ``dust_emission_model`` in ``Model()``.
-
-    Parameters
-    ----------
-    grid_path : str
-        Path to ``dale2014_templates_v2.h5`` or ``dale2014_templates.h5``.
-    name : str
-        Registry name. Default ``"dale2014_tabulated"``.
-    """
-    model_fn = create_dale2014_from_grid(grid_path)
-    DUST_EMISSION_MODELS[name] = model_fn
-
-
-def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> None:
-    """Load and register the tabulated DL07 model in the emission registry.
-
-    After calling this, the model is available via
-    ``resolve_emission_model("dl07_tabulated")`` and can be used as the
-    ``dust_emission_model`` in ``Model()``.
-
-    Parameters
-    ----------
-    grid_path : str
-        Path to ``dl07_templates_v2.h5`` or ``dl07_templates.h5``.
-    name : str
-        Registry name. Default ``"dl07_tabulated"``.
-    """
-    model_fn = create_dl07_from_grid(grid_path)
-    DUST_EMISSION_MODELS[name] = model_fn
-
-
-# ===================================================================
-# Model 6: Astrodust+PAH (Hensley & Draine 2023) — template-based
-# ===================================================================
-
-
-def load_astrodust_templates(filepath: str) -> dict:
-    """Load Astrodust+PAH template grid from NPZ or HDF5.
-
-    The template file must contain:
-
-    - ``wavelength_um``: wavelength grid in microns (n_wave,)
-    - ``qpah_grid``: PAH mass fractions (n_qpah,)
-    - ``umin_grid``: minimum radiation field intensities (n_umin,)
-    - ``spectra_single``: single-U templates (n_qpah, n_umin, n_wave)
-    - ``spectra_pdr``: power-law U (PDR) templates (n_qpah, n_umin, n_wave)
-
-    Parameters
-    ----------
-    filepath : str
-        Path to ``astrodust_templates_v2.h5`` or ``astrodust_templates.h5``.
-
-    Returns
-    -------
-    dict
-        Keys: wavelength_aa, umin_grid, qpah_grid, single_u, powerlaw.
-        All arrays are JAX arrays.  wavelength_aa is in Angstrom (converted
-        from microns).  single_u and powerlaw have shape
-        (n_qpah, n_umin, n_wave) and are normalized so each template
-        integrates to 1 over frequency in L_nu convention.
-    """
-    import numpy as np
-
-    already_lnu = False
-
-    if filepath.endswith(".npz"):
-        data = np.load(filepath)
-        wavs_um = np.array(data["wavelength_um"])
-        single_u = np.array(data["spectra_single"])
-        powerlaw = np.array(data["spectra_pdr"])
-        umin_grid = np.array(data["umin_grid"])
-        qpah_grid = np.array(data["qpah_grid"])
-        wavs_aa = wavs_um * 1.0e4
-    else:
-        import h5py as _h5py
-
-        with _h5py.File(filepath, "r") as f:
-            already_lnu = (
-                f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
-            )
-            if "wavelength_aa" in f:
-                # Standardized HDF5 (already Angstrom + L_nu normalized)
-                wavs_aa = np.array(f["wavelength_aa"][:])
-                single_u = np.array(f["single_u"][:])
-                powerlaw = np.array(f["powerlaw"][:])
-                umin_grid = np.array(f["umin_grid"][:])
-                qpah_grid = np.array(f["qpah_grid"][:])
-            elif "grid" in f:
-                # v2 layout
-                wavs_aa = np.array(f["wavelength"][:]) * 1.0e4
-                single_u = np.array(f["spectra/single_u"][:])
-                powerlaw = np.array(f["spectra/pdr"][:])
-                umin_grid = np.array(f["grid/umin"][:])
-                qpah_grid = np.array(f["grid/qpah"][:])
-            else:
-                wavs_aa = np.array(f["wavelength_um"][:]) * 1.0e4
-                single_u = np.array(f["spectra_single"][:])
-                powerlaw = np.array(f["spectra_pdr"][:])
-                umin_grid = np.array(f["umin_grid"][:])
-                qpah_grid = np.array(f["qpah_grid"][:])
-
-    if not already_lnu:
-        # Convert to L_nu: L_nu = L_lambda * lambda^2 / c
-        wave_cm = wavs_aa * _AA_TO_CM
-        nu = _C_CGS / wave_cm  # descending
-
-        for arr in (single_u, powerlaw):
-            for i in range(arr.shape[0]):
-                for j in range(arr.shape[1]):
-                    lnu = arr[i, j] * (wave_cm**2) / _C_CGS
-                    integral = -np.trapezoid(lnu, nu)
-                    if integral > 0:
-                        arr[i, j] = lnu / integral
-                    else:
-                        arr[i, j] = lnu
-
-    # Use jnp.array so dynamic JAX indexing works inside JIT.
-    # Call preload_emission_model() at factory time (outside JIT) to avoid tracer leaks.
-    return {
-        "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
-        "umin_grid": jnp.array(umin_grid, dtype=jnp.float64),
-        "qpah_grid": jnp.array(qpah_grid, dtype=jnp.float64),
-        "single_u": jnp.array(single_u, dtype=jnp.float64),
-        "powerlaw": jnp.array(powerlaw, dtype=jnp.float64),
-    }
-
-
-def _normalize_dl07_like_grid(raw: dict, q_key: str = "qpah_grid") -> dict:
-    """Convert a raw DL07-like grid dict to the processed format.
-
-    Raw grids have keys ``spectra_single``, ``spectra_pdr``, and
-    ``wavelength_um``; the processed format uses ``single_u``,
-    ``powerlaw``, and ``wavelength_aa`` (in Angstrom, L_nu-normalized).
-
-    Parameters
-    ----------
-    raw : dict
-        Raw template grid with wavelength_um, spectra_single, spectra_pdr,
-        umin_grid, and either qpah_grid or qhac_grid.
-    q_key : str
-        Key for the grain composition parameter grid (``"qpah_grid"`` for
-        Astrodust/DL07, ``"qhac_grid"`` for THEMIS).
-
-    Returns
-    -------
-    dict
-        Processed grid with wavelength_aa, single_u, powerlaw, umin_grid,
-        and the composition grid key.
-    """
-    import numpy as np
-
-    wavs_um = np.asarray(raw["wavelength_um"])
-    wavs_aa = wavs_um * 1.0e4
-
-    single_u = np.array(raw["spectra_single"])
-    powerlaw = np.array(raw["spectra_pdr"])
-
-    wave_cm = wavs_aa * _AA_TO_CM
-    nu = _C_CGS / wave_cm
-
-    for arr in (single_u, powerlaw):
-        for i in range(arr.shape[0]):
-            for j in range(arr.shape[1]):
-                lnu = arr[i, j] * (wave_cm**2) / _C_CGS
-                integral = -np.trapezoid(lnu, nu)
-                if integral > 0:
-                    arr[i, j] = lnu / integral
-                else:
-                    arr[i, j] = lnu
-
-    # Use jnp.array so dynamic JAX indexing works inside JIT.
-    result = {
-        "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
-        "umin_grid": jnp.array(np.asarray(raw["umin_grid"]), dtype=jnp.float64),
-        "single_u": jnp.array(single_u, dtype=jnp.float64),
-        "powerlaw": jnp.array(powerlaw, dtype=jnp.float64),
-    }
-    result[q_key] = jnp.array(np.asarray(raw[q_key]), dtype=jnp.float64)
-    return result
-
-
-def _normalize_bosa_grid(raw: dict) -> dict:
-    """Convert a raw BOSA grid dict to the processed format.
-
-    Raw grids have ``wavelength_um`` and ``spectra``; the processed
-    format uses ``wavelength_aa`` (Angstrom) with L_nu-normalized spectra.
-
-    Parameters
-    ----------
-    raw : dict
-        Raw BOSA grid with wavelength_um, log_ltir_grid, log_ssfr_grid,
-        and spectra.
-
-    Returns
-    -------
-    dict
-        Processed grid with wavelength_aa and L_nu-normalized spectra.
-    """
-    import numpy as np
-
-    wavs_um = np.asarray(raw["wavelength_um"])
-    wavs_aa = wavs_um * 1.0e4
-
-    spectra = np.array(raw["spectra"])
-
-    wave_cm = wavs_aa * _AA_TO_CM
-    nu = _C_CGS / wave_cm
-
-    for i in range(spectra.shape[0]):
-        for j in range(spectra.shape[1]):
-            lnu = spectra[i, j] * (wave_cm**2) / _C_CGS
-            integral = -np.trapezoid(lnu, nu)
-            if integral > 0:
-                spectra[i, j] = lnu / integral
-            else:
-                spectra[i, j] = lnu
-
-    # Use jnp.array so dynamic JAX indexing works inside JIT.
-    return {
-        "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
-        "log_ltir_grid": jnp.array(np.asarray(raw["log_ltir_grid"]), dtype=jnp.float64),
-        "log_ssfr_grid": jnp.array(np.asarray(raw["log_ssfr_grid"]), dtype=jnp.float64),
-        "spectra": jnp.array(spectra, dtype=jnp.float64),
-    }
-
-
-def create_astrodust_from_grid(
-    template_data: dict | str,
-) -> Callable:
-    """Create Astrodust+PAH emission function from pre-loaded template grid.
-
-    The mixing formula is identical to DL07::
-
-        j_nu = (1 - gamma) * j_single(qPAH, Umin)
-             + gamma * j_PDR(qPAH, Umin)
-
-    Parameters
-    ----------
-    template_data : dict or str
-        Either a dict (from ``load_astrodust_templates``) or a file path.
-        If a string, ``load_astrodust_templates`` is called automatically.
-
-    Returns
-    -------
-    Callable
-        Model function with signature
-        ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
-
-    References
-    ----------
-    Hensley, B. S. & Draine, B. T. 2023, ApJ, 948, 55.
-    """
-    if isinstance(template_data, str):
-        template_data = load_astrodust_templates(template_data)
-
-    # Accept both raw grid format (spectra_single/spectra_pdr/wavelength_um)
-    # and processed format (single_u/powerlaw/wavelength_aa) from load_*
-    if "spectra_single" in template_data and "single_u" not in template_data:
-        template_data = _normalize_dl07_like_grid(template_data, q_key="qpah_grid")
-
-    single_u = template_data["single_u"]  # (n_qpah, n_umin, n_wave)
-    powerlaw = template_data["powerlaw"]  # (n_qpah, n_umin, n_wave)
-    tmpl_wave = template_data["wavelength_aa"]
-    umin_grid = template_data["umin_grid"]
-    qpah_grid = template_data["qpah_grid"]
-
-    def astrodust_emission(
-        wavelength_aa: jnp.ndarray,
-        L_absorbed: float,
-        dust_umin: float = 1.0,
-        dust_gamma_dl: float = 0.01,
-        dust_qpah: float = 3.0,
-        redshift: float = 0.0,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        """Astrodust+PAH emission from tabulated templates (Hensley & Draine 2023).
-
-        j_nu = (1-gamma) * single_U(qPAH, Umin) + gamma * PDR(qPAH, Umin)
-
-        Templates are pre-normalized in L_nu convention.  The function
-        interpolates bilinearly in (qPAH, Umin) space, mixes via gamma,
-        and scales by L_absorbed to enforce energy balance.
-
-        Parameters
-        ----------
-        wavelength_aa : array, shape (n_wave,)
-            Wavelength grid in Angstrom (sorted ascending).
-        L_absorbed : float
-            Total absorbed luminosity in Lsun.
-        dust_umin : float
-            Minimum radiation field intensity (Mathis ISRF units).
-        dust_gamma_dl : float
-            Fraction of dust mass in PDR (high-U) component.
-        dust_qpah : float
-            PAH mass fraction (%).
-        redshift : float
-            Source redshift (for CMB contrast correction).
-
-        Returns
-        -------
-        array, shape (n_wave,)
-            Dust emission L_nu in Lsun/Hz.
-        """
-        dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
-        dust_qpah_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
-
-        # Bilinear interpolation indices
-        i_u = jnp.clip(
-            jnp.searchsorted(umin_grid, dust_umin_c) - 1,
-            0,
-            len(umin_grid) - 2,
-        )
-        i_q = jnp.clip(
-            jnp.searchsorted(qpah_grid, dust_qpah_c) - 1,
-            0,
-            len(qpah_grid) - 2,
-        )
-
-        fu = (dust_umin_c - umin_grid[i_u]) / (umin_grid[i_u + 1] - umin_grid[i_u])
-        fq = (dust_qpah_c - qpah_grid[i_q]) / (qpah_grid[i_q + 1] - qpah_grid[i_q])
-
-        def _bilinear(grid: jnp.ndarray) -> jnp.ndarray:
-            return (
-                (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
-                + (1.0 - fq) * fu * grid[i_q, i_u + 1]
-                + fq * (1.0 - fu) * grid[i_q + 1, i_u]
-                + fq * fu * grid[i_q + 1, i_u + 1]
-            )
-
-        # Mix single-U and PDR components via gamma
-        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _bilinear(
-            powerlaw
-        )
-
-        # Interpolate onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
-
-        # CMB contrast correction at high redshift
-        T_eff_approx = 18.0 * dust_umin ** (1.0 / 6.0)
-        T_eff = cmb_corrected_temperature(T_eff_approx, redshift, 2.0)
-        contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
-
-        return L_absorbed * sed * contrast
-
-    return astrodust_emission
-
-
-def register_astrodust_tabulated(grid_path: str, name: str = "astrodust_tabulated") -> None:
-    """Load and register the tabulated Astrodust model.
-
-    Parameters
-    ----------
-    grid_path : str
-        Path to ``astrodust_templates_v2.h5`` or ``astrodust_templates.h5``.
-    name : str
-        Registry name.  Default ``"astrodust_tabulated"``.
-    """
-    model_fn = create_astrodust_from_grid(grid_path)
-    DUST_EMISSION_MODELS[name] = model_fn
-
-
-# ===================================================================
-# Model 7: BOSA (Boquien & Salim 2021) — template-based
-# ===================================================================
-
-
-def load_bosa_templates(filepath: str) -> dict:
-    """Load BOSA template grid from HDF5.
-
-    The template file must contain:
-
-    - ``wavelength_um``: wavelength grid in microns (n_wave,)
-    - ``log_ltir_grid``: log10(L_TIR/Lsun) grid (n_ltir,)
-    - ``log_ssfr_grid``: log10(sSFR/yr^-1) grid (n_ssfr,)
-    - ``spectra``: normalized SED templates (n_ltir, n_ssfr, n_wave)
-
-    Parameters
-    ----------
-    filepath : str
-        Path to ``bosa_templates_v2.h5`` or ``bosa_templates.h5``.
-
-    Returns
-    -------
-    dict
-        Keys: wavelength_aa, log_ltir_grid, log_ssfr_grid, spectra.
-        All arrays are JAX arrays.  wavelength_aa is in Angstrom.
-        spectra have shape (n_ltir, n_ssfr, n_wave) and are normalized
-        so each template integrates to 1 over frequency in L_nu convention.
-    """
-    import numpy as np
-
-    already_lnu = False
-
-    if filepath.endswith(".npz"):
-        data = np.load(filepath)
-        wavs_um = np.array(data["wavelength_um"])
-        spectra = np.array(data["spectra"])
-        log_ltir_grid = np.array(data["log_ltir_grid"])
-        log_ssfr_grid = np.array(data["log_ssfr_grid"])
-        wavs_aa = wavs_um * 1.0e4
-    else:
-        import h5py as _h5py
-
-        with _h5py.File(filepath, "r") as f:
-            already_lnu = (
-                f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
-            )
-            if "wavelength_aa" in f:
-                # Standardized HDF5
-                wavs_aa = np.array(f["wavelength_aa"][:])
-                spectra = np.array(f["spectra"][:])
-                log_ltir_grid = np.array(f["log_ltir_grid"][:])
-                log_ssfr_grid = np.array(f["log_ssfr_grid"][:])
-            elif "grid" in f:
-                wavs_aa = np.array(f["wavelength"][:]) * 1.0e4
-                spectra = np.array(f["spectra"]["templates"][:])
-                log_ltir_grid = np.array(f["grid"]["log_ltir"][:])
-                log_ssfr_grid = np.array(f["grid"]["log_ssfr"][:])
-            else:
-                wavs_aa = np.array(f["wavelength_um"][:]) * 1.0e4
-                spectra = np.array(f["spectra"][:])
-                log_ltir_grid = np.array(f["log_ltir_grid"][:])
-                log_ssfr_grid = np.array(f["log_ssfr_grid"][:])
-
-    if not already_lnu:
-        # Convert to L_nu and normalize
-        wave_cm = wavs_aa * _AA_TO_CM
-        nu = _C_CGS / wave_cm
-
-        for i in range(spectra.shape[0]):
-            for j in range(spectra.shape[1]):
-                lnu = spectra[i, j] * (wave_cm**2) / _C_CGS
-                integral = -np.trapezoid(lnu, nu)
-                if integral > 0:
-                    spectra[i, j] = lnu / integral
-                else:
-                    spectra[i, j] = lnu
-
-    # Use jnp.array so dynamic JAX indexing works inside JIT.
-    return {
-        "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
-        "log_ltir_grid": jnp.array(log_ltir_grid, dtype=jnp.float64),
-        "log_ssfr_grid": jnp.array(log_ssfr_grid, dtype=jnp.float64),
-        "spectra": jnp.array(spectra, dtype=jnp.float64),
-    }
-
-
-def create_bosa_from_grid(template_data: dict | str) -> Callable:
-    """Create BOSA emission function from pre-loaded template grid.
-
-    The BOSA model (Boquien & Salim 2021) parameterizes dust emission
-    templates by (L_TIR, sSFR) instead of radiation field parameters.
-    This provides a direct link between star formation activity and
-    dust temperature.
-
-    For fitting, L_TIR is derived from L_absorbed (energy balance),
-    so the free parameter is just ``dust_log_ssfr``.  The template
-    is selected by interpolating in (log L_TIR, log sSFR) space.
-
-    Parameters
-    ----------
-    template_data : dict or str
-        Either a dict (from ``load_bosa_templates``) or a file path.
-
-    Returns
-    -------
-    Callable
-        Model function with signature
-        ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
-
-    References
-    ----------
-    Boquien, M. & Salim, S. 2021, A&A, 653, A149.
-    """
-    if isinstance(template_data, str):
-        template_data = load_bosa_templates(template_data)
-
-    # Accept both raw grid format (wavelength_um) and processed (wavelength_aa)
-    if "wavelength_um" in template_data and "wavelength_aa" not in template_data:
-        template_data = _normalize_bosa_grid(template_data)
-
-    spectra = template_data["spectra"]  # (n_ltir, n_ssfr, n_wave)
-    tmpl_wave = template_data["wavelength_aa"]
-    log_ltir_grid = template_data["log_ltir_grid"]
-    log_ssfr_grid = template_data["log_ssfr_grid"]
-
-    def bosa_emission(
-        wavelength_aa: jnp.ndarray,
-        L_absorbed: float,
-        dust_log_ssfr: float = -10.0,
-        redshift: float = 0.0,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        """BOSA emission from tabulated templates (Boquien & Salim 2021).
-
-        Interpolates in (log L_TIR, log sSFR) space.  L_TIR is derived
-        from L_absorbed via energy balance.
-
-        Parameters
-        ----------
-        wavelength_aa : array, shape (n_wave,)
-            Wavelength grid in Angstrom (sorted ascending).
-        L_absorbed : float
-            Total absorbed luminosity in Lsun (= L_TIR).
-        dust_log_ssfr : float
-            log10(sSFR / yr^-1).  Typical range: -12 to -8.
-        redshift : float
-            Source redshift (for CMB contrast correction).
-
-        Returns
-        -------
-        array, shape (n_wave,)
-            Dust emission L_nu in Lsun/Hz.
-        """
-        # L_TIR ~ L_absorbed (energy balance)
-        log_ltir = jnp.log10(jnp.clip(L_absorbed, 1.0e-30, None))
-
-        log_ltir_c = jnp.clip(log_ltir, log_ltir_grid[0], log_ltir_grid[-1])
-        log_ssfr_c = jnp.clip(dust_log_ssfr, log_ssfr_grid[0], log_ssfr_grid[-1])
-
-        n_l = len(log_ltir_grid)
-        n_s = len(log_ssfr_grid)
-
-        # Bilinear interpolation
-        i_l = jnp.clip(
-            jnp.searchsorted(log_ltir_grid, log_ltir_c) - 1,
-            0,
-            n_l - 2,
-        )
-        i_s = jnp.clip(
-            jnp.searchsorted(log_ssfr_grid, log_ssfr_c) - 1,
-            0,
-            n_s - 2,
-        )
-
-        fl = (log_ltir_c - log_ltir_grid[i_l]) / (log_ltir_grid[i_l + 1] - log_ltir_grid[i_l])
-        fs = (log_ssfr_c - log_ssfr_grid[i_s]) / (log_ssfr_grid[i_s + 1] - log_ssfr_grid[i_s])
-
-        template = (
-            (1.0 - fl) * (1.0 - fs) * spectra[i_l, i_s]
-            + (1.0 - fl) * fs * spectra[i_l, i_s + 1]
-            + fl * (1.0 - fs) * spectra[i_l + 1, i_s]
-            + fl * fs * spectra[i_l + 1, i_s + 1]
-        )
-
-        # Interpolate onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
-
-        # CMB contrast correction at high redshift
-        # Use representative cold dust temperature (25 K) since BOSA doesn't have U_min
-        T_eff_approx = 25.0
-        T_eff = cmb_corrected_temperature(T_eff_approx, redshift, 2.0)
-        contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
-
-        return L_absorbed * sed * contrast
-
-    return bosa_emission
-
-
-def register_bosa_tabulated(grid_path: str, name: str = "bosa_tabulated") -> None:
-    """Load and register the tabulated BOSA model.
-
-    Parameters
-    ----------
-    grid_path : str
-        Path to ``bosa_templates_v2.h5`` or ``bosa_templates.h5``.
-    name : str
-        Registry name.  Default ``"bosa_tabulated"``.
-    """
-    model_fn = create_bosa_from_grid(grid_path)
-    DUST_EMISSION_MODELS[name] = model_fn
-
-
-# ===================================================================
-# Model 8: THEMIS (Jones et al. 2017) — template-based
-# ===================================================================
-
-
-def load_themis_templates(filepath: str) -> dict:
-    """Load THEMIS template grid from HDF5.
-
-    The template file must contain:
-
-    - ``wavelength_um``: wavelength grid in microns (n_wave,)
-    - ``qhac_grid``: a-C(:H) aromatic fraction (n_qhac,)
-    - ``umin_grid``: minimum radiation field intensities (n_umin,)
-    - ``spectra_single``: single-U templates (n_qhac, n_umin, n_wave)
-    - ``spectra_pdr``: power-law U (PDR) templates (n_qhac, n_umin, n_wave)
-
-    Parameters
-    ----------
-    filepath : str
-        Path to ``themis_templates_v2.h5`` or ``themis_templates.h5``.
-
-    Returns
-    -------
-    dict
-        Keys: wavelength_aa, umin_grid, qhac_grid, single_u, powerlaw.
-        All arrays are JAX arrays.  wavelength_aa is in Angstrom.
-        single_u and powerlaw have shape (n_qhac, n_umin, n_wave) and are
-        normalized in L_nu convention.
-    """
-    import numpy as np
-
-    already_lnu = False
-
-    if filepath.endswith(".npz"):
-        data = np.load(filepath)
-        wavs_um = np.array(data["wavelength_um"])
-        single_u = np.array(data["spectra_single"])
-        powerlaw = np.array(data["spectra_pdr"])
-        umin_grid = np.array(data["umin_grid"])
-        qhac_grid = np.array(data["qhac_grid"])
-        wavs_aa = wavs_um * 1.0e4
-    else:
-        import h5py as _h5py
-
-        with _h5py.File(filepath, "r") as f:
-            already_lnu = (
-                f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
-            )
-            if "wavelength_aa" in f:
-                # Standardized HDF5
-                wavs_aa = np.array(f["wavelength_aa"][:])
-                single_u = np.array(f["single_u"][:])
-                powerlaw = np.array(f["powerlaw"][:])
-                umin_grid = np.array(f["umin_grid"][:])
-                qhac_grid = np.array(f["qhac_grid"][:])
-            elif "grid" in f:
-                wavs_aa = np.array(f["wavelength"][:]) * 1.0e4
-                single_u = np.array(f["spectra/single_u"][:])
-                powerlaw = np.array(f["spectra/pdr"][:])
-                umin_grid = np.array(f["grid/umin"][:])
-                qhac_grid = np.array(f["grid/qhac"][:])
-            else:
-                wavs_aa = np.array(f["wavelength_um"][:]) * 1.0e4
-                single_u = np.array(f["spectra_single"][:])
-                powerlaw = np.array(f["spectra_pdr"][:])
-                umin_grid = np.array(f["umin_grid"][:])
-                qhac_grid = np.array(f["qhac_grid"][:])
-
-    if not already_lnu:
-        # Convert to L_nu and normalize
-        wave_cm = wavs_aa * _AA_TO_CM
-        nu = _C_CGS / wave_cm
-
-        for arr in (single_u, powerlaw):
-            for i in range(arr.shape[0]):
-                for j in range(arr.shape[1]):
-                    lnu = arr[i, j] * (wave_cm**2) / _C_CGS
-                    integral = -np.trapezoid(lnu, nu)
-                    if integral > 0:
-                        arr[i, j] = lnu / integral
-                    else:
-                        arr[i, j] = lnu
-
-    # Use jnp.array so dynamic JAX indexing works inside JIT.
-    # Call preload_emission_model() at factory time (outside JIT) to avoid tracer leaks.
-    return {
-        "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
-        "umin_grid": jnp.array(umin_grid, dtype=jnp.float64),
-        "qhac_grid": jnp.array(qhac_grid, dtype=jnp.float64),
-        "single_u": jnp.array(single_u, dtype=jnp.float64),
-        "powerlaw": jnp.array(powerlaw, dtype=jnp.float64),
-    }
-
-
-def create_themis_from_grid(template_data: dict | str) -> Callable:
-    """Create THEMIS emission function from pre-loaded DustEM template grid.
-
-    The THEMIS model (Jones et al. 2017) uses the same mixing formula
-    as DL07 but with different grain compositions.  The aromatic fraction
-    parameter ``qhac`` (a-C(:H) aromatic carbon mass fraction) replaces
-    ``qpah`` from DL07.
-
-    Parameters
-    ----------
-    template_data : dict or str
-        Either a dict (from ``load_themis_templates``) or a file path.
-
-    Returns
-    -------
-    Callable
-        Model function with signature
-        ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
-
-    References
-    ----------
-    Jones, A. P. et al. 2017, A&A, 602, A46.
-    """
-    if isinstance(template_data, str):
-        template_data = load_themis_templates(template_data)
-
-    # Accept both raw grid format (spectra_single/spectra_pdr/wavelength_um)
-    # and processed format (single_u/powerlaw/wavelength_aa) from load_*
-    if "spectra_single" in template_data and "single_u" not in template_data:
-        template_data = _normalize_dl07_like_grid(template_data, q_key="qhac_grid")
-
-    single_u = template_data["single_u"]  # (n_qhac, n_umin, n_wave)
-    powerlaw = template_data["powerlaw"]  # (n_qhac, n_umin, n_wave)
-    tmpl_wave = template_data["wavelength_aa"]
-    umin_grid = template_data["umin_grid"]
-    qhac_grid = template_data["qhac_grid"]
-
-    def themis_emission(
-        wavelength_aa: jnp.ndarray,
-        L_absorbed: float,
-        dust_umin: float = 1.0,
-        dust_gamma_dl: float = 0.01,
-        dust_qhac: float = 0.17,
-        redshift: float = 0.0,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        """THEMIS emission from tabulated DustEM templates (Jones+2017).
-
-        j_nu = (1-gamma) * single_U(qhac, Umin) + gamma * PDR(qhac, Umin)
-
-        Parameters
-        ----------
-        wavelength_aa : array, shape (n_wave,)
-            Wavelength grid in Angstrom (sorted ascending).
-        L_absorbed : float
-            Total absorbed luminosity in Lsun.
-        dust_umin : float
-            Minimum radiation field intensity (Mathis ISRF units).
-        dust_gamma_dl : float
-            Fraction of dust mass in PDR (high-U) component.
-        dust_qhac : float
-            a-C(:H) aromatic carbon mass fraction.
-            Typical range: 0.02--0.30.
-        redshift : float
-            Source redshift (for CMB contrast correction).
-
-        Returns
-        -------
-        array, shape (n_wave,)
-            Dust emission L_nu in Lsun/Hz.
-        """
-        dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
-        dust_qhac_c = jnp.clip(dust_qhac, qhac_grid[0], qhac_grid[-1])
-
-        # Bilinear interpolation indices
-        i_u = jnp.clip(
-            jnp.searchsorted(umin_grid, dust_umin_c) - 1,
-            0,
-            len(umin_grid) - 2,
-        )
-        i_q = jnp.clip(
-            jnp.searchsorted(qhac_grid, dust_qhac_c) - 1,
-            0,
-            len(qhac_grid) - 2,
-        )
-
-        fu = (dust_umin_c - umin_grid[i_u]) / (umin_grid[i_u + 1] - umin_grid[i_u])
-        fq = (dust_qhac_c - qhac_grid[i_q]) / (qhac_grid[i_q + 1] - qhac_grid[i_q])
-
-        def _bilinear(grid: jnp.ndarray) -> jnp.ndarray:
-            return (
-                (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
-                + (1.0 - fq) * fu * grid[i_q, i_u + 1]
-                + fq * (1.0 - fu) * grid[i_q + 1, i_u]
-                + fq * fu * grid[i_q + 1, i_u + 1]
-            )
-
-        # Mix single-U and PDR components via gamma
-        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _bilinear(
-            powerlaw
-        )
-
-        # Interpolate onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
-
-        # CMB contrast correction at high redshift
-        T_eff_approx = 18.0 * dust_umin ** (1.0 / 6.0)
-        T_eff = cmb_corrected_temperature(T_eff_approx, redshift, 2.0)
-        contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
-
-        return L_absorbed * sed * contrast
-
-    return themis_emission
-
-
-def register_themis_tabulated(grid_path: str, name: str = "themis_tabulated") -> None:
-    """Load and register the tabulated THEMIS model.
-
-    Parameters
-    ----------
-    grid_path : str
-        Path to ``themis_templates_v2.h5`` or ``themis_templates.h5``.
-    name : str
-        Registry name.  Default ``"themis_tabulated"``.
-    """
-    model_fn = create_themis_from_grid(grid_path)
-    DUST_EMISSION_MODELS[name] = model_fn
-
-
-# ===================================================================
-# Model: Two-temperature energy balance with spatial offset
-# ===================================================================
-
-
-@register_emission_model("energy_balance_split")
 def energy_balance_split(
     wavelength_aa: jnp.ndarray,
     L_absorbed_stellar: float,
@@ -2237,6 +760,11 @@ def energy_balance_split(
     return sed_warm + sed_cold
 
 
+# ===================================================================
+# Application layer: model dispatchers and utilities
+# ===================================================================
+
+
 def apply_dust_emission(
     model_name: str,
     wavelength_aa: jnp.ndarray,
@@ -2248,42 +776,31 @@ def apply_dust_emission(
     Parameters
     ----------
     model_name : str
-        One of ``"modified_blackbody"``, ``"dale2014"``, ``"draine_li2007"``,
-        ``"draine_li2014"``, or any tabulated model registered via
-        ``register_dl07_tabulated()`` / ``register_dl14_tabulated()``.
-    wavelength_aa : array, shape (n_wave,)
+        Registered model name (e.g. "modified_blackbody", "draine_li2007").
+    wavelength_aa : array
         Wavelength grid in Angstrom.
     L_absorbed : float
-        Total absorbed luminosity in Lsun.
+        Absorbed luminosity in Lsun.
     **params
-        Model-specific parameters.
+        Model-specific keyword arguments.
 
     Returns
     -------
-    array, shape (n_wave,)
+    array
         Dust emission L_nu in Lsun/Hz.
+
+    Raises
+    ------
+    ValueError
+        If model_name is not registered.
     """
-    model_fn = resolve_emission_model(model_name)
-    return model_fn(wavelength_aa, L_absorbed, **params)
+    fn = resolve_emission_model(model_name)
+    return fn(wavelength_aa, L_absorbed, **params)
 
 
 # ===================================================================
-# Lazy auto-loading: template-based models as defaults
+# Lazy loading infrastructure for template-based models
 # ===================================================================
-#
-# On first call, each model tries to load tabulated templates from
-# data/.  If found, the template-based version replaces itself in
-# the registry.  If not found, falls back to the analytic
-# approximation with a loud warning.
-#
-# This gives:
-#   - Zero-config: ``dust_emission="draine_li2007"`` just works
-#   - Fast import: no I/O at import time
-#   - Correct physics: tabulated templates used by default
-# ===================================================================
-
-# Track which models have been resolved (to avoid repeated warnings)
-_resolved: set[str] = set()
 
 
 def _make_lazy_loader(
@@ -2333,8 +850,8 @@ def _make_lazy_loader(
     return _lazy_wrapper
 
 
-# --- DL07: tries v2 HDF5 first, then legacy .h5 ---
 def _find_dl07_templates() -> str | None:
+    """Find DL07 template files, preferring v2 grid."""
     for fn in ("dl07_templates_v2.h5", "dl07_templates.h5"):
         path = _find_data_file(fn)
         if path is not None:
@@ -2348,6 +865,8 @@ def _dl07_lazy_wrapper(*args, **kwargs):
         _resolved.add("draine_li2007")
         path = _find_dl07_templates()
         if path is not None:
+            from .emission_templates import create_dl07_from_grid
+
             tabulated = create_dl07_from_grid(path)
             DUST_EMISSION_MODELS["draine_li2007"] = tabulated
             DUST_EMISSION_MODELS["dl07_tabulated"] = tabulated
@@ -2363,10 +882,38 @@ def _dl07_lazy_wrapper(*args, **kwargs):
     return DUST_EMISSION_MODELS["draine_li2007"](*args, **kwargs)
 
 
+# ===================================================================
+# Import emission template functions for backward compatibility
+# ===================================================================
+
+from .emission_templates import (
+    create_astrodust_from_grid as create_astrodust_from_grid,
+    create_bosa_from_grid as create_bosa_from_grid,
+    create_dale2014_from_grid as create_dale2014_from_grid,
+    create_dl07_from_grid as create_dl07_from_grid,
+    create_dl14_from_grid as create_dl14_from_grid,
+    create_themis_from_grid as create_themis_from_grid,
+    load_astrodust_templates as load_astrodust_templates,
+    load_bosa_templates as load_bosa_templates,
+    load_dale2014_templates as load_dale2014_templates,
+    load_dl14_templates as load_dl14_templates,
+    load_draine_li_templates as load_draine_li_templates,
+    load_themis_templates as load_themis_templates,
+    register_astrodust_tabulated as register_astrodust_tabulated,
+    register_bosa_tabulated as register_bosa_tabulated,
+    register_dale2014_tabulated as register_dale2014_tabulated,
+    register_dl07_tabulated as register_dl07_tabulated,
+    register_dl14_tabulated as register_dl14_tabulated,
+    register_themis_tabulated as register_themis_tabulated,
+)
+
+# Register models at module load time
+DUST_EMISSION_MODELS["energy_balance_split"] = energy_balance_split
+
+# Register lazy loaders at module load time
+# These will auto-load templates on first call
 DUST_EMISSION_MODELS["draine_li2007"] = _dl07_lazy_wrapper
 
-
-# --- Dale+2014: tries dale2014_templates_v2.h5 / dale2014_templates.h5 ---
 DUST_EMISSION_MODELS["dale2014"] = _make_lazy_loader(
     "dale2014",
     "dale2014_templates.h5",
@@ -2374,9 +921,11 @@ DUST_EMISSION_MODELS["dale2014"] = _make_lazy_loader(
 )
 
 
-# --- DL14: tries dl14_templates_v2.h5 (improved grid) before dl14_templates.h5 ---
+# DL14: prioritizes v2 grid, falls back to legacy grid
 def _dl14_lazy_wrapper(*args, **kwargs):
     """Lazy loader for DL14: prioritizes v2 grid, falls back to legacy grid."""
+    from .emission_templates import create_dl14_from_grid
+
     global _dl14_fn
     if _dl14_fn is None:
         for fname in ("dl14_templates_v2.h5", "dl14_templates.h5"):
@@ -2391,69 +940,26 @@ def _dl14_lazy_wrapper(*args, **kwargs):
                 "The analytic fallback has been removed because it produced scientifically "
                 "incorrect results. Run: python scripts/download_dl14_templates.py"
             )
-    return _dl14_fn(*args, **kwargs)
+    return DUST_EMISSION_MODELS["draine_li2014"](*args, **kwargs)
 
 
 _dl14_fn = None
 DUST_EMISSION_MODELS["draine_li2014"] = _dl14_lazy_wrapper
 
-
-# --- Astrodust+PAH (Hensley & Draine 2023): tries astrodust_templates_v2.h5 / .h5 ---
 DUST_EMISSION_MODELS["astrodust"] = _make_lazy_loader(
     "astrodust",
     "astrodust_templates.h5",
     "create_astrodust_from_grid",
 )
 
-
-# --- BOSA (Boquien & Salim 2021): tries bosa_templates_v2.h5 / bosa_templates.h5 ---
 DUST_EMISSION_MODELS["bosa"] = _make_lazy_loader(
     "bosa",
     "bosa_templates.h5",
     "create_bosa_from_grid",
 )
 
-
-# --- THEMIS (Jones+2017): tries themis_templates_v2.h5 / themis_templates.h5 ---
 DUST_EMISSION_MODELS["themis"] = _make_lazy_loader(
     "themis",
     "themis_templates.h5",
     "create_themis_from_grid",
 )
-
-
-# ===================================================================
-# Backward-compatible module-level aliases for direct imports
-# ===================================================================
-# Tests and user code may do ``from tengri.components.dust.emission import draine_li2007``.
-# These aliases point to the lazy wrappers (which auto-load templates on call).
-
-
-def draine_li2007(*args, **kwargs):
-    """Draine & Li (2007) — dispatches to the registry (auto-loads templates)."""
-    return DUST_EMISSION_MODELS["draine_li2007"](*args, **kwargs)
-
-
-def dale2014(*args, **kwargs):
-    """Dale et al. (2014) — dispatches to the registry (auto-loads templates)."""
-    return DUST_EMISSION_MODELS["dale2014"](*args, **kwargs)
-
-
-def draine_li2014(*args, **kwargs):
-    """Draine & Li (2014) — dispatches to the registry (auto-loads templates)."""
-    return DUST_EMISSION_MODELS["draine_li2014"](*args, **kwargs)
-
-
-def astrodust(*args, **kwargs):
-    """Astrodust+PAH (Hensley & Draine 2023) — dispatches to the registry."""
-    return DUST_EMISSION_MODELS["astrodust"](*args, **kwargs)
-
-
-def bosa(*args, **kwargs):
-    """BOSA (Boquien & Salim 2021) — dispatches to the registry."""
-    return DUST_EMISSION_MODELS["bosa"](*args, **kwargs)
-
-
-def themis(*args, **kwargs):
-    """THEMIS (Jones+2017) — dispatches to the registry."""
-    return DUST_EMISSION_MODELS["themis"](*args, **kwargs)

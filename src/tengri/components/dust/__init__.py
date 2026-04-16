@@ -41,7 +41,6 @@ from tengri.components.dust.drude_profiles import (
 )
 from tengri.components.dust.emission import (
     DUST_EMISSION_MODELS,
-    apply_dust_emission,
     astrodust,
     bosa,
     casey2012,
@@ -55,14 +54,13 @@ from tengri.components.dust.emission import (
     create_dl07_from_grid,
     create_dl14_from_grid,
     create_themis_from_grid,
-    energy_balance_split,
     get_emission_model,
     load_astrodust_templates,
     load_bosa_templates,
+    load_dale2014_templates,
     load_dl14_templates,
     load_draine_li_templates,
     load_themis_templates,
-    magphys_dc08,
     planck_bnu,
     register_astrodust_tabulated,
     register_bosa_tabulated,
