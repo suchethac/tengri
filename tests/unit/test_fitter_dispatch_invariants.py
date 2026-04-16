@@ -207,7 +207,7 @@ class TestAutoDispatchRouting:
     def test_auto_low_d_routes_to_nuts(self, low_d_spec: Parameters) -> None:
         """auto with D <= threshold should call _run_nuts."""
         assert low_d_spec.n_free <= _AUTO_D_THRESHOLD, (
-            f"Test precondition failed: low_d_spec.n_free={low_d_spec.n_free} > {_AUTO_D_THRESHOLD}"
+            f"Precondition: low_d_spec.n_free={low_d_spec.n_free} > {_AUTO_D_THRESHOLD}"
         )
         fitter = self._build_fitter(low_d_spec)
         sentinel = object()

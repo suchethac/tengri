@@ -62,7 +62,7 @@ class TestAttenuateEmissionShape:
     def test_output_shape_matches_input(self, n_wave: int) -> None:
         wave = jnp.linspace(1000.0, 20000.0, n_wave)
         sed = _flat_sed(n_wave)
-        sed_out, L_absorbed = attenuate_emission(
+        sed_out, _ = attenuate_emission(
             sed,
             wave,
             "bc",
@@ -199,7 +199,7 @@ class TestZeroDustIdentity:
     def test_zero_tau_bc_and_diff_returns_input(self) -> None:
         """With tau_bc=0 and tau_diff=0, output must be ≈ input everywhere."""
         sed = _power_sed(_WAVE)
-        sed_out, L_absorbed = attenuate_emission(
+        sed_out, _ = attenuate_emission(
             sed,
             _WAVE,
             "bc",
@@ -329,7 +329,7 @@ class TestIGMAbsorption:
         )
 
     def test_igm_no_nan_short_wavelength(self) -> None:
-        """No NaN for short-wavelength photons at moderate z (previously buggy: negative base raised to fractional power)."""
+        """No NaN at short wavelengths for moderate z (negative base fractional-power bug)."""
         from tengri.components.igm import igm_transmission
 
         wave_obs = jnp.linspace(100.0, 1000.0, 80)
