@@ -345,6 +345,84 @@ In DSPS's lookback-time convention used by tengri, a declining tau model in cosm
 
 ---
 
+## ISSUES FOUND DURING HST AR PROPOSAL FIGURE WORK (2026-04-16)
+
+Discovered while fitting CANDELS z~1 galaxies with NSS under multiple model
+configurations (dense_basis, tsnorm, dirichlet, DPL × 4 SSP libraries × 4 dust laws).
+
+### PERF-01: DL07 dust emission — JIT graph exceeds 2 GB, ~150x slower in NSS
+
+**File:** `src/tengri/forward/nonstell.py`, `src/tengri/components/dust/emission.py`
+**Symptom:** With `dust_emission="draine_li2007"` and `dust_umin=Uniform(...)` (free), each
+NSS iteration takes ~4-6s instead of ~0.03s. XLA compilation cache reports
+`CompilationResultProto exceeded maximum protobuf size of 2GB: 4758750946`.
+**Root cause:** The DL07 template interpolation embeds the full 2D template array
+into the XLA computation graph when traced. With `dust_umin` free, the interpolation
+can't be collapsed at init time — every likelihood call re-traces the template lookup.
+**Workaround:** Fix `dust_umin` to a constant (`Fixed(1.0)`) so the template collapses
+at model init. Or run without dust emission for optical-only photometry (rest-frame
+< 4 μm at z~1 doesn't constrain dust emission templates anyway).
+**Status:** OPEN — architectural. Would require moving DL07 interpolation outside the
+JIT scope (precompute a lookup table over a umin grid at init, then use simple 1D
+interp inside JIT).
+
+### BUG-NSS-01: `posterior.derived` crashes when `stellar_mass_surviving` is None
+
+**File:** `src/tengri/inference/posterior.py:101`
+**Symptom:** `TypeError: stack requires ndarray or scalar arguments, got <class 'NoneType'>`
+when calling `posterior.derived` after NSS fit with an SSP file that lacks the
+mass-remaining table (e.g., `bpss_stars_c3k_a_chabrier.h5`).
+**Root cause:** `predict_derived()` returns `stellar_mass_surviving: None` when
+`ssp_data.ssp_mass_remaining` is absent. `posterior.derived` then tries
+`jnp.stack([None, None, ...])` which fails.
+**Workaround:** Use `model.predict_sfh_quantities(params)` per-sample instead of
+`posterior.derived` — `sfh_quantities.stellar_mass` (total formed) is always available.
+**Fix:** `posterior.derived` should filter out None-valued fields before stacking,
+or substitute NaN arrays.
+**Status:** OPEN
+
+### BUG-NSS-02: `evolving_metallicity=True` causes KeyError: 'log_z_abs' in fused kernel
+
+**File:** `src/tengri/forward/kernels/assembly.py:2850`
+**Symptom:** `KeyError: 'log_z_abs'` when running MAP or any inference with
+`evolving_metallicity=True` in Parameters.
+**Root cause:** The fused kernel expects `p["log_z_abs"]` (single metallicity), but
+evolving metallicity produces `met_logzsol_0` and `met_logzsol_final` which map to
+a time-dependent Z(t). The internal param translation doesn't produce the scalar
+`log_z_abs` key that the fused kernel requires.
+**Workaround:** Use `met_logzsol=Uniform(...)` (single free metallicity) instead of
+`evolving_metallicity=True`.
+**Status:** OPEN — the fused/compositional kernel path doesn't support evolving
+metallicity yet. The exact pipeline path likely works (untested).
+
+### BUG-NSS-03: qsogen AGN tracer leak — `UnexpectedTracerError` in JIT scopes
+
+**File:** `src/tengri/components/agn/qsogen.py:179`
+**Symptom:** `jax.errors.UnexpectedTracerError: Encountered an unexpected tracer` when
+running any JIT-compiled inference (MAP, NSS, VI) with `agn_model="qsogen"`.
+**Root cause:** `_load_emline_template()` performs lazy file I/O and Python-level
+iteration (`genexpr`) inside a JAX-traced function. The intermediate array reference
+escapes the JIT scope.
+**Workaround:** Don't use `agn_model="qsogen"` with JIT-based inference. The template
+loading needs to be moved to model init time.
+**Status:** OPEN
+
+### NOTE-01: Dirichlet SFH produces extreme SFH spikes (~1000 M_sun/yr)
+
+**Observed with:** `mean_sfh_type="dirichlet"`, BC03 SSP, Kriek & Conroy dust,
+CANDELS 10413 (z=1.094).
+**Symptom:** NSS converges to log Z = -1868 (much worse than other configs at -708 to
+-798), with SFR > 1000 M_sun/yr concentrated in a single time bin. M* drops to
+10^10.95 (vs 10^11.8 for other configs). The extreme SFH dominates the plot y-axis.
+**Assessment:** Not a code bug — the Dirichlet stick-breaking parameterization with
+uniform priors on z_i ∈ [0.01, 0.99] allows extreme mass concentration in a single
+bin. The poor log Z confirms this is a bad fit, not a preferred solution. The prior
+volume effect is well-known (Leja+2019a). Consider tighter priors on z_i or using
+`continuity` SFH (ratio-based, less prone to spikes) instead.
+**Status:** DOCUMENTED — not a bug, prior choice issue.
+
+---
+
 ## BUGS CONFIRMED FIXED (for reference)
 
 ### From original audit (22 fixed):
