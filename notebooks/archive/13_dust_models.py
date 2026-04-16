@@ -71,8 +71,8 @@ plt.rcParams.update({
 os.makedirs("figures", exist_ok=True)
 
 from tengri import Fixed, Model, ParamSpec, Uniform, load_filter_set, load_ssp_data
-from tengri.components.dust.attenuation import DUST_LAWS, two_component_dust
-from tengri.components.dust.emission import (
+from tengri.dust.attenuation import DUST_LAWS, two_component_dust
+from tengri.dust.emission import (
     DUST_EMISSION_MODELS,
     compute_absorbed_luminosity,
     create_dl07_from_grid,
@@ -613,12 +613,12 @@ params = {
 
 # %%
 # Compute intrinsic and attenuated SEDs manually for energy balance check
-from tengri.components.sps.dsps_wrapper import (
+from tengri.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
     interpolate_metallicity,
 )
-from tengri.components.dust.emission import compute_absorbed_luminosity, modified_blackbody
+from tengri.dust.emission import compute_absorbed_luminosity, modified_blackbody
 
 # Use model internals to get SFR weights
 p = model._get_internal_params(params)

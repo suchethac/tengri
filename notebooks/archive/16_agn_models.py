@@ -51,7 +51,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
 
-from tengri.components.agn import AGN_MODELS, get_agn_model
+from tengri.agn import AGN_MODELS, get_agn_model
 from tengri import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
@@ -194,7 +194,7 @@ plt.show()
 # four key parameters and their effect on the SED shape.
 
 # %%
-from tengri.components.agn.qsogen import qsogen_sed
+from tengri.agn.qsogen import qsogen_sed
 
 fig, axes = plt.subplots(2, 2, figsize=(12, 9))
 
@@ -295,7 +295,7 @@ plt.show()
 # **emission** in face-on (Type 1) views.
 
 # %%
-from tengri.components.agn.skirtor import skirtor_analytic
+from tengri.agn.skirtor import skirtor_analytic
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 

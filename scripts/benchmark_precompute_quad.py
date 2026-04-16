@@ -142,7 +142,7 @@ def _approx_phot_nquad(
         dust_avg = float(dust_fn(np.array([lam_eff]))[0])
     else:
         # GL quadrature over the filter bandpass
-        from tengri.components.sps.precompute import _gauss_legendre_nodes_for_filter
+        from tengri.sps.precompute import _gauss_legendre_nodes_for_filter
 
         nodes, weights, h = _gauss_legendre_nodes_for_filter(wav_np, n_quad, thr_np)
         t_at_nodes = np.interp(nodes, wav_np, thr_np)
@@ -257,8 +257,8 @@ def run_timing(
     from astropy.cosmology import FlatLambdaCDM
 
     from tengri.observation.filters import load_filter_set
-    from tengri.components.sps.dsps_wrapper import load_ssp_data
-    from tengri.components.sps.precompute import fast_photometry, precompute_photometry
+    from tengri.sps.dsps_wrapper import load_ssp_data
+    from tengri.sps.precompute import fast_photometry, precompute_photometry
 
     ssp = load_ssp_data(ssp_file)
     fw_list, ft_list, _ = load_filter_set(filter_names)

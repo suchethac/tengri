@@ -42,7 +42,7 @@ from tengri import (
     load_ssp_data,
     two_component_dust,
 )
-from tengri.components.dust.attenuation import DUST_LAWS, get_dust_law
+from tengri.dust.attenuation import DUST_LAWS, get_dust_law
 
 import sys, os  # noqa: E401
 
@@ -439,7 +439,7 @@ plt.show()
 # The clumpy geometry is the greyest because some sightlines miss all clumps.
 
 # %%
-from tengri.components.dust import wg00_shell, wg00_cloudy, wg00_dusty
+from tengri.dust import wg00_shell, wg00_cloudy, wg00_dusty
 
 wave_geom = jnp.linspace(1000.0, 20000.0, 1500)
 tau_values = [1.0, 2.0, 4.0]
@@ -489,7 +489,7 @@ plt.show()
 # models at three temperatures.
 
 # %%
-from tengri.components.dust.emission import modified_blackbody, casey2012
+from tengri.dust.emission import modified_blackbody, casey2012
 
 # Wavelength grid covering FIR (10 to 1000 micron)
 wave_ir = jnp.linspace(1e4, 1e7, 5000)  # 1-1000 um in Angstrom
@@ -643,7 +643,7 @@ plt.show()
 # that encode these trends, ready for direct use in ParamSpec.
 
 # %%
-from tengri.components.dust.priors import narayanan_prior
+from tengri.dust.priors import narayanan_prior
 
 redshifts = [0.0, 1.0, 3.0, 6.0]
 z_colors = {0.0: "#1f77b4", 1.0: "#2ca02c", 3.0: "#ff7f0e", 6.0: "#d62728"}
@@ -704,7 +704,7 @@ plt.show()
 # tengri:
 #
 # ```python
-# from tengri.components.dust.priors import narayanan_prior
+# from tengri.dust.priors import narayanan_prior
 # spec = ParamSpec(..., **narayanan_prior(z=2.0))
 # ```
 

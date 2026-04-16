@@ -34,8 +34,8 @@ jax.config.update("jax_enable_x64", True)
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.components.sfh.psd_models import psd_drw, drw_acf
-from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
+from tengri.sfh.psd_models import psd_drw, drw_acf
+from tengri.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
 from tengri.utils.grid import make_log_age_grid, grid_spacing, log_age_to_age_yr
 
 import sys; sys.path.insert(0, ".")

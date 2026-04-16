@@ -16,9 +16,9 @@ from tengri import (
     Uniform,
     load_ssp_data,
 )
-from tengri.components.dust.attenuation import two_component_dust
+from tengri.dust.attenuation import two_component_dust
 from tengri.observation.photometry import compute_flux_density
-from tengri.components.sps.dsps_wrapper import (
+from tengri.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
     interpolate_metallicity,

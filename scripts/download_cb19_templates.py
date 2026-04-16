@@ -760,7 +760,7 @@ def main() -> None:
     print("\nDone. Verify with:")
     print(
         '  python -c "'
-        "from tengri.components.nebular.cloudy_cb19 import CB19Backend; "
+        "from tengri.nebular.cloudy_cb19 import CB19Backend; "
         "b = CB19Backend('data/cb19_templates.h5'); "
         "print(b.line_names[:5])"
         '"'

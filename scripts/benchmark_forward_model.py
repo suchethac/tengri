@@ -26,7 +26,7 @@ import jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
 from tengri import Fixed, Observation, Parameters, Photometry, SEDModel, Uniform
-from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.sps.dsps_wrapper import load_ssp_data
 
 N_WARMUP = 5
 N_RUNS = 200

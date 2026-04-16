@@ -45,11 +45,11 @@ from tengri import (
     Model, ParamSpec, Uniform, Fixed,
     load_ssp_data, load_filter_set,
 )
-from tengri.components.sps.dsps_wrapper import (
+from tengri.sps.dsps_wrapper import (
     compute_csp_weights, compute_csp_sed, interpolate_metallicity,
 )
-from tengri.components.dust.attenuation import two_component_dust
-from tengri.components.sfh.mean_sfh import double_powerlaw
+from tengri.dust.attenuation import two_component_dust
+from tengri.sfh.mean_sfh import double_powerlaw
 
 import sys; sys.path.insert(0, ".")
 import sys; sys.path.insert(0, "..")

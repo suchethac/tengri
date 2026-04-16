@@ -40,7 +40,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 from tengri import Model, ParamSpec, Uniform
-from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.sps.dsps_wrapper import load_ssp_data
 
 # %%
 ssp = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")

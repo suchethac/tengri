@@ -687,7 +687,7 @@ plt.show()
 # - Effect is strongest for old populations, weak for young hot stars
 
 # %%
-from tengri.components.sps.dsps_wrapper import SSPData
+from tengri.sps.dsps_wrapper import SSPData
 
 # Grid dimensions
 n_met, n_alpha, n_age, n_wave = 5, 5, 40, 500
@@ -761,7 +761,7 @@ print(f"Ages: {float(10 ** lg_age_gyr[0]):.3f} to {float(10 ** lg_age_gyr[-1]):.
 # signatures — primarily in absorption line strengths, not the continuum.
 
 # %%
-from tengri.components.sps.dsps_wrapper import has_alpha_grid, interpolate_met_alpha
+from tengri.sps.dsps_wrapper import has_alpha_grid, interpolate_met_alpha
 
 assert has_alpha_grid(ssp_4d), "4D grid should be detected"
 
@@ -849,7 +849,7 @@ plt.show()
 # match the solar-scaled (3D) SSP slice.
 
 # %%
-from tengri.components.sps.dsps_wrapper import interpolate_metallicity
+from tengri.sps.dsps_wrapper import interpolate_metallicity
 
 # Extract the solar [α/Fe] slice as a 3D grid
 ssp_3d_solar = ssp_4d.ssp_flux[:, 1, :, :]  # α index 1 = [α/Fe] = 0.0
@@ -894,7 +894,7 @@ plt.show()
 # this as a linear ramp in lookback time.
 
 # %%
-from tengri.components.sps.dsps_wrapper import (
+from tengri.sps.dsps_wrapper import (
     compute_alpha_fe_evolving,
     interpolate_met_alpha_evolving,
 )
@@ -984,7 +984,7 @@ plt.show()
 # $$ [\text{M/H}] = [\text{Fe/H}] + 0.66154 \times [\alpha/\text{Fe}] + 0.20465 \times [\alpha/\text{Fe}]^2 $$
 
 # %%
-from tengri.components.sps.dsps_wrapper import salaris_feh_from_mh, salaris_mh_from_feh
+from tengri.sps.dsps_wrapper import salaris_feh_from_mh, salaris_mh_from_feh
 
 # --- FIGURE 4: Salaris relation ---
 fig, axes = plt.subplots(1, 2, figsize=(12, 4))

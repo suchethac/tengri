@@ -50,11 +50,11 @@ import jax.numpy as jnp
 from jax import random, grad, jit
 
 # tengri imports
-from tengri.components.sfh.psd_models import psd_drw, drw_acf, drw_variance, psd_to_sqrt_power
-from tengri.components.sfh.gp_sfh import (
+from tengri.sfh.psd_models import psd_drw, drw_acf, drw_variance, psd_to_sqrt_power
+from tengri.sfh.gp_sfh import (
     gp_from_xi, generate_gp_fourier, generate_gp_batch, compute_sqrt_power_drw
 )
-from tengri.components.sfh.mean_sfh import double_powerlaw
+from tengri.sfh.mean_sfh import double_powerlaw
 from tengri.utils.grid import make_log_age_grid, grid_spacing, log_age_to_age_yr, interpolate_to_linear_time
 from tengri.utils.cosmology import age_at_z
 

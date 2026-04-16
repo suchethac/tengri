@@ -37,7 +37,7 @@ logging.getLogger("nifty8").setLevel(logging.ERROR)
 
 from tengri import Fitter, Model, ParamSpec, Uniform
 from tengri.observation.filters import load_filter_set
-from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.sps.dsps_wrapper import load_ssp_data
 
 # %% [markdown]
 # ## Setup: Mock Galaxy with Known Truth

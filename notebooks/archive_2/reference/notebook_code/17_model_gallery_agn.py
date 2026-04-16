@@ -37,7 +37,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri.components.agn import (
+from tengri.agn import (
     AGN_MODELS,
     adaf_agn,
     adaf_disc,
@@ -54,7 +54,7 @@ from tengri.components.agn import (
     two_temperature_torus,
     unified_nlr_blr,
 )
-from tengri.components.agn.disc import _isco_radius
+from tengri.agn.disc import _isco_radius
 
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
@@ -920,7 +920,7 @@ try:
     ax.set_title("SKIRTOR: inclination dependence (Type 1 to Type 2)")
 except Exception as e:
     print(f"SKIRTOR unavailable ({e}); showing analytic two-T fallback.")
-    from tengri.components.agn.skirtor import skirtor_analytic
+    from tengri.agn.skirtor import skirtor_analytic
 
     for ci, c, lb in zip(
         [0.95, 0.7, 0.5, 0.1],
@@ -1263,7 +1263,7 @@ axes[0].set(
 axes[0].legend(fontsize=7)
 
 # (b) Sigmoid masking transition
-from tengri.components.agn.unified import _sigmoid_mask
+from tengri.agn.unified import _sigmoid_mask
 
 cos_inc_grid = np.linspace(0.0, 1.0, 200)
 for theta, c, lb in zip(

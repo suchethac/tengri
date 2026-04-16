@@ -99,7 +99,7 @@ Usage (once data/feltre_grid.h5 is available)
   python scripts/download_feltre_grid.py --validate
 
   # The FeltreNLRBackend will load automatically:
-  from tengri.components.nebular import FeltreNLRBackend
+  from tengri.nebular import FeltreNLRBackend
   backend = FeltreNLRBackend("data/feltre_grid.h5")
 """
 

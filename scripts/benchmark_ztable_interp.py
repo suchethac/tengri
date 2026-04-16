@@ -180,7 +180,7 @@ def compute_errors(
         all_max_errs : array of shape (n_probe,) — max over (met, age, filt) per z
         probe_zs : array of shape (n_probe,)
     """
-    from tengri.components.sps.precompute import (
+    from tengri.sps.precompute import (
         interpolate_ztable_smooth,
         precompute_photometry,
         precompute_photometry_ztable,

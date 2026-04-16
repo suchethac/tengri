@@ -26,9 +26,9 @@ import jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
 from tengri import Fixed, Model, Observation, Parameters, Photometry, Uniform, load_ssp_data
-from tengri.components.dust.attenuation import two_component_dust
+from tengri.dust.attenuation import two_component_dust
 from tengri.observation.photometry import compute_flux_density
-from tengri.components.sps.dsps_wrapper import compute_csp_sed, compute_csp_weights, interpolate_metallicity
+from tengri.sps.dsps_wrapper import compute_csp_sed, compute_csp_weights, interpolate_metallicity
 from tengri.profiling.timers import bench, _sync
 from tengri.utils.cosmology import luminosity_distance
 

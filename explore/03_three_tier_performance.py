@@ -211,7 +211,7 @@ for name, (model, params, D) in CONFIGS.items():
     # Tier 2 kernel only (no SFH/Z dispatch — pure JIT'd physics)
     if model._fused_rest_sed is not None:
         from tengri.forward.pipeline import interp_met_alpha_dispatch
-        from tengri.components.sps.dsps_wrapper import compute_csp_weights
+        from tengri.sps.dsps_wrapper import compute_csp_weights
 
         p = model._get_internal_params(params)
         sfr = model._compute_sfr(p)

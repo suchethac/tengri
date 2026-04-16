@@ -35,7 +35,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri.components.agn import (
+from tengri.agn import (
     AGN_MODELS,
     get_agn_model,
     multicolor_disc,
@@ -356,7 +356,7 @@ plt.show()
 # $L = \eta \dot{M} c^2$.
 
 # %%
-from tengri.components.agn.disc import _isco_radius
+from tengri.agn.disc import _isco_radius
 
 spin_grid = np.linspace(0.0, 0.998, 200)
 r_isco_arr = np.array([float(_isco_radius(a)) for a in spin_grid])
@@ -438,7 +438,7 @@ plt.show()
 # Compare this to the standard multicolor disc (outer zone only).
 
 # %%
-from tengri.components.agn.disc import kubota_done_disc
+from tengri.agn.disc import kubota_done_disc
 
 # Extended wavelength range: 1 Angstrom to 10 micron
 wave_xray = jnp.logspace(0.0, 5.0, 2000)  # 1 A to 100000 A = 10 um
@@ -549,7 +549,7 @@ plt.show()
 # / F(\text{H}\beta)$.
 
 # %%
-from tengri.components.agn.blr import blr_emission
+from tengri.agn.blr import blr_emission
 
 _LSUN_ERG_LOCAL = 3.828e33
 l_disc_bol = 10.0**44.0 * _LSUN_ERG_LOCAL

@@ -701,7 +701,7 @@ def main() -> None:
             import jax
 
             jax.config.update("jax_enable_x64", True)
-            from tengri.components.sps.dsps_wrapper import load_ssp_data
+            from tengri.sps.dsps_wrapper import load_ssp_data
 
             ssp_data = load_ssp_data(str(_SSP_PATH))
             tengri_seds = _build_all_tengri_seds(ssp_data, wave)

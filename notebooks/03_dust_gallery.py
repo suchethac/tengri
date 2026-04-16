@@ -76,7 +76,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri.components.dust.attenuation import (
+from tengri.dust.attenuation import (
     DUST_LAWS,
     li08,
     precompute_dust_age_weights,
@@ -1346,8 +1346,8 @@ FIGDIR = os.path.join("models", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 # %%
-from tengri.components.dust.drude_profiles import SMITH2007_PAH_FEATURES, pah_template
-from tengri.components.dust.emission import (
+from tengri.dust.drude_profiles import SMITH2007_PAH_FEATURES, pah_template
+from tengri.dust.emission import (
     DUST_EMISSION_MODELS,
     _modified_blackbody_component,
     astrodust,

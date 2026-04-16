@@ -54,7 +54,7 @@ from tengri import (
     psd_drw,
     tsnorm,
 )
-from tengri.components.sfh.psd_models import psd_matern
+from tengri.sfh.psd_models import psd_matern
 from tengri.utils.grid import grid_spacing
 
 import sys, os  # noqa: E401
@@ -255,7 +255,7 @@ from tengri.analysis.diagnostics.green_functions import (
     compute_green_function,
     compute_window_function,
 )
-from tengri.components.sps.dsps_wrapper import interpolate_metallicity
+from tengri.sps.dsps_wrapper import interpolate_metallicity
 
 # Pick a reference metallicity (solar)
 LOG10_ZSUN = -1.848
@@ -618,7 +618,7 @@ plt.show()
 
 # %%
 # --- FIGURE 9: Matern PSD family comparison (detailed) ---
-from tengri.components.sfh.psd_models import psd_matern, psd_extended_regulator
+from tengri.sfh.psd_models import psd_matern, psd_extended_regulator
 
 omega_alt = np.logspace(-3, 2, 600)  # rad / Myr
 sigma_alt, tau_myr_alt = 1.0, 100.0
@@ -659,7 +659,7 @@ gp_drw = gp_from_xi(xi, sqrt_p_drw, N_GRID)
 ax.plot(ages_gyr, gp_drw, "k-", lw=1.2, alpha=0.9, label=r"DRW ($\nu = 0.5$)")
 
 # Matern realizations (same xi for fair comparison)
-from tengri.components.sfh.psd_models import psd_to_sqrt_power
+from tengri.sfh.psd_models import psd_to_sqrt_power
 omega_grid = 2.0 * jnp.pi * jnp.fft.rfftfreq(N_GRID, d=d_log_age)
 
 for nu, c, ls in zip(nu_values, nu_colors, nu_styles):

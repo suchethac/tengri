@@ -36,8 +36,8 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri.components.igm import igm_transmission, igm_transmission_patchy
-from tengri.components.nebular.shock import (
+from tengri.igm import igm_transmission, igm_transmission_patchy
+from tengri.nebular.shock import (
     shock_line_ratios,
     _SHOCK_V,
     _R_OIII,

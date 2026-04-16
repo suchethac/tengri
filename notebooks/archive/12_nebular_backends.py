@@ -70,7 +70,7 @@ os.makedirs(FIGDIR, exist_ok=True)
 
 # %%
 from tengri import Fixed, Model, ParamSpec, load_ssp_data
-from tengri.components.nebular import BakedInBackend, CloudyGridBackend, CueBackend
+from tengri.nebular import BakedInBackend, CloudyGridBackend, CueBackend
 
 # Data file paths
 SSP_WNE_PATH = Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
@@ -164,7 +164,7 @@ else:
 
 # %%
 if CLOUDY_GRID_PATH.exists():
-    from tengri.components.nebular.cloudy_grid import load_cloudy_grid
+    from tengri.nebular.cloudy_grid import load_cloudy_grid
 
     grid = load_cloudy_grid(str(CLOUDY_GRID_PATH))
 
@@ -197,7 +197,7 @@ else:
 # `compute_qh()` is JIT-compiled and vectorized over the SSP grid.
 
 # %%
-from tengri.components.nebular.cloudy_grid import compute_qh
+from tengri.nebular.cloudy_grid import compute_qh
 
 if SSP_WNE_PATH.exists():
     ssp = load_ssp_data(str(SSP_WNE_PATH))
@@ -284,7 +284,7 @@ else:
 
 # %%
 if CUE_WEIGHTS_PATH.exists():
-    from tengri.components.nebular.cue import load_cue_weights
+    from tengri.nebular.cue import load_cue_weights
 
     weights = load_cue_weights(str(CUE_WEIGHTS_PATH))
 
@@ -306,7 +306,7 @@ else:
 
 # %%
 if CUE_WEIGHTS_PATH.exists():
-    from tengri.components.nebular.cue import (
+    from tengri.nebular.cue import (
         predict_all_lines,
         prepare_nn_params_from_dict,
     )

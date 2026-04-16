@@ -461,7 +461,7 @@ def main() -> None:
     print("\nDone. Verify with:")
     print(
         "  python -c \""
-        "from tengri.components.nebular import MappingsPhotoStellarBackend; "
+        "from tengri.nebular import MappingsPhotoStellarBackend; "
         "b = MappingsPhotoStellarBackend('data/flury2024_grids.h5', 'sb99', 'cpr'); "
         "print(b.line_names[:5])\""
     )

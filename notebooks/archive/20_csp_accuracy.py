@@ -65,7 +65,7 @@ jax.config.update("jax_enable_x64", True)
 # ## 1. Load SSP templates
 
 # %%
-from tengri.components.sps.dsps_wrapper import (
+from tengri.sps.dsps_wrapper import (
     load_ssp_data,
     compute_csp_weights,
     compute_csp_sed,

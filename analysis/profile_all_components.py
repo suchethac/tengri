@@ -171,7 +171,7 @@ if model_smooth._precomp is not None:
 
 # Z-table
 try:
-    from tengri.components.sps.precompute import precompute_photometry_ztable
+    from tengri.sps.precompute import precompute_photometry_ztable
     n_z = 200
     fw_list = list(obs.photometry.filter_waves)
     ft_list = list(obs.photometry.filter_trans)
@@ -199,7 +199,7 @@ except Exception as e:
 
 # CUE weights
 try:
-    from tengri.components.nebular.cue import load_cue_weights
+    from tengri.nebular.cue import load_cue_weights
     cue_path = Path("data/cue_weights.npz")
     if cue_path.exists():
         cue_w = load_cue_weights(str(cue_path))
@@ -265,7 +265,7 @@ print(f"\n{'Component':<42s} {'Forward':>10s} {'Gradient':>10s} {'Array mem':>10
 print("-" * 75)
 
 # --- SFH models ---
-from tengri.components.sfh.mean_sfh import (
+from tengri.sfh.mean_sfh import (
     constant_sfh,
     delayed_exponential_sfh,
     dpl,
@@ -309,7 +309,7 @@ for name, fn in sfh_models.items():
 
 # --- GP / FFT ---
 print()
-from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
+from tengri.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
 
 for n_grid in [128, 256, 512]:
     xi = jax.random.normal(jax.random.PRNGKey(0), (n_grid,))
@@ -323,7 +323,7 @@ for n_grid in [128, 256, 512]:
 
 # --- SPS: CSP weights + SED assembly ---
 print()
-from tengri.components.sps.dsps_wrapper import (
+from tengri.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
     interpolate_metallicity,
@@ -340,7 +340,7 @@ t_met, ssp_at_z = bench(
 )
 print(format_row("Metallicity interpolation", t_met, None, array_mb(ssp_at_z)))
 
-from tengri.components.dust.attenuation import two_component_dust
+from tengri.dust.attenuation import two_component_dust
 dust_atten = two_component_dust(ssp.ssp_wave, model_smooth.ssp_ages_yr,
                                  p["tau_bc"], p["tau_diff"])
 
@@ -352,7 +352,7 @@ print(format_row("CSP SED (einsum w×ssp×dust)", t_sed, None, array_mb(sed)))
 
 # --- Dust attenuation ---
 print()
-from tengri.components.dust.attenuation import DUST_LAWS
+from tengri.dust.attenuation import DUST_LAWS
 
 for law_name in ["power_law", "calzetti", "kriek_conroy", "smc", "cardelli", "salim"]:
     if law_name not in DUST_LAWS:
@@ -375,7 +375,7 @@ for law_name in ["power_law", "calzetti", "kriek_conroy", "smc", "cardelli", "sa
 
 # --- Dust emission ---
 print()
-from tengri.components.dust.emission import DUST_EMISSION_MODELS
+from tengri.dust.emission import DUST_EMISSION_MODELS
 
 wave = ssp.ssp_wave
 L_absorbed = 1e10  # Lsun
@@ -422,7 +422,7 @@ if "dl07_tabulated" in DUST_EMISSION_MODELS:
 print()
 cue_path = Path("data/cue_weights.npz")
 if cue_path.exists():
-    from tengri.components.nebular.cue import (
+    from tengri.nebular.cue import (
         load_cue_weights,
         predict_all_lines,
         predict_continuum,
@@ -465,7 +465,7 @@ else:
 
 # --- IGM ---
 print()
-from tengri.components.igm import igm_transmission
+from tengri.igm import igm_transmission
 
 wave_obs = ssp.ssp_wave * 1.1  # z=0.1
 fn_igm = jax.jit(lambda: igm_transmission(wave_obs, 0.1))
@@ -481,7 +481,7 @@ print(format_row("IGM (Inoue+2014, z=3.0)", t_igm2))
 
 # --- AGN ---
 print()
-from tengri.components.agn.unified import simple_agn
+from tengri.agn.unified import simple_agn
 
 fn_agn = jax.jit(lambda: simple_agn(wave, agn_log_lbol=44.0, agn_alpha=-1.0,
                                       agn_T_torus=1000.0))
@@ -496,7 +496,7 @@ print(format_row("AGN simple (disc + torus)", t_agn, t_gagn, array_mb(r_agn)))
 
 # Standard AGN (multicolor disc + 2-temp torus)
 try:
-    from tengri.components.agn.unified import AGN_MODELS
+    from tengri.agn.unified import AGN_MODELS
     if "standard" in AGN_MODELS:
         std_agn = AGN_MODELS["standard"]
         fn_std = jax.jit(lambda: std_agn(wave, agn_log_lbol=44.0))

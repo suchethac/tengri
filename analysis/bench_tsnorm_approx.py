@@ -15,7 +15,7 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.components.sfh.mean_sfh import _clamp_age, _skewed_gaussian_kernel
+from tengri.sfh.mean_sfh import _clamp_age, _skewed_gaussian_kernel
 
 AGEMAX_YR = 14e9
 

@@ -41,10 +41,10 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri.components.sfh.psd_models import psd_drw
-from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw
-from tengri.components.sfh.gp_sfh import gp_from_xi, generate_gp_fourier
-from tengri.components.sfh.mean_sfh import tsnorm
+from tengri.sfh.psd_models import psd_drw
+from tengri.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.sfh.gp_sfh import gp_from_xi, generate_gp_fourier
+from tengri.sfh.mean_sfh import tsnorm
 from tengri.utils.grid import make_log_age_grid, grid_spacing
 
 import sys, os  # noqa: E401, E402

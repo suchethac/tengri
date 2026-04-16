@@ -34,7 +34,7 @@ def main():
 
     # --- Import + SSP ---
     from tengri import Fitter, Fixed, Observation, Parameters, Photometry, SEDModel, Uniform
-    from tengri.components.sps.dsps_wrapper import load_ssp_data
+    from tengri.sps.dsps_wrapper import load_ssp_data
 
     ssp_path = "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
     if not os.path.exists(ssp_path):

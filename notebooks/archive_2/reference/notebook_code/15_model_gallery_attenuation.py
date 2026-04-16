@@ -50,7 +50,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri.components.dust.attenuation import (
+from tengri.dust.attenuation import (
     DUST_LAWS,
     get_dust_law,
     li08,

@@ -87,10 +87,10 @@ from tengri import (
     triweight_burst,
     tsnorm,
 )
-from tengri.components.sfh.chemical_evolution import closed_box_metallicity
-from tengri.components.sfh.nonparametric import continuity_sfh, dirichlet_sfh
-from tengri.components.sfh.psd_models import psd_extended_regulator, psd_matern
-from tengri.components.sfh.registry import compute_field_gp, resolve_sfh
+from tengri.sfh.chemical_evolution import closed_box_metallicity
+from tengri.sfh.nonparametric import continuity_sfh, dirichlet_sfh
+from tengri.sfh.psd_models import psd_extended_regulator, psd_matern
+from tengri.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.utils.grid import grid_spacing
 
 import sys, os  # noqa: E401

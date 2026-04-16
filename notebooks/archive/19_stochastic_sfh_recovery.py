@@ -65,10 +65,10 @@ from tengri import (
     Model, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
-from tengri.components.sfh.gp_sfh import (
+from tengri.sfh.gp_sfh import (
     generate_gp_fourier, compute_sqrt_power_drw, make_log_age_grid,
 )
-from tengri.components.sfh.mean_sfh import double_powerlaw
+from tengri.sfh.mean_sfh import double_powerlaw
 
 # Reproducibility
 KEY_MASTER = jax.random.PRNGKey(2026)

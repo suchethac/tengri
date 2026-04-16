@@ -99,9 +99,9 @@ from tengri import (
     load_filter_set,
     load_ssp_data,
 )
-from tengri.components.dust.attenuation import DUST_LAWS
-from tengri.components.agn import AGN_MODELS, get_agn_model
-from tengri.components.igm import igm_transmission
+from tengri.dust.attenuation import DUST_LAWS
+from tengri.agn import AGN_MODELS, get_agn_model
+from tengri.igm import igm_transmission
 from tengri.observation.filters import FILTER_REGISTRY, load_filter
 
 SSP_PATH = "../data/fsps_prsc_miles_chabrier.h5"

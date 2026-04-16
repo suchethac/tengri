@@ -87,3 +87,4 @@ __all__ = [
 ]
 
 # Convenience re-exports for `from tengri.agn import ...`
+from tengri.components.agn.agn_config import AGNConfig

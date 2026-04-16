@@ -55,14 +55,14 @@ from tengri import (
 )
 
 # Low-level imports for step-by-step pipeline
-from tengri.components.sps.dsps_wrapper import (
+from tengri.sps.dsps_wrapper import (
     compute_csp_weights, compute_csp_sed, interpolate_metallicity,
 )
-from tengri.components.dust.attenuation import two_component_dust
+from tengri.dust.attenuation import two_component_dust
 from tengri.observation.photometry import (
     compute_flux_density, ab_mag_from_flux,
 )
-from tengri.components.sfh.mean_sfh import double_powerlaw
+from tengri.sfh.mean_sfh import double_powerlaw
 
 # Load data
 ssp_data = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")

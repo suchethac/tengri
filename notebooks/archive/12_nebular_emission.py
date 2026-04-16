@@ -61,9 +61,9 @@ import jax.numpy as jnp
 
 # tengri imports
 from tengri import load_ssp_data, load_filter_set
-from tengri.components.nebular import CloudyGridBackend, BakedInBackend, CueBackend
-from tengri.components.nebular.cloudy_grid import compute_qh, load_cloudy_grid, _compute_qh_grid
-from tengri.components.nebular.ionizing_spectrum import (
+from tengri.nebular import CloudyGridBackend, BakedInBackend, CueBackend
+from tengri.nebular.cloudy_grid import compute_qh, load_cloudy_grid, _compute_qh_grid
+from tengri.nebular.ionizing_spectrum import (
     fit_ionizing_spectrum,
     SEGMENT_EDGES,
     HI_LIMIT,

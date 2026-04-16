@@ -38,7 +38,7 @@ jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri import Fixed, Model, Observation, Parameters, Photometry, Uniform, load_ssp_data
-from tengri.components.igm import igm_transmission
+from tengri.igm import igm_transmission
 
 import sys, os  # noqa: E401
 

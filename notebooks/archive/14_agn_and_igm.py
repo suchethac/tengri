@@ -41,10 +41,10 @@ import matplotlib.colors as mcolors
 import matplotlib.cm as mcm
 import numpy as np
 
-from tengri.components.agn import AGN_MODELS, get_agn_model, unified_agn
-from tengri.components.agn.disc import powerlaw_disc, multicolor_disc
-from tengri.components.agn.torus import simple_torus, two_temperature_torus
-from tengri.components.igm import igm_transmission
+from tengri.agn import AGN_MODELS, get_agn_model, unified_agn
+from tengri.agn.disc import powerlaw_disc, multicolor_disc
+from tengri.agn.torus import simple_torus, two_temperature_torus
+from tengri.igm import igm_transmission
 from tengri.observation.filters import load_filter
 from tengri import (
     Model, ParamSpec, Uniform, Fixed,
