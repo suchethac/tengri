@@ -43,7 +43,7 @@ _DEFAULT_CUE_WEIGHTS_PATH = (
 
 - [ ] **Step 2: Verify the path resolves correctly**
 
-Run: `python -c "from tengri.models.nebular import _DEFAULT_CUE_WEIGHTS_PATH; print(_DEFAULT_CUE_WEIGHTS_PATH); print(_DEFAULT_CUE_WEIGHTS_PATH.exists())"`
+Run: `python -c "from tengri.components.nebular import _DEFAULT_CUE_WEIGHTS_PATH; print(_DEFAULT_CUE_WEIGHTS_PATH); print(_DEFAULT_CUE_WEIGHTS_PATH.exists())"`
 
 Expected: path to `data/cue_weights.npz`, `True`
 
@@ -380,7 +380,7 @@ Replace lines 748-756 with:
         if nebular_cue:
             self.nebular_mode = "cue"
             if self.cue_weights_path is None:
-                from tengri.models.nebular import _DEFAULT_CUE_WEIGHTS_PATH
+                from tengri.components.nebular import _DEFAULT_CUE_WEIGHTS_PATH
                 self.cue_weights_path = str(_DEFAULT_CUE_WEIGHTS_PATH)
         elif nebular:
             self.nebular_mode = "cloudy"
@@ -510,20 +510,20 @@ Replace the current nebular backend block with:
 
         self._nebular_backend = None
         if spec.nebular_mode == "cue":
-            from tengri.models.nebular import CueBackend
+            from tengri.components.nebular import CueBackend
             self._nebular_backend = CueBackend(
                 spec.cue_weights_path, ssp_data=ssp_data
             )
         elif spec.nebular_mode == "cloudy":
-            from tengri.models.nebular import CloudyGridBackend
+            from tengri.components.nebular import CloudyGridBackend
             self._nebular_backend = CloudyGridBackend(
                 spec.cloudy_grid_path, ssp_data
             )
         elif spec.nebular_mode == "ssp":
-            from tengri.models.nebular import BakedInBackend
+            from tengri.components.nebular import BakedInBackend
             self._nebular_backend = BakedInBackend()
         else:
-            from tengri.models.nebular import BakedInBackend
+            from tengri.components.nebular import BakedInBackend
             self._nebular_backend = BakedInBackend()
 ```
 

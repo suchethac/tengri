@@ -66,7 +66,7 @@ for JAX JIT compilation.
 For a single metallicity and [α/Fe] applied to all ages:
 
 ```python
-from tengri.models.sps.dsps_wrapper import interpolate_met_alpha
+from tengri.components.sps.dsps_wrapper import interpolate_met_alpha
 
 # ssp_flux: (n_met, n_alpha, n_age, n_wave)
 sed = interpolate_met_alpha(ssp_flux, ssp_lgmet, ssp_alpha_fe,
@@ -81,7 +81,7 @@ Uses bilinear interpolation (4 corners) — fully JIT-compiled and differentiabl
 For the physically motivated case where old stars are α-enhanced:
 
 ```python
-from tengri.models.sps.dsps_wrapper import (
+from tengri.components.sps.dsps_wrapper import (
     compute_alpha_fe_evolving,
     interpolate_met_alpha_evolving,
 )

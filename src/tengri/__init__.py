@@ -184,7 +184,47 @@ def posteriors_to_dataframe(results: list, params: list[str] | None = None):
     return pd.DataFrame(rows)
 
 
+# ── Convenient namespace aliases ──────────────────────────────────────
+# Usage: from tengri import agn; agn.unified_nlr_blr(...)
+# Or:    from tengri.agn import unified_nlr_blr
+import sys
+
+from tengri import components as _components
+
+agn = _components.agn
+dust = _components.dust
+nebular = _components.nebular
+sfh = _components.sfh
+sps = _components.sps
+igm = _components.igm
+radio = _components.radio
+xray = _components.xray
+
+# Register module aliases for convenient short imports (Pattern 3: from tengri.agn import ...)
+sys.modules["tengri.agn"] = agn
+sys.modules["tengri.dust"] = dust
+sys.modules["tengri.nebular"] = nebular
+sys.modules["tengri.sfh"] = sfh
+sys.modules["tengri.sps"] = sps
+sys.modules["tengri.igm"] = igm
+sys.modules["tengri.radio"] = radio
+sys.modules["tengri.xray"] = xray
+
+# Observation layer shortcut (already exists in imports above)
+# observation module is imported separately below
+
+
 __all__ = [
+    # Convenient namespace aliases for component access
+    "agn",
+    "dust",
+    "igm",
+    "nebular",
+    "observation",
+    "radio",
+    "sfh",
+    "sps",
+    "xray",
     # High-level API
     "AGEMAX_YR",
     # Registry
@@ -276,6 +316,8 @@ __all__ = [
 ]
 
 # Plotting utilities
+# Import observation module for namespace alias (already in imports above, adding as alias)
+from tengri import observation
 from tengri.analysis.plotting import (
     COLORS,
     SDSS_WAVE_EFF,

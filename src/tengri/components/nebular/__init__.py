@@ -112,3 +112,5 @@ __all__ = [
     "shock_emission_sed",
     "shock_line_ratios",
 ]
+
+# Convenience re-exports for `from tengri.nebular import ...`

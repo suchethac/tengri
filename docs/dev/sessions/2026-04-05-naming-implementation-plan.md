@@ -126,7 +126,7 @@ The simple assignment (`Model = SEDModel`) is sufficient for internal backward c
 **File:** `src/tengri/__init__.py`
 
 ```python
-from tengri.core.model import SEDModel, PriorPredictive
+from tengri.forward.sed_model import SEDModel, PriorPredictive
 
 # Deprecated alias with warning
 def __getattr__(name):
@@ -148,7 +148,7 @@ Update `__all__`: add `"SEDModel"`, keep `"Model"` for discoverability.
 
 Search targets:
 ```bash
-grep -rn "from tengri.core.model import.*\bModel\b" src/ tests/
+grep -rn "from tengri.forward.sed_model import.*\bModel\b" src/ tests/
 grep -rn "from tengri import.*\bModel\b" src/ tests/
 grep -rn "\bModel\b" src/tengri/ --include="*.py" | grep -v "SEDModel\|NoiseModel\|__pycache__"
 ```
@@ -175,7 +175,7 @@ ruff check src/ tests/
 ruff format --check src/ tests/
 python -c "from tengri import SEDModel; print(SEDModel)"
 python -c "from tengri import Model"  # should emit DeprecationWarning but succeed
-python -c "from tengri.core.model import Model; from tengri.core.model import SEDModel; assert Model is SEDModel"
+python -c "from tengri.forward.sed_model import Model; from tengri.forward.sed_model import SEDModel; assert Model is SEDModel"
 ```
 
 ---
@@ -192,7 +192,7 @@ Each sub-phase is independent. Run verification after each.
 - Add `ParamSpec = Parameters` at module level.
 - **Rename file:** `param_spec.py` → `parameters.py` (Contract §2 file path rule).
 - Update `core/__init__.py` import path.
-- Update all internal imports to `from tengri.core.parameters import Parameters`.
+- Update all internal imports to `from tengri.parameters.parameters import Parameters`.
 - Keep `ParamSpec` in `__all__` for backward compatibility.
 
 **Caution:** The file rename means every `from tengri.core.param_spec import ...` in the codebase must be updated in the same commit. Use grep:

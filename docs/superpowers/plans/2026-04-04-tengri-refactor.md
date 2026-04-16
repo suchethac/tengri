@@ -251,7 +251,7 @@ SpectroscopyConfig = _make_deprecated_spectroscopy_config()
 - [ ] **Step 4: Update `__init__.py`**
 
 ```python
-from tengri.models.observation.spectroscopy_config import Spectroscopy, SpectroscopyConfig
+from tengri.observation.spectroscopy_config import Spectroscopy, SpectroscopyConfig
 ```
 
 - [ ] **Step 5: Run tests and ruff**
@@ -583,7 +583,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from tengri.core.model import Model
+    from tengri.forward.sed_model import Model
 
 
 def prior_predictive(model: "Model", n: int = 500, seed: int = 42):
@@ -656,7 +656,7 @@ git commit -m "refactor: extract convenience methods from model.py into core/con
 ```bash
 python -c "
 import jax.numpy as jnp
-from tengri.models.observation.eline_priors import cloudy_line_priors
+from tengri.observation.eline_priors import cloudy_line_priors
 means_solar, _ = cloudy_line_priors(log_z=0.0, neb_logU=-2.0)
 means_subsolar, _ = cloudy_line_priors(log_z=-0.7, neb_logU=-2.0)
 # [NII]6583 is index 8 in the CLOUDY reference line list
@@ -707,7 +707,7 @@ _CLOUDY_SUBSOLAR_LOGU2 = jnp.array([
 ```python
 # tests/unit/test_eline_priors.py (new file or add to existing)
 import jax.numpy as jnp
-from tengri.models.observation.eline_priors import cloudy_line_priors
+from tengri.observation.eline_priors import cloudy_line_priors
 
 
 def test_cloudy_priors_metallicity_effect_at_high_logu():
@@ -723,7 +723,7 @@ def test_cloudy_priors_metallicity_effect_at_high_logu():
 
 def test_cloudy_priors_solar_logu3_corner():
     """At solar Z + logU=-3, result matches the SOLAR_LOGU3 reference."""
-    from tengri.models.observation.eline_priors import _CLOUDY_SOLAR_LOGU3
+    from tengri.observation.eline_priors import _CLOUDY_SOLAR_LOGU3
     means, _ = cloudy_line_priors(log_z=0.0, neb_logU=-3.0)
     assert jnp.allclose(means, _CLOUDY_SOLAR_LOGU3, atol=1e-5)
 
@@ -773,7 +773,7 @@ git commit -m "fix: CLOUDY bilinear interpolation regression tests (NEW-01)"
 ```bash
 python -c "
 import inspect
-from tengri.models.observation.eline_priors import marginalize_emission_lines_cloudy
+from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
 src = inspect.getsource(marginalize_emission_lines_cloudy)
 print('residual_shifted present:', 'residual_shifted' in src)
 print('prior_mean pre-subtracted:', 'design_matrix @ scaled_means' in src)
@@ -788,7 +788,7 @@ print('prior_mean pre-subtracted:', 'design_matrix @ scaled_means' in src)
 # Run this in a Python REPL to verify gradient correctness
 import jax
 import jax.numpy as jnp
-from tengri.models.observation.eline_priors import marginalize_emission_lines_cloudy
+from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
 
 key = jax.random.PRNGKey(0)
 n_pix, n_lines = 50, 3
@@ -836,7 +836,7 @@ import jax.numpy as jnp
 
 def test_marginalize_gradient_is_finite():
     """Gradient of marginalized ln_L wrt log_z must be finite."""
-    from tengri.models.observation.eline_priors import marginalize_emission_lines_cloudy
+    from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
 
     n_pix, n_lines = 50, 3
     residual = jnp.zeros(n_pix)
@@ -855,7 +855,7 @@ def test_marginalize_gradient_is_finite():
 
 def test_marginalize_gradient_matches_finite_difference():
     """Analytic gradient must match finite-difference to 0.1% (NEW-09 regression)."""
-    from tengri.models.observation.eline_priors import marginalize_emission_lines_cloudy
+    from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
 
     key = jax.random.PRNGKey(42)
     n_pix, n_lines = 30, 4
@@ -935,7 +935,7 @@ def _check_grad(fn, x0, eps=_EPS, tol=_REL_TOL):
 
 def test_sfh_transform_gradient():
     """SFH parametric transforms must have correct gradients."""
-    from tengri.models.sfh.mean_sfh import tsnorm_sfh
+    from tengri.components.sfh.mean_sfh import tsnorm_sfh
 
     ages_gyr = jnp.linspace(0.01, 13.7, 200)
 
@@ -968,7 +968,7 @@ pytest tests/unit/test_gradients.py::test_sfh_transform_gradient -v
 ```python
 def test_dust_attenuation_gradient():
     """Two-component Charlot-Fall dust must have correct gradient wrt tau_bc."""
-    from tengri.models.dust.attenuation import two_component_dust
+    from tengri.components.dust.attenuation import two_component_dust
 
     wave_rest = jnp.linspace(1000.0, 10000.0, 300)
     sed = jnp.ones(300)
@@ -998,7 +998,7 @@ def test_dust_attenuation_gradient():
 ```python
 def test_igm_transmission_gradient():
     """IGM Inoue+2014 transmission must have finite gradient wrt redshift."""
-    from tengri.models.igm import igm_transmission
+    from tengri.components.igm import igm_transmission
 
     wave_obs = jnp.linspace(800.0, 3000.0, 100)  # observed-frame, Angstrom
 
@@ -1018,7 +1018,7 @@ def test_igm_transmission_gradient():
 ```python
 def test_nebular_marginalization_gradient():
     """Emission line marginalization ln_L must have correct gradient wrt log_z."""
-    from tengri.models.observation.eline_priors import marginalize_emission_lines_cloudy
+    from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
 
     n_pix, n_lines = 40, 5
     key = jax.random.PRNGKey(7)
@@ -1043,7 +1043,7 @@ def test_nebular_marginalization_gradient():
 ```python
 def test_agn_disc_gradient():
     """AGN multicolor disc SED must have finite gradient wrt log_mbh."""
-    from tengri.models.agn.disc import multicolor_disc
+    from tengri.components.agn.disc import multicolor_disc
 
     wave_rest = jnp.linspace(100.0, 30000.0, 200)
 

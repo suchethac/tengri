@@ -83,7 +83,7 @@ Charlot & Fall (2000), with pluggable attenuation curves and geometry models.
 Attenuation curves: ``calzetti``, ``cardelli``, ``kriek_conroy``, ``smc``,
 ``lmc``, ``power_law``, ``salim``, ``li08``.
 
-.. automodule:: tengri.models.dust.attenuation
+.. automodule:: tengri.components.dust.attenuation
    :members: calzetti, cardelli, kriek_conroy, smc, lmc, power_law, wg00_shell, wg00_cloudy, wg00_dusty
    :noindex:
 
@@ -92,7 +92,7 @@ Dust Emission
 
 Energy-balanced IR dust emission models.
 
-.. automodule:: tengri.models.dust.emission
+.. automodule:: tengri.components.dust.emission
    :members: modified_blackbody, casey2012
    :noindex:
 
@@ -101,7 +101,7 @@ Dust Priors
 
 Redshift-dependent attenuation priors from cosmological simulations.
 
-.. automodule:: tengri.models.dust.priors
+.. automodule:: tengri.components.dust.priors
    :members: narayanan_prior, narayanan_tau_prior
    :noindex:
 
@@ -110,19 +110,19 @@ AGN
 
 Accretion disc, torus, BLR, NLR, and unified AGN models.
 
-.. automodule:: tengri.models.agn.disc
+.. automodule:: tengri.components.agn.disc
    :members: powerlaw_disc, multicolor_disc, kubota_done_disc
    :noindex:
 
-.. automodule:: tengri.models.agn.blr
+.. automodule:: tengri.components.agn.blr
    :members: blr_emission
    :noindex:
 
-.. automodule:: tengri.models.agn.nlr
+.. automodule:: tengri.components.agn.nlr
    :members: nlr_emission
    :noindex:
 
-.. automodule:: tengri.models.agn.unified
+.. automodule:: tengri.components.agn.unified
    :members: unified_agn, multicolor_agn, kubota_done_full_agn, unified_nlr_blr
    :noindex:
 
@@ -132,11 +132,11 @@ Nebular Emission
 Nebular line and continuum emission from CLOUDY grids or the Cue neural
 network emulator, with optional shock and DIG mixing.
 
-.. automodule:: tengri.models.nebular.shock
+.. automodule:: tengri.components.nebular.shock
    :members: shock_line_ratios, shock_emission_sed
    :noindex:
 
-.. automodule:: tengri.models.nebular.dig
+.. automodule:: tengri.components.nebular.dig
    :members: mix_dig_emission
    :noindex:
 
@@ -145,7 +145,7 @@ Observation Models
 
 Photometry, spectroscopy, calibration, and emission line marginalization.
 
-.. automodule:: tengri.models.observation.calibration
+.. automodule:: tengri.observation.calibration
    :members: calibration_polynomial, marginalize_calibration
    :noindex:
 

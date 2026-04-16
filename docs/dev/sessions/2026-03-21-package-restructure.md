@@ -53,14 +53,14 @@ src/tengri/
 
 | Old path | New path |
 |----------|----------|
-| `tengri.model` | `tengri.core.model` |
+| `tengri.model` | `tengri.forward.sed_model` |
 | `tengri.param_spec` | `tengri.core.param_spec` |
-| `tengri._param_translate` | `tengri.core.param_translate` |
-| `tengri._fused_kernels` | `tengri.core.fused_kernels` |
-| `tengri._sed_pipeline` | `tengri.core.sed_pipeline` |
-| `tengri._mock` | `tengri.core.mock` |
-| `tengri.prediction` | `tengri.core.prediction` |
-| `tengri.noise` | `tengri.core.noise` |
+| `tengri._param_translate` | `tengri.parameters.translate` |
+| `tengri._fused_kernels` | `tengri.forward.kernels.assembly` |
+| `tengri._sed_pipeline` | `tengri.forward.pipeline` |
+| `tengri._mock` | `tengri.observation.mock` |
+| `tengri.prediction` | `tengri.forward.prediction` |
+| `tengri.noise` | `tengri.observation.noise` |
 | `tengri.fitter` | `tengri.inference.fitter` |
 | `tengri.hierarchical` | `tengri.inference.hierarchical` |
 | `tengri.posterior` | `tengri.inference.posterior` |
@@ -87,9 +87,9 @@ Create `src/tengri/core/__init__.py`:
 ```python
 """Core forward model: Model, ParamSpec, Prediction, and internals."""
 
-from tengri.core.mock import MockData, generate_mock
-from tengri.core.model import Model
-from tengri.core.noise import (
+from tengri.observation.mock import MockData, generate_mock
+from tengri.forward.sed_model import Model
+from tengri.observation.noise import (
     compute_effective_noise,
     compute_std_inv,
     has_noise_model,
@@ -97,8 +97,8 @@ from tengri.core.noise import (
     variable_noise_hamiltonian,
 )
 from tengri.core.param_spec import ParamSpec
-from tengri.core.param_translate import LOG10_ZSUN
-from tengri.core.prediction import (
+from tengri.parameters.translate import LOG10_ZSUN
+from tengri.forward.prediction import (
     DerivedQuantities,
     EmissionLines,
     Prediction,
@@ -147,19 +147,19 @@ from tengri._fused_kernels import ...
 from tengri._param_translate import ...
 from tengri._sed_pipeline import ...
 # New:
-from tengri.core.fused_kernels import ...
-from tengri.core.param_translate import ...
-from tengri.core.sed_pipeline import ...
+from tengri.forward.kernels.assembly import ...
+from tengri.parameters.translate import ...
+from tengri.forward.pipeline import ...
 ```
 
 Also update lazy imports inside methods:
-- `from tengri.prediction import ...` → `from tengri.core.prediction import ...`
+- `from tengri.prediction import ...` → `from tengri.forward.prediction import ...`
 - `from tengri.fitter import Fitter` → `from tengri.inference.fitter import Fitter`
 
 In `core/mock.py`, update:
 ```python
 # Old: from tengri.model import MockData
-# New: from tengri.core.model import MockData
+# New: from tengri.forward.sed_model import MockData
 ```
 
 In `core/param_spec.py` — imports `from tengri.distributions` (stays at root, no change needed).
@@ -232,7 +232,7 @@ from tengri.posterior import Posterior
 from tengri.vi_config import VIConfig, evi_sample_mode
 from tengri.raytrace_jax import sample_raytrace
 # New:
-from tengri.core.noise import ...
+from tengri.observation.noise import ...
 from tengri.inference.posterior import Posterior
 from tengri.inference.vi_config import VIConfig, evi_sample_mode
 from tengri.inference.raytrace import sample_raytrace
@@ -257,13 +257,13 @@ In `inference/posterior.py`, update lazy imports:
 In `inference/standardized.py`, update:
 ```python
 # Old: from tengri.noise import ...
-# New: from tengri.core.noise import ...
+# New: from tengri.observation.noise import ...
 ```
 
 In `inference/geovi.py`, update:
 ```python
 # Old: from tengri.noise import compute_std_inv
-# New: from tengri.core.noise import compute_std_inv
+# New: from tengri.observation.noise import compute_std_inv
 ```
 
 - [ ] **Step 4: Verify**
@@ -291,15 +291,15 @@ The root `__init__.py` is the public API hub. Update every import to the new loc
 
 ```python
 # Core
-from tengri.core.mock import MockData, generate_mock
-from tengri.core.model import Model
-from tengri.core.noise import (
+from tengri.observation.mock import MockData, generate_mock
+from tengri.forward.sed_model import Model
+from tengri.observation.noise import (
     compute_effective_noise, compute_std_inv, has_noise_model,
     uses_student_t, variable_noise_hamiltonian,
 )
 from tengri.core.param_spec import ParamSpec
-from tengri.core.param_translate import LOG10_ZSUN  # if exported
-from tengri.core.prediction import (
+from tengri.parameters.translate import LOG10_ZSUN  # if exported
+from tengri.forward.prediction import (
     DerivedQuantities, EmissionLines, Prediction, SEDQuantities, SFHQuantities,
 )
 
@@ -356,12 +356,12 @@ git add -A && git commit -m "refactor: update __init__.py to import from core/ a
 Apply these replacements across all test files:
 
 ```
-from tengri.model import          → from tengri.core.model import
+from tengri.model import          → from tengri.forward.sed_model import
 from tengri.param_spec import     → from tengri.core.param_spec import
-from tengri._param_translate import → from tengri.core.param_translate import
-from tengri._mock import          → from tengri.core.mock import
-from tengri.prediction import     → from tengri.core.prediction import
-from tengri.noise import          → from tengri.core.noise import
+from tengri._param_translate import → from tengri.parameters.translate import
+from tengri._mock import          → from tengri.observation.mock import
+from tengri.prediction import     → from tengri.forward.prediction import
+from tengri.noise import          → from tengri.observation.noise import
 from tengri.fitter import         → from tengri.inference.fitter import
 from tengri.posterior import      → from tengri.inference.posterior import
 from tengri.raytrace_jax import   → from tengri.inference.raytrace import

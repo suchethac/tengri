@@ -141,7 +141,7 @@ filter_set = load_filter_set(["sdss_r", "sdss_i"])
 phot = Photometry.from_filter_set(filter_set)
 
 # From a list of FilterCurve objects
-from tengri.models.observation.photometry import FilterCurve
+from tengri.observation.photometry import FilterCurve
 curves = [FilterCurve(name="custom", wave=wave_arr, trans=trans_arr)]
 phot = Photometry.from_filter_set(curves)
 ```
@@ -152,7 +152,7 @@ For filters not in the registry, construct `FilterCurve` objects directly:
 
 ```python
 import jax.numpy as jnp
-from tengri.models.observation.photometry import FilterCurve
+from tengri.observation.photometry import FilterCurve
 from tengri import Photometry
 
 my_filter = FilterCurve(
@@ -187,7 +187,7 @@ The built-in `FILTER_REGISTRY` includes 50+ filters across major surveys:
 To list all available filters programmatically:
 
 ```python
-from tengri.models.observation.filters import FILTER_REGISTRY
+from tengri.observation.filters import FILTER_REGISTRY
 print(sorted(FILTER_REGISTRY.keys()))
 ```
 

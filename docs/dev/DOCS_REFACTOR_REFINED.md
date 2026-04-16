@@ -464,7 +464,7 @@ Use this when **lifting** `models/notebook_code/*.py` into root spine files (`02
 ```
 
 **Models import cell pattern:** same JAX/bootstrap as quickstart, then **domain imports**
-(`tengri.models.dust...`, etc.), then `_plot_style`, then `FIGDIR` under `models/figures` (or
+(`tengri.components.dust...`, etc.), then `_plot_style`, then `FIGDIR` under `models/figures` (or
 the appropriate subfolder for that track).
 
 ### Theory: forward model — **no figure writes to disk**
@@ -852,10 +852,10 @@ from tengri import (
     delayed_tau, dpl, drw_acf, drw_variance, exponential_sfh, generate_gp_fourier,
     gp_from_xi, lnorm, make_log_age_grid, norm, psd_drw, snorm, triweight_burst, tsnorm,
 )
-from tengri.models.sfh.chemical_evolution import closed_box_metallicity
-from tengri.models.sfh.nonparametric import continuity_sfh, dirichlet_sfh
-from tengri.models.sfh.psd_models import psd_extended_regulator, psd_matern
-from tengri.models.sfh.registry import compute_field_gp, resolve_sfh
+from tengri.components.sfh.chemical_evolution import closed_box_metallicity
+from tengri.components.sfh.nonparametric import continuity_sfh, dirichlet_sfh
+from tengri.components.sfh.psd_models import psd_extended_regulator, psd_matern
+from tengri.components.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.utils.grid import grid_spacing
 ```
 
@@ -919,7 +919,7 @@ All `plt.savefig(...)` calls are commented out:
 | `18_continuity_sfh.png` | 7-bin continuity model (Leja+2019) — SFR in each bin + prior draws |
 | `18_dirichlet_sfh.png` | Dirichlet stick-breaking model (Leja+2017) — normalised mass fractions |
 
-Uses `continuity_sfh` and `dirichlet_sfh` from `tengri.models.sfh.nonparametric`.
+Uses `continuity_sfh` and `dirichlet_sfh` from `tengri.components.sfh.nonparametric`.
 
 ---
 
@@ -949,7 +949,7 @@ Uses `generate_gp_fourier`, `gp_from_xi`, `psd_drw`, `psd_extended_regulator`, `
 | `18_composition_burst.png` | tsnorm + triweight_burst burst-mixture |
 | `18_composition_field.png` | tsnorm × exp(GP) field modulator (mean × stochastic) |
 
-Uses `resolve_sfh` and `compute_field_gp` from `tengri.models.sfh.registry`.
+Uses `resolve_sfh` and `compute_field_gp` from `tengri.components.sfh.registry`.
 
 ---
 
@@ -968,7 +968,7 @@ motivation for multi-wavelength fitting.
 **Imports**:
 
 ```python
-from tengri.models.dust.attenuation import (
+from tengri.components.dust.attenuation import (
     DUST_LAWS,
     get_dust_law,  # spine refactor: rename to resolve_dust_law per NAMING_CONTRACT when available
     li08,
@@ -1138,7 +1138,7 @@ and CMB-correction effects. All models are pure JAX (JIT-compatible, fully diffe
 **Imports**:
 
 ```python
-from tengri.models.dust.emission import (
+from tengri.components.dust.emission import (
     DUST_EMISSION_MODELS,
     _draine_li2007_analytic_fallback, _draine_li2014_analytic_fallback,
     _dale2014_analytic_fallback, _astrodust_analytic_fallback,
@@ -2020,7 +2020,7 @@ it like a map, feature by feature. It builds the visual vocabulary the rest of t
 **Known issues**:
 - 3 `plt.savefig(...)` calls writing to the current working directory (no FIGDIR defined) —
   comment out all three
-- Uses private function `_predict_sed_component()` from `tengri.core.sed_pipeline` — replace
+- Uses private function `_predict_sed_component()` from `tengri.forward.pipeline` — replace
   with public `model.predict()` decomposition or document as intentional internal use
 
 #### Section 1 — "The full story: X-ray to radio in one plot"
@@ -2240,9 +2240,9 @@ nebular luminosity. All figures follow the canonical source notebook exactly.
 **Key imports**:
 ```python
 from tengri import Fixed, Model, Parameters, load_ssp_data
-from tengri.models.nebular.shock import shock_line_ratios, _SHOCK_V, _R_OIII, _R_NII, _R_SII, _R_OII, _R_OI, _R_HA
-from tengri.models.nebular import shock_emission_sed, mix_dig_emission
-from tengri.models.nebular.cloudy_grid import compute_qh
+from tengri.components.nebular.shock import shock_line_ratios, _SHOCK_V, _R_OIII, _R_NII, _R_SII, _R_OII, _R_OI, _R_HA
+from tengri.components.nebular import shock_emission_sed, mix_dig_emission
+from tengri.components.nebular.cloudy_grid import compute_qh
 from _plot_style import COLORS, setup_style
 ```
 
@@ -2282,7 +2282,7 @@ from _plot_style import COLORS, setup_style
   `_R_OIII`, `_R_NII`, `_R_SII`, `_R_OII`, `_R_OI`) on log-y scale. Panel B: BPT showing shock
   track (Allen+2008) vs HII track (vary logU), with Kauffmann+2003 demarcation dashed.
 - **Source**: `notebooks/models/notebook_code/06_nebular.py` §1.3 (lines 323–396). Uses the
-  tabulated arrays imported directly from `tengri.models.nebular.shock`.
+  tabulated arrays imported directly from `tengri.components.nebular.shock`.
 - **Figure**: `plt.subplots(1, 2, figsize=(9, 3.5))`. Figure saved as
   `# plt.savefig(..., "19_shock_emission.png")`.
 - **Story thread**: "→ The DIG — diffuse ionized gas — also alters line ratios by lowering
@@ -2305,7 +2305,7 @@ from _plot_style import COLORS, setup_style
   for young SSP (~10 Myr) and `compute_qh(wave, ssp_flux[3,-5])` for old SSP (~10 Gyr).
   Print Q_H values and ratio. Guarded by `if SSP_WNE_PATH.exists()`.
 - **Source**: `notebooks/models/notebook_code/06_nebular.py` §2.1 (lines 460–525).
-  `compute_qh` imported from `tengri.models.nebular.cloudy_grid`.
+  `compute_qh` imported from `tengri.components.nebular.cloudy_grid`.
 - **Story thread**: "→ Shocks across a continuous velocity grid have distinct diagnostic ratios
   — now shown at higher resolution using `shock_line_ratios()`."
 
@@ -2314,7 +2314,7 @@ from _plot_style import COLORS, setup_style
   shock velocity (100–1000 km/s, 200 points via `np.linspace`): [NII]6583/Hα, [SII]6716+31/Hα,
   [OI]6300/Hα, [OIII]5007/Hβ. Each panel has an HII region reference dashed line
   (Kewley+2006 typical values). Uses `shock_line_ratios(v)` from
-  `tengri.models.nebular.shock`.
+  `tengri.components.nebular.shock`.
 - **Source**: `notebooks/models/notebook_code/06_nebular.py` §3 (lines 527–597).
 - **Figure**: `plt.subplots(2, 2, figsize=(10, 7), sharex=True)`. Suptitle: "Shock Diagnostic
   Line Ratios (Allen+2008, Solar, n=1 cm⁻³)". Figure saved as
@@ -2340,7 +2340,7 @@ from _plot_style import COLORS, setup_style
   line. DIG ratios from Tacchella+2022 Fig 3. Followed by API code block (markdown):
   `mix_dig_emission(backend, ..., neb_dig_frac=0.4, neb_dig_delta_logU=-1.0)`.
 - **Source**: `notebooks/models/notebook_code/06_nebular.py` §5 (lines 675–796).
-  Uses `mix_dig_emission` from `tengri.models.nebular`.
+  Uses `mix_dig_emission` from `tengri.components.nebular`.
 - **Figure**: `plt.subplots(1, 3, figsize=(12, 4), sharey=False)`. Suptitle: "DIG Mixing:
   Enhanced Low-Ionization Lines (ΔlogU = −1 dex, Tacchella+2022)". Figure saved as
   `# plt.savefig(..., "05_dig_mixing.png")`.
@@ -2792,7 +2792,7 @@ Save the following as **`notebooks/00_quickstart.py`** (percent format; sync wit
 `savefig`, expanded markdown pedagogy, and `FIGDIR` under `notebooks/figures`.
 
 **Package exports:** If `SEDModel` is not yet available from `from tengri import …`, import it
-from `tengri.core.model` until `__init__.py` is updated — the canonical name in new material
+from `tengri.forward.sed_model` until `__init__.py` is updated — the canonical name in new material
 remains `SEDModel` ([NAMING_CONTRACT.md](NAMING_CONTRACT.md) §2).
 
 **Jupytext `formats`:** The YAML below uses the historical `notebook_code//py:percent,ipynb` pairing.

@@ -15,7 +15,7 @@ how to work around it.
 
 ```python
 from tengri import ParamSpec, Fixed
-from tengri.models.nebular import CB19Backend
+from tengri.components.nebular import CB19Backend
 
 # Default: SSP ionizing spectrum, Kroupa IMF, radiation-bounded
 backend = CB19Backend()            # requires data/cb19_templates.h5
@@ -96,7 +96,7 @@ Lyman-break region), stack `CB19Backend` on top of `CloudyGridBackend`:
 
 ```python
 # Stack: use Cue/CloudyGrid continuum + CB_19 lines
-from tengri.models.nebular import CloudyGridBackend, CB19Backend
+from tengri.components.nebular import CloudyGridBackend, CB19Backend
 
 cloudy = CloudyGridBackend("data/cloudy_grid_mist.h5", ssp_data)
 cb19  = CB19Backend()
@@ -203,7 +203,7 @@ If you use `CB19Backend` in published work, please cite:
 ## API reference
 
 ```{eval-rst}
-.. autoclass:: tengri.models.nebular.CB19Backend
+.. autoclass:: tengri.components.nebular.CB19Backend
    :members:
    :undoc-members:
 ```

@@ -57,7 +57,7 @@ This downloads 6 CSV files from Zenodo (~3 MB each) and caches them in
 
 ```python
 import jax.numpy as jnp
-from tengri.models.nebular import MappingsPhotoStellarBackend
+from tengri.components.nebular import MappingsPhotoStellarBackend
 
 backend = MappingsPhotoStellarBackend(
     "data/flury2024_grids.h5",
@@ -86,7 +86,7 @@ wave, lum = backend.predict_nebular_line_luminosities(
 ### AGN narrow-line emission
 
 ```python
-from tengri.models.nebular import MappingsPhotoAGNBackend
+from tengri.components.nebular import MappingsPhotoAGNBackend
 
 agn_backend = MappingsPhotoAGNBackend(
     "data/flury2024_grids.h5",

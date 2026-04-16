@@ -497,7 +497,7 @@ Model = deprecated_class_alias("Model", SEDModel)
    - Remove imports if they're only re-exported
 
 3. Update any internal code that imports old names
-   - Search: `from tengri import ParamSpec` or `from tengri.core.parameters import ParamSpec`
+   - Search: `from tengri import ParamSpec` or `from tengri.parameters.parameters import ParamSpec`
    - Replace with canonical names
 
 ### To Remove inference method aliases in v1.0:

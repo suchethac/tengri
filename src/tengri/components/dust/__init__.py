@@ -17,15 +17,21 @@ Priors
 Narayanan+2018 cosmological RT simulations.
 """
 
+# Convenience re-exports for `from tengri.dust import ...`
 from tengri.components.dust.attenuation import (
     DUST_LAWS,
+    calzetti as calzetti,
+    cardelli as cardelli,
     get_dust_law,
+    li08 as li08,
+    lmc as lmc,
     precompute_dust_age_mask,
     precompute_dust_age_weights,
     register_dust_law,
     resolve_dust_law,
     single_component_dust,
     single_component_dust_fast,
+    smc as smc,
     two_component_dust,
     two_component_dust_fast,
     wg00_cloudy,
@@ -54,6 +60,9 @@ from tengri.components.dust.emission import (
     create_dl07_from_grid,
     create_dl14_from_grid,
     create_themis_from_grid,
+    dale2014 as dale2014,
+    draine_li2007 as draine_li2007,
+    draine_li2014 as draine_li2014,
     get_emission_model,
     load_astrodust_templates,
     load_bosa_templates,
@@ -61,6 +70,7 @@ from tengri.components.dust.emission import (
     load_dl14_templates,
     load_draine_li_templates,
     load_themis_templates,
+    modified_blackbody as modified_blackbody,
     planck_bnu,
     register_astrodust_tabulated,
     register_bosa_tabulated,

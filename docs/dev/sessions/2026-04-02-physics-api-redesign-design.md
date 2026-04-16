@@ -168,22 +168,22 @@ Model(ParamSpec, SSPData, observation)
 ├── SPS (DSPS) → Stellar SED L_star(λ)
 │     Input: SFR(t), Z(t), SSP grid
 │
-├── Dust attenuation → L_attenuated(λ)                [tengri.models.dust.attenuation]
+├── Dust attenuation → L_attenuated(λ)                [tengri.components.dust.attenuation]
 │     ├── Attenuation curves: calzetti, power_law, kriek_conroy, smc, ...
 │     └── Two-component (Charlot & Fall): birth cloud + diffuse ISM
 │
-├── Nebular emission → L_nebular(λ)                   [tengri.models.nebular]
+├── Nebular emission → L_nebular(λ)                   [tengri.components.nebular]
 │     ├── Q_H from stellar SED (ionizing photons below 912 Å)
 │     └── Backend:
 │           BakedIn  → pre-baked in SSP templates (zero free params)
 │           CloudyGrid → grid interpolation (3 params: logU, Z_gas, fesc)
 │           Cue      → neural emulator (12 params: ionspec × 7 + gas × 5)
 │
-├── Dust emission → L_dust(λ)                         [tengri.models.dust.emission]
+├── Dust emission → L_dust(λ)                         [tengri.components.dust.emission]
 │     Energy balance: L_absorbed = ∫(L_star - L_attenuated) dν → L_IR
 │     Models: modified_blackbody, dl07, dl14, dale2014, astrodust, bosa, themis, ...
 │
-├── AGN → L_AGN(λ)  [optional]                        [tengri.models.agn]
+├── AGN → L_AGN(λ)  [optional]                        [tengri.components.agn]
 │     ├── Disc: powerlaw_disc | multicolor_disc | kubota_done_disc | adaf_disc
 │     ├── Torus: simple_torus | two_temperature_torus | skirtor_analytic
 │     ├── NLR (isotropic, always visible):
@@ -194,16 +194,16 @@ Model(ParamSpec, SSPData, observation)
 │     ├── Fe II pseudo-continuum [optional]
 │     └── Polar dust [optional]
 │
-├── IGM absorption → T_IGM(λ, z)                      [tengri.models.igm]
+├── IGM absorption → T_IGM(λ, z)                      [tengri.components.igm]
 │
-├── Radio / X-ray [optional]                          [tengri.models.radio, .xray]
+├── Radio / X-ray [optional]                          [tengri.components.radio, .xray]
 │
 └── Observation
       ├── Photometry: filter convolution → f_ν [n_filters]
       ├── Spectroscopy: pixel-level prediction → f_λ [n_pix]
       │     + LSF convolution
       │     + Chebyshev calibration polynomial
-      └── Emission line marginalization [optional]    [tengri.models.observation.eline_*]
+      └── Emission line marginalization [optional]    [tengri.observation.eline_*]
             ├── Design matrix: Gaussian line profiles → A [n_pix × n_lines]
             ├── Prior: CLOUDY-based ratios relative to Hβ
             └── Analytical marginalization: integrates out line amplitudes

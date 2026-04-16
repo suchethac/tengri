@@ -780,12 +780,12 @@ Add the following method to the `Model` class immediately before `fit()` (around
         ...     )
         ... )
         """
-        from tengri.core.param_translate import resolve_short_names
+        from tengri.parameters.translate import resolve_short_names
         from tengri.core.param_spec import ParamSpec
         from tengri.distributions import Fixed, Uniform
-        from tengri.models.observation.observation import Observation
-        from tengri.models.observation.photometry_config import Photometry
-        from tengri.models.sps.dsps_wrapper import SSPData, load_ssp_data
+        from tengri.observation.observation import Observation
+        from tengri.observation.photometry_config import Photometry
+        from tengri.components.sps.dsps_wrapper import SSPData, load_ssp_data
 
         # --- Load SSP data ---
         if isinstance(ssp, str):
@@ -836,7 +836,7 @@ Add the following method to the `Model` class immediately before `fit()` (around
             obs_photometry = Photometry.from_names(filters)
 
         if wave_obs is not None:
-            from tengri.models.observation.spectroscopy_config import SpectroscopyConfig
+            from tengri.observation.spectroscopy_config import SpectroscopyConfig
             obs_spectroscopy = SpectroscopyConfig(wave_obs=wave_obs)
 
         if obs_photometry is not None or obs_spectroscopy is not None:
@@ -1194,7 +1194,7 @@ Add this method immediately after `fit()`:
                 row_spec = self.spec.with_params(redshift=Fixed(row_z))
                 # Build a lightweight model clone with the updated spec
                 # (shares all arrays — only spec differs)
-                from tengri.core.model import Model as _Model
+                from tengri.forward.sed_model import Model as _Model
                 row_model = _Model.__new__(_Model)
                 row_model.__dict__.update(self.__dict__)
                 row_model.spec = row_spec
@@ -1516,10 +1516,10 @@ def posteriors_to_dataframe(results: list, params: list[str] | None = None):
 
 - [ ] **Step 2: Add `PriorPredictive` and `posteriors_to_dataframe` to imports in `__init__.py`**
 
-In `__init__.py`, find the `from tengri.core.model import Model` line and replace with:
+In `__init__.py`, find the `from tengri.forward.sed_model import Model` line and replace with:
 
 ```python
-from tengri.core.model import Model, PriorPredictive
+from tengri.forward.sed_model import Model, PriorPredictive
 ```
 
 Also add `posteriors_to_dataframe` to the `__all__` list if present, or verify it's accessible at `tengri.posteriors_to_dataframe`.
@@ -1682,7 +1682,7 @@ class TestDeprecationWarnings:
 
 class TestResolveShortNames:
     def test_tsnorm_short_names(self):
-        from tengri.core.param_translate import resolve_short_names
+        from tengri.parameters.translate import resolve_short_names
         from tengri.distributions import Uniform
 
         prior = {"log_peak_sfr": Uniform(-1, 2.5), "logzsol": Uniform(-2, 0.2)}
@@ -1694,7 +1694,7 @@ class TestResolveShortNames:
         assert "logzsol" not in expanded
 
     def test_dpl_short_names(self):
-        from tengri.core.param_translate import resolve_short_names
+        from tengri.parameters.translate import resolve_short_names
         from tengri.distributions import Uniform
 
         prior = {"alpha": Uniform(0.5, 3.0), "tau_bc": Uniform(0, 2)}
@@ -1704,7 +1704,7 @@ class TestResolveShortNames:
         assert "dust_tau_bc" in expanded
 
     def test_field_short_names_in_compound(self):
-        from tengri.core.param_translate import resolve_short_names
+        from tengri.parameters.translate import resolve_short_names
         from tengri.distributions import Uniform
 
         prior = {"psd_sigma": Uniform(0.1, 2.0), "psd_tau_myr": Uniform(10, 500)}
@@ -1714,7 +1714,7 @@ class TestResolveShortNames:
         assert "sfh_field_psd_tau_myr" in expanded
 
     def test_full_names_pass_through(self):
-        from tengri.core.param_translate import resolve_short_names
+        from tengri.parameters.translate import resolve_short_names
         from tengri.distributions import Uniform
 
         prior = {"sfh_tsnorm_log_peak_sfr": Uniform(-1, 2.5)}
@@ -1724,7 +1724,7 @@ class TestResolveShortNames:
         assert "sfh_tsnorm_log_peak_sfr" in expanded
 
     def test_list_input_sfh_type(self):
-        from tengri.core.param_translate import resolve_short_names
+        from tengri.parameters.translate import resolve_short_names
         from tengri.distributions import Uniform
 
         prior = {"log_peak_sfr": Uniform(-1, 2.5)}
@@ -1868,7 +1868,7 @@ class TestModelFromConfig:
         )
 
     def test_returns_model_instance(self, model_tsnorm):
-        from tengri.core.model import Model
+        from tengri.forward.sed_model import Model
 
         assert isinstance(model_tsnorm, Model)
 
@@ -1998,7 +1998,7 @@ class TestPriorPredictive:
         )
 
     def test_prior_predictive_returns_object(self, model_simple):
-        from tengri.core.model import PriorPredictive
+        from tengri.forward.sed_model import PriorPredictive
 
         ppc = model_simple.prior_predictive(n=20, seed=0)
         assert isinstance(ppc, PriorPredictive)

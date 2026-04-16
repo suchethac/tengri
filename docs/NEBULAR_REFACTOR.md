@@ -196,7 +196,7 @@ backend = MappingsPhotoStellarBackend(..., ionizing_source_warning="suppress")
 ```
 
 **Implementation:** `IonizingSpectrumInconsistencyError` raised in `__init__` by default.
-Exported from `tengri.models.nebular`.
+Exported from `tengri.components.nebular`.
 
 ### 3.4 `MappingsPhotoAGNBackend`
 
