@@ -329,16 +329,18 @@ def precompute_for_model(
         if path is None:
             return None
         templates = load_draine_li_templates(path)
-        return precompute_dl07_photometry(
-            templates, filter_waves, filter_trans, redshift=redshift
-        )
+        return precompute_dl07_photometry(templates, filter_waves, filter_trans, redshift=redshift)
 
     # Generic template-based models share a load → extract → preintegrate shape.
     # The per-model file paths, loader functions, and flux units are the only
     # differences.
     _GENERIC_LOADERS: dict[str, tuple[tuple[str, ...], Any, str]] = {
         "dale2014": (("dale2014_templates.npz",), None, "llam"),
-        "draine_li2014": (("dl14_templates_v2.h5", "dl14_templates.h5"), load_dl14_templates, "lnu"),
+        "draine_li2014": (
+            ("dl14_templates_v2.h5", "dl14_templates.h5"),
+            load_dl14_templates,
+            "lnu",
+        ),
         "astrodust": (("astrodust_templates.npz",), load_astrodust_templates, "lnu"),
         "bosa": (("bosa_templates.npz",), load_bosa_templates, "lnu"),
         "themis": (("themis_templates.npz",), load_themis_templates, "lnu"),
