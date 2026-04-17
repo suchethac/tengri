@@ -153,7 +153,11 @@ def get_from_config_defaults() -> dict[str, Any]:
     """
     try:
         data = load_defaults()
-    except Exception:
+    except (ImportError, FileNotFoundError, OSError, tomllib.TOMLDecodeError):  # type: ignore[attr-defined]
+        # ImportError: tomllib unavailable
+        # FileNotFoundError: defaults.toml missing
+        # OSError: permission denied or other I/O failure
+        # TOMLDecodeError: malformed TOML syntax
         return dict(_FALLBACK_FROM_CONFIG)
     return {**_FALLBACK_FROM_CONFIG, **data.get("from_config", {})}
 
@@ -174,7 +178,11 @@ def get_inference_defaults(method: str | None = None) -> dict[str, Any]:
     """
     try:
         data = load_defaults()
-    except Exception:
+    except (ImportError, FileNotFoundError, OSError, tomllib.TOMLDecodeError):  # type: ignore[attr-defined]
+        # ImportError: tomllib unavailable
+        # FileNotFoundError: defaults.toml missing
+        # OSError: permission denied or other I/O failure
+        # TOMLDecodeError: malformed TOML syntax
         return {}
     section = data.get("inference", {})
     if method is None:
