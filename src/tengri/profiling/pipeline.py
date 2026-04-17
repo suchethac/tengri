@@ -288,7 +288,10 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
         _ = grad_fn(params)
         t_grad, _ = bench(lambda: grad_fn(params), n=min(n, 100))
         grad_us = t_grad
-    except Exception:
+    except (AttributeError, TypeError, RuntimeError):
+        # AttributeError: predict_photometry doesn't exist
+        # TypeError: grad/jit compilation failed
+        # RuntimeError: JAX compilation error
         pass
 
     return PipelineReport(
@@ -361,7 +364,10 @@ def _profile_fused_path(model, params, n: int = 200) -> PipelineReport:
         # Now the compiled gradient
         t_grad, _ = bench(lambda: grad_fn(params), n=n)
         grad_us = t_grad
-    except Exception:
+    except (AttributeError, TypeError, RuntimeError):
+        # AttributeError: predict_photometry doesn't exist
+        # TypeError: grad/jit compilation failed
+        # RuntimeError: JAX compilation error
         pass
 
     # Forward compilation time
@@ -372,7 +378,10 @@ def _profile_fused_path(model, params, n: int = 200) -> PipelineReport:
         r = pred_fn(params)
         _sync(r)
         fwd_compile = (time.perf_counter() - t0) * 1e6
-    except Exception:
+    except (AttributeError, TypeError, RuntimeError):
+        # AttributeError: predict_photometry doesn't exist
+        # TypeError: jit compilation failed
+        # RuntimeError: JAX compilation error
         pass
 
     return PipelineReport(
