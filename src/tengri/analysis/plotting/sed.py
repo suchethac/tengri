@@ -293,7 +293,10 @@ def sweep_parameter(
         override = {param_name: float(val)}
         try:
             wave, lnu = model.sed(override)
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
+            # AttributeError: sed() method doesn't exist
+            # TypeError: sed() signature mismatch
+            # ValueError: sed() failed with invalid parameters
             # Fallback: try predict interface
             pred = model.predict(override)
             wave = np.asarray(pred.wavelengths)
@@ -436,7 +439,10 @@ def sfh_sed_comparison(
         try:
             t_lookback, sfr = model.sfh(override)
             ax_sfh.plot(np.asarray(t_lookback), np.asarray(sfr), color=color, lw=1.8, label=label)
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
+            # AttributeError: sfh() method doesn't exist
+            # TypeError: sfh() signature mismatch
+            # ValueError: sfh() failed with invalid parameters
             pass  # model may not support sfh() — skip
 
         # SED panel
@@ -451,7 +457,10 @@ def sfh_sed_comparison(
             y = lnu * wave
             mask = (wave >= SED_XLIM[0]) & (wave <= SED_XLIM[1])
             ax_sed.plot(wave[mask], y[mask], color=color, lw=1.8, label=label)
-        except Exception:
+        except (IndexError, ValueError, TypeError):
+            # IndexError: idx_norm out of bounds
+            # ValueError: boolean indexing failed
+            # TypeError: arithmetic operation failed
             pass
 
     ax_sfh.set_xlabel(SFH_XLABEL)
@@ -647,7 +656,10 @@ def posterior_plot_sed(result, mock=None, ax=None):
             t_gyr_true = np.array(sfh_true["t_gyr"])
             sfr_true = np.array(sfh_true["sfr_mean"])
             ax_sfh.plot(t_gyr_true, sfr_true, "--", color="k", lw=2, label="Truth")
-        except Exception:
+        except (KeyError, AttributeError, ValueError, TypeError):
+            # KeyError: sfr_mean or t_gyr missing from output
+            # AttributeError: predict_sfh method doesn't exist
+            # ValueError/TypeError: array conversion failed
             pass
 
     ax_sfh.set_xlabel("Lookback time [Gyr]")
