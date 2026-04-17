@@ -191,7 +191,7 @@ def run_map(
 
 def run_laplace(fitter, *, key, init_from=None, n_map_steps=1000, **kwargs):
     """Laplace approximation: Gaussian posterior from Hessian at MAP."""
-    from tengri.inference.laplace import run_laplace
+    from tengri.inference.backends.laplace import run_laplace
 
     loss_fn = fitter._get_or_build_loss_fn()
     data_args = fitter._data_args
@@ -219,7 +219,7 @@ def run_laplace(fitter, *, key, init_from=None, n_map_steps=1000, **kwargs):
 
 def run_pathfinder(fitter, *, key, init_from=None, **kwargs):
     """Pathfinder: fast approximate posterior via L-BFGS path."""
-    from tengri.inference.pathfinder import run_pathfinder
+    from tengri.inference.backends.pathfinder import run_pathfinder
 
     loss_fn = fitter._get_or_build_loss_fn()
     data_args = fitter._data_args

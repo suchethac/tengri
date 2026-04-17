@@ -54,8 +54,8 @@ def run_nss(
     verbose : bool
         Print progress.
     """
-    from tengri.inference.ns.nss import as_top_level_api
-    from tengri.inference.ns.utils import ess as ns_ess, finalise, sample as ns_sample
+    from tengri.inference.backends.nested.nss import as_top_level_api
+    from tengri.inference.backends.nested.utils import ess as ns_ess, finalise, sample as ns_sample
     from tengri.inference.posterior import Posterior
 
     # Guard stochastic models

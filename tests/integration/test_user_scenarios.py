@@ -576,7 +576,7 @@ class TestStandardGalaxyWorkflows:
             noise=mock_data_z1["flux_unc"],
             method="vi",
             rng_key=rng_key,
-            n_iter=10,  # geoVI iterations
+            n_iterations=10,  # geoVI iterations
         )
 
         jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
@@ -791,7 +791,8 @@ class TestEdgeCases:
         )
 
         # Create mock data at z=0.01
-        n_bands = len(optical_nir_filters)
+        _, _, filter_curves = optical_nir_filters  # Unpack 3-tuple from load_filter_set()
+        n_bands = len(filter_curves)
         flux_cgs = 1e-26 * np.ones(n_bands)
         noise_cgs = flux_cgs / 10.0
 
@@ -839,7 +840,8 @@ class TestEdgeCases:
         )
 
         # Create mock data at z=8
-        n_bands = len(optical_nir_filters)
+        _, _, filter_curves = optical_nir_filters  # Unpack 3-tuple from load_filter_set()
+        n_bands = len(filter_curves)
         flux_cgs = 1e-27 * np.ones(n_bands)  # Faint high-z galaxy
         noise_cgs = flux_cgs / 5.0
 

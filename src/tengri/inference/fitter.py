@@ -1366,12 +1366,12 @@ class Fitter:
         return build_loglikelihood_unbounded_fn(self)
 
     def _run_laplace(self, *, key, **kwargs):
-        from tengri.inference.backends.laplace import run_laplace
+        from tengri.inference.backends.map_dispatch import run_laplace
 
         return run_laplace(self, key=key, **kwargs)
 
     def _run_pathfinder(self, *, key, **kwargs):
-        from tengri.inference.backends.pathfinder import run_pathfinder
+        from tengri.inference.backends.map_dispatch import run_pathfinder
 
         return run_pathfinder(self, key=key, **kwargs)
 
