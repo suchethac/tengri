@@ -1562,12 +1562,16 @@ def build_hybrid_photometry_ztable(model):
     if _use_smooth_z:
         from tengri.components.sps.dsps_wrapper import compute_lgmet_weights as _clw
 
-    # IGM: precomputed on z-table
+    # IGM: z-table kernel applies IGM in two places:
+    #   1. Stellar photometry: interpolate igm_trans_table (n_z, n_filters) to current z.
+    #   2. Non-stellar SED: evaluate igm_transmission(wave_obs, z) at full wavelength
+    #      inside the traced function (pure JAX, JIT-safe).
     has_igm = ztable.igm_trans_table is not None
     if has_igm:
-        # Ensure igm_trans_table is all ones (expected for z-table)
-        # Full wavelength IGM will be evaluated in non-stellar section
-        pass
+        from tengri.components.igm import igm_transmission as _igm_fn
+
+        _igm_trans_table = ztable.igm_trans_table  # shape (n_z, n_filters)
+        _igm_z_grid = ztable.z_grid
 
     # === Non-stellar components (full wavelength) ===
     ssp_wave_f64 = model.ssp_data.ssp_wave
@@ -2258,6 +2262,21 @@ def build_hybrid_photometry_ztable(model):
                 )
                 non_stellar_sed = non_stellar_sed + ir_sed
 
+            # Apply IGM to non-stellar SED (full wavelength, evaluated at traced z).
+            # igm_transmission takes observed-frame wavelengths.
+            if has_igm:
+                _wave_obs_nonstell = ssp_wave_f64 * (1.0 + redshift)
+                _igm_full = _igm_fn(_wave_obs_nonstell, redshift).astype(jnp.float64)
+                if _needs_extension:
+                    from tengri.utils.wavelength import interpolate_sed_to_grid
+
+                    _igm_panch = interpolate_sed_to_grid(
+                        ssp_wave_f64, _igm_full, rest_wave_f64
+                    )
+                    non_stellar_sed = non_stellar_sed * _igm_panch
+                else:
+                    non_stellar_sed = non_stellar_sed * _igm_full
+
             # Integrate non-stellar through filters
             # Interpolate non-stellar SED to observed frame + filter integration
             from tengri.observation.photometry import compute_flux_density
@@ -2273,17 +2292,32 @@ def build_hybrid_photometry_ztable(model):
 
         # === STEP 3: Combine and convert to erg/s/cm²/Hz ===
         # Interpolate z-table to get flux_scale at current z
+        _z_arr = jnp.asarray(redshift, dtype=dt)
         _, _, flux_scale = interpolate_ztable(
             ztable.ssp_phot_table,
             ztable.eff_waves_rest_table,
             ztable.flux_scale_table,
             ztable.z_grid,
-            jnp.asarray(redshift, dtype=dt),
+            _z_arr,
         )
         flux_scale = jnp.asarray(flux_scale, dtype=jnp.float64)
 
         # Stellar contribution: flux_attenuated is in Lsun/Hz (from einsum)
         stellar_phot = flux_scale * flux_attenuated * lsun  # erg/s/cm²/Hz
+
+        # Apply IGM to stellar photometry (per-filter, interpolated from z-table).
+        # igm_trans_table shape: (n_z, n_filters); linear interp along z axis.
+        if has_igm:
+            _z_c = jnp.clip(_z_arr, _igm_z_grid[0], _igm_z_grid[-1])
+            _iz = jnp.clip(
+                jnp.searchsorted(_igm_z_grid, _z_c) - 1, 0, _igm_z_grid.shape[0] - 2
+            )
+            _frac = (_z_c - _igm_z_grid[_iz]) / (_igm_z_grid[_iz + 1] - _igm_z_grid[_iz])
+            _igm_eff = (
+                (1.0 - _frac) * _igm_trans_table[_iz]
+                + _frac * _igm_trans_table[_iz + 1]
+            ).astype(jnp.float64)
+            stellar_phot = stellar_phot * _igm_eff
 
         # Total photometry
         total_phot = stellar_phot + non_stellar_phot
