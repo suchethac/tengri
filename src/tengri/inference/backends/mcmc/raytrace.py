@@ -54,7 +54,7 @@ def random_split_like_tree(rng_key, target=None, treedef=None):
 def normal_like_tree(rng_key, target, mean=0, std=1):
     keys_tree = random_split_like_tree(rng_key, target)
     return tree_map(
-        lambda l, k: mean + std * jax.random.normal(k, l.shape, l.dtype),
+        lambda leaf, k: mean + std * jax.random.normal(k, leaf.shape, leaf.dtype),
         target,
         keys_tree,
     )
