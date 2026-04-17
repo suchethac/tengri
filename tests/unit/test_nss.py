@@ -32,7 +32,7 @@ def _analytic_logZ_gaussian(D, prior_half_width=5.0):
 
 def _make_gaussian_nss(D, n_live=200, num_delete=10, prior_half_width=5.0):
     """Set up NSS for a D-dim unit Gaussian target."""
-    from tengri.inference.ns.nss import as_top_level_api
+    from tengri.inference.backends.nested.nss import as_top_level_api
 
     w = prior_half_width
     names = [f"x{i}" for i in range(D)]
@@ -159,7 +159,7 @@ class TestSliceSampling:
 
     def test_hrss_samples_from_target(self):
         """HRSS generates samples near a 1D Gaussian mode."""
-        from tengri.inference.ns.slice_sampling import hrss_as_top_level_api
+        from tengri.inference.backends.nested.slice_sampling import hrss_as_top_level_api
 
         def logdensity(position):
             x = position["x"]
@@ -183,7 +183,7 @@ class TestSliceSampling:
 
     def test_direction_has_correct_norm(self):
         """Direction proposal from covariance is Mahalanobis-normalized."""
-        from tengri.inference.ns.slice_sampling import sample_direction_from_covariance
+        from tengri.inference.backends.nested.slice_sampling import sample_direction_from_covariance
 
         cov = jnp.diag(jnp.array([1.0, 4.0, 9.0]))
         key = jax.random.PRNGKey(42)
@@ -203,7 +203,7 @@ class TestParticles:
 
     def test_covariance_matches_numpy(self):
         """particles_covariance_matrix matches numpy (ddof=0)."""
-        from tengri.inference.ns.particles import particles_covariance_matrix
+        from tengri.inference.backends.nested.particles import particles_covariance_matrix
 
         key = jax.random.PRNGKey(0)
         n = 50
@@ -220,8 +220,8 @@ class TestIntegrator:
 
     def test_init_integrator(self):
         """Integrator initializes with logX=0, logZ=-inf."""
-        from tengri.inference.ns.base import StateWithLogLikelihood
-        from tengri.inference.ns.integrator import init_integrator
+        from tengri.inference.backends.nested.base import StateWithLogLikelihood
+        from tengri.inference.backends.nested.integrator import init_integrator
 
         particles = StateWithLogLikelihood(
             position={"x": jnp.ones(10)},
@@ -291,7 +291,7 @@ class TestNSSPostProcessing:
 
     def test_finalise_and_sample(self):
         """finalise + sample produce resampled particles."""
-        from tengri.inference.ns.utils import finalise, sample
+        from tengri.inference.backends.nested.utils import finalise, sample
 
         D = 2
         n_live = 100
@@ -316,7 +316,7 @@ class TestNSSPostProcessing:
 
     def test_ess_positive(self):
         """ESS is positive."""
-        from tengri.inference.ns.utils import ess, finalise
+        from tengri.inference.backends.nested.utils import ess, finalise
 
         D = 2
         n_live = 100
@@ -337,7 +337,7 @@ class TestNSSUtils:
 
     def test_log1mexp(self):
         """log1mexp matches direct computation."""
-        from tengri.inference.ns.utils import log1mexp
+        from tengri.inference.backends.nested.utils import log1mexp
 
         x = jnp.array([-2.0, -1.0, -0.5, -0.1])
         result = log1mexp(x)
@@ -346,7 +346,7 @@ class TestNSSUtils:
 
     def test_uniform_prior(self):
         """uniform_prior generates samples within bounds."""
-        from tengri.inference.ns.utils import uniform_prior
+        from tengri.inference.backends.nested.utils import uniform_prior
 
         key = jax.random.PRNGKey(0)
         bounds = {"a": (-2.0, 3.0), "b": (0.0, 1.0)}

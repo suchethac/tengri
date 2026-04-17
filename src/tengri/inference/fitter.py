@@ -959,13 +959,13 @@ class Fitter:
     # -------------------------------------------------------------------
 
     def _run_vi_native(self, *, key, init_from=None, **kwargs):
-        from tengri.inference.vi import run_native_vi
+        from tengri.inference.backends.vi.native import run_native_vi
 
         kwargs.setdefault("sample_mode", "geovi")
         return run_native_vi(self, key=key, init_from=init_from, **kwargs)
 
     def _run_vi_native_linear(self, *, key, init_from=None, **kwargs):
-        from tengri.inference.vi import run_native_vi
+        from tengri.inference.backends.vi.native import run_native_vi
 
         kwargs.setdefault("sample_mode", "linear")
         return run_native_vi(self, key=key, init_from=init_from, **kwargs)
@@ -1120,30 +1120,30 @@ class Fitter:
         return result
 
     def _run_nss(self, *, key, **kwargs):
-        from tengri.inference.evidence import run_nss
+        from tengri.inference.backends.evidence import run_nss
 
         return run_nss(self, key=key, **kwargs)
 
     def _run_vi(self, *, key, init_from=None, **kwargs):
-        from tengri.inference.vi import run_nifty_vi
+        from tengri.inference.backends.vi.nifty import run_nifty_vi
 
         kwargs.setdefault("sample_mode", "nonlinear_resample")
         return run_nifty_vi(self, key=key, init_from=init_from, **kwargs)
 
     def _run_vi_linear(self, *, key, init_from=None, **kwargs):
-        from tengri.inference.vi import run_nifty_vi
+        from tengri.inference.backends.vi.nifty import run_nifty_vi
 
         kwargs.setdefault("sample_mode", "linear_resample")
         return run_nifty_vi(self, key=key, init_from=init_from, **kwargs)
 
     def _run_nifty_fast_vi(self, *, key, init_from=None, **kwargs):
-        from tengri.inference.vi import run_nifty_fast_vi
+        from tengri.inference.backends.vi.nifty import run_nifty_fast_vi
 
         kwargs.setdefault("sample_mode", "nonlinear_resample")
         return run_nifty_fast_vi(self, key=key, init_from=init_from, **kwargs)
 
     def _run_nifty_fast_vi_linear(self, *, key, init_from=None, **kwargs):
-        from tengri.inference.vi import run_nifty_fast_vi
+        from tengri.inference.backends.vi.nifty import run_nifty_fast_vi
 
         kwargs.setdefault("sample_mode", "linear_resample")
         return run_nifty_fast_vi(self, key=key, init_from=init_from, **kwargs)
@@ -1340,17 +1340,17 @@ class Fitter:
         return results
 
     def _run_map(self, *, key, **kwargs):
-        from tengri.inference.map_dispatch import run_map
+        from tengri.inference.backends.map_dispatch import run_map
 
         return run_map(self, key=key, **kwargs)
 
     def _run_raytrace(self, *, key, **kwargs):
-        from tengri.inference.mcmc import run_raytrace
+        from tengri.inference.backends.mcmc.common import run_raytrace
 
         return run_raytrace(self, key=key, **kwargs)
 
     def _run_nuts(self, *, key, **kwargs):
-        from tengri.inference.mcmc import run_nuts
+        from tengri.inference.backends.mcmc.common import run_nuts
 
         return run_nuts(self, key=key, **kwargs)
 
@@ -1362,16 +1362,16 @@ class Fitter:
         return build_loglikelihood_unbounded_fn(self)
 
     def _run_laplace(self, *, key, **kwargs):
-        from tengri.inference.map_dispatch import run_laplace
+        from tengri.inference.backends.laplace import run_laplace
 
         return run_laplace(self, key=key, **kwargs)
 
     def _run_pathfinder(self, *, key, **kwargs):
-        from tengri.inference.map_dispatch import run_pathfinder
+        from tengri.inference.backends.pathfinder import run_pathfinder
 
         return run_pathfinder(self, key=key, **kwargs)
 
     def _run_elliptical_slice(self, *, key, **kwargs):
-        from tengri.inference.mcmc import run_elliptical_slice
+        from tengri.inference.backends.mcmc.common import run_elliptical_slice
 
         return run_elliptical_slice(self, key=key, **kwargs)

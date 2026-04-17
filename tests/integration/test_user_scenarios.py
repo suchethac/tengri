@@ -411,10 +411,14 @@ class TestStandardGalaxyWorkflows:
             rng_key=rng_key,
         )
 
+        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
+        ram_str = f"{result['ram_gb']:.2f}GB" if result['ram_gb'] is not None else "N/A"
         print(f"\n{result['name']}: D={result['D']}, "
-              f"JIT={result['jit_sec']:.1f}s, "
-              f"RAM={result['ram_gb']:.2f}GB, "
+              f"JIT={jit_str}, "
+              f"RAM={ram_str}, "
               f"status={result['status']}")
+        if not result['success']:
+            print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         # Baseline assertion: should not crash
         assert result["success"], f"A1 failed: {result['error_type']}"
@@ -444,7 +448,7 @@ class TestStandardGalaxyWorkflows:
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
             dust_model="two_component",
-            dust_emission="dl07",
+            dust_emission="draine_li2007",
             dust_umin=Fixed(1.0),  # FIXED → should avoid PERF-01
             dust_gamma_dl=Uniform(0.0, 0.1),
             dust_qpah=Uniform(0.5, 4.5),
@@ -464,10 +468,14 @@ class TestStandardGalaxyWorkflows:
             rng_key=rng_key,
         )
 
+        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
+        ram_str = f"{result['ram_gb']:.2f}GB" if result['ram_gb'] is not None else "N/A"
         print(f"\n{result['name']}: D={result['D']}, "
-              f"JIT={result['jit_sec']:.1f}s, "
-              f"RAM={result['ram_gb']:.2f}GB, "
+              f"JIT={jit_str}, "
+              f"RAM={ram_str}, "
               f"status={result['status']}")
+        if not result['success']:
+            print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         assert result["success"], f"A2 failed: {result['error_type']}"
 
@@ -476,7 +484,7 @@ class TestStandardGalaxyWorkflows:
             f"A2 JIT {result['jit_sec']:.1f}s suggests Fixed umin didn't prevent template explosion"
         )
 
-    def test_a3_free_dust_temperature_perf01(self, mist_ssp, mock_obs_z1, rng_key):
+    def test_a3_free_dust_temperature_perf01(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """A3. Free dust temperature (D=10, known PERF-01 case).
 
         Model: tsnorm + DL07 with free dust_umin=Uniform(0.5, 25.0)
@@ -495,13 +503,13 @@ class TestStandardGalaxyWorkflows:
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
             dust_model="two_component",
-            dust_emission="dl07",
+            dust_emission="draine_li2007",
             dust_umin=Uniform(0.5, 25.0),  # FREE → triggers PERF-01
             dust_gamma_dl=Uniform(0.0, 0.1),
             dust_qpah=Uniform(0.5, 4.5),
             nebular_ssp=True,
             apply_igm=True,
-            redshift=Fixed(1.0),
+            redshift=Fixed(mock_data_z1["redshift"]),
         )
 
         result = run_scenario(
@@ -509,14 +517,20 @@ class TestStandardGalaxyWorkflows:
             params=params,
             ssp_data=mist_ssp,
             observation=mock_obs_z1,
+            data=mock_data_z1["flux"],
+            noise=mock_data_z1["flux_unc"],
             method="map",
             rng_key=rng_key,
         )
 
+        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
+        ram_str = f"{result['ram_gb']:.2f}GB" if result['ram_gb'] is not None else "N/A"
         print(f"\n{result['name']}: D={result['D']}, "
-              f"JIT={result['jit_sec']:.1f}s, "
-              f"RAM={result['ram_gb']:.2f}GB, "
+              f"JIT={jit_str}, "
+              f"RAM={ram_str}, "
               f"status={result['status']}")
+        if not result['success']:
+            print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         # This scenario is EXPECTED to be slow (documented bug PERF-01)
         # We're testing that it reproduces the known issue
@@ -528,7 +542,7 @@ class TestStandardGalaxyWorkflows:
                 print("   This could mean PERF-01 was fixed!")
 
 
-    def test_a4_stochastic_sfh_recovery(self, mist_ssp, mock_obs_z1, rng_key):
+    def test_a4_stochastic_sfh_recovery(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """A4. Stochastic SFH recovery (D=12, bursty galaxies).
 
         Model: dense_basis+field (5 DB + 2 PSD params), Salim dust, nebular
@@ -537,11 +551,10 @@ class TestStandardGalaxyWorkflows:
         """
         params = Parameters(
             mean_sfh_type=["dense_basis", "field"],
-            sfh_db_log_m_tot=Uniform(9.0, 12.0),
-            sfh_db_log_r=Uniform(-1.5, 1.0),
-            sfh_db_tau_dep_gyr=Uniform(0.5, 10.0),
-            sfh_db_tau_rise_gyr=Uniform(0.1, 3.0),
-            sfh_db_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_dbp_log_total_mass=Uniform(9.0, 12.0),
+            sfh_dbp_tx_frac_0=Uniform(0.05, 0.95),
+            sfh_dbp_tx_frac_1=Uniform(0.05, 0.95),
+            sfh_dbp_tx_frac_2=Uniform(0.05, 0.95),
             sfh_field_psd_sigma=Uniform(0.1, 3.0),
             sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
             met_logzsol=Uniform(-2.0, 0.2),
@@ -550,7 +563,7 @@ class TestStandardGalaxyWorkflows:
             dust_tau_diff=Uniform(0.0, 2.0),
             nebular_ssp=True,
             apply_igm=True,
-            redshift=Fixed(0.1),
+            redshift=Fixed(mock_data_z1["redshift"]),
             n_grid=64,
         )
 
@@ -559,38 +572,48 @@ class TestStandardGalaxyWorkflows:
             params=params,
             ssp_data=mist_ssp,
             observation=mock_obs_z1,
+            data=mock_data_z1["flux"],
+            noise=mock_data_z1["flux_unc"],
             method="vi",
             rng_key=rng_key,
             n_iter=10,  # geoVI iterations
         )
 
+        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
+        ram_str = f"{result['ram_gb']:.2f}GB" if result['ram_gb'] is not None else "N/A"
         print(f"\n{result['name']}: D={result['D']}, "
-              f"JIT={result['jit_sec']:.1f}s, "
-              f"RAM={result['ram_gb']:.2f}GB, "
+              f"JIT={jit_str}, "
+              f"RAM={ram_str}, "
               f"status={result['status']}")
+        if not result['success']:
+            print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         assert result["success"], f"A4 failed: {result['error_type']}"
 
-    def test_a5_high_d_nonparametric(self, mist_ssp, mock_obs_z1, rng_key):
-        """A5. High-D non-parametric (D=30, vi_linear test).
+    def test_a5_high_d_nonparametric(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
+        """A5. High-D non-parametric (D~13, vi_linear test).
 
-        Model: dirichlet SFH (20 time bins), dust, nebular
+        Model: dirichlet SFH (7 bins, 6 auxiliary vars), dust, nebular
         Inference: vi_linear (MGVI, faster for high-D)
         Expected: <20s JIT, <60s inference
         Failure modes: Extreme SFH spikes (NOTE-01)
         """
         params = Parameters(
             mean_sfh_type="dirichlet",
-            sfh_dirichlet_n_bins=20,
-            sfh_dirichlet_alpha=Uniform(0.5, 5.0),
-            sfh_dirichlet_log_m_tot=Uniform(9.0, 12.0),
+            sfh_dir_log_total_mass=Uniform(9.0, 12.0),
+            sfh_dir_z_0=Uniform(0.01, 0.99),
+            sfh_dir_z_1=Uniform(0.01, 0.99),
+            sfh_dir_z_2=Uniform(0.01, 0.99),
+            sfh_dir_z_3=Uniform(0.01, 0.99),
+            sfh_dir_z_4=Uniform(0.01, 0.99),
+            sfh_dir_z_5=Uniform(0.01, 0.99),
             met_logzsol=Uniform(-2.0, 0.2),
             dust_law_bc="calzetti",
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
             nebular_ssp=True,
             apply_igm=True,
-            redshift=Fixed(0.5),
+            redshift=Fixed(mock_data_z1["redshift"]),
         )
 
         result = run_scenario(
@@ -598,15 +621,21 @@ class TestStandardGalaxyWorkflows:
             params=params,
             ssp_data=mist_ssp,
             observation=mock_obs_z1,
+            data=mock_data_z1["flux"],
+            noise=mock_data_z1["flux_unc"],
             method="vi_linear",
             rng_key=rng_key,
             n_iter=20,
         )
 
+        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
+        ram_str = f"{result['ram_gb']:.2f}GB" if result['ram_gb'] is not None else "N/A"
         print(f"\n{result['name']}: D={result['D']}, "
-              f"JIT={result['jit_sec']:.1f}s, "
-              f"RAM={result['ram_gb']:.2f}GB, "
+              f"JIT={jit_str}, "
+              f"RAM={ram_str}, "
               f"status={result['status']}")
+        if not result['success']:
+            print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         # High-D should still be tractable with vi_linear
         if result["success"]:
@@ -619,7 +648,7 @@ class TestKnownBugReproduction:
     """Category C: Known bug reproduction tests."""
 
     @pytest.mark.skipif(not _BPASS_EXISTS, reason="BPASS SSP required for BUG-NSS-01 test")
-    def test_c1_bpass_posterior_derived_crash(self, bpass_ssp, mock_obs_z1, rng_key):
+    def test_c1_bpass_posterior_derived_crash(self, bpass_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """C1. BPASS + posterior.derived crash (BUG-NSS-01).
 
         Model: dpl SFH, BPASS SSP
@@ -636,14 +665,14 @@ class TestKnownBugReproduction:
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
             nebular_ssp=True,
-            redshift=Fixed(1.0),
+            redshift=Fixed(mock_data_z1["redshift"]),
         )
 
-        model = SEDModel(params, bpass_ssp, filters=mock_obs_z1.filters)
-        fitter = PopulationFitter(model)
+        model = SEDModel(params, bpass_ssp, observation=mock_obs_z1)
+        fitter = Fitter(model, data=mock_data_z1["flux"], noise=mock_data_z1["flux_unc"])
 
         try:
-            posterior = fitter.fit(observation=mock_obs_z1, method="map", rng_key=rng_key)
+            posterior = fitter.run("map", key=rng_key)
 
             # BUG-NSS-01: posterior.derived should crash with BPASS
             try:
@@ -660,7 +689,7 @@ class TestKnownBugReproduction:
         except Exception as e:
             pytest.fail(f"C1 failed during fit (not posterior.derived): {e}")
 
-    def test_c2_evolving_metallicity_keyerror(self, mist_ssp, mock_obs_z1, rng_key):
+    def test_c2_evolving_metallicity_keyerror(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """C2. Evolving metallicity KeyError (BUG-NSS-02).
 
         Model: dense_basis, evolving_metallicity=True
@@ -669,24 +698,24 @@ class TestKnownBugReproduction:
         """
         params = Parameters(
             mean_sfh_type="dense_basis",
-            sfh_db_log_m_tot=Uniform(9.0, 12.0),
-            sfh_db_log_r=Uniform(-1.5, 1.0),
-            sfh_db_tau_dep_gyr=Uniform(0.5, 10.0),
-            sfh_db_tau_rise_gyr=Uniform(0.1, 3.0),
-            sfh_db_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_db_log_total_mass=Uniform(9.0, 12.0),
+            sfh_db_log_sfr_inst=Uniform(-2.0, 3.0),
+            sfh_db_tx_frac_0=Uniform(0.0, 1.0),
+            sfh_db_tx_frac_1=Uniform(0.0, 1.0),
+            sfh_db_tx_frac_2=Uniform(0.0, 1.0),
             evolving_metallicity=True,
-            met_logzsol_young=Uniform(-2.0, 0.2),
-            met_logzsol_old=Uniform(-2.0, 0.2),
+            met_logzsol_0=Uniform(-2.0, 0.2),
+            met_logzsol_final=Uniform(-2.0, 0.2),
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
-            redshift=Fixed(1.0),
+            redshift=Fixed(mock_data_z1["redshift"]),
         )
 
-        model = SEDModel(params, mist_ssp, filters=mock_obs_z1.filters)
-        fitter = PopulationFitter(model)
+        model = SEDModel(params, mist_ssp, observation=mock_obs_z1)
+        fitter = Fitter(model, data=mock_data_z1["flux"], noise=mock_data_z1["flux_unc"])
 
         try:
-            _ = fitter.fit(observation=mock_obs_z1, method="map", rng_key=rng_key)
+            _ = fitter.run("map", key=rng_key)
             print("\n⚠️ BUG-NSS-02 NOT reproduced: evolving_metallicity succeeded")
             print("   This could mean BUG-NSS-02 was fixed!")
         except KeyError as e:
@@ -700,7 +729,7 @@ class TestKnownBugReproduction:
 class TestMemoryAndCompilation:
     """Category E: Memory and compilation profiling."""
 
-    def test_e1_baseline_memory(self, mist_ssp, mock_obs_z1, rng_key):
+    def test_e1_baseline_memory(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """E1. Baseline memory (D=7, simple model).
 
         Model: tsnorm + dust (no nebular, no dust emission)
@@ -717,7 +746,7 @@ class TestMemoryAndCompilation:
             met_logzsol=Uniform(-2.0, 0.2),
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
-            redshift=Fixed(1.0),
+            redshift=Fixed(mock_data_z1["redshift"]),
         )
 
         result = run_scenario(
@@ -725,6 +754,8 @@ class TestMemoryAndCompilation:
             params=params,
             ssp_data=mist_ssp,
             observation=mock_obs_z1,
+            data=mock_data_z1["flux"],
+            noise=mock_data_z1["flux_unc"],
             method="map",
             rng_key=rng_key,
         )
@@ -759,30 +790,35 @@ class TestEdgeCases:
             redshift=Fixed(0.01),
         )
 
-        # Create mock obs at z=0.01
+        # Create mock data at z=0.01
         n_bands = len(optical_nir_filters)
-        rng = np.random.default_rng(42)
         flux_cgs = 1e-26 * np.ones(n_bands)
         noise_cgs = flux_cgs / 10.0
 
-        obs = Photometry(
-            flux=jnp.array(flux_cgs),
-            noise=jnp.array(noise_cgs),
-            filters=optical_nir_filters,
-        )
+        obs = Observation(photometry=Photometry.from_filter_set(optical_nir_filters))
+        data_dict = {
+            "flux": jnp.array(flux_cgs),
+            "flux_unc": jnp.array(noise_cgs),
+            "redshift": 0.01,
+        }
 
         result = run_scenario(
             name="F1_low_redshift",
             params=params,
             ssp_data=mist_ssp,
             observation=obs,
+            data=data_dict["flux"],
+            noise=data_dict["flux_unc"],
             method="map",
             rng_key=rng_key,
         )
 
+        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
         print(f"\n{result['name']}: z=0.01, "
-              f"JIT={result['jit_sec']:.1f}s, "
+              f"JIT={jit_str}, "
               f"status={result['status']}")
+        if not result['success']:
+            print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         assert result["success"], f"F1 failed at z=0.01: {result['error_type']}"
 
@@ -802,34 +838,39 @@ class TestEdgeCases:
             redshift=Fixed(8.0),
         )
 
-        # Create mock obs at z=8
+        # Create mock data at z=8
         n_bands = len(optical_nir_filters)
-        rng = np.random.default_rng(43)
         flux_cgs = 1e-27 * np.ones(n_bands)  # Faint high-z galaxy
         noise_cgs = flux_cgs / 5.0
 
-        obs = Photometry(
-            flux=jnp.array(flux_cgs),
-            noise=jnp.array(noise_cgs),
-            filters=optical_nir_filters,
-        )
+        obs = Observation(photometry=Photometry.from_filter_set(optical_nir_filters))
+        data_dict = {
+            "flux": jnp.array(flux_cgs),
+            "flux_unc": jnp.array(noise_cgs),
+            "redshift": 8.0,
+        }
 
         result = run_scenario(
             name="F2_high_redshift",
             params=params,
             ssp_data=mist_ssp,
             observation=obs,
+            data=data_dict["flux"],
+            noise=data_dict["flux_unc"],
             method="map",
             rng_key=rng_key,
         )
 
+        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
         print(f"\n{result['name']}: z=8, "
-              f"JIT={result['jit_sec']:.1f}s, "
+              f"JIT={jit_str}, "
               f"status={result['status']}")
+        if not result['success']:
+            print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         assert result["success"], f"F2 failed at z=8: {result['error_type']}"
 
-    def test_f3_zero_dust(self, mist_ssp, mock_obs_z1, rng_key):
+    def test_f3_zero_dust(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """F3. Zero dust (tau_bc=0, tau_diff=0)."""
         params = Parameters(
             mean_sfh_type="tsnorm",
@@ -841,7 +882,7 @@ class TestEdgeCases:
             met_logzsol=Uniform(-2.0, 0.2),
             dust_tau_bc=Fixed(0.0),  # Zero dust
             dust_tau_diff=Fixed(0.0),
-            redshift=Fixed(1.0),
+            redshift=Fixed(mock_data_z1["redshift"]),
         )
 
         result = run_scenario(
@@ -849,6 +890,8 @@ class TestEdgeCases:
             params=params,
             ssp_data=mist_ssp,
             observation=mock_obs_z1,
+            data=mock_data_z1["flux"],
+            noise=mock_data_z1["flux_unc"],
             method="map",
             rng_key=rng_key,
         )
@@ -859,7 +902,7 @@ class TestEdgeCases:
 
         assert result["success"], f"F3 failed with zero dust: {result['error_type']}"
 
-    def test_f4_extreme_metallicity(self, mist_ssp, mock_obs_z1, rng_key):
+    def test_f4_extreme_metallicity(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """F4. Extreme metallicity (logZ = -2.0 subsolar)."""
         params = Parameters(
             mean_sfh_type="tsnorm",
@@ -871,7 +914,7 @@ class TestEdgeCases:
             met_logzsol=Fixed(-2.0),  # Extreme metal-poor (grid edge)
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
-            redshift=Fixed(1.0),
+            redshift=Fixed(mock_data_z1["redshift"]),
         )
 
         result = run_scenario(
@@ -879,6 +922,8 @@ class TestEdgeCases:
             params=params,
             ssp_data=mist_ssp,
             observation=mock_obs_z1,
+            data=mock_data_z1["flux"],
+            noise=mock_data_z1["flux_unc"],
             method="map",
             rng_key=rng_key,
         )

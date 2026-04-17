@@ -1219,7 +1219,7 @@ class PopulationFitter:
         """
         from jax.flatten_util import ravel_pytree
 
-        from tengri.inference.raytrace import sample_raytrace
+        from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 
         n_gal = self.n_galaxies
         spec = self._spec

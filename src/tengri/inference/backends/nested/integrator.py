@@ -27,8 +27,8 @@ from typing import NamedTuple
 import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 
-from tengri.inference.ns._types import Array
-from tengri.inference.ns.base import StateWithLogLikelihood
+from tengri.inference.backends.nested._types import Array
+from tengri.inference.backends.nested.base import StateWithLogLikelihood
 
 __all__ = ["NSIntegrator", "init_integrator", "update_integrator"]
 

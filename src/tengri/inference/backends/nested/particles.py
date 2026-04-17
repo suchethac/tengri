@@ -23,7 +23,7 @@ import jax
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
-from tengri.inference.ns._types import Array
+from tengri.inference.backends.nested._types import Array
 
 __all__ = [
     "inverse_mass_matrix_from_particles",

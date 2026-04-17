@@ -25,7 +25,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from tengri.inference.ns._types import Array, ArrayLikeTree, PRNGKey
+from tengri.inference.backends.nested._types import Array, ArrayLikeTree, PRNGKey
 
 __all__ = ["NSInfo", "NSState", "build_kernel", "delete_fn", "init"]
 

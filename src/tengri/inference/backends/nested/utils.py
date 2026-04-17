@@ -24,8 +24,8 @@ from collections.abc import Callable
 import jax
 import jax.numpy as jnp
 
-from tengri.inference.ns._types import Array, ArrayTree, PRNGKey
-from tengri.inference.ns.base import NSInfo, NSState
+from tengri.inference.backends.nested._types import Array, ArrayTree, PRNGKey
+from tengri.inference.backends.nested.base import NSInfo, NSState
 
 __all__ = [
     "compute_num_live",

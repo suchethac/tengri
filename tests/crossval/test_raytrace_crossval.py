@@ -64,7 +64,7 @@ def gaussian_target():
 @pytest.fixture(scope="module")
 def tengri_chain(gaussian_target):
     """Run tengri's ray tracer."""
-    from tengri.inference.raytrace import sample_raytrace
+    from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 
     key = jax.random.PRNGKey(0)
     x0 = jnp.zeros(gaussian_target["D"])
@@ -160,7 +160,7 @@ class TestHMCCrossValidation:
 
     def test_hmc_chains_identical(self, gaussian_target):
         """HMC mode should also produce identical chains."""
-        from tengri.inference.raytrace import sample_hamiltonian
+        from tengri.inference.backends.mcmc.raytrace import sample_hamiltonian
 
         ref = _load_behroozi_module()
         key = jax.random.PRNGKey(7)

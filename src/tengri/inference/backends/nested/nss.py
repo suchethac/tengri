@@ -28,17 +28,17 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from tengri.inference.ns._types import ArrayTree, SamplingAlgorithm
-from tengri.inference.ns.adaptive import build_kernel as build_adaptive_kernel, init
-from tengri.inference.ns.base import (
+from tengri.inference.backends.nested._types import ArrayTree, SamplingAlgorithm
+from tengri.inference.backends.nested.adaptive import build_kernel as build_adaptive_kernel, init
+from tengri.inference.backends.nested.base import (
     NSInfo,
     NSState,
     delete_fn as default_delete_fn,
     init_state_strategy,
 )
-from tengri.inference.ns.from_mcmc import update_with_mcmc_take_last
-from tengri.inference.ns.particles import particles_covariance_matrix
-from tengri.inference.ns.slice_sampling import (
+from tengri.inference.backends.nested.from_mcmc import update_with_mcmc_take_last
+from tengri.inference.backends.nested.particles import particles_covariance_matrix
+from tengri.inference.backends.nested.slice_sampling import (
     build_kernel as build_slice_kernel,
     sample_direction_from_covariance,
 )

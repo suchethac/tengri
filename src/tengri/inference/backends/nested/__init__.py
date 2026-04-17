@@ -17,14 +17,14 @@ Available modules
 
 Usage
 -----
->>> from tengri.inference.ns.nss import as_top_level_api
->>> from tengri.inference.ns.utils import finalise, sample, ess
+>>> from tengri.inference.backends.nested.nss import as_top_level_api
+>>> from tengri.inference.backends.nested.utils import finalise, sample, ess
 >>> algo = as_top_level_api(logprior_fn, loglik_fn, num_inner_steps=D)
 >>> state = algo.init(particles)
 >>> state, info = algo.step(key, state)
 """
 
-from tengri.inference.ns import (
+from tengri.inference.backends.nested import (
     adaptive,
     base,
     from_mcmc,

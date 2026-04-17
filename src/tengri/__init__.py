@@ -84,7 +84,7 @@ from tengri.inference.hierarchical import (
     PopulationPosterior,
 )
 from tengri.inference.posterior import Posterior
-from tengri.inference.raytrace import sample_raytrace
+from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 from tengri.inference.vi_config import VIConfig
 from tengri.observation.filters import load_filter_set
 from tengri.observation.line_list import LineCatalog, LineList

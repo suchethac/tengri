@@ -72,7 +72,7 @@ class TestGenerateTrainingData:
     """Tests for generate_sbi_training_data."""
 
     def test_output_keys(self, mock_model, mock_spec):
-        from tengri.inference.sbi import generate_sbi_training_data
+        from tengri.inference.backends.sbi import generate_sbi_training_data
 
         data = generate_sbi_training_data(
             mock_model,
@@ -85,7 +85,7 @@ class TestGenerateTrainingData:
         assert "x_type" in data
 
     def test_theta_shape(self, mock_model, mock_spec):
-        from tengri.inference.sbi import generate_sbi_training_data
+        from tengri.inference.backends.sbi import generate_sbi_training_data
 
         n = 20
         data = generate_sbi_training_data(
@@ -97,7 +97,7 @@ class TestGenerateTrainingData:
         assert data["theta"].shape == (n, n_params)
 
     def test_x_shape(self, mock_model, mock_spec):
-        from tengri.inference.sbi import generate_sbi_training_data
+        from tengri.inference.backends.sbi import generate_sbi_training_data
 
         n = 15
         data = generate_sbi_training_data(
@@ -110,7 +110,7 @@ class TestGenerateTrainingData:
         assert data["x"].shape[1] == 5
 
     def test_param_names(self, mock_model, mock_spec):
-        from tengri.inference.sbi import generate_sbi_training_data
+        from tengri.inference.backends.sbi import generate_sbi_training_data
 
         data = generate_sbi_training_data(
             mock_model,
@@ -121,7 +121,7 @@ class TestGenerateTrainingData:
         assert data["param_names"] == sorted(mock_spec.free_params)
 
     def test_x_type_photometry(self, mock_model, mock_spec):
-        from tengri.inference.sbi import generate_sbi_training_data
+        from tengri.inference.backends.sbi import generate_sbi_training_data
 
         data = generate_sbi_training_data(
             mock_model,
@@ -132,7 +132,7 @@ class TestGenerateTrainingData:
         assert data["x_type"] == "photometry"
 
     def test_theta_finite(self, mock_model, mock_spec):
-        from tengri.inference.sbi import generate_sbi_training_data
+        from tengri.inference.backends.sbi import generate_sbi_training_data
 
         data = generate_sbi_training_data(
             mock_model,
@@ -142,7 +142,7 @@ class TestGenerateTrainingData:
         assert jnp.all(jnp.isfinite(data["theta"]))
 
     def test_x_finite(self, mock_model, mock_spec):
-        from tengri.inference.sbi import generate_sbi_training_data
+        from tengri.inference.backends.sbi import generate_sbi_training_data
 
         data = generate_sbi_training_data(
             mock_model,
@@ -152,7 +152,7 @@ class TestGenerateTrainingData:
         assert jnp.all(jnp.isfinite(data["x"]))
 
     def test_theta_within_prior_bounds(self, mock_model, mock_spec):
-        from tengri.inference.sbi import generate_sbi_training_data
+        from tengri.inference.backends.sbi import generate_sbi_training_data
 
         data = generate_sbi_training_data(
             mock_model,
@@ -176,7 +176,7 @@ class TestGenerateTrainingData:
             assert jnp.all(col <= hi + 1e-6), f"{name} above upper bound"
 
     def test_reproducible_with_same_key(self, mock_model, mock_spec):
-        from tengri.inference.sbi import generate_sbi_training_data
+        from tengri.inference.backends.sbi import generate_sbi_training_data
 
         key = jax.random.key(123)
         d1 = generate_sbi_training_data(mock_model, mock_spec, n_samples=10, key=key)
@@ -185,7 +185,7 @@ class TestGenerateTrainingData:
         assert jnp.allclose(d1["x"], d2["x"])
 
     def test_different_keys_different_data(self, mock_model, mock_spec):
-        from tengri.inference.sbi import generate_sbi_training_data
+        from tengri.inference.backends.sbi import generate_sbi_training_data
 
         d1 = generate_sbi_training_data(
             mock_model,
@@ -211,7 +211,7 @@ class TestInputValidation:
     """Test error handling for invalid inputs."""
 
     def test_invalid_obs_type(self, mock_model, mock_spec):
-        from tengri.inference.sbi import generate_sbi_training_data
+        from tengri.inference.backends.sbi import generate_sbi_training_data
 
         with pytest.raises(ValueError, match="obs_type"):
             generate_sbi_training_data(
@@ -222,7 +222,7 @@ class TestInputValidation:
             )
 
     def test_invalid_noise_model(self, mock_model, mock_spec):
-        from tengri.inference.sbi import generate_sbi_training_data
+        from tengri.inference.backends.sbi import generate_sbi_training_data
 
         with pytest.raises(ValueError, match="noise_model"):
             generate_sbi_training_data(
@@ -233,7 +233,7 @@ class TestInputValidation:
             )
 
     def test_invalid_n_samples(self, mock_model, mock_spec):
-        from tengri.inference.sbi import generate_sbi_training_data
+        from tengri.inference.backends.sbi import generate_sbi_training_data
 
         with pytest.raises(ValueError, match="n_samples"):
             generate_sbi_training_data(
@@ -263,7 +263,7 @@ class TestSaveLoad:
 
     def test_round_trip(self, sample_data):
         h5py = pytest.importorskip("h5py")
-        from tengri.inference.sbi import load_sbi_training_data, save_sbi_training_data
+        from tengri.inference.backends.sbi import load_sbi_training_data, save_sbi_training_data
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = str(Path(tmpdir) / "test_sbi.h5")
@@ -277,7 +277,7 @@ class TestSaveLoad:
 
     def test_load_missing_file(self):
         h5py = pytest.importorskip("h5py")
-        from tengri.inference.sbi import load_sbi_training_data
+        from tengri.inference.backends.sbi import load_sbi_training_data
 
         with pytest.raises(FileNotFoundError):
             load_sbi_training_data("/nonexistent/path/data.h5")
@@ -307,13 +307,13 @@ class TestSBIPosterior:
     """Tests for the SBIPosterior wrapper."""
 
     def test_from_file_missing(self):
-        from tengri.inference.sbi import SBIPosterior
+        from tengri.inference.backends.sbi import SBIPosterior
 
         with pytest.raises(FileNotFoundError):
             SBIPosterior.from_file("/nonexistent/posterior.pkl")
 
     def test_from_file_dict_format(self):
-        from tengri.inference.sbi import SBIPosterior
+        from tengri.inference.backends.sbi import SBIPosterior
 
         state = {
             "posterior": _FakePosterior(),
@@ -333,7 +333,7 @@ class TestSBIPosterior:
             Path(path).unlink()
 
     def test_from_file_bare_object(self):
-        from tengri.inference.sbi import SBIPosterior
+        from tengri.inference.backends.sbi import SBIPosterior
 
         with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
             pickle.dump(_FakePosterior(), f)
@@ -347,7 +347,7 @@ class TestSBIPosterior:
             Path(path).unlink()
 
     def test_sample_calls_underlying(self):
-        from tengri.inference.sbi import SBIPosterior
+        from tengri.inference.backends.sbi import SBIPosterior
 
         mock_posterior = MagicMock()
         expected = jnp.ones((100, 3))
@@ -361,7 +361,7 @@ class TestSBIPosterior:
         assert jnp.allclose(result, expected)
 
     def test_log_prob_calls_underlying(self):
-        from tengri.inference.sbi import SBIPosterior
+        from tengri.inference.backends.sbi import SBIPosterior
 
         mock_posterior = MagicMock()
         expected = jnp.zeros(5)
@@ -376,7 +376,7 @@ class TestSBIPosterior:
         assert jnp.allclose(result, expected)
 
     def test_sample_no_method_raises(self):
-        from tengri.inference.sbi import SBIPosterior
+        from tengri.inference.backends.sbi import SBIPosterior
 
         # Object without sample method
         wrapper = SBIPosterior(posterior=42)
@@ -384,14 +384,14 @@ class TestSBIPosterior:
             wrapper.sample(jnp.array([1.0]))
 
     def test_log_prob_no_method_raises(self):
-        from tengri.inference.sbi import SBIPosterior
+        from tengri.inference.backends.sbi import SBIPosterior
 
         wrapper = SBIPosterior(posterior=42)
         with pytest.raises(AttributeError, match="log_prob"):
             wrapper.log_prob(jnp.array([1.0]), jnp.array([1.0]))
 
     def test_save_load_round_trip(self):
-        from tengri.inference.sbi import SBIPosterior
+        from tengri.inference.backends.sbi import SBIPosterior
 
         original = SBIPosterior(
             _FakePosterior(),
@@ -408,7 +408,7 @@ class TestSBIPosterior:
         assert loaded.metadata["epochs"] == 10
 
     def test_summary(self):
-        from tengri.inference.sbi import SBIPosterior
+        from tengri.inference.backends.sbi import SBIPosterior
 
         wrapper = SBIPosterior(
             MagicMock(),

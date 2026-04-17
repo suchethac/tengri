@@ -26,8 +26,8 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from tengri.inference.ns.adaptive import build_kernel as build_adaptive_kernel
-from tengri.inference.ns.base import delete_fn as default_delete_fn
+from tengri.inference.backends.nested.adaptive import build_kernel as build_adaptive_kernel
+from tengri.inference.backends.nested.base import delete_fn as default_delete_fn
 
 
 class MCMCUpdateInfo(NamedTuple):

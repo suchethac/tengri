@@ -51,8 +51,8 @@ def run_raytrace(
     verbose : bool
         Print progress.
     """
+    from tengri.inference.backends.mcmc.raytrace import sample_raytrace
     from tengri.inference.posterior import Posterior
-    from tengri.inference.raytrace import sample_raytrace
 
     loss_fn = fitter._get_or_build_loss_fn()
     data_args = fitter._data_args
@@ -389,7 +389,7 @@ def run_nuts(
 
 def run_elliptical_slice(fitter, *, key, init_from=None, **kwargs):
     """Elliptical Slice Sampling for Gaussian-prior latent models."""
-    from tengri.inference.elliptical_slice import run_elliptical_slice
+    from tengri.inference.backends.mcmc.elliptical_slice import run_elliptical_slice
 
     loglik_unbounded_fn = fitter._build_loglikelihood_unbounded_fn()
     data_args = fitter._data_args

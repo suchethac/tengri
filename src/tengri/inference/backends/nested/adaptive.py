@@ -27,15 +27,19 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from tengri.inference.ns._types import ArrayLikeTree, ArrayTree, PRNGKey
-from tengri.inference.ns.base import (
+from tengri.inference.backends.nested._types import ArrayLikeTree, ArrayTree, PRNGKey
+from tengri.inference.backends.nested.base import (
     NSInfo,
     NSState,
     StateWithLogLikelihood,
     build_kernel as base_build_kernel,
     init as base_init,
 )
-from tengri.inference.ns.integrator import NSIntegrator, init_integrator, update_integrator
+from tengri.inference.backends.nested.integrator import (
+    NSIntegrator,
+    init_integrator,
+    update_integrator,
+)
 
 __all__ = ["build_kernel", "init"]
 

@@ -85,7 +85,7 @@ class TestNSSParity:
 
     def test_identical_init(self):
         """init() produces identical states."""
-        from tengri.inference.ns.nss import as_top_level_api as tengri_api
+        from tengri.inference.backends.nested.nss import as_top_level_api as tengri_api
 
         logprior_fn, loglik_fn, names = _make_functions()
 
@@ -118,7 +118,7 @@ class TestNSSParity:
 
     def test_identical_steps(self):
         """step() produces identical results for the same key."""
-        from tengri.inference.ns.nss import as_top_level_api as tengri_api
+        from tengri.inference.backends.nested.nss import as_top_level_api as tengri_api
 
         logprior_fn, loglik_fn, names = _make_functions()
 
@@ -159,7 +159,7 @@ class TestNSSParity:
 
     def test_identical_evidence(self):
         """Full runs produce identical log-evidence."""
-        from tengri.inference.ns.nss import as_top_level_api as tengri_api
+        from tengri.inference.backends.nested.nss import as_top_level_api as tengri_api
 
         logprior_fn, loglik_fn, names = _make_functions()
 
@@ -190,8 +190,8 @@ class TestNSSParity:
 
     def test_identical_post_processing(self):
         """finalise + sample + ess produce identical results."""
-        from tengri.inference.ns.nss import as_top_level_api as tengri_api
-        from tengri.inference.ns.utils import (
+        from tengri.inference.backends.nested.nss import as_top_level_api as tengri_api
+        from tengri.inference.backends.nested.utils import (
             ess as tengri_ess,
             finalise as tengri_finalise,
             sample as tengri_sample,
@@ -253,7 +253,7 @@ class TestNSSPerformanceParity:
 
     def test_step_time_comparable(self):
         """Single JIT-compiled step takes comparable time."""
-        from tengri.inference.ns.nss import as_top_level_api as tengri_api
+        from tengri.inference.backends.nested.nss import as_top_level_api as tengri_api
 
         logprior_fn, loglik_fn, names = _make_functions()
 

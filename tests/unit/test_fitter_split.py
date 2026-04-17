@@ -2,14 +2,15 @@
 
 
 def test_vi_module_importable():
-    """After split, vi.py must be importable and expose run_nifty_fast_vi."""
-    from tengri.inference.vi import run_nifty_fast_vi
+    """After split, vi backend must be importable and expose run_nifty_fast_vi."""
+    from tengri.inference.backends.vi.nifty import run_nifty_fast_vi
 
     assert callable(run_nifty_fast_vi)
 
 
 def test_vi_module_all_functions():
-    from tengri.inference.vi import run_native_vi, run_nifty_fast_vi, run_nifty_vi
+    from tengri.inference.backends.vi.native import run_native_vi
+    from tengri.inference.backends.vi.nifty import run_nifty_fast_vi, run_nifty_vi
 
     assert callable(run_nifty_fast_vi)
     assert callable(run_native_vi)
@@ -17,7 +18,7 @@ def test_vi_module_all_functions():
 
 
 def test_mcmc_module_importable():
-    from tengri.inference.mcmc import run_elliptical_slice, run_nuts, run_raytrace
+    from tengri.inference.backends.mcmc.common import run_elliptical_slice, run_nuts, run_raytrace
 
     assert callable(run_raytrace)
     assert callable(run_nuts)
@@ -25,13 +26,15 @@ def test_mcmc_module_importable():
 
 
 def test_evidence_module_importable():
-    from tengri.inference.evidence import run_nss
+    from tengri.inference.backends.evidence import run_nss
 
     assert callable(run_nss)
 
 
 def test_map_dispatch_importable():
-    from tengri.inference.map_dispatch import run_laplace, run_map, run_pathfinder
+    from tengri.inference.backends.laplace import run_laplace
+    from tengri.inference.backends.map_dispatch import run_map
+    from tengri.inference.backends.pathfinder import run_pathfinder
 
     assert callable(run_map)
     assert callable(run_laplace)
