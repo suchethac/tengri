@@ -174,7 +174,9 @@ def _validate_shock_params(
     v_arr = np.asarray(g["velocities_kms"])
     try:
         v = float(shock_velocity)
-    except Exception:
+    except (TypeError, AttributeError):
+        # TypeError: JAX tracer doesn't support float() conversion
+        # AttributeError: tracer missing __float__
         pass  # traced value — validation deferred to prior bounds
     else:
         if not (v_arr[0] <= v <= v_arr[-1]):
