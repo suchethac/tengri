@@ -868,42 +868,29 @@ def kubota_done_disc_preintegrated(
 def precompute(filter_waves: list, filter_trans: list, redshift: float, parameters=None, **kwargs):
     """Protocol-shaped entry point for K&D 3-zone disc precompute.
 
-    The K&D tables are fully built regardless of ``parameters`` — the K&D
-    grid axes are internal physics coords, not user priors, so auto-collapse
-    is a no-op. Delegates to the existing ``kubota_done_disc_preintegrated``
-    path. See docs/dev/optimization-architecture.md for the incomplete-state
-    notes.
+    Delegates to :func:`preintegrate_kd_components`, which builds Planck,
+    nthcomp, and corona filter lookup tables. The K&D grid axes are internal
+    physics coordinates (temperature, photon index, etc.), not user-facing
+    priors, so auto-collapse-on-Fixed is a no-op (``AXIS_PARAMS = ()``).
 
     Parameters
     ----------
     filter_waves, filter_trans : list
         Filter curves (observed frame).
     redshift : float
-        Source redshift.
+        Source redshift (fixed at init time).
     parameters : Parameters | None
-        Unused — K&D grid axes are internal physics coords, not user
-        parameters.
+        Unused — K&D grid axes are internal physics coords, not user priors.
     **kwargs
-        Additional keyword arguments passed to the K&D builder.
+        Forwarded to :func:`preintegrate_kd_components` (e.g. ``n_T``,
+        ``T_min``, ``T_max``, ``n_Gamma``, ``n_kT_corona``).
 
-    Raises
-    ------
-    NotImplementedError
-        K&D precompute Protocol wiring is deferred.  See
-        docs/dev/optimization-architecture.md and use the existing
-        kd_disc precomputation path invoked from core/model.py.
+    Returns
+    -------
+    KDPreintegratedData
+        All precomputed filter-integrated tables for the 3-zone K&D disc.
     """
-    # The existing K&D build function lives in this module; look for a
-    # top-level ``build_*`` function (e.g. ``build_planck_table``,
-    # ``build_nthcomp_table``) and call them. Delegate to whichever top-level
-    # precompute constructor returns a KDPreintegratedData.
-    # If no turnkey constructor exists, raise NotImplementedError with a clear
-    # message pointing to the existing internal callers in core/model.py.
-    raise NotImplementedError(
-        "K&D precompute Protocol wiring is deferred — use the existing "
-        "kd_disc precomputation path invoked from core/model.py. "
-        "See docs/dev/optimization-architecture.md."
-    )
+    return preintegrate_kd_components(filter_waves, filter_trans, redshift, **kwargs)
 
 
 def build_lookup(preint, **kwargs):
