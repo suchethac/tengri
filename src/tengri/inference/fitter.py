@@ -15,11 +15,14 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 import warnings
 
 import jax
+
+logger = logging.getLogger(__name__)
 import jax.numpy as jnp
 
 from tengri.inference.jit_engine import build_jit_engine
@@ -417,6 +420,14 @@ class Fitter:
                             verbose=False,
                         )
             except Exception as exc:
+                # Compilation errors (JAX tracing, type mismatches, etc.) are stored
+                # and re-raised when the engine is first accessed via _get_or_build_engine()
+                logger.error(
+                    "Background JIT compilation failed: %s: %s",
+                    type(exc).__name__,
+                    exc,
+                    exc_info=True,
+                )
                 self._compilation_error = exc
             finally:
                 self._compilation_event.set()
@@ -937,6 +948,8 @@ class Fitter:
                 combined = {k: pos_tree[k] + sample_tree[k] for k in pos_tree}
                 existing_samples.append(combined)
             except Exception:
+                # Sampling failed (likely numerical instability or convergence failure)
+                # Stop generating warmup samples and return what we have
                 break
 
         return existing_samples
@@ -1016,7 +1029,8 @@ class Fitter:
             from tengri.parameters.defaults import get_inference_defaults
 
             kwargs = {**get_inference_defaults(method), **kwargs}
-        except Exception:
+        except (ImportError, FileNotFoundError, OSError):
+            # Config file unavailable or unreadable — skip defaults merge
             pass
 
         # Strip any stale vi_flavor kwarg that callers may pass (no longer used)
@@ -1029,7 +1043,8 @@ class Fitter:
                 from tengri.parameters.defaults import get_inference_defaults
 
                 threshold = int(get_inference_defaults().get("mcmc_auto_d", _AUTO_D_THRESHOLD))
-            except Exception:
+            except (ImportError, FileNotFoundError, OSError, KeyError, ValueError):
+                # Config unavailable, missing key, or non-integer value — use hardcoded fallback
                 threshold = _AUTO_D_THRESHOLD
             method = "mcmc_nuts" if d <= threshold else "vi"
 
