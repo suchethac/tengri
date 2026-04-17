@@ -118,7 +118,10 @@ def posterior_plot_sfh(result, truth_sfh=None, ax=None):
             t_gyr_true = np.array(sfh_true["t_gyr"])
             sfr_true = np.array(sfh_true["sfr_mean"])
             ax.plot(t_gyr_true, sfr_true, "--", color="k", lw=2, label="Truth")
-        except Exception:
+        except (KeyError, AttributeError, ValueError, TypeError):
+            # KeyError: sfr_mean or t_gyr missing from output
+            # AttributeError: predict_sfh method doesn't exist
+            # ValueError/TypeError: array conversion failed
             pass
 
     ax.set_xlabel("Lookback time [Gyr]")
