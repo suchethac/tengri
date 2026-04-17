@@ -92,7 +92,10 @@ def tree(model: SEDModel) -> str:
         try:
             dist = model.spec.get_distribution(name)
             lines.append(f"{sep}   {prefix} {name:<30s} ~ {dist!r}")
-        except Exception:
+        except (KeyError, AttributeError, ValueError):
+            # KeyError: parameter not in spec
+            # AttributeError: get_distribution method missing
+            # ValueError: invalid distribution specification
             lines.append(f"{sep}   {prefix} {name}")
     if model.spec.stochastic:
         lines.append(f"{sep}   {last} sfh_field_xi  [{n_grid}-dim GP latent, xi ~ N(0,I)]")
@@ -103,7 +106,9 @@ def tree(model: SEDModel) -> str:
         ssp = model.ssp_data
         n_met, n_age, n_wave = ssp.ssp_flux.shape
         lines.append(f"{branch} SPS: DSPS  [{n_met} Z x {n_age} ages x {n_wave} lambda]")
-    except Exception:
+    except (AttributeError, ValueError):
+        # AttributeError: ssp_data or ssp_flux not available
+        # ValueError: shape unpacking failed (wrong dimensions)
         lines.append(f"{branch} SPS: DSPS")
     lines.append(sep)
 
@@ -114,7 +119,10 @@ def tree(model: SEDModel) -> str:
         try:
             dist = model.spec.get_distribution(name)
             lines.append(f"{sep}   {branch} {name:<30s} ~ {dist!r}")
-        except Exception:
+        except (KeyError, AttributeError, ValueError):
+            # KeyError: parameter not in spec
+            # AttributeError: get_distribution method missing
+            # ValueError: invalid distribution specification
             lines.append(f"{sep}   {branch} {name}")
     lines.append(sep)
 
@@ -127,7 +135,10 @@ def tree(model: SEDModel) -> str:
             try:
                 dist = model.spec.get_distribution(name)
                 lines.append(f"{sep}   {branch} {name:<30s} ~ {dist!r}")
-            except Exception:
+            except (KeyError, AttributeError, ValueError):
+                # KeyError: parameter not in spec
+                # AttributeError: get_distribution method missing
+                # ValueError: invalid distribution specification
                 lines.append(f"{sep}   {branch} {name}")
         lines.append(sep)
 
@@ -140,7 +151,10 @@ def tree(model: SEDModel) -> str:
             try:
                 dist = model.spec.get_distribution(name)
                 lines.append(f"{sep}   {branch} {name:<30s} ~ {dist!r}")
-            except Exception:
+            except (KeyError, AttributeError, ValueError):
+                # KeyError: parameter not in spec
+                # AttributeError: get_distribution method missing
+                # ValueError: invalid distribution specification
                 lines.append(f"{sep}   {branch} {name}")
         lines.append(sep)
 
