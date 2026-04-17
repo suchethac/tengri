@@ -132,7 +132,11 @@ def generate_sbi_training_data(
     # non-traceable callables (e.g., mocks in tests).
     try:
         x_clean = jax.vmap(predict_fn)(theta_dict)
-    except Exception:
+    except (TypeError, ValueError, RuntimeError, AttributeError):
+        # TypeError: predict_fn isn't vmappable (non-traceable callable)
+        # ValueError: theta_dict structure incompatible with vmap
+        # RuntimeError: JAX compilation error
+        # AttributeError: predict_fn doesn't behave as expected
         # Fallback: loop over samples individually
         results = []
         for i in range(n_samples):
