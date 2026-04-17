@@ -947,8 +947,12 @@ class Fitter:
                 )
                 combined = {k: pos_tree[k] + sample_tree[k] for k in pos_tree}
                 existing_samples.append(combined)
-            except Exception:
-                # Sampling failed (likely numerical instability or convergence failure)
+            except (TypeError, ValueError, AttributeError, KeyError, RuntimeError):
+                # TypeError: NIFTy API mismatch or dict() conversion failed
+                # ValueError: invalid cg_kwargs configuration
+                # AttributeError: missing .tree attribute
+                # KeyError: position/sample tree key mismatch
+                # RuntimeError: linear solver failed to converge
                 # Stop generating warmup samples and return what we have
                 break
 
