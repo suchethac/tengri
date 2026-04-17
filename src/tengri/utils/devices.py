@@ -107,7 +107,10 @@ def device_info() -> dict:
                 if mem:
                     info["gpu_memory_mb"] = mem.get("bytes_limit", 0) / 1e6
                     break
-        except Exception:
+        except (AttributeError, KeyError, TypeError):
+            # AttributeError: memory_stats() not available on this backend
+            # KeyError: bytes_limit missing from memory stats dict
+            # TypeError: memory_stats() returned non-dict
             pass
 
     return info
@@ -158,7 +161,11 @@ def get_n_parallel_chains(memory_per_chain_mb: float = 50.0) -> int:
             # Use 80% of available memory
             n = int(0.8 * total_mb / memory_per_chain_mb)
             return max(n, 1)
-        except Exception:
+        except (AttributeError, KeyError, TypeError, ZeroDivisionError):
+            # AttributeError: memory_stats() not available
+            # KeyError: bytes_limit missing
+            # TypeError: memory_stats() returned non-dict
+            # ZeroDivisionError: memory_per_chain_mb is 0
             return 100  # conservative default for unknown GPU
 
     elif platform == "cpu":
