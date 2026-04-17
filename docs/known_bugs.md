@@ -479,6 +479,24 @@ if _has_any_nonstell:
 
 **Status:** OPEN — lower priority than ARCH-01; requires case-by-case analysis.
 
+### ARCH-03: Input validation at API boundaries (ASSESSED 2026-04-17)
+
+**Scope:** API entry points (`SEDModel.__init__`, `Fitter.__init__`, public component functions)
+**Current state:**
+- ✅ High-level API validates critical inputs (mutual exclusivity, types, enum values)
+- ✅ Discrete parameters (e.g., `sfr_mode`, `csp_integration`) validated with helpful error messages
+- ❌ No systematic numerical validation (NaN, inf, negative values, array shape mismatches)
+
+**Examples of existing validation:**
+- `SEDModel.__init__`: Type check for `observation` (lines 201-204), enum check for `csp_integration` (257-260), mutual exclusivity check for `filters`/`observation` (191-194)
+- `radio.py:_radio_star_forming_dispatch`: Enum check for `sfr_mode` (459-462)
+
+**Assessment:** By design for JAX — extensive numerical checks inside JIT-compiled functions add overhead and interfere with tracing. Pragmatic approach is to validate discrete/type errors at the outer boundary and rely on JAX's error messages for numerical issues.
+
+**Impact:** Low. The code validates for the most common user errors (type errors, invalid enum values). Additional numerical validation would be nice-to-have but is lower priority.
+
+**Status:** ASSESSED — not a bug, current approach is reasonable for JAX codebase. Can revisit if user error reports indicate a gap.
+
 ---
 
 ## BUGS CONFIRMED FIXED (for reference)
