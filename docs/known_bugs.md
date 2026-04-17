@@ -431,6 +431,56 @@ volume effect is well-known (Leja+2019a). Consider tighter priors on z_i or usin
 
 ---
 
+## ARCHITECTURAL DEBT
+
+These are not bugs but acknowledged design/implementation issues that accumulate technical debt. Tracked here for visibility and future refactoring priority.
+
+### ARCH-01: Deep nesting in hybrid kernel non-stellar section (OPEN)
+
+**File:** `src/tengri/forward/kernels/hybrid.py:1084-1372` (_hybrid_phot_body function)
+**Metric:** 888 lines with 4+ indentation levels (most in codebase)
+**Pattern:** Each non-stellar component (nebular, shock, dust IR, AGN, radio, X-ray) has conditional preintegrated vs full-wavelength paths, creating deep nesting:
+```
+if _has_any_nonstell:
+    if has_nebular:
+        if _has_preint_neb:
+            # preintegrated path
+        else:
+            # full-wavelength path
+    if has_dust_em_full:
+        if _has_preint_dust_ir:
+            if _dust_model_name == "draine_li2007":
+                # DL07-specific preintegration
+            elif _dust_model_name == "dale2014":
+                # Dale-specific preintegration
+        else:
+            # full-wavelength path
+    # ... similar for AGN, radio, X-ray
+```
+
+**Why deferred:** Lines 142-152 TODO explicitly documents the reason — the refactored `build_nonstell_fn()` API returns full-wavelength SEDs, incompatible with the preintegrated shortcuts that return filter-integrated photometry directly. Migrating would require either (a) dropping the fast paths (performance loss) or (b) extending `build_nonstell_fn()` to optionally return photometry shortcuts. Deferred until preintegrated paths are verified and stabilized.
+
+**Impact:** Readability. The deep nesting reflects genuine conditional logic (two API-incompatible paths per component), not accidental complexity. Extracting helper functions wouldn't reduce nesting without first resolving the API incompatibility.
+
+**Status:** OPEN — tracking only, not blocking any work.
+
+### ARCH-02: Deep nesting in other large files (OPEN)
+
+**Scope:** 81 files total with 4+ indentation levels (16+ spaces)
+**High-frequency files:**
+- `inference/hierarchical.py`
+- `inference/fitter.py`
+- `components/nebular/cue.py`
+- `forward/sed_model.py`
+
+**Impact:** Maintainability. Deep nesting indicates complex conditional logic that should be extracted into helper functions.
+
+**Next step:** Spot-check top 5 files to identify whether nesting reflects genuine conditional paths (like hybrid.py) or could be refactored via early returns / helper extraction.
+
+**Status:** OPEN — lower priority than ARCH-01; requires case-by-case analysis.
+
+---
+
 ## BUGS CONFIRMED FIXED (for reference)
 
 ### From original audit (22 fixed):
