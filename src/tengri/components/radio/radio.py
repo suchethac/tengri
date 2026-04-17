@@ -47,9 +47,10 @@ import jax.numpy as jnp
 
 from tengri.utils.physics_constants import C_AA as _C_AA
 
-# Bell+2003 synchrotron suppression threshold at 1.4 GHz reference.
-# L0 = 3e28 erg/s/Hz (Mancuso+2017 / Bell+2003).
-_L0_SYNCH: float = 3.0e28  # erg/s/Hz
+# Bell (2003) ApJ 586, 794 Eq. 3: characteristic luminosity L* at 1.4 GHz.
+# L* ≈ 3e28 erg/s/Hz corresponds to the M_V = -21 galaxy threshold.
+_L_STAR_SYNCH: float = 3.0e28  # erg/s/Hz at 1.4 GHz
+_L0_SYNCH = _L_STAR_SYNCH  # alias used in tests and external references
 
 # Wavelength boundary separating radio from IR (1 mm = 1e7 Angstrom = 300 GHz)
 _RADIO_WAVE_MIN_AA: float = 1.0e7
@@ -65,18 +66,23 @@ _SFR_IR_KENNICUTT: float = 1.73e10 * 3.828e33  # ≈ 6.62e43 erg/s
 
 
 def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:
-    """Bell+2003 correction for low-SFR synchrotron suppression.
+    """Bell (2003) non-thermal fraction correction for synchrotron suppression.
 
     Low-mass, low-SFR galaxies are less efficient synchrotron emitters due to
     cosmic-ray losses (Klein+1984; Chi+1990; Price+1992; Bell 2003). This
-    correction smoothly suppresses emission below a threshold luminosity.
+    applies the non-thermal fraction n(L) from Bell (2003) ApJ 586, 794 Eq. 3:
 
     .. math::
 
-        L_{\\rm corr} = \\frac{L}{1 + (L_0 / L)^2}
+        n(L) = \\begin{cases}
+            0.9 & L > L^* \\\\
+            0.9 \\left(\\frac{L}{L^*}\\right)^{0.3} & L \\leq L^*
+        \\end{cases}
 
-    At L >> L0: L_corr ≈ L (unaffected).
-    At L << L0: L_corr ≈ L^3 / L0^2 (quadratic suppression).
+        L_{\\rm corr} = n(L) \\times L
+
+    At L >> L*: n ≈ 0.9 (unaffected, ~10% thermal fraction).
+    At L = 0.01 L*: n ≈ 0.9 × 0.01^{0.3} ≈ 0.45 (gentle 0.3 power-law).
 
     Parameters
     ----------
@@ -90,12 +96,17 @@ def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:
 
     Notes
     -----
-    L0 = 3e28 erg/s/Hz at 1.4 GHz (Mancuso+2017 / Bell+2003).
-    The correction is applied at the reference frequency before spectral
-    extrapolation so that the power-law shape is preserved.
+    L* = 3e28 erg/s/Hz at 1.4 GHz, corresponding to the M_V = -21 threshold
+    in Bell (2003). The correction is applied at the reference frequency before
+    spectral extrapolation so the power-law shape is preserved.
     """
     L_safe = jnp.where(L_ref > 0.0, L_ref, 1.0e-40)
-    return L_ref / (1.0 + (_L0_SYNCH / L_safe) ** 2)
+    n = jnp.where(
+        L_safe >= _L_STAR_SYNCH,
+        0.9,
+        0.9 * (L_safe / _L_STAR_SYNCH) ** 0.3,
+    )
+    return n * L_ref
 
 
 def radio_sfr_bell2003(

@@ -1111,16 +1111,19 @@ def adaf_disc(
     # The M_BH and m_dot scalings follow directly from nu_c = (3/2)*nu_cyclotron*(T_e/m_e c^2)^2
     # combined with B ∝ m_dot^{1/2} M_BH^{-1/2} in the ADAF equipartition field.
     nu_peak_sync = 1e12 * (10.0**agn_log_mbh / 1e8) ** (-0.5) * m_dot_dimensionless**0.5
-    # Synchrotron spectrum: two-regime shape (Mahadevan 1997 Eq. 24).
-    # Below the self-absorption frequency nu_sa ~ nu_peak/3: nu^{5/2} (Rayleigh-Jeans).
+    # Synchrotron spectrum: two-regime shape (Mahadevan 1997 Eq. 19/23/24).
+    # Below the self-absorption frequency nu_sa ~ nu_peak/3: nu^{2} (Rayleigh-Jeans,
+    # thermal ADAF electrons; Mahadevan 1997 Eq. 19). Note: nu^{5/2} is for non-thermal
+    # power-law electrons and does NOT apply here.
     # Above nu_sa: nu^{1/3} (optically-thin synchrotron).
     # Join continuously at nu_sa.
     nu_sa = nu_peak_sync / 3.0  # self-absorption break (Mahadevan 1997)
     nu_ratio_sync = nu / jnp.maximum(nu_peak_sync, 1.0)
     nu_ratio_sa = nu / jnp.maximum(nu_sa, 1.0)
     sync_thin = nu_ratio_sync ** (1.0 / 3.0) * jnp.exp(-jnp.clip(nu_ratio_sync / 3.0, 0.0, 500.0))
-    # Continuous join at nu_sa: nu_sa^{1/3} = nu_sa^{5/2}/nu_sa^{5/2} * nu_sa^{1/3}
-    sync_thick = nu_ratio_sa**2.5 * (nu_sa / jnp.maximum(nu_peak_sync, 1.0)) ** (1.0 / 3.0)
+    # Continuous join at nu_sa: normalization = (nu_sa/nu_peak)^{1/3} so thick and thin
+    # meet at nu = nu_sa where nu_ratio_sa = 1. Exponent 2.0 per Mahadevan 1997 Eq. 19.
+    sync_thick = nu_ratio_sa**2.0 * (nu_sa / jnp.maximum(nu_peak_sync, 1.0)) ** (1.0 / 3.0)
     sync_shape = jnp.where(nu < nu_sa, sync_thick, sync_thin)
 
     # --- Bremsstrahlung component ---

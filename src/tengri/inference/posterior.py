@@ -98,7 +98,12 @@ class Posterior:
                     derived_lists[k] = []
                 derived_lists[k].append(v)
 
-        return {k: jnp.stack(v) for k, v in derived_lists.items()}
+        return {
+            k: jnp.full(n_samples, jnp.nan)
+            if any(x is None for x in v)
+            else jnp.stack(v)
+            for k, v in derived_lists.items()
+        }
 
     def line_fluxes(self) -> dict[str, tuple[float, float, float]]:
         """Emission line flux posterior summaries.

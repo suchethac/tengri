@@ -422,13 +422,34 @@ class CloudyGridBackend:
         )
 
         # Collapse fixed axes if provided
-        # Note: only collapse continuum grid, not lines. PreintegratedLines.line_filter_weights
-        # is shape (n_lines, n_filters) with no grid dimensions. The axes/edges stored in
-        # PreintegratedLines are metadata for interpolating the line luminosity grid
-        # (nebular_backend.grid.line_luminosity) elsewhere, which we do NOT reshape here.
-        # TODO: Properly handle fixed axis collapsing for line_luminosity grid and axes/edges.
         if fixed:
             self._preint_continuum = slice_fixed_axes(self._preint_continuum, fixed)
+
+            # Also collapse line_luminosity (n_Z, n_age, n_logU, n_lines) along fixed axes.
+            # slice_fixed_axes for PreintegratedLines only updates axes/edges metadata; the
+            # actual luminosity grid used by interp_nd_triweight in assembly.py must have the
+            # same number of leading dimensions as len(axes). We apply the same triweight
+            # contraction here at init time so the two are always in sync.
+            line_lum = jnp.asarray(self.grid.line_luminosity)  # (n_Z, n_age, n_logU, n_lines)
+            line_axes = [
+                jnp.asarray(self.grid.line_log_met),
+                jnp.asarray(self.grid.line_log_age),
+                jnp.asarray(self.grid.line_log_U),
+            ]
+            for axis_idx in sorted(fixed.keys(), reverse=True):
+                value = fixed[axis_idx]
+                ax = line_axes[axis_idx]
+                scatter = 0.5 * float(ax[1] - ax[0])
+                w = compute_grid_weights(
+                    value, ax, scatter=scatter, edges=edges_for_grid(ax)
+                )
+                # tensordot contracts axis `axis_idx` of line_lum with axis 0 of w.
+                # The resulting tensor has all axes of line_lum except axis_idx.
+                line_lum = jnp.tensordot(w, line_lum, axes=([0], [axis_idx]))
+                line_axes.pop(axis_idx)
+            self._line_lum_collapsed = line_lum
+        else:
+            self._line_lum_collapsed = jnp.asarray(self.grid.line_luminosity)
 
         # Set flag
         self._has_preint_photometry = True

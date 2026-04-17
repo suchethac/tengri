@@ -729,3 +729,10 @@ def qsogen(
 
 # Backward compatibility alias
 qsogen_sed = compute_qsogen_sed
+
+# Pre-load emission line template at import time so that file I/O does not
+# occur inside JIT-traced functions (which causes UnexpectedTracerError).
+try:
+    _load_emline_template()
+except FileNotFoundError:
+    pass

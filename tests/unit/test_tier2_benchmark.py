@@ -61,17 +61,17 @@ class TestTier2DispatchWiring:
         assert hasattr(Model, "_predict_spectrum_compositional")
 
     def test_build_fused_rest_sed_importable(self):
-        from tengri.forward.kernels.assembly import build_fused_rest_sed
+        from tengri.forward.kernels import build_fused_rest_sed
 
         assert callable(build_fused_rest_sed)
 
     def test_build_fused_tier2_photometry_importable(self):
-        from tengri.forward.kernels.assembly import build_fused_tier2_photometry
+        from tengri.forward.kernels import build_fused_tier2_photometry
 
         assert callable(build_fused_tier2_photometry)
 
     def test_build_fused_tier2_spectrum_importable(self):
-        from tengri.forward.kernels.assembly import build_fused_tier2_spectrum
+        from tengri.forward.kernels import build_fused_tier2_spectrum
 
         assert callable(build_fused_tier2_spectrum)
 

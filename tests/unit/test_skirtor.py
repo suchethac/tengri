@@ -9,6 +9,9 @@ Validates:
 - Gradient flow through all 5 parameters
 - JIT compatibility
 - Energy conservation (torus_frac scaling)
+- NPZ loading path in create_skirtor_from_grid
+- FileNotFoundError path in skirtor_analytic
+- Missing required keys error in create_skirtor_from_grid
 """
 
 import jax
@@ -564,3 +567,135 @@ class TestNovikovThorneEfficiency:
             f"Efficiency must grow with prograde spin: "
             f"η(0)={eta_0:.4f}, η(0.5)={eta_5:.4f}, η(0.9)={eta_9:.4f}"
         )
+
+
+class TestCreateSkirtorFromGridNpz:
+    """Tests for the NPZ loading path in create_skirtor_from_grid.
+
+    The default skirtor_analytic auto-loads an HDF5 file (skirtor_templates_v2.h5)
+    which is always found first in the candidate list, so the NPZ code path
+    (create_skirtor_from_grid with a .npz suffix) is never exercised by the
+    existing physics tests.  These tests target that branch directly.
+    """
+
+    @pytest.fixture
+    def mock_npz(self, tmp_path):
+        """Create a minimal valid SKIRTOR .npz file for testing."""
+        rng = np.random.default_rng(42)
+        n_tau, n_p, n_q, n_oa, n_inc, n_wave = 3, 3, 3, 3, 3, 50
+        wave = np.geomspace(1e3, 1e7, n_wave)
+        # Positive grid values so energy integral > 0
+        grid = rng.uniform(0.1, 1.0, (n_tau, n_p, n_q, n_oa, n_inc, n_wave))
+        data = {
+            "wavelength": wave,
+            "tau": np.array([3.0, 7.0, 11.0]),
+            "p": np.array([0.0, 1.0, 2.0]),
+            "q": np.array([0.0, 1.0, 2.0]),
+            "oa": np.array([20.0, 40.0, 60.0]),
+            "cos_inc": np.array([0.1, 0.5, 0.9]),
+            "grid": grid,
+        }
+        path = tmp_path / "skirtor_test.npz"
+        np.savez(str(path), **data)
+        return str(path)
+
+    def test_npz_returns_callable(self, mock_npz):
+        """create_skirtor_from_grid('.npz') must return a callable."""
+        from tengri.components.agn.skirtor import create_skirtor_from_grid
+
+        fn = create_skirtor_from_grid(mock_npz)
+        assert callable(fn), "NPZ loader must return a callable interpolator"
+
+    def test_npz_output_shape(self, mock_npz):
+        """Returned callable must produce correct output shape."""
+        from tengri.components.agn.skirtor import create_skirtor_from_grid
+
+        fn = create_skirtor_from_grid(mock_npz)
+        wave = jnp.logspace(4.0, 6.0, 80)
+        out = fn(wave, agn_log_lbol=12.0)
+        assert out.shape == wave.shape, (
+            f"NPZ path: output shape {out.shape} does not match wave shape {wave.shape}"
+        )
+
+    def test_npz_output_finite(self, mock_npz):
+        """NPZ-loaded interpolator must produce finite output."""
+        from tengri.components.agn.skirtor import create_skirtor_from_grid
+
+        fn = create_skirtor_from_grid(mock_npz)
+        wave = jnp.logspace(4.0, 6.0, 80)
+        out = fn(wave, agn_log_lbol=12.0)
+        assert jnp.all(jnp.isfinite(out)), "NPZ path: NaN/Inf in output"
+
+    def test_npz_output_non_negative(self, mock_npz):
+        """NPZ-loaded interpolator must produce non-negative luminosities."""
+        from tengri.components.agn.skirtor import create_skirtor_from_grid
+
+        fn = create_skirtor_from_grid(mock_npz)
+        wave = jnp.logspace(4.0, 6.0, 80)
+        out = fn(wave, agn_log_lbol=12.0)
+        assert jnp.all(out >= 0.0), "NPZ path: negative L_nu values"
+
+    def test_npz_missing_key_raises(self, tmp_path):
+        """create_skirtor_from_grid must raise KeyError when NPZ lacks required keys."""
+        from tengri.components.agn.skirtor import create_skirtor_from_grid
+
+        # Intentionally omit 'cos_inc' and 'oa'
+        rng = np.random.default_rng(0)
+        n_wave = 20
+        incomplete = {
+            "wavelength": np.geomspace(1e3, 1e7, n_wave),
+            "tau": np.array([3.0, 7.0]),
+            "p": np.array([0.0, 1.0]),
+            "q": np.array([0.0, 1.0]),
+            "grid": rng.uniform(0.1, 1.0, (2, 2, 2, 2, 2, n_wave)),
+            # 'oa' and 'cos_inc' intentionally missing
+        }
+        bad_path = tmp_path / "incomplete.npz"
+        np.savez(str(bad_path), **incomplete)
+
+        with pytest.raises(KeyError, match="missing keys"):
+            create_skirtor_from_grid(str(bad_path))
+
+    def test_npz_gradient_flows(self, mock_npz):
+        """JAX autodiff must flow through the NPZ-loaded interpolator."""
+        from tengri.components.agn.skirtor import create_skirtor_from_grid
+
+        fn = create_skirtor_from_grid(mock_npz)
+        wave = jnp.logspace(4.0, 6.0, 40)
+
+        g_jax = float(jax.grad(lambda lbol: jnp.sum(fn(wave, agn_log_lbol=lbol)))(12.0))
+        g_fd = fd_grad(lambda lbol: float(jnp.sum(fn(wave, agn_log_lbol=lbol))), 12.0)
+        assert np.isfinite(g_jax), "NPZ path: autodiff gradient is not finite"
+        np.testing.assert_allclose(
+            g_jax, g_fd, rtol=1e-2, err_msg="NPZ path: autodiff gradient differs from FD by >1%"
+        )
+
+
+class TestSkirtorAnalyticErrorPaths:
+    """Tests for the FileNotFoundError branch in skirtor_analytic.
+
+    The lazy-init singleton (_skirtor_default) is reset to None and all
+    candidate template paths are patched away so the 'not found' branch
+    fires without requiring removal of real data files.
+    """
+
+    def test_file_not_found_raises(self, monkeypatch, tmp_path):
+        """skirtor_analytic must raise FileNotFoundError when no template file exists."""
+        import tengri.components.agn.skirtor as _mod
+
+        # Reset the lazy singleton so the loader re-runs
+        monkeypatch.setattr(_mod, "_skirtor_default", None)
+
+        # Patch Path.__file__ resolution so all four candidate paths point to
+        # a non-existent location inside tmp_path (guaranteed not to exist).
+        ghost = tmp_path / "ghost_does_not_exist.h5"  # never created
+
+        from pathlib import Path
+
+        def fake_is_file(self):
+            return False
+
+        monkeypatch.setattr(Path, "is_file", fake_is_file)
+
+        with pytest.raises(FileNotFoundError, match="SKIRTOR templates not found"):
+            _mod.skirtor_analytic(jnp.logspace(3, 6, 50), agn_log_lbol=12.0)

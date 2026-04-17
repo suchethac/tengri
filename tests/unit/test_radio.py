@@ -93,33 +93,38 @@ class TestBackwardCompat:
 
 
 class TestSynchrotronSuppression:
-    """Bell+2003 suppression helper: L_corr = L / (1 + (L0/L)^2)."""
+    """Bell+2003 suppression: piecewise power-law n(L) per Bell (2003) ApJ 586, 794 Eq. 3.
+
+    n(L) = 0.9 for L >= L*; n(L) = 0.9*(L/L*)^0.3 for L < L*. L_corr = n(L)*L.
+    Replaces the old quadratic formula L/(1+(L0/L)^2) which had the wrong index.
+    """
 
     def test_bright_source_unchanged(self):
-        """At L >> L0, L_corr ≈ L (suppression negligible)."""
-        L_bright = jnp.array(1e6 * _L0_SYNCH)  # 1e6 × L0
+        """At L >> L*, non-thermal fraction n ≈ 0.9 (Bell 2003 Eq. 3 plateau)."""
+        L_bright = jnp.array(1e6 * _L0_SYNCH)  # 1e6 × L*
         L_corr = _synchrotron_suppression(L_bright)
         ratio = float(L_corr / L_bright)
-        assert abs(ratio - 1.0) < 1e-3, f"Bright source ratio {ratio:.6f} should be ~1"
+        assert abs(ratio - 0.9) < 1e-6, f"Bright source n = {ratio:.6f}, expected 0.9"
 
     def test_faint_source_suppressed(self):
-        """At L << L0, L_corr ≈ L^3 / L0^2 (quadratic suppression)."""
-        L_faint = jnp.array(1e-6 * _L0_SYNCH)  # 1e-6 × L0
+        """At L << L*, n = 0.9*(L/L*)^0.3 (Bell 2003 Eq. 3 power-law)."""
+        L_faint = jnp.array(1e-6 * _L0_SYNCH)  # 1e-6 × L*
         L_corr = _synchrotron_suppression(L_faint)
-        # Expected: L_corr ≈ L / (L0/L)^2 = L^3 / L0^2
-        expected = float(L_faint) ** 3 / float(_L0_SYNCH) ** 2
+        # Expected: L_corr = 0.9 * (1e-6)^0.3 * L_faint
+        n_expected = 0.9 * (1e-6) ** 0.3
+        expected = n_expected * float(L_faint)
         assert abs(float(L_corr) - expected) / expected < 0.02, (
             f"Faint source L_corr {float(L_corr):.4e} != expected {expected:.4e}"
         )
 
     def test_suppression_monotonic(self):
-        """Correction factor increases monotonically with L."""
+        """Non-thermal fraction n(L) increases monotonically with L."""
         L_vals = jnp.logspace(-10, 2, 100) * _L0_SYNCH
         L_corr = _synchrotron_suppression(L_vals)
         factors = L_corr / L_vals
-        # All factors should be < 1 and increasing
-        assert jnp.all(factors <= 1.0 + 1e-12), "Suppression factor must be <= 1"
-        assert jnp.all(jnp.diff(factors) >= 0.0), "Factor should increase monotonically"
+        # All factors should be <= 0.9 and non-decreasing (tolerance for float noise)
+        assert jnp.all(factors <= 0.9 + 1e-12), "n(L) must never exceed 0.9"
+        assert jnp.all(jnp.diff(factors) >= -1e-12), "n(L) should increase monotonically"
 
     def test_suppression_at_zero_safe(self):
         """L=0 should not produce NaN."""

@@ -223,7 +223,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
                 weights,
                 ssp_wave_f64,
                 ssp_log_ages_yr,
-                p["log_z_abs"],
+                p.get("log_z_abs", p.get("log_z_abs_final", -1.8477)),
                 _sfr_last,
                 neb_logU=p.get("neb_logU", -3.0),
                 neb_logZ_gas=p.get("neb_logZ_gas", None),

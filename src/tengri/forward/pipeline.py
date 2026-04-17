@@ -568,9 +568,11 @@ def compute_sed_components(
                 lgmet_scatter,
             )
         elif _use_alpha_fe:
-            ssp_flux_at_z = interp_met_alpha_dispatch(model, p["log_z_abs"], alpha_fe)
+            _lgmet = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
+            ssp_flux_at_z = interp_met_alpha_dispatch(model, _lgmet, alpha_fe)
         else:
-            ssp_flux_at_z = interp_metallicity(model, p["log_z_abs"])
+            _lgmet2 = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
+            ssp_flux_at_z = interp_metallicity(model, _lgmet2)
 
         # --- Fast JIT path: dust + einsum in one compiled kernel ---
         # Eliminates ~78% Python dispatch overhead (4-14x speedup).
@@ -685,7 +687,7 @@ def compute_sed_components(
             weights,
             _ssp_wave,
             model.ssp_log_ages_yr,
-            p["log_z_abs"],
+            p.get("log_z_abs", p.get("log_z_abs_final", -1.8477)),
             _sfr_for_neb,
             neb_logU=p.get("neb_logU", -3.0),
             neb_logZ_gas=p.get("neb_logZ_gas", None),

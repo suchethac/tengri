@@ -205,13 +205,17 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
         _time_step(
             "metallicity_interp",
             lambda: interpolate_metallicity(
-                model.ssp_data.ssp_flux, model.ssp_data.ssp_lgmet, p["log_z_abs"]
+                model.ssp_data.ssp_flux,
+                model.ssp_data.ssp_lgmet,
+                p.get("log_z_abs", p.get("log_z_abs_final", -1.8477)),
             ),
             n=n,
         )
     )
     ssp_at_z = interpolate_metallicity(
-        model.ssp_data.ssp_flux, model.ssp_data.ssp_lgmet, p["log_z_abs"]
+        model.ssp_data.ssp_flux,
+        model.ssp_data.ssp_lgmet,
+        p.get("log_z_abs", p.get("log_z_abs_final", -1.8477)),
     )
 
     # 6. Dust attenuation

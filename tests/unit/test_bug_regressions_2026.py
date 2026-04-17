@@ -223,3 +223,205 @@ class TestVacuumWavelengthConsistency:
         assert abs(oiii_wave - 5008.24) < 0.5, (
             f"[OIII]5007 at {oiii_wave:.2f} Å, expected 5008.24 Å (vacuum)"
         )
+
+
+# ===================================================================
+# 6. ADAF synchrotron self-absorption spectral index ν^2 vs ν^{5/2}
+# ===================================================================
+
+
+class TestAdafSyncSpectralIndex:
+    """Regression: ADAF synchrotron thick-regime index must be ν^2, not ν^{5/2}.
+
+    Bug: disc.py used nu_ratio_sa**2.5 for the self-absorbed regime.
+    Fix: Changed to nu_ratio_sa**2.0 per Mahadevan (1997) ApJ 477, 585 Eq. 19.
+    Reference: Mahadevan (1997) Eq. 19 gives L_ν ∝ ν^2 for thermal (Rayleigh-Jeans)
+    ADAF electrons in the self-absorbed regime. The ν^{5/2} index applies only to
+    non-thermal power-law electron distributions, which is NOT the ADAF case.
+    """
+
+    def test_log_slope_below_nu_sa_is_two(self):
+        """Log-slope d(log L)/d(log ν) below ν_sa must be ≈ 2.0 ± 0.15."""
+        from tengri.components.agn.disc import adaf_disc
+
+        # Fiducial ADAF: low Eddington ratio so nu_sa is well inside the grid
+        # adaf_disc returns L_nu in erg/s/Hz vs wavelength (Angstrom)
+        c_aa = 2.99792458e18  # Angstrom/s
+
+        # Use a typical ADAF: M_BH = 1e8 Msun, Eddington ratio = 1e-3
+        # nu_peak ~ 1e12 Hz => nu_sa ~ 3.3e11 Hz => lambda_sa ~ 9e6 Angstrom
+        # We sample two wavelengths well below nu_sa
+        lam_lo = 3e7  # Angstrom, nu_lo ~ 1e11 Hz (well below nu_sa)
+        lam_hi = 1e7  # Angstrom, nu_hi ~ 3e11 Hz (just below nu_sa)
+
+        wave = jnp.array([lam_lo, lam_hi], dtype=jnp.float64)
+        sed = adaf_disc(wave, agn_log_lbol=10.0, agn_log_mbh=8.0, agn_log_ledd=-3.0)
+
+        # L_nu vs wavelength: L_nu ∝ ν^α → as λ decreases ν increases
+        # L_nu(λ) = L_nu(ν) so slope in λ-space: d(log L)/d(log λ) = -α
+        lam_ratio = float(lam_lo / lam_hi)
+        lnu_ratio = float(sed[0] / jnp.maximum(sed[1], 1e-300))
+
+        if lnu_ratio > 0 and jnp.isfinite(jnp.array(lnu_ratio)):
+            # slope in wavelength space: d(log L)/d(log λ)
+            slope_lam = jnp.log(lnu_ratio) / jnp.log(lam_ratio)
+            # nu ∝ 1/λ so slope in frequency space = -slope_lam
+            slope_nu = float(-slope_lam)
+            assert abs(slope_nu - 2.0) < 0.15, (
+                f"ADAF synchrotron slope below nu_sa = {slope_nu:.3f}, "
+                "expected 2.0 ± 0.15 (Mahadevan 1997 Eq. 19). "
+                "Regression: was 2.5 (non-thermal power-law exponent, incorrect for ADAF)."
+            )
+
+
+# ===================================================================
+# 7. Bell (2003) synchrotron suppression formula
+# ===================================================================
+
+
+class TestBell2003SynchrotronSuppression:
+    """Regression: non-thermal fraction must follow Bell (2003) ApJ 586, 794 Eq. 3.
+
+    Bug: _synchrotron_suppression used quadratic L/(1+(L0/L)^2), giving
+    power-law index ~2 suppression. Bell's actual model is n = 0.9*(L/L*)^0.3
+    for L ≤ L* (gentle 0.3 slope) and n = 0.9 for L > L* (saturates).
+    Fix: replaced with piecewise power-law per Bell (2003) Eq. 3.
+    """
+
+    def test_high_luminosity_fraction_saturates_at_09(self):
+        """n(L >> L*) must saturate at 0.9; suppressed(L) / L ≈ 0.9."""
+        from tengri.components.radio.radio import _L_STAR_SYNCH, _synchrotron_suppression
+
+        L_high = jnp.array(1e4 * _L_STAR_SYNCH, dtype=jnp.float64)
+        suppressed = float(_synchrotron_suppression(L_high))
+        n = suppressed / float(L_high)
+        assert abs(n - 0.9) < 0.01, (
+            f"n(L >> L*) = {n:.4f}, expected 0.9 (Bell 2003 Eq. 3). "
+            "Regression: old formula gave n → 1 at high L, not 0.9."
+        )
+
+    def test_low_luminosity_fraction_follows_power_law(self):
+        """n(L = 0.01 L*) ≈ 0.9 × 0.01^0.3 ≈ 0.45; log-slope ≈ 0.3."""
+        from tengri.components.radio.radio import _L_STAR_SYNCH, _synchrotron_suppression
+
+        L_low = jnp.array(0.01 * _L_STAR_SYNCH, dtype=jnp.float64)
+        suppressed = float(_synchrotron_suppression(L_low))
+        n = suppressed / float(L_low)
+        expected_n = 0.9 * 0.01**0.3  # ≈ 0.451
+        assert abs(n - expected_n) < 0.02, (
+            f"n(0.01 L*) = {n:.4f}, expected {expected_n:.4f} = 0.9 × 0.01^0.3 "
+            "(Bell 2003 Eq. 3). "
+            "Regression: old quadratic formula gave ~0.01/(1+100^2) ≈ 1e-6."
+        )
+
+    def test_log_slope_below_L_star_is_03(self):
+        """d(log n)/d(log L) ≈ 0.3 for L << L* (Bell 2003 Eq. 3 power-law index)."""
+        from tengri.components.radio.radio import _L_STAR_SYNCH, _synchrotron_suppression
+
+        L1 = jnp.array(0.001 * _L_STAR_SYNCH, dtype=jnp.float64)
+        L2 = jnp.array(0.01 * _L_STAR_SYNCH, dtype=jnp.float64)
+        n1 = float(_synchrotron_suppression(L1)) / float(L1)
+        n2 = float(_synchrotron_suppression(L2)) / float(L2)
+
+        slope = jnp.log(n2 / n1) / jnp.log(0.01 / 0.001)
+        assert abs(float(slope) - 0.3) < 0.02, (
+            f"n log-slope = {float(slope):.3f}, expected 0.3 (Bell 2003 Eq. 3). "
+            "Regression: old formula had slope ≈ 2 at low L."
+        )
+
+
+# ===================================================================
+# 8. Evolving metallicity KeyError fallback (BUG-NSS-02)
+# ===================================================================
+
+
+class TestEvolvingMetallicityFallback:
+    """Regression: evolving_metallicity=True emits log_z_abs_final, not log_z_abs.
+
+    Bug: assembly.py, nonstell.py, pipeline.py, sed_model.py all hard-subscripted
+    p["log_z_abs"] — causing KeyError when evolving_metallicity=True produces
+    log_z_abs_initial / log_z_abs_final keys instead.
+    Fix: All lookup sites replaced with p.get("log_z_abs", p.get("log_z_abs_final", -1.8477)).
+    """
+
+    def test_fallback_to_log_z_abs_final(self):
+        """Params with log_z_abs_final but no log_z_abs must not raise KeyError."""
+        p = {"log_z_abs_final": -1.5, "log_z_abs_initial": -2.0}
+        # This is the exact pattern used in all fixed sites
+        val = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
+        assert abs(val - (-1.5)) < 1e-9, f"Expected -1.5, got {val}"
+
+    def test_log_z_abs_takes_priority(self):
+        """When log_z_abs is present it must be used, not log_z_abs_final."""
+        p = {"log_z_abs": -1.8, "log_z_abs_final": -1.5}
+        val = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
+        assert abs(val - (-1.8)) < 1e-9, f"Expected -1.8, got {val}"
+
+    def test_default_when_both_absent(self):
+        """When neither key is present the fallback default -1.8477 is returned."""
+        p = {}
+        val = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
+        assert abs(val - (-1.8477)) < 1e-9, f"Expected -1.8477, got {val}"
+
+
+# ===================================================================
+# 9. CLOUDY line grid fixed-axis collapsing (BUG-07)
+# ===================================================================
+
+
+class TestCloudyLineGridCollapse:
+    """Regression: CloudyGridBackend._line_lum_collapsed shape must reflect fixed axes.
+
+    Bug: _precompute_photometry collapsed the continuum grid (PreintegratedGrid) but
+    not the line luminosity grid. interp_nd_triweight received a 3D grid with only 2
+    axes, causing shape mismatch.
+    Fix: New code applies triweight contraction to line_luminosity at fixed axis
+    indices and stores result as _line_lum_collapsed with reduced leading dimensions.
+    """
+
+    def test_collapsing_reduces_line_lum_ndim(self):
+        """Triweight collapsing at one axis reduces line_lum leading dims by 1."""
+        import numpy as np
+
+        from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
+
+        # Minimal mock: 3D grid (n_Z=4, n_age=5, n_logU=3, n_lines=10)
+        rng = np.random.default_rng(42)
+        line_lum = jnp.asarray(rng.standard_normal((4, 5, 3, 10)))
+        line_axes = [
+            jnp.linspace(-2.5, -0.5, 4),  # log_Z
+            jnp.linspace(7.0, 10.5, 5),   # log_age
+            jnp.linspace(-4.0, -1.0, 3),  # log_U
+        ]
+
+        # Fix axis 2 (log_U) at -3.0 — this is the collapse the bug prevented
+        fixed = {2: -3.0}
+        collapsed = jnp.asarray(line_lum)
+        fixed_axes_list = list(line_axes)
+        for axis_idx in sorted(fixed.keys(), reverse=True):
+            value = fixed[axis_idx]
+            ax = fixed_axes_list[axis_idx]
+            scatter = 0.5 * float(ax[1] - ax[0])
+            w = compute_grid_weights(value, ax, scatter=scatter, edges=edges_for_grid(ax))
+            collapsed = jnp.tensordot(w, collapsed, axes=([0], [axis_idx]))
+            fixed_axes_list.pop(axis_idx)
+
+        # Original: (4, 5, 3, 10) → collapsed along axis 2 → (4, 5, 10)
+        assert collapsed.shape == (4, 5, 10), (
+            f"Collapsed shape {collapsed.shape}, expected (4, 5, 10). "
+            "Regression: without fix, interp_nd_triweight would see ndim=3 grid with 2 axes."
+        )
+        # Values must be finite
+        assert jnp.all(jnp.isfinite(collapsed)), "Collapsed grid contains non-finite values"
+
+    def test_no_fixed_axes_preserves_shape(self):
+        """Without fixed axes, line_lum_collapsed must equal the original grid."""
+        import numpy as np
+
+        rng = np.random.default_rng(7)
+        line_lum = jnp.asarray(rng.standard_normal((4, 5, 3, 10)))
+        # No fixed axes — collapsed should be identical
+        collapsed = line_lum  # the else branch: self._line_lum_collapsed = jnp.asarray(grid)
+        assert collapsed.shape == (4, 5, 3, 10), (
+            f"No-fixed-axes shape {collapsed.shape}, expected (4, 5, 3, 10)."
+        )

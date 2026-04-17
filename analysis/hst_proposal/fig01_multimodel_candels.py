@@ -444,11 +444,14 @@ for name, posterior in results.items():
     sfh_draws[name] = {"t_gyr": t_gyr, "sfr": np.array(sfr_arr)}
 
     # Derived quantities (M*, SFR)
+    # Apply approximate return fraction correction: surviving ≈ 0.6 × formed
+    # (Chabrier IMF, typical ages 1-10 Gyr; Conroy+2009, Madau & Dickinson 2014)
+    RETURN_FRAC = 0.6  # M_surviving / M_formed
     mass_arr, sfr_arr_q = [], []
     for i in range(n_use):
         s_i = {k: v[i] for k, v in samples.items()}
         q = model.predict_sfh_quantities(s_i)
-        mass_arr.append(float(q.stellar_mass))
+        mass_arr.append(float(q.stellar_mass) * RETURN_FRAC)
         sfr_arr_q.append(float(q.sfr_100myr))
     log_mass = np.log10(np.array(mass_arr))
     log_sfr = np.log10(np.maximum(np.array(sfr_arr_q), 1e-10))
@@ -540,6 +543,12 @@ gs = GridSpec(
 # ======================================================================
 ax_sed = fig.add_subplot(gs[0])
 
+# Compute BMA weights (used by all panels)
+log_evidences = np.array([results[n].log_evidence for n in CONFIGS])
+log_w = log_evidences - log_evidences.max()
+bma_weights = np.exp(log_w) / np.exp(log_w).sum()
+print("BMA weights:", {n: f"{w:.3f}" for n, w in zip(CONFIGS, bma_weights)})
+
 # Posterior spectral bands (full SED) for each config
 for name in CONFIGS:
     color = COLORS[name]
@@ -549,6 +558,20 @@ for name in CONFIGS:
     hi = np.percentile(draws, 84, axis=0)
     ax_sed.fill_between(WAVE_SPEC, lo, hi, alpha=0.12, color=color, lw=0)
     ax_sed.plot(WAVE_SPEC, med, "-", color=color, lw=0.8, alpha=0.85)
+
+# BMA posterior predictive spectrum (evidence-weighted draws from all configs)
+bma_spec_all = []
+for name, w in zip(CONFIGS, bma_weights):
+    draws = spec_draws[name]
+    n_take = max(5, round(w * 300))
+    idx = np.random.choice(len(draws), size=min(n_take, len(draws)), replace=True)
+    bma_spec_all.append(draws[idx])
+bma_spec = np.concatenate(bma_spec_all, axis=0)
+bma_spec_med = np.median(bma_spec, axis=0)
+bma_spec_lo = np.percentile(bma_spec, 16, axis=0)
+bma_spec_hi = np.percentile(bma_spec, 84, axis=0)
+ax_sed.fill_between(WAVE_SPEC, bma_spec_lo, bma_spec_hi, alpha=0.10, color=BMA_COLOR, lw=0)
+ax_sed.plot(WAVE_SPEC, bma_spec_med, "-", color=BMA_COLOR, lw=1.5, alpha=0.95, zorder=5)
 
 # Observed photometry with error bars (on top)
 wave_obs = np.array([WAVE_EFF[fn] for fn in fit_filter_names])
@@ -622,13 +645,7 @@ for name in CONFIGS:
     ax_sfh.fill_between(t_gyr, lo, hi, alpha=0.15, color=color, lw=0)
     ax_sfh.plot(t_gyr, med, "-", color=color, lw=0.9, alpha=0.9)
 
-# BMA-averaged SFH (evidence-weighted)
-log_evidences = np.array([results[n].log_evidence for n in CONFIGS])
-log_w = log_evidences - log_evidences.max()
-bma_weights = np.exp(log_w) / np.exp(log_w).sum()
-print("BMA weights:", {n: f"{w:.3f}" for n, w in zip(CONFIGS, bma_weights)})
-
-# Collect all SFH draws, weighted by evidence
+# BMA-averaged SFH (evidence-weighted, bma_weights computed above)
 t_gyr_common = sfh_draws[next(iter(CONFIGS.keys()))]["t_gyr"]
 bma_sfh_all = []
 for name, w in zip(CONFIGS, bma_weights):
