@@ -1,9 +1,34 @@
 """Fused SED kernels.
 
-Currently houses the full kernel set in ``assembly.py`` (3174 lines, not yet
-split). Phase 6 will split this by fusion strategy into ``exact.py``,
-``compositional.py``, ``hybrid.py``, ``traceable.py``, and ``dispatch.py``.
-Callers should import from ``tengri.forward.kernels.assembly`` until then.
+Kernel builders organized by fusion strategy:
+- ``hybrid.py``: Precomputed stellar + exact non-stellar (fastest for photometry)
+- ``exact.py``: Full-resolution dust and stellar CSP
+- ``compositional.py``: Compositional pipeline with all components
+
+Legacy ``assembly.py`` still present but no longer used.
 """
 
-from tengri.forward.kernels.assembly import *  # noqa: F403
+from tengri.forward.kernels.compositional import (
+    build_fused_tier2_photometry,
+    build_fused_tier2_spectrum,
+    build_hybrid_spectrum,
+    observe_photometry_from_rest_sed,
+    observe_spectrum_from_rest_sed,
+)
+from tengri.forward.kernels.exact import build_exact_sed, build_fused_rest_sed
+from tengri.forward.kernels.hybrid import (
+    build_hybrid_photometry,
+    build_hybrid_photometry_ztable,
+)
+
+__all__ = [
+    "build_exact_sed",
+    "build_fused_rest_sed",
+    "build_fused_tier2_photometry",
+    "build_fused_tier2_spectrum",
+    "build_hybrid_photometry",
+    "build_hybrid_photometry_ztable",
+    "build_hybrid_spectrum",
+    "observe_photometry_from_rest_sed",
+    "observe_spectrum_from_rest_sed",
+]
