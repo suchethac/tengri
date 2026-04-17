@@ -2160,7 +2160,10 @@ class SEDModel:
             sfr_10 = float(sfh_q.sfr_10myr)
             sfr_10 = max(sfr_10, 1e-10)
             return float(_L_HBETA_PER_SFR * sfr_10)
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
+            # AttributeError: predict_sfh_quantities doesn't exist or sfr_10myr missing
+            # TypeError: float() conversion failed (JAX tracer or wrong type)
+            # ValueError: invalid params
             return 1.0  # 1 Lsun safe fallback
 
     def predict_derived(self, params):
