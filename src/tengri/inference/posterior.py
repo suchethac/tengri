@@ -700,7 +700,10 @@ class Posterior:
                 for k in ["stellar_mass", "sfr_100myr", "sfr_10myr"]:
                     if k in d:
                         derived[k] = np.array(d[k])
-            except Exception:
+            except (AttributeError, TypeError, ValueError):
+                # AttributeError: derived property doesn't exist or failed
+                # TypeError: np.array() conversion failed
+                # ValueError: invalid values for array conversion
                 pass
             # Compute truth derived quantities for truth lines
             if truths is not None:
@@ -709,7 +712,10 @@ class Posterior:
                     for k in derived:
                         if k in d_true:
                             derived_truths[k] = float(d_true[k])
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
+                    # AttributeError: predict_derived method doesn't exist
+                    # TypeError: wrong arguments or float() conversion failed
+                    # ValueError: invalid truths parameter
                     pass
 
         n = len(params) + len(derived)
@@ -923,7 +929,10 @@ class Posterior:
                 try:
                     sed = np.array(model.predict_rest_sed(p).sed)
                     seds.append(sed)
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
+                    # AttributeError: predict_rest_sed doesn't exist or .sed attribute missing
+                    # TypeError: wrong arguments or np.array() conversion failed
+                    # ValueError: invalid parameter dict
                     pass
             if seds:
                 seds = np.stack(seds, axis=0)
@@ -1006,7 +1015,11 @@ class Posterior:
                         t_gyr = np.array(sfh_dict["t_gyr"])
                     sfhs_mean.append(np.array(sfh_dict["sfr_mean"]))
                     sfhs_full.append(np.array(sfh_dict["sfr_full"]))
-                except Exception:
+                except (AttributeError, TypeError, ValueError, KeyError):
+                    # AttributeError: predict_sfh doesn't exist
+                    # TypeError: wrong arguments or np.array() conversion failed
+                    # ValueError: invalid parameter dict
+                    # KeyError: missing t_gyr, sfr_mean, or sfr_full in result
                     pass
             if sfhs_mean and t_gyr is not None:
                 sfhs_mean = np.stack(sfhs_mean, axis=0)
