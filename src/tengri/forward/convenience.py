@@ -186,7 +186,11 @@ def prior_predictive(model: SEDModel, n: int = 500, seed: int = 42) -> PriorPred
     if model.filter_waves is not None:
         try:
             flux_batch = jax.vmap(model.predict_photometry)(params_batch)
-        except Exception:
+        except (TypeError, ValueError, RuntimeError, AttributeError):
+            # TypeError: predict_photometry isn't vmappable
+            # ValueError: params_batch structure incompatible with vmap
+            # RuntimeError: JAX compilation error
+            # AttributeError: predict_photometry doesn't behave as expected
             flux_batch = None
 
     return PriorPredictive(
