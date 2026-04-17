@@ -216,7 +216,10 @@ def _build_nthcomp_filter_table(
             nu_grid = f["nu_grid"][:].astype(np.float64)
             # shape: (n_gamma, n_kTe, n_kTbb, n_nu)
             raw_table = f["table"][:].astype(np.float64)
-    except Exception:
+    except (OSError, KeyError, ValueError):
+        # OSError: file read error
+        # KeyError: dataset missing from HDF5 file
+        # ValueError: dtype conversion failed
         return None, None, None, None
 
     n_gamma, n_kTe, n_kTbb, n_nu = raw_table.shape
