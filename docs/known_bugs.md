@@ -497,6 +497,20 @@ if _has_any_nonstell:
 
 **Status:** ASSESSED — not a bug, current approach is reasonable for JAX codebase. Can revisit if user error reports indicate a gap.
 
+### ARCH-04: Explicit `return None` statements (ASSESSED 2026-04-17)
+
+**Scope:** 33 instances across 15 files
+**Pattern:** Functions that can legitimately return None as part of their contract (component disabled, template missing, feature not applicable)
+
+**Examples:**
+- `build_dust_ir_fn()`: returns None when `model._dust_emission_model is None` (dust emission disabled)
+- `resolve(component_name)`: returns None for unregistered components (documented fallback to runtime eval)
+- `load_grid(model_name)`: returns None when templates are missing or model is analytic
+
+**Assessment:** These are NOT code smells. Explicit `return None` makes the control flow clear when None is a meaningful sentinel value that callers expect and handle gracefully. In this codebase's architecture, None signals "component disabled" or "precomputation not available" — implicit return would hide this intent.
+
+**Status:** ASSESSED — intentional design pattern, not a bug. Explicit return None is appropriate when None is part of the function's documented contract.
+
 ---
 
 ## BUGS CONFIRMED FIXED (for reference)
