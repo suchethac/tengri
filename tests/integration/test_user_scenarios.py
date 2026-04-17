@@ -256,7 +256,7 @@ def measure_jit_and_runtime(
         result["t_runtime_sec"] = float(np.mean(runtimes))
 
         # Get peak memory
-        current, peak = tracemalloc.get_traced_memory()
+        _current, peak = tracemalloc.get_traced_memory()
         result["peak_ram_mb"] = peak / (1024**2)  # Convert bytes → MB
         tracemalloc.stop()
 
@@ -411,15 +411,18 @@ class TestStandardGalaxyWorkflows:
             rng_key=rng_key,
         )
 
-        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
-        runtime_str = f"{result['runtime_sec']:.3f}s" if result['runtime_sec'] is not None else "N/A"
-        ram_str = f"{result['ram_gb']:.2f}GB" if result['ram_gb'] is not None else "N/A"
-        print(f"\n{result['name']}: D={result['D']}, "
-              f"JIT={jit_str}, "
-              f"Runtime={runtime_str}, "
-              f"RAM={ram_str}, "
-              f"status={result['status']}")
-        if not result['success']:
+        jit_str = f"{result['jit_sec']:.1f}s" if result["jit_sec"] is not None else "N/A"
+        _rt = result["runtime_sec"]
+        runtime_str = f"{_rt:.3f}s" if _rt is not None else "N/A"
+        ram_str = f"{result['ram_gb']:.2f}GB" if result["ram_gb"] is not None else "N/A"
+        print(
+            f"\n{result['name']}: D={result['D']}, "
+            f"JIT={jit_str}, "
+            f"Runtime={runtime_str}, "
+            f"RAM={ram_str}, "
+            f"status={result['status']}"
+        )
+        if not result["success"]:
             print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         # Baseline assertion: should not crash
@@ -470,22 +473,26 @@ class TestStandardGalaxyWorkflows:
             rng_key=rng_key,
         )
 
-        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
-        runtime_str = f"{result['runtime_sec']:.3f}s" if result['runtime_sec'] is not None else "N/A"
-        ram_str = f"{result['ram_gb']:.2f}GB" if result['ram_gb'] is not None else "N/A"
-        print(f"\n{result['name']}: D={result['D']}, "
-              f"JIT={jit_str}, "
-              f"Runtime={runtime_str}, "
-              f"RAM={ram_str}, "
-              f"status={result['status']}")
-        if not result['success']:
+        jit_str = f"{result['jit_sec']:.1f}s" if result["jit_sec"] is not None else "N/A"
+        _rt = result["runtime_sec"]
+        runtime_str = f"{_rt:.3f}s" if _rt is not None else "N/A"
+        ram_str = f"{result['ram_gb']:.2f}GB" if result["ram_gb"] is not None else "N/A"
+        print(
+            f"\n{result['name']}: D={result['D']}, "
+            f"JIT={jit_str}, "
+            f"Runtime={runtime_str}, "
+            f"RAM={ram_str}, "
+            f"status={result['status']}"
+        )
+        if not result["success"]:
             print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         assert result["success"], f"A2 failed: {result['error_type']}"
 
         # Should be fast with Fixed umin (no template explosion)
         assert result["jit_sec"] < PerformanceThresholds.JIT_EXCELLENT, (
-            f"A2 JIT {result['jit_sec']:.1f}s suggests Fixed umin didn't prevent template explosion"
+            f"A2 JIT {result['jit_sec']:.1f}s suggests Fixed umin didn't prevent "
+            f"template explosion"
         )
 
     def test_a3_free_dust_temperature_perf01(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
@@ -527,15 +534,18 @@ class TestStandardGalaxyWorkflows:
             rng_key=rng_key,
         )
 
-        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
-        runtime_str = f"{result['runtime_sec']:.3f}s" if result['runtime_sec'] is not None else "N/A"
-        ram_str = f"{result['ram_gb']:.2f}GB" if result['ram_gb'] is not None else "N/A"
-        print(f"\n{result['name']}: D={result['D']}, "
-              f"JIT={jit_str}, "
-              f"Runtime={runtime_str}, "
-              f"RAM={ram_str}, "
-              f"status={result['status']}")
-        if not result['success']:
+        jit_str = f"{result['jit_sec']:.1f}s" if result["jit_sec"] is not None else "N/A"
+        _rt = result["runtime_sec"]
+        runtime_str = f"{_rt:.3f}s" if _rt is not None else "N/A"
+        ram_str = f"{result['ram_gb']:.2f}GB" if result["ram_gb"] is not None else "N/A"
+        print(
+            f"\n{result['name']}: D={result['D']}, "
+            f"JIT={jit_str}, "
+            f"Runtime={runtime_str}, "
+            f"RAM={ram_str}, "
+            f"status={result['status']}"
+        )
+        if not result["success"]:
             print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         # This scenario is EXPECTED to be slow (documented bug PERF-01)
@@ -546,7 +556,6 @@ class TestStandardGalaxyWorkflows:
             else:
                 print(f"⚠️ PERF-01 NOT reproduced: JIT={result['jit_sec']:.1f}s (expected >60s)")
                 print("   This could mean PERF-01 was fixed!")
-
 
     def test_a4_stochastic_sfh_recovery(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """A4. Stochastic SFH recovery (D=12, bursty galaxies).
@@ -585,15 +594,18 @@ class TestStandardGalaxyWorkflows:
             n_iterations=10,  # geoVI iterations
         )
 
-        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
-        runtime_str = f"{result['runtime_sec']:.3f}s" if result['runtime_sec'] is not None else "N/A"
-        ram_str = f"{result['ram_gb']:.2f}GB" if result['ram_gb'] is not None else "N/A"
-        print(f"\n{result['name']}: D={result['D']}, "
-              f"JIT={jit_str}, "
-              f"Runtime={runtime_str}, "
-              f"RAM={ram_str}, "
-              f"status={result['status']}")
-        if not result['success']:
+        jit_str = f"{result['jit_sec']:.1f}s" if result["jit_sec"] is not None else "N/A"
+        _rt = result["runtime_sec"]
+        runtime_str = f"{_rt:.3f}s" if _rt is not None else "N/A"
+        ram_str = f"{result['ram_gb']:.2f}GB" if result["ram_gb"] is not None else "N/A"
+        print(
+            f"\n{result['name']}: D={result['D']}, "
+            f"JIT={jit_str}, "
+            f"Runtime={runtime_str}, "
+            f"RAM={ram_str}, "
+            f"status={result['status']}"
+        )
+        if not result["success"]:
             print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         assert result["success"], f"A4 failed: {result['error_type']}"
@@ -636,15 +648,18 @@ class TestStandardGalaxyWorkflows:
             n_iterations=20,
         )
 
-        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
-        runtime_str = f"{result['runtime_sec']:.3f}s" if result['runtime_sec'] is not None else "N/A"
-        ram_str = f"{result['ram_gb']:.2f}GB" if result['ram_gb'] is not None else "N/A"
-        print(f"\n{result['name']}: D={result['D']}, "
-              f"JIT={jit_str}, "
-              f"Runtime={runtime_str}, "
-              f"RAM={ram_str}, "
-              f"status={result['status']}")
-        if not result['success']:
+        jit_str = f"{result['jit_sec']:.1f}s" if result["jit_sec"] is not None else "N/A"
+        _rt = result["runtime_sec"]
+        runtime_str = f"{_rt:.3f}s" if _rt is not None else "N/A"
+        ram_str = f"{result['ram_gb']:.2f}GB" if result["ram_gb"] is not None else "N/A"
+        print(
+            f"\n{result['name']}: D={result['D']}, "
+            f"JIT={jit_str}, "
+            f"Runtime={runtime_str}, "
+            f"RAM={ram_str}, "
+            f"status={result['status']}"
+        )
+        if not result["success"]:
             print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         # High-D variational inference has longer JIT times (60-90s typical)
@@ -656,7 +671,9 @@ class TestStandardGalaxyWorkflows:
             )
             # Log warning if in slow range (60-90s)
             if result["jit_sec"] > PerformanceThresholds.JIT_SLOW:
-                print(f"  Note: High-D VI JIT time ({result['jit_sec']:.1f}s) is slow but expected")
+                print(
+                    f"  Note: High-D VI JIT time ({result['jit_sec']:.1f}s) is slow but expected"
+                )
 
 
 class TestKnownBugReproduction:
@@ -775,10 +792,12 @@ class TestMemoryAndCompilation:
             rng_key=rng_key,
         )
 
-        print(f"\n{result['name']}: D={result['D']}, "
-              f"JIT={result['jit_sec']:.1f}s, "
-              f"RAM={result['ram_gb']:.2f}GB (baseline), "
-              f"status={result['status']}")
+        print(
+            f"\n{result['name']}: D={result['D']}, "
+            f"JIT={result['jit_sec']:.1f}s, "
+            f"RAM={result['ram_gb']:.2f}GB (baseline), "
+            f"status={result['status']}"
+        )
 
         assert result["success"], f"E1 failed: {result['error_type']}"
         assert result["ram_gb"] < 2.0, (
@@ -831,11 +850,9 @@ class TestAGNScience:
             rng_key=rng_key,
         )
 
-        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
-        print(f"\n{result['name']}: D={result['D']}, "
-              f"JIT={jit_str}, "
-              f"status={result['status']}")
-        if not result['success']:
+        jit_str = f"{result['jit_sec']:.1f}s" if result["jit_sec"] is not None else "N/A"
+        print(f"\n{result['name']}: D={result['D']}, JIT={jit_str}, status={result['status']}")
+        if not result["success"]:
             print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         if result["success"]:
@@ -937,10 +954,12 @@ class TestInferenceStressTests:
             n_samples=100,
         )
 
-        print(f"\n{result['name']}: D={result['D']}, "
-              f"JIT={result['jit_sec']:.1f}s, "
-              f"status={result['status']}")
-        if not result['success']:
+        print(
+            f"\n{result['name']}: D={result['D']}, "
+            f"JIT={result['jit_sec']:.1f}s, "
+            f"status={result['status']}"
+        )
+        if not result["success"]:
             print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         # NUTS at D=20 is borderline — success is not guaranteed
@@ -999,11 +1018,345 @@ class TestInferenceStressTests:
             n_samples_per_iteration=12,
         )
 
-        print(f"\n{result_4['name']}: Runtime={result_4['runtime_sec']:.1f}s, status={result_4['status']}")
-        print(f"{result_12['name']}: Runtime={result_12['runtime_sec']:.1f}s, status={result_12['status']}")
+        print(
+            f"\n{result_4['name']}: Runtime={result_4['runtime_sec']:.1f}s, "
+            f"status={result_4['status']}"
+        )
+        print(
+            f"{result_12['name']}: Runtime={result_12['runtime_sec']:.1f}s, "
+            f"status={result_12['status']}"
+        )
 
         if result_4["success"] and result_12["success"]:
             print(f"  ✓ Both n_samples={4} and n_samples={12} converged")
+
+    @pytest.mark.slow
+    def test_d2_raytrace_step_size(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
+        """D2. Ray Tracing step_size sensitivity (D=25).
+
+        Model: dirichlet (20 bins) + dust
+        Inference: mcmc_raytrace with step_size = [0.04, 0.05, 0.06, 0.07]
+        Expected: 0.05 → acceptance ~0.8-0.9; 0.06 → cliff (acceptance drops)
+        Purpose: Reproduce documented sharp viability cliff
+        """
+        params = Parameters(
+            mean_sfh_type="dirichlet",
+            sfh_dir_n_bins=20,  # D=20 from Dirichlet
+            met_logzsol=Uniform(-2.0, 0.2),
+            dust_tau_bc=Uniform(0.0, 3.0),
+            dust_tau_diff=Uniform(0.0, 2.0),
+            redshift=Fixed(mock_data_z1["redshift"]),
+        )
+
+        # Test step sizes around documented cliff
+        step_sizes = [0.04, 0.05, 0.06, 0.07]
+        results = {}
+
+        for i, step_size in enumerate(step_sizes):
+            result = run_scenario(
+                name=f"D2_raytrace_step{step_size:.2f}",
+                params=params,
+                ssp_data=mist_ssp,
+                observation=mock_obs_z1,
+                data=mock_data_z1["flux"],
+                noise=mock_data_z1["flux_unc"],
+                method="mcmc_raytrace",
+                rng_key=jax.random.fold_in(rng_key, i),
+                n_warmup=50,  # Reduced for speed
+                n_samples=50,
+                step_size=step_size,
+            )
+            results[step_size] = result
+
+            print(
+                f"\n{result['name']}: step_size={step_size:.2f}, "
+                f"D={result['D']}, "
+                f"status={result['status']}"
+            )
+            if not result["success"]:
+                print(f"  Error: {result['error_type']}: {result['error_msg']}")
+
+        # Check if we can observe the cliff
+        if results[0.05]["success"] and not results[0.06]["success"]:
+            print("  ✓ Reproduced documented step_size cliff at 0.06")
+        elif all(results[s]["success"] for s in step_sizes):
+            print("  ⚠️ All step sizes succeeded (cliff not observed, may be stochastic)")
+
+
+class TestMemoryProfiling:
+    """Category E: Memory & compilation profiling."""
+
+    def test_e1_baseline_memory(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
+        """E1. Baseline memory (D=7, simple).
+
+        Model: tsnorm + dust
+        Inference: map
+        Measure: Peak RAM during JIT + inference
+        Expected: <2GB total
+        """
+        params = Parameters(
+            mean_sfh_type="tsnorm",
+            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
+            sfh_tsnorm_skew=Uniform(-1.0, 1.0),
+            sfh_tsnorm_trunc=Uniform(1.0, 10.0),
+            met_logzsol=Uniform(-2.0, 0.2),
+            dust_tau_bc=Uniform(0.0, 3.0),
+            dust_tau_diff=Uniform(0.0, 2.0),
+            redshift=Fixed(mock_data_z1["redshift"]),
+        )
+
+        result = run_scenario(
+            name="E1_baseline_memory",
+            params=params,
+            ssp_data=mist_ssp,
+            observation=mock_obs_z1,
+            data=mock_data_z1["flux"],
+            noise=mock_data_z1["flux_unc"],
+            method="map",
+            rng_key=rng_key,
+        )
+
+        ram_gb = result["peak_ram_mb"] / 1024.0 if result["peak_ram_mb"] is not None else 0.0
+        print(
+            f"\n{result['name']}: D={result['D']}, RAM={ram_gb:.2f}GB, status={result['status']}"
+        )
+
+        if result["success"] and ram_gb < 2.0:
+            print("  ✓ Baseline memory < 2GB (laptop-friendly)")
+
+    @pytest.mark.slow
+    def test_e2_memory_scaling_components(self, mist_ssp, optical_nir_filters, rng_key):
+        """E2. Memory scaling with components.
+
+        Models: Progressively add stellar → +nebular → +DL07(Fixed) → +AGN
+        Inference: map (just JIT each)
+        Measure: ΔRamPeak per component
+        Expected: Each component adds <500MB; total <6GB
+        """
+        # Create mock data
+        _, _, filter_curves = optical_nir_filters
+        n_bands = len(filter_curves)
+        flux_cgs = 1e-26 * np.ones(n_bands)
+        noise_cgs = flux_cgs / 10.0
+        obs = Observation(photometry=Photometry.from_filter_set(optical_nir_filters))
+        data_dict = {
+            "flux": jnp.array(flux_cgs),
+            "flux_unc": jnp.array(noise_cgs),
+            "redshift": 1.0,
+        }
+
+        # Base: stellar only
+        params_stellar = Parameters(
+            mean_sfh_type="tsnorm",
+            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
+            sfh_tsnorm_skew=Uniform(-1.0, 1.0),
+            sfh_tsnorm_trunc=Uniform(1.0, 10.0),
+            met_logzsol=Uniform(-2.0, 0.2),
+            dust_tau_bc=Uniform(0.0, 3.0),
+            dust_tau_diff=Uniform(0.0, 2.0),
+            redshift=Fixed(data_dict["redshift"]),
+        )
+
+        result_stellar = run_scenario(
+            name="E2_stellar",
+            params=params_stellar,
+            ssp_data=mist_ssp,
+            observation=obs,
+            data=data_dict["flux"],
+            noise=data_dict["flux_unc"],
+            method="map",
+            rng_key=rng_key,
+        )
+
+        # + nebular
+        params_nebular = Parameters(
+            mean_sfh_type="tsnorm",
+            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
+            sfh_tsnorm_skew=Uniform(-1.0, 1.0),
+            sfh_tsnorm_trunc=Uniform(1.0, 10.0),
+            met_logzsol=Uniform(-2.0, 0.2),
+            dust_tau_bc=Uniform(0.0, 3.0),
+            dust_tau_diff=Uniform(0.0, 2.0),
+            nebular_ssp=True,
+            redshift=Fixed(data_dict["redshift"]),
+        )
+
+        result_nebular = run_scenario(
+            name="E2_nebular",
+            params=params_nebular,
+            ssp_data=mist_ssp,
+            observation=obs,
+            data=data_dict["flux"],
+            noise=data_dict["flux_unc"],
+            method="map",
+            rng_key=jax.random.fold_in(rng_key, 1),
+        )
+
+        # + DL07 dust emission (Fixed umin)
+        params_dl07 = Parameters(
+            mean_sfh_type="tsnorm",
+            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
+            sfh_tsnorm_skew=Uniform(-1.0, 1.0),
+            sfh_tsnorm_trunc=Uniform(1.0, 10.0),
+            met_logzsol=Uniform(-2.0, 0.2),
+            dust_tau_bc=Uniform(0.0, 3.0),
+            dust_tau_diff=Uniform(0.0, 2.0),
+            dust_model="two_component",
+            dust_emission="draine_li2007",
+            dust_umin=Fixed(1.0),  # Fixed to avoid PERF-01
+            dust_gamma_dl=Uniform(0.0, 0.1),
+            dust_qpah=Uniform(0.5, 4.5),
+            nebular_ssp=True,
+            redshift=Fixed(data_dict["redshift"]),
+        )
+
+        result_dl07 = run_scenario(
+            name="E2_dl07",
+            params=params_dl07,
+            ssp_data=mist_ssp,
+            observation=obs,
+            data=data_dict["flux"],
+            noise=data_dict["flux_unc"],
+            method="map",
+            rng_key=jax.random.fold_in(rng_key, 2),
+        )
+
+        # + AGN
+        params_agn = Parameters(
+            mean_sfh_type="tsnorm",
+            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
+            sfh_tsnorm_skew=Uniform(-1.0, 1.0),
+            sfh_tsnorm_trunc=Uniform(1.0, 10.0),
+            met_logzsol=Uniform(-2.0, 0.2),
+            dust_tau_bc=Uniform(0.0, 3.0),
+            dust_tau_diff=Uniform(0.0, 2.0),
+            dust_model="two_component",
+            dust_emission="draine_li2007",
+            dust_umin=Fixed(1.0),
+            dust_gamma_dl=Uniform(0.0, 0.1),
+            dust_qpah=Uniform(0.5, 4.5),
+            nebular_ssp=True,
+            agn_model="disc",
+            agn_log_lbol=Uniform(43.0, 46.0),
+            agn_disc_alpha_ox=Uniform(-1.8, -1.2),
+            agn_torus_model="skirtor",
+            agn_torus_frac=Uniform(0.0, 1.0),
+            agn_torus_tau_v=Uniform(10.0, 150.0),
+            agn_torus_angle_deg=Uniform(0.0, 90.0),
+            redshift=Fixed(data_dict["redshift"]),
+        )
+
+        result_agn = run_scenario(
+            name="E2_agn",
+            params=params_agn,
+            ssp_data=mist_ssp,
+            observation=obs,
+            data=data_dict["flux"],
+            noise=data_dict["flux_unc"],
+            method="map",
+            rng_key=jax.random.fold_in(rng_key, 3),
+        )
+
+        # Print results
+        results = [result_stellar, result_nebular, result_dl07, result_agn]
+        for r in results:
+            ram_gb = r["peak_ram_mb"] / 1024.0 if r["peak_ram_mb"] is not None else 0.0
+            print(f"\n{r['name']}: RAM={ram_gb:.2f}GB, status={r['status']}")
+
+        # Check scaling
+        if all(r["success"] for r in results):
+            ram_vals = [r["peak_ram_mb"] / 1024.0 for r in results]
+            max_ram = max(ram_vals)
+            if max_ram < 6.0:
+                print(f"  ✓ All components fit in <6GB (max={max_ram:.2f}GB)")
+
+    @pytest.mark.slow
+    def test_e3_jit_breakdown_kitchen_sink(self, mist_ssp, optical_nir_filters, rng_key):
+        """E3. JIT compilation time breakdown.
+
+        Model: Kitchen-sink (stellar + nebular + DL07 + AGN)
+        Inference: map
+        Measure: t_compile_first_call, t_runtime_after_warmup
+        Expected: <60s compile, <1ms runtime (post-JIT)
+        Failure: If >120s compile, user experience is broken
+        """
+        # Create mock data
+        _, _, filter_curves = optical_nir_filters
+        n_bands = len(filter_curves)
+        flux_cgs = 1e-26 * np.ones(n_bands)
+        noise_cgs = flux_cgs / 10.0
+        obs = Observation(photometry=Photometry.from_filter_set(optical_nir_filters))
+        data_dict = {
+            "flux": jnp.array(flux_cgs),
+            "flux_unc": jnp.array(noise_cgs),
+            "redshift": 1.0,
+        }
+
+        # Kitchen-sink params
+        params = Parameters(
+            mean_sfh_type="tsnorm",
+            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+            sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
+            sfh_tsnorm_skew=Uniform(-1.0, 1.0),
+            sfh_tsnorm_trunc=Uniform(1.0, 10.0),
+            met_logzsol=Uniform(-2.0, 0.2),
+            dust_tau_bc=Uniform(0.0, 3.0),
+            dust_tau_diff=Uniform(0.0, 2.0),
+            dust_model="two_component",
+            dust_emission="draine_li2007",
+            dust_umin=Fixed(1.0),
+            dust_gamma_dl=Uniform(0.0, 0.1),
+            dust_qpah=Uniform(0.5, 4.5),
+            nebular_ssp=True,
+            agn_model="disc",
+            agn_log_lbol=Uniform(43.0, 46.0),
+            agn_disc_alpha_ox=Uniform(-1.8, -1.2),
+            agn_torus_model="skirtor",
+            agn_torus_frac=Uniform(0.0, 1.0),
+            agn_torus_tau_v=Uniform(10.0, 150.0),
+            agn_torus_angle_deg=Uniform(0.0, 90.0),
+            redshift=Fixed(data_dict["redshift"]),
+        )
+
+        result = run_scenario(
+            name="E3_kitchen_sink_jit",
+            params=params,
+            ssp_data=mist_ssp,
+            observation=obs,
+            data=data_dict["flux"],
+            noise=data_dict["flux_unc"],
+            method="map",
+            rng_key=rng_key,
+        )
+
+        jit_sec = result["jit_sec"] if result["jit_sec"] is not None else float("inf")
+        runtime_sec = result["runtime_sec"] if result["runtime_sec"] is not None else float("inf")
+
+        print(
+            f"\n{result['name']}: "
+            f"JIT={jit_sec:.1f}s, "
+            f"Runtime={runtime_sec:.3f}s, "
+            f"status={result['status']}"
+        )
+
+        if result["success"]:
+            if jit_sec < 60.0:
+                print("  ✓ Excellent: JIT < 60s")
+            elif jit_sec < 120.0:
+                print("  ⚠️ Acceptable: JIT < 120s")
+            else:
+                print("  ❌ Broken: JIT > 120s (user experience degraded)")
 
 
 class TestEdgeCases:
@@ -1049,11 +1402,9 @@ class TestEdgeCases:
             rng_key=rng_key,
         )
 
-        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
-        print(f"\n{result['name']}: z=0.01, "
-              f"JIT={jit_str}, "
-              f"status={result['status']}")
-        if not result['success']:
+        jit_str = f"{result['jit_sec']:.1f}s" if result["jit_sec"] is not None else "N/A"
+        print(f"\n{result['name']}: z=0.01, JIT={jit_str}, status={result['status']}")
+        if not result["success"]:
             print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         assert result["success"], f"F1 failed at z=0.01: {result['error_type']}"
@@ -1098,11 +1449,9 @@ class TestEdgeCases:
             rng_key=rng_key,
         )
 
-        jit_str = f"{result['jit_sec']:.1f}s" if result['jit_sec'] is not None else "N/A"
-        print(f"\n{result['name']}: z=8, "
-              f"JIT={jit_str}, "
-              f"status={result['status']}")
-        if not result['success']:
+        jit_str = f"{result['jit_sec']:.1f}s" if result["jit_sec"] is not None else "N/A"
+        print(f"\n{result['name']}: z=8, JIT={jit_str}, status={result['status']}")
+        if not result["success"]:
             print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
         assert result["success"], f"F2 failed at z=8: {result['error_type']}"
@@ -1133,9 +1482,9 @@ class TestEdgeCases:
             rng_key=rng_key,
         )
 
-        print(f"\n{result['name']}: tau=0, "
-              f"JIT={result['jit_sec']:.1f}s, "
-              f"status={result['status']}")
+        print(
+            f"\n{result['name']}: tau=0, JIT={result['jit_sec']:.1f}s, status={result['status']}"
+        )
 
         assert result["success"], f"F3 failed with zero dust: {result['error_type']}"
 
@@ -1165,8 +1514,10 @@ class TestEdgeCases:
             rng_key=rng_key,
         )
 
-        print(f"\n{result['name']}: logZ=-2.0, "
-              f"JIT={result['jit_sec']:.1f}s, "
-              f"status={result['status']}")
+        print(
+            f"\n{result['name']}: logZ=-2.0, "
+            f"JIT={result['jit_sec']:.1f}s, "
+            f"status={result['status']}"
+        )
 
         assert result["success"], f"F4 failed at metallicity grid edge: {result['error_type']}"
