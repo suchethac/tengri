@@ -940,7 +940,11 @@ def build_jit_engine(fitter, pos_dict):
                 kl_map=jax.vmap,
                 residual_map=jax.vmap,
             )
-        except Exception:
+        except (ImportError, ModuleNotFoundError, AttributeError, TypeError, ValueError):
+            # ImportError/ModuleNotFoundError: nifty8 not installed
+            # AttributeError: NIFTy API changed (method/class renamed)
+            # TypeError: wrong arguments to NIFTy constructors
+            # ValueError: invalid configuration for NIFTy likelihood/model
             _has_nifty = False
             nifty_likelihood = None
             nifty_opt_vi = None
