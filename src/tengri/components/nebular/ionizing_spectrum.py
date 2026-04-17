@@ -247,7 +247,10 @@ def precompute_ionizing_params_table(
                 ionspec_table[im, ia, 5] = result["ionspec_logLratio2"]
                 ionspec_table[im, ia, 6] = result["ionspec_logLratio3"]
                 logqion_table[im, ia] = result["gas_logqion"]
-            except Exception:
+            except (ValueError, IndexError, RuntimeError):
+                # ValueError: invalid input data (NaN, zero flux, wrong wavelength range)
+                # IndexError: wavelength array doesn't cover ionizing regime (<912 A)
+                # RuntimeError: scipy optimization failed to converge
                 continue
 
     return {
