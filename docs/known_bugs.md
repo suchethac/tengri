@@ -570,3 +570,52 @@ if _has_any_nonstell:
 - **#11**: Lya `is_balmer=False` — corrected in both catalogs
 - **#12**: `from_cloudy_grid` — wavelength-proximity lookup for doublet ratios
 - **#14**: `bpt_nii()` — returns NaN for non-detections
+
+---
+
+## Performance & Consistency Backlog (2026-04-17)
+
+Non-bug items surfaced while benchmarking `vi_native` vs `vi` (see
+`docs/dev/benchmarks/2026-04-17_native_vs_nifty.md`). These are
+consistency or perf improvements, not correctness bugs.
+
+- **PERF-02 — vi / vi_native are not posterior-equivalent.** Benchmark shows
+  native is **~19× faster** on the 7-param parametric case (2.3s vs 44s) and
+  **~25× faster** on the 137-D stochastic case (2.8s vs 71s). On physics
+  parameters the two paths diverge: `dust_tau_diff` is 2–4σ apart, and the
+  PSD burstiness timescale `sfh_field_psd_tau_myr` lands at 82 Myr (NIFTy)
+  vs 6 Myr (native) — an order-of-magnitude disagreement in the physical
+  interpretation of the data, not just a Monte-Carlo difference. A NUTS
+  head-to-head is needed to see which VI path is closer to the gold-standard
+  posterior before promoting either.
+
+- **PERF-03 — `vi_native` marked "experimental" in `fitter.py:82`.** The label
+  may be stale — the native path already has MAP warm-start, multi-seed vmap,
+  and KL-tolerance early stopping. Audit git log and HANDOFF before promoting.
+  If promoted, it becomes the recommended default for multi-seed fits.
+
+- **CONS-01 — Mode proliferation.** `_PREDICTION_MODES = {auto, precomputed,
+  compositional, hybrid, exact, _traceable}` in `sed_model.py`. User-facing
+  semantics of `"precomputed"` vs `"hybrid"` are unclear. Audit which modes
+  are reachable via `"auto"` and whether `"precomputed"` can be deprecated.
+
+- **CONS-02 — Method-name drift in quickstart (fixed 2026-04-17).** The
+  quickstart notebook comments called the inference "native_geovi" but the
+  actual call was `fitter.run("vi", ..., n_seeds=5)` — which raises
+  `TypeError` because NIFTy's driver has no `n_seeds` parameter. Fixed by
+  switching the calls to `"vi_native"`.
+
+- **CONS-03 — `n_samples` effective-count mismatch.** `VIConfig.n_samples=3`
+  doubles to 6 effective samples via NIFTy's `mirror_samples=True`. Users
+  (and prior AI analyses) have read this wrong. CLAUDE.md now flags it;
+  consider logging the effective count in the fitter verbose output as well.
+
+- **PERF-04 — `fit_batch` loops sequentially for non-MAP methods.** MAP now
+  has a vmap-batched helper (`fit_batch_map_vmap`, `forward/convenience.py`).
+  VI/geoVI catalog batching would need `jit_engine.py` to accept a batch
+  axis; tracked as follow-up work.
+
+- **PERF-05 — No explicit XLA cache warm-up script.** First-time users pay
+  the JIT cost (~17s compile for NIFTy vi, ~5s for native vi on the 7-param
+  model) on first fit. A `scripts/warmup_cache.py` that pre-compiles the
+  standard model configs would move that cost to install-time.

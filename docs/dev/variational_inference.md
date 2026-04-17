@@ -206,6 +206,36 @@ for i in range(10):
     # pred should bracket the data within noise
 ```
 
+## Choosing an Inference Method
+
+tengri has two VI paths with the same variational objective but different drivers.
+
+| Method string | Driver | Notes |
+|---|---|---|
+| `"vi"` | NIFTy `jft.optimize_kl` (Python loop) | Reference path; verbose logging. |
+| `"vi_linear"` | NIFTy MGVI | Linear-only, debugging high-D problems. |
+| `"vi_native"` | Pure-JAX `lax.while_loop` | ~18× faster warm-run; **not posterior-equivalent to `"vi"` in general** (see benchmark below). |
+| `"vi_native_linear"` | Pure-JAX MGVI | Same as above, MGVI variant. |
+
+**Deprecated aliases** `"native_geovi"`, `"native_mgvi"`, `"native_evi"`, `"geovi"`, `"mgvi"`, `"evi"` still work (with `DeprecationWarning`) but should not be used in new code.
+
+**Important equivalence caveat:** A 2026-04-17 benchmark (`docs/dev/benchmarks/2026-04-17_native_vs_nifty.md`) compared `"vi"` vs `"vi_native"` on a 7-parameter parametric setup (15 KL iterations, 6 samples, matched `init_from="random"`). Native was 18.5× faster on warm run, but converged posterior means disagreed by up to 2.3σ on some parameters. **The two paths target the same objective with different solver details and land in different modes on multi-modal problems.** Treat `"vi_native"` as "fast but not identical" — validate per-problem with NUTS (for D ≤ 20) before trusting its posterior.
+
+### OptimizationSchedule factories
+
+`OptimizationSchedule` (in `inference/vi_config.py`) builds per-iteration control callables for the native path. Use via `fitter.run("vi_native", schedule=…)` or passing the schedule's `n_iterations` and `sample_mode_at`.
+
+| Factory | Behavior | When to use |
+|---|---|---|
+| `OptimizationSchedule.geovi(n_iterations=15, resample_every=5)` | Resample at iter 0 and every 5 iters; update between. | Recommended default for stochastic SFH fits. |
+| `OptimizationSchedule.evi(n_iterations=20, transition=10)` | MGVI (linear) for first `transition` iters, then geoVI. | Faster warm-up; good when MAP init is far from the true mode. |
+| `OptimizationSchedule.mgvi(n_iterations=15)` | Pure linear resample. | Debugging high-D problems. |
+| `OptimizationSchedule.gibbs(blocks, resample_every=5)` | Block-Gibbs cycle over `BlockStep` groups. | Hierarchical inference where you want to freeze shared vs. per-galaxy params alternately. `BlockSchedule.individual_geovi()` and `BlockSchedule.hierarchical()` provide ready-made block lists. |
+
+### `n_samples` gotcha
+
+`VIConfig.n_samples` defaults to `3`. With NIFTy's `mirror_samples=True` (default), this produces **6 effective samples per KL iteration** (each sample paired with its negation). Raising `n_samples` above 12 triggers a warning because high sample counts reduce the stochastic regularization that Newton-CG relies on.
+
 ## Performance Guide
 
 | Problem | D | Recommended method | Time |
