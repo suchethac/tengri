@@ -899,7 +899,12 @@ class PopulationFitter:
                 )
                 combined = {k: pos_tree[k] + sample_tree[k] for k in pos_tree}
                 all_sample_dicts.append(combined)
-            except Exception:
+            except (TypeError, ValueError, AttributeError, KeyError, RuntimeError):
+                # TypeError: NIFTy API mismatch or dict() conversion failed
+                # ValueError: invalid cg_kwargs configuration
+                # AttributeError: missing .tree attribute
+                # KeyError: position/sample tree key mismatch
+                # RuntimeError: linear solver failed to converge
                 break
 
         wall_time = time.time() - t0
@@ -1174,7 +1179,12 @@ class PopulationFitter:
                 )
                 combined = {k: pos_tree[k] + sample_tree[k] for k in pos_tree}
                 all_sample_dicts.append(combined)
-            except Exception:
+            except (TypeError, ValueError, AttributeError, KeyError, RuntimeError):
+                # TypeError: NIFTy API mismatch or dict() conversion failed
+                # ValueError: invalid cg_kwargs configuration
+                # AttributeError: missing .tree attribute
+                # KeyError: position/sample tree key mismatch
+                # RuntimeError: linear solver failed to converge
                 break
 
         wall_time = time.time() - t0
