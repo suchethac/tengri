@@ -18,7 +18,7 @@ from tengri.parameters.priors import Gaussian, LogUniform
 from tengri.utils.transforms import to_bounded
 
 
-def build_loss_fn(fitter):
+def build_loss_fn(fitter, mode="_traceable"):
     """Build a differentiable loss function.
 
     The loss function takes an unbounded parameter dict **and a
@@ -30,6 +30,10 @@ def build_loss_fn(fitter):
     Parameters
     ----------
     fitter : Fitter
+    mode : str, optional
+        Forward model prediction mode. Default "_traceable" is safe inside
+        JIT scopes (used by NIFTy VI/geoVI). Use "auto" for better performance
+        with MAP, Laplace, Pathfinder, NUTS, Raytrace, NSS (~1.5x speedup).
 
     Returns
     -------
@@ -85,12 +89,12 @@ def build_loss_fn(fitter):
 
         # Forward model prediction
         if data_type == "photometry":
-            predicted = model.predict_photometry(params, mode="_traceable")
+            predicted = model.predict_photometry(params, mode=mode)
         elif data_type == "spectroscopy":
-            predicted = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+            predicted = model.predict_spectrum(params, model._wave_obs, mode=mode)
         elif data_type == "joint":
-            pred_phot = model.predict_photometry(params, mode="_traceable")
-            pred_spec = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+            pred_phot = model.predict_photometry(params, mode=mode)
+            pred_spec = model.predict_spectrum(params, model._wave_obs, mode=mode)
             predicted = jnp.concatenate([pred_phot, pred_spec])
         else:
             raise ValueError(f"Unknown data_type: {data_type}")
@@ -164,7 +168,7 @@ def build_loss_fn(fitter):
             sigma_kms = params.get("eline_sigma_kms", 0.0)
             delta_v = params.get("eline_delta_v_kms", 0.0)
             resolution = getattr(model, "_spectral_resolution", None) or 2000.0
-            n_phot = model.predict_photometry(params, mode="_traceable").shape[0]
+            n_phot = model.predict_photometry(params, mode=mode).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -233,7 +237,7 @@ def build_loss_fn(fitter):
                 marginalize_calibration,
             )
 
-            n_phot = model.predict_photometry(params, mode="_traceable").shape[0]
+            n_phot = model.predict_photometry(params, mode=mode).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -307,7 +311,7 @@ def build_loss_fn(fitter):
             sigma_kms = params.get("eline_sigma_kms", 0.0)
             delta_v = params.get("eline_delta_v_kms", 0.0)
             resolution = getattr(model, "_spectral_resolution", None) or 2000.0
-            n_phot = model.predict_photometry(params, mode="_traceable").shape[0]
+            n_phot = model.predict_photometry(params, mode=mode).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -382,7 +386,7 @@ def build_loss_fn(fitter):
             sigma_kms = params.get("eline_sigma_kms", 0.0)
             delta_v = params.get("eline_delta_v_kms", 0.0)
             resolution = getattr(model, "_spectral_resolution", None) or 2000.0
-            n_phot = model.predict_photometry(params, mode="_traceable").shape[0]
+            n_phot = model.predict_photometry(params, mode=mode).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -467,7 +471,7 @@ def build_logprior_fn(fitter):
     return logprior_fn
 
 
-def build_loglikelihood_fn(fitter):
+def build_loglikelihood_fn(fitter, mode="_traceable"):
     """Build a log-likelihood function in physical parameter space.
 
     Returns a function: ``(dict of free params, data_args) → scalar``.
@@ -478,6 +482,10 @@ def build_loglikelihood_fn(fitter):
     Parameters
     ----------
     fitter : Fitter
+    mode : str, optional
+        Forward model prediction mode. Default "_traceable" is safe inside
+        JIT scopes (used by NIFTy VI/geoVI). Use "auto" for better performance
+        with MAP, Laplace, Pathfinder, NUTS, Raytrace, NSS (~1.5x speedup).
 
     Returns
     -------
@@ -521,12 +529,12 @@ def build_loglikelihood_fn(fitter):
 
         # Forward model prediction
         if data_type == "photometry":
-            predicted = model.predict_photometry(params, mode="_traceable")
+            predicted = model.predict_photometry(params, mode=mode)
         elif data_type == "spectroscopy":
-            predicted = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+            predicted = model.predict_spectrum(params, model._wave_obs, mode=mode)
         elif data_type == "joint":
-            pred_phot = model.predict_photometry(params, mode="_traceable")
-            pred_spec = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+            pred_phot = model.predict_photometry(params, mode=mode)
+            pred_spec = model.predict_spectrum(params, model._wave_obs, mode=mode)
             predicted = jnp.concatenate([pred_phot, pred_spec])
         else:
             raise ValueError(f"Unknown data_type: {data_type}")
@@ -600,7 +608,7 @@ def build_loglikelihood_fn(fitter):
             sigma_kms = params.get("eline_sigma_kms", 0.0)
             delta_v = params.get("eline_delta_v_kms", 0.0)
             resolution = getattr(model, "_spectral_resolution", None) or 2000.0
-            n_phot = model.predict_photometry(params, mode="_traceable").shape[0]
+            n_phot = model.predict_photometry(params, mode=mode).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -667,7 +675,7 @@ def build_loglikelihood_fn(fitter):
                 marginalize_calibration,
             )
 
-            n_phot = model.predict_photometry(params, mode="_traceable").shape[0]
+            n_phot = model.predict_photometry(params, mode=mode).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -741,7 +749,7 @@ def build_loglikelihood_fn(fitter):
             sigma_kms = params.get("eline_sigma_kms", 0.0)
             delta_v = params.get("eline_delta_v_kms", 0.0)
             resolution = getattr(model, "_spectral_resolution", None) or 2000.0
-            n_phot = model.predict_photometry(params, mode="_traceable").shape[0]
+            n_phot = model.predict_photometry(params, mode=mode).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -816,7 +824,7 @@ def build_loglikelihood_fn(fitter):
             sigma_kms = params.get("eline_sigma_kms", 0.0)
             delta_v = params.get("eline_delta_v_kms", 0.0)
             resolution = getattr(model, "_spectral_resolution", None) or 2000.0
-            n_phot = model.predict_photometry(params, mode="_traceable").shape[0]
+            n_phot = model.predict_photometry(params, mode=mode).shape[0]
             data_phot = data[:n_phot]
             data_spec = data[n_phot:]
             noise_phot = noise[:n_phot]
@@ -847,7 +855,7 @@ def build_loglikelihood_fn(fitter):
     return loglikelihood_fn
 
 
-def build_loglikelihood_unbounded_fn(fitter):
+def build_loglikelihood_unbounded_fn(fitter, mode="_traceable"):
     """Build a log-likelihood function in unbounded parameter space.
 
     For Elliptical Slice Sampling, which handles the N(0,I) prior
@@ -856,13 +864,17 @@ def build_loglikelihood_unbounded_fn(fitter):
     Parameters
     ----------
     fitter : Fitter
+    mode : str, optional
+        Forward model prediction mode. Default "_traceable" is safe inside
+        JIT scopes (used by NIFTy VI/geoVI). Use "auto" for better performance
+        with MAP, Laplace, Pathfinder, NUTS, Raytrace, NSS (~1.5x speedup).
 
     Returns
     -------
     callable
         ``loglik_unbounded(params_unbounded, data_args) -> scalar``
     """
-    loglik_fn = fitter._get_or_build_loglikelihood_fn()
+    loglik_fn = fitter._get_or_build_loglikelihood_fn(mode=mode)
     bounds = fitter._bounds
     free_names = fitter._free_names
     fixed_values = fitter._fixed_values
