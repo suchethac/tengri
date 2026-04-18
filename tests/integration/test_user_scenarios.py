@@ -827,13 +827,12 @@ class TestAGNScience:
             met_logzsol=Uniform(-2.0, 0.2),
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
-            agn_model="disc",
+            agn_model="kubota_done",  # Kubota & Done disc
             agn_log_lbol=Uniform(43.0, 47.0),
-            agn_disc_alpha_ox=Uniform(-1.8, -1.2),
-            agn_torus_model="skirtor",
-            agn_torus_frac=Uniform(0.0, 1.0),
-            agn_torus_tau_v=Uniform(10.0, 150.0),
-            agn_torus_angle_deg=Uniform(0.0, 90.0),
+            agn_frac=Uniform(0.01, 0.3),  # Fraction of L_bol in disc
+            agn_torus_frac=Uniform(0.0, 1.0),  # Fraction seen by torus (enables SKIRTOR)
+            agn_tau_skirtor=Uniform(3.0, 11.0),  # SKIRTOR optical depth
+            agn_oa_skirtor=Uniform(20.0, 70.0),  # Opening angle (deg)
             nebular_ssp=True,
             apply_igm=True,
             redshift=Fixed(mock_data_z1["redshift"]),
@@ -1118,7 +1117,7 @@ class TestMemoryProfiling:
             rng_key=rng_key,
         )
 
-        ram_gb = result["peak_ram_mb"] / 1024.0 if result["peak_ram_mb"] is not None else 0.0
+        ram_gb = result["ram_gb"] if result["ram_gb"] is not None else 0.0
         print(
             f"\n{result['name']}: D={result['D']}, RAM={ram_gb:.2f}GB, status={result['status']}"
         )

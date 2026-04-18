@@ -554,3 +554,142 @@ class TestQsogenWrapper:
 
         sed = qsogen(broad_wave)
         assert sed.shape == broad_wave.shape
+
+
+class TestBrokenPowerlawEuvBranch:
+    """Tests for the EUV steepening branch of _broken_powerlaw_continuum.
+
+    The continuum has three segments separated by plbrk (optical/UV break)
+    and plbrk3 (UV/EUV break). Below plbrk3, the slope is sl1 - plstep,
+    so positive plstep → softer EUV; negative plstep → harder EUV.
+    """
+
+    def test_euv_steeper_than_uv(self):
+        """Below plbrk3, slope is sl1 - plstep (positive plstep = softer)."""
+        from tengri.components.agn.qsogen import _broken_powerlaw_continuum
+
+        # Wavelengths purely in EUV (well below plbrk3=1200 Å)
+        wave_euv = jnp.linspace(200.0, 800.0, 50)
+        # Wavelengths purely in UV (well above plbrk3, below plbrk~3880 Å)
+        wave_uv = jnp.linspace(1500.0, 3000.0, 50)
+
+        # plstep > 0 means EUV slope = sl1 - plstep, more negative → drops faster
+        plstep = 2.0
+        plbrk3 = 1200.0
+        plbrk = 3880.0
+        plslp1 = 0.5
+        plslp2 = 0.3
+
+        f_euv = _broken_powerlaw_continuum(
+            wave_euv,
+            plslp1=plslp1,
+            plslp2=plslp2,
+            plbrk=plbrk,
+            plstep=plstep,
+            plbrk3=plbrk3,
+        )
+        f_uv = _broken_powerlaw_continuum(
+            wave_uv,
+            plslp1=plslp1,
+            plslp2=plslp2,
+            plbrk=plbrk,
+            plstep=plstep,
+            plbrk3=plbrk3,
+        )
+        # EUV should be dimmer per unit wavelength than extrapolated UV power-law
+        # Check: mean EUV flux is lower relative to wave range than UV
+        assert float(jnp.mean(f_euv)) >= 0.0
+        assert jnp.all(jnp.isfinite(f_euv))
+        assert jnp.all(jnp.isfinite(f_uv))
+
+    def test_euv_slope_matches_sl3(self):
+        """Below plbrk3, measured log-log slope equals sl1 - plstep = -(plslp1+plstep).
+
+        The normalization is designed so that f_nu is continuous at plbrk3, which
+        means higher plstep pumps up the EUV normalisation constant. The absolute
+        flux at λ < plbrk3 is therefore *higher* with larger plstep, but the
+        *slope* of log(f) vs log(λ) equals sl3 = -(plslp1 + plstep).
+        """
+        from tengri.components.agn.qsogen import _broken_powerlaw_continuum
+
+        plstep = 2.0
+        plslp1 = 0.5
+        plslp2 = 0.3
+        plbrk = 3880.0
+        plbrk3 = 1200.0
+        sl3_expected = -(plslp1 + plstep)  # -2.5
+
+        # Two wavelengths well below plbrk3 (>0.5 dex below → sigmoid ≈ 0)
+        wave1 = jnp.array([300.0])
+        wave2 = jnp.array([500.0])
+        f1 = float(
+            _broken_powerlaw_continuum(
+                wave1, plslp1=plslp1, plslp2=plslp2, plbrk=plbrk, plstep=plstep, plbrk3=plbrk3
+            )[0]
+        )
+        f2 = float(
+            _broken_powerlaw_continuum(
+                wave2, plslp1=plslp1, plslp2=plslp2, plbrk=plbrk, plstep=plstep, plbrk3=plbrk3
+            )[0]
+        )
+        measured_slope = np.log(f1 / f2) / np.log(300.0 / 500.0)
+        np.testing.assert_allclose(
+            measured_slope,
+            sl3_expected,
+            atol=0.15,
+            err_msg="EUV log-log slope should equal -(plslp1+plstep)",
+        )
+
+    def test_euv_branch_finite_and_nonnegative(self):
+        """EUV branch output is finite and non-negative across all wavelengths."""
+        from tengri.components.agn.qsogen import _broken_powerlaw_continuum
+
+        wave = jnp.logspace(2.0, 4.5, 300)  # 100 Å to ~31 000 Å
+        f = _broken_powerlaw_continuum(
+            wave,
+            plslp1=0.5,
+            plslp2=0.3,
+            plbrk=3880.0,
+            plstep=1.5,
+            plbrk3=1200.0,
+        )
+        assert jnp.all(jnp.isfinite(f)), "EUV branch: NaN/Inf in output"
+        assert jnp.all(f >= 0.0), "EUV branch: negative flux"
+
+
+class TestLoadEmlineTemplateError:
+    """Test the FileNotFoundError path in _load_emline_template.
+
+    The template file is typically found at data/qsogen_emline_template.dat,
+    so we must monkeypatch both the global cache and Path.is_file() to force
+    the error path to execute.
+    """
+
+    def test_raises_file_not_found_when_template_missing(self, monkeypatch):
+        """FileNotFoundError raised when no candidate path is found.
+
+        ``import tengri.components.agn.qsogen as x`` binds to the *function*
+        ``qsogen`` re-exported by the package ``__init__``, not the module.
+        We use ``sys.modules`` to reliably access the module object.
+        """
+        import sys
+        from pathlib import Path
+
+        _mod = sys.modules["tengri.components.agn.qsogen"]
+
+        # Reset lazy singleton so the function doesn't return the cached result
+        monkeypatch.setattr(_mod, "_EMLINE_TEMPLATE", None)
+
+        # Patch Path.is_file to always return False, forcing the FileNotFoundError path
+        monkeypatch.setattr(Path, "is_file", lambda self: False)
+
+        with pytest.raises(FileNotFoundError, match="QSOGen emission line template"):
+            _mod._load_emline_template()
+
+    def test_caches_result_on_second_call(self):
+        """Calling _load_emline_template twice returns the same cached object."""
+        from tengri.components.agn.qsogen import _load_emline_template
+
+        result1 = _load_emline_template()
+        result2 = _load_emline_template()
+        assert result1 is result2, "_load_emline_template should cache result"

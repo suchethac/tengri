@@ -431,3 +431,54 @@ class TestComputeMassRemainingFraction:
         f_fine = float(compute_mass_remaining_fraction(ages, n_mass=1000)[0])
         # Both are valid; agreement within a few percent
         np.testing.assert_allclose(f_coarse, f_fine, rtol=0.02)
+
+
+class TestMassRemainingGradient:
+    """JAX autodiff gradient tests for differentiable sub-functions.
+
+    ``compute_mass_remaining_fraction`` uses ``jnp.where(m_grid < m_to, ...)``
+    where both branch values are independent of ``m_to`` (they are constants
+    from the mass grid). JAX AD therefore returns zero for the gradient of the
+    integral w.r.t. age — this is a Heaviside step function, and JAX AD does
+    not differentiate through the boolean condition, only through the values.
+
+    We test the two genuinely-differentiable sub-functions instead:
+    ``_ms_lifetime_gyr`` (analytic power-law) and ``_turnoff_mass``
+    (Newton-Raphson iteration using only JAX arithmetic).
+    """
+
+    def test_ms_lifetime_gradient_negative(self):
+        """Lifetime decreases with mass: d(t_ms)/d(m) < 0."""
+        from tengri.components.sps.mass_remaining import _ms_lifetime_gyr
+
+        g = float(jax.grad(_ms_lifetime_gyr)(2.0))
+        assert g < 0.0, f"d(t_ms)/d(m) should be negative, got {g}"
+
+    def test_ms_lifetime_gradient_fd(self):
+        """JAX gradient of _ms_lifetime_gyr matches central FD."""
+        from tengri.components.sps.mass_remaining import _ms_lifetime_gyr
+
+        m0 = 2.0
+        eps = 0.01
+        g_jax = float(jax.grad(_ms_lifetime_gyr)(m0))
+        g_fd = (float(_ms_lifetime_gyr(m0 + eps)) - float(_ms_lifetime_gyr(m0 - eps))) / (
+            2.0 * eps
+        )
+        np.testing.assert_allclose(g_jax, g_fd, rtol=1e-3)
+
+    def test_turnoff_mass_gradient_negative(self):
+        """Turnoff mass decreases with age: d(m_to)/d(age) < 0."""
+        from tengri.components.sps.mass_remaining import _turnoff_mass
+
+        g = float(jax.grad(_turnoff_mass)(5.0))
+        assert g < 0.0, f"d(m_turnoff)/d(age) should be negative, got {g}"
+
+    def test_turnoff_mass_gradient_fd(self):
+        """JAX gradient of _turnoff_mass (Newton solver) matches central FD."""
+        from tengri.components.sps.mass_remaining import _turnoff_mass
+
+        age0 = 5.0
+        eps = 0.05
+        g_jax = float(jax.grad(_turnoff_mass)(age0))
+        g_fd = (float(_turnoff_mass(age0 + eps)) - float(_turnoff_mass(age0 - eps))) / (2.0 * eps)
+        np.testing.assert_allclose(g_jax, g_fd, rtol=1e-2)
