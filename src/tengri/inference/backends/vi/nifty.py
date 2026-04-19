@@ -609,14 +609,11 @@ def _get_or_build_nifty_likelihood(fitter):
         has_noise_model,
         uses_student_t,
     )
-    from tengri.utils.transforms import to_bounded
-
     model = fitter.model
     data = fitter.data
     noise = fitter.noise
     data_type = fitter.data_type
     free_names = fitter._free_names
-    bounds = fitter._bounds
     fixed_values = fitter._fixed_values
     spec = fitter.spec
     stochastic = spec.stochastic
@@ -638,8 +635,8 @@ def _get_or_build_nifty_likelihood(fitter):
     def _build_params(primals):
         params = {}
         for name in free_names:
-            lo, hi = bounds[name]
-            params[name] = to_bounded(primals[name], lo, hi)
+            dist = spec.get_distribution(name)
+            params[name] = dist.unstandardize(primals[name])
         for name, val in fixed_values.items():
             params[name] = val
         if stochastic and "psd_xi" in primals:

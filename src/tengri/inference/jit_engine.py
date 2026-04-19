@@ -15,8 +15,6 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from tengri.utils.transforms import to_bounded
-
 
 def build_jit_engine(fitter, pos_dict):
     """Build JIT-compiled inference engine: optimizer + posterior sampler.
@@ -65,9 +63,9 @@ def build_jit_engine(fitter, pos_dict):
     model = fitter.model
     data_type = fitter.data_type
     free_names = fitter._free_names
-    bounds = fitter._bounds
     fixed_values = fitter._fixed_values
-    stochastic = fitter.spec.stochastic
+    spec = fitter.spec
+    stochastic = spec.stochastic
     # data/noise are NO LONGER captured here as local variables.
     # Instead they are passed at call-time via the ``data_args`` dict
     # so that the compiled engine can be reused across galaxies.
@@ -77,15 +75,19 @@ def build_jit_engine(fitter, pos_dict):
     # --- Signal response (physics only) ---
     # NOT JIT'd — must remain traceable so that jax.jvp/vjp (in metric_vec)
     # and jax.value_and_grad (in hamiltonian) can differentiate through it.
-    def signal_response(primals):
+    def _primals_to_params(primals):
         params = {}
         for name in free_names:
-            lo, hi = bounds[name]
-            params[name] = to_bounded(primals[name], lo, hi)
+            dist = spec.get_distribution(name)
+            params[name] = dist.unstandardize(primals[name])
         for name, val in fixed_values.items():
             params[name] = val
         if stochastic and "psd_xi" in primals:
             params["psd_xi"] = primals["psd_xi"]
+        return params
+
+    def signal_response(primals):
+        params = _primals_to_params(primals)
         if data_type == "photometry":
             return model.predict_photometry(params, mode="_traceable")
         elif data_type == "spectroscopy":
@@ -101,14 +103,7 @@ def build_jit_engine(fitter, pos_dict):
 
         def signal_noise_response(primals, data_args):
             """Return (predicted, std_inv) tuple for variable noise metric."""
-            params = {}
-            for name in free_names:
-                lo, hi = bounds[name]
-                params[name] = to_bounded(primals[name], lo, hi)
-            for name, val in fixed_values.items():
-                params[name] = val
-            if stochastic and "psd_xi" in primals:
-                params["psd_xi"] = primals["psd_xi"]
+            params = _primals_to_params(primals)
             if data_type == "photometry":
                 predicted = model.predict_photometry(params, mode="_traceable")
             elif data_type == "spectroscopy":
@@ -167,14 +162,9 @@ def build_jit_engine(fitter, pos_dict):
             """E_lh + 0.5 ||xi||^2 with variable noise (includes logdet)."""
             data = data_args["data"]
             noise = data_args["noise"]
-            pred = signal_response(unflatten(xi))
             primals = unflatten(xi)
-            params = {}
-            for name in free_names:
-                lo, hi = bounds[name]
-                params[name] = to_bounded(primals[name], lo, hi)
-            for name, val in fixed_values.items():
-                params[name] = val
+            params = _primals_to_params(primals)
+            pred = signal_response(primals)
             f_cal = params.get("noise_frac_cal", 0.0)
             return variable_noise_hamiltonian(
                 data, noise, pred, f_cal, dof=noise_dof

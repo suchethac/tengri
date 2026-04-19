@@ -34,7 +34,6 @@ from tengri.inference.loss_functions import (
 )
 from tengri.parameters.priors import Gaussian, Uniform
 from tengri.runtime.exceptions import ParameterError
-from tengri.utils.transforms import to_bounded, to_unbounded
 
 # ---------------------------------------------------------------------------
 # Method name unification
@@ -679,9 +678,7 @@ class Fitter:
         for i, name in enumerate(self._free_names):
             dist = self.spec.get_distribution(name)
             if isinstance(dist, Gaussian):
-                # Initialize at mu in unbounded space
-                lo, hi = dist.bounds
-                params[name] = to_unbounded(jnp.array(dist.mu), lo, hi)
+                params[name] = dist.standardize(jnp.array(dist.mu))
             else:
                 # Initialize near midpoint (u=0) with small perturbation
                 params[name] = 0.1 * jax.random.normal(keys[i])
@@ -696,9 +693,8 @@ class Fitter:
         params = {}
         for name in self._free_names:
             if name in posterior.params:
-                lo, hi = self._bounds[name]
-                val = jnp.clip(jnp.array(posterior.params[name]), lo + 1e-6, hi - 1e-6)
-                params[name] = to_unbounded(val, lo, hi)
+                dist = self.spec.get_distribution(name)
+                params[name] = dist.standardize(jnp.array(posterior.params[name]))
             else:
                 params[name] = jnp.array(0.0)
 
@@ -717,8 +713,8 @@ class Fitter:
         """Convert a single unbounded param dict to physical space."""
         params = {}
         for name in self._free_names:
-            lo, hi = self._bounds[name]
-            params[name] = to_bounded(params_unbounded[name], lo, hi)
+            dist = self.spec.get_distribution(name)
+            params[name] = dist.unstandardize(params_unbounded[name])
         for name, val in self._fixed_values.items():
             params[name] = jnp.array(val)
         if self.spec.stochastic and "psd_xi" in params_unbounded:
