@@ -9,10 +9,15 @@ import time
 
 import jax
 import jax.numpy as jnp
+import numpy as np
+from jax.flatten_util import ravel_pytree
 
 _OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd"}
-_JAXOPT_SOLVERS = {"lbfgs", "bfgs"}
-_ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _JAXOPT_SOLVERS
+_QUASI_NEWTON = {"lbfgs", "bfgs"}
+_ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _QUASI_NEWTON
+
+# Backward compatibility alias (used by fitter._fit_batch_vmap_map and tests)
+_JAXOPT_SOLVERS = _QUASI_NEWTON
 
 
 def _build_optax_optimizer(optimizer, learning_rate):
@@ -41,10 +46,14 @@ def _build_optax_optimizer(optimizer, learning_rate):
 def _build_jaxopt_solver(optimizer, loss_fn, *, maxiter, tol):
     """Build a jaxopt solver from a string name.
 
+    Used by ``_fit_batch_vmap_map`` for batched ``jax.vmap(solver.run)``
+    optimization.  For single-galaxy optimization, use ``_run_map_scipy``
+    which avoids all JAX compilation for the optimizer.
+
     Parameters
     ----------
     optimizer : str
-        One of ``_JAXOPT_SOLVERS``.
+        One of ``_QUASI_NEWTON``.
     loss_fn : callable
         ``(params, data_args) -> scalar`` loss function.
     maxiter : int
@@ -131,140 +140,96 @@ def _get_or_build_map_fns(model, loss_fn, optimizer, learning_rate):
     return scan_batch, single_step, opt, opt_name
 
 
-def _run_map_jaxopt(
+# ---------------------------------------------------------------------------
+# scipy quasi-Newton path (single-galaxy, no JAX compilation for optimizer)
+# ---------------------------------------------------------------------------
+
+
+def _run_map_scipy(
     fitter,
     *,
     init_params,
+    grad_fn,
     loss_fn,
     data_args,
     optimizer,
     n_steps,
     tol,
     verbose,
-    print_every,
     verbose_steps=False,
+    print_every=50,
 ):
-    """MAP optimization via jaxopt quasi-Newton / line-search solvers.
+    """MAP optimization via scipy quasi-Newton solvers.
 
-    By default uses ``solver.run()`` (single XLA dispatch via
-    ``jax.lax.while_loop``).  Set ``verbose_steps=True`` to fall back to
-    a Python ``update()`` loop that prints per-iteration loss and records
-    full loss history — useful for debugging but ~10x slower due to
-    per-step XLA dispatch overhead.
+    Uses scipy's L-BFGS-B / BFGS — pure Fortran optimizer with zero
+    JAX compilation.  Only the forward model + gradient evaluation is
+    JIT-compiled (via the cached ``grad_fn``).
+
+    This is ~100x faster cold-start than jaxopt's ``solver.run(jit=True)``,
+    which compiles the entire while_loop + line-search into one monolithic
+    XLA program.
     """
+    from scipy.optimize import minimize as scipy_minimize
+
     from tengri.inference.posterior import Posterior
 
-    solver, opt_name = _build_jaxopt_solver(
-        optimizer, loss_fn, maxiter=n_steps, tol=tol,
-    )
+    scipy_method = {"lbfgs": "L-BFGS-B", "bfgs": "BFGS"}[optimizer]
+    opt_name = {"lbfgs": "L-BFGS", "bfgs": "BFGS"}[optimizer]
 
+    # Flatten params to 1D array for scipy
+    init_flat, unravel_fn = ravel_pytree(init_params)
+
+    # Warmup: ensure grad_fn is compiled before timing
+    _warmup = grad_fn(init_params, data_args)
+    jax.block_until_ready(_warmup)
+
+    n_evals = [0]
+    losses = []
+
+    def objective(flat_params_np):
+        params = unravel_fn(jnp.asarray(flat_params_np))
+        val, grad = grad_fn(params, data_args)
+        flat_grad, _ = ravel_pytree(grad)
+        n_evals[0] += 1
+        return float(val), np.asarray(flat_grad, dtype=np.float64)
+
+    callback = None
     if verbose_steps:
-        return _run_map_jaxopt_verbose(
-            fitter,
-            solver=solver,
-            opt_name=opt_name,
-            init_params=init_params,
-            loss_fn=loss_fn,
-            data_args=data_args,
-            n_steps=n_steps,
-            tol=tol,
-            print_every=print_every,
-        )
-
-    # ── Fast path: solver.run() — single XLA dispatch ──
-
-    # Warmup JIT
-    warmup_result = solver.run(init_params, data_args)
-    jax.block_until_ready(warmup_result)
+        def callback(xk):
+            params = unravel_fn(jnp.asarray(xk))
+            loss_val = float(loss_fn(params, data_args))
+            losses.append(loss_val)
+            step = len(losses)
+            if step % print_every == 0:
+                print(f"    step {step}: loss={loss_val:.6f}")
 
     t0 = time.time()
-    result = solver.run(init_params, data_args)
-    jax.block_until_ready(result)
+    result = scipy_minimize(
+        objective,
+        np.asarray(init_flat, dtype=np.float64),
+        method=scipy_method,
+        jac=True,
+        callback=callback,
+        options={"maxiter": n_steps, "gtol": tol},
+    )
     wall_time = time.time() - t0
 
-    params = result.params
-    state = result.state
-    n_actual = int(state.iter_num)
-    converged = bool(state.error < tol)
-
-    final_loss = float(loss_fn(params, data_args))
-    best_params_physical = fitter._to_physical(params)
+    best_params = unravel_fn(jnp.asarray(result.x))
+    best_params_physical = fitter._to_physical(best_params)
+    final_loss = float(result.fun)
+    converged = result.success
 
     if verbose:
         cv_msg = " (converged)" if converged else ""
         print(
             f"  MAP ({opt_name}) complete in {wall_time:.1f}s, "
-            f"{n_actual} steps{cv_msg}, loss={final_loss:.6f}"
+            f"{result.nit} iters, {n_evals[0]} evals{cv_msg}, "
+            f"loss={final_loss:.6f}"
         )
 
-    return Posterior(
-        samples=None,
-        params=best_params_physical,
-        method=f"MAP ({opt_name})",
-        wall_time_s=wall_time,
-        diagnostics={
-            "n_steps": n_actual,
-            "final_loss": final_loss,
-            "optimizer": opt_name,
-            "converged": converged,
-            "grad_norm": float(state.error),
-        },
-        loss_history=jnp.asarray([final_loss]),
-        _model=fitter.model,
-    )
+    grad_norm = float(jnp.linalg.norm(jnp.asarray(result.jac)))
 
-
-def _run_map_jaxopt_verbose(
-    fitter,
-    *,
-    solver,
-    opt_name,
-    init_params,
-    loss_fn,
-    data_args,
-    n_steps,
-    tol,
-    print_every,
-):
-    """Slow diagnostic path: Python update() loop with per-step loss history."""
-    from tengri.inference.posterior import Posterior
-
-    state = solver.init_state(init_params, data_args)
-
-    # Warmup JIT
-    _, warmup_state = solver.update(init_params, state, data_args)
-    jax.block_until_ready(warmup_state)
-
-    params = init_params
-    state = solver.init_state(init_params, data_args)
-    losses = []
-    t0 = time.time()
-
-    for i in range(n_steps):
-        params, state = solver.update(params, state, data_args)
-        if hasattr(state, "value"):
-            loss_val = float(state.value)
-        else:
-            loss_val = float(loss_fn(params, data_args))
-        losses.append(loss_val)
-
-        if i % print_every == 0 or i == n_steps - 1:
-            print(f"    step {i}: loss={loss_val:.6f}  err={float(state.error):.2e}")
-
-        if state.error < tol:
-            break
-
-    wall_time = time.time() - t0
-    n_actual = len(losses)
-    final_loss = losses[-1] if losses else float("nan")
-    best_params_physical = fitter._to_physical(params)
-
-    converged = state.error < tol
-    cv_msg = " (converged)" if converged else ""
-    print(
-        f"  MAP ({opt_name}) complete in {wall_time:.1f}s, "
-        f"{n_actual} steps{cv_msg}, loss={final_loss:.6f}"
-    )
+    loss_hist = jnp.asarray(losses) if losses else jnp.asarray([final_loss])
 
     return Posterior(
         samples=None,
@@ -272,13 +237,14 @@ def _run_map_jaxopt_verbose(
         method=f"MAP ({opt_name})",
         wall_time_s=wall_time,
         diagnostics={
-            "n_steps": n_actual,
+            "n_steps": result.nit,
+            "n_evals": n_evals[0],
             "final_loss": final_loss,
             "optimizer": opt_name,
             "converged": converged,
-            "grad_norm": float(state.error),
+            "grad_norm": grad_norm,
         },
-        loss_history=jnp.asarray(losses),
+        loss_history=loss_hist,
         _model=fitter.model,
     )
 
@@ -306,23 +272,23 @@ def run_map(
     n_steps : int
         Maximum number of optimization steps.
     learning_rate : float
-        Learning rate (optax optimizers only; ignored for jaxopt solvers).
+        Learning rate (optax optimizers only; ignored for quasi-Newton).
     optimizer : str or optax optimizer
         Optax: ``"adam"``, ``"sgd"``, ``"adamw"``, or a pre-built optax optimizer.
-        Jaxopt: ``"lbfgs"``, ``"bfgs"``.
+        Quasi-Newton: ``"lbfgs"``, ``"bfgs"`` (uses scipy — zero JAX
+        compilation for the optimizer).
     early_stopping : bool
-        Stop if loss doesn't improve (optax only; jaxopt uses ``tol``).
+        Stop if loss doesn't improve (optax only; quasi-Newton uses ``tol``).
     patience : int
         Steps to wait for improvement before stopping (optax only).
     rtol : float
         Relative tolerance for early stopping (optax only).
     tol : float
-        Gradient norm tolerance for convergence (jaxopt solvers).
+        Gradient norm tolerance for convergence (quasi-Newton solvers).
     verbose : bool
         Print progress summary.
     verbose_steps : bool
-        Print per-step loss for jaxopt solvers (uses slow Python update
-        loop instead of compiled ``solver.run()``).  Ignored for optax.
+        Print per-step loss (quasi-Newton only).
     print_every : int
         Print interval.
     """
@@ -336,11 +302,13 @@ def run_map(
     else:
         init_params = fitter._initialize_unbounded(key)
 
-    # ── jaxopt quasi-Newton / line-search path ──
-    if isinstance(optimizer, str) and optimizer in _JAXOPT_SOLVERS:
-        return _run_map_jaxopt(
+    # ── scipy quasi-Newton path (L-BFGS-B / BFGS) ──
+    if isinstance(optimizer, str) and optimizer in _QUASI_NEWTON:
+        grad_fn = fitter._get_or_build_grad_fn()
+        return _run_map_scipy(
             fitter,
             init_params=init_params,
+            grad_fn=grad_fn,
             loss_fn=loss_fn,
             data_args=data_args,
             optimizer=optimizer,
