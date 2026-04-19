@@ -13,7 +13,7 @@ import numpy as np
 from jax.flatten_util import ravel_pytree
 
 _OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd"}
-_QUASI_NEWTON = {"lbfgs", "bfgs"}
+_QUASI_NEWTON = {"lbfgs"}
 _ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _QUASI_NEWTON
 
 # Backward compatibility alias (used by fitter._fit_batch_vmap_map and tests)
@@ -79,14 +79,10 @@ def _build_jaxopt_solver(optimizer, loss_fn, *, maxiter, tol):
         "lbfgs": lambda: jaxopt.LBFGS(
             fun=loss_fn, maxiter=maxiter, tol=tol, jit=True,
         ),
-        "bfgs": lambda: jaxopt.BFGS(
-            fun=loss_fn, maxiter=maxiter, tol=tol, jit=True,
-        ),
     }
 
     display_names = {
         "lbfgs": "L-BFGS",
-        "bfgs": "BFGS",
     }
 
     return builders[optimizer](), display_names[optimizer]
@@ -173,8 +169,8 @@ def _run_map_scipy(
 
     from tengri.inference.posterior import Posterior
 
-    scipy_method = {"lbfgs": "L-BFGS-B", "bfgs": "BFGS"}[optimizer]
-    opt_name = {"lbfgs": "L-BFGS", "bfgs": "BFGS"}[optimizer]
+    scipy_method = {"lbfgs": "L-BFGS-B"}[optimizer]
+    opt_name = {"lbfgs": "L-BFGS"}[optimizer]
 
     # Flatten params to 1D array for scipy
     init_flat, unravel_fn = ravel_pytree(init_params)
@@ -275,7 +271,7 @@ def run_map(
         Learning rate (optax optimizers only; ignored for quasi-Newton).
     optimizer : str or optax optimizer
         Optax: ``"adam"``, ``"sgd"``, ``"adamw"``, or a pre-built optax optimizer.
-        Quasi-Newton: ``"lbfgs"``, ``"bfgs"`` (uses scipy — zero JAX
+        Quasi-Newton: ``"lbfgs"`` (uses scipy L-BFGS-B — zero JAX
         compilation for the optimizer).
     early_stopping : bool
         Stop if loss doesn't improve (optax only; quasi-Newton uses ``tol``).
@@ -418,6 +414,7 @@ def run_laplace(fitter, *, key, init_from=None, n_map_steps=1000, **kwargs):
     from tengri.inference.backends.laplace import run_laplace
 
     loss_fn = fitter._get_or_build_loss_fn()
+    grad_fn = fitter._get_or_build_grad_fn()
     data_args = fitter._data_args
 
     if init_from is not None:
@@ -437,6 +434,7 @@ def run_laplace(fitter, *, key, init_from=None, n_map_steps=1000, **kwargs):
         map_params_unbounded=map_params,
         to_physical_fn=fitter._to_physical,
         model=fitter.model,
+        grad_fn=grad_fn,
         **kwargs,
     )
 

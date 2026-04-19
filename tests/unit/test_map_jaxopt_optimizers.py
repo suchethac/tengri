@@ -1,7 +1,8 @@
-"""Tests for jaxopt quasi-Newton optimizers in MAP dispatch.
+"""Tests for quasi-Newton optimizers in MAP dispatch.
 
-Verifies that L-BFGS and BFGS are accessible through the MAP
-optimizer= kwarg and converge on simple problems.
+Verifies that L-BFGS is accessible through the MAP optimizer= kwarg
+and converges on simple problems. Also tests jaxopt solver builder
+for the batch/vmap path.
 """
 
 from __future__ import annotations
@@ -56,14 +57,6 @@ class TestBuildJaxoptSolver:
         assert hasattr(solver, "run")
         assert hasattr(solver, "update")
 
-    def test_builds_bfgs(self, quadratic_loss):
-        from tengri.inference.backends.map_dispatch import _build_jaxopt_solver
-
-        _solver, name = _build_jaxopt_solver(
-            "bfgs", quadratic_loss, maxiter=50, tol=1e-6,
-        )
-        assert name == "BFGS"
-
     def test_unknown_optimizer_error(self):
         from tengri.inference.backends.map_dispatch import _build_optax_optimizer
 
@@ -79,12 +72,11 @@ class TestBuildJaxoptSolver:
 class TestJaxoptConvergence:
     """Verify each solver converges on a simple quadratic."""
 
-    @pytest.mark.parametrize("optimizer", ["lbfgs", "bfgs"])
-    def test_converges_quadratic(self, quadratic_loss, optimizer):
+    def test_converges_quadratic(self, quadratic_loss):
         from tengri.inference.backends.map_dispatch import _build_jaxopt_solver
 
         solver, _ = _build_jaxopt_solver(
-            optimizer, quadratic_loss, maxiter=100, tol=1e-8,
+            "lbfgs", quadratic_loss, maxiter=100, tol=1e-8,
         )
         init_params = {"x": jnp.array([5.0, -3.0, 7.0])}
         data_args = {"target": jnp.array([1.0, 2.0, 3.0])}
@@ -92,12 +84,11 @@ class TestJaxoptConvergence:
         result = solver.run(init_params, data_args)
         assert jnp.allclose(result.params["x"], data_args["target"], atol=1e-4)
 
-    @pytest.mark.parametrize("optimizer", ["lbfgs", "bfgs"])
-    def test_converges_rosenbrock(self, rosenbrock_loss, optimizer):
+    def test_converges_rosenbrock(self, rosenbrock_loss):
         from tengri.inference.backends.map_dispatch import _build_jaxopt_solver
 
         solver, _ = _build_jaxopt_solver(
-            optimizer, rosenbrock_loss, maxiter=200, tol=1e-8,
+            "lbfgs", rosenbrock_loss, maxiter=200, tol=1e-8,
         )
         init_params = {"x": jnp.array([-1.0, 1.0])}
         data_args = {}
@@ -115,7 +106,7 @@ class TestOptimizerRegistry:
     def test_jaxopt_solvers_set(self):
         from tengri.inference.backends.map_dispatch import _JAXOPT_SOLVERS
 
-        assert {"lbfgs", "bfgs"} == _JAXOPT_SOLVERS
+        assert {"lbfgs"} == _JAXOPT_SOLVERS
 
     def test_all_optimizers_includes_both(self):
         from tengri.inference.backends.map_dispatch import (
@@ -141,12 +132,11 @@ class TestOptimizerRegistry:
 class TestJaxoptVmap:
     """Verify jaxopt solvers work with jax.vmap for batch optimization."""
 
-    @pytest.mark.parametrize("optimizer", ["lbfgs", "bfgs"])
-    def test_vmap_run_converges(self, quadratic_loss, optimizer):
+    def test_vmap_run_converges(self, quadratic_loss):
         from tengri.inference.backends.map_dispatch import _build_jaxopt_solver
 
         solver, _ = _build_jaxopt_solver(
-            optimizer, quadratic_loss, maxiter=100, tol=1e-8,
+            "lbfgs", quadratic_loss, maxiter=100, tol=1e-8,
         )
 
         batch_init = {"x": jnp.array([[5.0, -3.0], [0.0, 10.0], [-5.0, 5.0]])}

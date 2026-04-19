@@ -11,11 +11,44 @@ Works entirely in unbounded parameter space (where the loss is smooth),
 then transforms samples to physical space.
 """
 
+from __future__ import annotations
+
 import time
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax.flatten_util import ravel_pytree
+
+
+def _finite_diff_hessian(grad_fn, theta_flat, unravel_fn, data_args, eps=1e-5):
+    """Hessian via central finite differences on pre-compiled grad_fn.
+
+    2×D gradient evaluations using the already-JIT-compiled grad_fn.
+    Zero additional JAX compilation — each call is a cache hit on the
+    same compiled kernel.
+
+    For D=7 at ~350μs/eval: total ≈ 5ms (vs 55s for ``jax.hessian``
+    which compiles a monolithic second-derivative XLA program).
+    """
+    n = len(theta_flat)
+    H = np.zeros((n, n))
+
+    for j in range(n):
+        h = eps * max(abs(float(theta_flat[j])), 1.0)
+
+        theta_plus = theta_flat.at[j].set(theta_flat[j] + h)
+        theta_minus = theta_flat.at[j].set(theta_flat[j] - h)
+
+        _, grad_plus = grad_fn(unravel_fn(theta_plus), data_args)
+        _, grad_minus = grad_fn(unravel_fn(theta_minus), data_args)
+
+        gp_flat, _ = ravel_pytree(grad_plus)
+        gm_flat, _ = ravel_pytree(grad_minus)
+
+        H[:, j] = np.asarray((gp_flat - gm_flat) / (2.0 * h))
+
+    return jnp.asarray(H)
 
 
 def run_laplace(
@@ -26,6 +59,7 @@ def run_laplace(
     map_params_unbounded,
     to_physical_fn,
     model,
+    grad_fn=None,
     n_samples=2000,
     regularize=True,
     min_eigenvalue=1e-6,
@@ -47,6 +81,11 @@ def run_laplace(
         Converts unbounded param dict to physical space.
     model : Model
         Forward model (stored in Posterior).
+    grad_fn : callable, optional
+        Pre-compiled ``(params, data_args) -> (loss, grad)`` function.
+        When provided, the Hessian is computed via central finite
+        differences — avoiding the monolithic ``jax.hessian`` compilation
+        (55s → 5ms for D=7).  Falls back to ``jax.hessian`` if ``None``.
     n_samples : int
         Number of posterior samples to draw.
     regularize : bool
@@ -72,12 +111,17 @@ def run_laplace(
     if verbose:
         print(f"Laplace: {n_dim} parameters, {n_samples} samples")
 
-    # Loss in flat space — bind data_args for cache-friendly compilation
-    def loss_flat(x):
-        return loss_fn(unravel_fn(x), data_args)
+    # Hessian at MAP — finite differences on pre-compiled grad_fn (fast)
+    # or jax.hessian (slow compilation, exact).
+    if grad_fn is not None:
+        hessian = _finite_diff_hessian(
+            grad_fn, theta_flat, unravel_fn, data_args,
+        )
+    else:
+        def loss_flat(x):
+            return loss_fn(unravel_fn(x), data_args)
 
-    # Hessian at MAP
-    hessian = jax.hessian(loss_flat)(theta_flat)
+        hessian = jax.hessian(loss_flat)(theta_flat)
 
     # Symmetrize (numerical safety)
     hessian = 0.5 * (hessian + hessian.T)
@@ -107,7 +151,7 @@ def run_laplace(
     samples_flat = jax.random.multivariate_normal(key, theta_flat, cov, shape=(n_samples,))
 
     # Laplace log-evidence estimate
-    loss_at_map = float(loss_flat(theta_flat))
+    loss_at_map = float(loss_fn(map_params_unbounded, data_args))
     log_det_h = jnp.sum(jnp.log(eigenvalues_clipped))
     log_evidence = -loss_at_map + 0.5 * n_dim * jnp.log(2.0 * jnp.pi) - 0.5 * log_det_h
 

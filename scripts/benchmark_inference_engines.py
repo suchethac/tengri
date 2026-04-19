@@ -179,7 +179,6 @@ def main():
         "methods": [
             ("map", {}),
             ("map", {"optimizer": "lbfgs"}),
-            ("map", {"optimizer": "bfgs"}),
             ("laplace", {}),
             ("pathfinder", {"n_samples": 500}),
             ("mcmc_nuts", {"n_warmup": 200, "n_samples": 300}),
@@ -217,7 +216,6 @@ def main():
         "methods": [
             ("map", {}),
             ("map", {"optimizer": "lbfgs"}),
-            ("map", {"optimizer": "bfgs"}),
             ("mcmc_nuts", {"n_warmup": 200, "n_samples": 300}),
             ("vi", {"n_iterations": 3, "n_samples": 8}),
             ("nss", {"n_live": 200, "max_iterations": 2000}),
@@ -258,7 +256,6 @@ def main():
         "methods": [
             ("map", {}),
             ("map", {"optimizer": "lbfgs"}),
-            ("map", {"optimizer": "bfgs"}),
             ("vi", {"n_iterations": 3, "n_samples": 8}),
             ("nss", {"n_live": 200, "max_iterations": 2000}),
         ],

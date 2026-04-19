@@ -1,7 +1,7 @@
-"""Tests for jaxopt quasi-Newton MAP optimizers.
+"""Tests for quasi-Newton MAP optimizers (scipy L-BFGS-B).
 
-Verifies that L-BFGS, BFGS, Nonlinear-CG, and GD-linesearch optimizers
-converge correctly through the ``fitter.run("map", optimizer=...)`` API.
+Verifies that L-BFGS converges correctly through the
+``fitter.run("map", optimizer="lbfgs")`` API.
 """
 
 from __future__ import annotations
@@ -79,15 +79,14 @@ def fitter_and_mock():
 class TestJaxoptOptimizers:
     """Each jaxopt solver converges and returns a valid Posterior."""
 
-    @pytest.mark.parametrize("optimizer", ["lbfgs", "bfgs"])
-    def test_converges(self, fitter_and_mock, optimizer):
+    def test_converges(self, fitter_and_mock):
         from tengri.inference.posterior import Posterior
 
         fitter, _ = fitter_and_mock
         result = fitter.run(
             method="map",
             key=jax.random.PRNGKey(0),
-            optimizer=optimizer,
+            optimizer="lbfgs",
             n_steps=200,
             verbose=False,
         )
@@ -95,13 +94,12 @@ class TestJaxoptOptimizers:
         assert jnp.isfinite(result.diagnostics["final_loss"])
         assert result.diagnostics["n_steps"] > 0
 
-    @pytest.mark.parametrize("optimizer", ["lbfgs", "bfgs"])
-    def test_fewer_steps_than_adam(self, fitter_and_mock, optimizer):
+    def test_fewer_steps_than_adam(self, fitter_and_mock):
         fitter, _ = fitter_and_mock
         result = fitter.run(
             method="map",
             key=jax.random.PRNGKey(0),
-            optimizer=optimizer,
+            optimizer="lbfgs",
             n_steps=200,
             tol=1e-5,
             verbose=False,
