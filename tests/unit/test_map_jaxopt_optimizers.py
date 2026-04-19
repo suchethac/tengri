@@ -1,8 +1,7 @@
 """Tests for jaxopt quasi-Newton optimizers in MAP dispatch.
 
-Verifies that L-BFGS, BFGS, NonlinearCG, and GradientDescent (with line
-search) are accessible through the MAP optimizer= kwarg and converge on
-simple problems.
+Verifies that L-BFGS and BFGS are accessible through the MAP
+optimizer= kwarg and converge on simple problems.
 """
 
 from __future__ import annotations
@@ -65,22 +64,6 @@ class TestBuildJaxoptSolver:
         )
         assert name == "BFGS"
 
-    def test_builds_nonlinear_cg(self, quadratic_loss):
-        from tengri.inference.backends.map_dispatch import _build_jaxopt_solver
-
-        _solver, name = _build_jaxopt_solver(
-            "nonlinear_cg", quadratic_loss, maxiter=50, tol=1e-6,
-        )
-        assert name == "Nonlinear-CG"
-
-    def test_builds_gradient_descent(self, quadratic_loss):
-        from tengri.inference.backends.map_dispatch import _build_jaxopt_solver
-
-        _solver, name = _build_jaxopt_solver(
-            "gradient_descent", quadratic_loss, maxiter=50, tol=1e-6,
-        )
-        assert name == "GD-linesearch"
-
     def test_unknown_optimizer_error(self):
         from tengri.inference.backends.map_dispatch import _build_optax_optimizer
 
@@ -96,7 +79,7 @@ class TestBuildJaxoptSolver:
 class TestJaxoptConvergence:
     """Verify each solver converges on a simple quadratic."""
 
-    @pytest.mark.parametrize("optimizer", ["lbfgs", "bfgs", "nonlinear_cg", "gradient_descent"])
+    @pytest.mark.parametrize("optimizer", ["lbfgs", "bfgs"])
     def test_converges_quadratic(self, quadratic_loss, optimizer):
         from tengri.inference.backends.map_dispatch import _build_jaxopt_solver
 
@@ -132,7 +115,7 @@ class TestOptimizerRegistry:
     def test_jaxopt_solvers_set(self):
         from tengri.inference.backends.map_dispatch import _JAXOPT_SOLVERS
 
-        assert {"lbfgs", "bfgs", "nonlinear_cg", "gradient_descent"} == _JAXOPT_SOLVERS
+        assert {"lbfgs", "bfgs"} == _JAXOPT_SOLVERS
 
     def test_all_optimizers_includes_both(self):
         from tengri.inference.backends.map_dispatch import (

@@ -11,7 +11,7 @@ import jax
 import jax.numpy as jnp
 
 _OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd"}
-_JAXOPT_SOLVERS = {"lbfgs", "bfgs", "nonlinear_cg", "gradient_descent"}
+_JAXOPT_SOLVERS = {"lbfgs", "bfgs"}
 _ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _JAXOPT_SOLVERS
 
 
@@ -73,19 +73,11 @@ def _build_jaxopt_solver(optimizer, loss_fn, *, maxiter, tol):
         "bfgs": lambda: jaxopt.BFGS(
             fun=loss_fn, maxiter=maxiter, tol=tol, jit=True,
         ),
-        "nonlinear_cg": lambda: jaxopt.NonlinearCG(
-            fun=loss_fn, maxiter=maxiter, tol=tol, jit=True,
-        ),
-        "gradient_descent": lambda: jaxopt.GradientDescent(
-            fun=loss_fn, maxiter=maxiter, tol=tol, jit=True,
-        ),
     }
 
     display_names = {
         "lbfgs": "L-BFGS",
         "bfgs": "BFGS",
-        "nonlinear_cg": "Nonlinear-CG",
-        "gradient_descent": "GD-linesearch",
     }
 
     return builders[optimizer](), display_names[optimizer]
@@ -317,7 +309,7 @@ def run_map(
         Learning rate (optax optimizers only; ignored for jaxopt solvers).
     optimizer : str or optax optimizer
         Optax: ``"adam"``, ``"sgd"``, ``"adamw"``, or a pre-built optax optimizer.
-        Jaxopt: ``"lbfgs"``, ``"bfgs"``, ``"nonlinear_cg"``, ``"gradient_descent"``.
+        Jaxopt: ``"lbfgs"``, ``"bfgs"``.
     early_stopping : bool
         Stop if loss doesn't improve (optax only; jaxopt uses ``tol``).
     patience : int

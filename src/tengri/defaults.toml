@@ -144,7 +144,7 @@ n_samples = 500   # Posterior samples after burn-in
 
 [inference.map]
 # optimizer: "adam" | "adamw" | "sgd" (optax, iterative)
-#          | "lbfgs" | "bfgs" | "nonlinear_cg" | "gradient_descent" (jaxopt, quasi-Newton)
+#          | "lbfgs" | "bfgs" (jaxopt, quasi-Newton)
 # Quasi-Newton solvers (lbfgs, bfgs) converge in ~10-50 steps for D ≲ 20.
 optimizer     = "adam"
 n_steps       = 500    # max optimisation steps (optax) or max iterations (jaxopt)
