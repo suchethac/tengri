@@ -150,43 +150,55 @@ def _run_map_jaxopt(
     tol,
     verbose,
     print_every,
+    verbose_steps=False,
 ):
-    """MAP optimization via jaxopt quasi-Newton / line-search solvers."""
+    """MAP optimization via jaxopt quasi-Newton / line-search solvers.
+
+    By default uses ``solver.run()`` (single XLA dispatch via
+    ``jax.lax.while_loop``).  Set ``verbose_steps=True`` to fall back to
+    a Python ``update()`` loop that prints per-iteration loss and records
+    full loss history — useful for debugging but ~10x slower due to
+    per-step XLA dispatch overhead.
+    """
     from tengri.inference.posterior import Posterior
 
     solver, opt_name = _build_jaxopt_solver(
         optimizer, loss_fn, maxiter=n_steps, tol=tol,
     )
 
-    state = solver.init_state(init_params, data_args)
+    if verbose_steps:
+        return _run_map_jaxopt_verbose(
+            fitter,
+            solver=solver,
+            opt_name=opt_name,
+            init_params=init_params,
+            loss_fn=loss_fn,
+            data_args=data_args,
+            n_steps=n_steps,
+            tol=tol,
+            print_every=print_every,
+        )
+
+    # ── Fast path: solver.run() — single XLA dispatch ──
 
     # Warmup JIT
-    _, warmup_state = solver.update(init_params, state, data_args)
-    jax.block_until_ready(warmup_state)
+    warmup_result = solver.run(init_params, data_args)
+    jax.block_until_ready(warmup_result)
 
-    params = init_params
-    state = solver.init_state(init_params, data_args)
-    losses = []
     t0 = time.time()
-
-    for i in range(n_steps):
-        params, state = solver.update(params, state, data_args)
-        loss_val = float(state.value) if hasattr(state, "value") else float(loss_fn(params, data_args))
-        losses.append(loss_val)
-
-        if verbose and (i % print_every == 0 or i == n_steps - 1):
-            print(f"    step {i}: loss={loss_val:.6f}  err={float(state.error):.2e}")
-
-        if state.error < tol:
-            break
-
+    result = solver.run(init_params, data_args)
+    jax.block_until_ready(result)
     wall_time = time.time() - t0
-    n_actual = len(losses)
-    final_loss = losses[-1] if losses else float("nan")
+
+    params = result.params
+    state = result.state
+    n_actual = int(state.iter_num)
+    converged = bool(state.error < tol)
+
+    final_loss = float(loss_fn(params, data_args))
     best_params_physical = fitter._to_physical(params)
 
     if verbose:
-        converged = state.error < tol
         cv_msg = " (converged)" if converged else ""
         print(
             f"  MAP ({opt_name}) complete in {wall_time:.1f}s, "
@@ -202,7 +214,76 @@ def _run_map_jaxopt(
             "n_steps": n_actual,
             "final_loss": final_loss,
             "optimizer": opt_name,
-            "converged": bool(state.error < tol),
+            "converged": converged,
+            "grad_norm": float(state.error),
+        },
+        loss_history=jnp.asarray([final_loss]),
+        _model=fitter.model,
+    )
+
+
+def _run_map_jaxopt_verbose(
+    fitter,
+    *,
+    solver,
+    opt_name,
+    init_params,
+    loss_fn,
+    data_args,
+    n_steps,
+    tol,
+    print_every,
+):
+    """Slow diagnostic path: Python update() loop with per-step loss history."""
+    from tengri.inference.posterior import Posterior
+
+    state = solver.init_state(init_params, data_args)
+
+    # Warmup JIT
+    _, warmup_state = solver.update(init_params, state, data_args)
+    jax.block_until_ready(warmup_state)
+
+    params = init_params
+    state = solver.init_state(init_params, data_args)
+    losses = []
+    t0 = time.time()
+
+    for i in range(n_steps):
+        params, state = solver.update(params, state, data_args)
+        if hasattr(state, "value"):
+            loss_val = float(state.value)
+        else:
+            loss_val = float(loss_fn(params, data_args))
+        losses.append(loss_val)
+
+        if i % print_every == 0 or i == n_steps - 1:
+            print(f"    step {i}: loss={loss_val:.6f}  err={float(state.error):.2e}")
+
+        if state.error < tol:
+            break
+
+    wall_time = time.time() - t0
+    n_actual = len(losses)
+    final_loss = losses[-1] if losses else float("nan")
+    best_params_physical = fitter._to_physical(params)
+
+    converged = state.error < tol
+    cv_msg = " (converged)" if converged else ""
+    print(
+        f"  MAP ({opt_name}) complete in {wall_time:.1f}s, "
+        f"{n_actual} steps{cv_msg}, loss={final_loss:.6f}"
+    )
+
+    return Posterior(
+        samples=None,
+        params=best_params_physical,
+        method=f"MAP ({opt_name})",
+        wall_time_s=wall_time,
+        diagnostics={
+            "n_steps": n_actual,
+            "final_loss": final_loss,
+            "optimizer": opt_name,
+            "converged": converged,
             "grad_norm": float(state.error),
         },
         loss_history=jnp.asarray(losses),
@@ -223,6 +304,7 @@ def run_map(
     rtol=1e-5,
     tol=1e-5,
     verbose=True,
+    verbose_steps=False,
     print_every=200,
 ):
     """MAP optimization via gradient descent or quasi-Newton solvers.
@@ -245,7 +327,10 @@ def run_map(
     tol : float
         Gradient norm tolerance for convergence (jaxopt solvers).
     verbose : bool
-        Print progress.
+        Print progress summary.
+    verbose_steps : bool
+        Print per-step loss for jaxopt solvers (uses slow Python update
+        loop instead of compiled ``solver.run()``).  Ignored for optax.
     print_every : int
         Print interval.
     """
@@ -270,6 +355,7 @@ def run_map(
             n_steps=n_steps,
             tol=tol,
             verbose=verbose,
+            verbose_steps=verbose_steps,
             print_every=print_every,
         )
 
@@ -294,7 +380,7 @@ def run_map(
     n_full_batches = n_steps // _SCAN_BATCH
     n_remainder = n_steps % _SCAN_BATCH
 
-    for batch_idx in range(n_full_batches):
+    for _batch_idx in range(n_full_batches):
         params, opt_state, batch_losses = scan_batch(params, opt_state, data_args)
         batch_losses_list = batch_losses.tolist()
         losses.extend(batch_losses_list)
@@ -315,7 +401,7 @@ def run_map(
             print(f"    step {n_done}: loss={last_loss:.4f}")
 
     else:
-        for i in range(n_remainder):
+        for _i in range(n_remainder):
             params, opt_state, loss = single_step(params, opt_state, data_args)
             loss_val = float(loss)
             losses.append(loss_val)
