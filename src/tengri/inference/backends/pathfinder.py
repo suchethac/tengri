@@ -20,7 +20,7 @@ from jax.flatten_util import ravel_pytree
 def run_pathfinder(
     *,
     key,
-    loss_fn,
+    logdensity_fn,
     data_args,
     init_params,
     to_physical_fn,
@@ -36,8 +36,9 @@ def run_pathfinder(
     ----------
     key : PRNGKey
         Random key.
-    loss_fn : callable
-        Loss function: ``(unbounded param dict, data_args) -> scalar``.
+    logdensity_fn : callable
+        Log-density: ``(unbounded param dict, data_args) -> scalar``.
+        Should be ``-loss_fn``, cached via ``Fitter._get_or_build_logdensity_fn()``.
     data_args : dict
         Observed data dict (``data``, ``noise``, etc.).
     init_params : dict
@@ -76,9 +77,10 @@ def run_pathfinder(
     if verbose:
         print(f"Pathfinder: {n_dim} parameters, maxiter={maxiter}, {n_samples} samples")
 
-    # Log-posterior in flat space — bind data_args for cache-friendly compilation
+    # Thin lambda — BlackJAX JITs this, but the expensive forward model
+    # is pre-compiled inside logdensity_fn, so retrace cost is negligible
     def log_posterior_flat(position):
-        return -loss_fn(unravel_fn(position), data_args)
+        return logdensity_fn(unravel_fn(position), data_args)
 
     # Run Pathfinder approximation
     key, approx_key, sample_key = jax.random.split(key, 3)

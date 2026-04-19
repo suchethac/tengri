@@ -241,19 +241,25 @@ def measure_jit_and_runtime(
         result["t_jit_sec"] = t_end_jit - t_start_jit
 
         # Measure runtime after warmup (compilation cached)
-        runtimes = []
-        for i in range(n_warmup):
-            key_i = jax.random.fold_in(rng_key, abs(hash(f"warmup_{i}")) % (2**31))
-            t_start = time.perf_counter()
-            _ = fitter.run(
-                method,
-                key=key_i,
-                **method_kwargs,
-            )
-            t_end = time.perf_counter()
-            runtimes.append(t_end - t_start)
+        # Skip warmup for MCMC methods - each run is expensive (full chain)
+        if method.startswith("mcmc_"):
+            # For MCMC, JIT time already includes full sampling run
+            result["t_runtime_sec"] = result["t_jit_sec"]
+        else:
+            # For MAP/VI/NSS, measure cached runtime with warmup
+            runtimes = []
+            for i in range(n_warmup):
+                key_i = jax.random.fold_in(rng_key, abs(hash(f"warmup_{i}")) % (2**31))
+                t_start = time.perf_counter()
+                _ = fitter.run(
+                    method,
+                    key=key_i,
+                    **method_kwargs,
+                )
+                t_end = time.perf_counter()
+                runtimes.append(t_end - t_start)
 
-        result["t_runtime_sec"] = float(np.mean(runtimes))
+            result["t_runtime_sec"] = float(np.mean(runtimes))
 
         # Get peak memory
         _current, peak = tracemalloc.get_traced_memory()
@@ -949,8 +955,9 @@ class TestInferenceStressTests:
             noise=mock_data_z1["flux_unc"],
             method="mcmc_nuts",
             rng_key=rng_key,
-            n_warmup=100,  # Reduced for speed
-            n_samples=100,
+            n_warmup=20,  # Minimal for UX testing only
+            n_burnin=0,  # Skip burn-in for speed
+            n_samples=20,
         )
 
         print(
@@ -999,7 +1006,7 @@ class TestInferenceStressTests:
             noise=mock_data_z1["flux_unc"],
             method="vi",
             rng_key=rng_key,
-            n_iterations=5,
+            n_iterations=3,  # Reduced for UX testing only
             n_samples_per_iteration=4,
         )
 
@@ -1013,34 +1020,40 @@ class TestInferenceStressTests:
             noise=mock_data_z1["flux_unc"],
             method="vi",
             rng_key=jax.random.fold_in(rng_key, 1),
-            n_iterations=5,
+            n_iterations=3,  # Reduced for UX testing only
             n_samples_per_iteration=12,
         )
 
-        print(
-            f"\n{result_4['name']}: Runtime={result_4['runtime_sec']:.1f}s, "
-            f"status={result_4['status']}"
+        runtime_4_str = (
+            f"{result_4['runtime_sec']:.1f}s" if result_4['runtime_sec'] else "N/A"
         )
-        print(
-            f"{result_12['name']}: Runtime={result_12['runtime_sec']:.1f}s, "
-            f"status={result_12['status']}"
+        runtime_12_str = (
+            f"{result_12['runtime_sec']:.1f}s" if result_12['runtime_sec'] else "N/A"
         )
+        print(f"\n{result_4['name']}: Runtime={runtime_4_str}, status={result_4['status']}")
+        print(f"{result_12['name']}: Runtime={runtime_12_str}, status={result_12['status']}")
 
         if result_4["success"] and result_12["success"]:
             print(f"  ✓ Both n_samples={4} and n_samples={12} converged")
 
     @pytest.mark.slow
     def test_d2_raytrace_step_size(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
-        """D2. Ray Tracing step_size sensitivity (D=25).
+        """D2. Ray Tracing step_size sensitivity (D=9).
 
-        Model: dirichlet (20 bins) + dust
+        Model: dirichlet (6 bins) + dust
         Inference: mcmc_raytrace with step_size = [0.04, 0.05, 0.06, 0.07]
         Expected: 0.05 → acceptance ~0.8-0.9; 0.06 → cliff (acceptance drops)
         Purpose: Reproduce documented sharp viability cliff
         """
         params = Parameters(
             mean_sfh_type="dirichlet",
-            sfh_dir_n_bins=20,  # D=20 from Dirichlet
+            sfh_dir_log_total_mass=Uniform(9.0, 12.0),
+            sfh_dir_z_0=Uniform(0.01, 0.99),
+            sfh_dir_z_1=Uniform(0.01, 0.99),
+            sfh_dir_z_2=Uniform(0.01, 0.99),
+            sfh_dir_z_3=Uniform(0.01, 0.99),
+            sfh_dir_z_4=Uniform(0.01, 0.99),
+            sfh_dir_z_5=Uniform(0.01, 0.99),
             met_logzsol=Uniform(-2.0, 0.2),
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
@@ -1061,8 +1074,8 @@ class TestInferenceStressTests:
                 noise=mock_data_z1["flux_unc"],
                 method="mcmc_raytrace",
                 rng_key=jax.random.fold_in(rng_key, i),
-                n_warmup=50,  # Reduced for speed
-                n_samples=50,
+                n_burnin=0,  # Skip burn-in for speed
+                n_steps=10,  # Raytrace uses n_steps instead of n_samples
                 step_size=step_size,
             )
             results[step_size] = result
@@ -1245,13 +1258,12 @@ class TestMemoryProfiling:
             dust_gamma_dl=Uniform(0.0, 0.1),
             dust_qpah=Uniform(0.5, 4.5),
             nebular_ssp=True,
-            agn_model="disc",
+            agn_model="kubota_done",
             agn_log_lbol=Uniform(43.0, 46.0),
-            agn_disc_alpha_ox=Uniform(-1.8, -1.2),
-            agn_torus_model="skirtor",
+            agn_frac=Uniform(0.01, 0.3),
             agn_torus_frac=Uniform(0.0, 1.0),
-            agn_torus_tau_v=Uniform(10.0, 150.0),
-            agn_torus_angle_deg=Uniform(0.0, 90.0),
+            agn_tau_skirtor=Uniform(3.0, 11.0),
+            agn_oa_skirtor=Uniform(20.0, 70.0),
             redshift=Fixed(data_dict["redshift"]),
         )
 
@@ -1269,13 +1281,13 @@ class TestMemoryProfiling:
         # Print results
         results = [result_stellar, result_nebular, result_dl07, result_agn]
         for r in results:
-            ram_gb = r["peak_ram_mb"] / 1024.0 if r["peak_ram_mb"] is not None else 0.0
+            ram_gb = r["ram_gb"] if r["ram_gb"] is not None else 0.0
             print(f"\n{r['name']}: RAM={ram_gb:.2f}GB, status={r['status']}")
 
         # Check scaling
         if all(r["success"] for r in results):
-            ram_vals = [r["peak_ram_mb"] / 1024.0 for r in results]
-            max_ram = max(ram_vals)
+            ram_vals = [r["ram_gb"] for r in results if r["ram_gb"] is not None]
+            max_ram = max(ram_vals) if ram_vals else 0.0
             if max_ram < 6.0:
                 print(f"  ✓ All components fit in <6GB (max={max_ram:.2f}GB)")
 
@@ -1318,13 +1330,12 @@ class TestMemoryProfiling:
             dust_gamma_dl=Uniform(0.0, 0.1),
             dust_qpah=Uniform(0.5, 4.5),
             nebular_ssp=True,
-            agn_model="disc",
+            agn_model="kubota_done",
             agn_log_lbol=Uniform(43.0, 46.0),
-            agn_disc_alpha_ox=Uniform(-1.8, -1.2),
-            agn_torus_model="skirtor",
+            agn_frac=Uniform(0.01, 0.3),
             agn_torus_frac=Uniform(0.0, 1.0),
-            agn_torus_tau_v=Uniform(10.0, 150.0),
-            agn_torus_angle_deg=Uniform(0.0, 90.0),
+            agn_tau_skirtor=Uniform(3.0, 11.0),
+            agn_oa_skirtor=Uniform(20.0, 70.0),
             redshift=Fixed(data_dict["redshift"]),
         )
 

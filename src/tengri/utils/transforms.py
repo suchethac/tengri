@@ -70,3 +70,59 @@ def to_bounded(u_param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
 def to_unbounded(param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
     """Map bounded parameter from (lo, hi) to R."""
     return inverse_sigmoid(param, 0.0, 1.0, lo, hi)
+
+
+@jax.jit
+def log_det_jacobian_to_bounded(u_param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
+    """Log determinant of Jacobian: d(bounded)/d(unbounded).
+
+    For the sigmoid transform θ = lo + (hi - lo) * sigmoid(u),
+    the Jacobian is: dθ/du = (hi - lo) * sigmoid(u) * (1 - sigmoid(u))
+
+    This is the log|dθ/du| term needed when transforming densities:
+        p(θ) = p(u) * |du/dθ| = p(u) / |dθ/du|
+        log p(θ) = log p(u) - log|dθ/du|
+
+    Parameters
+    ----------
+    u_param : array
+        Unbounded parameter.
+    lo, hi : float
+        Bounds of the transformed parameter.
+
+    Returns
+    -------
+    array
+        log|dθ/du| = log(hi - lo) + log(sigmoid(u)) + log(1 - sigmoid(u))
+
+    Notes
+    -----
+    With k=1.0 (as used in to_bounded), this simplifies to:
+        log|dθ/du| = log(hi - lo) + u - 2*log(1 + exp(u))
+                    = log(hi - lo) + u - 2*softplus(u)
+    """
+    width = hi - lo
+    sig_u = jax.nn.sigmoid(u_param)
+    # log(sig * (1 - sig)) = log(sig) + log(1 - sig)
+    #                       = log(sig) + log(1 - sig)
+    # Numerically stable:
+    # log(sigmoid(u)) = -softplus(-u)
+    # log(1 - sigmoid(u)) = -softplus(u)
+    log_jac = jnp.log(width) - jax.nn.softplus(-u_param) - jax.nn.softplus(u_param)
+    return log_jac
+
+
+@jax.jit
+def log_det_jacobian_to_unbounded(param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
+    """Log determinant of Jacobian: d(unbounded)/d(bounded).
+
+    This is the inverse Jacobian: du/dθ = 1 / (dθ/du)
+
+    Returns
+    -------
+    array
+        log|du/dθ| = -log|dθ/du|
+    """
+    # Compute u first
+    u = to_unbounded(param, lo, hi)
+    return -log_det_jacobian_to_bounded(u, lo, hi)

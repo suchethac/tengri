@@ -14,9 +14,6 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tengri.parameters.priors import Gaussian, LogUniform
-from tengri.utils.transforms import to_bounded
-
 
 def build_loss_fn(fitter, mode="_traceable"):
     """Build a differentiable loss function.
@@ -74,10 +71,12 @@ def build_loss_fn(fitter, mode="_traceable"):
         noise = data_args["noise"]
 
         # Convert unbounded → physical for free params
+        # Each distribution's unstandardize() method implements the transform h(ξ)
+        # that satisfies P(h(ξ)) |dh/dξ| = φ(ξ), ensuring Jacobian cancellation
         params = {}
         for name in free_names:
-            lo, hi = bounds[name]
-            params[name] = to_bounded(params_unbounded[name], lo, hi)
+            dist = spec.get_distribution(name)
+            params[name] = dist.unstandardize(params_unbounded[name])
 
         # Merge fixed values
         for name, val in fixed_values.items():
@@ -414,32 +413,35 @@ def build_loss_fn(fitter, mode="_traceable"):
             chi2 = jnp.sum(((data - predicted) / noise) ** 2)
             e_lh = 0.5 * chi2
 
-        # Prior contributions (IFT Hamiltonian: H = -log L + 0.5 * ξᵀξ)
-        # All unbounded parameters get a standard normal prior because
-        # the sigmoid transform maps N(0,1) → Uniform(lo, hi). Without
-        # this term, MCMC chains drift to ±∞ in unbounded space for
-        # weakly-constrained parameters.
+        # Prior contributions (IFT Hamiltonian)
+        #
+        # The information Hamiltonian in standardized space is:
+        #   H(ξ|d) = ½χ²(d, h(ξ)) + ½ξᵀξ
+        #
+        # where h(ξ) is the per-parameter transform that maps ξ ~ N(0,1) to the
+        # physical parameter θ with the desired prior distribution.
+        #
+        # Each distribution class implements unstandardize(ξ) = h(ξ) such that
+        # the Jacobian condition holds: P(h(ξ)) |dh/dξ| = φ(ξ), where φ is
+        # the standard normal density. This guarantees that the Jacobian factors
+        # from the change of variables cancel exactly with the prior density,
+        # leaving only the isotropic quadratic term ½ξᵀξ in the Hamiltonian.
+        #
+        # This cancellation is NOT an approximation—it is exact for all prior
+        # types (Uniform, Gaussian, LogUniform, LogNormal, StudentT) via their
+        # respective transforms (sigmoid, linear, exp-sigmoid, exp, quantile).
+        #
+        # Reference: Section 2.2 and Appendix A of the tengri paper.
+        #
         prior_penalty = 0.0
 
-        # Standard normal prior on ALL unbounded parameters
+        # Standard normal prior: ξᵀξ (doubled here because we return 0.5 * prior_penalty)
         for name in free_names:
             prior_penalty += params_unbounded[name] ** 2
 
-        # Standard normal prior on psd_xi
+        # Standard normal prior on psd_xi (IFT correlated field)
         if stochastic and "psd_xi" in params_unbounded:
             prior_penalty += jnp.sum(params_unbounded["psd_xi"] ** 2)
-
-        # Additional prior contributions for non-Uniform distributions
-        # (replace the implicit N(0,1) → Uniform with the actual prior)
-        for name in free_names:
-            dist = spec.get_distribution(name)
-            if isinstance(dist, Gaussian):
-                val = params[name]
-                prior_penalty -= 2.0 * dist.log_prob(val)
-            elif isinstance(dist, LogUniform):
-                val = params[name]
-                uniform_lp = -jnp.log(dist.hi - dist.lo)
-                prior_penalty -= 2.0 * (dist.log_prob(val) - uniform_lp)
 
         return e_lh + 0.5 * prior_penalty
 
@@ -908,8 +910,8 @@ def build_loglikelihood_unbounded_fn(fitter, mode="_traceable"):
     def loglik_unbounded(params_unbounded, data_args):
         params = {}
         for name in free_names:
-            lo, hi = bounds[name]
-            params[name] = to_bounded(params_unbounded[name], lo, hi)
+            dist = spec.get_distribution(name)
+            params[name] = dist.unstandardize(params_unbounded[name])
         for name, val in fixed_values.items():
             params[name] = val
         if spec.stochastic and "psd_xi" in params_unbounded:
