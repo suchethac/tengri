@@ -143,8 +143,13 @@ n_samples = 500   # Posterior samples after burn-in
 
 
 [inference.map]
-n_steps       = 1000   # Adam optimisation steps
-learning_rate = 0.01   # Adam learning rate
+# optimizer: "adam" | "adamw" | "sgd" (optax, iterative)
+#          | "lbfgs" | "bfgs" | "nonlinear_cg" | "gradient_descent" (jaxopt, quasi-Newton)
+# Quasi-Newton solvers (lbfgs, bfgs) converge in ~10-50 steps for D ≲ 20.
+optimizer     = "adam"
+n_steps       = 500    # max optimisation steps (optax) or max iterations (jaxopt)
+learning_rate = 0.02   # optax learning rate (ignored by jaxopt solvers)
+tol           = 1e-5   # gradient norm convergence tolerance (jaxopt solvers)
 
 
 [inference.evidence]

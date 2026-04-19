@@ -628,6 +628,49 @@ class Fitter:
         self.model._loglik_fn_cache[cache_key] = loglik_fn
         return loglik_fn
 
+    def _get_or_build_grad_fn(self, mode="_traceable"):
+        """Return cached JIT-compiled value_and_grad of the loss function.
+
+        The gradient function takes ``(params_unbounded, data_args)`` as
+        explicit arguments so the compiled XLA program is reusable across
+        galaxies with the same model structure.
+        """
+        cache_key = (self._engine_cache_key(), mode)
+        if not hasattr(self.model, "_grad_fn_cache"):
+            self.model._grad_fn_cache = {}
+        if cache_key in self.model._grad_fn_cache:
+            return self.model._grad_fn_cache[cache_key]
+
+        loss_fn = self._get_or_build_loss_fn(mode=mode)
+
+        @jax.jit
+        def val_and_grad(params_u, data_args):
+            return jax.value_and_grad(lambda p: loss_fn(p, data_args))(params_u)
+
+        self.model._grad_fn_cache[cache_key] = val_and_grad
+        return val_and_grad
+
+    def _get_or_build_logdensity_fn(self, mode="_traceable"):
+        """Return cached JIT-compiled log-density for MCMC/Pathfinder.
+
+        Returns ``logdensity(params_u, data_args) -> scalar``.  Callers
+        should partial-apply ``data_args`` for blackjax compatibility.
+        """
+        cache_key = (self._engine_cache_key(), mode)
+        if not hasattr(self.model, "_logdensity_fn_cache"):
+            self.model._logdensity_fn_cache = {}
+        if cache_key in self.model._logdensity_fn_cache:
+            return self.model._logdensity_fn_cache[cache_key]
+
+        loss_fn = self._get_or_build_loss_fn(mode=mode)
+
+        @jax.jit
+        def logdensity(params_u, data_args):
+            return -loss_fn(params_u, data_args)
+
+        self.model._logdensity_fn_cache[cache_key] = logdensity
+        return logdensity
+
     def _initialize_unbounded(self, key):
         """Create initial unbounded parameter dict."""
         params = {}
@@ -929,13 +972,12 @@ class Fitter:
                 return -lh_val - prior
 
         else:
-            # Build log-density from the loss function (used by _run_native_vi path)
-            loss_fn = self._get_or_build_loss_fn()
+            _logdensity_2arg = self._get_or_build_logdensity_fn()
             _data_args = self._data_args
 
             @jax.jit
             def logdensity_fn(x):
-                return -loss_fn(x, _data_args)
+                return _logdensity_2arg(x, _data_args)
 
         warmup_key, sample_key = jax.random.split(key)
         n_warmup = min(200, n_samples)
@@ -1294,11 +1336,7 @@ class Fitter:
 
         Requirements: same model (precomp set), same data shape per galaxy.
         """
-        try:
-            import optax
-        except ImportError:
-            raise ImportError("optax required for MAP: pip install optax") from None
-
+        from tengri.inference.backends.map_dispatch import _JAXOPT_SOLVERS
         from tengri.inference.posterior import Posterior
 
         n_steps = kwargs.get("n_steps", 1000)
@@ -1323,10 +1361,60 @@ class Fitter:
         # Initialize params for each galaxy independently
         init_keys = jax.random.split(key, n_gal)
         init_params_list = [self._initialize_unbounded(k) for k in init_keys]
-        # Stack param dicts: each leaf becomes (n_gal, ...)
         params_batch = jax.tree.map(lambda *xs: jnp.stack(xs), *init_params_list)
 
-        # Build optimizer and batch optimizer states
+        loss_fn = self._get_or_build_loss_fn()
+
+        # ── jaxopt quasi-Newton / line-search path ──
+        if isinstance(optimizer, str) and optimizer in _JAXOPT_SOLVERS:
+            from tengri.inference.backends.map_dispatch import _build_jaxopt_solver
+
+            tol = kwargs.get("tol", 1e-5)
+            solver, opt_name = _build_jaxopt_solver(
+                optimizer, loss_fn, maxiter=n_steps, tol=tol,
+            )
+
+            if verbose:
+                print(
+                    f"  vmap MAP ({opt_name}): {n_gal} galaxies "
+                    f"× {n_steps} max iter (single JIT kernel)"
+                )
+
+            batch_result = jax.jit(jax.vmap(solver.run))(params_batch, batch_data_args)
+
+            t_total = time.time() - t0
+            if verbose:
+                print(
+                    f"  Done: {n_gal} galaxies in {t_total:.1f}s "
+                    f"({t_total / n_gal:.2f}s/galaxy)"
+                )
+
+            results = []
+            for g_idx in range(n_gal):
+                params_i = jax.tree.map(lambda x, idx=g_idx: x[idx], batch_result.params)
+                bounded_i = self._bounded_from_unbounded(params_i)
+                result_i = Posterior(
+                    samples=bounded_i,
+                    log_weights=None,
+                    fitter=self,
+                    method=f"map ({opt_name})",
+                    diagnostics={
+                        "loss": float(batch_result.state.value[g_idx]),
+                        "n_steps": int(batch_result.state.iter_num[g_idx]),
+                        "optimizer": opt_name,
+                        "converged": bool(batch_result.state.error[g_idx] < tol),
+                    },
+                )
+                results.append(result_i)
+
+            return results
+
+        # ── optax iterative path (adam / adamw / sgd / custom) ──
+        try:
+            import optax
+        except ImportError:
+            raise ImportError("optax required for MAP: pip install optax") from None
+
         if isinstance(optimizer, str):
             _opt_builders = {
                 "adam": lambda: optax.adam(learning_rate),
@@ -1339,16 +1427,12 @@ class Fitter:
 
         opt_states_batch = jax.vmap(opt.init)(params_batch)
 
-        # Loss function for a single galaxy
-        loss_fn = self._get_or_build_loss_fn()
-
         def single_step(params, opt_state, data_args_i):
             loss, grads = jax.value_and_grad(lambda p: loss_fn(p, data_args_i))(params)
             updates, new_opt_state = opt.update(grads, opt_state, params)
             new_params = optax.apply_updates(params, updates)
             return new_params, new_opt_state, loss
 
-        # vmap over galaxy dimension; data_args leaves mapped over axis 0
         batch_step = jax.jit(jax.vmap(single_step))
 
         params = params_batch
@@ -1367,7 +1451,6 @@ class Fitter:
         if verbose:
             print(f"  Done: {n_gal} galaxies in {t_total:.1f}s ({t_total / n_gal:.2f}s/galaxy)")
 
-        # Unstack results and build Posterior objects
         results = []
         for g_idx in range(n_gal):
             params_i = jax.tree.map(lambda x, idx=g_idx: x[idx], params)
