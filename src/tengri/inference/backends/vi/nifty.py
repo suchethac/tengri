@@ -589,6 +589,109 @@ def run_nifty_fast_vi(
     )
 
 
+def _get_or_build_nifty_likelihood(fitter):
+    """Return cached NIFTy likelihood, building on first call.
+
+    Caches signal_response, nifty_model, and likelihood on the fitter
+    so that repeated ``run_nifty_vi`` calls reuse the same function
+    identities.  Without this, each call creates new local closures
+    → new ``jax.jit`` identity → JAX trace cache miss → full retrace
+    + XLA compilation (~22s per call).
+    """
+    if hasattr(fitter, "_nifty_lh_cache") and fitter._nifty_lh_cache is not None:
+        return fitter._nifty_lh_cache
+
+    import nifty8.re as jft
+
+    from tengri.observation.noise import (
+        compute_effective_noise,
+        compute_std_inv,
+        has_noise_model,
+        uses_student_t,
+    )
+    from tengri.utils.transforms import to_bounded
+
+    model = fitter.model
+    data = fitter.data
+    noise = fitter.noise
+    data_type = fitter.data_type
+    free_names = fitter._free_names
+    bounds = fitter._bounds
+    fixed_values = fitter._fixed_values
+    spec = fitter.spec
+    stochastic = spec.stochastic
+    use_variable_noise = has_noise_model(spec)
+    use_student_t = uses_student_t(spec)
+
+    def _predict(params):
+        if data_type == "photometry":
+            return model.predict_photometry(params, mode="_traceable")
+        elif data_type == "spectroscopy":
+            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+        elif data_type == "joint":
+            p = model.predict_photometry(params, mode="_traceable")
+            s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+            return jnp.concatenate([p, s])
+        else:
+            raise ValueError(f"Unknown data_type: {data_type}")
+
+    def _build_params(primals):
+        params = {}
+        for name in free_names:
+            lo, hi = bounds[name]
+            params[name] = to_bounded(primals[name], lo, hi)
+        for name, val in fixed_values.items():
+            params[name] = val
+        if stochastic and "psd_xi" in primals:
+            params["psd_xi"] = primals["psd_xi"]
+        return params
+
+    if use_variable_noise:
+        if use_student_t:
+
+            def signal_response(primals):
+                params = _build_params(primals)
+                predicted = _predict(params)
+                f_cal = params.get("noise_frac_cal", 0.0)
+                sigma_eff = compute_effective_noise(noise, predicted, f_cal)
+                return predicted, sigma_eff
+
+        else:
+
+            def signal_response(primals):
+                params = _build_params(primals)
+                predicted = _predict(params)
+                f_cal = params.get("noise_frac_cal", 0.0)
+                std_inv = compute_std_inv(noise, predicted, f_cal)
+                return predicted, std_inv
+
+    else:
+
+        def signal_response(primals):
+            return _predict(_build_params(primals))
+
+    domain = {}
+    for name in free_names:
+        domain[name] = jft.ShapeWithDtype(())
+    if stochastic:
+        domain["psd_xi"] = jft.ShapeWithDtype((spec.n_grid,))
+
+    signal_response_jit = jax.jit(signal_response)
+    nifty_model = jft.Model(signal_response_jit, domain=domain)
+
+    if use_student_t and use_variable_noise:
+        dof = float(spec.get_distribution("noise_dof").value)
+        likelihood = jft.VariableCovarianceStudentT(data, dof).amend(nifty_model)
+    elif use_variable_noise:
+        likelihood = jft.VariableCovarianceGaussian(data).amend(nifty_model)
+    else:
+        noise_cov_inv = 1.0 / noise**2
+        likelihood = jft.Gaussian(data, noise_cov_inv).amend(nifty_model)
+
+    fitter._nifty_lh_cache = likelihood
+    return likelihood
+
+
 def run_nifty_vi(
     fitter,
     *,
@@ -639,104 +742,14 @@ def run_nifty_vi(
 
     from tengri.inference.posterior import Posterior
     from tengri.inference.vi_config import VIConfig, evi_sample_mode
-    from tengri.observation.noise import (
-        compute_effective_noise,
-        compute_std_inv,
-        has_noise_model,
-        uses_student_t,
-    )
-    from tengri.utils.transforms import to_bounded
 
     cfg = vi_config or VIConfig()
 
-    model = fitter.model
+    likelihood = _get_or_build_nifty_likelihood(fitter)
+
     data = fitter.data
-    noise = fitter.noise
-    data_type = fitter.data_type
     free_names = fitter._free_names
-    bounds = fitter._bounds
-    fixed_values = fitter._fixed_values
     spec = fitter.spec
-    stochastic = spec.stochastic
-    use_variable_noise = has_noise_model(spec)
-    use_student_t = uses_student_t(spec)
-
-    def _predict(params):
-        """Dispatch forward model by data type."""
-        if data_type == "photometry":
-            return model.predict_photometry(params, mode="_traceable")
-        elif data_type == "spectroscopy":
-            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
-        elif data_type == "joint":
-            p = model.predict_photometry(params, mode="_traceable")
-            s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
-            return jnp.concatenate([p, s])
-        else:
-            raise ValueError(f"Unknown data_type: {data_type}")
-
-    def _build_params(primals):
-        """Transform unbounded primals → physical params dict."""
-        params = {}
-        for name in free_names:
-            lo, hi = bounds[name]
-            params[name] = to_bounded(primals[name], lo, hi)
-        for name, val in fixed_values.items():
-            params[name] = val
-        if stochastic and "psd_xi" in primals:
-            params["psd_xi"] = primals["psd_xi"]
-        return params
-
-    # Build signal_response: unbounded primals → predicted observables
-    # When noise model is active, returns tuple for variable-covariance
-    # likelihoods:
-    #   Gaussian: (predicted, std_inv) for VariableCovarianceGaussian
-    #   Student-t: (predicted, sigma_eff) for VariableCovarianceStudentT
-    if use_variable_noise:
-        if use_student_t:
-
-            def signal_response(primals):
-                params = _build_params(primals)
-                predicted = _predict(params)
-                f_cal = params.get("noise_frac_cal", 0.0)
-                sigma_eff = compute_effective_noise(noise, predicted, f_cal)
-                return predicted, sigma_eff
-
-        else:
-
-            def signal_response(primals):
-                params = _build_params(primals)
-                predicted = _predict(params)
-                f_cal = params.get("noise_frac_cal", 0.0)
-                std_inv = compute_std_inv(noise, predicted, f_cal)
-                return predicted, std_inv
-
-    else:
-
-        def signal_response(primals):
-            return _predict(_build_params(primals))
-
-    # Build NIFTy.re domain
-    domain = {}
-    for name in free_names:
-        domain[name] = jft.ShapeWithDtype(())
-    if stochastic:
-        domain["psd_xi"] = jft.ShapeWithDtype((spec.n_grid,))
-
-    signal_response_jit = jax.jit(signal_response)
-    nifty_model = jft.Model(signal_response_jit, domain=domain)
-
-    # Likelihood dispatch:
-    #   Student-t + variable noise → VariableCovarianceStudentT
-    #   Gaussian + variable noise → VariableCovarianceGaussian
-    #   Fixed noise → Gaussian
-    if use_student_t and use_variable_noise:
-        dof = float(spec.get_distribution("noise_dof").value)
-        likelihood = jft.VariableCovarianceStudentT(data, dof).amend(nifty_model)
-    elif use_variable_noise:
-        likelihood = jft.VariableCovarianceGaussian(data).amend(nifty_model)
-    else:
-        noise_cov_inv = 1.0 / noise**2
-        likelihood = jft.Gaussian(data, noise_cov_inv).amend(nifty_model)
 
     # Initialize
     if init_from is not None:
@@ -748,7 +761,7 @@ def run_nifty_vi(
     init_pos = jft.Vector(init_params)
 
     if verbose:
-        n_total = len(free_names) + (spec.n_grid if stochastic else 0)
+        n_total = len(free_names) + (spec.n_grid if spec.stochastic else 0)
         _mode_labels = {
             "nonlinear_resample": "geoVI",
             "linear_resample": "MGVI",

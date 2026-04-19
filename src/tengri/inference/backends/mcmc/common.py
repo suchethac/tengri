@@ -13,6 +13,28 @@ import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
 
+def _get_flat_logdensity(fitter, init_params):
+    """Return (log_posterior_flat, unravel_fn, init_flat) with cached identity.
+
+    Caches the flat log-density closure and unravel_fn on the fitter
+    so that repeated calls reuse the same function identity → JAX
+    trace cache hits for BlackJAX kernels.
+    """
+    if not hasattr(fitter, "_flat_logdensity"):
+        logdensity_2arg = fitter._get_or_build_logdensity_fn()
+        data_args = fitter._data_args
+        _, unravel_fn = ravel_pytree(init_params)
+
+        def log_posterior_flat(position):
+            return logdensity_2arg(unravel_fn(position), data_args)
+
+        fitter._flat_logdensity = log_posterior_flat
+        fitter._cached_unravel_fn = unravel_fn
+
+    init_flat, _ = ravel_pytree(init_params)
+    return fitter._flat_logdensity, fitter._cached_unravel_fn, init_flat
+
+
 def run_raytrace(
     fitter,
     *,
@@ -54,16 +76,12 @@ def run_raytrace(
     from tengri.inference.backends.mcmc.raytrace import sample_raytrace
     from tengri.inference.posterior import Posterior
 
-    loss_fn = fitter._get_or_build_loss_fn()
-    data_args = fitter._data_args
-
     if init_from is not None:
         init_params = fitter._unbounded_from_posterior(init_from)
     else:
         init_params = fitter._initialize_unbounded(key)
 
-    # Flatten for the sampler (expects a flat 1D array)
-    init_flat, unravel_fn = ravel_pytree(init_params)
+    log_prob_flat, unravel_fn, init_flat = _get_flat_logdensity(fitter, init_params)
     D = len(init_flat)
 
     if step_size is None:
@@ -74,10 +92,6 @@ def run_raytrace(
             step_size = 0.03 * jnp.sqrt(float(D))
         else:
             step_size = 0.01
-
-    def log_prob_flat(position):
-        params = unravel_fn(position)
-        return -loss_fn(params, data_args)
 
     total_steps = n_burnin + n_steps
 
@@ -239,15 +253,9 @@ def run_nuts(
             stacklevel=3,
         )
 
-    loss_fn = fitter._get_or_build_loss_fn()
-    data_args = fitter._data_args
-
     if init_from is not None:
         init_params = fitter._unbounded_from_posterior(init_from)
     else:
-        # Auto-MAP initialization: find the posterior mode first,
-        # then start NUTS warmup from there.  Improves warmup
-        # convergence (~5x faster) and mass matrix quality.
         if verbose:
             print("  MAP initialization (200 steps)...")
         key, map_key = jax.random.split(key)
@@ -256,12 +264,7 @@ def run_nuts(
         if verbose:
             print(f"  MAP init done (loss={map_result.diagnostics['final_loss']:.2f})")
 
-    # Flatten for BlackJAX
-    init_flat, unravel_fn = ravel_pytree(init_params)
-
-    def log_posterior_flat(position):
-        params = unravel_fn(position)
-        return -loss_fn(params, data_args)
+    log_posterior_flat, unravel_fn, init_flat = _get_flat_logdensity(fitter, init_params)
 
     if verbose:
         n_dim = len(init_flat)
