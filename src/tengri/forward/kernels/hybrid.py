@@ -116,7 +116,7 @@ def build_hybrid_photometry(model):
     # IGM: full-wavelength transmission (compositional-quality, not approximate).
     # Precompute once at init on the rest-frame wavelength grid.
     _z_for_igm = model._z_fixed
-    has_igm = model._apply_igm and _z_for_igm is not None
+    has_igm = model._uses_igm and _z_for_igm is not None
     if has_igm:
         from tengri.components.igm import igm_transmission
 
@@ -304,14 +304,14 @@ def build_hybrid_photometry(model):
             _kd_data = model._precomputed.kd_preintegrated
 
     # Radio
-    has_radio = model._radio_enabled
+    has_radio = model._uses_radio
     if has_radio:
         _radio_sfr_mode = model._radio_sfr_mode
         _include_freefree = model._radio_include_freefree
         _redshift = float(getattr(model, "_redshift", 0.0))
 
     # X-ray
-    has_xray = model._xray_enabled
+    has_xray = model._uses_xray
 
     # Constants for energy balance
     _c_aa = dt.type(2.99792458e18)
@@ -1377,7 +1377,7 @@ def build_hybrid_photometry(model):
 
     param_map = model._param_map
     spec = model.spec
-    has_field = model._has_field
+    has_field = model._uses_stochastic_sfh
     sfh_fn = model._sfh_fn
     sfh_internal_names = model._sfh_internal_names
     field_model = model._field_model
@@ -1620,13 +1620,13 @@ def build_hybrid_photometry_ztable(model):
         agn_model_fn_full = resolve_agn_model(model._agn_model)
 
     # Radio
-    has_radio = model._radio_enabled
+    has_radio = model._uses_radio
     if has_radio:
         _radio_sfr_mode = model._radio_sfr_mode
         _include_freefree = model._radio_include_freefree
 
     # X-ray
-    has_xray = model._xray_enabled
+    has_xray = model._uses_xray
 
     # Constants for energy balance
     _c_aa = dt.type(2.99792458e18)

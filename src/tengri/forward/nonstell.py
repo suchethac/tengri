@@ -88,11 +88,11 @@ def collect_nonstell(model) -> list[NonStellarSlot]:
         slots.append(NonStellarSlot("agn", on_ssp_grid=False))
 
     # Radio
-    if model._radio_enabled:
+    if model._uses_radio:
         slots.append(NonStellarSlot("radio", on_ssp_grid=False))
 
     # X-ray
-    if model._xray_enabled:
+    if model._uses_xray:
         slots.append(NonStellarSlot("xray", on_ssp_grid=False))
 
     return slots
@@ -178,7 +178,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
         agn_model_fn = resolve_agn_model(model._agn_model)
 
     # --- Radio ---
-    has_radio = model._radio_enabled
+    has_radio = model._uses_radio
     if has_radio:
         from tengri.forward.emission_helpers import radio_emission
 
@@ -187,7 +187,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
         _redshift = float(getattr(model, "_redshift", 0.0))
 
     # --- X-ray ---
-    has_xray = model._xray_enabled
+    has_xray = model._uses_xray
     if has_xray:
         from tengri.forward.emission_helpers import xray_emission
 

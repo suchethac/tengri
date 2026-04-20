@@ -247,20 +247,20 @@ def summary(model: SEDModel) -> str:
         components.append(f"dust_emission={model._dust_emission_model}")
     if model._agn_model:
         components.append(f"agn={model._agn_model}")
-    if model._apply_igm:
+    if model._uses_igm:
         components.append("igm")
-    if model._radio_enabled:
+    if model._uses_radio:
         components.append("radio")
-    if model._xray_enabled:
+    if model._uses_xray:
         components.append("xray")
-    if model._shock_enabled:
+    if model._uses_shock:
         components.append("shock")
     if components:
         lines.append(f"  Components:  {', '.join(components)}")
 
     # Dimensionality
     n_free = model.spec.n_free
-    n_grid = model._n_grid if model._has_field else 0
+    n_grid = model._n_grid if model._uses_stochastic_sfh else 0
     lines.append(f"  Parameters:  {n_free} free" + (f" + {n_grid} latent (ξ)" if n_grid else ""))
 
     lines.append(sep)

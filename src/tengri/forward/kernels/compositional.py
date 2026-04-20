@@ -156,14 +156,14 @@ def build_fused_tier2_photometry(model):
     rest_sed_kernel = model._compositional.rest_sed
     param_map = model._param_map
     spec = model.spec
-    has_field = model._has_field
+    has_field = model._uses_stochastic_sfh
     ssp_ages_yr = model.ssp_ages_yr
     # Panchromatic wavelength grid (extended if radio/xray enabled)
     rest_wave = model._rest_wavelength
 
     filter_waves = model.filter_waves
     filter_trans = model.filter_trans
-    apply_igm = model._apply_igm
+    apply_igm = model._uses_igm
     # Pad filters for vectorized integration
     fw_padded_t2, ft_padded_t2, _filt_nv_t2 = pad_filters(filter_waves, filter_trans)
 
@@ -332,7 +332,7 @@ def build_fused_tier2_spectrum(model):
     rest_sed_kernel = model._compositional.rest_sed
     param_map = model._param_map
     spec = model.spec
-    has_field = model._has_field
+    has_field = model._uses_stochastic_sfh
     ssp_ages_yr = model.ssp_ages_yr
     # Panchromatic wavelength grid (extended if radio/xray enabled)
     rest_wave = model._rest_wavelength
@@ -472,7 +472,7 @@ def build_hybrid_spectrum(model):
     rest_sed_kernel = model._compositional.rest_sed
     param_map = model._param_map
     spec = model.spec
-    has_field = model._has_field
+    has_field = model._uses_stochastic_sfh
     rest_wave = model._rest_wavelength
 
     # Redshift handling
@@ -517,7 +517,7 @@ def build_hybrid_spectrum(model):
 
         # Non-stellar SED at full wavelength
         p_ns = p.copy()
-        if model._xray_enabled:
+        if model._uses_xray:
             p_ns["_sfr_current"] = sfr_on_ssp[-1]
         rest_sed_full = rest_sed_kernel(weights, ssp_flux_at_z, p_ns)
 

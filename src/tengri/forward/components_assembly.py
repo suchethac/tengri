@@ -349,7 +349,7 @@ def build_radio_component(model):
         ``(L_ir, L_agn_bol, radio_params) -> radio_sed`` in erg/s/Hz,
         or None if radio is disabled.
     """
-    if not model._radio_enabled:
+    if not model._uses_radio:
         return None
 
     from tengri.components.radio import radio_total
@@ -394,7 +394,7 @@ def build_xray_component(model):
         ``(sfr, mstar, L_agn_bol, xray_params) -> xray_sed``
         in erg/s/Hz, or None if X-ray is disabled.
     """
-    if not model._xray_enabled:
+    if not model._uses_xray:
         return None
 
     from tengri.components.xray import xray_total

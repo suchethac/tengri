@@ -874,7 +874,7 @@ def compute_sed_components(
         sed = sed + agn_sed
 
     # ── Radio emission (synchrotron from SF + AGN jets) ───────────────
-    if model._radio_enabled:
+    if model._uses_radio:
         radio_sed = radio_emission(
             wave_z2,
             L_ir=_L_ir,
@@ -894,7 +894,7 @@ def compute_sed_components(
         sed = sed + radio_sed
 
     # ── X-ray emission (XRBs + AGN corona) ────────────────────────────
-    if model._xray_enabled:
+    if model._uses_xray:
         xray_sed = xray_emission(
             wave_z2,
             sfr=_sfr_cached,

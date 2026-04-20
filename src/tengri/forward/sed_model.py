@@ -240,8 +240,8 @@ class SEDModel:
 
         # ── Kernel hierarchy ──────────────────────────────────────
         self._precomputed = self._build_precomputed_data(ssp_data, precompute)
-        self.__compositional = self._build_compositional_kernels()
-        self.__hybrid = self._build_hybrid_kernels()
+        self._compositional_kernels = self._build_compositional_kernels()
+        self._hybrid_kernels = self._build_hybrid_kernels()
 
         if (
             observation is not None
@@ -329,7 +329,7 @@ class SEDModel:
             spec.mean_sfh_type,
             dust_model=getattr(spec, "dust_model", "two_component"),
         )
-        self._has_field = spec.stochastic
+        self._uses_stochastic_sfh = spec.stochastic
         self._field_model = sfh_settings.get("sfh_field_model", "drw")
 
     def _init_metallicity(self, spec):
@@ -388,8 +388,8 @@ class SEDModel:
 
     def _init_igm(self, spec):
         """Configure IGM absorption and DLA."""
-        self._apply_igm = spec.apply_igm
-        self._dla_enabled = getattr(spec, "dla", False)
+        self._uses_igm = spec.apply_igm
+        self._uses_dla = getattr(spec, "dla", False)
         self._igm_patchy = getattr(spec, "igm_patchy", False)
 
     def _init_nebular(self, spec, ssp_data):
@@ -427,29 +427,29 @@ class SEDModel:
 
     def _init_multiwavelength(self, spec, ssp_data):
         """Configure radio, X-ray, shock, and build wavelength grid."""
-        self._radio_enabled = getattr(spec, "radio", False)
-        if self._radio_enabled:
+        self._uses_radio = getattr(spec, "radio", False)
+        if self._uses_radio:
             self._param_map.update(identity_param_map(_RADIO_IDENTITY_PARAMS))
             self._radio_include_freefree = getattr(spec, "radio_include_freefree", True)
             self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
 
-        self._xray_enabled = getattr(spec, "xray", False)
-        if self._xray_enabled:
+        self._uses_xray = getattr(spec, "xray", False)
+        if self._uses_xray:
             self._param_map.update(identity_param_map(_XRAY_IDENTITY_PARAMS))
 
-        if self._radio_enabled or self._xray_enabled:
+        if self._uses_radio or self._uses_xray:
             from tengri.utils.wavelength import make_panchromatic_grid
 
             self._rest_wavelength = make_panchromatic_grid(
                 ssp_data.ssp_wave,
-                extend_xray=self._xray_enabled,
-                extend_radio=self._radio_enabled,
+                extend_xray=self._uses_xray,
+                extend_radio=self._uses_radio,
             )
         else:
             self._rest_wavelength = ssp_data.ssp_wave
 
-        self._shock_enabled = getattr(spec, "shock", False)
-        if self._shock_enabled:
+        self._uses_shock = getattr(spec, "shock", False)
+        if self._uses_shock:
             self._param_map.update(identity_param_map(_SHOCK_IDENTITY_PARAMS))
 
     def _init_instrument(self, spec, observation):
@@ -487,21 +487,21 @@ class SEDModel:
     @property
     def _compositional(self):
         """Lazily build compositional kernels on first access."""
-        if self.__compositional is None:
-            self.__compositional = self._build_compositional_kernels()
-        return self.__compositional
+        if self._compositional_kernels is None:
+            self._compositional_kernels = self._build_compositional_kernels()
+        return self._compositional_kernels
 
     @property
     def _hybrid(self):
         """Lazily build hybrid kernels on first access."""
-        if self.__hybrid is None:
-            self.__hybrid = self._build_hybrid_kernels()
-        return self.__hybrid
+        if self._hybrid_kernels is None:
+            self._hybrid_kernels = self._build_hybrid_kernels()
+        return self._hybrid_kernels
 
     def _invalidate_kernels(self):
         """Reset cached kernels so they're rebuilt on next access."""
-        self.__compositional = None
-        self.__hybrid = None
+        self._compositional_kernels = None
+        self._hybrid_kernels = None
 
     # ── Kernel builders ────────────────────────────────────────────────
 
@@ -582,7 +582,7 @@ class SEDModel:
         # IGM at filter effective wavelengths (for hybrid kernel, fixed z)
         igm_eff = None
         if (
-            self._apply_igm
+            self._uses_igm
             and self._approx["igm"]
             and phot is not None
             and self._z_fixed is not None
@@ -698,7 +698,7 @@ class SEDModel:
 
         # Store partial result so build_fused_tier2_photometry can read
         # model._compositional.rest_sed during construction.
-        self.__compositional = CompositionalKernels(
+        self._compositional_kernels = CompositionalKernels(
             rest_sed=rest_sed,
             exact_sed=exact_sed,
         )
@@ -762,7 +762,7 @@ class SEDModel:
 
         Thin wrapper around :func:`tengri._param_translate.get_internal_params`.
         """
-        return get_internal_params(params, self._param_map, self.spec, self._has_field)
+        return get_internal_params(params, self._param_map, self.spec, self._uses_stochastic_sfh)
 
     @staticmethod
     def _t_universe_gyr(z):
@@ -810,7 +810,7 @@ class SEDModel:
         kw = {k: v for k, v in p.items() if k in self._sfh_internal_names}
 
         # If field is present, compute GP and pass to composed fn
-        if self._has_field and "xi" in p:
+        if self._uses_stochastic_sfh and "xi" in p:
             gp_x, k0_half = compute_field_gp(
                 xi=p["xi"],
                 psd_sigma=p["psd_sigma"],
@@ -839,7 +839,7 @@ class SEDModel:
         kw = {k: v for k, v in p.items() if k in self._sfh_internal_names}
         sfr_mean = self._sfh_fn(self.age_yr, **kw)
 
-        if self._has_field and "xi" in p:
+        if self._uses_stochastic_sfh and "xi" in p:
             gp_x, k0_half = compute_field_gp(
                 xi=p["xi"],
                 psd_sigma=p["psd_sigma"],
@@ -940,7 +940,7 @@ class SEDModel:
         z = self._get_redshift(params)
         wave_obs = rest_result.wavelength * (1.0 + z)
         sed_obs = rest_result.sed
-        if self._apply_igm:
+        if self._uses_igm:
             from tengri.forward.emission_helpers import igm_absorption
 
             # Always apply IGM when enabled — igm_transmission returns
@@ -953,7 +953,7 @@ class SEDModel:
                 igm_patchy=getattr(self, "_igm_patchy", False),
             )
             sed_obs = sed_obs * igm_trans
-        if self._dla_enabled:
+        if self._uses_dla:
             from tengri.components.igm.dla import dla_transmission_obs
 
             z_dla = params.get("dla_z", 0.0)
@@ -1430,17 +1430,17 @@ class SEDModel:
         @jax.jit on the outer wrapper, so it can be traced by an
         enclosing jax.jit (e.g. NIFTy's signal_response).
 
-        IMPORTANT: uses __hybrid/__compositional directly (not the lazy
-        property) to avoid building kernels inside a JIT scope.
+        IMPORTANT: uses _hybrid_kernels/_compositional_kernels directly
+        (not the lazy property) to avoid building kernels inside a JIT scope.
         """
         # Prefer hybrid raw (already built at init)
-        if self.__hybrid is not None:
-            raw = getattr(self.__hybrid, "_photometry_raw", None)
+        if self._hybrid_kernels is not None:
+            raw = getattr(self._hybrid_kernels, "_photometry_raw", None)
             if raw is not None:
                 return raw(params)
         # Fall back to compositional raw
-        if self.__compositional is not None:
-            raw = getattr(self.__compositional, "_photometry_raw", None)
+        if self._compositional_kernels is not None:
+            raw = getattr(self._compositional_kernels, "_photometry_raw", None)
             if raw is not None:
                 p = self._get_internal_params(params)
                 sfr = self._compute_sfr(p)
@@ -1461,8 +1461,8 @@ class SEDModel:
         auto path if no precomputed spectrum kernel is available.
         """
         # Prefer hybrid spectrum raw (precomputed SSP on pixel grid)
-        if self.__hybrid is not None:
-            raw = getattr(self.__hybrid, "_spectrum_raw", None)
+        if self._hybrid_kernels is not None:
+            raw = getattr(self._hybrid_kernels, "_spectrum_raw", None)
             if raw is not None:
                 p = self._get_internal_params(params)
                 sfr = self._compute_sfr(p)
@@ -1510,7 +1510,7 @@ class SEDModel:
             kw["agn_q_skirtor"] = p.get("agn_q_skirtor", 1.0)
             kw["agn_oa_skirtor"] = p.get("agn_oa_skirtor", 40.0)
         # Radio
-        if self._radio_enabled:
+        if self._uses_radio:
             kw["radio_loudness"] = p.get("radio_loudness", 0.0)
             kw["log_mstar"] = jnp.log10(jnp.maximum(p.get("mstar", 1e10), 1e-10))
         return kw
@@ -1596,7 +1596,7 @@ class SEDModel:
                 lgmet,
                 lgmet_scatter,
             )
-            if self._xray_enabled:
+            if self._uses_xray:
                 p = {**p, "_sfr_current": sfr[-1]}
             return self._compositional.rest_sed(weights, ssp_flux_at_z, p)
         elif self._csp_integration == "dsps_met_table":
@@ -1626,7 +1626,7 @@ class SEDModel:
                 t_obs_gyr,
                 lgmet_scatter,
             )
-            if self._xray_enabled:
+            if self._uses_xray:
                 p = {**p, "_sfr_current": sfr[-1]}
             return self._compositional.rest_sed(weights, ssp_flux_at_z, p)
         else:
@@ -1667,7 +1667,7 @@ class SEDModel:
             ssp_flux_at_z = interp_metallicity(self, _log_z)
 
         # Enrich p with current SFR for X-ray model
-        if self._xray_enabled:
+        if self._uses_xray:
             p = {**p, "_sfr_current": sfr[-1]}
 
         return self._compositional.rest_sed(weights, ssp_flux_at_z, p)
@@ -1698,7 +1698,7 @@ class SEDModel:
                     dl_cm,
                     self.filter_waves,
                     self.filter_trans,
-                    apply_igm=self._apply_igm,
+                    apply_igm=self._uses_igm,
                 )
             # Standard path: compute sfr_on_ssp in Python, pass into JIT.
             p = self._get_internal_params(params)
@@ -1716,7 +1716,7 @@ class SEDModel:
             dl_cm,
             self.filter_waves,
             self.filter_trans,
-            apply_igm=self._apply_igm,
+            apply_igm=self._uses_igm,
         )
 
     def _predict_spectrum_compositional(self, params, wave_obs):
@@ -1875,7 +1875,7 @@ class SEDModel:
             z_min=z_min,
             z_max=z_max,
             n_z=n_z,
-            apply_igm=self._apply_igm and self._approx.get("igm", True),
+            apply_igm=self._uses_igm and self._approx.get("igm", True),
         )
         self._precomputed.photometry_ztable = ztable
 

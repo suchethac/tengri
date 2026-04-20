@@ -542,7 +542,7 @@ class Fitter:
 
         # Dimensionality
         n_free = len(self._free_names)
-        n_grid = self.model._n_grid if self.model._has_field else 0
+        n_grid = self.model._n_grid if self.model._uses_stochastic_sfh else 0
         dim_str = f"{n_free} free"
         if n_grid:
             dim_str += f" + {n_grid} latent (ξ)"
