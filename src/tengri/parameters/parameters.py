@@ -78,7 +78,6 @@ __all__ = ["SETTINGS_KEYS", "_DUST_EMISSION_PARAMS", "ParamSpec", "Parameters"]
 # ── Parameters class ───────────────────────────────────────────────────
 
 
-
 class Parameters:
     """Parameter specification defining model parameters and their priors.
 
@@ -694,7 +693,6 @@ class Parameters:
                     f"violate physical constraint: {err_msg}"
                 )
 
-
     # ── Properties ────────────────────────────────────────────────────
 
     @property
@@ -741,7 +739,6 @@ class Parameters:
     def mirrors(self) -> dict[str, str]:
         """Parameter mirrors: {target_name: source_name}."""
         return dict(self._mirrors)
-
 
     # ── Public API ────────────────────────────────────────────────────
 
@@ -1037,7 +1034,6 @@ class Parameters:
             lines.append(f"    {'n_grid':30s} = {self._n_grid},")
         lines.append(")")
         return "\n".join(lines)
-
 
 
 # ── Deprecated alias (removed in v1.0) ─────────────────────────────────

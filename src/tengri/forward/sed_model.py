@@ -109,9 +109,6 @@ __all__ = [
 ]
 
 
-
-
-
 class SEDModel:
     """Differentiable forward model with clean parameter API.
 
@@ -484,7 +481,6 @@ class SEDModel:
             self._dl_cm_fixed = None
             self._z_fixed = None
 
-
     # ── Kernel management ─────────────────────────────────────────────
 
     @property
@@ -756,7 +752,6 @@ class SEDModel:
         hk._spectrum_raw = hybrid_spec_raw
         return hk
 
-
     # ── Parameter translation ─────────────────────────────────────────
 
     def _get_internal_params(self, params):
@@ -780,7 +775,6 @@ class SEDModel:
             return self._dl_cm_fixed
         z = self._get_redshift(params)
         return luminosity_distance(z)
-
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
@@ -912,7 +906,6 @@ class SEDModel:
             kw["radio_loudness"] = p.get("radio_loudness", 0.0)
             kw["log_mstar"] = jnp.log10(jnp.maximum(p.get("mstar", 1e10), 1e-10))
         return kw
-
 
     # ── Predictions (public API) ──────────────────────────────────────
 
@@ -1289,8 +1282,7 @@ class SEDModel:
         backend = self._nebular_backend
         if backend is None or not hasattr(backend, "predict_nebular_line_luminosities"):
             raise ValueError(
-                "No nebular backend with line prediction configured. "
-                "Cannot compute line fluxes."
+                "No nebular backend with line prediction configured. Cannot compute line fluxes."
             )
 
         comp = self._compute_sed_components(params)
@@ -1740,7 +1732,6 @@ class SEDModel:
             luminosity_weighted_metallicity=lw_z,
         )
 
-
     # ── Batch operations ──────────────────────────────────────────────
 
     def predict_photometry_batch(self, params_batch):
@@ -1752,7 +1743,6 @@ class SEDModel:
         from tengri.forward.convenience import predict_spectrum_batch as _fn
 
         return _fn(self, params_batch)
-
 
     # ── Private prediction dispatch ───────────────────────────────────
 
@@ -2145,7 +2135,6 @@ class SEDModel:
 
         return self._compositional.rest_sed(weights, ssp_flux_at_z, p)
 
-
     # ── Factories and convenience ─────────────────────────────────────
 
     @classmethod
@@ -2451,7 +2440,6 @@ class SEDModel:
         ax.set_xlim(0, 13.5)
         ax.legend(fontsize=9)
         return ax
-
 
     # ── Utilities ─────────────────────────────────────────────────────
 

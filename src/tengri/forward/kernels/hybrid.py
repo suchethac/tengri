@@ -2268,9 +2268,7 @@ def build_hybrid_photometry_ztable(model):
                 if _needs_extension:
                     from tengri.utils.wavelength import interpolate_sed_to_grid
 
-                    _igm_panch = interpolate_sed_to_grid(
-                        ssp_wave_f64, _igm_full, rest_wave_f64
-                    )
+                    _igm_panch = interpolate_sed_to_grid(ssp_wave_f64, _igm_full, rest_wave_f64)
                     non_stellar_sed = non_stellar_sed * _igm_panch
                 else:
                     non_stellar_sed = non_stellar_sed * _igm_full
@@ -2307,13 +2305,10 @@ def build_hybrid_photometry_ztable(model):
         # igm_trans_table shape: (n_z, n_filters); linear interp along z axis.
         if has_igm:
             _z_c = jnp.clip(_z_arr, _igm_z_grid[0], _igm_z_grid[-1])
-            _iz = jnp.clip(
-                jnp.searchsorted(_igm_z_grid, _z_c) - 1, 0, _igm_z_grid.shape[0] - 2
-            )
+            _iz = jnp.clip(jnp.searchsorted(_igm_z_grid, _z_c) - 1, 0, _igm_z_grid.shape[0] - 2)
             _frac = (_z_c - _igm_z_grid[_iz]) / (_igm_z_grid[_iz + 1] - _igm_z_grid[_iz])
             _igm_eff = (
-                (1.0 - _frac) * _igm_trans_table[_iz]
-                + _frac * _igm_trans_table[_iz + 1]
+                (1.0 - _frac) * _igm_trans_table[_iz] + _frac * _igm_trans_table[_iz + 1]
             ).astype(jnp.float64)
             stellar_phot = stellar_phot * _igm_eff
 
