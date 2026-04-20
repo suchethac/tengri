@@ -181,6 +181,8 @@ class SEDModel:
         "igm": True,
     }
 
+    # ── Construction ──────────────────────────────────────────────────
+
     def __init__(
         self,
         spec,
@@ -250,8 +252,6 @@ class SEDModel:
             and precompute is not False
         ):
             self.precompute_spectroscopy(observation.spectroscopy.wave_obs)
-
-    # ── Construction helpers ──────────────────────────────────────────
 
     @staticmethod
     def _init_observation(spec, filters, observation):
@@ -482,7 +482,8 @@ class SEDModel:
             self._dl_cm_fixed = None
             self._z_fixed = None
 
-    # ── Kernel properties ─────────────────────────────────────────────
+
+    # ── Kernel management ─────────────────────────────────────────────
 
     @property
     def _compositional(self):
@@ -502,8 +503,6 @@ class SEDModel:
         """Reset cached kernels so they're rebuilt on next access."""
         self._compositional_kernels = None
         self._hybrid_kernels = None
-
-    # ── Kernel builders ────────────────────────────────────────────────
 
     def _precompute_dust_ir_photometry(self):
         """Precompute dust IR template photometry for fast hybrid kernel lookup.
@@ -755,6 +754,7 @@ class SEDModel:
         hk._spectrum_raw = hybrid_spec_raw
         return hk
 
+
     # ── Parameter translation ─────────────────────────────────────────
 
     def _get_internal_params(self, params):
@@ -764,31 +764,23 @@ class SEDModel:
         """
         return get_internal_params(params, self._param_map, self.spec, self._uses_stochastic_sfh)
 
-    @staticmethod
-    def _t_universe_gyr(z):
-        """Age of the universe at redshift z in Gyr.
+    def _get_redshift(self, params):
+        """Get redshift value from params or fixed value."""
+        if "redshift" in params:
+            return params["redshift"]
+        if self._z_fixed is not None:
+            return self._z_fixed
+        raise KeyError("Redshift not in params and not fixed in spec")
 
-        Thin wrapper around age_at_z.
+    def _get_dl_cm(self, params):
+        """Get luminosity distance from params or precomputed value."""
+        if self._dl_cm_fixed is not None:
+            return self._dl_cm_fixed
+        z = self._get_redshift(params)
+        return luminosity_distance(z)
 
-        Parameters
-        ----------
-        z : float or jnp.ndarray
-            Redshift.
 
-        Returns
-        -------
-        float
-            Age of universe in Gyr.
-        """
-        return age_at_z(z)
-
-    def _interp_metallicity(self, log_z):
-        """Dispatch metallicity interpolation (single Z value)."""
-        return interp_metallicity(self, log_z)
-
-    def _interp_metallicity_evolving(self, log_z_per_age):
-        """Dispatch evolving metallicity interpolation (per-age Z)."""
-        return interp_metallicity_evolving(self, log_z_per_age)
+    # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
     def _compute_sfr(self, p):
         """Compute SFR via the composed SFH function.
@@ -856,32 +848,6 @@ class SEDModel:
 
         return sfr_mean, sfr_full
 
-    def _get_redshift(self, params):
-        """Get redshift value from params or fixed value."""
-        if "redshift" in params:
-            return params["redshift"]
-        if self._z_fixed is not None:
-            return self._z_fixed
-        raise KeyError("Redshift not in params and not fixed in spec")
-
-    def _get_dl_cm(self, params):
-        """Get luminosity distance from params or precomputed value."""
-        if self._dl_cm_fixed is not None:
-            return self._dl_cm_fixed
-        z = self._get_redshift(params)
-        return luminosity_distance(z)
-
-    # ── Forward predictions ───────────────────────────────────────────
-
-    @property
-    def wavelengths(self):
-        """Rest-frame wavelength grid (Angstrom).
-
-        Returns the SSP grid by default, or the extended panchromatic grid
-        when radio or X-ray emission is enabled.
-        """
-        return self._rest_wavelength
-
     def _compute_sed_components(
         self, params, _sfr=None, _weights=None, need_intrinsic=False, rest_wavelength=None
     ):
@@ -892,6 +858,92 @@ class SEDModel:
         return compute_sed_components(
             self, params, _sfr, _weights, need_intrinsic, rest_wavelength=rest_wavelength
         )
+
+    def _get_dust_kwargs(self, p):
+        """Extract dust law + emission kwargs from internal params dict."""
+        return get_dust_kwargs(self, p)
+
+    def _get_agn_kwargs(self, p):
+        """Extract AGN kwargs from internal params dict for fused kernel."""
+        return get_agn_kwargs(self, p)
+
+    def _get_non_stellar_kwargs(self, p):
+        """Extract non-stellar kwargs from internal params for hybrid kernel."""
+        kw = {}
+        # Nebular
+        if self._nebular_backend is not None and getattr(
+            self._nebular_backend, "has_free_params", False
+        ):
+            kw["neb_logU"] = p.get("neb_logU", -3.0)
+            kw["neb_logZ_gas"] = p.get("neb_logZ_gas", None)
+            kw["neb_fesc"] = p.get("neb_fesc", 0.0)
+            kw["neb_fesc_lya"] = p.get("neb_fesc_lya", 0.0)
+        # Shock
+        if getattr(self, "_shock_enabled", False):
+            kw["shock_frac"] = p.get("shock_frac", 0.0)
+            kw["shock_velocity"] = p.get("shock_velocity", 300.0)
+            kw["shock_log_density"] = p.get("shock_log_density", 0.0)
+            kw["shock_b_over_sqrt_n"] = p.get("shock_b_over_sqrt_n", 1.0)
+        # Dust emission (all models, not just MBB)
+        if self._dust_emission_model is not None:
+            kw["dust_T"] = p.get("dust_T", 35.0)
+            kw["dust_beta_ir"] = p.get("dust_beta_ir", 1.6)
+            kw["dust_eta_balance"] = p.get("dust_eta_balance", 1.0)
+            kw["dust_alpha_mir"] = p.get("dust_alpha_mir", 2.0)
+            kw["dust_alpha_dale"] = p.get("dust_alpha_dale", 2.0)
+            kw["dust_umin"] = p.get("dust_umin", 1.0)
+            kw["dust_gamma_dl"] = p.get("dust_gamma_dl", 0.01)
+            kw["dust_qpah"] = p.get("dust_qpah", 2.5)
+        # AGN (full params for exact evaluation)
+        if self._agn_model is not None:
+            kw["agn_polar_ebv"] = p.get("agn_polar_ebv", 0.0)
+            kw["agn_cos_inc"] = p.get("agn_cos_inc", 0.5)
+            kw["agn_polar_oa"] = p.get("agn_polar_oa", 45.0)
+            kw["agn_frac"] = p.get("agn_frac", 0.0)
+            kw["agn_a_spin"] = p.get("agn_a_spin", 0.0)
+            kw["agn_tau_skirtor"] = p.get("agn_tau_skirtor", 7.0)
+            kw["agn_p_skirtor"] = p.get("agn_p_skirtor", 1.0)
+            kw["agn_q_skirtor"] = p.get("agn_q_skirtor", 1.0)
+            kw["agn_oa_skirtor"] = p.get("agn_oa_skirtor", 40.0)
+        # Radio
+        if self._uses_radio:
+            kw["radio_loudness"] = p.get("radio_loudness", 0.0)
+            kw["log_mstar"] = jnp.log10(jnp.maximum(p.get("mstar", 1e10), 1e-10))
+        return kw
+
+
+    # ── Predictions (public API) ──────────────────────────────────────
+
+    def predict_sfh(self, params, n_linear=1000):
+        """Compute SFH on a uniform linear-time grid for plotting.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values.
+        n_linear : int
+            Number of output grid points.
+
+        Returns
+        -------
+        dict with keys:
+            "t_gyr": lookback time (Gyr), shape (n_linear,)
+            "sfr_mean": mean SFH (Msun/yr), shape (n_linear,)
+            "sfr_full": full SFH including GP (Msun/yr), shape (n_linear,)
+        """
+        p = self._get_internal_params(params)
+        sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p)
+
+        t_gyr_mean, sfr_mean_lin = interpolate_to_linear_time(
+            self.log_age_grid, sfr_mean, n_linear
+        )
+        _, sfr_full_lin = interpolate_to_linear_time(self.log_age_grid, sfr_full, n_linear)
+
+        return {
+            "t_gyr": t_gyr_mean,
+            "sfr_mean": sfr_mean_lin,
+            "sfr_full": sfr_full_lin,
+        }
 
     def predict_rest_sed(self, params, wave=None):
         """Compute rest-frame panchromatic SED.
@@ -1040,6 +1092,372 @@ class SEDModel:
         from tengri.forward.prediction import Prediction
 
         return Prediction(self, params)
+
+    def predict_photometry(self, params, mode="auto", approx=None):
+        """Compute observed photometric flux densities.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values (public names).
+        mode : str
+            Prediction mode. One of:
+
+            - ``"auto"`` (default) — pick the fastest available mode
+              (compositional → hybrid → exact).
+            - ``"compositional"`` — full-resolution JIT SED from all
+              components, then integrate through filters. Exact and
+              fastest (XLA fuses entire graph). Preferred.
+            - ``"hybrid"`` — precomputed SSP stellar + exact
+              non-stellar at full wavelength. Fallback when
+              compositional is unavailable.
+            - ``"exact"`` — raw pipeline, no JIT kernel.
+        approx : bool, optional
+            **Deprecated.** Use ``mode="auto"`` (True) or
+            ``mode="exact"`` (False) instead.
+
+        Returns
+        -------
+        array, shape (n_filters,)
+            Observed flux densities in erg/s/cm^2/Hz.
+        """
+        if self.filter_waves is None:
+            raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
+
+        # Handle deprecated approx parameter
+        if approx is not None:
+            mode = "auto" if approx else "exact"
+
+        # _traceable: un-JIT'd path for NIFTy/VI tracing (not user-facing)
+        if mode == "_traceable":
+            return self._predict_photometry_traceable(params)
+
+        if mode not in self._PREDICTION_MODES:
+            raise ValueError(
+                f"Unknown mode {mode!r}. Choose from: {sorted(self._PREDICTION_MODES)}"
+            )
+
+        if mode == "auto":
+            return self._predict_photometry_auto(params)
+        if mode == "_traceable":
+            # Raw un-JIT'd path for use inside inference JIT scopes.
+            # Picks hybrid (precomputed, tiny graph) if available,
+            # otherwise falls back to auto.
+            return self._predict_photometry_auto(params)
+        if mode == "hybrid":
+            return self._predict_photometry_hybrid(params)
+        if mode == "precomputed":
+            raise ValueError(
+                "Precomputed mode has been removed. Use mode='hybrid' for fast "
+                "approximate photometry or mode='compositional' for exact JIT."
+            )
+        if mode == "compositional":
+            return self._predict_photometry_compositional(params)
+
+        # mode == "exact"
+        return self._predict_photometry_exact(params)
+
+    def predict_spectrum(self, params, wave_obs=None, mode="auto", approx=None):
+        """Compute observed spectrum at given wavelengths.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values.
+        wave_obs : array, optional
+            Observed wavelength grid (Angstrom). If None, uses the
+            grid from ``precompute_spectroscopy()`` or the Observation config.
+        mode : str
+            Prediction mode — same as :meth:`predict_photometry`.
+        approx : bool, optional
+            **Deprecated.** Use ``mode=`` instead.
+
+        Returns
+        -------
+        array, shape (n_pix,)
+            Spectral flux density in erg/s/cm^2/Hz.
+        """
+        if wave_obs is None and self._precomputed.spectroscopy is not None:
+            wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
+        elif wave_obs is None and hasattr(self, "_wave_obs"):
+            wave_obs = self._wave_obs
+        elif wave_obs is None:
+            raise ValueError("No wavelength grid. Pass wave_obs or call precompute_spectroscopy()")
+
+        if approx is not None:
+            mode = "auto" if approx else "exact"
+
+        if mode not in self._PREDICTION_MODES:
+            raise ValueError(
+                f"Unknown mode {mode!r}. Choose from: {sorted(self._PREDICTION_MODES)}"
+            )
+
+        if mode == "auto":
+            return self._predict_spectrum_auto(params, wave_obs)
+        if mode == "_traceable":
+            # Raw un-JIT'd path for use inside inference JIT scopes.
+            # Uses hybrid (precomputed SSP on pixel grid) when available —
+            # ~50× smaller XLA graph than the full rest-SED compositional path.
+            return self._predict_spectrum_traceable(params, wave_obs)
+        if mode == "precomputed":
+            raise ValueError(
+                "Precomputed mode has been removed. Use mode='compositional' for fast "
+                "JIT spectrum or mode='exact' for full SED pipeline."
+            )
+        if mode == "compositional":
+            return self._predict_spectrum_compositional(params, wave_obs)
+        if mode == "hybrid":
+            return self._predict_spectrum_hybrid(params, wave_obs)
+
+        # mode == "exact"
+        return self._predict_spectrum_exact(params, wave_obs)
+
+    def predict_magnitudes(self, params):
+        """Compute observed AB magnitudes through all filters."""
+        if self.filter_waves is None:
+            raise ValueError("No filters set.")
+
+        try:
+            from dsps import calc_obs_mag
+
+            from tengri.utils.cosmology import DEFAULT_COSMO
+
+            sed_lsun = self.predict_luminosity(params)
+            z = self._get_redshift(params)
+            cosmo = DEFAULT_COSMO
+
+            mags = []
+            for fw, ft in zip(self.filter_waves, self.filter_trans):
+                m = calc_obs_mag(
+                    self.ssp_data.ssp_wave,
+                    sed_lsun,
+                    fw,
+                    ft,
+                    z,
+                    cosmo.Om0,
+                    cosmo.w0,
+                    cosmo.wa,
+                    cosmo.h,
+                )
+                mags.append(m)
+            return jnp.array(mags)
+
+        except ImportError:
+            flux = self.predict_photometry(params)
+            return ab_mag_from_flux(flux)
+
+    def predict_luminosity(self, params):
+        """Compute rest-frame luminosity SED in solar units.
+
+        Returns
+        -------
+        array, shape (n_wave,)
+            Rest-frame luminosity in Lsun/Hz.
+        """
+        LSUN_CGS = 3.828e33  # erg/s (IAU 2015)
+        sed_erg = self.predict_rest_sed(params).sed
+        return sed_erg / LSUN_CGS
+
+    def predict_line_fluxes(self, params, target_wavelengths=None):
+        """Predict observed emission line fluxes.
+
+        Calls the nebular backend to compute line luminosities,
+        selects target lines by wavelength matching, and converts
+        from luminosity (Lsun) to observed flux (erg/s/cm^2).
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values (public names).
+        target_wavelengths : array, shape (n_target,), optional
+            Rest-frame vacuum wavelengths (Angstrom) of lines to predict.
+            Each wavelength is matched to the nearest backend line.
+            If None, returns all lines from the nebular backend.
+
+        Returns
+        -------
+        fluxes : array, shape (n_target,) or (n_all_lines,)
+            Observed line fluxes in erg/s/cm^2.
+
+        Raises
+        ------
+        ValueError
+            If no nebular backend is configured.
+        """
+        from tengri.utils.physics_constants import L_SUN
+
+        backend = self._nebular_backend
+        if backend is None or not hasattr(backend, "predict_nebular_line_luminosities"):
+            raise ValueError(
+                "No nebular backend with line prediction configured. "
+                "Cannot compute line fluxes."
+            )
+
+        comp = self._compute_sed_components(params)
+        weights = comp["weights"]
+        p = comp["p"]
+
+        all_waves, all_lums = backend.predict_nebular_line_luminosities(
+            ssp_weights=weights,
+            ssp_log_ages_yr=self.ssp_log_ages_yr,
+            log_z=p.get("log_z_abs", 0.0),
+            neb_logU=p.get("neb_logU", -3.0),
+            neb_logZ_gas=p.get("neb_logZ_gas", None),
+            neb_fesc=p.get("neb_fesc", 0.0),
+        )
+
+        if target_wavelengths is not None:
+            target_wavelengths = jnp.asarray(target_wavelengths)
+            indices = jnp.argmin(
+                jnp.abs(all_waves[None, :] - target_wavelengths[:, None]),
+                axis=1,
+            )
+            selected_lums = all_lums[indices]
+        else:
+            selected_lums = all_lums
+
+        dl_cm = self._get_dl_cm(params)
+        flux = selected_lums * L_SUN / (4.0 * jnp.pi * dl_cm**2)
+        return flux
+
+    def predict_spectral_indices(self, params, index_defs, mode="_traceable"):
+        """Predict spectral index values from the model SED.
+
+        Generates a rest-frame spectrum covering the index wavelength
+        ranges and measures each index (EW or break ratio).
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values (public names).
+        index_defs : tuple of SpectralIndexDef
+            Index definitions to measure.
+        mode : str, optional
+            Forward model prediction mode.
+
+        Returns
+        -------
+        jnp.ndarray, shape (n_indices,)
+            Predicted index values.
+        """
+        from tengri.observation.spectral_indices import measure_index_jax
+
+        wave_min = min(d.wave_min for d in index_defs)
+        wave_max = max(d.wave_max for d in index_defs)
+
+        z = params.get("redshift", 0.0)
+        wave_obs = jnp.linspace(
+            wave_min * (1.0 + z) * 0.98,
+            wave_max * (1.0 + z) * 1.02,
+            2000,
+        )
+
+        flux_obs = self.predict_spectrum(params, wave_obs, mode=mode)
+        wave_rest = wave_obs / (1.0 + z)
+
+        indices = []
+        for idx_def in index_defs:
+            val = measure_index_jax(wave_rest, flux_obs, idx_def)
+            indices.append(val)
+        return jnp.array(indices)
+
+    def predict_hbeta(self, params: dict) -> float:
+        """Predict Hβ luminosity for use with CLOUDY-informed emission line priors.
+
+        Required by ``marginalize_emission_lines_cloudy()`` as the ``l_hbeta``
+        argument, which scales CLOUDY's ratio-relative-to-Hβ priors to physical
+        units.
+
+        Hβ luminosity is computed via the Case B recombination approximation
+        (Leitherer et al. 1999):
+
+        .. math::
+
+            L_{H\\beta} \\approx 52.2 \\times \\text{SFR}_{10} \\; [L_\\odot]
+
+        where :math:`\\text{SFR}_{10}` is the SFR averaged over the last 10 Myr
+        (the ionizing-photon relevant timescale), derived from
+        Q_H ≈ 4.2 × 10⁵³ × SFR [photons/s] and
+        L_Hβ = 4.76 × 10⁻¹³ × Q_H erg/s converted to L_sun.
+
+        Parameters
+        ----------
+        params : dict
+            Model parameters (from ``spec.sample()`` or a ``Posterior``).
+
+        Returns
+        -------
+        float
+            Hβ luminosity [Lsun].
+
+        Examples
+        --------
+        >>> l_hbeta = model.predict_hbeta(params)
+        >>> ln_L = marginalize_emission_lines_cloudy(
+        ...     residual,
+        ...     noise,
+        ...     A,
+        ...     log_z=params["met_logzsol"],
+        ...     neb_logU=-3.0,
+        ...     l_hbeta=l_hbeta,
+        ... )
+
+        See Also
+        --------
+        predict_sfh_quantities : JIT-compatible SFH quantities including sfr_10myr.
+        """
+        # Case B: L_Hbeta [Lsun] = 4.76e-13 * Q_H, Q_H = 4.2e53 * SFR [Msun/yr]
+        # => L_Hbeta = 4.76e-13 * 4.2e53 / 3.828e33 * SFR ≈ 52.2 * SFR
+        _L_HBETA_PER_SFR = 52.2  # Lsun per Msun/yr (Leitherer+1999)
+        try:
+            sfh_q = self.predict_sfh_quantities(params)
+            sfr_10 = float(sfh_q.sfr_10myr)
+            sfr_10 = max(sfr_10, 1e-10)
+            return float(_L_HBETA_PER_SFR * sfr_10)
+        except (AttributeError, TypeError, ValueError):
+            # AttributeError: predict_sfh_quantities doesn't exist or sfr_10myr missing
+            # TypeError: float() conversion failed (JAX tracer or wrong type)
+            # ValueError: invalid params
+            return 1.0  # 1 Lsun safe fallback
+
+    def predict_derived(self, params):
+        """Compute derived physical quantities.
+
+        .. deprecated::
+            Use ``model.predict(params)`` for lazy on-demand access,
+            or ``model.predict_sfh_quantities(params)`` for JIT-compatible
+            batch computation.
+
+        This method is kept for backward compatibility and returns a
+        dict with the same keys as before.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values.
+
+        Returns
+        -------
+        dict with keys:
+            "stellar_mass": total mass formed (Msun)
+            "stellar_mass_surviving": surviving mass in living stars +
+                remnants (Msun). None if mass-remaining table not loaded.
+            "sfr_100myr": SFR averaged over last 100 Myr (Msun/yr)
+            "sfr_10myr": SFR averaged over last 10 Myr (Msun/yr)
+            "ssfr": specific SFR (yr^-1), uses surviving mass if
+                available, else formed mass.
+        """
+        pred = self.predict(params)
+        mass_surv = pred.sfh.stellar_mass_surviving
+        # Backward compat: return None instead of NaN
+        mass_surv_out = None if jnp.isnan(mass_surv) else mass_surv
+        return {
+            "stellar_mass": pred.sfh.stellar_mass,
+            "stellar_mass_surviving": mass_surv_out,
+            "sfr_100myr": pred.sfh.sfr_100myr,
+            "sfr_10myr": pred.sfh.sfr_10myr,
+            "ssfr": pred.sfh.ssfr,
+        }
 
     def predict_sfh_quantities(self, params):
         """Compute SFH-derived quantities (JIT-compatible).
@@ -1322,73 +1740,51 @@ class SEDModel:
             luminosity_weighted_metallicity=lw_z,
         )
 
-    # Valid prediction modes
-    _PREDICTION_MODES: ClassVar[frozenset] = frozenset(
-        {"auto", "precomputed", "compositional", "hybrid", "exact", "_traceable"}
-    )
 
-    def predict_photometry(self, params, mode="auto", approx=None):
-        """Compute observed photometric flux densities.
+    # ── Batch operations ──────────────────────────────────────────────
 
-        Parameters
-        ----------
-        params : dict
-            Parameter values (public names).
-        mode : str
-            Prediction mode. One of:
+    def predict_photometry_batch(self, params_batch):
+        from tengri.forward.convenience import predict_photometry_batch as _fn
 
-            - ``"auto"`` (default) — pick the fastest available mode
-              (compositional → hybrid → exact).
-            - ``"compositional"`` — full-resolution JIT SED from all
-              components, then integrate through filters. Exact and
-              fastest (XLA fuses entire graph). Preferred.
-            - ``"hybrid"`` — precomputed SSP stellar + exact
-              non-stellar at full wavelength. Fallback when
-              compositional is unavailable.
-            - ``"exact"`` — raw pipeline, no JIT kernel.
-        approx : bool, optional
-            **Deprecated.** Use ``mode="auto"`` (True) or
-            ``mode="exact"`` (False) instead.
+        return _fn(self, params_batch)
 
-        Returns
-        -------
-        array, shape (n_filters,)
-            Observed flux densities in erg/s/cm^2/Hz.
+    def predict_spectrum_batch(self, params_batch):
+        from tengri.forward.convenience import predict_spectrum_batch as _fn
+
+        return _fn(self, params_batch)
+
+
+    # ── Private prediction dispatch ───────────────────────────────────
+
+    def _predict_photometry_auto(self, params):
+        """Auto mode: pick fastest available (Compositional → Hybrid → Exact).
+
+        Compositional is preferred over hybrid because XLA fuses the
+        entire graph (SFH → SED → filter integration) into one optimized
+        kernel, which is faster than splitting into precomputed stellar
+        + Python-dispatched non-stellar filter integration.  Hybrid is
+        the fallback when compositional is unavailable.
+
+        Tabulated SFH and standard parametric SFH are both handled by the
+        compositional path: SFH is evaluated in Python before JIT entry, so
+        the JIT closure is SFH-type-independent.  Evolving-metallicity and
+        chem-evol models fall back inside ``_predict_photometry_compositional``.
         """
-        if self.filter_waves is None:
-            raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
+        import warnings
 
-        # Handle deprecated approx parameter
-        if approx is not None:
-            mode = "auto" if approx else "exact"
-
-        # _traceable: un-JIT'd path for NIFTy/VI tracing (not user-facing)
-        if mode == "_traceable":
-            return self._predict_photometry_traceable(params)
-
-        if mode not in self._PREDICTION_MODES:
-            raise ValueError(
-                f"Unknown mode {mode!r}. Choose from: {sorted(self._PREDICTION_MODES)}"
-            )
-
-        if mode == "auto":
-            return self._predict_photometry_auto(params)
-        if mode == "_traceable":
-            # Raw un-JIT'd path for use inside inference JIT scopes.
-            # Picks hybrid (precomputed, tiny graph) if available,
-            # otherwise falls back to auto.
-            return self._predict_photometry_auto(params)
-        if mode == "hybrid":
-            return self._predict_photometry_hybrid(params)
-        if mode == "precomputed":
-            raise ValueError(
-                "Precomputed mode has been removed. Use mode='hybrid' for fast "
-                "approximate photometry or mode='compositional' for exact JIT."
-            )
-        if mode == "compositional":
+        # Compositional: full-resolution JIT (bit-exact, default)
+        if self._compositional.photometry is not None:
             return self._predict_photometry_compositional(params)
 
-        # mode == "exact"
+        # Hybrid: precomputed SSP×filter (faster but ~0.2% approx, fallback)
+        # Tabulated SFH not supported in hybrid (variable-size arrays).
+        if self._hybrid.photometry is not None and "sfh_t_gyr" not in params:
+            return self._predict_photometry_hybrid(params)
+
+        warnings.warn(
+            "mode='auto' requested but no fast path available, using exact path",
+            stacklevel=3,
+        )
         return self._predict_photometry_exact(params)
 
     def _predict_photometry_exact(self, params):
@@ -1449,6 +1845,127 @@ class SEDModel:
         # Last resort: exact (slow but always works)
         return self._predict_photometry_exact(params)
 
+    def _predict_photometry_compositional(self, params):
+        """Photometry via Compositional: rest SED + filter integration.
+
+        Uses the compositional end-to-end JIT kernel when available.  SFH is
+        evaluated in Python (before JIT entry) and passed as a traced array, so
+        the JIT closure is SFH-type-independent and does not recompile on SFH
+        type changes.
+
+        Evolving-metallicity and chem-evol models cannot use the single-Z JIT
+        and fall back to ``_compute_rest_sed_compositional`` + Python filter
+        integration.
+        """
+        if self._compositional.photometry is not None:
+            # Evolving-Z / chem-evol: the end-to-end JIT has no met-table path;
+            # fall back to the REST-SED kernel + Python filter integration.
+            if self._evolving_metallicity or getattr(self, "_chem_evol_enabled", False):
+                rest_sed = self._compute_rest_sed_compositional(params)
+                z = self._get_redshift(params)
+                dl_cm = self._get_dl_cm(params)
+                return observe_photometry_from_rest_sed(
+                    rest_sed,
+                    self._rest_wavelength,
+                    z,
+                    dl_cm,
+                    self.filter_waves,
+                    self.filter_trans,
+                    apply_igm=self._uses_igm,
+                )
+            # Standard path: compute sfr_on_ssp in Python, pass into JIT.
+            p = self._get_internal_params(params)
+            sfr = self._compute_sfr(p)
+            sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+            return self._compositional.photometry(sfr_on_ssp, params)
+
+        rest_sed = self._compute_rest_sed_compositional(params)
+        z = self._get_redshift(params)
+        dl_cm = self._get_dl_cm(params)
+        return observe_photometry_from_rest_sed(
+            rest_sed,
+            self._rest_wavelength,
+            z,
+            dl_cm,
+            self.filter_waves,
+            self.filter_trans,
+            apply_igm=self._uses_igm,
+        )
+
+    def _predict_spectrum_auto(self, params, wave_obs):
+        """Auto mode: pick fastest available spectrum path.
+
+        The compositional path now handles all SFH types (including tabulated)
+        because SFH is evaluated outside the JIT.  Evolving-metallicity and
+        chem-evol models fall back inside ``_predict_spectrum_compositional``.
+        """
+        import warnings
+
+        # Compositional (full resolution)
+        if self._compositional.rest_sed is not None:
+            return self._predict_spectrum_compositional(params, wave_obs)
+
+        warnings.warn(
+            "mode='auto' requested but no fast path available, using exact path",
+            stacklevel=3,
+        )
+        return self._predict_spectrum_exact(params, wave_obs)
+
+    def _predict_spectrum_exact(self, params, wave_obs):
+        """Exact spectrum: full SED pipeline + interpolation."""
+        obs_sed = self.predict_obs_sed(params)
+        z = self._get_redshift(params)
+        dl_cm = self._get_dl_cm(params)
+
+        if self.observation is not None and self.observation.spectroscopy is not None:
+            return self.observation.observe_spectrum(obs_sed, z, dl_cm)
+
+        wave_rest = obs_sed.wavelength / (1.0 + z)
+        flux = compute_spectrum(obs_sed.sed, wave_rest, wave_obs, z, dl_cm)
+
+        resolution = self._lsf_resolution
+        if resolution is not None:
+            flux = apply_lsf(
+                flux,
+                wave_obs,
+                resolution,
+                sigma_lib_kms=self._sigma_lib_kms,
+                n_bins=self._lsf_n_bins,
+            )
+        return flux
+
+    def _predict_spectrum_hybrid(self, params, wave_obs):
+        """Hybrid spectrum: precomputed SSP + exact non-stellar.
+
+        Uses precomputed SSP templates on spectral pixels for stellar
+        (exact on the grid), and emission_helpers at full wavelength
+        for non-stellar (exact).
+
+        The kernel is fully fused: params dict → spectrum in one JIT call.
+        """
+        if self._hybrid.spectrum is None:
+            return self._predict_spectrum_auto(params, wave_obs)
+
+        p = self._get_internal_params(params)
+        sfr = self._compute_sfr(p)
+        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+        flux = self._hybrid.spectrum(sfr_on_ssp, params, **self._get_non_stellar_kwargs(p))
+
+        # Apply LSF if needed
+        resolution = self._lsf_resolution
+        if resolution is not None:
+            from tengri.observation.spectrum import apply_lsf
+
+            flux = apply_lsf(
+                flux,
+                wave_obs,
+                resolution,
+                sigma_lib_kms=self._sigma_lib_kms,
+                n_bins=self._lsf_n_bins,
+            )
+
+        return flux
+
     def _predict_spectrum_traceable(self, params, wave_obs=None):
         """Un-JIT'd spectrum for use inside JAX tracing (NIFTy VI).
 
@@ -1471,90 +1988,46 @@ class SEDModel:
         # Fall back to auto path (compositional rest-SED)
         return self._predict_spectrum_auto(params, wave_obs)
 
-    def _get_non_stellar_kwargs(self, p):
-        """Extract non-stellar kwargs from internal params for hybrid kernel."""
-        kw = {}
-        # Nebular
-        if self._nebular_backend is not None and getattr(
-            self._nebular_backend, "has_free_params", False
-        ):
-            kw["neb_logU"] = p.get("neb_logU", -3.0)
-            kw["neb_logZ_gas"] = p.get("neb_logZ_gas", None)
-            kw["neb_fesc"] = p.get("neb_fesc", 0.0)
-            kw["neb_fesc_lya"] = p.get("neb_fesc_lya", 0.0)
-        # Shock
-        if getattr(self, "_shock_enabled", False):
-            kw["shock_frac"] = p.get("shock_frac", 0.0)
-            kw["shock_velocity"] = p.get("shock_velocity", 300.0)
-            kw["shock_log_density"] = p.get("shock_log_density", 0.0)
-            kw["shock_b_over_sqrt_n"] = p.get("shock_b_over_sqrt_n", 1.0)
-        # Dust emission (all models, not just MBB)
-        if self._dust_emission_model is not None:
-            kw["dust_T"] = p.get("dust_T", 35.0)
-            kw["dust_beta_ir"] = p.get("dust_beta_ir", 1.6)
-            kw["dust_eta_balance"] = p.get("dust_eta_balance", 1.0)
-            kw["dust_alpha_mir"] = p.get("dust_alpha_mir", 2.0)
-            kw["dust_alpha_dale"] = p.get("dust_alpha_dale", 2.0)
-            kw["dust_umin"] = p.get("dust_umin", 1.0)
-            kw["dust_gamma_dl"] = p.get("dust_gamma_dl", 0.01)
-            kw["dust_qpah"] = p.get("dust_qpah", 2.5)
-        # AGN (full params for exact evaluation)
-        if self._agn_model is not None:
-            kw["agn_polar_ebv"] = p.get("agn_polar_ebv", 0.0)
-            kw["agn_cos_inc"] = p.get("agn_cos_inc", 0.5)
-            kw["agn_polar_oa"] = p.get("agn_polar_oa", 45.0)
-            kw["agn_frac"] = p.get("agn_frac", 0.0)
-            kw["agn_a_spin"] = p.get("agn_a_spin", 0.0)
-            kw["agn_tau_skirtor"] = p.get("agn_tau_skirtor", 7.0)
-            kw["agn_p_skirtor"] = p.get("agn_p_skirtor", 1.0)
-            kw["agn_q_skirtor"] = p.get("agn_q_skirtor", 1.0)
-            kw["agn_oa_skirtor"] = p.get("agn_oa_skirtor", 40.0)
-        # Radio
-        if self._uses_radio:
-            kw["radio_loudness"] = p.get("radio_loudness", 0.0)
-            kw["log_mstar"] = jnp.log10(jnp.maximum(p.get("mstar", 1e10), 1e-10))
-        return kw
+    def _predict_spectrum_compositional(self, params, wave_obs):
+        """Spectrum via Compositional: rest SED + interpolation.
 
-    def _predict_photometry_auto(self, params):
-        """Auto mode: pick fastest available (Compositional → Hybrid → Exact).
-
-        Compositional is preferred over hybrid because XLA fuses the
-        entire graph (SFH → SED → filter integration) into one optimized
-        kernel, which is faster than splitting into precomputed stellar
-        + Python-dispatched non-stellar filter integration.  Hybrid is
-        the fallback when compositional is unavailable.
-
-        Tabulated SFH and standard parametric SFH are both handled by the
-        compositional path: SFH is evaluated in Python before JIT entry, so
-        the JIT closure is SFH-type-independent.  Evolving-metallicity and
-        chem-evol models fall back inside ``_predict_photometry_compositional``.
+        Uses the compositional end-to-end JIT kernel when available and the
+        wave_obs grid matches the precomputed grid.  SFH is evaluated in Python
+        before JIT entry and passed as a traced array.  Evolving-metallicity and
+        chem-evol models fall back to the rest-SED kernel path.
         """
-        import warnings
+        if (
+            self._compositional.spectrum is not None
+            and self._precomputed.spectroscopy is not None
+            and wave_obs is self._precomputed.spectroscopy.wave_obs_pixels
+            and not self._evolving_metallicity
+            and not getattr(self, "_chem_evol_enabled", False)
+        ):
+            p = self._get_internal_params(params)
+            sfr = self._compute_sfr(p)
+            sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+            flux = self._compositional.spectrum(sfr_on_ssp, params)
+            # Apply LSF if needed (below)
+        else:
+            rest_sed = self._compute_rest_sed_compositional(params)
+            z = self._get_redshift(params)
+            dl_cm = self._get_dl_cm(params)
+            flux = observe_spectrum_from_rest_sed(
+                rest_sed, self._rest_wavelength, wave_obs, z, dl_cm
+            )
 
-        # Compositional: full-resolution JIT (bit-exact, default)
-        if self._compositional.photometry is not None:
-            return self._predict_photometry_compositional(params)
+        # Apply LSF convolution if resolution profile is set
+        resolution = self._lsf_resolution
+        if resolution is not None:
+            flux = apply_lsf(
+                flux,
+                wave_obs,
+                resolution,
+                sigma_lib_kms=self._sigma_lib_kms,
+                n_bins=self._lsf_n_bins,
+            )
 
-        # Hybrid: precomputed SSP×filter (faster but ~0.2% approx, fallback)
-        # Tabulated SFH not supported in hybrid (variable-size arrays).
-        if self._hybrid.photometry is not None and "sfh_t_gyr" not in params:
-            return self._predict_photometry_hybrid(params)
-
-        warnings.warn(
-            "mode='auto' requested but no fast path available, using exact path",
-            stacklevel=3,
-        )
-        return self._predict_photometry_exact(params)
-
-    def _get_dust_kwargs(self, p):
-        """Extract dust law + emission kwargs from internal params dict."""
-        return get_dust_kwargs(self, p)
-
-    def _get_agn_kwargs(self, p):
-        """Extract AGN kwargs from internal params dict for fused kernel."""
-        return get_agn_kwargs(self, p)
-
-    # ── Compositional SED dispatch ────────────────────────────────────
+        return flux
 
     def _compute_rest_sed_compositional(self, params):
         """Compute rest-frame SED via the compositional JIT kernel.
@@ -1672,693 +2145,8 @@ class SEDModel:
 
         return self._compositional.rest_sed(weights, ssp_flux_at_z, p)
 
-    def _predict_photometry_compositional(self, params):
-        """Photometry via Compositional: rest SED + filter integration.
 
-        Uses the compositional end-to-end JIT kernel when available.  SFH is
-        evaluated in Python (before JIT entry) and passed as a traced array, so
-        the JIT closure is SFH-type-independent and does not recompile on SFH
-        type changes.
-
-        Evolving-metallicity and chem-evol models cannot use the single-Z JIT
-        and fall back to ``_compute_rest_sed_compositional`` + Python filter
-        integration.
-        """
-        if self._compositional.photometry is not None:
-            # Evolving-Z / chem-evol: the end-to-end JIT has no met-table path;
-            # fall back to the REST-SED kernel + Python filter integration.
-            if self._evolving_metallicity or getattr(self, "_chem_evol_enabled", False):
-                rest_sed = self._compute_rest_sed_compositional(params)
-                z = self._get_redshift(params)
-                dl_cm = self._get_dl_cm(params)
-                return observe_photometry_from_rest_sed(
-                    rest_sed,
-                    self._rest_wavelength,
-                    z,
-                    dl_cm,
-                    self.filter_waves,
-                    self.filter_trans,
-                    apply_igm=self._uses_igm,
-                )
-            # Standard path: compute sfr_on_ssp in Python, pass into JIT.
-            p = self._get_internal_params(params)
-            sfr = self._compute_sfr(p)
-            sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-            return self._compositional.photometry(sfr_on_ssp, params)
-
-        rest_sed = self._compute_rest_sed_compositional(params)
-        z = self._get_redshift(params)
-        dl_cm = self._get_dl_cm(params)
-        return observe_photometry_from_rest_sed(
-            rest_sed,
-            self._rest_wavelength,
-            z,
-            dl_cm,
-            self.filter_waves,
-            self.filter_trans,
-            apply_igm=self._uses_igm,
-        )
-
-    def _predict_spectrum_compositional(self, params, wave_obs):
-        """Spectrum via Compositional: rest SED + interpolation.
-
-        Uses the compositional end-to-end JIT kernel when available and the
-        wave_obs grid matches the precomputed grid.  SFH is evaluated in Python
-        before JIT entry and passed as a traced array.  Evolving-metallicity and
-        chem-evol models fall back to the rest-SED kernel path.
-        """
-        if (
-            self._compositional.spectrum is not None
-            and self._precomputed.spectroscopy is not None
-            and wave_obs is self._precomputed.spectroscopy.wave_obs_pixels
-            and not self._evolving_metallicity
-            and not getattr(self, "_chem_evol_enabled", False)
-        ):
-            p = self._get_internal_params(params)
-            sfr = self._compute_sfr(p)
-            sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-            flux = self._compositional.spectrum(sfr_on_ssp, params)
-            # Apply LSF if needed (below)
-        else:
-            rest_sed = self._compute_rest_sed_compositional(params)
-            z = self._get_redshift(params)
-            dl_cm = self._get_dl_cm(params)
-            flux = observe_spectrum_from_rest_sed(
-                rest_sed, self._rest_wavelength, wave_obs, z, dl_cm
-            )
-
-        # Apply LSF convolution if resolution profile is set
-        resolution = self._lsf_resolution
-        if resolution is not None:
-            flux = apply_lsf(
-                flux,
-                wave_obs,
-                resolution,
-                sigma_lib_kms=self._sigma_lib_kms,
-                n_bins=self._lsf_n_bins,
-            )
-
-        return flux
-
-    def _predict_spectrum_hybrid(self, params, wave_obs):
-        """Hybrid spectrum: precomputed SSP + exact non-stellar.
-
-        Uses precomputed SSP templates on spectral pixels for stellar
-        (exact on the grid), and emission_helpers at full wavelength
-        for non-stellar (exact).
-
-        The kernel is fully fused: params dict → spectrum in one JIT call.
-        """
-        if self._hybrid.spectrum is None:
-            return self._predict_spectrum_auto(params, wave_obs)
-
-        p = self._get_internal_params(params)
-        sfr = self._compute_sfr(p)
-        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        flux = self._hybrid.spectrum(sfr_on_ssp, params, **self._get_non_stellar_kwargs(p))
-
-        # Apply LSF if needed
-        resolution = self._lsf_resolution
-        if resolution is not None:
-            from tengri.observation.spectrum import apply_lsf
-
-            flux = apply_lsf(
-                flux,
-                wave_obs,
-                resolution,
-                sigma_lib_kms=self._sigma_lib_kms,
-                n_bins=self._lsf_n_bins,
-            )
-
-        return flux
-
-    def precompute_spectroscopy(self, wave_obs):
-        """Pre-interpolate SSP templates to observed wavelength grid.
-
-        Call this before spectroscopic fitting to get a ~20x speedup.
-        Requires fixed redshift.
-
-        Parameters
-        ----------
-        wave_obs : array, shape (n_pix,)
-            Observed wavelength grid (Angstrom).
-
-        Returns
-        -------
-        self
-            For chaining: ``model.precompute_spectroscopy(wave_obs)``
-        """
-        if self._z_fixed is None:
-            raise ValueError("Spectroscopy precomputation requires fixed redshift")
-        spec_precomp = precompute_spectroscopy(
-            self.ssp_data,
-            jnp.asarray(wave_obs),
-            self._z_fixed,
-            self._dl_cm_fixed,
-        )
-        self._precomputed.spectroscopy = spec_precomp
-        self._wave_obs = jnp.asarray(wave_obs)
-
-        # Invalidate cached kernels and fitter loss-fn caches so any attached
-        # Fitter picks up the new precomputed spectroscopy path on next run().
-        self._invalidate_kernels()
-        for _attr in ("_loss_fn_cache", "_jit_engine_cache", "_loglik_fn_cache"):
-            if hasattr(self, _attr):
-                delattr(self, _attr)
-
-        # Rebuild compositional spectrum kernel (full-resolution end-to-end JIT)
-        if self._compositional.rest_sed is not None:
-            with contextlib.suppress(Exception):
-                _raw = build_fused_tier2_spectrum(self)
-                self._compositional.spectrum = jax.jit(_raw) if _raw else None
-
-        # Rebuild hybrid spectrum kernel (precomputed SSP + exact non-stellar)
-        if self._compositional.rest_sed is not None:
-            with contextlib.suppress(Exception):
-                _raw = build_hybrid_spectrum(self)
-                self._hybrid.spectrum = jax.jit(_raw) if _raw else None
-
-        return self
-
-    def precompute_ztable(self, z_grid=None, z_min=0.001, z_max=3.0, n_z=100):
-        """Pre-compute SSP photometry on a redshift grid for free-z fitting.
-
-        At inference time, the precomputed table is interpolated to the
-        current z — same speedup as fixed-z precomputation, but z is free.
-        Follows the DSPS ``precompute_ssp_obsmags_on_z_table`` approach.
-
-        Parameters
-        ----------
-        z_grid : array, optional
-            Custom redshift grid. If None, uses linspace(z_min, z_max, n_z).
-        z_min : float
-            Minimum redshift (default 0.001).
-        z_max : float
-            Maximum redshift (default 3.0).
-        n_z : int
-            Number of grid points (default 100). More points = more accurate
-            interpolation. 100 gives <0.01% interpolation error for smooth
-            filter transmission curves.
-
-        Returns
-        -------
-        self
-            For chaining: ``model.precompute_ztable().predict_photometry(params)``
-        """
-        if self.filter_waves is None:
-            raise ValueError("Z-table precomputation requires filters to be set")
-        ztable = precompute_photometry_ztable(
-            self.ssp_data,
-            self.filter_waves,
-            self.filter_trans,
-            z_grid=z_grid,
-            z_min=z_min,
-            z_max=z_max,
-            n_z=n_z,
-            apply_igm=self._uses_igm and self._approx.get("igm", True),
-        )
-        self._precomputed.photometry_ztable = ztable
-
-        # Invalidate fitter loss-fn caches so any attached Fitter uses the
-        # new ztable interpolation path on next run().
-        for _attr in ("_loss_fn_cache", "_jit_engine_cache", "_loglik_fn_cache"):
-            if hasattr(self, _attr):
-                delattr(self, _attr)
-
-        # Build hybrid z-table kernel if using hybrid mode
-        if self._hybrid.photometry is not None or any(
-            (
-                getattr(self._nebular_backend, "has_free_params", False),
-                getattr(self._shock_backend, "has_free_params", False),
-                self._has_dust_ir_full,
-                self._has_agn_full,
-                self._has_radio,
-                self._has_xray,
-            )
-        ):
-            with contextlib.suppress(Exception):
-                _raw = build_hybrid_photometry_ztable(self)
-                self._hybrid.photometry = jax.jit(_raw) if _raw else None
-
-        return self
-
-    def predict_spectrum(self, params, wave_obs=None, mode="auto", approx=None):
-        """Compute observed spectrum at given wavelengths.
-
-        Parameters
-        ----------
-        params : dict
-            Parameter values.
-        wave_obs : array, optional
-            Observed wavelength grid (Angstrom). If None, uses the
-            grid from ``precompute_spectroscopy()`` or the Observation config.
-        mode : str
-            Prediction mode — same as :meth:`predict_photometry`.
-        approx : bool, optional
-            **Deprecated.** Use ``mode=`` instead.
-
-        Returns
-        -------
-        array, shape (n_pix,)
-            Spectral flux density in erg/s/cm^2/Hz.
-        """
-        if wave_obs is None and self._precomputed.spectroscopy is not None:
-            wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
-        elif wave_obs is None and hasattr(self, "_wave_obs"):
-            wave_obs = self._wave_obs
-        elif wave_obs is None:
-            raise ValueError("No wavelength grid. Pass wave_obs or call precompute_spectroscopy()")
-
-        if approx is not None:
-            mode = "auto" if approx else "exact"
-
-        if mode not in self._PREDICTION_MODES:
-            raise ValueError(
-                f"Unknown mode {mode!r}. Choose from: {sorted(self._PREDICTION_MODES)}"
-            )
-
-        if mode == "auto":
-            return self._predict_spectrum_auto(params, wave_obs)
-        if mode == "_traceable":
-            # Raw un-JIT'd path for use inside inference JIT scopes.
-            # Uses hybrid (precomputed SSP on pixel grid) when available —
-            # ~50× smaller XLA graph than the full rest-SED compositional path.
-            return self._predict_spectrum_traceable(params, wave_obs)
-        if mode == "precomputed":
-            raise ValueError(
-                "Precomputed mode has been removed. Use mode='compositional' for fast "
-                "JIT spectrum or mode='exact' for full SED pipeline."
-            )
-        if mode == "compositional":
-            return self._predict_spectrum_compositional(params, wave_obs)
-        if mode == "hybrid":
-            return self._predict_spectrum_hybrid(params, wave_obs)
-
-        # mode == "exact"
-        return self._predict_spectrum_exact(params, wave_obs)
-
-    def _predict_spectrum_auto(self, params, wave_obs):
-        """Auto mode: pick fastest available spectrum path.
-
-        The compositional path now handles all SFH types (including tabulated)
-        because SFH is evaluated outside the JIT.  Evolving-metallicity and
-        chem-evol models fall back inside ``_predict_spectrum_compositional``.
-        """
-        import warnings
-
-        # Compositional (full resolution)
-        if self._compositional.rest_sed is not None:
-            return self._predict_spectrum_compositional(params, wave_obs)
-
-        warnings.warn(
-            "mode='auto' requested but no fast path available, using exact path",
-            stacklevel=3,
-        )
-        return self._predict_spectrum_exact(params, wave_obs)
-
-    def _predict_spectrum_exact(self, params, wave_obs):
-        """Exact spectrum: full SED pipeline + interpolation."""
-        obs_sed = self.predict_obs_sed(params)
-        z = self._get_redshift(params)
-        dl_cm = self._get_dl_cm(params)
-
-        if self.observation is not None and self.observation.spectroscopy is not None:
-            return self.observation.observe_spectrum(obs_sed, z, dl_cm)
-
-        wave_rest = obs_sed.wavelength / (1.0 + z)
-        flux = compute_spectrum(obs_sed.sed, wave_rest, wave_obs, z, dl_cm)
-
-        resolution = self._lsf_resolution
-        if resolution is not None:
-            flux = apply_lsf(
-                flux,
-                wave_obs,
-                resolution,
-                sigma_lib_kms=self._sigma_lib_kms,
-                n_bins=self._lsf_n_bins,
-            )
-        return flux
-
-    def predict_sfh(self, params, n_linear=1000):
-        """Compute SFH on a uniform linear-time grid for plotting.
-
-        Parameters
-        ----------
-        params : dict
-            Parameter values.
-        n_linear : int
-            Number of output grid points.
-
-        Returns
-        -------
-        dict with keys:
-            "t_gyr": lookback time (Gyr), shape (n_linear,)
-            "sfr_mean": mean SFH (Msun/yr), shape (n_linear,)
-            "sfr_full": full SFH including GP (Msun/yr), shape (n_linear,)
-        """
-        p = self._get_internal_params(params)
-        sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p)
-
-        t_gyr_mean, sfr_mean_lin = interpolate_to_linear_time(
-            self.log_age_grid, sfr_mean, n_linear
-        )
-        _, sfr_full_lin = interpolate_to_linear_time(self.log_age_grid, sfr_full, n_linear)
-
-        return {
-            "t_gyr": t_gyr_mean,
-            "sfr_mean": sfr_mean_lin,
-            "sfr_full": sfr_full_lin,
-        }
-
-    def predict_hbeta(self, params: dict) -> float:
-        """Predict Hβ luminosity for use with CLOUDY-informed emission line priors.
-
-        Required by ``marginalize_emission_lines_cloudy()`` as the ``l_hbeta``
-        argument, which scales CLOUDY's ratio-relative-to-Hβ priors to physical
-        units.
-
-        Hβ luminosity is computed via the Case B recombination approximation
-        (Leitherer et al. 1999):
-
-        .. math::
-
-            L_{H\\beta} \\approx 52.2 \\times \\text{SFR}_{10} \\; [L_\\odot]
-
-        where :math:`\\text{SFR}_{10}` is the SFR averaged over the last 10 Myr
-        (the ionizing-photon relevant timescale), derived from
-        Q_H ≈ 4.2 × 10⁵³ × SFR [photons/s] and
-        L_Hβ = 4.76 × 10⁻¹³ × Q_H erg/s converted to L_sun.
-
-        Parameters
-        ----------
-        params : dict
-            Model parameters (from ``spec.sample()`` or a ``Posterior``).
-
-        Returns
-        -------
-        float
-            Hβ luminosity [Lsun].
-
-        Examples
-        --------
-        >>> l_hbeta = model.predict_hbeta(params)
-        >>> ln_L = marginalize_emission_lines_cloudy(
-        ...     residual,
-        ...     noise,
-        ...     A,
-        ...     log_z=params["met_logzsol"],
-        ...     neb_logU=-3.0,
-        ...     l_hbeta=l_hbeta,
-        ... )
-
-        See Also
-        --------
-        predict_sfh_quantities : JIT-compatible SFH quantities including sfr_10myr.
-        """
-        # Case B: L_Hbeta [Lsun] = 4.76e-13 * Q_H, Q_H = 4.2e53 * SFR [Msun/yr]
-        # => L_Hbeta = 4.76e-13 * 4.2e53 / 3.828e33 * SFR ≈ 52.2 * SFR
-        _L_HBETA_PER_SFR = 52.2  # Lsun per Msun/yr (Leitherer+1999)
-        try:
-            sfh_q = self.predict_sfh_quantities(params)
-            sfr_10 = float(sfh_q.sfr_10myr)
-            sfr_10 = max(sfr_10, 1e-10)
-            return float(_L_HBETA_PER_SFR * sfr_10)
-        except (AttributeError, TypeError, ValueError):
-            # AttributeError: predict_sfh_quantities doesn't exist or sfr_10myr missing
-            # TypeError: float() conversion failed (JAX tracer or wrong type)
-            # ValueError: invalid params
-            return 1.0  # 1 Lsun safe fallback
-
-    def predict_derived(self, params):
-        """Compute derived physical quantities.
-
-        .. deprecated::
-            Use ``model.predict(params)`` for lazy on-demand access,
-            or ``model.predict_sfh_quantities(params)`` for JIT-compatible
-            batch computation.
-
-        This method is kept for backward compatibility and returns a
-        dict with the same keys as before.
-
-        Parameters
-        ----------
-        params : dict
-            Parameter values.
-
-        Returns
-        -------
-        dict with keys:
-            "stellar_mass": total mass formed (Msun)
-            "stellar_mass_surviving": surviving mass in living stars +
-                remnants (Msun). None if mass-remaining table not loaded.
-            "sfr_100myr": SFR averaged over last 100 Myr (Msun/yr)
-            "sfr_10myr": SFR averaged over last 10 Myr (Msun/yr)
-            "ssfr": specific SFR (yr^-1), uses surviving mass if
-                available, else formed mass.
-        """
-        pred = self.predict(params)
-        mass_surv = pred.sfh.stellar_mass_surviving
-        # Backward compat: return None instead of NaN
-        mass_surv_out = None if jnp.isnan(mass_surv) else mass_surv
-        return {
-            "stellar_mass": pred.sfh.stellar_mass,
-            "stellar_mass_surviving": mass_surv_out,
-            "sfr_100myr": pred.sfh.sfr_100myr,
-            "sfr_10myr": pred.sfh.sfr_10myr,
-            "ssfr": pred.sfh.ssfr,
-        }
-
-    def predict_magnitudes(self, params):
-        """Compute observed AB magnitudes through all filters."""
-        if self.filter_waves is None:
-            raise ValueError("No filters set.")
-
-        try:
-            from dsps import calc_obs_mag
-
-            from tengri.utils.cosmology import DEFAULT_COSMO
-
-            sed_lsun = self.predict_luminosity(params)
-            z = self._get_redshift(params)
-            cosmo = DEFAULT_COSMO
-
-            mags = []
-            for fw, ft in zip(self.filter_waves, self.filter_trans):
-                m = calc_obs_mag(
-                    self.ssp_data.ssp_wave,
-                    sed_lsun,
-                    fw,
-                    ft,
-                    z,
-                    cosmo.Om0,
-                    cosmo.w0,
-                    cosmo.wa,
-                    cosmo.h,
-                )
-                mags.append(m)
-            return jnp.array(mags)
-
-        except ImportError:
-            flux = self.predict_photometry(params)
-            return ab_mag_from_flux(flux)
-
-    def predict_luminosity(self, params):
-        """Compute rest-frame luminosity SED in solar units.
-
-        Returns
-        -------
-        array, shape (n_wave,)
-            Rest-frame luminosity in Lsun/Hz.
-        """
-        LSUN_CGS = 3.828e33  # erg/s (IAU 2015)
-        sed_erg = self.predict_rest_sed(params).sed
-        return sed_erg / LSUN_CGS
-
-    def predict_line_fluxes(self, params, target_wavelengths=None):
-        """Predict observed emission line fluxes.
-
-        Calls the nebular backend to compute line luminosities,
-        selects target lines by wavelength matching, and converts
-        from luminosity (Lsun) to observed flux (erg/s/cm^2).
-
-        Parameters
-        ----------
-        params : dict
-            Parameter values (public names).
-        target_wavelengths : array, shape (n_target,), optional
-            Rest-frame vacuum wavelengths (Angstrom) of lines to predict.
-            Each wavelength is matched to the nearest backend line.
-            If None, returns all lines from the nebular backend.
-
-        Returns
-        -------
-        fluxes : array, shape (n_target,) or (n_all_lines,)
-            Observed line fluxes in erg/s/cm^2.
-
-        Raises
-        ------
-        ValueError
-            If no nebular backend is configured.
-        """
-        from tengri.utils.physics_constants import L_SUN
-
-        backend = self._nebular_backend
-        if backend is None or not hasattr(backend, "predict_nebular_line_luminosities"):
-            raise ValueError(
-                "No nebular backend with line prediction configured. "
-                "Cannot compute line fluxes."
-            )
-
-        comp = self._compute_sed_components(params)
-        weights = comp["weights"]
-        p = comp["p"]
-
-        all_waves, all_lums = backend.predict_nebular_line_luminosities(
-            ssp_weights=weights,
-            ssp_log_ages_yr=self.ssp_log_ages_yr,
-            log_z=p.get("log_z_abs", 0.0),
-            neb_logU=p.get("neb_logU", -3.0),
-            neb_logZ_gas=p.get("neb_logZ_gas", None),
-            neb_fesc=p.get("neb_fesc", 0.0),
-        )
-
-        if target_wavelengths is not None:
-            target_wavelengths = jnp.asarray(target_wavelengths)
-            indices = jnp.argmin(
-                jnp.abs(all_waves[None, :] - target_wavelengths[:, None]),
-                axis=1,
-            )
-            selected_lums = all_lums[indices]
-        else:
-            selected_lums = all_lums
-
-        dl_cm = self._get_dl_cm(params)
-        flux = selected_lums * L_SUN / (4.0 * jnp.pi * dl_cm**2)
-        return flux
-
-    def predict_spectral_indices(self, params, index_defs, mode="_traceable"):
-        """Predict spectral index values from the model SED.
-
-        Generates a rest-frame spectrum covering the index wavelength
-        ranges and measures each index (EW or break ratio).
-
-        Parameters
-        ----------
-        params : dict
-            Parameter values (public names).
-        index_defs : tuple of SpectralIndexDef
-            Index definitions to measure.
-        mode : str, optional
-            Forward model prediction mode.
-
-        Returns
-        -------
-        jnp.ndarray, shape (n_indices,)
-            Predicted index values.
-        """
-        from tengri.observation.spectral_indices import measure_index_jax
-
-        wave_min = min(d.wave_min for d in index_defs)
-        wave_max = max(d.wave_max for d in index_defs)
-
-        z = params.get("redshift", 0.0)
-        wave_obs = jnp.linspace(
-            wave_min * (1.0 + z) * 0.98,
-            wave_max * (1.0 + z) * 1.02,
-            2000,
-        )
-
-        flux_obs = self.predict_spectrum(params, wave_obs, mode=mode)
-        wave_rest = wave_obs / (1.0 + z)
-
-        indices = []
-        for idx_def in index_defs:
-            val = measure_index_jax(wave_rest, flux_obs, idx_def)
-            indices.append(val)
-        return jnp.array(indices)
-
-    def plot_sfh_posterior(
-        self, posterior, true_params=None, ax=None, n_draws=50, color="C0", label="Posterior"
-    ):
-        """Plot posterior SFH with percentile fill and sample lines."""
-        import matplotlib.pyplot as plt
-
-        if ax is None:
-            _, ax = plt.subplots(figsize=(10, 5))
-
-        if posterior.samples is None:
-            sfh = self.predict_sfh(posterior.params)
-            ax.plot(sfh["t_gyr"], sfh["sfr_mean"], color=color, lw=2, label=label)
-        else:
-            n_total = len(next(iter(posterior.samples.values())))
-            sfh_draws = []
-            for i in range(n_total):
-                s_i = {k: posterior.samples[k][i] for k in posterior.samples}
-                sfh_i = self.predict_sfh(s_i)
-                key = "sfr_full" if self.spec.stochastic else "sfr_mean"
-                sfh_draws.append(sfh_i[key])
-
-            import numpy as np
-
-            sfh_arr = np.array(sfh_draws)
-            t_gyr = np.array(self.predict_sfh(posterior.params)["t_gyr"])
-
-            lo = np.percentile(sfh_arr, 16, axis=0)
-            hi = np.percentile(sfh_arr, 84, axis=0)
-            ax.fill_between(t_gyr, lo, hi, color=color, alpha=0.2)
-
-            n_show = min(n_draws, n_total)
-            indices = np.linspace(0, n_total - 1, n_show, dtype=int)
-            for idx in indices:
-                ax.plot(t_gyr, sfh_arr[idx], color=color, alpha=0.1, lw=0.4)
-
-            sfh_mean = self.predict_sfh(posterior.params)
-            key = "sfr_full" if self.spec.stochastic else "sfr_mean"
-            ax.plot(t_gyr, sfh_mean[key], color=color, lw=2, label=label)
-
-        if true_params is not None:
-            sfh_true = self.predict_sfh(true_params)
-            key = "sfr_full" if self.spec.stochastic else "sfr_mean"
-            ax.plot(sfh_true["t_gyr"], sfh_true[key], "k-", lw=2.5, label="Truth", zorder=10)
-            if self.spec.stochastic:
-                ax.plot(sfh_true["t_gyr"], sfh_true["sfr_mean"], "k--", lw=1, alpha=0.3)
-
-        ax.set_xlabel("Lookback time (Gyr)")
-        ax.set_ylabel(r"SFR (M$_{\odot}$/yr)")
-        ax.set_xlim(0, 13.5)
-        ax.legend(fontsize=9)
-        return ax
-
-    # ── Mock generation ──────────────────────────────────────────────
-
-    def mock(self, params, snr=20.0, key=None):
-        from tengri.forward.convenience import mock as _fn
-
-        return _fn(self, params, snr=snr, key=key)
-
-    def mock_spectrum(self, params, wave_obs, snr=30.0, key=None):
-        from tengri.forward.convenience import mock_spectrum as _fn
-
-        return _fn(self, params, wave_obs, snr=snr, key=key)
-
-    def mock_batch(self, params_batch, snr=20.0, key=None):
-        from tengri.forward.convenience import mock_batch as _fn
-
-        return _fn(self, params_batch, snr=snr, key=key)
-
-    # ── Batch predictions ─────────────────────────────────────────────
-
-    def predict_photometry_batch(self, params_batch):
-        from tengri.forward.convenience import predict_photometry_batch as _fn
-
-        return _fn(self, params_batch)
-
-    def predict_spectrum_batch(self, params_batch):
-        from tengri.forward.convenience import predict_spectrum_batch as _fn
-
-        return _fn(self, params_batch)
-
-    # ── Factory classmethod ──────────────────────────────────────────
+    # ── Factories and convenience ─────────────────────────────────────
 
     @classmethod
     def from_config(
@@ -2445,14 +2233,10 @@ class SEDModel:
             **model_kwargs,
         )
 
-    # ── Prior predictive ─────────────────────────────────────────────
-
     def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
         from tengri.forward.convenience import prior_predictive as _fn
 
         return _fn(self, n=n, seed=seed)
-
-    # ── Convenience fit ──────────────────────────────────────────────
 
     def fit(
         self,
@@ -2584,6 +2368,238 @@ class SEDModel:
             **kwargs,
         )
 
+    def fit_population(
+        self,
+        observations_list: list,
+        method: str = "vi",
+        population_prior: dict | None = None,
+        **kwargs,
+    ):
+        from tengri.forward.convenience import fit_population as _fn
+
+        return _fn(
+            self,
+            observations_list,
+            method=method,
+            population_prior=population_prior,
+            **kwargs,
+        )
+
+    def mock(self, params, snr=20.0, key=None):
+        from tengri.forward.convenience import mock as _fn
+
+        return _fn(self, params, snr=snr, key=key)
+
+    def mock_spectrum(self, params, wave_obs, snr=30.0, key=None):
+        from tengri.forward.convenience import mock_spectrum as _fn
+
+        return _fn(self, params, wave_obs, snr=snr, key=key)
+
+    def mock_batch(self, params_batch, snr=20.0, key=None):
+        from tengri.forward.convenience import mock_batch as _fn
+
+        return _fn(self, params_batch, snr=snr, key=key)
+
+    def plot_sfh_posterior(
+        self, posterior, true_params=None, ax=None, n_draws=50, color="C0", label="Posterior"
+    ):
+        """Plot posterior SFH with percentile fill and sample lines."""
+        import matplotlib.pyplot as plt
+
+        if ax is None:
+            _, ax = plt.subplots(figsize=(10, 5))
+
+        if posterior.samples is None:
+            sfh = self.predict_sfh(posterior.params)
+            ax.plot(sfh["t_gyr"], sfh["sfr_mean"], color=color, lw=2, label=label)
+        else:
+            n_total = len(next(iter(posterior.samples.values())))
+            sfh_draws = []
+            for i in range(n_total):
+                s_i = {k: posterior.samples[k][i] for k in posterior.samples}
+                sfh_i = self.predict_sfh(s_i)
+                key = "sfr_full" if self.spec.stochastic else "sfr_mean"
+                sfh_draws.append(sfh_i[key])
+
+            import numpy as np
+
+            sfh_arr = np.array(sfh_draws)
+            t_gyr = np.array(self.predict_sfh(posterior.params)["t_gyr"])
+
+            lo = np.percentile(sfh_arr, 16, axis=0)
+            hi = np.percentile(sfh_arr, 84, axis=0)
+            ax.fill_between(t_gyr, lo, hi, color=color, alpha=0.2)
+
+            n_show = min(n_draws, n_total)
+            indices = np.linspace(0, n_total - 1, n_show, dtype=int)
+            for idx in indices:
+                ax.plot(t_gyr, sfh_arr[idx], color=color, alpha=0.1, lw=0.4)
+
+            sfh_mean = self.predict_sfh(posterior.params)
+            key = "sfr_full" if self.spec.stochastic else "sfr_mean"
+            ax.plot(t_gyr, sfh_mean[key], color=color, lw=2, label=label)
+
+        if true_params is not None:
+            sfh_true = self.predict_sfh(true_params)
+            key = "sfr_full" if self.spec.stochastic else "sfr_mean"
+            ax.plot(sfh_true["t_gyr"], sfh_true[key], "k-", lw=2.5, label="Truth", zorder=10)
+            if self.spec.stochastic:
+                ax.plot(sfh_true["t_gyr"], sfh_true["sfr_mean"], "k--", lw=1, alpha=0.3)
+
+        ax.set_xlabel("Lookback time (Gyr)")
+        ax.set_ylabel(r"SFR (M$_{\odot}$/yr)")
+        ax.set_xlim(0, 13.5)
+        ax.legend(fontsize=9)
+        return ax
+
+
+    # ── Utilities ─────────────────────────────────────────────────────
+
+    @property
+    def wavelengths(self):
+        """Rest-frame wavelength grid (Angstrom).
+
+        Returns the SSP grid by default, or the extended panchromatic grid
+        when radio or X-ray emission is enabled.
+        """
+        return self._rest_wavelength
+
+    @staticmethod
+    def _t_universe_gyr(z):
+        """Age of the universe at redshift z in Gyr.
+
+        Thin wrapper around age_at_z.
+
+        Parameters
+        ----------
+        z : float or jnp.ndarray
+            Redshift.
+
+        Returns
+        -------
+        float
+            Age of universe in Gyr.
+        """
+        return age_at_z(z)
+
+    def _interp_metallicity(self, log_z):
+        """Dispatch metallicity interpolation (single Z value)."""
+        return interp_metallicity(self, log_z)
+
+    def _interp_metallicity_evolving(self, log_z_per_age):
+        """Dispatch evolving metallicity interpolation (per-age Z)."""
+        return interp_metallicity_evolving(self, log_z_per_age)
+
+    def precompute_spectroscopy(self, wave_obs):
+        """Pre-interpolate SSP templates to observed wavelength grid.
+
+        Call this before spectroscopic fitting to get a ~20x speedup.
+        Requires fixed redshift.
+
+        Parameters
+        ----------
+        wave_obs : array, shape (n_pix,)
+            Observed wavelength grid (Angstrom).
+
+        Returns
+        -------
+        self
+            For chaining: ``model.precompute_spectroscopy(wave_obs)``
+        """
+        if self._z_fixed is None:
+            raise ValueError("Spectroscopy precomputation requires fixed redshift")
+        spec_precomp = precompute_spectroscopy(
+            self.ssp_data,
+            jnp.asarray(wave_obs),
+            self._z_fixed,
+            self._dl_cm_fixed,
+        )
+        self._precomputed.spectroscopy = spec_precomp
+        self._wave_obs = jnp.asarray(wave_obs)
+
+        # Invalidate cached kernels and fitter loss-fn caches so any attached
+        # Fitter picks up the new precomputed spectroscopy path on next run().
+        self._invalidate_kernels()
+        for _attr in ("_loss_fn_cache", "_jit_engine_cache", "_loglik_fn_cache"):
+            if hasattr(self, _attr):
+                delattr(self, _attr)
+
+        # Rebuild compositional spectrum kernel (full-resolution end-to-end JIT)
+        if self._compositional.rest_sed is not None:
+            with contextlib.suppress(Exception):
+                _raw = build_fused_tier2_spectrum(self)
+                self._compositional.spectrum = jax.jit(_raw) if _raw else None
+
+        # Rebuild hybrid spectrum kernel (precomputed SSP + exact non-stellar)
+        if self._compositional.rest_sed is not None:
+            with contextlib.suppress(Exception):
+                _raw = build_hybrid_spectrum(self)
+                self._hybrid.spectrum = jax.jit(_raw) if _raw else None
+
+        return self
+
+    def precompute_ztable(self, z_grid=None, z_min=0.001, z_max=3.0, n_z=100):
+        """Pre-compute SSP photometry on a redshift grid for free-z fitting.
+
+        At inference time, the precomputed table is interpolated to the
+        current z — same speedup as fixed-z precomputation, but z is free.
+        Follows the DSPS ``precompute_ssp_obsmags_on_z_table`` approach.
+
+        Parameters
+        ----------
+        z_grid : array, optional
+            Custom redshift grid. If None, uses linspace(z_min, z_max, n_z).
+        z_min : float
+            Minimum redshift (default 0.001).
+        z_max : float
+            Maximum redshift (default 3.0).
+        n_z : int
+            Number of grid points (default 100). More points = more accurate
+            interpolation. 100 gives <0.01% interpolation error for smooth
+            filter transmission curves.
+
+        Returns
+        -------
+        self
+            For chaining: ``model.precompute_ztable().predict_photometry(params)``
+        """
+        if self.filter_waves is None:
+            raise ValueError("Z-table precomputation requires filters to be set")
+        ztable = precompute_photometry_ztable(
+            self.ssp_data,
+            self.filter_waves,
+            self.filter_trans,
+            z_grid=z_grid,
+            z_min=z_min,
+            z_max=z_max,
+            n_z=n_z,
+            apply_igm=self._uses_igm and self._approx.get("igm", True),
+        )
+        self._precomputed.photometry_ztable = ztable
+
+        # Invalidate fitter loss-fn caches so any attached Fitter uses the
+        # new ztable interpolation path on next run().
+        for _attr in ("_loss_fn_cache", "_jit_engine_cache", "_loglik_fn_cache"):
+            if hasattr(self, _attr):
+                delattr(self, _attr)
+
+        # Build hybrid z-table kernel if using hybrid mode
+        if self._hybrid.photometry is not None or any(
+            (
+                getattr(self._nebular_backend, "has_free_params", False),
+                getattr(self._shock_backend, "has_free_params", False),
+                self._has_dust_ir_full,
+                self._has_agn_full,
+                self._has_radio,
+                self._has_xray,
+            )
+        ):
+            with contextlib.suppress(Exception):
+                _raw = build_hybrid_photometry_ztable(self)
+                self._hybrid.photometry = jax.jit(_raw) if _raw else None
+
+        return self
+
     def _method_recommendation(self) -> tuple[str, str]:
         """Return (method_name, reason) for the recommended inference method."""
         from tengri.runtime.display import method_recommendation
@@ -2640,25 +2656,6 @@ class SEDModel:
         from tengri.runtime.display import summary as _summary
 
         return _summary(self)
-
-    # ── Population fitting ───────────────────────────────────────────
-
-    def fit_population(
-        self,
-        observations_list: list,
-        method: str = "vi",
-        population_prior: dict | None = None,
-        **kwargs,
-    ):
-        from tengri.forward.convenience import fit_population as _fn
-
-        return _fn(
-            self,
-            observations_list,
-            method=method,
-            population_prior=population_prior,
-            **kwargs,
-        )
 
 
 # Backward-compatibility alias
