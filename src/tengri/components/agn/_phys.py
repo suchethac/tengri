@@ -14,6 +14,7 @@ import jax.numpy as jnp
 from tengri.utils.physics_constants import (
     AA_TO_CM as ANGSTROM_CM,
     C_CGS as C_LIGHT,
+    C_KM_S,
     H_PLANCK,
     K_BOLTZ,
     L_SUN as LSUN_ERG,
@@ -25,8 +26,10 @@ __all__ = [
     "H_PLANCK",
     "K_BOLTZ",
     "LSUN_ERG",
+    "gaussian_line_profile",
     "lines_to_sed",
     "planck_lnu",
+    "ring_area",
     "wavelength_to_nu",
 ]
 
@@ -78,6 +81,79 @@ def planck_lnu(
 def wavelength_to_nu(wavelength_angstrom: jnp.ndarray) -> jnp.ndarray:
     """Convert wavelength (Ångström) to frequency (Hz)."""
     return C_LIGHT / (wavelength_angstrom * ANGSTROM_CM)
+
+
+# ---------------------------------------------------------------------------
+# Gaussian emission-line profile (scalar kernel)
+# ---------------------------------------------------------------------------
+
+
+def gaussian_line_profile(
+    wavelength: jnp.ndarray,
+    line_center: float,
+    fwhm_kms: float,
+) -> jnp.ndarray:
+    """Normalized Gaussian line profile in wavelength space.
+
+    Returns the profile per unit frequency so that the integral over
+    d(nu) equals 1.  Used by NLR and BLR modules via ``jax.vmap`` over
+    a line list.
+
+    Parameters
+    ----------
+    wavelength : array
+        Wavelength grid [Angstrom].
+    line_center : float
+        Line center wavelength [Angstrom].
+    fwhm_kms : float
+        FWHM in km/s.
+
+    Returns
+    -------
+    array
+        Profile [Hz^-1], normalized so that integral over d(nu) = 1.
+    """
+    sigma_ang = line_center * (fwhm_kms / C_KM_S) / 2.3548200450309493
+    sigma_ang = jnp.maximum(sigma_ang, 0.01)
+
+    phi_lam = jnp.exp(-0.5 * ((wavelength - line_center) / sigma_ang) ** 2) / (
+        sigma_ang * jnp.sqrt(2.0 * jnp.pi)
+    )
+
+    # Convert per-Angstrom to per-Hz: phi_nu = phi_lam * lam^2 / c
+    c_ang = C_LIGHT / ANGSTROM_CM
+    phi_nu = phi_lam * wavelength**2 / c_ang
+
+    return phi_nu
+
+
+# ---------------------------------------------------------------------------
+# Disc ring projected area (R&L 1979 Eq 1.6 geometry)
+# ---------------------------------------------------------------------------
+
+
+def ring_area(r_cm: float, dr_cm: float, cos_inc: float) -> float:
+    """Projected area of an annular disc ring.
+
+    Encodes ``dL_nu = pi * B_nu * 2*pi*r*dr * cos(i)`` — the hemisphere
+    integral of spectral radiance over a flat annular ring
+    (Rybicki & Lightman 1979, Eq 1.6).
+
+    Parameters
+    ----------
+    r_cm : float
+        Ring radius [cm].
+    dr_cm : float
+        Ring width [cm].
+    cos_inc : float
+        Cosine of inclination angle.
+
+    Returns
+    -------
+    float
+        ``pi * 2*pi * r * dr * max(cos_inc, 0.01)`` [cm^2 sr].
+    """
+    return jnp.pi * 2.0 * jnp.pi * r_cm * dr_cm * jnp.maximum(cos_inc, 0.01)
 
 
 # ---------------------------------------------------------------------------

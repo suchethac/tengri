@@ -46,6 +46,7 @@ from tengri.components.agn._phys import (
     K_BOLTZ as _K_BOLTZ,
     LSUN_ERG as _LSUN_ERG,
     planck_lnu as _planck_lnu,
+    ring_area as _ring_area,
     wavelength_to_nu as _wavelength_to_nu,
 )
 from tengri.utils.physics_constants import (
@@ -486,11 +487,8 @@ def multicolor_disc(
     # B_nu at each (radius, wavelength): shape (n_radii, n_wave)
     # Use vmap over radii
     def _ring_lnu(r_cm, t_ring, dr_ring):
-        b_nu = _planck_lnu(nu, t_ring)  # (n_wave,)
-        # dL_nu = pi * B_nu * dA * cos(i): the pi comes from integrating B_nu cos(theta)
-        # over the hemisphere (Rybicki & Lightman 1979, Eq. 1.6).  dA = 2*pi*r*dr.
-        area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring  # [cm^2 sr]
-        return b_nu * area * jnp.maximum(agn_cos_inc, 0.01)
+        b_nu = _planck_lnu(nu, t_ring)
+        return b_nu * _ring_area(r_cm, dr_ring, agn_cos_inc)
 
     ring_contributions = jax.vmap(_ring_lnu)(r_grid, t_profile, dr)  # (n_radii, n_wave)
     l_nu_intrinsic = jnp.sum(ring_contributions, axis=0)  # (n_wave,) [erg s^-1 Hz^-1]
@@ -867,9 +865,7 @@ def kubota_done_disc(
 
     def _outer_ring(r_cm, t_ring, dr_ring):
         b_nu = _planck_lnu(nu, t_ring)
-        # dL_nu = pi * B_nu * dA * cos(i) (Rybicki & Lightman 1979, Eq. 1.6)
-        area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
-        return b_nu * area * jnp.maximum(agn_cos_inc, 0.01)
+        return b_nu * _ring_area(r_cm, dr_ring, agn_cos_inc)
 
     l_nu_outer = jnp.sum(jax.vmap(_outer_ring)(r_outer, t_outer, dr_outer), axis=0)
 
@@ -907,8 +903,7 @@ def kubota_done_disc(
         def _warm_ring(r_cm, t_ring, dr_ring):
             b_nu_plain = _planck_lnu(nu, t_ring)
             p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
-            area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
-            l_total = p_plain * area * jnp.maximum(agn_cos_inc, 0.01)
+            l_total = p_plain * _ring_area(r_cm, dr_ring, agn_cos_inc)
             kTbb_keV = _K_BOLTZ_KEV * t_ring
             shape = _nthcomp_lnu_interp(nu, agn_gamma_warm, agn_kt_warm, kTbb_keV)
             return shape * l_total
@@ -922,9 +917,7 @@ def kubota_done_disc(
             p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
             p_comp = jnp.abs(jnp.trapezoid(b_nu_mod, nu))
             renorm = p_plain / jnp.maximum(p_comp, 1e-100)
-            # dL_nu = pi * B_nu_mod * dA * cos(i) (Rybicki & Lightman 1979, Eq. 1.6)
-            area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
-            return b_nu_mod * renorm * area * jnp.maximum(agn_cos_inc, 0.01)
+            return b_nu_mod * renorm * _ring_area(r_cm, dr_ring, agn_cos_inc)
 
     l_nu_warm = jnp.sum(jax.vmap(_warm_ring)(r_warm_grid, t_warm, dr_warm), axis=0)
 
@@ -1194,9 +1187,7 @@ def adaf_disc(
 
     def _ring_lnu(r_cm, t_ring, dr_ring):
         b_nu = _planck_lnu(nu, t_ring)
-        # dL_nu = pi * B_nu * dA * cos(i) (Rybicki & Lightman 1979, Eq. 1.6)
-        area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
-        return b_nu * area * jnp.maximum(agn_cos_inc, 0.01)
+        return b_nu * _ring_area(r_cm, dr_ring, agn_cos_inc)
 
     ring_contributions = jax.vmap(_ring_lnu)(r_grid, t_profile, dr)
     l_nu_disc = jnp.sum(ring_contributions, axis=0)

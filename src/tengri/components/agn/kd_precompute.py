@@ -32,6 +32,7 @@ from tengri.components.agn._phys import (
     C_LIGHT as _C_LIGHT,
     H_PLANCK as _H_PLANCK,
     K_BOLTZ as _K_BOLTZ,
+    ring_area as _ring_area,
 )
 from tengri.utils.physics_constants import KEV_TO_ERG as _KEV_TO_ERG
 
@@ -753,8 +754,7 @@ def kubota_done_disc_preintegrated(
 
     def _outer_ring_phot(r_cm, t_ring, dr_ring):
         b_filt = _lookup_planck_filter(t_ring, kd_data.planck_T_grid, kd_data.planck_table)
-        area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
-        return b_filt * area * jnp.maximum(agn_cos_inc, 0.01)
+        return b_filt * _ring_area(r_cm, dr_ring, agn_cos_inc)
 
     outer_phot = jnp.sum(
         jax.vmap(_outer_ring_phot)(r_outer, t_outer, dr_outer), axis=0
@@ -785,13 +785,8 @@ def kubota_done_disc_preintegrated(
     if has_nthcomp:
 
         def _warm_ring_phot(r_cm, t_ring, dr_ring):
-            # Bolometric power from this ring via Stefan-Boltzmann (exact).
-            # This matches the full-wavelength path which computes
-            # p_plain = abs(trapezoid(B_nu, nu)) ≈ sigma*T^4/pi
-            # then l_total = p_plain * pi * 2*pi*r*dr * cos(i)
-            #              = sigma*T^4 * 2*pi*r*dr * cos(i)
-            area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
-            l_total = _SIGMA_SB * t_ring**4 / jnp.pi * area * jnp.maximum(agn_cos_inc, 0.01)
+            # Bolometric power: sigma*T^4/pi * ring_area = sigma*T^4 * 2*pi*r*dr * cos(i)
+            l_total = _SIGMA_SB * t_ring**4 / jnp.pi * _ring_area(r_cm, dr_ring, agn_cos_inc)
 
             kTbb_keV = _K_BOLTZ_KEV * t_ring
             nthcomp_filt = _lookup_nthcomp_filter(
@@ -808,8 +803,7 @@ def kubota_done_disc_preintegrated(
         # Fallback: use Planck lookup (no Comptonization enhancement)
         def _warm_ring_phot(r_cm, t_ring, dr_ring):
             b_filt = _lookup_planck_filter(t_ring, kd_data.planck_T_grid, kd_data.planck_table)
-            area = jnp.pi * 2.0 * jnp.pi * r_cm * dr_ring
-            return b_filt * area * jnp.maximum(agn_cos_inc, 0.01)
+            return b_filt * _ring_area(r_cm, dr_ring, agn_cos_inc)
 
     warm_phot = jnp.sum(
         jax.vmap(_warm_ring_phot)(r_warm_grid, t_warm, dr_warm), axis=0

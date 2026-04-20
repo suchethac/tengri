@@ -24,13 +24,16 @@ References
 
 import jax.numpy as jnp
 
+from tengri.components.agn._phys import gaussian_line_profile as _gaussian_line_profile
+
 # ===================================================================
 # Physical constants
 # ===================================================================
-
-_C_LIGHT_KMS = 2.99792458e5  # Speed of light [km/s]
-_C_LIGHT = 2.99792458e10  # Speed of light [cm s^-1]
-_ANGSTROM_CM = 1e-8  # Angstrom -> cm
+from tengri.utils.physics_constants import (
+    AA_TO_CM as _ANGSTROM_CM,
+    C_CGS as _C_LIGHT,
+    C_KM_S as _C_LIGHT_KMS,
+)
 
 # ===================================================================
 # BLR emission-line template
@@ -71,41 +74,6 @@ _BLR_FWHM_KMS = 5000.0
 # Fraction of intercepted luminosity re-emitted as broad lines
 # Typical BLR radiative efficiency: ~5-10% of intercepted continuum
 _BLR_LINE_EFFICIENCY = 0.08
-
-
-def _gaussian_line_profile(
-    wavelength: jnp.ndarray,
-    line_center: float,
-    fwhm_kms: float,
-) -> jnp.ndarray:
-    """Normalized Gaussian line profile in wavelength space.
-
-    Parameters
-    ----------
-    wavelength : array
-        Wavelength grid [Angstrom].
-    line_center : float
-        Line center wavelength [Angstrom].
-    fwhm_kms : float
-        FWHM in km/s.
-
-    Returns
-    -------
-    array
-        Profile in units of Hz^-1 (normalized so integral over dnu = 1).
-    """
-    sigma_ang = line_center * (fwhm_kms / _C_LIGHT_KMS) / 2.3548
-    sigma_ang = jnp.maximum(sigma_ang, 0.01)
-
-    phi_lam = jnp.exp(-0.5 * ((wavelength - line_center) / sigma_ang) ** 2) / (
-        sigma_ang * jnp.sqrt(2.0 * jnp.pi)
-    )
-
-    # Convert per-Angstrom to per-Hz
-    c_ang = _C_LIGHT / _ANGSTROM_CM
-    phi_nu = phi_lam * wavelength**2 / c_ang
-
-    return phi_nu
 
 
 # ===================================================================

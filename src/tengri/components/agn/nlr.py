@@ -22,13 +22,14 @@ References
 
 import jax.numpy as jnp
 
+from tengri.components.agn._phys import gaussian_line_profile as _gaussian_line_profile
+
 # ===================================================================
 # Physical constants
 # ===================================================================
 from tengri.utils.physics_constants import (
     AA_TO_CM as _ANGSTROM_CM,
     C_CGS as _C_LIGHT,
-    C_KM_S as _C_LIGHT_KMS,
 )
 
 # ===================================================================
@@ -82,46 +83,6 @@ _NLR_CONTINUUM_EFFICIENCY = 0.02
 
 # Continuum power-law slope (F_nu ~ nu^alpha, typical NLR continuum)
 _NLR_CONTINUUM_ALPHA = -1.5
-
-
-def _gaussian_line_profile(
-    wavelength: jnp.ndarray,
-    line_center: float,
-    fwhm_kms: float,
-) -> jnp.ndarray:
-    """Normalized Gaussian line profile in wavelength space.
-
-    Parameters
-    ----------
-    wavelength : array
-        Wavelength grid [Angstrom].
-    line_center : float
-        Line center wavelength [Angstrom].
-    fwhm_kms : float
-        FWHM in km/s.
-
-    Returns
-    -------
-    array
-        Profile normalized so that integral over d(nu) = 1.
-        Units: Hz^-1.
-    """
-    # Convert FWHM from km/s to Angstrom
-    sigma_ang = line_center * (fwhm_kms / _C_LIGHT_KMS) / 2.3548
-    sigma_ang = jnp.maximum(sigma_ang, 0.01)
-
-    # Gaussian in wavelength space
-    phi_lam = jnp.exp(-0.5 * ((wavelength - line_center) / sigma_ang) ** 2) / (
-        sigma_ang * jnp.sqrt(2.0 * jnp.pi)
-    )
-
-    # Convert from per-Angstrom to per-Hz:
-    # phi_nu = phi_lam * |dlam/dnu| = phi_lam * lam^2 / c
-    # c in Angstrom/s = C_LIGHT / ANGSTROM_CM
-    c_ang = _C_LIGHT / _ANGSTROM_CM  # [Angstrom s^-1]
-    phi_nu = phi_lam * wavelength**2 / c_ang
-
-    return phi_nu
 
 
 def compute_nlr_sed(

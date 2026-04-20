@@ -585,40 +585,29 @@ class PopulationFitter:
 
         wall_time = time.time() - t0
 
-        # --- Extract shared PSD posteriors ---
+        # --- Extract posteriors (vectorized) ---
         converged_p = unflatten(best_flat)
-        sigma_samples = []
-        tau_samples = []
-        for i in range(n_posterior_samples):
-            res_p = unflatten(residuals_flat[i])
-            combined = jax.tree.map(lambda a, b: a + b, converged_p, res_p)
-            sigma_samples.append(to_bounded(combined["psd_sigma_u"], sigma_lo, sigma_hi))
-            tau_samples.append(to_bounded(combined["psd_tau_u"], tau_lo, tau_hi))
+        all_res_p = jax.vmap(unflatten)(residuals_flat)
 
         shared_samples = {
-            "psd_sigma": jnp.array(sigma_samples),
-            "psd_tau_myr": jnp.array(tau_samples),
+            "psd_sigma": to_bounded(
+                converged_p["psd_sigma_u"] + all_res_p["psd_sigma_u"], sigma_lo, sigma_hi
+            ),
+            "psd_tau_myr": to_bounded(
+                converged_p["psd_tau_u"] + all_res_p["psd_tau_u"], tau_lo, tau_hi
+            ),
         }
         shared_params = {k: float(jnp.mean(v)) for k, v in shared_samples.items()}
 
-        # Extract per-galaxy posteriors
         individual_samples = []
         for g in range(n_gal):
             gal_samples = {}
             for name in free_names:
                 lo, hi = bounds[name]
-                vals = []
-                for i in range(n_posterior_samples):
-                    res_p = unflatten(residuals_flat[i])
-                    combined_val = converged_p["gal"][name][g] + res_p["gal"][name][g]
-                    vals.append(to_bounded(combined_val, lo, hi))
-                gal_samples[name] = jnp.array(vals)
+                combined = converged_p["gal"][name][g] + all_res_p["gal"][name][:, g]
+                gal_samples[name] = to_bounded(combined, lo, hi)
             if stochastic:
-                xi_vals = []
-                for i in range(n_posterior_samples):
-                    res_p = unflatten(residuals_flat[i])
-                    xi_vals.append(converged_p["gal_xi"][g] + res_p["gal_xi"][g])
-                gal_samples["psd_xi"] = jnp.stack(xi_vals)
+                gal_samples["psd_xi"] = converged_p["gal_xi"][g] + all_res_p["gal_xi"][:, g]
             individual_samples.append(gal_samples)
 
         if verbose:
