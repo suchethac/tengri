@@ -1,4 +1,4 @@
-"""Tests for quasi-Newton MAP optimizers (scipy L-BFGS-B).
+"""Tests for L-BFGS MAP optimizer (optax scan-batch path).
 
 Verifies that L-BFGS converges correctly through the
 ``fitter.run("map", optimizer="lbfgs")`` API.
@@ -94,18 +94,17 @@ class TestJaxoptOptimizers:
         assert jnp.isfinite(result.diagnostics["final_loss"])
         assert result.diagnostics["n_steps"] > 0
 
-    def test_fewer_steps_than_adam(self, fitter_and_mock):
+    def test_lower_loss_than_adam(self, fitter_and_mock):
         fitter, _ = fitter_and_mock
-        result = fitter.run(
-            method="map",
-            key=jax.random.PRNGKey(0),
-            optimizer="lbfgs",
-            n_steps=200,
-            tol=1e-5,
-            verbose=False,
+        lbfgs = fitter.run(
+            method="map", key=jax.random.PRNGKey(0),
+            optimizer="lbfgs", n_steps=200, verbose=False,
         )
-        assert result.diagnostics["converged"]
-        assert result.diagnostics["n_steps"] < 150
+        adam = fitter.run(
+            method="map", key=jax.random.PRNGKey(0),
+            optimizer="adam", n_steps=500, verbose=False,
+        )
+        assert lbfgs.diagnostics["final_loss"] <= adam.diagnostics["final_loss"]
 
 class TestJaxoptPosteriorStructure:
     """Verify Posterior object fields from jaxopt path."""
@@ -121,7 +120,7 @@ class TestJaxoptPosteriorStructure:
         )
         assert "L-BFGS" in result.method
 
-    def test_diagnostics_has_converged(self, fitter_and_mock):
+    def test_diagnostics_has_optimizer_name(self, fitter_and_mock):
         fitter, _ = fitter_and_mock
         result = fitter.run(
             method="map",
@@ -130,8 +129,9 @@ class TestJaxoptPosteriorStructure:
             n_steps=200,
             verbose=False,
         )
-        assert "converged" in result.diagnostics
-        assert "grad_norm" in result.diagnostics
+        assert result.diagnostics["optimizer"] == "L-BFGS"
+        assert "final_loss" in result.diagnostics
+        assert "n_steps" in result.diagnostics
 
     def test_loss_history_is_array(self, fitter_and_mock):
         fitter, _ = fitter_and_mock

@@ -12,12 +12,13 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
-_OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd"}
-_QUASI_NEWTON = {"lbfgs"}
-_ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _QUASI_NEWTON
+_OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd", "lbfgs"}
+_SCIPY_OPTIMIZERS = {"lbfgs_scipy"}
+_ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _SCIPY_OPTIMIZERS
 
 # Backward compatibility alias (used by fitter._fit_batch_vmap_map and tests)
-_JAXOPT_SOLVERS = _QUASI_NEWTON
+_JAXOPT_SOLVERS = _SCIPY_OPTIMIZERS
+_QUASI_NEWTON = _SCIPY_OPTIMIZERS
 
 
 def _build_optax_optimizer(optimizer, learning_rate):
@@ -32,13 +33,20 @@ def _build_optax_optimizer(optimizer, learning_rate):
             "adam": lambda: optax.adam(learning_rate),
             "adamw": lambda: optax.adamw(learning_rate),
             "sgd": lambda: optax.sgd(learning_rate, momentum=0.9),
+            "lbfgs": lambda: optax.chain(
+                optax.scale_by_lbfgs(memory_size=10, scale_init_precond=True),
+                optax.clip_by_global_norm(0.5),
+                optax.scale(-1.0),
+            ),
         }
         if optimizer not in opt_builders:
             raise ValueError(
                 f"Unknown optimizer '{optimizer}'. "
                 f"Use {sorted(_ALL_OPTIMIZERS)} or pass an optax optimizer."
             )
-        return opt_builders[optimizer](), optimizer.upper()
+        display_names = {"lbfgs": "L-BFGS"}
+        name = display_names.get(optimizer, optimizer.upper())
+        return opt_builders[optimizer](), name
 
     return optimizer, "custom"
 
@@ -169,8 +177,8 @@ def _run_map_scipy(
 
     from tengri.inference.posterior import Posterior
 
-    scipy_method = {"lbfgs": "L-BFGS-B"}[optimizer]
-    opt_name = {"lbfgs": "L-BFGS"}[optimizer]
+    scipy_method = {"lbfgs": "L-BFGS-B", "lbfgs_scipy": "L-BFGS-B"}[optimizer]
+    opt_name = {"lbfgs": "L-BFGS", "lbfgs_scipy": "L-BFGS"}[optimizer]
 
     # Flatten params to 1D array for scipy
     init_flat, unravel_fn = ravel_pytree(init_params)
@@ -270,9 +278,11 @@ def run_map(
     learning_rate : float
         Learning rate (optax optimizers only; ignored for quasi-Newton).
     optimizer : str or optax optimizer
-        Optax: ``"adam"``, ``"sgd"``, ``"adamw"``, or a pre-built optax optimizer.
-        Quasi-Newton: ``"lbfgs"`` (uses scipy L-BFGS-B — zero JAX
-        compilation for the optimizer).
+        Optax: ``"adam"``, ``"sgd"``, ``"adamw"``, ``"lbfgs"``, or a
+        pre-built optax optimizer.  ``"lbfgs"`` uses ``optax.scale_by_lbfgs``
+        through the scan-batch path (fast, no line search).
+        ``"lbfgs_scipy"`` uses scipy L-BFGS-B with Wolfe line search
+        (slower but guaranteed convergence).
     early_stopping : bool
         Stop if loss doesn't improve (optax only; quasi-Newton uses ``tol``).
     patience : int
@@ -298,8 +308,8 @@ def run_map(
     else:
         init_params = fitter._initialize_unbounded(key)
 
-    # ── scipy quasi-Newton path (L-BFGS-B / BFGS) ──
-    if isinstance(optimizer, str) and optimizer in _QUASI_NEWTON:
+    # ── scipy quasi-Newton path (optimizer="lbfgs_scipy") ──
+    if isinstance(optimizer, str) and optimizer in _SCIPY_OPTIMIZERS:
         grad_fn = fitter._get_or_build_grad_fn()
         return _run_map_scipy(
             fitter,
