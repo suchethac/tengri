@@ -190,6 +190,86 @@ def uses_student_t(spec) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Data mask constants for censored likelihood
+# ---------------------------------------------------------------------------
+
+DETECTED = 0
+UPPER_LIMIT = 1
+LOWER_LIMIT = -1
+
+
+# ---------------------------------------------------------------------------
+# Censored likelihood for upper/lower limits
+# ---------------------------------------------------------------------------
+
+
+def censored_log_likelihood(
+    data: jnp.ndarray,
+    noise_obs: jnp.ndarray,
+    predicted: jnp.ndarray,
+    mask: jnp.ndarray,
+    f_cal: float | jnp.ndarray = 0.0,
+    dof: float | None = None,
+) -> jnp.ndarray:
+    """Negative log-likelihood with per-band censoring.
+
+    For detected bands (mask=0), uses the standard Gaussian (or
+    Student-t) likelihood. For upper limits (mask=1), uses the normal
+    CDF: ``ln L_k = ln Phi((f_upper - m_k) / sigma_k)``. For lower
+    limits (mask=-1): ``ln L_k = ln Phi((m_k - f_lower) / sigma_k)``.
+
+    All branches are computed via ``jnp.where`` for JIT compatibility
+    (no Python control flow per band).
+
+    Parameters
+    ----------
+    data : array, shape (n_bands,)
+        Observed fluxes.  For censored bands, this holds the limit value.
+    noise_obs : array, shape (n_bands,)
+        Observed 1-sigma uncertainties.
+    predicted : array, shape (n_bands,)
+        Model-predicted fluxes.
+    mask : array, shape (n_bands,)
+        Per-band type: 0=detected, 1=upper limit, -1=lower limit.
+    f_cal : float or scalar array
+        Fractional calibration uncertainty (applied to detected bands
+        only).  Default 0.0.
+    dof : float or None
+        Student-t degrees of freedom for detected bands.  None =
+        Gaussian.
+
+    Returns
+    -------
+    scalar
+        Total energy (negative log-likelihood, up to additive constant).
+    """
+    sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
+
+    # --- Detected band energy ---
+    r = (data - predicted) / sigma_eff
+    if dof is not None:
+        e_detected = 0.5 * (dof + 1.0) * jnp.log(1.0 + r**2 / dof) + jnp.log(sigma_eff)
+    else:
+        e_detected = 0.5 * r**2 + jnp.log(sigma_eff)
+
+    # --- Upper limit: ln L = ln Phi((f_upper - m) / sigma) ---
+    z_upper = (data - predicted) / sigma_eff
+    e_upper = -jax.scipy.stats.norm.logcdf(z_upper)
+
+    # --- Lower limit: ln L = ln Phi((m - f_lower) / sigma) ---
+    z_lower = (predicted - data) / sigma_eff
+    e_lower = -jax.scipy.stats.norm.logcdf(z_lower)
+
+    # Per-band dispatch
+    e_per_band = jnp.where(
+        mask == UPPER_LIMIT,
+        e_upper,
+        jnp.where(mask == LOWER_LIMIT, e_lower, e_detected),
+    )
+    return jnp.sum(e_per_band)
+
+
+# ---------------------------------------------------------------------------
 # Energy and metric for JIT EVI engine
 # ---------------------------------------------------------------------------
 

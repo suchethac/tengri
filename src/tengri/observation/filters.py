@@ -382,6 +382,158 @@ _ALMA_BANDS_GHZ: dict[int, tuple[float, float]] = {
 
 
 # ---------------------------------------------------------------------------
+# Filter metadata: facility and description for rich listing
+# ---------------------------------------------------------------------------
+
+_FACILITY_FROM_PREFIX: dict[str, str] = {
+    "sdss": "SDSS",
+    "lsst": "LSST/Rubin",
+    "ps1": "Pan-STARRS",
+    "des": "DES/DECam",
+    "megacam": "CFHT/MegaCam",
+    "hsc": "Subaru/HSC",
+    "suprime": "Subaru/SuprimeCam",
+    "galex": "GALEX",
+    "xmm": "XMM-Newton/OM",
+    "uvot": "Swift/UVOT",
+    "2mass": "2MASS",
+    "vista": "VISTA/VIRCAM",
+    "ukidss": "UKIRT/WFCAM",
+    "hst": "HST",
+    "jwst": "JWST/NIRCam",
+    "nircam25": "JWST/NIRCam2025",
+    "niriss": "JWST/NIRISS",
+    "nirspec": "JWST/NIRSpec",
+    "miri": "JWST/MIRI",
+    "roman": "Roman/WFI",
+    "euclid": "Euclid",
+    "irac": "Spitzer/IRAC",
+    "mips": "Spitzer/MIPS",
+    "wise": "WISE",
+    "akari": "AKARI",
+    "herschel": "Herschel",
+    "scuba2": "JCMT/SCUBA-2",
+    "laboca": "APEX/LABOCA",
+    "saboca": "APEX/SABOCA",
+    "johnson": "Generic/Johnson",
+    "cousins": "Generic/Cousins",
+}
+
+
+def _infer_facility(name: str) -> str:
+    """Infer facility from filter short name prefix."""
+    for prefix, facility in _FACILITY_FROM_PREFIX.items():
+        if name.startswith(prefix):
+            return facility
+    return "Other"
+
+
+# ---------------------------------------------------------------------------
+# Filter property computation (pure numpy, no JAX)
+# ---------------------------------------------------------------------------
+
+
+def compute_effective_wavelength(wave: np.ndarray, trans: np.ndarray) -> float:
+    """Photon-counting effective wavelength: λ_eff = ∫T·λ·dλ / ∫T·dλ.
+
+    Parameters
+    ----------
+    wave : array
+        Wavelength in Angstrom.
+    trans : array
+        Transmission (dimensionless).
+
+    Returns
+    -------
+    float
+        Effective wavelength in Angstrom.
+    """
+    num = np.trapz(trans * wave, wave)
+    den = np.trapz(trans, wave)
+    if den == 0:
+        return 0.0
+    return float(num / den)
+
+
+def compute_fwhm(wave: np.ndarray, trans: np.ndarray) -> float:
+    """Full width at half maximum of the transmission curve.
+
+    Parameters
+    ----------
+    wave : array
+        Wavelength in Angstrom.
+    trans : array
+        Transmission (dimensionless).
+
+    Returns
+    -------
+    float
+        FWHM in Angstrom. Returns 0 if the curve never exceeds half-max.
+    """
+    peak = np.max(trans)
+    if peak == 0:
+        return 0.0
+    half_max = peak / 2.0
+    above = wave[trans >= half_max]
+    if len(above) < 2:
+        return 0.0
+    return float(above[-1] - above[0])
+
+
+def _format_wavelength(wave_aa: float) -> str:
+    """Format wavelength with appropriate units."""
+    if wave_aa >= 1e7:
+        return f"{wave_aa / 1e8:.2f} cm"
+    elif wave_aa >= 1e4:
+        return f"{wave_aa / 1e4:.2f} \u03bcm"
+    else:
+        return f"{wave_aa:.0f} \u00c5"
+
+
+def filter_info(name: str, *, cache_dir: str | None = None) -> dict:
+    """Return metadata for a single filter.
+
+    Loads the transmission curve from the local cache (downloading from
+    SVO if needed) and computes derived properties.
+
+    Parameters
+    ----------
+    name : str
+        Short filter name from ``FILTER_REGISTRY``.
+    cache_dir : str, optional
+        Override cache directory.
+
+    Returns
+    -------
+    dict
+        Keys: ``name``, ``svo_id``, ``facility``, ``lambda_eff_aa``,
+        ``fwhm_aa``, ``lambda_eff_str``, ``fwhm_str``.
+
+    Raises
+    ------
+    KeyError
+        If *name* is not in the registry.
+    """
+    if name not in FILTER_REGISTRY:
+        raise KeyError(f"Unknown filter '{name}'. Use list_available_filters() to see options.")
+    kwargs = {"cache_dir": cache_dir} if cache_dir is not None else {}
+    fc = load_filter(name, **kwargs)
+    wave_np = np.asarray(fc.wave)
+    trans_np = np.asarray(fc.trans)
+    lam_eff = compute_effective_wavelength(wave_np, trans_np)
+    fwhm = compute_fwhm(wave_np, trans_np)
+    return {
+        "name": name,
+        "svo_id": FILTER_REGISTRY[name],
+        "facility": _infer_facility(name),
+        "lambda_eff_aa": lam_eff,
+        "fwhm_aa": fwhm,
+        "lambda_eff_str": _format_wavelength(lam_eff),
+        "fwhm_str": _format_wavelength(fwhm),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
@@ -665,17 +817,79 @@ def load_alma_band(band: int, name: str | None = None) -> FilterCurve:
     return load_tophat_filter(center_aa, width_aa, name=label)
 
 
-def list_available_filters() -> dict[str, str]:
-    """Print and return the filter registry.
+def list_available_filters(
+    *,
+    group_by: str = "facility",
+    compute_properties: bool = False,
+    cache_dir: str | None = None,
+) -> dict[str, str]:
+    """Print and return the filter registry, optionally grouped by facility.
+
+    Parameters
+    ----------
+    group_by : str
+        Grouping key.  ``"facility"`` (default) groups by telescope/instrument.
+        ``"none"`` lists filters alphabetically without grouping.
+    compute_properties : bool
+        If ``True``, load each filter's transmission curve and display
+        effective wavelength and FWHM columns.  This triggers SVO
+        downloads for any filters not yet cached.
+    cache_dir : str, optional
+        Override cache directory for filter downloads.
 
     Returns
     -------
     dict
-        Copy of ``FILTER_REGISTRY``.
+        Copy of ``FILTER_REGISTRY`` (short name -> SVO ID).
     """
-    print(f"{'Short Name':<22s} {'SVO ID':<35s}")
-    print("-" * 58)
-    for name, svo_id in sorted(FILTER_REGISTRY.items()):
-        print(f"{name:<22s} {svo_id:<35s}")
-    print(f"\nTotal: {len(FILTER_REGISTRY)} filters")
+    if group_by == "none":
+        _print_flat_listing(compute_properties, cache_dir)
+    else:
+        _print_grouped_listing(compute_properties, cache_dir)
     return dict(FILTER_REGISTRY)
+
+
+def _print_flat_listing(compute_properties: bool, cache_dir: str | None) -> None:
+    if compute_properties:
+        hdr = f"{'Name':<22s} {'SVO ID':<35s} {'lambda_eff':>12s} {'FWHM':>10s}"
+        print(hdr)
+        print("-" * len(hdr))
+        for name in sorted(FILTER_REGISTRY):
+            kwargs = {"cache_dir": cache_dir} if cache_dir is not None else {}
+            info = filter_info(name, **kwargs)
+            print(
+                f"{name:<22s} {info['svo_id']:<35s} "
+                f"{info['lambda_eff_str']:>12s} {info['fwhm_str']:>10s}"
+            )
+    else:
+        hdr = f"{'Name':<22s} {'SVO ID':<35s}"
+        print(hdr)
+        print("-" * len(hdr))
+        for name, svo_id in sorted(FILTER_REGISTRY.items()):
+            print(f"{name:<22s} {svo_id:<35s}")
+    print(f"\nTotal: {len(FILTER_REGISTRY)} filters")
+
+
+def _print_grouped_listing(compute_properties: bool, cache_dir: str | None) -> None:
+    groups: dict[str, list[str]] = {}
+    for name in sorted(FILTER_REGISTRY):
+        fac = _infer_facility(name)
+        groups.setdefault(fac, []).append(name)
+
+    for fac in sorted(groups):
+        names = groups[fac]
+        print(f"\n{'=' * 60}")
+        print(f"  {fac}  ({len(names)} filters)")
+        print(f"{'=' * 60}")
+        if compute_properties:
+            hdr = f"  {'Name':<22s} {'lambda_eff':>12s} {'FWHM':>10s}"
+            print(hdr)
+            print(f"  {'-' * (len(hdr) - 2)}")
+            kwargs = {"cache_dir": cache_dir} if cache_dir is not None else {}
+            for name in names:
+                info = filter_info(name, **kwargs)
+                print(f"  {name:<22s} {info['lambda_eff_str']:>12s} {info['fwhm_str']:>10s}")
+        else:
+            for name in names:
+                print(f"  {name:<22s} {FILTER_REGISTRY[name]}")
+    print(f"\nTotal: {len(FILTER_REGISTRY)} filters across {len(groups)} facilities")

@@ -24,6 +24,15 @@ from tengri.analysis.plotting.convergence import diagnostics_table, posterior_pl
 from tengri.analysis.plotting.corner import plot_corner_comparison, safe_corner
 
 # ═══════════════════════════════════════════════════════════════════
+# Filter curve visualization
+# ═══════════════════════════════════════════════════════════════════
+from tengri.analysis.plotting.filters import (
+    compare_filter_sets,
+    plot_filter_coverage,
+    plot_filter_curves,
+)
+
+# ═══════════════════════════════════════════════════════════════════
 # SED and spectrum plotting
 # ═══════════════════════════════════════════════════════════════════
 from tengri.analysis.plotting.sed import (
@@ -61,7 +70,6 @@ from tengri.analysis.plotting.styles import (
 )
 
 __all__ = [
-    # Styles
     "COLORS",
     "GALAXY_ANNOTATIONS",
     "REFERENCE_STYLE",
@@ -78,20 +86,19 @@ __all__ = [
     "SFH_YLABEL",
     "SPECTRAL_FEATURES",
     "SWEEP_CMAPS",
-    # Convergence
+    "compare_filter_sets",
     "diagnostics_table",
     "mock_plot",
     "parameter_gallery",
     "plot_corner_comparison",
-    # SED
+    "plot_filter_coverage",
+    "plot_filter_curves",
     "plot_sed_fit",
-    # SFH
     "plot_sfh",
     "plot_sfh_comparison",
     "plot_spectrum_fit",
     "posterior_plot_sed",
     "posterior_plot_sfh",
-    # Corner
     "safe_corner",
     "setup_style",
     "sfh_sed_comparison",
