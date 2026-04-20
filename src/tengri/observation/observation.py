@@ -16,10 +16,10 @@ import dataclasses
 import jax.numpy as jnp
 
 from tengri.observation.line_flux_data import LineFluxData
-from tengri.observation.noise_model import NoiseConfig
+from tengri.observation.noise_model import NoiseModel
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectral_indices import SpectralIndexData
-from tengri.observation.spectroscopy import SpectroscopyConfig
+from tengri.observation.spectroscopy import Spectroscopy
 from tengri.parameters.priors import Distribution
 
 
@@ -62,8 +62,8 @@ class Observation:
     """
 
     photometry: Photometry | None = None
-    spectroscopy: SpectroscopyConfig | None = None
-    noise: NoiseConfig | None = None
+    spectroscopy: Spectroscopy | None = None
+    noise: NoiseModel | None = None
     line_fluxes: LineFluxData | None = None
     spectral_indices: SpectralIndexData | None = None
 

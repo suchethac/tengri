@@ -742,7 +742,7 @@ class Parameters:
 
     # ── Public API ────────────────────────────────────────────────────
 
-    def with_params(self, **kwargs) -> ParamSpec:
+    def with_params(self, **kwargs) -> Parameters:
         """Return a new Parameters with additional parameters merged in.
 
         Creates a copy of this Parameters with extra parameters added.
@@ -944,7 +944,7 @@ class Parameters:
 
         # Header
         sfh_label = "+".join(self._mean_sfh_type)
-        lines.append(f"ParamSpec  SFH: {sfh_label}")
+        lines.append(f"Parameters  SFH: {sfh_label}")
         lines.append(sep)
 
         # Dimensionality

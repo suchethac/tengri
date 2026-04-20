@@ -682,7 +682,7 @@ def fit_population(
     HierarchicalResult
     """
     from tengri.forward.sed_model import Model as ModelClass
-    from tengri.inference.hierarchical import HierarchicalFitter
+    from tengri.inference.hierarchical import PopulationFitter
     from tengri.parameters.priors import Fixed
 
     # Normalise input
@@ -729,7 +729,7 @@ def fit_population(
         m.spec = new_spec
         return m
 
-    hfitter = HierarchicalFitter(
+    hfitter = PopulationFitter(
         _model_factory,
         galaxies,
         psd_sigma_prior=psd_sigma_prior,
@@ -769,7 +769,7 @@ def build_model_from_config(
     redshift = _defs["redshift"] if redshift is _UNSET else redshift
     from tengri.components.sps.dsps_wrapper import SSPData, load_ssp_data
     from tengri.observation.observation import Observation
-    from tengri.parameters.parameters import ParamSpec
+    from tengri.parameters.parameters import Parameters
     from tengri.parameters.priors import Uniform
 
     # --- Load SSP data ---
@@ -828,7 +828,7 @@ def build_model_from_config(
     if agn is not None:
         spec_kwargs["agn_model"] = agn
 
-    spec = ParamSpec(**spec_kwargs)
+    spec = Parameters(**spec_kwargs)
 
     # --- Build Observation ---
     obs_photometry = None
@@ -844,9 +844,9 @@ def build_model_from_config(
 
     if wave_obs is not None:
         try:
-            from tengri.observation.spectroscopy import SpectroscopyConfig
+            from tengri.observation.spectroscopy import Spectroscopy
 
-            obs_spectroscopy = SpectroscopyConfig(wave_obs=wave_obs)
+            obs_spectroscopy = Spectroscopy(wave_obs=wave_obs)
         except (ImportError, AttributeError):
             pass
 

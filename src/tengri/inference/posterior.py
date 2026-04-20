@@ -129,7 +129,7 @@ class Posterior:
         if self.eline_fluxes is None:
             raise ValueError(
                 "No emission line fluxes available. "
-                "Set eline_mode='marginalized' or 'fitted' in SpectroscopyConfig."
+                "Set eline_mode='marginalized' or 'fitted' in Spectroscopy."
             )
         result = {}
         for i, name in enumerate(self.eline_names):
@@ -574,7 +574,7 @@ class Posterior:
         -------
         Parameters
         """
-        from tengri.parameters.parameters import ParamSpec
+        from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed, Gaussian
 
         kwargs = {}
@@ -604,7 +604,7 @@ class Posterior:
             kwargs["stochastic"] = self._model.spec.stochastic
             kwargs["n_grid"] = self._model.spec.n_grid
 
-        return ParamSpec(**kwargs)
+        return Parameters(**kwargs)
 
     def to_arviz(self):
         """Convert to ArviZ InferenceData for diagnostics.

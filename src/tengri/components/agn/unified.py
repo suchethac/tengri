@@ -823,7 +823,7 @@ def unified_nlr_blr(
     # at torus_frac=0.5±1e-6 that corrupts gradient-based inference (VI, MAP).
     # Auto-derivation from theta_torus is done at the Parameters level via fixed values,
     # not in the forward pass.
-    _ = geom_cf  # retained for reference; used when agn_torus_frac is fixed by ParamSpec
+    _ = geom_cf  # retained for reference; used when agn_torus_frac is fixed by Parameters
 
     # --- Geometric masks ---
     mask_disc = _sigmoid_mask(agn_cos_inc, agn_theta_torus)

@@ -42,12 +42,12 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 
-from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.parameters import Parameters
 
 
 def generate_sbi_training_data(
     model: Any,
-    spec: ParamSpec,
+    spec: Parameters,
     n_samples: int = 100_000,
     key: jnp.ndarray | None = None,
     obs_type: str = "photometry",

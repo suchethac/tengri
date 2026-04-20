@@ -346,22 +346,22 @@ class Fitter:
                 import warnings
 
                 warnings.warn(
-                    "SpectroscopyConfig has eline_broad=True but ParamSpec was built with "
+                    "Spectroscopy has eline_broad=True but Parameters was built with "
                     "eline_broad=False. The broad-component velocity dispersion parameter "
                     "'eline_broad_sigma_kms' will not be sampled. "
-                    "Pass eline_broad=True to ParamSpec() to fix this.",
+                    "Pass eline_broad=True to Parameters() to fix this.",
                     UserWarning,
                     stacklevel=2,
                 )
 
     def _init_eline_arrays(self, _spec_config):
         """Build catalog arrays and constraint matrices for emission line fitting."""
-        from tengri.observation.line_list import LineCatalog
+        from tengri.observation.line_list import LineList
 
         if _spec_config is not None and _spec_config.eline_catalog is not None:
             _catalog = _spec_config.effective_catalog
         else:
-            _catalog = LineCatalog.default_13()
+            _catalog = LineList.default_13()
 
         self._eline_wavelengths = _catalog.wavelengths
         self._eline_independent_wavelengths = _catalog.independent_wavelengths

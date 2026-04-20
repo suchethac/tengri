@@ -150,11 +150,11 @@ class Spectroscopy:
         LineList
             The active line catalog.
         """
-        from tengri.observation.line_list import LineCatalog
+        from tengri.observation.line_list import LineList
 
         if self.eline_catalog is not None:
             return self.eline_catalog
-        return LineCatalog.default_13()
+        return LineList.default_13()
 
     # ── Parameter helpers ─────────────────────────────────────────
 
@@ -211,7 +211,7 @@ class Spectroscopy:
 
         wave_jax = jnp.asarray(wave_obs)
         resolution = nirspec_prism_resolution(wave_jax / 1e4)
-        return SpectroscopyConfig._from_resolution(wave_jax, resolution, **kwargs)
+        return Spectroscopy._from_resolution(wave_jax, resolution, **kwargs)
 
     @staticmethod
     def nirspec_g140m(wave_obs: jnp.ndarray, **kwargs) -> Spectroscopy:
@@ -220,12 +220,12 @@ class Spectroscopy:
 
         wave_jax = jnp.asarray(wave_obs)
         resolution = nirspec_g140m_resolution(wave_jax / 1e4)
-        return SpectroscopyConfig._from_resolution(wave_jax, resolution, **kwargs)
+        return Spectroscopy._from_resolution(wave_jax, resolution, **kwargs)
 
     @staticmethod
     def constant_r(wave_obs: jnp.ndarray, R: float, **kwargs) -> Spectroscopy:
         """Constant-resolution spectrograph."""
-        return SpectroscopyConfig._from_resolution(wave_obs, float(R), **kwargs)
+        return Spectroscopy._from_resolution(wave_obs, float(R), **kwargs)
 
     @classmethod
     def desi_like(
@@ -254,14 +254,14 @@ class Spectroscopy:
         Spectroscopy
             Configured for DESI-like spectroscopic fitting.
         """
-        from tengri.observation.line_list import LineCatalog
+        from tengri.observation.line_list import LineList
 
         return cls(
             wave_obs=wave_obs,
             resolution=resolution,
             calibration_order=3,
             eline_mode="marginalized",
-            eline_catalog=LineCatalog.default_optical(),
+            eline_catalog=LineList.default_optical(),
             eline_prior_type="cloudy",
             eline_fix_doublets=True,
             **kwargs,
