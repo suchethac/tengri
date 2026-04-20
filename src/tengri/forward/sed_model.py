@@ -204,7 +204,6 @@ class SEDModel:
         self.spec = spec
         self.ssp_data = ssp_data
         self._forward_dtype = jnp.dtype(forward_dtype)
-        self._spec = spec
 
         # ── Approximation settings ────────────────────────────────
         if approx is None or approx is True:
@@ -334,13 +333,12 @@ class SEDModel:
             dust_model=getattr(spec, "dust_model", "two_component"),
         )
         self._uses_stochastic_sfh = spec.stochastic
-        self._field_model = sfh_settings.get("sfh_field_model", "drw")
+        self._gp_kernel = sfh_settings.get("sfh_field_model", "drw")
 
     def _init_metallicity(self, spec):
         """Configure metallicity mode and evolving alpha-enhancement."""
         self._met_mode = getattr(spec, "met_mode", "delta")
-        self._evolving_metallicity = self._met_mode == "ramp"
-        self._chem_evol_enabled = self._met_mode == "chem_evol"
+        # _met_mode checked directly: "ramp" for evolving, "chem_evol" for chemical evolution
 
         if self._met_mode != "delta":
             self._param_map.pop("met_logzsol", None)
@@ -357,7 +355,7 @@ class SEDModel:
     def _init_dust(self, spec):
         """Configure dust attenuation laws, nebular dust, and dust emission."""
         self._dust_model = getattr(spec, "dust_model", "two_component")
-        self._dust_approx = getattr(spec, "dust_approx", "fast")
+        self._dust_scheme = getattr(spec, "dust_approx", "fast")
 
         self._dust_law_bc = spec.dust_law_bc
         self._dust_law_diff = spec.dust_law_diff
@@ -369,7 +367,7 @@ class SEDModel:
         else:
             self._dust_law_diff_fn = resolve_dust_law(self._dust_law_diff)
 
-        self._neb_dust = getattr(spec, "neb_dust", "bc")
+        self._neb_dust_mode = getattr(spec, "neb_dust", "bc")
         _neb_bc_law_name = getattr(spec, "neb_dust_law_bc", None)
         if _neb_bc_law_name is not None:
             from tengri.components.dust.attenuation import resolve_dust_law as _rdl
@@ -419,14 +417,14 @@ class SEDModel:
     def _init_agn(self, spec):
         """Configure AGN model and detect parametric vs. fraction mode."""
         self._agn_model = getattr(spec, "agn_model", None)
-        self._agn_parametric = False
+        self._agn_luminosity_mode = False
         if self._agn_model:
             agn_dists = getattr(spec, "_distributions", {})
             agn_lbol_dist = agn_dists.get("agn_log_lbol")
             agn_frac_dist = agn_dists.get("agn_frac")
             lbol_is_free = agn_lbol_dist is not None and not agn_lbol_dist.is_fixed
             frac_is_free = agn_frac_dist is not None and not agn_frac_dist.is_fixed
-            self._agn_parametric = lbol_is_free and not frac_is_free
+            self._agn_luminosity_mode = lbol_is_free and not frac_is_free
             self._param_map.update(identity_param_map(_AGN_IDENTITY_PARAMS))
 
     def _init_multiwavelength(self, spec, ssp_data):
@@ -579,7 +577,7 @@ class SEDModel:
 
         # Dust age weights (sigmoid, for exact two-component dust)
         dust_age_w = None
-        if self._dust_model != "single_component" and self._dust_approx == "exact":
+        if self._dust_model != "single_component" and self._dust_scheme == "exact":
             dust_age_w = precompute_dust_age_weights(self.ssp_ages_yr)
 
         # IGM at filter effective wavelengths (for hybrid kernel, fixed z)
@@ -813,7 +811,7 @@ class SEDModel:
                 psd_tau_yr=p["psd_tau_yr"],
                 n_grid=self._n_grid,
                 d_log_age=float(self.d_log_age),
-                field_model=self._field_model,
+                field_model=self._gp_kernel,
             )
             kw["gp_x"] = gp_x
             kw["k0_half"] = k0_half
@@ -842,7 +840,7 @@ class SEDModel:
                 psd_tau_yr=p["psd_tau_yr"],
                 n_grid=self._n_grid,
                 d_log_age=float(self.d_log_age),
-                field_model=self._field_model,
+                field_model=self._gp_kernel,
             )
             kw["gp_x"] = gp_x
             kw["k0_half"] = k0_half
@@ -883,7 +881,7 @@ class SEDModel:
             kw["neb_fesc"] = p.get("neb_fesc", 0.0)
             kw["neb_fesc_lya"] = p.get("neb_fesc_lya", 0.0)
         # Shock
-        if getattr(self, "_shock_enabled", False):
+        if self._uses_shock:
             kw["shock_frac"] = p.get("shock_frac", 0.0)
             kw["shock_velocity"] = p.get("shock_velocity", 300.0)
             kw["shock_log_density"] = p.get("shock_log_density", 0.0)
@@ -1539,7 +1537,7 @@ class SEDModel:
             z_val = p.get("redshift", 0.1)
             t_obs_gyr = self._t_universe_gyr(z_val)
             lgmet_scatter = float(p.get("lgmet_scatter", self._lgmet_scatter))
-            if self._evolving_metallicity:
+            if self._met_mode == "ramp":
                 from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
 
                 lgmet_per_age = compute_log_z_evolving(
@@ -1862,7 +1860,7 @@ class SEDModel:
         if self._compositional.photometry is not None:
             # Evolving-Z / chem-evol: the end-to-end JIT has no met-table path;
             # fall back to the REST-SED kernel + Python filter integration.
-            if self._evolving_metallicity or getattr(self, "_chem_evol_enabled", False):
+            if self._met_mode == "ramp" or self._met_mode == "chem_evol":
                 rest_sed = self._compute_rest_sed_compositional(params)
                 z = self._get_redshift(params)
                 dl_cm = self._get_dl_cm(params)
@@ -2002,8 +2000,8 @@ class SEDModel:
             self._compositional.spectrum is not None
             and self._precomputed.spectroscopy is not None
             and wave_obs is self._precomputed.spectroscopy.wave_obs_pixels
-            and not self._evolving_metallicity
-            and not getattr(self, "_chem_evol_enabled", False)
+            and self._met_mode != "ramp"
+            and self._met_mode != "chem_evol"
         ):
             p = self._get_internal_params(params)
             sfr = self._compute_sfr(p)
@@ -2080,7 +2078,7 @@ class SEDModel:
             z_val = p.get("redshift", 0.0)
             t_obs_gyr = self._t_universe_gyr(z_val) if hasattr(self, "_t_universe_gyr") else 13.7
             lgmet_scatter = float(p.get("lgmet_scatter", self._lgmet_scatter))
-            if self._evolving_metallicity:
+            if self._met_mode == "ramp":
                 from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
 
                 lgmet_per_age = compute_log_z_evolving(
@@ -2117,10 +2115,10 @@ class SEDModel:
         # For evolving-Z / chem-evol with a non-dsps_met_table integration method,
         # the compositional kernel expects a single ssp_flux_at_z (no per-age grid),
         # so we derive a representative single metallicity.
-        if self._evolving_metallicity:
+        if self._met_mode == "ramp":
             # Use the final (present-day) metallicity as the representative value.
             _log_z = p.get("log_z_abs_final", p.get("log_z_abs", -1.8477))
-        elif self._chem_evol_enabled:
+        elif self._met_mode == "chem_evol":
             from tengri.components.sfh.chemical_evolution import chem_evol_metallicity_on_ssp_grid
 
             _log_z_per_age = chem_evol_metallicity_on_ssp_grid(

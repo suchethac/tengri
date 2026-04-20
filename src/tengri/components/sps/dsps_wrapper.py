@@ -401,7 +401,7 @@ def compute_dsps_met_table_weights(
     with a lognormal MDF, this function accepts a per-SSP-age metallicity
     array so each age bin can have its own metallicity and lognormal scatter
     (Hearin et al. 2023, Eq. 11).  This is the natural mode for models with
-    an evolving chemical history (``_evolving_metallicity=True``).
+    an evolving chemical history (``_met_mode="ramp"``).
 
     For a constant-metallicity model, pass a uniform array
     ``jnp.full_like(ssp_ages_yr, log_z_abs)``; the result is numerically

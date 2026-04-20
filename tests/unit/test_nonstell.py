@@ -45,11 +45,10 @@ def _make_model(
 
     model = SimpleNamespace(
         _nebular_backend=nebular_backend,
-        _shock_enabled=uses_shock,
         _uses_shock=uses_shock,
         _dust_emission_model=dust_emission_model,
         _agn_model=agn_model,
-        _agn_parametric=agn_parametric,
+        _agn_luminosity_mode=agn_parametric,
         _uses_radio=uses_radio,
         _uses_xray=uses_xray,
         _neb_dust=neb_dust,

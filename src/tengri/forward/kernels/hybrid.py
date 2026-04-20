@@ -69,7 +69,7 @@ def build_hybrid_photometry(model):
     if _use_taylor:
         ssp_phot_moment = precomp.ssp_phot_moment.astype(dt)
     _is_single_dust = model._dust_model == "single_component"
-    _dust_exact = getattr(model, "_dust_approx", "fast") == "exact"
+    _dust_exact = getattr(model, "_dust_scheme", "fast") == "exact"
     if not _is_single_dust:
         if _dust_exact:
             dust_age_w = model._precomputed.dust_age_weights.astype(dt)
@@ -163,7 +163,7 @@ def build_hybrid_photometry(model):
     if has_nebular:
         nebular_backend = model._nebular_backend
         ssp_log_ages_yr = model.ssp_log_ages_yr
-        _neb_dust_mode = getattr(model, "_neb_dust", "bc")
+        _neb_dust_mode = getattr(model, "_neb_dust_mode", "bc")
         _neb_bc_fn = getattr(model, "_neb_dust_law_bc_fn", law_bc_fn)
     if _has_preint_neb:
         # Capture preintegrated CLOUDY data for fast nebular photometry
@@ -186,7 +186,7 @@ def build_hybrid_photometry(model):
         _neb_lya_idx = int(jnp.argmin(jnp.abs(nebular_backend.grid.line_wavelengths - 1215.67)))
 
     # Shock
-    has_shock = getattr(model, "_shock_enabled", False)
+    has_shock = getattr(model, "_uses_shock", False)
 
     # Dust emission (full wavelength or preintegrated)
     has_dust_em_full = model._dust_emission_model is not None
@@ -279,7 +279,7 @@ def build_hybrid_photometry(model):
 
     # AGN (full wavelength or preintegrated K&D disc)
     has_agn_full = model._agn_model is not None
-    agn_parametric = model._agn_parametric if has_agn_full else False
+    agn_parametric = model._agn_luminosity_mode if has_agn_full else False
     _has_preint_kd = False
     _kd_data_fn = None
     if has_agn_full:
@@ -1380,7 +1380,7 @@ def build_hybrid_photometry(model):
     has_field = model._uses_stochastic_sfh
     sfh_fn = model._sfh_fn
     sfh_internal_names = model._sfh_internal_names
-    field_model = model._field_model
+    field_model = model._gp_kernel
     n_grid = model._n_grid
     d_log_age = float(model.d_log_age)
     ssp_log_ages_yr_cap = model.ssp_log_ages_yr
@@ -1519,7 +1519,7 @@ def build_hybrid_photometry_ztable(model):
     ztable = model._precomputed.photometry_ztable
     ssp_lgmet = model.ssp_data.ssp_lgmet.astype(dt)
     _is_single_dust = model._dust_model == "single_component"
-    _dust_exact = getattr(model, "_dust_approx", "fast") == "exact"
+    _dust_exact = getattr(model, "_dust_scheme", "fast") == "exact"
     if not _is_single_dust:
         if _dust_exact:
             dust_age_w = model._precomputed.dust_age_weights.astype(dt)
@@ -1582,7 +1582,7 @@ def build_hybrid_photometry_ztable(model):
     )
     if has_nebular:
         nebular_backend = model._nebular_backend
-        _neb_dust_mode = getattr(model, "_neb_dust", "bc")
+        _neb_dust_mode = getattr(model, "_neb_dust_mode", "bc")
         _neb_bc_fn = getattr(model, "_neb_dust_law_bc_fn", law_bc_fn)
     _has_preint_neb = has_nebular and getattr(
         model._nebular_backend, "_has_preint_photometry", False
@@ -1602,7 +1602,7 @@ def build_hybrid_photometry_ztable(model):
         _neb_lya_idx = int(jnp.argmin(jnp.abs(nebular_backend.grid.line_wavelengths - 1215.67)))
 
     # Shock
-    has_shock = getattr(model, "_shock_enabled", False)
+    has_shock = getattr(model, "_uses_shock", False)
 
     # Dust emission (full wavelength or preintegrated)
     has_dust_em_full = model._dust_emission_model is not None
@@ -1646,7 +1646,7 @@ def build_hybrid_photometry_ztable(model):
     has_field = "xi" in model.spec.free_params
     sfh_internal_names = model._sfh_internal_names
     n_grid = model._age_grid_n_pts
-    field_model = model._field_model
+    field_model = model._gp_kernel
     sfh_fn = resolve_sfh(model._sfh_model)
 
     # === Define kernel signature (parametric-style, same as fixed-z) ===

@@ -239,7 +239,7 @@ def get_agn_kwargs(model, p):
     dict
         Keyword arguments for fused AGN kernel (empty if AGN disabled).
     """
-    if not (model._agn_model is not None and model._agn_parametric):
+    if not (model._agn_model is not None and model._agn_luminosity_mode):
         return {}
     return {
         "agn_log_lbol": p.get("agn_log_lbol", 10.0),
@@ -469,7 +469,7 @@ def compute_sed_components(
             ssp_flux_at_z = interp_met_alpha_evolving_dispatch(model, log_z_abs, alpha_fe)
         else:
             ssp_flux_at_z = interp_metallicity_evolving(model, log_z_abs)
-    elif model._evolving_metallicity:
+    elif model._met_mode == "ramp":
         z = p.get("redshift", 0.0)
         t_universe_gyr = model._t_universe_gyr(z)
         log_z_per_age = compute_log_z_evolving(
@@ -496,7 +496,7 @@ def compute_sed_components(
             ssp_flux_at_z = interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe)
         else:
             ssp_flux_at_z = interp_metallicity_evolving(model, log_z_per_age)
-    elif getattr(model, "_chem_evol_enabled", False):
+    elif model._met_mode == "chem_evol":
         # Chemical evolution: derive Z(t) from SFH via gas-regulator model
         from tengri.components.sfh.chemical_evolution import chem_evol_metallicity_on_ssp_grid
 
@@ -578,7 +578,7 @@ def compute_sed_components(
         # Eliminates ~78% Python dispatch overhead (4-14x speedup).
         if (
             _dsps_weights_2d is None
-            and not model._evolving_metallicity
+            and model._met_mode != "ramp"
             and model._compositional.exact_sed is not None
         ):
             sed_attenuated, sed_intrinsic_jit = model._compositional.exact_sed(
@@ -666,7 +666,7 @@ def compute_sed_components(
     _law_bc_fn = getattr(model, "_dust_law_bc_fn", None)
     _law_diff_fn = getattr(model, "_dust_law_diff_fn", None)
     _neb_bc_fn = getattr(model, "_neb_dust_law_bc_fn", _law_bc_fn)
-    _neb_dust_mode = getattr(model, "_neb_dust", "bc")
+    _neb_dust_mode = getattr(model, "_neb_dust_mode", "bc")
     _dust_kw = {
         "dust_slope": p.get("dust_slope", -0.7),
         "dust_bump_strength": p.get("dust_bump_strength", 0.0),
@@ -710,7 +710,7 @@ def compute_sed_components(
         sed = sed + neb_sed
 
     # Shock emission (diffuse dust only — shocks outside birth clouds)
-    if getattr(model, "_shock_enabled", False):
+    if getattr(model, "_uses_shock", False):
         shock_raw = shock_emission(
             _ssp_wave,
             sed,
@@ -752,7 +752,7 @@ def compute_sed_components(
     agn_log_lbol = 0.0
     agn_frac_for_model = 0.0
     if model._agn_model is not None:
-        if model._agn_parametric:
+        if model._agn_luminosity_mode:
             agn_log_lbol = p.get("agn_log_lbol", 10.0)
             agn_frac_for_model = 1.0
             agn_bol_erg = 10.0**agn_log_lbol * 3.828e33  # Lsun → erg/s

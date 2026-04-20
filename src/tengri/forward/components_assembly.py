@@ -245,7 +245,7 @@ def build_agn_component(model):
 
     agn_model_fn = resolve_agn_model(model._agn_model)
     wave = model.ssp_data.ssp_wave
-    is_parametric = model._agn_parametric
+    is_parametric = model._agn_luminosity_mode
 
     def agn_fn(
         sed_so_far=None,

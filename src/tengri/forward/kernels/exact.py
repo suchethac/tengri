@@ -54,7 +54,7 @@ def build_exact_sed(model):
     dt = model._forward_dtype
     ssp_wave = model.ssp_data.ssp_wave.astype(dt)
     _is_single_dust_exact = model._dust_model == "single_component"
-    _dust_exact_sed = getattr(model, "_dust_approx", "fast") == "exact"
+    _dust_exact_sed = getattr(model, "_dust_scheme", "fast") == "exact"
     if not _is_single_dust_exact:
         if _dust_exact_sed:
             dust_age_w = model._precomputed.dust_age_weights.astype(dt)
@@ -155,7 +155,7 @@ def build_fused_rest_sed(model):
     dt = model._forward_dtype
     ssp_wave = model.ssp_data.ssp_wave.astype(dt)
     _is_single_dust = model._dust_model == "single_component"
-    _dust_exact = getattr(model, "_dust_approx", "fast") == "exact"
+    _dust_exact = getattr(model, "_dust_scheme", "fast") == "exact"
     if not _is_single_dust:
         if _dust_exact:
             dust_age_w = model._precomputed.dust_age_weights.astype(dt)

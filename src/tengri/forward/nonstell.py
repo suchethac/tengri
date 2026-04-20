@@ -70,13 +70,13 @@ def collect_nonstell(model) -> list[NonStellarSlot]:
         slots.append(
             NonStellarSlot(
                 "nebular",
-                dust_mode=getattr(model, "_neb_dust", "bc"),
+                dust_mode=getattr(model, "_neb_dust_mode", "bc"),
                 on_ssp_grid=True,
             )
         )
 
     # Shock
-    if getattr(model, "_shock_enabled", False):
+    if getattr(model, "_uses_shock", False):
         slots.append(NonStellarSlot("shock", dust_mode="diff", on_ssp_grid=True))
 
     # Dust IR (energy-balanced thermal re-emission)
@@ -147,11 +147,11 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
 
         nebular_backend = model._nebular_backend
         ssp_log_ages_yr = model.ssp_log_ages_yr
-        _neb_dust_mode = getattr(model, "_neb_dust", "bc")
+        _neb_dust_mode = getattr(model, "_neb_dust_mode", "bc")
         _neb_bc_fn = getattr(model, "_neb_dust_law_bc_fn", law_bc_fn)
 
     # --- Shock ---
-    has_shock = getattr(model, "_shock_enabled", False)
+    has_shock = getattr(model, "_uses_shock", False)
     if has_shock:
         from tengri.forward.emission_helpers import (
             attenuate_emission as _atten_shock,
@@ -170,7 +170,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
 
     # --- AGN ---
     has_agn = model._agn_model is not None
-    agn_parametric = model._agn_parametric if has_agn else False
+    agn_parametric = model._agn_luminosity_mode if has_agn else False
     if has_agn:
         from tengri.components.agn import resolve_agn_model
         from tengri.forward.emission_helpers import agn_emission
