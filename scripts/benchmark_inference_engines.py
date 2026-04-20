@@ -49,10 +49,18 @@ def build_scenario_fitter(spec_kwargs, true_params, snr=20.0, key=None):
         return None
 
     ssp = load_ssp_data(str(ssp_file))
-    filters = load_filter_set([
-        "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-        "2mass_j", "2mass_h", "2mass_ks",
-    ])
+    filters = load_filter_set(
+        [
+            "sdss_u",
+            "sdss_g",
+            "sdss_r",
+            "sdss_i",
+            "sdss_z",
+            "2mass_j",
+            "2mass_h",
+            "2mass_ks",
+        ]
+    )
 
     spec = ParamSpec(**spec_kwargs)
     model = SEDModel(spec, ssp, filters=filters)
@@ -102,7 +110,7 @@ def run_inference_method(
                 if "n_steps" in posterior.diagnostics:
                     diagnostics["n_steps"] = int(posterior.diagnostics["n_steps"])
 
-        elif method in ["mcmc_nuts", "mcmc_raytrace"]:
+        elif method.startswith("mcmc_"):
             if hasattr(posterior, "diagnostics"):
                 diag = posterior.diagnostics
                 diagnostics["n_divergent"] = int(diag.get("n_divergent", 0))
@@ -149,117 +157,128 @@ def main():
     scenarios = []
 
     # ===== SCENARIO A1: Simple optical fit (D=7) =====
-    scenarios.append({
-        "name": "A1_optical_simple",
-        "spec_kwargs": {
-            "mean_sfh_type": "tsnorm",
-            "sfh_tsnorm_skew": Uniform(-0.5, 0.5),
-            "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
-            "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
-            "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
-            "sfh_tsnorm_log_peak_sfr": Uniform(-1.0, 2.5),
-            "met_logzsol": Uniform(-1.5, 0.2),
-            "dust_tau_bc": Uniform(0.0, 2.0),
-            "dust_tau_diff": 0.3,
-            "dust_slope": -0.7,
-            "redshift": 1.0,
-        },
-        "true_params": {
-            "sfh_tsnorm_skew": 0.1,
-            "sfh_tsnorm_peak_lbt_gyr": 3.0,
-            "sfh_tsnorm_width_gyr": 1.2,
-            "sfh_tsnorm_trunc": 0.3,
-            "sfh_tsnorm_log_peak_sfr": 1.0,
-            "met_logzsol": -0.3,
-            "dust_tau_bc": 0.5,
-            "dust_tau_diff": 0.3,
-            "dust_slope": -0.7,
-            "redshift": 1.0,
-        },
-        "methods": [
-            ("map", {}),
-            ("map", {"optimizer": "lbfgs"}),
-            ("laplace", {}),
-            ("pathfinder", {"n_samples": 500}),
-            ("mcmc_nuts", {"n_warmup": 200, "n_samples": 300}),
-            ("vi", {"n_iterations": 3, "n_samples": 8}),
-            ("nss", {"n_live": 200, "max_iterations": 2000}),
-        ],
-    })
+    scenarios.append(
+        {
+            "name": "A1_optical_simple",
+            "spec_kwargs": {
+                "mean_sfh_type": "tsnorm",
+                "sfh_tsnorm_skew": Uniform(-0.5, 0.5),
+                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
+                "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
+                "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
+                "sfh_tsnorm_log_peak_sfr": Uniform(-1.0, 2.5),
+                "met_logzsol": Uniform(-1.5, 0.2),
+                "dust_tau_bc": Uniform(0.0, 2.0),
+                "dust_tau_diff": 0.3,
+                "dust_slope": -0.7,
+                "redshift": 1.0,
+            },
+            "true_params": {
+                "sfh_tsnorm_skew": 0.1,
+                "sfh_tsnorm_peak_lbt_gyr": 3.0,
+                "sfh_tsnorm_width_gyr": 1.2,
+                "sfh_tsnorm_trunc": 0.3,
+                "sfh_tsnorm_log_peak_sfr": 1.0,
+                "met_logzsol": -0.3,
+                "dust_tau_bc": 0.5,
+                "dust_tau_diff": 0.3,
+                "dust_slope": -0.7,
+                "redshift": 1.0,
+            },
+            "methods": [
+                ("map", {}),
+                ("map", {"optimizer": "lbfgs"}),
+                ("laplace", {}),
+                ("pathfinder", {"n_samples": 500}),
+                ("mcmc_nuts", {"n_warmup": 200, "n_samples": 300}),
+                ("mcmc_hmc", {"n_warmup": 100, "n_samples": 200, "n_leapfrog_steps": 10}),
+                ("mcmc_dynamic_hmc", {"n_warmup": 100, "n_samples": 200}),
+                ("mcmc_ghmc", {"n_warmup": 100, "n_samples": 200}),
+                ("mcmc_mclmc", {"n_warmup": 200, "n_samples": 300}),
+                ("mcmc_adjusted_mclmc", {"n_warmup": 200, "n_samples": 300}),
+                ("vi", {"n_iterations": 3, "n_samples": 8}),
+                ("nss", {"n_live": 200, "max_iterations": 2000}),
+            ],
+        }
+    )
 
     # ===== SCENARIO A2: Mid-complexity with metallicity (D=8) =====
-    scenarios.append({
-        "name": "A2_optical_met",
-        "spec_kwargs": {
-            "mean_sfh_type": "dpl",
-            "sfh_dpl_alpha": Uniform(0.1, 3.0),
-            "sfh_dpl_beta": Uniform(0.1, 3.0),
-            "sfh_dpl_tau_gyr": Uniform(0.1, 10.0),
-            "sfh_dpl_log_peak_sfr": Uniform(-1.0, 2.5),
-            "met_logzsol": Gaussian(-0.3, 0.3, -1.5, 0.2),
-            "dust_tau_bc": Uniform(0.0, 2.0),
-            "dust_tau_diff": LogUniform(0.01, 2.0),
-            "dust_slope": Uniform(-1.5, 0.5),
-            "redshift": 1.0,
-        },
-        "true_params": {
-            "sfh_dpl_alpha": 1.0,
-            "sfh_dpl_beta": 0.5,
-            "sfh_dpl_tau_gyr": 2.0,
-            "sfh_dpl_log_peak_sfr": 1.2,
-            "met_logzsol": -0.2,
-            "dust_tau_bc": 0.6,
-            "dust_tau_diff": 0.4,
-            "dust_slope": -0.7,
-            "redshift": 1.0,
-        },
-        "methods": [
-            ("map", {}),
-            ("map", {"optimizer": "lbfgs"}),
-            ("mcmc_nuts", {"n_warmup": 200, "n_samples": 300}),
-            ("vi", {"n_iterations": 3, "n_samples": 8}),
-            ("nss", {"n_live": 200, "max_iterations": 2000}),
-        ],
-    })
+    scenarios.append(
+        {
+            "name": "A2_optical_met",
+            "spec_kwargs": {
+                "mean_sfh_type": "dpl",
+                "sfh_dpl_alpha": Uniform(0.1, 3.0),
+                "sfh_dpl_beta": Uniform(0.1, 3.0),
+                "sfh_dpl_tau_gyr": Uniform(0.1, 10.0),
+                "sfh_dpl_log_peak_sfr": Uniform(-1.0, 2.5),
+                "met_logzsol": Gaussian(-0.3, 0.3, -1.5, 0.2),
+                "dust_tau_bc": Uniform(0.0, 2.0),
+                "dust_tau_diff": LogUniform(0.01, 2.0),
+                "dust_slope": Uniform(-1.5, 0.5),
+                "redshift": 1.0,
+            },
+            "true_params": {
+                "sfh_dpl_alpha": 1.0,
+                "sfh_dpl_beta": 0.5,
+                "sfh_dpl_tau_gyr": 2.0,
+                "sfh_dpl_log_peak_sfr": 1.2,
+                "met_logzsol": -0.2,
+                "dust_tau_bc": 0.6,
+                "dust_tau_diff": 0.4,
+                "dust_slope": -0.7,
+                "redshift": 1.0,
+            },
+            "methods": [
+                ("map", {}),
+                ("map", {"optimizer": "lbfgs"}),
+                ("mcmc_nuts", {"n_warmup": 200, "n_samples": 300}),
+                ("vi", {"n_iterations": 3, "n_samples": 8}),
+                ("nss", {"n_live": 200, "max_iterations": 2000}),
+            ],
+        }
+    )
 
     # ===== SCENARIO A3: Stochastic SFH (D~9) =====
-    scenarios.append({
-        "name": "A3_stochastic_sfh",
-        "spec_kwargs": {
-            "mean_sfh_type": ["dense_basis", "field"],
-            "sfh_dbp_log_total_mass": Uniform(9.0, 11.5),
-            "sfh_dbp_tx_frac_0": Uniform(0.0, 1.0),
-            "sfh_dbp_tx_frac_1": Uniform(0.0, 1.0),
-            "sfh_dbp_tx_frac_2": Uniform(0.0, 1.0),
-            "sfh_field_psd_type": "power_law",
-            "sfh_field_psd_sigma": LogUniform(0.01, 1.0),
-            "sfh_field_psd_tau_myr": LogUniform(10.0, 1000.0),
-            "met_logzsol": Uniform(-1.5, 0.2),
-            "dust_tau_bc": Uniform(0.0, 2.0),
-            "dust_tau_diff": LogUniform(0.01, 2.0),
-            "dust_slope": -0.7,
-            "redshift": 1.0,
-        },
-        "true_params": {
-            "sfh_dbp_log_total_mass": 10.2,
-            "sfh_dbp_tx_frac_0": 0.3,
-            "sfh_dbp_tx_frac_1": 0.4,
-            "sfh_dbp_tx_frac_2": 0.3,
-            "sfh_field_psd_sigma": 0.3,
-            "sfh_field_psd_tau_myr": 100.0,
-            "met_logzsol": -0.3,
-            "dust_tau_bc": 0.5,
-            "dust_tau_diff": 0.3,
-            "dust_slope": -0.7,
-            "redshift": 1.0,
-        },
-        "methods": [
-            ("map", {}),
-            ("map", {"optimizer": "lbfgs"}),
-            ("vi", {"n_iterations": 3, "n_samples": 8}),
-            ("nss", {"n_live": 200, "max_iterations": 2000}),
-        ],
-    })
+    scenarios.append(
+        {
+            "name": "A3_stochastic_sfh",
+            "spec_kwargs": {
+                "mean_sfh_type": ["dense_basis", "field"],
+                "sfh_dbp_log_total_mass": Uniform(9.0, 11.5),
+                "sfh_dbp_tx_frac_0": Uniform(0.0, 1.0),
+                "sfh_dbp_tx_frac_1": Uniform(0.0, 1.0),
+                "sfh_dbp_tx_frac_2": Uniform(0.0, 1.0),
+                "sfh_field_psd_type": "power_law",
+                "sfh_field_psd_sigma": LogUniform(0.01, 1.0),
+                "sfh_field_psd_tau_myr": LogUniform(10.0, 1000.0),
+                "met_logzsol": Uniform(-1.5, 0.2),
+                "dust_tau_bc": Uniform(0.0, 2.0),
+                "dust_tau_diff": LogUniform(0.01, 2.0),
+                "dust_slope": -0.7,
+                "redshift": 1.0,
+            },
+            "true_params": {
+                "sfh_dbp_log_total_mass": 10.2,
+                "sfh_dbp_tx_frac_0": 0.3,
+                "sfh_dbp_tx_frac_1": 0.4,
+                "sfh_dbp_tx_frac_2": 0.3,
+                "sfh_field_psd_sigma": 0.3,
+                "sfh_field_psd_tau_myr": 100.0,
+                "met_logzsol": -0.3,
+                "dust_tau_bc": 0.5,
+                "dust_tau_diff": 0.3,
+                "dust_slope": -0.7,
+                "redshift": 1.0,
+            },
+            "methods": [
+                ("map", {}),
+                ("map", {"optimizer": "lbfgs"}),
+                ("vi", {"n_iterations": 3, "n_samples": 8}),
+                ("nss", {"n_live": 200, "max_iterations": 2000}),
+            ],
+        }
+    )
 
     # Run all scenarios
     all_results = []
@@ -303,23 +322,85 @@ def main():
             else:
                 print(f"FAILED: {result['error']}")
 
+    # ===== CACHE PROFILING: cold → cached → new-fitter =====
+    print(f"\n{'=' * 90}")
+    print("  CACHE PROFILING (A1 MCMC methods)")
+    print(f"{'=' * 90}\n")
+
+    a1_fitter = build_scenario_fitter(
+        scenarios[0]["spec_kwargs"],
+        scenarios[0]["true_params"],
+    )
+    mcmc_methods_a1 = [m for m in scenarios[0]["methods"] if m[0].startswith("mcmc_")]
+
+    # Cold run (JIT compile + adaptation)
+    print("  --- Cold (JIT + adaptation) ---")
+    for method, method_kwargs in mcmc_methods_a1:
+        print(f"  {method}...", end=" ", flush=True)
+        key, subkey = jr.split(key)
+        r = run_inference_method("A1_cold", a1_fitter, method, method_kwargs, key=subkey)
+        all_results.append(r)
+        if r["success"]:
+            print(f"{r['inference_sec']:.2f}s")
+        else:
+            print(f"FAIL: {r['error']}")
+
+    # Cached run (adaptation skipped, JIT warm)
+    print("  --- Cached (skip adaptation, JIT warm) ---")
+    for method, method_kwargs in mcmc_methods_a1:
+        print(f"  {method}...", end=" ", flush=True)
+        key, subkey = jr.split(key)
+        r = run_inference_method("A1_cached", a1_fitter, method, method_kwargs, key=subkey)
+        all_results.append(r)
+        if r["success"]:
+            print(f"{r['inference_sec']:.2f}s")
+        else:
+            print(f"FAIL: {r['error']}")
+
+    # New fitter, DIFFERENT galaxy, same Model, REVERSED engine order
+    print("  --- New fitter, different galaxy, reversed engine order ---")
+    model_shared = a1_fitter.model
+    different_params = {
+        "sfh_tsnorm_skew": -0.3,
+        "sfh_tsnorm_peak_lbt_gyr": 7.0,
+        "sfh_tsnorm_width_gyr": 0.5,
+        "sfh_tsnorm_trunc": 0.8,
+        "sfh_tsnorm_log_peak_sfr": 0.2,
+        "met_logzsol": -1.0,
+        "dust_tau_bc": 1.5,
+        "dust_tau_diff": 0.3,
+        "dust_slope": -0.7,
+        "redshift": 1.0,
+    }
+    obs2 = model_shared.mock(different_params, snr=15.0, key=jr.PRNGKey(777))
+    a1_fitter2 = Fitter(model_shared, obs2.flux_obs, obs2.noise)
+    for method, method_kwargs in reversed(mcmc_methods_a1):
+        print(f"  {method}...", end=" ", flush=True)
+        key, subkey = jr.split(key)
+        r = run_inference_method("A1_new_gal", a1_fitter2, method, method_kwargs, key=subkey)
+        all_results.append(r)
+        if r["success"]:
+            print(f"{r['inference_sec']:.2f}s")
+        else:
+            print(f"FAIL: {r['error']}")
+
     # Summary table
     print()
     print("=" * 90)
     print("  SUMMARY TABLE")
     print("=" * 90)
     print()
-    print(f"{'Scenario':<20} {'Method':<18} {'D':<4} {'Status':<8} {'Time':<10} {'Memory':<10}")
+    print(f"{'Scenario':<20} {'Method':<22} {'D':<4} {'Status':<8} {'Time':<10} {'Memory':<10}")
     print("-" * 90)
 
     for r in all_results:
         status = "OK" if r["success"] else "FAIL"
-        time_str = f"{r['inference_sec']:.1f}s" if r["success"] else "-"
+        time_str = f"{r['inference_sec']:.2f}s" if r["success"] else "-"
         mem_str = f"{r['memory_mb']:.0f} MB" if r["success"] else "-"
 
         print(
             f"{r['scenario']:<20} "
-            f"{r['method']:<18} "
+            f"{r['method']:<22} "
             f"{r['n_free']:<4} "
             f"{status:<8} "
             f"{time_str:<10} "
