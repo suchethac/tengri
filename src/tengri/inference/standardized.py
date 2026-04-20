@@ -240,6 +240,7 @@ def build_standardized_loss(
     noise: jnp.ndarray,
     data_type: str = "photometry",
     wave_obs=None,
+    data_mask: jnp.ndarray | None = None,
 ) -> Callable:
     """Build the unified loss function.
 
@@ -252,10 +253,15 @@ def build_standardized_loss(
     where σ²_eff,k = σ²_obs,k + (f_cal · m_k)² and the log-determinant
     term prevents the trivial solution σ → ∞.
 
+    When ``data_mask`` is provided, censored bands use the normal CDF
+    likelihood instead of chi-squared.  Mask values: 0 = detected,
+    1 = upper limit, -1 = lower limit.
+
     No prior penalty terms beyond ½ξᵀξ. The prior is absorbed into the
     transforms.
     """
     from tengri.observation.noise import (
+        censored_log_likelihood,
         get_noise_dof,
         has_noise_model,
         uses_student_t,
@@ -264,6 +270,7 @@ def build_standardized_loss(
 
     use_variable_noise = has_noise_model(smodel.spec)
     noise_dof = get_noise_dof(smodel.spec) if uses_student_t(smodel.spec) else None
+    use_censored = data_mask is not None
 
     xi_template = {}
     for name, shape in smodel.domain.items():
@@ -274,7 +281,22 @@ def build_standardized_loss(
 
     _, unravel_fn = ravel_pytree(xi_template)
 
-    if use_variable_noise:
+    if use_censored:
+        mask_arr = jnp.asarray(data_mask)
+
+        def loss_fn(xi_flat: jnp.ndarray) -> jnp.ndarray:
+            xi = unravel_fn(xi_flat)
+            predicted = smodel.predict(xi, data_type=data_type, wave_obs=wave_obs)
+            params = smodel.xi_to_params(xi)
+            f_cal = params.get("noise_frac_cal", 0.0)
+
+            e_lh = censored_log_likelihood(
+                data, noise, predicted, mask_arr, f_cal=f_cal, dof=noise_dof
+            )
+            prior = jnp.sum(xi_flat**2)
+            return e_lh + 0.5 * prior
+
+    elif use_variable_noise:
 
         def loss_fn(xi_flat: jnp.ndarray) -> jnp.ndarray:
             xi = unravel_fn(xi_flat)
