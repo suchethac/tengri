@@ -11,6 +11,53 @@ import jax
 import jax.numpy as jnp
 
 
+def _get_nss_algo(
+    fitter,
+    *,
+    num_inner_steps,
+    num_delete,
+    max_steps,
+    max_shrinkage,
+):
+    """Return cached (algo, jit_step), building if needed.
+
+    The algorithm is cached on the **Model** so that multiple Fitters
+    with different galaxy data (but same model structure) share the
+    same compiled XLA step function — zero recompilation.
+    """
+    cache_key = (
+        fitter._engine_cache_key(),
+        "nss",
+        num_inner_steps,
+        num_delete,
+        max_steps,
+        max_shrinkage,
+    )
+    model = fitter.model
+    if not hasattr(model, "_nss_algo_cache"):
+        model._nss_algo_cache = {}
+
+    if cache_key not in model._nss_algo_cache:
+        from tengri.inference.backends.nested.nss import as_top_level_api
+
+        logprior_fn = fitter._build_logprior_fn()
+        loglikelihood_fn = fitter._get_or_build_loglikelihood_fn()
+
+        algo = as_top_level_api(
+            logprior_fn,
+            loglikelihood_fn,
+            num_inner_steps,
+            num_delete=num_delete,
+            max_steps=max_steps,
+            max_shrinkage=max_shrinkage,
+            data_args=fitter._data_args,
+        )
+        step = jax.jit(algo.step)
+        model._nss_algo_cache[cache_key] = (algo, step)
+
+    return model._nss_algo_cache[cache_key]
+
+
 def run_nss(
     fitter,
     *,
@@ -54,7 +101,6 @@ def run_nss(
     verbose : bool
         Print progress.
     """
-    from tengri.inference.backends.nested.nss import as_top_level_api
     from tengri.inference.backends.nested.utils import ess as ns_ess, finalise, sample as ns_sample
     from tengri.inference.posterior import Posterior
 
@@ -64,10 +110,6 @@ def run_nss(
             "NSS not supported for stochastic SFH models (D~137). "
             "Use 'vi' or 'mcmc_raytrace' instead."
         )
-
-    logprior_fn = fitter._build_logprior_fn()
-    loglikelihood_fn = fitter._get_or_build_loglikelihood_fn()
-    data_args = fitter._data_args
 
     D = len(fitter._free_names)
     if num_inner_steps is None:
@@ -79,14 +121,10 @@ def run_nss(
             f"{num_delete} deletions/iter, {num_inner_steps} HRSS steps"
         )
 
-    # Build NSS algorithm — bind data_args into the likelihood
-    def _nss_loglik(free_params):
-        return loglikelihood_fn(free_params, data_args)
-
-    algo = as_top_level_api(
-        logprior_fn,
-        _nss_loglik,
-        num_inner_steps,
+    # Get cached algo + JIT step (compile-once across galaxies)
+    algo, step = _get_nss_algo(
+        fitter,
+        num_inner_steps=num_inner_steps,
         num_delete=num_delete,
         max_steps=max_steps,
         max_shrinkage=max_shrinkage,
@@ -97,8 +135,8 @@ def run_nss(
     all_samples = fitter.spec.sample_batch(init_key, n_live)
     particles = {name: all_samples[name] for name in fitter._free_names}
 
-    live = algo.init(particles)
-    step = jax.jit(algo.step)
+    data_args = fitter._data_args
+    live = algo.init(particles, data_args=data_args)
 
     dead_points = []
     n_iter = 0

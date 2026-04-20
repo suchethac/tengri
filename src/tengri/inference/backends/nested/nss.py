@@ -80,6 +80,7 @@ def update_inner_kernel_params(
     """Update inner kernel parameters from current particles.
 
     Computes the empirical covariance matrix from the live particles.
+    Preserves ``data_args`` from previous params when present (compile-once mode).
 
     Parameters
     ----------
@@ -90,14 +91,17 @@ def update_inner_kernel_params(
     info
         Information from the last NS step (unused).
     inner_kernel_params
-        Previous parameters (unused).
+        Previous parameters; ``data_args`` key is preserved if present.
 
     Returns
     -------
     dict
-        Dictionary with updated 'cov' (covariance matrix).
+        Dictionary with updated 'cov' (and preserved 'data_args' if applicable).
     """
-    return {"cov": jnp.atleast_2d(particles_covariance_matrix(state.particles.position))}
+    result = {"cov": jnp.atleast_2d(particles_covariance_matrix(state.particles.position))}
+    if inner_kernel_params is not None and "data_args" in inner_kernel_params:
+        result["data_args"] = inner_kernel_params["data_args"]
+    return result
 
 
 def build_kernel(
@@ -118,12 +122,13 @@ def build_kernel(
     """
 
     def constrained_mcmc_slice_fn(rng_key, state, loglikelihood_0, **params):
+        data_args = params.pop("data_args", None)
         rng_key, prop_key = jax.random.split(rng_key, 2)
         d = generate_slice_direction_fn(prop_key, state.position, **params)
 
         def slice_fn(t) -> tuple[NSState, bool]:
             x, step_accepted = stepper_fn(state.position, d, t)
-            new_state = init_state_fn(x, loglikelihood_birth=loglikelihood_0)
+            new_state = init_state_fn(x, loglikelihood_birth=loglikelihood_0, data_args=data_args)
             in_contour = new_state.loglikelihood > loglikelihood_0
             is_accepted = in_contour & step_accepted
             return new_state, is_accepted
@@ -161,6 +166,7 @@ def as_top_level_api(
     update_strategy: Callable = update_with_mcmc_take_last,
     max_steps: int = 10,
     max_shrinkage: int = 100,
+    data_args: dict | None = None,
 ) -> SamplingAlgorithm:
     """Create a Nested Slice Sampling (NSS) algorithm.
 
@@ -174,6 +180,8 @@ def as_top_level_api(
         Log-prior probability of a single particle.
     loglikelihood_fn
         Log-likelihood of a single particle.
+        If *data_args* is provided, must be 2-arg: ``(params, data_args) -> scalar``
+        (compile-once mode).  Otherwise 1-arg: ``(params) -> scalar``.
     num_inner_steps
         Number of HRSS steps per new particle generation.
     num_delete
@@ -194,6 +202,10 @@ def as_top_level_api(
         Maximum expansion steps in slice sampling.
     max_shrinkage
         Maximum shrinking steps in slice sampling.
+    data_args : dict, optional
+        If provided, enables compile-once mode: ``loglikelihood_fn`` is
+        2-arg and ``data_args`` is stored in the state so changing galaxy
+        data does not trigger XLA recompilation.
 
     Returns
     -------
@@ -219,12 +231,21 @@ def as_top_level_api(
         max_shrinkage=max_shrinkage,
     )
 
-    def init_fn(position, rng_key=None):
-        return init(
+    def init_fn(position, data_args=None, rng_key=None):
+        if data_args is not None:
+            _init_fn = jax.vmap(partial(init_state_fn, data_args=data_args))
+        else:
+            _init_fn = jax.vmap(init_state_fn)
+        state = init(
             position,
-            init_state_fn=jax.vmap(init_state_fn),
+            init_state_fn=_init_fn,
             update_inner_kernel_params_fn=update_inner_kernel_params_fn,
         )
+        if data_args is not None:
+            state = state._replace(
+                inner_kernel_params={**state.inner_kernel_params, "data_args": data_args}
+            )
+        return state
 
     def step_fn(rng_key, state):
         return kernel(rng_key, state)

@@ -320,7 +320,7 @@ class TestDisabledBuilders:
         ssp_data = _make_ssp_data()
         model = types.SimpleNamespace(
             ssp_data=ssp_data,
-            _radio_enabled=False,
+            _uses_radio=False,
         )
         assert build_radio_component(model) is None
 
@@ -328,6 +328,6 @@ class TestDisabledBuilders:
         ssp_data = _make_ssp_data()
         model = types.SimpleNamespace(
             ssp_data=ssp_data,
-            _xray_enabled=False,
+            _uses_xray=False,
         )
         assert build_xray_component(model) is None

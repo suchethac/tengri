@@ -433,7 +433,6 @@ class Fitter:
 
         return args
 
-
     # ── Compilation ───────────────────────────────────────────────────
 
     def _start_background_compilation(self) -> None:
@@ -657,7 +656,6 @@ class Fitter:
             print("Compilation complete.")
         return self
 
-
     # ── Loss and likelihood builders ──────────────────────────────────
 
     def _build_loss_fn(self, mode="_traceable"):
@@ -766,7 +764,6 @@ class Fitter:
         self.model._logdensity_fn_cache[cache_key] = logdensity
         return logdensity
 
-
     # ── Parameter transforms ──────────────────────────────────────────
 
     def _initialize_unbounded(self, key):
@@ -815,7 +812,6 @@ class Fitter:
         if self.spec.stochastic and "psd_xi" in params_unbounded:
             params["psd_xi"] = params_unbounded["psd_xi"]
         return params
-
 
     # ── Inference dispatch ────────────────────────────────────────────
 
@@ -1070,7 +1066,6 @@ class Fitter:
         # (mode="auto" variance pathology fixed 2026-04-18)
         return "_traceable"
 
-
     # ── Private method runners ────────────────────────────────────────
 
     def _run_vi(self, *, key, init_from=None, **kwargs):
@@ -1168,7 +1163,6 @@ class Fitter:
         from tengri.inference.backends.mcmc.common import run_elliptical_slice
 
         return run_elliptical_slice(self, key=key, **kwargs)
-
 
     # ── Posterior sampling ────────────────────────────────────────────
 
@@ -1367,7 +1361,6 @@ class Fitter:
 
         return existing_samples
 
-
     # ── Batch ─────────────────────────────────────────────────────────
 
     def fit_batch(
@@ -1422,18 +1415,39 @@ class Fitter:
         # vmap batch MAP: vectorize optimization over all galaxies in one JIT call.
         # Enabled when: method="map", precomp is set (same model for all galaxies),
         # and all galaxies have the same data shape.
+        _same_shape = n_gal > 1 and all(
+            jnp.asarray(g["flux_obs"]).shape == jnp.asarray(batch[0]["flux_obs"]).shape
+            for g in batch
+        )
         _use_vmap_map = (
-            method == "map"
-            and self.model._precomputed.photometry is not None
-            and n_gal > 1
-            and all(
-                jnp.asarray(g["flux_obs"]).shape == jnp.asarray(batch[0]["flux_obs"]).shape
-                for g in batch
-            )
+            method == "map" and self.model._precomputed.photometry is not None and _same_shape
         )
 
         if _use_vmap_map:
             return self._fit_batch_vmap_map(batch, key=key, verbose=verbose, **kwargs)
+
+        # vmap batch MCMC: vectorize sampling over all galaxies in one JIT call.
+        _mcmc_methods = {
+            "mcmc_nuts",
+            "mcmc_hmc",
+            "mcmc_dynamic_hmc",
+            "mcmc_ghmc",
+        }
+        _use_vmap_mcmc = (
+            method in _mcmc_methods
+            and self.model._precomputed.photometry is not None
+            and _same_shape
+            and not self.spec.stochastic
+        )
+
+        if _use_vmap_mcmc:
+            return self._fit_batch_vmap_mcmc(
+                batch,
+                key=key,
+                method=method,
+                verbose=verbose,
+                **kwargs,
+            )
 
         results = []
         t0 = time.time()
@@ -1460,6 +1474,272 @@ class Fitter:
         t_total = time.time() - t0
         if verbose:
             print(f"  Done: {n_gal} galaxies in {t_total:.1f}s ({t_total / n_gal:.1f}s/galaxy)")
+
+        return results
+
+    def _fit_batch_vmap_mcmc(
+        self,
+        batch,
+        *,
+        key,
+        method="mcmc_nuts",
+        verbose=True,
+        **kwargs,
+    ):
+        """Vectorized MCMC sampling over a batch using jax.vmap.
+
+        All galaxies share the same compiled XLA kernel — adaptation
+        parameters are computed on the first galaxy and reused for all.
+        A single ``jax.jit(jax.vmap(...))`` call runs sampling for all
+        galaxies in parallel.
+
+        Requirements: same model structure, same data shape, parametric SFH.
+        """
+        import blackjax
+        from jax.flatten_util import ravel_pytree
+
+        from tengri.inference.backends.mcmc.common import (
+            _get_dynamic_hmc_kernel,
+            _get_flat_logdensity,
+            _get_ghmc_kernel,
+            _get_hmc_kernel,
+            _get_nuts_kernel,
+        )
+        from tengri.inference.posterior import Posterior
+
+        n_warmup = kwargs.get("n_warmup", 300)
+        n_burnin = kwargs.get("n_burnin", 100)
+        n_samples = kwargs.get("n_samples", 1000)
+        target_accept_rate = kwargs.get("target_accept_rate", 0.85)
+        max_num_doublings = kwargs.get("max_num_doublings", 10)
+        dense_mass_matrix = kwargs.get("dense_mass_matrix", True)
+        n_leapfrog_steps = kwargs.get("n_leapfrog_steps", 10)
+        alpha = kwargs.get("alpha", 0.8)
+        delta = kwargs.get("delta", 0.1)
+
+        n_gal = len(batch)
+        t0 = time.time()
+
+        # Stack galaxy data into batch arrays (n_gal, n_obs)
+        flux_batch = jnp.stack([jnp.asarray(g["flux_obs"]) for g in batch])
+        noise_batch = jnp.stack([jnp.asarray(g["noise"]) for g in batch])
+        noise_inv_batch = 1.0 / noise_batch**2
+        batch_data_args = {
+            "data": flux_batch,
+            "noise": noise_batch,
+            "noise_inv": noise_inv_batch,
+            "sqrt_noise_inv": jnp.sqrt(noise_inv_batch),
+        }
+
+        # Get shared logdensity (cached on Model, stable identity)
+        init_params = self._initialize_unbounded(jax.random.PRNGKey(0))
+        logdensity_flat_2arg, unravel_fn, _, _ = _get_flat_logdensity(self, init_params)
+
+        # Initialize params per galaxy
+        init_keys = jax.random.split(key, n_gal + 2)
+        key = init_keys[0]
+        adapt_key = init_keys[1]
+        init_params_list = [self._initialize_unbounded(init_keys[2 + i]) for i in range(n_gal)]
+        init_flats = jnp.stack([ravel_pytree(p)[0] for p in init_params_list])
+
+        n_dim = init_flats.shape[1]
+        use_dense = dense_mass_matrix and n_dim <= 30
+
+        # Run adaptation on first galaxy (shared across all)
+        first_data_args = jax.tree.map(lambda x: x[0], batch_data_args)
+
+        def ld_first(pos):
+            return logdensity_flat_2arg(pos, first_data_args)
+
+        if method in ("mcmc_nuts", "mcmc_hmc"):
+            bj_algo = blackjax.nuts if method == "mcmc_nuts" else blackjax.hmc
+            adapt_kwargs = {}
+            if method == "mcmc_hmc":
+                adapt_kwargs["num_integration_steps"] = n_leapfrog_steps
+            warmup = blackjax.window_adaptation(
+                bj_algo,
+                ld_first,
+                is_mass_matrix_diagonal=not use_dense,
+                target_acceptance_rate=target_accept_rate,
+                **adapt_kwargs,
+            )
+            (_, adapt_params), _ = warmup.run(adapt_key, init_flats[0], num_steps=n_warmup)
+        elif method == "mcmc_dynamic_hmc":
+            warmup = blackjax.window_adaptation(
+                blackjax.hmc,
+                ld_first,
+                is_mass_matrix_diagonal=not use_dense,
+                target_acceptance_rate=target_accept_rate,
+                num_integration_steps=10,
+            )
+            (_, adapt_params), _ = warmup.run(adapt_key, init_flats[0], num_steps=n_warmup)
+        elif method == "mcmc_ghmc":
+            warmup = blackjax.window_adaptation(
+                blackjax.nuts,
+                ld_first,
+                is_mass_matrix_diagonal=not use_dense,
+                target_acceptance_rate=target_accept_rate,
+            )
+            (_, adapt_params), _ = warmup.run(adapt_key, init_flats[0], num_steps=n_warmup)
+
+        step_size = adapt_params["step_size"]
+        inv_mass_matrix = adapt_params["inverse_mass_matrix"]
+
+        if verbose:
+            print(
+                f"  vmap {method}: {n_gal} galaxies × {n_samples} samples "
+                f"(D={n_dim}, step_size={float(step_size):.4f})"
+            )
+
+        # Raw scan functions (no @jax.jit — the outer jit+vmap handles it)
+        if method == "mcmc_nuts":
+            kernel = _get_nuts_kernel()
+
+            def _sample_scan(state, keys, data_args_i):
+                def ld(pos):
+                    return logdensity_flat_2arg(pos, data_args_i)
+
+                def _step(s, k):
+                    s, info = kernel(
+                        k,
+                        s,
+                        ld,
+                        step_size,
+                        inv_mass_matrix,
+                        max_num_doublings,
+                    )
+                    return s, (s.position, info.is_divergent)
+
+                return jax.lax.scan(_step, state, keys)
+
+        elif method == "mcmc_hmc":
+            kernel = _get_hmc_kernel()
+
+            def _sample_scan(state, keys, data_args_i):
+                def ld(pos):
+                    return logdensity_flat_2arg(pos, data_args_i)
+
+                def _step(s, k):
+                    s, info = kernel(
+                        k,
+                        s,
+                        ld,
+                        step_size,
+                        inv_mass_matrix,
+                        n_leapfrog_steps,
+                    )
+                    return s, (s.position, info.is_divergent)
+
+                return jax.lax.scan(_step, state, keys)
+
+        elif method == "mcmc_dynamic_hmc":
+            kernel = _get_dynamic_hmc_kernel()
+
+            def _sample_scan(state, keys, data_args_i):
+                def ld(pos):
+                    return logdensity_flat_2arg(pos, data_args_i)
+
+                def _step(s, k):
+                    s, info = kernel(k, s, ld, step_size, inv_mass_matrix)
+                    return s, (s.position, info.is_divergent)
+
+                return jax.lax.scan(_step, state, keys)
+
+        elif method == "mcmc_ghmc":
+            kernel = _get_ghmc_kernel()
+            if inv_mass_matrix.ndim == 2:
+                momentum_inv_scale = jnp.sqrt(jnp.diag(inv_mass_matrix))
+            else:
+                momentum_inv_scale = jnp.sqrt(inv_mass_matrix)
+
+            def _sample_scan(state, keys, data_args_i):
+                def ld(pos):
+                    return logdensity_flat_2arg(pos, data_args_i)
+
+                def _step(s, k):
+                    s, info = kernel(
+                        k,
+                        s,
+                        ld,
+                        step_size,
+                        momentum_inv_scale,
+                        alpha,
+                        delta,
+                    )
+                    return s, (s.position, info.is_divergent)
+
+                return jax.lax.scan(_step, state, keys)
+
+        # Single-galaxy function to vmap
+        def single_galaxy(gal_key, init_flat_i, data_args_i):
+            def ld(pos):
+                return logdensity_flat_2arg(pos, data_args_i)
+
+            init_key, burn_key, sample_key = jax.random.split(gal_key, 3)
+
+            if method == "mcmc_ghmc":
+                state = blackjax.mcmc.ghmc.init(init_flat_i, init_key, ld)
+            elif method == "mcmc_hmc":
+                state = blackjax.mcmc.hmc.init(init_flat_i, ld)
+            elif method == "mcmc_dynamic_hmc":
+                state = blackjax.mcmc.dynamic_hmc.init(init_flat_i, ld, init_key)
+            else:
+                state = blackjax.mcmc.nuts.init(init_flat_i, ld)
+
+            # Burn-in (discarded)
+            if n_burnin > 0:
+                burnin_keys = jax.random.split(burn_key, n_burnin)
+                state, _ = _sample_scan(state, burnin_keys, data_args_i)
+
+            # Sampling
+            sample_keys = jax.random.split(sample_key, n_samples)
+            _, (positions, divergent) = _sample_scan(state, sample_keys, data_args_i)
+            return positions, divergent
+
+        # vmap + jit: one XLA kernel for all galaxies
+        gal_keys = jax.random.split(key, n_gal)
+        all_positions, all_divergent = jax.jit(jax.vmap(single_galaxy))(
+            gal_keys,
+            init_flats,
+            batch_data_args,
+        )
+
+        t_sample = time.time() - t0
+
+        if verbose:
+            total_div = int(jnp.sum(all_divergent))
+            print(
+                f"  Done: {n_gal} galaxies in {t_sample:.1f}s "
+                f"({t_sample / n_gal:.2f}s/galaxy, {total_div} divergences)"
+            )
+
+        # Post-process: unravel flat positions to physical params
+        def _convert_one(flat_pos):
+            return self._to_physical(unravel_fn(flat_pos))
+
+        results = []
+        for g_idx in range(n_gal):
+            positions_i = all_positions[g_idx]
+            divergent_i = all_divergent[g_idx]
+            samples_phys = jax.vmap(_convert_one)(positions_i)
+            best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+            n_div = int(jnp.sum(divergent_i))
+            result_i = Posterior(
+                samples=samples_phys,
+                params=best_params,
+                method=f"{method} (vmap)",
+                wall_time_s=t_sample / n_gal,
+                diagnostics={
+                    "n_warmup": n_warmup,
+                    "n_burnin": n_burnin,
+                    "n_samples": n_samples,
+                    "n_divergent": n_div,
+                    "step_size": float(step_size),
+                    "batch_size": n_gal,
+                },
+                _model=self.model,
+            )
+            results.append(result_i)
 
         return results
 

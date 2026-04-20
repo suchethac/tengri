@@ -23,12 +23,12 @@ from tengri.forward.nonstell import NonStellarSlot, build_nonstell_fn, collect_n
 def _make_model(
     *,
     nebular_backend=None,
-    shock_enabled=False,
+    uses_shock=False,
     dust_emission_model=None,
     agn_model=None,
     agn_parametric=False,
-    radio_enabled=False,
-    xray_enabled=False,
+    uses_radio=False,
+    uses_xray=False,
     neb_dust="bc",
     dust_model="charlot_fall",
     radio_sfr_mode="ir",
@@ -45,19 +45,19 @@ def _make_model(
 
     model = SimpleNamespace(
         _nebular_backend=nebular_backend,
-        _shock_enabled=shock_enabled,
+        _shock_enabled=uses_shock,
+        _uses_shock=uses_shock,
         _dust_emission_model=dust_emission_model,
         _agn_model=agn_model,
         _agn_parametric=agn_parametric,
-        _radio_enabled=radio_enabled,
-        _xray_enabled=xray_enabled,
+        _uses_radio=uses_radio,
+        _uses_xray=uses_xray,
         _neb_dust=neb_dust,
         _dust_model=dust_model,
         _radio_sfr_mode=radio_sfr_mode,
         _radio_include_freefree=radio_include_freefree,
         _redshift=redshift,
         ssp_log_ages_yr=np.log10(np.logspace(6, 10, 64)),
-        # rest_wavelength is an identity reference (same object as ssp_wave)
         _rest_wavelength=rest_wave,
         ssp_data=SimpleNamespace(ssp_wave=ssp_wave),
     )
@@ -94,7 +94,7 @@ class TestCollectNonstell:
         assert collect_nonstell(model) == []
 
     def test_shock_slot(self):
-        model = _make_model(shock_enabled=True)
+        model = _make_model(uses_shock=True)
         slots = collect_nonstell(model)
         assert any(s.name == "shock" for s in slots)
 
@@ -110,12 +110,12 @@ class TestCollectNonstell:
         assert any(s.name == "agn" for s in slots)
 
     def test_radio_slot(self):
-        model = _make_model(radio_enabled=True)
+        model = _make_model(uses_radio=True)
         slots = collect_nonstell(model)
         assert any(s.name == "radio" for s in slots)
 
     def test_xray_slot(self):
-        model = _make_model(xray_enabled=True)
+        model = _make_model(uses_xray=True)
         slots = collect_nonstell(model)
         assert any(s.name == "xray" for s in slots)
 
@@ -125,11 +125,11 @@ class TestCollectNonstell:
         backend.has_free_params = True
         model = _make_model(
             nebular_backend=backend,
-            shock_enabled=True,
+            uses_shock=True,
             dust_emission_model="dl07",
             agn_model="qsogen",
-            radio_enabled=True,
-            xray_enabled=True,
+            uses_radio=True,
+            uses_xray=True,
         )
         names = [s.name for s in collect_nonstell(model)]
         expected = ["nebular", "shock", "dust_ir", "agn", "radio", "xray"]
@@ -137,7 +137,7 @@ class TestCollectNonstell:
 
     def test_partial_set_preserves_order(self):
         """Radio + xray only → still in the correct relative order."""
-        model = _make_model(radio_enabled=True, xray_enabled=True)
+        model = _make_model(uses_radio=True, uses_xray=True)
         names = [s.name for s in collect_nonstell(model)]
         assert names == ["radio", "xray"]
 

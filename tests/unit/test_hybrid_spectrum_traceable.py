@@ -69,7 +69,7 @@ def model_with_spec(ssp, spec):
 def test_hybrid_spectrum_raw_built(model_with_spec):
     """_build_hybrid_kernels should populate hk._spectrum_raw."""
     model, _ = model_with_spec
-    hk = model._SEDModel__hybrid  # name-mangled
+    hk = model._hybrid_kernels
     assert hk is not None, "_hybrid kernels not built"
     assert hasattr(hk, "_spectrum_raw"), "hk._spectrum_raw attribute missing"
     assert hk._spectrum_raw is not None, (
@@ -81,7 +81,7 @@ def test_hybrid_spectrum_raw_built(model_with_spec):
 def test_traceable_spectrum_uses_hybrid(model_with_spec):
     """predict_spectrum(_traceable) should use hybrid path, not _predict_spectrum_auto."""
     model, wave_obs = model_with_spec
-    hk = model._SEDModel__hybrid
+    hk = model._hybrid_kernels
 
     call_log = []
     original_raw = hk._spectrum_raw
@@ -127,7 +127,7 @@ def test_traceable_spectrum_agrees_with_compositional(model_with_spec):
 def test_compositional_spectrum_raw_built(model_with_spec):
     """CompositionalKernels should now also have _spectrum_raw."""
     model, _ = model_with_spec
-    ck = model._SEDModel__compositional
+    ck = model._compositional_kernels
     assert hasattr(ck, "_spectrum_raw"), "ck._spectrum_raw attribute missing"
     # May be None if build_fused_tier2_spectrum failed, but attr must exist
 

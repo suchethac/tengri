@@ -77,6 +77,7 @@ def init_state_strategy(
     logprior_fn: Callable,
     loglikelihood_fn: Callable,
     loglikelihood_birth: float = jnp.nan,
+    data_args: dict | None = None,
 ) -> StateWithLogLikelihood:
     """Default initialisation strategy for each state.
 
@@ -88,15 +89,23 @@ def init_state_strategy(
         Log-prior density function for a single particle.
     loglikelihood_fn
         Log-likelihood function for a single particle.
+        If *data_args* is provided, called as ``loglikelihood_fn(position, data_args)``
+        (2-arg, compile-once mode).  Otherwise ``loglikelihood_fn(position)`` (1-arg).
     loglikelihood_birth
         Log-likelihood threshold the particle must exceed.
+    data_args : dict, optional
+        Observed-data dict passed as a traced JAX argument for
+        compile-once reuse across galaxies.
 
     Returns
     -------
     StateWithLogLikelihood
     """
     logprior_values = logprior_fn(position)
-    loglikelihood_values = loglikelihood_fn(position)
+    if data_args is not None:
+        loglikelihood_values = loglikelihood_fn(position, data_args)
+    else:
+        loglikelihood_values = loglikelihood_fn(position)
     loglikelihood_birth_values = loglikelihood_birth * jnp.ones_like(loglikelihood_values)
 
     return StateWithLogLikelihood(

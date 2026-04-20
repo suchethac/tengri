@@ -181,6 +181,10 @@ class SEDModel:
         "igm": True,
     }
 
+    _PREDICTION_MODES: ClassVar[frozenset] = frozenset(
+        {"auto", "exact", "hybrid", "compositional"}
+    )
+
     # ── Construction ──────────────────────────────────────────────────
 
     def __init__(
@@ -1187,6 +1191,9 @@ class SEDModel:
         if approx is not None:
             mode = "auto" if approx else "exact"
 
+        if mode == "_traceable":
+            return self._predict_spectrum_traceable(params, wave_obs)
+
         if mode not in self._PREDICTION_MODES:
             raise ValueError(
                 f"Unknown mode {mode!r}. Choose from: {sorted(self._PREDICTION_MODES)}"
@@ -1194,11 +1201,6 @@ class SEDModel:
 
         if mode == "auto":
             return self._predict_spectrum_auto(params, wave_obs)
-        if mode == "_traceable":
-            # Raw un-JIT'd path for use inside inference JIT scopes.
-            # Uses hybrid (precomputed SSP on pixel grid) when available —
-            # ~50× smaller XLA graph than the full rest-SED compositional path.
-            return self._predict_spectrum_traceable(params, wave_obs)
         if mode == "precomputed":
             raise ValueError(
                 "Precomputed mode has been removed. Use mode='compositional' for fast "
