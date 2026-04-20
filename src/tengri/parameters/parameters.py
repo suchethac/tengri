@@ -1278,206 +1278,39 @@ class Parameters:
         )
     """
 
+    # ── Construction ──────────────────────────────────────────────────
+
     def __init__(self, **kwargs):
-        # --- Extract settings ---
+        # ── Settings ──────────────────────────────────────────────
         raw_sfh_type = kwargs.pop("mean_sfh_type", None)
         explicit_stochastic = kwargs.pop("stochastic", None)
         n_grid = int(kwargs.pop("n_grid", 64))
-
-        # IGM absorption (default: True — negligible at z<2, essential at z>3)
         self.apply_igm = kwargs.pop("apply_igm", True)
 
-        # --- Nebular emission ---
-        nebular_ssp = kwargs.pop("nebular_ssp", False)
-        nebular = kwargs.pop("nebular", False)
-        nebular_cue = kwargs.pop("nebular_cue", False)
-        self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
-        self.cue_weights_path = kwargs.pop("cue_weights_path", None)
-        self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
+        # ── Nebular emission ──────────────────────────────────────
+        self._init_nebular_config(kwargs)
 
-        # Backward compat: old string-style flags
-        self._nebular_cb19 = False
-        if nebular == "cue":
-            nebular_cue = True
-            nebular = False
-        elif nebular == "cb19":
-            self._nebular_cb19 = True
-            nebular = False  # handle separately below
-        elif nebular == "cloudy":
-            nebular = True
+        # ── Dust ──────────────────────────────────────────────────
+        self._init_dust_config(kwargs)
 
-        # Backward compat: path implies backend
-        no_explicit = not nebular_cue and not nebular and not nebular_ssp
-        if self.cue_weights_path is not None and no_explicit:
-            nebular_cue = True
-        no_explicit_cloudy = not nebular and not nebular_cue and not nebular_ssp
-        if self.cloudy_grid_path is not None and no_explicit_cloudy:
-            nebular = True
-
-        # Mutual exclusion check
-        n_set = sum([bool(nebular_ssp), bool(nebular), bool(nebular_cue)])
-        if n_set > 1:
-            raise ValueError(
-                "nebular_ssp, nebular (CLOUDY), and nebular_cue are "
-                "mutually exclusive — choose one."
-            )
-
-        # Resolve mode
-        if nebular_cue:
-            self.nebular_mode = "cue"
-            if self.cue_weights_path is None:
-                from tengri.components.nebular import _DEFAULT_CUE_WEIGHTS_PATH
-
-                self.cue_weights_path = str(_DEFAULT_CUE_WEIGHTS_PATH)
-        elif self._nebular_cb19:
-            self.nebular_mode = "cb19"
-        elif nebular:
-            self.nebular_mode = "cloudy"
-            if self.cloudy_grid_path is None:
-                self._raise_missing_grid_path()
-        elif nebular_ssp:
-            self.nebular_mode = "ssp"
-        else:
-            self.nebular_mode = "off"
-
-        # Keep self.nebular as truthy for backward compat
-        self.nebular = self.nebular_mode != "off"
-
-        # Validate ionization source
-        if self.neb_ionization in ("agn", "ssp+agn"):
-            raise NotImplementedError(
-                "AGN ionization not yet implemented — use neb_ionization='ssp'"
-            )
-
-        # Warn if nebular_ssp user sets nebular params; drop them from kwargs
-        if self.nebular_mode == "ssp":
-            _NEB_PARAM_NAMES = (
-                set(_NEBULAR_PARAMS) | set(_CUE_IONSPEC_PARAMS) | set(_CUE_GAS_EXTRA_PARAMS)
-            )
-            for name in list(kwargs):
-                if name in _NEB_PARAM_NAMES:
-                    import warnings
-
-                    warnings.warn(
-                        f"'{name}' is ignored with nebular_ssp=True "
-                        f"(emission is baked into SSP at fixed logU/logZ).",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                    kwargs.pop(name)
-
-        # Dust model: "two_component" (Charlot & Fall) or "single_component" (screen)
-        self.dust_model = kwargs.pop("dust_model", "two_component")
-        if self.dust_model not in ("two_component", "single_component"):
-            raise ValueError(
-                f"dust_model must be 'two_component' or 'single_component', "
-                f"got '{self.dust_model}'"
-            )
-
-        # Dust approximation for two-component model:
-        #   "fast" (default): hard age threshold at t_birth — original C&F 2000,
-        #     enables two-CSP decomposition (no n_ages x n_wave intermediate)
-        #   "exact": smooth sigmoid transition — differentiable but requires
-        #     full (n_ages, n_wave) outer product
-        self.dust_approx = kwargs.pop("dust_approx", "fast")
-        if self.dust_approx not in ("fast", "exact"):
-            raise ValueError(f"dust_approx must be 'fast' or 'exact', got '{self.dust_approx}'")
-
-        # Dust law settings
-        # For single-component, accept `dust_law` as cleaner alias for `dust_law_bc`
-        dust_law_alias = kwargs.pop("dust_law", None)
-        if dust_law_alias is not None:
-            self.dust_law_bc = kwargs.pop("dust_law_bc", dust_law_alias)
-        else:
-            self.dust_law_bc = kwargs.pop("dust_law_bc", "power_law")
-
-        if self.dust_model == "single_component":
-            dust_law_diff_explicit = kwargs.pop("dust_law_diff", None)
-            if dust_law_diff_explicit is not None:
-                import warnings
-
-                warnings.warn(
-                    "dust_law_diff is ignored with dust_model='single_component' "
-                    "(only one attenuation curve is used).",
-                    UserWarning,
-                    stacklevel=2,
-                )
-            self.dust_law_diff = self.dust_law_bc  # Not used, but keep consistent
-        else:
-            self.dust_law_diff = kwargs.pop("dust_law_diff", self.dust_law_bc)
-
-        # Dust emission: None, "modified_blackbody", "dale2014", "draine_li2007", "dl07_tabulated"
-        self.dust_emission = kwargs.pop("dust_emission", None)
-        self.dl07_grid_path = kwargs.pop("dl07_grid_path", None)
-
-        # Patchy IGM: False (default), True — enables igm_x_HI and igm_bubble_mpc parameters
+        # ── Component flags ───────────────────────────────────────
         self.igm_patchy = kwargs.pop("igm_patchy", False)
-
-        # DLA absorber: False (default), True — adds Voigt-profile DLA absorption
         self.dla = kwargs.pop("dla", False)
-
-        # AGN model: None (default), "simple", "standard", "kubota_done", "unified_nlr_blr"
         self.agn_model = kwargs.pop("agn_model", None)
-
-        # Radio: False (default), True — adds synchrotron + AGN jet emission
         self.radio = kwargs.pop("radio", False)
-
-        # X-ray: False (default), True — adds XRB + AGN corona emission
         self.xray = kwargs.pop("xray", False)
-
-        # Shock emission: False (default), True — adds MAPPINGS V shock lines
         self.shock = kwargs.pop("shock", False)
 
-        # Metallicity mode: registry-based (mirrors SFH registry pattern)
-        _met_mode_explicit = kwargs.pop("met_mode", None)
-        _evolving_met = kwargs.pop("evolving_metallicity", False)
-        _chem_evol = kwargs.pop("chem_evol", False)
+        # ── Metallicity ───────────────────────────────────────────
+        self._init_metallicity_config(kwargs)
 
-        # Resolve met_mode from legacy booleans if not explicitly set
-        if _met_mode_explicit is not None:
-            if _evolving_met or _chem_evol:
-                raise ValueError(
-                    "Cannot use met_mode with evolving_metallicity or chem_evol. "
-                    "Use met_mode='ramp' instead of evolving_metallicity=True, "
-                    "or met_mode='chem_evol' instead of chem_evol=True."
-                )
-            self.met_mode = _met_mode_explicit
-        elif _evolving_met and _chem_evol:
-            raise ValueError(
-                "chem_evol and evolving_metallicity are mutually exclusive. "
-                "chem_evol derives Z(t) from SFH; evolving_metallicity uses "
-                "a linear Z(t) ramp with met_logzsol_0/met_logzsol_final."
-            )
-        elif _evolving_met:
-            self.met_mode = "ramp"
-        elif _chem_evol:
-            self.met_mode = "chem_evol"
-        else:
-            self.met_mode = "delta"
-
-        # Backward-compat properties for sed_model / pipeline
-        self.evolving_metallicity = self.met_mode == "ramp"
-        self.chem_evol = self.met_mode == "chem_evol"
-
-        # Evolving alpha-enhancement: False (default), True
-        # When True, [α/Fe] varies with lookback time (old stars more α-enhanced).
-        # Replaces met_alpha_fe with met_alpha_fe_old + met_alpha_fe_young.
-        self.alpha_fe_evolving = kwargs.pop("alpha_fe_evolving", False)
-
-        # Metallicity interpolation: "smooth" (triweight, DSPS) or "linear" (2-point, FSPS)
-        # Default: smooth — 8.5x smoother gradients at <1% speed overhead
-        self.met_interp = kwargs.pop("met_interp", "smooth")
-        self.lgmet_scatter = float(kwargs.pop("lgmet_scatter", 0.1))
-
-        # Emission line fitting mode: "off" (default), "fixed", "marginalized", "fitted"
+        # ── Emission lines ────────────────────────────────────────
         self.eline_mode = kwargs.pop("eline_mode", "off")
         if self.eline_mode not in ("off", "fixed", "marginalized", "fitted"):
             raise ValueError(
                 f"eline_mode must be 'off', 'fixed', 'marginalized', or 'fitted', "
                 f"got '{self.eline_mode}'"
             )
-
-        # Broad emission line component (AGN): False (default), True
         self.eline_broad = bool(kwargs.pop("eline_broad", False))
 
         # --- Resolve legacy parameter aliases ---
@@ -1612,6 +1445,157 @@ class Parameters:
         # --- Validate physical bounds ---
         self._validate_bounds()
 
+    def _init_nebular_config(self, kwargs):
+        """Resolve nebular emission backend from kwargs."""
+        nebular_ssp = kwargs.pop("nebular_ssp", False)
+        nebular = kwargs.pop("nebular", False)
+        nebular_cue = kwargs.pop("nebular_cue", False)
+        self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
+        self.cue_weights_path = kwargs.pop("cue_weights_path", None)
+        self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
+
+        # Backward compat: old string-style flags
+        self._nebular_cb19 = False
+        if nebular == "cue":
+            nebular_cue = True
+            nebular = False
+        elif nebular == "cb19":
+            self._nebular_cb19 = True
+            nebular = False
+        elif nebular == "cloudy":
+            nebular = True
+
+        # Path implies backend
+        no_explicit = not nebular_cue and not nebular and not nebular_ssp
+        if self.cue_weights_path is not None and no_explicit:
+            nebular_cue = True
+        no_explicit_cloudy = not nebular and not nebular_cue and not nebular_ssp
+        if self.cloudy_grid_path is not None and no_explicit_cloudy:
+            nebular = True
+
+        # Mutual exclusion
+        n_set = sum([bool(nebular_ssp), bool(nebular), bool(nebular_cue)])
+        if n_set > 1:
+            raise ValueError(
+                "nebular_ssp, nebular (CLOUDY), and nebular_cue are "
+                "mutually exclusive — choose one."
+            )
+
+        # Resolve mode
+        if nebular_cue:
+            self.nebular_mode = "cue"
+            if self.cue_weights_path is None:
+                from tengri.components.nebular import _DEFAULT_CUE_WEIGHTS_PATH
+
+                self.cue_weights_path = str(_DEFAULT_CUE_WEIGHTS_PATH)
+        elif self._nebular_cb19:
+            self.nebular_mode = "cb19"
+        elif nebular:
+            self.nebular_mode = "cloudy"
+            if self.cloudy_grid_path is None:
+                self._raise_missing_grid_path()
+        elif nebular_ssp:
+            self.nebular_mode = "ssp"
+        else:
+            self.nebular_mode = "off"
+
+        self.nebular = self.nebular_mode != "off"
+
+        if self.neb_ionization in ("agn", "ssp+agn"):
+            raise NotImplementedError(
+                "AGN ionization not yet implemented — use neb_ionization='ssp'"
+            )
+
+        # Warn if nebular_ssp user sets nebular params
+        if self.nebular_mode == "ssp":
+            _NEB_PARAM_NAMES = (
+                set(_NEBULAR_PARAMS) | set(_CUE_IONSPEC_PARAMS) | set(_CUE_GAS_EXTRA_PARAMS)
+            )
+            for name in list(kwargs):
+                if name in _NEB_PARAM_NAMES:
+                    import warnings
+
+                    warnings.warn(
+                        f"'{name}' is ignored with nebular_ssp=True "
+                        f"(emission is baked into SSP at fixed logU/logZ).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    kwargs.pop(name)
+
+    def _init_dust_config(self, kwargs):
+        """Resolve dust model, attenuation law, and emission from kwargs."""
+        self.dust_model = kwargs.pop("dust_model", "two_component")
+        if self.dust_model not in ("two_component", "single_component"):
+            raise ValueError(
+                f"dust_model must be 'two_component' or 'single_component', "
+                f"got '{self.dust_model}'"
+            )
+
+        self.dust_approx = kwargs.pop("dust_approx", "fast")
+        if self.dust_approx not in ("fast", "exact"):
+            raise ValueError(f"dust_approx must be 'fast' or 'exact', got '{self.dust_approx}'")
+
+        # For single-component, accept `dust_law` as cleaner alias for `dust_law_bc`
+        dust_law_alias = kwargs.pop("dust_law", None)
+        if dust_law_alias is not None:
+            self.dust_law_bc = kwargs.pop("dust_law_bc", dust_law_alias)
+        else:
+            self.dust_law_bc = kwargs.pop("dust_law_bc", "power_law")
+
+        if self.dust_model == "single_component":
+            dust_law_diff_explicit = kwargs.pop("dust_law_diff", None)
+            if dust_law_diff_explicit is not None:
+                import warnings
+
+                warnings.warn(
+                    "dust_law_diff is ignored with dust_model='single_component' "
+                    "(only one attenuation curve is used).",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            self.dust_law_diff = self.dust_law_bc
+        else:
+            self.dust_law_diff = kwargs.pop("dust_law_diff", self.dust_law_bc)
+
+        self.dust_emission = kwargs.pop("dust_emission", None)
+        self.dl07_grid_path = kwargs.pop("dl07_grid_path", None)
+
+    def _init_metallicity_config(self, kwargs):
+        """Resolve metallicity evolution mode from kwargs."""
+        _met_mode_explicit = kwargs.pop("met_mode", None)
+        _evolving_met = kwargs.pop("evolving_metallicity", False)
+        _chem_evol = kwargs.pop("chem_evol", False)
+
+        if _met_mode_explicit is not None:
+            if _evolving_met or _chem_evol:
+                raise ValueError(
+                    "Cannot use met_mode with evolving_metallicity or chem_evol. "
+                    "Use met_mode='ramp' instead of evolving_metallicity=True, "
+                    "or met_mode='chem_evol' instead of chem_evol=True."
+                )
+            self.met_mode = _met_mode_explicit
+        elif _evolving_met and _chem_evol:
+            raise ValueError(
+                "chem_evol and evolving_metallicity are mutually exclusive. "
+                "chem_evol derives Z(t) from SFH; evolving_metallicity uses "
+                "a linear Z(t) ramp with met_logzsol_0/met_logzsol_final."
+            )
+        elif _evolving_met:
+            self.met_mode = "ramp"
+        elif _chem_evol:
+            self.met_mode = "chem_evol"
+        else:
+            self.met_mode = "delta"
+
+        # Backward-compat properties for sed_model / pipeline
+        self.evolving_metallicity = self.met_mode == "ramp"
+        self.chem_evol = self.met_mode == "chem_evol"
+
+        self.alpha_fe_evolving = kwargs.pop("alpha_fe_evolving", False)
+        self.met_interp = kwargs.pop("met_interp", "smooth")
+        self.lgmet_scatter = float(kwargs.pop("lgmet_scatter", 0.1))
+
     @staticmethod
     def _raise_missing_grid_path():
         """Raise ValueError listing available CLOUDY grids."""
@@ -1679,7 +1663,56 @@ class Parameters:
                     f"violate physical constraint: {err_msg}"
                 )
 
-    # ── Immutable copy with additional parameters ─────────────────
+
+    # ── Properties ────────────────────────────────────────────────────
+
+    @property
+    def stochastic(self) -> bool:
+        """Whether the model includes a GP field (backward-compat property)."""
+        return "field" in self._mean_sfh_type
+
+    @property
+    def n_grid(self) -> int:
+        """GP grid size (only relevant when stochastic=True)."""
+        return self._n_grid
+
+    @property
+    def mean_sfh_type(self) -> list[str]:
+        """SFH model type(s) as a list of strings."""
+        return list(self._mean_sfh_type)
+
+    @property
+    def all_params(self) -> list[str]:
+        """All parameter names (sorted, excludes settings)."""
+        return sorted(self._distributions.keys())
+
+    @property
+    def free_params(self) -> list[str]:
+        """Names of free (non-fixed) parameters."""
+        return sorted(k for k, d in self._distributions.items() if not d.is_fixed)
+
+    @property
+    def fixed_params(self) -> list[str]:
+        """Names of fixed parameters."""
+        return sorted(k for k, d in self._distributions.items() if d.is_fixed)
+
+    @property
+    def n_free(self) -> int:
+        """Number of free parameters (excludes sfh_field_xi)."""
+        return len(self.free_params)
+
+    @property
+    def valid_param_names(self) -> frozenset:
+        """Set of valid parameter names for this model configuration."""
+        return self._valid_param_names
+
+    @property
+    def mirrors(self) -> dict[str, str]:
+        """Parameter mirrors: {target_name: source_name}."""
+        return dict(self._mirrors)
+
+
+    # ── Public API ────────────────────────────────────────────────────
 
     def with_params(self, **kwargs) -> ParamSpec:
         """Return a new Parameters with additional parameters merged in.
@@ -1735,55 +1768,6 @@ class Parameters:
         # Preserve user_provided set — auto-merged params are NOT user-provided
         object.__setattr__(new_spec, "_user_provided", self._user_provided)
         return new_spec
-
-    # ── Properties ────────────────────────────────────────────────
-
-    @property
-    def stochastic(self) -> bool:
-        """Whether the model includes a GP field (backward-compat property)."""
-        return "field" in self._mean_sfh_type
-
-    @property
-    def n_grid(self) -> int:
-        """GP grid size (only relevant when stochastic=True)."""
-        return self._n_grid
-
-    @property
-    def mean_sfh_type(self) -> list[str]:
-        """SFH model type(s) as a list of strings."""
-        return list(self._mean_sfh_type)
-
-    @property
-    def all_params(self) -> list[str]:
-        """All parameter names (sorted, excludes settings)."""
-        return sorted(self._distributions.keys())
-
-    @property
-    def free_params(self) -> list[str]:
-        """Names of free (non-fixed) parameters."""
-        return sorted(k for k, d in self._distributions.items() if not d.is_fixed)
-
-    @property
-    def fixed_params(self) -> list[str]:
-        """Names of fixed parameters."""
-        return sorted(k for k, d in self._distributions.items() if d.is_fixed)
-
-    @property
-    def n_free(self) -> int:
-        """Number of free parameters (excludes sfh_field_xi)."""
-        return len(self.free_params)
-
-    @property
-    def valid_param_names(self) -> frozenset:
-        """Set of valid parameter names for this model configuration."""
-        return self._valid_param_names
-
-    @property
-    def mirrors(self) -> dict[str, str]:
-        """Parameter mirrors: {target_name: source_name}."""
-        return dict(self._mirrors)
-
-    # ── Methods ───────────────────────────────────────────────────
 
     def resolve_mirrors(self, params: dict) -> dict:
         """Copy mirrored parameter values from source to target.
@@ -2022,6 +2006,7 @@ class Parameters:
             lines.append(f"    {'n_grid':30s} = {self._n_grid},")
         lines.append(")")
         return "\n".join(lines)
+
 
 
 # ── Deprecated alias (removed in v1.0) ─────────────────────────────────
