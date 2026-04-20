@@ -205,6 +205,8 @@ class Fitter:
         ``None`` auto-detects from ``Spectroscopy.eline_prior_type``.
     """
 
+    # ── Construction ──────────────────────────────────────────────────
+
     def __init__(
         self,
         model,
@@ -218,67 +220,95 @@ class Fitter:
         eline_marginalize=None,
         eline_prior_type=None,
     ):
+        # ── Data validation ─────────────────────────────────────────
         self.model = model
         self.data = jnp.asarray(data)
         self.noise = jnp.asarray(noise)
         self.data_mask = jnp.asarray(data_mask) if data_mask is not None else None
-
-        # Infer data_type from Observation if not provided
-        if data_type is None:
-            obs = getattr(model, "observation", None)
-            if obs is not None:
-                data_type = obs.data_type
-            else:
-                data_type = "photometry"  # backward compat default
-
-        self.data_type = data_type
-
-        # Auto-trigger photometry precomputation when conditions are met:
-        # fixed redshift + filters present + not yet precomputed.
-        # This lets users create a Model without precompute=True and still get
-        # the fast fused path when they construct a Fitter for fitting.
-        if (
-            data_type in ("photometry", "joint")
-            and model._precomputed.photometry is None
-            and getattr(model, "_z_fixed", None) is not None
-            and getattr(model, "filter_waves", None) is not None
-        ):
-            import contextlib
-
-            from tengri.components.sps.precompute import precompute_photometry
-
-            model._precomputed.photometry = precompute_photometry(
-                model.ssp_data,
-                model.filter_waves,
-                model.filter_trans,
-                model._z_fixed,
-                model._dl_cm_fixed,
-            )
-            with contextlib.suppress(Exception):
-                model._hybrid = model._build_hybrid_kernels()
-
+        self.data_type = self._resolve_data_type(data_type, model)
         self.spec = model.spec
 
-        # Calibration marginalization settings
+        # ── Auto-precompute photometry ─────────────────────────────
+        self._auto_precompute_photometry(model)
+
+        # ── Calibration ────────────────────────────────────────────
         self._calibration_marginalize = calibration_marginalize
         self._cal_n_poly = cal_n_poly
         self._cal_prior_sigma = cal_prior_sigma
-        self._has_spectroscopy = data_type in ("spectroscopy", "joint")
+        self._has_spectroscopy = self.data_type in ("spectroscopy", "joint")
 
-        # Emission line marginalization settings
+        # ── Emission lines ─────────────────────────────────────────
+        self._init_emission_lines(model, eline_marginalize, eline_prior_type)
+
+        # ── Parameters ─────────────────────────────────────────────
+        self._free_names = self.spec.free_params
+        self._fixed_values = self.spec.get_fixed_values()
+        self._bounds = {n: self.spec.get_distribution(n).bounds for n in self._free_names}
+
+        # ── Data arguments ─────────────────────────────────────────
+        self._data_args = self._build_data_args(model)
+
+        # ── Background compilation ─────────────────────────────────
+        self._jit_sampler = None
+        self._compilation_event = threading.Event()
+        self._compilation_error: Exception | None = None
+        self._compilation_lock = threading.Lock()
+        self._compilation_thread: threading.Thread | None = None
+        self._start_background_compilation()
+
+    @staticmethod
+    def _resolve_data_type(data_type, model):
+        """Infer data_type from Observation when not explicitly provided."""
+        if data_type is not None:
+            return data_type
+        obs = getattr(model, "observation", None)
+        if obs is not None:
+            return obs.data_type
+        return "photometry"
+
+    def _auto_precompute_photometry(self, model):
+        """Auto-trigger photometry precomputation if conditions are met.
+
+        Fires when: fixed redshift + filters present + not yet precomputed.
+        Lets users create a Model without ``precompute=True`` and still get
+        the fast fused path when they construct a Fitter.
+        """
+        if (
+            self.data_type not in ("photometry", "joint")
+            or model._precomputed.photometry is not None
+            or getattr(model, "_z_fixed", None) is None
+            or getattr(model, "filter_waves", None) is None
+        ):
+            return
+
+        import contextlib
+
+        from tengri.components.sps.precompute import precompute_photometry
+
+        model._precomputed.photometry = precompute_photometry(
+            model.ssp_data,
+            model.filter_waves,
+            model.filter_trans,
+            model._z_fixed,
+            model._dl_cm_fixed,
+        )
+        with contextlib.suppress(Exception):
+            model._hybrid = model._build_hybrid_kernels()
+
+    def _init_emission_lines(self, model, eline_marginalize, eline_prior_type):
+        """Configure emission line marginalization and fitted-amplitude modes."""
         _spec_config = getattr(model, "_spectroscopy_config", None)
-        # Also try model.observation.spectroscopy if _spectroscopy_config not set
         if _spec_config is None:
             obs = getattr(model, "observation", None)
             if obs is not None:
                 _spec_config = getattr(obs, "spectroscopy", None)
 
+        # Marginalization mode
         if eline_marginalize is None:
             if _spec_config is not None and hasattr(_spec_config, "eline_mode"):
                 eline_marginalize = _spec_config.eline_mode == "marginalized"
             else:
                 eline_marginalize = False
-
         self._eline_marginalize = bool(eline_marginalize) and self._has_spectroscopy
 
         # Fitted emission line mode — amplitudes become explicit latent params
@@ -288,12 +318,10 @@ class Fitter:
             _eline_fitted = False
         self._eline_fitted = bool(_eline_fitted) and self._has_spectroscopy
 
+        # Prior type
         if eline_prior_type is None:
             if _spec_config is not None and hasattr(_spec_config, "eline_prior_type"):
                 _raw = _spec_config.eline_prior_type
-                # Only use the attribute when it's a genuine string; non-string
-                # values (e.g. MagicMock in tests) fall back to the default so
-                # the cache key is stable across equivalent configurations.
                 eline_prior_type = _raw if isinstance(_raw, str) else "flat"
             else:
                 eline_prior_type = "flat"
@@ -301,44 +329,7 @@ class Fitter:
 
         # Precompute static arrays for emission line fitting
         if self._eline_marginalize or self._eline_fitted:
-            from tengri.observation.line_list import LineCatalog
-
-            if _spec_config is not None and _spec_config.eline_catalog is not None:
-                _catalog = _spec_config.effective_catalog
-            else:
-                _catalog = LineCatalog.default_13()
-            self._eline_wavelengths = _catalog.wavelengths
-            self._eline_independent_wavelengths = _catalog.independent_wavelengths
-            self._eline_names = _catalog.names
-            fix_doublets = True
-            if _spec_config is not None and hasattr(_spec_config, "eline_fix_doublets"):
-                fix_doublets = _spec_config.eline_fix_doublets
-            if fix_doublets:
-                self._eline_constraint_matrix = _catalog.build_constraint_matrix()
-            else:
-                self._eline_constraint_matrix = jnp.eye(_catalog.n_lines)
-            self._eline_prior_sigma = (
-                getattr(_spec_config, "eline_prior_sigma", 100.0) if _spec_config else 100.0
-            )
-            self._eline_prior_width_dex = (
-                getattr(_spec_config, "eline_prior_width_dex", 0.3) if _spec_config else 0.3
-            )
-            if self._eline_fitted:
-                # Build per-line amplitude parameter names (one per independent column of G_eff)
-                # and augment self.spec so they appear in free_params / get_distribution / bounds.
-                _secondary_indices = {dc.secondary_idx for dc in _catalog.doublets}
-                _independent_line_names = [
-                    nm for i, nm in enumerate(_catalog.names) if i not in _secondary_indices
-                ]
-                self._eline_amplitude_names = [f"eline_amp_{nm}" for nm in _independent_line_names]
-                _amp_bound = 10.0 * self._eline_prior_sigma
-                _amp_priors = {
-                    nm: Uniform(-_amp_bound, _amp_bound) for nm in self._eline_amplitude_names
-                }
-                # Augment spec so amplitude params flow through bounds / prior loops / summary
-                self.spec = self.spec.merge_observation_params(**_amp_priors)
-            else:
-                self._eline_amplitude_names = []
+            self._init_eline_arrays(_spec_config)
         else:
             self._eline_wavelengths = None
             self._eline_independent_wavelengths = None
@@ -348,7 +339,7 @@ class Fitter:
             self._eline_prior_width_dex = 0.3
             self._eline_amplitude_names = []
 
-        # Consistency check: SpectroscopyConfig.eline_broad vs Parameters.eline_broad
+        # Consistency check: Spectroscopy.eline_broad vs Parameters.eline_broad
         if _spec_config is not None and getattr(_spec_config, "eline_broad", False):
             spec_has_broad = getattr(self.spec, "eline_broad", False)
             if not spec_has_broad:
@@ -363,22 +354,57 @@ class Fitter:
                     stacklevel=2,
                 )
 
-        # Separate free and fixed parameters
-        self._free_names = self.spec.free_params
-        self._fixed_values = self.spec.get_fixed_values()
+    def _init_eline_arrays(self, _spec_config):
+        """Build catalog arrays and constraint matrices for emission line fitting."""
+        from tengri.observation.line_list import LineCatalog
 
-        # Build bounds for free params
-        self._bounds = {}
-        for name in self._free_names:
-            dist = self.spec.get_distribution(name)
-            self._bounds[name] = dist.bounds
+        if _spec_config is not None and _spec_config.eline_catalog is not None:
+            _catalog = _spec_config.effective_catalog
+        else:
+            _catalog = LineCatalog.default_13()
 
-        # Pre-compute data-dependent arguments passed to JIT'd functions.
-        # These are passed as explicit arguments (not closed over) so that
-        # engines compiled for one galaxy can be reused for another with
-        # the same model + parameter structure.
+        self._eline_wavelengths = _catalog.wavelengths
+        self._eline_independent_wavelengths = _catalog.independent_wavelengths
+        self._eline_names = _catalog.names
+
+        fix_doublets = True
+        if _spec_config is not None and hasattr(_spec_config, "eline_fix_doublets"):
+            fix_doublets = _spec_config.eline_fix_doublets
+        if fix_doublets:
+            self._eline_constraint_matrix = _catalog.build_constraint_matrix()
+        else:
+            self._eline_constraint_matrix = jnp.eye(_catalog.n_lines)
+
+        self._eline_prior_sigma = (
+            getattr(_spec_config, "eline_prior_sigma", 100.0) if _spec_config else 100.0
+        )
+        self._eline_prior_width_dex = (
+            getattr(_spec_config, "eline_prior_width_dex", 0.3) if _spec_config else 0.3
+        )
+
+        if self._eline_fitted:
+            _secondary_indices = {dc.secondary_idx for dc in _catalog.doublets}
+            _independent_line_names = [
+                nm for i, nm in enumerate(_catalog.names) if i not in _secondary_indices
+            ]
+            self._eline_amplitude_names = [f"eline_amp_{nm}" for nm in _independent_line_names]
+            _amp_bound = 10.0 * self._eline_prior_sigma
+            _amp_priors = {
+                nm: Uniform(-_amp_bound, _amp_bound) for nm in self._eline_amplitude_names
+            }
+            self.spec = self.spec.merge_observation_params(**_amp_priors)
+        else:
+            self._eline_amplitude_names = []
+
+    def _build_data_args(self, model):
+        """Build the data-dependent argument dict passed to JIT'd loss functions.
+
+        These are passed as explicit arguments (not closed over) so that
+        engines compiled for one galaxy can be reused for another with
+        the same model + parameter structure.
+        """
         noise_inv = 1.0 / self.noise**2
-        self._data_args = {
+        args = {
             "data": self.data,
             "noise": self.noise,
             "noise_inv": noise_inv,
@@ -386,36 +412,29 @@ class Fitter:
             "n_data": jnp.int32(len(self.data)),
         }
         if self.data_mask is not None:
-            self._data_args["data_mask"] = self.data_mask
+            args["data_mask"] = self.data_mask
 
         obs = getattr(model, "observation", None)
         if obs is not None:
             spec_cfg = getattr(obs, "spectroscopy", None)
             if spec_cfg is not None and getattr(spec_cfg, "has_covariance", False):
-                self._data_args["spec_cov_inv"] = spec_cfg.cov_inv
+                args["spec_cov_inv"] = spec_cfg.cov_inv
 
             line_flux_cfg = getattr(obs, "line_fluxes", None)
             if line_flux_cfg is not None:
-                self._data_args["line_flux_obs"] = line_flux_cfg.fluxes
-                self._data_args["line_flux_err"] = line_flux_cfg.errors
-                self._data_args["line_flux_waves"] = line_flux_cfg.wavelengths
+                args["line_flux_obs"] = line_flux_cfg.fluxes
+                args["line_flux_err"] = line_flux_cfg.errors
+                args["line_flux_waves"] = line_flux_cfg.wavelengths
 
             index_cfg = getattr(obs, "spectral_indices", None)
             if index_cfg is not None:
-                self._data_args["index_obs"] = index_cfg.values
-                self._data_args["index_err"] = index_cfg.errors
+                args["index_obs"] = index_cfg.values
+                args["index_err"] = index_cfg.errors
 
-        # JIT posterior sampler — call compile() to pre-compile, or it
-        # compiles lazily on first VI run.
-        self._jit_sampler = None
+        return args
 
-        # Background compilation state — XLA C++ releases the GIL, so the
-        # 54s of compilation runs in genuine parallel with the caller's setup.
-        self._compilation_event = threading.Event()
-        self._compilation_error: Exception | None = None
-        self._compilation_lock = threading.Lock()
-        self._compilation_thread: threading.Thread | None = None
-        self._start_background_compilation()
+
+    # ── Compilation ───────────────────────────────────────────────────
 
     def _start_background_compilation(self) -> None:
         """Spawn a daemon thread to pre-compile the JIT engine.
@@ -521,272 +540,6 @@ class Fitter:
         self.model._jit_engine_cache[cache_key] = engine
         self._jit_sampler = engine
         return engine
-
-    def summary(self) -> str:
-        """Return a human-readable summary of the fitting problem.
-
-        Returns
-        -------
-        str
-            Formatted summary showing data shape, free parameters,
-            priors, bounds, and available inference methods.
-        """
-        sep = "─" * 66
-        lines: list[str] = [f"Fitter  data_type: {self.data_type}", sep]
-
-        # Data shape
-        n_data = self.data.shape[0]
-        snr_med = float(jnp.median(jnp.abs(self.data / self.noise)))
-        lines.append(f"  Data points: {n_data}")
-        lines.append(f"  Median S/N:  {snr_med:.1f}")
-
-        # Dimensionality
-        n_free = len(self._free_names)
-        n_grid = self.model._n_grid if self.model._uses_stochastic_sfh else 0
-        dim_str = f"{n_free} free"
-        if n_grid:
-            dim_str += f" + {n_grid} latent (ξ)"
-        lines.append(f"  Parameters:  {dim_str}")
-        lines.append("")
-
-        # Free parameter table
-        hdr = f"  {'Parameter':<32s} {'Prior':<26s} {'Bounds'}"
-        lines.append(hdr)
-        lines.append("  " + "─" * 64)
-        for name in self._free_names:
-            dist = self.spec.get_distribution(name)
-            lo, hi = dist.bounds
-            lines.append(f"  {name:<32s} {dist!r:<26s} [{lo:.4g}, {hi:.4g}]")
-
-        # Available methods
-        lines.append("")
-        lines.append(
-            "  Methods:     vi, vi_linear, vi_nifty_fast, vi_nifty_fast_linear, "
-            "vi_native, vi_native_linear, mcmc, mcmc_raytrace, mcmc_nuts, "
-            "mcmc_hmc, mcmc_dynamic_hmc, mcmc_ghmc, mcmc_mclmc, "
-            "mcmc_adjusted_mclmc, mcmc_ess, map, laplace, pathfinder, nss, auto"
-        )
-
-        lines.append(sep)
-        return "\n".join(lines)
-
-    # ── Loss function construction ──────────────────────────────────
-
-    def _get_mode_for_method(self, method: str) -> str:
-        """Determine forward model prediction mode based on inference method.
-
-        PERFORMANCE NOTE (2026-04-18): Profiling shows mode="_traceable" is
-        12.64x FASTER than mode="auto" (5.9ms vs 74.4ms) with stable timing.
-        mode="auto" has pathological variance (std=504ms, 6.8x the mean) causing
-        occasional 500ms+ outliers. Always use mode="_traceable" for inference.
-
-        Parameters
-        ----------
-        method : str
-            Inference method name (e.g., "vi", "mcmc_nuts", "map")
-
-        Returns
-        -------
-        str
-            Always returns "_traceable" for optimal performance across all
-            inference methods. Previous "auto" mode had severe variance issues.
-
-        See Also
-        --------
-        docs/dev/jit-optimization-report-2026-04-18.md : Full profiling analysis
-        """
-        # ALL methods now use _traceable for 12.64x speedup + stable timing
-        # (mode="auto" variance pathology fixed 2026-04-18)
-        return "_traceable"
-
-    def _build_loss_fn(self, mode="_traceable"):
-        """Build a differentiable loss function.
-
-        See ``tengri.inference.loss_functions.build_loss_fn`` for full docs.
-        Returns ``loss_fn(params_unbounded, data_args) -> scalar``.
-
-        Parameters
-        ----------
-        mode : str, optional
-            Forward model prediction mode. Default "_traceable" is for
-            backward compatibility. Use "auto" for ~1.5x speedup with
-            non-NIFTy methods.
-        """
-        return build_loss_fn(self, mode=mode)
-
-    def _get_or_build_loss_fn(self, mode="_traceable"):
-        """Return the cached loss function, building it if needed.
-
-        The loss function is cached on the Model object keyed by
-        ``_engine_cache_key()`` + mode so that multiple Fitters with the same
-        model structure share the same compiled XLA program.
-
-        Parameters
-        ----------
-        mode : str, optional
-            Forward model prediction mode. Default "_traceable" for backward
-            compatibility. Pass "auto" for ~1.5x speedup with non-NIFTy methods.
-        """
-        cache_key = (self._engine_cache_key(), mode)
-        if not hasattr(self.model, "_loss_fn_cache"):
-            self.model._loss_fn_cache = {}
-        if cache_key in self.model._loss_fn_cache:
-            return self.model._loss_fn_cache[cache_key]
-        loss_fn = self._build_loss_fn(mode=mode)
-        self.model._loss_fn_cache[cache_key] = loss_fn
-        return loss_fn
-
-    def _build_logprior_fn(self):
-        """Build a log-prior function. See ``loss_functions.build_logprior_fn``."""
-        return build_logprior_fn(self)
-
-    def _build_loglikelihood_fn(self, mode="_traceable"):
-        """Build log-likelihood function. See ``loss_functions.build_loglikelihood_fn``."""
-        return build_loglikelihood_fn(self, mode=mode)
-
-    def _get_or_build_loglikelihood_fn(self, mode="_traceable"):
-        """Return the cached log-likelihood function, building if needed."""
-        cache_key = (self._engine_cache_key(), mode)
-        if not hasattr(self.model, "_loglik_fn_cache"):
-            self.model._loglik_fn_cache = {}
-        if cache_key in self.model._loglik_fn_cache:
-            return self.model._loglik_fn_cache[cache_key]
-        loglik_fn = self._build_loglikelihood_fn(mode=mode)
-        self.model._loglik_fn_cache[cache_key] = loglik_fn
-        return loglik_fn
-
-    def _get_or_build_grad_fn(self, mode="_traceable"):
-        """Return cached JIT-compiled value_and_grad of the loss function.
-
-        The gradient function takes ``(params_unbounded, data_args)`` as
-        explicit arguments so the compiled XLA program is reusable across
-        galaxies with the same model structure.
-        """
-        cache_key = (self._engine_cache_key(), mode)
-        if not hasattr(self.model, "_grad_fn_cache"):
-            self.model._grad_fn_cache = {}
-        if cache_key in self.model._grad_fn_cache:
-            return self.model._grad_fn_cache[cache_key]
-
-        loss_fn = self._get_or_build_loss_fn(mode=mode)
-
-        @jax.jit
-        def val_and_grad(params_u, data_args):
-            return jax.value_and_grad(lambda p: loss_fn(p, data_args))(params_u)
-
-        self.model._grad_fn_cache[cache_key] = val_and_grad
-        return val_and_grad
-
-    def _get_or_build_logdensity_fn(self, mode="_traceable"):
-        """Return cached JIT-compiled log-density for MCMC/Pathfinder.
-
-        Returns ``logdensity(params_u, data_args) -> scalar``.  Callers
-        should partial-apply ``data_args`` for blackjax compatibility.
-        """
-        cache_key = (self._engine_cache_key(), mode)
-        if not hasattr(self.model, "_logdensity_fn_cache"):
-            self.model._logdensity_fn_cache = {}
-        if cache_key in self.model._logdensity_fn_cache:
-            return self.model._logdensity_fn_cache[cache_key]
-
-        loss_fn = self._get_or_build_loss_fn(mode=mode)
-
-        @jax.jit
-        def logdensity(params_u, data_args):
-            return -loss_fn(params_u, data_args)
-
-        self.model._logdensity_fn_cache[cache_key] = logdensity
-        return logdensity
-
-    def _initialize_unbounded(self, key):
-        """Create initial unbounded parameter dict."""
-        params = {}
-        keys = jax.random.split(key, len(self._free_names) + 1)
-
-        for i, name in enumerate(self._free_names):
-            dist = self.spec.get_distribution(name)
-            if isinstance(dist, Gaussian):
-                params[name] = dist.standardize(jnp.array(dist.mu))
-            else:
-                # Initialize near midpoint (u=0) with small perturbation
-                params[name] = 0.1 * jax.random.normal(keys[i])
-
-        if self.spec.stochastic:
-            params["psd_xi"] = 0.1 * jax.random.normal(keys[-1], shape=(self.spec.n_grid,))
-
-        return params
-
-    def _unbounded_from_posterior(self, posterior):
-        """Convert a Posterior's params to unbounded space for init."""
-        params = {}
-        for name in self._free_names:
-            if name in posterior.params:
-                dist = self.spec.get_distribution(name)
-                params[name] = dist.standardize(jnp.array(posterior.params[name]))
-            else:
-                params[name] = jnp.array(0.0)
-
-        if self.spec.stochastic and "psd_xi" in posterior.params:
-            params["psd_xi"] = posterior.params["psd_xi"]
-        elif self.spec.stochastic:
-            params["psd_xi"] = jnp.zeros(self.spec.n_grid)
-
-        return params
-
-    # ── Unbounded ↔ physical transforms ─────────────────────────────
-
-    def _to_physical(self, params_unbounded):
-        """Convert a single unbounded param dict to physical space."""
-        params = {}
-        for name in self._free_names:
-            dist = self.spec.get_distribution(name)
-            params[name] = dist.unstandardize(params_unbounded[name])
-        for name, val in self._fixed_values.items():
-            params[name] = jnp.array(val)
-        if self.spec.stochastic and "psd_xi" in params_unbounded:
-            params["psd_xi"] = params_unbounded["psd_xi"]
-        return params
-
-    # ── Posterior sampling ──────────────────────────────────────────
-
-    def _draw_posterior_samples(
-        self,
-        likelihood,
-        pos_dict,
-        key,
-        n_samples,
-        existing_samples,
-        *,
-        method="jit",
-        verbose=True,
-    ):
-        """Draw posterior samples from the converged geoVI approximation.
-
-        Parameters
-        ----------
-        method : str
-            "jit" (default) — JIT-compiled CG solve, ~0.2ms/sample.
-            "blackjax" — BlackJAX NUTS (independent MCMC, not geoVI).
-            "nifty" — NIFTy draw_linear_residual (slow, ~540ms/sample).
-        """
-        if method == "jit":
-            return self._draw_jit_samples(
-                pos_dict, key, n_samples, existing_samples, verbose=verbose
-            )
-        if method == "blackjax":
-            try:
-                return self._draw_blackjax_samples(
-                    likelihood, pos_dict, key, n_samples, existing_samples, verbose=verbose
-                )
-            except ImportError:
-                if verbose:
-                    print("  blackjax not installed, falling back to JIT sampling")
-                return self._draw_jit_samples(
-                    pos_dict, key, n_samples, existing_samples, verbose=verbose
-                )
-        return self._draw_nifty_samples(
-            likelihood, pos_dict, key, n_samples, existing_samples, verbose=verbose
-        )
 
     def _build_jit_engine(self, pos_dict):
         """Build JIT-compiled inference engine. See ``jit_engine.build_jit_engine``."""
@@ -904,175 +657,167 @@ class Fitter:
             print("Compilation complete.")
         return self
 
-    def _draw_jit_samples(self, pos_dict, key, n_samples, existing_samples, *, verbose=True):
-        """Draw geoVI linear residual samples via JIT-compiled CG.
 
-        Same math as NIFTy's draw_linear_residual but fully JIT-compiled:
-        1. Draw z = J^T sqrt(N^{-1}) eta1 + eta2  (eta_i ~ N(0,I))
-        2. Solve M @ residual = z via CG  (M = J^T N^{-1} J + I)
-        3. Sample = pos + residual
+    # ── Loss and likelihood builders ──────────────────────────────────
 
-        ~2000x faster than NIFTy's Python-loop CG.
+    def _build_loss_fn(self, mode="_traceable"):
+        """Build a differentiable loss function.
+
+        See ``tengri.inference.loss_functions.build_loss_fn`` for full docs.
+        Returns ``loss_fn(params_unbounded, data_args) -> scalar``.
+
+        Parameters
+        ----------
+        mode : str, optional
+            Forward model prediction mode. Default "_traceable" is for
+            backward compatibility. Use "auto" for ~1.5x speedup with
+            non-NIFTy methods.
         """
-        if verbose:
-            print(f"  Drawing {n_samples} posterior samples (JIT CG)...")
+        return build_loss_fn(self, mode=mode)
 
-        if self._jit_sampler is None:
-            self._jit_sampler = self._get_or_build_engine(pos_dict)
+    def _get_or_build_loss_fn(self, mode="_traceable"):
+        """Return the cached loss function, building it if needed.
 
-        engine = self._jit_sampler
-        flatten, unflatten = engine["flatten"], engine["unflatten"]
-        pos_flat = flatten(pos_dict)
-        draw_keys = jax.random.split(key, n_samples)
-        residuals_flat = engine["draw_samples"](pos_flat, draw_keys, self._data_args)
+        The loss function is cached on the Model object keyed by
+        ``_engine_cache_key()`` + mode so that multiple Fitters with the same
+        model structure share the same compiled XLA program.
 
-        for i in range(n_samples):
-            res = unflatten(residuals_flat[i])
-            combined = {k: pos_dict[k] + res[k] for k in pos_dict}
-            existing_samples.append(combined)
-
-        return existing_samples
-
-    def _draw_nonlinear_jit_samples(
-        self, pos_dict, key, n_samples, existing_samples, *, verbose=True
-    ):
-        """Draw geoVI nonlinear posterior samples via JIT engine.
-
-        Unlike ``_draw_jit_samples`` (linear CG only), this applies
-        the geoVI coordinate curving to each sample.  Produces
-        samples from the nonlinear approximation, capturing
-        banana-shaped degeneracies that the linear Gaussian misses.
-
-        Uses ``draw_nonlinear_residuals`` from the JIT engine.
+        Parameters
+        ----------
+        mode : str, optional
+            Forward model prediction mode. Default "_traceable" for backward
+            compatibility. Pass "auto" for ~1.5x speedup with non-NIFTy methods.
         """
-        if verbose:
-            print(f"  Drawing {n_samples} nonlinear posterior samples (JIT geoVI)...")
+        cache_key = (self._engine_cache_key(), mode)
+        if not hasattr(self.model, "_loss_fn_cache"):
+            self.model._loss_fn_cache = {}
+        if cache_key in self.model._loss_fn_cache:
+            return self.model._loss_fn_cache[cache_key]
+        loss_fn = self._build_loss_fn(mode=mode)
+        self.model._loss_fn_cache[cache_key] = loss_fn
+        return loss_fn
 
-        if self._jit_sampler is None:
-            self._jit_sampler = self._get_or_build_engine(pos_dict)
+    def _build_logprior_fn(self):
+        """Build a log-prior function. See ``loss_functions.build_logprior_fn``."""
+        return build_logprior_fn(self)
 
-        engine = self._jit_sampler
-        flatten, unflatten = engine["flatten"], engine["unflatten"]
-        pos_flat = flatten(pos_dict)
-        data_args = self._data_args
+    def _build_loglikelihood_fn(self, mode="_traceable"):
+        """Build log-likelihood function. See ``loss_functions.build_loglikelihood_fn``."""
+        return build_loglikelihood_fn(self, mode=mode)
 
-        # Draw in batches to avoid OOM for large n_samples
-        batch_size = min(n_samples, 50)
-        draw_keys = jax.random.split(key, n_samples)
+    def _get_or_build_loglikelihood_fn(self, mode="_traceable"):
+        """Return the cached log-likelihood function, building if needed."""
+        cache_key = (self._engine_cache_key(), mode)
+        if not hasattr(self.model, "_loglik_fn_cache"):
+            self.model._loglik_fn_cache = {}
+        if cache_key in self.model._loglik_fn_cache:
+            return self.model._loglik_fn_cache[cache_key]
+        loglik_fn = self._build_loglikelihood_fn(mode=mode)
+        self.model._loglik_fn_cache[cache_key] = loglik_fn
+        return loglik_fn
 
-        for batch_start in range(0, n_samples, batch_size):
-            batch_end = min(batch_start + batch_size, n_samples)
-            batch_keys = draw_keys[batch_start:batch_end]
-            # draw_nonlinear_samples returns (2*n, D): first n positive, last n mirrors
-            residuals_flat = engine["draw_nonlinear_samples"](pos_flat, batch_keys, data_args)
-            n_batch = batch_end - batch_start
-            # Use only the first n (positive) samples, not the mirrors
-            for i in range(n_batch):
-                res = unflatten(residuals_flat[i])
-                combined = {k: pos_dict[k] + res[k] for k in pos_dict}
-                existing_samples.append(combined)
+    def _build_loglikelihood_unbounded_fn(self, mode="_traceable"):
+        """Build unbounded-space log-likelihood.
 
-        return existing_samples
+        See ``loss_functions.build_loglikelihood_unbounded_fn``.
+        """
+        return build_loglikelihood_unbounded_fn(self, mode=mode)
 
-    def _draw_blackjax_samples(
-        self, likelihood, pos_dict, key, n_samples, existing_samples, *, verbose=True
-    ):
-        """Draw samples via BlackJAX NUTS (independent MCMC, not geoVI)."""
-        import blackjax
+    def _get_or_build_grad_fn(self, mode="_traceable"):
+        """Return cached JIT-compiled value_and_grad of the loss function.
 
-        if verbose:
-            print(f"  Drawing {n_samples} posterior samples via BlackJAX NUTS...")
+        The gradient function takes ``(params_unbounded, data_args)`` as
+        explicit arguments so the compiled XLA program is reusable across
+        galaxies with the same model structure.
+        """
+        cache_key = (self._engine_cache_key(), mode)
+        if not hasattr(self.model, "_grad_fn_cache"):
+            self.model._grad_fn_cache = {}
+        if cache_key in self.model._grad_fn_cache:
+            return self.model._grad_fn_cache[cache_key]
 
-        if likelihood is not None:
-
-            @jax.jit
-            def logdensity_fn(x):
-                lh_val = likelihood(x)
-                prior = 0.5 * sum(jnp.sum(v**2) for v in x.values())
-                return -lh_val - prior
-
-        else:
-            _logdensity_2arg = self._get_or_build_logdensity_fn()
-            _da = self._data_args
-
-            @jax.jit
-            def logdensity_fn(x):
-                return _logdensity_2arg(x, _da)
-
-        warmup_key, sample_key = jax.random.split(key)
-        n_warmup = min(200, n_samples)
-        warmup = blackjax.window_adaptation(blackjax.nuts, logdensity_fn)
-        (state, parameters), _ = warmup.run(warmup_key, pos_dict, num_steps=n_warmup)
-
-        if verbose:
-            print(f"  Warmup done ({n_warmup} steps). Sampling...")
-
-        kernel = blackjax.nuts(logdensity_fn, **parameters).step
+        loss_fn = self._get_or_build_loss_fn(mode=mode)
 
         @jax.jit
-        def one_step(state, rng_key):
-            state, _ = kernel(rng_key, state)
-            return state, state
+        def val_and_grad(params_u, data_args):
+            return jax.value_and_grad(lambda p: loss_fn(p, data_args))(params_u)
 
-        keys = jax.random.split(sample_key, n_samples)
-        _, states = jax.lax.scan(one_step, state, keys)
+        self.model._grad_fn_cache[cache_key] = val_and_grad
+        return val_and_grad
 
-        sample_positions = states.position
-        for i in range(n_samples):
-            sd = jax.tree.map(lambda x, _i=i: x[_i], sample_positions)
-            existing_samples.append(sd)
+    def _get_or_build_logdensity_fn(self, mode="_traceable"):
+        """Return cached JIT-compiled log-density for MCMC/Pathfinder.
 
-        return existing_samples
+        Returns ``logdensity(params_u, data_args) -> scalar``.  Callers
+        should partial-apply ``data_args`` for blackjax compatibility.
+        """
+        cache_key = (self._engine_cache_key(), mode)
+        if not hasattr(self.model, "_logdensity_fn_cache"):
+            self.model._logdensity_fn_cache = {}
+        if cache_key in self.model._logdensity_fn_cache:
+            return self.model._logdensity_fn_cache[cache_key]
 
-    def _draw_nifty_samples(
-        self, likelihood, pos_dict, key, n_samples, existing_samples, *, verbose=True
-    ):
-        """Draw samples via NIFTy's draw_linear_residual (slow, ~540ms/sample)."""
-        import nifty8.re as jft
+        loss_fn = self._get_or_build_loss_fn(mode=mode)
 
-        if verbose:
-            print(f"  Drawing {n_samples} posterior samples (NIFTy CG)...")
+        @jax.jit
+        def logdensity(params_u, data_args):
+            return -loss_fn(params_u, data_args)
 
-        converged_pos = jft.Vector(pos_dict)
-        draw_keys = jax.random.split(key, n_samples)
-        for sub_key in draw_keys:
-            try:
-                residual, _ = jft.draw_linear_residual(
-                    likelihood,
-                    converged_pos,
-                    sub_key,
-                    cg_kwargs={"absdelta": 1e-4, "maxiter": 30},
-                )
-                sample_tree = residual.tree if hasattr(residual, "tree") else dict(residual)
-                pos_tree = (
-                    converged_pos.tree if hasattr(converged_pos, "tree") else dict(converged_pos)
-                )
-                combined = {k: pos_tree[k] + sample_tree[k] for k in pos_tree}
-                existing_samples.append(combined)
-            except (TypeError, ValueError, AttributeError, KeyError, RuntimeError):
-                # TypeError: NIFTy API mismatch or dict() conversion failed
-                # ValueError: invalid cg_kwargs configuration
-                # AttributeError: missing .tree attribute
-                # KeyError: position/sample tree key mismatch
-                # RuntimeError: linear solver failed to converge
-                # Stop generating warmup samples and return what we have
-                break
+        self.model._logdensity_fn_cache[cache_key] = logdensity
+        return logdensity
 
-        return existing_samples
 
-    # ── Fully JIT'd EVI optimizer ───────────────────────────────────
+    # ── Parameter transforms ──────────────────────────────────────────
 
-    def _run_vi_native(self, *, key, init_from=None, **kwargs):
-        from tengri.inference.backends.vi.native import run_native_vi
+    def _initialize_unbounded(self, key):
+        """Create initial unbounded parameter dict."""
+        params = {}
+        keys = jax.random.split(key, len(self._free_names) + 1)
 
-        kwargs.setdefault("sample_mode", "geovi")
-        return run_native_vi(self, key=key, init_from=init_from, **kwargs)
+        for i, name in enumerate(self._free_names):
+            dist = self.spec.get_distribution(name)
+            if isinstance(dist, Gaussian):
+                params[name] = dist.standardize(jnp.array(dist.mu))
+            else:
+                # Initialize near midpoint (u=0) with small perturbation
+                params[name] = 0.1 * jax.random.normal(keys[i])
 
-    def _run_vi_native_linear(self, *, key, init_from=None, **kwargs):
-        from tengri.inference.backends.vi.native import run_native_vi
+        if self.spec.stochastic:
+            params["psd_xi"] = 0.1 * jax.random.normal(keys[-1], shape=(self.spec.n_grid,))
 
-        kwargs.setdefault("sample_mode", "linear")
-        return run_native_vi(self, key=key, init_from=init_from, **kwargs)
+        return params
+
+    def _unbounded_from_posterior(self, posterior):
+        """Convert a Posterior's params to unbounded space for init."""
+        params = {}
+        for name in self._free_names:
+            if name in posterior.params:
+                dist = self.spec.get_distribution(name)
+                params[name] = dist.standardize(jnp.array(posterior.params[name]))
+            else:
+                params[name] = jnp.array(0.0)
+
+        if self.spec.stochastic and "psd_xi" in posterior.params:
+            params["psd_xi"] = posterior.params["psd_xi"]
+        elif self.spec.stochastic:
+            params["psd_xi"] = jnp.zeros(self.spec.n_grid)
+
+        return params
+
+    def _to_physical(self, params_unbounded):
+        """Convert a single unbounded param dict to physical space."""
+        params = {}
+        for name in self._free_names:
+            dist = self.spec.get_distribution(name)
+            params[name] = dist.unstandardize(params_unbounded[name])
+        for name, val in self._fixed_values.items():
+            params[name] = jnp.array(val)
+        if self.spec.stochastic and "psd_xi" in params_unbounded:
+            params["psd_xi"] = params_unbounded["psd_xi"]
+        return params
+
+
+    # ── Inference dispatch ────────────────────────────────────────────
 
     def run(self, method: str = "vi", *, init_from=None, key=None, **kwargs):
         """Run inference.
@@ -1250,10 +995,83 @@ class Fitter:
             pass
         return result
 
-    def _run_nss(self, *, key, **kwargs):
-        from tengri.inference.backends.evidence import run_nss
+    def summary(self) -> str:
+        """Return a human-readable summary of the fitting problem.
 
-        return run_nss(self, key=key, **kwargs)
+        Returns
+        -------
+        str
+            Formatted summary showing data shape, free parameters,
+            priors, bounds, and available inference methods.
+        """
+        sep = "─" * 66
+        lines: list[str] = [f"Fitter  data_type: {self.data_type}", sep]
+
+        # Data shape
+        n_data = self.data.shape[0]
+        snr_med = float(jnp.median(jnp.abs(self.data / self.noise)))
+        lines.append(f"  Data points: {n_data}")
+        lines.append(f"  Median S/N:  {snr_med:.1f}")
+
+        # Dimensionality
+        n_free = len(self._free_names)
+        n_grid = self.model._n_grid if self.model._uses_stochastic_sfh else 0
+        dim_str = f"{n_free} free"
+        if n_grid:
+            dim_str += f" + {n_grid} latent (ξ)"
+        lines.append(f"  Parameters:  {dim_str}")
+        lines.append("")
+
+        # Free parameter table
+        hdr = f"  {'Parameter':<32s} {'Prior':<26s} {'Bounds'}"
+        lines.append(hdr)
+        lines.append("  " + "─" * 64)
+        for name in self._free_names:
+            dist = self.spec.get_distribution(name)
+            lo, hi = dist.bounds
+            lines.append(f"  {name:<32s} {dist!r:<26s} [{lo:.4g}, {hi:.4g}]")
+
+        # Available methods
+        lines.append("")
+        lines.append(
+            "  Methods:     vi, vi_linear, vi_nifty_fast, vi_nifty_fast_linear, "
+            "vi_native, vi_native_linear, mcmc, mcmc_raytrace, mcmc_nuts, "
+            "mcmc_hmc, mcmc_dynamic_hmc, mcmc_ghmc, mcmc_mclmc, "
+            "mcmc_adjusted_mclmc, mcmc_ess, map, laplace, pathfinder, nss, auto"
+        )
+
+        lines.append(sep)
+        return "\n".join(lines)
+
+    def _get_mode_for_method(self, method: str) -> str:
+        """Determine forward model prediction mode based on inference method.
+
+        PERFORMANCE NOTE (2026-04-18): Profiling shows mode="_traceable" is
+        12.64x FASTER than mode="auto" (5.9ms vs 74.4ms) with stable timing.
+        mode="auto" has pathological variance (std=504ms, 6.8x the mean) causing
+        occasional 500ms+ outliers. Always use mode="_traceable" for inference.
+
+        Parameters
+        ----------
+        method : str
+            Inference method name (e.g., "vi", "mcmc_nuts", "map")
+
+        Returns
+        -------
+        str
+            Always returns "_traceable" for optimal performance across all
+            inference methods. Previous "auto" mode had severe variance issues.
+
+        See Also
+        --------
+        docs/dev/jit-optimization-report-2026-04-18.md : Full profiling analysis
+        """
+        # ALL methods now use _traceable for 12.64x speedup + stable timing
+        # (mode="auto" variance pathology fixed 2026-04-18)
+        return "_traceable"
+
+
+    # ── Private method runners ────────────────────────────────────────
 
     def _run_vi(self, *, key, init_from=None, **kwargs):
         from tengri.inference.backends.vi.nifty import run_nifty_vi
@@ -1267,6 +1085,18 @@ class Fitter:
         kwargs.setdefault("sample_mode", "linear_resample")
         return run_nifty_vi(self, key=key, init_from=init_from, **kwargs)
 
+    def _run_vi_native(self, *, key, init_from=None, **kwargs):
+        from tengri.inference.backends.vi.native import run_native_vi
+
+        kwargs.setdefault("sample_mode", "geovi")
+        return run_native_vi(self, key=key, init_from=init_from, **kwargs)
+
+    def _run_vi_native_linear(self, *, key, init_from=None, **kwargs):
+        from tengri.inference.backends.vi.native import run_native_vi
+
+        kwargs.setdefault("sample_mode", "linear")
+        return run_native_vi(self, key=key, init_from=init_from, **kwargs)
+
     def _run_nifty_fast_vi(self, *, key, init_from=None, **kwargs):
         from tengri.inference.backends.vi.nifty import run_nifty_fast_vi
 
@@ -1278,6 +1108,267 @@ class Fitter:
 
         kwargs.setdefault("sample_mode", "linear_resample")
         return run_nifty_fast_vi(self, key=key, init_from=init_from, **kwargs)
+
+    def _run_nss(self, *, key, **kwargs):
+        from tengri.inference.backends.evidence import run_nss
+
+        return run_nss(self, key=key, **kwargs)
+
+    def _run_map(self, *, key, **kwargs):
+        from tengri.inference.backends.map_dispatch import run_map
+
+        return run_map(self, key=key, **kwargs)
+
+    def _run_raytrace(self, *, key, **kwargs):
+        from tengri.inference.backends.mcmc.common import run_raytrace
+
+        return run_raytrace(self, key=key, **kwargs)
+
+    def _run_nuts(self, *, key, **kwargs):
+        from tengri.inference.backends.mcmc.common import run_nuts
+
+        return run_nuts(self, key=key, **kwargs)
+
+    def _run_hmc(self, *, key, **kwargs):
+        from tengri.inference.backends.mcmc.common import run_hmc
+
+        return run_hmc(self, key=key, **kwargs)
+
+    def _run_dynamic_hmc(self, *, key, **kwargs):
+        from tengri.inference.backends.mcmc.common import run_dynamic_hmc
+
+        return run_dynamic_hmc(self, key=key, **kwargs)
+
+    def _run_ghmc(self, *, key, **kwargs):
+        from tengri.inference.backends.mcmc.common import run_ghmc
+
+        return run_ghmc(self, key=key, **kwargs)
+
+    def _run_mclmc(self, *, key, **kwargs):
+        from tengri.inference.backends.mcmc.common import run_mclmc
+
+        return run_mclmc(self, key=key, **kwargs)
+
+    def _run_adjusted_mclmc(self, *, key, **kwargs):
+        from tengri.inference.backends.mcmc.common import run_adjusted_mclmc
+
+        return run_adjusted_mclmc(self, key=key, **kwargs)
+
+    def _run_laplace(self, *, key, **kwargs):
+        from tengri.inference.backends.map_dispatch import run_laplace
+
+        return run_laplace(self, key=key, **kwargs)
+
+    def _run_pathfinder(self, *, key, **kwargs):
+        from tengri.inference.backends.map_dispatch import run_pathfinder
+
+        return run_pathfinder(self, key=key, **kwargs)
+
+    def _run_elliptical_slice(self, *, key, **kwargs):
+        from tengri.inference.backends.mcmc.common import run_elliptical_slice
+
+        return run_elliptical_slice(self, key=key, **kwargs)
+
+
+    # ── Posterior sampling ────────────────────────────────────────────
+
+    def _draw_posterior_samples(
+        self,
+        likelihood,
+        pos_dict,
+        key,
+        n_samples,
+        existing_samples,
+        *,
+        method="jit",
+        verbose=True,
+    ):
+        """Draw posterior samples from the converged geoVI approximation.
+
+        Parameters
+        ----------
+        method : str
+            "jit" (default) — JIT-compiled CG solve, ~0.2ms/sample.
+            "blackjax" — BlackJAX NUTS (independent MCMC, not geoVI).
+            "nifty" — NIFTy draw_linear_residual (slow, ~540ms/sample).
+        """
+        if method == "jit":
+            return self._draw_jit_samples(
+                pos_dict, key, n_samples, existing_samples, verbose=verbose
+            )
+        if method == "blackjax":
+            try:
+                return self._draw_blackjax_samples(
+                    likelihood, pos_dict, key, n_samples, existing_samples, verbose=verbose
+                )
+            except ImportError:
+                if verbose:
+                    print("  blackjax not installed, falling back to JIT sampling")
+                return self._draw_jit_samples(
+                    pos_dict, key, n_samples, existing_samples, verbose=verbose
+                )
+        return self._draw_nifty_samples(
+            likelihood, pos_dict, key, n_samples, existing_samples, verbose=verbose
+        )
+
+    def _draw_jit_samples(self, pos_dict, key, n_samples, existing_samples, *, verbose=True):
+        """Draw geoVI linear residual samples via JIT-compiled CG.
+
+        Same math as NIFTy's draw_linear_residual but fully JIT-compiled:
+        1. Draw z = J^T sqrt(N^{-1}) eta1 + eta2  (eta_i ~ N(0,I))
+        2. Solve M @ residual = z via CG  (M = J^T N^{-1} J + I)
+        3. Sample = pos + residual
+
+        ~2000x faster than NIFTy's Python-loop CG.
+        """
+        if verbose:
+            print(f"  Drawing {n_samples} posterior samples (JIT CG)...")
+
+        if self._jit_sampler is None:
+            self._jit_sampler = self._get_or_build_engine(pos_dict)
+
+        engine = self._jit_sampler
+        flatten, unflatten = engine["flatten"], engine["unflatten"]
+        pos_flat = flatten(pos_dict)
+        draw_keys = jax.random.split(key, n_samples)
+        residuals_flat = engine["draw_samples"](pos_flat, draw_keys, self._data_args)
+
+        for i in range(n_samples):
+            res = unflatten(residuals_flat[i])
+            combined = {k: pos_dict[k] + res[k] for k in pos_dict}
+            existing_samples.append(combined)
+
+        return existing_samples
+
+    def _draw_nonlinear_jit_samples(
+        self, pos_dict, key, n_samples, existing_samples, *, verbose=True
+    ):
+        """Draw geoVI nonlinear posterior samples via JIT engine.
+
+        Unlike ``_draw_jit_samples`` (linear CG only), this applies
+        the geoVI coordinate curving to each sample.  Produces
+        samples from the nonlinear approximation, capturing
+        banana-shaped degeneracies that the linear Gaussian misses.
+
+        Uses ``draw_nonlinear_residuals`` from the JIT engine.
+        """
+        if verbose:
+            print(f"  Drawing {n_samples} nonlinear posterior samples (JIT geoVI)...")
+
+        if self._jit_sampler is None:
+            self._jit_sampler = self._get_or_build_engine(pos_dict)
+
+        engine = self._jit_sampler
+        flatten, unflatten = engine["flatten"], engine["unflatten"]
+        pos_flat = flatten(pos_dict)
+        data_args = self._data_args
+
+        # Draw in batches to avoid OOM for large n_samples
+        batch_size = min(n_samples, 50)
+        draw_keys = jax.random.split(key, n_samples)
+
+        for batch_start in range(0, n_samples, batch_size):
+            batch_end = min(batch_start + batch_size, n_samples)
+            batch_keys = draw_keys[batch_start:batch_end]
+            # draw_nonlinear_samples returns (2*n, D): first n positive, last n mirrors
+            residuals_flat = engine["draw_nonlinear_samples"](pos_flat, batch_keys, data_args)
+            n_batch = batch_end - batch_start
+            # Use only the first n (positive) samples, not the mirrors
+            for i in range(n_batch):
+                res = unflatten(residuals_flat[i])
+                combined = {k: pos_dict[k] + res[k] for k in pos_dict}
+                existing_samples.append(combined)
+
+        return existing_samples
+
+    def _draw_blackjax_samples(
+        self, likelihood, pos_dict, key, n_samples, existing_samples, *, verbose=True
+    ):
+        """Draw samples via BlackJAX NUTS (independent MCMC, not geoVI)."""
+        import blackjax
+
+        if verbose:
+            print(f"  Drawing {n_samples} posterior samples via BlackJAX NUTS...")
+
+        if likelihood is not None:
+
+            @jax.jit
+            def logdensity_fn(x):
+                lh_val = likelihood(x)
+                prior = 0.5 * sum(jnp.sum(v**2) for v in x.values())
+                return -lh_val - prior
+
+        else:
+            _logdensity_2arg = self._get_or_build_logdensity_fn()
+            _da = self._data_args
+
+            @jax.jit
+            def logdensity_fn(x):
+                return _logdensity_2arg(x, _da)
+
+        warmup_key, sample_key = jax.random.split(key)
+        n_warmup = min(200, n_samples)
+        warmup = blackjax.window_adaptation(blackjax.nuts, logdensity_fn)
+        (state, parameters), _ = warmup.run(warmup_key, pos_dict, num_steps=n_warmup)
+
+        if verbose:
+            print(f"  Warmup done ({n_warmup} steps). Sampling...")
+
+        kernel = blackjax.nuts(logdensity_fn, **parameters).step
+
+        @jax.jit
+        def one_step(state, rng_key):
+            state, _ = kernel(rng_key, state)
+            return state, state
+
+        keys = jax.random.split(sample_key, n_samples)
+        _, states = jax.lax.scan(one_step, state, keys)
+
+        sample_positions = states.position
+        for i in range(n_samples):
+            sd = jax.tree.map(lambda x, _i=i: x[_i], sample_positions)
+            existing_samples.append(sd)
+
+        return existing_samples
+
+    def _draw_nifty_samples(
+        self, likelihood, pos_dict, key, n_samples, existing_samples, *, verbose=True
+    ):
+        """Draw samples via NIFTy's draw_linear_residual (slow, ~540ms/sample)."""
+        import nifty8.re as jft
+
+        if verbose:
+            print(f"  Drawing {n_samples} posterior samples (NIFTy CG)...")
+
+        converged_pos = jft.Vector(pos_dict)
+        draw_keys = jax.random.split(key, n_samples)
+        for sub_key in draw_keys:
+            try:
+                residual, _ = jft.draw_linear_residual(
+                    likelihood,
+                    converged_pos,
+                    sub_key,
+                    cg_kwargs={"absdelta": 1e-4, "maxiter": 30},
+                )
+                sample_tree = residual.tree if hasattr(residual, "tree") else dict(residual)
+                pos_tree = (
+                    converged_pos.tree if hasattr(converged_pos, "tree") else dict(converged_pos)
+                )
+                combined = {k: pos_tree[k] + sample_tree[k] for k in pos_tree}
+                existing_samples.append(combined)
+            except (TypeError, ValueError, AttributeError, KeyError, RuntimeError):
+                # TypeError: NIFTy API mismatch or dict() conversion failed
+                # ValueError: invalid cg_kwargs configuration
+                # AttributeError: missing .tree attribute
+                # KeyError: position/sample tree key mismatch
+                # RuntimeError: linear solver failed to converge
+                # Stop generating warmup samples and return what we have
+                break
+
+        return existing_samples
+
+
+    # ── Batch ─────────────────────────────────────────────────────────
 
     def fit_batch(
         self,
@@ -1512,65 +1603,3 @@ class Fitter:
             results.append(result_i)
 
         return results
-
-    def _run_map(self, *, key, **kwargs):
-        from tengri.inference.backends.map_dispatch import run_map
-
-        return run_map(self, key=key, **kwargs)
-
-    def _run_raytrace(self, *, key, **kwargs):
-        from tengri.inference.backends.mcmc.common import run_raytrace
-
-        return run_raytrace(self, key=key, **kwargs)
-
-    def _run_nuts(self, *, key, **kwargs):
-        from tengri.inference.backends.mcmc.common import run_nuts
-
-        return run_nuts(self, key=key, **kwargs)
-
-    def _run_hmc(self, *, key, **kwargs):
-        from tengri.inference.backends.mcmc.common import run_hmc
-
-        return run_hmc(self, key=key, **kwargs)
-
-    def _run_dynamic_hmc(self, *, key, **kwargs):
-        from tengri.inference.backends.mcmc.common import run_dynamic_hmc
-
-        return run_dynamic_hmc(self, key=key, **kwargs)
-
-    def _run_ghmc(self, *, key, **kwargs):
-        from tengri.inference.backends.mcmc.common import run_ghmc
-
-        return run_ghmc(self, key=key, **kwargs)
-
-    def _run_mclmc(self, *, key, **kwargs):
-        from tengri.inference.backends.mcmc.common import run_mclmc
-
-        return run_mclmc(self, key=key, **kwargs)
-
-    def _run_adjusted_mclmc(self, *, key, **kwargs):
-        from tengri.inference.backends.mcmc.common import run_adjusted_mclmc
-
-        return run_adjusted_mclmc(self, key=key, **kwargs)
-
-    def _build_loglikelihood_unbounded_fn(self, mode="_traceable"):
-        """Build unbounded-space log-likelihood.
-
-        See ``loss_functions.build_loglikelihood_unbounded_fn``.
-        """
-        return build_loglikelihood_unbounded_fn(self, mode=mode)
-
-    def _run_laplace(self, *, key, **kwargs):
-        from tengri.inference.backends.map_dispatch import run_laplace
-
-        return run_laplace(self, key=key, **kwargs)
-
-    def _run_pathfinder(self, *, key, **kwargs):
-        from tengri.inference.backends.map_dispatch import run_pathfinder
-
-        return run_pathfinder(self, key=key, **kwargs)
-
-    def _run_elliptical_slice(self, *, key, **kwargs):
-        from tengri.inference.backends.mcmc.common import run_elliptical_slice
-
-        return run_elliptical_slice(self, key=key, **kwargs)
