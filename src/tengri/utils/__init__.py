@@ -41,6 +41,7 @@ from tengri.utils.cosmology import (
     z_at_cosmic_time,
     z_at_lookback_time,
 )
+from tengri.utils.diffndhist import tw_ndhist, tw_ndhist_weighted
 from tengri.utils.grid import log_age_to_age_yr, make_log_age_grid
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid, tw_cuml_kern
 from tengri.utils.magnitudes import (
@@ -121,6 +122,8 @@ __all__ = [
     "surface_brightness_to_mag",
     "tau_to_attenuation",
     "tw_cuml_kern",
+    "tw_ndhist",
+    "tw_ndhist_weighted",
     "ujy_to_fnu",
     "vacuum_to_air",
     "vega_to_ab",
