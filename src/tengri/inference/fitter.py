@@ -1416,11 +1416,6 @@ class Fitter:
                 "adam": lambda: optax.adam(learning_rate),
                 "adamw": lambda: optax.adamw(learning_rate),
                 "sgd": lambda: optax.sgd(learning_rate, momentum=0.9),
-                "lbfgs": lambda: optax.chain(
-                    optax.scale_by_lbfgs(memory_size=10, scale_init_precond=True),
-                    optax.clip_by_global_norm(0.5),
-                    optax.scale(-1.0),
-                ),
             }
             opt = _opt_builders[optimizer]()
         else:

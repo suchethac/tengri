@@ -106,7 +106,7 @@ class TestOptimizerRegistry:
     def test_jaxopt_solvers_set(self):
         from tengri.inference.backends.map_dispatch import _JAXOPT_SOLVERS
 
-        assert {"lbfgs_scipy"} == _JAXOPT_SOLVERS
+        assert {"lbfgs", "lbfgs_scipy"} == _JAXOPT_SOLVERS
 
     def test_all_optimizers_includes_both(self):
         from tengri.inference.backends.map_dispatch import (

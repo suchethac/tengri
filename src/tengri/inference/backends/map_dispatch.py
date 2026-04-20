@@ -12,8 +12,8 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
-_OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd", "lbfgs"}
-_SCIPY_OPTIMIZERS = {"lbfgs_scipy"}
+_OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd"}
+_SCIPY_OPTIMIZERS = {"lbfgs", "lbfgs_scipy"}
 _ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _SCIPY_OPTIMIZERS
 
 # Backward compatibility alias (used by fitter._fit_batch_vmap_map and tests)
@@ -33,19 +33,13 @@ def _build_optax_optimizer(optimizer, learning_rate):
             "adam": lambda: optax.adam(learning_rate),
             "adamw": lambda: optax.adamw(learning_rate),
             "sgd": lambda: optax.sgd(learning_rate, momentum=0.9),
-            "lbfgs": lambda: optax.chain(
-                optax.scale_by_lbfgs(memory_size=10, scale_init_precond=True),
-                optax.clip_by_global_norm(0.5),
-                optax.scale(-1.0),
-            ),
         }
         if optimizer not in opt_builders:
             raise ValueError(
                 f"Unknown optimizer '{optimizer}'. "
                 f"Use {sorted(_ALL_OPTIMIZERS)} or pass an optax optimizer."
             )
-        display_names = {"lbfgs": "L-BFGS"}
-        name = display_names.get(optimizer, optimizer.upper())
+        name = optimizer.upper()
         return opt_builders[optimizer](), name
 
     return optimizer, "custom"
@@ -278,11 +272,10 @@ def run_map(
     learning_rate : float
         Learning rate (optax optimizers only; ignored for quasi-Newton).
     optimizer : str or optax optimizer
-        Optax: ``"adam"``, ``"sgd"``, ``"adamw"``, ``"lbfgs"``, or a
-        pre-built optax optimizer.  ``"lbfgs"`` uses ``optax.scale_by_lbfgs``
-        through the scan-batch path (fast, no line search).
-        ``"lbfgs_scipy"`` uses scipy L-BFGS-B with Wolfe line search
-        (slower but guaranteed convergence).
+        Optax: ``"adam"``, ``"sgd"``, ``"adamw"``, or a pre-built optax
+        optimizer.  ``"lbfgs"`` (or ``"lbfgs_scipy"``) uses scipy
+        L-BFGS-B with Wolfe line search — reliable convergence, zero
+        JAX compilation for the optimizer itself.
     early_stopping : bool
         Stop if loss doesn't improve (optax only; quasi-Newton uses ``tol``).
     patience : int
