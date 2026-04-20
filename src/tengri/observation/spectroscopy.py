@@ -49,9 +49,9 @@ class Spectroscopy:
         - ``"fitted"``: Line amplitudes as free MCMC parameters.
 
         Default: ``"off"``.
-    eline_catalog : LineCatalog or None
-        Line catalog. ``None`` falls back to ``LineCatalog.default_13()`` for
-        backward compatibility. Use ``LineCatalog.default_optical()`` for
+    eline_catalog : LineList or None
+        Line catalog. ``None`` falls back to ``LineList.default_13()`` for
+        backward compatibility. Use ``LineList.default_optical()`` for
         FastSpecFit parity. Default: None.
     eline_prior_type : str
         Prior type for line amplitudes. One of ``"flat"`` (uninformative) or
@@ -64,6 +64,11 @@ class Spectroscopy:
         Enable broad component for AGN candidate lines. Default: False.
     eline_broad_fwhm_min_kms : float
         Minimum FWHM for the broad component in km/s. Default: 500.0.
+    covariance : jnp.ndarray or None
+        Full spectral covariance matrix, shape ``(n_pix, n_pix)``.
+        When provided, the likelihood uses ``diff @ C^{-1} @ diff``
+        instead of per-pixel ``sum((diff/sigma)^2)``. The inverse is
+        precomputed at construction time.  Default: None (diagonal noise).
     """
 
     wave_obs: jnp.ndarray = dataclasses.field(hash=False)
@@ -79,6 +84,7 @@ class Spectroscopy:
     eline_fix_doublets: bool = True
     eline_broad: bool = False
     eline_broad_fwhm_min_kms: float = 500.0
+    covariance: jnp.ndarray | None = dataclasses.field(default=None, hash=False)
 
     def __post_init__(self) -> None:
         _valid_modes = ("off", "fixed", "marginalized", "fitted")
@@ -91,15 +97,34 @@ class Spectroscopy:
                     f"resolution array length {res_arr.shape[0]} does not match "
                     f"wave_obs length {len(self.wave_obs)}"
                 )
+        if self.covariance is not None:
+            cov = jnp.asarray(self.covariance)
+            n = len(self.wave_obs)
+            if cov.shape != (n, n):
+                raise ValueError(
+                    f"covariance shape {cov.shape} does not match "
+                    f"expected ({n}, {n})"
+                )
+            object.__setattr__(self, "_cov_inv", jnp.linalg.inv(cov))
+        else:
+            object.__setattr__(self, "_cov_inv", None)
 
-    # -------------------------------------------------------------------
-    # Properties
-    # -------------------------------------------------------------------
+    # ── Properties ────────────────────────────────────────────────
 
     @property
     def n_pixels(self) -> int:
         """Number of spectral pixels."""
         return len(self.wave_obs)
+
+    @property
+    def has_covariance(self) -> bool:
+        """Whether a full covariance matrix is configured."""
+        return self._cov_inv is not None
+
+    @property
+    def cov_inv(self) -> jnp.ndarray | None:
+        """Precomputed inverse covariance matrix, or None."""
+        return self._cov_inv
 
     @property
     def has_lsf(self) -> bool:
@@ -122,7 +147,7 @@ class Spectroscopy:
 
         Returns
         -------
-        LineCatalog
+        LineList
             The active line catalog.
         """
         from tengri.observation.line_list import LineCatalog
@@ -131,12 +156,10 @@ class Spectroscopy:
             return self.eline_catalog
         return LineCatalog.default_13()
 
-    # -------------------------------------------------------------------
-    # Parameter helpers
-    # -------------------------------------------------------------------
+    # ── Parameter helpers ─────────────────────────────────────────
 
     def get_calibration_params(self) -> dict[str, Distribution]:
-        """Return ParamSpec entries for calibration polynomial.
+        """Return Parameters entries for calibration polynomial.
 
         Returns
         -------
@@ -148,9 +171,7 @@ class Spectroscopy:
             return {}
         return {f"cal_c{i + 1}": Gaussian(0.0, 0.1) for i in range(self.calibration_order)}
 
-    # -------------------------------------------------------------------
-    # Instrument factories
-    # -------------------------------------------------------------------
+    # ── Instrument factories ──────────────────────────────────────
 
     @staticmethod
     def _from_resolution(
@@ -230,7 +251,7 @@ class Spectroscopy:
 
         Returns
         -------
-        SpectroscopyConfig
+        Spectroscopy
             Configured for DESI-like spectroscopic fitting.
         """
         from tengri.observation.line_list import LineCatalog
@@ -246,9 +267,7 @@ class Spectroscopy:
             **kwargs,
         )
 
-    # -------------------------------------------------------------------
-    # Summary
-    # -------------------------------------------------------------------
+    # ── Summary ───────────────────────────────────────────────────
 
     def summary(self) -> str:
         """Return a one-line summary of the spectroscopy configuration."""
@@ -263,12 +282,57 @@ class Spectroscopy:
             parts.append(f"cal order={self.calibration_order}")
         if self.eline_mode != "off":
             parts.append(f"eline={self.eline_mode}")
+        if self.has_covariance:
+            parts.append("cov_matrix")
         return ", ".join(parts)
 
 
-# ---------------------------------------------------------------------------
-# Deprecated alias — removed in tengri v1.0
-# ---------------------------------------------------------------------------
+# ── Wavelength masking ────────────────────────────────────────────
+
+
+def apply_wavelength_mask(
+    noise: jnp.ndarray,
+    wave_obs: jnp.ndarray,
+    mask_ranges: list[tuple[float, float]],
+) -> jnp.ndarray:
+    """Mask spectral regions by setting noise to infinity.
+
+    Masked pixels are effectively removed from the likelihood (chi2
+    contribution → 0). Returns a new array — does not mutate the input.
+
+    Parameters
+    ----------
+    noise : array, shape (n_pix,)
+        Per-pixel 1-sigma noise.
+    wave_obs : array, shape (n_pix,)
+        Observed-frame wavelength grid (Angstrom).
+    mask_ranges : list of (lo, hi)
+        Wavelength ranges to mask, in Angstrom. Each ``(lo, hi)`` pair
+        defines a region where ``lo <= wave <= hi`` is masked.
+
+    Returns
+    -------
+    jnp.ndarray
+        Copy of ``noise`` with masked pixels set to ``inf``.
+
+    Examples
+    --------
+    Mask the 5577 A sky line and a detector gap::
+
+        noise_masked = apply_wavelength_mask(
+            noise, wave_obs,
+            mask_ranges=[(5560, 5590), (7580, 7680)],
+        )
+    """
+    noise = jnp.array(noise)
+    wave_obs = jnp.array(wave_obs)
+    for lo, hi in mask_ranges:
+        in_range = (wave_obs >= lo) & (wave_obs <= hi)
+        noise = jnp.where(in_range, jnp.inf, noise)
+    return noise
+
+
+# ── Deprecated alias — removed in tengri v1.0 ─────────────────────
 
 
 def _make_deprecated_spectroscopy_config():

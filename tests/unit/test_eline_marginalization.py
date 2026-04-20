@@ -26,9 +26,7 @@ from tengri.observation.eline_marginalization import (
 jax.config.update("jax_enable_x64", True)
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -57,9 +55,7 @@ def multi_line_setup(wave_grid):
     return wave_grid, G, line_waves, R, z
 
 
-# ---------------------------------------------------------------------------
-# 1. Design matrix shape and normalization
-# ---------------------------------------------------------------------------
+# ── 1. Design matrix shape and normalization ──────────────────────
 
 
 class TestDesignMatrix:
@@ -112,9 +108,7 @@ class TestDesignMatrix:
         assert G.shape == (len(wave_grid), len(DEFAULT_LINE_WAVELENGTHS))
 
 
-# ---------------------------------------------------------------------------
-# 2. Recovery of known line amplitudes
-# ---------------------------------------------------------------------------
+# ── 2. Recovery of known line amplitudes ──────────────────────────
 
 
 class TestAmplitudeRecovery:
@@ -168,9 +162,7 @@ class TestAmplitudeRecovery:
         )
 
 
-# ---------------------------------------------------------------------------
-# 3. Marginalized likelihood > non-marginalized when lines present
-# ---------------------------------------------------------------------------
+# ── 3. Marginalized likelihood > non-marginalized when lines present
 
 
 class TestLikelihoodImprovement:
@@ -197,9 +189,7 @@ class TestLikelihoodImprovement:
         )
 
 
-# ---------------------------------------------------------------------------
-# 4. Gradient through marginalization is finite
-# ---------------------------------------------------------------------------
+# ── 4. Gradient through marginalization is finite ─────────────────
 
 
 class TestGradients:
@@ -249,9 +239,7 @@ class TestGradients:
         assert jnp.all(jnp.isfinite(grad)), "Gradient through predict should be finite"
 
 
-# ---------------------------------------------------------------------------
-# 5. Prior shrinks amplitudes toward zero
-# ---------------------------------------------------------------------------
+# ── 5. Prior shrinks amplitudes toward zero ───────────────────────
 
 
 class TestPriorEffect:
@@ -295,9 +283,7 @@ class TestPriorEffect:
         assert abs(float(a_hat[2]) - 5.0) < 0.5, "Third line should be recovered"
 
 
-# ---------------------------------------------------------------------------
-# 6. JIT compilation works
-# ---------------------------------------------------------------------------
+# ── 6. JIT compilation works ──────────────────────────────────────
 
 
 class TestJIT:
@@ -352,9 +338,7 @@ class TestJIT:
         assert jnp.all(jnp.isfinite(model))
 
 
-# ---------------------------------------------------------------------------
-# 7. Multiple lines don't interfere
-# ---------------------------------------------------------------------------
+# ── 7. Multiple lines don't interfere ─────────────────────────────
 
 
 class TestLineIndependence:
@@ -404,9 +388,7 @@ class TestLineIndependence:
         )
 
 
-# ---------------------------------------------------------------------------
-# 8. Zero-amplitude lines don't affect likelihood
-# ---------------------------------------------------------------------------
+# ── 8. Zero-amplitude lines don't affect likelihood ───────────────
 
 
 class TestZeroLines:
@@ -454,9 +436,7 @@ class TestZeroLines:
         assert_allclose(model, continuum, atol=1e-15)
 
 
-# ---------------------------------------------------------------------------
-# Edge cases
-# ---------------------------------------------------------------------------
+# ── Edge cases ────────────────────────────────────────────────────
 
 
 class TestEdgeCases:

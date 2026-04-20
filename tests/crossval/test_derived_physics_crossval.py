@@ -30,9 +30,7 @@ pytestmark = [
 ]
 
 
-# ===================================================================
-# 1. SSP color sequence with age
-# ===================================================================
+# ── 1. SSP color sequence with age ────────────────────────────────
 
 
 class TestSSPColorSequence:
@@ -113,9 +111,7 @@ class TestSSPColorSequence:
         assert beta < -1.0, f"10 Myr SSP beta = {beta:.2f}, expected < -1.0"
 
 
-# ===================================================================
-# 2. SSP mass-to-light ratio
-# ===================================================================
+# ── 2. SSP mass-to-light ratio ────────────────────────────────────
 
 
 class TestSSPMassLightRatio:
@@ -179,9 +175,7 @@ class TestSSPMassLightRatio:
         )
 
 
-# ===================================================================
-# 3. IGM transmission published values
-# ===================================================================
+# ── 3. IGM transmission published values ──────────────────────────
 
 
 class TestIGMTransmissionPhysics:
@@ -237,9 +231,7 @@ class TestIGMTransmissionPhysics:
             )
 
 
-# ===================================================================
-# 4. Cosmology full suite (tighter than existing)
-# ===================================================================
+# ── 4. Cosmology full suite (tighter than existing) ───────────────
 
 
 class TestCosmologyFullSuite:
@@ -282,9 +274,7 @@ class TestCosmologyFullSuite:
             )
 
 
-# ===================================================================
-# 5. Physical quantity ranges over random parameter draws
-# ===================================================================
+# ── 5. Physical quantity ranges over random parameter draws ───────
 
 
 class TestRandomParameterPhysics:

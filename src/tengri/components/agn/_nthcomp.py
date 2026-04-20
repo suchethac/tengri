@@ -39,9 +39,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-# ---------------------------------------------------------------------------
-# Template loading (lazy — no computation at import time)
-# ---------------------------------------------------------------------------
+# ── Template loading (lazy — no computation at import time) ───────
 
 #: Grid axes stored in the npz file (set by load_nthcomp_templates).
 _GAMMA_JAX: jnp.ndarray | None = None
@@ -105,9 +103,7 @@ def load_nthcomp_templates(path: Path | None = None) -> bool:
 load_nthcomp_templates()
 
 
-# ---------------------------------------------------------------------------
-# JAX-compatible interpolation (only valid when _TABLE_AVAILABLE is True)
-# ---------------------------------------------------------------------------
+# ── JAX-compatible interpolation (only valid when _TABLE_AVAILABLE is True)
 
 
 def _clamp_interp_index(val: jnp.ndarray, grid: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:

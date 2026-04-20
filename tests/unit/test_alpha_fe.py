@@ -28,9 +28,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Unit tests for effective_metallicity
-# ---------------------------------------------------------------------------
+# ── Unit tests for effective_metallicity ──────────────────────────
 
 
 class TestEffectiveMetallicity:
@@ -102,9 +100,7 @@ class TestEffectiveMetallicity:
         assert_allclose(result, expected, atol=1e-14)
 
 
-# ---------------------------------------------------------------------------
-# ParamSpec integration
-# ---------------------------------------------------------------------------
+# ── ParamSpec integration ─────────────────────────────────────────
 
 
 class TestAlphaFeParamSpec:
@@ -165,9 +161,7 @@ class TestAlphaFeParamSpec:
         assert -0.2 <= val <= 0.6
 
 
-# ---------------------------------------------------------------------------
-# Forward model integration (requires SSP data)
-# ---------------------------------------------------------------------------
+# ── Forward model integration (requires SSP data) ─────────────────
 
 
 class TestAlphaFeForwardModel:

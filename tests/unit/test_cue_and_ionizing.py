@@ -13,9 +13,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ===================================================================
-# Ionizing spectrum fitting
-# ===================================================================
+# ── Ionizing spectrum fitting ─────────────────────────────────────
 
 
 class TestIonizingSpectrumFit:
@@ -82,9 +80,7 @@ class TestIonizingSpectrumFit:
         )
 
 
-# ===================================================================
-# Precomputed ionizing params table
-# ===================================================================
+# ── Precomputed ionizing params table ─────────────────────────────
 
 
 class TestIonizingParamsTable:
@@ -119,9 +115,7 @@ class TestIonizingParamsTable:
         assert jnp.all(jnp.isfinite(ionspec))
 
 
-# ===================================================================
-# Cue backend
-# ===================================================================
+# ── Cue backend ───────────────────────────────────────────────────
 
 
 class TestCueBackend:
@@ -228,9 +222,7 @@ class TestCueBackend:
         )
 
 
-# ===================================================================
-# Cue with precomputed ionizing params
-# ===================================================================
+# ── Cue with precomputed ionizing params ──────────────────────────
 
 
 class TestCueWithSSP:
@@ -277,9 +269,7 @@ class TestCueWithSSP:
         assert float(jnp.sum(lum)) > 0, "Should produce positive line emission"
 
 
-# ===================================================================
-# Kennicutt 1998 Hα calibration
-# ===================================================================
+# ── Kennicutt 1998 Hα calibration ─────────────────────────────────
 
 
 class TestKennicutt1998Halpha:

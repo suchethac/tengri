@@ -10,9 +10,7 @@ import pytest
 import tengri.components.agn.skirtor as _skirtor_mod
 import tengri.components.dust.emission as _emission_mod
 
-# ---------------------------------------------------------------------------
-# Helpers: clear module-level caches between tests so each test starts fresh
-# ---------------------------------------------------------------------------
+# ── Helpers: clear module-level caches between tests so each test starts fresh
 
 
 def _reset_emission_caches():
@@ -38,9 +36,7 @@ def _reset_skirtor_cache():
     _skirtor_mod._skirtor_default = None
 
 
-# ---------------------------------------------------------------------------
-# DL07 (Draine & Li 2007)
-# ---------------------------------------------------------------------------
+# ── DL07 (Draine & Li 2007) ───────────────────────────────────────
 
 
 class TestDL07NoFallback:
@@ -70,9 +66,7 @@ class TestDL07NoFallback:
         assert "convert_dl07_templates" in str(exc_info.value)
 
 
-# ---------------------------------------------------------------------------
-# Dale+2014
-# ---------------------------------------------------------------------------
+# ── Dale+2014 ─────────────────────────────────────────────────────
 
 
 class TestDale2014NoFallback:
@@ -93,9 +87,7 @@ class TestDale2014NoFallback:
             _emission_mod.dale2014(wave, L_absorbed=1e10)
 
 
-# ---------------------------------------------------------------------------
-# DL14 (Draine & Li 2014)
-# ---------------------------------------------------------------------------
+# ── DL14 (Draine & Li 2014) ───────────────────────────────────────
 
 
 class TestDL14NoFallback:
@@ -126,9 +118,7 @@ class TestDL14NoFallback:
         assert "download_dl14_templates" in str(exc_info.value)
 
 
-# ---------------------------------------------------------------------------
-# Astrodust+PAH (Hensley & Draine 2023)
-# ---------------------------------------------------------------------------
+# ── Astrodust+PAH (Hensley & Draine 2023) ─────────────────────────
 
 
 class TestAstrodustNoFallback:
@@ -149,9 +139,7 @@ class TestAstrodustNoFallback:
             _emission_mod.astrodust(wave, L_absorbed=1e10)
 
 
-# ---------------------------------------------------------------------------
-# SKIRTOR torus
-# ---------------------------------------------------------------------------
+# ── SKIRTOR torus ─────────────────────────────────────────────────
 
 
 class TestSKIRTORNoFallback:

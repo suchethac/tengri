@@ -17,9 +17,7 @@ from tengri.components.sfh.dense_basis import (
     pchip_interpolate,
 )
 
-# ---------------------------------------------------------------------------
-# pchip_interpolate
-# ---------------------------------------------------------------------------
+# ── pchip_interpolate ─────────────────────────────────────────────
 
 
 class TestPchipInterpolate:
@@ -94,9 +92,7 @@ class TestPchipInterpolate:
         assert jnp.all(jnp.isfinite(g))
 
 
-# ---------------------------------------------------------------------------
-# _build_quantile_points_pure
-# ---------------------------------------------------------------------------
+# ── _build_quantile_points_pure ───────────────────────────────────
 
 
 class TestBuildQuantilePointsPure:
@@ -148,9 +144,7 @@ class TestBuildQuantilePointsPure:
         assert mass_q.shape == (4,)
 
 
-# ---------------------------------------------------------------------------
-# dense_basis_pure_sfh
-# ---------------------------------------------------------------------------
+# ── dense_basis_pure_sfh ──────────────────────────────────────────
 
 
 class TestDenseBasisPureSfh:

@@ -12,9 +12,7 @@ if TYPE_CHECKING:
     from tengri.forward.sed_model import SEDModel
 
 
-# ---------------------------------------------------------------------------
-# Inference method recommendation
-# ---------------------------------------------------------------------------
+# ── Inference method recommendation ───────────────────────────────
 
 
 def method_recommendation(model: SEDModel) -> tuple[str, str]:
@@ -44,9 +42,7 @@ def method_recommendation(model: SEDModel) -> tuple[str, str]:
         return "vi", f"D={d}, moderate-high, geoVI default"
 
 
-# ---------------------------------------------------------------------------
-# tree()
-# ---------------------------------------------------------------------------
+# ── tree() ────────────────────────────────────────────────────────
 
 
 def tree(model: SEDModel) -> str:
@@ -185,9 +181,7 @@ def tree(model: SEDModel) -> str:
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# summary()
-# ---------------------------------------------------------------------------
+# ── summary() ─────────────────────────────────────────────────────
 
 
 def summary(model: SEDModel) -> str:

@@ -28,9 +28,7 @@ from tengri.observation.eline_priors import (
     marginalize_emission_lines_cloudy,
 )
 
-# ---------------------------------------------------------------------------
-# cloudy_line_priors tests
-# ---------------------------------------------------------------------------
+# ── cloudy_line_priors tests ──────────────────────────────────────
 
 
 class TestCloudyLinePriors:
@@ -185,9 +183,7 @@ class TestCloudyLinePriors:
         )
 
 
-# ---------------------------------------------------------------------------
-# marginalize_emission_lines_cloudy integration tests
-# ---------------------------------------------------------------------------
+# ── marginalize_emission_lines_cloudy integration tests ───────────
 
 
 class TestMarginalizeEmissionLinesCloudy:
@@ -394,9 +390,7 @@ class TestMarginalizeEmissionLinesCloudy:
         )
 
 
-# ---------------------------------------------------------------------------
-# balmer_decrement_prior tests
-# ---------------------------------------------------------------------------
+# ── balmer_decrement_prior tests ──────────────────────────────────
 
 
 class TestBalmerDecrementPrior:
@@ -456,9 +450,7 @@ class TestBalmerDecrementPrior:
         assert hbeta > 4861.8, f"Hβ should be vacuum (4862.68), got {hbeta}"
 
 
-# ---------------------------------------------------------------------------
-# cloudy_grid_line_priors tests (NEW-07)
-# ---------------------------------------------------------------------------
+# ── cloudy_grid_line_priors tests (NEW-07) ────────────────────────
 
 
 class _MockGridData:

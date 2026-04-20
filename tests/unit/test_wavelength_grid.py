@@ -11,9 +11,7 @@ from tengri.utils.wavelength import (
     make_panchromatic_grid,
 )
 
-# ---------------------------------------------------------------------------
-# make_panchromatic_grid
-# ---------------------------------------------------------------------------
+# ── make_panchromatic_grid ────────────────────────────────────────
 
 
 class TestMakePanchromaticGrid:
@@ -76,9 +74,7 @@ class TestMakePanchromaticGrid:
         assert len(grid_dense) > len(grid_sparse)
 
 
-# ---------------------------------------------------------------------------
-# interpolate_sed_to_grid
-# ---------------------------------------------------------------------------
+# ── interpolate_sed_to_grid ───────────────────────────────────────
 
 
 class TestInterpolateSedToGrid:

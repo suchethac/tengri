@@ -49,9 +49,7 @@ def _integrate(sfr_fn, t=T_GRID, **kwargs):
     return float(trapezoid(sfr, t))
 
 
-# ---------------------------------------------------------------------------
-# exponential_sfh
-# ---------------------------------------------------------------------------
+# ── exponential_sfh ───────────────────────────────────────────────
 
 
 class TestExponentialSFHMassConservation:
@@ -103,9 +101,7 @@ class TestExponentialSFHMassConservation:
         assert abs(numerical - analytical) / analytical < 0.01
 
 
-# ---------------------------------------------------------------------------
-# delayed_exponential_sfh
-# ---------------------------------------------------------------------------
+# ── delayed_exponential_sfh ───────────────────────────────────────
 
 
 class TestDelayedExponentialSFHMassConservation:
@@ -146,9 +142,7 @@ class TestDelayedExponentialSFHMassConservation:
         assert mass_delayed > mass_exp
 
 
-# ---------------------------------------------------------------------------
-# constant_sfh
-# ---------------------------------------------------------------------------
+# ── constant_sfh ──────────────────────────────────────────────────
 
 
 class TestConstantSFHMassConservation:
@@ -194,9 +188,7 @@ class TestConstantSFHMassConservation:
         np.testing.assert_array_equal(sfr_after, 0.0)
 
 
-# ---------------------------------------------------------------------------
-# double_powerlaw
-# ---------------------------------------------------------------------------
+# ── double_powerlaw ───────────────────────────────────────────────
 
 
 class TestDoublePowerlawMassConservation:

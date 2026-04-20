@@ -59,9 +59,7 @@ from tengri.utils.physics_constants import (
     SIGMA_T as _SIGMA_T,
 )
 
-# ===================================================================
-# Model 1: Simple power-law disc + UV cutoff
-# ===================================================================
+# ── Model 1: Simple power-law disc + UV cutoff ────────────────────
 
 
 def powerlaw_disc(
@@ -117,9 +115,7 @@ def powerlaw_disc(
     return l_nu_erg
 
 
-# ===================================================================
-# Model 2: Multi-color disc (Shakura-Sunyaev thin disc)
-# ===================================================================
+# ── Model 2: Multi-color disc (Shakura-Sunyaev thin disc) ─────────
 
 
 def _isco_radius(a_spin: float) -> float:
@@ -506,9 +502,7 @@ def multicolor_disc(
     return l_nu_intrinsic * scale
 
 
-# ===================================================================
-# Model 3: Kubota & Done (2018) 3-zone disc
-# ===================================================================
+# ── Model 3: Kubota & Done (2018) 3-zone disc ─────────────────────
 
 
 def _warm_comptonization_lnu(
@@ -848,9 +842,7 @@ def kubota_done_disc(
     # L_hot = f_hard * L_Edd (capped at L_bol)
     l_hot_erg = jnp.minimum(f_hard_safe * l_edd, l_bol_erg * 0.5)
 
-    # ===============================================================
-    # Zone 1: Outer standard disc (r > R_warm)
-    # ===============================================================
+    # ── Zone 1: Outer standard disc (r > R_warm) ──────────────────
     log_r_warm = jnp.log10(r_warm_cm)
     log_r_out = jnp.log10(r_out_cm)
     log_r_outer = jnp.linspace(log_r_warm, log_r_out, n_radii)
@@ -869,9 +861,7 @@ def kubota_done_disc(
 
     l_nu_outer = jnp.sum(jax.vmap(_outer_ring)(r_outer, t_outer, dr_outer), axis=0)
 
-    # ===============================================================
-    # Zone 2: Warm Comptonization (R_hot < r < R_warm)
-    # ===============================================================
+    # ── Zone 2: Warm Comptonization (R_hot < r < R_warm) ──────────
     if not _NTHCOMP_AVAILABLE:
         warnings.warn(
             "nthcomp templates not found — warm Comptonization zone uses the "
@@ -921,9 +911,7 @@ def kubota_done_disc(
 
     l_nu_warm = jnp.sum(jax.vmap(_warm_ring)(r_warm_grid, t_warm, dr_warm), axis=0)
 
-    # ===============================================================
-    # Zone 3: Hot corona (R_ISCO < r < R_hot)
-    # ===============================================================
+    # ── Zone 3: Hot corona (R_ISCO < r < R_hot) ───────────────────
     # Self-consistent Gamma_hot (Beloborodov 1999 / K&D 2018 Eq. 6):
     #   Gamma_hot = (7/3) * (L_diss / L_seed)^{-0.1}
     # L_seed: geometric integral of F_NT * Θ(R)/π over disc radii R > R_hot
@@ -939,9 +927,7 @@ def kubota_done_disc(
     gamma_hard_eff = jnp.where(agn_self_consistent_gamma, gamma_hard_sc, agn_gamma_hard)
     l_nu_hot = _hot_corona_lnu(nu, l_hot_erg, gamma_hard_eff, kt_hot_erg)
 
-    # ===============================================================
-    # Combine and normalize
-    # ===============================================================
+    # ── Combine and normalize ─────────────────────────────────────
     l_nu_total = l_nu_outer + l_nu_warm + l_nu_hot
 
     # Normalize all 3 zones to L_bol * agn_frac.
@@ -979,9 +965,7 @@ def kubota_done_disc(
     return l_nu_total * scale
 
 
-# ===================================================================
-# Model 4: ADAF + truncated disc (low-luminosity AGN)
-# ===================================================================
+# ── Model 4: ADAF + truncated disc (low-luminosity AGN) ───────────
 
 
 def adaf_disc(
@@ -1080,9 +1064,7 @@ def adaf_disc(
     eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
     mdot = l_edd_ratio * l_edd / (eta * _C_LIGHT**2)
 
-    # ===============================================================
-    # ADAF component (r < r_tr)
-    # ===============================================================
+    # ── ADAF component (r < r_tr) ─────────────────────────────────
     # ADAF radiative luminosity fraction: L_adaf ~ L_bol * (r_isco / r_tr)
     # Most energy is advected, not radiated
     adaf_efficiency = r_isco_rg / r_tr_safe
@@ -1151,9 +1133,7 @@ def adaf_disc(
     adaf_integral_safe = jnp.maximum(adaf_integral, 1e-100)
     l_nu_adaf = l_adaf_erg * adaf_shape / adaf_integral_safe
 
-    # ===============================================================
-    # Truncated outer disc (r > r_tr)
-    # ===============================================================
+    # ── Truncated outer disc (r > r_tr) ───────────────────────────
     r_in_cm = r_tr_safe * r_g  # inner edge at truncation radius (= r_tr)
     r_out_cm = 1000.0 * r_isco_rg * r_g  # self-gravity limit
 
@@ -1192,9 +1172,7 @@ def adaf_disc(
     ring_contributions = jax.vmap(_ring_lnu)(r_grid, t_profile, dr)
     l_nu_disc = jnp.sum(ring_contributions, axis=0)
 
-    # ===============================================================
-    # Combine and normalize
-    # ===============================================================
+    # ── Combine and normalize ─────────────────────────────────────
     # Disc luminosity: L_bol * (1 - r_isco/r_tr) [remaining after ADAF]
     l_disc_erg = l_bol_erg * (1.0 - adaf_efficiency)
     disc_integral = jnp.trapezoid(l_nu_disc[::-1], nu[::-1])

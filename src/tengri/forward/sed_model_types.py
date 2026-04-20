@@ -8,9 +8,7 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 
-# ---------------------------------------------------------------------------
-# MockData container
-# ---------------------------------------------------------------------------
+# ── MockData container ────────────────────────────────────────────
 
 
 class MockData(NamedTuple):
@@ -68,9 +66,7 @@ class MockData(NamedTuple):
         return fig
 
 
-# ---------------------------------------------------------------------------
-# PriorPredictive container
-# ---------------------------------------------------------------------------
+# ── PriorPredictive container ─────────────────────────────────────
 
 
 @dataclasses.dataclass
@@ -123,9 +119,7 @@ class PriorPredictive:
         return {"n_nan": n_nan, "n_inf": n_inf, "frac_bad": frac_bad, "ok": (n_nan + n_inf == 0)}
 
 
-# ---------------------------------------------------------------------------
-# Kernel hierarchy dataclasses
-# ---------------------------------------------------------------------------
+# ── Kernel hierarchy dataclasses ──────────────────────────────────
 
 
 @dataclasses.dataclass

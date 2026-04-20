@@ -18,9 +18,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-# ---------------------------------------------------------------------------
-# SSP data paths (needed for tengri Model tests)
-# ---------------------------------------------------------------------------
+# ── SSP data paths (needed for tengri Model tests) ────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_PATH = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 SSP_EXISTS = _SSP_PATH.is_file()

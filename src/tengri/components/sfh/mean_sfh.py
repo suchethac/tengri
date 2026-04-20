@@ -42,9 +42,7 @@ AGEMAX_YR = 14e9
 _INV_SQRT2 = 1.0 / jnp.sqrt(2.0)
 
 
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
+# ── Shared helpers ────────────────────────────────────────────────
 
 
 def _clamp_age(t_lookback: jnp.ndarray) -> jnp.ndarray:
@@ -94,9 +92,7 @@ def _skewed_gaussian_kernel(
     return jnp.exp(-(y**2) / 2.0)
 
 
-# ---------------------------------------------------------------------------
-# Smooth SFH models — all take t_lookback (yr), return SFR (Msun/yr)
-# ---------------------------------------------------------------------------
+# ── Smooth SFH models — all take t_lookback (yr), return SFR (Msun/yr)
 
 
 def truncated_skewnormal_sfh(
@@ -496,6 +492,50 @@ def declining_exponential_sfh(
     return jnp.where((t_lookback >= 0) & (t_lookback <= age), sfr, 0.0)
 
 
+def constant_then_exponential_sfh(
+    t_lookback: jnp.ndarray,
+    log_sfr: float,
+    tau: float,
+    quench_age: float,
+    age: float,
+) -> jnp.ndarray:
+    """Constant SFR followed by exponential decline — 'quenching at time T'.
+
+    Constant SFR from formation (age) until quench_age, then exponential
+    decline from quench_age to present. In lookback time:
+
+        SFR(t_lb) = SFR_0 * exp(-(quench_age - t_lb) / tau)  for t_lb < quench_age
+        SFR(t_lb) = SFR_0                                     for quench_age <= t_lb <= age
+
+    Parameters
+    ----------
+    t_lookback : array
+        Lookback time (yr).
+    log_sfr : float
+        log10 of constant SFR before quenching (Msun/yr).
+    tau : float
+        e-folding decline timescale (yr) after quenching.
+    quench_age : float
+        Lookback time when quenching began (yr).
+    age : float
+        Galaxy age = lookback time of formation (yr). Must be > quench_age.
+
+    Returns
+    -------
+    array
+        SFR (Msun/yr).
+
+    References
+    ----------
+    - Carnall+2018 (bagpipes) — ``const_exp`` SFH.
+    """
+    sfr_0 = 10.0**log_sfr
+    dt_quench = quench_age - t_lookback
+    declining = sfr_0 * jnp.exp(-dt_quench / tau)
+    sfr = jnp.where(t_lookback >= quench_age, sfr_0, declining)
+    return jnp.where((t_lookback >= 0) & (t_lookback <= age), sfr, 0.0)
+
+
 def triweight_burst(
     t_lookback: jnp.ndarray,
     log_tpeak_myr: float,
@@ -537,14 +577,90 @@ def triweight_burst(
     return kernel
 
 
-# ---------------------------------------------------------------------------
-# Legacy functions (kept for backward compatibility)
-# ---------------------------------------------------------------------------
+# ── Legacy functions (kept for backward compatibility) ────────────
 
 
 def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float) -> jnp.ndarray:
     """Delayed-tau SFH: SFR(t) = norm * t * exp(-t/tau). Peaks at t=tau."""
     return norm * t_lookback * jnp.exp(-t_lookback / tau)
+
+
+def psb_wild2020(
+    t_lookback: jnp.ndarray,
+    log_peak_sfr: float,
+    age: float,
+    tau: float,
+    burstage: float,
+    alpha: float,
+    beta: float,
+    fburst: float,
+) -> jnp.ndarray:
+    """Post-starburst SFH (Wild+2020).
+
+    Two-component model: declining exponential for the old stellar
+    population plus a double power law for the recent burst episode.
+    Components are combined via mass-fraction weighting.
+
+    SFR(t) = peak_sfr × [(1 - fburst) × SFR_exp(t)/M_exp
+                          + fburst × SFR_burst(t)/M_burst]
+
+    Each component is normalized to unit mass before mixing, so
+    ``fburst`` controls the fraction of total stellar mass formed
+    in the burst.
+
+    Parameters
+    ----------
+    t_lookback : array
+        Lookback time (yr).
+    log_peak_sfr : float
+        log10 of overall SFR normalization (Msun/yr).
+    age : float
+        Galaxy age (yr): lookback time when old component began
+        forming. Exponential is active for burstage < t < age.
+    tau : float
+        e-folding timescale of the old exponential component (yr).
+    burstage : float
+        Lookback time of the burst onset (yr). Burst is active for
+        0 < t < burstage; DPL peaks at cosmic time = age_universe - burstage.
+    alpha : float
+        DPL falling slope (post-peak in cosmic time).
+    beta : float
+        DPL rising slope (pre-peak in cosmic time).
+    fburst : float
+        Fraction of total stellar mass in the burst (0-1).
+
+    Returns
+    -------
+    array
+        SFR (Msun/yr).
+
+    References
+    ----------
+    Wild+2020 (MNRAS, 494, 529): PSB SFH parameterization.
+    """
+    peak_sfr = 10.0**log_peak_sfr
+
+    # --- Old component: declining exponential between burstage and age ---
+    t_cosmic_old = age - t_lookback
+    sfr_exp = jnp.exp(-t_cosmic_old / tau)
+    mask_old = (t_lookback >= burstage) & (t_lookback <= age)
+    sfr_exp = jnp.where(mask_old, sfr_exp, 0.0)
+
+    # --- Burst component: DPL in cosmic time, peaks at (age_universe - burstage) ---
+    age_universe = AGEMAX_YR
+    t_cosmic = age_universe - t_lookback
+    tau_burst = age_universe - burstage
+    log_ratio = jnp.log(jnp.maximum(t_cosmic, 1.0) / jnp.maximum(tau_burst, 1.0))
+    sfr_burst = jnp.exp(-jnp.logaddexp(alpha * log_ratio, -beta * log_ratio))
+    mask_burst = t_lookback <= burstage
+    sfr_burst = jnp.where(mask_burst, sfr_burst, 0.0)
+
+    # --- Mass-normalize each component ---
+    m_exp = jnp.sum(sfr_exp) + 1e-30
+    m_burst = jnp.sum(sfr_burst) + 1e-30
+
+    sfr = peak_sfr * ((1.0 - fburst) * sfr_exp / m_exp + fburst * sfr_burst / m_burst)
+    return jnp.maximum(sfr, 0.0)
 
 
 def powerlaw_sfh(

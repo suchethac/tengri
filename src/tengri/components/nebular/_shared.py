@@ -18,9 +18,7 @@ from tengri.components.nebular._constants import (
 )
 from tengri.utils.physics_constants import K_BOLTZ as _K_BOLTZ
 
-# ---------------------------------------------------------------------------
-# Line placement
-# ---------------------------------------------------------------------------
+# ── Line placement ────────────────────────────────────────────────
 
 
 def place_line_profiles(
@@ -76,9 +74,7 @@ def place_line_profiles(
     return sed
 
 
-# ---------------------------------------------------------------------------
-# Ionizing photon rate
-# ---------------------------------------------------------------------------
+# ── Ionizing photon rate ──────────────────────────────────────────
 
 
 @jax.jit
@@ -126,9 +122,7 @@ compute_qh_grid = jax.vmap(
 )
 
 
-# ---------------------------------------------------------------------------
-# Grid interpolation — piecewise-linear
-# ---------------------------------------------------------------------------
+# ── Grid interpolation — piecewise-linear ─────────────────────────
 
 
 def _interp_index_weight(
@@ -148,10 +142,8 @@ def _interp_index_weight(
     return idx, w
 
 
-# ---------------------------------------------------------------------------
-# Grid interpolation — triweight kernel (smooth, C²)
+# ── Grid interpolation — triweight kernel (smooth, C²) ────────────
 # Re-exported from utils.interpolation for backward compatibility.
-# ---------------------------------------------------------------------------
 
 from tengri.utils.interpolation import (
     compute_grid_weights,  # noqa: F401
@@ -159,9 +151,7 @@ from tengri.utils.interpolation import (
     tw_cuml_kern as _tw_cuml_kern,  # noqa: F401
 )
 
-# ---------------------------------------------------------------------------
-# Metallicity convention converters
-# ---------------------------------------------------------------------------
+# ── Metallicity convention converters ─────────────────────────────
 
 
 def neb_logzsol_to_log_z_abs(logzsol: jnp.ndarray) -> jnp.ndarray:
@@ -179,9 +169,7 @@ def neb_logzsol_to_mappings_zeta(logzsol: jnp.ndarray) -> jnp.ndarray:
     return 10.0**logzsol
 
 
-# ---------------------------------------------------------------------------
-# Analytic nebular continuum  (Phase N-4b)
-# ---------------------------------------------------------------------------
+# ── Analytic nebular continuum  (Phase N-4b) ──────────────────────
 
 # Case B recombination coefficient at T=10^4 K [cm³/s]
 # Storey & Hummer (1995) via pyNeb: alpha_B(1e4 K, ne=100) = 2.585e-13
@@ -312,9 +300,7 @@ def compute_analytic_nebular_continuum(
     return L_ff + L_2q
 
 
-# ---------------------------------------------------------------------------
-# Continuum fallback
-# ---------------------------------------------------------------------------
+# ── Continuum fallback ────────────────────────────────────────────
 
 
 class NebularContinuumFallback:

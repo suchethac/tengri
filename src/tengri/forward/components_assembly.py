@@ -15,9 +15,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-# -------------------------------------------------------------------
-# SSP component: metallicity interpolation + CSP weighted sum
-# -------------------------------------------------------------------
+# ── SSP component: metallicity interpolation + CSP weighted sum ───
 
 
 def build_ssp_component(model):
@@ -83,9 +81,7 @@ def build_ssp_component(model):
     return ssp_fn
 
 
-# -------------------------------------------------------------------
-# Dust attenuation: two-component model
-# -------------------------------------------------------------------
+# ── Dust attenuation: two-component model ─────────────────────────
 
 
 def build_dust_atten_component(model):
@@ -171,9 +167,7 @@ def build_dust_atten_component(model):
     return dust_fn
 
 
-# -------------------------------------------------------------------
-# Dust IR emission (energy-balanced)
-# -------------------------------------------------------------------
+# ── Dust IR emission (energy-balanced) ────────────────────────────
 
 
 def build_dust_emission_component(model):
@@ -227,9 +221,7 @@ def build_dust_emission_component(model):
     return dust_em_fn
 
 
-# -------------------------------------------------------------------
-# AGN contribution
-# -------------------------------------------------------------------
+# ── AGN contribution ──────────────────────────────────────────────
 
 
 def build_agn_component(model):
@@ -294,9 +286,7 @@ def build_agn_component(model):
     return agn_fn
 
 
-# -------------------------------------------------------------------
-# Nebular emission
-# -------------------------------------------------------------------
+# ── Nebular emission ──────────────────────────────────────────────
 
 
 def build_nebular_component(model):
@@ -342,9 +332,7 @@ def build_nebular_component(model):
     return neb_fn
 
 
-# -------------------------------------------------------------------
-# Radio emission
-# -------------------------------------------------------------------
+# ── Radio emission ────────────────────────────────────────────────
 
 
 def build_radio_component(model):
@@ -389,9 +377,7 @@ def build_radio_component(model):
     return radio_fn
 
 
-# -------------------------------------------------------------------
-# X-ray emission
-# -------------------------------------------------------------------
+# ── X-ray emission ────────────────────────────────────────────────
 
 
 def build_xray_component(model):

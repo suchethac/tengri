@@ -40,9 +40,7 @@ LSUN = float(const.L_sun.cgs.value)  # erg/s
 MSUN = float(const.M_sun.cgs.value)  # g
 
 
-# ===================================================================
-# 1. ISCO RADIUS — independent scipy implementation of BPT72
-# ===================================================================
+# ── 1. ISCO RADIUS — independent scipy implementation of BPT72 ────
 
 
 def _isco_radius_reference(a_spin: float) -> float:
@@ -71,9 +69,7 @@ class TestISCOExact:
         )
 
 
-# ===================================================================
-# 2. EDDINGTON LUMINOSITY — exact from astropy constants
-# ===================================================================
+# ── 2. EDDINGTON LUMINOSITY — exact from astropy constants ────────
 
 
 def _eddington_luminosity_reference(log_mbh: float) -> float:
@@ -100,9 +96,7 @@ class TestEddingtonExact:
         )
 
 
-# ===================================================================
-# 3. GRAVITATIONAL RADIUS — exact from astropy
-# ===================================================================
+# ── 3. GRAVITATIONAL RADIUS — exact from astropy ──────────────────
 
 
 def _gravitational_radius_reference(log_mbh: float) -> float:
@@ -126,9 +120,7 @@ class TestGravRadiusExact:
         )
 
 
-# ===================================================================
-# 4. NOVIKOV-THORNE EFFICIENCY — independent calculation
-# ===================================================================
+# ── 4. NOVIKOV-THORNE EFFICIENCY — independent calculation ────────
 
 
 class TestNTEfficiency:
@@ -157,9 +149,7 @@ class TestNTEfficiency:
         )
 
 
-# ===================================================================
-# 5. PLANCK FUNCTION — independent scipy implementation
-# ===================================================================
+# ── 5. PLANCK FUNCTION — independent scipy implementation ─────────
 
 
 def _planck_bnu_reference(nu: float, temperature: float) -> float:
@@ -204,9 +194,7 @@ class TestPlanckExact:
         np.testing.assert_allclose(tengri_bnu, ref_bnu, rtol=1e-5)
 
 
-# ===================================================================
-# 6. QSOGEN BROKEN POWER-LAW — analytical verification
-# ===================================================================
+# ── 6. QSOGEN BROKEN POWER-LAW — analytical verification ──────────
 
 
 class TestQSOgenContinuumExact:
@@ -259,9 +247,7 @@ class TestQSOgenContinuumExact:
         assert cv < 0.15, f"plslp1=0 should give ~flat blue, CV={cv:.3f}"
 
 
-# ===================================================================
-# 7. QSOGEN HOT DUST — Planck B_λ anchor at 2μm
-# ===================================================================
+# ── 7. QSOGEN HOT DUST — Planck B_λ anchor at 2μm ─────────────────
 
 
 class TestQSOgenHotDustExact:
@@ -298,9 +284,7 @@ class TestQSOgenHotDustExact:
         assert peak_hot < peak_cool, "Hotter dust should peak bluer"
 
 
-# ===================================================================
-# 8. BELOBORODOV 1999 — exact formula verification
-# ===================================================================
+# ── 8. BELOBORODOV 1999 — exact formula verification ──────────────
 
 
 class TestBeloborodovExact:
@@ -325,9 +309,7 @@ class TestBeloborodovExact:
         np.testing.assert_allclose(gamma, expected_clipped, rtol=0.01)
 
 
-# ===================================================================
-# 9. JUST+2007 alpha_ox — exact formula
-# ===================================================================
+# ── 9. JUST+2007 alpha_ox — exact formula ─────────────────────────
 
 
 class TestJust2007Exact:
@@ -343,9 +325,7 @@ class TestJust2007Exact:
         np.testing.assert_allclose(result, expected, atol=0.001)
 
 
-# ===================================================================
-# 10. POLAR DUST — SMC A_λ = R_V * E(B-V) * k(λ)
-# ===================================================================
+# ── 10. POLAR DUST — SMC A_λ = R_V * E(B-V) * k(λ) ────────────────
 
 
 class TestPolarDustExtinctionExact:
@@ -391,9 +371,7 @@ class TestPolarDustExtinctionExact:
         np.testing.assert_allclose(ratio_actual, ratio_expected, rtol=0.05)
 
 
-# ===================================================================
-# 11. MULTICOLOR DISC TEMPERATURE PROFILE — T(r) ∝ r^{-3/4}
-# ===================================================================
+# ── 11. MULTICOLOR DISC TEMPERATURE PROFILE — T(r) ∝ r^{-3/4} ─────
 
 
 class TestDiscTemperatureProfile:
@@ -447,9 +425,7 @@ class TestDiscTemperatureProfile:
         )
 
 
-# ===================================================================
-# 12. DISC BOLOMETRIC LUMINOSITY — energy conservation
-# ===================================================================
+# ── 12. DISC BOLOMETRIC LUMINOSITY — energy conservation ──────────
 
 
 class TestDiscEnergyConservation:
@@ -488,9 +464,7 @@ class TestDiscEnergyConservation:
         )
 
 
-# ===================================================================
-# 13. YANG+2022 ANISOTROPY — exact formula at specific angles
-# ===================================================================
+# ── 13. YANG+2022 ANISOTROPY — exact formula at specific angles ───
 
 
 class TestAnisotropyExact:
@@ -516,9 +490,7 @@ class TestAnisotropyExact:
         np.testing.assert_allclose(result, expected_factor, atol=1e-10)
 
 
-# ===================================================================
-# 14. RADIO DPL — analytical shape at reference frequency
-# ===================================================================
+# ── 14. RADIO DPL — analytical shape at reference frequency ───────
 
 
 class TestRadioDPLExact:

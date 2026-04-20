@@ -35,9 +35,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Tests that do NOT require grid data
-# ---------------------------------------------------------------------------
+# ── Tests that do NOT require grid data ───────────────────────────
 
 
 def test_import_feltre_nlr_backend() -> None:
@@ -91,9 +89,7 @@ def test_dispatcher_unknown_backend() -> None:
         agn_nlr_emission(backend="nonexistent_backend")
 
 
-# ---------------------------------------------------------------------------
-# Tests that require grid data (skip if absent)
-# ---------------------------------------------------------------------------
+# ── Tests that require grid data (skip if absent) ─────────────────
 
 
 @pytest.mark.skipif(not _GRID_AVAILABLE, reason="data/feltre_grid.h5 not found")
@@ -249,9 +245,7 @@ def test_feltre_fesc_scales_luminosity() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Tests for agn_ionspec_from_alpha_pl (no data required)
-# ---------------------------------------------------------------------------
+# ── Tests for agn_ionspec_from_alpha_pl (no data required) ────────
 
 
 def test_agn_ionspec_returns_all_keys() -> None:
@@ -387,9 +381,7 @@ def test_agn_ionspec_jit_compatible() -> None:
     assert jnp.isfinite(result)
 
 
-# ---------------------------------------------------------------------------
-# Tests for _log_qh_from_lacc (no data required)
-# ---------------------------------------------------------------------------
+# ── Tests for _log_qh_from_lacc (no data required) ────────────────
 
 
 def test_log_qh_matches_reference() -> None:

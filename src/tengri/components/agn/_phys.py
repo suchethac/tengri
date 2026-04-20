@@ -34,9 +34,7 @@ __all__ = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Planck function
-# ---------------------------------------------------------------------------
+# ── Planck function ───────────────────────────────────────────────
 
 
 def planck_lnu(
@@ -73,9 +71,7 @@ def planck_lnu(
     return 2.0 * H_PLANCK * nu64**3 / C_LIGHT**2 / jnp.expm1(x)
 
 
-# ---------------------------------------------------------------------------
-# Wavelength ↔ frequency conversion
-# ---------------------------------------------------------------------------
+# ── Wavelength ↔ frequency conversion ─────────────────────────────
 
 
 def wavelength_to_nu(wavelength_angstrom: jnp.ndarray) -> jnp.ndarray:
@@ -83,9 +79,7 @@ def wavelength_to_nu(wavelength_angstrom: jnp.ndarray) -> jnp.ndarray:
     return C_LIGHT / (wavelength_angstrom * ANGSTROM_CM)
 
 
-# ---------------------------------------------------------------------------
-# Gaussian emission-line profile (scalar kernel)
-# ---------------------------------------------------------------------------
+# ── Gaussian emission-line profile (scalar kernel) ────────────────
 
 
 def gaussian_line_profile(
@@ -127,9 +121,7 @@ def gaussian_line_profile(
     return phi_nu
 
 
-# ---------------------------------------------------------------------------
-# Disc ring projected area (R&L 1979 Eq 1.6 geometry)
-# ---------------------------------------------------------------------------
+# ── Disc ring projected area (R&L 1979 Eq 1.6 geometry) ───────────
 
 
 def ring_area(r_cm: float, dr_cm: float, cos_inc: float) -> float:
@@ -156,9 +148,7 @@ def ring_area(r_cm: float, dr_cm: float, cos_inc: float) -> float:
     return jnp.pi * 2.0 * jnp.pi * r_cm * dr_cm * jnp.maximum(cos_inc, 0.01)
 
 
-# ---------------------------------------------------------------------------
-# Line list → SED convolution
-# ---------------------------------------------------------------------------
+# ── Line list → SED convolution ───────────────────────────────────
 
 
 def lines_to_sed(

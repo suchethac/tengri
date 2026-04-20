@@ -98,7 +98,17 @@ class DustConfig:
     def __post_init__(self) -> None:
         valid_models = frozenset({"two_component", "single_component"})
         valid_laws = frozenset(
-            {"power_law", "calzetti", "kriek_conroy", "smc", "cardelli", "salim", "li08"}
+            {
+                "power_law",
+                "calzetti",
+                "kriek_conroy",
+                "smc",
+                "cardelli",
+                "salim",
+                "li08",
+                "vw07_bc",
+                "vw07_diff",
+            }
         )
         valid_emission = frozenset(
             {None, "modified_blackbody", "casey2012", "dale2014", "draine_li2007", "draine_li2014"}

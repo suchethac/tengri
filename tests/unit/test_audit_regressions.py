@@ -20,9 +20,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# BUG-01: SFR hardcoded to 1.0 Msun/yr
-# ---------------------------------------------------------------------------
+# ── BUG-01: SFR hardcoded to 1.0 Msun/yr ──────────────────────────
 class TestBug01SfrCached:
     """sed_pipeline.py:638 — _sfr_cached must reflect actual SFR.
 
@@ -48,9 +46,7 @@ class TestBug01SfrCached:
         )
 
 
-# ---------------------------------------------------------------------------
-# BUG-02: SFR time-averaging trapezoid
-# ---------------------------------------------------------------------------
+# ── BUG-02: SFR time-averaging trapezoid ──────────────────────────
 class TestBug02SfrTimeAvg:
     """model.py:791-804 — sfr_100myr must be positive and correct.
 
@@ -92,9 +88,7 @@ class TestBug02SfrTimeAvg:
         assert float(sfr_100myr) > 0, "sfr_100myr must be positive for declining SFH"
 
 
-# ---------------------------------------------------------------------------
-# BUG-06: Balmer continuum tau direction
-# ---------------------------------------------------------------------------
+# ── BUG-06: Balmer continuum tau direction ────────────────────────
 class TestBug06BalmerTau:
     """qsogen.py:397 — tau must increase at shorter wavelengths."""
 
@@ -122,9 +116,7 @@ class TestBug06BalmerTau:
         assert tau_short_correct > tau_long_correct
 
 
-# ---------------------------------------------------------------------------
-# BUG-07: Disc ring area missing pi factor
-# ---------------------------------------------------------------------------
+# ── BUG-07: Disc ring area missing pi factor ──────────────────────
 class TestBug07DiscArea:
     """disc.py:298 — L_nu per ring must include pi*B_nu."""
 
@@ -154,9 +146,7 @@ class TestBug07DiscArea:
         )
 
 
-# ---------------------------------------------------------------------------
-# BUG-08: Shock emission unit mismatch
-# ---------------------------------------------------------------------------
+# ── BUG-08: Shock emission unit mismatch ──────────────────────────
 class TestBug08ShockUnits:
     """shock.py:182-206 — Both branches must return same units."""
 
@@ -169,9 +159,7 @@ class TestBug08ShockUnits:
         pass  # covered by test_bug_regression.py::TestShockEmissionUnits
 
 
-# ---------------------------------------------------------------------------
-# BUG-09: Mean ionizing photon energy
-# ---------------------------------------------------------------------------
+# ── BUG-09: Mean ionizing photon energy ───────────────────────────
 class TestBug09MeanPhotonEnergy:
     """agn_nebular.py:177-183 — <hnu> must depend on spectral index."""
 
@@ -205,9 +193,7 @@ class TestBug09MeanPhotonEnergy:
         assert abs(e1 - e2) / e1 > 0.1, "Correct <hnu> must differ by >10% for different alpha"
 
 
-# ---------------------------------------------------------------------------
-# BUG-11: summary_table key mismatch
-# ---------------------------------------------------------------------------
+# ── BUG-11: summary_table key mismatch ────────────────────────────
 class TestBug11SummaryKeys:
     """posterior.py:178-181 — Must show acceptance rate from RT diagnostics."""
 
@@ -228,9 +214,7 @@ class TestBug11SummaryKeys:
         assert len(nuts_found) == 0, "If this fails, BUG-11 has been fixed"
 
 
-# ---------------------------------------------------------------------------
-# BUG-13: nonparametric len() under JIT
-# ---------------------------------------------------------------------------
+# ── BUG-13: nonparametric len() under JIT ─────────────────────────
 class TestBug13NonparametricJit:
     """nonparametric.py:74 — Must not use len() on JAX arrays."""
 
@@ -252,14 +236,10 @@ class TestBug13NonparametricJit:
         assert jnp.all(jnp.isfinite(result))
 
 
-# ---------------------------------------------------------------------------
-# BUG-16: Dead code in eline_priors.py — FIXED (bare expression removed)
-# ---------------------------------------------------------------------------
+# ── BUG-16: Dead code in eline_priors.py — FIXED (bare expression removed)
 
 
-# ---------------------------------------------------------------------------
-# BUG-23: wg00_cloudy NaN gradient at tau_k=0
-# ---------------------------------------------------------------------------
+# ── BUG-23: wg00_cloudy NaN gradient at tau_k=0 ───────────────────
 class TestBug23WG00Gradient:
     """attenuation.py:1198-1202 — grad must be finite at tau_k=0."""
 
@@ -287,9 +267,7 @@ class TestBug23WG00Gradient:
         )
 
 
-# ---------------------------------------------------------------------------
-# BUG-30: Planck function divide-by-zero
-# ---------------------------------------------------------------------------
+# ── BUG-30: Planck function divide-by-zero ────────────────────────
 class TestBug30PlanckDivZero:
     """emission.py:159-160 — exp(x)-1 must not be zero."""
 
@@ -336,9 +314,7 @@ class TestBug30PlanckDivZero:
         assert jnp.all(result >= 0), "Planck function must be non-negative"
 
 
-# ---------------------------------------------------------------------------
-# BUG-29: _mstar uses formed mass, not surviving mass (XRB over-estimate)
-# ---------------------------------------------------------------------------
+# ── BUG-29: _mstar uses formed mass, not surviving mass (XRB over-estimate)
 class TestBug29MstarSurvivingMass:
     """sed_pipeline.py:753 — XRB must use surviving stellar mass, not formed mass.
 
@@ -417,9 +393,7 @@ class TestBug29MstarSurvivingMass:
         )
 
 
-# ---------------------------------------------------------------------------
-# BUG-04: Warm Comptonization uses simplified power-law, not nthcomp
-# ---------------------------------------------------------------------------
+# ── BUG-04: Warm Comptonization uses simplified power-law, not nthcomp
 
 
 class TestBug04WarmComptonization:
@@ -582,10 +556,8 @@ class TestBug04WarmComptonization:
         )
 
 
-# ---------------------------------------------------------------------------
-# NaN fix: compositional kernel L_absorbed_stellar guard
+# ── NaN fix: compositional kernel L_absorbed_stellar guard ────────
 # (parity with hybrid kernel lines 645-649 and sed_pipeline.py lines 742-743)
-# ---------------------------------------------------------------------------
 
 
 class TestCompositionalKernelLAbsorbedGuard:
@@ -661,9 +633,7 @@ class TestCompositionalKernelLAbsorbedGuard:
         )
 
 
-# ---------------------------------------------------------------------------
-# BUG-NSS-04: IGM silently not applied in z-table kernel (hybrid.py)
-# ---------------------------------------------------------------------------
+# ── BUG-NSS-04: IGM silently not applied in z-table kernel (hybrid.py)
 
 
 class TestBugNSS04ZTableIGM:

@@ -62,14 +62,12 @@ def _relagn_fnu(ear, gamma, kTe_keV, kTbb_keV):
     return nu_mid, fnu
 
 
-# ---------------------------------------------------------------------------
-# Test parameter grid
+# ── Test parameter grid ───────────────────────────────────────────
 # Restricted to the interior of tengri's template grid (gamma 1.5–3.5,
 # kTe 0.05–0.5, kTbb 1e-5–0.3) to keep interpolation error small.
 # The extreme boundary case (1.5, 0.05, 1e-4) was removed: it sits at the
 # triple grid boundary where trilinear interpolation error is largest and
 # the RELAGN–tengri comparison is not meaningful.
-# ---------------------------------------------------------------------------
 
 _TEST_CASES = [
     (2.0, 0.200, 0.010),  # typical warm Compton zone (K&D 2018)
@@ -102,10 +100,8 @@ _TOLERANCE_P95 = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Test 1: F_nu shape from templates agrees with RELAGN
+# ── Test 1: F_nu shape from templates agrees with RELAGN ──────────
 # Tolerance accounts for trilinear interpolation on the 20×15×50 grid.
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("gamma,kTe_keV,kTbb_keV", _TEST_CASES)
@@ -170,9 +166,7 @@ def test_template_fnu_agrees_with_relagn(gamma, kTe_keV, kTbb_keV):
     )
 
 
-# ---------------------------------------------------------------------------
-# Test 2: spectral peak frequency agrees to within 5%
-# ---------------------------------------------------------------------------
+# ── Test 2: spectral peak frequency agrees to within 5% ───────────
 
 
 @pytest.mark.parametrize("gamma,kTe_keV,kTbb_keV", _TEST_CASES)
@@ -204,9 +198,7 @@ def test_template_peak_frequency_agrees(gamma, kTe_keV, kTbb_keV):
     )
 
 
-# ---------------------------------------------------------------------------
-# Test 3: spectral tilt — harder Gamma gives less X-ray/UV in both codes
-# ---------------------------------------------------------------------------
+# ── Test 3: spectral tilt — harder Gamma gives less X-ray/UV in both codes
 
 
 def test_gamma_tilt_direction_consistent_with_relagn():

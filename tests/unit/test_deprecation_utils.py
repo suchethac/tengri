@@ -11,9 +11,7 @@ import pytest
 
 from tengri.runtime.deprecation import deprecated_alias, deprecated_class_alias
 
-# ---------------------------------------------------------------------------
-# deprecated_alias
-# ---------------------------------------------------------------------------
+# ── deprecated_alias ──────────────────────────────────────────────
 
 
 class TestDeprecatedAlias:
@@ -98,9 +96,7 @@ class TestDeprecatedAlias:
         assert "Original docstring" in (my_function.__doc__ or "")
 
 
-# ---------------------------------------------------------------------------
-# deprecated_class_alias
-# ---------------------------------------------------------------------------
+# ── deprecated_class_alias ────────────────────────────────────────
 
 
 class _RealClass:

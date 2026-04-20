@@ -25,9 +25,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# compute_effective_noise
-# ---------------------------------------------------------------------------
+# ── compute_effective_noise ───────────────────────────────────────
 
 
 class TestComputeEffectiveNoise:
@@ -111,9 +109,7 @@ class TestComputeEffectiveNoise:
         )
 
 
-# ---------------------------------------------------------------------------
-# compute_std_inv
-# ---------------------------------------------------------------------------
+# ── compute_std_inv ───────────────────────────────────────────────
 
 
 class TestComputeStdInv:
@@ -136,9 +132,7 @@ class TestComputeStdInv:
         npt.assert_allclose(tau, 1.0 / noise_obs, atol=1e-12)
 
 
-# ---------------------------------------------------------------------------
-# has_noise_model
-# ---------------------------------------------------------------------------
+# ── has_noise_model ───────────────────────────────────────────────
 
 
 class TestHasNoiseModel:
@@ -212,9 +206,7 @@ class TestHasNoiseModel:
         assert has_noise_model(spec) is False
 
 
-# ---------------------------------------------------------------------------
-# variable_noise_hamiltonian
-# ---------------------------------------------------------------------------
+# ── variable_noise_hamiltonian ────────────────────────────────────
 
 
 class TestVariableNoiseHamiltonian:
@@ -296,9 +288,7 @@ class TestVariableNoiseHamiltonian:
         )
 
 
-# ---------------------------------------------------------------------------
-# Student-t energy
-# ---------------------------------------------------------------------------
+# ── Student-t energy ──────────────────────────────────────────────
 
 
 class TestStudentTEnergy:
@@ -429,9 +419,7 @@ class TestUsesStudentT:
         assert uses_student_t(spec) is False
 
 
-# ---------------------------------------------------------------------------
-# variable_noise_metric_vec
-# ---------------------------------------------------------------------------
+# ── variable_noise_metric_vec ─────────────────────────────────────
 
 
 class TestVariableNoiseMetricVec:

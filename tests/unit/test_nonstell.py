@@ -17,9 +17,7 @@ import pytest
 
 from tengri.forward.nonstell import NonStellarSlot, build_nonstell_fn, collect_nonstell
 
-# ---------------------------------------------------------------------------
-# Helpers — minimal model stubs so tests run without SSP data
-# ---------------------------------------------------------------------------
+# ── Helpers — minimal model stubs so tests run without SSP data ───
 
 
 def _make_model(
@@ -71,9 +69,7 @@ def _identity_dust_law(wave, **kw):
     return jnp.zeros_like(jnp.asarray(wave))
 
 
-# ---------------------------------------------------------------------------
-# collect_nonstell — registry tests
-# ---------------------------------------------------------------------------
+# ── collect_nonstell — registry tests ─────────────────────────────
 
 
 class TestCollectNonstell:
@@ -146,9 +142,7 @@ class TestCollectNonstell:
         assert names == ["radio", "xray"]
 
 
-# ---------------------------------------------------------------------------
-# build_nonstell_fn — factory tests
-# ---------------------------------------------------------------------------
+# ── build_nonstell_fn — factory tests ─────────────────────────────
 
 
 class TestBuildNonstellFn:
@@ -194,9 +188,7 @@ class TestBuildNonstellFn:
         assert result.dtype == jnp.float64
 
 
-# ---------------------------------------------------------------------------
-# NonStellarSlot dataclass
-# ---------------------------------------------------------------------------
+# ── NonStellarSlot dataclass ──────────────────────────────────────
 
 
 class TestNonStellarSlot:

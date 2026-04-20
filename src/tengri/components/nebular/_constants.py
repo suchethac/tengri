@@ -20,9 +20,7 @@ from tengri.utils.physics_constants import (
     L_SUN as _LSUN_ERG,  # noqa: F401
 )
 
-# ---------------------------------------------------------------------------
-# Nebular-specific constants
-# ---------------------------------------------------------------------------
+# ── Nebular-specific constants ────────────────────────────────────
 
 # Hydrogen Lyman limit [Angstrom]
 _LYMAN_LIMIT: float = 911.76

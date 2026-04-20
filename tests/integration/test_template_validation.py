@@ -32,9 +32,7 @@ FIR_PEAK_MIN_AA = 1.0e5  # 10 um
 FIR_PEAK_MAX_AA = 5.0e6  # 500 um
 
 
-# -----------------------------------------------------------------------
-# Astrodust (Hensley & Draine 2023)
-# -----------------------------------------------------------------------
+# ── Astrodust (Hensley & Draine 2023) ─────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -148,9 +146,7 @@ class TestAstrodustEmission:
         assert peak_high < peak_low
 
 
-# -----------------------------------------------------------------------
-# BOSA (Boquien & Salim 2021)
-# -----------------------------------------------------------------------
+# ── BOSA (Boquien & Salim 2021) ───────────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -241,9 +237,7 @@ class TestBosaEmission:
         assert peak_high < peak_low
 
 
-# -----------------------------------------------------------------------
-# THEMIS (Jones et al. 2017)
-# -----------------------------------------------------------------------
+# ── THEMIS (Jones et al. 2017) ────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -351,9 +345,7 @@ class TestThemisEmission:
         assert peak_high < peak_low
 
 
-# -----------------------------------------------------------------------
-# Cross-model comparison
-# -----------------------------------------------------------------------
+# ── Cross-model comparison ────────────────────────────────────────
 
 
 class TestCrossModelComparison:

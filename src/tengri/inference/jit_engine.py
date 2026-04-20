@@ -84,6 +84,7 @@ def build_jit_engine(fitter, pos_dict):
             params[name] = val
         if stochastic and "psd_xi" in primals:
             params["psd_xi"] = primals["psd_xi"]
+        params = spec.resolve_mirrors(params)
         return params
 
     def signal_response(primals):

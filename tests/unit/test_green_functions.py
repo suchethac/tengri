@@ -17,9 +17,7 @@ from tengri.analysis.diagnostics.green_functions import (
     compute_window_function_fourier,
 )
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture()
@@ -50,9 +48,7 @@ def uniform_ssp():
     return ssp_flux, ssp_wave, ages_yr
 
 
-# ---------------------------------------------------------------------------
-# compute_green_function — monochromatic mode
-# ---------------------------------------------------------------------------
+# ── compute_green_function — monochromatic mode ───────────────────
 
 
 class TestComputeGreenFunctionMonochromatic:
@@ -104,9 +100,7 @@ class TestComputeGreenFunctionMonochromatic:
         assert jnp.allclose(g, 1.0, rtol=1e-5)
 
 
-# ---------------------------------------------------------------------------
-# compute_green_function — filter mode
-# ---------------------------------------------------------------------------
+# ── compute_green_function — filter mode ──────────────────────────
 
 
 class TestComputeGreenFunctionFilter:
@@ -155,9 +149,7 @@ class TestComputeGreenFunctionFilter:
             compute_green_function(ssp_flux, ssp_wave)
 
 
-# ---------------------------------------------------------------------------
-# compute_window_function
-# ---------------------------------------------------------------------------
+# ── compute_window_function ───────────────────────────────────────
 
 
 class TestComputeWindowFunction:
@@ -197,9 +189,7 @@ class TestComputeWindowFunction:
         assert jnp.allclose(w, 2.0 * sfr, rtol=1e-6)
 
 
-# ---------------------------------------------------------------------------
-# compute_window_function_fourier
-# ---------------------------------------------------------------------------
+# ── compute_window_function_fourier ───────────────────────────────
 
 
 class TestComputeWindowFunctionFourier:
@@ -254,9 +244,7 @@ class TestComputeWindowFunctionFourier:
         assert jnp.all(jnp.diff(omega) >= 0.0)
 
 
-# ---------------------------------------------------------------------------
-# compute_time_sensitivity_matrix
-# ---------------------------------------------------------------------------
+# ── compute_time_sensitivity_matrix ───────────────────────────────
 
 
 class TestComputeTimeSensitivityMatrix:

@@ -30,9 +30,7 @@ from tengri.forward.components_assembly import (
     build_xray_component,
 )
 
-# ---------------------------------------------------------------------------
-# Shared geometry
-# ---------------------------------------------------------------------------
+# ── Shared geometry ───────────────────────────────────────────────
 
 N_MET = 4
 N_AGE = 8
@@ -88,9 +86,7 @@ def _make_model_for_dust(*, same_law=True):
     return model
 
 
-# ---------------------------------------------------------------------------
-# build_ssp_component — linear interpolation path
-# ---------------------------------------------------------------------------
+# ── build_ssp_component — linear interpolation path ───────────────
 
 
 class TestBuildSspComponentLinear:
@@ -149,9 +145,7 @@ class TestBuildSspComponentLinear:
         assert jnp.all(jnp.isfinite(ssp1))
 
 
-# ---------------------------------------------------------------------------
-# build_ssp_component — log_interp (matrix) path
-# ---------------------------------------------------------------------------
+# ── build_ssp_component — log_interp (matrix) path ────────────────
 
 
 class TestBuildSspComponentMatrix:
@@ -181,9 +175,7 @@ class TestBuildSspComponentMatrix:
         assert weights.shape == (N_AGE,)
 
 
-# ---------------------------------------------------------------------------
-# build_ssp_component — smooth interpolation path
-# ---------------------------------------------------------------------------
+# ── build_ssp_component — smooth interpolation path ───────────────
 
 
 class TestBuildSspComponentSmooth:
@@ -208,9 +200,7 @@ class TestBuildSspComponentSmooth:
         assert jnp.all(jnp.isfinite(ssp_at_z))
 
 
-# ---------------------------------------------------------------------------
-# build_dust_atten_component
-# ---------------------------------------------------------------------------
+# ── build_dust_atten_component ────────────────────────────────────
 
 
 class TestBuildDustAttenComponent:
@@ -286,9 +276,7 @@ class TestBuildDustAttenComponent:
         assert jnp.allclose(sed_atten, sed_intr_no_dust, rtol=1e-5)
 
 
-# ---------------------------------------------------------------------------
-# Disabled component builders — must return None
-# ---------------------------------------------------------------------------
+# ── Disabled component builders — must return None ────────────────
 
 
 class TestDisabledBuilders:

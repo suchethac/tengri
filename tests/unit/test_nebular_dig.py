@@ -24,9 +24,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Minimal mock backend
-# ---------------------------------------------------------------------------
+# ── Minimal mock backend ──────────────────────────────────────────
 
 
 class MockNebularBackend:
@@ -58,9 +56,7 @@ class MockNebularBackend:
         return self._wave * (neb_logU + self._offset)
 
 
-# ---------------------------------------------------------------------------
-# Shared fixtures
-# ---------------------------------------------------------------------------
+# ── Shared fixtures ───────────────────────────────────────────────
 
 N_WAVE = 20
 N_AGE = 5
@@ -85,9 +81,7 @@ def common_kw():
     )
 
 
-# ---------------------------------------------------------------------------
-# Core algebraic identity tests
-# ---------------------------------------------------------------------------
+# ── Core algebraic identity tests ─────────────────────────────────
 
 
 def test_dig_frac_zero_equals_pure_hii(mock_backend, common_kw):
@@ -145,9 +139,7 @@ def test_dig_frac_half_equals_arithmetic_mean(mock_backend, common_kw):
     )
 
 
-# ---------------------------------------------------------------------------
-# Intermediate fractions and custom delta_logU
-# ---------------------------------------------------------------------------
+# ── Intermediate fractions and custom delta_logU ──────────────────
 
 
 @pytest.mark.parametrize("frac", [0.1, 0.3, 0.7, 0.9])
@@ -172,9 +164,7 @@ def test_dig_arbitrary_fraction(mock_backend, common_kw, frac):
     )
 
 
-# ---------------------------------------------------------------------------
-# JIT compatibility (traced neb_dig_frac)
-# ---------------------------------------------------------------------------
+# ── JIT compatibility (traced neb_dig_frac) ───────────────────────
 
 
 def test_dig_jit_traced_frac(mock_backend, common_kw):
@@ -205,9 +195,7 @@ def test_dig_jit_consistent_with_python(mock_backend, common_kw):
     )
 
 
-# ---------------------------------------------------------------------------
-# Gradient check — gradient w.r.t. neb_dig_frac is finite
-# ---------------------------------------------------------------------------
+# ── Gradient check — gradient w.r.t. neb_dig_frac is finite ───────
 
 
 def test_dig_grad_wrt_frac_finite(mock_backend, common_kw):
@@ -230,9 +218,7 @@ def test_dig_grad_wrt_frac_finite(mock_backend, common_kw):
     )
 
 
-# ---------------------------------------------------------------------------
-# Output shape and finiteness
-# ---------------------------------------------------------------------------
+# ── Output shape and finiteness ───────────────────────────────────
 
 
 def test_dig_output_shape(mock_backend, common_kw):

@@ -20,9 +20,7 @@ jax.config.update("jax_enable_x64", True)
 pytestmark = pytest.mark.crossval
 
 
-# ===================================================================
-# 1. RADIO — FIR-radio correlation
-# ===================================================================
+# ── 1. RADIO — FIR-radio correlation ──────────────────────────────
 
 
 class TestRadioPhysics:
@@ -95,9 +93,7 @@ class TestRadioPhysics:
         )
 
 
-# ===================================================================
-# 2. X-RAY — HMXB/LMXB scaling
-# ===================================================================
+# ── 2. X-RAY — HMXB/LMXB scaling ──────────────────────────────────
 
 
 class TestXrayPhysics:
@@ -149,9 +145,7 @@ class TestXrayPhysics:
         assert ratio_soft > ratio_hard, "Higher Γ should give softer spectrum"
 
 
-# ===================================================================
-# 3. IGM TRANSMISSION — Inoue+2014
-# ===================================================================
+# ── 3. IGM TRANSMISSION — Inoue+2014 ──────────────────────────────
 
 
 class TestIGMPhysics:
@@ -206,9 +200,7 @@ class TestIGMPhysics:
         np.testing.assert_allclose(t, 1.0, atol=0.01)
 
 
-# ===================================================================
-# 4. PSD MODELS — power spectral density physics
-# ===================================================================
+# ── 4. PSD MODELS — power spectral density physics ────────────────
 
 
 class TestPSDPhysics:
@@ -295,9 +287,7 @@ class TestPSDPhysics:
         assert 3.0 < ratio < 5.0, f"2x sigma should give ~4x PSD, got {ratio:.1f}x"
 
 
-# ===================================================================
-# 5. SED QUANTITIES — derived physical properties
-# ===================================================================
+# ── 5. SED QUANTITIES — derived physical properties ───────────────
 
 
 class TestSEDQuantitiesPhysics:

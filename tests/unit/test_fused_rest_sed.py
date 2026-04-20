@@ -27,9 +27,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Synthetic SSP data (no real data file dependency)
-# ---------------------------------------------------------------------------
+# ── Synthetic SSP data (no real data file dependency) ─────────────
 
 _N_MET = 5
 _N_AGE = 94
@@ -96,9 +94,7 @@ def simple_params():
     }
 
 
-# ---------------------------------------------------------------------------
-# Test: Tier 2 compatibility check
-# ---------------------------------------------------------------------------
+# ── Test: Tier 2 compatibility check ──────────────────────────────
 
 
 class TestTier2Compatibility:
@@ -109,9 +105,7 @@ class TestTier2Compatibility:
         assert model._compositional.rest_sed is not None
 
 
-# ---------------------------------------------------------------------------
-# Test: Tier 2 vs Tier 3 agreement (core)
-# ---------------------------------------------------------------------------
+# ── Test: Tier 2 vs Tier 3 agreement (core) ───────────────────────
 
 
 class TestTier2VsTier3:
@@ -206,9 +200,7 @@ class TestTier2VsTier3:
         assert_allclose(spec_tier2, spec_tier3, rtol=1e-3, atol=1e-30)
 
 
-# ---------------------------------------------------------------------------
-# Test: component combinations
-# ---------------------------------------------------------------------------
+# ── Test: component combinations ──────────────────────────────────
 
 
 class TestComponentCombinations:
@@ -307,9 +299,7 @@ class TestComponentCombinations:
         assert_allclose(tier2, tier3, rtol=1e-3, atol=1e-30)
 
 
-# ---------------------------------------------------------------------------
-# Test: observation wrappers
-# ---------------------------------------------------------------------------
+# ── Test: observation wrappers ────────────────────────────────────
 
 
 class TestObservationWrappers:
@@ -358,9 +348,7 @@ class TestObservationWrappers:
         assert_allclose(result, expected, rtol=1e-10)
 
 
-# ---------------------------------------------------------------------------
-# Test: edge cases and fallbacks
-# ---------------------------------------------------------------------------
+# ── Test: edge cases and fallbacks ────────────────────────────────
 
 
 class TestFallbacks:
@@ -426,9 +414,7 @@ class TestFallbacks:
         assert not jnp.allclose(sed1, sed2)
 
 
-# ---------------------------------------------------------------------------
-# Test: gradient flows through Tier 2
-# ---------------------------------------------------------------------------
+# ── Test: gradient flows through Tier 2 ───────────────────────────
 
 
 class TestGradients:
@@ -463,9 +449,7 @@ class TestGradients:
         assert grad_jax <= 0.0
 
 
-# ---------------------------------------------------------------------------
-# Test: Fused Tier 2 end-to-end kernels
-# ---------------------------------------------------------------------------
+# ── Test: Fused Tier 2 end-to-end kernels ─────────────────────────
 
 
 class TestFusedTier2Photometry:

@@ -25,9 +25,7 @@ pytestmark = pytest.mark.crossval
 T_LOOKBACK = jnp.geomspace(1e5, 14e9, 500)
 
 
-# ===================================================================
-# 1. CONSTANT SFH — trivial analytic
-# ===================================================================
+# ── 1. CONSTANT SFH — trivial analytic ────────────────────────────
 
 
 class TestConstantSFHPhysics:
@@ -58,9 +56,7 @@ class TestConstantSFHPhysics:
         )
 
 
-# ===================================================================
-# 2. EXPONENTIAL SFH — declining model
-# ===================================================================
+# ── 2. EXPONENTIAL SFH — declining model ──────────────────────────
 
 
 class TestExponentialSFHPhysics:
@@ -84,9 +80,7 @@ class TestExponentialSFHPhysics:
             assert mean_young > mean_old, "Exponential SFH should peak at start"
 
 
-# ===================================================================
-# 3. DELAYED EXPONENTIAL — peaks at start + tau
-# ===================================================================
+# ── 3. DELAYED EXPONENTIAL — peaks at start + tau ─────────────────
 
 
 class TestDelayedExponentialPhysics:
@@ -107,9 +101,7 @@ class TestDelayedExponentialPhysics:
         assert jnp.all(jnp.isfinite(sfr))
 
 
-# ===================================================================
-# 4. DOUBLE POWER LAW — Carnall+2018
-# ===================================================================
+# ── 4. DOUBLE POWER LAW — Carnall+2018 ────────────────────────────
 
 
 class TestDPLPhysics:
@@ -152,9 +144,7 @@ class TestDPLPhysics:
         assert float(jnp.max(sfr)) > 0
 
 
-# ===================================================================
-# 5. SKEW-NORMAL FAMILY — tsnorm, snorm, norm
-# ===================================================================
+# ── 5. SKEW-NORMAL FAMILY — tsnorm, snorm, norm ───────────────────
 
 
 class TestSkewNormalPhysics:
@@ -214,9 +204,7 @@ class TestSkewNormalPhysics:
         assert mass_old > mass_young, "Log-normal should have longer old-age tail"
 
 
-# ===================================================================
-# 6. TRIWEIGHT BURST — compact burst component
-# ===================================================================
+# ── 6. TRIWEIGHT BURST — compact burst component ──────────────────
 
 
 class TestTriweightBurstPhysics:
@@ -238,9 +226,7 @@ class TestTriweightBurstPhysics:
         )
 
 
-# ===================================================================
-# 7. CONTINUITY SFH — non-parametric (Leja+2019)
-# ===================================================================
+# ── 7. CONTINUITY SFH — non-parametric (Leja+2019) ────────────────
 
 
 class TestContinuitySFHPhysics:
@@ -310,9 +296,7 @@ class TestContinuitySFHPhysics:
             assert mean_recent > mean_old, "Positive ratios should give rising SFH"
 
 
-# ===================================================================
-# 8. DIRICHLET SFH — non-parametric (Leja+2017)
-# ===================================================================
+# ── 8. DIRICHLET SFH — non-parametric (Leja+2017) ─────────────────
 
 
 class TestDirichletSFHPhysics:
@@ -381,9 +365,7 @@ class TestDirichletSFHPhysics:
             assert frac > 0.3, f"z_frac_0=0.99 should concentrate mass young, got frac={frac:.2f}"
 
 
-# ===================================================================
-# 9. ALL SFH MODELS — universal constraints
-# ===================================================================
+# ── 9. ALL SFH MODELS — universal constraints ─────────────────────
 
 
 class TestAllSFHUniversalPhysics:

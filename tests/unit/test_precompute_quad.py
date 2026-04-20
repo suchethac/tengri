@@ -13,9 +13,7 @@ from numpy.testing import assert_allclose
 
 from tengri.components.sps.precompute import precompute_photometry
 
-# ---------------------------------------------------------------------------
-# Minimal fake SSP data
-# ---------------------------------------------------------------------------
+# ── Minimal fake SSP data ─────────────────────────────────────────
 
 
 class _SSPData:
@@ -50,9 +48,7 @@ def _simple_filters(n_filt=3):
     return waves, trans
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+# ── Tests ─────────────────────────────────────────────────────────
 
 
 class TestTaylorMomentTensor:

@@ -42,9 +42,7 @@ from tengri.parameters.parameters import ParamSpec
 from tengri.parameters.priors import Uniform
 from tengri.utils.transforms import to_bounded
 
-# ---------------------------------------------------------------------------
-# Data paths -- skip if SSP data missing
-# ---------------------------------------------------------------------------
+# ── Data paths -- skip if SSP data missing ────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
@@ -75,9 +73,7 @@ _NIFTY_KW = dict(
     },
 )
 
-# ---------------------------------------------------------------------------
-# Shared fixtures
-# ---------------------------------------------------------------------------
+# ── Shared fixtures ───────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -173,9 +169,7 @@ def nifty_likelihood(fitter, model_and_data):
     return jft.Gaussian(data, noise_cov_inv).amend(nifty_model)
 
 
-# ===================================================================
-# Helper: evaluate Hamiltonian H(xi) = lh(xi) + 0.5 ||xi||^2
-# ===================================================================
+# ── Helper: evaluate Hamiltonian H(xi) = lh(xi) + 0.5 ||xi||^2 ────
 
 
 def _hamiltonian_nifty(likelihood, pos_dict, flatten_fn):
@@ -186,9 +180,7 @@ def _hamiltonian_nifty(likelihood, pos_dict, flatten_fn):
     return lh + prior
 
 
-# ===================================================================
-# 1. Linear residual draw: covariance structure
-# ===================================================================
+# ── 1. Linear residual draw: covariance structure ─────────────────
 
 
 class TestLinearResidualCovariance:
@@ -283,9 +275,7 @@ class TestLinearResidualCovariance:
         )
 
 
-# ===================================================================
-# 2. KL value comparison
-# ===================================================================
+# ── 2. KL value comparison ────────────────────────────────────────
 
 
 class TestKLValue:
@@ -364,9 +354,7 @@ class TestKLValue:
         assert H_opt < H_init, f"JIT geoVI did not decrease H: init={H_init:.2f}, opt={H_opt:.2f}"
 
 
-# ===================================================================
-# 3. Metric-vector product
-# ===================================================================
+# ── 3. Metric-vector product ──────────────────────────────────────
 
 
 class TestMetricVectorProduct:
@@ -434,9 +422,7 @@ class TestMetricVectorProduct:
         assert r_norm > 0.0, "Residual is zero"
 
 
-# ===================================================================
-# 4. Full optimize_kl convergence
-# ===================================================================
+# ── 4. Full optimize_kl convergence ───────────────────────────────
 
 
 class TestOptimizeKLConvergence:
@@ -520,9 +506,7 @@ class TestOptimizeKLConvergence:
         )
 
 
-# ===================================================================
-# 5. Posterior width comparison
-# ===================================================================
+# ── 5. Posterior width comparison ─────────────────────────────────
 
 
 class TestPosteriorWidthComparison:

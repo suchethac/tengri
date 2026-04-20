@@ -41,11 +41,9 @@ skip_no_db = pytest.mark.skipif(
 
 from tengri.components.sfh.dense_basis import dense_basis_sfh
 
-# ---------------------------------------------------------------------------
-# Test data: 6 canonical tutorial shapes (Iyer+2019)
+# ── Test data: 6 canonical tutorial shapes (Iyer+2019) ────────────
 # Format: [log_M*, log_SFR_inst, Nparam, tx0, tx1, tx2]
 # We only use log_M*, Nparam, and tx values (no SFR decoupling in tengri v1).
-# ---------------------------------------------------------------------------
 
 TUTORIAL_SHAPES = {
     "rising_starburst": {
@@ -133,9 +131,7 @@ def _compute_db_cumulative_mass(sfh_tuple: list, n_points: int = 500) -> tuple:
     return t_sorted, cumul_mass
 
 
-# ---------------------------------------------------------------------------
-# Cross-validation tests
-# ---------------------------------------------------------------------------
+# ── Cross-validation tests ────────────────────────────────────────
 
 
 @skip_no_db

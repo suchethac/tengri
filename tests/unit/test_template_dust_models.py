@@ -31,9 +31,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ===================================================================
-# Fixtures: synthetic template grids for testing
-# ===================================================================
+# ── Fixtures: synthetic template grids for testing ────────────────
 
 
 def _make_dl07_like_grid(
@@ -168,9 +166,7 @@ def themis_grid():
     return _make_dl07_like_grid(param_name="qhac")
 
 
-# ===================================================================
-# Astrodust tests
-# ===================================================================
+# ── Astrodust tests ───────────────────────────────────────────────
 
 
 class TestAstrodust:
@@ -251,9 +247,7 @@ class TestAstrodust:
         assert grad_jax > 0.0  # more absorbed -> more emission
 
 
-# ===================================================================
-# BOSA tests
-# ===================================================================
+# ── BOSA tests ────────────────────────────────────────────────────
 
 
 class TestBOSA:
@@ -335,9 +329,7 @@ class TestBOSA:
         )
 
 
-# ===================================================================
-# THEMIS tests
-# ===================================================================
+# ── THEMIS tests ──────────────────────────────────────────────────
 
 
 class TestTHEMIS:
@@ -417,9 +409,7 @@ class TestTHEMIS:
         assert grad_jax > 0.0
 
 
-# ===================================================================
-# Registry integration tests
-# ===================================================================
+# ── Registry integration tests ────────────────────────────────────
 
 
 class TestRegistry:

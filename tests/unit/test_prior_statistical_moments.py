@@ -31,9 +31,7 @@ def _draw(dist, n=N_SAMPLES, seed=42):
     return jax.vmap(dist.sample)(keys)
 
 
-# ---------------------------------------------------------------------------
-# Uniform
-# ---------------------------------------------------------------------------
+# ── Uniform ───────────────────────────────────────────────────────
 
 
 class TestUniformMoments:
@@ -78,9 +76,7 @@ class TestUniformMoments:
         assert abs(float(jnp.var(samples)) - expected_var) / expected_var < RTOL_VAR
 
 
-# ---------------------------------------------------------------------------
-# LogUniform
-# ---------------------------------------------------------------------------
+# ── LogUniform ────────────────────────────────────────────────────
 
 
 class TestLogUniformMoments:
@@ -136,9 +132,7 @@ class TestLogUniformMoments:
         assert bool(jnp.all(samples <= hi))
 
 
-# ---------------------------------------------------------------------------
-# Gaussian
-# ---------------------------------------------------------------------------
+# ── Gaussian ──────────────────────────────────────────────────────
 
 
 class TestGaussianMoments:
@@ -186,9 +180,7 @@ class TestGaussianMoments:
         assert abs(float(jnp.var(samples)) - sigma**2) / sigma**2 < RTOL_VAR
 
 
-# ---------------------------------------------------------------------------
-# Fixed — degenerate distribution (no variance, fixed mean)
-# ---------------------------------------------------------------------------
+# ── Fixed — degenerate distribution (no variance, fixed mean) ─────
 
 
 class TestFixedMoments:
@@ -203,9 +195,7 @@ class TestFixedMoments:
         assert float(jnp.var(samples)) == pytest.approx(0.0)
 
 
-# ---------------------------------------------------------------------------
-# Standardize / unstandardize roundtrip
-# ---------------------------------------------------------------------------
+# ── Standardize / unstandardize roundtrip ─────────────────────────
 
 
 class TestStandardizeRoundtrip:

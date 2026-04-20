@@ -11,9 +11,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-# ---------------------------------------------------------------------------
-# Primary line catalog
-# ---------------------------------------------------------------------------
+# ── Primary line catalog ──────────────────────────────────────────
 
 # name: (rest_wavelength_aa, line_type, default_prior_width_dex)
 EMISSION_LINES: dict[str, tuple[float, str, float]] = {
@@ -46,9 +44,7 @@ EMISSION_LINES: dict[str, tuple[float, str, float]] = {
     "SII6731": (6732.67, "forbidden", 0.35),
 }
 
-# ---------------------------------------------------------------------------
-# Named line groups
-# ---------------------------------------------------------------------------
+# ── Named line groups ─────────────────────────────────────────────
 
 LINE_GROUPS: dict[str, list[str]] = {
     "uv_narrow": [
@@ -103,9 +99,7 @@ LINE_GROUPS: dict[str, list[str]] = {
     ],
 }
 
-# ---------------------------------------------------------------------------
-# Convenience functions
-# ---------------------------------------------------------------------------
+# ── Convenience functions ─────────────────────────────────────────
 
 
 def get_line_wavelengths(group: str | list[str]) -> jnp.ndarray:
@@ -133,11 +127,9 @@ def get_line_names(group: str) -> tuple[str, ...]:
     return tuple(LINE_GROUPS[group])
 
 
-# ---------------------------------------------------------------------------
-# Backward-compatibility arrays
+# ── Backward-compatibility arrays ─────────────────────────────────
 # (Match the old DEFAULT_LINE_* and CLOUDY_LINE_* arrays so existing code
 #  importing from eline_marginalization/eline_priors still works unchanged.)
-# ---------------------------------------------------------------------------
 
 # 13-line set (was DEFAULT_LINE_NAMES/DEFAULT_LINE_WAVELENGTHS in eline_marginalization.py)
 DEFAULT_LINE_NAMES: tuple[str, ...] = (

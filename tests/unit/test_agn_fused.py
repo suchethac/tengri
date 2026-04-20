@@ -20,9 +20,7 @@ from tengri.components.sps.dsps_wrapper import SSPData
 jax.config.update("jax_enable_x64", True)
 
 
-# ---------------------------------------------------------------------------
-# Fixtures: synthetic SSP-like data
-# ---------------------------------------------------------------------------
+# ── Fixtures: synthetic SSP-like data ─────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -103,9 +101,7 @@ def legacy_agn_spec():
     )
 
 
-# ---------------------------------------------------------------------------
-# Tests: mode detection and fused compatibility
-# ---------------------------------------------------------------------------
+# ── Tests: mode detection and fused compatibility ─────────────────
 
 
 class TestAGNModeDetection:
@@ -141,9 +137,7 @@ class TestAGNModeDetection:
         assert model._hybrid.photometry is not None
 
 
-# ---------------------------------------------------------------------------
-# Tests: fused AGN photometry correctness
-# ---------------------------------------------------------------------------
+# ── Tests: fused AGN photometry correctness ───────────────────────
 
 
 class TestAGNFusedPhotometry:
@@ -209,9 +203,7 @@ class TestAGNFusedPhotometry:
         )
 
 
-# ---------------------------------------------------------------------------
-# Tests: fused vs exact comparison
-# ---------------------------------------------------------------------------
+# ── Tests: fused vs exact comparison ──────────────────────────────
 
 
 class TestAGNFusedVsExact:
@@ -339,9 +331,7 @@ class TestAGNFusedVsExact:
         )
 
 
-# ---------------------------------------------------------------------------
-# Tests: predict_sed parametric AGN
-# ---------------------------------------------------------------------------
+# ── Tests: predict_sed parametric AGN ─────────────────────────────
 
 
 class TestAGNPredictSED:

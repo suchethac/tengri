@@ -54,10 +54,8 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 }
 
 
-# -------------------------------------------------------------------
-# DL07 / DL14 template photometry precomputation (original functions kept
+# ── DL07 / DL14 template photometry precomputation (original functions kept
 # for backward compatibility; the Protocol-shaped entry points below wrap them)
-# -------------------------------------------------------------------
 
 
 def precompute_dl07_photometry(
@@ -168,9 +166,7 @@ def build_dl07_photometry_lookup(precomp: dict):
     return dl07_phot
 
 
-# -------------------------------------------------------------------
-# Protocol-shaped entry points (new in restructure)
-# -------------------------------------------------------------------
+# ── Protocol-shaped entry points (new in restructure) ─────────────
 
 
 def _auto_collapse(preint: PreintegratedGrid, axis_params, parameters) -> PreintegratedGrid:
@@ -271,9 +267,7 @@ def build_lookup(preint, *, model_name: str):
     return build_template_photometry_lookup(preint)
 
 
-# -------------------------------------------------------------------
-# Turnkey loader + preintegrator — used by SEDModel.__init__
-# -------------------------------------------------------------------
+# ── Turnkey loader + preintegrator — used by SEDModel.__init__ ────
 
 
 def precompute_for_model(

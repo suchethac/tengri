@@ -29,9 +29,7 @@ from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import ParamSpec
 from tengri.parameters.priors import Fixed, Uniform
 
-# ---------------------------------------------------------------------------
-# Skip guards
-# ---------------------------------------------------------------------------
+# ── Skip guards ───────────────────────────────────────────────────
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
@@ -45,9 +43,7 @@ pytestmark = pytest.mark.skipif(
 _FILTER_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -95,9 +91,7 @@ def cue_params(cue_spec):
     return cue_spec.sample(_KEY)
 
 
-# ---------------------------------------------------------------------------
-# Diagnostic: compare exact vs hybrid, assert discrepancy is documented
-# ---------------------------------------------------------------------------
+# ── Diagnostic: compare exact vs hybrid, assert discrepancy is documented
 
 
 class TestCueHybridDiagnostic:

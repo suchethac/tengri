@@ -25,9 +25,7 @@ def fd_grad(f, x: float, eps: float = 1e-5) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
+# ── Constants ─────────────────────────────────────────────────────
 
 
 class TestMaskConstants:
@@ -43,9 +41,7 @@ class TestMaskConstants:
         assert LOWER_LIMIT == -1
 
 
-# ---------------------------------------------------------------------------
-# All-detected: should match standard likelihood
-# ---------------------------------------------------------------------------
+# ── All-detected: should match standard likelihood ────────────────
 
 
 class TestCensoredAllDetected:
@@ -75,9 +71,7 @@ class TestCensoredAllDetected:
         npt.assert_allclose(float(censored), float(standard), rtol=1e-10)
 
 
-# ---------------------------------------------------------------------------
-# Upper limits
-# ---------------------------------------------------------------------------
+# ── Upper limits ──────────────────────────────────────────────────
 
 
 class TestUpperLimit:
@@ -132,9 +126,7 @@ class TestUpperLimit:
             )
 
 
-# ---------------------------------------------------------------------------
-# Lower limits
-# ---------------------------------------------------------------------------
+# ── Lower limits ──────────────────────────────────────────────────
 
 
 class TestLowerLimit:
@@ -202,9 +194,7 @@ class TestLowerLimit:
         npt.assert_allclose(float(e_upper), float(e_lower), rtol=1e-10)
 
 
-# ---------------------------------------------------------------------------
-# Mixed masks
-# ---------------------------------------------------------------------------
+# ── Mixed masks ───────────────────────────────────────────────────
 
 
 class TestMixedMask:
@@ -263,9 +253,7 @@ class TestMixedMask:
         assert float(energy) >= 0
 
 
-# ---------------------------------------------------------------------------
-# Variable noise (f_cal) interaction
-# ---------------------------------------------------------------------------
+# ── Variable noise (f_cal) interaction ────────────────────────────
 
 
 class TestCensoredWithFcal:
@@ -293,9 +281,7 @@ class TestCensoredWithFcal:
         npt.assert_allclose(float(e0), float(e_default), rtol=1e-12)
 
 
-# ---------------------------------------------------------------------------
-# Student-t interaction
-# ---------------------------------------------------------------------------
+# ── Student-t interaction ─────────────────────────────────────────
 
 
 class TestCensoredWithStudentT:
@@ -336,9 +322,7 @@ class TestCensoredWithStudentT:
         npt.assert_allclose(float(e_large), float(e_gauss), rtol=1e-4)
 
 
-# ---------------------------------------------------------------------------
-# JIT compatibility
-# ---------------------------------------------------------------------------
+# ── JIT compatibility ─────────────────────────────────────────────
 
 
 class TestCensoredJIT:
@@ -365,9 +349,7 @@ class TestCensoredJIT:
         assert jnp.isfinite(result)
 
 
-# ---------------------------------------------------------------------------
-# Gradients
-# ---------------------------------------------------------------------------
+# ── Gradients ─────────────────────────────────────────────────────
 
 
 class TestCensoredGradients:
@@ -477,9 +459,7 @@ class TestCensoredGradients:
         )
 
 
-# ---------------------------------------------------------------------------
-# Edge cases
-# ---------------------------------------------------------------------------
+# ── Edge cases ────────────────────────────────────────────────────
 
 
 class TestCensoredEdgeCases:

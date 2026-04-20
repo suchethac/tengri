@@ -38,6 +38,7 @@ def build_loss_fn(fitter, mode="_traceable"):
         ``loss_fn(params_unbounded, data_args) -> scalar``
     """
     from tengri.observation.noise import (
+        censored_log_likelihood,
         get_noise_dof,
         has_noise_model,
         uses_student_t,
@@ -53,6 +54,7 @@ def build_loss_fn(fitter, mode="_traceable"):
     stochastic = spec.stochastic
     use_variable_noise = has_noise_model(spec)
     noise_dof = get_noise_dof(spec) if uses_student_t(spec) else None
+    use_censored = fitter.data_mask is not None
     use_cal_marg = fitter._calibration_marginalize and fitter._has_spectroscopy
     cal_n_poly = fitter._cal_n_poly
     cal_prior_sigma = fitter._cal_prior_sigma
@@ -65,6 +67,19 @@ def build_loss_fn(fitter, mode="_traceable"):
     eline_prior_sigma = fitter._eline_prior_sigma
     eline_prior_width_dex = fitter._eline_prior_width_dex
     eline_amplitude_names = fitter._eline_amplitude_names
+    has_spec_cov = "spec_cov_inv" in fitter._data_args
+    has_line_fluxes = "line_flux_waves" in fitter._data_args
+    has_indices = "index_obs" in fitter._data_args
+    index_defs = None
+    if has_indices:
+        obs_for_idx = getattr(model, "observation", None)
+        if obs_for_idx is not None and obs_for_idx.spectral_indices is not None:
+            index_defs = obs_for_idx.spectral_indices.index_defs
+    n_phot = 0
+    if has_spec_cov and data_type == "joint":
+        obs = getattr(model, "observation", None)
+        if obs is not None:
+            n_phot = obs.n_data_phot  # noqa: F841 (used in closure)
 
     def loss_fn(params_unbounded, data_args):
         data = data_args["data"]
@@ -85,6 +100,9 @@ def build_loss_fn(fitter, mode="_traceable"):
         # Add psd_xi if stochastic
         if stochastic and "psd_xi" in params_unbounded:
             params["psd_xi"] = params_unbounded["psd_xi"]
+
+        # Resolve mirrored parameters (e.g., neb_logZ_gas = met_logzsol)
+        params = spec.resolve_mirrors(params)
 
         # Forward model prediction
         if data_type == "photometry":
@@ -406,12 +424,46 @@ def build_loss_fn(fitter, mode="_traceable"):
             chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
             chi2_spec = jnp.sum(((data_spec - pred_spec_with_lines) / noise_spec) ** 2)
             e_lh = 0.5 * (chi2_phot + chi2_spec)
+        elif use_censored:
+            mask = data_args["data_mask"]
+            f_cal = params.get("noise_frac_cal", 0.0)
+            e_lh = censored_log_likelihood(
+                data, noise, predicted, mask, f_cal=f_cal, dof=noise_dof
+            )
         elif use_variable_noise:
             f_cal = params.get("noise_frac_cal", 0.0)
             e_lh = variable_noise_hamiltonian(data, noise, predicted, f_cal, dof=noise_dof)
+        elif has_spec_cov and data_type == "spectroscopy":
+            diff = data - predicted
+            chi2 = diff @ data_args["spec_cov_inv"] @ diff
+            e_lh = 0.5 * chi2
+        elif has_spec_cov and data_type == "joint":
+            data_phot = data[:n_phot]
+            pred_phot = predicted[:n_phot]
+            noise_phot = noise[:n_phot]
+            diff_spec = data[n_phot:] - predicted[n_phot:]
+            chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
+            chi2_spec = diff_spec @ data_args["spec_cov_inv"] @ diff_spec
+            e_lh = 0.5 * (chi2_phot + chi2_spec)
         else:
             chi2 = jnp.sum(((data - predicted) / noise) ** 2)
             e_lh = 0.5 * chi2
+
+        if has_line_fluxes:
+            model_lf = model.predict_line_fluxes(
+                params, target_wavelengths=data_args["line_flux_waves"]
+            )
+            chi2_lines = jnp.sum(
+                ((data_args["line_flux_obs"] - model_lf) / data_args["line_flux_err"]) ** 2
+            )
+            e_lh = e_lh + 0.5 * chi2_lines
+
+        if has_indices:
+            model_idx = model.predict_spectral_indices(params, index_defs, mode=mode)
+            chi2_idx = jnp.sum(
+                ((data_args["index_obs"] - model_idx) / data_args["index_err"]) ** 2
+            )
+            e_lh = e_lh + 0.5 * chi2_idx
 
         # Prior contributions (IFT Hamiltonian)
         #
@@ -544,6 +596,19 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
     eline_prior_sigma = fitter._eline_prior_sigma
     eline_prior_width_dex = fitter._eline_prior_width_dex
     eline_amplitude_names = fitter._eline_amplitude_names
+    has_spec_cov_ll = "spec_cov_inv" in fitter._data_args
+    has_line_fluxes_ll = "line_flux_waves" in fitter._data_args
+    has_indices_ll = "index_obs" in fitter._data_args
+    index_defs_ll = None
+    if has_indices_ll:
+        obs_for_idx_ll = getattr(model, "observation", None)
+        if obs_for_idx_ll is not None and obs_for_idx_ll.spectral_indices is not None:
+            index_defs_ll = obs_for_idx_ll.spectral_indices.index_defs
+    n_phot_ll = 0
+    if has_spec_cov_ll and data_type == "joint":
+        obs_ll = getattr(model, "observation", None)
+        if obs_ll is not None:
+            n_phot_ll = obs_ll.n_data_phot
 
     def loglikelihood_fn(free_params, data_args):
         data = data_args["data"]
@@ -553,6 +618,8 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
         params = dict(free_params)
         for name, val in fixed_values.items():
             params[name] = val
+
+        params = spec.resolve_mirrors(params)
 
         # Forward model prediction
         if data_type == "photometry":
@@ -620,7 +687,7 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
                 n_poly=cal_n_poly,
                 prior_sigma=cal_prior_sigma,
             )
-            return log_like_spec
+            ll = log_like_spec
         elif use_eline_marg and use_cal_marg and data_type == "joint":
             # Joint + both: marginalize lines on spec part, then calibration on spec,
             # standard chi2 for photometry
@@ -682,7 +749,7 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
                 n_poly=cal_n_poly,
                 prior_sigma=cal_prior_sigma,
             )
-            return -0.5 * chi2_phot + log_like_spec
+            ll = -0.5 * chi2_phot + log_like_spec
         elif use_cal_marg and data_type == "spectroscopy":
             from tengri.observation.calibration import (
                 marginalize_calibration,
@@ -696,7 +763,7 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
                 n_poly=cal_n_poly,
                 prior_sigma=cal_prior_sigma,
             )
-            return log_like_spec
+            ll = log_like_spec
         elif use_cal_marg and data_type == "joint":
             from tengri.observation.calibration import (
                 marginalize_calibration,
@@ -719,7 +786,7 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
                 n_poly=cal_n_poly,
                 prior_sigma=cal_prior_sigma,
             )
-            return -0.5 * chi2_phot + log_like_spec
+            ll = -0.5 * chi2_phot + log_like_spec
         elif use_eline_marg and data_type == "spectroscopy":
             # Analytically marginalize emission line amplitudes
             from tengri.observation.eline_marginalization import (
@@ -763,7 +830,7 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
                 ln_l_eline, _, _ = marginalize_emission_lines(
                     residual, noise, G_eff, prior_variance=prior_var
                 )
-            return ln_l_eline
+            ll = ln_l_eline
         elif use_eline_marg and data_type == "joint":
             # Joint: marginalize lines on spectroscopic part, standard chi2 for photometry
             from tengri.observation.eline_marginalization import (
@@ -815,7 +882,7 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
                     residual_spec, noise_spec, G_eff, prior_variance=prior_var
                 )
             chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
-            return -0.5 * chi2_phot + ln_l_eline
+            ll = -0.5 * chi2_phot + ln_l_eline
         elif use_eline_fitted and data_type == "spectroscopy":
             # Fitted mode: amplitudes are explicit params; add line prediction to continuum
             from tengri.observation.eline_marginalization import (
@@ -839,7 +906,7 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
             a = jnp.array([params[nm] for nm in eline_amplitude_names])
             predicted_with_lines = predicted + G_eff @ a
             chi2 = jnp.sum(((data - predicted_with_lines) / noise) ** 2)
-            return -0.5 * chi2
+            ll = -0.5 * chi2
         elif use_eline_fitted and data_type == "joint":
             # Joint fitted: add lines to spectroscopic part, standard chi2 for photometry
             from tengri.observation.eline_marginalization import (
@@ -871,13 +938,42 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
             pred_spec_with_lines = pred_spec + G_eff @ a
             chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
             chi2_spec = jnp.sum(((data_spec - pred_spec_with_lines) / noise_spec) ** 2)
-            return -0.5 * (chi2_phot + chi2_spec)
+            ll = -0.5 * (chi2_phot + chi2_spec)
         elif use_variable_noise:
             f_cal = params.get("noise_frac_cal", 0.0)
-            return -variable_noise_hamiltonian(data, noise, predicted, f_cal, dof=noise_dof)
+            ll = -variable_noise_hamiltonian(data, noise, predicted, f_cal, dof=noise_dof)
+        elif has_spec_cov_ll and data_type == "spectroscopy":
+            diff = data - predicted
+            ll = -0.5 * (diff @ data_args["spec_cov_inv"] @ diff)
+        elif has_spec_cov_ll and data_type == "joint":
+            data_phot = data[:n_phot_ll]
+            pred_phot = predicted[:n_phot_ll]
+            noise_phot = noise[:n_phot_ll]
+            diff_spec = data[n_phot_ll:] - predicted[n_phot_ll:]
+            chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
+            chi2_spec = diff_spec @ data_args["spec_cov_inv"] @ diff_spec
+            ll = -0.5 * (chi2_phot + chi2_spec)
         else:
             chi2 = jnp.sum(((data - predicted) / noise) ** 2)
-            return -0.5 * chi2
+            ll = -0.5 * chi2
+
+        if has_line_fluxes_ll:
+            model_lf = model.predict_line_fluxes(
+                params, target_wavelengths=data_args["line_flux_waves"]
+            )
+            chi2_lines = jnp.sum(
+                ((data_args["line_flux_obs"] - model_lf) / data_args["line_flux_err"]) ** 2
+            )
+            ll = ll - 0.5 * chi2_lines
+
+        if has_indices_ll:
+            model_idx = model.predict_spectral_indices(params, index_defs_ll, mode=mode)
+            chi2_idx = jnp.sum(
+                ((data_args["index_obs"] - model_idx) / data_args["index_err"]) ** 2
+            )
+            ll = ll - 0.5 * chi2_idx
+
+        return ll
 
     return loglikelihood_fn
 
@@ -916,6 +1012,7 @@ def build_loglikelihood_unbounded_fn(fitter, mode="_traceable"):
             params[name] = val
         if spec.stochastic and "psd_xi" in params_unbounded:
             params["psd_xi"] = params_unbounded["psd_xi"]
+        params = spec.resolve_mirrors(params)
         return loglik_fn(params, data_args)
 
     return loglik_unbounded

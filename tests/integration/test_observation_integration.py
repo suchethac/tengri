@@ -22,7 +22,6 @@ from tengri.observation.spectroscopy import SpectroscopyConfig
 from tengri.parameters.parameters import ParamSpec
 from tengri.parameters.priors import Fixed, Uniform
 
-# ---------------------------------------------------------------------------
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 _SSP_EXISTS = _SSP_FILE.is_file()
@@ -30,9 +29,7 @@ _SSP_EXISTS = _SSP_FILE.is_file()
 pytestmark = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -73,9 +70,7 @@ def _make_synthetic_filters(n=3):
     return filters
 
 
-# ===========================================================================
-# Model integration
-# ===========================================================================
+# ── Model integration ─────────────────────────────────────────────
 
 
 class TestObservationWithModel:
@@ -201,9 +196,7 @@ class TestObservationWithModel:
         assert model._lsf_n_bins == 8
 
 
-# ===========================================================================
-# Fitter integration
-# ===========================================================================
+# ── Fitter integration ────────────────────────────────────────────
 
 
 class TestObservationWithFitter:
@@ -238,9 +231,7 @@ class TestObservationWithFitter:
         assert fitter.data_type == "photometry"
 
 
-# ===========================================================================
-# End-to-end
-# ===========================================================================
+# ── End-to-end ────────────────────────────────────────────────────
 
 
 class TestObservationEndToEnd:

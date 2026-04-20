@@ -19,9 +19,7 @@ _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_PATH = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 
 
-# ===================================================================
-# 1. GP SFH via IFFT
-# ===================================================================
+# ── 1. GP SFH via IFFT ────────────────────────────────────────────
 
 
 class TestGPSFHCrossval:
@@ -92,9 +90,7 @@ class TestGPSFHCrossval:
         assert jnp.all(jnp.isfinite(grad))
 
 
-# ===================================================================
-# 2. Parameter transforms (bounded <-> unbounded)
-# ===================================================================
+# ── 2. Parameter transforms (bounded <-> unbounded) ───────────────
 
 
 class TestTransformsCrossval:
@@ -173,9 +169,7 @@ class TestTransformsCrossval:
             assert jac > 0, f"Jacobian at x={x} is {jac}, expected > 0"
 
 
-# ===================================================================
-# 3. Age grid utilities
-# ===================================================================
+# ── 3. Age grid utilities ─────────────────────────────────────────
 
 
 class TestGridCrossval:
@@ -207,9 +201,7 @@ class TestGridCrossval:
         np.testing.assert_allclose(d, expected, rtol=1e-10)
 
 
-# ===================================================================
-# 4. Ionizing photon rate Q_H
-# ===================================================================
+# ── 4. Ionizing photon rate Q_H ───────────────────────────────────
 
 
 class TestIonizingSpectrumCrossval:
@@ -270,9 +262,7 @@ class TestIonizingSpectrumCrossval:
         assert qh_old < qh_young * 0.001, "Old SSP Q_H should be << young"
 
 
-# ===================================================================
-# 5. Precomputation consistency
-# ===================================================================
+# ── 5. Precomputation consistency ─────────────────────────────────
 
 
 class TestPrecomputeCrossval:

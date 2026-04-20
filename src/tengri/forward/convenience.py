@@ -11,14 +11,13 @@ from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 if TYPE_CHECKING:
     from tengri.forward.sed_model import MockData, PriorPredictive, SEDModel
 
 
-# ---------------------------------------------------------------------------
-# Mock data generation
-# ---------------------------------------------------------------------------
+# ── Mock data generation ──────────────────────────────────────────
 
 
 def mock(model: SEDModel, params, snr=20.0, key=None) -> MockData:
@@ -103,9 +102,7 @@ def mock_batch(model: SEDModel, params_batch, snr=20.0, key=None) -> MockData:
     )
 
 
-# ---------------------------------------------------------------------------
-# Batch predictions (vmap over galaxies)
-# ---------------------------------------------------------------------------
+# ── Batch predictions (vmap over galaxies) ────────────────────────
 
 
 def predict_photometry_batch(model: SEDModel, params_batch):
@@ -143,9 +140,7 @@ def predict_spectrum_batch(model: SEDModel, params_batch):
     return jax.vmap(model.predict_spectrum)(params_batch)
 
 
-# ---------------------------------------------------------------------------
-# Prior predictive check
-# ---------------------------------------------------------------------------
+# ── Prior predictive check ────────────────────────────────────────
 
 
 def prior_predictive(model: SEDModel, n: int = 500, seed: int = 42) -> PriorPredictive:
@@ -201,9 +196,7 @@ def prior_predictive(model: SEDModel, n: int = 500, seed: int = 42) -> PriorPred
     )
 
 
-# ---------------------------------------------------------------------------
-# Catalog fitting
-# ---------------------------------------------------------------------------
+# ── Catalog fitting ───────────────────────────────────────────────
 
 
 def fit_batch_map_vmap(
@@ -349,6 +342,8 @@ def fit_batch(
     method: str = "vi",
     n_workers: int = 1,
     verbose: bool = True,
+    output_dir: str | None = None,
+    id_col: str | None = None,
     **kwargs,
 ) -> list:
     """Fit a batch of galaxies, one row at a time.
@@ -372,6 +367,13 @@ def fit_batch(
         Currently ignored (reserved for future multiprocessing). Default 1.
     verbose : bool
         Print per-galaxy progress. Default True.
+    output_dir : str or None
+        If provided, save each ``Posterior`` to ``{output_dir}/{id}.h5``
+        after fitting. On re-run, galaxies with existing result files are
+        skipped (checkpoint resume). The directory is created if needed.
+    id_col : str or None
+        Column name for galaxy identifiers used in checkpoint filenames.
+        If None, uses the row index (``0.h5``, ``1.h5``, ...).
     **kwargs
         Forwarded to ``Fitter.run()`` for every galaxy.
 
@@ -387,12 +389,16 @@ def fit_batch(
     ...     flux_cols=["flux_u", "flux_g", "flux_r"],
     ...     err_cols=["err_u", "err_g", "err_r"],
     ...     redshift_col="z_spec",
+    ...     output_dir="results/sdss_run1",
+    ...     id_col="objID",
     ... )
     """
+    import os
     import time
 
     from tengri.forward.sed_model import Model as ModelClass
     from tengri.inference.fitter import Fitter
+    from tengri.inference.posterior import Posterior
     from tengri.parameters.priors import Fixed
 
     # Normalise catalog to list of dicts
@@ -423,11 +429,29 @@ def fit_batch(
             f"Got {type(catalog)}"
         )
 
+    if output_dir is not None:
+        os.makedirs(output_dir, exist_ok=True)
+
     n_gal = len(rows)
     results: list = []
+    n_skipped = 0
     t0 = time.time()
 
     for i, row in enumerate(rows):
+        gal_id = str(row[id_col]) if id_col is not None else str(i)
+
+        if output_dir is not None:
+            result_path = os.path.join(output_dir, f"{gal_id}.h5")
+            if os.path.exists(result_path):
+                result_i = Posterior.load(result_path, model=model)
+                results.append(result_i)
+                n_skipped += 1
+                if verbose and n_skipped <= 3:
+                    print(f"  [{i + 1}/{n_gal}] {gal_id} — loaded from checkpoint")
+                elif verbose and n_skipped == 4:
+                    print("  ... skipping remaining cached results")
+                continue
+
         t_row = time.time()
 
         flux_i = jnp.array([float(row[c]) for c in flux_cols])
@@ -444,6 +468,11 @@ def fit_batch(
             fitter_i = Fitter(model, flux_i, noise_i)
 
         result_i = fitter_i.run(method, **kwargs)
+
+        if output_dir is not None:
+            result_path = os.path.join(output_dir, f"{gal_id}.h5")
+            result_i.save(result_path)
+
         results.append(result_i)
 
         if verbose:
@@ -452,6 +481,9 @@ def fit_batch(
             chi2 = result_i.diagnostics.get("chi2_dof", "?")
             chi2_str = f"{chi2:.2f}" if isinstance(chi2, float) else str(chi2)
             print(f"  [{i + 1}/{n_gal}] chi2/dof={chi2_str}, row={dt:.1f}s, total={elapsed:.0f}s")
+
+    if verbose and n_skipped > 0:
+        print(f"  Checkpoint: {n_skipped}/{n_gal} loaded from {output_dir}")
 
     return results
 
@@ -490,9 +522,136 @@ def fit_catalog(
     )
 
 
-# ---------------------------------------------------------------------------
-# Population fitting
-# ---------------------------------------------------------------------------
+# ── Catalog summary ───────────────────────────────────────────────
+
+
+def catalog_summary(
+    results: list,
+    percentiles: tuple[float, ...] = (16.0, 50.0, 84.0),
+    include_derived: bool = True,
+) -> dict[str, np.ndarray]:
+    """Aggregate a list of Posteriors into a summary catalog.
+
+    For each free parameter (and optionally derived quantities),
+    computes percentiles across each galaxy's posterior samples.
+    MAP results contribute a single value repeated across all
+    percentile columns.
+
+    Parameters
+    ----------
+    results : list of Posterior
+        One per galaxy, from ``fit_batch`` or ``Fitter.fit_batch``.
+    percentiles : tuple of float
+        Percentiles to compute. Default ``(16, 50, 84)`` gives
+        median with 68% credible interval.
+    include_derived : bool
+        If True and model reference is available, include derived
+        quantities (stellar_mass, sfr_100myr, etc.).
+
+    Returns
+    -------
+    dict[str, np.ndarray]
+        Keys are ``"{param}_p{pct}"`` (e.g. ``"dust_av_p50"``).
+        Each value is a 1-D array of length ``len(results)``.
+        Also includes ``"chi2_dof"`` if available in diagnostics.
+
+    Examples
+    --------
+    >>> results = fit_batch(model, catalog, flux_cols, err_cols)
+    >>> summary = catalog_summary(results)
+    >>> summary["dust_av_p50"]  # median dust Av for each galaxy
+    """
+    if not results:
+        return {}
+
+    n_gal = len(results)
+    pct_arr = np.array(percentiles)
+
+    # Collect parameter names from first result with samples
+    param_names: list[str] = []
+    for r in results:
+        source = r.samples if r.samples is not None else r.params
+        for k in sorted(source.keys()):
+            if k == "psd_xi":
+                continue
+            arr = source[k]
+            if np.asarray(arr).ndim <= 1:
+                param_names.append(k)
+        break
+
+    out: dict[str, np.ndarray] = {}
+    for name in param_names:
+        for pct in percentiles:
+            col = f"{name}_p{int(pct)}"
+            out[col] = np.full(n_gal, np.nan)
+
+    for i, r in enumerate(results):
+        if r.samples is not None:
+            for name in param_names:
+                if name not in r.samples:
+                    continue
+                arr = np.asarray(r.samples[name])
+                if arr.ndim != 1:
+                    continue
+                pvals = np.percentile(arr, pct_arr)
+                for pct, pv in zip(percentiles, pvals):
+                    out[f"{name}_p{int(pct)}"][i] = pv
+        else:
+            for name in param_names:
+                if name not in r.params:
+                    continue
+                val = float(np.mean(np.asarray(r.params[name])))
+                for pct in percentiles:
+                    out[f"{name}_p{int(pct)}"][i] = val
+
+    if include_derived:
+        derived_keys: list[str] = []
+        for r in results:
+            if r._model is None:
+                break
+            try:
+                d = r.derived
+                derived_keys = [k for k in sorted(d.keys()) if np.asarray(d[k]).ndim <= 1]
+                break
+            except (RuntimeError, AttributeError):
+                break
+
+        if derived_keys:
+            for dk in derived_keys:
+                for pct in percentiles:
+                    out[f"{dk}_p{int(pct)}"] = np.full(n_gal, np.nan)
+
+            for i, r in enumerate(results):
+                if r._model is None:
+                    continue
+                try:
+                    d = r.derived
+                except (RuntimeError, AttributeError):
+                    continue
+                for dk in derived_keys:
+                    if dk not in d:
+                        continue
+                    arr = np.asarray(d[dk])
+                    if arr.ndim == 0:
+                        val = float(arr)
+                        for pct in percentiles:
+                            out[f"{dk}_p{int(pct)}"][i] = val
+                    elif arr.ndim == 1:
+                        pvals = np.percentile(arr, pct_arr)
+                        for pct, pv in zip(percentiles, pvals):
+                            out[f"{dk}_p{int(pct)}"][i] = pv
+
+    chi2_dof = np.full(n_gal, np.nan)
+    for i, r in enumerate(results):
+        val = r.diagnostics.get("chi2_dof")
+        if isinstance(val, (int, float)):
+            chi2_dof[i] = float(val)
+    out["chi2_dof"] = chi2_dof
+
+    return out
+
+
+# ── Population fitting ────────────────────────────────────────────
 
 
 def fit_population(
@@ -504,7 +663,7 @@ def fit_population(
 ):
     """Fit a population of galaxies with shared PSD hyperparameters.
 
-    Thin wrapper around ``HierarchicalFitter``.
+    Thin wrapper around ``PopulationFitter``.
 
     Parameters
     ----------
@@ -516,7 +675,7 @@ def fit_population(
     population_prior : dict or None
         Hyperpriors on shared PSD parameters.
     **kwargs
-        Forwarded to ``HierarchicalFitter.run()``.
+        Forwarded to ``PopulationFitter.run()``.
 
     Returns
     -------
@@ -551,7 +710,7 @@ def fit_population(
             dist = population_prior["psd_tau_myr"]
             psd_tau_prior = getattr(dist, "bounds", psd_tau_prior)
 
-    # Translate canonical → HierarchicalFitter method names
+    # Translate canonical → PopulationFitter method names
     _hier_method_map = {
         "vi": "geovi",
         "vi_linear": "mgvi",
@@ -579,9 +738,7 @@ def fit_population(
     return hfitter.run(hier_method, **kwargs)
 
 
-# ---------------------------------------------------------------------------
-# from_config factory
-# ---------------------------------------------------------------------------
+# ── from_config factory ───────────────────────────────────────────
 
 from tengri.parameters.defaults import UNSET as _UNSET  # re-export for back-compat
 
@@ -641,7 +798,7 @@ def build_model_from_config(
     if agn is not None and "agn_frac" not in expanded and "agn_log_lbol" not in expanded:
         expanded["agn_log_lbol"] = Uniform(8.0, 12.0)
 
-    # --- Build ParamSpec ---
+    # --- Build Parameters ---
     sfh_tokens = [t.strip() for t in sfh.replace("+", " ").split()]
 
     spec_kwargs: dict = dict(expanded)
@@ -704,9 +861,7 @@ def build_model_from_config(
     return model_cls(spec, ssp_data, observation=observation, **model_kwargs)
 
 
-# ---------------------------------------------------------------------------
-# fit convenience wrapper
-# ---------------------------------------------------------------------------
+# ── fit convenience wrapper ───────────────────────────────────────
 
 
 def fit_model(

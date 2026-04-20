@@ -41,9 +41,7 @@ _C_CGS = 2.99792458e10
 _PC_CM = 3.0857e18
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -61,9 +59,7 @@ def _band_avg(wave, flux, center, half_width=100.0):
     return float(np.nanmean(flux[mask]))
 
 
-# ===================================================================
-# 1. Absolute SED normalisation for simple stellar populations
-# ===================================================================
+# ── 1. Absolute SED normalisation for simple stellar populations ──
 
 
 class TestSSPAbsoluteNormalisation:
@@ -190,9 +186,7 @@ class TestSSPAbsoluteNormalisation:
         )
 
 
-# ===================================================================
-# 2. Dust attenuation: absolute A_V consistency
-# ===================================================================
+# ── 2. Dust attenuation: absolute A_V consistency ─────────────────
 
 
 class TestDustAttenuationAbsolute:
@@ -291,9 +285,7 @@ class TestDustAttenuationAbsolute:
         )
 
 
-# ===================================================================
-# 3. SFR-luminosity calibrations (Kennicutt 1998)
-# ===================================================================
+# ── 3. SFR-luminosity calibrations (Kennicutt 1998) ───────────────
 
 
 class TestSFRLuminosityCalibrations:
@@ -340,9 +332,7 @@ class TestSFRLuminosityCalibrations:
         )
 
 
-# ===================================================================
-# 4. Photometry: absolute magnitudes of standard galaxies
-# ===================================================================
+# ── 4. Photometry: absolute magnitudes of standard galaxies ───────
 
 
 class TestAbsoluteMagnitudes:
@@ -421,9 +411,7 @@ class TestAbsoluteMagnitudes:
         assert 5 < ratio < 15, f"10x SFR ratio = {ratio:.1f}, expected ~10 (linear CSP scaling)"
 
 
-# ===================================================================
-# 5. Dust attenuation comparison: Calzetti vs SMC
-# ===================================================================
+# ── 5. Dust attenuation comparison: Calzetti vs SMC ───────────────
 
 
 class TestDustLawComparison:
@@ -460,9 +448,7 @@ class TestDustLawComparison:
         assert uv_smc < uv_calz, f"SMC UV flux ({uv_smc:.2e}) should be < Calzetti ({uv_calz:.2e})"
 
 
-# ===================================================================
-# 6. Redshift effects on photometry
-# ===================================================================
+# ── 6. Redshift effects on photometry ─────────────────────────────
 
 
 class TestRedshiftEffects:

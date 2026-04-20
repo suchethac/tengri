@@ -99,9 +99,7 @@ def ssp_data_3d():
     )
 
 
-# ===================================================================
-# has_alpha_grid detection
-# ===================================================================
+# ── has_alpha_grid detection ──────────────────────────────────────
 
 
 class TestHasAlphaGrid:
@@ -123,9 +121,7 @@ class TestHasAlphaGrid:
         assert has_alpha_grid(ssp_data_3d) is False
 
 
-# ===================================================================
-# Bilinear (Z, [α/Fe]) interpolation
-# ===================================================================
+# ── Bilinear (Z, [α/Fe]) interpolation ────────────────────────────
 
 
 class TestInterpolateMetAlpha:
@@ -310,9 +306,7 @@ class TestInterpolateMetAlpha:
         )
 
 
-# ===================================================================
-# Per-age evolving (Z, [α/Fe]) interpolation
-# ===================================================================
+# ── Per-age evolving (Z, [α/Fe]) interpolation ────────────────────
 
 
 class TestInterpolateMetAlphaEvolving:
@@ -405,9 +399,7 @@ class TestInterpolateMetAlphaEvolving:
         assert jnp.all(jnp.isfinite(result))
 
 
-# ===================================================================
-# Alpha evolution ramp
-# ===================================================================
+# ── Alpha evolution ramp ──────────────────────────────────────────
 
 
 class TestComputeAlphaFeEvolving:
@@ -469,9 +461,7 @@ class TestComputeAlphaFeEvolving:
         assert grad_jax > 0  # more alpha_old → higher total
 
 
-# ===================================================================
-# Effective metallicity (backward compatibility)
-# ===================================================================
+# ── Effective metallicity (backward compatibility) ────────────────
 
 
 class TestEffectiveMetallicity:
@@ -498,9 +488,7 @@ class TestEffectiveMetallicity:
         assert float(z_eff) == pytest.approx(0.75, abs=0.01)
 
 
-# ===================================================================
-# Salaris [Fe/H] ↔ [M/H] convention conversions
-# ===================================================================
+# ── Salaris [Fe/H] ↔ [M/H] convention conversions ─────────────────
 
 
 class TestSalarisConversion:
@@ -629,9 +617,7 @@ class TestSalarisConversion:
             )
 
 
-# ===================================================================
-# Solar [α/Fe] = 0.0 equivalence with no-alpha case
-# ===================================================================
+# ── Solar [α/Fe] = 0.0 equivalence with no-alpha case ─────────────
 
 
 class TestSolarAlphaEquivalence:
@@ -729,9 +715,7 @@ class TestSolarAlphaEquivalence:
             assert salaris_feh_from_mh(z, 0.0) == pytest.approx(z, abs=1e-12)
 
 
-# ===================================================================
-# Convention differences: [Fe/H] vs [M/H] vs effective_metallicity
-# ===================================================================
+# ── Convention differences: [Fe/H] vs [M/H] vs effective_metallicity
 
 
 class TestConventionDifferences:

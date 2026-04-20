@@ -43,9 +43,7 @@ from tengri.components.sfh.mean_sfh import (
 jax.config.update("jax_enable_x64", True)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# ── Helpers ───────────────────────────────────────────────────────
 
 
 class TestClampAge:
@@ -100,9 +98,7 @@ class TestSkewedGaussianKernel:
         assert jnp.all(kernel >= 0)
 
 
-# ---------------------------------------------------------------------------
-# Double Power Law (legacy + registry)
-# ---------------------------------------------------------------------------
+# ── Double Power Law (legacy + registry) ──────────────────────────
 
 
 class TestDoublePowerlaw:
@@ -264,9 +260,7 @@ class TestDpl:
         np.testing.assert_allclose(mass2 / mass1, 10.0, rtol=0.01)
 
 
-# ---------------------------------------------------------------------------
-# tsnorm / snorm / norm family
-# ---------------------------------------------------------------------------
+# ── tsnorm / snorm / norm family ──────────────────────────────────
 
 
 class TestTsnorm:
@@ -342,9 +336,7 @@ class TestNorm:
         assert_allclose(sfr_norm, sfr_snorm, rtol=1e-10)
 
 
-# ---------------------------------------------------------------------------
-# lnorm (log-normal)
-# ---------------------------------------------------------------------------
+# ── lnorm (log-normal) ────────────────────────────────────────────
 
 
 class TestLnorm:
@@ -375,9 +367,7 @@ class TestLnorm:
         assert sum_below != pytest.approx(float(sum_above), rel=0.1)
 
 
-# ---------------------------------------------------------------------------
-# constant, exponential, delayed-exponential
-# ---------------------------------------------------------------------------
+# ── constant, exponential, delayed-exponential ────────────────────
 
 
 class TestConstantSFH:
@@ -453,9 +443,7 @@ class TestDelayedExponentialSFH:
         assert float(sfr) == 0.0
 
 
-# ---------------------------------------------------------------------------
-# Burst (triweight)
-# ---------------------------------------------------------------------------
+# ── Burst (triweight) ─────────────────────────────────────────────
 
 
 class TestTriweightBurst:
@@ -490,9 +478,7 @@ class TestTriweightBurst:
         assert_allclose(float(kernel), 35.0 / 96.0, rtol=0.01)
 
 
-# ---------------------------------------------------------------------------
-# Legacy functions
-# ---------------------------------------------------------------------------
+# ── Legacy functions ──────────────────────────────────────────────
 
 
 class TestDelayedTau:
@@ -513,9 +499,7 @@ class TestDelayedTau:
         assert jnp.all(sfr > 0)
 
 
-# ---------------------------------------------------------------------------
-# Cross-cutting: all models JIT and grad
-# ---------------------------------------------------------------------------
+# ── Cross-cutting: all models JIT and grad ────────────────────────
 
 
 _TSNORM_KW = {

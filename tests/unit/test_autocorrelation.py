@@ -10,9 +10,7 @@ from tengri.analysis.diagnostics.autocorrelation import (
     effective_sample_size,
 )
 
-# -------------------------------------------------------------------
-# Helpers
-# -------------------------------------------------------------------
+# ── Helpers ───────────────────────────────────────────────────────
 
 
 def _make_ar1(n, phi, seed=42):
@@ -31,9 +29,7 @@ def _make_iid(n, seed=42):
     return np.random.default_rng(seed).standard_normal(n)
 
 
-# -------------------------------------------------------------------
-# autocorrelation_at_lag
-# -------------------------------------------------------------------
+# ── autocorrelation_at_lag ────────────────────────────────────────
 
 
 class TestAutocorrelationAtLag:
@@ -70,9 +66,7 @@ class TestAutocorrelationAtLag:
         assert isinstance(rho, float)
 
 
-# -------------------------------------------------------------------
-# autocorrelation_time (Sokal's method)
-# -------------------------------------------------------------------
+# ── autocorrelation_time (Sokal's method) ─────────────────────────
 
 
 class TestAutocorrelationTime:
@@ -105,9 +99,7 @@ class TestAutocorrelationTime:
         assert tau >= 1.0
 
 
-# -------------------------------------------------------------------
-# autocorrelation_time_combined
-# -------------------------------------------------------------------
+# ── autocorrelation_time_combined ─────────────────────────────────
 
 
 class TestAutocorrelationTimeCombined:
@@ -144,9 +136,7 @@ class TestAutocorrelationTimeCombined:
         assert info["chain_converged"] is False
 
 
-# -------------------------------------------------------------------
-# effective_sample_size (dict interface)
-# -------------------------------------------------------------------
+# ── effective_sample_size (dict interface) ────────────────────────
 
 
 class TestEffectiveSampleSize:
@@ -174,9 +164,7 @@ class TestEffectiveSampleSize:
         assert result["a"]["ess"] > 5000  # τ ≈ 1 → ESS ≈ N
 
 
-# -------------------------------------------------------------------
-# check_chain_length
-# -------------------------------------------------------------------
+# ── check_chain_length ────────────────────────────────────────────
 
 
 class TestCheckChainLength:

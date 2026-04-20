@@ -31,9 +31,7 @@ pytestmark = pytest.mark.crossval
 WAVE = jnp.geomspace(912.0, 30000.0, 1000)
 
 
-# ===================================================================
-# 1. ALL CURVES — universal physics constraints
-# ===================================================================
+# ── 1. ALL CURVES — universal physics constraints ─────────────────
 
 
 class TestAllCurvesUniversalPhysics:
@@ -91,9 +89,7 @@ class TestAllCurvesUniversalPhysics:
         assert k_uv > k_nir, f"{name}: k(1500A)={k_uv:.2f} should exceed k(20000A)={k_nir:.2f}"
 
 
-# ===================================================================
-# 2. CALZETTI — starburst curve reference values
-# ===================================================================
+# ── 2. CALZETTI — starburst curve reference values ────────────────
 
 
 class TestCalzettiPhysics:
@@ -130,9 +126,7 @@ class TestCalzettiPhysics:
         assert max_jump < 0.02, f"Calzetti has discontinuity at 6300A: {max_jump}"
 
 
-# ===================================================================
-# 3. CARDELLI MW — R_V dependence
-# ===================================================================
+# ── 3. CARDELLI MW — R_V dependence ───────────────────────────────
 
 
 class TestCardelliPhysics:
@@ -180,9 +174,7 @@ class TestCardelliPhysics:
         assert abs(ratio - expected) < 0.05, f"A(B)/A(V) should be {expected:.3f}, got {ratio:.3f}"
 
 
-# ===================================================================
-# 4. SMC vs LMC vs MW — cross-curve ordering
-# ===================================================================
+# ── 4. SMC vs LMC vs MW — cross-curve ordering ────────────────────
 
 
 class TestExtinctionCurveOrdering:
@@ -244,9 +236,7 @@ class TestExtinctionCurveOrdering:
         assert ratio_calz < ratio_mw, "Calzetti should be grayer (lower UV/V ratio) than MW"
 
 
-# ===================================================================
-# 5. KRIEK-CONROY — bump + slope modifications
-# ===================================================================
+# ── 5. KRIEK-CONROY — bump + slope modifications ──────────────────
 
 
 class TestKriekConroyPhysics:
@@ -287,9 +277,7 @@ class TestKriekConroyPhysics:
         assert ratio_steep > ratio_flat, "Negative delta should steepen UV"
 
 
-# ===================================================================
-# 6. LEITHERER02 — far-UV extension
-# ===================================================================
+# ── 6. LEITHERER02 — far-UV extension ─────────────────────────────
 
 
 class TestLeitherer02Physics:
@@ -314,9 +302,7 @@ class TestLeitherer02Physics:
         assert jnp.all(k > 0), "L02 should give positive k below 1200A"
 
 
-# ===================================================================
-# 7. NOLL09 & SALIM_SBL18 — modified Calzetti variants
-# ===================================================================
+# ── 7. NOLL09 & SALIM_SBL18 — modified Calzetti variants ──────────
 
 
 class TestModifiedCalzettiPhysics:
@@ -356,9 +342,7 @@ class TestModifiedCalzettiPhysics:
         np.testing.assert_allclose(k_l02, k_noll, rtol=0.10)
 
 
-# ===================================================================
-# 8. LI08 — flexible 4-parameter curve
-# ===================================================================
+# ── 8. LI08 — flexible 4-parameter curve ──────────────────────────
 
 
 class TestLi08Physics:
@@ -408,9 +392,7 @@ class TestLi08Physics:
         assert diff > 0.1, f"c2 should change UV shape, got diff={diff:.3f}"
 
 
-# ===================================================================
-# 9. WG00 GEOMETRIES — radiative transfer geometry ordering
-# ===================================================================
+# ── 9. WG00 GEOMETRIES — radiative transfer geometry ordering ─────
 
 
 class TestWG00GeometryPhysics:
@@ -464,9 +446,7 @@ class TestWG00GeometryPhysics:
             prev_t = t
 
 
-# ===================================================================
-# 10. NARAYANAN — redshift-dependent curve
-# ===================================================================
+# ── 10. NARAYANAN — redshift-dependent curve ──────────────────────
 
 
 class TestNarayananPhysics:
@@ -498,9 +478,7 @@ class TestNarayananPhysics:
         assert diff > 0.01, f"Redshift should modify UV shape, got diff={diff:.4f}"
 
 
-# ===================================================================
-# 11. CONROY2010 — MW/power-law blend
-# ===================================================================
+# ── 11. CONROY2010 — MW/power-law blend ───────────────────────────
 
 
 class TestConroy2010Physics:
@@ -527,9 +505,7 @@ class TestConroy2010Physics:
         assert k_at_2175 >= k_at_2500 * 0.9, "Conroy2010 should have some bump"
 
 
-# ===================================================================
-# 12. POWER LAW — analytic exactness
-# ===================================================================
+# ── 12. POWER LAW — analytic exactness ────────────────────────────
 
 
 class TestPowerLawPhysics:

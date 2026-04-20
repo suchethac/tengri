@@ -16,9 +16,7 @@ References
 
 import jax.numpy as jnp
 
-# ---------------------------------------------------------------------------
-# Primary: Damped Random Walk
-# ---------------------------------------------------------------------------
+# ── Primary: Damped Random Walk ───────────────────────────────────
 
 
 def psd_drw(omega: jnp.ndarray, psd_sigma: float, psd_tau_yr: float) -> jnp.ndarray:
@@ -91,9 +89,7 @@ def psd_to_sqrt_power(psd_values: jnp.ndarray, d_grid: float) -> jnp.ndarray:
     return jnp.sqrt(jnp.maximum(psd_values, 1e-30) / d_grid)
 
 
-# ---------------------------------------------------------------------------
-# Alternative PSD models
-# ---------------------------------------------------------------------------
+# ── Alternative PSD models ────────────────────────────────────────
 
 
 def psd_matern(omega: jnp.ndarray, variance: float, length_scale: float, nu: float) -> jnp.ndarray:

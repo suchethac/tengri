@@ -39,9 +39,7 @@ def _no_fallback_warning(recwarn) -> bool:
     return not any("fallback" in str(w.message).lower() for w in recwarn)
 
 
-# ===================================================================
-# DL07 — Draine & Li 2007
-# ===================================================================
+# ── DL07 — Draine & Li 2007 ───────────────────────────────────────
 
 _DL07_EXISTS = _template_exists("dl07_templates.npz") or _template_exists("dl07_templates.h5")
 
@@ -153,9 +151,7 @@ class TestDL07TemplatePhysics:
         )
 
 
-# ===================================================================
-# ASTRODUST — Hensley & Draine 2023
-# ===================================================================
+# ── ASTRODUST — Hensley & Draine 2023 ─────────────────────────────
 
 _AD_EXISTS = _template_exists("astrodust_templates.npz")
 
@@ -220,9 +216,7 @@ class TestAstrodustTemplatePhysics:
         )
 
 
-# ===================================================================
-# THEMIS — Jones et al. 2017
-# ===================================================================
+# ── THEMIS — Jones et al. 2017 ────────────────────────────────────
 
 _TH_EXISTS = _template_exists("themis_templates.npz")
 
@@ -272,9 +266,7 @@ class TestTHEMISTemplatePhysics:
         )
 
 
-# ===================================================================
-# BOSA — Boquien & Salim 2021
-# ===================================================================
+# ── BOSA — Boquien & Salim 2021 ───────────────────────────────────
 
 _BO_EXISTS = _template_exists("bosa_templates.npz")
 
@@ -341,9 +333,7 @@ class TestBOSATemplatePhysics:
         assert 1.5 < ratio < 2.5, f"BOSA luminosity scaling: ratio={ratio:.2f}, expected ~2"
 
 
-# ===================================================================
-# Dale 2014 templates
-# ===================================================================
+# ── Dale 2014 templates ───────────────────────────────────────────
 
 _DA_EXISTS = _template_exists("dale2014_templates.npz")
 
@@ -410,9 +400,7 @@ class TestDale2014TemplatePhysics:
         )
 
 
-# ===================================================================
-# MAGPHYS — da Cunha+2008 (analytic, always available)
-# ===================================================================
+# ── MAGPHYS — da Cunha+2008 (analytic, always available) ──────────
 
 
 class TestMagphysPhysics:

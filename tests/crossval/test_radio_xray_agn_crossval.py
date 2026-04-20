@@ -28,9 +28,7 @@ pytestmark = pytest.mark.crossval
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
 
-# ===================================================================
-# 1. Radio: FIR-radio correlation
-# ===================================================================
+# ── 1. Radio: FIR-radio correlation ───────────────────────────────
 
 
 class TestRadioCrossval:
@@ -120,9 +118,7 @@ class TestRadioCrossval:
             assert l_high < l_low, f"q_IR={q_ir} should give less radio than q_IR=2.34"
 
 
-# ===================================================================
-# 2. X-ray: scaling relations
-# ===================================================================
+# ── 2. X-ray: scaling relations ───────────────────────────────────
 
 
 class TestXrayCrossval:
@@ -189,9 +185,7 @@ class TestXrayCrossval:
         assert l_soft > l_hard, "Soft X-ray should be brighter than hard (cutoff)"
 
 
-# ===================================================================
-# 3. AGN models
-# ===================================================================
+# ── 3. AGN models ─────────────────────────────────────────────────
 
 
 class TestAGNCrossval:

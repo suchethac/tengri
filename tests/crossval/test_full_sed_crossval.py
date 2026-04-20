@@ -55,9 +55,7 @@ if not _SSP_PATH.is_file():
     pytest.skip("SSP data not found", allow_module_level=True)
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -93,9 +91,7 @@ def ref_wave_ir(ref) -> np.ndarray:
     )
 
 
-# ---------------------------------------------------------------------------
-# Helper: band-averaged flux
-# ---------------------------------------------------------------------------
+# ── Helper: band-averaged flux ────────────────────────────────────
 
 
 def _band_avg(
@@ -150,9 +146,7 @@ def _build_tengri_sed(
     return wave, sed_per_msun, m_formed
 
 
-# ---------------------------------------------------------------------------
-# Test case 1: Star-forming (constant SFH, 3 Gyr, no dust)
-# ---------------------------------------------------------------------------
+# ── Test case 1: Star-forming (constant SFH, 3 Gyr, no dust) ──────
 
 
 class TestStarforming:
@@ -252,9 +246,7 @@ class TestStarforming:
         )
 
 
-# ---------------------------------------------------------------------------
-# Test case 2: Old quenched (10 Gyr galaxy, SF ended at 5 Gyr)
-# ---------------------------------------------------------------------------
+# ── Test case 2: Old quenched (10 Gyr galaxy, SF ended at 5 Gyr) ──
 
 
 class TestOldQuenched:
@@ -322,9 +314,7 @@ class TestOldQuenched:
         )
 
 
-# ---------------------------------------------------------------------------
-# Test case 3: Dusty star-forming (same as starforming + CF00 dust)
-# ---------------------------------------------------------------------------
+# ── Test case 3: Dusty star-forming (same as starforming + CF00 dust)
 
 
 class TestDustySFG:
@@ -456,9 +446,7 @@ class TestDustySFG:
         )
 
 
-# ---------------------------------------------------------------------------
-# Cross-case sanity: colour trends
-# ---------------------------------------------------------------------------
+# ── Cross-case sanity: colour trends ──────────────────────────────
 
 
 class TestColourTrends:
@@ -529,9 +517,7 @@ class TestColourTrends:
             )
 
 
-# ---------------------------------------------------------------------------
-# SFR / stellar mass normalisation
-# ---------------------------------------------------------------------------
+# ── SFR / stellar mass normalisation ──────────────────────────────
 
 
 def _build_tengri_sed_raw(
@@ -663,9 +649,7 @@ class TestSFRNormalisation:
         )
 
 
-# ---------------------------------------------------------------------------
-# SFH type cross-validation: delayed tau and DPL
-# ---------------------------------------------------------------------------
+# ── SFH type cross-validation: delayed tau and DPL ────────────────
 
 
 class TestDelayedTauSFH:
@@ -871,9 +855,7 @@ class TestDPLSFH:
         )
 
 
-# ---------------------------------------------------------------------------
-# Exponential SFH (tau model) — bagpipes + FSPS
-# ---------------------------------------------------------------------------
+# ── Exponential SFH (tau model) — bagpipes + FSPS ─────────────────
 
 
 class TestExpSFH:
@@ -973,9 +955,7 @@ class TestExpSFH:
         )
 
 
-# ---------------------------------------------------------------------------
-# Tau (declining exponential) SFH — tengri 'tau' model vs FSPS/bagpipes
-# ---------------------------------------------------------------------------
+# ── Tau (declining exponential) SFH — tengri 'tau' model vs FSPS/bagpipes
 
 
 def _tau_m_formed(peak_sfr: float, tau_yr: float, age_yr: float) -> float:
@@ -1361,9 +1341,7 @@ class TestTauSFHCrossVal:
         )
 
 
-# ---------------------------------------------------------------------------
-# Nebular emission — bagpipes + FSPS
-# ---------------------------------------------------------------------------
+# ── Nebular emission — bagpipes + FSPS ────────────────────────────
 
 
 class TestNebularEmission:
@@ -1431,9 +1409,7 @@ class TestNebularEmission:
         )
 
 
-# ---------------------------------------------------------------------------
-# Nebular emission — tengri pipeline (CLOUDY grid)
-# ---------------------------------------------------------------------------
+# ── Nebular emission — tengri pipeline (CLOUDY grid) ──────────────
 
 
 def _build_tengri_nebular_sed(
@@ -1636,9 +1612,7 @@ class TestNebularTengri:
         )
 
 
-# ---------------------------------------------------------------------------
-# Calzetti dust law — FSPS only
-# ---------------------------------------------------------------------------
+# ── Calzetti dust law — FSPS only ─────────────────────────────────
 
 
 class TestCalzettiDust:
@@ -1765,9 +1739,7 @@ class TestCalzettiDust:
         )
 
 
-# ---------------------------------------------------------------------------
-# Dust emission (DL07) — FSPS only, IR wavelength grid
-# ---------------------------------------------------------------------------
+# ── Dust emission (DL07) — FSPS only, IR wavelength grid ──────────
 
 
 class TestDustEmission:
@@ -1840,9 +1812,7 @@ class TestDustEmission:
         )
 
 
-# ---------------------------------------------------------------------------
-# Non-parametric (tabular) SFH — FSPS only
-# ---------------------------------------------------------------------------
+# ── Non-parametric (tabular) SFH — FSPS only ──────────────────────
 
 
 class TestTabularSFH:
@@ -1946,9 +1916,7 @@ class TestTabularSFH:
         )
 
 
-# ---------------------------------------------------------------------------
-# IGM attenuation — FSPS only, high-z galaxies
-# ---------------------------------------------------------------------------
+# ── IGM attenuation — FSPS only, high-z galaxies ──────────────────
 
 
 class TestIGMAttenuation:
@@ -2095,9 +2063,7 @@ class TestIGMAttenuation:
         )
 
 
-# ---------------------------------------------------------------------------
-# AGN torus (Nenkova) — FSPS only
-# ---------------------------------------------------------------------------
+# ── AGN torus (Nenkova) — FSPS only ───────────────────────────────
 
 
 class TestAGNTorus:
@@ -2190,9 +2156,7 @@ class TestAGNTorus:
             )
 
 
-# ---------------------------------------------------------------------------
-# pCIGALE Calzetti dust law
-# ---------------------------------------------------------------------------
+# ── pCIGALE Calzetti dust law ─────────────────────────────────────
 
 
 class TestCIGALECalzetti:
@@ -2261,9 +2225,7 @@ class TestCIGALECalzetti:
             )
 
 
-# ---------------------------------------------------------------------------
-# pCIGALE DL07 dust emission
-# ---------------------------------------------------------------------------
+# ── pCIGALE DL07 dust emission ────────────────────────────────────
 
 
 class TestCIGALEDustEmission:
@@ -2337,9 +2299,7 @@ class TestCIGALEDustEmission:
             )
 
 
-# ---------------------------------------------------------------------------
-# pCIGALE SKIRTOR2016 AGN torus
-# ---------------------------------------------------------------------------
+# ── pCIGALE SKIRTOR2016 AGN torus ─────────────────────────────────
 
 
 class TestCIGALESKIRTOR:
@@ -2497,9 +2457,7 @@ class TestCIGALESKIRTOR:
         )
 
 
-# ---------------------------------------------------------------------------
-# Metallicity grid cross-validation
-# ---------------------------------------------------------------------------
+# ── Metallicity grid cross-validation ─────────────────────────────
 
 
 class TestMetallicityGrid:
@@ -2642,9 +2600,7 @@ class TestMetallicityGrid:
         )
 
 
-# ---------------------------------------------------------------------------
-# High-z passive galaxy cross-validation
-# ---------------------------------------------------------------------------
+# ── High-z passive galaxy cross-validation ────────────────────────
 
 
 class TestHighZPassive:
@@ -2776,9 +2732,7 @@ class TestHighZPassive:
         )
 
 
-# ---------------------------------------------------------------------------
-# IMF comparison
-# ---------------------------------------------------------------------------
+# ── IMF comparison ────────────────────────────────────────────────
 
 
 class TestIMFComparison:
@@ -2923,9 +2877,7 @@ class TestIMFComparison:
         )
 
 
-# ---------------------------------------------------------------------------
-# Synthesizer SED validation
-# ---------------------------------------------------------------------------
+# ── Synthesizer SED validation ────────────────────────────────────
 
 
 class TestSynthesizerSEDs:
@@ -3052,9 +3004,7 @@ class TestSynthesizerSEDs:
         )
 
 
-# ---------------------------------------------------------------------------
-# SMC / LMC / CCM dust law cross-validation
-# ---------------------------------------------------------------------------
+# ── SMC / LMC / CCM dust law cross-validation ─────────────────────
 
 
 class TestSMCLMCDustLaw:
@@ -3272,9 +3222,7 @@ class TestSMCLMCDustLaw:
         )
 
 
-# ---------------------------------------------------------------------------
-# Log-normal SFH cross-validation
-# ---------------------------------------------------------------------------
+# ── Log-normal SFH cross-validation ───────────────────────────────
 
 
 class TestLognormSFH:
@@ -3426,9 +3374,7 @@ class TestLognormSFH:
         )
 
 
-# ---------------------------------------------------------------------------
-# Tabular SFH — tengri full pipeline vs FSPS step functions
-# ---------------------------------------------------------------------------
+# ── Tabular SFH — tengri full pipeline vs FSPS step functions ─────
 
 
 def _build_tengri_step_sed(

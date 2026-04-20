@@ -24,9 +24,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Helpers: synthetic filters
-# ---------------------------------------------------------------------------
+# ── Helpers: synthetic filters ────────────────────────────────────
 
 
 def _make_tophat_filter(center_aa: float, width_aa: float, n_points: int = 100):
@@ -49,9 +47,7 @@ def _make_sdss_like_filters():
     return filter_waves, filter_trans
 
 
-# ---------------------------------------------------------------------------
-# Test: Planck filter table
-# ---------------------------------------------------------------------------
+# ── Test: Planck filter table ─────────────────────────────────────
 
 
 class TestPlanckFilterTable:
@@ -122,9 +118,7 @@ class TestPlanckFilterTable:
             )
 
 
-# ---------------------------------------------------------------------------
-# Test: Corona filter table
-# ---------------------------------------------------------------------------
+# ── Test: Corona filter table ─────────────────────────────────────
 
 
 class TestCoronaFilterTable:
@@ -155,9 +149,7 @@ class TestCoronaFilterTable:
         assert r_band[-1] > r_band[0], "Softer Gamma should give more optical"
 
 
-# ---------------------------------------------------------------------------
-# Test: nthcomp filter table
-# ---------------------------------------------------------------------------
+# ── Test: nthcomp filter table ────────────────────────────────────
 
 
 class TestNthcompFilterTable:
@@ -209,9 +201,7 @@ class TestNthcompFilterTable:
         np.testing.assert_allclose(result, expected, rtol=1e-4)
 
 
-# ---------------------------------------------------------------------------
-# Test: Full preintegration pipeline
-# ---------------------------------------------------------------------------
+# ── Test: Full preintegration pipeline ────────────────────────────
 
 
 class TestKDPreintegrationPipeline:

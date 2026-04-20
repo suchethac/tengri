@@ -37,9 +37,7 @@ if not _SSP_NONE_PATH.is_file() or not _SSP_WNE_PATH.is_file():
 _LOG10_ZSUN = -1.8477116556169435
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -87,9 +85,7 @@ def young_burst_idx(ssp_data):
     return int(np.argmin(np.abs(10.0**ssp_log_ages_yr - 3e6)))
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# ── Helpers ───────────────────────────────────────────────────────
 
 
 def _integrated_line_flux(wave, sed, line_center, half_width=15.0):
@@ -112,9 +108,7 @@ def _integrated_line_flux(wave, sed, line_center, half_width=15.0):
     return float(np.trapezoid(sed[mask], wave[mask]))
 
 
-# ===================================================================
-# 1. BakedIn vs CLOUDY grid
-# ===================================================================
+# ── 1. BakedIn vs CLOUDY grid ─────────────────────────────────────
 
 
 class TestBakedInVsCloudy:
@@ -279,9 +273,7 @@ class TestBakedInVsCloudy:
         assert 0.70 < ratio < 1.40, f"Ha at {age_myr} Myr: CLOUDY/baked={ratio:.3f}"
 
 
-# ===================================================================
-# 2. BakedIn vs Cue
-# ===================================================================
+# ── 2. BakedIn vs Cue ─────────────────────────────────────────────
 
 
 class TestBakedInVsCue:
@@ -389,9 +381,7 @@ class TestBakedInVsCue:
             assert 0.5 < ratio < 2.0, f"Cue continuum {lo}-{hi}A: ratio={ratio:.3f}"
 
 
-# ===================================================================
-# 3. CLOUDY vs Cue line-by-line
-# ===================================================================
+# ── 3. CLOUDY vs Cue line-by-line ─────────────────────────────────
 
 
 class TestCloudyVsCue:
@@ -616,9 +606,7 @@ class TestCloudyVsCue:
         assert nmad < 0.5, f"NMAD scatter: {nmad:.3f} dex, expected <0.5"
 
 
-# ===================================================================
-# 4. tengri nebular vs python-fsps CLOUDY (external reference)
-# ===================================================================
+# ── 4. tengri nebular vs python-fsps CLOUDY (external reference) ──
 
 _FSPS_NEB_REF = _DATA_DIR / "fsps_nebular_reference.npz"
 

@@ -17,9 +17,7 @@ import dataclasses
 import resource
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# Data containers
-# ---------------------------------------------------------------------------
+# ── Data containers ───────────────────────────────────────────────
 
 
 @dataclasses.dataclass(frozen=True)
@@ -98,9 +96,7 @@ class MemoryReport:
         return self.summary()
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# ── Helpers ───────────────────────────────────────────────────────
 
 
 def _arr_mb(arr: Any) -> float:
@@ -132,9 +128,7 @@ def get_rss_mb() -> float:
     return usage / 1e3  # KB → MB
 
 
-# ---------------------------------------------------------------------------
-# Profile model memory
-# ---------------------------------------------------------------------------
+# ── Profile model memory ──────────────────────────────────────────
 
 
 def profile_memory(model) -> MemoryReport:
@@ -306,9 +300,7 @@ def profile_memory(model) -> MemoryReport:
     return MemoryReport(entries=entries, rss_mb=get_rss_mb())
 
 
-# ---------------------------------------------------------------------------
-# Memory scaling
-# ---------------------------------------------------------------------------
+# ── Memory scaling ────────────────────────────────────────────────
 
 
 def profile_memory_scaling(
@@ -322,7 +314,7 @@ def profile_memory_scaling(
     Parameters
     ----------
     spec_factory : callable
-        Function that takes ``n_grid`` and returns a ParamSpec.
+        Function that takes ``n_grid`` and returns a Parameters.
     ssp : SSPData
         SSP data.
     filters : tuple

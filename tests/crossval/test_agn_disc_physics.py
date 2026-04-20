@@ -33,9 +33,7 @@ pytestmark = pytest.mark.crossval
 WAVE = jnp.geomspace(100.0, 1e8, 2000)
 
 
-# ===================================================================
-# 1. ISCO PHYSICS — Bardeen, Press & Teukolsky (1972)
-# ===================================================================
+# ── 1. ISCO PHYSICS — Bardeen, Press & Teukolsky (1972) ───────────
 
 
 class TestISCOPhysics:
@@ -84,9 +82,7 @@ class TestISCOPhysics:
         assert 0.25 < eta < 0.40, f"Max spin η should be ~0.32, got {eta}"
 
 
-# ===================================================================
-# 2. EDDINGTON LUMINOSITY — fundamental AGN scaling
-# ===================================================================
+# ── 2. EDDINGTON LUMINOSITY — fundamental AGN scaling ─────────────
 
 
 class TestEddingtonLuminosity:
@@ -112,9 +108,7 @@ class TestEddingtonLuminosity:
         assert abs(ratio - 10.0) < 0.1, f"L_Edd ratio should be 10.0, got {ratio}"
 
 
-# ===================================================================
-# 3. POWERLAW DISC — basic spectral shape
-# ===================================================================
+# ── 3. POWERLAW DISC — basic spectral shape ───────────────────────
 
 
 class TestPowerlawDiscPhysics:
@@ -166,9 +160,7 @@ class TestPowerlawDiscPhysics:
         assert float(jnp.mean(l_hot[euv_mask])) > 10.0 * float(jnp.mean(l_cool[euv_mask]))
 
 
-# ===================================================================
-# 4. MULTICOLOR DISC — Shakura-Sunyaev physics
-# ===================================================================
+# ── 4. MULTICOLOR DISC — Shakura-Sunyaev physics ──────────────────
 
 
 class TestMulticolorDiscPhysics:
@@ -231,9 +223,7 @@ class TestMulticolorDiscPhysics:
         assert jnp.all(jnp.isfinite(l_edge))
 
 
-# ===================================================================
-# 5. KUBOTA & DONE 3-ZONE DISC — multi-zone structure
-# ===================================================================
+# ── 5. KUBOTA & DONE 3-ZONE DISC — multi-zone structure ───────────
 
 
 class TestKubotaDonePhysics:
@@ -281,9 +271,7 @@ class TestKubotaDonePhysics:
             assert ratio_high > ratio_low, "Higher f_hard should boost X-ray/optical ratio"
 
 
-# ===================================================================
-# 6. ADAF — low-luminosity AGN physics
-# ===================================================================
+# ── 6. ADAF — low-luminosity AGN physics ──────────────────────────
 
 
 class TestADAFPhysics:
@@ -344,9 +332,7 @@ class TestADAFPhysics:
         )
 
 
-# ===================================================================
-# 7. BLR EMISSION — broad line physics
-# ===================================================================
+# ── 7. BLR EMISSION — broad line physics ──────────────────────────
 
 
 class TestBLRPhysics:
@@ -402,9 +388,7 @@ class TestBLRPhysics:
         assert peak_narrow > peak_broad, "Broader FWHM should give lower peak"
 
 
-# ===================================================================
-# 8. NLR EMISSION — narrow forbidden line physics
-# ===================================================================
+# ── 8. NLR EMISSION — narrow forbidden line physics ───────────────
 
 
 class TestNLRPhysics:
@@ -448,9 +432,7 @@ class TestNLRPhysics:
         )
 
 
-# ===================================================================
-# 9. TORUS MODELS — IR emission physics
-# ===================================================================
+# ── 9. TORUS MODELS — IR emission physics ─────────────────────────
 
 
 class TestTorusPhysics:
@@ -495,9 +477,7 @@ class TestTorusPhysics:
         assert float(jnp.sum(l_double[ir_mask])) > 0
 
 
-# ===================================================================
-# 10. UNIFIED AGN — Type 1/Type 2 geometry
-# ===================================================================
+# ── 10. UNIFIED AGN — Type 1/Type 2 geometry ──────────────────────
 
 
 class TestUnifiedAGNPhysics:

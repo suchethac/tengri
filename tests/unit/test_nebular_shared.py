@@ -27,9 +27,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -56,9 +54,7 @@ def single_line_lum():
     return jnp.array([1.0e40])  # erg/s
 
 
-# ---------------------------------------------------------------------------
-# place_line_profiles
-# ---------------------------------------------------------------------------
+# ── place_line_profiles ───────────────────────────────────────────
 
 
 class TestPlaceLineProfiles:
@@ -158,9 +154,7 @@ class TestPlaceLineProfiles:
         np.testing.assert_allclose(float(jnp.mean(ratio[near_line])), 2.0, rtol=1e-5)
 
 
-# ---------------------------------------------------------------------------
-# compute_qh
-# ---------------------------------------------------------------------------
+# ── compute_qh ────────────────────────────────────────────────────
 
 
 class TestComputeQh:
@@ -224,9 +218,7 @@ class TestComputeQh:
         assert jnp.isfinite(qh)
 
 
-# ---------------------------------------------------------------------------
-# compute_analytic_nebular_continuum
-# ---------------------------------------------------------------------------
+# ── compute_analytic_nebular_continuum ────────────────────────────
 
 
 class TestComputeAnalyticNebularContinuum:
@@ -312,9 +304,7 @@ class TestComputeAnalyticNebularContinuum:
         assert jnp.all(jnp.isfinite(cont))
 
 
-# ---------------------------------------------------------------------------
-# NebularContinuumFallback
-# ---------------------------------------------------------------------------
+# ── NebularContinuumFallback ──────────────────────────────────────
 
 
 class _MockLineOnlyBackend:
@@ -458,9 +448,7 @@ class TestNebularContinuumFallback:
         np.testing.assert_array_equal(np.array(result), np.array(expected))
 
 
-# ---------------------------------------------------------------------------
-# _interp_index_weight
-# ---------------------------------------------------------------------------
+# ── _interp_index_weight ──────────────────────────────────────────
 
 
 class TestInterpIndexWeight:
@@ -535,9 +523,7 @@ class TestInterpIndexWeight:
         assert reconstructed == pytest.approx(x, abs=1e-6)
 
 
-# ---------------------------------------------------------------------------
-# Metallicity convention converters
-# ---------------------------------------------------------------------------
+# ── Metallicity convention converters ─────────────────────────────
 
 
 class TestMetallicityConverters:

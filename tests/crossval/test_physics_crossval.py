@@ -16,9 +16,7 @@ pytestmark = pytest.mark.crossval
 _LSUN_ERG = 3.828e33
 
 
-# ===================================================================
-# 1. Cosmology: luminosity distance vs astropy
-# ===================================================================
+# ── 1. Cosmology: luminosity distance vs astropy ──────────────────
 
 
 class TestCosmologyCrossval:
@@ -87,9 +85,7 @@ class TestCosmologyCrossval:
         assert all(dls[i] < dls[i + 1] for i in range(len(dls) - 1))
 
 
-# ===================================================================
-# 2. Dust attenuation laws vs literature
-# ===================================================================
+# ── 2. Dust attenuation laws vs literature ────────────────────────
 
 
 class TestDustLawsCrossval:
@@ -149,9 +145,7 @@ class TestDustLawsCrossval:
         np.testing.assert_allclose(k[0], (2000.0 / 5500.0) ** (-0.7), rtol=0.01)
 
 
-# ===================================================================
-# 3. PSD models: Wiener-Khinchin theorem
-# ===================================================================
+# ── 3. PSD models: Wiener-Khinchin theorem ────────────────────────
 
 
 class TestPSDCrossval:
@@ -187,9 +181,7 @@ class TestPSDCrossval:
         assert psd[-1] < psd[0] * 0.1
 
 
-# ===================================================================
-# 4. Mean SFH: analytical properties
-# ===================================================================
+# ── 4. Mean SFH: analytical properties ────────────────────────────
 
 
 class TestMeanSFHCrossval:
@@ -222,9 +214,7 @@ class TestMeanSFHCrossval:
         np.testing.assert_allclose(np.asarray(sfr2), np.asarray(sfr1) * 2, rtol=1e-10)
 
 
-# ===================================================================
-# 5. Spectroscopy: velocity broadening
-# ===================================================================
+# ── 5. Spectroscopy: velocity broadening ──────────────────────────
 
 
 class TestSpectroscopyCrossval:
@@ -260,9 +250,7 @@ class TestSpectroscopyCrossval:
         np.testing.assert_allclose(flux_broad, flux_orig, rtol=0.10)
 
 
-# ===================================================================
-# 6. BLR/NLR emission lines
-# ===================================================================
+# ── 6. BLR/NLR emission lines ─────────────────────────────────────
 
 
 class TestBLRNLRCrossval:
@@ -314,9 +302,7 @@ class TestBLRNLRCrossval:
         np.testing.assert_allclose(ratio, 10.0, rtol=0.5)
 
 
-# ===================================================================
-# 7. Filters: effective wavelengths vs FSPS
-# ===================================================================
+# ── 7. Filters: effective wavelengths vs FSPS ─────────────────────
 
 _FSPS_FILTER_LAMBDAEFF = {
     "sdss_u": 3556.5,
@@ -360,9 +346,7 @@ class TestFiltersCrossval:
         )
 
 
-# ===================================================================
-# 8. Noise model: Student-t likelihood
-# ===================================================================
+# ── 8. Noise model: Student-t likelihood ──────────────────────────
 
 
 class TestNoiseCrossval:

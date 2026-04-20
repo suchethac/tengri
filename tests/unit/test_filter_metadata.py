@@ -16,9 +16,7 @@ from tengri.observation.filters import (
     list_available_filters,
 )
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -42,9 +40,7 @@ def tophat_filter():
     return wave, trans
 
 
-# ---------------------------------------------------------------------------
-# compute_effective_wavelength
-# ---------------------------------------------------------------------------
+# ── compute_effective_wavelength ──────────────────────────────────
 
 
 class TestComputeEffectiveWavelength:
@@ -89,9 +85,7 @@ class TestComputeEffectiveWavelength:
         assert isinstance(compute_effective_wavelength(wave, trans), float)
 
 
-# ---------------------------------------------------------------------------
-# compute_fwhm
-# ---------------------------------------------------------------------------
+# ── compute_fwhm ──────────────────────────────────────────────────
 
 
 class TestComputeFWHM:
@@ -129,9 +123,7 @@ class TestComputeFWHM:
         assert isinstance(compute_fwhm(wave, trans), float)
 
 
-# ---------------------------------------------------------------------------
-# _format_wavelength (private but critical for display)
-# ---------------------------------------------------------------------------
+# ── _format_wavelength (private but critical for display) ─────────
 
 
 class TestFormatWavelength:
@@ -175,9 +167,7 @@ class TestFormatWavelength:
         assert "cm" in at_boundary
 
 
-# ---------------------------------------------------------------------------
-# _infer_facility
-# ---------------------------------------------------------------------------
+# ── _infer_facility ───────────────────────────────────────────────
 
 
 class TestInferFacility:
@@ -208,9 +198,7 @@ class TestInferFacility:
         assert _infer_facility("") == "Other"
 
 
-# ---------------------------------------------------------------------------
-# filter_info
-# ---------------------------------------------------------------------------
+# ── filter_info ───────────────────────────────────────────────────
 
 
 class TestFilterInfo:
@@ -271,9 +259,7 @@ class TestFilterInfo:
         assert "\u03bcm" in info["lambda_eff_str"] or "μm" in info["lambda_eff_str"]
 
 
-# ---------------------------------------------------------------------------
-# list_available_filters (enhanced)
-# ---------------------------------------------------------------------------
+# ── list_available_filters (enhanced) ─────────────────────────────
 
 
 class TestListAvailableFiltersEnhanced:

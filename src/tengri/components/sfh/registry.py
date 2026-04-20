@@ -37,12 +37,14 @@ from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
 from tengri.components.sfh.mean_sfh import (
     AGEMAX_YR,
     constant_sfh,
+    constant_then_exponential_sfh,
     declining_exponential_sfh,
     delayed_exponential_sfh,
     dpl,
     exponential_sfh,
     lnorm,
     norm,
+    psb_wild2020,
     snorm,
     triweight_burst,
     tsnorm,
@@ -51,9 +53,7 @@ from tengri.components.sfh.nonparametric import continuity_sfh, dirichlet_sfh
 from tengri.components.sfh.psd_models import drw_variance
 from tengri.parameters.priors import Distribution, Fixed, Uniform
 
-# ---------------------------------------------------------------------------
-# Data structures
-# ---------------------------------------------------------------------------
+# ── Data structures ───────────────────────────────────────────────
 
 
 class ParamDef(NamedTuple):
@@ -105,9 +105,7 @@ class SFHModelSpec(NamedTuple):
     composition_type: str
 
 
-# ---------------------------------------------------------------------------
-# Registries
-# ---------------------------------------------------------------------------
+# ── Registries ────────────────────────────────────────────────────
 
 SFH_REGISTRY: dict[str, SFHModelSpec] = {}
 
@@ -126,9 +124,7 @@ def _register(spec: SFHModelSpec) -> None:
     SFH_REGISTRY[spec.name] = spec
 
 
-# ---------------------------------------------------------------------------
-# Register smooth (additive) models
-# ---------------------------------------------------------------------------
+# ── Register smooth (additive) models ─────────────────────────────
 
 # --- tsnorm (truncated skew-normal) — canonical: truncated_skewnormal_sfh ---
 _tsnorm_spec = SFHModelSpec(
@@ -385,10 +381,110 @@ _register(
     )
 )
 
+# --- const_exp (constant + exponential decline — "quenching at time T") ---
+_register(
+    SFHModelSpec(
+        name="const_exp",
+        fn=constant_then_exponential_sfh,
+        params={
+            "sfh_cexp_log_sfr": ParamDef(
+                "log10 constant SFR before quenching (Msun/yr)",
+                _always_true,
+                "",
+                Uniform(-1.0, 3.0),
+            ),
+            "sfh_cexp_tau_gyr": ParamDef(
+                "Post-quench e-folding timescale (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 10.0),
+            ),
+            "sfh_cexp_quench_gyr": ParamDef(
+                "Lookback time when quenching began (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, 10.0),
+            ),
+            "sfh_cexp_age_gyr": ParamDef(
+                "Galaxy age / lookback to formation (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 13.0),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_cexp_log_sfr": ("log_sfr", 1.0, 0.0),
+            "sfh_cexp_tau_gyr": ("tau", 1e9, 0.0),
+            "sfh_cexp_quench_gyr": ("quench_age", 1e9, 0.0),
+            "sfh_cexp_age_gyr": ("age", 1e9, 0.0),
+        },
+        composition_type="additive",
+    )
+)
+SFH_REGISTRY["constant_then_exponential"] = SFH_REGISTRY["const_exp"]
 
-# ---------------------------------------------------------------------------
-# Register tabulated SFH model (for simulations)
-# ---------------------------------------------------------------------------
+
+# --- psb (post-starburst, Wild+2020) ---
+_register(
+    SFHModelSpec(
+        name="psb",
+        fn=psb_wild2020,
+        params={
+            "sfh_psb_log_peak_sfr": ParamDef(
+                "log10 overall SFR normalization (Msun/yr)",
+                _always_true,
+                "",
+                Uniform(-1.0, 3.0),
+            ),
+            "sfh_psb_age_gyr": ParamDef(
+                "Galaxy age / lookback to formation (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 13.0),
+            ),
+            "sfh_psb_tau_gyr": ParamDef(
+                "Old-component e-folding timescale (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 10.0),
+            ),
+            "sfh_psb_burstage_gyr": ParamDef(
+                "Lookback time of burst onset (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, 5.0),
+            ),
+            "sfh_psb_alpha": ParamDef(
+                "DPL burst falling slope", _lo_positive, "must have lo > 0", Uniform(0.5, 5.0)
+            ),
+            "sfh_psb_beta": ParamDef(
+                "DPL burst rising slope", _lo_positive, "must have lo > 0", Uniform(0.5, 5.0)
+            ),
+            "sfh_psb_fburst": ParamDef(
+                "Burst mass fraction",
+                lambda lo, hi: lo >= 0 and hi <= 1,
+                "must be in [0, 1]",
+                Uniform(0.01, 0.99),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_psb_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+            "sfh_psb_age_gyr": ("age", 1e9, 0.0),
+            "sfh_psb_tau_gyr": ("tau", 1e9, 0.0),
+            "sfh_psb_burstage_gyr": ("burstage", 1e9, 0.0),
+            "sfh_psb_alpha": ("alpha", 1.0, 0.0),
+            "sfh_psb_beta": ("beta", 1.0, 0.0),
+            "sfh_psb_fburst": ("fburst", 1.0, 0.0),
+        },
+        composition_type="additive",
+    )
+)
+SFH_REGISTRY["psb_wild2020"] = SFH_REGISTRY["psb"]
+
+
+# ── Register tabulated SFH model (for simulations) ────────────────
 
 
 def _table_sfh_placeholder(t_lookback, **kwargs):
@@ -408,9 +504,7 @@ _register(
 )
 
 
-# ---------------------------------------------------------------------------
-# Register non-parametric SFH models (Leja+2017, Leja+2019)
-# ---------------------------------------------------------------------------
+# ── Register non-parametric SFH models (Leja+2017, Leja+2019) ─────
 
 # --- continuity (Leja+2019): piecewise-constant with Student-t smoothness prior ---
 _register(
@@ -554,9 +648,7 @@ _register(
 SFH_REGISTRY["dbp"] = SFH_REGISTRY["dense_basis_pure"]
 
 
-# ---------------------------------------------------------------------------
-# Register burst (mixture) model
-# ---------------------------------------------------------------------------
+# ── Register burst (mixture) model ────────────────────────────────
 
 _register(
     SFHModelSpec(
@@ -587,9 +679,7 @@ _register(
 )
 
 
-# ---------------------------------------------------------------------------
-# Register field (modulator) model
-# ---------------------------------------------------------------------------
+# ── Register field (modulator) model ──────────────────────────────
 
 
 def _field_fn_placeholder(t_lookback, **kwargs):
@@ -622,9 +712,7 @@ _register(
 )
 
 
-# ---------------------------------------------------------------------------
-# Composition: resolve_sfh()
-# ---------------------------------------------------------------------------
+# ── Composition: resolve_sfh() ────────────────────────────────────
 
 
 def resolve_sfh(

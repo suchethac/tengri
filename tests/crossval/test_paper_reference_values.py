@@ -16,9 +16,7 @@ jax.config.update("jax_enable_x64", True)
 pytestmark = pytest.mark.crossval
 
 
-# ===================================================================
-# 1. CALZETTI+2000 — Table 1, Eq. 2-4
-# ===================================================================
+# ── 1. CALZETTI+2000 — Table 1, Eq. 2-4 ───────────────────────────
 
 
 class TestCalzetti2000:
@@ -76,9 +74,7 @@ class TestCalzetti2000:
         np.testing.assert_allclose(k, k_expected, rtol=0.01)
 
 
-# ===================================================================
-# 2. CARDELLI, CLAYTON & MATHIS 1989 — Table 3
-# ===================================================================
+# ── 2. CARDELLI, CLAYTON & MATHIS 1989 — Table 3 ──────────────────
 
 
 class TestCardelli1989:
@@ -125,9 +121,7 @@ class TestCardelli1989:
         )
 
 
-# ===================================================================
-# 3. PEI 1992 — SMC/LMC extinction curves
-# ===================================================================
+# ── 3. PEI 1992 — SMC/LMC extinction curves ───────────────────────
 
 
 class TestPei1992:
@@ -172,9 +166,7 @@ class TestPei1992:
         assert len(_LMC_LAM) == 6
 
 
-# ===================================================================
-# 4. ALLEN+2008 — MAPPINGS III shock model reference values
-# ===================================================================
+# ── 4. ALLEN+2008 — MAPPINGS III shock model reference values ─────
 
 
 class TestAllen2008:
@@ -236,9 +228,7 @@ class TestAllen2008:
         np.testing.assert_allclose(float(_FALLBACK_R_OIII[-1]), 2.5, atol=0.5)
 
 
-# ===================================================================
-# 5. MAHADEVAN 1997 — ADAF synchrotron peak frequency
-# ===================================================================
+# ── 5. MAHADEVAN 1997 — ADAF synchrotron peak frequency ───────────
 
 
 class TestMahadevan1997:
@@ -308,9 +298,7 @@ class TestMahadevan1997:
         )
 
 
-# ===================================================================
-# 6. BARDEEN, PRESS & TEUKOLSKY 1972 — ISCO radius
-# ===================================================================
+# ── 6. BARDEEN, PRESS & TEUKOLSKY 1972 — ISCO radius ──────────────
 
 
 class TestBPT1972:
@@ -348,9 +336,7 @@ class TestBPT1972:
         np.testing.assert_allclose(r, 2.321, atol=0.05)
 
 
-# ===================================================================
-# 7. LI+2008 — Eq. 1 three-term attenuation curve
-# ===================================================================
+# ── 7. LI+2008 — Eq. 1 three-term attenuation curve ───────────────
 
 
 class TestLi2008:
@@ -395,9 +381,7 @@ class TestLi2008:
         assert k_at_2175 > interpolated, "MW preset must show 2175A bump"
 
 
-# ===================================================================
-# 8. VANDEN BERK+2001 — BLR line relative strengths
-# ===================================================================
+# ── 8. VANDEN BERK+2001 — BLR line relative strengths ─────────────
 
 
 class TestVandenBerk2001:
@@ -436,9 +420,7 @@ class TestVandenBerk2001:
         assert mgii_strength > 0.1, f"MgII should be present, got strength {mgii_strength}"
 
 
-# ===================================================================
-# 9. BELLSTEDT+2020 — skew-normal SFH formulation
-# ===================================================================
+# ── 9. BELLSTEDT+2020 — skew-normal SFH formulation ───────────────
 
 
 class TestBellstedt2020:
@@ -466,9 +448,7 @@ class TestBellstedt2020:
         assert corr > 0.8, "tsnorm(trunc=1) should be similar to snorm"
 
 
-# ===================================================================
-# 10. LEJA+2019 — Continuity SFH prior
-# ===================================================================
+# ── 10. LEJA+2019 — Continuity SFH prior ──────────────────────────
 
 
 class TestLeja2019:
@@ -510,9 +490,7 @@ class TestLeja2019:
             assert cv < 0.5, f"Zero ratios should give ~flat SFH, CV={cv:.2f}"
 
 
-# ===================================================================
-# 11. EDDINGTON LUMINOSITY — fundamental physics
-# ===================================================================
+# ── 11. EDDINGTON LUMINOSITY — fundamental physics ────────────────
 
 
 class TestEddingtonPhysics:
@@ -538,9 +516,7 @@ class TestEddingtonPhysics:
         np.testing.assert_allclose(r_g, expected, rtol=0.02)
 
 
-# ===================================================================
-# 12. SFH MASS CONSERVATION — dense_basis and continuity
-# ===================================================================
+# ── 12. SFH MASS CONSERVATION — dense_basis and continuity ────────
 
 
 class TestSFHMassConservation:
@@ -645,9 +621,7 @@ class TestSFHMassConservation:
         )
 
 
-# ===================================================================
-# 13. CHARLOT & FALL 2000 — two-component dust attenuation
-# ===================================================================
+# ── 13. CHARLOT & FALL 2000 — two-component dust attenuation ──────
 
 
 class TestCharlotFall2000:
@@ -755,9 +729,7 @@ class TestCharlotFall2000:
         )
 
 
-# ===================================================================
-# 14. WG00 DUST GEOMETRY LIMITS
-# ===================================================================
+# ── 14. WG00 DUST GEOMETRY LIMITS ─────────────────────────────────
 
 
 class TestWittGordon2000Limits:
@@ -819,9 +791,7 @@ class TestWittGordon2000Limits:
         )
 
 
-# ===================================================================
-# 15. BELL 2003 — FIR-Radio correlation
-# ===================================================================
+# ── 15. BELL 2003 — FIR-Radio correlation ─────────────────────────
 
 
 class TestBell2003Radio:
@@ -906,9 +876,7 @@ class TestBell2003Radio:
         )
 
 
-# ===================================================================
-# 16. RANALLI+2003 — XRB calibration
-# ===================================================================
+# ── 16. RANALLI+2003 — XRB calibration ────────────────────────────
 
 
 class TestRanalli2003XRay:
@@ -937,9 +905,7 @@ class TestRanalli2003XRay:
         )
 
 
-# ===================================================================
-# 17. INOUE+2014 — IGM opacity
-# ===================================================================
+# ── 17. INOUE+2014 — IGM opacity ──────────────────────────────────
 
 
 class TestInoue2014IGM:
@@ -990,9 +956,7 @@ class TestInoue2014IGM:
         )
 
 
-# ===================================================================
-# 18. OSTERBROCK & FERLAND 2006 — Case B Balmer decrements
-# ===================================================================
+# ── 18. OSTERBROCK & FERLAND 2006 — Case B Balmer decrements ──────
 
 
 class TestOsterbrockCaseB:
@@ -1116,9 +1080,7 @@ class TestOsterbrockCaseB:
         )
 
 
-# ===================================================================
-# 19. STOREY & ZEIPPEN 2000 — Forbidden-line doublet A-coefficient ratios
-# ===================================================================
+# ── 19. STOREY & ZEIPPEN 2000 — Forbidden-line doublet A-coefficient ratios
 
 
 class TestStoreyZeippen2000:
@@ -1224,9 +1186,7 @@ class TestStoreyZeippen2000:
         )
 
 
-# ===================================================================
-# 20. KENNICUTT 1998 — Hα SFR calibration
-# ===================================================================
+# ── 20. KENNICUTT 1998 — Hα SFR calibration ───────────────────────
 
 
 class TestKennicutt1998:

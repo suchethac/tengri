@@ -15,9 +15,7 @@ from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import ParamSpec
 from tengri.parameters.priors import Uniform
 
-# ---------------------------------------------------------------------------
-# Skip if SSP data not available
-# ---------------------------------------------------------------------------
+# ── Skip if SSP data not available ────────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 _SSP_EXISTS = _SSP_FILE.is_file()
@@ -115,9 +113,7 @@ def typical_params(parametric_spec):
     return parametric_spec.sample(jax.random.PRNGKey(42))
 
 
-# ===================================================================
-# SED Predictions
-# ===================================================================
+# ── SED Predictions ───────────────────────────────────────────────
 
 
 class TestPredictSed:
@@ -187,9 +183,7 @@ class TestPredictDerived:
         assert 1e7 < mass < 1e13
 
 
-# ===================================================================
-# Stochastic Model
-# ===================================================================
+# ── Stochastic Model ──────────────────────────────────────────────
 
 
 class TestStochastic:
@@ -207,9 +201,7 @@ class TestStochastic:
         assert not jnp.allclose(sfh["sfr_mean"], sfh["sfr_full"])
 
 
-# ===================================================================
-# DPL Model
-# ===================================================================
+# ── DPL Model ─────────────────────────────────────────────────────
 
 
 class TestDPL:
@@ -226,9 +218,7 @@ class TestDPL:
         assert float(d["stellar_mass"]) > 0
 
 
-# ===================================================================
-# Mock Generation
-# ===================================================================
+# ── Mock Generation ───────────────────────────────────────────────
 
 
 class TestMock:
@@ -251,9 +241,7 @@ class TestMock:
         assert mock_batch.flux_obs.shape == (5, 5)
 
 
-# ===================================================================
-# Gradient Flow
-# ===================================================================
+# ── Gradient Flow ─────────────────────────────────────────────────
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -295,9 +283,7 @@ class TestGradients:
         )
 
 
-# ===================================================================
-# Prediction API (lazy derived quantities)
-# ===================================================================
+# ── Prediction API (lazy derived quantities) ──────────────────────
 
 
 class TestPrediction:
@@ -506,10 +492,8 @@ class TestPrediction:
         np.testing.assert_allclose(float(d["sfr_100myr"]), float(pred.sfh.sfr_100myr), rtol=1e-8)
 
 
-# ---------------------------------------------------------------------------
-# Dust emission wiring in forward model
+# ── Dust emission wiring in forward model ─────────────────────────
 # (Migrated from test_new_physics.py during test audit 2026-04-08)
-# ---------------------------------------------------------------------------
 
 
 class TestDustEmissionForwardModel:

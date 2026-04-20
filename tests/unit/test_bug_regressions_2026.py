@@ -18,9 +18,7 @@ import jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
 
-# ===================================================================
-# 1. QSOgen Balmer continuum optical depth direction
-# ===================================================================
+# ── 1. QSOgen Balmer continuum optical depth direction ────────────
 
 
 class TestBalmerContinuumTauDirection:
@@ -49,9 +47,7 @@ class TestBalmerContinuumTauDirection:
         )
 
 
-# ===================================================================
-# 2. QSOgen hot dust BB normalization
-# ===================================================================
+# ── 2. QSOgen hot dust BB normalization ───────────────────────────
 
 
 class TestHotDustNormalization:
@@ -95,9 +91,7 @@ class TestHotDustNormalization:
         )
 
 
-# ===================================================================
-# 3. agn_torus_frac gradient discontinuity
-# ===================================================================
+# ── 3. agn_torus_frac gradient discontinuity ──────────────────────
 
 
 class TestTorusFracGradientContinuity:
@@ -142,9 +136,7 @@ class TestTorusFracGradientContinuity:
         # If step==0, gradient is constant across the region — perfectly smooth
 
 
-# ===================================================================
-# 4. Shock sigma_nu Å→cm conversion
-# ===================================================================
+# ── 4. Shock sigma_nu Å→cm conversion ─────────────────────────────
 
 
 class TestShockSigmaNuConversion:
@@ -179,9 +171,7 @@ class TestShockSigmaNuConversion:
             )
 
 
-# ===================================================================
-# 5. Vacuum wavelength consistency for emission lines
-# ===================================================================
+# ── 5. Vacuum wavelength consistency for emission lines ───────────
 
 
 class TestVacuumWavelengthConsistency:
@@ -225,9 +215,7 @@ class TestVacuumWavelengthConsistency:
         )
 
 
-# ===================================================================
-# 6. ADAF synchrotron self-absorption spectral index ν^2 vs ν^{5/2}
-# ===================================================================
+# ── 6. ADAF synchrotron self-absorption spectral index ν^2 vs ν^{5/2}
 
 
 class TestAdafSyncSpectralIndex:
@@ -274,9 +262,7 @@ class TestAdafSyncSpectralIndex:
             )
 
 
-# ===================================================================
-# 7. Bell (2003) synchrotron suppression formula
-# ===================================================================
+# ── 7. Bell (2003) synchrotron suppression formula ────────────────
 
 
 class TestBell2003SynchrotronSuppression:
@@ -330,9 +316,7 @@ class TestBell2003SynchrotronSuppression:
         )
 
 
-# ===================================================================
-# 8. Evolving metallicity KeyError fallback (BUG-NSS-02)
-# ===================================================================
+# ── 8. Evolving metallicity KeyError fallback (BUG-NSS-02) ────────
 
 
 class TestEvolvingMetallicityFallback:
@@ -364,9 +348,7 @@ class TestEvolvingMetallicityFallback:
         assert abs(val - (-1.8477)) < 1e-9, f"Expected -1.8477, got {val}"
 
 
-# ===================================================================
-# 9. CLOUDY line grid fixed-axis collapsing (BUG-07)
-# ===================================================================
+# ── 9. CLOUDY line grid fixed-axis collapsing (BUG-07) ────────────
 
 
 class TestCloudyLineGridCollapse:

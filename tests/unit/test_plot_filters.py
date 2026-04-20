@@ -18,9 +18,7 @@ from tengri.analysis.plotting.filters import (
     plot_filter_curves,
 )
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture(autouse=True)
@@ -34,9 +32,7 @@ OPTICAL_FILTERS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 IR_FILTERS = ["2mass_j", "2mass_h", "2mass_ks"]
 
 
-# ---------------------------------------------------------------------------
-# plot_filter_curves
-# ---------------------------------------------------------------------------
+# ── plot_filter_curves ────────────────────────────────────────────
 
 
 class TestPlotFilterCurves:
@@ -108,9 +104,7 @@ class TestPlotFilterCurves:
         assert "Normalized" not in ax_raw.get_ylabel()
 
 
-# ---------------------------------------------------------------------------
-# plot_filter_coverage
-# ---------------------------------------------------------------------------
+# ── plot_filter_coverage ──────────────────────────────────────────
 
 
 class TestPlotFilterCoverage:
@@ -160,9 +154,7 @@ class TestPlotFilterCoverage:
         assert labels[-1] == "sdss_z"
 
 
-# ---------------------------------------------------------------------------
-# compare_filter_sets
-# ---------------------------------------------------------------------------
+# ── compare_filter_sets ───────────────────────────────────────────
 
 
 class TestCompareFilterSets:

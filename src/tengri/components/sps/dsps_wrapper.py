@@ -536,9 +536,7 @@ def compute_csp_weights(
     return sfr_on_ssp_ages * dt
 
 
-# ---------------------------------------------------------------------------
-# Alpha-element enhancement
-# ---------------------------------------------------------------------------
+# ── Alpha-element enhancement ─────────────────────────────────────
 
 # Coefficient converting [alpha/Fe] to total metallicity offset.
 # Alpha elements (O, Mg, Si, Ca, Ti) dominate the metal mass budget,
@@ -874,9 +872,7 @@ def interpolate_metallicity(
     return (1.0 - frac) * ssp_flux[idx] + frac * ssp_flux[idx + 1]
 
 
-# ---------------------------------------------------------------------------
-# Smooth metallicity interpolation (triweight kernel, DSPS-compatible)
-# ---------------------------------------------------------------------------
+# ── Smooth metallicity interpolation (triweight kernel, DSPS-compatible)
 
 _LGMET_LO = -4.0
 _LGMET_HI = 0.5

@@ -39,9 +39,7 @@ def wide_wave():
     return jnp.logspace(3, 7, 3000)
 
 
-# ===================================================================
-# DL07 Tabulated Template Tests
-# ===================================================================
+# ── DL07 Tabulated Template Tests ─────────────────────────────────
 
 
 class TestDL07Tabulated:
@@ -227,9 +225,7 @@ class TestDL07Tabulated:
         assert 1.9 < ratio < 2.1, f"Doubling L_abs should double flux, got ratio={ratio:.4f}"
 
 
-# ===================================================================
-# Dale+2014 Tabulated Template Tests
-# ===================================================================
+# ── Dale+2014 Tabulated Template Tests ────────────────────────────
 
 
 class TestDale2014Tabulated:
@@ -333,9 +329,7 @@ class TestDale2014Tabulated:
         )
 
 
-# ===================================================================
-# SKIRTOR Template Tests
-# ===================================================================
+# ── SKIRTOR Template Tests ────────────────────────────────────────
 
 
 class TestSKIRTORTemplates:
@@ -384,9 +378,7 @@ class TestSKIRTORTemplates:
         assert 1e4 < peak_wave < 1e6, f"Torus peak at {peak_wave:.0f} A, expected MIR (1e4-1e6 A)"
 
 
-# ===================================================================
-# Registry and Lazy Loading Tests
-# ===================================================================
+# ── Registry and Lazy Loading Tests ───────────────────────────────
 
 
 class TestRegistryAndLazyLoading:
@@ -435,9 +427,7 @@ class TestRegistryAndLazyLoading:
         assert callable(draine_li2014)
 
 
-# ===================================================================
-# Toy Model Warning Tests
-# ===================================================================
+# ── Toy Model Warning Tests ───────────────────────────────────────
 
 
 class TestToyModelWarnings:
@@ -463,10 +453,8 @@ class TestToyModelWarnings:
         assert "warning" in skirtor.skirtor_analytic.__doc__.lower() or True
 
 
-# =====================================================================
-# Draine & Li 2014 — extended parameter range and alpha parameter
+# ── Draine & Li 2014 — extended parameter range and alpha parameter
 # (Migrated from test_new_physics.py during test audit 2026-04-08)
-# =====================================================================
 
 
 class TestDL14ExtendedRange:

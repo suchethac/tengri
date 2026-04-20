@@ -1,7 +1,7 @@
 """Inference engine: fit observed data using MAP, NUTS, Ray Tracing, or geoVI.
 
 The Fitter separates inference strategy from the forward model. It builds
-a loss function from the SEDModel's predictions and the ParamSpec's priors,
+a loss function from the SEDModel's predictions and the Parameters's priors,
 then runs the chosen optimizer/sampler.
 
 Usage:
@@ -35,9 +35,7 @@ from tengri.inference.loss_functions import (
 from tengri.parameters.priors import Gaussian, Uniform
 from tengri.runtime.exceptions import ParameterError
 
-# ---------------------------------------------------------------------------
-# Method name unification
-# ---------------------------------------------------------------------------
+# ── Method name unification ────────────────────────────────────────────
 
 # Maps deprecated/old method strings → new canonical names.
 _DEPRECATED_METHOD_ALIASES: dict[str, str] = {
@@ -61,6 +59,11 @@ _DEPRECATED_METHOD_ALIASES: dict[str, str] = {
     # MCMC
     "raytrace": "mcmc_raytrace",
     "nuts": "mcmc_nuts",
+    "hmc": "mcmc_hmc",
+    "dynamic_hmc": "mcmc_dynamic_hmc",
+    "ghmc": "mcmc_ghmc",
+    "mclmc": "mcmc_mclmc",
+    "adjusted_mclmc": "mcmc_adjusted_mclmc",
     "elliptical_slice": "mcmc_ess",
     # Evidence
     "evidence": "nss",
@@ -83,6 +86,11 @@ _CANONICAL_METHODS = {
     "mcmc",  # auto: NUTS (D≤20) or Ray Tracing (D>20)
     "mcmc_raytrace",
     "mcmc_nuts",
+    "mcmc_hmc",
+    "mcmc_dynamic_hmc",
+    "mcmc_ghmc",
+    "mcmc_mclmc",
+    "mcmc_adjusted_mclmc",
     "mcmc_ess",
     "map",
     "laplace",
@@ -190,11 +198,11 @@ class Fitter:
         coefficient.  Default 1.0.
     eline_marginalize : bool or None
         Whether to analytically marginalize emission line amplitudes.
-        ``None`` (default) auto-detects from the model's ``SpectroscopyConfig``
+        ``None`` (default) auto-detects from the model's ``Spectroscopy``
         (uses ``eline_mode="marginalized"`` setting).
     eline_prior_type : str or None
         Prior type for emission lines: ``"flat"`` or ``"cloudy"``.
-        ``None`` auto-detects from ``SpectroscopyConfig.eline_prior_type``.
+        ``None`` auto-detects from ``Spectroscopy.eline_prior_type``.
     """
 
     def __init__(
@@ -203,6 +211,7 @@ class Fitter:
         data,
         noise,
         data_type=None,
+        data_mask=None,
         calibration_marginalize=False,
         cal_n_poly=3,
         cal_prior_sigma=1.0,
@@ -212,6 +221,7 @@ class Fitter:
         self.model = model
         self.data = jnp.asarray(data)
         self.noise = jnp.asarray(noise)
+        self.data_mask = jnp.asarray(data_mask) if data_mask is not None else None
 
         # Infer data_type from Observation if not provided
         if data_type is None:
@@ -338,7 +348,7 @@ class Fitter:
             self._eline_prior_width_dex = 0.3
             self._eline_amplitude_names = []
 
-        # Consistency check: SpectroscopyConfig.eline_broad vs ParamSpec.eline_broad
+        # Consistency check: SpectroscopyConfig.eline_broad vs Parameters.eline_broad
         if _spec_config is not None and getattr(_spec_config, "eline_broad", False):
             spec_has_broad = getattr(self.spec, "eline_broad", False)
             if not spec_has_broad:
@@ -375,6 +385,25 @@ class Fitter:
             "sqrt_noise_inv": jnp.sqrt(noise_inv),
             "n_data": jnp.int32(len(self.data)),
         }
+        if self.data_mask is not None:
+            self._data_args["data_mask"] = self.data_mask
+
+        obs = getattr(model, "observation", None)
+        if obs is not None:
+            spec_cfg = getattr(obs, "spectroscopy", None)
+            if spec_cfg is not None and getattr(spec_cfg, "has_covariance", False):
+                self._data_args["spec_cov_inv"] = spec_cfg.cov_inv
+
+            line_flux_cfg = getattr(obs, "line_fluxes", None)
+            if line_flux_cfg is not None:
+                self._data_args["line_flux_obs"] = line_flux_cfg.fluxes
+                self._data_args["line_flux_err"] = line_flux_cfg.errors
+                self._data_args["line_flux_waves"] = line_flux_cfg.wavelengths
+
+            index_cfg = getattr(obs, "spectral_indices", None)
+            if index_cfg is not None:
+                self._data_args["index_obs"] = index_cfg.values
+                self._data_args["index_err"] = index_cfg.errors
 
         # JIT posterior sampler — call compile() to pre-compile, or it
         # compiles lazily on first VI run.
@@ -533,16 +562,15 @@ class Fitter:
         lines.append("")
         lines.append(
             "  Methods:     vi, vi_linear, vi_nifty_fast, vi_nifty_fast_linear, "
-            "vi_native, vi_native_linear, mcmc, mcmc_raytrace, mcmc_nuts, mcmc_ess, "
-            "map, laplace, pathfinder, nss, auto"
+            "vi_native, vi_native_linear, mcmc, mcmc_raytrace, mcmc_nuts, "
+            "mcmc_hmc, mcmc_dynamic_hmc, mcmc_ghmc, mcmc_mclmc, "
+            "mcmc_adjusted_mclmc, mcmc_ess, map, laplace, pathfinder, nss, auto"
         )
 
         lines.append(sep)
         return "\n".join(lines)
 
-    # -------------------------------------------------------------------
-    # Loss function construction
-    # -------------------------------------------------------------------
+    # ── Loss function construction ──────────────────────────────────
 
     def _get_mode_for_method(self, method: str) -> str:
         """Determine forward model prediction mode based on inference method.
@@ -705,9 +733,7 @@ class Fitter:
 
         return params
 
-    # -------------------------------------------------------------------
-    # Convert unbounded samples to physical space
-    # -------------------------------------------------------------------
+    # ── Unbounded ↔ physical transforms ─────────────────────────────
 
     def _to_physical(self, params_unbounded):
         """Convert a single unbounded param dict to physical space."""
@@ -721,9 +747,7 @@ class Fitter:
             params["psd_xi"] = params_unbounded["psd_xi"]
         return params
 
-    # -------------------------------------------------------------------
-    # Posterior sampling
-    # -------------------------------------------------------------------
+    # ── Posterior sampling ──────────────────────────────────────────
 
     def _draw_posterior_samples(
         self,
@@ -969,11 +993,11 @@ class Fitter:
 
         else:
             _logdensity_2arg = self._get_or_build_logdensity_fn()
-            _data_args = self._data_args
+            _da = self._data_args
 
             @jax.jit
             def logdensity_fn(x):
-                return _logdensity_2arg(x, _data_args)
+                return _logdensity_2arg(x, _da)
 
         warmup_key, sample_key = jax.random.split(key)
         n_warmup = min(200, n_samples)
@@ -1036,9 +1060,7 @@ class Fitter:
 
         return existing_samples
 
-    # -------------------------------------------------------------------
-    # Fully JIT'd EVI optimizer
-    # -------------------------------------------------------------------
+    # ── Fully JIT'd EVI optimizer ───────────────────────────────────
 
     def _run_vi_native(self, *, key, init_from=None, **kwargs):
         from tengri.inference.backends.vi.native import run_native_vi
@@ -1065,6 +1087,11 @@ class Fitter:
             ``"vi_native"``            — Native JAX geoVI (experimental).
             ``"vi_native_linear"``     — Native JAX MGVI (experimental).
             ``"mcmc_nuts"``            — NUTS via BlackJAX (default for D≤20).
+            ``"mcmc_hmc"``             — Standard HMC (fixed trajectory length).
+            ``"mcmc_dynamic_hmc"``     — Dynamic HMC (adaptive trajectory).
+            ``"mcmc_ghmc"``            — Generalized HMC (partial momentum refresh).
+            ``"mcmc_mclmc"``           — MCLMC (O(1) grad/sample, biased).
+            ``"mcmc_adjusted_mclmc"``  — Adjusted MCLMC (Metropolis-corrected).
             ``"mcmc_raytrace"``        — Ray Tracing (Behroozi 2025).
             ``"mcmc"``                 — Auto: NUTS (D≤20) or Ray Tracing (D>20).
             ``"mcmc_ess"``             — Elliptical Slice Sampling.
@@ -1085,6 +1112,11 @@ class Fitter:
             ``"native_mgvi"``, ``"native_evi"`` → ``"vi_native_linear"``
             ``"raytrace"``         → ``"mcmc_raytrace"``
             ``"nuts"``             → ``"mcmc_nuts"``
+            ``"hmc"``              → ``"mcmc_hmc"``
+            ``"dynamic_hmc"``      → ``"mcmc_dynamic_hmc"``
+            ``"ghmc"``             → ``"mcmc_ghmc"``
+            ``"mclmc"``            → ``"mcmc_mclmc"``
+            ``"adjusted_mclmc"``   → ``"mcmc_adjusted_mclmc"``
             ``"elliptical_slice"`` → ``"mcmc_ess"``
             ``"evidence"``         → ``"nss"``
 
@@ -1172,6 +1204,21 @@ class Fitter:
         elif method == "mcmc_nuts":
             result = self._run_nuts(key=key, init_from=init_from, **kwargs)
 
+        elif method == "mcmc_hmc":
+            result = self._run_hmc(key=key, init_from=init_from, **kwargs)
+
+        elif method == "mcmc_dynamic_hmc":
+            result = self._run_dynamic_hmc(key=key, init_from=init_from, **kwargs)
+
+        elif method == "mcmc_ghmc":
+            result = self._run_ghmc(key=key, init_from=init_from, **kwargs)
+
+        elif method == "mcmc_mclmc":
+            result = self._run_mclmc(key=key, init_from=init_from, **kwargs)
+
+        elif method == "mcmc_adjusted_mclmc":
+            result = self._run_adjusted_mclmc(key=key, init_from=init_from, **kwargs)
+
         elif method == "mcmc_ess":
             result = self._run_elliptical_slice(key=key, init_from=init_from, **kwargs)
 
@@ -1189,7 +1236,9 @@ class Fitter:
                 f"Unknown method: '{method}'. "
                 f"Canonical names: 'vi', 'vi_linear', 'vi_nifty_fast', "
                 f"'vi_nifty_fast_linear', 'vi_native', 'vi_native_linear', "
-                f"'mcmc', 'mcmc_raytrace', 'mcmc_nuts', 'mcmc_ess', 'map', "
+                f"'mcmc', 'mcmc_raytrace', 'mcmc_nuts', 'mcmc_hmc', "
+                f"'mcmc_dynamic_hmc', 'mcmc_ghmc', 'mcmc_mclmc', "
+                f"'mcmc_adjusted_mclmc', 'mcmc_ess', 'map', "
                 f"'laplace', 'pathfinder', 'nss', 'auto'. "
                 f"See Fitter.run() docstring for deprecated aliases."
             )
@@ -1367,7 +1416,10 @@ class Fitter:
 
             tol = kwargs.get("tol", 1e-5)
             solver, opt_name = _build_jaxopt_solver(
-                optimizer, loss_fn, maxiter=n_steps, tol=tol,
+                optimizer,
+                loss_fn,
+                maxiter=n_steps,
+                tol=tol,
             )
 
             if verbose:
@@ -1381,8 +1433,7 @@ class Fitter:
             t_total = time.time() - t0
             if verbose:
                 print(
-                    f"  Done: {n_gal} galaxies in {t_total:.1f}s "
-                    f"({t_total / n_gal:.2f}s/galaxy)"
+                    f"  Done: {n_gal} galaxies in {t_total:.1f}s ({t_total / n_gal:.2f}s/galaxy)"
                 )
 
             results = []
@@ -1476,6 +1527,31 @@ class Fitter:
         from tengri.inference.backends.mcmc.common import run_nuts
 
         return run_nuts(self, key=key, **kwargs)
+
+    def _run_hmc(self, *, key, **kwargs):
+        from tengri.inference.backends.mcmc.common import run_hmc
+
+        return run_hmc(self, key=key, **kwargs)
+
+    def _run_dynamic_hmc(self, *, key, **kwargs):
+        from tengri.inference.backends.mcmc.common import run_dynamic_hmc
+
+        return run_dynamic_hmc(self, key=key, **kwargs)
+
+    def _run_ghmc(self, *, key, **kwargs):
+        from tengri.inference.backends.mcmc.common import run_ghmc
+
+        return run_ghmc(self, key=key, **kwargs)
+
+    def _run_mclmc(self, *, key, **kwargs):
+        from tengri.inference.backends.mcmc.common import run_mclmc
+
+        return run_mclmc(self, key=key, **kwargs)
+
+    def _run_adjusted_mclmc(self, *, key, **kwargs):
+        from tengri.inference.backends.mcmc.common import run_adjusted_mclmc
+
+        return run_adjusted_mclmc(self, key=key, **kwargs)
 
     def _build_loglikelihood_unbounded_fn(self, mode="_traceable"):
         """Build unbounded-space log-likelihood.

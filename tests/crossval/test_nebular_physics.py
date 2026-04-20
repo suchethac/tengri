@@ -23,9 +23,7 @@ jax.config.update("jax_enable_x64", True)
 pytestmark = pytest.mark.crossval
 
 
-# ===================================================================
-# 1. SHOCK EMISSION SED — spectral line placement
-# ===================================================================
+# ── 1. SHOCK EMISSION SED — spectral line placement ───────────────
 
 
 class TestShockEmissionSEDPhysics:
@@ -85,9 +83,7 @@ class TestShockEmissionSEDPhysics:
             assert jnp.all(l_nu >= 0), f"Shock SED at v={v} has negative values"
 
 
-# ===================================================================
-# 2. SHOCK LINE RATIOS — velocity-dependent physics
-# ===================================================================
+# ── 2. SHOCK LINE RATIOS — velocity-dependent physics ─────────────
 
 
 class TestShockLineRatioPhysics:
@@ -143,9 +139,7 @@ class TestShockLineRatioPhysics:
         assert ratios_high["Hbeta"] == pytest.approx(1.0)
 
 
-# ===================================================================
-# 3. SHOCK ATOMIC PHYSICS — doublet ratios
-# ===================================================================
+# ── 3. SHOCK ATOMIC PHYSICS — doublet ratios ──────────────────────
 
 
 class TestShockAtomicPhysics:
@@ -168,9 +162,7 @@ class TestShockAtomicPhysics:
         assert abs(r - 2.94) < 0.1, f"[NII] doublet ratio should be 2.94, got {r:.2f}"
 
 
-# ===================================================================
-# 4. NLR LINE PHYSICS — forbidden line properties
-# ===================================================================
+# ── 4. NLR LINE PHYSICS — forbidden line properties ───────────────
 
 
 class TestNLRLinePhysics:
@@ -214,9 +206,7 @@ class TestNLRLinePhysics:
             assert min_dist < 5.0, f"NLR missing line at {line_wave:.0f} A"
 
 
-# ===================================================================
-# 5. BLR LINE PHYSICS — broad permitted lines
-# ===================================================================
+# ── 5. BLR LINE PHYSICS — broad permitted lines ───────────────────
 
 
 class TestBLRLinePhysics:
@@ -261,9 +251,7 @@ class TestBLRLinePhysics:
         assert 2.0 < ratio < 4.0, f"BLR Hα/Hβ should be ~2.86, got {ratio:.2f}"
 
 
-# ===================================================================
-# 6. SHOCK+NLR BPT SEPARATION — diagnostic diagram physics
-# ===================================================================
+# ── 6. SHOCK+NLR BPT SEPARATION — diagnostic diagram physics ──────
 
 
 class TestBPTDiagramPhysics:

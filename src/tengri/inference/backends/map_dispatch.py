@@ -138,9 +138,7 @@ def _get_or_build_map_fns(model, loss_fn, optimizer, learning_rate):
     return scan_batch, single_step, opt, opt_name
 
 
-# ---------------------------------------------------------------------------
-# scipy quasi-Newton path (single-galaxy, no JAX compilation for optimizer)
-# ---------------------------------------------------------------------------
+# ── scipy quasi-Newton path (single-galaxy, no JAX compilation for optimizer)
 
 
 def _run_map_scipy(
@@ -444,21 +442,25 @@ def run_laplace(fitter, *, key, init_from=None, n_map_steps=1000, **kwargs):
 
 def run_pathfinder(fitter, *, key, init_from=None, **kwargs):
     """Pathfinder: fast approximate posterior via L-BFGS path."""
+    from tengri.inference.backends.mcmc.common import _get_flat_logdensity
     from tengri.inference.backends.pathfinder import run_pathfinder
-
-    logdensity_2arg = fitter._get_or_build_logdensity_fn()
-    data_args = fitter._data_args
 
     if init_from is not None:
         init_params = fitter._unbounded_from_posterior(init_from)
     else:
         init_params = fitter._initialize_unbounded(key)
 
+    log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
+        fitter, init_params,
+    )
+    def log_posterior_flat(pos):
+        return log_posterior_flat_2arg(pos, data_args)
+
     return run_pathfinder(
         key=key,
-        logdensity_fn=logdensity_2arg,
-        data_args=data_args,
-        init_params=init_params,
+        log_posterior_flat=log_posterior_flat,
+        init_flat=init_flat,
+        unravel_fn=unravel_fn,
         to_physical_fn=fitter._to_physical,
         model=fitter.model,
         **kwargs,

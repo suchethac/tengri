@@ -19,9 +19,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -36,9 +34,7 @@ def broad_wave():
     return jnp.logspace(2.0, 9.0, 500)
 
 
-# ---------------------------------------------------------------------------
-# Broken power-law continuum
-# ---------------------------------------------------------------------------
+# ── Broken power-law continuum ────────────────────────────────────
 
 
 class TestBrokenPowerlawContinuum:
@@ -99,9 +95,7 @@ class TestBrokenPowerlawContinuum:
         assert abs(ratio_steep - ratio_flat) > 0.01
 
 
-# ---------------------------------------------------------------------------
-# Hot dust blackbody
-# ---------------------------------------------------------------------------
+# ── Hot dust blackbody ────────────────────────────────────────────
 
 
 class TestHotDustBlackbody:
@@ -149,9 +143,7 @@ class TestHotDustBlackbody:
         assert jnp.all(jnp.isfinite(bb))
 
 
-# ---------------------------------------------------------------------------
-# Balmer continuum
-# ---------------------------------------------------------------------------
+# ── Balmer continuum ──────────────────────────────────────────────
 
 
 class TestBalmerContinuum:
@@ -211,9 +203,7 @@ class TestBalmerContinuum:
         assert extra_near_edge > extra_uv
 
 
-# ---------------------------------------------------------------------------
-# lbol to M_i conversion
-# ---------------------------------------------------------------------------
+# ── lbol to M_i conversion ────────────────────────────────────────
 
 
 class TestLbolToMi:
@@ -253,9 +243,7 @@ class TestLbolToMi:
         np.testing.assert_allclose(result, expected, rtol=1e-8)
 
 
-# ---------------------------------------------------------------------------
-# Full compute_qsogen_sed
-# ---------------------------------------------------------------------------
+# ── Full compute_qsogen_sed ───────────────────────────────────────
 
 
 class TestComputeQsogenSed:
@@ -386,9 +374,7 @@ class TestComputeQsogenSed:
         assert float(jnp.sum(sed_with_bc[bc_mask])) >= float(jnp.sum(sed_no_bc[bc_mask]))
 
 
-# ---------------------------------------------------------------------------
-# _wavelength_to_nu
-# ---------------------------------------------------------------------------
+# ── _wavelength_to_nu ─────────────────────────────────────────────
 
 
 class TestWavelengthToNu:
@@ -431,9 +417,7 @@ class TestWavelengthToNu:
         assert jnp.all(nu > 0.0)
 
 
-# ---------------------------------------------------------------------------
-# _planck_blambda
-# ---------------------------------------------------------------------------
+# ── _planck_blambda ───────────────────────────────────────────────
 
 
 class TestPlanckBlambda:
@@ -482,9 +466,7 @@ class TestPlanckBlambda:
         assert jnp.all(jnp.isfinite(blam))
 
 
-# ---------------------------------------------------------------------------
-# _apply_dust_reddening
-# ---------------------------------------------------------------------------
+# ── _apply_dust_reddening ─────────────────────────────────────────
 
 
 class TestApplyDustReddening:
@@ -526,9 +508,7 @@ class TestApplyDustReddening:
         assert reddened.shape == uv_optical_wave.shape
 
 
-# ---------------------------------------------------------------------------
-# qsogen registered wrapper
-# ---------------------------------------------------------------------------
+# ── qsogen registered wrapper ─────────────────────────────────────
 
 
 class TestQsogenWrapper:

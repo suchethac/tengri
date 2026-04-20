@@ -37,7 +37,7 @@ code switches to ``jft.VariableCovarianceGaussian``.
 
 Example::
 
-    spec = ParamSpec(
+    spec = Parameters(
         noise_frac_cal=Uniform(0.01, 0.2),  # enable noise model
         sfh_dpl_alpha=Uniform(0.5, 4.0),
         ...
@@ -49,9 +49,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-# ---------------------------------------------------------------------------
-# Core noise computation (pure JAX, JIT-compatible)
-# ---------------------------------------------------------------------------
+# ── Core noise computation (pure JAX, JIT-compatible) ─────────────
 
 
 def compute_effective_noise(
@@ -109,9 +107,7 @@ def compute_std_inv(
     return 1.0 / sigma_eff
 
 
-# ---------------------------------------------------------------------------
-# Detection: is the noise model active?
-# ---------------------------------------------------------------------------
+# ── Detection: is the noise model active? ─────────────────────────
 
 
 def has_noise_model(spec) -> bool:
@@ -119,7 +115,7 @@ def has_noise_model(spec) -> bool:
 
     Parameters
     ----------
-    spec : ParamSpec
+    spec : Parameters
         Parameter specification.
 
     Returns
@@ -145,7 +141,7 @@ def get_noise_dof(spec) -> float | None:
 
     Parameters
     ----------
-    spec : ParamSpec
+    spec : Parameters
         Parameter specification.
 
     Returns
@@ -171,7 +167,7 @@ def uses_student_t(spec) -> bool:
 
     Parameters
     ----------
-    spec : ParamSpec
+    spec : Parameters
         Parameter specification.
 
     Returns
@@ -189,18 +185,14 @@ def uses_student_t(spec) -> bool:
     return True  # free noise_dof → Student-t
 
 
-# ---------------------------------------------------------------------------
-# Data mask constants for censored likelihood
-# ---------------------------------------------------------------------------
+# ── Data mask constants for censored likelihood ───────────────────
 
 DETECTED = 0
 UPPER_LIMIT = 1
 LOWER_LIMIT = -1
 
 
-# ---------------------------------------------------------------------------
-# Censored likelihood for upper/lower limits
-# ---------------------------------------------------------------------------
+# ── Censored likelihood for upper/lower limits ────────────────────
 
 
 def censored_log_likelihood(
@@ -269,9 +261,7 @@ def censored_log_likelihood(
     return jnp.sum(e_per_band)
 
 
-# ---------------------------------------------------------------------------
-# Energy and metric for JIT EVI engine
-# ---------------------------------------------------------------------------
+# ── Energy and metric for JIT EVI engine ──────────────────────────
 
 
 def variable_noise_hamiltonian(

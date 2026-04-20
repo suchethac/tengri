@@ -36,9 +36,7 @@ bagpipes_mg = pytest.importorskip(
 )
 
 
-# ===================================================================
-# 1. Energy balance (tengri internal)
-# ===================================================================
+# ── 1. Energy balance (tengri internal) ───────────────────────────
 
 
 class TestEnergyBalanceCrossval:
@@ -148,9 +146,7 @@ class TestEnergyBalanceCrossval:
             assert l_abs_hi > l_abs_lo, f"tau_v={tau_v} should absorb more than tau_v=0.1"
 
 
-# ===================================================================
-# 2. Bagpipes energy balance (end-to-end)
-# ===================================================================
+# ── 2. Bagpipes energy balance (end-to-end) ───────────────────────
 
 
 class TestBagpipesEnergyBalance:
@@ -221,9 +217,7 @@ class TestBagpipesEnergyBalance:
         assert 0.5 < ratio < 2.0, f"IR/absorbed ratio = {ratio:.2f}, expected 0.5-2.0"
 
 
-# ===================================================================
-# 3. DL07 parameter trends (bagpipes templates)
-# ===================================================================
+# ── 3. DL07 parameter trends (bagpipes templates) ─────────────────
 
 
 class TestDL07ParameterTrends:
@@ -275,9 +269,7 @@ class TestDL07ParameterTrends:
         assert mean_hi < mean_lo, "Higher gamma should shift emission blueward"
 
 
-# ===================================================================
-# 4. tengri vs bagpipes DL07 qualitative comparison
-# ===================================================================
+# ── 4. tengri vs bagpipes DL07 qualitative comparison ─────────────
 
 
 class TestDL07ShapeCrossval:

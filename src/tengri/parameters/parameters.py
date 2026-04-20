@@ -1,7 +1,7 @@
 """Parameter specification for tengri models.
 
-ParamSpec defines all model parameters: their names, distributions (or fixed
-values), and physical bounds. A single ParamSpec is used for both mock
+Parameters defines all model parameters: their names, distributions (or fixed
+values), and physical bounds. A single Parameters is used for both mock
 generation (sampling from priors) and inference (defining the prior).
 
 The parameter set is dynamically determined by ``mean_sfh_type``, which
@@ -12,7 +12,7 @@ Usage
 -----
 Default (dense_basis + GP field)::
 
-    spec = ParamSpec(
+    spec = Parameters(
         sfh_db_log_total_mass=Uniform(8, 12),
         sfh_db_log_sfr_inst=Uniform(-2, 3),
         sfh_db_tx_frac_0=Uniform(0.05, 0.95),
@@ -27,7 +27,7 @@ Default (dense_basis + GP field)::
 
 Legacy tsnorm (backward compatible)::
 
-    spec = ParamSpec(
+    spec = Parameters(
         mean_sfh_type = "tsnorm",
         sfh_tsnorm_log_peak_sfr = Uniform(-1, 2),
         sfh_tsnorm_peak_lbt_gyr = Uniform(1, 12),
@@ -39,7 +39,7 @@ Legacy tsnorm (backward compatible)::
 
 Legacy DPL (backward compatible)::
 
-    spec = ParamSpec(
+    spec = Parameters(
         mean_sfh_type = "dpl",
         sfh_dpl_alpha    = Uniform(0.5, 3.0),
         sfh_dpl_beta     = Uniform(0.3, 2.0),
@@ -56,6 +56,7 @@ import copy
 import jax
 import jax.numpy as jnp
 
+from tengri.components.sfh.met_registry import resolve_met
 from tengri.components.sfh.registry import resolve_sfh
 from tengri.parameters.priors import (
     Distribution,
@@ -64,9 +65,7 @@ from tengri.parameters.priors import (
     resolve_shorthand,
 )
 
-# ---------------------------------------------------------------------------
-# Non-SFH parameter registry: always present regardless of mean_sfh_type
-# ---------------------------------------------------------------------------
+# ── Non-SFH parameter registry ─────────────────────────────────────────
 
 _NON_SFH_PARAMS = {
     "met_logzsol": (
@@ -153,7 +152,7 @@ _NEBULAR_PARAMS = {
     ),
 }
 
-# ---- CB_19 extra parameters (added when nebular == "cb19") ----
+# ── CB_19 extra parameters (nebular == "cb19") ────────────────────────
 # CB_19 extends the base CLOUDY grid with three additional continuous axes:
 # density, C/O ratio, and ΔN/O. These have no counterpart in the FSPS/Byler grid.
 #
@@ -188,7 +187,7 @@ _CB19_PARAMS = {
     ),
 }
 
-# ---- Emission line velocity parameters ----
+# ── Emission line velocity parameters ──────────────────────────────────
 _ELINE_PARAMS = {
     "eline_sigma_kms": (
         "Emission line velocity dispersion in km/s (added in quadrature to instrument resolution)",
@@ -204,7 +203,7 @@ _ELINE_PARAMS = {
     ),
 }
 
-# ---- Broad emission line component parameters (AGN) ----
+# ── Broad emission line parameters (AGN) ───────────────────────────────
 _ELINE_BROAD_PARAMS = {
     "eline_broad_sigma_kms": (
         "Broad emission line velocity dispersion in km/s",
@@ -400,6 +399,34 @@ _IGM_PATCHY_PARAMS = {
         lambda lo, hi: lo > 0,
         "must be > 0",
         Fixed(10.0),
+    ),
+}
+
+# DLA (Damped Lyman-alpha) absorber params (only when dla=True)
+_DLA_PARAMS = {
+    "dla_log_n_hi": (
+        "log10(N_HI / cm^-2) for foreground DLA absorber (Voigt profile)",
+        lambda lo, hi: lo >= 15 and hi <= 24,
+        "must be in [15, 24]",
+        Uniform(19.0, 22.0),
+    ),
+    "dla_z": (
+        "Redshift of DLA absorber (defaults to source z if fixed at 0)",
+        lambda lo, hi: True,
+        "",
+        Fixed(0.0),
+    ),
+    "dla_temp": (
+        "Gas temperature of DLA absorber (K)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(1e4),
+    ),
+    "dla_b_turb": (
+        "Turbulent broadening of DLA absorber (km/s)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(0.0),
     ),
 }
 
@@ -781,9 +808,7 @@ _AGN_PARAMS = {
     ),
 }
 
-# ---------------------------------------------------------------------------
-# Legacy parameter name aliases (old API → new API)
-# ---------------------------------------------------------------------------
+# ── Legacy parameter name aliases ──────────────────────────────────────
 
 _LEGACY_PARAM_ALIASES = {
     "sfh_alpha": "sfh_dpl_alpha",
@@ -831,10 +856,11 @@ SETTINGS_KEYS = frozenset(
         "xray",
         # Shock emission
         "shock",
-        # Evolving metallicity / alpha
+        # Metallicity mode (registry-based, replaces evolving_metallicity/chem_evol)
+        "met_mode",
+        # Legacy booleans (resolved to met_mode internally)
         "evolving_metallicity",
         "alpha_fe_evolving",
-        # Chemical evolution (Z from SFH)
         "chem_evol",
         # Metallicity interpolation
         "met_interp",
@@ -846,9 +872,7 @@ SETTINGS_KEYS = frozenset(
 )
 
 
-# ---------------------------------------------------------------------------
-# Build parameter registry dynamically
-# ---------------------------------------------------------------------------
+# ── Build parameter registry ───────────────────────────────────────────
 
 
 def _build_param_registry(
@@ -863,9 +887,11 @@ def _build_param_registry(
     xray=False,
     shock=False,
     igm_patchy=False,
+    dla=False,
     evolving_metallicity=False,
     alpha_fe_evolving=False,
     chem_evol=False,
+    met_mode="delta",
     eline_mode="off",
     eline_broad=False,
 ):
@@ -911,8 +937,8 @@ def _build_param_registry(
     _is_single = dust_model == "single_component"
     _skip_dust_params = {"dust_tau_bc", "dust_tau_diff"} if _is_single else set()
     for pname, (desc, check, err, default) in _NON_SFH_PARAMS.items():
-        # When evolving metallicity or chem_evol enabled, skip met_logzsol
-        if (evolving_metallicity or chem_evol) and pname == "met_logzsol":
+        # met_logzsol is now injected by the metallicity registry (met_mode)
+        if pname == "met_logzsol":
             continue
         # When single-component dust, skip birth-cloud / diffuse params
         if pname in _skip_dust_params:
@@ -926,17 +952,11 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Evolving metallicity params (replaces met_logzsol when enabled)
-    if evolving_metallicity:
-        for pname, (desc, check, err, default) in _EVOLVING_MET_PARAMS.items():
-            registry[pname] = (desc, check, err)
-            defaults[pname] = default
-
-    # Chemical evolution params (replaces met_logzsol when enabled)
-    if chem_evol:
-        for pname, (desc, check, err, default) in _CHEM_EVOL_PARAMS.items():
-            registry[pname] = (desc, check, err)
-            defaults[pname] = default
+    # Metallicity params from registry (replaces ad-hoc evolving_metallicity/chem_evol)
+    _, met_params, _, _ = resolve_met(met_mode)
+    for pname, pdef in met_params.items():
+        registry[pname] = (pdef.description, pdef.bound_check, pdef.bound_error)
+        defaults[pname] = pdef.default
 
     # Nebular params (CLOUDY, Cue, or CB_19 — not BakedIn/ssp/off)
     if nebular in ("cloudy", "cue", "cb19"):
@@ -1004,6 +1024,12 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
+    # DLA absorber params (only when dla=True)
+    if dla:
+        for pname, (desc, check, err, default) in _DLA_PARAMS.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+
     # Emission line velocity parameters (registered when eline_mode is active)
     if eline_mode in ("marginalized", "fitted"):
         for pname, (desc, check, err, default) in _ELINE_PARAMS.items():
@@ -1019,9 +1045,7 @@ def _build_param_registry(
     return registry, defaults
 
 
-# ---------------------------------------------------------------------------
-# ParamSpec class
-# ---------------------------------------------------------------------------
+# ── Parameters class ───────────────────────────────────────────────────
 
 
 class Parameters:
@@ -1209,7 +1233,7 @@ class Parameters:
     --------
     Minimal parametric model::
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.5, 3.0),
@@ -1223,7 +1247,7 @@ class Parameters:
 
     Full model with all physics::
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type=["dpl", "field"],
             n_grid=64,
             # Dust attenuation
@@ -1389,6 +1413,9 @@ class Parameters:
         # Patchy IGM: False (default), True — enables igm_x_HI and igm_bubble_mpc parameters
         self.igm_patchy = kwargs.pop("igm_patchy", False)
 
+        # DLA absorber: False (default), True — adds Voigt-profile DLA absorption
+        self.dla = kwargs.pop("dla", False)
+
         # AGN model: None (default), "simple", "standard", "kubota_done", "unified_nlr_blr"
         self.agn_model = kwargs.pop("agn_model", None)
 
@@ -1401,19 +1428,36 @@ class Parameters:
         # Shock emission: False (default), True — adds MAPPINGS V shock lines
         self.shock = kwargs.pop("shock", False)
 
-        # Evolving metallicity: False (default), True
-        self.evolving_metallicity = kwargs.pop("evolving_metallicity", False)
+        # Metallicity mode: registry-based (mirrors SFH registry pattern)
+        _met_mode_explicit = kwargs.pop("met_mode", None)
+        _evolving_met = kwargs.pop("evolving_metallicity", False)
+        _chem_evol = kwargs.pop("chem_evol", False)
 
-        # Chemical evolution: derive Z(t) from SFH via gas-regulator model
-        self.chem_evol = kwargs.pop("chem_evol", False)
-
-        # Mutual exclusion: chem_evol and evolving_metallicity
-        if self.chem_evol and self.evolving_metallicity:
+        # Resolve met_mode from legacy booleans if not explicitly set
+        if _met_mode_explicit is not None:
+            if _evolving_met or _chem_evol:
+                raise ValueError(
+                    "Cannot use met_mode with evolving_metallicity or chem_evol. "
+                    "Use met_mode='ramp' instead of evolving_metallicity=True, "
+                    "or met_mode='chem_evol' instead of chem_evol=True."
+                )
+            self.met_mode = _met_mode_explicit
+        elif _evolving_met and _chem_evol:
             raise ValueError(
                 "chem_evol and evolving_metallicity are mutually exclusive. "
                 "chem_evol derives Z(t) from SFH; evolving_metallicity uses "
                 "a linear Z(t) ramp with met_logzsol_0/met_logzsol_final."
             )
+        elif _evolving_met:
+            self.met_mode = "ramp"
+        elif _chem_evol:
+            self.met_mode = "chem_evol"
+        else:
+            self.met_mode = "delta"
+
+        # Backward-compat properties for sed_model / pipeline
+        self.evolving_metallicity = self.met_mode == "ramp"
+        self.chem_evol = self.met_mode == "chem_evol"
 
         # Evolving alpha-enhancement: False (default), True
         # When True, [α/Fe] varies with lookback time (old stars more α-enhanced).
@@ -1491,9 +1535,9 @@ class Parameters:
             xray=self.xray,
             shock=self.shock,
             igm_patchy=self.igm_patchy,
-            evolving_metallicity=self.evolving_metallicity,
+            dla=self.dla,
+            met_mode=self.met_mode,
             alpha_fe_evolving=self.alpha_fe_evolving,
-            chem_evol=self.chem_evol,
             eline_mode=self.eline_mode,
             eline_broad=self.eline_broad,
         )
@@ -1515,6 +1559,27 @@ class Parameters:
                 )
 
         self._valid_param_names = frozenset(self._param_registry.keys())
+
+        # --- Extract mirror specifications (string values → param tying) ---
+        # Must run before validation so mirrored params (which may reference
+        # params from other modules, e.g. neb_logZ_gas → met_logzsol) are
+        # converted to Fixed(0.0) before the unknown-param check.
+        self._mirrors: dict[str, str] = {}
+        for name, val in list(resolved_kwargs.items()):
+            if (
+                isinstance(val, str)
+                and name in self._valid_param_names
+                and val in self._valid_param_names
+            ):
+                self._mirrors[name] = val
+                resolved_kwargs[name] = Fixed(0.0)
+
+        for target, source in self._mirrors.items():
+            if source in self._mirrors:
+                raise ValueError(
+                    f"Chained mirror: '{target}' -> '{source}' -> "
+                    f"'{self._mirrors[source]}'. Only direct mirrors are allowed."
+                )
 
         # --- Validate parameter names ---
         # Drop field params if field was removed (e.g., stochastic=False
@@ -1614,14 +1679,12 @@ class Parameters:
                     f"violate physical constraint: {err_msg}"
                 )
 
-    # -------------------------------------------------------------------
-    # Immutable copy with additional parameters
-    # -------------------------------------------------------------------
+    # ── Immutable copy with additional parameters ─────────────────
 
     def with_params(self, **kwargs) -> ParamSpec:
-        """Return a new ParamSpec with additional parameters merged in.
+        """Return a new Parameters with additional parameters merged in.
 
-        Creates a copy of this ParamSpec with extra parameters added.
+        Creates a copy of this Parameters with extra parameters added.
         Existing user-defined parameters take precedence — if a param
         name already exists, the new value is silently ignored.
 
@@ -1636,7 +1699,7 @@ class Parameters:
 
         Returns
         -------
-        ParamSpec
+        Parameters
             New instance with merged parameters.
         """
         if not kwargs:
@@ -1673,9 +1736,7 @@ class Parameters:
         object.__setattr__(new_spec, "_user_provided", self._user_provided)
         return new_spec
 
-    # -------------------------------------------------------------------
-    # Properties
-    # -------------------------------------------------------------------
+    # ── Properties ────────────────────────────────────────────────
 
     @property
     def stochastic(self) -> bool:
@@ -1717,9 +1778,35 @@ class Parameters:
         """Set of valid parameter names for this model configuration."""
         return self._valid_param_names
 
-    # -------------------------------------------------------------------
-    # Methods
-    # -------------------------------------------------------------------
+    @property
+    def mirrors(self) -> dict[str, str]:
+        """Parameter mirrors: {target_name: source_name}."""
+        return dict(self._mirrors)
+
+    # ── Methods ───────────────────────────────────────────────────
+
+    def resolve_mirrors(self, params: dict) -> dict:
+        """Copy mirrored parameter values from source to target.
+
+        For each mirror ``target -> source``, sets ``params[target] =
+        params[source]``.  Returns a new dict (immutable pattern).
+
+        Parameters
+        ----------
+        params : dict
+            Parameter name -> value.
+
+        Returns
+        -------
+        dict
+            New dict with mirrored values filled in.
+        """
+        if not self._mirrors:
+            return params
+        out = dict(params)
+        for target, source in self._mirrors.items():
+            out[target] = out[source]
+        return out
 
     def get_distribution(self, name: str) -> Distribution:
         """Get the distribution object for a parameter."""
@@ -1788,7 +1875,7 @@ class Parameters:
         if self.stochastic:
             params["sfh_field_xi"] = jax.random.normal(keys[-1], shape=(self._n_grid,))
 
-        return params
+        return self.resolve_mirrors(params)
 
     def sample_batch(self, key: jax.Array, n: int) -> dict[str, jnp.ndarray]:
         """Draw n samples from all parameter distributions.
@@ -1850,10 +1937,13 @@ class Parameters:
 
         # Dimensionality
         n_free = self.n_free
-        n_fixed = len(self.fixed_params)
+        n_mirror = len(self._mirrors)
+        n_fixed = len(self.fixed_params) - n_mirror
         dim_parts = [f"{n_free} free"]
         if self.stochastic:
             dim_parts.append(f"+ {self._n_grid} latent (ξ)")
+        if n_mirror:
+            dim_parts.append(f"+ {n_mirror} mirrored")
         dim_parts.append(f"+ {n_fixed} fixed")
         lines.append(f"  Dimensions:  {', '.join(dim_parts)}")
 
@@ -1869,6 +1959,8 @@ class Parameters:
             modules.append(f"agn={agn}")
         if getattr(self, "apply_igm", False):
             modules.append("igm")
+        if getattr(self, "dla", False):
+            modules.append("dla")
         if getattr(self, "radio", False):
             modules.append("radio")
         if getattr(self, "xray", False):
@@ -1883,12 +1975,9 @@ class Parameters:
             dust_diff = getattr(self, "dust_law_diff", None) or dust_bc
             if dust_bc != "power_law" or dust_diff != "power_law":
                 modules.append(f"dust_law={dust_bc}/{dust_diff}")
-        ev_met = getattr(self, "evolving_metallicity", False)
-        if ev_met:
-            modules.append("evolving_Z")
-        chem_ev = getattr(self, "chem_evol", False)
-        if chem_ev:
-            modules.append("chem_evol_Z")
+        met_mode = getattr(self, "met_mode", "delta")
+        if met_mode != "delta":
+            modules.append(f"met={met_mode}")
         if modules:
             lines.append(f"  Modules:     {', '.join(modules)}")
         lines.append("")
@@ -1909,9 +1998,17 @@ class Parameters:
         if self.fixed_params:
             lines.append("  " + "─" * 64)
             for name in self.fixed_params:
+                if name in self._mirrors:
+                    continue
                 dist = self._distributions[name]
                 val = dist.bounds[0]
                 lines.append(f"  {name:<32s} {'Fixed':<26s} {val:.4g}")
+
+        if self._mirrors:
+            lines.append("  " + "─" * 64)
+            for target, source in self._mirrors.items():
+                mirror_str = f"Mirror({source})"
+                lines.append(f"  {target:<32s} {mirror_str:<26s} ──►")
 
         lines.append(sep)
         return "\n".join(lines)
@@ -1927,9 +2024,7 @@ class Parameters:
         return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# Deprecated alias — removed in tengri v1.0
-# ---------------------------------------------------------------------------
+# ── Deprecated alias (removed in v1.0) ─────────────────────────────────
 
 
 def _make_deprecated_paramspec():

@@ -43,9 +43,7 @@ DEFAULT_KW = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Kernel tests
-# ---------------------------------------------------------------------------
+# ── Kernel tests ──────────────────────────────────────────────────
 
 
 class TestMatern32Kernel:
@@ -109,9 +107,7 @@ class TestCombinedKernel:
         assert jnp.allclose(k_comb, k_m + k_l, atol=1e-12)
 
 
-# ---------------------------------------------------------------------------
-# GP interpolation tests
-# ---------------------------------------------------------------------------
+# ── GP interpolation tests ────────────────────────────────────────
 
 
 class TestGPInterpolation:
@@ -137,9 +133,7 @@ class TestGPInterpolation:
         assert n_violations <= 2, f"Too many monotonicity violations: {n_violations}"
 
 
-# ---------------------------------------------------------------------------
-# Quantile point construction
-# ---------------------------------------------------------------------------
+# ── Quantile point construction ───────────────────────────────────
 
 
 class TestBuildQuantilePoints:
@@ -204,9 +198,7 @@ class TestGPCumulativeMassAccuracy:
         )
 
 
-# ---------------------------------------------------------------------------
-# Dense basis SFH function tests
-# ---------------------------------------------------------------------------
+# ── Dense basis SFH function tests ────────────────────────────────
 
 
 class TestDenseBasisSFH:
@@ -375,9 +367,7 @@ class TestDenseBasisSFH:
         assert sfr.shape == AGE_YR.shape
 
 
-# ---------------------------------------------------------------------------
-# SFH shape tests (tutorial shapes from Iyer+2019)
-# ---------------------------------------------------------------------------
+# ── SFH shape tests (tutorial shapes from Iyer+2019) ──────────────
 
 
 def _sfh_for_tx(t0: float, t1: float, t2: float) -> jnp.ndarray:
@@ -422,9 +412,7 @@ class TestDenseBasisShapes:
             assert jnp.all(sfr >= 0), f"Negative SFR for tx=({t0}, {t1}, {t2})"
 
 
-# ---------------------------------------------------------------------------
-# Registry integration tests
-# ---------------------------------------------------------------------------
+# ── Registry integration tests ────────────────────────────────────
 
 
 class TestDenseBasisRegistry:
@@ -472,9 +460,7 @@ class TestDenseBasisRegistry:
         assert settings["sfh_db_age_universe_gyr"] == 13.47
 
 
-# ---------------------------------------------------------------------------
-# Edge case tests
-# ---------------------------------------------------------------------------
+# ── Edge case tests ───────────────────────────────────────────────
 
 
 class TestDenseBasisEdgeCases:

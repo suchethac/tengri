@@ -47,9 +47,7 @@ pytestmark = [
 ]
 
 
-# ===================================================================
-# Test wavelength grids
-# ===================================================================
+# ── Test wavelength grids ─────────────────────────────────────────
 
 # Wavelengths in Angstrom for N09/SBL18 (full range 970-22000 A)
 WAVS_FULL_AA = np.array([1000.0, 1200.0, 1500.0, 2175.0, 3000.0, 5500.0, 10000.0, 20000.0])
@@ -68,9 +66,7 @@ WAVS_DENSE_AA = np.linspace(1000.0, 20000.0, 200)
 WAVS_DENSE_UM = WAVS_DENSE_AA / 1e4
 
 
-# ===================================================================
-# C00 — Calzetti et al. (2000)
-# ===================================================================
+# ── C00 — Calzetti et al. (2000) ──────────────────────────────────
 
 
 class TestC00:
@@ -103,9 +99,7 @@ class TestC00:
         np.testing.assert_allclose(tng, ref, rtol=1e-10)
 
 
-# ===================================================================
-# L02 — Leitherer et al. (2002)
-# ===================================================================
+# ── L02 — Leitherer et al. (2002) ─────────────────────────────────
 
 
 class TestL02:
@@ -135,9 +129,7 @@ class TestL02:
         np.testing.assert_allclose(tng, ref, rtol=1e-10)
 
 
-# ===================================================================
-# N09 — Noll et al. (2009)
-# ===================================================================
+# ── N09 — Noll et al. (2009) ──────────────────────────────────────
 
 
 class TestN09:
@@ -189,9 +181,7 @@ class TestN09:
         assert abs(peak_wav - 2175.0) < 50.0, f"Bump peak at {peak_wav} A, expected ~2175 A"
 
 
-# ===================================================================
-# SBL18 — Salim, Boquien & Lee (2018)
-# ===================================================================
+# ── SBL18 — Salim, Boquien & Lee (2018) ───────────────────────────
 
 
 class TestSBL18:
@@ -253,9 +243,7 @@ class TestSBL18:
         np.testing.assert_allclose(tng_n09, tng_sbl, rtol=1e-10)
 
 
-# ===================================================================
-# WG00 — Witt & Gordon (2000) radiative transfer
-# ===================================================================
+# ── WG00 — Witt & Gordon (2000) radiative transfer ────────────────
 
 
 class TestWG00:
@@ -292,9 +280,7 @@ class TestWG00:
         assert np.all(np.diff(tng_trans) > 0), "Analytic transmission should increase UV->NIR"
 
 
-# ===================================================================
-# Standalone regression tests (no external package needed)
-# ===================================================================
+# ── Standalone regression tests (no external package needed) ──────
 # These hardcode reference values computed from dust_attenuation and
 # serve as regression tests even when the package is not installed.
 

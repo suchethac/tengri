@@ -36,9 +36,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -60,9 +58,7 @@ def rising_sfr(age_grid):
     return jnp.linspace(5.0, 0.1, len(age_grid))
 
 
-# ---------------------------------------------------------------------------
-# Basic properties
-# ---------------------------------------------------------------------------
+# ── Basic properties ──────────────────────────────────────────────
 
 
 class TestClosedBoxMetallicity:
@@ -158,9 +154,7 @@ class TestClosedBoxAnalytic:
         assert jnp.all(jnp.isfinite(log_z_high_r))
 
 
-# ---------------------------------------------------------------------------
-# JAX compatibility
-# ---------------------------------------------------------------------------
+# ── JAX compatibility ─────────────────────────────────────────────
 
 
 class TestJAXCompatibility:
@@ -232,9 +226,7 @@ class TestJAXCompatibility:
         assert log_z_abs.shape == ssp_log_ages.shape
 
 
-# ---------------------------------------------------------------------------
-# SSP grid interpolation
-# ---------------------------------------------------------------------------
+# ── SSP grid interpolation ────────────────────────────────────────
 
 
 class TestChemEvolOnSSPGrid:
@@ -263,9 +255,7 @@ class TestChemEvolOnSSPGrid:
         assert log_z_abs.shape == (94,)
 
 
-# ---------------------------------------------------------------------------
-# Anchored version
-# ---------------------------------------------------------------------------
+# ── Anchored version ──────────────────────────────────────────────
 
 
 class TestAnchoredMetallicity:
@@ -304,9 +294,7 @@ class TestAnchoredMetallicity:
         assert log_z[0] < 0.0, "Sub-solar target should give sub-solar Z"
 
 
-# ---------------------------------------------------------------------------
-# ParamSpec integration
-# ---------------------------------------------------------------------------
+# ── ParamSpec integration ─────────────────────────────────────────
 
 
 class TestParamSpecChemEvol:
@@ -381,7 +369,7 @@ class TestParamSpecChemEvol:
             sfh_tsnorm_trunc=Fixed(5.0),
         )
         summary = spec.summary()
-        assert "chem_evol_Z" in summary
+        assert "met=chem_evol" in summary
 
     def test_chem_evol_with_free_yield(self):
         """Yield can be made a free parameter."""
@@ -398,9 +386,7 @@ class TestParamSpecChemEvol:
         assert "chem_yield" in spec.free_params
 
 
-# ---------------------------------------------------------------------------
-# Mass-metallicity relation
-# ---------------------------------------------------------------------------
+# ── Mass-metallicity relation ─────────────────────────────────────
 
 
 class TestMassMetallicityRelation:

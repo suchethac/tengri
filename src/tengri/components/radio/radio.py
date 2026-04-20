@@ -19,7 +19,7 @@ Three SFR physics models are available (select via ``sfr_mode`` in
     Mass- and redshift-dependent FIRRC at 1.4 GHz (Delvecchio+2021, UV+FIR).
     Correlation parameters (q0, mass_slope, z_slope) are exposed as function
     arguments so they can later be treated as hierarchical prior hyperparameters
-    in HierarchicalFitter.
+    in PopulationFitter.
 
 ``"mccheyne2022"``
     Mass- and redshift-dependent FIRRC calibrated at 150 MHz (McCheyne+2022).
@@ -181,7 +181,7 @@ def radio_sfr_delvecchio2021(
 
     The three FIRRC parameters (``q0``, ``mass_slope``, ``z_slope``) are
     exposed as function arguments so they can be promoted to hierarchical
-    prior hyperparameters in ``HierarchicalFitter`` without modifying this
+    prior hyperparameters in ``PopulationFitter`` without modifying this
     code.  Their defaults are the Delvecchio+2021 best-fit values.
 
     Parameters

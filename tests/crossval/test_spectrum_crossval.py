@@ -61,9 +61,7 @@ def _flux_at(wave, flux, target, width=50.0):
     return float(np.mean(flux[mask])) if np.sum(mask) > 0 else 0.0
 
 
-# ===================================================================
-# 1. SSP spectrum values vs FSPS
-# ===================================================================
+# ── 1. SSP spectrum values vs FSPS ────────────────────────────────
 
 
 class TestSSPSpectrumCrossval:
@@ -154,9 +152,7 @@ class TestSSPSpectrumCrossval:
         assert uv_low > uv_high, "Low-Z should be UV-brighter"
 
 
-# ===================================================================
-# 2. Dust-attenuated spectrum
-# ===================================================================
+# ── 2. Dust-attenuated spectrum ───────────────────────────────────
 
 
 class TestDustySpectrumCrossval:
@@ -207,9 +203,7 @@ class TestDustySpectrumCrossval:
         np.testing.assert_allclose(t_v, np.exp(-0.5), rtol=0.05)
 
 
-# ===================================================================
-# 3. Burst population spectra
-# ===================================================================
+# ── 3. Burst population spectra ───────────────────────────────────
 
 
 class TestBurstSpectrumCrossval:
@@ -263,9 +257,7 @@ class TestBurstSpectrumCrossval:
         assert colors[0] > colors[1] > colors[2], f"Color should redden: {colors}"
 
 
-# ===================================================================
-# 4. Nebular emission features
-# ===================================================================
+# ── 4. Nebular emission features ──────────────────────────────────
 
 
 class TestNebularSpectrumCrossval:
@@ -297,9 +289,7 @@ class TestNebularSpectrumCrossval:
         assert 1.0 < ratio < 10.0, f"At 10 Myr, Halpha boost = {ratio:.1f}x"
 
 
-# ===================================================================
-# 5. Bagpipes comparison (qualitative, BC03 vs FSPS)
-# ===================================================================
+# ── 5. Bagpipes comparison (qualitative, BC03 vs FSPS) ────────────
 
 
 class TestBagpipesSpectrumCrossval:

@@ -24,9 +24,7 @@ from tengri.components.agn._phys import (
 from tengri.forward.precompute.grid import interp_nd_triweight
 from tengri.utils.interpolation import edges_for_grid
 
-# ===================================================================
-# Template grid interpolation
-# ===================================================================
+# ── Template grid interpolation ───────────────────────────────────
 
 
 def create_skirtor_from_grid(grid_path: str) -> Callable:
@@ -165,9 +163,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     return skirtor_grid
 
 
-# ===================================================================
-# Auto-load tabulated SKIRTOR as the default
-# ===================================================================
+# ── Auto-load tabulated SKIRTOR as the default ────────────────────
 
 _skirtor_default = None
 

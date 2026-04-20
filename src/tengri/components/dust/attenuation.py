@@ -32,6 +32,8 @@ Available Attenuation Curves
 - **tea**: Haskell et al. (2024) TEA 3-param empirical (NIHAO-SKIRT bump-slope correlation)
 - **narayanan_z**: Narayanan et al. (2018) redshift-dependent Kriek-Conroy (SIMBA RT)
 - **conroy2010**: Conroy+2010 mixed MW + power-law (FSPS dust_type=1)
+- **vw07_bc**: Wild+2007 birth cloud power-law (n=-1.3)
+- **vw07_diff**: Wild+2007 diffuse ISM power-law (n=-0.7)
 
 Dust Geometries (Witt & Gordon 2000)
 -------------------------------------
@@ -56,6 +58,7 @@ References
 - Natta & Panagia 1984, ApJ, 287, 228
 - Noll et al. 2009, A&A, 507, 1793
 - Salim, Boquien & Lee 2018, ApJ, 859, 11
+- Wild et al. 2007, MNRAS, 381, 543
 - Witt & Gordon 2000, ApJ, 528, 799
 - Zacharegkas et al. 2025, arXiv:2506.19919
 """
@@ -65,9 +68,7 @@ from collections.abc import Callable
 import jax
 import jax.numpy as jnp
 
-# ===================================================================
-# Attenuation curve registry
-# ===================================================================
+# ── Attenuation curve registry ────────────────────────────────────
 
 DUST_LAWS: dict[str, Callable] = {}
 
@@ -93,9 +94,7 @@ def resolve_dust_law(name: str) -> Callable:
 get_dust_law = resolve_dust_law
 
 
-# ===================================================================
-# Utility: Drude profile for the 2175 Angstrom UV bump
-# ===================================================================
+# ── Utility: Drude profile for the 2175 Angstrom UV bump ──────────
 
 
 def _drude_profile(
@@ -110,9 +109,7 @@ def _drude_profile(
     return (wave_um * gamma) ** 2 / ((wave_um**2 - x0**2) ** 2 + (wave_um * gamma) ** 2)
 
 
-# ===================================================================
-# Internal helpers
-# ===================================================================
+# ── Internal helpers ──────────────────────────────────────────────
 
 
 def _calzetti_l02_kprime(wavelength: jnp.ndarray) -> jnp.ndarray:
@@ -150,9 +147,7 @@ def _calzetti_l02_kprime(wavelength: jnp.ndarray) -> jnp.ndarray:
     return jnp.where(wave_um <= 0.18, k_l02, k_calz)
 
 
-# ===================================================================
-# Attenuation curves
-# ===================================================================
+# ── Attenuation curves ────────────────────────────────────────────
 
 
 @register_dust_law("power_law")
@@ -166,6 +161,38 @@ def power_law(
     Original Charlot & Fall (2000) wavelength dependence.
     """
     return (wavelength / 5500.0) ** n_slope
+
+
+@register_dust_law("vw07_bc")
+def vw07_bc(
+    wavelength: jnp.ndarray,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Wild+2007 birth cloud: power-law with n = -1.3 (steep UV).
+
+    Steeper than the diffuse ISM curve, reflecting the denser dust
+    geometry around young stellar populations.
+
+    References
+    ----------
+    Wild et al. 2007, MNRAS, 381, 543.
+    """
+    return (wavelength / 5500.0) ** (-1.3)
+
+
+@register_dust_law("vw07_diff")
+def vw07_diff(
+    wavelength: jnp.ndarray,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Wild+2007 diffuse ISM: power-law with n = -0.7 (standard CF00).
+
+    References
+    ----------
+    Wild et al. 2007, MNRAS, 381, 543;
+    Charlot & Fall 2000, ApJ, 539, 718.
+    """
+    return (wavelength / 5500.0) ** (-0.7)
 
 
 @register_dust_law("calzetti")
@@ -782,9 +809,7 @@ def conroy2010(
     return jnp.clip(k_raw / k_v, 0.0)
 
 
-# ===================================================================
-# Two-component dust model
-# ===================================================================
+# ── Two-component dust model ──────────────────────────────────────
 
 
 def precompute_dust_age_weights(
@@ -1007,9 +1032,7 @@ def two_component_dust_fast(
     return f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau_lambda)
 
 
-# ===================================================================
-# Single-component dust model (uniform screen)
-# ===================================================================
+# ── Single-component dust model (uniform screen) ──────────────────
 
 
 def single_component_dust(
@@ -1089,9 +1112,7 @@ def single_component_dust_fast(
     return jnp.broadcast_to(trans_1d[None, :], (n_ages, wavelengths.shape[0]))
 
 
-# ===================================================================
-# Witt & Gordon (2000) dust geometry transmission functions
-# ===================================================================
+# ── Witt & Gordon (2000) dust geometry transmission functions ─────
 #
 # These functions compute the wavelength-dependent transmission T(lambda)
 # for different star-dust geometries, given a V-band optical depth tau_V
@@ -1277,9 +1298,7 @@ def wg00_dusty(
     return jnp.exp(-n_clumps * (1.0 - jnp.exp(-tau_clump * k)))
 
 
-# ===================================================================
-# Dust-to-gas ratio scaling
-# ===================================================================
+# ── Dust-to-gas ratio scaling ─────────────────────────────────────
 
 
 def dust_to_gas_scaling_remy_ruyer(logzsol: float) -> float:

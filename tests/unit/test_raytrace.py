@@ -17,9 +17,7 @@ from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import ParamSpec
 from tengri.parameters.priors import Uniform
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# ── Helpers ───────────────────────────────────────────────────────
 
 
 def _gaussian_log_prob(mean, cov_inv):
@@ -32,9 +30,7 @@ def _gaussian_log_prob(mean, cov_inv):
     return log_prob
 
 
-# ---------------------------------------------------------------------------
-# Pure sampler tests (no Model/Fitter dependency)
-# ---------------------------------------------------------------------------
+# ── Pure sampler tests (no Model/Fitter dependency) ───────────────
 
 
 class TestSampleRaytraceGaussian:
@@ -195,9 +191,7 @@ class TestRaytraceVsHmcGaussian:
         )
 
 
-# ---------------------------------------------------------------------------
-# Fitter integration tests (require SSP data)
-# ---------------------------------------------------------------------------
+# ── Fitter integration tests (require SSP data) ───────────────────
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
@@ -335,9 +329,7 @@ class TestFitterRaytraceInitFromMap:
         )
 
 
-# ---------------------------------------------------------------------------
-# KDK integrator tests
-# ---------------------------------------------------------------------------
+# ── KDK integrator tests ──────────────────────────────────────────
 
 
 class TestKDKIntegrator:
@@ -412,9 +404,7 @@ class TestKDKIntegrator:
             )
 
 
-# ---------------------------------------------------------------------------
-# Posterior autocorrelation integration
-# ---------------------------------------------------------------------------
+# ── Posterior autocorrelation integration ─────────────────────────
 
 
 class TestPosteriorAutocorrelation:

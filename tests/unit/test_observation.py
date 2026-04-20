@@ -20,9 +20,7 @@ from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectroscopy import SpectroscopyConfig
 from tengri.parameters.priors import Fixed, Gaussian, Uniform
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# ── Helpers ───────────────────────────────────────────────────────
 
 
 def _make_filter(name="test_r", center=6200.0, width=500.0, n=50):
@@ -37,9 +35,7 @@ def _make_wave_obs(n=100, lo=10000.0, hi=50000.0):
     return jnp.linspace(lo, hi, n)
 
 
-# ===========================================================================
-# NoiseConfig
-# ===========================================================================
+# ── NoiseConfig ───────────────────────────────────────────────────
 
 
 class TestNoiseConfig:
@@ -89,9 +85,7 @@ class TestNoiseConfig:
             nc.calibration_floor = 0.1
 
 
-# ===========================================================================
-# Photometry
-# ===========================================================================
+# ── Photometry ────────────────────────────────────────────────────
 
 
 class TestPhotometry:
@@ -167,9 +161,7 @@ class TestPhotometry:
         np.testing.assert_array_equal(phot.filter_trans[0], f.trans)
 
 
-# ===========================================================================
-# SpectroscopyConfig
-# ===========================================================================
+# ── SpectroscopyConfig ────────────────────────────────────────────
 
 
 class TestSpectroscopyConfig:
@@ -258,9 +250,7 @@ class TestSpectroscopyConfig:
         assert "cal order=2" in s
 
 
-# ===========================================================================
-# Observation
-# ===========================================================================
+# ── Observation ───────────────────────────────────────────────────
 
 
 class TestObservation:
@@ -408,9 +398,7 @@ class TestObservation:
         assert len(params) == 1
 
 
-# ===========================================================================
-# ParamSpec.with_params
-# ===========================================================================
+# ── ParamSpec.with_params ─────────────────────────────────────────
 
 
 class TestParamSpecWithParams:

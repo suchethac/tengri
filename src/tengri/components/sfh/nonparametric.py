@@ -27,9 +27,7 @@ DEFAULT_BIN_EDGES_GYR = jnp.array([0.0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.7])
 DEFAULT_N_BINS = 7
 
 
-# ---------------------------------------------------------------------------
-# Continuity SFH (Leja+2019)
-# ---------------------------------------------------------------------------
+# ── Continuity SFH (Leja+2019) ────────────────────────────────────
 
 
 def continuity_sfh(
@@ -134,9 +132,7 @@ def continuity_prior_logp(
     return jnp.sum(student_t.logpdf(log_sfr_ratios, df, loc=0.0, scale=scale))
 
 
-# ---------------------------------------------------------------------------
-# Dirichlet SFH (Leja+2017)
-# ---------------------------------------------------------------------------
+# ── Dirichlet SFH (Leja+2017) ─────────────────────────────────────
 
 
 def _stick_breaking(z_fractions: jnp.ndarray) -> jnp.ndarray:

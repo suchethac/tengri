@@ -30,10 +30,8 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Pure-formula tests (no grid required)
+# ── Pure-formula tests (no grid required) ─────────────────────────
 # These test the escape-fraction scaling formula isolated from the grid backend.
-# ---------------------------------------------------------------------------
 
 _LYA_WAVE = 1215.67  # Å, vacuum Ly-α
 

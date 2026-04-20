@@ -21,7 +21,7 @@ from __future__ import annotations
 import importlib
 from types import ModuleType
 
-# Maps the component identifier (as used in ModelConfig / ParamSpec model selection)
+# Maps the component identifier (as used in ModelConfig / Parameters model selection)
 # to the dotted module path of its precompute adapter.
 _REGISTRY: dict[str, str] = {
     # Stellar population photometry (redshift + filters fixed → preintegrate SSP×filter tensor)

@@ -14,9 +14,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -63,9 +61,7 @@ def mock_model(mock_spec):
     return model
 
 
-# ---------------------------------------------------------------------------
-# generate_sbi_training_data
-# ---------------------------------------------------------------------------
+# ── generate_sbi_training_data ────────────────────────────────────
 
 
 class TestGenerateTrainingData:
@@ -202,9 +198,7 @@ class TestGenerateTrainingData:
         assert not jnp.allclose(d1["theta"], d2["theta"])
 
 
-# ---------------------------------------------------------------------------
-# Input validation
-# ---------------------------------------------------------------------------
+# ── Input validation ──────────────────────────────────────────────
 
 
 class TestInputValidation:
@@ -243,9 +237,7 @@ class TestInputValidation:
             )
 
 
-# ---------------------------------------------------------------------------
-# Save/load round-trip
-# ---------------------------------------------------------------------------
+# ── Save/load round-trip ──────────────────────────────────────────
 
 
 class TestSaveLoad:
@@ -283,9 +275,7 @@ class TestSaveLoad:
             load_sbi_training_data("/nonexistent/path/data.h5")
 
 
-# ---------------------------------------------------------------------------
-# Picklable stub posterior for SBIPosterior tests
-# ---------------------------------------------------------------------------
+# ── Picklable stub posterior for SBIPosterior tests ───────────────
 
 
 class _FakePosterior:
@@ -298,9 +288,7 @@ class _FakePosterior:
         return jnp.zeros(len(theta))
 
 
-# ---------------------------------------------------------------------------
-# SBIPosterior
-# ---------------------------------------------------------------------------
+# ── SBIPosterior ──────────────────────────────────────────────────
 
 
 class TestSBIPosterior:

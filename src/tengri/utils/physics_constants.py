@@ -59,9 +59,7 @@ Notes
 
 from __future__ import annotations
 
-# ---------------------------------------------------------------------------
-# Speed of light
-# ---------------------------------------------------------------------------
+# ── Speed of light ────────────────────────────────────────────────
 
 C_CGS: float = 2.99792458e10
 """Speed of light c [cm s⁻¹].
@@ -91,9 +89,7 @@ Derivation: c = 2.99792458e8 m/s (exact)
 Used for Doppler-shift and line-width calculations.
 """
 
-# ---------------------------------------------------------------------------
-# Planck's constant
-# ---------------------------------------------------------------------------
+# ── Planck's constant ─────────────────────────────────────────────
 
 H_PLANCK: float = 6.62607015e-27
 """Planck constant h [erg s].
@@ -103,9 +99,7 @@ Derivation: h = 6.62607015e-34 J s (exact, CODATA 2018 / SI 2019)
             = 6.62607015e-27 erg s
 """
 
-# ---------------------------------------------------------------------------
-# Boltzmann constant
-# ---------------------------------------------------------------------------
+# ── Boltzmann constant ────────────────────────────────────────────
 
 K_BOLTZ: float = 1.380649e-16
 """Boltzmann constant k_B [erg K⁻¹].
@@ -126,9 +120,7 @@ Used to convert ring/corona temperature → seed photon energy for
 nthcomp (Comptonization) models.
 """
 
-# ---------------------------------------------------------------------------
-# Stefan-Boltzmann constant
-# ---------------------------------------------------------------------------
+# ── Stefan-Boltzmann constant ─────────────────────────────────────
 
 SIGMA_SB: float = 5.670374419e-5
 """Stefan-Boltzmann constant σ [erg cm⁻² s⁻¹ K⁻⁴].
@@ -141,9 +133,7 @@ Derivation: σ = 5.670374419e-8 W m⁻² K⁻⁴  (derived from exact h, k_B, c)
 Reference: Eq. σ = 2π⁵k_B⁴/(15h³c²).  Numerically exact from CODATA 2018.
 """
 
-# ---------------------------------------------------------------------------
-# Gravitational constant
-# ---------------------------------------------------------------------------
+# ── Gravitational constant ────────────────────────────────────────
 
 G_GRAV: float = 6.674e-8
 """Gravitational constant G [cm³ g⁻¹ s⁻²].
@@ -158,9 +148,7 @@ used here is rounded to 4 sig. fig., sufficient for accretion disc calculations
 where M_BH and spin dominate the uncertainty.
 """
 
-# ---------------------------------------------------------------------------
-# Thomson cross section
-# ---------------------------------------------------------------------------
+# ── Thomson cross section ─────────────────────────────────────────
 
 SIGMA_T: float = 6.6524e-25
 """Thomson cross section σ_T [cm²].
@@ -172,9 +160,7 @@ Derivation: σ_T = 6.6524587158e-29 m²  (CODATA 2018)
 Used in Eddington luminosity: L_Edd = 4πGMm_p c / σ_T.
 """
 
-# ---------------------------------------------------------------------------
-# Particle masses
-# ---------------------------------------------------------------------------
+# ── Particle masses ───────────────────────────────────────────────
 
 M_PROTON: float = 1.6726e-24
 """Proton mass m_p [g].
@@ -194,9 +180,18 @@ Derivation: m_e = 9.1093837015e-31 kg  (CODATA 2018)
             = 9.1093837015e-28 g  ≈ 9.1094e-28 g
 """
 
-# ---------------------------------------------------------------------------
-# Solar constants
-# ---------------------------------------------------------------------------
+E_CHARGE_ESU: float = 4.80326e-10
+"""Elementary charge e [statcoulomb (esu)].
+
+Derivation: e = 1.602176634e-19 C  (exact, SI 2019)
+            × 2.99792458e9 statC/C  (SI → Gaussian CGS)
+            = 4.80326e-10 statC
+
+Used in Ly-alpha cross-section for DLA absorption models:
+σ_α = (√π e² f) / (m_e c Δν_D) × H(a, x).
+"""
+
+# ── Solar constants ───────────────────────────────────────────────
 
 L_SUN: float = 3.828e33
 """Solar luminosity L_⊙ [erg s⁻¹].
@@ -230,9 +225,7 @@ CUE neural-net training set).
 Do NOT use as a general-purpose solar luminosity.
 """
 
-# ---------------------------------------------------------------------------
-# Distances
-# ---------------------------------------------------------------------------
+# ── Distances ─────────────────────────────────────────────────────
 
 PC_CM: float = 3.0856775814913674e18
 """Parsec in cm.
@@ -248,9 +241,7 @@ Used for flux ↔ luminosity conversions:
     f_ν = L_ν / (4π d²)  with d in cm.
 """
 
-# ---------------------------------------------------------------------------
-# Unit conversion factors
-# ---------------------------------------------------------------------------
+# ── Unit conversion factors ───────────────────────────────────────
 
 AA_TO_CM: float = 1.0e-8
 """Ångström to cm conversion.
@@ -283,9 +274,7 @@ Used for X-ray SED grids:
     nu_hz = energy_keV * KEV_TO_HZ
 """
 
-# ---------------------------------------------------------------------------
-# AB magnitude zeropoint
-# ---------------------------------------------------------------------------
+# ── AB magnitude zeropoint ────────────────────────────────────────
 
 JY_CGS: float = 1e-23
 """Jansky in CGS [erg s⁻¹ cm⁻² Hz⁻¹].

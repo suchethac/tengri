@@ -24,9 +24,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 _CB19_H5 = Path(__file__).parents[2] / "data" / "cb19_templates.h5"
 _SKIP_NO_H5 = pytest.mark.skipif(
@@ -69,9 +67,7 @@ def fake_grid_data(cb19_module):
     )
 
 
-# ---------------------------------------------------------------------------
-# Unit conversion constants
-# ---------------------------------------------------------------------------
+# ── Unit conversion constants ─────────────────────────────────────
 
 
 class TestHbConversionConstant:
@@ -112,9 +108,7 @@ class TestHbConversionConstant:
         assert abs(log_oh - _LOG_OH_SOLAR) < 1e-6
 
 
-# ---------------------------------------------------------------------------
-# _frac_idx
-# ---------------------------------------------------------------------------
+# ── _frac_idx ─────────────────────────────────────────────────────
 
 
 class TestFracIdx:
@@ -143,9 +137,7 @@ class TestFracIdx:
         assert float(fi) <= float(len(grid) - 1)
 
 
-# ---------------------------------------------------------------------------
-# _interp_6d
-# ---------------------------------------------------------------------------
+# ── _interp_6d ────────────────────────────────────────────────────
 
 
 class TestInterp6D:
@@ -196,9 +188,7 @@ class TestInterp6D:
         assert jnp.all(jnp.isfinite(result))
 
 
-# ---------------------------------------------------------------------------
-# CB19Backend (with mocked grid)
-# ---------------------------------------------------------------------------
+# ── CB19Backend (with mocked grid) ────────────────────────────────
 
 
 class TestCB19BackendMocked:
@@ -383,9 +373,7 @@ class TestCB19BackendMocked:
         assert "SSP" in repr(backend_with_fake_grid)
 
 
-# ---------------------------------------------------------------------------
-# JIT compatibility
-# ---------------------------------------------------------------------------
+# ── JIT compatibility ─────────────────────────────────────────────
 
 
 class TestJITCompatibility:
@@ -436,9 +424,7 @@ class TestJITCompatibility:
         assert jnp.all(jnp.isfinite(result))
 
 
-# ---------------------------------------------------------------------------
-# Missing HDF5 file raises FileNotFoundError
-# ---------------------------------------------------------------------------
+# ── Missing HDF5 file raises FileNotFoundError ────────────────────
 
 
 class TestMissingH5:
@@ -453,9 +439,7 @@ class TestMissingH5:
             cb19_module.CB19Backend(grid_path="/nonexistent/path/cb19_templates.h5")
 
 
-# ---------------------------------------------------------------------------
-# param_spec integration
-# ---------------------------------------------------------------------------
+# ── param_spec integration ────────────────────────────────────────
 
 
 class TestParamSpec:
@@ -509,9 +493,7 @@ class TestParamSpec:
         assert abs(float(defaults["neb_hbfrac"].value) - 1.0) < 1e-6  # radiation-bounded
 
 
-# ---------------------------------------------------------------------------
-# Real HDF5 file tests (skipped if file missing)
-# ---------------------------------------------------------------------------
+# ── Real HDF5 file tests (skipped if file missing) ────────────────
 
 
 @_SKIP_NO_H5

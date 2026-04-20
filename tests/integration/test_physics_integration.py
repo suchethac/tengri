@@ -25,9 +25,7 @@ from tengri.forward.sed_model import Model
 from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import ParamSpec
 
-# ---------------------------------------------------------------------------
-# Skip if SSP data not available
-# ---------------------------------------------------------------------------
+# ── Skip if SSP data not available ────────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 _SSP_EXISTS = _SSP_FILE.is_file()
@@ -38,9 +36,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-# ---------------------------------------------------------------------------
-# Shared fixtures
-# ---------------------------------------------------------------------------
+# ── Shared fixtures ───────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -73,9 +69,7 @@ def _make_model(ssp_data, filters, **spec_kwargs):
     return Model(spec, ssp_data, filters=filters), spec.sample(jax.random.PRNGKey(0))
 
 
-# ===================================================================
-# 1. Stellar mass consistency
-# ===================================================================
+# ── 1. Stellar mass consistency ───────────────────────────────────
 
 
 class TestStellarMassConsistency:
@@ -115,9 +109,7 @@ class TestStellarMassConsistency:
         np.testing.assert_allclose(ratio, 2.0, rtol=0.1, err_msg=f"Mass ratio = {ratio:.3f}")
 
 
-# ===================================================================
-# 2. Old vs young galaxy physics
-# ===================================================================
+# ── 2. Old vs young galaxy physics ────────────────────────────────
 
 
 class TestOldVsYoungGalaxyPhysics:
@@ -188,9 +180,7 @@ class TestOldVsYoungGalaxyPhysics:
         assert uv_old > uv_young, f"UV color: old={uv_old:.2f}, young={uv_young:.2f}"
 
 
-# ===================================================================
-# 3. Dust effects on SED
-# ===================================================================
+# ── 3. Dust effects on SED ────────────────────────────────────────
 
 
 class TestDustEffectsOnSED:
@@ -260,9 +250,7 @@ class TestDustEffectsOnSED:
         )
 
 
-# ===================================================================
-# 4. Metallicity effects on SED
-# ===================================================================
+# ── 4. Metallicity effects on SED ─────────────────────────────────
 
 
 class TestMetallicityEffectsOnSED:
@@ -305,9 +293,7 @@ class TestMetallicityEffectsOnSED:
         assert uv_hi > uv_lo, f"U-V color: low Z={uv_lo:.2f}, high Z={uv_hi:.2f}"
 
 
-# ===================================================================
-# 5. Passive galaxy properties
-# ===================================================================
+# ── 5. Passive galaxy properties ──────────────────────────────────
 
 
 class TestPassiveGalaxyProperties:
@@ -346,9 +332,7 @@ class TestPassiveGalaxyProperties:
         assert age > 5.0, f"Passive galaxy MW age = {age:.2f} Gyr, expected > 5"
 
 
-# ===================================================================
-# 6. Photometric color ordering
-# ===================================================================
+# ── 6. Photometric color ordering ─────────────────────────────────
 
 
 class TestPhotometricColorOrdering:

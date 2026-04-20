@@ -30,16 +30,12 @@ from tengri.components.sfh.nonparametric import (
 )
 from tengri.components.sfh.registry import SFH_REGISTRY, resolve_sfh
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# ── Helpers ───────────────────────────────────────────────────────
 
 AGE_YR = jnp.linspace(1e7, 13.5e9, 200)
 
 
-# ---------------------------------------------------------------------------
-# Continuity SFH tests
-# ---------------------------------------------------------------------------
+# ── Continuity SFH tests ──────────────────────────────────────────
 
 
 class TestContinuitySFH:
@@ -227,9 +223,7 @@ class TestContinuityPrior:
         assert logp_wide > logp_narrow
 
 
-# ---------------------------------------------------------------------------
-# Dirichlet SFH tests
-# ---------------------------------------------------------------------------
+# ── Dirichlet SFH tests ───────────────────────────────────────────
 
 
 class TestDirichletSFH:
@@ -317,9 +311,7 @@ class TestDirichletSFH:
         assert sfr.shape == AGE_YR.shape
 
 
-# ---------------------------------------------------------------------------
-# Registry integration tests
-# ---------------------------------------------------------------------------
+# ── Registry integration tests ────────────────────────────────────
 
 
 class TestRegistryIntegration:
@@ -381,9 +373,7 @@ class TestRegistryIntegration:
         assert jnp.all(jnp.isfinite(sfr))
 
 
-# ---------------------------------------------------------------------------
-# Regression: step-function behavior (searchsorted fix, 2026-04)
-# ---------------------------------------------------------------------------
+# ── Regression: step-function behavior (searchsorted fix, 2026-04)
 
 
 class TestStepFunctionRegression:

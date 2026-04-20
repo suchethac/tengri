@@ -135,9 +135,7 @@ def build_skirtor_photometry_lookup(precomp: dict):
     return skirtor_phot
 
 
-# -------------------------------------------------------------------
-# Protocol-shaped entry points
-# -------------------------------------------------------------------
+# ── Protocol-shaped entry points ──────────────────────────────────
 
 
 def precompute(

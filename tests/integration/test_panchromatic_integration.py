@@ -36,9 +36,7 @@ from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed
 
-# ---------------------------------------------------------------------------
-# Skip if SSP data not available
-# ---------------------------------------------------------------------------
+# ── Skip if SSP data not available ────────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 _SSP_EXISTS = _SSP_FILE.is_file()
@@ -50,9 +48,7 @@ _LSUN_ERG = 3.828e33  # erg/s
 _C_AA = 2.99792458e18  # c in Angstrom/s
 
 
-# ---------------------------------------------------------------------------
-# Shared fixtures
-# ---------------------------------------------------------------------------
+# ── Shared fixtures ───────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -87,9 +83,7 @@ def wide_filters():
     )
 
 
-# ===================================================================
-# 1. Full panchromatic SED: stellar + dust atten + dust em + AGN
-# ===================================================================
+# ── 1. Full panchromatic SED: stellar + dust atten + dust em + AGN
 
 
 class TestFullPanchromaticSED:
@@ -270,9 +264,7 @@ class TestFullPanchromaticSED:
         assert -0.5 < j_ks < 2.0, f"J-Ks = {j_ks:.2f}, outside physical range"
 
 
-# ===================================================================
-# 2. Radio + X-ray component integration
-# ===================================================================
+# ── 2. Radio + X-ray component integration ────────────────────────
 
 
 class TestRadioXrayIntegration:
@@ -545,9 +537,7 @@ class TestRadioXrayIntegration:
         )
 
 
-# ===================================================================
-# 3. Energy balance across the full pipeline
-# ===================================================================
+# ── 3. Energy balance across the full pipeline ────────────────────
 
 
 class TestEnergyBalanceEndToEnd:
@@ -605,9 +595,7 @@ class TestEnergyBalanceEndToEnd:
         )
 
 
-# ===================================================================
-# 4. Stellar mass / SFR / derived quantity numerical ranges
-# ===================================================================
+# ── 4. Stellar mass / SFR / derived quantity numerical ranges ─────
 
 
 class TestDerivedQuantityRanges:
@@ -723,9 +711,7 @@ class TestDerivedQuantityRanges:
         assert ssfr > 1e-10, f"Starburst sSFR = {ssfr:.2e}, expected > 1e-10"
 
 
-# ===================================================================
-# 5. Gradient flow through all components
-# ===================================================================
+# ── 5. Gradient flow through all components ───────────────────────
 
 
 class TestGradientFlowComplete:
@@ -789,9 +775,7 @@ class TestGradientFlowComplete:
         assert abs(grad_jax_tau) > 0, "dust_tau_bc gradient is zero — disconnected?"
 
 
-# ===================================================================
-# 6. Exact vs precomputed photometry agreement
-# ===================================================================
+# ── 6. Exact vs precomputed photometry agreement ──────────────────
 
 
 class TestExactVsPrecomputed:

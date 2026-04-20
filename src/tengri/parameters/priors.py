@@ -1,7 +1,7 @@
 """Probability distribution objects for parameter specification.
 
 Each distribution defines a prior for a single model parameter.
-Used by ParamSpec for both mock generation (sampling) and inference (priors).
+Used by Parameters for both mock generation (sampling) and inference (priors).
 
 All methods are JAX-compatible for use inside JIT-compiled functions.
 """
@@ -11,9 +11,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-# ---------------------------------------------------------------------------
-# Base class
-# ---------------------------------------------------------------------------
+# ── Base class ────────────────────────────────────────────────────
 
 
 class Distribution:
@@ -88,9 +86,7 @@ class Distribution:
         return self.unstandardize
 
 
-# ---------------------------------------------------------------------------
-# Concrete distributions
-# ---------------------------------------------------------------------------
+# ── Concrete distributions ────────────────────────────────────────
 
 
 class Uniform(Distribution):
@@ -494,9 +490,7 @@ class Fixed(Distribution):
         return isinstance(other, Fixed) and self._value == other._value
 
 
-# ---------------------------------------------------------------------------
-# Shorthand resolution
-# ---------------------------------------------------------------------------
+# ── Shorthand resolution ──────────────────────────────────────────
 
 
 def resolve_shorthand(val) -> Distribution:

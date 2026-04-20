@@ -25,10 +25,8 @@ from collections.abc import Sequence
 import jax.numpy as jnp
 import numpy as np
 
-# ---------------------------------------------------------------------------
-# Doublet ratio constants (primary / secondary)
+# ── Doublet ratio constants (primary / secondary) ─────────────────
 # key: (primary_name, secondary_name), value: flux ratio primary/secondary
-# ---------------------------------------------------------------------------
 
 _DOUBLET_RATIOS: dict[tuple[str, str], float] = {
     ("OIII_5007", "OIII_4959"): 2.98,  # [OIII] — fixed by transition probabilities
@@ -41,10 +39,8 @@ _DOUBLET_RATIOS: dict[tuple[str, str], float] = {
     # [SII] 6717/6731 is similarly density-sensitive and is also left unconstrained.
 }
 
-# ---------------------------------------------------------------------------
-# Default ~40 line catalog (rest-frame vacuum wavelengths in Angstrom)
+# ── Default ~40 line catalog (rest-frame vacuum wavelengths in Angstrom)
 # Tuple layout: (name, wavelength_angstrom, species, is_balmer, is_broad_candidate)
-# ---------------------------------------------------------------------------
 
 _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool]] = [
     # UV lines (1200-3000 Å)
@@ -92,10 +88,8 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool]] = [
     ("SIII_9532", 9533.23, "S3", False, False),
 ]
 
-# ---------------------------------------------------------------------------
-# 13-line backward-compatible catalog matching eline_marginalization.py
+# ── 13-line backward-compatible catalog matching eline_marginalization.py
 # Same wavelengths and insertion order as DEFAULT_LINE_WAVELENGTHS there.
-# ---------------------------------------------------------------------------
 
 _DEFAULT_13_LINES: list[tuple[str, float, str, bool, bool]] = [
     ("Lya", 1215.67, "H1", False, False),
@@ -114,9 +108,7 @@ _DEFAULT_13_LINES: list[tuple[str, float, str, bool, bool]] = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Data structures
-# ---------------------------------------------------------------------------
+# ── Data structures ───────────────────────────────────────────────
 
 
 @dataclasses.dataclass(frozen=True)
@@ -178,9 +170,7 @@ class LineList:
     is_balmer: tuple[bool, ...]
     is_broad_candidate: tuple[bool, ...]
 
-    # ------------------------------------------------------------------
-    # Properties
-    # ------------------------------------------------------------------
+    # ── Properties ────────────────────────────────────────────────
 
     @property
     def n_lines(self) -> int:
@@ -210,9 +200,7 @@ class LineList:
         kept = [i for i in range(self.n_lines) if i not in secondary_indices]
         return self.wavelengths[jnp.array(kept)]
 
-    # ------------------------------------------------------------------
-    # Factory methods
-    # ------------------------------------------------------------------
+    # ── Factory methods ───────────────────────────────────────────
 
     @classmethod
     def default_optical(cls) -> LineList:
@@ -330,9 +318,7 @@ class LineList:
             is_broad_candidate=is_broad,
         )
 
-    # ------------------------------------------------------------------
-    # Filtering
-    # ------------------------------------------------------------------
+    # ── Filtering ─────────────────────────────────────────────────
 
     def select(
         self,
@@ -480,9 +466,7 @@ class LineList:
             is_broad_candidate=new_is_broad,
         )
 
-    # ------------------------------------------------------------------
-    # Constraint matrix
-    # ------------------------------------------------------------------
+    # ── Constraint matrix ─────────────────────────────────────────
 
     def build_constraint_matrix(self) -> jnp.ndarray:
         """Build the (n_lines, n_independent) constraint matrix C.
@@ -542,9 +526,7 @@ class LineList:
         result = mat[:, independent_cols]
         return jnp.array(result)
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+    # ── Internal helpers ──────────────────────────────────────────
 
     @classmethod
     def _from_line_tuples(
@@ -589,9 +571,7 @@ class LineList:
         )
 
 
-# ---------------------------------------------------------------------------
-# Private helpers for CLOUDY parsing
-# ---------------------------------------------------------------------------
+# ── Private helpers for CLOUDY parsing ────────────────────────────
 
 
 def _parse_cloudy_species(name: str) -> str:
@@ -733,9 +713,7 @@ def _detect_doublets_by_proximity(
     return tuple(doublets)
 
 
-# ---------------------------------------------------------------------------
-# Deprecated alias — removed in tengri v1.0
-# ---------------------------------------------------------------------------
+# ── Deprecated alias — removed in tengri v1.0 ─────────────────────
 
 
 def _make_deprecated_line_catalog():

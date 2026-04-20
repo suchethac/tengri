@@ -14,9 +14,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture()
@@ -41,9 +39,7 @@ def rosenbrock_loss():
     return loss_fn
 
 
-# ---------------------------------------------------------------------------
-# Builder tests
-# ---------------------------------------------------------------------------
+# ── Builder tests ─────────────────────────────────────────────────
 
 
 class TestBuildJaxoptSolver:
@@ -64,9 +60,7 @@ class TestBuildJaxoptSolver:
             _build_optax_optimizer("bogus", 0.01)
 
 
-# ---------------------------------------------------------------------------
-# Convergence tests (standalone, no Fitter needed)
-# ---------------------------------------------------------------------------
+# ── Convergence tests (standalone, no Fitter needed) ──────────────
 
 
 class TestJaxoptConvergence:
@@ -97,9 +91,7 @@ class TestJaxoptConvergence:
         assert jnp.allclose(result.params["x"], jnp.array([1.0, 1.0]), atol=1e-3)
 
 
-# ---------------------------------------------------------------------------
-# Constants / registry tests
-# ---------------------------------------------------------------------------
+# ── Constants / registry tests ────────────────────────────────────
 
 
 class TestOptimizerRegistry:
@@ -124,9 +116,7 @@ class TestOptimizerRegistry:
             _build_optax_optimizer("bogus", 0.01)
 
 
-# ---------------------------------------------------------------------------
-# vmap batch tests (standalone)
-# ---------------------------------------------------------------------------
+# ── vmap batch tests (standalone) ─────────────────────────────────
 
 
 class TestJaxoptVmap:

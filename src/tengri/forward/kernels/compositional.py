@@ -102,9 +102,7 @@ def observe_spectrum_from_rest_sed(
     return compute_spectrum(rest_sed, wave_rest, wave_obs, z, dl_cm)
 
 
-# -------------------------------------------------------------------
-# Fused Tier 2 end-to-end kernels (params → photometry/spectrum)
-# -------------------------------------------------------------------
+# ── Fused Tier 2 end-to-end kernels (params → photometry/spectrum)
 
 
 def build_fused_tier2_photometry(model):

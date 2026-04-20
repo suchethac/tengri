@@ -737,9 +737,7 @@ def kubota_done_disc_preintegrated(
     r_hot_cm = jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm * 0.5)
     r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm * 1.01, r_out_cm * 0.9)
 
-    # ===============================================================
-    # Zone 1: Outer standard disc — filter-level Planck lookup
-    # ===============================================================
+    # ── Zone 1: Outer standard disc — filter-level Planck lookup ──
     log_r_warm = jnp.log10(r_warm_cm)
     log_r_out = jnp.log10(r_out_cm)
     log_r_outer = jnp.linspace(log_r_warm, log_r_out, n_radii)
@@ -766,9 +764,7 @@ def kubota_done_disc_preintegrated(
         _SIGMA_SB * t_outer**4 * 2.0 * jnp.pi * r_outer * dr_outer * jnp.maximum(agn_cos_inc, 0.01)
     )
 
-    # ===============================================================
-    # Zone 2: Warm Comptonization — filter-level nthcomp lookup
-    # ===============================================================
+    # ── Zone 2: Warm Comptonization — filter-level nthcomp lookup ─
     log_r_hot = jnp.log10(r_hot_cm)
     log_r_warm_grid = jnp.linspace(log_r_hot, log_r_warm, n_radii)
     r_warm_grid = 10.0**log_r_warm_grid
@@ -820,9 +816,7 @@ def kubota_done_disc_preintegrated(
         * jnp.maximum(agn_cos_inc, 0.01)
     )
 
-    # ===============================================================
-    # Zone 3: Hot corona — single filter lookup
-    # ===============================================================
+    # ── Zone 3: Hot corona — single filter lookup ─────────────────
     l_hot_erg = jnp.minimum(f_hard_safe * l_edd, l_bol_erg * 0.5)
 
     # Self-consistent Gamma (same as full-wavelength path)
@@ -839,9 +833,7 @@ def kubota_done_disc_preintegrated(
     )
     hot_phot = l_hot_erg * corona_filt  # (n_filters,)
 
-    # ===============================================================
-    # Combine and normalize to L_bol * agn_frac
-    # ===============================================================
+    # ── Combine and normalize to L_bol * agn_frac ─────────────────
     # The full-wavelength code normalizes: scale = L_bol_requested / int[L_nu dnu].
     # We can't compute int[L_nu dnu] from filter photometry alone (filters miss
     # most of the bolometric SED for UV/X-ray-bright AGN). Instead, compute the

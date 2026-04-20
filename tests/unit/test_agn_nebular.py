@@ -17,9 +17,7 @@ from tengri.components.nebular.agn_nebular import (
 )
 from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES
 
-# ---------------------------------------------------------------------------
-# Fixtures and skip conditions
-# ---------------------------------------------------------------------------
+# ── Fixtures and skip conditions ──────────────────────────────────
 
 _DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 _CUE_WEIGHTS_PATH = _DATA_DIR / "cue_weights.npz"
@@ -47,9 +45,7 @@ def wavelength():
     return jnp.linspace(3000.0, 10000.0, 1000)
 
 
-# ===================================================================
-# Tests: agn_ionspec_from_alpha_pl
-# ===================================================================
+# ── Tests: agn_ionspec_from_alpha_pl ──────────────────────────────
 
 
 class TestIonspecFromAlphaPl:
@@ -117,9 +113,7 @@ class TestIonspecFromAlphaPl:
                 assert jnp.isfinite(val), f"{key} not finite for alpha={alpha}"
 
 
-# ===================================================================
-# Tests: _log_qh_from_lacc
-# ===================================================================
+# ── Tests: _log_qh_from_lacc ──────────────────────────────────────
 
 
 class TestLogQH:
@@ -143,9 +137,7 @@ class TestLogQH:
             assert jnp.isfinite(log_qh), f"Q_H not finite for alpha={alpha}"
 
 
-# ===================================================================
-# Tests: agn_nlr_cue (requires Cue weights)
-# ===================================================================
+# ── Tests: agn_nlr_cue (requires Cue weights) ─────────────────────
 
 
 class TestAgnNlrCue:
@@ -218,14 +210,10 @@ class TestAgnNlrCue:
         assert not jnp.allclose(norm_low, norm_high, atol=1e-3)
 
 
-# ===================================================================
-# Tests: agn_nlr_emission dispatcher
-# ===================================================================
+# ── Tests: agn_nlr_emission dispatcher ────────────────────────────
 
 
-# ===================================================================
-# Tests: agn_nlr_emission dispatcher
-# ===================================================================
+# ── Tests: agn_nlr_emission dispatcher ────────────────────────────
 
 
 class TestDispatcher:

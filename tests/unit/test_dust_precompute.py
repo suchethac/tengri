@@ -27,9 +27,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -55,9 +53,7 @@ def dust_age_weights(age_grid):
     return precompute_dust_age_weights(age_grid)
 
 
-# ---------------------------------------------------------------------------
-# precompute_dust_age_weights
-# ---------------------------------------------------------------------------
+# ── precompute_dust_age_weights ───────────────────────────────────
 
 
 class TestPrecomputeDustAgeWeights:
@@ -114,9 +110,7 @@ class TestPrecomputeDustAgeWeights:
         assert_allclose(w1, w2, atol=0.0)
 
 
-# ---------------------------------------------------------------------------
-# charlot_fall_at_wavelengths_fast vs charlot_fall_at_wavelengths
-# ---------------------------------------------------------------------------
+# ── charlot_fall_at_wavelengths_fast vs charlot_fall_at_wavelengths
 
 
 _CF_KWARGS = {"law_bc": "power_law", "law_diff": "power_law"}
@@ -219,9 +213,7 @@ class TestFastDustAgreement:
         assert result.shape == (len(dust_age_weights), len(filter_wavelengths))
 
 
-# ---------------------------------------------------------------------------
-# Gradient tests
-# ---------------------------------------------------------------------------
+# ── Gradient tests ────────────────────────────────────────────────
 
 
 class TestFastDustGradients:
@@ -306,9 +298,7 @@ class TestFastDustGradients:
         assert jnp.all(jnp.isfinite(result))
 
 
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
+# ── Benchmark ─────────────────────────────────────────────────────
 
 
 class TestFastDustSpeedup:

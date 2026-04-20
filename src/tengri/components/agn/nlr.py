@@ -24,17 +24,13 @@ import jax.numpy as jnp
 
 from tengri.components.agn._phys import gaussian_line_profile as _gaussian_line_profile
 
-# ===================================================================
-# Physical constants
-# ===================================================================
+# ── Physical constants ────────────────────────────────────────────
 from tengri.utils.physics_constants import (
     AA_TO_CM as _ANGSTROM_CM,
     C_CGS as _C_LIGHT,
 )
 
-# ===================================================================
-# NLR emission-line template
-# ===================================================================
+# ── NLR emission-line template ────────────────────────────────────
 
 # Key narrow emission lines: (rest wavelength [Angstrom], relative strength)
 # Relative strengths are approximate, calibrated to typical Seyfert 2 spectra.

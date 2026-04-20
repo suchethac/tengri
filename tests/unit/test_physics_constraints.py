@@ -23,9 +23,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 
-# ===================================================================
-# 1. Balmer decrement physics (Case B recombination + dust)
-# ===================================================================
+# ── 1. Balmer decrement physics (Case B recombination + dust) ─────
 
 
 class TestBalmerDecrementPhysics:
@@ -84,9 +82,7 @@ class TestBalmerDecrementPhysics:
         assert all(ratios[i] < ratios[i + 1] for i in range(len(ratios) - 1))
 
 
-# ===================================================================
-# 2. IRX-beta direction (Meurer+1999)
-# ===================================================================
+# ── 2. IRX-beta direction (Meurer+1999) ───────────────────────────
 
 
 class TestIRXBetaDirection:
@@ -153,9 +149,7 @@ class TestIRXBetaDirection:
             assert beta_values[i] < beta_values[i + 1], f"Beta not reddening: step {i} → {i + 1}"
 
 
-# ===================================================================
-# 3. SFR indicator consistency
-# ===================================================================
+# ── 3. SFR indicator consistency ──────────────────────────────────
 
 
 class TestSFRIndicatorConsistency:
@@ -208,9 +202,7 @@ class TestSFRIndicatorConsistency:
         np.testing.assert_allclose(lx, 2.6e39, rtol=0.01)
 
 
-# ===================================================================
-# 4. Age of universe constraints
-# ===================================================================
+# ── 4. Age of universe constraints ────────────────────────────────
 
 
 class TestAgeOfUniverseConstraint:
@@ -256,9 +248,7 @@ class TestAgeOfUniverseConstraint:
             assert age > 0, f"Negative age at z={z}: {age}"
 
 
-# ===================================================================
-# 5. Radio-FIR correlation
-# ===================================================================
+# ── 5. Radio-FIR correlation ──────────────────────────────────────
 
 
 class TestRadioFIRCorrelation:
@@ -295,9 +285,7 @@ class TestRadioFIRCorrelation:
                 assert np.isfinite(q), f"q_TIR not finite for L_TIR={l_tir}, L_radio={l_radio}"
 
 
-# ===================================================================
-# 6. Dust attenuation curve analytic values
-# ===================================================================
+# ── 6. Dust attenuation curve analytic values ─────────────────────
 
 
 class TestDustAttenuationAnalyticValues:
@@ -360,9 +348,7 @@ class TestDustAttenuationAnalyticValues:
         )
 
 
-# ===================================================================
-# 7. Dust physical monotonicity
-# ===================================================================
+# ── 7. Dust physical monotonicity ─────────────────────────────────
 
 
 class TestDustPhysicalMonotonicity:
@@ -443,9 +429,7 @@ class TestDustPhysicalMonotonicity:
         assert bump_2175 > bump_3000, "Bump not peaked at 2175A"
 
 
-# ===================================================================
-# 8. UV slope beta analytic values
-# ===================================================================
+# ── 8. UV slope beta analytic values ──────────────────────────────
 
 
 class TestUVSlopeBetaAnalytic:
@@ -512,9 +496,7 @@ class TestUVSlopeBetaAnalytic:
         )
 
 
-# ===================================================================
-# 9. Dn4000 physical limits
-# ===================================================================
+# ── 9. Dn4000 physical limits ─────────────────────────────────────
 
 
 class TestDn4000PhysicalLimits:
@@ -554,9 +536,7 @@ class TestDn4000PhysicalLimits:
         np.testing.assert_allclose(dn, 2.0, atol=0.05)
 
 
-# ===================================================================
-# 10. Cosmological luminosity distance
-# ===================================================================
+# ── 10. Cosmological luminosity distance ──────────────────────────
 
 
 class TestLuminosityDistancePhysics:

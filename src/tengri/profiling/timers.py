@@ -40,9 +40,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# JAX sync helper
-# ---------------------------------------------------------------------------
+# ── JAX sync helper ───────────────────────────────────────────────
 
 
 def _sync(result: Any) -> None:
@@ -63,9 +61,7 @@ def _sync(result: Any) -> None:
                 v.block_until_ready()
 
 
-# ---------------------------------------------------------------------------
-# Global timer storage
-# ---------------------------------------------------------------------------
+# ── Global timer storage ──────────────────────────────────────────
 
 _lock = threading.Lock()
 
@@ -92,9 +88,7 @@ def _get_or_create(name: str, source: str = "python") -> dict[str, Any]:
     return _timings[name]
 
 
-# ---------------------------------------------------------------------------
-# tic / toc interface
-# ---------------------------------------------------------------------------
+# ── tic / toc interface ───────────────────────────────────────────
 
 
 def tic(name: str) -> None:
@@ -162,9 +156,7 @@ def toc(name: str | None = None, result: Any = None) -> float:
     return elapsed
 
 
-# ---------------------------------------------------------------------------
-# @profiled decorator
-# ---------------------------------------------------------------------------
+# ── @profiled decorator ───────────────────────────────────────────
 
 
 def profiled(
@@ -229,9 +221,7 @@ def profiled(
     return decorator
 
 
-# ---------------------------------------------------------------------------
-# OperationTimers — dict-like access to accumulated data
-# ---------------------------------------------------------------------------
+# ── OperationTimers — dict-like access to accumulated data ────────
 
 
 class OperationTimers:
@@ -380,9 +370,7 @@ class OperationTimers:
         return self.summary()
 
 
-# ---------------------------------------------------------------------------
-# bench() utility — standalone timing for quick benchmarks
-# ---------------------------------------------------------------------------
+# ── bench() utility — standalone timing for quick benchmarks ──────
 
 
 def bench(
@@ -436,8 +424,6 @@ def bench(
     return mean_us, r
 
 
-# ---------------------------------------------------------------------------
-# Module-level singleton
-# ---------------------------------------------------------------------------
+# ── Module-level singleton ────────────────────────────────────────
 
 timers = OperationTimers()

@@ -117,9 +117,7 @@ class TestHartleyGP:
         assert 0.1 < ratio < 10.0, f"Hartley/rfft variance ratio = {ratio:.3f}, expected ~1"
 
 
-# ---------------------------------------------------------------------------
-# effective_wavelength
-# ---------------------------------------------------------------------------
+# ── effective_wavelength ──────────────────────────────────────────
 
 
 class TestEffectiveWavelength:
@@ -153,9 +151,7 @@ class TestEffectiveWavelength:
         assert abs(float(lam_eff) - peak) < 50.0  # within 50 Å
 
 
-# ---------------------------------------------------------------------------
-# precompute_ssp_photometry
-# ---------------------------------------------------------------------------
+# ── precompute_ssp_photometry ─────────────────────────────────────
 
 
 class TestPrecomputeSspPhotometry:
@@ -196,9 +192,7 @@ class TestPrecomputeSspPhotometry:
         assert jnp.all(jnp.abs(c) < 1e-10)
 
 
-# ---------------------------------------------------------------------------
-# approximate_photometry
-# ---------------------------------------------------------------------------
+# ── approximate_photometry ────────────────────────────────────────
 
 
 class TestApproximatePhotometry:
@@ -231,9 +225,7 @@ class TestApproximatePhotometry:
         assert float(flux_no_dust) > float(flux_dust)
 
 
-# ---------------------------------------------------------------------------
-# checkpointed_forward_model
-# ---------------------------------------------------------------------------
+# ── checkpointed_forward_model ────────────────────────────────────
 
 
 class TestCheckpointedForwardModel:
@@ -257,9 +249,7 @@ class TestCheckpointedForwardModel:
         assert jnp.all(jnp.isfinite(g))
 
 
-# ---------------------------------------------------------------------------
-# batched_forward
-# ---------------------------------------------------------------------------
+# ── batched_forward ───────────────────────────────────────────────
 
 
 class TestBatchedForward:

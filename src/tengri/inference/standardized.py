@@ -87,9 +87,7 @@ class StandardizedForwardModel:
             log_ages,
         )
 
-    # -------------------------------------------------------------------
-    # Domain: what latent variables exist
-    # -------------------------------------------------------------------
+    # ── Domain: what latent variables exist ───────────────────────
 
     @property
     def domain(self) -> dict:
@@ -109,9 +107,7 @@ class StandardizedForwardModel:
             n += self._n_grid
         return n
 
-    # -------------------------------------------------------------------
-    # Core transforms
-    # -------------------------------------------------------------------
+    # ── Core transforms ───────────────────────────────────────────
 
     def xi_to_params(self, xi: dict) -> dict:
         """Map standardized latents → physical parameters.
@@ -205,9 +201,7 @@ class StandardizedForwardModel:
 
         return xi
 
-    # -------------------------------------------------------------------
-    # Forward pass
-    # -------------------------------------------------------------------
+    # ── Forward pass ──────────────────────────────────────────────
 
     def predict(self, xi: dict, data_type: str = "photometry", wave_obs=None) -> jnp.ndarray:
         """Full forward model: ξ → predicted observables."""
@@ -229,9 +223,7 @@ class StandardizedForwardModel:
         return self.predict(xi, data_type="photometry")
 
 
-# -------------------------------------------------------------------
-# Loss function builders
-# -------------------------------------------------------------------
+# ── Loss function builders ────────────────────────────────────────
 
 
 def build_standardized_loss(

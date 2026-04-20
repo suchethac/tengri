@@ -14,15 +14,14 @@ import time
 
 import jax
 import jax.numpy as jnp
-from jax.flatten_util import ravel_pytree
 
 
 def run_pathfinder(
     *,
     key,
-    logdensity_fn,
-    data_args,
-    init_params,
+    log_posterior_flat,
+    init_flat,
+    unravel_fn,
     to_physical_fn,
     model,
     n_samples=2000,
@@ -36,13 +35,13 @@ def run_pathfinder(
     ----------
     key : PRNGKey
         Random key.
-    logdensity_fn : callable
-        Log-density: ``(unbounded param dict, data_args) -> scalar``.
-        Should be ``-loss_fn``, cached via ``Fitter._get_or_build_logdensity_fn()``.
-    data_args : dict
-        Observed data dict (``data``, ``noise``, etc.).
-    init_params : dict
-        Initial parameters in unbounded space.
+    log_posterior_flat : callable
+        Log-density on flattened parameter vector, cached via
+        ``_get_flat_logdensity()`` for stable JIT identity.
+    init_flat : jnp.ndarray
+        Initial parameters as a flat 1-D array.
+    unravel_fn : callable
+        Converts flat array back to parameter dict.
     to_physical_fn : callable
         Converts unbounded param dict to physical space.
     model : Model
@@ -70,19 +69,11 @@ def run_pathfinder(
 
     t0 = time.time()
 
-    # Flatten init params
-    init_flat, unravel_fn = ravel_pytree(init_params)
     n_dim = len(init_flat)
 
     if verbose:
         print(f"Pathfinder: {n_dim} parameters, maxiter={maxiter}, {n_samples} samples")
 
-    # Thin lambda — BlackJAX JITs this, but the expensive forward model
-    # is pre-compiled inside logdensity_fn, so retrace cost is negligible
-    def log_posterior_flat(position):
-        return logdensity_fn(unravel_fn(position), data_args)
-
-    # Run Pathfinder approximation
     key, approx_key, sample_key = jax.random.split(key, 3)
 
     pathfinder = blackjax.pathfinder(log_posterior_flat)
@@ -97,23 +88,15 @@ def run_pathfinder(
         t_approx = time.time() - t0
         print(f"  Approximation complete ({t_approx:.1f}s)")
 
-    # Draw samples from the best Gaussian approximation
     samples_flat, log_q = pathfinder.sample(sample_key, state, n_samples)
 
     if verbose:
         print(f"  Drew {n_samples} samples (mean log q = {float(jnp.mean(log_q)):.2f})")
 
-    # Unravel and convert to physical space
-    samples_phys = {}
-    for i in range(n_samples):
-        sample_u = unravel_fn(samples_flat[i])
-        sample_p = to_physical_fn(sample_u)
-        for k, v in sample_p.items():
-            if k not in samples_phys:
-                samples_phys[k] = []
-            samples_phys[k].append(v)
+    def _convert_one(flat_sample):
+        return to_physical_fn(unravel_fn(flat_sample))
 
-    samples_phys = {k: jnp.stack(v) for k, v in samples_phys.items()}
+    samples_phys = jax.vmap(_convert_one)(samples_flat)
     best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
 
     wall_time = time.time() - t0

@@ -22,9 +22,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Fixtures: synthetic SSP data
-# ---------------------------------------------------------------------------
+# ── Fixtures: synthetic SSP data ──────────────────────────────────
 
 
 @pytest.fixture
@@ -74,9 +72,7 @@ def sfr_on_ssp(n_age):
     return jnp.abs(jax.random.normal(key, (n_age,))) + 0.01
 
 
-# ---------------------------------------------------------------------------
-# Build kernels at different precisions
-# ---------------------------------------------------------------------------
+# ── Build kernels at different precisions ─────────────────────────
 
 
 def _make_kernel(ssp_phot, ssp_lgmet, eff_waves_rest, dust_age_w, flux_scale, ssp_ages_yr, dtype):
@@ -122,9 +118,7 @@ def _make_kernel(ssp_phot, ssp_lgmet, eff_waves_rest, dust_age_w, flux_scale, ss
     return kernel
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+# ── Tests ─────────────────────────────────────────────────────────
 
 
 class TestMixedPrecisionAccuracy:

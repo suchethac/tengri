@@ -24,9 +24,7 @@ _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _QSOGEN_REF = _DATA_DIR / "qsogen_reference.npz"
 
 
-# ===================================================================
-# 1. QSOGen: tengri vs original Temple+2021
-# ===================================================================
+# ── 1. QSOGen: tengri vs original Temple+2021 ─────────────────────
 
 
 class TestQSOGenCrossval:
@@ -166,9 +164,7 @@ class TestQSOGenCrossval:
         )
 
 
-# ===================================================================
-# 2. SKIRTOR torus model
-# ===================================================================
+# ── 2. SKIRTOR torus model ────────────────────────────────────────
 
 
 class TestSKIRTORCrossval:
@@ -338,9 +334,7 @@ class TestSKIRTORCrossval:
         )
 
 
-# ===================================================================
-# 3. Fritz+2006 vs SKIRTOR (qualitative)
-# ===================================================================
+# ── 3. Fritz+2006 vs SKIRTOR (qualitative) ────────────────────────
 
 
 class TestFritzVsSKIRTOR:
@@ -400,9 +394,7 @@ class TestFritzVsSKIRTOR:
         assert 1 < peak_ft < 100, f"Simple torus peak: {peak_ft:.1f} um"
 
 
-# ===================================================================
-# 4. QSOGen numerical precision vs original
-# ===================================================================
+# ── 4. QSOGen numerical precision vs original ─────────────────────
 
 _QSOGEN_MANUAL_REF = _DATA_DIR / "qsogen_manual_cont_bb.npz"
 

@@ -46,9 +46,7 @@ __all__ = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# AB Magnitude System
-# ---------------------------------------------------------------------------
+# ── AB Magnitude System ───────────────────────────────────────────
 
 
 @jax.jit
@@ -193,9 +191,7 @@ def absolute_ab_mag_to_lnu(mag_abs: jnp.ndarray) -> jnp.ndarray:
     return fnu_at_10pc * distance_factor
 
 
-# ---------------------------------------------------------------------------
-# Apparent ↔ Absolute Magnitude
-# ---------------------------------------------------------------------------
+# ── Apparent ↔ Absolute Magnitude ─────────────────────────────────
 
 
 @jax.jit
@@ -309,9 +305,7 @@ def distance_modulus_from_dl_mpc(dl_mpc: jnp.ndarray) -> jnp.ndarray:
     return distance_modulus_from_dl(dl_cm)
 
 
-# ---------------------------------------------------------------------------
-# Cosmological Dimming
-# ---------------------------------------------------------------------------
+# ── Cosmological Dimming ──────────────────────────────────────────
 
 
 @jax.jit
@@ -354,9 +348,7 @@ def cosmological_dimming(dist_modulus: jnp.ndarray, redshift: jnp.ndarray) -> jn
     return dist_modulus - dimming
 
 
-# ---------------------------------------------------------------------------
-# Vega Magnitude System
-# ---------------------------------------------------------------------------
+# ── Vega Magnitude System ─────────────────────────────────────────
 
 AB_VEGA_OFFSETS: dict[str, float] = {
     "U": 0.79,
@@ -446,9 +438,7 @@ def vega_to_ab(mag_vega: jnp.ndarray, ab_vega_offset: float) -> jnp.ndarray:
     return mag_vega + ab_vega_offset
 
 
-# ---------------------------------------------------------------------------
-# Surface Brightness
-# ---------------------------------------------------------------------------
+# ── Surface Brightness ────────────────────────────────────────────
 
 
 @jax.jit

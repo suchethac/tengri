@@ -33,9 +33,7 @@ from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.runtime.exceptions import ParameterError
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 def _make_mock_model(spec: Parameters, n_filters: int = 3) -> MagicMock:
@@ -75,9 +73,7 @@ def high_d_spec():
     )
 
 
-# ---------------------------------------------------------------------------
-# resolve_method — deprecated aliases
-# ---------------------------------------------------------------------------
+# ── resolve_method — deprecated aliases ───────────────────────────
 
 
 class TestResolveMethodDeprecatedAliases:
@@ -119,9 +115,7 @@ class TestResolveMethodDeprecatedAliases:
         )
 
 
-# ---------------------------------------------------------------------------
-# resolve_method — unknown methods
-# ---------------------------------------------------------------------------
+# ── resolve_method — unknown methods ──────────────────────────────
 
 
 class TestResolveMethodUnknownMethod:
@@ -139,9 +133,7 @@ class TestResolveMethodUnknownMethod:
             resolve_method("totally_invalid")
 
 
-# ---------------------------------------------------------------------------
-# resolve_method — canonical methods
-# ---------------------------------------------------------------------------
+# ── resolve_method — canonical methods ────────────────────────────
 
 
 class TestResolveMethodCanonical:
@@ -164,9 +156,7 @@ class TestResolveMethodCanonical:
         )
 
 
-# ---------------------------------------------------------------------------
-# Threshold constants — documentation contract
-# ---------------------------------------------------------------------------
+# ── Threshold constants — documentation contract ──────────────────
 
 
 class TestThresholdConstants:
@@ -187,9 +177,7 @@ class TestThresholdConstants:
         assert _AUTO_D_THRESHOLD == _MCMC_AUTO_D_THRESHOLD
 
 
-# ---------------------------------------------------------------------------
-# "auto" dispatch routing — mock patching
-# ---------------------------------------------------------------------------
+# ── "auto" dispatch routing — mock patching ───────────────────────
 
 
 class TestAutoDispatchRouting:
@@ -247,9 +235,7 @@ class TestAutoDispatchRouting:
         mock_nuts.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
-# "mcmc" dispatch routing — mock patching
-# ---------------------------------------------------------------------------
+# ── "mcmc" dispatch routing — mock patching ───────────────────────
 
 
 class TestMcmcDispatchRouting:
@@ -298,9 +284,7 @@ class TestMcmcDispatchRouting:
         mock_nuts.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
-# _engine_cache_key — stability and sensitivity
-# ---------------------------------------------------------------------------
+# ── _engine_cache_key — stability and sensitivity ─────────────────
 
 
 class TestEngineCacheKey:

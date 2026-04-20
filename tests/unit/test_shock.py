@@ -30,9 +30,7 @@ _HAS_H5 = _H5_PATH.exists()
 h5_only = pytest.mark.skipif(not _HAS_H5, reason="data/mappings_templates.h5 not found")
 
 
-# ---------------------------------------------------------------------------
-# 1. HDF5 loads with correct shape (skip when file absent)
-# ---------------------------------------------------------------------------
+# ── 1. HDF5 loads with correct shape (skip when file absent) ──────
 
 
 @h5_only
@@ -64,9 +62,7 @@ def test_mappings_h5_loads():
     assert n_nan == 0, f"NaN in solar/n=1 combined slice ({n_nan} NaN)"
 
 
-# ---------------------------------------------------------------------------
-# 2. Backward compatibility — solar, n=1, no HDF5
-# ---------------------------------------------------------------------------
+# ── 2. Backward compatibility — solar, n=1, no HDF5 ───────────────
 
 
 def test_backward_compat_solar_n1():
@@ -103,9 +99,7 @@ def test_backward_compat_solar_n1():
     assert 2.5 <= r_ha <= 5.0, f"Hα/Hβ={r_ha:.2f} outside plausible range"
 
 
-# ---------------------------------------------------------------------------
-# 3. Velocity interpolation is monotone and clamps at grid edges
-# ---------------------------------------------------------------------------
+# ── 3. Velocity interpolation is monotone and clamps at grid edges
 
 
 def test_velocity_interpolation():
@@ -137,9 +131,7 @@ def test_velocity_interpolation():
     assert float(r_edge["HA_6563A"]) > 0.0
 
 
-# ---------------------------------------------------------------------------
-# 4. B-field nearest-neighbor snap — no error at grid boundaries
-# ---------------------------------------------------------------------------
+# ── 4. B-field nearest-neighbor snap — no error at grid boundaries
 
 
 @h5_only
@@ -172,9 +164,7 @@ def test_b_field_snapping():
         shock_line_ratios(300.0, shock_b_over_sqrt_n=b_max * 100.0)
 
 
-# ---------------------------------------------------------------------------
-# 5. Precursor component differs from shock only at higher velocities
-# ---------------------------------------------------------------------------
+# ── 5. Precursor component differs from shock only at higher velocities
 
 
 @h5_only
@@ -221,9 +211,7 @@ def test_precursor_vs_shock_component():
     )
 
 
-# ---------------------------------------------------------------------------
-# 7. DeprecationWarning raised when HDF5 is absent
-# ---------------------------------------------------------------------------
+# ── 7. DeprecationWarning raised when HDF5 is absent ──────────────
 
 
 def test_fallback_without_h5(tmp_path, monkeypatch):
@@ -253,9 +241,7 @@ def test_fallback_without_h5(tmp_path, monkeypatch):
         shock_module._MAPPINGS_GRIDS = original_grids
 
 
-# ---------------------------------------------------------------------------
-# 8. Diffuse ISM attenuation reduces shock SED correctly
-# ---------------------------------------------------------------------------
+# ── 8. Diffuse ISM attenuation reduces shock SED correctly ────────
 
 
 def test_ism_attenuation_reduces_shock_sed():

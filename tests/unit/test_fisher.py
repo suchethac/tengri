@@ -12,9 +12,7 @@ import jax.numpy as jnp
 
 from tengri.analysis.diagnostics.fisher import fisher_correlation_matrix, fisher_parameter_errors
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# ── Helpers ───────────────────────────────────────────────────────
 
 
 def _diagonal_fim(variances):
@@ -22,9 +20,7 @@ def _diagonal_fim(variances):
     return jnp.diag(jnp.array(variances, dtype=float))
 
 
-# ---------------------------------------------------------------------------
-# fisher_parameter_errors
-# ---------------------------------------------------------------------------
+# ── fisher_parameter_errors ───────────────────────────────────────
 
 
 class TestFisherParameterErrors:
@@ -77,9 +73,7 @@ class TestFisherParameterErrors:
         assert jnp.all(jnp.isreal(errors))
 
 
-# ---------------------------------------------------------------------------
-# fisher_correlation_matrix
-# ---------------------------------------------------------------------------
+# ── fisher_correlation_matrix ─────────────────────────────────────
 
 
 class TestFisherCorrelationMatrix:

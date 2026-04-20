@@ -28,9 +28,7 @@ jax.config.update("jax_enable_x64", True)
 pytestmark = [pytest.mark.crossval]
 
 
-# ===================================================================
-# 1. ISCO radius — Bardeen, Press & Teukolsky (1972) Table
-# ===================================================================
+# ── 1. ISCO radius — Bardeen, Press & Teukolsky (1972) Table ──────
 
 
 class TestISCORadius:
@@ -59,9 +57,7 @@ class TestISCORadius:
         )
 
 
-# ===================================================================
-# 2. Eddington luminosity — L_Edd = 4*pi*G*M*m_p*c / sigma_T
-# ===================================================================
+# ── 2. Eddington luminosity — L_Edd = 4*pi*G*M*m_p*c / sigma_T ────
 
 
 class TestEddingtonLuminosity:
@@ -93,9 +89,7 @@ class TestEddingtonLuminosity:
         )
 
 
-# ===================================================================
-# 3. Radiative efficiency — Novikov-Thorne: eta = 1 - sqrt(1 - 2/(3*r_isco))
-# ===================================================================
+# ── 3. Radiative efficiency — Novikov-Thorne: eta = 1 - sqrt(1 - 2/(3*r_isco))
 
 
 class TestRadiativeEfficiency:
@@ -125,9 +119,7 @@ class TestRadiativeEfficiency:
         )
 
 
-# ===================================================================
-# 4. Multicolor disc Wien peak — T_in scaling
-# ===================================================================
+# ── 4. Multicolor disc Wien peak — T_in scaling ───────────────────
 
 
 class TestMulticolorDiscPeak:
@@ -183,9 +175,7 @@ class TestMulticolorDiscPeak:
         )
 
 
-# ===================================================================
-# 5. BLR Balmer decrement — Ha/Hb ratio
-# ===================================================================
+# ── 5. BLR Balmer decrement — Ha/Hb ratio ─────────────────────────
 
 
 class TestBLRBalmerDecrement:
@@ -231,9 +221,7 @@ class TestBLRBalmerDecrement:
         )
 
 
-# ===================================================================
-# 6. NLR forbidden line ratios — atomic physics
-# ===================================================================
+# ── 6. NLR forbidden line ratios — atomic physics ─────────────────
 
 
 class TestNLRLineRatios:
@@ -292,9 +280,7 @@ class TestNLRLineRatios:
         )
 
 
-# ===================================================================
-# 7. QSOgen broken power law — Temple+2021 slopes
-# ===================================================================
+# ── 7. QSOgen broken power law — Temple+2021 slopes ───────────────
 
 
 class TestQSOgenPowerLaw:
@@ -358,9 +344,7 @@ class TestQSOgenPowerLaw:
         )
 
 
-# ===================================================================
-# 8. Type 1 vs Type 2 geometric masking
-# ===================================================================
+# ── 8. Type 1 vs Type 2 geometric masking ─────────────────────────
 
 
 class TestGeometricMasking:
@@ -419,9 +403,7 @@ class TestGeometricMasking:
         )
 
 
-# ===================================================================
-# 9. Polar dust — SMC reddening applied correctly
-# ===================================================================
+# ── 9. Polar dust — SMC reddening applied correctly ───────────────
 
 
 class TestPolarDust:
@@ -474,9 +456,7 @@ class TestPolarDust:
         )
 
 
-# ===================================================================
-# 10. Kubota & Done 3-zone disc — zone contributions
-# ===================================================================
+# ── 10. Kubota & Done 3-zone disc — zone contributions ────────────
 
 
 class TestKubotaDone3Zone:
@@ -568,9 +548,7 @@ class TestKubotaDone3Zone:
         assert opt_flux > peak * 1e-4, "No significant optical flux in K&D model"
 
 
-# ===================================================================
-# 11. Alpha_ox cross-validation — Just+2007 / CIGALE
-# ===================================================================
+# ── 11. Alpha_ox cross-validation — Just+2007 / CIGALE ────────────
 
 
 class TestAlphaOxCrossval:
@@ -651,9 +629,7 @@ class TestAlphaOxCrossval:
             )
 
 
-# ===================================================================
-# 12. X-ray anisotropy cross-validation — Yang+2022
-# ===================================================================
+# ── 12. X-ray anisotropy cross-validation — Yang+2022 ─────────────
 
 
 class TestXrayAnisotropyCrossval:
@@ -745,9 +721,7 @@ class TestXrayAnisotropyCrossval:
         assert l_face > l_edge, f"Face-on ({l_face:.3f}) should exceed edge-on ({l_edge:.3f})"
 
 
-# ===================================================================
-# 13. Cue input bounds check
-# ===================================================================
+# ── 13. Cue input bounds check ────────────────────────────────────
 
 
 class TestCueInputBoundsCheck:
@@ -839,9 +813,7 @@ class TestCueInputBoundsCheck:
             assert lo <= val <= hi, f"Boundary {name}={val} outside Cue range [{lo}, {hi}]"
 
 
-# ===================================================================
-# 14. Polar dust cross-validation — X-CIGALE expectations
-# ===================================================================
+# ── 14. Polar dust cross-validation — X-CIGALE expectations ───────
 
 
 class TestPolarDustCrossval:
@@ -974,9 +946,7 @@ class TestPolarDustCrossval:
         )
 
 
-# ===================================================================
-# 15. DPL radio cross-validation — AGNfitter-rx
-# ===================================================================
+# ── 15. DPL radio cross-validation — AGNfitter-rx ─────────────────
 
 
 class TestDPLRadioCrossval:
@@ -1139,9 +1109,7 @@ class TestDPLRadioCrossval:
         assert 1.0 < ratio < 100.0, f"L(1GHz)/L(100GHz) = {ratio:.1f}, expected between 1 and 100"
 
 
-# ===================================================================
-# 16. Unit consistency: AGN luminosity to Cue input
-# ===================================================================
+# ── 16. Unit consistency: AGN luminosity to Cue input ─────────────
 
 
 class TestUnitConsistencyAgnToCue:

@@ -44,7 +44,7 @@ class BakedInBackend:
                 "FIXED logU and FIXED escape fraction determined when the SSP grid "
                 "was generated (commonly logU = −3, but depends on the SSP file). "
                 "The ionization parameter and escape fraction are NOT free parameters "
-                "— varying neb_logU or neb_fesc in your ParamSpec will have no "
+                "— varying neb_logU or neb_fesc in your Parameters will have no "
                 "effect. Check your SSP file's nebular assumptions. Switch to "
                 "CloudyGridBackend or CueBackend to vary nebular properties. "
                 "To suppress: pass ionizing_source_warning='suppress'."

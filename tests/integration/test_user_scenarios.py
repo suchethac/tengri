@@ -32,9 +32,7 @@ from tengri.components.sps.dsps_wrapper import load_ssp_data
 from tengri.observation.filters import load_filter_set
 from tengri.parameters.priors import Fixed, Uniform
 
-# ---------------------------------------------------------------------------
-# Skip if SSP data not available
-# ---------------------------------------------------------------------------
+# ── Skip if SSP data not available ────────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _MIST_SSP = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 _BC03_SSP = _DATA_DIR / "ssp_bc03_miles_chabrier.h5"
@@ -50,9 +48,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-# ---------------------------------------------------------------------------
-# Performance thresholds (user experience boundaries)
-# ---------------------------------------------------------------------------
+# ── Performance thresholds (user experience boundaries) ───────────
 class PerformanceThresholds:
     """User experience thresholds for JIT and memory usage."""
 
@@ -68,9 +64,7 @@ class PerformanceThresholds:
     # Above 8GB = ❌ Requires workstation
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="session")
@@ -170,9 +164,7 @@ def rng_key():
     return jax.random.PRNGKey(42)
 
 
-# ---------------------------------------------------------------------------
-# Helper functions
-# ---------------------------------------------------------------------------
+# ── Helper functions ──────────────────────────────────────────────
 
 
 def measure_jit_and_runtime(
@@ -375,9 +367,7 @@ def run_scenario(
     }
 
 
-# ---------------------------------------------------------------------------
-# Test Scenarios
-# ---------------------------------------------------------------------------
+# ── Test Scenarios ────────────────────────────────────────────────
 
 
 class TestStandardGalaxyWorkflows:

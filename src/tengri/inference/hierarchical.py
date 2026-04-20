@@ -143,7 +143,7 @@ class PopulationFitter:
     model_factory : callable
         Function(psd_sigma, psd_tau_myr) → Model.
         Creates a model with the given PSD params. All other params
-        (SFH, dust, etc.) come from the model's ParamSpec.
+        (SFH, dust, etc.) come from the model's Parameters.
     galaxies : list of dict
         Each dict has 'flux_obs', 'noise', and optionally 'spec_obs',
         'spec_noise', 'wave_spec'.
@@ -321,6 +321,7 @@ class PopulationFitter:
                 params["sfh_field_psd_tau_myr"] = psd_tau
                 if stochastic:
                     params["sfh_field_xi"] = xi
+                params = spec.resolve_mirrors(params)
                 return _predict(params)
 
             if stochastic:
@@ -779,6 +780,7 @@ class PopulationFitter:
                 params["sfh_field_xi"] = gp_field
                 params["sfh_field_psd_sigma"] = 1.0
                 params["sfh_field_psd_tau_myr"] = 50.0
+                params = spec.resolve_mirrors(params)
                 return _predict_cfm(params)
 
             predictions = jax.vmap(forward_one)(gal_ub, gal_xi)
@@ -1065,6 +1067,7 @@ class PopulationFitter:
                 params["sfh_field_psd_tau_myr"] = psd_tau
                 if stochastic:
                     params["sfh_field_xi"] = xi
+                params = spec.resolve_mirrors(params)
                 return _predict_single(params)
 
             if stochastic:
@@ -1313,6 +1316,7 @@ class PopulationFitter:
                 params["sfh_field_psd_tau_myr"] = psd_tau
                 if stochastic:
                     params["sfh_field_xi"] = xi
+                params = spec.resolve_mirrors(params)
                 return _predict_rt(params)
 
             if stochastic:
@@ -1400,9 +1404,7 @@ class PopulationFitter:
         )
 
 
-# ---------------------------------------------------------------------------
-# Deprecated aliases — removed in tengri v1.0
-# ---------------------------------------------------------------------------
+# ── Deprecated aliases — removed in tengri v1.0 ───────────────────
 
 
 def _make_deprecated_hierarchical_result():

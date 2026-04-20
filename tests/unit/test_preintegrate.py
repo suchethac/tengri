@@ -25,9 +25,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Fixtures: synthetic templates and filters
-# ---------------------------------------------------------------------------
+# ── Fixtures: synthetic templates and filters ─────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -75,9 +73,7 @@ def line_wavelengths():
     return jnp.array([1500.0, 4500.0, 8500.0])
 
 
-# ---------------------------------------------------------------------------
-# Tests: preintegrate_grid() basic functionality
-# ---------------------------------------------------------------------------
+# ── Tests: preintegrate_grid() basic functionality ────────────────
 
 
 class TestPreintegrateGridBasic:
@@ -160,9 +156,7 @@ class TestPreintegrateGridBasic:
         assert jnp.all(result.phot > 0.0)
 
 
-# ---------------------------------------------------------------------------
-# Tests: energy normalization mode
-# ---------------------------------------------------------------------------
+# ── Tests: energy normalization mode ──────────────────────────────
 
 
 class TestPreintegrateGridEnergyNormalization:
@@ -218,9 +212,7 @@ class TestPreintegrateGridEnergyNormalization:
         assert float(weighted_sum) > 0.0
 
 
-# ---------------------------------------------------------------------------
-# Tests: Taylor moment computation
-# ---------------------------------------------------------------------------
+# ── Tests: Taylor moment computation ──────────────────────────────
 
 
 class TestPreintegrateGridTaylorMoment:
@@ -281,9 +273,7 @@ class TestPreintegrateGridTaylorMoment:
         assert float(max_moment) < 1e-6
 
 
-# ---------------------------------------------------------------------------
-# Tests: correctness against SSP precomputation (integration test)
-# ---------------------------------------------------------------------------
+# ── Tests: correctness against SSP precomputation (integration test)
 
 
 class TestPreintegrateGridSSPCrossval:
@@ -339,9 +329,7 @@ class TestPreintegrateGridSSPCrossval:
         npt.assert_allclose(result.phot, phot_ref.ssp_phot, rtol=1e-10, atol=1e-30)
 
 
-# ---------------------------------------------------------------------------
-# Tests: preintegrate_lines() basic functionality
-# ---------------------------------------------------------------------------
+# ── Tests: preintegrate_lines() basic functionality ───────────────
 
 
 class TestPreintegrateLines:
@@ -434,9 +422,7 @@ class TestPreintegrateLines:
         )
 
 
-# ---------------------------------------------------------------------------
-# Tests: interp_nd_triweight() 1D case
-# ---------------------------------------------------------------------------
+# ── Tests: interp_nd_triweight() 1D case ──────────────────────────
 
 
 class TestInterpNdTriweight1D:
@@ -517,9 +503,7 @@ class TestInterpNdTriweight1D:
         assert jnp.all(jnp.isfinite(result))
 
 
-# ---------------------------------------------------------------------------
-# Tests: interp_nd_triweight() 2D case
-# ---------------------------------------------------------------------------
+# ── Tests: interp_nd_triweight() 2D case ──────────────────────────
 
 
 class TestInterpNdTriweight2D:
@@ -583,9 +567,7 @@ class TestInterpNdTriweight2D:
         assert jnp.all(jnp.isfinite(result))
 
 
-# ---------------------------------------------------------------------------
-# Tests: Gradient and JIT compatibility
-# ---------------------------------------------------------------------------
+# ── Tests: Gradient and JIT compatibility ─────────────────────────
 
 
 class TestGradientAndJIT:
@@ -636,9 +618,7 @@ class TestGradientAndJIT:
         assert jnp.isfinite(result)
 
 
-# ---------------------------------------------------------------------------
-# Tests: Edge cases and numerical stability
-# ---------------------------------------------------------------------------
+# ── Tests: Edge cases and numerical stability ─────────────────────
 
 
 class TestEdgeCasesAndStability:
@@ -723,9 +703,7 @@ class TestEdgeCasesAndStability:
         assert jnp.all(jnp.isfinite(result))
 
 
-# ---------------------------------------------------------------------------
-# Tests: slice_fixed_axes()
-# ---------------------------------------------------------------------------
+# ── Tests: slice_fixed_axes() ─────────────────────────────────────
 
 
 class TestSliceFixedAxes:

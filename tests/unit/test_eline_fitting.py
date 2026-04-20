@@ -280,9 +280,7 @@ class TestFittedMode:
             observation=None,
         )
 
-    # ------------------------------------------------------------------
-    # Config-level tests (no SSP, no Fitter)
-    # ------------------------------------------------------------------
+    # ── Config-level tests (no SSP, no Fitter) ────────────────────
 
     def test_spectroscopy_fitted_mode_no_error(self):
         """Spectroscopy(eline_mode='fitted') must not raise NotImplementedError."""
@@ -296,9 +294,7 @@ class TestFittedMode:
         cfg = Spectroscopy(wave_obs=wave, eline_mode="fitted")
         assert cfg.has_eline_fitting is True
 
-    # ------------------------------------------------------------------
-    # ParamSpec-level test
-    # ------------------------------------------------------------------
+    # ── ParamSpec-level test ──────────────────────────────────────
 
     def test_merge_observation_params_adds_free_params(self):
         """merge_observation_params must add params to free_params and leave original intact."""
@@ -316,9 +312,7 @@ class TestFittedMode:
         assert "eline_amp_Halpha" not in spec.free_params
         assert "eline_amp_Halpha" not in spec._valid_param_names
 
-    # ------------------------------------------------------------------
-    # Fitter-level tests (mock model, no SSP)
-    # ------------------------------------------------------------------
+    # ── Fitter-level tests (mock model, no SSP) ───────────────────
 
     def test_fitter_sets_eline_fitted_flag(self):
         """Fitter must set _eline_fitted=True when eline_mode='fitted'."""

@@ -2,7 +2,7 @@
 
 Declarative specification of the noise model: calibration floor and
 likelihood shape (Gaussian vs Student-t). Replaces the pattern of
-manually adding noise_frac_cal / noise_dof to ParamSpec.
+manually adding noise_frac_cal / noise_dof to Parameters.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ class NoiseModel:
     student_t_dof: float | None = None
 
     def get_params(self) -> dict[str, Distribution]:
-        """Return ParamSpec entries for the noise model.
+        """Return Parameters entries for the noise model.
 
         Returns
         -------
@@ -66,9 +66,7 @@ class NoiseModel:
         return ", ".join(parts) if parts else "Gaussian (default)"
 
 
-# ---------------------------------------------------------------------------
-# Deprecated alias — removed in tengri v1.0
-# ---------------------------------------------------------------------------
+# ── Deprecated alias — removed in tengri v1.0 ─────────────────────
 
 
 def _make_deprecated_noise_config():

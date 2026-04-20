@@ -30,9 +30,7 @@ bagpipes_mg = pytest.importorskip(
     reason="bagpipes not installed",
 )
 
-# ---------------------------------------------------------------------------
-# SSP data (needed for tengri Model)
-# ---------------------------------------------------------------------------
+# ── SSP data (needed for tengri Model) ────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_PATH = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 _SSP_EXISTS = _SSP_PATH.is_file()
@@ -109,9 +107,7 @@ def _make_bagpipes_constant_sfh(age_gyr, log_massformed, metallicity_solar=1.0):
     return bagpipes_mg.model_galaxy(comp, spec_wavs=np.arange(3000, 10000, 10.0))
 
 
-# ===================================================================
-# 1. Formed mass consistency (SSP-independent)
-# ===================================================================
+# ── 1. Formed mass consistency (SSP-independent) ──────────────────
 
 
 class TestFormedMassCrossval:
@@ -156,9 +152,7 @@ class TestFormedMassCrossval:
         )
 
 
-# ===================================================================
-# 2. SFR consistency
-# ===================================================================
+# ── 2. SFR consistency ────────────────────────────────────────────
 
 
 class TestSFRCrossval:
@@ -207,9 +201,7 @@ class TestSFRCrossval:
         assert 1e-14 < ssfr_ds < 1e-7, f"tengri sSFR = {ssfr_ds:.2e} out of range"
 
 
-# ===================================================================
-# 3. Surviving stellar mass (SSP-dependent, expect ~20% difference)
-# ===================================================================
+# ── 3. Surviving stellar mass (SSP-dependent, expect ~20% difference)
 
 
 class TestSurvivingMassCrossval:
@@ -243,9 +235,7 @@ class TestSurvivingMassCrossval:
         assert f_old < f_young, "Older population should have more mass loss"
 
 
-# ===================================================================
-# 4. SED shape sanity (qualitative agreement)
-# ===================================================================
+# ── 4. SED shape sanity (qualitative agreement) ───────────────────
 
 
 class TestSEDShapeCrossval:

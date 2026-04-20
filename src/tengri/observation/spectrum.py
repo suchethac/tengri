@@ -20,9 +20,7 @@ import jax.numpy as jnp
 
 from tengri.utils.conversions import lnu_to_fnu
 
-# ---------------------------------------------------------------------------
-# SSP library spectral resolutions (velocity dispersion in km/s)
-# ---------------------------------------------------------------------------
+# ── SSP library spectral resolutions (velocity dispersion in km/s)
 SSP_LIBRARY_RESOLUTIONS: dict[str, float] = {
     "miles": 70.0,  # R ~ 2500 at 5000 A, sigma ~ 70 km/s
     "c3k": 15.0,  # R ~ 10000, sigma ~ 15 km/s
@@ -30,16 +28,12 @@ SSP_LIBRARY_RESOLUTIONS: dict[str, float] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Speed of light
-# ---------------------------------------------------------------------------
+# ── Speed of light ────────────────────────────────────────────────
 _C_KM_S = 299792.458  # km/s
 _FWHM_TO_SIGMA = 2.3548200  # 2*sqrt(2*ln(2))
 
 
-# ---------------------------------------------------------------------------
-# Instrument resolution profiles
-# ---------------------------------------------------------------------------
+# ── Instrument resolution profiles ────────────────────────────────
 
 
 def nirspec_prism_resolution(wave_um: jnp.ndarray) -> jnp.ndarray:
@@ -77,9 +71,7 @@ def nirspec_g140m_resolution(wave_um: jnp.ndarray) -> jnp.ndarray:
     return 1000.0 * jnp.ones_like(wave_um)
 
 
-# ---------------------------------------------------------------------------
-# Line Spread Function (LSF) convolution
-# ---------------------------------------------------------------------------
+# ── Line Spread Function (LSF) convolution ────────────────────────
 
 
 def _resolution_to_sigma_kms(resolution: jnp.ndarray) -> jnp.ndarray:
@@ -433,9 +425,7 @@ def chebyshev_calibration(
     return result
 
 
-# ---------------------------------------------------------------------------
-# Speed of light in Angstrom/s (for frequency conversions)
-# ---------------------------------------------------------------------------
+# ── Speed of light in Angstrom/s (for frequency conversions) ──────
 _C_AA_PER_S = 2.99792458e18
 
 

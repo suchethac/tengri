@@ -164,14 +164,10 @@ class TestDustCurveCrossval:
         assert trans_bp[0] < trans_bp[-1], "bagpipes: blue should be more attenuated"
 
 
-# ===================================================================
-# Part 2: Reference-value cross-validation (no external dependencies)
-# ===================================================================
+# ── Part 2: Reference-value cross-validation (no external dependencies)
 
 
-# -------------------------------------------------------------------
-# 1. Calzetti (2000) polynomial reference values
-# -------------------------------------------------------------------
+# ── 1. Calzetti (2000) polynomial reference values ────────────────
 
 
 class TestCalzettiReference:
@@ -255,9 +251,7 @@ class TestCalzettiReference:
         )
 
 
-# -------------------------------------------------------------------
-# 2. Cardelli, Clayton & Mathis (1989) reference values
-# -------------------------------------------------------------------
+# ── 2. Cardelli, Clayton & Mathis (1989) reference values ─────────
 
 
 class TestCardelliReference:
@@ -327,9 +321,7 @@ class TestCardelliReference:
         )
 
 
-# -------------------------------------------------------------------
-# 3. SMC and LMC Pei (1992) curves
-# -------------------------------------------------------------------
+# ── 3. SMC and LMC Pei (1992) curves ──────────────────────────────
 
 
 class TestSMCLMCReference:
@@ -399,9 +391,7 @@ class TestSMCLMCReference:
         np.testing.assert_allclose(k_v, 1.0, atol=0.1)
 
 
-# -------------------------------------------------------------------
-# 4. Kriek & Conroy (2013) limiting cases
-# -------------------------------------------------------------------
+# ── 4. Kriek & Conroy (2013) limiting cases ───────────────────────
 
 
 class TestKriekConroyReference:
@@ -449,9 +439,7 @@ class TestKriekConroyReference:
         )
 
 
-# -------------------------------------------------------------------
-# 5. Two-component dust: Charlot & Fall (2000) physics
-# -------------------------------------------------------------------
+# ── 5. Two-component dust: Charlot & Fall (2000) physics ──────────
 
 
 class TestCharlotFallReference:
@@ -563,9 +551,7 @@ class TestCharlotFallReference:
         assert np.all(diffs >= -1e-10), "Transmission should increase monotonically with age"
 
 
-# -------------------------------------------------------------------
-# 6. WG00 geometries: analytic verification
-# -------------------------------------------------------------------
+# ── 6. WG00 geometries: analytic verification ─────────────────────
 
 
 class TestWG00GeometriesReference:
@@ -672,9 +658,7 @@ class TestWG00GeometriesReference:
         np.testing.assert_allclose(trans, 1.0, atol=1e-10)
 
 
-# -------------------------------------------------------------------
-# 7. Energy balance: L_absorbed = integral(L_intrinsic - L_attenuated)
-# -------------------------------------------------------------------
+# ── 7. Energy balance: L_absorbed = integral(L_intrinsic - L_attenuated)
 
 
 class TestEnergyBalanceReference:
@@ -751,9 +735,7 @@ class TestEnergyBalanceReference:
         )
 
 
-# -------------------------------------------------------------------
-# 8. Casey 2012: FIR peak vs temperature
-# -------------------------------------------------------------------
+# ── 8. Casey 2012: FIR peak vs temperature ────────────────────────
 
 
 class TestCasey2012Reference:

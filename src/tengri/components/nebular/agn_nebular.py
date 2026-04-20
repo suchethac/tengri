@@ -42,16 +42,12 @@ from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES, SEGMENT_ED
 # Default path for the Feltre+2016 HDF5 grid
 _DEFAULT_FELTRE_GRID_PATH = Path(__file__).resolve().parents[4] / "data" / "feltre_grid.h5"
 
-# ---------------------------------------------------------------------------
-# Physical constants
-# ---------------------------------------------------------------------------
+# ── Physical constants ────────────────────────────────────────────
 _NU_LYMAN = _C_CGS / (911.76e-8)  # Lyman limit frequency [Hz]
 _RYDBERG_ERG = 2.1799e-11  # 13.6 eV in erg
 
 
-# ---------------------------------------------------------------------------
-# Ionizing spectrum conversion
-# ---------------------------------------------------------------------------
+# ── Ionizing spectrum conversion ──────────────────────────────────
 
 
 def agn_ionspec_from_alpha_pl(alpha_pl: float) -> dict:
@@ -128,9 +124,7 @@ def agn_ionspec_from_alpha_pl(alpha_pl: float) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# Q_H computation
-# ---------------------------------------------------------------------------
+# ── Q_H computation ───────────────────────────────────────────────
 
 
 def _log_qh_from_lacc(l_acc_erg: float, alpha_pl: float) -> float:
@@ -200,9 +194,7 @@ def _log_qh_from_lacc(l_acc_erg: float, alpha_pl: float) -> float:
     return jnp.log10(jnp.maximum(q_h, 1.0))
 
 
-# ---------------------------------------------------------------------------
-# Backend: Cue emulator
-# ---------------------------------------------------------------------------
+# ── Backend: Cue emulator ─────────────────────────────────────────
 
 
 def agn_nlr_cue(
@@ -286,9 +278,7 @@ def agn_nlr_cue(
     return line_wav, line_lum
 
 
-# ---------------------------------------------------------------------------
-# Feltre+2016 NLR backend
-# ---------------------------------------------------------------------------
+# ── Feltre+2016 NLR backend ───────────────────────────────────────
 
 
 @dataclass
@@ -529,14 +519,10 @@ class FeltreNLRBackend:
         return grid.line_wavelengths_aa, line_lum
 
 
-# ---------------------------------------------------------------------------
-# Backend: analytic (existing)
-# ---------------------------------------------------------------------------
+# ── Backend: analytic (existing) ──────────────────────────────────
 
 
-# ---------------------------------------------------------------------------
-# Unified dispatcher
-# ---------------------------------------------------------------------------
+# ── Unified dispatcher ────────────────────────────────────────────
 
 
 def agn_nlr_emission(

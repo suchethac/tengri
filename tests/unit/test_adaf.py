@@ -13,9 +13,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture()
@@ -30,9 +28,7 @@ def optical_wavelength():
     return jnp.logspace(2.5, 5.0, 200)  # 316 A to 100,000 A
 
 
-# ---------------------------------------------------------------------------
-# Basic functionality
-# ---------------------------------------------------------------------------
+# ── Basic functionality ───────────────────────────────────────────
 
 
 class TestAdafDisc:
@@ -184,9 +180,7 @@ class TestAdafDisc:
         assert jnp.allclose(ratio, 2.0, rtol=0.01, atol=1e-30)
 
 
-# ---------------------------------------------------------------------------
-# JIT and gradient compatibility
-# ---------------------------------------------------------------------------
+# ── JIT and gradient compatibility ────────────────────────────────
 
 
 class TestAdafJitGrad:
@@ -283,9 +277,7 @@ class TestAdafJitGrad:
         )
 
 
-# ---------------------------------------------------------------------------
-# Registry tests
-# ---------------------------------------------------------------------------
+# ── Registry tests ────────────────────────────────────────────────
 
 
 class TestAdafRegistry:
@@ -326,9 +318,7 @@ class TestAdafRegistry:
         assert jnp.all(jnp.isfinite(l_nu))
 
 
-# ---------------------------------------------------------------------------
-# simple_agn: power-law disc + single-temperature torus
-# ---------------------------------------------------------------------------
+# ── simple_agn: power-law disc + single-temperature torus ─────────
 
 
 class TestSimpleAgn:
@@ -456,9 +446,7 @@ class TestSimpleAgn:
         )
 
 
-# ---------------------------------------------------------------------------
-# standard_agn: multi-color disc + two-temperature torus
-# ---------------------------------------------------------------------------
+# ── standard_agn: multi-color disc + two-temperature torus ────────
 
 
 class TestStandardAgn:
@@ -598,9 +586,7 @@ class TestStandardAgn:
         )
 
 
-# ---------------------------------------------------------------------------
-# unified_agn combiner: disc × torus combinations
-# ---------------------------------------------------------------------------
+# ── unified_agn combiner: disc × torus combinations ───────────────
 
 
 class TestUnifiedAgnCombinations:
@@ -712,9 +698,7 @@ class TestUnifiedAgnCombinations:
         )
 
 
-# ---------------------------------------------------------------------------
-# resolve_agn_model: error and deprecation paths
-# ---------------------------------------------------------------------------
+# ── resolve_agn_model: error and deprecation paths ────────────────
 
 
 class TestResolveAgn:
@@ -771,9 +755,7 @@ class TestResolveAgn:
             assert name in AGN_MODELS, f"'{name}' missing from AGN_MODELS"
 
 
-# ---------------------------------------------------------------------------
-# register_agn_model: decorator factory
-# ---------------------------------------------------------------------------
+# ── register_agn_model: decorator factory ─────────────────────────
 
 
 class TestRegisterAgn:
@@ -807,9 +789,7 @@ class TestRegisterAgn:
             AGN_MODELS.pop("_test_unit_identity_c3d4", None)
 
 
-# ---------------------------------------------------------------------------
-# multicolor_agn: spin-dependent disc + two-temperature torus
-# ---------------------------------------------------------------------------
+# ── multicolor_agn: spin-dependent disc + two-temperature torus ───
 
 
 class TestMulticolorAgn:
@@ -877,9 +857,7 @@ class TestMulticolorAgn:
         assert jnp.all(jnp.isfinite(_run(wavelength)))
 
 
-# ---------------------------------------------------------------------------
-# kubota_done_full_agn: full 3-zone K&D disc + two-temperature torus
-# ---------------------------------------------------------------------------
+# ── kubota_done_full_agn: full 3-zone K&D disc + two-temperature torus
 
 
 class TestKubotaDoneFullAgn:
@@ -961,9 +939,7 @@ class TestKubotaDoneFullAgn:
         assert jnp.all(jnp.isfinite(_run(wavelength)))
 
 
-# ---------------------------------------------------------------------------
-# _sigmoid_mask: smooth geometric visibility function
-# ---------------------------------------------------------------------------
+# ── _sigmoid_mask: smooth geometric visibility function ───────────
 
 
 class TestSigmoidMask:
@@ -1039,9 +1015,7 @@ class TestSigmoidMask:
         assert g != 0.0, "Gradient of sigmoid mask should be non-zero near transition"
 
 
-# ---------------------------------------------------------------------------
-# unified_nlr_blr: NLR/BLR decomposition with geometric masking
-# ---------------------------------------------------------------------------
+# ── unified_nlr_blr: NLR/BLR decomposition with geometric masking ─
 
 
 class TestUnifiedNlrBlr:

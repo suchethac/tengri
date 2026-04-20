@@ -73,9 +73,7 @@ def ScatterV(momentum, refresh_rate, dt, key):
     return momentum, key
 
 
-# -------------------------------------------------------------------
-# HMC leapfrog variants (for comparison)
-# -------------------------------------------------------------------
+# ── HMC leapfrog variants (for comparison) ────────────────────────
 
 
 def hmc_leapfrog_refresh(params, momentum, log_prob_fn, step_size, n_steps, refresh_rate, key):
@@ -123,9 +121,7 @@ def hmc_leapfrog_norefresh(params, momentum, log_prob_fn, step_size, n_steps, re
     return new_params, new_momentum, -kinetic_energy_diff, key
 
 
-# -------------------------------------------------------------------
-# Ray tracing core: UpdateV (Snell's law in parameter space)
-# -------------------------------------------------------------------
+# ── Ray tracing core: UpdateV (Snell's law in parameter space) ────
 
 
 def UpdateV(momentum, grad, D, step_size):
@@ -209,9 +205,7 @@ def UpdateV(momentum, grad, D, step_size):
     )
 
 
-# -------------------------------------------------------------------
-# Ray tracing leapfrog integrators
-# -------------------------------------------------------------------
+# ── Ray tracing leapfrog integrators ──────────────────────────────
 
 
 def raytracer_leapfrog_refresh(
@@ -258,9 +252,7 @@ def raytracer_leapfrog_norefresh(
     return new_params, new_momentum, new_ln_L, key
 
 
-# -------------------------------------------------------------------
-# KDK (Kick-Drift-Kick) integrators
-# -------------------------------------------------------------------
+# ── KDK (Kick-Drift-Kick) integrators ─────────────────────────────
 
 
 def raytracer_kdk_norefresh(params, momentum, log_prob_fn, step_size, n_steps, refresh_rate, key):
@@ -318,9 +310,7 @@ def hmc_kdk_norefresh(params, momentum, log_prob_fn, step_size, n_steps, refresh
     return new_params, new_momentum, -kinetic_energy_diff, key
 
 
-# -------------------------------------------------------------------
-# Public API
-# -------------------------------------------------------------------
+# ── Public API ────────────────────────────────────────────────────
 
 
 def sample_hamiltonian(

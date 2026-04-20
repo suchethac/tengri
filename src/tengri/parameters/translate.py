@@ -35,16 +35,12 @@ import warnings
 
 from tengri.components.sfh.registry import resolve_sfh
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
+# ── Constants ─────────────────────────────────────────────────────
 
 # Solar metallicity: log10(Zsun) = log10(0.0142) ≈ -1.848 (Asplund 2009)
 LOG10_ZSUN = -1.8477116556169435
 
-# ---------------------------------------------------------------------------
-# Parameter maps: public → (internal, unit_scale, offset)
-# ---------------------------------------------------------------------------
+# ── Parameter maps: public → (internal, unit_scale, offset) ───────
 
 _EVOLVING_MET_PARAM_MAP = {
     "met_logzsol_0": ("log_z_abs_initial", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
@@ -55,6 +51,86 @@ _EVOLVING_ALPHA_PARAM_MAP = {
     "met_alpha_fe_old": ("alpha_fe_old", 1.0, 0.0),  # [alpha/Fe] of oldest stars
     "met_alpha_fe_young": ("alpha_fe_young", 1.0, 0.0),  # [alpha/Fe] at present day
 }
+
+# ── Identity param lists (no unit conversion, scale=1, offset=0) ─────
+
+_DUST_EMISSION_IDENTITY_PARAMS = [
+    "dust_T",
+    "dust_beta_ir",
+    "dust_alpha_mir",
+    "dust_alpha_dale",
+    "dust_umin",
+    "dust_gamma_dl",
+    "dust_qpah",
+    "dust_eta_balance",
+    "dust_alpha_dl14",
+]
+
+_AGN_IDENTITY_PARAMS = [
+    "agn_frac",
+    "agn_log_lbol",
+    "agn_alpha",
+    "agn_T_torus",
+    "agn_tau_torus",
+    "agn_torus_frac",
+    "agn_log_mbh",
+    "agn_log_ledd",
+    "agn_tau_skirtor",
+    "agn_p_skirtor",
+    "agn_q_skirtor",
+    "agn_oa_skirtor",
+    "agn_cos_inc",
+    "agn_a_spin",
+    "agn_T_hot",
+    "agn_T_warm",
+    "agn_frac_hot",
+    "agn_f_hard",
+    "agn_gamma_warm",
+    "agn_kt_warm",
+    "agn_gamma_hard",
+    "agn_kt_hot",
+    "agn_r_warm_ratio",
+    "agn_polar_ebv",
+    "agn_polar_oa",
+]
+
+_RADIO_IDENTITY_PARAMS = [
+    "radio_q_ir",
+    "radio_alpha_sf",
+    "radio_loudness",
+    "radio_alpha_agn",
+    "radio_T_e",
+    "radio_alpha_ff",
+]
+
+_XRAY_IDENTITY_PARAMS = [
+    "xray_gamma_agn",
+    "xray_alpha_ox",
+    "xray_gamma_hmxb",
+    "xray_gamma_lmxb",
+    "xray_E_cut",
+]
+
+_SHOCK_IDENTITY_PARAMS = [
+    "shock_frac",
+    "shock_velocity",
+    "shock_log_density",
+    "shock_b_over_sqrt_n",
+]
+
+_NEBULAR_IDENTITY_PARAMS = [
+    "neb_logU",
+    "neb_fesc",
+    "neb_fesc_lya",
+]
+
+
+def identity_param_map(names: list[str]) -> dict[str, tuple[str, float, float]]:
+    """Build param_map entries for params that pass through without conversion."""
+    return {p: (p, 1.0, 0.0) for p in names}
+
+
+# ── Non-SFH param map (includes real unit conversions) ───────────────
 
 _NON_SFH_PARAM_MAP = {
     "met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN),  # log(Z/Zsun) → log(Z)
@@ -85,9 +161,7 @@ _REVERSE_ALIASES = {
     "sfh_field_psd_tau_myr": "psd_tau_myr",
 }
 
-# ---------------------------------------------------------------------------
-# High-level API: short name → full prefixed name
-# ---------------------------------------------------------------------------
+# ── High-level API: short name → full prefixed name ──────────────
 
 # sfh_type token → {short_name: full_prefixed_name}
 # Used by Model.from_config() to expand user-supplied short priors.
@@ -211,9 +285,7 @@ PARAM_MAP = {
     "redshift": ("redshift", 1.0, 0.0),
 }
 
-# ---------------------------------------------------------------------------
-# Factory
-# ---------------------------------------------------------------------------
+# ── Factory ────────────────────────────────────────────────────────
 
 
 _SINGLE_COMPONENT_DUST_PARAM_MAP = {
@@ -249,9 +321,7 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
     return result
 
 
-# ---------------------------------------------------------------------------
-# Translation functions
-# ---------------------------------------------------------------------------
+# ── Translation functions ──────────────────────────────────────────
 
 
 def find_legacy_param(params, target_public_name):
@@ -291,7 +361,7 @@ def get_internal_params(params, param_map, spec, has_field):
     param_map : dict
         Mapping ``public_name -> (internal_name, scale, offset)``, as built
         by ``_build_param_map``.
-    spec : ParamSpec
+    spec : Parameters
         The parameter specification (used to look up fixed defaults).
     has_field : bool
         Whether the model uses a stochastic field component. When ``True``

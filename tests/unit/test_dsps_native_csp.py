@@ -27,9 +27,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Minimal synthetic SSP grid (no file I/O)
-# ---------------------------------------------------------------------------
+# ── Minimal synthetic SSP grid (no file I/O) ──────────────────────
 
 N_MET = 5
 N_AGE = 20
@@ -54,9 +52,7 @@ def _flat_sfr(n_age: int = N_AGE) -> jnp.ndarray:
     return jnp.ones(n_age, dtype=jnp.float64)
 
 
-# ---------------------------------------------------------------------------
-# compute_dsps_native_weights: unit tests
-# ---------------------------------------------------------------------------
+# ── compute_dsps_native_weights: unit tests ───────────────────────
 
 
 def test_output_shapes():
@@ -233,9 +229,7 @@ def test_grad_wrt_lgmet():
     )
 
 
-# ---------------------------------------------------------------------------
-# Model-level: csp_integration='dsps_native' accepted
-# ---------------------------------------------------------------------------
+# ── Model-level: csp_integration='dsps_native' accepted ───────────
 
 
 def _make_minimal_spec():
@@ -291,9 +285,7 @@ def test_model_rejects_unknown_csp_mode():
         Model(spec, ssp_data, csp_integration="bogus_mode")
 
 
-# ---------------------------------------------------------------------------
-# compute_dsps_met_table_weights: unit tests
-# ---------------------------------------------------------------------------
+# ── compute_dsps_met_table_weights: unit tests ────────────────────
 
 LGMET_TABLE = np.linspace(-2.0, -1.0, N_AGE)  # per-age log10(Z), youngest first
 
@@ -439,9 +431,7 @@ def test_met_table_grad_wrt_lgmet():
     assert jnp.all(jnp.isfinite(grad)), f"Non-finite gradient: {grad}"
 
 
-# ---------------------------------------------------------------------------
-# Model-level: csp_integration='dsps_met_table' accepted
-# ---------------------------------------------------------------------------
+# ── Model-level: csp_integration='dsps_met_table' accepted ────────
 
 
 def test_model_accepts_dsps_met_table():

@@ -48,9 +48,7 @@ __all__ = [
     "PC_CM",
 ]
 
-# ---------------------------------------------------------------------------
-# Key emission line wavelengths (rest-frame, Angstrom)
-# ---------------------------------------------------------------------------
+# ── Key emission line wavelengths (rest-frame, Angstrom) ──────────
 
 KEY_LINES = {
     "lya": (1215.67,),
@@ -73,9 +71,7 @@ are summed by :func:`extract_line_luminosity`.
 """
 
 
-# ===================================================================
-# SFH-based quantities (no SED needed)
-# ===================================================================
+# ── SFH-based quantities (no SED needed) ──────────────────────────
 
 
 def compute_mass_weighted_age(weights: jnp.ndarray, ssp_ages_yr: jnp.ndarray) -> jnp.ndarray:
@@ -155,9 +151,7 @@ def compute_mass_weighted_metallicity(
     return jnp.log10(jnp.maximum(mean_z, 1e-30))
 
 
-# ===================================================================
-# SED-based quantities
-# ===================================================================
+# ── SED-based quantities ──────────────────────────────────────────
 
 
 def compute_bolometric_luminosity(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
@@ -517,9 +511,7 @@ def compute_rest_uv_color(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     return mag_u - mag_v
 
 
-# ===================================================================
-# Luminosity-weighted quantities (need per-bin SED info)
-# ===================================================================
+# ── Luminosity-weighted quantities (need per-bin SED info) ────────
 
 
 def compute_per_bin_luminosity(
@@ -628,9 +620,7 @@ def compute_luminosity_weighted_metallicity(
     return jnp.log10(jnp.maximum(mean_z, 1e-30))
 
 
-# ===================================================================
-# Emission line extraction
-# ===================================================================
+# ── Emission line extraction ──────────────────────────────────────
 
 
 def extract_line_luminosity(
@@ -671,9 +661,7 @@ def extract_line_luminosity(
     return total
 
 
-# ===================================================================
-# Radio quantities (empirical scaling relations)
-# ===================================================================
+# ── Radio quantities (empirical scaling relations) ────────────────
 
 
 def compute_l_radio_1p4ghz_from_sfr(sfr: jnp.ndarray) -> jnp.ndarray:
@@ -753,9 +741,7 @@ def compute_q_ir(l_tir_lsun: jnp.ndarray, l_1p4ghz: jnp.ndarray) -> jnp.ndarray:
     )
 
 
-# ===================================================================
-# X-ray quantities (empirical scaling relations)
-# ===================================================================
+# ── X-ray quantities (empirical scaling relations) ────────────────
 
 
 def compute_l_x_xrb(sfr: jnp.ndarray, stellar_mass: jnp.ndarray) -> jnp.ndarray:
@@ -816,9 +802,7 @@ def compute_l_x_agn(l_bol_agn_erg: jnp.ndarray) -> jnp.ndarray:
     return l_bol_agn_erg / jnp.maximum(k_bol, 1.0)
 
 
-# ===================================================================
-# Ionizing photon budget
-# ===================================================================
+# ── Ionizing photon budget ────────────────────────────────────────
 
 
 def compute_ionizing_efficiency(q_h: jnp.ndarray, l_uv_erg: jnp.ndarray) -> jnp.ndarray:

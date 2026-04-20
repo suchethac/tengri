@@ -14,9 +14,7 @@ import inspect
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Source-inspection helpers
-# ---------------------------------------------------------------------------
+# ── Source-inspection helpers ─────────────────────────────────────
 
 
 def _pipeline_src() -> str:
@@ -43,9 +41,13 @@ def _params_src() -> str:
     return inspect.getsource(parameters)
 
 
-# ---------------------------------------------------------------------------
-# AGN spin + inclination forwarding
-# ---------------------------------------------------------------------------
+def _translate_src() -> str:
+    from tengri.parameters import translate
+
+    return inspect.getsource(translate)
+
+
+# ── AGN spin + inclination forwarding ─────────────────────────────
 class TestAGNSpinCosInc:
     """agn_a_spin and agn_cos_inc must be forwarded to the AGN model call."""
 
@@ -66,13 +68,11 @@ class TestAGNSpinCosInc:
         assert '"agn_a_spin"' in src, "agn_a_spin must be declared in _AGN_PARAMS in parameters.py"
 
     def test_agn_a_spin_in_param_map(self):
-        src = _model_src()
-        assert '"agn_a_spin"' in src, "agn_a_spin must be registered in model.py _param_map loop"
+        src = _translate_src()
+        assert '"agn_a_spin"' in src, "agn_a_spin must be in _AGN_IDENTITY_PARAMS in translate.py"
 
 
-# ---------------------------------------------------------------------------
-# SKIRTOR parameter forwarding
-# ---------------------------------------------------------------------------
+# ── SKIRTOR parameter forwarding ──────────────────────────────────
 class TestSKIRTORParams:
     """SKIRTOR clumpy torus params must be forwarded."""
 
@@ -101,13 +101,11 @@ class TestSKIRTORParams:
         ],
     )
     def test_skirtor_param_in_param_map(self, param):
-        src = _model_src()
-        assert f'"{param}"' in src, f"{param} must be registered in model.py _param_map loop"
+        src = _translate_src()
+        assert f'"{param}"' in src, f"{param} must be in _AGN_IDENTITY_PARAMS in translate.py"
 
 
-# ---------------------------------------------------------------------------
-# K&D full 3-zone disc parameters
-# ---------------------------------------------------------------------------
+# ── K&D full 3-zone disc parameters ───────────────────────────────
 class TestKDFullParams:
     """Kubota & Done (2018) 3-zone disc params must be forwarded."""
 
@@ -144,9 +142,7 @@ class TestKDFullParams:
         assert f'"{param}"' in src, f"{param} must be declared in _AGN_PARAMS in parameters.py"
 
 
-# ---------------------------------------------------------------------------
-# Polar dust forwarding
-# ---------------------------------------------------------------------------
+# ── Polar dust forwarding ─────────────────────────────────────────
 class TestPolarDustForwarding:
     """Polar dust (agn_polar_ebv, agn_polar_oa) must gate and forward correctly."""
 
@@ -196,9 +192,7 @@ class TestPolarDustForwarding:
         )
 
 
-# ---------------------------------------------------------------------------
-# X-ray extra parameters
-# ---------------------------------------------------------------------------
+# ── X-ray extra parameters ────────────────────────────────────────
 class TestXrayExtraParams:
     """gamma_hmxb, gamma_lmxb, E_cut must be forwarded to xray_total."""
 
@@ -222,9 +216,7 @@ class TestXrayExtraParams:
         assert f'"{param}"' in src, f"{param} must be declared in _XRAY_PARAMS in parameters.py"
 
 
-# ---------------------------------------------------------------------------
-# Radio free-free parameters
-# ---------------------------------------------------------------------------
+# ── Radio free-free parameters ────────────────────────────────────
 class TestRadioFreeFreeParams:
     """radio_T_e, radio_alpha_ff, sfr_mode, include_freefree must reach radio_total."""
 
@@ -265,9 +257,7 @@ class TestRadioFreeFreeParams:
         assert f'"{param}"' in src, f"{param} must be declared in _RADIO_PARAMS in parameters.py"
 
 
-# ---------------------------------------------------------------------------
-# Dust emission alpha_dl14
-# ---------------------------------------------------------------------------
+# ── Dust emission alpha_dl14 ──────────────────────────────────────
 class TestDustAlphaDL14:
     """dust_alpha_dl14 must be forwarded to the dust emission call."""
 
@@ -278,15 +268,13 @@ class TestDustAlphaDL14:
         )
 
     def test_dust_alpha_dl14_in_param_map(self):
-        src = _model_src()
+        src = _translate_src()
         assert '"dust_alpha_dl14"' in src, (
-            "dust_alpha_dl14 must be registered in model.py _param_map"
+            "dust_alpha_dl14 must be in _DUST_EMISSION_IDENTITY_PARAMS in translate.py"
         )
 
 
-# ---------------------------------------------------------------------------
-# Shock b_over_sqrt_n registration
-# ---------------------------------------------------------------------------
+# ── Shock b_over_sqrt_n registration ──────────────────────────────
 class TestShockBOverSqrtN:
     """shock_b_over_sqrt_n must be in _param_map when shock is enabled."""
 
@@ -297,7 +285,7 @@ class TestShockBOverSqrtN:
         )
 
     def test_shock_b_over_sqrt_n_in_param_map(self):
-        src = _model_src()
+        src = _translate_src()
         assert '"shock_b_over_sqrt_n"' in src, (
-            "shock_b_over_sqrt_n must be registered in model.py _param_map loop"
+            "shock_b_over_sqrt_n must be in _SHOCK_IDENTITY_PARAMS in translate.py"
         )

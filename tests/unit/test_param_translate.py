@@ -17,9 +17,7 @@ from tengri.parameters.translate import (
     get_internal_params,
 )
 
-# ---------------------------------------------------------------------------
-# Tests for LOG10_ZSUN
-# ---------------------------------------------------------------------------
+# ── Tests for LOG10_ZSUN ──────────────────────────────────────────
 
 
 class TestLog10Zsun:
@@ -34,9 +32,7 @@ class TestLog10Zsun:
         assert offset == LOG10_ZSUN
 
 
-# ---------------------------------------------------------------------------
-# Tests for _build_param_map
-# ---------------------------------------------------------------------------
+# ── Tests for _build_param_map ────────────────────────────────────
 
 
 class TestBuildParamMap:
@@ -71,9 +67,7 @@ class TestBuildParamMap:
         assert offset == LOG10_ZSUN
 
 
-# ---------------------------------------------------------------------------
-# Tests for find_legacy_param
-# ---------------------------------------------------------------------------
+# ── Tests for find_legacy_param ───────────────────────────────────
 
 
 class TestFindLegacyParam:
@@ -111,9 +105,7 @@ class TestFindLegacyParam:
         assert params == original
 
 
-# ---------------------------------------------------------------------------
-# Tests for get_internal_params
-# ---------------------------------------------------------------------------
+# ── Tests for get_internal_params ─────────────────────────────────
 
 
 class _DummyDist:
@@ -239,9 +231,7 @@ class TestGetInternalParams:
         assert params == original
 
 
-# ---------------------------------------------------------------------------
-# Tests for legacy PARAM_MAP
-# ---------------------------------------------------------------------------
+# ── Tests for legacy PARAM_MAP ────────────────────────────────────
 
 
 class TestLegacyParamMap:

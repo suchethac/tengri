@@ -111,9 +111,7 @@ from tengri.utils.sed_quantities import (
     extract_line_luminosity,
 )
 
-# ---------------------------------------------------------------------------
-# NamedTuples for JIT-compatible batch computation
-# ---------------------------------------------------------------------------
+# ── NamedTuples for JIT-compatible batch computation ──────────────
 
 
 class SFHQuantities(NamedTuple):
@@ -269,9 +267,7 @@ class DerivedQuantities(NamedTuple):
     sed: SEDQuantities
 
 
-# ---------------------------------------------------------------------------
-# Lazy property group base
-# ---------------------------------------------------------------------------
+# ── Lazy property group base ──────────────────────────────────────
 
 
 class _CachedBase:
@@ -288,9 +284,7 @@ class _CachedBase:
         self._pred = prediction
 
 
-# ---------------------------------------------------------------------------
-# SFH properties (lazy)
-# ---------------------------------------------------------------------------
+# ── SFH properties (lazy) ─────────────────────────────────────────
 
 
 class SFHProperties(_CachedBase):
@@ -420,9 +414,7 @@ class SFHProperties(_CachedBase):
         )
 
 
-# ---------------------------------------------------------------------------
-# SED properties (lazy)
-# ---------------------------------------------------------------------------
+# ── SED properties (lazy) ─────────────────────────────────────────
 
 
 class SEDProperties(_CachedBase):
@@ -555,9 +547,7 @@ class SEDProperties(_CachedBase):
         )
 
 
-# ---------------------------------------------------------------------------
-# Emission line properties (lazy)
-# ---------------------------------------------------------------------------
+# ── Emission line properties (lazy) ───────────────────────────────
 
 
 class LineProperties(_CachedBase):
@@ -677,9 +667,7 @@ class LineProperties(_CachedBase):
         return self.halpha / jnp.maximum(self.hbeta, 1e-50)
 
 
-# ---------------------------------------------------------------------------
-# Radio properties (lazy)
-# ---------------------------------------------------------------------------
+# ── Radio properties (lazy) ───────────────────────────────────────
 
 
 class RadioProperties(_CachedBase):
@@ -719,9 +707,7 @@ class RadioProperties(_CachedBase):
         return compute_q_ir(l_tir, self.l_1p4ghz)
 
 
-# ---------------------------------------------------------------------------
-# X-ray properties (lazy)
-# ---------------------------------------------------------------------------
+# ── X-ray properties (lazy) ───────────────────────────────────────
 
 
 class XRayProperties(_CachedBase):
@@ -757,9 +743,7 @@ class XRayProperties(_CachedBase):
         return self.l_x_xrb + self.l_x_agn
 
 
-# ---------------------------------------------------------------------------
-# Ionizing properties (lazy)
-# ---------------------------------------------------------------------------
+# ── Ionizing properties (lazy) ────────────────────────────────────
 
 
 class IonizingProperties(_CachedBase):
@@ -797,9 +781,7 @@ class IonizingProperties(_CachedBase):
         return compute_ionizing_efficiency(q_h, l_uv)
 
 
-# ---------------------------------------------------------------------------
-# Main Prediction class
-# ---------------------------------------------------------------------------
+# ── Main Prediction class ─────────────────────────────────────────
 
 
 class Prediction:

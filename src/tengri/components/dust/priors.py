@@ -9,7 +9,7 @@ and optical depth with redshift and stellar mass:
 - Optical depth scales with stellar mass and redshift
 
 These functions return dicts of Gaussian distributions suitable for direct
-use in ParamSpec kwargs.
+use in Parameters kwargs.
 
 References
 ----------
@@ -24,7 +24,7 @@ def narayanan_prior(z: float) -> dict:
     """Recommended dust attenuation priors based on Narayanan+2018 z-dependent trends.
 
     Returns dict of Gaussian distributions for dust_delta and dust_bump_strength,
-    suitable for direct use in ParamSpec.
+    suitable for direct use in Parameters.
 
     Based on Narayanan et al. (2018, ApJ, 869, 70) cosmological RT simulations:
     - Higher-z galaxies have steeper curves (more negative dust_delta)
@@ -43,9 +43,9 @@ def narayanan_prior(z: float) -> dict:
 
     Examples
     --------
-    >>> from tengri import ParamSpec
+    >>> from tengri import Parameters
     >>> from tengri.components.dust.priors import narayanan_prior
-    >>> spec = ParamSpec(..., **narayanan_prior(z=2.0))
+    >>> spec = Parameters(..., **narayanan_prior(z=2.0))
     """
     from tengri.parameters.priors import Gaussian
 
@@ -81,9 +81,9 @@ def narayanan_tau_prior(z: float, log_mstar: float = 10.0) -> dict:
 
     Examples
     --------
-    >>> from tengri import ParamSpec
+    >>> from tengri import Parameters
     >>> from tengri.components.dust.priors import narayanan_tau_prior
-    >>> spec = ParamSpec(..., **narayanan_tau_prior(z=1.5, log_mstar=10.5))
+    >>> spec = Parameters(..., **narayanan_tau_prior(z=1.5, log_mstar=10.5))
     """
     from tengri.parameters.priors import Gaussian
 

@@ -15,9 +15,7 @@ import jax.numpy as jnp
 
 from tengri.utils.conversions import lnu_to_fnu
 
-# ---------------------------------------------------------------------------
-# 1. Hartley transform (from NIFTy.re)
-# ---------------------------------------------------------------------------
+# ── 1. Hartley transform (from NIFTy.re) ──────────────────────────
 
 
 @jax.jit
@@ -114,9 +112,7 @@ def compute_full_amplitude_drw(
     return jnp.sqrt(jnp.maximum(p_logage, 1e-30) / d_log_age)
 
 
-# ---------------------------------------------------------------------------
-# 2. Gradient checkpointing
-# ---------------------------------------------------------------------------
+# ── 2. Gradient checkpointing ─────────────────────────────────────
 
 
 def checkpointed_forward_model(model_fn):
@@ -144,9 +140,7 @@ def checkpointed_forward_model(model_fn):
     return jax.checkpoint(model_fn)
 
 
-# ---------------------------------------------------------------------------
-# 3. Approximate photometry (Zacharegkas+2025 Section 3)
-# ---------------------------------------------------------------------------
+# ── 3. Approximate photometry (Zacharegkas+2025 Section 3) ────────
 
 
 @jax.jit
@@ -249,9 +243,7 @@ def approximate_photometry(
     return flux_scale * flux_intrinsic
 
 
-# ---------------------------------------------------------------------------
-# 4. Memory-efficient vmap patterns
-# ---------------------------------------------------------------------------
+# ── 4. Memory-efficient vmap patterns ─────────────────────────────
 
 
 def batched_forward(model_fn, params_batch, batch_size=100):

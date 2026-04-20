@@ -34,9 +34,7 @@ from tengri.utils.physics_constants import MPC_CM, TEN_PC_CM
 jax.config.update("jax_enable_x64", True)
 
 
-# ---------------------------------------------------------------------------
-# Test AB Magnitude System
-# ---------------------------------------------------------------------------
+# ── Test AB Magnitude System ──────────────────────────────────────
 
 
 class TestABMagnitudes:
@@ -94,9 +92,7 @@ class TestABMagnitudes:
         assert jnp.all(fnu_array > 0.0)
 
 
-# ---------------------------------------------------------------------------
-# Test Absolute Magnitude
-# ---------------------------------------------------------------------------
+# ── Test Absolute Magnitude ───────────────────────────────────────
 
 
 class TestAbsoluteMagnitudes:
@@ -132,9 +128,7 @@ class TestAbsoluteMagnitudes:
         assert jnp.allclose(delta_mag, -2.5, atol=1e-10)
 
 
-# ---------------------------------------------------------------------------
-# Test Distance Modulus
-# ---------------------------------------------------------------------------
+# ── Test Distance Modulus ─────────────────────────────────────────
 
 
 class TestDistanceModulus:
@@ -184,9 +178,7 @@ class TestDistanceModulus:
         assert jnp.all(jnp.diff(mu) > 0.0)
 
 
-# ---------------------------------------------------------------------------
-# Test Apparent ↔ Absolute
-# ---------------------------------------------------------------------------
+# ── Test Apparent ↔ Absolute ──────────────────────────────────────
 
 
 class TestApparentAbsolute:
@@ -237,9 +229,7 @@ class TestApparentAbsolute:
         assert m_app.shape == (3,)
 
 
-# ---------------------------------------------------------------------------
-# Test Vega Magnitude System
-# ---------------------------------------------------------------------------
+# ── Test Vega Magnitude System ────────────────────────────────────
 
 
 class TestVegaMagnitudes:
@@ -292,9 +282,7 @@ class TestVegaMagnitudes:
         assert jnp.all(jnp.isfinite(mag_vega))
 
 
-# ---------------------------------------------------------------------------
-# Test Surface Brightness
-# ---------------------------------------------------------------------------
+# ── Test Surface Brightness ───────────────────────────────────────
 
 
 class TestSurfaceBrightness:
@@ -349,9 +337,7 @@ class TestSurfaceBrightness:
         assert jnp.all(jnp.isfinite(mu))
 
 
-# ---------------------------------------------------------------------------
-# Test Cosmological Dimming
-# ---------------------------------------------------------------------------
+# ── Test Cosmological Dimming ─────────────────────────────────────
 
 
 class TestCosmologicalDimming:
@@ -390,9 +376,7 @@ class TestCosmologicalDimming:
         assert mu_eff.shape == (3,)
 
 
-# ---------------------------------------------------------------------------
-# Test JIT Compilation
-# ---------------------------------------------------------------------------
+# ── Test JIT Compilation ──────────────────────────────────────────
 
 
 class TestJITCompatibility:

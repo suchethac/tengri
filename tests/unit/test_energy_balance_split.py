@@ -13,9 +13,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -30,9 +28,7 @@ def L_absorbed():
     return 1e10
 
 
-# ---------------------------------------------------------------------------
-# Registration
-# ---------------------------------------------------------------------------
+# ── Registration ──────────────────────────────────────────────────
 
 
 class TestRegistration:
@@ -50,9 +46,7 @@ class TestRegistration:
         assert callable(fn)
 
 
-# ---------------------------------------------------------------------------
-# f_cold extremes
-# ---------------------------------------------------------------------------
+# ── f_cold extremes ───────────────────────────────────────────────
 
 
 class TestFColdExtremes:
@@ -95,9 +89,7 @@ class TestFColdExtremes:
         assert jnp.allclose(sed, expected, rtol=1e-10)
 
 
-# ---------------------------------------------------------------------------
-# AGN IR contribution
-# ---------------------------------------------------------------------------
+# ── AGN IR contribution ───────────────────────────────────────────
 
 
 class TestAGNContribution:
@@ -141,9 +133,7 @@ class TestAGNContribution:
         assert jnp.isclose(integral, L_agn, rtol=0.05)
 
 
-# ---------------------------------------------------------------------------
-# Energy conservation
-# ---------------------------------------------------------------------------
+# ── Energy conservation ───────────────────────────────────────────
 
 
 class TestEnergyConservation:
@@ -184,9 +174,7 @@ class TestEnergyConservation:
         assert jnp.isclose(integral, expected, rtol=0.05)
 
 
-# ---------------------------------------------------------------------------
-# JIT compatibility
-# ---------------------------------------------------------------------------
+# ── JIT compatibility ─────────────────────────────────────────────
 
 
 class TestJITCompatibility:
@@ -209,9 +197,7 @@ class TestJITCompatibility:
         assert seds.shape == (3, len(wavelengths))
 
 
-# ---------------------------------------------------------------------------
-# Gradient compatibility
-# ---------------------------------------------------------------------------
+# ── Gradient compatibility ────────────────────────────────────────
 
 
 class TestGradientCompatibility:
@@ -304,9 +290,7 @@ class TestGradientCompatibility:
         assert g_jax > 0.0
 
 
-# ---------------------------------------------------------------------------
-# Edge cases
-# ---------------------------------------------------------------------------
+# ── Edge cases ────────────────────────────────────────────────────
 
 
 class TestEdgeCases:
@@ -348,9 +332,7 @@ class TestEdgeCases:
         assert peak_warm < peak_cold
 
 
-# ---------------------------------------------------------------------------
-# planck_bnu standalone
-# ---------------------------------------------------------------------------
+# ── planck_bnu standalone ─────────────────────────────────────────
 
 
 class TestPlanckBnu:
@@ -426,9 +408,7 @@ class TestPlanckBnu:
         assert g_jax > 0.0
 
 
-# ---------------------------------------------------------------------------
-# modified_blackbody standalone
-# ---------------------------------------------------------------------------
+# ── modified_blackbody standalone ─────────────────────────────────
 
 
 class TestModifiedBlackbody:
@@ -532,9 +512,7 @@ class TestModifiedBlackbody:
         np.testing.assert_allclose(g_jax, g_fd, rtol=1e-2)
 
 
-# ---------------------------------------------------------------------------
-# casey2012 standalone
-# ---------------------------------------------------------------------------
+# ── casey2012 standalone ──────────────────────────────────────────
 
 
 class TestCasey2012:
@@ -656,9 +634,7 @@ class TestCasey2012:
         assert peak_warm < peak_cold
 
 
-# ---------------------------------------------------------------------------
-# CMB heating correction
-# ---------------------------------------------------------------------------
+# ── CMB heating correction ────────────────────────────────────────
 
 
 class TestCmbCorrectedTemperature:
@@ -726,9 +702,7 @@ class TestCmbCorrectedTemperature:
         assert g > 0.0
 
 
-# ---------------------------------------------------------------------------
-# CMB contrast factor
-# ---------------------------------------------------------------------------
+# ── CMB contrast factor ───────────────────────────────────────────
 
 
 class TestCmbContrastFactor:
@@ -792,9 +766,7 @@ class TestCmbContrastFactor:
         assert g > 0.0  # hotter dust → contrast closer to 1 → sum increases
 
 
-# ---------------------------------------------------------------------------
-# Absorbed luminosity integrals
-# ---------------------------------------------------------------------------
+# ── Absorbed luminosity integrals ─────────────────────────────────
 
 
 class TestComputeAbsorbedLuminosity:
@@ -870,9 +842,7 @@ class TestComputeAbsorbedLuminosity:
         assert g > 0.0  # more tau → more absorption → luminosity increases
 
 
-# ---------------------------------------------------------------------------
-# Registry utilities
-# ---------------------------------------------------------------------------
+# ── Registry utilities ────────────────────────────────────────────
 
 
 class TestRegistryUtilities:
@@ -941,9 +911,7 @@ class TestRegistryUtilities:
             assert name in DUST_EMISSION_MODELS, f"'{name}' missing from registry"
 
 
-# ---------------------------------------------------------------------------
-# apply_dust_emission dispatcher
-# ---------------------------------------------------------------------------
+# ── apply_dust_emission dispatcher ────────────────────────────────
 
 
 class TestApplyDustEmission:
@@ -980,9 +948,7 @@ class TestApplyDustEmission:
             apply_dust_emission("no_such_model", wave, 1e10)
 
 
-# ---------------------------------------------------------------------------
-# Module-level aliases
-# ---------------------------------------------------------------------------
+# ── Module-level aliases ──────────────────────────────────────────
 
 
 class TestModuleLevelAliases:
@@ -1025,9 +991,7 @@ class TestModuleLevelAliases:
         assert callable(em.draine_li2014)
 
 
-# ---------------------------------------------------------------------------
-# CMB corrections integrated into MBB
-# ---------------------------------------------------------------------------
+# ── CMB corrections integrated into MBB ───────────────────────────
 
 
 class TestMbbWithCmbCorrection:

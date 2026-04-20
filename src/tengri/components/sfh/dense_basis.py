@@ -29,9 +29,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
+# ── Constants ─────────────────────────────────────────────────────
 
 _SQRT3 = jnp.sqrt(3.0)
 _LENGTH_SCALE_FLOOR = 1e-10
@@ -40,9 +38,7 @@ _LENGTH_SCALE_FLOOR = 1e-10
 _DEFAULT_RES = 1000
 
 
-# ---------------------------------------------------------------------------
-# GP Kernel functions
-# ---------------------------------------------------------------------------
+# ── GP Kernel functions ───────────────────────────────────────────
 
 
 def matern32_kernel(
@@ -103,9 +99,7 @@ def combined_kernel(
     )
 
 
-# ---------------------------------------------------------------------------
-# GP interpolation
-# ---------------------------------------------------------------------------
+# ── GP interpolation ──────────────────────────────────────────────
 
 
 _NUGGET = 1e-4  # Diagonal jitter for GP numerical stability
@@ -140,9 +134,7 @@ def gp_interpolate(
     return k_eval @ alpha
 
 
-# ---------------------------------------------------------------------------
-# Monotone cubic interpolation (PCHIP) — no matrix solve needed
-# ---------------------------------------------------------------------------
+# ── Monotone cubic interpolation (PCHIP) — no matrix solve needed ─
 
 
 def pchip_interpolate(
@@ -214,9 +206,7 @@ def pchip_interpolate(
     return h00 * y0 + h10 * dx * d0 + h01 * y1 + h11 * dx * d1
 
 
-# ---------------------------------------------------------------------------
-# Quantile point construction (matching dense_basis exactly)
-# ---------------------------------------------------------------------------
+# ── Quantile point construction (matching dense_basis exactly) ────
 
 
 def _build_quantile_points(
@@ -345,9 +335,7 @@ def _build_quantile_points(
     return time_q, mass_q, yerr
 
 
-# ---------------------------------------------------------------------------
-# Main SFH function
-# ---------------------------------------------------------------------------
+# ── Main SFH function ─────────────────────────────────────────────
 
 
 def dense_basis_sfh(
@@ -462,9 +450,7 @@ def dense_basis_sfh(
     return jnp.maximum(result, 0.0)
 
 
-# ---------------------------------------------------------------------------
-# Pure quantile-only variant (no SFR constraint — for use with field)
-# ---------------------------------------------------------------------------
+# ── Pure quantile-only variant (no SFR constraint — for use with field)
 
 
 def _build_quantile_points_pure(

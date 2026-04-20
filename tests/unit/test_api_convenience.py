@@ -15,9 +15,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-# ---------------------------------------------------------------------------
-# SSP availability gate
-# ---------------------------------------------------------------------------
+# ── SSP availability gate ─────────────────────────────────────────
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILES = sorted(_DATA_DIR.glob("ssp_*.h5"))
@@ -25,9 +23,7 @@ _SSP_FILE = _SSP_FILES[0] if _SSP_FILES else None
 _SSP_EXISTS = _SSP_FILE is not None and _SSP_FILE.is_file()
 _needs_ssp = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# ── Helpers ───────────────────────────────────────────────────────
 
 
 def _make_minimal_posterior(method="vi", n_samples=10):
@@ -47,9 +43,7 @@ def _make_minimal_posterior(method="vi", n_samples=10):
     )
 
 
-# ---------------------------------------------------------------------------
-# Task 1: resolve_short_names
-# ---------------------------------------------------------------------------
+# ── Task 1: resolve_short_names ───────────────────────────────────
 
 
 class TestResolveShortNames:
@@ -91,9 +85,7 @@ class TestResolveShortNames:
         assert set(r1.keys()) == set(r2.keys())
 
 
-# ---------------------------------------------------------------------------
-# Task 2: Method unification — deprecation warnings
-# ---------------------------------------------------------------------------
+# ── Task 2: Method unification — deprecation warnings ─────────────
 
 
 class TestDeprecationWarnings:
@@ -140,9 +132,7 @@ class TestDeprecationWarnings:
             assert name in doc, f"'{name}' not in Fitter.run() docstring"
 
 
-# ---------------------------------------------------------------------------
-# Task 3: Posterior._fitter + refine() + validate()
-# ---------------------------------------------------------------------------
+# ── Task 3: Posterior._fitter + refine() + validate() ─────────────
 
 
 class TestPosteriorRefine:
@@ -191,9 +181,7 @@ class TestPosteriorRefine:
         assert "passed" in result
 
 
-# ---------------------------------------------------------------------------
-# Task 6: PriorPredictive
-# ---------------------------------------------------------------------------
+# ── Task 6: PriorPredictive ───────────────────────────────────────
 
 
 class TestPriorPredictive:
@@ -223,9 +211,7 @@ class TestPriorPredictive:
         assert len(w) >= 1
 
 
-# ---------------------------------------------------------------------------
-# Task 7: posteriors_to_dataframe
-# ---------------------------------------------------------------------------
+# ── Task 7: posteriors_to_dataframe ───────────────────────────────
 
 
 class TestPostersToDataframe:
@@ -268,9 +254,7 @@ class TestPostersToDataframe:
             tengri.posteriors_to_dataframe(results)
 
 
-# ---------------------------------------------------------------------------
-# Task 8: HierarchicalResult.individual
-# ---------------------------------------------------------------------------
+# ── Task 8: HierarchicalResult.individual ─────────────────────────
 
 
 class TestHierarchicalResultIndividual:
@@ -311,9 +295,7 @@ class TestHierarchicalResultIndividual:
         assert hasattr(ind[0], "params")
 
 
-# ---------------------------------------------------------------------------
-# Task 5: Model.from_config (no-SSP: test classmethod exists)
-# ---------------------------------------------------------------------------
+# ── Task 5: Model.from_config (no-SSP: test classmethod exists) ───
 
 
 class TestModelFromConfigInterface:
@@ -343,9 +325,7 @@ class TestModelFromConfigInterface:
         assert len(defs["sfh"]) > 0
 
 
-# ---------------------------------------------------------------------------
-# SSP-required integration tests
-# ---------------------------------------------------------------------------
+# ── SSP-required integration tests ────────────────────────────────
 
 
 @_needs_ssp

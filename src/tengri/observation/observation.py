@@ -15,8 +15,10 @@ import dataclasses
 
 import jax.numpy as jnp
 
+from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.noise_model import NoiseConfig
 from tengri.observation.photometry_config import Photometry
+from tengri.observation.spectral_indices import SpectralIndexData
 from tengri.observation.spectroscopy import SpectroscopyConfig
 from tengri.parameters.priors import Distribution
 
@@ -33,10 +35,14 @@ class Observation:
     ----------
     photometry : Photometry or None
         Photometric filter configuration.
-    spectroscopy : SpectroscopyConfig or None
+    spectroscopy : Spectroscopy or None
         Spectroscopic instrument configuration.
-    noise : NoiseConfig or None
+    noise : NoiseModel or None
         Noise model configuration (calibration floor, Student-t dof).
+    line_fluxes : LineFluxData or None
+        Observed emission line fluxes for direct fitting.
+        When provided, the likelihood includes an additive chi-squared
+        term comparing model line luminosities against these fluxes.
 
     Examples
     --------
@@ -50,22 +56,30 @@ class Observation:
 
         obs = Observation(
             photometry=Photometry.from_names(["jwst_f200w", "jwst_f356w"]),
-            spectroscopy=SpectroscopyConfig.nirspec_prism(wave_obs),
-            noise=NoiseConfig(calibration_floor=Uniform(0.01, 0.15)),
+            spectroscopy=Spectroscopy.nirspec_prism(wave_obs),
+            noise=NoiseModel(calibration_floor=Uniform(0.01, 0.15)),
         )
     """
 
     photometry: Photometry | None = None
     spectroscopy: SpectroscopyConfig | None = None
     noise: NoiseConfig | None = None
+    line_fluxes: LineFluxData | None = None
+    spectral_indices: SpectralIndexData | None = None
 
     def __post_init__(self):
-        if self.photometry is None and self.spectroscopy is None:
-            raise ValueError("Observation requires at least one of photometry or spectroscopy.")
+        if (
+            self.photometry is None
+            and self.spectroscopy is None
+            and self.line_fluxes is None
+            and self.spectral_indices is None
+        ):
+            raise ValueError(
+                "Observation requires at least one of "
+                "photometry, spectroscopy, line_fluxes, or spectral_indices."
+            )
 
-    # -------------------------------------------------------------------
-    # Capability queries
-    # -------------------------------------------------------------------
+    # ── Capability queries ────────────────────────────────────────
 
     @property
     def can_do_photometry(self) -> bool:
@@ -76,6 +90,16 @@ class Observation:
     def can_do_spectroscopy(self) -> bool:
         """Whether a spectroscopic wavelength grid is configured."""
         return self.spectroscopy is not None
+
+    @property
+    def has_line_fluxes(self) -> bool:
+        """Whether observed emission line fluxes are configured."""
+        return self.line_fluxes is not None
+
+    @property
+    def has_spectral_indices(self) -> bool:
+        """Whether observed spectral indices are configured."""
+        return self.spectral_indices is not None
 
     @property
     def is_joint(self) -> bool:
@@ -98,9 +122,7 @@ class Observation:
         else:
             return "spectroscopy"
 
-    # -------------------------------------------------------------------
-    # Data dimensions
-    # -------------------------------------------------------------------
+    # ── Data dimensions ───────────────────────────────────────────
 
     @property
     def n_data_phot(self) -> int:
@@ -113,13 +135,21 @@ class Observation:
         return self.spectroscopy.n_pixels if self.spectroscopy else 0
 
     @property
+    def n_data_lines(self) -> int:
+        """Number of emission line flux data points."""
+        return self.line_fluxes.n_lines if self.line_fluxes else 0
+
+    @property
+    def n_data_indices(self) -> int:
+        """Number of spectral index data points."""
+        return self.spectral_indices.n_indices if self.spectral_indices else 0
+
+    @property
     def n_data(self) -> int:
         """Total number of data points."""
-        return self.n_data_phot + self.n_data_spec
+        return self.n_data_phot + self.n_data_spec + self.n_data_lines + self.n_data_indices
 
-    # -------------------------------------------------------------------
-    # Data packing / unpacking
-    # -------------------------------------------------------------------
+    # ── Data packing / unpacking ──────────────────────────────────
 
     def pack_data(
         self,
@@ -203,9 +233,7 @@ class Observation:
 
         return result
 
-    # -------------------------------------------------------------------
-    # Parameter generation
-    # -------------------------------------------------------------------
+    # ── Parameter generation ──────────────────────────────────────
 
     def get_all_params(self) -> dict[str, Distribution]:
         """Collect all observation-driven parameters.
@@ -229,9 +257,7 @@ class Observation:
 
         return params
 
-    # -------------------------------------------------------------------
-    # Observation projection (rest SED → observed fluxes)
-    # -------------------------------------------------------------------
+    # ── Observation projection (rest SED → observed fluxes) ───────
 
     def observe_photometry(self, sed_result, z: float, dl_cm: float) -> jnp.ndarray:
         """Project an observed-frame SED through photometric filters.
@@ -295,9 +321,7 @@ class Observation:
             )
         return flux
 
-    # -------------------------------------------------------------------
-    # Display
-    # -------------------------------------------------------------------
+    # ── Display ───────────────────────────────────────────────────
 
     def summary(self) -> str:
         """Return a human-readable summary of the observation.
@@ -316,6 +340,12 @@ class Observation:
         if self.spectroscopy is not None:
             lines.append(f"  Spectroscopy : {self.spectroscopy.summary()}")
 
+        if self.line_fluxes is not None:
+            lines.append(f"  Line fluxes: {self.line_fluxes.summary()}")
+
+        if self.spectral_indices is not None:
+            lines.append(f"  Indices    : {self.spectral_indices.summary()}")
+
         if self.noise is not None:
             lines.append(f"  Noise      : {self.noise.summary()}")
 
@@ -323,6 +353,10 @@ class Observation:
         lines.append(f"  N data     : {self.n_data}")
         if self.is_joint:
             lines.append(f"               ({self.n_data_phot} phot + {self.n_data_spec} spec)")
+        if self.has_line_fluxes:
+            lines.append(f"               + {self.n_data_lines} line fluxes")
+        if self.has_spectral_indices:
+            lines.append(f"               + {self.n_data_indices} spectral indices")
 
         obs_params = self.get_all_params()
         if obs_params:

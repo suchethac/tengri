@@ -15,9 +15,7 @@ from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
 jax.config.update("jax_enable_x64", True)
 
 
-# ---------------------------------------------------------------------------
-# Fixtures: synthetic data for testing vmap
-# ---------------------------------------------------------------------------
+# ── Fixtures: synthetic data for testing vmap ─────────────────────
 
 
 @pytest.fixture
@@ -89,9 +87,7 @@ def single_galaxy_fn(ssp_phot, ssp_lgmet, eff_waves_rest, dust_age_weights, ssp_
     return predict
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+# ── Tests ─────────────────────────────────────────────────────────
 
 
 class TestVmapBatchAccuracy:

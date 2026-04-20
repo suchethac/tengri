@@ -57,9 +57,7 @@ __all__ = [
 ]
 
 
-# =============================================================================
-# Spectral Density Conversions (Luminosity)
-# =============================================================================
+# ── Spectral Density Conversions (Luminosity) ─────────────────────
 
 
 @jit
@@ -181,9 +179,7 @@ def flambda_to_fnu(
     return flambda * (wavelength_aa**2) / C_AA
 
 
-# =============================================================================
-# Flux Density Unit Conversions
-# =============================================================================
+# ── Flux Density Unit Conversions ─────────────────────────────────
 
 
 @jit
@@ -357,9 +353,7 @@ def maggies_to_fnu(maggies: jnp.ndarray) -> jnp.ndarray:
     return maggies * MAGGIES_ZP_CGS
 
 
-# =============================================================================
-# Luminosity Conversions
-# =============================================================================
+# ── Luminosity Conversions ────────────────────────────────────────
 
 
 @jit
@@ -404,9 +398,7 @@ def lsun_to_erg_per_s(luminosity_lsun: jnp.ndarray) -> jnp.ndarray:
     return luminosity_lsun * L_SUN
 
 
-# =============================================================================
-# Cosmological Flux-Luminosity Conversions
-# =============================================================================
+# ── Cosmological Flux-Luminosity Conversions ──────────────────────
 
 
 @jit
@@ -480,9 +472,7 @@ def fnu_to_lnu(
     return fnu * factor
 
 
-# =============================================================================
-# Optical Depth & Attenuation
-# =============================================================================
+# ── Optical Depth & Attenuation ───────────────────────────────────
 
 
 @jit
@@ -535,9 +525,7 @@ def attenuation_to_tau(a_mag: jnp.ndarray) -> jnp.ndarray:
     return a_mag / (2.5 * jnp.log10(jnp.e))
 
 
-# =============================================================================
-# Wavelength Conversions (numpy, not JIT)
-# =============================================================================
+# ── Wavelength Conversions (numpy, not JIT) ───────────────────────
 
 
 def vacuum_to_air(wavelength_aa: np.ndarray) -> np.ndarray:

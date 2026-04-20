@@ -32,9 +32,7 @@ from tengri.components.agn._phys import (
     wavelength_to_nu as _wavelength_to_nu,
 )
 
-# ===================================================================
-# Physical constants (CGS)
-# ===================================================================
+# ── Physical constants (CGS) ──────────────────────────────────────
 
 _MICRON_ANGSTROM = 1e4  # Micron -> Angstrom
 
@@ -42,9 +40,7 @@ _MICRON_ANGSTROM = 1e4  # Micron -> Angstrom
 _LAMBDA_SI = 9.7 * _MICRON_ANGSTROM  # 9.7 um in Angstrom
 
 
-# ===================================================================
-# Model 1: Simple hot blackbody torus
-# ===================================================================
+# ── Model 1: Simple hot blackbody torus ───────────────────────────
 
 
 def simple_torus(
@@ -117,9 +113,7 @@ def simple_torus(
     return l_nu_erg
 
 
-# ===================================================================
-# Model 2: Two-temperature torus (SKIRTOR-inspired)
-# ===================================================================
+# ── Model 2: Two-temperature torus (SKIRTOR-inspired) ─────────────
 
 
 def two_temperature_torus(

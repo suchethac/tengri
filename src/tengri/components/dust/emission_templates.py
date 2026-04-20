@@ -32,9 +32,7 @@ from tengri.utils.physics_constants import (
     C_CGS as _C_CGS,
 )
 
-# ===================================================================
-# Template search paths (resolved once, reused for all models)
-# ===================================================================
+# ── Template search paths (resolved once, reused for all models) ──
 
 _DATA_CANDIDATES = [
     Path(__file__).resolve().parents[4] / "data",
@@ -55,14 +53,11 @@ def _find_data_file(filename: str) -> str | None:
 # This will be populated by lazy loaders
 DUST_EMISSION_MODELS: dict[str, Callable] = {}
 
-# ===================================================================
-# All template loading functions extracted from emission.py
-# ===================================================================
+# ── All template loading functions extracted from emission.py ─────
 
 
 # Template-based DL07, Dale, and DL14 models
 # Template-based DL07: create from grid file
-# ===================================================================
 
 
 def create_dl07_from_grid(grid_path: str) -> Callable:
@@ -1165,9 +1160,7 @@ def register_bosa_tabulated(grid_path: str, name: str = "bosa_tabulated") -> Non
 
 
 # Load and create THEMIS
-# ===================================================================
-# Model 8: THEMIS (Jones et al. 2017) — template-based
-# ===================================================================
+# ── Model 8: THEMIS (Jones et al. 2017) — template-based ──────────
 
 
 def load_themis_templates(filepath: str) -> dict:

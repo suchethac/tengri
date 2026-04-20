@@ -12,10 +12,10 @@ Usage
 -----
 Generate training data::
 
-    from tengri import SEDModel, ParamSpec, Uniform
+    from tengri import SEDModel, Parameters, Uniform
     from tengri.inference.sbi import generate_sbi_training_data, save_sbi_training_data
 
-    spec = ParamSpec(...)
+    spec = Parameters(...)
     model = SEDModel(spec, ssp, filters=filters)
     data = generate_sbi_training_data(model, spec, n_samples=100_000)
     save_sbi_training_data(data, "sbi_training.h5")
@@ -56,7 +56,7 @@ def generate_sbi_training_data(
 ) -> dict[str, Any]:
     """Generate training data for simulation-based inference.
 
-    Samples parameters from the prior (ParamSpec), runs the forward
+    Samples parameters from the prior (Parameters), runs the forward
     model, adds realistic noise, and returns (theta, x) pairs suitable
     for training a neural posterior estimator.
 
@@ -64,7 +64,7 @@ def generate_sbi_training_data(
     ----------
     model : Model
         Configured tengri Model with filters/wavelength grid.
-    spec : ParamSpec
+    spec : Parameters
         Parameter specification with priors.
     n_samples : int
         Number of training simulations. Default 100,000.

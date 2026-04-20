@@ -26,9 +26,7 @@ def _fd_grad(fn, x, eps=1e-3):
     return (fn(x + eps) - fn(x - eps)) / (2.0 * eps)
 
 
-# ---------------------------------------------------------------------------
-# Minimal mock SSP data for backend initialization
-# ---------------------------------------------------------------------------
+# ── Minimal mock SSP data for backend initialization ──────────────
 
 
 def _make_mock_ssp(n_met=3, n_age=10, n_wave=50):
@@ -58,9 +56,7 @@ def _make_mock_ssp(n_met=3, n_age=10, n_wave=50):
     )
 
 
-# ---------------------------------------------------------------------------
-# CloudyGridBackend
-# ---------------------------------------------------------------------------
+# ── CloudyGridBackend ─────────────────────────────────────────────
 
 _CLOUDY_GRID_PATH = Path("/Users/suchethacooray/Projects/tengri/data/cloudy_grid_mist.h5")
 
@@ -247,9 +243,7 @@ def test_cloudy_grid_invalid_interp_mode():
         CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp, grid_interp="cubic")
 
 
-# ---------------------------------------------------------------------------
-# CueBackend
-# ---------------------------------------------------------------------------
+# ── CueBackend ────────────────────────────────────────────────────
 
 _CUE_WEIGHTS_PATH = Path("/Users/suchethacooray/Projects/tengri/data/cue_weights.npz")
 
@@ -303,9 +297,7 @@ def test_cue_grad_logu():
     )
 
 
-# ---------------------------------------------------------------------------
-# CB19Backend
-# ---------------------------------------------------------------------------
+# ── CB19Backend ───────────────────────────────────────────────────
 
 _CB19_GRID_PATH = Path("/Users/suchethacooray/Projects/tengri/data/cb19_templates.h5")
 
@@ -361,9 +353,7 @@ def test_cb19_grad_logu():
     )
 
 
-# ---------------------------------------------------------------------------
-# ShockBackend — MAPPINGS V velocity gradient
-# ---------------------------------------------------------------------------
+# ── ShockBackend — MAPPINGS V velocity gradient ───────────────────
 
 _MAPPINGS_GRID_PATH = Path("/Users/suchethacooray/Projects/tengri/data/mappings_templates.h5")
 
@@ -413,9 +403,7 @@ def test_mappings_grad_velocity():
     )
 
 
-# ---------------------------------------------------------------------------
-# Metallicity conversion round-trip
-# ---------------------------------------------------------------------------
+# ── Metallicity conversion round-trip ─────────────────────────────
 
 
 def test_neb_logzsol_to_log_z_abs_round_trip():

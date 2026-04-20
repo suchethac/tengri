@@ -28,9 +28,7 @@ import jax.numpy as jnp
 
 from tengri.profiling.timers import _sync, bench
 
-# ---------------------------------------------------------------------------
-# Data containers
-# ---------------------------------------------------------------------------
+# ── Data containers ───────────────────────────────────────────────
 
 
 @dataclasses.dataclass(frozen=True)
@@ -117,9 +115,7 @@ class PipelineReport:
         return self.summary()
 
 
-# ---------------------------------------------------------------------------
-# Array memory helper
-# ---------------------------------------------------------------------------
+# ── Array memory helper ───────────────────────────────────────────
 
 
 def _array_mb(arr: Any) -> float:
@@ -131,9 +127,7 @@ def _array_mb(arr: Any) -> float:
     return 0.0
 
 
-# ---------------------------------------------------------------------------
-# Step-level timing
-# ---------------------------------------------------------------------------
+# ── Step-level timing ─────────────────────────────────────────────
 
 
 def _time_step(name: str, fn, n: int = 200, grad_fn=None) -> StepTiming:
@@ -149,9 +143,7 @@ def _time_step(name: str, fn, n: int = 200, grad_fn=None) -> StepTiming:
     return StepTiming(name=name, mean_us=t_fwd, grad_us=t_grad, array_mb=mem)
 
 
-# ---------------------------------------------------------------------------
-# Pipeline profiling: exact path
-# ---------------------------------------------------------------------------
+# ── Pipeline profiling: exact path ────────────────────────────────
 
 
 def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
@@ -305,9 +297,7 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
     )
 
 
-# ---------------------------------------------------------------------------
-# Pipeline profiling: fused path
-# ---------------------------------------------------------------------------
+# ── Pipeline profiling: fused path ────────────────────────────────
 
 
 def _profile_fused_path(model, params, n: int = 200) -> PipelineReport:
@@ -395,9 +385,7 @@ def _profile_fused_path(model, params, n: int = 200) -> PipelineReport:
     )
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+# ── Public API ────────────────────────────────────────────────────
 
 
 def profile_pipeline(
@@ -463,7 +451,7 @@ def compare_paths(
 
     Parameters
     ----------
-    spec : ParamSpec
+    spec : Parameters
         Parameter specification.
     ssp : SSPData
         SSP data.
@@ -520,7 +508,7 @@ def profile_configurations(
         SSP data.
     filters : tuple
         Filter set.
-    configs : list of (name, ParamSpec, model_kwargs)
+    configs : list of (name, Parameters, model_kwargs)
         Each entry is (label, spec, kwargs_for_Model).
     n : int
         Iterations per benchmark.

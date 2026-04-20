@@ -18,9 +18,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 
-# ---------------------------------------------------------------------------
-# Helpers: build minimal specs + mock models without SSP data
-# ---------------------------------------------------------------------------
+# ── Helpers: build minimal specs + mock models without SSP data ───
 
 
 def _make_spec():
@@ -59,9 +57,7 @@ def _make_mock_model(spec, n_filters=5):
     return model
 
 
-# ---------------------------------------------------------------------------
-# Domain and n_latent
-# ---------------------------------------------------------------------------
+# ── Domain and n_latent ───────────────────────────────────────────
 
 
 class TestDomain:
@@ -119,9 +115,7 @@ class TestDomain:
         assert smodel.n_latent == n_scalar_free + n_grid
 
 
-# ---------------------------------------------------------------------------
-# xi_to_params / params_to_xi roundtrip
-# ---------------------------------------------------------------------------
+# ── xi_to_params / params_to_xi roundtrip ─────────────────────────
 
 
 class TestRoundtrip:
@@ -230,9 +224,7 @@ class TestRoundtrip:
             assert float(xi_out[name]) == 0.0
 
 
-# ---------------------------------------------------------------------------
-# build_standardized_loss — structure of the Hamiltonian
-# ---------------------------------------------------------------------------
+# ── build_standardized_loss — structure of the Hamiltonian ────────
 
 
 class TestBuildStandardizedLoss:
@@ -332,9 +324,7 @@ class TestBuildStandardizedLoss:
         assert float(loss_small(xi_flat)) > float(loss_large(xi_flat))
 
 
-# ---------------------------------------------------------------------------
-# build_hierarchical_loss
-# ---------------------------------------------------------------------------
+# ── build_hierarchical_loss ───────────────────────────────────────
 
 
 class TestBuildHierarchicalLoss:
@@ -413,9 +403,7 @@ class TestBuildHierarchicalLoss:
         assert jnp.isfinite(val)
 
 
-# ---------------------------------------------------------------------------
-# predict method
-# ---------------------------------------------------------------------------
+# ── predict method ────────────────────────────────────────────────
 
 
 class TestPredict:
@@ -473,9 +461,7 @@ class TestPredict:
         )
 
 
-# ---------------------------------------------------------------------------
-# Custom PSD model injection
-# ---------------------------------------------------------------------------
+# ── Custom PSD model injection ────────────────────────────────────
 
 
 class TestCustomPSDModel:

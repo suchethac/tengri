@@ -68,9 +68,7 @@ _TEST_PARAMS = [
 ]
 
 
-# ===================================================================
-# 1. Reference output comparison
-# ===================================================================
+# ── 1. Reference output comparison ────────────────────────────────
 
 
 class TestCueVsTFReference:
@@ -166,9 +164,7 @@ class TestCueVsTFReference:
             )
 
 
-# ===================================================================
-# 2. Internal consistency (always runs)
-# ===================================================================
+# ── 2. Internal consistency (always runs) ─────────────────────────
 
 
 class TestCueInternalConsistency:

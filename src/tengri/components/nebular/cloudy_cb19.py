@@ -70,9 +70,7 @@ import numpy as np
 from tengri.components.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
 from tengri.components.nebular._shared import compute_qh, place_line_profiles
 
-# ---------------------------------------------------------------------------
-# Physical and grid constants
-# ---------------------------------------------------------------------------
+# ── Physical and grid constants ───────────────────────────────────
 
 # Case B L_Hβ/Q_H (Lsun per photon/s = Lsun·s/photon)
 # Source: Osterbrock & Ferland 2006, Table 4.4; T_e=10^4 K, n_e=100 cm⁻³
@@ -83,9 +81,7 @@ _HB_PER_QH_LSUN: float = 4.78e-13 / _LSUN_ERG
 _DEFAULT_PATH = Path(__file__).parents[4] / "data" / "cb19_templates.h5"
 
 
-# ---------------------------------------------------------------------------
-# Ionizing spectrum warnings
-# ---------------------------------------------------------------------------
+# ── Ionizing spectrum warnings ────────────────────────────────────
 
 
 class CB19IonizingSpectrumWarning(UserWarning):
@@ -127,9 +123,7 @@ def _emit_cb19_warnings(ionizing_source_warning: str, continuum_warning: str) ->
         warnings.warn(msg, CB19NoContinuumWarning, stacklevel=3)
 
 
-# ---------------------------------------------------------------------------
-# Grid data container
-# ---------------------------------------------------------------------------
+# ── Grid data container ───────────────────────────────────────────
 
 
 class CB19GridData(NamedTuple):
@@ -156,9 +150,7 @@ class CB19GridData(NamedTuple):
     log_hb_per_qh: float  # log10(_HB_PER_QH_LSUN) for fast scaling
 
 
-# ---------------------------------------------------------------------------
-# HDF5 loader
-# ---------------------------------------------------------------------------
+# ── HDF5 loader ───────────────────────────────────────────────────
 
 _LOG_FLOOR = 1e-30  # prevent log(0) for zero-flux lines
 
@@ -263,9 +255,7 @@ def load_cb19_grid(
     )
 
 
-# ---------------------------------------------------------------------------
-# 6D interpolation via map_coordinates
-# ---------------------------------------------------------------------------
+# ── 6D interpolation via map_coordinates ──────────────────────────
 
 
 def _frac_idx(val: float, grid: jnp.ndarray) -> jnp.ndarray:
@@ -322,9 +312,7 @@ def _interp_6d(
     return jax.vmap(_interp_one)(data_lines_first)  # (N_lines,)
 
 
-# ---------------------------------------------------------------------------
-# Q_H helpers (same interface as CloudyGridBackend)
-# ---------------------------------------------------------------------------
+# ── Q_H helpers (same interface as CloudyGridBackend) ─────────────
 
 _compute_qh_grid = jax.vmap(
     jax.vmap(compute_qh, in_axes=(None, 0)),
@@ -332,9 +320,7 @@ _compute_qh_grid = jax.vmap(
 )  # vmap over (n_met, n_age)
 
 
-# ---------------------------------------------------------------------------
-# Main backend class
-# ---------------------------------------------------------------------------
+# ── Main backend class ────────────────────────────────────────────
 
 
 class CB19Backend:

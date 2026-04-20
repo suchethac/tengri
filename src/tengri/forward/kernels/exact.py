@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-# -------------------------------------------------------------------
 
 
 def build_exact_sed(model):

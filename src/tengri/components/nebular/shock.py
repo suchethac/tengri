@@ -42,9 +42,7 @@ from tengri.components.nebular._shared import place_line_profiles as _place_line
 from tengri.forward.precompute.grid import interp_nd_triweight as _interp_nd_triweight
 from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 
-# ---------------------------------------------------------------------------
-# Legacy hardcoded fallback — Allen+2008 Table 5 (solar, n=1 cm⁻³)
-# ---------------------------------------------------------------------------
+# ── Legacy hardcoded fallback — Allen+2008 Table 5 (solar, n=1 cm⁻³)
 
 # 8-point velocity grid [km/s]
 _FALLBACK_V = jnp.array([100.0, 150.0, 200.0, 300.0, 400.0, 500.0, 750.0, 1000.0])
@@ -91,9 +89,7 @@ _FALLBACK_LINE_WAVES = jnp.array(
     ]
 )
 
-# ---------------------------------------------------------------------------
-# Abundance short-name aliases (param_spec uses short names; DB uses full names)
-# ---------------------------------------------------------------------------
+# ── Abundance short-name aliases (param_spec uses short names; DB uses full names)
 
 _ABUNDANCE_ALIASES: dict[str, str] = {
     "solar": "Allen2008_Solar",
@@ -141,7 +137,7 @@ def _validate_shock_params(
 
     Discrete parameters (density, B-field, abundance, component) are always
     validated because they must be concrete values (they are never JAX-traced
-    in normal use — they are Fixed in ParamSpec).
+    in normal use — they are Fixed in Parameters).
 
     Velocity is validated only when it is a concrete Python number; when called
     inside ``jax.jit`` with a traced velocity, the check is skipped so that JIT
@@ -186,9 +182,7 @@ def _validate_shock_params(
             )
 
 
-# ---------------------------------------------------------------------------
-# HDF5 grid cache
-# ---------------------------------------------------------------------------
+# ── HDF5 grid cache ───────────────────────────────────────────────
 
 _MAPPINGS_GRIDS: dict | None = None
 _MAPPINGS_GRIDS_LOADED: bool = False
@@ -270,9 +264,7 @@ def _load_mappings_grids() -> dict | None:
     return grids
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+# ── Public API ────────────────────────────────────────────────────
 
 
 def shock_line_ratios(
@@ -332,9 +324,7 @@ def shock_line_ratios(
     """
     grids = _load_mappings_grids()
 
-    # ------------------------------------------------------------------ #
-    # HDF5 grid path
-    # ------------------------------------------------------------------ #
+    # ── HDF5 grid path ─────────────────────────────────────────────
     if grids is not None and "mappings5" in grids:
         g = grids["mappings5"]
 
@@ -380,9 +370,7 @@ def shock_line_ratios(
 
         return {name: ratios_vec[j] for j, name in enumerate(g["line_names"])}
 
-    # ------------------------------------------------------------------ #
-    # Fallback path — hardcoded Allen+2008 Table 5
-    # ------------------------------------------------------------------ #
+    # ── Fallback path — hardcoded Allen+2008 Table 5 ───────────────
     v_clip = jnp.clip(shock_velocity, 100.0, 1000.0)
     r_oiii = jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_OIII)
     r_nii = jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_NII)
@@ -503,9 +491,7 @@ def compute_shock_sed(
 shock_emission_sed = compute_shock_sed
 
 
-# ---------------------------------------------------------------------------
-# Protocol-conformant backend class
-# ---------------------------------------------------------------------------
+# ── Protocol-conformant backend class ─────────────────────────────
 
 
 @dataclass

@@ -32,9 +32,7 @@ from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import ParamSpec
 from tengri.parameters.priors import Fixed, Uniform
 
-# ---------------------------------------------------------------------------
-# Skip guards — require SSP data
-# ---------------------------------------------------------------------------
+# ── Skip guards — require SSP data ────────────────────────────────
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
@@ -55,9 +53,7 @@ _FILTER_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 _KEY = jax.random.PRNGKey(42)
 
 
-# ---------------------------------------------------------------------------
-# Session-scoped fixtures
-# ---------------------------------------------------------------------------
+# ── Session-scoped fixtures ───────────────────────────────────────
 
 
 @pytest.fixture(scope="session")
@@ -93,9 +89,7 @@ def _photometry_error(model, params, key_a="hybrid", key_b="exact"):
     return jnp.abs(flux_a - flux_b) / (jnp.abs(flux_b) + 1e-50)
 
 
-# ---------------------------------------------------------------------------
-# DL07 energy-balance regression
-# ---------------------------------------------------------------------------
+# ── DL07 energy-balance regression ────────────────────────────────
 
 
 class TestDL07EnergyBalance:
@@ -135,9 +129,7 @@ class TestDL07EnergyBalance:
         assert jnp.all(flux > 0.0), "DL07 hybrid photometry has non-positive values"
 
 
-# ---------------------------------------------------------------------------
-# Non-regression: Dale 2014
-# ---------------------------------------------------------------------------
+# ── Non-regression: Dale 2014 ─────────────────────────────────────
 
 
 class TestDale2014NonRegression:
@@ -166,9 +158,7 @@ class TestDale2014NonRegression:
         )
 
 
-# ---------------------------------------------------------------------------
-# Non-regression: THEMIS
-# ---------------------------------------------------------------------------
+# ── Non-regression: THEMIS ────────────────────────────────────────
 
 
 class TestTHEMISNonRegression:
@@ -195,9 +185,7 @@ class TestTHEMISNonRegression:
         assert max_err < 1.0, f"THEMIS hybrid max per-band error {max_err:.2f}% regressed past 1%."
 
 
-# ---------------------------------------------------------------------------
-# Non-regression: stellar only
-# ---------------------------------------------------------------------------
+# ── Non-regression: stellar only ──────────────────────────────────
 
 
 class TestStellarOnlyNonRegression:
@@ -224,11 +212,9 @@ class TestStellarOnlyNonRegression:
         )
 
 
-# ---------------------------------------------------------------------------
-# DL07 worst-case: young, heavily-dusty galaxy
+# ── DL07 worst-case: young, heavily-dusty galaxy ──────────────────
 # UV absorption peaks at <2000 Å — the original Voronoi-sum bug missed this
 # band entirely (SDSS ugriz at z=0.1 covers rest ~2600–8800 Å).
-# ---------------------------------------------------------------------------
 
 
 class TestDL07EnergyBalanceWorstCase:

@@ -35,9 +35,7 @@ jax.config.update("jax_enable_x64", True)
 pytestmark = pytest.mark.crossval
 
 
-# ===================================================================
-# 1. BELOBORODOV (1999) — self-consistent Gamma_hot
-# ===================================================================
+# ── 1. BELOBORODOV (1999) — self-consistent Gamma_hot ─────────────
 
 
 class TestBeloborodov1999:
@@ -99,9 +97,7 @@ class TestBeloborodov1999:
         assert gamma_soft <= 3.0, f"Gamma too high: {gamma_soft}"
 
 
-# ===================================================================
-# 2. JUST+2007 — alpha_ox–L_2500 relation
-# ===================================================================
+# ── 2. JUST+2007 — alpha_ox–L_2500 relation ───────────────────────
 
 
 class TestJust2007:
@@ -154,9 +150,7 @@ class TestJust2007:
             )
 
 
-# ===================================================================
-# 3. YANG+2022 — X-ray anisotropy
-# ===================================================================
+# ── 3. YANG+2022 — X-ray anisotropy ───────────────────────────────
 
 
 class TestYang2022Anisotropy:
@@ -206,9 +200,7 @@ class TestYang2022Anisotropy:
         np.testing.assert_allclose(result, expected, rtol=1e-6)
 
 
-# ===================================================================
-# 4. MARTINEZ-RAMIREZ+2024 — double power-law AGN radio
-# ===================================================================
+# ── 4. MARTINEZ-RAMIREZ+2024 — double power-law AGN radio ─────────
 
 
 class TestMartinezRamirez2024:
@@ -301,9 +293,7 @@ class TestMartinezRamirez2024:
         assert float(l_nu[0]) > 0, "L_nu at 5 GHz should be positive"
 
 
-# ===================================================================
-# 5. YANG+2020 — polar dust extinction + greybody emission
-# ===================================================================
+# ── 5. YANG+2020 — polar dust extinction + greybody emission ──────
 
 
 class TestYang2020PolarDust:
@@ -411,9 +401,7 @@ class TestYang2020PolarDust:
         )
 
 
-# ===================================================================
-# 6. KUBOTA & DONE SELF-CONSISTENT GAMMA
-# ===================================================================
+# ── 6. KUBOTA & DONE SELF-CONSISTENT GAMMA ────────────────────────
 
 
 class TestKDSelfConsistentGamma:
@@ -443,9 +431,7 @@ class TestKDSelfConsistentGamma:
         assert float(jnp.sum(l_nu)) > 0
 
 
-# ===================================================================
-# 7. compute_l2500 — monochromatic extraction
-# ===================================================================
+# ── 7. compute_l2500 — monochromatic extraction ───────────────────
 
 
 class TestComputeL2500:
@@ -479,9 +465,7 @@ class TestComputeL2500:
         np.testing.assert_allclose(l2500, 2.5, atol=0.1)
 
 
-# ===================================================================
-# 8. SELF-CONSISTENT X-RAY CORONA FROM DISC
-# ===================================================================
+# ── 8. SELF-CONSISTENT X-RAY CORONA FROM DISC ─────────────────────
 
 
 class TestSelfConsistentCorona:
@@ -531,9 +515,7 @@ class TestSelfConsistentCorona:
         )
 
 
-# ===================================================================
-# 9. AGN NLR IONIZING SPECTRUM CONVERSION
-# ===================================================================
+# ── 9. AGN NLR IONIZING SPECTRUM CONVERSION ───────────────────────
 
 
 class TestAGNIonSpec:
@@ -575,9 +557,7 @@ class TestAGNIonSpec:
                 assert np.isfinite(float(val)), f"alpha_pl={alpha}: {key}={val} is not finite"
 
 
-# ===================================================================
-# 10. ANTI-LAZINESS: ALL NEW FUNCTIONS RESPOND TO PARAMETERS
-# ===================================================================
+# ── 10. ANTI-LAZINESS: ALL NEW FUNCTIONS RESPOND TO PARAMETERS ────
 
 
 class TestNewModelsParameterSensitivity:

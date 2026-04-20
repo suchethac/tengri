@@ -35,9 +35,7 @@ from tengri.components.sps.dsps_wrapper import (
 jax.config.update("jax_enable_x64", True)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# ── Helpers ───────────────────────────────────────────────────────
 
 
 def make_log_spaced_ages(n=107, t_min_yr=1e6, t_max_yr=1.4e10):
@@ -71,9 +69,7 @@ def analytic_integral(sfr_fn, t_min, t_max, n_ref=10_000):
     return float(jnp.trapezoid(sfr, t))
 
 
-# ---------------------------------------------------------------------------
-# Unit tests: csp_age_dt correctness
-# ---------------------------------------------------------------------------
+# ── Unit tests: csp_age_dt correctness ────────────────────────────
 
 
 class TestCspAgeDt:
@@ -124,9 +120,7 @@ class TestCspAgeDt:
         assert_allclose(np.array(w_new), np.array(w_explicit), rtol=1e-12)
 
 
-# ---------------------------------------------------------------------------
-# Accuracy comparison: trapz vs log_trapz vs dense reference
-# ---------------------------------------------------------------------------
+# ── Accuracy comparison: trapz vs log_trapz vs dense reference ────
 
 
 class TestCspIntegrationAccuracy:
@@ -197,9 +191,7 @@ class TestCspIntegrationAccuracy:
             )
 
 
-# ---------------------------------------------------------------------------
-# Difference visualization (run with pytest -s to see output)
-# ---------------------------------------------------------------------------
+# ── Difference visualization (run with pytest -s to see output) ───
 
 
 def test_print_weight_differences(capsys):
@@ -235,9 +227,7 @@ def test_print_weight_differences(capsys):
         print(f"  analytic (t_max-t_min): {t_range:.4e} Msun")
 
 
-# ---------------------------------------------------------------------------
-# Benchmark: precomputed dt vs inline computation
-# ---------------------------------------------------------------------------
+# ── Benchmark: precomputed dt vs inline computation ───────────────
 
 
 class TestCspBenchmark:
@@ -330,9 +320,7 @@ class TestCspBenchmark:
         assert max(t_trapz, t_log) / min(t_trapz, t_log) < 3.0
 
 
-# ---------------------------------------------------------------------------
-# Johnson+2021 log_interp matrix tests
-# ---------------------------------------------------------------------------
+# ── Johnson+2021 log_interp matrix tests ──────────────────────────
 
 
 class TestCspLogInterpMatrix:

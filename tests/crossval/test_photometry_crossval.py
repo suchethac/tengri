@@ -34,9 +34,7 @@ def ref():
     return dict(np.load(str(_REF_PATH)))
 
 
-# ===================================================================
-# 1. Color ordering (filter-independent)
-# ===================================================================
+# ── 1. Color ordering (filter-independent) ────────────────────────
 
 
 class TestColorOrdering:
@@ -74,9 +72,7 @@ class TestColorOrdering:
         assert delta_u > delta_k > 0, f"Dust effect: delta_u={delta_u:.2f}, delta_K={delta_k:.2f}"
 
 
-# ===================================================================
-# 2. Redshift effects on magnitudes
-# ===================================================================
+# ── 2. Redshift effects on magnitudes ─────────────────────────────
 
 
 class TestRedshiftPhotometry:
@@ -117,9 +113,7 @@ class TestRedshiftPhotometry:
         )
 
 
-# ===================================================================
-# 3. Physical magnitude ranges
-# ===================================================================
+# ── 3. Physical magnitude ranges ──────────────────────────────────
 
 
 class TestMagnitudeRanges:
@@ -150,9 +144,7 @@ class TestMagnitudeRanges:
                 assert np.all(np.isfinite(ref[key])), f"{key} has non-finite mags"
 
 
-# ===================================================================
-# 4. Cross-check tengri photometry (if SSP data available)
-# ===================================================================
+# ── 4. Cross-check tengri photometry (if SSP data available) ──────
 
 
 class TestDiffsedPhotometry:

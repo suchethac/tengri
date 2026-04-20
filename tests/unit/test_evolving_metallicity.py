@@ -31,9 +31,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -78,9 +76,7 @@ def ssp_lg_age_gyr():
     return jnp.linspace(-3.0, 1.114, 10)
 
 
-# ---------------------------------------------------------------------------
-# Tests: interpolate_metallicity_evolving
-# ---------------------------------------------------------------------------
+# ── Tests: interpolate_metallicity_evolving ───────────────────────
 
 
 class TestInterpolateMetallicityEvolving:
@@ -144,9 +140,7 @@ class TestInterpolateMetallicityEvolving:
         assert float(jnp.mean(result[0])) < float(jnp.mean(result[-1]))
 
 
-# ---------------------------------------------------------------------------
-# Tests: interpolate_mass_remaining_evolving
-# ---------------------------------------------------------------------------
+# ── Tests: interpolate_mass_remaining_evolving ────────────────────
 
 
 class TestInterpolateMassRemainingEvolving:
@@ -173,9 +167,7 @@ class TestInterpolateMassRemainingEvolving:
         assert result.shape == (n_age,)
 
 
-# ---------------------------------------------------------------------------
-# Tests: compute_log_z_evolving
-# ---------------------------------------------------------------------------
+# ── Tests: compute_log_z_evolving ─────────────────────────────────
 
 
 class TestComputeLogZEvolving:
@@ -232,9 +224,7 @@ class TestComputeLogZEvolving:
         assert float(result[-2]) == pytest.approx(log_z_initial, abs=1e-10)
 
 
-# ---------------------------------------------------------------------------
-# Tests: Gradient flow
-# ---------------------------------------------------------------------------
+# ── Tests: Gradient flow ──────────────────────────────────────────
 
 
 class TestEvolvingMetallicityGradients:
@@ -312,9 +302,7 @@ class TestEvolvingMetallicityGradients:
         assert_allclose(grad_auto, grad_fd, rtol=1e-3, err_msg="Autodiff vs finite-diff mismatch")
 
 
-# ---------------------------------------------------------------------------
-# Tests: ParamSpec integration
-# ---------------------------------------------------------------------------
+# ── Tests: ParamSpec integration ──────────────────────────────────
 
 
 class TestParamSpecEvolvingMetallicity:

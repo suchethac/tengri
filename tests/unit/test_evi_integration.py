@@ -16,9 +16,7 @@ from tengri.observation.photometry import FilterCurve
 jax.config.update("jax_enable_x64", True)
 
 
-# ---------------------------------------------------------------------------
-# Fixtures: minimal synthetic SSP data (no disk I/O)
-# ---------------------------------------------------------------------------
+# ── Fixtures: minimal synthetic SSP data (no disk I/O) ────────────
 
 
 @pytest.fixture(scope="module")
@@ -85,9 +83,7 @@ def model_and_mock(simple_spec, synthetic_ssp, simple_observation):
     return model, mock, params
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+# ── Tests ─────────────────────────────────────────────────────────
 
 
 class TestEVIRuns:

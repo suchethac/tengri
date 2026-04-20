@@ -18,9 +18,7 @@ Coefficient tables from eazy-py (Brammer et al.):
 import jax
 import jax.numpy as jnp
 
-# ---------------------------------------------------------------------------
-# Lyman series wavelengths (Angstrom) for lines j=2 (Ly-alpha) to j=40
-# ---------------------------------------------------------------------------
+# ── Lyman series wavelengths (Angstrom) for lines j=2 (Ly-alpha) to j=40
 _N_LINES = 39
 
 # Rest-frame wavelengths of Lyman series lines (Angstrom)
@@ -71,11 +69,9 @@ _LAMBDA_LYMAN = jnp.array(
 # Lyman limit wavelength
 _LAMBDA_LIMIT = 912.0  # Angstrom
 
-# ---------------------------------------------------------------------------
-# LAF coefficients: A_j^LAF for 3 regimes (Inoue+2014 Eq. 21)
+# ── LAF coefficients: A_j^LAF for 3 regimes (Inoue+2014 Eq. 21) ───
 # Shape: (39, 3) — [A_j1, A_j2, A_j3]
 # From eazy-py LAFcoeff.txt
-# ---------------------------------------------------------------------------
 _A_LAF = jnp.array(
     [
         [1.690e-02, 2.354e-03, 1.026e-04],
@@ -120,11 +116,9 @@ _A_LAF = jnp.array(
     ]
 )
 
-# ---------------------------------------------------------------------------
-# DLA coefficients: A_j^DLA for 2 regimes (Inoue+2014 Eq. 22)
+# ── DLA coefficients: A_j^DLA for 2 regimes (Inoue+2014 Eq. 22) ───
 # Shape: (39, 2) — [A_j1, A_j2]
 # From eazy-py DLAcoeff.txt
-# ---------------------------------------------------------------------------
 _A_DLA = jnp.array(
     [
         [1.617e-04, 1.545e-04],
@@ -170,9 +164,7 @@ _A_DLA = jnp.array(
 )
 
 
-# ---------------------------------------------------------------------------
-# Lyman series optical depth (LAF)
-# ---------------------------------------------------------------------------
+# ── Lyman series optical depth (LAF) ──────────────────────────────
 
 
 def _tau_ls_laf(
@@ -204,9 +196,7 @@ def _tau_ls_laf(
     return jnp.sum(jnp.where(active, t_j, 0.0), axis=0)
 
 
-# ---------------------------------------------------------------------------
-# Lyman series optical depth (DLA)
-# ---------------------------------------------------------------------------
+# ── Lyman series optical depth (DLA) ──────────────────────────────
 
 
 def _tau_ls_dla(
@@ -234,9 +224,7 @@ def _tau_ls_dla(
     return jnp.sum(jnp.where(active, t_j, 0.0), axis=0)
 
 
-# ---------------------------------------------------------------------------
-# Lyman continuum optical depth (LAF)
-# ---------------------------------------------------------------------------
+# ── Lyman continuum optical depth (LAF) ───────────────────────────
 
 
 def _tau_lc_laf(
@@ -295,9 +283,7 @@ def _tau_lc_laf(
     return jnp.where(active, jnp.clip(tau, a_min=0.0), 0.0)
 
 
-# ---------------------------------------------------------------------------
-# Lyman continuum optical depth (DLA)
-# ---------------------------------------------------------------------------
+# ── Lyman continuum optical depth (DLA) ───────────────────────────
 
 
 def _tau_lc_dla(
@@ -325,9 +311,7 @@ def _tau_lc_dla(
     return jnp.where(active, jnp.clip(tau, a_min=0.0), 0.0)
 
 
-# ---------------------------------------------------------------------------
-# CGM damping wing absorption (Asada et al. 2025)
-# ---------------------------------------------------------------------------
+# ── CGM damping wing absorption (Asada et al. 2025) ───────────────
 
 # Physical constants for damping wing calculation
 _C_CGS_IGM = 2.99792458e10  # cm/s
@@ -409,9 +393,7 @@ def _cgm_damping_wing_tau(
     return jnp.clip(tau, a_min=0.0)
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+# ── Public API ────────────────────────────────────────────────────
 
 
 def igm_transmission(
@@ -469,9 +451,7 @@ def igm_transmission(
     return jnp.exp(-jnp.clip(tau_total, a_min=0.0))
 
 
-# ---------------------------------------------------------------------------
-# Patchy reionization damping wing (Mason+2018, Keating+2025)
-# ---------------------------------------------------------------------------
+# ── Patchy reionization damping wing (Mason+2018, Keating+2025) ───
 
 
 def _damping_wing_tau(

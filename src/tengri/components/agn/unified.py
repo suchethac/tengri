@@ -37,9 +37,7 @@ from tengri.components.agn.skirtor import create_skirtor_from_grid
 _skirtor_fn = None
 from tengri.components.agn.torus import simple_torus, two_temperature_torus
 
-# ===================================================================
-# AGN model registry
-# ===================================================================
+# ── AGN model registry ────────────────────────────────────────────
 
 AGN_MODELS: dict[str, Callable] = {}
 
@@ -95,9 +93,7 @@ def resolve_agn_model(name: str) -> Callable:
 get_agn_model = resolve_agn_model
 
 
-# ===================================================================
-# Generic unified AGN combiner
-# ===================================================================
+# ── Generic unified AGN combiner ──────────────────────────────────
 
 
 def unified_agn(
@@ -171,9 +167,7 @@ def unified_agn(
     return l_disc + l_torus
 
 
-# ===================================================================
-# Pre-registered AGN models
-# ===================================================================
+# ── Pre-registered AGN models ─────────────────────────────────────
 
 
 @register_agn_model("simple")
@@ -687,9 +681,7 @@ def adaf_agn(
     return (l_disc + l_torus) * agn_frac
 
 
-# ===================================================================
-# Geometric masking (smooth sigmoid for differentiability)
-# ===================================================================
+# ── Geometric masking (smooth sigmoid for differentiability) ──────
 
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
@@ -730,9 +722,7 @@ def _sigmoid_mask(
     return jax.nn.sigmoid(-(inc_deg - inc_crit) / jnp.maximum(width, 0.1))
 
 
-# ===================================================================
-# Unified AGN with NLR + BLR decomposition
-# ===================================================================
+# ── Unified AGN with NLR + BLR decomposition ──────────────────────
 
 
 @register_agn_model("unified_nlr_blr")
@@ -831,7 +821,7 @@ def unified_nlr_blr(
     # When agn_torus_frac is a free parameter, use it directly.
     # The jnp.where(|x-0.5| < 1e-6, geom_cf, x) creates a likelihood discontinuity
     # at torus_frac=0.5±1e-6 that corrupts gradient-based inference (VI, MAP).
-    # Auto-derivation from theta_torus is done at the ParamSpec level via fixed values,
+    # Auto-derivation from theta_torus is done at the Parameters level via fixed values,
     # not in the forward pass.
     _ = geom_cf  # retained for reference; used when agn_torus_frac is fixed by ParamSpec
 

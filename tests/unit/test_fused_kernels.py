@@ -41,9 +41,7 @@ def setup_module(_module):
     jax.clear_caches()
 
 
-# ---------------------------------------------------------------------------
-# Fixtures: synthetic SSP-like data
-# ---------------------------------------------------------------------------
+# ── Fixtures: synthetic SSP-like data ─────────────────────────────
 
 
 @pytest.fixture
@@ -112,9 +110,7 @@ def sfr_on_ssp(n_age):
     return jnp.abs(jax.random.normal(key, (n_age,))) + 0.01
 
 
-# ---------------------------------------------------------------------------
-# Build compositional photometry kernel
-# ---------------------------------------------------------------------------
+# ── Build compositional photometry kernel ─────────────────────────
 
 
 def _make_fused_phot(ssp_phot, ssp_lgmet, eff_waves_rest, dust_age_w, flux_scale, ssp_ages_yr):
@@ -167,9 +163,7 @@ def _make_fused_spec(
     return fused_spec
 
 
-# ---------------------------------------------------------------------------
-# Unfused reference path (calls individual JIT functions separately)
-# ---------------------------------------------------------------------------
+# ── Unfused reference path (calls individual JIT functions separately)
 
 
 def _unfused_photometry(
@@ -199,9 +193,7 @@ def _unfused_photometry(
     return fast_photometry(weights, ssp_at_z, dust, flux_scale)
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+# ── Tests ─────────────────────────────────────────────────────────
 
 
 class TestFusedPhotometryAccuracy:
@@ -517,9 +509,7 @@ class TestFusedKernelSpeedup:
         )
 
 
-# ---------------------------------------------------------------------------
-# Regression: CSP trapezoidal endpoint weights (2026-04 bug fix)
-# ---------------------------------------------------------------------------
+# ── Regression: CSP trapezoidal endpoint weights (2026-04 bug fix)
 
 
 class TestCSPEndpointWeights:

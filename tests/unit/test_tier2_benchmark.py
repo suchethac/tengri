@@ -24,9 +24,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-# ---------------------------------------------------------------------------
-# SSP data availability
-# ---------------------------------------------------------------------------
+# ── SSP data availability ─────────────────────────────────────────
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILES = sorted(_DATA_DIR.glob("ssp_*.h5"))
@@ -37,9 +35,7 @@ _needs_ssp = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
 _CPU_THRESHOLD_US = 100_000  # 100 ms for fixed-z forward pass (relaxed for CI/Metal stability)
 
 
-# ---------------------------------------------------------------------------
-# No-SSP tests (dispatch wiring)
-# ---------------------------------------------------------------------------
+# ── No-SSP tests (dispatch wiring) ────────────────────────────────
 
 
 class TestTier2DispatchWiring:
@@ -76,9 +72,7 @@ class TestTier2DispatchWiring:
         assert callable(build_fused_tier2_spectrum)
 
 
-# ---------------------------------------------------------------------------
-# SSP-required: functional and performance tests
-# ---------------------------------------------------------------------------
+# ── SSP-required: functional and performance tests ────────────────
 
 
 @_needs_ssp

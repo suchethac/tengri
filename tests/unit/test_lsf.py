@@ -33,9 +33,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -57,9 +55,7 @@ def flat_spectrum():
     return jnp.ones(1000) * 1e-17
 
 
-# ---------------------------------------------------------------------------
-# Instrument resolution profiles
-# ---------------------------------------------------------------------------
+# ── Instrument resolution profiles ────────────────────────────────
 
 
 class TestInstrumentProfiles:
@@ -94,9 +90,7 @@ class TestInstrumentProfiles:
         assert nirspec_g140m_resolution(wave_um).shape == (200,)
 
 
-# ---------------------------------------------------------------------------
-# Library resolution constants
-# ---------------------------------------------------------------------------
+# ── Library resolution constants ──────────────────────────────────
 
 
 class TestLibraryResolutions:
@@ -117,9 +111,7 @@ class TestLibraryResolutions:
         assert SSP_LIBRARY_RESOLUTIONS["c3k"] == pytest.approx(15.0)
 
 
-# ---------------------------------------------------------------------------
-# Resolution to sigma conversion
-# ---------------------------------------------------------------------------
+# ── Resolution to sigma conversion ────────────────────────────────
 
 
 class TestResolutionConversion:
@@ -138,9 +130,7 @@ class TestResolutionConversion:
         assert float(sigma_100) > float(sigma_1000)
 
 
-# ---------------------------------------------------------------------------
-# Constant-R LSF
-# ---------------------------------------------------------------------------
+# ── Constant-R LSF ────────────────────────────────────────────────
 
 
 class TestApplyLSFConstantR:
@@ -193,9 +183,7 @@ class TestApplyLSFConstantR:
         assert jnp.all(jnp.isfinite(smoothed))
 
 
-# ---------------------------------------------------------------------------
-# Library resolution subtraction
-# ---------------------------------------------------------------------------
+# ── Library resolution subtraction ────────────────────────────────
 
 
 class TestLibrarySubtraction:
@@ -218,9 +206,7 @@ class TestLibrarySubtraction:
         assert_allclose(smoothed, delta_spectrum, atol=1e-10)
 
 
-# ---------------------------------------------------------------------------
-# Variable-R LSF
-# ---------------------------------------------------------------------------
+# ── Variable-R LSF ────────────────────────────────────────────────
 
 
 class TestApplyLSFVariableR:
@@ -272,9 +258,7 @@ class TestApplyLSFVariableR:
         assert float(err_32) <= float(err_8) + 1e-10
 
 
-# ---------------------------------------------------------------------------
-# Differentiability and JIT
-# ---------------------------------------------------------------------------
+# ── Differentiability and JIT ─────────────────────────────────────
 
 
 class TestLSFGradients:

@@ -31,9 +31,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 _WAVE = jnp.logspace(2.5, 8.0, 500)  # 316 A to 10 cm, broad grid
 
-# ============================================================
-# SHOWSTOPPER 1: SFR no longer hardcoded to 1.0 Msun/yr
-# ============================================================
+# ── SHOWSTOPPER 1: SFR no longer hardcoded to 1.0 Msun/yr ─────────
 
 
 class TestSFRNotHardcoded:
@@ -55,9 +53,7 @@ class TestSFRNotHardcoded:
         assert not jnp.isclose(sfr_low[-1], 1.0, atol=0.1)
 
 
-# ============================================================
-# SHOWSTOPPER 2: SFR time-averaging trapezoid non-negative
-# ============================================================
+# ── SHOWSTOPPER 2: SFR time-averaging trapezoid non-negative ──────
 
 
 class TestSFRTrapezoidNonNegative:
@@ -88,9 +84,7 @@ class TestSFRTrapezoidNonNegative:
         assert integral_10 >= 0.0
 
 
-# ============================================================
-# SHOWSTOPPER 3: disc.py — ring area π factor
-# ============================================================
+# ── SHOWSTOPPER 3: disc.py — ring area π factor ───────────────────
 
 
 class TestRingAreaPi:
@@ -132,9 +126,7 @@ class TestRingAreaPi:
         assert jnp.all(l_nu >= 0.0)
 
 
-# ============================================================
-# SHOWSTOPPER 4: Warm Comptonization — UV boost present
-# ============================================================
+# ── SHOWSTOPPER 4: Warm Comptonization — UV boost present ─────────
 
 
 class TestWarmComptonization:
@@ -187,9 +179,7 @@ class TestWarmComptonization:
         assert jnp.all(b_nu >= 0.0)
 
 
-# ============================================================
-# SHOWSTOPPER 5: ADAF — T_e has m_dot dependence
-# ============================================================
+# ── SHOWSTOPPER 5: ADAF — T_e has m_dot dependence ────────────────
 
 
 class TestADAFMdotDependence:
@@ -236,9 +226,7 @@ class TestADAFMdotDependence:
         )
 
 
-# ============================================================
-# SHOWSTOPPER 6: Balmer continuum tau direction
-# ============================================================
+# ── SHOWSTOPPER 6: Balmer continuum tau direction ─────────────────
 
 
 class TestBalmerContinuumTauDirection:
@@ -284,9 +272,7 @@ class TestBalmerContinuumTauDirection:
         assert peak_wave < 4000.0, f"Balmer continuum peak at {peak_wave:.0f} A, expected < 4000 A"
 
 
-# ============================================================
-# SHOWSTOPPER 8: Shock emission unit consistency
-# ============================================================
+# ── SHOWSTOPPER 8: Shock emission unit consistency ────────────────
 
 
 class TestShockEmissionUnits:
@@ -348,9 +334,7 @@ class TestShockEmissionUnits:
         assert peak < 1e10, f"SED peak {peak:.2e} Lsun/Hz suggests wrong units (erg/s/Hz?)"
 
 
-# ============================================================
-# SERIOUS 11: Posterior summary_table shows accept_rate and n_divergent
-# ============================================================
+# ── SERIOUS 11: Posterior summary_table shows accept_rate and n_divergent
 
 
 class TestPosteriorDiagnosticKeys:
@@ -405,9 +389,7 @@ class TestPosteriorDiagnosticKeys:
         assert "divergences=" not in table, "Old wrong key 'n_divergences' is being read"
 
 
-# ============================================================
-# SERIOUS 13: nonparametric.py JIT-safe (no len())
-# ============================================================
+# ── SERIOUS 13: nonparametric.py JIT-safe (no len()) ──────────────
 
 
 class TestNonparametricJITSafe:
@@ -463,9 +445,7 @@ class TestNonparametricJITSafe:
         assert jnp.allclose(sfr_bin1, sfr_bin1[0]), "SFR not constant within bin 1"
 
 
-# ============================================================
-# SERIOUS 14: DIG short-circuit when frac=0
-# ============================================================
+# ── SERIOUS 14: DIG short-circuit when frac=0 ─────────────────────
 
 
 class TestDIGShortCircuit:
@@ -502,9 +482,7 @@ class TestDIGShortCircuit:
         )
 
 
-# ============================================================
-# SERIOUS 15: attenuation.py float equality safe under JIT
-# ============================================================
+# ── SERIOUS 15: attenuation.py float equality safe under JIT ──────
 
 
 class TestAttenuationFloatEqualitySafe:
@@ -552,9 +530,7 @@ class TestAttenuationFloatEqualitySafe:
         )
 
 
-# ============================================================
-# SLOPPY 16: eline_priors.py dead code removed
-# ============================================================
+# ── SLOPPY 16: eline_priors.py dead code removed ──────────────────
 
 
 class TestElinePriorNoDead:
@@ -573,9 +549,7 @@ class TestElinePriorNoDead:
         )
 
 
-# ============================================================
-# SLOPPY 19: BLR Fe II normalization grid-resolution-independent
-# ============================================================
+# ── SLOPPY 19: BLR Fe II normalization grid-resolution-independent
 
 
 class TestBLRFeIINormalization:
@@ -616,9 +590,7 @@ class TestBLRFeIINormalization:
             )
 
 
-# ============================================================
-# SLOPPY 20: Continuity SFH piecewise-constant (not linear)
-# ============================================================
+# ── SLOPPY 20: Continuity SFH piecewise-constant (not linear) ─────
 
 
 class TestContinuitySFHPiecewiseConstant:
@@ -640,9 +612,7 @@ class TestContinuitySFHPiecewiseConstant:
         assert max_dev == 0.0, f"SFR varies by {max_dev:.3e} within a bin (should be zero)"
 
 
-# ============================================================
-# SLOPPY 21: single_component_dust_fast JIT-safe
-# ============================================================
+# ── SLOPPY 21: single_component_dust_fast JIT-safe ────────────────
 
 
 class TestSingleComponentDustFastJITSafe:
@@ -664,9 +634,7 @@ class TestSingleComponentDustFastJITSafe:
         assert jnp.all(jnp.isfinite(result))
 
 
-# ============================================================
-# SLOPPY 22: Leitherer02 cutoff consistent at 1800 A
-# ============================================================
+# ── SLOPPY 22: Leitherer02 cutoff consistent at 1800 A ────────────
 
 
 class TestLeithererCutoff:
@@ -690,9 +658,7 @@ class TestLeithererCutoff:
         )
 
 
-# ============================================================
-# SLOPPY 23: wg00_cloudy gradient not zero at tau_k=0
-# ============================================================
+# ── SLOPPY 23: wg00_cloudy gradient not zero at tau_k=0 ───────────
 
 
 class TestWG00CloudyGradient:
@@ -738,9 +704,7 @@ class TestWG00CloudyGradient:
         )
 
 
-# ============================================================
-# SLOPPY 26: radio.py redundant *_LSUN/_LSUN removed
-# ============================================================
+# ── SLOPPY 26: radio.py redundant *_LSUN/_LSUN removed ────────────
 
 
 class TestRadioAGNSimplified:
@@ -756,9 +720,7 @@ class TestRadioAGNSimplified:
         assert jnp.all(l_nu >= 0.0)
 
 
-# ============================================================
-# SLOPPY 27: unified.py torus_frac float equality safe
-# ============================================================
+# ── SLOPPY 27: unified.py torus_frac float equality safe ──────────
 
 
 class TestUnifiedAGNTorusFrac:
@@ -792,9 +754,7 @@ class TestUnifiedAGNTorusFrac:
         assert jnp.all(jnp.isfinite(l_nu_custom))
 
 
-# ============================================================
-# SLOPPY 28: precompute_dust_age_mask preserves dtype
-# ============================================================
+# ── SLOPPY 28: precompute_dust_age_mask preserves dtype ───────────
 
 
 class TestDustAgeMaskDtype:

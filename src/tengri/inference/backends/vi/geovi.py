@@ -132,7 +132,7 @@ def fit_geovi(
             raise ValueError(f"Unknown data_type: {data_type}")
 
     # Check if noise_frac_cal is passed (for variable noise support)
-    # The old ForwardModel API doesn't use ParamSpec, so we check the prior_config
+    # The old ForwardModel API doesn't use Parameters, so we check the prior_config
     use_variable_noise = hasattr(prior_config, "noise_frac_cal")
 
     if use_variable_noise:

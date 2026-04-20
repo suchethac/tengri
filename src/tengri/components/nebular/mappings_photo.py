@@ -57,9 +57,7 @@ import numpy as np
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._shared import _interp_index_weight, compute_qh, place_line_profiles
 
-# ---------------------------------------------------------------------------
-# Ionizing spectrum warnings
-# ---------------------------------------------------------------------------
+# ── Ionizing spectrum warnings ────────────────────────────────────
 
 
 class IonizingSpectrumInconsistencyError(Exception):
@@ -117,9 +115,7 @@ _MAX_NEB_LOG_AGE_YR = 8.0  # log10(100 Myr in yr)
 _DEFAULT_GRID_PATH = Path(__file__).resolve().parents[4] / "data" / "flury2024_grids.h5"
 
 
-# ---------------------------------------------------------------------------
-# NamedTuples for pre-loaded grid data
-# ---------------------------------------------------------------------------
+# ── NamedTuples for pre-loaded grid data ──────────────────────────
 
 
 class MappingsStellarGridData(NamedTuple):
@@ -169,9 +165,7 @@ class MappingsAGNGridData(NamedTuple):
     line_ratios: jnp.ndarray  # (N_z, N_m, N_e, N_u, N_n, N_lines)
 
 
-# ---------------------------------------------------------------------------
-# HDF5 loaders
-# ---------------------------------------------------------------------------
+# ── HDF5 loaders ──────────────────────────────────────────────────
 
 
 def _load_stellar_grid(filepath: str | Path, model: str, density: str) -> MappingsStellarGridData:
@@ -261,16 +255,12 @@ def _load_agn_grid(filepath: str | Path, density: str) -> MappingsAGNGridData:
     )
 
 
-# ---------------------------------------------------------------------------
-# Q_H computation (identical to cloudy_grid.py)
-# ---------------------------------------------------------------------------
+# ── Q_H computation (identical to cloudy_grid.py) ─────────────────
 
 _compute_qh_grid = jax.vmap(jax.vmap(compute_qh, in_axes=(None, 0)), in_axes=(None, 0))
 
 
-# ---------------------------------------------------------------------------
-# Metallicity conversion helpers
-# ---------------------------------------------------------------------------
+# ── Metallicity conversion helpers ────────────────────────────────
 
 
 def _log_z_abs_to_zo(log_z_abs: float) -> float:
@@ -281,9 +271,7 @@ def _log_z_abs_to_zo(log_z_abs: float) -> float:
     return 10.0 ** (log_z_abs - _LOG10_ZSUN)
 
 
-# ---------------------------------------------------------------------------
-# Stellar grid interpolation: 4-D (ζ_O, log_age, logU, logn) + sfh slice
-# ---------------------------------------------------------------------------
+# ── Stellar grid interpolation: 4-D (ζ_O, log_age, logU, logn) + sfh slice
 
 
 def _interp_stellar_grid(
@@ -328,9 +316,7 @@ def _interp_stellar_grid(
     return ca0 * (1 - wz) + ca1 * wz
 
 
-# ---------------------------------------------------------------------------
-# AGN grid interpolation: 4-D (ζ_O, logMBH, logEdd, logU, logn)
-# ---------------------------------------------------------------------------
+# ── AGN grid interpolation: 4-D (ζ_O, logMBH, logEdd, logU, logn) ─
 
 
 def _interp_agn_grid(
@@ -372,9 +358,7 @@ def _interp_agn_grid(
     return _lerp_meun(iz) * (1 - wz) + _lerp_meun(iz + 1) * wz
 
 
-# ---------------------------------------------------------------------------
-# MappingsPhotoStellarBackend
-# ---------------------------------------------------------------------------
+# ── MappingsPhotoStellarBackend ───────────────────────────────────
 
 
 class MappingsPhotoStellarBackend:
@@ -630,9 +614,7 @@ class MappingsPhotoStellarBackend:
         )
 
 
-# ---------------------------------------------------------------------------
-# MappingsPhotoAGNBackend
-# ---------------------------------------------------------------------------
+# ── MappingsPhotoAGNBackend ───────────────────────────────────────
 
 
 class MappingsPhotoAGNBackend:

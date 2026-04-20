@@ -29,9 +29,7 @@ from tengri.parameters.translate import (
     resolve_short_names,
 )
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -77,9 +75,7 @@ def stochastic_spec() -> Parameters:
     )
 
 
-# ---------------------------------------------------------------------------
-# sample() returns ALL params (fixed + free)
-# ---------------------------------------------------------------------------
+# ── sample() returns ALL params (fixed + free) ────────────────────
 
 
 class TestSampleKeys:
@@ -132,9 +128,7 @@ class TestSampleKeys:
         )
 
 
-# ---------------------------------------------------------------------------
-# free_params and fixed_params are disjoint and partition all_params
-# ---------------------------------------------------------------------------
+# ── free_params and fixed_params are disjoint and partition all_params
 
 
 class TestParamPartitioning:
@@ -177,9 +171,7 @@ class TestParamPartitioning:
             )
 
 
-# ---------------------------------------------------------------------------
-# merge_observation_params() immutability
-# ---------------------------------------------------------------------------
+# ── merge_observation_params() immutability ───────────────────────
 
 
 class TestMergeObservationParams:
@@ -213,9 +205,7 @@ class TestMergeObservationParams:
             assert name in merged.all_params, f"Original param {name!r} lost after merge"
 
 
-# ---------------------------------------------------------------------------
-# resolve_short_names — SFH-specific expansion
-# ---------------------------------------------------------------------------
+# ── resolve_short_names — SFH-specific expansion ──────────────────
 
 
 class TestResolveShortNamesDPL:

@@ -16,9 +16,7 @@ from tengri.observation.photometry import FilterCurve
 jax.config.update("jax_enable_x64", True)
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -93,9 +91,7 @@ def data_args(fitter_and_mock):
     return fitter._data_args
 
 
-# ---------------------------------------------------------------------------
-# BlockSchedule tests
-# ---------------------------------------------------------------------------
+# ── BlockSchedule tests ───────────────────────────────────────────
 
 
 class TestBlockSchedule:
@@ -141,9 +137,7 @@ class TestBlockSchedule:
             step.sample_mode = "linear_resample"
 
 
-# ---------------------------------------------------------------------------
-# Engine primitive tests
-# ---------------------------------------------------------------------------
+# ── Engine primitive tests ────────────────────────────────────────
 
 
 class TestEnginePrimitives:
@@ -184,9 +178,7 @@ class TestEnginePrimitives:
         assert total_ones == engine["d_total"] - (end - start)
 
 
-# ---------------------------------------------------------------------------
-# geoVI run tests
-# ---------------------------------------------------------------------------
+# ── geoVI run tests ───────────────────────────────────────────────
 
 
 class TestGeoVIRuns:
@@ -315,9 +307,7 @@ class TestGeoVIRuns:
         assert bool(jnp.all(chi < 10)), f"Posterior predictive residuals too large: chi = {chi}"
 
 
-# ---------------------------------------------------------------------------
-# OptimizationSchedule tests
-# ---------------------------------------------------------------------------
+# ── OptimizationSchedule tests ────────────────────────────────────
 
 
 class TestOptimizationSchedule:
@@ -364,9 +354,7 @@ class TestOptimizationSchedule:
         assert sched.sample_mode_at(1) == "nonlinear_update"
 
 
-# ---------------------------------------------------------------------------
-# Native geovi schedule test
-# ---------------------------------------------------------------------------
+# ── Native geovi schedule test ────────────────────────────────────
 
 
 class TestNativeGeoVISchedule:

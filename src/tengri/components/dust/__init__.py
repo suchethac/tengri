@@ -34,6 +34,8 @@ from tengri.components.dust.attenuation import (
     smc as smc,
     two_component_dust,
     two_component_dust_fast,
+    vw07_bc as vw07_bc,
+    vw07_diff as vw07_diff,
     wg00_cloudy,
     wg00_dusty,
     wg00_shell,

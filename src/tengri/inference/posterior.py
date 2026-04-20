@@ -2,7 +2,7 @@
 
 The Posterior object stores parameter samples (or point estimates for MAP),
 provides summary statistics, derived quantities, and can convert to ArviZ
-format or back to a ParamSpec for mock generation.
+format or back to a Parameters for mock generation.
 
 Usage:
     result = model.fit(data, noise, method="mcmc_nuts")
@@ -68,9 +68,7 @@ class Posterior:
     eline_names: tuple | None = field(default=None, repr=False)
     eline_wavelengths: jnp.ndarray | None = field(default=None, repr=False)
 
-    # -------------------------------------------------------------------
-    # Derived quantities
-    # -------------------------------------------------------------------
+    # ── Derived quantities ────────────────────────────────────────
 
     @functools.cached_property
     def derived(self) -> dict:
@@ -99,9 +97,7 @@ class Posterior:
                 derived_lists[k].append(v)
 
         return {
-            k: jnp.full(n_samples, jnp.nan)
-            if any(x is None for x in v)
-            else jnp.stack(v)
+            k: jnp.full(n_samples, jnp.nan) if any(x is None for x in v) else jnp.stack(v)
             for k, v in derived_lists.items()
         }
 
@@ -121,7 +117,7 @@ class Posterior:
         ------
         ValueError
             If no emission line fluxes are available. Set
-            ``eline_mode="marginalized"`` in ``SpectroscopyConfig`` to enable.
+            ``eline_mode="marginalized"`` in ``Spectroscopy`` to enable.
 
         Examples
         --------
@@ -271,9 +267,7 @@ class Posterior:
             "Use line_fluxes() and divide by the continuum model manually."
         )
 
-    # -------------------------------------------------------------------
-    # Summary statistics
-    # -------------------------------------------------------------------
+    # ── Summary statistics ────────────────────────────────────────
 
     def stats(self) -> dict:
         """Median and 68% credible intervals for all parameters.
@@ -393,9 +387,7 @@ class Posterior:
         lines.append(sep)
         return "\n".join(lines)
 
-    # -------------------------------------------------------------------
-    # Autocorrelation and effective sample size
-    # -------------------------------------------------------------------
+    # ── Autocorrelation and effective sample size ─────────────────
 
     @staticmethod
     def _autocorrelation_1d(x: np.ndarray, max_lag: int | None = None) -> np.ndarray:
@@ -537,9 +529,7 @@ class Posterior:
 
         return "\n".join(lines)
 
-    # -------------------------------------------------------------------
-    # Resampling
-    # -------------------------------------------------------------------
+    # ── Resampling ────────────────────────────────────────────────
 
     def resample(self, key, n=1) -> dict:
         """Resample from posterior with replacement.
@@ -572,19 +562,17 @@ class Posterior:
 
         return {k: v[indices] for k, v in self.samples.items()}
 
-    # -------------------------------------------------------------------
-    # Conversion
-    # -------------------------------------------------------------------
+    # ── Conversion ────────────────────────────────────────────────
 
     def to_param_spec(self):
-        """Convert posterior to an empirical ParamSpec.
+        """Convert posterior to an empirical Parameters.
 
         For MAP: all parameters become Fixed at their best-fit values.
         For sampling: fit clipped Gaussian to each marginal.
 
         Returns
         -------
-        ParamSpec
+        Parameters
         """
         from tengri.parameters.parameters import ParamSpec
         from tengri.parameters.priors import Fixed, Gaussian
@@ -644,9 +632,167 @@ class Posterior:
 
         return az.from_dict(posterior=posterior)
 
-    # -------------------------------------------------------------------
-    # Plotting
-    # -------------------------------------------------------------------
+    # ── HDF5 serialization ────────────────────────────────────────
+
+    def save(self, path: str) -> None:
+        """Save posterior to HDF5 file.
+
+        Serializes samples, params, diagnostics, loss history, and
+        emission line data. Model and fitter references are NOT saved
+        (they are non-serializable runtime objects).
+
+        Parameters
+        ----------
+        path : str
+            Output HDF5 file path.
+        """
+        import h5py
+
+        with h5py.File(path, "w") as f:
+            f.attrs["method"] = self.method
+            f.attrs["wall_time_s"] = self.wall_time_s
+            if self.log_evidence is not None:
+                f.attrs["log_evidence"] = self.log_evidence
+
+            if self.samples is not None:
+                grp = f.create_group("samples")
+                for name, arr in self.samples.items():
+                    grp.create_dataset(name, data=np.asarray(arr))
+
+            grp = f.create_group("params")
+            for name, val in self.params.items():
+                grp.create_dataset(name, data=np.asarray(val))
+
+            if self.loss_history is not None:
+                f.create_dataset("loss_history", data=np.asarray(self.loss_history))
+
+            self._save_diagnostics(f, self.diagnostics)
+
+            if self.eline_fluxes is not None:
+                eline = f.create_group("eline")
+                eline.create_dataset("fluxes", data=np.asarray(self.eline_fluxes))
+                if self.eline_flux_cov is not None:
+                    eline.create_dataset("flux_cov", data=np.asarray(self.eline_flux_cov))
+                if self.eline_names is not None:
+                    eline.attrs["names"] = list(self.eline_names)
+                if self.eline_wavelengths is not None:
+                    eline.create_dataset("wavelengths", data=np.asarray(self.eline_wavelengths))
+
+    @staticmethod
+    def _save_diagnostics(f, diagnostics: dict) -> None:
+        """Save diagnostics dict to HDF5, handling nested dicts and mixed types."""
+        grp = f.create_group("diagnostics")
+        for key, val in diagnostics.items():
+            if isinstance(val, dict):
+                sub = grp.create_group(key)
+                for k2, v2 in val.items():
+                    if isinstance(v2, (int, float, np.integer, np.floating)):
+                        sub.attrs[k2] = float(v2)
+                    elif isinstance(v2, str):
+                        sub.attrs[k2] = v2
+            elif isinstance(val, (int, float, np.integer, np.floating)):
+                grp.attrs[key] = float(val)
+            elif isinstance(val, str):
+                grp.attrs[key] = val
+            elif isinstance(val, (np.ndarray, jnp.ndarray)):
+                grp.create_dataset(key, data=np.asarray(val))
+            elif isinstance(val, (list, tuple)):
+                try:
+                    grp.create_dataset(key, data=np.asarray(val))
+                except (TypeError, ValueError):
+                    grp.attrs[key] = str(val)
+
+    @classmethod
+    def load(cls, path: str, model=None) -> Posterior:
+        """Load a Posterior from an HDF5 file.
+
+        Parameters
+        ----------
+        path : str
+            Path to HDF5 file saved by :meth:`save`.
+        model : Model, optional
+            Model reference for derived quantity computation.
+
+        Returns
+        -------
+        Posterior
+        """
+        import h5py
+
+        with h5py.File(path, "r") as f:
+            method = str(f.attrs["method"])
+            wall_time_s = float(f.attrs["wall_time_s"])
+            log_evidence = float(f.attrs["log_evidence"]) if "log_evidence" in f.attrs else None
+
+            def _read_ds(ds):
+                return jnp.asarray(ds[()]) if ds.shape == () else jnp.asarray(ds[:])
+
+            samples = None
+            if "samples" in f:
+                samples = {name: _read_ds(ds) for name, ds in f["samples"].items()}
+
+            params = {name: _read_ds(ds) for name, ds in f["params"].items()}
+
+            loss_history = None
+            if "loss_history" in f:
+                loss_history = jnp.asarray(f["loss_history"][:])
+
+            diagnostics = cls._load_diagnostics(f)
+
+            eline_fluxes = None
+            eline_flux_cov = None
+            eline_names = None
+            eline_wavelengths = None
+            if "eline" in f:
+                eg = f["eline"]
+                eline_fluxes = jnp.asarray(eg["fluxes"][:])
+                if "flux_cov" in eg:
+                    eline_flux_cov = jnp.asarray(eg["flux_cov"][:])
+                if "names" in eg.attrs:
+                    eline_names = tuple(eg.attrs["names"])
+                if "wavelengths" in eg:
+                    eline_wavelengths = jnp.asarray(eg["wavelengths"][:])
+
+        return cls(
+            samples=samples,
+            params=params,
+            method=method,
+            wall_time_s=wall_time_s,
+            diagnostics=diagnostics,
+            loss_history=loss_history,
+            log_evidence=log_evidence,
+            _model=model,
+            eline_fluxes=eline_fluxes,
+            eline_flux_cov=eline_flux_cov,
+            eline_names=eline_names,
+            eline_wavelengths=eline_wavelengths,
+        )
+
+    @staticmethod
+    def _load_diagnostics(f) -> dict:
+        """Load diagnostics dict from HDF5."""
+        diagnostics: dict = {}
+        if "diagnostics" not in f:
+            return diagnostics
+        grp = f["diagnostics"]
+        for key in grp.attrs:
+            diagnostics[key] = grp.attrs[key]
+            if isinstance(diagnostics[key], bytes):
+                diagnostics[key] = diagnostics[key].decode()
+        for key in grp:
+            item = grp[key]
+            if hasattr(item, "shape"):
+                diagnostics[key] = np.asarray(item[:])
+            else:
+                sub = {}
+                for k2 in item.attrs:
+                    sub[k2] = item.attrs[k2]
+                    if isinstance(sub[k2], bytes):
+                        sub[k2] = sub[k2].decode()
+                diagnostics[key] = sub
+        return diagnostics
+
+    # ── Plotting ──────────────────────────────────────────────────
 
     def plot_corner(
         self, params=None, truths=None, figsize=None, color="C0", fig=None, axes=None, label=None
@@ -1051,9 +1197,7 @@ class Posterior:
         fig.tight_layout()
         return fig
 
-    # -------------------------------------------------------------------
-    # Display
-    # -------------------------------------------------------------------
+    # ── Display ───────────────────────────────────────────────────
 
     def __repr__(self) -> str:
         n = "None" if self.samples is None else next(iter(self.samples.values())).shape[0]
@@ -1061,9 +1205,7 @@ class Posterior:
             f"Posterior(method='{self.method}', n_samples={n}, wall_time={self.wall_time_s:.1f}s)"
         )
 
-    # -------------------------------------------------------------------
-    # Method chaining
-    # -------------------------------------------------------------------
+    # ── Method chaining ───────────────────────────────────────────
 
     def refine(self, method: str, **kwargs):
         """Re-run inference from this result using a different method.

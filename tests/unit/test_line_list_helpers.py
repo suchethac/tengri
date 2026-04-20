@@ -19,9 +19,7 @@ from tengri.observation.line_list import (
     _parse_cloudy_species,
 )
 
-# ---------------------------------------------------------------------------
-# _parse_cloudy_species
-# ---------------------------------------------------------------------------
+# ── _parse_cloudy_species ─────────────────────────────────────────
 
 
 class TestParseCloudySpecies:
@@ -69,9 +67,7 @@ class TestParseCloudySpecies:
             assert isinstance(_parse_cloudy_species(name), str)
 
 
-# ---------------------------------------------------------------------------
-# _is_balmer_line
-# ---------------------------------------------------------------------------
+# ── _is_balmer_line ───────────────────────────────────────────────
 
 
 class TestIsBalmerLine:
@@ -120,9 +116,7 @@ class TestIsBalmerLine:
         assert _is_balmer_line("H  1 BADWA", "H1") is False
 
 
-# ---------------------------------------------------------------------------
-# _is_broad_candidate
-# ---------------------------------------------------------------------------
+# ── _is_broad_candidate ───────────────────────────────────────────
 
 
 class TestIsBroadCandidate:
@@ -164,9 +158,7 @@ class TestIsBroadCandidate:
         assert _is_broad_candidate("some_mgii_feature", "XX") is True
 
 
-# ---------------------------------------------------------------------------
-# _get_doublet_ratio_by_wavelength
-# ---------------------------------------------------------------------------
+# ── _get_doublet_ratio_by_wavelength ──────────────────────────────
 
 
 class TestGetDoubletRatioByWavelength:
@@ -197,9 +189,7 @@ class TestGetDoubletRatioByWavelength:
         assert abs(ratio - 2.47) < 0.01
 
 
-# ---------------------------------------------------------------------------
-# _detect_doublets_by_proximity
-# ---------------------------------------------------------------------------
+# ── _detect_doublets_by_proximity ─────────────────────────────────
 
 
 class TestDetectDoubletsByProximity:
@@ -276,9 +266,7 @@ class TestDetectDoubletsByProximity:
         assert abs(doublets[0].ratio - 2.98) < 0.01
 
 
-# ---------------------------------------------------------------------------
-# LineList.select() — species filter and empty result
-# ---------------------------------------------------------------------------
+# ── LineList.select() — species filter and empty result ───────────
 
 
 class TestSelectSpeciesAndEmpty:

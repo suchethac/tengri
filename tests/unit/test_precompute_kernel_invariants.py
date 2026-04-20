@@ -36,9 +36,7 @@ _SSP_EXISTS = _SSP_FILE is not None and _SSP_FILE.is_file()
 _needs_ssp = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
 
 
-# ---------------------------------------------------------------------------
-# Helper: build a minimal model (requires SSP)
-# ---------------------------------------------------------------------------
+# ── Helper: build a minimal model (requires SSP) ──────────────────
 
 
 def _make_spec_model():
@@ -67,9 +65,7 @@ def _make_phot_model():
     )
 
 
-# ===========================================================================
-# Class 1: Stale fitter cache
-# ===========================================================================
+# ── Class 1: Stale fitter cache ───────────────────────────────────
 
 
 class TestCacheInvalidation:
@@ -172,9 +168,7 @@ class TestCacheInvalidation:
         assert jnp.all(jnp.isfinite(flux)), "Flux has NaN/Inf after double precompute"
 
 
-# ===========================================================================
-# Class 2: len() vs .shape[0] on traced arrays
-# ===========================================================================
+# ── Class 2: len() vs .shape[0] on traced arrays ──────────────────
 
 
 class TestJITSafeSearchsorted:
@@ -307,9 +301,7 @@ class TestJITSafeSearchsorted:
         assert idxs.shape == (3,)
 
 
-# ===========================================================================
-# Class 3: _traceable mode routing and JIT composability
-# ===========================================================================
+# ── Class 3: _traceable mode routing and JIT composability ────────
 
 
 class TestTraceableRouting:
@@ -409,9 +401,7 @@ class TestTraceableRouting:
         )
 
 
-# ===========================================================================
-# Class 3b: prediction consistency across precompute boundary
-# ===========================================================================
+# ── Class 3b: prediction consistency across precompute boundary ───
 
 
 class TestPrecomputeConsistency:

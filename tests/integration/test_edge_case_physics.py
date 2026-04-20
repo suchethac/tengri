@@ -19,9 +19,7 @@ from tengri.forward.sed_model import Model
 from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import ParamSpec
 
-# ---------------------------------------------------------------------------
-# Skip if SSP data not available
-# ---------------------------------------------------------------------------
+# ── Skip if SSP data not available ────────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 _SSP_EXISTS = _SSP_FILE.is_file()
@@ -61,9 +59,7 @@ def _make_model(ssp_data, filters, **spec_kwargs):
     return Model(spec, ssp_data, filters=filters), spec.sample(jax.random.PRNGKey(0))
 
 
-# ===================================================================
-# 1. Extreme dust
-# ===================================================================
+# ── 1. Extreme dust ───────────────────────────────────────────────
 
 
 class TestExtremeDust:
@@ -111,9 +107,7 @@ class TestExtremeDust:
         assert jnp.all(phot > 0)
 
 
-# ===================================================================
-# 2. Zero dust
-# ===================================================================
+# ── 2. Zero dust ──────────────────────────────────────────────────
 
 
 class TestZeroDust:
@@ -139,9 +133,7 @@ class TestZeroDust:
             )
 
 
-# ===================================================================
-# 3. Extreme redshift
-# ===================================================================
+# ── 3. Extreme redshift ───────────────────────────────────────────
 
 
 class TestExtremeRedshift:
@@ -179,9 +171,7 @@ class TestExtremeRedshift:
         )
 
 
-# ===================================================================
-# 4. High burstiness (stochastic SFH)
-# ===================================================================
+# ── 4. High burstiness (stochastic SFH) ───────────────────────────
 
 
 class TestHighBurstiness:
@@ -238,9 +228,7 @@ class TestHighBurstiness:
         assert np.isfinite(float(d["sfr_100myr"])), "Non-finite SFR"
 
 
-# ===================================================================
-# 5. Metallicity extremes
-# ===================================================================
+# ── 5. Metallicity extremes ───────────────────────────────────────
 
 
 class TestMetallicityExtremes:

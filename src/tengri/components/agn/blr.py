@@ -26,18 +26,14 @@ import jax.numpy as jnp
 
 from tengri.components.agn._phys import gaussian_line_profile as _gaussian_line_profile
 
-# ===================================================================
-# Physical constants
-# ===================================================================
+# ── Physical constants ────────────────────────────────────────────
 from tengri.utils.physics_constants import (
     AA_TO_CM as _ANGSTROM_CM,
     C_CGS as _C_LIGHT,
     C_KM_S as _C_LIGHT_KMS,
 )
 
-# ===================================================================
-# BLR emission-line template
-# ===================================================================
+# ── BLR emission-line template ────────────────────────────────────
 
 # Key broad emission lines: (rest wavelength [Angstrom], relative strength)
 # Relative strengths based on typical Type 1 AGN composite spectra
@@ -76,9 +72,7 @@ _BLR_FWHM_KMS = 5000.0
 _BLR_LINE_EFFICIENCY = 0.08
 
 
-# ===================================================================
-# Fe II pseudo-continuum template
-# ===================================================================
+# ── Fe II pseudo-continuum template ───────────────────────────────
 
 # Fe II multiplet groups modeled as broad Gaussians:
 # (center wavelength [A], sigma width [A], relative strength)

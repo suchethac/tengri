@@ -12,11 +12,11 @@ composed function, eliminating separate stochastic/parametric code paths.
 
 Usage::
 
-    from tengri import Model, ParamSpec, Uniform, load_ssp_data, load_filter_set
+    from tengri import Model, Parameters, Uniform, load_ssp_data, load_filter_set
 
     ssp = load_ssp_data("data/ssp.h5")
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    spec = ParamSpec(
+    spec = Parameters(
         sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
         sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
         sfh_tsnorm_width_gyr=Uniform(0.5, 5),
@@ -76,11 +76,17 @@ from tengri.forward.sed_model_types import (
 from tengri.observation.photometry import ab_mag_from_flux
 from tengri.observation.spectrum import apply_lsf, compute_spectrum
 from tengri.parameters.translate import (
+    _AGN_IDENTITY_PARAMS,
+    _DUST_EMISSION_IDENTITY_PARAMS,
     _EVOLVING_ALPHA_PARAM_MAP,
-    _EVOLVING_MET_PARAM_MAP,
+    _NEBULAR_IDENTITY_PARAMS,
+    _RADIO_IDENTITY_PARAMS,
+    _SHOCK_IDENTITY_PARAMS,
+    _XRAY_IDENTITY_PARAMS,
     LOG10_ZSUN,
     _build_param_map,
     get_internal_params,
+    identity_param_map,
 )
 from tengri.runtime.deprecation import deprecated_class_alias
 from tengri.utils.cosmology import age_at_z, luminosity_distance
@@ -102,9 +108,8 @@ __all__ = [
     "SEDModel",
 ]
 
-# ---------------------------------------------------------------------------
-# Model class
-# ---------------------------------------------------------------------------
+
+
 
 
 class SEDModel:
@@ -116,7 +121,7 @@ class SEDModel:
 
     Parameters
     ----------
-    spec : ParamSpec
+    spec : Parameters
         Parameter specification (defines free/fixed params and priors).
     ssp_data : SSPData
         Pre-loaded SSP templates.
@@ -187,7 +192,70 @@ class SEDModel:
         approx=None,
         csp_integration="trapz",
     ):
-        # --- Observation / filters resolution ---
+        # ── Observation ────────────────────────────────────────────
+        observation, spec = self._init_observation(spec, filters, observation)
+        self.observation = observation
+        self.spec = spec
+        self.ssp_data = ssp_data
+        self._forward_dtype = jnp.dtype(forward_dtype)
+        self._spec = spec
+
+        # ── Approximation settings ────────────────────────────────
+        if approx is None or approx is True:
+            self._approx = dict(self._DEFAULT_APPROX)
+        elif approx is False:
+            self._approx = {k: False for k in self._DEFAULT_APPROX}
+        else:
+            self._approx = {**self._DEFAULT_APPROX, **approx}
+
+        # ── Stellar populations ───────────────────────────────────
+        self._init_ssp(spec, ssp_data, csp_integration)
+
+        # ── Star formation history ────────────────────────────────
+        self._init_sfh(spec)
+
+        # ── Metallicity ───────────────────────────────────────────
+        self._init_metallicity(spec)
+
+        # ── Dust (attenuation + emission) ─────────────────────────
+        self._init_dust(spec)
+
+        # ── IGM + DLA ─────────────────────────────────────────────
+        self._init_igm(spec)
+
+        # ── Nebular emission ──────────────────────────────────────
+        self._init_nebular(spec, ssp_data)
+
+        # ── AGN ───────────────────────────────────────────────────
+        self._init_agn(spec)
+
+        # ── Multiwavelength (radio, X-ray, shock) ─────────────────
+        self._init_multiwavelength(spec, ssp_data)
+
+        # ── Instrument (velocity dispersion, LSF) ─────────────────
+        self._init_instrument(spec, observation)
+
+        # ── Cosmology (luminosity distance) ───────────────────────
+        self._init_cosmology(spec)
+
+        # ── Kernel hierarchy ──────────────────────────────────────
+        self._precomputed = self._build_precomputed_data(ssp_data, precompute)
+        self.__compositional = self._build_compositional_kernels()
+        self.__hybrid = self._build_hybrid_kernels()
+
+        if (
+            observation is not None
+            and observation.can_do_spectroscopy
+            and self._z_fixed is not None
+            and precompute is not False
+        ):
+            self.precompute_spectroscopy(observation.spectroscopy.wave_obs)
+
+    # ── Construction helpers ──────────────────────────────────────────
+
+    @staticmethod
+    def _init_observation(spec, filters, observation):
+        """Resolve observation/filters into a canonical Observation + spec."""
         if filters is not None and observation is not None:
             raise ValueError(
                 "Cannot specify both filters= and observation=. "
@@ -205,54 +273,28 @@ class SEDModel:
             obs_params = observation.get_all_params()
             if obs_params:
                 spec = spec.with_params(**obs_params)
-
         elif filters is not None:
             from tengri.observation.photometry_config import Photometry
 
             observation = Observation(photometry=Photometry.from_filter_set(filters))
 
-        self.observation = observation
-        self.spec = spec
-        self.ssp_data = ssp_data
-        self._forward_dtype = jnp.dtype(forward_dtype)
+        return observation, spec
 
-        # Initialize metallicity interpolation settings early so attribute
-        # lookups never fail before the full-init code runs.
+    def _init_ssp(self, spec, ssp_data, csp_integration):
+        """Set up SSP grid, CSP integration, and log-age grid."""
         self._met_interp = getattr(spec, "met_interp", "linear")
         self._lgmet_scatter = float(getattr(spec, "lgmet_scatter", 0.1))
 
-        # Parse approximation settings
-        if approx is None or approx is True:
-            self._approx = dict(self._DEFAULT_APPROX)
-        elif approx is False:
-            self._approx = {k: False for k in self._DEFAULT_APPROX}
-        else:
-            self._approx = {**self._DEFAULT_APPROX, **approx}
-
-        # Handle filter input formats
         self.filter_waves = None
         self.filter_trans = None
-        if observation is not None and observation.can_do_photometry:
-            self.filter_waves = list(observation.photometry.filter_waves)
-            self.filter_trans = list(observation.photometry.filter_trans)
-        elif filters is not None:
-            if isinstance(filters, tuple) and len(filters) == 3:
-                self.filter_waves = filters[0]
-                self.filter_trans = filters[1]
-            elif isinstance(filters, (list, tuple)):
-                self.filter_waves = [f.wave for f in filters]
-                self.filter_trans = [f.trans for f in filters]
-            else:
-                raise TypeError(
-                    f"filters must be a list of FilterCurve or output of "
-                    f"load_filter_set(), got {type(filters)}"
-                )
+        obs = self.observation
+        if obs is not None and obs.can_do_photometry:
+            self.filter_waves = list(obs.photometry.filter_waves)
+            self.filter_trans = list(obs.photometry.filter_trans)
 
-        # SSP grid info
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
         self.ssp_ages_yr = 10.0**self.ssp_log_ages_yr
 
-        # CSP integration method (precompute bin widths once at model init)
         _valid_csp = ("trapz", "log_trapz", "log_interp", "dsps_native", "dsps_met_table")
         if csp_integration not in _valid_csp:
             raise ValueError(
@@ -265,21 +307,20 @@ class SEDModel:
             self._csp_matrix = jnp.array(csp_log_interp_matrix(self.ssp_ages_yr))
             self._csp_age_dt = None
         elif csp_integration in ("dsps_native", "dsps_met_table"):
-            # No precomputed bin widths; DSPS handles integration internally.
             self._csp_age_dt = None
             self._csp_matrix = None
         else:
             self._csp_age_dt = csp_age_dt(self.ssp_ages_yr, csp_integration)
             self._csp_matrix = None
 
-        # Log-age grid for SFH computation
         n_grid = spec.n_grid if spec.stochastic else 256
         self.log_age_grid = make_log_age_grid(n_grid)
         self.d_log_age = grid_spacing(self.log_age_grid)
         self.age_yr = log_age_to_age_yr(self.log_age_grid)
         self._n_grid = n_grid
 
-        # Resolve SFH from registry
+    def _init_sfh(self, spec):
+        """Resolve SFH from registry and build the base param_map."""
         sfh_fn, _sfh_params, sfh_param_map, sfh_settings = resolve_sfh(spec.mean_sfh_type)
         self._sfh_fn = sfh_fn
         self._sfh_internal_names = {v[0] for v in sfh_param_map.values()}
@@ -288,36 +329,43 @@ class SEDModel:
             spec.mean_sfh_type,
             dust_model=getattr(spec, "dust_model", "two_component"),
         )
-
-        # Field settings
         self._has_field = spec.stochastic
         self._field_model = sfh_settings.get("sfh_field_model", "drw")
 
-        # Dust model: "two_component" (Charlot & Fall) or "single_component" (screen)
+    def _init_metallicity(self, spec):
+        """Configure metallicity mode and evolving alpha-enhancement."""
+        self._met_mode = getattr(spec, "met_mode", "delta")
+        self._evolving_metallicity = self._met_mode == "ramp"
+        self._chem_evol_enabled = self._met_mode == "chem_evol"
+
+        if self._met_mode != "delta":
+            self._param_map.pop("met_logzsol", None)
+        from tengri.components.sfh.met_registry import resolve_met
+
+        _, _, met_param_map, _ = resolve_met(self._met_mode)
+        self._param_map.update(met_param_map)
+
+        self._alpha_fe_evolving = getattr(spec, "alpha_fe_evolving", False)
+        if self._alpha_fe_evolving:
+            self._param_map.pop("met_alpha_fe", None)
+            self._param_map.update(_EVOLVING_ALPHA_PARAM_MAP)
+
+    def _init_dust(self, spec):
+        """Configure dust attenuation laws, nebular dust, and dust emission."""
         self._dust_model = getattr(spec, "dust_model", "two_component")
-        # Dust approx: "fast" (hard threshold, 2-CSP) or "exact" (smooth sigmoid)
         self._dust_approx = getattr(spec, "dust_approx", "fast")
 
-        # Dust law settings
         self._dust_law_bc = spec.dust_law_bc
         self._dust_law_diff = spec.dust_law_diff
-        # Cache resolved dust law functions (avoid dict lookup per forward call)
         from tengri.components.dust.attenuation import resolve_dust_law
 
         self._dust_law_bc_fn = resolve_dust_law(self._dust_law_bc)
         if self._dust_model == "single_component":
-            self._dust_law_diff_fn = self._dust_law_bc_fn  # not used, keep consistent
+            self._dust_law_diff_fn = self._dust_law_bc_fn
         else:
             self._dust_law_diff_fn = resolve_dust_law(self._dust_law_diff)
 
-        # Nebular dust attenuation mode:
-        #   "bc"   (default) = same BC + diffuse laws as stellar (Charlot & Fall 2000)
-        #   "diff"           = diffuse ISM only (no birth-cloud dust on nebular)
-        #   "neb"            = separate BC law for nebular (spec.neb_dust_law_bc)
-        #                      + same diffuse law as stellar
-        #   "none"           = no dust on nebular emission
         self._neb_dust = getattr(spec, "neb_dust", "bc")
-        # Optional separate BC law for nebular (only used when _neb_dust == "neb")
         _neb_bc_law_name = getattr(spec, "neb_dust_law_bc", None)
         if _neb_bc_law_name is not None:
             from tengri.components.dust.attenuation import resolve_dust_law as _rdl
@@ -326,12 +374,6 @@ class SEDModel:
         else:
             self._neb_dust_law_bc_fn = self._dust_law_bc_fn
 
-        # IGM absorption (Inoue+2014)
-        self._apply_igm = spec.apply_igm
-
-        # Dust emission model (None = disabled)
-        # "dl07_tabulated" is a legacy alias — map to "draine_li2007" which
-        # now auto-loads tabulated templates on first call.
         self._dust_emission_model = getattr(spec, "dust_emission", None)
         if self._dust_emission_model == "dl07_tabulated":
             warnings.warn(
@@ -342,127 +384,59 @@ class SEDModel:
             )
             self._dust_emission_model = "draine_li2007"
         if self._dust_emission_model:
-            for p in [
-                "dust_T",
-                "dust_beta_ir",
-                "dust_alpha_mir",
-                "dust_alpha_dale",
-                "dust_umin",
-                "dust_gamma_dl",
-                "dust_qpah",
-                "dust_eta_balance",
-                "dust_alpha_dl14",
-            ]:
-                self._param_map[p] = (p, 1.0, 0.0)
+            self._param_map.update(identity_param_map(_DUST_EMISSION_IDENTITY_PARAMS))
 
-        # Evolving metallicity
-        self._evolving_metallicity = getattr(spec, "evolving_metallicity", False)
-        if self._evolving_metallicity:
-            # Replace met_logzsol mapping with the two evolving-Z params
-            self._param_map.pop("met_logzsol", None)
-            self._param_map.update(_EVOLVING_MET_PARAM_MAP)
+    def _init_igm(self, spec):
+        """Configure IGM absorption and DLA."""
+        self._apply_igm = spec.apply_igm
+        self._dla_enabled = getattr(spec, "dla", False)
+        self._igm_patchy = getattr(spec, "igm_patchy", False)
 
-        # Chemical evolution: Z(t) derived from SFH via gas-regulator model
-        self._chem_evol_enabled = getattr(spec, "chem_evol", False)
-        if self._chem_evol_enabled:
-            # Remove met_logzsol (metallicity derived from SFH)
-            self._param_map.pop("met_logzsol", None)
-            # Add chem_evol params (identity mapping, no unit conversion)
-            for p in [
-                "chem_yield",
-                "chem_eta_outflow",
-                "chem_f_gas_init",
-                "chem_return_frac",
-            ]:
-                self._param_map[p] = (p, 1.0, 0.0)
+    def _init_nebular(self, spec, ssp_data):
+        """Configure nebular emission backend and register param_map entries."""
+        if spec.nebular_mode in ("cloudy", "cue"):
+            self._param_map.update(identity_param_map(_NEBULAR_IDENTITY_PARAMS))
+            self._param_map["neb_logZ_gas"] = ("neb_logZ_gas", 1.0, LOG10_ZSUN)
 
-        # Evolving alpha-enhancement: replaces global met_alpha_fe
-        self._alpha_fe_evolving = getattr(spec, "alpha_fe_evolving", False)
-        if self._alpha_fe_evolving:
-            self._param_map.pop("met_alpha_fe", None)
-            self._param_map.update(_EVOLVING_ALPHA_PARAM_MAP)
+        self._nebular_backend = None
+        if spec.nebular_mode == "cue":
+            from tengri.components.nebular import CueBackend
 
-        # Store spec reference for pipeline access
-        self._spec = spec
+            self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
+        elif spec.nebular_mode == "cloudy":
+            from tengri.components.nebular import CloudyGridBackend
 
-        # AGN model (None = disabled)
+            self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
+        else:
+            from tengri.components.nebular import BakedInBackend
+
+            self._nebular_backend = BakedInBackend()
+
+    def _init_agn(self, spec):
+        """Configure AGN model and detect parametric vs. fraction mode."""
         self._agn_model = getattr(spec, "agn_model", None)
-        # Detect parametric AGN mode: agn_log_lbol is a free (non-Fixed)
-        # parameter. Parametric mode uses agn_log_lbol directly, enabling
-        # fused-kernel evaluation. Legacy mode uses agn_frac to derive
-        # L_bol from the full SED integral, forcing the exact path.
         self._agn_parametric = False
         if self._agn_model:
             agn_dists = getattr(spec, "_distributions", {})
             agn_lbol_dist = agn_dists.get("agn_log_lbol")
             agn_frac_dist = agn_dists.get("agn_frac")
-            # Parametric if agn_log_lbol is free, or if agn_frac is Fixed(0)
-            # (default) and agn_log_lbol exists with any non-zero default.
             lbol_is_free = agn_lbol_dist is not None and not agn_lbol_dist.is_fixed
             frac_is_free = agn_frac_dist is not None and not agn_frac_dist.is_fixed
             self._agn_parametric = lbol_is_free and not frac_is_free
-            for p in [
-                # Core AGN params
-                "agn_frac",
-                "agn_log_lbol",
-                "agn_alpha",
-                "agn_T_torus",
-                "agn_tau_torus",
-                "agn_torus_frac",
-                "agn_log_mbh",
-                "agn_log_ledd",
-                # SKIRTOR clumpy torus (were in _AGN_PARAMS but missing from loop)
-                "agn_tau_skirtor",
-                "agn_p_skirtor",
-                "agn_q_skirtor",
-                "agn_oa_skirtor",
-                # Inclination (was in _AGN_PARAMS but missing from loop)
-                "agn_cos_inc",
-                # BH spin + two-temperature torus (multicolor_agn, kubota_done_full)
-                "agn_a_spin",
-                "agn_T_hot",
-                "agn_T_warm",
-                "agn_frac_hot",
-                # Full K&D 3-zone disc (kubota_done_full only)
-                "agn_f_hard",
-                "agn_gamma_warm",
-                "agn_kt_warm",
-                "agn_gamma_hard",
-                "agn_kt_hot",
-                "agn_r_warm_ratio",
-                # Polar dust screen on AGN disc
-                "agn_polar_ebv",
-                "agn_polar_oa",
-            ]:
-                self._param_map[p] = (p, 1.0, 0.0)
+            self._param_map.update(identity_param_map(_AGN_IDENTITY_PARAMS))
 
-        # Radio and X-ray
+    def _init_multiwavelength(self, spec, ssp_data):
+        """Configure radio, X-ray, shock, and build wavelength grid."""
         self._radio_enabled = getattr(spec, "radio", False)
         if self._radio_enabled:
-            for p in [
-                "radio_q_ir",
-                "radio_alpha_sf",
-                "radio_loudness",
-                "radio_alpha_agn",
-                "radio_T_e",
-                "radio_alpha_ff",
-            ]:
-                self._param_map[p] = (p, 1.0, 0.0)
+            self._param_map.update(identity_param_map(_RADIO_IDENTITY_PARAMS))
             self._radio_include_freefree = getattr(spec, "radio_include_freefree", True)
             self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
 
         self._xray_enabled = getattr(spec, "xray", False)
         if self._xray_enabled:
-            for p in [
-                "xray_gamma_agn",
-                "xray_alpha_ox",
-                "xray_gamma_hmxb",
-                "xray_gamma_lmxb",
-                "xray_E_cut",
-            ]:
-                self._param_map[p] = (p, 1.0, 0.0)
+            self._param_map.update(identity_param_map(_XRAY_IDENTITY_PARAMS))
 
-        # Build rest-frame wavelength grid (auto-extend for radio/X-ray)
         if self._radio_enabled or self._xray_enabled:
             from tengri.utils.wavelength import make_panchromatic_grid
 
@@ -474,52 +448,20 @@ class SEDModel:
         else:
             self._rest_wavelength = ssp_data.ssp_wave
 
-        # Patchy IGM reionization (Miralda-Escudé 1998 / Mason+2018)
-        self._igm_patchy = getattr(spec, "igm_patchy", False)
-
-        # Shock emission (MAPPINGS V)
         self._shock_enabled = getattr(spec, "shock", False)
         if self._shock_enabled:
-            for p in ["shock_frac", "shock_velocity", "shock_log_density", "shock_b_over_sqrt_n"]:
-                self._param_map[p] = (p, 1.0, 0.0)
+            self._param_map.update(identity_param_map(_SHOCK_IDENTITY_PARAMS))
 
-        # Nebular emission backend + params
-        if spec.nebular_mode in ("cloudy", "cue"):
-            self._param_map["neb_logU"] = ("neb_logU", 1.0, 0.0)
-            self._param_map["neb_logZ_gas"] = ("neb_logZ_gas", 1.0, LOG10_ZSUN)
-            self._param_map["neb_fesc"] = ("neb_fesc", 1.0, 0.0)
-            self._param_map["neb_fesc_lya"] = ("neb_fesc_lya", 1.0, 0.0)
-
-        self._nebular_backend = None
-        if spec.nebular_mode == "cue":
-            from tengri.components.nebular import CueBackend
-
-            self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
-        elif spec.nebular_mode == "cloudy":
-            from tengri.components.nebular import CloudyGridBackend
-
-            self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
-        elif spec.nebular_mode == "ssp":
-            from tengri.components.nebular import BakedInBackend
-
-            self._nebular_backend = BakedInBackend()
-        else:
-            from tengri.components.nebular import BakedInBackend
-
-            self._nebular_backend = BakedInBackend()
-
-        # Velocity dispersion: only apply if sigma_v is in the spec
+    def _init_instrument(self, spec, observation):
+        """Configure velocity dispersion and LSF settings."""
         self._has_sigma_v = spec.has_param("sigma_v") if hasattr(spec, "has_param") else False
         if not self._has_sigma_v:
-            # Check if sigma_v is in the param names directly
             try:
                 spec.get_distribution("sigma_v")
                 self._has_sigma_v = True
             except KeyError:
                 self._has_sigma_v = False
 
-        # SSP library velocity resolution for LSF subtraction (km/s)
-        # Observation config takes precedence over spec attributes
         if observation is not None and observation.can_do_spectroscopy:
             sc = observation.spectroscopy
             self._sigma_lib_kms = sc.sigma_lib_kms
@@ -530,7 +472,8 @@ class SEDModel:
             self._lsf_resolution = getattr(spec, "lsf_resolution", None)
             self._lsf_n_bins = getattr(spec, "lsf_n_bins", 16)
 
-        # Precompute luminosity distance if redshift is fixed
+    def _init_cosmology(self, spec):
+        """Precompute luminosity distance if redshift is fixed."""
         redshift_dist = spec.get_distribution("redshift")
         if redshift_dist.is_fixed:
             self._dl_cm_fixed = luminosity_distance(redshift_dist.bounds[0])
@@ -539,31 +482,7 @@ class SEDModel:
             self._dl_cm_fixed = None
             self._z_fixed = None
 
-        # =================================================================
-        # Three-level kernel hierarchy: PrecomputedData → CompositionalKernels → HybridKernels
-        # =================================================================
-
-        # Level 1: Precomputed data (SSP tensors, dust weights, IGM)
-        self._precomputed = self._build_precomputed_data(ssp_data, precompute)
-
-        # Level 2 & 3: Eagerly build kernels at init (not lazy) so they
-        # are never constructed inside a JIT scope (which causes tracer leaks
-        # when NIFTy/VI traces through predict_photometry).
-        self.__compositional = self._build_compositional_kernels()
-        self.__hybrid = self._build_hybrid_kernels()
-
-        # Auto-precompute spectroscopy from Observation config
-        if (
-            observation is not None
-            and observation.can_do_spectroscopy
-            and self._z_fixed is not None
-            and precompute is not False
-        ):
-            self.precompute_spectroscopy(observation.spectroscopy.wave_obs)
-
-    # -------------------------------------------------------------------
-    # Lazy kernel properties
-    # -------------------------------------------------------------------
+    # ── Kernel properties ─────────────────────────────────────────────
 
     @property
     def _compositional(self):
@@ -584,9 +503,7 @@ class SEDModel:
         self.__compositional = None
         self.__hybrid = None
 
-    # -------------------------------------------------------------------
-    # Kernel hierarchy builders
-    # -------------------------------------------------------------------
+    # ── Kernel builders ────────────────────────────────────────────────
 
     def _precompute_dust_ir_photometry(self):
         """Precompute dust IR template photometry for fast hybrid kernel lookup.
@@ -838,9 +755,7 @@ class SEDModel:
         hk._spectrum_raw = hybrid_spec_raw
         return hk
 
-    # -------------------------------------------------------------------
-    # Internal parameter translation
-    # -------------------------------------------------------------------
+    # ── Parameter translation ─────────────────────────────────────────
 
     def _get_internal_params(self, params):
         """Translate public param dict to internal names with unit conversion.
@@ -956,9 +871,7 @@ class SEDModel:
         z = self._get_redshift(params)
         return luminosity_distance(z)
 
-    # -------------------------------------------------------------------
-    # Forward predictions
-    # -------------------------------------------------------------------
+    # ── Forward predictions ───────────────────────────────────────────
 
     @property
     def wavelengths(self):
@@ -1040,6 +953,18 @@ class SEDModel:
                 igm_patchy=getattr(self, "_igm_patchy", False),
             )
             sed_obs = sed_obs * igm_trans
+        if self._dla_enabled:
+            from tengri.components.igm.dla import dla_transmission_obs
+
+            z_dla = params.get("dla_z", 0.0)
+            z_dla = jnp.where(z_dla > 0.0, z_dla, z)
+            sed_obs = sed_obs * dla_transmission_obs(
+                wave_obs,
+                z_dla=z_dla,
+                log_n_hi=params.get("dla_log_n_hi", 20.0),
+                temp=params.get("dla_temp", 1e4),
+                b_turb_kms=params.get("dla_b_turb", 0.0),
+            )
         return SEDResult(wavelength=wave_obs, sed=sed_obs)
 
     def predict_sed(self, params):
@@ -1629,9 +1554,7 @@ class SEDModel:
         """Extract AGN kwargs from internal params dict for fused kernel."""
         return get_agn_kwargs(self, p)
 
-    # -------------------------------------------------------------------
-    # Level 2: Compositional rest-frame SED dispatch
-    # -------------------------------------------------------------------
+    # ── Compositional SED dispatch ────────────────────────────────────
 
     def _compute_rest_sed_compositional(self, params):
         """Compute rest-frame SED via the compositional JIT kernel.
@@ -2251,6 +2174,109 @@ class SEDModel:
         sed_erg = self.predict_rest_sed(params).sed
         return sed_erg / LSUN_CGS
 
+    def predict_line_fluxes(self, params, target_wavelengths=None):
+        """Predict observed emission line fluxes.
+
+        Calls the nebular backend to compute line luminosities,
+        selects target lines by wavelength matching, and converts
+        from luminosity (Lsun) to observed flux (erg/s/cm^2).
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values (public names).
+        target_wavelengths : array, shape (n_target,), optional
+            Rest-frame vacuum wavelengths (Angstrom) of lines to predict.
+            Each wavelength is matched to the nearest backend line.
+            If None, returns all lines from the nebular backend.
+
+        Returns
+        -------
+        fluxes : array, shape (n_target,) or (n_all_lines,)
+            Observed line fluxes in erg/s/cm^2.
+
+        Raises
+        ------
+        ValueError
+            If no nebular backend is configured.
+        """
+        from tengri.utils.physics_constants import L_SUN
+
+        backend = self._nebular_backend
+        if backend is None or not hasattr(backend, "predict_nebular_line_luminosities"):
+            raise ValueError(
+                "No nebular backend with line prediction configured. "
+                "Cannot compute line fluxes."
+            )
+
+        comp = self._compute_sed_components(params)
+        weights = comp["weights"]
+        p = comp["p"]
+
+        all_waves, all_lums = backend.predict_nebular_line_luminosities(
+            ssp_weights=weights,
+            ssp_log_ages_yr=self.ssp_log_ages_yr,
+            log_z=p.get("log_z_abs", 0.0),
+            neb_logU=p.get("neb_logU", -3.0),
+            neb_logZ_gas=p.get("neb_logZ_gas", None),
+            neb_fesc=p.get("neb_fesc", 0.0),
+        )
+
+        if target_wavelengths is not None:
+            target_wavelengths = jnp.asarray(target_wavelengths)
+            indices = jnp.argmin(
+                jnp.abs(all_waves[None, :] - target_wavelengths[:, None]),
+                axis=1,
+            )
+            selected_lums = all_lums[indices]
+        else:
+            selected_lums = all_lums
+
+        dl_cm = self._get_dl_cm(params)
+        flux = selected_lums * L_SUN / (4.0 * jnp.pi * dl_cm**2)
+        return flux
+
+    def predict_spectral_indices(self, params, index_defs, mode="_traceable"):
+        """Predict spectral index values from the model SED.
+
+        Generates a rest-frame spectrum covering the index wavelength
+        ranges and measures each index (EW or break ratio).
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values (public names).
+        index_defs : tuple of SpectralIndexDef
+            Index definitions to measure.
+        mode : str, optional
+            Forward model prediction mode.
+
+        Returns
+        -------
+        jnp.ndarray, shape (n_indices,)
+            Predicted index values.
+        """
+        from tengri.observation.spectral_indices import measure_index_jax
+
+        wave_min = min(d.wave_min for d in index_defs)
+        wave_max = max(d.wave_max for d in index_defs)
+
+        z = params.get("redshift", 0.0)
+        wave_obs = jnp.linspace(
+            wave_min * (1.0 + z) * 0.98,
+            wave_max * (1.0 + z) * 1.02,
+            2000,
+        )
+
+        flux_obs = self.predict_spectrum(params, wave_obs, mode=mode)
+        wave_rest = wave_obs / (1.0 + z)
+
+        indices = []
+        for idx_def in index_defs:
+            val = measure_index_jax(wave_rest, flux_obs, idx_def)
+            indices.append(val)
+        return jnp.array(indices)
+
     def plot_sfh_posterior(
         self, posterior, true_params=None, ax=None, n_draws=50, color="C0", label="Posterior"
     ):
@@ -2303,9 +2329,7 @@ class SEDModel:
         ax.legend(fontsize=9)
         return ax
 
-    # -------------------------------------------------------------------
-    # Mock generation
-    # -------------------------------------------------------------------
+    # ── Mock generation ──────────────────────────────────────────────
 
     def mock(self, params, snr=20.0, key=None):
         from tengri.forward.convenience import mock as _fn
@@ -2322,9 +2346,7 @@ class SEDModel:
 
         return _fn(self, params_batch, snr=snr, key=key)
 
-    # -------------------------------------------------------------------
-    # Batch predictions (vmap over galaxies)
-    # -------------------------------------------------------------------
+    # ── Batch predictions ─────────────────────────────────────────────
 
     def predict_photometry_batch(self, params_batch):
         from tengri.forward.convenience import predict_photometry_batch as _fn
@@ -2336,9 +2358,7 @@ class SEDModel:
 
         return _fn(self, params_batch)
 
-    # -------------------------------------------------------------------
-    # Factory classmethod
-    # -------------------------------------------------------------------
+    # ── Factory classmethod ──────────────────────────────────────────
 
     @classmethod
     def from_config(
@@ -2357,7 +2377,7 @@ class SEDModel:
         """Build a Model from a grouped configuration dict.
 
         Reduces boilerplate for the common case: instead of constructing
-        ``ParamSpec``, ``SSPData``, ``Observation``, and ``Model`` separately,
+        ``Parameters``, ``SSPData``, ``Observation``, and ``Model`` separately,
         provide a single grouped config and receive a fully configured ``Model``.
 
         Parameters
@@ -2425,18 +2445,14 @@ class SEDModel:
             **model_kwargs,
         )
 
-    # -------------------------------------------------------------------
-    # Prior predictive check
-    # -------------------------------------------------------------------
+    # ── Prior predictive ─────────────────────────────────────────────
 
     def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
         from tengri.forward.convenience import prior_predictive as _fn
 
         return _fn(self, n=n, seed=seed)
 
-    # -------------------------------------------------------------------
-    # Convenience fit
-    # -------------------------------------------------------------------
+    # ── Convenience fit ──────────────────────────────────────────────
 
     def fit(
         self,
@@ -2516,6 +2532,8 @@ class SEDModel:
         method: str = "vi",
         n_workers: int = 1,
         verbose: bool = True,
+        output_dir: str | None = None,
+        id_col: str | None = None,
         **kwargs,
     ) -> list:
         from tengri.forward.convenience import fit_batch as _fn
@@ -2529,6 +2547,8 @@ class SEDModel:
             method=method,
             n_workers=n_workers,
             verbose=verbose,
+            output_dir=output_dir,
+            id_col=id_col,
             **kwargs,
         )
 
@@ -2621,9 +2641,7 @@ class SEDModel:
 
         return _summary(self)
 
-    # -------------------------------------------------------------------
-    # Population fitting
-    # -------------------------------------------------------------------
+    # ── Population fitting ───────────────────────────────────────────
 
     def fit_population(
         self,

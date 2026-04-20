@@ -641,6 +641,7 @@ def _get_or_build_nifty_likelihood(fitter):
             params[name] = val
         if stochastic and "psd_xi" in primals:
             params["psd_xi"] = primals["psd_xi"]
+        params = spec.resolve_mirrors(params)
         return params
 
     if use_variable_noise:

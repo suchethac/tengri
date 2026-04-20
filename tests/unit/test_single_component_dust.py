@@ -13,9 +13,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -29,9 +27,7 @@ def n_ages():
     return 107
 
 
-# ---------------------------------------------------------------------------
-# single_component_dust (base, returns 1-D)
-# ---------------------------------------------------------------------------
+# ── single_component_dust (base, returns 1-D) ─────────────────────
 
 
 class TestSingleComponentDust:
@@ -139,9 +135,7 @@ class TestSingleComponentDust:
         assert grad_jax < 0.0
 
 
-# ---------------------------------------------------------------------------
-# single_component_dust_fast (broadcast to n_ages x n_wave)
-# ---------------------------------------------------------------------------
+# ── single_component_dust_fast (broadcast to n_ages x n_wave) ─────
 
 
 class TestSingleComponentDustFast:

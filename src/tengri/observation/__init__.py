@@ -2,8 +2,10 @@
 
 from tengri.observation.calibration import (
     apply_calibration,
+    apply_double_calibration,
     calibration_polynomial,
     chebyshev_basis,
+    double_calibration_polynomial,
     marginalize_calibration,
 )
 from tengri.observation.eline_catalog import (
@@ -21,10 +23,22 @@ from tengri.observation.eline_priors import (
     cloudy_line_priors,
     marginalize_emission_lines_cloudy,
 )
+from tengri.observation.line_flux_data import LineFluxData
+from tengri.observation.noise import DETECTED, LOWER_LIMIT, UPPER_LIMIT
 from tengri.observation.noise_model import NoiseConfig, NoiseModel
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
-from tengri.observation.spectroscopy import Spectroscopy, SpectroscopyConfig
+from tengri.observation.spectral_indices import (
+    STANDARD_INDICES,
+    SpectralIndexData,
+    SpectralIndexDef,
+    measure_index_jax,
+)
+from tengri.observation.spectroscopy import (
+    Spectroscopy,
+    SpectroscopyConfig,
+    apply_wavelength_mask,
+)
 from tengri.observation.spectrum import (
     SSP_LIBRARY_RESOLUTIONS,
     apply_lsf,
@@ -38,23 +52,34 @@ __all__ = [
     "CLOUDY_LINE_WAVELENGTHS",
     "DEFAULT_LINE_NAMES",
     "DEFAULT_LINE_WAVELENGTHS",
+    "DETECTED",
+    "LOWER_LIMIT",
     "SSP_LIBRARY_RESOLUTIONS",
+    "STANDARD_INDICES",
+    "UPPER_LIMIT",
+    "LineFluxData",
     "NoiseConfig",
     "NoiseModel",
     "Observation",
     "Photometry",
+    "SpectralIndexData",
+    "SpectralIndexDef",
     "Spectroscopy",
     "SpectroscopyConfig",
     "apply_calibration",
+    "apply_double_calibration",
     "apply_lsf",
+    "apply_wavelength_mask",
     "blend_emission_lines",
     "build_eline_design_matrix",
     "calibration_polynomial",
     "chebyshev_basis",
     "cloudy_line_priors",
+    "double_calibration_polynomial",
     "marginalize_calibration",
     "marginalize_emission_lines",
     "marginalize_emission_lines_cloudy",
+    "measure_index_jax",
     "nirspec_g140m_resolution",
     "nirspec_prism_resolution",
     "predict_with_marginalized_lines",

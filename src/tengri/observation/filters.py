@@ -29,14 +29,10 @@ import numpy as np
 
 from tengri.observation.photometry import FilterCurve
 
-# ---------------------------------------------------------------------------
-# Registry: short name -> SVO Filter Profile Service ID
-# ---------------------------------------------------------------------------
+# ── Registry: short name -> SVO Filter Profile Service ID ─────────
 
 FILTER_REGISTRY: dict[str, str] = {
-    # ------------------------------------------------------------------
-    # UV / optical — ground-based survey imagers
-    # ------------------------------------------------------------------
+    # ── UV / optical — ground-based survey imagers ────────────────
     # SDSS
     "sdss_u": "SLOAN/SDSS.u",
     "sdss_g": "SLOAN/SDSS.g",
@@ -108,9 +104,7 @@ FILTER_REGISTRY: dict[str, str] = {
     "suprime_nb711": "Subaru/Suprime.NB711",
     "suprime_nb816": "Subaru/Suprime.NB816",
     "suprime_nb921": "Subaru/Suprime.NB921_filter",
-    # ------------------------------------------------------------------
-    # UV / optical — space telescopes
-    # ------------------------------------------------------------------
+    # ── UV / optical — space telescopes ───────────────────────────
     # GALEX
     "galex_fuv": "GALEX/GALEX.FUV",
     "galex_nuv": "GALEX/GALEX.NUV",
@@ -129,9 +123,7 @@ FILTER_REGISTRY: dict[str, str] = {
     "uvot_b": "Swift/UVOT.B",
     "uvot_v": "Swift/UVOT.V",
     "uvot_white": "Swift/UVOT.white",
-    # ------------------------------------------------------------------
-    # NIR — ground-based
-    # ------------------------------------------------------------------
+    # ── NIR — ground-based ────────────────────────────────────────
     # 2MASS
     "2mass_j": "2MASS/2MASS.J",
     "2mass_h": "2MASS/2MASS.H",
@@ -148,9 +140,7 @@ FILTER_REGISTRY: dict[str, str] = {
     "ukidss_j": "UKIRT/UKIDSS.J",
     "ukidss_h": "UKIRT/UKIDSS.H",
     "ukidss_k": "UKIRT/UKIDSS.K",
-    # ------------------------------------------------------------------
-    # HST (UV → NIR)
-    # ------------------------------------------------------------------
+    # ── HST (UV → NIR) ────────────────────────────────────────────
     # ACS/WFC (optical / red)
     "hst_f435w": "HST/ACS_WFC.F435W",
     "hst_f606w": "HST/ACS_WFC.F606W",
@@ -162,9 +152,7 @@ FILTER_REGISTRY: dict[str, str] = {
     "hst_f125w": "HST/WFC3_IR.F125W",
     "hst_f140w": "HST/WFC3_IR.F140W",
     "hst_f160w": "HST/WFC3_IR.F160W",
-    # ------------------------------------------------------------------
-    # JWST NIRCam — original throughput curves
-    # ------------------------------------------------------------------
+    # ── JWST NIRCam — original throughput curves ──────────────────
     "jwst_f070w": "JWST/NIRCam.F070W",
     "jwst_f090w": "JWST/NIRCam.F090W",
     "jwst_f115w": "JWST/NIRCam.F115W",
@@ -194,9 +182,7 @@ FILTER_REGISTRY: dict[str, str] = {
     "jwst_f466n": "JWST/NIRCam.F466N",
     "jwst_f470n": "JWST/NIRCam.F470N",
     "jwst_f480m": "JWST/NIRCam.F480M",
-    # ------------------------------------------------------------------
-    # JWST NIRCam2025 — recalibrated throughputs (use for data after 2025)
-    # ------------------------------------------------------------------
+    # ── JWST NIRCam2025 — recalibrated throughputs (use for data after 2025)
     "nircam25_f070w": "JWST/NIRCam2025.F070W",
     "nircam25_f090w": "JWST/NIRCam2025.F090W",
     "nircam25_f115w": "JWST/NIRCam2025.F115W",
@@ -226,9 +212,7 @@ FILTER_REGISTRY: dict[str, str] = {
     "nircam25_f466n": "JWST/NIRCam2025.F466N",
     "nircam25_f470n": "JWST/NIRCam2025.F470N",
     "nircam25_f480m": "JWST/NIRCam2025.F480M",
-    # ------------------------------------------------------------------
-    # JWST NIRISS
-    # ------------------------------------------------------------------
+    # ── JWST NIRISS ───────────────────────────────────────────────
     "niriss_f090w": "JWST/NIRISS.F090W",
     "niriss_f115w": "JWST/NIRISS.F115W",
     "niriss_f140m": "JWST/NIRISS.F140M",
@@ -241,17 +225,13 @@ FILTER_REGISTRY: dict[str, str] = {
     "niriss_f430m": "JWST/NIRISS.F430M",
     "niriss_f444w": "JWST/NIRISS.F444W",
     "niriss_f480m": "JWST/NIRISS.F480M",
-    # ------------------------------------------------------------------
-    # JWST NIRSpec (disperser+filter combos used as pseudo-photometry)
-    # ------------------------------------------------------------------
+    # ── JWST NIRSpec (disperser+filter combos used as pseudo-photometry)
     "nirspec_prism": "JWST/NIRSpec.Prism",
     "nirspec_g235m": "JWST/NIRSpec.G235M_F170LP",
     "nirspec_g235h": "JWST/NIRSpec.G235H_F170LP",
     "nirspec_g395m": "JWST/NIRSpec.G395M_F290LP",
     "nirspec_g395h": "JWST/NIRSpec.G395H_F290LP",
-    # ------------------------------------------------------------------
-    # JWST MIRI (5.6–25.5 μm; W=wide, C=coronagraphic)
-    # ------------------------------------------------------------------
+    # ── JWST MIRI (5.6–25.5 μm; W=wide, C=coronagraphic) ──────────
     "miri_f560w": "JWST/MIRI.F560W",
     "miri_f770w": "JWST/MIRI.F770W",
     "miri_f1000w": "JWST/MIRI.F1000W",
@@ -265,9 +245,7 @@ FILTER_REGISTRY: dict[str, str] = {
     "miri_f2100w": "JWST/MIRI.F2100W",
     "miri_f2300c": "JWST/MIRI.F2300C",
     "miri_f2550w": "JWST/MIRI.F2550W",
-    # ------------------------------------------------------------------
-    # Roman Space Telescope / WFI
-    # ------------------------------------------------------------------
+    # ── Roman Space Telescope / WFI ───────────────────────────────
     "roman_f062": "Roman/WFI.F062",
     "roman_f087": "Roman/WFI.F087",
     "roman_f106": "Roman/WFI.F106",
@@ -275,16 +253,12 @@ FILTER_REGISTRY: dict[str, str] = {
     "roman_f158": "Roman/WFI.F158",
     "roman_f184": "Roman/WFI.F184",
     "roman_f213": "Roman/WFI.F213",
-    # ------------------------------------------------------------------
-    # Euclid
-    # ------------------------------------------------------------------
+    # ── Euclid ────────────────────────────────────────────────────
     "euclid_vis": "Euclid/VIS.vis",
     "euclid_y": "Euclid/NISP.Y",
     "euclid_j": "Euclid/NISP.J",
     "euclid_h": "Euclid/NISP.H",
-    # ------------------------------------------------------------------
-    # Spitzer (mid-IR)
-    # ------------------------------------------------------------------
+    # ── Spitzer (mid-IR) ──────────────────────────────────────────
     # IRAC (3.6–8 μm)
     "irac_36": "Spitzer/IRAC.I1",
     "irac_45": "Spitzer/IRAC.I2",
@@ -294,16 +268,12 @@ FILTER_REGISTRY: dict[str, str] = {
     "mips_24": "Spitzer/MIPS.24mu",
     "mips_70": "Spitzer/MIPS.70mu",
     "mips_160": "Spitzer/MIPS.160mu",
-    # ------------------------------------------------------------------
-    # WISE (mid-IR all-sky)
-    # ------------------------------------------------------------------
+    # ── WISE (mid-IR all-sky) ─────────────────────────────────────
     "wise_w1": "WISE/WISE.W1",
     "wise_w2": "WISE/WISE.W2",
     "wise_w3": "WISE/WISE.W3",
     "wise_w4": "WISE/WISE.W4",
-    # ------------------------------------------------------------------
-    # AKARI (near-IR + far-IR)
-    # ------------------------------------------------------------------
+    # ── AKARI (near-IR + far-IR) ──────────────────────────────────
     # IRC (2–24 μm)
     "akari_n2": "AKARI/IRC.N2",
     "akari_n3": "AKARI/IRC.N3",
@@ -319,9 +289,7 @@ FILTER_REGISTRY: dict[str, str] = {
     "akari_wides": "AKARI/FIS.WIDE-S",
     "akari_widel": "AKARI/FIS.WIDE-L",
     "akari_n160": "AKARI/FIS.N160",
-    # ------------------------------------------------------------------
-    # Herschel (far-IR / submm)
-    # ------------------------------------------------------------------
+    # ── Herschel (far-IR / submm) ─────────────────────────────────
     # PACS (70–160 μm)
     "herschel_70": "Herschel/Pacs.blue",
     "herschel_100": "Herschel/Pacs.green",
@@ -333,18 +301,14 @@ FILTER_REGISTRY: dict[str, str] = {
     "herschel_250_ext": "Herschel/SPIRE.PSW_ext",
     "herschel_350_ext": "Herschel/SPIRE.PMW_ext",
     "herschel_500_ext": "Herschel/SPIRE.PLW_ext",
-    # ------------------------------------------------------------------
-    # (Sub)millimeter photometric instruments
-    # ------------------------------------------------------------------
+    # ── (Sub)millimeter photometric instruments ───────────────────
     # JCMT SCUBA-2
     "scuba2_450": "JCMT/SCUBA2.450GHz",
     "scuba2_850": "JCMT/SCUBA2.850GHz",
     # APEX bolometer cameras
     "laboca_870": "APEX/LABOCA.345GHz",
     "saboca_350": "APEX/SABOCA.852GHz",
-    # ------------------------------------------------------------------
-    # Generic / standard photometric systems
-    # ------------------------------------------------------------------
+    # ── Generic / standard photometric systems ────────────────────
     # Johnson UBVRI
     "johnson_u": "Generic/Johnson.U",
     "johnson_b": "Generic/Johnson.B",
@@ -381,9 +345,7 @@ _ALMA_BANDS_GHZ: dict[int, tuple[float, float]] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Filter metadata: facility and description for rich listing
-# ---------------------------------------------------------------------------
+# ── Filter metadata: facility and description for rich listing ────
 
 _FACILITY_FROM_PREFIX: dict[str, str] = {
     "sdss": "SDSS",
@@ -428,9 +390,7 @@ def _infer_facility(name: str) -> str:
     return "Other"
 
 
-# ---------------------------------------------------------------------------
-# Filter property computation (pure numpy, no JAX)
-# ---------------------------------------------------------------------------
+# ── Filter property computation (pure numpy, no JAX) ──────────────
 
 
 def compute_effective_wavelength(wave: np.ndarray, trans: np.ndarray) -> float:
@@ -533,9 +493,7 @@ def filter_info(name: str, *, cache_dir: str | None = None) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
+# ── Internal helpers ──────────────────────────────────────────────
 
 
 def _svo_id_to_filename(svo_id: str) -> str:
@@ -578,9 +536,7 @@ def _fetch_from_svo(svo_id: str) -> tuple[np.ndarray, np.ndarray]:
     return wave, trans
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+# ── Public API ────────────────────────────────────────────────────
 
 
 def download_filter(

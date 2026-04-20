@@ -13,9 +13,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 
-# ---------------------------------------------------------------------------
-# IMF shape tests
-# ---------------------------------------------------------------------------
+# ── IMF shape tests ───────────────────────────────────────────────
 
 
 class TestChabrierIMF:
@@ -140,9 +138,7 @@ class TestKroupaIMF:
         np.testing.assert_allclose(slope, -1.3, atol=0.05)
 
 
-# ---------------------------------------------------------------------------
-# Main-sequence lifetime
-# ---------------------------------------------------------------------------
+# ── Main-sequence lifetime ────────────────────────────────────────
 
 
 class TestMsLifetime:
@@ -194,9 +190,7 @@ class TestMsLifetime:
         np.testing.assert_allclose(float(_ms_lifetime_gyr(m)), expected, rtol=1e-10)
 
 
-# ---------------------------------------------------------------------------
-# Turnoff mass (Newton-Raphson inversion of lifetime)
-# ---------------------------------------------------------------------------
+# ── Turnoff mass (Newton-Raphson inversion of lifetime) ───────────
 
 
 class TestTurnoffMass:
@@ -255,9 +249,7 @@ class TestTurnoffMass:
         assert 0.08 <= m_old <= 300.0
 
 
-# ---------------------------------------------------------------------------
-# Remnant mass (Kalirai+2008 WDs, NS, BH)
-# ---------------------------------------------------------------------------
+# ── Remnant mass (Kalirai+2008 WDs, NS, BH) ───────────────────────
 
 
 class TestRemnantMass:
@@ -316,9 +308,7 @@ class TestRemnantMass:
             assert r < m, f"Remnant {r} >= initial {m} at m={m} Msun"
 
 
-# ---------------------------------------------------------------------------
-# Top-level compute_mass_remaining_fraction
-# ---------------------------------------------------------------------------
+# ── Top-level compute_mass_remaining_fraction ─────────────────────
 
 
 class TestComputeMassRemainingFraction:

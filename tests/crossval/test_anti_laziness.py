@@ -27,9 +27,7 @@ jax.config.update("jax_enable_x64", True)
 pytestmark = pytest.mark.crossval
 
 
-# ===================================================================
-# 1. ATTENUATION CURVES — parameter sensitivity
-# ===================================================================
+# ── 1. ATTENUATION CURVES — parameter sensitivity ─────────────────
 
 
 class TestAttenuationParameterSensitivity:
@@ -139,9 +137,7 @@ class TestAttenuationParameterSensitivity:
         assert max_diff > 0.01, f"Narayanan redshift IGNORED — max change is {max_diff:.6f}"
 
 
-# ===================================================================
-# 2. AGN DISC MODELS — parameter sensitivity & scaling
-# ===================================================================
+# ── 2. AGN DISC MODELS — parameter sensitivity & scaling ──────────
 
 
 class TestAGNParameterSensitivity:
@@ -240,9 +236,7 @@ class TestAGNParameterSensitivity:
             assert 5.0 < ratio < 20.0, f"{name}: 10x L_bol gave {ratio:.1f}x flux, expected ~10x"
 
 
-# ===================================================================
-# 3. SFH MODELS — parameter sensitivity
-# ===================================================================
+# ── 3. SFH MODELS — parameter sensitivity ─────────────────────────
 
 
 class TestSFHParameterSensitivity:
@@ -316,9 +310,7 @@ class TestSFHParameterSensitivity:
             )
 
 
-# ===================================================================
-# 4. SHOCK EMISSION — velocity sensitivity
-# ===================================================================
+# ── 4. SHOCK EMISSION — velocity sensitivity ──────────────────────
 
 
 class TestShockParameterSensitivity:
@@ -353,9 +345,7 @@ class TestShockParameterSensitivity:
         assert shape_diff > 0.01, "Shock SED shape doesn't change with velocity — suspicious"
 
 
-# ===================================================================
-# 5. TEMPLATE LOADING — not falling back to dummies
-# ===================================================================
+# ── 5. TEMPLATE LOADING — not falling back to dummies ─────────────
 
 
 class TestTemplatesAreReal:
@@ -459,9 +449,7 @@ class TestTemplatesAreReal:
             )
 
 
-# ===================================================================
-# 6. WAVELENGTH GRID INDEPENDENCE — no hardcoded grid
-# ===================================================================
+# ── 6. WAVELENGTH GRID INDEPENDENCE — no hardcoded grid ───────────
 
 
 class TestWavelengthGridIndependence:
@@ -490,9 +478,7 @@ class TestWavelengthGridIndependence:
                 assert jnp.all(jnp.isfinite(l_nu))
 
 
-# ===================================================================
-# 7. NOT RETURNING ZEROS OR ONES
-# ===================================================================
+# ── 7. NOT RETURNING ZEROS OR ONES ────────────────────────────────
 
 
 class TestNotReturningDummies:
@@ -551,9 +537,7 @@ class TestNotReturningDummies:
             assert total > 0, f"{name}: SFR is all zeros"
 
 
-# ===================================================================
-# 8. BLR/NLR — lines at correct wavelengths
-# ===================================================================
+# ── 8. BLR/NLR — lines at correct wavelengths ─────────────────────
 
 
 class TestEmissionLinesAtCorrectWavelengths:
@@ -608,9 +592,7 @@ class TestEmissionLinesAtCorrectWavelengths:
                 )
 
 
-# ===================================================================
-# 9. WG00 GEOMETRY — not returning identity
-# ===================================================================
+# ── 9. WG00 GEOMETRY — not returning identity ─────────────────────
 
 
 class TestWG00NotIdentity:

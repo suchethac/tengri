@@ -28,9 +28,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Fixtures: minimal synthetic SSP + filters
-# ---------------------------------------------------------------------------
+# ── Fixtures: minimal synthetic SSP + filters ─────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -57,9 +55,7 @@ def filters():
     return waves, trans
 
 
-# ---------------------------------------------------------------------------
-# Tests: IGM precomputation in z-table
-# ---------------------------------------------------------------------------
+# ── Tests: IGM precomputation in z-table ──────────────────────────
 
 
 class TestIGMPrecomputation:
@@ -114,9 +110,7 @@ class TestIGMPrecomputation:
         assert_allclose(zt.igm_trans_table[:, 2], 1.0, atol=1e-10)
 
 
-# ---------------------------------------------------------------------------
-# Tests: IGM disabled (default behavior)
-# ---------------------------------------------------------------------------
+# ── Tests: IGM disabled (default behavior) ────────────────────────
 
 
 class TestIGMDisabled:
@@ -146,9 +140,7 @@ class TestIGMDisabled:
         assert_allclose(zt_no.ssp_phot_table, zt_yes.ssp_phot_table, rtol=1e-10)
 
 
-# ---------------------------------------------------------------------------
-# Tests: IGM interpolation
-# ---------------------------------------------------------------------------
+# ── Tests: IGM interpolation ──────────────────────────────────────
 
 
 class TestIGMInterpolation:
@@ -199,9 +191,7 @@ class TestIGMInterpolation:
         assert_allclose(igm_high, zt.igm_trans_table[-1], rtol=1e-6)
 
 
-# ---------------------------------------------------------------------------
-# Tests: gradients
-# ---------------------------------------------------------------------------
+# ── Tests: gradients ──────────────────────────────────────────────
 
 
 class TestIGMGradients:

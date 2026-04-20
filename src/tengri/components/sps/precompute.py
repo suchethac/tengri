@@ -427,9 +427,7 @@ def precompute_photometry_ztable(
     )
 
 
-# -----------------------------------------------------------------------
-# Fast inference-time functions (these run inside the MCMC loop)
-# -----------------------------------------------------------------------
+# ── Fast inference-time functions (these run inside the MCMC loop)
 
 
 @jax.jit

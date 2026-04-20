@@ -14,6 +14,7 @@ from tengri.components.sfh.gp_sfh import (
 from tengri.components.sfh.mean_sfh import (
     AGEMAX_YR,
     constant_sfh,
+    constant_then_exponential_sfh,
     declining_exponential_sfh,
     delayed_exponential_sfh,
     delayed_tau,
@@ -25,11 +26,20 @@ from tengri.components.sfh.mean_sfh import (
     lognormal_sfh,
     norm,
     powerlaw_sfh,
+    psb_wild2020,
     skewnormal_sfh,
     snorm,
     triweight_burst,
     truncated_skewnormal_sfh,
     tsnorm,
+)
+from tengri.components.sfh.met_registry import MET_REGISTRY, resolve_met
+from tengri.components.sfh.metallicity_history import (
+    metallicity_bins_continuity_on_ssp_grid,
+    metallicity_bins_on_ssp_grid,
+    psb_two_step_metallicity,
+    tabulated_metallicity_on_ssp_grid,
+    two_step_metallicity,
 )
 from tengri.components.sfh.nonparametric import (
     continuity_prior_logp,
@@ -45,45 +55,57 @@ from tengri.components.sfh.registry import (
 )
 
 __all__ = [
-    # Mean SFH models
-    "dpl",
-    "tsnorm",
-    "double_powerlaw",
-    "exponential_sfh",
-    "delayed_tau",
-    "constant_sfh",
-    "declining_exponential_sfh",
-    "delayed_exponential_sfh",
-    "gaussian_sfh",
-    "lognormal_sfh",
-    "skewnormal_sfh",
-    "triweight_burst",
-    "truncated_skewnormal_sfh",
-    "powerlaw_sfh",
-    # Nonparametric
-    "continuity_sfh",
-    "dirichlet_sfh",
-    "continuity_prior_logp",
-    # Dense basis
-    "dense_basis_sfh",
-    "dense_basis_pure_sfh",
+    "AGEMAX_YR",
+    "FIELD_MODEL_REGISTRY",
+    "MET_REGISTRY",
+    "SFH_REGISTRY",
+    "chem_evol_metallicity_on_ssp_grid",
     # Chemical evolution
     "closed_box_metallicity",
     "closed_box_metallicity_anchored",
-    "chem_evol_metallicity_on_ssp_grid",
+    "compute_field_gp",
+    "compute_sqrt_power_drw",
+    "constant_sfh",
+    "constant_then_exponential_sfh",
+    "continuity_prior_logp",
+    # Nonparametric
+    "continuity_sfh",
+    "declining_exponential_sfh",
+    "delayed_exponential_sfh",
+    "delayed_tau",
+    "dense_basis_pure_sfh",
+    # Dense basis
+    "dense_basis_sfh",
+    "dirichlet_sfh",
+    "double_powerlaw",
+    # Mean SFH models
+    "dpl",
+    "exponential_sfh",
+    "gaussian_sfh",
     # GP and PSD
     "generate_gp_fourier",
     "gp_from_xi",
-    "compute_sqrt_power_drw",
-    "psd_drw",
-    # Registry
-    "resolve_sfh",
-    "SFH_REGISTRY",
-    "FIELD_MODEL_REGISTRY",
-    "compute_field_gp",
     # Wrappers for convenience
     "lnorm",
+    "lognormal_sfh",
+    "metallicity_bins_continuity_on_ssp_grid",
+    "metallicity_bins_on_ssp_grid",
     "norm",
+    "powerlaw_sfh",
+    "psb_two_step_metallicity",
+    # PSB SFH
+    "psb_wild2020",
+    "psd_drw",
+    # Metallicity registry
+    "resolve_met",
+    # SFH Registry
+    "resolve_sfh",
+    "skewnormal_sfh",
     "snorm",
-    "AGEMAX_YR",
+    "tabulated_metallicity_on_ssp_grid",
+    "triweight_burst",
+    "truncated_skewnormal_sfh",
+    "tsnorm",
+    # Metallicity history
+    "two_step_metallicity",
 ]

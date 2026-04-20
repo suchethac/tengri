@@ -27,9 +27,7 @@ def _n_lines() -> int:
     return len(_FALLBACK_LINE_NAMES)
 
 
-# ---------------------------------------------------------------------------
-# shock_line_ratios — fallback path (no HDF5 file in test environment)
-# ---------------------------------------------------------------------------
+# ── shock_line_ratios — fallback path (no HDF5 file in test environment)
 
 
 class TestShockLineRatios:
@@ -144,9 +142,7 @@ class TestShockLineRatios:
         )
 
 
-# ---------------------------------------------------------------------------
-# shock_emission_sed
-# ---------------------------------------------------------------------------
+# ── shock_emission_sed ────────────────────────────────────────────
 
 
 class TestShockEmissionSed:
@@ -198,9 +194,7 @@ class TestShockEmissionSed:
         assert jnp.allclose(ratio, 2.0, rtol=1e-5)
 
 
-# ---------------------------------------------------------------------------
-# JIT compatibility
-# ---------------------------------------------------------------------------
+# ── JIT compatibility ─────────────────────────────────────────────
 
 
 class TestShockJIT:
@@ -224,9 +218,7 @@ class TestShockJIT:
         assert sed.shape == wave.shape
 
 
-# ---------------------------------------------------------------------------
-# Differentiability
-# ---------------------------------------------------------------------------
+# ── Differentiability ─────────────────────────────────────────────
 
 
 class TestShockDifferentiable:
@@ -263,9 +255,7 @@ class TestShockDifferentiable:
         assert grad_jax != 0.0
 
 
-# ---------------------------------------------------------------------------
-# Integration with ParamSpec
-# ---------------------------------------------------------------------------
+# ── Integration with ParamSpec ────────────────────────────────────
 
 
 class TestShockParamSpec:
@@ -303,9 +293,7 @@ class TestShockParamSpec:
             ParamSpec(shock=True, shock_velocity=(50.0, 1000.0))
 
 
-# ---------------------------------------------------------------------------
-# ShockBackend protocol compliance and delegation
-# ---------------------------------------------------------------------------
+# ── ShockBackend protocol compliance and delegation ───────────────
 
 
 class TestShockBackend:

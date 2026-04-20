@@ -61,9 +61,7 @@ References
 import jax
 import jax.numpy as jnp
 
-# ===================================================================
-# IMF definitions: dn/dlog(m) as a function of mass
-# ===================================================================
+# ── IMF definitions: dn/dlog(m) as a function of mass ─────────────
 
 
 def _chabrier_imf(log_m: jnp.ndarray) -> jnp.ndarray:
@@ -135,9 +133,7 @@ _IMF_REGISTRY = {
 }
 
 
-# ===================================================================
-# Main-sequence lifetime
-# ===================================================================
+# ── Main-sequence lifetime ────────────────────────────────────────
 
 
 def _ms_lifetime_gyr(mass: jnp.ndarray) -> jnp.ndarray:
@@ -162,9 +158,7 @@ def _ms_lifetime_gyr(mass: jnp.ndarray) -> jnp.ndarray:
     return 10.0 * m_safe ** (-2.5) + 0.1 * m_safe ** (-0.75)
 
 
-# ===================================================================
-# Turnoff mass (inverse of MS lifetime)
-# ===================================================================
+# ── Turnoff mass (inverse of MS lifetime) ─────────────────────────
 
 
 def _turnoff_mass(age_gyr: jnp.ndarray) -> jnp.ndarray:
@@ -201,9 +195,7 @@ def _turnoff_mass(age_gyr: jnp.ndarray) -> jnp.ndarray:
     return m
 
 
-# ===================================================================
-# Remnant mass
-# ===================================================================
+# ── Remnant mass ──────────────────────────────────────────────────
 
 
 def _remnant_mass(m_init: jnp.ndarray) -> jnp.ndarray:
@@ -244,9 +236,7 @@ def _remnant_mass(m_init: jnp.ndarray) -> jnp.ndarray:
     )
 
 
-# ===================================================================
-# Public API
-# ===================================================================
+# ── Public API ────────────────────────────────────────────────────
 
 
 def compute_mass_remaining_fraction(

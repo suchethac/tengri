@@ -26,9 +26,7 @@ from tengri.observation.eline_catalog import (
     CLOUDY_LINE_WAVELENGTHS,
 )
 
-# -------------------------------------------------------------------------
-# CLOUDY reference line ratios (relative to Hbeta = 1.0)
-# -------------------------------------------------------------------------
+# ── CLOUDY reference line ratios (relative to Hbeta = 1.0) ────────
 
 # Line ratios relative to Hbeta at solar metallicity, logU = -3.
 # Source: standard CLOUDY HII region models (Byler+2017, Levesque+2010).
@@ -116,9 +114,7 @@ _LOG_ZSOL = 0.0
 _LOG_Z_SUBSOLAR = -0.7
 
 
-# -------------------------------------------------------------------------
-# Public API
-# -------------------------------------------------------------------------
+# ── Public API ────────────────────────────────────────────────────
 
 
 def cloudy_line_priors(

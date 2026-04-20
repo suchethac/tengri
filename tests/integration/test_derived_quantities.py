@@ -17,9 +17,7 @@ from tengri import Model, ParamSpec, Uniform
 from tengri.components.sps.dsps_wrapper import load_ssp_data
 from tengri.parameters.priors import Fixed
 
-# ---------------------------------------------------------------------------
-# Paths to real SSP data
-# ---------------------------------------------------------------------------
+# ── Paths to real SSP data ────────────────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_NO_NEB = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 
@@ -30,9 +28,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ── Fixtures ──────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="session")
@@ -105,9 +101,7 @@ def smooth_params(spec):
     }
 
 
-# ===================================================================
-# 1. Stellar Mass (via predict_sfh_quantities)
-# ===================================================================
+# ── 1. Stellar Mass (via predict_sfh_quantities) ──────────────────
 
 
 class TestStellarMass:
@@ -148,9 +142,7 @@ class TestStellarMass:
         )
 
 
-# ===================================================================
-# 2. Derived Quantities (via predict_derived)
-# ===================================================================
+# ── 2. Derived Quantities (via predict_derived) ───────────────────
 
 
 class TestDerivedQuantities:
@@ -293,9 +285,7 @@ class TestDerivedQuantities:
         assert 0.3 < ratio < 3.0, f"Ensemble <M*>/M*_base = {ratio:.2f}, expected ~1"
 
 
-# ===================================================================
-# 3. Gradient Flow
-# ===================================================================
+# ── 3. Gradient Flow ──────────────────────────────────────────────
 
 
 class TestDerivedGradients:

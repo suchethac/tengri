@@ -31,9 +31,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ---------------------------------------------------------------------------
-# Fixtures: minimal synthetic SSP + filters
-# ---------------------------------------------------------------------------
+# ── Fixtures: minimal synthetic SSP + filters ─────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -60,9 +58,7 @@ def filters():
     return waves, trans
 
 
-# ---------------------------------------------------------------------------
-# Tests: precompute_photometry_ztable
-# ---------------------------------------------------------------------------
+# ── Tests: precompute_photometry_ztable ───────────────────────────
 
 
 class TestZTablePrecomputation:
@@ -110,9 +106,7 @@ class TestZTablePrecomputation:
         assert jnp.all(jnp.isfinite(zt.flux_scale_table))
 
 
-# ---------------------------------------------------------------------------
-# Tests: interpolation accuracy
-# ---------------------------------------------------------------------------
+# ── Tests: interpolation accuracy ─────────────────────────────────
 
 
 class TestZTableInterpolationAccuracy:
@@ -184,9 +178,7 @@ class TestZTableInterpolationAccuracy:
         assert fs_err < 0.01, f"Flux scale error: {fs_err:.4f}"
 
 
-# ---------------------------------------------------------------------------
-# Tests: gradients
-# ---------------------------------------------------------------------------
+# ── Tests: gradients ──────────────────────────────────────────────
 
 
 class TestZTableGradients:
@@ -253,9 +245,7 @@ class TestZTableGradients:
         assert jnp.all(jnp.isfinite(ssp_phot))
 
 
-# ---------------------------------------------------------------------------
-# Tests: smooth (triweight) interpolation
-# ---------------------------------------------------------------------------
+# ── Tests: smooth (triweight) interpolation ───────────────────────
 
 
 class TestZTableSmoothInterpolation:

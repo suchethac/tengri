@@ -5,7 +5,7 @@ tabulated SFH(t) and optionally Z(t) arrays (e.g., from cosmological
 simulations like IllustrisTNG, EAGLE, UniverseMachine), compute the
 rest-frame SED, observed photometry, or spectrum.
 
-This bypasses the parametric SFH models in ParamSpec and directly uses
+This bypasses the parametric SFH models in Parameters and directly uses
 the DSPS CSP integral.
 
 Usage
@@ -50,9 +50,7 @@ from tengri.components.sps.dsps_wrapper import (
 )
 from tengri.utils.cosmology import luminosity_distance
 
-# ===================================================================
-# Constants
-# ===================================================================
+# ── Constants ─────────────────────────────────────────────────────
 
 
 def _filter_waves_and_trans(filters):
@@ -81,9 +79,7 @@ def _filter_waves_and_trans(filters):
     return filter_waves, filter_trans
 
 
-# ===================================================================
-# Core: SED from tabulated SFH
-# ===================================================================
+# ── Core: SED from tabulated SFH ──────────────────────────────────
 
 
 def sed_from_sfh(

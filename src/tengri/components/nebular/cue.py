@@ -44,9 +44,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-# ---------------------------------------------------------------------------
-# Physical constants
-# ---------------------------------------------------------------------------
+# ── Physical constants ────────────────────────────────────────────
 from tengri.utils.physics_constants import (
     C_CGS as _C_CGS,
     L_SUN_CUE as _LSUN_ERG,  # 3.839e33 — Cue training convention, NOT IAU 2015
@@ -64,9 +62,7 @@ _LOG10_ZSUN = -1.8477116556169435
 _MAX_NEB_LOG_AGE = 8.0  # log10(100 Myr in yr)
 
 
-# ---------------------------------------------------------------------------
-# Data containers (immutable NamedTuples for JAX tracing)
-# ---------------------------------------------------------------------------
+# ── Data containers (immutable NamedTuples for JAX tracing) ───────
 
 
 class SubNetWeights(NamedTuple):
@@ -122,9 +118,7 @@ class CueWeights(NamedTuple):
     batched_sort_idx: jnp.ndarray = None  # (n_total_lines,) wavelength sort
 
 
-# ---------------------------------------------------------------------------
-# Weight loading
-# ---------------------------------------------------------------------------
+# ── Weight loading ────────────────────────────────────────────────
 
 _LINE_NAMES = (
     "H1",
@@ -257,9 +251,7 @@ def load_cue_weights(npz_path: str) -> CueWeights:
     )
 
 
-# ---------------------------------------------------------------------------
-# Neural network forward pass (pure JAX, JIT-compatible)
-# ---------------------------------------------------------------------------
+# ── Neural network forward pass (pure JAX, JIT-compatible) ────────
 
 
 def _speculator_activation(x: jnp.ndarray, alpha: jnp.ndarray, beta: jnp.ndarray) -> jnp.ndarray:
@@ -328,9 +320,7 @@ def _speculator_log_spectrum(
     return log_spec_normalized * net.log_spec_scale + net.log_spec_shift
 
 
-# ---------------------------------------------------------------------------
-# Parameter conversion: user-facing -> network input
-# ---------------------------------------------------------------------------
+# ── Parameter conversion: user-facing -> network input ────────────
 
 
 def _logq_from_logu(
@@ -408,9 +398,7 @@ def prepare_nn_params_from_dict(params: dict) -> jnp.ndarray:
     )
 
 
-# ---------------------------------------------------------------------------
-# Line prediction
-# ---------------------------------------------------------------------------
+# ── Line prediction ───────────────────────────────────────────────
 
 
 def _predict_lines_single_net(
@@ -510,9 +498,7 @@ def predict_all_lines(
     return wav_sorted, luminosities
 
 
-# ---------------------------------------------------------------------------
-# Continuum prediction
-# ---------------------------------------------------------------------------
+# ── Continuum prediction ──────────────────────────────────────────
 
 
 def predict_continuum(
@@ -560,9 +546,7 @@ def predict_continuum(
     return wav_sorted, luminosity
 
 
-# ---------------------------------------------------------------------------
-# Ionizing-spectrum warnings
-# ---------------------------------------------------------------------------
+# ── Ionizing-spectrum warnings ────────────────────────────────────
 
 
 class CueWNESSPWarning(UserWarning):
@@ -589,9 +573,7 @@ _WNE_LOGQH_THRESHOLD: float = 44.0
 _YOUNG_LOG_AGE_MAX: float = 7.0  # 10 Myr
 
 
-# ---------------------------------------------------------------------------
-# Backend class (matches CloudyGridBackend interface)
-# ---------------------------------------------------------------------------
+# ── Backend class (matches CloudyGridBackend interface) ───────────
 
 
 class CueBackend:
@@ -633,7 +615,7 @@ class CueBackend:
         # Precompute ionizing spectrum parameters from SSP if provided.
         # These serve as defaults when ionspec params are not explicitly
         # specified. Users can override by setting ionspec_index1..4 and
-        # ionspec_logLratio1..3 as free params in ParamSpec.
+        # ionspec_logLratio1..3 as free params in Parameters.
         self._ionspec_table = None
         self._logqion_table = None
         self._ssp_lgmet = None
@@ -703,9 +685,7 @@ class CueBackend:
             log_age_yr,
         )
 
-    # ------------------------------------------------------------------
-    # High-level interface (matches CloudyGridBackend)
-    # ------------------------------------------------------------------
+    # ── High-level interface (matches CloudyGridBackend) ──────────
 
     # Default ionizing spectrum shape (young starburst)
     _IONSPEC_DEFAULTS: ClassVar[dict] = dict(
@@ -1193,9 +1173,7 @@ class CueBackend:
         return neb_sed * _LSUN_ERG
 
 
-# ---------------------------------------------------------------------------
-# JIT-compiled pure-functional API (for use in inference loops)
-# ---------------------------------------------------------------------------
+# ── JIT-compiled pure-functional API (for use in inference loops) ─
 
 
 @jax.jit
@@ -1252,9 +1230,7 @@ def predict_continuum_jit(
     return predict_continuum(nn_params_12, weights, gas_logq, gas_logqion)
 
 
-# ---------------------------------------------------------------------------
-# JAX pytree registration for CueWeights (enables JIT with string fields)
-# ---------------------------------------------------------------------------
+# ── JAX pytree registration for CueWeights (enables JIT with string fields)
 
 
 def _cue_weights_flatten(cw):

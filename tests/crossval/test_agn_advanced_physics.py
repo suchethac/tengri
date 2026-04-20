@@ -20,9 +20,7 @@ WAVE = jnp.geomspace(100.0, 1e8, 2000)
 WAVE_OPT = jnp.geomspace(1000.0, 50000.0, 2000)
 
 
-# ===================================================================
-# 1. UNIFIED NLR+BLR — Type 1/Type 2 AGN unification
-# ===================================================================
+# ── 1. UNIFIED NLR+BLR — Type 1/Type 2 AGN unification ────────────
 
 
 class TestUnifiedNLRBLRPhysics:
@@ -111,9 +109,7 @@ class TestUnifiedNLRBLRPhysics:
             assert ratio_dusty < ratio_clean, "Polar dust should redden UV"
 
 
-# ===================================================================
-# 2. QSOGEN — Temple, Hewett & Banerji (2021)
-# ===================================================================
+# ── 2. QSOGEN — Temple, Hewett & Banerji (2021) ───────────────────
 
 
 class TestQSOgenPhysics:
@@ -207,9 +203,7 @@ class TestQSOgenPhysics:
             assert excess > 1.0, "Balmer continuum should add flux below 3646A"
 
 
-# ===================================================================
-# 3. SKIRTOR TORUS — Stalevski+2012, 2016
-# ===================================================================
+# ── 3. SKIRTOR TORUS — Stalevski+2012, 2016 ───────────────────────
 
 
 class TestSKIRTORPhysics:

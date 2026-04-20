@@ -22,9 +22,7 @@ from tengri.components.nebular.mappings_photo import (
     _log_z_abs_to_zo,
 )
 
-# ---------------------------------------------------------------------------
-# Helpers: synthetic grids for offline testing
-# ---------------------------------------------------------------------------
+# ── Helpers: synthetic grids for offline testing ──────────────────
 
 _LOG10_ZSUN = -1.8477116556169435
 _LSUN_ERG = 3.828e33
@@ -86,9 +84,7 @@ def _make_agn_grid(n_z=3, n_m=2, n_e=2, n_u=4, n_n=2, n_lines=5) -> MappingsAGNG
     )
 
 
-# ---------------------------------------------------------------------------
-# Unit helpers
-# ---------------------------------------------------------------------------
+# ── Unit helpers ──────────────────────────────────────────────────
 
 
 class TestInterpIndexWeight:
@@ -149,9 +145,7 @@ class TestComputeQH:
         assert float(qh) > 0.0
 
 
-# ---------------------------------------------------------------------------
-# Stellar grid interpolation
-# ---------------------------------------------------------------------------
+# ── Stellar grid interpolation ────────────────────────────────────
 
 
 class TestInterpStellarGrid:
@@ -211,9 +205,7 @@ class TestInterpStellarGrid:
         assert jnp.isfinite(val)
 
 
-# ---------------------------------------------------------------------------
-# MappingsPhotoStellarBackend (patched load)
-# ---------------------------------------------------------------------------
+# ── MappingsPhotoStellarBackend (patched load) ────────────────────
 
 
 def _make_stellar_backend_with_qh() -> MappingsPhotoStellarBackend:
@@ -330,9 +322,7 @@ class TestMappingsPhotoStellarBackend:
         assert jnp.allclose(lum_none, lum_explicit, rtol=1e-6)
 
 
-# ---------------------------------------------------------------------------
-# MappingsPhotoAGNBackend (patched load)
-# ---------------------------------------------------------------------------
+# ── MappingsPhotoAGNBackend (patched load) ────────────────────────
 
 
 def _make_agn_backend() -> MappingsPhotoAGNBackend:
@@ -393,9 +383,7 @@ class TestMappingsPhotoAGNBackend:
         assert float(lum[0]) < 1e48  # sanity ceiling
 
 
-# ---------------------------------------------------------------------------
-# Q_H sanitization regression (commit 3996aba parity)
-# ---------------------------------------------------------------------------
+# ── Q_H sanitization regression (commit 3996aba parity) ───────────
 
 
 class _MockSSPData:
@@ -492,9 +480,7 @@ class TestMappingsQHSanitization:
         assert float(result) == pytest.approx(0.0, abs=1e-30)
 
 
-# ---------------------------------------------------------------------------
-# __init__.py exports
-# ---------------------------------------------------------------------------
+# ── __init__.py exports ───────────────────────────────────────────
 
 
 def test_module_exports():

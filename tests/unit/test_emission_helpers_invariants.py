@@ -24,9 +24,7 @@ from tengri.forward.emission_helpers import (
     attenuate_emission,
 )
 
-# ---------------------------------------------------------------------------
-# Helpers: synthetic grids and mock dust laws
-# ---------------------------------------------------------------------------
+# ── Helpers: synthetic grids and mock dust laws ───────────────────
 
 _N_WAVE = 150
 _WAVE = jnp.linspace(1000.0, 25000.0, _N_WAVE)  # Å
@@ -52,9 +50,7 @@ def _calzetti_approx(wave: jnp.ndarray, *, n_slope: float = -0.7, dust_bump_stre
     return (5500.0 / wave) ** 0.7
 
 
-# ---------------------------------------------------------------------------
-# Shape invariants
-# ---------------------------------------------------------------------------
+# ── Shape invariants ──────────────────────────────────────────────
 
 
 class TestAttenuateEmissionShape:
@@ -93,9 +89,7 @@ class TestAttenuateEmissionShape:
         )
 
 
-# ---------------------------------------------------------------------------
-# Return type: (array, scalar)
-# ---------------------------------------------------------------------------
+# ── Return type: (array, scalar) ──────────────────────────────────
 
 
 class TestAttenuateReturnType:
@@ -148,9 +142,7 @@ class TestAttenuateReturnType:
         assert float(L_absorbed) >= 0.0, f"L_absorbed={float(L_absorbed)} is negative"
 
 
-# ---------------------------------------------------------------------------
-# All four modes return finite arrays
-# ---------------------------------------------------------------------------
+# ── All four modes return finite arrays ───────────────────────────
 
 
 class TestAttenuateEmissionModes:
@@ -190,9 +182,7 @@ class TestAttenuateEmissionModes:
         )
 
 
-# ---------------------------------------------------------------------------
-# Zero-dust identity
-# ---------------------------------------------------------------------------
+# ── Zero-dust identity ────────────────────────────────────────────
 
 
 class TestZeroDustIdentity:
@@ -234,9 +224,7 @@ class TestZeroDustIdentity:
         )
 
 
-# ---------------------------------------------------------------------------
-# Energy conservation
-# ---------------------------------------------------------------------------
+# ── Energy conservation ───────────────────────────────────────────
 
 
 class TestEnergyConservation:
@@ -310,9 +298,7 @@ class TestEnergyConservation:
         )
 
 
-# ---------------------------------------------------------------------------
-# IGM absorption
-# ---------------------------------------------------------------------------
+# ── IGM absorption ────────────────────────────────────────────────
 
 
 class TestIGMAbsorption:

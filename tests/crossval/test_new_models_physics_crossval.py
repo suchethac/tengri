@@ -29,9 +29,7 @@ jax.config.update("jax_enable_x64", True)
 pytestmark = pytest.mark.crossval
 
 
-# ===================================================================
-# 1. SHOCK EMISSION — BPT diagram & velocity-dependent physics
-# ===================================================================
+# ── 1. SHOCK EMISSION — BPT diagram & velocity-dependent physics ──
 
 
 class TestShockBPTPhysics:
@@ -127,9 +125,7 @@ class TestShockBPTPhysics:
         )
 
 
-# ===================================================================
-# 2. ADAF — spectral component physics
-# ===================================================================
+# ── 2. ADAF — spectral component physics ──────────────────────────
 
 
 class TestADAFSpectralPhysics:
@@ -221,9 +217,7 @@ class TestADAFSpectralPhysics:
         )
 
 
-# ===================================================================
-# 3. PATCHY IGM — Gunn-Peterson & damping wing quantitative
-# ===================================================================
+# ── 3. PATCHY IGM — Gunn-Peterson & damping wing quantitative ─────
 
 
 class TestPatchyIGMQuantitative:
@@ -312,9 +306,7 @@ class TestPatchyIGMQuantitative:
             )
 
 
-# ===================================================================
-# 4. CHEMICAL EVOLUTION — closed-box analytic formula
-# ===================================================================
+# ── 4. CHEMICAL EVOLUTION — closed-box analytic formula ───────────
 
 
 class TestChemEvolAnalyticFormulas:
@@ -400,9 +392,7 @@ class TestChemEvolAnalyticFormulas:
         assert float(z_high_y[0]) > float(z_low_y[0]), "Higher yield should give higher final Z"
 
 
-# ===================================================================
-# 5. TEA ATTENUATION — bump-slope correlation
-# ===================================================================
+# ── 5. TEA ATTENUATION — bump-slope correlation ───────────────────
 
 
 class TestTEABumpSlopePhysics:
@@ -474,9 +464,7 @@ class TestTEABumpSlopePhysics:
         )
 
 
-# ===================================================================
-# 6. MAGPHYS — MBB peak wavelengths (Wien's law)
-# ===================================================================
+# ── 6. MAGPHYS — MBB peak wavelengths (Wien's law) ────────────────
 
 
 class TestMagphysWienPeaks:
@@ -553,9 +541,7 @@ class TestMagphysWienPeaks:
         assert 5 < peak_um < 50, f"Hot dust (180K) peak at {peak_um:.0f} um, expected 5-50 um"
 
 
-# ===================================================================
-# 7. PAH — Drude profile properties
-# ===================================================================
+# ── 7. PAH — Drude profile properties ─────────────────────────────
 
 
 class TestPAHDrudeProfilePhysics:
@@ -615,9 +601,7 @@ class TestPAHDrudeProfilePhysics:
         )
 
 
-# ===================================================================
-# 8. Li08 attenuation — Li et al. (2008) Eq. (1), coefficients c1–c4
-# ===================================================================
+# ── 8. Li08 attenuation — Li et al. (2008) Eq. (1), coefficients c1–c4
 
 
 class TestLi08AttenuationPhysics:

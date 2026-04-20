@@ -36,9 +36,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# ── Helpers ───────────────────────────────────────────────────────
 
 
 def _get_grid():
@@ -66,9 +64,7 @@ def _quarter_point(arr):
     return float(a[len(a) // 4])
 
 
-# ---------------------------------------------------------------------------
-# Grid-node exact-lookup tests
-# ---------------------------------------------------------------------------
+# ── Grid-node exact-lookup tests ──────────────────────────────────
 
 
 class TestGridNodeLookup:
@@ -106,9 +102,7 @@ class TestGridNodeLookup:
             assert jnp.isfinite(val), f"NaN at first grid corner for line {name}"
 
 
-# ---------------------------------------------------------------------------
-# Monotonicity / physics plausibility
-# ---------------------------------------------------------------------------
+# ── Monotonicity / physics plausibility ───────────────────────────
 
 
 class TestInterpolationSmoothness:
@@ -170,9 +164,7 @@ class TestInterpolationSmoothness:
                 assert jnp.isfinite(val), f"NaN at log_density={n:.4g} for line {name}"
 
 
-# ---------------------------------------------------------------------------
-# Gradient tests — the core motivation for this change
-# ---------------------------------------------------------------------------
+# ── Gradient tests — the core motivation for this change ──────────
 
 
 class TestGradients:
@@ -276,9 +268,7 @@ class TestGradients:
         )
 
 
-# ---------------------------------------------------------------------------
-# Smoke tests for compute_shock_sed
-# ---------------------------------------------------------------------------
+# ── Smoke tests for compute_shock_sed ─────────────────────────────
 
 
 class TestComputeShockSed:

@@ -62,9 +62,7 @@ from tengri.utils.physics_constants import (
     K_BOLTZ as _K_BOLTZMANN,
 )
 
-# ===================================================================
-# Template search paths (resolved once, reused for all models)
-# ===================================================================
+# ── Template search paths (resolved once, reused for all models) ──
 
 _DATA_CANDIDATES = [
     Path(__file__).resolve().parents[4] / "data",
@@ -81,9 +79,7 @@ def _find_data_file(filename: str) -> str | None:
     return None
 
 
-# ===================================================================
-# Emission model registry
-# ===================================================================
+# ── Emission model registry ───────────────────────────────────────
 
 DUST_EMISSION_MODELS: dict[str, Callable] = {}
 
@@ -168,9 +164,7 @@ def preload_emission_model(name: str) -> Callable:
     return DUST_EMISSION_MODELS[name]
 
 
-# ===================================================================
-# Utility: Planck function
-# ===================================================================
+# ── Utility: Planck function ──────────────────────────────────────
 
 
 def planck_bnu(
@@ -206,9 +200,7 @@ def planck_bnu(
     return 2.0 * _H_PLANCK * nu**3 / (_C_CGS**2) / jnp.expm1(x)
 
 
-# ===================================================================
-# CMB heating correction (da Cunha+2013)
-# ===================================================================
+# ── CMB heating correction (da Cunha+2013) ────────────────────────
 
 _T_CMB_0 = 2.725  # CMB temperature at z=0 (K)
 
@@ -310,9 +302,7 @@ def cmb_contrast_factor(
     return jnp.clip(1.0 - ratio, 0.0, 1.0)
 
 
-# ===================================================================
-# Energy balance
-# ===================================================================
+# ── Energy balance ────────────────────────────────────────────────
 
 
 def compute_absorbed_luminosity(
@@ -380,9 +370,7 @@ def compute_absorbed_luminosity_from_tau(
     return compute_absorbed_luminosity(wavelength_aa, L_nu_intrinsic, transmission)
 
 
-# ===================================================================
-# Model 1: Modified blackbody (2-3 parameters)
-# ===================================================================
+# ── Model 1: Modified blackbody (2-3 parameters) ──────────────────
 
 
 @register_emission_model("modified_blackbody")
@@ -461,9 +449,7 @@ def modified_blackbody(
     return result * contrast
 
 
-# ===================================================================
-# Model 1b: Casey (2012) modified blackbody + mid-IR power law
-# ===================================================================
+# ── Model 1b: Casey (2012) modified blackbody + mid-IR power law ──
 
 # Empirical coefficients for turnover wavelength (Casey 2012, Eq. 3, errata)
 _CASEY_B1_UM = 26.68  # μm
@@ -596,9 +582,7 @@ def casey2012(
     return result * contrast
 
 
-# ===================================================================
-# Model 2: Dale et al. 2014 (1 parameter)
-# ===================================================================
+# ── Model 2: Dale et al. 2014 (1 parameter) ───────────────────────
 
 
 def _dale_component_temperature(alpha: float) -> tuple[float, float, float]:
@@ -626,9 +610,7 @@ def _dale_component_temperature(alpha: float) -> tuple[float, float, float]:
     return T_cold, T_warm, f_warm
 
 
-# ===================================================================
-# Backward-compatible module-level aliases for direct imports
-# ===================================================================
+# ── Backward-compatible module-level aliases for direct imports ───
 # Tests and user code may do ``from tengri.components.dust.emission import draine_li2007``.
 # These aliases point to the lazy wrappers (which auto-load templates on call).
 
@@ -663,9 +645,7 @@ def themis(*args, **kwargs):
     return DUST_EMISSION_MODELS["themis"](*args, **kwargs)
 
 
-# ===================================================================
-# Energy-balance decomposition models
-# ===================================================================
+# ── Energy-balance decomposition models ───────────────────────────
 
 
 def energy_balance_split(
@@ -760,9 +740,7 @@ def energy_balance_split(
     return sed_warm + sed_cold
 
 
-# ===================================================================
-# Application layer: model dispatchers and utilities
-# ===================================================================
+# ── Application layer: model dispatchers and utilities ────────────
 
 
 def apply_dust_emission(
@@ -798,9 +776,7 @@ def apply_dust_emission(
     return fn(wavelength_aa, L_absorbed, **params)
 
 
-# ===================================================================
-# Lazy loading infrastructure for template-based models
-# ===================================================================
+# ── Lazy loading infrastructure for template-based models ─────────
 
 
 def _make_lazy_loader(
@@ -882,9 +858,7 @@ def _dl07_lazy_wrapper(*args, **kwargs):
     return DUST_EMISSION_MODELS["draine_li2007"](*args, **kwargs)
 
 
-# ===================================================================
-# Import emission template functions for backward compatibility
-# ===================================================================
+# ── Import emission template functions for backward compatibility ─
 
 from .emission_templates import (
     create_astrodust_from_grid as create_astrodust_from_grid,

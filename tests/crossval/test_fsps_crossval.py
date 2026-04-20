@@ -48,9 +48,7 @@ def sp():
     return sp
 
 
-# ===================================================================
-# 1. Mass-remaining fraction
-# ===================================================================
+# ── 1. Mass-remaining fraction ────────────────────────────────────
 
 
 class TestMassRemainingCrossval:
@@ -115,9 +113,7 @@ class TestMassRemainingCrossval:
         )
 
 
-# ===================================================================
-# 2. Dust attenuation: Charlot & Fall (CF00)
-# ===================================================================
+# ── 2. Dust attenuation: Charlot & Fall (CF00) ────────────────────
 
 
 class TestDustCF00Crossval:
@@ -245,9 +241,7 @@ class TestDustCF00Crossval:
         np.testing.assert_allclose(t_v_fsps, expected, rtol=0.15)
 
 
-# ===================================================================
-# 3. Ionizing photon rate Q_H
-# ===================================================================
+# ── 3. Ionizing photon rate Q_H ───────────────────────────────────
 
 
 class TestQHCrossval:
@@ -307,9 +301,7 @@ class TestQHCrossval:
         assert q_h_old < q_h_young * 0.1, "Q_H at 100 Myr should be <<< Q_H at 1 Myr"
 
 
-# ===================================================================
-# 4. Dust re-emission (energy balance)
-# ===================================================================
+# ── 4. Dust re-emission (energy balance) ──────────────────────────
 
 
 class TestDustEmissionCrossval:
@@ -393,9 +385,7 @@ class TestDustEmissionCrossval:
         assert peak_warm < peak_cool, "Lower alpha should produce warmer dust"
 
 
-# ===================================================================
-# 5. AGN SED
-# ===================================================================
+# ── 5. AGN SED ────────────────────────────────────────────────────
 
 
 class TestAGNCrossval:

@@ -25,9 +25,7 @@ from tengri.components.nebular import (
     NebularBackend,
 )
 
-# ---------------------------------------------------------------------------
-# BakedInBackend
-# ---------------------------------------------------------------------------
+# ── BakedInBackend ────────────────────────────────────────────────
 
 
 def test_baked_in_warns_by_default():
@@ -55,9 +53,7 @@ def test_baked_in_has_continuum_true():
     assert b.has_continuum is True
 
 
-# ---------------------------------------------------------------------------
-# CB19Backend
-# ---------------------------------------------------------------------------
+# ── CB19Backend ───────────────────────────────────────────────────
 
 
 @pytest.mark.skipif(
@@ -89,9 +85,7 @@ def test_cb19_has_continuum_false():
     assert b.has_continuum is False
 
 
-# ---------------------------------------------------------------------------
-# MappingsPhotoStellarBackend
-# ---------------------------------------------------------------------------
+# ── MappingsPhotoStellarBackend ───────────────────────────────────
 
 
 def test_mappings_stellar_raises_by_default():
@@ -118,9 +112,7 @@ def test_mappings_stellar_suppress_mode():
             MappingsPhotoStellarBackend("nonexistent.h5", ionizing_source_warning="suppress")
 
 
-# ---------------------------------------------------------------------------
-# MappingsPhotoAGNBackend
-# ---------------------------------------------------------------------------
+# ── MappingsPhotoAGNBackend ───────────────────────────────────────
 
 
 def test_mappings_agn_warns_by_default():
@@ -140,9 +132,7 @@ def test_mappings_agn_suppress_is_silent():
             MappingsPhotoAGNBackend("nonexistent.h5", ionizing_source_warning="suppress")
 
 
-# ---------------------------------------------------------------------------
-# has_continuum correctness
-# ---------------------------------------------------------------------------
+# ── has_continuum correctness ─────────────────────────────────────
 
 
 def test_has_continuum_table():
@@ -163,9 +153,7 @@ def test_has_continuum_table():
         assert c.has_continuum is True, "Cue should have continuum"
 
 
-# ---------------------------------------------------------------------------
-# Protocol compliance
-# ---------------------------------------------------------------------------
+# ── Protocol compliance ───────────────────────────────────────────
 
 
 def test_baked_in_satisfies_protocol():

@@ -15,9 +15,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-# ---------------------------------------------------------------------------
-# SSP gate
-# ---------------------------------------------------------------------------
+# ── SSP gate ──────────────────────────────────────────────────────
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
@@ -25,9 +23,7 @@ _SSP_EXISTS = _SSP_FILE.is_file()
 _needs_ssp = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
 
 
-# ---------------------------------------------------------------------------
-# Task 1: _planck_lnu extracted to _phys.py
-# ---------------------------------------------------------------------------
+# ── Task 1: _planck_lnu extracted to _phys.py ─────────────────────
 
 
 class TestPlanckLnuExtracted:
@@ -93,9 +89,7 @@ class TestLinesToSed:
         assert abs(peak_wave - 6562.80) < 10.0
 
 
-# ---------------------------------------------------------------------------
-# Task 2: agn_nlr_emission return type fix
-# ---------------------------------------------------------------------------
+# ── Task 2: agn_nlr_emission return type fix ──────────────────────
 
 
 class TestAgnNlrEmissionReturnType:
@@ -139,9 +133,7 @@ class TestAgnNlrEmissionReturnType:
         assert "gas_logu" not in sig.parameters
 
 
-# ---------------------------------------------------------------------------
-# Task 3: line_efficiency exposed in nlr/blr
-# ---------------------------------------------------------------------------
+# ── Task 3: line_efficiency exposed in nlr/blr ────────────────────
 
 
 class TestLineEfficiencyExposed:
@@ -179,9 +171,7 @@ class TestLineEfficiencyExposed:
         assert 1.5 < ratio < 2.2
 
 
-# ---------------------------------------------------------------------------
-# Task 4: Emission line catalog
-# ---------------------------------------------------------------------------
+# ── Task 4: Emission line catalog ─────────────────────────────────
 
 
 class TestEmissionLineCatalog:
@@ -232,9 +222,7 @@ class TestEmissionLineCatalog:
         assert CLOUDY_LINE_WAVELENGTHS.shape == (12,)
 
 
-# ---------------------------------------------------------------------------
-# Task 5: Unified build_line_design_matrix
-# ---------------------------------------------------------------------------
+# ── Task 5: Unified build_line_design_matrix ──────────────────────
 
 
 class TestBuildLineDesignMatrix:
@@ -270,9 +258,7 @@ class TestBuildLineDesignMatrix:
         assert A_combined.shape == (300, 3)  # 2 narrow + 1 broad
 
 
-# ---------------------------------------------------------------------------
-# Task 8: AGNConfig dataclass
-# ---------------------------------------------------------------------------
+# ── Task 8: AGNConfig dataclass ───────────────────────────────────
 
 
 class TestAGNConfig:
@@ -317,9 +303,7 @@ class TestAGNConfig:
             AGNConfig(torus="photon_torpedo")
 
 
-# ---------------------------------------------------------------------------
-# SSP-required: model.tree() and model.recommend_method()
-# ---------------------------------------------------------------------------
+# ── SSP-required: model.tree() and model.recommend_method() ───────
 
 
 @_needs_ssp

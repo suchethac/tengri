@@ -13,9 +13,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-# -------------------------------------------------------------------
-# Hybrid kernel: precomputed SSP + exact non-stellar
-# -------------------------------------------------------------------
+# ── Hybrid kernel: precomputed SSP + exact non-stellar ────────────
 
 
 def build_hybrid_photometry(model):

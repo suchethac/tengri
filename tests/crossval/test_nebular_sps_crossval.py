@@ -37,9 +37,7 @@ _LSUN_ERG = 3.828e33  # erg / s
 _C_KM_S = 299792.458  # km/s
 
 
-# ===================================================================
-# 1. IGM — Inoue+2014 transmission at key redshifts
-# ===================================================================
+# ── 1. IGM — Inoue+2014 transmission at key redshifts ─────────────
 
 
 class TestIGMPublishedValues:
@@ -134,9 +132,7 @@ class TestIGMPublishedValues:
         assert T > 0.99, f"T={T:.3f} at wave_obs=8000A, z=3; expected ~1.0"
 
 
-# ===================================================================
-# 2. AB magnitude system — Oke (1974) zero point
-# ===================================================================
+# ── 2. AB magnitude system — Oke (1974) zero point ────────────────
 
 
 class TestABMagnitudeZeroPoint:
@@ -176,9 +172,7 @@ class TestABMagnitudeZeroPoint:
         )
 
 
-# ===================================================================
-# 3. Planck function — Wien and Stefan-Boltzmann limits
-# ===================================================================
+# ── 3. Planck function — Wien and Stefan-Boltzmann limits ─────────
 
 
 class TestPlanckFunction:
@@ -274,9 +268,7 @@ class TestPlanckFunction:
         )
 
 
-# ===================================================================
-# 4. Metallicity conversion — verify LOG10_ZSUN
-# ===================================================================
+# ── 4. Metallicity conversion — verify LOG10_ZSUN ─────────────────
 
 
 class TestMetallicityConversion:
@@ -311,9 +303,7 @@ class TestMetallicityConversion:
         )
 
 
-# ===================================================================
-# 5. Salaris relation — verify quadratic formula
-# ===================================================================
+# ── 5. Salaris relation — verify quadratic formula ────────────────
 
 
 class TestSalarisRelation:
@@ -389,9 +379,7 @@ class TestSalarisRelation:
         )
 
 
-# ===================================================================
-# 6. Photometry — flat spectrum through filter (Hogg+2002)
-# ===================================================================
+# ── 6. Photometry — flat spectrum through filter (Hogg+2002) ──────
 
 
 class TestPhotometryFlatSpectrum:
@@ -479,9 +467,7 @@ class TestPhotometryFlatSpectrum:
         )
 
 
-# ===================================================================
-# 7. Velocity broadening — verify sigma
-# ===================================================================
+# ── 7. Velocity broadening — verify sigma ─────────────────────────
 
 
 class TestVelocityBroadening:
@@ -558,9 +544,7 @@ class TestVelocityBroadening:
         )
 
 
-# ===================================================================
-# 8. Chebyshev calibration — verify T_n values
-# ===================================================================
+# ── 8. Chebyshev calibration — verify T_n values ──────────────────
 
 
 class TestChebyshevCalibration:
@@ -651,9 +635,7 @@ class TestChebyshevCalibration:
         )
 
 
-# ===================================================================
-# 9. Calibration marginalization — recover known calibration
-# ===================================================================
+# ── 9. Calibration marginalization — recover known calibration ────
 
 
 class TestCalibrationMarginalization:
@@ -733,9 +715,7 @@ class TestCalibrationMarginalization:
         )
 
 
-# ===================================================================
-# 10. Modified blackbody — Rayleigh-Jeans slope
-# ===================================================================
+# ── 10. Modified blackbody — Rayleigh-Jeans slope ─────────────────
 
 
 class TestModifiedBlackbodySlope:
@@ -800,9 +780,7 @@ class TestModifiedBlackbodySlope:
         )
 
 
-# ===================================================================
-# 11. CMB correction — da Cunha+2013
-# ===================================================================
+# ── 11. CMB correction — da Cunha+2013 ────────────────────────────
 
 
 class TestCMBCorrection:

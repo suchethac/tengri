@@ -32,9 +32,7 @@ from tengri.observation.eline_catalog import (
     DEFAULT_LINE_WAVELENGTHS,  # noqa: F401 — re-exported for backward compatibility
 )
 
-# -------------------------------------------------------------------------
-# Public API
-# -------------------------------------------------------------------------
+# ── Public API ────────────────────────────────────────────────────
 
 
 @jax.jit
@@ -184,7 +182,7 @@ def apply_doublet_constraints(
     design_matrix : array, shape (n_pix, n_lines)
         Full design matrix with one column per emission line.
     constraint_matrix : array, shape (n_lines, n_independent)
-        Constraint matrix from ``LineCatalog.build_constraint_matrix()``.
+        Constraint matrix from ``LineList.build_constraint_matrix()``.
         Encodes doublet ratios as a linear transformation.
 
     Returns
@@ -197,7 +195,7 @@ def apply_doublet_constraints(
     --------
     ::
 
-        cat = LineCatalog.default_optical()
+        cat = LineList.default_optical()
         C = cat.build_constraint_matrix()
         G = build_eline_design_matrix(wave_obs, cat.wavelengths, R, z)
         G_eff = apply_doublet_constraints(G, C)  # (n_pix, n_independent)
@@ -224,7 +222,7 @@ def expand_constrained_amplitudes(
     a_cov : array, shape (n_independent, n_independent)
         Posterior covariance for the independent parameters.
     constraint_matrix : array, shape (n_lines, n_independent)
-        Constraint matrix from ``LineCatalog.build_constraint_matrix()``.
+        Constraint matrix from ``LineList.build_constraint_matrix()``.
 
     Returns
     -------

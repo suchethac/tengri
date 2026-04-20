@@ -27,9 +27,7 @@ def wavelength():
     return jnp.linspace(1000.0, 25000.0, 200)
 
 
-# ===================================================================
-# wg00_shell tests
-# ===================================================================
+# ── wg00_shell tests ──────────────────────────────────────────────
 
 
 class TestWG00Shell:
@@ -111,9 +109,7 @@ class TestWG00Shell:
         assert T < 1e-10, f"WG00 shell opaque limit: T={T:.2e} at tau_V=100 (expected <1e-10)"
 
 
-# ===================================================================
-# wg00_cloudy tests
-# ===================================================================
+# ── wg00_cloudy tests ─────────────────────────────────────────────
 
 
 class TestWG00Cloudy:
@@ -194,9 +190,7 @@ class TestWG00Cloudy:
         assert grad_jax < 0.0, "wg00_cloudy: ∂T/∂tau_V should be negative"
 
 
-# ===================================================================
-# wg00_dusty tests
-# ===================================================================
+# ── wg00_dusty tests ──────────────────────────────────────────────
 
 
 class TestWG00Dusty:
@@ -316,9 +310,7 @@ class TestWG00Dusty:
         )
 
 
-# ===================================================================
-# Geometry ordering tests (cross-geometry comparisons)
-# ===================================================================
+# ── Geometry ordering tests (cross-geometry comparisons) ──────────
 
 
 class TestGeometryOrdering:

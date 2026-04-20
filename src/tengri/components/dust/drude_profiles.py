@@ -17,9 +17,7 @@ from typing import NamedTuple
 import jax.numpy as jnp
 from jax.typing import ArrayLike
 
-# ---------------------------------------------------------------------------
-# Feature table
-# ---------------------------------------------------------------------------
+# ── Feature table ─────────────────────────────────────────────────
 
 
 class PAHFeature(NamedTuple):
@@ -75,9 +73,7 @@ _FWHMS_UM = _CENTERS_UM * _GAMMAS  # absolute FWHM in microns
 _DEFAULT_STRENGTHS = jnp.array([f.strength for f in SMITH2007_PAH_FEATURES])
 
 
-# ---------------------------------------------------------------------------
-# Core profile functions
-# ---------------------------------------------------------------------------
+# ── Core profile functions ────────────────────────────────────────
 
 
 def drude_profile(
@@ -149,9 +145,7 @@ def pah_template(
     return jnp.sum(profiles, axis=1)
 
 
-# ---------------------------------------------------------------------------
-# Decomposition
-# ---------------------------------------------------------------------------
+# ── Decomposition ─────────────────────────────────────────────────
 
 
 def decompose_pah(

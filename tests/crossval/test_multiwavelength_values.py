@@ -34,9 +34,7 @@ _L_IR_SFR1 = 1e10 * _LSUN  # L_IR for SFR ~ 1 Msun/yr (Kennicutt 1998)
 _L_IR_SFR10 = 1e11 * _LSUN  # L_IR for SFR ~ 10 Msun/yr
 
 
-# ===================================================================
-# 1. Radio: absolute values in erg/s/Hz
-# ===================================================================
+# ── 1. Radio: absolute values in erg/s/Hz ─────────────────────────
 
 
 class TestRadioAbsoluteValues:
@@ -176,9 +174,7 @@ class TestRadioAbsoluteValues:
         )
 
 
-# ===================================================================
-# 2. X-ray: absolute values in erg/s
-# ===================================================================
+# ── 2. X-ray: absolute values in erg/s ────────────────────────────
 
 
 class TestXrayAbsoluteValues:
@@ -307,9 +303,7 @@ class TestXrayAbsoluteValues:
         assert l_18 < l_14, "Steeper alpha_ox → less X-ray"
 
 
-# ===================================================================
-# 3. Cross-component self-consistency
-# ===================================================================
+# ── 3. Cross-component self-consistency ───────────────────────────
 
 
 class TestCrossComponentConsistency:
@@ -358,9 +352,7 @@ class TestCrossComponentConsistency:
         np.testing.assert_allclose(ff_2 / ff_1, 2.0, rtol=1e-10)
 
 
-# ===================================================================
-# 4. IGM: numerical transmission values
-# ===================================================================
+# ── 4. IGM: numerical transmission values ─────────────────────────
 
 
 class TestIGMNumericalValues:
@@ -401,9 +393,7 @@ class TestIGMNumericalValues:
         assert t_min <= t <= t_max + 0.01, f"T = {t:.3f}, expected [{t_min}, {t_max}]"
 
 
-# ===================================================================
-# 5. Radio component decomposition (CGS throughout)
-# ===================================================================
+# ── 5. Radio component decomposition (CGS throughout) ─────────────
 
 
 class TestRadioComponentDecomposition:

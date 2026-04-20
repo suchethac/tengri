@@ -29,10 +29,8 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 
-# ---------------------------------------------------------------------------
-# Inline implementations matching prediction.py (no external data required)
+# ── Inline implementations matching prediction.py (no external data required)
 # These mirror the property implementations exactly so tests are independent.
-# ---------------------------------------------------------------------------
 
 
 def bpt_nii(nii_6584: float, halpha: float) -> float:
@@ -61,9 +59,7 @@ def balmer_decrement(halpha: float, hbeta: float) -> float:
     return float(halpha / jnp.maximum(hbeta, 1e-50))
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+# ── Tests ─────────────────────────────────────────────────────────
 
 
 class TestBptNii:

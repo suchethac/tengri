@@ -28,9 +28,7 @@ from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
 from tengri.components.nebular._shared import _interp_index_weight, compute_qh, place_line_profiles
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
-# ---------------------------------------------------------------------------
-# Ionizing-spectrum warnings
-# ---------------------------------------------------------------------------
+# ── Ionizing-spectrum warnings ────────────────────────────────────
 
 
 class CloudyGridWNESSPWarning(UserWarning):
@@ -126,9 +124,7 @@ def load_cloudy_grid(filepath: str) -> CloudyGridData:
         )
 
 
-# ---------------------------------------------------------------------------
-# Q_H computation (ionizing photon rate)
-# ---------------------------------------------------------------------------
+# ── Q_H computation (ionizing photon rate) ────────────────────────
 
 # Vectorized over metallicity and age dimensions
 _compute_qh_grid = jax.vmap(
@@ -137,9 +133,7 @@ _compute_qh_grid = jax.vmap(
 )
 
 
-# ---------------------------------------------------------------------------
-# Grid interpolation (trilinear in logZ, logAge, logU)
-# ---------------------------------------------------------------------------
+# ── Grid interpolation (trilinear in logZ, logAge, logU) ──────────
 
 
 def _trilinear_interp(
@@ -244,9 +238,7 @@ def _trilinear_interp_smooth(
     return result
 
 
-# ---------------------------------------------------------------------------
-# Main backend class
-# ---------------------------------------------------------------------------
+# ── Main backend class ────────────────────────────────────────────
 
 
 class CloudyGridBackend:

@@ -47,9 +47,7 @@ _WAVE_150MHZ = jnp.array([_C_AA / 1.5e8])
 _L_IR = 1e11  # Lsun, typical LIRG
 
 
-# ---------------------------------------------------------------------------
-# Backward-compatibility
-# ---------------------------------------------------------------------------
+# ── Backward-compatibility ────────────────────────────────────────
 
 
 class TestRadioConstantsCGS:
@@ -87,9 +85,7 @@ class TestBackwardCompat:
             radio_total(_WAVE_RADIO, L_ir=_L_IR, sfr_mode="bogus")
 
 
-# ---------------------------------------------------------------------------
-# Bell+2003 synchrotron suppression
-# ---------------------------------------------------------------------------
+# ── Bell+2003 synchrotron suppression ─────────────────────────────
 
 
 class TestSynchrotronSuppression:
@@ -132,9 +128,7 @@ class TestSynchrotronSuppression:
         assert jnp.isfinite(L_corr), "Suppression at L=0 must not be NaN/Inf"
 
 
-# ---------------------------------------------------------------------------
-# Delvecchio+2021 model
-# ---------------------------------------------------------------------------
+# ── Delvecchio+2021 model ─────────────────────────────────────────
 
 
 class TestDelvecchio2021:
@@ -291,9 +285,7 @@ class TestDelvecchio2021:
         )
 
 
-# ---------------------------------------------------------------------------
-# McCheyne+2022 model
-# ---------------------------------------------------------------------------
+# ── McCheyne+2022 model ───────────────────────────────────────────
 
 
 class TestMcCheyne2022:
@@ -410,9 +402,7 @@ class TestMcCheyne2022:
         )
 
 
-# ---------------------------------------------------------------------------
-# radio_total dispatcher
-# ---------------------------------------------------------------------------
+# ── radio_total dispatcher ────────────────────────────────────────
 
 
 class TestRadioTotalDispatcher:
@@ -540,9 +530,7 @@ class TestRadioTotalDispatcher:
 _RC_KW: dict = dict(L_ir=_L_IR, L_agn_bol=1e12, sfr_mode="bell2003", apply_suppression=False)
 
 
-# ---------------------------------------------------------------------------
-# radio_freefree — Murphy+2011 thermal bremsstrahlung
-# ---------------------------------------------------------------------------
+# ── radio_freefree — Murphy+2011 thermal bremsstrahlung ───────────
 
 
 class TestFreeFree:
@@ -651,9 +639,7 @@ class TestFreeFree:
         )
 
 
-# ---------------------------------------------------------------------------
-# radio_components — diagnostic component decomposition
-# ---------------------------------------------------------------------------
+# ── radio_components — diagnostic component decomposition ─────────
 
 
 class TestRadioComponents:
@@ -702,9 +688,7 @@ class TestRadioComponents:
             assert jnp.all(jnp.isfinite(arr)), f"Non-finite values in {key}"
 
 
-# ---------------------------------------------------------------------------
-# TestLayerConsistency — radio_total == components summed
-# ---------------------------------------------------------------------------
+# ── TestLayerConsistency — radio_total == components summed ───────
 
 
 class TestLayerConsistency:

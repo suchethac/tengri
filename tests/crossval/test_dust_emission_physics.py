@@ -18,9 +18,7 @@ jax.config.update("jax_enable_x64", True)
 pytestmark = pytest.mark.crossval
 
 
-# ===================================================================
-# 1. MODIFIED BLACKBODY — Wien's law, beta, energy conservation
-# ===================================================================
+# ── 1. MODIFIED BLACKBODY — Wien's law, beta, energy conservation ─
 
 
 class TestModifiedBlackbodyPhysics:
@@ -89,9 +87,7 @@ class TestModifiedBlackbodyPhysics:
         assert l_bol > 0, "Integrated luminosity should be positive"
 
 
-# ===================================================================
-# 2. CASEY 2012 — MBB + mid-IR power-law
-# ===================================================================
+# ── 2. CASEY 2012 — MBB + mid-IR power-law ────────────────────────
 
 
 class TestCasey2012Physics:
@@ -130,9 +126,7 @@ class TestCasey2012Physics:
         )
 
 
-# ===================================================================
-# 3. CMB CORRECTIONS — da Cunha+2013
-# ===================================================================
+# ── 3. CMB CORRECTIONS — da Cunha+2013 ────────────────────────────
 
 
 class TestCMBCorrections:

@@ -99,9 +99,7 @@ import numpy as np
 from tengri.components.agn.unified import register_agn_model
 from tengri.components.dust.attenuation import smc as smc_curve
 
-# ===================================================================
-# Physical constants (CGS)
-# ===================================================================
+# ── Physical constants (CGS) ──────────────────────────────────────
 from tengri.utils.physics_constants import (
     AA_TO_CM as _ANGSTROM_CM,
     C_CGS as _C_LIGHT,
@@ -116,9 +114,7 @@ _LAMBDA_NORM = 5500.0  # Angstrom
 # Reference wavelength for hot dust anchoring
 _LAMBDA_BB_ANCHOR = 20000.0  # 2 um in Angstrom
 
-# ===================================================================
-# Default parameters (Temple+2021 Table 3)
-# ===================================================================
+# ── Default parameters (Temple+2021 Table 3) ──────────────────────
 
 _DEFAULT_PLSLP1 = -0.349  # Blue power-law slope (f_nu ~ nu^alpha)
 _DEFAULT_PLSLP2 = 0.593  # Red power-law slope
@@ -138,9 +134,7 @@ _BENORM = -27.0
 _SIGMOID_WIDTH = 0.02  # dex (~5% in wavelength)
 
 
-# ===================================================================
-# Emission line template (loaded lazily from data file)
-# ===================================================================
+# ── Emission line template (loaded lazily from data file) ─────────
 # Template format: 6 rows x N wavelengths
 #   row 0: wavelength (Angstrom)
 #   row 1: median emission lines (flux units, relative to reference continuum)
@@ -191,9 +185,7 @@ _LUMVAL = np.array(
 )
 
 
-# ===================================================================
-# Helper functions
-# ===================================================================
+# ── Helper functions ──────────────────────────────────────────────
 
 
 def _wavelength_to_nu(wavelength: jnp.ndarray) -> jnp.ndarray:
@@ -540,9 +532,7 @@ def _apply_dust_reddening(
     return f_lam * 10.0 ** (-0.4 * a_lam)
 
 
-# ===================================================================
-# Main QSOgen SED function
-# ===================================================================
+# ── Main QSOgen SED function ──────────────────────────────────────
 
 
 def _lbol_to_m_i(log_lbol_lsun: float) -> float:
@@ -685,9 +675,7 @@ def compute_qsogen_sed(
     return l_nu * agn_frac
 
 
-# ===================================================================
-# Register in AGN_MODELS
-# ===================================================================
+# ── Register in AGN_MODELS ────────────────────────────────────────
 
 
 @register_agn_model("qsogen")

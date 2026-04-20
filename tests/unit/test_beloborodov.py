@@ -29,9 +29,7 @@ from tengri.components.agn.disc import (
     kubota_done_disc,
 )
 
-# ===================================================================
-# beloborodov_gamma_hot
-# ===================================================================
+# ── beloborodov_gamma_hot ─────────────────────────────────────────
 
 
 class TestBeloborodovGammaHot:
@@ -86,9 +84,7 @@ class TestBeloborodovGammaHot:
         assert grad_jax != 0.0
 
 
-# ===================================================================
-# compute_l2500
-# ===================================================================
+# ── compute_l2500 ─────────────────────────────────────────────────
 
 
 class TestComputeL2500:
@@ -117,9 +113,7 @@ class TestComputeL2500:
         assert jnp.isclose(result, 5.0, atol=1e-5)
 
 
-# ===================================================================
-# kubota_done_disc with self-consistent gamma
-# ===================================================================
+# ── kubota_done_disc with self-consistent gamma ───────────────────
 
 
 class TestKubotaDoneSelfConsistent:
@@ -235,9 +229,7 @@ class TestKubotaDoneSelfConsistent:
         assert not jnp.allclose(ratio_high, ratio_low, atol=1e-15)
 
 
-# ===================================================================
-# _r_hot_bisect: exact K&D 2018 Eq. 2 solve
-# ===================================================================
+# ── _r_hot_bisect: exact K&D 2018 Eq. 2 solve ─────────────────────
 
 _SIGMA_SB = 5.670374419e-5  # erg cm^-2 s^-1 K^-4
 

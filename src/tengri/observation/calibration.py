@@ -15,13 +15,13 @@ a flat calibration.
 Coefficients a_n have a Gaussian(0, sigma) prior that regularizes the
 polynomial toward unity, preventing overfitting of broad spectral features.
 
-ParamSpec integration example
+Parameters integration example
 -----------------------------
 To add calibration coefficients as free parameters::
 
     from tengri.parameters.priors import Gaussian
 
-    spec = ParamSpec(
+    spec = Parameters(
         ...,
         # 3rd-order calibration polynomial (3 free coefficients)
         cal_c1=Gaussian(0.0, 0.1),
@@ -318,4 +318,77 @@ def apply_calibration(
         Calibrated spectrum.
     """
     cal = calibration_polynomial(wavelength, coeffs, wave_min, wave_max)
+    return spectrum * cal
+
+
+@jax.jit
+def double_calibration_polynomial(
+    wavelength: jnp.ndarray,
+    coeffs_blue: jnp.ndarray,
+    coeffs_red: jnp.ndarray,
+    wave_split: float,
+) -> jnp.ndarray:
+    """Piecewise calibration: independent Chebyshev polynomials for blue and red halves.
+
+    For two-arm spectrographs (e.g. X-SHOOTER, DEIMOS) where a detector
+    gap or dichroic split causes a calibration discontinuity, fitting a
+    single polynomial across the full range can bias the result.  This
+    function applies separate polynomials to each half, matched to their
+    local wavelength range.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid (Angstrom), must be sorted.
+    coeffs_blue : array, shape (order_blue,)
+        Chebyshev coefficients for the blue arm (lambda < wave_split).
+    coeffs_red : array, shape (order_red,)
+        Chebyshev coefficients for the red arm (lambda >= wave_split).
+    wave_split : float
+        Wavelength boundary between blue and red arms (Angstrom).
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Calibration factor at each wavelength.
+    """
+    wave_min = wavelength[0]
+    wave_max = wavelength[-1]
+
+    cal_blue = calibration_polynomial(wavelength, coeffs_blue, wave_min, wave_split)
+    cal_red = calibration_polynomial(wavelength, coeffs_red, wave_split, wave_max)
+
+    is_blue = wavelength < wave_split
+    return jnp.where(is_blue, cal_blue, cal_red)
+
+
+@jax.jit
+def apply_double_calibration(
+    spectrum: jnp.ndarray,
+    wavelength: jnp.ndarray,
+    coeffs_blue: jnp.ndarray,
+    coeffs_red: jnp.ndarray,
+    wave_split: float,
+) -> jnp.ndarray:
+    """Apply piecewise calibration polynomial to a spectrum.
+
+    Parameters
+    ----------
+    spectrum : array, shape (n_wave,)
+        Physical model spectrum.
+    wavelength : array, shape (n_wave,)
+        Wavelength grid (Angstrom), must be sorted.
+    coeffs_blue : array, shape (order_blue,)
+        Chebyshev coefficients for the blue arm.
+    coeffs_red : array, shape (order_red,)
+        Chebyshev coefficients for the red arm.
+    wave_split : float
+        Wavelength boundary (Angstrom).
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Calibrated spectrum.
+    """
+    cal = double_calibration_polynomial(wavelength, coeffs_blue, coeffs_red, wave_split)
     return spectrum * cal
