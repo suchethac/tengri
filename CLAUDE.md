@@ -50,16 +50,16 @@ Deprecated aliases (never use in new code): `Model`, `ParamSpec`, `SpectroscopyC
 
 ## Package structure
 
-Layout: `parameters/ -> components/ -> forward/ -> observation/ -> inference/ -> analysis/ -> runtime/ + utils/`. Public API re-exported at `src/tengri/__init__.py`.
+Layout: `parameters/ -> components/ -> forward/ -> observation/ -> inference/ -> analysis/ -> config/ + utils/`. Public API re-exported at `src/tengri/__init__.py`.
 
 Key directories:
 - `parameters/` — Parameters class, priors, param translation
 - `components/` — SED physics: sfh/, sps/, dust/, nebular/, agn/, igm/, radio/, xray/
-- `forward/` — SEDModel, pipeline, fused kernels, precompute protocol+registry
-- `observation/` — photometry, spectroscopy, filters, noise, emission lines, mock
+- `forward/` — SEDModel, pipeline, _kernels/ (JIT strategies, private), precompute/ (protocol+registry)
+- `observation/` — photometry, spectroscopy, filters, noise, emission lines
 - `inference/` — fitter, posterior, all inference methods (vi, mcmc, nss, map, etc.)
-- `analysis/` — diagnostics, plotting, simulate
-- `runtime/` — settings, exceptions, display, deprecation
+- `analysis/` — diagnostics, plotting, simulate, mock
+- `config/` — DustConfig/NebularConfig/SFHConfig/ModelConfig, exceptions, display, deprecation
 - `utils/` — cosmology, conversions, interpolation, physics_constants
 
 ## Key conventions

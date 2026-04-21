@@ -40,16 +40,17 @@ Parameters (latent xi + physical params)
 
 ## Key files to read
 
-**Package layout rewritten 2026-04-15** (`core/` dissolved; `models/` → `components/`;
+**Package layout rewritten 2026-04-15, further refined 2026-04-21** (`core/` dissolved; `models/` → `components/`;
 `models/observation/` promoted to top-level `observation/`; `diagnostics/` +
 `plotting.py` + `simulate.py` moved under `analysis/`; `distributions.py` →
-`parameters/priors.py`; new `runtime/` for settings/exceptions/display/deprecation).
+`parameters/priors.py`; `runtime/` → `config/` for settings/exceptions/display/deprecation;
+`mock.py` moved from `observation/` → `analysis/`; `kernels/` → `_kernels/` (private JIT details)).
 Public API (`from tengri import ...`) unchanged.
 
 | File | Purpose | When to read |
 |------|---------|--------------|
 | `src/tengri/forward/sed_model.py` | High-level SEDModel class (2957L, split deferred) | Understanding the forward model |
-| `src/tengri/forward/kernels/assembly.py` | JIT kernel factory — CSP + AGN + dust assembly (3174L, split deferred by fusion strategy) | Core forward model |
+| `src/tengri/forward/_kernels/` | JIT kernel strategies (hybrid, compositional, exact) — private implementation detail | Core forward model |
 | `src/tengri/forward/pipeline.py` | SED computation engine (non-fused path) | Tracing SED assembly |
 | `src/tengri/forward/precompute/` | Precompute Protocol + registry + algorithm (`protocol.py`, `registry.py`, `grid.py`, `templates.py`) | Extending precompute |
 | `src/tengri/parameters/parameters.py` | Parameters class (canonical, was ParamSpec) | Parameter handling |
@@ -69,8 +70,9 @@ Public API (`from tengri import ...`) unchanged.
 | `src/tengri/components/nebular/cloudy_precompute.py` | CLOUDY Protocol marker (auto-collapse inside CloudyGridBackend) | Nebular precompute |
 | `src/tengri/components/radio/radio.py` | Radio emission (synchrotron, free-free, AGN) | Radio |
 | `src/tengri/components/xray/xray.py` | X-ray emission (XRB, AGN corona) | X-ray |
-| `src/tengri/observation/` | Photometry, spectroscopy, filters, line_list, noise, mock | Observation layer |
-| `src/tengri/runtime/` | Settings, exceptions, display, deprecation | Cross-cutting plumbing |
+| `src/tengri/observation/` | Photometry, spectroscopy, filters, line_list, noise | Observation layer |
+| `src/tengri/analysis/` | Diagnostics, plotting, simulation, mock data generation | Post-fit analysis |
+| `src/tengri/config/` | DustConfig/NebularConfig/SFHConfig/ModelConfig, exceptions, display, deprecation | Cross-cutting plumbing |
 | `tests/conftest.py` | Test fixtures, grid setup | Understanding test patterns |
 
 ## Parameter dictionary convention

@@ -410,7 +410,7 @@ or substitute NaN arrays.
 
 ### BUG-NSS-02: `evolving_metallicity=True` causes KeyError: 'log_z_abs' in fused kernel
 
-**File:** `src/tengri/forward/kernels/assembly.py:2850`
+**File:** `src/tengri/forward/_kernels/` (assembly logic, line refs approximate after 2026-04-21 rename)
 **Symptom:** `KeyError: 'log_z_abs'` when running MAP or any inference with
 `evolving_metallicity=True` in Parameters.
 **Root cause:** The fused kernel expects `p["log_z_abs"]` (single metallicity), but
@@ -456,7 +456,7 @@ These are not bugs but acknowledged design/implementation issues that accumulate
 
 ### ARCH-01: Deep nesting in hybrid kernel non-stellar section (OPEN)
 
-**File:** `src/tengri/forward/kernels/hybrid.py:1084-1372` (_hybrid_phot_body function)
+**File:** `src/tengri/forward/_kernels/hybrid.py` (_hybrid_phot_body function, approx lines 1084-1372)
 **Metric:** 888 lines with 4+ indentation levels (most in codebase)
 **Pattern:** Each non-stellar component (nebular, shock, dust IR, AGN, radio, X-ray) has conditional preintegrated vs full-wavelength paths, creating deep nesting:
 ```
