@@ -37,9 +37,28 @@ Zero violations required.
 
 - **snake_case** everywhere
 - **99-character** line length limit
-- **Numpydoc** docstrings with Parameters/Returns sections
+- **Numpydoc** docstrings — see [docs/dev/docstring-standard.md](../dev/docstring-standard.md) for the full standard
 - **Greek letters** (sigma, xi, theta) are allowed in docstrings and comments
 - **Type hints**: use `X | None` (PEP 604), not `Optional[X]`
+
+#### Docstring tier system
+
+Apply documentation depth based on the function's audience:
+
+| Tier | Location | Required sections |
+|------|----------|-------------------|
+| 1 — Public API | `__init__.py` exports | Parameters, Returns, Raises, Notes (JIT flag), References, Examples |
+| 2 — Scientific functions | `components/`, `forward/`, `observation/` | Parameters, Returns, Notes (JIT + equations), References |
+| 3 — Utilities | `utils/`, `config/`, `analysis/` | Parameters, Returns |
+| 4 — Private helpers | `_`-prefixed | One-sentence summary |
+
+Key rules for all docstrings:
+- **Units** in brackets for every physical parameter: `[erg/s/Hz]`, `[yr]`
+- **Array shapes** always annotated: `array_like, shape (n_wave,)` for inputs
+- **Equations** use the RST `.. math::` directive; define all variables with units; cite source equation by number
+- **Approximations** must be flagged explicitly with validity range
+- **Citations** use `.. [N]` numbered References with exact title, arXiv ID, and DOI
+- **Upstream code** must be credited in Notes
 
 ### Ruff rules enforced
 

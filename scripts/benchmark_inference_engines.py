@@ -16,6 +16,7 @@ scenario so that cached loss/gradient functions are shared — matching
 how a user would compare methods on the same galaxy.
 """
 
+import gc
 import time
 import tracemalloc
 
@@ -129,6 +130,11 @@ def run_inference_method(
             diag = posterior.diagnostics
             diagnostics["final_kl"] = float(diag.get("final_kl", 0.0))
             diagnostics["n_iterations"] = int(diag.get("n_iterations", 0))
+
+    # CRITICAL: Delete posterior to free memory (samples arrays can be huge)
+    # For VI with 2000 samples × D=73: ~85MB per posterior object
+    del posterior
+    gc.collect()  # Force garbage collection to release memory immediately
 
     display_method = method
     if method == "map" and "optimizer" in method_kwargs:
@@ -321,6 +327,13 @@ def main():
                 print(f"done {result['inference_sec']:.1f}s")
             else:
                 print(f"FAILED: {result['error']}")
+
+        # Clear JAX compilation cache and force GC between scenarios
+        # to prevent XLA executable accumulation (each method compiles different paths)
+        print("  Clearing JAX cache and running GC...", end=" ", flush=True)
+        jax.clear_caches()
+        gc.collect()
+        print("done")
 
     # ===== CACHE PROFILING: cold → cached → new-fitter =====
     print(f"\n{'=' * 90}")

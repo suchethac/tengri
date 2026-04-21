@@ -108,6 +108,96 @@ params = {
 }
 ```
 
+## Writing documentation (MANDATORY for all new code)
+
+**Read `docs/dev/docstring-standard.md` for the full template and rules.** Below is the
+quick reference. Every function or class you add must have a docstring at the appropriate
+tier level.
+
+### Tier system
+
+| Tier | Who | Mandatory sections |
+|------|-----|--------------------|
+| 1 — Public API | `__init__.py` exports (SEDModel, Fitter, Parameters, Posterior, …) | Summary, Parameters, Returns, Raises, Notes (JIT flag), References, Examples |
+| 2 — Scientific functions | `components/`, `forward/`, `observation/` | Summary, Parameters, Returns, Notes (JIT flag + equations + approximation flags), References |
+| 3 — Utilities | `utils/`, `config/`, `analysis/` | Summary, Parameters, Returns |
+| 4 — Private helpers | `_`-prefixed | One-sentence summary; Parameters if non-obvious |
+
+### Equations
+
+Use RST `.. math::` directive — it renders with MathJax in the Sphinx docs:
+
+```rst
+Notes
+-----
+The damped random walk power spectral density is:
+
+.. math::
+
+    P(\omega) = \frac{\sigma^2 \,\tau}{1 + (\tau\,\omega)^2}
+
+where :math:`\sigma` is the PSD amplitude [dimensionless], :math:`\tau` is the
+damping timescale [yr], and :math:`\omega` is angular frequency [rad/yr].
+This is Eq. 3 of Author+2026 [1]_.
+```
+
+**Before writing any equation: verify against the original paper.** If the implementation
+is an approximation, flag it explicitly:
+```
+**Approximation**: valid for :math:`\tau \gtrsim 10\,\Delta t`. Breaks down at small tau.
+```
+
+### Citations
+
+Use numbered References with exact paper titles, arXiv ID, and DOI:
+
+```rst
+References
+----------
+.. [1] S. Charlot and S. M. Fall, "A Simple Model for the Absorption of Starlight by
+   Dust in Star-forming Galaxies," ApJ, 539, 718 (2000).
+   https://doi.org/10.1086/309250
+.. [2] B. D. Johnson et al., "Prospector: Stellar Population Inference from Spectra
+   and SEDs," ApJS, 254, 22 (2021). arXiv:2012.01426.
+   https://doi.org/10.3847/1538-4365/abef67
+```
+
+Never write citations from memory — verify exact titles and identifiers against authoritative sources.
+
+### Upstream code credit
+
+If you port or adapt code from another package, say so in Notes:
+
+```
+**Upstream**: Follows the Prospector ``transforms.py`` implementation
+(Johnson et al. 2021 [2]_), adapted for JAX.
+```
+
+Include the upstream code's paper in References.
+
+### JIT/grad compatibility
+
+For every function in `components/` or `forward/`, state in Notes:
+
+```
+**JIT-compatible**: yes — all operations use ``jnp`` primitives.
+**Gradient-safe**: yes.
+```
+
+Or, if not JIT-safe:
+
+```
+This function is not compatible with :func:`jax.jit` because [reason].
+```
+
+### Units and shapes
+
+- Units always in brackets: `[erg/s/Hz]`, `[yr]`, `[Msun/yr]`, `[Angstrom]`
+- Input arrays: `array_like, shape (n_wave,)`
+- Output arrays: `ndarray, shape (n_wave,)`
+
+---
+
 ## Common tasks an agent might need to do
 
 ### Generate a mock galaxy SED

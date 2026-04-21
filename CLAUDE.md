@@ -48,6 +48,26 @@ Deprecated aliases (never use in new code): `Model`, `ParamSpec`, `SpectroscopyC
 - 64-bit precision: `jax.config.update("jax_enable_x64", True)`
 - Greek letters (sigma, xi, theta) allowed in docstrings/comments
 
+## Documentation (MANDATORY)
+
+**Read `docs/dev/docstring-standard.md` before writing any new function, class, or method.**
+
+**Tier rules (quick reference):**
+- **Tier 1 — Public API** (symbols in `__init__.py`): full numpydoc — Parameters, Returns, Raises, Notes (JIT flag), References, Examples.
+- **Tier 2 — Scientific functions** (`components/`, `forward/`, `observation/`): Parameters, Returns, Notes (JIT flag + equations + approximation flags), References.
+- **Tier 3 — Utilities** (`utils/`, `config/`, `analysis/`): Parameters, Returns minimum.
+- **Tier 4 — Private helpers** (`_` prefix): one-sentence summary; Parameters if non-obvious.
+
+**Non-negotiable rules — every violation is a bug:**
+- Units ALWAYS in brackets in parameter descriptions: `[erg/s/Hz]`, `[yr]`, `[Msun/yr]`.
+- Array shapes ALWAYS annotated: `array_like, shape (n_wave,)` for inputs, `ndarray, shape (n_wave,)` for outputs.
+- `.. math::` directive MANDATORY for any function implementing a physical formula. Define every variable with units after the equation.
+- Approximations MUST be flagged: *"Approximation of Eq. X in Author+Year — valid for A < B."* Undocumented approximations are a correctness failure.
+- Citations MANDATORY when any formula or algorithm comes from a paper. Use `.. [N]` in References with exact title, journal, arXiv ID, and DOI. Never write citations from memory — verify against authoritative sources.
+- Upstream code MUST be credited in Notes: *"Ported from Prospector (Johnson et al. 2021 [N]_)"*.
+- JIT/grad/vmap compatibility MUST be stated in Notes for all `components/` and `forward/` functions.
+- VERIFY equations against the original paper before writing — do not rely on memory or other code.
+
 ## Package structure
 
 Layout: `parameters/ -> components/ -> forward/ -> observation/ -> inference/ -> analysis/ -> config/ + utils/`. Public API re-exported at `src/tengri/__init__.py`.

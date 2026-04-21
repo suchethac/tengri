@@ -96,6 +96,12 @@ ignore = [
 "tests/**" = ["F841"]             # unused variables common in test fixtures
 "analysis/**" = ["F841", "E501"]  # scripts: relaxed
 "notebooks/**" = ["F401", "F841", "E402", "E501", "E702", "I001"]  # notebooks: exploratory, jax.config between imports
+# Numpydoc math blocks contain unavoidably long LaTeX equations (.. math:: directives)
+"src/tengri/components/dust/attenuation.py" = ["E501"]
+"src/tengri/components/igm/igm.py" = ["E501"]
+"src/tengri/components/nebular/_shared.py" = ["E501"]
+"src/tengri/components/sfh/mean_sfh.py" = ["E501"]
+"src/tengri/components/sfh/psd_models.py" = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["tengri"]
