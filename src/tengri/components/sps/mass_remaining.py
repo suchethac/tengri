@@ -254,21 +254,30 @@ def compute_mass_remaining_fraction(
     Parameters
     ----------
     age_gyr : array, shape (n_age,)
-        Population ages in Gyr.
+        Population ages [Gyr], sorted ascending.
     imf : str
-        IMF name: "chabrier", "salpeter", or "kroupa".
+        IMF name: ``"chabrier"``, ``"salpeter"``, or ``"kroupa"``.
     m_low : float
-        Lower mass limit of the IMF (Msun). Default 0.08.
+        Lower mass limit of the IMF [Msun]. Default 0.08.
     m_high : float
-        Upper mass limit of the IMF (Msun). Default 120.
+        Upper mass limit of the IMF [Msun]. Default 120.
     n_mass : int
-        Number of mass grid points for integration. Default 500.
+        Number of mass grid points for logarithmic integration. Default 500.
 
     Returns
     -------
     array, shape (n_age,)
-        Fraction of formed mass in living stars + remnants. Values
-        in (0, 1]; 1.0 at age=0 (no stars have died).
+        Fraction of formed mass in living stars + remnants (dimensionless,
+        in (0, 1]). Value is 1.0 at age=0 (no stars have died).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.vmap`` for vectorized age integration.
+    **Gradient-safe**: yes.
+
+    This function numerically integrates the IMF in logarithmic mass space
+    and uses Newton's method to compute the MS turnoff mass at each age.
+    See module docstring for limitations vs. FSPS mass-remaining tables.
     """
     if imf not in _IMF_REGISTRY:
         raise ValueError(f"Unknown IMF '{imf}'. Available: {list(_IMF_REGISTRY.keys())}")

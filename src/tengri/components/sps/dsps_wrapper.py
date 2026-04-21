@@ -64,6 +64,13 @@ class SSPData(NamedTuple):
     stellar evolution (main-sequence turnoff, white dwarf cooling, etc.).
     It is essential for mass-based inferences but may not be present in
     older SSP libraries.
+
+    Examples
+    --------
+    >>> from tengri import SSPData, load_ssp_data
+    >>> ssp = load_ssp_data("data/ssp_miles.h5")  # doctest: +SKIP
+    >>> ssp.ssp_flux.shape  # (n_met, n_age, n_wave)  # doctest: +SKIP
+    (22, 107, 4563)
     """
 
     ssp_wave: jnp.ndarray
@@ -153,12 +160,17 @@ def load_ssp_data_dsps(filepath: str) -> SSPData:
     Parameters
     ----------
     filepath : str
-        Path to HDF5 file.
+        Path to HDF5 file in DSPS format.
 
     Returns
     -------
     SSPData
         Loaded SSP template data.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — only file I/O occurs outside JAX traced code.
+    Falls back gracefully to load_ssp_data() if dsps is not available.
     """
     try:
         from dsps import load_ssp_templates
@@ -200,15 +212,20 @@ def csp_age_dt(ssp_ages_yr: jnp.ndarray, method: str = "trapz") -> jnp.ndarray:
     Parameters
     ----------
     ssp_ages_yr : array, shape (n_age,)
-        SSP ages in years, sorted ascending.
+        SSP ages in years [yr], sorted ascending.
     method : {"trapz", "log_trapz"}
         Integration scheme. Default ``"trapz"`` matches DSPS.
 
     Returns
     -------
     array, shape (n_age,)
-        Effective linear-age bin widths (years). Multiply by SFR (Msun/yr)
-        to get mass formed per bin (Msun).
+        Effective linear-age bin widths [yr]. Multiply by SFR [Msun/yr]
+        to get mass formed per bin [Msun].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes.
     """
     if method == "trapz":
         return jnp.concatenate(
@@ -271,7 +288,7 @@ def csp_log_interp_matrix(ssp_ages_yr, n_gl: int = 5):
     Parameters
     ----------
     ssp_ages_yr : array-like, shape (n_age,)
-        SSP ages in years, sorted ascending.
+        SSP ages in years [yr], sorted ascending.
     n_gl : int, optional
         Number of Gauss-Legendre quadrature points per interval. Default 5
         (exact for degree-9 polynomials; more than sufficient).
@@ -279,7 +296,14 @@ def csp_log_interp_matrix(ssp_ages_yr, n_gl: int = 5):
     Returns
     -------
     ndarray, shape (n_age, n_age)
-        Weight matrix A. Use as ``weights = A @ sfr_on_ssp``.
+        Weight matrix A (dimensionless, evaluated in years). Use as
+        ``weights = A @ sfr_on_ssp`` to integrate the CSP.
+
+    Notes
+    -----
+    **JIT-compatible**: no — uses numpy and does not support traced evaluation.
+    Precompute the matrix at startup or outside JAX functions.
+    **Gradient-safe**: not applicable (CPU-only computation).
     """
     import numpy as np
 
@@ -566,9 +590,9 @@ def compute_csp_weights(
     Parameters
     ----------
     sfr_on_ssp_ages : array, shape (n_age,)
-        Star formation rate at each SSP age (Msun/yr).
+        Star formation rate at each SSP age [Msun/yr].
     ssp_ages_yr : array, shape (n_age,)
-        SSP ages in years.
+        SSP ages [yr], sorted ascending.
     method : {"trapz", "log_trapz", "log_interp"}
         Integration method. See :func:`csp_age_dt` for details.
         Default ``"trapz"`` is the DSPS-compatible linear-age trapezoid rule.
@@ -582,7 +606,12 @@ def compute_csp_weights(
     Returns
     -------
     array, shape (n_age,)
-        Mass formed per age bin (Msun). Sum = total mass formed.
+        Mass formed per age bin [Msun]. Sum = total mass formed.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes.
     """
     if method == "log_interp":
         if _log_interp_matrix is None:
@@ -622,14 +651,24 @@ def salaris_mh_from_feh(feh: float, alpha_fe: float) -> float:
     Parameters
     ----------
     feh : float
-        Iron abundance [Fe/H] (dex, relative to solar).
+        Iron abundance [Fe/H] (relative to solar, dimensionless).
     alpha_fe : float
-        Alpha-element enhancement [α/Fe] (dex).
+        Alpha-element enhancement [α/Fe] (relative to solar, dimensionless).
 
     Returns
     -------
     float
-        Total metallicity [M/H] (dex, relative to solar).
+        Total metallicity [M/H] (relative to solar, dimensionless).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure arithmetic operations.
+    **Gradient-safe**: yes.
+
+    References
+    ----------
+    Salaris, Chieffi & Straniero 1993, ApJ, 414, 580.
+    Knowles et al. 2023, Eq. 2.
     """
     return feh + _SALARIS_LINEAR * alpha_fe + _SALARIS_QUADRATIC * alpha_fe**2
 
@@ -646,14 +685,23 @@ def salaris_feh_from_mh(mh: float, alpha_fe: float) -> float:
     Parameters
     ----------
     mh : float
-        Total metallicity [M/H] (dex, relative to solar).
+        Total metallicity [M/H] (relative to solar, dimensionless).
     alpha_fe : float
-        Alpha-element enhancement [α/Fe] (dex).
+        Alpha-element enhancement [α/Fe] (relative to solar, dimensionless).
 
     Returns
     -------
     float
-        Iron abundance [Fe/H] (dex, relative to solar).
+        Iron abundance [Fe/H] (relative to solar, dimensionless).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure arithmetic operations.
+    **Gradient-safe**: yes.
+
+    References
+    ----------
+    Salaris, Chieffi & Straniero 1993, ApJ, 414, 580 (inverse formula).
     """
     return mh - _SALARIS_LINEAR * alpha_fe - _SALARIS_QUADRATIC * alpha_fe**2
 
@@ -676,8 +724,8 @@ def effective_metallicity(log_z_fe: float, alpha_fe: float = 0.0) -> float:
         Iron abundance [Fe/H] (or equivalently, log10(Z) when
         [alpha/Fe] = 0, i.e. the existing ``log_z`` parameter).
     alpha_fe : float, optional
-        Alpha-element enhancement [alpha/Fe] in dex.
-        Default is 0.0 (solar abundance ratios).
+        Alpha-element enhancement [alpha/Fe] (relative to solar,
+        dimensionless). Default is 0.0 (solar abundance ratios).
 
     Returns
     -------
@@ -685,10 +733,15 @@ def effective_metallicity(log_z_fe: float, alpha_fe: float = 0.0) -> float:
         Effective total metallicity log10(Z_eff) in the same
         units as ``log_z_fe``.
 
+    Notes
+    -----
+    **JIT-compatible**: yes — pure arithmetic; decorated with ``@jax.jit``.
+    **Gradient-safe**: yes.
+
     References
     ----------
-    Thomas, Maraston & Bender 2003, MNRAS 339, 897
-    Vazdekis et al. 2015, MNRAS 449, 1177
+    Thomas, Maraston & Bender 2003, MNRAS 339, 897.
+    Vazdekis et al. 2015, MNRAS 449, 1177.
     """
     return log_z_fe + _ALPHA_TO_Z_COEFF * alpha_fe
 
@@ -709,6 +762,11 @@ def has_alpha_grid(ssp_data: SSPData) -> bool:
     -------
     bool
         True if ssp_alpha_fe is present and ssp_flux is 4D.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure shape checking and conditionals.
+    **Gradient-safe**: yes.
     """
     return ssp_data.ssp_alpha_fe is not None and ssp_data.ssp_flux.ndim == 4
 
@@ -731,21 +789,27 @@ def interpolate_met_alpha(
     Parameters
     ----------
     ssp_flux : array, shape (n_met, n_alpha, n_age, n_wave)
-        SSP flux on the full (Z, [α/Fe]) grid.
+        SSP flux [Lsun/Hz/Msun] on the full (Z, [α/Fe]) grid.
     ssp_lgmet : array, shape (n_met,)
-        [Fe/H] iron abundance grid (log10 relative to solar).
+        [Fe/H] iron abundance grid (log10 relative to solar, dimensionless).
         All source libraries must be converted to [Fe/H] at load time.
     ssp_alpha_fe : array, shape (n_alpha,)
-        [α/Fe] grid values (e.g., [-0.2, 0.0, +0.2, +0.4, +0.6]).
+        [α/Fe] grid values (relative to solar, dimensionless;
+        e.g., [-0.2, 0.0, +0.2, +0.4, +0.6]).
     log_z : float
         Target [Fe/H] (iron abundance, log10 relative to solar).
     alpha_fe : float
-        Target [α/Fe] in dex.
+        Target [α/Fe] (relative to solar, dimensionless).
 
     Returns
     -------
     array, shape (n_age, n_wave)
-        Interpolated SSP flux at the target (Z, [α/Fe]).
+        Interpolated SSP flux [Lsun/Hz/Msun] at the target (Z, [α/Fe]).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes — bilinear interpolation is differentiable.
     """
     # Metallicity index and fraction
     lz = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
@@ -783,20 +847,25 @@ def interpolate_met_alpha_evolving(
     Parameters
     ----------
     ssp_flux : array, shape (n_met, n_alpha, n_age, n_wave)
-        SSP flux on the full (Z, [α/Fe]) grid.
+        SSP flux [Lsun/Hz/Msun] on the full (Z, [α/Fe]) grid.
     ssp_lgmet : array, shape (n_met,)
-        [Fe/H] iron abundance grid (log10 relative to solar).
+        [Fe/H] iron abundance grid (log10 relative to solar, dimensionless).
     ssp_alpha_fe : array, shape (n_alpha,)
-        [α/Fe] grid values.
+        [α/Fe] grid values (relative to solar, dimensionless).
     log_z_per_age : array, shape (n_age,)
-        Target [M/H] at each SSP age bin.
+        Target [Fe/H] at each SSP age bin (dimensionless).
     alpha_fe_per_age : array, shape (n_age,)
-        Target [α/Fe] at each SSP age bin.
+        Target [α/Fe] at each SSP age bin (relative to solar, dimensionless).
 
     Returns
     -------
     array, shape (n_age, n_wave)
-        Interpolated SSP flux with per-age (Z, [α/Fe]).
+        Interpolated SSP flux [Lsun/Hz/Msun] with per-age (Z, [α/Fe]).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.vmap`` for vectorized interpolation.
+    **Gradient-safe**: yes.
     """
 
     def _interp_one_age(lz_i, afe_i, flux_at_age_i):
@@ -842,20 +911,25 @@ def compute_alpha_fe_evolving(
     Parameters
     ----------
     ssp_lg_age_gyr : array, shape (n_age,)
-        Log10(age/Gyr) of SSP templates (= lookback time for SSP bins).
+        Log10(age [Gyr]) of SSP templates (= lookback time for SSP bins).
     alpha_fe_old : float
-        [α/Fe] of the oldest stars (at t_lookback = t_universe).
+        [α/Fe] of the oldest stars (at t_lookback = t_universe, dimensionless).
         Typically +0.3 to +0.5 for massive ellipticals.
     alpha_fe_young : float
-        [α/Fe] at present day (t_lookback ≈ 0).
+        [α/Fe] at present day (t_lookback ≈ 0, dimensionless).
         Typically ~0.0 (solar) for disk galaxies.
     t_universe_gyr : float
-        Age of the universe at the observed redshift (Gyr).
+        Age of the universe at the observed redshift [Gyr].
 
     Returns
     -------
     array, shape (n_age,)
-        [α/Fe] at each SSP age bin.
+        [α/Fe] at each SSP age bin (dimensionless).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes.
     """
     age_gyr = 10.0**ssp_lg_age_gyr
     t_frac = jnp.clip(age_gyr / t_universe_gyr, 0.0, 1.0)
@@ -879,16 +953,22 @@ def compute_csp_sed(
     Parameters
     ----------
     weights : array, shape (n_age,)
-        Mass formed per age bin (Msun) from compute_csp_weights.
+        Mass formed per age bin [Msun] from :func:`compute_csp_weights`.
     ssp_flux_at_met : array, shape (n_age, n_wave)
-        SSP spectra at fixed metallicity (Lsun/Hz/Msun).
+        SSP spectra at fixed metallicity [Lsun/Hz/Msun].
     dust_attenuation : array, shape (n_age, n_wave)
-        Multiplicative dust transmission per age and wavelength.
+        Multiplicative dust transmission per age and wavelength
+        (dimensionless, in [0, 1]).
 
     Returns
     -------
     array, shape (n_wave,)
-        Composite SED in erg/s/Hz (rest-frame luminosity density).
+        Composite SED [erg/s/Hz] (rest-frame luminosity density).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.einsum`` for vectorized multiplication.
+    **Gradient-safe**: yes.
     """
     # weights [Msun] * ssp [Lsun/Hz/Msun] * dust [dimensionless] -> Lsun/Hz
     sed_lsun = jnp.einsum("i,iw,iw->w", weights, dust_attenuation, ssp_flux_at_met)
@@ -907,16 +987,21 @@ def interpolate_metallicity(
     Parameters
     ----------
     ssp_flux : array, shape (n_met, n_age, n_wave)
-        Full SSP flux grid.
+        Full SSP flux grid [Lsun/Hz/Msun].
     ssp_lgmet : array, shape (n_met,)
-        Log10(Z/Zsun) grid.
+        Log10(Z/Zsun) grid (dimensionless).
     log_z : float
         Target log10(Z/Zsun).
 
     Returns
     -------
     array, shape (n_age, n_wave)
-        Interpolated SSP flux.
+        Interpolated SSP flux [Lsun/Hz/Msun].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes — linear interpolation is differentiable.
     """
     # Clamp to grid bounds
     log_z_clamped = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
@@ -972,15 +1057,21 @@ def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=0.1):
     Parameters
     ----------
     log_z : float
-        Target log10(Z/Zsun).
-    ssp_lgmet : array (n_met,)
-        SSP metallicity grid.
+        Target log10(Z/Zsun) (dimensionless).
+    ssp_lgmet : array, shape (n_met,)
+        SSP metallicity grid [log10(Z/Zsun)], sorted ascending.
     lgmet_scatter : float
-        Kernel bandwidth in dex (DSPS default: 0.1).
+        Kernel bandwidth [dex]. DSPS default: 0.1.
 
     Returns
     -------
-    array (n_met,) — normalized weights summing to 1.
+    array, shape (n_met,)
+        Normalized weights summing to 1 (dimensionless).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and custom kernel CDF.
+    **Gradient-safe**: yes.
     """
     edges = _get_lgmet_bin_edges(ssp_lgmet)
     # CDF difference: probability mass in each bin
@@ -1002,18 +1093,28 @@ def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=0.1):
 def interpolate_metallicity_smooth(ssp_flux, ssp_lgmet, log_z, lgmet_scatter=0.1):
     """Interpolate SSP flux using triweight kernel over metallicity.
 
-    C2-continuous gradients. Matches DSPS approach (Hearin+2023).
+    C²-continuous gradients. Matches DSPS approach (Hearin+2023).
 
     Parameters
     ----------
-    ssp_flux : array (n_met, n_age, n_wave)
-    ssp_lgmet : array (n_met,)
-    log_z : float — target log10(Z/Zsun)
-    lgmet_scatter : float — kernel bandwidth in dex
+    ssp_flux : array, shape (n_met, n_age, n_wave)
+        Full SSP flux grid [Lsun/Hz/Msun].
+    ssp_lgmet : array, shape (n_met,)
+        SSP metallicity grid [log10(Z/Zsun)], sorted ascending.
+    log_z : float
+        Target log10(Z/Zsun).
+    lgmet_scatter : float
+        Kernel bandwidth [dex]. Default 0.1.
 
     Returns
     -------
-    array (n_age, n_wave)
+    array, shape (n_age, n_wave)
+        Interpolated SSP flux [Lsun/Hz/Msun].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses triweight kernel via :func:`compute_lgmet_weights`.
+    **Gradient-safe**: yes — C²-continuous gradients.
     """
     w = compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter)
     return jnp.einsum("m,maw->aw", w, ssp_flux)
@@ -1025,14 +1126,24 @@ def interpolate_metallicity_smooth_evolving(ssp_flux, ssp_lgmet, log_z_per_age, 
 
     Parameters
     ----------
-    ssp_flux : array (n_met, n_age, n_wave)
-    ssp_lgmet : array (n_met,)
-    log_z_per_age : array (n_age,) — per-bin log10(Z/Zsun)
+    ssp_flux : array, shape (n_met, n_age, n_wave)
+        Full SSP flux grid [Lsun/Hz/Msun].
+    ssp_lgmet : array, shape (n_met,)
+        SSP metallicity grid [log10(Z/Zsun)], sorted ascending.
+    log_z_per_age : array, shape (n_age,)
+        Target log10(Z/Zsun) at each SSP age bin (dimensionless).
     lgmet_scatter : float
+        Kernel bandwidth [dex]. Default 0.1.
 
     Returns
     -------
-    array (n_age, n_wave)
+    array, shape (n_age, n_wave)
+        Interpolated SSP flux [Lsun/Hz/Msun].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.vmap`` for per-age interpolation.
+    **Gradient-safe**: yes — C²-continuous gradients.
     """
 
     def _one_age(log_z_i, flux_at_age_i):
@@ -1046,7 +1157,32 @@ def interpolate_metallicity_smooth_evolving(ssp_flux, ssp_lgmet, log_z_per_age, 
 
 @jax.jit
 def interpolate_mass_remaining_smooth(ssp_mass_remaining, ssp_lgmet, log_z, lgmet_scatter=0.1):
-    """Smooth mass-remaining interpolation using triweight kernel."""
+    """Smooth mass-remaining interpolation using triweight kernel.
+
+    Interpolates the surviving mass fraction to a target metallicity
+    using the same triweight kernel as :func:`interpolate_metallicity_smooth`.
+
+    Parameters
+    ----------
+    ssp_mass_remaining : array, shape (n_met, n_age)
+        Surviving mass fraction per metallicity and age (dimensionless, in [0, 1]).
+    ssp_lgmet : array, shape (n_met,)
+        SSP metallicity grid [log10(Z/Zsun)], sorted ascending.
+    log_z : float
+        Target log10(Z/Zsun).
+    lgmet_scatter : float
+        Kernel bandwidth [dex]. Default 0.1.
+
+    Returns
+    -------
+    array, shape (n_age,)
+        Interpolated mass-remaining fraction per age (dimensionless).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses triweight kernel via :func:`compute_lgmet_weights`.
+    **Gradient-safe**: yes — C²-continuous gradients.
+    """
     w = compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter)
     return jnp.einsum("m,ma->a", w, ssp_mass_remaining)
 
@@ -1065,16 +1201,21 @@ def interpolate_metallicity_evolving(
     Parameters
     ----------
     ssp_flux : array, shape (n_met, n_age, n_wave)
-        Full SSP flux grid.
+        Full SSP flux grid [Lsun/Hz/Msun].
     ssp_lgmet : array, shape (n_met,)
-        Log10(Z/Zsun) grid.
+        Log10(Z/Zsun) grid (dimensionless), sorted ascending.
     log_z_per_age : array, shape (n_age,)
-        Target log10(Z/Zsun) at each age bin.
+        Target log10(Z/Zsun) at each age bin (dimensionless).
 
     Returns
     -------
     array, shape (n_age, n_wave)
-        Interpolated SSP flux with per-age metallicity.
+        Interpolated SSP flux [Lsun/Hz/Msun] with per-age metallicity.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.vmap`` for vectorized interpolation.
+    **Gradient-safe**: yes — linear interpolation is differentiable.
     """
 
     def _interp_one_age(log_z_i, ssp_flux_at_age_i):
@@ -1090,7 +1231,7 @@ def interpolate_metallicity_evolving(
         Returns
         -------
         array, shape (n_wave,)
-            Interpolated flux.
+            Interpolated flux [Lsun/Hz/Msun].
         """
         log_z_c = jnp.clip(log_z_i, ssp_lgmet[0], ssp_lgmet[-1])
         idx = jnp.clip(
@@ -1118,16 +1259,21 @@ def interpolate_mass_remaining_evolving(
     Parameters
     ----------
     ssp_mass_remaining : array, shape (n_met, n_age)
-        Fraction of formed mass surviving at each age and metallicity.
+        Surviving mass fraction per metallicity and age (dimensionless, in [0, 1]).
     ssp_lgmet : array, shape (n_met,)
-        Log10(Z/Zsun) grid.
+        Log10(Z/Zsun) grid (dimensionless), sorted ascending.
     log_z_per_age : array, shape (n_age,)
-        Target log10(Z/Zsun) at each age bin.
+        Target log10(Z/Zsun) at each age bin (dimensionless).
 
     Returns
     -------
     array, shape (n_age,)
-        Interpolated mass-remaining fraction per age bin.
+        Interpolated mass-remaining fraction per age bin (dimensionless).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.vmap`` for vectorized interpolation.
+    **Gradient-safe**: yes — linear interpolation is differentiable.
     """
 
     def _interp_one_age(log_z_i, mr_at_age_i):
@@ -1166,19 +1312,24 @@ def compute_log_z_evolving(
     Parameters
     ----------
     ssp_lg_age_gyr : array, shape (n_age,)
-        Log10(age/Gyr) of SSP templates.
+        Log10(age [Gyr]) of SSP templates (= lookback time for SSP bins).
     log_z_initial : float
         Metallicity of the oldest stars (at t_lookback = t_universe),
-        in log10(Z/Zsun) internally (absolute log10(Z)).
+        in log10(Z/Zsun) (dimensionless).
     log_z_final : float
-        Metallicity at present day (t_lookback = 0), in log10(Z).
+        Metallicity at present day (t_lookback = 0) [log10(Z/Zsun)].
     t_universe_gyr : float
-        Age of the universe at the observed redshift (Gyr).
+        Age of the universe at the observed redshift [Gyr].
 
     Returns
     -------
     array, shape (n_age,)
-        log10(Z) at each SSP age bin.
+        log10(Z/Zsun) at each SSP age bin (dimensionless).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes.
     """
     age_gyr = 10.0**ssp_lg_age_gyr
     # Clamp lookback time to [0, t_universe] so extrapolation is safe
@@ -1195,16 +1346,21 @@ def interpolate_mass_remaining(
     Parameters
     ----------
     ssp_mass_remaining : array, shape (n_met, n_age)
-        Fraction of formed mass surviving at each age and metallicity.
+        Surviving mass fraction per metallicity and age (dimensionless, in [0, 1]).
     ssp_lgmet : array, shape (n_met,)
-        Log10(Z/Zsun) grid.
+        Log10(Z/Zsun) grid (dimensionless), sorted ascending.
     log_z : float
         Target log10(Z/Zsun).
 
     Returns
     -------
     array, shape (n_age,)
-        Interpolated mass-remaining fraction.
+        Interpolated mass-remaining fraction per age (dimensionless).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes — linear interpolation is differentiable.
     """
     log_z_clamped = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
     idx = jnp.searchsorted(ssp_lgmet, log_z_clamped) - 1
@@ -1220,14 +1376,19 @@ def compute_surviving_mass(weights: jnp.ndarray, mass_remaining_at_met: jnp.ndar
     Parameters
     ----------
     weights : array, shape (n_age,)
-        Mass formed per age bin (Msun) from compute_csp_weights.
+        Mass formed per age bin [Msun] from :func:`compute_csp_weights`.
     mass_remaining_at_met : array, shape (n_age,)
-        Fraction of formed mass surviving at each age (from
-        interpolate_mass_remaining).
+        Fraction of formed mass surviving at each age (dimensionless, in [0, 1])
+        from :func:`interpolate_mass_remaining`.
 
     Returns
     -------
     float
-        Total surviving stellar mass (Msun).
+        Total surviving stellar mass [Msun].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.sum`` for reduction.
+    **Gradient-safe**: yes.
     """
     return jnp.sum(weights * mass_remaining_at_met)

@@ -177,15 +177,16 @@ def precompute_photometry(
     Parameters
     ----------
     ssp_data : SSPData
-        SSP templates with ssp_wave, ssp_flux, ssp_lg_age_gyr, ssp_lgmet.
+        SSP templates with ssp_wave [Angstrom], ssp_flux [Lsun/Hz/Msun],
+        ssp_lg_age_gyr, ssp_lgmet.
     filter_waves : list of array
-        Wavelength grid per filter (observed frame, Angstrom).
+        Wavelength grid per filter (observed frame [Angstrom]).
     filter_trans : list of array
-        Transmission curve per filter.
+        Transmission curve per filter (dimensionless, in [0, 1]).
     redshift : float
-        Source redshift.
+        Source redshift (dimensionless).
     dl_cm : float
-        Luminosity distance (cm).
+        Luminosity distance [cm].
     taylor_correction : bool
         Precompute the spectral moment tensor Ψ for first-order Taylor
         dust correction (default True).  Adds one tensor of the same shape
@@ -193,14 +194,20 @@ def precompute_photometry(
         filter, computed via finite differences).
     fixed : dict[int, float], optional
         Mapping of axis index → fixed value. Axes are numbered from 0:
-        - 0: lgmet (metallicity)
+        - 0: lgmet (metallicity in log10(Z/Zsun))
         If provided, these axes are collapsed at init time via triweight
         interpolation. Default None.
 
     Returns
     -------
     PhotometricPrecomputation
-        Pre-computed data for the fused photometry kernel.
+        Pre-computed SSP photometry data for the fused photometry kernel.
+
+    Notes
+    -----
+    **JIT-compatible**: no — this is a data precomputation function that
+    runs once at startup, not inside the inference loop. Uses numpy and HDF5 I/O.
+    **Gradient-safe**: not applicable (CPU preprocessing).
     """
     from tengri.forward.precompute.grid import slice_fixed_axes
 
@@ -247,18 +254,23 @@ def precompute_spectroscopy(
     Parameters
     ----------
     ssp_data : SSPData
-        SSP templates.
+        SSP templates with ssp_flux [Lsun/Hz/Msun] and ssp_wave [Angstrom].
     wave_obs_pixels : array, shape (n_pix,)
-        Observed-frame wavelengths of spectral pixels (Angstrom).
+        Observed-frame wavelengths of spectral pixels [Angstrom].
     redshift : float
-        Source redshift.
+        Source redshift (dimensionless).
     dl_cm : float
-        Luminosity distance (cm).
+        Luminosity distance [cm].
 
     Returns
     -------
     SpectroscopicPrecomputation
-        Pre-rebinned SSP data for fast_spectrum().
+        Pre-rebinned SSP data for :func:`fast_spectrum`.
+
+    Notes
+    -----
+    **JIT-compatible**: no — data precomputation function with numpy I/O.
+    **Gradient-safe**: not applicable (CPU preprocessing).
     """
     wave_rest_pixels = wave_obs_pixels / (1.0 + redshift)
 
@@ -333,17 +345,18 @@ def precompute_photometry_ztable(
     Parameters
     ----------
     ssp_data : SSPData
-        SSP templates.
+        SSP templates with ssp_flux [Lsun/Hz/Msun], ssp_wave [Angstrom].
     filter_waves : list of array
-        Wavelength grid per filter (observed frame, Angstrom).
+        Wavelength grid per filter (observed frame [Angstrom]).
     filter_trans : list of array
-        Transmission curve per filter.
+        Transmission curve per filter (dimensionless, in [0, 1]).
     z_grid : array, optional
-        Custom redshift grid. If None, uses linspace(z_min, z_max, n_z).
+        Custom redshift grid (dimensionless). If None, uses
+        linspace(z_min, z_max, n_z).
     z_min : float
-        Minimum redshift (default 0.001).
+        Minimum redshift (dimensionless, default 0.001).
     z_max : float
-        Maximum redshift (default 3.0).
+        Maximum redshift (dimensionless, default 3.0).
     n_z : int
         Number of redshift grid points (default 100).
     apply_igm : bool
@@ -354,7 +367,13 @@ def precompute_photometry_ztable(
     Returns
     -------
     PhotometricZTable
-        Pre-computed table for fast_photometry_ztable().
+        Pre-computed table for :func:`fast_photometry_ztable` and
+        :func:`interpolate_ztable`.
+
+    Notes
+    -----
+    **JIT-compatible**: no — data precomputation function with nested loops.
+    **Gradient-safe**: not applicable (CPU preprocessing).
     """
     from tengri.utils.cosmology import luminosity_distance
 
@@ -444,19 +463,25 @@ def fast_photometry(
     Parameters
     ----------
     weights : array, shape (n_age,)
-        Normalized SFH weights.
+        Normalized SFH weights [Msun].
     ssp_phot_at_z : array, shape (n_age, n_filters)
-        Pre-computed SSP broadband fluxes at the target metallicity.
-        (Already interpolated in Z from the full grid.)
+        Pre-computed SSP broadband fluxes [Lsun/Hz/Msun] at the target metallicity.
+        Already interpolated in Z from the full grid.
     dust_at_eff : array, shape (n_age, n_filters)
-        Dust transmission evaluated at effective wavelengths per age/band.
+        Dust transmission (dimensionless, in [0, 1]) evaluated at
+        effective wavelengths per age/band.
     flux_scale : float
-        Geometric factor (1+z) / (4 pi dL^2).
+        Geometric factor (1+z) / (4 π d_L²) [cm⁻²].
 
     Returns
     -------
     array, shape (n_filters,)
-        Observed flux density per filter (erg/s/cm^2/Hz).
+        Observed flux density per filter [erg/s/cm²/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.einsum`` for fast weighted sum.
+    **Gradient-safe**: yes.
     """
     # Weighted sum: weights [Msun] * ssp [Lsun/Hz/Msun] * dust -> Lsun/Hz
     from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
@@ -477,18 +502,24 @@ def fast_spectrum(
     Parameters
     ----------
     weights : array, shape (n_age,)
-        Normalized SFH weights.
+        Normalized SFH weights [Msun].
     ssp_on_pixels_at_z : array, shape (n_age, n_pix)
-        Pre-rebinned SSP flux at target metallicity.
+        Pre-rebinned SSP flux [Lsun/Hz/Msun] at target metallicity.
     dust_at_pixels : array, shape (n_age, n_pix)
-        Dust transmission at each pixel wavelength per age.
+        Dust transmission (dimensionless, in [0, 1]) at each pixel
+        wavelength per age.
     flux_scale : float
-        Geometric factor.
+        Geometric factor (1+z) / (4 π d_L²) [cm⁻²].
 
     Returns
     -------
     array, shape (n_pix,)
-        Model flux at each spectral pixel.
+        Model flux [erg/s/cm²/Angstrom or erg/s/cm²/Hz] at each spectral pixel.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.einsum`` for fast weighted sum.
+    **Gradient-safe**: yes.
     """
     flux = jnp.einsum("i,ip,ip->p", weights, dust_at_pixels, ssp_on_pixels_at_z)
     return flux_scale * flux
@@ -503,16 +534,21 @@ def interpolate_ssp_phot_metallicity(
     Parameters
     ----------
     ssp_phot : array, shape (n_met, n_age, n_filters)
-        Pre-computed SSP broadband fluxes.
+        Pre-computed SSP broadband fluxes [Lsun/Hz/Msun].
     ssp_lgmet : array, shape (n_met,)
-        Metallicity grid.
+        Metallicity grid [log10(Z/Zsun)], sorted ascending.
     log_z : float
         Target log10(Z/Zsun).
 
     Returns
     -------
     array, shape (n_age, n_filters)
-        Interpolated SSP photometry.
+        Interpolated SSP photometry [Lsun/Hz/Msun].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes — linear interpolation is differentiable.
     """
     log_z_clamped = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
     idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_clamped) - 1, 0, len(ssp_lgmet) - 2)
@@ -529,24 +565,29 @@ def interpolate_ztable(ztable_ssp_phot, ztable_eff_rest, ztable_flux_scale, z_gr
     Parameters
     ----------
     ztable_ssp_phot : array, shape (n_z, n_met, n_age, n_filters)
-        Precomputed SSP photometry on z grid.
+        Precomputed SSP photometry [Lsun/Hz/Msun] on z grid.
     ztable_eff_rest : array, shape (n_z, n_filters)
-        Rest-frame effective wavelengths on z grid.
+        Rest-frame effective wavelengths [Angstrom] on z grid.
     ztable_flux_scale : array, shape (n_z,)
-        Geometric flux scale on z grid.
+        Geometric flux scale (1+z)/(4π d_L²) [cm⁻²] on z grid.
     z_grid : array, shape (n_z,)
-        Redshift grid.
+        Redshift grid (dimensionless), sorted ascending.
     z : float
-        Target redshift.
+        Target redshift (dimensionless).
 
     Returns
     -------
     ssp_phot : array, shape (n_met, n_age, n_filters)
-        Interpolated SSP photometry.
+        Interpolated SSP photometry [Lsun/Hz/Msun].
     eff_waves_rest : array, shape (n_filters,)
-        Interpolated rest-frame effective wavelengths.
+        Interpolated rest-frame effective wavelengths [Angstrom].
     flux_scale : float
-        Interpolated geometric factor.
+        Interpolated geometric factor [cm⁻²].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes — linear interpolation is differentiable.
     """
     z_clamped = jnp.clip(z, z_grid[0], z_grid[-1])
     idx = jnp.clip(jnp.searchsorted(z_grid, z_clamped) - 1, 0, len(z_grid) - 2)
@@ -581,15 +622,15 @@ def interpolate_ztable_smooth(
     Parameters
     ----------
     ztable_ssp_phot : array, shape (n_z, n_met, n_age, n_filters)
-        Precomputed SSP photometry on z grid.
+        Precomputed SSP photometry [Lsun/Hz/Msun] on z grid.
     ztable_eff_rest : array, shape (n_z, n_filters)
-        Rest-frame effective wavelengths on z grid.
+        Rest-frame effective wavelengths [Angstrom] on z grid.
     ztable_flux_scale : array, shape (n_z,)
-        Geometric flux scale on z grid.
+        Geometric flux scale (1+z)/(4π d_L²) [cm⁻²] on z grid.
     z_grid : array, shape (n_z,)
-        Redshift grid (must be sorted ascending).
+        Redshift grid (dimensionless, sorted ascending).
     z : float
-        Target redshift.
+        Target redshift (dimensionless).
     scatter : float
         Triweight kernel bandwidth (same units as z_grid).
         Recommended: ``0.5 * dz`` where ``dz`` is the grid spacing —
@@ -600,8 +641,16 @@ def interpolate_ztable_smooth(
     Returns
     -------
     ssp_phot : array, shape (n_met, n_age, n_filters)
+        Interpolated SSP photometry [Lsun/Hz/Msun].
     eff_waves_rest : array, shape (n_filters,)
+        Interpolated rest-frame effective wavelengths [Angstrom].
     flux_scale : float
+        Interpolated geometric factor [cm⁻²].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses triweight kernel via :func:`compute_grid_weights`.
+    **Gradient-safe**: yes — C²-continuous gradients.
     """
     from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
@@ -620,16 +669,21 @@ def interpolate_igm_ztable(igm_trans_table, z_grid, z):
     Parameters
     ----------
     igm_trans_table : array, shape (n_z, n_filters)
-        Precomputed IGM transmission on z grid.
+        Precomputed IGM transmission (dimensionless, in [0, 1]) on z grid.
     z_grid : array, shape (n_z,)
-        Redshift grid.
+        Redshift grid (dimensionless), sorted ascending.
     z : float
-        Target redshift.
+        Target redshift (dimensionless).
 
     Returns
     -------
     igm_trans : array, shape (n_filters,)
-        Interpolated IGM transmission.
+        Interpolated IGM transmission (dimensionless).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes — linear interpolation is differentiable.
     """
     z_clamped = jnp.clip(z, z_grid[0], z_grid[-1])
     idx = jnp.clip(jnp.searchsorted(z_grid, z_clamped) - 1, 0, len(z_grid) - 2)
@@ -660,15 +714,16 @@ def precompute(
     Parameters
     ----------
     filter_waves, filter_trans : list
-        Filter curves (observed frame).
+        Filter curves (observed frame [Angstrom]).
     redshift : float
-        Source redshift.
+        Source redshift (dimensionless).
     parameters : Parameters | None
         Parameter spec, used to detect Fixed-axis parameters.
     ssp_data : dict
-        SSP data (wavelength, metallicity grid, age grid, SSP spectra).
+        SSP data: wavelength [Angstrom], metallicity grid [log10(Z/Zsun)],
+        age grid [log10(Gyr)], SSP spectra [Lsun/Hz/Msun].
     dl_cm : float
-        Luminosity distance in cm.
+        Luminosity distance [cm].
     taylor_correction : bool, optional
         If True, compute and include SSP first-moment correction for dust
         attenuation. Default True.
@@ -677,6 +732,11 @@ def precompute(
     -------
     PhotometricPrecomputation
         Precomputed SSP photometry, optionally collapsed for Fixed parameters.
+
+    Notes
+    -----
+    **JIT-compatible**: no — data precomputation with conditional collapsing.
+    **Gradient-safe**: not applicable (CPU preprocessing).
     """
     fixed: dict[int, float] | None = None
     if parameters is not None and parameters.is_fixed("met_logzsol"):
@@ -703,7 +763,8 @@ def build_lookup(preint, **kwargs):
     Parameters
     ----------
     preint : PhotometricPrecomputation
-        Precomputed SSP photometry.
+        Precomputed SSP photometry with ssp_phot, effective wavelengths,
+        and flux scaling factors.
     **kwargs
         Ignored; accepted for Protocol consistency.
 
@@ -712,5 +773,14 @@ def build_lookup(preint, **kwargs):
     None
         SSP photometry is used directly in the fused kernels without a
         separate JIT lookup function.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable (placeholder function).
+    **Gradient-safe**: not applicable (placeholder function).
+
+    This function implements the Protocol interface but performs no operation.
+    The precomputed photometry is passed directly to fast_photometry() or
+    similar kernel functions.
     """
     return None
