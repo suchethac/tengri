@@ -17,6 +17,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._phys import C_LIGHT as _C_CGS, LSUN_ERG as _LSUN_ERG
 from tengri.forward.precompute.grid import (
     PreintegratedGrid,
     interp_nd_triweight,
@@ -39,47 +40,105 @@ def precompute_skirtor_photometry(
     grid_path: str,
     filter_waves: list[jnp.ndarray],
     filter_trans: list[jnp.ndarray],
+    redshift: float = 0.0,
 ) -> dict:
     """Pre-integrate SKIRTOR templates through filter curves.
 
     For each 5D grid point (tau, p, q, oa, cos_inc), compute the
-    filter-integrated photometry.  Backward-compatible — returns a dict with
-    ``grid_phot`` and ``axes``.
+    filter-integrated photometry.  Returns a dict with ``grid_phot``
+    and ``axes``.
+
+    Templates are frequency-normalized (matching the runtime normalization
+    in ``skirtor.py``) so that ``build_skirtor_photometry_lookup`` returns
+    L_ν [erg/s/Hz] per L_sun of bolometric luminosity, consistent with the
+    full-wavelength ``agn_emission`` path.
 
     Parameters
     ----------
     grid_path : str
         Path to ``skirtor_templates.npz``.
     filter_waves, filter_trans : list of array
-        Filter curves in Angstrom / relative transmission.
+        Filter curves in Angstrom / relative transmission, **observed frame**.
+    redshift : float
+        Source redshift.  Used to shift rest-frame templates into the
+        observed frame before integrating against observed-frame filters.
 
     Returns
     -------
     dict
         ``grid_phot`` : array (n_tau, n_p, n_q, n_oa, n_inc, n_filters)
-        ``axes`` : tuple of 5 grid arrays (jnp.ndarray, for legacy callers)
-        ``_preint`` : :class:`PreintegratedGrid` (new, used by auto-collapse)
+            Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
+        ``axes`` : tuple of 5 grid arrays (jnp.ndarray)
+        ``_preint`` : :class:`PreintegratedGrid`
     """
-    data = np.load(grid_path)
-    grid = data["grid"]  # (n_tau, n_p, n_q, n_oa, n_inc, n_wave)
-    wave_grid = data["wavelength"]  # Angstrom
-    axes_np = (
-        np.asarray(data["tau"]),
-        np.asarray(data["p"]),
-        np.asarray(data["q"]),
-        np.asarray(data["oa"]),
-        np.asarray(data["cos_inc"]),
-    )
+    if grid_path.endswith(".npz"):
+        data = np.load(grid_path)
+        grid = np.array(data["grid"])
+        wave_grid = np.asarray(data["wavelength"], dtype=np.float64)
+        axes_np = (
+            np.asarray(data["tau"]),
+            np.asarray(data["p"]),
+            np.asarray(data["q"]),
+            np.asarray(data["oa"]),
+            np.asarray(data["cos_inc"]),
+        )
+    else:
+        import h5py as _h5py
+
+        with _h5py.File(grid_path, "r") as f:
+            if "grid" in f and isinstance(f["grid"], _h5py.Group):
+                # v2 HDF5 layout
+                wave_grid = np.asarray(f["wavelength"][:], dtype=np.float64)
+                grid = np.array(f["spectra/torus_emission"][:])
+                axes_np = (
+                    np.asarray(f["grid/tau_97"][:]),
+                    np.asarray(f["grid/p"][:]),
+                    np.asarray(f["grid/q"][:]),
+                    np.asarray(f["grid/opening_angle"][:]),
+                    np.asarray(f["grid/cos_inclination"][:]),
+                )
+            else:
+                wave_grid = np.asarray(f["wavelength"][:], dtype=np.float64)
+                grid = np.array(f["grid"][:])
+                axes_np = (
+                    np.asarray(f["tau"][:]),
+                    np.asarray(f["p"][:]),
+                    np.asarray(f["q"][:]),
+                    np.asarray(f["oa"][:]),
+                    np.asarray(f["cos_inc"][:]),
+                )
+
+    # Convert raw dimensionless templates to L_ν [erg/s/Hz per L_sun of L_bol].
+    # This matches the normalization in skirtor.py:
+    #   l_nu_erg = l_bol_erg * torus_frac * template / trapz(template, nu)
+    # Precomputed: lnu_per_lsun = LSUN_ERG * template / trapz(template, nu)
+    # Runtime: l_bol_lsun * torus_frac * lnu_per_lsun  →  L_ν [erg/s/Hz]
+    nu_grid = _C_CGS / (wave_grid * 1e-8)  # Hz (decreasing order)
+    sort_idx = np.argsort(nu_grid)
+    nu_sorted = nu_grid[sort_idx]
+
+    *grid_dims, n_wave = grid.shape
+    n_pts = int(np.prod(grid_dims)) if grid_dims else 1
+    grid_flat = np.array(grid, dtype=np.float64).reshape(n_pts, n_wave)
+    lnu_flat = np.empty_like(grid_flat)
+
+    for i in range(n_pts):
+        template = grid_flat[i]
+        integral = np.trapz(template[sort_idx], nu_sorted)
+        integral_safe = max(abs(integral), 1e-100)
+        lnu_flat[i] = _LSUN_ERG * template / integral_safe
+
+    lnu_grid = lnu_flat.reshape(*grid_dims, n_wave)
 
     preint = preintegrate_grid(
-        templates=grid,
-        wave_rest=np.asarray(wave_grid),
+        templates=lnu_grid,
+        wave_rest=wave_grid,
         filter_waves=[np.asarray(fw) for fw in filter_waves],
         filter_trans=[np.asarray(ft) for ft in filter_trans],
-        redshift=0.0,
+        redshift=redshift,
         dl_cm=1.0,
         axes=axes_np,
-        energy_normalize=True,
+        energy_normalize=False,  # templates already normalized per L_sun
     )
 
     axes_jax = tuple(jnp.asarray(ax) for ax in axes_np)
@@ -91,7 +150,7 @@ def precompute_skirtor_photometry(
 
 
 def build_skirtor_photometry_lookup(precomp: dict):
-    """Build a JIT-compiled SKIRTOR photometry function.
+    """Build a JIT-compiled SKIRTOR torus photometry function.
 
     Uses triweight interpolation for C²-continuous gradients.
 
@@ -106,6 +165,8 @@ def build_skirtor_photometry_lookup(precomp: dict):
     callable
         ``(agn_log_lbol, agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor,
            agn_oa_skirtor, agn_cos_inc, agn_torus_frac) -> array (n_filters,)``
+        Returns torus L_ν [erg/s/Hz].  Caller applies
+        ``flux_scale = (1+z) / (4π d_L²)`` to get flux density.
     """
     grid_phot = precomp["grid_phot"]
     axes = precomp["axes"]
@@ -121,6 +182,8 @@ def build_skirtor_photometry_lookup(precomp: dict):
         agn_cos_inc,
         agn_torus_frac,
     ):
+        # grid_phot stores L_ν [erg/s/Hz] per L_sun of L_bol (unit torus fraction)
+        # Return: L_bol_lsun [L_sun] * torus_frac * phot [erg/s/Hz/L_sun] = L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
         point = (
             agn_tau_skirtor,
@@ -129,8 +192,8 @@ def build_skirtor_photometry_lookup(precomp: dict):
             agn_oa_skirtor,
             agn_cos_inc,
         )
-        phot_normed = interp_nd_triweight(grid_phot, axes, edges, point)
-        return l_bol_lsun * agn_torus_frac * phot_normed
+        phot_per_lsun = interp_nd_triweight(grid_phot, axes, edges, point)
+        return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return skirtor_phot
 
@@ -166,7 +229,9 @@ def precompute(
         Same shape as :func:`precompute_skirtor_photometry` but with grid
         axes collapsed for any Fixed :data:`AXIS_PARAMS` entry.
     """
-    result = precompute_skirtor_photometry(grid_path, filter_waves, filter_trans)
+    result = precompute_skirtor_photometry(
+        grid_path, filter_waves, filter_trans, redshift=redshift
+    )
     if parameters is None:
         return result
 
@@ -207,8 +272,9 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     @jax.jit
     def skirtor_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
+        # Same unit convention as build_skirtor_photometry_lookup: L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
-        phot_normed = interp_nd_triweight(grid_phot, axes, edges, tuple(free_axis_values))
-        return l_bol_lsun * agn_torus_frac * phot_normed
+        phot_per_lsun = interp_nd_triweight(grid_phot, axes, edges, tuple(free_axis_values))
+        return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return skirtor_phot_collapsed

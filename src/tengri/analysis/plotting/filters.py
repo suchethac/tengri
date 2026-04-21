@@ -115,9 +115,7 @@ def plot_filter_coverage(
     facilities = list({d["facility"] for d in infos})
     facilities.sort()
     fac_cmap = plt.cm.Set2
-    fac_colors = {
-        f: fac_cmap(i / max(len(facilities) - 1, 1)) for i, f in enumerate(facilities)
-    }
+    fac_colors = {f: fac_cmap(i / max(len(facilities) - 1, 1)) for i, f in enumerate(facilities)}
 
     for y_pos, info in enumerate(infos):
         lam = info["lambda_eff_aa"]
@@ -153,9 +151,7 @@ def plot_filter_coverage(
     if color_by_facility and len(facilities) <= 15:
         from matplotlib.patches import Patch
 
-        handles = [
-            Patch(facecolor=fac_colors[f], label=f) for f in facilities if f != "Other"
-        ]
+        handles = [Patch(facecolor=fac_colors[f], label=f) for f in facilities if f != "Other"]
         if handles:
             ax.legend(handles=handles, fontsize=7, loc="lower right")
 

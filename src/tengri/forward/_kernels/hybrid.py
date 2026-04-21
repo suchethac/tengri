@@ -281,6 +281,7 @@ def build_hybrid_photometry(model):
     has_agn_full = model._agn_model is not None
     agn_parametric = model._agn_luminosity_mode if has_agn_full else False
     _has_preint_kd = False
+    _has_preint_skirtor = False
     _kd_data_fn = None
     if has_agn_full:
         from tengri.components.agn import resolve_agn_model
@@ -302,6 +303,22 @@ def build_hybrid_photometry(model):
 
             _kd_data_fn = kubota_done_disc_preintegrated
             _kd_data = model._precomputed.kd_preintegrated
+
+        # SKIRTOR torus preintegration: filter-level torus lookup replaces the
+        # full-wavelength SKIRTOR template at runtime.  Disc contribution is
+        # computed at full wavelength via powerlaw_disc with the correct fraction.
+        _skirtor_lookup = None
+        _skirtor_disc_fn = None
+        if (
+            model._agn_model == "skirtor"
+            and model._precomputed.skirtor_lookup is not None
+            and not _needs_extension
+        ):
+            _has_preint_skirtor = True
+            _skirtor_lookup = model._precomputed.skirtor_lookup
+            from tengri.components.agn.disc import powerlaw_disc as _powerlaw_disc
+
+            _skirtor_disc_fn = _powerlaw_disc
 
     # Radio
     has_radio = model._uses_radio
@@ -1213,8 +1230,9 @@ def build_hybrid_photometry(model):
             else:
                 L_ir = jnp.float64(0.0)
 
-            # 2d: AGN emission (full wavelength or preintegrated K&D disc)
+            # 2d: AGN emission (full wavelength or preintegrated K&D disc / SKIRTOR torus)
             agn_phot_preint = jnp.zeros(n_filters, dtype=jnp.float64)
+            skirtor_torus_preint = jnp.zeros(n_filters, dtype=jnp.float64)
             if has_agn_full:
                 if agn_parametric:
                     _agn_lbol = agn_log_lbol
@@ -1223,19 +1241,89 @@ def build_hybrid_photometry(model):
                     _agn_frac = jnp.float64(0.0)  # Not parametric in hybrid
                     _agn_lbol = 10.0
 
-                # Fast path: preintegrated K&D disc (if available).
-                # Computes filter-integrated photometry directly, bypassing full-wavelength
-                # computation for the outer disc component only. Torus, NLR, BLR still
-                # use full-wavelength path via agn_emission below.
-                if _has_preint_kd:
-                    kd_disc_lnu = _kd_data_fn(
-                        _kd_data,
+                if _has_preint_skirtor:
+                    # Fast path: preintegrated SKIRTOR torus + full-wavelength disc.
+                    # Torus: filter-level triweight lookup (bypasses 132-point template).
+                    # Disc: powerlaw_disc at full wavelength with correct luminosity fraction.
+                    skirtor_torus_lnu = _skirtor_lookup(
+                        jnp.float64(_agn_lbol),
+                        jnp.float64(agn_tau_skirtor),
+                        jnp.float64(agn_p_skirtor),
+                        jnp.float64(agn_q_skirtor),
+                        jnp.float64(agn_oa_skirtor),
+                        jnp.float64(agn_cos_inc),
+                        jnp.float64(agn_torus_frac),
+                    )
+                    # Scale torus: L_ν [erg/s/Hz] * agn_frac → flux density [erg/s/cm²/Hz]
+                    skirtor_torus_preint = (
+                        skirtor_torus_lnu * jnp.float64(_agn_frac) * jnp.float64(flux_scale)
+                    )
+
+                    # Disc: powerlaw_disc with disc fraction of L_bol
+                    # agn_frac_disc = _agn_frac * (1 - torus_frac) matches skirtor_agn:
+                    #   l_disc = powerlaw_disc(..., agn_frac=1 - agn_torus_frac) * agn_frac
+                    _disc_frac = jnp.float64(_agn_frac) * (1.0 - jnp.float64(agn_torus_frac))
+                    disc_sed = agn_emission(
+                        _skirtor_disc_fn,
+                        rest_wave_f64,
                         agn_log_lbol=jnp.float64(_agn_lbol),
-                        agn_frac=jnp.float64(_agn_frac),
+                        agn_frac=_disc_frac,
+                        agn_polar_ebv=jnp.float64(agn_polar_ebv),
+                        agn_cos_inc=jnp.float64(agn_cos_inc),
+                        agn_polar_oa=jnp.float64(agn_polar_oa),
+                        agn_alpha=jnp.float64(agn_alpha),
+                    )
+                    non_stellar_sed = non_stellar_sed + disc_sed
+
+                else:
+                    # Fast path: preintegrated K&D disc (if available).
+                    # Computes filter-integrated photometry directly, bypassing full-wavelength
+                    # computation for the outer disc component only. Torus, NLR, BLR still
+                    # use full-wavelength path via agn_emission below.
+                    if _has_preint_kd:
+                        kd_disc_lnu = _kd_data_fn(
+                            _kd_data,
+                            agn_log_lbol=jnp.float64(_agn_lbol),
+                            agn_frac=jnp.float64(_agn_frac),
+                            agn_log_mbh=jnp.float64(agn_log_mbh),
+                            agn_log_ledd=jnp.float64(agn_log_ledd),
+                            agn_a_spin=jnp.float64(agn_a_spin),
+                            agn_cos_inc=jnp.float64(agn_cos_inc),
+                            agn_f_hard=jnp.float64(agn_f_hard),
+                            agn_gamma_warm=jnp.float64(agn_gamma_warm),
+                            agn_kt_warm=jnp.float64(agn_kt_warm),
+                            agn_gamma_hard=jnp.float64(agn_gamma_hard),
+                            agn_kt_hot=jnp.float64(agn_kt_hot),
+                            agn_r_warm_ratio=jnp.float64(agn_r_warm_ratio),
+                        )
+                        # Convert L_nu (erg/s/Hz) to flux density (erg/s/cm^2/Hz)
+                        agn_phot_preint = kd_disc_lnu * flux_scale
+
+                    # Full-wavelength path: always computed to get torus, NLR, BLR, and
+                    # hot corona. When K&D disc is preintegrated, this includes all AGN
+                    # components except the outer disc (whose contribution is in agn_phot_preint).
+                    agn_sed = agn_emission(
+                        agn_model_fn_full,
+                        rest_wave_f64,
+                        agn_log_lbol=_agn_lbol,
+                        agn_frac=_agn_frac,
+                        agn_polar_ebv=jnp.float64(agn_polar_ebv),
+                        agn_cos_inc=jnp.float64(agn_cos_inc),
+                        agn_polar_oa=jnp.float64(agn_polar_oa),
+                        agn_alpha=jnp.float64(agn_alpha),
+                        agn_T_torus=jnp.float64(agn_T_torus),
+                        agn_tau_torus=jnp.float64(agn_tau_torus),
+                        agn_torus_frac=jnp.float64(agn_torus_frac),
                         agn_log_mbh=jnp.float64(agn_log_mbh),
                         agn_log_ledd=jnp.float64(agn_log_ledd),
                         agn_a_spin=jnp.float64(agn_a_spin),
-                        agn_cos_inc=jnp.float64(agn_cos_inc),
+                        agn_tau_skirtor=jnp.float64(agn_tau_skirtor),
+                        agn_p_skirtor=jnp.float64(agn_p_skirtor),
+                        agn_q_skirtor=jnp.float64(agn_q_skirtor),
+                        agn_oa_skirtor=jnp.float64(agn_oa_skirtor),
+                        agn_T_hot=jnp.float64(agn_T_hot),
+                        agn_T_warm=jnp.float64(agn_T_warm),
+                        agn_frac_hot=jnp.float64(agn_frac_hot),
                         agn_f_hard=jnp.float64(agn_f_hard),
                         agn_gamma_warm=jnp.float64(agn_gamma_warm),
                         agn_kt_warm=jnp.float64(agn_kt_warm),
@@ -1243,42 +1331,7 @@ def build_hybrid_photometry(model):
                         agn_kt_hot=jnp.float64(agn_kt_hot),
                         agn_r_warm_ratio=jnp.float64(agn_r_warm_ratio),
                     )
-                    # Convert L_nu (erg/s/Hz) to flux density (erg/s/cm^2/Hz)
-                    agn_phot_preint = kd_disc_lnu * flux_scale
-
-                # Full-wavelength path: always computed to get torus, NLR, BLR, and
-                # hot corona. When K&D disc is preintegrated, this includes all AGN
-                # components except the outer disc (whose contribution is in agn_phot_preint).
-                agn_sed = agn_emission(
-                    agn_model_fn_full,
-                    rest_wave_f64,
-                    agn_log_lbol=_agn_lbol,
-                    agn_frac=_agn_frac,
-                    agn_polar_ebv=jnp.float64(agn_polar_ebv),
-                    agn_cos_inc=jnp.float64(agn_cos_inc),
-                    agn_polar_oa=jnp.float64(agn_polar_oa),
-                    agn_alpha=jnp.float64(agn_alpha),
-                    agn_T_torus=jnp.float64(agn_T_torus),
-                    agn_tau_torus=jnp.float64(agn_tau_torus),
-                    agn_torus_frac=jnp.float64(agn_torus_frac),
-                    agn_log_mbh=jnp.float64(agn_log_mbh),
-                    agn_log_ledd=jnp.float64(agn_log_ledd),
-                    agn_a_spin=jnp.float64(agn_a_spin),
-                    agn_tau_skirtor=jnp.float64(agn_tau_skirtor),
-                    agn_p_skirtor=jnp.float64(agn_p_skirtor),
-                    agn_q_skirtor=jnp.float64(agn_q_skirtor),
-                    agn_oa_skirtor=jnp.float64(agn_oa_skirtor),
-                    agn_T_hot=jnp.float64(agn_T_hot),
-                    agn_T_warm=jnp.float64(agn_T_warm),
-                    agn_frac_hot=jnp.float64(agn_frac_hot),
-                    agn_f_hard=jnp.float64(agn_f_hard),
-                    agn_gamma_warm=jnp.float64(agn_gamma_warm),
-                    agn_kt_warm=jnp.float64(agn_kt_warm),
-                    agn_gamma_hard=jnp.float64(agn_gamma_hard),
-                    agn_kt_hot=jnp.float64(agn_kt_hot),
-                    agn_r_warm_ratio=jnp.float64(agn_r_warm_ratio),
-                )
-                non_stellar_sed = non_stellar_sed + agn_sed
+                    non_stellar_sed = non_stellar_sed + agn_sed
 
             # 2e: Radio emission
             if has_radio:
@@ -1366,6 +1419,10 @@ def build_hybrid_photometry(model):
         # Add preintegrated K&D disc photometry if available (already flux-scaled).
         if _has_preint_kd:
             non_stellar_phot = non_stellar_phot + agn_phot_preint
+
+        # Add preintegrated SKIRTOR torus photometry if available (already flux-scaled).
+        if _has_preint_skirtor:
+            non_stellar_phot = non_stellar_phot + skirtor_torus_preint
 
         return stellar_phot + non_stellar_phot
 

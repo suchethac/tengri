@@ -48,7 +48,8 @@ from tengri.components.sps.precompute import (
     precompute_photometry_ztable,
     precompute_spectroscopy,
 )
-from tengri.forward.kernels import (
+from tengri.config.deprecation import deprecated_class_alias
+from tengri.forward._kernels import (
     build_exact_sed,
     build_fused_rest_sed,
     build_fused_tier2_photometry,
@@ -88,7 +89,6 @@ from tengri.parameters.translate import (
     get_internal_params,
     identity_param_map,
 )
-from tengri.runtime.deprecation import deprecated_class_alias
 from tengri.utils.cosmology import age_at_z, luminosity_distance
 from tengri.utils.grid import (
     grid_spacing,
@@ -96,6 +96,7 @@ from tengri.utils.grid import (
     log_age_to_age_yr,
     make_log_age_grid,
 )
+from tengri.utils.jit_logging import logged_jit
 
 # Re-export supporting types for backwards compatibility
 __all__ = [
@@ -423,6 +424,17 @@ class SEDModel:
             frac_is_free = agn_frac_dist is not None and not agn_frac_dist.is_fixed
             self._agn_luminosity_mode = lbol_is_free and not frac_is_free
             self._param_map.update(identity_param_map(_AGN_IDENTITY_PARAMS))
+            if self._agn_model == "skirtor":
+                # Pre-warm the SKIRTOR template cache outside any JIT context.
+                # Calling _load_skirtor_fn() lazily inside jit.trace causes a
+                # tracer leak because create_skirtor_from_grid allocates jnp.array
+                # objects that get captured as DynamicJaxprTracers.
+                try:
+                    from tengri.components.agn.unified import _load_skirtor_fn
+
+                    _load_skirtor_fn()
+                except Exception:
+                    pass
 
     def _init_multiwavelength(self, spec, ssp_data):
         """Configure radio, X-ray, shock, and build wavelength grid."""
@@ -670,6 +682,47 @@ class SEDModel:
                 self._z_fixed,
             )
 
+        # SKIRTOR torus preintegration (for hybrid kernel, fixed z, SKIRTOR models)
+        # Pre-integrate SKIRTOR torus templates through filters at init time for
+        # fast filter-level triweight lookup instead of wavelength-level computation.
+        skirtor_lookup = None
+        if (
+            precompute
+            and self._z_fixed is not None
+            and self.filter_waves is not None
+            and self._agn_model == "skirtor"
+        ):
+            try:
+                from pathlib import Path
+
+                from tengri.components.agn.skirtor_precompute import (
+                    build_skirtor_photometry_lookup,
+                    precompute_skirtor_photometry,
+                )
+
+                _grid_candidates = [
+                    Path(__file__).resolve().parents[3] / "data" / "skirtor_templates_v2.h5",
+                    Path(__file__).resolve().parents[3] / "data" / "skirtor_templates.npz",
+                ]
+                _grid_path = next((str(p) for p in _grid_candidates if p.is_file()), None)
+                if _grid_path is not None:
+                    _precomp = precompute_skirtor_photometry(
+                        _grid_path,
+                        self.filter_waves,
+                        self.filter_trans,
+                        redshift=float(self._z_fixed),
+                    )
+                    skirtor_lookup = build_skirtor_photometry_lookup(_precomp)
+            except Exception as e:
+                import warnings
+
+                warnings.warn(
+                    f"SKIRTOR torus preintegration failed: {e}. "
+                    "Falling back to full-wavelength evaluation.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
         return PrecomputedData(
             photometry=phot,
             dust_age_weights=dust_age_w,
@@ -677,6 +730,7 @@ class SEDModel:
             effective_bandwidths_hz=eff_bw,
             dust_ir_lookup=dust_ir_lookup,
             kd_preintegrated=kd_preint,
+            skirtor_lookup=skirtor_lookup,
         )
 
     def _build_compositional_kernels(self):
@@ -707,12 +761,20 @@ class SEDModel:
         if rest_sed is not None and self.filter_waves is not None:
             with contextlib.suppress(Exception):
                 fused_phot_raw = build_fused_tier2_photometry(self)
-                fused_phot = jax.jit(fused_phot_raw) if fused_phot_raw is not None else None
+                fused_phot = (
+                    logged_jit(fused_phot_raw, name="compositional_phot")
+                    if fused_phot_raw is not None
+                    else None
+                )
 
         if rest_sed is not None:
             with contextlib.suppress(Exception):
                 fused_spec_raw = build_fused_tier2_spectrum(self)
-                fused_spec = jax.jit(fused_spec_raw) if fused_spec_raw is not None else None
+                fused_spec = (
+                    logged_jit(fused_spec_raw, name="compositional_spec")
+                    if fused_spec_raw is not None
+                    else None
+                )
 
         ck = CompositionalKernels(
             rest_sed=rest_sed,
@@ -738,14 +800,22 @@ class SEDModel:
         if self._precomputed.photometry is not None and self._z_fixed is not None:
             with contextlib.suppress(Exception):
                 hybrid_phot_raw = build_hybrid_photometry(self)
-                hybrid_phot = jax.jit(hybrid_phot_raw) if hybrid_phot_raw is not None else None
+                hybrid_phot = (
+                    logged_jit(hybrid_phot_raw, name="hybrid_phot")
+                    if hybrid_phot_raw is not None
+                    else None
+                )
 
         hybrid_spec = None
         hybrid_spec_raw = None
         if self._precomputed.spectroscopy is not None and self._z_fixed is not None:
             with contextlib.suppress(Exception):
                 hybrid_spec_raw = build_hybrid_spectrum(self)
-                hybrid_spec = jax.jit(hybrid_spec_raw) if hybrid_spec_raw is not None else None
+                hybrid_spec = (
+                    logged_jit(hybrid_spec_raw, name="hybrid_spec")
+                    if hybrid_spec_raw is not None
+                    else None
+                )
 
         hk = HybridKernels(photometry=hybrid_phot, spectrum=hybrid_spec)
         hk._photometry_raw = hybrid_phot_raw
@@ -2590,7 +2660,7 @@ class SEDModel:
 
     def _method_recommendation(self) -> tuple[str, str]:
         """Return (method_name, reason) for the recommended inference method."""
-        from tengri.runtime.display import method_recommendation
+        from tengri.config.display import method_recommendation
 
         return method_recommendation(self)
 
@@ -2612,7 +2682,7 @@ class SEDModel:
         Model  [D=7, stochastic=False]
         ...
         """
-        from tengri.runtime.display import tree as _tree
+        from tengri.config.display import tree as _tree
 
         return _tree(self)
 
@@ -2641,7 +2711,7 @@ class SEDModel:
             Formatted summary showing SSP grid, filters, precomputation,
             fused kernel status, and enabled components.
         """
-        from tengri.runtime.display import summary as _summary
+        from tengri.config.display import summary as _summary
 
         return _summary(self)
 
