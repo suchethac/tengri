@@ -75,13 +75,14 @@ def _build_jaxopt_solver(optimizer, loss_fn, *, maxiter, tol):
     try:
         import jaxopt
     except ImportError:
-        raise ImportError(
-            "jaxopt required for quasi-Newton MAP: pip install jaxopt"
-        ) from None
+        raise ImportError("jaxopt required for quasi-Newton MAP: pip install jaxopt") from None
 
     builders = {
         "lbfgs": lambda: jaxopt.LBFGS(
-            fun=loss_fn, maxiter=maxiter, tol=tol, jit=True,
+            fun=loss_fn,
+            maxiter=maxiter,
+            tol=tol,
+            jit=True,
         ),
     }
 
@@ -124,7 +125,10 @@ def _get_or_build_map_fns(model, loss_fn, optimizer, learning_rate):
             return (new_params, new_ostate), loss
 
         (params, ostate), losses = jax.lax.scan(
-            _step_body, (params, ostate), None, length=_SCAN_BATCH,
+            _step_body,
+            (params, ostate),
+            None,
+            length=_SCAN_BATCH,
         )
         return params, ostate, losses
 
@@ -192,6 +196,7 @@ def _run_map_scipy(
 
     callback = None
     if verbose_steps:
+
         def callback(xk):
             params = unravel_fn(jnp.asarray(xk))
             loss_val = float(loss_fn(params, data_args))
@@ -319,7 +324,10 @@ def run_map(
 
     # ── optax iterative path (adam / adamw / sgd / custom) ──
     scan_batch, single_step, opt, opt_name = _get_or_build_map_fns(
-        fitter.model, loss_fn, optimizer, learning_rate,
+        fitter.model,
+        loss_fn,
+        optimizer,
+        learning_rate,
     )
     opt_state = opt.init(init_params)
 
@@ -443,7 +451,7 @@ def run_laplace(fitter, *, key, init_from=None, n_map_steps=1000, **kwargs):
 
 def run_pathfinder(fitter, *, key, init_from=None, **kwargs):
     """Pathfinder: fast approximate posterior via L-BFGS path."""
-    from tengri.inference.backends.mcmc.common import _get_flat_logdensity
+    from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
     from tengri.inference.backends.pathfinder import run_pathfinder
 
     if init_from is not None:
@@ -452,8 +460,10 @@ def run_pathfinder(fitter, *, key, init_from=None, **kwargs):
         init_params = fitter._initialize_unbounded(key)
 
     log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
-        fitter, init_params,
+        fitter,
+        init_params,
     )
+
     def log_posterior_flat(pos):
         return log_posterior_flat_2arg(pos, data_args)
 

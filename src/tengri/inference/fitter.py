@@ -33,6 +33,7 @@ import jax
 logger = logging.getLogger(__name__)
 import jax.numpy as jnp
 
+from tengri.config.exceptions import ParameterError
 from tengri.inference._model_cache import get_model_cache
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.jit_engine import build_jit_engine
@@ -43,7 +44,6 @@ from tengri.inference.loss_functions import (
     build_loss_fn,
 )
 from tengri.parameters.priors import Gaussian, Uniform
-from tengri.runtime.exceptions import ParameterError
 
 # ── Method name unification ────────────────────────────────────────────
 
@@ -1168,9 +1168,11 @@ class Fitter:
         return run_pathfinder(self, key=key, **kwargs)
 
     def _run_elliptical_slice(self, *, key, **kwargs) -> Posterior:
-        from tengri.inference.backends.mcmc.common import run_elliptical_slice
+        from tengri.inference.backends.mcmc.elliptical_slice import (
+            run_elliptical_slice_fitter,
+        )
 
-        return run_elliptical_slice(self, key=key, **kwargs)
+        return run_elliptical_slice_fitter(self, key=key, **kwargs)
 
     # ── Posterior sampling ────────────────────────────────────────────
 
@@ -1511,7 +1513,7 @@ class Fitter:
         import blackjax
         from jax.flatten_util import ravel_pytree
 
-        from tengri.inference.backends.mcmc.common import (
+        from tengri.inference.backends.mcmc._shared import (
             _get_dynamic_hmc_kernel,
             _get_flat_logdensity,
             _get_ghmc_kernel,
