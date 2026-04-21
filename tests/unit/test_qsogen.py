@@ -657,14 +657,18 @@ class TestLoadEmlineTemplateError:
 
         _mod = sys.modules["tengri.components.agn.qsogen"]
 
-        # Reset lazy singleton so the function doesn't return the cached result
-        monkeypatch.setattr(_mod, "_EMLINE_TEMPLATE", None)
+        # Clear functools.cache so the loader re-runs on next call
+        _mod._load_emline_template.cache_clear()
 
         # Patch Path.is_file to always return False, forcing the FileNotFoundError path
         monkeypatch.setattr(Path, "is_file", lambda self: False)
 
-        with pytest.raises(FileNotFoundError, match="QSOGen emission line template"):
-            _mod._load_emline_template()
+        try:
+            with pytest.raises(FileNotFoundError, match="QSOGen emission line template"):
+                _mod._load_emline_template()
+        finally:
+            # Clear again so the error result is not cached for subsequent tests
+            _mod._load_emline_template.cache_clear()
 
     def test_caches_result_on_second_call(self):
         """Calling _load_emline_template twice returns the same cached object."""

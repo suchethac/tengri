@@ -5,6 +5,7 @@ from pathlib import Path
 
 import h5py
 import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -16,10 +17,90 @@ import pytest
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
 from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.components.sps.dsps_wrapper import SSPData
 from tengri.utils.grid import grid_spacing, make_log_age_grid
 
 # Enable 64-bit for numerical precision in tests
 jax.config.update("jax_enable_x64", True)
+
+# ── Paths for real SSP data ──────────────────────────────────────
+
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+_SSP_FILE_WNE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+_SSP_FILE_FSPS = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
+
+
+# ── Session-scoped real SSP fixtures ─────────────────────────────
+# Loading HDF5 SSP data is expensive (~0.5-1s per call).  Session scope
+# ensures a single load shared across all test files that need it.
+
+
+@pytest.fixture(scope="session")
+def ssp_data_wne():
+    """Load the wNE SSP data once per session.  Skip if file missing."""
+    if not _SSP_FILE_WNE.is_file():
+        pytest.skip(f"SSP data not found: {_SSP_FILE_WNE}")
+    from tengri.components.sps.dsps_wrapper import load_ssp_data
+
+    return load_ssp_data(str(_SSP_FILE_WNE))
+
+
+@pytest.fixture(scope="session")
+def ssp_data_fsps():
+    """Load the FSPS SSP data once per session.  Skip if file missing."""
+    if not _SSP_FILE_FSPS.is_file():
+        pytest.skip(f"SSP data not found: {_SSP_FILE_FSPS}")
+    from tengri.components.sps.dsps_wrapper import load_ssp_data
+
+    return load_ssp_data(str(_SSP_FILE_FSPS))
+
+
+@pytest.fixture(scope="session")
+def sdss_filters():
+    """Load SDSS ugriz filters once per session."""
+    from tengri.observation.filters import load_filter_set
+
+    return load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+
+
+# ── Session-scoped synthetic SSP fixture ─────────────────────────
+# Many unit tests create identical (3, 20, 100) synthetic SSPs.  Sharing
+# a single instance avoids redundant array allocation and — more
+# importantly — ensures all tests hit the same JIT-compiled code paths.
+
+
+@pytest.fixture(scope="session")
+def synthetic_ssp():
+    """Minimal synthetic SSP: 3 Z × 20 ages × 100 wavelengths."""
+    n_met, n_age, n_wave = 3, 20, 100
+    wave = jnp.linspace(3000.0, 10000.0, n_wave)
+    ages_gyr = jnp.linspace(-1.0, 1.14, n_age)
+    key = jax.random.PRNGKey(123)
+    flux = jnp.abs(jax.random.normal(key, (n_met, n_age, n_wave))) * 1e-3 + 1e-5
+    lgmet = jnp.array([-1.5, -0.5, 0.0])
+    return SSPData(
+        ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet
+    )
+
+
+@pytest.fixture(scope="session")
+def simple_observation():
+    """Synthetic 3-band observation matching the synthetic SSP wavelength range."""
+    from tengri.observation.photometry import FilterCurve
+
+    waves = [
+        jnp.linspace(3500.0, 4500.0, 50),
+        jnp.linspace(5000.0, 6500.0, 50),
+        jnp.linspace(7500.0, 9000.0, 50),
+    ]
+    trans = [jnp.ones(50) * 0.5 for _ in range(3)]
+    curves = tuple(
+        FilterCurve(wave=w, trans=t, name=f"band_{i}")
+        for i, (w, t) in enumerate(zip(waves, trans))
+    )
+    from tengri import Observation, Photometry
+
+    return Observation(photometry=Photometry(filters=curves))
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:

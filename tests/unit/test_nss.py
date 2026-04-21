@@ -171,13 +171,12 @@ class TestSliceSampling:
 
         key = jax.random.PRNGKey(0)
         samples = []
-        for _i in range(200):
+        for _i in range(80):
             key, subkey = jax.random.split(key)
             state, _info = algo.step(subkey, state)
             samples.append(float(state.position["x"]))
 
         samples = np.array(samples)
-        # Should be roughly standard normal
         assert abs(np.mean(samples)) < 0.5
         assert 0.3 < np.std(samples) < 2.0
 

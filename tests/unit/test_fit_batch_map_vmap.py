@@ -29,7 +29,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _make_model():
+def _make_model(ssp):
     from tengri import (
         Fixed,
         Observation,
@@ -37,7 +37,6 @@ def _make_model():
         Photometry,
         SEDModel,
         Uniform,
-        load_ssp_data,
     )
 
     spec = Parameters(
@@ -53,7 +52,6 @@ def _make_model():
         redshift=Fixed(0.1),
         mean_sfh_type="tsnorm",
     )
-    ssp = load_ssp_data(SSP_FILE)
     obs = Observation(
         photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     )
@@ -80,10 +78,10 @@ def _synthesize_catalog(model, n: int = 4, snr: float = 30.0, seed: int = 0):
 
 
 @pytest.mark.integration
-def test_fit_batch_map_vmap_returns_finite_map_for_small_catalog():
+def test_fit_batch_map_vmap_returns_finite_map_for_small_catalog(ssp_data_wne):
     from tengri.forward.convenience import fit_batch_map_vmap
 
-    model = _make_model()
+    model = _make_model(ssp_data_wne)
     fluxes, noises = _synthesize_catalog(model, n=4)
 
     result = fit_batch_map_vmap(

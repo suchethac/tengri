@@ -15,6 +15,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 import time
@@ -25,6 +26,8 @@ import jax
 logger = logging.getLogger(__name__)
 import jax.numpy as jnp
 
+from tengri.inference._model_cache import get_model_cache
+from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.jit_engine import build_jit_engine
 from tengri.inference.loss_functions import (
     build_loglikelihood_fn,
@@ -458,9 +461,8 @@ class Fitter:
             try:
                 with self._compilation_lock:
                     cache_key = self._engine_cache_key()
-                    if not hasattr(self.model, "_jit_engine_cache"):
-                        self.model._jit_engine_cache = {}
-                    if cache_key not in self.model._jit_engine_cache:
+                    cache = get_model_cache(self.model).setdefault("jit_engine", {})
+                    if cache_key not in cache:
                         self.compile(
                             modes=("linear_resample", "nonlinear_update"),
                             verbose=False,
@@ -529,14 +531,13 @@ class Fitter:
             return self._jit_sampler
 
         cache_key = self._engine_cache_key()
-        if not hasattr(self.model, "_jit_engine_cache"):
-            self.model._jit_engine_cache = {}
-        if cache_key in self.model._jit_engine_cache:
-            self._jit_sampler = self.model._jit_engine_cache[cache_key]
+        cache = get_model_cache(self.model).setdefault("jit_engine", {})
+        if cache_key in cache:
+            self._jit_sampler = cache[cache_key]
             return self._jit_sampler
 
         engine = self._build_jit_engine(pos_dict)
-        self.model._jit_engine_cache[cache_key] = engine
+        cache[cache_key] = engine
         self._jit_sampler = engine
         return engine
 
@@ -602,15 +603,18 @@ class Fitter:
         data_args = self._data_args
 
         if verbose:
-            print(
-                f"Compiling: n_iter={n_iterations}, n_samp={n_samples}, "
-                f"n_post={n_posterior_samples}, modes={modes}"
+            logger.info(
+                "Compiling: n_iter=%d, n_samp=%d, n_post=%d, modes=%s",
+                n_iterations,
+                n_samples,
+                n_posterior_samples,
+                modes,
             )
 
         # Pre-compile each optimization mode
         for mode in modes:
             if verbose:
-                print(f"  Compiling {mode}...", end="", flush=True)
+                logger.info("  Compiling %s...", mode)
             t0 = time.time()
             engine["run_evi_geovi"](
                 pos_flat,
@@ -622,11 +626,11 @@ class Fitter:
                 sample_mode=mode,
             )
             if verbose:
-                print(f" {time.time() - t0:.1f}s")
+                logger.info("  Compiling %s... %.1fs", mode, time.time() - t0)
 
         # Pre-compile MGVI optimizer (old path, used by native_mgvi)
         if verbose:
-            print("  Compiling MGVI (old path)...", end="", flush=True)
+            logger.info("  Compiling MGVI (old path)...")
         t0 = time.time()
         engine["run_evi"](
             pos_flat,
@@ -637,23 +641,26 @@ class Fitter:
             kl_rtol=1e-2,
         )
         if verbose:
-            print(f" {time.time() - t0:.1f}s")
+            logger.info("  Compiling MGVI (old path)... %.1fs", time.time() - t0)
 
         # Pre-compile posterior draw
         if verbose:
-            print(
-                f"  Compiling posterior draw ({n_posterior_samples} samples)...",
-                end="",
-                flush=True,
+            logger.info(
+                "  Compiling posterior draw (%d samples)...",
+                n_posterior_samples,
             )
         t0 = time.time()
         draw_keys = jax.random.split(jax.random.PRNGKey(0), n_posterior_samples)
         engine["draw_samples"](pos_flat, draw_keys, data_args)
         if verbose:
-            print(f" {time.time() - t0:.1f}s")
+            logger.info(
+                "  Compiling posterior draw (%d samples)... %.1fs",
+                n_posterior_samples,
+                time.time() - t0,
+            )
 
         if verbose:
-            print("Compilation complete.")
+            logger.info("Compilation complete.")
         return self
 
     # ── Loss and likelihood builders ──────────────────────────────────
@@ -687,12 +694,11 @@ class Fitter:
             compatibility. Pass "auto" for ~1.5x speedup with non-NIFTy methods.
         """
         cache_key = (self._engine_cache_key(), mode)
-        if not hasattr(self.model, "_loss_fn_cache"):
-            self.model._loss_fn_cache = {}
-        if cache_key in self.model._loss_fn_cache:
-            return self.model._loss_fn_cache[cache_key]
+        cache = get_model_cache(self.model).setdefault("loss_fn", {})
+        if cache_key in cache:
+            return cache[cache_key]
         loss_fn = self._build_loss_fn(mode=mode)
-        self.model._loss_fn_cache[cache_key] = loss_fn
+        cache[cache_key] = loss_fn
         return loss_fn
 
     def _build_logprior_fn(self):
@@ -706,12 +712,11 @@ class Fitter:
     def _get_or_build_loglikelihood_fn(self, mode="_traceable"):
         """Return the cached log-likelihood function, building if needed."""
         cache_key = (self._engine_cache_key(), mode)
-        if not hasattr(self.model, "_loglik_fn_cache"):
-            self.model._loglik_fn_cache = {}
-        if cache_key in self.model._loglik_fn_cache:
-            return self.model._loglik_fn_cache[cache_key]
+        cache = get_model_cache(self.model).setdefault("loglik_fn", {})
+        if cache_key in cache:
+            return cache[cache_key]
         loglik_fn = self._build_loglikelihood_fn(mode=mode)
-        self.model._loglik_fn_cache[cache_key] = loglik_fn
+        cache[cache_key] = loglik_fn
         return loglik_fn
 
     def _build_loglikelihood_unbounded_fn(self, mode="_traceable"):
@@ -729,10 +734,9 @@ class Fitter:
         galaxies with the same model structure.
         """
         cache_key = (self._engine_cache_key(), mode)
-        if not hasattr(self.model, "_grad_fn_cache"):
-            self.model._grad_fn_cache = {}
-        if cache_key in self.model._grad_fn_cache:
-            return self.model._grad_fn_cache[cache_key]
+        cache = get_model_cache(self.model).setdefault("grad_fn", {})
+        if cache_key in cache:
+            return cache[cache_key]
 
         loss_fn = self._get_or_build_loss_fn(mode=mode)
 
@@ -740,7 +744,7 @@ class Fitter:
         def val_and_grad(params_u, data_args):
             return jax.value_and_grad(lambda p: loss_fn(p, data_args))(params_u)
 
-        self.model._grad_fn_cache[cache_key] = val_and_grad
+        cache[cache_key] = val_and_grad
         return val_and_grad
 
     def _get_or_build_logdensity_fn(self, mode="_traceable"):
@@ -750,10 +754,9 @@ class Fitter:
         should partial-apply ``data_args`` for blackjax compatibility.
         """
         cache_key = (self._engine_cache_key(), mode)
-        if not hasattr(self.model, "_logdensity_fn_cache"):
-            self.model._logdensity_fn_cache = {}
-        if cache_key in self.model._logdensity_fn_cache:
-            return self.model._logdensity_fn_cache[cache_key]
+        cache = get_model_cache(self.model).setdefault("logdensity_fn", {})
+        if cache_key in cache:
+            return cache[cache_key]
 
         loss_fn = self._get_or_build_loss_fn(mode=mode)
 
@@ -761,7 +764,7 @@ class Fitter:
         def logdensity(params_u, data_args):
             return -loss_fn(params_u, data_args)
 
-        self.model._logdensity_fn_cache[cache_key] = logdensity
+        cache[cache_key] = logdensity
         return logdensity
 
     # ── Parameter transforms ──────────────────────────────────────────
@@ -985,10 +988,8 @@ class Fitter:
             )
 
         # Attach back-reference so Posterior.refine() works
-        try:
+        with contextlib.suppress(AttributeError):
             result._fitter = self
-        except AttributeError:
-            pass
         return result
 
     def summary(self) -> str:
@@ -1197,7 +1198,7 @@ class Fitter:
                 )
             except ImportError:
                 if verbose:
-                    print("  blackjax not installed, falling back to JIT sampling")
+                    logger.info("  blackjax not installed, falling back to JIT sampling")
                 return self._draw_jit_samples(
                     pos_dict, key, n_samples, existing_samples, verbose=verbose
                 )
@@ -1216,7 +1217,7 @@ class Fitter:
         ~2000x faster than NIFTy's Python-loop CG.
         """
         if verbose:
-            print(f"  Drawing {n_samples} posterior samples (JIT CG)...")
+            logger.info("  Drawing %d posterior samples (JIT CG)...", n_samples)
 
         if self._jit_sampler is None:
             self._jit_sampler = self._get_or_build_engine(pos_dict)
@@ -1247,7 +1248,7 @@ class Fitter:
         Uses ``draw_nonlinear_residuals`` from the JIT engine.
         """
         if verbose:
-            print(f"  Drawing {n_samples} nonlinear posterior samples (JIT geoVI)...")
+            logger.info("  Drawing %d nonlinear posterior samples (JIT geoVI)...", n_samples)
 
         if self._jit_sampler is None:
             self._jit_sampler = self._get_or_build_engine(pos_dict)
@@ -1282,7 +1283,7 @@ class Fitter:
         import blackjax
 
         if verbose:
-            print(f"  Drawing {n_samples} posterior samples via BlackJAX NUTS...")
+            logger.info("  Drawing %d posterior samples via BlackJAX NUTS...", n_samples)
 
         if likelihood is not None:
 
@@ -1306,7 +1307,7 @@ class Fitter:
         (state, parameters), _ = warmup.run(warmup_key, pos_dict, num_steps=n_warmup)
 
         if verbose:
-            print(f"  Warmup done ({n_warmup} steps). Sampling...")
+            logger.info("  Warmup done (%d steps). Sampling...", n_warmup)
 
         kernel = blackjax.nuts(logdensity_fn, **parameters).step
 
@@ -1332,7 +1333,7 @@ class Fitter:
         import nifty8.re as jft
 
         if verbose:
-            print(f"  Drawing {n_samples} posterior samples (NIFTy CG)...")
+            logger.info("  Drawing %d posterior samples (NIFTy CG)...", n_samples)
 
         converged_pos = jft.Vector(pos_dict)
         draw_keys = jax.random.split(key, n_samples)
@@ -1410,7 +1411,7 @@ class Fitter:
 
         n_gal = len(batch)
         if verbose:
-            print(f"fit_batch: {n_gal} galaxies, method={method}")
+            logger.info("fit_batch: %d galaxies, method=%s", n_gal, method)
 
         # vmap batch MAP: vectorize optimization over all galaxies in one JIT call.
         # Enabled when: method="map", precomp is set (same model for all galaxies),
@@ -1469,11 +1470,16 @@ class Fitter:
             if verbose and (i < 3 or (i + 1) % max(1, n_gal // 10) == 0 or i == n_gal - 1):
                 chi2 = result_i.diagnostics.get("chi2_dof", "?")
                 chi2_str = f"{chi2:.2f}" if isinstance(chi2, float) else str(chi2)
-                print(f"  Galaxy {i + 1}/{n_gal}: chi2/dof={chi2_str}, {dt:.1f}s")
+                logger.info("  Galaxy %d/%d: chi2/dof=%s, %.1fs", i + 1, n_gal, chi2_str, dt)
 
         t_total = time.time() - t0
         if verbose:
-            print(f"  Done: {n_gal} galaxies in {t_total:.1f}s ({t_total / n_gal:.1f}s/galaxy)")
+            logger.info(
+                "  Done: %d galaxies in %.1fs (%.1fs/galaxy)",
+                n_gal,
+                t_total,
+                t_total / n_gal,
+            )
 
         return results
 
@@ -1519,6 +1525,15 @@ class Fitter:
 
         n_gal = len(batch)
         t0 = time.time()
+
+        # All galaxies must have the same band count — vmap requires uniform shapes.
+        n_obs_set = {len(g["flux_obs"]) for g in batch}
+        if len(n_obs_set) != 1:
+            raise ValueError(
+                f"_fit_batch_vmap_mcmc requires all galaxies to have the same number of "
+                f"observations, but got sizes: {sorted(n_obs_set)}. "
+                "Use fit_batch with vmap=False to handle heterogeneous data."
+            )
 
         # Stack galaxy data into batch arrays (n_gal, n_obs)
         flux_batch = jnp.stack([jnp.asarray(g["flux_obs"]) for g in batch])
@@ -1586,9 +1601,13 @@ class Fitter:
         inv_mass_matrix = adapt_params["inverse_mass_matrix"]
 
         if verbose:
-            print(
-                f"  vmap {method}: {n_gal} galaxies × {n_samples} samples "
-                f"(D={n_dim}, step_size={float(step_size):.4f})"
+            logger.info(
+                "  vmap %s: %d galaxies × %d samples (D=%d, step_size=%.4f)",
+                method,
+                n_gal,
+                n_samples,
+                n_dim,
+                float(step_size),
             )
 
         # Raw scan functions (no @jax.jit — the outer jit+vmap handles it)
@@ -1708,21 +1727,21 @@ class Fitter:
 
         if verbose:
             total_div = int(jnp.sum(all_divergent))
-            print(
-                f"  Done: {n_gal} galaxies in {t_sample:.1f}s "
-                f"({t_sample / n_gal:.2f}s/galaxy, {total_div} divergences)"
+            logger.info(
+                "  Done: %d galaxies in %.1fs (%.2fs/galaxy, %d divergences)",
+                n_gal,
+                t_sample,
+                t_sample / n_gal,
+                total_div,
             )
 
         # Post-process: unravel flat positions to physical params
-        def _convert_one(flat_pos):
-            return self._to_physical(unravel_fn(flat_pos))
-
         results = []
         for g_idx in range(n_gal):
             positions_i = all_positions[g_idx]
             divergent_i = all_divergent[g_idx]
-            samples_phys = jax.vmap(_convert_one)(positions_i)
-            best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+            samples_phys = _vmap_samples_to_physical(positions_i, unravel_fn, self._to_physical)
+            best_params = _mean_params(samples_phys)
             n_div = int(jnp.sum(divergent_i))
             result_i = Posterior(
                 samples=samples_phys,
@@ -1794,17 +1813,22 @@ class Fitter:
             )
 
             if verbose:
-                print(
-                    f"  vmap MAP ({opt_name}): {n_gal} galaxies "
-                    f"× {n_steps} max iter (single JIT kernel)"
+                logger.info(
+                    "  vmap MAP (%s): %d galaxies × %d max iter (single JIT kernel)",
+                    opt_name,
+                    n_gal,
+                    n_steps,
                 )
 
             batch_result = jax.jit(jax.vmap(solver.run))(params_batch, batch_data_args)
 
             t_total = time.time() - t0
             if verbose:
-                print(
-                    f"  Done: {n_gal} galaxies in {t_total:.1f}s ({t_total / n_gal:.2f}s/galaxy)"
+                logger.info(
+                    "  Done: %d galaxies in %.1fs (%.2fs/galaxy)",
+                    n_gal,
+                    t_total,
+                    t_total / n_gal,
                 )
 
             results = []
@@ -1857,17 +1881,22 @@ class Fitter:
         opt_states = opt_states_batch
 
         if verbose:
-            print(f"  vmap MAP: {n_gal} galaxies × {n_steps} steps (single JIT kernel)")
+            logger.info("  vmap MAP: %d galaxies × %d steps (single JIT kernel)", n_gal, n_steps)
 
         for i in range(n_steps):
             params, opt_states, losses = batch_step(params, opt_states, batch_data_args)
             if verbose and (i % print_every == 0 or i == n_steps - 1):
                 mean_loss = float(losses.mean())
-                print(f"  Step {i:5d}/{n_steps}: mean loss = {mean_loss:.4f}")
+                logger.info("  Step %5d/%d: mean loss = %.4f", i, n_steps, mean_loss)
 
         t_total = time.time() - t0
         if verbose:
-            print(f"  Done: {n_gal} galaxies in {t_total:.1f}s ({t_total / n_gal:.2f}s/galaxy)")
+            logger.info(
+                "  Done: %d galaxies in %.1fs (%.2fs/galaxy)",
+                n_gal,
+                t_total,
+                t_total / n_gal,
+            )
 
         results = []
         for g_idx in range(n_gal):

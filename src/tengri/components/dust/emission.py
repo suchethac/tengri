@@ -50,6 +50,7 @@ References
 """
 
 import contextlib
+import functools
 from collections.abc import Callable
 from pathlib import Path
 
@@ -895,29 +896,28 @@ DUST_EMISSION_MODELS["dale2014"] = _make_lazy_loader(
 )
 
 
-# DL14: prioritizes v2 grid, falls back to legacy grid
-def _dl14_lazy_wrapper(*args, **kwargs):
-    """Lazy loader for DL14: prioritizes v2 grid, falls back to legacy grid."""
+@functools.cache
+def _load_dl14_fn():
+    """Load DL14 template grid from file."""
     from .emission_templates import create_dl14_from_grid
 
-    global _dl14_fn
-    if _dl14_fn is None:
-        for fname in ("dl14_templates_v2.h5", "dl14_templates.h5"):
-            path = _find_data_file(fname)
-            if path is not None:
-                _dl14_fn = create_dl14_from_grid(path)
-                DUST_EMISSION_MODELS["draine_li2014"] = _dl14_fn
-                break
-        if _dl14_fn is None:
-            raise FileNotFoundError(
-                "DL14 template files not found (dl14_templates_v2.h5 or dl14_templates.h5). "
-                "The analytic fallback has been removed because it produced scientifically "
-                "incorrect results. Run: python scripts/download_dl14_templates.py"
-            )
-    return DUST_EMISSION_MODELS["draine_li2014"](*args, **kwargs)
+    for fname in ("dl14_templates_v2.h5", "dl14_templates.h5"):
+        path = _find_data_file(fname)
+        if path is not None:
+            return create_dl14_from_grid(path)
+    raise FileNotFoundError(
+        "DL14 template files not found (dl14_templates_v2.h5 or dl14_templates.h5). "
+        "The analytic fallback has been removed because it produced scientifically "
+        "incorrect results. Run: python scripts/download_dl14_templates.py"
+    )
 
 
-_dl14_fn = None
+def _dl14_lazy_wrapper(*args, **kwargs):
+    """Lazy loader for DL14: prioritizes v2 grid, falls back to legacy grid."""
+    fn = _load_dl14_fn()
+    return fn(*args, **kwargs)
+
+
 DUST_EMISSION_MODELS["draine_li2014"] = _dl14_lazy_wrapper
 
 DUST_EMISSION_MODELS["astrodust"] = _make_lazy_loader(

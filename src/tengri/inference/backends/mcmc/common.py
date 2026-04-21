@@ -7,12 +7,18 @@ cached scan functions with stable JIT identity to avoid recompilation.
 from __future__ import annotations
 
 import functools
+import logging
 import time
 import warnings
 
 import jax
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
+
+from tengri.inference._model_cache import get_model_cache
+from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
+
+logger = logging.getLogger(__name__)
 
 # ── Cached NUTS scan functions (module-level for stable JIT identity)
 # Using blackjax.mcmc.nuts.build_kernel() returns a kernel that takes
@@ -21,46 +27,33 @@ from jax.flatten_util import ravel_pytree
 # whose trace cache key depends only on the logdensity_fn identity (stable
 # via _get_flat_logdensity) — not on warmup parameters.
 
-_nuts_kernel_fn = None
-_hmc_kernel_fn = None
-_dynamic_hmc_kernel_fn = None
-_ghmc_kernel_fn = None
 
-
+@functools.cache
 def _get_nuts_kernel():
-    global _nuts_kernel_fn
-    if _nuts_kernel_fn is None:
-        import blackjax.mcmc.nuts
+    import blackjax.mcmc.nuts
 
-        _nuts_kernel_fn = blackjax.mcmc.nuts.build_kernel()
-    return _nuts_kernel_fn
+    return blackjax.mcmc.nuts.build_kernel()
 
 
+@functools.cache
 def _get_hmc_kernel():
-    global _hmc_kernel_fn
-    if _hmc_kernel_fn is None:
-        import blackjax.mcmc.hmc
+    import blackjax.mcmc.hmc
 
-        _hmc_kernel_fn = blackjax.mcmc.hmc.build_kernel()
-    return _hmc_kernel_fn
+    return blackjax.mcmc.hmc.build_kernel()
 
 
+@functools.cache
 def _get_dynamic_hmc_kernel():
-    global _dynamic_hmc_kernel_fn
-    if _dynamic_hmc_kernel_fn is None:
-        import blackjax.mcmc.dynamic_hmc
+    import blackjax.mcmc.dynamic_hmc
 
-        _dynamic_hmc_kernel_fn = blackjax.mcmc.dynamic_hmc.build_kernel()
-    return _dynamic_hmc_kernel_fn
+    return blackjax.mcmc.dynamic_hmc.build_kernel()
 
 
+@functools.cache
 def _get_ghmc_kernel():
-    global _ghmc_kernel_fn
-    if _ghmc_kernel_fn is None:
-        import blackjax.mcmc.ghmc
+    import blackjax.mcmc.ghmc
 
-        _ghmc_kernel_fn = blackjax.mcmc.ghmc.build_kernel()
-    return _ghmc_kernel_fn
+    return blackjax.mcmc.ghmc.build_kernel()
 
 
 # --- NUTS scans ---
@@ -69,11 +62,19 @@ def _get_ghmc_kernel():
 # as a regular traced argument — changing galaxy data does NOT trigger
 # recompilation.
 
+
 @functools.partial(jax.jit, static_argnums=(2, 5))
 def _nuts_sample_scan(
-    state, keys, logdensity_fn_2arg, step_size, inv_mass_matrix, max_doublings, data_args,
+    state,
+    keys,
+    logdensity_fn_2arg,
+    step_size,
+    inv_mass_matrix,
+    max_doublings,
+    data_args,
 ):
     kernel = _get_nuts_kernel()
+
     def ld(pos):
         return logdensity_fn_2arg(pos, data_args)
 
@@ -86,9 +87,16 @@ def _nuts_sample_scan(
 
 @functools.partial(jax.jit, static_argnums=(2, 5))
 def _nuts_burnin_scan(
-    state, keys, logdensity_fn_2arg, step_size, inv_mass_matrix, max_doublings, data_args,
+    state,
+    keys,
+    logdensity_fn_2arg,
+    step_size,
+    inv_mass_matrix,
+    max_doublings,
+    data_args,
 ):
     kernel = _get_nuts_kernel()
+
     def ld(pos):
         return logdensity_fn_2arg(pos, data_args)
 
@@ -102,11 +110,19 @@ def _nuts_burnin_scan(
 
 # --- HMC scans ---
 
+
 @functools.partial(jax.jit, static_argnums=(2, 5))
 def _hmc_sample_scan(
-    state, keys, logdensity_fn_2arg, step_size, inv_mass_matrix, n_leapfrog, data_args,
+    state,
+    keys,
+    logdensity_fn_2arg,
+    step_size,
+    inv_mass_matrix,
+    n_leapfrog,
+    data_args,
 ):
     kernel = _get_hmc_kernel()
+
     def ld(pos):
         return logdensity_fn_2arg(pos, data_args)
 
@@ -119,9 +135,16 @@ def _hmc_sample_scan(
 
 @functools.partial(jax.jit, static_argnums=(2, 5))
 def _hmc_burnin_scan(
-    state, keys, logdensity_fn_2arg, step_size, inv_mass_matrix, n_leapfrog, data_args,
+    state,
+    keys,
+    logdensity_fn_2arg,
+    step_size,
+    inv_mass_matrix,
+    n_leapfrog,
+    data_args,
 ):
     kernel = _get_hmc_kernel()
+
     def ld(pos):
         return logdensity_fn_2arg(pos, data_args)
 
@@ -135,11 +158,18 @@ def _hmc_burnin_scan(
 
 # --- Dynamic HMC scans ---
 
+
 @functools.partial(jax.jit, static_argnums=(2,))
 def _dynamic_hmc_sample_scan(
-    state, keys, logdensity_fn_2arg, step_size, inv_mass_matrix, data_args,
+    state,
+    keys,
+    logdensity_fn_2arg,
+    step_size,
+    inv_mass_matrix,
+    data_args,
 ):
     kernel = _get_dynamic_hmc_kernel()
+
     def ld(pos):
         return logdensity_fn_2arg(pos, data_args)
 
@@ -152,9 +182,15 @@ def _dynamic_hmc_sample_scan(
 
 @functools.partial(jax.jit, static_argnums=(2,))
 def _dynamic_hmc_burnin_scan(
-    state, keys, logdensity_fn_2arg, step_size, inv_mass_matrix, data_args,
+    state,
+    keys,
+    logdensity_fn_2arg,
+    step_size,
+    inv_mass_matrix,
+    data_args,
 ):
     kernel = _get_dynamic_hmc_kernel()
+
     def ld(pos):
         return logdensity_fn_2arg(pos, data_args)
 
@@ -168,11 +204,20 @@ def _dynamic_hmc_burnin_scan(
 
 # --- GHMC scans ---
 
+
 @functools.partial(jax.jit, static_argnums=(2,))
 def _ghmc_sample_scan(
-    state, keys, logdensity_fn_2arg, step_size, momentum_inv_scale, alpha, delta, data_args,
+    state,
+    keys,
+    logdensity_fn_2arg,
+    step_size,
+    momentum_inv_scale,
+    alpha,
+    delta,
+    data_args,
 ):
     kernel = _get_ghmc_kernel()
+
     def ld(pos):
         return logdensity_fn_2arg(pos, data_args)
 
@@ -185,9 +230,17 @@ def _ghmc_sample_scan(
 
 @functools.partial(jax.jit, static_argnums=(2,))
 def _ghmc_burnin_scan(
-    state, keys, logdensity_fn_2arg, step_size, momentum_inv_scale, alpha, delta, data_args,
+    state,
+    keys,
+    logdensity_fn_2arg,
+    step_size,
+    momentum_inv_scale,
+    alpha,
+    delta,
+    data_args,
 ):
     kernel = _get_ghmc_kernel()
+
     def ld(pos):
         return logdensity_fn_2arg(pos, data_args)
 
@@ -204,6 +257,7 @@ def _ghmc_burnin_scan(
 # at build time.  The kernel itself is the static identity for caching.
 # Adaptation params are cached on the Model; the kernel is rebuilt per-fitter
 # (cheap ~ms) using the fitter's data_args.
+
 
 @functools.partial(jax.jit, static_argnums=(2,))
 def _mclmc_sample_scan(state, keys, kernel, L, step_size):
@@ -235,22 +289,21 @@ def _get_flat_logdensity(fitter, init_params):
     """
     cache_key = fitter._engine_cache_key()
     model = fitter.model
-    if not hasattr(model, "_flat_logdensity_cache"):
-        model._flat_logdensity_cache = {}
+    cache = get_model_cache(model).setdefault("flat_logdensity", {})
 
-    if cache_key not in model._flat_logdensity_cache:
+    if cache_key not in cache:
         logdensity_2arg = fitter._get_or_build_logdensity_fn()
         _, unravel_fn = ravel_pytree(init_params)
 
         def log_posterior_flat_2arg(position, data_args):
             return logdensity_2arg(unravel_fn(position), data_args)
 
-        model._flat_logdensity_cache[cache_key] = (
+        cache[cache_key] = (
             log_posterior_flat_2arg,
             unravel_fn,
         )
 
-    logdensity_flat, unravel_fn = model._flat_logdensity_cache[cache_key]
+    logdensity_flat, unravel_fn = cache[cache_key]
     init_flat, _ = ravel_pytree(init_params)
     return logdensity_flat, unravel_fn, init_flat, fitter._data_args
 
@@ -262,7 +315,8 @@ def _get_cached_adaptation(fitter, method_key):
     ``(engine_cache_key, method_key)`` so that adaptation results
     persist across Fitters sharing the same model structure.
     """
-    cache = getattr(fitter.model, "_adaptation_cache", None)
+    mc = get_model_cache(fitter.model)
+    cache = mc.get("adaptation")
     if cache is None:
         return None
     engine_key = fitter._engine_cache_key()
@@ -271,10 +325,9 @@ def _get_cached_adaptation(fitter, method_key):
 
 def _set_cached_adaptation(fitter, method_key, params):
     """Store adaptation params on the **Model** for cross-fitter reuse."""
-    if not hasattr(fitter.model, "_adaptation_cache"):
-        fitter.model._adaptation_cache = {}
+    cache = get_model_cache(fitter.model).setdefault("adaptation", {})
     engine_key = fitter._engine_cache_key()
-    fitter.model._adaptation_cache[(engine_key, method_key)] = params
+    cache[(engine_key, method_key)] = params
 
 
 def run_raytrace(
@@ -324,10 +377,13 @@ def run_raytrace(
         init_params = fitter._initialize_unbounded(key)
 
     log_prob_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
-        fitter, init_params,
+        fitter,
+        init_params,
     )
+
     def log_prob_flat(pos):
         return log_prob_flat_2arg(pos, data_args)
+
     D = len(init_flat)
 
     if step_size is None:
@@ -342,10 +398,9 @@ def run_raytrace(
     total_steps = n_burnin + n_steps
 
     if verbose:
-        print(
-            f"Ray Tracing: {D} params, {n_burnin} burn-in + "
-            f"{n_steps} samples, {n_leapfrog_steps} leapfrog/step, "
-            f"step_size={float(step_size):.4f}"
+        logger.info(
+            "Ray Tracing: %d params, %d burn-in + %d samples, %d leapfrog/step, step_size=%.4f",
+            D, n_burnin, n_steps, n_leapfrog_steps, float(step_size)
         )
 
     t0 = time.time()
@@ -374,19 +429,14 @@ def run_raytrace(
     mean_accept = float(jnp.mean(accept_prob))
     mean_accept_post = float(jnp.mean(accept_prob_post))
 
-    # Convert to physical parameter space (vectorized)
-    def _convert_one(flat_sample):
-        return fitter._to_physical(unravel_fn(flat_sample))
-
-    samples_phys = jax.vmap(_convert_one)(chain)
-    best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+    samples_phys = _vmap_samples_to_physical(chain, unravel_fn, fitter._to_physical)
+    best_params = _mean_params(samples_phys)
 
     if verbose:
-        print(
-            f"  Ray Tracing complete in {wall_time:.1f}s. "
-            f"Acceptance: {mean_accept:.1%} (overall), "
-            f"{mean_accept_post:.1%} (post burn-in). "
-            f"Samples: {n_samples_out}"
+        logger.info(
+            "  Ray Tracing complete in %.1fs. Acceptance: %.1f%% (overall), "
+            "%.1f%% (post burn-in). Samples: %d",
+            wall_time, mean_accept * 100, mean_accept_post * 100, n_samples_out
         )
 
     return Posterior(
@@ -499,19 +549,11 @@ def run_nuts(
             stacklevel=3,
         )
 
-    if init_from is not None:
-        init_params = fitter._unbounded_from_posterior(init_from)
-    else:
-        if verbose:
-            print("  MAP initialization (200 steps)...")
-        key, map_key = jax.random.split(key)
-        map_result = fitter._run_map(key=map_key, n_steps=200, verbose=False)
-        init_params = fitter._unbounded_from_posterior(map_result)
-        if verbose:
-            print(f"  MAP init done (loss={map_result.diagnostics['final_loss']:.2f})")
+    init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
 
     log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
-        fitter, init_params,
+        fitter,
+        init_params,
     )
 
     if verbose:
@@ -524,9 +566,9 @@ def run_nuts(
                 stacklevel=3,
             )
         burnin_msg = f", {n_burnin} burn-in" if n_burnin > 0 else ""
-        print(
-            f"NUTS: {n_dim} parameters, {n_warmup} warmup{burnin_msg}, "
-            f"{n_samples} samples, target_accept={target_accept_rate}"
+        logger.info(
+            "NUTS: %d parameters, %d warmup%s, %d samples, target_accept=%.2f",
+            n_dim, n_warmup, burnin_msg, n_samples, target_accept_rate
         )
 
     t0 = time.time()
@@ -540,27 +582,32 @@ def run_nuts(
     if dense_mass_matrix and n_dim > 30:
         use_dense = False
         if verbose:
-            print(
-                f"  Auto-switching to diagonal mass matrix (D={n_dim}>30). "
-                f"Dense would be O({n_dim}²)={n_dim**2} per step."
+            logger.info(
+                "  Auto-switching to diagonal mass matrix (D=%d>30). "
+                "Dense would be O(D²)=%d per step.",
+                n_dim, n_dim**2
             )
 
     adapt_key = ("nuts", not use_dense)
     cached = _get_cached_adaptation(fitter, adapt_key)
     if cached is not None:
         parameters = cached
+
         def ld_1arg(pos):
             return log_posterior_flat_2arg(pos, data_args)
+
         state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
         if verbose:
-            print(
-                f"  Reusing cached warmup ({time.time() - t0:.1f}s). "
-                f"Step size: {float(parameters['step_size']):.4f}"
+            logger.info(
+                "  Reusing cached warmup (%.1fs). Step size: %.4f",
+                time.time() - t0, float(parameters['step_size'])
             )
     else:
         key, warmup_key = jax.random.split(key)
+
         def ld_1arg(pos):
             return log_posterior_flat_2arg(pos, data_args)
+
         warmup = blackjax.window_adaptation(
             blackjax.nuts,
             ld_1arg,
@@ -570,9 +617,9 @@ def run_nuts(
         (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
         _set_cached_adaptation(fitter, adapt_key, parameters)
         if verbose:
-            print(
-                f"  Warmup complete ({time.time() - t0:.1f}s). "
-                f"Step size: {float(parameters['step_size']):.4f}"
+            logger.info(
+                "  Warmup complete (%.1fs). Step size: %.4f",
+                time.time() - t0, float(parameters['step_size'])
             )
 
     step_size = parameters["step_size"]
@@ -583,35 +630,44 @@ def run_nuts(
         key, burnin_key = jax.random.split(key)
         burnin_keys = jax.random.split(burnin_key, n_burnin)
         state = _nuts_burnin_scan(
-            state, burnin_keys, log_posterior_flat_2arg,
-            step_size, inv_mass_matrix, max_num_doublings, data_args,
+            state,
+            burnin_keys,
+            log_posterior_flat_2arg,
+            step_size,
+            inv_mass_matrix,
+            max_num_doublings,
+            data_args,
         )
         if verbose:
-            print(f"  Burn-in complete ({n_burnin} steps discarded)")
+            logger.info("  Burn-in complete (%d steps discarded)", n_burnin)
 
     key, sample_key = jax.random.split(key)
     sample_keys = jax.random.split(sample_key, n_samples)
 
     _, (positions, divergent) = _nuts_sample_scan(
-        state, sample_keys, log_posterior_flat_2arg,
-        step_size, inv_mass_matrix, max_num_doublings, data_args,
+        state,
+        sample_keys,
+        log_posterior_flat_2arg,
+        step_size,
+        inv_mass_matrix,
+        max_num_doublings,
+        data_args,
     )
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
 
     if verbose:
-        print(f"  Sampling complete ({n_samples} samples)")
+        logger.info("  Sampling complete (%d samples)", n_samples)
 
-    # Vectorized post-processing: unravel + convert to physical
-    def _convert_one(flat_pos):
-        return fitter._to_physical(unravel_fn(flat_pos))
-
-    samples_phys = jax.vmap(_convert_one)(positions)
-    best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, fitter._to_physical)
+    best_params = _mean_params(samples_phys)
 
     if verbose:
-        print(f"  NUTS complete in {wall_time:.1f}s. Divergences: {n_divergent}/{n_samples}")
+        logger.info(
+            "  NUTS complete in %.1fs. Divergences: %d/%d",
+            wall_time, n_divergent, n_samples
+        )
 
     return Posterior(
         samples=samples_phys,
@@ -673,19 +729,11 @@ def run_hmc(
 
     from tengri.inference.posterior import Posterior
 
-    if init_from is not None:
-        init_params = fitter._unbounded_from_posterior(init_from)
-    else:
-        if verbose:
-            print("  MAP initialization (200 steps)...")
-        key, map_key = jax.random.split(key)
-        map_result = fitter._run_map(key=map_key, n_steps=200, verbose=False)
-        init_params = fitter._unbounded_from_posterior(map_result)
-        if verbose:
-            print(f"  MAP init done (loss={map_result.diagnostics['final_loss']:.2f})")
+    init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
 
     log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
-        fitter, init_params,
+        fitter,
+        init_params,
     )
     n_dim = len(init_flat)
 
@@ -693,24 +741,26 @@ def run_hmc(
 
     if verbose:
         burnin_msg = f", {n_burnin} burn-in" if n_burnin > 0 else ""
-        print(
-            f"HMC: {n_dim} parameters, {n_warmup} warmup{burnin_msg}, "
-            f"{n_samples} samples, {n_leapfrog_steps} leapfrog/step"
+        logger.info(
+            "HMC: %d parameters, %d warmup%s, %d samples, %d leapfrog/step",
+            n_dim, n_warmup, burnin_msg, n_samples, n_leapfrog_steps
         )
 
     t0 = time.time()
 
     adapt_key = ("hmc", not use_dense)
     cached = _get_cached_adaptation(fitter, adapt_key)
+
     def ld_1arg(pos):
         return log_posterior_flat_2arg(pos, data_args)
+
     if cached is not None:
         parameters = cached
         state = blackjax.mcmc.hmc.init(init_flat, ld_1arg)
         if verbose:
-            print(
-                f"  Reusing cached warmup ({time.time() - t0:.1f}s). "
-                f"Step size: {float(parameters['step_size']):.4f}"
+            logger.info(
+                "  Reusing cached warmup (%.1fs). Step size: %.4f",
+                time.time() - t0, float(parameters['step_size'])
             )
     else:
         key, warmup_key = jax.random.split(key)
@@ -724,9 +774,9 @@ def run_hmc(
         (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
         _set_cached_adaptation(fitter, adapt_key, parameters)
         if verbose:
-            print(
-                f"  Warmup complete ({time.time() - t0:.1f}s). "
-                f"Step size: {float(parameters['step_size']):.4f}"
+            logger.info(
+                "  Warmup complete (%.1fs). Step size: %.4f",
+                time.time() - t0, float(parameters['step_size'])
             )
 
     step_size = parameters["step_size"]
@@ -736,31 +786,41 @@ def run_hmc(
         key, burnin_key = jax.random.split(key)
         burnin_keys = jax.random.split(burnin_key, n_burnin)
         state = _hmc_burnin_scan(
-            state, burnin_keys, log_posterior_flat_2arg,
-            step_size, inv_mass_matrix, n_leapfrog_steps, data_args,
+            state,
+            burnin_keys,
+            log_posterior_flat_2arg,
+            step_size,
+            inv_mass_matrix,
+            n_leapfrog_steps,
+            data_args,
         )
         if verbose:
-            print(f"  Burn-in complete ({n_burnin} steps discarded)")
+            logger.info("  Burn-in complete (%d steps discarded)", n_burnin)
 
     key, sample_key = jax.random.split(key)
     sample_keys = jax.random.split(sample_key, n_samples)
 
     _, (positions, divergent) = _hmc_sample_scan(
-        state, sample_keys, log_posterior_flat_2arg,
-        step_size, inv_mass_matrix, n_leapfrog_steps, data_args,
+        state,
+        sample_keys,
+        log_posterior_flat_2arg,
+        step_size,
+        inv_mass_matrix,
+        n_leapfrog_steps,
+        data_args,
     )
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
 
-    def _convert_one(flat_pos):
-        return fitter._to_physical(unravel_fn(flat_pos))
-
-    samples_phys = jax.vmap(_convert_one)(positions)
-    best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, fitter._to_physical)
+    best_params = _mean_params(samples_phys)
 
     if verbose:
-        print(f"  HMC complete in {wall_time:.1f}s. Divergences: {n_divergent}/{n_samples}")
+        logger.info(
+            "  HMC complete in %.1fs. Divergences: %d/%d",
+            wall_time, n_divergent, n_samples
+        )
 
     return Posterior(
         samples=samples_phys,
@@ -820,19 +880,11 @@ def run_dynamic_hmc(
 
     from tengri.inference.posterior import Posterior
 
-    if init_from is not None:
-        init_params = fitter._unbounded_from_posterior(init_from)
-    else:
-        if verbose:
-            print("  MAP initialization (200 steps)...")
-        key, map_key = jax.random.split(key)
-        map_result = fitter._run_map(key=map_key, n_steps=200, verbose=False)
-        init_params = fitter._unbounded_from_posterior(map_result)
-        if verbose:
-            print(f"  MAP init done (loss={map_result.diagnostics['final_loss']:.2f})")
+    init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
 
     log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
-        fitter, init_params,
+        fitter,
+        init_params,
     )
     n_dim = len(init_flat)
 
@@ -840,9 +892,9 @@ def run_dynamic_hmc(
 
     if verbose:
         burnin_msg = f", {n_burnin} burn-in" if n_burnin > 0 else ""
-        print(
-            f"Dynamic HMC: {n_dim} parameters, {n_warmup} warmup{burnin_msg}, "
-            f"{n_samples} samples"
+        logger.info(
+            "Dynamic HMC: %d parameters, %d warmup%s, %d samples",
+            n_dim, n_warmup, burnin_msg, n_samples
         )
 
     t0 = time.time()
@@ -852,14 +904,16 @@ def run_dynamic_hmc(
     # then initialize dynamic_hmc state separately.
     adapt_key = ("hmc", not use_dense)
     cached = _get_cached_adaptation(fitter, adapt_key)
+
     def ld_1arg(pos):
         return log_posterior_flat_2arg(pos, data_args)
+
     if cached is not None:
         parameters = cached
         if verbose:
-            print(
-                f"  Reusing cached warmup ({time.time() - t0:.1f}s). "
-                f"Step size: {float(parameters['step_size']):.4f}"
+            logger.info(
+                "  Reusing cached warmup (%.1fs). Step size: %.4f",
+                time.time() - t0, float(parameters['step_size'])
             )
     else:
         key, warmup_key = jax.random.split(key)
@@ -873,9 +927,9 @@ def run_dynamic_hmc(
         (_, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
         _set_cached_adaptation(fitter, adapt_key, parameters)
         if verbose:
-            print(
-                f"  Warmup complete ({time.time() - t0:.1f}s). "
-                f"Step size: {float(parameters['step_size']):.4f}"
+            logger.info(
+                "  Warmup complete (%.1fs). Step size: %.4f",
+                time.time() - t0, float(parameters['step_size'])
             )
 
     step_size = parameters["step_size"]
@@ -888,33 +942,38 @@ def run_dynamic_hmc(
         key, burnin_key = jax.random.split(key)
         burnin_keys = jax.random.split(burnin_key, n_burnin)
         state = _dynamic_hmc_burnin_scan(
-            state, burnin_keys, log_posterior_flat_2arg,
-            step_size, inv_mass_matrix, data_args,
+            state,
+            burnin_keys,
+            log_posterior_flat_2arg,
+            step_size,
+            inv_mass_matrix,
+            data_args,
         )
         if verbose:
-            print(f"  Burn-in complete ({n_burnin} steps discarded)")
+            logger.info("  Burn-in complete (%d steps discarded)", n_burnin)
 
     key, sample_key = jax.random.split(key)
     sample_keys = jax.random.split(sample_key, n_samples)
 
     _, (positions, divergent) = _dynamic_hmc_sample_scan(
-        state, sample_keys, log_posterior_flat_2arg,
-        step_size, inv_mass_matrix, data_args,
+        state,
+        sample_keys,
+        log_posterior_flat_2arg,
+        step_size,
+        inv_mass_matrix,
+        data_args,
     )
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
 
-    def _convert_one(flat_pos):
-        return fitter._to_physical(unravel_fn(flat_pos))
-
-    samples_phys = jax.vmap(_convert_one)(positions)
-    best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, fitter._to_physical)
+    best_params = _mean_params(samples_phys)
 
     if verbose:
-        print(
-            f"  Dynamic HMC complete in {wall_time:.1f}s. "
-            f"Divergences: {n_divergent}/{n_samples}"
+        logger.info(
+            "  Dynamic HMC complete in %.1fs. Divergences: %d/%d",
+            wall_time, n_divergent, n_samples
         )
 
     return Posterior(
@@ -984,27 +1043,19 @@ def run_ghmc(
 
     from tengri.inference.posterior import Posterior
 
-    if init_from is not None:
-        init_params = fitter._unbounded_from_posterior(init_from)
-    else:
-        if verbose:
-            print("  MAP initialization (200 steps)...")
-        key, map_key = jax.random.split(key)
-        map_result = fitter._run_map(key=map_key, n_steps=200, verbose=False)
-        init_params = fitter._unbounded_from_posterior(map_result)
-        if verbose:
-            print(f"  MAP init done (loss={map_result.diagnostics['final_loss']:.2f})")
+    init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
 
     log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
-        fitter, init_params,
+        fitter,
+        init_params,
     )
     n_dim = len(init_flat)
 
     if verbose:
         burnin_msg = f", {n_burnin} burn-in" if n_burnin > 0 else ""
-        print(
-            f"GHMC: {n_dim} parameters, {n_warmup} warmup{burnin_msg}, "
-            f"{n_samples} samples, alpha={alpha}, delta={delta}"
+        logger.info(
+            "GHMC: %d parameters, %d warmup%s, %d samples, alpha=%.1f, delta=%.2f",
+            n_dim, n_warmup, burnin_msg, n_samples, alpha, delta
         )
 
     t0 = time.time()
@@ -1014,14 +1065,16 @@ def run_ghmc(
     # of the dense_mass_matrix flag.
     adapt_key = ("hmc", True)  # always diagonal for GHMC
     cached = _get_cached_adaptation(fitter, adapt_key)
+
     def ld_1arg(pos):
         return log_posterior_flat_2arg(pos, data_args)
+
     if cached is not None:
         parameters = cached
         if verbose:
-            print(
-                f"  Reusing cached warmup ({time.time() - t0:.1f}s). "
-                f"Step size: {float(parameters['step_size']):.4f}"
+            logger.info(
+                "  Reusing cached warmup (%.1fs). Step size: %.4f",
+                time.time() - t0, float(parameters['step_size'])
             )
     else:
         key, warmup_key = jax.random.split(key)
@@ -1035,9 +1088,9 @@ def run_ghmc(
         (_, parameters), _ = warmup_hmc.run(warmup_key, init_flat, num_steps=n_warmup)
         _set_cached_adaptation(fitter, adapt_key, parameters)
         if verbose:
-            print(
-                f"  Warmup complete ({time.time() - t0:.1f}s). "
-                f"Step size: {float(parameters['step_size']):.4f}"
+            logger.info(
+                "  Warmup complete (%.1fs). Step size: %.4f",
+                time.time() - t0, float(parameters['step_size'])
             )
 
     step_size = parameters["step_size"]
@@ -1050,31 +1103,43 @@ def run_ghmc(
         key, burnin_key = jax.random.split(key)
         burnin_keys = jax.random.split(burnin_key, n_burnin)
         state = _ghmc_burnin_scan(
-            state, burnin_keys, log_posterior_flat_2arg,
-            step_size, momentum_inv_scale, alpha, delta, data_args,
+            state,
+            burnin_keys,
+            log_posterior_flat_2arg,
+            step_size,
+            momentum_inv_scale,
+            alpha,
+            delta,
+            data_args,
         )
         if verbose:
-            print(f"  Burn-in complete ({n_burnin} steps discarded)")
+            logger.info("  Burn-in complete (%d steps discarded)", n_burnin)
 
     key, sample_key = jax.random.split(key)
     sample_keys = jax.random.split(sample_key, n_samples)
 
     _, (positions, divergent) = _ghmc_sample_scan(
-        state, sample_keys, log_posterior_flat_2arg,
-        step_size, momentum_inv_scale, alpha, delta, data_args,
+        state,
+        sample_keys,
+        log_posterior_flat_2arg,
+        step_size,
+        momentum_inv_scale,
+        alpha,
+        delta,
+        data_args,
     )
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
 
-    def _convert_one(flat_pos):
-        return fitter._to_physical(unravel_fn(flat_pos))
-
-    samples_phys = jax.vmap(_convert_one)(positions)
-    best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, fitter._to_physical)
+    best_params = _mean_params(samples_phys)
 
     if verbose:
-        print(f"  GHMC complete in {wall_time:.1f}s. Divergences: {n_divergent}/{n_samples}")
+        logger.info(
+            "  GHMC complete in %.1fs. Divergences: %d/%d",
+            wall_time, n_divergent, n_samples
+        )
 
     return Posterior(
         samples=samples_phys,
@@ -1130,26 +1195,20 @@ def run_mclmc(
 
     from tengri.inference.posterior import Posterior
 
-    if init_from is not None:
-        init_params = fitter._unbounded_from_posterior(init_from)
-    else:
-        if verbose:
-            print("  MAP initialization (200 steps)...")
-        key, map_key = jax.random.split(key)
-        map_result = fitter._run_map(key=map_key, n_steps=200, verbose=False)
-        init_params = fitter._unbounded_from_posterior(map_result)
-        if verbose:
-            print(f"  MAP init done (loss={map_result.diagnostics['final_loss']:.2f})")
+    init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
 
     log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
-        fitter, init_params,
+        fitter,
+        init_params,
     )
+
     def ld_1arg(pos):
         return log_posterior_flat_2arg(pos, data_args)
+
     n_dim = len(init_flat)
 
     if verbose:
-        print(f"MCLMC: {n_dim} parameters, {n_warmup} warmup, {n_samples} samples")
+        logger.info("MCLMC: %d parameters, %d warmup, %d samples", n_dim, n_warmup, n_samples)
 
     t0 = time.time()
 
@@ -1167,9 +1226,9 @@ def run_mclmc(
         key, init_key = jax.random.split(key)
         state = blackjax.mcmc.mclmc.init(init_flat, ld_1arg, init_key)
         if verbose:
-            print(
-                f"  Reusing cached warmup ({time.time() - t0:.1f}s). "
-                f"L={float(params.L):.4f}, step_size={float(params.step_size):.4f}"
+            logger.info(
+                "  Reusing cached warmup (%.1fs). L=%.4f, step_size=%.4f",
+                time.time() - t0, float(params.L), float(params.step_size)
             )
     else:
         key, init_key = jax.random.split(key)
@@ -1188,28 +1247,29 @@ def run_mclmc(
         _set_cached_adaptation(fitter, "mclmc", params)
 
         if verbose:
-            print(
-                f"  Warmup complete ({time.time() - t0:.1f}s). "
-                f"L={float(params.L):.4f}, step_size={float(params.step_size):.4f}"
+            logger.info(
+                "  Warmup complete (%.1fs). L=%.4f, step_size=%.4f",
+                time.time() - t0, float(params.L), float(params.step_size)
             )
 
     key, sample_key = jax.random.split(key)
     sample_keys = jax.random.split(sample_key, n_samples)
 
     _, positions = _mclmc_sample_scan(
-        state, sample_keys, kernel, params.L, params.step_size,
+        state,
+        sample_keys,
+        kernel,
+        params.L,
+        params.step_size,
     )
 
     wall_time = time.time() - t0
 
-    def _convert_one(flat_pos):
-        return fitter._to_physical(unravel_fn(flat_pos))
-
-    samples_phys = jax.vmap(_convert_one)(positions)
-    best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, fitter._to_physical)
+    best_params = _mean_params(samples_phys)
 
     if verbose:
-        print(f"  MCLMC complete in {wall_time:.1f}s ({n_samples} samples)")
+        logger.info("  MCLMC complete in %.1fs (%d samples)", wall_time, n_samples)
 
     return Posterior(
         samples=samples_phys,
@@ -1266,28 +1326,22 @@ def run_adjusted_mclmc(
 
     from tengri.inference.posterior import Posterior
 
-    if init_from is not None:
-        init_params = fitter._unbounded_from_posterior(init_from)
-    else:
-        if verbose:
-            print("  MAP initialization (200 steps)...")
-        key, map_key = jax.random.split(key)
-        map_result = fitter._run_map(key=map_key, n_steps=200, verbose=False)
-        init_params = fitter._unbounded_from_posterior(map_result)
-        if verbose:
-            print(f"  MAP init done (loss={map_result.diagnostics['final_loss']:.2f})")
+    init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
 
     log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
-        fitter, init_params,
+        fitter,
+        init_params,
     )
+
     def ld_1arg(pos):
         return log_posterior_flat_2arg(pos, data_args)
+
     n_dim = len(init_flat)
 
     if verbose:
-        print(
-            f"Adjusted MCLMC: {n_dim} parameters, {n_warmup} warmup, "
-            f"{n_samples} samples, target_accept={target_accept_rate}"
+        logger.info(
+            "Adjusted MCLMC: %d parameters, %d warmup, %d samples, target_accept=%.2f",
+            n_dim, n_warmup, n_samples, target_accept_rate
         )
 
     t0 = time.time()
@@ -1302,9 +1356,9 @@ def run_adjusted_mclmc(
         )
         state = blackjax.mcmc.adjusted_mclmc.init(init_flat, ld_1arg)
         if verbose:
-            print(
-                f"  Reusing cached warmup ({time.time() - t0:.1f}s). "
-                f"L={float(params.L):.4f}, step_size={float(params.step_size):.4f}"
+            logger.info(
+                "  Reusing cached warmup (%.1fs). L=%.4f, step_size=%.4f",
+                time.time() - t0, float(params.L), float(params.step_size)
             )
     else:
         state = blackjax.mcmc.adjusted_mclmc.init(init_flat, ld_1arg)
@@ -1341,9 +1395,9 @@ def run_adjusted_mclmc(
         _set_cached_adaptation(fitter, "adjusted_mclmc", params)
 
         if verbose:
-            print(
-                f"  Warmup complete ({time.time() - t0:.1f}s). "
-                f"L={float(params.L):.4f}, step_size={float(params.step_size):.4f}"
+            logger.info(
+                "  Warmup complete (%.1fs). L=%.4f, step_size=%.4f",
+                time.time() - t0, float(params.L), float(params.step_size)
             )
 
     L = params.L
@@ -1354,22 +1408,23 @@ def run_adjusted_mclmc(
     sample_keys = jax.random.split(sample_key, n_samples)
 
     _, (positions, divergent) = _adjusted_mclmc_sample_scan(
-        state, sample_keys, kernel, step_size, n_integration_steps,
+        state,
+        sample_keys,
+        kernel,
+        step_size,
+        n_integration_steps,
     )
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
 
-    def _convert_one(flat_pos):
-        return fitter._to_physical(unravel_fn(flat_pos))
-
-    samples_phys = jax.vmap(_convert_one)(positions)
-    best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, fitter._to_physical)
+    best_params = _mean_params(samples_phys)
 
     if verbose:
-        print(
-            f"  Adjusted MCLMC complete in {wall_time:.1f}s. "
-            f"Divergences: {n_divergent}/{n_samples}"
+        logger.info(
+            "  Adjusted MCLMC complete in %.1fs. Divergences: %d/%d",
+            wall_time, n_divergent, n_samples
         )
 
     return Posterior(

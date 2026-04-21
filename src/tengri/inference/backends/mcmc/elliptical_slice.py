@@ -22,6 +22,8 @@ import jax
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
+from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+
 
 def run_elliptical_slice(
     *,
@@ -130,17 +132,8 @@ def run_elliptical_slice(
     positions = jnp.stack(all_positions)
 
     # Unravel and convert to physical space
-    samples_phys = {}
-    for i in range(n_samples):
-        sample_u = unravel_fn(positions[i])
-        sample_p = to_physical_fn(sample_u)
-        for k, v in sample_p.items():
-            if k not in samples_phys:
-                samples_phys[k] = []
-            samples_phys[k].append(v)
-
-    samples_phys = {k: jnp.stack(v) for k, v in samples_phys.items()}
-    best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, to_physical_fn)
+    best_params = _mean_params(samples_phys)
 
     wall_time = time.time() - t0
     mean_subiter = subiter_total / max(n_samples, 1)

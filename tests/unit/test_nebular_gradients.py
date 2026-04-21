@@ -36,17 +36,14 @@ def _make_mock_ssp(n_met=3, n_age=10, n_wave=50):
     so that Q_H can be computed.
     """
     ssp_wave = np.linspace(500.0, 2000.0, n_wave)
-    # Simple blackbody-like spectrum: higher for hotter (younger) SSPs
     ssp_flux = np.zeros((n_met, n_age, n_wave))
     for i in range(n_met):
         for j in range(n_age):
-            # Young ages (j=0..4) emit ionizing photons; older do not
             if j < 5:
                 ssp_flux[i, j] = np.exp(-ssp_wave / 300.0) * 1e3
             else:
                 ssp_flux[i, j] = np.exp(-ssp_wave / 800.0)
     ssp_lgmet = np.linspace(-2.5, -1.0, n_met)
-    # log10(age/Gyr): spans 6 Myr to 13 Gyr
     ssp_lg_age_gyr = np.linspace(-3.2, 1.1, n_age)
     return SimpleNamespace(
         ssp_wave=ssp_wave,
@@ -56,18 +53,68 @@ def _make_mock_ssp(n_met=3, n_age=10, n_wave=50):
     )
 
 
-# ── CloudyGridBackend ─────────────────────────────────────────────
+# ── Module-scoped fixtures for shared backends ────────────────────
 
 _CLOUDY_GRID_PATH = Path("/Users/suchethacooray/Projects/tengri/data/cloudy_grid_mist.h5")
+_CUE_WEIGHTS_PATH = Path("/Users/suchethacooray/Projects/tengri/data/cue_weights.npz")
+_CB19_GRID_PATH = Path("/Users/suchethacooray/Projects/tengri/data/cb19_templates.h5")
 
 
-@pytest.mark.skipif(not _CLOUDY_GRID_PATH.exists(), reason="CLOUDY grid not present")
-def test_cloudy_grid_grad_logu():
-    """Test JAX autodiff vs finite difference for CloudyGridBackend."""
+@pytest.fixture(scope="module")
+def mock_ssp():
+    return _make_mock_ssp()
+
+
+@pytest.fixture(scope="module")
+def cloudy_linear_backend(mock_ssp):
+    if not _CLOUDY_GRID_PATH.exists():
+        pytest.skip("CLOUDY grid not present")
     from tengri.components.nebular import CloudyGridBackend
 
-    mock_ssp = _make_mock_ssp()
-    backend = CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp)
+    return CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp)
+
+
+@pytest.fixture(scope="module")
+def cloudy_triweight_backend(mock_ssp):
+    if not _CLOUDY_GRID_PATH.exists():
+        pytest.skip("CLOUDY grid not present")
+    from tengri.components.nebular import CloudyGridBackend
+
+    return CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp, grid_interp="triweight")
+
+
+@pytest.fixture(scope="module")
+def cue_backend(mock_ssp):
+    if not _CUE_WEIGHTS_PATH.exists():
+        pytest.skip("Cue weights not present")
+    from tengri.components.nebular import CueBackend
+    from tengri.components.nebular.cue import CueWNESSPWarning
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", CueWNESSPWarning)
+        return CueBackend(str(_CUE_WEIGHTS_PATH), ssp_data=mock_ssp)
+
+
+@pytest.fixture(scope="module")
+def cb19_backend(mock_ssp):
+    if not _CB19_GRID_PATH.exists():
+        pytest.skip("CB19 grid not present")
+    from tengri.components.nebular.cloudy_cb19 import CB19Backend
+
+    return CB19Backend(
+        grid_path=str(_CB19_GRID_PATH),
+        ssp_data=mock_ssp,
+        ionizing_source_warning="suppress",
+        continuum_warning="suppress",
+    )
+
+
+# ── CloudyGridBackend ─────────────────────────────────────────────
+
+
+def test_cloudy_grid_grad_logu(cloudy_linear_backend, mock_ssp):
+    """Test JAX autodiff vs finite difference for CloudyGridBackend."""
+    backend = cloudy_linear_backend
 
     # Use the mock SSP age/weight arrays matching initialization
     n_age = len(mock_ssp.ssp_lg_age_gyr)
@@ -108,13 +155,9 @@ def test_cloudy_grid_grad_logu():
     )
 
 
-@pytest.mark.skipif(not _CLOUDY_GRID_PATH.exists(), reason="CLOUDY grid not present")
-def test_cloudy_grid_triweight_runs():
+def test_cloudy_grid_triweight_runs(cloudy_triweight_backend, mock_ssp):
     """Triweight mode produces finite output for both lines and continuum."""
-    from tengri.components.nebular import CloudyGridBackend
-
-    mock_ssp = _make_mock_ssp()
-    backend = CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp, grid_interp="triweight")
+    backend = cloudy_triweight_backend
 
     n_age = len(mock_ssp.ssp_lg_age_gyr)
     ssp_wave = jnp.array(mock_ssp.ssp_wave)
@@ -137,17 +180,13 @@ def test_cloudy_grid_triweight_runs():
     assert jnp.any(sed > 0.0), "Triweight mode produced all-zero SED"
 
 
-@pytest.mark.skipif(not _CLOUDY_GRID_PATH.exists(), reason="CLOUDY grid not present")
-def test_cloudy_grid_triweight_grad_at_grid_node():
+def test_cloudy_grid_triweight_grad_at_grid_node(cloudy_triweight_backend, mock_ssp):
     """Triweight mode: FD ≈ AD even when logU lands exactly on a grid node.
 
     This is the key advantage over linear mode — the smooth C²-continuous kernel
     eliminates the piecewise-linear kink, so FD and AD agree everywhere.
     """
-    from tengri.components.nebular import CloudyGridBackend
-
-    mock_ssp = _make_mock_ssp()
-    backend = CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp, grid_interp="triweight")
+    backend = cloudy_triweight_backend
 
     n_age = len(mock_ssp.ssp_lg_age_gyr)
     ssp_wave = jnp.array(mock_ssp.ssp_wave)
@@ -182,8 +221,7 @@ def test_cloudy_grid_triweight_grad_at_grid_node():
     )
 
 
-@pytest.mark.skipif(not _CLOUDY_GRID_PATH.exists(), reason="CLOUDY grid not present")
-def test_logu_ordering():
+def test_logu_ordering(cloudy_linear_backend, mock_ssp):
     """Higher logU → harder ionization → higher [OIII]5007/Hβ ratio.
 
     Veilleux & Osterbrock (1987, ApJS 63, 295): [OIII]5007/Hβ is the primary
@@ -194,10 +232,7 @@ def test_logu_ordering():
     Line order in CLOUDY_LINE_NAMES: Hβ at index 4 (4862.68 Å),
     [OIII]5007 at index 6 (5008.24 Å) — vacuum wavelengths.
     """
-    from tengri.components.nebular import CloudyGridBackend
-
-    mock_ssp = _make_mock_ssp()
-    backend = CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp)
+    backend = cloudy_linear_backend
 
     n_age = len(mock_ssp.ssp_lg_age_gyr)
     ssp_weights = jnp.ones(n_age) * 1e8
@@ -233,23 +268,19 @@ def test_logu_ordering():
     )
 
 
-@pytest.mark.skipif(not _CLOUDY_GRID_PATH.exists(), reason="CLOUDY grid not present")
-def test_cloudy_grid_invalid_interp_mode():
+def test_cloudy_grid_invalid_interp_mode(mock_ssp):
     """Unknown grid_interp raises ValueError at construction time."""
+    if not _CLOUDY_GRID_PATH.exists():
+        pytest.skip("CLOUDY grid not present")
     from tengri.components.nebular import CloudyGridBackend
 
-    mock_ssp = _make_mock_ssp()
     with pytest.raises(ValueError, match="grid_interp"):
         CloudyGridBackend(str(_CLOUDY_GRID_PATH), mock_ssp, grid_interp="cubic")
 
 
 # ── CueBackend ────────────────────────────────────────────────────
 
-_CUE_WEIGHTS_PATH = Path("/Users/suchethacooray/Projects/tengri/data/cue_weights.npz")
-
-
-@pytest.mark.skipif(not _CUE_WEIGHTS_PATH.exists(), reason="Cue weights not present")
-def test_cue_grad_logu():
+def test_cue_grad_logu(cue_backend, mock_ssp):
     """Test JAX autodiff vs finite difference for CueBackend.
 
     The mock SSP has near-zero ionizing flux, which correctly triggers a
@@ -257,13 +288,7 @@ def test_cue_grad_logu():
     We suppress that warning here — it is expected behaviour for mock data and
     is tested separately in test_nebular_warnings.py.
     """
-    from tengri.components.nebular import CueBackend
-    from tengri.components.nebular.cue import CueWNESSPWarning
-
-    mock_ssp = _make_mock_ssp()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", CueWNESSPWarning)
-        backend = CueBackend(str(_CUE_WEIGHTS_PATH), ssp_data=mock_ssp)
+    backend = cue_backend
 
     n_age = len(mock_ssp.ssp_lg_age_gyr)
     ssp_wave = jnp.array(mock_ssp.ssp_wave)
@@ -299,26 +324,14 @@ def test_cue_grad_logu():
 
 # ── CB19Backend ───────────────────────────────────────────────────
 
-_CB19_GRID_PATH = Path("/Users/suchethacooray/Projects/tengri/data/cb19_templates.h5")
-
-
-@pytest.mark.skipif(not _CB19_GRID_PATH.exists(), reason="CB19 grid not present")
-def test_cb19_grad_logu():
+def test_cb19_grad_logu(cb19_backend, mock_ssp):
     """Test JAX autodiff vs finite difference for CB19Backend w.r.t. neb_logU.
 
     CB_19 provides line ratios only (no continuum).  The gradient check confirms
     that the logU interpolation inside the CB_19 grid is smooth enough for
     autodiff to agree with central finite differences to 5% relative tolerance.
     """
-    from tengri.components.nebular.cloudy_cb19 import CB19Backend
-
-    mock_ssp = _make_mock_ssp()
-    backend = CB19Backend(
-        grid_path=str(_CB19_GRID_PATH),
-        ssp_data=mock_ssp,
-        ionizing_source_warning="suppress",
-        continuum_warning="suppress",
-    )
+    backend = cb19_backend
 
     n_age = len(mock_ssp.ssp_lg_age_gyr)
     ssp_wave = jnp.array(mock_ssp.ssp_wave)

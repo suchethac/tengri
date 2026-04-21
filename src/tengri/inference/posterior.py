@@ -14,11 +14,14 @@ Usage:
 from __future__ import annotations
 
 import functools
+import logging
 from dataclasses import dataclass, field
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -846,11 +849,8 @@ class Posterior:
                 for k in ["stellar_mass", "sfr_100myr", "sfr_10myr"]:
                     if k in d:
                         derived[k] = np.array(d[k])
-            except (AttributeError, TypeError, ValueError):
-                # AttributeError: derived property doesn't exist or failed
-                # TypeError: np.array() conversion failed
-                # ValueError: invalid values for array conversion
-                pass
+            except (AttributeError, TypeError, ValueError) as exc:
+                logger.debug("derived quantity computation failed: %s", exc)
             # Compute truth derived quantities for truth lines
             if truths is not None:
                 try:
@@ -858,11 +858,8 @@ class Posterior:
                     for k in derived:
                         if k in d_true:
                             derived_truths[k] = float(d_true[k])
-                except (AttributeError, TypeError, ValueError):
-                    # AttributeError: predict_derived method doesn't exist
-                    # TypeError: wrong arguments or float() conversion failed
-                    # ValueError: invalid truths parameter
-                    pass
+                except (AttributeError, TypeError, ValueError) as exc:
+                    logger.debug("derived truth computation failed: %s", exc)
 
         n = len(params) + len(derived)
         if fig is None or axes is None:

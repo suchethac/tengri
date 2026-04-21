@@ -12,6 +12,8 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
+from tengri.inference._model_cache import get_model_cache
+
 _OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd"}
 _SCIPY_OPTIMIZERS = {"lbfgs", "lbfgs_scipy"}
 _ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _SCIPY_OPTIMIZERS
@@ -105,11 +107,10 @@ def _get_or_build_map_fns(model, loss_fn, optimizer, learning_rate):
     cache_key = optimizer if isinstance(optimizer, str) else "custom"
     step_key = (id(loss_fn), cache_key, learning_rate)
 
-    if not hasattr(model, "_map_step_cache"):
-        model._map_step_cache = {}
+    cache = get_model_cache(model).setdefault("map_step", {})
 
-    if step_key in model._map_step_cache:
-        return model._map_step_cache[step_key]
+    if step_key in cache:
+        return cache[step_key]
 
     opt, opt_name = _build_optax_optimizer(optimizer, learning_rate)
 
@@ -134,7 +135,7 @@ def _get_or_build_map_fns(model, loss_fn, optimizer, learning_rate):
         new_params = optax.apply_updates(params, updates)
         return new_params, new_ostate, loss
 
-    model._map_step_cache[step_key] = (scan_batch, single_step, opt, opt_name)
+    cache[step_key] = (scan_batch, single_step, opt, opt_name)
     return scan_batch, single_step, opt, opt_name
 
 

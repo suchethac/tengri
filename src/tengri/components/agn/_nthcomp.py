@@ -31,6 +31,7 @@ Zdziarski, Johnson & Magdziarz (1996) MNRAS 283 193 — Kompaneets solver.
 
 from __future__ import annotations
 
+import functools
 import warnings
 from pathlib import Path
 
@@ -41,66 +42,75 @@ import numpy as np
 
 # ── Template loading (lazy — no computation at import time) ───────
 
-#: Grid axes stored in the npz file (set by load_nthcomp_templates).
-_GAMMA_JAX: jnp.ndarray | None = None
-_KTE_JAX: jnp.ndarray | None = None
-_KTBB_JAX: jnp.ndarray | None = None
-_NU_JAX: jnp.ndarray | None = None
-_TABLE_JAX: jnp.ndarray | None = None
-
-#: True once templates are successfully loaded.
-_TABLE_AVAILABLE: bool = False
-
 _DEFAULT_TEMPLATE_PATH = Path(__file__).parents[4] / "data" / "nthcomp_templates.h5"
 
 
-def load_nthcomp_templates(path: Path | None = None) -> bool:
-    """Load precomputed nthcomp templates from an npz file.
+@functools.cache
+def _load_nthcomp_templates_impl():
+    """Load precomputed nthcomp templates from file.
 
-    Called automatically at import time if ``data/nthcomp_templates.h5``
-    exists.  Also callable manually to load from a custom path.
-
-    Parameters
-    ----------
-    path : Path, optional
-        Path to the npz file.  Defaults to ``data/nthcomp_templates.npz``
-        relative to the package root.
-
-    Returns
-    -------
-    bool
-        True if templates were loaded successfully.
+    Returns a tuple (gamma, kte, ktbb, nu, table_log, available).
     """
-    global _GAMMA_JAX, _KTE_JAX, _KTBB_JAX, _NU_JAX, _TABLE_JAX, _TABLE_AVAILABLE
-
-    fpath = Path(path) if path is not None else _DEFAULT_TEMPLATE_PATH
+    fpath = _DEFAULT_TEMPLATE_PATH
     if not fpath.exists():
-        return False
+        return None, None, None, None, None, False
 
     try:
         with h5py.File(fpath, "r") as f:
-            _GAMMA_JAX = jnp.array(f["gamma_grid"][:], dtype=jnp.float32)
-            _KTE_JAX = jnp.array(f["kte_grid"][:], dtype=jnp.float32)
-            _KTBB_JAX = jnp.array(f["ktbb_grid"][:], dtype=jnp.float32)
-            _NU_JAX = jnp.array(f["nu_grid"][:], dtype=jnp.float32)
+            gamma_jax = jnp.array(f["gamma_grid"][:], dtype=jnp.float32)
+            kte_jax = jnp.array(f["kte_grid"][:], dtype=jnp.float32)
+            ktbb_jax = jnp.array(f["ktbb_grid"][:], dtype=jnp.float32)
+            nu_jax = jnp.array(f["nu_grid"][:], dtype=jnp.float32)
             table = f["table"][:]
-        # Store log(table) for log-space trilinear interpolation.
-        # Clamped to a small positive floor to avoid log(0); zeros in the
-        # table correspond to spectral regions where nthcomp returns no flux.
-        _TABLE_JAX = jnp.array(np.log(np.maximum(table, 1e-37)), dtype=jnp.float32)
-        _TABLE_AVAILABLE = True
-        return True
+        table_log_jax = jnp.array(np.log(np.maximum(table, 1e-37)), dtype=jnp.float32)
+        return gamma_jax, kte_jax, ktbb_jax, nu_jax, table_log_jax, True
     except Exception as exc:
         warnings.warn(
             f"Failed to load nthcomp templates from {fpath}: {exc}. "
             "Run scripts/build_nthcomp_templates.py to build them.",
             stacklevel=2,
         )
-        return False
+        return None, None, None, None, None, False
 
 
-# Try to auto-load at import time.
-load_nthcomp_templates()
+def _get_nthcomp_templates():
+    """Get cached nthcomp templates, loading on first call."""
+    gamma, kte, ktbb, nu, table_log, available = _load_nthcomp_templates_impl()
+    return gamma, kte, ktbb, nu, table_log, available
+
+
+#: Backward-compat global accessors (for interpolation functions below)
+def _get_gamma_jax():
+    gamma, _, _, _, _, _ = _get_nthcomp_templates()
+    return gamma
+
+
+def _get_kte_jax():
+    _, kte, _, _, _, _ = _get_nthcomp_templates()
+    return kte
+
+
+def _get_ktbb_jax():
+    _, _, ktbb, _, _, _ = _get_nthcomp_templates()
+    return ktbb
+
+
+def _get_nu_jax():
+    _, _, _, nu, _, _ = _get_nthcomp_templates()
+    return nu
+
+
+def _get_table_jax():
+    _, _, _, _, table_log, _ = _get_nthcomp_templates()
+    return table_log
+
+
+def _is_table_available():
+    _, _, _, _, _, available = _get_nthcomp_templates()
+    return available
+
+
+_TABLE_AVAILABLE = _is_table_available()
 
 
 # ── JAX-compatible interpolation (only valid when _TABLE_AVAILABLE is True)
@@ -124,7 +134,7 @@ def _nthcomp_lnu_interp_impl(
     kTbb_keV: jnp.ndarray,
 ) -> jnp.ndarray:
     """Implementation of nthcomp interpolation (used by both forward and VJP)."""
-    if not _TABLE_AVAILABLE:
+    if not _is_table_available():
         raise RuntimeError(
             "nthcomp templates not loaded. Run scripts/build_nthcomp_templates.py first."
         )
@@ -133,15 +143,21 @@ def _nthcomp_lnu_interp_impl(
     t = jnp.asarray(kTe_keV, dtype=jnp.float32)
     b = jnp.asarray(kTbb_keV, dtype=jnp.float32)
 
-    ig, fg = _clamp_interp_index(g, _GAMMA_JAX)
-    it, ft = _clamp_interp_index(t, _KTE_JAX)
-    ib, fb = _clamp_interp_index(b, _KTBB_JAX)
+    gamma_jax = _get_gamma_jax()
+    kte_jax = _get_kte_jax()
+    ktbb_jax = _get_ktbb_jax()
+    ig, fg = _clamp_interp_index(g, gamma_jax)
+    it, ft = _clamp_interp_index(t, kte_jax)
+    ib, fb = _clamp_interp_index(b, ktbb_jax)
+
+    table_jax = _get_table_jax()
+    nu_jax = _get_nu_jax()
 
     def _c(dg: int, dt: int, db: int) -> jnp.ndarray:
-        return _TABLE_JAX[ig + dg, it + dt, ib + db]
+        return table_jax[ig + dg, it + dt, ib + db]
 
     # Trilinear interpolation over 8 corners (gamma × kTe × kTbb) in log space.
-    # _TABLE_JAX stores log(spectral_shape); exponentiating after interpolation
+    # table_jax stores log(spectral_shape); exponentiating after interpolation
     # gives exact results for exponentially varying features (e.g. Wien seed-BB
     # tail), avoiding the large errors that linear interpolation produces there.
     s00 = _c(0, 0, 0) * (1 - fg) + _c(1, 0, 0) * fg
@@ -155,7 +171,7 @@ def _nthcomp_lnu_interp_impl(
 
     # Resample onto the requested nu grid
     nu_f = jnp.asarray(nu, dtype=jnp.float32)
-    lnu = jnp.interp(nu_f, _NU_JAX, shape_on_table_grid, left=0.0, right=0.0)
+    lnu = jnp.interp(nu_f, nu_jax, shape_on_table_grid, left=0.0, right=0.0)
     return jnp.maximum(lnu, 0.0)
 
 

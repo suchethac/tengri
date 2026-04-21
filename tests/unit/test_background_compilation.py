@@ -13,39 +13,15 @@ import threading
 from unittest.mock import patch
 
 import jax
-import jax.numpy as jnp
 import pytest
 
-from tengri import Fitter, Fixed, Model, Observation, ParamSpec, Photometry, Uniform
-from tengri.components.sps.dsps_wrapper import SSPData
-from tengri.observation.photometry import FilterCurve
+from tengri import Fitter, Fixed, Model, ParamSpec, Uniform
 
 jax.config.update("jax_enable_x64", True)
 
 
-# ── Fixtures (minimal, fast — no real SSP data needed) ────────────
-
-
-@pytest.fixture(scope="module")
-def synthetic_ssp():
-    n_met, n_age, n_wave = 3, 20, 100
-    wave = jnp.linspace(3000.0, 10000.0, n_wave)
-    ages_gyr = jnp.linspace(-1.0, 1.14, n_age)
-    key = jax.random.PRNGKey(7)
-    flux = jnp.abs(jax.random.normal(key, (n_met, n_age, n_wave))) * 1e-3 + 1e-5
-    lgmet = jnp.array([-1.5, -0.5, 0.0])
-    return SSPData(ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet)
-
-
-@pytest.fixture(scope="module")
-def simple_observation():
-    waves = [jnp.linspace(3500.0, 9000.0, 50) for _ in range(3)]
-    trans = [jnp.ones(50) * 0.5 for _ in range(3)]
-    curves = tuple(
-        FilterCurve(wave=w, trans=t, name=f"band_{i}")
-        for i, (w, t) in enumerate(zip(waves, trans))
-    )
-    return Observation(photometry=Photometry(filters=curves))
+# ── Fixtures ─────────────────────────────────────────────────────
+# synthetic_ssp and simple_observation are provided by conftest.py (session scope)
 
 
 @pytest.fixture(scope="module")
@@ -136,6 +112,8 @@ class TestBackgroundCompilation:
 
     def test_compilation_error_propagated(self, model_and_data):
         """A compile() exception must surface as RuntimeError when run() is called."""
+        from tengri.inference._model_cache import get_model_cache
+
         model, mock = model_and_data
 
         def failing_compile(self, **kwargs):
@@ -143,8 +121,11 @@ class TestBackgroundCompilation:
 
         with patch.object(Fitter, "compile", failing_compile):
             # Clear the engine cache so the thread actually tries to compile.
-            if hasattr(model, "_jit_engine_cache"):
-                model._jit_engine_cache.clear()
+            # Uses get_model_cache (the current cache location) rather than the
+            # legacy model._jit_engine_cache attribute.
+            engine_cache = get_model_cache(model).get("jit_engine")
+            if engine_cache is not None:
+                engine_cache.clear()
 
             fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
             fitter._compilation_event.wait(timeout=30)

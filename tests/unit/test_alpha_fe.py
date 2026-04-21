@@ -168,10 +168,10 @@ class TestAlphaFeForwardModel:
     """Test alpha enhancement in the full forward model."""
 
     @pytest.fixture
-    def model_with_alpha(self):
-        from tengri import Fixed, Model, ParamSpec, Uniform, load_ssp_data
+    def model_with_alpha(self, ssp_data_fsps):
+        from tengri import Fixed, Model, ParamSpec, Uniform
 
-        ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+        ssp = ssp_data_fsps
         spec = ParamSpec(
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
@@ -186,13 +186,12 @@ class TestAlphaFeForwardModel:
         )
         return Model(spec, ssp, precompute=False)
 
-    def test_alpha_zero_matches_no_alpha(self, model_with_alpha):
+    def test_alpha_zero_matches_no_alpha(self, model_with_alpha, ssp_data_fsps):
         """alpha_fe=0 should give identical SED as no alpha enhancement."""
         sed_alpha0 = model_with_alpha.predict_rest_sed({"met_alpha_fe": 0.0}).sed
-        # Build a model without alpha_fe (defaults to Fixed(0.0))
-        from tengri import Fixed, Model, ParamSpec, load_ssp_data
+        from tengri import Fixed, Model, ParamSpec
 
-        ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+        ssp = ssp_data_fsps
         spec_no = ParamSpec(
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),

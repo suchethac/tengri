@@ -11,6 +11,8 @@ import time
 import jax
 import jax.numpy as jnp
 
+from tengri.inference._sample_utils import _mean_params
+
 
 def run_native_vi(
     fitter,
@@ -107,6 +109,20 @@ def run_native_vi(
         fitter._jit_sampler = fitter._get_or_build_engine(dummy_pos)
 
     engine = fitter._jit_sampler
+
+    # n_samples is a static_argname in run_evi_geovi_jit, so any value other
+    # than 3 (the background-compilation default) triggers a full XLA
+    # recompilation (~30-60s).  Warn so the user isn't surprised.
+    if n_samples != 3:
+        warnings.warn(
+            f"n_samples={n_samples} differs from the pre-compiled default (3). "
+            "Because n_samples is a static JAX argument, this triggers a full "
+            f"XLA recompilation (~30-60s). Call fitter.compile(n_samples={n_samples}) "
+            "ahead of time to avoid the delay.",
+            UserWarning,
+            stacklevel=3,
+        )
+
     flatten = engine["flatten"]
     unflatten = engine["unflatten"]
     data_args = fitter._data_args
@@ -395,7 +411,7 @@ def run_native_vi(
             samples_phys[k].append(v)
 
     samples_phys = {k: jnp.stack(v) for k, v in samples_phys.items()}
-    best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+    best_params = _mean_params(samples_phys)
 
     # --- Post-fit diagnostics ---
     diag_warnings = []

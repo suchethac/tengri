@@ -27,7 +27,7 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture(scope="module")
-def fitter_and_mock():
+def fitter_and_mock(ssp_data_wne, sdss_filters):
     from tengri import (
         Fitter,
         Fixed,
@@ -36,7 +36,6 @@ def fitter_and_mock():
         Photometry,
         SEDModel,
         Uniform,
-        load_ssp_data,
     )
 
     spec = Parameters(
@@ -52,7 +51,7 @@ def fitter_and_mock():
         redshift=Fixed(0.1),
         mean_sfh_type="tsnorm",
     )
-    ssp = load_ssp_data(SSP_FILE)
+    ssp = ssp_data_wne
     obs = Observation(
         photometry=Photometry.from_names(
             ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]

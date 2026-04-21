@@ -90,6 +90,8 @@ References
 - Stern et al. 2012, ApJ, 753, 30 (W1-W2 AGN selection)
 """
 
+import contextlib
+import functools
 from pathlib import Path
 
 import jax
@@ -147,9 +149,8 @@ _SIGMOID_WIDTH = 0.02  # dex (~5% in wavelength)
 #   flux_with_lines = flux * (1 + |scal| * linval / conval)
 # This preserves EW ratios relative to the actual continuum.
 
-_EMLINE_TEMPLATE = None  # lazy-loaded JAX arrays
 
-
+@functools.cache
 def _load_emline_template():
     """Load the empirical emission line template (Temple+2021).
 
@@ -158,10 +159,6 @@ def _load_emline_template():
     tuple of jnp.ndarray
         (wavelength, median_lines, reference_continuum, peaky, windy, narrow)
     """
-    global _EMLINE_TEMPLATE
-    if _EMLINE_TEMPLATE is not None:
-        return _EMLINE_TEMPLATE
-
     candidates = [
         Path(__file__).resolve().parents[4] / "data" / "qsogen_emline_template.dat",
         Path("data/qsogen_emline_template.dat"),
@@ -170,8 +167,7 @@ def _load_emline_template():
     for path in candidates:
         if path.is_file():
             data = np.genfromtxt(str(path), unpack=True)
-            _EMLINE_TEMPLATE = tuple(jnp.array(row) for row in data)
-            return _EMLINE_TEMPLATE
+            return tuple(jnp.array(row) for row in data)
 
     raise FileNotFoundError(
         "QSOGen emission line template not found. Expected at data/qsogen_emline_template.dat"
@@ -720,7 +716,5 @@ qsogen_sed = compute_qsogen_sed
 
 # Pre-load emission line template at import time so that file I/O does not
 # occur inside JIT-traced functions (which causes UnexpectedTracerError).
-try:
+with contextlib.suppress(FileNotFoundError):
     _load_emline_template()
-except FileNotFoundError:
-    pass

@@ -17,6 +17,7 @@ import jax
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
+from tengri.inference._sample_utils import _mean_params
 from tengri.inference.common import (
     DEFAULT_PRIOR,
     InferenceResult,
@@ -175,7 +176,7 @@ def fit_nuts(
     physical_samples = {k: jnp.stack(v) for k, v in physical_samples.items()}
 
     # Posterior mean as point estimate
-    best_params = {k: jnp.mean(v, axis=0) for k, v in physical_samples.items()}
+    best_params = _mean_params(physical_samples)
 
     if verbose:
         print(f"  NUTS complete in {wall_time:.1f}s. Divergences: {n_divergent}/{n_samples}")

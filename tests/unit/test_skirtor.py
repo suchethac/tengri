@@ -683,12 +683,8 @@ class TestSkirtorAnalyticErrorPaths:
         """skirtor_analytic must raise FileNotFoundError when no template file exists."""
         import tengri.components.agn.skirtor as _mod
 
-        # Reset the lazy singleton so the loader re-runs
-        monkeypatch.setattr(_mod, "_skirtor_default", None)
-
-        # Patch Path.__file__ resolution so all four candidate paths point to
-        # a non-existent location inside tmp_path (guaranteed not to exist).
-        ghost = tmp_path / "ghost_does_not_exist.h5"  # never created
+        # Clear functools.cache so the loader re-runs on next call
+        _mod._load_skirtor_default.cache_clear()
 
         from pathlib import Path
 
@@ -697,5 +693,9 @@ class TestSkirtorAnalyticErrorPaths:
 
         monkeypatch.setattr(Path, "is_file", fake_is_file)
 
-        with pytest.raises(FileNotFoundError, match="SKIRTOR templates not found"):
-            _mod.skirtor_analytic(jnp.logspace(3, 6, 50), agn_log_lbol=12.0)
+        try:
+            with pytest.raises(FileNotFoundError, match="SKIRTOR templates not found"):
+                _mod.skirtor_analytic(jnp.logspace(3, 6, 50), agn_log_lbol=12.0)
+        finally:
+            # Clear again so the error result is not cached for subsequent tests
+            _mod._load_skirtor_default.cache_clear()

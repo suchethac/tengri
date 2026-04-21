@@ -9,11 +9,9 @@ jax.config.update("jax_enable_x64", True)
 
 from pathlib import Path
 
-from tengri.components.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.sed_model import Model
 from tengri.inference.fitter import Fitter
 from tengri.inference.posterior import Posterior
-from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import ParamSpec
 from tengri.parameters.priors import Gaussian, Uniform
 
@@ -25,9 +23,9 @@ pytestmark = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
 
 
 @pytest.fixture(scope="session")
-def model_and_mock():
-    ssp = load_ssp_data(str(_SSP_FILE))
-    filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+def model_and_mock(ssp_data_wne, sdss_filters):
+    ssp = ssp_data_wne
+    filters = sdss_filters
 
     spec = ParamSpec(
         mean_sfh_type="dpl",
@@ -117,9 +115,9 @@ class TestMAP:
 
 
 class TestGaussianPrior:
-    def test_gaussian_prior_applied(self):
-        ssp = load_ssp_data(str(_SSP_FILE))
-        filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    def test_gaussian_prior_applied(self, ssp_data_wne, sdss_filters):
+        ssp = ssp_data_wne
+        filters = sdss_filters
 
         spec = ParamSpec(
             met_logzsol=Gaussian(-0.3, 0.1, lo=-2.0, hi=0.2),

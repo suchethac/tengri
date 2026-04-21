@@ -14,7 +14,6 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.components.sps.dsps_wrapper import SSPData
 from tengri.components.sps.precompute import (
     interpolate_ztable,
     interpolate_ztable_smooth,
@@ -31,19 +30,13 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-# ── Fixtures: minimal synthetic SSP + filters ─────────────────────
+# ── Fixtures ─────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
-def ssp_data():
-    """Small synthetic SSP (3 Z × 20 ages × 100 λ)."""
-    key = jax.random.PRNGKey(0)
-    return SSPData(
-        ssp_wave=jnp.linspace(3000.0, 10000.0, 100),
-        ssp_flux=jnp.abs(jax.random.normal(key, (3, 20, 100))) * 1e-3 + 1e-5,
-        ssp_lg_age_gyr=jnp.linspace(-1.0, 1.14, 20),
-        ssp_lgmet=jnp.array([-1.5, -0.5, 0.0]),
-    )
+def ssp_data(synthetic_ssp):
+    """Alias session-scoped synthetic SSP from conftest."""
+    return synthetic_ssp
 
 
 @pytest.fixture(scope="module")

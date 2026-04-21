@@ -219,11 +219,8 @@ def test_fallback_without_h5(tmp_path, monkeypatch):
     and shock_line_ratios still returns non-zero ratios."""
     import tengri.components.nebular.shock as shock_module
 
-    # Reset the module-level cache so the load runs fresh
-    original_loaded = shock_module._MAPPINGS_GRIDS_LOADED
-    original_grids = shock_module._MAPPINGS_GRIDS
-    shock_module._MAPPINGS_GRIDS_LOADED = False
-    shock_module._MAPPINGS_GRIDS = None
+    # Clear functools.cache so the loader re-runs on next call
+    shock_module._load_mappings_grids.cache_clear()
 
     # Point the HDF5 lookup to a non-existent path by monkeypatching __file__
     fake_file = tmp_path / "shock.py"
@@ -236,9 +233,8 @@ def test_fallback_without_h5(tmp_path, monkeypatch):
         assert float(ratios["HA_6563A"]) > 0.0
         assert float(ratios["Hb_4861A"]) == pytest.approx(1.0, abs=0.01)
     finally:
-        # Restore module state so other tests are not affected
-        shock_module._MAPPINGS_GRIDS_LOADED = original_loaded
-        shock_module._MAPPINGS_GRIDS = original_grids
+        # Clear again so the fallback result is not cached for subsequent tests
+        shock_module._load_mappings_grids.cache_clear()
 
 
 # ── 8. Diffuse ISM attenuation reduces shock SED correctly ────────

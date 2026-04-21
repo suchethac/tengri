@@ -8,12 +8,10 @@ jax.config.update("jax_enable_x64", True)
 
 from pathlib import Path
 
-from tengri.components.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.sed_model import Model
+from tengri.inference.backends.mcmc.raytrace import sample_hamiltonian, sample_raytrace
 from tengri.inference.fitter import Fitter
 from tengri.inference.posterior import Posterior
-from tengri.inference.backends.mcmc.raytrace import sample_hamiltonian, sample_raytrace
-from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import ParamSpec
 from tengri.parameters.priors import Uniform
 
@@ -199,10 +197,10 @@ _SSP_EXISTS = _SSP_FILE.is_file()
 
 
 @pytest.fixture(scope="module")
-def fitter_setup():
+def fitter_setup(ssp_data_wne, sdss_filters):
     """Create a simple Model/Fitter setup for integration tests."""
-    ssp = load_ssp_data(str(_SSP_FILE))
-    filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    ssp = ssp_data_wne
+    filters = sdss_filters
 
     spec = ParamSpec(
         mean_sfh_type="dpl",

@@ -33,12 +33,9 @@ def _has_blackjax():
 
 
 @pytest.fixture(scope="session")
-def fitter_and_mock():
-    from tengri.components.sps.dsps_wrapper import load_ssp_data
-    from tengri.observation.filters import load_filter_set
-
-    ssp = load_ssp_data(str(_SSP_FILE))
-    filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+def fitter_and_mock(ssp_data_wne, sdss_filters):
+    ssp = ssp_data_wne
+    filters = sdss_filters
 
     spec = ParamSpec(
         mean_sfh_type="dpl",

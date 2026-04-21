@@ -22,6 +22,7 @@ Usage::
     l_nu = unified_agn(wavelength, agn_log_lbol=44.0, disc_model="powerlaw", ...)
 """
 
+import functools
 import warnings
 from collections.abc import Callable
 
@@ -32,10 +33,29 @@ from tengri.components.agn.blr import blr_emission
 from tengri.components.agn.disc import adaf_disc, kubota_done_disc, multicolor_disc, powerlaw_disc
 from tengri.components.agn.nlr import nlr_emission
 from tengri.components.agn.skirtor import create_skirtor_from_grid
-
-# Auto-load tabulated SKIRTOR templates (preferred over analytic)
-_skirtor_fn = None
 from tengri.components.agn.torus import simple_torus, two_temperature_torus
+
+
+@functools.cache
+def _load_skirtor_fn():
+    """Load SKIRTOR template grid from file."""
+    from pathlib import Path
+
+    for candidate in [
+        Path(__file__).resolve().parents[4] / "data" / "skirtor_templates_v2.h5",
+        Path(__file__).resolve().parents[4] / "data" / "skirtor_templates.npz",
+        Path("data/skirtor_templates_v2.h5"),
+        Path("data/skirtor_templates.npz"),
+        Path.home() / "Projects/tengri/data/skirtor_templates.npz",
+    ]:
+        if candidate.is_file():
+            return create_skirtor_from_grid(str(candidate))
+    raise FileNotFoundError(
+        "SKIRTOR templates not found. Download from "
+        "https://sites.google.com/site/skirtorus/sed-library "
+        "and convert with scripts/convert_skirtor_templates.py"
+    )
+
 
 # ── AGN model registry ────────────────────────────────────────────
 
@@ -551,33 +571,7 @@ def skirtor_agn(
 
     # SKIRTOR torus re-emits covering_factor of L_bol
     # Auto-load tabulated templates on first call
-    global _skirtor_fn
-    if _skirtor_fn is None:
-        from pathlib import Path
-
-        # parents[4] = project root (src/tengri/models/agn/unified.py → 4 levels up)
-        grid_path = Path(__file__).resolve().parents[4] / "data" / "skirtor_templates.npz"
-        if not grid_path.is_file():
-            # Search alternative locations including v2 grid and project-relative paths
-            for candidate in [
-                Path(__file__).resolve().parents[4] / "data" / "skirtor_templates_v2.h5",
-                Path("data/skirtor_templates_v2.h5"),
-                Path("data/skirtor_templates.npz"),
-                Path.home() / "Projects/tengri/data/skirtor_templates.npz",
-            ]:
-                if candidate.is_file():
-                    grid_path = candidate
-                    break
-        if grid_path.is_file():
-            _skirtor_fn = create_skirtor_from_grid(str(grid_path))
-        else:
-            raise FileNotFoundError(
-                "SKIRTOR templates not found. Download from "
-                "https://sites.google.com/site/skirtorus/sed-library "
-                "and convert with scripts/convert_skirtor_templates.py"
-            )
-
-    l_torus = _skirtor_fn(
+    l_torus = _load_skirtor_fn()(
         wavelength,
         agn_log_lbol=agn_log_lbol,
         agn_tau_skirtor=agn_tau_skirtor,

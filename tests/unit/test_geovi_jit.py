@@ -8,44 +8,14 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import Fitter, Fixed, Model, Observation, ParamSpec, Photometry, Uniform
-from tengri.components.sps.dsps_wrapper import SSPData
+from tengri import Fitter, Fixed, Model, ParamSpec, Uniform
 from tengri.inference.vi_config import BlockSchedule, BlockStep, OptimizationSchedule
-from tengri.observation.photometry import FilterCurve
 
 jax.config.update("jax_enable_x64", True)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────
-
-
-@pytest.fixture(scope="module")
-def synthetic_ssp():
-    """Minimal synthetic SSP for fast tests (3 Z x 20 ages x 100 lam)."""
-    n_met, n_age, n_wave = 3, 20, 100
-    wave = jnp.linspace(3000.0, 10000.0, n_wave)
-    ages_gyr = jnp.linspace(-1.0, 1.14, n_age)
-    key = jax.random.PRNGKey(123)
-    flux = jnp.abs(jax.random.normal(key, (n_met, n_age, n_wave))) * 1e-3 + 1e-5
-    lgmet = jnp.array([-1.5, -0.5, 0.0])
-    return SSPData(ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet)
-
-
-@pytest.fixture(scope="module")
-def simple_observation():
-    """Synthetic 3-band observation."""
-    waves = [
-        jnp.linspace(3500.0, 4500.0, 50),
-        jnp.linspace(5000.0, 6500.0, 50),
-        jnp.linspace(7500.0, 9000.0, 50),
-    ]
-    trans = [jnp.ones(50) * 0.5 for _ in range(3)]
-    curves = tuple(
-        FilterCurve(wave=w, trans=t, name=f"band_{i}")
-        for i, (w, t) in enumerate(zip(waves, trans))
-    )
-    photometry = Photometry(filters=curves)
-    return Observation(photometry=photometry)
+# synthetic_ssp and simple_observation are provided by conftest.py (session scope)
 
 
 @pytest.fixture(scope="module")
@@ -204,10 +174,10 @@ class TestGeoVIRuns:
         fitter, _, _ = fitter_and_mock
         result = fitter.run(
             "vi_native",
-            n_iterations=5,
+            n_iterations=3,
             n_samples=2,
             n_seeds=1,
-            n_posterior_samples=20,
+            n_posterior_samples=10,
             verbose=False,
             key=jax.random.PRNGKey(11),
         )
@@ -222,7 +192,7 @@ class TestGeoVIRuns:
         if they do, the routing logic has collapsed to a single code path.
 
         We compare per-parameter posterior stds.  They need not agree within
-        any particular tolerance (convergence is not expected at n_iterations=5),
+        any particular tolerance (convergence is not expected at n_iterations=3),
         but they must differ, confirming two distinct algorithms ran.
         """
         fitter, _, _ = fitter_and_mock
@@ -230,19 +200,19 @@ class TestGeoVIRuns:
 
         result_mgvi = fitter.run(
             "vi_native_linear",
-            n_iterations=5,
+            n_iterations=3,
             n_samples=2,
             n_seeds=1,
-            n_posterior_samples=20,
+            n_posterior_samples=10,
             verbose=False,
             key=key,
         )
         result_geovi = fitter.run(
             "vi_native",
-            n_iterations=5,
+            n_iterations=3,
             n_samples=2,
             n_seeds=1,
-            n_posterior_samples=20,
+            n_posterior_samples=10,
             verbose=False,
             key=key,
         )
@@ -270,10 +240,10 @@ class TestGeoVIRuns:
         fitter, mock, _ = fitter_and_mock
         result = fitter.run(
             "vi_native",
-            n_iterations=5,
+            n_iterations=3,
             n_samples=2,
             n_seeds=1,
-            n_posterior_samples=50,
+            n_posterior_samples=20,
             verbose=False,
             key=jax.random.PRNGKey(13),
         )

@@ -26,9 +26,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.components.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.sed_model import Model
-from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import ParamSpec
 from tengri.parameters.priors import Fixed, Uniform
 
@@ -57,13 +55,13 @@ _KEY = jax.random.PRNGKey(42)
 
 
 @pytest.fixture(scope="session")
-def ssp_data():
-    return load_ssp_data(str(_SSP_FILE))
+def ssp_data(ssp_data_wne):
+    return ssp_data_wne
 
 
 @pytest.fixture(scope="session")
-def filters():
-    return load_filter_set(_FILTER_NAMES)
+def filters(sdss_filters):
+    return sdss_filters
 
 
 def _base_spec_kwargs():

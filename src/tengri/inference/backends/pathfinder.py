@@ -15,6 +15,8 @@ import time
 import jax
 import jax.numpy as jnp
 
+from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+
 
 def run_pathfinder(
     *,
@@ -93,11 +95,8 @@ def run_pathfinder(
     if verbose:
         print(f"  Drew {n_samples} samples (mean log q = {float(jnp.mean(log_q)):.2f})")
 
-    def _convert_one(flat_sample):
-        return to_physical_fn(unravel_fn(flat_sample))
-
-    samples_phys = jax.vmap(_convert_one)(samples_flat)
-    best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+    samples_phys = _vmap_samples_to_physical(samples_flat, unravel_fn, to_physical_fn)
+    best_params = _mean_params(samples_phys)
 
     wall_time = time.time() - t0
     if verbose:

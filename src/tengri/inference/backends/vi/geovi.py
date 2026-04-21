@@ -23,6 +23,7 @@ import time
 import jax
 import jax.numpy as jnp
 
+from tengri.inference._sample_utils import _mean_params
 from tengri.inference.common import (
     DEFAULT_PRIOR,
     InferenceResult,
@@ -218,7 +219,7 @@ def fit_geovi(
     physical_samples = {k: jnp.stack(v) for k, v in physical_samples.items()}
 
     # Posterior mean
-    best_params = {k: jnp.mean(v, axis=0) for k, v in physical_samples.items()}
+    best_params = _mean_params(physical_samples)
 
     if verbose:
         mode = "geoVI" if sample_mode == "nonlinear_resample" else "MGVI"

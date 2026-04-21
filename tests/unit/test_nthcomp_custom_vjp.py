@@ -14,14 +14,11 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 
 from tengri.components.agn._nthcomp import (
-    _GAMMA_JAX,
-    _KTBB_JAX,
-    _KTE_JAX,
-    _NU_JAX,
-    _TABLE_AVAILABLE,
-    _TABLE_JAX,
     _clamp_interp_index,
+    _get_nthcomp_templates,
 )
+
+_GAMMA_JAX, _KTE_JAX, _KTBB_JAX, _NU_JAX, _TABLE_JAX, _TABLE_AVAILABLE = _get_nthcomp_templates()
 
 
 @pytest.mark.skipif(not _TABLE_AVAILABLE, reason="nthcomp templates not loaded")

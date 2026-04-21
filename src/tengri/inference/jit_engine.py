@@ -15,6 +15,91 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
+from tengri.inference._model_cache import get_model_cache
+
+
+def _build_signal_response(fitter):
+    """Build data-free ``signal_response`` and ``_primals_to_params`` closures.
+
+    Returns the *uncompiled* closures.  The caller decides whether to wrap
+    with ``jax.jit`` (for standalone eager use) or leave unwrapped (so an
+    outer ``jax.jit`` can inline it and differentiate through it).
+
+    Neither closure captures any galaxy data — they depend only on model
+    structure and parameter configuration.  This makes them the
+    "reproducible components" that can be compiled once and shared across
+    all Fitters for the same model.
+    """
+    model = fitter.model
+    data_type = fitter.data_type
+    free_names = fitter._free_names
+    fixed_values = fitter._fixed_values
+    spec = fitter.spec
+    stochastic = spec.stochastic
+
+    def _primals_to_params(primals):
+        params = {}
+        for name in free_names:
+            dist = spec.get_distribution(name)
+            params[name] = dist.unstandardize(primals[name])
+        for name, val in fixed_values.items():
+            params[name] = val
+        if stochastic and "psd_xi" in primals:
+            params["psd_xi"] = primals["psd_xi"]
+        params = spec.resolve_mirrors(params)
+        return params
+
+    def signal_response(primals):
+        params = _primals_to_params(primals)
+        if data_type == "photometry":
+            return model.predict_photometry(params, mode="_traceable")
+        elif data_type == "spectroscopy":
+            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+        elif data_type == "joint":
+            p = model.predict_photometry(params, mode="_traceable")
+            s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+            return jnp.concatenate([p, s])
+        raise ValueError(f"Unknown data_type: {data_type}")
+
+    return signal_response, _primals_to_params
+
+
+def get_or_build_signal_response(fitter):
+    """Return ``(signal_response, signal_response_jit)`` cached on the Model.
+
+    The physics stack (stellar populations, dust, nebular, AGN) is the
+    "reproducible component": it does not depend on any galaxy's data.
+    Caching it on the Model gives two compile-once guarantees:
+
+    1. **Native path** — the same ``signal_response`` closure is used inside
+       ``build_jit_engine``.  Because the outer ``run_evi_geovi_jit`` is
+       itself cached per ``_engine_cache_key()``, the physics is traced only
+       once per model structure regardless of galaxy count.
+
+    2. **NIFTy path** — ``signal_response_jit`` is the stable function object
+       passed to ``jft.Model``.  JAX's trace cache is keyed by Python function
+       identity, so both ``run_nifty_vi`` (full path) and ``run_nifty_fast_vi``
+       (tight loop) share one compiled physics kernel.  NIFTy's
+       ``OptimizeVI.update`` skips re-tracing the SPS/dust/AGN stack for
+       every new galaxy.
+
+    Keyed by ``_engine_cache_key()`` (captures data_type, param names, model
+    structure — but not galaxy data values or shapes).
+    """
+    cache_key = fitter._engine_cache_key()
+    cache = get_model_cache(fitter.model).setdefault("signal_response", {})
+    if cache_key in cache:
+        return cache[cache_key]
+
+    signal_response, _ = _build_signal_response(fitter)
+    # JIT-compile the standalone version for NIFTy and eager calls.
+    # The native VI path uses the unwrapped closure so the outer
+    # run_evi_geovi_jit can inline and differentiate through it.
+    signal_response_jit = jax.jit(signal_response)
+    result = (signal_response, signal_response_jit)
+    cache[cache_key] = result
+    return result
+
 
 def build_jit_engine(fitter, pos_dict):
     """Build JIT-compiled inference engine: optimizer + posterior sampler.
@@ -39,7 +124,7 @@ def build_jit_engine(fitter, pos_dict):
     Returns
     -------
     dict
-        Compiled functions: run_evi, run_evi_geovi, run_nifty_jit,
+        Compiled functions: run_evi, run_evi_geovi, nifty_model,
         draw_samples, draw_nonlinear_samples, flatten, unflatten, etc.
     """
     from tengri.observation.noise import (
@@ -53,8 +138,7 @@ def build_jit_engine(fitter, pos_dict):
 
     # Import NIFTy for the exact geoVI path
     try:
-        from nifty8.re.evi import Samples as NiftySamples
-        from nifty8.re.optimize_kl import OptimizeVI
+        import nifty8.re  # noqa: F401
 
         _has_nifty = True
     except ImportError:
@@ -62,10 +146,6 @@ def build_jit_engine(fitter, pos_dict):
 
     model = fitter.model
     data_type = fitter.data_type
-    free_names = fitter._free_names
-    fixed_values = fitter._fixed_values
-    spec = fitter.spec
-    stochastic = spec.stochastic
     # data/noise are NO LONGER captured here as local variables.
     # Instead they are passed at call-time via the ``data_args`` dict
     # so that the compiled engine can be reused across galaxies.
@@ -73,31 +153,11 @@ def build_jit_engine(fitter, pos_dict):
     noise_dof = get_noise_dof(fitter.spec) if uses_student_t(fitter.spec) else None
 
     # --- Signal response (physics only) ---
-    # NOT JIT'd — must remain traceable so that jax.jvp/vjp (in metric_vec)
+    # NOT JIT'd here — must remain traceable so jax.jvp/vjp (in metric_vec)
     # and jax.value_and_grad (in hamiltonian) can differentiate through it.
-    def _primals_to_params(primals):
-        params = {}
-        for name in free_names:
-            dist = spec.get_distribution(name)
-            params[name] = dist.unstandardize(primals[name])
-        for name, val in fixed_values.items():
-            params[name] = val
-        if stochastic and "psd_xi" in primals:
-            params["psd_xi"] = primals["psd_xi"]
-        params = spec.resolve_mirrors(params)
-        return params
-
-    def signal_response(primals):
-        params = _primals_to_params(primals)
-        if data_type == "photometry":
-            return model.predict_photometry(params, mode="_traceable")
-        elif data_type == "spectroscopy":
-            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
-        elif data_type == "joint":
-            p = model.predict_photometry(params, mode="_traceable")
-            s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
-            return jnp.concatenate([p, s])
-        raise ValueError(f"Unknown data_type: {data_type}")
+    # The JIT-compiled version lives in get_or_build_signal_response() for
+    # NIFTy and eager use; this unwrapped copy is for the native VI path.
+    signal_response, _primals_to_params = _build_signal_response(fitter)
 
     # --- Signal + noise response for variable noise ---
     if use_variable_noise:
@@ -902,79 +962,27 @@ def build_jit_engine(fitter, pos_dict):
                 mask = mask.at[start:end].set(0.0)
         return mask
 
-    # --- NIFTy-backed geoVI: exact NIFTy math, minimal Python overhead ---
-    # Uses NIFTy's OptimizeVI.update directly (already JIT'd internally)
-    # but skips logging, pickling, and callbacks for speed.
-    nifty_likelihood = None
-    nifty_opt_vi = None
+    # --- NIFTy model (physics wrapper, no data) ---
+    # ``_nifty_model`` wraps the shared signal_response_jit so NIFTy's trace
+    # cache hits on the second galaxy.  The per-Fitter nifty_likelihood
+    # (which captures galaxy data) is built in run_nifty_fast_vi via
+    # _get_or_build_nifty_likelihood — NOT here, so the shared engine
+    # never holds a stale reference to any galaxy's flux/noise arrays.
+    _nifty_model = None
     if _has_nifty:
         try:
             import nifty8.re as jft
 
-            # Build the NIFTy likelihood (same as _run_nifty_vi)
+            _, _sr_jit = get_or_build_signal_response(fitter)
             _nifty_domain = {}
             for name in fitter._free_names:
                 _nifty_domain[name] = jft.ShapeWithDtype(())
             if fitter.spec.stochastic:
                 _nifty_domain["psd_xi"] = jft.ShapeWithDtype((fitter.spec.n_grid,))
-            _nifty_model = jft.Model(jax.jit(signal_response), domain=_nifty_domain)
-            if not use_variable_noise:
-                nifty_likelihood = jft.Gaussian(fitter.data, fitter._data_args["noise_inv"]).amend(
-                    _nifty_model
-                )
-            # Build OptimizeVI with vmap and JIT.
-            nifty_opt_vi = OptimizeVI(
-                nifty_likelihood,
-                n_total_iterations=50,  # max, actual controlled by caller
-                kl_jit=True,
-                residual_jit=True,
-                kl_map=jax.vmap,
-                residual_map=jax.vmap,
-            )
+            _nifty_model = jft.Model(_sr_jit, domain=_nifty_domain)
         except (ImportError, ModuleNotFoundError, AttributeError, TypeError, ValueError):
-            # ImportError/ModuleNotFoundError: nifty8 not installed
-            # AttributeError: NIFTy API changed (method/class renamed)
-            # TypeError: wrong arguments to NIFTy constructors
-            # ValueError: invalid configuration for NIFTy likelihood/model
             _has_nifty = False
-            nifty_likelihood = None
-            nifty_opt_vi = None
-
-    def run_nifty_jit(
-        init_pos_flat,
-        key,
-        n_iterations,
-        n_samples,
-        sample_mode_str,
-        draw_linear_kwargs,
-        nonlinearly_update_kwargs,
-        kl_kwargs,
-    ):
-        """Run NIFTy's exact optimize_kl with minimal Python overhead.
-
-        Uses NIFTy's OptimizeVI.update (already JIT'd) in a tight
-        Python loop — no logging, no pickling, no callbacks.
-        Exact same math as ``jft.optimize_kl``.
-
-        Returns (converged_flat, n_iters).
-        """
-        import nifty8.re as jft
-
-        pos_dict_local = unflatten(init_pos_flat)
-        samples = NiftySamples(pos=jft.Vector(pos_dict_local), samples=None, keys=None)
-        state = nifty_opt_vi.init_state(
-            key,
-            n_samples=n_samples,
-            sample_mode=sample_mode_str,
-            draw_linear_kwargs=draw_linear_kwargs,
-            nonlinearly_update_kwargs=nonlinearly_update_kwargs,
-            kl_kwargs=kl_kwargs,
-        )
-        for _i in range(n_iterations):
-            samples, state = nifty_opt_vi.update(samples, state)
-        converged = samples.pos
-        pos_d = converged.tree if hasattr(converged, "tree") else dict(converged)
-        return flatten(pos_d), samples
+            _nifty_model = None
 
     # Wrap core functions in JIT but do NOT pre-compile (no dummy calls).
     # Compilation happens lazily on first real call — avoids the 2+ GB
@@ -993,8 +1001,7 @@ def build_jit_engine(fitter, pos_dict):
     return {
         "run_evi": run_evi_jit,
         "run_evi_geovi": run_evi_geovi_jit,
-        "run_nifty_jit": run_nifty_jit if _has_nifty else None,
-        "nifty_likelihood": nifty_likelihood,
+        "nifty_model": _nifty_model,
         "draw_samples": draw_samples_jit,
         "draw_nonlinear_samples": jax.jit(draw_nonlinear_residuals),
         "draw_batch": draw_batch,

@@ -20,10 +20,8 @@ class TestIonizingSpectrumFit:
     """Test ionizing spectrum parameter extraction from SSP spectra."""
 
     @pytest.fixture(scope="class")
-    def ssp(self):
-        from tengri import load_ssp_data
-
-        return load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+    def ssp(self, ssp_data_fsps):
+        return ssp_data_fsps
 
     def test_fit_returns_7_params(self, ssp):
         from tengri.components.nebular.ionizing_spectrum import fit_ionizing_spectrum
@@ -87,10 +85,8 @@ class TestIonizingParamsTable:
     """Test precomputation and interpolation of ionizing params."""
 
     @pytest.fixture(scope="class")
-    def ssp(self):
-        from tengri import load_ssp_data
-
-        return load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+    def ssp(self, ssp_data_fsps):
+        return ssp_data_fsps
 
     def test_interpolation_within_bounds(self, ssp):
         from tengri.components.nebular.ionizing_spectrum import (
@@ -229,16 +225,14 @@ class TestCueWithSSP:
     """Test Cue backend with SSP-derived ionizing parameters."""
 
     @pytest.fixture(scope="class")
-    def backend_with_ssp(self):
+    def backend_with_ssp(self, ssp_data_fsps):
         import os
 
-        from tengri import load_ssp_data
         from tengri.components.nebular.cue import CueBackend
 
         if not os.path.exists("data/cue_weights.npz"):
             pytest.skip("Cue weights not found")
-        ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
-        return CueBackend("data/cue_weights.npz", ssp_data=ssp)
+        return CueBackend("data/cue_weights.npz", ssp_data=ssp_data_fsps)
 
     def test_ionspec_table_computed(self, backend_with_ssp):
         assert backend_with_ssp._ionspec_table is not None

@@ -14,7 +14,6 @@ import numpy as np
 import pytest
 
 from tengri import Fixed, Model, ParamSpec, Uniform
-from tengri.components.sps.dsps_wrapper import SSPData
 
 jax.config.update("jax_enable_x64", True)
 
@@ -25,25 +24,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 
 # ── Fixtures ──────────────────────────────────────────────────────
-
-
-@pytest.fixture(scope="module")
-def synthetic_ssp():
-    """Minimal synthetic SSP for fast tests (3 Z x 20 ages x 100 wavelengths)."""
-    n_met, n_age, n_wave = 3, 20, 100
-    wave = jnp.linspace(3000.0, 10000.0, n_wave)
-    ages_gyr = jnp.linspace(-1.0, 1.14, n_age)  # log10(age/Gyr)
-
-    key = jax.random.PRNGKey(42)
-    flux = jnp.abs(jax.random.normal(key, (n_met, n_age, n_wave))) * 1e-3 + 1e-5
-    lgmet = jnp.array([-1.5, -0.5, 0.0])
-
-    return SSPData(
-        ssp_wave=wave,
-        ssp_flux=flux,
-        ssp_lg_age_gyr=ages_gyr,
-        ssp_lgmet=lgmet,
-    )
+# synthetic_ssp is provided by conftest.py (session scope)
 
 
 @pytest.fixture(scope="module")

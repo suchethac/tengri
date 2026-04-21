@@ -20,6 +20,8 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
+from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+
 
 def _finite_diff_hessian(grad_fn, theta_flat, unravel_fn, data_args, eps=1e-5):
     """Hessian via central finite differences on pre-compiled grad_fn.
@@ -161,17 +163,8 @@ def run_laplace(
         print(f"  Condition number: {float(eigenvalues_clipped[-1] / eigenvalues_clipped[0]):.1e}")
 
     # Unravel and convert to physical space
-    samples_phys = {}
-    for i in range(n_samples):
-        sample_u = unravel_fn(samples_flat[i])
-        sample_p = to_physical_fn(sample_u)
-        for k, v in sample_p.items():
-            if k not in samples_phys:
-                samples_phys[k] = []
-            samples_phys[k].append(v)
-
-    samples_phys = {k: jnp.stack(v) for k, v in samples_phys.items()}
-    best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+    samples_phys = _vmap_samples_to_physical(samples_flat, unravel_fn, to_physical_fn)
+    best_params = _mean_params(samples_phys)
 
     wall_time = time.time() - t0
     if verbose:

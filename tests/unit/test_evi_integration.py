@@ -9,34 +9,13 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import Fitter, Fixed, Model, Observation, ParamSpec, Photometry, Uniform
-from tengri.components.sps.dsps_wrapper import SSPData
-from tengri.observation.photometry import FilterCurve
+from tengri import Fitter, Fixed, Model, ParamSpec, Uniform
 
 jax.config.update("jax_enable_x64", True)
 
 
-# ── Fixtures: minimal synthetic SSP data (no disk I/O) ────────────
-
-
-@pytest.fixture(scope="module")
-def synthetic_ssp():
-    """Minimal synthetic SSP for fast tests (3 Z × 20 ages × 100 λ)."""
-    n_met, n_age, n_wave = 3, 20, 100
-    wave = jnp.linspace(3000.0, 10000.0, n_wave)
-    ages_gyr = jnp.linspace(-1.0, 1.14, n_age)  # log10(age/Gyr)
-
-    # Simple power-law SSP: brighter at blue wavelengths, younger ages
-    key = jax.random.PRNGKey(123)
-    flux = jnp.abs(jax.random.normal(key, (n_met, n_age, n_wave))) * 1e-3 + 1e-5
-    lgmet = jnp.array([-1.5, -0.5, 0.0])
-
-    return SSPData(
-        ssp_wave=wave,
-        ssp_flux=flux,
-        ssp_lg_age_gyr=ages_gyr,
-        ssp_lgmet=lgmet,
-    )
+# ── Fixtures ─────────────────────────────────────────────────────
+# synthetic_ssp and simple_observation are provided by conftest.py (session scope)
 
 
 @pytest.fixture(scope="module")
@@ -54,23 +33,6 @@ def simple_spec():
         dust_slope=Fixed(-0.7),
         redshift=Fixed(0.1),
     )
-
-
-@pytest.fixture(scope="module")
-def simple_observation():
-    """Synthetic 3-band observation."""
-    waves = [
-        jnp.linspace(3500.0, 4500.0, 50),
-        jnp.linspace(5000.0, 6500.0, 50),
-        jnp.linspace(7500.0, 9000.0, 50),
-    ]
-    trans = [jnp.ones(50) * 0.5 for _ in range(3)]
-    curves = tuple(
-        FilterCurve(wave=w, trans=t, name=f"band_{i}")
-        for i, (w, t) in enumerate(zip(waves, trans))
-    )
-    photometry = Photometry(filters=curves)
-    return Observation(photometry=photometry)
 
 
 @pytest.fixture(scope="module")
@@ -99,7 +61,7 @@ class TestEVIRuns:
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
-            n_posterior_samples=50,
+            n_posterior_samples=20,
             verbose=False,
             key=jax.random.PRNGKey(0),
         )

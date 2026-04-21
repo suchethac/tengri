@@ -29,6 +29,7 @@ References
 
 from __future__ import annotations
 
+import functools
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -184,22 +185,14 @@ def _validate_shock_params(
 
 # ── HDF5 grid cache ───────────────────────────────────────────────
 
-_MAPPINGS_GRIDS: dict | None = None
-_MAPPINGS_GRIDS_LOADED: bool = False
 
-
+@functools.cache
 def _load_mappings_grids() -> dict | None:
     """Load MAPPINGS III + V grids from ``data/mappings_templates.h5``.
 
     Returns the cached grid dict on subsequent calls.  Returns ``None`` and
     emits ``DeprecationWarning`` if the file is absent.
     """
-    global _MAPPINGS_GRIDS, _MAPPINGS_GRIDS_LOADED
-    if _MAPPINGS_GRIDS_LOADED:
-        return _MAPPINGS_GRIDS
-
-    _MAPPINGS_GRIDS_LOADED = True
-
     # Locate HDF5 relative to the package root (…/tengri/src/tengri → …/tengri)
     _here = Path(__file__).parents[4]
     h5_path = _here / "data" / "mappings_templates.h5"
@@ -212,7 +205,6 @@ def _load_mappings_grids() -> dict | None:
             DeprecationWarning,
             stacklevel=3,
         )
-        _MAPPINGS_GRIDS = None
         return None
 
     import h5py  # optional dependency — only needed when HDF5 exists
@@ -223,7 +215,6 @@ def _load_mappings_grids() -> dict | None:
     grids: dict = {}
     with h5py.File(h5_path, "r") as f:
         if "mappings5" not in f:
-            _MAPPINGS_GRIDS = None
             return None
         g = f["mappings5"]
 
@@ -260,7 +251,6 @@ def _load_mappings_grids() -> dict | None:
     g5["b_edges"] = _edges_for_grid(g5["b_axis"])
     g5["n_edges"] = _edges_for_grid(g5["log_density_cm3"])
 
-    _MAPPINGS_GRIDS = grids
     return grids
 
 

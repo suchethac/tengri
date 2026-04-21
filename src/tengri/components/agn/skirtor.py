@@ -13,6 +13,7 @@ References
 - Stalevski et al. 2016, MNRAS, 458, 2288 (updated SKIRTOR grid)
 """
 
+import functools
 from collections.abc import Callable
 
 import jax.numpy as jnp
@@ -165,7 +166,27 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
 
 # ── Auto-load tabulated SKIRTOR as the default ────────────────────
 
-_skirtor_default = None
+
+@functools.cache
+def _load_skirtor_default():
+    """Load SKIRTOR template grid from file."""
+    from pathlib import Path
+
+    for candidate in [
+        Path(__file__).resolve().parents[4] / "data" / "skirtor_templates_v2.h5",
+        Path(__file__).resolve().parents[4] / "data" / "skirtor_templates.npz",
+        Path("data/skirtor_templates_v2.h5"),
+        Path("data/skirtor_templates.npz"),
+    ]:
+        if candidate.is_file():
+            return create_skirtor_from_grid(str(candidate))
+    raise FileNotFoundError(
+        "SKIRTOR templates not found (skirtor_templates_v2.h5 or skirtor_templates.npz). "
+        "The analytic fallback has been removed because it produced scientifically "
+        "incorrect results (3-temperature MBB, not radiative transfer). "
+        "Download from: https://sites.google.com/site/skirtorus/sed-library "
+        "or run: python scripts/download_skirtor_templates.py"
+    )
 
 
 def skirtor_analytic(*args, **kwargs):
@@ -176,25 +197,4 @@ def skirtor_analytic(*args, **kwargs):
 
     See ``create_skirtor_from_grid`` for parameters.
     """
-    global _skirtor_default
-    if _skirtor_default is None:
-        from pathlib import Path
-
-        for candidate in [
-            Path(__file__).resolve().parents[4] / "data" / "skirtor_templates_v2.h5",
-            Path(__file__).resolve().parents[4] / "data" / "skirtor_templates.npz",
-            Path("data/skirtor_templates_v2.h5"),
-            Path("data/skirtor_templates.npz"),
-        ]:
-            if candidate.is_file():
-                _skirtor_default = create_skirtor_from_grid(str(candidate))
-                break
-        if _skirtor_default is None:
-            raise FileNotFoundError(
-                "SKIRTOR templates not found (skirtor_templates_v2.h5 or skirtor_templates.npz). "
-                "The analytic fallback has been removed because it produced scientifically "
-                "incorrect results (3-temperature MBB, not radiative transfer). "
-                "Download from: https://sites.google.com/site/skirtorus/sed-library "
-                "or run: python scripts/download_skirtor_templates.py"
-            )
-    return _skirtor_default(*args, **kwargs)
+    return _load_skirtor_default()(*args, **kwargs)

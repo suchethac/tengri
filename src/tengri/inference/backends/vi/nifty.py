@@ -23,6 +23,9 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
+from tengri.inference._model_cache import get_model_cache
+from tengri.inference._sample_utils import _mean_params
+
 
 class GeoVITransform(NamedTuple):
     """Frozen geoVI coordinate transform state.
@@ -418,23 +421,9 @@ def run_nifty_fast_vi(
     from tengri.inference.posterior import Posterior
     from tengri.inference.vi_config import VIConfig, evi_sample_mode
 
-    cfg = vi_config or VIConfig()
-
-    # Build JIT engine (includes NIFTy likelihood + OptimizeVI)
-    if init_from is not None:
-        init_params = fitter._unbounded_from_posterior(init_from)
-    else:
-        init_params = fitter._initialize_unbounded(key)
-
-    if fitter._jit_sampler is None:
-        fitter._jit_sampler = fitter._get_or_build_engine(init_params)
-
-    engine = fitter._jit_sampler
-    flatten = engine["flatten"]
-    unflatten = engine["unflatten"]
-
-    if engine["run_nifty_jit"] is None:
-        # NIFTy JIT not available, fall back to full run_nifty_vi
+    try:
+        import nifty8.re as jft
+    except ImportError:
         return run_nifty_vi(
             fitter,
             key=key,
@@ -448,29 +437,36 @@ def run_nifty_fast_vi(
             verbose=verbose,
         )
 
+    cfg = vi_config or VIConfig()
+
+    if init_from is not None:
+        init_params = fitter._unbounded_from_posterior(init_from)
+    else:
+        init_params = fitter._initialize_unbounded(key)
+
     # Resolve sample mode.
     # For geoVI: use periodic resample + update schedule (prevents
     # sample staleness while maintaining stable convergence).
-    resample_every = 5  # refresh scouts every 5 iterations
+    resample_every = 5
     if sample_mode == "evi":
         resolved_mode = evi_sample_mode(n_iterations, cfg.evi_linear_fraction)
     elif sample_mode == "nonlinear_resample":
-        # Optimal schedule: resample at 0, then every resample_every,
-        # nonlinear_update in between.
+
         def resolved_mode(i: int) -> str:
             if i == 0 or i % resample_every == 0:
                 return "nonlinear_resample"
             return "nonlinear_update"
+
     else:
         resolved_mode = sample_mode
 
     n_total = len(fitter._free_names) + (fitter.spec.n_grid if fitter.spec.stochastic else 0)
+    _mode_labels = {
+        "nonlinear_resample": "geovi",
+        "linear_resample": "mgvi",
+        "evi": "evi",
+    }
     if verbose:
-        _mode_labels = {
-            "nonlinear_resample": "geovi",
-            "linear_resample": "mgvi",
-            "evi": "evi",
-        }
         mode_label = _mode_labels.get(sample_mode, sample_mode)
         print(
             f"{mode_label}: {n_total} params, {len(fitter.data)} data points, "
@@ -478,36 +474,42 @@ def run_nifty_fast_vi(
         )
 
     t0 = time.time()
-
-    pos_flat = flatten(init_params)
     key, opt_key = jax.random.split(key)
 
-    converged_flat, nifty_samples = engine["run_nifty_jit"](
-        pos_flat,
-        opt_key,
-        n_iterations=n_iterations,
+    likelihood = _get_or_build_nifty_likelihood(fitter)
+    init_pos = jft.Vector(init_params)
+
+    # Use jft.optimize_kl with odir=None (no pickling/logging overhead).
+    # Shared likelihood means the physics kernel is already compiled — this
+    # call only pays for the KL minimization itself, not the SPS/dust/AGN stack.
+    samples, _state = jft.optimize_kl(
+        likelihood,
+        init_pos,
+        n_total_iterations=n_iterations,
         n_samples=n_samples,
-        sample_mode_str=resolved_mode,
+        key=opt_key,
+        sample_mode=resolved_mode,
+        residual_map=jax.vmap if cfg.use_vmap else "lmap",
         draw_linear_kwargs=cfg.draw_linear_kwargs,
         nonlinearly_update_kwargs=cfg.nonlinearly_update_kwargs,
         kl_kwargs=cfg.kl_kwargs,
+        odir=None,
     )
 
-    converged_dict = unflatten(converged_flat)
+    converged_pos = samples.pos
+    converged_dict = converged_pos.tree if hasattr(converged_pos, "tree") else dict(converged_pos)
 
-    # Draw posterior samples (fast JIT path)
+    # Draw posterior samples
     key, draw_key = jax.random.split(key)
     all_sample_dicts = []
 
     # Include optimization samples from last iteration
-    if nifty_samples is not None:
-        for s in list(nifty_samples):
-            sd = s.tree if hasattr(s, "tree") else dict(s)
-            all_sample_dicts.append(sd)
+    for s in list(samples):
+        sd = s.tree if hasattr(s, "tree") else dict(s)
+        all_sample_dicts.append(sd)
 
     if n_posterior_samples > 0:
         if posterior_method == "nonlinear":
-            # geoVI-curved posterior samples (captures non-Gaussian shapes)
             all_sample_dicts = fitter._draw_nonlinear_jit_samples(
                 converged_dict,
                 draw_key,
@@ -515,17 +517,8 @@ def run_nifty_fast_vi(
                 all_sample_dicts,
                 verbose=verbose,
             )
-        elif posterior_method == "jit":
-            # Linear CG posterior samples (MGVI approximation)
-            all_sample_dicts = fitter._draw_jit_samples(
-                converged_dict,
-                draw_key,
-                n_posterior_samples,
-                all_sample_dicts,
-                verbose=verbose,
-            )
         elif posterior_method == "blackjax":
-            lh = engine["nifty_likelihood"]
+            lh = _get_or_build_nifty_likelihood(fitter)
             all_sample_dicts = fitter._draw_blackjax_samples(
                 lh,
                 converged_dict,
@@ -546,7 +539,6 @@ def run_nifty_fast_vi(
     wall_time = time.time() - t0
     n_posterior = len(all_sample_dicts)
 
-    # Convert to physical space
     samples_phys = {}
     for sample_dict in all_sample_dicts:
         phys = fitter._to_physical(sample_dict)
@@ -556,9 +548,8 @@ def run_nifty_fast_vi(
             samples_phys[k].append(v)
 
     samples_phys = {k: jnp.stack(v) for k, v in samples_phys.items()}
-    best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+    best_params = _mean_params(samples_phys)
 
-    # Chi2/dof diagnostic
     chi2_dof = None
     if fitter.data_type == "photometry" and best_params:
         pred = fitter.model.predict_photometry(best_params)
@@ -592,14 +583,14 @@ def run_nifty_fast_vi(
 def _get_or_build_nifty_likelihood(fitter):
     """Return cached NIFTy likelihood, building on first call.
 
-    Caches signal_response, nifty_model, and likelihood on the fitter
-    so that repeated ``run_nifty_vi`` calls reuse the same function
-    identities.  Without this, each call creates new local closures
-    → new ``jax.jit`` identity → JAX trace cache miss → full retrace
-    + XLA compilation (~22s per call).
+    For the non-variable-noise case, uses the shared ``engine["nifty_model"]``
+    (physics-only, data-free) so the physics stack compiles once per model
+    structure regardless of galaxy count.  Variable-noise models build their
+    own per-Fitter model because ``signal_response`` captures ``noise`` data.
     """
-    if hasattr(fitter, "_nifty_lh_cache") and fitter._nifty_lh_cache is not None:
-        return fitter._nifty_lh_cache
+    cached = get_model_cache(fitter.model).get("nifty_lh")
+    if cached is not None:
+        return cached
 
     import nifty8.re as jft
 
@@ -609,50 +600,52 @@ def _get_or_build_nifty_likelihood(fitter):
         has_noise_model,
         uses_student_t,
     )
-    model = fitter.model
+
     data = fitter.data
     noise = fitter.noise
-    data_type = fitter.data_type
-    free_names = fitter._free_names
-    fixed_values = fitter._fixed_values
     spec = fitter.spec
     stochastic = spec.stochastic
     use_variable_noise = has_noise_model(spec)
     use_student_t = uses_student_t(spec)
 
-    def _predict(params):
-        if data_type == "photometry":
-            return model.predict_photometry(params, mode="_traceable")
-        elif data_type == "spectroscopy":
-            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
-        elif data_type == "joint":
-            p = model.predict_photometry(params, mode="_traceable")
-            s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
-            return jnp.concatenate([p, s])
-        else:
+    if use_variable_noise:
+        # Variable-noise: signal_response returns (predicted, noise_scale)
+        # and captures per-Fitter noise array — cannot be shared.
+        model = fitter.model
+        data_type = fitter.data_type
+        free_names = fitter._free_names
+        fixed_values = fitter._fixed_values
+
+        def _predict(params):
+            if data_type == "photometry":
+                return model.predict_photometry(params, mode="_traceable")
+            elif data_type == "spectroscopy":
+                return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+            elif data_type == "joint":
+                p = model.predict_photometry(params, mode="_traceable")
+                s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                return jnp.concatenate([p, s])
             raise ValueError(f"Unknown data_type: {data_type}")
 
-    def _build_params(primals):
-        params = {}
-        for name in free_names:
-            dist = spec.get_distribution(name)
-            params[name] = dist.unstandardize(primals[name])
-        for name, val in fixed_values.items():
-            params[name] = val
-        if stochastic and "psd_xi" in primals:
-            params["psd_xi"] = primals["psd_xi"]
-        params = spec.resolve_mirrors(params)
-        return params
+        def _build_params(primals):
+            params = {}
+            for name in free_names:
+                dist = spec.get_distribution(name)
+                params[name] = dist.unstandardize(primals[name])
+            for name, val in fixed_values.items():
+                params[name] = val
+            if stochastic and "psd_xi" in primals:
+                params["psd_xi"] = primals["psd_xi"]
+            params = spec.resolve_mirrors(params)
+            return params
 
-    if use_variable_noise:
         if use_student_t:
 
             def signal_response(primals):
                 params = _build_params(primals)
                 predicted = _predict(params)
                 f_cal = params.get("noise_frac_cal", 0.0)
-                sigma_eff = compute_effective_noise(noise, predicted, f_cal)
-                return predicted, sigma_eff
+                return predicted, compute_effective_noise(noise, predicted, f_cal)
 
         else:
 
@@ -660,33 +653,48 @@ def _get_or_build_nifty_likelihood(fitter):
                 params = _build_params(primals)
                 predicted = _predict(params)
                 f_cal = params.get("noise_frac_cal", 0.0)
-                std_inv = compute_std_inv(noise, predicted, f_cal)
-                return predicted, std_inv
+                return predicted, compute_std_inv(noise, predicted, f_cal)
+
+        domain = {}
+        for name in fitter._free_names:
+            domain[name] = jft.ShapeWithDtype(())
+        if stochastic:
+            domain["psd_xi"] = jft.ShapeWithDtype((spec.n_grid,))
+
+        nifty_model = jft.Model(jax.jit(signal_response), domain=domain)
+
+        if use_student_t:
+            dof = float(spec.get_distribution("noise_dof").value)
+            likelihood = jft.VariableCovarianceStudentT(data, dof).amend(nifty_model)
+        else:
+            likelihood = jft.VariableCovarianceGaussian(data).amend(nifty_model)
 
     else:
+        # Non-variable-noise: compile only the physics kernel, not the full
+        # native-VI engine (run_evi_geovi_jit etc.).  The full engine can be
+        # ~2 GB of compiled XLA; signal_response_jit is ~100 MB.  Only build
+        # the full engine if it is already in cache (built by a prior run() call).
+        from tengri.inference.jit_engine import get_or_build_signal_response
 
-        def signal_response(primals):
-            return _predict(_build_params(primals))
+        # Prefer the nifty_model already in the engine cache if available —
+        # avoids creating a second jft.Model object for the same physics.
+        nifty_model = None
+        if fitter._jit_sampler is not None:
+            nifty_model = fitter._jit_sampler.get("nifty_model")
 
-    domain = {}
-    for name in free_names:
-        domain[name] = jft.ShapeWithDtype(())
-    if stochastic:
-        domain["psd_xi"] = jft.ShapeWithDtype((spec.n_grid,))
+        if nifty_model is None:
+            _, sr_jit = get_or_build_signal_response(fitter)
+            domain = {}
+            for name in fitter._free_names:
+                domain[name] = jft.ShapeWithDtype(())
+            if stochastic:
+                domain["psd_xi"] = jft.ShapeWithDtype((spec.n_grid,))
+            nifty_model = jft.Model(sr_jit, domain=domain)
 
-    signal_response_jit = jax.jit(signal_response)
-    nifty_model = jft.Model(signal_response_jit, domain=domain)
-
-    if use_student_t and use_variable_noise:
-        dof = float(spec.get_distribution("noise_dof").value)
-        likelihood = jft.VariableCovarianceStudentT(data, dof).amend(nifty_model)
-    elif use_variable_noise:
-        likelihood = jft.VariableCovarianceGaussian(data).amend(nifty_model)
-    else:
         noise_cov_inv = 1.0 / noise**2
         likelihood = jft.Gaussian(data, noise_cov_inv).amend(nifty_model)
 
-    fitter._nifty_lh_cache = likelihood
+    get_model_cache(fitter.model)["nifty_lh"] = likelihood
     return likelihood
 
 
@@ -839,7 +847,7 @@ def run_nifty_vi(
             samples_phys[k].append(v)
 
     samples_phys = {k: jnp.stack(v) for k, v in samples_phys.items()}
-    best_params = {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
+    best_params = _mean_params(samples_phys)
 
     _mode_labels = {
         "nonlinear_resample": "geoVI",

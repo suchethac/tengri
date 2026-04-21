@@ -344,40 +344,36 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ### Fitting with vi (geoVI)
+# ### Fitting with vi_native (geoVI, JIT-compiled)
 #
-# vi (geoVI) is tengri's default inference method: geometric Variational
-# Inference (geoVI; Frank et al. 2021) reimplemented as a fully JIT-compiled
-# JAX program. It constructs a coordinate transform that flattens the posterior
-# geometry — straightening curved degeneracies like the age–dust banana — then
-# draws samples. The JIT engine eliminates all Python overhead, achieving a
-# 500× speedup over standard implementations.
+# `vi_native` is tengri's fastest inference method: geometric Variational
+# Inference (geoVI; Frank et al. 2021) compiled entirely in JAX — no NIFTy
+# dependency, no Python loops. The JIT engine is background-compiled at
+# `Fitter.__init__` time, so the first `run()` call sees near-zero compile
+# delay. It constructs a coordinate transform that flattens the posterior
+# geometry, straightening curved degeneracies like the age–dust banana, then
+# draws samples in the flattened space.
 
 # %%
-# MAP initialization + vi (geoVI) inference
+# vi_native (geoVI, pure-JAX) — background-compiled at Fitter init
 fitter_param = Fitter(
     model_param,
     mock_param.flux_obs,
     mock_param.noise,
 )
 
-t0 = time.perf_counter()
-result_map_param = fitter_param.run("map", n_steps=500, verbose=False)
-t_map = time.perf_counter() - t0
-
-# Inference runtime
+# Inference runtime (JIT engine already compiled in background)
 t0 = time.perf_counter()
 result_geovi_param = fitter_param.run(
-    "vi",
-    n_iterations=8,
-    n_samples=4,
+    "vi_native",
+    n_iterations=15,
+    n_samples=3,
     n_posterior_samples=500,
     verbose=False,
 )
 t_geovi = time.perf_counter() - t0
 
-print(f"MAP init:    {t_map:.1f}s")
-print(f"vi (geoVI): {t_geovi:.1f}s  ← runtime per galaxy")
+print(f"vi_native (geoVI): {t_geovi:.1f}s  ← runtime per galaxy")
 
 # %%
 # --- FIGURE 2: Spectral Fit ---
@@ -505,13 +501,13 @@ plt.show()
 # they should agree.
 
 # %%
-# Run NUTS from MAP initialization
+# Run NUTS warm-started from vi_native result
 t0 = time.perf_counter()
 result_nuts_param = fitter_param.run(
     "mcmc_nuts",
     n_warmup=500,
     n_samples=300,
-    init_from=result_map_param,
+    init_from=result_geovi_param,
     verbose=False,
 )
 t_nuts = time.perf_counter() - t0
@@ -553,7 +549,7 @@ plt.show()
 print("\n  Method         | Wall Clock | Effective Samples | ESS/sec")
 print("  " + "-" * 60)
 for name, res, t in [
-    ("vi", result_geovi_param, t_geovi),
+    ("vi_native", result_geovi_param, t_geovi),
     ("NUTS", result_nuts_param, t_nuts),
 ]:
     n_samp = len(next(iter(res.samples.values()))) if res.samples else 0
@@ -677,7 +673,7 @@ fig.tight_layout()
 plt.show()
 
 # %%
-# MAP + vi (geoVI) on the stochastic model
+# vi_native (geoVI) on the stochastic model — 137-D posterior
 fitter_stoch = Fitter(
     model_stoch,
     mock_stoch.flux_obs,
@@ -685,15 +681,10 @@ fitter_stoch = Fitter(
 )
 
 t0 = time.perf_counter()
-result_map_stoch = fitter_stoch.run("map", n_steps=500, verbose=False)
-t_map_s = time.perf_counter() - t0
-
-# Inference runtime
-t0 = time.perf_counter()
 result_geovi_stoch = fitter_stoch.run(
-    "vi",
-    n_iterations=8,
-    n_samples=4,
+    "vi_native",
+    n_iterations=15,
+    n_samples=3,
     n_posterior_samples=500,
     verbose=False,
 )
@@ -702,8 +693,7 @@ t_geovi_s = time.perf_counter() - t0
 print(f"\n{'=' * 55}")
 print(f"  137-dimensional posterior in {t_geovi_s:.1f}s runtime")
 print(f"{'=' * 55}")
-print(f"  MAP init:    {t_map_s:.1f}s")
-print(f"  vi (geoVI): {t_geovi_s:.1f}s  ← runtime per galaxy")
+print(f"  vi_native (geoVI): {t_geovi_s:.1f}s  ← runtime per galaxy")
 
 # %%
 # --- FIGURE 7: Stochastic SFH Recovery (THE MONEY FIGURE) ---
@@ -829,7 +819,7 @@ plt.show()
 t0 = time.perf_counter()
 result_rt_stoch = fitter_stoch.run(
     "mcmc_raytrace",
-    init_from=result_map_stoch,
+    init_from=result_geovi_stoch,
     n_burnin=200,
     n_steps=2000,
     step_size=0.05,

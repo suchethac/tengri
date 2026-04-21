@@ -10,6 +10,8 @@ import time
 import jax
 import jax.numpy as jnp
 
+from tengri.inference._model_cache import get_model_cache
+
 
 def _get_nss_algo(
     fitter,
@@ -34,10 +36,9 @@ def _get_nss_algo(
         max_shrinkage,
     )
     model = fitter.model
-    if not hasattr(model, "_nss_algo_cache"):
-        model._nss_algo_cache = {}
+    cache = get_model_cache(model).setdefault("nss_algo", {})
 
-    if cache_key not in model._nss_algo_cache:
+    if cache_key not in cache:
         from tengri.inference.backends.nested.nss import as_top_level_api
 
         logprior_fn = fitter._build_logprior_fn()
@@ -53,9 +54,9 @@ def _get_nss_algo(
             data_args=fitter._data_args,
         )
         step = jax.jit(algo.step)
-        model._nss_algo_cache[cache_key] = (algo, step)
+        cache[cache_key] = (algo, step)
 
-    return model._nss_algo_cache[cache_key]
+    return cache[cache_key]
 
 
 def run_nss(
