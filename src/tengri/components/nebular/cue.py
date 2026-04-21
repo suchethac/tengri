@@ -211,11 +211,13 @@ def load_cue_weights(npz_path: str) -> CueWeights:
     max_lines = max(n.pca_components.shape[1] for n in nets)
 
     def _pad2d(arr, target_r, target_c, fill=0.0):
+        """Pad a 2D array to target shape along both dimensions."""
         return jnp.pad(
             arr, ((0, target_r - arr.shape[0]), (0, target_c - arr.shape[1])), constant_values=fill
         )
 
     def _pad1d(arr, target, fill=0.0):
+        """Pad a 1D array to target shape."""
         return jnp.pad(arr, (0, target - arr.shape[0]), constant_values=fill)
 
     nn_line_wav = jnp.array(npz["nn_line_wavelength"])
@@ -743,6 +745,7 @@ class CueBackend:
             derived = {}
 
         def _pick(name, explicit, default):
+            """Return explicit value, derived value, or default in priority order."""
             if explicit is not None:
                 return explicit
             if name in derived:
@@ -881,6 +884,7 @@ class CueBackend:
 
         # Vectorize over age axis: get (ionspec_7, logqion) for each age
         def _get_params_at_age(log_age_yr):
+            """Get ionizing spectrum and Q_H at specified age via interpolation."""
             return interpolate_ionizing_params(
                 self._ionspec_table,
                 self._logqion_table,

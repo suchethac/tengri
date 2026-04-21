@@ -93,6 +93,7 @@ class CB19NoContinuumWarning(UserWarning):
 
 
 def _emit_cb19_warnings(ionizing_source_warning: str, continuum_warning: str) -> None:
+    """Emit warnings or raise errors about CB19Backend limitations."""
     if ionizing_source_warning not in ("raise", "warn", "suppress"):
         raise ValueError("ionizing_source_warning must be 'raise', 'warn', or 'suppress'")
     if continuum_warning not in ("raise", "warn", "suppress"):
@@ -307,6 +308,7 @@ def _interp_6d(
     data_lines_first = jnp.moveaxis(data_f64, -1, 0)  # (N_lines, N_OH, ...)
 
     def _interp_one(d6: jnp.ndarray) -> jnp.ndarray:
+        """Interpolate a single line over 6D continuous grid axes."""
         return jax.scipy.ndimage.map_coordinates(d6, coords, order=1, mode="nearest")
 
     return jax.vmap(_interp_one)(data_lines_first)  # (N_lines,)
@@ -549,6 +551,7 @@ class CB19Backend:
             log_age_i: float,
             weight_i: float,
         ) -> jnp.ndarray:
+            """Compute weighted line luminosity contribution for one SSP age bin."""
             qh_i = self._get_qh_at(log_z, log_age_i)
             log_ratios_i = _interp_6d(
                 grid.log_line_ratios,

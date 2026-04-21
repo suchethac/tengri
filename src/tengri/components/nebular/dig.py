@@ -1,27 +1,22 @@
-"""Diffuse ionized gas (DIG) nebular emission mixing.
+"""Diffuse Ionized Gas (DIG) nebular emission model.
 
-DIG is low-density ionized gas between HII regions, characterised by a lower
-ionization parameter (logU ~ -4) compared to HII regions (logU ~ -2.5 to -3).
-This produces enhanced low-ionization line ratios ([NII]/Ha, [SII]/Ha, [OI]/Ha).
+Models the mixing of ionizing photon-powered emission from two gas components:
+dense HII regions and diffuse ionized gas (DIG). DIG is low-density ionized gas
+between HII regions, characterised by lower ionization parameter (log U ~ −4 vs
+−2.5 in HII regions). This produces a distinct emission-line signature: enhanced
+low-ionization diagnostics ([NII]/Hα, [SII]/Hα, [OI]/Hα).
 
-Typical DIG fractions are 30-60% of total Ha in local galaxies
-(Reynolds 1984; Haffner et al. 2009; Tacchella et al. 2022).
+Observationally, DIG contributes ~30–60% of Hα flux in local star-forming
+galaxies (Reynolds 1984; Haffner et al. 2009; Tacchella et al. 2022).
 
-The mixing model evaluates any nebular backend at two ionization parameters:
+**Mixing formula**: Returns a weighted average of nebular emission at two
+ionization parameters (HII + DIG):
 
-    L_total = (1 - f_DIG) * L(logU_HII) + f_DIG * L(logU_DIG)
+    L_total = (1 − f_DIG) × L(log U_HII) + f_DIG × L(log U_DIG)
 
-where logU_DIG = logU_HII + delta_logU (delta_logU is negative, default -1 dex).
+where log U_DIG = log U_HII + Δ log U, with Δ log U = −1 dex (default).
 
-When ``neb_dig_frac=0`` (default), this reduces to pure HII emission with
-zero overhead when ``neb_dig_frac`` is a Python float 0.0; under JIT with
-a traced value, both forward passes execute.
-
-References
-----------
-- Reynolds 1984, ApJ, 282, 191
-- Haffner et al. 2009, RvMP, 81, 969
-- Tacchella et al. 2022, ApJ, 926, 134
+When f_DIG = 0 (default), collapses to pure HII region emission.
 """
 
 import jax.numpy as jnp
@@ -42,52 +37,98 @@ def mix_dig_emission(
     line_sigma_aa: float = 0.0,
     **kwargs,
 ) -> jnp.ndarray:
-    """Compute nebular SED with DIG mixing.
+    r"""Predict nebular SED with HII region and diffuse ionized gas components.
 
-    Evaluates the nebular backend at two ionization parameters and mixes:
-
-        L_total = (1 - f_DIG) * L(logU_HII) + f_DIG * L(logU_DIG)
-
-    where ``logU_DIG = logU_HII + delta_logU`` (delta_logU is negative).
-
-    When ``neb_dig_frac=0`` (default), this returns pure HII emission.
+    Computes emission from two ionization regimes (HII + DIG) using any backend,
+    then combines via mass-weighted mixing. This captures the enhanced low-ionization
+    emission ([NII], [SII], [OI]) characteristic of warm, ionized ISM.
 
     Parameters
     ----------
-    nebular_backend : CloudyGridBackend or CueBackend
-        Any backend with a ``predict_nebular_sed`` method.
+    nebular_backend : NebularBackend (CloudyGridBackend or CueBackend)
+        Backend with predict_nebular_sed() method. Called twice (HII, DIG).
     ssp_wave : array, shape (n_wave,)
-        Wavelength grid in Angstrom.
+        SSP wavelength grid in Å. [Å]
     ssp_weights : array, shape (n_age,)
-        CSP mass weights per age bin.
+        Stellar mass weights of composite stellar population per age bin.
+        [Msun]
     ssp_log_ages_yr : array, shape (n_age,)
-        log10(age/yr) of SSP bins.
+        Age grid of SSP basis (in cosmic time). [log10(yr)]
     log_z : float
-        Stellar metallicity log10(Z) (absolute).
-    neb_logU : float
-        HII region ionization parameter log10(U). Default -3.0.
-    neb_logZ_gas : float or None
-        Gas-phase metallicity log10(Z_gas/Zsun). If None, the backend
-        defaults to matching stellar metallicity.
-    neb_fesc : float
-        Ionizing photon escape fraction [0, 1]. Default 0.0.
-    neb_fesc_lya : float
-        Lyman-alpha escape fraction [0, 1]. Default 0.0.
-    neb_dig_frac : float
-        Fraction of nebular emission from DIG [0, 1]. Default 0.0.
-    neb_dig_delta_logU : float
-        Offset in log10(U) for DIG relative to HII (dex, negative).
-        Default -1.0.
-    line_sigma_aa : float
-        Gaussian line width in Angstrom. Default 0.0.
+        Stellar metallicity (SSP grid metallicity). [log10(Z)]
+    neb_logU : float, optional
+        HII region ionization parameter. Default: −3.0. [log10(U)]
+    neb_logZ_gas : float, optional
+        Gas-phase metallicity (relative to solar). If None, defaults to
+        stellar metallicity. Default: None. [log10(Z/Zsun)]
+    neb_fesc : float, optional
+        Ionizing photon escape fraction (applies to both HII and DIG).
+        Default: 0.0. [dimensionless, ∈ [0, 1]]
+    neb_fesc_lya : float, optional
+        Lyman-α-specific escape fraction. Default: 0.0. [dimensionless, ∈ [0, 1]]
+    neb_dig_frac : float, optional
+        DIG mass fraction. Default: 0.0. [dimensionless, ∈ [0, 1]]
+    neb_dig_delta_logU : float, optional
+        Offset in ionization parameter for DIG (negative). Default: −1.0 dex.
+        [dex]
+    line_sigma_aa : float, optional
+        Gaussian line width for emission-line placement. Default: 0.0 (delta).
+        [Å]
     **kwargs
-        Additional keyword arguments forwarded to the backend
-        (e.g., Cue-specific ionizing spectrum parameters).
-
+        Additional backend-specific keyword arguments (passed to both calls).
     Returns
     -------
     array, shape (n_wave,)
-        Total nebular SED (HII + DIG weighted mixture) in erg/s/Hz.
+        Combined nebular SED: (1 − f_DIG) × L_HII + f_DIG × L_DIG.
+        [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives, but note
+    that when neb_dig_frac is a traced JAX value, both HII and DIG forward
+    passes execute (no short-circuit optimisation).
+
+    **Mixing model** (Haffner et al. 2009, Tacchella et al. 2022):
+        The diffuse ionized gas (DIG) has a lower ionization parameter than
+        HII regions, producing a distinct line-ratio signature. We approximate
+        the total emission as a linear combination:
+
+        .. math::
+
+            L_{\mathrm{total}}(\lambda) = (1 - f_{\mathrm{DIG}}) \,
+                L_{\mathrm{HII}}(\lambda, \log U_{\mathrm{HII}}) +
+                f_{\mathrm{DIG}} \, L_{\mathrm{DIG}}(\lambda, \log U_{\mathrm{DIG}})
+
+        where log U_DIG = log U_HII + Δ log U, and both components use the
+        same metallicity, escape fraction, and stellar population weights.
+
+    **Physical picture**:
+        - **HII regions**: dense, photoionised by young (< 1 Myr) OB stars.
+          Log U ~ −2.5 to −3. Dominated by recombination lines ([OIII], [SIII],
+          etc.).
+        - **DIG**: diffuse, warm (~8000 K), ionised by stellar radiation and
+          shocks. Log U ~ −3 to −4. Dominated by forbidden lines ([NII], [SII],
+          [OI]).
+
+    **Escape fraction**:
+        Both HII and DIG share the same f_esc (stellar-population-level escape).
+        This is a simplification; physically, dust might preferentially shield
+        DIG, but we do not model this spatial variation.
+
+    **Pitfall**: When neb_dig_frac is a JAX-traced (differentiable) value,
+    both forward passes (HII + DIG) execute and contribute to gradients, even
+    if neb_dig_frac = 0 at runtime. Pre-compute DIG mixing only when needed.
+
+    References
+    ----------
+    .. [1] L. M. Haffner et al., "The Wisconsin Hα Mapper Northern Sky Survey,"
+       Rev. Mod. Phys., 81, 969 (2009). arXiv:0903.3933.
+       https://doi.org/10.1103/RevModPhys.81.969
+    .. [2] S. Tacchella et al., "The JWST Emission Line Survey (JELS): Toward
+       a Better Understanding of Star Formation in Galaxies," ApJ, 926, 134 (2022).
+       arXiv:2110.07929. https://doi.org/10.3847/1538-4357/ac439b
+    .. [3] S. P. Reynolds, "Supernova Remnants as Cosmic Ray Sources," ApJ,
+       282, 191 (1984). https://doi.org/10.1086/162189
     """
     common_kw = dict(
         ssp_wave=ssp_wave,

@@ -300,10 +300,12 @@ def _interp_stellar_grid(
     in_, wn = _interp_index_weight(logn_val, grid.logn_axis)
 
     def _get(iz_, ia_, iu_, in_):
+        """Retrieve value from sliced 4D grid."""
         return sliced[iz_, ia_, iu_, in_]
 
     # 4-D linear interpolation (16 corners)
     def _lerp4(iz_, ia_, iu_, in_):
+        """Perform 4D linear interpolation over logn, logU, log_age, and log_Z."""
         # Accumulate over n
         c0 = _get(iz_, ia_, iu_, in_) * (1 - wn) + _get(iz_, ia_, iu_, in_ + 1) * wn
         c1 = _get(iz_, ia_, iu_ + 1, in_) * (1 - wn) + _get(iz_, ia_, iu_ + 1, in_ + 1) * wn
@@ -341,18 +343,23 @@ def _interp_agn_grid(
     in_, wn = _interp_index_weight(logn_val, grid.logn_axis)
 
     def _get(iz_, im_, ie_, iu_, in_):
+        """Retrieve value from 5D AGN grid."""
         return data[iz_, im_, ie_, iu_, in_]
 
     def _lerp_n(iz_, im_, ie_, iu_):
+        """Interpolate over logn axis."""
         return _get(iz_, im_, ie_, iu_, in_) * (1 - wn) + _get(iz_, im_, ie_, iu_, in_ + 1) * wn
 
     def _lerp_un(iz_, im_, ie_):
+        """Interpolate over logU and logn axes."""
         return _lerp_n(iz_, im_, ie_, iu) * (1 - wu) + _lerp_n(iz_, im_, ie_, iu + 1) * wu
 
     def _lerp_eun(iz_, im_):
+        """Interpolate over logEdd, logU, and logn axes."""
         return _lerp_un(iz_, im_, ie) * (1 - we) + _lerp_un(iz_, im_, ie + 1) * we
 
     def _lerp_meun(iz_):
+        """Interpolate over logMBH, logEdd, logU, and logn axes."""
         return _lerp_eun(iz_, im) * (1 - wm) + _lerp_eun(iz_, im + 1) * wm
 
     return _lerp_meun(iz) * (1 - wz) + _lerp_meun(iz + 1) * wz
@@ -540,6 +547,7 @@ class MappingsPhotoStellarBackend:
             young_weights = ssp_weights[young_idx]
 
         def _contrib_one_age(log_age_i, weight_i):
+            """Compute weighted line luminosity contribution for one SSP age bin."""
             qh_i = self._get_qh_at(log_z, log_age_i)
 
             logHB_pq_i = _interp_stellar_grid(

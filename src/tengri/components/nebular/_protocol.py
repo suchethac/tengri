@@ -13,27 +13,59 @@ from typing import Protocol, runtime_checkable
 
 
 class NebularContinuumUnavailableError(Exception):
-    """Raised when a backend has no nebular continuum and no fallback is configured.
+    """Raised when a nebular backend cannot provide continuum and no fallback exists.
 
-    Use NebularContinuumFallback wrapper from _shared.py to add a fallback,
-    or switch to CloudyGridBackend or CueBackend which provide continuum natively.
+    This exception is raised by NebularContinuumFallback (with fallback_mode="error")
+    when a line-only backend (CB19, MAPPINGS, Shock) is called without either:
+    - a secondary continuum-capable backend (fallback=CueBackend or CloudyGridBackend), or
+    - the required keyword arguments (ssp_wave and gas_logqion) for analytic continuum.
+
+    Resolution: either (1) pass a continuum-capable backend as fallback=,
+    (2) provide ssp_wave and gas_logqion at prediction time, or
+    (3) switch to CloudyGridBackend or CueBackend which include continuum natively.
     """
 
 
 @runtime_checkable
 class NebularBackend(Protocol):
-    """Minimal Protocol all nebular backends must satisfy.
+    """Protocol definition for pluggable nebular emission backends.
+
+    All nebular backends in the tengri forward model must satisfy this minimal
+    interface, enabling runtime swapping of implementations (CB19, Cue, MAPPINGS,
+    Cloudy grids, etc.) without changing the forward model or inference code.
 
     Attributes
     ----------
     has_continuum : bool
-        True if the backend can return nebular continuum via predict_nebular_sed.
-        False for line-only backends (CB19, MappingsPhotoStellar, MappingsPhotoAGN,
-        ShockEmission).
+        Whether the backend provides nebular continuum emission in addition to
+        (or in place of) emission lines. True for physics-based grids (Cue,
+        CloudyGrid); False for line-only backends (CB19, MAPPINGS). Tooling
+        like NebularContinuumFallback uses this flag to add continuum via
+        fallback mechanisms when needed.
     has_free_params : bool
-        True if the backend has JAX-traced (differentiable) parameters.
+        Whether the backend has differentiable (JAX-traced) free parameters
+        that can be optimized during inference. True for data-driven emulators
+        (Cue); False for tabular grids. Used by the inference layer to decide
+        whether the backend participates in gradient-based inference.
     name : str
-        Short identifier string for the backend.
+        Short human-readable identifier (e.g., "Cue", "CB19", "Cloudy_CB19").
+        Used in logging, configuration, and error messages.
+
+    Methods
+    -------
+    predict_nebular_sed(...)
+        Returns nebular emission SED on the SSP wavelength grid [erg/s/Hz].
+        Signature varies by backend; see individual backend docstrings.
+
+    Notes
+    -----
+    **Composition**: Any callable with these three attributes is considered a valid
+    backend at runtime (duck typing via @runtime_checkable). This enables rapid
+    prototyping of new backends without modifying the Protocol definition.
+
+    **Line-only vs. continuum-capable**: A backend is NOT required to provide
+    continuum. Line-only backends can be wrapped with NebularContinuumFallback
+    to add analytic or physics-based continuum automatically.
     """
 
     has_continuum: bool

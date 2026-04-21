@@ -1,15 +1,14 @@
-"""Physical constants for nebular emission calculations.
+"""Physical and astrophysical constants for nebular emission module.
 
-Fundamental constants (h, c, L_sun) are imported from
-:mod:`tengri.utils.physics`, which documents their SI→CGS derivations and
-primary references (CODATA 2018, IAU 2015).
+This module centralises constant definitions used across nebular backends.
+Fundamental constants (h, c, L_sun) are re-exported from
+:mod:`tengri.utils.physics_constants` (SI→CGS conversions documented there;
+sources: CODATA 2018, IAU 2015). Nebular-specific constants are defined here.
 
-Nebular-specific constants (Lyman limit, solar metallicity, CB19 oxygen
-abundance offset) are defined here.
-
-Note: cue.py intentionally uses ``L_SUN_CUE = 3.839e33`` (CUE neural-net
-training convention) rather than the IAU 2015 value.  Do not replace that
-constant.  See tengri.utils.physics_constants for the full explanation.
+**Important**: cue.py intentionally uses L_SUN_CUE = 3.839e33 erg/s
+(neural-net training convention), not the IAU 2015 value. This constant
+is NOT re-exported from this module. See physics_constants.py docstring
+for the rationale.
 """
 
 from tengri.utils.physics_constants import (

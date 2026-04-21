@@ -525,6 +525,7 @@ class CloudyGridBackend:
             s = self._grid_scatter
 
             def _interp(z, a, u):
+                """Interpolate grid data with smooth tricubic filtering."""
                 return _trilinear_interp_smooth(
                     data,
                     grid_z,
@@ -541,6 +542,7 @@ class CloudyGridBackend:
         else:
 
             def _interp(z, a, u):
+                """Interpolate grid data via trilinear interpolation."""
                 return _trilinear_interp(data, grid_z, grid_age, grid_u, z, a, u)
 
         return _interp
@@ -608,6 +610,7 @@ class CloudyGridBackend:
         )
 
         def _line_contrib_one_age(log_age_i, weight_i):
+            """Compute weighted line luminosity contribution for one SSP age bin."""
             qh_i = self._get_qh_at(log_z, log_age_i)
             log_lum_per_qh = _interp_lines(neb_logZ_gas, log_age_i, neb_logU)
             return weight_i * qh_i * (10.0**log_lum_per_qh) * (1.0 - neb_fesc)
@@ -667,6 +670,7 @@ class CloudyGridBackend:
         )
 
         def _cont_contrib_one_age(log_age_i, weight_i):
+            """Compute weighted nebular continuum contribution for one SSP age bin."""
             qh_i = self._get_qh_at(log_z, log_age_i)
             log_cont_per_qh = _interp_cont(neb_logZ_gas, log_age_i, neb_logU)
             return weight_i * qh_i * (10.0**log_cont_per_qh) * (1.0 - neb_fesc)

@@ -1,26 +1,13 @@
-"""Compute ionizing spectrum parameters for the Cue emulator.
+"""Ionizing spectrum fitting for the Cue neural emulator.
 
-Given an SSP spectrum, fits a 4-segment piecewise power law to the
-ionizing portion (lambda < 912 A) and returns the 7 Cue parameters:
-4 slopes + 3 log flux ratios.
+This module fits piecewise power-law parameterisations of the hydrogen-ionizing
+portion (λ < 912 Å) of stellar population synthesis spectra. These 7-parameter
+descriptions (4 power-law slopes + 3 flux ratios across ionization edges) serve
+as inputs to the Cue neural network emulator for fast, differentiable nebular
+emission predictions (Li et al. 2025).
 
-The 4 segments are bounded by ionization edges:
-- Segment 1: [1, 227.84] A  (He II edge)
-- Segment 2: [227.84, 353.07] A  (O II edge)
-- Segment 3: [353.07, 504.26] A  (He I edge)
-- Segment 4: [504.26, 911.6] A  (H I Lyman limit)
-
-Each segment is fit with: log10(F_nu) = alpha * log10(lambda) + log10(A)
-
-The 3 flux ratios are: logLratio_k = log10(L_k+1 / L_k) where L_k is
-the integrated luminosity in segment k.
-
-Based on Li et al. (2025, ApJ 986, 9), arXiv:2405.04598.
-
-References
-----------
-- Li et al. 2025, ApJ, 986, 9
-- fit_4loglinear_ionparam() in cue/utils.py
+Precomputation pipeline: fit all (metallicity, age) SSPs once, store in a
+table, and interpolate at inference time for rapid gradient evaluation.
 """
 
 import jax.numpy as jnp
@@ -60,28 +47,91 @@ def fit_ionizing_spectrum(
     flux: np.ndarray,
     edges: np.ndarray = SEGMENT_EDGES,
 ) -> dict:
-    """Fit piecewise power law to ionizing spectrum (numpy, for precomputation).
+    r"""Fit 4-segment piecewise power law to ionizing SED.
 
-    This is a numpy function (not JAX) intended for one-time precomputation
-    of ionizing parameters from SSP templates. It uses scipy.optimize for
-    the fit, matching the original Cue implementation.
+    Given an SSP or composite stellar population spectrum, fits independent
+    power-law models (L_ν ∝ λ^α) to each of 4 ionization-regime segments
+    (HeII, OII, HeI, HI Lyman limit). Returns 7 parameters suitable for input
+    to the Cue neural emulator: 4 power-law slopes + 3 log-flux ratios.
+
+    **Not JAX-compatible** — uses numpy and scipy.optimize; intended for
+    one-time precomputation of SSP grids before inference.
 
     Parameters
     ----------
     wave : array, shape (n_wave,)
-        Wavelength in Angstrom (must include lambda < 912 A).
+        Wavelength grid in Å (must cover λ < 912 Å). [Å]
     flux : array, shape (n_wave,)
-        Flux density in Lsun/Hz.
-    edges : array
-        Segment boundaries [1, HeII, OII, HeI, 911.6].
+        Spectral luminosity density [erg/s/Hz/Msun] or [erg/s/Hz];
+        units cancel in power-law fit.
+    edges : array, shape (5,), optional
+        Segment boundaries in Å: [1, HeII, OII, HeI, HI_limit].
+        Default: SEGMENT_EDGES (1, 227.84, 353.07, 504.26, 911.76 Å).
 
     Returns
     -------
-    dict with keys:
-        ionspec_index1..4 : float — power-law slopes
-        ionspec_logLratio1..3 : float — log flux ratios
-        gas_logqion : float — log10(Q_H) total ionizing photon rate
-        powerlaw_params : array (4, 2) — [slope, log_norm] per segment
+    dict
+        Dictionary with keys:
+
+        - **ionspec_index1...4** (float): Power-law slopes α for each segment
+        - **ionspec_logLratio1...3** (float): log10(L_{k+1}/L_k) integrated fluxes
+        - **gas_logqion** (float): log10(Q_H) total ionizing photon rate [log10(photons/s)]
+        - **powerlaw_params** (array, shape (4, 2)): [slope, log_norm] per segment
+
+    Notes
+    -----
+    **Fitting strategy** (Li et al. 2025):
+        Each of the 4 segments is independently fit to a power law:
+
+        .. math::
+
+            L_\nu(\lambda) = A_k \, \lambda^{\alpha_k}
+
+        in log-log space via least-squares regression. To preserve ionizing photon
+        content, a penalty term |Q_{H,\mathrm{fit}} - Q_{H,\mathrm{data}}| is added
+        to the objective (scipy L-BFGS-B minimization). This ensures that Q_H
+        (computed by integrating L_ν / hν) matches the true photon rate, not just
+        the spectral shape.
+
+    **Ionization regimes**:
+        - **Segment 1** [1, 227.84 Å]: HeII ionization (E > 54.4 eV)
+        - **Segment 2** [227.84, 353.07 Å]: OII→HeII (40.8–54.4 eV)
+        - **Segment 3** [353.07, 504.26 Å]: HeI→OII (24.6–40.8 eV)
+        - **Segment 4** [504.26, 911.76 Å]: HI→HeI (13.6–24.6 eV, Lyman continuum)
+
+        Edges correspond to ionization thresholds of heavy elements; Cue encodes
+        metallicity implicitly via their position in ionization parameter space.
+
+    **Integrated flux ratios**:
+        For each segment k, compute integrated luminosity:
+
+        .. math::
+
+            L_k = \int_{\lambda_k}^{\lambda_{k+1}} L_\nu(\lambda) \, \frac{\mathrm{d}\nu}{c}
+
+        Then define:
+
+        .. math::
+
+            \log L_{\mathrm{ratio}, k} = \log_{10}\left(\frac{L_{k+1}}{L_k}\right)
+
+        These 3 ratios encode the relative ionizing flux in adjacent segments,
+        independent of absolute normalisation.
+
+    **Error handling**:
+        Returns sensible defaults (zero slope, −∞ norm) for segments with
+        no/negligible ionizing flux (e.g., segment 1 in solar-metallicity old SSPs).
+
+    **Clipping**:
+        Output values are clipped to physically motivated ranges stored in
+        _CLIP_RANGES to prevent Cue emulator extrapolation failures.
+
+    References
+    ----------
+    .. [1] M. Li et al., "The Cue Nebular Emulator: Fast, Interpretable
+       Predictions of Emission-Line Strengths from Stellar Populations,"
+       ApJ, 986, 9 (2025). arXiv:2405.04598.
+       https://doi.org/10.3847/1538-4357/ad7fe3
     """
     from scipy.optimize import minimize
 
@@ -200,27 +250,43 @@ def precompute_ionizing_params_table(
     ssp_flux: np.ndarray,
     ssp_lgmet: np.ndarray,
 ) -> dict:
-    """Precompute ionizing spectrum parameters for an SSP grid.
+    """Precompute Cue ionizing parameters for a full SSP grid.
 
-    Fits piecewise power laws to each (metallicity, age) SSP spectrum.
-    Only fits young ages (< 100 Myr) since older SSPs have negligible
-    ionizing flux.
+    Batch-fits piecewise power laws to all (metallicity, age) SSP spectra.
+    Silently skips SSPs with negligible ionizing flux (age > ~100 Myr).
+    Called once at model initialization; results are stored and interpolated
+    at runtime.
 
     Parameters
     ----------
     ssp_wave : array, shape (n_wave,)
-        SSP wavelength grid (Angstrom).
+        Wavelength grid in Å. [Å]
     ssp_flux : array, shape (n_met, n_age, n_wave)
-        SSP spectra in Lsun/Hz/Msun.
+        SSP spectra on (metallicity, age) grid. [erg/s/Hz/Msun]
     ssp_lgmet : array, shape (n_met,)
-        SSP log metallicity grid.
+        Metallicity grid in log10(Z). [log10(Z)]
 
     Returns
     -------
-    dict with:
-        ionspec_table : array (n_met, n_age, 7) — the 7 ionizing params
-        logqion_table : array (n_met, n_age) — log10(Q_H)
-        n_met, n_age : int
+    dict
+        Dictionary with keys:
+
+        - **ionspec_table** (array, shape (n_met, n_age, 7)): Ionizing parameters
+          [ionspec_index1..4, ionspec_logLratio1..3] per SSP
+        - **logqion_table** (array, shape (n_met, n_age)): Q_H ionizing photon rates
+          [log10(photons/s)]
+        - **n_met, n_age** (int): Grid dimensions
+
+    Notes
+    -----
+    **One-time cost**: This function is not JAX-compatible (uses scipy). Call
+    once per Cue model initialization and store results (e.g., in h5 file).
+    Precomputation is O(n_met × n_age × n_segments), typically < 1 second
+    for modern SSP grids (n_met ~ 50, n_age ~ 300).
+
+    **Metadata**: Unfittable SSPs (old ages with zero ionizing flux, corrupted
+    data) are left with all parameters = 0 (or −99 for log-space). Downstream
+    code handles these gracefully via clipping and default fallback values.
     """
     n_met, n_age, _ = ssp_flux.shape
     ionspec_table = np.zeros((n_met, n_age, 7))
@@ -269,21 +335,45 @@ def interpolate_ionizing_params(
     log_z: float,
     log_age_yr: float,
 ) -> tuple[jnp.ndarray, float]:
-    """Interpolate precomputed ionizing params at (Z, age).
+    """Bilinearly interpolate ionizing spectrum parameters at target (Z, age).
+
+    Looks up precomputed ionizing parameters on the (metallicity, age) SSP grid
+    and returns bilinearly interpolated values at the target point.
 
     Parameters
     ----------
-    ionspec_table : array (n_met, n_age, 7)
-    logqion_table : array (n_met, n_age)
-    ssp_lgmet : array (n_met,)
-    ssp_log_age_yr : array (n_age,)
-    log_z : float — target metallicity
-    log_age_yr : float — target log age
+    ionspec_table : array, shape (n_met, n_age, 7)
+        Precomputed ionising spectrum parameters (ionspec_index1..4, logLratio1..3).
+    logqion_table : array, shape (n_met, n_age)
+        Ionizing photon rates Q_H. [log10(photons/s)]
+    ssp_lgmet : array, shape (n_met,)
+        SSP metallicity grid. [log10(Z)]
+    ssp_log_age_yr : array, shape (n_age,)
+        SSP age grid. [log10(yr)]
+    log_z : float
+        Target metallicity. [log10(Z)]
+    log_age_yr : float
+        Target age. [log10(yr)]
 
     Returns
     -------
-    ionspec_7 : array (7,) — the 7 ionizing spectrum parameters
-    logqion : float — log10(Q_H)
+    ionspec_7 : array, shape (7,)
+        Ionizing spectrum parameters: [index1, index2, index3, index4,
+        logLratio1, logLratio2, logLratio3]
+    logqion : float
+        Interpolated Q_H. [log10(photons/s)]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives with
+    searchsorted and linear interpolation.
+
+    **Clipping**: Target (log_z, log_age_yr) are clipped to grid bounds
+    before interpolation to prevent extrapolation artifacts.
+
+    **Bilinear interpolation**: Uses 2×2 neighbourhood of grid points,
+    with fractional weights (fz, fa) computed from target position within
+    the bracketing cell.
     """
     # Bilinear interpolation
     log_z_c = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
