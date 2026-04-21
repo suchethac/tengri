@@ -36,35 +36,58 @@ def continuity_sfh(
     bin_edges_gyr: jnp.ndarray | None = None,
     **ratio_kwargs,
 ) -> jnp.ndarray:
-    """Non-parametric SFH with continuity prior (Leja+2019).
+    """Non-parametric piecewise-constant SFH with continuity prior (Leja+2019).
 
-    The SFH is piecewise-constant in N age bins. The free parameters
-    are log-ratios between adjacent bins: r_j = log10(SFR_j / SFR_{j+1}).
-    A Student-t(df=2, scale=0.3) prior on r_j penalizes sharp jumps.
-
-    The total mass normalizes the absolute SFR level.
+    A flexible non-parametric model that divides the age range into N bins
+    and parameterizes relative SFR changes between adjacent bins. The continuity
+    prior penalizes sharp transitions, promoting smooth SFH evolution.
 
     Parameters
     ----------
-    age_yr : array (n_age,)
-        Lookback time grid in years.
-    log_total_mass : float
-        log10(total stellar mass formed / Msun).
-    bin_edges_gyr : array (n_bins+1,) or None
-        Bin edges in Gyr. Default: log-spaced from 0 to 13.7 Gyr.
+    age_yr : array_like, shape (n_age,)
+        Lookback time grid [yr].
+    log_total_mass : float, optional
+        log10(total stellar mass formed / Msun). Default: 10.0 (10 Gyr Msun).
+    bin_edges_gyr : array_like, shape (n_bins+1,), optional
+        Bin edges in Gyr. Default: 7-edge log-spaced grid from 0 to 13.7 Gyr.
     **ratio_kwargs
-        Keyword arguments named ``ratio_0``, ``ratio_1``, ..., ``ratio_{N-2}``
-        containing the log10 SFR ratios between adjacent bins.
+        Keyword arguments ``ratio_0``, ``ratio_1``, ..., ``ratio_{N-2}``
+        containing the log10 SFR ratios between adjacent bins [dimensionless].
 
     Returns
     -------
-    array (n_age,)
-        SFR at each lookback time (Msun/yr), non-negative.
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
 
     Notes
     -----
-    r_j > 0 means the younger bin (j) has higher SFR than the older bin (j+1),
-    i.e. a rising SFH toward the present. r_j = 0 for all j gives a flat SFH.
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The SFH is piecewise-constant (step function) with N bins. The free parameters
+    are log-ratios between adjacent bins:
+
+    .. math::
+
+        r_j = \\log_{10}(\\mathrm{SFR}_j / \\mathrm{SFR}_{j+1})
+
+    where :math:`j=0` is the youngest bin. The oldest bin is the reference (:math:`r=0`),
+    and each younger bin's absolute log-SFR is the cumulative sum of ratios from it
+    to the oldest bin.
+
+    Positive :math:`r_j` means the younger bin (j) has higher SFR than the older bin (j+1),
+    representing rising SFH toward the present. Setting all :math:`r_j = 0` gives a flat SFH.
+
+    Total stellar mass is conserved by construction
+    (:math:`M_{\\star} = \\int \\mathrm{SFR}(t)\\,dt = 10^{\\log M_{\\star}}`).
+
+    A Student-t(df=2, scale=0.3) prior is applied to each ratio (via :func:`continuity_prior_logp`)
+    to penalize sharp jumps, encouraging smooth evolution across bins.
+
+    References
+    ----------
+    .. [1] J. Leja et al., "Deriving Physical Properties from Broadband Photometry with
+       Prospector: Description of the Code and Case Studies," ApJ, 876, 3 (2019).
+       arXiv:1905.11997. https://doi.org/10.3847/1538-4357/ab133c
     """
     if bin_edges_gyr is None:
         bin_edges_gyr = DEFAULT_BIN_EDGES_GYR
@@ -174,34 +197,59 @@ def dirichlet_sfh(
     bin_edges_gyr: jnp.ndarray | None = None,
     **z_kwargs,
 ) -> jnp.ndarray:
-    """Non-parametric SFH with Dirichlet prior (Leja+2017).
+    """Non-parametric piecewise-constant SFH with symmetric Dirichlet prior (Leja+2017).
 
-    Mass fractions are derived from auxiliary variables via stick-breaking:
-      f_1 = z_1
-      f_2 = (1 - z_1) * z_2
-      f_3 = (1 - z_1) * (1 - z_2) * z_3
-      ...
-      f_N = product(1 - z_j, j=1..N-1)
-
-    When all z_j ~ Beta(1,1) = Uniform(0,1), the mass fractions follow a
-    symmetric Dirichlet(1,...,1) distribution.
+    A flexible non-parametric model parameterized by mass fractions in age bins.
+    The mass fractions are derived from auxiliary variables via stick-breaking,
+    with a natural symmetric Dirichlet(1,...,1) prior on the fractions.
 
     Parameters
     ----------
-    age_yr : array (n_age,)
-        Lookback time grid in years.
-    log_total_mass : float
-        log10(total stellar mass formed / Msun).
-    bin_edges_gyr : array (n_bins+1,) or None
-        Bin edges in Gyr. Default: log-spaced from 0 to 13.7 Gyr.
+    age_yr : array_like, shape (n_age,)
+        Lookback time grid [yr].
+    log_total_mass : float, optional
+        log10(total stellar mass formed / Msun). Default: 10.0 (10 Gyr Msun).
+    bin_edges_gyr : array_like, shape (n_bins+1,), optional
+        Bin edges in Gyr. Default: 7-edge log-spaced grid from 0 to 13.7 Gyr.
     **z_kwargs
-        Keyword arguments named ``z_frac_0``, ``z_frac_1``, ..., ``z_frac_{N-2}``
-        containing the auxiliary Beta(1,1) variables in [0, 1].
+        Keyword arguments ``z_frac_0``, ``z_frac_1``, ..., ``z_frac_{N-2}``
+        containing the auxiliary Beta(1,1) variables (uniform on [0, 1]).
 
     Returns
     -------
-    array (n_age,)
-        SFR at each lookback time (Msun/yr), non-negative.
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The mass fractions are derived from auxiliary variables :math:`z_j \\sim \\mathrm{Beta}(1,1)`
+    via stick-breaking:
+
+    .. math::
+
+        f_0 &= z_0 \\\\
+        f_1 &= (1 - z_0) z_1 \\\\
+        f_2 &= (1 - z_0)(1 - z_1) z_2 \\\\
+        &\\ldots \\\\
+        f_{N-1} &= \\prod_{j=0}^{N-2} (1 - z_j)
+
+    When all :math:`z_j \\sim \\mathrm{Uniform}(0, 1)`, the mass fractions
+    :math:`\\mathbf{f} = (f_0, \\ldots, f_{N-1})` automatically follow
+    a symmetric :math:`\\mathrm{Dirichlet}(1, \\ldots, 1)` distribution.
+
+    The SFR in each bin is :math:`\\mathrm{SFR}_j = f_j \\cdot M_{\\star} / \\Delta t_j`,
+    where :math:`\\Delta t_j` is the width of bin j.
+
+    References
+    ----------
+    .. [1] J. Leja et al., "The Star Formation Histories of Quiescent Galaxies,"
+       ApJ, 837, 170 (2017). arXiv:1609.09073.
+       https://doi.org/10.3847/1538-4357/aa5ffe
+    .. [2] J. Leja et al., "Deriving Physical Properties from Broadband Photometry with
+       Prospector: Description of the Code and Case Studies," ApJ, 876, 3 (2019).
+       arXiv:1905.11997. https://doi.org/10.3847/1538-4357/ab133c
     """
     if bin_edges_gyr is None:
         bin_edges_gyr = DEFAULT_BIN_EDGES_GYR

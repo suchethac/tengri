@@ -21,21 +21,29 @@ def make_log_age_grid(
 ) -> jnp.ndarray:
     """Create uniform grid in log10(age/yr).
 
-    Default range: 1 Myr to ~13.8 Gyr.
+    Default range: 1 Myr to ~13.8 Gyr (approximately the age of the universe).
 
     Parameters
     ----------
-    n_grid : int
-        Number of grid points (should be even for FFT efficiency).
-    log_age_min : float
-        Minimum log10(age/yr). Default 6.0 = 1 Myr.
-    log_age_max : float
-        Maximum log10(age/yr). Default 10.14 ~ 13.8 Gyr.
+    n_grid : int, optional
+        Number of grid points (should be even for FFT efficiency). Default: 256.
+    log_age_min : float, optional
+        Minimum log10(age/yr). Default: 6.0 (1 Myr).
+    log_age_max : float, optional
+        Maximum log10(age/yr). Default: 10.14 (~13.8 Gyr).
 
     Returns
     -------
-    array, shape (n_grid,)
-        Uniform grid in log10(age/yr).
+    ndarray, shape (n_grid,)
+        Uniform grid in log10(age/yr) [dimensionless log values].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.linspace``.
+
+    This grid is used as the internal representation for age in GP-based SFH models.
+    The log-space parametrization provides better resolution at young ages and
+    maps naturally to the logarithmic timescales of stellar evolution.
     """
     return jnp.linspace(log_age_min, log_age_max, n_grid)
 
@@ -43,29 +51,50 @@ def make_log_age_grid(
 def gp_from_xi(xi: jnp.ndarray, sqrt_power: jnp.ndarray, n_points: int) -> jnp.ndarray:
     """Deterministic GP realization from standardized latent vector.
 
-    Implements the IFT correlated field model: s = IFFT(sqrt(P) * xi_hat).
-    This is the core function used during inference — the sampler proposes
-    xi ~ N(0, I), and this maps it to a correlated GP realization.
-
-    Uses rfft to map real-valued xi to Hermitian-symmetric Fourier
-    coefficients. This preserves the correct variance normalization:
-    E[|rfft(xi)_k|^2] = N, so with sqrt_power = sqrt(P/dx), we get
-    Var[x] = integral P(f) df, as required.
+    Maps a standardized Gaussian random vector to a correlated GP field via
+    Fourier-space multiplication with a spectral amplitude operator. This
+    is the core function used during inference and mock generation.
 
     Parameters
     ----------
-    xi : array, shape (n_points,)
-        Standardized latent vector (xi ~ N(0, I) under the prior).
-    sqrt_power : array, shape (n_freq,)
-        Amplitude operator sqrt(P(omega) / d_grid) at rfft frequencies.
-        Pre-compute with psd_to_sqrt_power().
+    xi : array_like, shape (n_points,)
+        Standardized latent vector :math:`\\xi \\sim \\mathcal{N}(0, I)` under the prior.
+    sqrt_power : array_like, shape (n_freq,)
+        Amplitude operator :math:`\\sqrt{P(\\omega) / d_{\rm grid}}` at rfft frequencies
+        (pre-compute with :func:`psd_to_sqrt_power`). [dimensionless]
     n_points : int
-        Number of grid points.
+        Number of grid points (should match the length of xi).
 
     Returns
     -------
-    array, shape (n_points,)
-        GP realization on the log-age grid.
+    ndarray, shape (n_points,)
+        GP realization on the log-age grid [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.fft.rfft`` and ``jnp.fft.irfft``.
+
+    **Gradient-safe**: yes — differentiable w.r.t. sqrt_power.
+
+    Implements the NIFTy correlated field model:
+
+    .. math::
+
+        s = \\mathrm{IFFT}(\\sqrt{P} \\cdot \\hat{\\xi})
+
+    The rfft (real FFT) preserves Hermitian symmetry for real-valued output and
+    ensures correct variance normalization: :math:`E[|\\mathrm{rfft}(\\xi)_k|^2] = N`,
+    so with :math:`\\sqrt{P/\\Delta x}` we recover :math:`\\mathrm{Var}[s] = \\int P(f) df`.
+
+    This is the primary function called during MCMC inference and mock galaxy generation.
+    The sampler proposes values of :math:`\\xi` and this function maps them to
+    correlated SFH realizations.
+
+    References
+    ----------
+    .. [1] Selig et al., "NIFTY - Numerical Information Field Theory in Python,"
+       A&A, 554, A26 (2013). arXiv:1301.4499.
+       https://doi.org/10.1051/0004-6361/201321236
     """
     xi_hat = jnp.fft.rfft(xi)
     coeffs = sqrt_power * xi_hat
@@ -73,23 +102,37 @@ def gp_from_xi(xi: jnp.ndarray, sqrt_power: jnp.ndarray, n_points: int) -> jnp.n
 
 
 def generate_gp_fourier(key: jax.Array, sqrt_power: jnp.ndarray, n_points: int) -> jnp.ndarray:
-    """Stochastic GP realization (for mock generation).
+    """Stochastic GP realization for mock galaxy generation.
 
-    Draws xi ~ N(0, I) and applies the correlated field model.
+    Draws a random standardized vector and maps it to a correlated GP field.
 
     Parameters
     ----------
-    key : PRNGKey
-        JAX random key.
-    sqrt_power : array, shape (n_freq,)
-        Amplitude operator at rfft frequencies.
+    key : jax.random.PRNGKey
+        JAX random key for reproducibility.
+    sqrt_power : array_like, shape (n_freq,)
+        Amplitude operator :math:`\\sqrt{P(\\omega) / d_{\rm grid}}` at rfft frequencies
+        (pre-compute with :func:`psd_to_sqrt_power`). [dimensionless]
     n_points : int
         Number of grid points.
 
     Returns
     -------
-    array, shape (n_points,)
-        GP realization.
+    ndarray, shape (n_points,)
+        GP realization on the log-age grid [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.random.normal`` and :func:`gp_from_xi`.
+
+    This function is the primary interface for generating mock SFHs with
+    stochastic variability. The random draw is always independent; for
+    reproducibility, pass the same PRNGKey.
+
+    See Also
+    --------
+    gp_from_xi : Deterministic GP mapping (used internally).
+    generate_gp_batch : Generate multiple independent realizations.
     """
     xi = random.normal(key, shape=(n_points,))
     return gp_from_xi(xi, sqrt_power, n_points)
@@ -98,23 +141,38 @@ def generate_gp_fourier(key: jax.Array, sqrt_power: jnp.ndarray, n_points: int) 
 def generate_gp_batch(
     key: jax.Array, sqrt_power: jnp.ndarray, n_points: int, n_realizations: int
 ) -> jnp.ndarray:
-    """Batch of GP realizations via vmap.
+    """Batch of independent GP realizations via vectorization.
+
+    Generates multiple independent SFH realizations in parallel using vmap.
 
     Parameters
     ----------
-    key : PRNGKey
-        JAX random key.
-    sqrt_power : array, shape (n_freq,)
-        Amplitude operator.
+    key : jax.random.PRNGKey
+        JAX random key (will be split into n_realizations independent keys).
+    sqrt_power : array_like, shape (n_freq,)
+        Amplitude operator :math:`\\sqrt{P(\\omega) / d_{\rm grid}}` at rfft frequencies.
+        [dimensionless]
     n_points : int
-        Grid size.
+        Number of grid points.
     n_realizations : int
-        Number of independent realizations.
+        Number of independent realizations to generate.
 
     Returns
     -------
-    array, shape (n_realizations, n_points)
-        Batch of GP realizations.
+    ndarray, shape (n_realizations, n_points)
+        Batch of independent GP realizations [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.vmap`` over :func:`generate_gp_fourier`.
+
+    Each realization is independent with the specified PSD structure.
+    This function is useful for generating mock catalogs or computing
+    uncertainties via Monte Carlo sampling.
+
+    See Also
+    --------
+    generate_gp_fourier : Single realization.
     """
     keys = random.split(key, n_realizations)
     return jax.vmap(lambda k: generate_gp_fourier(k, sqrt_power, n_points))(keys)
@@ -123,33 +181,49 @@ def generate_gp_batch(
 def compute_sqrt_power_drw(
     n_points: int, d_log_age: float, psd_sigma: float, psd_tau_yr: float, log_age_ref: float = 8.0
 ) -> jnp.ndarray:
-    """Pre-compute the DRW amplitude operator for the log-age grid.
+    """Pre-compute DRW amplitude operator for log-age grid.
 
-    Converts the DRW PSD from physical frequency (rad/yr) to log-age
-    frequency (rad/dex) using the Jacobian correction:
-
-        P_u(q) = P_t(q / (t_ref * ln10)) / (t_ref * ln10)
-
-    where t_ref = 10^log_age_ref is a reference time and q is the
-    log-age-space angular frequency.
+    Converts the DRW PSD from physical frequency (rad/yr) to log-age frequency
+    space (rad/dex) using the Jacobian correction for the change of variables
+    from linear time :math:`t` to log-time :math:`u = \\log_{10} t`.
 
     Parameters
     ----------
     n_points : int
-        Grid size.
+        Grid size (number of age samples).
     d_log_age : float
-        Grid spacing in dex.
+        Grid spacing in dex [dimensionless].
     psd_sigma : float
-        DRW PSD amplitude.
+        DRW PSD amplitude [dimensionless].
     psd_tau_yr : float
-        DRW damping timescale (yr).
-    log_age_ref : float
-        Reference log10(age/yr) for Jacobian correction. Default 8.0 (100 Myr).
+        DRW damping timescale [yr].
+    log_age_ref : float, optional
+        Reference log10(age/yr) for Jacobian correction. Default: 8.0 (100 Myr).
 
     Returns
     -------
-    array, shape (n_freq,)
-        sqrt(P_u(q) / d_log_age) at rfft frequencies.
+    ndarray, shape (n_freq,)
+        Amplitude operator :math:`\\sqrt{P_u(q) / \\Delta u}` at rfft frequencies
+        in log-age space [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The Jacobian correction for the change of variables from cosmic time
+    :math:`t` (in years) to log-age :math:`u = \\log_{10}(t)` is:
+
+    .. math::
+
+        P_u(q) = P_t\\left( \\frac{q}{t_{\\rm ref} \\ln 10} \\right) / (t_{\\rm ref} \\ln 10)
+
+    where :math:`t_{\\rm ref} = 10^{\\log_{\rm age, ref}}` is a reference time,
+    :math:`q` is the angular frequency in log-age space [rad/dex],
+    and :math:`P_t` is the PSD in physical frequency space.
+
+    The reference time scales out in the power spectrum but affects the
+    mapping between physical and log-age frequencies. A typical choice is
+    the midpoint of the age range (e.g., 100 Myr ~ 8 Gyr cosmic age).
     """
     from tengri.components.sfh.psd_models import psd_drw, psd_to_sqrt_power
 

@@ -41,52 +41,80 @@ def closed_box_metallicity(
 ) -> jnp.ndarray:
     """Compute metallicity history Z(t) from SFH using closed/leaky box model.
 
-    Given a star formation rate history on a lookback-time grid, compute the
-    gas-phase metallicity at each timestep using analytic chemical evolution.
-    The SFR is integrated from oldest to youngest (cosmic time order) to build
-    up cumulative stellar mass, gas depletion, and enrichment.
+    Self-consistently derives gas-phase metallicity at each age from the star
+    formation history using analytic chemical evolution. Supports both closed-box
+    (no outflows) and leaky-box (with mass-loading outflows) regimes.
 
     Parameters
     ----------
-    age_yr : array, shape (n_age,)
-        Lookback time grid in years. Convention: youngest (smallest lookback
-        time) first, oldest last. This matches tengri's internal log-age grid.
-    sfr : array, shape (n_age,)
-        Star formation rate in Msun/yr at each lookback time.
-    yield_y : float
+    age_yr : array_like, shape (n_age,)
+        Lookback time grid [yr]. Convention: youngest (smallest lookback time) first,
+        oldest last. This matches tengri's internal log-age grid convention.
+    sfr : array_like, shape (n_age,)
+        Star formation rate [Msun/yr] at each lookback time.
+    yield_y : float, optional
         Nucleosynthetic yield (mass of metals produced per unit mass locked
-        in long-lived stars). Default 0.03 (solar neighborhood value for
-        Chabrier IMF; Vincenzo et al. 2016).
-    eta_outflow : float
-        Mass loading factor: Mdot_out / SFR. 0 = closed box (no outflows).
-        Typical values: 0.5-3 for dwarf galaxies, 0-0.5 for massive galaxies.
-    f_gas_init : float
-        Initial gas fraction M_gas / (M_gas + M_star) at earliest cosmic time.
-        Default 0.9 (galaxy starts gas-dominated).
-    return_frac : float
+        in long-lived stars). Default: 0.03 (solar neighborhood for Chabrier IMF;
+        Vincenzo et al. 2016). [dimensionless]
+    eta_outflow : float, optional
+        Mass loading factor: Mdot_out / SFR. Default: 0.0 (closed box, no outflows).
+        Typical range: 0.5-3 for dwarf galaxies, 0-0.5 for massive galaxies.
+        [dimensionless]
+    f_gas_init : float, optional
+        Initial gas fraction :math:`M_{\\rm gas} / (M_{\\rm gas} + M_{\\star})` at
+        earliest cosmic time. Default: 0.9 (galaxy starts gas-dominated).
+        [dimensionless, in (0,1)]
+    return_frac : float, optional
         Instantaneous recycling fraction: fraction of formed stellar mass
-        returned to the ISM via winds/SNe. Default 0.4 (Chabrier IMF;
-        Leitner & Kravtsov 2011).
+        returned to the ISM via winds/SNe. Default: 0.4 (Chabrier IMF;
+        Leitner & Kravtsov 2011). [dimensionless, in [0,1))
 
     Returns
     -------
-    log_z_solar : array, shape (n_age,)
+    ndarray, shape (n_age,)
         log10(Z/Z_sun) at each lookback time. Clipped to [-4, +1].
 
     Notes
     -----
-    The computation proceeds in cosmic time (oldest first). Since the input
-    grid is in lookback time (youngest first), arrays are reversed internally.
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
-    The effective yield in the leaky-box model is y_eff = y / (1 + eta).
-    With eta=0 this reduces to the closed-box solution.
+    The closed-box and leaky-box chemical evolution models compute metallicity
+    from the integrated SFR history:
 
-    Gas mass evolves as:
-        M_gas(t) = M_gas(0) - (1 - R) * M_star_formed(t) - eta * M_star_formed(t)
+    .. math::
 
-    where M_star_formed is the cumulative integral of SFR. The (1-R) term
-    accounts for mass locked into long-lived stars/remnants, and the eta term
-    accounts for outflows.
+        Z(t) = \\frac{y_{\rm eff}}{1} \\ln\\left( \\frac{1}{f_{\rm gas}(t)} \\right)
+
+    where :math:`y_{\rm eff} = y / (1 + \\eta)` is the effective yield and
+    :math:`f_{\rm gas}(t)` is the gas fraction at time t.
+
+    Gas mass evolution:
+
+    .. math::
+
+        M_{\\rm gas}(t) = M_{\\rm gas,0} - (1 - R) M_{\\star,{\\rm formed}}(t)
+        - \\eta M_{\\star,{\\rm formed}}(t)
+
+    where :math:`M_{\\star,{\\rm formed}}` is the cumulative integral of SFR,
+    :math:`R` is the return fraction, and :math:`\\eta` is the mass loading factor.
+
+    **Computation order**: The input grid is in lookback time (youngest first).
+    Internally, the code reverses to cosmic time order (oldest first) to integrate
+    the SFR and track cumulative stellar mass and gas depletion.
+
+    With :math:`\\eta = 0` (eta_outflow=0), this reduces to the standard closed-box model.
+
+    References
+    ----------
+    .. [1] B. Tinsley, "Fundamentals of Cosmic Physics," in Fundamentals of Cosmic Physics,
+       5, 287 (1980).
+    .. [2] S. Bellstedt et al., "Galaxy And Mass Assembly (GAMA): a forensic SED
+       reconstruction of the cosmic star formation history and metallicity evolution
+       by galaxy type," MNRAS, 498, 5581 (2020). arXiv:2005.11917.
+       https://doi.org/10.1093/mnras/staa2620
+    .. [3] J. Leja et al., "Deriving Physical Properties from Broadband Photometry with
+       Prospector: Description of the Code and Case Studies," ApJ, 876, 3 (2019).
+       arXiv:1905.11997. https://doi.org/10.3847/1538-4357/ab133c
     """
     # Reverse to cosmic time order (oldest first)
     sfr_cosmic = sfr[::-1]

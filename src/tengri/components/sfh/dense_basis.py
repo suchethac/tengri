@@ -345,50 +345,79 @@ def dense_basis_sfh(
     age_universe_yr: float = 13.47e9,
     **tx_kwargs: float,
 ) -> jnp.ndarray:
-    """Non-parametric GP-SFH via mass-time quantiles (Iyer+2017, 2019).
+    """Non-parametric GP star formation history via mass-time quantiles (Iyer+2017, 2019).
 
-    Faithfully reimplements ``dense_basis.gp_sfh.tuple_to_sfh()`` in JAX.
-    The SFR is derived from the GP-interpolated cumulative mass curve
-    using the same ``sfh_scale * np.diff(mass_interp)`` approach as
-    the original, NOT ``jnp.gradient()``.
+    A sophisticated non-parametric model based on mass-weighted cosmic times.
+    The SFH is parameterized by the cosmic times at which the galaxy has assembled
+    specified fractions of its total stellar mass. A Gaussian Process with
+    Matérn 3/2 + Linear kernel smoothly interpolates the cumulative mass curve;
+    the SFR is derived as the time derivative.
 
     Parameters
     ----------
-    age_yr : array (n_age,)
-        Lookback time grid in years.
-    log_total_mass : float
-        log10(total stellar mass formed / Msun).
-    log_sfr_inst : float
-        log10(instantaneous SFR at observation / Msun/yr).
-        Used to add 3 constraint points near t=1 that pin the
-        recent SFH shape (dense_basis lines 140-152).
-        Default: 0.0 (1 Msun/yr).
-    age_universe_yr : float
-        Age of the universe at observation epoch (yr).
-        Default: 13.47e9 (FlatLambdaCDM H0=70, Om0=0.3 at z=0).
+    age_yr : array_like, shape (n_age,)
+        Lookback time grid [yr].
+    log_total_mass : float, optional
+        log10(total stellar mass formed / Msun). Default: 10.0 (10 Gyr Msun).
+    log_sfr_inst : float, optional
+        log10(instantaneous SFR at observation / Msun/yr). Default: 0.0 (1 Msun/yr).
+        Used to add 3 constraint points near t=1 (today) that pin the recent SFH
+        shape to be consistent with the observed instantaneous SFR.
+    age_universe_yr : float, optional
+        Age of the universe at observation epoch [yr].
+        Default: 13.47e9 (FlatLambdaCDM, H0=70, Omega_m=0.3, z=0).
     **tx_kwargs
-        Keyword arguments ``tx_frac_0``, ``tx_frac_1``, ...,
-        ``tx_frac_{N-1}``: cosmic time fractions in (0, 1).
+        Keyword arguments ``tx_frac_0``, ``tx_frac_1``, ..., ``tx_frac_{N-1}``
+        containing cosmic time fractions at which the galaxy formed specified
+        mass fractions (e.g., 25%, 50%, 75%) [dimensionless, in (0,1)].
 
     Returns
     -------
-    array (n_age,)
-        SFR at each lookback time (Msun/yr), non-negative.
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
 
     Notes
     -----
-    Default ``age_universe_yr=13.47e9`` matches the dense_basis cosmology
-    (FlatLambdaCDM H0=70, Om0=0.3). Override for other cosmologies or
-    redshifts.
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
-    The SFR derivative uses ``np.diff`` on the cumulative mass curve
-    (matching dense_basis lines 165-168), scaled by
-    ``sfh_scale = 10^logM / (age_universe_gyr * 1e9 / res)``.
+    This is a faithful JAX reimplementation of the ``dense_basis.gp_sfh.tuple_to_sfh()``
+    algorithm from Iyer & Gawiser (2017, 2019). Key design features:
+
+    1. **Direct mass parameterization**: stellar mass is a direct free parameter
+       (:math:`\\log_{10} M_{\\star}`), not derived from integrating SFR. This decouples
+       mass and SFH shape inference and improves sampling efficiency.
+
+    2. **Quantile-based parameterization**: the SFH is defined by the cosmic times
+       at which the galaxy has assembled given fractions (e.g., 25%, 50%, 75%) of
+       its stellar mass.
+
+    3. **GP interpolation**: a GP with Matérn 3/2 + Linear kernel smoothly
+       interpolates the cumulative mass curve through the quantile constraints.
+
+    4. **SFR derivation**: the SFR is computed as
+       :math:`\\mathrm{SFR}(t) = d M_{\\star} / dt`, using finite differences on the
+       GP-interpolated cumulative mass curve (matching the original dense_basis code).
+
+    5. **Observation-epoch constraints**: three constraint points near t=1 (today)
+       pin the recent SFH to be consistent with the instantaneous SFR at observation,
+       via Equations 140-152 in dense_basis.py.
+
+    The default ``age_universe_yr=13.47e9`` is calibrated to FlatLambdaCDM with
+    H0=70 km/s/Mpc and Omega_m=0.3 at z=0. Override for other cosmologies or redshifts.
+
+    **Approximation**: The SFR is computed using discrete differences on the
+    GP-interpolated mass curve, matching the original dense_basis implementation.
+    This is valid when the GP resolution (1000 points by default) is fine enough
+    to resolve the SFH timescales of interest.
 
     References
     ----------
-    - Iyer & Gawiser (2017), ApJ 838, 127 (arXiv:1702.04371).
-    - Iyer et al. (2019), ApJ 879, 116 (arXiv:1901.02877).
+    .. [1] K. Iyer and E. Gawiser, "Reconstruction of Galaxy Star Formation Histories
+       through SED Fitting: The Dense Basis Approach," ApJ, 838, 127 (2017).
+       arXiv:1702.04371. https://doi.org/10.3847/1538-4357/aa63f0
+    .. [2] K. Iyer et al., "Nonparametric Star Formation History Reconstruction with
+       Gaussian Processes. I. Counting Major Episodes of Star Formation," ApJ, 879,
+       116 (2019). arXiv:1901.02877. https://doi.org/10.3847/1538-4357/aaf563
     """
     # --- Validate and collect tx fractions ---
     n_param = len(tx_kwargs)
@@ -498,37 +527,63 @@ def dense_basis_pure_sfh(
     age_universe_yr: float = 13.47e9,
     **tx_kwargs: float,
 ) -> jnp.ndarray:
-    """Pure quantile-based SFH using monotone cubic (PCHIP) interpolation.
+    """Pure quantile-based SFH using monotone cubic Hermite interpolation (PCHIP).
 
-    Like ``dense_basis_sfh`` but without the ``log_sfr_inst`` parameter,
-    SFR constraint points, or GP kernel. Uses monotone PCHIP interpolation
-    instead of a GP — this guarantees monotonic cumulative mass curves,
-    eliminates the matrix solve entirely, and is faster and more robust.
-
-    Intended for use as the mean SFH in a composed model with the
-    GP field modulator: ``sfh=["dense_basis", "field"]`` (auto-swaps).
+    A lightweight variant of :func:`dense_basis_sfh` optimized for use as the
+    mean component in a composed model with a GP field modulator
+    (``sfh=["dense_basis", "field"]``). Eliminates the GP kernel overhead
+    and observation-epoch SFR constraints, using fast PCHIP monotone interpolation
+    instead.
 
     Parameters
     ----------
-    age_yr : array (n_age,)
-        Lookback time grid in years.
-    log_total_mass : float
-        log10(total stellar mass formed / Msun).
-    age_universe_yr : float
-        Age of the universe at observation epoch (yr).
+    age_yr : array_like, shape (n_age,)
+        Lookback time grid [yr].
+    log_total_mass : float, optional
+        log10(total stellar mass formed / Msun). Default: 10.0 (10 Gyr Msun).
+    age_universe_yr : float, optional
+        Age of the universe at observation epoch [yr].
+        Default: 13.47e9 (FlatLambdaCDM, H0=70, Omega_m=0.3, z=0).
     **tx_kwargs
-        ``tx_frac_0``, ``tx_frac_1``, ...: cosmic time fractions.
+        Keyword arguments ``tx_frac_0``, ``tx_frac_1``, ..., ``tx_frac_{N-1}``
+        containing cosmic time fractions [dimensionless, in (0,1)].
 
     Returns
     -------
-    array (n_age,)
-        SFR at each lookback time (Msun/yr), non-negative.
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``pchip_interpolate``.
+
+    **Approximation**: Replaces the GP with monotone PCHIP (Piecewise Cubic
+    Hermite Interpolating Polynomial), which guarantees a monotonically
+    increasing cumulative mass curve without overshoot. The Fritsch-Carlson
+    algorithm computes slopes such that the interpolant never violates the
+    monotonicity of the input points.
+
+    Compared to :func:`dense_basis_sfh`:
+
+    - **Pros**: Faster (no matrix solve), more robust (always monotonic),
+      fewer hyperparameters (no GP kernel bandwidth).
+    - **Cons**: Less smooth, no automatic variance propagation to nearby points.
+
+    **Intended use**: As the smooth mean component in a composed model with
+    a GP field modulator. The field adds high-frequency variability on top
+    of the smooth mean, so the mean component can be simpler.
 
     References
     ----------
-    - Iyer & Gawiser (2017), ApJ 838, 127 (arXiv:1702.04371).
-    - Iyer et al. (2019), ApJ 879, 116 (arXiv:1901.02877).
-    - Fritsch & Carlson (1980), SIAM J. Numer. Anal. 17, 238.
+    .. [1] K. Iyer and E. Gawiser, "Reconstruction of Galaxy Star Formation Histories
+       through SED Fitting: The Dense Basis Approach," ApJ, 838, 127 (2017).
+       arXiv:1702.04371. https://doi.org/10.3847/1538-4357/aa63f0
+    .. [2] K. Iyer et al., "Nonparametric Star Formation History Reconstruction with
+       Gaussian Processes. I. Counting Major Episodes of Star Formation," ApJ, 879,
+       116 (2019). arXiv:1901.02877. https://doi.org/10.3847/1538-4357/aaf563
+    .. [3] F. N. Fritsch and R. E. Carlson, "Monotone Piecewise Cubic Interpolation,"
+       SIAM J. Numer. Anal., 17, 238 (1980).
+       https://doi.org/10.1137/0717021
     """
     n_param = len(tx_kwargs)
     if n_param == 0:

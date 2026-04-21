@@ -41,28 +41,51 @@ def two_step_metallicity(
     log_z_abs_young: float,
     step_age_gyr: float,
 ) -> jnp.ndarray:
-    """Step-function metallicity: one Z for old stars, another for young.
+    """Step-function metallicity history with smooth sigmoid transition.
 
-    Stars older than ``step_age_gyr`` receive ``log_z_abs_old``;
-    younger stars receive ``log_z_abs_young``.  The transition is
-    smoothed with a narrow sigmoid (width ~2% of step age in log-space)
-    for JAX differentiability.
+    Assigns one metallicity to old stars and another to young stars,
+    with a smoothed sigmoid transition for JAX differentiability.
 
     Parameters
     ----------
-    ssp_lg_age_gyr : array, shape (n_age,)
-        Log10(age/Gyr) of SSP templates (= lookback time).
+    ssp_lg_age_gyr : array_like, shape (n_age,)
+        Log10(age/Gyr) of SSP templates. Lookback time (younger ages first).
     log_z_abs_old : float
-        log10(Z) absolute for old stars (before step).
+        log10(Z) absolute for old stars [dimensionless].
     log_z_abs_young : float
-        log10(Z) absolute for young stars (after step).
+        log10(Z) absolute for young stars [dimensionless].
     step_age_gyr : float
-        Lookback time of the metallicity step (Gyr).
+        Lookback time of the metallicity step [Gyr].
 
     Returns
     -------
-    array, shape (n_age,)
-        log10(Z) absolute at each SSP age.
+    ndarray, shape (n_age,)
+        log10(Z) absolute at each SSP age [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.nn.sigmoid``.
+
+    **Gradient-safe**: yes — sigmoid provides smooth gradients.
+
+    The metallicity history is:
+
+    .. math::
+
+        Z(t) = Z_{\\rm young} + (Z_{\\rm old} - Z_{\\rm young}) \\sigma(x)
+
+    where :math:`\\sigma(x)` is the sigmoid function:
+
+    .. math::
+
+        \\sigma(x) = \\frac{1}{1 + \\exp(-x/w)}
+
+    and :math:`x = \\log_{10}(t_{\\rm age}) - \\log_{10}(t_{\\rm step})`,
+    :math:`t_{\\rm age}` is the stellar age [Gyr], :math:`t_{\\rm step}` is
+    the step age [Gyr], and :math:`w = 0.02` (width in log-space, ~2%).
+
+    The smooth sigmoid avoids discontinuities that would complicate gradients
+    while keeping the transition sharp enough to be physically meaningful.
     """
     log_step = jnp.log10(jnp.maximum(step_age_gyr, 1e-4))
     width = 0.02
@@ -108,32 +131,42 @@ def metallicity_bins_on_ssp_grid(
     bin_edges_log_yr: jnp.ndarray,
     metallicities_abs: jnp.ndarray,
 ) -> jnp.ndarray:
-    """Piecewise-constant metallicity from user-defined time bins.
+    """Piecewise-constant metallicity history from time bins.
 
-    Each bin defined by ``bin_edges_log_yr`` gets its own metallicity.
-    Designed to pair with the continuity SFH (shared bin edges).
-
-    Bin indexing follows lookback-time convention:
-
-    - ``bin_edges_log_yr`` sorted ascending (youngest edge first).
-    - ``metallicities_abs[0]`` = youngest bin (smallest lookback time).
-    - ``metallicities_abs[-1]`` = oldest bin (largest lookback time).
-
-    SSP ages outside the bin range are clamped to the nearest edge bin.
+    Assigns a constant metallicity to each age bin. Designed to pair with
+    the continuity SFH model (shared bin edges). SSP ages are mapped to
+    bins using lookback-time indexing.
 
     Parameters
     ----------
-    ssp_lg_age_gyr : array, shape (n_age,)
-        Log10(age/Gyr) of SSP templates.
-    bin_edges_log_yr : array, shape (n_bins + 1,)
-        Bin edges in log10(age/yr), sorted ascending.
-    metallicities_abs : array, shape (n_bins,)
-        log10(Z) absolute per bin (youngest first, oldest last).
+    ssp_lg_age_gyr : array_like, shape (n_age,)
+        Log10(age/Gyr) of SSP templates [dimensionless].
+    bin_edges_log_yr : array_like, shape (n_bins+1,)
+        Bin edges in log10(age/yr), sorted ascending [dimensionless].
+    metallicities_abs : array_like, shape (n_bins,)
+        log10(Z) absolute per bin [dimensionless]. Index convention:
+        metallicities_abs[0] = youngest bin, metallicities_abs[-1] = oldest bin.
 
     Returns
     -------
-    array, shape (n_age,)
-        log10(Z) absolute at each SSP age.
+    ndarray, shape (n_age,)
+        log10(Z) absolute at each SSP age [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.searchsorted`` and ``jnp.clip``.
+
+    Bin indexing follows lookback-time convention:
+
+    - ``bin_edges_log_yr`` must be sorted ascending (youngest edge first).
+    - ``metallicities_abs[0]`` corresponds to the youngest bin (smallest lookback time).
+    - ``metallicities_abs[-1]`` corresponds to the oldest bin (largest lookback time).
+
+    SSP ages outside the bin range are clamped to the nearest edge bin metallicity.
+
+    The metallicity is a step function: :math:`Z(t) = Z_j` for
+    :math:`t_j \\leq t < t_{j+1}`, where j is determined by binary search
+    on the bin edges.
     """
     ssp_log_yr = ssp_lg_age_gyr + 9.0
     n_bins = metallicities_abs.shape[0]

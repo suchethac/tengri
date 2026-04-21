@@ -20,71 +20,142 @@ import jax.numpy as jnp
 
 
 def psd_drw(omega: jnp.ndarray, psd_sigma: float, psd_tau_yr: float) -> jnp.ndarray:
-    """Damped random walk (Lorentzian) power spectral density.
-
-    P(omega) = sigma_PS^2 * tau_PS / (1 + (tau_PS * omega)^2)
+    r"""Damped random walk (Lorentzian) power spectral density.
 
     Parameters
     ----------
-    omega : array
-        Angular frequency (rad / yr).
+    omega : array_like, shape (n_freq,)
+        Angular frequency [rad/yr].
     psd_sigma : float
-        PSD amplitude.
+        PSD amplitude (dimensionless).
     psd_tau_yr : float
-        Characteristic damping timescale (yr).
+        Characteristic damping timescale [yr].
 
     Returns
     -------
-    array
-        Power spectral density at each omega.
+    ndarray, shape (n_freq,)
+        Power spectral density at each frequency [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The damped random walk (Lorentzian) power spectral density is:
+
+    .. math::
+
+        P(\\omega) = \\sigma_{\rm PS}^2 \\,\tau_{\rm PS} / (1 + (\tau_{\rm PS} \\omega)^2)
+
+    where :math:`\\sigma_{\rm PS}` is the PSD amplitude [dimensionless],
+    :math:`\tau_{\rm PS}` is the damping timescale [yr], and :math:`\\omega`
+    is the angular frequency [rad/yr].
+
+    This is the primary PSD model used in tengri for stochastic SFH modeling.
+
+    References
+    ----------
+    .. [1] Munoz et al., "Correlated Star Formation Histories in Simulated Galaxies,"
+       arXiv:2601.07912 (2026).
     """
     return psd_sigma**2 * psd_tau_yr / (1.0 + (psd_tau_yr * omega) ** 2)
 
 
 def drw_acf(delta_t: jnp.ndarray, psd_sigma: float, psd_tau_yr: float) -> jnp.ndarray:
-    """Analytic autocorrelation function for DRW.
-
-    xi(dt) = (sigma_PS^2 / 2) * exp(-|dt| / tau_PS)
+    """Analytic autocorrelation function (autocovariance) for DRW.
 
     Parameters
     ----------
-    delta_t : array
-        Time lag (yr).
+    delta_t : array_like, shape (n_lag,)
+        Time lag [yr].
     psd_sigma : float
-        PSD amplitude.
+        PSD amplitude (dimensionless).
     psd_tau_yr : float
-        Damping timescale (yr).
+        Damping timescale [yr].
 
     Returns
     -------
-    array
-        Autocovariance at each lag.
+    ndarray, shape (n_lag,)
+        Autocovariance at each lag [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The autocovariance (autocorrelation function) of the DRW is:
+
+    .. math::
+
+        \\xi(\\Delta t) = \\frac{\\sigma_{\\rm PS}^2}{2}
+            \\exp\\!\\left( -\\frac{|\\Delta t|}{\\tau_{\\rm PS}} \\right)
+
+    where :math:`\\sigma_{\\rm PS}` is the PSD amplitude, :math:`\\tau_{\\rm PS}`
+    is the damping timescale [yr], and :math:`\\Delta t` is the time lag [yr].
     """
     return 0.5 * psd_sigma**2 * jnp.exp(-jnp.abs(delta_t) / psd_tau_yr)
 
 
 def drw_variance(psd_sigma: float) -> float:
-    """Stationary variance of DRW: sigma_x^2 = sigma_PS^2 / 2."""
+    """Stationary variance of DRW.
+
+    Parameters
+    ----------
+    psd_sigma : float
+        PSD amplitude (dimensionless).
+
+    Returns
+    -------
+    float
+        Stationary variance [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — scalar arithmetic.
+
+    The stationary variance of a DRW is:
+
+    .. math::
+
+        \\sigma_x^2 = \\frac{\\sigma_{\rm PS}^2}{2}
+
+    where :math:`\\sigma_{\rm PS}` is the PSD amplitude.
+    """
     return 0.5 * psd_sigma**2
 
 
 def psd_to_sqrt_power(psd_values: jnp.ndarray, d_grid: float) -> jnp.ndarray:
-    """Convert PSD values to amplitude operator sqrt(P / d_grid).
+    """Convert PSD to amplitude operator for GP generation.
 
-    This is the factor that multiplies the standardized latent vector xi
-    in Fourier space: IFFT(sqrt(P/d) * xi_hat).
+    Computes the factor that multiplies the standardized latent vector in
+    Fourier space to produce a GP realization:
+    :math:`s = \\mathrm{IFFT}(\\sqrt{P/d} \\cdot \\hat{\\xi})`.
 
     Parameters
     ----------
-    psd_values : array
-        PSD evaluated at rfft frequencies.
+    psd_values : array_like, shape (n_freq,)
+        PSD evaluated at rfft frequencies [dimensionless].
     d_grid : float
-        Grid spacing (needed for FFT normalization).
+        Grid spacing in the original domain (needed for FFT normalization) [dimensionless].
 
     Returns
     -------
-    array
-        Amplitude operator values.
+    ndarray, shape (n_freq,)
+        Amplitude operator :math:`\\sqrt{P(\\omega) / d_{\rm grid}}` [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The amplitude operator is:
+
+    .. math::
+
+        A(\\omega) = \\sqrt{\\frac{P(\\omega)}{d_{\rm grid}}}
+
+    where :math:`P(\\omega)` is the power spectral density and :math:`d_{\rm grid}`
+    is the grid spacing. This normalization ensures that the GP realization
+    has the correct variance: :math:`\\mathrm{Var}[s] = \\int P(f) \\, df`.
+
+    A floor of :math:`10^{-30}` is applied to avoid division by zero.
     """
     return jnp.sqrt(jnp.maximum(psd_values, 1e-30) / d_grid)
 
@@ -93,7 +164,37 @@ def psd_to_sqrt_power(psd_values: jnp.ndarray, d_grid: float) -> jnp.ndarray:
 
 
 def psd_matern(omega: jnp.ndarray, variance: float, length_scale: float, nu: float) -> jnp.ndarray:
-    """Matern PSD in 1D. Setting nu=0.5 recovers DRW."""
+    """Matern power spectral density (1D).
+
+    Parameters
+    ----------
+    omega : array_like, shape (n_freq,)
+        Angular frequency [rad/yr].
+    variance : float
+        Signal variance [dimensionless].
+    length_scale : float
+        Length scale parameter [yr].
+    nu : float
+        Matern smoothness parameter (dimensionless). nu=0.5 recovers the DRW.
+
+    Returns
+    -------
+    ndarray, shape (n_freq,)
+        Power spectral density [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.scipy.special.gammaln`` for log-gamma.
+
+    The Matern PSD is a generalization of the DRW (which corresponds to nu=0.5).
+    Larger nu values produce smoother realizations with steeper spectral fall-off
+    at high frequencies.
+
+    References
+    ----------
+    .. [1] Rasmussen & Williams, "Gaussian Processes for Machine Learning,"
+       MIT Press (2006). Section 4.2.
+    """
     from jax.scipy.special import gammaln
 
     lam = 2.0 * nu / length_scale**2
@@ -111,7 +212,53 @@ def psd_matern(omega: jnp.ndarray, variance: float, length_scale: float, nu: flo
 def psd_extended_regulator(
     f: jnp.ndarray, s_reg: float, tau_in: float, tau_eq: float, s_dyn: float, tau_dyn: float
 ) -> jnp.ndarray:
-    """Extended regulator PSD (Tacchella+2020). Uses cyclic frequency f."""
+    """Extended regulator power spectral density (Tacchella+2020).
+
+    Two-component PSD combining a feedback-regulated component and a dynamical component.
+
+    Parameters
+    ----------
+    f : array_like, shape (n_freq,)
+        Cyclic frequency [Hz or 1/yr] (must match timescale parameters).
+    s_reg : float
+        Regulator component amplitude [dimensionless].
+    tau_in : float
+        Inflow timescale [inverse units of f].
+    tau_eq : float
+        Equilibrium/feedback timescale [inverse units of f].
+    s_dyn : float
+        Dynamical component amplitude [dimensionless].
+    tau_dyn : float
+        Dynamical timescale [inverse units of f].
+
+    Returns
+    -------
+    ndarray, shape (n_freq,)
+        Power spectral density [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The extended regulator PSD combines feedback-regulated accretion and
+    dynamical instability:
+
+    .. math::
+
+        P(f) = \\frac{s_{\\rm reg}^2}{(1 + (2\\pi f \\tau_{\\rm in})^2)(1 + (2\\pi f \\tau_{\\rm eq})^2)}
+               + \\frac{s_{\\rm dyn}^2}{1 + (2\\pi f \\tau_{\\rm dyn})^2}
+
+    where all timescales are in the same units as the inverse of frequency f.
+
+    References
+    ----------
+    .. [1] Tacchella et al., "Simulating Realistic Star Formation Histories at
+       z > 2 with Dust Continuum Observations," ApJ, 868, 92 (2018).
+       arXiv:1809.01146. https://doi.org/10.3847/1538-4357/aae8e0
+    .. [2] Caplar & Tacchella, "The Chaotic Dynamics of Star-forming Galaxies,"
+       ApJ, 882, 106 (2019). arXiv:1905.05799.
+       https://doi.org/10.3847/1538-4357/ab3522
+    """
     two_pi_f = 2.0 * jnp.pi * f
     regulator = s_reg**2 / ((1.0 + (tau_in * two_pi_f) ** 2) * (1.0 + (tau_eq * two_pi_f) ** 2))
     dynamical = s_dyn**2 / (1.0 + (tau_dyn * two_pi_f) ** 2)

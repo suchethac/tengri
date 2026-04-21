@@ -86,6 +86,7 @@ _always_true = lambda lo, hi: True  # noqa: E731
 
 
 def _register(spec: MetModelSpec) -> None:
+    """Register a metallicity mode spec in the global registry."""
     MET_REGISTRY[spec.name] = spec
 
 
