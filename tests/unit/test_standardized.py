@@ -49,7 +49,7 @@ def _make_stochastic_spec(n_grid=16):
 
 
 def _make_mock_model(spec, n_filters=5):
-    """Build a mock Model that has spec + predict_photometry returning random flux."""
+    """Build a mock SEDModel that has spec + predict_photometry returning random flux."""
     model = MagicMock()
     model.spec = spec
     model.predict_photometry.return_value = jnp.ones(n_filters) * 1e-18

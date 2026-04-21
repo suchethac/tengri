@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Model, ParamSpec, load_ssp_data
+from tengri import Fixed, Parameters, SEDModel, load_ssp_data
 from tengri.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
 
 setup_style()
@@ -44,7 +44,7 @@ if SSP_PATH is None:
 ssp = load_ssp_data(SSP_PATH)
 
 # --- Build model with DL07 dust emission ---
-spec = ParamSpec(
+spec = Parameters(
     dust_emission="draine_li2007",
     sfh_tsnorm_log_peak_sfr=Fixed(1.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(1.5),
@@ -60,7 +60,7 @@ spec = ParamSpec(
     dust_qpah=Fixed(2.5),  # Will sweep this
     redshift=Fixed(0.1),
 )
-model = Model(spec, ssp)
+model = SEDModel(spec, ssp)
 
 # --- Sweep dust_qpah (%), zoomed to mid-IR where PAH features dominate ---
 # Mid-IR zoom: 3–20 μm = 3e4 Å to 2e5 Å

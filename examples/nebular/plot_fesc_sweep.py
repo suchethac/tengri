@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Model, ParamSpec, load_ssp_data
+from tengri import Fixed, Parameters, SEDModel, load_ssp_data
 from tengri.plotting import setup_style, sweep_parameter
 
 setup_style()
@@ -44,7 +44,7 @@ if SSP_PATH is None:
 ssp = load_ssp_data(SSP_PATH)
 
 # --- Build model: young star-forming galaxy ---
-spec = ParamSpec(
+spec = Parameters(
     nebular_cue=True,
     sfh_tsnorm_log_peak_sfr=Fixed(1.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),  # Peak ~500 Myr ago (young)
@@ -60,7 +60,7 @@ spec = ParamSpec(
     neb_logZ_gas=Fixed(-0.3),
     neb_fesc=Fixed(0.0),  # Will sweep this
 )
-model = Model(spec, ssp)
+model = SEDModel(spec, ssp)
 
 # --- Sweep escape fraction ---
 values = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]

@@ -23,8 +23,8 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.forward.sed_model import Model
-from tengri.parameters.parameters import ParamSpec
+from tengri.forward.sed_model import SEDModel
+from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
 
 # ── Skip guards ───────────────────────────────────────────────────
@@ -57,7 +57,7 @@ def filters(sdss_filters):
 @pytest.fixture(scope="module")
 def cue_spec():
     """DPL SFH + Cue nebular emulator, no dust emission, fixed z=0.1."""
-    return ParamSpec(
+    return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -74,9 +74,9 @@ def cue_spec():
 
 @pytest.fixture(scope="module")
 def cue_model(ssp_data, filters, cue_spec):
-    """Model with Cue nebular emulator, no dust IR emission."""
+    """SEDModel with Cue nebular emulator, no dust IR emission."""
     try:
-        return Model(cue_spec, ssp_data, filters=filters)
+        return SEDModel(cue_spec, ssp_data, filters=filters)
     except (ImportError, FileNotFoundError) as exc:
         pytest.skip(f"Cue emulator not available: {exc}")
 

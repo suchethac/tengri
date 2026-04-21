@@ -17,7 +17,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Model, ParamSpec, Uniform, load_ssp_data, setup_style
+from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp_data, setup_style
 from tengri.plotting import sfh_sed_comparison
 
 setup_style()
@@ -42,8 +42,8 @@ if SSP_PATH is None:
 
 ssp = load_ssp_data(SSP_PATH)
 
-# Build ParamSpec with tsnorm + GP field for stochastic SFH
-spec = ParamSpec(
+# Build Parameters with tsnorm + GP field for stochastic SFH
+spec = Parameters(
     mean_sfh_type=["tsnorm", "field"],
     sfh_tsnorm_log_peak_sfr=Fixed(1.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
@@ -59,7 +59,7 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
 )
 
-model = Model(spec, ssp)
+model = SEDModel(spec, ssp)
 
 # Sweep parameter with stochastic samples
 key = jax.random.PRNGKey(0)

@@ -13,7 +13,7 @@ MAPPINGS V v5.2.1 photoionization model grids computed with:
   - Jenkins+2009/2014 empirical dust depletion (F★ = 0.43)
   - CHIANTI v10 atomic data
 
-Model types
+SEDModel types
 -----------
   sb99    : Starburst99 (Geneva+WM-Basic/CMFGEN, Kroupa IMF 120 Msun)
   bpass   : BPASS v2.2 (binary stars, Kroupa IMF 120 Msun)

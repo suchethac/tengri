@@ -273,12 +273,12 @@ class TestPrecomputeCrossval:
         if not _SSP_PATH.is_file():
             pytest.skip("SSP data not found")
 
-        from tengri import Model, ParamSpec, Uniform
+        from tengri import Parameters, SEDModel, Uniform
         from tengri.components.sps.dsps_wrapper import load_ssp_data
 
         try:
             ssp = load_ssp_data(str(_SSP_PATH))
-            spec = ParamSpec(
+            spec = Parameters(
                 sfh_alpha=Uniform(0.5, 3.0),
                 sfh_beta=Uniform(0.3, 2.0),
                 sfh_tau_peak_gyr=Uniform(0.5, 10.0),
@@ -291,9 +291,9 @@ class TestPrecomputeCrossval:
             )
 
             # With precomputation (default)
-            model_pre = Model(spec, ssp, precompute=True)
+            model_pre = SEDModel(spec, ssp, precompute=True)
             # Without
-            model_dir = Model(spec, ssp, precompute=False)
+            model_dir = SEDModel(spec, ssp, precompute=False)
 
             params = spec.sample(jax.random.PRNGKey(0))
 

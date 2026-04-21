@@ -19,9 +19,9 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri.components.sps.dsps_wrapper import load_ssp_data
-from tengri.forward.sed_model import Model
+from tengri.forward.sed_model import SEDModel
 from tengri.observation.filters import load_filter_set
-from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Uniform
 
 # ── Skip guard — all tests require SSP data on disk ───────────────
@@ -59,7 +59,7 @@ class TestEvolvingZRouting:
 
     @pytest.fixture(scope="class")
     def evolvingz_spec(self):
-        return ParamSpec(
+        return Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
@@ -78,14 +78,14 @@ class TestEvolvingZRouting:
 
     @pytest.fixture(scope="class")
     def evolvingz_model(self, evolvingz_spec, ssp_data, filters):
-        return Model(evolvingz_spec, ssp_data, filters=filters)
+        return SEDModel(evolvingz_spec, ssp_data, filters=filters)
 
     @pytest.fixture(scope="class")
     def evolvingz_params(self, evolvingz_spec):
         return evolvingz_spec.sample(jax.random.PRNGKey(0))
 
     def test_compositional_kernel_built(self, evolvingz_model):
-        """Model must have built the compositional photometry kernel for evolving-Z."""
+        """SEDModel must have built the compositional photometry kernel for evolving-Z."""
         assert evolvingz_model._compositional is not None
         assert evolvingz_model._compositional.photometry is not None
 
@@ -111,7 +111,7 @@ class TestChemEvolRouting:
     @pytest.fixture(scope="class")
     def chemevol_spec(self):
         # chem_evol params all have Fixed defaults — no Uniform needed
-        return ParamSpec(
+        return Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
@@ -127,14 +127,14 @@ class TestChemEvolRouting:
 
     @pytest.fixture(scope="class")
     def chemevol_model(self, chemevol_spec, ssp_data, filters):
-        return Model(chemevol_spec, ssp_data, filters=filters)
+        return SEDModel(chemevol_spec, ssp_data, filters=filters)
 
     @pytest.fixture(scope="class")
     def chemevol_params(self, chemevol_spec):
         return chemevol_spec.sample(jax.random.PRNGKey(1))
 
     def test_compositional_kernel_built(self, chemevol_model):
-        """Model must have built the compositional photometry kernel for chem-evol."""
+        """SEDModel must have built the compositional photometry kernel for chem-evol."""
         assert chemevol_model._compositional is not None
         assert chemevol_model._compositional.photometry is not None
 
@@ -166,7 +166,7 @@ class TestTabularSFHRouting:
     @pytest.fixture(scope="class")
     def tabular_spec(self):
         # mean_sfh_type="table" defers the SFH to runtime arrays in the params dict
-        return ParamSpec(
+        return Parameters(
             mean_sfh_type="table",
             met_logzsol=Uniform(-1.5, 0.2),
             dust_tau_bc=Uniform(0.0, 3.0),
@@ -177,7 +177,7 @@ class TestTabularSFHRouting:
 
     @pytest.fixture(scope="class")
     def tabular_model(self, tabular_spec, ssp_data, filters):
-        return Model(tabular_spec, ssp_data, filters=filters)
+        return SEDModel(tabular_spec, ssp_data, filters=filters)
 
     @pytest.fixture(scope="class")
     def base_params(self, tabular_spec):

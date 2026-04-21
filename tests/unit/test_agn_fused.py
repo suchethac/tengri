@@ -15,7 +15,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import Fixed, Model, ParamSpec, Uniform
+from tengri import Fixed, Parameters, SEDModel, Uniform
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SKIRTOR_CANDIDATES = [_DATA_DIR / "skirtor_templates_v2.h5", _DATA_DIR / "skirtor_templates.npz"]
@@ -47,8 +47,8 @@ def simple_filters():
 
 @pytest.fixture(scope="module")
 def parametric_agn_spec():
-    """ParamSpec with parametric AGN (agn_log_lbol is free)."""
-    return ParamSpec(
+    """Parameters with parametric AGN (agn_log_lbol is free)."""
+    return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Fixed(1.5),
         sfh_dpl_beta=Fixed(1.0),
@@ -69,8 +69,8 @@ def parametric_agn_spec():
 
 @pytest.fixture(scope="module")
 def legacy_agn_spec():
-    """ParamSpec with legacy AGN (agn_frac is free)."""
-    return ParamSpec(
+    """Parameters with legacy AGN (agn_frac is free)."""
+    return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Fixed(1.5),
         sfh_dpl_beta=Fixed(1.0),
@@ -98,28 +98,28 @@ class TestAGNModeDetection:
         """Parametric AGN (agn_log_lbol free) sets _agn_luminosity_mode=True."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model = Model(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
+            model = SEDModel(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
         assert model._agn_luminosity_mode is True
 
     def test_legacy_mode_detected(self, legacy_agn_spec, synthetic_ssp, simple_filters):
         """Legacy AGN (agn_frac free) sets _agn_luminosity_mode=False."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model = Model(legacy_agn_spec, synthetic_ssp, filters=simple_filters)
+            model = SEDModel(legacy_agn_spec, synthetic_ssp, filters=simple_filters)
         assert model._agn_luminosity_mode is False
 
     def test_parametric_enables_hybrid(self, parametric_agn_spec, synthetic_ssp, simple_filters):
         """Parametric AGN allows hybrid kernel."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model = Model(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
+            model = SEDModel(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
         assert model._hybrid.photometry is not None
 
     def test_legacy_still_builds_hybrid(self, legacy_agn_spec, synthetic_ssp, simple_filters):
         """Legacy AGN still builds hybrid kernel (non-stellar at full res)."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model = Model(legacy_agn_spec, synthetic_ssp, filters=simple_filters)
+            model = SEDModel(legacy_agn_spec, synthetic_ssp, filters=simple_filters)
         # Hybrid handles all AGN modes (frac computed from broadband L_bol)
         assert model._hybrid.photometry is not None
 
@@ -134,7 +134,7 @@ class TestAGNFusedPhotometry:
         """Fused AGN photometry is finite and positive."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model = Model(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
+            model = SEDModel(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
 
         key = jax.random.PRNGKey(42)
         params = parametric_agn_spec.sample(key)
@@ -147,7 +147,7 @@ class TestAGNFusedPhotometry:
         """Gradients through AGN fused path are all finite."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model = Model(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
+            model = SEDModel(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
 
         key = jax.random.PRNGKey(42)
         params = parametric_agn_spec.sample(key)
@@ -167,7 +167,7 @@ class TestAGNFusedPhotometry:
         """Changing agn_log_lbol changes the photometry (approx path)."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model = Model(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
+            model = SEDModel(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
 
         key = jax.random.PRNGKey(42)
         params = parametric_agn_spec.sample(key)
@@ -205,7 +205,7 @@ class TestAGNFusedVsExact:
         should agree within ~20% (AGN SED varies more strongly than
         stellar SED across filter bandpasses).
         """
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Fixed(1.5),
             sfh_dpl_beta=Fixed(1.0),
@@ -225,8 +225,8 @@ class TestAGNFusedVsExact:
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model_fused = Model(spec, synthetic_ssp, filters=simple_filters, approx=True)
-            model_exact = Model(spec, synthetic_ssp, filters=simple_filters, approx=False)
+            model_fused = SEDModel(spec, synthetic_ssp, filters=simple_filters, approx=True)
+            model_exact = SEDModel(spec, synthetic_ssp, filters=simple_filters, approx=False)
 
         key = jax.random.PRNGKey(99)
         params = spec.sample(key)
@@ -265,7 +265,7 @@ class TestAGNFusedVsExact:
         _agn_luminosity_mode=True, which enables the `has_agn=True` branch inside
         the fused kernel — the only path where the unit bug fired.
         """
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Fixed(1.5),
             sfh_dpl_beta=Fixed(1.0),
@@ -285,8 +285,8 @@ class TestAGNFusedVsExact:
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model_fused = Model(spec, synthetic_ssp, filters=simple_filters, approx=True)
-            model_exact = Model(spec, synthetic_ssp, filters=simple_filters, approx=False)
+            model_fused = SEDModel(spec, synthetic_ssp, filters=simple_filters, approx=True)
+            model_exact = SEDModel(spec, synthetic_ssp, filters=simple_filters, approx=False)
 
         assert model_fused._agn_luminosity_mode is True, (
             "Expected _agn_luminosity_mode=True with free agn_log_lbol"
@@ -328,7 +328,7 @@ class TestAGNPredictSED:
         """predict_sed with parametric AGN produces finite SED."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model = Model(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
+            model = SEDModel(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
 
         key = jax.random.PRNGKey(42)
         params = parametric_agn_spec.sample(key)
@@ -395,7 +395,7 @@ class TestSKIRTORPreintegration:
     @pytest.fixture(scope="class")
     def skirtor_spec(self):
         """Parameters spec with SKIRTOR AGN, fixed redshift (required for preintegration)."""
-        return ParamSpec(
+        return Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Fixed(1.5),
             sfh_dpl_beta=Fixed(1.0),
@@ -423,7 +423,7 @@ class TestSKIRTORPreintegration:
         """SEDModel with SKIRTOR + fixed z loads skirtor_lookup into PrecomputedData."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model = Model(skirtor_spec, synthetic_ssp, filters=simple_filters)
+            model = SEDModel(skirtor_spec, synthetic_ssp, filters=simple_filters)
         assert model._precomputed.skirtor_lookup is not None, (
             "Expected skirtor_lookup to be populated for fixed-z SKIRTOR model"
         )
@@ -432,7 +432,7 @@ class TestSKIRTORPreintegration:
         """Hybrid kernel with SKIRTOR preintegration produces finite, positive photometry."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model = Model(skirtor_spec, synthetic_ssp, filters=simple_filters)
+            model = SEDModel(skirtor_spec, synthetic_ssp, filters=simple_filters)
 
         key = jax.random.PRNGKey(42)
         params = skirtor_spec.sample(key)
@@ -453,8 +453,8 @@ class TestSKIRTORPreintegration:
         """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model_hybrid = Model(skirtor_spec, synthetic_ssp, filters=simple_filters)
-            model_exact = Model(skirtor_spec, synthetic_ssp, filters=simple_filters, approx=False)
+            model_hybrid = SEDModel(skirtor_spec, synthetic_ssp, filters=simple_filters)
+            model_exact = SEDModel(skirtor_spec, synthetic_ssp, filters=simple_filters, approx=False)
 
         key = jax.random.PRNGKey(7)
         params = skirtor_spec.sample(key)
@@ -478,7 +478,7 @@ class TestSKIRTORPreintegration:
         """Preintegrated SKIRTOR photometry scales monotonically with agn_log_lbol."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model = Model(skirtor_spec, synthetic_ssp, filters=simple_filters)
+            model = SEDModel(skirtor_spec, synthetic_ssp, filters=simple_filters)
 
         key = jax.random.PRNGKey(0)
         params = skirtor_spec.sample(key)

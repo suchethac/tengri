@@ -1,4 +1,4 @@
-"""Tests for distribution objects used in ParamSpec."""
+"""Tests for distribution objects used in Parameters."""
 
 import jax
 import jax.numpy as jnp

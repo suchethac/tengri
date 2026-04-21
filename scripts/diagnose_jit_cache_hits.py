@@ -23,7 +23,7 @@ from tengri import (
     load_filter_set,
     load_ssp_data,
 )
-from tengri.parameters.parameters import ParamSpec
+from tengri import Parameters
 
 data_dir = Path(__file__).resolve().parents[1] / "data"
 ssp_file = data_dir / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
@@ -36,7 +36,7 @@ def build_fitter():
     ssp = load_ssp_data(str(ssp_file))
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 
-    spec = ParamSpec(
+    spec = Parameters(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_skew=Uniform(-0.5, 0.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 10.0),

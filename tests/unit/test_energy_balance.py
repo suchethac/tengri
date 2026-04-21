@@ -5,7 +5,7 @@ Validates that:
 - eta=2.0 doubles IR luminosity
 - eta=0.0 produces zero IR emission
 - Gradients flow through eta
-- ParamSpec accepts dust_eta_balance as a free parameter
+- Parameters accepts dust_eta_balance as a free parameter
 """
 
 import jax
@@ -13,7 +13,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import Fixed, Model, ParamSpec, Uniform
+from tengri import Fixed, Parameters, SEDModel, Uniform
 
 jax.config.update("jax_enable_x64", True)
 
@@ -29,8 +29,8 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 @pytest.fixture(scope="module")
 def base_spec():
-    """ParamSpec with dust emission enabled and eta fixed at 1.0."""
-    return ParamSpec(
+    """Parameters with dust emission enabled and eta fixed at 1.0."""
+    return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Fixed(1.5),
         sfh_dpl_beta=Fixed(1.0),
@@ -47,8 +47,8 @@ def base_spec():
 
 
 def _make_model_and_predict(ssp, spec, eta_value):
-    """Build a Model from spec/ssp and predict SED with given eta_balance."""
-    model = Model(spec, ssp)
+    """Build a SEDModel from spec/ssp and predict SED with given eta_balance."""
+    model = SEDModel(spec, ssp)
     key = jax.random.PRNGKey(0)
     params = spec.sample(key)
     params = {**params, "dust_eta_balance": eta_value}
@@ -87,7 +87,7 @@ class TestEnergyBalanceEta:
     def test_eta_0_produces_zero_ir(self, synthetic_ssp, base_spec):
         """eta=0.0 should produce zero dust IR emission."""
         # Build model with no dust emission as reference
-        spec_no_dust_em = ParamSpec(
+        spec_no_dust_em = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Fixed(1.5),
             sfh_dpl_beta=Fixed(1.0),
@@ -100,7 +100,7 @@ class TestEnergyBalanceEta:
             redshift=Fixed(0.1),
             # No dust_emission
         )
-        model_no_em = Model(spec_no_dust_em, synthetic_ssp)
+        model_no_em = SEDModel(spec_no_dust_em, synthetic_ssp)
         key = jax.random.PRNGKey(0)
         params_no_em = spec_no_dust_em.sample(key)
         sed_no_em = model_no_em.predict_rest_sed(params_no_em).sed
@@ -118,7 +118,7 @@ class TestEnergyBalanceEta:
 
     def test_gradient_flows_through_eta(self, synthetic_ssp, base_spec):
         """Gradient of SED sum w.r.t. dust_eta_balance should be finite."""
-        model = Model(base_spec, synthetic_ssp)
+        model = SEDModel(base_spec, synthetic_ssp)
         key = jax.random.PRNGKey(0)
         params = base_spec.sample(key)
 
@@ -135,8 +135,8 @@ class TestEnergyBalanceEta:
         assert grad_jax != 0.0, "Gradient is zero — eta has no effect"
 
     def test_paramspec_accepts_eta_as_free(self):
-        """ParamSpec should accept dust_eta_balance=Uniform(0.5, 2.0)."""
-        spec = ParamSpec(
+        """Parameters should accept dust_eta_balance=Uniform(0.5, 2.0)."""
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Fixed(1.5),
             sfh_dpl_beta=Fixed(1.0),

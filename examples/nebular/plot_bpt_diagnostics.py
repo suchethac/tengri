@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import setup_style
-from tengri.models.nebular.shock import shock_line_ratios
+from tengri.nebular import shock_line_ratios
 
 setup_style()
 

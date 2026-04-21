@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.models.dust.attenuation import get_dust_law
+from tengri.dust import get_dust_law
 
 wavelength = jnp.linspace(1000.0, 30000.0, 2000)
 wave_um = np.array(wavelength) / 1e4

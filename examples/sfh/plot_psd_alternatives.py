@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.models.sfh.psd_models import psd_drw
+from tengri.sfh import psd_drw
 
 # %%
 # Frequency grid (angular frequency in rad/yr)
@@ -31,7 +31,7 @@ ax.loglog(np.array(omega), np.array(drw), "k-", lw=2.5, label="DRW (default)")
 # %%
 # Matern family: nu=0.5 recovers DRW, higher nu gives smoother fields
 try:
-    from tengri.models.sfh.psd_models import psd_matern
+    from tengri.sfh import psd_matern
 
     # Convert DRW params to Matern parameterization
     variance = 0.5 * sigma**2  # DRW stationary variance
@@ -51,7 +51,7 @@ except ImportError:
 # %%
 # Extended regulator model (Tacchella+2020)
 try:
-    from tengri.models.sfh.psd_models import psd_extended_regulator
+    from tengri.sfh import psd_extended_regulator
 
     # Cyclic frequency f = omega / (2*pi)
     f = omega / (2.0 * jnp.pi)

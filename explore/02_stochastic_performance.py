@@ -51,13 +51,13 @@ sys.path.insert(0, os.path.join(proj_root, "notebooks"))
 from tengri import (  # noqa: E402
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
-    ParamSpec,
+    Parameters,
     Uniform,
     load_ssp_data,
 )
-from tengri.observation import SpectroscopyConfig  # noqa: E402
+from tengri import Spectroscopy  # noqa: E402
 
 from _plot_style import (  # noqa: E402
     COLORS,
@@ -80,7 +80,7 @@ ssp_data = load_ssp_data(
     "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5",
 )
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
-obs = Observation(spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS))
+obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS))
 
 # %% [markdown]
 # ## 2. Stochastic model (D = 135)
@@ -88,7 +88,7 @@ obs = Observation(spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS))
 # %%
 N_GRID = 128
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.3, 2.0),
     sfh_dpl_tau_gyr=Uniform(1.0, 8.0),
@@ -103,7 +103,7 @@ spec = ParamSpec(
     stochastic=True,
     n_grid=N_GRID,
 )
-model = Model(spec, ssp_data, observation=obs)
+model = SEDModel(spec, ssp_data, observation=obs)
 n_phys = len(spec.free_params)
 D = n_phys + N_GRID
 print(f"{n_phys} physical + {N_GRID} GP latent = D={D}")
@@ -337,7 +337,7 @@ plt.show()
 # %% [markdown]
 # ## 7. Batch: 10 galaxies — native_geovi
 #
-# Engine cached on Model from §4. Each new Fitter reuses it.
+# Engine cached on SEDModel from §4. Each new Fitter reuses it.
 
 # %%
 N_BATCH = 10
@@ -385,7 +385,7 @@ ax1.axhline(t_native_cached, color="grey", ls=":", lw=1,
             label=f"Same-fitter cached: {t_native_cached:.0f}s")
 ax1.set_xlabel("Galaxy")
 ax1.set_ylabel("Wall time [s]")
-ax1.set_title("Per-galaxy (engine cached on Model)")
+ax1.set_title("Per-galaxy (engine cached on SEDModel)")
 ax1.legend(fontsize=8)
 
 cum = np.cumsum(times_batch)

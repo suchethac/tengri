@@ -39,22 +39,22 @@ _CPU_THRESHOLD_US = 100_000  # 100 ms for fixed-z forward pass (relaxed for CI/M
 
 
 class TestTier2DispatchWiring:
-    """Verify that tier-2 methods exist on Model (no SSP needed)."""
+    """Verify that tier-2 methods exist on SEDModel (no SSP needed)."""
 
     def test_predict_photometry_has_tier2_path(self):
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
 
-        assert hasattr(Model, "_predict_photometry_compositional")
+        assert hasattr(SEDModel, "_predict_photometry_compositional")
 
     def test_compute_rest_sed_fused_exists(self):
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
 
-        assert hasattr(Model, "_compute_rest_sed_compositional")
+        assert hasattr(SEDModel, "_compute_rest_sed_compositional")
 
     def test_predict_spectrum_fused_exists(self):
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
 
-        assert hasattr(Model, "_predict_spectrum_compositional")
+        assert hasattr(SEDModel, "_predict_spectrum_compositional")
 
     def test_build_fused_rest_sed_importable(self):
         from tengri.forward._kernels import build_fused_rest_sed
@@ -81,10 +81,10 @@ class TestTier2Functionality:
 
     @pytest.fixture(scope="class")
     def model_fixed_z(self):
-        """Model with fixed redshift (triggers tier-2 dispatch)."""
+        """SEDModel with fixed redshift (triggers tier-2 dispatch)."""
         import tengri
 
-        return tengri.Model.from_config(
+        return tengri.SEDModel.from_config(
             ssp=str(_SSP_FILE),
             sfh="dpl",
             filters=["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
@@ -128,10 +128,10 @@ class TestTier2Performance:
 
     @pytest.fixture(scope="class")
     def model_fixed_z_with_warmup(self):
-        """Model with fixed redshift, JIT compiled."""
+        """SEDModel with fixed redshift, JIT compiled."""
         import tengri
 
-        model = tengri.Model.from_config(
+        model = tengri.SEDModel.from_config(
             ssp=str(_SSP_FILE),
             sfh="dpl",
             filters=["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
@@ -204,7 +204,7 @@ class TestTier2Dispatch:
         """Tier-2 should activate for fixed-z + parametric SFH."""
         import tengri
 
-        model = tengri.Model.from_config(
+        model = tengri.SEDModel.from_config(
             ssp=str(_SSP_FILE),
             sfh="dpl",
             filters=["sdss_u", "sdss_g", "sdss_r"],
@@ -218,7 +218,7 @@ class TestTier2Dispatch:
         """Verify _predict_photometry_compositional is called correctly."""
         import tengri
 
-        model = tengri.Model.from_config(
+        model = tengri.SEDModel.from_config(
             ssp=str(_SSP_FILE),
             sfh="dpl",
             filters=["sdss_u", "sdss_g"],
@@ -241,7 +241,7 @@ class TestTier2EdgeCases:
         """Tier-2 should handle AGN when enabled."""
         import tengri
 
-        model = tengri.Model.from_config(
+        model = tengri.SEDModel.from_config(
             ssp=str(_SSP_FILE),
             sfh="dpl",
             agn="multicolor_agn",  # Enable AGN
@@ -257,7 +257,7 @@ class TestTier2EdgeCases:
         """Tier-2 should work with stochastic SFH (field+mean)."""
         import tengri
 
-        model = tengri.Model.from_config(
+        model = tengri.SEDModel.from_config(
             ssp=str(_SSP_FILE),
             sfh="dpl+field",  # Stochastic with field
             filters=["sdss_u", "sdss_g", "sdss_r"],

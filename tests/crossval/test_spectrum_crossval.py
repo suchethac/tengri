@@ -6,7 +6,7 @@ offset bugs, dust normalization errors, and nebular contribution.
 
 IMPORTANT: tengri's ssp_lgmet grid is log10(Z) ABSOLUTE, not
 log10(Z/Zsun). Solar metallicity is log10(0.0142) = -1.848, NOT 0.0.
-The Model class handles this conversion (met_logzsol -> log_z), but
+The SEDModel class handles this conversion (met_logzsol -> log_z), but
 tests using the low-level SSP functions must apply LOG10_ZSUN manually.
 
 Reference spectra from python-fsps (Chabrier IMF, PADOVA, MILES)

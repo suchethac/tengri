@@ -1,6 +1,6 @@
 """Integration tests for physical consistency of tengri forward model.
 
-These tests use full Model predictions with real SSP data to verify that
+These tests use full SEDModel predictions with real SSP data to verify that
 the forward model produces physically consistent SEDs — checking that
 old galaxies are red, dusty galaxies have strong IR, metallicity affects
 colors correctly, etc.
@@ -21,9 +21,9 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri.components.sps.dsps_wrapper import load_ssp_data
-from tengri.forward.sed_model import Model
+from tengri.forward.sed_model import SEDModel
 from tengri.observation.filters import load_filter_set
-from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.parameters import Parameters
 
 # ── Skip if SSP data not available ────────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -50,7 +50,7 @@ def filters():
 
 
 def _make_model(ssp_data, filters, **spec_kwargs):
-    """Helper to create Model with given ParamSpec overrides."""
+    """Helper to create SEDModel with given Parameters overrides."""
     defaults = dict(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_log_peak_sfr=1.0,
@@ -65,8 +65,8 @@ def _make_model(ssp_data, filters, **spec_kwargs):
         redshift=0.1,
     )
     defaults.update(spec_kwargs)
-    spec = ParamSpec(**defaults)
-    return Model(spec, ssp_data, filters=filters), spec.sample(jax.random.PRNGKey(0))
+    spec = Parameters(**defaults)
+    return SEDModel(spec, ssp_data, filters=filters), spec.sample(jax.random.PRNGKey(0))
 
 
 # ── 1. Stellar mass consistency ───────────────────────────────────

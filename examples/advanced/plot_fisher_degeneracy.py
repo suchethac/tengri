@@ -19,10 +19,10 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri import (
     Fixed,
-    Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
+    SEDModel,
     Uniform,
     load_ssp_data,
     setup_style,
@@ -47,7 +47,7 @@ if SSP_PATH is None:
 
 ssp = load_ssp_data(SSP_PATH)
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -83,7 +83,7 @@ sigmas = {}
 for fname, filters in FILTER_SETS.items():
     try:
         obs  = Observation(photometry=Photometry.from_names(filters))
-        mdl  = Model(spec, ssp, observation=obs)
+        mdl  = SEDModel(spec, ssp, observation=obs)
         phot = jnp.abs(mdl.predict_photometry(true_params))
         noise = phot / 20.0
         fim, _ = compute_fisher_matrix(mdl, true_params, noise,

@@ -139,10 +139,10 @@ class TestHasNoiseModel:
     """Tests for noise model detection."""
 
     def test_default_spec_no_noise(self):
-        """Default ParamSpec has noise OFF (Fixed(0.0))."""
-        from tengri import Fixed, ParamSpec, Uniform
+        """Default Parameters has noise OFF (Fixed(0.0))."""
+        from tengri import Fixed, Parameters, Uniform
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 4.0),
             sfh_dpl_beta=Uniform(0.3, 3.0),
@@ -156,9 +156,9 @@ class TestHasNoiseModel:
 
     def test_free_noise_frac_cal(self):
         """noise_frac_cal as Uniform → noise model active."""
-        from tengri import Fixed, ParamSpec, Uniform
+        from tengri import Fixed, Parameters, Uniform
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 4.0),
             sfh_dpl_beta=Uniform(0.3, 3.0),
@@ -173,9 +173,9 @@ class TestHasNoiseModel:
 
     def test_fixed_nonzero_noise(self):
         """noise_frac_cal=Fixed(0.05) → noise model active."""
-        from tengri import Fixed, ParamSpec, Uniform
+        from tengri import Fixed, Parameters, Uniform
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 4.0),
             sfh_dpl_beta=Uniform(0.3, 3.0),
@@ -190,9 +190,9 @@ class TestHasNoiseModel:
 
     def test_fixed_zero_no_noise(self):
         """noise_frac_cal=Fixed(0.0) → noise model OFF."""
-        from tengri import Fixed, ParamSpec, Uniform
+        from tengri import Fixed, Parameters, Uniform
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 4.0),
             sfh_dpl_beta=Uniform(0.3, 3.0),
@@ -366,10 +366,10 @@ class TestUsesStudentT:
 
     def test_default_no_student_t(self):
         """Default spec uses Gaussian."""
-        from tengri import Fixed, ParamSpec, Uniform
+        from tengri import Fixed, Parameters, Uniform
         from tengri.observation.noise import uses_student_t
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 4.0),
             sfh_dpl_beta=Uniform(0.3, 3.0),
@@ -383,10 +383,10 @@ class TestUsesStudentT:
 
     def test_fixed_dof_activates(self):
         """noise_dof=Fixed(2.0) → Student-t active."""
-        from tengri import Fixed, ParamSpec, Uniform
+        from tengri import Fixed, Parameters, Uniform
         from tengri.observation.noise import uses_student_t
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 4.0),
             sfh_dpl_beta=Uniform(0.3, 3.0),
@@ -402,10 +402,10 @@ class TestUsesStudentT:
 
     def test_zero_dof_no_student_t(self):
         """noise_dof=Fixed(0.0) → Gaussian (default)."""
-        from tengri import Fixed, ParamSpec, Uniform
+        from tengri import Fixed, Parameters, Uniform
         from tengri.observation.noise import uses_student_t
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 4.0),
             sfh_dpl_beta=Uniform(0.3, 3.0),

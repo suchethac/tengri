@@ -427,7 +427,7 @@ class TestRegistryAndLazyLoading:
         assert callable(draine_li2014)
 
 
-# ── Toy Model Warning Tests ───────────────────────────────────────
+# ── Toy SEDModel Warning Tests ───────────────────────────────────────
 
 
 class TestToyModelWarnings:

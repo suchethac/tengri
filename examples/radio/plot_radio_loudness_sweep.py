@@ -18,8 +18,8 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.models.radio import radio_agn
 from tengri.plotting import setup_style
+from tengri.radio import radio_agn
 
 setup_style()
 

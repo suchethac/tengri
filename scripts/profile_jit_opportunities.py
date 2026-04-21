@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Profile JIT opportunities: identify real performance improvements.
 
-Answers: "Model evaluation takes milliseconds, why does loss eval take longer?"
+Answers: "SEDModel evaluation takes milliseconds, why does loss eval take longer?"
 
 Strategy:
 1. Time pure model prediction (forward model only)
@@ -229,7 +229,7 @@ def profile_model_components(model, param_dict):
     observation = Observation(photometry=Photometry.from_filter_set(filters))
     model_no_dust_em = SEDModel(params_no_dust_em, model._ssp_data, observation=observation)
 
-    print("\n  Model without dust emission...")
+    print("\n  SEDModel without dust emission...")
     timing_no_dust_em = time_function(model_no_dust_em.predict, param_dict, mode="_traceable", n_evals=30)
     print(f"    Mean: {timing_no_dust_em['mean_ms']:.3f} ± {timing_no_dust_em['std_ms']:.3f} ms")
 
@@ -252,7 +252,7 @@ def profile_model_components(model, param_dict):
     )
     model_no_neb = SEDModel(params_no_neb, model._ssp_data, observation=observation)
 
-    print("\n  Model without nebular...")
+    print("\n  SEDModel without nebular...")
     timing_no_neb = time_function(model_no_neb.predict, param_dict, mode="_traceable", n_evals=30)
     print(f"    Mean: {timing_no_neb['mean_ms']:.3f} ± {timing_no_neb['std_ms']:.3f} ms")
 
@@ -275,7 +275,7 @@ def profile_model_components(model, param_dict):
     )
     model_no_igm = SEDModel(params_no_igm, model._ssp_data, observation=observation)
 
-    print("\n  Model without IGM...")
+    print("\n  SEDModel without IGM...")
     timing_no_igm = time_function(model_no_igm.predict, param_dict, mode="_traceable", n_evals=30)
     print(f"    Mean: {timing_no_igm['mean_ms']:.3f} ± {timing_no_igm['std_ms']:.3f} ms")
 
@@ -428,7 +428,7 @@ def main():
 
     # Final summary
     print("\n" + "="*80)
-    print("ANSWERING: 'Model eval takes milliseconds, why does loss take longer?'")
+    print("ANSWERING: 'SEDModel eval takes milliseconds, why does loss take longer?'")
     print("="*80)
 
     print(f"\n  1. Pure model.predict_photometry (mode='auto'): {timing_auto['mean_ms']:.3f} ms")
@@ -448,7 +448,7 @@ def main():
     print(f"    + Prior evaluation: {prior_overhead:.3f} ms")
     print(f"    = Total loss: {timing_loss['mean_ms']:.3f} ms")
 
-    print(f"\n  User's observation: 'Model eval takes milliseconds'")
+    print(f"\n  User's observation: 'SEDModel eval takes milliseconds'")
     print(f"  ✓ CONFIRMED: model.predict_photometry = {timing_auto['mean_ms']:.3f} ms")
 
     print(f"\n  Question: 'Why does loss eval take longer?'")

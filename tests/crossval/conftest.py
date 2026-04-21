@@ -18,7 +18,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-# ── SSP data paths (needed for tengri Model tests) ────────────────
+# ── SSP data paths (needed for tengri SEDModel tests) ────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_PATH = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 SSP_EXISTS = _SSP_PATH.is_file()
@@ -26,7 +26,7 @@ SSP_EXISTS = _SSP_PATH.is_file()
 
 @pytest.fixture(scope="session")
 def ssp_data():
-    """Load SSP data for tengri Model (skip if files missing)."""
+    """Load SSP data for tengri SEDModel (skip if files missing)."""
     if not SSP_EXISTS:
         pytest.skip("SSP data not found")
     from tengri.components.sps.dsps_wrapper import load_ssp_data

@@ -16,10 +16,10 @@ import numpy as np
 from tengri import (
     Fitter,
     Fixed,
-    Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
+    SEDModel,
     Uniform,
     load_ssp_data,
 )
@@ -66,7 +66,7 @@ obs = Observation(
     photometry=Photometry.from_names(bands, cache_dir=_FILTER_DIR),
 )
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -78,7 +78,7 @@ spec = ParamSpec(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.05),
 )
-model = Model(spec, ssp_data, observation=obs)
+model = SEDModel(spec, ssp_data, observation=obs)
 
 # --- Generate mock data (star-forming galaxy) ---
 true_params = spec.sample(jax.random.PRNGKey(42))

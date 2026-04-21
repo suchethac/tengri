@@ -15,9 +15,9 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri.components.sps.dsps_wrapper import load_ssp_data
-from tengri.forward.sed_model import Model
+from tengri.forward.sed_model import SEDModel
 from tengri.observation.filters import load_filter_set
-from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.parameters import Parameters
 
 # ── Skip if SSP data not available ────────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -55,8 +55,8 @@ def _make_model(ssp_data, filters, **spec_kwargs):
         redshift=0.1,
     )
     defaults.update(spec_kwargs)
-    spec = ParamSpec(**defaults)
-    return Model(spec, ssp_data, filters=filters), spec.sample(jax.random.PRNGKey(0))
+    spec = Parameters(**defaults)
+    return SEDModel(spec, ssp_data, filters=filters), spec.sample(jax.random.PRNGKey(0))
 
 
 # ── 1. Extreme dust ───────────────────────────────────────────────
@@ -179,7 +179,7 @@ class TestHighBurstiness:
 
     def test_extreme_psd_sigma_finite(self, ssp_data, filters):
         """psd_sigma=5.0 (very bursty): SED should be finite and positive."""
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type=["tsnorm", "field"],
             sfh_tsnorm_log_peak_sfr=1.0,
             sfh_tsnorm_peak_lbt_gyr=5.0,
@@ -195,7 +195,7 @@ class TestHighBurstiness:
             redshift=0.1,
             n_grid=64,
         )
-        model = Model(spec, ssp_data, filters=filters)
+        model = SEDModel(spec, ssp_data, filters=filters)
         params = spec.sample(jax.random.PRNGKey(42))
 
         sed = model.predict_rest_sed(params).sed
@@ -204,7 +204,7 @@ class TestHighBurstiness:
 
     def test_moderate_burstiness_physical(self, ssp_data, filters):
         """psd_sigma=2.0 (moderately bursty): derived quantities physical."""
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type=["tsnorm", "field"],
             sfh_tsnorm_log_peak_sfr=1.0,
             sfh_tsnorm_peak_lbt_gyr=5.0,
@@ -220,7 +220,7 @@ class TestHighBurstiness:
             redshift=0.1,
             n_grid=64,
         )
-        model = Model(spec, ssp_data, filters=filters)
+        model = SEDModel(spec, ssp_data, filters=filters)
         params = spec.sample(jax.random.PRNGKey(42))
 
         d = model.predict_derived(params)

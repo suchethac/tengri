@@ -14,22 +14,22 @@ def test_convenience_module_importable():
 
 
 def test_model_still_has_prior_predictive():
-    """Model.prior_predictive must still work as a method after extraction."""
+    """SEDModel.prior_predictive must still work as a method after extraction."""
     import tengri
 
-    assert hasattr(tengri.Model, "prior_predictive")
-    assert callable(tengri.Model.prior_predictive)
+    assert hasattr(tengri.SEDModel, "prior_predictive")
+    assert callable(tengri.SEDModel.prior_predictive)
 
 
 def test_model_still_has_fit_catalog():
     import tengri
 
-    assert hasattr(tengri.Model, "fit_catalog")
-    assert callable(tengri.Model.fit_catalog)
+    assert hasattr(tengri.SEDModel, "fit_catalog")
+    assert callable(tengri.SEDModel.fit_catalog)
 
 
 def test_model_still_has_fit_population():
     import tengri
 
-    assert hasattr(tengri.Model, "fit_population")
-    assert callable(tengri.Model.fit_population)
+    assert hasattr(tengri.SEDModel, "fit_population")
+    assert callable(tengri.SEDModel.fit_population)

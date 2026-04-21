@@ -241,7 +241,7 @@ class TestMagphysDifferentiability:
 
 
 class TestMagphysRegistry:
-    """Model is properly registered in the emission model registry."""
+    """SEDModel is properly registered in the emission model registry."""
 
     def test_registered(self):
         from tengri.components.dust.emission import DUST_EMISSION_MODELS

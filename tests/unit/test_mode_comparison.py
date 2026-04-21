@@ -33,7 +33,7 @@ _needs_ssp = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
 def _make_model(sfh="dpl", agn=None, redshift=0.1):
     import tengri
 
-    return tengri.Model.from_config(
+    return tengri.SEDModel.from_config(
         ssp=str(_SSP_FILE),
         sfh=sfh,
         agn=agn,

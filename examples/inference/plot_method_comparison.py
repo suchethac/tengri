@@ -17,10 +17,10 @@ jax.config.update("jax_enable_x64", True)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
+    SEDModel,
     Uniform,
     load_ssp_data,
     safe_corner,
@@ -55,8 +55,8 @@ obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 )
 
-# --- Model ---
-spec = ParamSpec(
+# --- SEDModel ---
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -69,7 +69,7 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 
 # --- Mock photometry (star-forming galaxy) ---
 key = jax.random.PRNGKey(42)

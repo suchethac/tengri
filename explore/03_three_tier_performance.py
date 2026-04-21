@@ -63,8 +63,8 @@ from common import (
     setup_matplotlib,
 )
 
-from tengri import Fitter, Model, ParamSpec, Uniform
-from tengri.forward.kernels.assembly import (
+from tengri import Fitter, SEDModel, Parameters, Uniform
+from tengri.forward._kernels.assembly import (
     observe_spectrum_from_rest_sed,
 )
 from tengri.observation.spectrum import compute_spectrum

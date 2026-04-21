@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # The IFT Correlated Field Model
+# # The IFT Correlated Field SEDModel
 #
 # By the end of this notebook you'll understand:
 # 1. How a PSD encodes SFH burstiness.

@@ -30,7 +30,7 @@ bagpipes_mg = pytest.importorskip(
     reason="bagpipes not installed",
 )
 
-# ── SSP data (needed for tengri Model) ────────────────────────────
+# ── SSP data (needed for tengri SEDModel) ────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_PATH = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 _SSP_EXISTS = _SSP_PATH.is_file()
@@ -54,13 +54,13 @@ def _tengri_smooth_params(n_grid=64):
 
 @pytest.fixture(scope="module")
 def tengri_model():
-    """Create a tengri Model with smooth SFH (no GP burstiness)."""
+    """Create a tengri SEDModel with smooth SFH (no GP burstiness)."""
     if not _SSP_EXISTS:
         pytest.skip("SSP data not found")
 
-    from tengri import Model, ParamSpec, Uniform
+    from tengri import Parameters, SEDModel, Uniform
 
-    spec = ParamSpec(
+    spec = Parameters(
         sfh_alpha=Uniform(0.5, 3.0),
         sfh_beta=Uniform(0.3, 2.0),
         sfh_tau_peak_gyr=Uniform(0.5, 10.0),
@@ -75,7 +75,7 @@ def tengri_model():
     from tengri.components.sps.dsps_wrapper import load_ssp_data
 
     ssp = load_ssp_data(str(_SSP_PATH))
-    return Model(spec, ssp)
+    return SEDModel(spec, ssp)
 
 
 def _make_bagpipes_constant_sfh(age_gyr, log_massformed, metallicity_solar=1.0):

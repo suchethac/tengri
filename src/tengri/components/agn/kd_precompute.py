@@ -442,7 +442,7 @@ def preintegrate_kd_components(
 
     Builds lookup tables for the three K&D zones by integrating their
     spectral shapes through the photometric filters. This is called
-    once at ``Model.__init__`` when K&D AGN is enabled with fixed
+    once at ``SEDModel.__init__`` when K&D AGN is enabled with fixed
     redshift and photometric filters.
 
     Parameters

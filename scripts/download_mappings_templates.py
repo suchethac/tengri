@@ -3,7 +3,7 @@
 
 Source
 ------
-3MdBs — Extensive Online Shock Model Database
+3MdBs — Extensive Online Shock SEDModel Database
   Alarie & Morisset 2019, RMxAA, 55, 377-394
   arXiv:1908.08579 | doi:10.22201/ia.01851101p.2019.55.02.21
   Database portal: http://3mdb.astro.unam.mx
@@ -369,7 +369,7 @@ def _write_hdf5(
         g = f.create_group("mappings5")
         g.attrs["source"] = (
             "Alarie & Morisset 2019, RMxAA, 55, 377-394 — "
-            "3MdBs Extensive Online Shock Model Database (Project 1: Allen08)"
+            "3MdBs Extensive Online Shock SEDModel Database (Project 1: Allen08)"
         )
         g.attrs["mappings_code"] = "Sutherland & Dopita 2017, ApJS, 229, 34 — MAPPINGS V 5.1.13"
         g.attrs["mappings_code_url"] = "https://mappings.anu.edu.au/code/"

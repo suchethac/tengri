@@ -1,5 +1,5 @@
 """
-Two-Component Dust Model
+Two-Component Dust SEDModel
 =========================
 
 Visualize the Charlot & Fall (2000) two-component dust model: birth

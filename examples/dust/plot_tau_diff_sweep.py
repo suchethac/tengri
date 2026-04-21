@@ -18,7 +18,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Model, ParamSpec, Uniform, load_ssp_data
+from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp_data
 from tengri.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
 
 setup_style()
@@ -45,7 +45,7 @@ if SSP_PATH is None:
 ssp = load_ssp_data(SSP_PATH)
 
 # --- Build model: typical star-forming galaxy ---
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Fixed(1.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),  # Peak ~2 Gyr ago
     sfh_tsnorm_width_gyr=Fixed(1.5),
@@ -57,7 +57,7 @@ spec = ParamSpec(
     dust_slope=Fixed(-0.7),  # Calzetti-like
     redshift=Fixed(0.1),
 )
-model = Model(spec, ssp)
+model = SEDModel(spec, ssp)
 
 # --- Sweep τ_diff ---
 values = [0.0, 0.3, 0.7, 1.5, 3.0]

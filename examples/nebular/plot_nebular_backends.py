@@ -12,7 +12,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import Fixed, Model, ParamSpec, load_ssp_data
+from tengri import Fixed, Parameters, SEDModel, load_ssp_data
 
 
 # --- Check for SSP data ---
@@ -47,8 +47,8 @@ shared_params = dict(
 )
 
 # --- Backend 1: BakedIn (nebular pre-computed in SSP) ---
-spec_baked = ParamSpec(**shared_params)
-model_baked = Model(spec_baked, ssp_data)
+spec_baked = Parameters(**shared_params)
+model_baked = SEDModel(spec_baked, ssp_data)
 params_baked = {k: float(v.value) for k, v in shared_params.items()}
 sed_baked = model_baked.predict_rest_sed(params_baked).sed
 wave = ssp_data.ssp_wave
@@ -60,14 +60,14 @@ cloudy_path = next(
 )
 sed_cloudy = None
 if cloudy_path is not None:
-    spec_cloudy = ParamSpec(
+    spec_cloudy = Parameters(
         **shared_params,
         nebular=True,
         cloudy_grid_path=cloudy_path,
         neb_logU=Fixed(-3.0),
         neb_logZ_gas=Fixed(-0.3),
     )
-    model_cloudy = Model(spec_cloudy, ssp_data)
+    model_cloudy = SEDModel(spec_cloudy, ssp_data)
     params_cloudy = {k: float(v.value) for k, v in shared_params.items()}
     params_cloudy.update({"neb_logU": -3.0, "neb_logZ_gas": -0.3})
     sed_cloudy = model_cloudy.predict_rest_sed(params_cloudy).sed

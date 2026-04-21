@@ -37,7 +37,7 @@ def _make_model(
     ssp_wave=None,
     rest_wave=None,
 ):
-    """Return a lightweight namespace that looks like a Model to nonstell helpers."""
+    """Return a lightweight namespace that looks like a SEDModel to nonstell helpers."""
     if ssp_wave is None:
         ssp_wave = np.linspace(1e3, 1e4, 64)
     if rest_wave is None:

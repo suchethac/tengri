@@ -156,10 +156,10 @@ class TestDiffsedPhotometry:
         if not ssp_path.is_file():
             pytest.skip("SSP data not found")
 
-        from tengri import Model, ParamSpec, Uniform
+        from tengri import Parameters, SEDModel, Uniform
         from tengri.components.sps.dsps_wrapper import load_ssp_data
 
-        spec = ParamSpec(
+        spec = Parameters(
             sfh_alpha=Uniform(0.5, 3.0),
             sfh_beta=Uniform(0.3, 2.0),
             sfh_tau_peak_gyr=Uniform(0.5, 10.0),
@@ -171,12 +171,12 @@ class TestDiffsedPhotometry:
             redshift=0.1,
         )
         ssp = load_ssp_data(str(ssp_path))
-        return Model(spec, ssp)
+        return SEDModel(spec, ssp)
 
     def test_photometry_positive(self, tengri_model):
         """tengri photometry should be positive for a star-forming galaxy."""
         if tengri_model is None:
-            pytest.skip("Model not available")
+            pytest.skip("SEDModel not available")
 
         params = {
             "sfh_dpl_alpha": 1.0,
@@ -196,4 +196,4 @@ class TestDiffsedPhotometry:
             assert jnp.all(jnp.isfinite(phot)), "Photometry has non-finite values"
             assert jnp.all(phot > 0), "Photometry should be positive"
         except (ValueError, AttributeError):
-            pytest.skip("No filters configured on Model")
+            pytest.skip("No filters configured on SEDModel")

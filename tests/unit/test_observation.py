@@ -1,7 +1,7 @@
 """Tests for the unified Observation API.
 
 Tests NoiseConfig, Photometry, SpectroscopyConfig, Observation,
-and ParamSpec.with_params(). No SSP data needed — pure config/logic.
+and Parameters.with_params(). No SSP data needed — pure config/logic.
 """
 
 import dataclasses
@@ -40,7 +40,7 @@ def _make_wave_obs(n=100, lo=10000.0, hi=50000.0):
 
 class TestNoiseConfig:
     def test_default_no_params(self):
-        """NoiseConfig() with defaults generates no ParamSpec entries."""
+        """NoiseConfig() with defaults generates no Parameters entries."""
         nc = NoiseConfig()
         assert nc.get_params() == {}
 
@@ -398,15 +398,15 @@ class TestObservation:
         assert len(params) == 1
 
 
-# ── ParamSpec.with_params ─────────────────────────────────────────
+# ── Parameters.with_params ─────────────────────────────────────────
 
 
 class TestParamSpecWithParams:
     @pytest.fixture
     def base_spec(self):
-        from tengri.parameters.parameters import ParamSpec
+        from tengri.parameters.parameters import Parameters
 
-        return ParamSpec(
+        return Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -424,7 +424,7 @@ class TestParamSpecWithParams:
         assert "cal_c1" in new_spec.all_params
 
     def test_returns_new_instance(self, base_spec):
-        """Original ParamSpec unchanged (immutability)."""
+        """Original Parameters unchanged (immutability)."""
         original_params = list(base_spec.all_params)
         _new_spec = base_spec.with_params(cal_c1=Gaussian(0, 0.1))
         assert base_spec.all_params == original_params

@@ -1,4 +1,4 @@
-"""Integration tests for Observation with Model and Fitter.
+"""Integration tests for Observation with SEDModel and Fitter.
 
 Requires SSP data — skips gracefully if not found.
 """
@@ -12,14 +12,14 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri.components.sps.dsps_wrapper import load_ssp_data
-from tengri.forward.sed_model import Model
+from tengri.forward.sed_model import SEDModel
 from tengri.inference.fitter import Fitter
 from tengri.observation.noise_model import NoiseConfig
 from tengri.observation.observation import Observation
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectroscopy import SpectroscopyConfig
-from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -39,7 +39,7 @@ def ssp():
 
 @pytest.fixture(scope="module")
 def base_spec():
-    return ParamSpec(
+    return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -70,22 +70,22 @@ def _make_synthetic_filters(n=3):
     return filters
 
 
-# ── Model integration ─────────────────────────────────────────────
+# ── SEDModel integration ─────────────────────────────────────────────
 
 
 class TestObservationWithModel:
     def test_model_accepts_observation_photometry(self, ssp, base_spec):
-        """Model(spec, ssp, observation=obs) with photometry works."""
+        """SEDModel(spec, ssp, observation=obs) with photometry works."""
         filters = _make_synthetic_filters()
         obs = Observation(photometry=Photometry(filters=tuple(filters)))
-        model = Model(base_spec, ssp, observation=obs)
+        model = SEDModel(base_spec, ssp, observation=obs)
         assert model.observation is not None
         assert model.observation.can_do_photometry
         assert model.filter_waves is not None
         assert len(model.filter_waves) == 3
 
     def test_model_observation_backward_compat(self, ssp, base_spec):
-        """Model(spec, ssp, filters=...) still works, creates Observation."""
+        """SEDModel(spec, ssp, filters=...) still works, creates Observation."""
         filters = _make_synthetic_filters()
         # 3-tuple format (simulating load_filter_set output)
         filter_data = (
@@ -93,7 +93,7 @@ class TestObservationWithModel:
             [f.trans for f in filters],
             filters,
         )
-        model = Model(base_spec, ssp, filters=filter_data)
+        model = SEDModel(base_spec, ssp, filters=filter_data)
         assert model.observation is not None
         assert model.observation.can_do_photometry
         assert model.observation.photometry.n_filters == 3
@@ -103,7 +103,7 @@ class TestObservationWithModel:
         filters = _make_synthetic_filters()
         obs = Observation(photometry=Photometry(filters=tuple(filters)))
         with pytest.raises(ValueError, match="Cannot specify both"):
-            Model(base_spec, ssp, filters=filters, observation=obs)
+            SEDModel(base_spec, ssp, filters=filters, observation=obs)
 
     def test_auto_merge_adds_calibration_params(self, ssp, base_spec):
         """model.spec.free_params includes cal_c1..cN from spectroscopy."""
@@ -112,7 +112,7 @@ class TestObservationWithModel:
             photometry=Photometry(filters=tuple(_make_synthetic_filters())),
             spectroscopy=SpectroscopyConfig(wave_obs=wave_obs, calibration_order=2),
         )
-        model = Model(base_spec, ssp, observation=obs)
+        model = SEDModel(base_spec, ssp, observation=obs)
         assert "cal_c1" in model.spec.free_params
         assert "cal_c2" in model.spec.free_params
 
@@ -122,12 +122,12 @@ class TestObservationWithModel:
             photometry=Photometry(filters=tuple(_make_synthetic_filters())),
             noise=NoiseConfig(calibration_floor=Uniform(0.01, 0.1)),
         )
-        model = Model(base_spec, ssp, observation=obs)
+        model = SEDModel(base_spec, ssp, observation=obs)
         assert "noise_frac_cal" in model.spec.free_params
 
     def test_auto_merge_user_precedence(self, ssp):
         """User-provided noise_frac_cal isn't overridden by auto-merge."""
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -144,7 +144,7 @@ class TestObservationWithModel:
             # NoiseConfig tries to auto-merge a different distribution
             noise=NoiseConfig(calibration_floor=Uniform(0.01, 0.1)),
         )
-        model = Model(spec, ssp, observation=obs)
+        model = SEDModel(spec, ssp, observation=obs)
         # User's Uniform(0.0, 0.5) should win over NoiseConfig's Uniform(0.01, 0.1)
         dist = model.spec.get_distribution("noise_frac_cal")
         assert isinstance(dist, Uniform)
@@ -156,13 +156,13 @@ class TestObservationWithModel:
         obs = Observation(
             spectroscopy=SpectroscopyConfig(wave_obs=wave_obs),
         )
-        model = Model(base_spec, ssp, observation=obs)
+        model = SEDModel(base_spec, ssp, observation=obs)
         # _spec_precomp should be set
         assert model._precomputed.spectroscopy is not None
 
     def test_no_precompute_when_z_free(self, ssp):
         """Free z → spectroscopy precomputation does NOT auto-trigger."""
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -176,7 +176,7 @@ class TestObservationWithModel:
         obs = Observation(
             spectroscopy=SpectroscopyConfig(wave_obs=wave_obs),
         )
-        model = Model(spec, ssp, observation=obs)
+        model = SEDModel(spec, ssp, observation=obs)
         assert model._precomputed.spectroscopy is None
 
     def test_lsf_settings_from_observation(self, ssp, base_spec):
@@ -190,7 +190,7 @@ class TestObservationWithModel:
                 lsf_n_bins=8,
             ),
         )
-        model = Model(base_spec, ssp, observation=obs)
+        model = SEDModel(base_spec, ssp, observation=obs)
         assert model._lsf_resolution == 2000.0
         assert model._sigma_lib_kms == 15.0
         assert model._lsf_n_bins == 8
@@ -203,7 +203,7 @@ class TestObservationWithFitter:
     def test_fitter_infers_photometry_type(self, ssp, base_spec):
         """Fitter(model, data, noise) with phot-only obs infers photometry."""
         obs = Observation(photometry=Photometry(filters=tuple(_make_synthetic_filters())))
-        model = Model(base_spec, ssp, observation=obs)
+        model = SEDModel(base_spec, ssp, observation=obs)
         # Generate fake data
         key = jax.random.PRNGKey(0)
         params = base_spec.sample(key)
@@ -216,7 +216,7 @@ class TestObservationWithFitter:
     def test_fitter_explicit_data_type_still_works(self, ssp, base_spec):
         """Explicit data_type= overrides observation inference."""
         obs = Observation(photometry=Photometry(filters=tuple(_make_synthetic_filters())))
-        model = Model(base_spec, ssp, observation=obs)
+        model = SEDModel(base_spec, ssp, observation=obs)
         flux = jnp.ones(3)
         noise = jnp.ones(3) * 0.1
 
@@ -225,7 +225,7 @@ class TestObservationWithFitter:
 
     def test_fitter_no_observation_defaults_photometry(self, ssp, base_spec):
         """No observation, no data_type → defaults to 'photometry'."""
-        model = Model(base_spec, ssp)
+        model = SEDModel(base_spec, ssp)
         assert model.observation is None
         fitter = Fitter(model, jnp.ones(3), jnp.ones(3) * 0.1)
         assert fitter.data_type == "photometry"
@@ -236,9 +236,9 @@ class TestObservationWithFitter:
 
 class TestObservationEndToEnd:
     def test_photometry_map_fit(self, ssp, base_spec):
-        """Full: Observation → Model → predict → Fitter → MAP."""
+        """Full: Observation → SEDModel → predict → Fitter → MAP."""
         obs = Observation(photometry=Photometry(filters=tuple(_make_synthetic_filters())))
-        model = Model(base_spec, ssp, observation=obs)
+        model = SEDModel(base_spec, ssp, observation=obs)
 
         # Generate mock photometry
         key = jax.random.PRNGKey(42)
@@ -258,7 +258,7 @@ class TestObservationEndToEnd:
             photometry=Photometry(filters=tuple(_make_synthetic_filters())),
             spectroscopy=SpectroscopyConfig(wave_obs=wave_obs),
         )
-        model = Model(base_spec, ssp, observation=obs)
+        model = SEDModel(base_spec, ssp, observation=obs)
 
         # Check pack/unpack shapes
         phot_data = jnp.ones(3) * 1e-29

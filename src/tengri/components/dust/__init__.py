@@ -65,6 +65,7 @@ from tengri.components.dust.emission import (
     dale2014 as dale2014,
     draine_li2007 as draine_li2007,
     draine_li2014 as draine_li2014,
+    energy_balance_split as energy_balance_split,
     get_emission_model,
     load_astrodust_templates,
     load_bosa_templates,

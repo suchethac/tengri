@@ -13,7 +13,7 @@ jax.config.update("jax_enable_x64", True)
 from pathlib import Path
 from tengri import (
     SEDModel,
-    ParamSpec,
+    Parameters,
     Uniform,
     Gaussian,
     LogUniform,
@@ -184,7 +184,7 @@ def test_loss_with_different_priors():
         print(f"\n  Testing {name} prior...")
 
         # Create param spec
-        spec = ParamSpec(**config["spec_kwargs"])
+        spec = Parameters(**config["spec_kwargs"])
 
         # Create model
         model = SEDModel(spec, ssp, filters=filters)

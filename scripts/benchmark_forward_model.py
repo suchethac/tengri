@@ -331,7 +331,7 @@ if __name__ == "__main__":
     ]
 
     print()
-    print("tengri Forward Model Benchmark")
+    print("tengri Forward SEDModel Benchmark")
     print(f"  Platform: {jax.default_backend().upper()}")
     print("  Precision: float64")
     print("  Filters: SDSS ugriz (5)")

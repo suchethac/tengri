@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Checking Your Model Before Fitting
+# # Checking Your SEDModel Before Fitting
 #
 # Before fitting, ask: does my model produce plausible galaxies? A prior
 # predictive check samples from the prior and runs the forward model. If the
@@ -34,7 +34,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri import (
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -89,7 +89,7 @@ spec_good = Parameters(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model_good = Model(spec_good, ssp_data, observation=obs)
+model_good = SEDModel(spec_good, ssp_data, observation=obs)
 model_good.precompute_spectroscopy(WAVE_OBS)
 
 # %%
@@ -195,7 +195,7 @@ spec_bad = Parameters(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model_bad = Model(spec_bad, ssp_data, observation=obs)
+model_bad = SEDModel(spec_bad, ssp_data, observation=obs)
 model_bad.precompute_spectroscopy(WAVE_OBS)
 
 bad_spectra = []
@@ -240,7 +240,7 @@ plt.savefig(os.path.join(FIGDIR, "fig04_bad_prior.png"), dpi=150, bbox_inches="t
 plt.show()
 
 # %% [markdown]
-# ## Stochastic Model Prior Predictive
+# ## Stochastic SEDModel Prior Predictive
 #
 # How do PSD priors affect the burstiness range?
 
@@ -261,7 +261,7 @@ spec_stoch = Parameters(
     mean_sfh_type=["tsnorm", "field"],
     n_grid=128,
 )
-model_stoch = Model(spec_stoch, ssp_data, observation=obs)
+model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs)
 
 # %%
 # --- FIGURE 5: Stochastic prior SFHs ---

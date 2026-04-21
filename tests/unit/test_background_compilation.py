@@ -3,7 +3,7 @@
 Ensures that:
 - The compilation thread is a daemon thread.
 - _compilation_event is set after the thread finishes.
-- Two Fitters sharing the same Model + cache key do NOT double-compile.
+- Two Fitters sharing the same SEDModel + cache key do NOT double-compile.
 - A compilation error is propagated to run() rather than silently dropped.
 """
 
@@ -15,7 +15,7 @@ from unittest.mock import patch
 import jax
 import pytest
 
-from tengri import Fitter, Fixed, Model, ParamSpec, Uniform
+from tengri import Fitter, Fixed, Parameters, SEDModel, Uniform
 
 jax.config.update("jax_enable_x64", True)
 
@@ -26,7 +26,7 @@ jax.config.update("jax_enable_x64", True)
 
 @pytest.fixture(scope="module")
 def smooth_spec():
-    return ParamSpec(
+    return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.5, 3.0),
@@ -42,7 +42,7 @@ def smooth_spec():
 
 @pytest.fixture(scope="module")
 def model_and_data(smooth_spec, synthetic_ssp, simple_observation):
-    model = Model(smooth_spec, synthetic_ssp, observation=simple_observation)
+    model = SEDModel(smooth_spec, synthetic_ssp, observation=simple_observation)
     key = jax.random.PRNGKey(42)
     params = smooth_spec.sample(key)
     mock = model.mock(params, snr=20.0, key=key)
@@ -87,7 +87,7 @@ class TestBackgroundCompilation:
         assert spawned[0].daemon, "Background compilation thread must be daemon=True"
 
     def test_no_double_compile(self, model_and_data):
-        """Two Fitters with the same Model + cache key compile only once."""
+        """Two Fitters with the same SEDModel + cache key compile only once."""
         model, mock = model_and_data
         # Ensure the cache is populated by the first Fitter.
         fitter1 = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")

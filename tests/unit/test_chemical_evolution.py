@@ -10,7 +10,7 @@ Verifies:
 7. log_z_solar is in reasonable range (-4 to +1)
 8. chem_evol_metallicity_on_ssp_grid returns absolute metallicity
 9. Anchored version reaches target metallicity
-10. ParamSpec correctly adds/removes parameters based on chem_evol flag
+10. Parameters correctly adds/removes parameters based on chem_evol flag
 """
 
 import jax
@@ -25,7 +25,7 @@ from tengri.components.sfh.chemical_evolution import (
     closed_box_metallicity,
     closed_box_metallicity_anchored,
 )
-from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
 
 jax.config.update("jax_enable_x64", True)
@@ -294,15 +294,15 @@ class TestAnchoredMetallicity:
         assert log_z[0] < 0.0, "Sub-solar target should give sub-solar Z"
 
 
-# ── ParamSpec integration ─────────────────────────────────────────
+# ── Parameters integration ─────────────────────────────────────────
 
 
 class TestParamSpecChemEvol:
-    """Tests for ParamSpec with chem_evol=True."""
+    """Tests for Parameters with chem_evol=True."""
 
     def test_chem_evol_adds_params(self):
         """chem_evol=True should add chemical evolution params."""
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="tsnorm",
             chem_evol=True,
             sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
@@ -319,7 +319,7 @@ class TestParamSpecChemEvol:
 
     def test_chem_evol_removes_met_logzsol(self):
         """chem_evol=True should remove met_logzsol."""
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="tsnorm",
             chem_evol=True,
             sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
@@ -334,7 +334,7 @@ class TestParamSpecChemEvol:
     def test_chem_evol_mutual_exclusion(self):
         """chem_evol and evolving_metallicity should be mutually exclusive."""
         with pytest.raises(ValueError, match="mutually exclusive"):
-            ParamSpec(
+            Parameters(
                 mean_sfh_type="tsnorm",
                 chem_evol=True,
                 evolving_metallicity=True,
@@ -347,7 +347,7 @@ class TestParamSpecChemEvol:
 
     def test_default_still_has_met_logzsol(self):
         """Without chem_evol, met_logzsol should still be present."""
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
             sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
@@ -359,7 +359,7 @@ class TestParamSpecChemEvol:
 
     def test_chem_evol_summary_shows_module(self):
         """Summary should mention chem_evol_Z when enabled."""
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="tsnorm",
             chem_evol=True,
             sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
@@ -373,7 +373,7 @@ class TestParamSpecChemEvol:
 
     def test_chem_evol_with_free_yield(self):
         """Yield can be made a free parameter."""
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="tsnorm",
             chem_evol=True,
             chem_yield=Uniform(0.01, 0.06),

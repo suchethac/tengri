@@ -3,7 +3,7 @@ Hierarchical PSD Inference
 ===========================
 
 Sets up a small population of mock galaxies sharing the same burstiness
-PSD parameters (sigma, tau), runs HierarchicalFitter briefly, and
+PSD parameters (sigma, tau), runs PopulationFitter briefly, and
 displays the shared PSD posterior vs truth.
 """
 
@@ -18,11 +18,11 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri import (
     Fixed,
-    HierarchicalFitter,
-    Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
+    PopulationFitter,
+    SEDModel,
     Uniform,
     load_ssp_data,
     setup_style,
@@ -59,8 +59,8 @@ N_GAL = 4
 
 
 def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
-    """Create a Model with fixed PSD — called by HierarchicalFitter."""
-    spec = ParamSpec(
+    """Create a SEDModel with fixed PSD — called by PopulationFitter."""
+    spec = Parameters(
         sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -76,7 +76,7 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         mean_sfh_type=["tsnorm", "field"],
         n_grid=128,
     )
-    return Model(spec, ssp, observation=obs)
+    return SEDModel(spec, ssp, observation=obs)
 
 
 # --- Generate mock galaxies ---
@@ -91,7 +91,7 @@ for i in range(N_GAL):
 print(f"Generated {N_GAL} mock galaxies with sigma={TRUE_SIGMA}, tau={TRUE_TAU} Myr")
 
 # --- Hierarchical fit (quick) ---
-hfitter = HierarchicalFitter(
+hfitter = PopulationFitter(
     model_factory,
     galaxies,
     psd_sigma_prior=(0.1, 4.0),

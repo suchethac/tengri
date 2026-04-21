@@ -178,7 +178,7 @@ class TestEnergyConservation:
 
 
 class TestJITCompatibility:
-    """Model is JIT-compilable."""
+    """SEDModel is JIT-compilable."""
 
     def test_jit(self, wavelengths, L_absorbed):
         from tengri.components.dust.emission import energy_balance_split
@@ -201,7 +201,7 @@ class TestJITCompatibility:
 
 
 class TestGradientCompatibility:
-    """Model is differentiable w.r.t. all continuous parameters."""
+    """SEDModel is differentiable w.r.t. all continuous parameters."""
 
     def test_grad_L_absorbed(self, wavelengths):
         from tengri.components.dust.emission import energy_balance_split

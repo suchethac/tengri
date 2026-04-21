@@ -19,7 +19,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Model, ParamSpec, Uniform, load_ssp_data
+from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp_data
 from tengri.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
 
 setup_style()
@@ -46,7 +46,7 @@ if SSP_PATH is None:
 ssp = load_ssp_data(SSP_PATH)
 
 # --- Build model: young star-forming galaxy ---
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Fixed(1.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),  # Peak ~500 Myr ago (young)
     sfh_tsnorm_width_gyr=Fixed(0.3),
@@ -61,7 +61,7 @@ spec = ParamSpec(
     neb_logZ_gas=Fixed(-0.3),
     eline_sigma_kms=Fixed(0.0),  # Will sweep this
 )
-model = Model(spec, ssp)
+model = SEDModel(spec, ssp)
 
 # --- Sweep line width ---
 values = [50, 100, 200, 400, 800]

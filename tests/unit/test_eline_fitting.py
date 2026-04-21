@@ -294,7 +294,7 @@ class TestFittedMode:
         cfg = Spectroscopy(wave_obs=wave, eline_mode="fitted")
         assert cfg.has_eline_fitting is True
 
-    # ── ParamSpec-level test ──────────────────────────────────────
+    # ── Parameters-level test ──────────────────────────────────────
 
     def test_merge_observation_params_adds_free_params(self):
         """merge_observation_params must add params to free_params and leave original intact."""

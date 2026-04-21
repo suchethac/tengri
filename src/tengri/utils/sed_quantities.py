@@ -489,7 +489,7 @@ def compute_rest_uv_color(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
 
     Uses approximate Johnson U (3200–3900 Å) and V (5000–5800 Å)
     bands. Sufficient for UVJ classification; for precision photometry
-    use :meth:`~tengri.model.Model.predict_magnitudes` with loaded
+    use :meth:`~tengri.SEDModel.predict_magnitudes` with loaded
     filter curves.
 
     Parameters

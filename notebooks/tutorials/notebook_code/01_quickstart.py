@@ -37,7 +37,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -118,9 +118,9 @@ for name in spec_param.free_params:
 # %%
 # Create the model with spectroscopic precomputation
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)  # SDSS-like, 200 pixels
-model_param = Model(spec_param, ssp_data, observation=obs)
+model_param = SEDModel(spec_param, ssp_data, observation=obs)
 model_param.precompute_spectroscopy(WAVE_OBS)
-print(f"Model created: {spec_param.n_free} free parameters, {len(WAVE_OBS)} spectral pixels")
+print(f"SEDModel created: {spec_param.n_free} free parameters, {len(WAVE_OBS)} spectral pixels")
 
 # %%
 # The forward model is fast
@@ -448,7 +448,7 @@ print(f"  GP latent: {len([p for p in spec_stoch.free_params if 'xi' in p])}")
 
 # %%
 # Create stochastic model with spectroscopic precomputation
-model_stoch = Model(spec_stoch, ssp_data, observation=obs)
+model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs)
 model_stoch.precompute_spectroscopy(WAVE_OBS)
 
 # %%
@@ -750,7 +750,7 @@ plt.show()
 # Summary timing table
 print("\n  Summary")
 print("  " + "=" * 75)
-print(f"  {'Model':<20s} {'D':>4s}  {'Method':<16s} {'Compile':>8s} {'Runtime':>8s}  Notes")
+print(f"  {'SEDModel':<20s} {'D':>4s}  {'Method':<16s} {'Compile':>8s} {'Runtime':>8s}  Notes")
 print("  " + "-" * 75)
 print(f"  {'Parametric':<20s} {'7':>4s}  {'native_geovi':<16s} {t_compile:>7.1f}s {t_geovi:>7.1f}s  Default")
 print(f"  {'Parametric':<20s} {'7':>4s}  {'NUTS':<16s} {'':>8s} {t_nuts:>7.1f}s  Exact, gold standard")
@@ -771,7 +771,7 @@ print(f"  Headline: 137D posterior in {t_geovi_s:.0f}s runtime with native_geovi
 # %% [markdown]
 # ## What's Next
 #
-# - **tutorials/02** — Learn the Model, Fitter, Posterior classes in detail.
+# - **tutorials/02** — Learn the SEDModel, Fitter, Posterior classes in detail.
 # - **tutorials/03** — Understand the IFT/PSD/GP machinery.
 # - **tutorials/04** — See how SFH becomes an observable SED.
 # - **tutorials/05** — Check your model before fitting (prior predictive).

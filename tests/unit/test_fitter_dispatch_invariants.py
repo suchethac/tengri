@@ -37,7 +37,7 @@ from tengri.parameters.priors import Fixed, Uniform
 
 
 def _make_mock_model(spec: Parameters, n_filters: int = 3) -> MagicMock:
-    """Return a MagicMock Model wired to the given spec."""
+    """Return a MagicMock SEDModel wired to the given spec."""
     model = MagicMock()
     model.spec = spec
     model.predict_photometry.return_value = jnp.ones(n_filters) * 1e-18

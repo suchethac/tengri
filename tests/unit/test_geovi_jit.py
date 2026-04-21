@@ -8,7 +8,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import Fitter, Fixed, Model, ParamSpec, Uniform
+from tengri import Fitter, Fixed, Parameters, SEDModel, Uniform
 from tengri.inference.vi_config import BlockSchedule, BlockStep, OptimizationSchedule
 
 jax.config.update("jax_enable_x64", True)
@@ -21,7 +21,7 @@ jax.config.update("jax_enable_x64", True)
 @pytest.fixture(scope="module")
 def smooth_spec():
     """Smooth SFH spec (D=5, minimal free params)."""
-    return ParamSpec(
+    return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.5, 3.0),
@@ -38,7 +38,7 @@ def smooth_spec():
 @pytest.fixture(scope="module")
 def fitter_and_mock(smooth_spec, synthetic_ssp, simple_observation):
     """Fitter + mock data for geoVI testing."""
-    model = Model(smooth_spec, synthetic_ssp, observation=simple_observation)
+    model = SEDModel(smooth_spec, synthetic_ssp, observation=simple_observation)
     key = jax.random.PRNGKey(42)
     params = smooth_spec.sample(key)
     mock = model.mock(params, snr=20.0, key=key)

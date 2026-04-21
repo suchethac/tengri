@@ -19,7 +19,7 @@ jax.config.update("jax_enable_x64", True)
 
 @pytest.fixture
 def mock_spec():
-    """Create a minimal ParamSpec-like object for testing."""
+    """Create a minimal Parameters-like object for testing."""
     spec = MagicMock()
     spec.free_params = ["dust_tau_bc", "met_logzsol", "sfh_tsnorm_log_peak_sfr"]
 
@@ -37,7 +37,7 @@ def mock_spec():
 
 @pytest.fixture
 def mock_model(mock_spec):
-    """Create a minimal Model-like object for testing."""
+    """Create a minimal SEDModel-like object for testing."""
     model = MagicMock()
     model.spec = mock_spec
 

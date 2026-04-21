@@ -19,11 +19,11 @@ jax.config.update("jax_enable_x64", True)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
-    SpectroscopyConfig,
+    SEDModel,
+    Spectroscopy,
     Uniform,
     generate_mock,
     load_ssp_data,
@@ -81,14 +81,14 @@ phot = Photometry.from_names(
     cache_dir=_FILTER_DIR,
 )
 wave_obs = jnp.linspace(3800.0, 9200.0, 200) * 1.1  # observed frame at z=0.1
-spec_config = SpectroscopyConfig(wave_obs=wave_obs, resolution=100.0)
+spec_config = Spectroscopy(wave_obs=wave_obs, resolution=100.0)
 obs = Observation(photometry=phot, spectroscopy=spec_config)
 
 # %%
 # Create model and generate mock data
 # -------------------------------------
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -101,7 +101,7 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 
 true_params = {
     "sfh_tsnorm_log_peak_sfr": 1.2,

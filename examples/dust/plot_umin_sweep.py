@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Model, ParamSpec, load_ssp_data
+from tengri import Fixed, Parameters, SEDModel, load_ssp_data
 from tengri.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
 
 setup_style()
@@ -44,7 +44,7 @@ if SSP_PATH is None:
 ssp = load_ssp_data(SSP_PATH)
 
 # --- Build model with DL07 dust emission ---
-spec = ParamSpec(
+spec = Parameters(
     dust_emission="draine_li2007",
     sfh_tsnorm_log_peak_sfr=Fixed(1.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(1.5),
@@ -60,7 +60,7 @@ spec = ParamSpec(
     dust_qpah=Fixed(2.5),
     redshift=Fixed(0.1),
 )
-model = Model(spec, ssp)
+model = SEDModel(spec, ssp)
 
 # --- Sweep dust_umin ---
 values = [0.1, 1.0, 5.0, 25.0]

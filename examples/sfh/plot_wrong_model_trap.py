@@ -1,5 +1,5 @@
 """
-The Wrong-Model Trap: Parametric Bias in Derived Quantities
+The Wrong-SEDModel Trap: Parametric Bias in Derived Quantities
 ============================================================
 
 A smooth (parametric) model fits a bursty galaxy with χ² ≈ 1 but
@@ -19,14 +19,14 @@ jax.config.update("jax_enable_x64", True)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
     Observation,
-    ParamSpec,
+    Parameters,
+    SEDModel,
+    Spectroscopy,
     Uniform,
     load_ssp_data,
     setup_style,
 )
-from tengri.models.observation import SpectroscopyConfig
 
 setup_style()
 
@@ -46,10 +46,10 @@ if SSP_PATH is None:
 
 ssp = load_ssp_data(SSP_PATH)
 wave_obs = jnp.linspace(3800.0, 9200.0, 200)
-obs = Observation(spectroscopy=SpectroscopyConfig(wave_obs=wave_obs))
+obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
 
 # --- True bursty model ---
-spec_stoch = ParamSpec(
+spec_stoch = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -64,7 +64,7 @@ spec_stoch = ParamSpec(
     redshift=Fixed(0.0),
     mean_sfh_type=["tsnorm", "field"],
 )
-model_stoch = Model(spec_stoch, ssp, observation=obs)
+model_stoch = SEDModel(spec_stoch, ssp, observation=obs)
 
 key = jax.random.PRNGKey(7)
 true_params = {**spec_stoch.sample(key)}
@@ -73,7 +73,7 @@ true_params["sfh_field_psd_tau_myr"] = jnp.array(15.0)
 mock = model_stoch.mock_spectrum(true_params, wave_obs, snr=30.0, key=key)
 
 # --- Wrong (smooth) model ---
-spec_smooth = ParamSpec(
+spec_smooth = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -86,7 +86,7 @@ spec_smooth = ParamSpec(
     redshift=Fixed(0.0),
     mean_sfh_type="tsnorm",
 )
-model_smooth = Model(spec_smooth, ssp, observation=obs)
+model_smooth = SEDModel(spec_smooth, ssp, observation=obs)
 
 fitter_smooth = Fitter(model_smooth, mock.flux_obs, mock.noise, data_type="spectroscopy")
 map_smooth = fitter_smooth.run("map", n_steps=400, verbose=False)
@@ -107,7 +107,7 @@ ax.plot(t_gyr, sfh_fit["sfr_mean"], color="#1f77b4", lw=2.0, ls="--",
         label="Smooth model MAP")
 ax.set_xlabel("Lookback time [Gyr]")
 ax.set_ylabel(r"SFR [$M_\odot$ yr$^{-1}$]")
-ax.set_title("SFH: True vs Smooth Model Fit")
+ax.set_title("SFH: True vs Smooth SEDModel Fit")
 ax.legend(fontsize=9, frameon=False)
 ax.set_xlim(0, 13)
 
@@ -123,7 +123,7 @@ ax.set_xlabel(r"Wavelength [$\AA$]")
 ax.set_ylabel(r"$(d - m) / \sigma$")
 ax.set_title(f"Residuals: reduced χ² = {chi2_red:.2f} (looks good!)")
 
-fig.suptitle("Wrong-Model Trap: χ² ≈ 1 but SFH is wrong", fontsize=11, y=1.02)
+fig.suptitle("Wrong-SEDModel Trap: χ² ≈ 1 but SFH is wrong", fontsize=11, y=1.02)
 fig.tight_layout()
 plt.savefig("plot_wrong_model_trap.png", dpi=150, bbox_inches="tight")
 plt.show()

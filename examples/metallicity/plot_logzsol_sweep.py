@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Model, ParamSpec, load_ssp_data
+from tengri import Fixed, Parameters, SEDModel, load_ssp_data
 from tengri.plotting import setup_style, sweep_parameter
 
 setup_style()
@@ -45,7 +45,7 @@ if SSP_PATH is None:
 ssp = load_ssp_data(SSP_PATH)
 
 # --- Build model: intermediate-age galaxy with modest dust ---
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Fixed(0.5),
     sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
     sfh_tsnorm_width_gyr=Fixed(1.0),
@@ -57,7 +57,7 @@ spec = ParamSpec(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
 )
-model = Model(spec, ssp)
+model = SEDModel(spec, ssp)
 
 # --- Sweep stellar metallicity ---
 values = [-2.0, -1.5, -1.0, -0.5, -0.3, 0.0, 0.2]

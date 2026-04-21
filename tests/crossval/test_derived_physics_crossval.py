@@ -20,8 +20,8 @@ from tests.crossval.conftest import SSP_EXISTS
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.forward.sed_model import Model
-from tengri.parameters.parameters import ParamSpec
+from tengri.forward.sed_model import SEDModel
+from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Uniform
 
 pytestmark = [
@@ -285,7 +285,7 @@ class TestRandomParameterPhysics:
         from tengri.observation.filters import load_filter_set
 
         filters = load_filter_set(["sdss_r"])
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
@@ -298,7 +298,7 @@ class TestRandomParameterPhysics:
             dust_slope=-0.7,
             redshift=0.1,
         )
-        model = Model(spec, ssp_data, filters=filters)
+        model = SEDModel(spec, ssp_data, filters=filters)
 
         for i in range(10):
             key = jax.random.PRNGKey(i * 7 + 13)

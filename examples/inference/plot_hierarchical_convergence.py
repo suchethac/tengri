@@ -19,11 +19,11 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri import (
     Fixed,
-    HierarchicalFitter,
-    Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
+    PopulationFitter,
+    SEDModel,
     Uniform,
     load_ssp_data,
     setup_style,
@@ -57,7 +57,7 @@ TRUE_TAU   = 40.0
 def make_model(psd_sigma=TRUE_SIGMA, psd_tau_myr=TRUE_TAU):
     # n_grid=32 keeps per-galaxy D ≈ 36 — feasible for hierarchical raytrace.
     # Larger n_grid (128) gives D ≈ 820 total for N=6 which hangs.
-    spec = ParamSpec(
+    spec = Parameters(
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(1.0, 8.0),
@@ -72,7 +72,7 @@ def make_model(psd_sigma=TRUE_SIGMA, psd_tau_myr=TRUE_TAU):
         stochastic=True,
         n_grid=32,
     )
-    return Model(spec, ssp, observation=obs), spec
+    return SEDModel(spec, ssp, observation=obs), spec
 
 
 N_GAL = 6
@@ -92,7 +92,7 @@ def model_factory(psd_sigma, psd_tau_myr):
 
 
 # Hierarchical fit over N_GAL galaxies
-hfitter = HierarchicalFitter(
+hfitter = PopulationFitter(
     model_factory,
     galaxies,
     psd_sigma_prior=(0.1, 4.0),

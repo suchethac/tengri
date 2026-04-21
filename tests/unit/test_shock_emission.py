@@ -255,42 +255,42 @@ class TestShockDifferentiable:
         assert grad_jax != 0.0
 
 
-# ── Integration with ParamSpec ────────────────────────────────────
+# ── Integration with Parameters ────────────────────────────────────
 
 
 class TestShockParamSpec:
     def test_shock_params_registered(self):
-        from tengri.parameters.parameters import ParamSpec
+        from tengri.parameters.parameters import Parameters
 
-        spec = ParamSpec(shock=True)
+        spec = Parameters(shock=True)
         params = spec.all_params
         assert "shock_frac" in params
         assert "shock_velocity" in params
         assert "shock_log_density" in params
 
     def test_shock_params_absent_by_default(self):
-        from tengri.parameters.parameters import ParamSpec
+        from tengri.parameters.parameters import Parameters
 
-        spec = ParamSpec()
+        spec = Parameters()
         params = spec.all_params
         assert "shock_frac" not in params
         assert "shock_velocity" not in params
 
     def test_shock_frac_zero_default(self):
-        from tengri.parameters.parameters import ParamSpec
+        from tengri.parameters.parameters import Parameters
 
-        spec = ParamSpec(shock=True)
+        spec = Parameters(shock=True)
         dist = spec.get_distribution("shock_frac")
         assert dist.value == pytest.approx(0.0)
 
     def test_shock_velocity_bounds(self):
-        from tengri.parameters.parameters import ParamSpec
+        from tengri.parameters.parameters import Parameters
 
-        spec = ParamSpec(shock=True, shock_velocity=(100.0, 1000.0))
+        spec = Parameters(shock=True, shock_velocity=(100.0, 1000.0))
         assert "shock_velocity" in spec.free_params
 
         with pytest.raises(ValueError):
-            ParamSpec(shock=True, shock_velocity=(50.0, 1000.0))
+            Parameters(shock=True, shock_velocity=(50.0, 1000.0))
 
 
 # ── ShockBackend protocol compliance and delegation ───────────────

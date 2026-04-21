@@ -16,7 +16,7 @@ from tengri.forward._kernels import (
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,
 )
-from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Uniform
 
 jax.config.update("jax_enable_x64", True)
@@ -63,8 +63,8 @@ def synthetic_ssp():
 
 @pytest.fixture(scope="module")
 def simple_spec():
-    """Basic ParamSpec with DPL SFH and two-component dust."""
-    return ParamSpec(
+    """Basic Parameters with DPL SFH and two-component dust."""
+    return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -113,9 +113,9 @@ class TestTier2VsTier3:
 
     def test_rest_sed_matches_exact(self, synthetic_ssp, simple_spec, simple_params):
         """Rest-frame SED from Tier 2 matches compute_sed_components."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
 
-        model = Model(simple_spec, synthetic_ssp)
+        model = SEDModel(simple_spec, synthetic_ssp)
 
         # Tier 3: exact path
         tier3_result = model._compute_sed_components(simple_params)
@@ -128,11 +128,11 @@ class TestTier2VsTier3:
 
     def test_photometry_matches_exact(self, synthetic_ssp, simple_params):
         """Tier 2 photometry matches Tier 3 photometry."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.observation.filters import FilterCurve
         from tengri.observation.photometry import compute_flux_density
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -157,7 +157,7 @@ class TestTier2VsTier3:
             filter_trans.append(filt_t)
             filter_curves.append(FilterCurve(name=f"test_{i}", wave=filt_w, trans=filt_t))
 
-        model = Model(spec, synthetic_ssp, filters=filter_curves)
+        model = SEDModel(spec, synthetic_ssp, filters=filter_curves)
 
         # Disable Tier 1 (fused photometry) to test Tier 2 path
         # Get Tier 3 reference by calling predict_sed + manual integration
@@ -180,10 +180,10 @@ class TestTier2VsTier3:
 
     def test_spectrum_matches_exact(self, synthetic_ssp, simple_spec, simple_params):
         """Tier 2 spectrum matches Tier 3 spectrum."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.observation.spectrum import compute_spectrum
 
-        model = Model(simple_spec, synthetic_ssp)
+        model = SEDModel(simple_spec, synthetic_ssp)
 
         # Wavelength grid in observed frame
         wave_obs = jnp.linspace(4000.0, 9000.0, 100)
@@ -208,9 +208,9 @@ class TestComponentCombinations:
 
     def test_single_component_dust(self, synthetic_ssp):
         """Single-component dust model works with Tier 2."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -222,7 +222,7 @@ class TestComponentCombinations:
             dust_slope=-0.7,
             redshift=0.1,
         )
-        model = Model(spec, synthetic_ssp)
+        model = SEDModel(spec, synthetic_ssp)
         assert model._compositional.rest_sed is not None
 
         params = {
@@ -244,9 +244,9 @@ class TestComponentCombinations:
 
     def test_dust_emission_mbb(self, synthetic_ssp, simple_params):
         """Modified blackbody dust emission works with Tier 2."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -259,7 +259,7 @@ class TestComponentCombinations:
             dust_emission="modified_blackbody",
             redshift=0.1,
         )
-        model = Model(spec, synthetic_ssp)
+        model = SEDModel(spec, synthetic_ssp)
         assert model._compositional.rest_sed is not None
 
         tier3 = model._compute_sed_components(simple_params)["sed_total"]
@@ -269,9 +269,9 @@ class TestComponentCombinations:
 
     def test_stochastic_sfh(self, synthetic_ssp):
         """Stochastic (GP-modulated) SFH works with Tier 2."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             stochastic=True,
             n_grid=32,
@@ -287,7 +287,7 @@ class TestComponentCombinations:
             dust_slope=-0.7,
             redshift=0.1,
         )
-        model = Model(spec, synthetic_ssp)
+        model = SEDModel(spec, synthetic_ssp)
         assert model._compositional.rest_sed is not None
 
         # Sample params including GP latent vector
@@ -305,10 +305,10 @@ class TestComponentCombinations:
 class TestObservationWrappers:
     def test_observe_photometry(self, synthetic_ssp, simple_spec, simple_params):
         """observe_photometry_from_rest_sed matches manual integration."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.observation.photometry import compute_flux_density
 
-        model = Model(simple_spec, synthetic_ssp)
+        model = SEDModel(simple_spec, synthetic_ssp)
         rest_sed = model._compute_rest_sed_compositional(simple_params)
         wave_rest = model.ssp_data.ssp_wave
         z = model._get_redshift(simple_params)
@@ -333,10 +333,10 @@ class TestObservationWrappers:
 
     def test_observe_spectrum(self, synthetic_ssp, simple_spec, simple_params):
         """observe_spectrum_from_rest_sed matches compute_spectrum."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.observation.spectrum import compute_spectrum
 
-        model = Model(simple_spec, synthetic_ssp)
+        model = SEDModel(simple_spec, synthetic_ssp)
         rest_sed = model._compute_rest_sed_compositional(simple_params)
         wave_rest = model.ssp_data.ssp_wave
         wave_obs = jnp.linspace(5000.0, 8000.0, 50)
@@ -354,9 +354,9 @@ class TestObservationWrappers:
 class TestFallbacks:
     def test_tabulated_sfh_falls_back_to_tier3(self, synthetic_ssp, simple_spec, simple_params):
         """Tabulated SFH bypasses Tier 2 and uses Tier 3."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
 
-        model = Model(simple_spec, synthetic_ssp)
+        model = SEDModel(simple_spec, synthetic_ssp)
         assert model._compositional.rest_sed is not None
 
         # Add tabulated SFH params — should skip Tier 2
@@ -373,9 +373,9 @@ class TestFallbacks:
 
     def test_tier2_jit_traces(self, synthetic_ssp, simple_spec, simple_params):
         """Tier 2 kernel can be JIT-compiled and re-called."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
 
-        model = Model(simple_spec, synthetic_ssp)
+        model = SEDModel(simple_spec, synthetic_ssp)
         assert model._compositional.rest_sed is not None
 
         # Call twice — second should use cached JIT
@@ -386,9 +386,9 @@ class TestFallbacks:
 
     def test_tier2_different_params(self, synthetic_ssp, simple_spec):
         """Tier 2 produces different SEDs for different params."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
 
-        model = Model(simple_spec, synthetic_ssp)
+        model = SEDModel(simple_spec, synthetic_ssp)
 
         params1 = {
             "sfh_dpl_alpha": 1.5,
@@ -420,9 +420,9 @@ class TestFallbacks:
 class TestGradients:
     def test_gradient_through_tier2(self, synthetic_ssp, simple_spec):
         """Gradients through Tier 2 rest SED kernel match FD."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
 
-        model = Model(simple_spec, synthetic_ssp)
+        model = SEDModel(simple_spec, synthetic_ssp)
 
         def loss_fn(dust_tau_bc):
             params = {
@@ -457,7 +457,7 @@ class TestFusedTier2Photometry:
 
     def test_fused_tier2_phot_builds(self, synthetic_ssp, simple_spec):
         """Fused Tier 2 photometry kernel builds for fixed-z + filters."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.observation.filters import FilterCurve
 
         filters = [
@@ -468,12 +468,12 @@ class TestFusedTier2Photometry:
             )
             for i, c in enumerate([4000.0, 6000.0, 8000.0])
         ]
-        model = Model(simple_spec, synthetic_ssp, filters=filters)
+        model = SEDModel(simple_spec, synthetic_ssp, filters=filters)
         assert model._compositional.photometry is not None
 
     def test_fused_tier2_phot_matches_unfused(self, synthetic_ssp, simple_spec, simple_params):
         """Fused Tier 2 photometry matches unfused path."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.observation.filters import FilterCurve
 
         filters = [
@@ -484,7 +484,7 @@ class TestFusedTier2Photometry:
             )
             for i, c in enumerate([4000.0, 6000.0, 8000.0])
         ]
-        model = Model(simple_spec, synthetic_ssp, filters=filters)
+        model = SEDModel(simple_spec, synthetic_ssp, filters=filters)
 
         # Fused path (sfr_on_ssp computed outside JIT, passed as traced arg)
         phot_fused = model._predict_photometry_compositional(simple_params)
@@ -499,7 +499,7 @@ class TestFusedTier2Photometry:
 
     def test_fused_tier2_phot_gradient(self, synthetic_ssp, simple_spec):
         """Gradients through fused Tier 2 photometry match FD."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.observation.filters import FilterCurve
 
         filters = [
@@ -509,7 +509,7 @@ class TestFusedTier2Photometry:
                 trans=jnp.ones(50),
             )
         ]
-        model = Model(simple_spec, synthetic_ssp, filters=filters)
+        model = SEDModel(simple_spec, synthetic_ssp, filters=filters)
         assert model._compositional.photometry is not None
 
         def loss(dust_tau_bc):
@@ -535,10 +535,10 @@ class TestFusedTier2Photometry:
 
     def test_free_z_builds(self, synthetic_ssp):
         """Fused Tier 2 photometry builds even with free redshift."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.observation.filters import FilterCurve
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -557,7 +557,7 @@ class TestFusedTier2Photometry:
                 trans=jnp.ones(50),
             )
         ]
-        model = Model(spec, synthetic_ssp, filters=filters)
+        model = SEDModel(spec, synthetic_ssp, filters=filters)
         assert model._compositional.photometry is not None
 
         params = spec.sample(jax.random.PRNGKey(42))

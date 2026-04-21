@@ -12,7 +12,7 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri import (
     Fitter,
-    ParamSpec,
+    Parameters,
     SEDModel,
     Uniform,
     load_filter_set,
@@ -39,7 +39,7 @@ TRUE_PARAMS = {
 def build_fitter():
     ssp = load_ssp_data(str(SSP_FILE))
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    spec = ParamSpec(
+    spec = Parameters(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),

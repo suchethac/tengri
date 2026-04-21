@@ -1,6 +1,6 @@
 """Integration tests for stellar mass and derived quantities.
 
-Verifies that Model.predict_sfh_quantities() and Model.predict_derived()
+Verifies that SEDModel.predict_sfh_quantities() and SEDModel.predict_derived()
 return physically reasonable values using real SSP data.
 """
 
@@ -13,7 +13,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Model, ParamSpec, Uniform
+from tengri import Parameters, SEDModel, Uniform
 from tengri.components.sps.dsps_wrapper import load_ssp_data
 from tengri.parameters.priors import Fixed
 
@@ -38,8 +38,8 @@ def ssp():
 
 @pytest.fixture(scope="session")
 def spec():
-    """ParamSpec with DPL + field SFH model."""
-    return ParamSpec(
+    """Parameters with DPL + field SFH model."""
+    return Parameters(
         mean_sfh_type=["dpl", "field"],
         n_grid=256,
         sfh_dpl_alpha=Uniform(0.5, 3.0),
@@ -58,7 +58,7 @@ def spec():
 
 @pytest.fixture(scope="session")
 def model(ssp, spec):
-    return Model(spec, ssp)
+    return SEDModel(spec, ssp)
 
 
 @pytest.fixture(scope="session")

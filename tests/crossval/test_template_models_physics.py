@@ -49,7 +49,7 @@ class TestDL07TemplatePhysics:
     """Draine & Li 2007 template-based model physics validation."""
 
     def test_loads_real_templates(self):
-        """Model must load templates, not fall back to analytic."""
+        """SEDModel must load templates, not fall back to analytic."""
         from tengri.components.dust.emission import draine_li2007
 
         wave = jnp.logspace(4, 7, 500)

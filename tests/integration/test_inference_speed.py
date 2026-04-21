@@ -109,7 +109,7 @@ def test_a1_quick_optical_map(ssp_data, filters_optical, mock_flux_optical):
     print("A1: Quick Optical Fit (D=7) - MAP Optimization")
     print("=" * 80)
 
-    # Model: tsnorm SFH, Calzetti dust, nebular, IGM
+    # SEDModel: tsnorm SFH, Calzetti dust, nebular, IGM
     params = Parameters(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
@@ -253,7 +253,7 @@ def test_a2_fir_constrained_nuts(ssp_data):
     print("A2: FIR-Constrained Fit (D=8-9) - NUTS with DL07")
     print("=" * 80)
 
-    # Model: tsnorm + DL07 with Fixed dust_umin
+    # SEDModel: tsnorm + DL07 with Fixed dust_umin
     params = Parameters(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
@@ -363,7 +363,7 @@ def test_a4_stochastic_sfh_vi(ssp_data):
     print("A4: Stochastic SFH (D=12) - geoVI")
     print("=" * 80)
 
-    # Model: dense_basis+field (4 DB + 2 PSD params)
+    # SEDModel: dense_basis+field (4 DB + 2 PSD params)
     params = Parameters(
         mean_sfh_type=["dense_basis", "field"],
         sfh_dbp_log_total_mass=Uniform(9.0, 11.5),

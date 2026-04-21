@@ -1,4 +1,4 @@
-"""Unit tests for the Model class."""
+"""Unit tests for the SEDModel class."""
 
 import jax
 

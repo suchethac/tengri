@@ -10,7 +10,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.models.agn import powerlaw_disc, simple_torus
+from tengri.agn import powerlaw_disc, simple_torus
 
 # Wavelength grid: 100 Angstrom to 100 micron
 wavelength = jnp.logspace(np.log10(100), np.log10(1e6), 1000)

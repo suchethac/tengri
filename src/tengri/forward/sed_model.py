@@ -1,18 +1,18 @@
-"""High-level Model class wrapping the tengri forward model.
+"""SEDModel: high-level forward model wrapping the tengri SED pipeline.
 
-Model provides a clean API for:
+SEDModel provides a clean API for:
 - Forward predictions (SED, photometry, spectrum, SFH, derived quantities)
 - Mock galaxy generation (single and batch)
 - Convenience fitting (delegates to Fitter)
 
-The Model translates between the user-facing parameter names and the
+SEDModel translates between the user-facing parameter names and the
 internal names used by the low-level functions, handling unit conversions
 automatically. SFH computation is dispatched through the registry-driven
 composed function, eliminating separate stochastic/parametric code paths.
 
 Usage::
 
-    from tengri import Model, Parameters, Uniform, load_ssp_data, load_filter_set
+    from tengri import SEDModel, Parameters, Uniform, load_ssp_data, load_filter_set
 
     ssp = load_ssp_data("data/ssp.h5")
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
@@ -26,7 +26,7 @@ Usage::
         sfh_field_psd_tau_myr=Uniform(10, 500),
         redshift=0.1,
     )
-    model = Model(spec, ssp, filters=filters)
+    model = SEDModel(spec, ssp, filters=filters)
     params = spec.sample(jax.random.PRNGKey(0))
     photometry = model.predict_photometry(params)
 """
@@ -2220,12 +2220,12 @@ class SEDModel:
         wave_obs=None,
         priors: dict | None = None,
         **model_kwargs,
-    ) -> Model:
-        """Build a Model from a grouped configuration dict.
+    ) -> SEDModel:
+        """Build a SEDModel from a grouped configuration dict.
 
         Reduces boilerplate for the common case: instead of constructing
-        ``Parameters``, ``SSPData``, ``Observation``, and ``Model`` separately,
-        provide a single grouped config and receive a fully configured ``Model``.
+        ``Parameters``, ``SSPData``, ``Observation``, and ``SEDModel`` separately,
+        provide a single grouped config and receive a fully configured ``SEDModel``.
 
         Parameters
         ----------
@@ -2250,15 +2250,15 @@ class SEDModel:
             universal short names (``"logzsol"``), or full prefixed names.
             Short names are expanded automatically.
         **model_kwargs
-            Forwarded to ``Model.__init__()``.
+            Forwarded to ``SEDModel.__init__()``.
 
         Returns
         -------
-        Model
+        SEDModel
 
         Examples
         --------
-        >>> model = tengri.Model.from_config(
+        >>> model = tengri.SEDModel.from_config(
         ...     ssp="data/ssp.h5",
         ...     sfh="dense_basis",
         ...     filters=["sdss_u", "sdss_g", "sdss_r"],

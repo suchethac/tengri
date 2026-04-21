@@ -661,7 +661,7 @@ class TestCalibrationMarginalization:
         true_coeffs = jnp.array([0.05, -0.02, 0.01])
         cal_true = calibration_polynomial(wave, true_coeffs, wave_min, wave_max)
 
-        # Model spectrum (smooth power law)
+        # SEDModel spectrum (smooth power law)
         model_flux = 1e-17 * (wave / 5000.0) ** (-1.5)
 
         # Observed = model * calibration

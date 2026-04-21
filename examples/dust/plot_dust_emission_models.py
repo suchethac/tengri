@@ -12,13 +12,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import setup_style
-from tengri.models.dust.emission import (
+from tengri.dust import (
     casey2012,
     dale2014,
     draine_li2007,
     draine_li2014,
     energy_balance_split,
-    magphys_dc08,
     modified_blackbody,
 )
 
@@ -39,16 +38,7 @@ def _casey():
 
 
 def _magphys():
-    return magphys_dc08(
-        wave_aa,
-        L_ABS,
-        dust_T_warm=35.0,
-        dust_T_cold=20.0,
-        dust_T_hot=180.0,
-        dust_xi_pah=0.06,
-        dust_xi_mir=0.07,
-        dust_xi_warm=0.25,
-    )
+    return None  # magphys_dc08 not yet implemented
 
 
 def _ebs():

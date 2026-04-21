@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import Fitter, Fixed, Model, ParamSpec, Uniform
+from tengri import Fitter, Fixed, Parameters, SEDModel, Uniform
 
 jax.config.update("jax_enable_x64", True)
 
@@ -21,7 +21,7 @@ jax.config.update("jax_enable_x64", True)
 @pytest.fixture(scope="module")
 def simple_spec():
     """Simple smooth SFH spec (D=5, minimal free params)."""
-    return ParamSpec(
+    return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.5, 3.0),
@@ -37,8 +37,8 @@ def simple_spec():
 
 @pytest.fixture(scope="module")
 def model_and_mock(simple_spec, synthetic_ssp, simple_observation):
-    """Model + mock data for EVI testing."""
-    model = Model(simple_spec, synthetic_ssp, observation=simple_observation)
+    """SEDModel + mock data for EVI testing."""
+    model = SEDModel(simple_spec, synthetic_ssp, observation=simple_observation)
     key = jax.random.PRNGKey(42)
     params = simple_spec.sample(key)
     mock = model.mock(params, snr=20.0, key=key)

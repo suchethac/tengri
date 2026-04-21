@@ -51,13 +51,13 @@ sys.path.insert(0, os.path.join(proj_root, "notebooks"))
 from tengri import (  # noqa: E402
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
-    ParamSpec,
+    Parameters,
     Uniform,
     load_ssp_data,
 )
-from tengri.observation import SpectroscopyConfig  # noqa: E402
+from tengri import Spectroscopy  # noqa: E402
 
 from _plot_style import (  # noqa: E402
     COLORS,
@@ -83,13 +83,13 @@ ssp_data = load_ssp_data(
     "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5",
 )
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
-obs = Observation(spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS))
+obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS))
 
 # %% [markdown]
 # ## 2. Parametric model (D = 8)
 
 # %%
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -102,7 +102,7 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model = Model(spec, ssp_data, observation=obs)
+model = SEDModel(spec, ssp_data, observation=obs)
 D = len(spec.free_params)
 print(f"D = {D} free parameters: {spec.free_params}")
 

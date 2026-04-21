@@ -26,8 +26,8 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.forward.sed_model import Model
-from tengri.parameters.parameters import ParamSpec
+from tengri.forward.sed_model import SEDModel
+from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
 
 # ── Skip guards — require SSP data ────────────────────────────────
@@ -97,11 +97,11 @@ class TestDL07EnergyBalance:
     def dl07_spec(self):
         if not _DL07_FILE.is_file():
             pytest.skip("DL07 template file not found")
-        return ParamSpec(**_base_spec_kwargs(), dust_emission="draine_li2007")
+        return Parameters(**_base_spec_kwargs(), dust_emission="draine_li2007")
 
     @pytest.fixture(scope="class")
     def dl07_model(self, ssp_data, filters, dl07_spec):
-        return Model(dl07_spec, ssp_data, filters=filters)
+        return SEDModel(dl07_spec, ssp_data, filters=filters)
 
     @pytest.fixture(scope="class")
     def dl07_params(self, dl07_spec):
@@ -137,11 +137,11 @@ class TestDale2014NonRegression:
     def dale_spec(self):
         if not _DALE_FILE.is_file():
             pytest.skip("Dale 2014 template file not found")
-        return ParamSpec(**_base_spec_kwargs(), dust_emission="dale2014")
+        return Parameters(**_base_spec_kwargs(), dust_emission="dale2014")
 
     @pytest.fixture(scope="class")
     def dale_model(self, ssp_data, filters, dale_spec):
-        return Model(dale_spec, ssp_data, filters=filters)
+        return SEDModel(dale_spec, ssp_data, filters=filters)
 
     @pytest.fixture(scope="class")
     def dale_params(self, dale_spec):
@@ -166,11 +166,11 @@ class TestTHEMISNonRegression:
     def themis_spec(self):
         if not _THEMIS_FILE.is_file():
             pytest.skip("THEMIS template file not found")
-        return ParamSpec(**_base_spec_kwargs(), dust_emission="themis")
+        return Parameters(**_base_spec_kwargs(), dust_emission="themis")
 
     @pytest.fixture(scope="class")
     def themis_model(self, ssp_data, filters, themis_spec):
-        return Model(themis_spec, ssp_data, filters=filters)
+        return SEDModel(themis_spec, ssp_data, filters=filters)
 
     @pytest.fixture(scope="class")
     def themis_params(self, themis_spec):
@@ -191,11 +191,11 @@ class TestStellarOnlyNonRegression:
 
     @pytest.fixture(scope="class")
     def stellar_spec(self):
-        return ParamSpec(**_base_spec_kwargs())
+        return Parameters(**_base_spec_kwargs())
 
     @pytest.fixture(scope="class")
     def stellar_model(self, ssp_data, filters, stellar_spec):
-        return Model(stellar_spec, ssp_data, filters=filters)
+        return SEDModel(stellar_spec, ssp_data, filters=filters)
 
     @pytest.fixture(scope="class")
     def stellar_params(self, stellar_spec):
@@ -231,7 +231,7 @@ class TestDL07EnergyBalanceWorstCase:
     def dl07_spec_young_dusty(self):
         if not _DL07_FILE.is_file():
             pytest.skip("DL07 template file not found")
-        return ParamSpec(
+        return Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Fixed(3.0),  # steep rise — young burst
             sfh_dpl_beta=Fixed(0.3),  # slow decline — sustained recent SFR
@@ -247,7 +247,7 @@ class TestDL07EnergyBalanceWorstCase:
 
     @pytest.fixture(scope="class")
     def dl07_model_young_dusty(self, ssp_data, filters, dl07_spec_young_dusty):
-        return Model(dl07_spec_young_dusty, ssp_data, filters=filters)
+        return SEDModel(dl07_spec_young_dusty, ssp_data, filters=filters)
 
     @pytest.fixture(scope="class")
     def dl07_params_young_dusty(self, dl07_spec_young_dusty):

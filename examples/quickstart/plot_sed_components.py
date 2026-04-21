@@ -17,10 +17,10 @@ import numpy as np
 
 from tengri import (
     Fixed,
-    Model,
     Observation,
-    ParamSpec,
+    Parameters,
     Photometry,
+    SEDModel,
     load_ssp_data,
 )
 
@@ -50,7 +50,7 @@ if SSP_PATH is None:
 ssp = load_ssp_data(SSP_PATH)
 
 # --- Define a dusty galaxy model ---
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Fixed(1.2),
     sfh_tsnorm_peak_lbt_gyr=Fixed(5.0),
     sfh_tsnorm_width_gyr=Fixed(2.0),
@@ -65,7 +65,7 @@ spec = ParamSpec(
 )
 
 obs = Observation(photometry=Photometry.from_names(["sdss_r"], cache_dir=_FILTER_DIR))
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 params = spec.sample(jax.random.PRNGKey(0))
 
 # --- Compute SEDs: with and without dust ---

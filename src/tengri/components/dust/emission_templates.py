@@ -417,7 +417,7 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
 
     After calling this, the model is available via
     ``resolve_emission_model("dl14_tabulated")`` and can be used as the
-    ``dust_emission_model`` in ``Model()``.
+    ``dust_emission_model`` in ``SEDModel()``.
 
     Parameters
     ----------
@@ -575,7 +575,7 @@ def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated"
 
     After calling this, the model is available via
     ``resolve_emission_model("dale2014_tabulated")`` and can be used as the
-    ``dust_emission_model`` in ``Model()``.
+    ``dust_emission_model`` in ``SEDModel()``.
 
     Parameters
     ----------
@@ -595,7 +595,7 @@ def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> Non
 
     After calling this, the model is available via
     ``resolve_emission_model("dl07_tabulated")`` and can be used as the
-    ``dust_emission_model`` in ``Model()``.
+    ``dust_emission_model`` in ``SEDModel()``.
 
     Parameters
     ----------

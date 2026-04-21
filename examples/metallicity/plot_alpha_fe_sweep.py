@@ -8,7 +8,7 @@ by core-collapse supernovae before Type Ia SNe can dilute the alpha
 elements. In the SED, enhanced alpha suppresses iron absorption features
 and alters the optical mass-to-light ratio.
 
-Enable with ``alpha_enhancement=True`` in ``ParamSpec``.
+Enable with ``alpha_enhancement=True`` in ``Parameters``.
 """
 
 # sphinx_gallery_thumbnail_number = 1
@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Model, ParamSpec, load_ssp_data
+from tengri import Fixed, Parameters, SEDModel, load_ssp_data
 from tengri.plotting import setup_style, sweep_parameter
 
 setup_style()
@@ -47,7 +47,7 @@ if SSP_PATH is None:
 ssp = load_ssp_data(SSP_PATH)
 
 # --- Build model: old passive galaxy where [α/Fe] matters ---
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Fixed(0.5),
     sfh_tsnorm_peak_lbt_gyr=Fixed(8.0),  # peaked early
     sfh_tsnorm_width_gyr=Fixed(1.5),
@@ -61,7 +61,7 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
     alpha_enhancement=True,
 )
-model = Model(spec, ssp)
+model = SEDModel(spec, ssp)
 
 # --- Sweep [α/Fe] ---
 values = [-0.2, 0.0, 0.2, 0.4, 0.6]

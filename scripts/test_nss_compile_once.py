@@ -52,7 +52,7 @@ print(f"NSS Galaxy B (cached): {t_cached:.1f}s  logZ={result_b.log_evidence:.2f}
 speedup = t_cold / t_cached if t_cached > 0 else float("inf")
 print(f"Speedup: {speedup:.1f}x")
 
-# Verify algo was cached on Model
+# Verify algo was cached on SEDModel
 cache = getattr(model, "_nss_algo_cache", {})
 print(f"NSS algo cache entries: {len(cache)}")
 

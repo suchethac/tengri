@@ -21,9 +21,9 @@ pytestmark = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
 @pytest.fixture(scope="module")
 def smooth_fitter():
     """Create a smooth fitter with mock photometric data."""
-    from tengri import Fitter, Model, ParamSpec, Uniform, load_filter_set, load_ssp_data
+    from tengri import Fitter, Parameters, SEDModel, Uniform, load_filter_set, load_ssp_data
 
-    spec = ParamSpec(
+    spec = Parameters(
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
         sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
@@ -34,7 +34,7 @@ def smooth_fitter():
     )
     ssp = load_ssp_data(str(_SSP_PATH))
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    model = Model(spec, ssp, filters=filters)
+    model = SEDModel(spec, ssp, filters=filters)
     key = jax.random.PRNGKey(42)
     mock = model.mock(spec.sample(key), snr=20.0, key=jax.random.PRNGKey(1))
     return Fitter(model, mock.flux_obs, mock.noise)

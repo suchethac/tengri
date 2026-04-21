@@ -44,7 +44,7 @@ def _make_spec_model():
     import tengri
 
     wave_obs = jnp.linspace(4000.0, 9000.0, 200)
-    model = tengri.Model.from_config(
+    model = tengri.SEDModel.from_config(
         ssp=str(_SSP_FILE),
         sfh="dpl",
         redshift=0.1,
@@ -57,7 +57,7 @@ def _make_phot_model():
     """Return a DPL SEDModel with photometry (fixed z)."""
     import tengri
 
-    return tengri.Model.from_config(
+    return tengri.SEDModel.from_config(
         ssp=str(_SSP_FILE),
         sfh="dpl",
         filters=["sdss_u", "sdss_g", "sdss_r"],
@@ -308,7 +308,7 @@ class TestTraceableRouting:
     """_traceable mode must route to the lean precomputed kernel and be JIT-safe."""
 
     def test_traceable_methods_exist(self):
-        """Both _predict_*_traceable methods must exist on Model."""
+        """Both _predict_*_traceable methods must exist on SEDModel."""
         from tengri.forward.sed_model import SEDModel
 
         assert hasattr(SEDModel, "_predict_photometry_traceable"), (
@@ -413,7 +413,7 @@ class TestPrecomputeConsistency:
         import tengri
 
         wave_obs = jnp.linspace(4000.0, 9000.0, 100)
-        model = tengri.Model.from_config(
+        model = tengri.SEDModel.from_config(
             ssp=str(_SSP_FILE),
             sfh="dpl",
             redshift=0.1,

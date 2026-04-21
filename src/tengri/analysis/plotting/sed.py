@@ -248,7 +248,7 @@ def sweep_parameter(
 
     Parameters
     ----------
-    model : tengri.Model
+    model : tengri.SEDModel
         Model instance with a ``predict`` or ``sed`` callable.
     param_name : str
         Full parameter name (e.g. ``"dust_tau_bc"``).
@@ -347,7 +347,7 @@ def parameter_gallery(
 
     Parameters
     ----------
-    model : tengri.Model
+    model : tengri.SEDModel
     param_sweep_specs : list of dict
         Each dict: ``{"param": "dust_tau_bc", "values": [...], "label": "τ_BC",
         "cmap": "YlOrRd", "label_fmt": "{:.1f}"}``.
@@ -407,7 +407,7 @@ def sfh_sed_comparison(
 
     Parameters
     ----------
-    model : tengri.Model
+    model : tengri.SEDModel
     param_name : str
         Parameter to sweep across ``values``.
     values : sequence

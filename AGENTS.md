@@ -77,7 +77,7 @@ Public API (`from tengri import ...`) unchanged.
 
 ## Parameter dictionary convention
 
-The ``Model`` class uses **public parameter names** (via ``ParamSpec``).
+The ``SEDModel`` class uses **public parameter names** (via ``Parameters``).
 For a DPL + GP field model:
 
 ```python
@@ -336,7 +336,7 @@ All major components are implemented and tested:
   in `components/sps/precompute.py`). Template adapters (DL07/Dale/DL14/…) and
   SKIRTOR still use zeroth-order only. Enabling Taylor across all template
   adapters should be a future benchmark study.
-- **Large-file splits.** `forward/kernels/assembly.py` (3174L) and
+- **Large-file splits.** `forward/_kernels/` (assembly, hybrid, compositional, exact — private JIT strategies) and
   `forward/sed_model.py` (2957L) moved from `core/` unsplit; the planned split
   by fusion strategy (exact / compositional / hybrid / traceable / dispatch)
   and by lifecycle (class / factory / fit / predict / summary / precompute)

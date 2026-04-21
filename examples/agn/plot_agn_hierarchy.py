@@ -1,5 +1,5 @@
 """
-AGN Model Hierarchy
+AGN SEDModel Hierarchy
 ===================
 
 Compare all AGN model tiers in tengri: from simple power-law disc + single
@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.models.agn import AGN_MODELS, get_agn_model
+from tengri.agn import AGN_MODELS, get_agn_model
 
 # %%
 # Wavelength grid: 100 Angstrom (UV) to 500 micron (MIR)
@@ -56,13 +56,13 @@ for name, color in zip(model_order, colors):
             label=f"{name} ({n_params} params)",
         )
     except Exception:
-        # Model may require external data (e.g. SKIRTOR grids)
+        # SEDModel may require external data (e.g. SKIRTOR grids)
         continue
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title(
-    rf"AGN Model Hierarchy at $\log L_{{\mathrm{{bol}}}} = {log_lbol:.0f}$"
+    rf"AGN SEDModel Hierarchy at $\log L_{{\mathrm{{bol}}}} = {log_lbol:.0f}$"
 )
 ax.set_xlim(0.01, 50)
 ax.legend(frameon=False, fontsize=9)

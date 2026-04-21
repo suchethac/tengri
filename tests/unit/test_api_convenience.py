@@ -295,25 +295,25 @@ class TestHierarchicalResultIndividual:
         assert hasattr(ind[0], "params")
 
 
-# ── Task 5: Model.from_config (no-SSP: test classmethod exists) ───
+# ── Task 5: SEDModel.from_config (no-SSP: test classmethod exists) ───
 
 
 class TestModelFromConfigInterface:
     def test_from_config_is_classmethod(self):
         import inspect
 
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
 
-        assert hasattr(Model, "from_config")
-        assert isinstance(inspect.getattr_static(Model, "from_config"), classmethod)
+        assert hasattr(SEDModel, "from_config")
+        assert isinstance(inspect.getattr_static(SEDModel, "from_config"), classmethod)
 
     def test_from_config_signature(self):
         import inspect
 
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.parameters.defaults import get_from_config_defaults
 
-        sig = inspect.signature(Model.from_config)
+        sig = inspect.signature(SEDModel.from_config)
         assert "ssp" in sig.parameters
         assert "sfh" in sig.parameters
         assert "priors" in sig.parameters
@@ -334,7 +334,7 @@ class TestModelFitIntegration:
     def model_and_mock(self):
         import tengri
 
-        model = tengri.Model.from_config(
+        model = tengri.SEDModel.from_config(
             ssp=str(_SSP_FILE),
             sfh="dpl",
             filters=["sdss_u", "sdss_g", "sdss_r"],

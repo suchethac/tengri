@@ -78,7 +78,7 @@ class TestUpperLimit:
     """Tests for upper limit (mask=1) behavior."""
 
     def test_model_below_limit_low_energy(self):
-        """Model << limit → Φ ≈ 1 → energy ≈ 0."""
+        """SEDModel << limit → Φ ≈ 1 → energy ≈ 0."""
         data = jnp.array([10.0])  # upper limit at 10
         noise = jnp.array([1.0])
         predicted = jnp.array([1.0])  # well below limit
@@ -88,7 +88,7 @@ class TestUpperLimit:
         assert float(energy) < 0.5
 
     def test_model_above_limit_high_energy(self):
-        """Model >> limit → Φ → 0 → energy large."""
+        """SEDModel >> limit → Φ → 0 → energy large."""
         data = jnp.array([1.0])  # upper limit at 1
         noise = jnp.array([0.1])
         predicted = jnp.array([10.0])  # well above limit
@@ -98,7 +98,7 @@ class TestUpperLimit:
         assert float(energy) > 10.0
 
     def test_model_at_limit_moderate_energy(self):
-        """Model = limit → Φ(0) = 0.5 → energy = -log(0.5) ≈ 0.693."""
+        """SEDModel = limit → Φ(0) = 0.5 → energy = -log(0.5) ≈ 0.693."""
         data = jnp.array([5.0])
         noise = jnp.array([1.0])
         predicted = jnp.array([5.0])
@@ -133,7 +133,7 @@ class TestLowerLimit:
     """Tests for lower limit (mask=-1) behavior."""
 
     def test_model_above_limit_low_energy(self):
-        """Model >> limit → Φ ≈ 1 → energy ≈ 0."""
+        """SEDModel >> limit → Φ ≈ 1 → energy ≈ 0."""
         data = jnp.array([1.0])  # lower limit at 1
         noise = jnp.array([0.1])
         predicted = jnp.array([10.0])  # well above limit
@@ -143,7 +143,7 @@ class TestLowerLimit:
         assert float(energy) < 0.5
 
     def test_model_below_limit_high_energy(self):
-        """Model << limit → energy large."""
+        """SEDModel << limit → energy large."""
         data = jnp.array([10.0])  # lower limit at 10
         noise = jnp.array([1.0])
         predicted = jnp.array([1.0])  # well below limit
@@ -153,7 +153,7 @@ class TestLowerLimit:
         assert float(energy) > 10.0
 
     def test_model_at_limit_moderate_energy(self):
-        """Model = limit → energy = -log(0.5) ≈ 0.693."""
+        """SEDModel = limit → energy = -log(0.5) ≈ 0.693."""
         data = jnp.array([5.0])
         noise = jnp.array([1.0])
         predicted = jnp.array([5.0])
@@ -371,12 +371,12 @@ class TestCensoredGradients:
         def loss(m):
             return censored_log_likelihood(data, noise, jnp.array([m]), mask)
 
-        # Model at 7.0 (above limit 5.0) → gradient should be positive
+        # SEDModel at 7.0 (above limit 5.0) → gradient should be positive
         # (increasing model further increases energy)
         grad = float(jax.grad(loss)(7.0))
         assert grad > 0, f"Expected positive gradient, got {grad}"
 
-        # Model at 2.0 (below limit 5.0) → gradient should be near zero
+        # SEDModel at 2.0 (below limit 5.0) → gradient should be near zero
         # (model is safely below limit, almost no penalty change)
         grad_low = float(jax.grad(loss)(2.0))
         assert abs(grad_low) < abs(grad)
@@ -390,7 +390,7 @@ class TestCensoredGradients:
         def loss(m):
             return censored_log_likelihood(data, noise, jnp.array([m]), mask)
 
-        # Model at 3.0 (below limit 5.0) → gradient should be negative
+        # SEDModel at 3.0 (below limit 5.0) → gradient should be negative
         # (increasing model reduces energy)
         grad = float(jax.grad(loss)(3.0))
         assert grad < 0, f"Expected negative gradient, got {grad}"
@@ -468,7 +468,7 @@ class TestCensoredEdgeCases:
         assert jnp.isfinite(energy)
 
     def test_large_residual_upper_limit(self):
-        """Model 100σ above limit — energy should be finite, not inf."""
+        """SEDModel 100σ above limit — energy should be finite, not inf."""
         data = jnp.array([1.0])
         noise = jnp.array([0.01])
         predicted = jnp.array([2.0])  # 100σ above
@@ -479,7 +479,7 @@ class TestCensoredEdgeCases:
         assert float(energy) > 100.0
 
     def test_large_residual_lower_limit(self):
-        """Model 100σ below limit — energy should be finite, not inf."""
+        """SEDModel 100σ below limit — energy should be finite, not inf."""
         data = jnp.array([2.0])
         noise = jnp.array([0.01])
         predicted = jnp.array([1.0])  # 100σ below

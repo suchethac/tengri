@@ -451,26 +451,26 @@ class TestParamSpec:
 
     def test_cb19_nebular_mode_registers_base_params(self):
         """nebular='cb19' registers the standard neb_logU, neb_logZ_gas params."""
-        from tengri.parameters.parameters import ParamSpec
+        from tengri.parameters.parameters import Parameters
 
-        spec = ParamSpec(nebular="cb19")
+        spec = Parameters(nebular="cb19")
         assert "neb_logU" in spec._param_registry
         assert "neb_logZ_gas" in spec._param_registry
 
     def test_cb19_nebular_mode_registers_cb19_params(self):
         """nebular='cb19' registers neb_log_nH, neb_co, neb_dno, neb_hbfrac."""
-        from tengri.parameters.parameters import ParamSpec
+        from tengri.parameters.parameters import Parameters
 
-        spec = ParamSpec(nebular="cb19")
+        spec = Parameters(nebular="cb19")
         for pname in ("neb_log_nH", "neb_co", "neb_dno", "neb_hbfrac"):
             assert pname in spec._param_registry, f"Missing param: {pname}"
 
     @_SKIP_NO_GRID
     def test_cloudy_mode_does_not_register_cb19_params(self):
         """nebular='cloudy' should NOT include the CB_19-specific extra params."""
-        from tengri.parameters.parameters import ParamSpec
+        from tengri.parameters.parameters import Parameters
 
-        spec = ParamSpec(nebular="cloudy", cloudy_grid_path=str(self._CLOUDY_GRID))
+        spec = Parameters(nebular="cloudy", cloudy_grid_path=str(self._CLOUDY_GRID))
         for pname in ("neb_log_nH", "neb_co", "neb_dno", "neb_hbfrac"):
             assert pname not in spec._param_registry, (
                 f"Param {pname} should not be in cloudy mode registry"
@@ -478,9 +478,9 @@ class TestParamSpec:
 
     def test_cb19_param_defaults(self):
         """CB_19 params should have physically sensible default values."""
-        from tengri.parameters.parameters import Fixed, ParamSpec
+        from tengri.parameters.parameters import Fixed, Parameters
 
-        spec = ParamSpec(nebular="cb19")
+        spec = Parameters(nebular="cb19")
         defaults = spec._defaults
 
         assert isinstance(defaults["neb_log_nH"], Fixed)

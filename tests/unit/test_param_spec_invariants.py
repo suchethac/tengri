@@ -1,4 +1,4 @@
-"""Invariant tests for Parameters (ParamSpec) construction and contracts.
+"""Invariant tests for Parameters (Parameters) construction and contracts.
 
 Bug classes covered:
 - Parameter name consistency: wrong keys returned by sample(), fixed params

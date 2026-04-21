@@ -16,7 +16,7 @@ jax.config.update("jax_enable_x64", True)
 from pathlib import Path
 from tengri import (
     SEDModel,
-    ParamSpec,
+    Parameters,
     Uniform,
     Gaussian,
     LogUniform,
@@ -42,7 +42,7 @@ def time_workflow(prior_name, spec_kwargs, n_galaxies=3):
 
     # Create model (cold start)
     t0 = time.perf_counter()
-    spec = ParamSpec(**spec_kwargs)
+    spec = Parameters(**spec_kwargs)
     model = SEDModel(spec, ssp, filters=filters)
     t_model_create = time.perf_counter() - t0
 

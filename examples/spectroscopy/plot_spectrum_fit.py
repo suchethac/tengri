@@ -16,10 +16,10 @@ import numpy as np
 from tengri import (
     Fitter,
     Fixed,
-    Model,
     Observation,
-    ParamSpec,
-    SpectroscopyConfig,
+    Parameters,
+    SEDModel,
+    Spectroscopy,
     Uniform,
     load_ssp_data,
 )
@@ -46,10 +46,10 @@ WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 
 ssp_data = load_ssp_data(SSP_PATH)
 obs = Observation(
-    spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS),
+    spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
 )
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
@@ -61,7 +61,7 @@ spec = ParamSpec(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(REDSHIFT),
 )
-model = Model(spec, ssp_data, observation=obs)
+model = SEDModel(spec, ssp_data, observation=obs)
 
 # --- Generate mock spectrum ---
 true_params = spec.sample(jax.random.PRNGKey(42))

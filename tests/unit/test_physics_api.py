@@ -312,7 +312,7 @@ class TestModelTree:
     def smooth_model(self):
         import tengri
 
-        return tengri.Model.from_config(
+        return tengri.SEDModel.from_config(
             ssp=str(_SSP_FILE),
             sfh="dpl",
             filters=["sdss_u", "sdss_g", "sdss_r"],

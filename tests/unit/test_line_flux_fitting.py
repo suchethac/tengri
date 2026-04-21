@@ -281,7 +281,7 @@ class TestLineFluxUpperLimits:
         assert chi2 == pytest.approx(1.0, abs=1e-10)
 
     def test_log_likelihood_upper_limit_below_limit(self):
-        """Model flux below upper limit → high likelihood (close to 0)."""
+        """SEDModel flux below upper limit → high likelihood (close to 0)."""
         lf = LineFluxData(
             names=("NII_6583",),
             fluxes=jnp.array([3.0e-17]),

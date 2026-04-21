@@ -20,7 +20,7 @@ class _FakeModel:
 
 @pytest.fixture
 def fake_model():
-    """Model returning fixed 5-band photometry."""
+    """SEDModel returning fixed 5-band photometry."""
     return _FakeModel(jnp.array([1.0, 2.0, 3.0, 4.0, 5.0]))
 
 

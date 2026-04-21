@@ -17,7 +17,7 @@ from pathlib import Path
 
 from tengri import (
     Fitter,
-    ParamSpec,
+    Parameters,
     SEDModel,
     Uniform,
     load_filter_set,
@@ -88,7 +88,7 @@ def main():
         "redshift": 1.0,
     }
 
-    spec = ParamSpec(**spec_kwargs)
+    spec = Parameters(**spec_kwargs)
     model = SEDModel(spec, ssp, filters=filters)
 
     # Build fitters via mock observations — use Fitter constructor directly

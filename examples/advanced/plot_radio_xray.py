@@ -11,8 +11,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.models.radio import radio_agn, radio_star_forming
-from tengri.models.xray import xray_agn_corona, xray_xrb
+from tengri.radio import radio_agn, radio_star_forming
+from tengri.xray import xray_agn_corona, xray_xrb
 
 # %%
 # Wavelength grid: 1 Angstrom (hard X-ray) to 10^10 Angstrom (30 cm radio)

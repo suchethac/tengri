@@ -16,8 +16,16 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Model, Observation, ParamSpec, Uniform, load_ssp_data, setup_style
-from tengri.models.observation import SpectroscopyConfig
+from tengri import (
+    Fixed,
+    Observation,
+    Parameters,
+    SEDModel,
+    Spectroscopy,
+    Uniform,
+    load_ssp_data,
+    setup_style,
+)
 
 setup_style()
 
@@ -37,9 +45,9 @@ if SSP_PATH is None:
 
 ssp = load_ssp_data(SSP_PATH)
 wave_obs = jnp.linspace(3800.0, 9200.0, 200)
-obs = Observation(spectroscopy=SpectroscopyConfig(wave_obs=wave_obs))
+obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
 
-spec = ParamSpec(
+spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Fixed(1.2),
     sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
     sfh_tsnorm_width_gyr=Fixed(3.0),
@@ -54,7 +62,7 @@ spec = ParamSpec(
     redshift=Fixed(0.0),
     mean_sfh_type=["tsnorm", "field"],
 )
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 
 REGIMES = [
     {"label": "Smooth",   "sigma": 0.3, "tau": 100.0, "color": "#1f77b4"},

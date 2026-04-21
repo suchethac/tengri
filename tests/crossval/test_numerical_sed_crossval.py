@@ -72,7 +72,7 @@ class TestSSPAbsoluteNormalisation:
 
     def test_young_solar_vband(self, ssp):
         """1 Gyr constant SF, solar Z, no dust: V-band L_nu ~ 2e27 erg/s/Hz per 1e9 Msun."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
@@ -86,7 +86,7 @@ class TestSSPAbsoluteNormalisation:
             dust_tau_diff=Fixed(0.0),
             redshift=0.001,
         )
-        model = Model(spec, ssp, precompute=False)
+        model = SEDModel(spec, ssp, precompute=False)
         result = model.predict_rest_sed({})
         wave = np.asarray(result.wavelength)
         sed = np.asarray(result.sed)
@@ -109,7 +109,7 @@ class TestSSPAbsoluteNormalisation:
         Both have same SFR=1 Msun/yr and same duration (3 Gyr),
         but the quenched one stopped 5 Gyr ago → its stars have faded.
         """
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
@@ -135,8 +135,8 @@ class TestSSPAbsoluteNormalisation:
             dust_tau_diff=Fixed(0.0),
             redshift=0.001,
         )
-        m_sf = Model(spec_sf, ssp, precompute=False)
-        m_q = Model(spec_q, ssp, precompute=False)
+        m_sf = SEDModel(spec_sf, ssp, precompute=False)
+        m_q = SEDModel(spec_q, ssp, precompute=False)
 
         wave = np.asarray(m_sf.predict_rest_sed({}).wavelength)
         sed_sf = np.asarray(m_sf.predict_rest_sed({}).sed)
@@ -155,7 +155,7 @@ class TestSSPAbsoluteNormalisation:
 
         At UV (1500 Å) / V-band (5500 Å) ratio: metal-poor > solar.
         """
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
@@ -170,7 +170,7 @@ class TestSSPAbsoluteNormalisation:
                 dust_tau_diff=Fixed(0.0),
                 redshift=0.001,
             )
-            model = Model(spec, ssp, precompute=False)
+            model = SEDModel(spec, ssp, precompute=False)
             r = model.predict_rest_sed({})
             wave = np.asarray(r.wavelength)
             sed = np.asarray(r.sed)
@@ -199,7 +199,7 @@ class TestDustAttenuationAbsolute:
 
     def test_av_from_tau_diff(self, ssp):
         """tau_diff=1.0 should attenuate old-star V-band by factor ~2.7."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
@@ -223,8 +223,8 @@ class TestDustAttenuationAbsolute:
             dust_tau_diff=Fixed(1.0),
             redshift=0.001,
         )
-        m_clean = Model(spec_clean, ssp, precompute=False)
-        m_dusty = Model(spec_dusty, ssp, precompute=False)
+        m_clean = SEDModel(spec_clean, ssp, precompute=False)
+        m_dusty = SEDModel(spec_dusty, ssp, precompute=False)
 
         wave = np.asarray(m_clean.predict_rest_sed({}).wavelength)
         sed_clean = np.asarray(m_clean.predict_rest_sed({}).sed)
@@ -241,7 +241,7 @@ class TestDustAttenuationAbsolute:
 
     def test_uv_more_attenuated_than_nir(self, ssp):
         """UV attenuation must exceed NIR attenuation (Calzetti-like curve)."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
@@ -265,8 +265,8 @@ class TestDustAttenuationAbsolute:
             dust_tau_diff=Fixed(1.0),
             redshift=0.001,
         )
-        m_clean = Model(spec_clean, ssp, precompute=False)
-        m_dusty = Model(spec_dusty, ssp, precompute=False)
+        m_clean = SEDModel(spec_clean, ssp, precompute=False)
+        m_dusty = SEDModel(spec_dusty, ssp, precompute=False)
 
         wave = np.asarray(m_clean.predict_rest_sed({}).wavelength)
         sed_clean = np.asarray(m_clean.predict_rest_sed({}).sed)
@@ -302,7 +302,7 @@ class TestSFRLuminosityCalibrations:
 
         Using constant SFH with SFR=1 Msun/yr for 3 Gyr (equilibrium).
         """
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
@@ -316,7 +316,7 @@ class TestSFRLuminosityCalibrations:
             dust_tau_diff=Fixed(0.0),
             redshift=0.001,
         )
-        model = Model(spec, ssp, precompute=False)
+        model = SEDModel(spec, ssp, precompute=False)
         r = model.predict_rest_sed({})
         wave = np.asarray(r.wavelength)
         sed = np.asarray(r.sed)
@@ -345,7 +345,7 @@ class TestAbsoluteMagnitudes:
 
     def test_mw_like_absolute_magnitude(self, ssp):
         """MW-like galaxy: M_r ~ -20 to -22 (Blanton+2003, Flynn+2006)."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.observation.filters import load_filter_set
         from tengri.observation.photometry import ab_mag_from_flux
         from tengri.parameters.parameters import Parameters
@@ -363,7 +363,7 @@ class TestAbsoluteMagnitudes:
             dust_tau_diff=Fixed(0.2),
             redshift=0.01,
         )
-        model = Model(spec, ssp, filters=filters, precompute=False)
+        model = SEDModel(spec, ssp, filters=filters, precompute=False)
         phot = model.predict_photometry({})
         m_app = float(ab_mag_from_flux(phot)[0])
 
@@ -379,7 +379,7 @@ class TestAbsoluteMagnitudes:
 
     def test_sfr_makes_galaxy_brighter(self, ssp):
         """Higher SFR → brighter galaxy at fixed age/Z."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.observation.filters import load_filter_set
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
@@ -397,7 +397,7 @@ class TestAbsoluteMagnitudes:
                 dust_tau_diff=Fixed(0.0),
                 redshift=0.01,
             )
-            model = Model(spec, ssp, filters=filters, precompute=False)
+            model = SEDModel(spec, ssp, filters=filters, precompute=False)
             return float(model.predict_photometry({})[0])
 
         f_low = _make(-0.5)  # SFR = 0.3
@@ -419,7 +419,7 @@ class TestDustLawComparison:
 
     def test_smc_steeper_than_calzetti_in_uv(self, ssp):
         """SMC curve produces more UV attenuation than Calzetti at fixed tau."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
@@ -435,7 +435,7 @@ class TestDustLawComparison:
                 dust_law_diff=law,
                 redshift=0.001,
             )
-            model = Model(spec, ssp, precompute=False)
+            model = SEDModel(spec, ssp, precompute=False)
             r = model.predict_rest_sed({})
             wave = np.asarray(r.wavelength)
             sed = np.asarray(r.sed)
@@ -456,7 +456,7 @@ class TestRedshiftEffects:
 
     def test_higher_z_fainter(self, ssp):
         """Same galaxy at higher z must have lower observed flux."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.observation.filters import load_filter_set
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
@@ -474,7 +474,7 @@ class TestRedshiftEffects:
                 dust_tau_diff=Fixed(0.0),
                 redshift=z,
             )
-            model = Model(spec, ssp, filters=filters, precompute=False)
+            model = SEDModel(spec, ssp, filters=filters, precompute=False)
             return float(model.predict_photometry({})[0])
 
         f_01 = _flux(0.1)
@@ -489,7 +489,7 @@ class TestRedshiftEffects:
 
     def test_igm_suppresses_uv_at_high_z(self, ssp):
         """At z=3, IGM should suppress flux blueward of Lyα."""
-        from tengri.forward.sed_model import Model
+        from tengri.forward.sed_model import SEDModel
         from tengri.observation.filters import load_filter_set
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
@@ -509,7 +509,7 @@ class TestRedshiftEffects:
             dust_tau_diff=Fixed(0.0),
             redshift=3.0,
         )
-        model = Model(spec, ssp, filters=filters, precompute=False)
+        model = SEDModel(spec, ssp, filters=filters, precompute=False)
         phot = model.predict_photometry({})
 
         f_u, f_g, f_r = float(phot[0]), float(phot[1]), float(phot[2])

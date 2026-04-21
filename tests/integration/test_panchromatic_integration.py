@@ -2,7 +2,7 @@
 
 Tests that exercise the COMPLETE forward model pipeline including components
 never before tested in combination: radio, X-ray, AGN, dust emission, nebular,
-IGM, and shock — all wired together through the Model class with real SSP data.
+IGM, and shock — all wired together through the SEDModel class with real SSP data.
 
 Each test checks numerical values against physically motivated ranges, not just
 "runs without error". These are the tests that catch wiring bugs where component
@@ -31,7 +31,7 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri.components.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.result import SEDResult
-from tengri.forward.sed_model import Model
+from tengri.forward.sed_model import SEDModel
 from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed
@@ -108,7 +108,7 @@ class TestFullPanchromaticSED:
             agn_torus_frac=Fixed(0.5),
             redshift=0.1,
         )
-        return Model(spec, ssp, filters=wide_filters, precompute=False)
+        return SEDModel(spec, ssp, filters=wide_filters, precompute=False)
 
     @pytest.fixture(scope="class")
     def dusty_params(self):
@@ -164,7 +164,7 @@ class TestFullPanchromaticSED:
             agn_torus_frac=Fixed(0.5),
             redshift=0.1,
         )
-        model_no_de = Model(
+        model_no_de = SEDModel(
             spec_no_de,
             dusty_sfg_model.ssp_data,
             filters=load_filter_set(
@@ -224,8 +224,8 @@ class TestFullPanchromaticSED:
             agn_torus_frac=Fixed(0.5),
             redshift=0.1,
         )
-        m_stellar = Model(spec_stellar, ssp, filters=wide_filters, precompute=False)
-        m_agn = Model(spec_agn, ssp, filters=wide_filters, precompute=False)
+        m_stellar = SEDModel(spec_stellar, ssp, filters=wide_filters, precompute=False)
+        m_agn = SEDModel(spec_agn, ssp, filters=wide_filters, precompute=False)
 
         p_stellar = m_stellar.predict_photometry({})
         p_agn = m_agn.predict_photometry({"agn_log_lbol": 11.0})
@@ -286,7 +286,7 @@ class TestRadioXrayIntegration:
             xray=True,
             redshift=0.01,  # nearby so fluxes are large
         )
-        return Model(spec, ssp, precompute=False)
+        return SEDModel(spec, ssp, precompute=False)
 
     def test_radio_extends_sed_to_long_wavelengths(self, radio_xray_model):
         """With radio=True, the SED grid must extend to λ > 1e7 Å (>1mm)."""
@@ -363,7 +363,7 @@ class TestRadioXrayIntegration:
         """The SED must include stellar + radio + X-ray — total > stellar alone."""
         params = {"dust_T": 30.0, "dust_beta_ir": 1.8}
 
-        # Model without radio/xray for comparison
+        # SEDModel without radio/xray for comparison
         spec_stellar = Parameters(
             mean_sfh_type="const",
             sfh_const_log_sfr=Fixed(1.0),
@@ -375,7 +375,7 @@ class TestRadioXrayIntegration:
             dust_emission="modified_blackbody",
             redshift=0.01,
         )
-        m_stellar = Model(
+        m_stellar = SEDModel(
             spec_stellar,
             radio_xray_model.ssp_data,
             precompute=False,
@@ -516,7 +516,7 @@ class TestRadioXrayIntegration:
             dust_emission="modified_blackbody",
             redshift=0.01,
         )
-        m_stellar = Model(spec_stellar, radio_xray_model.ssp_data, precompute=False)
+        m_stellar = SEDModel(spec_stellar, radio_xray_model.ssp_data, precompute=False)
         sed_stellar = m_stellar.predict_rest_sed(params)
 
         # In the optical (5000-7000 Å), radio+xray model should match stellar
@@ -556,7 +556,7 @@ class TestEnergyBalanceEndToEnd:
             dust_emission="modified_blackbody",
             redshift=0.001,  # nearly local
         )
-        return Model(spec, ssp, precompute=False)
+        return SEDModel(spec, ssp, precompute=False)
 
     def test_absorbed_equals_emitted(self, energy_model):
         """Integrated L_absorbed ≈ L_emitted_IR within 30%.
@@ -619,7 +619,7 @@ class TestDerivedQuantityRanges:
             dust_tau_diff=Fixed(0.2),
             redshift=0.01,
         )
-        return Model(spec, ssp, filters=sdss_filters, precompute=False)
+        return SEDModel(spec, ssp, filters=sdss_filters, precompute=False)
 
     def test_stellar_mass(self, milky_way_model):
         """MW-like galaxy: M* ~ 2.6e10 Msun (SFR=2, 13 Gyr)."""
@@ -670,7 +670,7 @@ class TestDerivedQuantityRanges:
             dust_tau_diff=Fixed(0.1),
             redshift=0.05,
         )
-        model = Model(spec, ssp, filters=sdss_filters, precompute=False)
+        model = SEDModel(spec, ssp, filters=sdss_filters, precompute=False)
         from tengri.observation.photometry import ab_mag_from_flux
 
         phot = model.predict_photometry({})
@@ -695,7 +695,7 @@ class TestDerivedQuantityRanges:
             dust_tau_diff=Fixed(0.05),
             redshift=0.05,
         )
-        model = Model(spec, ssp, filters=sdss_filters, precompute=False)
+        model = SEDModel(spec, ssp, filters=sdss_filters, precompute=False)
         from tengri.observation.photometry import ab_mag_from_flux
 
         phot = model.predict_photometry({})
@@ -733,7 +733,7 @@ class TestGradientFlowComplete:
             agn_log_lbol=Fixed(10.5),
             redshift=0.1,
         )
-        model = Model(spec, ssp, filters=sdss_filters, precompute=False)
+        model = SEDModel(spec, ssp, filters=sdss_filters, precompute=False)
 
         def loss(dust_T, tau_bc):
             params = {"dust_T": dust_T, "dust_beta_ir": 1.6, "dust_tau_bc": tau_bc}
@@ -794,7 +794,7 @@ class TestExactVsPrecomputed:
             dust_tau_diff=Fixed(0.3),
             redshift=0.1,
         )
-        model = Model(spec, ssp, filters=sdss_filters)
+        model = SEDModel(spec, ssp, filters=sdss_filters)
 
         params = {}
         phot_exact = model.predict_photometry(params, approx=False)

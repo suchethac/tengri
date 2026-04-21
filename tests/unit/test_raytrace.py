@@ -8,11 +8,11 @@ jax.config.update("jax_enable_x64", True)
 
 from pathlib import Path
 
-from tengri.forward.sed_model import Model
+from tengri.forward.sed_model import SEDModel
 from tengri.inference.backends.mcmc.raytrace import sample_hamiltonian, sample_raytrace
 from tengri.inference.fitter import Fitter
 from tengri.inference.posterior import Posterior
-from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Uniform
 
 # ── Helpers ───────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ def _gaussian_log_prob(mean, cov_inv):
     return log_prob
 
 
-# ── Pure sampler tests (no Model/Fitter dependency) ───────────────
+# ── Pure sampler tests (no SEDModel/Fitter dependency) ───────────────
 
 
 class TestSampleRaytraceGaussian:
@@ -198,11 +198,11 @@ _SSP_EXISTS = _SSP_FILE.is_file()
 
 @pytest.fixture(scope="module")
 def fitter_setup(ssp_data_wne, sdss_filters):
-    """Create a simple Model/Fitter setup for integration tests."""
+    """Create a simple SEDModel/Fitter setup for integration tests."""
     ssp = ssp_data_wne
     filters = sdss_filters
 
-    spec = ParamSpec(
+    spec = Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -214,7 +214,7 @@ def fitter_setup(ssp_data_wne, sdss_filters):
         dust_slope=-0.7,
         redshift=0.1,
     )
-    model = Model(spec, ssp, filters=filters)
+    model = SEDModel(spec, ssp, filters=filters)
 
     true_params = {
         "sfh_dpl_alpha": 1.5,

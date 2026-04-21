@@ -22,7 +22,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri.forward.sed_model import SEDModel
-from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -42,7 +42,7 @@ def ssp(ssp_data_wne):
 
 @pytest.fixture(scope="module")
 def spec():
-    return ParamSpec(
+    return Parameters(
         mean_sfh_type="dense_basis",
         sfh_db_log_total_mass=Uniform(8, 12),
         sfh_db_log_sfr_inst=Uniform(-3, 3),

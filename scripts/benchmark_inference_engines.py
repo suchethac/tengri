@@ -11,7 +11,7 @@ Measures:
 - Memory usage
 - Convergence diagnostics
 
-The benchmark reuses the same Model/Fitter across all methods within a
+The benchmark reuses the same SEDModel/Fitter across all methods within a
 scenario so that cached loss/gradient functions are shared — matching
 how a user would compare methods on the same galaxy.
 """
@@ -30,7 +30,7 @@ from tengri import (
     Fitter,
     Gaussian,
     LogUniform,
-    ParamSpec,
+    Parameters,
     SEDModel,
     Uniform,
     load_filter_set,
@@ -39,7 +39,7 @@ from tengri import (
 
 
 def build_scenario_fitter(spec_kwargs, true_params, snr=20.0, key=None):
-    """Build a Model + Fitter for one scenario (reused across methods)."""
+    """Build a SEDModel + Fitter for one scenario (reused across methods)."""
     if key is None:
         key = jr.PRNGKey(42)
 
@@ -62,7 +62,7 @@ def build_scenario_fitter(spec_kwargs, true_params, snr=20.0, key=None):
         ]
     )
 
-    spec = ParamSpec(**spec_kwargs)
+    spec = Parameters(**spec_kwargs)
     model = SEDModel(spec, ssp, filters=filters)
 
     key, subkey = jr.split(key)
@@ -150,7 +150,7 @@ def main():
     print()
     print("=" * 90)
     print("  Comprehensive Inference Engine Benchmark")
-    print("  (shared Model/Fitter per scenario — cached loss/grad functions)")
+    print("  (shared SEDModel/Fitter per scenario — cached loss/grad functions)")
     print("=" * 90)
     print()
 
@@ -357,7 +357,7 @@ def main():
         else:
             print(f"FAIL: {r['error']}")
 
-    # New fitter, DIFFERENT galaxy, same Model, REVERSED engine order
+    # New fitter, DIFFERENT galaxy, same SEDModel, REVERSED engine order
     print("  --- New fitter, different galaxy, reversed engine order ---")
     model_shared = a1_fitter.model
     different_params = {

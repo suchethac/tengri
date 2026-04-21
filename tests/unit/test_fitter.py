@@ -9,10 +9,10 @@ jax.config.update("jax_enable_x64", True)
 
 from pathlib import Path
 
-from tengri.forward.sed_model import Model
+from tengri.forward.sed_model import SEDModel
 from tengri.inference.fitter import Fitter
 from tengri.inference.posterior import Posterior
-from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Gaussian, Uniform
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -27,7 +27,7 @@ def model_and_mock(ssp_data_wne, sdss_filters):
     ssp = ssp_data_wne
     filters = sdss_filters
 
-    spec = ParamSpec(
+    spec = Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -39,7 +39,7 @@ def model_and_mock(ssp_data_wne, sdss_filters):
         dust_slope=-0.7,
         redshift=0.1,
     )
-    model = Model(spec, ssp, filters=filters)
+    model = SEDModel(spec, ssp, filters=filters)
 
     true_params = {
         "sfh_dpl_alpha": 1.2,
@@ -119,12 +119,12 @@ class TestGaussianPrior:
         ssp = ssp_data_wne
         filters = sdss_filters
 
-        spec = ParamSpec(
+        spec = Parameters(
             met_logzsol=Gaussian(-0.3, 0.1, lo=-2.0, hi=0.2),
             redshift=0.1,
             stochastic=False,
         )
-        model = Model(spec, ssp, filters=filters)
+        model = SEDModel(spec, ssp, filters=filters)
         params = spec.sample(jax.random.PRNGKey(0))
         mock = model.mock(params, snr=20.0, key=jax.random.PRNGKey(1))
 

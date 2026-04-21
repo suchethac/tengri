@@ -117,7 +117,7 @@ class _DummyDist:
 
 
 class _DummySpec:
-    """Minimal ParamSpec stub for testing."""
+    """Minimal Parameters stub for testing."""
 
     def __init__(self, fixed_params=None):
         self._fixed = fixed_params or {}

@@ -1,7 +1,7 @@
 """Tests for DSPS CSP integration modes: 'dsps_native' and 'dsps_met_table'.
 
 Tests :func:`compute_dsps_native_weights`, :func:`compute_dsps_met_table_weights`,
-and the Model-level ``csp_integration='dsps_native'`` / ``'dsps_met_table'`` options.
+and the SEDModel-level ``csp_integration='dsps_native'`` / ``'dsps_met_table'`` options.
 
 All tests are CPU-only (no SSP file required).
 """
@@ -229,14 +229,14 @@ def test_grad_wrt_lgmet():
     )
 
 
-# ── Model-level: csp_integration='dsps_native' accepted ───────────
+# ── SEDModel-level: csp_integration='dsps_native' accepted ───────────
 
 
 def _make_minimal_spec():
-    """Minimal ParamSpec with fixed params (no SSP file needed)."""
-    from tengri import Fixed, ParamSpec, Uniform
+    """Minimal Parameters with fixed params (no SSP file needed)."""
+    from tengri import Fixed, Parameters, Uniform
 
-    return ParamSpec(
+    return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Fixed(1.5),
         sfh_dpl_beta=Fixed(2.0),
@@ -262,27 +262,27 @@ def _make_minimal_ssp_data():
 
 
 def test_model_accepts_dsps_native():
-    """Model.__init__ should not raise for csp_integration='dsps_native'."""
-    from tengri.forward.sed_model import Model
+    """SEDModel.__init__ should not raise for csp_integration='dsps_native'."""
+    from tengri.forward.sed_model import SEDModel
 
     ssp_data = _make_minimal_ssp_data()
     spec = _make_minimal_spec()
 
-    model = Model(spec, ssp_data, csp_integration="dsps_native")
+    model = SEDModel(spec, ssp_data, csp_integration="dsps_native")
     assert model._csp_integration == "dsps_native"
     assert model._csp_age_dt is None
     assert model._csp_matrix is None
 
 
 def test_model_rejects_unknown_csp_mode():
-    """Model.__init__ raises ValueError for unknown csp_integration."""
-    from tengri.forward.sed_model import Model
+    """SEDModel.__init__ raises ValueError for unknown csp_integration."""
+    from tengri.forward.sed_model import SEDModel
 
     ssp_data = _make_minimal_ssp_data()
     spec = _make_minimal_spec()
 
     with pytest.raises(ValueError, match="csp_integration must be one of"):
-        Model(spec, ssp_data, csp_integration="bogus_mode")
+        SEDModel(spec, ssp_data, csp_integration="bogus_mode")
 
 
 # ── compute_dsps_met_table_weights: unit tests ────────────────────
@@ -431,17 +431,17 @@ def test_met_table_grad_wrt_lgmet():
     assert jnp.all(jnp.isfinite(grad)), f"Non-finite gradient: {grad}"
 
 
-# ── Model-level: csp_integration='dsps_met_table' accepted ────────
+# ── SEDModel-level: csp_integration='dsps_met_table' accepted ────────
 
 
 def test_model_accepts_dsps_met_table():
-    """Model.__init__ should not raise for csp_integration='dsps_met_table'."""
-    from tengri.forward.sed_model import Model
+    """SEDModel.__init__ should not raise for csp_integration='dsps_met_table'."""
+    from tengri.forward.sed_model import SEDModel
 
     ssp_data = _make_minimal_ssp_data()
     spec = _make_minimal_spec()
 
-    model = Model(spec, ssp_data, csp_integration="dsps_met_table")
+    model = SEDModel(spec, ssp_data, csp_integration="dsps_met_table")
     assert model._csp_integration == "dsps_met_table"
     assert model._csp_age_dt is None
     assert model._csp_matrix is None

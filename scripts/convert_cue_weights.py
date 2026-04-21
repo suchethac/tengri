@@ -39,7 +39,7 @@ from pathlib import Path
 #   - tensorflow.python.trackable.data_structures.ListWrapper (just a list)
 #   - Cue's own classes (nn.Speculator, cont_pca.SpectrumPCA) which do
 #     `import tensorflow as tf` at module level and access tf.float32,
-#     tf.function, tf.keras.Model, tf.keras.optimizers.Adam
+#     tf.function, tf.keras.SEDModel, tf.keras.optimizers.Adam
 # ---------------------------------------------------------------------------
 
 
@@ -68,7 +68,7 @@ def _install_tf_mock():
         pass
 
     keras = _MockTFModule("tensorflow.keras")
-    keras.Model = _FakeModel
+    keras.SEDModel = _FakeModel
     optimizers = _MockTFModule("tensorflow.keras.optimizers")
     optimizers.Adam = lambda **kw: None
     keras.optimizers = optimizers

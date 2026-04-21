@@ -532,7 +532,7 @@ def _build_tengri_sed_raw(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build tengri SED in absolute erg/s/Hz (not normalised by M_formed).
 
-    sfh_params: dict of fully-prefixed ParamSpec kwargs for the given sfh_type.
+    sfh_params: dict of fully-prefixed Parameters kwargs for the given sfh_type.
     dust_law_bc: attenuation curve for the birth cloud (and diffuse ISM by default).
       Accepted values: "power_law", "calzetti", "smc", "lmc", "cardelli".
     Returns (wave_Å, L_nu_erg/s/Hz).

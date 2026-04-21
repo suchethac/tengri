@@ -46,7 +46,11 @@ from tengri.components.sfh.nonparametric import (
     continuity_sfh,
     dirichlet_sfh,
 )
-from tengri.components.sfh.psd_models import psd_drw as psd_drw
+from tengri.components.sfh.psd_models import (
+    psd_drw as psd_drw,
+    psd_extended_regulator as psd_extended_regulator,
+    psd_matern as psd_matern,
+)
 from tengri.components.sfh.registry import (
     FIELD_MODEL_REGISTRY,
     SFH_REGISTRY,
@@ -96,6 +100,8 @@ __all__ = [
     # PSB SFH
     "psb_wild2020",
     "psd_drw",
+    "psd_extended_regulator",
+    "psd_matern",
     # Metallicity registry
     "resolve_met",
     # SFH Registry

@@ -290,7 +290,7 @@ def run_scenario(
     name : str
         Scenario name (e.g., "A1_optical_quick").
     params : Parameters
-        Model parameter specification.
+        SEDModel parameter specification.
     ssp_data : dict
         SSP data dictionary.
     observation : Observation
@@ -376,7 +376,7 @@ class TestStandardGalaxyWorkflows:
     def test_a1_quick_optical_fit(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """A1. Quick optical fit (D=7, typical user starting point).
 
-        Model: tsnorm SFH, Calzetti dust, nebular (baked SSP), IGM
+        SEDModel: tsnorm SFH, Calzetti dust, nebular (baked SSP), IGM
         Expected: <5s JIT, <30s total inference
         Failure modes: Long JIT would surprise users
         """
@@ -433,7 +433,7 @@ class TestStandardGalaxyWorkflows:
     def test_a2_fir_constrained_fit(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """A2. FIR-constrained fit (D=8-9, dust emission with Fixed umin).
 
-        Model: tsnorm + DL07 dust emission with Fixed dust_umin=1.0
+        SEDModel: tsnorm + DL07 dust emission with Fixed dust_umin=1.0
         Expected: <10s JIT (template collapsed at init, no 2GB graph)
         Test: Verify Fixed umin → no PERF-01 issue
         """
@@ -494,7 +494,7 @@ class TestStandardGalaxyWorkflows:
     def test_a3_free_dust_temperature_perf01(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """A3. Free dust temperature (D=10, known PERF-01 case).
 
-        Model: tsnorm + DL07 with free dust_umin=Uniform(0.5, 25.0)
+        SEDModel: tsnorm + DL07 with free dust_umin=Uniform(0.5, 25.0)
         Expected: ⚠️ PERF-01 — 2GB XLA warning, >60s JIT
         Purpose: Reproduce documented performance issue
         """
@@ -556,7 +556,7 @@ class TestStandardGalaxyWorkflows:
     def test_a4_stochastic_sfh_recovery(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """A4. Stochastic SFH recovery (D=12, bursty galaxies).
 
-        Model: dense_basis+field (5 DB + 2 PSD params), Salim dust, nebular
+        SEDModel: dense_basis+field (5 DB + 2 PSD params), Salim dust, nebular
         Inference: vi (geoVI with n_KL=10 iterations)
         Expected: <15s JIT, ~20-40s inference
         """
@@ -609,7 +609,7 @@ class TestStandardGalaxyWorkflows:
     def test_a5_high_d_nonparametric(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """A5. High-D non-parametric (D~13, vi_linear test).
 
-        Model: dirichlet SFH (7 bins, 6 auxiliary vars), dust, nebular
+        SEDModel: dirichlet SFH (7 bins, 6 auxiliary vars), dust, nebular
         Inference: vi_linear (MGVI, faster for high-D)
         Expected: <20s JIT, <60s inference
         Failure modes: Extreme SFH spikes (NOTE-01)
@@ -679,7 +679,7 @@ class TestKnownBugReproduction:
     def test_c1_bpass_posterior_derived_crash(self, bpass_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """C1. BPASS + posterior.derived crash (BUG-NSS-01).
 
-        Model: dpl SFH, BPASS SSP
+        SEDModel: dpl SFH, BPASS SSP
         Inference: map (quick)
         Expected: ⚠️ Crash when calling posterior.derived (no ssp_mass_remaining table)
         """
@@ -720,7 +720,7 @@ class TestKnownBugReproduction:
     def test_c2_evolving_metallicity_keyerror(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """C2. Evolving metallicity KeyError (BUG-NSS-02).
 
-        Model: dense_basis, evolving_metallicity=True
+        SEDModel: dense_basis, evolving_metallicity=True
         Inference: map
         Expected: ⚠️ KeyError: 'log_z_abs' in fused kernel
         """
@@ -760,7 +760,7 @@ class TestMemoryAndCompilation:
     def test_e1_baseline_memory(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """E1. Baseline memory (D=7, simple model).
 
-        Model: tsnorm + dust (no nebular, no dust emission)
+        SEDModel: tsnorm + dust (no nebular, no dust emission)
         Inference: map
         Expected: <2GB total
         """
@@ -808,7 +808,7 @@ class TestAGNScience:
     def test_b1_agn_disc_torus(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """B1. AGN disc + torus (D=12-15).
 
-        Model: tsnorm + Kubota & Done disc + SKIRTOR torus
+        SEDModel: tsnorm + Kubota & Done disc + SKIRTOR torus
         Inference: mcmc_nuts
         Expected: <15s JIT, converges to reasonable agn_log_lbol, agn_torus_frac
         Failure modes: Degeneracies (dust emission vs torus); slow mixing
@@ -859,7 +859,7 @@ class TestAGNScience:
     def test_b2_qsogen_tracer_leak(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """B2. qsogen forbidden (D=10, BUG-NSS-03 tracer leak test).
 
-        Model: tsnorm + agn_model="qsogen" (template-based AGN)
+        SEDModel: tsnorm + agn_model="qsogen" (template-based AGN)
         Inference: map
         Expected: ⚠️ BUG-NSS-03 — UnexpectedTracerError during JIT
         Purpose: Confirm documented bug, check error message clarity
@@ -908,7 +908,7 @@ class TestInferenceStressTests:
     def test_d1_nuts_at_d20_boundary(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """D1. NUTS at D=20 boundary.
 
-        Model: dense_basis+field + DL07 (Fixed umin) + nebular (D~18-20)
+        SEDModel: dense_basis+field + DL07 (Fixed umin) + nebular (D~18-20)
         Inference: mcmc_nuts with default settings
         Expected: Borderline viable; may need tighter priors or MAP init
         Check: Acceptance rate > 0.7, n_divergent < 5%
@@ -966,7 +966,7 @@ class TestInferenceStressTests:
     def test_d3_geovi_sample_count(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """D3. geoVI sample count (D=10).
 
-        Model: tsnorm + dust + nebular
+        SEDModel: tsnorm + dust + nebular
         Inference: vi with n_samples_per_iteration = [4, 12]
         Expected: Both converge; 4-12 is optimal range per CLAUDE.md
         Purpose: Validate "NIFTy geoVI use 4-12 samples, not 80"
@@ -1026,7 +1026,7 @@ class TestInferenceStressTests:
     def test_d2_raytrace_step_size(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """D2. Ray Tracing step_size sensitivity (D=9).
 
-        Model: dirichlet (6 bins) + dust
+        SEDModel: dirichlet (6 bins) + dust
         Inference: mcmc_raytrace with step_size = [0.04, 0.05, 0.06, 0.07]
         Expected: 0.05 → acceptance ~0.8-0.9; 0.06 → cliff (acceptance drops)
         Purpose: Reproduce documented sharp viability cliff
@@ -1087,7 +1087,7 @@ class TestMemoryProfiling:
     def test_e1_baseline_memory(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """E1. Baseline memory (D=7, simple).
 
-        Model: tsnorm + dust
+        SEDModel: tsnorm + dust
         Inference: map
         Measure: Peak RAM during JIT + inference
         Expected: <2GB total
@@ -1281,7 +1281,7 @@ class TestMemoryProfiling:
     def test_e3_jit_breakdown_kitchen_sink(self, mist_ssp, optical_nir_filters, rng_key):
         """E3. JIT compilation time breakdown.
 
-        Model: Kitchen-sink (stellar + nebular + DL07 + AGN)
+        SEDModel: Kitchen-sink (stellar + nebular + DL07 + AGN)
         Inference: map
         Measure: t_compile_first_call, t_runtime_after_warmup
         Expected: <60s compile, <1ms runtime (post-JIT)

@@ -5,7 +5,7 @@ Verifies:
 2. compute_log_z_evolving produces correct ramp shapes
 3. Backward compatibility: constant Z(t) matches scalar interpolation
 4. Gradients flow through the evolving metallicity path
-5. ParamSpec correctly adds/removes parameters based on setting
+5. Parameters correctly adds/removes parameters based on setting
 """
 
 import jax
@@ -21,7 +21,7 @@ from tengri.components.sps.dsps_wrapper import (
     interpolate_metallicity,
     interpolate_metallicity_evolving,
 )
-from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.parameters import Parameters
 
 jax.config.update("jax_enable_x64", True)
 
@@ -302,22 +302,22 @@ class TestEvolvingMetallicityGradients:
         assert_allclose(grad_auto, grad_fd, rtol=1e-3, err_msg="Autodiff vs finite-diff mismatch")
 
 
-# ── Tests: ParamSpec integration ──────────────────────────────────
+# ── Tests: Parameters integration ──────────────────────────────────
 
 
 class TestParamSpecEvolvingMetallicity:
-    """Verify ParamSpec correctly handles evolving_metallicity setting."""
+    """Verify Parameters correctly handles evolving_metallicity setting."""
 
     def test_default_has_met_logzsol(self):
-        """Default ParamSpec should have met_logzsol, not evolving params."""
-        spec = ParamSpec()
+        """Default Parameters should have met_logzsol, not evolving params."""
+        spec = Parameters()
         assert "met_logzsol" in spec.all_params
         assert "met_logzsol_0" not in spec.all_params
         assert "met_logzsol_final" not in spec.all_params
 
     def test_evolving_replaces_scalar(self):
         """evolving_metallicity=True should replace met_logzsol with two params."""
-        spec = ParamSpec(evolving_metallicity=True)
+        spec = Parameters(evolving_metallicity=True)
         assert "met_logzsol" not in spec.all_params
         assert "met_logzsol_0" in spec.all_params
         assert "met_logzsol_final" in spec.all_params
@@ -326,7 +326,7 @@ class TestParamSpecEvolvingMetallicity:
         """Custom priors should work for evolving metallicity params."""
         from tengri.parameters.priors import Uniform
 
-        spec = ParamSpec(
+        spec = Parameters(
             evolving_metallicity=True,
             met_logzsol_0=Uniform(-3.0, -1.0),
             met_logzsol_final=Uniform(-1.0, 0.5),
@@ -337,8 +337,8 @@ class TestParamSpecEvolvingMetallicity:
         assert d1.bounds == (-1.0, 0.5)
 
     def test_sample_has_evolving_keys(self):
-        """Sampling from evolving ParamSpec should produce the right keys."""
-        spec = ParamSpec(evolving_metallicity=True)
+        """Sampling from evolving Parameters should produce the right keys."""
+        spec = Parameters(evolving_metallicity=True)
         params = spec.sample(jax.random.PRNGKey(0))
         assert "met_logzsol_0" in params
         assert "met_logzsol_final" in params
@@ -346,6 +346,6 @@ class TestParamSpecEvolvingMetallicity:
 
     def test_backward_compat_no_setting(self):
         """Omitting evolving_metallicity should give old behavior."""
-        spec = ParamSpec(met_logzsol=-0.3)
+        spec = Parameters(met_logzsol=-0.3)
         assert "met_logzsol" in spec.all_params
         assert spec.get_distribution("met_logzsol").is_fixed

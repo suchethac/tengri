@@ -1,4 +1,4 @@
-"""Integration tests for the new Model class with real SSP data."""
+"""Integration tests for the new SEDModel class with real SSP data."""
 
 from pathlib import Path
 
@@ -10,9 +10,9 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri.components.sps.dsps_wrapper import load_ssp_data
-from tengri.forward.sed_model import MockData, Model
+from tengri.forward.sed_model import MockData, SEDModel
 from tengri.observation.filters import load_filter_set
-from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Uniform
 
 # ── Skip if SSP data not available ────────────────────────────────
@@ -39,7 +39,7 @@ def filters():
 @pytest.fixture(scope="session")
 def parametric_spec():
     """Parametric tsnorm spec (no GP field)."""
-    return ParamSpec(
+    return Parameters(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
@@ -57,7 +57,7 @@ def parametric_spec():
 @pytest.fixture(scope="session")
 def stochastic_spec():
     """Stochastic tsnorm + field spec."""
-    return ParamSpec(
+    return Parameters(
         mean_sfh_type=["tsnorm", "field"],
         sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
@@ -78,7 +78,7 @@ def stochastic_spec():
 @pytest.fixture(scope="session")
 def dpl_spec():
     """DPL parametric spec for backward compat testing."""
-    return ParamSpec(
+    return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -94,17 +94,17 @@ def dpl_spec():
 
 @pytest.fixture(scope="session")
 def parametric_model(parametric_spec, ssp_data, filters):
-    return Model(parametric_spec, ssp_data, filters=filters)
+    return SEDModel(parametric_spec, ssp_data, filters=filters)
 
 
 @pytest.fixture(scope="session")
 def stochastic_model(stochastic_spec, ssp_data, filters):
-    return Model(stochastic_spec, ssp_data, filters=filters)
+    return SEDModel(stochastic_spec, ssp_data, filters=filters)
 
 
 @pytest.fixture(scope="session")
 def dpl_model(dpl_spec, ssp_data, filters):
-    return Model(dpl_spec, ssp_data, filters=filters)
+    return SEDModel(dpl_spec, ssp_data, filters=filters)
 
 
 @pytest.fixture(scope="session")
@@ -183,7 +183,7 @@ class TestPredictDerived:
         assert 1e7 < mass < 1e13
 
 
-# ── Stochastic Model ──────────────────────────────────────────────
+# ── Stochastic SEDModel ──────────────────────────────────────────────
 
 
 class TestStochastic:
@@ -201,7 +201,7 @@ class TestStochastic:
         assert not jnp.allclose(sfh["sfr_mean"], sfh["sfr_full"])
 
 
-# ── DPL Model ─────────────────────────────────────────────────────
+# ── DPL SEDModel ─────────────────────────────────────────────────────
 
 
 class TestDPL:
@@ -507,7 +507,7 @@ class TestDustEmissionForwardModel:
         from tengri.parameters.priors import Fixed
 
         filters = load_filter_set(["sdss_r", "wise_w3"])
-        spec = ParamSpec(
+        spec = Parameters(
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
@@ -520,10 +520,10 @@ class TestDustEmissionForwardModel:
             mean_sfh_type="dpl",
             dust_emission="modified_blackbody",
         )
-        model = Model(spec, ssp, filters=filters, precompute=False)
+        model = SEDModel(spec, ssp, filters=filters, precompute=False)
         params_em = {"dust_T": 35.0, "dust_beta_ir": 1.6}
 
-        spec_no = ParamSpec(
+        spec_no = Parameters(
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
@@ -534,7 +534,7 @@ class TestDustEmissionForwardModel:
             redshift=Fixed(0.1),
             mean_sfh_type="dpl",
         )
-        model_no = Model(spec_no, ssp, filters=filters, precompute=False)
+        model_no = SEDModel(spec_no, ssp, filters=filters, precompute=False)
 
         sed_em = model.predict_rest_sed(params_em).sed
         sed_no = model_no.predict_rest_sed({}).sed
@@ -545,7 +545,7 @@ class TestDustEmissionForwardModel:
         from tengri.parameters.priors import Fixed
 
         filters = load_filter_set(["wise_w3"])
-        spec = ParamSpec(
+        spec = Parameters(
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
@@ -558,7 +558,7 @@ class TestDustEmissionForwardModel:
             mean_sfh_type="dpl",
             dust_emission="modified_blackbody",
         )
-        model = Model(spec, ssp, filters=filters, precompute=False)
+        model = SEDModel(spec, ssp, filters=filters, precompute=False)
 
         def loss(T):
             return model.predict_photometry({"dust_T": T})[0]

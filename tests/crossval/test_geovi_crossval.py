@@ -38,7 +38,7 @@ jft = pytest.importorskip("nifty8.re", reason="nifty8.re not installed")
 
 from tengri.components.sps.dsps_wrapper import load_ssp_data
 from tengri.observation.filters import load_filter_set
-from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Uniform
 from tengri.utils.transforms import to_bounded
 
@@ -89,7 +89,7 @@ def filters():
 @pytest.fixture(scope="module")
 def smooth_spec():
     """Smooth parametric SFH spec (D=5) for tractable comparison."""
-    return ParamSpec(
+    return Parameters(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
@@ -103,10 +103,10 @@ def smooth_spec():
 
 @pytest.fixture(scope="module")
 def model_and_data(smooth_spec, ssp_data, filters):
-    """Build Model, generate mock data, return (model, data, noise)."""
-    from tengri.forward.sed_model import Model
+    """Build SEDModel, generate mock data, return (model, data, noise)."""
+    from tengri.forward.sed_model import SEDModel
 
-    model = Model(smooth_spec, ssp_data, filters=filters)
+    model = SEDModel(smooth_spec, ssp_data, filters=filters)
 
     # Generate mock from a random prior draw
     true_params = smooth_spec.sample(jax.random.PRNGKey(42))
@@ -163,7 +163,7 @@ def nifty_likelihood(fitter, model_and_data):
         return model.predict_photometry(params)
 
     domain = {name: jft.ShapeWithDtype(()) for name in free_names}
-    nifty_model = jft.Model(jax.jit(signal_response), domain=domain)
+    nifty_model = jft.SEDModel(jax.jit(signal_response), domain=domain)
 
     noise_cov_inv = 1.0 / noise**2
     return jft.Gaussian(data, noise_cov_inv).amend(nifty_model)

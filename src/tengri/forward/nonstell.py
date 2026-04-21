@@ -4,7 +4,7 @@ Provides:
 
 * :class:`NonStellarSlot` — lightweight registry entry describing one enabled
   non-stellar SED component (nebular, shock, dust IR, AGN, radio, X-ray).
-* :func:`collect_nonstell` — inspect a ``Model`` and return the ordered list of
+* :func:`collect_nonstell` — inspect a ``SEDModel`` and return the ordered list of
   enabled :class:`NonStellarSlot` objects.
 * :func:`build_nonstell_fn` — factory that captures all component callables and
   model flags into a single JAX-traceable function

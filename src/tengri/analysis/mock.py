@@ -1,7 +1,7 @@
 """Mock galaxy generation utilities.
 
 Standalone ``generate_mock`` function for quick mock photometry
-generation. For the ``Model``-based API, use ``Model.mock()`` instead.
+generation. For the ``SEDModel``-based API, use ``SEDModel.mock()`` instead.
 """
 
 import jax

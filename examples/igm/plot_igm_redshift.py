@@ -20,7 +20,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.models.igm import igm_transmission
+from tengri.igm import igm_transmission
 from tengri.plotting import SWEEP_CMAPS, setup_style
 
 setup_style()

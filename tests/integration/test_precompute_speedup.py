@@ -15,8 +15,8 @@ import pytest
 
 from tengri import (
     Gaussian,
-    Model,
-    ParamSpec,
+    Parameters,
+    SEDModel,
     Uniform,
     load_filter_set,
     load_ssp_data,
@@ -39,7 +39,7 @@ def sdss_filters():
 @pytest.fixture(scope="module")
 def smooth_spec():
     """Smooth SFH spec with fixed redshift (triggers precomputation)."""
-    return ParamSpec(
+    return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -61,8 +61,8 @@ class TestPrecomputeAccuracy:
 
     def test_fast_vs_exact_agreement(self, ssp_data, sdss_filters, smooth_spec):
         """Fast photometry agrees with exact within 1% per band."""
-        model_fast = Model(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
-        model_exact = Model(smooth_spec, ssp_data, filters=sdss_filters, precompute=False)
+        model_fast = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
+        model_exact = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=False)
 
         assert model_fast._precomputed.photometry is not None
         assert model_exact._precomputed.photometry is None
@@ -80,8 +80,8 @@ class TestPrecomputeAccuracy:
 
     def test_fast_vs_exact_multiple_params(self, ssp_data, sdss_filters, smooth_spec):
         """Agreement holds across 10 random parameter sets."""
-        model_fast = Model(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
-        model_exact = Model(smooth_spec, ssp_data, filters=sdss_filters, precompute=False)
+        model_fast = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
+        model_exact = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=False)
 
         for i in range(10):
             key = jax.random.PRNGKey(i)
@@ -104,8 +104,8 @@ class TestPrecomputeSpeedup:
 
     def test_gradient_speedup(self, ssp_data, sdss_filters, smooth_spec):
         """Gradient evaluation is >5x faster with precomputation."""
-        model_fast = Model(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
-        model_exact = Model(smooth_spec, ssp_data, filters=sdss_filters, precompute=False)
+        model_fast = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
+        model_exact = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=False)
 
         params = smooth_spec.sample(jax.random.PRNGKey(42))
         data = model_exact.predict_photometry(params)
@@ -172,7 +172,7 @@ class TestGradientCleanliness:
 
     def test_all_gradients_finite(self, ssp_data, sdss_filters, smooth_spec):
         """All autodiff gradients are finite (no NaN/inf)."""
-        model = Model(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
+        model = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
         params = smooth_spec.sample(jax.random.PRNGKey(42))
         data = model.predict_photometry(params)
         noise = data / 20.0
@@ -188,7 +188,7 @@ class TestGradientCleanliness:
 
     def test_autodiff_matches_finite_differences(self, ssp_data, sdss_filters, smooth_spec):
         """Autodiff gradients match finite differences to 4+ digits."""
-        model = Model(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
+        model = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
         params = smooth_spec.sample(jax.random.PRNGKey(42))
         data = model.predict_photometry(params)
         noise = data / 20.0
@@ -219,7 +219,7 @@ class TestGradientCleanliness:
 
     def test_stochastic_gradients_finite(self, ssp_data, sdss_filters):
         """Gradients are finite for stochastic (GP) model too."""
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type=["dpl", "field"],
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
@@ -234,7 +234,7 @@ class TestGradientCleanliness:
             redshift=0.1,
             n_grid=64,
         )
-        model = Model(spec, ssp_data, filters=sdss_filters, precompute=True)
+        model = SEDModel(spec, ssp_data, filters=sdss_filters, precompute=True)
         params = spec.sample(jax.random.PRNGKey(42))
         data = model.predict_photometry(params)
         noise = data / 20.0

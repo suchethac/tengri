@@ -204,15 +204,21 @@ def test_mode_speedup_mid_d(ssp_data, mock_observation, mock_flux):
     print(f"  Status: {status}")
 
 
-# ── Test: High-D model (D~20-30) ──────────────────────────────────
+# ── Test: High-D model (D~8-16) ───────────────────────────────────
 
 
 @pytest.mark.slow
 def test_mode_speedup_high_d(ssp_data, mock_observation, mock_flux):
-    """Mode speedup for D~25-30 dirichlet SFH model."""
+    """Mode speedup for D~8-16 dirichlet SFH model (7 SFH + dust + met)."""
     params = Parameters(
         mean_sfh_type="dirichlet",
-        sfh_dirichlet_alpha=Uniform(0.5, 2.0),
+        sfh_dir_log_total_mass=Uniform(9.0, 12.0),
+        sfh_dir_z_0=Uniform(0.01, 0.99),
+        sfh_dir_z_1=Uniform(0.01, 0.99),
+        sfh_dir_z_2=Uniform(0.01, 0.99),
+        sfh_dir_z_3=Uniform(0.01, 0.99),
+        sfh_dir_z_4=Uniform(0.01, 0.99),
+        sfh_dir_z_5=Uniform(0.01, 0.99),
         met_logzsol=Uniform(-2.0, 0.2),
         dust_law_bc="calzetti",
         dust_tau_bc=Uniform(0.0, 3.0),
@@ -227,7 +233,7 @@ def test_mode_speedup_high_d(ssp_data, mock_observation, mock_flux):
     fitter = Fitter(model, flux_cgs, flux_unc_cgs)
 
     D = len(fitter._free_names)
-    assert 20 <= D <= 35, f"Expected D~20-35, got {D}"
+    assert 8 <= D <= 16, f"Expected D~8-16, got {D}"
 
     # Benchmark both modes
     times_traceable = benchmark_loss_fn(fitter, mode="_traceable", n_measure=8)

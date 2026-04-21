@@ -5,7 +5,7 @@ Verifies:
 2. Alpha enhancement shifts the SED relative to solar ratios
 3. Backward compatibility: alpha_fe=0 gives identical results
 4. Gradients flow through the alpha enhancement path
-5. ParamSpec correctly registers met_alpha_fe
+5. Parameters correctly registers met_alpha_fe
 """
 
 import jax
@@ -18,7 +18,7 @@ from tengri.components.sps.dsps_wrapper import (
     _ALPHA_TO_Z_COEFF,
     effective_metallicity,
 )
-from tengri.parameters.parameters import ParamSpec
+from tengri.parameters.parameters import Parameters
 
 jax.config.update("jax_enable_x64", True)
 
@@ -100,15 +100,15 @@ class TestEffectiveMetallicity:
         assert_allclose(result, expected, atol=1e-14)
 
 
-# ── ParamSpec integration ─────────────────────────────────────────
+# ── Parameters integration ─────────────────────────────────────────
 
 
 class TestAlphaFeParamSpec:
-    """Test that ParamSpec correctly handles met_alpha_fe."""
+    """Test that Parameters correctly handles met_alpha_fe."""
 
     def test_default_is_fixed_zero(self):
         """met_alpha_fe should default to Fixed(0.0)."""
-        spec = ParamSpec(
+        spec = Parameters(
             sfh_dpl_alpha=1.0,
             sfh_dpl_beta=1.0,
             sfh_dpl_tau_gyr=5.0,
@@ -121,14 +121,14 @@ class TestAlphaFeParamSpec:
 
     def test_alpha_fe_in_all_params(self):
         """met_alpha_fe should appear in all_params."""
-        spec = ParamSpec(mean_sfh_type="dpl")
+        spec = Parameters(mean_sfh_type="dpl")
         assert "met_alpha_fe" in spec.all_params
 
     def test_alpha_fe_free_when_set(self):
         """met_alpha_fe should be free when given a distribution."""
         from tengri.parameters.priors import Uniform
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             met_alpha_fe=Uniform(-0.2, 0.6),
         )
@@ -141,7 +141,7 @@ class TestAlphaFeParamSpec:
 
     def test_backward_compatible_no_alpha(self):
         """Models without explicit met_alpha_fe should work unchanged."""
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             met_logzsol=-0.3,
         )
@@ -151,7 +151,7 @@ class TestAlphaFeParamSpec:
         """Sampling should include met_alpha_fe."""
         from tengri.parameters.priors import Uniform
 
-        spec = ParamSpec(
+        spec = Parameters(
             mean_sfh_type="dpl",
             met_alpha_fe=Uniform(-0.2, 0.6),
         )
@@ -169,10 +169,10 @@ class TestAlphaFeForwardModel:
 
     @pytest.fixture
     def model_with_alpha(self, ssp_data_fsps):
-        from tengri import Fixed, Model, ParamSpec, Uniform
+        from tengri import Fixed, Parameters, SEDModel, Uniform
 
         ssp = ssp_data_fsps
-        spec = ParamSpec(
+        spec = Parameters(
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
@@ -184,15 +184,15 @@ class TestAlphaFeForwardModel:
             redshift=Fixed(0.1),
             mean_sfh_type="dpl",
         )
-        return Model(spec, ssp, precompute=False)
+        return SEDModel(spec, ssp, precompute=False)
 
     def test_alpha_zero_matches_no_alpha(self, model_with_alpha, ssp_data_fsps):
         """alpha_fe=0 should give identical SED as no alpha enhancement."""
         sed_alpha0 = model_with_alpha.predict_rest_sed({"met_alpha_fe": 0.0}).sed
-        from tengri import Fixed, Model, ParamSpec
+        from tengri import Fixed, Parameters, SEDModel
 
         ssp = ssp_data_fsps
-        spec_no = ParamSpec(
+        spec_no = Parameters(
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
@@ -203,7 +203,7 @@ class TestAlphaFeForwardModel:
             redshift=Fixed(0.1),
             mean_sfh_type="dpl",
         )
-        model_no = Model(spec_no, ssp, precompute=False)
+        model_no = SEDModel(spec_no, ssp, precompute=False)
         sed_no = model_no.predict_rest_sed({}).sed
         assert_allclose(sed_alpha0, sed_no, rtol=1e-12)
 

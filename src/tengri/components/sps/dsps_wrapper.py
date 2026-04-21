@@ -270,7 +270,7 @@ def compute_dsps_native_weights(
     """Compute CSP age weights and metallicity-marginalized SSP flux via DSPS.
 
     **This is tengri's primary (recommended) CSP integration mode**,
-    selected via ``Model(..., csp_integration="dsps_native")``.
+    selected via ``SEDModel(..., csp_integration="dsps_native")``.
 
     Uses DSPS's triweight metallicity kernel (Hearin et al. 2023, Eq. 10)
     to convolve the stellar metallicity distribution with SSP templates,
@@ -396,7 +396,7 @@ def compute_dsps_met_table_weights(
     """Compute CSP age weights and metallicity-marginalized SSP flux via DSPS
     with a per-age metallicity table (time-evolving Z(t)).
 
-    Selected via ``Model(..., csp_integration="dsps_met_table")``.  Unlike
+    Selected via ``SEDModel(..., csp_integration="dsps_met_table")``.  Unlike
     :func:`compute_dsps_native_weights` which uses a single scalar ``lgmet``
     with a lognormal MDF, this function accepts a per-SSP-age metallicity
     array so each age bin can have its own metallicity and lognormal scatter
