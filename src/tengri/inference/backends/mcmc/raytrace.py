@@ -41,7 +41,7 @@ import jax
 import jax.numpy as jnp
 from jax.tree_util import tree_leaves, tree_map, tree_reduce
 
-__all__ = ["sample_hamiltonian", "sample_raytrace"]
+__all__ = ["run_raytrace", "sample_hamiltonian", "sample_raytrace"]
 
 
 def random_split_like_tree(rng_key, target=None, treedef=None):
@@ -451,3 +451,138 @@ def sample_raytrace(
     )
 
     return chain, log_likelihood, accept_prob
+
+
+def run_raytrace(
+    fitter,
+    *,
+    key,
+    init_from=None,
+    n_burnin=100,
+    n_steps=500,
+    n_leapfrog_steps=10,
+    step_size=None,
+    refresh_rate=0.0,
+    verbose=True,
+):
+    """Ray Tracing Sampler (Behroozi 2025).
+
+    Propagates light rays through a medium where the refractive
+    index n(x) = L(x)^{1/(D-1)}, using Snell's law to bend rays
+    toward high-likelihood regions.
+
+    The sampling proceeds in two phases:
+    1. **Burn-in**: initial samples are discarded to let the chain
+       forget its starting position and reach the typical set.
+    2. **Sampling**: posterior samples are collected.
+
+    Parameters
+    ----------
+    n_burnin : int
+        Burn-in steps (discarded).
+    n_steps : int
+        Post-burn-in samples to collect.
+    n_leapfrog_steps : int
+        Leapfrog integration steps per trajectory.
+    step_size : float, optional
+        Integration step size. Default: 0.03 * sqrt(D).
+    refresh_rate : float
+        Partial momentum refresh rate. 0 = no refresh (pure ray tracing).
+    verbose : bool
+        Print progress.
+    """
+    import logging
+    import time
+
+    from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+    from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
+    from tengri.inference.posterior import Posterior
+
+    logger = logging.getLogger(__name__)
+
+    if init_from is not None:
+        init_params = fitter._unbounded_from_posterior(init_from)
+    else:
+        init_params = fitter._initialize_unbounded(key)
+
+    log_prob_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
+        fitter,
+        init_params,
+    )
+
+    def log_prob_flat(pos):
+        return log_prob_flat_2arg(pos, data_args)
+
+    D = len(init_flat)
+
+    if step_size is None:
+        # Behroozi (2025) recommends 0.03 * sqrt(D), but for
+        # stochastic SFH models the psd_xi variables create a
+        # tighter curvature. Use a smaller default for D > 10.
+        if D <= 10:
+            step_size = 0.03 * jnp.sqrt(float(D))
+        else:
+            step_size = 0.01
+
+    total_steps = n_burnin + n_steps
+
+    if verbose:
+        logger.info(
+            "Ray Tracing: %d params, %d burn-in + %d samples, %d leapfrog/step, step_size=%.4f",
+            D, n_burnin, n_steps, n_leapfrog_steps, float(step_size)
+        )
+
+    t0 = time.time()
+
+    key, sample_key = jax.random.split(key)
+    chain, log_likelihood, accept_prob = sample_raytrace(
+        key=sample_key,
+        params_init=init_flat,
+        log_prob_fn=log_prob_flat,
+        n_steps=total_steps,
+        n_leapfrog_steps=n_leapfrog_steps,
+        step_size=float(step_size),
+        refresh_rate=float(refresh_rate),
+        metro_check=1,
+        sample_hmc=False,
+    )
+
+    wall_time = time.time() - t0
+
+    # Discard burn-in
+    chain = chain[n_burnin:]
+    log_likelihood = log_likelihood[n_burnin:]
+    accept_prob_post = accept_prob[n_burnin:]
+    n_samples_out = chain.shape[0]
+
+    mean_accept = float(jnp.mean(accept_prob))
+    mean_accept_post = float(jnp.mean(accept_prob_post))
+
+    samples_phys = _vmap_samples_to_physical(chain, unravel_fn, fitter._to_physical)
+    best_params = _mean_params(samples_phys)
+
+    if verbose:
+        logger.info(
+            "  Ray Tracing complete in %.1fs. Acceptance: %.1f%% (overall), "
+            "%.1f%% (post burn-in). Samples: %d",
+            wall_time, mean_accept * 100, mean_accept_post * 100, n_samples_out
+        )
+
+    return Posterior(
+        samples=samples_phys,
+        params=best_params,
+        method="Ray Tracing (Behroozi 2025)",
+        wall_time_s=wall_time,
+        diagnostics={
+            "n_burnin": n_burnin,
+            "n_steps": n_steps,
+            "n_samples": n_samples_out,
+            "n_leapfrog_steps": n_leapfrog_steps,
+            "step_size": float(step_size),
+            "refresh_rate": float(refresh_rate),
+            "accept_rate": mean_accept,
+            "accept_rate_post_burnin": mean_accept_post,
+        },
+        loss_history=None,
+        _model=fitter.model,
+    )

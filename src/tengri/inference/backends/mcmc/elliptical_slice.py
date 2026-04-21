@@ -154,3 +154,27 @@ def run_elliptical_slice(
         loss_history=None,
         _model=model,
     )
+
+
+def run_elliptical_slice_fitter(fitter, *, key, init_from=None, **kwargs):
+    """Fitter wrapper for Elliptical Slice Sampling.
+
+    Bridges the fitter interface to the low-level ESS sampler.
+    """
+    loglik_unbounded_fn = fitter._build_loglikelihood_unbounded_fn()
+    data_args = fitter._data_args
+
+    if init_from is not None:
+        init_params = fitter._unbounded_from_posterior(init_from)
+    else:
+        init_params = fitter._initialize_unbounded(key)
+
+    return run_elliptical_slice(
+        key=key,
+        loglikelihood_unbounded_fn=loglik_unbounded_fn,
+        data_args=data_args,
+        init_params=init_params,
+        to_physical_fn=fitter._to_physical,
+        model=fitter.model,
+        **kwargs,
+    )
