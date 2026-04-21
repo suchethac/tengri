@@ -122,11 +122,13 @@ def build_kernel(
     """
 
     def constrained_mcmc_slice_fn(rng_key, state, loglikelihood_0, **params):
+        """Single slice sampling step respecting the NS likelihood constraint."""
         data_args = params.pop("data_args", None)
         rng_key, prop_key = jax.random.split(rng_key, 2)
         d = generate_slice_direction_fn(prop_key, state.position, **params)
 
         def slice_fn(t) -> tuple[NSState, bool]:
+            """Evaluate state at parameter t along the slice direction."""
             x, step_accepted = stepper_fn(state.position, d, t)
             new_state = init_state_fn(x, loglikelihood_birth=loglikelihood_0, data_args=data_args)
             in_contour = new_state.loglikelihood > loglikelihood_0
@@ -232,6 +234,7 @@ def as_top_level_api(
     )
 
     def init_fn(position, data_args=None, rng_key=None):
+        """Initialize NSS state from initial positions (optional data for compile-once mode)."""
         if data_args is not None:
             _init_fn = jax.vmap(partial(init_state_fn, data_args=data_args))
         else:
@@ -248,6 +251,7 @@ def as_top_level_api(
         return state
 
     def step_fn(rng_key, state):
+        """Execute one NSS iteration: delete, resample via HRSS, update covariance."""
         return kernel(rng_key, state)
 
     return SamplingAlgorithm(init_fn, step_fn)

@@ -39,14 +39,50 @@ def particles_as_rows(particles):
 
 
 def particles_stds(particles):
+    """Compute standard deviation along each dimension of particles.
+
+    Parameters
+    ----------
+    particles
+        PyTree of particles (leading axis is the particle ensemble).
+
+    Returns
+    -------
+    ndarray, shape (n_dims,)
+        Standard deviation per dimension.
+    """
     return jnp.std(particles_as_rows(particles), axis=0)
 
 
 def particles_means(particles):
+    """Compute mean along each dimension of particles.
+
+    Parameters
+    ----------
+    particles
+        PyTree of particles (leading axis is the particle ensemble).
+
+    Returns
+    -------
+    ndarray, shape (n_dims,)
+        Mean per dimension.
+    """
     return jnp.mean(particles_as_rows(particles), axis=0)
 
 
 def particles_covariance_matrix(particles):
+    """Compute empirical covariance matrix from particle ensemble.
+
+    Parameters
+    ----------
+    particles
+        PyTree of particles (leading axis is the particle ensemble).
+
+    Returns
+    -------
+    ndarray, shape (n_dims, n_dims)
+        Covariance matrix.
+    """
     return jnp.cov(particles_as_rows(particles), ddof=0, rowvar=False)
 
 

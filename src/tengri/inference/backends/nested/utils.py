@@ -249,6 +249,7 @@ def uniform_prior(
     """
 
     def logprior_fn(params):
+        """Compute log prior density over uniform bounds."""
         logprior = 0.0
         for p, (a, b) in bounds.items():
             x = params[p]
@@ -256,6 +257,7 @@ def uniform_prior(
         return logprior
 
     def prior_sample(rng_key):
+        """Sample parameters uniformly from bounds."""
         init_keys = jax.random.split(rng_key, len(bounds))
         params = {}
         for rng_key, (p, (a, b)) in zip(init_keys, bounds.items()):

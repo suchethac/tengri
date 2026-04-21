@@ -124,6 +124,7 @@ def build_loss_fn(forward_model, data, noise, prior_config=None, data_type="phot
     }
 
     def loss(params_unbounded):
+        """Compute loss: chi2 + prior penalty on standardized parameters."""
         # Transform unbounded -> bounded for physical params
         params = {"xi": params_unbounded["xi"]}
         for key, (lo, hi) in bounds.items():

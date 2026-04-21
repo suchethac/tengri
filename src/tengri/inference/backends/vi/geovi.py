@@ -107,12 +107,14 @@ def fit_geovi(
     }
 
     def _build_params(primals):
+        """Transform latent unbounded params to bounded physical space via sigmoid."""
         params = {"xi": primals["xi"]}
         for param_key, (lo, hi) in bounds.items():
             params[param_key] = to_bounded(primals[param_key], lo, hi)
         return params
 
     def _predict(params):
+        """Forward model prediction: invoke correct method (photometry, spectrum, or joint)."""
         if data_type == "photometry":
             return forward_model.predict_photometry(params, mode="_traceable")
         elif data_type == "spectroscopy":

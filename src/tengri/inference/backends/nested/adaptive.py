@@ -128,6 +128,7 @@ def build_kernel(
     """
 
     def kernel(rng_key: PRNGKey, state: AdaptiveNSState) -> tuple[AdaptiveNSState, NSInfo]:
+        """Execute one adaptive NS step: delete, propose, update params, integrate evidence."""
         adapted_kernel = base_build_kernel(
             delete_fn,
             partial(inner_kernel, **state.inner_kernel_params),

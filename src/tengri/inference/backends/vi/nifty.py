@@ -164,6 +164,7 @@ def g_inverse(eta, transform, max_newton=5, cg_maxiter=30):
     xi = transform.m_star + eta
 
     def newton_body(carry):
+        """Execute one Newton-CG iteration to solve g(ξ) = η."""
         xi_cur, i = carry
         residual = g_forward(xi_cur, transform) - eta
         # Solve M(ξ) @ delta = -residual via CG
@@ -176,6 +177,7 @@ def g_inverse(eta, transform, max_newton=5, cg_maxiter=30):
         return (xi_cur + delta, i + 1)
 
     def newton_cond(carry):
+        """Continue Newton iteration if max iterations not reached."""
         _, i = carry
         return i < max_newton
 
@@ -212,6 +214,7 @@ def build_log_density(transform, frozen_jacobian=True):
 
     # Full log-det via Hutchinson trace estimation
     def log_density_with_logdet(eta):
+        """Compute log density with full log-det Jacobian correction (expensive)."""
         xi = g_inverse(eta, transform)
         neg_H = -transform.hamiltonian(xi)
         # log|det ∂g⁻¹/∂η| = -log|det ∂g/∂ξ| at ξ = g⁻¹(η)
@@ -328,6 +331,7 @@ def run_geovi_nuts(
 
     @jax.jit
     def one_step(state, rng_key):
+        """Execute one NUTS step and return position + divergence info."""
         state, info = kernel(rng_key, state)
         return state, (state.position, info)
 

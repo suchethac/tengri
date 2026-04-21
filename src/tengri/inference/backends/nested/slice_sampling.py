@@ -136,6 +136,7 @@ def build_kernel(
         rng_key: PRNGKey,
         state: SliceState,
     ) -> tuple[SliceState, SliceInfo]:
+        """Execute slice sampling: vertical sample, then horizontal expansion/shrinking."""
         vs_key, hs_key = jax.random.split(rng_key)
         u = jax.random.uniform(vs_key)
         logslice = state.logdensity + jnp.log(u)
@@ -191,6 +192,7 @@ def horizontal_slice(
 
     # Expand
     def step_body_fun(carry):
+        """Expand interval in one direction: step and check acceptance."""
         i, s, t, _ = carry
         t += s
         _, is_accepted = slice_fn(t)
@@ -198,6 +200,7 @@ def horizontal_slice(
         return i, s, t, is_accepted
 
     def step_cond_fun(carry):
+        """Continue stepping if within bounds and point is outside slice."""
         i, _, _, is_accepted = carry
         return is_accepted & (i > 0)
 
@@ -206,6 +209,7 @@ def horizontal_slice(
 
     # Shrink
     def shrink_body_fun(carry):
+        """Shrink interval: sample uniformly, accept or update bounds."""
         n, rng_key, left, right, _state, is_accepted = carry
 
         rng_key, subkey = jax.random.split(rng_key)
@@ -220,6 +224,7 @@ def horizontal_slice(
         return n, rng_key, left, right, new_state, is_accepted
 
     def shrink_cond_fun(carry):
+        """Continue shrinking if proposal rejected and iteration limit not reached."""
         n, _, _, _, _, is_accepted = carry
         return ~is_accepted & (n < max_shrinkage)
 

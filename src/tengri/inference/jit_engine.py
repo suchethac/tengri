@@ -40,6 +40,7 @@ def _build_signal_response(fitter):
     stochastic = spec.stochastic
 
     def _primals_to_params(primals):
+        """Convert unbounded (standardized) primals dict to bounded physical params."""
         params = {}
         for name in free_names:
             dist = spec.get_distribution(name)
@@ -52,6 +53,7 @@ def _build_signal_response(fitter):
         return params
 
     def signal_response(primals):
+        """Compute predicted data from unbounded parameters."""
         params = _primals_to_params(primals)
         if data_type == "photometry":
             return model.predict_photometry(params, mode="_traceable")
@@ -195,9 +197,11 @@ def build_jit_engine(fitter, pos_dict):
     n_data = len(fitter.data)  # static shape — same for all galaxies with same obs
 
     def flatten(d):
+        """Flatten parameter dict to 1D vector."""
         return jnp.concatenate([jnp.atleast_1d(d[k]).ravel() for k in param_keys])
 
     def unflatten(x):
+        """Unflatten 1D vector to parameter dict."""
         d = {}
         for i_k, k in enumerate(param_keys):
             start, end, shape = slices[i_k]
@@ -217,6 +221,7 @@ def build_jit_engine(fitter, pos_dict):
             data = data_args["data"]
 
             def _snr(primals):
+                """Compute signal and noise response for variable-noise likelihood."""
                 return signal_noise_response(primals, data_args)
 
             return variable_noise_metric_vec(xi, v, _snr, data, unflatten, flatten)
@@ -274,9 +279,11 @@ def build_jit_engine(fitter, pos_dict):
         init = (x0, r, d, gamma, energy, init_info, jnp.int32(0))
 
         def cond(s):
+            """Continue CG loop if not converged."""
             return s[5] < -1
 
         def body(s):
+            """Execute one CG iteration."""
             pos, r, d, prev_gamma, prev_energy, info, i = s
             i = i + 1
 
@@ -349,6 +356,7 @@ def build_jit_engine(fitter, pos_dict):
         n_d = n_data  # static, captured at engine-build time
 
         def draw_one(subkey):
+            """Draw one posterior residual sample."""
             k1, k2 = jax.random.split(subkey)
             eta_pr = jax.random.normal(k1, shape=(d_total,))
             eta_lh = jax.random.normal(k2, shape=(n_d,))
@@ -366,6 +374,7 @@ def build_jit_engine(fitter, pos_dict):
         return jax.vmap(draw_one)(subkeys)
 
     def _draw_batch_fn(pos_f, k, data_args):
+        """Batch draw residuals for a single galaxy (before vmap)."""
         return draw_residuals(pos_f, k, data_args)
 
     draw_batch = jax.jit(jax.vmap(_draw_batch_fn, in_axes=(None, 0, None)))
@@ -433,6 +442,7 @@ def build_jit_engine(fitter, pos_dict):
         ncg_xtol = xtol * d_total  # NIFTy: xtol * size(x0)
 
         def gradnorm(v):
+            """Compute norm of gradient vector (L1 by default)."""
             if custom_gradnorm is not None:
                 return custom_gradnorm(v)
             return jnp.sum(jnp.abs(v))  # L1 norm (NIFTy default)
@@ -448,9 +458,11 @@ def build_jit_engine(fitter, pos_dict):
         )
 
         def ncg_cond(state):
+            """Continue Newton-CG if not converged."""
             return state[4] < -1
 
         def ncg_body(state):
+            """Execute one Newton-CG iteration with line search."""
             pos, energy, old_energy, g, status, i = state
             i = i + 1
 
@@ -494,9 +506,11 @@ def build_jit_engine(fitter, pos_dict):
             )
 
             def ls_cond(ls):
+                """Continue line search if not successful."""
                 return ls[0] < -1
 
             def ls_body(ls):
+                """Execute one line search step (successive halving)."""
                 (
                     ls_st,
                     ls_i,
@@ -607,6 +621,7 @@ def build_jit_engine(fitter, pos_dict):
         trafo_at_m = transformation_flat(m, data_args)
 
         def phi_vg(x):
+            """Compute phi value and natural gradient for nonlinear residual curving."""
             trafo_x = transformation_flat(x, data_args)
             delta_trafo = trafo_x - trafo_at_m
             g_x = (x - m) + left_sqrt_metric_flat(m, delta_trafo, data_args)
@@ -618,6 +633,7 @@ def build_jit_engine(fitter, pos_dict):
             return val, -ngrad
 
         def phi_metric(x, v):
+            """Compute phi metric-vector product for nonlinear curving."""
             tm = left_sqrt_metric_flat(m, right_sqrt_metric_flat(x, v, data_args), data_args) + v
             return (
                 left_sqrt_metric_flat(x, right_sqrt_metric_flat(m, tm, data_args), data_args) + tm
@@ -625,6 +641,7 @@ def build_jit_engine(fitter, pos_dict):
 
         # sampnorm (evi.py:178-181)
         def sampnorm(natgrad):
+            """Compute sample norm used in Newton-CG for residual curving."""
             fpp = right_sqrt_metric_flat(m, natgrad, data_args)
             return jnp.sqrt(jnp.dot(natgrad, natgrad) + jnp.dot(fpp, fpp))
 
@@ -651,6 +668,7 @@ def build_jit_engine(fitter, pos_dict):
 
         # Curve each residual and its mirror
         def curve_pair(r, subkey):
+            """Curve a linear residual and its mirror (both signs)."""
             r_pos = curve_residual(m, r, subkey, sign=1.0, data_args=data_args)
             r_neg = curve_residual(m, -r, subkey, sign=-1.0, data_args=data_args)
             return r_pos, r_neg
@@ -670,6 +688,7 @@ def build_jit_engine(fitter, pos_dict):
         r_neg = prev_residuals[n_half:]
 
         def recurve_pair(r_p, r_n, subkey):
+            """Re-curve a mirrored pair of residuals at new expansion point."""
             new_p = curve_residual(m, r_p, subkey, sign=1.0, data_args=data_args)
             new_n = curve_residual(m, r_n, subkey, sign=-1.0, data_args=data_args)
             return new_p, new_n
@@ -682,6 +701,7 @@ def build_jit_engine(fitter, pos_dict):
         """KL value and gradient averaged over samples."""
 
         def single_vg(r):
+            """Compute Hamiltonian value and gradient for one residual."""
             return H_vg(m + r, data_args)
 
         vals, grads = jax.vmap(single_vg)(residuals)
@@ -691,6 +711,7 @@ def build_jit_engine(fitter, pos_dict):
         """KL metric-vector product averaged over samples."""
 
         def single_met(r):
+            """Apply metric for one residual sample."""
             return metric_vec(m + r, v, data_args)
 
         return jnp.mean(jax.vmap(single_met)(residuals), axis=0)
@@ -707,9 +728,11 @@ def build_jit_engine(fitter, pos_dict):
 
         # Newton-CG KL minimization (same path as evi_step_full)
         def _evi_kl_vg(m_cur):
+            """Compute KL value and gradient at current point."""
             return kl_vg(m_cur, residuals, data_args)
 
         def _evi_kl_hessp(m_cur, v):
+            """Compute KL Hessian-vector product at current point."""
             return kl_metric(m_cur, residuals, v, data_args)
 
         m_opt, kl_val = _newton_cg_flat(
@@ -732,10 +755,12 @@ def build_jit_engine(fitter, pos_dict):
 
         # State: (m, prev_kl, iteration, converged)
         def cond_fn(state):
+            """Continue EVI if not converged and iterations remain."""
             _m, _prev_kl, i, converged = state
             return (~converged) & (i < n_iterations)
 
         def body_fn(state):
+            """Execute one EVI iteration."""
             m, prev_kl, i, converged = state
             subkey = jax.random.fold_in(key, i)
             m_new, kl_val = evi_step(m, subkey, n_samples, data_args)
@@ -770,19 +795,23 @@ def build_jit_engine(fitter, pos_dict):
         """Newton-CG KL minimization with constants mask."""
 
         def _masked_kl_vg(m_cur, res):
+            """Compute KL value and gradient with constants masked out."""
             val, grad = kl_vg(m_cur, res, data_args)
             grad = jnp.where(constants_mask, 0.0, grad)
             return val, grad
 
         def _masked_kl_metric(m_cur, res, v):
+            """Apply KL metric with constants masked out."""
             v_masked = jnp.where(constants_mask, 0.0, v)
             mv = kl_metric(m_cur, res, v_masked, data_args)
             return jnp.where(constants_mask, 0.0, mv)
 
         def _fun_and_grad(m_cur):
+            """Compute masked KL value and gradient."""
             return _masked_kl_vg(m_cur, residuals)
 
         def _hessp(m_cur, v):
+            """Apply masked KL Hessian-vector product."""
             return _masked_kl_metric(m_cur, residuals, v)
 
         return _newton_cg_flat(
@@ -847,9 +876,11 @@ def build_jit_engine(fitter, pos_dict):
             do_resample = (iteration == 0) | (iteration % _RESAMPLE_EVERY == 0)
 
             def _do_resample(_):
+                """Draw fresh nonlinear residuals."""
                 return draw_nonlinear_residuals(m, sample_keys, data_args)
 
             def _do_update(_):
+                """Re-curve existing residuals at new expansion point."""
                 return update_nonlinear_residuals(m, prev_residuals, prev_keys, data_args)
 
             residuals = jax.lax.cond(do_resample, _do_resample, _do_update, None)
@@ -893,10 +924,12 @@ def build_jit_engine(fitter, pos_dict):
 
         # State: (m, prev_kl, residuals, prev_keys, iter, converged)
         def cond_fn(state):
+            """Continue geoVI if not converged and iterations remain."""
             _m, _prev_kl, _res, _pk, i, converged = state
             return (~converged) & (i < n_iterations)
 
         def body_fn(state):
+            """Execute one geoVI iteration."""
             m, prev_kl, prev_res, prev_k, i, converged = state
             subkey = jax.random.fold_in(key, i)
             m_new, kl_val, new_res, new_k = evi_step_full(

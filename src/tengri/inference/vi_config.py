@@ -218,6 +218,7 @@ class OptimizationSchedule:
     description: str = ""
 
     def __call__(self, i: int) -> BlockStep:
+        """Get BlockStep configuration for iteration i."""
         return self.get_step(i)
 
     def sample_mode_at(self, i: int) -> str:
@@ -240,6 +241,7 @@ class OptimizationSchedule:
         """
 
         def _get_step(i: int) -> BlockStep:
+            """Resample at iteration 0 and every resample_every, update otherwise."""
             if i == 0 or i % resample_every == 0:
                 return BlockStep(sample_mode="nonlinear_resample", n_samples=n_samples)
             return BlockStep(sample_mode="nonlinear_update", n_samples=n_samples)
@@ -269,6 +271,7 @@ class OptimizationSchedule:
         """
 
         def _get_step(i: int) -> BlockStep:
+            """MGVI before transition, then geoVI with periodic resampling."""
             if i < transition:
                 return BlockStep(sample_mode="linear_resample", n_samples=n_samples)
             if i == transition or (i > transition and (i - transition) % resample_every == 0):
@@ -314,6 +317,7 @@ class OptimizationSchedule:
         n_blocks = len(blocks)
 
         def _get_step(i: int) -> BlockStep:
+            """Cycle through blocks, switching resample to update except at resample points."""
             block_idx = i % n_blocks
             block = blocks[block_idx]
             outer_iter = i // n_blocks
@@ -374,6 +378,7 @@ def evi_sample_mode(n_iterations: int, linear_fraction: float = 0.5):
     transition = int(n_iterations * linear_fraction)
 
     def _mode(i: int) -> str:
+        """Return sample mode: linear before transition, nonlinear after."""
         return "linear_resample" if i < transition else "nonlinear_resample"
 
     return _mode

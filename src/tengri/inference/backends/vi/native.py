@@ -231,6 +231,7 @@ def run_native_vi(
         if _use_geovi:
             # vmap over (init_pos, key), static (n_iterations, n_samples, kl_rtol, mode)
             def _run_single_geovi(pos, k):
+                """Run geoVI on a single initial position."""
                 return engine["run_evi_geovi"](
                     pos,
                     k,
@@ -245,6 +246,7 @@ def run_native_vi(
         else:
 
             def _run_single_evi(pos, k):
+                """Run EVI (linear VI) on a single initial position."""
                 return engine["run_evi"](
                     pos,
                     k,
@@ -262,6 +264,7 @@ def run_native_vi(
 
         # Batch Hamiltonian evaluation
         def _eval_hamiltonian(converged_flat):
+            """Compute log prior + log likelihood (Hamiltonian) at converged position."""
             phys = fitter._to_physical(unflatten(converged_flat))
             if fitter.data_type == "photometry":
                 pred = fitter.model.predict_photometry(phys)

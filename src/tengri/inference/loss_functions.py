@@ -104,26 +104,81 @@ def _calibration_log_likelihood(predicted, data, noise, wave_obs, n_poly, prior_
 
 
 def build_loss_fn(fitter, mode="_traceable"):
-    """Build a differentiable loss function.
+    """Build the information Hamiltonian (loss function) from Fitter state.
 
-    The loss function takes an unbounded parameter dict **and a
-    ``data_args`` dict** and returns a scalar: chi² + prior penalties.
-    Observed data are passed as explicit arguments (not captured in
-    the closure) so that the compiled XLA program can be reused across
-    galaxies sharing the same model structure.
+    Constructs a JAX-differentiable loss function encapsulating the likelihood
+    and isotropic Gaussian prior on standardized parameters. The loss function
+    takes unbounded parameters and observed data as separate arguments so the
+    compiled XLA program can be reused across galaxies with the same model
+    structure.
+
+    The Hamiltonian is:
+
+    .. math::
+
+        \\mathcal{H}(\\boldsymbol{\\xi} \\mid \\mathbf{d}) =
+        \\frac{1}{2}\\chi^2(\\mathbf{d}, \\mathbf{f}(\\mathbf{h}(\\boldsymbol{\\xi})))
+        + \\frac{1}{2}\\boldsymbol{\\xi}^\\top\\boldsymbol{\\xi}
+
+    where :math:`\\mathbf{h}(\\boldsymbol{\\xi})` are the per-parameter
+    transforms from standardized to physical space, and :math:`\\chi^2`
+    includes contributions from photometry, spectroscopy, emission lines,
+    calibration, and optional noise models.
 
     Parameters
     ----------
     fitter : Fitter
+        Fitter instance with model, data, parameters, and configuration.
+
     mode : str, optional
-        Forward model prediction mode. Default "_traceable" is safe inside
-        JIT scopes (used by NIFTy VI/geoVI). Use "auto" for better performance
-        with MAP, Laplace, Pathfinder, NUTS, Raytrace, NSS (~1.5x speedup).
+        Forward model prediction mode. Default ``"_traceable"`` is safe
+        inside JIT scopes (used by NIFTy geoVI). Use ``"auto"`` (~1.5×
+        speedup) for non-JIT methods (MAP, Laplace, Pathfinder, NUTS,
+        Ray Tracing, NSS). See
+        :doc:`docs/dev/jit-optimization-report-2026-04-18.md`.
 
     Returns
     -------
     callable
         ``loss_fn(params_unbounded, data_args) -> scalar``
+
+        Parameters:
+
+        - ``params_unbounded`` : dict — Standardized parameters ξ (any real values).
+        - ``data_args`` : dict — Observed data, noise, and noise models
+          from ``fitter._data_args``.
+
+        Returns scalar loss value suitable for optimization/sampling.
+
+    Notes
+    -----
+    **Standardized parameterization**: The returned loss function works in
+    standardized (unbounded) space where all parameters follow N(0,1) prior.
+    Physical bounds and distributions are handled via per-parameter transforms.
+    This ensures the prior always cancels to the isotropic quadratic term
+    :math:`\\frac{1}{2}\\boldsymbol{\\xi}^\\top\\boldsymbol{\\xi}` regardless
+    of prior type (Uniform, Gaussian, LogUniform, etc.).
+
+    **Likelihood variants**: Automatically branches based on Fitter config:
+
+    - Photometry: χ²(data, prediction)
+    - Spectroscopy with calibration marginalization: Integrated over polynomial
+    - Emission lines (marginalized): Integrated over line amplitudes
+    - Emission lines (fitted): Amplitudes are explicit parameters
+    - Joint photometry + spectroscopy: Separate χ² per component
+    - Noise models: Student-t or other likelihoods if configured
+
+    **Data as explicit arguments**: Observed data, noise, and noise models are
+    passed via ``data_args`` (not captured in closure). This allows multiple
+    Fitters on the same Model to share compiled XLA programs.
+
+    **JIT compatibility**: The returned function is fully JAX-compatible and
+    safe inside :func:`jax.jit`, :func:`jax.grad`, :func:`jax.value_and_grad`.
+
+    References
+    ----------
+    .. [1] Standardized parameterization derivation and Jacobian cancellation:
+       Section 2.2 and Appendix A of the tengri methods paper.
     """
     from tengri.observation.noise import (
         censored_log_likelihood,
@@ -169,6 +224,7 @@ def build_loss_fn(fitter, mode="_traceable"):
             n_phot = obs.n_data_phot
 
     def loss_fn(params_unbounded, data_args):
+        """Compute loss: likelihood + prior penalty on standardized params."""
         data = data_args["data"]
         noise = data_args["noise"]
 
@@ -405,19 +461,41 @@ def build_loss_fn(fitter, mode="_traceable"):
 
 
 def build_logprior_fn(fitter):
-    """Build a log-prior function in physical parameter space.
+    """Build log-prior function in physical parameter space.
 
-    Automatically uses vectorized computation when all free parameters
-    have Uniform distributions (~367× speedup for D=8 case).
+    Evaluates the joint prior density over all free parameters in their
+    physical (original) space. Automatically dispatches to vectorized
+    computation for all-Uniform priors (major speedup) or general loop
+    for mixed-type priors.
 
     Parameters
     ----------
     fitter : Fitter
+        Fitter instance with ``spec`` (Parameters) and ``_free_names``.
 
     Returns
     -------
     callable
         ``logprior_fn(free_params) -> scalar``
+
+        where ``free_params`` is a dict of physical parameter values.
+        Returns log-density (or ``-inf`` if outside bounds).
+
+    Notes
+    -----
+    **Vectorization optimization**: When all free parameters have Uniform
+    priors, uses JAX vectorized operations for ~367× speedup (D=8 case).
+    For mixed Uniform/Gaussian/LogUniform priors, falls back to scalar loop.
+
+    **Bounds handling**: Uniform priors return ``-inf`` if any parameter
+    falls outside bounds; all other distributions use their continuous
+    pdf/cdf definitions and can have finite density at boundaries.
+
+    Examples
+    --------
+    >>> fitter = Fitter(model, data, noise)
+    >>> logprior = build_logprior_fn(fitter)
+    >>> lp = logprior({"stellar_mass": 11.0, "age_gyr": 1.5})
     """
     from tengri.parameters.priors import Uniform
 
@@ -436,6 +514,7 @@ def build_logprior_fn(fitter):
         log_widths_sum = jnp.sum(jnp.log(widths))
 
         def logprior_fn(free_params):
+            """Fast vectorized log prior for Uniform case: -log(widths) if in bounds."""
             # Stack parameter values into array
             param_values = jnp.array([free_params[name] for name in free_names])
             # Vectorized bounds check
@@ -445,6 +524,7 @@ def build_logprior_fn(fitter):
     else:
         # General case: loop over distributions (mixed Uniform/Gaussian/etc)
         def logprior_fn(free_params):
+            """Sum log probabilities from each distribution (Uniform, Gaussian, etc)."""
             lp = 0.0
             for name in free_names:
                 dist = spec.get_distribution(name)
@@ -455,25 +535,56 @@ def build_logprior_fn(fitter):
 
 
 def build_loglikelihood_fn(fitter, mode="_traceable"):
-    """Build a log-likelihood function in physical parameter space.
+    """Build log-likelihood function in physical parameter space.
 
-    Returns a function: ``(dict of free params, data_args) → scalar``.
-    Fixed parameters are automatically merged.  Observed data are
-    passed via ``data_args`` (not captured in the closure) for cache
-    reuse across galaxies.
+    Constructs a JAX-differentiable function that computes the log-likelihood
+    of observed data given physical parameters. Fixed parameters are
+    automatically merged, and observed data are passed separately from the
+    closure to enable XLA compilation reuse across galaxies.
 
     Parameters
     ----------
     fitter : Fitter
+        Fitter instance with model, data, parameters, and likelihood config.
+
     mode : str, optional
-        Forward model prediction mode. Default "_traceable" is safe inside
-        JIT scopes (used by NIFTy VI/geoVI). Use "auto" for better performance
-        with MAP, Laplace, Pathfinder, NUTS, Raytrace, NSS (~1.5x speedup).
+        Forward model prediction mode. Default ``"_traceable"`` is safe
+        inside JIT (used by NIFTy geoVI). Use ``"auto"`` (~1.5× speedup)
+        for non-JIT methods (MAP, Laplace, Pathfinder, NUTS, Ray Tracing, NSS).
 
     Returns
     -------
     callable
         ``loglikelihood_fn(free_params, data_args) -> scalar``
+
+        where ``free_params`` is dict of physical parameters and ``data_args``
+        is the data argument bundle from ``fitter._data_args``.
+
+    Notes
+    -----
+    **Likelihood variants**: Automatically branches based on data_type and
+    Fitter config:
+
+    - **Photometry**: χ² = Σ(d_i - f_i)²/σ_i²
+    - **Spectroscopy with calibration**: Marginalizes Chebyshev poly
+    - **Emission lines (marginalized)**: Integrates line amplitudes analytically
+    - **Emission lines (fitted)**: Line amplitude parameters in χ²
+    - **Joint photometry + spectroscopy**: Separate χ² per component
+    - **Spectral covariance**: Uses precision matrix instead of diagonal noise
+    - **Noise models**: Student-t or other likelihoods if configured
+
+    **Data as explicit arguments**: Observed data, measurement uncertainties,
+    and noise models are passed via ``data_args`` (not captured in closure).
+    This allows multiple Fitters using the same Model to share compiled XLA
+    programs and run on different galaxies.
+
+    **JIT compatibility**: The returned function is fully JAX-compatible and
+    safe inside :func:`jax.jit`, :func:`jax.grad`, :func:`jax.value_and_grad`.
+
+    See Also
+    --------
+    build_loss_fn : Returns likelihood + isotropic prior (Hamiltonian).
+    build_logprior_fn : Returns only prior log-density.
     """
     from tengri.observation.noise import (
         get_noise_dof,
@@ -515,6 +626,7 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
             n_phot_ll = obs_ll.n_data_phot
 
     def loglikelihood_fn(free_params, data_args):
+        """Compute log likelihood: data probability given current parameter values (no prior)."""
         data = data_args["data"]
         noise = data_args["noise"]
 

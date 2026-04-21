@@ -73,6 +73,7 @@ def update_with_mcmc_take_last(
     """
 
     def update_function(rng_key, state, loglikelihood_0, **step_parameters):
+        """Generate replacement particles via MCMC: select survivors, run chains, take finals."""
         choice_key, sample_key = jax.random.split(rng_key)
         particles = state.particles
 
@@ -95,9 +96,11 @@ def update_with_mcmc_take_last(
         )
 
         def mcmc_kernel(rng_key, state):
+            """Run num_mcmc_steps MCMC updates on a single particle."""
             keys = jax.random.split(rng_key, num_mcmc_steps)
 
             def body_fn(state, rng_key):
+                """Execute one MCMC step."""
                 new_state, info = shared_mcmc_step_fn(rng_key, state)
                 return new_state, info
 

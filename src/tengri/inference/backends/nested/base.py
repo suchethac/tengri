@@ -158,6 +158,7 @@ def build_kernel(
     """
 
     def kernel(rng_key: PRNGKey, state: NSState) -> tuple[NSState, NSInfo]:
+        """Execute one NS step: delete worst particle, propose replacement, record dead."""
         # Delete and grab dead information
         dead_idx, target_update_idx = delete_fn(state)
         dead_particles = jax.tree.map(lambda x: x[dead_idx], state.particles)
