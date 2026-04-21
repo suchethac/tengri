@@ -21,6 +21,7 @@ jax.config.update("jax_platforms", "cpu")
 
 from tengri import Fitter, Observation, Parameters, Photometry, SEDModel
 from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.inference._model_cache import get_model_cache
 from tengri.inference.backends import run_map, run_nuts
 from tengri.observation.filters import load_filter_set
 from tengri.parameters.priors import Fixed, Uniform
@@ -364,9 +365,11 @@ def test_cache_key_isolation(ssp_data, mock_observation, mock_flux):
     cache_key_traceable = (fitter._engine_cache_key(), "_traceable")
     cache_key_auto = (fitter._engine_cache_key(), "auto")
 
-    assert hasattr(model, "_loss_fn_cache"), "Cache should exist"
-    assert cache_key_traceable in model._loss_fn_cache, "Traceable cache entry missing"
-    assert cache_key_auto in model._loss_fn_cache, "Auto cache entry missing"
+    model_cache = get_model_cache(model)
+    loss_cache = model_cache.get("loss_fn", {})
+    assert loss_cache, "Cache should exist and be non-empty"
+    assert cache_key_traceable in loss_cache, "Traceable cache entry missing"
+    assert cache_key_auto in loss_cache, "Auto cache entry missing"
 
     # Verify cache keys are tuples with mode as second element
     assert isinstance(cache_key_traceable, tuple), "Cache key should be tuple"
