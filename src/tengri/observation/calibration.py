@@ -73,6 +73,7 @@ def chebyshev_basis(
 
     # Build basis via scan over the recurrence
     def _step(carry, _k):
+        """Execute one step of the Chebyshev recurrence relation."""
         t_prev, t_curr = carry
         t_next = 2.0 * x * t_curr - t_prev
         return (t_curr, t_next), t_next
@@ -131,6 +132,7 @@ def calibration_polynomial(
     # (The k=0 step uses x, not 2x, because T_0 = 1.)
 
     def _clenshaw_step(carry, c_k):
+        """Execute one step of Clenshaw's backward recurrence for Chebyshev evaluation."""
         b_kp1, b_kp2 = carry
         b_k = c_k + 2.0 * x * b_kp1 - b_kp2
         return (b_k, b_kp1), None
@@ -218,6 +220,7 @@ def marginalize_calibration(
     # Build Chebyshev basis T_1(x) ... T_{n_poly}(x) via recurrence
     # T_0 = 1, T_1 = x, T_{k+1} = 2x T_k - T_{k-1}
     def _cheb_step(carry, _k):
+        """Execute one step of the Chebyshev recurrence to build basis functions."""
         t_prev, t_curr = carry
         t_next = 2.0 * x * t_curr - t_prev
         return (t_curr, t_next), t_next

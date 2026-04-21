@@ -262,10 +262,12 @@ class SpectralIndexData:
 
     @property
     def n_indices(self) -> int:
+        """Number of spectral indices."""
         return len(self.index_defs)
 
     @property
     def names(self) -> tuple[str, ...]:
+        """Tuple of spectral index names."""
         return tuple(d.name for d in self.index_defs)
 
     @property
@@ -344,4 +346,5 @@ class SpectralIndexData:
         return jnp.sum(-0.5 * residual**2 - jnp.log(self.errors) - 0.5 * jnp.log(2.0 * jnp.pi))
 
     def summary(self) -> str:
+        """Return a human-readable summary of the spectral indices."""
         return f"{self.n_indices} indices ({', '.join(self.names)})"

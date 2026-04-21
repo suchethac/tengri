@@ -140,10 +140,12 @@ class Catalog:
 
     @property
     def n_galaxies(self) -> int:
+        """Number of galaxies in the catalog."""
         return self.flux.shape[0]
 
     @property
     def n_filters(self) -> int:
+        """Number of filters (photometric bands)."""
         return self.flux.shape[1]
 
     def __repr__(self) -> str:

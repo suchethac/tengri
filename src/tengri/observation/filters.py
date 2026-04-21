@@ -502,11 +502,13 @@ def _svo_id_to_filename(svo_id: str) -> str:
 
 
 def _save_filter(filepath: Path, wave: np.ndarray, trans: np.ndarray) -> None:
+    """Write wavelength and transmission columns to a two-column text file."""
     header = "# Wavelength(Angstrom)  Transmission"
     np.savetxt(str(filepath), np.column_stack([wave, trans]), header=header, fmt="%.6e")
 
 
 def _load_filter_file(filepath: Path) -> tuple[np.ndarray, np.ndarray]:
+    """Read and return wavelength and transmission columns from a text file."""
     data = np.loadtxt(str(filepath))
     if data.ndim != 2 or data.shape[1] < 2:
         raise ValueError(
@@ -806,6 +808,7 @@ def list_available_filters(
 
 
 def _print_flat_listing(compute_properties: bool, cache_dir: str | None) -> None:
+    """Print filter registry as a flat (non-grouped) alphabetical list."""
     if compute_properties:
         hdr = f"{'Name':<22s} {'SVO ID':<35s} {'lambda_eff':>12s} {'FWHM':>10s}"
         print(hdr)
@@ -827,6 +830,7 @@ def _print_flat_listing(compute_properties: bool, cache_dir: str | None) -> None
 
 
 def _print_grouped_listing(compute_properties: bool, cache_dir: str | None) -> None:
+    """Print filter registry grouped by facility/telescope."""
     groups: dict[str, list[str]] = {}
     for name in sorted(FILTER_REGISTRY):
         fac = _infer_facility(name)
