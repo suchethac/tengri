@@ -380,7 +380,7 @@ def precompute_for_model(
         filter_waves=filter_waves,
         filter_trans=filter_trans,
         axes=axes,
-        redshift=0.0 if model_name != "dale2014" else 0.0,  # both use rest-frame templates
+        redshift=0.0,  # both use rest-frame templates
         dl_cm=1.0,
         energy_normalize=True,
         units=units,

@@ -102,9 +102,7 @@ def log_det_jacobian_to_bounded(u_param: jnp.ndarray, lo: float, hi: float) -> j
                     = log(hi - lo) + u - 2*softplus(u)
     """
     width = hi - lo
-    sig_u = jax.nn.sigmoid(u_param)
     # log(sig * (1 - sig)) = log(sig) + log(1 - sig)
-    #                       = log(sig) + log(1 - sig)
     # Numerically stable:
     # log(sigmoid(u)) = -softplus(-u)
     # log(1 - sigmoid(u)) = -softplus(u)

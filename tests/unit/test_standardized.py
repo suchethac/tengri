@@ -388,7 +388,7 @@ class TestBuildHierarchicalLoss:
         model.predict_photometry.return_value = jnp.ones(5) * 1e-18
 
         galaxies = self._make_galaxies(n_gal=2)
-        loss_fn, unravel_fn = build_hierarchical_loss(smodel, galaxies)
+        loss_fn, _unravel_fn = build_hierarchical_loss(smodel, galaxies)
 
         # PSD sigma and tau are shared — the loss should have fewer params
         # than n_gal * n_latent

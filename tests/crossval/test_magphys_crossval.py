@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Cross-validation tests for MAGPHYS dust emission against literature values.
 
 Tests verify:
@@ -11,6 +12,8 @@ Run with: pytest -m crossval tests/crossval/test_magphys_crossval.py
 NOTE: magphys_dc08 and related functions not currently implemented. Module skipped.
 """
 
+import jax
+import jax.numpy as jnp
 import pytest
 
 pytest.skip("magphys_dc08 not implemented", allow_module_level=True)

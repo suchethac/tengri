@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Unit tests for the MAGPHYS 4-component dust emission model (da Cunha+2008).
 
 Tests cover shape, non-negativity, PAH feature visibility, MBB peak
@@ -6,6 +7,7 @@ locations, energy conservation, JIT compatibility, and differentiability.
 NOTE: magphys_dc08 not currently implemented. Module skipped.
 """
 
+import jax.numpy as jnp
 import pytest
 
 pytest.skip("magphys_dc08 not implemented", allow_module_level=True)

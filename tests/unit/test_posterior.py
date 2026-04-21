@@ -226,7 +226,7 @@ class TestBPT:
         assert jnp.all(jnp.isfinite(y))
 
     def test_negative_flux_gives_nan(self, negative_flux_eline_posterior):
-        x, y = negative_flux_eline_posterior.bpt_nii()
+        x, _y = negative_flux_eline_posterior.bpt_nii()
         # NII_6584 < 0 → log_nii_ha = NaN
         assert jnp.isnan(x)
 
