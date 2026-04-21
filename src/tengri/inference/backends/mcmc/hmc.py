@@ -93,6 +93,7 @@ def run_hmc(
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     def ld_1arg(pos):
+        """Closure binding log-posterior with data arguments for adaptation."""
         return log_posterior_flat_2arg(pos, data_args)
 
     if cached is not None:

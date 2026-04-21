@@ -45,6 +45,22 @@ __all__ = ["sample_hamiltonian", "sample_raytrace"]
 
 
 def random_split_like_tree(rng_key, target=None, treedef=None):
+    """Split a random key into a tree of keys with the same structure as target.
+
+    Parameters
+    ----------
+    rng_key : PRNGKey
+        Random key to split.
+    target : pytree, optional
+        Reference pytree to match structure. Required if treedef is None.
+    treedef : PyTreeDef, optional
+        Pre-computed tree definition. If None, inferred from target.
+
+    Returns
+    -------
+    pytree of PRNGKeys
+        Random keys arranged in the same tree structure as target.
+    """
     if treedef is None:
         treedef = jax.tree_util.tree_structure(target)
     keys = jax.random.split(rng_key, treedef.num_leaves)
@@ -52,6 +68,24 @@ def random_split_like_tree(rng_key, target=None, treedef=None):
 
 
 def normal_like_tree(rng_key, target, mean=0, std=1):
+    """Generate normal random samples matching the structure of target pytree.
+
+    Parameters
+    ----------
+    rng_key : PRNGKey
+        Random key.
+    target : pytree
+        Reference pytree structure and dtypes.
+    mean : float
+        Mean of normal distribution. [dimensionless]
+    std : float
+        Standard deviation of normal distribution. [dimensionless]
+
+    Returns
+    -------
+    pytree
+        Normal random samples with same structure as target.
+    """
     keys_tree = random_split_like_tree(rng_key, target)
     return tree_map(
         lambda l, k: mean + std * jax.random.normal(k, l.shape, l.dtype),
@@ -61,10 +95,46 @@ def normal_like_tree(rng_key, target, mean=0, std=1):
 
 
 def ifelse(cond, val_true, val_false):
+    """Conditional selection using JAX control flow (JIT-safe).
+
+    Parameters
+    ----------
+    cond : bool or traced bool
+        Condition to evaluate.
+    val_true : any
+        Value if cond is True.
+    val_false : any
+        Value if cond is False.
+
+    Returns
+    -------
+    any
+        val_true if cond else val_false.
+    """
     return jax.lax.cond(cond, lambda x: x[0], lambda x: x[1], (val_true, val_false))
 
 
 def ScatterV(momentum, refresh_rate, dt, key):
+    """Apply partial momentum refresh via exponential mixing with noise.
+
+    Implements momentum refreshment: p_new = exp(-rate*dt)*p_old + sqrt(1-exp(-2*rate*dt))*noise.
+
+    Parameters
+    ----------
+    momentum : pytree
+        Current momentum vector(s).
+    refresh_rate : float
+        Refresh rate parameter (1/correlation time). [1/time]
+    dt : float
+        Time step. [time]
+    key : PRNGKey
+        Random key for noise generation.
+
+    Returns
+    -------
+    tuple
+        (refreshed_momentum, new_key).
+    """
     key, normal_key = jax.random.split(key, 2)
     f = jnp.exp(-jnp.abs(refresh_rate * dt))
     fn = jnp.sqrt(1.0 - f * f)
@@ -77,10 +147,34 @@ def ScatterV(momentum, refresh_rate, dt, key):
 
 
 def hmc_leapfrog_refresh(params, momentum, log_prob_fn, step_size, n_steps, refresh_rate, key):
-    """HMC leapfrog with partial momentum refresh."""
+    """HMC leapfrog integration with partial momentum refresh.
+
+    Parameters
+    ----------
+    params : pytree
+        Current parameter values.
+    momentum : pytree
+        Current momentum (velocity).
+    log_prob_fn : callable
+        Log-probability function mapping params → scalar.
+    step_size : float
+        Leapfrog step size. [time]
+    n_steps : int
+        Number of leapfrog steps.
+    refresh_rate : float
+        Momentum refresh rate. [1/time]
+    key : PRNGKey
+        Random key.
+
+    Returns
+    -------
+    tuple
+        (new_params, new_momentum, kinetic_energy_diff, new_key).
+    """
     kinetic_energy_diff = 0
 
     def step(i, args):
+        """Execute one DKD leapfrog step with momentum refresh."""
         params, momentum, kinetic_energy_diff, key = args
         momentum, key = ScatterV(momentum, refresh_rate, step_size / 2.0, key)
         params = tree_map(lambda p, m: p + 0.5 * m * step_size, params, momentum)
@@ -102,10 +196,34 @@ def hmc_leapfrog_refresh(params, momentum, log_prob_fn, step_size, n_steps, refr
 
 
 def hmc_leapfrog_norefresh(params, momentum, log_prob_fn, step_size, n_steps, refresh_rate, key):
-    """HMC leapfrog without momentum refresh."""
+    """HMC leapfrog integration without momentum refresh.
+
+    Parameters
+    ----------
+    params : pytree
+        Current parameter values.
+    momentum : pytree
+        Current momentum (velocity).
+    log_prob_fn : callable
+        Log-probability function mapping params → scalar.
+    step_size : float
+        Leapfrog step size. [time]
+    n_steps : int
+        Number of leapfrog steps.
+    refresh_rate : float
+        Unused (included for API consistency).
+    key : PRNGKey
+        Random key.
+
+    Returns
+    -------
+    tuple
+        (new_params, new_momentum, kinetic_energy_diff, new_key).
+    """
     momentum_dot = tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(momentum)))
 
     def step(i, args):
+        """Execute one DKD leapfrog step without momentum refresh."""
         params, momentum = args
         params = tree_map(lambda p, m: p + 0.5 * m * step_size, params, momentum)
         grad = jax.grad(log_prob_fn)(params)
@@ -161,6 +279,7 @@ def UpdateV(momentum, grad, D, step_size):
     zero_result = (momentum, zero, norm_v, norm_g, zero, zero, jnp.ones_like(zero), zero)
 
     def _refract(_):
+        """Apply Snell's law refraction to velocity in likelihood space."""
         unit_v = tree_map(lambda m, n: m / n, momentum, norm_v)
         unit_g = tree_map(lambda g, n: g / n, grad, norm_g)
 
@@ -211,10 +330,34 @@ def UpdateV(momentum, grad, D, step_size):
 def raytracer_leapfrog_refresh(
     params, momentum, log_prob_fn, step_size, n_steps, refresh_rate, key
 ):
-    """Ray tracing DKD leapfrog with partial momentum refresh."""
+    """Ray tracing DKD leapfrog integration with partial momentum refresh.
+
+    Parameters
+    ----------
+    params : pytree
+        Current parameter values.
+    momentum : pytree
+        Current momentum (velocity).
+    log_prob_fn : callable
+        Log-probability function mapping params → scalar.
+    step_size : float
+        Leapfrog step size. [time]
+    n_steps : int
+        Number of leapfrog steps.
+    refresh_rate : float
+        Momentum refresh rate. [1/time]
+    key : PRNGKey
+        Random key.
+
+    Returns
+    -------
+    tuple
+        (new_params, new_momentum, log_likelihood_change, new_key).
+    """
     ln_L = 0
 
     def step(i, args):
+        """Execute one DKD ray-traced leapfrog step with momentum refresh."""
         params, momentum, ln_L, key = args
         momentum, key = ScatterV(momentum, refresh_rate, step_size / 2.0, key)
         params = tree_map(lambda p, m: p + 0.5 * m * step_size, params, momentum)
@@ -234,10 +377,34 @@ def raytracer_leapfrog_refresh(
 def raytracer_leapfrog_norefresh(
     params, momentum, log_prob_fn, step_size, n_steps, refresh_rate, key
 ):
-    """Ray tracing DKD leapfrog without momentum refresh."""
+    """Ray tracing DKD leapfrog integration without momentum refresh.
+
+    Parameters
+    ----------
+    params : pytree
+        Current parameter values.
+    momentum : pytree
+        Current momentum (velocity).
+    log_prob_fn : callable
+        Log-probability function mapping params → scalar.
+    step_size : float
+        Leapfrog step size. [time]
+    n_steps : int
+        Number of leapfrog steps.
+    refresh_rate : float
+        Unused (included for API consistency).
+    key : PRNGKey
+        Random key.
+
+    Returns
+    -------
+    tuple
+        (new_params, new_momentum, log_likelihood_change, new_key).
+    """
     ln_L = 0
 
     def step(i, args):
+        """Execute one DKD ray-traced leapfrog step without momentum refresh."""
         params, momentum, ln_L = args
         params = tree_map(lambda p, m: p + 0.5 * m * step_size, params, momentum)
         grad = jax.grad(log_prob_fn)(params)
@@ -256,16 +423,39 @@ def raytracer_leapfrog_norefresh(
 
 
 def raytracer_kdk_norefresh(params, momentum, log_prob_fn, step_size, n_steps, refresh_rate, key):
-    """Ray tracing KDK leapfrog without momentum refresh.
+    """Ray tracing KDK leapfrog integration without momentum refresh.
 
     KDK: Kick(dt/2) at position → Drift(dt) → Kick(dt/2) at new position.
     Both DKD and KDK are second-order palindromic integrators with valid
     radiance tracking. The half-kicks use δ = dt/2 in the Snell's law formula.
+
+    Parameters
+    ----------
+    params : pytree
+        Current parameter values.
+    momentum : pytree
+        Current momentum (velocity).
+    log_prob_fn : callable
+        Log-probability function mapping params → scalar.
+    step_size : float
+        Full step size (half-steps are dt/2). [time]
+    n_steps : int
+        Number of KDK steps.
+    refresh_rate : float
+        Unused (included for API consistency).
+    key : PRNGKey
+        Random key.
+
+    Returns
+    -------
+    tuple
+        (new_params, new_momentum, log_likelihood_change, new_key).
     """
     ln_L = 0
     half_dt = step_size * 0.5
 
     def step(i, args):
+        """Execute one KDK ray-traced leapfrog step (half-kick, drift, half-kick)."""
         params, momentum, ln_L = args
         # Half kick at current position
         grad = jax.grad(log_prob_fn)(params)
@@ -286,10 +476,34 @@ def raytracer_kdk_norefresh(params, momentum, log_prob_fn, step_size, n_steps, r
 
 
 def hmc_kdk_norefresh(params, momentum, log_prob_fn, step_size, n_steps, refresh_rate, key):
-    """HMC KDK leapfrog without momentum refresh."""
+    """HMC KDK leapfrog integration without momentum refresh.
+
+    Parameters
+    ----------
+    params : pytree
+        Current parameter values.
+    momentum : pytree
+        Current momentum (velocity).
+    log_prob_fn : callable
+        Log-probability function mapping params → scalar.
+    step_size : float
+        Full step size (half-steps are dt/2). [time]
+    n_steps : int
+        Number of KDK steps.
+    refresh_rate : float
+        Unused (included for API consistency).
+    key : PRNGKey
+        Random key.
+
+    Returns
+    -------
+    tuple
+        (new_params, new_momentum, kinetic_energy_diff, new_key).
+    """
     momentum_dot = tree_reduce(op.add, tree_map(lambda x: (x**2).sum(), tree_leaves(momentum)))
 
     def step(i, args):
+        """Execute one KDK HMC leapfrog step (half-kick, drift, half-kick)."""
         params, momentum = args
         # Half kick
         grad = jax.grad(log_prob_fn)(params)
@@ -324,7 +538,34 @@ def sample_hamiltonian(
     metro_check=1,
     sample_hmc=True,
 ):
-    """HMC sampling (convenience wrapper around sample_raytrace)."""
+    """HMC sampling via sample_raytrace (convenience wrapper).
+
+    Parameters
+    ----------
+    key : PRNGKey
+        Random key.
+    params_init : array, shape (D,)
+        Initial parameters (flat).
+    log_prob_fn : callable
+        Log-probability function.
+    n_steps : int
+        Number of MCMC steps.
+    n_leapfrog_steps : int
+        Leapfrog steps per trajectory.
+    step_size : float
+        Integration step size. [time]
+    refresh_rate : float
+        Momentum refresh rate. Default 0 (no refresh). [1/time]
+    metro_check : int
+        1 = apply Metropolis correction, 0 = skip.
+    sample_hmc : bool
+        Always True for this function (use HMC, not ray tracing).
+
+    Returns
+    -------
+    tuple
+        (chain, log_likelihood, accept_prob) — see sample_raytrace.
+    """
     return sample_raytrace(
         key,
         params_init,
@@ -415,6 +656,20 @@ def sample_raytrace(
     init_lnl = log_prob_fn(params_init)
 
     def ray_step_fn(carry, x):
+        """Execute one ray tracing MCMC step with Metropolis acceptance.
+
+        Parameters
+        ----------
+        carry : tuple
+            (params, key, old_lnl) state.
+        x : None
+            Unused (scan compatibility).
+
+        Returns
+        -------
+        tuple
+            Updated carry and (params, accept_prob, log_likelihood) output.
+        """
         params, key, old_lnl = carry
         key, normal_key, uniform_key = jax.random.split(key, 3)
 

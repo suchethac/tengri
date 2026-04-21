@@ -28,6 +28,7 @@ def _vmap_samples_to_physical(
     """Convert a batch of flat unbounded samples to physical parameter dicts."""
 
     def _convert_one(flat_pos: Array) -> dict[str, Array]:
+        """Convert single flat unbounded sample to physical parameter dict."""
         return to_physical_fn(unravel_fn(flat_pos))
 
     return jax.vmap(_convert_one)(samples)

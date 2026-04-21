@@ -164,6 +164,7 @@ def run_nuts(
         parameters = cached
 
         def ld_1arg(pos):
+            """Closure binding log-posterior with data arguments for initialization."""
             return log_posterior_flat_2arg(pos, data_args)
 
         state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
@@ -177,6 +178,7 @@ def run_nuts(
         key, warmup_key = jax.random.split(key)
 
         def ld_1arg(pos):
+            """Closure binding log-posterior with data arguments for warmup."""
             return log_posterior_flat_2arg(pos, data_args)
 
         warmup = blackjax.window_adaptation(

@@ -89,6 +89,7 @@ def run_elliptical_slice(
 
     # Log-likelihood in flat space (no prior — ESS handles N(0,I) internally)
     def loglik_flat(position):
+        """Evaluate log-likelihood in flat parameter space."""
         return loglikelihood_unbounded_fn(unravel_fn(position), data_args)
 
     # Build ESS kernel with N(0, I) prior
@@ -101,6 +102,7 @@ def run_elliptical_slice(
 
     @jax.jit
     def one_step(state, rng_key):
+        """Execute one ESS step, returning updated state and info."""
         state, info = ess.step(rng_key, state)
         return state, info
 
@@ -157,9 +159,23 @@ def run_elliptical_slice(
 
 
 def run_elliptical_slice_fitter(fitter, *, key, init_from=None, **kwargs):
-    """Fitter wrapper for Elliptical Slice Sampling.
+    """Elliptical Slice Sampling via fitter interface.
 
-    Bridges the fitter interface to the low-level ESS sampler.
+    Parameters
+    ----------
+    fitter : Fitter
+        Fitter object containing model and data.
+    key : PRNGKey
+        Random key.
+    init_from : Posterior or None
+        Initial parameters. If None, use MAP initialization.
+    **kwargs
+        Passed to run_elliptical_slice (n_samples, n_burnin, verbose).
+
+    Returns
+    -------
+    Posterior
+        Posterior samples from elliptical slice sampling.
     """
     loglik_unbounded_fn = fitter._build_loglikelihood_unbounded_fn()
     data_args = fitter._data_args

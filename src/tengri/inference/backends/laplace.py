@@ -125,6 +125,7 @@ def run_laplace(
     else:
 
         def loss_flat(x):
+            """Evaluate loss on flat unbounded parameter vector."""
             return loss_fn(unravel_fn(x), data_args)
 
         hessian = jax.hessian(loss_flat)(theta_flat)

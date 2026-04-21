@@ -66,6 +66,7 @@ def run_mclmc(
     )
 
     def ld_1arg(pos):
+        """Closure binding log-posterior with data arguments."""
         return log_posterior_flat_2arg(pos, data_args)
 
     n_dim = len(init_flat)
@@ -76,6 +77,7 @@ def run_mclmc(
     t0 = time.time()
 
     def kernel_factory(inv_mass):
+        """Create MCLMC kernel with given inverse mass matrix."""
         return blackjax.mcmc.mclmc.build_kernel(
             logdensity_fn=ld_1arg,
             inverse_mass_matrix=inv_mass,
@@ -201,6 +203,7 @@ def run_adjusted_mclmc(
     )
 
     def ld_1arg(pos):
+        """Closure binding log-posterior with data arguments."""
         return log_posterior_flat_2arg(pos, data_args)
 
     n_dim = len(init_flat)
@@ -241,6 +244,7 @@ def run_adjusted_mclmc(
         def _kernel_for_adaptation(
             rng_key, state, avg_num_integration_steps, step_size, inverse_mass_matrix
         ):
+            """Build adapted kernel for adjusted MCLMC tuning."""
             k = blackjax.mcmc.adjusted_mclmc.build_kernel(
                 logdensity_fn=ld_1arg,
                 integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,

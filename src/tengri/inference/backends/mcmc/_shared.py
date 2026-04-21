@@ -14,6 +14,7 @@ from tengri.inference._model_cache import get_model_cache
 
 
 def _get_nuts_kernel():
+    """Retrieve the NUTS kernel from BlackJAX."""
     import blackjax.mcmc.nuts
 
     return blackjax.mcmc.nuts.build_kernel()
@@ -21,6 +22,7 @@ def _get_nuts_kernel():
 
 @functools.cache
 def _get_hmc_kernel():
+    """Retrieve and cache the HMC kernel from BlackJAX."""
     import blackjax.mcmc.hmc
 
     return blackjax.mcmc.hmc.build_kernel()
@@ -28,6 +30,7 @@ def _get_hmc_kernel():
 
 @functools.cache
 def _get_dynamic_hmc_kernel():
+    """Retrieve and cache the dynamic HMC kernel from BlackJAX."""
     import blackjax.mcmc.dynamic_hmc
 
     return blackjax.mcmc.dynamic_hmc.build_kernel()
@@ -35,6 +38,7 @@ def _get_dynamic_hmc_kernel():
 
 @functools.cache
 def _get_ghmc_kernel():
+    """Retrieve and cache the GHMC kernel from BlackJAX."""
     import blackjax.mcmc.ghmc
 
     return blackjax.mcmc.ghmc.build_kernel()
@@ -57,12 +61,15 @@ def _nuts_sample_scan(
     max_doublings,
     data_args,
 ):
+    """JIT-compiled NUTS sampling scan over multiple steps."""
     kernel = _get_nuts_kernel()
 
     def ld(pos):
+        """Bind log-density function with data arguments."""
         return logdensity_fn_2arg(pos, data_args)
 
     def _step(s, k):
+        """Execute one NUTS step, returning state and sample."""
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix, max_doublings)
         return s, (s.position, info.is_divergent)
 
@@ -79,12 +86,15 @@ def _nuts_burnin_scan(
     max_doublings,
     data_args,
 ):
+    """JIT-compiled NUTS burn-in scan (samples discarded)."""
     kernel = _get_nuts_kernel()
 
     def ld(pos):
+        """Bind log-density function with data arguments."""
         return logdensity_fn_2arg(pos, data_args)
 
     def _step(s, k):
+        """Execute one NUTS step, returning updated state."""
         s, _info = kernel(k, s, ld, step_size, inv_mass_matrix, max_doublings)
         return s, None
 
@@ -105,12 +115,15 @@ def _hmc_sample_scan(
     n_leapfrog,
     data_args,
 ):
+    """JIT-compiled HMC sampling scan over multiple steps."""
     kernel = _get_hmc_kernel()
 
     def ld(pos):
+        """Bind log-density function with data arguments."""
         return logdensity_fn_2arg(pos, data_args)
 
     def _step(s, k):
+        """Execute one HMC step, returning state and sample."""
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix, n_leapfrog)
         return s, (s.position, info.is_divergent)
 
@@ -127,12 +140,15 @@ def _hmc_burnin_scan(
     n_leapfrog,
     data_args,
 ):
+    """JIT-compiled HMC burn-in scan (samples discarded)."""
     kernel = _get_hmc_kernel()
 
     def ld(pos):
+        """Bind log-density function with data arguments."""
         return logdensity_fn_2arg(pos, data_args)
 
     def _step(s, k):
+        """Execute one HMC step, returning updated state."""
         s, _info = kernel(k, s, ld, step_size, inv_mass_matrix, n_leapfrog)
         return s, None
 
@@ -152,12 +168,15 @@ def _dynamic_hmc_sample_scan(
     inv_mass_matrix,
     data_args,
 ):
+    """JIT-compiled dynamic HMC sampling scan over multiple steps."""
     kernel = _get_dynamic_hmc_kernel()
 
     def ld(pos):
+        """Bind log-density function with data arguments."""
         return logdensity_fn_2arg(pos, data_args)
 
     def _step(s, k):
+        """Execute one dynamic HMC step, returning state and sample."""
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix)
         return s, (s.position, info.is_divergent)
 
@@ -173,12 +192,15 @@ def _dynamic_hmc_burnin_scan(
     inv_mass_matrix,
     data_args,
 ):
+    """JIT-compiled dynamic HMC burn-in scan (samples discarded)."""
     kernel = _get_dynamic_hmc_kernel()
 
     def ld(pos):
+        """Bind log-density function with data arguments."""
         return logdensity_fn_2arg(pos, data_args)
 
     def _step(s, k):
+        """Execute one dynamic HMC step, returning updated state."""
         s, _info = kernel(k, s, ld, step_size, inv_mass_matrix)
         return s, None
 
@@ -200,12 +222,15 @@ def _ghmc_sample_scan(
     delta,
     data_args,
 ):
+    """JIT-compiled GHMC sampling scan over multiple steps."""
     kernel = _get_ghmc_kernel()
 
     def ld(pos):
+        """Bind log-density function with data arguments."""
         return logdensity_fn_2arg(pos, data_args)
 
     def _step(s, k):
+        """Execute one GHMC step, returning state and sample."""
         s, info = kernel(k, s, ld, step_size, momentum_inv_scale, alpha, delta)
         return s, (s.position, info.is_divergent)
 
@@ -223,12 +248,15 @@ def _ghmc_burnin_scan(
     delta,
     data_args,
 ):
+    """JIT-compiled GHMC burn-in scan (samples discarded)."""
     kernel = _get_ghmc_kernel()
 
     def ld(pos):
+        """Bind log-density function with data arguments."""
         return logdensity_fn_2arg(pos, data_args)
 
     def _step(s, k):
+        """Execute one GHMC step, returning updated state."""
         s, _info = kernel(k, s, ld, step_size, momentum_inv_scale, alpha, delta)
         return s, None
 
@@ -245,7 +273,9 @@ def _ghmc_burnin_scan(
 
 @functools.partial(jax.jit, static_argnums=(2,))
 def _mclmc_sample_scan(state, keys, kernel, L, step_size):
+    """JIT-compiled MCLMC sampling scan over multiple steps."""
     def _step(s, k):
+        """Execute one MCLMC step, returning state and sample."""
         s, _info = kernel(k, s, L, step_size)
         return s, s.position
 
@@ -254,7 +284,9 @@ def _mclmc_sample_scan(state, keys, kernel, L, step_size):
 
 @functools.partial(jax.jit, static_argnums=(2,))
 def _adjusted_mclmc_sample_scan(state, keys, kernel, step_size, n_integration_steps):
+    """JIT-compiled adjusted MCLMC sampling scan over multiple steps."""
     def _step(s, k):
+        """Execute one adjusted MCLMC step, returning state and sample."""
         s, info = kernel(k, s, step_size, n_integration_steps)
         return s, (s.position, info.is_divergent)
 
@@ -293,12 +325,7 @@ def _get_flat_logdensity(fitter, init_params):
 
 
 def _get_cached_adaptation(fitter, method_key):
-    """Return cached adaptation params for *method_key*, or None.
-
-    Cached on the **Model** (not fitter) keyed by
-    ``(engine_cache_key, method_key)`` so that adaptation results
-    persist across Fitters sharing the same model structure.
-    """
+    """Retrieve cached adaptation parameters by method key, or None if not cached."""
     mc = get_model_cache(fitter.model)
     cache = mc.get("adaptation")
     if cache is None:
@@ -308,7 +335,7 @@ def _get_cached_adaptation(fitter, method_key):
 
 
 def _set_cached_adaptation(fitter, method_key, params):
-    """Store adaptation params on the **Model** for cross-fitter reuse."""
+    """Store adaptation parameters on the Model for cross-fitter reuse."""
     cache = get_model_cache(fitter.model).setdefault("adaptation", {})
     engine_key = fitter._engine_cache_key()
     cache[(engine_key, method_key)] = params

@@ -94,6 +94,7 @@ def fit_map(
     # JIT-compile the update step
     @jax.jit
     def step(params, opt_state):
+        """Execute one Adam optimizer step: compute gradient, update state and params."""
         loss, grads = jax.value_and_grad(loss_fn)(params)
         updates, new_opt_state = optimizer.update(grads, opt_state, params)
         new_params = optax.apply_updates(params, updates)
