@@ -30,13 +30,12 @@ src/tengri/
 │   ├── sed_model.py         # SEDModel orchestrator
 │   ├── pipeline.py          # Non-fused SED engine + component tracking
 │   ├── emission_helpers.py  # Shared emission functions
-│   ├── kernels/             # Fused JIT kernels
+│   ├── _kernels/            # Fused JIT kernels (private — not user-facing)
 │   └── precompute/          # Precomputation registry
 │
 ├── observation/             # Data handling
 │   ├── filters.py, photometry.py, spectroscopy.py  # Data containers
-│   ├── noise_model.py       # Noise handling
-│   └── mock.py              # Mock generation
+│   └── noise_model.py       # Noise handling
 │
 ├── inference/               # Parameter estimation
 │   ├── fitter.py            # Fitter orchestrator
@@ -51,6 +50,7 @@ src/tengri/
 ├── analysis/                # Post-fitting analysis and visualization
 │   ├── diagnostics/         # Posterior diagnostics (ESS, R-hat, etc.)
 │   ├── plotting/            # Visualization (corner, SED, SFH, etc.)
+│   ├── mock.py              # Mock data generation (synthetic observations)
 │   └── simulate.py          # SED generation from SFH
 │
 ├── config/                  # Configuration and exceptions
@@ -163,7 +163,7 @@ No separate prior penalty terms. No per-distribution special cases.
 ## Emission physics architecture
 
 Both the non-fused pipeline (`pipeline.py`) and fused JIT kernels
-(`kernels/`) call the same pure functions from `emission_helpers.py`.
+(`_kernels/`) call the same pure functions from `emission_helpers.py`.
 This guarantees identical physics across code paths:
 
 ```
@@ -180,7 +180,7 @@ emission_helpers.py          ← single source of truth
 pipeline.py                  ← non-fused orchestrator
     branching + component tracking + return dict
 
-kernels/*.py                 ← fused JIT orchestrators
+_kernels/*.py                ← fused JIT orchestrators (private)
     closure captures at build time, calls same helpers inside @jax.jit
 ```
 
