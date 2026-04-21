@@ -146,5 +146,4 @@ def compute_nlr_sed(
     return l_nu_lines + l_nu_cont
 
 
-# Backward compatibility alias
 nlr_emission = compute_nlr_sed

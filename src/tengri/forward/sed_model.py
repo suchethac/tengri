@@ -438,8 +438,7 @@ class SEDModel:
         self._dust_emission_model = getattr(spec, "dust_emission", None)
         if self._dust_emission_model == "dl07_tabulated":
             warnings.warn(
-                "'dl07_tabulated' is deprecated. Use 'draine_li2007' instead. "
-                "Will be removed in tengri v1.0.",
+                "'dl07_tabulated' is deprecated. Use 'draine_li2007' instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -1317,8 +1316,8 @@ class SEDModel:
         **NaN handling**: Some quantities (e.g., ``stellar_mass_surviving``,
         ``l_dust_absorbed``) may return NaN if required data/parameters
         unavailable (e.g., no mass-remaining table, dust_model='none').
-        The Prediction object handles NaN gracefully (returns None for
-        backward compatibility in some cases).
+        The Prediction object handles NaN gracefully (returns None when
+        data required to compute the quantity is absent).
 
         Examples
         --------
@@ -1385,8 +1384,8 @@ class SEDModel:
             - ``"exact"`` — raw forward pipeline, no kernel JIT, no precomputation.
               Reference accuracy, slowest (~5–10× slower than compositional).
         approx : bool, optional
-            **Deprecated.** Use ``mode="auto"`` (approx=True) or ``mode="exact"``
-            (approx=False) instead.
+            Maps ``True`` → ``mode="auto"`` and ``False`` → ``mode="exact"``.
+            Prefer passing ``mode=`` directly.
 
         Returns
         -------
@@ -1435,7 +1434,7 @@ class SEDModel:
         if self.filter_waves is None:
             raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
 
-        # Handle deprecated approx parameter
+        # approx=bool is shorthand for mode= (for scripts that pre-date mode=)
         if approx is not None:
             mode = "auto" if approx else "exact"
 
@@ -1491,7 +1490,8 @@ class SEDModel:
             Prediction mode (same as :meth:`predict_photometry`).
             Default ``"auto"`` cascades through available kernels.
         approx : bool, optional
-            **Deprecated.** Use ``mode=`` instead.
+            Maps ``True`` → ``mode="auto"`` and ``False`` → ``mode="exact"``.
+            Prefer passing ``mode=`` directly.
 
         Returns
         -------
@@ -1776,15 +1776,12 @@ class SEDModel:
             return 1.0  # 1 Lsun safe fallback
 
     def predict_derived(self, params):
-        """Compute derived physical quantities.
+        """Compute derived physical quantities as a flat dict.
 
-        .. deprecated::
-            Use ``model.predict(params)`` for lazy on-demand access,
-            or ``model.predict_sfh_quantities(params)`` for JIT-compatible
-            batch computation.
-
-        This method is kept for backward compatibility and returns a
-        dict with the same keys as before.
+        Convenience wrapper around :meth:`predict` that extracts the key
+        SFH-derived scalars into a plain dict. Use :meth:`predict` for
+        lazy on-demand access to all quantities, or
+        :meth:`predict_sfh_quantities` for JIT-compatible batch computation.
 
         Parameters
         ----------
@@ -1804,7 +1801,7 @@ class SEDModel:
         """
         pred = self.predict(params)
         mass_surv = pred.sfh.stellar_mass_surviving
-        # Backward compat: return None instead of NaN
+        # Return None (not NaN) when mass-remaining table is absent
         mass_surv_out = None if jnp.isnan(mass_surv) else mass_surv
         return {
             "stellar_mass": pred.sfh.stellar_mass,
@@ -1852,7 +1849,7 @@ class SEDModel:
 
         **Surviving mass**: Requires SSP grid with ``ssp_mass_remaining``
         (e.g., FSPS grids). If unavailable, returns NaN. :meth:`predict`
-        handles NaN gracefully for backward compatibility.
+        handles NaN gracefully when the quantity is unavailable.
 
         **SFR averaging**: Time-weighted mean over lookback-time window:
 
@@ -2191,11 +2188,35 @@ class SEDModel:
     # ── Batch operations ──────────────────────────────────────────────
 
     def predict_photometry_batch(self, params_batch):
+        """Compute photometry for a batch of parameter sets via jax.vmap.
+
+        Parameters
+        ----------
+        params_batch : dict of arrays
+            Each value has shape (N, ...) with leading batch dimension.
+
+        Returns
+        -------
+        array, shape (N, n_filters)
+            Photometric flux for each galaxy.
+        """
         from tengri.forward.convenience import predict_photometry_batch as _fn
 
         return _fn(self, params_batch)
 
     def predict_spectrum_batch(self, params_batch):
+        """Compute spectra for a batch of parameter sets via jax.vmap.
+
+        Parameters
+        ----------
+        params_batch : dict of arrays
+            Each value has leading batch dimension.
+
+        Returns
+        -------
+        array, shape (N, n_pix)
+            Spectral flux for each galaxy.
+        """
         from tengri.forward.convenience import predict_spectrum_batch as _fn
 
         return _fn(self, params_batch)
@@ -2662,6 +2683,7 @@ class SEDModel:
         # Map Ellipsis (signature placeholder) → UNSET so build_model_from_config
         # knows to fall back to defaults.toml instead of hard-coded values.
         def _r(v):
+            """Convert ellipsis to UNSET sentinel for optional config parameters."""
             return UNSET if v is ... else v
 
         return build_model_from_config(
@@ -2679,6 +2701,20 @@ class SEDModel:
         )
 
     def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
+        """Sample from the prior and evaluate forward model on each draw.
+
+        Parameters
+        ----------
+        n : int
+            Number of prior samples. Default 500.
+        seed : int
+            Random seed. Default 42.
+
+        Returns
+        -------
+        PriorPredictive
+            Object containing flux, SFH, and parameter draws with model reference.
+        """
         from tengri.forward.convenience import prior_predictive as _fn
 
         return _fn(self, n=n, seed=seed)
@@ -2765,6 +2801,36 @@ class SEDModel:
         id_col: str | None = None,
         **kwargs,
     ) -> list:
+        """Fit a batch of galaxies from a catalog (DataFrame, Table, or list of dicts).
+
+        Parameters
+        ----------
+        catalog : DataFrame, Table, or list of dict
+            Input catalog.
+        flux_cols : list of str
+            Column names for per-band flux values.
+        err_cols : list of str
+            Column names for per-band 1-sigma uncertainties.
+        redshift_col : str or None
+            If provided, use this column as per-row redshift.
+        method : str
+            Inference method. Default ``"vi"``.
+        n_workers : int
+            Currently ignored (reserved for multiprocessing). Default 1.
+        verbose : bool
+            Print per-galaxy progress. Default True.
+        output_dir : str or None
+            If provided, save each Posterior to ``{output_dir}/{id}.h5``.
+        id_col : str or None
+            Column name for galaxy identifiers in checkpoint filenames.
+        **kwargs
+            Forwarded to Fitter.run().
+
+        Returns
+        -------
+        list of Posterior
+            One result per galaxy in catalog.
+        """
         from tengri.forward.convenience import fit_batch as _fn
 
         return _fn(
@@ -2789,6 +2855,23 @@ class SEDModel:
         population_prior: dict | None = None,
         **kwargs,
     ):
+        """Fit a population of galaxies with shared PSD hyperparameters.
+
+        Parameters
+        ----------
+        observations_list : list
+            Each element is a (flux, noise) tuple or dict with flux_obs/noise keys.
+        method : str
+            Hierarchical inference method. Default ``"vi"``.
+        population_prior : dict or None
+            Hyperpriors on shared PSD parameters.
+        **kwargs
+            Forwarded to PopulationFitter.run().
+
+        Returns
+        -------
+        PopulationPosterior
+        """
         from tengri.forward.convenience import fit_population as _fn
 
         return _fn(
@@ -2800,16 +2883,66 @@ class SEDModel:
         )
 
     def mock(self, params, snr=20.0, key=None):
+        """Generate mock photometric observation with noise.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values.
+        snr : float
+            Signal-to-noise ratio. Default 20.0.
+        key : PRNGKey, optional
+            Random key for noise. If None, returns noiseless.
+
+        Returns
+        -------
+        MockData
+            Mock photometric observation.
+        """
         from tengri.forward.convenience import mock as _fn
 
         return _fn(self, params, snr=snr, key=key)
 
     def mock_spectrum(self, params, wave_obs, snr=30.0, key=None):
+        """Generate mock spectroscopic observation with noise.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values.
+        wave_obs : array
+            Observed wavelength grid [Angstrom].
+        snr : float
+            Signal-to-noise ratio per pixel. Default 30.0.
+        key : PRNGKey, optional
+            Random key for noise. If None, returns noiseless.
+
+        Returns
+        -------
+        MockData
+            Mock spectroscopic observation.
+        """
         from tengri.forward.convenience import mock_spectrum as _fn
 
         return _fn(self, params, wave_obs, snr=snr, key=key)
 
     def mock_batch(self, params_batch, snr=20.0, key=None):
+        """Generate batch of mock photometric observations.
+
+        Parameters
+        ----------
+        params_batch : dict of arrays
+            Each value has leading batch dimension.
+        snr : float
+            Signal-to-noise ratio. Default 20.0.
+        key : PRNGKey, optional
+            Random key for noise. If None, returns noiseless.
+
+        Returns
+        -------
+        MockData
+            Mock observations with shape (N, n_filters).
+        """
         from tengri.forward.convenience import mock_batch as _fn
 
         return _fn(self, params_batch, snr=snr, key=key)

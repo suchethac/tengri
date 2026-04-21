@@ -210,6 +210,7 @@ def _load_mappings_grids() -> dict | None:
     import h5py  # optional dependency — only needed when HDF5 exists
 
     def _decode(arr: object) -> list[str]:
+        """Decode bytes array to string list, handling both bytes and str types."""
         return [n.decode() if isinstance(n, bytes) else str(n) for n in arr]
 
     grids: dict = {}
@@ -477,7 +478,6 @@ def compute_shock_sed(
     return _place_line_profiles(line_waves, line_lums, wavelength, line_sigma_aa)
 
 
-# Backward compatibility alias
 shock_emission_sed = compute_shock_sed
 
 

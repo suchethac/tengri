@@ -88,7 +88,7 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool]] = [
     ("SIII_9532", 9533.23, "S3", False, False),
 ]
 
-# ── 13-line backward-compatible catalog matching eline_marginalization.py
+# ── 13-line catalog matching eline_marginalization.py
 # Same wavelengths and insertion order as DEFAULT_LINE_WAVELENGTHS there.
 
 _DEFAULT_13_LINES: list[tuple[str, float, str, bool, bool]] = [

@@ -22,7 +22,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.observation.eline_catalog import (
-    CLOUDY_LINE_NAMES,  # noqa: F401 — re-exported for backward compatibility
+    CLOUDY_LINE_NAMES,  # noqa: F401 — re-exported for convenience
     CLOUDY_LINE_WAVELENGTHS,
 )
 
@@ -332,6 +332,7 @@ def cloudy_grid_line_priors(
 
     # Helper: 1D linear interp weight
     def _frac(arr, val):
+        """Compute interpolation index and fractional weight for 1D linear interpolation."""
         idx = np.searchsorted(arr, val) - 1
         idx = np.clip(idx, 0, len(arr) - 2)
         t = (val - arr[idx]) / (arr[idx + 1] - arr[idx] + 1e-30)
@@ -345,6 +346,7 @@ def cloudy_grid_line_priors(
     lum = grid_data.line_luminosity  # (n_met, n_age, n_logU, n_lines)
 
     def _get(dz, da, du):
+        """Retrieve a slice of the grid at the given offset from the interpolation corner."""
         return np.array(lum[iz + dz, ia + da, iu + du, :])
 
     log_lum = (

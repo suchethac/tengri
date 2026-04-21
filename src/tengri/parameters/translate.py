@@ -270,7 +270,7 @@ def resolve_short_names(sfh_type: str | list[str], priors: dict) -> dict:
     return expanded
 
 
-# Legacy module-level PARAM_MAP for backward compatibility with imports
+# Module-level PARAM_MAP exported for tests and external tooling
 PARAM_MAP = {
     "sfh_alpha": ("alpha", 1.0, 0.0),
     "sfh_beta": ("beta", 1.0, 0.0),

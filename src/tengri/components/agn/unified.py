@@ -70,6 +70,7 @@ def register_agn_model(name: str) -> Callable:
     """
 
     def decorator(fn: Callable) -> Callable:
+        """Inner decorator that registers function in AGN_MODELS dict."""
         AGN_MODELS[name] = fn
         return fn
 
@@ -100,8 +101,7 @@ def resolve_agn_model(name: str) -> Callable:
     # Emit deprecation warning for old model names
     if name == "kubota_done":
         warnings.warn(
-            "'kubota_done' is deprecated. Use 'multicolor_agn' instead. "
-            "Will be removed in tengri v1.0.",
+            "'kubota_done' is deprecated. Use 'multicolor_agn' instead.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -109,7 +109,6 @@ def resolve_agn_model(name: str) -> Callable:
     return AGN_MODELS[name]
 
 
-# Backward compatibility alias
 get_agn_model = resolve_agn_model
 
 
@@ -386,8 +385,7 @@ def multicolor_agn(
     return l_nu * agn_frac
 
 
-# Backward-compat alias (renamed from kubota_done -> multicolor_agn)
-kubota_done_agn = multicolor_agn
+# "kubota_done" is a registered alias for multicolor_agn in the model registry
 AGN_MODELS["kubota_done"] = multicolor_agn
 
 

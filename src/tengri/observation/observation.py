@@ -108,7 +108,7 @@ class Observation:
 
     @property
     def data_type(self) -> str:
-        """Inferred data type string for backward compatibility.
+        """Inferred data type string (photometry/spectroscopy/joint).
 
         Returns
         -------

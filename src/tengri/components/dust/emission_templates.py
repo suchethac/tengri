@@ -18,7 +18,7 @@ Lazy loaders (auto-load templates on first call):
 - ``_make_lazy_loader`` — factory for lazy-loading wrappers
 - ``_find_dl07_templates``, ``_dl07_lazy_wrapper``, ``_dl14_lazy_wrapper``
 
-Re-exported here for backward compatibility:
+Re-exported here from emission.py:
 - Import from ``tengri.components.dust.emission`` (re-exports from this module)
 """
 
@@ -123,6 +123,7 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
         fq = (dust_qpah_c - qpah_grid[i_q]) / (qpah_grid[i_q + 1] - qpah_grid[i_q])
 
         def _bilinear(grid):
+            """Perform 2D linear interpolation over qpah and gamma axes."""
             return (
                 (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
                 + (1.0 - fq) * fu * grid[i_q, i_u + 1]
@@ -317,6 +318,7 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
 
         # Bilinear interpolation for single-U (q_PAH, U_min)
         def _bilinear(grid):
+            """Perform 2D linear interpolation over qpah and Umin axes."""
             return (
                 (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
                 + (1.0 - fq) * fu * grid[i_q, i_u + 1]
@@ -326,8 +328,10 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
 
         # Trilinear interpolation for powerlaw (q_PAH, U_min, alpha)
         def _trilinear(grid):
+            """Perform 3D linear interpolation over qpah, Umin, and alpha axes."""
             # Interpolate at alpha[i_a] and alpha[i_a+1] via bilinear in (q, u)
             def _bilinear_at_alpha(ia_idx):
+                """Interpolate bilinearly at fixed alpha index."""
                 return (
                     (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u, ia_idx]
                     + (1.0 - fq) * fu * grid[i_q, i_u + 1, ia_idx]
@@ -550,7 +554,7 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
 
 
 def load_dale2014_templates(filepath: str) -> dict:
-    """Load Dale+2014 template grid from HDF5 (legacy for backward compatibility)."""
+    """Load Dale+2014 template grid from HDF5."""
     import h5py as _h5py
     import numpy as np
 
@@ -901,6 +905,7 @@ def create_astrodust_from_grid(
         fq = (dust_qpah_c - qpah_grid[i_q]) / (qpah_grid[i_q + 1] - qpah_grid[i_q])
 
         def _bilinear(grid: jnp.ndarray) -> jnp.ndarray:
+            """Perform 2D linear interpolation over qpah and Umin axes."""
             return (
                 (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
                 + (1.0 - fq) * fu * grid[i_q, i_u + 1]
@@ -1342,6 +1347,7 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         fq = (dust_qhac_c - qhac_grid[i_q]) / (qhac_grid[i_q + 1] - qhac_grid[i_q])
 
         def _bilinear(grid: jnp.ndarray) -> jnp.ndarray:
+            """Perform 2D linear interpolation over qhac and Umin axes."""
             return (
                 (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
                 + (1.0 - fq) * fu * grid[i_q, i_u + 1]
@@ -1409,6 +1415,7 @@ def _make_lazy_loader(
     """
 
     def _lazy_wrapper(*args, **kwargs):
+        """Lazy load template on first call, then dispatch to runtime function."""
         if name not in _resolved:
             _resolved.add(name)
             # Try v2 HDF5 first (improved grid), then canonical HDF5
@@ -1443,6 +1450,7 @@ def _make_lazy_loader(
 
 # --- DL07: tries v2 HDF5 first, then legacy .h5 ---
 def _find_dl07_templates() -> str | None:
+    """Find DL07 template file, preferring v2 HDF5 over legacy version."""
     for fn in ("dl07_templates_v2.h5", "dl07_templates.h5"):
         path = _find_data_file(fn)
         if path is not None:

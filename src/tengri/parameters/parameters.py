@@ -25,7 +25,7 @@ Default (dense_basis + GP field)::
         redshift=0.1,
     )
 
-Legacy tsnorm (backward compatible)::
+Shorthand tsnorm equivalent::
 
     spec = Parameters(
         mean_sfh_type = "tsnorm",
@@ -37,7 +37,7 @@ Legacy tsnorm (backward compatible)::
         ...
     )
 
-Legacy DPL (backward compatible)::
+Shorthand DPL equivalent::
 
     spec = Parameters(
         mean_sfh_type = "dpl",
@@ -555,7 +555,7 @@ class Parameters:
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
 
-        # Backward compat: old string-style flags
+        # Handle string-style flags ("cue", "cb19") passed as nebular=
         self._nebular_cb19 = False
         if nebular == "cue":
             nebular_cue = True
@@ -768,7 +768,7 @@ class Parameters:
 
     @property
     def stochastic(self) -> bool:
-        """Whether the model includes a GP field (backward-compat property)."""
+        """Whether the model includes a GP field component."""
         return "field" in self._mean_sfh_type
 
     @property

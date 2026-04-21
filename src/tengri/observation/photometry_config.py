@@ -49,7 +49,7 @@ class Photometry:
                 tuple(f.name for f in self.filters),
             )
 
-        # Extract wave/trans arrays for backward compatibility with Model
+        # Materialise wave/trans arrays for direct NumPy-level access
         object.__setattr__(
             self,
             "filter_waves",
@@ -104,7 +104,7 @@ class Photometry:
         """Create Photometry from existing filter data.
 
         Accepts the 3-tuple returned by ``load_filter_set()`` or a list
-        of ``FilterCurve`` objects — backward compatibility bridge.
+        of ``FilterCurve`` objects.
 
         Parameters
         ----------

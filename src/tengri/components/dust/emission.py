@@ -92,6 +92,7 @@ def register_emission_model(name: str) -> Callable:
     """Register a dust emission model function (decorator factory)."""
 
     def decorator(fn: Callable) -> Callable:
+        """Inner decorator that registers function in DUST_EMISSION_MODELS dict."""
         DUST_EMISSION_MODELS[name] = fn
         return fn
 
@@ -124,7 +125,6 @@ def resolve_emission_model(name: str) -> Callable:
     return DUST_EMISSION_MODELS[name]
 
 
-# Backward compatibility alias
 get_emission_model = resolve_emission_model
 
 
@@ -411,7 +411,7 @@ def modified_blackbody(
         Emissivity index.  Typical range: 1.5--2.0.
     redshift : float
         Source redshift. When > 0, CMB heating correction is applied.
-        Default 0 (no correction, backward compatible).
+        Default 0 (no correction).
 
     Returns
     -------
@@ -859,7 +859,7 @@ def _dl07_lazy_wrapper(*args, **kwargs):
     return DUST_EMISSION_MODELS["draine_li2007"](*args, **kwargs)
 
 
-# ── Import emission template functions for backward compatibility ─
+# ── Import emission template functions ───────────────────────────
 
 from .emission_templates import (
     create_astrodust_from_grid as create_astrodust_from_grid,

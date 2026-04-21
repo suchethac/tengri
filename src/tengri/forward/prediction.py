@@ -252,8 +252,7 @@ class EmissionLines(NamedTuple):
 class DerivedQuantities(NamedTuple):
     """All derived physical quantities (convenience container).
 
-    Returned by ``model.predict_derived()`` for backward compatibility
-    with the grouped API.
+    Returned by ``model.predict_derived()``.
 
     Attributes
     ----------
@@ -433,13 +432,16 @@ class SEDProperties(_CachedBase):
     """
 
     def _wave(self):
+        """Get rest-frame wavelength array from model."""
         return self._pred._model.ssp_data.ssp_wave
 
     def _sed(self):
+        """Retrieve cached total SED, computing if necessary."""
         self._pred._ensure_sed()
         return self._pred._cache["sed_total"]
 
     def _sed_intrinsic(self):
+        """Retrieve cached intrinsic (unattenuated) SED, computing if necessary."""
         self._pred._ensure_sed()
         return self._pred._cache.get("sed_intrinsic")
 
@@ -570,6 +572,7 @@ class LineProperties(_CachedBase):
     """
 
     def _get_line(self, name):
+        """Extract emission line luminosity from cached grid, computing if necessary."""
         self._pred._ensure_lines()
         lw = self._pred._cache["line_waves"]
         ll = self._pred._cache["line_lums"]
@@ -892,6 +895,7 @@ class Prediction:
             young_weights = weights[young_idx]
 
             def _qh_one_bin(log_age_i, w_i):
+                """Compute ionizing photon production rate for one age bin."""
                 return w_i * backend._get_qh_at(log_z, log_age_i)
 
             import jax

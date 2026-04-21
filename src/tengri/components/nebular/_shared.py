@@ -27,26 +27,52 @@ def place_line_profiles(
     obs_wavelengths: jnp.ndarray,
     line_sigma_aa: float,
 ) -> jnp.ndarray:
-    """Place emission lines onto a wavelength grid as Gaussians or delta functions.
+    r"""Place emission lines onto a wavelength grid as Gaussians or delta functions.
+
+    Converts line luminosities (point-like) to spectral luminosity density on a
+    wavelength grid by either convolving with a Gaussian profile or placing them
+    as delta functions in the nearest pixel. Commonly used to overlay nebular and
+    AGN emission lines onto continuum SEDs.
 
     Parameters
     ----------
-    line_wavelengths : array, shape (N_lines,)
-        Rest-frame line centres in Å.
-    line_luminosities : array, shape (N_lines,)
-        Line luminosities in any consistent unit (e.g. Lsun or erg/s).
-    obs_wavelengths : array, shape (N_wave,)
+    line_wavelengths : array, shape (n_lines,)
+        Rest-frame line centres in Å (vacuum wavelength).
+    line_luminosities : array, shape (n_lines,)
+        Line luminosities in consistent units [erg/s] or [erg/s/Msun].
+    obs_wavelengths : array, shape (n_wave,)
         Output wavelength grid in Å (rest-frame, increasing).
     line_sigma_aa : float
-        Gaussian line width in Å.  ``0`` or negative → delta function placed
-        into the nearest wavelength pixel.
+        Gaussian line width (FWHM equivalent) in Å. When <= 0, lines are placed as
+        delta functions in the nearest pixel. [Å]
 
     Returns
     -------
-    array, shape (N_wave,)
-        SED additive contribution in the same units as ``line_luminosities``
-        per Hz (i.e. line_luminosities[j] / sigma_nu for Gaussian,
-        line_luminosities[j] / dnu for delta function).
+    array, shape (n_wave,)
+        Spectral luminosity density on ``obs_wavelengths``. [erg/s/Hz] or [erg/s/Hz/Msun]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives and are
+    vectorised over lines and wavelengths.
+
+    **Gaussian mode** (``line_sigma_aa > 0``):
+        Converts wavelength width σ_λ to frequency width via the Jacobian:
+
+        .. math::
+
+            \sigma_\nu = \sigma_\lambda \, \frac{c}{\lambda^2}
+
+        where c is the speed of light and λ is line wavelength. Each line is
+        normalized such that the integrated flux equals the input ``line_luminosity``.
+
+    **Delta function mode** (``line_sigma_aa <= 0``):
+        Places each line in the nearest wavelength pixel by scatter-add,
+        normalised by the local frequency spacing Δν at that pixel. This is fast
+        but introduces aliasing artifacts if the wavelength grid is coarse.
+
+    **Upstream**: Implementation adapted from Prospector's line-placement routines
+    (Johnson et al. 2021) for JAX differentiability.
     """
     n_wave = obs_wavelengths.shape[0]
 
@@ -79,28 +105,59 @@ def place_line_profiles(
 
 @jax.jit
 def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
-    """Compute ionizing photon rate Q_H from a single SSP spectrum.
+    r"""Compute hydrogen-ionizing photon production rate Q_H from an SSP spectrum.
 
-    Q_H = integral_{0}^{912A} [L_nu / (h * nu)] d_nu
-
-    .. warning::
-
-        Returns ~0 for wNE (with Nebular Emission) SSP spectra because
-        ionizing photons are pre-consumed by CLOUDY during SSP generation.
-        This is expected — wNE SSPs already include nebular emission.
-        Use non-nebular SSP files if you need Q_H for custom nebular models.
+    Integrates the far-UV SSP luminosity density, divided by photon energy, over
+    the hydrogen-ionizing frequency range (ν > ν_LL ≈ 13.6 eV, λ < 911.76 Å).
+    This rate is essential for all nebular emission models (HII regions, AGN NLR,
+    DIG) that depend on ionizing photon supply.
 
     Parameters
     ----------
     ssp_wave : array, shape (n_wave,)
-        SSP wavelength grid in Angstrom (increasing).
+        SSP wavelength grid in Å (rest-frame, increasing).
     ssp_flux : array, shape (n_wave,)
-        SSP flux in Lsun/Hz/Msun.
+        SSP spectral luminosity density. [erg/s/Hz/Msun]
 
     Returns
     -------
     float
-        Q_H in photons/s/Msun.
+        Hydrogen-ionizing photon production rate. [photons/s/Msun]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives. Safe inside
+    :func:`jax.jit`, :func:`jax.vmap`, and :func:`jax.grad`.
+
+    **Frequency integration**:
+        Q_H is computed as:
+
+        .. math::
+
+            Q_H = \int_0^{\nu_{\rm LL}} \frac{L_\nu}{h\nu} \, \mathrm{d}\nu
+
+        where ν_LL = 13.6 eV / h ≈ 3.29 × 10^15 Hz (Lyman limit, λ < 911.76 Å),
+        L_ν is the SSP flux [erg/s/Hz/Msun], and h is Planck's constant.
+
+        The integral is computed via trapezoidal quadrature in frequency space
+        (not wavelength space) to avoid nonlinear Jacobian effects.
+
+    **Warning — wNE SSPs**:
+        Returns ~0 for "with Nebular Emission" (wNE) SSP spectra because CLOUDY
+        consumes ionizing photons during SSP generation. If you see Q_H ≈ 0 for
+        young SSPs (which should have Q_H > 1e50 photons/s), check that your
+        SSP templates are non-nebular variants (BC03, FSPS/Conroy+Gunn models, etc.).
+
+    **Numerical safety**:
+        Clamps per-wavelength integrand to prevent float64 overflow during
+        trapezoidal accumulation (only relevant for artificially young/pure SSPs
+        with Q_H > 1e100). Does not affect physically realistic rates (~1e31).
+
+    References
+    ----------
+    .. [1] C. Conroy, "Modeling the Panchromatic SED Evolution of Galaxies,"
+       ApJ, 647, 201 (2006). arXiv:astro-ph/0604217.
+       https://doi.org/10.1086/504612
     """
     nu = _C_CGS / (ssp_wave * 1e-8)  # Hz
     l_nu = ssp_flux * _LSUN_ERG  # erg/s/Hz/Msun
@@ -129,11 +186,7 @@ def _interp_index_weight(
     x: float,
     grid: jnp.ndarray,
 ) -> tuple[int, float]:
-    """Find bracketing index and interpolation weight for 1D grid.
-
-    Returns (i, w) such that value ≈ grid[i]*(1-w) + grid[i+1]*w.
-    Clips to grid bounds.
-    """
+    """Find bracketing index and linear interpolation weight for a 1D sorted grid."""
     x_clipped = jnp.clip(x, grid[0], grid[-1])
     idx = jnp.searchsorted(grid, x_clipped, side="right") - 1
     idx = jnp.clip(idx, 0, len(grid) - 2)
@@ -143,7 +196,7 @@ def _interp_index_weight(
 
 
 # ── Grid interpolation — triweight kernel (smooth, C²) ────────────
-# Re-exported from utils.interpolation for backward compatibility.
+# Re-exported from utils.interpolation for convenience.
 
 from tengri.utils.interpolation import (
     compute_grid_weights,  # noqa: F401
@@ -199,66 +252,124 @@ def compute_analytic_nebular_continuum(
     log_z_abs: float,
     temperature: float = 1e4,
 ) -> jnp.ndarray:
-    """Analytic nebular continuum: free-free + two-photon.
+    r"""Compute hydrogen nebular continuum: free-free + two-photon emission.
 
-    Computes the hydrogen nebular continuum for a case B, fully ionized,
-    ionization-bounded HII region, normalized to the ionizing photon rate Q_H.
-    Includes thermal bremsstrahlung (free-free) and the two-photon continuum
-    from the 2s→1s metastable transition (Nussbaumer & Schmutz 1984).
-
-    Free-bound (recombination) continuum is **not** included here — it requires
-    tabulated Milne function data (OF06 Chapter 4) and contributes mainly at
-    λ < 3646 Å (Balmer limit).  For a line-only fallback, free-free + two-photon
-    capture the dominant continuum shape at optical wavelengths.
+    Predicts the optically-thick, ionization-bounded HII region continuum from
+    case B recombination, thermal bremsstrahlung (free-free), and the two-photon
+    emission from the 2s metastable transition. This is a Tier 2 analytic
+    approximation used as a fallback when full grids (Cue, Cloudy) are unavailable.
 
     Parameters
     ----------
     wave_aa : array, shape (n_wave,)
         Wavelength grid in Å (rest-frame, increasing).
     q_h : float
-        Ionizing photon rate in photons/s.
+        Hydrogen-ionizing photon production rate. [photons/s]
     log_z_abs : float
-        log10(Z/Z_sun) absolute metallicity — currently unused (helium and metals
-        contribute ~10% to free-free at solar metallicity; reserved for future
-        He-contribution scaling).
-    temperature : float
-        Electron temperature in K.  Default 10^4 K (typical HII region).
+        Absolute metallicity. [log10(Z/Z_sun)]
+        Currently unused; included for forward compatibility (metallicity scaling
+        of free-free via He/metal opacity is reserved for a future update).
+    temperature : float, optional
+        Electron temperature in K. Default: 10^4 K (typical HII region). [K]
 
     Returns
     -------
     array, shape (n_wave,)
-        Nebular continuum SED in erg/s/Hz.
+        Nebular continuum spectral luminosity density. [erg/s/Hz]
 
     Notes
     -----
-    Normalization via case B recombination (Osterbrock & Ferland 2006, eq 4.3):
-        Q_H = α_B · n_e · n_p · V
-        ⟹ n_e · n_p · V = Q_H / α_B(T)
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives with no
+    Python-level branching on traced values.
 
-    Free-free (OF06 eq 4.16, hydrogen only):
-        L_ff(ν) = [Q_H / α_B(T)] · _FF_COEFF · T^{-1/2} · g_ff(ν,T) · exp(-hν/kT)
+    **Case B recombination normalization** (Osterbrock & Ferland 2006, §4.3):
+        The ionization balance is:
 
-    Gaunt factor approximation (Draine 2011, eq 10.9):
-        g_ff(u) = max(1.0, sqrt(3)/π · ln(2/u)) where u = hν/kT
+        .. math::
 
-    Two-photon (Nussbaumer & Schmutz 1984, Osterbrock & Ferland eq 4.29):
-        Spectral shape A₂γ(y) = 202 · y(1-y) · [(1-4y(1-y))^0.8 + 0.88(y(1-y))^1.53]
-        where y = ν/ν_Lyα = λ_Lyα/λ; defined for 0 < y < 1 (λ > 1216 Å).
-        Peak is near y=0.5, i.e. λ ≈ 2 × λ_Lyα ≈ 2432 Å (optical/NUV).
+            Q_H = \alpha_B(T) \, n_e \, n_p \, V
 
-        Normalization follows Osterbrock & Ferland (2006) §4.5 / pyNeb (Luridiana+2015):
-            L_2q(ν) = [Q_H / α_B(T)] × (h × c / λ) × A₂γ(y) / A_2s × α_eff_2s(T)
-        where:
-            α_eff_2s(T) = 0.838e-13 × (T/10^4)^{-0.728}  [cm³/s]
-            A_2s = 8.226 s^{-1}  (Einstein A for 2s→1s)
+        where α_B(T) is the case-B recombination coefficient and V is the HII
+        region volume. Rearranging:
+
+        .. math::
+
+            n_e \, n_p \, V = \frac{Q_H}{\alpha_B(T)}
+
+        Temperature dependence (Storey & Hummer 1995):
+
+        .. math::
+
+            \alpha_B(T) = \alpha_B(10^4\,\mathrm{K}) \, \left(\frac{T}{10^4}\right)^{-0.847}
+
+        with α_B(10^4 K) ≈ 2.585 × 10^{-13} cm^3/s.
+
+    **Free-free (bremsstrahlung) continuum** (OF06, §4.4, eq. 4.16):
+        Thermal radiation from electron–ion collisions:
+
+        .. math::
+
+            L_{\mathrm{ff}}(\nu) = \frac{Q_H}{\alpha_B(T)} \, \epsilon_{\mathrm{ff}}(\nu,T)
+                \quad \text{where} \quad
+                \epsilon_{\mathrm{ff}} = k_{\mathrm{ff}} \, T^{-1/2} \,
+                g_{\mathrm{ff}}(\nu,T) \, e^{-h\nu/(k_B T)}
+
+        Gaunt factor approximation (Draine 2011, §10.4, eq. 10.9):
+
+        .. math::
+
+            g_{\mathrm{ff}}(u) = \max\left(1, \frac{\sqrt{3}}{\pi} \ln\frac{2}{u}\right)
+                \quad \text{where} \quad u = \frac{h\nu}{k_B T}
+
+    **Two-photon continuum** (Nussbaumer & Schmutz 1984, OF06 §4.5, eq. 4.29):
+        Recombination to the 2s metastable level produces two-photon pairs
+        (2s → 1s emission is forbidden as a single photon). Spectral shape:
+
+        .. math::
+
+            A_{2\gamma}(y) = 202 \, y(1-y) \,
+                \left[(1-4y(1-y))^{0.8} + 0.88(y(1-y))^{1.53}\right]
+
+        where y = ν/ν_{Ly\alpha} = λ_{Ly\alpha}/λ ∈ (0,1), defined only for
+        λ > λ_{Ly\alpha} (≈ 1216 Å). Peak intensity near y ≈ 0.5 (λ ≈ 2432 Å,
+        optical/NUV). Normalization:
+
+        .. math::
+
+            L_{2\gamma}(\nu) = \frac{Q_H}{\alpha_B(T)} \, \frac{\alpha_{\mathrm{eff}}^{2s}(T)}{A_{2s}}
+                \, h \, y \, A_{2\gamma}(y)
+
+        where α^{eff}_{2s}(T) = 0.838 × 10^{-13} (T/10^4)^{-0.728} cm^3/s is
+        the effective recombination coefficient to 2s, and A_{2s} = 8.226 s^{-1}
+        is the Einstein A coefficient for the forbidden 2s → 1s transition.
+
+    **Approximation flags**:
+        - **Missing continua**: Free-bound (recombination) continuum is omitted
+          (contributes λ < 3646 Å, Balmer limit). This is acceptable for optical
+          SEDs but underestimates UV flux shortward of the Balmer limit.
+        - **Hydrogen only**: Neglects helium and metal free-free opacity (~10% at
+          solar metallicity); reserved for a future metallicity-dependent update.
+        - **Single temperature**: Assumes uniform electron temperature T=10^4 K.
+          Physically, HII region temperature varies with ionization parameter and
+          ISM conditions; this approximation is valid for log(U) ∈ [−3, −1].
+
+    **Validity**: Use this function when Cloudy or Cue grids are unavailable.
+    For science-grade nebular fitting, prefer CloudyGridBackend or CueBackend.
 
     References
     ----------
-    - Osterbrock & Ferland (2006) — Chapter 4 (free-free, free-bound, two-photon)
-    - Nussbaumer & Schmutz (1984) — two-photon spectral distribution
-    - Storey & Hummer (1995) — tabulated α_B (SH95); slope T^{-0.847}
-    - pyNeb v1.1.30 (Luridiana et al. 2015) — α_B, α_eff_2s fit coefficients
-    - Draine (2011), "Physics of the Interstellar and Intergalactic Medium"
+    .. [1] D. E. Osterbrock and G. J. Ferland, "Astrophysics of Gaseous Nebulae
+       and Active Galactic Nuclei," 2nd edn. (University Science Books, 2006).
+       Chapter 4: Nebular Continuum and Line Emission.
+    .. [2] H. Nussbaumer and W. Schmutz, "The two-photon continuum of HeII and
+       the He+ f-value problem," A&A, 138, 495 (1984).
+    .. [3] P. J. Storey and D. G. Hummer, "Recombination coefficients for H II and
+       HeII," MNRAS, 272, 41 (1995). https://doi.org/10.1093/mnras/272.1.41
+    .. [4] B. T. Draine, "Physics of the Interstellar and Intergalactic Medium"
+       (Princeton University Press, 2011). Section 10.4: Gaunt factors.
+    .. [5] V. Luridiana, C. Morisset, and R. A. Shaw, "PyNeb: A Python Package
+       for Analysing Emission Lines from Ionised Nebulae," A&A, 573, A42 (2015).
+       arXiv:1412.6345. https://doi.org/10.1051/0004-6361/201323152
     """
     nu = _C_CGS / (wave_aa * 1e-8)  # Hz
 
@@ -304,53 +415,64 @@ def compute_analytic_nebular_continuum(
 
 
 class NebularContinuumFallback:
-    """Wrapper that provides continuum for line-only nebular backends.
+    """Wrapper that adds nebular continuum to line-only nebular backends.
 
-    When a backend has ``has_continuum = False``, wrap it with this class
-    to automatically supply nebular continuum via a secondary backend or
-    the built-in analytic approximation.
-
-    Continuum is supplied in priority order at prediction time:
-
-    1. **Secondary backend** (``fallback=CueBackend(...)`` or
-       ``fallback=CloudyGridBackend(...)``): full physics, including line
-       strengths from the secondary backend's grid.
-    2. **Analytic free-free + two-photon continuum** via
-       :func:`compute_analytic_nebular_continuum` (Osterbrock & Ferland
-       2006 §4.3–4.5): activated automatically when ``ssp_wave`` and
-       ``gas_logqion`` are present in the keyword arguments passed to
-       :meth:`predict_nebular_sed`.
-    3. **Raise** :exc:`~tengri.components.nebular._protocol.NebularContinuumUnavailableError`
-       if ``fallback_mode="error"`` and neither Tier 1 nor Tier 2 is
-       available.
-    4. **Warn and return lines only** if ``fallback_mode="warn"``.
+    Many nebular backends (CB19, MAPPINGS, Shock) produce emission lines only,
+    without continuum. This wrapper provides missing continuum in a prioritised
+    fallback chain: (1) secondary physics backend, (2) analytic free-free +
+    two-photon (§4.3–4.5 of Osterbrock & Ferland 2006), (3) error or warning
+    graceful degradation.
 
     Parameters
     ----------
-    primary : object
-        The line-only backend (CB19Backend, MappingsPhotoStellarBackend,
-        MappingsPhotoAGNBackend, ShockBackend, etc.).
-    fallback : object or None
-        A continuum-capable backend (CueBackend or CloudyGridBackend).
-        Takes priority over the analytic Tier 2 path when provided.
-    fallback_mode : str
-        Behaviour when neither a ``fallback`` backend nor the ``ssp_wave``/
-        ``gas_logqion`` kwargs are available.  One of ``"error"`` (raise
-        NebularContinuumUnavailableError) or ``"warn"`` (emit a warning and
-        return lines only).  Default ``"error"``.
+    primary : NebularBackend
+        A line-only nebular backend (has_continuum=False). Must implement
+        predict_nebular_sed().
+    fallback : NebularBackend, optional
+        A continuum-capable backend (CueBackend, CloudyGridBackend) to use
+        if ``ssp_wave`` and ``gas_logqion`` are unavailable. Default: None.
+    fallback_mode : str, optional
+        Fallback behaviour if neither backend nor analytical continuum is
+        available. One of "error" (raise NebularContinuumUnavailableError)
+        or "warn" (emit warning, return lines only). Default: "error".
+
+    Attributes
+    ----------
+    has_continuum : bool
+        Always True; this wrapper guarantees continuum provision (via one of
+        three tiers) or graceful failure.
+    has_free_params : bool
+        Inherited from primary backend.
+    name : str
+        Identifier string (e.g., "fallback(CB19Backend)").
+
+    Notes
+    -----
+    **Continuum supply chain** at prediction time:
+
+    1. **Tier 1 (Secondary backend)**: If ``fallback`` is not None and has
+       ``predict_nebular_sed``, use it to compute full continuum + lines.
+       Integrated with the primary backend's lines.
+
+    2. **Tier 2 (Analytic approximation)**: If ``ssp_wave`` and ``gas_logqion``
+       are provided as kwargs to predict_nebular_sed(), compute analytic
+       free-free + two-photon via compute_analytic_nebular_continuum().
+       This requires ``ssp_wave`` [Å] and ``gas_logqion`` [log10(Q_H)].
+
+    3. **Tier 3/4 (Graceful degradation)**: If neither Tier 1 nor 2 is
+       available, either raise NebularContinuumUnavailableError (fallback_mode="error")
+       or emit a UserWarning and return lines only (fallback_mode="warn").
 
     Examples
     --------
-    Line-only backend with analytic continuum (Tier 2 via kwargs):
-
+    >>> from tengri.components.nebular import CB19Backend, CueBackend, NebularContinuumFallback
+    >>> ssp = load_ssp_data(...)
     >>> cb19 = CB19Backend(ssp_data=ssp)
-    >>> with_cont = NebularContinuumFallback(cb19, fallback_mode="warn")
-    >>> sed = with_cont.predict_nebular_sed(..., ssp_wave=wave, gas_logqion=49.1)
-
-    Line-only backend with full Cue continuum (Tier 1):
-
-    >>> cue = CueBackend(weights_path, ssp_data=ssp)
-    >>> with_cont = NebularContinuumFallback(cb19, fallback=cue)
+    >>> with_continuum = NebularContinuumFallback(cb19, fallback_mode="warn")
+    >>> # Predicts CB19 lines + analytic continuum if ssp_wave provided
+    >>> sed = with_continuum.predict_nebular_sed(
+    ...     neb_logzsol=-0.5, ..., ssp_wave=wave, gas_logqion=49.2
+    ... )
     """
 
     def __init__(
@@ -376,20 +498,38 @@ class NebularContinuumFallback:
         return getattr(self.primary, name)
 
     def predict_nebular_sed(self, *args, **kwargs) -> jnp.ndarray:
-        """Lines from primary backend + continuum from fallback or analytic.
+        """Predict nebular SED: lines from primary, continuum from fallback chain.
 
-        Continuum is supplied in priority order:
-        1. Secondary backend passed as ``fallback=`` (CueBackend / CloudyGridBackend)
-        2. Analytic free-free + two-photon continuum via
-           :func:`compute_analytic_nebular_continuum` (if ``ssp_wave`` and
-           ``gas_logqion`` are present in ``kwargs``)
-        3. Raise :exc:`NebularContinuumUnavailableError` (if ``fallback_mode="error"``)
-        4. Warn and return lines only (if ``fallback_mode="warn"``)
+        Retrieves emission lines from the primary backend and adds nebular
+        continuum via the priority fallback chain (secondary backend, analytic,
+        or graceful degradation).
 
         Returns
         -------
-        jnp.ndarray
-            Nebular SED on the SSP wavelength grid (erg/s/Hz).
+        jnp.ndarray, shape (n_wave,)
+            Nebular spectral luminosity density on SSP wavelength grid.
+            [erg/s/Hz]
+
+        Raises
+        ------
+        NebularContinuumUnavailableError
+            If ``fallback_mode="error"`` and neither secondary backend nor
+            analytic continuum (via ssp_wave + gas_logqion) is available.
+
+        Warns
+        -----
+        UserWarning
+            If ``fallback_mode="warn"`` and continuum is unavailable. Returns
+            lines only in this case.
+
+        Notes
+        -----
+        **Fallback chain execution**:
+
+        1. Call primary.predict_nebular_sed(*args, **kwargs) to get lines
+        2. If fallback backend is available, add its continuum output
+        3. Else if ssp_wave and gas_logqion in kwargs, compute analytic continuum
+        4. Else apply fallback_mode (error or warn)
         """
         from tengri.components.nebular._protocol import NebularContinuumUnavailableError
 

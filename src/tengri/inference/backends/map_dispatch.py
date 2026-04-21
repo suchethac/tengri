@@ -18,7 +18,7 @@ _OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd"}
 _SCIPY_OPTIMIZERS = {"lbfgs", "lbfgs_scipy"}
 _ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _SCIPY_OPTIMIZERS
 
-# Backward compatibility alias (used by fitter._fit_batch_vmap_map and tests)
+# Aliases for legacy names used in fitter and tests
 _JAXOPT_SOLVERS = _SCIPY_OPTIMIZERS
 _QUASI_NEWTON = _SCIPY_OPTIMIZERS
 
@@ -117,7 +117,9 @@ def _get_or_build_map_fns(model, loss_fn, optimizer, learning_rate):
 
     @jax.jit
     def scan_batch(params, ostate, d_args):
+        """Execute _SCAN_BATCH optimizer steps in a single jax.lax.scan."""
         def _step_body(carry, _):
+            """Execute one optimizer step: compute gradient, update state and params."""
             params, ostate = carry
             loss, grads = jax.value_and_grad(lambda p: loss_fn(p, d_args))(params)
             updates, new_ostate = opt.update(grads, ostate, params)
@@ -188,6 +190,7 @@ def _run_map_scipy(
     losses = []
 
     def objective(flat_params_np):
+        """Objective and gradient for scipy optimizer: (loss, grad_flat)."""
         params = unravel_fn(jnp.asarray(flat_params_np))
         val, grad = grad_fn(params, data_args)
         flat_grad, _ = ravel_pytree(grad)
@@ -198,6 +201,7 @@ def _run_map_scipy(
     if verbose_steps:
 
         def callback(xk):
+            """Print loss every print_every iterations."""
             params = unravel_fn(jnp.asarray(xk))
             loss_val = float(loss_fn(params, data_args))
             losses.append(loss_val)

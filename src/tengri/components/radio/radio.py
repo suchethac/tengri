@@ -1,46 +1,28 @@
-"""Radio emission models (synchrotron + free-free).
+"""Radio SED models: synchrotron + free-free + AGN jets.
 
-Predicts radio SED from star formation rate (via FIR-radio correlation)
-and AGN (via radio-loudness parameter).
+Predicts radio emission (mm–cm wavelengths) from three physical components:
 
-The total radio luminosity has three components:
-1. Star-forming synchrotron: from supernova remnants, scaled via FIRRC
-2. Thermal free-free: bremsstrahlung from HII regions (Murphy+2011)
-3. AGN: radio jets/lobes, parameterized by radio-loudness R
+1. **Star-forming synchrotron** (supernova remnants): scaled via FIR–radio
+   correlation (FIRRC) with optional mass and redshift evolution
+2. **Thermal free-free** (HII regions): bremsstrahlung, temperature-dependent
+3. **AGN radio** (jets/lobes): parameterised by radio-loudness R
 
-Three SFR physics models are available (select via ``sfr_mode`` in
-``radio_total`` / ``radio_total_dpl``):
+All functions are pure JAX, JIT-compatible, and fully differentiable.
 
-``"bell2003"``
-    Fixed scalar q_IR (Bell 2003). No mass or redshift dependence.
-    Backward-compatible default.
+**SFR→radio conversion modes** (select via sfr_mode parameter):
 
-``"delvecchio2021"``
-    Mass- and redshift-dependent FIRRC at 1.4 GHz (Delvecchio+2021, UV+FIR).
-    Correlation parameters (q0, mass_slope, z_slope) are exposed as function
-    arguments so they can later be treated as hierarchical prior hyperparameters
-    in PopulationFitter.
+- ``"bell2003"``: Fixed FIRRC q_IR = 2.64 (Bell 2003). Default, no evolution.
+- ``"delvecchio2021"``: Mass + redshift-dependent FIRRC at 1.4 GHz (Delvecchio+2021).
+  Correlation params exposed as arguments for hierarchical priors.
+- ``"mccheyne2022"``: Mass + redshift-dependent FIRRC at 150 MHz (McCheyne+2022).
+  Same architecture as Delvecchio2021.
 
-``"mccheyne2022"``
-    Mass- and redshift-dependent FIRRC calibrated at 150 MHz (McCheyne+2022).
-    Same hierarchical-prior architecture as Delvecchio2021.
+**Synchrotron suppression**: Low-mass galaxies have reduced non-thermal fraction
+(Bell 2003), encoded via the suppression function that scales luminosity by
+n(L) = 0.9 × (L/L*)^0.3 below threshold L* = 3e28 erg/s/Hz.
 
-The FIRRC correlation parameters in the latter two models are fixed to their
-literature best-fit values by default, but are architecturally free so they can
-be promoted to Uniform priors in a hierarchical fit without touching this code.
-
-All functions are pure JAX, JIT-compatible.
-
-References
-----------
-- Condon 1992, ARA&A, 30, 575
-- Bell 2003, ApJ, 586, 794 (FIR-radio correlation + synchrotron suppression)
-- Delhaize et al. 2017, A&A, 602, A4 (q_IR redshift evolution)
-- Delvecchio et al. 2021, A&A, 647, A123 (mass + redshift dependent FIRRC, 1.4 GHz)
-- McCheyne et al. 2022, A&A (mass + redshift dependent FIRRC, 150 MHz)
-- Mancuso et al. 2017 (synchrotron suppression calibration)
-- Martinez-Ramirez et al. 2024, A&A (AGNfitter-rx double power-law)
-- Giulietti et al. 2025 (arXiv:2503.20525, SEMPER; equations 4-5 adopted here)
+**Radio frequency range**: λ > 1 mm (ν < 300 GHz). SED is zero shortward of
+this limit; radio-only modes skip optical/IR computation entirely.
 """
 
 import jax.numpy as jnp
@@ -66,39 +48,49 @@ _SFR_IR_KENNICUTT: float = 1.73e10 * 3.828e33  # ≈ 6.62e43 erg/s
 
 
 def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:
-    """Bell (2003) non-thermal fraction correction for synchrotron suppression.
+    r"""Apply Bell (2003) non-thermal fraction correction to synchrotron luminosity.
 
-    Low-mass, low-SFR galaxies are less efficient synchrotron emitters due to
-    cosmic-ray losses (Klein+1984; Chi+1990; Price+1992; Bell 2003). This
-    applies the non-thermal fraction n(L) from Bell (2003) ApJ 586, 794 Eq. 3:
-
-    .. math::
-
-        n(L) = \\begin{cases}
-            0.9 & L > L^* \\\\
-            0.9 \\left(\\frac{L}{L^*}\\right)^{0.3} & L \\leq L^*
-        \\end{cases}
-
-        L_{\\rm corr} = n(L) \\times L
-
-    At L >> L*: n ≈ 0.9 (unaffected, ~10% thermal fraction).
-    At L = 0.01 L*: n ≈ 0.9 × 0.01^{0.3} ≈ 0.45 (gentle 0.3 power-law).
+    Corrects for the fact that low-mass, low-SFR galaxies have reduced synchrotron
+    efficiency due to cosmic-ray energy loss. The non-thermal fraction n(L)
+    transitions from ~0.9 (high-L, unaffected) to lower values below a critical
+    luminosity L* (Bell 2003, Eq. 3).
 
     Parameters
     ----------
     L_ref : array or float
-        Luminosity density at the reference frequency in erg/s/Hz.
+        Synchrotron luminosity density at reference frequency. [erg/s/Hz]
 
     Returns
     -------
     array or float
-        Corrected luminosity density in erg/s/Hz.
+        Suppression-corrected luminosity: n(L) × L_ref. [erg/s/Hz]
 
     Notes
     -----
-    L* = 3e28 erg/s/Hz at 1.4 GHz, corresponding to the M_V = -21 threshold
-    in Bell (2003). The correction is applied at the reference frequency before
-    spectral extrapolation so the power-law shape is preserved.
+    **Suppression formula** (Bell 2003, ApJ 586, 794, Eq. 3):
+
+        .. math::
+
+            n(L) = \begin{cases}
+                0.9 & \text{if } L \geq L_* \\
+                0.9 \, \left(\frac{L}{L_*}\right)^{0.3} & \text{if } L < L_*
+            \end{cases}
+
+        where L* = 3 × 10^28 erg/s/Hz at 1.4 GHz (M_V = −21 threshold).
+
+        The exponent 0.3 (gentle power-law) reflects the mild luminosity
+        dependence of cosmic-ray losses in low-mass systems.
+
+    **Physical mechanism**: Synchrotron radiation is generated by relativistic
+    electrons in magnetic fields. In low-SFR galaxies, electrons escape
+    (Klein et al. 1984; Chi et al. 1990; Price et al. 1992) before cooling
+    via synchrotron, reducing the radio-to-IR ratio from the usual ~0.9 to
+    lower values. High-L galaxies (massive, vigorous SF) retain sufficient
+    magnetic fields and confinement to avoid suppression.
+
+    **Application**: Correction is applied at the reference frequency before
+    power-law spectral extrapolation, so the spectral shape (α_1.4GHz) is
+    preserved; only the normalisation is adjusted.
     """
     L_safe = jnp.where(L_ref > 0.0, L_ref, 1.0e-40)
     n = jnp.where(
@@ -119,9 +111,8 @@ def radio_sfr_bell2003(
     """Star-forming synchrotron via fixed scalar FIRRC (Bell 2003).
 
     This is the original Bell+2003 model with a constant q_IR.  It is
-    equivalent to the former ``radio_star_forming`` function and preserved
-    here for backward-compatibility and as the ``sfr_mode="bell2003"``
-    option in ``radio_total``.
+    Equivalent to the former ``radio_star_forming`` function and available
+    as the ``sfr_mode="bell2003"`` option in ``radio_total``.
 
     .. math::
 
@@ -582,6 +573,7 @@ def radio_agn_dpl(
 
     # Double power-law (Martinez-Ramirez+2024 Eq. 9-10)
     def _dpl_shape(freq):
+        """Compute double power-law spectral shape with turnover and cutoff."""
         ratio = freq / nu_t
         thick_thin = jnp.power(ratio, alpha1)
         turnover = 1.0 - jnp.exp(-jnp.power(nu_t / freq, alpha1 - alpha2))
@@ -654,8 +646,7 @@ def radio_total(
     apply_suppression : bool
         Apply Bell+2003 synchrotron suppression (delvecchio/mccheyne modes).
     include_freefree : bool
-        Add thermal free-free component (Murphy+2011). Default False to preserve
-        backward-compatible behavior.
+        Add thermal free-free component (Murphy+2011). Default False.
     T_e : float
         Electron temperature [K] for free-free component. Default 1e4.
     alpha_ff : float

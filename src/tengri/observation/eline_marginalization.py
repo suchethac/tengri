@@ -28,8 +28,8 @@ import jax
 import jax.numpy as jnp
 
 from tengri.observation.eline_catalog import (
-    DEFAULT_LINE_NAMES,  # noqa: F401 — re-exported for backward compatibility
-    DEFAULT_LINE_WAVELENGTHS,  # noqa: F401 — re-exported for backward compatibility
+    DEFAULT_LINE_NAMES,  # noqa: F401 — re-exported for convenience
+    DEFAULT_LINE_WAVELENGTHS,  # noqa: F401 — re-exported for convenience
 )
 
 # ── Public API ────────────────────────────────────────────────────
@@ -48,6 +48,7 @@ def _build_eline_design_matrix_jitted(
     c_kms = 299792.458
 
     def _single_column(lam_rest):
+        """Build a normalized Gaussian profile for a single emission line."""
         lam_obs = lam_rest * (1.0 + redshift)
         # Velocity offset: convert km/s to wavelength shift
         delta_lam = lam_obs * eline_delta_v_kms / c_kms

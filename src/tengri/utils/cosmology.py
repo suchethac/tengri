@@ -109,7 +109,7 @@ def luminosity_distance(
 ) -> float:
     """Luminosity distance in cm.
 
-    Supports both positional args (backward compat) and keyword-only cosmo object.
+    Accepts positional h0/om0 or a keyword-only ``cosmo`` object.
     Priority: positional h0/om0 > keyword cosmo > defaults.
 
     Parameters

@@ -111,39 +111,66 @@ _CANONICAL_METHODS = {
 
 
 def resolve_method(method: str, emit_warning: bool = True) -> str:
-    """Resolve method string to canonical name.
+    """Resolve method string to canonical name with deprecation warning.
 
-    Maps deprecated aliases to their canonical names, emitting a
-    DeprecationWarning if an alias is used. Validates that the final
-    method is canonical or "auto".
+    Maps deprecated method aliases to their canonical equivalents, emitting
+    a DeprecationWarning for deprecated usage. Validates that the final
+    method name is either canonical (in _CANONICAL_METHODS) or ``"auto"``.
 
     Parameters
     ----------
     method : str
-        Method name (canonical, deprecated alias, "auto", or invalid).
+        Method name: canonical (e.g., ``"vi"``, ``"mcmc_nuts"``),
+        deprecated alias (e.g., ``"geovi"``, ``"nifty_geovi"``),
+        ``"auto"``, or invalid.
+
     emit_warning : bool, optional
-        If True (default), emit DeprecationWarning for deprecated aliases.
+        If ``True`` (default), emit DeprecationWarning when an alias is used.
+        Set to ``False`` to silence warnings (useful in test harnesses).
 
     Returns
     -------
     str
-        Canonical method name.
+        Canonical method name. May be ``"auto"`` if that was the input.
 
     Raises
     ------
     ParameterError
-        If method is not canonical, not a recognized alias, and not "auto".
+        If method is not canonical, not a recognized deprecated alias,
+        and not ``"auto"``. Exception message lists all valid canonical
+        names and known aliases.
+
+    Notes
+    -----
+    Deprecated aliases are managed by ``_DEPRECATED_METHOD_ALIASES`` dict at
+    module level. This function is called automatically by ``Fitter.run()``
+    and does not need to be invoked directly by users.
+
+    See Also
+    --------
+    Fitter.run : User-facing method that calls this internally.
 
     Examples
     --------
+    Canonical name (no warning):
+
     >>> resolve_method("vi")
     'vi'
+
+    Deprecated alias (emits DeprecationWarning):
+
     >>> resolve_method("geovi")  # doctest: +SKIP
-    'vi'  # and emits DeprecationWarning
-    >>> resolve_method("vi_nifty")  # doctest: +SKIP
-    'vi'  # and emits DeprecationWarning
-    >>> resolve_method("invalid_method")
-    ParameterError: Unknown method ...
+    'vi'  # Emits: DeprecationWarning: Method 'geovi' is deprecated...
+
+    Suppress warnings for tests:
+
+    >>> resolve_method("nifty_mgvi", emit_warning=False)
+    'vi_linear'
+
+    Invalid method:
+
+    >>> resolve_method("invalid_method")  # doctest: +SKIP
+    ParameterError: Unknown method: 'invalid_method'. Valid canonical names: ...
     """
     if method is None:
         raise ParameterError(
@@ -179,40 +206,109 @@ def resolve_method(method: str, emit_warning: bool = True) -> str:
 
 
 class Fitter:
-    """Inference engine for tengri models.
+    """Inference engine for differentiable SED fitting with flexible method dispatch.
+
+    Separates inference strategy from the forward model by building a loss
+    function from the SEDModel's predictions and the Parameters' priors, then
+    running the chosen optimizer/sampler. Supports point estimation (MAP,
+    Laplace), gradient-free and gradient-based sampling (ESS, NUTS, Ray
+    Tracing, MCMC), variational inference (geoVI, MGVI), and nested sampling
+    (NSS) via a unified ``run(method)`` interface.
 
     Parameters
     ----------
-    model : Model
-        Configured forward model.
-    data : array
-        Observed data (photometry or spectrum).
-    noise : array
-        1-sigma uncertainties.
+    model : SEDModel
+        Configured forward model with ``spec`` (Parameters), ``observation``
+        (Photometry/Spectroscopy/etc.), and predictor methods.
+    data : array_like, shape (n_data,)
+        Observed data (photometric fluxes or spectra). Units match the model's
+        ``observation`` configuration. [erg/s/cm²/Hz] for photometry.
+    noise : array_like, shape (n_data,)
+        1-sigma measurement uncertainties. Same shape and units as ``data``.
     data_type : str or None
-        ``"photometry"``, ``"spectroscopy"``, or ``"joint"``.
-        If ``None`` (default), inferred from ``model.observation``.
-        Explicit values override the inferred type.
-    calibration_marginalize : bool
-        If ``True``, analytically marginalize over spectroscopic
-        calibration polynomial coefficients (Chebyshev) when computing
-        the spectroscopic log-likelihood.  Only applies when
-        ``data_type`` is ``"spectroscopy"`` or ``"joint"``.
-        Follows the Prospector approach (Johnson et al. 2021).
-        Default ``False``.
-    cal_n_poly : int
+        Data type indicator: ``"photometry"``, ``"spectroscopy"``, or
+        ``"joint"``. If ``None`` (default), inferred from
+        ``model.observation``. Explicit values override inference.
+    data_mask : array_like, bool or None
+        Optional boolean mask for censored/non-detections. ``True`` = use datum
+        in likelihood, ``False`` = exclude. Default ``None`` (use all).
+    calibration_marginalize : bool, optional
+        If ``True``, analytically marginalize over spectroscopic calibration
+        polynomial coefficients (Chebyshev order 1--``cal_n_poly``) when
+        computing spectroscopic log-likelihood. Only applies when
+        ``data_type`` ∈ {``"spectroscopy"``, ``"joint"``}. Follows Prospector
+        (Johnson et al. 2021). Default ``False``.
+    cal_n_poly : int, optional
         Number of Chebyshev polynomial coefficients for calibration
-        marginalization (order 1 through ``cal_n_poly``).  Default 3.
-    cal_prior_sigma : float
-        Standard deviation of the Gaussian prior on each calibration
-        coefficient.  Default 1.0.
-    eline_marginalize : bool or None
+        marginalization (order 1 through ``cal_n_poly``). Default ``3``.
+    cal_prior_sigma : float, optional
+        Standard deviation of Gaussian prior on each calibration coefficient.
+        Default ``1.0``.
+    eline_marginalize : bool or None, optional
         Whether to analytically marginalize emission line amplitudes.
         ``None`` (default) auto-detects from the model's ``Spectroscopy``
-        (uses ``eline_mode="marginalized"`` setting).
-    eline_prior_type : str or None
-        Prior type for emission lines: ``"flat"`` or ``"cloudy"``.
+        config (checks ``eline_mode == "marginalized"``).
+    eline_prior_type : str or None, optional
+        Prior type for emission line marginalization: ``"flat"`` (uniform) or
+        ``"cloudy"`` (grid-interpolated from Cloudy models).
         ``None`` auto-detects from ``Spectroscopy.eline_prior_type``.
+        Default ``None``.
+
+    Attributes
+    ----------
+    model : SEDModel
+        Reference to the input forward model.
+    data : ndarray, shape (n_data,)
+        Input data as JAX array.
+    noise : ndarray, shape (n_data,)
+        Input noise as JAX array.
+    data_type : str
+        Resolved data type (``"photometry"``, ``"spectroscopy"``, ``"joint"``).
+    spec : Parameters
+        Reference to ``model.spec``.
+
+    Notes
+    -----
+    **JIT-compatibility**: Methods in this class are not JIT-compatible because
+    they perform Python-level branching on method names and manage resources
+    (thread compilation, caching). The *returned* loss function and sampler
+    engines are fully JIT-compiled and reusable across galaxies.
+
+    **Background compilation**: Upon initialization, a daemon thread spawns to
+    pre-compile the JIT engine (gradient computation, linear solve). The first
+    ``run()`` call waits for this thread (typically <1s if warm, or the full
+    compile time on cold XLA). Set ``TENGRI_NO_BACKGROUND_COMPILE=1`` to
+    disable (test environments).
+
+    **Engine caching**: Compiled engines are cached on the Model object so that
+    multiple Fitters created with the same Model but different data reuse the
+    same XLA programs. Cache key depends on data_type, dimensionality, free
+    parameter names, and feature flags (emission lines, calibration).
+
+    References
+    ----------
+    .. [1] B. D. Johnson et al., "Prospector: Stellar Population Inference from
+       Spectra and SEDs," ApJS, 254, 22 (2021).
+       arXiv:2012.01426. https://doi.org/10.3847/1538-4365/abef67
+
+    Examples
+    --------
+    Fit a single galaxy with geoVI (default):
+
+    >>> from tengri import SEDModel, Fitter, Parameters
+    >>> model = SEDModel(Parameters())
+    >>> data = jnp.array([1.2, 0.8, 0.5])  # photometric fluxes
+    >>> noise = jnp.array([0.1, 0.08, 0.06])
+    >>> fitter = Fitter(model, data, noise)
+    >>> result = fitter.run("vi", n_samples=100)
+    >>> print(result.params)
+
+    Fit with warm-start from MAP:
+
+    >>> result_map = fitter.run("map", n_steps=1000)
+    >>> result_mcmc = fitter.run("mcmc_nuts", init_from=result_map, n_warmup=500)
+
+    See the docstring of :meth:`run` for all available methods and their options.
     """
 
     # ── Construction ──────────────────────────────────────────────────
@@ -465,6 +561,7 @@ class Fitter:
             return
 
         def _worker() -> None:
+            """Background thread that compiles the JIT engine."""
             try:
                 with self._compilation_lock:
                     cache_key = self._engine_cache_key()
@@ -682,7 +779,7 @@ class Fitter:
         ----------
         mode : str, optional
             Forward model prediction mode. Default "_traceable" is for
-            backward compatibility. Use "auto" for ~1.5x speedup with
+            internal tracing mode (NIFTy VI path). Use "auto" for ~1.5x speedup with
             non-NIFTy methods.
         """
         return build_loss_fn(self, mode=mode)
@@ -749,6 +846,7 @@ class Fitter:
 
         @jax.jit
         def val_and_grad(params_u, data_args):
+            """Compute loss and gradient with respect to unbounded parameters."""
             return jax.value_and_grad(lambda p: loss_fn(p, data_args))(params_u)
 
         cache[cache_key] = val_and_grad
@@ -769,6 +867,7 @@ class Fitter:
 
         @jax.jit
         def logdensity(params_u, data_args):
+            """Compute log posterior (negative loss) for MCMC."""
             return -loss_fn(params_u, data_args)
 
         cache[cache_key] = logdensity
@@ -826,62 +925,204 @@ class Fitter:
     # ── Inference dispatch ────────────────────────────────────────────
 
     def run(self, method: str = "vi", *, init_from=None, key=None, **kwargs):
-        """Run inference.
+        """Run inference using the specified method.
+
+        Dispatches to the underlying inference backend (variational, MCMC,
+        point estimation, or nested sampling) and returns a ``Posterior``
+        object with samples, diagnostics, and derived quantities.
 
         Parameters
         ----------
-        method : str
-            ``"vi"``                   — geoVI via NIFTy (nonlinear, default).
-            ``"vi_linear"``            — MGVI via NIFTy (linearised).
-            ``"vi_nifty_fast"``        — geoVI fast path (~35% faster, no logging).
-            ``"vi_nifty_fast_linear"`` — MGVI fast path (~35% faster, no logging).
-            ``"vi_native"``            — Native JAX geoVI (experimental).
-            ``"vi_native_linear"``     — Native JAX MGVI (experimental).
-            ``"mcmc_nuts"``            — NUTS via BlackJAX (default for D≤20).
-            ``"mcmc_hmc"``             — Standard HMC (fixed trajectory length).
-            ``"mcmc_dynamic_hmc"``     — Dynamic HMC (adaptive trajectory).
-            ``"mcmc_ghmc"``            — Generalized HMC (partial momentum refresh).
-            ``"mcmc_mclmc"``           — MCLMC (O(1) grad/sample, biased).
-            ``"mcmc_adjusted_mclmc"``  — Adjusted MCLMC (Metropolis-corrected).
-            ``"mcmc_raytrace"``        — Ray Tracing (Behroozi 2025).
-            ``"mcmc"``                 — Auto: NUTS (D≤20) or Ray Tracing (D>20).
-            ``"mcmc_ess"``             — Elliptical Slice Sampling.
-            ``"map"``                  — MAP optimisation.
-            ``"laplace"``              — Gaussian approximation at MAP.
-            ``"pathfinder"``           — L-BFGS path (Zhang+2022).
-            ``"nss"``                  — Nested Slice Sampling, log Z (D≤30).
-            ``"auto"``                 — mcmc_nuts (D≤20) or vi (D>20).
+        method : str, optional
+            Inference method (case-sensitive). Default ``"vi"``.
 
-            Deprecated aliases (still work, emit DeprecationWarning):
-            ``"vi_nifty"``         → ``"vi"``
-            ``"vi_nifty_linear"``  → ``"vi_linear"``
-            ``"geovi"``, ``"fast_geovi"``,
-            ``"nifty_geovi"``      → ``"vi"``
-            ``"mgvi"``, ``"fast_mgvi"``,
-            ``"nifty_mgvi"``       → ``"vi_linear"``
-            ``"native_geovi"``     → ``"vi_native"``
-            ``"native_mgvi"``, ``"native_evi"`` → ``"vi_native_linear"``
-            ``"raytrace"``         → ``"mcmc_raytrace"``
-            ``"nuts"``             → ``"mcmc_nuts"``
-            ``"hmc"``              → ``"mcmc_hmc"``
-            ``"dynamic_hmc"``      → ``"mcmc_dynamic_hmc"``
-            ``"ghmc"``             → ``"mcmc_ghmc"``
-            ``"mclmc"``            → ``"mcmc_mclmc"``
-            ``"adjusted_mclmc"``   → ``"mcmc_adjusted_mclmc"``
-            ``"elliptical_slice"`` → ``"mcmc_ess"``
-            ``"evidence"``         → ``"nss"``
+            **Variational Inference (VI)**
+
+            - ``"vi"`` — geoVI via NIFTy (nonlinear, default for D>20)
+            - ``"vi_linear"`` — MGVI via NIFTy (linearized Gaussian)
+            - ``"vi_nifty_fast"`` — geoVI fast path (~35% faster, no logging)
+            - ``"vi_nifty_fast_linear"`` — MGVI fast path (~35% faster, no logging)
+            - ``"vi_native"`` — Native JAX geoVI (experimental; ~19× faster than NIFTy)
+            - ``"vi_native_linear"`` — Native JAX MGVI (experimental)
+
+            **MCMC Sampling**
+
+            - ``"mcmc_nuts"`` — NUTS via BlackJAX (default for D≤20; exact posterior)
+            - ``"mcmc_raytrace"`` — Ray Tracing (Behroozi 2025; O(1) gradient cost)
+            - ``"mcmc"`` — Auto: NUTS (D≤20) or Ray Tracing (D>20)
+            - ``"mcmc_hmc"`` — Standard HMC (fixed trajectory length)
+            - ``"mcmc_dynamic_hmc"`` — Dynamic HMC (adaptive trajectory)
+            - ``"mcmc_ghmc"`` — Generalized HMC (partial momentum refresh)
+            - ``"mcmc_mclmc"`` — MCLMC (O(1) grad/sample, biased)
+            - ``"mcmc_adjusted_mclmc"`` — MCLMC + Metropolis correction
+            - ``"mcmc_ess"`` — Elliptical Slice Sampling (gradient-free)
+
+            **Point Estimation & Approximations**
+
+            - ``"map"`` — MAP optimization (Adam by default)
+            - ``"laplace"`` — Laplace approximation (Gaussian posterior at MAP)
+            - ``"pathfinder"`` — L-BFGS trajectory + sequence of Gaussians (Zhang+2022)
+
+            **Model Comparison (Bayesian Evidence)**
+
+            - ``"nss"`` — Nested Slice Sampling (exact Z, D≤30)
+
+            **Automatic Selection**
+
+            - ``"auto"`` — NUTS (D≤20) or geoVI (D>20) based on dimensionality
+
+            **Deprecated Aliases** (still work, emit DeprecationWarning):
+
+            - ``"vi_nifty"``, ``"geovi"``, ``"fast_geovi"``, ``"nifty_geovi"``
+              → ``"vi"``
+            - ``"vi_nifty_linear"``, ``"mgvi"``, ``"fast_mgvi"``, ``"nifty_mgvi"``
+              → ``"vi_linear"``
+            - ``"native_geovi"`` → ``"vi_native"``
+            - ``"native_mgvi"``, ``"native_evi"`` → ``"vi_native_linear"``
+            - ``"raytrace"``, ``"nuts"``, ``"hmc"``, etc. (all MCMC methods)
+            - ``"evidence"`` → ``"nss"``
 
         init_from : Posterior, optional
-            Use a previous result as warm-start initialisation.
+            Previous inference result to use as warm-start initialization.
+            The posterior mean is extracted and converted to unbounded space.
+            Useful for refining results across different methods. Default ``None``.
+
         key : PRNGKey, optional
-            Random key (defaults to PRNGKey(42)).
+            JAX random key. Default ``PRNGKey(42)`` for reproducibility.
+            Ignored for deterministic methods (``"map"``, ``"laplace"``).
+
         **kwargs
-            Method-specific arguments passed to the underlying sampler.
+            Method-specific keyword arguments passed to the underlying backend:
+
+            - **VI methods**: ``n_samples``, ``n_kl_iter``, ``tol_kl``, ``sample_mode``,
+              ``verbose``, ``mirror_samples``.
+            - **MCMC methods**: ``n_steps``, ``n_warmup``, ``thin``, ``step_size``,
+              ``mass_matrix``, ``adapt_step_size``, ``verbose``.
+            - **MAP/Laplace**: ``n_steps``, ``step_size``, ``lr``, ``verbose``.
+            - **Pathfinder**: ``n_steps``, ``n_init``, ``step_size``, ``verbose``.
+            - **NSS**: ``n_live``, ``n_batch``, ``slice_width``, ``verbose``.
+
+            See backend docstrings for full option documentation.
 
         Returns
         -------
         Posterior
-            Inference results with ``._fitter`` back-reference set.
+            Inference results object with attributes:
+
+            - ``samples`` : dict or None — Posterior samples (None for MAP).
+            - ``params`` : dict — Best-fit or posterior mean parameters.
+            - ``method`` : str — Method used.
+            - ``diagnostics`` : dict — Convergence/quality metrics.
+            - ``log_evidence`` : float or None — Bayesian evidence (NSS only).
+            - ``wall_time_s`` : float — Total runtime.
+
+            The Posterior also has derived quantity methods:
+            ``derived``, ``summary()``, ``to_arviz()``, ``refine()``, etc.
+
+        Raises
+        ------
+        ParameterError
+            If ``method`` is invalid or unrecognized.
+        RuntimeError
+            If background JIT compilation failed.
+        ValueError
+            If method-specific kwargs are invalid.
+
+        Notes
+        -----
+        **Method selection strategy:**
+
+        - **Default** (``"vi"``): geoVI is recommended for high-dimensional problems
+          (D>50) and population fitting. Captures non-Gaussian posterior geometry.
+        - **Exact posterior** (``"mcmc_nuts"``): Use for D≤20 where exact sampling is
+          feasible and posterior validation is critical.
+        - **Fast large-D sampling** (``"mcmc_raytrace"``): Use for D>50 with gradient
+          access; 250× more robust to noisy gradients than HMC.
+        - **Bayesian model comparison** (``"nss"``): Estimates log-evidence for
+          comparing competing physical models (e.g., different dust laws).
+
+        **Important gotchas:**
+
+        - **VI posterior equivalence**: ``"vi"`` (NIFTy geoVI) and ``"vi_native"``
+          (pure JAX geoVI) target the same objective but are NOT posterior-equivalent.
+          The native version is ~19× faster but produces different posterior shapes
+          on some problems (e.g., PSD timescale can differ by order of magnitude).
+          Validate before swapping methods. See
+          :doc:`docs/dev/benchmarks/2026-04-17_native_vs_nifty.md`.
+
+        - **VIConfig.n_samples doubling**: In geoVI, when ``mirror_samples=True``
+          (default), ``n_samples=3`` produces 6 effective samples (3 + 3 mirrors).
+          When tuning convergence, think in effective samples.
+
+        - **Ray Tracing step_size scaling**: Ray Tracing uses ``step_size=0.05`` by
+          default for D~137. There is a sharp viability cliff at ~0.06 where
+          acceptance drops from 80% to 0%. Use smaller step sizes for safety.
+
+        - **Method defaults from file**: Default hyperparameters (``n_kl_iter``,
+          ``n_warmup``, etc.) are loaded from ``defaults.toml`` if available.
+          Command-line kwargs override file defaults.
+
+        **Warm-starting from MAP:**
+
+        Fitting often proceeds in stages:
+
+        >>> result_map = fitter.run("map", n_steps=1500)
+        >>> result_mcmc = fitter.run("mcmc_nuts", init_from=result_map, n_warmup=500)
+        >>> result_vi = fitter.run("vi", init_from=result_map, n_samples=100)
+
+        MAP provides a quick point estimate; MCMC and VI refine from this
+        initialization, converging faster than from random initialization.
+
+        **Reproducibility:**
+
+        Pass ``key=jax.random.PRNGKey(seed)`` to control randomness across runs.
+        ``key=None`` defaults to ``PRNGKey(42)`` for reproducibility.
+
+        References
+        ----------
+        .. [1] A. Hoffman and M. D. Hoffman, "The No-U-Turn Sampler: Adaptively
+           Setting Path Lengths in Hamiltonian Monte Carlo," JMLR, 15, 1593 (2014).
+           https://arxiv.org/abs/1111.4246
+
+        .. [2] P. Behroozi et al., "Ray Tracing Sampling," arXiv:2502.04507 (2025).
+           https://arxiv.org/abs/2502.04507
+
+        .. [3] L. Zhang et al., "Pathfinder: Parallel quasi-Newton variational
+           inference," NeurIPS, 35 (2022).
+           https://arxiv.org/abs/2108.03782
+
+        .. [4] B. D. Johnson et al., "Prospector: Stellar Population Inference
+           from Spectra and SEDs," ApJS, 254, 22 (2021).
+           arXiv:2012.01426. https://doi.org/10.3847/1538-4365/abef67
+
+        Examples
+        --------
+        **Example 1: Quick exploration with MAP + geoVI**
+
+        >>> fitter = Fitter(model, data, noise)
+        >>> result = fitter.run("vi")  # geoVI with defaults
+        >>> print(result.summary())
+
+        **Example 2: Exact posterior with NUTS (small-D)**
+
+        >>> result = fitter.run("mcmc_nuts", n_warmup=500, n_steps=2000)
+        >>> samples = result.samples["stellar_mass"]
+        >>> print(f"M_star = {jnp.median(samples):.2e} Msun")
+
+        **Example 3: Warm-start MCMC from MAP**
+
+        >>> result_map = fitter.run("map", n_steps=1500)
+        >>> result_mcmc = fitter.run("mcmc_nuts", init_from=result_map, n_warmup=300, n_steps=1000)
+
+        **Example 4: Nested sampling for Bayesian model comparison**
+
+        >>> result_nss = fitter.run("nss", n_live=100)
+        >>> log_z = result_nss.log_evidence
+        >>> print(f"log(Z) = {log_z:.2f}")  # Use for Bayes factors
+
+        **Example 5: Using ``"auto"`` method for unknown dimensionality**
+
+        >>> result = fitter.run("auto")  # NUTS if D≤20, VI if D>20
         """
         if key is None:
             key = jax.random.PRNGKey(42)
@@ -1077,97 +1318,115 @@ class Fitter:
     # ── Private method runners ────────────────────────────────────────
 
     def _run_vi(self, *, key, init_from=None, **kwargs) -> Posterior:
+        """Dispatch to geometric variational inference via NIFTy (nonlinear)."""
         from tengri.inference.backends.vi.nifty import run_nifty_vi
 
         kwargs.setdefault("sample_mode", "nonlinear_resample")
         return run_nifty_vi(self, key=key, init_from=init_from, **kwargs)
 
     def _run_vi_linear(self, *, key, init_from=None, **kwargs) -> Posterior:
+        """Dispatch to metric Gaussian variational inference via NIFTy (linear)."""
         from tengri.inference.backends.vi.nifty import run_nifty_vi
 
         kwargs.setdefault("sample_mode", "linear_resample")
         return run_nifty_vi(self, key=key, init_from=init_from, **kwargs)
 
     def _run_vi_native(self, *, key, init_from=None, **kwargs) -> Posterior:
+        """Dispatch to native JAX geometric variational inference (experimental)."""
         from tengri.inference.backends.vi.native import run_native_vi
 
         kwargs.setdefault("sample_mode", "geovi")
         return run_native_vi(self, key=key, init_from=init_from, **kwargs)
 
     def _run_vi_native_linear(self, *, key, init_from=None, **kwargs) -> Posterior:
+        """Dispatch to native JAX MGVI inference (experimental)."""
         from tengri.inference.backends.vi.native import run_native_vi
 
         kwargs.setdefault("sample_mode", "linear")
         return run_native_vi(self, key=key, init_from=init_from, **kwargs)
 
     def _run_nifty_fast_vi(self, *, key, init_from=None, **kwargs) -> Posterior:
+        """Dispatch to fast geoVI via NIFTy OptimizeVI (no logging, ~35% speedup)."""
         from tengri.inference.backends.vi.nifty import run_nifty_fast_vi
 
         kwargs.setdefault("sample_mode", "nonlinear_resample")
         return run_nifty_fast_vi(self, key=key, init_from=init_from, **kwargs)
 
     def _run_nifty_fast_vi_linear(self, *, key, init_from=None, **kwargs) -> Posterior:
+        """Dispatch to fast MGVI via NIFTy OptimizeVI (no logging, ~35% speedup)."""
         from tengri.inference.backends.vi.nifty import run_nifty_fast_vi
 
         kwargs.setdefault("sample_mode", "linear_resample")
         return run_nifty_fast_vi(self, key=key, init_from=init_from, **kwargs)
 
     def _run_nss(self, *, key, **kwargs) -> Posterior:
+        """Dispatch to nested slice sampling for Bayesian evidence estimation."""
         from tengri.inference.backends.evidence import run_nss
 
         return run_nss(self, key=key, **kwargs)
 
     def _run_map(self, *, key, **kwargs) -> Posterior:
+        """Dispatch to MAP optimization via gradient descent (Adam by default)."""
         from tengri.inference.backends.map_dispatch import run_map
 
         return run_map(self, key=key, **kwargs)
 
     def _run_raytrace(self, *, key, **kwargs) -> Posterior:
+        """Dispatch to Ray Tracing MCMC sampler (Behroozi 2025)."""
         from tengri.inference.backends.mcmc.common import run_raytrace
 
         return run_raytrace(self, key=key, **kwargs)
 
     def _run_nuts(self, *, key, **kwargs) -> Posterior:
+        """Dispatch to NUTS sampler via BlackJAX for exact posterior sampling."""
         from tengri.inference.backends.mcmc.common import run_nuts
 
         return run_nuts(self, key=key, **kwargs)
 
     def _run_hmc(self, *, key, **kwargs) -> Posterior:
+        """Dispatch to standard Hamiltonian Monte Carlo (fixed trajectory length)."""
         from tengri.inference.backends.mcmc.common import run_hmc
 
         return run_hmc(self, key=key, **kwargs)
 
     def _run_dynamic_hmc(self, *, key, **kwargs) -> Posterior:
+        """Dispatch to dynamic HMC with adaptive trajectory length."""
         from tengri.inference.backends.mcmc.common import run_dynamic_hmc
 
         return run_dynamic_hmc(self, key=key, **kwargs)
 
     def _run_ghmc(self, *, key, **kwargs) -> Posterior:
+        """Dispatch to generalized HMC with partial momentum refresh."""
         from tengri.inference.backends.mcmc.common import run_ghmc
 
         return run_ghmc(self, key=key, **kwargs)
 
     def _run_mclmc(self, *, key, **kwargs) -> Posterior:
+        """Dispatch to micro-canonical Langevin MCMC (microcanonical dynamics)."""
         from tengri.inference.backends.mcmc.common import run_mclmc
 
         return run_mclmc(self, key=key, **kwargs)
 
     def _run_adjusted_mclmc(self, *, key, **kwargs) -> Posterior:
+        """Dispatch to MCLMC with Metropolis-Hastings correction."""
         from tengri.inference.backends.mcmc.common import run_adjusted_mclmc
 
         return run_adjusted_mclmc(self, key=key, **kwargs)
 
     def _run_laplace(self, *, key, **kwargs) -> Posterior:
+        """Dispatch to Laplace approximation (Gaussian posterior at MAP)."""
         from tengri.inference.backends.map_dispatch import run_laplace
 
         return run_laplace(self, key=key, **kwargs)
 
     def _run_pathfinder(self, *, key, **kwargs) -> Posterior:
+        """Dispatch to Pathfinder (L-BFGS trajectory + best Gaussian fit)."""
         from tengri.inference.backends.map_dispatch import run_pathfinder
 
         return run_pathfinder(self, key=key, **kwargs)
 
     def _run_elliptical_slice(self, *, key, **kwargs) -> Posterior:
+        """Dispatch to elliptical slice sampling (gradient-free)."""
         from tengri.inference.backends.mcmc.elliptical_slice import (
             run_elliptical_slice_fitter,
         )
@@ -1322,6 +1581,7 @@ class Fitter:
 
         @jax.jit
         def one_step(state, rng_key):
+            """Execute one NUTS sampling step and return updated state."""
             state, _ = kernel(rng_key, state)
             return state, state
 
@@ -1573,6 +1833,7 @@ class Fitter:
         first_data_args = jax.tree.map(lambda x: x[0], batch_data_args)
 
         def ld_first(pos):
+            """Log-density for the first galaxy (used in warmup adaptation)."""
             return logdensity_flat_2arg(pos, first_data_args)
 
         if method in ("mcmc_nuts", "mcmc_hmc"):
@@ -1624,10 +1885,13 @@ class Fitter:
             kernel = _get_nuts_kernel()
 
             def _sample_scan(state, keys, data_args_i):
+                """Scan over MCMC steps for a single galaxy (NUTS variant)."""
                 def ld(pos):
+                    """Log-density for this galaxy."""
                     return logdensity_flat_2arg(pos, data_args_i)
 
                 def _step(s, k):
+                    """Execute one NUTS kernel step."""
                     s, info = kernel(
                         k,
                         s,
@@ -1644,10 +1908,13 @@ class Fitter:
             kernel = _get_hmc_kernel()
 
             def _sample_scan(state, keys, data_args_i):
+                """Scan over MCMC steps for a single galaxy (HMC variant)."""
                 def ld(pos):
+                    """Log-density for this galaxy."""
                     return logdensity_flat_2arg(pos, data_args_i)
 
                 def _step(s, k):
+                    """Execute one HMC kernel step."""
                     s, info = kernel(
                         k,
                         s,
@@ -1664,10 +1931,13 @@ class Fitter:
             kernel = _get_dynamic_hmc_kernel()
 
             def _sample_scan(state, keys, data_args_i):
+                """Scan over MCMC steps for a single galaxy (dynamic HMC variant)."""
                 def ld(pos):
+                    """Log-density for this galaxy."""
                     return logdensity_flat_2arg(pos, data_args_i)
 
                 def _step(s, k):
+                    """Execute one dynamic HMC kernel step."""
                     s, info = kernel(k, s, ld, step_size, inv_mass_matrix)
                     return s, (s.position, info.is_divergent)
 
@@ -1681,10 +1951,13 @@ class Fitter:
                 momentum_inv_scale = jnp.sqrt(inv_mass_matrix)
 
             def _sample_scan(state, keys, data_args_i):
+                """Scan over MCMC steps for a single galaxy (GHMC variant)."""
                 def ld(pos):
+                    """Log-density for this galaxy."""
                     return logdensity_flat_2arg(pos, data_args_i)
 
                 def _step(s, k):
+                    """Execute one GHMC kernel step."""
                     s, info = kernel(
                         k,
                         s,
@@ -1700,7 +1973,9 @@ class Fitter:
 
         # Single-galaxy function to vmap
         def single_galaxy(gal_key, init_flat_i, data_args_i):
+            """Run inference (warmup + sampling) for a single galaxy."""
             def ld(pos):
+                """Log-density for this galaxy."""
                 return logdensity_flat_2arg(pos, data_args_i)
 
             init_key, burn_key, sample_key = jax.random.split(gal_key, 3)
@@ -1879,6 +2154,7 @@ class Fitter:
         opt_states_batch = jax.vmap(opt.init)(params_batch)
 
         def single_step(params, opt_state, data_args_i):
+            """Perform one optimization step for a single galaxy."""
             loss, grads = jax.value_and_grad(lambda p: loss_fn(p, data_args_i))(params)
             updates, new_opt_state = opt.update(grads, opt_state, params)
             new_params = optax.apply_updates(params, updates)

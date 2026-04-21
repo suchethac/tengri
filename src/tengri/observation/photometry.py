@@ -14,16 +14,42 @@ from tengri.utils.magnitudes import fnu_to_ab_mag
 
 
 class FilterCurve(NamedTuple):
-    """A photometric filter transmission curve.
+    """Photometric filter transmission curve.
+
+    Represents a single broad-band photometric filter via its wavelength-dependent
+    transmission profile. Used to convolve SEDs and compute observed flux densities.
 
     Attributes
     ----------
-    wave : array
-        Wavelength grid (Angstrom).
-    trans : array
-        Transmission at each wavelength (dimensionless, 0-1).
-    name : str
-        Filter name (e.g., "SDSS_r", "F200W").
+    wave : array, shape (n_wave,)
+        Wavelength grid [Ångstrom]. Should be at least 10 points spanning
+        the transmission curve from near zero to near zero.
+    trans : array, shape (n_wave,)
+        Transmission at each wavelength (dimensionless, 0.0–1.0).
+        Typically peaked at 1.0 and falls to 0 at the filter edges.
+    name : str, optional
+        Filter identifier (e.g., ``"sdss_r"``, ``"jwst_f200w"``, ``"hsc_i"``).
+        Used for diagnostic output and filter registry lookups. Default empty string.
+
+    Notes
+    -----
+    **Standard sources**:
+
+    - Optical/NIR: Spanish Virtual Observatory (SVO) Filter Profile Service
+    - JWST: STScI filter definitions (via astropy.io.fits)
+    - Custom: User-provided arrays
+
+    **Filter conventions**:
+
+    - Transmission is not flux-normalized (raw instrumental response)
+    - Wavelength grid should be uniform or fine enough to resolve structure
+    - Outside [wave[0], wave[-1]], transmission is assumed zero
+
+    See Also
+    --------
+    load_filter_set : Load filter set from SVO database.
+    compute_flux_density : Convolve SED through this filter.
+    pad_filters : Stack variable-length filter arrays.
     """
 
     wave: jnp.ndarray
@@ -40,30 +66,72 @@ def compute_flux_density(
     redshift: float,
     dl_cm: float,
 ) -> float:
-    """Compute observed flux density through a single filter.
+    """Compute observed flux density through a single photometric filter.
 
-    f_nu = (1+z) / (4*pi*dL^2) * int[L_nu(lam/(1+z)) * T(lam) * lam dlam]
-                                  / int[T(lam) * lam dlam]
+    Evaluates the rest-frame SED at observed wavelengths (redshifted), convolves
+    with filter transmission, and integrates to produce a single observed flux
+    density. Uses the standard flux-weighted approach: flux is the filter-weighted
+    integral of redshifted SED, normalized by the filter response integral,
+    and scaled by the luminosity distance and (1+z) redshift factor.
 
     Parameters
     ----------
     sed_rest : array, shape (n_wave,)
-        Rest-frame SED (Lsun/Hz or erg/s/Hz).
+        Rest-frame spectral luminosity density [erg/s/Hz] or [L☉/Hz] at
+        rest-frame wavelengths.
     wave_rest : array, shape (n_wave,)
-        Rest-frame wavelength grid (Angstrom).
+        Rest-frame wavelength grid [Ångstrom].
     filter_wave : array, shape (n_filt,)
-        Filter wavelength grid (observed frame, Angstrom).
+        Filter wavelength grid [Ångstrom], already in observed frame
+        (redshifted by the model).
     filter_trans : array, shape (n_filt,)
-        Filter transmission.
+        Filter transmission at each wavelength (dimensionless, 0–1).
     redshift : float
-        Source redshift.
+        Source redshift z. Used to redshift rest-frame wavelengths and
+        scale flux by (1+z) factor.
     dl_cm : float
-        Luminosity distance (cm).
+        Luminosity distance [cm]. Typically from :func:`luminosity_distance`.
 
     Returns
     -------
-    float
-        Observed flux density (erg/s/cm^2/Hz).
+    flux_density : float
+        Observed flux density [erg/s/cm²/Hz] in the AB system.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    Safe to call inside :func:`jax.jit`.
+
+    **Gradient-safe**: yes — differentiable w.r.t. all inputs except
+    filter curves (considered fixed).
+
+    **Filter convolution formula**:
+
+    .. math::
+
+        f_\\nu^{\\rm obs} = \\frac{1+z}{4\\pi d_L^2} \\;
+        \\frac{\\int L_\\nu(\\lambda_\\mathrm{rest}) T(\\lambda_\\mathrm{obs})
+               \\lambda_\\mathrm{obs} \\, d\\lambda_\\mathrm{obs}}
+             {\\int T(\\lambda_\\mathrm{obs}) \\lambda_\\mathrm{obs}
+              \\, d\\lambda_\\mathrm{obs}}
+
+    where :math:`L_\\nu` is the rest-frame SED [erg/s/Hz],
+    :math:`T(\\lambda_\\mathrm{obs})` is the filter transmission,
+    :math:`z` is redshift, and :math:`d_L` is luminosity distance.
+    This convention matches DSPS and is standard in SED fitting.
+
+    **Interpolation**: The rest-frame SED is evaluated on the observed-frame
+    filter grid via linear interpolation (``jnp.interp``). This assumes
+    the filter grid adequately samples the SED; under-sampling (rare filters)
+    may underestimate flux slightly.
+
+    **Edge handling**: :math:`L_\\nu = 0` outside the SED wavelength domain
+    (set via ``left=0.0, right=0.0``).
+
+    See Also
+    --------
+    FilterCurve : Photometric filter transmission curve.
+    pad_filters : Stack variable-length filter arrays.
     """
     # Redshift the SED: observed wavelength = rest * (1+z)
     wave_obs = wave_rest * (1.0 + redshift)
@@ -191,7 +259,6 @@ def compute_photometry(
 def ab_mag_from_flux(flux_cgs: jnp.ndarray) -> jnp.ndarray:
     """Convert flux density (erg/s/cm^2/Hz) to AB magnitude.
 
-    This is a backward-compatibility wrapper that delegates to
-    :func:`tengri.utils.magnitudes.fnu_to_ab_mag`.
+    Delegates to :func:`tengri.utils.magnitudes.fnu_to_ab_mag`.
     """
     return fnu_to_ab_mag(flux_cgs)

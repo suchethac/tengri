@@ -42,7 +42,7 @@ class Spectroscopy:
     eline_mode : str
         Emission line fitting mode. One of:
 
-        - ``"off"``: No emission line fitting (default, backward compatible).
+        - ``"off"``: No emission line fitting (default).
         - ``"fixed"``: Lines from nebular model only.
         - ``"marginalized"``: Analytically marginalize line amplitudes
           (recommended for spectroscopic fitting).
@@ -51,7 +51,7 @@ class Spectroscopy:
         Default: ``"off"``.
     eline_catalog : LineList or None
         Line catalog. ``None`` falls back to ``LineList.default_13()`` for
-        backward compatibility. Use ``LineList.default_optical()`` for
+        Use ``LineList.default_optical()`` for
         FastSpecFit parity. Default: None.
     eline_prior_type : str
         Prior type for line amplitudes. One of ``"flat"`` (uninformative) or

@@ -141,6 +141,7 @@ def _fe2_pseudo_continuum(
     c_ang = _C_LIGHT / _ANGSTROM_CM  # speed of light in Angstrom/s
 
     def _single_group(group_data):
+        """Compute Fe II multiplet group profile as sum of Gaussians in quad width."""
         lam_c = group_data[0]
         sigma_intrinsic = group_data[1]
         strength = group_data[2]
@@ -218,7 +219,7 @@ def compute_blr_sed(
         Line FWHM [km/s]. Default 5000.
     agn_fe2_strength : float
         Fe II to H-beta flux ratio R_Fe = F(Fe II 4434-4684)/F(H-beta).
-        Typical range 0.5-2.0. Default 0.0 (disabled, backward compatible).
+        Typical range 0.5-2.0. Default 0.0 (disabled).
     line_efficiency : float
         Fraction of intercepted luminosity converted to line emission.
         Default 0.08.
@@ -233,6 +234,7 @@ def compute_blr_sed(
 
     # Sum broad Gaussian profiles for each line
     def _single_line(line_data):
+        """Compute Gaussian line profile at rest wavelength with FWHM broadening."""
         lam_c = line_data[0]
         strength = line_data[1]
         profile = _gaussian_line_profile(wavelength, lam_c, fwhm_kms)
@@ -257,5 +259,4 @@ def compute_blr_sed(
     return l_nu_blr
 
 
-# Backward compatibility alias
 blr_emission = compute_blr_sed

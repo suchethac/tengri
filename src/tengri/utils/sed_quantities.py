@@ -41,7 +41,7 @@ import jax.numpy as jnp
 from tengri.utils.magnitudes import fnu_to_ab_mag, lnu_to_absolute_ab_mag
 from tengri.utils.physics_constants import C_AA, L_SUN as LSUN_ERG, PC_CM
 
-# Re-export for backward compatibility
+# Re-export for convenience
 __all__ = [
     "C_AA",
     "LSUN_ERG",
@@ -536,6 +536,7 @@ def compute_per_bin_luminosity(
     nu = C_AA / wave
 
     def _lbol_one_bin(w_i, flux_i):
+        """Compute bolometric luminosity for a single SSP age bin."""
         return -jnp.trapezoid(w_i * flux_i * LSUN_ERG, nu)
 
     return jax.vmap(_lbol_one_bin)(weights, ssp_flux_at_z)
@@ -651,6 +652,7 @@ def extract_line_luminosity(
         return jnp.array(jnp.nan)
 
     def _lookup_one(target):
+        """Extract line luminosity by nearest-wavelength matching."""
         idx = jnp.argmin(jnp.abs(line_waves - target))
         return line_lums[idx]
 

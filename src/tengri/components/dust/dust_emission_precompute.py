@@ -54,8 +54,8 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 }
 
 
-# ── DL07 / DL14 template photometry precomputation (original functions kept
-# for backward compatibility; the Protocol-shaped entry points below wrap them)
+# ── DL07 / DL14 template photometry precomputation
+# (Protocol-shaped entry points below wrap the original functions)
 
 
 def precompute_dl07_photometry(
@@ -154,6 +154,10 @@ def build_dl07_photometry_lookup(precomp: dict):
 
     @jax.jit
     def dl07_phot(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah):
+        """Compute DL07 dust emission photometry via triweight interpolation on precomputed grid.
+
+        Returns filter-integrated L_nu [erg/s/Hz] at runtime.
+        """
         point = (dust_qpah, dust_umin)
         # 2D triweight interpolation (C²-continuous gradients)
         single = interp_nd_triweight(single_u_phot, axes, edges, point)

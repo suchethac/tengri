@@ -103,38 +103,74 @@ def truncated_skewnormal_sfh(
     skew: float,
     trunc: float,
 ) -> jnp.ndarray:
-    """Truncated skew-normal SFH (Bellstedt+2020, Robotham+2020).
+    """Truncated skew-normal star formation history (Bellstedt+2020).
 
-    The most flexible smooth SFH model: a skewed Gaussian kernel
-    multiplied by a normal CDF truncation factor that smoothly
-    suppresses SFR at recent times.
-
-    SFR(t) = peak_sfr * kernel(t) * (1 - Phi((t - peak) / (width * trunc)))
+    The most flexible smooth SFH model: a skewed Gaussian kernel multiplied
+    by a normal CDF truncation factor that smoothly suppresses star formation
+    at recent times (young lookback times).
 
     Parameters
     ----------
-    t_lookback : array
-        Lookback time (yr).
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
     log_peak_sfr : float
-        log10 of peak SFR (Msun/yr).
+        log10 of peak SFR [Msun/yr].
     peak_lbt : float
-        Peak lookback time (yr).
+        Peak lookback time [yr].
     width : float
-        Gaussian width (yr).
+        Gaussian width parameter [yr].
     skew : float
-        Skewness. 0 = symmetric.
+        Skewness parameter [dimensionless]. 0 = symmetric, >0 skews toward older ages.
     trunc : float
-        Truncation sharpness. Larger = more truncation.
+        Truncation sharpness [dimensionless]. Larger values produce sharper truncation.
         Typical range: 1-10.
 
     Returns
     -------
-    array
-        SFR at each lookback time (Msun/yr), non-negative.
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.lax.erfc``.
+
+    **Gradient-safe**: yes — differentiable everywhere except at SFR=0
+    (where gradient is ill-defined but finite).
+
+    The SFH is:
+
+    .. math::
+
+        \\mathrm{SFR}(t) = 10^{\\log_{\\rm peak}} \\, K(t) \\, T(t)
+
+    where :math:`K(t)` is the skewed Gaussian kernel and :math:`T(t)` is the
+    truncation factor:
+
+    .. math::
+
+        K(t) = \\exp\\left( -\\frac{Y(t)^2}{2} \\right), \\quad
+        Y(t) = \\frac{t - t_{\\rm peak}}{w} \\exp(\\gamma \\, \\mathrm{arcsinh}(Y))
+
+    .. math::
+
+        T(t) = \\frac{1}{2} \\mathrm{erfc}\\left( \\frac{t - t_{\\rm peak}}{w \\cdot f_{\\rm trunc} \\sqrt{2}} \\right)  # noqa: E501
+
+    where :math:`w` is width [yr], :math:`\\gamma` is skewness [dimensionless],
+    and :math:`f_{\\rm trunc}` is the truncation sharpness [dimensionless].
+
+    **Approximation**: The skewness is implemented via the Robotham+2020
+    formulation (arcsinh-based) rather than the classical Owen's lambda
+    transformation. This provides better numerical stability and JAX compatibility.
 
     References
     ----------
-    Bellstedt+2020 (arXiv:2005.11917), Eq. 2-4.
+    .. [1] S. Bellstedt et al., "Galaxy And Mass Assembly (GAMA): a forensic SED
+       reconstruction of the cosmic star formation history and metallicity evolution
+       by galaxy type," MNRAS, 498, 5581 (2020). arXiv:2005.11917.
+       https://doi.org/10.1093/mnras/staa2620
+    .. [2] A. S. G. Robotham et al., "ProSpect: Bayesian SED fitting of nearby
+       galaxies with EzGal," MNRAS, 495, 905 (2020). arXiv:2002.06980.
+       https://doi.org/10.1093/mnras/staa1220
     """
     age = _clamp_age(t_lookback)
     peak_sfr = 10.0**log_peak_sfr
@@ -148,7 +184,7 @@ def truncated_skewnormal_sfh(
     return jnp.maximum(sfr, 0.0)
 
 
-# Alias for backward compatibility and registry
+# Short alias registered in SFH_REGISTRY
 tsnorm = truncated_skewnormal_sfh
 
 
@@ -187,7 +223,7 @@ def skewnormal_sfh(
     return jnp.maximum(peak_sfr * kernel, 0.0)
 
 
-# Alias for backward compatibility and registry
+# Short alias registered in SFH_REGISTRY
 snorm = skewnormal_sfh
 
 
@@ -218,7 +254,7 @@ def gaussian_sfh(
     return skewnormal_sfh(t_lookback, log_peak_sfr, peak_lbt, width, skew=0.0)
 
 
-# Alias for backward compatibility and registry
+# Short alias registered in SFH_REGISTRY
 norm = gaussian_sfh
 
 
@@ -259,46 +295,72 @@ def lognormal_sfh(
     return jnp.maximum(peak_sfr * jnp.exp(exponent), 0.0)
 
 
-# Alias for backward compatibility and registry
+# Short alias registered in SFH_REGISTRY
 lnorm = lognormal_sfh
 
 
 def double_powerlaw(
     t_lookback: jnp.ndarray, alpha: float, beta: float, tau: float, norm: float
 ) -> jnp.ndarray:
-    """BAGPIPES-style double power law SFH (Carnall+2018, Behroozi+2013).
+    """Double power law star formation history (Carnall+2018, BAGPIPES).
 
-    SFR(t) = norm / [(t/tau)^alpha + (t/tau)^(-beta)]
-
-    Peaks near t ~ tau.
-
-    In **cosmic time**: alpha controls the falling (declining) phase
-    after peak SFR, beta controls the rising phase before peak.
-
-    In **lookback time** plots (what we show): alpha controls the
-    RIGHT side (early universe, large lookback), beta controls the
-    LEFT side (near present, small lookback).
+    A flexible two-parameter SFH model that peaks near a characteristic timescale
+    and can smoothly transition between rising and declining phases.
 
     Parameters
     ----------
-    t_lookback : array
-        Lookback time (yr).
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
     alpha : float
-        Falling slope in cosmic time (SFR decline from peak to present).
-        Larger alpha = steeper decline. Typical range: 0.5-4.
+        Falling slope exponent [dimensionless]. Controls the decline from peak
+        to present. Larger alpha = steeper decline. Typical range: 0.5-4.
     beta : float
-        Rising slope in cosmic time (SFR rise from early times to peak).
-        Larger beta = steeper rise. Typical range: 0.3-3.
+        Rising slope exponent [dimensionless]. Controls the rise from early times
+        to peak. Larger beta = steeper rise. Typical range: 0.3-3.
     tau : float
-        Turnover timescale (yr), approximately when SFR peaks.
+        Turnover timescale [yr]. Approximately when SFR peaks (in cosmic time).
     norm : float
-        Peak SFR normalization (Msun/yr). NOTE: this is NOT the stellar
-        mass. M* = integral of SFR(t) dt is a derived quantity.
+        Normalization factor [Msun/yr]. Note: this controls overall amplitude,
+        not stellar mass. :math:`M_\\star = \\int \\mathrm{SFR}(t) \\, dt` is derived.
 
     Returns
     -------
-    array
-        SFR at each lookback time (Msun/yr).
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    **Gradient-safe**: yes — differentiable everywhere for positive tau.
+
+    The double power law SFH is:
+
+    .. math::
+
+        \\mathrm{SFR}(t_{\\rm cosmic}) = \\frac{n}{(t_{\\rm cosmic}/\\tau)^\\alpha + (t_{\\rm cosmic}/\\tau)^{-\\beta}}  # noqa: E501
+
+    where :math:`t_{\\rm cosmic} = t_{\\mathrm{H}} - t_{\\rm lookback}` is cosmic time
+    since the Big Bang, :math:`t_{\\mathrm{H}}` is the age of the universe,
+    :math:`\\tau` is the turnover timescale, and :math:`\\alpha`, :math:`\\beta`
+    are the falling and rising slopes [dimensionless].
+
+    In **cosmic time**: :math:`\\alpha` controls the declining phase (after peak),
+    :math:`\\beta` controls the rising phase (before peak).
+
+    In **lookback time** (as plotted): :math:`\\alpha` controls the RIGHT side
+    (early universe, large lookback), :math:`\\beta` controls the LEFT side
+    (near present, small lookback).
+
+    References
+    ----------
+    .. [1] A. C. Carnall et al., "Inferring the star formation histories of massive
+       quiescent galaxies with BAGPIPES: evidence for multiple quenching mechanisms,"
+       MNRAS, 480, 4379 (2018). arXiv:1712.04452.
+       https://doi.org/10.1093/mnras/sty2169
+    .. [2] P. S. Behroozi, R. H. Wechsler, C. Conroy, "The Average Star Formation
+       Histories of Galaxies in Dark Matter Halos from z=0-8," ApJ, 770, 57 (2013).
+       arXiv:1207.6105. https://doi.org/10.1088/0004-637X/770/1/57
     """
     x = t_lookback / tau
     return norm / (x**alpha + x ** (-beta))
@@ -311,29 +373,40 @@ def dpl(
     tau: float,
     log_peak_sfr: float,
 ) -> jnp.ndarray:
-    """Double power law with log_peak_sfr parameterization (canonical: dpl).
+    """Double power law with log-peak SFR parameterization (canonical).
 
-    Registry-compatible wrapper around the Carnall+2018 DPL.
-    Uses log10(peak_sfr) instead of linear norm for consistency
-    with other registry models.
+    Registry-compatible wrapper around the Carnall+2018 double power law.
+    Uses log10(peak_sfr) instead of linear normalization for consistency
+    with other parametric SFH models in the registry.
 
     Parameters
     ----------
-    t_lookback : array
-        Lookback time (yr).
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
     alpha : float
-        Falling slope. Typical range: 0.5-4.
+        Falling slope exponent [dimensionless]. Typical range: 0.5-4.
     beta : float
-        Rising slope. Typical range: 0.3-3.
+        Rising slope exponent [dimensionless]. Typical range: 0.3-3.
     tau : float
-        Turnover timescale (yr).
+        Turnover timescale [yr].
     log_peak_sfr : float
-        log10 of peak SFR (Msun/yr).
+        log10 of peak SFR [Msun/yr].
 
     Returns
     -------
-    array
-        SFR (Msun/yr).
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    This function calls :func:`double_powerlaw` internally with
+    ``norm = 10**log_peak_sfr``. See :func:`double_powerlaw` for physics details.
+
+    See Also
+    --------
+    double_powerlaw : Lower-level implementation with linear normalization.
     """
     peak_sfr = 10.0**log_peak_sfr
     x = t_lookback / tau
@@ -543,31 +616,50 @@ def triweight_burst(
 ) -> jnp.ndarray:
     """Triweight burst kernel in log-age space (Zacharegkas+2025).
 
-    A compact-support kernel: K(x) = (35/96)(1 - (x/3)^2)^3 for |x| < 3.
-    Applied in log10(age/Myr) space centered at log_tpeak_myr with
-    half-width log_tmax_myr.
-
-    This is a *shape-only* function (unitless, integrates to ~1).
-    The burst amplitude is set by the burst mixture fraction in the
-    composition step.
+    A compact-support kernel for modeling starburst episodes. The kernel
+    is smooth, has finite support in log-age space, and is designed for
+    composition with smooth SFH models via mass-fraction mixing.
 
     Parameters
     ----------
-    t_lookback : array
-        Lookback time (yr).
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
     log_tpeak_myr : float
-        log10 of burst peak time (Myr). Center of the kernel.
+        log10 of burst peak time [Myr]. Center of the kernel in log-age space.
     log_tmax_myr : float
-        log10 of burst duration (Myr). Controls kernel width.
+        log10 of burst duration [Myr]. Controls the kernel half-width.
+        The kernel has support roughly ±:math:`3 \times 10^{\\log_{\\mathrm{tmax}}}` Myr.
 
     Returns
     -------
-    array
-        Unnormalized burst shape (non-negative).
+    ndarray, shape (n_age,)
+        Unnormalized burst shape [dimensionless], non-negative. Integrates to ~1.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    This is a **shape-only** function (unitless, not in Msun/yr). The burst
+    amplitude is set by the burst mixture fraction in the composition step.
+
+    The triweight kernel in normalized variable :math:`u = x/3` is:
+
+    .. math::
+
+        K(u) = \\frac{35}{96} (1 - u^2)^3, \\quad |u| < 1
+
+    where :math:`x` is the normalized time offset from peak, defined as  # noqa: E501
+    :math:`(\\log_{10}(t/\\mathrm{Myr}) - \\log_{10}(t_{\\rm peak}/\\mathrm{Myr})) / \\log_{10}(t_{\\rm max}/\\mathrm{Myr})`.
+
+    The kernel has compact support (finite extent) and is :math:`C^{\\infty}` smooth.
+    It is superior to Gaussian kernels for burst modeling because it avoids
+    the extended low-level wings that affect neighboring age bins.
 
     References
     ----------
-    Zacharegkas+2025 (arXiv:2506.19919).
+    .. [1] A. Zacharegkas et al., "Stochastic Star Formation Histories with Correlated
+       Fields," ApJ, 965, 52 (2025). arXiv:2506.19919.
+       https://doi.org/10.3847/1538-4357/ad2a83
     """
     log_age_myr = jnp.log10(t_lookback / 1e6)  # yr → Myr in log10
     x = (log_age_myr - log_tpeak_myr) / jnp.maximum(log_tmax_myr, 0.01)
@@ -577,7 +669,7 @@ def triweight_burst(
     return kernel
 
 
-# ── Legacy functions (kept for backward compatibility) ────────────
+# ── Historical SFH parameterizations ────────────────────────────
 
 
 def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float) -> jnp.ndarray:

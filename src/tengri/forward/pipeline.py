@@ -270,7 +270,7 @@ def compute_sed_components(
         Parameter values (public names).
     _sfr : array, optional
         Pre-computed SFR on the log-age grid (avoids recomputation
-        when called from ``predict_derived``).
+        when called from ``predict_derived``.
     _weights : array, optional
         Pre-computed CSP weights.
     need_intrinsic : bool
