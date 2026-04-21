@@ -18,7 +18,7 @@ _OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd"}
 _SCIPY_OPTIMIZERS = {"lbfgs", "lbfgs_scipy"}
 _ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _SCIPY_OPTIMIZERS
 
-# Aliases for legacy names used in fitter and tests
+# Short-form name aliases used in fitter and tests
 _JAXOPT_SOLVERS = _SCIPY_OPTIMIZERS
 _QUASI_NEWTON = _SCIPY_OPTIMIZERS
 

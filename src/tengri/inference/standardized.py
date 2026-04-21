@@ -66,7 +66,7 @@ class StandardizedForwardModel:
         else:
             self._psd_model = self._default_drw_sqrt_power
 
-        # Check if PSD params are free (support both new and legacy names)
+        # Check if PSD params are free (accept both full and short names)
         self._psd_sigma_free = any(
             n in self._free_names for n in ("sfh_field_psd_sigma", "psd_sigma")
         )
@@ -277,6 +277,7 @@ def build_standardized_loss(
         mask_arr = jnp.asarray(data_mask)
 
         def loss_fn(xi_flat: jnp.ndarray) -> jnp.ndarray:
+            """Censored likelihood + prior: handles upper/lower limits in masked bands."""
             xi = unravel_fn(xi_flat)
             predicted = smodel.predict(xi, data_type=data_type, wave_obs=wave_obs)
             params = smodel.xi_to_params(xi)
@@ -291,6 +292,7 @@ def build_standardized_loss(
     elif use_variable_noise:
 
         def loss_fn(xi_flat: jnp.ndarray) -> jnp.ndarray:
+            """Variable noise likelihood + prior: includes noise calibration uncertainty."""
             xi = unravel_fn(xi_flat)
             predicted = smodel.predict(xi, data_type=data_type, wave_obs=wave_obs)
             params = smodel.xi_to_params(xi)
@@ -303,6 +305,7 @@ def build_standardized_loss(
     else:
 
         def loss_fn(xi_flat: jnp.ndarray) -> jnp.ndarray:
+            """Gaussian likelihood + prior: standard chi-squared + isotropic prior."""
             xi = unravel_fn(xi_flat)
             predicted = smodel.predict(xi, data_type=data_type, wave_obs=wave_obs)
 

@@ -189,7 +189,7 @@ class PopulationFitter:
         method : str
             "vi" — geoVI with CorrelatedFieldMaker for native PSD learning.
             "vi_linear" — MGVI (faster per iteration, for very large N).
-            "geovi_flat" — flat parameter vector (legacy approach).
+            "geovi_flat" — flat parameter vector (geovi on unstandardized space).
             "mcmc_raytrace" — Ray Tracing on flat vector (fast but needs tuning).
         key : PRNGKey
         **kwargs
@@ -210,7 +210,7 @@ class PopulationFitter:
         }
 
         if method not in _method_map:
-            # Handle legacy flat-vector methods
+            # Handle flat-vector methods (geovi_flat)
             if method == "geovi_flat":
                 return self._run_geovi(key=key, **kwargs)
             elif method == "evi":
@@ -302,16 +302,19 @@ class PopulationFitter:
         data_type = self.data_type
 
         def _predict(params):
+            """Predict data from parameters for single or batch mode."""
             if data_type == "photometry":
                 return model.predict_photometry(params, mode="_traceable")
             return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
 
         # --- Hierarchical signal_response (vmapped) ---
         def signal_response(p):
+            """Compute predicted data from hierarchical parameters."""
             psd_sigma = to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi)
             psd_tau = to_bounded(p["psd_tau_u"], tau_lo, tau_hi)
 
             def forward_one(ub_scalars, xi):
+                """Evaluate forward model for one galaxy with given unbounded params."""
                 params = {}
                 for name in free_names:
                     lo, hi = bounds[name]
@@ -351,9 +354,11 @@ class PopulationFitter:
         d_total = len(_init_flat)
 
         def flatten(d):
+            """Flatten parameter tree to 1D vector."""
             return ravel_pytree(d)[0]
 
         def unflatten(x):
+            """Unflatten 1D vector to parameter tree."""
             return unravel_fn(x)
 
         # --- Core EVI primitives (same as single-galaxy) ---
@@ -382,9 +387,11 @@ class PopulationFitter:
             init = (x0, r, d, gamma, energy, jnp.int32(-2), jnp.int32(0))
 
             def cond(s):
+                """Continue CG loop if not converged."""
                 return s[5] < -1
 
             def body(s):
+                """Execute one CG iteration."""
                 x, r, d, pg, pe, info, i = s
                 i = i + 1
                 q = mat_fn(d)
@@ -411,7 +418,9 @@ class PopulationFitter:
 
         # --- Posterior sampler ---
         def draw_residuals(pos_f, subkeys):
+            """Draw posterior residuals for EVI sampling."""
             def draw_one(subkey):
+                """Sample one residual from the posterior."""
                 k1, k2 = jax.random.split(subkey)
                 eta_pr = jax.random.normal(k1, shape=(d_total,))
                 eta_lh = jax.random.normal(k2, shape=(n_data,))
@@ -430,14 +439,18 @@ class PopulationFitter:
 
         # --- EVI step ---
         def kl_vg(m, residuals):
+            """Compute mean Hamiltonian value and gradient over residual sample."""
             def single_vg(r):
+                """Compute Hamiltonian and gradient for one residual."""
                 return H_vg(m + r)
 
             vals, grads = jax.vmap(single_vg)(residuals)
             return jnp.mean(vals), jnp.mean(grads, axis=0)
 
         def kl_metric(m, residuals, v):
+            """Compute GGN Hessian-vector product averaged over residuals."""
             def single_met(r):
+                """Apply metric for one residual sample."""
                 return metric_vec(m + r, v)
 
             return jnp.mean(jax.vmap(single_met)(residuals), axis=0)
@@ -448,6 +461,7 @@ class PopulationFitter:
             residuals = jnp.concatenate([residuals, -residuals], axis=0)
 
             def ncg_body(carry):
+                """Execute one NCG iteration for finding EVI mode."""
                 m_cur, prev_val, info, i = carry
                 i = i + 1
                 val, grad = kl_vg(m_cur, residuals)
@@ -466,6 +480,7 @@ class PopulationFitter:
                 return (m_new, val, info, i)
 
             def ncg_cond(carry):
+                """Continue NCG if not converged."""
                 return carry[2] < -1
 
             val0, _ = kl_vg(m, residuals)
@@ -473,13 +488,16 @@ class PopulationFitter:
             return result[0], result[1]
 
         def run_evi(init_pos, evi_key, n_iter, n_samp, rtol):
+            """Run EVI for specified iterations or until convergence."""
             keys = jax.random.split(evi_key, n_iter)
 
             def cond_fn(state):
+                """Continue EVI if not converged and iterations remain."""
                 _m, _prev_kl, i, converged = state
                 return (~converged) & (i < n_iter)
 
             def body_fn(state):
+                """Execute one EVI iteration."""
                 m, prev_kl, i, converged = state
                 subkey = jax.lax.dynamic_index_in_dim(keys, i, keepdims=False)
                 m_new, kl_val = evi_step(m, subkey, n_samp)
@@ -685,6 +703,7 @@ class PopulationFitter:
         data_type = self.data_type
 
         def _predict_cfm(params):
+            """Predict data from parameters (CorrelatedFieldMaker variant)."""
             if data_type == "photometry":
                 return model.predict_photometry(params, mode="_traceable")
             return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
@@ -748,6 +767,7 @@ class PopulationFitter:
 
         # ── Build signal response ─────────────────────────────
         def signal_response(primals):
+            """Compute predicted data from NIFTy primals tree."""
             # Reconstruct the shared CFM primals (PSD hyperparams)
             cfm_primals = {}
             for k in corr_field_template.domain:
@@ -763,6 +783,7 @@ class PopulationFitter:
 
             # Single-galaxy forward (vmapped over galaxy axis)
             def forward_one(ub_scalars, xi):
+                """Evaluate forward model for one galaxy."""
                 # Generate the correlated field for this galaxy
                 cfm_primals_i = dict(cfm_primals)
                 cfm_primals_i["psd_xi"] = xi
@@ -1296,17 +1317,20 @@ class PopulationFitter:
         data_type = self.data_type
 
         def _predict_rt(params):
+            """Predict data from parameters (ray-trace variant)."""
             if data_type == "photometry":
                 return model.predict_photometry(params, mode="_traceable")
             return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
 
         def log_prob(flat_params):
+            """Compute log posterior for hierarchical ray-tracing."""
             p = unravel_fn(flat_params)
             psd_sigma = to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi)
             psd_tau = to_bounded(p["psd_tau_u"], tau_lo, tau_hi)
 
             # Single-galaxy forward (vmapped over galaxy axis)
             def forward_one(ub_scalars, xi):
+                """Evaluate forward model for one galaxy."""
                 params = {}
                 for name in free_names:
                     lo, hi = bounds[name]
@@ -1366,6 +1390,7 @@ class PopulationFitter:
 
         # Extract shared params (vectorized over chain)
         def extract_shared(flat_params):
+            """Extract shared PSD hyperparameters from flat parameter vector."""
             p = unravel_fn(flat_params)
             return jnp.array(
                 [

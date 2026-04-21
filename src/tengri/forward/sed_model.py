@@ -161,7 +161,7 @@ class SEDModel:
         - **Fused path**: captured arrays (SSP grid, dust weights, effective
           wavelengths) cast to ``forward_dtype`` at kernel build; outputs
           always cast back to float64 for cosmological distance scaling.
-        - **Exact path** (spectroscopy, legacy AGN): three largest intermediates
+        - **Exact path** (spectroscopy, non-precomputed AGN): three largest intermediates
           — metallicity-interpolated SSP ``(n_age, n_wave)``, dust attenuation
           ``(n_age, n_wave)``, dust age weights ``(n_age,)`` — computed in
           ``forward_dtype``, halving the 4.5 MB memory traffic that dominates

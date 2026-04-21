@@ -292,7 +292,7 @@ class Parameters:
     **AGN** (``agn_model != None``):
 
     ========================== ================= =======================================
-    agn_frac                   Fixed(0.0)        AGN fraction of stellar L_bol (legacy)
+    agn_frac                   Fixed(0.0)        AGN fraction of stellar L_bol
     agn_log_lbol               Fixed(10.0)       AGN log L_bol [erg/s] (parametric)
     agn_alpha                  Fixed(-1.0)       Disc power-law slope
     agn_T_torus                Fixed(1000)       Torus temperature (K)
@@ -414,7 +414,7 @@ class Parameters:
             )
         self.eline_broad = bool(kwargs.pop("eline_broad", False))
 
-        # --- Resolve legacy parameter aliases ---
+        # --- Resolve short-form parameter aliases ---
         resolved_kwargs = {}
         detected_models = set()
         for name, val in kwargs.items():
@@ -517,7 +517,7 @@ class Parameters:
 
         # --- Validate parameter names ---
         # Drop field params if field was removed (e.g., stochastic=False
-        # with legacy psd_sigma/psd_tau_myr that are Fixed)
+        # with short-form psd_sigma/psd_tau_myr that are Fixed)
         resolved_kwargs = {
             name: val
             for name, val in resolved_kwargs.items()

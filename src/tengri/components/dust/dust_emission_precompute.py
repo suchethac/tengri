@@ -231,8 +231,8 @@ def precompute(
     Returns
     -------
     dict (for DL07) or PreintegratedGrid (for generic path)
-        The precomputed data. For DL07 the dict is kept for backward
-        compatibility and is not a :class:`PreintegratedGrid`; the
+        The precomputed data. For DL07 this is a plain dict (not a
+        :class:`PreintegratedGrid`); the
         ``build_lookup`` function accepts both shapes.
     """
     if model_name in ("draine_li2007", "dl07"):

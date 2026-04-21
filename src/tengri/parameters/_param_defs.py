@@ -758,7 +758,7 @@ _AGN_PARAMS = {
     ),
 }
 
-# ── Legacy parameter name aliases ──────────────────────────────────────
+# ── Short-form parameter name aliases (accepted as user input) ──────────
 
 _LEGACY_PARAM_ALIASES = {
     "sfh_alpha": "sfh_dpl_alpha",
@@ -770,7 +770,7 @@ _LEGACY_PARAM_ALIASES = {
     "psd_tau_myr": "sfh_field_psd_tau_myr",
 }
 
-# Legacy mean_sfh_type aliases
+# SFH type short-form aliases
 _LEGACY_SFH_TYPE_ALIASES = {
     "double_powerlaw": "dpl",
 }
@@ -808,7 +808,7 @@ SETTINGS_KEYS = frozenset(
         "shock",
         # Metallicity mode (registry-based, replaces evolving_metallicity/chem_evol)
         "met_mode",
-        # Legacy booleans (resolved to met_mode internally)
+        # Older boolean flags (resolved to met_mode internally)
         "evolving_metallicity",
         "alpha_fe_evolving",
         "chem_evol",

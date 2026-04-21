@@ -149,9 +149,9 @@ _NON_SFH_PARAM_MAP = {
     "noise_dof": ("noise_dof", 1.0, 0.0),
 }
 
-# Reverse alias map: new canonical name → old legacy name
-# Used by find_legacy_param to accept old-style param dicts.
-# TODO(future): Remove once all callers use new parameter names.
+# Reverse alias map: canonical name → short-form alias
+# Used by find_short_param to resolve short parameter names.
+
 _REVERSE_ALIASES = {
     "sfh_dpl_alpha": "sfh_alpha",
     "sfh_dpl_beta": "sfh_beta",
@@ -324,8 +324,8 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
 # ── Translation functions ──────────────────────────────────────────
 
 
-def find_legacy_param(params, target_public_name):
-    """Check if params contains a legacy alias for target_public_name.
+def find_short_param(params, target_public_name):
+    """Check if params contains a short-form alias for target_public_name.
 
     Parameters
     ----------
@@ -337,7 +337,7 @@ def find_legacy_param(params, target_public_name):
     Returns
     -------
     float or None
-        The value from params under the legacy alias, or ``None`` if not found.
+        The value from params under the short-form alias, or ``None`` if not found.
     """
     old_name = _REVERSE_ALIASES.get(target_public_name)
     if old_name and old_name in params:
@@ -350,7 +350,7 @@ def get_internal_params(params, param_map, spec, has_field):
 
     Conversion applied element-wise: ``internal = public * scale + offset``.
 
-    Also accepts legacy parameter names (sfh_alpha, psd_sigma, etc.) via
+    Also accepts short-form parameter names (sfh_alpha, psd_sigma, etc.) via
     reverse alias lookup, and fills in fixed values from the spec when a
     parameter is absent from ``params``.
 
@@ -382,10 +382,10 @@ def get_internal_params(params, param_map, spec, has_field):
         if pub_name in params:
             internal[int_name] = params[pub_name] * scale + offset
         else:
-            # Check legacy alias: find old name that maps to pub_name
-            legacy_val = find_legacy_param(params, pub_name)
-            if legacy_val is not None:
-                internal[int_name] = legacy_val * scale + offset
+            # Check short-form alias: find short name that maps to pub_name
+            alias_val = find_short_param(params, pub_name)
+            if alias_val is not None:
+                internal[int_name] = alias_val * scale + offset
             else:
                 # Fall back to fixed value from spec
                 try:
@@ -399,7 +399,7 @@ def get_internal_params(params, param_map, spec, has_field):
                         f"Parameter '{pub_name}' not found in params dict and not in spec"
                     ) from err
 
-    # Handle field latent vector (both new and legacy names)
+    # Handle field latent vector (both full and short names)
     if has_field:
         if "sfh_field_xi" in params:
             internal["xi"] = params["sfh_field_xi"]

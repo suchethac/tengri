@@ -13,7 +13,7 @@ from tengri.parameters.translate import (
     LOG10_ZSUN,
     PARAM_MAP,
     _build_param_map,
-    find_legacy_param,
+    find_short_param,
     get_internal_params,
 )
 
@@ -67,7 +67,7 @@ class TestBuildParamMap:
         assert offset == LOG10_ZSUN
 
 
-# ── Tests for find_legacy_param ───────────────────────────────────
+# ── Tests for find_short_param ───────────────────────────────────
 
 
 class TestFindLegacyParam:
@@ -75,33 +75,33 @@ class TestFindLegacyParam:
 
     def test_finds_psd_sigma(self):
         params = {"psd_sigma": 0.5}
-        result = find_legacy_param(params, "sfh_field_psd_sigma")
+        result = find_short_param(params, "sfh_field_psd_sigma")
         assert result == 0.5
 
     def test_finds_psd_tau_myr(self):
         params = {"psd_tau_myr": 200.0}
-        result = find_legacy_param(params, "sfh_field_psd_tau_myr")
+        result = find_short_param(params, "sfh_field_psd_tau_myr")
         assert result == 200.0
 
     def test_finds_sfh_alpha(self):
         params = {"sfh_alpha": 1.5}
-        result = find_legacy_param(params, "sfh_dpl_alpha")
+        result = find_short_param(params, "sfh_dpl_alpha")
         assert result == 1.5
 
     def test_returns_none_for_unknown(self):
         params = {"some_other": 1.0}
-        result = find_legacy_param(params, "sfh_field_psd_sigma")
+        result = find_short_param(params, "sfh_field_psd_sigma")
         assert result is None
 
     def test_returns_none_when_alias_absent(self):
         params = {}
-        result = find_legacy_param(params, "sfh_dpl_beta")
+        result = find_short_param(params, "sfh_dpl_beta")
         assert result is None
 
     def test_does_not_mutate_params(self):
         params = {"psd_sigma": 0.5}
         original = dict(params)
-        find_legacy_param(params, "sfh_field_psd_sigma")
+        find_short_param(params, "sfh_field_psd_sigma")
         assert params == original
 
 

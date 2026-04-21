@@ -5,7 +5,7 @@ Kernel builders organized by fusion strategy:
 - ``exact.py``: Full-resolution dust and stellar CSP
 - ``compositional.py``: Compositional pipeline with all components
 
-Legacy ``assembly.py`` still present but no longer used.
+
 """
 
 from tengri.forward._kernels.compositional import (

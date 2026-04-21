@@ -6,12 +6,13 @@ Each function takes (model, ...) where model is an SEDModel instance.
 
 from __future__ import annotations
 
-import warnings
 from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+
+from tengri.parameters.defaults import UNSET as _UNSET
 
 if TYPE_CHECKING:
     from tengri.forward.sed_model import MockData, PriorPredictive, SEDModel
@@ -85,6 +86,7 @@ def mock_batch(model: SEDModel, params_batch, snr=20.0, key=None) -> MockData:
     n_batch = params_batch[first_key].shape[0]
 
     def _get_single(i):
+        """Extract parameters for one galaxy from batch dict."""
         return {k: v[i] for k, v in params_batch.items()}
 
     if key is not None:
@@ -283,6 +285,7 @@ def fit_batch_map_vmap(
     init_unbounded = template._initialize_unbounded(jax.random.PRNGKey(seed))
 
     def _replicate(x):
+        """Broadcast scalar to batch dimension."""
         return jnp.broadcast_to(x, (n_gal, *jnp.shape(x)))
 
     params_batch = jax.tree.map(_replicate, init_unbounded)
@@ -291,10 +294,12 @@ def fit_batch_map_vmap(
     optimizer = optax.adam(learning_rate)
 
     def _single_step(carry, _):
+        """Execute one Adam step across all galaxies via vmap."""
         params, opt_state = carry
 
         # vmap loss over leading axis of params and data_args
         def _loss_one(p, da):
+            """Compute loss and gradient for one galaxy."""
             return loss_fn(p, da)
 
         losses, grads = jax.vmap(jax.value_and_grad(_loss_one))(params, data_args_batch)
@@ -688,6 +693,7 @@ def fit_population(
     hier_method = _hier_method_map.get(method, method)
 
     def _model_factory(psd_sigma, psd_tau_myr):
+        """Create model copy with fixed PSD hyperparameters."""
         new_spec = model.spec.with_params(
             sfh_field_psd_sigma=Fixed(float(psd_sigma)),
             sfh_field_psd_tau_myr=Fixed(float(psd_tau_myr)),
@@ -707,8 +713,6 @@ def fit_population(
 
 
 # ── from_config factory ───────────────────────────────────────────
-
-from tengri.parameters.defaults import UNSET as _UNSET  # re-export for back-compat
 
 
 def build_model_from_config(
@@ -759,7 +763,7 @@ def build_model_from_config(
         expanded.setdefault("redshift", float(redshift))
 
     # --- Inject AGN parametric mode if AGN enabled ---
-    # Default to agn_log_lbol (parametric) instead of agn_frac (legacy).
+    # Default to agn_log_lbol (parametric) instead of agn_frac.
     # Parametric mode is compatible with all kernel paths (hybrid,
     # compositional) because L_bol is specified directly, avoiding
     # the circular dependency L_AGN = f × (L_stellar + L_AGN).
