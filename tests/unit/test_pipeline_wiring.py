@@ -36,9 +36,9 @@ def _emission_helpers_src() -> str:
 
 
 def _params_src() -> str:
-    from tengri.parameters import parameters
+    from tengri.parameters import _param_defs
 
-    return inspect.getsource(parameters)
+    return inspect.getsource(_param_defs)
 
 
 def _translate_src() -> str:
