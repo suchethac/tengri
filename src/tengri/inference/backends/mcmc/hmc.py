@@ -1,8 +1,6 @@
-"""Hamiltonian Monte Carlo (HMC) sampling via BlackJAX.
+"""Standard Hamiltonian Monte Carlo via BlackJAX.
 
-Standard HMC with fixed trajectory length. Predictable cost per step
-(no tree building), making it faster than NUTS per sample when the
-geometry is well-conditioned.
+Extracted from mcmc/common.py. Import via ``tengri.inference.backends.mcmc.common``.
 """
 
 from __future__ import annotations
@@ -11,8 +9,9 @@ import logging
 import time
 
 import jax
+import jax.numpy as jnp
 
-from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import (
     _get_cached_adaptation,
     _get_flat_logdensity,
@@ -45,10 +44,6 @@ def run_hmc(
 
     Parameters
     ----------
-    init_from : str, Posterior, or None
-        Initialization strategy. None (default) runs a quick MAP
-        for warm-starting the chain. Pass a Posterior to start from
-        a previous result.
     n_warmup : int
         Warmup/adaptation steps (tunes step size and mass matrix).
     n_burnin : int
@@ -69,7 +64,6 @@ def run_hmc(
     except ImportError:
         raise ImportError("blackjax required for HMC: pip install blackjax") from None
 
-    from tengri.inference._sample_utils import _maybe_map_init
     from tengri.inference.posterior import Posterior
 
     init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
@@ -152,7 +146,7 @@ def run_hmc(
         n_leapfrog_steps,
         data_args,
     )
-    n_divergent = int(jax.numpy.sum(divergent))
+    n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
 

@@ -1,18 +1,20 @@
-"""MCMC backends: NUTS, HMC, Dynamic HMC, GHMC, MCLMC, Ray Tracing, Elliptical Slice.
+"""MCMC samplers — re-export hub preserving the original public API.
 
-This module re-exports samplers from their individual backend modules
-to maintain backward compatibility with the public API.
-
-Internal infrastructure (shared scan functions, kernel getters, etc.)
-is in _shared.py.
+Samplers live in individual modules:
+  _shared.py     — kernel getters, scan functions, logdensity helpers
+  raytrace.py    — run_raytrace
+  nuts.py        — run_nuts
+  hmc.py         — run_hmc
+  dynamic_hmc.py — run_dynamic_hmc
+  ghmc.py        — run_ghmc
+  mclmc.py       — run_mclmc, run_adjusted_mclmc
+  elliptical_slice.py — run_elliptical_slice
 """
 
 from __future__ import annotations
 
 from tengri.inference.backends.mcmc.dynamic_hmc import run_dynamic_hmc
-from tengri.inference.backends.mcmc.elliptical_slice import (
-    run_elliptical_slice_fitter as run_elliptical_slice,
-)
+from tengri.inference.backends.mcmc.elliptical_slice import run_elliptical_slice
 from tengri.inference.backends.mcmc.ghmc import run_ghmc
 from tengri.inference.backends.mcmc.hmc import run_hmc
 from tengri.inference.backends.mcmc.mclmc import run_adjusted_mclmc, run_mclmc

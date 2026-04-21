@@ -1,62 +1,52 @@
-"""Shared infrastructure for MCMC samplers.
+"""Shared MCMC infrastructure: kernel getters, scan functions, logdensity helpers.
 
-Module-level cached scan functions with stable JIT identity to avoid
-recompilation across different sampler invocations.
+Internal — imported by per-sampler modules. Not part of the public API.
 """
 
 from __future__ import annotations
 
 import functools
-import logging
 
 import jax
 from jax.flatten_util import ravel_pytree
 
 from tengri.inference._model_cache import get_model_cache
 
-logger = logging.getLogger(__name__)
 
-# ── Cached kernel getters (module-level for stable JIT identity) ───────────
-# Using blackjax build_kernel() returns a kernel that takes
-# logdensity_fn, step_size, inverse_mass_matrix as ARGUMENTS instead of
-# closing over them. This lets us define module-level @jax.jit functions
-# whose trace cache key depends only on the logdensity_fn identity (stable
-# via _get_flat_logdensity) — not on warmup parameters.
-
-
-@functools.cache
 def _get_nuts_kernel():
-    """Get cached NUTS kernel from BlackJAX."""
     import blackjax.mcmc.nuts
 
     return blackjax.mcmc.nuts.build_kernel()
 
 
 @functools.cache
+
+
 def _get_hmc_kernel():
-    """Get cached HMC kernel from BlackJAX."""
     import blackjax.mcmc.hmc
 
     return blackjax.mcmc.hmc.build_kernel()
 
 
 @functools.cache
+
+
 def _get_dynamic_hmc_kernel():
-    """Get cached Dynamic HMC kernel from BlackJAX."""
     import blackjax.mcmc.dynamic_hmc
 
     return blackjax.mcmc.dynamic_hmc.build_kernel()
 
 
 @functools.cache
+
+
 def _get_ghmc_kernel():
-    """Get cached GHMC kernel from BlackJAX."""
     import blackjax.mcmc.ghmc
 
     return blackjax.mcmc.ghmc.build_kernel()
 
 
-# ── NUTS scans ──────────────────────────────────────────────────────────
+# --- NUTS scans ---
 # All scan functions take a 2-arg logdensity_fn(position, data_args) as
 # static_argnums so its identity is the cache key.  data_args flows in
 # as a regular traced argument — changing galaxy data does NOT trigger
@@ -64,6 +54,8 @@ def _get_ghmc_kernel():
 
 
 @functools.partial(jax.jit, static_argnums=(2, 5))
+
+
 def _nuts_sample_scan(
     state,
     keys,
@@ -73,7 +65,6 @@ def _nuts_sample_scan(
     max_doublings,
     data_args,
 ):
-    """JIT-compiled NUTS sampling scan."""
     kernel = _get_nuts_kernel()
 
     def ld(pos):
@@ -87,6 +78,8 @@ def _nuts_sample_scan(
 
 
 @functools.partial(jax.jit, static_argnums=(2, 5))
+
+
 def _nuts_burnin_scan(
     state,
     keys,
@@ -96,7 +89,6 @@ def _nuts_burnin_scan(
     max_doublings,
     data_args,
 ):
-    """JIT-compiled NUTS burn-in scan (positions discarded)."""
     kernel = _get_nuts_kernel()
 
     def ld(pos):
@@ -110,10 +102,12 @@ def _nuts_burnin_scan(
     return s
 
 
-# ── HMC scans ───────────────────────────────────────────────────────────
+# --- HMC scans ---
 
 
 @functools.partial(jax.jit, static_argnums=(2, 5))
+
+
 def _hmc_sample_scan(
     state,
     keys,
@@ -123,7 +117,6 @@ def _hmc_sample_scan(
     n_leapfrog,
     data_args,
 ):
-    """JIT-compiled HMC sampling scan."""
     kernel = _get_hmc_kernel()
 
     def ld(pos):
@@ -137,6 +130,8 @@ def _hmc_sample_scan(
 
 
 @functools.partial(jax.jit, static_argnums=(2, 5))
+
+
 def _hmc_burnin_scan(
     state,
     keys,
@@ -146,7 +141,6 @@ def _hmc_burnin_scan(
     n_leapfrog,
     data_args,
 ):
-    """JIT-compiled HMC burn-in scan (positions discarded)."""
     kernel = _get_hmc_kernel()
 
     def ld(pos):
@@ -160,10 +154,12 @@ def _hmc_burnin_scan(
     return s
 
 
-# ── Dynamic HMC scans ───────────────────────────────────────────────────
+# --- Dynamic HMC scans ---
 
 
 @functools.partial(jax.jit, static_argnums=(2,))
+
+
 def _dynamic_hmc_sample_scan(
     state,
     keys,
@@ -172,7 +168,6 @@ def _dynamic_hmc_sample_scan(
     inv_mass_matrix,
     data_args,
 ):
-    """JIT-compiled Dynamic HMC sampling scan."""
     kernel = _get_dynamic_hmc_kernel()
 
     def ld(pos):
@@ -186,6 +181,8 @@ def _dynamic_hmc_sample_scan(
 
 
 @functools.partial(jax.jit, static_argnums=(2,))
+
+
 def _dynamic_hmc_burnin_scan(
     state,
     keys,
@@ -194,7 +191,6 @@ def _dynamic_hmc_burnin_scan(
     inv_mass_matrix,
     data_args,
 ):
-    """JIT-compiled Dynamic HMC burn-in scan (positions discarded)."""
     kernel = _get_dynamic_hmc_kernel()
 
     def ld(pos):
@@ -208,10 +204,12 @@ def _dynamic_hmc_burnin_scan(
     return s
 
 
-# ── GHMC scans ──────────────────────────────────────────────────────────
+# --- GHMC scans ---
 
 
 @functools.partial(jax.jit, static_argnums=(2,))
+
+
 def _ghmc_sample_scan(
     state,
     keys,
@@ -222,7 +220,6 @@ def _ghmc_sample_scan(
     delta,
     data_args,
 ):
-    """JIT-compiled GHMC sampling scan."""
     kernel = _get_ghmc_kernel()
 
     def ld(pos):
@@ -236,6 +233,8 @@ def _ghmc_sample_scan(
 
 
 @functools.partial(jax.jit, static_argnums=(2,))
+
+
 def _ghmc_burnin_scan(
     state,
     keys,
@@ -246,7 +245,6 @@ def _ghmc_burnin_scan(
     delta,
     data_args,
 ):
-    """JIT-compiled GHMC burn-in scan (positions discarded)."""
     kernel = _get_ghmc_kernel()
 
     def ld(pos):
@@ -260,17 +258,17 @@ def _ghmc_burnin_scan(
     return s
 
 
-# ── MCLMC scans ─────────────────────────────────────────────────────────
+# --- MCLMC scans ---
 # MCLMC/adjusted_mclmc kernels bake in logdensity_fn and inverse_mass_matrix
-# at build time. The kernel itself is the static identity for caching.
+# at build time.  The kernel itself is the static identity for caching.
 # Adaptation params are cached on the Model; the kernel is rebuilt per-fitter
 # (cheap ~ms) using the fitter's data_args.
 
 
 @functools.partial(jax.jit, static_argnums=(2,))
-def _mclmc_sample_scan(state, keys, kernel, L, step_size):
-    """JIT-compiled MCLMC sampling scan."""
 
+
+def _mclmc_sample_scan(state, keys, kernel, L, step_size):
     def _step(s, k):
         s, _info = kernel(k, s, L, step_size)
         return s, s.position
@@ -279,17 +277,14 @@ def _mclmc_sample_scan(state, keys, kernel, L, step_size):
 
 
 @functools.partial(jax.jit, static_argnums=(2,))
-def _adjusted_mclmc_sample_scan(state, keys, kernel, step_size, n_integration_steps):
-    """JIT-compiled adjusted MCLMC sampling scan."""
 
+
+def _adjusted_mclmc_sample_scan(state, keys, kernel, step_size, n_integration_steps):
     def _step(s, k):
         s, info = kernel(k, s, step_size, n_integration_steps)
         return s, (s.position, info.is_divergent)
 
     return jax.lax.scan(_step, state, keys)
-
-
-# ── Flat logdensity and adaptation caching ──────────────────────────────
 
 
 def _get_flat_logdensity(fitter, init_params):

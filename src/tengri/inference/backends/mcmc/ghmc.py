@@ -1,10 +1,6 @@
-"""Generalized HMC (GHMC) sampling via BlackJAX.
+"""Generalized HMC via BlackJAX.
 
-GHMC uses partial momentum refreshment controlled by ``alpha``:
-at each step, the momentum is mixed with fresh noise as
-``p_new = alpha * p_old + sqrt(1-alpha²) * noise``. This creates
-persistent chains that remember their direction, improving mixing
-in elongated posteriors like the age-dust-metallicity banana.
+Extracted from mcmc/common.py. Import via ``tengri.inference.backends.mcmc.common``.
 """
 
 from __future__ import annotations
@@ -13,8 +9,9 @@ import logging
 import time
 
 import jax
+import jax.numpy as jnp
 
-from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import (
     _get_cached_adaptation,
     _get_flat_logdensity,
@@ -50,9 +47,6 @@ def run_ghmc(
 
     Parameters
     ----------
-    init_from : str, Posterior, or None
-        Initialization strategy. None (default) runs a quick MAP
-        for warm-starting the chain.
     n_warmup : int
         Warmup/adaptation steps.
     n_burnin : int
@@ -68,8 +62,7 @@ def run_ghmc(
     target_accept_rate : float
         Target acceptance rate for warmup adaptation.
     dense_mass_matrix : bool
-        Use dense mass matrix. Set False for D>30. Note: GHMC requires
-        diagonal mass matrix regardless of this flag.
+        Use dense mass matrix. Set False for D>30.
     verbose : bool
         Print progress.
     """
@@ -78,7 +71,6 @@ def run_ghmc(
     except ImportError:
         raise ImportError("blackjax required: pip install blackjax") from None
 
-    from tengri.inference._sample_utils import _maybe_map_init
     from tengri.inference.posterior import Posterior
 
     init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
@@ -166,7 +158,7 @@ def run_ghmc(
         delta,
         data_args,
     )
-    n_divergent = int(jax.numpy.sum(divergent))
+    n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
 

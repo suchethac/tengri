@@ -1,10 +1,6 @@
-"""MCLMC and Adjusted MCLMC sampling via BlackJAX.
+"""MCLMC and Adjusted MCLMC via BlackJAX.
 
-Microcanonical Langevin Monte Carlo (MCLMC) is a state-of-the-art
-gradient-based sampler operating on the microcanonical manifold
-(constant energy), producing one sample per gradient evaluation.
-
-Adjusted MCLMC adds Metropolis correction for exact sampling.
+Extracted from mcmc/common.py. Import via ``tengri.inference.backends.mcmc.common``.
 """
 
 from __future__ import annotations
@@ -15,7 +11,7 @@ import time
 import jax
 import jax.numpy as jnp
 
-from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import (
     _adjusted_mclmc_sample_scan,
     _get_cached_adaptation,
@@ -44,13 +40,10 @@ def run_mclmc(
     Often 10-100x more efficient than NUTS for smooth targets.
 
     Because there is no Metropolis correction, MCLMC is **biased**
-    for finite step sizes. Use ``run_adjusted_mclmc`` for exact sampling.
+    for finite step sizes. Use ``adjusted_mclmc`` for exact sampling.
 
     Parameters
     ----------
-    init_from : str, Posterior, or None
-        Initialization strategy. None (default) runs a quick MAP
-        for warm-starting the chain.
     n_warmup : int
         Warmup steps for tuning L (trajectory length) and step size.
     n_samples : int
@@ -63,7 +56,6 @@ def run_mclmc(
     except ImportError:
         raise ImportError("blackjax required: pip install blackjax") from None
 
-    from tengri.inference._sample_utils import _maybe_map_init
     from tengri.inference.posterior import Posterior
 
     init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
@@ -180,9 +172,6 @@ def run_adjusted_mclmc(
 
     Parameters
     ----------
-    init_from : str, Posterior, or None
-        Initialization strategy. None (default) runs a quick MAP
-        for warm-starting the chain.
     n_warmup : int
         Warmup steps for tuning step size and trajectory length.
     n_samples : int
@@ -198,7 +187,6 @@ def run_adjusted_mclmc(
     except ImportError:
         raise ImportError("blackjax required: pip install blackjax") from None
 
-    from tengri.inference._sample_utils import _maybe_map_init
     from tengri.inference.posterior import Posterior
 
     init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
@@ -289,7 +277,7 @@ def run_adjusted_mclmc(
         step_size,
         n_integration_steps,
     )
-    n_divergent = int(jax.numpy.sum(divergent))
+    n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
 
@@ -318,3 +306,6 @@ def run_adjusted_mclmc(
         loss_history=None,
         _model=fitter.model,
     )
+
+
+# ── Elliptical Slice Sampling ─────────────────────────────────────

@@ -1,11 +1,6 @@
-"""NUTS (No-U-Turn Sampler) sampling via BlackJAX.
+"""NUTS (No-U-Turn Sampler) via BlackJAX.
 
-Full Bayesian posterior sampling with gradient-based MCMC.
-Provides proper uncertainty quantification through posterior samples.
-
-Recommended for SED fitting posteriors with strong degeneracies
-(age-dust-metallicity, SFR-mass), bounded parameters, and D=6-20
-free parameters.
+Extracted from mcmc/common.py. Import via ``tengri.inference.backends.mcmc.common``.
 """
 
 from __future__ import annotations
@@ -15,8 +10,9 @@ import time
 import warnings
 
 import jax
+import jax.numpy as jnp
 
-from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import (
     _get_cached_adaptation,
     _get_flat_logdensity,
@@ -105,9 +101,6 @@ def run_nuts(
     except ImportError:
         raise ImportError("blackjax required for NUTS: pip install blackjax") from None
 
-    import jax.numpy as jnp
-
-    from tengri.inference._sample_utils import _maybe_map_init
     from tengri.inference.posterior import Posterior
 
     # Warn about high dimensionality

@@ -41,7 +41,7 @@ import jax
 import jax.numpy as jnp
 from jax.tree_util import tree_leaves, tree_map, tree_reduce
 
-__all__ = ["run_raytrace", "sample_hamiltonian", "sample_raytrace"]
+__all__ = ["sample_hamiltonian", "sample_raytrace"]
 
 
 def random_split_like_tree(rng_key, target=None, treedef=None):
@@ -453,6 +453,19 @@ def sample_raytrace(
     return chain, log_likelihood, accept_prob
 
 
+# ── Fitter interface ─────────────────────────────────
+
+import logging
+import time
+
+from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+from tengri.inference.backends.mcmc._shared import (
+    _get_flat_logdensity,
+)
+
+logger = logging.getLogger(__name__)
+
+
 def run_raytrace(
     fitter,
     *,
@@ -491,14 +504,8 @@ def run_raytrace(
     verbose : bool
         Print progress.
     """
-    import logging
-    import time
-
-    from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
-    from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
+    from tengri.inference.backends.mcmc.raytrace import sample_raytrace
     from tengri.inference.posterior import Posterior
-
-    logger = logging.getLogger(__name__)
 
     if init_from is not None:
         init_params = fitter._unbounded_from_posterior(init_from)

@@ -1,8 +1,6 @@
-"""Dynamic HMC sampling via BlackJAX.
+"""Dynamic HMC via BlackJAX.
 
-HMC with dynamic trajectory length selection — adapts the number
-of leapfrog steps per proposal based on a heuristic that balances
-exploration vs cost. Similar to NUTS but without the binary tree.
+Extracted from mcmc/common.py. Import via ``tengri.inference.backends.mcmc.common``.
 """
 
 from __future__ import annotations
@@ -11,8 +9,9 @@ import logging
 import time
 
 import jax
+import jax.numpy as jnp
 
-from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import (
     _dynamic_hmc_burnin_scan,
     _dynamic_hmc_sample_scan,
@@ -44,9 +43,6 @@ def run_dynamic_hmc(
 
     Parameters
     ----------
-    init_from : str, Posterior, or None
-        Initialization strategy. None (default) runs a quick MAP
-        for warm-starting the chain.
     n_warmup : int
         Warmup/adaptation steps.
     n_burnin : int
@@ -65,7 +61,6 @@ def run_dynamic_hmc(
     except ImportError:
         raise ImportError("blackjax required: pip install blackjax") from None
 
-    from tengri.inference._sample_utils import _maybe_map_init
     from tengri.inference.posterior import Posterior
 
     init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
@@ -151,7 +146,7 @@ def run_dynamic_hmc(
         inv_mass_matrix,
         data_args,
     )
-    n_divergent = int(jax.numpy.sum(divergent))
+    n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
 
