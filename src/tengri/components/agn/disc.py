@@ -1038,6 +1038,7 @@ def kubota_done_disc(
     dr_outer = r_outer * jnp.log(10.0) * d_log_r_outer
 
     def _outer_ring(r_cm, t_ring, dr_ring):
+        """Compute blackbody L_nu contribution from one outer-disk annulus."""
         b_nu = _planck_lnu(nu, t_ring)
         return b_nu * _ring_area(r_cm, dr_ring, agn_cos_inc)
 
@@ -1073,6 +1074,7 @@ def kubota_done_disc(
         # with large scalars (see _nthcomp.py:166-271).
         # Reference: agnsed.py _do_warm_annuli (scotthgn/pyAGNSED)
         def _warm_ring(r_cm, t_ring, dr_ring):
+            """Compute Comptonized L_nu for one warm-zone annulus using nthcomp spectral shape."""
             b_nu_plain = _planck_lnu(nu, t_ring)
             p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
             l_total = p_plain * _ring_area(r_cm, dr_ring, agn_cos_inc)

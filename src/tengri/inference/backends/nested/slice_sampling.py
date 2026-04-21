@@ -143,6 +143,7 @@ def build_kernel(
         vertical_is_accepted = logslice < state.logdensity
 
         def _slice_fn(t):
+            """Evaluate slice_fn at t, accepting only if log density exceeds the slice level."""
             new_state, is_accepted = slice_fn(t)
             in_slice = new_state.logdensity >= logslice
             return new_state, is_accepted & in_slice
@@ -294,10 +295,12 @@ def build_hrss_kernel(
     def kernel(
         rng_key: PRNGKey, state: SliceState, logdensity_fn: Callable
     ) -> tuple[SliceState, SliceInfo]:
+        """Run one HRSS iteration: sample a direction from the covariance, then slice along it."""
         rng_key, prop_key = jax.random.split(rng_key, 2)
         d = sample_direction_from_covariance(prop_key, state.position, cov)
 
         def slice_fn(t):
+            """Evaluate the logdensity at position displaced by t along direction d."""
             x = jax.tree.map(lambda x, d: x + t * d, state.position, d)
             is_accepted = True
             new_state = init_fn(x, logdensity_fn)

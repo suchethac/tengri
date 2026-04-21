@@ -773,6 +773,7 @@ def run_raytrace(
     )
 
     def log_prob_flat(pos):
+        """Evaluate flat log probability with data_args bound from the enclosing scope."""
         return log_prob_flat_2arg(pos, data_args)
 
     D = len(init_flat)

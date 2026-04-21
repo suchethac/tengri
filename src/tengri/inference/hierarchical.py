@@ -456,6 +456,7 @@ class PopulationFitter:
             return jnp.mean(jax.vmap(single_met)(residuals), axis=0)
 
         def evi_step(m, subkey, n_samp):
+            """Execute one EVI step: draw mirrored residuals and find the EVI mode via NCG."""
             sample_keys = jax.random.split(subkey, n_samp)
             residuals = draw_residuals(m, sample_keys)
             residuals = jnp.concatenate([residuals, -residuals], axis=0)
@@ -1065,6 +1066,7 @@ class PopulationFitter:
                 return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
 
         def signal_response(primals):
+            """Map hierarchical primals to stacked predictions for all galaxies."""
             # Shared PSD params (bounded)
             psd_sigma = to_bounded(primals["psd_sigma_u"], sigma_lo, sigma_hi)
             psd_tau = to_bounded(primals["psd_tau_u"], tau_lo, tau_hi)
@@ -1079,6 +1081,7 @@ class PopulationFitter:
 
             # Single-galaxy forward (vmapped over galaxy axis)
             def forward_one(ub_scalars, xi):
+                """Run the forward model for one galaxy from unbounded to physical params."""
                 params = {}
                 for name in free_names:
                     lo, hi = bounds[name]

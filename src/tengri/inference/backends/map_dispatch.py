@@ -136,6 +136,7 @@ def _get_or_build_map_fns(model, loss_fn, optimizer, learning_rate):
 
     @jax.jit
     def single_step(params, ostate, d_args):
+        """Perform one JIT-compiled gradient update, returning updated params and loss."""
         loss, grads = jax.value_and_grad(lambda p: loss_fn(p, d_args))(params)
         updates, new_ostate = opt.update(grads, ostate, params)
         new_params = optax.apply_updates(params, updates)
@@ -469,6 +470,7 @@ def run_pathfinder(fitter, *, key, init_from=None, **kwargs):
     )
 
     def log_posterior_flat(pos):
+        """Evaluate the flat log posterior with data_args bound from the enclosing scope."""
         return log_posterior_flat_2arg(pos, data_args)
 
     return run_pathfinder(

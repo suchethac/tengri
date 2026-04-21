@@ -273,6 +273,7 @@ class Posterior:
             raise ValueError(f"BPT lines not in catalog: {missing}")
 
         def _get(name):
+            """Return emission line flux (scalar or array) for the given line name."""
             idx = names.index(name)
             if self.eline_fluxes.ndim == 1:
                 return self.eline_fluxes[idx]
@@ -330,6 +331,7 @@ class Posterior:
                 raise ValueError(f"Required line '{n}' not in catalog.")
 
         def _get(name):
+            """Return emission line flux (scalar or array) for the given line name."""
             idx = names.index(name)
             if self.eline_fluxes.ndim == 1:
                 return self.eline_fluxes[idx]
@@ -811,6 +813,7 @@ class Posterior:
             log_evidence = float(f.attrs["log_evidence"]) if "log_evidence" in f.attrs else None
 
             def _read_ds(ds):
+                """Load an HDF5 dataset into a JAX array, handling both scalar and array shapes."""
                 return jnp.asarray(ds[()]) if ds.shape == () else jnp.asarray(ds[:])
 
             samples = None

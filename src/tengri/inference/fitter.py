@@ -1557,6 +1557,7 @@ class Fitter:
 
             @jax.jit
             def logdensity_fn(x):
+                """Evaluate negative log density from custom likelihood and standard prior."""
                 lh_val = likelihood(x)
                 prior = 0.5 * sum(jnp.sum(v**2) for v in x.values())
                 return -lh_val - prior
@@ -1567,6 +1568,7 @@ class Fitter:
 
             @jax.jit
             def logdensity_fn(x):
+                """Evaluate log density with data_args bound from the enclosing scope."""
                 return _logdensity_2arg(x, _da)
 
         warmup_key, sample_key = jax.random.split(key)

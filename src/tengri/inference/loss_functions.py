@@ -836,6 +836,7 @@ def build_loglikelihood_unbounded_fn(fitter, mode="_traceable"):
     spec = fitter.spec
 
     def loglik_unbounded(params_unbounded, data_args):
+        """Compute log-likelihood after unstandardizing unbounded parameters to physical space."""
         params = {}
         for name in free_names:
             dist = spec.get_distribution(name)

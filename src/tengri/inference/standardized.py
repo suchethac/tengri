@@ -359,6 +359,7 @@ def build_hierarchical_loss(
     all_noise = [jnp.asarray(g["noise"]) for g in galaxies]
 
     def loss_fn(xi_flat: jnp.ndarray) -> jnp.ndarray:
+        """Compute total negative log-likelihood over all galaxies from a flat parameter vector."""
         xi_all = unravel_fn(xi_flat)
 
         total_lh = 0.0

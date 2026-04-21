@@ -202,9 +202,11 @@ class Uniform(Distribution):
         return (self._lo, self._hi)
 
     def sample(self, key: jax.Array) -> jnp.ndarray:
+        """Draw one sample uniformly from [lo, hi]."""
         return jax.random.uniform(key, minval=self._lo, maxval=self._hi)
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Return log probability: -log(hi-lo) inside bounds, -inf outside."""
         in_bounds = (x >= self._lo) & (x <= self._hi)
         return jnp.where(in_bounds, -jnp.log(self._hi - self._lo), -jnp.inf)
 
@@ -426,12 +428,14 @@ class LogUniform(Distribution):
         return (self._lo, self._hi)
 
     def sample(self, key: jax.Array) -> jnp.ndarray:
+        """Draw one sample log-uniformly from [lo, hi]."""
         log_lo = jnp.log10(self._lo)
         log_hi = jnp.log10(self._hi)
         log_val = jax.random.uniform(key, minval=log_lo, maxval=log_hi)
         return 10.0**log_val
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Return log probability: -log(x * log(hi/lo)) inside bounds, -inf outside."""
         in_bounds = (x >= self._lo) & (x <= self._hi)
         lp = -jnp.log(x * jnp.log(self._hi / self._lo))
         return jnp.where(in_bounds, lp, -jnp.inf)
@@ -671,6 +675,7 @@ class StudentT(Distribution):
         return jnp.clip(self._mu + self._sigma * scale * xi, self._lo, self._hi)
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
+        """Map a physical parameter value to a standardized coordinate via the Student-t scale."""
         scale = jnp.where(self._df > 2, jnp.sqrt(self._df / (self._df - 2)), 3.0)
         return (theta - self._mu) / (self._sigma * scale)
 

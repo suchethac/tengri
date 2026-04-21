@@ -119,6 +119,7 @@ def compute_nlr_sed(
 
     # Sum Gaussian profiles for each line
     def _single_line(line_data):
+        """Compute luminosity-weighted Gaussian profile for one NLR emission line."""
         lam_c = line_data[0]
         strength = line_data[1]
         profile = _gaussian_line_profile(wavelength, lam_c, fwhm_kms)

@@ -804,6 +804,7 @@ def resolve_sfh(
 
     # Build the composed closure
     def composed_fn(t_lookback, **kw):
+        """Evaluate the composed SFH: sum additive components, then apply burst and field."""
         # 1. Sum additive components
         smooth = jnp.zeros_like(t_lookback)
         for fn_i, int_names_i in additive_info:

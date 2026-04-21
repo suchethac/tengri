@@ -312,6 +312,7 @@ def _get_flat_logdensity(fitter, init_params):
         _, unravel_fn = ravel_pytree(init_params)
 
         def log_posterior_flat_2arg(position, data_args):
+            """Evaluate log posterior from a flat position vector by unraveling to pytree first."""
             return logdensity_2arg(unravel_fn(position), data_args)
 
         cache[cache_key] = (

@@ -202,6 +202,7 @@ def _window_mean_flux(
 
 
 def _measure_break(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
+    """Compute spectral break ratio (red window mean flux / blue window mean flux)."""
     blue_lo, blue_hi = idx.continuum[0]
     red_lo, red_hi = idx.continuum[1]
     f_blue = _window_mean_flux(wave, flux, blue_lo, blue_hi)
@@ -210,6 +211,7 @@ def _measure_break(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) 
 
 
 def _measure_ew(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
+    """Compute equivalent width from continuum-to-feature flux ratio and feature window width."""
     cont_fluxes = []
     for lo, hi in idx.continuum:
         cont_fluxes.append(_window_mean_flux(wave, flux, lo, hi))

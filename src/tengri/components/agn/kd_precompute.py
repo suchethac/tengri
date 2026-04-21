@@ -785,6 +785,7 @@ def kubota_done_disc_preintegrated(
     if has_nthcomp:
 
         def _warm_ring_phot(r_cm, t_ring, dr_ring):
+            """Compute per-filter flux for one warm-zone annulus via nthcomp lookup."""
             # Bolometric power: sigma*T^4/pi * ring_area = sigma*T^4 * 2*pi*r*dr * cos(i)
             l_total = _SIGMA_SB * t_ring**4 / jnp.pi * _ring_area(r_cm, dr_ring, agn_cos_inc)
 
@@ -802,6 +803,7 @@ def kubota_done_disc_preintegrated(
     else:
         # Fallback: use Planck lookup (no Comptonization enhancement)
         def _warm_ring_phot(r_cm, t_ring, dr_ring):
+            """Compute per-filter flux for one warm-zone annulus via Planck fallback."""
             b_filt = _lookup_planck_filter(t_ring, kd_data.planck_T_grid, kd_data.planck_table)
             return b_filt * _ring_area(r_cm, dr_ring, agn_cos_inc)
 

@@ -799,6 +799,7 @@ def _make_lazy_loader(
     """
 
     def _lazy_wrapper(*args, **kwargs):
+        """Resolve and cache the dust emission template on first call, then delegate to it."""
         if name not in _resolved:
             _resolved.add(name)
             # Try v2 HDF5 first (improved grid), then canonical HDF5

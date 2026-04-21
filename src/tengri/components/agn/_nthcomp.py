@@ -160,6 +160,7 @@ def _nthcomp_lnu_interp_impl(
     nu_jax = _get_nu_jax()
 
     def _c(dg: int, dt: int, db: int) -> jnp.ndarray:
+        """Return table value at the interpolation-cell corner offset (dg, dt, db)."""
         return table_jax[ig + dg, it + dt, ib + db]
 
     # Trilinear interpolation over 8 corners (gamma × kTe × kTbb) in log space.

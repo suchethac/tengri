@@ -357,6 +357,7 @@ def build_fused_tier2_spectrum(model):
 
     # Shared SED computation (sfr_on_ssp pre-computed by caller)
     def _compute_rest_sed_spec(sfr_on_ssp, params):
+        """Compute rest-frame SED for the spectroscopy kernel given pre-computed SFR weights."""
         p = get_internal_params(params, param_map, spec, has_field)
         if _use_dsps_native_spec:
             z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)

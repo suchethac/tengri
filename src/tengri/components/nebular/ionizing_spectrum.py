@@ -178,6 +178,7 @@ def fit_ionizing_spectrum(
             _log_flux=log_flux,
             _log_Q=log_Q,
         ):
+            """Compute power-law residual and Q_H constraint for ionizing spectrum fitting."""
             pred = params[1] + params[0] * _log_wave
             log_Q_pred = (
                 params[1]

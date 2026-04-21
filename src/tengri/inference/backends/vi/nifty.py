@@ -207,6 +207,7 @@ def build_log_density(transform, frozen_jacobian=True):
         # Drop log-det correction: ∂g/∂ξ ≈ M(m*) = constant near the mode
         # so log|det ∂g/∂ξ| is constant and cancels in the Metropolis ratio.
         def log_density(eta):
+            """Evaluate log density without log-det Jacobian correction."""
             xi = g_inverse(eta, transform)
             return -transform.hamiltonian(xi)
 
@@ -457,6 +458,7 @@ def run_nifty_fast_vi(
     elif sample_mode == "nonlinear_resample":
 
         def resolved_mode(i: int) -> str:
+            """Schedule nonlinear_resample periodically, nonlinear_update otherwise."""
             if i == 0 or i % resample_every == 0:
                 return "nonlinear_resample"
             return "nonlinear_update"
@@ -621,6 +623,7 @@ def _get_or_build_nifty_likelihood(fitter):
         fixed_values = fitter._fixed_values
 
         def _predict(params):
+            """Dispatch to the forward model for this data_type given params."""
             if data_type == "photometry":
                 return model.predict_photometry(params, mode="_traceable")
             elif data_type == "spectroscopy":
@@ -632,6 +635,7 @@ def _get_or_build_nifty_likelihood(fitter):
             raise ValueError(f"Unknown data_type: {data_type}")
 
         def _build_params(primals):
+            """Unstandardize primals and merge fixed values into a physical parameter dict."""
             params = {}
             for name in free_names:
                 dist = spec.get_distribution(name)
@@ -646,6 +650,7 @@ def _get_or_build_nifty_likelihood(fitter):
         if use_student_t:
 
             def signal_response(primals):
+                """Map primals to (predicted, effective_noise) for the Student-t likelihood."""
                 params = _build_params(primals)
                 predicted = _predict(params)
                 f_cal = params.get("noise_frac_cal", 0.0)
@@ -654,6 +659,7 @@ def _get_or_build_nifty_likelihood(fitter):
         else:
 
             def signal_response(primals):
+                """Map primals to (predicted, std_inv) for the Gaussian likelihood."""
                 params = _build_params(primals)
                 predicted = _predict(params)
                 f_cal = params.get("noise_frac_cal", 0.0)
@@ -792,6 +798,7 @@ def run_nifty_vi(
     elif sample_mode == "nonlinear_resample":
 
         def resolved_mode(i: int) -> str:
+            """Schedule nonlinear_resample periodically, nonlinear_update otherwise."""
             if i == 0 or i % resample_every == 0:
                 return "nonlinear_resample"
             return "nonlinear_update"
