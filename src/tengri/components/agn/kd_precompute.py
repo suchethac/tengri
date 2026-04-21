@@ -576,6 +576,7 @@ def _lookup_nthcomp_filter(
     """
 
     def _interp_axis(val, grid):
+        """Compute clamped linear interpolation indices and fractions on grid."""
         n = grid.shape[0]
         idx_hi = jnp.searchsorted(grid, val, side="right")
         idx_lo = jnp.clip(idx_hi - 1, 0, n - 2)
@@ -590,6 +591,7 @@ def _lookup_nthcomp_filter(
 
     # Trilinear interpolation over 8 corners
     def _c(dg, dt, db):
+        """Index into nthcomp filter table at trilinear corner offset."""
         return nthcomp_table[ig + dg, it + dt, ib + db]
 
     s00 = _c(0, 0, 0) * (1 - fg) + _c(1, 0, 0) * fg
@@ -627,6 +629,7 @@ def _lookup_corona_filter(
     """
 
     def _interp_axis(val, grid):
+        """Compute clamped linear interpolation indices and fractions on grid."""
         n = grid.shape[0]
         idx_hi = jnp.searchsorted(grid, val, side="right")
         idx_lo = jnp.clip(idx_hi - 1, 0, n - 2)
@@ -751,6 +754,7 @@ def kubota_done_disc_preintegrated(
     dr_outer = r_outer * jnp.log(10.0) * d_log_r_outer
 
     def _outer_ring_phot(r_cm, t_ring, dr_ring):
+        """Compute filter-integrated Planck photometry for outer-disc annulus."""
         b_filt = _lookup_planck_filter(t_ring, kd_data.planck_T_grid, kd_data.planck_table)
         return b_filt * _ring_area(r_cm, dr_ring, agn_cos_inc)
 

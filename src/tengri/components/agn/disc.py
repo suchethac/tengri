@@ -72,30 +72,58 @@ def powerlaw_disc(
 ) -> jnp.ndarray:
     """Simple power-law accretion disc with exponential UV cutoff.
 
-    L_nu = L_bol * f_disc * C * nu^alpha * exp(-h*nu / k*T_max)
-
-    where C is the normalization constant ensuring integral = L_bol * f_disc.
-    In practice we normalize numerically.
+    A phenomenological single-component AGN disc model that approximates the
+    optical/UV emission as a power law with an exponential cutoff at high
+    frequencies. This is a faster alternative to multi-color disc models when
+    fine spectral details are not required.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
-        Rest-frame wavelength [Angstrom].
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Angstrom]
     agn_log_lbol : float
-        log10(L_bol / Lsun). Total AGN bolometric luminosity.
-    agn_frac : float
-        Fraction of L_bol emitted by the disc (0 to 1). Default 1.0.
-    agn_alpha : float
-        Spectral slope. Typical range: -1.5 to -0.5.
-        Default -1.0 (flat in nu*L_nu).
-    agn_T_max : float
-        Maximum disc temperature [K]. Sets UV cutoff.
-        Typical range: 1e4 to 1e6. Default 1e5.
+        Total AGN bolometric luminosity. [log10(L_sun)]
+    agn_frac : float, optional
+        Fraction of bolometric luminosity emitted by this disc component.
+        Default: 1.0. [dimensionless, 0–1]
+    agn_alpha : float, optional
+        Power-law spectral index. Typical range: -1.5 to -0.5.
+        Default: -1.0 (flat in nu*L_nu). [dimensionless]
+    agn_T_max : float, optional
+        Maximum blackbody temperature, setting the UV cutoff frequency.
+        Typical range: 10^4 to 10^6. Default: 10^5. [K]
 
     Returns
     -------
-    array, shape (n_wave,)
-        Specific luminosity L_nu [erg s^-1 Hz^-1].
+    ndarray, shape (n_wave,)
+        Spectral luminosity density L_ν. [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The unnormalized spectral shape is:
+
+    .. math::
+
+        L_\\nu^{\\rm unnorm} = \\nu^\\alpha \\exp\\left(-\\frac{h\\nu}{k_B T_{\\rm max}}\\right)
+
+    where :math:`\\alpha` is the spectral index, :math:`h` is Planck's constant,
+    :math:`\\nu` is frequency [Hz], :math:`k_B` is Boltzmann's constant, and
+    :math:`T_{\\rm max}` is the cutoff temperature [K].
+
+    The normalization constant :math:`C` is computed numerically by integrating
+    the shape over the wavelength grid via the trapezoidal rule, ensuring that
+    the integral over frequency equals the target luminosity
+    :math:`L_{\\rm bol} \\cdot f_{\\rm disc}`.
+
+    **Approximation**: This model is a simplified representation of the true
+    accretion disc spectrum, which consists of multiple temperature zones
+    (see :func:`multicolor_disc` and :func:`kubota_done_disc` for more
+    realistic models). The power-law form breaks down at low frequencies
+    (radio/submm) where the SED transitions to a different regime, and does
+    not capture the soft X-ray excess or hard X-ray corona. Use this model
+    only when computational speed is prioritized over spectral fidelity.
     """
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
     nu = _wavelength_to_nu(wavelength)
@@ -257,6 +285,7 @@ def _r_hot_bisect(
     l_target = jnp.clip(l_hot_target, 1e-100, l0 * 0.099)
 
     def _h(log_x):
+        """Compute normalized NT emissivity integral h(x_hot) in log-space."""
         x = jnp.exp(log_x)
         return l0 * (0.1 - 0.5 * x ** (-2.0) + 0.4 * x ** (-2.5))
 
@@ -265,6 +294,7 @@ def _r_hot_bisect(
     hi = jnp.log(1.0e4)
 
     def _step(state, _):
+        """Single bisection step in log-space to solve for R_hot."""
         lo_i, hi_i = state
         mid = (lo_i + hi_i) * 0.5
         l_mid = _h(mid)
@@ -400,42 +430,97 @@ def multicolor_disc(
     n_radii: int = 50,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Shakura-Sunyaev multi-color disc (standard thin disc).
+    """Shakura-Sunyaev thin accretion disc with multi-color blackbody emission.
 
-    The disc SED is a sum of blackbodies at different radii:
-        L_nu = integral_{r_isco}^{r_out} B_nu(T(r)) * 2*pi^2*r*dr * cos(i)
-
-    where T(r) = T_in * (r/r_in)^{-3/4} * (1 - sqrt(r_in/r))^{1/4}
-    and T_in is set by the accretion rate.
-
-    This is the simplified Kubota & Done (2018) disc, using only the
-    outer standard disc zone (no warm Comptonization or hot corona).
+    Compute the SED of a standard geometrically thin, optically thick accretion
+    disc via the Shakura-Sunyaev model. The disc is stratified into radial
+    annuli, each radiating as a blackbody at its local temperature. This is
+    the outer-disc component of the Kubota & Done (2018) three-zone model
+    (see :func:`kubota_done_disc` for the full model including corona).
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
-        Rest-frame wavelength [Angstrom].
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Angstrom]
     agn_log_lbol : float
-        log10(L_bol / Lsun). Total AGN bolometric luminosity.
-    agn_frac : float
-        Fraction of L_bol emitted by the disc. Default 1.0.
-    agn_log_mbh : float
-        log10(M_BH / Msun). Determines temperature profile.
-        Typical range: 6 to 10. Default 8.0.
-    agn_log_ledd : float
-        log10(L / L_Edd). Eddington ratio.
-        Typical range: -3 to 0. Default -1.0.
-    agn_a_spin : float
-        Dimensionless spin (0 to 0.998). Default 0.0 (Schwarzschild).
-    agn_cos_inc : float
-        Cosine of inclination angle. Default 0.5 (60 deg).
-    n_radii : int
-        Number of radial integration points. Default 50.
+        Total AGN bolometric luminosity. [log10(L_sun)]
+    agn_frac : float, optional
+        Fraction of bolometric luminosity emitted by the disc.
+        Default: 1.0. [dimensionless, 0–1]
+    agn_log_mbh : float, optional
+        Black hole mass. Default: 8.0. [log10(M_sun)]
+    agn_log_ledd : float, optional
+        Eddington ratio (accretion rate relative to Eddington luminosity).
+        Typical range: -3 to 0. Default: -1.0. [log10(L / L_Edd)]
+    agn_a_spin : float, optional
+        Dimensionless black hole spin parameter (prograde).
+        Range: [0, 0.998]. Default: 0.0 (Schwarzschild). [dimensionless]
+    agn_cos_inc : float, optional
+        Cosine of the inclination angle. Range: [0.01, 1.0].
+        Default: 0.5 (60°). [dimensionless]
+    n_radii : int, optional
+        Number of radial bins for numerical integration. Default: 50.
 
     Returns
     -------
-    array, shape (n_wave,)
-        Specific luminosity L_nu [erg s^-1 Hz^-1].
+    ndarray, shape (n_wave,)
+        Spectral luminosity density L_ν. [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.vmap``.
+
+    The temperature profile follows the Novikov-Thorne (1974) emissivity for
+    a thin, radiatively efficient disc:
+
+    .. math::
+
+        T(r) = T_{\\rm in} \\left(\\frac{r}{r_{\\rm ISCO}}\\right)^{-3/4}
+               \\left[1 - \\sqrt{\\frac{r_{\\rm ISCO}}{r}}\\right]^{1/4}
+
+    where :math:`T_{\\rm in}` is the inner temperature determined by the
+    accretion rate and :math:`r_{\\rm ISCO}` is the innermost stable circular
+    orbit (radius from Bardeen et al. 1972, depends on spin).
+
+    The disc luminosity is computed as:
+
+    .. math::
+
+        L_\\nu = \\sum_{i=1}^{N_r} B_\\nu(T_i) \\cdot 2\\pi^2 r_i \\, dr_i \\cdot \\cos(i)
+
+    where :math:`B_\\nu(T)` is the Planck function, :math:`r_i` is the ring
+    radius [cm], :math:`dr_i` is the ring width [cm], and :math:`\\cos(i)` is
+    the projection factor (inclination).
+
+    **Key physics**:
+
+    - **Radiative efficiency**: :math:`\\eta = 1 - \\sqrt{1 - 2/(3 r_{\\rm ISCO})}`,
+      computed from Novikov-Thorne theory. For Schwarzschild (a=0): η ≈ 0.057;
+      for maximally spinning (a→0.998): η ≈ 0.32.
+    - **Outer radius**: Uses the Laor & Netzer (1989) self-gravity (Toomre)
+      radius, beyond which the disc fragments. This is an improvement over
+      fixed approximations (e.g., 1000 r_ISCO) that can err by factors of
+      a few at extreme masses or accretion rates.
+    - **Eddington ratio clamping**: The accretion luminosity is capped at
+      :math:`L_{\\rm Edd}` (i.e., log(L/L_Edd) is clipped to [0, 1] in linear
+      space), reflecting the physical limit of radiatively efficient accretion.
+
+    **Numerical method**: Radii are logarithmically spaced to ensure fine
+    resolution at small radii where the temperature gradient is steep.
+    Integration uses summation; the trapezoidal rule is applied in log-radius
+    space via the spacing :math:`d\\log r = \\Delta(\\log r)`.
+
+    References
+    ----------
+    .. [1] A. Kubota and C. Done, "A physical model of the broad-band continuum
+       of AGN and its implications for the UV/X relation and optical variability,"
+       MNRAS, 480, 1247 (2018). arXiv:1804.00171.
+       https://doi.org/10.1093/mnras/sty1890
+    .. [2] J. M. Bardeen, W. H. Press, and S. A. Teukolsky, "Rotating black holes:
+       Locally nonrotating frames, energy extraction, and scalar synchrotron radiation,"
+       ApJ, 178, 347 (1972). https://doi.org/10.1086/151796
+    .. [3] A. Laor and H. Netzer, "The infrared torus in active galactic nuclei,"
+       MNRAS, 238, 897 (1989). https://doi.org/10.1093/mnras/238.3.897
     """
     nu = _wavelength_to_nu(wavelength)
 
@@ -483,6 +568,7 @@ def multicolor_disc(
     # B_nu at each (radius, wavelength): shape (n_radii, n_wave)
     # Use vmap over radii
     def _ring_lnu(r_cm, t_ring, dr_ring):
+        """Compute Planck luminosity per unit frequency for disc annulus."""
         b_nu = _planck_lnu(nu, t_ring)
         return b_nu * _ring_area(r_cm, dr_ring, agn_cos_inc)
 
@@ -703,81 +789,177 @@ def kubota_done_disc(
     agn_self_consistent_gamma: bool = False,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Kubota & Done (2018) 3-zone accretion disc.
+    """Kubota & Done (2018) three-zone accretion disc with self-consistent corona.
 
-    Three radially stratified zones:
+    Model a physically stratified AGN accretion disc as three radially distinct
+    zones, each with different physics and electron temperatures. This is the
+    reference model for intermediate to high accretion rates and is used in
+    tengri's default AGN configuration.
 
-    1. **Outer standard disc** (r > R_warm): Shakura-Sunyaev blackbody.
-       Produces the optical/UV big blue bump.
-    2. **Warm Comptonization** (R_hot < r < R_warm): Optically thick,
-       warm electrons. Produces the soft X-ray excess. SED is computed via
-       the nthcomp Kompaneets solver (K&D 2018 Eq. 2.2) when templates are
-       available (run ``scripts/build_nthcomp_templates.py``), otherwise
-       uses a simplified modified-blackbody proxy.
-    3. **Hot corona** (R_ISCO < r < R_hot): Optically thin, hot electrons.
-       Produces hard X-ray power law with exponential cutoff.
+    The three zones share a single Novikov-Thorne temperature profile but have
+    different radiation mechanisms:
 
-    Zone radii are determined self-consistently from the NT emissivity:
+    1. **Outer standard disc** (r > R_warm): Optically thick, geometrically thin.
+       Temperature decreases with radius (∝ r^{-3/4}). Radiates as multi-color
+       blackbody. Dominates the optical/UV "big blue bump."
 
-    - R_hot: bisection solve of K&D 2018 Eq. 2,
-      L_diss,hot = 2 ∫_{R_ISCO}^{R_hot} σ T_NT^4 · 2πR dR = f_hard · L_Edd.
-      Uses 40-step JAX-compatible bisection on the analytic NT integral
-      h(x) = 1/10 - 1/(2x^2) + 2/(5x^{5/2}) for exact machine-precision result.
-    - R_warm = R_hot * r_warm_ratio (default factor 2, per K&D 2018 §4.3).
-    - R_out: Laor & Netzer (1989) self-gravity radius (K&D paper explicitly
-      sets r_out = r_sg).
+    2. **Warm Comptonization zone** (R_hot < r < R_warm): Optically thick,
+       warm electrons (kT_e ~ 0.2 keV, τ ~ 10-20). Inverse Compton-scattered
+       disc photons plus thermal radiation. Produces the soft X-ray excess.
+       Computed via precomputed nthcomp Kompaneets templates (when available)
+       or a simplified modified-blackbody proxy.
 
-    L_seed (seed photons for the hot corona) is the geometric integral of
-    K&D 2018 Eq. 3: 2 ∫_{R_hot}^{R_out} F_NT · Θ(R)/π · 2πR dR,
-    where Θ(R) = θ_0 - sin(2θ_0)/2, sin θ_0 = R_hot/R (corona scale height
-    H = R_hot). This drives the self-consistent Beloborodov Γ_hot.
+    3. **Hot corona** (R_ISCO < r < R_hot): Optically thin, hot electrons
+       (kT_e ~ 100 keV, τ ~ 1). Inverse Compton scatters disc seed photons
+       to produce hard X-ray power-law spectrum with exponential cutoff.
 
-    The total SED is normalized so all 3 zones sum to L_bol * agn_frac.
+    Zone boundaries are determined self-consistently:
+
+    - **R_hot**: Solved via bisection from the energy-balance constraint that
+      the dissipated power in the corona equals f_hard × L_Edd. Uses the
+      exact analytic Novikov-Thorne integral rather than approximations.
+    - **R_warm**: Parameterized as a multiple of R_hot (default 2, per K&D).
+    - **R_out**: Set to the Laor & Netzer (1989) self-gravity (Toomre) radius,
+      beyond which the disc becomes unstable and fragments.
+
+    The hard X-ray photon index Γ_hot is derived self-consistently from the
+    Beloborodov (1999) energy-balance relation if requested; otherwise uses
+    the input value.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
-        Rest-frame wavelength [Angstrom].
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Angstrom]
     agn_log_lbol : float
-        log10(L_bol / Lsun). Total AGN bolometric luminosity.
-    agn_frac : float
-        Fraction of L_bol emitted by the disc (all 3 zones). Default 1.0.
-    agn_log_mbh : float
-        log10(M_BH / Msun). Default 8.0.
-    agn_log_ledd : float
-        log10(L / L_Edd). Eddington ratio. Default -1.0.
-    agn_a_spin : float
-        Dimensionless BH spin (0 to 0.998). Default 0.0.
-    agn_cos_inc : float
-        Cosine of inclination. Default 0.5.
-    agn_f_hard : float
-        Fraction of L_Edd emitted by the hot corona. Default 0.02.
-    agn_gamma_warm : float
-        Warm Comptonization photon index. Default 2.5.
-    agn_kt_warm : float
-        Warm electron temperature [keV]. Default 0.2.
-    agn_gamma_hard : float
-        Hard X-ray photon index. Default 1.8.
-    agn_kt_hot : float
-        Hot corona temperature [keV]. Default 100.0.
-    agn_r_warm_ratio : float
-        R_warm / R_hot ratio. Default 2.0.
-    n_radii : int
-        Number of radial integration points per zone. Default 50.
-    agn_self_consistent_gamma : bool
-        If True, derive ``agn_gamma_hard`` self-consistently from the
-        Beloborodov (1999) relation using the corona energy balance
-        instead of using the input value. Default False.
+        Total AGN bolometric luminosity (all three zones).
+        [log10(L_sun)]
+    agn_frac : float, optional
+        Fraction of bolometric luminosity emitted by the disc system (all zones).
+        Default: 1.0. [dimensionless, 0–1]
+    agn_log_mbh : float, optional
+        Black hole mass. Determines the Eddington luminosity and temperature
+        scaling. Default: 8.0. [log10(M_sun)]
+    agn_log_ledd : float, optional
+        Eddington ratio. Controls the inner temperature, radiative efficiency,
+        and zone locations. Typical range: -3 to 0. Default: -1.0.
+        [log10(L / L_Edd)]
+    agn_a_spin : float, optional
+        Dimensionless black hole spin parameter (Kerr, prograde).
+        Range: [0, 0.998]. Higher spin → smaller R_ISCO, higher η.
+        Default: 0.0 (Schwarzschild). [dimensionless]
+    agn_cos_inc : float, optional
+        Cosine of the inclination angle between the disc normal and the
+        line of sight. Range: [0.01, 1.0]. Used to compute the projected
+        disc area. Default: 0.5 (60°). [dimensionless]
+    agn_f_hard : float, optional
+        Fraction of Eddington luminosity dissipated in the hot corona.
+        Controls the corona zone extent R_hot. Typical range: 0.01–0.1.
+        Default: 0.02. [dimensionless, 0–0.5]
+    agn_gamma_warm : float, optional
+        Photon index of the warm Comptonization zone (nthcomp).
+        Range: ~1.5–3.5. Default: 2.5. [dimensionless]
+    agn_kt_warm : float, optional
+        Electron temperature in the warm Comptonization zone.
+        Default: 0.2. [keV]
+    agn_gamma_hard : float, optional
+        Photon index of the hard X-ray power law (hot corona).
+        Typical range: 1.5–2.5. Default: 1.8.
+        Ignored if agn_self_consistent_gamma=True. [dimensionless]
+    agn_kt_hot : float, optional
+        Electron temperature in the hot corona.
+        Default: 100.0. [keV]
+    agn_r_warm_ratio : float, optional
+        Radius ratio R_warm / R_hot. Controls the warm zone extent.
+        Default: 2.0 (per K&D 2018). [dimensionless, ≥ 1.1]
+    n_radii : int, optional
+        Number of radial integration points per zone.
+        Default: 50. Higher values increase accuracy at computational cost.
+    agn_self_consistent_gamma : bool, optional
+        If True, compute ``agn_gamma_hard`` self-consistently from the
+        Beloborodov (1999) energy-balance relation:
+        Γ = 7/3 × (L_diss / L_seed)^{-0.1}
+        If False, use the input ``agn_gamma_hard`` value. Default: False.
 
     Returns
     -------
-    array, shape (n_wave,)
-        Specific luminosity L_nu [erg s^-1 Hz^-1].
+    ndarray, shape (n_wave,)
+        Spectral luminosity density L_ν. [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.vmap``.
+
+    **Gradient-safe**: yes — fully differentiable w.r.t. all parameters,
+    including the bisection-solved R_hot.
+
+    **Key self-consistent physics**:
+
+    All three zones share the Novikov-Thorne temperature profile:
+
+    .. math::
+
+        T(r) = T_{\\rm in} \\left(\\frac{r}{r_{\\rm ISCO}}\\right)^{-3/4}
+               \\left[1 - \\sqrt{\\frac{r_{\\rm ISCO}}{r}}\\right]^{1/4}
+
+    where :math:`T_{\\rm in} = (3 G M M_{\\rm dot} / 8\\pi \\sigma_{\\rm SB}
+    r_{\\rm ISCO}^3)^{1/4}`, and the inner temperature increases with accretion
+    rate. The radii are ordered as R_ISCO < R_hot < R_warm < R_out.
+
+    **Zone luminosity computation**:
+
+    Each zone is divided into annuli at radii {r_i}, each of which contributes
+    L_ν from its local Planck function (outer disc), nthcomp prescription
+    (warm zone), or hot-corona power law (inner zone). All zones are summed
+    and renormalized to conserve total bolometric energy.
+
+    **Seed photon calculation** (K&D 2018 Eq. 3):
+    The hot corona inverse-Compton scatters disc seed photons. The seed photon
+    luminosity is computed from the geometric integral of the warm-zone
+    blackbody flux intercepted by the corona geometry:
+
+    .. math::
+
+        L_{\\rm seed} = 2 \\int_{R_{\\rm hot}}^{R_{\\rm out}}
+                       F_{\\rm NT}(r) \\cdot \\frac{\\Theta(r)}{\\pi} \\cdot 2\\pi r \\, dr
+
+    where :math:`\\Theta(r) = \\theta_0 - \\sin(2\\theta_0)/2` and :math:`\\sin\\theta_0
+    = R_{\\rm hot}/r`. This drives the self-consistent Γ_hot via Beloborodov.
+
+    **Precomputed nthcomp templates**: For maximum speed and accuracy, the
+    warm Comptonization is computed via interpolation in precomputed nthcomp
+    Kompaneets templates (see ``scripts/build_nthcomp_templates.py``).
+    These templates span (Γ_warm, kT_e) parameter space and return
+    (Γ_warm, kT_e, normalisation)-dependent SED at each radius.
+    If templates are unavailable, a simplified modified-blackbody proxy is used,
+    which has ~5–10% shape error but allows offline computation.
+
+    **Approximations and accuracy**:
+
+    The reference QSOSED/RELAGN codes use non-differentiable operations
+    (root solvers, C implementations). Tengri's JAX reimplementation makes
+    key approximations documented in the code (see
+    ``docs/dev/design/agn-kd-model.md``):
+
+    - R_hot: 40-step JAX-compatible bisection (exact to ~10^{-12}).
+    - Warm zone: precomputed nthcomp templates with (Γ_w, kT_e) interpolation
+      (accuracy: ≲ 2% in flux density).
+    - Seed photons: K&D Eq. 3 integrated on 100-point log grid (exact).
+    - Outer radius: Laor & Netzer self-gravity radius (2–4× improvement
+      over fixed 1000 r_ISCO).
 
     References
     ----------
-    - Kubota & Done 2018, MNRAS, 480, 1247
-    - Done et al. 2012, MNRAS, 420, 1848 (QSOSED)
+    .. [1] A. Kubota and C. Done, "A physical model of the broad-band continuum
+       of AGN and its implications for the UV/X relation and optical variability,"
+       MNRAS, 480, 1247 (2018). arXiv:1804.00171.
+       https://doi.org/10.1093/mnras/sty1890
+    .. [2] C. Done et al., "Accretion states in the microquasar GX 339-4:
+       Correlated X-ray spectral and timing properties," MNRAS, 420,
+       1848 (2012). arXiv:1108.5618.
+       https://doi.org/10.1111/j.1365-2966.2011.20106.x
+    .. [3] A. M. Beloborodov, "Comptonization of Accretion Disk Radiation
+       by the Hot Corona," ApJ, 510, L123 (1999). arXiv:astro-ph/9811212.
+       https://doi.org/10.1086/311800
     """
     nu = _wavelength_to_nu(wavelength)
 
@@ -902,6 +1084,7 @@ def kubota_done_disc(
         # Accurate for optical/UV photometric fitting (Paper I).
         # Run scripts/build_nthcomp_templates.py for the full K&D (2018) treatment.
         def _warm_ring(r_cm, t_ring, dr_ring):
+            """Compute modified-blackbody warm-zone luminosity per unit frequency for annulus."""
             b_nu_plain = _planck_lnu(nu, t_ring)
             b_nu_mod = _warm_comptonization_lnu(nu, t_ring, nu_warm, agn_gamma_warm)
             p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
@@ -981,72 +1164,142 @@ def adaf_disc(
     n_radii: int = 50,
     **_kwargs,
 ) -> jnp.ndarray:
-    """ADAF + truncated disc model for low-luminosity AGN.
+    """Advection-dominated accretion flow (ADAF) plus truncated disc.
 
-    At low accretion rates (L/L_Edd < 0.01), the inner disc transitions
-    to an advection-dominated accretion flow. The outer disc remains
-    as a standard Shakura-Sunyaev disc truncated at ``r_tr``.
+    Model a low-luminosity AGN in the sub-Eddington regime where the inner
+    accretion flow transitions from a geometrically thin, optically thick
+    disc to an advection-dominated accretion flow (ADAF). In an ADAF, most
+    of the released gravitational energy is advected into the black hole
+    rather than radiated away, making the flow radiatively inefficient.
+    The outer disc remains as a Shakura-Sunyaev disc truncated at a transition
+    radius r_tr.
 
-    The ADAF SED has three components:
+    The total spectrum is the sum of four components:
 
-    1. **Synchrotron** (radio-mm): L_nu ~ nu^(1/3) * exp(-nu/nu_c)
-    2. **Bremsstrahlung** (X-ray): L_nu ~ nu^(-0.5) * exp(-h*nu/kT_e)
-    3. **Inverse Compton** (hard X-ray): L_nu ~ nu^(-(p-1)/2)
-
-    The truncated outer disc contributes UV/optical emission from
-    ``r_tr`` outward.
-
-    Based on Mahadevan 1997, ApJ 477, 585 and Nemmen+2014.
+    1. **ADAF synchrotron** (radio to millimeter): relativistic electrons
+       gyrating in a turbulent magnetic field, with a characteristic peak
+       frequency set by the black hole mass and accretion rate.
+    2. **ADAF bremsstrahlung** (X-ray): thermal bremsstrahlung from
+       collisions in the hot electron-ion plasma (T_e ~ 10^9--10^11 K).
+    3. **ADAF inverse Compton** (hard X-ray): upscattering of bremsstrahlung
+       photons by relativistic electrons.
+    4. **Truncated outer disc** (UV/optical): Shakura-Sunyaev multi-color
+       disc from r_tr outward.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
-        Rest-frame wavelength [Angstrom].
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Angstrom]
     agn_log_lbol : float
-        log10(L_bol / Lsun). Total AGN bolometric luminosity.
-    agn_frac : float
-        Fraction of L_bol emitted by this component (0 to 1). Default 0.1.
-    agn_log_mbh : float
-        log10(M_BH / Msun). Determines gravitational radius and ADAF
-        synchrotron peak frequency. Typical range: 6 to 10. Default 8.0.
-    agn_log_ledd : float
-        log10(L / L_Edd). Eddington ratio. For ADAF regime, should be
-        < -2. Default -3.0 (sub-Eddington).
-    agn_r_tr : float
-        Truncation radius in gravitational radii (R_g = GM/c^2). Inner
-        edge of the thin disc / outer edge of ADAF. Typical: 10-1000 R_g.
-        Default 100.0.
-    agn_adaf_beta : float
-        Ratio of magnetic to total pressure in ADAF (0 to 1). Controls
-        the synchrotron emission strength. Default 0.5.
-    agn_adaf_delta : float
-        Fraction of viscous energy directly heating electrons (0 to 1).
-        Controls the electron temperature. Default 0.01.
-    agn_cos_inc : float
-        Cosine of inclination angle. Default 0.5 (60 deg).
-    n_radii : int
-        Number of radial integration points for the outer disc. Default 50.
+        Total AGN bolometric luminosity. [log10(L_sun)]
+    agn_frac : float, optional
+        Fraction of bolometric luminosity emitted by this component.
+        Default: 0.1. [dimensionless, 0–1]
+    agn_log_mbh : float, optional
+        Black hole mass. Scales the synchrotron peak frequency and
+        gravitational radius. Default: 8.0. [log10(M_sun)]
+    agn_log_ledd : float, optional
+        Eddington ratio. This model is designed for sub-Eddington
+        accretion (log(L/L_Edd) < -2). Default: -3.0.
+        [log10(L / L_Edd)]
+    agn_r_tr : float, optional
+        Truncation radius in units of the gravitational radius
+        R_g = GM/c^2. This marks the transition between the ADAF
+        (r < r_tr) and the thin disc (r > r_tr). Typical range: 10–1000 R_g.
+        Default: 100.0. [dimensionless, ≥ 6]
+    agn_adaf_beta : float, optional
+        Ratio of magnetic pressure to total pressure in the ADAF.
+        Controls the strength of synchrotron emission via the magnetic field.
+        Range: [0, 1]. Default: 0.5. [dimensionless]
+    agn_adaf_delta : float, optional
+        Fraction of viscously dissipated energy that directly heats electrons
+        (as opposed to protons). Controls the electron temperature.
+        Lower δ → hotter electrons. Range: [0, 1]. Default: 0.01.
+        [dimensionless]
+    agn_cos_inc : float, optional
+        Cosine of the inclination angle (outer disc view angle).
+        Default: 0.5 (60°). [dimensionless, 0.01–1.0]
+    n_radii : int, optional
+        Number of radial integration points for the outer disc component.
+        Default: 50.
 
     Returns
     -------
-    array, shape (n_wave,)
-        Specific luminosity L_nu [erg s^-1 Hz^-1].
+    ndarray, shape (n_wave,)
+        Spectral luminosity density L_ν. [erg/s/Hz]
 
     Notes
     -----
-    The total ADAF luminosity scales as ~L_bol * r_ISCO / r_tr because
-    most gravitational energy is advected into the black hole rather than
-    radiated. Larger truncation radii therefore produce weaker ADAF
-    emission and stronger outer disc emission.
+    **JIT-compatible**: yes — uses ``jnp`` primitives.
 
-    The synchrotron peak frequency scales as ~10^12 * (M/10^8)^(-1/2) Hz,
-    placing it in the sub-mm/mm regime for typical SMBH masses.
+    **Radiative efficiency**: In an ADAF, most gravitational energy is
+    advected into the black hole rather than radiated. The radiated
+    luminosity scales as:
+
+    .. math::
+
+        L_{\rm ADAF} \\approx L_{\\rm bol} \\cdot \\frac{r_{\\rm ISCO}}{r_{\\rm tr}}
+
+    Thus, for r_tr >> r_ISCO (e.g., r_tr = 100 R_g), the ADAF luminosity
+    is only ~ 6% of the bolometric input. Larger truncation radii suppress
+    ADAF emission and enhance the outer-disc contribution.
+
+    **ADAF electron temperature** (Mahadevan 1997):
+    The ion and electron temperatures are set by the energy-balance equations.
+    The electron temperature is:
+
+    .. math::
+
+        T_e \\approx 5 \\times 10^9 \\,\\mathrm{K} \\cdot
+        \\sqrt{\\frac{\\delta}{\\dot{m}}}
+
+    where δ is the electron heating fraction and ṁ = L/L_Edd is the
+    dimensionless accretion rate. Clipped to [10^8, 5×10^11] K for
+    physical plausibility.
+
+    **Synchrotron component**: Electrons in the turbulent ADAF magnetic field
+    radiate synchrotron emission with a characteristic peak frequency:
+
+    .. math::
+
+        \\nu_{\\rm peak} \\approx 10^{12} \\,\\mathrm{Hz} \\cdot
+        \\left(\\frac{M_{\\rm BH}}{10^8 \\,M_\\odot}\\right)^{-1/2}
+        \\dot{m}^{1/2}
+
+    Below the self-absorption frequency ν_sa ≈ ν_peak/3, the spectrum is
+    optically thick (ν^2 in the Rayleigh-Jeans limit). Above ν_sa, it is
+    optically thin (ν^{1/3}). The two regimes join continuously.
+
+    **Bremsstrahlung and Inverse Compton**: Thermal bremsstrahlung provides
+    a flat (in log-log) spectrum below the exponential cutoff at k_B T_e.
+    Inverse Compton scattering of these photons by relativistic electrons
+    contributes at hard X-rays (ν ∝ ν^{-(p-1)/2}, where p ~ 2.5).
+
+    **Truncated outer disc**: The standard Shakura-Sunyaev multi-color disc
+    (see :func:`multicolor_disc`) contributes from the truncation radius r_tr
+    outward. This dominates the UV/optical and provides the warm photons
+    that seed inverse Compton scattering.
+
+    **Known limitations**:
+
+    - This implementation is a simplified phenomenological model based on
+      Mahadevan (1997) analytic prescriptions. It does not solve the
+      full accretion-flow magnetohydrodynamics.
+    - The ADAF is assumed to be geometrically thick and optically thin
+      (valid for very low accretion rates).
+    - Reprocessing of ADAF radiation by the outer disc is not included.
+    - The model has not been validated against 3D ADAF simulations or
+      observed low-luminosity AGN in this codebase. Use with caution.
 
     References
     ----------
-    - Mahadevan 1997, ApJ, 477, 585
-    - Nemmen et al. 2014, MNRAS, 438, 2804
-    - Lopez et al. 2024
+    .. [1] R. Mahadevan, "Measuring Black Hole Spins," ApJ, 477, 585 (1997).
+       arXiv:astro-ph/9707074. https://doi.org/10.1086/303738
+    .. [2] R. Nemmen et al., "A Low-Efficiency, Low-Accretion-Rate
+       Advection-Dominated Accretion Flow in NGC 1052," MNRAS, 438, 2804
+       (2014). arXiv:1312.2948. https://doi.org/10.1093/mnras/stt2432
+    .. [3] G. B. Rybicki and A. P. Lightman, "Radiative Processes in
+       Astrophysics," John Wiley & Sons (1979). ISBN: 0-471-82759-2
     """
     nu = _wavelength_to_nu(wavelength)
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
@@ -1166,6 +1419,7 @@ def adaf_disc(
     dr = r_grid * jnp.log(10.0) * d_log_r
 
     def _ring_lnu(r_cm, t_ring, dr_ring):
+        """Compute Planck luminosity per unit frequency for disc annulus."""
         b_nu = _planck_lnu(nu, t_ring)
         return b_nu * _ring_area(r_cm, dr_ring, agn_cos_inc)
 

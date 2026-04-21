@@ -182,6 +182,10 @@ def build_skirtor_photometry_lookup(precomp: dict):
         agn_cos_inc,
         agn_torus_frac,
     ):
+        """Compute SKIRTOR torus photometry via triweight interpolation on 5D grid.
+
+        Returns filter-integrated L_nu [erg/s/Hz] at runtime.
+        """
         # grid_phot stores L_ν [erg/s/Hz] per L_sun of L_bol (unit torus fraction)
         # Return: L_bol_lsun [L_sun] * torus_frac * phot [erg/s/Hz/L_sun] = L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
@@ -272,6 +276,10 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     @jax.jit
     def skirtor_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
+        """Compute SKIRTOR torus photometry with collapsed (fixed) axes via triweight interp.
+
+        Returns filter-integrated L_nu [erg/s/Hz] at runtime.
+        """
         # Same unit convention as build_skirtor_photometry_lookup: L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
         phot_per_lsun = interp_nd_triweight(grid_phot, axes, edges, tuple(free_axis_values))

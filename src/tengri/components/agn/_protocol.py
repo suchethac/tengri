@@ -16,27 +16,33 @@ __all__ = ["AGNModel"]
 class AGNModel(Protocol):
     """Protocol for AGN emission models.
 
-    Any AGN model function must accept a wavelength array and bolometric
-    luminosity, returning the rest-frame SED in erg/s/Hz.
+    Defines the interface that all AGN emission models must implement. A model
+    accepts a wavelength grid and bolometric luminosity, and returns the
+    rest-frame SED in erg/s/Hz. Models can be composed of physical components
+    (accretion disc, torus, broad-line region, narrow-line region, X-ray
+    corona) that are computed independently and added.
 
-    AGN models are composed of physical components (disc, torus, BLR, NLR,
-    X-ray) that may be added, and each component follows this interface.
+    The AGN bolometric luminosity is specified as log10(L_bol / L_sun) at the
+    API level; implementations must convert to CGS (erg/s) as needed for
+    physical calculations.
 
-    The AGN bolometric luminosity is always specified as log10(L_bol / L_sun)
-    at the model input level; the implementation converts to cgs (erg/s)
-    internally as needed.
+    Notes
+    -----
+    See :mod:`tengri.components.agn.unified` for model registration and lookup
+    utilities.
 
     Examples
     --------
-    Implementing a power-law accretion disc emission model::
+    Implementing a custom power-law accretion disc model::
 
         def my_powerlaw_disc(wavelength, agn_log_lbol, alpha=-0.5, **kwargs):
-            '''Simple power-law disc SED.'''
-            L_bol_ergs = 10.0**agn_log_lbol * L_SUN_ERG  # convert to erg/s
-            # f_ν ∝ ν^α, convert wavelength to frequency, normalize
+            \"\"\"Simple power-law accretion disc SED.\"\"\"
+            L_bol_erg_s = 10.0**agn_log_lbol * L_SUN_ERG  # convert to erg/s
+            # Compute f_ν ∝ ν^α on the wavelength grid
             ...
+            return sed  # shape (n_wave,), [erg/s/Hz]
 
-    Registering it::
+    Registering the model::
 
         from tengri.components.agn.unified import register_agn_model
 
@@ -44,7 +50,7 @@ class AGNModel(Protocol):
         @register_agn_model("my_powerlaw_disc")
         def my_powerlaw_disc(wavelength, agn_log_lbol, alpha=-0.5, **kwargs): ...
 
-    Using it::
+    Using it in SEDModel::
 
         from tengri.components.agn.unified import resolve_agn_model
 
@@ -62,28 +68,35 @@ class AGNModel(Protocol):
 
         Parameters
         ----------
-        wavelength : jax.Array, shape (n_wave,)
-            Rest-frame wavelength grid in Angstrom.
+        wavelength : array_like, shape (n_wave,)
+            Rest-frame wavelength grid. [Angstrom]
         agn_log_lbol : float
-            AGN bolometric luminosity as log10(L_bol / L_sun).
-            Always in solar luminosities at the API level.
-            Implementation must convert to erg/s (1 L_sun ≈ 3.839e33 erg/s)
-            if needed for physical calculations.
+            AGN bolometric luminosity. [log10(L_sun)]
         **kwargs
-            Model-specific parameters passed through from the unified AGN
-            combiner or intermediate models. Examples include:
-            - ``agn_torus_frac``: covering factor [0, 1]
-            - ``agn_torus_angle``: viewing angle (degrees)
-            - ``agn_bh_spin``: black hole spin [0, 1]
-            - Temperature parameters, opacity indices, etc.
-            Unknown kwargs must be accepted but may be ignored.
+            Model-specific keyword arguments passed from the unified AGN
+            interface or parent components. Common parameters include:
+
+            - ``agn_torus_frac``: Torus covering factor. [dimensionless, 0–1]
+            - ``agn_torus_angle``: Viewing angle to torus axis. [degrees, 0–90]
+            - ``agn_bh_spin``: Black hole spin parameter. [dimensionless, 0–1]
+            - Temperature, opacity, radial structure parameters (model-specific)
+
+            Unknown kwargs must be accepted but may be silently ignored.
 
         Returns
         -------
-        jax.Array, shape (n_wave,)
-            AGN emission SED L_ν in erg/s/Hz (rest-frame).
-            All returned SEDs are absolute luminosities (not normalized).
-            Multiple model components (disc, torus, etc.) can be added
-            directly at the wavelength array level.
+        ndarray, shape (n_wave,)
+            AGN emission SED L_ν. [erg/s/Hz]
+
+        Notes
+        -----
+        **Absolute luminosities**: The returned SED is in absolute units
+        [erg/s/Hz], not normalized or flux-density units. Multiple components
+        (disc, torus, BLR, NLR, X-ray) can be summed at the wavelength array
+        level.
+
+        **JIT-compatible**: All implementations must use ``jnp`` primitives and
+        avoid Python-level branching on traced values to ensure
+        ``jax.jit`` compatibility.
         """
         ...

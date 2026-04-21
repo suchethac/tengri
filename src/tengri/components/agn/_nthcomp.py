@@ -81,31 +81,37 @@ def _get_nthcomp_templates():
 
 #: Backward-compat global accessors (for interpolation functions below)
 def _get_gamma_jax():
+    """Return photon index grid from cached nthcomp templates."""
     gamma, _, _, _, _, _ = _get_nthcomp_templates()
     return gamma
 
 
 def _get_kte_jax():
+    """Return electron temperature grid from cached nthcomp templates."""
     _, kte, _, _, _, _ = _get_nthcomp_templates()
     return kte
 
 
 def _get_ktbb_jax():
+    """Return seed blackbody temperature grid from cached nthcomp templates."""
     _, _, ktbb, _, _, _ = _get_nthcomp_templates()
     return ktbb
 
 
 def _get_nu_jax():
+    """Return frequency grid from cached nthcomp templates."""
     _, _, _, nu, _, _ = _get_nthcomp_templates()
     return nu
 
 
 def _get_table_jax():
+    """Return log-space nthcomp template table from cached templates."""
     _, _, _, _, table_log, _ = _get_nthcomp_templates()
     return table_log
 
 
 def _is_table_available():
+    """Check if nthcomp templates are loaded and available."""
     _, _, _, _, _, available = _get_nthcomp_templates()
     return available
 
