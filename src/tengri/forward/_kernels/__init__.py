@@ -8,15 +8,15 @@ Kernel builders organized by fusion strategy:
 Legacy ``assembly.py`` still present but no longer used.
 """
 
-from tengri.forward.kernels.compositional import (
+from tengri.forward._kernels.compositional import (
     build_fused_tier2_photometry,
     build_fused_tier2_spectrum,
     build_hybrid_spectrum,
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,
 )
-from tengri.forward.kernels.exact import build_exact_sed, build_fused_rest_sed
-from tengri.forward.kernels.hybrid import (
+from tengri.forward._kernels.exact import build_exact_sed, build_fused_rest_sed
+from tengri.forward._kernels.hybrid import (
     build_hybrid_photometry,
     build_hybrid_photometry_ztable,
 )

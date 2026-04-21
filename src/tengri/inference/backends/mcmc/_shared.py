@@ -20,8 +20,6 @@ def _get_nuts_kernel():
 
 
 @functools.cache
-
-
 def _get_hmc_kernel():
     import blackjax.mcmc.hmc
 
@@ -29,8 +27,6 @@ def _get_hmc_kernel():
 
 
 @functools.cache
-
-
 def _get_dynamic_hmc_kernel():
     import blackjax.mcmc.dynamic_hmc
 
@@ -38,8 +34,6 @@ def _get_dynamic_hmc_kernel():
 
 
 @functools.cache
-
-
 def _get_ghmc_kernel():
     import blackjax.mcmc.ghmc
 
@@ -54,8 +48,6 @@ def _get_ghmc_kernel():
 
 
 @functools.partial(jax.jit, static_argnums=(2, 5))
-
-
 def _nuts_sample_scan(
     state,
     keys,
@@ -78,8 +70,6 @@ def _nuts_sample_scan(
 
 
 @functools.partial(jax.jit, static_argnums=(2, 5))
-
-
 def _nuts_burnin_scan(
     state,
     keys,
@@ -106,8 +96,6 @@ def _nuts_burnin_scan(
 
 
 @functools.partial(jax.jit, static_argnums=(2, 5))
-
-
 def _hmc_sample_scan(
     state,
     keys,
@@ -130,8 +118,6 @@ def _hmc_sample_scan(
 
 
 @functools.partial(jax.jit, static_argnums=(2, 5))
-
-
 def _hmc_burnin_scan(
     state,
     keys,
@@ -158,8 +144,6 @@ def _hmc_burnin_scan(
 
 
 @functools.partial(jax.jit, static_argnums=(2,))
-
-
 def _dynamic_hmc_sample_scan(
     state,
     keys,
@@ -181,8 +165,6 @@ def _dynamic_hmc_sample_scan(
 
 
 @functools.partial(jax.jit, static_argnums=(2,))
-
-
 def _dynamic_hmc_burnin_scan(
     state,
     keys,
@@ -208,8 +190,6 @@ def _dynamic_hmc_burnin_scan(
 
 
 @functools.partial(jax.jit, static_argnums=(2,))
-
-
 def _ghmc_sample_scan(
     state,
     keys,
@@ -233,8 +213,6 @@ def _ghmc_sample_scan(
 
 
 @functools.partial(jax.jit, static_argnums=(2,))
-
-
 def _ghmc_burnin_scan(
     state,
     keys,
@@ -266,8 +244,6 @@ def _ghmc_burnin_scan(
 
 
 @functools.partial(jax.jit, static_argnums=(2,))
-
-
 def _mclmc_sample_scan(state, keys, kernel, L, step_size):
     def _step(s, k):
         s, _info = kernel(k, s, L, step_size)
@@ -277,8 +253,6 @@ def _mclmc_sample_scan(state, keys, kernel, L, step_size):
 
 
 @functools.partial(jax.jit, static_argnums=(2,))
-
-
 def _adjusted_mclmc_sample_scan(state, keys, kernel, step_size, n_integration_steps):
     def _step(s, k):
         s, info = kernel(k, s, step_size, n_integration_steps)

@@ -432,9 +432,7 @@ class CloudyGridBackend:
                 value = fixed[axis_idx]
                 ax = line_axes[axis_idx]
                 scatter = 0.5 * float(ax[1] - ax[0])
-                w = compute_grid_weights(
-                    value, ax, scatter=scatter, edges=edges_for_grid(ax)
-                )
+                w = compute_grid_weights(value, ax, scatter=scatter, edges=edges_for_grid(ax))
                 # tensordot contracts axis `axis_idx` of line_lum with axis 0 of w.
                 # The resulting tensor has all axes of line_lum except axis_idx.
                 line_lum = jnp.tensordot(w, line_lum, axes=([0], [axis_idx]))

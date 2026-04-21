@@ -50,8 +50,7 @@ def custom_mapping_csv(tmp_path):
     """CSV with non-standard column names needing a filter mapping."""
     path = tmp_path / "custom.csv"
     path.write_text(
-        "id,redshift,band_u,band_u_err,band_g,band_g_err\n"
-        "obj1,0.8,0.20,0.02,0.30,0.03\n"
+        "id,redshift,band_u,band_u_err,band_g,band_g_err\nobj1,0.8,0.20,0.02,0.30,0.03\n"
     )
     return path
 
@@ -60,10 +59,7 @@ def custom_mapping_csv(tmp_path):
 def tsv_file(tmp_path):
     """Tab-separated file."""
     path = tmp_path / "tab.tsv"
-    path.write_text(
-        "id\tredshift\tsdss_r\tsdss_r_err\n"
-        "gal1\t0.5\t0.30\t0.03\n"
-    )
+    path.write_text("id\tredshift\tsdss_r\tsdss_r_err\ngal1\t0.5\t0.30\t0.03\n")
     return path
 
 
@@ -180,10 +176,7 @@ class TestMaskConventions:
     def test_zero_error_gets_huge_noise(self, tmp_path):
         """Zero error value → noise set to 1e30 (effectively infinite)."""
         path = tmp_path / "zero_err.csv"
-        path.write_text(
-            "id,redshift,sdss_r,sdss_r_err\n"
-            "gal1,0.5,0.30,0.0\n"
-        )
+        path.write_text("id,redshift,sdss_r,sdss_r_err\ngal1,0.5,0.30,0.0\n")
         cat = read_catalog(path)
         assert cat.noise[0, 0] == 1e30
 
@@ -331,8 +324,7 @@ class TestPrebuiltMappings:
 
         for cigale_name, tengri_name in CIGALE_TO_TENGRI.items():
             assert tengri_name in FILTER_REGISTRY, (
-                f"CIGALE mapping '{cigale_name}' → '{tengri_name}' "
-                f"not found in FILTER_REGISTRY"
+                f"CIGALE mapping '{cigale_name}' → '{tengri_name}' not found in FILTER_REGISTRY"
             )
 
     def test_candels_values_in_registry(self):
@@ -341,8 +333,7 @@ class TestPrebuiltMappings:
 
         for candels_name, tengri_name in CANDELS_TO_TENGRI.items():
             assert tengri_name in FILTER_REGISTRY, (
-                f"CANDELS mapping '{candels_name}' → '{tengri_name}' "
-                f"not found in FILTER_REGISTRY"
+                f"CANDELS mapping '{candels_name}' → '{tengri_name}' not found in FILTER_REGISTRY"
             )
 
     def test_cigale_mapping_with_csv(self, tmp_path):
@@ -376,19 +367,13 @@ class TestCustomColumns:
 
     def test_custom_id_col(self, tmp_path):
         path = tmp_path / "custom_id.csv"
-        path.write_text(
-            "objname,redshift,sdss_r,sdss_r_err\n"
-            "NGC1234,0.5,0.30,0.03\n"
-        )
+        path.write_text("objname,redshift,sdss_r,sdss_r_err\nNGC1234,0.5,0.30,0.03\n")
         cat = read_catalog(path, id_col="objname")
         assert cat.ids[0] == "NGC1234"
 
     def test_custom_redshift_col(self, tmp_path):
         path = tmp_path / "custom_z.csv"
-        path.write_text(
-            "id,z_phot,sdss_r,sdss_r_err\n"
-            "gal1,0.8,0.30,0.03\n"
-        )
+        path.write_text("id,z_phot,sdss_r,sdss_r_err\ngal1,0.8,0.30,0.03\n")
         cat = read_catalog(path, redshift_col="z_phot")
         npt.assert_allclose(cat.redshifts[0], 0.8)
 
@@ -399,10 +384,7 @@ class TestCustomColumns:
 
     def test_custom_missing_value(self, tmp_path):
         path = tmp_path / "custom_missing.csv"
-        path.write_text(
-            "id,redshift,sdss_r,sdss_r_err\n"
-            "gal1,0.5,-99,-99\n"
-        )
+        path.write_text("id,redshift,sdss_r,sdss_r_err\ngal1,0.5,-99,-99\n")
         cat = read_catalog(path, missing_value=-99.0)
         assert cat.flux[0, 0] == 0.0
         assert cat.noise[0, 0] == 1e30
@@ -426,10 +408,7 @@ class TestReadCatalogErrors:
 
     def test_no_filter_columns(self, tmp_path):
         path = tmp_path / "no_filters.csv"
-        path.write_text(
-            "id,redshift,random_col,random_col_err\n"
-            "gal1,0.5,1.0,0.1\n"
-        )
+        path.write_text("id,redshift,random_col,random_col_err\ngal1,0.5,1.0,0.1\n")
         with pytest.raises(ValueError, match="No filter columns"):
             read_catalog(path)
 

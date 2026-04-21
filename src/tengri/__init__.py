@@ -24,6 +24,8 @@ jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
 __version__ = "0.1.0"
 
 # --- Exception hierarchy ---
+# --- New high-level API ---
+from tengri.analysis.mock import MockData, generate_mock
 from tengri.components.agn.agn_config import AGNConfig
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
@@ -68,6 +70,21 @@ from tengri.components.sps.dsps_wrapper import (
     salaris_feh_from_mh,
     salaris_mh_from_feh,
 )
+from tengri.config.exceptions import (
+    BackendError,
+    ConfigError,
+    InferenceError,
+    ParameterError,
+    TengriError,
+    TengriIOError,
+)
+from tengri.config.settings import (
+    DustConfig,
+    ModelConfig,
+    MultiwavelengthConfig,
+    NebularConfig,
+    SFHConfig,
+)
 from tengri.forward.convenience import catalog_summary, fit_batch
 from tengri.forward.prediction import (
     DerivedQuantities,
@@ -91,9 +108,6 @@ from tengri.inference.vi_config import VIConfig
 from tengri.observation.filters import load_filter_set
 from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.line_list import LineCatalog, LineList
-
-# --- New high-level API ---
-from tengri.observation.mock import MockData, generate_mock
 from tengri.observation.noise import (
     compute_effective_noise,
     compute_std_inv,
@@ -108,21 +122,7 @@ from tengri.observation.spectral_indices import SpectralIndexData, SpectralIndex
 from tengri.observation.spectroscopy import Spectroscopy, SpectroscopyConfig
 from tengri.parameters.parameters import Parameters, ParamSpec
 from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
-from tengri.runtime.exceptions import (
-    BackendError,
-    ConfigError,
-    InferenceError,
-    ParameterError,
-    TengriError,
-    TengriIOError,
-)
-from tengri.runtime.settings import (
-    DustConfig,
-    ModelConfig,
-    MultiwavelengthConfig,
-    NebularConfig,
-    SFHConfig,
-)
+from tengri.utils import jit_logging
 
 
 def posteriors_to_dataframe(results: list, params: list[str] | None = None):
@@ -219,111 +219,51 @@ sys.modules["tengri.xray"] = xray
 
 
 __all__ = [
-    # High-level API
-    "AGEMAX_YR",
-    # Registry
-    "FIELD_MODEL_REGISTRY",
-    "SFH_REGISTRY",
     "AGNConfig",
-    # Exceptions
     "BackendError",
     "ConfigError",
-    "DerivedQuantities",
     "DustConfig",
-    "EmissionLines",
     "Fitter",
     "Fixed",
     "Gaussian",
-    "HierarchicalFitter",
-    "HierarchicalResult",
     "InferenceError",
-    "LineCatalog",
     "LineFluxData",
     "LineList",
     "LogNormal",
     "LogUniform",
     "MockData",
-    "Model",
     "ModelConfig",
-    "MultiwavelengthConfig",
     "NebularConfig",
-    "NoiseConfig",
     "NoiseModel",
     "Observation",
-    "ParamSpec",
     "ParameterError",
     "Parameters",
     "Photometry",
     "PopulationFitter",
     "PopulationPosterior",
     "Posterior",
-    "Prediction",
-    "PriorPredictive",
     "SEDModel",
-    "SEDQuantities",
     "SFHConfig",
-    "SFHQuantities",
-    "SSPData",
     "SpectralIndexData",
     "SpectralIndexDef",
     "Spectroscopy",
-    "SpectroscopyConfig",
     "StudentT",
     "TengriError",
     "TengriIOError",
     "Uniform",
     "VIConfig",
-    # Convenient namespace aliases for component access
     "agn",
-    # SFH models
-    "catalog_summary",
-    "compute_effective_noise",
-    "compute_field_gp",
-    "compute_sqrt_power_drw",
-    "compute_std_inv",
-    "constant_sfh",
-    "delayed_exponential_sfh",
-    "delayed_tau",
-    "dla_transmission",
-    "dla_transmission_obs",
-    "double_powerlaw",
-    "dpl",
-    "drw_acf",
-    "drw_variance",
     "dust",
-    "effective_metallicity",
-    "exponential_sfh",
-    "fit_batch",
-    "gaussian_sfh",
-    "generate_gp_batch",
-    "generate_gp_fourier",
     "generate_mock",
-    "gp_from_xi",
-    "has_noise_model",
     "igm",
-    "lnorm",
     "load_filter_set",
     "load_ssp_data",
-    "lognormal_sfh",
-    "make_log_age_grid",
     "nebular",
-    "norm",
     "observation",
     "posteriors_to_dataframe",
-    "psd_drw",
     "radio",
-    "resolve_sfh",
-    "sample_raytrace",
     "sfh",
-    "skewnormal_sfh",
-    "snorm",
     "sps",
-    "triweight_burst",
-    "truncated_skewnormal_sfh",
-    "tsnorm",
-    "two_component_dust",
-    "uses_student_t",
-    "variable_noise_hamiltonian",
     "xray",
 ]
 

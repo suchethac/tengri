@@ -22,6 +22,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
+from tengri.config.exceptions import ParameterError
 from tengri.inference.fitter import (
     _AUTO_D_THRESHOLD,
     _CANONICAL_METHODS,
@@ -31,7 +32,6 @@ from tengri.inference.fitter import (
 )
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
-from tengri.runtime.exceptions import ParameterError
 
 # ── Fixtures ──────────────────────────────────────────────────────
 

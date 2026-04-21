@@ -91,7 +91,9 @@ def run_mclmc(
         if verbose:
             logger.info(
                 "  Reusing cached warmup (%.1fs). L=%.4f, step_size=%.4f",
-                time.time() - t0, float(params.L), float(params.step_size)
+                time.time() - t0,
+                float(params.L),
+                float(params.step_size),
             )
     else:
         key, init_key = jax.random.split(key)
@@ -112,7 +114,9 @@ def run_mclmc(
         if verbose:
             logger.info(
                 "  Warmup complete (%.1fs). L=%.4f, step_size=%.4f",
-                time.time() - t0, float(params.L), float(params.step_size)
+                time.time() - t0,
+                float(params.L),
+                float(params.step_size),
             )
 
     key, sample_key = jax.random.split(key)
@@ -204,7 +208,10 @@ def run_adjusted_mclmc(
     if verbose:
         logger.info(
             "Adjusted MCLMC: %d parameters, %d warmup, %d samples, target_accept=%.2f",
-            n_dim, n_warmup, n_samples, target_accept_rate
+            n_dim,
+            n_warmup,
+            n_samples,
+            target_accept_rate,
         )
 
     t0 = time.time()
@@ -221,7 +228,9 @@ def run_adjusted_mclmc(
         if verbose:
             logger.info(
                 "  Reusing cached warmup (%.1fs). L=%.4f, step_size=%.4f",
-                time.time() - t0, float(params.L), float(params.step_size)
+                time.time() - t0,
+                float(params.L),
+                float(params.step_size),
             )
     else:
         state = blackjax.mcmc.adjusted_mclmc.init(init_flat, ld_1arg)
@@ -260,7 +269,9 @@ def run_adjusted_mclmc(
         if verbose:
             logger.info(
                 "  Warmup complete (%.1fs). L=%.4f, step_size=%.4f",
-                time.time() - t0, float(params.L), float(params.step_size)
+                time.time() - t0,
+                float(params.L),
+                float(params.step_size),
             )
 
     L = params.L
@@ -287,7 +298,9 @@ def run_adjusted_mclmc(
     if verbose:
         logger.info(
             "  Adjusted MCLMC complete in %.1fs. Divergences: %d/%d",
-            wall_time, n_divergent, n_samples
+            wall_time,
+            n_divergent,
+            n_samples,
         )
 
     return Posterior(

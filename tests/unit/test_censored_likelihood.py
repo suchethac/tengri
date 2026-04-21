@@ -185,12 +185,8 @@ class TestLowerLimit:
         data = jnp.array([5.0])
         noise = jnp.array([1.0])
 
-        e_upper = censored_log_likelihood(
-            data, noise, jnp.array([3.0]), jnp.array([UPPER_LIMIT])
-        )
-        e_lower = censored_log_likelihood(
-            data, noise, jnp.array([7.0]), jnp.array([LOWER_LIMIT])
-        )
+        e_upper = censored_log_likelihood(data, noise, jnp.array([3.0]), jnp.array([UPPER_LIMIT]))
+        e_lower = censored_log_likelihood(data, noise, jnp.array([7.0]), jnp.array([LOWER_LIMIT]))
         npt.assert_allclose(float(e_upper), float(e_lower), rtol=1e-10)
 
 
@@ -219,9 +215,7 @@ class TestMixedMask:
 
         total = censored_log_likelihood(data, noise, predicted, mask)
 
-        e0 = censored_log_likelihood(
-            data[0:1], noise[0:1], predicted[0:1], jnp.array([DETECTED])
-        )
+        e0 = censored_log_likelihood(data[0:1], noise[0:1], predicted[0:1], jnp.array([DETECTED]))
         e1 = censored_log_likelihood(
             data[1:2], noise[1:2], predicted[1:2], jnp.array([UPPER_LIMIT])
         )

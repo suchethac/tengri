@@ -165,9 +165,7 @@ class TestCompareFilterSets:
         assert isinstance(ax, plt.Axes)
 
     def test_legend_present(self):
-        ax = compare_filter_sets(
-            OPTICAL_FILTERS[:2], IR_FILTERS[:2], labels=("Optical", "IR")
-        )
+        ax = compare_filter_sets(OPTICAL_FILTERS[:2], IR_FILTERS[:2], labels=("Optical", "IR"))
         legend = ax.get_legend()
         assert legend is not None
         texts = [t.get_text() for t in legend.get_texts()]

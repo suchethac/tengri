@@ -372,7 +372,7 @@ class TestCloudyLineGridCollapse:
         line_lum = jnp.asarray(rng.standard_normal((4, 5, 3, 10)))
         line_axes = [
             jnp.linspace(-2.5, -0.5, 4),  # log_Z
-            jnp.linspace(7.0, 10.5, 5),   # log_age
+            jnp.linspace(7.0, 10.5, 5),  # log_age
             jnp.linspace(-4.0, -1.0, 3),  # log_U
         ]
 

@@ -881,7 +881,7 @@ def fit_model(
     from tengri.parameters.defaults import get_inference_defaults
 
     if method is None:
-        from tengri.runtime.exceptions import ParameterError
+        from tengri.config.exceptions import ParameterError
 
         raise ParameterError(
             "method=None is not allowed. Pass an explicit method string "

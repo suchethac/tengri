@@ -117,9 +117,13 @@ def run_laplace(
     # or jax.hessian (slow compilation, exact).
     if grad_fn is not None:
         hessian = _finite_diff_hessian(
-            grad_fn, theta_flat, unravel_fn, data_args,
+            grad_fn,
+            theta_flat,
+            unravel_fn,
+            data_args,
         )
     else:
+
         def loss_flat(x):
             return loss_fn(unravel_fn(x), data_args)
 

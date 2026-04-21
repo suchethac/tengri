@@ -77,7 +77,10 @@ def run_dynamic_hmc(
         burnin_msg = f", {n_burnin} burn-in" if n_burnin > 0 else ""
         logger.info(
             "Dynamic HMC: %d parameters, %d warmup%s, %d samples",
-            n_dim, n_warmup, burnin_msg, n_samples
+            n_dim,
+            n_warmup,
+            burnin_msg,
+            n_samples,
         )
 
     t0 = time.time()
@@ -96,7 +99,8 @@ def run_dynamic_hmc(
         if verbose:
             logger.info(
                 "  Reusing cached warmup (%.1fs). Step size: %.4f",
-                time.time() - t0, float(parameters['step_size'])
+                time.time() - t0,
+                float(parameters["step_size"]),
             )
     else:
         key, warmup_key = jax.random.split(key)
@@ -112,7 +116,8 @@ def run_dynamic_hmc(
         if verbose:
             logger.info(
                 "  Warmup complete (%.1fs). Step size: %.4f",
-                time.time() - t0, float(parameters['step_size'])
+                time.time() - t0,
+                float(parameters["step_size"]),
             )
 
     step_size = parameters["step_size"]
@@ -156,7 +161,9 @@ def run_dynamic_hmc(
     if verbose:
         logger.info(
             "  Dynamic HMC complete in %.1fs. Divergences: %d/%d",
-            wall_time, n_divergent, n_samples
+            wall_time,
+            n_divergent,
+            n_samples,
         )
 
     return Posterior(

@@ -7,7 +7,7 @@ Usage
 -----
 ::
 
-    from tengri.runtime.settings import DustConfig, NebularConfig, ModelConfig
+    from tengri.config.settings import DustConfig, NebularConfig, ModelConfig
 
     cfg = ModelConfig(
         nebular=NebularConfig(backend="cloudy", grid_path="/data/cloudy.h5"),

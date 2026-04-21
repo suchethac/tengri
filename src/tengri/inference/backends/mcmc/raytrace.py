@@ -536,7 +536,11 @@ def run_raytrace(
     if verbose:
         logger.info(
             "Ray Tracing: %d params, %d burn-in + %d samples, %d leapfrog/step, step_size=%.4f",
-            D, n_burnin, n_steps, n_leapfrog_steps, float(step_size)
+            D,
+            n_burnin,
+            n_steps,
+            n_leapfrog_steps,
+            float(step_size),
         )
 
     t0 = time.time()
@@ -572,7 +576,10 @@ def run_raytrace(
         logger.info(
             "  Ray Tracing complete in %.1fs. Acceptance: %.1f%% (overall), "
             "%.1f%% (post burn-in). Samples: %d",
-            wall_time, mean_accept * 100, mean_accept_post * 100, n_samples_out
+            wall_time,
+            mean_accept * 100,
+            mean_accept_post * 100,
+            n_samples_out,
         )
 
     return Posterior(

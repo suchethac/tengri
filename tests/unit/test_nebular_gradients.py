@@ -280,6 +280,7 @@ def test_cloudy_grid_invalid_interp_mode(mock_ssp):
 
 # ── CueBackend ────────────────────────────────────────────────────
 
+
 def test_cue_grad_logu(cue_backend, mock_ssp):
     """Test JAX autodiff vs finite difference for CueBackend.
 
@@ -323,6 +324,7 @@ def test_cue_grad_logu(cue_backend, mock_ssp):
 
 
 # ── CB19Backend ───────────────────────────────────────────────────
+
 
 def test_cb19_grad_logu(cb19_backend, mock_ssp):
     """Test JAX autodiff vs finite difference for CB19Backend w.r.t. neb_logU.

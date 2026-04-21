@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.observation.mock import generate_mock
+from tengri.analysis.mock import generate_mock
 
 
 class _FakeModel:

@@ -1014,12 +1014,8 @@ class TestInferenceStressTests:
             n_samples_per_iteration=12,
         )
 
-        runtime_4_str = (
-            f"{result_4['runtime_sec']:.1f}s" if result_4['runtime_sec'] else "N/A"
-        )
-        runtime_12_str = (
-            f"{result_12['runtime_sec']:.1f}s" if result_12['runtime_sec'] else "N/A"
-        )
+        runtime_4_str = f"{result_4['runtime_sec']:.1f}s" if result_4["runtime_sec"] else "N/A"
+        runtime_12_str = f"{result_12['runtime_sec']:.1f}s" if result_12["runtime_sec"] else "N/A"
         print(f"\n{result_4['name']}: Runtime={runtime_4_str}, status={result_4['status']}")
         print(f"{result_12['name']}: Runtime={runtime_12_str}, status={result_12['status']}")
 

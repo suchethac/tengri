@@ -102,8 +102,7 @@ class Spectroscopy:
             n = len(self.wave_obs)
             if cov.shape != (n, n):
                 raise ValueError(
-                    f"covariance shape {cov.shape} does not match "
-                    f"expected ({n}, {n})"
+                    f"covariance shape {cov.shape} does not match expected ({n}, {n})"
                 )
             object.__setattr__(self, "_cov_inv", jnp.linalg.inv(cov))
         else:
@@ -320,7 +319,8 @@ def apply_wavelength_mask(
     Mask the 5577 A sky line and a detector gap::
 
         noise_masked = apply_wavelength_mask(
-            noise, wave_obs,
+            noise,
+            wave_obs,
             mask_ranges=[(5560, 5590), (7580, 7680)],
         )
     """

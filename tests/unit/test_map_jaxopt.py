@@ -53,9 +53,7 @@ def fitter_and_mock(ssp_data_wne, sdss_filters):
     )
     ssp = ssp_data_wne
     obs = Observation(
-        photometry=Photometry.from_names(
-            ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-        )
+        photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     )
     model = SEDModel(spec, ssp, observation=obs)
     true_params = {
@@ -96,14 +94,21 @@ class TestJaxoptOptimizers:
     def test_lower_loss_than_adam(self, fitter_and_mock):
         fitter, _ = fitter_and_mock
         lbfgs = fitter.run(
-            method="map", key=jax.random.PRNGKey(0),
-            optimizer="lbfgs", n_steps=200, verbose=False,
+            method="map",
+            key=jax.random.PRNGKey(0),
+            optimizer="lbfgs",
+            n_steps=200,
+            verbose=False,
         )
         adam = fitter.run(
-            method="map", key=jax.random.PRNGKey(0),
-            optimizer="adam", n_steps=500, verbose=False,
+            method="map",
+            key=jax.random.PRNGKey(0),
+            optimizer="adam",
+            n_steps=500,
+            verbose=False,
         )
         assert lbfgs.diagnostics["final_loss"] <= adam.diagnostics["final_loss"]
+
 
 class TestJaxoptPosteriorStructure:
     """Verify Posterior object fields from jaxopt path."""

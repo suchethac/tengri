@@ -133,7 +133,11 @@ def run_nuts(
         burnin_msg = f", {n_burnin} burn-in" if n_burnin > 0 else ""
         logger.info(
             "NUTS: %d parameters, %d warmup%s, %d samples, target_accept=%.2f",
-            n_dim, n_warmup, burnin_msg, n_samples, target_accept_rate
+            n_dim,
+            n_warmup,
+            burnin_msg,
+            n_samples,
+            target_accept_rate,
         )
 
     t0 = time.time()
@@ -150,7 +154,8 @@ def run_nuts(
             logger.info(
                 "  Auto-switching to diagonal mass matrix (D=%d>30). "
                 "Dense would be O(D²)=%d per step.",
-                n_dim, n_dim**2
+                n_dim,
+                n_dim**2,
             )
 
     adapt_key = ("nuts", not use_dense)
@@ -165,7 +170,8 @@ def run_nuts(
         if verbose:
             logger.info(
                 "  Reusing cached warmup (%.1fs). Step size: %.4f",
-                time.time() - t0, float(parameters['step_size'])
+                time.time() - t0,
+                float(parameters["step_size"]),
             )
     else:
         key, warmup_key = jax.random.split(key)
@@ -184,7 +190,8 @@ def run_nuts(
         if verbose:
             logger.info(
                 "  Warmup complete (%.1fs). Step size: %.4f",
-                time.time() - t0, float(parameters['step_size'])
+                time.time() - t0,
+                float(parameters["step_size"]),
             )
 
     step_size = parameters["step_size"]
@@ -230,8 +237,7 @@ def run_nuts(
 
     if verbose:
         logger.info(
-            "  NUTS complete in %.1fs. Divergences: %d/%d",
-            wall_time, n_divergent, n_samples
+            "  NUTS complete in %.1fs. Divergences: %d/%d", wall_time, n_divergent, n_samples
         )
 
     return Posterior(

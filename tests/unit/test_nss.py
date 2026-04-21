@@ -182,7 +182,9 @@ class TestSliceSampling:
 
     def test_direction_has_correct_norm(self):
         """Direction proposal from covariance is Mahalanobis-normalized."""
-        from tengri.inference.backends.nested.slice_sampling import sample_direction_from_covariance
+        from tengri.inference.backends.nested.slice_sampling import (
+            sample_direction_from_covariance,
+        )
 
         cov = jnp.diag(jnp.array([1.0, 4.0, 9.0]))
         key = jax.random.PRNGKey(42)

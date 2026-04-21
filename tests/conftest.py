@@ -78,9 +78,7 @@ def synthetic_ssp():
     key = jax.random.PRNGKey(123)
     flux = jnp.abs(jax.random.normal(key, (n_met, n_age, n_wave))) * 1e-3 + 1e-5
     lgmet = jnp.array([-1.5, -0.5, 0.0])
-    return SSPData(
-        ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet
-    )
+    return SSPData(ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet)
 
 
 @pytest.fixture(scope="session")

@@ -620,7 +620,7 @@ class TestCompositionalKernelLAbsorbedGuard:
         """
         import inspect
 
-        import tengri.forward.kernels.hybrid as fk
+        import tengri.forward._kernels.hybrid as fk
         import tengri.forward.nonstell as ns
 
         fk_count = inspect.getsource(fk).count("jnp.isfinite(L_absorbed_stellar)")
@@ -664,7 +664,7 @@ class TestBugNSS04ZTableIGM:
         """
         import inspect
 
-        import tengri.forward.kernels.hybrid as fk
+        import tengri.forward._kernels.hybrid as fk
 
         src = inspect.getsource(fk)
 

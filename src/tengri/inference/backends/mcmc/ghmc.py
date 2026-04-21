@@ -85,7 +85,12 @@ def run_ghmc(
         burnin_msg = f", {n_burnin} burn-in" if n_burnin > 0 else ""
         logger.info(
             "GHMC: %d parameters, %d warmup%s, %d samples, alpha=%.1f, delta=%.2f",
-            n_dim, n_warmup, burnin_msg, n_samples, alpha, delta
+            n_dim,
+            n_warmup,
+            burnin_msg,
+            n_samples,
+            alpha,
+            delta,
         )
 
     t0 = time.time()
@@ -104,7 +109,8 @@ def run_ghmc(
         if verbose:
             logger.info(
                 "  Reusing cached warmup (%.1fs). Step size: %.4f",
-                time.time() - t0, float(parameters['step_size'])
+                time.time() - t0,
+                float(parameters["step_size"]),
             )
     else:
         key, warmup_key = jax.random.split(key)
@@ -120,7 +126,8 @@ def run_ghmc(
         if verbose:
             logger.info(
                 "  Warmup complete (%.1fs). Step size: %.4f",
-                time.time() - t0, float(parameters['step_size'])
+                time.time() - t0,
+                float(parameters["step_size"]),
             )
 
     step_size = parameters["step_size"]
@@ -167,8 +174,7 @@ def run_ghmc(
 
     if verbose:
         logger.info(
-            "  GHMC complete in %.1fs. Divergences: %d/%d",
-            wall_time, n_divergent, n_samples
+            "  GHMC complete in %.1fs. Divergences: %d/%d", wall_time, n_divergent, n_samples
         )
 
     return Posterior(

@@ -47,7 +47,10 @@ class TestBuildJaxoptSolver:
         from tengri.inference.backends.map_dispatch import _build_jaxopt_solver
 
         solver, name = _build_jaxopt_solver(
-            "lbfgs", quadratic_loss, maxiter=50, tol=1e-6,
+            "lbfgs",
+            quadratic_loss,
+            maxiter=50,
+            tol=1e-6,
         )
         assert name == "L-BFGS"
         assert hasattr(solver, "run")
@@ -70,7 +73,10 @@ class TestJaxoptConvergence:
         from tengri.inference.backends.map_dispatch import _build_jaxopt_solver
 
         solver, _ = _build_jaxopt_solver(
-            "lbfgs", quadratic_loss, maxiter=100, tol=1e-8,
+            "lbfgs",
+            quadratic_loss,
+            maxiter=100,
+            tol=1e-8,
         )
         init_params = {"x": jnp.array([5.0, -3.0, 7.0])}
         data_args = {"target": jnp.array([1.0, 2.0, 3.0])}
@@ -82,7 +88,10 @@ class TestJaxoptConvergence:
         from tengri.inference.backends.map_dispatch import _build_jaxopt_solver
 
         solver, _ = _build_jaxopt_solver(
-            "lbfgs", rosenbrock_loss, maxiter=200, tol=1e-8,
+            "lbfgs",
+            rosenbrock_loss,
+            maxiter=200,
+            tol=1e-8,
         )
         init_params = {"x": jnp.array([-1.0, 1.0])}
         data_args = {}
@@ -126,7 +135,10 @@ class TestJaxoptVmap:
         from tengri.inference.backends.map_dispatch import _build_jaxopt_solver
 
         solver, _ = _build_jaxopt_solver(
-            "lbfgs", quadratic_loss, maxiter=100, tol=1e-8,
+            "lbfgs",
+            quadratic_loss,
+            maxiter=100,
+            tol=1e-8,
         )
 
         batch_init = {"x": jnp.array([[5.0, -3.0], [0.0, 10.0], [-5.0, 5.0]])}
