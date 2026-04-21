@@ -14,6 +14,13 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+__all__ = [
+    "build_loglikelihood_fn",
+    "build_loglikelihood_unbounded_fn",
+    "build_logprior_fn",
+    "build_loss_fn",
+]
+
 # ── Shared helpers (called inside traced closures) ───────────────────────
 
 

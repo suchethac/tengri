@@ -20,6 +20,13 @@ import logging
 import threading
 import time
 import warnings
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
+
+__all__ = ["Fitter", "resolve_method"]
+
+if TYPE_CHECKING:
+    from tengri.inference.posterior import Posterior
 
 import jax
 
@@ -260,7 +267,7 @@ class Fitter:
         self._start_background_compilation()
 
     @staticmethod
-    def _resolve_data_type(data_type, model):
+    def _resolve_data_type(data_type: str | None, model: Any) -> str:
         """Infer data_type from Observation when not explicitly provided."""
         if data_type is not None:
             return data_type
@@ -269,7 +276,7 @@ class Fitter:
             return obs.data_type
         return "photometry"
 
-    def _auto_precompute_photometry(self, model):
+    def _auto_precompute_photometry(self, model: Any) -> None:
         """Auto-trigger photometry precomputation if conditions are met.
 
         Fires when: fixed redshift + filters present + not yet precomputed.
@@ -399,7 +406,7 @@ class Fitter:
         else:
             self._eline_amplitude_names = []
 
-    def _build_data_args(self, model):
+    def _build_data_args(self, model: Any) -> dict:
         """Build the data-dependent argument dict passed to JIT'd loss functions.
 
         These are passed as explicit arguments (not closed over) so that
@@ -484,7 +491,7 @@ class Fitter:
         self._compilation_thread = thread
         thread.start()
 
-    def _engine_cache_key(self):
+    def _engine_cache_key(self) -> tuple:
         """Return a hashable key identifying the JIT engine shape.
 
         Two Fitters sharing the same Model will reuse the same compiled
@@ -507,7 +514,7 @@ class Fitter:
             self._eline_prior_type,
         )
 
-    def _get_or_build_engine(self, pos_dict):
+    def _get_or_build_engine(self, pos_dict: dict) -> dict:
         """Return the JIT engine, reusing a cached version when possible.
 
         Engines are cached on the Model object so that multiple Fitters
@@ -665,7 +672,7 @@ class Fitter:
 
     # ── Loss and likelihood builders ──────────────────────────────────
 
-    def _build_loss_fn(self, mode="_traceable"):
+    def _build_loss_fn(self, mode: str = "_traceable") -> Callable:
         """Build a differentiable loss function.
 
         See ``tengri.inference.loss_functions.build_loss_fn`` for full docs.
@@ -680,7 +687,7 @@ class Fitter:
         """
         return build_loss_fn(self, mode=mode)
 
-    def _get_or_build_loss_fn(self, mode="_traceable"):
+    def _get_or_build_loss_fn(self, mode: str = "_traceable") -> Callable:
         """Return the cached loss function, building it if needed.
 
         The loss function is cached on the Model object keyed by
@@ -701,15 +708,15 @@ class Fitter:
         cache[cache_key] = loss_fn
         return loss_fn
 
-    def _build_logprior_fn(self):
+    def _build_logprior_fn(self) -> Callable:
         """Build a log-prior function. See ``loss_functions.build_logprior_fn``."""
         return build_logprior_fn(self)
 
-    def _build_loglikelihood_fn(self, mode="_traceable"):
+    def _build_loglikelihood_fn(self, mode: str = "_traceable") -> Callable:
         """Build log-likelihood function. See ``loss_functions.build_loglikelihood_fn``."""
         return build_loglikelihood_fn(self, mode=mode)
 
-    def _get_or_build_loglikelihood_fn(self, mode="_traceable"):
+    def _get_or_build_loglikelihood_fn(self, mode: str = "_traceable") -> Callable:
         """Return the cached log-likelihood function, building if needed."""
         cache_key = (self._engine_cache_key(), mode)
         cache = get_model_cache(self.model).setdefault("loglik_fn", {})
@@ -719,14 +726,14 @@ class Fitter:
         cache[cache_key] = loglik_fn
         return loglik_fn
 
-    def _build_loglikelihood_unbounded_fn(self, mode="_traceable"):
+    def _build_loglikelihood_unbounded_fn(self, mode: str = "_traceable") -> Callable:
         """Build unbounded-space log-likelihood.
 
         See ``loss_functions.build_loglikelihood_unbounded_fn``.
         """
         return build_loglikelihood_unbounded_fn(self, mode=mode)
 
-    def _get_or_build_grad_fn(self, mode="_traceable"):
+    def _get_or_build_grad_fn(self, mode: str = "_traceable") -> Callable:
         """Return cached JIT-compiled value_and_grad of the loss function.
 
         The gradient function takes ``(params_unbounded, data_args)`` as
@@ -747,7 +754,7 @@ class Fitter:
         cache[cache_key] = val_and_grad
         return val_and_grad
 
-    def _get_or_build_logdensity_fn(self, mode="_traceable"):
+    def _get_or_build_logdensity_fn(self, mode: str = "_traceable") -> Callable:
         """Return cached JIT-compiled log-density for MCMC/Pathfinder.
 
         Returns ``logdensity(params_u, data_args) -> scalar``.  Callers
@@ -769,7 +776,7 @@ class Fitter:
 
     # ── Parameter transforms ──────────────────────────────────────────
 
-    def _initialize_unbounded(self, key):
+    def _initialize_unbounded(self, key: Any) -> dict:
         """Create initial unbounded parameter dict."""
         params = {}
         keys = jax.random.split(key, len(self._free_names) + 1)
@@ -787,7 +794,7 @@ class Fitter:
 
         return params
 
-    def _unbounded_from_posterior(self, posterior):
+    def _unbounded_from_posterior(self, posterior: Posterior) -> dict:
         """Convert a Posterior's params to unbounded space for init."""
         params = {}
         for name in self._free_names:
@@ -804,7 +811,7 @@ class Fitter:
 
         return params
 
-    def _to_physical(self, params_unbounded):
+    def _to_physical(self, params_unbounded: dict) -> dict:
         """Convert a single unbounded param dict to physical space."""
         params = {}
         for name in self._free_names:
@@ -1069,98 +1076,98 @@ class Fitter:
 
     # ── Private method runners ────────────────────────────────────────
 
-    def _run_vi(self, *, key, init_from=None, **kwargs):
+    def _run_vi(self, *, key, init_from=None, **kwargs) -> Posterior:
         from tengri.inference.backends.vi.nifty import run_nifty_vi
 
         kwargs.setdefault("sample_mode", "nonlinear_resample")
         return run_nifty_vi(self, key=key, init_from=init_from, **kwargs)
 
-    def _run_vi_linear(self, *, key, init_from=None, **kwargs):
+    def _run_vi_linear(self, *, key, init_from=None, **kwargs) -> Posterior:
         from tengri.inference.backends.vi.nifty import run_nifty_vi
 
         kwargs.setdefault("sample_mode", "linear_resample")
         return run_nifty_vi(self, key=key, init_from=init_from, **kwargs)
 
-    def _run_vi_native(self, *, key, init_from=None, **kwargs):
+    def _run_vi_native(self, *, key, init_from=None, **kwargs) -> Posterior:
         from tengri.inference.backends.vi.native import run_native_vi
 
         kwargs.setdefault("sample_mode", "geovi")
         return run_native_vi(self, key=key, init_from=init_from, **kwargs)
 
-    def _run_vi_native_linear(self, *, key, init_from=None, **kwargs):
+    def _run_vi_native_linear(self, *, key, init_from=None, **kwargs) -> Posterior:
         from tengri.inference.backends.vi.native import run_native_vi
 
         kwargs.setdefault("sample_mode", "linear")
         return run_native_vi(self, key=key, init_from=init_from, **kwargs)
 
-    def _run_nifty_fast_vi(self, *, key, init_from=None, **kwargs):
+    def _run_nifty_fast_vi(self, *, key, init_from=None, **kwargs) -> Posterior:
         from tengri.inference.backends.vi.nifty import run_nifty_fast_vi
 
         kwargs.setdefault("sample_mode", "nonlinear_resample")
         return run_nifty_fast_vi(self, key=key, init_from=init_from, **kwargs)
 
-    def _run_nifty_fast_vi_linear(self, *, key, init_from=None, **kwargs):
+    def _run_nifty_fast_vi_linear(self, *, key, init_from=None, **kwargs) -> Posterior:
         from tengri.inference.backends.vi.nifty import run_nifty_fast_vi
 
         kwargs.setdefault("sample_mode", "linear_resample")
         return run_nifty_fast_vi(self, key=key, init_from=init_from, **kwargs)
 
-    def _run_nss(self, *, key, **kwargs):
+    def _run_nss(self, *, key, **kwargs) -> Posterior:
         from tengri.inference.backends.evidence import run_nss
 
         return run_nss(self, key=key, **kwargs)
 
-    def _run_map(self, *, key, **kwargs):
+    def _run_map(self, *, key, **kwargs) -> Posterior:
         from tengri.inference.backends.map_dispatch import run_map
 
         return run_map(self, key=key, **kwargs)
 
-    def _run_raytrace(self, *, key, **kwargs):
+    def _run_raytrace(self, *, key, **kwargs) -> Posterior:
         from tengri.inference.backends.mcmc.common import run_raytrace
 
         return run_raytrace(self, key=key, **kwargs)
 
-    def _run_nuts(self, *, key, **kwargs):
+    def _run_nuts(self, *, key, **kwargs) -> Posterior:
         from tengri.inference.backends.mcmc.common import run_nuts
 
         return run_nuts(self, key=key, **kwargs)
 
-    def _run_hmc(self, *, key, **kwargs):
+    def _run_hmc(self, *, key, **kwargs) -> Posterior:
         from tengri.inference.backends.mcmc.common import run_hmc
 
         return run_hmc(self, key=key, **kwargs)
 
-    def _run_dynamic_hmc(self, *, key, **kwargs):
+    def _run_dynamic_hmc(self, *, key, **kwargs) -> Posterior:
         from tengri.inference.backends.mcmc.common import run_dynamic_hmc
 
         return run_dynamic_hmc(self, key=key, **kwargs)
 
-    def _run_ghmc(self, *, key, **kwargs):
+    def _run_ghmc(self, *, key, **kwargs) -> Posterior:
         from tengri.inference.backends.mcmc.common import run_ghmc
 
         return run_ghmc(self, key=key, **kwargs)
 
-    def _run_mclmc(self, *, key, **kwargs):
+    def _run_mclmc(self, *, key, **kwargs) -> Posterior:
         from tengri.inference.backends.mcmc.common import run_mclmc
 
         return run_mclmc(self, key=key, **kwargs)
 
-    def _run_adjusted_mclmc(self, *, key, **kwargs):
+    def _run_adjusted_mclmc(self, *, key, **kwargs) -> Posterior:
         from tengri.inference.backends.mcmc.common import run_adjusted_mclmc
 
         return run_adjusted_mclmc(self, key=key, **kwargs)
 
-    def _run_laplace(self, *, key, **kwargs):
+    def _run_laplace(self, *, key, **kwargs) -> Posterior:
         from tengri.inference.backends.map_dispatch import run_laplace
 
         return run_laplace(self, key=key, **kwargs)
 
-    def _run_pathfinder(self, *, key, **kwargs):
+    def _run_pathfinder(self, *, key, **kwargs) -> Posterior:
         from tengri.inference.backends.map_dispatch import run_pathfinder
 
         return run_pathfinder(self, key=key, **kwargs)
 
-    def _run_elliptical_slice(self, *, key, **kwargs):
+    def _run_elliptical_slice(self, *, key, **kwargs) -> Posterior:
         from tengri.inference.backends.mcmc.common import run_elliptical_slice
 
         return run_elliptical_slice(self, key=key, **kwargs)

@@ -17,6 +17,8 @@ import functools
 import logging
 from dataclasses import dataclass, field
 
+__all__ = ["Posterior"]
+
 import jax
 import jax.numpy as jnp
 import numpy as np

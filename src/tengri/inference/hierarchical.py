@@ -19,6 +19,8 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+__all__ = ["PopulationFitter", "PopulationPosterior"]
+
 import jax
 import jax.numpy as jnp
 import numpy as np

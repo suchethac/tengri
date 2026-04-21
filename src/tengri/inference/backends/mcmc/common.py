@@ -18,6 +18,17 @@ from jax.flatten_util import ravel_pytree
 from tengri.inference._model_cache import get_model_cache
 from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
 
+__all__ = [
+    "run_adjusted_mclmc",
+    "run_dynamic_hmc",
+    "run_elliptical_slice",
+    "run_ghmc",
+    "run_hmc",
+    "run_mclmc",
+    "run_nuts",
+    "run_raytrace",
+]
+
 logger = logging.getLogger(__name__)
 
 # ── Cached NUTS scan functions (module-level for stable JIT identity)

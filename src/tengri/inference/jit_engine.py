@@ -17,6 +17,8 @@ import jax.numpy as jnp
 
 from tengri.inference._model_cache import get_model_cache
 
+__all__ = ["build_jit_engine", "get_or_build_signal_response"]
+
 
 def _build_signal_response(fitter):
     """Build data-free ``signal_response`` and ``_primals_to_params`` closures.
