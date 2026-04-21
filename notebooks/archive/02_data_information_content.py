@@ -36,7 +36,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     ParamSpec,
     Uniform,
     load_filter_set,
@@ -115,7 +115,7 @@ spec_full = ParamSpec(
 )
 
 # Generate full 5-band mock
-model_full = Model(spec_full, ssp_data, filters=all_filters)
+model_full = SEDModel(spec_full, ssp_data, filters=all_filters)
 mock = model_full.mock(TRUTH, snr=20.0, key=jax.random.PRNGKey(42))
 flux_obs_all = mock.flux_obs
 noise_all = mock.noise
@@ -144,7 +144,7 @@ for stage in STAGES:
     print(f"\n--- Fitting: {stage['name']} ---")
     idx = stage["indices"]
     filt = load_filter_set(stage["filter_names"])
-    model_s = Model(spec_full, ssp_data, filters=filt)
+    model_s = SEDModel(spec_full, ssp_data, filters=filt)
 
     flux_s = flux_obs_all[jnp.array(idx)]
     noise_s = noise_all[jnp.array(idx)]
@@ -171,7 +171,7 @@ for row, stage in enumerate(STAGES):
     result = results_stages[stage["name"]]
     idx = stage["indices"]
     filt = load_filter_set(stage["filter_names"])
-    model_s = Model(spec_full, ssp_data, filters=filt)
+    model_s = SEDModel(spec_full, ssp_data, filters=filt)
 
     # Left: SED fit
     ax = axes[row, 0]
@@ -192,7 +192,7 @@ for row, stage in enumerate(STAGES):
         ax.scatter(
             wave_eff[unused], np.array(flux_obs_all)[unused], marker="x", color="#ccc", s=30
         )
-    # Model prediction
+    # SEDModel prediction
     model_flux = model_s.predict_photometry(result.params)
     ax.scatter(
         wave_eff[idx],
@@ -201,7 +201,7 @@ for row, stage in enumerate(STAGES):
         color=COLORS["model"],
         s=40,
         zorder=5,
-        label="Model",
+        label="SEDModel",
     )
     ax.set_xlabel(r"Wavelength [$\AA$]")
     ax.set_ylabel("Flux density")
@@ -279,7 +279,7 @@ plt.show()
 # %%
 # Generate spectroscopic mock
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
-model_spec = Model(spec_full, ssp_data, filters=all_filters)
+model_spec = SEDModel(spec_full, ssp_data, filters=all_filters)
 model_spec.precompute_spectroscopy(WAVE_OBS)
 spec_mock = model_spec.mock_spectrum(TRUTH, WAVE_OBS, snr=30.0, key=jax.random.PRNGKey(99))
 

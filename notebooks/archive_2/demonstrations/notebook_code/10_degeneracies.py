@@ -46,7 +46,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -162,7 +162,7 @@ if HAS_DATA:
         redshift=Fixed(0.1),
         mean_sfh_type="tsnorm",
     )
-    model_sdss = Model(spec, ssp_data, observation=obs_sdss)
+    model_sdss = SEDModel(spec, ssp_data, observation=obs_sdss)
 
     # Fix truth values that clearly show the degeneracy
     key = jax.random.PRNGKey(42)
@@ -261,8 +261,8 @@ if HAS_DATA:
     noise_sdss = jnp.abs(model_sdss.predict_photometry(true_params)) / 20.0
 
     # Build models for each filter configuration
-    model_nir = Model(spec, ssp_data, observation=obs_nir)
-    model_mir = Model(spec, ssp_data, observation=obs_mir)
+    model_nir = SEDModel(spec, ssp_data, observation=obs_nir)
+    model_mir = SEDModel(spec, ssp_data, observation=obs_mir)
 
     noise_nir = jnp.abs(model_nir.predict_photometry(true_params)) / 20.0
     noise_mir = jnp.abs(model_mir.predict_photometry(true_params)) / 20.0
@@ -364,7 +364,7 @@ if HAS_DATA:
         redshift=Uniform(0.01, 0.5),
         mean_sfh_type="tsnorm",
     )
-    model_free_z = Model(spec_free_z, ssp_data, observation=obs_sdss)
+    model_free_z = SEDModel(spec_free_z, ssp_data, observation=obs_sdss)
 
     # Fisher with redshift included — use public param names
     fim_fixed_z, _ = compute_fisher_matrix(
@@ -434,7 +434,7 @@ if HAS_DATA:
         ax_top.plot(wave_eff, draw, "-", color=COLORS["geovi"], alpha=0.08, lw=0.8)
     median_pred = np.median(posterior_phot, axis=0)
     ax_top.plot(
-        wave_eff, median_pred, "s", ms=5, color=COLORS["geovi"], zorder=4, label="Model (median)"
+        wave_eff, median_pred, "s", ms=5, color=COLORS["geovi"], zorder=4, label="SEDModel (median)"
     )
     ax_top.errorbar(
         wave_eff,

@@ -65,7 +65,7 @@ import numpy as np
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     ParamSpec,
     Uniform,
     load_filter_set,
@@ -121,7 +121,7 @@ for name, lam in zip(DEFAULT_LINE_NAMES, DEFAULT_LINE_WAVELENGTHS):
 # emission lines on top of the continuum.
 
 # %%
-# --- Model configuration (smooth DPL SFH, 7 free params) ---
+# --- SEDModel configuration (smooth DPL SFH, 7 free params) ---
 REDSHIFT = 0.1
 wave_obs = jnp.linspace(3600.0, 9500.0, 500)
 
@@ -137,7 +137,7 @@ spec = ParamSpec(
     redshift=Fixed(REDSHIFT),
 )
 
-model = Model(spec, ssp_data, filters=filters).precompute_spectroscopy(wave_obs)
+model = SEDModel(spec, ssp_data, filters=filters).precompute_spectroscopy(wave_obs)
 
 # True parameters: star-forming galaxy with moderate dust
 true_params = {
@@ -459,7 +459,7 @@ print("Saved: figures/15_marginalization_comparison.png")
 # continuum-derived physical parameters.
 
 # %% [markdown]
-# ## 5. Integration with the Full Model
+# ## 5. Integration with the Full SEDModel
 #
 # In a real fit, the continuum $\mathbf{m}(\theta)$ depends on
 # physical parameters $\theta$ (SFH shape, dust, metallicity).
@@ -544,7 +544,7 @@ ax.plot(wave_obs, flux_true_cont * 1e17, color="0.3", lw=0.8, ls="--",
         label="True continuum")
 ax.set_ylabel(r"$f_\nu$ [$10^{-17}$ erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
 ax.legend(loc="upper right", fontsize=8)
-ax.set_title("Full Model: Continuum + Marginalized Lines")
+ax.set_title("Full SEDModel: Continuum + Marginalized Lines")
 
 ax = axes[1]
 res_full = (flux_obs_full - flux_model_full) / noise_full

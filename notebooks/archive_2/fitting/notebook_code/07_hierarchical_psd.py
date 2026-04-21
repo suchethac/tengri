@@ -41,7 +41,7 @@ from tengri import (
     Fitter,
     Fixed,
     PopulationFitter,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -101,9 +101,9 @@ PHOT_SNR = 20.0
 
 
 # %%
-# Model factory for hierarchical inference
+# SEDModel factory for hierarchical inference
 def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
-    """Create a Model with fixed PSD — called by PopulationFitter."""
+    """Create a SEDModel with fixed PSD — called by PopulationFitter."""
     spec = Parameters(
         sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
@@ -120,7 +120,7 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         mean_sfh_type=["tsnorm", "field"],
         n_grid=128,
     )
-    return Model(spec, ssp_data, observation=obs)
+    return SEDModel(spec, ssp_data, observation=obs)
 
 
 # %%
@@ -202,7 +202,7 @@ spec_free = Parameters(
     mean_sfh_type=["tsnorm", "field"],
     n_grid=128,
 )
-model_free = Model(spec_free, ssp_data, observation=obs)
+model_free = SEDModel(spec_free, ssp_data, observation=obs)
 
 individual_results = []
 print("Fitting individual galaxies (PSD free)...")
@@ -716,9 +716,9 @@ print(f"Population: N = {N_GAL}, true sigma = {TRUE_SIGMA}, true tau = {TRUE_TAU
 
 
 # %%
-# Model factory for hierarchical inference — uses Observation API
+# SEDModel factory for hierarchical inference — uses Observation API
 def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
-    """Create a Model with fixed PSD, called by PopulationFitter.
+    """Create a SEDModel with fixed PSD, called by PopulationFitter.
 
     Uses the Observation API for both photometry and spectroscopy
     configuration. Star-forming prior with positive skew and
@@ -744,7 +744,7 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         photometry=Photometry.from_names(FILTER_NAMES),
         spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
     )
-    return Model(spec, ssp_data, observation=obs)
+    return SEDModel(spec, ssp_data, observation=obs)
 
 
 # %%
@@ -862,7 +862,7 @@ obs_spec = Observation(
     spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
     photometry=Photometry.from_names(FILTER_NAMES),
 )
-model_free = Model(spec_free, ssp_data, observation=obs_spec)
+model_free = SEDModel(spec_free, ssp_data, observation=obs_spec)
 
 individual_results = []
 print("Fitting 4 galaxies individually (PSD free)...")

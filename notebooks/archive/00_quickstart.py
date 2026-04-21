@@ -45,7 +45,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import (
-    Model, ParamSpec, Uniform, Gaussian, LogUniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Gaussian, LogUniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 
@@ -63,7 +63,7 @@ print(f"SSP grid loaded — {len(ssp_data.ssp_lgmet)} metallicities, "
 print(f"Filters loaded — {[fc.name for fc in filters[2]]}")
 
 # %% [markdown]
-# ## Part A: Parametric Model (catalog-scale fitting)
+# ## Part A: Parametric SEDModel (catalog-scale fitting)
 #
 # The parametric model uses a **double power law** for the SFH — a smooth
 # function that rises with cosmic time ($\beta$ controls the rise), peaks
@@ -93,7 +93,7 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="dpl",
 )
-model = Model(spec, ssp_data, filters=filters)
+model = SEDModel(spec, ssp_data, filters=filters)
 
 # Star-forming galaxy: late-peaking SFH, high current SFR, moderate dust
 # (tau_peak=10 Gyr cosmic time ≈ still near peak at z=0.1, alpha=1.0 = slow decline)
@@ -246,7 +246,7 @@ plt.savefig("notebook_figures/00_quickstart_fig03.png", dpi=72, bbox_inches="tig
 plt.show()
 
 # %% [markdown]
-# ## Part B: Stochastic Model (IFT correlated field)
+# ## Part B: Stochastic SEDModel (IFT correlated field)
 #
 # Smooth SFHs are insufficient for many galaxies.  Star formation is
 # driven by feedback (supernovae, stellar winds, AGN) and gas accretion,
@@ -287,7 +287,7 @@ spec_stoch = ParamSpec(
     mean_sfh_type=["dpl", "field"],
     n_grid=128,
 )
-model_stoch = Model(spec_stoch, ssp_data, filters=filters)
+model_stoch = SEDModel(spec_stoch, ssp_data, filters=filters)
 
 # Star-forming galaxy with bursty SFH
 # Use spec.sample() to get a full parameter set including sfh_field_xi,
@@ -456,9 +456,9 @@ plt.show()
 # This quickstart gave you the 60-second version.  The tutorial series
 # goes deeper, building from theory through implementation to science:
 #
-# - **[NB01 — The IFT Model](01_the_model.ipynb)**: How the PSD governs
+# - **[NB01 — The IFT SEDModel](01_the_model.ipynb)**: How the PSD governs
 #   burstiness — the climate/weather analogy for star formation
-# - **[NB02 — Forward Model](02_forward_model.ipynb)**: Step-by-step SPS
+# - **[NB02 — Forward SEDModel](02_forward_model.ipynb)**: Step-by-step SPS
 #   pipeline from SFH to photometry, with gradient sensitivity analysis
 # - **[NB03 — Inference Methods](03_inference_methods.ipynb)**: Deep dive
 #   into all five samplers — when each shines and where it breaks

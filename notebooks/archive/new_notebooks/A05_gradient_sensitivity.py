@@ -34,7 +34,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed,
+    SEDModel, ParamSpec, Uniform, Fixed,
     load_ssp_data, load_filter_set,
 )
 import sys; sys.path.insert(0, ".")
@@ -60,7 +60,7 @@ except FileNotFoundError:
 filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 
 # %% [markdown]
-# ## Stochastic Model at Fiducial Parameters
+# ## Stochastic SEDModel at Fiducial Parameters
 
 # %%
 spec = ParamSpec(
@@ -72,7 +72,7 @@ spec = ParamSpec(
     dust_slope=Fixed(-0.7), redshift=Fixed(0.1),
     stochastic=True, n_grid=128,
 )
-model = Model(spec, ssp_data, filters=filters)
+model = SEDModel(spec, ssp_data, filters=filters)
 
 key = jax.random.PRNGKey(42)
 fiducial = spec.sample(key)

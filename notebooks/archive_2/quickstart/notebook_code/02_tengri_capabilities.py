@@ -34,7 +34,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -89,7 +89,7 @@ spec = Parameters(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model = Model(spec, ssp_data, observation=obs)
+model = SEDModel(spec, ssp_data, observation=obs)
 
 # Generate mock and run geoVI
 key = jax.random.PRNGKey(42)
@@ -198,7 +198,7 @@ spec_phot = Parameters(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model_phot = Model(spec_phot, ssp_data, observation=obs_phot)
+model_phot = SEDModel(spec_phot, ssp_data, observation=obs_phot)
 
 batch_fn = jax.jit(jax.vmap(model_phot.predict_photometry))
 Ns = [1, 10, 100, 1000]

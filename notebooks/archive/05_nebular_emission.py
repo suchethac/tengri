@@ -42,7 +42,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri import (
     Fixed,
-    Model,
+    SEDModel,
     ParamSpec,
     load_ssp_data,
 )
@@ -97,7 +97,7 @@ spec = ParamSpec(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.0),
 )
-model = Model(spec, ssp_data)
+model = SEDModel(spec, ssp_data)
 params = {
     "sfh_tsnorm_log_peak_sfr": 1.5,
     "sfh_tsnorm_peak_lbt_gyr": 0.5,

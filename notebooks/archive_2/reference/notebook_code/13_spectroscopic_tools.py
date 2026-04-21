@@ -322,4 +322,4 @@ plt.show()
 # | `blend_emission_lines` | Resolution-broadened line placement |
 #
 # All functions are pure JAX, JIT-compatible, and differentiable -- suitable
-# for gradient-based inference with tengri's `Model` and `Fitter`.
+# for gradient-based inference with tengri's `SEDModel` and `Fitter`.

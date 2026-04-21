@@ -57,7 +57,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Spectroscopy,
@@ -161,7 +161,7 @@ obs = Observation(
         resolution=SPECTRAL_RESOLUTION,
     ),
 )
-model = Model(spec, ssp_data, observation=obs)
+model = SEDModel(spec, ssp_data, observation=obs)
 
 # True parameters: actively star-forming with moderate dust
 TRUE_PARAMS = {
@@ -548,7 +548,7 @@ plt.show()
 # parameters.
 
 # %% [markdown]
-# ## 6. Full Model Integration
+# ## 6. Full SEDModel Integration
 #
 # In a real fit, the continuum $\mathbf{m}(\theta)$ depends on physical
 # parameters $\theta$ (SFH shape, dust, metallicity).  The marginalized

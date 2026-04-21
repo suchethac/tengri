@@ -30,7 +30,7 @@
 #
 # **Prerequisite:** [Tutorial 2: From SFH to Observable SED](02_forward_model.ipynb) covers the forward model components (SSP, dust, photometry). Here we use those components as a black box to generate test data.
 #
-# > **Note:** This tutorial uses the high-level `Model`/`ParamSpec` API with descriptive parameter names (`sfh_alpha`, `psd_sigma`, `met_logzsol`, etc.). See the [Quickstart](00_quickstart.ipynb) for a minimal example and [Tutorial 4](04_fitting.ipynb) for fitting.
+# > **Note:** This tutorial uses the high-level `SEDModel`/`ParamSpec` API with descriptive parameter names (`sfh_alpha`, `psd_sigma`, `met_logzsol`, etc.). See the [Quickstart](00_quickstart.ipynb) for a minimal example and [Tutorial 4](04_fitting.ipynb) for fitting.
 
 # %%
 # %matplotlib inline
@@ -61,7 +61,7 @@ plt.rcParams.update({
 os.makedirs("figures", exist_ok=True)
 
 # ---- New high-level API imports ----
-from tengri import Model, ParamSpec, Uniform, Gaussian, Fixed, load_ssp_data, load_filter_set
+from tengri import SEDModel, ParamSpec, Uniform, Gaussian, Fixed, load_ssp_data, load_filter_set
 from tengri.observation.photometry import ab_mag_from_flux
 from tengri.utils.cosmology import luminosity_distance
 
@@ -110,8 +110,8 @@ spec = ParamSpec(
     n_grid=256,
 )
 
-# ---- Build Model ----
-model = Model(spec, ssp_data, filters=filters)
+# ---- Build SEDModel ----
+model = SEDModel(spec, ssp_data, filters=filters)
 
 # ---- Sample parameters (draws psd_xi from N(0,I)) ----
 params = spec.sample(jax.random.PRNGKey(42))
@@ -312,9 +312,9 @@ mask_sed = (wave_rest > 1000) & (wave_rest < 30000)
 idx_1um = int(jnp.argmin(jnp.abs(wave_rest - 10000)))
 
 for i, (name, gal) in enumerate(galaxy_zoo.items()):
-    # Build a Model for each archetype
+    # Build a SEDModel for each archetype
     spec_i = ParamSpec(**gal["spec_kwargs"])
-    model_i = Model(spec_i, ssp_data, filters=filters)
+    model_i = SEDModel(spec_i, ssp_data, filters=filters)
     params_i = spec_i.sample(jax.random.PRNGKey(i * 7))
 
     # Compute SFH via predict_sfh
@@ -382,7 +382,7 @@ pop_spec = ParamSpec(
     n_grid=256,
 )
 
-pop_model = Model(pop_spec, ssp_data, filters=filters)
+pop_model = SEDModel(pop_spec, ssp_data, filters=filters)
 
 # ---- Sample a batch of parameters ----
 pop_params = pop_spec.sample_batch(jax.random.PRNGKey(42), n=n_gal)
@@ -550,7 +550,7 @@ print(f"lines, and [OIII] each constrain different physical properties.")
 # ---
 # ## Summary
 #
-# This tutorial demonstrated the mock generation capabilities of `tengri` using the `Model`/`ParamSpec` API. The key methods and their use cases are:
+# This tutorial demonstrated the mock generation capabilities of `tengri` using the `SEDModel`/`ParamSpec` API. The key methods and their use cases are:
 #
 # | Mock type | Use case | Key method |
 # |-----------|----------|------------|

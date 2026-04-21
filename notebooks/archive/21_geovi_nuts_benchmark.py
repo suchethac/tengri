@@ -49,7 +49,7 @@ os.environ["JAX_PLATFORMS"] = "cpu"
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     ParamSpec,
     Uniform,
     load_filter_set,
@@ -92,7 +92,7 @@ spec = ParamSpec(
     redshift=0.1,
 )
 
-model = Model(spec, ssp_data, filters=filters)
+model = SEDModel(spec, ssp_data, filters=filters)
 
 # Ground truth (sample from prior, then override key params)
 true_params = spec.sample(jax.random.PRNGKey(10))

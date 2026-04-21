@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Model Comparison with Nested Slice Sampling
+# # SEDModel Comparison with Nested Slice Sampling
 #
 # tengri's other inference methods (geoVI, Ray Tracing, NUTS) target the
 # **posterior** — they tell you *what* the parameters are given a model. But
@@ -47,7 +47,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -97,17 +97,17 @@ obs = Observation(
 #
 # We set up two parametric SFH models with different complexity:
 #
-# | Model | SFH type | Free params | Physical motivation |
+# | SEDModel | SFH type | Free params | Physical motivation |
 # |-------|----------|-------------|-------------------|
 # | **A** (simple) | Double power law | 5 | Smooth rise-and-fall SFH |
 # | **B** (complex) | Truncated skew-normal | 7 | Asymmetric SFH with truncation |
 #
-# We generate mock data from Model A, then ask: **does the extra complexity
-# of Model B help, or does the simpler model suffice?** The Bayes factor
+# We generate mock data from SEDModel A, then ask: **does the extra complexity
+# of SEDModel B help, or does the simpler model suffice?** The Bayes factor
 # answers this question.
 
 # %%
-# --- Model A: Double power law (simple, 5 free params) ---
+# --- SEDModel A: Double power law (simple, 5 free params) ---
 spec_A = Parameters(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
@@ -119,9 +119,9 @@ spec_A = Parameters(
     redshift=Fixed(0.1),
     stochastic=False,
 )
-model_A = Model(spec_A, ssp_data, observation=obs)
+model_A = SEDModel(spec_A, ssp_data, observation=obs)
 
-# --- Model B: Truncated skew-normal (complex, 7 free params) ---
+# --- SEDModel B: Truncated skew-normal (complex, 7 free params) ---
 spec_B = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
@@ -136,13 +136,13 @@ spec_B = Parameters(
     mean_sfh_type="tsnorm",
     stochastic=False,
 )
-model_B = Model(spec_B, ssp_data, observation=obs)
+model_B = SEDModel(spec_B, ssp_data, observation=obs)
 
-print(f"Model A (double power law):      D = {spec_A.n_free}")
-print(f"Model B (truncated skew-normal): D = {spec_B.n_free}")
+print(f"SEDModel A (double power law):      D = {spec_A.n_free}")
+print(f"SEDModel B (truncated skew-normal): D = {spec_B.n_free}")
 
 # %%
-# Generate mock data from Model A (the truth)
+# Generate mock data from SEDModel A (the truth)
 key = jax.random.PRNGKey(42)
 true_params_A = spec_A.sample(key)
 
@@ -177,7 +177,7 @@ print(f"Mock photometry: {len(mock.flux_obs)} bands, SNR ≈ 20")
 fitter_A = Fitter(model_A, mock.flux_obs, mock.noise)
 fitter_B = Fitter(model_B, mock.flux_obs, mock.noise)
 
-print("Running NSS on Model A (double power law)...")
+print("Running NSS on SEDModel A (double power law)...")
 result_A = fitter_A.run(
     "evidence",
     n_live=500,
@@ -186,7 +186,7 @@ result_A = fitter_A.run(
 )
 
 # %%
-print("\nRunning NSS on Model B (truncated skew-normal)...")
+print("\nRunning NSS on SEDModel B (truncated skew-normal)...")
 result_B = fitter_B.run(
     "evidence",
     n_live=500,
@@ -215,8 +215,8 @@ logZ_A = result_A.log_evidence
 logZ_B = result_B.log_evidence
 ln_K = logZ_A - logZ_B
 
-print(f"  Model A (DPL, D={spec_A.n_free}):    log Z = {logZ_A:.2f}")
-print(f"  Model B (tsnorm, D={spec_B.n_free}):  log Z = {logZ_B:.2f}")
+print(f"  SEDModel A (DPL, D={spec_A.n_free}):    log Z = {logZ_A:.2f}")
+print(f"  SEDModel B (tsnorm, D={spec_B.n_free}):  log Z = {logZ_B:.2f}")
 print(f"  ln K (A vs B) = {ln_K:.2f}")
 print()
 
@@ -224,17 +224,17 @@ if abs(ln_K) < 1:
     verdict = "Inconclusive — cannot distinguish"
 elif abs(ln_K) < 2.5:
     preferred = "A" if ln_K > 0 else "B"
-    verdict = f"Moderate preference for Model {preferred}"
+    verdict = f"Moderate preference for SEDModel {preferred}"
 elif abs(ln_K) < 5:
     preferred = "A" if ln_K > 0 else "B"
-    verdict = f"Strong preference for Model {preferred}"
+    verdict = f"Strong preference for SEDModel {preferred}"
 else:
     preferred = "A" if ln_K > 0 else "B"
-    verdict = f"Decisive preference for Model {preferred}"
+    verdict = f"Decisive preference for SEDModel {preferred}"
 
 print(f"  Verdict: {verdict}")
 print()
-print("  (Data was generated from Model A — the Bayes factor should")
+print("  (Data was generated from SEDModel A — the Bayes factor should")
 print("   prefer A, penalizing B's extra parameters via Occam's razor.)")
 
 # %%
@@ -274,17 +274,17 @@ plt.show()
 # resampling of the dead and live points weighted by prior volume.
 
 # %%
-print("Model A posterior:")
+print("SEDModel A posterior:")
 print(result_A.summary_table())
 print()
-print("Model B posterior:")
+print("SEDModel B posterior:")
 print(result_B.summary_table())
 
 # %%
-# --- FIGURE 2: Corner plot for Model A ---
+# --- FIGURE 2: Corner plot for SEDModel A ---
 fig_corner = result_A.plot_corner(truths=true_params_A, color=COLORS["rt"])
 if fig_corner is not None:
-    fig_corner.suptitle("Model A (DPL): NSS Posterior", y=1.02, fontsize=12)
+    fig_corner.suptitle("SEDModel A (DPL): NSS Posterior", y=1.02, fontsize=12)
     plt.savefig(os.path.join(FIGDIR, "fig02_corner_model_A.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
@@ -295,8 +295,8 @@ plt.show()
 # key difference: NSS also computes log Z, enabling model comparison.
 
 # %%
-# Run geoVI on Model A for comparison
-print("Running geoVI on Model A for posterior comparison...")
+# Run geoVI on SEDModel A for comparison
+print("Running geoVI on SEDModel A for posterior comparison...")
 result_map_A = fitter_A.run(
     "map",
     n_steps=500,
@@ -332,7 +332,7 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle(
-        f"Model A: NSS (log Z = {logZ_A:.1f}) vs geoVI (no evidence)",
+        f"SEDModel A: NSS (log Z = {logZ_A:.1f}) vs geoVI (no evidence)",
         y=1.02,
         fontsize=11,
     )
@@ -349,7 +349,7 @@ plt.show()
 # - **n_dead**: total dead points (evidence integral resolution)
 
 # %%
-for name, result in [("Model A", result_A), ("Model B", result_B)]:
+for name, result in [("SEDModel A", result_A), ("SEDModel B", result_B)]:
     d = result.diagnostics
     print(f"  {name}:")
     print(f"    log Z       = {d['log_evidence']:.2f}")
@@ -360,10 +360,10 @@ for name, result in [("Model A", result_A), ("Model B", result_B)]:
     print()
 
 # %% [markdown]
-# ## Model A: Posterior Validation
+# ## SEDModel A: Posterior Validation
 
 # %%
-# --- FIGURE 4: Posterior predictive photometry for Model A ---
+# --- FIGURE 4: Posterior predictive photometry for SEDModel A ---
 phot_config = obs.photometry
 wave_eff = np.array([float(jnp.mean(fc.wave)) for fc in phot_config.filters])
 
@@ -414,7 +414,7 @@ ax_top.scatter(
 )
 ax_top.set_ylabel(r"$f_\nu$")
 ax_top.legend(loc="upper right", fontsize=9)
-ax_top.set_title("Model A (DPL): NSS Posterior Predictive Photometry")
+ax_top.set_title("SEDModel A (DPL): NSS Posterior Predictive Photometry")
 
 residuals_A = (np.array(mock.flux_obs) - median_pred_A) / np.array(mock.noise)
 ax_bot.axhline(0, color="0.5", ls="--", lw=0.8)
@@ -434,7 +434,7 @@ plt.savefig(
 plt.show()
 
 # %%
-# --- FIGURE 5: SFH recovery for Model A ---
+# --- FIGURE 5: SFH recovery for SEDModel A ---
 fig, ax = plt.subplots(figsize=(8, 4))
 plot_sfh(
     model_A,
@@ -445,7 +445,7 @@ plot_sfh(
     label="NSS",
     method="RT",
 )
-ax.set_title("Model A (DPL): SFH Recovery from NSS")
+ax.set_title("SEDModel A (DPL): SFH Recovery from NSS")
 fig.tight_layout()
 plt.savefig(
     os.path.join(FIGDIR, "fig05_sfh_recovery_A.png"),
@@ -455,7 +455,7 @@ plt.savefig(
 plt.show()
 
 # %%
-# --- Parameter recovery table for Model A ---
+# --- Parameter recovery table for SEDModel A ---
 print(f"\n{'Parameter':<25s} {'Truth':>10s} {'Median':>10s} {'68% CI':>20s}")
 print("-" * 67)
 for pname in spec_A.free_params:
@@ -471,7 +471,7 @@ for pname in spec_A.free_params:
 #
 # | Use case | Method |
 # |----------|--------|
-# | **Model comparison** (which SFH, which dust law?) | NSS |
+# | **SEDModel comparison** (which SFH, which dust law?) | NSS |
 # | **Parameter estimation** (smooth, D ≤ 30) | geoVI or NUTS (faster) |
 # | **Parameter estimation** (stochastic, D ~ 137) | geoVI or Ray Tracing |
 # | **Quick evidence from MAP** (Gaussian approx.) | Laplace |

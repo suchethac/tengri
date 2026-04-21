@@ -46,7 +46,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     ParamSpec,
     Photometry,
@@ -170,7 +170,7 @@ plt.savefig(os.path.join(FIGDIR, "08_snell_law.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## 2. RT on a Parametric Model (D = 7)
+# ## 2. RT on a Parametric SEDModel (D = 7)
 #
 # First we demonstrate RT on a simple parametric model where NUTS also
 # works, allowing direct comparison.
@@ -189,7 +189,7 @@ spec_param = ParamSpec(
     redshift=Fixed(0.1),
 )
 
-model_param = Model(spec_param, ssp_data, observation=obs)
+model_param = SEDModel(spec_param, ssp_data, observation=obs)
 truth_param = {
     "sfh_tsnorm_log_peak_sfr": 0.8,
     "sfh_tsnorm_peak_lbt_gyr": 4.0,
@@ -249,7 +249,7 @@ if result_rt.samples is not None:
 convergence_table({"RT (D=7)": result_rt})
 
 # %% [markdown]
-# ## 3. RT on a Stochastic Model (D ~ 137)
+# ## 3. RT on a Stochastic SEDModel (D ~ 137)
 #
 # The stochastic model has ~130 extra latent dimensions from the GP. RT
 # handles this dimensionality well, while NUTS struggles.
@@ -272,7 +272,7 @@ spec_stoch = ParamSpec(
     n_grid=128,
 )
 
-model_stoch = Model(spec_stoch, ssp_data, observation=obs)
+model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs)
 truth_stoch = {
     "sfh_tsnorm_log_peak_sfr": 0.8,
     "sfh_tsnorm_peak_lbt_gyr": 4.0,

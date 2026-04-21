@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # AGN Model Gallery: Complete Guide to All AGN Components
+# # AGN SEDModel Gallery: Complete Guide to All AGN Components
 #
 # This notebook provides a comprehensive visual tour of **every** AGN emission
 # model implemented in tengri. Each section demonstrates a different physical
@@ -1224,7 +1224,7 @@ fig.savefig(os.path.join(FIGDIR, "17_nlr_emission.png"), dpi=150, bbox_inches="t
 plt.show()
 
 # %% [markdown]
-# ## 7. Unified Model: Type 1 vs Type 2
+# ## 7. Unified SEDModel: Type 1 vs Type 2
 #
 # The `unified_nlr_blr` model combines disc + torus + BLR + NLR with geometric
 # masking: the torus blocks the disc and BLR at high inclinations, converting
@@ -1396,7 +1396,7 @@ plt.show()
 # %% [markdown]
 # ## 8. Summary Table: All AGN Models
 #
-# | Model | Components | Free Params | Best For | Reference |
+# | SEDModel | Components | Free Params | Best For | Reference |
 # |-------|-----------|-------------|----------|-----------|
 # | `simple` | Power-law disc + single-T torus | 3 (+agn_frac) | Quick photometric fits | - |
 # | `standard` | Multicolor disc + two-T torus | 5-6 | Broadband UV-to-MIR | Shakura & Sunyaev 1973 |

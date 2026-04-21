@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Model Gallery: Dust Attenuation Curves
+# # SEDModel Gallery: Dust Attenuation Curves
 #
 # A comprehensive visual reference for **all 14 attenuation curves** implemented
 # in tengri, inspired by the
@@ -878,7 +878,7 @@ fig.savefig(os.path.join(FIGDIR, "15_greying_effect.png"), dpi=150, bbox_inches=
 plt.show()
 
 # %% [markdown]
-# ## 8. Two-Component Dust Model
+# ## 8. Two-Component Dust SEDModel
 #
 # The Charlot & Fall (2000) two-component model applies **separate** dust
 # attenuation to young and old stars:

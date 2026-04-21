@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 import sys; sys.path.insert(0, ".")
@@ -62,7 +62,7 @@ spec_smooth = ParamSpec(
     dust_tau_bc=Uniform(0.0, 2.0), dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7), redshift=Fixed(0.1), stochastic=False,
 )
-model_sm = Model(spec_smooth, ssp_data, filters=filters)
+model_sm = SEDModel(spec_smooth, ssp_data, filters=filters)
 true_sm = dict(sfh_alpha=1.0, sfh_beta=1.5, sfh_tau_peak_gyr=8.0,
                sfh_peak_sfr=30.0, met_logzsol=-0.3,
                dust_tau_bc=0.5, dust_tau_diff=0.3)
@@ -102,7 +102,7 @@ spec_stoch = ParamSpec(
     dust_slope=Fixed(-0.7), redshift=Fixed(0.1),
     stochastic=True, n_grid=128,
 )
-model_st = Model(spec_stoch, ssp_data, filters=filters)
+model_st = SEDModel(spec_stoch, ssp_data, filters=filters)
 key = jax.random.PRNGKey(20)
 true_st = spec_stoch.sample(key)
 true_st.update(sfh_alpha=1.0, sfh_beta=1.5, sfh_tau_peak_gyr=8.0,

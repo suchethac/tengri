@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Checking Your Model Before Fitting
+# # Checking Your SEDModel Before Fitting
 #
 # Two questions to answer before running inference:
 #
@@ -43,7 +43,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -100,7 +100,7 @@ spec_good = Parameters(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model_good = Model(spec_good, ssp_data, observation=obs)
+model_good = SEDModel(spec_good, ssp_data, observation=obs)
 model_good.precompute_spectroscopy(WAVE_OBS)
 
 # %%
@@ -198,7 +198,7 @@ plt.savefig(os.path.join(FIGDIR, "fig03_prior_sfhs.png"), dpi=150, bbox_inches="
 plt.show()
 
 # %% [markdown]
-# ## 1. Prior Predictive: Parametric Model
+# ## 1. Prior Predictive: Parametric SEDModel
 #
 # 200 galaxies drawn from the prior. Spectra colored by u−r. The color–color
 # diagram should overlap the observed SDSS galaxy locus.
@@ -224,7 +224,7 @@ spec_bad = Parameters(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model_bad = Model(spec_bad, ssp_data, observation=obs)
+model_bad = SEDModel(spec_bad, ssp_data, observation=obs)
 model_bad.precompute_spectroscopy(WAVE_OBS)
 
 bad_spectra = []
@@ -301,7 +301,7 @@ spec_stoch = Parameters(
     mean_sfh_type=["tsnorm", "field"],
     n_grid=128,
 )
-model_stoch = Model(spec_stoch, ssp_data, observation=obs)
+model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs)
 
 # %%
 # --- FIGURE 5: Stochastic prior SFHs ---
@@ -368,7 +368,7 @@ ALL_FILTERS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 all_filters = load_filter_set(ALL_FILTERS)
 
 # Generate full 5-band mock
-model_full = Model(spec_full, ssp_data, filters=all_filters)
+model_full = SEDModel(spec_full, ssp_data, filters=all_filters)
 mock = model_full.mock(TRUTH, snr=20.0, key=jax.random.PRNGKey(42))
 flux_obs_all = mock.flux_obs
 noise_all = mock.noise
@@ -397,7 +397,7 @@ for stage in STAGES:
     print(f"\n--- Fitting: {stage['name']} ---")
     idx = stage["indices"]
     filt = load_filter_set(stage["filter_names"])
-    model_s = Model(spec_full, ssp_data, filters=filt)
+    model_s = SEDModel(spec_full, ssp_data, filters=filt)
 
     flux_s = flux_obs_all[jnp.array(idx)]
     noise_s = noise_all[jnp.array(idx)]
@@ -424,7 +424,7 @@ for row, stage in enumerate(STAGES):
     result = results_stages[stage["name"]]
     idx = stage["indices"]
     filt = load_filter_set(stage["filter_names"])
-    model_s = Model(spec_full, ssp_data, filters=filt)
+    model_s = SEDModel(spec_full, ssp_data, filters=filt)
 
     # Left: SED fit
     ax = axes[row, 0]
@@ -445,7 +445,7 @@ for row, stage in enumerate(STAGES):
         ax.scatter(
             wave_eff[unused], np.array(flux_obs_all)[unused], marker="x", color="#ccc", s=30
         )
-    # Model prediction
+    # SEDModel prediction
     model_flux = model_s.predict_photometry(result.params)
     ax.scatter(
         wave_eff[idx],
@@ -454,7 +454,7 @@ for row, stage in enumerate(STAGES):
         color=COLORS["model"],
         s=40,
         zorder=5,
-        label="Model",
+        label="SEDModel",
     )
     ax.set_xlabel(r"Wavelength [$\AA$]")
     ax.set_ylabel("Flux density")
@@ -532,7 +532,7 @@ plt.show()
 # %%
 # Generate spectroscopic mock
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
-model_spec = Model(spec_full, ssp_data, filters=all_filters)
+model_spec = SEDModel(spec_full, ssp_data, filters=all_filters)
 model_spec.precompute_spectroscopy(WAVE_OBS)
 spec_mock = model_spec.mock_spectrum(TRUTH, WAVE_OBS, snr=30.0, key=jax.random.PRNGKey(99))
 

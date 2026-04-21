@@ -50,7 +50,7 @@ from matplotlib.lines import Line2D
 import numpy as np
 
 from tengri import (
-    Model, ParamSpec, Uniform, Gaussian, LogUniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Gaussian, LogUniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 
@@ -169,7 +169,7 @@ print(f"Filters:  {[fc.name for fc in filters[2]]}")
 
 # %% [markdown]
 # ---
-# ## Part A — Parametric Model
+# ## Part A — Parametric SEDModel
 #
 # A smooth double power-law SFH with **7 free parameters**: 4 SFH shape
 # + 1 metallicity + 2 dust.  The PSD amplitude is fixed to zero
@@ -195,7 +195,7 @@ spec_param = ParamSpec(
     redshift=Fixed(0.1),
     stochastic=False,
 )
-model_param = Model(spec_param, ssp_data, filters=filters)
+model_param = SEDModel(spec_param, ssp_data, filters=filters)
 print(f"Free parameters: {spec_param.n_free}")
 
 # %%
@@ -304,13 +304,13 @@ plot_corner_comparison(
     colors=[COLORS["nuts"]],
     truths=true_param,
 )
-plt.suptitle("Parametric Model — NUTS Posterior", fontsize=12, y=1.02)
+plt.suptitle("Parametric SEDModel — NUTS Posterior", fontsize=12, y=1.02)
 savefig(plt.gcf(), "corner_parametric")
 plt.show()
 
 # %% [markdown]
 # ---
-# ## Part B — Stochastic Model (the unique capability)
+# ## Part B — Stochastic SEDModel (the unique capability)
 #
 # Real galaxies are not smooth.  Feedback from supernovae, stellar winds,
 # and gas accretion drives stochastic SFR fluctuations on timescales from
@@ -343,7 +343,7 @@ spec_stoch = ParamSpec(
     stochastic=True,
     n_grid=128,
 )
-model_stoch = Model(spec_stoch, ssp_data, filters=filters)
+model_stoch = SEDModel(spec_stoch, ssp_data, filters=filters)
 print(f"Free parameters (stochastic): {spec_stoch.n_free}")
 
 # %%
@@ -498,7 +498,7 @@ plot_corner_comparison(
     colors=[COLORS["rt"]],
     truths=true_stoch,
 )
-plt.suptitle("Stochastic Model — Ray Tracing Posterior", fontsize=12, y=1.02)
+plt.suptitle("Stochastic SEDModel — Ray Tracing Posterior", fontsize=12, y=1.02)
 savefig(plt.gcf(), "corner_stochastic")
 plt.show()
 
@@ -508,7 +508,7 @@ plt.show()
 #
 # | | Part A (parametric) | Part B (stochastic) |
 # |---|---|---|
-# | **Model** | Double power law | Double power law + GP(PSD) |
+# | **SEDModel** | Double power law | Double power law + GP(PSD) |
 # | **Free params** | 7 | ~137 |
 # | **Inference** | NUTS (exact, gold standard) | Ray Tracing (exact, noise-tolerant) |
 # | **SFH recovery** | Smooth envelope well-recovered | Burst amplitude recovered; phase unconstrained |
@@ -523,8 +523,8 @@ plt.show()
 #
 # | Tutorial | Topic |
 # |----------|-------|
-# | **[T01 — The IFT Model](T01_ift_model.ipynb)** | PSD → GP → SFH: the mathematical framework |
-# | **[T02 — Forward Model](T02_forward_model.ipynb)** | SFH → SPS → dust → photometry pipeline |
+# | **[T01 — The IFT SEDModel](T01_ift_model.ipynb)** | PSD → GP → SFH: the mathematical framework |
+# | **[T02 — Forward SEDModel](T02_forward_model.ipynb)** | SFH → SPS → dust → photometry pipeline |
 # | **[T03 — Inference](T03_inference.ipynb)** | All five samplers: when each works and when it breaks |
 # | **[T04 — Fitting](T04_fitting.ipynb)** | Photometry + spectroscopy fitting with diagnostics |
 # | **[T05 — Hierarchical](T05_hierarchical.ipynb)** | Population-level PSD recovery |

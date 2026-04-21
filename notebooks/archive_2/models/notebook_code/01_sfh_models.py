@@ -14,11 +14,11 @@
 # ---
 
 # %% [markdown]
-# # Model Gallery: Star Formation Histories
+# # SEDModel Gallery: Star Formation Histories
 #
-# ## When to Use Which SFH Model
+# ## When to Use Which SFH SEDModel
 #
-# | Model | Best use case | Free params | Stochastic? |
+# | SEDModel | Best use case | Free params | Stochastic? |
 # |-------|--------------|-------------|-------------|
 # | `tsnorm` | General galaxy; adjustable skew and truncation | 5 | No |
 # | `snorm` | Simple symmetric bell; fast to fit | 2 | No |
@@ -680,7 +680,7 @@ plt.savefig(os.path.join(FIGDIR, "18_dirichlet_sfh.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## 3. Stochastic (GP) SFH Model
+# ## 3. Stochastic (GP) SFH SEDModel
 #
 # The GP modulates a smooth mean SFH:
 # $\text{SFR}(t) = \bar{\text{SFR}}(t) \cdot \exp\!\bigl(x(t) - K(0)/2\bigr)$
@@ -1121,7 +1121,7 @@ plt.show()
 # %% [markdown]
 # ## 6. Summary Table
 #
-# | Model | Type | Free params | Key reference |
+# | SEDModel | Type | Free params | Key reference |
 # |-------|------|-------------|---------------|
 # | `delayed_tau` | Parametric | 2 ($\tau$, norm) | Classic |
 # | `dexp` | Parametric | 3 (log_peak, $\tau$, start) | Classic |

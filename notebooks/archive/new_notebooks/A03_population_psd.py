@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed,
+    SEDModel, ParamSpec, Uniform, Fixed,
     load_ssp_data, load_filter_set,
 )
 from tengri.inference.hierarchical import HierarchicalFitter
@@ -59,7 +59,7 @@ spec = ParamSpec(
     dust_slope=Fixed(-0.7), redshift=Fixed(0.1),
     stochastic=True, n_grid=128,
 )
-model = Model(spec, ssp_data, filters=filters)
+model = SEDModel(spec, ssp_data, filters=filters)
 
 
 def generate_population(N, sigma, tau_myr, seed):

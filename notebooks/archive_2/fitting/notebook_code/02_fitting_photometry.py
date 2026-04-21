@@ -35,7 +35,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -88,7 +88,7 @@ spec = Parameters(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model = Model(spec, ssp_data, observation=obs)
+model = SEDModel(spec, ssp_data, observation=obs)
 
 # %%
 # Generate 100 diverse mock galaxies
@@ -264,7 +264,7 @@ print(f"\nvmap photometry for 1000 galaxies: {t_batch:.1f} ms")
 # ## A. Photometry Precomputation (21.6× Speedup)
 #
 # When `redshift=Fixed(...)` is set in Parameters **and** photometry filters
-# are present, `Model` automatically precomputes SSP fluxes through the
+# are present, `SEDModel` automatically precomputes SSP fluxes through the
 # filter set at initialization time. Subsequent calls to `predict_photometry`
 # skip this integration entirely — the SSP×filter integrals are cached.
 #
@@ -272,7 +272,7 @@ print(f"\nvmap photometry for 1000 galaxies: {t_batch:.1f} ms")
 # Check `model.summary()` for confirmation.
 
 # %%
-# Model already uses redshift=Fixed(0.1) — precomputation is active
+# SEDModel already uses redshift=Fixed(0.1) — precomputation is active
 model.summary()
 
 # %%
@@ -303,7 +303,7 @@ spec_nopre = Parameters(
     redshift=Uniform(0.05, 0.15),  # free redshift → no precomputation
     mean_sfh_type="tsnorm",
 )
-model_nopre = Model(spec_nopre, ssp_data, observation=obs)
+model_nopre = SEDModel(spec_nopre, ssp_data, observation=obs)
 params_nopre = spec_nopre.sample(jax.random.PRNGKey(7))
 
 # Warm up
@@ -343,7 +343,7 @@ plt.show()
 # into a single JIT scope. This eliminates intermediate array
 # materializations and reduces memory bandwidth.
 #
-# Fused kernels are **always active** for standard Model configurations.
+# Fused kernels are **always active** for standard SEDModel configurations.
 # The `model.summary()` output above confirms "Fused kernels: YES".
 #
 # Typical speedup over un-fused computation:
@@ -444,7 +444,7 @@ plt.show()
 # | Technique | Speedup | When active |
 # |-----------|---------|-------------|
 # | Photometry precomputation | 21.6× | `redshift=Fixed(...)` in Parameters |
-# | Fused JIT kernels | ~2.5× | Always (standard Model) |
+# | Fused JIT kernels | ~2.5× | Always (standard SEDModel) |
 # | vmap batch forward | Near-linear | `jax.vmap(model.predict_photometry)` |
 # | `fit_batch` | Sequential | Full posterior per galaxy in catalog |
 #

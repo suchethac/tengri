@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Radio Emission Model Gallery
+# # Radio Emission SEDModel Gallery
 #
 # A visual tour of tengri's layered radio physics framework.
 #
@@ -442,7 +442,7 @@ plt.show()
 # %% [markdown]
 # ## Summary
 #
-# | Model | Key parameter | Calibration | Best for |
+# | SEDModel | Key parameter | Calibration | Best for |
 # |---|---|---|---|
 # | Bell+2003 | q_IR (fixed) | z=0 IRAS | Simple models, z~0 |
 # | Delvecchio+2021 | q0, mass_slope, z_slope | 1.4 GHz, 0.1 < z < 4 | VLA/eMERLIN surveys |

@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Dust Emission Model Gallery
+# # Dust Emission SEDModel Gallery
 #
 # tengri implements **10 dust emission models** spanning simple analytic
 # modified blackbodies through physically-motivated template libraries.
@@ -436,7 +436,7 @@ fig.savefig(os.path.join(FIGDIR, "16_casey2012.png"), dpi=150, bbox_inches="tigh
 plt.show()
 
 # %% [markdown]
-# ### 2c. MAGPHYS 4-Component Model (da Cunha, Charlot & Elbaz 2008)
+# ### 2c. MAGPHYS 4-Component SEDModel (da Cunha, Charlot & Elbaz 2008)
 #
 # Decomposes dust emission into four physically-motivated components:
 # 1. **PAH features** -- Drude profiles at 3.3, 6.2, 7.7, 8.6, 11.3, 12.7 um
@@ -1214,11 +1214,11 @@ summary_data = [
     ],
 ]
 
-headers = ["Model", "Type", "Parameters", "PAH Treatment", "Reference"]
+headers = ["SEDModel", "Type", "Parameters", "PAH Treatment", "Reference"]
 
 # Print table
 print(
-    f"{'Model':<22s} {'Type':<11s} {'Parameters':<50s} {'PAH Treatment':<30s} {'Reference':<25s}"
+    f"{'SEDModel':<22s} {'Type':<11s} {'Parameters':<50s} {'PAH Treatment':<30s} {'Reference':<25s}"
 )
 print("-" * 138)
 for row in summary_data:

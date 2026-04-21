@@ -48,7 +48,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 import sys; sys.path.insert(0, ".")
@@ -87,7 +87,7 @@ spec_s = ParamSpec(
     dust_slope=Fixed(-0.7), redshift=Fixed(0.1),
     stochastic=True, n_grid=128,
 )
-model_s = Model(spec_s, ssp_data, filters=filters)
+model_s = SEDModel(spec_s, ssp_data, filters=filters)
 
 key = jax.random.PRNGKey(42)
 true_s = spec_s.sample(key)
@@ -106,7 +106,7 @@ spec_p = ParamSpec(
     dust_tau_bc=Uniform(0.0, 2.0), dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7), redshift=Fixed(0.1), stochastic=False,
 )
-model_p = Model(spec_p, ssp_data, filters=filters)
+model_p = SEDModel(spec_p, ssp_data, filters=filters)
 true_p = dict(sfh_alpha=1.0, sfh_beta=1.5, sfh_tau_peak_gyr=8.0,
               sfh_peak_sfr=40.0, met_logzsol=-0.3,
               dust_tau_bc=0.5, dust_tau_diff=0.3)

@@ -13,7 +13,7 @@
 # ---
 
 # %% [markdown]
-# # Tutorial 1: The PSD &rarr; GP &rarr; SFH Model
+# # Tutorial 1: The PSD &rarr; GP &rarr; SFH SEDModel
 #
 # `tengri` models galaxy star formation histories (SFHs) as **continuous correlated fields** governed by a power spectral density (PSD), using the **Information Field Theory** (IFT) framework ([En&szlig;lin 2019](https://arxiv.org/abs/1804.03350)). The key insight: the PSD encodes the amplitude and timescale of star formation burstiness &mdash; different feedback mechanisms (supernovae, stellar winds, gas accretion) produce different PSDs, and the data decide which is preferred.
 #
@@ -990,7 +990,7 @@ plt.show()
 # %% [markdown]
 # ## Summary
 #
-# ### Model parameters at a glance
+# ### SEDModel parameters at a glance
 #
 # | Parameter | Symbol | Meaning | Typical range | Units |
 # |:----------|:------:|:--------|:--------------|:------|

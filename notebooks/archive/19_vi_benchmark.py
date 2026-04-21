@@ -35,7 +35,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 logging.getLogger("nifty8").setLevel(logging.ERROR)
 
-from tengri import Fitter, Model, ParamSpec, Uniform
+from tengri import Fitter, SEDModel, ParamSpec, Uniform
 from tengri.observation.filters import load_filter_set
 from tengri.sps.dsps_wrapper import load_ssp_data
 
@@ -69,7 +69,7 @@ spec = ParamSpec(
     redshift=0.1,
 )
 
-model = Model(spec, ssp, filters=filters)
+model = SEDModel(spec, ssp, filters=filters)
 key = jax.random.PRNGKey(42)
 true_params = spec.sample(key)
 mock = model.mock(true_params, snr=20.0, key=key)
@@ -444,7 +444,7 @@ print("  - Compile time is one-time; run time is per-galaxy (cached)")
 # - `n_iterations` changes (e.g., 10 → 15)
 # - `n_samples` changes (e.g., 3 → 6)
 # - `sample_mode` changes (e.g., `"linear_resample"` → `"nonlinear_update"`)
-# - Model structure changes (different D or N)
+# - SEDModel structure changes (different D or N)
 #
 # JAX does **NOT** recompile when:
 # - Different galaxy data (different `pos_flat`, different `key`)

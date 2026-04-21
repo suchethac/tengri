@@ -37,7 +37,7 @@ import numpy as np
 import time, io
 
 from tengri import (
-    Model, ParamSpec, Fitter, Uniform, Gaussian, Fixed,
+    SEDModel, ParamSpec, Fitter, Uniform, Gaussian, Fixed,
     load_ssp_data, load_filter_set,
 )
 
@@ -74,7 +74,7 @@ spec = ParamSpec(
     redshift         = 0.1,
     stochastic       = False,
 )
-model = Model(spec, ssp, filters=filters)
+model = SEDModel(spec, ssp, filters=filters)
 
 # Star-forming galaxy
 true_params = {
@@ -261,7 +261,7 @@ if geovi_ok:
     corner_truths["sfr_100myr"] = float(d_true["sfr_100myr"])
 
     fig = result_geovi.plot_corner(truths=corner_truths)
-    fig.suptitle("geoVI Posterior Corner Plot (Smooth Model)", fontsize=13, y=1.01)
+    fig.suptitle("geoVI Posterior Corner Plot (Smooth SEDModel)", fontsize=13, y=1.01)
     plt.show()
 else:
     print("Skipping — geoVI not available")
@@ -374,7 +374,7 @@ for key in ["stellar_mass", "sfr_100myr", "ssfr"]:
 
 # %% [markdown]
 # ---
-# ## 9. Stochastic Model: geoVI vs NUTS
+# ## 9. Stochastic SEDModel: geoVI vs NUTS
 #
 # The stochastic SFH model adds a GP with `n_grid=128` latent variables, making the total dimensionality 128 + 9 = 137. NUTS struggles in this regime (many divergences, slow mixing). geoVI handles it naturally because it approximates the posterior in a transformed Gaussian space.
 #
@@ -397,7 +397,7 @@ spec_stoch = ParamSpec(
     stochastic       = True,
     n_grid           = 128,
 )
-model_stoch = Model(spec_stoch, ssp, filters=filters)
+model_stoch = SEDModel(spec_stoch, ssp, filters=filters)
 
 # Star-forming galaxy with moderate burstiness
 true_stoch = spec_stoch.sample(jax.random.PRNGKey(7))

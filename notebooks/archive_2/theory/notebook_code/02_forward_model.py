@@ -34,7 +34,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri import (
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -143,7 +143,7 @@ spec = Parameters(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model = Model(spec, ssp_data, observation=obs)
+model = SEDModel(spec, ssp_data, observation=obs)
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 model.precompute_spectroscopy(WAVE_OBS)
 
@@ -354,13 +354,13 @@ ax3.set_xlabel("Wavelength [Å]")
 ax3.set_ylabel("Flux density")
 ax3.set_title("Photometry (5 bands)")
 
-fig.suptitle("The Complete Forward Model Pipeline", fontsize=12)
+fig.suptitle("The Complete Forward SEDModel Pipeline", fontsize=12)
 fig.tight_layout()
 # plt.savefig(os.path.join(FIGDIR, "fig06_complete_pipeline.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## 1. Setup: Parametric Model for Gradient Computation
+# ## 1. Setup: Parametric SEDModel for Gradient Computation
 #
 # We use a parametric tsnorm model so that JAX can differentiate with
 # respect to each physical parameter.
@@ -382,7 +382,7 @@ spec = Parameters(
 )
 
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 300)
-model = Model(spec, ssp_data)
+model = SEDModel(spec, ssp_data)
 model.precompute_spectroscopy(WAVE_OBS)
 
 # Fiducial parameters

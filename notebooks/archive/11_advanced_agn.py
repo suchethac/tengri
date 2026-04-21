@@ -69,9 +69,9 @@ wavelength = jnp.logspace(np.log10(100), np.log10(1e6), 1000)
 wave_um = np.asarray(wavelength) / 1e4
 
 # %% [markdown]
-# ## 1. Model Hierarchy Overview
+# ## 1. SEDModel Hierarchy Overview
 #
-# | Model | Params | Disc | Torus | Best for |
+# | SEDModel | Params | Disc | Torus | Best for |
 # |-------|--------|------|-------|----------|
 # | `simple` | 3 | Power-law | Single-T BB | Quick photometric fits |
 # | `standard` | 5-6 | Multi-color | Two-temperature | Broadband SED fitting |
@@ -227,7 +227,7 @@ fig.savefig(os.path.join(FIGDIR, "11_skirtor_torus.png"), dpi=150, bbox_inches="
 plt.show()
 
 # %% [markdown]
-# ## 5. Unified NLR/BLR Model: Type 1 vs Type 2
+# ## 5. Unified NLR/BLR SEDModel: Type 1 vs Type 2
 #
 # `unified_nlr_blr` adds NLR/BLR emission with sigmoid geometric masking:
 # - **Type 1** (face-on): disc + BLR + NLR + torus all visible
@@ -263,7 +263,7 @@ fig.savefig(os.path.join(FIGDIR, "11_type1_vs_type2.png"), dpi=150, bbox_inches=
 plt.show()
 
 # %% [markdown]
-# ## 6. Full Model Comparison
+# ## 6. Full SEDModel Comparison
 
 # %%
 fig, ax = plt.subplots(figsize=(8, 5))
@@ -803,7 +803,7 @@ fig.savefig(
 plt.show()
 
 # %% [markdown]
-# ## 13. Conclusion: Model Selection Guidance
+# ## 13. Conclusion: SEDModel Selection Guidance
 #
 # - **`simple`**: Few AGN-sensitive bands; fast; minimal degeneracies.
 # - **`standard`**: Broadband UV-to-MIR; captures disc temperature + two-T torus.

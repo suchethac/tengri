@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Model Gallery: Dust Attenuation Curves
+# # SEDModel Gallery: Dust Attenuation Curves
 #
 # A comprehensive visual reference for **all 14 attenuation curves** implemented
 # in tengri, inspired by the
@@ -931,7 +931,7 @@ fig.savefig(os.path.join(FIGDIR, "15_greying_effect.png"), dpi=150, bbox_inches=
 plt.show()
 
 # %% [markdown]
-# ## 8. Two-Component Dust Model
+# ## 8. Two-Component Dust SEDModel
 #
 # The Charlot & Fall (2000) two-component model applies **separate** dust
 # attenuation to young and old stars:
@@ -1182,7 +1182,7 @@ plt.show()
 
 # %%
 # Additional imports needed for age-dust degeneracy section
-from tengri import Fixed, Model, Observation, Parameters, Photometry, Uniform, load_ssp_data
+from tengri import Fixed, SEDModel, Observation, Parameters, Photometry, Uniform, load_ssp_data
 
 ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 
@@ -1210,7 +1210,7 @@ for i_t, tau in enumerate(tau_range):
             dust_slope=Fixed(-0.7),
             redshift=Fixed(0.1),
         )
-        model_grid = Model(spec_grid, ssp_data, observation=obs_ri)
+        model_grid = SEDModel(spec_grid, ssp_data, observation=obs_ri)
         params_grid = {
             "sfh_tsnorm_log_peak_sfr": 1.0,
             "sfh_tsnorm_peak_lbt_gyr": float(age),

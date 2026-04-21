@@ -41,7 +41,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     ParamSpec,
     Photometry,
@@ -136,7 +136,7 @@ spec_param = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model_param = Model(spec_param, ssp_data, observation=obs)
+model_param = SEDModel(spec_param, ssp_data, observation=obs)
 
 key = jax.random.PRNGKey(42)
 true_param = spec_param.sample(key)
@@ -166,7 +166,7 @@ spec_stoch = ParamSpec(
     mean_sfh_type=["tsnorm", "field"],
     n_grid=128,
 )
-model_stoch = Model(spec_stoch, ssp_data, observation=obs)
+model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs)
 
 true_stoch = spec_stoch.sample(jax.random.PRNGKey(123))
 true_stoch = {**true_stoch}

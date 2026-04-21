@@ -52,7 +52,7 @@ setup_style()
 import os; os.makedirs("notebook_figures", exist_ok=True)
 
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 
@@ -93,7 +93,7 @@ spec_full = ParamSpec(
     dust_slope=Fixed(-0.7), redshift=Fixed(0.1),
     mean_sfh_type=["dpl", "field"], n_grid=128,
 )
-model_full = Model(spec_full, ssp_data, filters=filters_sdss)
+model_full = SEDModel(spec_full, ssp_data, filters=filters_sdss)
 
 key = jax.random.PRNGKey(42)
 true_params = spec_full.sample(key)
@@ -137,7 +137,7 @@ def run_fit(model, flux_obs, noise, label, data_type="photometry", **kw):
 # %%
 # Build a 1-band model (r-band only)
 filters_r = load_filter_set(["sdss_r"])
-model_1 = Model(spec_full, ssp_data, filters=filters_r)
+model_1 = SEDModel(spec_full, ssp_data, filters=filters_r)
 
 # Extract the r-band mock data (index 2 in ugriz)
 flux_1 = mock_full.flux_obs[2:3]
@@ -171,7 +171,7 @@ plt.show()
 # %%
 # Build a 3-band model (g, r, i)
 filters_gri = load_filter_set(["sdss_g", "sdss_r", "sdss_i"])
-model_3 = Model(spec_full, ssp_data, filters=filters_gri)
+model_3 = SEDModel(spec_full, ssp_data, filters=filters_gri)
 
 # Extract g, r, i from the full mock (indices 1, 2, 3 in ugriz)
 idx_gri = jnp.array([1, 2, 3])
@@ -237,7 +237,7 @@ plt.show()
 filters_6 = load_filter_set(
     ["galex_nuv", "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 )
-model_6 = Model(spec_full, ssp_data, filters=filters_6)
+model_6 = SEDModel(spec_full, ssp_data, filters=filters_6)
 
 # Generate the NUV mock flux using the same true parameters
 mock_6 = model_6.mock(true_params, snr=20.0, key=key)

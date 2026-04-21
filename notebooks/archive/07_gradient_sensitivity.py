@@ -38,7 +38,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri import (
     Fixed,
-    Model,
+    SEDModel,
     ParamSpec,
     Uniform,
     load_ssp_data,
@@ -71,7 +71,7 @@ FIGDIR = os.path.join(_nb_dir, "..", "figures", "reference")
 os.makedirs(FIGDIR, exist_ok=True)
 
 # %% [markdown]
-# ## 1. Setup: Parametric Model for Gradient Computation
+# ## 1. Setup: Parametric SEDModel for Gradient Computation
 #
 # We use a parametric tsnorm model so that JAX can differentiate with
 # respect to each physical parameter.
@@ -93,7 +93,7 @@ spec = ParamSpec(
 )
 
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 300)
-model = Model(spec, ssp_data)
+model = SEDModel(spec, ssp_data)
 model.precompute_spectroscopy(WAVE_OBS)
 
 # Fiducial parameters

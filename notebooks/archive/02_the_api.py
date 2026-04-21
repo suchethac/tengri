@@ -14,9 +14,9 @@
 # ---
 
 # %% [markdown]
-# # The tengri API: Model, Fitter, Posterior
+# # The tengri API: SEDModel, Fitter, Posterior
 #
-# tengri has three core objects: `Model` (forward model), `Fitter` (inference
+# tengri has three core objects: `SEDModel` (forward model), `Fitter` (inference
 # engine), `Posterior` (results container). This notebook shows how to create,
 # configure, inspect, and compose them. You'll also learn the three JAX
 # patterns that make everything fast: `jit` (compile), `vmap` (batch),
@@ -40,7 +40,7 @@ from tengri import (
     Gaussian,
     LogNormal,
     LogUniform,
-    Model,
+    SEDModel,
     Observation,
     ParamSpec,
     Photometry,
@@ -81,7 +81,7 @@ ssp_data = load_ssp_data(
 obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
 
 # %% [markdown]
-# ## ParamSpec: Defining Your Model
+# ## ParamSpec: Defining Your SEDModel
 #
 # Every fit starts with a ParamSpec. It declares which parameters are free,
 # what priors they have, and which are fixed. The ParamSpec is the single
@@ -104,7 +104,7 @@ spec = ParamSpec(
     dust_slope=Fixed(-0.7),                              # attenuation slope (fixed)
     # Redshift
     redshift=Fixed(0.1),                                 # Fixed → enables precomputation
-    # Model configuration
+    # SEDModel configuration
     mean_sfh_type="tsnorm",
 )
 
@@ -162,15 +162,15 @@ print(f"  {'StudentT':<15s} Heavy-tailed prior (robust to outliers)")
 print(f"  {'Fixed':<15s} Held constant during inference")
 
 # %% [markdown]
-# ## Model: The Differentiable Forward Model
+# ## SEDModel: The Differentiable Forward SEDModel
 #
-# The Model wraps the full SPS pipeline — from parameters through SFH, CSP
+# The SEDModel wraps the full SPS pipeline — from parameters through SFH, CSP
 # integration, dust, and filter convolution — into a single differentiable
 # function.
 
 # %%
-model = Model(spec, ssp_data, observation=obs)
-print(f"Model created: {spec.n_free} free parameters")
+model = SEDModel(spec, ssp_data, observation=obs)
+print(f"SEDModel created: {spec.n_free} free parameters")
 
 # %%
 # Predict a spectrum
@@ -284,7 +284,7 @@ print(f"  sfr_full shape: {sfh['sfr_full'].shape}")
 # %% [markdown]
 # ## Fitter: Inference Engine
 #
-# The Fitter connects a Model to observed data and runs inference. It builds
+# The Fitter connects a SEDModel to observed data and runs inference. It builds
 # the loss function, handles standardization, and dispatches to any of the
 # 5+ inference backends.
 
@@ -385,7 +385,7 @@ if hasattr(result, "effective_sample_size"):
         print("(ESS not available for this method)")
 
 # %% [markdown]
-# ## The JAX Mental Model
+# ## The JAX Mental SEDModel
 #
 # tengri is built on JAX. Three things to know:
 #
@@ -405,7 +405,7 @@ if hasattr(result, "effective_sample_size"):
 # | Object | Purpose | Key methods |
 # |--------|---------|-------------|
 # | `ParamSpec` | Define parameters and priors | `.sample()`, `.standardize()` |
-# | `Model` | Forward model | `.predict_spectrum()`, `.predict_sfh()`, `.mock()` |
+# | `SEDModel` | Forward model | `.predict_spectrum()`, `.predict_sfh()`, `.mock()` |
 # | `Fitter` | Inference engine | `.run("native_geovi")`, `.run("raytrace")` |
 # | `Posterior` | Results container | `.samples`, `.summary()`, `.diagnostics` |
 #

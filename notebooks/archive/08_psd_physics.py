@@ -66,7 +66,7 @@ from tengri.utils.grid import (
 
 # High-level API
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 

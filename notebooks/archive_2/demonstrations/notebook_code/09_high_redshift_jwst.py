@@ -36,7 +36,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -121,7 +121,7 @@ spec_stoch = Parameters(
     mean_sfh_type=["tsnorm", "field"],
     n_grid=64,  # fewer grid points for young universe
 )
-model_stoch = Model(spec_stoch, ssp_data, observation=obs)
+model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs)
 
 # Parametric comparison model
 spec_param = Parameters(
@@ -137,7 +137,7 @@ spec_param = Parameters(
     redshift=Fixed(Z_HIGH),
     mean_sfh_type="tsnorm",
 )
-model_param = Model(spec_param, ssp_data, observation=obs)
+model_param = SEDModel(spec_param, ssp_data, observation=obs)
 
 # %%
 # Generate bursty mock at z = 6
@@ -407,7 +407,7 @@ for draw in posterior_phot:
     ax_top.plot(wave_eff, draw, "-", color=COLORS["geovi"], alpha=0.08, lw=0.8)
 median_pred = np.median(posterior_phot, axis=0)
 ax_top.plot(
-    wave_eff, median_pred, "s", ms=5, color=COLORS["geovi"], zorder=4, label="Model (median)"
+    wave_eff, median_pred, "s", ms=5, color=COLORS["geovi"], zorder=4, label="SEDModel (median)"
 )
 ax_top.errorbar(
     wave_eff,

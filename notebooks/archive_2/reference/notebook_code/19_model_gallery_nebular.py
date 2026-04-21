@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Model Gallery: Nebular Emission, IGM, and Observation Models
+# # SEDModel Gallery: Nebular Emission, IGM, and Observation Models
 #
 # This notebook provides a visual catalogue of the **nebular emission**,
 # **intergalactic medium (IGM)**, and **observation** models available in
@@ -691,7 +691,7 @@ plt.show()
 #
 # ### 4.2 IGM Models
 #
-# | Model | Parameters | Redshift range | Reference |
+# | SEDModel | Parameters | Redshift range | Reference |
 # |-------|-----------|----------------|-----------|
 # | Inoue+2014 | 0 (mean transmission) | 0 < z < 7 | Inoue+2014 |
 # | Patchy reionization | 2 (x_HI, R_bubble) | z > 5.5 | Miralda-Escude+1998 |

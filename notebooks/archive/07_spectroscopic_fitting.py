@@ -58,7 +58,7 @@ setup_style()
 import os; os.makedirs("notebook_figures", exist_ok=True)
 
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 
@@ -107,7 +107,7 @@ spec = ParamSpec(
     mean_sfh_type=["dpl", "field"],
     n_grid=128,
 )
-model = Model(spec, ssp_data, filters=filters)
+model = SEDModel(spec, ssp_data, filters=filters)
 
 # Ground truth — use spec.sample() to include psd_xi for stochastic model
 key, subkey = jax.random.split(key)

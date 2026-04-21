@@ -39,7 +39,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed,
+    SEDModel, ParamSpec, Uniform, Fixed,
     load_ssp_data, load_filter_set,
 )
 
@@ -60,7 +60,7 @@ print(f"Wavelength range: {float(ssp_data.ssp_wave[0]):.0f}–"
       f"{float(ssp_data.ssp_wave[-1]):.0f} Å")
 
 # %% [markdown]
-# ## Stochastic Model Setup
+# ## Stochastic SEDModel Setup
 #
 # We use the full stochastic SFH model — including PSD parameters
 # ($\sigma$, $\tau$) and the GP latent field — so the gradients
@@ -84,7 +84,7 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
     n_grid=128,
 )
-model = Model(spec, ssp_data, filters=filters)
+model = SEDModel(spec, ssp_data, filters=filters)
 
 # Fiducial moderately bursty galaxy
 key = jax.random.PRNGKey(42)

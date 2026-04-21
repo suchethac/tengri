@@ -34,7 +34,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri import (
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     ParamSpec,
     Photometry,
@@ -120,7 +120,7 @@ plt.savefig(os.path.join(FIGDIR, "03_attenuation_curves.png"), bbox_inches="tigh
 plt.show()
 
 # %% [markdown]
-# ## 2. Two-Component Model Exploration
+# ## 2. Two-Component SEDModel Exploration
 #
 # The Charlot & Fall model has two components:
 # - **Birth cloud** ($\tau_{\rm bc}$): extra attenuation on young stars
@@ -216,7 +216,7 @@ spec = ParamSpec(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.0),
 )
-model_nodust = Model(spec, ssp_data)
+model_nodust = SEDModel(spec, ssp_data)
 params_nodust = {
     "sfh_tsnorm_log_peak_sfr": 1.0,
     "sfh_tsnorm_peak_lbt_gyr": 3.0,
@@ -332,7 +332,7 @@ for i_t, tau in enumerate(tau_range):
             dust_slope=Fixed(-0.7),
             redshift=Fixed(0.1),
         )
-        model_grid = Model(spec_grid, ssp_data, observation=obs_ri)
+        model_grid = SEDModel(spec_grid, ssp_data, observation=obs_ri)
         params_grid = {
             "sfh_tsnorm_log_peak_sfr": 1.0,
             "sfh_tsnorm_peak_lbt_gyr": float(age),
@@ -575,7 +575,7 @@ spec_eta = ParamSpec(
     redshift=Fixed(0.0),
     dust_emission="modified_blackbody",
 )
-model_eta = Model(spec_eta, ssp_data)
+model_eta = SEDModel(spec_eta, ssp_data)
 
 eta_values = [0.5, 1.0, 2.0]
 eta_colors = {0.5: "#1f77b4", 1.0: "#2ca02c", 2.0: "#d62728"}

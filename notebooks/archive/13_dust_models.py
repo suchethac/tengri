@@ -70,7 +70,7 @@ plt.rcParams.update({
 
 os.makedirs("figures", exist_ok=True)
 
-from tengri import Fixed, Model, ParamSpec, Uniform, load_filter_set, load_ssp_data
+from tengri import Fixed, SEDModel, ParamSpec, Uniform, load_filter_set, load_ssp_data
 from tengri.dust.attenuation import DUST_LAWS, two_component_dust
 from tengri.dust.emission import (
     DUST_EMISSION_MODELS,
@@ -426,7 +426,7 @@ plt.show()
 # tengri implements three dust emission models, all normalized by the
 # energy-balance constraint $L_{\rm IR} = L_{\rm absorbed}$:
 #
-# | Model | Parameters | Description |
+# | SEDModel | Parameters | Description |
 # |-------|-----------|-------------|
 # | `modified_blackbody` | $T_{\rm dust}$, $\beta_{\rm IR}$ | Optically-thin greybody |
 # | `dale2014` | $\alpha$ | 1-param template family |
@@ -597,7 +597,7 @@ spec = ParamSpec(
     dust_law_diff="calzetti",
     mean_sfh_type="dpl",
 )
-model = Model(spec, ssp_data, filters=filters)
+model = SEDModel(spec, ssp_data, filters=filters)
 
 params = {
     "sfh_dpl_alpha": 1.0,

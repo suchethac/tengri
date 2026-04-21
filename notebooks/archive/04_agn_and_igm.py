@@ -34,7 +34,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri import (
     Fixed,
-    Model,
+    SEDModel,
     ParamSpec,
     load_ssp_data,
 )
@@ -128,7 +128,7 @@ ax.loglog(
 ax.loglog(np.array(wavelength) / 1e4, np.array(combined), "k-", lw=2, label="Combined AGN")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
-ax.set_title("AGN SED Components (Simple Model)")
+ax.set_title("AGN SED Components (Simple SEDModel)")
 ax.set_xlim(0.01, 100)
 ax.legend(frameon=False)
 fig.tight_layout()
@@ -136,12 +136,12 @@ plt.savefig(os.path.join(FIGDIR, "04_agn_components.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## 3. AGN Model Comparison
+# ## 3. AGN SEDModel Comparison
 #
 # Compare the registered AGN models at the same bolometric luminosity.
 
 # %%
-# --- FIGURE 2: Model comparison ---
+# --- FIGURE 2: SEDModel comparison ---
 fig, ax = plt.subplots(figsize=(9, 5))
 model_colors = [
     COLORS["rt"],
@@ -163,7 +163,7 @@ for i, name in enumerate(AGN_MODELS):
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
-ax.set_title("AGN Model Comparison (log $L_{\\rm bol}$ = 44)")
+ax.set_title("AGN SEDModel Comparison (log $L_{\\rm bol}$ = 44)")
 ax.set_xlim(0.01, 100)
 ax.legend(fontsize=7, frameon=False)
 fig.tight_layout()
@@ -192,7 +192,7 @@ spec_stellar = ParamSpec(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.0),
 )
-model_stellar = Model(spec_stellar, ssp_data)
+model_stellar = SEDModel(spec_stellar, ssp_data)
 params_stellar = {
     k: v.value if hasattr(v, "value") else v
     for k, v in {

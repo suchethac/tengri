@@ -44,7 +44,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Parameters,
     Uniform,
     load_filter_set,
@@ -79,7 +79,7 @@ from _plot_style import (  # noqa: E402
 setup_style()
 
 # %% [markdown]
-# ## 1. Setup: Parametric Model (D = 7)
+# ## 1. Setup: Parametric SEDModel (D = 7)
 
 # %%
 ssp_data = load_ssp_data(
@@ -100,7 +100,7 @@ spec = Parameters(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model = Model(spec, ssp_data, filters=filters)
+model = SEDModel(spec, ssp_data, filters=filters)
 
 key = jax.random.PRNGKey(42)
 true_params = spec.sample(key)
@@ -113,7 +113,7 @@ true_params["sfh_tsnorm_trunc"] = jnp.array(2.0)
 
 mock = model.mock(true_params, snr=20.0, key=key)
 fitter = Fitter(model, mock.flux_obs, mock.noise)
-print(f"Model: D = {spec.n_free}, N_data = {len(mock.flux_obs)}")
+print(f"SEDModel: D = {spec.n_free}, N_data = {len(mock.flux_obs)}")
 
 # %%
 timings = {}
@@ -463,7 +463,7 @@ print(f"Pathfinder -> NUTS (warm start): {t_warm:.1f}s")
 print(f"Speedup: {t_cold / t_warm:.1f}x")
 
 # %% [markdown]
-# ## 13. Stochastic Model (D ~ 137)
+# ## 13. Stochastic SEDModel (D ~ 137)
 
 # %%
 spec_stoch = Parameters(
@@ -482,7 +482,7 @@ spec_stoch = Parameters(
     mean_sfh_type=["tsnorm", "field"],
     n_grid=128,
 )
-model_stoch = Model(spec_stoch, ssp_data, filters=filters)
+model_stoch = SEDModel(spec_stoch, ssp_data, filters=filters)
 
 true_stoch = spec_stoch.sample(jax.random.PRNGKey(123))
 true_stoch = {**true_stoch}

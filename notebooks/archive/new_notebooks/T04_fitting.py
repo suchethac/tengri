@@ -37,7 +37,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 import sys; sys.path.insert(0, ".")
@@ -94,7 +94,7 @@ spec = ParamSpec(
     dust_slope=Fixed(-0.7), redshift=Fixed(0.1),
     stochastic=True, n_grid=128,
 )
-model = Model(spec, ssp_data, filters=filters)
+model = SEDModel(spec, ssp_data, filters=filters)
 
 key = jax.random.PRNGKey(2026)
 true_params = spec.sample(key)

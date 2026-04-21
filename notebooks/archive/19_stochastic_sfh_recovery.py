@@ -62,7 +62,7 @@ import os
 os.makedirs("figures", exist_ok=True)
 
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 from tengri.sfh.gp_sfh import (
@@ -74,7 +74,7 @@ from tengri.sfh.mean_sfh import double_powerlaw
 KEY_MASTER = jax.random.PRNGKey(2026)
 
 # %% [markdown]
-# ## Section 1: The Stochastic SFH Model
+# ## Section 1: The Stochastic SFH SEDModel
 #
 # The star formation rate is modulated by a Gaussian process whose
 # power spectral density follows a damped random walk:
@@ -180,7 +180,7 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
 )
 
-model = Model(spec, ssp_data, filters=filters)
+model = SEDModel(spec, ssp_data, filters=filters)
 
 D_total = spec.n_free + spec.n_grid  # physical + GP latent
 print(f"Free physical parameters: {spec.n_free}")
@@ -491,7 +491,7 @@ ax_top.errorbar(wave_eff, mock.flux_obs, yerr=mock.noise,
 ax_top.scatter(wave_eff, mock.flux_true, marker="D", s=40, facecolors="none",
                edgecolors="C3", linewidths=1.2, zorder=6, label="Truth")
 ax_top.plot(wave_eff, median_pred, "s", ms=5, color="#2b6ca3",
-            zorder=4, label="Model (median)")
+            zorder=4, label="SEDModel (median)")
 
 for wl, fn in zip(wave_eff, filter_names):
     ax_top.annotate(fn, (wl, float(mock.flux_obs[filter_names.index(fn)])),
@@ -549,7 +549,7 @@ spec_param = ParamSpec(
     redshift=Fixed(0.1),
 )
 
-model_param = Model(spec_param, ssp_data, filters=filters)
+model_param = SEDModel(spec_param, ssp_data, filters=filters)
 print(f"Parametric model: {spec_param.n_free} free parameters")
 print(f"Stochastic model: {spec.n_free} + {spec.n_grid} = {D_total} total parameters")
 
@@ -598,7 +598,7 @@ ax.plot(t_true, sfr_mean_true, "k--", lw=1.0, alpha=0.4)
 
 ax.set_xlabel("Lookback time [Gyr]")
 ax.set_ylabel(r"SFR [$M_\odot\,\mathrm{yr}^{-1}$]")
-ax.set_title("Parametric Model (misses bursts)", fontsize=12)
+ax.set_title("Parametric SEDModel (misses bursts)", fontsize=12)
 ax.set_xlim(0, 13.5)
 ax.set_ylim(bottom=0)
 ax.legend(fontsize=9, loc="upper left")
@@ -614,7 +614,7 @@ ax.plot(t_true, sfr_true, color="k", lw=2.2, label="Truth", zorder=10)
 ax.plot(t_true, sfr_mean_true, "k--", lw=1.0, alpha=0.4)
 
 ax.set_xlabel("Lookback time [Gyr]")
-ax.set_title("Stochastic Model (recovers bursts)", fontsize=12)
+ax.set_title("Stochastic SEDModel (recovers bursts)", fontsize=12)
 ax.set_xlim(0, 13.5)
 ax.legend(fontsize=9, loc="upper left")
 
@@ -655,7 +655,7 @@ print(f"  - Stochastic: recovers burst timing and amplitude")
 # | **$\tau_{\rm PSD}$** | Weakly constrained per-galaxy (timescale degeneracy); motivates hierarchical inference |
 # | **Dust parameters** | Recovered within 68% CI alongside the SFH |
 # | **Photometry fit** | Both parametric and stochastic achieve $\chi^2/N \approx 1$ |
-# | **Model mismatch** | Parametric model fits the photometry but misses burst features, biasing SFR recovery |
+# | **SEDModel mismatch** | Parametric model fits the photometry but misses burst features, biasing SFR recovery |
 # | **Timing** | EVI converges in $\sim$15 iterations for 73 parameters; total wall time $\sim$1--2 min |
 #
 # **Key takeaway:** Broadband photometry alone *cannot* distinguish smooth from

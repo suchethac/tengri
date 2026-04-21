@@ -13,7 +13,7 @@
 # ---
 
 # %% [markdown]
-# # Noise Model: Calibration Floors & Outlier Robustness
+# # Noise SEDModel: Calibration Floors & Outlier Robustness
 #
 # Real photometric uncertainties are almost always **underestimated**.
 # Calibration systematics, model inadequacy, aperture errors, and
@@ -74,7 +74,7 @@ os.makedirs("notebook_figures", exist_ok=True)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     ParamSpec,
     Uniform,
     load_filter_set,
@@ -111,7 +111,7 @@ spec_true = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="dpl",
 )
-model_true = Model(spec_true, ssp_data, filters=filters)
+model_true = SEDModel(spec_true, ssp_data, filters=filters)
 
 key = jax.random.PRNGKey(2025)
 true_params = spec_true.sample(key)
@@ -158,7 +158,7 @@ plt.savefig("notebook_figures/11_noise_model_fig01.png", dpi=150, bbox_inches="t
 plt.show()
 
 # %% [markdown]
-# ## 2. Fit Without Noise Model (Posterior Collapse)
+# ## 2. Fit Without Noise SEDModel (Posterior Collapse)
 #
 # With underestimated noise and no noise model, the chi-squared is
 # inflated and the posterior becomes very narrow.
@@ -256,7 +256,7 @@ plt.show()
 # (Knollmuller & Ensslin 2019).
 
 # %% [markdown]
-# ## 4. Fit With Noise Model: Wider, Honest Posteriors
+# ## 4. Fit With Noise SEDModel: Wider, Honest Posteriors
 #
 # Now we fit the same underestimated-noise data, but with
 # `noise_frac_cal=Uniform(0.01, 0.2)` enabled. The fitter automatically
@@ -277,7 +277,7 @@ spec_noise = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="dpl",
 )
-model_noise = Model(spec_noise, ssp_data, filters=filters)
+model_noise = SEDModel(spec_noise, ssp_data, filters=filters)
 print(f"Free parameters: {spec_noise.n_free} (includes noise_frac_cal)")
 
 # Fit with EVI
@@ -306,7 +306,7 @@ spec_nonoise = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="dpl",
 )
-model_nonoise = Model(spec_nonoise, ssp_data, filters=filters)
+model_nonoise = SEDModel(spec_nonoise, ssp_data, filters=filters)
 
 fitter_nonoise = Fitter(model_nonoise, mock.flux_obs, noise_underestimated)
 result_nonoise = fitter_nonoise.run(
@@ -457,7 +457,7 @@ spec_gauss = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="dpl",
 )
-model_gauss = Model(spec_gauss, ssp_data, filters=filters)
+model_gauss = SEDModel(spec_gauss, ssp_data, filters=filters)
 
 fitter_gauss = Fitter(model_gauss, flux_outlier, noise_correct)
 result_gauss = fitter_gauss.run(
@@ -481,7 +481,7 @@ spec_student = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="dpl",
 )
-model_student = Model(spec_student, ssp_data, filters=filters)
+model_student = SEDModel(spec_student, ssp_data, filters=filters)
 
 fitter_student = Fitter(model_student, flux_outlier, noise_correct)
 result_student = fitter_student.run(

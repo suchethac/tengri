@@ -372,7 +372,7 @@ import matplotlib.pyplot as plt
 from matplotlib import colormaps
 
 from tengri import (
-    Model,
+    SEDModel,
     ParamSpec,
     Uniform,
     Gaussian,
@@ -408,7 +408,7 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="dpl",
 )
-model = Model(spec, ssp_data, filters=filters)
+model = SEDModel(spec, ssp_data, filters=filters)
 
 # Ground truth
 true_params = dict(
@@ -751,7 +751,7 @@ for ax, title, res, col in zip(axes, titles, results, colors):
     ax.legend(fontsize=8, loc="upper right")
 
 axes[0].set_ylabel(r"SFR [$M_\odot$/yr]")
-fig.suptitle("SFH Recovery — Parametric Model", fontsize=14, y=1.02)
+fig.suptitle("SFH Recovery — Parametric SEDModel", fontsize=14, y=1.02)
 plt.tight_layout()
 plt.savefig("notebook_figures/03_inference_methods_fig07.png", dpi=72, bbox_inches="tight")
 plt.show()
@@ -761,7 +761,7 @@ plt.show()
 fig = result_rt.plot_corner(truths=true_params, color="C0", label="Ray Tracing")
 result_geovi.plot_corner(truths=true_params, color="C1", label="geoVI", fig=fig)
 result_nuts.plot_corner(truths=true_params, color="C2", label="NUTS", fig=fig)
-fig.suptitle("Posterior Comparison — Parametric Model", fontsize=14, y=1.02)
+fig.suptitle("Posterior Comparison — Parametric SEDModel", fontsize=14, y=1.02)
 plt.savefig("notebook_figures/03_inference_methods_fig08.png", dpi=72, bbox_inches="tight")
 plt.show()
 
@@ -848,7 +848,7 @@ print(f"MGVI wall time: {result_mgvi.wall_time_s:.1f}s")
 print(result_mgvi.diagnostics_summary())
 
 # %% [markdown]
-# ## The Stochastic Model: Where It Gets Interesting
+# ## The Stochastic SEDModel: Where It Gets Interesting
 #
 # So far we used a parametric SFH with $D = 7$ free parameters.  All
 # three samplers handled it easily.  Now let's turn on the **stochastic
@@ -882,7 +882,7 @@ spec_stoch = ParamSpec(
     mean_sfh_type=["dpl", "field"],
     n_grid=128,
 )
-model_stoch = Model(spec_stoch, ssp_data, filters=filters)
+model_stoch = SEDModel(spec_stoch, ssp_data, filters=filters)
 
 # Ground truth for stochastic model (includes PSD params)
 true_params_stoch = dict(
@@ -1001,7 +1001,7 @@ for ax, title, res, col in zip(axes, titles_s, results_s, colors_s):
     ax.legend(fontsize=8, loc="upper right")
 
 axes[0].set_ylabel(r"SFR [$M_\odot$/yr]")
-fig.suptitle("SFH Recovery — Stochastic Model ($D \\sim 137$)", fontsize=14, y=1.02)
+fig.suptitle("SFH Recovery — Stochastic SEDModel ($D \\sim 137$)", fontsize=14, y=1.02)
 plt.tight_layout()
 plt.savefig("notebook_figures/03_inference_methods_fig10.png", dpi=72, bbox_inches="tight")
 plt.show()
@@ -1034,7 +1034,7 @@ result_stoch_geovi.plot_corner(
     label="geoVI",
     fig=fig,
 )
-fig.suptitle("Stochastic Model — Physical + PSD Parameters", fontsize=14, y=1.02)
+fig.suptitle("Stochastic SEDModel — Physical + PSD Parameters", fontsize=14, y=1.02)
 plt.savefig("notebook_figures/03_inference_methods_fig11.png", dpi=72, bbox_inches="tight")
 plt.show()
 

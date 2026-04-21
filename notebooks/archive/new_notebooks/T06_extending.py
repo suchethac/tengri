@@ -60,7 +60,7 @@ ages_gyr = ages_yr / 1e9
 #
 # ```
 # ┌─────────────────────────────────────────────────────────────┐
-# │  PSD Model       │  Mean SFH      │  SPS          │  Dust  │
+# │  PSD SEDModel       │  Mean SFH      │  SPS          │  Dust  │
 # │  (psd_models.py) │  (mean_sfh.py) │  (DSPS/JAX)   │  (CF00)│
 # │  ─────────────── │  ──────────────│  ────────────  │  ──────│
 # │  • DRW           │  • Dbl power   │  • FSPS/MIST  │  • CF00│
@@ -71,7 +71,7 @@ ages_gyr = ages_yr / 1e9
 #            │               │               │           │
 #            ▼               ▼               ▼           ▼
 #       ┌────────────────────────────────────────────────────┐
-#       │  Differentiable Forward Model (JAX)                │
+#       │  Differentiable Forward SEDModel (JAX)                │
 #       │  H(ξ|d) = ½χ² + ½ξᵀξ                              │
 #       └───────────────────────┬────────────────────────────┘
 #                               │
@@ -171,7 +171,7 @@ fig.tight_layout(); savefig(fig, "custom_psd"); plt.show()
 #
 # ```python
 # ssp_bpass = load_ssp_data("path/to/bpass_chabrier.h5")
-# model = Model(spec, ssp_bpass, filters=filters)
+# model = SEDModel(spec, ssp_bpass, filters=filters)
 # ```
 #
 # The inference machinery, PSD model, and dust law are unchanged —

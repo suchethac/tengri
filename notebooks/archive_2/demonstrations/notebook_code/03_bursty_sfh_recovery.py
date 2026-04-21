@@ -35,7 +35,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -121,7 +121,7 @@ spec_stoch = Parameters(
     mean_sfh_type=["tsnorm", "field"],
     n_grid=128,
 )
-model_stoch = Model(spec_stoch, ssp_data, observation=obs_spec)
+model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs_spec)
 
 # %%
 # --- FIGURE 1: 2×2 SFH showcase ---
@@ -314,7 +314,7 @@ print(convergence_table(
 ))
 
 # %% [markdown]
-# ## The Wrong Model Trap
+# ## The Wrong SEDModel Trap
 #
 # A parametric model (no GP) can fit the photometry perfectly — χ² ≈ 1 —
 # but systematically miss burst features in the SFH. The SED fit looks fine
@@ -335,7 +335,7 @@ spec_param = Parameters(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model_param = Model(spec_param, ssp_data, observation=obs_spec)
+model_param = SEDModel(spec_param, ssp_data, observation=obs_spec)
 
 bursty_true = regime_data["Bursty"]["params"]
 bursty_mock = model_stoch.mock_spectrum(
@@ -370,7 +370,7 @@ plot_sfh(
     label="Parametric",
     method="MAP",
 )
-ax_wrong.set_title("Wrong Model (parametric, D=7)")
+ax_wrong.set_title("Wrong SEDModel (parametric, D=7)")
 
 plot_sfh(
     model_stoch,
@@ -382,7 +382,7 @@ plot_sfh(
     method="geoVI",
     show_mean_sfh=True,
 )
-ax_right.set_title("Correct Model (stochastic, D=137)")
+ax_right.set_title("Correct SEDModel (stochastic, D=137)")
 
 # 200 Myr insets with truth + posterior CI
 sfh_bursty = model_stoch.predict_sfh(bursty_true)
@@ -415,7 +415,7 @@ for ax_panel, res, mod, sfr_key, color in inset_data:
     inset.tick_params(labelsize=5)
     inset.set_xlim(0, 200)
 
-fig.suptitle("The Wrong Model Trap: Parametric Misses Bursts", fontsize=12, fontweight="bold")
+fig.suptitle("The Wrong SEDModel Trap: Parametric Misses Bursts", fontsize=12, fontweight="bold")
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig05_wrong_model_trap.png"), dpi=150, bbox_inches="tight")
 plt.show()

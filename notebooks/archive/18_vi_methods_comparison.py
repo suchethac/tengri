@@ -43,7 +43,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fitter, Model, ParamSpec, Uniform
+from tengri import Fitter, SEDModel, ParamSpec, Uniform
 from tengri.observation.filters import load_filter_set
 from tengri.sps.dsps_wrapper import load_ssp_data
 
@@ -71,7 +71,7 @@ spec = ParamSpec(
     redshift=0.1,
 )
 
-model = Model(spec, ssp, filters=filters)
+model = SEDModel(spec, ssp, filters=filters)
 key = jax.random.PRNGKey(42)
 true_params = spec.sample(key)
 mock = model.mock(true_params, snr=20.0, key=key)

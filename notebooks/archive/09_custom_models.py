@@ -87,7 +87,7 @@ setup_style()
 import os; os.makedirs("notebook_figures", exist_ok=True)
 
 from tengri import (
-    Model, ParamSpec, Uniform, Gaussian, LogUniform, LogNormal,
+    SEDModel, ParamSpec, Uniform, Gaussian, LogUniform, LogNormal,
     StudentT, Fixed, Fitter, load_ssp_data, load_filter_set,
 )
 from tengri.parameters.priors import Distribution
@@ -459,7 +459,7 @@ spec_stoch = ParamSpec(
     mean_sfh_type=["dpl", "field"],
     n_grid=128,
 )
-model = Model(spec_stoch, ssp_data, filters=filters)
+model = SEDModel(spec_stoch, ssp_data, filters=filters)
 
 # StandardizedForwardModel with Matern nu=1.5
 matern_15 = partial(matern_psd, nu=1.5)
@@ -728,7 +728,7 @@ print("The filter effective wavelength is used for photometric predictions.")
 # ensemble constrains the PSD even when individual galaxies cannot.
 
 # %%
-# Model with FREE PSD parameters
+# SEDModel with FREE PSD parameters
 spec_free_psd = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
@@ -745,7 +745,7 @@ spec_free_psd = ParamSpec(
     n_grid=128,
 )
 
-model_free = Model(spec_free_psd, ssp_data, filters=filters)
+model_free = SEDModel(spec_free_psd, ssp_data, filters=filters)
 
 # Generate mock with known PSD
 key = jax.random.PRNGKey(2024)

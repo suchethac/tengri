@@ -93,7 +93,7 @@ def savefig(fig, name, dpi=300):
 # Load SSP data and suppress fused-kernel warnings for exact-path models
 from tengri import (
     Fixed,
-    Model,
+    SEDModel,
     ParamSpec,
     Uniform,
     load_filter_set,
@@ -115,7 +115,7 @@ print(
 
 # %% [markdown]
 # ---
-# ## Figure 1: The Full Forward Model Pipeline
+# ## Figure 1: The Full Forward SEDModel Pipeline
 #
 # A single figure showing every physics module applied progressively to
 # one star-forming galaxy at $z=1$ with dust, nebular emission, AGN,
@@ -184,7 +184,7 @@ with warnings.catch_warnings():
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
     )
-    model_intrinsic = Model(spec_intrinsic, ssp, precompute=False, approx=False)
+    model_intrinsic = SEDModel(spec_intrinsic, ssp, precompute=False, approx=False)
 
     # Layer 2: + Dust attenuation
     spec_dust = ParamSpec(
@@ -193,7 +193,7 @@ with warnings.catch_warnings():
         dust_tau_diff=Fixed(0.4),
         apply_igm=False,
     )
-    model_dust = Model(spec_dust, ssp, precompute=False, approx=False)
+    model_dust = SEDModel(spec_dust, ssp, precompute=False, approx=False)
 
     # Layer 3: + Nebular emission
     spec_neb = ParamSpec(
@@ -205,7 +205,7 @@ with warnings.catch_warnings():
         neb_logU=Fixed(-2.5),
         apply_igm=False,
     )
-    model_neb = Model(spec_neb, ssp, precompute=False, approx=False)
+    model_neb = SEDModel(spec_neb, ssp, precompute=False, approx=False)
 
     # Layer 4: + Dust IR emission (DL07)
     spec_ir = ParamSpec(
@@ -221,7 +221,7 @@ with warnings.catch_warnings():
         dust_qpah=Fixed(3.0),
         apply_igm=False,
     )
-    model_ir = Model(spec_ir, ssp, precompute=False, approx=False)
+    model_ir = SEDModel(spec_ir, ssp, precompute=False, approx=False)
 
     # Layer 5: + AGN
     spec_agn = ParamSpec(
@@ -239,7 +239,7 @@ with warnings.catch_warnings():
         agn_frac=Fixed(0.1),
         apply_igm=False,
     )
-    model_agn = Model(spec_agn, ssp, precompute=False, approx=False)
+    model_agn = SEDModel(spec_agn, ssp, precompute=False, approx=False)
 
     # Layer 6: + IGM (final model)
     spec_full = ParamSpec(
@@ -257,7 +257,7 @@ with warnings.catch_warnings():
         agn_frac=Fixed(0.1),
         apply_igm=True,
     )
-    model_full = Model(spec_full, ssp, precompute=False, approx=False)
+    model_full = SEDModel(spec_full, ssp, precompute=False, approx=False)
 
 # %%
 # Generate parameter sample
@@ -518,7 +518,7 @@ plt.show()
 
 # %% [markdown]
 # ---
-# ## Figure 3: AGN Model Zoo
+# ## Figure 3: AGN SEDModel Zoo
 #
 # All 6 AGN models evaluated at the same bolometric luminosity
 # ($\log L_{\rm bol} = 44\,L_\odot$), showing the diversity of SED
@@ -532,7 +532,7 @@ wave_agn_um = np.array(wave_agn) / 1e4
 
 log_lbol = 44.0
 
-# Model display styles
+# SEDModel display styles
 agn_styles = {
     "simple": ("#2b6ca3", "-", 2.0, "simple (3 params)"),
     "standard": ("#d65f27", "--", 2.0, "standard (SS73 disc + 2T torus)"),
@@ -635,7 +635,7 @@ def make_model_and_sed(spec_kwargs, with_filters=True):
         warnings.simplefilter("ignore")
         spec = ParamSpec(**spec_kwargs)
         filt = filters_phot if with_filters else None
-        model = Model(spec, ssp, filters=filt, precompute=False, approx=False)
+        model = SEDModel(spec, ssp, filters=filt, precompute=False, approx=False)
         params = spec.sample(jax.random.PRNGKey(0))
         sed = np.array(model.predict_sed(params))
         phot = np.array(model.predict_photometry(params)) if with_filters else None
@@ -896,7 +896,7 @@ with warnings.catch_warnings():
         redshift=Fixed(0.5),
         apply_igm=False,
     )
-    model_panchro = Model(spec_panchro, ssp, precompute=False, approx=False)
+    model_panchro = SEDModel(spec_panchro, ssp, precompute=False, approx=False)
 
 params_panchro = spec_panchro.sample(jax.random.PRNGKey(123))
 sed_panchro = np.array(model_panchro.predict_sed(params_panchro))
@@ -917,7 +917,7 @@ with warnings.catch_warnings():
         redshift=Fixed(0.5),
         apply_igm=False,
     )
-    model_stellar = Model(spec_stellar, ssp, precompute=False, approx=False)
+    model_stellar = SEDModel(spec_stellar, ssp, precompute=False, approx=False)
     sed_stellar_only = np.array(
         model_stellar.predict_sed(spec_stellar.sample(jax.random.PRNGKey(123)))
     )
@@ -1062,7 +1062,7 @@ with warnings.catch_warnings():
         redshift=Fixed(0.0),
         apply_igm=False,
     )
-    model_bg = Model(spec_bg, ssp, precompute=False, approx=False)
+    model_bg = SEDModel(spec_bg, ssp, precompute=False, approx=False)
 
 params_bg = spec_bg.sample(jax.random.PRNGKey(77))
 sed_bg = np.array(model_bg.predict_sed(params_bg))

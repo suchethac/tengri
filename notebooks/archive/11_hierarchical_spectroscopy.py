@@ -53,7 +53,7 @@ from tengri import (
     Fixed,
     Fitter,
     HierarchicalFitter,
-    Model,
+    SEDModel,
     ParamSpec,
     Uniform,
     load_filter_set,
@@ -63,7 +63,7 @@ from tengri import (
 key = jax.random.PRNGKey(42)
 
 # %% [markdown]
-# ## Setup: Data and Model
+# ## Setup: Data and SEDModel
 #
 # We use a stochastic SFH model (DPL mean + GP field) with 128 GP grid
 # points, giving D$\sim$137 free parameters per galaxy. The spectroscopic
@@ -83,10 +83,10 @@ TRUE_TAU = 50.0  # Myr
 
 
 def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
-    """Model factory for hierarchical fitting.
+    """SEDModel factory for hierarchical fitting.
 
     HierarchicalFitter calls this with shared PSD values.
-    Returns a Model with those PSD params FIXED.
+    Returns a SEDModel with those PSD params FIXED.
     """
     spec = ParamSpec(
         sfh_dpl_alpha=Uniform(0.5, 3.0),
@@ -103,7 +103,7 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         mean_sfh_type=["dpl", "field"],
         n_grid=128,
     )
-    m = Model(spec, ssp, filters=filters)
+    m = SEDModel(spec, ssp, filters=filters)
     m.precompute_spectroscopy(WAVE_OBS)
     return m
 

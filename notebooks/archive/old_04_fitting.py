@@ -35,7 +35,7 @@ import numpy as np
 import time
 
 from tengri import (
-    Model, ParamSpec, Fitter, Uniform, Gaussian, Fixed,
+    SEDModel, ParamSpec, Fitter, Uniform, Gaussian, Fixed,
     load_ssp_data, load_filter_set,
 )
 
@@ -70,7 +70,7 @@ spec = ParamSpec(
     stochastic       = False,
 )
 
-model = Model(spec, ssp, filters=filters)
+model = SEDModel(spec, ssp, filters=filters)
 
 true_params = {
     "sfh_alpha": 1.0, "sfh_beta": 0.8,
@@ -164,7 +164,7 @@ spec_fixed = ParamSpec(
     redshift         = 0.1,
     stochastic       = False,
 )
-model_fixed = Model(spec_fixed, ssp, filters=filters)
+model_fixed = SEDModel(spec_fixed, ssp, filters=filters)
 
 print(f"Free: {spec_fixed.n_free} params (was {spec.n_free})")
 

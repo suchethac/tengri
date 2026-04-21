@@ -34,7 +34,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed,
+    SEDModel, ParamSpec, Uniform, Fixed,
     load_ssp_data, load_filter_set,
 )
 from tengri.sfh.psd_models import psd_drw, drw_variance
@@ -156,7 +156,7 @@ for z in REDSHIFTS:
         dust_slope=Fixed(-0.7), redshift=Fixed(z),
         stochastic=True, n_grid=128,
     )
-    model = Model(spec, ssp_data, filters=filters)
+    model = SEDModel(spec, ssp_data, filters=filters)
 
     for regime_name, r in PSD_REGIMES.items():
         key = jax.random.PRNGKey(int(z * 1000) + hash(regime_name) % 10000)

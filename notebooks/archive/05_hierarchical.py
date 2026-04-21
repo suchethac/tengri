@@ -44,7 +44,7 @@
 # 5. The trade-offs between CFM geoVI, flat geoVI, and Ray Tracing
 
 # %% [markdown]
-# ## The Hierarchical Bayesian Model
+# ## The Hierarchical Bayesian SEDModel
 #
 # Given $N$ galaxies with data $\{d_i\}$, we infer shared PSD
 # hyperparameters $\phi = (\sigma, \tau)$ via the hierarchical posterior:
@@ -101,7 +101,7 @@ setup_style()
 import os; os.makedirs("notebook_figures", exist_ok=True)
 
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Fixed, Fitter,
     HierarchicalFitter, HierarchicalResult,
     load_ssp_data, load_filter_set,
 )
@@ -126,9 +126,9 @@ def get_psd_samples(result):
 ssp_data = load_ssp_data("../data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 
-# Model factory for hierarchical fitting.
+# SEDModel factory for hierarchical fitting.
 # HierarchicalFitter calls model_factory(psd_sigma=X, psd_tau_myr=Y)
-# and expects it to return a Model with those PSD params FIXED.
+# and expects it to return a SEDModel with those PSD params FIXED.
 def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
     spec = ParamSpec(
         sfh_dpl_alpha=Uniform(0.5, 3.0),
@@ -145,7 +145,7 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         mean_sfh_type=["dpl", "field"],
         n_grid=128,
     )
-    return Model(spec, ssp_data, filters=filters)
+    return SEDModel(spec, ssp_data, filters=filters)
 
 model = model_factory(psd_sigma=1.5, psd_tau_myr=50.0)
 print(f"Per-galaxy dimensionality: D = {model.spec.n_free} physical + 128 GP latents")

@@ -46,7 +46,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -116,7 +116,7 @@ print(f"n_data:   {obs.n_data}  ({obs.n_data_phot} phot + {obs.n_data_spec} spec
 # %% [markdown]
 # ## Generate Joint Mock Data
 #
-# We create a `Model` with the joint observation and generate mock
+# We create a `SEDModel` with the joint observation and generate mock
 # photometry and spectroscopy from a known truth. The same forward model
 # parameters produce both data vectors simultaneously.
 
@@ -135,7 +135,7 @@ spec = Parameters(
     mean_sfh_type="tsnorm",
 )
 
-model = Model(spec, ssp_data, observation=obs)
+model = SEDModel(spec, ssp_data, observation=obs)
 
 key = jax.random.PRNGKey(42)
 true_params = spec.sample(key)
@@ -202,7 +202,7 @@ plt.show()
 # %% [markdown]
 # ## Fit with MAP
 #
-# The `Fitter` accepts the packed joint data vector. Because the `Model`
+# The `Fitter` accepts the packed joint data vector. Because the `SEDModel`
 # carries the `Observation`, the fitter automatically infers
 # `data_type="joint"` and dispatches the correct likelihood.
 
@@ -296,7 +296,7 @@ obs_phot = Observation(
         ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
     ),
 )
-model_phot = Model(spec, ssp_data, observation=obs_phot)
+model_phot = SEDModel(spec, ssp_data, observation=obs_phot)
 fitter_phot = Fitter(model_phot, mock_phot.flux_obs, mock_phot.noise)
 fitter_phot.compile(verbose=False)
 result_phot = fitter_phot.run("map", n_steps=500, verbose=False)
@@ -305,7 +305,7 @@ result_phot = fitter_phot.run("map", n_steps=500, verbose=False)
 obs_spec = Observation(
     spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, resolution=100),
 )
-model_spec = Model(spec, ssp_data, observation=obs_spec)
+model_spec = SEDModel(spec, ssp_data, observation=obs_spec)
 fitter_spec = Fitter(model_spec, mock_spec.flux_obs, mock_spec.noise)
 fitter_spec.compile(verbose=False)
 result_spec = fitter_spec.run("map", n_steps=500, verbose=False)

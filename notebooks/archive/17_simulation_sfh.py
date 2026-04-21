@@ -50,7 +50,7 @@ import matplotlib.ticker as ticker
 import numpy as np
 
 from tengri import (
-    Model,
+    SEDModel,
     ParamSpec,
     Fixed,
     Uniform,
@@ -118,7 +118,7 @@ def savefig(fig, name, dpi=200):
 # - **Delayed-tau** &mdash; typical Milky-Way-like disk galaxy
 # - **Bursty** &mdash; delayed-tau backbone with a recent starburst
 #
-# Each is passed to `Model` with `mean_sfh_type="table"`.
+# Each is passed to `SEDModel` with `mean_sfh_type="table"`.
 
 # %%
 # Load SSP data and filters
@@ -180,7 +180,7 @@ spec_table = ParamSpec(
     dust_tau_diff=Fixed(0.5),
     redshift=Fixed(0.5),
 )
-model_table = Model(spec_table, ssp, filters=filters)
+model_table = SEDModel(spec_table, ssp, filters=filters)
 
 print(f"ParamSpec SFH type: {spec_table.mean_sfh_type}")
 print(f"Free parameters: {spec_table.free_params}")
@@ -334,7 +334,7 @@ spec_bare = ParamSpec(
     redshift=Fixed(z_demo),
     apply_igm=False,
 )
-model_bare = Model(spec_bare, ssp, filters=filters)
+model_bare = SEDModel(spec_bare, ssp, filters=filters)
 sed_bare = np.array(model_bare.predict_sed(base_params))
 
 # 2) + Dust attenuation
@@ -347,7 +347,7 @@ spec_dust = ParamSpec(
     redshift=Fixed(z_demo),
     apply_igm=False,
 )
-model_dust = Model(spec_dust, ssp, filters=filters)
+model_dust = SEDModel(spec_dust, ssp, filters=filters)
 sed_dust = np.array(model_dust.predict_sed(base_params))
 
 # 3) + Nebular emission (CLOUDY)
@@ -363,7 +363,7 @@ spec_neb = ParamSpec(
     redshift=Fixed(z_demo),
     apply_igm=False,
 )
-model_neb = Model(spec_neb, ssp, filters=filters)
+model_neb = SEDModel(spec_neb, ssp, filters=filters)
 sed_neb = np.array(model_neb.predict_sed(base_params))
 
 # 4) + Dust emission (DL07 energy-balance templates)
@@ -384,7 +384,7 @@ spec_dustem = ParamSpec(
     redshift=Fixed(z_demo),
     apply_igm=False,
 )
-model_dustem = Model(spec_dustem, ssp, filters=filters)
+model_dustem = SEDModel(spec_dustem, ssp, filters=filters)
 sed_dustem = np.array(model_dustem.predict_sed(base_params))
 
 # 5) + AGN (simple disc + torus)
@@ -407,7 +407,7 @@ spec_agn = ParamSpec(
     redshift=Fixed(z_demo),
     apply_igm=False,
 )
-model_agn = Model(spec_agn, ssp, filters=filters)
+model_agn = SEDModel(spec_agn, ssp, filters=filters)
 sed_agn = np.array(model_agn.predict_sed(base_params))
 
 # 6) + IGM absorption (same as 5 but with IGM enabled)
@@ -430,7 +430,7 @@ spec_full = ParamSpec(
     redshift=Fixed(z_demo),
     apply_igm=True,
 )
-model_full = Model(spec_full, ssp, filters=filters)
+model_full = SEDModel(spec_full, ssp, filters=filters)
 
 # For the IGM effect we need to compare the observed-frame photometry
 phot_no_igm = np.array(model_agn.predict_photometry(base_params))
@@ -503,7 +503,7 @@ spec_var = ParamSpec(
     agn_frac=Uniform(0.0, 0.3),
     redshift=Fixed(1.0),
 )
-model_var = Model(spec_var, ssp, filters=filters)
+model_var = SEDModel(spec_var, ssp, filters=filters)
 
 print(f"Free parameters: {spec_var.free_params}")
 print(f"Fixed parameters: {spec_var.fixed_params}")
@@ -586,7 +586,7 @@ plt.show()
 # ## 5. Mock Observation Generation
 #
 # Given a simulation SFH, we generate a realistic mock observation with
-# photometric noise at a specified signal-to-noise ratio.  The `Model.mock`
+# photometric noise at a specified signal-to-noise ratio.  The `SEDModel.mock`
 # method handles this in a single call.
 
 # %%
@@ -602,7 +602,7 @@ spec_mock = ParamSpec(
     neb_logU=Fixed(-2.5),
     redshift=Fixed(1.5),
 )
-model_mock = Model(spec_mock, ssp, filters=filters)
+model_mock = SEDModel(spec_mock, ssp, filters=filters)
 
 # Generate mock at SNR = 20
 mock_params = {
@@ -734,7 +734,7 @@ spec_catalog = ParamSpec(
     dust_tau_diff=Uniform(0.0, 1.5),
     redshift=Fixed(1.0),
 )
-model_catalog = Model(spec_catalog, ssp, filters=filters)
+model_catalog = SEDModel(spec_catalog, ssp, filters=filters)
 
 mocks_catalog = []
 for i in range(n_galaxies):

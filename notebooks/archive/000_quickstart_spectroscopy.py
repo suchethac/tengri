@@ -32,7 +32,7 @@ jax.config.update("jax_enable_x64", True)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     ParamSpec,
     Uniform,
     load_filter_set,
@@ -40,7 +40,7 @@ from tengri import (
 )
 
 # %% [markdown]
-# ## 1. Model Setup
+# ## 1. SEDModel Setup
 
 # %%
 ssp_data = load_ssp_data(
@@ -62,7 +62,7 @@ spec = ParamSpec(
 
 # Precompute SSP interpolation for the observed wavelength grid (~8x speedup)
 wave_obs = np.linspace(3800, 9200, 200).astype(np.float64)
-model = Model(spec, ssp_data, filters=filters).precompute_spectroscopy(wave_obs)
+model = SEDModel(spec, ssp_data, filters=filters).precompute_spectroscopy(wave_obs)
 
 print(f"Free parameters: {spec.free_params}")
 print(f"D = {len(spec.free_params)}, n_pixels = {len(wave_obs)}")

@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Model Gallery: Nebular Emission, IGM, and Observation Models
+# # SEDModel Gallery: Nebular Emission, IGM, and Observation Models
 #
 # This notebook provides a visual catalogue of the **nebular emission**,
 # **intergalactic medium (IGM)**, and **observation** models available in
@@ -37,7 +37,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-from tengri import Fixed, Model, Parameters, load_ssp_data
+from tengri import Fixed, SEDModel, Parameters, load_ssp_data
 from tengri.igm import igm_transmission, igm_transmission_patchy
 from tengri.nebular.shock import (
     shock_line_ratios,
@@ -478,7 +478,7 @@ if SSP_WNE_PATH.exists():
         dust_slope=Fixed(-0.7),
         redshift=Fixed(0.0),
     )
-    _model = Model(_spec, _ssp)
+    _model = SEDModel(_spec, _ssp)
     _params = {
         "sfh_tsnorm_log_peak_sfr": 1.5,
         "sfh_tsnorm_peak_lbt_gyr": 0.5,

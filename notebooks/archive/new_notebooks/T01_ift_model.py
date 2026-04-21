@@ -13,7 +13,7 @@
 # ---
 
 # %% [markdown]
-# # The IFT Correlated Field Model
+# # The IFT Correlated Field SEDModel
 #
 # This tutorial develops the mathematical framework that makes tengri
 # different from other SED-fitting codes.  The central idea: **the star
@@ -998,7 +998,7 @@ plt.show()
 # ---
 # ## Summary
 #
-# ### Model parameters at a glance
+# ### SEDModel parameters at a glance
 #
 # | Parameter | Symbol | Meaning | Typical range | Units |
 # |:----------|:------:|:--------|:-------------|:------|
@@ -1034,7 +1034,7 @@ plt.show()
 #
 # ### Next
 #
-# [**T02 — The Forward Model**](T02_forward_model.ipynb) walks through
+# [**T02 — The Forward SEDModel**](T02_forward_model.ipynb) walks through
 # the full differentiable pipeline from SFH → SSP integration → dust
 # attenuation → redshift → filter convolution → observed photometry.
 

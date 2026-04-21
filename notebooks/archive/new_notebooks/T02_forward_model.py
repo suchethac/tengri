@@ -13,7 +13,7 @@
 # ---
 
 # %% [markdown]
-# # The Forward Model: SFH → SED → Photometry
+# # The Forward SEDModel: SFH → SED → Photometry
 #
 # Every SED-fitting code has a forward model that maps physical
 # parameters to predicted observations.  In tengri, this forward model
@@ -42,7 +42,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed,
+    SEDModel, ParamSpec, Uniform, Fixed,
     load_ssp_data, load_filter_set,
 )
 from tengri.sps.dsps_wrapper import (
@@ -241,7 +241,7 @@ spec = ParamSpec(
     dust_tau_bc=Uniform(0.0, 2.0), dust_tau_diff=Uniform(0.0, 2.0),
     dust_slope=Fixed(-0.7), redshift=Fixed(0.1), stochastic=False,
 )
-model = Model(spec, ssp_data, filters=(filter_waves, filter_trans, filter_curves))
+model = SEDModel(spec, ssp_data, filters=(filter_waves, filter_trans, filter_curves))
 
 params = dict(sfh_alpha=1.5, sfh_beta=1.0, sfh_tau_peak_gyr=5.0,
               sfh_peak_sfr=10.0, met_logzsol=-0.3,
@@ -254,7 +254,7 @@ phot = model.predict_photometry(params)
 
 fig, ax = plt.subplots(figsize=(10, 5))
 ax.plot(np.array(wave_obs), np.array(sed), color="0.5", lw=0.6, alpha=0.7,
-        label="Model SED")
+        label="SEDModel SED")
 ax.errorbar(SDSS_WAVE_EFF, np.array(phot), fmt="o", ms=8,
             color=COLORS["data"], zorder=5, label="Broadband photometry")
 for i, (bn, bc) in enumerate(zip(SDSS_BAND_NAMES, SDSS_BAND_COLORS)):
@@ -263,7 +263,7 @@ for i, (bn, bc) in enumerate(zip(SDSS_BAND_NAMES, SDSS_BAND_COLORS)):
                 ha="center", fontsize=9, color=bc, fontweight="bold")
 ax.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$f_\nu$ [arbitrary]")
-ax.set_title("Model SED with SDSS Photometric Points ($z=0.1$)")
+ax.set_title("SEDModel SED with SDSS Photometric Points ($z=0.1$)")
 ax.set_xlim(3000, 11000); ax.legend()
 fig.tight_layout(); savefig(fig, "sed_with_photometry"); plt.show()
 

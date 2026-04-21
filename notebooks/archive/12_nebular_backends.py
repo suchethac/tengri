@@ -69,7 +69,7 @@ FIGDIR = os.path.join(_nb_dir, "..", "figures", "reference")
 os.makedirs(FIGDIR, exist_ok=True)
 
 # %%
-from tengri import Fixed, Model, ParamSpec, load_ssp_data
+from tengri import Fixed, SEDModel, ParamSpec, load_ssp_data
 from tengri.nebular import BakedInBackend, CloudyGridBackend, CueBackend
 
 # Data file paths
@@ -412,7 +412,7 @@ else:
 #
 # All backends share a common interface (`predict_nebular_sed`,
 # `predict_nebular_line_fluxes`) and can be swapped transparently in the
-# `Model` class. The choice depends on the science question and available
+# `SEDModel` class. The choice depends on the science question and available
 # data constraints.
 #
 # **See also:** [Nebular Emission (Introduction)](../_notebooks/reference/05_nebular_emission) for

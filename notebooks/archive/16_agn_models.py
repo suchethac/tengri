@@ -30,7 +30,7 @@
 # 5. **Section 5** &mdash; EVI inference of AGN parameters from mock data.
 # 6. **Section 6** &mdash; AGN fraction recovery test across $f_{\rm AGN} = 0$&ndash;$0.3$.
 #
-# | Model | Disc | Torus | Free params | Reference |
+# | SEDModel | Disc | Torus | Free params | Reference |
 # |-------|------|-------|-------------|-----------|
 # | `simple` | Power-law | Single-$T$ BB | 3 | &mdash; |
 # | `standard` | Shakura&ndash;Sunyaev | Two-$T$ (hot+warm) | 5&ndash;6 | SS73 |
@@ -53,7 +53,7 @@ import numpy as np
 
 from tengri.agn import AGN_MODELS, get_agn_model
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 
@@ -112,7 +112,7 @@ wave_um = np.array(wave) / 1e4  # micron
 
 log_lbol = 44.0
 
-# Model styles: (color, linestyle, linewidth, label)
+# SEDModel styles: (color, linestyle, linewidth, label)
 model_styles = {
     "simple":          ("#2b6ca3", "-",   2.0, "simple"),
     "standard":        ("#d65f27", "--",  2.0, "standard"),
@@ -368,10 +368,10 @@ plt.show()
 #   hot dust component.
 
 # %% [markdown]
-# ## 4. AGN in the Forward Model
+# ## 4. AGN in the Forward SEDModel
 #
 # When `agn_model="simple"` (or any registered model name) is set in
-# `ParamSpec`, the `Model` class automatically adds AGN emission scaled
+# `ParamSpec`, the `SEDModel` class automatically adds AGN emission scaled
 # by `agn_frac * L_bol_stellar`.  Here we show a galaxy+AGN SED with
 # GALEX + SDSS + WISE photometry.
 
@@ -405,7 +405,7 @@ spec_no_agn = ParamSpec(
     mean_sfh_type="dpl",
     apply_igm=False,
 )
-model_no_agn = Model(spec_no_agn, ssp_data, filters=filters)
+model_no_agn = SEDModel(spec_no_agn, ssp_data, filters=filters)
 
 # --- Galaxy WITH AGN (qsogen, 15% AGN fraction) ---
 spec_agn = ParamSpec(
@@ -422,7 +422,7 @@ spec_agn = ParamSpec(
     agn_model="simple",
     apply_igm=False,
 )
-model_agn = Model(spec_agn, ssp_data, filters=filters)
+model_agn = SEDModel(spec_agn, ssp_data, filters=filters)
 
 # Sample at the fixed values
 params_no_agn = spec_no_agn.sample(jax.random.PRNGKey(0))
@@ -514,7 +514,7 @@ spec_fit = ParamSpec(
     agn_model="simple",
     apply_igm=False,
 )
-model_fit = Model(spec_fit, ssp_data, filters=filters)
+model_fit = SEDModel(spec_fit, ssp_data, filters=filters)
 
 # True parameters (using agn_log_lbol = parametric mode for fused kernel speed)
 true_params = {
@@ -610,7 +610,7 @@ ax.legend(fontsize=9)
 
 # --- Panel 3: Photometry fit with residuals ---
 ax = axes[2]
-# Model prediction at posterior median
+# SEDModel prediction at posterior median
 median_params = {k: jnp.array(np.median(np.array(v), axis=0))
                  for k, v in result_evi.samples.items()}
 for k, v in spec_fit.get_fixed_values().items():
@@ -769,7 +769,7 @@ plt.show()
 # | 6 AGN models | `tengri.components.agn` | `AGN_MODELS`, `get_agn_model()` |
 # | QSOgen empirical SED | `tengri.components.agn.qsogen` | `qsogen_sed()` |
 # | SKIRTOR clumpy torus | `tengri.components.agn.skirtor` | `skirtor_analytic()` |
-# | AGN in forward model | `tengri.Model` | `agn_model="simple"` in `ParamSpec` |
+# | AGN in forward model | `tengri.SEDModel` | `agn_model="simple"` in `ParamSpec` |
 # | AGN inference | `tengri.Fitter` | `fitter.run("native_evi", ...)` |
 #
 # **Key takeaways:**

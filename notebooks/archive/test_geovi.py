@@ -44,7 +44,7 @@ jax.config.update("jax_enable_x64", True)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     ParamSpec,
     Uniform,
     load_filter_set,
@@ -57,7 +57,7 @@ ssp_data = load_ssp_data(
 filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 
 # %% [markdown]
-# ## Model + Mock
+# ## SEDModel + Mock
 #
 # Bursty star-forming galaxy: $\sigma_{\rm PS} = 2.0$ (factor $\sim$7
 # fluctuations in SFR), $\tau_{\rm PS} = 20$ Myr (SN feedback timescale).
@@ -78,7 +78,7 @@ spec = ParamSpec(
     mean_sfh_type=["dpl", "field"],
     n_grid=128,
 )
-model = Model(spec, ssp_data, filters=filters)
+model = SEDModel(spec, ssp_data, filters=filters)
 
 key = jax.random.PRNGKey(2026)
 true_params = spec.sample(key)

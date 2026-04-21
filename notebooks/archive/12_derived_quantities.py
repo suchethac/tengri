@@ -39,7 +39,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Model, ParamSpec, Uniform
+from tengri import SEDModel, ParamSpec, Uniform
 from tengri.sps.dsps_wrapper import load_ssp_data
 
 # %%
@@ -58,7 +58,7 @@ spec = ParamSpec(
     redshift=0.5,
 )
 
-model = Model(spec, ssp)
+model = SEDModel(spec, ssp)
 
 # %% [markdown]
 # ## Mode 1: Lazy Single-Galaxy Exploration

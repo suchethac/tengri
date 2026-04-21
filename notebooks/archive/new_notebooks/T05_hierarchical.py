@@ -47,7 +47,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Fixed, Fitter,
     HierarchicalFitter,
     load_ssp_data, load_filter_set,
 )
@@ -82,7 +82,7 @@ spec = ParamSpec(
     dust_slope=Fixed(-0.7), redshift=Fixed(0.1),
     stochastic=True, n_grid=128,
 )
-model = Model(spec, ssp_data, filters=filters)
+model = SEDModel(spec, ssp_data, filters=filters)
 
 # True population parameters
 TRUE_SIGMA = 1.5
@@ -156,7 +156,7 @@ for i in range(N_POP):
 print(f"Generated {N_POP} mock galaxies")
 
 # %%
-# Model factory: creates a Model with given PSD params
+# SEDModel factory: creates a SEDModel with given PSD params
 def model_factory(psd_sigma, psd_tau_myr):
     s = ParamSpec(
         sfh_alpha=Uniform(0.5, 3.0), sfh_beta=Uniform(0.5, 3.0),
@@ -167,7 +167,7 @@ def model_factory(psd_sigma, psd_tau_myr):
         dust_slope=Fixed(-0.7), redshift=Fixed(0.1),
         stochastic=True, n_grid=128,
     )
-    return Model(s, ssp_data, filters=filters)
+    return SEDModel(s, ssp_data, filters=filters)
 
 hfitter = HierarchicalFitter(model_factory, mock_data)
 t0 = time.perf_counter()

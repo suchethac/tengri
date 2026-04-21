@@ -25,7 +25,7 @@
 #    Gunn&ndash;Peterson trough on high-$z$ galaxy spectra.
 #
 # We show how these modules work standalone, how they integrate into the
-# `Model` forward model, and how IGM absorption creates the photometric
+# `SEDModel` forward model, and how IGM absorption creates the photometric
 # dropout signatures used for high-redshift galaxy selection.
 
 # %%
@@ -47,7 +47,7 @@ from tengri.agn.torus import simple_torus, two_temperature_torus
 from tengri.igm import igm_transmission
 from tengri.observation.filters import load_filter
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed,
+    SEDModel, ParamSpec, Uniform, Fixed,
     load_ssp_data, load_filter_set,
 )
 
@@ -95,7 +95,7 @@ def savefig(fig, name, dpi=200):
 # tengri provides three pre-registered AGN configurations, all combining
 # an accretion disc (UV/optical) with a dust torus (MIR):
 #
-# | Model | Disc | Torus | Free params |
+# | SEDModel | Disc | Torus | Free params |
 # |-------|------|-------|-------------|
 # | `simple` | Power-law + UV cutoff | Single-$T$ modified BB | 3 |
 # | `standard` | Multi-color Shakura&ndash;Sunyaev | Two-$T$ (hot + warm) | 5&ndash;6 |
@@ -250,9 +250,9 @@ savefig(fig, "agn_frac_effect")
 plt.show()
 
 # %% [markdown]
-# ## 2. AGN in the Forward Model
+# ## 2. AGN in the Forward SEDModel
 #
-# When `agn_model="simple"` is set in the `ParamSpec`, the `Model` class
+# When `agn_model="simple"` is set in the `ParamSpec`, the `SEDModel` class
 # automatically adds AGN emission to the stellar SED. The AGN bolometric
 # luminosity is computed as `agn_frac * L_bol_stellar`, so the same
 # parameter controls the relative AGN contribution at all wavelengths.
@@ -290,7 +290,7 @@ spec_no_agn = ParamSpec(
     mean_sfh_type="dpl",
     apply_igm=False,
 )
-model_no_agn = Model(spec_no_agn, ssp_data, filters=filters)
+model_no_agn = SEDModel(spec_no_agn, ssp_data, filters=filters)
 
 # --- Galaxy WITH AGN (simple model, 10% AGN fraction) ---
 spec_agn = ParamSpec(
@@ -309,7 +309,7 @@ spec_agn = ParamSpec(
     agn_model="simple",
     apply_igm=False,
 )
-model_agn = Model(spec_agn, ssp_data, filters=filters)
+model_agn = SEDModel(spec_agn, ssp_data, filters=filters)
 
 # Sample at the fixed values
 params_no_agn = spec_no_agn.sample(jax.random.PRNGKey(0))
@@ -492,7 +492,7 @@ jwst_labels = ["F090W", "F115W", "F150W", "F200W", "F277W", "F356W", "F444W"]
 # Load filter curves (for transmission overlays)
 jwst_curves = [load_filter(n) for n in jwst_names]
 
-# Also load as filter set for Model
+# Also load as filter set for SEDModel
 jwst_filters = load_filter_set(jwst_names)
 # Approximate effective wavelengths (micron)
 jwst_wave_eff_um = np.array([0.90, 1.15, 1.50, 2.00, 2.77, 3.56, 4.44])
@@ -523,8 +523,8 @@ spec_z6_noigm = ParamSpec(
     apply_igm=False,
 )
 
-model_z6 = Model(spec_z6, ssp_data, filters=jwst_filters)
-model_z6_noigm = Model(spec_z6_noigm, ssp_data, filters=jwst_filters)
+model_z6 = SEDModel(spec_z6, ssp_data, filters=jwst_filters)
+model_z6_noigm = SEDModel(spec_z6_noigm, ssp_data, filters=jwst_filters)
 
 params_z6 = spec_z6.sample(jax.random.PRNGKey(42))
 params_z6_noigm = spec_z6_noigm.sample(jax.random.PRNGKey(42))
@@ -665,8 +665,8 @@ for ax, z_target, col in zip(axes.flat, target_redshifts, panel_colors):
         apply_igm=False,
     )
 
-    model_z = Model(spec_z, ssp_data, filters=jwst_filters)
-    model_z_noigm = Model(spec_z_noigm, ssp_data, filters=jwst_filters)
+    model_z = SEDModel(spec_z, ssp_data, filters=jwst_filters)
+    model_z_noigm = SEDModel(spec_z_noigm, ssp_data, filters=jwst_filters)
 
     p_z = spec_z.sample(jax.random.PRNGKey(int(z_target * 10)))
     p_z_noigm = spec_z_noigm.sample(jax.random.PRNGKey(int(z_target * 10)))
@@ -731,7 +731,7 @@ plt.show()
 # | AGN torus emission | `tengri.components.agn.torus` | `simple_torus`, `two_temperature_torus` |
 # | Unified AGN SED | `tengri.components.agn.unified` | `unified_agn`, `get_agn_model` |
 # | IGM transmission | `tengri.components.igm` | `igm_transmission` |
-# | Forward model integration | `tengri.Model` | `agn_model="simple"` in `ParamSpec` |
+# | Forward model integration | `tengri.SEDModel` | `agn_model="simple"` in `ParamSpec` |
 #
 # **Key takeaways:**
 #

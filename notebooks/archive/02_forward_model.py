@@ -50,7 +50,7 @@ import numpy as np
 
 # High-level API
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 
@@ -571,10 +571,10 @@ print(f"Spectroscopy: {n_spec} data points")
 print(f"Information ratio (naive): {n_spec / n_phot:.0f}x")
 
 # %% [markdown]
-# ## The Complete Forward Model
+# ## The Complete Forward SEDModel
 #
 # Putting it all together with the high-level API.
-# `Model.predict_photometry(params)` runs the full pipeline in one
+# `SEDModel.predict_photometry(params)` runs the full pipeline in one
 # differentiable call:
 #
 # 1. Evaluate the SFH (double power-law + optional GP stochastic component)
@@ -585,7 +585,7 @@ print(f"Information ratio (naive): {n_spec / n_phot:.0f}x")
 # 6. Convolve through filter transmission curves
 # 7. Apply cosmological dimming ($d_L$, $1+z$)
 #
-# The `Model` class handles parameter name translation (e.g.,
+# The `SEDModel` class handles parameter name translation (e.g.,
 # `sfh_dpl_tau_gyr` → internal `tau_sfh` in yr) and unit conversions
 # automatically.
 
@@ -602,7 +602,7 @@ spec = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="dpl",
 )
-model = Model(spec, ssp_data, filters=filter_curves)
+model = SEDModel(spec, ssp_data, filters=filter_curves)
 
 # Sample parameters and run the full forward model
 key = jax.random.PRNGKey(99)
@@ -704,7 +704,7 @@ ax.set_xticklabels([f"SDSS {b}" for b in band_names])
 ax.set_yticks(range(len(free_names)))
 ax.set_yticklabels(free_names)
 ax.set_xlabel("Photometric Band")
-ax.set_ylabel("Model Parameter")
+ax.set_ylabel("SEDModel Parameter")
 ax.set_title("Jacobian Sensitivity: $|\\partial f_\\nu / \\partial \\theta|$ "
              "(normalized)")
 
@@ -775,4 +775,4 @@ print("  - sfh_dpl_alpha and sfh_dpl_beta have similar sensitivity patterns → 
 #   with individual absorption features
 #
 # For the conceptual overview of the IFT correlated field model and
-# PSD priors, see [NB01 — Understanding the Model](01_model.ipynb).
+# PSD priors, see [NB01 — Understanding the SEDModel](01_model.ipynb).

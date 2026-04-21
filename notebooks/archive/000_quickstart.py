@@ -39,7 +39,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 
 from tengri import (
-    Model, ParamSpec, Uniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 from tengri.analysis.plotting import plot_corner_comparison
@@ -79,7 +79,7 @@ def plot_mock(model, mock, true_params, title="Mock Photometry"):
 
     fig, ax = plt.subplots(figsize=(9, 4))
     ax.plot(wave_spec, spec_true, color="0.75", lw=0.6, alpha=0.7,
-            label="Model spectrum")
+            label="SEDModel spectrum")
     ax.errorbar(SDSS_WAVE_EFF, mock.flux_obs, yerr=mock.noise,
                 fmt="o", ms=8, color="k", capsize=4, capthick=1.2,
                 elinewidth=1.2, zorder=10, label="Mock photometry (SNR 20)")
@@ -177,7 +177,7 @@ def plot_phot_fit(model, mock, result, color, title="Photometry Fit"):
 
     # Spectrum background
     ax1.plot(wave_spec, spec_model, color=color, lw=0.6, alpha=0.4,
-             label="Model spectrum")
+             label="SEDModel spectrum")
 
     # Posterior photometry draws
     for draw in pred_fluxes[::max(1, n_pred // 50)]:
@@ -250,7 +250,7 @@ def make_truth_lines_red(fig):
 # # Part A: Parametric SFH ($D = 7$)
 
 # %% [markdown]
-# ## A1. Model and Mock
+# ## A1. SEDModel and Mock
 
 # %%
 spec_param = ParamSpec(
@@ -265,7 +265,7 @@ spec_param = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="dpl",
 )
-model_param = Model(spec_param, ssp_data, filters=filters)
+model_param = SEDModel(spec_param, ssp_data, filters=filters)
 
 key = jax.random.PRNGKey(2026)
 true_params_param = dict(
@@ -479,7 +479,7 @@ if fig is not None:
 # the stochastic fluctuations, giving $D = 128 + 9 = 137$.
 
 # %% [markdown]
-# ## B1. Model and Mock
+# ## B1. SEDModel and Mock
 
 # %%
 spec_stoch = ParamSpec(
@@ -497,7 +497,7 @@ spec_stoch = ParamSpec(
     mean_sfh_type=["dpl", "field"],
     n_grid=128,
 )
-model_stoch = Model(spec_stoch, ssp_data, filters=filters)
+model_stoch = SEDModel(spec_stoch, ssp_data, filters=filters)
 
 key_s = jax.random.PRNGKey(42)
 true_params_stoch = spec_stoch.sample(key_s)

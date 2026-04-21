@@ -38,7 +38,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -107,8 +107,8 @@ spec_param = Parameters(
     redshift=Fixed(0.1),
     mean_sfh_type="tsnorm",
 )
-model_param = Model(spec_param, ssp_data, observation=obs_joint)
-model_param_spec = Model(spec_param, ssp_data, observation=obs_spec)
+model_param = SEDModel(spec_param, ssp_data, observation=obs_joint)
+model_param_spec = SEDModel(spec_param, ssp_data, observation=obs_spec)
 
 key = jax.random.PRNGKey(42)
 true_param = spec_param.sample(key)
@@ -373,8 +373,8 @@ spec_stoch = Parameters(
     mean_sfh_type=["tsnorm", "field"],
     n_grid=128,
 )
-model_stoch = Model(spec_stoch, ssp_data, observation=obs_joint)
-model_stoch_spec = Model(spec_stoch, ssp_data, observation=obs_spec)
+model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs_joint)
+model_stoch_spec = SEDModel(spec_stoch, ssp_data, observation=obs_spec)
 
 true_stoch = spec_stoch.sample(jax.random.PRNGKey(77))
 # Override to a typical star-forming galaxy with burstiness
@@ -459,7 +459,7 @@ plt.show()
 
 # %%
 # Fit photometry — separate model with photometry-only observation
-model_stoch_phot = Model(spec_stoch, ssp_data, observation=obs_phot)
+model_stoch_phot = SEDModel(spec_stoch, ssp_data, observation=obs_phot)
 fitter_stoch_phot = Fitter(model_stoch_phot, mock_phot_s.flux_obs, mock_phot_s.noise)
 _ = fitter_stoch_phot.run("map", n_steps=1000, verbose=False)
 result_stoch_phot = fitter_stoch_phot.run(

@@ -61,7 +61,7 @@ setup_style()
 import os; os.makedirs("notebook_figures", exist_ok=True)
 
 from tengri import (
-    Model, ParamSpec, Uniform, Gaussian, LogUniform, Fixed, Fitter,
+    SEDModel, ParamSpec, Uniform, Gaussian, LogUniform, Fixed, Fitter,
     load_ssp_data, load_filter_set,
 )
 
@@ -72,7 +72,7 @@ print(f"SSP grid loaded — {len(ssp_data.ssp_lgmet)} metallicities, "
 print(f"Filters loaded — {[fc.name for fc in filters[2]]}")
 
 # %% [markdown]
-# ## Part A: Parametric Model (7 free parameters)
+# ## Part A: Parametric SEDModel (7 free parameters)
 #
 # A smooth double-power-law SFH with no stochastic component
 # (`mean_sfh_type="dpl"`).  This is the regime where **tengri** competes
@@ -92,7 +92,7 @@ spec_param = ParamSpec(
     redshift=Fixed(0.1),
     mean_sfh_type="dpl",
 )
-model_param = Model(spec_param, ssp_data, filters=filters)
+model_param = SEDModel(spec_param, ssp_data, filters=filters)
 
 key = jax.random.PRNGKey(42)
 true_param = spec_param.sample(key)
@@ -219,7 +219,7 @@ for name in spec_param.free_params:
     print(f"  {name:20s}  {w_p:10.4f}  {w_s:10.4f}  {ratio:8.2f}x")
 
 # %% [markdown]
-# ## Part B: Stochastic Model (137 free parameters)
+# ## Part B: Stochastic SEDModel (137 free parameters)
 #
 # This is the IFT model -- the unique contribution of **tengri**.  The SFH
 # includes a Gaussian-process correlated field whose PSD is governed by two
@@ -257,7 +257,7 @@ true_stoch = spec_stoch.sample(key_stoch)
 # Override PSD params to known values for clear demonstration
 true_stoch = {**true_stoch, "sfh_field_psd_sigma": 1.5, "sfh_field_psd_tau_myr": 50.0}
 
-model_stoch = Model(spec_stoch, ssp_data, filters=filters)
+model_stoch = SEDModel(spec_stoch, ssp_data, filters=filters)
 mock_stoch = model_stoch.mock(true_stoch, snr=20.0, key=key_stoch)
 
 D = spec_stoch.n_free
@@ -421,7 +421,7 @@ plt.savefig("notebook_figures/04_recovery_tests_fig09.png", dpi=72, bbox_inches=
 plt.show()
 
 # %% [markdown]
-# ### What Happens When You Fit with the Wrong Model?
+# ### What Happens When You Fit with the Wrong SEDModel?
 #
 # A critical test: fit a **bursty** mock (generated with the stochastic
 # model) using the **parametric-only** model.  The smooth model cannot
@@ -463,13 +463,13 @@ fig, axes = plt.subplots(1, 2, figsize=(14, 4.5), sharey=True)
 model_param.plot_sfh_posterior(rt_wrong, true_params=true_bursty,
                               color="C3", label="Parametric (wrong model)",
                               ax=axes[0])
-axes[0].set_title("Parametric Model \\u2192 Misses Burst")
+axes[0].set_title("Parametric SEDModel \\u2192 Misses Burst")
 axes[0].legend()
 
 model_stoch.plot_sfh_posterior(rt_right, true_params=true_bursty,
                               color="C0", label="Stochastic (correct model)",
                               ax=axes[1])
-axes[1].set_title("Stochastic Model \\u2192 Recovers Burst")
+axes[1].set_title("Stochastic SEDModel \\u2192 Recovers Burst")
 axes[1].legend()
 
 plt.tight_layout()
@@ -564,11 +564,11 @@ def derived_summary(result, model, true_params, label):
 
 # Parametric model
 derived_summary(result_rt_phot, model_param, true_param,
-                "Parametric Model (NUTS, photometry)")
+                "Parametric SEDModel (NUTS, photometry)")
 
 # Stochastic model
 derived_summary(result_rt, model_stoch, true_stoch,
-                "Stochastic Model (Ray Tracing, photometry)")
+                "Stochastic SEDModel (Ray Tracing, photometry)")
 
 # %% [markdown]
 # ## Posterior Predictive Checks
@@ -631,7 +631,7 @@ plt.show()
 # | **PSD $\sigma$** | Well-constrained from a single galaxy (amplitude visible in SFH scatter). |
 # | **PSD $\tau$** | Poorly constrained -- timescale degeneracy. **Motivates hierarchical inference.** |
 # | **Burstiness regimes** | Smooth and moderate regimes: excellent recovery. Extreme regime: challenging but unbiased. |
-# | **Model mismatch** | Fitting a bursty galaxy with a smooth model biases SFR and sSFR. Use the stochastic model. |
+# | **SEDModel mismatch** | Fitting a bursty galaxy with a smooth model biases SFR and sSFR. Use the stochastic model. |
 # | **SNR dependence** | Posteriors widen at low SNR but remain calibrated. SNR > 10 recommended. |
 #
 # ## What You've Learned

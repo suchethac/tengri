@@ -54,7 +54,7 @@ from tengri import (
     Fitter,
     Fixed,
     HierarchicalFitter,
-    Model,
+    SEDModel,
     Observation,
     ParamSpec,
     Photometry,
@@ -115,7 +115,7 @@ setup_style()
 # $N$ galaxies: $D = N \times 136 + 2$ shared.
 
 # %% [markdown]
-# ## 2. Setup: Population and Model
+# ## 2. Setup: Population and SEDModel
 
 # %%
 # Load SSP data
@@ -142,9 +142,9 @@ print(f"Population: N = {N_GAL}, true sigma = {TRUE_SIGMA}, true tau = {TRUE_TAU
 
 
 # %%
-# Model factory for hierarchical inference — uses Observation API
+# SEDModel factory for hierarchical inference — uses Observation API
 def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
-    """Create a Model with fixed PSD, called by HierarchicalFitter.
+    """Create a SEDModel with fixed PSD, called by HierarchicalFitter.
 
     Uses the Observation API for both photometry and spectroscopy
     configuration. Star-forming prior with positive skew and
@@ -170,7 +170,7 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         photometry=Photometry.from_names(FILTER_NAMES),
         spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS),
     )
-    return Model(spec, ssp_data, observation=obs)
+    return SEDModel(spec, ssp_data, observation=obs)
 
 
 # %%
@@ -288,7 +288,7 @@ obs_spec = Observation(
     spectroscopy=SpectroscopyConfig(wave_obs=WAVE_OBS),
     photometry=Photometry.from_names(FILTER_NAMES),
 )
-model_free = Model(spec_free, ssp_data, observation=obs_spec)
+model_free = SEDModel(spec_free, ssp_data, observation=obs_spec)
 
 individual_results = []
 print("Fitting 4 galaxies individually (PSD free)...")

@@ -42,7 +42,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -115,9 +115,9 @@ for f_cal, color, ls in [
         lw=1.5,
         label=f"$f_{{cal}}$ = {f_cal:.0%}" if f_cal > 0 else "No cal floor",
     )
-ax.set_xlabel("Model flux")
+ax.set_xlabel("SEDModel flux")
 ax.set_ylabel(r"$\sigma_{\rm eff}$")
-ax.set_title("Effective Noise vs Model Flux")
+ax.set_title("Effective Noise vs SEDModel Flux")
 ax.legend(fontsize=8, frameon=False)
 
 # Right: SNR with and without cal floor
@@ -137,7 +137,7 @@ for f_cal, color, ls in [
         lw=1.5,
         label=f"$f_{{cal}}$ = {f_cal:.0%}" if f_cal > 0 else "No cal floor",
     )
-ax.set_xlabel("Model flux")
+ax.set_xlabel("SEDModel flux")
 ax.set_ylabel("Effective SNR")
 ax.set_title("SNR Saturation from Calibration Floor")
 ax.legend(fontsize=8, frameon=False)
@@ -183,7 +183,7 @@ plt.savefig(os.path.join(FIGDIR, "06_student_t.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## 3. Fitting with Noise Model
+# ## 3. Fitting with Noise SEDModel
 #
 # We demonstrate fitting with the calibration floor as a free parameter.
 
@@ -223,7 +223,7 @@ spec_no_noise = Parameters(
 )
 
 # Generate mock with 5% systematic floor baked in
-model_truth = Model(spec_no_noise, ssp_data, observation=obs)
+model_truth = SEDModel(spec_no_noise, ssp_data, observation=obs)
 truth_params = {
     "sfh_tsnorm_log_peak_sfr": 0.8,
     "sfh_tsnorm_peak_lbt_gyr": 4.0,
@@ -244,12 +244,12 @@ sys_scatter = 0.05 * mock.flux_true * jax.random.normal(key, shape=mock.flux_tru
 flux_with_sys = mock.flux_obs + sys_scatter
 
 # Fit without noise model
-model_no_noise = Model(spec_no_noise, ssp_data, observation=obs)
+model_no_noise = SEDModel(spec_no_noise, ssp_data, observation=obs)
 fitter_no_noise = Fitter(model_no_noise, flux_with_sys, mock.noise)
 result_no_noise = fitter_no_noise.run("map", n_steps=500, learning_rate=0.02)
 
 # Fit with noise model
-model_noise = Model(spec_noise, ssp_data, observation=obs)
+model_noise = SEDModel(spec_noise, ssp_data, observation=obs)
 fitter_noise = Fitter(model_noise, flux_with_sys, mock.noise)
 result_noise = fitter_noise.run("map", n_steps=500, learning_rate=0.02)
 
@@ -284,7 +284,7 @@ plt.savefig(os.path.join(FIGDIR, "06_noise_residuals.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## 4. Noise Model Comparison Table
+# ## 4. Noise SEDModel Comparison Table
 #
 # | Feature | Gaussian | + Cal floor | + Student-t |
 # |---------|----------|-------------|-------------|

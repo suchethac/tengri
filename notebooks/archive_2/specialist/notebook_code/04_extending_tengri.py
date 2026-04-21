@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Custom Physics: Bring Your Own Model
+# # Custom Physics: Bring Your Own SEDModel
 #
 # tengri is modular: swap PSD models, dust laws, priors, and mean SFH shapes
 # without changing any inference code. This notebook demonstrates each
@@ -33,7 +33,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri import (
     Fixed,
-    Model,
+    SEDModel,
     Parameters,
     Uniform,
     load_filter_set,

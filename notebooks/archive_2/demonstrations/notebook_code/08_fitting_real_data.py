@@ -38,7 +38,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    Model,
+    SEDModel,
     Observation,
     Parameters,
     Photometry,
@@ -112,7 +112,7 @@ spec = Parameters(
     redshift=Fixed(REDSHIFT),
     mean_sfh_type="tsnorm",
 )
-model = Model(spec, ssp_data, observation=obs)
+model = SEDModel(spec, ssp_data, observation=obs)
 
 # Generate a "real" galaxy (in practice, load from file)
 true_params = spec.sample(jax.random.PRNGKey(42))
@@ -268,7 +268,7 @@ plt.show()
 # noise = jnp.array(noise[good])
 # ```
 #
-# Then proceed with `Model`, `Fitter`, and `native_geovi` as above.
+# Then proceed with `SEDModel`, `Fitter`, and `native_geovi` as above.
 
 # %% [markdown]
 # ## Caveats
@@ -278,4 +278,4 @@ plt.show()
 # 2. **Emission lines**: Strong emitters may need line marginalization
 #    or masking (reference/05).
 # 3. **Resolution**: Convolve templates to match data spectral resolution.
-# 4. **Model adequacy**: Check residuals for systematic patterns.
+# 4. **SEDModel adequacy**: Check residuals for systematic patterns.

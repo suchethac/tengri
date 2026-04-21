@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # AGN Model Gallery
+# # AGN SEDModel Gallery
 #
 # Comprehensive visual tour of every AGN emission component in tengri.
 #
@@ -33,7 +33,7 @@
 # emission lines (Leja+2018). Only tengri constrains BH mass, spin, and AGN
 # line ratios jointly with the galaxy SED, fully differentiably.
 #
-# ## Model Registry
+# ## SEDModel Registry
 #
 # | Name | Disc | Torus | Params | Use |
 # |------|------|-------|--------|-----|
@@ -85,7 +85,7 @@ try:
 except ImportError:
     # unified_agn may not be exported at top-level; use unified_nlr_blr as alias
     unified_agn = unified_nlr_blr
-from tengri import Fixed, Model, Parameters, Uniform, load_ssp_data
+from tengri import Fixed, SEDModel, Parameters, Uniform, load_ssp_data
 from tengri.agn.disc import _isco_radius
 
 try:
@@ -1553,7 +1553,7 @@ plt.show()
 #
 
 # %% [markdown]
-# ## 5. Unified NLR/BLR Model: Type 1 vs Type 2
+# ## 5. Unified NLR/BLR SEDModel: Type 1 vs Type 2
 #
 # `unified_nlr_blr` adds NLR/BLR emission with sigmoid geometric masking:
 # - **Type 1** (face-on): disc + BLR + NLR + torus all visible
@@ -1588,7 +1588,7 @@ fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "11_type1_vs_type2.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
-# ## 7. Unified Model: Type 1 vs Type 2
+# ## 7. Unified SEDModel: Type 1 vs Type 2
 #
 # The `unified_nlr_blr` model combines disc + torus + BLR + NLR with geometric
 # masking: the torus blocks the disc and BLR at high inclinations, converting
@@ -1782,7 +1782,7 @@ spec_stellar = Parameters(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.0),
 )
-model_stellar = Model(spec_stellar, ssp_data)
+model_stellar = SEDModel(spec_stellar, ssp_data)
 params_stellar = {
     k: v.value if hasattr(v, "value") else v
     for k, v in {
@@ -1830,7 +1830,7 @@ plt.show()
 
 # ## 8. Summary Table: All AGN Models
 #
-# | Model | Components | Free Params | Best For | Reference |
+# | SEDModel | Components | Free Params | Best For | Reference |
 # |-------|-----------|-------------|----------|-----------|
 # | `simple` | Power-law disc + single-T torus | 3 (+agn_frac) | Quick photometric fits | - |
 # | `standard` | Multicolor disc + two-T torus | 5-6 | Broadband UV-to-MIR | Shakura & Sunyaev 1973 |
