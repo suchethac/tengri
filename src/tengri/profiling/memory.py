@@ -40,10 +40,12 @@ class MemoryReport:
 
     @property
     def total_f64_mb(self) -> float:
+        """Sum of float64 memory across all entries [MB]."""
         return sum(e.f64_mb for e in self.entries)
 
     @property
     def total_f32_mb(self) -> float:
+        """Sum of float32 memory across all entries [MB]."""
         return sum(e.f32_mb for e in self.entries if e.f32_mb is not None)
 
     def summary(self) -> str:

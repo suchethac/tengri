@@ -86,6 +86,18 @@ def compute_fisher_matrix(forward_model, params, noise, data_type="photometry", 
 
     # Build a function that maps a flat array of the selected params to predictions
     def predict_from_flat(flat_params):
+        """Map flattened parameter array to model predictions.
+
+        Parameters
+        ----------
+        flat_params : array, shape (n_params,)
+            Flattened free parameter vector.
+
+        Returns
+        -------
+        array
+            Model predictions (photometry or spectrum).
+        """
         p = dict(params)  # copy
         for i, name in enumerate(param_names):
             p[name] = flat_params[i]

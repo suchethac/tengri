@@ -189,6 +189,7 @@ def profiled(
     """
 
     def decorator(fn: Callable) -> Callable:
+        """Wrap function to accumulate execution time in global timers dict."""
         op_name = name or f"{fn.__module__}.{fn.__qualname__}"
 
         # Pre-create the entry
@@ -197,6 +198,7 @@ def profiled(
 
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
+            """Execute function and record timing."""
             t0 = time.perf_counter()
             result = fn(*args, **kwargs)
             _sync(result)

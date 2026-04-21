@@ -97,41 +97,56 @@ def sed_from_sfh(
 ):
     """Compute rest-frame SED from a tabulated star formation history.
 
+    Integrates composite stellar population (CSP) models over a tabulated SFH
+    and optional metallicity history. Useful for cosmological simulations,
+    semi-analytic models, or custom SFH specifications.
+
     Parameters
     ----------
-    t_gyr : array, shape (n_t,)
+    t_gyr : ndarray, shape (n_t,)
         Cosmic time grid in Gyr (increasing, from early to late universe).
-    sfr : array, shape (n_t,)
-        Star formation rate in Msun/yr at each time point.
+    sfr : ndarray, shape (n_t,)
+        Star formation rate [Msun/yr] at each time point.
     ssp_data : SSPData
         SSP templates from ``load_ssp_data()``.
-    log_z : float or array
+    log_z : float or ndarray, optional
         Stellar metallicity log10(Z/Zsun).
-        - float: constant metallicity for all stars
-        - array shape (n_t,): metallicity history Z(t) at each time point
-    lgmet_scatter : float
-        Lognormal scatter in metallicity (dex). Default 0 (delta function).
-        Only used when log_z is a scalar.
-    dust_tau_bc : float
-        Birth cloud V-band optical depth. Default 0 (no dust).
-    dust_tau_diff : float
-        Diffuse ISM V-band optical depth. Default 0 (no dust).
-    dust_law : str
-        Dust attenuation curve name. Default "power_law".
-    dust_slope : float
-        Power-law slope (for power_law curve). Default -0.7.
-    t_obs_gyr : float
-        Age of universe at observation in Gyr. Default 13.7.
+        - float: constant metallicity for all stars. Default: -0.3.
+        - ndarray shape (n_t,): metallicity history Z(t).
+    lgmet_scatter : float, optional
+        Lognormal scatter in metallicity [dex]. Used only when log_z is
+        scalar. Default: 0 (delta function).
+    dust_tau_bc : float, optional
+        Birth cloud V-band optical depth. Default: 0 (no dust).
+    dust_tau_diff : float, optional
+        Diffuse ISM V-band optical depth. Default: 0 (no dust).
+    dust_law : str, optional
+        Dust attenuation curve name. Default: "power_law".
+        Options: "power_law", "calzetti", "kriek_conroy", etc.
+    dust_slope : float, optional
+        Power-law slope (for power_law curve). Default: -0.7.
+    t_obs_gyr : float, optional
+        Age of universe at observation [Gyr]. Default: 13.7.
     **dust_kwargs
         Additional dust parameters (dust_bump_strength, dust_delta, etc.).
 
     Returns
     -------
-    dict with keys:
-        "wavelength" : array (n_wave,) — rest-frame wavelength in Angstrom
-        "sed" : array (n_wave,) — rest-frame SED in erg/s/Hz
-        "stellar_mass" : float — total mass formed (Msun)
-        "weights" : array (n_age,) — SSP age weights
+    dict
+        Rest-frame SED with keys:
+        - "wavelength" : ndarray shape (n_wave,) — wavelength [Angstrom]
+        - "sed" : ndarray shape (n_wave,) — luminosity density [erg/s/Hz]
+        - "stellar_mass" : float — total stellar mass formed [Msun]
+        - "weights" : ndarray shape (n_age,) — CSP age weights
+
+    Notes
+    -----
+    **JIT-compatible**: yes — the entire function is JAX-native and
+    compatible with jax.jit, jax.grad, and jax.vmap.
+
+    **Metallicity evolution**: When log_z is an array, it is interpolated
+    onto the SSP age grid. The interpolation respects the optional
+    lgmet_scatter parameter.
     """
     # Convert SFH to SSP age weights via interpolation onto SSP age grid
     ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0  # log10(age/yr)

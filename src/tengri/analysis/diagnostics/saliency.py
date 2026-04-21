@@ -34,6 +34,7 @@ def compute_gradient_sed(forward_model, params, param_name):
     """
 
     def sed_as_fn_of_param(val):
+        """Compute SED with modified parameter value."""
         p = dict(params)
         p[param_name] = val
         return forward_model(p)
@@ -125,6 +126,18 @@ def compute_photometry_sensitivity(forward_model, params, param_names=None):
         ]
 
     def predict_from_flat(flat):
+        """Map flattened parameters to photometric predictions.
+
+        Parameters
+        ----------
+        flat : array, shape (n_params,)
+            Flattened free parameter vector.
+
+        Returns
+        -------
+        array, shape (n_filters,)
+            Predicted photometry.
+        """
         p = dict(params)
         for i, name in enumerate(param_names):
             p[name] = flat[i]

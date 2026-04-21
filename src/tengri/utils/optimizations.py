@@ -185,6 +185,7 @@ def precompute_ssp_photometry(
     denom = jnp.trapezoid(filter_trans * filter_wave, filter_wave)
 
     def _single_age(ssp_spectrum):
+        """Compute broadband SSP flux through a single filter."""
         # Interpolate SSP onto filter wavelength grid
         sed_on_filter = jnp.interp(filter_wave, wave_obs, ssp_spectrum, left=0.0, right=0.0)
         num = jnp.trapezoid(sed_on_filter * filter_trans * filter_wave, filter_wave)

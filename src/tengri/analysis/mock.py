@@ -13,25 +13,49 @@ __all__ = ["MockData", "generate_mock"]
 
 
 def generate_mock(model, params, key=None, snr=20.0):
-    """Generate mock photometry with Gaussian noise.
+    """Generate mock galaxy photometry with optional Gaussian noise.
+
+    Computes noiseless predicted photometry, then optionally realizes noise
+    at a specified signal-to-noise ratio. Useful for testing data pipelines,
+    validating inference, and parameter recovery studies.
 
     Parameters
     ----------
     model : object
-        Any object with a ``predict_photometry(params)`` method.
-    params : dict
-        Model parameter values.
-    key : jax.random.PRNGKey, optional
+        Any object with a ``predict_photometry(params)`` method that returns
+        an array of flux densities.
+    params : dict[str, ndarray]
+        Model parameter values (typically sampled or optimized).
+    key : jax.Array (PRNGKey), optional
         Random key for noise realization. If ``None``, only noiseless
-        photometry is returned (no ``flux_obs`` key).
-    snr : float
-        Signal-to-noise ratio.
+        photometry is returned (no ``flux_obs`` key in output).
+    snr : float, optional
+        Signal-to-noise ratio (flux_true / noise_std). Default: 20.0.
 
     Returns
     -------
     dict
-        Dictionary with keys ``flux_true``, ``noise``, ``params``,
-        and (if *key* is not None) ``flux_obs``.
+        Mock observation data with keys:
+        - ``flux_true`` : noiseless predicted photometry [erg/s/cm²/Hz]
+        - ``noise`` : noise standard deviation per band [erg/s/cm²/Hz]
+        - ``params`` : the input parameter values
+        - ``flux_obs`` : observed (noisy) photometry (only if key is not None)
+
+    Notes
+    -----
+    **Noise model**: Assumes Gaussian noise with σ = flux_true / SNR.
+    This is appropriate for photon-limited observations.
+
+    Examples
+    --------
+    >>> import jax.random
+    >>> from tengri.forward import SEDModel
+    >>> model = SEDModel(...)
+    >>> params = {'redshift': 0.1, ...}
+    >>> key = jax.random.PRNGKey(42)
+    >>> mock = generate_mock(model, params, key=key, snr=10.0)
+    >>> print(f"True flux shape: {mock['flux_true'].shape}")
+    >>> print(f"Obs. flux shape: {mock['flux_obs'].shape}")
     """
     flux_true = model.predict_photometry(params)
     noise = flux_true / snr

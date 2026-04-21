@@ -258,6 +258,7 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
         ft_list = model.filter_trans
 
         def phot_loop():
+            """Integrate SED through all filter curves."""
             fluxes = []
             for fwi, fti in zip(fw_list, ft_list):
                 f = compute_flux_density(sed, model.ssp_data.ssp_wave, fwi, fti, z, dl_cm)
