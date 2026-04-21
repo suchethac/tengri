@@ -6,7 +6,7 @@ format or back to a Parameters for mock generation.
 
 Usage:
     result = model.fit(data, noise, method="mcmc_nuts")
-    print(result.summary())
+    print(result.stats())
     sfh_draws = [model.predict_sfh(result.resample(key)) for ...]
     idata = result.to_arviz()
 """
@@ -28,35 +28,127 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Posterior:
-    """Inference results with sampling and diagnostics.
+    """Inference results with samples, diagnostics, and derived quantities.
+
+    Stores posterior samples (or point estimate for MAP), best-fit parameters,
+    convergence diagnostics, and provides methods for summary statistics,
+    derived physical quantities, ArviZ conversion, and refinement via resampling
+    or additional fitting iterations.
 
     Attributes
     ----------
     samples : dict or None
-        Posterior samples in physical space. Each value has shape (n_samples, ...).
-        None for MAP results.
+        Posterior samples in physical parameter space. Each value has shape
+        (n_samples, ...). Keys are parameter names (e.g., ``"stellar_mass"``,
+        ``"age_gyr"``, ``"psd_xi"``). ``None`` for point estimates (MAP, Laplace,
+        Pathfinder).
+
     params : dict
-        Best-fit (MAP) or posterior mean parameters.
+        Best-fit (MAP for point estimation) or posterior mean parameters in
+        physical space. Same keys as ``samples`` (without ``"psd_xi"`` latent field).
+
     method : str
-        Inference method name.
+        Inference method name (e.g., ``"vi"``, ``"mcmc_nuts"``, ``"map"``).
+
     wall_time_s : float
-        Total wall-clock time in seconds.
+        Total wall-clock runtime in seconds, including compilation and sampling.
+
     diagnostics : dict
-        Method-specific diagnostics.
-    loss_history : array or None
-        Loss values over iterations (MAP only).
-    _model : Model
-        Reference to the model (for derived quantities).
-    eline_fluxes : array or None
-        Emission line fluxes. Shape (n_samples, n_lines) for MCMC, or
-        (n_lines,) for MAP. Flux units match the input data.
-    eline_flux_cov : array or None
-        Posterior covariance of line fluxes. Shape (n_samples, n_lines, n_lines)
-        or (n_lines, n_lines).
+        Method-specific convergence and quality metrics. Contents vary by method:
+
+        - **VI methods**: ``{"kl_iter": int, "kl_final": float}``, etc.
+        - **NUTS**: ``{"n_divergent": int, "accept_rate": float}``, etc.
+        - **Ray Tracing**: ``{"accept_rate": float, "step_size": float}``, etc.
+        - **MAP**: ``{"final_loss": float, "n_steps": int}``, etc.
+        - **NSS**: ``{"n_live": int, "log_evidence_err": float}``, etc.
+
+    loss_history : ndarray or None
+        Optimization loss values over iterations (MAP/Laplace/Pathfinder only).
+        Shape (n_iterations,). ``None`` for sampling methods.
+
+    log_evidence : float or None
+        Bayesian evidence log(Z) integral (NSS only). ``None`` for other methods.
+        Used for model comparison via Bayes factors.
+
+    _model : SEDModel, optional
+        Reference to the forward model. Required for computing derived quantities
+        (stellar mass, SFR, sSFR, etc.). Set by ``Fitter.run()`` automatically.
+
+    _fitter : Fitter, optional
+        Reference to the Fitter instance. Enables ``refine()`` and other
+        refinement methods. Set by ``Fitter.run()`` automatically.
+
+    eline_fluxes : ndarray or None
+        Emission line fluxes. Shape (n_lines,) for MAP, (n_samples, n_lines) for
+        sampling. ``None`` if no emission line fitting/marginalization was enabled.
+        Flux units match input data [erg/s/cm²].
+
+    eline_flux_cov : ndarray or None
+        Posterior covariance of emission line fluxes. Shape (n_lines, n_lines) for
+        MAP, (n_samples, n_lines, n_lines) for sampling. ``None`` if unavailable.
+
     eline_names : tuple or None
-        Line identifiers matching eline_fluxes columns.
-    eline_wavelengths : array or None
-        Rest-frame wavelengths matching eline_fluxes columns (Angstrom).
+        Emission line identifiers (e.g., ``("Halpha", "Hbeta", ...)``)
+        matching ``eline_fluxes`` column order.
+
+    eline_wavelengths : ndarray or None
+        Rest-frame vacuum wavelengths [Angstrom] of emission lines, matching
+        ``eline_fluxes`` column order.
+
+    Notes
+    -----
+    **Derived quantities**: The ``derived`` property computes stellar mass, SFR,
+    sSFR, etc. by re-running the forward model on all samples. For MAP results,
+    returns scalars; for MCMC/VI results, returns arrays (one per sample).
+
+    **Emission line diagnostics**: Methods ``line_fluxes()``, ``bpt_nii()``,
+    and ``balmer_decrement()`` provide astrophysical diagnostics on emission
+    lines. Require ``eline_mode != "none"`` in Spectroscopy config.
+
+    **Convergence diagnostics**: Use ``check_convergence()``, ``autocorrelation()``,
+    and ``effective_sample_size()`` to assess MCMC chain quality.
+
+    **Resampling and refinement**: Use ``resample()`` to draw new samples from
+    the posterior, and ``refine()`` to improve results by running additional
+    inference iterations (requires ``_fitter``).
+
+    See Also
+    --------
+    Fitter.run : Returns Posterior with all attributes populated.
+    Fitter : Primary interface for inference.
+
+    Examples
+    --------
+    **Basic usage:**
+
+    >>> result = fitter.run("mcmc_nuts")  # Returns Posterior
+    >>> print(result.summary_table())
+    >>> params_phys = result.params
+    >>> samples = result.samples
+
+    **Derived quantities:**
+
+    >>> derived = result.derived
+    >>> stellar_masses = derived["stellar_mass"]  # Shape (n_samples,)
+    >>> med, lo, hi = np.percentile(stellar_masses, [50, 16, 84])
+
+    **Emission line diagnostics:**
+
+    >>> fluxes = result.line_fluxes()
+    >>> ha_med, ha_lo, ha_hi = fluxes["Halpha"]
+    >>> x, y = result.bpt_nii()  # BPT diagram coordinates
+    >>> plt.scatter(x, y, alpha=0.3)
+
+    **Convergence checks:**
+
+    >>> converged = result.check_convergence()
+    >>> ess = result.effective_sample_size()
+    >>> print(f"Effective sample size: {ess['stellar_mass']:.0f}")
+
+    **Refinement via resampling:**
+
+    >>> refined_samples = result.resample(key, n=50)  # Resample with replacement
+    >>> refined = fitter.run("vi", init_from=result)  # Refine posterior
     """
 
     samples: dict | None
@@ -306,17 +398,6 @@ class Posterior:
 
         return result
 
-    def summary(self) -> dict:
-        """Deprecated. Use stats() instead."""
-        import warnings
-
-        warnings.warn(
-            "Posterior.summary() is deprecated. Use Posterior.stats() instead. "
-            "Will be removed in tengri v1.0.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.stats()
 
     def summary_table(self) -> str:
         """Return a formatted string table of parameter summaries.
@@ -339,7 +420,7 @@ class Posterior:
         )
         lines.append(sep)
 
-        stats = self.summary()
+        stats = self.stats()
         if not stats:
             lines.append("  (no parameters)")
             lines.append(sep)
@@ -515,7 +596,7 @@ class Posterior:
             return f"MAP result (no samples): method={self.method}"
 
         ess = self.effective_sample_size()
-        summary = self.summary()
+        summary = self.stats()
 
         lines = [
             f"Method: {self.method}",

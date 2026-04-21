@@ -48,7 +48,6 @@ from tengri.components.sps.precompute import (
     precompute_photometry_ztable,
     precompute_spectroscopy,
 )
-from tengri.config.deprecation import deprecated_class_alias
 from tengri.forward._kernels import (
     build_exact_sed,
     build_fused_rest_sed,
@@ -1272,26 +1271,6 @@ class SEDModel:
             )
         return SEDResult(wavelength=wave_obs, sed=sed_obs)
 
-    def predict_sed(self, params):
-        """Compute rest-frame luminosity SED.
-
-        .. deprecated::
-            Use :meth:`predict_rest_sed` (returns ``SEDResult``) or
-            :meth:`predict_obs_sed` instead.
-
-        Returns
-        -------
-        array, shape (n_wave,)
-            Rest-frame SED in erg/s/Hz on the SSP wavelength grid.
-        """
-        import warnings
-
-        warnings.warn(
-            "predict_sed() is deprecated, use predict_rest_sed()",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self._compute_sed_components(params)["sed_total"]
 
     def predict(self, params):
         """Create a lazy prediction object for all derived physical quantities.
@@ -2802,37 +2781,6 @@ class SEDModel:
             **kwargs,
         )
 
-    def fit_catalog(
-        self,
-        catalog,
-        flux_cols: list[str],
-        err_cols: list[str],
-        redshift_col: str | None = None,
-        method: str = "vi",
-        n_workers: int = 1,
-        verbose: bool = True,
-        **kwargs,
-    ) -> list:
-        """Deprecated alias for fit_batch.
-
-        .. deprecated:: 0.5.0
-            Use :meth:`fit_batch` instead.
-        """
-        warnings.warn(
-            "fit_catalog is deprecated. Use fit_batch instead. Will be removed in tengri v1.0.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.fit_batch(
-            catalog,
-            flux_cols,
-            err_cols,
-            redshift_col=redshift_col,
-            method=method,
-            n_workers=n_workers,
-            verbose=verbose,
-            **kwargs,
-        )
 
     def fit_population(
         self,
@@ -3126,4 +3074,3 @@ class SEDModel:
 
 
 # Backward-compatibility alias
-Model = deprecated_class_alias("Model", SEDModel)

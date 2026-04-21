@@ -565,7 +565,7 @@ if SSP_WNE_PATH.exists():
         "dust_slope": -0.7,
         "redshift": 0.0,
     }
-    sed_with_neb = _model.predict_sed(_params)
+    sed_with_neb = _model.predict_rest_sed(_params)
     wave = _ssp.ssp_wave
 else:
     sed_with_neb = None

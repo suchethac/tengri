@@ -131,7 +131,7 @@ def posteriors_to_dataframe(results: list, params: list[str] | None = None):
     Parameters
     ----------
     results : list of Posterior
-        Output of ``model.fit_catalog()`` or any list of Posterior objects.
+        Output of ``model.fit_batch()`` or any list of Posterior objects.
     params : list of str or None
         Parameter names to include. Default: all scalar free parameters,
         excluding ``psd_xi``.

@@ -1859,7 +1859,7 @@ params_stellar = {
         "redshift": 0.0,
     }.items()
 }
-sed_stellar = model_stellar.predict_sed(params_stellar)
+sed_stellar = model_stellar.predict_rest_sed(params_stellar)
 wave_rest = ssp_data.ssp_wave
 
 # --- FIGURE 3: Galaxy + AGN at different fractions ---

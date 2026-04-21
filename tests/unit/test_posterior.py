@@ -55,15 +55,15 @@ def sampling_posterior():
     )
 
 
-class TestSummary:
-    def test_map_summary(self, map_posterior):
-        s = map_posterior.summary()
+class TestStats:
+    def test_map_stats(self, map_posterior):
+        s = map_posterior.stats()
         assert "sfh_dpl_alpha" in s
         assert "value" in s["sfh_dpl_alpha"]
         assert s["sfh_dpl_alpha"]["value"] == pytest.approx(1.2)
 
-    def test_sampling_summary(self, sampling_posterior):
-        s = sampling_posterior.summary()
+    def test_sampling_stats(self, sampling_posterior):
+        s = sampling_posterior.stats()
         assert "sfh_dpl_alpha" in s
         assert "median" in s["sfh_dpl_alpha"]
         assert "lo_68" in s["sfh_dpl_alpha"]

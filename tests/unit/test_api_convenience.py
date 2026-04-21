@@ -389,7 +389,7 @@ class TestModelFitIntegration:
         result = ppc.check_finite()
         assert isinstance(result["ok"], bool)
 
-    def test_fit_catalog_list_of_dicts(self, model_and_mock):
+    def test_fit_batch_list_of_dicts(self, model_and_mock):
         model, mock = model_and_mock
         catalog = [
             {
@@ -401,7 +401,7 @@ class TestModelFitIntegration:
                 "err_r": float(mock.noise[2]),
             }
         ]
-        results = model.fit_catalog(
+        results = model.fit_batch(
             catalog,
             flux_cols=["flux_u", "flux_g", "flux_r"],
             err_cols=["err_u", "err_g", "err_r"],

@@ -488,38 +488,6 @@ def fit_batch(
     return results
 
 
-def fit_catalog(
-    model: SEDModel,
-    catalog,
-    flux_cols: list[str],
-    err_cols: list[str],
-    redshift_col: str | None = None,
-    method: str = "vi",
-    n_workers: int = 1,
-    verbose: bool = True,
-    **kwargs,
-) -> list:
-    """Deprecated alias for fit_batch.
-
-    .. deprecated:: 0.5.0
-        Use :func:`fit_batch` instead.
-    """
-    warnings.warn(
-        "fit_catalog is deprecated. Use fit_batch instead. Will be removed in tengri v1.0.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return fit_batch(
-        model,
-        catalog,
-        flux_cols,
-        err_cols,
-        redshift_col=redshift_col,
-        method=method,
-        n_workers=n_workers,
-        verbose=verbose,
-        **kwargs,
-    )
 
 
 # ── Catalog summary ───────────────────────────────────────────────
