@@ -60,11 +60,41 @@ normalized but the ionizing SED shape (which drives line ratios) remains BPASS.
 If ionizing SED shape variation is scientifically important, use
 ``CB19Backend`` (CB_19 3MdB_17) or ``CueBackend`` instead.
 
+Relation to Synthesizer stellar grids
+--------------------------------------
+Synthesizer (Lovell et al. 2025) provides stellar photoionization grids
+alongside its AGN grids.  The stellar grids (``test_grid_sfzh-*.hdf5``)
+use CLOUDY c23.01 and cover HII region emission for various SSP models.
+Their HDF5 schema uses the same ``axes/`` + ``lines/`` + ``spectra/``
+structure as the AGN test grids in ``data/synthesizer_grids/``.
+
+Key differences vs ``CloudyGridBackend`` (BPASS v2.1 / Byler+2017):
+
++----------------------------+---------------------------+---------------------------+
+| Feature                    | CloudyGridBackend          | Synthesizer stellar grids |
++============================+===========================+===========================+
+| CLOUDY version             | c17.01 (FSPS grids)       | c23.01 (10 yr newer)      |
++----------------------------+---------------------------+---------------------------+
+| N emission lines           | ~128                      | 215                       |
++----------------------------+---------------------------+---------------------------+
+| Full spectra stored        | no (lines only)           | yes (9244 λ pts)          |
++----------------------------+---------------------------+---------------------------+
+| JAX / JIT in tengri        | yes (triweight interp.)   | not yet integrated        |
++----------------------------+---------------------------+---------------------------+
+
+The tengri ``CloudyGridBackend`` can in principle load any grid with the
+same axis / normalization convention.  Synthesizer stellar grids would
+require a format adapter (``L_line`` stored in W, not L_⊙/Q_H) before
+plugging in.  For age-dependent stellar nebular emission the preferred
+tengri backend remains ``CB19Backend`` (c17.01, 2,358,330 models, Q_H-
+normalized, JAX-compatible; see ``cloudy_cb19.py``).
+
 References
 ----------
 - Byler et al. 2017, ApJ, 840, 44
 - Gutkin, Charlot & Bruzual 2016, MNRAS, 462, 1757
 - Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
+- Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
 - diffhtwo (ArgonneCPAC) for JAX grid interpolation patterns
 """
 

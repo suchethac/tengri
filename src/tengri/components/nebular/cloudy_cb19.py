@@ -98,6 +98,41 @@ for stochastic SFH science.
 Raw data: ``data/neogal/nebular_emission_Z*.txt`` (NEOGAL ASCII, 14 Z files,
 downloaded from ``http://www.iap.fr/neogal/``).
 
+Relation to Synthesizer stellar grids
+--------------------------------------
+Synthesizer (Lovell et al. 2025) ships stellar photoionization grids
+(``test_grid_sfzh-*.hdf5``) produced with CLOUDY c23.01, a decade newer
+than CB_19 (c17.01).  Their HDF5 schema stores ``lines/luminosity`` in W
+per bolometric luminosity, normalized to ``bolometric_luminosities`` weight
+variables — a different convention from CB_19's L_line/Q_H normalization.
+
+Key comparison:
+
++---------------------------+---------------------------+---------------------------+
+| Feature                   | CB_19 (3MdB_17)           | Synthesizer stellar grids |
++===========================+===========================+===========================+
+| CLOUDY version            | c17.01 (2017)             | c23.01 (2023)             |
++---------------------------+---------------------------+---------------------------+
+| N emission lines          | 7 (stored; full grid has  | 215                       |
+|                           | many more in 3MdB_17)     |                           |
++---------------------------+---------------------------+---------------------------+
+| Stellar age axis          | yes (full age range)      | yes                       |
++---------------------------+---------------------------+---------------------------+
+| C/O, N/O axes             | yes (log(C/O), ΔN/O)      | no (fixed solar)          |
++---------------------------+---------------------------+---------------------------+
+| N model points            | 2,358,330                 | 2-pt test grid only       |
+|                           |                           | (prod. grids via Box)     |
++---------------------------+---------------------------+---------------------------+
+| Normalization             | L_line / Q_H              | L_line / L_bol            |
++---------------------------+---------------------------+---------------------------+
+| JAX / JIT in tengri       | yes (triweight interp.)   | not yet integrated        |
++---------------------------+---------------------------+---------------------------+
+
+CB_19 remains the preferred tengri backend for age-dependent stellar nebular
+emission due to its Q_H normalization (which tracks the actual SFH-weighted
+ionizing flux) and its C/O + N/O axes (which CB_19 inherits from the 3MdB_17
+grid).
+
 References
 ----------
 - Martinez-Paredes et al. 2023, MNRAS, arXiv:2308.05604
@@ -106,6 +141,7 @@ References
 - Morisset et al. 2015, A&A, 3MdBs database
 - Gutkin, Charlot & Bruzual 2016, MNRAS, 462, 1757 (BEAGLE HII grids)
 - Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
+- Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
 """
 
 from __future__ import annotations
