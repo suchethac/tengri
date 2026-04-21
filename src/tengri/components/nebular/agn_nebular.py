@@ -8,7 +8,7 @@ Provides a unified interface for computing AGN NLR emission using:
 - **feltre**: Feltre, Charlot & Gutkin (2016) CLOUDY photoionization grids.
   Parameterized by power-law slope α, log U_S, log n_H, metallicity Z, and
   dust-to-metal ratio ξ_d.  Requires ``data/feltre_grid.h5`` built via
-  ``scripts/download_feltre_grid.py``.
+  ``scripts/build_feltre_grid.py``.
 
 The key physical link is ``agn_ionspec_from_alpha_pl``, which converts an
 AGN power-law slope (f_nu ~ nu^alpha_pl) into the 7 ionizing-spectrum
@@ -17,10 +17,89 @@ consistent NLR emission for an AGN-ionized gas cloud.
 
 All functions are pure JAX and JIT-compatible unless noted otherwise.
 
+Comparison with BEAGLE
+----------------------
+BEAGLE (Chevallard & Charlot 2016) uses the Feltre+2016 CLOUDY c13.03
+photoionization grids as its AGN NLR model.  tengri implements the same
+grids via ``FeltreNLRBackend`` and additionally provides the Cue neural-
+network emulator as a default alternative.
+
+Feltre+2016 grid axes (BEAGLE-equivalent):
+
++------------------+---------------------------+-------------------+
+| Axis             | Range                     | N points          |
++==================+===========================+===================+
+| α (EUV slope)    | -2.0, -1.7, -1.4, -1.2   | 4 (discrete)      |
++------------------+---------------------------+-------------------+
+| log U_S          | -5.0 to -1.0              | 9 (continuous)    |
++------------------+---------------------------+-------------------+
+| log n_H [cm⁻³]   | 2.0, 3.0, 4.0             | 3 (continuous)    |
++------------------+---------------------------+-------------------+
+| Z (metallicity)  | 0.0001 to 0.07            | 16 (continuous)   |
++------------------+---------------------------+-------------------+
+| ξ_d (dust/metal) | 0.1, 0.3, 0.5             | 3 (discrete)      |
++------------------+---------------------------+-------------------+
+| **Total**        | 4 × 9 × 3 × 16 × 3        | **5,184 models**  |
++------------------+---------------------------+-------------------+
+
+20 emission lines: [OII]3727, Hβ, [OIII]4959/5007, [OI]6300, [NII]6548/6584,
+Hα, [SII]6717/6731, NV1240, CIV1548/1551, HeII1640, OIII]1661/1666,
+[SiIII]1883, SiIII]1888, [CIII]1907, CIII]1910.
+
+Normalization: the NEOGAL ASCII files (``data/neogal/``) store luminosities in
+erg/s per L_acc = 10^45 erg/s.  ``FeltreNLRBackend`` uses the internally
+consistent normalization ``log10(L_Hβ / Q_H)``.  The conversion is performed
+by ``scripts/build_feltre_grid.py`` using ``_log_qh_from_lacc`` in this module.
+
+Ionizing spectrum: Feltre+2016 vs Cue
+--------------------------------------
+The parameter ``alpha`` in the Feltre+2016 grid is the **UV spectral index**
+defined as F_ν ∝ ν^α (Feltre et al. 2016, MNRAS 456, 3354; NEOGAL README).
+It is a single power-law slope parameterizing the EUV continuum from the Lyman
+limit to ~ 2500 Å.  The rest of the AGN SED (X-ray, IR) has fixed slopes
+following Charlot & Longhetti (2001).
+
+This is very different from Cue's 7-parameter ionizing SED description:
+Cue uses 4 segment slopes (``ionspec_index1..4``) in wavelength space plus
+3 log-luminosity ratios between adjacent segments (``ionspec_logLratio1..3``).
+Cue can represent an arbitrary broken power-law, while Feltre is restricted to
+4 choices of a single UV slope.
+
+Cue vs Feltre+2016 comparison:
+
++----------------------------+---------------------------+---------------------------+
+| Feature                    | Feltre+2016 (BEAGLE)      | Cue (tengri default)      |
++============================+===========================+===========================+
+| Ionizing SED shape         | Single power-law f_ν ~    | 4-segment broken power-   |
+|                            | ν^α; 4 discrete α values  | law; 7 continuous params  |
++----------------------------+---------------------------+---------------------------+
+| Free α / slope values      | 4 grid points (-2,-1.7,   | fully continuous via NN   |
+|                            | -1.4,-1.2); nearest-nbr   | interpolation             |
++----------------------------+---------------------------+---------------------------+
+| N emission lines           | 20                        | ~271                      |
++----------------------------+---------------------------+---------------------------+
+| CLOUDY version             | c13.03 (2013)             | training grids c17+       |
++----------------------------+---------------------------+---------------------------+
+| UV line coverage           | limited (UV-optical)      | UV to NIR                 |
++----------------------------+---------------------------+---------------------------+
+| JAX / JIT                  | yes (triweight interp.)   | yes (neural network)      |
++----------------------------+---------------------------+---------------------------+
+| Differentiable             | yes (C² triweight)        | yes (smooth NN)           |
++----------------------------+---------------------------+---------------------------+
+| C/O axis                   | no                        | yes (gas_logco)           |
++----------------------------+---------------------------+---------------------------+
+| N/O axis                   | no                        | yes (gas_logno)           |
++----------------------------+---------------------------+---------------------------+
+
+Grid data: ``data/neogal/AGN_NLR_nebular_feltre16/`` (raw ASCII from NEOGAL).
+Build the HDF5 grid with ``python scripts/build_feltre_grid.py``.
+
 References
 ----------
 - Feltre, Charlot & Gutkin 2016, MNRAS, 456, 3354 (arXiv:1511.08217)
-- Li et al. 2025, ApJ, 986, 9 (Cue emulator)
+- Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
+- Li et al. 2024, ApJ, 969, 28 (Cue v1)
+- Li et al. 2025, ApJ, 986, 9 (Cue v2, AGN extension)
 """
 
 from __future__ import annotations

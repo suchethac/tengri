@@ -10,9 +10,61 @@ The physical pipeline:
 3. Apply dust (diffuse only, no birth cloud) to nebular emission
 4. Add to stellar SED
 
+Grid normalization
+------------------
+All grids are stored with luminosities per ionizing photon rate Q_H::
+
+    L_line / Q_H  [L_⊙ · s]
+
+At runtime Q_H is computed from the DSPS stellar spectrum by integrating below
+912 Å.  This makes the grid independent of IMF or SFR normalization choices.
+
+Note: the BEAGLE/Gutkin+2016 grids (``data/neogal/nebular_emission_Z*.txt``)
+store luminosities per unit SFR [L_⊙ / (M_⊙ yr⁻¹)] under a 10^8-yr constant-
+SFR assumption.  Those grids are used by ``cloudy_cb19.py`` with an explicit
+L_Hβ / Q_H conversion; they are **not** directly compatible with this module.
+
+Comparison with BEAGLE / Gutkin+2016
+--------------------------------------
+BEAGLE uses Gutkin, Charlot & Bruzual (2016) CLOUDY c13.03 grids computed
+with BC03/CB19 ionizing SEDs (Chabrier IMF, constant SFR for 10^8 yr).
+This backend (``CloudyGridBackend``) loads CLOUDY grids computed with BPASS
+v2.1 binary stellar populations (Byler et al. 2017), re-normalizing Q_H to
+the user's DSPS SSPs at runtime.
+
+Key similarities and differences:
+
++----------------------------+---------------------------------+----------------------------+
+| Feature                    | BEAGLE / Gutkin+2016            | CloudyGridBackend          |
++============================+=================================+============================+
+| Ionizing SED (grid)        | BC03/CB19 (single star)         | BPASS v2.1 binary          |
++----------------------------+---------------------------------+----------------------------+
+| Q_H normalization          | baked-in per SFR                | runtime from DSPS SSPs     |
++----------------------------+---------------------------------+----------------------------+
+| Line ratio shape           | fixed to ionizing SED above     | fixed to BPASS v2.1        |
++----------------------------+---------------------------------+----------------------------+
+| Age axis                   | absent (10^8 yr average)        | present (per-age grids)    |
++----------------------------+---------------------------------+----------------------------+
+| N emission lines           | 18                              | ~128 (FSPS grids)          |
++----------------------------+---------------------------------+----------------------------+
+| CLOUDY version             | c13.03                          | c17.01 (FSPS), c23.01      |
+|                            |                                 | (Synthesizer test grids)   |
++----------------------------+---------------------------------+----------------------------+
+| C/O, N/O axes              | C/O (9 pt), N/O fixed           | absent                     |
++----------------------------+---------------------------------+----------------------------+
+| JAX / JIT                  | no                              | yes (triweight interp.)    |
++----------------------------+---------------------------------+----------------------------+
+
+Warning: ``CloudyGridIonizingSpectrumWarning`` is raised when Q_H is re-
+normalized but the ionizing SED shape (which drives line ratios) remains BPASS.
+If ionizing SED shape variation is scientifically important, use
+``CB19Backend`` (CB_19 3MdB_17) or ``CueBackend`` instead.
+
 References
 ----------
 - Byler et al. 2017, ApJ, 840, 44
+- Gutkin, Charlot & Bruzual 2016, MNRAS, 462, 1757
+- Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
 - diffhtwo (ArgonneCPAC) for JAX grid interpolation patterns
 """
 

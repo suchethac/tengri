@@ -27,9 +27,58 @@ IMPORTANT: The network internally takes gas_logq (not gas_logu), and
 gas_logn is converted to linear density (10**logn). The conversion is
 handled transparently.
 
+Ionizing spectrum parameterization
+-----------------------------------
+Cue parameterizes the ionizing SED as a broken power law in wavelength space
+across four segments (approximately 50–100 Å, 100–228 Å, 228–300 Å, 300–912 Å).
+Each segment has a slope parameter (``ionspec_index1..4``, where
+``F_ν ∝ λ^index`` in that segment) and the three log-luminosity ratios between
+adjacent segment boundaries (``ionspec_logLratio1..3``) fix the relative
+normalization.
+
+This 7-parameter description generalizes the single-slope power law used in
+Feltre+2016 (``alpha``) and the two-segment model common in older CLOUDY runs.
+
+Comparison with BEAGLE nebular models
+---------------------------------------
+BEAGLE (Chevallard & Charlot 2016) uses fixed-ionizing-SED CLOUDY grids (BC03
+stellar populations for HII regions; Feltre+2016 broken power law for AGN NLR).
+Cue differs in the following ways:
+
+- **Arbitrary ionizing SED**: the 7-parameter ionizing spectrum can represent any
+  stellar population shape (hot stars, stripped-star envelopes, WR-enriched
+  bursts, AGN power-laws) without being pre-committed to a specific SSP library.
+  The conversion to Cue parameters for AGN inputs is in ``agn_nebular.py``.
+
+- **~271 emission lines** vs 18 lines in the Gutkin+2016 HII grid used by BEAGLE.
+  This enables cross-matching with JWST NIRSpec line maps and rest-UV diagnostics
+  (e.g. CIII]1909, CIV1548, HeII1640) that are absent in the BEAGLE grids.
+
+- **C/O and N/O as free parameters**: BEAGLE/Gutkin+2016 has C/O as a discrete
+  grid axis (9 values) but fixes N/O to scaled-solar.  Cue accepts continuous
+  ``gas_logco`` and ``gas_logno`` offset parameters, enabling smooth gradient-
+  based inference over abundance ratios.
+
+- **Differentiable by design**: as a neural network, Cue is smooth and
+  differentiable through JAX, enabling VI (ELBO gradients) and HMC
+  (Hamiltonian gradients) over nebular parameters jointly with SFH and dust.
+  CLOUDY grid interpolation in BEAGLE is non-differentiable.
+
+- **No age axis**: Cue was trained for time-averaged ionizing spectra (similar to
+  BEAGLE's 10^8-yr constant-SFR assumption for HII regions).  For explicit age-
+  dependent nebular evolution, use ``CB19Backend`` (``cloudy_cb19.py``).
+
+Grid files: ``data/synthesizer_grids/test_grid_agn-nlr.hdf5`` (Synthesizer
+CLOUDY c23.01 test grid; 215 lines, 6D axes) is structurally comparable to what
+Cue was trained on, though the Cue emulator itself does not require grid files
+at inference time.
+
 References
 ----------
-- Li et al. 2025, ApJ (Cue)
+- Li et al. 2024, ApJ, 969, 28 (Cue v1)
+- Li et al. 2025, ApJ, 986, 9 (Cue v2, AGN extension)
+- Gutkin, Charlot & Bruzual 2016, MNRAS, 462, 1757 (BEAGLE HII grids)
+- Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
 - Alsing et al. 2020, ApJS (Speculator architecture)
 
 Notes

@@ -48,12 +48,64 @@ HbFrac = 1.0 → radiation-bounded (default); HbFrac < 1 → matter-bounded,
 with ionizing photon escape fraction ≈ 1 − HbFrac. The HbFrac axis is treated
 as discrete (nearest-neighbour snap at init time via ``hbfrac`` argument).
 
+Comparison with BEAGLE (Gutkin+2016)
+-------------------------------------
+BEAGLE (Chevallard & Charlot 2016) uses the Gutkin, Charlot & Bruzual (2016)
+CLOUDY c13.03 grids for stellar-photoionized nebular emission.  The CB_19
+backend is the closest tengri equivalent, sharing the same ionizing stellar
+population model (CB19 SSPs), but differs in several important ways:
+
++---------------------------+------------------------------+------------------------------+
+| Feature                   | BEAGLE / Gutkin+2016         | tengri / CB_19               |
++===========================+==============================+==============================+
+| CLOUDY version            | c13.03 (2013)                | c17.01 (2017); updated       |
+|                           |                              | atomic/recombination data    |
++---------------------------+------------------------------+------------------------------+
+| Ionizing stellar model    | BC03 + CB19 (Chabrier IMF)   | CB19 SSP + CSF               |
++---------------------------+------------------------------+------------------------------+
+| log U range               | -4.0 to -1.0 (7 points)     | full 3MdB_17 coverage        |
++---------------------------+------------------------------+------------------------------+
+| Metallicity axis          | Z = 0.0001–0.04 (14 Z)      | 12+log(O/H) axis, wider      |
++---------------------------+------------------------------+------------------------------+
+| n_H axis                  | 2 points (100, 1000 cm⁻³)   | continuous axis              |
++---------------------------+------------------------------+------------------------------+
+| C/O axis                  | 9 points (0.1–1.4 × solar)  | log(C/O) axis, continuous    |
++---------------------------+------------------------------+------------------------------+
+| N/O axis                  | fixed solar                  | ΔN/O axis                    |
++---------------------------+------------------------------+------------------------------+
+| Stellar age axis          | **absent** (10^8 yr CSF)     | **present** (full age range) |
++---------------------------+------------------------------+------------------------------+
+| Ionizing photon escape    | absent                       | HbFrac axis (matter-bounded) |
++---------------------------+------------------------------+------------------------------+
+| N model points            | ~148,000 total               | 2,358,330                    |
++---------------------------+------------------------------+------------------------------+
+| Output normalization      | L/SFR [L_⊙ / (M_⊙ yr⁻¹)]   | L_line/Q_H [L_⊙ · s]         |
++---------------------------+------------------------------+------------------------------+
+| JAX / JIT compatible      | no                           | yes (triweight interp.)      |
++---------------------------+------------------------------+------------------------------+
+
+The BEAGLE normalization (L per unit SFR) bakes in a constant SFR assumption
+for 10^8 yr with a Chabrier IMF.  CB_19's Q_H normalization is more flexible:
+the ionizing photon rate Q_H is computed at runtime from the DSPS SFH, allowing
+the line emission to track the actual current ionizing flux for any SFH shape.
+
+Critically, the BEAGLE/Gutkin grid has **no stellar age axis**: it was computed
+for a constant SFR averaged over 10^8 yr.  CB_19 explicitly tracks how the
+ionizing SED hardens/softens with stellar age, which matters for galaxies
+undergoing rapid bursts or quenching.  This makes CB_19 the preferred backend
+for stochastic SFH science.
+
+Raw data: ``data/neogal/nebular_emission_Z*.txt`` (NEOGAL ASCII, 14 Z files,
+downloaded from ``http://www.iap.fr/neogal/``).
+
 References
 ----------
 - Martinez-Paredes et al. 2023, MNRAS, arXiv:2308.05604
 - Osterbrock & Ferland 2006, "Astrophysics of Gaseous Nebulae", Table 4.4
 - Byler et al. 2017, ApJ, 840, 44 (Hβ conversion factor)
 - Morisset et al. 2015, A&A, 3MdBs database
+- Gutkin, Charlot & Bruzual 2016, MNRAS, 462, 1757 (BEAGLE HII grids)
+- Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
 """
 
 from __future__ import annotations
