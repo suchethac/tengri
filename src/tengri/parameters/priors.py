@@ -17,31 +17,78 @@ import jax.numpy as jnp
 class Distribution:
     """Base class for parameter distributions.
 
-    Subclasses must implement:
-    - bounds: (lo, hi) tuple
-    - sample(key): draw from the prior
-    - log_prob(x): log probability density
+    A Distribution defines a prior for a single model parameter. Supports both
+    sampling (for mock generation) and probability evaluation (for inference).
 
-    For standardized inference, subclasses should also implement:
-    - unstandardize(xi): map N(0,1) → physical space (differentiable)
-    - standardize(theta): map physical space → N(0,1) (for initialization)
+    Subclasses must implement ``bounds``, ``sample()``, and ``log_prob()``.
+    For standardized inference with reparameterization, subclasses should also
+    implement ``unstandardize()`` and ``standardize()``.
 
-    The unstandardize method defines how the prior is absorbed into the
-    forward model. The loss becomes H = ½χ² + ½ξᵀξ with no extra terms.
+    Parameters
+    ----------
+    (None — this is an abstract base class)
+
+    Attributes
+    ----------
+    bounds : tuple[float, float]
+        (lo, hi) — lower and upper bounds on the parameter value.
+
+    Methods
+    -------
+    sample(key : jax.Array) → ndarray
+        Draw a random sample from the prior distribution.
+    log_prob(x : ndarray) → ndarray
+        Evaluate the log probability density at parameter value x.
+    unstandardize(xi : ndarray) → ndarray
+        Map standardized latent variable ξ ~ N(0,1) to physical parameter space.
+    standardize(theta : ndarray) → ndarray
+        Map physical parameter to standardized latent variable ξ ~ N(0,1).
+
+    Notes
+    -----
+    **Standardized inference**: The unstandardize method absorbs the prior into
+    the forward model via a change-of-variables. If the map h(ξ) satisfies
+    P(h(ξ))|dh/dξ| = φ(ξ) (where φ is the standard normal density), then the
+    loss becomes H = ½χ² + ½ξᵀξ with no extra per-parameter prior penalty terms.
+    This Jacobian cancellation is exact (not an approximation).
+
+    **Posterior geometry**: This reparameterization makes the posterior landscape
+    isotropic in the prior directions, with unit-scale curvature from the prior.
+    This benefits all samplers: variational (geoVI/MGVI), MCMC, and gradient-based
+    optimization.
+
+    Examples
+    --------
+    Creating custom priors:
+
+    >>> from tengri import Uniform, Gaussian, Fixed
+    >>> # Shorthand notation (resolved in Parameters)
+    >>> p1 = Uniform(0, 1)
+    >>> p2 = Gaussian(mu=0, sigma=0.5)
+    >>> p3 = Fixed(0.0)
+    >>> # Sample and evaluate
+    >>> import jax.random
+    >>> key = jax.random.PRNGKey(0)
+    >>> sample = p1.sample(key)
+    >>> log_p = p1.log_prob(sample)
     """
 
     @property
     def is_fixed(self) -> bool:
+        """Return True if this is a Fixed distribution, False otherwise."""
         return False
 
     @property
     def bounds(self) -> tuple[float, float]:
+        """Lower and upper bounds [lo, hi] for this distribution."""
         raise NotImplementedError
 
     def sample(self, key: jax.Array) -> jnp.ndarray:
+        """Draw a random sample from the prior distribution."""
         raise NotImplementedError
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Evaluate log probability density at parameter value x."""
         raise NotImplementedError
 
     def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray:
@@ -92,12 +139,45 @@ class Distribution:
 class Uniform(Distribution):
     """Uniform prior on [lo, hi].
 
+    A flat probability density on the interval [lo, hi]. Commonly used for
+    bounded astrophysical quantities with little prior knowledge. Reparameterizes
+    via sigmoid to ensure differentiability and automatic bound satisfaction.
+
     Parameters
     ----------
     lo : float
-        Lower bound.
+        Lower bound (inclusive).
     hi : float
-        Upper bound (must be > lo).
+        Upper bound (inclusive). Must satisfy hi > lo.
+
+    Raises
+    ------
+    ValueError
+        If lo >= hi.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    **Standardization**: Maps ξ ~ N(0,1) to θ via the sigmoid function:
+
+    .. math::
+
+        \\theta = lo + (hi - lo) \\cdot \\sigma(\\xi)
+
+    where σ(ξ) = 1 / (1 + exp(-ξ)). At ξ = 0 (prior center), θ = (lo + hi) / 2.
+    This ensures automatic bound satisfaction and smooth gradients.
+
+    Examples
+    --------
+    >>> import jax.random
+    >>> from tengri import Uniform
+    >>> prior = Uniform(0, 1)
+    >>> key = jax.random.PRNGKey(0)
+    >>> sample = prior.sample(key)
+    >>> print(f"Sample: {sample:.4f}")  # Will be in [0, 1)
+    >>> log_prob = prior.log_prob(0.5)
+    >>> print(f"log p(0.5): {log_prob:.4f}")  # ≈ 0.0 (log(1) = 0)
     """
 
     def __init__(self, lo: float, hi: float):
@@ -108,14 +188,17 @@ class Uniform(Distribution):
 
     @property
     def lo(self) -> float:
+        """Lower bound of the uniform distribution."""
         return self._lo
 
     @property
     def hi(self) -> float:
+        """Upper bound of the uniform distribution."""
         return self._hi
 
     @property
     def bounds(self) -> tuple[float, float]:
+        """Lower and upper bounds [lo, hi]."""
         return (self._lo, self._hi)
 
     def sample(self, key: jax.Array) -> jnp.ndarray:
@@ -148,18 +231,51 @@ class Uniform(Distribution):
 
 
 class Gaussian(Distribution):
-    """Gaussian prior, optionally clipped to [lo, hi].
+    """Gaussian (normal) prior, optionally clipped to [lo, hi].
+
+    A bell-curve probability density centered at μ with standard deviation σ.
+    Useful when prior information suggests a most-probable value with uncertainty.
+    Optional bounds allow truncation to physical ranges.
 
     Parameters
     ----------
     mu : float
-        Mean.
+        Mean of the Gaussian distribution.
     sigma : float
-        Standard deviation (must be > 0).
-    lo : float
-        Lower bound (default: -inf).
-    hi : float
-        Upper bound (default: +inf).
+        Standard deviation. Must be positive.
+    lo : float, optional
+        Lower truncation bound. Default: -∞ (no lower truncation).
+    hi : float, optional
+        Upper truncation bound. Default: +∞ (no upper truncation).
+
+    Raises
+    ------
+    ValueError
+        If sigma <= 0 or lo >= hi.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    **Standardization**: Maps ξ ~ N(0,1) to θ via:
+
+    .. math::
+
+        \\theta = \\text{clip}(\\mu + \\sigma \\cdot \\xi, lo, hi)
+
+    **Normalization**: When lo, hi are finite, the density is normalized over [lo, hi],
+    not over the full real line. Use this for physically bounded quantities.
+
+    Examples
+    --------
+    >>> import jax.random
+    >>> from tengri import Gaussian
+    >>> prior = Gaussian(mu=-0.3, sigma=0.2)  # metallicity
+    >>> key = jax.random.PRNGKey(0)
+    >>> sample = prior.sample(key)
+    >>> print(f"Sample: {sample:.3f}")  # Typically near -0.3
+    >>> log_prob = prior.log_prob(-0.3)
+    >>> print(f"log p(μ): {log_prob:.4f}")  # Maximum at mean
     """
 
     def __init__(
@@ -176,29 +292,36 @@ class Gaussian(Distribution):
 
     @property
     def mu(self) -> float:
+        """Mean of the Gaussian distribution."""
         return self._mu
 
     @property
     def sigma(self) -> float:
+        """Standard deviation of the Gaussian distribution."""
         return self._sigma
 
     @property
     def lo(self) -> float:
+        """Lower truncation bound."""
         return self._lo
 
     @property
     def hi(self) -> float:
+        """Upper truncation bound."""
         return self._hi
 
     @property
     def bounds(self) -> tuple[float, float]:
+        """Lower and upper truncation bounds [lo, hi]."""
         return (self._lo, self._hi)
 
     def sample(self, key: jax.Array) -> jnp.ndarray:
+        """Draw a random sample from the Gaussian distribution."""
         raw = self._mu + self._sigma * jax.random.normal(key)
         return jnp.clip(raw, self._lo, self._hi)
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Evaluate log probability density, returning -inf outside bounds."""
         lp = -0.5 * ((x - self._mu) / self._sigma) ** 2
         in_bounds = (x >= self._lo) & (x <= self._hi)
         return jnp.where(in_bounds, lp, -jnp.inf)
@@ -232,15 +355,51 @@ class Gaussian(Distribution):
 class LogUniform(Distribution):
     """Uniform in log10 space on [lo, hi].
 
-    Samples are drawn uniformly in log10(x), so the density in linear
-    space is p(x) = 1 / (x * ln(hi/lo)).
+    A prior that places equal probability in logarithmic intervals, resulting
+    in power-law density in linear space. Useful for quantities with logarithmic
+    uncertainties, such as star formation rates, timescales, and luminosities.
 
     Parameters
     ----------
     lo : float
-        Lower bound (must be > 0).
+        Lower bound. Must be strictly positive.
     hi : float
-        Upper bound (must be > lo).
+        Upper bound. Must be greater than lo.
+
+    Raises
+    ------
+    ValueError
+        If lo <= 0 or lo >= hi.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The probability density in linear space is:
+
+    .. math::
+
+        p(x) = \\frac{1}{x \\cdot \\ln(10) \\cdot \\log_{10}(hi / lo)}
+
+    where x ∈ [lo, hi]. Samples drawn from this distribution are equally
+    spaced in log10 space: log10(x) ~ U(log10(lo), log10(hi)).
+
+    **Standardization**: Maps ξ ~ N(0,1) to θ via sigmoid in log space:
+
+    .. math::
+
+        \\theta = 10^{\\log_{10}(lo) + (\\log_{10}(hi) - \\log_{10}(lo)) \\cdot \\sigma(\\xi)}
+
+    Examples
+    --------
+    >>> import jax.random
+    >>> from tengri import LogUniform
+    >>> prior = LogUniform(1e-2, 1e2)  # ~4 orders of magnitude
+    >>> key = jax.random.PRNGKey(0)
+    >>> sample = prior.sample(key)
+    >>> print(f"Sample: {sample:.3e}")
+    >>> log_prob = prior.log_prob(1.0)  # Center of log space
+    >>> print(f"log p(1.0): {log_prob:.4f}")
     """
 
     def __init__(self, lo: float, hi: float):
@@ -253,14 +412,17 @@ class LogUniform(Distribution):
 
     @property
     def lo(self) -> float:
+        """Lower bound of the log-uniform distribution."""
         return self._lo
 
     @property
     def hi(self) -> float:
+        """Upper bound of the log-uniform distribution."""
         return self._hi
 
     @property
     def bounds(self) -> tuple[float, float]:
+        """Lower and upper bounds [lo, hi]."""
         return (self._lo, self._hi)
 
     def sample(self, key: jax.Array) -> jnp.ndarray:
@@ -298,19 +460,58 @@ class LogUniform(Distribution):
 class LogNormal(Distribution):
     """Log-normal prior: log(θ) ~ N(μ, σ²).
 
-    Natural for positive-definite quantities with multiplicative
-    uncertainty, such as PSD amplitudes and timescales.
+    A prior suitable for positive-definite quantities with multiplicative
+    uncertainty, such as timescales, amplitudes, and scale factors. The log
+    of the parameter is normally distributed.
 
     Parameters
     ----------
-    mu : float
-        Mean of log(θ).
-    sigma : float
-        Standard deviation of log(θ).
-    lo : float
-        Lower bound (default: 0).
-    hi : float
-        Upper bound (default: inf).
+    mu : float, optional
+        Mean of log(θ). Default: 0.0.
+    sigma : float, optional
+        Standard deviation of log(θ). Must be positive. Default: 1.0.
+    lo : float, optional
+        Lower truncation bound. Default: 0.0 (ensures θ > 0).
+    hi : float, optional
+        Upper truncation bound. Default: +∞ (no upper truncation).
+
+    Raises
+    ------
+    ValueError
+        If sigma <= 0.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The probability density in linear space is:
+
+    .. math::
+
+        p(\\theta) = \\frac{1}{\\theta \\sigma \\sqrt{2\\pi}} \\exp\\left(
+          -\\frac{(\\ln \\theta - \\mu)^2}{2\\sigma^2}
+        \\right)
+
+    for θ ∈ [lo, hi]. When truncated, the density is renormalized over the
+    interval.
+
+    **Standardization**: Maps ξ ~ N(0,1) to θ via:
+
+    .. math::
+
+        \\theta = \\text{clip}(\\exp(\\mu + \\sigma \\cdot \\xi), lo, hi)
+
+    Examples
+    --------
+    >>> import jax.random
+    >>> from tengri import LogNormal
+    >>> # PSD timescale: log(tau_yr) centered at 8, width 0.5 dex
+    >>> prior = LogNormal(mu=8, sigma=0.5)
+    >>> key = jax.random.PRNGKey(0)
+    >>> sample = prior.sample(key)
+    >>> print(f"Sample (yr): {sample:.3e}")
+    >>> log_prob = prior.log_prob(1e8)
+    >>> print(f"log p(1e8): {log_prob:.4f}")
     """
 
     def __init__(
@@ -325,21 +526,26 @@ class LogNormal(Distribution):
 
     @property
     def mu(self) -> float:
+        """Mean of log(theta)."""
         return self._mu
 
     @property
     def sigma(self) -> float:
+        """Standard deviation of log(theta)."""
         return self._sigma
 
     @property
     def bounds(self) -> tuple[float, float]:
+        """Lower and upper truncation bounds [lo, hi]."""
         return (self._lo, self._hi)
 
     def sample(self, key: jax.Array) -> jnp.ndarray:
+        """Draw a random sample from the log-normal distribution."""
         log_val = self._mu + self._sigma * jax.random.normal(key)
         return jnp.clip(jnp.exp(log_val), self._lo, self._hi)
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Evaluate log probability density, returning -inf outside bounds."""
         lp = -jnp.log(x) - 0.5 * ((jnp.log(x) - self._mu) / self._sigma) ** 2
         in_bounds = (x >= self._lo) & (x <= self._hi)
         return jnp.where(in_bounds, lp, -jnp.inf)
@@ -367,21 +573,54 @@ class LogNormal(Distribution):
 
 
 class StudentT(Distribution):
-    """Student's t prior — heavier tails than Gaussian.
+    """Student's t prior with heavier tails than Gaussian.
 
-    Useful for parameters that may have outlier-like behavior.
-    Common in BAGPIPES-style SED fitting for robust priors.
+    A robust prior with longer tails, useful for parameters that may exhibit
+    outlier-like behavior. Commonly used in BAGPIPES-style SED fitting for
+    down-weighting extreme values while remaining flexible.
 
     Parameters
     ----------
-    mu : float
-        Location.
-    sigma : float
-        Scale.
-    df : float
-        Degrees of freedom (df→∞ gives Gaussian, df=1 gives Cauchy).
-    lo, hi : float
-        Bounds.
+    mu : float, optional
+        Location (center) of the distribution. Default: 0.0.
+    sigma : float, optional
+        Scale parameter. Must be positive. Default: 1.0.
+    df : float, optional
+        Degrees of freedom. Controls tail weight:
+        - df → ∞ gives Gaussian (heaviest concentration at center)
+        - df = 3 gives a moderately heavy-tailed prior
+        - df = 1 gives Cauchy (extremely heavy tails)
+        Default: 3.0.
+    lo : float, optional
+        Lower truncation bound. Default: -∞ (no lower truncation).
+    hi : float, optional
+        Upper truncation bound. Default: +∞ (no upper truncation).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The probability density follows a Student's t distribution with the
+    standard normalisation. For finite df, it has heavier tails than a
+    Gaussian.
+
+    **Standardization**: Uses a Gaussian approximation with variance scaling:
+
+    .. math::
+
+        \\theta = \\text{clip}(\\mu + \\sigma \\cdot \\sqrt{df/(df-2)} \\cdot \\xi,
+          lo, hi)
+
+    This is valid for df > 2. For df ≤ 2, a fallback scale of 3 is used.
+
+    Examples
+    --------
+    >>> import jax.random
+    >>> from tengri import StudentT
+    >>> prior = StudentT(mu=0, sigma=1, df=3)  # Robust prior
+    >>> key = jax.random.PRNGKey(0)
+    >>> sample = prior.sample(key)
+    >>> print(f"Sample: {sample:.4f}")
     """
 
     def __init__(
@@ -400,9 +639,11 @@ class StudentT(Distribution):
 
     @property
     def bounds(self) -> tuple[float, float]:
+        """Lower and upper truncation bounds [lo, hi]."""
         return (self._lo, self._hi)
 
     def sample(self, key: jax.Array) -> jnp.ndarray:
+        """Draw a random sample from the Student's t distribution."""
         # t = normal / sqrt(chi2/df)
         k1, k2 = jax.random.split(key)
         z = jax.random.normal(k1)
@@ -411,6 +652,7 @@ class StudentT(Distribution):
         return jnp.clip(self._mu + self._sigma * t, self._lo, self._hi)
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Evaluate log probability density, returning -inf outside bounds."""
         z = (x - self._mu) / self._sigma
         lp = -0.5 * (self._df + 1) * jnp.log(1 + z**2 / self._df)
         in_bounds = (x >= self._lo) & (x <= self._hi)
@@ -437,13 +679,38 @@ class StudentT(Distribution):
 
 
 class Fixed(Distribution):
-    """Fixed value — not sampled, not inferred.
+    """Fixed (non-free) parameter with a constant value.
+
+    Represents a parameter that is not sampled or inferred. Used for holding
+    model settings constant during fitting, or for categorical parameters
+    that don't vary. Fixed parameters contribute zero to the likelihood.
 
     Parameters
     ----------
-    value : float | str
-        The fixed value. Strings are allowed for categorical parameters
-        (e.g. ``Fixed("solar")`` for shock abundance).
+    value : float, int, or str
+        The fixed value. Can be numeric (for quantitative parameters) or
+        string (for categorical choices, e.g. "solar" for shock abundance).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — ``unstandardize()`` returns the constant value
+    regardless of the latent variable ξ.
+
+    **Inference**: Fixed parameters are excluded from the inference set.
+    They do not appear in the posterior and do not contribute to the loss
+    or gradients.
+
+    Examples
+    --------
+    >>> from tengri import Fixed
+    >>> # Numerical fixed value
+    >>> redshift = Fixed(0.1)
+    >>> print(redshift.sample(None))
+    0.1
+    >>> # Categorical fixed value
+    >>> shock_abundance = Fixed("solar")
+    >>> print(shock_abundance.sample(None))
+    solar
     """
 
     def __init__(self, value: float | str):
@@ -451,24 +718,29 @@ class Fixed(Distribution):
 
     @property
     def value(self) -> float | str:
+        """The fixed value (numeric or string)."""
         return self._value
 
     @property
     def is_fixed(self) -> bool:
+        """Return True — this is a fixed (non-free) parameter."""
         return True
 
     @property
     def bounds(self) -> tuple[float, float] | tuple[None, None]:
+        """Return (value, value) for numeric, or (None, None) for string."""
         if isinstance(self._value, str):
             return (None, None)
         return (self._value, self._value)
 
     def sample(self, key: jax.Array) -> jnp.ndarray | str:
+        """Return the fixed value (ignores random key)."""
         if isinstance(self._value, str):
             return self._value
         return jnp.array(self._value)
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Return 0.0 (fixed parameters have zero log-likelihood contribution)."""
         return jnp.array(0.0)
 
     def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray | str:
@@ -496,19 +768,48 @@ class Fixed(Distribution):
 def resolve_shorthand(val) -> Distribution:
     """Convert shorthand notation to a Distribution object.
 
-    - Scalar (int/float) → Fixed(value)
-    - Tuple (lo, hi) → Uniform(lo, hi)
-    - Distribution instance → returned as-is
+    Provides convenient shorthand for common prior specifications, allowing
+    Parameters to accept scalar, tuple, or explicit Distribution objects.
 
     Parameters
     ----------
-    val : float, tuple, or Distribution
-        Parameter specification.
+    val : float, int, tuple, or Distribution
+        Parameter specification:
+        - Scalar int/float → Fixed(value)
+        - Tuple (lo, hi) → Uniform(lo, hi)
+        - Distribution instance → returned unchanged
 
     Returns
     -------
     Distribution
         Resolved distribution object.
+
+    Raises
+    ------
+    TypeError
+        If val is not a supported type.
+
+    Notes
+    -----
+    This function enables the concise Parameters syntax, e.g.::
+
+        Parameters(
+            redshift=0.1,  # → Fixed(0.1)
+            met_logzsol=(-2, 0.5),  # → Uniform(-2, 0.5)
+            dust_tau_bc=Uniform(0, 4),  # → Uniform(0, 4)
+            neb_logU=Gaussian(-3, 0.5),  # → Gaussian(-3, 0.5)
+        )
+
+    Examples
+    --------
+    >>> from tengri.parameters.priors import resolve_shorthand
+    >>> resolve_shorthand(0.1)
+    Fixed(0.1)
+    >>> resolve_shorthand((0, 1))
+    Uniform(0, 1)
+    >>> from tengri import Uniform
+    >>> resolve_shorthand(Uniform(0, 1))
+    Uniform(0, 1)
     """
     if isinstance(val, Distribution):
         return val
