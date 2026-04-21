@@ -41,28 +41,39 @@ def nebular_emission(
     neb_fesc: float = 0.0,
     neb_fesc_lya: float = 0.0,
 ) -> jnp.ndarray:
-    """Compute nebular emission SED (lines + continuum) with wNE fallback.
+    """Synthesize nebular emission (lines + continuum) with automatic Q_H mode selection.
 
     Parameters
     ----------
-    backend
-        Nebular backend instance (CueBackend, CloudyGridBackend, etc.).
-    weights : array (n_age,)
-        CSP mass weights.
-    ssp_wave : array (n_wave,)
-        SSP wavelength grid in Å.
-    ssp_log_ages_yr : array (n_age,)
-        log10(age/yr) of SSP age bins.
+    backend : nebular backend instance
+        Nebular emission backend (CueBackend, CloudyGridBackend, etc.).
+    weights : ndarray, shape (n_age,)
+        CSP mass weights [Msun].
+    ssp_wave : ndarray, shape (n_wave,)
+        SSP wavelength grid [Angstrom].
+    ssp_log_ages_yr : ndarray, shape (n_age,)
+        SSP age bin centers log10(age/yr) [dimensionless].
     log_z_abs : float
-        Stellar metallicity log10(Z) (absolute).
+        Stellar metallicity log10(Z) absolute [dimensionless].
     sfr_current : float
-        Current SFR in Msun/yr (for SFR-based Q_H).
+        Current star formation rate [Msun/yr].
+    neb_logU : float, optional
+        Ionization parameter log10(U). Default -3.0.
+    neb_logZ_gas : float, optional
+        Gas-phase metallicity log10(Z/Zsun). If None, inferred from stellar.
+    neb_fesc : float, optional
+        Escape fraction of LyC photons (0-1). Default 0.0.
+    neb_fesc_lya : float, optional
+        Lyman-alpha escape fraction (0-1). Default 0.0.
 
     Returns
     -------
-    array (n_wave,)
-        Nebular SED in erg/s/Hz on the SSP wavelength grid.
-        **Before** dust attenuation — caller applies via :func:`attenuate_emission`.
+    ndarray, shape (n_wave,)
+        Nebular SED [erg/s/Hz] before dust attenuation.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.lax.cond`` for Q_H mode branching.
     """
     # SFR-based Q_H
     qh_from_sfr = _QH_PER_SFR * sfr_current
@@ -82,7 +93,7 @@ def nebular_emission(
         ssp_qh_ok = ssp_logqion > gas_logqion_sfr - 2.0  # within 1%
 
         def _ssp_path(_):
-            """Compute nebular SED using SSP-derived ionizing photon spectrum."""
+            """Use SSP-derived ionizing photon spectrum."""
             return backend.predict_nebular_sed(
                 ssp_weights=weights,
                 ssp_wave=ssp_wave,
@@ -96,7 +107,7 @@ def nebular_emission(
             )
 
         def _fallback_path(_):
-            """Compute nebular SED using SFR-derived ionizing photon spectrum."""
+            """Use SFR-derived ionizing photon spectrum."""
             return backend.predict_nebular_sed(
                 ssp_wave=ssp_wave,
                 log_z=log_z_abs,
@@ -141,34 +152,42 @@ def attenuate_emission(
     dust_slope: float = -0.7,
     dust_bump_strength: float = 0.0,
 ) -> tuple[jnp.ndarray, float]:
-    """Apply dust attenuation and return absorbed luminosity.
+    """Apply dust attenuation to emission and integrate absorbed luminosity.
 
     Parameters
     ----------
-    sed : array (n_wave,)
-        Input SED in erg/s/Hz (before dust).
-    wave : array (n_wave,)
-        Wavelength grid in Å.
+    sed : ndarray, shape (n_wave,)
+        Input SED [erg/s/Hz] (before dust).
+    wave : ndarray, shape (n_wave,)
+        Wavelength grid [Angstrom].
     mode : str
-        ``"bc"`` — birth-cloud + diffuse (Charlot & Fall 2000 default).
-        ``"diff"`` — diffuse ISM only.
-        ``"neb"`` — separate BC law (*neb_bc_fn*) + same diffuse law.
-        ``"none"`` — no dust (returns input unchanged, L_absorbed=0).
-    tau_bc, tau_diff : float
-        Birth-cloud and diffuse V-band optical depths.
-    law_bc_fn, law_diff_fn : callable
-        Dust law functions ``(wave, n_slope=..., dust_bump_strength=...) -> k(λ)``.
-    neb_bc_fn : callable or None
-        Separate BC law for ``mode="neb"``.  Falls back to *law_bc_fn*.
-    dust_slope, dust_bump_strength : float
-        Dust law shape parameters.
+        Attenuation mode: ``"bc"`` (birth-cloud + diffuse), ``"diff"`` (diffuse only),
+        ``"neb"`` (separate BC law + diffuse), or ``"none"`` (no attenuation).
+    tau_bc : float
+        Birth-cloud V-band optical depth [dimensionless].
+    tau_diff : float
+        Diffuse V-band optical depth [dimensionless].
+    law_bc_fn : callable
+        Birth-cloud dust law ``(wave, n_slope, dust_bump_strength) -> k(λ)`` [1/mag].
+    law_diff_fn : callable
+        Diffuse dust law ``(wave, n_slope, dust_bump_strength) -> k(λ)`` [1/mag].
+    neb_bc_fn : callable, optional
+        Separate BC law for ``mode="neb"``. Falls back to ``law_bc_fn`` if None.
+    dust_slope : float, optional
+        Dust law slope parameter. Default -0.7.
+    dust_bump_strength : float, optional
+        Dust law bump strength parameter. Default 0.0.
 
     Returns
     -------
-    sed_attenuated : array (n_wave,)
-        Attenuated SED in erg/s/Hz.
+    sed_attenuated : ndarray, shape (n_wave,)
+        Attenuated SED [erg/s/Hz].
     L_absorbed : float
-        Total absorbed luminosity in erg/s (for energy balance).
+        Integrated absorbed luminosity [erg/s].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     if mode == "none":
         return sed, jnp.float64(0.0)
@@ -214,25 +233,37 @@ def shock_emission(
     shock_abundance: str = "solar",
     shock_component: str = "combined",
 ) -> jnp.ndarray:
-    """Compute shock emission SED (MAPPINGS V).
+    """Synthesize shock emission SED (MAPPINGS V).
 
-    Returns the **raw** shock SED before dust attenuation.
-    Caller applies diffuse dust via :func:`attenuate_emission`
-    with ``mode="diff"``.
+    Returns raw shock SED before dust attenuation.
 
     Parameters
     ----------
-    wave : array (n_wave,)
-        Wavelength grid in Å.
-    sed_so_far : array (n_wave,)
-        Current cumulative SED (erg/s/Hz) for L_bol estimation.
+    wave : ndarray, shape (n_wave,)
+        Wavelength grid [Angstrom].
+    sed_so_far : ndarray, shape (n_wave,)
+        Current cumulative SED [erg/s/Hz] for bolometric luminosity estimation.
     shock_frac : float
-        Fraction of L_Halpha channelled into shock emission.
+        Fraction of Halpha luminosity channeled into shocks [dimensionless].
+    shock_velocity : float, optional
+        Shock velocity [km/s]. Default 300.0.
+    shock_log_density : float, optional
+        Log10 of electron density [cm^-3]. Default 0.0.
+    shock_b_over_sqrt_n : float, optional
+        Magnetic parameter B/sqrt(n). Default 1.0.
+    shock_abundance : str, optional
+        Abundance set ("solar", etc.). Default "solar".
+    shock_component : str, optional
+        Component to return ("combined", etc.). Default "combined".
 
     Returns
     -------
-    array (n_wave,)
-        Shock emission SED in erg/s/Hz (before dust).
+    ndarray, shape (n_wave,)
+        Shock emission SED [erg/s/Hz] before dust attenuation.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     from tengri.components.nebular.shock import compute_shock_sed
 
@@ -263,32 +294,40 @@ def agn_emission(
     agn_log_lbol: float,
     agn_frac: float,
     *,
-    # Polar dust
     agn_polar_ebv: float = 0.0,
     agn_cos_inc: float = 0.5,
     agn_polar_oa: float = 45.0,
-    # All other AGN params forwarded via kwargs
     **agn_params,
 ) -> jnp.ndarray:
-    """Compute AGN emission including polar dust reddening.
+    """Synthesize AGN emission with optional polar dust reddening.
 
     Parameters
     ----------
     agn_fn : callable
         Resolved AGN model function (e.g., ``kubota_done_full_agn``).
-    wave : array (n_wave,)
-        Wavelength grid in Å.
+    wave : ndarray, shape (n_wave,)
+        Wavelength grid [Angstrom].
     agn_log_lbol : float
-        log10(L_bol / Lsun).
+        log10(L_bol / Lsun) bolometric luminosity [dimensionless].
     agn_frac : float
-        AGN fraction (1.0 for parametric mode).
-    agn_polar_ebv : float
-        Polar dust E(B-V).  0 → no polar dust.
+        AGN SED fraction (1.0 for parametric mode) [dimensionless].
+    agn_polar_ebv : float, optional
+        Polar dust reddening E(B-V) [mag]. Default 0.0 (no polar dust).
+    agn_cos_inc : float, optional
+        cos(inclination angle) for viewing geometry [dimensionless]. Default 0.5.
+    agn_polar_oa : float, optional
+        Polar opening angle [degrees]. Default 45.0.
+    **agn_params
+        Additional AGN parameters forwarded to ``agn_fn``.
 
     Returns
     -------
-    array (n_wave,)
-        AGN SED in erg/s/Hz.
+    ndarray, shape (n_wave,)
+        AGN SED [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.lax.cond`` for polar dust branching.
     """
     agn_sed = agn_fn(
         wave,
@@ -303,7 +342,7 @@ def agn_emission(
     from tengri.components.agn.polar_dust import polar_dust_total
 
     def _apply_polar_dust(sed):
-        """Apply polar dust attenuation and re-emission to AGN SED."""
+        """Attenuate and re-emit through polar dust."""
         agn_lsun = sed / _LSUN
         att_lsun, reemit_lsun = polar_dust_total(
             agn_lsun,
@@ -335,21 +374,27 @@ def dust_ir_emission(
     L_ir: float,
     **dust_params,
 ) -> jnp.ndarray:
-    """Compute dust IR re-emission SED.
+    """Synthesize dust IR re-emission from absorbed luminosity.
 
     Parameters
     ----------
     emission_fn : callable
-        Resolved dust emission function (e.g., DL07 tabulated).
-    wave : array (n_wave,)
-        Wavelength grid in Å.
+        Resolved dust emission function (e.g., DL07 grid).
+    wave : ndarray, shape (n_wave,)
+        Wavelength grid [Angstrom].
     L_ir : float
-        Total absorbed luminosity in erg/s (energy balance input).
+        Total absorbed luminosity from dust attenuation [erg/s].
+    **dust_params
+        Dust emission parameters (T, beta_ir, alpha_mir, etc.).
 
     Returns
     -------
-    array (n_wave,)
-        Dust IR SED in erg/s/Hz.
+    ndarray, shape (n_wave,)
+        Dust IR SED [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     # Guard against NaN/Inf L_ir (can occur with pure SSPs)
     L_ir_safe = jnp.where(jnp.isfinite(L_ir), L_ir, 0.0)
@@ -389,12 +434,45 @@ def radio_emission(
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
 ) -> jnp.ndarray:
-    """Compute radio emission SED (SF synchrotron + AGN jets + free-free).
+    """Synthesize radio emission SED from SF synchrotron and AGN jets.
+
+    Parameters
+    ----------
+    wave : ndarray, shape (n_wave,)
+        Wavelength grid [Angstrom].
+    L_ir : float
+        Infrared luminosity [erg/s].
+    L_agn_bol : float
+        AGN bolometric luminosity [erg/s].
+    q_ir : float, optional
+        q-parameter for IR-radio correlation. Default 2.64.
+    alpha_sf : float, optional
+        Star formation synchrotron spectral index. Default 0.8.
+    radio_loudness : float, optional
+        AGN radio loudness offset. Default 0.0.
+    alpha_agn : float, optional
+        AGN radio spectral index. Default 0.7.
+    sfr_mode : str, optional
+        SFR→radio conversion model. Default "bell2003".
+    log_mstar : float, optional
+        log10(stellar mass / Msun). Default 10.0.
+    redshift : float, optional
+        Redshift for K-correction. Default 0.0.
+    include_freefree : bool, optional
+        Include free-free contribution. Default False.
+    T_e : float, optional
+        Electron temperature [K]. Default 1e4.
+    alpha_ff : float, optional
+        Free-free spectral index. Default -0.1.
 
     Returns
     -------
-    array (n_wave,)
-        Radio SED in erg/s/Hz.
+    ndarray, shape (n_wave,)
+        Radio SED [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     from tengri.components.radio import radio_total
 
@@ -432,12 +510,37 @@ def xray_emission(
     gamma_lmxb: float = 1.6,
     E_cut: float = 300.0,
 ) -> jnp.ndarray:
-    """Compute X-ray emission SED (XRBs + AGN corona).
+    """Synthesize X-ray emission SED from XRBs and AGN corona.
+
+    Parameters
+    ----------
+    wave : ndarray, shape (n_wave,)
+        Wavelength grid [Angstrom].
+    sfr : float
+        Star formation rate [Msun/yr].
+    stellar_mass : float
+        Stellar mass [Msun].
+    L_agn_bol : float
+        AGN bolometric luminosity [erg/s].
+    gamma_agn : float, optional
+        AGN photon index. Default 1.8.
+    alpha_ox : float, optional
+        UV-to-X-ray slope. Default -1.4.
+    gamma_hmxb : float, optional
+        HMXB photon index. Default 2.0.
+    gamma_lmxb : float, optional
+        LMXB photon index. Default 1.6.
+    E_cut : float, optional
+        X-ray cutoff energy [keV]. Default 300.0.
 
     Returns
     -------
-    array (n_wave,)
-        X-ray SED in erg/s/Hz.
+    ndarray, shape (n_wave,)
+        X-ray SED [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     from tengri.components.xray import xray_total
 
@@ -466,31 +569,34 @@ def igm_absorption(
     igm_bubble_mpc: float = 10.0,
     igm_patchy: bool = False,
 ) -> jnp.ndarray:
-    """Compute IGM transmission (Inoue+2014, optionally patchy).
+    """Compute IGM transmission with optional patchy reionization.
 
-    When ``igm_patchy=True`` and ``igm_x_HI > 0``, applies the
-    Miralda-Escudé (1998) / Mason+2018 damping wing model on top
-    of the mean Inoue+2014 transmission.
+    Computes transmission using Inoue+2014 mean, optionally modified
+    by Miralda-Escudé (1998) / Mason+2018 patchy reionization model.
 
     Parameters
     ----------
-    wave_obs : array (n_wave,)
-        Observed-frame wavelength in Å.
+    wave_obs : ndarray, shape (n_wave,)
+        Observed-frame wavelength [Angstrom].
     z : float
-        Redshift.
-    igm_x_HI : float
-        Volume-averaged neutral hydrogen fraction (0–1).
+        Redshift [dimensionless].
+    igm_x_HI : float, optional
+        Volume-averaged neutral hydrogen fraction (0-1). Default 0.0.
         Only used when ``igm_patchy=True``.
-    igm_bubble_mpc : float
-        Ionized bubble radius in proper Mpc.
+    igm_bubble_mpc : float, optional
+        Ionized bubble radius [proper Mpc]. Default 10.0.
         Only used when ``igm_patchy=True``.
-    igm_patchy : bool
-        If True, apply patchy reionization damping wing.
+    igm_patchy : bool, optional
+        Enable patchy reionization damping wing model. Default False.
 
     Returns
     -------
-    array (n_wave,)
-        Transmission fraction (0–1).
+    ndarray, shape (n_wave,)
+        Transmission fraction [dimensionless, 0-1].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     if igm_patchy and igm_x_HI > 0.0:
         from tengri.components.igm import igm_transmission_patchy

@@ -19,9 +19,10 @@ import jax.numpy as jnp
 
 
 def build_ssp_component(model):
-    """Build SSP flux + CSP weight computation.
+    """Build SSP flux and CSP weight computation closure.
 
-    Captures SSP grid, metallicity mode, and dust age weights.
+    Captures SSP grid, metallicity mode, and dust age weights, returning a
+    pure JAX function for metallicity interpolation and CSP integration.
 
     Parameters
     ----------
@@ -31,10 +32,16 @@ def build_ssp_component(model):
     Returns
     -------
     callable
-        ``(sfr_on_ssp, log_z_abs, alpha_fe) -> (ssp_flux_at_z, weights)``
+        A function with signature
+        ``(sfr_on_ssp, log_z_abs, alpha_fe) -> (ssp_flux_at_z, weights)``.
 
-        - ``ssp_flux_at_z``: shape (n_age, n_wave), Z-interpolated SSP.
-        - ``weights``: shape (n_age,), CSP mass weights (Msun).
+        - ``ssp_flux_at_z``: ndarray, shape (n_age, n_wave) — Z-interpolated
+          SSP [erg/s/Hz]
+        - ``weights``: ndarray, shape (n_age,) — CSP mass weights [Msun]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     from tengri.components.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
@@ -53,7 +60,7 @@ def build_ssp_component(model):
         _age_dt = model._csp_age_dt.astype(dt)  # precomputed bin widths
 
     def ssp_fn(sfr_on_ssp, log_z_abs, alpha_fe=0.0):
-        """Compute SSP flux and CSP mass weights via metallicity interpolation."""
+        """Interpolate SSP at fixed metallicity and integrate SFR profile."""
         sfr = sfr_on_ssp.astype(dt)
         lz = jnp.asarray(log_z_abs, dtype=dt)
         afe = jnp.asarray(alpha_fe, dtype=dt)
@@ -86,22 +93,32 @@ def build_ssp_component(model):
 
 
 def build_dust_atten_component(model):
-    """Build dust attenuation applied to age-resolved SSP fluxes.
+    """Build dust attenuation closure for age-resolved SSP fluxes.
 
-    Captures dust law functions and precomputed age weights.
+    Captures dust law functions and precomputed age weights, returning a
+    pure JAX function for Charlot & Fall two-component attenuation.
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The model instance.
 
     Returns
     -------
     callable
-        ``(ssp_flux_at_z, weights, tau_bc, tau_diff, dust_slope, ...) ->
-        (sed_attenuated, sed_intrinsic, L_absorbed)``
+        A function with signature
+        ``(ssp_flux_at_z, weights, tau_bc, tau_diff, ...) -> (sed_atten, sed_intr, L_abs)``.
 
-        All outputs in erg/s/Hz. ``L_absorbed`` is in erg/s (integrated).
+        - ``sed_attenuated``: ndarray, shape (n_wave,) — attenuated SED
+          [erg/s/Hz]
+        - ``sed_intrinsic``: ndarray, shape (n_wave,) — intrinsic (unattenuated)
+          SED [erg/s/Hz]
+        - ``L_absorbed``: ndarray, shape () — integrated absorbed luminosity
+          [erg/s]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
 
@@ -125,7 +142,7 @@ def build_dust_atten_component(model):
         dust_delta=0.0,
         dust_Rv=3.1,
     ):
-        """Apply dust attenuation to SSP fluxes and compute absorbed luminosity."""
+        """Apply two-component dust attenuation and compute absorbed energy."""
         w = weights.astype(dt)
         ssp_z = ssp_flux_at_z.astype(dt)
 
@@ -173,20 +190,25 @@ def build_dust_atten_component(model):
 
 
 def build_dust_emission_component(model):
-    """Build dust IR emission from absorbed luminosity.
+    """Build dust IR emission closure from absorbed luminosity.
 
-    Captures the emission model name and dispatches at trace time.
+    Captures the emission model type and returns a pure JAX function
+    for energy-balanced dust re-radiation.
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The model instance.
 
     Returns
     -------
     callable or None
-        ``(wave, L_ir, dust_params) -> dust_ir_sed`` in erg/s/Hz,
-        or None if dust emission is disabled.
+        A function with signature ``(L_ir, dust_T, dust_beta_ir, ...) -> dust_ir_sed``
+        in [erg/s/Hz], or None if dust emission is disabled.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     if model._dust_emission_model is None:
         return None
@@ -207,7 +229,7 @@ def build_dust_emission_component(model):
         dust_qpah=2.5,
         dust_eta_balance=1.0,
     ):
-        """Compute dust IR emission SED from absorbed luminosity."""
+        """Compute dust IR emission SED from absorbed luminosity scaling."""
         L_ir_scaled = jnp.maximum(L_ir * dust_eta_balance, 0.0)
         return emission_fn(
             wave,
@@ -228,18 +250,26 @@ def build_dust_emission_component(model):
 
 
 def build_agn_component(model):
-    """Build AGN SED contribution (parametric mode only).
+    """Build AGN SED contribution closure.
+
+    Captures AGN model type and luminosity mode, returning a pure JAX function
+    for AGN spectral energy distribution synthesis.
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The model instance.
 
     Returns
     -------
     callable or None
-        ``(agn_params) -> agn_sed`` in erg/s/Hz (Lsun/Hz units),
-        or None if AGN is disabled.
+        A function with signature ``(sed_so_far, agn_log_lbol, ...) ->
+        (agn_sed, bol_erg)`` returning AGN SED in [erg/s/Hz] and bolometric
+        luminosity in [erg/s], or None if AGN is disabled.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     if model._agn_model is None:
         return None
@@ -261,7 +291,7 @@ def build_agn_component(model):
         agn_log_mbh=7.0,
         agn_log_ledd=-1.0,
     ):
-        """Compute AGN SED contribution and bolometric luminosity."""
+        """Synthesize AGN spectrum and derive bolometric luminosity."""
         if is_parametric:
             frac_for_model = 1.0
             bol_erg = 10.0**agn_log_lbol * 3.828e33  # Lsun → erg/s
@@ -294,18 +324,25 @@ def build_agn_component(model):
 
 
 def build_nebular_component(model):
-    """Build nebular emission from backend.
+    """Build nebular emission closure from backend.
+
+    Captures nebular backend and returns a pure JAX function for
+    nebular line and continuum synthesis.
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The model instance.
 
     Returns
     -------
     callable or None
-        ``(weights, log_z, neb_params) -> neb_sed`` in erg/s/Hz,
-        or None if nebular backend has no free params.
+        A function with signature ``(weights, log_z, neb_logU, ...) -> neb_sed``
+        in [erg/s/Hz], or None if nebular backend has no free parameters.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     backend = model._nebular_backend
     if backend is None or not backend.has_free_params:
@@ -322,7 +359,7 @@ def build_nebular_component(model):
         neb_fesc=0.0,
         neb_fesc_lya=0.0,
     ):
-        """Compute nebular emission SED (lines and continuum)."""
+        """Synthesize nebular lines and continuum emission."""
         return backend.predict_nebular_sed(
             ssp_weights=weights,
             ssp_wave=ssp_wave,
@@ -341,18 +378,25 @@ def build_nebular_component(model):
 
 
 def build_radio_component(model):
-    """Build radio emission (synchrotron from SF + AGN jets).
+    """Build radio emission closure from synchrotron and free-free.
+
+    Captures radio model configuration and returns a pure JAX function
+    for radio SED synthesis.
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The model instance.
 
     Returns
     -------
     callable or None
-        ``(L_ir, L_agn_bol, radio_params) -> radio_sed`` in erg/s/Hz,
-        or None if radio is disabled.
+        A function with signature ``(L_ir, L_agn_bol, radio_q_ir, ...) -> radio_sed``
+        in [erg/s/Hz], or None if radio is disabled.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     if not model._uses_radio:
         return None
@@ -369,7 +413,7 @@ def build_radio_component(model):
         radio_loudness=0.0,
         radio_alpha_agn=0.7,
     ):
-        """Compute radio SED from synchrotron and free-free emission."""
+        """Synthesize radio SED from synchrotron and free-free sources."""
         return radio_total(
             wave,
             L_ir=L_ir,
@@ -387,18 +431,25 @@ def build_radio_component(model):
 
 
 def build_xray_component(model):
-    """Build X-ray emission (XRBs + AGN corona).
+    """Build X-ray emission closure from XRBs and AGN corona.
+
+    Captures X-ray model configuration and returns a pure JAX function
+    for X-ray SED synthesis.
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The model instance.
 
     Returns
     -------
     callable or None
-        ``(sfr, mstar, L_agn_bol, xray_params) -> xray_sed``
-        in erg/s/Hz, or None if X-ray is disabled.
+        A function with signature ``(sfr, stellar_mass, L_agn_bol, ...)
+        -> xray_sed`` in [erg/s/Hz], or None if X-ray is disabled.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     if not model._uses_xray:
         return None
@@ -414,7 +465,7 @@ def build_xray_component(model):
         xray_gamma_agn=1.8,
         xray_alpha_ox=-1.4,
     ):
-        """Compute X-ray SED from XRBs and AGN corona."""
+        """Synthesize X-ray SED from XRB and AGN emission."""
         return xray_total(
             wave,
             sfr=sfr,

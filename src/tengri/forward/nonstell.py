@@ -49,7 +49,7 @@ _NONSTELL_ORDER = ("nebular", "shock", "dust_ir", "agn", "radio", "xray")
 
 
 def collect_nonstell(model) -> list[NonStellarSlot]:
-    """Inspect *model* and return ordered :class:`NonStellarSlot` list.
+    """Inspect model and return ordered list of enabled non-stellar components.
 
     Parameters
     ----------
@@ -60,6 +60,10 @@ def collect_nonstell(model) -> list[NonStellarSlot]:
     -------
     list[NonStellarSlot]
         One entry per enabled non-stellar component, in canonical order.
+
+    Notes
+    -----
+    **JIT-compatible**: no — uses Python-level attribute introspection.
     """
     slots: list[NonStellarSlot] = []
 
@@ -99,36 +103,39 @@ def collect_nonstell(model) -> list[NonStellarSlot]:
 
 
 def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64):
-    """Build a JAX-traceable function that adds all non-stellar SED components.
+    """Build a JAX-traceable closure that adds all non-stellar SED components.
 
-    Call this **once** at model-build time (outside any JIT scope) to capture
-    all Python-level flags and component callables into a closure.  The returned
-    ``nonstell_fn`` can then be called inside ``@jax.jit`` traced code.
+    Called once at model-build time to capture Python-level flags and component
+    callables. The returned function can be called inside ``@jax.jit`` code.
 
     Parameters
     ----------
     model : SEDModel
         Fully initialized model instance.
     law_bc_fn : callable
-        Birth-cloud dust extinction law (JAX-traceable).
+        Birth-cloud dust extinction law [1/mag].
     law_diff_fn : callable
-        Diffuse ISM dust extinction law (JAX-traceable).
-    ssp_wave_f64 : array, shape (n_wave_ssp,)
-        SSP wavelength grid in Angstrom (float64).
-    rest_wave_f64 : array, shape (n_wave_rest,)
-        Panchromatic rest-frame wavelength grid in Angstrom (float64).
-        May equal ``ssp_wave_f64`` when radio/X-ray are disabled.
+        Diffuse ISM dust extinction law [1/mag].
+    ssp_wave_f64 : ndarray, shape (n_wave_ssp,)
+        SSP wavelength grid [Angstrom].
+    rest_wave_f64 : ndarray, shape (n_wave_rest,)
+        Panchromatic rest-frame wavelength grid [Angstrom].
+        May equal ``ssp_wave_f64`` when radio/X-ray disabled.
 
     Returns
     -------
     callable
-        ``nonstell_fn(weights, p, stellar_sed, stellar_sed_intr) -> sed``
+        Function with signature ``(weights, p, stellar_sed, stellar_sed_intr) -> sed``.
 
-        * ``weights``: CSP mass weights, shape (n_age,)
-        * ``p``: internal parameters dict
-        * ``stellar_sed``: dust-attenuated stellar SED, shape (n_wave_ssp,), erg/s/Hz
-        * ``stellar_sed_intr``: intrinsic stellar SED, shape (n_wave_ssp,), erg/s/Hz
-        * returns: full SED on ``rest_wave_f64``, erg/s/Hz
+        - ``weights``: ndarray, shape (n_age,) — CSP mass weights [Msun]
+        - ``p``: dict — internal parameters
+        - ``stellar_sed``: ndarray, shape (n_wave_ssp,) — attenuated stellar SED [erg/s/Hz]
+        - ``stellar_sed_intr``: ndarray, shape (n_wave_ssp,) — intrinsic stellar SED [erg/s/Hz]
+        - returns: ndarray, shape (n_wave_rest,) — full SED [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives after closure creation.
     """
     import jax.numpy as jnp
 
@@ -192,23 +199,23 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
         from tengri.forward.emission_helpers import xray_emission
 
     def nonstell_fn(weights, p, stellar_sed, stellar_sed_intr):
-        """Add all enabled non-stellar SED components.
+        """Synthesize full SED by adding all enabled non-stellar components.
 
         Parameters
         ----------
-        weights : array, shape (n_age,)
-            CSP mass weights in Msun.
+        weights : ndarray, shape (n_age,)
+            CSP mass weights [Msun].
         p : dict
-            Internal parameter dict (from ``get_internal_params``).
-        stellar_sed : array, shape (n_wave_ssp,)
-            Dust-attenuated stellar SED in erg/s/Hz.
-        stellar_sed_intr : array, shape (n_wave_ssp,)
-            Intrinsic (unattenuated) stellar SED in erg/s/Hz.
+            Internal parameter dictionary.
+        stellar_sed : ndarray, shape (n_wave_ssp,)
+            Dust-attenuated stellar SED [erg/s/Hz].
+        stellar_sed_intr : ndarray, shape (n_wave_ssp,)
+            Intrinsic (unattenuated) stellar SED [erg/s/Hz].
 
         Returns
         -------
-        array, shape (n_wave_rest,)
-            Full SED (stellar + all non-stellar) in erg/s/Hz.
+        ndarray, shape (n_wave_rest,)
+            Full SED (stellar + nebular + dust + AGN + radio + X-ray) [erg/s/Hz].
         """
         sed = stellar_sed
         L_abs_neb = jnp.float64(0.0)

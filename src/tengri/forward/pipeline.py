@@ -35,19 +35,23 @@ from tengri.components.sps.dsps_wrapper import (
 
 
 def interp_metallicity(model, log_z):
-    """Dispatch metallicity interpolation (single Z value).
+    """Dispatch metallicity interpolation on SSP grid (single Z value).
 
     Parameters
     ----------
-    model : Model
-        The tengri Model instance.
+    model : SEDModel
+        The model instance.
     log_z : float
-        Log10 absolute metallicity.
+        log10(Z) absolute metallicity [dimensionless].
 
     Returns
     -------
-    array, shape (n_age, n_wave)
-        SSP flux interpolated to target metallicity.
+    ndarray, shape (n_age, n_wave)
+        SSP flux interpolated to target metallicity [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses smooth or nearest-neighbor interpolation.
     """
     if model._met_interp == "smooth":
         return interpolate_metallicity_smooth(
@@ -60,19 +64,23 @@ def interp_metallicity(model, log_z):
 
 
 def interp_metallicity_evolving(model, log_z_per_age):
-    """Dispatch evolving metallicity interpolation (per-age Z).
+    """Dispatch per-age metallicity interpolation on SSP grid.
 
     Parameters
     ----------
-    model : Model
-        The tengri Model instance.
-    log_z_per_age : array, shape (n_age,)
-        Log10 absolute metallicity at each SSP age bin.
+    model : SEDModel
+        The model instance.
+    log_z_per_age : ndarray, shape (n_age,)
+        log10(Z) absolute metallicity at each SSP age bin [dimensionless].
 
     Returns
     -------
-    array, shape (n_age, n_wave)
-        SSP flux with age-dependent metallicity.
+    ndarray, shape (n_age, n_wave)
+        SSP flux with age-dependent metallicity [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses smooth or nearest-neighbor interpolation.
     """
     if model._met_interp == "smooth":
         return interpolate_metallicity_smooth_evolving(
@@ -89,22 +97,26 @@ def interp_metallicity_evolving(model, log_z_per_age):
 def interp_met_alpha_dispatch(model, log_z, alpha_fe):
     """Dispatch metallicity+alpha interpolation based on SSP grid dimensionality.
 
-    When 4D alpha-enhanced SSPs are loaded, uses proper bilinear (Z, [α/Fe])
-    interpolation. Otherwise falls back to effective_metallicity approximation
-    on the 3D grid.
+    Uses 4D bilinear interpolation if alpha-enhanced SSPs are available,
+    otherwise falls back to effective_metallicity approximation on 3D grid.
 
     Parameters
     ----------
-    model : Model
-        The tengri Model instance.
+    model : SEDModel
+        The model instance.
     log_z : float
-        Iron abundance [Fe/H] (or log10(Z/Zsun) for 3D grids).
+        Iron abundance [Fe/H] or log10(Z/Zsun) [dimensionless].
     alpha_fe : float
-        Alpha-element enhancement [α/Fe] in dex.
+        Alpha-element enhancement [α/Fe] [dex].
 
     Returns
     -------
-    array, shape (n_age, n_wave)
+    ndarray, shape (n_age, n_wave)
+        SSP flux with metallicity and alpha enhancement [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses bilinear or effective-Z interpolation.
     """
     if has_alpha_grid(model.ssp_data):
         return interpolate_met_alpha(
@@ -120,24 +132,28 @@ def interp_met_alpha_dispatch(model, log_z, alpha_fe):
 
 
 def interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe_per_age):
-    """Dispatch per-age metallicity+alpha interpolation.
+    """Dispatch per-age metallicity+alpha interpolation on SSP grid.
 
-    When 4D alpha-enhanced SSPs are loaded, uses per-age bilinear (Z, [α/Fe])
-    interpolation. Otherwise applies effective_metallicity per age bin and
-    interpolates on the 3D grid.
+    Uses per-age 4D bilinear if alpha-enhanced SSPs available,
+    otherwise effective-Z approximation on 3D grid.
 
     Parameters
     ----------
-    model : Model
-        The tengri Model instance.
-    log_z_per_age : array, shape (n_age,)
-        [Fe/H] at each SSP age bin.
-    alpha_fe_per_age : array or float
-        [α/Fe] at each SSP age bin (array for evolving, scalar for constant).
+    model : SEDModel
+        The model instance.
+    log_z_per_age : ndarray, shape (n_age,)
+        [Fe/H] at each SSP age bin [dimensionless].
+    alpha_fe_per_age : ndarray or float
+        [α/Fe] at each age (array or scalar) [dex].
 
     Returns
     -------
-    array, shape (n_age, n_wave)
+    ndarray, shape (n_age, n_wave)
+        SSP flux with per-age metallicity and alpha [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses bilinear or effective-Z interpolation.
     """
     if has_alpha_grid(model.ssp_data):
         # Broadcast scalar alpha_fe to per-age array
@@ -156,19 +172,23 @@ def interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe_per_age):
 
 
 def get_dust_kwargs(model, p):
-    """Extract dust law + emission kwargs from internal params dict.
+    """Extract dust law and emission keyword arguments from internal params.
 
     Parameters
     ----------
-    model : Model
-        The tengri Model instance.
+    model : SEDModel
+        The model instance.
     p : dict
-        Internal parameter dict from ``_get_internal_params()``.
+        Internal parameter dictionary from ``_get_internal_params()``.
 
     Returns
     -------
     dict
-        Keyword arguments for fused dust kernels.
+        Keyword arguments for fused dust kernels (law parameters, T, etc.).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — returns a dict of JAX-compatible values.
     """
     kw = {
         "f_obscuration": p.get("f_obscuration", 0.0),
@@ -186,9 +206,27 @@ def get_dust_kwargs(model, p):
 
 
 def _compute_dust_atten(model, wave_dt, p):
-    """Compute dust attenuation array, dispatching on dust model type.
+    """Compute dust attenuation curve dispatched on model type.
 
-    Returns shape ``(n_ages, n_wave)`` for both single- and two-component.
+    Returns shape (n_ages, n_wave) for both single and two-component dust.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Model instance with dust configuration.
+    wave_dt : ndarray, shape (n_wave,)
+        Wavelength grid [Angstrom].
+    p : dict
+        Internal parameter dictionary.
+
+    Returns
+    -------
+    ndarray, shape (n_age, n_wave)
+        Dust transmission factor (fraction transmitted) [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     law_kw = {
         "f_obscuration": p.get("f_obscuration", 0.0),
@@ -225,19 +263,23 @@ def _compute_dust_atten(model, wave_dt, p):
 
 
 def get_agn_kwargs(model, p):
-    """Extract AGN kwargs from internal params dict for fused kernel.
+    """Extract AGN keyword arguments from internal params for fused kernel.
 
     Parameters
     ----------
-    model : Model
-        The tengri Model instance.
+    model : SEDModel
+        The model instance.
     p : dict
-        Internal parameter dict from ``_get_internal_params()``.
+        Internal parameter dictionary from ``_get_internal_params()``.
 
     Returns
     -------
     dict
-        Keyword arguments for fused AGN kernel (empty if AGN disabled).
+        Keyword arguments for fused AGN kernel (empty dict if AGN disabled).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — returns a dict of JAX-compatible values.
     """
     if not (model._agn_model is not None and model._agn_luminosity_mode):
         return {}
@@ -255,40 +297,44 @@ def get_agn_kwargs(model, p):
 def compute_sed_components(
     model, params, _sfr=None, _weights=None, need_intrinsic=False, rest_wavelength=None
 ):
-    """Compute all SED intermediates.
+    """Compute full SED and all intermediates (shared engine for forward model).
 
-    This is the shared computation engine behind ``predict_sed()``,
-    ``predict_sed_quantities()``, and the lazy ``Prediction`` object.
-    By returning all intermediates, downstream code can compute derived
-    quantities without re-running the forward model.
+    Orchestrates stellar population synthesis, dust attenuation, and non-stellar
+    components (nebular, AGN, radio, X-ray). Returns all intermediates to enable
+    derived-quantity calculations without re-running forward model.
 
     Parameters
     ----------
-    model : Model
-        The tengri Model instance.
+    model : SEDModel
+        Model instance.
     params : dict
         Parameter values (public names).
-    _sfr : array, optional
-        Pre-computed SFR on the log-age grid (avoids recomputation
-        when called from ``predict_derived``.
-    _weights : array, optional
-        Pre-computed CSP weights.
-    need_intrinsic : bool
-        If True, always compute the unattenuated stellar SED even
-        when no dust emission model is enabled. Required for
-        ``l_dust_absorbed`` and intrinsic FUV/NUV.
+    _sfr : ndarray, optional
+        Pre-computed SFR on log-age grid [Msun/yr].
+    _weights : ndarray, optional
+        Pre-computed CSP mass weights [Msun].
+    need_intrinsic : bool, optional
+        If True, compute intrinsic (unattenuated) SED. Default False.
+    rest_wavelength : ndarray, optional
+        Custom rest wavelength grid [Angstrom]. If None, use model grid.
 
     Returns
     -------
-    dict with keys:
-        ``"sed_total"`` : array (n_wave,) -- final rest-frame SED
-        ``"sed_attenuated"`` : array (n_wave,) -- dust-attenuated stellar SED
-        ``"sed_intrinsic"`` : array (n_wave,) or None -- unattenuated stellar SED
-        ``"ssp_flux_at_z"`` : array (n_age, n_wave) -- Z-interpolated SSP
-        ``"weights"`` : array (n_age,) -- CSP mass weights
-        ``"sfr"`` : array (n_grid,) -- SFR on log-age grid
-        ``"p"`` : dict -- internal parameter dict
-        ``"agn_bol_erg"`` : float -- AGN bolometric luminosity (erg/s)
+    dict
+        Complete SED computation with keys:
+
+        - ``sed_total``: ndarray, shape (n_wave,) — final rest-frame SED [erg/s/Hz]
+        - ``sed_attenuated``: ndarray, shape (n_wave,) — stellar after dust [erg/s/Hz]
+        - ``sed_intrinsic``: ndarray, shape (n_wave,) — stellar unattenuated [erg/s/Hz]
+        - ``ssp_flux_at_z``: ndarray, shape (n_age, n_wave) — Z-interpolated SSP [erg/s/Hz]
+        - ``weights``: ndarray, shape (n_age,) — CSP mass weights [Msun]
+        - ``sfr``: ndarray, shape (n_grid,) — SFR on log-age grid [Msun/yr]
+        - ``p``: dict — internal parameters
+        - ``agn_bol_erg``: float — AGN bolometric luminosity [erg/s]
+
+    Notes
+    -----
+    **JIT-compatible**: no — uses Python-level dispatch and model introspection.
     """
     p = model._get_internal_params(params)
 
