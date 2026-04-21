@@ -290,6 +290,7 @@ def compute_mass_remaining_fraction(
     remnant_m = _remnant_mass(m_grid)
 
     def _surviving_at_age(t_gyr):
+        """Integrate surviving mass (living stars + remnants) at a given age."""
         m_to = _turnoff_mass(t_gyr)
 
         # Living stars: m < m_turnoff, contribute their full mass

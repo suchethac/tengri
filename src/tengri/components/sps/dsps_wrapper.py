@@ -1,13 +1,17 @@
-"""DSPS (Differentiable Stellar Population Synthesis) integration.
+"""DSPS integration: differentiable CSP synthesis and SSP template management.
 
-Wraps the DSPS CSP integral and SSP template loading. DSPS provides
-the differentiable mapping from SFH weights → composite stellar
-population spectrum, which is the core of the forward model.
+This module wraps the Differentiable Stellar Population Synthesis (DSPS) library
+(Hearin et al. 2023), which provides the core forward model operation: integrating
+a star formation history (SFH) with SSP templates to produce a composite stellar
+population (CSP) spectrum. All operations are JAX-native and fully differentiable
+via automatic differentiation.
 
-References
-----------
-- Hearin et al. 2023 (arXiv:2112.08423): DSPS
-- SSP templates: https://halos.as.arizona.edu/suchethacooray/ssp-spectra/
+The CSP integral is:
+
+    L_CSP(λ) = ∫ SFR(t) × L_SSP(λ|age,Z) dt
+
+See 3-forward-model.tex, Eq. 3.1–3.5 for the mathematical formulation and
+Appendix A.1 for metallicity marginalization and precomputation schemes.
 """
 
 from typing import NamedTuple
@@ -17,24 +21,49 @@ import jax.numpy as jnp
 
 
 class SSPData(NamedTuple):
-    """Container for SSP template data.
+    """Immutable container for SSP template library.
+
+    Holds wavelength grid, flux templates, and metadata (age/metallicity grids)
+    needed by the CSP integration engine. Typically loaded once from disk and
+    reused across many forward-model evaluations.
 
     Attributes
     ----------
     ssp_wave : array, shape (n_wave,)
-        Rest-frame wavelength grid (Angstrom).
+        Rest-frame wavelength grid. [Å]
     ssp_flux : array, shape (n_met, n_age, n_wave)
-        SSP luminosity per unit mass (Lsun/Hz/Msun or similar).
+        Spectral luminosity density of simple stellar populations (SSPs)
+        per unit stellar mass. [erg/s/Hz/Msun]
+        Origin: BC03, BPASS, FSPS, ProGeny, or other DSPS-compatible library.
     ssp_lg_age_gyr : array, shape (n_age,)
-        Log10(age/Gyr) of SSP templates.
+        Age grid in log10 space. [log10(Gyr)]
     ssp_lgmet : array, shape (n_met,)
-        log10(Z) metallicity grid (absolute log10 metallicity, NOT log10(Z/Zsun)).
-        Offset from solar: log10(Zsun) ≈ -1.848. See CLAUDE.md conventions.
+        Metallicity grid (absolute, NOT solar-relative). [log10(Z)]
+        Offset: log10(Z_sun) ≈ −1.848 (Asplund+2009).
+        Do NOT confuse with user-facing log10(Z/Z_sun).
     ssp_mass_remaining : array, shape (n_met, n_age), optional
-        Fraction of formed mass still in living stars + remnants
-        at each age and metallicity. Computed from stellar evolution
-        tracks; depends on IMF and isochrone library. None if not
-        available (surviving mass cannot be computed).
+        Fraction of initial stellar mass still present (living stars + remnants)
+        at each (age, metallicity). [dimensionless, ∈ [0, 1]]
+        Used for stellar mass normalization in CSP integral. Depends on IMF
+        and isochrone library; None if unavailable.
+    ssp_alpha_fe : array, optional
+        Alpha enhancement grid (for future use). Currently None.
+        When implemented: ssp_flux will be (n_met, n_alpha, n_age, n_wave).
+
+    Notes
+    -----
+    **Metallicity convention**: ssp_lgmet is absolute log10(Z), NOT relative
+    to solar. To convert user-supplied log10(Z/Z_sun) to grid coordinates,
+    add LOG10_ZSUN ≈ −1.848.
+
+    **Future extension**: ssp_alpha_fe support for alpha-element abundance
+    variations (Vazdekis+2015, MIST, etc.) is planned. Currently, metallicity
+    is the only dimension; alpha is fixed (typically solar, α = 0).
+
+    **Survival mass**: ssp_mass_remaining encodes stellar mass loss due to
+    stellar evolution (main-sequence turnoff, white dwarf cooling, etc.).
+    It is essential for mass-based inferences but may not be present in
+    older SSP libraries.
     """
 
     ssp_wave: jnp.ndarray
@@ -50,18 +79,47 @@ class SSPData(NamedTuple):
 
 
 def load_ssp_data(filepath: str) -> SSPData:
-    """Load SSP templates from DSPS-compatible HDF5 file.
+    """Load SSP templates from a DSPS-format HDF5 file.
+
+    Reads stellar population synthesis templates stored in HDF5 format
+    (compatible with DSPS library and distributed SSP libraries: BC03,
+    BPASS, FSPS, ProGeny). Handles optional fields (ssp_mass_remaining,
+    ssp_alpha_fe) gracefully.
 
     Parameters
     ----------
     filepath : str
-        Path to HDF5 file with fields: ssp_wave, ssp_flux,
-        ssp_lg_age_gyr, ssp_lgmet.
+        Path to HDF5 file. Expected fields: ssp_wave, ssp_flux,
+        ssp_lg_age_gyr, ssp_lgmet. Optional: ssp_mass_remaining, ssp_alpha_fe.
 
     Returns
     -------
     SSPData
-        Loaded SSP template data.
+        Loaded SSP container with all template data and metadata.
+
+    Raises
+    ------
+    ImportError
+        If h5py is not installed.
+    KeyError
+        If required HDF5 fields are missing.
+    OSError
+        If filepath does not exist or is not readable.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — only file I/O occurs; returned SSPData is
+    immutable and suitable for use in JAX operations.
+
+    **File format**: Standard DSPS HDF5 layout. See DSPS documentation
+    and distributed templates on halos.as.arizona.edu for format details.
+
+    Examples
+    --------
+    >>> from tengri.components.sps import load_ssp_data
+    >>> ssp = load_ssp_data("data/ssp_bc03.h5")
+    >>> print(ssp.ssp_wave.shape, ssp.ssp_flux.shape)
+    (6000,) (50, 300, 6000)
     """
     try:
         import h5py
@@ -742,6 +800,7 @@ def interpolate_met_alpha_evolving(
     """
 
     def _interp_one_age(lz_i, afe_i, flux_at_age_i):
+        """Bilinear interpolation over metallicity and alpha-element abundance."""
         # flux_at_age_i: (n_met, n_alpha, n_wave)
         lz = jnp.clip(lz_i, ssp_lgmet[0], ssp_lgmet[-1])
         iz = jnp.clip(jnp.searchsorted(ssp_lgmet, lz) - 1, 0, len(ssp_lgmet) - 2)
@@ -977,6 +1036,7 @@ def interpolate_metallicity_smooth_evolving(ssp_flux, ssp_lgmet, log_z_per_age, 
     """
 
     def _one_age(log_z_i, flux_at_age_i):
+        """Marginalize SSP flux over metallicity using triweight kernel."""
         w = compute_lgmet_weights(log_z_i, ssp_lgmet, lgmet_scatter)
         return jnp.einsum("m,mw->w", w, flux_at_age_i)
 
@@ -1071,6 +1131,7 @@ def interpolate_mass_remaining_evolving(
     """
 
     def _interp_one_age(log_z_i, mr_at_age_i):
+        """Linear interpolation of mass-remaining at a single age bin."""
         log_z_c = jnp.clip(log_z_i, ssp_lgmet[0], ssp_lgmet[-1])
         idx = jnp.clip(
             jnp.searchsorted(ssp_lgmet, log_z_c) - 1,
