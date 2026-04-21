@@ -184,9 +184,9 @@ class TestVacuumWavelengthConsistency:
 
     def test_halpha_vacuum(self):
         """Hα must be at vacuum wavelength 6564.61 Å, not air 6562.80 Å."""
-        from tengri.observation.line_list import LineCatalog
+        from tengri.observation.line_list import LineList
 
-        cat = LineCatalog.default_optical()
+        cat = LineList.default_optical()
         ha_idx = cat.names.index("Halpha")
         ha_wave = float(cat.wavelengths[ha_idx])
         assert abs(ha_wave - 6564.61) < 0.5, f"Hα at {ha_wave:.2f} Å, expected 6564.61 Å (vacuum)"
@@ -196,18 +196,18 @@ class TestVacuumWavelengthConsistency:
 
     def test_hbeta_vacuum(self):
         """Hβ must be at vacuum wavelength 4862.68 Å."""
-        from tengri.observation.line_list import LineCatalog
+        from tengri.observation.line_list import LineList
 
-        cat = LineCatalog.default_optical()
+        cat = LineList.default_optical()
         hb_idx = cat.names.index("Hbeta")
         hb_wave = float(cat.wavelengths[hb_idx])
         assert abs(hb_wave - 4862.68) < 0.5, f"Hβ at {hb_wave:.2f} Å, expected 4862.68 Å (vacuum)"
 
     def test_oiii5007_vacuum(self):
         """[OIII]5007 must be at vacuum wavelength 5008.24 Å."""
-        from tengri.observation.line_list import LineCatalog
+        from tengri.observation.line_list import LineList
 
-        cat = LineCatalog.default_optical()
+        cat = LineList.default_optical()
         oiii_idx = cat.names.index("OIII_5007")
         oiii_wave = float(cat.wavelengths[oiii_idx])
         assert abs(oiii_wave - 5008.24) < 0.5, (

@@ -396,7 +396,7 @@ def fit_batch(
     import os
     import time
 
-    from tengri.forward.sed_model import Model as ModelClass
+    from tengri.forward.sed_model import SEDModel as ModelClass
     from tengri.inference.fitter import Fitter
     from tengri.inference.posterior import Posterior
     from tengri.parameters.priors import Fixed
@@ -679,9 +679,9 @@ def fit_population(
 
     Returns
     -------
-    HierarchicalResult
+    PopulationPosterior
     """
-    from tengri.forward.sed_model import Model as ModelClass
+    from tengri.forward.sed_model import SEDModel as ModelClass
     from tengri.inference.hierarchical import PopulationFitter
     from tengri.parameters.priors import Fixed
 

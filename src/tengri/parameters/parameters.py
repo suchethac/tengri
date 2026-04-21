@@ -72,32 +72,103 @@ from tengri.parameters.priors import (
     resolve_shorthand,
 )
 
-__all__ = ["SETTINGS_KEYS", "_DUST_EMISSION_PARAMS", "ParamSpec", "Parameters"]
+__all__ = ["SETTINGS_KEYS", "_DUST_EMISSION_PARAMS", "Parameters"]
 
 
 # ── Parameters class ───────────────────────────────────────────────────
 
 
 class Parameters:
-    """Parameter specification defining model parameters and their priors.
+    """Parameter specification defining all model parameters and their priors.
 
-    Parameters are specified as keyword arguments.  Each can be:
+    A Parameters object defines the complete parameter set for a SEDModel,
+    including both the mean SFH model(s) and all optional components (dust,
+    nebular emission, AGN, etc.). Parameters can be sampled (for mock data
+    generation) or used as priors for inference.
 
-    - A scalar (int/float) → ``Fixed`` value
-    - A tuple (lo, hi)     → ``Uniform`` prior
-    - A ``Distribution`` object (``Uniform``, ``Gaussian``, ``LogUniform``,
-      ``LogNormal``, ``StudentT``, ``Fixed``)
+    Parameters are specified as keyword arguments, each of which can be:
+
+    - **Scalar** (int/float) → ``Fixed(value)`` — parameter is constant
+    - **Tuple** (lo, hi) → ``Uniform(lo, hi)`` — shorthand for uniform prior
+    - **Distribution object** — ``Uniform``, ``Gaussian``, ``LogUniform``,
+      ``LogNormal``, ``StudentT``, or ``Fixed``
+
+    A Parameters object also stores model configuration settings
+    (mean_sfh_type, dust_law, nebular mode, etc.) that control which
+    components are enabled. These are not fittable parameters.
+
+    Parameters
+    ----------
+    **kwargs : keyword arguments
+        Model parameters (distribution objects or shorthands) and settings
+        (see "Settings" section below).
+
+    Attributes
+    ----------
+    mean_sfh_type : list[str]
+        Active SFH model(s). Read-only.
+    n_grid : int
+        Grid size for stochastic SFH. Read-only.
+    stochastic : bool
+        True if mean_sfh_type includes 'field'. Read-only.
+    all_params : list[str]
+        All valid parameter names (free + fixed).
+    free_params : list[str]
+        Non-fixed parameter names (to be inferred).
+    fixed_params : list[str]
+        Fixed parameter names (constants).
+    n_free : int
+        Number of free parameters.
+    nebular_mode : str
+        Nebular emission backend: 'off', 'ssp', 'cue', 'cloudy', or 'cb19'.
+    dust_model : str
+        Dust model: 'two_component' or 'single_component'.
+    dust_emission : str or None
+        Dust emission template: 'modified_blackbody', 'casey2012', 'dale2014', etc.
+    agn_model : str or None
+        AGN SED model, e.g. 'kubota_done', 'skirtor', 'qsogen'.
+    apply_igm : bool
+        If True, apply IGM absorption (Inoue+2014).
+    radio : bool
+        If True, include radio synchrotron + AGN jet emission.
+    xray : bool
+        If True, include X-ray (XRB + AGN) emission.
+
+    Raises
+    ------
+    ValueError
+        If parameter names are invalid for the selected mean_sfh_type.
+    ValueError
+        If nebular/dust/AGN settings are mutually incompatible.
+
+    Notes
+    -----
+    **Not JAX-traced**: Parameters objects cannot be created or modified inside
+    a JAX gradient tape (jax.grad, jax.vmap, jax.jit). Create all Parameters
+    objects at the Python level before tracing. Once created, a Parameters
+    object is immutable — use the `with_params()` method to create modified
+    copies.
+
+    **Parameter auto-detection**: If mean_sfh_type is not explicit, it is
+    inferred from the parameter name prefixes (e.g., 'sfh_dpl_alpha' implies
+    'dpl' is active). The inferred type is normalized to a sorted list.
+
+    **Mirror parameters**: A parameter can be tied to another by passing the
+    target name as a string instead of a distribution. Example:
+    ``neb_logZ_gas="met_logzsol"`` ties gas metallicity to stellar.
 
     Settings (model configuration, not fittable parameters)
-    --------------------------------------------------------
+    ========================================================
     mean_sfh_type : str or list[str]
-        SFH model(s).  Composable: ``["dpl", "field"]``.
-        Options: dpl, tsnorm, snorm, norm, lnorm, const, exp, dexp, burst, field.
+        SFH model(s). Composable: ``["dpl", "field"]``.
+        Options: ``dpl``, ``tsnorm``, ``snorm``, ``norm``, ``lnorm``, ``const``,
+        ``exp``, ``dexp``, ``burst``, ``field``.
         Default: ``["dpl", "field"]``.
     n_grid : int
-        GP grid size (latent dimensions for stochastic SFH).  Default: 64.
+        Grid size for stochastic SFH (latent dimensions).
+        Default: 64.
     stochastic : bool
-        DEPRECATED.  Use ``mean_sfh_type`` with/without ``"field"`` instead.
+        **DEPRECATED**. Use mean_sfh_type with/without 'field' instead.
 
     Dust Attenuation Settings
     ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -745,23 +816,47 @@ class Parameters:
     def with_params(self, **kwargs) -> Parameters:
         """Return a new Parameters with additional parameters merged in.
 
-        Creates a copy of this Parameters with extra parameters added.
-        Existing user-defined parameters take precedence — if a param
-        name already exists, the new value is silently ignored.
+        Creates an independent copy of this Parameters with extra parameters
+        added (usually observation-level parameters like calibration or noise).
+        User-defined parameters take precedence — if a name already exists in
+        this spec, the new value is silently skipped (user intent is preserved).
 
-        This is used by Model to auto-merge observation-driven parameters
-        (calibration coefficients, noise model params) into the spec.
+        Typically used internally by ``SEDModel`` to auto-inject noise and
+        calibration parameters into the specification.
 
         Parameters
         ----------
         **kwargs
             Parameter name → Distribution (or scalar/tuple shorthand).
-            Only params not already present are added.
+            Only params not already explicitly provided by the user are added.
 
         Returns
         -------
         Parameters
-            New instance with merged parameters.
+            New instance with merged parameters. The original is not modified
+            (immutable pattern).
+
+        Notes
+        -----
+        **Immutability**: The original Parameters object is never modified.
+        A new Parameters instance is created via ``copy.copy()``, with internal
+        mutable structures (dicts) replaced with copies.
+
+        **Parameter priority**: User-provided parameters (via __init__) take
+        absolute precedence. Auto-merged parameters are added only if their
+        name is not in the user-provided set.
+
+        Examples
+        --------
+        >>> from tengri import Parameters, Uniform
+        >>> spec = Parameters(redshift=0.1)
+        >>> # Merge in observation-level calibration parameters
+        >>> spec_aug = spec.with_params(
+        ...     cal_offset_aper=Uniform(-0.1, 0.1),
+        ...     noise_frac=Uniform(0, 0.05),
+        ... )
+        >>> print(set(spec_aug.all_params) - set(spec.all_params))
+        {'cal_offset_aper', 'noise_frac'}
         """
         if not kwargs:
             return self
@@ -800,18 +895,45 @@ class Parameters:
     def resolve_mirrors(self, params: dict) -> dict:
         """Copy mirrored parameter values from source to target.
 
-        For each mirror ``target -> source``, sets ``params[target] =
-        params[source]``.  Returns a new dict (immutable pattern).
+        For each mirror ``target → source``, copies the sampled source value
+        to the target parameter. Used after sampling to ensure tied parameters
+        have identical values. Returns a new dict (immutable pattern).
 
         Parameters
         ----------
-        params : dict
-            Parameter name -> value.
+        params : dict[str, ndarray]
+            Parameter name → sampled value. Must include all source parameters.
 
         Returns
         -------
-        dict
-            New dict with mirrored values filled in.
+        dict[str, ndarray]
+            New dict with mirrored values filled in. For each target, the
+            sampled value of the source parameter is assigned. Non-mirrored
+            parameters are unchanged.
+
+        Notes
+        -----
+        **Parameter tying**: Mirrors are specified in __init__ by passing
+        a source parameter name as a string instead of a distribution::
+
+            Parameters(
+                neb_logZ_gas="met_logzsol",  # Gas Z tied to stellar Z
+                ...
+            )
+
+        This is more elegant than using Fixed(0) + manual post-hoc copying.
+
+        Examples
+        --------
+        >>> from tengri import Parameters
+        >>> spec = Parameters(
+        ...     met_logzsol=(-2, 0.5),
+        ...     neb_logZ_gas="met_logzsol",  # Mirror: neb → met
+        ... )
+        >>> params = {"met_logzsol": -0.3, "neb_logZ_gas": 0.0}
+        >>> resolved = spec.resolve_mirrors(params)
+        >>> print(resolved["neb_logZ_gas"])
+        -0.3
         """
         if not self._mirrors:
             return params
@@ -821,16 +943,69 @@ class Parameters:
         return out
 
     def get_distribution(self, name: str) -> Distribution:
-        """Get the distribution object for a parameter."""
+        """Get the prior distribution object for a parameter.
+
+        Parameters
+        ----------
+        name : str
+            Parameter name.
+
+        Returns
+        -------
+        Distribution
+            The prior distribution object (Uniform, Gaussian, LogUniform, etc.)
+            or Fixed for non-free parameters.
+
+        Raises
+        ------
+        KeyError
+            If parameter name is not valid for this model configuration.
+
+        Examples
+        --------
+        >>> from tengri import Parameters, Uniform
+        >>> spec = Parameters(
+        ...     dust_tau_bc=Uniform(0, 4),
+        ...     redshift=0.1,
+        ... )
+        >>> prior = spec.get_distribution("dust_tau_bc")
+        >>> print(prior)
+        Uniform(0, 4)
+        """
         if name not in self._distributions:
             raise KeyError(f"Unknown parameter '{name}'")
         return self._distributions[name]
 
     def get_fixed_values(self) -> dict[str, float]:
-        """Get a dict of {name: value} for all numeric fixed parameters.
+        """Extract all numeric fixed parameter values as a dict.
 
-        String-valued Fixed parameters (categorical config, e.g. shock_abundance)
-        are excluded because they cannot be represented as float.
+        Fixed (non-free) parameters are constants that do not vary during
+        inference. This method returns only the numeric ones; categorical
+        Fixed parameters (strings) are excluded.
+
+        Returns
+        -------
+        dict[str, float]
+            Mapping of numeric fixed parameter names to their constant values.
+            String-valued Fixed parameters are not included because they cannot
+            be represented as float.
+
+        Notes
+        -----
+        This is useful for freezing parameters before optimization, or for
+        passing to upstream code that requires a flat parameter vector.
+
+        Examples
+        --------
+        >>> from tengri import Parameters
+        >>> spec = Parameters(
+        ...     redshift=0.1,
+        ...     dust_tau_bc=(0, 4),
+        ...     eline_broad="broad",  # String-valued
+        ... )
+        >>> fixed = spec.get_fixed_values()
+        >>> print(fixed)
+        {'redshift': 0.1}
         """
         result: dict[str, float] = {}
         for name, dist in self._distributions.items():
@@ -843,20 +1018,39 @@ class Parameters:
     def merge_observation_params(self, **extra_params: Distribution) -> Parameters:
         """Return a copy augmented with extra observation-level parameters.
 
-        Used by ``Fitter`` to inject emission-line amplitude parameters so they
+        Used by inference to inject emission-line amplitude parameters so they
         flow through bounds, prior penalty loops, and summary output without
         requiring special-casing in downstream code.
 
         Parameters
         ----------
         **extra_params : Distribution
-            Mapping of parameter name → Distribution to add.
+            Mapping of parameter name → Distribution to add (e.g.,
+            ``eline_EW_Halpha=Uniform(0, 1000)``).
 
         Returns
         -------
         Parameters
-            New ``Parameters`` instance with ``extra_params`` included in
-            ``free_params``. The original instance is not modified.
+            New Parameters instance with ``extra_params`` included in
+            ``free_params``. The original instance is not modified
+            (immutable pattern).
+
+        Notes
+        -----
+        This is distinct from ``with_params()`` in that all extra parameters
+        are unconditionally added, whereas with_params() respects user-provided
+        settings.
+
+        Examples
+        --------
+        >>> from tengri import Parameters, Uniform
+        >>> spec = Parameters(redshift=0.1)
+        >>> spec_aug = spec.merge_observation_params(
+        ...     eline_EW_Halpha=Uniform(0, 1000),
+        ...     eline_EW_OIII=Uniform(0, 500),
+        ... )
+        >>> print(spec_aug.n_free - spec.n_free)
+        2
         """
         new_spec = copy.copy(self)
         new_spec._distributions = {**self._distributions, **extra_params}
@@ -864,20 +1058,48 @@ class Parameters:
         return new_spec
 
     def sample(self, key: jax.Array) -> dict[str, jnp.ndarray]:
-        """Draw one sample from all parameter distributions.
+        """Draw one random sample from all parameter prior distributions.
 
-        Fixed parameters return their fixed value.
-        If "field" in mean_sfh_type, also generates sfh_field_xi ~ N(0,I).
+        Samples all free parameters from their priors, returns fixed parameters
+        at their fixed values, and (if stochastic) generates the latent field
+        ξ ~ N(0,I). Mirrors are resolved (target ← source value).
 
         Parameters
         ----------
-        key : PRNGKey
-            Random key.
+        key : jax.Array (PRNGKey)
+            Random key for sampling.
 
         Returns
         -------
-        dict
-            Parameter name → sampled value.
+        dict[str, ndarray]
+            Parameter name → sampled value. Free parameters are sampled from
+            their prior distributions. Fixed parameters return their constant
+            value (as float or string). If stochastic, ``sfh_field_xi`` is an
+            array of shape ``(n_grid,)``. Dictionary is immutable-ready (no
+            direct mutation of values).
+
+        Notes
+        -----
+        **JIT-compatible**: yes — safe to call inside :func:`jax.jit` on the
+        key and parameters only (not on branching logic).
+
+        **Stochastic SFH**: When the model includes a GP field, ``sfh_field_xi``
+        is an independent N(0,1) vector of length n_grid. The SED model uses
+        this to generate the stochastic log-SFR perturbations.
+
+        Examples
+        --------
+        >>> import jax.random
+        >>> from tengri import Parameters, Uniform
+        >>> spec = Parameters(
+        ...     sfh_dpl_alpha=Uniform(0.5, 3.0),
+        ...     sfh_dpl_beta=Uniform(0.5, 3.0),
+        ...     redshift=0.1,
+        ... )
+        >>> key = jax.random.PRNGKey(42)
+        >>> samples = spec.sample(key)
+        >>> print(sorted(samples.keys()))
+        ['redshift', 'sfh_dpl_alpha', 'sfh_dpl_beta']
         """
         keys = jax.random.split(key, len(self._distributions) + 1)
         params = {}
@@ -890,35 +1112,79 @@ class Parameters:
         return self.resolve_mirrors(params)
 
     def sample_batch(self, key: jax.Array, n: int) -> dict[str, jnp.ndarray]:
-        """Draw n samples from all parameter distributions.
+        """Draw n random samples from all parameter prior distributions.
+
+        Vectorized sampling via :func:`jax.vmap`. Each parameter becomes
+        a batch of n independent samples.
 
         Parameters
         ----------
-        key : PRNGKey
-            Random key.
+        key : jax.Array (PRNGKey)
+            Random key for sampling.
         n : int
-            Number of samples.
+            Number of independent samples to draw.
 
         Returns
         -------
-        dict
-            Parameter name → array of shape (n,) or (n, n_grid) for xi.
+        dict[str, ndarray]
+            Parameter name → array of samples. Each entry has shape:
+            - ``(n,)`` for scalar parameters
+            - ``(n, n_grid)`` for ``sfh_field_xi`` (stochastic SFH only)
+
+        Notes
+        -----
+        **JIT-compatible**: yes. The function is implemented via
+        :func:`jax.vmap` applied to the single-sample method.
+
+        **Memory**: For n=1000, a 20-parameter model, and n_grid=64 (stochastic),
+        the output dict occupies roughly 100 KB.
+
+        Examples
+        --------
+        >>> import jax.random
+        >>> from tengri import Parameters, Uniform
+        >>> spec = Parameters(
+        ...     sfh_dpl_alpha=Uniform(0.5, 3.0),
+        ...     dust_tau_bc=Uniform(0, 4),
+        ... )
+        >>> key = jax.random.PRNGKey(0)
+        >>> batch = spec.sample_batch(key, n=100)
+        >>> print(batch["sfh_dpl_alpha"].shape)
+        (100,)
         """
         keys = jax.random.split(key, n)
         return jax.vmap(self.sample)(keys)
 
     def validate(self, params: dict[str, jnp.ndarray]) -> None:
-        """Check that parameter values are within bounds.
+        """Check that all parameter values respect their distribution bounds.
+
+        Useful before inference or after optimization to ensure no parameter
+        has drifted outside its valid range.
 
         Parameters
         ----------
-        params : dict
-            Parameter name → value.
+        params : dict[str, ndarray or float or str]
+            Parameter name → value (sampled or optimized).
 
         Raises
         ------
         ValueError
-            If any parameter is out of bounds.
+            If any parameter is outside its bounds. Fixed parameters are
+            always valid.
+
+        Notes
+        -----
+        Missing parameters (not in dict) are silently ignored — this allows
+        checking partial parameter sets.
+
+        Examples
+        --------
+        >>> from tengri import Parameters, Uniform
+        >>> spec = Parameters(dust_tau_bc=Uniform(0, 4))
+        >>> params_valid = {"dust_tau_bc": 2.0}
+        >>> spec.validate(params_valid)  # OK
+        >>> params_bad = {"dust_tau_bc": 5.0}
+        >>> spec.validate(params_bad)  # Raises ValueError
         """
         for name, dist in self._distributions.items():
             if name not in params:
@@ -931,13 +1197,41 @@ class Parameters:
     def summary(self) -> str:
         """Return a human-readable summary of the model configuration.
 
-        Displays SFH type, enabled modules, dimensionality, and a table
-        of all parameters grouped by component (free first, then fixed).
+        Displays SFH type, enabled components (nebular, dust, AGN, etc.),
+        dimensionality, and a table of all parameters grouped by category
+        (free first, then fixed). Useful for printing model status before fitting.
 
         Returns
         -------
         str
-            Formatted summary string.
+            Formatted multi-line summary string with ASCII table and component flags.
+
+        Notes
+        -----
+        Output includes:
+        - SFH type and composition
+        - Dimensions (n free, latent ξ, mirrored, fixed)
+        - Enabled optional modules (nebular, dust_emission, AGN, etc.)
+        - Tabular list of parameters with their distributions/values
+
+        Examples
+        --------
+        >>> from tengri import Parameters, Uniform
+        >>> spec = Parameters(
+        ...     mean_sfh_type="dpl",
+        ...     sfh_dpl_alpha=Uniform(0.5, 3),
+        ...     dust_tau_bc=Uniform(0, 4),
+        ... )
+        >>> print(spec.summary())
+        Parameters  SFH: dpl
+        ────────────────────────────────────────────────────────────
+          Dimensions:  3 free + 6 fixed
+          Modules:     none
+        ────────────────────────────────────────────────────────────
+        Free parameters:
+          sfh_dpl_alpha            Uniform(0.5, 3)
+          sfh_dpl_beta             Uniform(0.5, 3)
+          ...
         """
         lines: list[str] = []
         sep = "─" * 66
@@ -1034,26 +1328,3 @@ class Parameters:
             lines.append(f"    {'n_grid':30s} = {self._n_grid},")
         lines.append(")")
         return "\n".join(lines)
-
-
-# ── Deprecated alias (removed in v1.0) ─────────────────────────────────
-
-
-def _make_deprecated_paramspec():
-    import warnings
-
-    class ParamSpec(Parameters):
-        def __init__(self, *args, **kwargs):
-            warnings.warn(
-                "ParamSpec is deprecated. Use Parameters instead. Will be removed in tengri v1.0.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            super().__init__(*args, **kwargs)
-
-    ParamSpec.__name__ = "ParamSpec"
-    ParamSpec.__qualname__ = "ParamSpec"
-    return ParamSpec
-
-
-ParamSpec = _make_deprecated_paramspec()

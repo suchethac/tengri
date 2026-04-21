@@ -1,6 +1,6 @@
 """Tests for the unified Observation API.
 
-Tests NoiseConfig, Photometry, SpectroscopyConfig, Observation,
+Tests NoiseModel, Photometry, Spectroscopy, Observation,
 and Parameters.with_params(). No SSP data needed — pure config/logic.
 """
 
@@ -13,11 +13,11 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.observation.noise_model import NoiseConfig
+from tengri.observation.noise_model import NoiseModel
 from tengri.observation.observation import Observation
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.photometry_config import Photometry
-from tengri.observation.spectroscopy import SpectroscopyConfig
+from tengri.observation.spectroscopy import Spectroscopy
 from tengri.parameters.priors import Fixed, Gaussian, Uniform
 
 # ── Helpers ───────────────────────────────────────────────────────
@@ -35,44 +35,44 @@ def _make_wave_obs(n=100, lo=10000.0, hi=50000.0):
     return jnp.linspace(lo, hi, n)
 
 
-# ── NoiseConfig ───────────────────────────────────────────────────
+# ── NoiseModel ───────────────────────────────────────────────────
 
 
-class TestNoiseConfig:
+class TestNoiseModel:
     def test_default_no_params(self):
-        """NoiseConfig() with defaults generates no Parameters entries."""
-        nc = NoiseConfig()
+        """NoiseModel() with defaults generates no Parameters entries."""
+        nc = NoiseModel()
         assert nc.get_params() == {}
 
     def test_fixed_calibration_floor(self):
         """Float calibration_floor > 0 → Fixed distribution in get_params()."""
-        nc = NoiseConfig(calibration_floor=0.05)
+        nc = NoiseModel(calibration_floor=0.05)
         params = nc.get_params()
         assert "noise_frac_cal" in params
         assert isinstance(params["noise_frac_cal"], Fixed)
 
     def test_zero_calibration_floor(self):
         """Float calibration_floor == 0 → no param."""
-        nc = NoiseConfig(calibration_floor=0.0)
+        nc = NoiseModel(calibration_floor=0.0)
         assert nc.get_params() == {}
 
     def test_free_calibration_floor(self):
         """Distribution calibration_floor → free param in get_params()."""
-        nc = NoiseConfig(calibration_floor=Uniform(0.01, 0.15))
+        nc = NoiseModel(calibration_floor=Uniform(0.01, 0.15))
         params = nc.get_params()
         assert "noise_frac_cal" in params
         assert isinstance(params["noise_frac_cal"], Uniform)
 
     def test_student_t_dof(self):
         """student_t_dof → Fixed noise_dof in get_params()."""
-        nc = NoiseConfig(student_t_dof=5.0)
+        nc = NoiseModel(student_t_dof=5.0)
         params = nc.get_params()
         assert "noise_dof" in params
         assert isinstance(params["noise_dof"], Fixed)
 
     def test_both_params(self):
         """Both calibration_floor and student_t together."""
-        nc = NoiseConfig(calibration_floor=Uniform(0.01, 0.1), student_t_dof=10.0)
+        nc = NoiseModel(calibration_floor=Uniform(0.01, 0.1), student_t_dof=10.0)
         params = nc.get_params()
         assert len(params) == 2
         assert "noise_frac_cal" in params
@@ -80,7 +80,7 @@ class TestNoiseConfig:
 
     def test_frozen_immutable(self):
         """Cannot mutate fields after creation."""
-        nc = NoiseConfig()
+        nc = NoiseModel()
         with pytest.raises(dataclasses.FrozenInstanceError):
             nc.calibration_floor = 0.1
 
@@ -161,14 +161,14 @@ class TestPhotometry:
         np.testing.assert_array_equal(phot.filter_trans[0], f.trans)
 
 
-# ── SpectroscopyConfig ────────────────────────────────────────────
+# ── Spectroscopy ────────────────────────────────────────────
 
 
-class TestSpectroscopyConfig:
+class TestSpectroscopy:
     def test_basic_creation(self):
         """Minimal config with just wave_obs."""
         wave = _make_wave_obs()
-        sc = SpectroscopyConfig(wave_obs=wave)
+        sc = Spectroscopy(wave_obs=wave)
         assert sc.n_pixels == 100
         assert not sc.has_lsf
         assert not sc.has_calibration
@@ -176,7 +176,7 @@ class TestSpectroscopyConfig:
     def test_constant_resolution(self):
         """Scalar resolution stores correctly."""
         wave = _make_wave_obs()
-        sc = SpectroscopyConfig(wave_obs=wave, resolution=3000.0)
+        sc = Spectroscopy(wave_obs=wave, resolution=3000.0)
         assert sc.has_lsf
         assert sc.resolution == 3000.0
 
@@ -184,18 +184,18 @@ class TestSpectroscopyConfig:
         """Array resolution stores correctly."""
         wave = _make_wave_obs(50)
         R = jnp.linspace(30, 300, 50)
-        sc = SpectroscopyConfig(wave_obs=wave, resolution=R)
+        sc = Spectroscopy(wave_obs=wave, resolution=R)
         assert sc.has_lsf
         assert sc.resolution.shape == (50,)
 
     def test_calibration_params_order_0(self):
         """calibration_order=0 → no params."""
-        sc = SpectroscopyConfig(wave_obs=_make_wave_obs(), calibration_order=0)
+        sc = Spectroscopy(wave_obs=_make_wave_obs(), calibration_order=0)
         assert sc.get_calibration_params() == {}
 
     def test_calibration_params_order_3(self):
         """calibration_order=3 → {cal_c1, cal_c2, cal_c3} Gaussian priors."""
-        sc = SpectroscopyConfig(wave_obs=_make_wave_obs(), calibration_order=3)
+        sc = Spectroscopy(wave_obs=_make_wave_obs(), calibration_order=3)
         params = sc.get_calibration_params()
         assert len(params) == 3
         assert "cal_c1" in params
@@ -207,7 +207,7 @@ class TestSpectroscopyConfig:
     def test_nirspec_prism_factory(self):
         """nirspec_prism() creates config with variable-R array."""
         wave = jnp.linspace(6000.0, 53000.0, 200)
-        sc = SpectroscopyConfig.nirspec_prism(wave)
+        sc = Spectroscopy.nirspec_prism(wave)
         assert sc.has_lsf
         assert isinstance(sc.resolution, jnp.ndarray)
         assert sc.resolution.shape == (200,)
@@ -215,7 +215,7 @@ class TestSpectroscopyConfig:
     def test_nirspec_g140m_factory(self):
         """nirspec_g140m() creates config with R~1000 via resolution function."""
         wave = _make_wave_obs()
-        sc = SpectroscopyConfig.nirspec_g140m(wave)
+        sc = Spectroscopy.nirspec_g140m(wave)
         assert sc.has_lsf
         # nirspec_g140m_resolution returns ~1000 for all wavelengths
         r = jnp.asarray(sc.resolution)
@@ -224,26 +224,26 @@ class TestSpectroscopyConfig:
     def test_constant_r_factory(self):
         """constant_r(R=5000) stores scalar resolution."""
         wave = _make_wave_obs()
-        sc = SpectroscopyConfig.constant_r(wave, R=5000)
+        sc = Spectroscopy.constant_r(wave, R=5000)
         assert sc.resolution == 5000.0
 
     def test_factory_with_calibration(self):
         """Factories pass through calibration_order."""
         wave = _make_wave_obs()
-        sc = SpectroscopyConfig.nirspec_prism(wave, calibration_order=2)
+        sc = Spectroscopy.nirspec_prism(wave, calibration_order=2)
         assert sc.calibration_order == 2
         assert len(sc.get_calibration_params()) == 2
 
     def test_frozen_immutable(self):
         """Cannot mutate fields after creation."""
-        sc = SpectroscopyConfig(wave_obs=_make_wave_obs())
+        sc = Spectroscopy(wave_obs=_make_wave_obs())
         with pytest.raises(dataclasses.FrozenInstanceError):
             sc.calibration_order = 5
 
     def test_summary(self):
         """summary() returns useful info."""
         wave = _make_wave_obs(200)
-        sc = SpectroscopyConfig(wave_obs=wave, resolution=1000.0, calibration_order=2)
+        sc = Spectroscopy(wave_obs=wave, resolution=1000.0, calibration_order=2)
         s = sc.summary()
         assert "200 pixels" in s
         assert "R=1000" in s
@@ -260,7 +260,7 @@ class TestObservation:
 
     @pytest.fixture
     def spec_config(self):
-        return SpectroscopyConfig(wave_obs=_make_wave_obs(150))
+        return Spectroscopy(wave_obs=_make_wave_obs(150))
 
     def test_photometry_only_capabilities(self, phot):
         """can_do_photometry=True, can_do_spectroscopy=False."""
@@ -373,8 +373,8 @@ class TestObservation:
 
     def test_get_all_params_merges(self, phot):
         """Collects from spectroscopy + noise configs."""
-        sc = SpectroscopyConfig(wave_obs=_make_wave_obs(), calibration_order=2)
-        nc = NoiseConfig(calibration_floor=Uniform(0.01, 0.1))
+        sc = Spectroscopy(wave_obs=_make_wave_obs(), calibration_order=2)
+        nc = NoiseModel(calibration_floor=Uniform(0.01, 0.1))
         obs = Observation(photometry=phot, spectroscopy=sc, noise=nc)
         params = obs.get_all_params()
         assert "cal_c1" in params
@@ -390,8 +390,8 @@ class TestObservation:
         assert len(s) > 50
 
     def test_with_noise_only(self, phot):
-        """NoiseConfig without spectroscopy → noise params only."""
-        nc = NoiseConfig(calibration_floor=0.03)
+        """NoiseModel without spectroscopy → noise params only."""
+        nc = NoiseModel(calibration_floor=0.03)
         obs = Observation(photometry=phot, noise=nc)
         params = obs.get_all_params()
         assert "noise_frac_cal" in params

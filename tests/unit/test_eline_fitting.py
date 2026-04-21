@@ -22,7 +22,7 @@ from tengri.observation.eline_marginalization import (
     expand_constrained_amplitudes,
     marginalize_emission_lines,
 )
-from tengri.observation.line_list import LineCatalog
+from tengri.observation.line_list import LineList
 from tengri.observation.spectroscopy import Spectroscopy
 
 
@@ -79,7 +79,7 @@ class TestDesignMatrix:
 
 class TestDoubletConstraints:
     def test_constraint_reduces_columns(self):
-        cat = LineCatalog.default_optical()
+        cat = LineList.default_optical()
         C = cat.build_constraint_matrix()
         wave = jnp.linspace(4000, 7000, 1000)
         G_full = build_eline_design_matrix(wave, cat.wavelengths, 2000.0, 0.0)
@@ -89,7 +89,7 @@ class TestDoubletConstraints:
 
     def test_doublet_ratio_enforced(self):
         """After marginalization with constraints, OIII ratio should be 2.98."""
-        cat = LineCatalog.default_optical()
+        cat = LineList.default_optical()
         C = cat.build_constraint_matrix()
         wave = jnp.linspace(4800, 5100, 1000)
         G_full = build_eline_design_matrix(wave, cat.wavelengths, 2000.0, 0.0)
@@ -352,7 +352,7 @@ class TestFittedMode:
         from tengri.inference.fitter import Fitter
 
         wave = self._wave()
-        cat = LineCatalog.default_13()
+        cat = LineList.default_13()
         cfg = Spectroscopy(
             wave_obs=wave, eline_mode="fitted", eline_catalog=cat, eline_fix_doublets=True
         )
@@ -417,7 +417,7 @@ class TestFittedMode:
 
         # Fine grid centred on Hα: 0.3 Å/pix → line well-sampled at R=2000
         wave = jnp.linspace(6500.0, 6630.0, 440)
-        cat = LineCatalog.default_13()
+        cat = LineList.default_13()
         cfg = Spectroscopy(
             wave_obs=wave, eline_mode="fitted", eline_catalog=cat, eline_fix_doublets=True
         )

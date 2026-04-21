@@ -254,14 +254,14 @@ class TestPostersToDataframe:
             tengri.posteriors_to_dataframe(results)
 
 
-# ── Task 8: HierarchicalResult.individual ─────────────────────────
+# ── Task 8: PopulationPosterior.individual ─────────────────────────
 
 
-class TestHierarchicalResultIndividual:
+class TestPopulationPosteriorIndividual:
     def test_individual_returns_empty_when_none(self):
-        from tengri.inference.hierarchical import HierarchicalResult
+        from tengri.inference.hierarchical import PopulationPosterior
 
-        result = HierarchicalResult(
+        result = PopulationPosterior(
             shared_samples={},
             shared_params={},
             individual_samples=None,
@@ -274,13 +274,13 @@ class TestHierarchicalResultIndividual:
     def test_individual_returns_list_of_namespace(self):
         from types import SimpleNamespace
 
-        from tengri.inference.hierarchical import HierarchicalResult
+        from tengri.inference.hierarchical import PopulationPosterior
 
         individual_samples = [
             {"met_logzsol": jnp.array([-0.3, -0.2, -0.1])},
             {"met_logzsol": jnp.array([-0.5, -0.4, -0.3])},
         ]
-        result = HierarchicalResult(
+        result = PopulationPosterior(
             shared_samples={},
             shared_params={},
             individual_samples=individual_samples,

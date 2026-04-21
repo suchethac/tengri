@@ -65,26 +65,3 @@ class NoiseModel:
             parts.append(f"Student-t dof={self.student_t_dof}")
         return ", ".join(parts) if parts else "Gaussian (default)"
 
-
-# ── Deprecated alias — removed in tengri v1.0 ─────────────────────
-
-
-def _make_deprecated_noise_config():
-    import warnings
-
-    class NoiseConfig(NoiseModel):
-        def __init__(self, *args, **kwargs):
-            warnings.warn(
-                "NoiseConfig is deprecated. Use NoiseModel instead. "
-                "Will be removed in tengri v1.0.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            super().__init__(*args, **kwargs)
-
-    NoiseConfig.__name__ = "NoiseConfig"
-    NoiseConfig.__qualname__ = "NoiseConfig"
-    return NoiseConfig
-
-
-NoiseConfig = _make_deprecated_noise_config()

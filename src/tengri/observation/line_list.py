@@ -713,24 +713,5 @@ def _detect_doublets_by_proximity(
     return tuple(doublets)
 
 
+
 # ── Deprecated alias — removed in tengri v1.0 ─────────────────────
-
-
-def _make_deprecated_line_catalog():
-    import warnings
-
-    class LineCatalog(LineList):
-        def __init__(self, *args, **kwargs):
-            warnings.warn(
-                "LineCatalog is deprecated. Use LineList instead. Will be removed in tengri v1.0.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            super().__init__(*args, **kwargs)
-
-    LineCatalog.__name__ = "LineCatalog"
-    LineCatalog.__qualname__ = "LineCatalog"
-    return LineCatalog
-
-
-LineCatalog = _make_deprecated_line_catalog()

@@ -94,12 +94,10 @@ from tengri.forward.prediction import (
     SFHQuantities,
 )
 from tengri.forward.result import SEDResult
-from tengri.forward.sed_model import Model, PriorPredictive, SEDModel
+from tengri.forward.sed_model import PriorPredictive, SEDModel
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 from tengri.inference.fitter import Fitter
 from tengri.inference.hierarchical import (
-    HierarchicalFitter,
-    HierarchicalResult,
     PopulationFitter,
     PopulationPosterior,
 )
@@ -107,7 +105,7 @@ from tengri.inference.posterior import Posterior
 from tengri.inference.vi_config import VIConfig
 from tengri.observation.filters import load_filter_set
 from tengri.observation.line_flux_data import LineFluxData
-from tengri.observation.line_list import LineCatalog, LineList
+from tengri.observation.line_list import LineList
 from tengri.observation.noise import (
     compute_effective_noise,
     compute_std_inv,
@@ -115,12 +113,12 @@ from tengri.observation.noise import (
     uses_student_t,
     variable_noise_hamiltonian,
 )
-from tengri.observation.noise_model import NoiseConfig, NoiseModel
+from tengri.observation.noise_model import NoiseModel
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectral_indices import SpectralIndexData, SpectralIndexDef
-from tengri.observation.spectroscopy import Spectroscopy, SpectroscopyConfig
-from tengri.parameters.parameters import Parameters, ParamSpec
+from tengri.observation.spectroscopy import Spectroscopy
+from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
 from tengri.utils import jit_logging
 

@@ -25,7 +25,7 @@ from tengri.observation.eline_priors import (
 )
 from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.noise import DETECTED, LOWER_LIMIT, UPPER_LIMIT
-from tengri.observation.noise_model import NoiseConfig, NoiseModel
+from tengri.observation.noise_model import NoiseModel
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectral_indices import (
@@ -36,7 +36,6 @@ from tengri.observation.spectral_indices import (
 )
 from tengri.observation.spectroscopy import (
     Spectroscopy,
-    SpectroscopyConfig,
     apply_wavelength_mask,
 )
 from tengri.observation.spectrum import (
@@ -58,14 +57,12 @@ __all__ = [
     "STANDARD_INDICES",
     "UPPER_LIMIT",
     "LineFluxData",
-    "NoiseConfig",
     "NoiseModel",
     "Observation",
     "Photometry",
     "SpectralIndexData",
     "SpectralIndexDef",
     "Spectroscopy",
-    "SpectroscopyConfig",
     "apply_calibration",
     "apply_double_calibration",
     "apply_lsf",

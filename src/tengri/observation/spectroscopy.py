@@ -333,24 +333,3 @@ def apply_wavelength_mask(
 
 
 # ── Deprecated alias — removed in tengri v1.0 ─────────────────────
-
-
-def _make_deprecated_spectroscopy_config():
-    import warnings
-
-    class SpectroscopyConfig(Spectroscopy):
-        def __init__(self, *args, **kwargs):
-            warnings.warn(
-                "SpectroscopyConfig is deprecated. Use Spectroscopy instead. "
-                "Will be removed in tengri v1.0.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            super().__init__(*args, **kwargs)
-
-    SpectroscopyConfig.__name__ = "SpectroscopyConfig"
-    SpectroscopyConfig.__qualname__ = "SpectroscopyConfig"
-    return SpectroscopyConfig
-
-
-SpectroscopyConfig = _make_deprecated_spectroscopy_config()

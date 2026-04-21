@@ -14,11 +14,11 @@ jax.config.update("jax_enable_x64", True)
 from tengri.components.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.sed_model import SEDModel
 from tengri.inference.fitter import Fitter
-from tengri.observation.noise_model import NoiseConfig
+from tengri.observation.noise_model import NoiseModel
 from tengri.observation.observation import Observation
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.photometry_config import Photometry
-from tengri.observation.spectroscopy import SpectroscopyConfig
+from tengri.observation.spectroscopy import Spectroscopy
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
 
@@ -110,7 +110,7 @@ class TestObservationWithModel:
         wave_obs = jnp.linspace(10000, 50000, 100)
         obs = Observation(
             photometry=Photometry(filters=tuple(_make_synthetic_filters())),
-            spectroscopy=SpectroscopyConfig(wave_obs=wave_obs, calibration_order=2),
+            spectroscopy=Spectroscopy(wave_obs=wave_obs, calibration_order=2),
         )
         model = SEDModel(base_spec, ssp, observation=obs)
         assert "cal_c1" in model.spec.free_params
@@ -120,7 +120,7 @@ class TestObservationWithModel:
         """model.spec.free_params includes noise_frac_cal from noise config."""
         obs = Observation(
             photometry=Photometry(filters=tuple(_make_synthetic_filters())),
-            noise=NoiseConfig(calibration_floor=Uniform(0.01, 0.1)),
+            noise=NoiseModel(calibration_floor=Uniform(0.01, 0.1)),
         )
         model = SEDModel(base_spec, ssp, observation=obs)
         assert "noise_frac_cal" in model.spec.free_params
@@ -141,11 +141,11 @@ class TestObservationWithModel:
         )
         obs = Observation(
             photometry=Photometry(filters=tuple(_make_synthetic_filters())),
-            # NoiseConfig tries to auto-merge a different distribution
-            noise=NoiseConfig(calibration_floor=Uniform(0.01, 0.1)),
+            # NoiseModel tries to auto-merge a different distribution
+            noise=NoiseModel(calibration_floor=Uniform(0.01, 0.1)),
         )
         model = SEDModel(spec, ssp, observation=obs)
-        # User's Uniform(0.0, 0.5) should win over NoiseConfig's Uniform(0.01, 0.1)
+        # User's Uniform(0.0, 0.5) should win over NoiseModel's Uniform(0.01, 0.1)
         dist = model.spec.get_distribution("noise_frac_cal")
         assert isinstance(dist, Uniform)
         assert dist.bounds[1] == 0.5  # User's upper bound, not 0.1
@@ -154,7 +154,7 @@ class TestObservationWithModel:
         """Fixed z + spectroscopy config triggers auto-precomputation."""
         wave_obs = jnp.linspace(10000, 50000, 100)
         obs = Observation(
-            spectroscopy=SpectroscopyConfig(wave_obs=wave_obs),
+            spectroscopy=Spectroscopy(wave_obs=wave_obs),
         )
         model = SEDModel(base_spec, ssp, observation=obs)
         # _spec_precomp should be set
@@ -174,16 +174,16 @@ class TestObservationWithModel:
         )
         wave_obs = jnp.linspace(10000, 50000, 100)
         obs = Observation(
-            spectroscopy=SpectroscopyConfig(wave_obs=wave_obs),
+            spectroscopy=Spectroscopy(wave_obs=wave_obs),
         )
         model = SEDModel(spec, ssp, observation=obs)
         assert model._precomputed.spectroscopy is None
 
     def test_lsf_settings_from_observation(self, ssp, base_spec):
-        """LSF resolution/sigma_lib from SpectroscopyConfig override spec attrs."""
+        """LSF resolution/sigma_lib from Spectroscopy override spec attrs."""
         wave_obs = jnp.linspace(10000, 50000, 100)
         obs = Observation(
-            spectroscopy=SpectroscopyConfig(
+            spectroscopy=Spectroscopy(
                 wave_obs=wave_obs,
                 resolution=2000.0,
                 sigma_lib_kms=15.0,
@@ -256,7 +256,7 @@ class TestObservationEndToEnd:
         wave_obs = jnp.linspace(10000, 50000, 50)
         obs = Observation(
             photometry=Photometry(filters=tuple(_make_synthetic_filters())),
-            spectroscopy=SpectroscopyConfig(wave_obs=wave_obs),
+            spectroscopy=Spectroscopy(wave_obs=wave_obs),
         )
         model = SEDModel(base_spec, ssp, observation=obs)
 

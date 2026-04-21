@@ -103,7 +103,6 @@ __all__ = [
     "CompositionalKernels",
     "HybridKernels",
     "MockData",
-    "Model",
     "PrecomputedData",
     "PriorPredictive",
     "SEDModel",
@@ -111,65 +110,128 @@ __all__ = [
 
 
 class SEDModel:
-    """Differentiable forward model with clean parameter API.
+    """Differentiable SED forward model with modular physics and clean API.
 
-    The SFH is computed via a registry-driven composed function that
-    handles additive smooth models, burst mixture, and GP field
-    modulation in a single call.
+    The forward model maps physical parameters (stellar mass, SFH, metallicity,
+    dust, AGN, etc.) to observables: photometry, spectrum, and derived SED
+    quantities. Internally, it decomposes the SED pipeline into independent
+    physics modules (stellar populations, star formation history, dust,
+    nebular, AGN, IGM) that are composed into prediction kernels at
+    initialization time, enabling fast inference and flexibility in model
+    configuration.
+
+    The SFH is computed via a registry-driven composed function that handles
+    additive smooth models, burst mixture, and correlated-field (GP) modulation
+    in a single call. Three prediction modes (compositional, hybrid, exact) trade
+    accuracy for speed, with automatic fallback.
 
     Parameters
     ----------
     spec : Parameters
-        Parameter specification (defines free/fixed params and priors).
+        Parameter specification from ``tengri.Parameters``. Defines
+        free/fixed parameters and their priors.
     ssp_data : SSPData
-        Pre-loaded SSP templates.
+        Pre-loaded SSP templates (from ``load_ssp_data()``). Contains
+        absolute SSP grid in ``log10(Z)`` absolute, age array, and
+        optional mass-remaining tables for stellar mass surviving
+        constraints.
     filters : list or tuple, optional
-        Filter transmission curves. Accepts either:
-        - 3-tuple from load_filter_set(): (filter_waves, filter_trans, filter_curves)
-        - List of FilterCurve namedtuples
+        Filter transmission curves for photometric prediction. Accepts either:
+
+        - 3-tuple from :func:`load_filter_set`: ``(filter_waves, filter_trans, filter_curves)``
+        - List of :class:`FilterCurve` namedtuples
+
+        If provided, enables photometry prediction and automatic precomputation
+        at initialization. Either ``filters`` or ``observation`` may be passed,
+        not both.
+    observation : Observation, optional
+        Unified observation config (photometry + spectroscopy + emission lines).
+        Mutually exclusive with ``filters``.
     precompute : bool, optional
-        Whether to precompute SSP photometry at initialization. True (default)
-        activates the Zacharegkas+2025 fast-photometry path.
+        Whether to precompute SSP photometry and spectroscopy grids at
+        initialization. Default True activates the Zacharegkas+2025
+        fast-photometry path and enabling caching of spectroscopy grids.
+        Set False to defer computation (useful for batch operations).
     forward_dtype : str or jnp.dtype, optional
-        Dtype for forward model computation. ``"float32"`` halves memory
-        and gives ~1.5x speedup with <0.1% accuracy loss. Default
-        ``"float64"`` preserves full precision.
+        Dtype for forward model computation. Default ``"float64"`` preserves
+        full precision. ``"float32"`` halves memory and gives ~1.5× speedup
+        with <0.1% accuracy loss for photometry.
 
-        Affects **both** fused and exact paths:
+        Affects both fused (photometry + precomputation) and exact paths:
 
-        - **Fused path** (photometry with precomputation): all captured
-          arrays (SSP grid, dust weights, effective wavelengths) are cast
-          to ``forward_dtype`` at kernel build time. Outputs are always
-          cast back to float64 for cosmological distance scaling.
-        - **Exact path** (spectroscopy, legacy AGN): the three largest
-          intermediates — metallicity-interpolated SSP ``(n_age, n_wave)``,
-          dust attenuation ``(n_age, n_wave)``, and dust age weights
-          ``(n_age,)`` — are computed in ``forward_dtype``. This halves
-          the 4.5 MB memory traffic that dominates exact-path dust cost.
+        - **Fused path**: captured arrays (SSP grid, dust weights, effective
+          wavelengths) cast to ``forward_dtype`` at kernel build; outputs
+          always cast back to float64 for cosmological distance scaling.
+        - **Exact path** (spectroscopy, legacy AGN): three largest intermediates
+          — metallicity-interpolated SSP ``(n_age, n_wave)``, dust attenuation
+          ``(n_age, n_wave)``, dust age weights ``(n_age,)`` — computed in
+          ``forward_dtype``, halving the 4.5 MB memory traffic that dominates
+          exact-path dust cost.
 
-        Cosmological distances always use float64 (float32 overflows
-        at z > 0.01).
-    approx : dict, optional
-        Control which approximations the fused kernel uses. Each key
-        enables/disables a specific approximation. When a component's
-        approximation is disabled, the model falls back to the exact
-        path for that component.
+        Cosmological distances always use float64 (float32 overflows at z > 0.01).
+    approx : dict or bool, optional
+        Control which approximations the fused kernel uses. Default True enables
+        all approximations (fastest). False disables all (forces exact path
+        everywhere). A dict enables selective control:
 
-        Keys and defaults::
+        - ``"dust_attenuation"``: use dust at filter effective wavelengths (True, default)
+        - ``"dust_emission"``: use MBB at filter effective wavelengths (True, default)
+        - ``"igm"``: use IGM at filter effective wavelengths (True, default)
 
-            {
-                "dust_attenuation": True,  # dust at filter eff. wavelengths
-                "dust_emission": True,  # MBB at filter eff. wavelengths
-                "igm": True,  # IGM at filter eff. wavelengths
-            }
+        Approximation accuracy (Zacharegkas+2025 [1]_):
 
-        Approximation accuracy (Zacharegkas+2025):
         - dust_attenuation: <3% for most laws, ~36% for SMC
-        - dust_emission: negligible for optical (MBB peaks at >50μm)
+        - dust_emission: negligible for optical (MBB peak >50 μm)
         - igm: exact for fixed z (precomputed once)
 
-        Set ``approx=False`` to disable all approximations (forces exact
-        path for everything). Set ``approx=True`` (default) to use all.
+    csp_integration : str, optional
+        CSP age integration scheme. Default ``"trapz"`` (trapezoidal on
+        linear time). Options: ``"log_trapz"``, ``"log_interp"`` (Dopita+2005
+        interpolation), ``"dsps_native"`` (DSPS trapezoidal with automatic
+        metallicity marginalization), ``"dsps_met_table"`` (time-evolving
+        metallicity table). See Appendix A of the forward model paper [2]_.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all prediction methods (except
+    :meth:`predict` for lazy evaluation) are fully JAX differentiable
+    and can be called inside :func:`jax.jit` and :func:`jax.vmap`.
+
+    **Gradient-safe**: yes — all physical parameters are differentiable
+    for inference via HMC, VI, and score-based methods.
+
+    **Approximation scheme**: The forward model uses a three-tier kernel
+    hierarchy to balance speed and accuracy:
+
+    1. **Compositional** (preferred): Full-resolution JIT SED from all
+       components → filter integration. XLA fuses entire graph (SFH → SED → photometry).
+       Bit-exact and fastest.
+    2. **Hybrid** (fallback): Precomputed SSP×filter stellar + exact
+       non-stellar at full wavelength resolution.
+    3. **Exact** (reference): Raw pipeline, no approximations or precomputation.
+
+    Mode selection in :meth:`predict_photometry` and :meth:`predict_spectrum`:
+    ``mode="auto"`` (default) cascades through available modes.
+
+    **Physical units** (internal):
+
+    - Time: years (yr). User-facing API converts to Myr/Gyr.
+    - Wavelength: Angstrom (Å).
+    - Luminosity (SED components): erg/s/Hz (L_ν).
+    - Luminosity (photometry): erg/s/cm²/Hz (f_ν).
+    - Metallicity (SSP grid): log₁₀(Z) absolute. User API uses log₁₀(Z/Z☉).
+    - AGN bolometric luminosity: log₁₀(L_bol/L☉) at API level.
+
+    **IGM absorption gotcha**: :meth:`predict_obs_sed` applies IGM transmission
+    at observed-frame wavelengths (input to ``igm_transmission()`` is redshifted).
+    This is automatic when ``igm=True`` in spec.
+
+    References
+    ----------
+    .. [1] A. Zacharegkas et al., "Fast Photometry with Precomputed
+       Stellar Population Grids," ApJ, (2025).
+    .. [2] S. Cooray et al., "Forward Model for Differentiable SED Fitting
+       with Correlated SFH," (2026).
     """
 
     # Default approximation settings (immutable — used as template only)
@@ -980,21 +1042,55 @@ class SEDModel:
     # ── Predictions (public API) ──────────────────────────────────────
 
     def predict_sfh(self, params, n_linear=1000):
-        """Compute SFH on a uniform linear-time grid for plotting.
+        """Compute SFH on uniform linear-time grid for visualization.
+
+        Evaluates the SFH parameterization at ``n_linear`` evenly-spaced
+        points in lookback time, returning both the smooth parametric
+        component (``sfr_mean``) and the full SFH including GP-field
+        modulation (``sfr_full``, if stochastic SFH enabled).
 
         Parameters
         ----------
         params : dict
-            Parameter values.
-        n_linear : int
-            Number of output grid points.
+            Parameter values using public parameter names.
+        n_linear : int, optional
+            Number of output grid points, evenly spaced in lookback time.
+            Default 1000 (sufficient for smooth visualization).
 
         Returns
         -------
         dict with keys:
-            "t_gyr": lookback time (Gyr), shape (n_linear,)
-            "sfr_mean": mean SFH (Msun/yr), shape (n_linear,)
-            "sfr_full": full SFH including GP (Msun/yr), shape (n_linear,)
+
+            - ``"t_gyr"`` : array, shape (n_linear,).
+              Lookback time [Gyr], from 0 (now) to ~13.8 (Big Bang).
+            - ``"sfr_mean"`` : array, shape (n_linear,).
+              Parametric mean SFR [M☉/yr] (no GP modulation).
+            - ``"sfr_full"`` : array, shape (n_linear,).
+              Full SFH including GP field [M☉/yr]. Identical to ``sfr_mean``
+              if stochastic SFH not enabled.
+
+        Notes
+        -----
+        **JIT-compatible**: no — uses Python-side interpolation. For
+        JIT-compatible SFH evaluation, use :meth:`predict_sfh_quantities`
+        to get integrated quantities (stellar mass, age, etc.).
+
+        **Time grid**: Output is on a uniform linear-time (lookback) grid,
+        not the internal log-age grid. This makes visualization cleaner
+        and suitable for plotting.
+
+        **SFH mean vs. full**: When correlated-field (stochastic) SFH is enabled,
+        ``sfr_mean`` shows the smooth parametric trend (e.g., exponential
+        decline), while ``sfr_full`` adds GP modulation for realistic burstiness.
+        If parametric-only SFH is used, they are identical.
+
+        **Physical units**: Output SFR is in M☉/yr. Lookback time is in Gyr
+        (cosmic time before today).
+
+        See Also
+        --------
+        predict_sfh_quantities : Integrated SFH quantities (JIT-compatible).
+        predict : Lazy access to SFH and all derived quantities.
         """
         p = self._get_internal_params(params)
         sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p)
@@ -1011,21 +1107,62 @@ class SEDModel:
         }
 
     def predict_rest_sed(self, params, wave=None):
-        """Compute rest-frame panchromatic SED.
+        """Compute rest-frame panchromatic SED luminosity spectrum.
+
+        Evaluates all stellar populations, emission (nebular, AGN), and
+        multi-wavelength (radio, X-ray) components in rest-frame coordinates.
+        Returns the total SED integrated across the age distribution set by
+        the SFH and stellar mass parameters.
 
         Parameters
         ----------
         params : dict
-            Parameter values (public names).
+            Parameter values using public parameter names.
         wave : array, optional
-            Custom rest-frame wavelength grid (Angstrom). If None, uses
-            the model's default grid (SSP grid, or auto-extended when
-            radio/xray enabled).
+            Custom rest-frame wavelength grid [Angstrom]. If None,
+            uses the model's default: SSP wavelength grid
+            (``ssp_data.ssp_wave``), or auto-extended grid if
+            ``radio=True`` or ``xray=True`` in spec.
 
         Returns
         -------
         SEDResult
-            NamedTuple with ``wavelength`` (Angstrom) and ``sed`` (erg/s/Hz).
+            NamedTuple with:
+
+            - ``wavelength`` : array, shape (n_wave,). Rest-frame wavelength [Ångstrom]
+            - ``sed`` : array, shape (n_wave,). Spectral luminosity density [erg/s/Hz]
+
+        Notes
+        -----
+        **JIT-compatible**: no — computes SED components via
+        :func:`_compute_sed_components` which is not JIT'd. For JIT-compatible
+        SED access, use :meth:`predict_sed_quantities` instead.
+
+        **Physical units**:
+
+        - Wavelength: rest-frame Ångstrom (not redshifted)
+        - SED: erg/s/Hz (L_ν), normalized to the total stellar mass
+          implied by the SFH
+
+        **SED components**: Total SED is the sum of:
+
+        - Stellar continuum (CSP from SSP integration)
+        - Nebular continuum (if nebular_mode ≠ 'baked-in')
+        - Nebular emission lines (if ``neb_*`` params free)
+        - AGN continuum (if ``agn_model`` set)
+        - Dust attenuation (applied to stellar + AGN)
+        - Dust emission (re-radiated IR, if dust_emission_model set)
+        - Shock emission (if ``shock=True``)
+        - Radio/X-ray (if ``radio=True`` or ``xray=True``)
+
+        **Attenuation**: Applied via two-component (birth cloud + diffuse ISM)
+        or single-screen dust law, parameterized by age-dependent optical depth.
+        See ``components.dust`` for available laws.
+
+        See Also
+        --------
+        predict_obs_sed : Observed-frame SED (redshifted + IGM).
+        predict_sed_quantities : JIT-compatible SED-derived quantities.
         """
         from tengri.forward.result import SEDResult
 
@@ -1034,22 +1171,73 @@ class SEDModel:
         return SEDResult(wavelength=result["rest_wavelength"], sed=result["sed_total"])
 
     def predict_obs_sed(self, params, wave=None):
-        """Compute observed-frame SED (redshifted + IGM absorbed).
+        """Compute observed-frame SED (redshifted + IGM + DLA transmission).
 
-        At z=0, identical to ``predict_rest_sed()``.
+        Evaluates the rest-frame SED, redshifts to observed frame
+        (wavelength × (1+z)), and applies IGM and DLA absorption where
+        configured. At z=0, identical to :meth:`predict_rest_sed`.
 
         Parameters
         ----------
         params : dict
-            Parameter values (public names).
+            Parameter values using public parameter names.
         wave : array, optional
-            Custom rest-frame wavelength grid (Angstrom) before redshifting.
+            Custom rest-frame wavelength grid [Angstrom] before redshifting.
+            If None, uses model default.
 
         Returns
         -------
         SEDResult
-            NamedTuple with ``wavelength`` (observed-frame Angstrom) and
-            ``sed`` (erg/s/Hz).
+            NamedTuple with:
+
+            - ``wavelength`` : array, shape (n_wave,).
+              Observed-frame wavelength [Ångstrom]
+            - ``sed`` : array, shape (n_wave,).
+              Observed-frame spectral luminosity density [erg/s/Hz]
+
+        Notes
+        -----
+        **JIT-compatible**: no — delegates to :meth:`predict_rest_sed`.
+
+        **IGM absorption**: Applies transmission via
+        :math:`T_{\\mathrm{IGM}}(\\lambda_{\\mathrm{obs}}, z)` when ``igm=True`` in spec.
+        Uses Inoue+2014 [1]_ mean IGM with optional extensions for:
+
+        - Reionization epoch: CGM damping wing (Asada+2025 [2]_)
+        - Patchy reionization: parameterized neutral fraction (Mason+2018 [3]_)
+
+        **CRITICAL GOTCHA**: IGM transmission takes **observed-frame** wavelengths
+        as input. The redshifted ``wavelength`` in this SED is already in observed
+        frame, so ``igm_transmission(wave_obs, z)`` is called correctly.
+
+        **DLA absorption**: Applies Lyman-series damping wing when ``dla=True``.
+        Parameterized by neutral column density log₁₀(N_HI) and temperature.
+        See :func:`~tengri.components.igm.dla.dla_transmission_obs`.
+
+        **Physical units**:
+
+        - Wavelength: observed-frame Ångstrom (redshifted)
+        - SED: erg/s/Hz (same as rest-frame), but now at redshifted
+          wavelengths and reduced intensity by :math:`(1+z)` factor from
+          cosmological redshift
+
+        See Also
+        --------
+        predict_rest_sed : Rest-frame SED (before redshift/IGM).
+        predict_photometry : Filter-integrated observed flux (uses this internally).
+
+        References
+        ----------
+        .. [1] A. Inoue et al., "Pale Blue Dot: A Direct Measure of the
+           Small Magnitude of Intergalactic Dust Using z ∼ 0–0.5 Spectra,"
+           ApJ, 780, 116 (2014). arXiv:1309.2389.
+           https://doi.org/10.1088/0004-637X/780/2/116
+        .. [2] R. Asada et al., "Reionization-Era Low-Mass Galaxies and the
+           Ionizing Photon Budget during Cosmic Reionization," ApJ, (2025).
+        .. [3] C. Mason et al., "The Universe is Reionizing at z ~ 7: Bayesian
+           Inference of the IGM Optical Depth Using Ly-alpha Forest Data,"
+           ApJ, 857, 97 (2018). arXiv:1711.11585.
+           https://doi.org/10.3847/1538-4357/aab6a8
         """
         from tengri.forward.result import SEDResult
 
@@ -1106,85 +1294,164 @@ class SEDModel:
         return self._compute_sed_components(params)["sed_total"]
 
     def predict(self, params):
-        """Create a lazy prediction object for derived physical quantities.
+        """Create a lazy prediction object for all derived physical quantities.
 
-        Returns a :class:`~tengri.prediction.Prediction` object whose
-        properties are computed on first access and cached. This is the
-        recommended API for exploring derived quantities from a single
-        galaxy.
+        Returns a :class:`Prediction` object that computes and caches
+        derived quantities on first access. This is the recommended API
+        for interactive exploration of a single galaxy's properties,
+        trading speed for convenience.
 
-        For batch computation over many parameter sets (posterior
-        chains, mock catalogs), use the JIT-compatible group methods
-        :meth:`predict_sfh_quantities`, :meth:`predict_sed_quantities`,
-        or :meth:`predict_line_luminosities` with ``jax.vmap`` instead.
+        For batch computation over posterior chains or mock catalogs,
+        use the JIT-compatible methods :meth:`predict_sfh_quantities`,
+        :meth:`predict_sed_quantities`, or :meth:`predict_line_luminosities`
+        with :func:`jax.vmap` instead (up to 1000× faster for large batches).
 
         Parameters
         ----------
         params : dict
-            Parameter values (public names).
+            Parameter values using public parameter names.
 
         Returns
         -------
         Prediction
-            Lazy prediction object with ``.sfh``, ``.sed``, ``.lines``,
-            ``.radio``, ``.xray``, and ``.ionizing`` property groups.
+            Lazy caching wrapper with property groups:
+
+            - ``.sfh`` : SFH-derived quantities (stellar mass, SFR, age, metallicity)
+            - ``.sed`` : SED-derived quantities (luminosities, colors, indices)
+            - ``.lines`` : Emission line properties (luminosities, fluxes, ratios)
+            - ``.radio`` : Radio SED properties (if ``radio=True``)
+            - ``.xray`` : X-ray SED properties (if ``xray=True``)
+            - ``.ionizing`` : Ionizing photon budget properties
+
+        Notes
+        -----
+        **Not JIT-compatible**: Uses Python-side caching and object
+        attribute access. Useful for interactive exploration, not
+        for inference loops. For inference, use
+        :meth:`predict_sfh_quantities`, :meth:`predict_sed_quantities`,
+        etc. with :func:`jax.vmap`.
+
+        **Lazy evaluation**: Quantities are computed only when accessed.
+        Repeated access to the same property reuses cached results.
+        This is transparent to the user.
+
+        **NaN handling**: Some quantities (e.g., ``stellar_mass_surviving``,
+        ``l_dust_absorbed``) may return NaN if required data/parameters
+        unavailable (e.g., no mass-remaining table, dust_model='none').
+        The Prediction object handles NaN gracefully (returns None for
+        backward compatibility in some cases).
 
         Examples
         --------
         **Single-galaxy exploration (lazy, on-demand):**
 
         >>> pred = model.predict(params)
-        >>> pred.sfh.stellar_mass  # triggers SFH computation
+        >>> pred.sfh.stellar_mass  # triggers SFH computation, caches result
+        Array(1.23e10, dtype=float64)
         >>> pred.sfh.mass_weighted_age_gyr  # reuses cached SFH
+        Array(2.34, dtype=float64)
         >>> pred.sed.l_bol  # triggers SED computation
+        Array(2.5e10, dtype=float64)
         >>> pred.sed.uv_slope_beta  # reuses cached SED
+        Array(-1.8, dtype=float64)
         >>> pred.lines.halpha  # triggers nebular computation
-        >>> pred.lines.bpt_nii  # reuses cached lines
+        Array(4.23e-15, dtype=float64)
 
-        **Batch computation (JIT + vmap):**
+        **Batch computation (JIT-compatible, faster for large N):**
 
         >>> import jax
+        >>> params_batch = spec.sample(jax.random.PRNGKey(0), n=10000)
         >>> sfh_fn = jax.vmap(model.predict_sfh_quantities)
         >>> sfh_batch = sfh_fn(params_batch)
-        >>> sfh_batch.stellar_mass  # shape (n_galaxies,)
+        >>> sfh_batch.stellar_mass  # shape (10000,)
+        >>> sfh_batch.stellar_mass.mean()
 
         See Also
         --------
-        predict_sfh_quantities : JIT-compatible SFH quantities.
-        predict_sed_quantities : JIT-compatible SED quantities.
-        predict_line_luminosities : JIT-compatible emission lines.
+        predict_sfh_quantities : JIT-compatible SFH quantities for batch.
+        predict_sed_quantities : JIT-compatible SED quantities for batch.
+        predict_line_luminosities : JIT-compatible emission lines for batch.
+        predict_rest_sed : Full rest-frame SED for custom analysis.
         """
         from tengri.forward.prediction import Prediction
 
         return Prediction(self, params)
 
     def predict_photometry(self, params, mode="auto", approx=None):
-        """Compute observed photometric flux densities.
+        """Compute observed photometric flux densities through all filters.
+
+        Convolves the SED (redshifted and IGM-absorbed) through filter
+        transmission curves, returning flux densities in the AB system
+        at the source. Supports three prediction modes for speed/accuracy
+        tradeoff: compositional (exact, XLA-fused), hybrid (precomputed
+        stellar + exact non-stellar), and exact (full pipeline, slowest).
 
         Parameters
         ----------
         params : dict
-            Parameter values (public names).
-        mode : str
-            Prediction mode. One of:
+            Parameter values using public parameter names (e.g.,
+            ``sfh_tsnorm_log_peak_sfr``, ``met_logzsol``, ``redshift``).
+            See :class:`Parameters` for canonical names.
+        mode : str, optional
+            Prediction strategy. Default ``"auto"`` selects fastest available.
 
-            - ``"auto"`` (default) — pick the fastest available mode
-              (compositional → hybrid → exact).
-            - ``"compositional"`` — full-resolution JIT SED from all
-              components, then integrate through filters. Exact and
-              fastest (XLA fuses entire graph). Preferred.
-            - ``"hybrid"`` — precomputed SSP stellar + exact
-              non-stellar at full wavelength. Fallback when
-              compositional is unavailable.
-            - ``"exact"`` — raw pipeline, no JIT kernel.
+            - ``"auto"`` — cascade through available: compositional → hybrid → exact
+            - ``"compositional"`` — full-resolution JIT SED kernel (bit-exact,
+              fastest). All components evaluated at full wavelength, integrated
+              through filters in single XLA-fused graph. Preferred when available.
+            - ``"hybrid"`` — precomputed SSP×filter photometry (stellar, ~0.4% error)
+              + exact non-stellar (emission, AGN, dust) at full wavelength, integrated
+              through filters. Fallback when compositional unavailable (e.g.,
+              variable-redshift, evolving metallicity, tabulated SFH).
+            - ``"exact"`` — raw forward pipeline, no kernel JIT, no precomputation.
+              Reference accuracy, slowest (~5–10× slower than compositional).
         approx : bool, optional
-            **Deprecated.** Use ``mode="auto"`` (True) or
-            ``mode="exact"`` (False) instead.
+            **Deprecated.** Use ``mode="auto"`` (approx=True) or ``mode="exact"``
+            (approx=False) instead.
 
         Returns
         -------
-        array, shape (n_filters,)
-            Observed flux densities in erg/s/cm^2/Hz.
+        flux_density : array, shape (n_filters,)
+            Observed flux densities in erg/s/cm²/Hz (AB system, rest-frame
+            reference frame corrected for luminosity distance and (1+z)
+            redshift factor).
+
+        Raises
+        ------
+        ValueError
+            If no filters configured in the model (pass ``filters`` or
+            ``observation=`` to constructor).
+
+        Notes
+        -----
+        **JIT-compatible**: yes — compositional and hybrid modes are
+        JIT'd at initialization. Exact mode is not JIT'd. All modes
+        are safe inside :func:`jax.grad` for parameter gradients.
+
+        **Approximate accuracy**: Compositional and hybrid modes produce
+        predictions within 0.1%–0.4% of exact (see CLAUDE.md for
+        mode-specific tolerances). Differences driven by:
+
+        - Compositional: None (bit-exact vs. exact)
+        - Hybrid: ~0.4% stellar photometry (Zacharegkas+2025 [1]_)
+        - Approximations enabled via ``approx``: see :class:`SEDModel`
+          for individual component tolerances
+
+        **Filter wavelengths**: All filters loaded via :func:`load_filter_set`
+        or :class:`Photometry` are assumed to be in observed frame (redshifted).
+        The model auto-redshifts rest-frame SED by :math:`(1+z)` before
+        filter integration.
+
+        See Also
+        --------
+        predict : Lazy prediction object for all derived quantities.
+        predict_spectrum : Spectral flux at arbitrary wavelengths.
+        predict_magnitudes : AB magnitudes (uses photometry internally).
+
+        References
+        ----------
+        .. [1] A. Zacharegkas et al., "Fast Photometry with Precomputed
+           Stellar Population Grids," ApJ, (2025).
         """
         if self.filter_waves is None:
             raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
@@ -1223,24 +1490,71 @@ class SEDModel:
         return self._predict_photometry_exact(params)
 
     def predict_spectrum(self, params, wave_obs=None, mode="auto", approx=None):
-        """Compute observed spectrum at given wavelengths.
+        """Compute observed spectrum at given wavelengths with LSF convolution.
+
+        Evaluates the full SED at custom wavelengths in observed frame,
+        applies velocity dispersion broadening (if ``sigma_v`` in spec),
+        convolves with instrument line-spread function, and optionally
+        applies multiplicative Chebyshev calibration polynomial.
 
         Parameters
         ----------
         params : dict
-            Parameter values.
+            Parameter values using public parameter names.
         wave_obs : array, optional
-            Observed wavelength grid (Angstrom). If None, uses the
-            grid from ``precompute_spectroscopy()`` or the Observation config.
-        mode : str
-            Prediction mode — same as :meth:`predict_photometry`.
+            Observed-frame wavelength grid [Angstrom]. If None, uses:
+
+            1. Grid from :meth:`precompute_spectroscopy()` if called
+            2. Grid from ``observation.spectroscopy.wave_obs`` if set
+            3. Raises ValueError if neither available
+
+        mode : str, optional
+            Prediction mode (same as :meth:`predict_photometry`).
+            Default ``"auto"`` cascades through available kernels.
         approx : bool, optional
             **Deprecated.** Use ``mode=`` instead.
 
         Returns
         -------
-        array, shape (n_pix,)
-            Spectral flux density in erg/s/cm^2/Hz.
+        flux : array, shape (n_pix,)
+            Observed spectral flux density [erg/s/cm²/Hz] in the AB system
+            at the specified wavelengths.
+
+        Raises
+        ------
+        ValueError
+            If ``wave_obs`` is None and no precomputed wavelength grid available.
+
+        Notes
+        -----
+        **JIT-compatible**: compositional and hybrid modes are JIT'd.
+        Exact mode is not JIT'd.
+
+        **Velocity dispersion**: When ``sigma_v`` is in free params,
+        applies line-of-sight broadening via Gaussian convolution at
+        FWHM = ``2.355 × sigma_v``. Implemented as wavelength-space
+        Gaussian convolution (valid for linear pixels; use
+        :func:`~tengri.observation.spectrum.apply_lsf` for
+        log-wavelength pixels).
+
+        **Line-spread function**: Composition of:
+
+        - Velocity dispersion broadening (σ_v-dependent)
+        - Instrument LSF (resolution R-dependent, Gaussian approximation)
+        - Chebyshev multiplicative calibration (optional)
+
+        All three are convolved in the forward model.
+
+        **Precomputed wavelength grid**: For fixed-redshift models with
+        fixed wavelength grid, call :meth:`precompute_spectroscopy(wave_obs)`
+        at initialization to cache spectroscopy kernels. This enables the
+        hybrid/compositional paths for ~10× speedup vs. exact.
+
+        See Also
+        --------
+        predict_photometry : Filter-integrated flux (simpler, faster).
+        predict : Lazy access to all SED and SFH quantities.
+        precompute_spectroscopy : Cache spectroscopy kernels for this grid.
         """
         if wave_obs is None and self._precomputed.spectroscopy is not None:
             wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
@@ -1522,26 +1836,62 @@ class SEDModel:
         }
 
     def predict_sfh_quantities(self, params):
-        """Compute SFH-derived quantities (JIT-compatible).
+        """Compute SFH-derived quantities in JIT-compatible form.
 
-        Returns a :class:`~tengri.prediction.SFHQuantities` NamedTuple
-        containing stellar mass, SFR, sSFR, and mass-weighted age and
-        metallicity. This method is fully JIT-compatible and can be
-        vectorized with ``jax.vmap`` for batch computation over
-        posterior chains or mock catalogs.
+        Integrates the SFH to compute stellar mass, recent SFR, specific SFR,
+        and mass-weighted age/metallicity. Returns a :class:`SFHQuantities`
+        NamedTuple that is fully JIT-compatible and vmap-ready for batch
+        inference over posterior chains or mock catalogs.
 
         Parameters
         ----------
         params : dict
-            Parameter values (public names).
+            Parameter values using public parameter names.
 
         Returns
         -------
         SFHQuantities
-            NamedTuple with fields: ``stellar_mass``,
-            ``stellar_mass_surviving``, ``sfr_100myr``, ``sfr_10myr``,
-            ``ssfr``, ``mass_weighted_age_gyr``,
-            ``mass_weighted_metallicity``.
+            NamedTuple with fields:
+
+            - ``stellar_mass`` : float. Total stellar mass formed [M☉]
+            - ``stellar_mass_surviving`` : float. Mass in living stars + remnants [M☉],
+              or NaN if SSP mass-remaining tables not loaded.
+            - ``sfr_100myr`` : float. SFR time-averaged over last 100 Myr [M☉/yr]
+            - ``sfr_10myr`` : float. SFR time-averaged over last 10 Myr [M☉/yr]
+            - ``ssfr`` : float. Specific SFR (SFR/M_surv or SFR/M_formed) [yr⁻¹]
+            - ``mass_weighted_age_gyr`` : float. Mass-weighted age [Gyr]
+            - ``mass_weighted_metallicity`` : float. Mass-weighted log₁₀(Z/Z☉) or
+              absolute log₁₀(Z) depending on metallicity mode
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        Safe inside :func:`jax.jit`, :func:`jax.vmap`, and :func:`jax.grad`.
+
+        **Gradient-safe**: yes — all quantities are differentiable w.r.t.
+        SFH and metallicity parameters.
+
+        **Surviving mass**: Requires SSP grid with ``ssp_mass_remaining``
+        (e.g., FSPS grids). If unavailable, returns NaN. :meth:`predict`
+        handles NaN gracefully for backward compatibility.
+
+        **SFR averaging**: Time-weighted mean over lookback-time window:
+
+        .. math::
+
+            \\langle\\mathrm{SFR}\\rangle_T =
+                \\frac{\\sum_i \\mathrm{SFR}_i \\Delta t_i}{\\sum_i \\Delta t_i}
+
+        where :math:`i` ranges over all ages :math:`\\leq T`. Uses symmetric
+        bin widths (``jnp.gradient``) to avoid trapezoid boundary artifacts.
+
+        **Mass-weighted age**: Computed as
+
+        .. math::
+
+            t_\\mathrm{mw} = \\frac{\\sum_i w_i t_i}{\\sum_i w_i}
+
+        where :math:`w_i` are stellar population weights (age-integrated SFR).
 
         Examples
         --------
@@ -1557,10 +1907,12 @@ class SEDModel:
         >>> sfh_fn = jax.vmap(model.predict_sfh_quantities)
         >>> sfh_batch = sfh_fn(params_batch)
         >>> sfh_batch.stellar_mass  # shape (10000,)
+        >>> print(sfh_batch.stellar_mass.mean())
 
         See Also
         --------
-        predict : Lazy prediction for single-galaxy exploration.
+        predict : Lazy prediction for single-galaxy exploration (non-JIT).
+        predict_sfh : SFH on linear-time grid for visualization.
         predict_sed_quantities : JIT-compatible SED quantities.
         """
         from tengri.forward.prediction import SFHQuantities
@@ -1682,30 +2034,74 @@ class SEDModel:
         )
 
     def predict_sed_quantities(self, params):
-        """Compute SED-derived quantities (JIT-compatible).
+        """Compute SED-derived quantities in JIT-compatible form.
 
-        Returns a :class:`~tengri.prediction.SEDQuantities` NamedTuple
-        containing bolometric and IR luminosities, UV slope, spectral
-        indices, and luminosity-weighted age/metallicity. Runs the
-        full forward model internally.
-
-        This method is fully JIT-compatible and can be vectorized with
-        ``jax.vmap`` for batch computation.
+        Evaluates the full forward model and computes UV slope, spectral
+        indices (D4000, Balmer break), bolometric/IR luminosities, dust
+        attenuation, and luminosity-weighted age/metallicity. Returns
+        a :class:`SEDQuantities` NamedTuple that is fully JIT-compatible
+        and vmap-ready for batch inference.
 
         Parameters
         ----------
         params : dict
-            Parameter values (public names).
+            Parameter values using public parameter names.
 
         Returns
         -------
         SEDQuantities
-            NamedTuple with fields: ``l_bol``, ``l_tir``,
-            ``l_dust_absorbed``, ``irx``, ``uv_slope_beta``,
-            ``dn4000``, ``balmer_break``, ``m_uv``, ``fuv_flux``,
-            ``nuv_flux``, ``fuv_flux_intrinsic``, ``nuv_flux_intrinsic``,
-            ``rest_uv_color``, ``luminosity_weighted_age_gyr``,
-            ``luminosity_weighted_metallicity``.
+            NamedTuple with fields:
+
+            - ``l_bol`` : float. Bolometric luminosity [L☉]
+            - ``l_tir`` : float. Total infrared (8–1000 μm) luminosity [L☉]
+            - ``l_dust_absorbed`` : float. Dust-absorbed luminosity [L☉]
+              (intrinsic − attenuated), or NaN if intrinsic SED unavailable.
+            - ``irx`` : float. Infrared excess := L_TIR / L_UV(1600 Å).
+              Common probe of dust obscuration (Dale et al. 2001).
+            - ``uv_slope_beta`` : float. UV slope (power-law index) in
+              f_λ ∝ λ^β for 1200–2600 Å.
+            - ``dn4000`` : float. D_n(4000) break ratio: flux average
+              at 3750–3950 Å / 4050–4250 Å. Indicator of stellar age.
+            - ``balmer_break`` : float. Balmer break: flux ratio
+              ~3700 Å / ~4000 Å. Old stellar population signature.
+            - ``m_uv`` : float. Absolute magnitude at 1500 Å
+              (M_1500, standard reionization-era indicator).
+            - ``fuv_flux`` : float. Flux at 1500 Å [erg/s/cm²]
+            - ``nuv_flux`` : float. Flux at 2300 Å [erg/s/cm²]
+            - ``fuv_flux_intrinsic`` : float. FUV flux, dust-free
+              (intrinsic SED). NaN if unavailable.
+            - ``nuv_flux_intrinsic`` : float. NUV flux, dust-free. NaN
+              if unavailable.
+            - ``rest_uv_color`` : float. Rest-frame UV color (f_1500 − f_2300).
+            - ``luminosity_weighted_age_gyr`` : float. Luminosity-weighted
+              age [Gyr] (∫L_λ age dλ / ∫L_λ dλ).
+            - ``luminosity_weighted_metallicity`` : float. Luminosity-weighted
+              log₁₀(Z/Z☉) or absolute log₁₀(Z).
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        Safe inside :func:`jax.jit`, :func:`jax.vmap`, and :func:`jax.grad`.
+
+        **Gradient-safe**: yes — all quantities are differentiable w.r.t.
+        SFH, metallicity, and dust parameters.
+
+        **Spectral indices**: Computed directly on the rest-frame SED
+        (not broadband-filtered). All wavelengths defined in rest frame.
+
+        **Dust-absorbed luminosity**: Defined as L_dust = L_intrinsic − L_attenuated
+        (i.e., the energy re-radiated in the IR). Requires the forward model
+        to track both intrinsic and attenuated SEDs internally. Returns NaN if
+        ``dust_model="none"`` or intrinsic SED not available.
+
+        **Luminosity-weighted quantities**: Computed as:
+
+        .. math::
+
+            \\langle Q \\rangle_L = \\frac{\\int L_\\lambda(\\lambda) Q(\\lambda) d\\lambda}
+                                        {\\int L_\\lambda(\\lambda) d\\lambda}
+
+        More sensitive to young, UV-bright populations than mass-weighted age.
 
         Examples
         --------
@@ -1716,6 +2112,8 @@ class SEDModel:
         Array(2.5e10, dtype=float64)
         >>> sed_q.dn4000
         Array(1.42, dtype=float64)
+        >>> sed_q.irx
+        Array(1.87, dtype=float64)
 
         **Batch over posterior samples:**
 
@@ -1723,11 +2121,20 @@ class SEDModel:
         >>> sed_fn = jax.vmap(model.predict_sed_quantities)
         >>> sed_batch = sed_fn(params_batch)
         >>> sed_batch.m_uv  # shape (n_samples,)
+        >>> sed_batch.dn4000.mean()
+
+        **Computing IRX − β relation:**
+
+        >>> sed_q = sed_fn(params_batch)
+        >>> irx = sed_q.irx
+        >>> beta = sed_q.uv_slope_beta
+        >>> # Compare to Meurer et al. (1999) IRX-β calibration
 
         See Also
         --------
         predict : Lazy prediction for single-galaxy exploration.
         predict_sfh_quantities : JIT-compatible SFH quantities.
+        predict_rest_sed : Full rest-frame SED (for custom analysis).
         """
         from tengri.forward.prediction import SEDQuantities
         from tengri.utils.sed_quantities import (
@@ -2714,6 +3121,8 @@ class SEDModel:
         from tengri.config.display import summary as _summary
 
         return _summary(self)
+
+
 
 
 # Backward-compatibility alias
