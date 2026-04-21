@@ -80,6 +80,7 @@ def build_exact_sed(model):
         f_obscuration=0.0,
         tau_v=0.0,
     ):
+        """Assemble full exact SED from CSP weights, SSP flux, and dust parameters."""
         w = weights.astype(dt)
         ssp_z = ssp_at_z.astype(dt)
 

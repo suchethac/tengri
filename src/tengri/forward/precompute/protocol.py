@@ -60,6 +60,42 @@ class PrecomputeModule(Protocol):
         redshift: float,
         parameters: Any,
         **kwargs: Any,
-    ) -> Any: ...
+    ) -> Any:
+        """Build preintegrated grid through filters with auto-collapse of fixed axes.
 
-    def build_lookup(self, preint: Any, **kwargs: Any) -> Any: ...
+        Parameters
+        ----------
+        filter_waves : list
+            Per-filter wavelength arrays.
+        filter_trans : list
+            Per-filter transmission curves.
+        redshift : float
+            Source redshift.
+        parameters : Any
+            Free and fixed parameter specification.
+        **kwargs : Any
+            Component-specific options.
+
+        Returns
+        -------
+        Any
+            Preintegrated result (PreintegratedGrid or component-specific dataclass).
+        """
+        ...
+
+    def build_lookup(self, preint: Any, **kwargs: Any) -> Any:
+        """Build JIT-compiled lookup function from preintegrated grid.
+
+        Parameters
+        ----------
+        preint : Any
+            Output of precompute().
+        **kwargs : Any
+            Component-specific options.
+
+        Returns
+        -------
+        callable
+            JIT-compiled function: (scale, *free_params) -> photometry array.
+        """
+        ...

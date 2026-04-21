@@ -53,6 +53,7 @@ def build_ssp_component(model):
         _age_dt = model._csp_age_dt.astype(dt)  # precomputed bin widths
 
     def ssp_fn(sfr_on_ssp, log_z_abs, alpha_fe=0.0):
+        """Compute SSP flux and CSP mass weights via metallicity interpolation."""
         sfr = sfr_on_ssp.astype(dt)
         lz = jnp.asarray(log_z_abs, dtype=dt)
         afe = jnp.asarray(alpha_fe, dtype=dt)
@@ -124,6 +125,7 @@ def build_dust_atten_component(model):
         dust_delta=0.0,
         dust_Rv=3.1,
     ):
+        """Apply dust attenuation to SSP fluxes and compute absorbed luminosity."""
         w = weights.astype(dt)
         ssp_z = ssp_flux_at_z.astype(dt)
 
@@ -205,6 +207,7 @@ def build_dust_emission_component(model):
         dust_qpah=2.5,
         dust_eta_balance=1.0,
     ):
+        """Compute dust IR emission SED from absorbed luminosity."""
         L_ir_scaled = jnp.maximum(L_ir * dust_eta_balance, 0.0)
         return emission_fn(
             wave,
@@ -258,6 +261,7 @@ def build_agn_component(model):
         agn_log_mbh=7.0,
         agn_log_ledd=-1.0,
     ):
+        """Compute AGN SED contribution and bolometric luminosity."""
         if is_parametric:
             frac_for_model = 1.0
             bol_erg = 10.0**agn_log_lbol * 3.828e33  # Lsun → erg/s
@@ -318,6 +322,7 @@ def build_nebular_component(model):
         neb_fesc=0.0,
         neb_fesc_lya=0.0,
     ):
+        """Compute nebular emission SED (lines and continuum)."""
         return backend.predict_nebular_sed(
             ssp_weights=weights,
             ssp_wave=ssp_wave,
@@ -364,6 +369,7 @@ def build_radio_component(model):
         radio_loudness=0.0,
         radio_alpha_agn=0.7,
     ):
+        """Compute radio SED from synchrotron and free-free emission."""
         return radio_total(
             wave,
             L_ir=L_ir,
@@ -408,6 +414,7 @@ def build_xray_component(model):
         xray_gamma_agn=1.8,
         xray_alpha_ox=-1.4,
     ):
+        """Compute X-ray SED from XRBs and AGN corona."""
         return xray_total(
             wave,
             sfr=sfr,

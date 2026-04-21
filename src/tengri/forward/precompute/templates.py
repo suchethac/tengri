@@ -116,6 +116,20 @@ def build_template_photometry_lookup(preint: PreintegratedGrid):
 
     @jax.jit
     def lookup(scale, *grid_params):
+        """Interpolate template photometry at given grid parameters and scale by luminosity.
+
+        Parameters
+        ----------
+        scale : float
+            Luminosity scaling factor (L_absorbed, L_bol, etc.).
+        *grid_params : float
+            Per-axis query points for triweight interpolation.
+
+        Returns
+        -------
+        array, shape (n_filters,)
+            Photometry in filter bands.
+        """
         normed = interp_nd_triweight(phot, axes, edges, grid_params)
         return scale * normed
 

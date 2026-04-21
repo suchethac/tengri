@@ -414,6 +414,7 @@ def build_hybrid_photometry(model):
             xray_gamma_lmxb=1.6,
             xray_E_cut=300.0,
         ):
+            """Compute hybrid photometry for single dust component."""
             return _hybrid_phot_body(
                 sfr_on_ssp,
                 log_z_abs,
@@ -551,6 +552,7 @@ def build_hybrid_photometry(model):
             xray_gamma_lmxb=1.6,
             xray_E_cut=300.0,
         ):
+            """Compute hybrid photometry for two-component dust."""
             return _hybrid_phot_body(
                 sfr_on_ssp,
                 log_z_abs,
@@ -920,6 +922,7 @@ def build_hybrid_photometry(model):
 
         # Q_H interpolation helper (bilinear in SSP met × age)
         def _get_qh(log_z, log_age_yr):
+            """Interpolate ionizing photon production rate from metallicity-age grid."""
             iz = jnp.clip(
                 jnp.searchsorted(_neb_qh_log_met, log_z) - 1, 0, len(_neb_qh_log_met) - 2
             )
@@ -946,6 +949,7 @@ def build_hybrid_photometry(model):
         young_weights = weights[_neb_young_idx]
 
         def _cont_one_age(log_age_i, weight_i):
+            """Compute nebular continuum photometry contribution for one age bin."""
             qh_i = _get_qh(log_z_abs, log_age_i)
             # Triweight interp in (Z_gas, age_cloudy, logU) → (n_filters,) per Q_H
             # The preint grid is in log10 linear space (10^log10_lum was done at preint time)
@@ -962,6 +966,7 @@ def build_hybrid_photometry(model):
 
         # --- Lines: same age-sum but on (n_lines,), then project to filters ---
         def _line_one_age(log_age_i, weight_i):
+            """Compute nebular emission line photometry contribution for one age bin."""
             qh_i = _get_qh(log_z_abs, log_age_i)
             # Interp line luminosities in (Z_gas, age, logU) → (n_lines,) log10
             log_lum_per_qh = interp_nd_triweight(
@@ -1777,6 +1782,7 @@ def build_hybrid_photometry_ztable(model):
             xray_gamma_lmxb=1.6,
             xray_E_cut=300.0,
         ):
+            """Compute hybrid photometry for single dust component with redshift table."""
             return _hybrid_phot_ztable_body(
                 sfr_on_ssp,
                 log_z_abs,
@@ -1916,6 +1922,7 @@ def build_hybrid_photometry_ztable(model):
             xray_gamma_lmxb=1.6,
             xray_E_cut=300.0,
         ):
+            """Compute hybrid photometry for two-component dust with redshift table."""
             return _hybrid_phot_ztable_body(
                 sfr_on_ssp,
                 log_z_abs,

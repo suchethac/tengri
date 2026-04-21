@@ -82,6 +82,7 @@ def nebular_emission(
         ssp_qh_ok = ssp_logqion > gas_logqion_sfr - 2.0  # within 1%
 
         def _ssp_path(_):
+            """Compute nebular SED using SSP-derived ionizing photon spectrum."""
             return backend.predict_nebular_sed(
                 ssp_weights=weights,
                 ssp_wave=ssp_wave,
@@ -95,6 +96,7 @@ def nebular_emission(
             )
 
         def _fallback_path(_):
+            """Compute nebular SED using SFR-derived ionizing photon spectrum."""
             return backend.predict_nebular_sed(
                 ssp_wave=ssp_wave,
                 log_z=log_z_abs,
@@ -301,6 +303,7 @@ def agn_emission(
     from tengri.components.agn.polar_dust import polar_dust_total
 
     def _apply_polar_dust(sed):
+        """Apply polar dust attenuation and re-emission to AGN SED."""
         agn_lsun = sed / _LSUN
         att_lsun, reemit_lsun = polar_dust_total(
             agn_lsun,
