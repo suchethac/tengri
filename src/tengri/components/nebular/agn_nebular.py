@@ -396,6 +396,313 @@ def agn_nlr_cue(
     return line_wav, line_lum
 
 
+# ── Synthesizer NLR backend ───────────────────────────────────────
+
+
+@dataclass
+class SynthesizerGridData:
+    """Container for Synthesizer CLOUDY c23.01 grid loaded from HDF5.
+
+    Grid shape for ``log_line_per_qh`` leading dims:
+    ``(n_mass, n_edd, n_inc, n_met, n_ionU, n_nH)``.
+
+    Attributes
+    ----------
+    mass_axis : (n,) array
+        log10(mass [kg]).
+    eddington_axis : (n,) array
+        log10(accretion_rate_eddington).
+    cosine_axis : (n,) array
+        cosine_inclination (linear, not log).
+    metallicity_axis : (n,) array
+        log10(metallicities).
+    logU_axis : (n,) array
+        log10(ionisation_parameter).
+    logn_axis : (n,) array
+        log10(hydrogen_density [cm^-3]).
+    line_wavelengths_aa : (n_lines,) array
+        Vacuum wavelengths [Angstrom].
+    log_line_per_qh : (n_mass, n_edd, n_inc, n_met, n_U, n_n, n_lines) array
+        log10(L_line / Q_H) where L_line is in L_sun and Q_H in photons/s.
+    """
+
+    mass_axis: jnp.ndarray
+    eddington_axis: jnp.ndarray
+    cosine_axis: jnp.ndarray
+    metallicity_axis: jnp.ndarray
+    logU_axis: jnp.ndarray
+    logn_axis: jnp.ndarray
+    line_wavelengths_aa: jnp.ndarray
+    log_line_per_qh: jnp.ndarray
+
+
+def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
+    """Load Synthesizer CLOUDY c23.01 AGN NLR grid from HDF5.
+
+    Loads grid axes and emission line data, converts line luminosities from
+    per-unit-bolometric to per-unit-ionizing-photon normalization.
+
+    Parameters
+    ----------
+    filepath : str or Path
+        Path to Synthesizer test grid HDF5 file
+        (e.g. ``data/synthesizer_grids/test_grid_agn-nlr.hdf5``).
+
+    Returns
+    -------
+    SynthesizerGridData
+        Loaded grid data with log_line_per_qh in log10(L_sun·s/photons).
+
+    Raises
+    ------
+    FileNotFoundError
+        If the grid file does not exist.
+    KeyError
+        If required datasets are missing.
+    """
+    import h5py
+
+    from tengri.utils.physics_constants import L_SUN
+
+    filepath = Path(filepath)
+    if not filepath.exists():
+        raise FileNotFoundError(
+            f"Synthesizer NLR grid not found at '{filepath}'.\n"
+            "Download or generate the grid with Synthesizer Box credentials."
+        )
+
+    with h5py.File(filepath, "r") as f:
+        # Load axes: order from root attributes is preserved in the grid
+        mass_kg = jnp.array(f["axes"]["mass"][:])
+        eddington = jnp.array(f["axes"]["accretion_rate_eddington"][:])
+        cosine_inc = jnp.array(f["axes"]["cosine_inclination"][:])
+        metallicities = jnp.array(f["axes"]["metallicities"][:])
+        ionU = jnp.array(f["axes"]["ionisation_parameter"][:])
+        nH = jnp.array(f["axes"]["hydrogen_density"][:])
+
+        # Convert to log10 where appropriate
+        mass_axis = jnp.log10(mass_kg)
+        eddington_axis = jnp.log10(eddington)
+        cosine_axis = cosine_inc  # Linear
+        metallicity_axis = jnp.log10(metallicities)
+        logU_axis = jnp.log10(ionU)
+        logn_axis = jnp.log10(nH)
+
+        # Load emission lines
+        line_wav = jnp.array(f["lines"]["wavelength"][:])
+        line_lum = jnp.array(f["lines"]["luminosity"][:])  # (2,2,2,2,2,2,215)
+
+        # Load log10(specific ionizing luminosity for HI)
+        log10_qh_specific = jnp.array(f["log10_specific_ionising_luminosity"]["HI"][:])
+
+    # Normalize line luminosities from per-unit-bolometric to per-unit-Q_H
+    # Synthesizer stores: L_line [W] per unit L_bol [W]
+    # We need: L_line / Q_H [L_sun·s/photons]
+    #
+    # log10(L_line / Q_H) = log10(L_line) - log10(Q_H)
+    #   where L_line is in W and Q_H is in photons/s
+    #
+    # The relationship: L_line / L_bol = line_luminosity
+    #                   Q_H / L_bol = 10^(log10_qh_specific)
+    #                   L_line / Q_H = line_luminosity / 10^(log10_qh_specific)
+    #
+    # In log10: log10(L_line / Q_H [W·s/photons]) = log10(L_line / L_bol)
+    #                                                 - log10(Q_H / L_bol)
+    #         = log10(line_lum) - log10_qh_specific
+    #
+    # Convert from W·s/photons to L_sun·s/photons:
+    # L_sun = 3.828e33 erg/s = 3.828e26 W
+    # L_sun·s/photon = 3.828e26 W·s/photon
+    log_line_lum_per_qh_w = (
+        jnp.log10(jnp.maximum(line_lum, 1e-99)) - log10_qh_specific[:, :, :, :, :, :, None]
+    )
+    log_L_sun = jnp.log10(L_SUN / 1e7)  # Convert erg/s to W
+    log_line_per_qh = log_line_lum_per_qh_w - log_L_sun
+
+    return SynthesizerGridData(
+        mass_axis=mass_axis,
+        eddington_axis=eddington_axis,
+        cosine_axis=cosine_axis,
+        metallicity_axis=metallicity_axis,
+        logU_axis=logU_axis,
+        logn_axis=logn_axis,
+        line_wavelengths_aa=line_wav,
+        log_line_per_qh=log_line_per_qh,
+    )
+
+
+class SynthesizerNLRBackend:
+    """Synthesizer CLOUDY c23.01 AGN NLR photoionization backend.
+
+    Computes AGN narrow-line region emission by interpolating the
+    CLOUDY c23.01 photoionization grids from Synthesizer (Lovell et al. 2025).
+    The grid covers AGN-ionized gas parameterized by BH mass, accretion rate
+    (Eddington ratio), inclination angle, metallicity, ionization parameter,
+    and hydrogen density.
+
+    **Grid data required**: Synthesizer test grids at
+    ``data/synthesizer_grids/test_grid_agn-nlr.hdf5`` (production grids
+    require Synthesizer Box credentials).
+
+    Interpolation strategy
+    ----------------------
+    All 6 axes use C²-continuous triweight interpolation via
+    ``interp_nd_triweight``:
+    - Internal storage in log10 (except cosine_inclination, which is linear)
+    - All axes interpolated independently
+
+    This backend has ``has_continuum = False``.
+
+    Parameters
+    ----------
+    grid_path : str or Path
+        Path to Synthesizer grid HDF5 file.
+
+    Example
+    -------
+    >>> backend = SynthesizerNLRBackend("data/synthesizer_grids/test_grid_agn-nlr.hdf5")
+    >>> wave, lum = backend.predict_agn_nlr_lines(
+    ...     log_bh_mass=8.0,  # [log10(M_sun)]
+    ...     log_eddington=-0.3,  # [log10(Eddington ratio)]
+    ...     cosine_inclination=0.2,  # [linear, 0=edge-on]
+    ...     log_metallicity=0.0,  # [log10(Z_sun)]
+    ...     log_ionU=-1.5,  # [log10(U)]
+    ...     log_nH=4.0,  # [log10(n_H [cm^-3])]
+    ...     log_qh=53.0,  # [log10(Q_H [photons/s])]
+    ... )
+
+    References
+    ----------
+    Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
+    """
+
+    name = "synthesizer_nlr"
+    has_free_params = True
+    has_continuum = False
+
+    def __init__(self, grid_path: str | Path) -> None:
+        self.grid = _load_synthesizer_nlr_grid(grid_path)
+
+        # Pre-compute triweight edges for all 6 axes at init time.
+        # Axes must be sorted ascending for interp_nd_triweight.
+        from tengri.utils.interpolation import edges_for_grid
+
+        # Check and sort each axis
+        self._mass_sorted = jnp.sort(self.grid.mass_axis)
+        self._mass_descending = bool(self.grid.mass_axis[0] > self.grid.mass_axis[-1])
+
+        self._edd_sorted = jnp.sort(self.grid.eddington_axis)
+        self._edd_descending = bool(self.grid.eddington_axis[0] > self.grid.eddington_axis[-1])
+
+        self._cos_sorted = jnp.sort(self.grid.cosine_axis)
+        self._cos_descending = bool(self.grid.cosine_axis[0] > self.grid.cosine_axis[-1])
+
+        self._met_sorted = jnp.sort(self.grid.metallicity_axis)
+        self._met_descending = bool(self.grid.metallicity_axis[0] > self.grid.metallicity_axis[-1])
+
+        self._ionU_sorted = jnp.sort(self.grid.logU_axis)
+        self._ionU_descending = bool(self.grid.logU_axis[0] > self.grid.logU_axis[-1])
+
+        self._nH_sorted = jnp.sort(self.grid.logn_axis)
+        self._nH_descending = bool(self.grid.logn_axis[0] > self.grid.logn_axis[-1])
+
+        # Precompute edges for triweight interpolation
+        self._edges_mass = edges_for_grid(self._mass_sorted)
+        self._edges_edd = edges_for_grid(self._edd_sorted)
+        self._edges_cos = edges_for_grid(self._cos_sorted)
+        self._edges_met = edges_for_grid(self._met_sorted)
+        self._edges_ionU = edges_for_grid(self._ionU_sorted)
+        self._edges_nH = edges_for_grid(self._nH_sorted)
+
+    def predict_agn_nlr_lines(
+        self,
+        log_bh_mass: float = 8.0,
+        log_eddington: float = -0.3,
+        cosine_inclination: float = 0.2,
+        log_metallicity: float = 0.0,
+        log_ionU: float = -1.5,
+        log_nH: float = 4.0,
+        log_qh: float = 53.0,
+        neb_fesc: float = 0.0,
+        **_kwargs,
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Compute AGN NLR emission line luminosities via grid interpolation.
+
+        Parameters
+        ----------
+        log_bh_mass : float
+            log10(BH mass [M_sun]).  Default 8.0.
+        log_eddington : float
+            log10(accretion rate / L_Eddington).  Default -0.3.
+        cosine_inclination : float
+            cos(inclination angle).  Linear, not log.  Default 0.2.
+        log_metallicity : float
+            log10(metallicity [Z_sun]).  Default 0.0 (solar).
+        log_ionU : float
+            log10(ionization parameter U).  Default -1.5.
+        log_nH : float
+            log10(hydrogen density [cm^-3]).  Default 4.0.
+        log_qh : float
+            log10(Q_H) ionizing photon rate [photons/s].  Default 53.0.
+        neb_fesc : float
+            Ionizing photon escape fraction [0, 1].  Default 0.0.
+        **_kwargs
+            Additional keyword arguments (ignored).
+
+        Returns
+        -------
+        wavelengths : (215,) array
+            Vacuum wavelengths [Angstrom].
+        luminosities : (215,) array
+            Emission line luminosities [L_sun].
+        """
+        from tengri.forward.precompute.grid import interp_nd_triweight
+
+        grid = self.grid
+
+        # Reverse axes if they were descending so the slice is always ascending
+        log_line_slice = grid.log_line_per_qh
+        if self._mass_descending:
+            log_line_slice = log_line_slice[::-1, :, :, :, :, :, :]
+        if self._edd_descending:
+            log_line_slice = log_line_slice[:, ::-1, :, :, :, :, :]
+        if self._cos_descending:
+            log_line_slice = log_line_slice[:, :, ::-1, :, :, :, :]
+        if self._met_descending:
+            log_line_slice = log_line_slice[:, :, :, ::-1, :, :, :]
+        if self._ionU_descending:
+            log_line_slice = log_line_slice[:, :, :, :, ::-1, :, :]
+        if self._nH_descending:
+            log_line_slice = log_line_slice[:, :, :, :, :, ::-1, :]
+
+        # Set up interpolation
+        axes = (
+            self._mass_sorted,
+            self._edd_sorted,
+            self._cos_sorted,
+            self._met_sorted,
+            self._ionU_sorted,
+            self._nH_sorted,
+        )
+        edges = (
+            self._edges_mass,
+            self._edges_edd,
+            self._edges_cos,
+            self._edges_met,
+            self._edges_ionU,
+            self._edges_nH,
+        )
+        point = (log_bh_mass, log_eddington, cosine_inclination, log_metallicity, log_ionU, log_nH)
+
+        log_line_per_qh_interp = interp_nd_triweight(log_line_slice, axes, edges, point)
+
+        # Convert to linear luminosity and scale by Q_H and escape fraction
+        # L_line = 10^(log_line_per_qh) × Q_H × (1 - fesc)  [L_sun]
+        line_lum = (10.0**log_line_per_qh_interp) * (10.0**log_qh) * (1.0 - neb_fesc)
+
+        return grid.line_wavelengths_aa, line_lum
+
+
 # ── Feltre+2016 NLR backend ───────────────────────────────────────
 
 
@@ -647,6 +954,7 @@ def agn_nlr_emission(
     backend: str = "cue",
     cue_backend=None,
     feltre_backend: FeltreNLRBackend | None = None,
+    synthesizer_nlr_backend: SynthesizerNLRBackend | None = None,
     l_acc_erg: float = 1e44,
     covering_fraction: float = 0.1,
     alpha_pl: float = -1.7,
@@ -660,6 +968,9 @@ def agn_nlr_emission(
     xi_d: float = 0.3,
     log_qh: float = 53.0,
     neb_fesc: float = 0.0,
+    log_bh_mass: float = 8.0,
+    log_eddington: float = -0.3,
+    cosine_inclination: float = 0.2,
     **kwargs,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Unified AGN NLR emission dispatcher.
@@ -670,12 +981,15 @@ def agn_nlr_emission(
     Parameters
     ----------
     backend : str
-        Backend name: ``"cue"`` or ``"feltre"``.
+        Backend name: ``"cue"``, ``"feltre"``, or ``"synthesizer_nlr"``.
     cue_backend : CueBackend or None
         Required when ``backend="cue"``.
     feltre_backend : FeltreNLRBackend or None
         Required when ``backend="feltre"``.  Initialize with
         ``FeltreNLRBackend(grid_path)`` before calling.
+    synthesizer_nlr_backend : SynthesizerNLRBackend or None
+        Required when ``backend="synthesizer_nlr"``.  Initialize with
+        ``SynthesizerNLRBackend(grid_path)`` before calling.
     l_acc_erg : float
         AGN accretion luminosity [erg s^-1].  Default 1e44.
     covering_fraction : float
@@ -700,9 +1014,16 @@ def agn_nlr_emission(
     xi_d : float
         Dust-to-metal ratio (Feltre backend).  Default 0.3.
     log_qh : float
-        log10(Q_H) ionizing photon rate (Feltre backend).  Default 53.0.
+        log10(Q_H) ionizing photon rate (all backends).  Default 53.0.
     neb_fesc : float
-        Ionizing photon escape fraction (Feltre backend).  Default 0.0.
+        Ionizing photon escape fraction (all backends).  Default 0.0.
+    log_bh_mass : float
+        log10(BH mass [M_sun]) (Synthesizer backend).  Default 8.0.
+    log_eddington : float
+        log10(accretion rate / L_Eddington) (Synthesizer backend).
+        Default -0.3.
+    cosine_inclination : float
+        cos(inclination angle) (Synthesizer backend).  Default 0.2.
     **kwargs
         Additional keyword arguments (ignored).
 
@@ -750,5 +1071,26 @@ def agn_nlr_emission(
             log_qh=log_qh,
             neb_fesc=neb_fesc,
         )
+    elif backend == "synthesizer_nlr":
+        if synthesizer_nlr_backend is None:
+            raise ValueError(
+                "synthesizer_nlr_backend must be provided when backend='synthesizer_nlr'. "
+                "Initialize with SynthesizerNLRBackend(grid_path) where grid_path is the "
+                "path to data/synthesizer_grids/test_grid_agn-nlr.hdf5."
+            )
+        _logZ = neb_logZ_gas if neb_logZ_gas is not None else _LOG10_ZSUN
+        return synthesizer_nlr_backend.predict_agn_nlr_lines(
+            log_bh_mass=log_bh_mass,
+            log_eddington=log_eddington,
+            cosine_inclination=cosine_inclination,
+            log_metallicity=_logZ,
+            log_ionU=neb_logU,
+            log_nH=gas_logn,
+            log_qh=log_qh,
+            neb_fesc=neb_fesc,
+        )
     else:
-        raise ValueError(f"Unknown AGN NLR backend '{backend}'. Choose from: 'cue', 'feltre'.")
+        raise ValueError(
+            f"Unknown AGN NLR backend '{backend}'. "
+            "Choose from: 'cue', 'feltre', 'synthesizer_nlr'."
+        )
