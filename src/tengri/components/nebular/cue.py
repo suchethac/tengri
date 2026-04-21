@@ -68,10 +68,23 @@ Cue differs in the following ways:
   BEAGLE's 10^8-yr constant-SFR assumption for HII regions).  For explicit age-
   dependent nebular evolution, use ``CB19Backend`` (``cloudy_cb19.py``).
 
-Grid files: ``data/synthesizer_grids/test_grid_agn-nlr.hdf5`` (Synthesizer
-CLOUDY c23.01 test grid; 215 lines, 6D axes) is structurally comparable to what
-Cue was trained on, though the Cue emulator itself does not require grid files
-at inference time.
+Relation to Synthesizer grids
+------------------------------
+The Synthesizer (Lovell et al. 2025) AGN grids (CLOUDY c23.01, 215 lines,
+6 axes: BH mass, Eddington ratio, cos(inclination), metallicity, log U, n_H)
+are structurally the closest published counterpart to the grids on which Cue
+was trained.  Key similarities: c17+ CLOUDY physics, broad line coverage, and
+physical BH-mass + Eddington-ratio parameterization.  Key difference: Cue
+replaces the physical-BH axes with the 7 ionizing-spectrum shape parameters
+(``ionspec_index1..4``, ``ionspec_logLratio1..3``), which makes it agnostic
+to the specific accretion-disc model.
+
+The Cue emulator does NOT require grid files at inference time — the neural
+network weights are loaded from ``data/cue_weights.npz``.  The Synthesizer
+test grids at ``data/synthesizer_grids/test_grid_agn-nlr.hdf5`` and
+``data/synthesizer_grids/test_grid_agn-blr.hdf5`` are available for
+cross-validation only (2-point per axis; 19 MB each).  Production grids
+require Synthesizer Box credentials (``synthesizer-download --agn-grids``).
 
 References
 ----------

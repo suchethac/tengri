@@ -94,12 +94,51 @@ Cue vs Feltre+2016 comparison:
 Grid data: ``data/neogal/AGN_NLR_nebular_feltre16/`` (raw ASCII from NEOGAL).
 Build the HDF5 grid with ``python scripts/build_feltre_grid.py``.
 
+Comparison with Synthesizer (Lovell et al. 2025)
+-------------------------------------------------
+Synthesizer (https://github.com/synthesizer-project/synthesizer) ships
+separate AGN NLR and BLR CLOUDY grids run with CLOUDY c23.01, a decade
+newer than Feltre+2016 (c13.03).  Key structural differences:
+
++----------------------------+---------------------------+---------------------------+
+| Feature                    | Feltre+2016 / tengri      | Synthesizer c23.01 grids  |
++============================+===========================+===========================+
+| CLOUDY version             | c13.03 (2013)             | c23.01 (2023)             |
++----------------------------+---------------------------+---------------------------+
+| NLR / BLR separation       | NLR only                  | separate NLR + BLR grids  |
++----------------------------+---------------------------+---------------------------+
+| N emission lines           | 20                        | 215                       |
++----------------------------+---------------------------+---------------------------+
+| Full spectra stored        | no (lines only)           | yes (9244 λ pts, UV–mm)   |
++----------------------------+---------------------------+---------------------------+
+| AGN luminosity axis        | fixed L_acc = 10^45 erg/s | BH mass + Eddington ratio |
++----------------------------+---------------------------+---------------------------+
+| Inclination axis           | no                        | cos(inclination) [0.09,   |
+|                            |                           | 0.5] (type-1 / type-2)   |
++----------------------------+---------------------------+---------------------------+
+| Ionizing SED               | single power-law α        | emergent from BH+disc     |
+|                            | (4 discrete values)       | Shakura-Sunyaev spectrum  |
++----------------------------+---------------------------+---------------------------+
+| Metallicity axis           | 16 Z values               | 2 pts (test); prod TBD    |
++----------------------------+---------------------------+---------------------------+
+| Normalization (lines)      | erg/s per L_acc=10^45     | W per bolometric L_bol    |
++----------------------------+---------------------------+---------------------------+
+| JAX / JIT in tengri        | yes (FeltreNLRBackend)    | not yet integrated        |
++----------------------------+---------------------------+---------------------------+
+
+The Synthesizer test grids (2-point per axis, 19 MB each) are at
+``data/synthesizer_grids/test_grid_agn-nlr.hdf5`` and
+``data/synthesizer_grids/test_grid_agn-blr.hdf5``.  Production grids
+(full axis coverage) require Synthesizer Box credentials
+(see ``synthesizer-download --agn-grids``).
+
 References
 ----------
 - Feltre, Charlot & Gutkin 2016, MNRAS, 456, 3354 (arXiv:1511.08217)
 - Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
 - Li et al. 2024, ApJ, 969, 28 (Cue v1)
 - Li et al. 2025, ApJ, 986, 9 (Cue v2, AGN extension)
+- Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
 """
 
 from __future__ import annotations
