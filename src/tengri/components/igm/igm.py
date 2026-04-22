@@ -699,3 +699,130 @@ def igm_transmission_patchy(
     t_wing = jnp.exp(-tau_wing)
 
     return t_inoue * t_wing
+
+
+# ── Madau+1995 IGM (alternative, simpler model) ───────────────────
+
+
+# Lyman-series rest-frame wavelengths and coefficients (Madau 1995, Table 1).
+# 17 lines from Ly-alpha (1216 Å) to Ly-limit.
+_MADAU_LYW = jnp.array([
+    1215.67, 1025.72, 972.537, 949.743, 937.803, 930.748,
+    926.226, 923.150, 920.963, 919.352, 918.129, 917.181,
+    916.429, 915.824, 915.329, 914.919, 914.576,
+])
+_MADAU_COEFF = jnp.array([
+    3.6e-3, 1.7e-3, 1.1846e-3, 9.410e-4, 7.960e-4, 6.967e-4,
+    6.236e-4, 5.665e-4, 5.200e-4, 4.817e-4, 4.487e-4, 4.200e-4,
+    3.947e-4, 3.720e-4, 3.520e-4, 3.334e-4, 3.1644e-4,
+])
+_MADAU_LYLIM = 911.75  # Lyman limit [Angstrom]
+
+
+def igm_transmission_madau(
+    wave_obs: jnp.ndarray,
+    z: float,
+    igm_factor: float = 1.0,
+) -> jnp.ndarray:
+    r"""Mean IGM transmission using the Madau (1995) model.
+
+    Computes line-of-sight Lyman-series absorption from 17 lines plus
+    continuum absorption below the Lyman limit. This is the simpler of the
+    two IGM models available in tengri; the default is :func:`igm_transmission`
+    (Inoue+2014) which includes 39 lines and DLA contributions.
+
+    Parameters
+    ----------
+    wave_obs : array_like, shape (n_wave,)
+        Observed-frame wavelengths [Angstrom].
+    z : float
+        Source redshift.
+    igm_factor : float, optional
+        Multiplicative fudge factor for IGM strength. Default 1.0 (mean IGM).
+
+    Returns
+    -------
+    T_igm : jnp.ndarray, shape (n_wave,)
+        Mean IGM transmission [dimensionless], in [0, 1]. Values outside the modeled
+        wavelength range are set to 1.0 (no attenuation).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure ``jnp`` operations with ``jax.lax.scan``
+    for the line summation.
+
+    **Line opacity formula**: The optical depth from each Lyman-series line is:
+
+    .. math::
+
+        \tau_j(\lambda) = A_j \left(\frac{\lambda}{\lambda_j}\right)^{3.46}
+
+    where :math:`A_j` are the line coefficients from Madau (1995) Table 1 [1]_,
+    :math:`\lambda_j` are the rest-frame Lyman-series wavelengths [Angstrom], and
+    the formula applies for :math:`\lambda_j \leq \lambda_\mathrm{obs} \leq \lambda_j(1+z)`.
+
+    ``wave_obs`` is **observed-frame** wavelength (consistent with tengri's
+    IGM convention). The Madau+1995 model takes observed-frame wavelengths
+    directly.
+
+    Ported from Prospector ``add_igm`` in ``fake_fsps.py`` (Johnson+2021 [2]_).
+    The Inoue+2014 model (:func:`igm_transmission`) supersedes this for science
+    use; Madau+1995 is provided for comparison and backward compatibility.
+
+    References
+    ----------
+    .. [1] P. Madau, "Radiative Transfer in a Clumpy Universe: The Colors of
+       High-Redshift Galaxies," ApJ, 441, 18 (1995).
+       https://doi.org/10.1086/175332
+    .. [2] B. D. Johnson et al., "Stellar Population Inference," ApJS, 254,
+       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4295/abef67
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> wave_obs = jnp.linspace(1000.0, 10000.0, 200)
+    >>> T = igm_transmission_madau(wave_obs, z=3.0)
+    >>> T.shape
+    (200,)
+    >>> float(T[0]) < 1.0  # attenuated at Ly-alpha
+    True
+    """
+    wave_obs = jnp.asarray(wave_obs, dtype=jnp.float64)
+
+    # ── Lyman-series line absorption ─────────────────────────────
+    # For each line j: tau_j(lam) = A_j * (lam/lyw_j)^3.46
+    # applied over lyw_j <= lam <= lyw_j * (1 + z)
+    def _add_line_tau(carry, line_data):
+        """Accumulate optical depth from one Lyman-series line."""
+        lyw_j, coeff_j = line_data[0], line_data[1]
+        lmax = lyw_j * (1.0 + z)
+        in_range = (wave_obs >= lyw_j) & (wave_obs <= lmax)
+        tau_j = coeff_j * (wave_obs / lyw_j) ** 3.46
+        return carry + jnp.where(in_range, tau_j, 0.0), None
+
+    tau_line, _ = jax.lax.scan(
+        _add_line_tau,
+        jnp.zeros_like(wave_obs),
+        jnp.stack([_MADAU_LYW, _MADAU_COEFF], axis=1),
+    )
+
+    # ── Lyman-continuum absorption ────────────────────────────────
+    # Madau+1995 Eq. 16: continuum opacity below Lyman limit
+    xc = wave_obs / _MADAU_LYLIM
+    xem = 1.0 + z
+
+    # Clamp xc to [1.0, xem]
+    xc_lo = jnp.clip(xc, 1.0, None)
+    xc_hi = jnp.clip(xc_lo, None, xem)
+
+    tau_cont = (
+        0.25 * xc_hi ** 3 * (jnp.exp(0.46 * jnp.log(xem)) - jnp.exp(0.46 * jnp.log(xc_hi)))
+        + 9.4 * xc_hi ** 1.5 * (jnp.exp(0.18 * jnp.log(xem)) - jnp.exp(0.18 * jnp.log(xc_hi)))
+        - 0.7 * xc_hi ** 3 * (xc_hi ** (-1.32) - xem ** (-1.32))
+        - 0.023 * (xem ** 1.68 - xc_hi ** 1.68)
+    )
+    # Continuum only applies blueward of Lyman limit in the observed frame
+    tau_cont = jnp.where(wave_obs < _MADAU_LYLIM * (1.0 + z), tau_cont, 0.0)
+
+    tau_total = (tau_line + tau_cont) * igm_factor
+    return jnp.exp(-jnp.clip(tau_total, 0.0, None))

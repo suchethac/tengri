@@ -42,7 +42,11 @@ from tengri.components.agn.disc import (
     multicolor_disc,
     powerlaw_disc,
 )
-from tengri.components.agn.nlr import compute_nlr_sed, nlr_emission
+from tengri.components.agn.nlr import (
+    compute_nlr_sed,
+    nlr_emission,
+    nlr_emission_richardson2014,
+)
 
 # QSOgen must be imported after unified (needs register_agn_model)
 from tengri.components.agn.qsogen import compute_qsogen_sed, qsogen, qsogen_sed
@@ -75,6 +79,7 @@ __all__ = [
     "kubota_done_full_agn",
     "multicolor_disc",
     "nlr_emission",
+    "nlr_emission_richardson2014",
     "powerlaw_disc",
     "qsogen",
     "qsogen_sed",

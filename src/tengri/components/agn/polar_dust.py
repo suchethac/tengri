@@ -60,6 +60,150 @@ def _type1_mask(
     return jax.nn.sigmoid((cos_inc - cos_threshold) * sharpness)
 
 
+def calzetti2000_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
+    """Calzetti et al. (2000) dust extinction curve.
+
+    Piecewise polynomial extinction law valid for 0.12–2.2 um (1200–22000 A).
+    Widely used for star-forming galaxies and AGN optical/UV extinction.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength in Angstrom.
+
+    Returns
+    -------
+    k_lambda : ndarray, shape (n_wave,)
+        Extinction coefficient k(lambda) = A(lambda) / E(B-V).
+        [dimensionless]
+
+    Notes
+    -----
+    Calzetti et al. (2000) parameterization:
+
+    For :math:`\\lambda < 630` nm (6300 A):
+
+    .. math::
+
+        k(\\lambda) = 2.659 \\times (-2.156 + 1509/\\lambda_{\\rm nm}
+                    - 0.198 \\times 10^6/\\lambda_{\\rm nm}^2
+                    + 0.011 \\times 10^9/\\lambda_{\\rm nm}^3) + 4.05
+
+    For :math:`\\lambda \\geq 630` nm:
+
+    .. math::
+
+        k(\\lambda) = 2.659 \\times (-1.857 + 1040/\\lambda_{\\rm nm}) + 4.05
+
+    where :math:`\\lambda_{\\rm nm}` is wavelength in nanometers.
+
+    **JIT-compatible**: yes — uses ``jnp`` primitives.
+
+    **Upstream**: Ported from CIGALE ``skirtor2016.py`` ``k_ext()``
+    (Boquien et al. 2019 [2]_).
+
+    References
+    ----------
+    .. [1] D. Calzetti et al., "The Dust Content and Opacity of Actively
+       Star-forming Galaxies," ApJ, 533, 682 (2000).
+       https://doi.org/10.1086/308692
+    .. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy
+       Emission," A&A, 622, A103 (2019). arXiv:1811.03094.
+       https://doi.org/10.1051/0004-6361/201834156
+    """
+    # Convert Angstrom to nanometers
+    wave_nm = wavelength / 10.0
+
+    # Split into two regimes
+    x_short = 1.0 / wave_nm  # 1/lambda for short wavelengths
+
+    # Short wavelength (lambda < 630 nm, x > 1/630)
+    short_part = (
+        2.659 * (-2.156 + 1509.0 * x_short - 0.198e6 * x_short**2 + 0.011e9 * x_short**3) + 4.05
+    )
+
+    # Long wavelength (lambda >= 630 nm)
+    long_part = 2.659 * (-1.857 + 1040.0 * x_short) + 4.05
+
+    # Select based on wavelength
+    k_lambda = jnp.where(wave_nm < 630.0, short_part, long_part)
+
+    return k_lambda
+
+
+def gaskell2004_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
+    """Gaskell et al. (2004) dust extinction curve.
+
+    Polynomial extinction law parameterized in inverse wavelength space.
+    Developed from observations of AGN and suitable for AGN UV/optical
+    extinction studies.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength in Angstrom.
+
+    Returns
+    -------
+    k_lambda : ndarray, shape (n_wave,)
+        Extinction coefficient k(lambda) = A(lambda) / E(B-V).
+        [dimensionless]
+
+    Notes
+    -----
+    Gaskell et al. (2004) parameterization in terms of :math:`x = 1000/\\lambda`
+    (where :math:`\\lambda` is in nm):
+
+    For :math:`x < 3.69` (wavelength > ~271 nm, 2710 A):
+
+    .. math::
+
+        A(\\lambda) / A_V = -0.8175 + 1.5848 x - 0.3774 x^2 + 0.0296 x^3
+
+    For :math:`x \\geq 3.69`:
+
+    .. math::
+
+        A(\\lambda) / A_V = 1.3468 + 0.0087 x
+
+    The result is then divided by :math:`A_B / A_V = 1.182` to convert from
+    A(λ)/A_V to k(λ) = A(λ) / E(B-V).
+
+    **JIT-compatible**: yes — uses ``jnp`` primitives.
+
+    **Upstream**: Ported from CIGALE ``skirtor2016.py`` ``k_ext()``
+    (Boquien et al. 2019 [2]_).
+
+    References
+    ----------
+    .. [1] C. M. Gaskell et al., "A Redetermination of the Reddening of
+       AGNs," ApJ, 616, 147 (2004).
+       https://doi.org/10.1086/423885
+    .. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy
+       Emission," A&A, 622, A103 (2019). arXiv:1811.03094.
+       https://doi.org/10.1051/0004-6361/201834156
+    """
+    # Convert Angstrom to nanometers
+    wave_nm = wavelength / 10.0
+
+    # x = 1000 / lambda_nm
+    x = 1000.0 / wave_nm
+
+    # A(lambda) / A_V from polynomial
+    a_av_short = -0.8175 + 1.5848 * x - 0.3774 * x**2 + 0.0296 * x**3
+    a_av_long = 1.3468 + 0.0087 * x
+
+    # Select regime
+    a_av = jnp.where(x < 3.69, a_av_short, a_av_long)
+
+    # Convert A(lambda)/A_V to k(lambda) = A(lambda)/E(B-V)
+    # Using CIGALE's convention: k = a_av / 0.182
+    # This ensures positivity for all wavelengths
+    k_lambda = jnp.maximum(a_av / 0.182, 0.0)
+
+    return k_lambda
+
+
 def polar_dust_extinction(
     l_nu: jnp.ndarray,
     wavelength: jnp.ndarray,
@@ -71,7 +215,7 @@ def polar_dust_extinction(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Apply polar dust extinction to AGN luminosity.
 
-    SMC extinction is applied only to Type 1 sightlines (face-on), with a
+    Extinction is applied only to Type 1 sightlines (face-on), with a
     smooth sigmoid transition at the Type 1/2 boundary.
 
     Parameters
@@ -87,7 +231,9 @@ def polar_dust_extinction(
     ebv : float
         Colour excess E(B-V) for the polar dust. 0 = no extinction.
     law : str
-        Extinction law name. Currently only ``"smc"`` is supported.
+        Extinction law name: ``"smc"`` (Pei 1992), ``"calzetti"`` (Calzetti
+        et al. 2000), or ``"gaskell"`` (Gaskell et al. 2004).
+        Default: ``"smc"``.
     sharpness : float
         Sigmoid steepness at the Type 1/2 boundary.
 
@@ -98,12 +244,24 @@ def polar_dust_extinction(
     l_absorbed : array, shape (n_wave,)
         Absorbed luminosity density (per wavelength bin). Always >= 0.
     """
-    # k(lambda) / k(V), normalized at 5500 A
-    k_lambda = smc_extinction_curve(wavelength)
+    # Select extinction law
+    if law == "smc":
+        k_lambda = smc_extinction_curve(wavelength)
+        r_v = _RV_SMC
+    elif law == "calzetti":
+        k_lambda = calzetti2000_extinction_curve(wavelength)
+        r_v = 1.0  # Calzetti normalized to E(B-V) directly
+    elif law == "gaskell":
+        k_lambda = gaskell2004_extinction_curve(wavelength)
+        r_v = 1.0  # Gaskell normalized to E(B-V) directly
+    else:
+        # Fallback to SMC
+        k_lambda = smc_extinction_curve(wavelength)
+        r_v = _RV_SMC
 
     # A(lambda) = E(B-V) * R_V * k(lambda)
     # Transmission: 10^{-0.4 * A(lambda)} = exp(-0.921 * A(lambda))
-    tau_lambda = 0.921 * ebv * _RV_SMC * k_lambda
+    tau_lambda = 0.921 * ebv * r_v * k_lambda
     extinction_factor = jnp.exp(-tau_lambda)  # fraction transmitted
 
     # Type 1 mask: 1 for face-on (extinct), 0 for edge-on (no effect)
@@ -196,6 +354,96 @@ def polar_dust_emission(
     norm = l_absorbed_total / safe_integral
 
     return norm * unnormalized
+
+
+def anisotropic_polar_luminosity(
+    l_nu_disk: jnp.ndarray,
+    wavelength: jnp.ndarray,
+    opening_angle_deg: float,
+    extinction_factor: jnp.ndarray,
+) -> float:
+    """Total extincted luminosity with anisotropic disc geometry.
+
+    Computes the bolometric luminosity accounting for the anisotropic emission
+    pattern of the disc as seen through the polar dust. The disc emission varies
+    with inclination angle θ as L(θ,λ) ∝ A(λ) · cosθ · (1 + 2cosθ), and the
+    observable luminosity is averaged over a solid angle.
+
+    This models the viewing-angle dependent attenuation for an anisotropic
+    accretion disc viewed through a clumpy torus with opening angle.
+
+    Parameters
+    ----------
+    l_nu_disk : array, shape (n_wave,)
+        Intrinsic disc luminosity density [erg/s/Hz].
+    wavelength : array, shape (n_wave,)
+        Wavelength in Angstrom.
+    opening_angle_deg : float
+        Torus half-opening angle in degrees (from equator).
+    extinction_factor : array, shape (n_wave,)
+        Wavelength-dependent transmission through polar dust
+        (i.e., exp(-tau_lambda) from :func:`polar_dust_extinction`).
+        [dimensionless, 0–1]
+
+    Returns
+    -------
+    l_total : float
+        Total extincted luminosity integrated over frequency and solid angle
+        [erg/s].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives.
+
+    The anisotropic geometry factor is derived from CIGALE's SKIRTOR module.
+    For a given opening angle (related to the torus geometry), the average
+    over viewing angles of the anisotropic factor is:
+
+    .. math::
+
+        \\langle f_{\\rm aniso} \\rangle = \\frac{7}{18} - \\frac{\\sin^2 \\Phi}{6}
+                                          - \\frac{2 \\sin^3 \\Phi}{9}
+
+    where :math:`\\Phi` is the torus half-opening angle in degrees.
+
+    The extincted luminosity is then:
+
+    .. math::
+
+        L_{\\rm ext} = f_{\\rm aniso} \\int L_\\nu (1 - A_\\nu) \\, d\\nu
+
+    This accounts for both the varying disc brightness with inclination and
+    the wavelength-dependent extinction through the polar dust.
+
+    **Upstream**: Ported from CIGALE ``skirtor2016.py`` ``agn_lnu_ir``
+    function (Boquien et al. 2019 [2]_).
+
+    References
+    ----------
+    .. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+       torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+       arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
+    .. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy
+       Emission," A&A, 622, A103 (2019). arXiv:1811.03094.
+       https://doi.org/10.1051/0004-6361/201834156
+    """
+    # Compute anisotropic geometry factor
+    sin_oa = jnp.sin(jnp.radians(opening_angle_deg))
+    aniso_factor = 7.0 / 18.0 - sin_oa**2 / 6.0 - (2.0 / 9.0) * sin_oa**3
+
+    # Apply extinction to the disc spectrum
+    l_nu_extinct = l_nu_disk * extinction_factor
+
+    # Integrate over frequency: convert wavelength integral to frequency integral
+    # dnu = -c/lambda^2 dlambda, so |dnu| = c/lambda^2 |dlambda|
+    nu = _C_AA / wavelength
+    # Use trapezoidal rule on frequency grid (descending order)
+    l_total = jnp.trapezoid(l_nu_extinct[::-1], nu[::-1])
+
+    # Apply anisotropic geometry factor
+    l_total = aniso_factor * l_total
+
+    return jnp.maximum(l_total, 0.0)
 
 
 def polar_dust_total(
