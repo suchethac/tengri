@@ -198,6 +198,13 @@ class BlockSchedule:
         -------
         BlockSchedule
             Three-block schedule for hierarchical parameter inference.
+
+        Examples
+        --------
+        >>> from tengri import VIConfig
+        >>> sched = VIConfig.hierarchical()
+        >>> len(sched.blocks)
+        3
         """
         return BlockSchedule(
             blocks=(

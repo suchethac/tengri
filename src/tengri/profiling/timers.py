@@ -284,7 +284,17 @@ class OperationTimers:
             return len(_timings)
 
     def items(self) -> list[tuple[str, dict[str, Any]]]:
-        """Yield (name, data) pairs sorted by cumulative time (descending)."""
+        """Return (name, data) pairs sorted by cumulative time (descending).
+
+        Examples
+        --------
+        .. code-block:: python
+
+            from tengri import TimingRegistry
+            reg = TimingRegistry()
+            for name, data in reg.items():
+                print(f"{name}: {data['cum_time']:.3f}s ({data['n_calls']} calls)")
+        """
         names = self.keys()
         pairs = [(name, self[name]) for name in names]
         return sorted(pairs, key=lambda x: x[1]["cum_time"], reverse=True)

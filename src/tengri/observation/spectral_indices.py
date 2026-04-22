@@ -303,7 +303,15 @@ class SpectralIndexData:
 
     @property
     def names(self) -> tuple[str, ...]:
-        """Tuple of spectral index names."""
+        """Tuple of spectral index names.
+
+        Examples
+        --------
+        >>> from tengri import SpectralIndexData
+        >>> sid = SpectralIndexData.from_names(["Dn4000", "HdA"], [1.3, 5.1], [0.05, 0.3])
+        >>> sid.names
+        ('Dn4000', 'HdA')
+        """
         return tuple(d.name for d in self.index_defs)
 
     @property

@@ -113,6 +113,15 @@ class Catalog:
             Keys: ``id``, ``redshift``, ``flux``, ``noise``, ``mask``,
             ``filter_names``.
 
+        Examples
+        --------
+        .. code-block:: python
+
+            from tengri import GalaxyCatalog
+            cat = GalaxyCatalog.from_fits("my_catalog.fits", filter_names=["sdss_r", "sdss_i"])
+            g = cat.galaxy(0)
+            g["id"]            # galaxy identifier
+            g["flux"].shape    # (n_filters,)
         """
         return {
             "id": self.ids[idx],

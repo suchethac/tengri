@@ -1779,5 +1779,13 @@ class Prediction:
         -----
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
+
+        Examples
+        --------
+        .. code-block:: python
+
+            pred = model.predict(params)
+            phot = pred.photometry      # ndarray, shape (n_filters,)
+            print(phot.shape)           # e.g. (8,) for 8 photometric bands
         """
         return self._model.predict_photometry(self._params)
