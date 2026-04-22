@@ -547,8 +547,9 @@ class TestPSBContinuitySFH:
         assert abs(ratio - 10.0) < 0.5, f"10x mass increase should give ~10x SFR, got {ratio:.2f}"
 
     def test_jit_compatible(self, age_yr, default_edges):
-        from tengri.components.sfh.nonparametric import psb_continuity_sfh
         import functools
+
+        from tengri.components.sfh.nonparametric import psb_continuity_sfh
 
         # bin_edges_gyr is a fixed structural arg — bake it in via partial before JIT
         fn = jax.jit(functools.partial(psb_continuity_sfh, bin_edges_gyr=default_edges))
