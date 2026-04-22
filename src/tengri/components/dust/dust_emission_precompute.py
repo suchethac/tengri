@@ -28,15 +28,15 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.forward.precompute.grid import (
+from tengri.forward.precompute.templates import (
+    build_template_photometry_lookup,
+    precompute_template_photometry,
+)
+from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_triweight,
     preintegrate_grid,
     slice_fixed_axes,
-)
-from tengri.forward.precompute.templates import (
-    build_template_photometry_lookup,
-    precompute_template_photometry,
 )
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import AA_TO_CM as _AA_TO_CM, C_CGS as _C_CGS

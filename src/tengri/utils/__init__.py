@@ -43,6 +43,14 @@ from tengri.utils.cosmology import (
 )
 from tengri.utils.diffndhist import tw_ndhist, tw_ndhist_weighted
 from tengri.utils.grid import log_age_to_age_yr, make_log_age_grid
+from tengri.utils.grid_interp import (
+    PreintegratedGrid,
+    PreintegratedLines,
+    interp_nd_triweight,
+    preintegrate_grid,
+    preintegrate_lines,
+    slice_fixed_axes,
+)
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid, tw_cuml_kern
 from tengri.utils.magnitudes import (
     AB_VEGA_OFFSETS,
@@ -68,6 +76,8 @@ __all__ = [
     # Cosmology
     "DEFAULT_COSMO",
     "PLANCK18",
+    "PreintegratedGrid",
+    "PreintegratedLines",
     "ab_mag_to_fnu",
     "ab_to_vega",
     "absolute_ab_mag_to_lnu",
@@ -100,6 +110,8 @@ __all__ = [
     "fnu_to_maggies",
     "fnu_to_njy",
     "fnu_to_ujy",
+    # Grid interpolation
+    "interp_nd_triweight",
     # Transforms
     "inverse_sigmoid",
     "jy_to_fnu",
@@ -118,7 +130,10 @@ __all__ = [
     "maggies_to_fnu",
     "make_log_age_grid",
     "njy_to_fnu",
+    "preintegrate_grid",
+    "preintegrate_lines",
     "sigmoid",
+    "slice_fixed_axes",
     "surface_brightness_to_mag",
     "tau_to_attenuation",
     "tw_cuml_kern",

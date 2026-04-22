@@ -27,6 +27,11 @@ from tengri.analysis.diagnostics.green_functions import (
     compute_time_sensitivity_matrix,
     compute_window_function,
 )
+from tengri.analysis.diagnostics.lines import (
+    compute_equivalent_widths,
+    compute_line_fluxes,
+    compute_line_moments,
+)
 from tengri.analysis.diagnostics.saliency import (
     compute_all_gradient_seds,
     compute_gradient_sed,
@@ -45,10 +50,13 @@ __all__ = [
     "autocorrelation_time_combined",
     "check_chain_length",
     "compute_all_gradient_seds",
+    "compute_equivalent_widths",
     "compute_fisher_matrix",
     "compute_gradient_sed",
     "compute_green_function",
     "compute_jacobian",
+    "compute_line_fluxes",
+    "compute_line_moments",
     "compute_photometry_sensitivity",
     "compute_time_sensitivity_matrix",
     "compute_window_function",

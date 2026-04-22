@@ -11,8 +11,6 @@ rather than data tables.
 
 from __future__ import annotations
 
-from tengri.components.sfh.met_registry import resolve_met
-from tengri.components.sfh.registry import resolve_sfh
 from tengri.parameters.priors import Fixed, Uniform
 
 # ── Non-SFH parameter registry ─────────────────────────────────────────
@@ -873,6 +871,9 @@ def _build_param_registry(
     defaults : dict
         param_name -> default Distribution
     """
+    from tengri.components.sfh.met_registry import resolve_met
+    from tengri.components.sfh.registry import resolve_sfh
+
     _, sfh_params, _, _ = resolve_sfh(mean_sfh_type)
 
     registry = {}

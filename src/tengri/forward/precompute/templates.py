@@ -18,7 +18,7 @@ from __future__ import annotations
 import jax
 import numpy as np
 
-from tengri.forward.precompute.grid import (
+from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_triweight,
     preintegrate_grid,

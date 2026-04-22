@@ -461,7 +461,7 @@ class CloudyGridBackend:
             If provided, these axes are collapsed at init time. Default None.
 
         """
-        from tengri.forward.precompute.grid import (
+        from tengri.utils.grid_interp import (
             preintegrate_grid,
             preintegrate_lines,
             slice_fixed_axes,

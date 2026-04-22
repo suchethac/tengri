@@ -41,7 +41,7 @@ import numpy as np
 from tengri.components.nebular._shared import place_line_profiles as _place_line_profiles
 
 # Physical constants
-from tengri.forward.precompute.grid import interp_nd_triweight as _interp_nd_triweight
+from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight
 from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 
 # ── Legacy hardcoded fallback — Allen+2008 Table 5 (solar, n=1 cm⁻³)

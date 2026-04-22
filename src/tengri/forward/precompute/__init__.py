@@ -9,19 +9,19 @@ Usage::
     from tengri.forward.precompute import preintegrate_grid, slice_fixed_axes
 """
 
-from tengri.forward.precompute.grid import (
+from tengri.forward.precompute.protocol import PrecomputeModule
+from tengri.forward.precompute.registry import registered_components, resolve
+from tengri.forward.precompute.templates import (
+    build_template_photometry_lookup,
+    precompute_template_photometry,
+)
+from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
     interp_nd_triweight,
     preintegrate_grid,
     preintegrate_lines,
     slice_fixed_axes,
-)
-from tengri.forward.precompute.protocol import PrecomputeModule
-from tengri.forward.precompute.registry import registered_components, resolve
-from tengri.forward.precompute.templates import (
-    build_template_photometry_lookup,
-    precompute_template_photometry,
 )
 
 __all__ = [

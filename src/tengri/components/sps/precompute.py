@@ -35,8 +35,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.forward.precompute.grid import preintegrate_grid
 from tengri.utils.conversions import lnu_to_fnu
+from tengri.utils.grid_interp import preintegrate_grid
 
 # SSP precompute grid axes: (lgmet, lg_age_gyr). The age axis is never user-fixed
 # (ages are determined by the SFH). Only metallicity may be Fixed.
@@ -209,7 +209,7 @@ def precompute_photometry(
     runs once at startup, not inside the inference loop. Uses numpy and HDF5 I/O.
     **Gradient-safe**: not applicable (CPU preprocessing).
     """
-    from tengri.forward.precompute.grid import slice_fixed_axes
+    from tengri.utils.grid_interp import slice_fixed_axes
 
     # Delegate to preintegrate_grid, which handles all wavelength integration
     # for arbitrary grid dimensionality (2D for normal SSP, 4D for alpha-enhanced).

@@ -9,6 +9,7 @@ from tengri.config.exceptions import (
     TengriIOError,
 )
 from tengri.config.settings import (
+    AGNConfig,
     DustConfig,
     ModelConfig,
     MultiwavelengthConfig,
@@ -17,6 +18,7 @@ from tengri.config.settings import (
 )
 
 __all__ = [
+    "AGNConfig",
     "BackendError",
     "ConfigError",
     "DustConfig",

@@ -256,7 +256,7 @@ def _build_nthcomp_filter_table(
         flat_sorted = flat_table[:, sort_idx]
 
         # Vectorized interpolation: all grid points at once
-        from tengri.forward.precompute.grid import _vectorized_interp
+        from tengri.utils.grid_interp import _vectorized_interp
 
         # _vectorized_interp expects (xp_target, xp_source, yp_source)
         # where yp_source shape is (..., n_source)

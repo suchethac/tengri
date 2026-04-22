@@ -65,6 +65,7 @@ from tengri.components.agn.unified import (
 
 __all__ = [
     "AGN_MODELS",
+    "AGNConfig",
     "adaf_agn",
     "adaf_disc",
     "beloborodov_gamma_hot",
@@ -78,6 +79,7 @@ __all__ = [
     "kubota_done_disc",
     "kubota_done_full_agn",
     "multicolor_disc",
+    "nenkova_torus",
     "nlr_emission",
     "nlr_emission_richardson2014",
     "powerlaw_disc",
@@ -85,7 +87,6 @@ __all__ = [
     "qsogen_sed",
     "register_agn_model",
     "resolve_agn_model",
-    "nenkova_torus",
     "simple_torus",
     "two_temperature_torus",
     "unified_agn",
@@ -93,4 +94,4 @@ __all__ = [
 ]
 
 # Convenience re-exports for `from tengri.agn import ...`
-from tengri.components.agn.agn_config import AGNConfig
+from tengri.config.settings import AGNConfig

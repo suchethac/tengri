@@ -35,7 +35,7 @@ from tengri.components.agn._phys import (
     LSUN_ERG as _LSUN_ERG,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.forward.precompute.grid import interp_nd_triweight
+from tengri.utils.grid_interp import interp_nd_triweight
 from tengri.utils.interpolation import edges_for_grid
 
 

@@ -664,7 +664,7 @@ class SynthesizerNLRBackend:
             Emission line luminosities [L_sun].
 
         """
-        from tengri.forward.precompute.grid import interp_nd_triweight
+        from tengri.utils.grid_interp import interp_nd_triweight
 
         grid = self.grid
 
@@ -918,7 +918,7 @@ class FeltreNLRBackend:
             Emission line luminosities [Lsun].
 
         """
-        from tengri.forward.precompute.grid import interp_nd_triweight
+        from tengri.utils.grid_interp import interp_nd_triweight
 
         grid = self.grid
 

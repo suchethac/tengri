@@ -33,8 +33,6 @@ from __future__ import annotations
 
 import warnings
 
-from tengri.components.sfh.registry import resolve_sfh
-
 # ── Constants ─────────────────────────────────────────────────────
 
 # Solar metallicity: log10(Zsun) = log10(0.0142) ≈ -1.848 (Asplund 2009)
@@ -319,6 +317,8 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
     dict
         public_name -> (internal_name, scale, offset)
     """
+    from tengri.components.sfh.registry import resolve_sfh
+
     _, _, sfh_param_map, _ = resolve_sfh(mean_sfh_type)
     result = dict(sfh_param_map)
     if dust_model == "single_component":

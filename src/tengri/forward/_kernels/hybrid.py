@@ -168,7 +168,7 @@ def build_hybrid_photometry(model):
         _neb_bc_fn = getattr(model, "_neb_dust_law_bc_fn", law_bc_fn)
     if _has_preint_neb:
         # Capture preintegrated CLOUDY data for fast nebular photometry
-        from tengri.forward.precompute.grid import interp_nd_triweight
+        from tengri.utils.grid_interp import interp_nd_triweight
 
         _neb_cont_phot = nebular_backend._preint_continuum.phot  # (n_Z, n_age, n_logU, n_filt)
         _neb_cont_axes = nebular_backend._preint_continuum.axes

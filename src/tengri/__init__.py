@@ -26,7 +26,6 @@ __version__ = "0.1.0"
 # --- Exception hierarchy ---
 # --- New high-level API ---
 from tengri.analysis.mock import MockData, generate_mock
-from tengri.components.agn.agn_config import AGNConfig
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.sfh.gp_sfh import (
@@ -50,12 +49,14 @@ from tengri.components.sfh.mean_sfh import (
     norm,
     skewnormal_sfh,
     snorm,
+    snorm_burst,
     snorm_burst_sfh,
     snorm_trunc_burst_sfh,
     spline_sfh,
     triweight_burst,
     truncated_skewnormal_sfh,
     tsnorm,
+    tsnorm_burst,
 )
 from tengri.components.sfh.psd_models import drw_acf, drw_variance, psd_drw
 from tengri.components.sfh.registry import (
@@ -82,6 +83,7 @@ from tengri.config.exceptions import (
     TengriIOError,
 )
 from tengri.config.settings import (
+    AGNConfig,
     DustConfig,
     ModelConfig,
     MultiwavelengthConfig,

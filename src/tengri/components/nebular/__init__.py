@@ -64,7 +64,12 @@ from pathlib import Path
 
 from tengri.components.nebular._protocol import NebularBackend, NebularContinuumUnavailableError
 from tengri.components.nebular._shared import NebularContinuumFallback
-from tengri.components.nebular.agn_nebular import FeltreNLRBackend
+from tengri.components.nebular.agn_nebular import (
+    FeltreGridData,
+    FeltreNLRBackend,
+    SynthesizerGridData,
+    SynthesizerNLRBackend,
+)
 from tengri.components.nebular.baked_in import BakedInBackend, BakedInNebularWarning
 from tengri.components.nebular.cloudy_cb19 import (
     CB19Backend,
@@ -99,6 +104,7 @@ __all__ = [
     "CloudyGridIonizingSpectrumWarning",
     "CloudyGridWNESSPWarning",
     "CueBackend",
+    "FeltreGridData",
     "FeltreNLRBackend",
     "IonizingSpectrumInconsistencyError",
     "IonizingSpectrumInconsistencyWarning",
@@ -108,6 +114,8 @@ __all__ = [
     "NebularContinuumFallback",
     "NebularContinuumUnavailableError",
     "ShockBackend",
+    "SynthesizerGridData",
+    "SynthesizerNLRBackend",
     "mix_dig_emission",
     "shock_emission_sed",
     "shock_line_ratios",

@@ -18,7 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._phys import C_LIGHT as _C_CGS, LSUN_ERG as _LSUN_ERG
-from tengri.forward.precompute.grid import (
+from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_triweight,
     preintegrate_grid,
