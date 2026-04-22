@@ -199,11 +199,13 @@ class PrecomputedData:
     spectroscopy : object or None
         SpectroscopicPrecomputation for spectrum prediction.
     dust_age_weights : ndarray or None
-        Sigmoid weights [dimensionless] for two-component dust attenuation, shape (n_age,).
+        Sigmoid weights for two-component dust attenuation, shape (n_age,).
+        [dimensionless]
     igm_at_effective_wavelengths : ndarray or None
-        IGM transmission T(λ_eff) at filter effective wavelengths, shape (n_filters,).
+        IGM transmission T(λ_eff) at filter effective wavelengths, shape
+        (n_filters,). [dimensionless]
     effective_bandwidths_hz : ndarray or None
-        Effective bandwidth per filter [Hz], shape (n_filters,).
+        Effective bandwidth per filter, shape (n_filters,). [Hz]
     dust_ir_lookup : object or None
         Preintegrated template-based dust IR photometry lookup.
     kd_preintegrated : object or None
@@ -213,7 +215,8 @@ class PrecomputedData:
 
     Notes
     -----
-    This is an internal container used by SEDModel. Users do not construct this directly.
+    This is an internal container used by SEDModel. Users do not construct
+    this directly.
     """
 
     photometry: object | None = None  # PhotometricPrecomputation (fixed z)
@@ -237,19 +240,20 @@ class CompositionalKernels:
 
     Attributes
     ----------
-    rest_sed : object or None
-        JIT-compiled kernel for full rest-frame SED [erg/s/Hz].
-    photometry : object or None
-        JIT-compiled kernel for photometric predictions [erg/s/cm²/Hz].
-    spectrum : object or None
-        JIT-compiled kernel for spectroscopic predictions [erg/s/cm²/Hz].
-    exact_sed : object or None
-        JIT-compiled exact SED kernel with fused dust+stellar.
+    rest_sed : callable or None
+        JIT-compiled kernel for full rest-frame SED. [erg/s/Hz]
+    photometry : callable or None
+        JIT-compiled kernel for photometric predictions. [erg/s/cm^2/Hz]
+    spectrum : callable or None
+        JIT-compiled kernel for spectroscopic predictions. [erg/s/cm^2/Hz]
+    exact_sed : callable or None
+        JIT-compiled exact SED kernel with fused dust+stellar. [erg/s/Hz]
 
     Notes
     -----
-    This is an internal container used by SEDModel. Users do not construct this directly.
-    All kernels are callables (built via :func:`build_fused_rest_sed`, etc.).
+    This is an internal container used by SEDModel. Users do not construct
+    this directly. All kernels are callables built via
+    :func:`build_fused_rest_sed`, :func:`build_fused_tier2_photometry`, etc.
     """
 
     rest_sed: object | None = None  # build_fused_rest_sed
@@ -264,21 +268,22 @@ class HybridKernels:
 
     Stellar photometry uses the precomputed SSP×filter einsum (fast).
     Non-stellar components use emission_helpers.py at full wavelength
-    resolution, then integrate through filters. Populated in PR 2.
+    resolution, then integrate through filters.
 
     Attributes
     ----------
-    photometry : object or None
-        Hybrid kernel for fixed-redshift photometry [erg/s/cm²/Hz].
-    photometry_ztable : object or None
-        Hybrid kernel for free-redshift photometry [erg/s/cm²/Hz].
-    spectrum : object or None
-        Hybrid kernel for spectroscopy [erg/s/cm²/Hz].
+    photometry : callable or None
+        Hybrid kernel for fixed-redshift photometry. [erg/s/cm^2/Hz]
+    photometry_ztable : callable or None
+        Hybrid kernel for free-redshift photometry. [erg/s/cm^2/Hz]
+    spectrum : callable or None
+        Hybrid kernel for spectroscopy. [erg/s/cm^2/Hz]
 
     Notes
     -----
-    This is an internal container used by SEDModel. Users do not construct this directly.
-    Hybrid kernels trade speed (precomputed stellar) for accuracy (compositional non-stellar).
+    This is an internal container used by SEDModel. Users do not construct
+    this directly. Hybrid kernels trade speed (precomputed stellar) for
+    accuracy (compositional non-stellar).
     """
 
     photometry: object | None = None

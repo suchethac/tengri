@@ -1105,6 +1105,11 @@ def agn_nlr_emission(
     ValueError
         If ``backend`` is not recognized or required backend object is missing.
 
+    Notes
+    -----
+    **JIT-compatible**: yes — dispatcher routes to backend-specific methods
+    which are JIT-compatible. Gradient-safe for continuous parameters.
+
     """
     if backend == "cue":
         if cue_backend is None:

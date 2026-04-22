@@ -56,23 +56,30 @@ def precompute_skirtor_photometry(
     Parameters
     ----------
     grid_path : str
-        Path to ``skirtor_templates.npz``.
-    filter_waves, filter_trans : list of array
-        Filter curves in Angstrom / relative transmission, **observed frame**.
-    redshift : float
-        Source redshift.  Used to shift rest-frame templates into the
+        Path to ``skirtor_templates.npz`` or ``.h5``.
+    filter_waves : list[ndarray]
+        Wavelength grid per filter [Angstrom], observed frame.
+    filter_trans : list[ndarray]
+        Transmission per filter (0–1).
+    redshift : float, optional
+        Source redshift. Used to shift rest-frame templates into the
         observed frame before integrating against observed-frame filters.
+        Default 0.0.
 
     Returns
     -------
     dict
-        ``grid_phot`` : array (n_tau, n_p, n_q, n_oa, n_inc, n_filters)
+        ``grid_phot`` : ndarray, shape (n_tau, n_p, n_q, n_oa, n_inc, n_filters)
             Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
         ``axes`` : tuple of 5 grid arrays (jnp.ndarray)
-        ``_preint`` : :class:`PreintegratedGrid`
+            Grid axes (tau, p, q, oa, cos_inc).
+        ``_preint`` : PreintegratedGrid
+            Internal preintegration data structure.
 
     Notes
     -----
+    **JIT-compatible**: no — this is a build-time function using NumPy.
+
     **Build-time operation**: This function performs frequency-domain
     integration via NumPy. The precomputed photometry is grid-independent
     (depends only on filter curves and redshift, not wavelength grid).
@@ -149,9 +156,14 @@ def build_skirtor_photometry_lookup(precomp: dict):
     Returns
     -------
     callable
-        ``(agn_log_lbol, agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor,
-           agn_oa_skirtor, agn_cos_inc, agn_torus_frac) -> array (n_filters,)``
+        Function with signature::
+
+            fn(agn_log_lbol, agn_tau_skirtor, agn_p_skirtor,
+               agn_q_skirtor, agn_oa_skirtor, agn_cos_inc,
+               agn_torus_frac) -> ndarray, shape (n_filters,)
+
         Returns torus L_ν [erg/s/Hz].  Caller applies
+        ``flux_scale = (1+z) / (4π d_L²)`` to get flux density.
 
     Notes
     -----
@@ -162,7 +174,6 @@ def build_skirtor_photometry_lookup(precomp: dict):
     gradients for autodiff, unlike nearest-neighbor or linear interpolation.
     This is important for robust inference when SKIRTOR parameters are
     fitted via gradient descent.
-        ``flux_scale = (1+z) / (4π d_L²)`` to get flux density.
     """
     grid_phot = precomp["grid_phot"]
     axes = precomp["axes"]
@@ -213,21 +224,26 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves, filter_trans : list
-        Filter curves (observed frame).
+    filter_waves : list[ndarray]
+        Wavelength grid per filter [Angstrom], observed frame.
+    filter_trans : list[ndarray]
+        Transmission per filter (0–1).
     redshift : float
-        Unused — SKIRTOR templates are rest-frame and the filter grid is
-        already observed-frame.  Accepted for Protocol consistency.
+        Source redshift. [dimensionless]
     parameters : Parameters | None
         Parameters spec, used to detect Fixed-axis parameters.
-    grid_path : str
-        Path to ``skirtor_templates.npz``.
+    grid_path : str, keyword-only
+        Path to ``skirtor_templates.npz`` or ``.h5``.
 
     Returns
     -------
     dict
         Same shape as :func:`precompute_skirtor_photometry` but with grid
         axes collapsed for any Fixed :data:`AXIS_PARAMS` entry.
+
+    Notes
+    -----
+    **JIT-compatible**: no — this is a build-time function using NumPy.
     """
     result = precompute_skirtor_photometry(
         grid_path, filter_waves, filter_trans, redshift=redshift
@@ -267,15 +283,23 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     preint : dict
         Preintegrated data dict with keys ``"grid_phot"``, ``"axes"``,
         and optionally ``"_collapsed_axes"`` and ``"_preint"``.
-    free_param_names : tuple of str or None
+    free_param_names : tuple of str or None, optional
         Names of remaining free axes in the collapsed case.
         Not used in the default (no-collapse) case.
 
     Returns
     -------
-    Callable
-        JIT-compiled photometry lookup function with signature
-        ``(agn_log_lbol, *free_axis_values, agn_torus_frac) -> ndarray``.
+    callable
+        JIT-compiled photometry lookup function with signature::
+
+            fn(agn_log_lbol, *free_axis_values, agn_torus_frac)
+                -> ndarray, shape (n_filters,)
+
+        Returns torus L_ν [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — the returned function is fully JAX-native.
     """
     if not preint.get("_collapsed_axes"):
         return build_skirtor_photometry_lookup(preint)

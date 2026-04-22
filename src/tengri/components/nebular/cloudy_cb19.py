@@ -276,6 +276,12 @@ def load_cb19_grid(
         HbFrac value (snapped to nearest grid point). HbFrac=1.0 = radiation-bounded.
         Ionizing photon escape fraction ≈ 1 − HbFrac.
 
+    Returns
+    -------
+    CB19GridData
+        Pre-loaded grid with 6 continuous interpolation axes
+        (log_OH, log_age, log_U, log_nH, log_CO, dNO) and line data.
+
     Raises
     ------
     FileNotFoundError
@@ -283,6 +289,11 @@ def load_cb19_grid(
         to build it.
     KeyError
         If the requested (sed_type, imf, mup) combination is not in the file.
+
+    Notes
+    -----
+    **JIT-compatible**: no — HDF5 I/O is not JAX-compatible. Call once
+    at model initialization and cache the result for repeated use.
 
     """
     filepath = Path(filepath)
@@ -616,6 +627,12 @@ class CB19Backend:
         luminosities : array, shape (n_lines,)
             Emission line luminosities in Lsun.
 
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **Gradient-safe**: yes — differentiable through neb_logU, neb_fesc,
+        neb_log_nH, neb_co, neb_dno parameters.
+
         """
         if neb_logZ_gas is None:
             neb_logZ_gas = log_z
@@ -685,11 +702,27 @@ class CB19Backend:
         combine this backend with ``CloudyGridBackend`` (use CB_19 for lines,
         FSPS/Byler grid for continuum).
 
+        Parameters
+        ----------
+        ssp_weights : array, shape (n_age,)
+            SSP mass weights (unused).
+        ssp_log_ages_yr : array, shape (n_age,)
+            SSP log-space ages in years (unused).
+        log_z : float
+            Stellar metallicity log10(Z) (unused).
+        **_kwargs
+            Additional keyword arguments (all unused).
+
         Returns
         -------
         wavelength : array, shape (1,)
+            Dummy wavelength [Angstrom].
         luminosity : array, shape (1,)
-            Both are zeros (no continuum from CB_19).
+            Zero array [erg/s/Hz] — no continuum from CB_19.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — returns constant arrays.
 
         """
         return jnp.array([5000.0]), jnp.array([0.0])
@@ -742,6 +775,12 @@ class CB19Backend:
         -------
         array, shape (n_wave,)
             Nebular emission SED in erg/s/Hz on the SSP wavelength grid.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **Gradient-safe**: yes — differentiable through neb_logU, neb_fesc,
+        neb_log_nH, neb_co, neb_dno parameters.
 
         """
         line_wave, line_lum = self.predict_nebular_line_luminosities(

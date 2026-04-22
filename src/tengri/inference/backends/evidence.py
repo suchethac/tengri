@@ -51,7 +51,9 @@ def _get_nss_fns(
         # once; subsequent calls with the same Python function object and the
         # same abstract shapes hit the Python-level JIT cache without retrace.
         def _step_with_data(key, state, data_args):
+            """Advance nested sampling state by one iteration with the given data."""
             def _loglik(params):
+                """Evaluate likelihood for given parameters."""
                 return loglikelihood_fn(params, data_args)
 
             _algo = as_top_level_api(
@@ -65,7 +67,9 @@ def _get_nss_fns(
             return _algo.step(key, state)
 
         def _init_with_data(particles, data_args):
+            """Initialize nested sampling state with particles and data."""
             def _loglik(params):
+                """Evaluate likelihood for given parameters."""
                 return loglikelihood_fn(params, data_args)
 
             _algo = as_top_level_api(
@@ -95,7 +99,7 @@ def run_nss(
     max_iterations=10000,
     n_posterior_samples=1000,
     max_steps=10,
-    max_shrinkage=100,
+    max_shrinkage=20,
     verbose=True,
 ):
     """Nested Slice Sampling for Bayesian evidence computation.
@@ -122,7 +126,10 @@ def run_nss(
     max_steps : int
         Maximum stepping-out steps in slice sampling.
     max_shrinkage : int
-        Maximum shrinking steps in slice sampling.
+        Maximum shrinking steps in slice sampling. Default 20 (reduced from 100)
+        to limit the XLA graph size — each shrinkage step is compiled into the
+        ``vmap(lax.while_loop)`` body, and ``max_shrinkage=100`` caused 20 GB+
+        JIT compilation memory.
     verbose : bool
         Print progress.
 
@@ -137,12 +144,18 @@ def run_nss(
     dimensionality and photometric band layout.  The cache is keyed on
     ``(model_cache_key, num_inner_steps, num_delete, max_steps, max_shrinkage)``.
 
+    **XLA compilation size**: each ``lax.while_loop`` shrinkage step adds nodes
+    to the compiled XLA graph when ``jax.vmap`` batches it over ``num_delete``
+    particles.  ``max_shrinkage=100`` caused 20 GB+ JIT compilation RAM;
+    the default is now 20.  Increase only if acceptance rates fall below ~0.5.
+
     Cold compile (~10–15 s) happens once per model configuration; subsequent
     galaxies pay only the per-step XLA execution time.
 
     JIT/grad/vmap: the step body is fully JIT-compatible.
     """
-    from tengri.inference.backends.nested.utils import ess as ns_ess, finalise, sample as ns_sample
+    from tengri.inference.backends.nested.base import NSInfo as _NSInfo
+    from tengri.inference.backends.nested.utils import ess as ns_ess, sample as ns_sample
     from tengri.inference.posterior import Posterior
 
     if fitter.spec.stochastic:
@@ -175,14 +188,16 @@ def run_nss(
     particles = {name: all_samples[name] for name in fitter._free_names}
     live = init_jit(particles, data_args)
 
-    dead_points = []
+    # Collect only dead particles, not the full NSInfo (update_info is MCMC internals
+    # of the replacement step — 3-4× larger than particles but unused by ns_sample/ns_ess).
+    dead_particles_list = []
     n_iter = 0
     t0 = time.time()
 
     while True:
         key, subkey = jax.random.split(key)
         live, dead = step_jit(subkey, live, data_args)
-        dead_points.append(dead)
+        dead_particles_list.append(dead.particles)
         n_iter += 1
 
         logZ_est = float(jnp.logaddexp(live.integrator.logZ, live.integrator.logZ_live))
@@ -206,7 +221,10 @@ def run_nss(
     wall_time = time.time() - t0
     logZ = float(jnp.logaddexp(live.integrator.logZ, live.integrator.logZ_live))
 
-    ns_run = finalise(live, dead_points)
+    all_ps = [*dead_particles_list, live.particles]
+    del dead_particles_list
+    final_particles = jax.tree_util.tree_map(lambda *xs: jnp.concatenate(xs, axis=0), *all_ps)
+    ns_run = _NSInfo(final_particles, None)
 
     key, sample_key = jax.random.split(key)
     resampled = ns_sample(sample_key, ns_run, n_posterior_samples)

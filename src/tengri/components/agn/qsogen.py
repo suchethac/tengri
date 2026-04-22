@@ -589,32 +589,43 @@ def compute_qsogen_sed(
         Rest-frame wavelength [Angstrom].
     agn_plslp1 : float
         Blue power-law slope in f_nu (UV/blue side). Default -0.349.
+        [dimensionless]
     agn_plslp2 : float
         Red power-law slope in f_nu (optical/red side). Default 0.593.
+        [dimensionless]
     agn_plbrk : float
         Break wavelength [Angstrom]. Default 3880.
     agn_tbb : float
         Hot dust temperature [K]. Default 1240.
     agn_bbnorm : float
         Hot dust normalization (relative to continuum at 2 um).
-        Default 3.96.
+        Default 3.96. [dimensionless]
     agn_emline_scale : float
         Emission line strength multiplier. Default 1.0 (negative values
-        use EW-scaling, matching the original qsogen).
+        use EW-scaling, matching the original qsogen). [dimensionless]
     agn_ebv : float
         E(B-V) dust reddening [mag]. Default 0.0 (no reddening).
     agn_log_lbol : float
         log10(L_bol / Lsun). Bolometric luminosity. Default 45.0.
+        [log10(L_sun)]
     agn_frac : float
-        Overall AGN fraction scaling. Default 1.0.
+        Overall AGN fraction scaling. Default 1.0. [dimensionless]
     agn_bcnorm : float
         Balmer continuum normalization. Default 0.0 (disabled).
-        Set to ~1.0 to enable Balmer continuum emission.
+        Set to ~1.0 to enable Balmer continuum emission. [dimensionless]
 
     Returns
     -------
     array, shape (n_wave,)
         L_nu [erg s^-1 Hz^-1].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and smooth sigmoid
+    transitions.
+
+    The emission line template is loaded from disk at module import time
+    to avoid file I/O inside JIT-traced functions.
     """
     # --- Component 1: Broken power-law continuum ---
     continuum = _broken_powerlaw_continuum(

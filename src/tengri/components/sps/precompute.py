@@ -68,6 +68,7 @@ def _vectorized_interp(
     -------
     array, shape (n_met, n_age, n_target)
         Interpolated values, with out-of-bounds set to 0.
+
     """
     n_source = len(xp_source)
 
@@ -122,6 +123,7 @@ class PhotometricPrecomputation(NamedTuple):
     **JIT-compatible**: no — this is a data container produced by
     :func:`precompute_photometry` at startup; data itself is immutable
     and suitable for use in JAX operations.
+
     """
 
     ssp_phot: jnp.ndarray
@@ -155,6 +157,7 @@ class SpectroscopicPrecomputation(NamedTuple):
     **JIT-compatible**: no — this is a data container produced by
     :func:`precompute_spectroscopy` at startup; data itself is immutable
     and suitable for use in JAX operations.
+
     """
 
     ssp_on_pixels: jnp.ndarray
@@ -220,6 +223,7 @@ def precompute_photometry(
     **JIT-compatible**: no — this is a data precomputation function that
     runs once at startup, not inside the inference loop. Uses numpy and HDF5 I/O.
     **Gradient-safe**: not applicable (CPU preprocessing).
+
     """
     from tengri.utils.grid_interp import slice_fixed_axes
 
@@ -283,6 +287,7 @@ def precompute_spectroscopy(
     -----
     **JIT-compatible**: no — data precomputation function with numpy I/O.
     **Gradient-safe**: not applicable (CPU preprocessing).
+
     """
     wave_rest_pixels = wave_obs_pixels / (1.0 + redshift)
 
@@ -335,6 +340,7 @@ class PhotometricZTable(NamedTuple):
     **JIT-compatible**: no — this is a data container produced by
     :func:`precompute_photometry_ztable` at startup; data itself is immutable
     and suitable for use in JAX operations.
+
     """
 
     ssp_phot_table: jnp.ndarray
@@ -393,6 +399,7 @@ def precompute_photometry_ztable(
     -----
     **JIT-compatible**: no — data precomputation function with nested loops.
     **Gradient-safe**: not applicable (CPU preprocessing).
+
     """
     from tengri.utils.cosmology import luminosity_distance
 
@@ -501,6 +508,7 @@ def fast_photometry(
     -----
     **JIT-compatible**: yes — uses ``jnp.einsum`` for fast weighted sum.
     **Gradient-safe**: yes.
+
     """
     # Weighted sum: weights [Msun] * ssp [Lsun/Hz/Msun] * dust -> Lsun/Hz
     from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
@@ -539,6 +547,7 @@ def fast_spectrum(
     -----
     **JIT-compatible**: yes — uses ``jnp.einsum`` for fast weighted sum.
     **Gradient-safe**: yes.
+
     """
     flux = jnp.einsum("i,ip,ip->p", weights, dust_at_pixels, ssp_on_pixels_at_z)
     return flux_scale * flux
@@ -568,6 +577,7 @@ def interpolate_ssp_phot_metallicity(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     **Gradient-safe**: yes — linear interpolation is differentiable.
+
     """
     log_z_clamped = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
     idx = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_clamped) - 1, 0, len(ssp_lgmet) - 2)
@@ -607,6 +617,7 @@ def interpolate_ztable(ztable_ssp_phot, ztable_eff_rest, ztable_flux_scale, z_gr
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     **Gradient-safe**: yes — linear interpolation is differentiable.
+
     """
     z_clamped = jnp.clip(z, z_grid[0], z_grid[-1])
     idx = jnp.clip(jnp.searchsorted(z_grid, z_clamped) - 1, 0, len(z_grid) - 2)
@@ -670,6 +681,7 @@ def interpolate_ztable_smooth(
     -----
     **JIT-compatible**: yes — uses triweight kernel via :func:`compute_grid_weights`.
     **Gradient-safe**: yes — C²-continuous gradients.
+
     """
     from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
@@ -703,6 +715,7 @@ def interpolate_igm_ztable(igm_trans_table, z_grid, z):
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     **Gradient-safe**: yes — linear interpolation is differentiable.
+
     """
     z_clamped = jnp.clip(z, z_grid[0], z_grid[-1])
     idx = jnp.clip(jnp.searchsorted(z_grid, z_clamped) - 1, 0, len(z_grid) - 2)
@@ -756,6 +769,7 @@ def precompute(
     -----
     **JIT-compatible**: no — data precomputation with conditional collapsing.
     **Gradient-safe**: not applicable (CPU preprocessing).
+
     """
     fixed: dict[int, float] | None = None
     if parameters is not None and parameters.is_fixed("met_logzsol"):
@@ -776,8 +790,10 @@ def precompute(
 
 
 def build_lookup(preint, **kwargs):
-    """SSP photometry is consumed directly by the fused kernels — no JIT
-    lookup returned here; this is a Protocol placeholder.
+    """Return SSP photometry lookup for the fused kernels.
+
+    SSP photometry is consumed directly by the fused kernels — no JIT
+    lookup is returned here. This is a Protocol placeholder.
 
     Parameters
     ----------
@@ -801,5 +817,6 @@ def build_lookup(preint, **kwargs):
     This function implements the Protocol interface but performs no operation.
     The precomputed photometry is passed directly to fast_photometry() or
     similar kernel functions.
+
     """
     return None

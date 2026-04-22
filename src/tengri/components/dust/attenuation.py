@@ -2057,6 +2057,7 @@ def _make_grain_law(wave_aa: np.ndarray, k_norm: np.ndarray):
     _k = jnp.asarray(k_norm)
 
     def _law(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
+        """Interpolate precomputed dust attenuation curve at given wavelengths."""
         return jnp.maximum(jnp.interp(wavelength, _wave, _k), 0.0)
 
     return _law

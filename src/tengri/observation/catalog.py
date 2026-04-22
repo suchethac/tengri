@@ -117,8 +117,10 @@ class Catalog:
         Returns
         -------
         dict
-            Keys: ``id``, ``redshift``, ``flux``, ``noise``, ``mask``,
-            ``filter_names``. Arrays have shape ``(n_filters,)``.
+            Keys: ``id`` (scalar), ``redshift`` (scalar),
+            ``flux`` (array, shape ``(n_filters,)``), ``noise`` (array, shape
+            ``(n_filters,)``), ``mask`` (array, shape ``(n_filters,)``),
+            ``filter_names`` (tuple of str). Flux and noise are in ``flux_unit``.
 
         Notes
         -----
@@ -158,10 +160,10 @@ class Catalog:
 
         Returns
         -------
-        flux : array, shape (n_detected,)
+        flux : ndarray, shape (n_detected,)
             Flux values for detected bands [flux_unit].
-        noise : array, shape (n_detected,)
-            Noise for detected bands [flux_unit].
+        noise : ndarray, shape (n_detected,)
+            1-sigma noise for detected bands [flux_unit].
         filter_names : tuple of str
             Filter names for detected bands only.
 
@@ -236,21 +238,25 @@ def read_catalog(
     filter_mapping : dict, optional
         Maps catalog column names → tengri filter names.  If ``None``,
         column names are matched directly against ``FILTER_REGISTRY``.
-    flux_unit : str
+        Default: ``None``.
+    flux_unit : str, optional
         Unit label stored in the returned ``Catalog``. Default ``"mJy"``.
-    redshift_col : str
+    redshift_col : str, optional
         Name of the redshift column. Default ``"redshift"``.
-    id_col : str
+    id_col : str, optional
         Name of the ID column. Default ``"id"``.
-    missing_value : float
+    missing_value : float, optional
         Value indicating missing data. Default ``-9999``.
-    delimiter : str
+    delimiter : str, optional
         CSV delimiter. Default ``","``.
 
     Returns
     -------
     Catalog
-        Parsed catalog with flux, noise, and mask arrays.
+        Parsed catalog with ``flux`` array, shape ``(n_galaxies, n_filters)``
+        [flux_unit]; ``noise`` array [flux_unit]; ``mask`` array with values
+        ``0`` (detected), ``1`` (upper limit), ``-1`` (lower limit); and
+        ``filter_names`` tuple.
 
     Raises
     ------

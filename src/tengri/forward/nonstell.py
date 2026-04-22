@@ -119,29 +119,31 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
     model : SEDModel
         Fully initialized model instance.
     law_bc_fn : callable
-        Birth-cloud dust extinction law [1/mag].
+        Birth-cloud dust extinction law. [1/mag]
     law_diff_fn : callable
-        Diffuse ISM dust extinction law [1/mag].
+        Diffuse ISM dust extinction law. [1/mag]
     ssp_wave_f64 : ndarray, shape (n_wave_ssp,)
-        SSP wavelength grid [Angstrom].
+        SSP wavelength grid. [Angstrom]
     rest_wave_f64 : ndarray, shape (n_wave_rest,)
-        Panchromatic rest-frame wavelength grid [Angstrom].
-        May equal ``ssp_wave_f64`` when radio/X-ray disabled.
+        Panchromatic rest-frame wavelength grid. May equal ``ssp_wave_f64``
+        when radio/X-ray disabled. [Angstrom]
 
     Returns
     -------
     callable
-        Function with signature ``(weights, p, stellar_sed, stellar_sed_intr) -> sed``.
-
-        - ``weights``: ndarray, shape (n_age,) — CSP mass weights [Msun]
-        - ``p``: dict — internal parameters
-        - ``stellar_sed``: ndarray, shape (n_wave_ssp,) — attenuated stellar SED [erg/s/Hz]
-        - ``stellar_sed_intr``: ndarray, shape (n_wave_ssp,) — intrinsic stellar SED [erg/s/Hz]
-        - returns: ndarray, shape (n_wave_rest,) — full SED [erg/s/Hz]
+        Function: ``(weights, p, stellar_sed, stellar_sed_intr) -> sed``,
+        where ``weights`` has shape (n_age,) [Msun], ``p`` is a parameter dict,
+        ``stellar_sed`` has shape (n_wave_ssp,) [erg/s/Hz] (dust-attenuated),
+        ``stellar_sed_intr`` has shape (n_wave_ssp,) [erg/s/Hz] (intrinsic),
+        and ``sed`` has shape (n_wave_rest,) [erg/s/Hz] (full SED with all
+        non-stellar components added).
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives after closure creation.
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives after closure
+    creation.
+
+    **Gradient-safe**: yes — differentiable w.r.t. all parameters in p.
     """
     import jax.numpy as jnp
 

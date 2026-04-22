@@ -113,6 +113,7 @@ def uv_slope_beta(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
     log_f = jnp.log(jnp.maximum(f_lambda, 1e-40))
 
     def _window_slope(lo_hi):
+        """Compute slope and weight for a wavelength window."""
         lo, hi = lo_hi
         mask = ((wavelength_aa >= lo) & (wavelength_aa <= hi)).astype(jnp.float64)
         n = jnp.sum(mask)

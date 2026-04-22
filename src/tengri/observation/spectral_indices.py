@@ -93,7 +93,13 @@ class SpectralIndexDef:
         Returns
         -------
         float
-            Minimum wavelength [Angstrom] across all continuum and feature windows.
+            Minimum wavelength [Angstrom] across all continuum and feature
+            windows defined in this index.
+
+        Notes
+        -----
+        Computed as the minimum of all window edges. Useful for determining
+        the minimum wavelength coverage needed in the forward model spectrum.
 
         """
         vals = [w for pair in self.continuum for w in pair]
@@ -108,7 +114,13 @@ class SpectralIndexDef:
         Returns
         -------
         float
-            Maximum wavelength [Angstrom] across all continuum and feature windows.
+            Maximum wavelength [Angstrom] across all continuum and feature
+            windows defined in this index.
+
+        Notes
+        -----
+        Computed as the maximum of all window edges. Useful for determining
+        the maximum wavelength coverage needed in the forward model spectrum.
 
         """
         vals = [w for pair in self.continuum for w in pair]
@@ -205,23 +217,26 @@ def measure_index_jax(
 
     Parameters
     ----------
-    wave_rest : array, shape (n_pix,)
-        Rest-frame wavelengths [Angstrom] (must cover the index windows).
-    flux : array, shape (n_pix,)
+    wave_rest : ndarray, shape (n_pix,)
+        Rest-frame wavelengths [Angstrom]. Must cover all windows defined
+        in ``index_def``.
+    flux : ndarray, shape (n_pix,)
         Flux density (any consistent units — only ratios matter).
     index_def : SpectralIndexDef
-        Index definition.
+        Index definition specifying windows and index type (EW or break).
 
     Returns
     -------
-    jnp.ndarray, scalar
-        Measured index value (units depend on ``index_def.units``:
-        Angstrom for EW, dimensionless for break indices).
+    ndarray, shape ()
+        Measured index value (scalar). Units depend on ``index_def.units``:
+        [Angstrom] for EW indices, [dimensionless] for break indices.
 
     Notes
     -----
     **JIT-compatible**: yes — uses soft sigmoid edges for differentiability
     rather than hard window boundaries.
+
+    **Gradient-safe**: yes — fully differentiable w.r.t. flux.
 
     """
     if index_def.index_type == "break":
@@ -335,7 +350,12 @@ class SpectralIndexData:
         Returns
         -------
         tuple[str, ...]
-            Index names in the same order as ``index_defs``.
+            Index names in the same order as ``index_defs``, e.g.
+            ``("Dn4000", "HdA")``.
+
+        Notes
+        -----
+        Names match the keys in STANDARD_INDICES.
 
         Examples
         --------
@@ -353,7 +373,13 @@ class SpectralIndexData:
         Returns
         -------
         tuple[float, float]
-            Tuple (wave_min, wave_max) in Angstrom covering all indices.
+            Tuple ``(wave_min, wave_max)`` [Angstrom] covering all continuum
+            and feature windows across all indices.
+
+        Notes
+        -----
+        Useful for determining minimum wavelength coverage required in the
+        forward model spectrum to compute all indices.
 
         """
         lo = min(d.wave_min for d in self.index_defs)
@@ -371,23 +397,29 @@ class SpectralIndexData:
 
         Parameters
         ----------
-        names : list of str
-            Index names from ``STANDARD_INDICES``
-            (e.g. ``["Dn4000", "HdA"]``).
-        values : list of float
-            Observed index values (units depend on index type).
-        errors : list of float
-            1-sigma uncertainties (same units as values).
+        names : list[str]
+            Index names from ``STANDARD_INDICES`` (e.g. ``["Dn4000", "HdA"]``).
+        values : list[float]
+            Observed index values. Units depend on index type: [Angstrom] for
+            EW indices, [dimensionless] for break indices.
+        errors : list[float]
+            1-sigma uncertainties (same units as ``values``).
 
         Returns
         -------
         SpectralIndexData
-            Spectral index data object.
+            Spectral index data object with index definitions looked up from
+            ``STANDARD_INDICES``.
 
         Raises
         ------
         ValueError
             If any name is not in ``STANDARD_INDICES``.
+
+        Notes
+        -----
+        The wavelength coverage required to measure all indices can be obtained
+        via :func:`wave_range` property.
 
         """
         defs = []
@@ -408,17 +440,19 @@ class SpectralIndexData:
 
         Parameters
         ----------
-        model_values : array, shape (n_indices,)
+        model_values : ndarray, shape (n_indices,)
             Model-predicted index values (same units as ``values``).
 
         Returns
         -------
-        jnp.ndarray, scalar
-            Sum of ((obs - model) / error)^2 [dimensionless].
+        ndarray, shape ()
+            Sum of ``((obs - model) / error)^2`` [dimensionless].
 
         Notes
         -----
         **JIT-compatible**: yes — uses only jnp primitives.
+
+        **Gradient-safe**: yes — differentiable w.r.t. ``model_values``.
 
         """
         residual = (self.values - model_values) / self.errors
@@ -429,17 +463,21 @@ class SpectralIndexData:
 
         Parameters
         ----------
-        model_values : array, shape (n_indices,)
+        model_values : ndarray, shape (n_indices,)
             Model-predicted index values (same units as ``values``).
 
         Returns
         -------
-        jnp.ndarray, scalar
+        ndarray, shape ()
             Total log-likelihood summed over all indices [dimensionless].
 
         Notes
         -----
         **JIT-compatible**: yes — uses only jnp primitives.
+
+        **Gradient-safe**: yes — differentiable w.r.t. ``model_values``.
+
+        Assumes Gaussian uncertainties on the observed indices.
 
         """
         residual = (self.values - model_values) / self.errors
@@ -451,7 +489,7 @@ class SpectralIndexData:
         Returns
         -------
         str
-            Summary string (e.g., "2 indices (Dn4000, HdA)").
+            Summary string (e.g., ``"2 indices (Dn4000, HdA)"``).
 
         Notes
         -----

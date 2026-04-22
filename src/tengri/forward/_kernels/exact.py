@@ -41,12 +41,20 @@ def build_exact_sed(model):
     Returns
     -------
     callable
-        JIT-compiled function: (weights, ssp_at_z, tau_bc, tau_diff,
-        ...) -> (sed_atten, sed_intr).
+        JIT-compiled function: ``(weights, ssp_at_z, tau_bc, tau_diff, ...)``
+        → ``(sed_atten, sed_intr)``, where weights has shape (n_age,) [Msun],
+        ssp_at_z has shape (n_age, n_wave) [erg/s/Hz], tau_bc and tau_diff
+        are floats [dimensionless], and both outputs have shape (n_wave,)
+        [erg/s/Hz].
 
     Notes
     -----
-    Typical speedup: 4-14x vs un-JIT'd exact path.
+    **JIT-compatible**: yes — entire pipeline fused into one ``@jax.jit`` scope.
+
+    **Gradient-safe**: yes — differentiable w.r.t. all dust and attenuation
+    parameters.
+
+    Typical speedup: 4–14× vs un-JIT'd exact path (measured on CPU).
     """
     from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
 
@@ -125,7 +133,7 @@ def build_exact_sed(model):
 
 
 def build_fused_rest_sed(model):
-    """Build a JIT'd function: internal params -> rest-frame SED.
+    """Build a JIT'd function: internal params → rest-frame SED.
 
     Composes all enabled physics components into a single JIT'd function.
     Disabled components are excluded from the XLA graph at trace time
@@ -144,10 +152,17 @@ def build_fused_rest_sed(model):
     Returns
     -------
     callable
-        JIT-compiled function:
-        ``(weights, ssp_flux_at_z, p_dict) -> rest_sed``
-        where ``p_dict`` contains internal dust/AGN/nebular/radio/X-ray
-        parameters.
+        JIT-compiled function: ``(weights, ssp_flux_at_z, p_dict) -> rest_sed``,
+        where weights has shape (n_age,) [Msun], ssp_flux_at_z has shape
+        (n_age, n_wave) [erg/s/Hz], p_dict is a parameter dictionary
+        (internal dust/AGN/nebular/radio/X-ray parameters), and rest_sed
+        has shape (n_wave,) [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all components fused into one ``@jax.jit`` scope.
+
+    **Gradient-safe**: yes — differentiable w.r.t. all parameters in p_dict.
     """
     from tengri.components.dust.attenuation import resolve_dust_law
     from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S

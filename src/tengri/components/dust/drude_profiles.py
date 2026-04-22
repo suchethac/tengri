@@ -8,6 +8,7 @@ strengths from an observed mid-IR SED.
 References
 ----------
 Smith et al. 2007, ApJ 656, 770 — PAHFIT; Table 2 feature list.
+
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ class PAHFeature(NamedTuple):
     Used to define the 18-feature PAH template from Smith et al. (2007).
     Each feature can be evaluated as a Drude profile via
     :func:`drude_profile` or combined via :func:`pah_template`.
+
     """
 
     wave_um: float
@@ -115,6 +117,7 @@ def drude_profile(
     **JIT-compatible**: yes.
 
     **Gradient-safe**: yes.
+
     """
     lam = jnp.asarray(wave_um)
     # gamma is the fractional FWHM; g_over_l0 = gamma is already Δλ/λ₀.
@@ -150,6 +153,7 @@ def pah_template(
     **JIT-compatible**: yes.
 
     **Gradient-safe**: yes.
+
     """
     lam = jnp.asarray(wave_um)
     s = _DEFAULT_STRENGTHS if strengths is None else jnp.asarray(strengths)
@@ -211,6 +215,7 @@ def decompose_pah(
     **JIT-compatible**: yes.
 
     **Gradient-safe**: yes. Use for warm-starting or sensitivity analysis.
+
     """
     lam = jnp.asarray(wave_um)
     y = jnp.asarray(sed)

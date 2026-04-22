@@ -174,6 +174,7 @@ def _nuts_full_scan(
     kernel = _get_nuts_kernel()
 
     def _step(s, k):
+        """Advance NUTS sampler by one step, returning position and divergence flag."""
         s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix, max_doublings)
         return s, (s.position, info.is_divergent)
 
@@ -225,6 +226,7 @@ def _nuts_chain_scan(
     kernel = _get_nuts_kernel()
 
     def _step(s, k):
+        """Advance NUTS sampler by one step, returning position and divergence flag."""
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix, max_doublings)
         return s, (s.position, info.is_divergent)
 
@@ -307,6 +309,7 @@ def _hmc_full_scan(
     kernel = _get_hmc_kernel()
 
     def _step(s, k):
+        """Advance HMC sampler by one step, returning position and divergence flag."""
         s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix, n_leapfrog)
         return s, (s.position, info.is_divergent)
 
@@ -360,6 +363,7 @@ def _hmc_chain_scan(
     kernel = _get_hmc_kernel()
 
     def _step(s, k):
+        """Advance HMC sampler by one step, returning position and divergence flag."""
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix, n_leapfrog)
         return s, (s.position, info.is_divergent)
 
@@ -443,6 +447,7 @@ def _dynamic_hmc_full_scan(
     kernel = _get_dynamic_hmc_kernel()
 
     def _step(s, k):
+        """Advance dynamic HMC sampler by one step, returning position and divergence flag."""
         s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix)
         return s, (s.position, info.is_divergent)
 
@@ -493,6 +498,7 @@ def _dynamic_hmc_chain_scan(
     kernel = _get_dynamic_hmc_kernel()
 
     def _step(s, k):
+        """Advance dynamic HMC sampler by one step, returning position and divergence flag."""
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix)
         return s, (s.position, info.is_divergent)
 
@@ -579,6 +585,7 @@ def _ghmc_full_scan(
     kernel = _get_ghmc_kernel()
 
     def _step(s, k):
+        """Advance GHMC sampler by one step, returning position and divergence flag."""
         s, info = kernel(k, s, ld_1arg, step_size, momentum_inv_scale, alpha, delta)
         return s, (s.position, info.is_divergent)
 
@@ -642,6 +649,7 @@ def _ghmc_chain_scan(
     kernel = _get_ghmc_kernel()
 
     def _step(s, k):
+        """Advance GHMC sampler by one step, returning position and divergence flag."""
         s, info = kernel(k, s, ld, step_size, momentum_inv_scale, alpha, delta)
         return s, (s.position, info.is_divergent)
 
@@ -661,6 +669,7 @@ def _mclmc_sample_scan(state, keys, kernel, L, step_size):
     """JIT-compiled MCLMC sampling scan over multiple steps."""
 
     def _step(s, k):
+        """Advance MCLMC sampler by one step, returning updated state and position."""
         s, _info = kernel(k, s, L, step_size)
         return s, s.position
 
@@ -672,6 +681,7 @@ def _adjusted_mclmc_sample_scan(state, keys, kernel, step_size, n_integration_st
     """JIT-compiled adjusted MCLMC sampling scan over multiple steps."""
 
     def _step(s, k):
+        """Advance adjusted MCLMC sampler by one step, returning position and divergence flag."""
         s, info = kernel(k, s, step_size, n_integration_steps)
         return s, (s.position, info.is_divergent)
 

@@ -71,6 +71,7 @@ class SSPData(NamedTuple):
     >>> ssp = load_ssp_data("data/ssp_miles.h5")  # doctest: +SKIP
     >>> ssp.ssp_flux.shape  # (n_met, n_age, n_wave)  # doctest: +SKIP
     (22, 107, 4563)
+
     """
 
     ssp_wave: jnp.ndarray
@@ -127,6 +128,7 @@ def load_ssp_data(filepath: str) -> SSPData:
     >>> ssp = load_ssp_data("data/ssp_bc03.h5")
     >>> print(ssp.ssp_wave.shape, ssp.ssp_flux.shape)
     (6000,) (50, 300, 6000)
+
     """
     try:
         import h5py
@@ -171,6 +173,7 @@ def load_ssp_data_dsps(filepath: str) -> SSPData:
     -----
     **JIT-compatible**: yes — only file I/O occurs outside JAX traced code.
     Falls back gracefully to load_ssp_data() if dsps is not available.
+
     """
     try:
         from dsps import load_ssp_templates
@@ -226,6 +229,7 @@ def csp_age_dt(ssp_ages_yr: jnp.ndarray, method: str = "trapz") -> jnp.ndarray:
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     **Gradient-safe**: yes.
+
     """
     if method == "trapz":
         return jnp.concatenate(
@@ -304,6 +308,7 @@ def csp_log_interp_matrix(ssp_ages_yr, n_gl: int = 5):
     **JIT-compatible**: no — uses numpy and does not support traced evaluation.
     Precompute the matrix at startup or outside JAX functions.
     **Gradient-safe**: not applicable (CPU-only computation).
+
     """
     import numpy as np
 
@@ -419,6 +424,7 @@ def compute_dsps_native_weights(
     References
     ----------
     Hearin et al. 2023, arXiv:2112.08423, Eq. 10 (triweight kernel).
+
     """
     try:
         from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
@@ -475,8 +481,9 @@ def compute_dsps_met_table_weights(
     t_obs_gyr: float,
     lgmet_scatter: float = 0.2,
 ) -> tuple:
-    """Compute CSP age weights and metallicity-marginalized SSP flux via DSPS
-    with a per-age metallicity table (time-evolving Z(t)).
+    """Compute CSP age weights and metallicity-marginalized SSP flux via DSPS.
+
+    Uses a per-age metallicity table (time-evolving Z(t)).
 
     Selected via ``SEDModel(..., csp_integration="dsps_met_table")``.  Unlike
     :func:`compute_dsps_native_weights` which uses a single scalar ``lgmet``
@@ -530,6 +537,7 @@ def compute_dsps_met_table_weights(
     References
     ----------
     Hearin et al. 2023, arXiv:2112.08423, Eq. 11 (met-table kernel).
+
     """
     try:
         from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
@@ -612,6 +620,7 @@ def compute_csp_weights(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     **Gradient-safe**: yes.
+
     """
     if method == "log_interp":
         if _log_interp_matrix is None:
@@ -675,6 +684,7 @@ def salaris_mh_from_feh(feh: float, alpha_fe: float) -> float:
     >>> from tengri import salaris_mh_from_feh
     >>> round(float(salaris_mh_from_feh(feh=-0.5, alpha_fe=0.2)), 4)
     -0.3676
+
     """
     return feh + _SALARIS_LINEAR * alpha_fe + _SALARIS_QUADRATIC * alpha_fe**2
 
@@ -714,6 +724,7 @@ def salaris_feh_from_mh(mh: float, alpha_fe: float) -> float:
     >>> from tengri import salaris_feh_from_mh
     >>> round(float(salaris_feh_from_mh(mh=-0.5, alpha_fe=0.2)), 4)
     -0.6324
+
     """
     return mh - _SALARIS_LINEAR * alpha_fe - _SALARIS_QUADRATIC * alpha_fe**2
 
@@ -760,6 +771,7 @@ def effective_metallicity(log_z_fe: float, alpha_fe: float = 0.0) -> float:
     >>> from tengri import effective_metallicity
     >>> round(float(effective_metallicity(-0.5, alpha_fe=0.3)), 4)
     -0.275
+
     """
     return log_z_fe + _ALPHA_TO_Z_COEFF * alpha_fe
 
@@ -792,6 +804,7 @@ def has_alpha_grid(ssp_data: SSPData) -> bool:
     >>> # ssp = load_ssp_data("data/ssp_BC03_Chabrier.h5")
     >>> # has_alpha_grid(ssp)  # True if file contains [alpha/Fe] axis
     >>> # False for standard BC03 grids (no alpha grid)
+
     """
     return ssp_data.ssp_alpha_fe is not None and ssp_data.ssp_flux.ndim == 4
 
@@ -835,6 +848,7 @@ def interpolate_met_alpha(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     **Gradient-safe**: yes — bilinear interpolation is differentiable.
+
     """
     # Metallicity index and fraction
     lz = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
@@ -891,6 +905,7 @@ def interpolate_met_alpha_evolving(
     -----
     **JIT-compatible**: yes — uses ``jax.vmap`` for vectorized interpolation.
     **Gradient-safe**: yes.
+
     """
 
     def _interp_one_age(lz_i, afe_i, flux_at_age_i):
@@ -955,6 +970,7 @@ def compute_alpha_fe_evolving(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     **Gradient-safe**: yes.
+
     """
     age_gyr = 10.0**ssp_lg_age_gyr
     t_frac = jnp.clip(age_gyr / t_universe_gyr, 0.0, 1.0)
@@ -994,6 +1010,7 @@ def compute_csp_sed(
     -----
     **JIT-compatible**: yes — uses ``jnp.einsum`` for vectorized multiplication.
     **Gradient-safe**: yes.
+
     """
     # weights [Msun] * ssp [Lsun/Hz/Msun] * dust [dimensionless] -> Lsun/Hz
     sed_lsun = jnp.einsum("i,iw,iw->w", weights, dust_attenuation, ssp_flux_at_met)
@@ -1027,6 +1044,7 @@ def interpolate_metallicity(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     **Gradient-safe**: yes — linear interpolation is differentiable.
+
     """
     # Clamp to grid bounds
     log_z_clamped = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
@@ -1097,6 +1115,7 @@ def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=0.1):
     -----
     **JIT-compatible**: yes — uses ``jnp`` primitives and custom kernel CDF.
     **Gradient-safe**: yes.
+
     """
     edges = _get_lgmet_bin_edges(ssp_lgmet)
     # CDF difference: probability mass in each bin
@@ -1140,6 +1159,7 @@ def interpolate_metallicity_smooth(ssp_flux, ssp_lgmet, log_z, lgmet_scatter=0.1
     -----
     **JIT-compatible**: yes — uses triweight kernel via :func:`compute_lgmet_weights`.
     **Gradient-safe**: yes — C²-continuous gradients.
+
     """
     w = compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter)
     return jnp.einsum("m,maw->aw", w, ssp_flux)
@@ -1169,6 +1189,7 @@ def interpolate_metallicity_smooth_evolving(ssp_flux, ssp_lgmet, log_z_per_age, 
     -----
     **JIT-compatible**: yes — uses ``jax.vmap`` for per-age interpolation.
     **Gradient-safe**: yes — C²-continuous gradients.
+
     """
 
     def _one_age(log_z_i, flux_at_age_i):
@@ -1207,6 +1228,7 @@ def interpolate_mass_remaining_smooth(ssp_mass_remaining, ssp_lgmet, log_z, lgme
     -----
     **JIT-compatible**: yes — uses triweight kernel via :func:`compute_lgmet_weights`.
     **Gradient-safe**: yes — C²-continuous gradients.
+
     """
     w = compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter)
     return jnp.einsum("m,ma->a", w, ssp_mass_remaining)
@@ -1241,6 +1263,7 @@ def interpolate_metallicity_evolving(
     -----
     **JIT-compatible**: yes — uses ``jax.vmap`` for vectorized interpolation.
     **Gradient-safe**: yes — linear interpolation is differentiable.
+
     """
 
     def _interp_one_age(log_z_i, ssp_flux_at_age_i):
@@ -1257,6 +1280,7 @@ def interpolate_metallicity_evolving(
         -------
         array, shape (n_wave,)
             Interpolated flux [Lsun/Hz/Msun].
+
         """
         log_z_c = jnp.clip(log_z_i, ssp_lgmet[0], ssp_lgmet[-1])
         idx = jnp.clip(
@@ -1299,6 +1323,7 @@ def interpolate_mass_remaining_evolving(
     -----
     **JIT-compatible**: yes — uses ``jax.vmap`` for vectorized interpolation.
     **Gradient-safe**: yes — linear interpolation is differentiable.
+
     """
 
     def _interp_one_age(log_z_i, mr_at_age_i):
@@ -1355,6 +1380,7 @@ def compute_log_z_evolving(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     **Gradient-safe**: yes.
+
     """
     age_gyr = 10.0**ssp_lg_age_gyr
     # Clamp lookback time to [0, t_universe] so extrapolation is safe
@@ -1386,6 +1412,7 @@ def interpolate_mass_remaining(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     **Gradient-safe**: yes — linear interpolation is differentiable.
+
     """
     log_z_clamped = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
     idx = jnp.searchsorted(ssp_lgmet, log_z_clamped) - 1
@@ -1415,5 +1442,6 @@ def compute_surviving_mass(weights: jnp.ndarray, mass_remaining_at_met: jnp.ndar
     -----
     **JIT-compatible**: yes — uses ``jnp.sum`` for reduction.
     **Gradient-safe**: yes.
+
     """
     return jnp.sum(weights * mass_remaining_at_met)

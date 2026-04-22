@@ -258,15 +258,15 @@ class Spectroscopy:
 
         Returns
         -------
-        dict
+        dict[str, Distribution]
             Mapping of calibration coefficient names (``cal_c1``, ..., ``cal_cN``)
             to ``Gaussian(0, 0.1)`` priors. Empty dict if ``calibration_order == 0``.
 
         Notes
         -----
-        Called by Observation.get_all_params() to register observation-level
+        Called by ``Observation.get_all_params()`` to register observation-level
         parameters with the inference engine. Each coefficient has a weak
-        Gaussian prior centered at unity (in log space: 0).
+        Gaussian prior centered at 0 in log space (unity in linear space).
 
         """
         if self.calibration_order == 0:
@@ -287,26 +287,30 @@ class Spectroscopy:
 
         Parameters
         ----------
-        wave_obs : jnp.ndarray
-            Observed wavelength grid [Angstrom].
-        resolution : float, array, or None
-            Spectral resolution R(lambda).
-        sigma_lib_kms : float
-            SSP library resolution [km/s]. Default: 70.0.
-        calibration_order : int
-            Chebyshev calibration order. Default: 0.
+        wave_obs : ndarray, shape (n_pix,)
+            Observed-frame wavelength grid [Angstrom].
+        resolution : float, ndarray, or None
+            Spectral resolution ``R = lambda / delta_lambda``. Scalar for
+            constant R, per-pixel array for wavelength-dependent, or None
+            to skip LSF convolution.
+        sigma_lib_kms : float, optional
+            SSP library velocity dispersion to subtract in quadrature [km/s].
+            Default: 70.0 (MILES standard).
+        calibration_order : int, optional
+            Order of multiplicative Chebyshev calibration polynomial.
+            Default: 0 (no calibration).
         **kwargs
-            Passed to ``Spectroscopy``.
+            Additional keyword arguments passed to ``Spectroscopy.__init__``.
 
         Returns
         -------
         Spectroscopy
-            Configured spectroscopy object.
+            Configured spectroscopy object with all parameters set.
 
         Notes
         -----
-        Internal helper used by instrument-specific factories (nirspec_prism,
-        nirspec_g140m, constant_r). Not intended for direct public use.
+        Internal helper used by instrument-specific factories (``nirspec_prism``,
+        ``nirspec_g140m``, ``constant_r``). Not intended for direct public use.
 
         """
         return Spectroscopy(
@@ -323,15 +327,16 @@ class Spectroscopy:
 
         Parameters
         ----------
-        wave_obs : jnp.ndarray
+        wave_obs : ndarray, shape (n_pix,)
             Observed-frame wavelength grid [Angstrom].
         **kwargs
-            Additional arguments passed to Spectroscopy.
+            Additional keyword arguments passed to ``Spectroscopy``.
 
         Returns
         -------
         Spectroscopy
-            Configured NIRSpec PRISM spectroscopy.
+            Configured NIRSpec PRISM spectroscopy with wavelength-dependent
+            resolution.
 
         Notes
         -----
@@ -352,15 +357,16 @@ class Spectroscopy:
 
         Parameters
         ----------
-        wave_obs : jnp.ndarray
+        wave_obs : ndarray, shape (n_pix,)
             Observed-frame wavelength grid [Angstrom].
         **kwargs
-            Additional arguments passed to Spectroscopy.
+            Additional keyword arguments passed to ``Spectroscopy``.
 
         Returns
         -------
         Spectroscopy
-            Configured NIRSpec G140M spectroscopy.
+            Configured NIRSpec G140M spectroscopy with approximately constant
+            resolution R~1000.
 
         Notes
         -----
@@ -381,17 +387,19 @@ class Spectroscopy:
 
         Parameters
         ----------
-        wave_obs : jnp.ndarray
+        wave_obs : ndarray, shape (n_pix,)
             Observed-frame wavelength grid [Angstrom].
         R : float
-            Spectral resolution (constant across all wavelengths).
+            Spectral resolution ``R = lambda / delta_lambda`` (constant across
+            all wavelengths, dimensionless).
         **kwargs
-            Additional arguments passed to Spectroscopy.
+            Additional keyword arguments passed to ``Spectroscopy``.
 
         Returns
         -------
         Spectroscopy
-            Configured spectrograph with constant resolution.
+            Configured spectrograph with constant wavelength-independent
+            resolution.
 
         Notes
         -----
@@ -417,17 +425,19 @@ class Spectroscopy:
 
         Parameters
         ----------
-        wave_obs : jnp.ndarray
+        wave_obs : ndarray, shape (n_pix,)
             Observed-frame wavelength grid [Angstrom].
-        resolution : float
-            Spectral resolution R = lambda/delta_lambda. Default: 2500 (DESI).
+        resolution : float, optional
+            Spectral resolution ``R = lambda / delta_lambda`` (dimensionless).
+            Default: 2500 (DESI standard).
         **kwargs
-            Additional fields passed to ``Spectroscopy``.
+            Additional keyword arguments passed to ``Spectroscopy``.
 
         Returns
         -------
         Spectroscopy
-            Fully configured spectroscopy for DESI-like emission-line fitting.
+            Fully configured spectroscopy for DESI-like emission-line fitting
+            with all standard settings pre-applied.
 
         Notes
         -----
@@ -500,18 +510,19 @@ def apply_wavelength_mask(
 
     Parameters
     ----------
-    noise : array, shape (n_pix,)
+    noise : ndarray, shape (n_pix,)
         Per-pixel 1-sigma noise [flux units].
-    wave_obs : array, shape (n_pix,)
+    wave_obs : ndarray, shape (n_pix,)
         Observed-frame wavelength grid [Angstrom].
-    mask_ranges : list of (lo, hi)
+    mask_ranges : list[tuple[float, float]]
         Wavelength ranges to mask [Angstrom]. Each ``(lo, hi)`` pair
         defines a region where ``lo <= wave <= hi`` is masked.
 
     Returns
     -------
-    jnp.ndarray
-        Copy of ``noise`` with masked pixels set to ``inf``.
+    ndarray, shape (n_pix,)
+        Copy of ``noise`` with masked pixels set to ``inf``. Pixels in
+        masked wavelength ranges have noise = infinity.
 
     Notes
     -----
@@ -522,7 +533,7 @@ def apply_wavelength_mask(
 
     Examples
     --------
-    Mask the 5577 A sky line and a detector gap::
+    Mask the 5577 Å sky line and a detector gap::
 
         noise_masked = apply_wavelength_mask(
             noise,

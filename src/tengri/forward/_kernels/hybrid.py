@@ -36,10 +36,21 @@ def build_hybrid_photometry(model):
 
     Returns
     -------
-    callable
-        JIT-compiled function: (sfr_on_ssp, log_z_abs, tau_bc, tau_diff,
-        dust_slope, ..., neb_logU=..., shock_frac=..., etc.)
-        -> photometry array (n_filters,) in erg/s/cm^2/Hz.
+    callable or None
+        JIT-compiled function: ``(sfr_on_ssp, log_z_abs, tau_bc, tau_diff,
+        dust_slope, ..., neb_logU=..., shock_frac=..., etc.)``
+        → ``photometry_array``, where ``sfr_on_ssp`` has shape (n_age,)
+        [Msun/yr] and ``photometry_array`` has shape (n_filters,)
+        [erg/s/cm^2/Hz]. Returns None if prerequisites are not met.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — stellar photometry precomputed on filter grid,
+    non-stellar components computed at full wavelength then integrated through
+    filters.
+
+    **Gradient-safe**: yes — differentiable w.r.t. all dust, AGN, nebular,
+    and shock parameters.
     """
     from tengri.components.dust.attenuation import resolve_dust_law
     from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
@@ -1533,8 +1544,8 @@ def build_hybrid_photometry(model):
 def build_hybrid_photometry_ztable(model):
     """Build hybrid photometry kernel for free-z inference using a z-table.
 
-    Like build_hybrid_photometry but with SSP photometry interpolated from
-    a precomputed redshift grid instead of fixed at model.redshift.
+    Like :func:`build_hybrid_photometry` but with SSP photometry interpolated
+    from a precomputed redshift grid instead of fixed at model.redshift.
     Stellar photometry uses precomputed SSP×filter einsum (fast, ~0.4% error).
     Non-stellar components evaluated at full wavelength resolution via
     emission_helpers, then integrated through filters (exact).
@@ -1550,14 +1561,26 @@ def build_hybrid_photometry_ztable(model):
 
     Returns
     -------
-    callable
-        JIT-compiled function: (params_dict) -> photometry array (n_filters,)
-        in erg/s/cm^2/Hz. Parameters include redshift as a free variable.
+    callable or None
+        JIT-compiled function: ``(params_dict) -> photometry_array``,
+        where ``photometry_array`` has shape (n_filters,) [erg/s/cm^2/Hz]
+        and ``params_dict`` includes redshift as a free variable.
+        Returns None if z-table has not been precomputed.
 
     Raises
     ------
     ValueError
-        If photometry_ztable has not been precomputed via model.precompute_ztable().
+        If photometry_ztable has not been precomputed via
+        ``model.precompute_ztable()``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — stellar photometry interpolated from z-table,
+    non-stellar components computed at full wavelength then integrated through
+    filters.
+
+    **Gradient-safe**: yes — differentiable w.r.t. all parameters including
+    redshift, dust, AGN, nebular, and shock parameters.
     """
     from tengri.components.dust.attenuation import resolve_dust_law
     from tengri.components.sfh.registry import compute_field_gp, resolve_sfh

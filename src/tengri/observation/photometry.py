@@ -156,10 +156,11 @@ def pad_filters(filter_waves: list, filter_trans: list):
 
     Parameters
     ----------
-    filter_waves : list of arrays
-        Wavelength grids per filter (different lengths, units [Angstrom]).
-    filter_trans : list of arrays
-        Transmission per filter (same lengths as filter_waves, dimensionless).
+    filter_waves : list[ndarray]
+        Wavelength grids per filter (different lengths allowed, units
+        [Angstrom]).
+    filter_trans : list[ndarray]
+        Transmission per filter (same lengths as ``filter_waves``, dimensionless).
 
     Returns
     -------

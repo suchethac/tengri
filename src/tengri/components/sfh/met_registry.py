@@ -48,6 +48,7 @@ class MetParamDef(NamedTuple):
     Notes
     -----
     **JIT-compatible**: no — Python dataclass for registry initialization.
+
     """
 
     description: str
@@ -77,6 +78,7 @@ class MetModelSpec(NamedTuple):
     Notes
     -----
     **JIT-compatible**: no — Python dataclass for registry initialization.
+
     """
 
     name: str
@@ -108,6 +110,7 @@ def _register(spec: MetModelSpec) -> None:
     Notes
     -----
     **JIT-compatible**: no — mutates global registry dictionary.
+
     """
     MET_REGISTRY[spec.name] = spec
 
@@ -388,6 +391,7 @@ def resolve_met(
 
     All metallicity inputs are in **log10(Z/Zsun)** (relative to solar).
     The param_map applies LOG10_ZSUN offset to convert to absolute log10(Z) internally.
+
     """
     if met_mode not in MET_REGISTRY:
         valid = sorted(MET_REGISTRY.keys())

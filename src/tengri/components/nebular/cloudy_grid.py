@@ -179,6 +179,16 @@ def load_cloudy_grid(filepath: str) -> CloudyGridData:
     filepath : str
         Path to cloudy_grid_*.h5 file (from convert_fsps_cloudy_grid.py).
 
+    Returns
+    -------
+    CloudyGridData
+        Pre-loaded grid with line and continuum luminosities in log10 space.
+
+    Notes
+    -----
+    **JIT-compatible**: no — HDF5 I/O is not JAX-compatible. Call once
+    at model initialization and cache the result for repeated use.
+
     """
     _LOG_FLOOR = 1e-95  # FSPS convention to avoid log(0)
 
@@ -304,6 +314,7 @@ def _trilinear_interp_smooth(
     Parameters
     ----------
     data : array, shape (n_z, n_age, n_u, ...)
+        Grid values with 3 leading axes and arbitrary trailing dimensions.
     grid_z, grid_age, grid_u : array
         Sorted axis values.
     z_val, age_val, u_val : float
@@ -313,6 +324,16 @@ def _trilinear_interp_smooth(
     edges_z, edges_age, edges_u : array or None
         Precomputed bin edges from :func:`edges_for_grid`.  When ``None``,
         edges are computed on the fly.
+
+    Returns
+    -------
+    array, shape (...)
+        Interpolated value at the query point.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes — triweight kernel is C²-continuous.
 
     """
     wz = compute_grid_weights(z_val, grid_z, scatter, edges=edges_z)
@@ -674,7 +695,14 @@ class CloudyGridBackend:
         Returns
         -------
         wavelengths : array, shape (n_lines,)
+            Rest-frame vacuum wavelengths [Angstrom].
         luminosities : array, shape (n_lines,)
+            Emission line luminosities [Lsun].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **Gradient-safe**: yes — differentiable through neb_logU and neb_fesc.
 
         """
         if neb_logZ_gas is None:
@@ -732,11 +760,34 @@ class CloudyGridBackend:
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Compute nebular continuum SED (vectorized over age bins).
 
+        Parameters
+        ----------
+        ssp_weights : array, shape (n_age,)
+            CSP mass weights [Msun per age bin].
+        ssp_log_ages_yr : array, shape (n_age,)
+            log10(age/yr) of SSP age bins [yr].
+        log_z : float
+            Stellar metallicity log10(Z) absolute [log10(Z)].
+        neb_logU : float
+            Ionization parameter log10(U) [dimensionless]. Default -3.0.
+        neb_logZ_gas : float or None
+            Gas metallicity log10(Z) absolute [log10(Z)]. None → tied to stellar.
+        neb_fesc : float
+            Ionizing photon escape fraction [0, 1]. Default 0.0.
+        **_kwargs
+            Additional keyword arguments (unused).
+
         Returns
         -------
         wavelength : array, shape (n_wave_cont,)
+            Continuum wavelengths [Angstrom].
         luminosity : array, shape (n_wave_cont,)
-            Nebular continuum L_nu (Lsun/Hz, converted to erg/s/Hz at SED assembly).
+            Nebular continuum L_nu [Lsun/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **Gradient-safe**: yes — differentiable through neb_logU and neb_fesc.
 
         """
         if neb_logZ_gas is None:
@@ -816,6 +867,11 @@ class CloudyGridBackend:
         -------
         array, shape (n_wave,)
             Nebular SED in erg/s/Hz on the SSP wavelength grid.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **Gradient-safe**: yes — differentiable through neb_logU and neb_fesc.
 
         """
         # Get line luminosities

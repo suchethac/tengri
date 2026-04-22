@@ -211,6 +211,10 @@ def apply_doublet_constraints(
         Constrained design matrix. Marginalizing over ``n_independent``
         amplitudes automatically enforces all doublet ratio constraints.
 
+    Notes
+    -----
+    **JIT-compatible**: yes — pure matrix multiplication via ``jnp.dot``.
+
     Examples
     --------
     ::
@@ -247,11 +251,16 @@ def expand_constrained_amplitudes(
 
     Returns
     -------
-    a_hat_full : array, shape (n_lines,)
-        Amplitudes for all lines including constrained doublet secondaries.
-    a_cov_full : array, shape (n_lines, n_lines)
+    a_hat_full : ndarray, shape (n_lines,)
+        Amplitudes for all lines including constrained doublet secondaries
+        [erg/s] or [erg/s/Angstrom] depending on line fitting context.
+    a_cov_full : ndarray, shape (n_lines, n_lines)
         Full covariance, propagated through the constraint matrix:
         ``C @ a_cov @ C.T``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — matrix multiplications via ``jnp.dot``.
 
     Examples
     --------
@@ -293,11 +302,18 @@ def marginalize_emission_lines(
     Returns
     -------
     ln_L_marg : scalar
-        Marginalized log-likelihood.
-    a_hat : array, shape (n_lines,)
-        Posterior-mean (optimal) line amplitudes.
-    a_cov : array, shape (n_lines, n_lines)
+        Marginalized log-likelihood (dimensionless).
+    a_hat : ndarray, shape (n_lines,)
+        Posterior-mean (optimal) line amplitudes [same units as residual].
+    a_cov : ndarray, shape (n_lines, n_lines)
         Posterior covariance of line amplitudes.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations via ``jnp`` primitives.
+
+    **Gradient-safe**: yes — differentiable everywhere w.r.t. ``residual``,
+    ``noise``, and ``design_matrix``.
 
     """
     if prior_variance is None:
@@ -370,8 +386,15 @@ def predict_with_marginalized_lines(
 
     Returns
     -------
-    array, shape (n_pix,)
-        Full model: ``model_continuum + G @ a_hat``.
+    ndarray, shape (n_pix,)
+        Full model spectrum including continuum and optimized emission lines
+        [erg/s/Hz] or [erg/s/Angstrom] depending on wavelength unit.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — matrix multiplication via ``jnp.dot``.
+
+    **Gradient-safe**: yes — fully differentiable.
 
     """
     return model_continuum + design_matrix @ a_hat
@@ -417,8 +440,16 @@ def build_line_design_matrix(
 
     Returns
     -------
-    array, shape (n_pix, n_narrow [+ n_broad])
-        Design matrix. Each column is a normalized Gaussian profile.
+    ndarray, shape (n_pix, n_narrow [+ n_broad])
+        Design matrix. Each column is a normalized Gaussian profile
+        [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — delegates to :func:`build_eline_design_matrix` and
+    :func:`build_broad_design_matrix`, which are JIT-decorated.
+
+    If ``broad_wavelengths`` is ``None``, returns only the narrow-line portion.
 
     Examples
     --------

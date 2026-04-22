@@ -47,6 +47,7 @@ References
 - Hensley & Draine 2023, ApJ, 948, 55 (Astrodust+PAH)
 - Boquien & Salim 2021, A&A, 653, A149 (BOSA templates)
 - Jones et al. 2017, A&A, 602, A46 (THEMIS dust model)
+
 """
 
 import contextlib
@@ -108,6 +109,7 @@ def register_emission_model(name: str) -> Callable:
     Decorated functions must implement the ``DustEmissionTemplate`` protocol:
     accept a wavelength array, absorbed luminosity, and keyword arguments,
     returning an emission SED ``L_ν`` [erg/s/Hz].
+
     """
 
     def decorator(fn: Callable) -> Callable:
@@ -126,6 +128,7 @@ def register_emission_model(name: str) -> Callable:
         Notes
         -----
         **JIT-compatible**: depends on the decorated function.
+
         """
         DUST_EMISSION_MODELS[name] = fn
         return fn
@@ -158,6 +161,7 @@ def resolve_emission_model(name: str) -> Callable:
 
     The returned function matches the ``DustEmissionTemplate`` protocol and can
     be called with wavelengths, absorbed luminosity, and model-specific parameters.
+
     """
     if name not in DUST_EMISSION_MODELS:
         raise ValueError(
@@ -197,6 +201,7 @@ def preload_emission_model(name: str) -> Callable:
 
     Safe to call at ``SEDModel.__init__`` time to prevent tracer leaks
     when models are first called inside a ``@jax.jit`` scope.
+
     """
     if name not in DUST_EMISSION_MODELS:
         raise ValueError(
@@ -246,6 +251,7 @@ def planck_bnu(
 
     where :math:`\nu = c / \lambda` is the frequency, :math:`h` is Planck's constant,
     :math:`k_B` is Boltzmann's constant, and :math:`c` is the speed of light.
+
     """
     # Cast to float64 before computing nu to prevent nu**3 overflow.
     # float32 max is ~3.4e38; at 5.6 Å, nu = 5.35e17 Hz so nu**3 ~ 1.5e53 —
@@ -303,6 +309,7 @@ def cmb_corrected_temperature(
         - T_{\rm CMB}(z=0)^{4+\beta}\right]^{1/(4+\beta)}
 
     where :math:`T_{\rm CMB}(z) = T_{\rm CMB,0} (1 + z)` with :math:`T_{\rm CMB,0} = 2.725` K.
+
     """
     exponent = 4.0 + beta_ir
     T_cmb_z = _T_CMB_0 * (1.0 + redshift)
@@ -349,6 +356,7 @@ def cmb_contrast_factor(
         C(\lambda) = 1 - \frac{B_\nu(T_{\rm CMB}(z))}{B_\nu(T_{\rm eff})}
 
     Since :math:`T_{\rm eff} > T_{\rm CMB}(z)`, we have :math:`0 \leq C(\lambda) \leq 1`.
+
     """
     T_cmb_z = _T_CMB_0 * (1.0 + redshift)
 
@@ -421,6 +429,7 @@ def compute_absorbed_luminosity(
         L_{\rm absorbed} = \int [1 - T(\lambda)] L_\nu(\lambda) d\nu
 
     where the integral is over frequency (ν is descending as λ is ascending).
+
     """
     wavelength_cm = wavelength_aa * _AA_TO_CM
     nu = _C_CGS / wavelength_cm  # descending (since wave is ascending)
@@ -460,6 +469,7 @@ def compute_absorbed_luminosity_from_tau(
 
     Internally converts τ(λ) to transmission via T(λ) = exp(−τ(λ))
     then calls ``compute_absorbed_luminosity``.
+
     """
     transmission = jnp.exp(-tau_lambda)
     return compute_absorbed_luminosity(wavelength_aa, L_nu_intrinsic, transmission)
@@ -517,6 +527,7 @@ def modified_blackbody(
     **JIT-compatible**: yes — all operations are ``jnp`` primitives.
 
     **Gradient-safe**: yes — differentiable everywhere.
+
     """
     # CMB correction: always applied. At z=0 this is a no-op since
     # T_cmb(z=0) terms cancel and B_nu(T_cmb)/B_nu(T_dust) ~ 0.
@@ -641,6 +652,7 @@ def casey2012(
     ----------
     Casey, C. M., 2012, MNRAS, 425, 3094.
     da Cunha, E. et al., 2013, ApJ, 766, 13 (CMB corrections).
+
     """
     # CMB correction (no-op at z=0)
     T_eff = cmb_corrected_temperature(dust_T, redshift, dust_beta_ir)
@@ -725,6 +737,7 @@ def _drude_profile(
             (\lambda/\lambda_0 - \lambda_0/\lambda)^2 + \gamma^2}
 
     where :math:`\gamma = \text{FWHM} / \lambda_0`.
+
     """
     lambda0_um = lambda0_aa / 1e4
     fwhm_um_safe = jnp.maximum(fwhm_um, 1e-6)
@@ -801,6 +814,7 @@ def schreiber2016(
 
     .. [2] Smith, J. D. T., Draine, B. T., Dale, D. A., et al., 2007,
            ApJ, 656, 770 (PAH profile templates).
+
     """
     # CMB correction (no-op at z=0)
     T_eff = cmb_corrected_temperature(dust_T, redshift, 1.5)
@@ -897,6 +911,7 @@ def draine_li2007(*args, **kwargs):
 
     Dispatches to the lazy-loaded tabulated DL07 model. Auto-loads HDF5 templates
     on first call.
+
     """
     return DUST_EMISSION_MODELS["draine_li2007"](*args, **kwargs)
 
@@ -915,6 +930,7 @@ def dale2014(*args, **kwargs):
 
     Dispatches to the lazy-loaded Dale2014 template model. Auto-loads HDF5
     templates on first call.
+
     """
     return DUST_EMISSION_MODELS["dale2014"](*args, **kwargs)
 
@@ -934,6 +950,7 @@ def draine_li2014(*args, **kwargs):
     Dispatches to the lazy-loaded DL14 template model. Auto-loads HDF5 templates
     on first call. DL14 is the 2014 update to Draine & Li 2007 with additional
     alpha (radiation field) dependence.
+
     """
     return DUST_EMISSION_MODELS["draine_li2014"](*args, **kwargs)
 
@@ -952,6 +969,7 @@ def astrodust(*args, **kwargs):
 
     Dispatches to the lazy-loaded Astrodust+PAH template model. Auto-loads
     HDF5 templates on first call.
+
     """
     return DUST_EMISSION_MODELS["astrodust"](*args, **kwargs)
 
@@ -970,6 +988,7 @@ def bosa(*args, **kwargs):
 
     Dispatches to the lazy-loaded BOSA template model. Auto-loads HDF5
     templates on first call. BOSA parameterizes dust by (L_TIR, sSFR).
+
     """
     return DUST_EMISSION_MODELS["bosa"](*args, **kwargs)
 
@@ -989,6 +1008,7 @@ def themis(*args, **kwargs):
     Dispatches to the lazy-loaded THEMIS/DustEM template model. Auto-loads
     HDF5 templates on first call. Uses a-C(:H) aromatic carbon composition
     rather than PAH fraction.
+
     """
     return DUST_EMISSION_MODELS["themis"](*args, **kwargs)
 
@@ -1070,6 +1090,7 @@ def energy_balance_split(
     .. [2] E. da Cunha et al., "MAGPHYS: a new code to compute and interpret
        the Spectral Energy Distribution of the Galaxy," MNRAS, 388, 1595 (2008).
        https://doi.org/10.1111/j.1365-2966.2008.13535.x
+
     """
     L_ir_total = eta_balance * L_absorbed_stellar + L_agn_ir
 
@@ -1132,6 +1153,7 @@ def apply_dust_emission(
     Notes
     -----
     **JIT-compatible**: yes if the underlying model is JIT-compatible.
+
     """
     fn = resolve_emission_model(model_name)
     return fn(wavelength_aa, L_absorbed, **params)
@@ -1156,6 +1178,7 @@ def _make_lazy_loader(
         The v2 variant (``"*_v2.h5"``) is tried first if present.
     loader_fn_name : str
         Name of the ``create_*_from_grid`` function in this module.
+
     """
 
     def _lazy_wrapper(*args, **kwargs):

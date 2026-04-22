@@ -55,7 +55,7 @@ class PrecomputeModule(Protocol):
     AXIS_PARAMS : tuple or dict
         Ordered tuple of parameter names defining preintegration grid axes,
         or dict mapping model variant to tuple (for multi-variant components).
-        Empty tuple means scalar template (no grid axes).
+        Empty tuple means scalar template (no grid axes). [dimensionless]
 
     Notes
     -----
@@ -77,12 +77,12 @@ class PrecomputeModule(Protocol):
 
         Parameters
         ----------
-        filter_waves : list
-            Per-filter wavelength arrays.
-        filter_trans : list
-            Per-filter transmission curves.
+        filter_waves : list of array_like
+            Per-filter wavelength arrays. [Angstrom]
+        filter_trans : list of array_like
+            Per-filter transmission curves (normalized). [dimensionless]
         redshift : float
-            Source redshift [dimensionless].
+            Source redshift. [dimensionless]
         parameters : Any
             Free and fixed parameter specification.
         **kwargs : Any
@@ -95,6 +95,8 @@ class PrecomputeModule(Protocol):
 
         Notes
         -----
+        **JIT-compatible**: no — factory function, runs at model-init time outside JIT.
+
         Implementations must auto-collapse grid axes whose parameters are Fixed
         in ``parameters``, reducing dimensionality and lookup cost.
         """
@@ -106,18 +108,23 @@ class PrecomputeModule(Protocol):
         Parameters
         ----------
         preint : Any
-            Output of precompute().
+            Output of :meth:`precompute`.
         **kwargs : Any
             Component-specific options.
 
         Returns
         -------
         callable
-            JIT-compiled function: (scale, *free_params) -> photometry array.
+            JIT-compiled function: ``(scale, *free_params) -> photometry_array``,
+            where ``photometry_array`` has shape matching the filter set passed
+            to precompute. [erg/s/cm^2/Hz]
 
         Notes
         -----
-        **JIT-compatible**: yes — returned function must be decorated with ``@jax.jit``
-        and use only ``jnp`` primitives for gradient-safe interpolation.
+        **JIT-compatible**: yes — returned function must be decorated with
+        ``@jax.jit`` and use only ``jnp`` primitives for gradient-safe
+        interpolation.
+
+        **Gradient-safe**: yes — differentiable w.r.t. all free parameters.
         """
         ...

@@ -161,7 +161,16 @@ def has_noise_model(spec) -> bool:
     Returns
     -------
     bool
-        True if the noise model is active.
+        True if the noise model is active (any noise parameter is free or
+        Fixed to nonzero value).
+
+    Notes
+    -----
+    Not JIT-compatible (uses Python control flow and class introspection).
+
+    This function checks if any parameter whose name starts with ``"noise_"``
+    is in the free parameter list, or if ``noise_frac_cal`` is explicitly
+    fixed to a nonzero value.
 
     Examples
     --------
@@ -197,7 +206,17 @@ def get_noise_dof(spec) -> float | None:
     Returns
     -------
     float or None
-        Degrees of freedom if noise_dof is set (Fixed or free), None otherwise.
+        Degrees of freedom (scalar, dimensionless) if ``noise_dof`` is fixed
+        to a specific value. Returns ``None`` if ``noise_dof`` is not set or
+        is a free (fitted) parameter.
+
+    Notes
+    -----
+    Not JIT-compatible (uses Python class introspection).
+
+    When ``noise_dof`` is free (a fitted parameter), this function returns
+    ``None`` to signal that the DOF is part of the latent parameter vector
+    and must be handled separately in the inference engine.
 
     """
     from tengri.parameters.priors import Fixed
@@ -224,7 +243,16 @@ def uses_student_t(spec) -> bool:
     Returns
     -------
     bool
-        True if Student-t likelihood should be used.
+        True if the Student-t likelihood (with heavy tails) should be used
+        instead of the standard Gaussian.
+
+    Notes
+    -----
+    Not JIT-compatible (uses Python class introspection).
+
+    Student-t likelihood with ``dof`` degrees of freedom is heavier-tailed
+    than Gaussian and more robust to outliers. If ``noise_dof`` is free,
+    it is fitted jointly with other parameters.
 
     Examples
     --------

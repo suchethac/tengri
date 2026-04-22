@@ -936,11 +936,13 @@ def precompute(filter_waves: list, filter_trans: list, redshift: float, paramete
 
     Parameters
     ----------
-    filter_waves, filter_trans : list
-        Filter curves (observed frame).
+    filter_waves : list[ndarray]
+        Wavelength grid per filter [Angstrom], observed frame.
+    filter_trans : list[ndarray]
+        Transmission per filter (0–1).
     redshift : float
-        Source redshift (fixed at init time).
-    parameters : Parameters | None
+        Source redshift (fixed at init time). [dimensionless]
+    parameters : Parameters | None, optional
         Unused — K&D grid axes are internal physics coords, not user priors.
     **kwargs
         Forwarded to :func:`preintegrate_kd_components` (e.g. ``n_T``,
@@ -950,6 +952,11 @@ def precompute(filter_waves: list, filter_trans: list, redshift: float, paramete
     -------
     KDPreintegratedData
         All precomputed filter-integrated tables for the 3-zone K&D disc.
+
+    Notes
+    -----
+    **JIT-compatible**: no — this is a build-time function using NumPy.
+    The returned tables are JIT-compatible.
     """
     return preintegrate_kd_components(filter_waves, filter_trans, redshift, **kwargs)
 
@@ -968,5 +975,10 @@ def build_lookup(preint, **kwargs):
     -------
     None
         K&D runtime lookup is performed directly in the fused kernels.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable — K&D integration happens at
+    model initialization time, not at inference time.
     """
     return None

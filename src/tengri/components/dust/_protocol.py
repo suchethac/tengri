@@ -44,6 +44,7 @@ class DustAttenuationLaw(Protocol):
 
         law = resolve_dust_law("my_powerlaw")
         k = law(wavelengths, n_slope=-0.9)
+
     """
 
     def __call__(
@@ -74,6 +75,7 @@ class DustAttenuationLaw(Protocol):
         **JIT-compatible**: yes (required for all dust laws).
 
         **Gradient-safe**: yes (required for likelihood evaluation and inference).
+
         """
         ...
 
@@ -113,6 +115,7 @@ class DustEmissionTemplate(Protocol):
 
         model = resolve_emission_model("my_mbb")
         l_nu = model(wavelengths, L_absorbed=1e10, T_dust=30.0)
+
     """
 
     def __call__(
@@ -148,5 +151,6 @@ class DustEmissionTemplate(Protocol):
         **JIT-compatible**: yes (required for all dust emission models).
 
         **Gradient-safe**: yes (required for likelihood evaluation and inference).
+
         """
         ...

@@ -25,6 +25,7 @@ References
 - Robotham+2020 (arXiv:2002.06980): snorm_burst, tsnorm_burst (ProSpect).
 - Carnall+2018: DPL.
 - Zacharegkas+2025 (arXiv:2506.19919): triweight burst.
+
 """
 
 from __future__ import annotations
@@ -85,6 +86,7 @@ class ParamDef(NamedTuple):
     Notes
     -----
     **JIT-compatible**: no — Python dataclass for registry initialization.
+
     """
 
     description: str
@@ -115,6 +117,7 @@ class SFHModelSpec(NamedTuple):
     Notes
     -----
     **JIT-compatible**: no — Python dataclass for registry initialization.
+
     """
 
     name: str
@@ -154,6 +157,7 @@ def _register(spec: SFHModelSpec) -> None:
     Notes
     -----
     **JIT-compatible**: no — mutates global registry dictionary during initialization.
+
     """
     SFH_REGISTRY[spec.name] = spec
 
@@ -723,6 +727,7 @@ def _table_sfh_placeholder(t_lookback, **kwargs):
     Notes
     -----
     **JIT-compatible**: yes — uses ``jnp.zeros_like``.
+
     """
     return jnp.zeros_like(t_lookback)
 
@@ -991,6 +996,7 @@ def _field_fn_placeholder(t_lookback, **kwargs):
     Notes
     -----
     **JIT-compatible**: no — raises at runtime.
+
     """
     raise RuntimeError("field fn should not be called directly; use resolve_sfh()")
 
@@ -1081,6 +1087,7 @@ def resolve_sfh(
     True
     >>> fn  # doctest: +ELLIPSIS
     <function ...>
+
     """
     if isinstance(mean_sfh_type, str):
         mean_sfh_type = [mean_sfh_type]
@@ -1227,6 +1234,7 @@ def compute_field_gp(
     >>> gp_x, k0_half = compute_field_gp(xi, psd_sigma=1.0, psd_tau_yr=1e8, n_grid=n, d_log_age=d)
     >>> gp_x.shape
     (64,)
+
     """
     sqrt_power_fn = FIELD_MODEL_REGISTRY[field_model]
     sqrt_power = sqrt_power_fn(n_grid, d_log_age, psd_sigma, psd_tau_yr)

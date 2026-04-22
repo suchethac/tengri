@@ -99,6 +99,7 @@ from tengri.components.agn.disc import adaf_disc, kubota_done_disc, multicolor_d
 from tengri.components.agn.nlr import nlr_emission
 from tengri.components.agn.skirtor import _find_skirtor_grid, create_skirtor_from_grid
 from tengri.components.agn.torus import simple_torus, two_temperature_torus
+from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 
 @functools.cache
@@ -729,8 +730,6 @@ def adaf_agn(
 
 
 # ── Geometric masking (smooth sigmoid for differentiability) ──────
-
-from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 
 def _sigmoid_mask(

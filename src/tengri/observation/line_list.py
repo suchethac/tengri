@@ -227,6 +227,11 @@ class LineList:
         int
             Number of independent parameters (total lines minus doublet secondaries).
 
+        Notes
+        -----
+        Computed as ``n_lines - len(doublets)``, since each doublet constraint
+        removes one degree of freedom.
+
         """
         return self.n_lines - len(self.doublets)
 
@@ -241,8 +246,14 @@ class LineList:
 
         Returns
         -------
-        jnp.ndarray, shape (n_independent,)
-            Rest-frame vacuum wavelengths for independent amplitude columns.
+        ndarray, shape (n_independent,)
+            Rest-frame vacuum wavelengths in Angstrom for independent amplitude columns.
+
+        Notes
+        -----
+        The returned wavelengths correspond to the columns of the constraint matrix
+        returned by :func:`build_constraint_matrix`. Column order is the same as
+        the order of non-constrained lines in the original catalog.
 
         """
         secondary_indices = {dc.secondary_idx for dc in self.doublets}
@@ -264,6 +275,10 @@ class LineList:
         Notes
         -----
         Not JIT-compatible (uses Python sorting and class method).
+
+        Includes UV lines (1200–3000 Å), optical (3700–6800 Å), and
+        near-infrared lines (7000–10000 Å). Line properties and doublet
+        constraints follow the FastSpecFit standard (Moustakas et al. 2023).
 
         """
         lines = sorted(_DEFAULT_OPTICAL_LINES, key=lambda t: t[1])
@@ -287,6 +302,10 @@ class LineList:
         Not JIT-compatible (uses Python class method). Kept for
         backward compatibility with eline_marginalization.py.
 
+        Includes Lyman alpha, Balmer series, key optical lines, and commonly
+        detected forbidden lines. Suitable for quick analyses where a compact
+        line set is preferred over the full optical catalog.
+
         """
         return cls._from_line_tuples(_DEFAULT_13_LINES)
 
@@ -301,12 +320,15 @@ class LineList:
         Parameters
         ----------
         filepath : str
-            Path to the CLOUDY HDF5 grid file.
+            Path to the CLOUDY HDF5 grid file containing ``lines/names`` and
+            ``lines/wavelength`` datasets.
 
         Returns
         -------
         LineList
-            Catalog populated from the CLOUDY grid, sorted by wavelength.
+            Catalog populated from the CLOUDY grid, sorted by wavelength
+            [Angstrom]. Doublet constraints are auto-detected by species
+            and proximity.
 
         Raises
         ------
@@ -315,11 +337,15 @@ class LineList:
         OSError
             If the file cannot be opened or read.
         KeyError
-            If required datasets are missing.
+            If required datasets (``lines/names``, ``lines/wavelength``) are missing.
 
         Notes
         -----
         Not JIT-compatible (uses Python file I/O and h5py).
+
+        Parses CLOUDY species names (e.g., ``"H  1"``, ``"O  3"``) into
+        compact codes (``"H1"``, ``"O3"``). Doublet detection requires
+        same species and wavelength separation < 20 Å.
 
         """
         try:
@@ -378,16 +404,19 @@ class LineList:
         Parameters
         ----------
         wave_min : float, optional
-            Minimum rest-frame wavelength [Angstrom] (inclusive).
+            Minimum rest-frame wavelength [Angstrom] (inclusive). Default: 0.
         wave_max : float, optional
             Maximum rest-frame wavelength [Angstrom] (inclusive).
+            Default: infinity.
         species : sequence of str, optional
             If given, retain only lines whose species code is in this list.
+            Default: ``None`` (no filtering).
         names : sequence of str, optional
             If given, retain only lines whose name exactly matches one in this list.
+            Default: ``None`` (no filtering).
         wavelengths : sequence of float, optional
             If given, match each wavelength to the nearest line in the catalog
-            within 5 Angstrom tolerance.
+            within 5 Angstrom tolerance. Default: ``None`` (no filtering).
 
         Returns
         -------
@@ -401,6 +430,13 @@ class LineList:
         ValueError
             If any name in ``names`` is not found in the catalog, or if any
             wavelength in ``wavelengths`` cannot be matched within 5 Angstrom.
+
+        Notes
+        -----
+        Not JIT-compatible (uses Python control flow and set operations).
+
+        All filtering criteria are combined via AND logic. If all criteria
+        filter out all lines, returns an empty LineList.
 
         Examples
         --------
@@ -420,12 +456,6 @@ class LineList:
         Select hydrogen lines only::
 
             hydrogen = cat.select(species=["H1"])
-
-        Notes
-        -----
-        Not JIT-compatible (uses Python control flow and set operations).
-        All filtering criteria are combined via AND logic. At least one criterion
-        should be specified to avoid returning an empty catalog.
 
         """
         waves_np = [float(w) for w in self.wavelengths]
@@ -535,15 +565,19 @@ class LineList:
         ndarray, shape (n_lines, n_independent)
             Linear constraint matrix. Each row represents one emission line;
             each column represents one independent amplitude parameter.
-            Zero columns correspond to constrained secondary lines.
+            For constrained secondary lines, the row encodes the constraint
+            relationship; for primary lines, the row has a unit entry.
 
         Notes
         -----
         Not JIT-compatible (uses NumPy array mutation and slicing).
 
-        For each doublet constraint with flux_secondary = flux_primary / ratio,
-        the corresponding column is zeroed and a single off-diagonal entry
-        (ratio^{-1}) encodes the constraint relationship.
+        For each doublet constraint with ``flux_secondary = flux_primary / ratio``,
+        the corresponding column is removed and the secondary line's row encodes
+        the constraint via an off-diagonal entry ``1 / ratio`` in the primary
+        column. This ensures that fitting ``n_independent`` amplitudes
+        automatically enforces all doublet ratio constraints via matrix
+        multiplication: ``a_full = C @ a_independent``.
 
         """
         n = self.n_lines
@@ -579,18 +613,22 @@ class LineList:
 
         Parameters
         ----------
-        lines : list of tuples
+        lines : list[tuple]
             Each tuple: ``(name, wavelength [Angstrom], species, is_balmer,
             is_broad_candidate, is_strong, plot_group)``.
 
         Returns
         -------
         LineList
-            Catalog with constraints auto-detected.
+            Catalog with doublet constraints auto-detected from the global
+            ``_DOUBLET_RATIOS`` dictionary.
 
         Notes
         -----
         Private helper. Not JIT-compatible (uses Python list operations).
+
+        Constraints are only added if both the primary and secondary lines
+        from ``_DOUBLET_RATIOS`` are present in the input list.
 
         """
         names_list = [t[0] for t in lines]

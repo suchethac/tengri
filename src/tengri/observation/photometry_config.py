@@ -86,22 +86,23 @@ class Photometry:
 
         Parameters
         ----------
-        names : sequence of str
+        names : sequence[str]
             Short names from ``FILTER_REGISTRY`` (e.g. ``"sdss_r"``,
             ``"jwst_f200w"``).
-        cache_dir : str
+        cache_dir : str, optional
             Directory for cached SVO filter files. Default: ``"data/filters"``.
 
         Returns
         -------
         Photometry
-            Configured photometry with loaded filters.
+            Configured photometry with loaded filter transmission curves.
+            Filters are validated against the global registry.
 
         Notes
         -----
         Loads filter transmission curves from the SVO filter service or
         local cache. Filter names are validated against the registry;
-        unrecognized names raise an error.
+        unrecognized names raise a KeyError.
 
         Examples
         --------
@@ -130,14 +131,16 @@ class Photometry:
 
         Parameters
         ----------
-        filter_set : tuple or list
+        filter_set : tuple | list
             Either a 3-tuple ``(filter_waves, filter_trans, filter_curves)``
-            from ``load_filter_set()``, or a list/tuple of ``FilterCurve``.
+            from ``load_filter_set()``, or a list/tuple of ``FilterCurve``
+            objects.
 
         Returns
         -------
         Photometry
-            Configured photometry with precomputed fields.
+            Configured photometry with precomputed field (filter curves,
+            wavelengths, transmissions, and filter count).
 
         Notes
         -----

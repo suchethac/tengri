@@ -118,19 +118,23 @@ class LineFluxData:
 
         Parameters
         ----------
-        model_fluxes : array, shape (n_lines,)
+        model_fluxes : ndarray, shape (n_lines,)
             Model-predicted line fluxes [erg/s/cm^2].
 
         Returns
         -------
-        jnp.ndarray, scalar
+        ndarray, shape ()
             Sum of ((obs - model) / error)^2 over detected lines
             [dimensionless].
 
         Notes
         -----
         **JIT-compatible**: yes — uses only jnp primitives.
-        Upper limit lines (where ``is_upper_limit`` is True) are excluded.
+
+        **Gradient-safe**: yes — differentiable w.r.t. ``model_fluxes``.
+
+        Upper limit lines (where ``is_upper_limit`` is True) are excluded
+        from the sum.
 
         """
         residual = (self.fluxes - model_fluxes) / self.errors
@@ -151,18 +155,23 @@ class LineFluxData:
 
         Parameters
         ----------
-        model_fluxes : array, shape (n_lines,)
+        model_fluxes : ndarray, shape (n_lines,)
             Model-predicted line fluxes [erg/s/cm^2].
 
         Returns
         -------
-        jnp.ndarray, scalar
+        ndarray, shape ()
             Total log-likelihood summed over all lines [dimensionless].
 
         Notes
         -----
         **JIT-compatible**: yes — uses only jnp primitives.
+
+        **Gradient-safe**: yes — differentiable w.r.t. ``model_fluxes``.
+
         Handles both detections and upper limits (marked via ``is_upper_limit``).
+        Upper limit lines use the complementary error function (erfc) to
+        compute the probability that the true flux exceeds the model prediction.
 
         """
         residual = (self.fluxes - model_fluxes) / self.errors
@@ -189,7 +198,7 @@ class LineFluxData:
 
         Parameters
         ----------
-        line_data : dict
+        line_data : dict[str, tuple[float, float]]
             Mapping from line name to ``(flux, error)`` tuple,
             both [erg/s/cm^2]. E.g.
             ``{"Halpha": (1.2e-16, 0.1e-16), "Hbeta": (3.5e-17, 0.5e-17)}``.
@@ -197,12 +206,19 @@ class LineFluxData:
         Returns
         -------
         LineFluxData
-            Line flux data object with names, fluxes, errors, and wavelengths.
+            Line flux data object with names, fluxes, errors, and wavelengths
+            populated from the input dict.
 
         Raises
         ------
         ValueError
             If any line name is not found in the standard catalog.
+
+        Notes
+        -----
+        Wavelengths are looked up from the default optical emission line catalog
+        (vacuum wavelengths). Unknown line names raise a descriptive error with
+        the list of available names.
 
         """
         names = []

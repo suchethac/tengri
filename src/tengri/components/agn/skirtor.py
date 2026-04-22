@@ -79,6 +79,10 @@ def _load_grid_arrays(grid_path: str):
     dict
         Keys: ``wave``, ``total``, ``axes`` (tau, p, q, oa, cos_inc),
         and optionally ``disk``, ``dust``.
+
+    Notes
+    -----
+    **JIT-compatible**: no — performs file I/O at module load time.
     """
     import numpy as np
 
@@ -146,24 +150,28 @@ def _interpolate_and_normalize(
     Parameters
     ----------
     grid_jax : ndarray, shape (n_tau, n_p, n_q, n_oa, n_inc, n_wave)
-        Template grid.
+        Template grid. [dimensionless, per unit luminosity]
     wave_grid : ndarray, shape (n_wave_grid,)
-        Grid wavelength array. [Å]
+        Grid wavelength array [Angstrom].
     axes : tuple of ndarray
         Grid axis values (tau, p, q, oa, cos_inc).
     edges : tuple of ndarray
         Precomputed bin edges for triweight interpolation.
     wavelength : ndarray, shape (n_wave,)
-        Target wavelength array. [Å]
+        Target wavelength array [Angstrom].
     point : tuple
         (tau, p, q, oa, cos_inc) query point.
     l_scale : float
-        Luminosity scale factor. [erg s⁻¹]
+        Luminosity scale factor [erg s^-1].
 
     Returns
     -------
     ndarray, shape (n_wave,)
-        Specific luminosity L_ν. [erg s⁻¹ Hz⁻¹]
+        Specific luminosity L_ν [erg s^-1 Hz^-1].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.interp`` and ``jax.vmap``.
     """
     template = interp_nd_triweight(grid_jax, axes, edges, point)
     sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
@@ -208,6 +216,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     Notes
     -----
     **JIT-compatible**: yes — the returned function is pure JAX.
+    Grid loading is cached via ``@functools.cache``.
 
     Supports v2 (total-only) and v3 (separate disk/dust) HDF5 layouts.
     When v3 is available, use ``create_skirtor_components_from_grid``
@@ -300,7 +309,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
             fn(wavelength, agn_log_lbol, ..., agn_torus_frac, **kwargs)
                 -> SKIRTORComponents(disk, dust, total)
 
-        Each component is in [erg s⁻¹ Hz⁻¹].
+        Each component is in [erg s^-1 Hz^-1].
 
     Raises
     ------
@@ -311,6 +320,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
     Notes
     -----
     **JIT-compatible**: yes — the returned function is pure JAX.
+    Grid loading is cached via ``@functools.cache``.
 
     The separate components enable:
 
@@ -489,6 +499,8 @@ def skirtor_analytic(*args, **kwargs):
 
     Notes
     -----
+    **JIT-compatible**: yes — delegates to cached grid function.
+
     See ``create_skirtor_from_grid`` for full parameter documentation and
     grid-dependent ranges.
     """
@@ -534,6 +546,10 @@ def skirtor_components(*args, **kwargs) -> SKIRTORComponents:
     ------
     RuntimeError
         If no v3 grid with separate components is available.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — delegates to cached grid function.
     """
     fn = _load_skirtor_components()
     if fn is None:

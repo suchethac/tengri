@@ -53,15 +53,15 @@ class NoiseModel:
 
         Returns
         -------
-        dict
+        dict[str, Distribution]
             Mapping of parameter names (``"noise_frac_cal"``, ``"noise_dof"``)
             to Distribution objects. Empty dict if no noise parameters are needed.
 
         Notes
         -----
-        Called by Observation.get_all_params() to register noise model
+        Called by ``Observation.get_all_params()`` to register noise model
         hyperparameters with the inference engine. Parameters are only included
-        if they are non-trivial (calibration floor > 0 or Student-t dof != None).
+        if they are non-trivial (calibration floor > 0 or Student-t dof is not None).
 
         """
         params: dict[str, Distribution] = {}
@@ -82,11 +82,12 @@ class NoiseModel:
         Returns
         -------
         str
-            Single-line summary of calibration floor and likelihood settings.
+            Single-line summary string with calibration floor and likelihood
+            settings (e.g., ``"cal floor=0.05 (fixed), Student-t dof=10"``).
 
         Notes
         -----
-        Used for logging and diagnostics. Returns "Gaussian (default)" if
+        Used for logging and diagnostics. Returns ``"Gaussian (default)"`` if
         no custom noise settings are configured.
 
         """

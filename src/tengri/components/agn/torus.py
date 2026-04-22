@@ -65,23 +65,34 @@ def simple_torus(
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
         log10(L_bol / Lsun). Total AGN bolometric luminosity.
+        [log10(L_sun)]
     agn_torus_frac : float
         Fraction of L_bol re-emitted by torus (covering factor).
-        Typical range: 0.1 to 0.9. Default 0.5.
+        Typical range: 0.1 to 0.9. Default 0.5. [dimensionless]
     agn_T_torus : float
         Torus dust temperature [K].
         Typical range: 500 to 1500. Default 1000.
     agn_tau_torus : float
-        Optical depth at 9.7 um silicate feature.
+        Optical depth at 9.7 um silicate feature [dimensionless].
         Typical range: 1 to 10. Default 5.
     agn_tau_beta : float
-        Power-law index for opacity wavelength dependence.
+        Power-law index for opacity wavelength dependence [dimensionless].
         Typical range: 1.0 to 2.0. Default 1.5.
 
     Returns
     -------
     array, shape (n_wave,)
         Specific luminosity L_nu [erg s^-1 Hz^-1].
+
+    Notes
+    -----
+    .. warning::
+        This is a **toy model** using a single-temperature modified blackbody.
+        It is NOT a radiative transfer result and should NOT be used for
+        science. For production work, use the SKIRTOR templates in
+        :mod:`tengri.components.agn.skirtor`.
+
+    **JIT-compatible**: yes — uses ``jnp`` primitives only.
     """
     warnings.warn(
         "simple_torus is a toy model (single-temperature MBB, not radiative transfer) "
@@ -142,8 +153,10 @@ def two_temperature_torus(
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
         log10(L_bol / Lsun). Total AGN bolometric luminosity.
+        [log10(L_sun)]
     agn_torus_frac : float
         Fraction of L_bol re-emitted by torus. Default 0.5.
+        [dimensionless]
     agn_T_hot : float
         Hot dust temperature [K], near sublimation.
         Typical range: 1000 to 1500. Default 1200.
@@ -152,15 +165,26 @@ def two_temperature_torus(
         Typical range: 200 to 800. Default 300.
     agn_frac_hot : float
         Luminosity fraction in hot component (0 to 1). Default 0.3.
+        [dimensionless]
     agn_tau_torus : float
-        Optical depth at 9.7 um. Default 5.
+        Optical depth at 9.7 um [dimensionless]. Default 5.
     agn_tau_beta : float
-        Opacity power-law index. Default 1.5.
+        Opacity power-law index [dimensionless]. Default 1.5.
 
     Returns
     -------
     array, shape (n_wave,)
         Specific luminosity L_nu [erg s^-1 Hz^-1].
+
+    Notes
+    -----
+    .. warning::
+        This is a **toy model** using two modified blackbodies.
+        It is NOT a radiative transfer result and should NOT be used for
+        science. For production work, use the SKIRTOR templates in
+        :mod:`tengri.components.agn.skirtor`.
+
+    **JIT-compatible**: yes — uses ``jnp`` primitives only.
     """
     warnings.warn(
         "two_temperature_torus is a toy model (two-temperature MBB, not radiative transfer) "

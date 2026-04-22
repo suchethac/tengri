@@ -31,28 +31,28 @@ def observe_photometry_from_rest_sed(
 
     Parameters
     ----------
-    rest_sed : array, shape (n_wave,)
-        Rest-frame SED [erg/s/Hz].
-    wave_rest : array, shape (n_wave,)
-        Rest-frame wavelength grid [Angstrom].
+    rest_sed : array_like, shape (n_wave,)
+        Rest-frame SED. [erg/s/Hz]
+    wave_rest : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Angstrom]
     z : float
-        Redshift [dimensionless].
+        Redshift. [dimensionless]
     dl_cm : float
-        Luminosity distance [cm].
-    filter_waves : list of arrays
-        Filter wavelength arrays [Angstrom].
-    filter_trans : list of arrays
-        Filter transmission arrays (normalized to 1) [dimensionless].
-    apply_igm : bool
-        Whether to apply IGM absorption.
+        Luminosity distance. [cm]
+    filter_waves : list of array_like
+        Filter wavelength arrays. [Angstrom]
+    filter_trans : list of array_like
+        Filter transmission arrays (normalized to 1). [dimensionless]
+    apply_igm : bool, optional
+        Whether to apply IGM absorption. Default: False.
     igm_fn : callable, optional
         IGM transmission function (wave_obs, z) → transmission.
-        If None, defaults to ``igm_transmission``.
+        If None, defaults to ``igm_transmission``. Default: None.
 
     Returns
     -------
-    array, shape (n_filters,)
-        Observed flux densities [erg/s/cm^2/Hz].
+    ndarray, shape (n_filters,)
+        Observed flux densities. [erg/s/cm^2/Hz]
 
     Notes
     -----
@@ -89,21 +89,21 @@ def observe_spectrum_from_rest_sed(
 
     Parameters
     ----------
-    rest_sed : array, shape (n_wave,)
-        Rest-frame SED [erg/s/Hz].
-    wave_rest : array, shape (n_wave,)
-        Rest-frame wavelength grid [Angstrom].
-    wave_obs : array, shape (n_pix,)
-        Observed wavelength grid [Angstrom].
+    rest_sed : array_like, shape (n_wave,)
+        Rest-frame SED. [erg/s/Hz]
+    wave_rest : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Angstrom]
+    wave_obs : array_like, shape (n_pix,)
+        Observed wavelength grid. [Angstrom]
     z : float
-        Redshift [dimensionless].
+        Redshift. [dimensionless]
     dl_cm : float
-        Luminosity distance [cm].
+        Luminosity distance. [cm]
 
     Returns
     -------
-    array, shape (n_pix,)
-        Spectral flux density [erg/s/cm^2/Hz].
+    ndarray, shape (n_pix,)
+        Spectral flux density. [erg/s/cm^2/Hz]
 
     Notes
     -----
@@ -135,19 +135,23 @@ def build_fused_tier2_photometry(model):
     Parameters
     ----------
     model : SEDModel
-        Fully initialized Model with filters and fixed redshift.
+        Fully initialized model with filters and fixed redshift.
 
     Returns
     -------
     callable or None
-        JIT-compiled function: ``(sfr_on_ssp, params_dict) -> photometry_array``.
-        Returns None if prerequisites are not met (no filters, no Tier 2 kernel).
+        JIT-compiled function: ``(sfr_on_ssp, params_dict) -> photometry_array``,
+        where ``sfr_on_ssp`` has shape (n_age,) [Msun/yr] and ``photometry_array``
+        has shape (n_filters,) [erg/s/cm^2/Hz]. Returns None if no filters or
+        Tier 2 kernel is available.
 
     Notes
     -----
     **JIT-compatible**: yes — entire pipeline (parameter translation, metallicity
-    interpolation, compositional SED, filter integration) fused into one ``@jax.jit``
-    scope. SFH evaluation remains outside JIT (caller-computed).
+    interpolation, compositional SED, filter integration) fused into one
+    ``@jax.jit`` scope. SFH evaluation remains outside JIT (caller-computed).
+
+    **Gradient-safe**: yes — differentiable w.r.t. all parameters and sfr_on_ssp.
     """
     if model._compositional.rest_sed is None:
         return None
@@ -313,19 +317,23 @@ def build_fused_tier2_spectrum(model):
     Parameters
     ----------
     model : SEDModel
-        Fully initialized Model with spectroscopy config.
+        Fully initialized model with spectroscopy config.
 
     Returns
     -------
     callable or None
-        JIT-compiled function: ``(sfr_on_ssp, params_dict) -> spectrum_array``.
-        Returns None if no Tier 2 kernel is available.
+        JIT-compiled function: ``(sfr_on_ssp, params_dict) -> spectrum_array``,
+        where ``sfr_on_ssp`` has shape (n_age,) [Msun/yr] and ``spectrum_array``
+        has shape (n_pix,) [erg/s/cm^2/Hz]. Returns None if no Tier 2 kernel
+        or wavelength grid is available.
 
     Notes
     -----
     **JIT-compatible**: yes — entire pipeline fused into one ``@jax.jit`` scope.
     Requires precomputed wavelength grid from ``precompute_spectroscopy()`` or
     Observation config.
+
+    **Gradient-safe**: yes — differentiable w.r.t. all parameters and sfr_on_ssp.
     """
     if model._compositional.rest_sed is None:
         return None
@@ -455,14 +463,18 @@ def build_hybrid_spectrum(model):
     Returns
     -------
     callable or None
-        JIT-compiled function: (sfr_on_ssp, params) → spectrum array
-        [erg/s/cm^2/Hz]. Returns None if spectroscopy is not precomputed.
+        JIT-compiled function: ``(sfr_on_ssp, params) -> spectrum_array``,
+        where ``sfr_on_ssp`` has shape (n_age,) [Msun/yr] and
+        ``spectrum_array`` has shape (n_pix,) [erg/s/cm^2/Hz].
+        Returns None if spectroscopy is not precomputed.
 
     Notes
     -----
     **JIT-compatible**: yes — fuses precomputed stellar interpolation (fast, on
     pixel grid) with exact non-stellar evaluation (full wavelength, then
     interpolated to pixels). This balances speed and accuracy for science models.
+
+    **Gradient-safe**: yes — differentiable w.r.t. all parameters and sfr_on_ssp.
     """
     if model._precomputed.spectroscopy is None:
         return None

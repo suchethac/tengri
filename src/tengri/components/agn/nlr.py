@@ -111,6 +111,10 @@ def compute_nlr_sed(
     -------
     array, shape (n_wave,)
         NLR L_nu [erg s^-1 Hz^-1].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.vmap``.
     """
     l_intercepted = covering_fraction * l_disc_bol_erg
 

@@ -99,6 +99,8 @@ def calzetti2000_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     **JIT-compatible**: yes — uses ``jnp`` primitives.
 
+    **Gradient-safe**: yes — fully differentiable.
+
     **Upstream**: Ported from CIGALE ``skirtor2016.py`` ``k_ext()``
     (Boquien et al. 2019 [2]_).
 
@@ -171,6 +173,8 @@ def gaskell2004_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     **JIT-compatible**: yes — uses ``jnp`` primitives.
 
+    **Gradient-safe**: yes — fully differentiable.
+
     **Upstream**: Ported from CIGALE ``skirtor2016.py`` ``k_ext()``
     (Boquien et al. 2019 [2]_).
 
@@ -226,23 +230,30 @@ def polar_dust_extinction(
         Wavelength in Angstrom.
     cos_inc : float
         Cosine of inclination. 1 = face-on (Type 1), 0 = edge-on (Type 2).
+        [dimensionless, 0–1]
     opening_angle_deg : float
-        Torus half-opening angle in degrees (from equator).
+        Torus half-opening angle in degrees (from equator). [degrees]
     ebv : float
         Colour excess E(B-V) for the polar dust. 0 = no extinction.
+        [dimensionless, mag]
     law : str
         Extinction law name: ``"smc"`` (Pei 1992), ``"calzetti"`` (Calzetti
         et al. 2000), or ``"gaskell"`` (Gaskell et al. 2004).
         Default: ``"smc"``.
     sharpness : float
-        Sigmoid steepness at the Type 1/2 boundary.
+        Sigmoid steepness at the Type 1/2 boundary. [dimensionless]
 
     Returns
     -------
     l_nu_attenuated : array, shape (n_wave,)
-        Attenuated luminosity density.
+        Attenuated luminosity density. Same units as input l_nu.
     l_absorbed : array, shape (n_wave,)
         Absorbed luminosity density (per wavelength bin). Always >= 0.
+        Same units as input l_nu.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and smooth sigmoid.
     """
     # Select extinction law
     if law == "smc":
@@ -320,19 +331,23 @@ def polar_dust_emission(
         Total absorbed luminosity (scalar, integrated over frequency).
         Same units as input l_nu * delta_nu.
     wavelength : array, shape (n_wave,)
-        Wavelength grid in Angstrom.
+        Wavelength grid [Angstrom].
     temperature : float
-        Dust temperature in Kelvin. Default 100 K.
+        Dust temperature [K]. Default 100.
     beta : float
-        Dust emissivity index. Default 1.6.
+        Dust emissivity index [dimensionless]. Default 1.6.
     lambda_0 : float
-        Reference wavelength for optical depth in Angstrom.
+        Reference wavelength for optical depth [Angstrom].
         Default 2e6 (= 200 um).
 
     Returns
     -------
     l_nu_reemit : array, shape (n_wave,)
-        Reemitted luminosity density [same units as input l_nu].
+        Reemitted luminosity density [same units as input l_absorbed_total].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives only.
     """
     # Greybody: L_nu proportional to (1 - exp(-(lambda_0/lambda)^beta)) * B_nu(T)
     opacity_factor = 1.0 - jnp.exp(-((lambda_0 / wavelength) ** beta))
@@ -379,7 +394,7 @@ def anisotropic_polar_luminosity(
     wavelength : array, shape (n_wave,)
         Wavelength in Angstrom.
     opening_angle_deg : float
-        Torus half-opening angle in degrees (from equator).
+        Torus half-opening angle in degrees (from equator). [degrees]
     extinction_factor : array, shape (n_wave,)
         Wavelength-dependent transmission through polar dust
         (i.e., exp(-tau_lambda) from :func:`polar_dust_extinction`).
@@ -393,7 +408,7 @@ def anisotropic_polar_luminosity(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    **JIT-compatible**: yes — uses ``jnp`` primitives only.
 
     The anisotropic geometry factor is derived from CIGALE's SKIRTOR module.
     For a given opening angle (related to the torus geometry), the average
