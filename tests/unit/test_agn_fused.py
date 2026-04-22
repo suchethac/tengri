@@ -420,12 +420,12 @@ class TestSKIRTORPreintegration:
         )
 
     def test_preintegration_enabled(self, skirtor_spec, synthetic_ssp, simple_filters):
-        """SEDModel with SKIRTOR + fixed z loads skirtor_lookup into PrecomputedData."""
+        """SEDModel with SKIRTOR + fixed z loads skirtor_preintegrated into PrecomputedData."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model = SEDModel(skirtor_spec, synthetic_ssp, filters=simple_filters)
-        assert model._precomputed.skirtor_lookup is not None, (
-            "Expected skirtor_lookup to be populated for fixed-z SKIRTOR model"
+        assert model._precomputed.skirtor_preintegrated is not None, (
+            "Expected skirtor_preintegrated to be populated for fixed-z SKIRTOR model"
         )
 
     def test_preintegrated_photometry_finite(self, skirtor_spec, synthetic_ssp, simple_filters):

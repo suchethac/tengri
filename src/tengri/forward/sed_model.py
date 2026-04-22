@@ -772,7 +772,7 @@ class SEDModel:
         # SKIRTOR torus preintegration (for hybrid kernel, fixed z, SKIRTOR models)
         # Pre-integrate SKIRTOR torus templates through filters at init time for
         # fast filter-level triweight lookup instead of wavelength-level computation.
-        skirtor_lookup = None
+        skirtor_preint = None
         if (
             precompute
             and self._z_fixed is not None
@@ -799,7 +799,7 @@ class SEDModel:
                         self.filter_trans,
                         redshift=float(self._z_fixed),
                     )
-                    skirtor_lookup = build_skirtor_photometry_lookup(_precomp)
+                    skirtor_preint = build_skirtor_photometry_lookup(_precomp)
             except Exception as e:
                 import warnings
 
@@ -817,7 +817,7 @@ class SEDModel:
             effective_bandwidths_hz=eff_bw,
             dust_ir_lookup=dust_ir_lookup,
             kd_preintegrated=kd_preint,
-            skirtor_lookup=skirtor_lookup,
+            skirtor_preintegrated=skirtor_preint,
         )
 
     def _build_compositional_kernels(self):

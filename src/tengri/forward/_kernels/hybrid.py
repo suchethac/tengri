@@ -311,11 +311,11 @@ def build_hybrid_photometry(model):
         _skirtor_disc_fn = None
         if (
             model._agn_model == "skirtor"
-            and model._precomputed.skirtor_lookup is not None
+            and model._precomputed.skirtor_preintegrated is not None
             and not _needs_extension
         ):
             _has_preint_skirtor = True
-            _skirtor_lookup = model._precomputed.skirtor_lookup
+            _skirtor_lookup = model._precomputed.skirtor_preintegrated
             from tengri.components.agn.disc import powerlaw_disc as _powerlaw_disc
 
             _skirtor_disc_fn = _powerlaw_disc

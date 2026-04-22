@@ -175,7 +175,7 @@ class PrecomputedData:
     effective_bandwidths_hz: jnp.ndarray | None = None  # Voronoi Δν per filter (Hz)
     dust_ir_lookup: object | None = None  # Preintegrated template-based dust IR photometry
     kd_preintegrated: object | None = None  # KDPreintegratedData for K&D AGN disc
-    skirtor_lookup: object | None = None  # Preintegrated SKIRTOR torus photometry (callable)
+    skirtor_preintegrated: object | None = None  # Preintegrated SKIRTOR torus photometry lookup
 
 
 @dataclasses.dataclass
