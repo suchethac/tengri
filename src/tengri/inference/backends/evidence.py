@@ -13,7 +13,7 @@ import jax.numpy as jnp
 from tengri.inference._model_cache import get_model_cache
 
 
-def _get_nss_algo(
+def _get_nss_fns(
     fitter,
     *,
     num_inner_steps,
@@ -21,11 +21,14 @@ def _get_nss_algo(
     max_steps,
     max_shrinkage,
 ):
-    """Return cached (algo, jit_step), building if needed.
+    """Return (init_jit, step_jit) cached on the model.
 
-    The algorithm is cached on the **Model** so that multiple Fitters
-    with different galaxy data (but same model structure) share the
-    same compiled XLA step function — zero recompilation.
+    Both functions accept ``data_args`` as a *traced* JAX argument so that the
+    compiled XLA program is generic — it is reused for every galaxy that shares
+    the same model dimensionality and data shape, with zero recompilation.
+
+    The functions are keyed by model configuration and stored in the model-level
+    WeakKeyDictionary cache so they are garbage-collected with the model.
     """
     cache_key = (
         fitter._engine_cache_key(),
@@ -35,8 +38,7 @@ def _get_nss_algo(
         max_steps,
         max_shrinkage,
     )
-    model = fitter.model
-    cache = get_model_cache(model).setdefault("nss_algo", {})
+    cache = get_model_cache(fitter.model).setdefault("nss_fns", {})
 
     if cache_key not in cache:
         from tengri.inference.backends.nested.nss import as_top_level_api
@@ -44,17 +46,39 @@ def _get_nss_algo(
         logprior_fn = fitter._build_logprior_fn()
         loglikelihood_fn = fitter._get_or_build_loglikelihood_fn()
 
-        algo = as_top_level_api(
-            logprior_fn,
-            loglikelihood_fn,
-            num_inner_steps,
-            num_delete=num_delete,
-            max_steps=max_steps,
-            max_shrinkage=max_shrinkage,
-            data_args=fitter._data_args,
-        )
-        step = jax.jit(algo.step)
-        cache[cache_key] = (algo, step)
+        # Build algo *inside* the JIT-traced function so that data_args is
+        # abstract (traced) rather than a Python constant.  JAX traces these
+        # once; subsequent calls with the same Python function object and the
+        # same abstract shapes hit the Python-level JIT cache without retrace.
+        def _step_with_data(key, state, data_args):
+            def _loglik(params):
+                return loglikelihood_fn(params, data_args)
+
+            _algo = as_top_level_api(
+                logprior_fn,
+                _loglik,
+                num_inner_steps,
+                num_delete=num_delete,
+                max_steps=max_steps,
+                max_shrinkage=max_shrinkage,
+            )
+            return _algo.step(key, state)
+
+        def _init_with_data(particles, data_args):
+            def _loglik(params):
+                return loglikelihood_fn(params, data_args)
+
+            _algo = as_top_level_api(
+                logprior_fn,
+                _loglik,
+                num_inner_steps,
+                num_delete=num_delete,
+                max_steps=max_steps,
+                max_shrinkage=max_shrinkage,
+            )
+            return _algo.init(particles)
+
+        cache[cache_key] = (jax.jit(_init_with_data), jax.jit(_step_with_data))
 
     return cache[cache_key]
 
@@ -101,11 +125,26 @@ def run_nss(
         Maximum shrinking steps in slice sampling.
     verbose : bool
         Print progress.
+
+    Notes
+    -----
+    **Cross-galaxy cache reuse**
+
+    The compiled XLA step function is cached on the ``SEDModel`` object via
+    :func:`~tengri.inference._model_cache.get_model_cache`.  ``data_args`` is
+    passed as a *traced* JAX value (not a compile-time constant), so the same
+    compiled program is reused for every galaxy that shares the same model
+    dimensionality and photometric band layout.  The cache is keyed on
+    ``(model_cache_key, num_inner_steps, num_delete, max_steps, max_shrinkage)``.
+
+    Cold compile (~10–15 s) happens once per model configuration; subsequent
+    galaxies pay only the per-step XLA execution time.
+
+    JIT/grad/vmap: the step body is fully JIT-compatible.
     """
     from tengri.inference.backends.nested.utils import ess as ns_ess, finalise, sample as ns_sample
     from tengri.inference.posterior import Posterior
 
-    # Guard stochastic models
     if fitter.spec.stochastic:
         raise ValueError(
             "NSS not supported for stochastic SFH models (D~137). "
@@ -118,12 +157,10 @@ def run_nss(
 
     if verbose:
         print(
-            f"NSS: {D} parameters, {n_live} live points, "
-            f"{num_delete} deletions/iter, {num_inner_steps} HRSS steps"
+            f"NSS: {D} params, {n_live} live, {num_delete} del/iter, {num_inner_steps} HRSS steps"
         )
 
-    # Get cached algo + JIT step (compile-once across galaxies)
-    algo, step = _get_nss_algo(
+    init_jit, step_jit = _get_nss_fns(
         fitter,
         num_inner_steps=num_inner_steps,
         num_delete=num_delete,
@@ -131,30 +168,23 @@ def run_nss(
         max_shrinkage=max_shrinkage,
     )
 
-    # Initialize live points from prior
+    data_args = fitter._data_args
+
     key, init_key = jax.random.split(key)
     all_samples = fitter.spec.sample_batch(init_key, n_live)
     particles = {name: all_samples[name] for name in fitter._free_names}
-
-    data_args = fitter._data_args
-    live = algo.init(particles, data_args=data_args)
+    live = init_jit(particles, data_args)
 
     dead_points = []
     n_iter = 0
     t0 = time.time()
 
-    # Python while loop: NSS has dynamic termination that can't be
-    # fully compiled with jax.lax.while_loop without losing cache benefit.
-    # The step function is JIT'd and cached; Python handles convergence checks.
-    # Tested: jax.lax.while_loop improved cold time (10.9s vs 28.8s) but
-    # worsened cache speedup (1.4× vs 3.6×) due to per-galaxy recompilation.
     while True:
         key, subkey = jax.random.split(key)
-        live, dead = step(subkey, live)
+        live, dead = step_jit(subkey, live, data_args)
         dead_points.append(dead)
         n_iter += 1
 
-        # Check termination
         logZ_est = float(jnp.logaddexp(live.integrator.logZ, live.integrator.logZ_live))
         remaining = float(live.integrator.logZ_live - live.integrator.logZ)
 
@@ -176,7 +206,6 @@ def run_nss(
     wall_time = time.time() - t0
     logZ = float(jnp.logaddexp(live.integrator.logZ, live.integrator.logZ_live))
 
-    # Finalise and extract posterior samples
     ns_run = finalise(live, dead_points)
 
     key, sample_key = jax.random.split(key)
@@ -185,11 +214,7 @@ def run_nss(
     key, ess_key = jax.random.split(key)
     ess_val = float(ns_ess(ess_key, ns_run))
 
-    # Convert to physical param dict
-    samples_phys = {}
-    for name in fitter._free_names:
-        samples_phys[name] = resampled.position[name]
-    # Add fixed params (broadcast)
+    samples_phys = {name: resampled.position[name] for name in fitter._free_names}
     for name, val in fitter._fixed_values.items():
         samples_phys[name] = jnp.full(n_posterior_samples, val)
 
