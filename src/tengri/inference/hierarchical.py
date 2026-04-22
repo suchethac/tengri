@@ -218,6 +218,21 @@ class PopulationFitter:
     ----------
     n_galaxies : int
         Number of galaxies in the population.
+
+    Examples
+    --------
+    >>> import jax
+    >>> from tengri import PopulationFitter, SEDModel, Parameters, Uniform
+    >>> # Define a factory that builds a model given shared PSD params
+    >>> def model_factory(psd_sigma, psd_tau_myr):
+    ...     spec = Parameters(
+    ...         sfh_field_psd_sigma=Uniform(0.1, 4.0),
+    ...         sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
+    ...     )
+    ...     return SEDModel(spec, ssp_data)  # ssp_data loaded separately
+    >>> # galaxies = [{'flux_obs': ..., 'noise': ...}, ...]
+    >>> # pop = PopulationFitter(model_factory, galaxies)
+    >>> # result = pop.run('vi', key=jax.random.PRNGKey(0))
     """
 
     def __init__(

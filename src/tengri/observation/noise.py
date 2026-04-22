@@ -76,6 +76,15 @@ def compute_effective_noise(
     array, shape (n_bands,)
         Effective noise standard deviation.
 
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import compute_effective_noise
+    >>> noise = jnp.array([0.1, 0.2, 0.15])
+    >>> model = jnp.array([1.0, 2.0, 1.5])
+    >>> sigma_eff = compute_effective_noise(noise, model, f_cal=0.05)
+    >>> sigma_eff.shape
+    (3,)
     """
     cal_noise = f_cal * jnp.abs(model_flux)
     return jnp.sqrt(noise_obs**2 + cal_noise**2)
@@ -105,6 +114,15 @@ def compute_std_inv(
     array, shape (n_bands,)
         Inverse noise standard deviation τ = 1/σ_eff.
 
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import compute_std_inv
+    >>> noise = jnp.array([0.1, 0.2, 0.15])
+    >>> model = jnp.array([1.0, 2.0, 1.5])
+    >>> tau = compute_std_inv(noise, model, f_cal=0.05)
+    >>> tau.shape
+    (3,)
     """
     sigma_eff = compute_effective_noise(noise_obs, model_flux, f_cal)
     return 1.0 / sigma_eff
@@ -126,6 +144,15 @@ def has_noise_model(spec) -> bool:
     bool
         True if the noise model is active.
 
+    Examples
+    --------
+    >>> from tengri import Parameters, Uniform, has_noise_model
+    >>> spec = Parameters(dust_tau_bc=Uniform(0.1, 4.0))
+    >>> has_noise_model(spec)
+    False
+    >>> spec2 = Parameters(dust_tau_bc=Uniform(0.1, 4.0), noise_frac_cal=Uniform(0.01, 0.2))
+    >>> has_noise_model(spec2)
+    True
     """
     from tengri.parameters.priors import Fixed
 
@@ -180,6 +207,12 @@ def uses_student_t(spec) -> bool:
     bool
         True if Student-t likelihood should be used.
 
+    Examples
+    --------
+    >>> from tengri import Parameters, Uniform, uses_student_t
+    >>> spec = Parameters(dust_tau_bc=Uniform(0.1, 4.0))
+    >>> uses_student_t(spec)
+    False
     """
     if "noise_dof" not in spec.all_params:
         return False

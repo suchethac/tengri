@@ -43,6 +43,15 @@ def make_log_age_grid(
     -------
     array, shape (n_grid,)
         Uniform grid in log10(age/yr).
+
+    Examples
+    --------
+    >>> from tengri import make_log_age_grid
+    >>> grid = make_log_age_grid(n_grid=64)
+    >>> grid.shape
+    (64,)
+    >>> float(grid[0]), float(grid[-1])
+    (6.0, 10.14)
     """
     return jnp.linspace(log_age_min, log_age_max, n_grid)
 

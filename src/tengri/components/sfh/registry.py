@@ -811,6 +811,15 @@ def resolve_sfh(
 
     Auto-swap: ``dense_basis`` → ``dense_basis_pure`` if burst or field is
     present (to avoid SFR constraint interference with composition).
+
+    Examples
+    --------
+    >>> from tengri import resolve_sfh
+    >>> fn, params, param_map, settings = resolve_sfh("dpl")
+    >>> "sfh_dpl_alpha" in params
+    True
+    >>> fn  # doctest: +ELLIPSIS
+    <function ...>
     """
     if isinstance(mean_sfh_type, str):
         mean_sfh_type = [mean_sfh_type]

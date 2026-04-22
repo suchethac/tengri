@@ -231,6 +231,15 @@ def skewnormal_sfh(
     Notes
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import skewnormal_sfh
+    >>> t = jnp.logspace(7, 10.14, 64)
+    >>> sfr = skewnormal_sfh(t, log_peak_sfr=1.5, peak_lbt=3e9, width=1e9, skew=1.0)
+    >>> sfr.shape
+    (64,)
     """
     age = _clamp_age(t_lookback)
     peak_sfr = 10.0**log_peak_sfr
@@ -269,6 +278,15 @@ def gaussian_sfh(
     Notes
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import gaussian_sfh
+    >>> t = jnp.logspace(7, 10.14, 64)
+    >>> sfr = gaussian_sfh(t, log_peak_sfr=1.5, peak_lbt=3e9, width=1e9)
+    >>> sfr.shape
+    (64,)
     """
     return skewnormal_sfh(t_lookback, log_peak_sfr, peak_lbt, width, skew=0.0)
 
@@ -309,6 +327,15 @@ def lognormal_sfh(
     Notes
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import lognormal_sfh
+    >>> t = jnp.logspace(7, 10.14, 64)
+    >>> sfr = lognormal_sfh(t, log_peak_sfr=1.5, peak_lbt=3e9, width=0.3)
+    >>> sfr.shape
+    (64,)
     """
     age = _clamp_age(t_lookback)
     peak_sfr = 10.0**log_peak_sfr
@@ -435,6 +462,15 @@ def dpl(
 
     This function wraps :func:`double_powerlaw` with ``norm = 10**log_peak_sfr``.
     See :func:`double_powerlaw` for physics details.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import dpl
+    >>> t = jnp.logspace(7, 10.14, 64)
+    >>> sfr = dpl(t, alpha=1.5, beta=0.5, tau=3e9, log_peak_sfr=1.5)
+    >>> sfr.shape
+    (64,)
     """
     peak_sfr = 10.0**log_peak_sfr
     x = t_lookback / tau
@@ -473,6 +509,15 @@ def constant_sfh(
 
     Internal convention: ``start <= t_lookback <= end`` (both in lookback time).
     The user-facing API names are reversed for chronological intuition.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import constant_sfh
+    >>> t = jnp.logspace(7, 10.14, 64)
+    >>> sfr = constant_sfh(t, log_sfr=1.0, start=5e8, end=5e9)
+    >>> sfr.shape
+    (64,)
     """
     sfr = 10.0**log_sfr
     mask = (t_lookback >= start) & (t_lookback <= end)
@@ -508,6 +553,15 @@ def exponential_sfh(
     Notes
     -----
     **JIT-compatible**: yes — uses ``jnp`` primitives for exponential and masking.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import exponential_sfh
+    >>> t = jnp.logspace(7, 10.14, 64)
+    >>> sfr = exponential_sfh(t, log_peak_sfr=2.0, tau=2e9, start=1e8)
+    >>> sfr.shape
+    (64,)
     """
     peak_sfr = 10.0**log_peak_sfr
     dt = t_lookback - start
@@ -545,6 +599,15 @@ def delayed_exponential_sfh(
     Notes
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import delayed_exponential_sfh
+    >>> t = jnp.logspace(7, 10.14, 64)
+    >>> sfr = delayed_exponential_sfh(t, log_peak_sfr=2.0, tau=2e9, start=1e8)
+    >>> sfr.shape
+    (64,)
     """
     peak_sfr = 10.0**log_peak_sfr
     dt = t_lookback - start
@@ -731,6 +794,15 @@ def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float) -> jnp.ndarray
     Notes
     -----
     **JIT-compatible**: yes — uses ``jnp`` primitives.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import delayed_tau
+    >>> t = jnp.logspace(7, 10.14, 64)
+    >>> sfr = delayed_tau(t, tau=2e9, norm=10.0)
+    >>> sfr.shape
+    (64,)
     """
     return norm * t_lookback * jnp.exp(-t_lookback / tau)
 

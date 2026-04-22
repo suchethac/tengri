@@ -669,6 +669,12 @@ def salaris_mh_from_feh(feh: float, alpha_fe: float) -> float:
     ----------
     Salaris, Chieffi & Straniero 1993, ApJ, 414, 580.
     Knowles et al. 2023, Eq. 2.
+
+    Examples
+    --------
+    >>> from tengri import salaris_mh_from_feh
+    >>> round(float(salaris_mh_from_feh(feh=-0.5, alpha_fe=0.2)), 4)
+    -0.3676
     """
     return feh + _SALARIS_LINEAR * alpha_fe + _SALARIS_QUADRATIC * alpha_fe**2
 
@@ -702,6 +708,12 @@ def salaris_feh_from_mh(mh: float, alpha_fe: float) -> float:
     References
     ----------
     Salaris, Chieffi & Straniero 1993, ApJ, 414, 580 (inverse formula).
+
+    Examples
+    --------
+    >>> from tengri import salaris_feh_from_mh
+    >>> round(float(salaris_feh_from_mh(mh=-0.5, alpha_fe=0.2)), 4)
+    -0.6324
     """
     return mh - _SALARIS_LINEAR * alpha_fe - _SALARIS_QUADRATIC * alpha_fe**2
 
@@ -742,6 +754,12 @@ def effective_metallicity(log_z_fe: float, alpha_fe: float = 0.0) -> float:
     ----------
     Thomas, Maraston & Bender 2003, MNRAS 339, 897.
     Vazdekis et al. 2015, MNRAS 449, 1177.
+
+    Examples
+    --------
+    >>> from tengri import effective_metallicity
+    >>> round(float(effective_metallicity(-0.5, alpha_fe=0.3)), 4)
+    -0.275
     """
     return log_z_fe + _ALPHA_TO_Z_COEFF * alpha_fe
 
@@ -767,6 +785,13 @@ def has_alpha_grid(ssp_data: SSPData) -> bool:
     -----
     **JIT-compatible**: yes — pure shape checking and conditionals.
     **Gradient-safe**: yes.
+
+    Examples
+    --------
+    >>> from tengri import has_alpha_grid, load_ssp_data
+    >>> # ssp = load_ssp_data("data/ssp_BC03_Chabrier.h5")
+    >>> # has_alpha_grid(ssp)  # True if file contains [alpha/Fe] axis
+    >>> # False for standard BC03 grids (no alpha grid)
     """
     return ssp_data.ssp_alpha_fe is not None and ssp_data.ssp_flux.ndim == 4
 

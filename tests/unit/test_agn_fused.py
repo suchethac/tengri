@@ -454,7 +454,9 @@ class TestSKIRTORPreintegration:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model_hybrid = SEDModel(skirtor_spec, synthetic_ssp, filters=simple_filters)
-            model_exact = SEDModel(skirtor_spec, synthetic_ssp, filters=simple_filters, approx=False)
+            model_exact = SEDModel(
+                skirtor_spec, synthetic_ssp, filters=simple_filters, approx=False
+            )
 
         key = jax.random.PRNGKey(7)
         params = skirtor_spec.sample(key)

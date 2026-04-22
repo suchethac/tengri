@@ -654,6 +654,14 @@ def load_filter_set(
     filter_curves : list of FilterCurve
         Full FilterCurve objects.
 
+    Examples
+    --------
+    >>> from tengri import load_filter_set
+    >>> waves, trans, curves = load_filter_set(["sdss_r", "sdss_i", "sdss_z"])
+    >>> len(curves)
+    3
+    >>> curves[0].name
+    'sdss_r'
     """
     filter_waves: list[jnp.ndarray] = []
     filter_trans: list[jnp.ndarray] = []
