@@ -32,6 +32,13 @@ from tengri.analysis.diagnostics.saliency import (
     compute_gradient_sed,
     compute_photometry_sensitivity,
 )
+from tengri.analysis.diagnostics.spectral import (
+    dn4000,
+    irx,
+    rest_frame_colour,
+    rest_frame_luminosity,
+    uv_slope_beta,
+)
 
 __all__ = [
     "autocorrelation_time",
@@ -45,7 +52,12 @@ __all__ = [
     "compute_photometry_sensitivity",
     "compute_time_sensitivity_matrix",
     "compute_window_function",
+    "dn4000",
     "effective_sample_size",
     "fisher_correlation_matrix",
     "fisher_parameter_errors",
+    "irx",
+    "rest_frame_colour",
+    "rest_frame_luminosity",
+    "uv_slope_beta",
 ]

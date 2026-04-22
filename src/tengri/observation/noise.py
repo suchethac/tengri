@@ -432,3 +432,192 @@ def variable_noise_metric_vec(
 
     # M @ v = J^T H_E J v + v (prior metric is identity)
     return flatten(JTw) + v
+
+
+# ── GP covariance kernels for correlated spectral noise ───────────
+
+
+def exp_squared_kernel(
+    x: jnp.ndarray,
+    amplitude: float | jnp.ndarray,
+    length_scale: float | jnp.ndarray,
+    x2: jnp.ndarray | None = None,
+) -> jnp.ndarray:
+    r"""Squared exponential (RBF) covariance kernel.
+
+    Computes the squared exponential kernel matrix for Gaussian process
+    modeling of correlated spectral noise.
+
+    Parameters
+    ----------
+    x : array, shape (n,)
+        Coordinate values [Angstrom] (or any real-valued coordinate).
+    amplitude : float or scalar array
+        Kernel amplitude :math:`\sigma`. Controls overall variance.
+    length_scale : float or scalar array
+        Kernel length scale :math:`\ell`. Controls correlation length.
+    x2 : array, shape (m,), optional
+        Second set of coordinates for cross-covariance. If None,
+        computes auto-covariance (x vs x).
+
+    Returns
+    -------
+    K : ndarray, shape (n, n) or (n, m)
+        Covariance matrix. If x2 is None, returns symmetric (n, n)
+        auto-covariance; otherwise returns (n, m) cross-covariance.
+
+    Notes
+    -----
+    .. math::
+
+        K(x, x') = \sigma^2 \exp\!\left(-\frac{(x - x')^2}{2 \ell^2}\right)
+
+    where :math:`\sigma` is the amplitude and :math:`\ell` is the length scale.
+
+    JIT-compatible and differentiable w.r.t. all float inputs.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import exp_squared_kernel
+    >>> x = jnp.linspace(4000.0, 8000.0, 20)
+    >>> K = exp_squared_kernel(x, amplitude=1.0, length_scale=500.0)
+    >>> K.shape
+    (20, 20)
+    >>> K[0, 0]  # diagonal entry equals amplitude^2
+    DeviceArray(1., dtype=float32)
+    """
+    if x2 is None:
+        x2 = x
+    # Outer difference: shape (n, m)
+    diff = x[:, None] - x2[None, :]
+    # Squared exponential kernel
+    return amplitude**2 * jnp.exp(-0.5 * (diff / length_scale) ** 2)
+
+
+def matern32_kernel(
+    x: jnp.ndarray,
+    amplitude: float | jnp.ndarray,
+    length_scale: float | jnp.ndarray,
+    x2: jnp.ndarray | None = None,
+) -> jnp.ndarray:
+    r"""Matérn 3/2 covariance kernel.
+
+    Computes the Matérn 3/2 kernel matrix for Gaussian process modeling
+    of correlated spectral noise. This kernel is once-differentiable in
+    the underlying random field, providing smoother realizations than
+    the exponential kernel while remaining computationally efficient.
+
+    Parameters
+    ----------
+    x : array, shape (n,)
+        Coordinate values [Angstrom] (or any real-valued coordinate).
+    amplitude : float or scalar array
+        Kernel amplitude :math:`\sigma`. Controls overall variance.
+    length_scale : float or scalar array
+        Kernel length scale :math:`\ell`. Controls correlation length.
+    x2 : array, shape (m,), optional
+        Second set of coordinates for cross-covariance. If None,
+        computes auto-covariance (x vs x).
+
+    Returns
+    -------
+    K : ndarray, shape (n, n) or (n, m)
+        Covariance matrix. If x2 is None, returns symmetric (n, n)
+        auto-covariance; otherwise returns (n, m) cross-covariance.
+
+    Notes
+    -----
+    .. math::
+
+        K(x, x') = \sigma^2 \left(1 + \frac{\sqrt{3}\,r}{\ell}\right)
+        \exp\!\left(-\frac{\sqrt{3}\,r}{\ell}\right), \quad r = |x - x'|
+
+    where :math:`\sigma` is the amplitude and :math:`\ell` is the length scale.
+
+    JIT-compatible. The absolute value introduces a non-differentiable point at
+    :math:`r = 0`; in practice this is not reached when :math:`x \neq x'`.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import matern32_kernel
+    >>> x = jnp.linspace(4000.0, 8000.0, 20)
+    >>> K = matern32_kernel(x, amplitude=1.0, length_scale=500.0)
+    >>> K.shape
+    (20, 20)
+    """
+    if x2 is None:
+        x2 = x
+    # Outer difference: shape (n, m)
+    diff = x[:, None] - x2[None, :]
+    # Smooth absolute value — avoids zero-gradient kink at r=0 (diagonal)
+    r = jnp.sqrt(diff**2 + 1e-20)
+    # Matérn 3/2 kernel
+    sqrt3 = jnp.sqrt(3.0)
+    arg = sqrt3 * r / length_scale
+    return amplitude**2 * (1.0 + arg) * jnp.exp(-arg)
+
+
+def gp_noise_covariance(
+    wavelength: jnp.ndarray,
+    noise_obs: jnp.ndarray,
+    gp_amplitude: float | jnp.ndarray,
+    gp_length_scale: float | jnp.ndarray,
+    kernel: str = "exp_squared",
+) -> jnp.ndarray:
+    r"""Compute noise covariance as white noise + GP kernel.
+
+    Combines observational uncertainties (white noise diagonal) with
+    a Gaussian process kernel to model correlated spectral noise.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelengths [Angstrom].
+    noise_obs : array, shape (n_wave,)
+        Observed 1-sigma uncertainties [same units as flux].
+    gp_amplitude : float or scalar array
+        GP kernel amplitude. Dimensionless scaling of kernel.
+    gp_length_scale : float or scalar array
+        GP kernel length scale [Angstrom].
+    kernel : str, optional
+        Kernel type: "exp_squared" (default) or "matern32".
+
+    Returns
+    -------
+    N : ndarray, shape (n_wave, n_wave)
+        Covariance matrix :math:`N = \text{diag}(\sigma_{\text{obs}}^2) + K_{\text{gp}}`.
+
+    Notes
+    -----
+    The returned matrix combines white noise variance on the diagonal
+    with off-diagonal correlations from the chosen GP kernel. This is
+    suitable for spectral fitting likelihoods that support full
+    covariance matrices.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import gp_noise_covariance
+    >>> wave = jnp.linspace(4000.0, 8000.0, 50)
+    >>> noise = jnp.ones(50) * 0.1
+    >>> N = gp_noise_covariance(wave, noise, gp_amplitude=0.5,
+    ...                         gp_length_scale=300.0, kernel="exp_squared")
+    >>> N.shape
+    (50, 50)
+    """
+    # White noise diagonal
+    diag_noise = jnp.diag(noise_obs**2)
+
+    # Choose kernel
+    if kernel == "exp_squared":
+        K_gp = exp_squared_kernel(wavelength, gp_amplitude, gp_length_scale)
+    elif kernel == "matern32":
+        K_gp = matern32_kernel(wavelength, gp_amplitude, gp_length_scale)
+    else:
+        raise ValueError(
+            f"Unknown kernel '{kernel}'. Must be 'exp_squared' or 'matern32'."
+        )
+
+    return diag_noise + K_gp
