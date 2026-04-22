@@ -48,6 +48,8 @@ from tengri.components.sfh.metallicity_history import (
 )
 from tengri.components.sfh.nonparametric import (
     bursty_continuity_prior_logp,
+    continuity_flex_prior_logp,
+    continuity_flex_sfh,
     continuity_prior_logp,
     continuity_sfh,
     dirichlet_sfh,
@@ -79,6 +81,8 @@ __all__ = [
     "compute_sqrt_power_drw",
     "constant_sfh",
     "constant_then_exponential_sfh",
+    "continuity_flex_prior_logp",
+    "continuity_flex_sfh",
     "continuity_prior_logp",
     "continuity_sfh",
     "declining_exponential_sfh",

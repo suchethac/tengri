@@ -56,7 +56,12 @@ from tengri.components.sfh.mean_sfh import (
     triweight_burst,
     tsnorm,
 )
-from tengri.components.sfh.nonparametric import continuity_sfh, dirichlet_sfh
+from tengri.components.sfh.nonparametric import (
+    CFLEX_DEFAULT_ANCHOR_GYR,
+    continuity_flex_sfh,
+    continuity_sfh,
+    dirichlet_sfh,
+)
 from tengri.components.sfh.psd_models import drw_variance
 from tengri.parameters.priors import Distribution, Fixed, Uniform
 
@@ -759,6 +764,57 @@ _register(
     )
 )
 
+# --- continuity_flex (Leja+2019): piecewise-constant with flexible bin edges ---
+# Default: 3 flex ratios (flex_0..flex_2) + ratio_young + ratio_old = 5 free params.
+# n_flex ratios → n_flex+1 internal flex time bins.
+_N_CFLEX = 3
+_register(
+    SFHModelSpec(
+        name="continuity_flex",
+        fn=continuity_flex_sfh,
+        params={
+            "sfh_cflex_log_total_mass": ParamDef(
+                "log10 total stellar mass formed (Msun)",
+                _always_true,
+                "",
+                Uniform(8.0, 12.0),
+            ),
+            "sfh_cflex_ratio_young": ParamDef(
+                "log10(SFR_young / SFR_flex[0])",
+                _always_true,
+                "",
+                Uniform(-1.0, 1.0),
+            ),
+            **{
+                f"sfh_cflex_flex_{i}": ParamDef(
+                    f"log10 flex bin SFR ratio {i} (controls bin width)",
+                    _always_true,
+                    "",
+                    Uniform(-1.0, 1.0),
+                )
+                for i in range(_N_CFLEX)
+            },
+            "sfh_cflex_ratio_old": ParamDef(
+                "log10(SFR_old / SFR_flex[N])",
+                _always_true,
+                "",
+                Uniform(-1.0, 1.0),
+            ),
+        },
+        settings={
+            "sfh_cflex_n_flex": _N_CFLEX,
+            "sfh_cflex_anchor_gyr": CFLEX_DEFAULT_ANCHOR_GYR.tolist(),
+        },
+        internal_param_map={
+            "sfh_cflex_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            "sfh_cflex_ratio_young": ("ratio_young", 1.0, 0.0),
+            **{f"sfh_cflex_flex_{i}": (f"flex_{i}", 1.0, 0.0) for i in range(_N_CFLEX)},
+            "sfh_cflex_ratio_old": ("ratio_old", 1.0, 0.0),
+        },
+        composition_type="additive",
+    )
+)
+
 # --- dirichlet (Leja+2017): piecewise-constant with Dirichlet mass fraction prior ---
 _register(
     SFHModelSpec(
@@ -1063,7 +1119,7 @@ def resolve_sfh(
         merged_settings.update(s.settings)
 
     # Build lists of (fn, set_of_internal_names) for each additive component
-    _NONPARAM_NAMES = {"continuity", "dirichlet"}
+    _NONPARAM_NAMES = {"continuity", "dirichlet", "continuity_flex"}
     additive_info = []
     for s in additive:
         internal_names = {v[0] for v in s.internal_param_map.values()}

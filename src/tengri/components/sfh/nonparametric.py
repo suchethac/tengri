@@ -1,8 +1,9 @@
 """Non-parametric star formation history models.
 
-Implements the Continuity (Leja+2019), Dirichlet (Leja+2017), and Bursty
-Continuity (Tacchella+2022) non-parametric SFH priors from the Prospector
-framework. All describe piecewise-constant SFR in N lookback-time bins.
+Implements the Continuity (Leja+2019), Dirichlet (Leja+2017), Bursty
+Continuity (Tacchella+2022), and ContinuityFlex (Leja+2019) non-parametric
+SFH priors from the Prospector framework. All describe piecewise-constant SFR
+in N lookback-time bins.
 
 - **Continuity**: free parameters are log-SFR *ratios* between adjacent bins,
   with a Student-t(df=2, scale=0.3) smoothness prior penalizing sharp jumps.
@@ -10,6 +11,8 @@ framework. All describe piecewise-constant SFR in N lookback-time bins.
   to mass fractions via stick-breaking, giving a symmetric Dirichlet prior.
 - **Bursty continuity**: same continuity SFH, but young bins use a wider
   Student-t scale (1.0) than old bins (0.3) to permit rapid recent fluctuations.
+- **ContinuityFlex**: anchored young/old bins + N flexible intermediate bins
+  whose edges are derived from the SFR ratios (constant-mass-per-flex-bin).
 
 Convention: t_lookback in years, SFR returned in Msun/yr.
 All functions are pure JAX and JIT-compatible.
@@ -17,10 +20,11 @@ All functions are pure JAX and JIT-compatible.
 References
 ----------
 - Leja+2017 (arXiv:1609.09073): Dirichlet SFH prior.
-- Leja+2019 (arXiv:1905.11997): Continuity SFH prior.
+- Leja+2019 (arXiv:1905.11997): Continuity and ContinuityFlex SFH priors.
 - Johnson+2021: Prospector implementation.
 - Tacchella et al. 2022, ApJ, 926, 134 (arXiv:2102.11954): Bursty continuity.
 - Wang et al. 2024 (arXiv:2401.12198): Prospector-β agebins scheme.
+- Wilkins et al. 2025, arXiv:2508.03888: Synthesizer (ContinuityFlex upstream reference).
 """
 
 from __future__ import annotations
@@ -551,3 +555,238 @@ def psb_continuity_sfh(
     bin_idx = jnp.clip(bin_idx, 0, n_bins_total - 1)
     sfr = sfr_bins_norm[bin_idx]
     return jnp.maximum(sfr, 0.0)
+
+
+# ── ContinuityFlex SFH (Leja+2019) ────────────────────────────────
+
+# Anchor bin edges [t_young_end_gyr, t_old_start_gyr, t_max_gyr].
+# Matches synthesizer's ContinuityFlex defaults:
+#   young bin [0, 10^7.5 yr] = [0, 31.6 Myr], old bin [10^9.7, 10^10.136 yr] = [5.01, 13.7 Gyr].
+CFLEX_DEFAULT_ANCHOR_GYR = np.array([0.0316, 5.012, 13.7])
+
+
+def continuity_flex_sfh(
+    age_yr: jnp.ndarray,
+    log_total_mass: float = 10.0,
+    bin_edges_gyr: jnp.ndarray | None = None,
+    **ratio_kwargs,
+) -> jnp.ndarray:
+    """Non-parametric piecewise-constant SFH with flexible bin edges (ContinuityFlex, Leja+2019).
+
+    Extends the continuity SFH by replacing fixed intermediate bins with N+1
+    flex bins whose *widths* are derived from N log-SFR ratio parameters under a
+    constant-mass-per-flex-bin constraint. Two anchor bins (young and old) are
+    fixed in lookback-time extent; their amplitudes relative to the innermost
+    flex bins are set by ``ratio_young`` and ``ratio_old``.
+
+    Parameters
+    ----------
+    age_yr : array_like, shape (n_age,)
+        Lookback time grid [yr].
+    log_total_mass : float, optional
+        log10 total stellar mass formed [Msun]. Default 10.0.
+    bin_edges_gyr : array_like, shape (3,), optional
+        Anchor bin edges ``[t_young_end, t_old_start, t_max]`` [Gyr].
+        Default: ``[0.0316, 5.012, 13.7]`` (matches synthesizer ContinuityFlex).
+    **ratio_kwargs
+        ``ratio_young`` : float
+            log10(SFR_young / SFR_flex[0]) [dimensionless]. Default 0.
+        ``flex_0``, ``flex_1``, …, ``flex_{N-1}`` : float
+            log10 SFR ratios that control flex bin widths [dimensionless]. The
+            number of ``flex_*`` keys auto-sets N. Default: N=0 (1 flat flex bin).
+        ``ratio_old`` : float
+            log10(SFR_old / SFR_flex[N]) [dimensionless]. Default 0.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    Gradients flow through the SFR *amplitudes* (via ``ratio_young``,
+    ``flex_*``, ``ratio_old`` and ``log_total_mass``). Flex bin *edge positions*
+    depend on ``jnp.searchsorted`` and are not differentiable.
+
+    N ratio parameters (``flex_0``...``flex_{N-1}``) produce N+1 flex time bins.
+    The bin widths satisfy:
+
+    .. math::
+
+        \\Delta t_i = \\frac{T_{\\rm flex} \\prod_{j=0}^{i-1} r_j}
+                            {\\sum_{k=0}^{N} \\prod_{j=0}^{k-1} r_j},
+        \\quad r_j = 10^{(\\text{flex\\_}j)}, \\quad i = 0, \\ldots, N
+
+    where :math:`T_{\\rm flex} = t_{\\rm old} - t_{\\rm young}` [yr] and the
+    empty product equals 1. This enforces equal mass per flex bin:
+
+    .. math::
+
+        M_{\\rm bin} = \\frac{10^{m_*}}{N_{\\rm flex} + s_{\\rm young}
+            \\Delta t_{\\rm young}/\\Delta t_0 +
+            s_{\\rm old} \\Delta t_{\\rm old}/\\Delta t_N}
+
+    where :math:`N_{\\rm flex} = N+1`, :math:`s = 10^{\\rm ratio}`, and the
+    per-bin SFR values are:
+
+    .. math::
+
+        {\\rm SFR}_{{\\rm flex},i} = M_{\\rm bin}/\\Delta t_i, \\quad
+        {\\rm SFR}_{\\rm young} = s_{\\rm young}\\,M_{\\rm bin}/\\Delta t_0, \\quad
+        {\\rm SFR}_{\\rm old} = s_{\\rm old}\\,M_{\\rm bin}/\\Delta t_N.
+
+    Upstream credit: ported from ``synthesizer.parametric.sf_hist.ContinuityFlex``
+    (Wilkins et al. 2025 [3]_).
+
+    References
+    ----------
+    .. [1] J. Leja et al., "How to Measure Galaxy Star Formation Histories, I.
+       Parametric Models," ApJ, 876, 3 (2019). arXiv:1905.11997.
+       https://doi.org/10.3847/1538-4357/ab133c
+    .. [2] B. D. Johnson et al., "Stellar Population Inference from the
+       Spectral Energy Distributions of Billions of Galaxies," ApJS, 254, 22
+       (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4295/abef67
+    .. [3] S. C. Wilkins et al., "Synthesizer: A Python Package for Generating
+       Synthetic Galaxy Observables," arXiv:2508.03888 (2025).
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> t = jnp.logspace(6.0, 10.14, 256)
+    >>> sfr = continuity_flex_sfh(
+    ...     t,
+    ...     log_total_mass=10.5,
+    ...     ratio_young=0.5,
+    ...     flex_0=0.2,
+    ...     flex_1=-0.1,
+    ...     flex_2=0.0,
+    ...     ratio_old=-0.3,
+    ... )
+    >>> sfr.shape
+    (256,)
+    """
+    if bin_edges_gyr is None:
+        bin_edges_gyr = CFLEX_DEFAULT_ANCHOR_GYR
+
+    t_young_end_yr = float(bin_edges_gyr[0]) * 1e9
+    t_old_start_yr = float(bin_edges_gyr[1]) * 1e9
+    t_max_yr = float(bin_edges_gyr[2]) * 1e9
+
+    # Auto-detect n_flex_ratios from flex_* kwargs
+    n_flex_ratios = sum(1 for k in ratio_kwargs if k.startswith("flex_"))
+
+    # Flex bin widths via constant-mass-per-bin constraint
+    if n_flex_ratios > 0:
+        flex_ratios_log = jnp.array(
+            [ratio_kwargs.get(f"flex_{i}", 0.0) for i in range(n_flex_ratios)]
+        )
+        sfr_ratios = jnp.power(10.0, flex_ratios_log)
+        cumprod_prefixed = jnp.concatenate([jnp.ones(1), jnp.cumprod(sfr_ratios)])
+    else:
+        cumprod_prefixed = jnp.ones(1)
+
+    n_flex_bins = cumprod_prefixed.shape[0]  # N+1 flex bins for N ratios
+    T_flex_yr = t_old_start_yr - t_young_end_yr
+    denom_flex = jnp.sum(cumprod_prefixed)
+    dt_flex_yr = T_flex_yr * cumprod_prefixed / (denom_flex + 1e-30)
+
+    dt0_yr = dt_flex_yr[0]  # first flex bin width (reference for young anchor)
+    dtN_yr = dt_flex_yr[-1]  # last flex bin width (reference for old anchor)
+    dt_young_yr = t_young_end_yr  # young anchor bin: [0, t_young_end]
+    dt_old_yr = t_max_yr - t_old_start_yr  # old anchor bin: [t_old_start, t_max]
+
+    syoung = jnp.power(10.0, ratio_kwargs.get("ratio_young", 0.0))
+    sold = jnp.power(10.0, ratio_kwargs.get("ratio_old", 0.0))
+
+    # Equal mass per flex bin; anchor masses scale by ratio * dt / dt_reference
+    denom_mass = (
+        float(n_flex_bins)
+        + syoung * dt_young_yr / (dt0_yr + 1e-30)
+        + sold * dt_old_yr / (dtN_yr + 1e-30)
+    )
+    mbin = jnp.power(10.0, log_total_mass) / (denom_mass + 1e-30)
+
+    sfr_flex = mbin / (dt_flex_yr + 1e-30)  # (n_flex_bins,)
+    sfr_young = syoung * mbin / (dt0_yr + 1e-30)  # scalar
+    sfr_old = sold * mbin / (dtN_yr + 1e-30)  # scalar
+
+    # All bins in order from youngest to oldest: young, flex[0..N], old
+    sfr_bins = jnp.concatenate([jnp.array([sfr_young]), sfr_flex, jnp.array([sfr_old])])
+
+    # Bin edges: [0, t_young_end, flex_interior..., t_old_start, t_max] (yr)
+    flex_interior_edges_yr = t_young_end_yr + jnp.cumsum(dt_flex_yr)
+    all_edges_yr = jnp.concatenate(
+        [
+            jnp.array([0.0, t_young_end_yr]),
+            flex_interior_edges_yr,
+            jnp.array([t_max_yr]),
+        ]
+    )
+
+    n_bins_total = n_flex_bins + 2  # young + flex bins + old
+    bin_idx = jnp.searchsorted(all_edges_yr, age_yr, side="right") - 1
+    bin_idx = jnp.clip(bin_idx, 0, n_bins_total - 1)
+    return jnp.maximum(sfr_bins[bin_idx], 0.0)
+
+
+def continuity_flex_prior_logp(
+    logsfr_ratio_young: float,
+    logsfr_ratios: jnp.ndarray,
+    logsfr_ratio_old: float,
+    df: float = 2.0,
+    scale: float = 0.3,
+) -> jnp.ndarray:
+    """Student-t smoothness prior on all ContinuityFlex log-SFR ratios (Leja+2019).
+
+    Applies an independent Student-t(df, 0, scale) prior to each of the
+    ``ratio_young``, flex, and ``ratio_old`` parameters, penalizing large
+    deviations from a flat (constant) SFH.
+
+    Parameters
+    ----------
+    logsfr_ratio_young : float
+        log10(SFR_young / SFR_flex[0]) [dimensionless].
+    logsfr_ratios : array_like, shape (N,)
+        log10 flex bin SFR ratios [dimensionless].
+    logsfr_ratio_old : float
+        log10(SFR_old / SFR_flex[N]) [dimensionless].
+    df : float, optional
+        Degrees of freedom. Default 2.
+    scale : float, optional
+        Scale parameter [dex]. Default 0.3 (same as :func:`continuity_prior_logp`).
+
+    Returns
+    -------
+    logp : scalar
+        Total log-probability [dimensionless], summed over all ratios.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.scipy.stats.t``.
+    **Gradient-safe**: yes — differentiable w.r.t. all ratio arguments.
+
+    .. math::
+
+        \\log p = \\sum_{r \\in \\{r_{\\rm young},\\, r_{\\rm flex},\\, r_{\\rm old}\\}}
+            \\log t_\\nu(r \\mid 0,\\, \\sigma)
+
+    where :math:`t_\\nu` is the Student-t density with :math:`\\nu = \\mathtt{df}`
+    degrees of freedom and :math:`\\sigma = \\mathtt{scale}` [dex].
+
+    References
+    ----------
+    .. [1] J. Leja et al., "How to Measure Galaxy Star Formation Histories, I.
+       Parametric Models," ApJ, 876, 3 (2019). arXiv:1905.11997.
+       https://doi.org/10.3847/1538-4357/ab133c
+    """
+    from jax.scipy.stats import t as student_t
+
+    all_ratios = jnp.concatenate(
+        [
+            jnp.array([logsfr_ratio_young]),
+            jnp.atleast_1d(jnp.asarray(logsfr_ratios)),
+            jnp.array([logsfr_ratio_old]),
+        ]
+    )
+    return jnp.sum(student_t.logpdf(all_ratios, df, loc=0.0, scale=scale))

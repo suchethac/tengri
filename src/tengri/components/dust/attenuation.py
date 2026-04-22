@@ -67,6 +67,7 @@ from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 # ── Attenuation curve registry ────────────────────────────────────
 
@@ -1949,3 +1950,247 @@ def dust_to_gas_scaling_remy_ruyer(logzsol: float) -> float:
         0.1 * (z_ratio / 0.1) ** 2.0,
     )
     return scaling
+
+
+# ── Grain model dust attenuation laws (WD01, D03, HD23) ──────────
+# Precomputed at module import from dust_extinction (astropy-affiliated).
+# Stored as numpy constants; JAX functions use jnp.interp for JIT compatibility.
+
+
+def _precompute_grain_curve(model_cls: type, submodel: str) -> tuple[np.ndarray, np.ndarray]:
+    """Load a grain model and return wavelength [Å] + k(λ) arrays.
+
+    Parameters
+    ----------
+    model_cls : type
+        Class from ``dust_extinction.grain_models``.
+    submodel : str
+        Submodel key (e.g. ``"SMCBar"``, ``"MWRV31"``).
+
+    Returns
+    -------
+    wave_aa : ndarray, shape (n,)
+        Wavelength array [Å], sorted ascending.
+    k_norm : ndarray, shape (n,)
+        Normalized attenuation curve k(λ), k(5500 Å) = 1 [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: no — uses astropy units at call time.
+    Call at module level (import time), not inside JIT.
+    """
+    from dust_extinction.grain_models import WD01  # noqa: F401 (ensures package present)
+
+    m = model_cls(submodel)
+    data_x = np.asarray(m.data_x, dtype=np.float64)
+    data_axav = np.asarray(m.data_axav, dtype=np.float64)
+    # data_x is in 1/μm (wavenumber); valid where > 0
+    mask = data_x > 0
+    wave_aa = 1e4 / data_x[mask]
+    k = data_axav[mask]
+    order = np.argsort(wave_aa)
+    wave_aa, k = wave_aa[order], k[order]
+    # Normalize to k(5500 Å) = 1 for consistency with other tengri dust laws
+    k_at_5500 = float(np.interp(5500.0, wave_aa, k))
+    return wave_aa, k / k_at_5500
+
+
+def _make_grain_law(wave_aa: np.ndarray, k_norm: np.ndarray):
+    """Return a JIT-compatible dust law that interpolates a precomputed curve.
+
+    Parameters
+    ----------
+    wave_aa : ndarray, shape (n,)
+        Precomputed wavelength grid [Å].
+    k_norm : ndarray, shape (n,)
+        Precomputed k(λ) values, k(5500 Å) = 1 [dimensionless].
+
+    Returns
+    -------
+    callable
+        Function ``(wavelength, **_kwargs) -> k(λ)`` compatible with
+        ``@register_dust_law``.
+    """
+    _wave = jnp.asarray(wave_aa)
+    _k = jnp.asarray(k_norm)
+
+    def _law(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
+        return jnp.maximum(jnp.interp(wavelength, _wave, _k), 0.0)
+
+    return _law
+
+
+# Precompute at module import (numpy, once).
+try:
+    from dust_extinction.grain_models import D03, HD23, WD01
+
+    _WD01_SMCBAR = _precompute_grain_curve(WD01, "SMCBar")
+    _WD01_MWRV31 = _precompute_grain_curve(WD01, "MWRV31")
+    _D03_MWRV31 = _precompute_grain_curve(D03, "MWRV31")
+    _HD23_MWRV31 = _precompute_grain_curve(HD23, "MWRV31")
+    _GRAIN_MODELS_AVAILABLE = True
+except ImportError:
+    _GRAIN_MODELS_AVAILABLE = False
+
+
+def _grain_law_unavailable(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
+    """Fallback when dust-extinction package is not installed."""
+    raise ImportError(
+        "dust-extinction package required for grain model dust laws. "
+        "Install with: pip install dust-extinction"
+    )
+
+
+@register_dust_law("wd01_smcbar")
+def wd01_smcbar(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
+    r"""Weingartner & Draine (2001) SMC Bar grain model attenuation curve.
+
+    Physically motivated dust grain-size + composition distribution for SMC-like
+    dust: steep UV rise, no 2175 Å bump. Most relevant for high-redshift galaxies.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid [Å].
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized attenuation curve k(λ), k(5500 Å) = 1 [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.interp`` on precomputed curve.
+
+    Precomputed from ``dust_extinction.grain_models.WD01("SMCBar")`` at module
+    import time. Data cover ~100–10\ :sup:`7` Å. Values outside the tabulated
+    range are held constant at boundary values.
+
+    Upstream credit: grain model data from Weingartner & Draine (2001) [1]_,
+    accessed via the ``dust-extinction`` astropy-affiliated package.
+    Independent implementation in synthesizer (Wilkins et al. 2025 [2]_).
+
+    References
+    ----------
+    .. [1] J. C. Weingartner & B. T. Draine, "Dust Grain-Size Distributions
+       and Extinction in the Milky Way, LMC, and SMC," ApJ, 548, 296 (2001).
+       arXiv:astro-ph/0008146. https://doi.org/10.1086/318651
+    .. [2] S. C. Wilkins et al., "Synthesizer: A Python Package for Generating
+       Synthetic Galaxy Observables," arXiv:2508.03888 (2025).
+    """
+    if not _GRAIN_MODELS_AVAILABLE:
+        return _grain_law_unavailable(wavelength)
+    return _make_grain_law(*_WD01_SMCBAR)(wavelength)
+
+
+@register_dust_law("wd01_mwrv31")
+def wd01_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
+    r"""Weingartner & Draine (2001) MW R_V=3.1 grain model attenuation curve.
+
+    Physically motivated dust grain-size + composition distribution for Milky
+    Way diffuse ISM dust: prominent 2175 Å bump, R_V = 3.1.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid [Å].
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized attenuation curve k(λ), k(5500 Å) = 1 [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.interp`` on precomputed curve.
+
+    Upstream credit: grain model data from Weingartner & Draine (2001) [1]_,
+    accessed via the ``dust-extinction`` astropy-affiliated package.
+    Independent implementation in synthesizer (Wilkins et al. 2025 [2]_).
+
+    References
+    ----------
+    .. [1] J. C. Weingartner & B. T. Draine, "Dust Grain-Size Distributions
+       and Extinction in the Milky Way, LMC, and SMC," ApJ, 548, 296 (2001).
+       arXiv:astro-ph/0008146. https://doi.org/10.1086/318651
+    .. [2] S. C. Wilkins et al., "Synthesizer: A Python Package for Generating
+       Synthetic Galaxy Observables," arXiv:2508.03888 (2025).
+    """
+    if not _GRAIN_MODELS_AVAILABLE:
+        return _grain_law_unavailable(wavelength)
+    return _make_grain_law(*_WD01_MWRV31)(wavelength)
+
+
+@register_dust_law("d03_mwrv31")
+def d03_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
+    r"""Draine (2003) MW R_V=3.1 updated grain model attenuation curve.
+
+    Updated Milky Way grain model incorporating revised PAH properties and
+    emission efficiencies relative to WD01. R_V = 3.1.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid [Å].
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized attenuation curve k(λ), k(5500 Å) = 1 [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.interp`` on precomputed curve.
+
+    Upstream credit: grain model data from Draine (2003) [1]_,
+    accessed via the ``dust-extinction`` astropy-affiliated package.
+    Independent implementation in synthesizer (Wilkins et al. 2025 [2]_).
+
+    References
+    ----------
+    .. [1] B. T. Draine, "Interstellar Dust Grains," ARA&A, 41, 241 (2003).
+       arXiv:astro-ph/0304489. https://doi.org/10.1146/annurev.astro.41.011802.094840
+    .. [2] S. C. Wilkins et al., "Synthesizer: A Python Package for Generating
+       Synthetic Galaxy Observables," arXiv:2508.03888 (2025).
+    """
+    if not _GRAIN_MODELS_AVAILABLE:
+        return _grain_law_unavailable(wavelength)
+    return _make_grain_law(*_D03_MWRV31)(wavelength)
+
+
+@register_dust_law("hd23_mwrv31")
+def hd23_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
+    r"""Hensley & Draine (2023) astrodust+PAH MW R_V=3.1 grain model.
+
+    State-of-the-art MW grain model combining astrodust grains with PAH
+    emission. R_V = 3.1. Supersedes WD01/D03 for the diffuse MW ISM.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid [Å].
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized attenuation curve k(λ), k(5500 Å) = 1 [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.interp`` on precomputed curve.
+
+    Upstream credit: grain model data from Hensley & Draine (2023) [1]_,
+    accessed via the ``dust-extinction`` astropy-affiliated package.
+    Independent implementation in synthesizer (Wilkins et al. 2025 [2]_).
+
+    References
+    ----------
+    .. [1] B. S. Hensley & B. T. Draine, "The Astrodust+PAH Model: A Unified
+       Description of the Dust of the Diffuse Milky Way," ApJ, 948, 55 (2023).
+       arXiv:2208.12365. https://doi.org/10.3847/1538-4357/acc4c2
+    .. [2] S. C. Wilkins et al., "Synthesizer: A Python Package for Generating
+       Synthetic Galaxy Observables," arXiv:2508.03888 (2025).
+    """
+    if not _GRAIN_MODELS_AVAILABLE:
+        return _grain_law_unavailable(wavelength)
+    return _make_grain_law(*_HD23_MWRV31)(wavelength)
