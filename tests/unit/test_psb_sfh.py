@@ -257,3 +257,43 @@ class TestEdgeCases:
         params = {**default_params, "age": 1e9, "burstage": 1e9, "fburst": 0.5}
         sfr = psb_wild2020(t_lookback, **params)
         assert jnp.all(jnp.isfinite(sfr))
+
+
+# ── Regression: fburst mass fraction on log-spaced grid ───────────
+
+
+class TestLogGridMassNorm:
+    """Regression test: fburst must represent true stellar mass fraction on a
+    log-spaced grid (as used by DSPS).  The unweighted jnp.sum() normalization
+    inflated the burst fraction because young (narrow) bins were equal-weight to
+    old (wide) bins in log-space.
+    """
+
+    def test_fburst_correct_on_log_grid(self):
+        """On a log-spaced lookback time grid, burst mass / total mass ≈ fburst."""
+        # Log-spaced grid matching DSPS convention: 1 Myr to 13.8 Gyr
+        t = jnp.logspace(6.0, 10.14, 256)  # 256 points, log-spaced
+
+        fburst = 0.3
+        sfr = psb_wild2020(
+            t,
+            log_peak_sfr=1.0,
+            age=10e9,
+            tau=2e9,
+            burstage=0.5e9,
+            alpha=2.0,
+            beta=2.0,
+            fburst=fburst,
+        )
+
+        dt = jnp.gradient(t)
+        burst_mask = t < 0.5e9
+        m_burst = jnp.sum(sfr[burst_mask] * dt[burst_mask])
+        m_total = jnp.sum(sfr * dt)
+        measured_fburst = float(m_burst / (m_total + 1e-30))
+
+        # Allow ±10 pp tolerance (grid discretization, boundary effects)
+        assert abs(measured_fburst - fburst) < 0.10, (
+            f"fburst={fburst:.2f} but measured burst fraction={measured_fburst:.3f} "
+            f"on log-spaced grid (tolerance 0.10)"
+        )

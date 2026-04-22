@@ -101,7 +101,7 @@ def test_feltre_backend_loads_grid() -> None:
     g = backend.grid
 
     assert g.alpha_axis.shape == (4,)
-    assert g.logUs_axis.shape == (4,)
+    assert g.logUs_axis.shape == (9,)
     assert g.logn_axis.shape == (3,)
     assert g.logZ_axis.shape == (16,)
     assert g.xi_d_axis.shape == (3,)

@@ -11,6 +11,7 @@ Tests cover:
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 jax.config.update("jax_enable_x64", True)
 
@@ -439,3 +440,175 @@ class TestStepFunctionRegression:
             f"SFR should change discontinuously at bin boundaries: "
             f"before={float(sfr_before[0]):.4e}, after={float(sfr_after[0]):.4e}"
         )
+
+
+# ── make_agebins_from_zred ────────────────────────────────────────
+
+
+class TestMakeAgebinsFromZred:
+    """Tests for Prospector-β redshift-aware age bin construction."""
+
+    def test_edges_monotone(self):
+        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+
+        edges = make_agebins_from_zred(1.0)
+        assert np.all(np.diff(edges) >= 0.0), "bin edges must be monotonically non-decreasing"
+
+    def test_starts_at_zero(self):
+        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+
+        edges = make_agebins_from_zred(2.0)
+        assert edges[0] == 0.0
+
+    def test_capped_at_tuniv_z2(self):
+        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+
+        edges = make_agebins_from_zred(2.0)
+        # Age of universe at z=2 is ~3.3 Gyr; edges must not exceed it
+        assert edges[-1] <= 3.5, f"edges exceed tuniv at z=2: {edges[-1]:.2f} Gyr"
+
+    def test_capped_at_tuniv_z4(self):
+        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+
+        edges = make_agebins_from_zred(4.0)
+        assert edges[-1] <= 1.8, f"edges exceed tuniv at z=4: {edges[-1]:.2f} Gyr"
+
+    def test_capped_at_tuniv_z6(self):
+        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+
+        edges = make_agebins_from_zred(6.0)
+        assert edges[-1] <= 1.0, f"edges exceed tuniv at z=6: {edges[-1]:.2f} Gyr"
+
+    def test_returns_numpy_not_jax(self):
+        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+
+        edges = make_agebins_from_zred(1.0)
+        assert isinstance(edges, np.ndarray), "should return numpy array (setup-time utility)"
+
+    def test_n_bins_argument(self):
+        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+
+        edges = make_agebins_from_zred(1.0, n_bins=5)
+        assert len(edges) == 6, f"n_bins=5 → 6 edges, got {len(edges)}"
+
+    def test_low_zred_has_young_bins(self):
+        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+
+        edges = make_agebins_from_zred(0.5)
+        # Should include ~30 Myr and ~100 Myr young edges
+        assert any(0.02 < e < 0.05 for e in edges), "missing ~30 Myr young bin edge"
+        assert any(0.08 < e < 0.15 for e in edges), "missing ~100 Myr young bin edge"
+
+
+# ── psb_continuity_sfh ────────────────────────────────────────────
+
+
+class TestPSBContinuitySFH:
+    """Tests for Suess+2021 PSB nonparametric SFH."""
+
+    @pytest.fixture
+    def age_yr(self):
+        return jnp.linspace(1e6, 10e9, 200)
+
+    @pytest.fixture
+    def default_edges(self):
+        return jnp.array([0.1, 1.0, 3.0, 6.0, 13.7])
+
+    def test_non_negative(self, age_yr, default_edges):
+        from tengri.components.sfh.nonparametric import psb_continuity_sfh
+
+        sfr = psb_continuity_sfh(
+            age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0,
+            bin_edges_gyr=default_edges, ratio_young=0.0, ratio_old_0=0.0,
+        )
+        assert jnp.all(sfr >= 0.0)
+
+    def test_finite(self, age_yr, default_edges):
+        from tengri.components.sfh.nonparametric import psb_continuity_sfh
+
+        sfr = psb_continuity_sfh(
+            age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0,
+            bin_edges_gyr=default_edges, ratio_young=0.0, ratio_old_0=0.0,
+        )
+        assert jnp.all(jnp.isfinite(sfr))
+
+    def test_mass_scales_with_log_total_mass(self, age_yr, default_edges):
+        from tengri.components.sfh.nonparametric import psb_continuity_sfh
+
+        sfr10 = psb_continuity_sfh(
+            age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0,
+            bin_edges_gyr=default_edges, ratio_young=0.0, ratio_old_0=0.0,
+        )
+        sfr11 = psb_continuity_sfh(
+            age_yr, 11.0, tlast_gyr=0.5, tflex_gyr=2.0,
+            bin_edges_gyr=default_edges, ratio_young=0.0, ratio_old_0=0.0,
+        )
+        ratio = float(jnp.sum(sfr11) / jnp.sum(sfr10))
+        assert abs(ratio - 10.0) < 0.5, f"10x mass increase should give ~10x SFR, got {ratio:.2f}"
+
+    def test_jit_compatible(self, age_yr, default_edges):
+        from tengri.components.sfh.nonparametric import psb_continuity_sfh
+        import functools
+
+        # bin_edges_gyr is a fixed structural arg — bake it in via partial before JIT
+        fn = jax.jit(functools.partial(psb_continuity_sfh, bin_edges_gyr=default_edges))
+        sfr = fn(age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0, ratio_young=0.0, ratio_old_0=0.0)
+        assert jnp.all(jnp.isfinite(sfr))
+
+    def test_grad_wrt_log_total_mass(self, age_yr, default_edges):
+        from tengri.components.sfh.nonparametric import psb_continuity_sfh
+
+        g = jax.grad(lambda m: jnp.sum(psb_continuity_sfh(
+            age_yr, m, tlast_gyr=0.5, tflex_gyr=2.0,
+            bin_edges_gyr=default_edges, ratio_young=0.0, ratio_old_0=0.0,
+        )))(10.0)
+        assert jnp.isfinite(g) and g > 0
+
+    def test_grad_wrt_ratio_young(self, age_yr, default_edges):
+        from tengri.components.sfh.nonparametric import psb_continuity_sfh
+
+        g = jax.grad(lambda r: jnp.sum(psb_continuity_sfh(
+            age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0,
+            bin_edges_gyr=default_edges, ratio_young=r, ratio_old_0=0.0,
+        )))(0.0)
+        assert jnp.isfinite(g)
+
+
+# ── Registry bin_edges_gyr support ───────────────────────────────
+
+
+class TestRegistryBinEdges:
+    """Tests for resolve_sfh bin_edges_gyr argument."""
+
+    def test_custom_edges_passed_through(self):
+        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+        from tengri.components.sfh.registry import resolve_sfh
+
+        edges = make_agebins_from_zred(2.0, n_bins=6)
+        fn, params, _, _ = resolve_sfh("continuity", bin_edges_gyr=edges)
+        age_yr = jnp.linspace(1e6, 3.3e9, 100)
+        kwargs = {v[0]: 0.0 for v in params.values() if v[0] != "log_total_mass"}
+        sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
+        assert jnp.all(jnp.isfinite(sfr))
+        assert jnp.any(sfr > 0)
+
+    def test_none_uses_default_edges(self):
+        from tengri.components.sfh.registry import resolve_sfh
+
+        fn, params, _, _ = resolve_sfh("continuity", bin_edges_gyr=None)
+        age_yr = jnp.linspace(1e6, 13.7e9, 100)
+        kwargs = {v[0]: 0.0 for v in params.values() if v[0] != "log_total_mass"}
+        sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
+        assert jnp.all(jnp.isfinite(sfr))
+
+    def test_dirichlet_custom_edges(self):
+        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+        from tengri.components.sfh.registry import resolve_sfh
+
+        edges = make_agebins_from_zred(3.0, n_bins=6)
+        fn, _, param_map, _ = resolve_sfh("dirichlet", bin_edges_gyr=edges)
+        age_yr = jnp.linspace(1e6, 2.0e9, 100)
+        # param_map: {public_name: (internal_name, scale, offset)}
+        kwargs = {v[0]: 0.5 for v in param_map.values() if v[0] != "log_total_mass"}
+        sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
+        assert jnp.all(jnp.isfinite(sfr))
