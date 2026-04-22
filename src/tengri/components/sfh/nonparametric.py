@@ -18,9 +18,13 @@ References
 - Leja+2017 (arXiv:1609.09073): Dirichlet SFH prior.
 - Leja+2019 (arXiv:1905.11997): Continuity SFH prior.
 - Johnson+2021: Prospector implementation.
+- Wang et al. 2024 (arXiv:2401.12198): Prospector-β agebins scheme.
 """
 
+from __future__ import annotations
+
 import jax.numpy as jnp
+import numpy as np
 
 # Default bin edges in Gyr (8 edges = 7 bins), log-spaced from 30 Myr to 13.7 Gyr.
 DEFAULT_BIN_EDGES_GYR = jnp.array([0.0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.7])
@@ -259,4 +263,205 @@ def dirichlet_sfh(
     bin_idx = jnp.searchsorted(bin_edges_yr, age_yr, side="right") - 1
     bin_idx = jnp.clip(bin_idx, 0, n_bins - 1)
     sfr = sfr_bins[bin_idx]
+    return jnp.maximum(sfr, 0.0)
+
+
+# ── Redshift-aware bin edges (Prospector-β scheme) ─────────────────
+
+
+def make_agebins_from_zred(
+    zred: float,
+    n_bins: int = 7,
+    cosmo=None,
+) -> np.ndarray:
+    """Redshift-dependent SFH bin edges (Prospector-β scheme, Wang+2024).
+
+    Constructs bin edges capped at the age of the universe at ``zred`` so
+    that no bin extends into the future. For low redshifts the youngest two
+    bins are fixed at 30 Myr and 100 Myr; interior bins are log-spaced to
+    90% of the universe age; the oldest bin spans 90–100% of the universe age.
+
+    This is a **setup-time utility** — call it when building a
+    :class:`~tengri.parameters.Parameters` object, not inside the forward
+    model. The returned array is plain NumPy so it can be passed as the
+    ``bin_edges_gyr`` argument to :func:`continuity_sfh` or
+    :func:`dirichlet_sfh`.
+
+    Parameters
+    ----------
+    zred : float
+        Galaxy redshift. Sets the age of the universe that caps the bins.
+    n_bins : int, optional
+        Total number of age bins. Default 7 (matches the tengri default).
+    cosmo : CosmoParams, optional
+        DSPS cosmology parameters. Default: tengri's Planck 2018 cosmology.
+
+    Returns
+    -------
+    bin_edges_gyr : np.ndarray, shape (n_bins+1,)
+        Age bin edges [Gyr], monotonically increasing from 0, capped at age of
+        universe at ``zred``.
+
+    Notes
+    -----
+    **Not JIT-compatible** — uses Python control flow and NumPy. Call once
+    at model-construction time, then pass the edges as a static array.
+
+    Ported from Prospector ``zred_to_agebins_pbeta`` (Johnson et al. 2021
+    [1]_), with two changes: uses tengri's Planck 2018 cosmology instead of
+    WMAP9, and returns edges in Gyr rather than log10(yr).
+
+    References
+    ----------
+    .. [1] B. D. Johnson et al., "Stellar Population Inference," ApJS, 254,
+       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4295/abef67
+    .. [2] S. Wang et al., "Prospector-β," arXiv:2401.12198 (2024).
+
+    Examples
+    --------
+    >>> edges = make_agebins_from_zred(zred=2.0)
+    >>> len(edges)
+    8
+    >>> bool((edges[:-1] < edges[1:]).all())  # monotone
+    True
+    """
+    from tengri.utils.cosmology import DEFAULT_COSMO, age_at_z
+
+    if cosmo is None:
+        cosmo = DEFAULT_COSMO
+
+    t_univ_gyr = float(age_at_z(zred, cosmo=cosmo))
+
+    log_30myr = np.log10(30e6)    # 7.477
+    log_100myr = 8.0              # 10^8 yr
+    log_90pct = np.log10(0.9 * t_univ_gyr * 1e9)
+    log_tuniv = np.log10(t_univ_gyr * 1e9)
+
+    if zred <= 3.0:
+        n_middle = n_bins - 3
+        if n_middle > 0:
+            log_middle = list(np.linspace(log_100myr, log_90pct, n_middle + 1)[1:])
+        else:
+            log_middle = []
+        log_edges = [log_30myr, log_100myr, *log_middle, log_tuniv]
+    else:
+        log_amin = 6.0  # 1 Myr
+        log_edges_inner = list(np.linspace(log_amin, log_90pct, n_bins - 1))
+        log_edges = [*log_edges_inner, log_tuniv]
+
+    edges_gyr = np.array([0.0, *[10.0 ** le / 1e9 for le in log_edges]])
+    edges_gyr = np.clip(edges_gyr, 0.0, t_univ_gyr)
+    edges_gyr = np.maximum.accumulate(edges_gyr)
+    return edges_gyr
+
+
+# ── PSB continuity SFH (Suess+2021) ───────────────────────────────
+
+
+def psb_continuity_sfh(
+    age_yr: jnp.ndarray,
+    log_total_mass: float = 10.0,
+    tlast_gyr: float = 0.5,
+    tflex_gyr: float = 2.0,
+    bin_edges_gyr: jnp.ndarray | None = None,
+    **ratio_kwargs,
+) -> jnp.ndarray:
+    """Post-starburst non-parametric SFH with variable quenching epoch (Suess+2021).
+
+    Extends the continuity SFH (Leja+2019) with two additional parameters that
+    track the quenching epoch. The oldest N bins have fixed edges and log-SFR
+    ratio priors (same as continuity). A flexible zone between ``tlast_gyr``
+    and ``tflex_gyr`` captures the transition epoch. The youngest bin spans
+    [0, tlast_gyr] and its SFR ratio encodes how recently star formation ceased.
+
+    Parameters
+    ----------
+    age_yr : array_like, shape (n_age,)
+        Lookback time grid [yr].
+    log_total_mass : float, optional
+        log10 of total stellar mass formed [Msun]. Default 10.0.
+    tlast_gyr : float, optional
+        Lookback time of quenching onset [Gyr]. Sets the youngest bin width.
+        Typical range: 0.01 to 1.0 Gyr.
+    tflex_gyr : float, optional
+        Upper boundary of the flexible zone [Gyr]. Default 2.0.
+    bin_edges_gyr : array_like, shape (n_fixed+1,), optional
+        Fixed old bin edges [Gyr]. Default: ``DEFAULT_BIN_EDGES_GYR[2:]``
+        = [0.3, 1.0, 3.0, 6.0, 13.7] Gyr.
+    **ratio_kwargs
+        Log-SFR ratios. Convention:
+        - ``ratio_young`` — youngest bin vs flex bin (large positive = burst).
+        - ``ratio_old_0``, ``ratio_old_1``, ... — ratios among old fixed bins.
+
+    Returns
+    -------
+    sfr : jnp.ndarray, shape (n_age,)
+        Star formation rate [Msun yr^-1], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives; ``tlast_gyr`` and
+    ``tflex_gyr`` must be concrete scalars (not traced inside JIT).
+
+    Ported from Prospector ``psb_logsfr_ratios_to_agebins`` and
+    ``logsfr_ratios_to_masses_psb`` (Johnson et al. 2021 [1]_), reimplemented
+    as a pure JAX step-function SFH compatible with DSPS.
+
+    References
+    ----------
+    .. [1] B. D. Johnson et al., "Stellar Population Inference," ApJS, 254,
+       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4295/abef67
+    .. [2] K. A. Suess et al., "Half-mass Radii for ~7000 Galaxies," ApJ,
+       915, 87 (2021). arXiv:2101.03177.
+       https://doi.org/10.3847/1538-4357/ac062c
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> t = jnp.logspace(6.0, 10.14, 256)
+    >>> sfr = psb_continuity_sfh(t, log_total_mass=10.5, tlast_gyr=0.3,
+    ...                          tflex_gyr=2.0, ratio_young=1.0,
+    ...                          ratio_old_0=0.2, ratio_old_1=-0.3)
+    >>> sfr.shape
+    (256,)
+    """
+    if bin_edges_gyr is None:
+        bin_edges_gyr = DEFAULT_BIN_EDGES_GYR[2:]  # [0.3, 1.0, 3.0, 6.0, 13.7]
+
+    n_fixed_bins = bin_edges_gyr.shape[0] - 1
+
+    # Full edge array: [0, tlast, tflex, old_fixed_bins...]
+    all_edges_gyr = jnp.concatenate(
+        [jnp.array([0.0, tlast_gyr, tflex_gyr]), bin_edges_gyr[1:]]
+    )
+    n_bins_total = all_edges_gyr.shape[0] - 1
+
+    # Old bins: log-SFR ratios (oldest = reference = 0)
+    ratio_young = ratio_kwargs.get("ratio_young", 0.0)
+    ratio_old = jnp.array(
+        [ratio_kwargs.get(f"ratio_old_{i}", 0.0) for i in range(n_fixed_bins - 1)]
+    )
+    log_sfr_old = jnp.concatenate(
+        [jnp.cumsum(ratio_old[::-1])[::-1], jnp.array([0.0])]
+    )
+
+    # Flex bin: same log-SFR as innermost old bin; youngest bin adds ratio_young
+    log_sfr_flex = log_sfr_old[0]
+    log_sfr_young = log_sfr_flex + ratio_young
+
+    log_sfr_bins = jnp.concatenate(
+        [jnp.array([log_sfr_young, log_sfr_flex]), log_sfr_old]
+    )
+
+    # Normalize to total mass
+    bin_widths_yr = jnp.diff(all_edges_gyr) * 1e9
+    sfr_unnorm = 10.0 ** log_sfr_bins
+    mass_unnorm = jnp.sum(sfr_unnorm * bin_widths_yr)
+    sfr_bins_norm = sfr_unnorm * (10.0 ** log_total_mass) / (mass_unnorm + 1e-30)
+
+    # Piecewise-constant lookup
+    bin_edges_yr = all_edges_gyr * 1e9
+    bin_idx = jnp.searchsorted(bin_edges_yr, age_yr, side="right") - 1
+    bin_idx = jnp.clip(bin_idx, 0, n_bins_total - 1)
+    sfr = sfr_bins_norm[bin_idx]
     return jnp.maximum(sfr, 0.0)
