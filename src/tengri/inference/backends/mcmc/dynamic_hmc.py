@@ -13,8 +13,8 @@ import jax.numpy as jnp
 
 from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import (
-    _dynamic_hmc_burnin_scan,
-    _dynamic_hmc_sample_scan,
+    _dynamic_hmc_chain_scan,
+    _dynamic_hmc_full_scan,
     _get_cached_adaptation,
     _get_flat_logdensity,
     _set_cached_adaptation,
@@ -91,67 +91,57 @@ def run_dynamic_hmc(
     adapt_key = ("hmc", not use_dense)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
-    def ld_1arg(pos):
-        """Closure binding log-posterior with data arguments for adaptation."""
-        return log_posterior_flat_2arg(pos, data_args)
-
     if cached is not None:
         parameters = cached
+
+        def ld_1arg(pos):
+            return log_posterior_flat_2arg(pos, data_args)
+
+        key, init_key = jax.random.split(key)
+        state = blackjax.mcmc.dynamic_hmc.init(init_flat, ld_1arg, init_key)
         if verbose:
             logger.info(
                 "  Reusing cached warmup (%.1fs). Step size: %.4f",
                 time.time() - t0,
                 float(parameters["step_size"]),
             )
+        key, chain_key = jax.random.split(key)
+        chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
+        positions, divergent = _dynamic_hmc_chain_scan(
+            state,
+            chain_keys,
+            log_posterior_flat_2arg,
+            data_args,
+            parameters["step_size"],
+            parameters["inverse_mass_matrix"],
+            n_burnin,
+        )
     else:
         key, warmup_key = jax.random.split(key)
-        warmup = blackjax.window_adaptation(
-            blackjax.hmc,
-            ld_1arg,
-            is_mass_matrix_diagonal=not use_dense,
-            target_acceptance_rate=target_accept_rate,
-            num_integration_steps=10,
+        key, dhmc_init_key = jax.random.split(key)
+        key, chain_key = jax.random.split(key)
+        chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
+        positions, divergent, step_size, inv_mass_matrix = _dynamic_hmc_full_scan(
+            init_flat,
+            warmup_key,
+            dhmc_init_key,
+            chain_keys,
+            log_posterior_flat_2arg,
+            data_args,
+            n_warmup,
+            n_burnin,
+            use_dense,
+            target_accept_rate,
         )
-        (_, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+        parameters = {"step_size": step_size, "inverse_mass_matrix": inv_mass_matrix}
         _set_cached_adaptation(fitter, adapt_key, parameters)
         if verbose:
             logger.info(
-                "  Warmup complete (%.1fs). Step size: %.4f",
+                "  Warmup + chain complete (%.1fs). Step size: %.4f",
                 time.time() - t0,
-                float(parameters["step_size"]),
+                float(step_size),
             )
 
-    step_size = parameters["step_size"]
-    inv_mass_matrix = parameters["inverse_mass_matrix"]
-
-    key, init_key = jax.random.split(key)
-    state = blackjax.mcmc.dynamic_hmc.init(init_flat, ld_1arg, init_key)
-
-    if n_burnin > 0:
-        key, burnin_key = jax.random.split(key)
-        burnin_keys = jax.random.split(burnin_key, n_burnin)
-        state = _dynamic_hmc_burnin_scan(
-            state,
-            burnin_keys,
-            log_posterior_flat_2arg,
-            step_size,
-            inv_mass_matrix,
-            data_args,
-        )
-        if verbose:
-            logger.info("  Burn-in complete (%d steps discarded)", n_burnin)
-
-    key, sample_key = jax.random.split(key)
-    sample_keys = jax.random.split(sample_key, n_samples)
-
-    _, (positions, divergent) = _dynamic_hmc_sample_scan(
-        state,
-        sample_keys,
-        log_posterior_flat_2arg,
-        step_size,
-        inv_mass_matrix,
-        data_args,
-    )
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0

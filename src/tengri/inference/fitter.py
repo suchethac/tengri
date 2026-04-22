@@ -656,6 +656,11 @@ class Fitter:
         n_samples=3,
         n_posterior_samples=200,
         modes=("linear_resample", "nonlinear_update"),
+        mcmc_methods=(),
+        n_warmup=300,
+        n_burnin=100,
+        n_mcmc_samples=100,
+        nss=False,
         verbose=True,
     ):
         """Pre-compile the JIT inference engine ahead of time.
@@ -678,15 +683,34 @@ class Fitter:
         n_posterior_samples : int
             Compile posterior draw for this many samples.
         modes : tuple of str
-            Which sample modes to pre-compile. Each mode compiles
+            Which VI sample modes to pre-compile. Each mode compiles
             separately. Default covers MGVI + geoVI update (fastest).
             Add ``"nonlinear_resample"`` for full geoVI (~56s extra).
+        mcmc_methods : tuple of str
+            MCMC methods to pre-compile. Supported values:
+            ``"nuts"``, ``"hmc"``, ``"dynamic_hmc"``, ``"ghmc"``.
+            Each call runs the full warmup + chain scan through JIT so
+            the XLA disk cache is populated before the first user call.
+            After ``fitter.compile(mcmc_methods=["nuts"])``, a fresh
+            kernel restart deserializes in <1s instead of ~23s.
+        n_warmup : int
+            Warmup steps used for the MCMC compilation run.
+        n_burnin : int
+            Burn-in steps used for the MCMC compilation run.
+        n_mcmc_samples : int
+            Sample steps used for the MCMC compilation run.
+        nss : bool
+            Pre-compile the NSS (nested slice sampling) step and init
+            functions.  NSS has a ~10–15s cold compile on the first
+            ``fitter.run("nss")`` call; setting ``nss=True`` moves that cost
+            to compile time.  ``data_args`` is traced so the compiled program
+            is reused across galaxies with the same model configuration.
         verbose : bool
             Print compilation progress.
 
         Returns
         -------
-        None
+        self
 
         Notes
         -----
@@ -694,22 +718,25 @@ class Fitter:
         the forward model's SED prediction and inference engines, storing
         compiled XLA programs to disk. First ``fitter.run()`` will skip
         XLA overhead by loading pre-compiled kernels. Typical times:
-        ``"linear_resample"`` + ``"nonlinear_update"`` ~3s; full modes ~60s.
+        ``"linear_resample"`` + ``"nonlinear_update"`` ~3s; full modes ~60s;
+        NUTS ~23s (once per unique model shape).
+
+        **MCMC cache key**: The XLA program is keyed on ``logdensity_fn_2arg``
+        identity, ``n_warmup``, ``n_burnin``, ``n_mcmc_samples``, and
+        ``use_dense``.  Use the same values here as in ``fitter.run()`` to
+        guarantee a cache hit.  Changing galaxy data does **not** invalidate
+        the cache (``data_args`` is traced, not static).
 
         **JIT-compatible**: yes — internally calls JIT-compiled JAX functions.
 
         Example
         -------
         >>> fitter = Fitter(model, data, noise)
-        >>> fitter.compile()  # ~3s for default modes
-        >>> fitter.compile(
-        ...     modes=(  # ~60s for all modes
-        ...         "linear_resample",
-        ...         "nonlinear_update",
-        ...         "nonlinear_resample",
-        ...     )
-        ... )
-        >>> result = fitter.run("vi_native")  # instant
+        >>> fitter.compile()  # ~3s for default VI modes
+        >>> fitter.compile(mcmc_methods=["nuts"])  # ~23s, then instant restarts
+        >>> fitter.compile(nss=True)  # ~12s, then instant restarts
+        >>> result = fitter.run("mcmc_nuts")  # instant after compile
+        >>> result = fitter.run("nss")  # instant after compile
         """
         dummy_pos = self._initialize_unbounded(jax.random.PRNGKey(0))
         if self._jit_sampler is None:
@@ -776,6 +803,118 @@ class Fitter:
                 n_posterior_samples,
                 time.time() - t0,
             )
+
+        if mcmc_methods:
+            from tengri.inference.backends.mcmc._shared import (
+                _dynamic_hmc_full_scan,
+                _get_flat_logdensity,
+                _ghmc_full_scan,
+                _hmc_full_scan,
+                _nuts_full_scan,
+            )
+
+            log_posterior_flat_2arg, _, init_flat, data_args = _get_flat_logdensity(
+                self, dummy_pos
+            )
+            n_chain = n_burnin + n_mcmc_samples
+            warmup_key = jax.random.PRNGKey(1)
+            chain_keys = jax.random.split(jax.random.PRNGKey(2), n_chain)
+            n_dim = len(init_flat)
+            use_dense = n_dim <= 30
+
+            for method in mcmc_methods:
+                if verbose:
+                    logger.info("  Compiling MCMC %s...", method)
+                t0 = time.time()
+                if method in ("nuts", "mcmc_nuts"):
+                    _nuts_full_scan(
+                        init_flat,
+                        warmup_key,
+                        chain_keys,
+                        log_posterior_flat_2arg,
+                        data_args,
+                        n_warmup,
+                        10,
+                        n_burnin,
+                        use_dense,
+                        0.85,
+                    )
+                elif method in ("hmc", "mcmc_hmc"):
+                    _hmc_full_scan(
+                        init_flat,
+                        warmup_key,
+                        chain_keys,
+                        log_posterior_flat_2arg,
+                        data_args,
+                        n_warmup,
+                        10,
+                        n_burnin,
+                        use_dense,
+                        0.85,
+                    )
+                elif method in ("dynamic_hmc", "mcmc_dynamic_hmc"):
+                    dhmc_init_key = jax.random.PRNGKey(4)
+                    dhmc_chain_keys = jax.random.split(jax.random.PRNGKey(5), n_chain)
+                    _dynamic_hmc_full_scan(
+                        init_flat,
+                        warmup_key,
+                        dhmc_init_key,
+                        dhmc_chain_keys,
+                        log_posterior_flat_2arg,
+                        data_args,
+                        n_warmup,
+                        n_burnin,
+                        use_dense,
+                        0.85,
+                    )
+                elif method in ("ghmc", "mcmc_ghmc"):
+                    ghmc_init_key = jax.random.PRNGKey(4)
+                    ghmc_chain_keys = jax.random.split(jax.random.PRNGKey(5), n_chain)
+                    _ghmc_full_scan(
+                        init_flat,
+                        warmup_key,
+                        ghmc_init_key,
+                        ghmc_chain_keys,
+                        log_posterior_flat_2arg,
+                        data_args,
+                        n_warmup,
+                        n_burnin,
+                        0.85,
+                        0.8,
+                        0.65,
+                    )
+                else:
+                    logger.warning("  Unknown MCMC method for compile: %s", method)
+                    continue
+                if verbose:
+                    logger.info("  Compiling MCMC %s... %.1fs", method, time.time() - t0)
+
+        if nss:
+            from tengri.inference.backends.evidence import _get_nss_fns
+
+            if self.spec.stochastic:
+                logger.warning("  NSS compile skipped: NSS does not support stochastic SFH")
+            else:
+                D = len(self._free_names)
+                if verbose:
+                    logger.info("  Compiling NSS (D=%d)...", D)
+                t0 = time.time()
+                init_jit, step_jit = _get_nss_fns(
+                    self,
+                    num_inner_steps=D,
+                    num_delete=50,
+                    max_steps=10,
+                    max_shrinkage=100,
+                )
+                nss_key = jax.random.PRNGKey(10)
+                nss_key, init_key = jax.random.split(nss_key)
+                all_samples = self.spec.sample_batch(init_key, 200)
+                particles = {name: all_samples[name] for name in self._free_names}
+                live = init_jit(particles, data_args)
+                nss_key, step_key = jax.random.split(nss_key)
+                step_jit(step_key, live, data_args)
+                if verbose:
+                    logger.info("  Compiling NSS... %.1fs", time.time() - t0)
 
         if verbose:
             logger.info("Compilation complete.")

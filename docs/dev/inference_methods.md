@@ -731,6 +731,121 @@ The `"geovi"` sample mode (used by `vi`, the default) uses `jax.lax.cond`
 to dynamically choose between resample and update. This traces both branches, incurring
 the full 56s cost. The fast/NIFTy backends avoid this by dispatching in Python.
 
+### 7.5 MCMC Compilation Architecture and Design Philosophy
+
+#### Why `lax.scan` (not a Python for-loop)
+
+```python
+# BAD: Python for-loop — unrolls the entire graph at trace time
+for k in keys:
+    state, info = kernel(k, state, ld, step_size, inv_mass_matrix, max_doublings)
+    positions.append(state.position)
+
+# GOOD: lax.scan — compiles the loop body once, executes N times
+_, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
+```
+
+`jax.lax.scan` compiles the loop body (`_step`) exactly once into an XLA `while` primitive.
+The resulting XLA program is compact and runs at hardware speed. A Python for-loop at trace
+time produces a giant unrolled graph: compile time and memory scale linearly with N, and
+the BlackJAX NUTS tree-builder (`lax.while_loop`) gets compiled N times — once per
+iteration. For 1000 samples this is catastrophically slow.
+
+#### Why `data_args` is a traced tensor (not closed over)
+
+The log-posterior is structured as:
+
+```python
+def log_posterior_flat_2arg(position, data_args):
+    return logdensity_2arg(unravel_fn(position), data_args)
+```
+
+`data_args` flows into the JIT-compiled program as a **traced** argument — it is part
+of the input values, not burned into the XLA bytecode. This means:
+
+- Switching to a new galaxy with the same model shape **never** triggers recompilation.
+- The compiled XLA program is galaxy-agnostic: only the model structure (parameter count,
+  filter count, SFH grid size) matters.
+- Benchmark evidence: `A1_new_gal mcmc_nuts = 0.08s` — a new galaxy runs at cached speed.
+
+#### Why `logdensity_fn_2arg` is a static argument
+
+```python
+@functools.partial(jax.jit, static_argnums=(3, ...))
+def _nuts_full_scan(init_flat, warmup_key, chain_keys, logdensity_fn_2arg, data_args, ...):
+```
+
+JAX uses **function identity** (Python object `id`) as part of the XLA cache key for
+static arguments. Marking `logdensity_fn_2arg` as static ensures:
+
+1. The XLA program is model-specific — two different models with the same D get separate
+   compiled programs (correct behavior).
+2. The same model reuses the same compiled program — no recompilation when `data_args` change.
+3. `functools.cache` on `_get_nuts_kernel()` guarantees kernel object identity across calls.
+
+#### Previous design (3 JITs) vs current design (1–2 JITs)
+
+Old architecture per cold NUTS run:
+
+| Phase | Function | JIT trigger |
+|-------|----------|-------------|
+| Warmup | `blackjax.window_adaptation.run()` | Internal `lax.scan`, compiles NUTS kernel |
+| Burn-in | `_nuts_burnin_scan()` | `@jax.jit`, recompiles NUTS kernel |
+| Sampling | `_nuts_sample_scan()` | `@jax.jit`, recompiles NUTS kernel |
+
+The NUTS tree-builder (`lax.while_loop`) compiled **3×** per cold run.
+
+New architecture:
+
+| Path | Function | JIT trigger |
+|------|----------|-------------|
+| Cold (no cached adaptation) | `_nuts_full_scan()` | Single outer `jax.jit` — kernel compiled **once** |
+| Warm (cached adaptation) | `_nuts_chain_scan()` | Single outer `jax.jit` — kernel compiled **once** |
+
+`_nuts_full_scan` wraps `window_adaptation.run()` **and** the chain scan inside a single
+outer `jax.jit`. Because JAX traces the entire body as one program, `blackjax`'s internal
+`lax.scan` (warmup) and the chain `lax.scan` see the same compiled NUTS kernel — the
+`lax.while_loop` tree-builder is emitted once into the XLA bytecode.
+
+#### XLA persistent disk cache
+
+XLA compiled programs are serialized to `~/.cache/tengri_jax_cache` on first run. On
+subsequent Python interpreter restarts, JAX deserializes the cached bytecode rather than
+recompiling. This means:
+
+- **First run** (cold, no disk cache): ~23s for NUTS D=7 (down from ~69s with 3 JITs).
+- **Second run** (disk cache hit): <1s deserialization.
+- The cache survives across Python restarts as long as JAX version and function identity
+  (`logdensity_fn_2arg`) are stable.
+
+#### Pre-warming with `fitter.compile()`
+
+```python
+# Pre-warm the MCMC XLA cache before interactive notebook use:
+fitter.compile(
+    mcmc_methods=["nuts"],   # or ["hmc", "dynamic_hmc", "ghmc"]
+    n_warmup=300,
+    n_burnin=100,
+    n_mcmc_samples=100,
+)
+# Now restart Python — first NUTS call deserializes in <1s.
+result = fitter.run("mcmc_nuts", n_warmup=300, n_burnin=100, n_samples=1000)
+```
+
+**Cache key contract**: The XLA program is keyed on `logdensity_fn_2arg` identity,
+`n_warmup`, `n_burnin`, `n_mcmc_samples` (chain length = n_burnin + n_samples), `use_dense`,
+and `max_doublings`. Use the same values in `compile()` as in `run()` to guarantee a hit.
+
+#### Expected performance impact
+
+| Scenario | Before | After |
+|----------|--------|-------|
+| Cold NUTS D=7, no XLA cache | ~69s (3 kernel compiles) | ~23s (1 compile) |
+| Warm NUTS (cached adaptation) | 2 JIT calls | 1 JIT call |
+| Fresh kernel restart, XLA cache populated | ~69s | <1s (deserialize) |
+| After `fitter.compile(mcmc_methods=["nuts"])` | cold on first use | instant on first use |
+| New galaxy, same model | 0.08s (traced data_args) | 0.08s (unchanged) |
+
 ---
 
 ## 8. Performance Benchmarks

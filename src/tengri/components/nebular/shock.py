@@ -330,8 +330,7 @@ def shock_line_ratios(
     --------
     >>> ratios = shock_line_ratios(300.0)  # solar, combined, 300 km/s
     >>> ratios = shock_line_ratios(500.0, shock_component="precursor")
-    >>> ratios = shock_line_ratios(400.0, shock_abundance="lmc",
-    ...                            shock_log_density=1.0)
+    >>> ratios = shock_line_ratios(400.0, shock_abundance="lmc", shock_log_density=1.0)
 
     """
     grids = _load_mappings_grids()

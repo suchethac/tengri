@@ -18,7 +18,9 @@ def test_vi_module_all_functions():
 
 
 def test_mcmc_module_importable():
-    from tengri.inference.backends.mcmc.common import run_elliptical_slice, run_nuts, run_raytrace
+    from tengri.inference.backends.mcmc.elliptical_slice import run_elliptical_slice
+    from tengri.inference.backends.mcmc.nuts import run_nuts
+    from tengri.inference.backends.mcmc.raytrace import run_raytrace
 
     assert callable(run_raytrace)
     assert callable(run_nuts)

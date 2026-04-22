@@ -16,8 +16,8 @@ from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_
 from tengri.inference.backends.mcmc._shared import (
     _get_cached_adaptation,
     _get_flat_logdensity,
-    _nuts_burnin_scan,
-    _nuts_sample_scan,
+    _nuts_chain_scan,
+    _nuts_full_scan,
     _set_cached_adaptation,
 )
 
@@ -35,6 +35,7 @@ def run_nuts(
     target_accept_rate=0.85,
     max_num_doublings=10,
     dense_mass_matrix=True,
+    pathfinder_warmstart=False,
     verbose=True,
 ):
     """NUTS sampling via BlackJAX.
@@ -93,6 +94,19 @@ def run_nuts(
         parameter correlations (e.g. age-dust-metallicity) and
         dramatically reduces divergences. Default True. Set False
         for D>20 where the dense matrix becomes expensive.
+    pathfinder_warmstart : bool, default False
+        Use ``blackjax.pathfinder_adaptation`` (L-BFGS mode-finding +
+        Hessian-derived inverse mass matrix + short step-size refinement)
+        instead of the default window adaptation. Typically 3-10x faster
+        warmup on high-dimensional problems (D>~30). When enabled,
+        ``dense_mass_matrix`` is ignored — Pathfinder always returns a
+        full inverse-covariance matrix. Consider reducing ``n_warmup``
+        (e.g. to 50) since only step-size refinement remains.
+
+        References:
+
+        - Zhang et al. 2022, "Pathfinder: Parallel quasi-Newton variational
+          inference", JMLR 23, 306, arXiv:2108.03782.
     verbose : bool
         Print progress.
     """
@@ -158,13 +172,13 @@ def run_nuts(
                 n_dim**2,
             )
 
-    adapt_key = ("nuts", not use_dense)
+    adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart))
     cached = _get_cached_adaptation(fitter, adapt_key)
+
     if cached is not None:
         parameters = cached
 
         def ld_1arg(pos):
-            """Closure binding log-posterior with data arguments for initialization."""
             return log_posterior_flat_2arg(pos, data_args)
 
         state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
@@ -174,65 +188,47 @@ def run_nuts(
                 time.time() - t0,
                 float(parameters["step_size"]),
             )
+        key, chain_key = jax.random.split(key)
+        chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
+        positions, divergent = _nuts_chain_scan(
+            state,
+            chain_keys,
+            log_posterior_flat_2arg,
+            data_args,
+            parameters["step_size"],
+            parameters["inverse_mass_matrix"],
+            max_num_doublings,
+            n_burnin,
+        )
     else:
         key, warmup_key = jax.random.split(key)
-
-        def ld_1arg(pos):
-            """Closure binding log-posterior with data arguments for warmup."""
-            return log_posterior_flat_2arg(pos, data_args)
-
-        warmup = blackjax.window_adaptation(
-            blackjax.nuts,
-            ld_1arg,
-            is_mass_matrix_diagonal=not use_dense,
-            target_acceptance_rate=target_accept_rate,
+        key, chain_key = jax.random.split(key)
+        chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
+        positions, divergent, step_size, inv_mass_matrix = _nuts_full_scan(
+            init_flat,
+            warmup_key,
+            chain_keys,
+            log_posterior_flat_2arg,
+            data_args,
+            n_warmup,
+            max_num_doublings,
+            n_burnin,
+            use_dense,
+            target_accept_rate,
+            bool(pathfinder_warmstart),
         )
-        (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+        parameters = {"step_size": step_size, "inverse_mass_matrix": inv_mass_matrix}
         _set_cached_adaptation(fitter, adapt_key, parameters)
         if verbose:
             logger.info(
-                "  Warmup complete (%.1fs). Step size: %.4f",
+                "  Warmup + chain complete (%.1fs). Step size: %.4f",
                 time.time() - t0,
-                float(parameters["step_size"]),
+                float(step_size),
             )
 
-    step_size = parameters["step_size"]
-    inv_mass_matrix = parameters["inverse_mass_matrix"]
-
-    # Burn-in via cached scan (discarded)
-    if n_burnin > 0:
-        key, burnin_key = jax.random.split(key)
-        burnin_keys = jax.random.split(burnin_key, n_burnin)
-        state = _nuts_burnin_scan(
-            state,
-            burnin_keys,
-            log_posterior_flat_2arg,
-            step_size,
-            inv_mass_matrix,
-            max_num_doublings,
-            data_args,
-        )
-        if verbose:
-            logger.info("  Burn-in complete (%d steps discarded)", n_burnin)
-
-    key, sample_key = jax.random.split(key)
-    sample_keys = jax.random.split(sample_key, n_samples)
-
-    _, (positions, divergent) = _nuts_sample_scan(
-        state,
-        sample_keys,
-        log_posterior_flat_2arg,
-        step_size,
-        inv_mass_matrix,
-        max_num_doublings,
-        data_args,
-    )
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
-
-    if verbose:
-        logger.info("  Sampling complete (%d samples)", n_samples)
 
     samples_phys = _vmap_samples_to_physical(positions, unravel_fn, fitter._to_physical)
     best_params = _mean_params(samples_phys)
@@ -253,6 +249,7 @@ def run_nuts(
             "n_samples": n_samples,
             "n_divergent": n_divergent,
             "step_size": float(parameters["step_size"]),
+            "warmup": "pathfinder" if pathfinder_warmstart else "window",
         },
         loss_history=None,
         _model=fitter.model,

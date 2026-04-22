@@ -1,6 +1,32 @@
 """Shared MCMC infrastructure: kernel getters, scan functions, logdensity helpers.
 
 Internal — imported by per-sampler modules. Not part of the public API.
+
+Compilation strategy
+--------------------
+Every sampler exposes two JIT-compiled entry points:
+
+``_<method>_full_scan``
+    Outer JIT wrapping BlackJAX window adaptation **and** the chain
+    (burn-in + sampling) in a single XLA program.  Used for the cold
+    path (no cached adaptation).  The kernel — e.g. the NUTS
+    ``lax.while_loop`` tree builder — is compiled exactly once instead
+    of once per phase.  Returns ``(positions, divergent, step_size,
+    inv_mass_matrix)`` so the caller can cache the adaptation params
+    after the call.
+
+``_<method>_chain_scan``
+    Outer JIT wrapping burn-in + sampling only.  Used for the warm
+    path (adaptation params cached from a prior run).  Replaces the
+    old separate burnin_scan + sample_scan pair, halving the number of
+    distinct JIT compilations.
+
+``data_args`` is always a **traced** argument (never closed over) so
+the compiled XLA program is galaxy-agnostic: switching to a new galaxy
+with the same model never triggers recompilation.
+
+``logdensity_fn_2arg`` is a **static** argument because JAX uses
+function identity as part of the compilation cache key.
 """
 
 from __future__ import annotations
@@ -12,9 +38,14 @@ from jax.flatten_util import ravel_pytree
 
 from tengri.inference._model_cache import get_model_cache
 
+# ---------------------------------------------------------------------------
+# Kernel getters (cached in Python so we don't rebuild on every JIT call)
+# ---------------------------------------------------------------------------
 
+
+@functools.cache
 def _get_nuts_kernel():
-    """Retrieve the NUTS kernel from BlackJAX."""
+    """Build and cache the BlackJAX NUTS kernel."""
     import blackjax.mcmc.nuts
 
     return blackjax.mcmc.nuts.build_kernel()
@@ -22,7 +53,7 @@ def _get_nuts_kernel():
 
 @functools.cache
 def _get_hmc_kernel():
-    """Retrieve and cache the HMC kernel from BlackJAX."""
+    """Build and cache the BlackJAX HMC kernel."""
     import blackjax.mcmc.hmc
 
     return blackjax.mcmc.hmc.build_kernel()
@@ -30,7 +61,7 @@ def _get_hmc_kernel():
 
 @functools.cache
 def _get_dynamic_hmc_kernel():
-    """Retrieve and cache the dynamic HMC kernel from BlackJAX."""
+    """Build and cache the BlackJAX dynamic HMC kernel."""
     import blackjax.mcmc.dynamic_hmc
 
     return blackjax.mcmc.dynamic_hmc.build_kernel()
@@ -38,237 +69,591 @@ def _get_dynamic_hmc_kernel():
 
 @functools.cache
 def _get_ghmc_kernel():
-    """Retrieve and cache the GHMC kernel from BlackJAX."""
+    """Build and cache the BlackJAX GHMC kernel."""
     import blackjax.mcmc.ghmc
 
     return blackjax.mcmc.ghmc.build_kernel()
 
 
-# --- NUTS scans ---
-# All scan functions take a 2-arg logdensity_fn(position, data_args) as
-# static_argnums so its identity is the cache key.  data_args flows in
-# as a regular traced argument — changing galaxy data does NOT trigger
-# recompilation.
+# ---------------------------------------------------------------------------
+# NUTS
+# ---------------------------------------------------------------------------
+# static_argnums legend for every scan:
+#   logdensity_fn_2arg → function identity is the JIT cache key
+#   n_warmup           → lax.scan length inside window_adaptation
+#   max_doublings      → NUTS tree parameter (compile-time constant)
+#   n_burnin           → used to slice chain_keys at trace time
+#   use_dense          → warmup constructor kwarg (bool)
+#   target_accept_rate → warmup constructor kwarg (float, rarely changed)
+#   use_pathfinder_warmup → picks pathfinder_adaptation vs window_adaptation (bool)
 
 
-@functools.partial(jax.jit, static_argnums=(2, 5))
-def _nuts_sample_scan(
-    state,
-    keys,
+@functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8, 9, 10))
+def _nuts_full_scan(
+    init_flat,
+    warmup_key,
+    chain_keys,
     logdensity_fn_2arg,
+    data_args,
+    n_warmup,
+    max_doublings,
+    n_burnin,
+    use_dense,
+    target_accept_rate,
+    use_pathfinder_warmup: bool = False,
+):
+    """Outer JIT: BlackJAX NUTS window adaptation + burn-in + sampling.
+
+    Compiles the NUTS tree-building kernel once for the full chain.
+    Returns adaptation params so the caller can populate the Python-side
+    cache after the call.
+
+    Parameters
+    ----------
+    init_flat : ndarray, shape (D,)
+        Initial position in unbounded latent space.
+    warmup_key : PRNGKey
+        Random key for window adaptation.
+    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
+        Pre-split keys for the combined burn-in + sampling chain.
+    logdensity_fn_2arg : callable (static)
+        ``log_p(position, data_args)`` — galaxy-agnostic log-posterior.
+    data_args : pytree (traced)
+        Observed data tensors; changing these does NOT trigger recompilation.
+    n_warmup : int (static)
+        Window adaptation steps.
+    max_doublings : int (static)
+        Maximum NUTS tree doublings.
+    n_burnin : int (static)
+        Burn-in steps (discarded).
+    use_dense : bool (static)
+        Dense vs diagonal mass matrix. Ignored when ``use_pathfinder_warmup``
+        is True (Pathfinder always returns a full inverse-covariance matrix
+        from its L-BFGS Hessian approximation).
+    target_accept_rate : float (static)
+        Target acceptance rate for dual averaging.
+    use_pathfinder_warmup : bool (static)
+        When True, use ``blackjax.adaptation.pathfinder_adaptation`` in
+        place of ``blackjax.window_adaptation``. Pathfinder runs L-BFGS
+        to locate the posterior mode and derives an inverse mass matrix
+        from the Hessian approximation, followed by a short dual-averaging
+        step-size refinement. Typically 3-10x faster than window adaptation
+        on high-dimensional problems (D>~30). Default False.
+
+    Returns
+    -------
+    positions : ndarray, shape (n_samples, D)
+    divergent : ndarray, shape (n_samples,)
+    step_size : scalar
+    inv_mass_matrix : ndarray, shape (D,) or (D, D)
+    """
+    import blackjax
+
+    def ld_1arg(pos):
+        return logdensity_fn_2arg(pos, data_args)
+
+    if use_pathfinder_warmup:
+        from blackjax.adaptation.pathfinder_adaptation import pathfinder_adaptation
+
+        warmup = pathfinder_adaptation(
+            blackjax.nuts,
+            ld_1arg,
+            target_acceptance_rate=target_accept_rate,
+        )
+    else:
+        warmup = blackjax.window_adaptation(
+            blackjax.nuts,
+            ld_1arg,
+            is_mass_matrix_diagonal=not use_dense,
+            target_acceptance_rate=target_accept_rate,
+        )
+    (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+    step_size = parameters["step_size"]
+    inv_mass_matrix = parameters["inverse_mass_matrix"]
+
+    kernel = _get_nuts_kernel()
+
+    def _step(s, k):
+        s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix, max_doublings)
+        return s, (s.position, info.is_divergent)
+
+    if n_burnin > 0:
+        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    return positions, divergent, step_size, inv_mass_matrix
+
+
+@functools.partial(jax.jit, static_argnums=(2, 6, 7))
+def _nuts_chain_scan(
+    state,
+    chain_keys,
+    logdensity_fn_2arg,
+    data_args,
     step_size,
     inv_mass_matrix,
     max_doublings,
-    data_args,
+    n_burnin,
 ):
-    """JIT-compiled NUTS sampling scan over multiple steps."""
-    kernel = _get_nuts_kernel()
+    """Outer JIT: NUTS burn-in + sampling with pre-computed adaptation params.
+
+    Used when adaptation params are already cached.  Combines the old
+    ``_nuts_burnin_scan`` + ``_nuts_sample_scan`` into a single compiled
+    program.
+
+    Parameters
+    ----------
+    state : NUTSState
+        Initial chain state (from ``blackjax.mcmc.nuts.init``).
+    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
+        Pre-split keys for the combined chain.
+    logdensity_fn_2arg : callable (static)
+    data_args : pytree (traced)
+    step_size : scalar (traced)
+    inv_mass_matrix : ndarray (traced)
+    max_doublings : int (static)
+    n_burnin : int (static)
+
+    Returns
+    -------
+    positions : ndarray, shape (n_samples, D)
+    divergent : ndarray, shape (n_samples,)
+    """
 
     def ld(pos):
-        """Bind log-density function with data arguments."""
         return logdensity_fn_2arg(pos, data_args)
 
+    kernel = _get_nuts_kernel()
+
     def _step(s, k):
-        """Execute one NUTS step, returning state and sample."""
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix, max_doublings)
         return s, (s.position, info.is_divergent)
 
-    return jax.lax.scan(_step, state, keys)
+    if n_burnin > 0:
+        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    return positions, divergent
 
 
-@functools.partial(jax.jit, static_argnums=(2, 5))
-def _nuts_burnin_scan(
-    state,
-    keys,
+# ---------------------------------------------------------------------------
+# HMC
+# ---------------------------------------------------------------------------
+
+
+@functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8, 9))
+def _hmc_full_scan(
+    init_flat,
+    warmup_key,
+    chain_keys,
     logdensity_fn_2arg,
-    step_size,
-    inv_mass_matrix,
-    max_doublings,
     data_args,
+    n_warmup,
+    n_leapfrog,
+    n_burnin,
+    use_dense,
+    target_accept_rate,
 ):
-    """JIT-compiled NUTS burn-in scan (samples discarded)."""
-    kernel = _get_nuts_kernel()
+    """Outer JIT: BlackJAX HMC window adaptation + burn-in + sampling.
 
-    def ld(pos):
-        """Bind log-density function with data arguments."""
+    Wraps warmup, burn-in, and sampling in a single ``jax.jit`` so the
+    HMC leapfrog kernel is compiled once. Returns adaptation params for
+    the Python-side cache.
+
+    Parameters
+    ----------
+    init_flat : ndarray, shape (D,)
+        Initial position in unbounded latent space.
+    warmup_key : PRNGKey
+        Random key for window adaptation.
+    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
+        Pre-split keys for the combined chain.
+    logdensity_fn_2arg : callable (static)
+        ``log_p(position, data_args)`` — galaxy-agnostic log-posterior.
+    data_args : pytree (traced)
+        Observed data tensors; changing these does NOT trigger recompilation.
+    n_warmup : int (static)
+        Window adaptation steps.
+    n_leapfrog : int (static)
+        Leapfrog integration steps per HMC proposal.
+    n_burnin : int (static)
+        Post-warmup burn-in steps (discarded).
+    use_dense : bool (static)
+        Dense vs diagonal mass matrix.
+    target_accept_rate : float (static)
+        Target acceptance rate for dual averaging.
+
+    Returns
+    -------
+    positions : ndarray, shape (n_samples, D)
+    divergent : ndarray, shape (n_samples,)
+    step_size : scalar
+    inv_mass_matrix : ndarray, shape (D,) or (D, D)
+    """
+    import blackjax
+
+    def ld_1arg(pos):
         return logdensity_fn_2arg(pos, data_args)
 
+    warmup = blackjax.window_adaptation(
+        blackjax.hmc,
+        ld_1arg,
+        is_mass_matrix_diagonal=not use_dense,
+        target_acceptance_rate=target_accept_rate,
+        num_integration_steps=n_leapfrog,
+    )
+    (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+    step_size = parameters["step_size"]
+    inv_mass_matrix = parameters["inverse_mass_matrix"]
+
+    kernel = _get_hmc_kernel()
+
     def _step(s, k):
-        """Execute one NUTS step, returning updated state."""
-        s, _info = kernel(k, s, ld, step_size, inv_mass_matrix, max_doublings)
-        return s, None
+        s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix, n_leapfrog)
+        return s, (s.position, info.is_divergent)
 
-    s, _ = jax.lax.scan(_step, state, keys)
-    return s
-
-
-# --- HMC scans ---
+    if n_burnin > 0:
+        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    return positions, divergent, step_size, inv_mass_matrix
 
 
-@functools.partial(jax.jit, static_argnums=(2, 5))
-def _hmc_sample_scan(
+@functools.partial(jax.jit, static_argnums=(2, 6, 7))
+def _hmc_chain_scan(
     state,
-    keys,
+    chain_keys,
     logdensity_fn_2arg,
+    data_args,
     step_size,
     inv_mass_matrix,
     n_leapfrog,
-    data_args,
+    n_burnin,
 ):
-    """JIT-compiled HMC sampling scan over multiple steps."""
-    kernel = _get_hmc_kernel()
+    """Outer JIT: HMC burn-in + sampling with pre-computed adaptation params.
+
+    Parameters
+    ----------
+    state : HMCState
+        Initial chain state (from ``blackjax.mcmc.hmc.init``).
+    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
+        Pre-split keys for the combined chain.
+    logdensity_fn_2arg : callable (static)
+        ``log_p(position, data_args)``.
+    data_args : pytree (traced)
+        Observed data tensors.
+    step_size : scalar (traced)
+        Step size from window adaptation.
+    inv_mass_matrix : ndarray (traced), shape (D,) or (D, D)
+        Inverse mass matrix from window adaptation.
+    n_leapfrog : int (static)
+        Leapfrog integration steps per proposal.
+    n_burnin : int (static)
+        Steps to discard at the start of the chain.
+
+    Returns
+    -------
+    positions : ndarray, shape (n_samples, D)
+    divergent : ndarray, shape (n_samples,)
+    """
 
     def ld(pos):
-        """Bind log-density function with data arguments."""
         return logdensity_fn_2arg(pos, data_args)
 
+    kernel = _get_hmc_kernel()
+
     def _step(s, k):
-        """Execute one HMC step, returning state and sample."""
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix, n_leapfrog)
         return s, (s.position, info.is_divergent)
 
-    return jax.lax.scan(_step, state, keys)
+    if n_burnin > 0:
+        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    return positions, divergent
 
 
-@functools.partial(jax.jit, static_argnums=(2, 5))
-def _hmc_burnin_scan(
-    state,
-    keys,
+# ---------------------------------------------------------------------------
+# Dynamic HMC
+# ---------------------------------------------------------------------------
+
+
+@functools.partial(jax.jit, static_argnums=(4, 6, 7, 8, 9))
+def _dynamic_hmc_full_scan(
+    init_flat,
+    warmup_key,
+    dhmc_init_key,
+    chain_keys,
     logdensity_fn_2arg,
-    step_size,
-    inv_mass_matrix,
-    n_leapfrog,
     data_args,
+    n_warmup,
+    n_burnin,
+    use_dense,
+    target_accept_rate,
 ):
-    """JIT-compiled HMC burn-in scan (samples discarded)."""
-    kernel = _get_hmc_kernel()
+    """Outer JIT: HMC warmup + dynamic HMC init + burn-in + sampling.
 
-    def ld(pos):
-        """Bind log-density function with data arguments."""
+    Uses HMC window adaptation to tune step size and mass matrix, then
+    initialises a dynamic HMC state inside the same JIT so the kernel is
+    compiled once.
+
+    Parameters
+    ----------
+    init_flat : ndarray, shape (D,)
+        Initial position in unbounded latent space.
+    warmup_key : PRNGKey
+        Random key for HMC window adaptation.
+    dhmc_init_key : PRNGKey (traced)
+        Random key for ``dynamic_hmc.init`` (requires a random generator arg).
+    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
+        Pre-split keys for the combined chain.
+    logdensity_fn_2arg : callable (static)
+        ``log_p(position, data_args)`` — galaxy-agnostic log-posterior.
+    data_args : pytree (traced)
+        Observed data tensors; changing these does NOT trigger recompilation.
+    n_warmup : int (static)
+        Window adaptation steps.
+    n_burnin : int (static)
+        Post-warmup burn-in steps (discarded).
+    use_dense : bool (static)
+        Dense vs diagonal mass matrix for HMC warmup.
+    target_accept_rate : float (static)
+        Target acceptance rate for dual averaging.
+
+    Returns
+    -------
+    positions : ndarray, shape (n_samples, D)
+    divergent : ndarray, shape (n_samples,)
+    step_size : scalar
+    inv_mass_matrix : ndarray, shape (D,) or (D, D)
+    """
+    import blackjax
+
+    def ld_1arg(pos):
         return logdensity_fn_2arg(pos, data_args)
 
-    def _step(s, k):
-        """Execute one HMC step, returning updated state."""
-        s, _info = kernel(k, s, ld, step_size, inv_mass_matrix, n_leapfrog)
-        return s, None
+    warmup = blackjax.window_adaptation(
+        blackjax.hmc,
+        ld_1arg,
+        is_mass_matrix_diagonal=not use_dense,
+        target_acceptance_rate=target_accept_rate,
+        num_integration_steps=10,
+    )
+    (_, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+    step_size = parameters["step_size"]
+    inv_mass_matrix = parameters["inverse_mass_matrix"]
 
-    s, _ = jax.lax.scan(_step, state, keys)
-    return s
-
-
-# --- Dynamic HMC scans ---
-
-
-@functools.partial(jax.jit, static_argnums=(2,))
-def _dynamic_hmc_sample_scan(
-    state,
-    keys,
-    logdensity_fn_2arg,
-    step_size,
-    inv_mass_matrix,
-    data_args,
-):
-    """JIT-compiled dynamic HMC sampling scan over multiple steps."""
+    state = blackjax.mcmc.dynamic_hmc.init(init_flat, ld_1arg, dhmc_init_key)
     kernel = _get_dynamic_hmc_kernel()
 
+    def _step(s, k):
+        s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix)
+        return s, (s.position, info.is_divergent)
+
+    if n_burnin > 0:
+        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    return positions, divergent, step_size, inv_mass_matrix
+
+
+@functools.partial(jax.jit, static_argnums=(2, 6))
+def _dynamic_hmc_chain_scan(
+    state,
+    chain_keys,
+    logdensity_fn_2arg,
+    data_args,
+    step_size,
+    inv_mass_matrix,
+    n_burnin,
+):
+    """Outer JIT: dynamic HMC burn-in + sampling with pre-computed adaptation params.
+
+    Parameters
+    ----------
+    state : DynamicHMCState
+        Initial chain state (from ``blackjax.mcmc.dynamic_hmc.init``).
+    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
+        Pre-split keys for the combined chain.
+    logdensity_fn_2arg : callable (static)
+        ``log_p(position, data_args)``.
+    data_args : pytree (traced)
+        Observed data tensors.
+    step_size : scalar (traced)
+        Step size from HMC window adaptation.
+    inv_mass_matrix : ndarray (traced), shape (D,) or (D, D)
+        Inverse mass matrix from HMC window adaptation.
+    n_burnin : int (static)
+        Steps to discard at the start of the chain.
+
+    Returns
+    -------
+    positions : ndarray, shape (n_samples, D)
+    divergent : ndarray, shape (n_samples,)
+    """
+
     def ld(pos):
-        """Bind log-density function with data arguments."""
         return logdensity_fn_2arg(pos, data_args)
 
+    kernel = _get_dynamic_hmc_kernel()
+
     def _step(s, k):
-        """Execute one dynamic HMC step, returning state and sample."""
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix)
         return s, (s.position, info.is_divergent)
 
-    return jax.lax.scan(_step, state, keys)
+    if n_burnin > 0:
+        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    return positions, divergent
 
 
-@functools.partial(jax.jit, static_argnums=(2,))
-def _dynamic_hmc_burnin_scan(
-    state,
-    keys,
+# ---------------------------------------------------------------------------
+# GHMC
+# ---------------------------------------------------------------------------
+
+
+@functools.partial(jax.jit, static_argnums=(4, 6, 7, 8, 9, 10))
+def _ghmc_full_scan(
+    init_flat,
+    warmup_key,
+    ghmc_init_key,
+    chain_keys,
     logdensity_fn_2arg,
-    step_size,
-    inv_mass_matrix,
     data_args,
+    n_warmup,
+    n_burnin,
+    target_accept_rate,
+    alpha,
+    delta,
 ):
-    """JIT-compiled dynamic HMC burn-in scan (samples discarded)."""
-    kernel = _get_dynamic_hmc_kernel()
+    """Outer JIT: HMC warmup + GHMC init + burn-in + sampling.
 
-    def ld(pos):
-        """Bind log-density function with data arguments."""
+    GHMC requires a diagonal mass matrix (momentum generator constraint),
+    so HMC warmup always uses diagonal regardless of the ``dense_mass_matrix``
+    flag. Returns step size and diagonal momentum inverse scale.
+
+    Parameters
+    ----------
+    init_flat : ndarray, shape (D,)
+        Initial position in unbounded latent space.
+    warmup_key : PRNGKey
+        Random key for HMC window adaptation.
+    ghmc_init_key : PRNGKey (traced)
+        Random key for ``ghmc.init`` momentum initialisation.
+    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
+        Pre-split keys for the combined chain.
+    logdensity_fn_2arg : callable (static)
+        ``log_p(position, data_args)`` — galaxy-agnostic log-posterior.
+    data_args : pytree (traced)
+        Observed data tensors; changing these does NOT trigger recompilation.
+    n_warmup : int (static)
+        HMC window adaptation steps.
+    n_burnin : int (static)
+        Post-warmup burn-in steps (discarded).
+    target_accept_rate : float (static)
+        Target acceptance rate for HMC dual averaging.
+    alpha : float (static)
+        Momentum persistence (0=full refresh, 1=no refresh).
+    delta : float (static)
+        Step size scaling in the GHMC proposal.
+
+    Returns
+    -------
+    positions : ndarray, shape (n_samples, D)
+    divergent : ndarray, shape (n_samples,)
+    step_size : scalar
+    momentum_inv_scale : ndarray, shape (D,)
+    """
+    import blackjax
+
+    def ld_1arg(pos):
         return logdensity_fn_2arg(pos, data_args)
 
+    warmup = blackjax.window_adaptation(
+        blackjax.hmc,
+        ld_1arg,
+        is_mass_matrix_diagonal=True,
+        target_acceptance_rate=target_accept_rate,
+        num_integration_steps=10,
+    )
+    (_, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+    step_size = parameters["step_size"]
+    momentum_inv_scale = parameters["inverse_mass_matrix"]
+
+    state = blackjax.mcmc.ghmc.init(init_flat, ghmc_init_key, ld_1arg)
+    kernel = _get_ghmc_kernel()
+
     def _step(s, k):
-        """Execute one dynamic HMC step, returning updated state."""
-        s, _info = kernel(k, s, ld, step_size, inv_mass_matrix)
-        return s, None
+        s, info = kernel(k, s, ld_1arg, step_size, momentum_inv_scale, alpha, delta)
+        return s, (s.position, info.is_divergent)
 
-    s, _ = jax.lax.scan(_step, state, keys)
-    return s
-
-
-# --- GHMC scans ---
+    if n_burnin > 0:
+        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    return positions, divergent, step_size, momentum_inv_scale
 
 
-@functools.partial(jax.jit, static_argnums=(2,))
-def _ghmc_sample_scan(
+@functools.partial(jax.jit, static_argnums=(2, 8, 9, 10))
+def _ghmc_chain_scan(
     state,
-    keys,
+    chain_keys,
     logdensity_fn_2arg,
+    data_args,
     step_size,
     momentum_inv_scale,
     alpha,
     delta,
-    data_args,
+    n_burnin,
+    alpha_static,
+    delta_static,
 ):
-    """JIT-compiled GHMC sampling scan over multiple steps."""
-    kernel = _get_ghmc_kernel()
+    """Outer JIT: GHMC burn-in + sampling with pre-computed adaptation params.
+
+    Parameters
+    ----------
+    state : GHMCState
+        Initial chain state (from ``blackjax.mcmc.ghmc.init``).
+    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
+        Pre-split keys for the combined chain.
+    logdensity_fn_2arg : callable (static)
+        ``log_p(position, data_args)``.
+    data_args : pytree (traced)
+        Observed data tensors.
+    step_size : scalar (traced)
+        Step size from HMC window adaptation.
+    momentum_inv_scale : ndarray (traced), shape (D,)
+        Diagonal inverse mass matrix from HMC window adaptation.
+    alpha : float (traced)
+        Momentum persistence passed to the GHMC kernel.
+    delta : float (traced)
+        Step size scaling passed to the GHMC kernel.
+    n_burnin : int (static)
+        Steps to discard at the start of the chain.
+    alpha_static : float (static)
+        Mirrors ``alpha`` as a static arg; belongs in the XLA cache key
+        because it controls the momentum-refresh geometry. Pass the same value.
+    delta_static : float (static)
+        Mirrors ``delta`` as a static arg. Pass the same value as ``delta``.
+
+    Returns
+    -------
+    positions : ndarray, shape (n_samples, D)
+    divergent : ndarray, shape (n_samples,)
+    """
 
     def ld(pos):
-        """Bind log-density function with data arguments."""
         return logdensity_fn_2arg(pos, data_args)
 
+    kernel = _get_ghmc_kernel()
+
     def _step(s, k):
-        """Execute one GHMC step, returning state and sample."""
         s, info = kernel(k, s, ld, step_size, momentum_inv_scale, alpha, delta)
         return s, (s.position, info.is_divergent)
 
-    return jax.lax.scan(_step, state, keys)
+    if n_burnin > 0:
+        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    return positions, divergent
 
 
-@functools.partial(jax.jit, static_argnums=(2,))
-def _ghmc_burnin_scan(
-    state,
-    keys,
-    logdensity_fn_2arg,
-    step_size,
-    momentum_inv_scale,
-    alpha,
-    delta,
-    data_args,
-):
-    """JIT-compiled GHMC burn-in scan (samples discarded)."""
-    kernel = _get_ghmc_kernel()
-
-    def ld(pos):
-        """Bind log-density function with data arguments."""
-        return logdensity_fn_2arg(pos, data_args)
-
-    def _step(s, k):
-        """Execute one GHMC step, returning updated state."""
-        s, _info = kernel(k, s, ld, step_size, momentum_inv_scale, alpha, delta)
-        return s, None
-
-    s, _ = jax.lax.scan(_step, state, keys)
-    return s
-
-
-# --- MCLMC scans ---
-# MCLMC/adjusted_mclmc kernels bake in logdensity_fn and inverse_mass_matrix
-# at build time.  The kernel itself is the static identity for caching.
-# Adaptation params are cached on the Model; the kernel is rebuilt per-fitter
-# (cheap ~ms) using the fitter's data_args.
+# ---------------------------------------------------------------------------
+# MCLMC scans (no burn-in phase; adaptation tunes L and step_size jointly)
+# ---------------------------------------------------------------------------
 
 
 @functools.partial(jax.jit, static_argnums=(2,))
@@ -276,7 +661,6 @@ def _mclmc_sample_scan(state, keys, kernel, L, step_size):
     """JIT-compiled MCLMC sampling scan over multiple steps."""
 
     def _step(s, k):
-        """Execute one MCLMC step, returning state and sample."""
         s, _info = kernel(k, s, L, step_size)
         return s, s.position
 
@@ -288,11 +672,15 @@ def _adjusted_mclmc_sample_scan(state, keys, kernel, step_size, n_integration_st
     """JIT-compiled adjusted MCLMC sampling scan over multiple steps."""
 
     def _step(s, k):
-        """Execute one adjusted MCLMC step, returning state and sample."""
         s, info = kernel(k, s, step_size, n_integration_steps)
         return s, (s.position, info.is_divergent)
 
     return jax.lax.scan(_step, state, keys)
+
+
+# ---------------------------------------------------------------------------
+# Logdensity and adaptation cache helpers
+# ---------------------------------------------------------------------------
 
 
 def _get_flat_logdensity(fitter, init_params):
