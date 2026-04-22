@@ -478,6 +478,17 @@ class SEDModel:
         self._uses_igm = spec.apply_igm
         self._uses_dla = getattr(spec, "dla", False)
         self._igm_patchy = getattr(spec, "igm_patchy", False)
+        self._igm_model = getattr(spec, "igm_model", "inoue")
+        _valid = {"inoue", "madau"}
+        if self._igm_model not in _valid:
+            raise ValueError(
+                f"igm_model={self._igm_model!r} not recognised. Choose from: {sorted(_valid)}"
+            )
+        if self._igm_model == "madau":
+            from tengri.components.igm import igm_transmission_madau as _igm_fn
+        else:
+            from tengri.components.igm import igm_transmission as _igm_fn
+        self._igm_fn = _igm_fn
 
     def _init_nebular(self, spec, ssp_data):
         """Configure nebular emission backend and register param_map entries."""
@@ -683,9 +694,7 @@ class SEDModel:
             and phot is not None
             and self._z_fixed is not None
         ):
-            from tengri.components.igm import igm_transmission
-
-            igm_eff = igm_transmission(phot.effective_wavelengths, self._z_fixed)
+            igm_eff = self._igm_fn(phot.effective_wavelengths, self._z_fixed)
 
         # Voronoi frequency bandwidths for L_absorbed broadband estimate.
         # Each filter is assigned a non-overlapping frequency interval via
@@ -780,26 +789,20 @@ class SEDModel:
             and self._agn_model == "skirtor"
         ):
             try:
-                from pathlib import Path
-
+                from tengri.components.agn.skirtor import _find_skirtor_grid
                 from tengri.components.agn.skirtor_precompute import (
                     build_skirtor_photometry_lookup,
                     precompute_skirtor_photometry,
                 )
 
-                _grid_candidates = [
-                    Path(__file__).resolve().parents[3] / "data" / "skirtor_templates_v2.h5",
-                    Path(__file__).resolve().parents[3] / "data" / "skirtor_templates.npz",
-                ]
-                _grid_path = next((str(p) for p in _grid_candidates if p.is_file()), None)
-                if _grid_path is not None:
-                    _precomp = precompute_skirtor_photometry(
-                        _grid_path,
-                        self.filter_waves,
-                        self.filter_trans,
-                        redshift=float(self._z_fixed),
-                    )
-                    skirtor_preint = build_skirtor_photometry_lookup(_precomp)
+                _grid_path = _find_skirtor_grid()
+                _precomp = precompute_skirtor_photometry(
+                    _grid_path,
+                    self.filter_waves,
+                    self.filter_trans,
+                    redshift=float(self._z_fixed),
+                )
+                skirtor_preint = build_skirtor_photometry_lookup(_precomp)
             except Exception as e:
                 import warnings
 
@@ -1307,6 +1310,7 @@ class SEDModel:
                 igm_x_HI=params.get("igm_x_HI", 0.0),
                 igm_bubble_mpc=params.get("igm_bubble_mpc", 10.0),
                 igm_patchy=getattr(self, "_igm_patchy", False),
+                igm_model=self._igm_model,
             )
             sed_obs = sed_obs * igm_trans
         if self._uses_dla:
@@ -2506,6 +2510,7 @@ class SEDModel:
                     self.filter_waves,
                     self.filter_trans,
                     apply_igm=self._uses_igm,
+                    igm_fn=self._igm_fn,
                 )
             # Standard path: compute sfr_on_ssp in Python, pass into JIT.
             p = self._get_internal_params(params)

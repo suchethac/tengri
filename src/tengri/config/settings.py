@@ -256,19 +256,22 @@ class MultiwavelengthConfig:
     shock : bool
         Enable shock emission (MAPPINGS III).  Default: ``False``.
     apply_igm : bool
-        Apply Inoue+2014 IGM absorption.  Default: ``True``.
+        Apply IGM absorption.  Default: ``True``.
+    igm_model : str
+        IGM absorption model: ``"inoue"`` (Inoue+2014, default) or
+        ``"madau"`` (Madau+1995, 17 absorption lines).
 
     Attributes
     ----------
-    radio, xray, shock, apply_igm
+    radio, xray, shock, apply_igm, igm_model
         All constructor parameters are read-only frozen attributes.
 
     Notes
     -----
     Frozen dataclass — all fields are immutable after construction.
-    ``apply_igm=True`` applies Inoue+2014 IGM absorption to the full SED at
-    the galaxy redshift. Pass to :class:`ModelConfig` via the ``multiwavelength``
-    field.
+    ``apply_igm=True`` applies IGM absorption to the full SED at the galaxy
+    redshift.  The model is selected via ``igm_model``.  Pass to
+    :class:`ModelConfig` via the ``multiwavelength`` field.
 
     Examples
     --------
@@ -282,6 +285,7 @@ class MultiwavelengthConfig:
     xray: bool = False
     shock: bool = False
     apply_igm: bool = True
+    igm_model: str = "inoue"
 
 
 @dataclass(frozen=True)

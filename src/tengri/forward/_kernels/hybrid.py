@@ -117,11 +117,12 @@ def build_hybrid_photometry(model):
     # Precompute once at init on the rest-frame wavelength grid.
     _z_for_igm = model._z_fixed
     has_igm = model._uses_igm and _z_for_igm is not None
+    _igm_fn = getattr(model, "_igm_fn", None)
+    if _igm_fn is None:
+        from tengri.components.igm import igm_transmission as _igm_fn
     if has_igm:
-        from tengri.components.igm import igm_transmission
-
         _wave_obs_igm = model.ssp_data.ssp_wave * (1.0 + _z_for_igm)
-        igm_trans_full = jnp.asarray(igm_transmission(_wave_obs_igm, _z_for_igm), dtype=dt)
+        igm_trans_full = jnp.asarray(_igm_fn(_wave_obs_igm, _z_for_igm), dtype=dt)
         # Per-filter effective IGM (for stellar preintegrated photometry)
         igm_trans_eff = model._precomputed.igm_at_effective_wavelengths
         if igm_trans_eff is not None:
@@ -1627,9 +1628,11 @@ def build_hybrid_photometry_ztable(model):
     #   2. Non-stellar SED: evaluate igm_transmission(wave_obs, z) at full wavelength
     #      inside the traced function (pure JAX, JIT-safe).
     has_igm = ztable.igm_trans_table is not None
+    _igm_fn_ztable = getattr(model, "_igm_fn", None)
+    if _igm_fn_ztable is None:
+        from tengri.components.igm import igm_transmission as _igm_fn_ztable
     if has_igm:
-        from tengri.components.igm import igm_transmission as _igm_fn
-
+        _igm_fn = _igm_fn_ztable
         _igm_trans_table = ztable.igm_trans_table  # shape (n_z, n_filters)
         _igm_z_grid = ztable.z_grid
 

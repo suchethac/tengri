@@ -568,11 +568,12 @@ def igm_absorption(
     igm_x_HI: float = 0.0,
     igm_bubble_mpc: float = 10.0,
     igm_patchy: bool = False,
+    igm_model: str = "inoue",
 ) -> jnp.ndarray:
     """Compute IGM transmission with optional patchy reionization.
 
-    Computes transmission using Inoue+2014 mean, optionally modified
-    by Miralda-Escudé (1998) / Mason+2018 patchy reionization model.
+    Computes transmission using the selected mean-IGM model, optionally
+    modified by Miralda-Escudé (1998) / Mason+2018 patchy reionization.
 
     Parameters
     ----------
@@ -588,6 +589,9 @@ def igm_absorption(
         Only used when ``igm_patchy=True``.
     igm_patchy : bool, optional
         Enable patchy reionization damping wing model. Default False.
+    igm_model : str, optional
+        Mean IGM model: ``"inoue"`` (Inoue+2014, default) or
+        ``"madau"`` (Madau+1995).
 
     Returns
     -------
@@ -597,11 +601,17 @@ def igm_absorption(
     Notes
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    Patchy reionization always uses Inoue+2014 as the mean-IGM base.
     """
     if igm_patchy and igm_x_HI > 0.0:
         from tengri.components.igm import igm_transmission_patchy
 
         return igm_transmission_patchy(wave_obs, z, x_HI=igm_x_HI, R_bubble=igm_bubble_mpc)
+
+    if igm_model == "madau":
+        from tengri.components.igm import igm_transmission_madau
+
+        return igm_transmission_madau(wave_obs, z)
 
     from tengri.components.igm import igm_transmission
 

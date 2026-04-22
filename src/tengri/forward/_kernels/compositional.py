@@ -21,6 +21,7 @@ def observe_photometry_from_rest_sed(
     filter_waves,
     filter_trans,
     apply_igm=False,
+    igm_fn=None,
 ):
     """Apply redshift + filter integration to a rest-frame SED.
 
@@ -57,10 +58,10 @@ def observe_photometry_from_rest_sed(
 
     sed = rest_sed
     if apply_igm:
-        from tengri.components.igm import igm_transmission
-
+        if igm_fn is None:
+            from tengri.components.igm import igm_transmission as igm_fn
         wave_obs = wave_rest * (1.0 + z)
-        igm_trans = igm_transmission(wave_obs, z)
+        igm_trans = igm_fn(wave_obs, z)
         sed = sed * igm_trans
 
     fw_pad, ft_pad, _n_valid = pad_filters(filter_waves, filter_trans)
@@ -185,21 +186,21 @@ def build_fused_tier2_photometry(model):
     if _use_dsps_native and not is_free_z:
         _t_obs_gyr_fixed = float(_age_at_z_fn(z_fixed))
 
+    # Resolve IGM function once at factory build time based on model config.
+    _igm_fn = getattr(model, "_igm_fn", None)
+    if _igm_fn is None:
+        from tengri.components.igm import igm_transmission as _igm_fn
+
     # IGM at full wavelength grid (only for fixed z)
     # Use panchromatic grid if available (when radio/xray enabled), else SSP grid
     igm_trans_full = None
     if apply_igm and not is_free_z:
-        from tengri.components.igm import igm_transmission
-
         wave_obs_full = rest_wave * (1.0 + z_fixed)
-        igm_trans_full = igm_transmission(wave_obs_full, z_fixed)
+        igm_trans_full = _igm_fn(wave_obs_full, z_fixed)
 
     # For free-z: need luminosity_distance inside JIT
     if is_free_z:
         from tengri.utils.cosmology import luminosity_distance as _lum_dist
-
-        if apply_igm:
-            from tengri.components.igm import igm_transmission as _igm_fn
 
     # --- Shared SED computation (sfr_on_ssp pre-computed by caller) ---
     def _compute_rest_sed(sfr_on_ssp, params):
