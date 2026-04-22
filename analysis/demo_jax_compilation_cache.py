@@ -419,10 +419,9 @@ ax1.bar([i + width for i in x], multi_gal_means, width, yerr=multi_gal_stds,
 ax1.set_xticks(x)
 ax1.set_xticklabels(methods)
 ax1.set_ylabel("Time (s)")
-ax1.set_yscale("log")  # LOG SCALE for clarity
-ax1.set_title("MCMC Inference Time: Cold vs Cached vs Multi-Galaxy (log scale)")
+ax1.set_title("MCMC Inference Time: Cold vs Cached vs Multi-Galaxy")
 ax1.legend()
-ax1.grid(axis="y", alpha=0.3, which="both")
+ax1.grid(axis="y", alpha=0.3)
 
 # Speedup factors (LOG SCALE)
 speedups_cached = cold_times / cached_times
@@ -433,10 +432,9 @@ ax2.bar([i + width/2 for i in x], speedups_multi_gal, width*1.5, label="Cold →
 ax2.set_xticks(x)
 ax2.set_xticklabels(methods)
 ax2.set_ylabel("Speedup Factor")
-ax2.set_yscale("log")  # LOG SCALE for clarity
-ax2.set_title("Cache Speedup: How Much Faster? (log scale)")
+ax2.set_title("Cache Speedup: How Much Faster?")
 ax2.legend()
-ax2.grid(axis="y", alpha=0.3, which="both")
+ax2.grid(axis="y", alpha=0.3)
 
 plt.tight_layout()
 plt.savefig("jax_cache_speedup.png", dpi=150, bbox_inches="tight")
