@@ -49,7 +49,9 @@ from tengri import Fitter, Gaussian, SEDModel, Uniform, load_filter_set, load_ss
 
 # %%
 # Load SSP and filters (shared across all tests)
-data_dir = Path("..") / "data"
+# Use Path(__file__) to get script location, then go up to repo root
+script_dir = Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
+data_dir = script_dir.parent / "data"
 ssp_file = data_dir / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 ssp = load_ssp_data(str(ssp_file))
 
@@ -156,58 +158,115 @@ print(f"\n✓ Cold → Warm speedup: {speedup_warm:.1f}×")
 gc.collect()
 
 # %% [markdown]
-# ## Test 2: New Galaxy (Same Model, Different Data)
+# ## Test 2: Multiple Galaxies (Same Model, Different Data)
 #
 # Demonstrates that the cache is **data-agnostic** — different galaxy data doesn't trigger recompilation.
+# Test on 4 galaxies to get robust timing statistics.
 
 # %%
 print("\n" + "=" * 80)
-print("Test 2: New Galaxy (Same Model, Different Data)")
+print("Test 2: Multiple Galaxies (Same Model, Different Data)")
 print("=" * 80)
 
-# Generate different galaxy with SAME model structure
-true_params_gal2 = {
-    "sfh_tsnorm_skew": -0.3,
-    "sfh_tsnorm_peak_lbt_gyr": 7.0,
-    "sfh_tsnorm_width_gyr": 0.5,
-    "sfh_tsnorm_trunc": 0.8,
-    "sfh_tsnorm_log_peak_sfr": 0.2,
-    "met_logzsol": -1.0,
-    "dust_tau_bc": 1.5,
-    "dust_tau_diff": 0.3,
-    "dust_slope": -0.7,
-    "redshift": 1.0,
-}
+# Generate 4 different galaxies with SAME model structure
+galaxy_params = [
+    # Galaxy 1 already exists (fitter1 from Test 1)
+    true_params_gal1,
+    # Galaxy 2
+    {
+        "sfh_tsnorm_skew": -0.3,
+        "sfh_tsnorm_peak_lbt_gyr": 7.0,
+        "sfh_tsnorm_width_gyr": 0.5,
+        "sfh_tsnorm_trunc": 0.8,
+        "sfh_tsnorm_log_peak_sfr": 0.2,
+        "met_logzsol": -1.0,
+        "dust_tau_bc": 1.5,
+        "dust_tau_diff": 0.3,
+        "dust_slope": -0.7,
+        "redshift": 1.0,
+    },
+    # Galaxy 3
+    {
+        "sfh_tsnorm_skew": 0.3,
+        "sfh_tsnorm_peak_lbt_gyr": 5.0,
+        "sfh_tsnorm_width_gyr": 2.0,
+        "sfh_tsnorm_trunc": 0.5,
+        "sfh_tsnorm_log_peak_sfr": 1.5,
+        "met_logzsol": -0.5,
+        "dust_tau_bc": 0.8,
+        "dust_tau_diff": 0.3,
+        "dust_slope": -0.7,
+        "redshift": 1.0,
+    },
+    # Galaxy 4
+    {
+        "sfh_tsnorm_skew": -0.1,
+        "sfh_tsnorm_peak_lbt_gyr": 2.0,
+        "sfh_tsnorm_width_gyr": 0.8,
+        "sfh_tsnorm_trunc": 0.2,
+        "sfh_tsnorm_log_peak_sfr": 0.5,
+        "met_logzsol": -0.8,
+        "dust_tau_bc": 1.2,
+        "dust_tau_diff": 0.3,
+        "dust_slope": -0.7,
+        "redshift": 1.0,
+    },
+    # Galaxy 5
+    {
+        "sfh_tsnorm_skew": 0.4,
+        "sfh_tsnorm_peak_lbt_gyr": 8.0,
+        "sfh_tsnorm_width_gyr": 1.5,
+        "sfh_tsnorm_trunc": 0.6,
+        "sfh_tsnorm_log_peak_sfr": 2.0,
+        "met_logzsol": -0.1,
+        "dust_tau_bc": 0.3,
+        "dust_tau_diff": 0.3,
+        "dust_slope": -0.7,
+        "redshift": 1.0,
+    },
+]
 
-obs2 = model.mock(true_params_gal2, snr=15.0, key=jr.PRNGKey(777))
-fitter2 = Fitter(model, obs2.flux_obs, obs2.noise)  # Different Fitter, SAME Model
+# Create fitters for galaxies 2-4 (galaxy 1 already exists)
+fitters = [fitter1]
+for i, params in enumerate(galaxy_params[1:], start=2):
+    obs = model.mock(params, snr=20.0, key=jr.PRNGKey(777 + i))
+    fitters.append(Fitter(model, obs.flux_obs, obs.noise))
 
-print("\n[1/2] Galaxy #1 (already cached from Test 1)...")
-_, t_gal1 = time_call(fitter1.run, method="map", key=jr.PRNGKey(3), n_steps=200, verbose=False, warmup=False)
-print(f"  Time: {t_gal1[0]:.3f}s")
+print(f"\nGenerated {len(fitters)} galaxies, all using the SAME Model instance")
 
-print("\n[2/2] Galaxy #2 (different data, same Model)...")
-_, t_gal2 = time_call(fitter2.run, method="map", key=jr.PRNGKey(4), n_steps=200, verbose=False, warmup=False)
-print(f"  Time: {t_gal2[0]:.3f}s")
+# Warm up cache with galaxy 1
+print("\n[Warmup] Galaxy #1 (already cached from Test 1)...")
+_, t_warmup = time_call(fitters[0].run, method="map", key=jr.PRNGKey(100), n_steps=200, verbose=False, warmup=False)
+print(f"  Time: {t_warmup[0]:.3f}s")
 
-overhead = t_gal2[0] / t_gal1[0]
-print(f"\n✓ Galaxy #1 → Galaxy #2 overhead: {overhead:.2f}× (should be ~1.0-1.2×)")
-print("  (Proves data_args pattern works — no recompilation!)")
+# Run MAP on all 4 galaxies and collect timings
+gal_times = []
+for i, fitter in enumerate(fitters, start=1):
+    print(f"\nGalaxy #{i}...", end=" ", flush=True)
+    _, t_gal = time_call(fitter.run, method="map", key=jr.PRNGKey(200 + i), n_steps=200, verbose=False, warmup=False)
+    gal_times.append(t_gal[0])
+    print(f"{t_gal[0]:.3f}s")
+
+mean_time = jnp.mean(jnp.array(gal_times))
+std_time = jnp.std(jnp.array(gal_times))
+
+print(f"\n✓ {len(fitters)}-galaxy average: {mean_time:.3f}s ± {std_time:.3f}s")
+print(f"  (Proves cache is data-agnostic — no recompilation across galaxies!)")
 
 # %%
 gc.collect()
 
 # %% [markdown]
-# ## Test 3: MCMC Methods (Cache Profiling)
+# ## Test 3: MCMC Methods (Cache Profiling with 5 Galaxies)
 #
 # Test multiple MCMC engines to see:
 # - Cold compilation time (first run)
 # - Cached performance (second run)
-# - New galaxy performance (proves cache reuse across data)
+# - Multi-galaxy average (proves cache reuse across data)
 
 # %%
 print("\n" + "=" * 80)
-print("Test 3: MCMC Methods (Cache Profiling)")
+print("Test 3: MCMC Methods (Cache Profiling with 5 Galaxies)")
 print("=" * 80)
 
 mcmc_methods = [
@@ -223,32 +282,38 @@ for method, kwargs in mcmc_methods:
 
     # Cold run
     print(f"  [1/3] Cold (JIT compiles)...", end=" ", flush=True)
-    _, t_cold = time_call(fitter1.run, method=method, key=jr.PRNGKey(10), warmup=False, **kwargs)
+    _, t_cold = time_call(fitters[0].run, method=method, key=jr.PRNGKey(10), warmup=False, **kwargs)
     print(f"{t_cold[0]:.2f}s")
 
     # Cached run (same Fitter)
     print(f"  [2/3] Cached (same Fitter)...", end=" ", flush=True)
-    _, t_cached = time_call(fitter1.run, method=method, key=jr.PRNGKey(11), warmup=False, **kwargs)
+    _, t_cached = time_call(fitters[0].run, method=method, key=jr.PRNGKey(11), warmup=False, **kwargs)
     print(f"{t_cached[0]:.2f}s")
 
-    # New galaxy (different Fitter, same Model)
-    print(f"  [3/3] New galaxy (different data)...", end=" ", flush=True)
-    _, t_new_gal = time_call(fitter2.run, method=method, key=jr.PRNGKey(12), warmup=False, **kwargs)
-    print(f"{t_new_gal[0]:.2f}s")
+    # Run on all 5 galaxies and average
+    print(f"  [3/3] Running on all {len(fitters)} galaxies...", end=" ", flush=True)
+    multi_gal_times = []
+    for i, fitter in enumerate(fitters):
+        _, t_gal = time_call(fitter.run, method=method, key=jr.PRNGKey(20 + i), warmup=False, **kwargs)
+        multi_gal_times.append(t_gal[0])
+
+    mean_multi_gal = jnp.mean(jnp.array(multi_gal_times))
+    std_multi_gal = jnp.std(jnp.array(multi_gal_times))
+    print(f"{mean_multi_gal:.2f}s ± {std_multi_gal:.2f}s")
 
     speedup_cached = t_cold[0] / t_cached[0]
-    speedup_new_gal = t_cold[0] / t_new_gal[0]
+    speedup_multi_gal = t_cold[0] / mean_multi_gal
 
     results.append({
         "Method": method,
         "Cold (s)": t_cold[0],
         "Cached (s)": t_cached[0],
-        "New Galaxy (s)": t_new_gal[0],
+        "5-Galaxy Avg (s)": f"{mean_multi_gal:.2f} ± {std_multi_gal:.2f}",
         "Cold→Cached": f"{speedup_cached:.1f}×",
-        "Cold→NewGal": f"{speedup_new_gal:.1f}×",
+        "Cold→5Gal": f"{speedup_multi_gal:.1f}×",
     })
 
-    print(f"  Speedup: Cold→Cached {speedup_cached:.1f}×, Cold→NewGal {speedup_new_gal:.1f}×")
+    print(f"  Speedup: Cold→Cached {speedup_cached:.1f}×, Cold→5GalAvg {speedup_multi_gal:.1f}×")
 
     # Cleanup
     gc.collect()
@@ -338,33 +403,40 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 methods = df_mcmc["Method"].str.replace("mcmc_", "").str.upper()
 cold_times = df_mcmc["Cold (s)"]
 cached_times = df_mcmc["Cached (s)"]
-new_gal_times = df_mcmc["New Galaxy (s)"]
 
-# Bar chart: Absolute times
+# Parse 5-galaxy averages (format: "mean ± std")
+multi_gal_data = df_mcmc["5-Galaxy Avg (s)"].str.split(" ± ", expand=True)
+multi_gal_means = multi_gal_data[0].astype(float)
+multi_gal_stds = multi_gal_data[1].astype(float)
+
+# Bar chart: Absolute times (LOG SCALE)
 x = range(len(methods))
 width = 0.25
 ax1.bar([i - width for i in x], cold_times, width, label="Cold (first run)", color="red", alpha=0.7)
 ax1.bar(x, cached_times, width, label="Cached (same galaxy)", color="green", alpha=0.7)
-ax1.bar([i + width for i in x], new_gal_times, width, label="New galaxy", color="blue", alpha=0.7)
+ax1.bar([i + width for i in x], multi_gal_means, width, yerr=multi_gal_stds,
+        label="5-galaxy avg", color="blue", alpha=0.7, capsize=5)
 ax1.set_xticks(x)
 ax1.set_xticklabels(methods)
 ax1.set_ylabel("Time (s)")
-ax1.set_title("MCMC Inference Time: Cold vs Cached vs New Galaxy")
+ax1.set_yscale("log")  # LOG SCALE for clarity
+ax1.set_title("MCMC Inference Time: Cold vs Cached vs Multi-Galaxy (log scale)")
 ax1.legend()
-ax1.grid(axis="y", alpha=0.3)
+ax1.grid(axis="y", alpha=0.3, which="both")
 
-# Speedup factors
+# Speedup factors (LOG SCALE)
 speedups_cached = cold_times / cached_times
-speedups_new_gal = cold_times / new_gal_times
+speedups_multi_gal = cold_times / multi_gal_means
 
 ax2.bar([i - width/2 for i in x], speedups_cached, width*1.5, label="Cold → Cached", color="green", alpha=0.7)
-ax2.bar([i + width/2 for i in x], speedups_new_gal, width*1.5, label="Cold → New Galaxy", color="blue", alpha=0.7)
+ax2.bar([i + width/2 for i in x], speedups_multi_gal, width*1.5, label="Cold → 5-Gal Avg", color="blue", alpha=0.7)
 ax2.set_xticks(x)
 ax2.set_xticklabels(methods)
 ax2.set_ylabel("Speedup Factor")
-ax2.set_title("Cache Speedup: How Much Faster?")
+ax2.set_yscale("log")  # LOG SCALE for clarity
+ax2.set_title("Cache Speedup: How Much Faster? (log scale)")
 ax2.legend()
-ax2.grid(axis="y", alpha=0.3)
+ax2.grid(axis="y", alpha=0.3, which="both")
 
 plt.tight_layout()
 plt.savefig("jax_cache_speedup.png", dpi=150, bbox_inches="tight")

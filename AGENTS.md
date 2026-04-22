@@ -155,7 +155,7 @@ Use numbered References with exact paper titles, arXiv ID, and DOI:
 References
 ----------
 .. [1] S. Charlot and S. M. Fall, "A Simple Model for the Absorption of Starlight by
-   Dust in Star-forming Galaxies," ApJ, 539, 718 (2000).
+   Dust in Galaxies," ApJ, 539, 718 (2000).
    https://doi.org/10.1086/309250
 .. [2] B. D. Johnson et al., "Prospector: Stellar Population Inference from Spectra
    and SEDs," ApJS, 254, 22 (2021). arXiv:2012.01426.

@@ -230,7 +230,7 @@ Full example of a correct References entry:
 References
 ----------
 .. [1] S. Charlot and S. M. Fall, "A Simple Model for the Absorption of Starlight by
-   Dust in Star-forming Galaxies," ApJ, 539, 718 (2000).
+   Dust in Galaxies," ApJ, 539, 718 (2000).
    https://doi.org/10.1086/309250
 
 .. [2] J. Leja et al., "Deriving Physical Properties from Broadband Photometry with
