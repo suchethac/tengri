@@ -248,19 +248,14 @@ class TestAdafJitGrad:
             err_msg="adaf_disc: FD check ∂/∂adaf_delta",
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "ADAF beta gradient is numerically unstable: autodiff=O(1e48), FD=0. "
-            "The ADAF spectrum has an algebraic power-law singularity near beta=0.5 "
-            "that causes the autodiff chain to amplify floating-point noise to extreme "
-            "values. This is a known limitation of the current ADAF implementation "
-            "and should be fixed by reparameterizing the ADAF equations (see ADAF rewrite "
-            "project in memory/project_adaf_rewrite.md)."
-        ),
-    )
     def test_gradient_wrt_beta(self, optical_wavelength):
-        """FD check: ∂(∑SED)/∂beta for adaf_disc. ADAF β parameter gradient."""
+        """FD check: ∂(∑SED)/∂beta for adaf_disc. ADAF β parameter gradient.
+
+        Fixed by the Mahadevan 1997 rewrite (2026-04-21): The new implementation uses
+        a more physical weighting of synchrotron/bremsstrahlung/IC components via
+        magnetic field pressure (1-beta), which avoids the algebraic singularity
+        that plagued the old linear weighting scheme.
+        """
         from tengri.components.agn.disc import adaf_disc
 
         def loss_fn(beta):

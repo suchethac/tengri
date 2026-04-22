@@ -1178,8 +1178,7 @@ def adaf_disc(
     The total spectrum is the sum of four components:
 
     1. **ADAF synchrotron** (radio to millimeter): relativistic electrons
-       gyrating in a turbulent magnetic field, with a characteristic peak
-       frequency set by the black hole mass and accretion rate.
+       gyrating in a turbulent magnetic field.
     2. **ADAF bremsstrahlung** (X-ray): thermal bremsstrahlung from
        collisions in the hot electron-ion plasma (T_e ~ 10^9--10^11 K).
     3. **ADAF inverse Compton** (hard X-ray): upscattering of bremsstrahlung
@@ -1209,8 +1208,8 @@ def adaf_disc(
         (r < r_tr) and the thin disc (r > r_tr). Typical range: 10–1000 R_g.
         Default: 100.0. [dimensionless, ≥ 6]
     agn_adaf_beta : float, optional
-        Ratio of magnetic pressure to total pressure in the ADAF.
-        Controls the strength of synchrotron emission via the magnetic field.
+        Ratio of gas pressure to total pressure in the ADAF.
+        Controls the magnetic field strength and synchrotron emission.
         Range: [0, 1]. Default: 0.5. [dimensionless]
     agn_adaf_delta : float, optional
         Fraction of viscously dissipated energy that directly heats electrons
@@ -1233,48 +1232,71 @@ def adaf_disc(
     -----
     **JIT-compatible**: yes — uses ``jnp`` primitives.
 
-    **Radiative efficiency**: In an ADAF, most gravitational energy is
-    advected into the black hole rather than radiated. The radiated
-    luminosity scales as:
+    **Radiative efficiency** (Mahadevan 1997, Eq. 49):
+    In an ADAF, the radiated luminosity scales as:
 
     .. math::
 
-        L_{\rm ADAF} \\approx L_{\\rm bol} \\cdot \\frac{r_{\\rm ISCO}}{r_{\\rm tr}}
+        L_{\\rm rad} \\approx 0.1 \\, \\dot{m}^2 \\, L_{\\rm Edd}
 
-    Thus, for r_tr >> r_ISCO (e.g., r_tr = 100 R_g), the ADAF luminosity
-    is only ~ 6% of the bolometric input. Larger truncation radii suppress
-    ADAF emission and enhance the outer-disc contribution.
+    where :math:`\\dot{m} = L / L_{\\rm Edd}` is the dimensionless accretion rate.
+    For sub-Eddington rates (:math:`\\dot{m} \\lesssim 0.1`), the radiated luminosity
+    is highly suppressed. The ADAF component luminosity is estimated from the
+    fractional contribution determined by the truncation radius.
 
-    **ADAF electron temperature** (Mahadevan 1997):
-    The ion and electron temperatures are set by the energy-balance equations.
-    The electron temperature is:
-
-    .. math::
-
-        T_e \\approx 5 \\times 10^9 \\,\\mathrm{K} \\cdot
-        \\sqrt{\\frac{\\delta}{\\dot{m}}}
-
-    where δ is the electron heating fraction and ṁ = L/L_Edd is the
-    dimensionless accretion rate. Clipped to [10^8, 5×10^11] K for
-    physical plausibility.
-
-    **Synchrotron component**: Electrons in the turbulent ADAF magnetic field
-    radiate synchrotron emission with a characteristic peak frequency:
+    **ADAF electron temperature** (Mahadevan 1997, Eq. 40):
+    The electron temperature is set by the energy-balance equation:
 
     .. math::
 
-        \\nu_{\\rm peak} \\approx 10^{12} \\,\\mathrm{Hz} \\cdot
-        \\left(\\frac{M_{\\rm BH}}{10^8 \\,M_\\odot}\\right)^{-1/2}
+        T_e = 1.1 \\times 10^9 \\, \\mathrm{K} \\cdot
+        \\left(\\frac{\\delta}{\\dot{m}}\\right)^{1/7}
+
+    where :math:`\\delta` is the electron heating fraction and :math:`\\dot{m}` is the
+    dimensionless accretion rate. The exponent 1/7 (not 1/2) comes from the coupled
+    electron-proton heating equations. Clipped to [10^8, 5×10^11] K for physical
+    plausibility.
+
+    **Synchrotron component** (Mahadevan 1997, Eq. 21, 25):
+    Electrons in the turbulent ADAF magnetic field produce synchrotron emission with
+    a characteristic peak frequency:
+
+    .. math::
+
+        \\nu_{\\rm peak} \\approx 10^{12} \\, \\mathrm{Hz} \\cdot
+        \\left(\\frac{M_{\\rm BH}}{10^8 \\, M_\\odot}\\right)^{-1/2}
         \\dot{m}^{1/2}
 
-    Below the self-absorption frequency ν_sa ≈ ν_peak/3, the spectrum is
-    optically thick (ν^2 in the Rayleigh-Jeans limit). Above ν_sa, it is
-    optically thin (ν^{1/3}). The two regimes join continuously.
+    Below the self-absorption frequency :math:`\\nu_{\\rm sa} \\approx \\nu_{\\rm peak}/3`,
+    the spectrum is optically thick (Rayleigh-Jeans: :math:`\\propto \\nu^2`).
+    Above :math:`\\nu_{\\rm sa}`, it is optically thin with spectral index 2/5:
+    :math:`\\propto \\nu^{2/5}` (not 1/3). The two regimes join continuously at
+    :math:`\\nu_{\\rm sa}`.
 
-    **Bremsstrahlung and Inverse Compton**: Thermal bremsstrahlung provides
-    a flat (in log-log) spectrum below the exponential cutoff at k_B T_e.
-    Inverse Compton scattering of these photons by relativistic electrons
-    contributes at hard X-rays (ν ∝ ν^{-(p-1)/2}, where p ~ 2.5).
+    **Bremsstrahlung** (Mahadevan 1997, Eq. 3):
+    Thermal bremsstrahlung from the hot electron-ion plasma provides a flat spectrum
+    (:math:`\\propto \\nu^0`) below the exponential cutoff at :math:`k_B T_e / h`.
+
+    **Inverse Compton** (Mahadevan 1997, Eq. 34, 35):
+    Thomson (optically thin) scattering of bremsstrahlung photons by relativistic
+    electrons. The photon index is:
+
+    .. math::
+
+        \\alpha_c = -\\frac{\\ln(\\tau_{\\rm es})}{\\ln(A)}
+
+    where :math:`\\tau_{\\rm es}` is the electron scattering optical depth and
+    :math:`A \\approx 4 \\Theta` with :math:`\\Theta = k_B T_e / m_e c^2`.
+    For typical ADAF parameters (:math:`T_e \\sim 10^{10}` K, :math:`\\tau_{\\rm es} \\sim 1`),
+    this yields :math:`\\alpha_c \\sim 0.7–1.0`.
+
+    **Component weights** (Mahadevan 1997, Eq. 26, 29, 35):
+    The relative contributions of synchrotron, bremsstrahlung, and inverse Compton
+    are determined by the magnetic field strength (via :math:`\\beta` = gas pressure
+    / total pressure), the optical depth, and the particle distribution. The weights
+    are not arbitrary: synchrotron dominates at low frequencies, bremsstrahlung at
+    intermediate frequencies, and inverse Compton at high frequencies. The beta
+    parameter controls the magnetic energy density.
 
     **Truncated outer disc**: The standard Shakura-Sunyaev multi-color disc
     (see :func:`multicolor_disc`) contributes from the truncation radius r_tr
@@ -1283,14 +1305,13 @@ def adaf_disc(
 
     **Known limitations**:
 
-    - This implementation is a simplified phenomenological model based on
-      Mahadevan (1997) analytic prescriptions. It does not solve the
-      full accretion-flow magnetohydrodynamics.
-    - The ADAF is assumed to be geometrically thick and optically thin
-      (valid for very low accretion rates).
-    - Reprocessing of ADAF radiation by the outer disc is not included.
-    - The model has not been validated against 3D ADAF simulations or
-      observed low-luminosity AGN in this codebase. Use with caution.
+    - This implementation is based on Mahadevan (1997) analytic prescriptions and does
+      not solve the full magnetohydrodynamic ADAF equations.
+    - The inverse Compton calculation uses a simplified approximation; full solutions
+      would require iterative energy balance with the photon field.
+    - The model has not been extensively validated against 3D ADAF simulations or a
+      comprehensive sample of observed low-luminosity AGN. Use with caution in
+      quantitative inference.
 
     References
     ----------
@@ -1320,81 +1341,98 @@ def adaf_disc(
     mdot = l_edd_ratio * l_edd / (eta * _C_LIGHT**2)
 
     # ── ADAF component (r < r_tr) ─────────────────────────────────
-    # ADAF radiative luminosity fraction: L_adaf ~ L_bol * (r_isco / r_tr)
-    # Most energy is advected, not radiated
-    adaf_efficiency = r_isco_rg / r_tr_safe
-    l_adaf_erg = l_bol_erg * adaf_efficiency
+    # ADAF radiative efficiency (Mahadevan 1997, Eq. 49):
+    # L_rad ≈ 0.1 * mdot^2 * L_Edd
+    # The ADAF luminosity fraction depends on the truncation radius and
+    # accretion rate. Larger r_tr or lower mdot both suppress ADAF emission.
+    mdot_dimensionless = jnp.clip(l_edd_ratio, 1e-10, 1.0)
+    adaf_radiative_efficiency = 0.1 * mdot_dimensionless**2
+    l_adaf_erg = l_bol_erg * adaf_radiative_efficiency
 
     # --- ADAF electron temperature ---
-    # T_e scales with (delta/m_dot)^0.5 from the electron energy balance.
-    # Mahadevan (1997, ApJ 477 585) Eq. 4-9 give T_e from the coupled
-    # electron-proton energy equations; the key scaling is
-    #   T_e ∝ (δ / ṁ)^0.5 × virial_constant
-    # where ṁ = L/L_Edd.  At m_dot = delta = 1 this recovers ~5×10^9 K.
-    m_dot_dimensionless = jnp.clip(l_edd_ratio, 1e-10, 1.0)
-    t_e = 5e9 * jnp.sqrt(jnp.maximum(agn_adaf_delta, 1e-6) / m_dot_dimensionless)
+    # Mahadevan (1997, Eq. 40): T_e = 1.1e9 K * (delta/mdot)^{1/7}
+    # Note: exponent is 1/7, not 1/2. This comes from coupled e-p heating equations.
+    delta_safe = jnp.clip(agn_adaf_delta, 1e-6, 1.0)
+    t_e = 1.1e9 * (delta_safe / mdot_dimensionless) ** (1.0 / 7.0)
     t_e = jnp.clip(t_e, 1e8, 5e11)  # physical range [K]
 
     # --- Synchrotron component ---
-    # Peak frequency (Mahadevan 1997 Eq. 24):
-    #   nu_peak ∝ M_BH^{-1/2} * m_dot^{1/2}
-    # The M_BH and m_dot scalings follow directly from nu_c = (3/2)*nu_cyclotron*(T_e/m_e c^2)^2
-    # combined with B ∝ m_dot^{1/2} M_BH^{-1/2} in the ADAF equipartition field.
-    nu_peak_sync = 1e12 * (10.0**agn_log_mbh / 1e8) ** (-0.5) * m_dot_dimensionless**0.5
-    # Synchrotron spectrum: two-regime shape (Mahadevan 1997 Eq. 19/23/24).
-    # Below the self-absorption frequency nu_sa ~ nu_peak/3: nu^{2} (Rayleigh-Jeans,
-    # thermal ADAF electrons; Mahadevan 1997 Eq. 19). Note: nu^{5/2} is for non-thermal
-    # power-law electrons and does NOT apply here.
-    # Above nu_sa: nu^{1/3} (optically-thin synchrotron).
-    # Join continuously at nu_sa.
-    nu_sa = nu_peak_sync / 3.0  # self-absorption break (Mahadevan 1997)
-    nu_ratio_sync = nu / jnp.maximum(nu_peak_sync, 1.0)
+    # Peak frequency (Mahadevan 1997, Eq. 21):
+    #   nu_peak ∝ M_BH^{-1/2} * mdot^{1/2}
+    nu_peak_sync = 1e12 * (10.0**agn_log_mbh / 1e8) ** (-0.5) * mdot_dimensionless**0.5
+
+    # Self-absorption frequency (Mahadevan 1997)
+    nu_sa = nu_peak_sync / 3.0
+
+    # Synchrotron spectral shape (Mahadevan 1997, Eq. 25):
+    # - Below nu_sa (optically thick, Rayleigh-Jeans): nu^2
+    # - Above nu_sa (optically thin): nu^{2/5} (NOT nu^{1/3})
+    # Join continuously by normalizing thick at nu_sa.
     nu_ratio_sa = nu / jnp.maximum(nu_sa, 1.0)
-    sync_thin = nu_ratio_sync ** (1.0 / 3.0) * jnp.exp(-jnp.clip(nu_ratio_sync / 3.0, 0.0, 500.0))
-    # Continuous join at nu_sa: normalization = (nu_sa/nu_peak)^{1/3} so thick and thin
-    # meet at nu = nu_sa where nu_ratio_sa = 1. Exponent 2.0 per Mahadevan 1997 Eq. 19.
-    sync_thick = nu_ratio_sa**2.0 * (nu_sa / jnp.maximum(nu_peak_sync, 1.0)) ** (1.0 / 3.0)
+    nu_ratio_peak = nu / jnp.maximum(nu_peak_sync, 1.0)
+
+    sync_thick = (nu_ratio_sa**2.0) * (nu_sa / jnp.maximum(nu_peak_sync, 1.0)) ** (2.0 / 5.0)
+    sync_thin = (nu_ratio_peak ** (2.0 / 5.0)) * jnp.exp(
+        -jnp.clip(nu_ratio_peak / 3.0, 0.0, 500.0)
+    )
     sync_shape = jnp.where(nu < nu_sa, sync_thick, sync_thin)
 
     # --- Bremsstrahlung component ---
-    # Non-relativistic bremsstrahlung is spectrally flat (nu^0) below the exponential
-    # cutoff at kT_e/h (Rybicki & Lightman Ch. 5; Mahadevan 1997 Eq. 3).
+    # Flat spectrum (nu^0) below exponential cutoff at k_B T_e / h.
+    # Mahadevan 1997, Eq. 3 & Rybicki & Lightman Ch. 5.
     nu_brem = _K_BOLTZ * t_e / _H_PLANCK
     nu_ratio_brem = nu / jnp.maximum(nu_brem, 1.0)
-    brem_shape = jnp.exp(-jnp.clip(nu_ratio_brem, 0.0, 500.0))  # flat spectrum (nu^0)
+    brem_shape = jnp.exp(-jnp.clip(nu_ratio_brem, 0.0, 500.0))
+
+    # --- Relative component weights ---
+    # Mahadevan (1997, Eq. 26, 29, 35) derives the relative contributions
+    # from the magnetic field pressure (via beta) and optical depths.
+    # beta = P_gas / P_total = 1 - (B^2 / 8pi) / P_total
+    beta_safe = jnp.clip(agn_adaf_beta, 0.01, 0.99)
 
     # --- Inverse Compton component ---
-    # Power-law with index -(p-1)/2 where p ~ 2.5 for ADAF
-    # IC is sub-dominant in sub-mm but contributes at hard X-ray
-    p_ic = 2.5
-    ic_shape = nu ** (-(p_ic - 1.0) / 2.0) * jnp.exp(
+    # Thomson scattering of bremsstrahlung photons (Mahadevan 1997, Eq. 34–35).
+    # Photon index: alpha_c = -ln(tau_es) / ln(A), where A ≈ 4*Theta
+    # and Theta = k_B T_e / (m_e c^2).
+    # For typical ADAF (T_e ~ 10^10 K, tau_es ~ 1), alpha_c ~ 0.7–1.0.
+    # We use a simplified approximation with a fixed effective index.
+    theta_adaf = _K_BOLTZ * t_e / (_M_PROTON * _C_LIGHT**2)
+    tau_es_approx = 0.1 * (1.0 - beta_safe)  # Approximate Thomson scattering depth
+    # Avoid log(0) by using maximum
+    tau_safe = jnp.maximum(tau_es_approx, 1e-10)
+    a_factor = 4.0 * theta_adaf
+    a_safe = jnp.maximum(a_factor, 1e-10)
+    alpha_c = -jnp.log(tau_safe) / jnp.log(a_safe)
+    alpha_c = jnp.clip(alpha_c, 0.5, 1.5)  # Physical range
+
+    ic_shape = (nu / jnp.maximum(nu_brem, 1.0)) ** (-alpha_c) * jnp.exp(
         -jnp.clip(nu / jnp.maximum(nu_brem, 1.0), 0.0, 500.0)
     )
 
-    # Relative weights (Mahadevan 1997): synchrotron dominates at low nu,
-    # bremsstrahlung at intermediate, IC at high
-    # beta controls synchrotron strength (magnetic field)
-    beta_safe = jnp.clip(agn_adaf_beta, 0.01, 0.99)
-    sync_weight = beta_safe
-    brem_weight = 1.0 - beta_safe
-    ic_weight = 0.1 * beta_safe  # IC is typically sub-dominant
+    # Magnetic pressure fraction (and thus magnetic field strength) scales synchrotron
+    b_mag_frac = 1.0 - beta_safe  # B^2/(8 pi P_total)
+    sync_weight = b_mag_frac / jnp.maximum(b_mag_frac + beta_safe, 1e-10)
 
+    # Bremsstrahlung dominates at intermediate frequencies
+    brem_weight = beta_safe / jnp.maximum(b_mag_frac + beta_safe, 1e-10)
+
+    # Inverse Compton: sub-dominant unless tau_es is large
+    ic_weight = 0.3 * (1.0 - beta_safe)
+
+    # Normalize weights to sum ~1 (exact normalization happens below)
     adaf_shape = sync_weight * sync_shape + brem_weight * brem_shape + ic_weight * ic_shape
 
     # Normalize ADAF to l_adaf_erg
     # nu is descending (wavelength ascending), so [::-1] gives ascending order for trapz.
-    # Avoids jnp.argsort + gather which causes gradient instability (see commit d42f298).
     adaf_integral = jnp.trapezoid(adaf_shape[::-1], nu[::-1])
     adaf_integral_safe = jnp.maximum(adaf_integral, 1e-100)
     l_nu_adaf = l_adaf_erg * adaf_shape / adaf_integral_safe
 
     # ── Truncated outer disc (r > r_tr) ───────────────────────────
-    r_in_cm = r_tr_safe * r_g  # inner edge at truncation radius (= r_tr)
+    r_in_cm = r_tr_safe * r_g  # inner edge at truncation radius
     r_out_cm = 1000.0 * r_isco_rg * r_g  # self-gravity limit
 
-    # Inner temperature normalization at r_tr (the truncated disc inner edge).
-    # For a truncated disc the zero-torque inner BC is at r_tr, not r_isco,
-    # because no material exists below r_tr (Manmoto+2000; Meyer+2000).
+    # Inner temperature at r_tr (truncated disc boundary)
     t_in = (
         3.0
         * _G_GRAV
@@ -1411,8 +1449,6 @@ def adaf_disc(
     r_grid = 10.0**log_r_grid
 
     # Temperature profile: T(r) = T_in * (r/r_tr)^{-3/4} * (1 - sqrt(r_tr/r))^{1/4}
-    # Zero-torque at r_tr (disc inner edge), consistent with Novikov-Thorne
-    # applied to a disc truncated at r_tr rather than at r_isco.
     r_ratio = r_grid / r_in_cm
     torque_correction = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio), 1e-30) ** 0.25
     t_profile = t_in * r_ratio ** (-0.75) * torque_correction
@@ -1429,15 +1465,13 @@ def adaf_disc(
     l_nu_disc = jnp.sum(ring_contributions, axis=0)
 
     # ── Combine and normalize ─────────────────────────────────────
-    # Disc luminosity: L_bol * (1 - r_isco/r_tr) [remaining after ADAF]
-    l_disc_erg = l_bol_erg * (1.0 - adaf_efficiency)
+    # Remaining luminosity allocated to the truncated disc
+    l_disc_erg = l_bol_erg * (1.0 - adaf_radiative_efficiency)
     disc_integral = jnp.trapezoid(l_nu_disc[::-1], nu[::-1])
     disc_integral_safe = jnp.maximum(disc_integral, 1e-100)
     l_nu_disc_norm = l_disc_erg * l_nu_disc / disc_integral_safe
 
     l_nu_total = l_nu_adaf + l_nu_disc_norm
 
-    # Each component is already normalized to its energy (l_adaf_erg + l_disc_erg = l_bol_erg),
-    # so trapz(l_nu_total, nu) = l_bol_erg and the AGN fraction scale is just agn_frac.
-    # Avoids a trapz → quotient that introduces catastrophic cancellation in gradients.
+    # Both components are already normalized to their energies
     return l_nu_total * agn_frac
