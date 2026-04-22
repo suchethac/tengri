@@ -22,12 +22,14 @@ The returned ``fn`` is a pure JAX closure that can be JIT-compiled.
 References
 ----------
 - Bellstedt+2020 (arXiv:2005.11917): snorm, tsnorm.
+- Robotham+2020 (arXiv:2002.06980): snorm_burst, tsnorm_burst (ProSpect).
 - Carnall+2018: DPL.
 - Zacharegkas+2025 (arXiv:2506.19919): triweight burst.
 """
 
 from __future__ import annotations
 
+import functools
 from typing import Any, NamedTuple
 
 import jax.numpy as jnp
@@ -36,16 +38,21 @@ from tengri.components.sfh.dense_basis import dense_basis_pure_sfh, dense_basis_
 from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
 from tengri.components.sfh.mean_sfh import (
     AGEMAX_YR,
+    buat08,
     constant_sfh,
     constant_then_exponential_sfh,
     declining_exponential_sfh,
+    delayed_bq,
     delayed_exponential_sfh,
     dpl,
     exponential_sfh,
     lnorm,
     norm,
+    periodic,
     psb_wild2020,
     snorm,
+    snorm_burst_sfh,
+    snorm_trunc_burst_sfh,
     triweight_burst,
     tsnorm,
 )
@@ -199,6 +206,82 @@ _snorm_spec = SFHModelSpec(
 _register(_snorm_spec)
 # Register canonical name (same spec object, just different key)
 SFH_REGISTRY["skewnormal_sfh"] = _snorm_spec
+
+# --- snorm_burst (skew-normal + flat burst) — canonical: snorm_burst_sfh ---
+_snorm_burst_spec = SFHModelSpec(
+    name="snorm_burst",
+    fn=snorm_burst_sfh,
+    params={
+        "sfh_snorm_burst_log_peak_sfr": ParamDef(
+            "log10 peak SFR of skew-normal component", _always_true, "", Uniform(-1.0, 3.0)
+        ),
+        "sfh_snorm_burst_peak_lbt_gyr": ParamDef(
+            "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
+        ),
+        "sfh_snorm_burst_width_gyr": ParamDef(
+            "Gaussian width (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.2, 5.0)
+        ),
+        "sfh_snorm_burst_skew": ParamDef("Skewness", _always_true, "", Uniform(-1.0, 1.0)),
+        "sfh_snorm_burst_burst_sfr": ParamDef(
+            "Constant burst SFR amplitude (Msun/yr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
+        ),
+        "sfh_snorm_burst_burst_age_gyr": ParamDef(
+            "Burst lookback duration (Gyr)", _lo_positive, "must have lo > 0", Fixed(0.1)
+        ),
+    },
+    settings={},
+    internal_param_map={
+        "sfh_snorm_burst_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_snorm_burst_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_snorm_burst_width_gyr": ("width", 1e9, 0.0),
+        "sfh_snorm_burst_skew": ("skew", 1.0, 0.0),
+        "sfh_snorm_burst_burst_sfr": ("burst_sfr", 1.0, 0.0),
+        "sfh_snorm_burst_burst_age_gyr": ("burst_age", 1e9, 0.0),
+    },
+    composition_type="additive",
+)
+_register(_snorm_burst_spec)
+SFH_REGISTRY["snorm_burst_sfh"] = _snorm_burst_spec
+
+# --- tsnorm_burst (truncated skew-normal + flat burst) — canonical: snorm_trunc_burst_sfh ---
+_tsnorm_burst_spec = SFHModelSpec(
+    name="tsnorm_burst",
+    fn=snorm_trunc_burst_sfh,
+    params={
+        "sfh_tsnorm_burst_log_peak_sfr": ParamDef(
+            "log10 peak SFR of tsnorm component", _always_true, "", Uniform(-1.0, 3.0)
+        ),
+        "sfh_tsnorm_burst_peak_lbt_gyr": ParamDef(
+            "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
+        ),
+        "sfh_tsnorm_burst_width_gyr": ParamDef(
+            "Gaussian width (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.2, 5.0)
+        ),
+        "sfh_tsnorm_burst_skew": ParamDef("Skewness", _always_true, "", Uniform(-1.0, 1.0)),
+        "sfh_tsnorm_burst_trunc": ParamDef(
+            "Truncation sharpness", _lo_positive, "must have lo > 0", Uniform(1.0, 10.0)
+        ),
+        "sfh_tsnorm_burst_burst_sfr": ParamDef(
+            "Constant burst SFR amplitude (Msun/yr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
+        ),
+        "sfh_tsnorm_burst_burst_age_gyr": ParamDef(
+            "Burst lookback duration (Gyr)", _lo_positive, "must have lo > 0", Fixed(0.1)
+        ),
+    },
+    settings={},
+    internal_param_map={
+        "sfh_tsnorm_burst_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_tsnorm_burst_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_tsnorm_burst_width_gyr": ("width", 1e9, 0.0),
+        "sfh_tsnorm_burst_skew": ("skew", 1.0, 0.0),
+        "sfh_tsnorm_burst_trunc": ("trunc", 1.0, 0.0),
+        "sfh_tsnorm_burst_burst_sfr": ("burst_sfr", 1.0, 0.0),
+        "sfh_tsnorm_burst_burst_age_gyr": ("burst_age", 1e9, 0.0),
+    },
+    composition_type="additive",
+)
+_register(_tsnorm_burst_spec)
+SFH_REGISTRY["snorm_trunc_burst_sfh"] = _tsnorm_burst_spec
 
 # --- norm (Gaussian) — canonical: gaussian_sfh ---
 _norm_spec = SFHModelSpec(
@@ -437,6 +520,114 @@ _register(
     )
 )
 SFH_REGISTRY["constant_then_exponential"] = SFH_REGISTRY["const_exp"]
+
+
+# --- delayed_bq (delayed-tau with burst/quench, Ciesla+2017) ---
+_register(
+    SFHModelSpec(
+        name="delayed_bq",
+        fn=delayed_bq,
+        params={
+            "sfh_delayed_bq_tau_main_gyr": ParamDef(
+                "e-folding timescale of main component (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 10.0),
+            ),
+            "sfh_delayed_bq_age_main_gyr": ParamDef(
+                "Galaxy age / lookback to formation (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 13.0),
+            ),
+            "sfh_delayed_bq_age_bq_gyr": ParamDef(
+                "Lookback time of burst/quench onset (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, 5.0),
+            ),
+            "sfh_delayed_bq_r_sfr": ParamDef(
+                "SFR ratio after/before burst/quench",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, 10.0),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_delayed_bq_tau_main_gyr": ("tau_main_yr", 1e9, 0.0),
+            "sfh_delayed_bq_age_main_gyr": ("age_main_yr", 1e9, 0.0),
+            "sfh_delayed_bq_age_bq_gyr": ("age_bq_yr", 1e9, 0.0),
+            "sfh_delayed_bq_r_sfr": ("r_sfr", 1.0, 0.0),
+        },
+        composition_type="additive",
+    )
+)
+
+
+# --- periodic (periodic SF events, Ciesla+2017) ---
+_register(
+    SFHModelSpec(
+        name="periodic",
+        fn=periodic,
+        params={
+            "sfh_periodic_delta_bursts_gyr": ParamDef(
+                "Spacing between burst onsets (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, 1.0),
+            ),
+            "sfh_periodic_tau_bursts_gyr": ParamDef(
+                "Duration/e-folding timescale of each burst (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.001, 0.5),
+            ),
+            "sfh_periodic_burst_type": ParamDef(
+                "Burst type: 0=exponential, 1=delayed, 2=rectangular",
+                lambda lo, hi: lo >= 0 and hi <= 2 and int(lo) == lo,
+                "must be 0, 1, or 2",
+                Fixed(0),
+            ),
+            "sfh_periodic_age_gyr": ParamDef(
+                "Galaxy age / lookback to formation (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 13.0),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_periodic_delta_bursts_gyr": ("delta_bursts_yr", 1e9, 0.0),
+            "sfh_periodic_tau_bursts_gyr": ("tau_bursts_yr", 1e9, 0.0),
+            "sfh_periodic_burst_type": ("burst_type", 1.0, 0.0),
+            "sfh_periodic_age_gyr": ("age_yr", 1e9, 0.0),
+        },
+        composition_type="additive",
+    )
+)
+
+
+# --- buat08 (velocity-parameterized SFH, Buat+2008) ---
+_register(
+    SFHModelSpec(
+        name="buat08",
+        fn=buat08,
+        params={
+            "sfh_buat08_velocity_km_s": ParamDef(
+                "Rotational velocity (km/s), range [40, 360]",
+                lambda lo, hi: lo >= 40 and hi <= 360,
+                "must have 40 <= lo and hi <= 360",
+                Uniform(80.0, 360.0),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_buat08_velocity_km_s": ("velocity_km_s", 1.0, 0.0),
+        },
+        composition_type="additive",
+    )
+)
 
 
 # --- psb (post-starburst, Wild+2020) ---
@@ -770,6 +961,7 @@ _register(
 
 def resolve_sfh(
     mean_sfh_type: str | list[str],
+    bin_edges_gyr: object = None,
 ) -> tuple[object, dict[str, ParamDef], dict[str, tuple[str, float, float]], dict[str, Any]]:
     """Resolve SFH specification to a composed function + params.
 
@@ -777,6 +969,11 @@ def resolve_sfh(
     ----------
     mean_sfh_type : str or list[str]
         Model name(s). E.g., ``"tsnorm"`` or ``["tsnorm", "burst", "field"]``.
+    bin_edges_gyr : array-like, shape (n_bins+1,), optional
+        Custom age bin edges [Gyr] for ``continuity`` and ``dirichlet`` models.
+        When provided, overrides the default ``DEFAULT_BIN_EDGES_GYR``. Use
+        ``make_agebins_from_zred`` to generate redshift-appropriate edges.
+        Ignored for non-nonparametric models. Default None (use model default).
 
     Returns
     -------
@@ -866,10 +1063,14 @@ def resolve_sfh(
         merged_settings.update(s.settings)
 
     # Build lists of (fn, set_of_internal_names) for each additive component
+    _NONPARAM_NAMES = {"continuity", "dirichlet"}
     additive_info = []
     for s in additive:
         internal_names = {v[0] for v in s.internal_param_map.values()}
-        additive_info.append((s.fn, internal_names))
+        fn_i = s.fn
+        if bin_edges_gyr is not None and s.name in _NONPARAM_NAMES:
+            fn_i = functools.partial(fn_i, bin_edges_gyr=bin_edges_gyr)
+        additive_info.append((fn_i, internal_names))
 
     has_burst = len(mixtures) > 0
     burst_info = None

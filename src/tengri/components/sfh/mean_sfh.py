@@ -23,11 +23,16 @@ Canonical names (short name alias in parentheses):
 - **delayed_exponential_sfh** (dexp): peaks at start + tau (3 params).
 - **declining_exponential_sfh** (tau): FSPS/bagpipes tau model in lookback time (3 params).
 - **triweight_burst**: compact triweight kernel in log-age for burst component.
+- **spline_sfh**: N-node monotone cubic (PCHIP) spline in log-age space. Nodes are
+  static (set at JIT-compile time); SFR values are free parameters. Use directly
+  (not via the registry — array node inputs don't fit the scalar-kwarg registry).
+- **snorm_burst_sfh** (snorm_burst): skew-normal SFH + flat recent burst.
+- **snorm_trunc_burst_sfh** (tsnorm_burst): truncated skew-normal + flat recent burst.
 
 References
 ----------
 - Bellstedt+2020 (arXiv:2005.11917): snorm, snorm_trunc parameterizations.
-- Robotham+2020 (arXiv:2002.06980): ProSpect SFH models.
+- Robotham+2020 (arXiv:2002.06980): ProSpect SFH models including spline and burst variants.
 - Carnall+2018: double power law (BAGPIPES).
 - Zacharegkas+2025 (arXiv:2506.19919): triweight burst model.
 """
@@ -178,8 +183,9 @@ def truncated_skewnormal_sfh(
     >>> import jax.numpy as jnp
     >>> from tengri import truncated_skewnormal_sfh
     >>> t = jnp.linspace(0.0, 13.7e9, 100)
-    >>> sfr = truncated_skewnormal_sfh(t, log_peak_sfr=1.0, peak_lbt=5e9,
-    ...     width=2e9, skew=0.0, trunc=5.0)
+    >>> sfr = truncated_skewnormal_sfh(
+    ...     t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=5.0
+    ... )
     >>> sfr.shape
     (100,)
     """
@@ -869,9 +875,12 @@ def psb_wild2020(
     mask_burst = t_lookback <= burstage
     sfr_burst = jnp.where(mask_burst, sfr_burst, 0.0)
 
-    # --- Mass-normalize each component ---
-    m_exp = jnp.sum(sfr_exp) + 1e-30
-    m_burst = jnp.sum(sfr_burst) + 1e-30
+    # --- Mass-normalize each component using dt-weighted integration ---
+    # jnp.gradient gives symmetric finite-difference widths; correct for
+    # log-spaced grids (DSPS) where bins span very different linear intervals.
+    dt = jnp.gradient(t_lookback)
+    m_exp = jnp.sum(sfr_exp * dt) + 1e-30
+    m_burst = jnp.sum(sfr_burst * dt) + 1e-30
 
     sfr = peak_sfr * ((1.0 - fburst) * sfr_exp / m_exp + fburst * sfr_burst / m_burst)
     return jnp.maximum(sfr, 0.0)
@@ -903,3 +912,619 @@ def powerlaw_sfh(
     **JIT-compatible**: yes — uses ``jnp`` primitives.
     """
     return norm * (t_lookback / t_ref) ** alpha
+
+
+def delayed_bq(
+    t_lookback: jnp.ndarray,
+    tau_main_yr: float,
+    age_main_yr: float,
+    age_bq_yr: float,
+    r_sfr: float,
+) -> jnp.ndarray:
+    """Delayed-tau SFH with burst or quench episode (Ciesla+2017).
+
+    A delayed exponential SFR that peaks at tau_main_yr, followed by a burst
+    or quench at age_bq_yr. Before the burst/quench, the SFR follows the
+    delayed-tau form: SFR(t) = t * exp(-t/tau) / tau^2. After age_bq_yr,
+    the SFR is constant at r_sfr times the SFR at the burst/quench onset.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
+    tau_main_yr : float
+        e-folding timescale of main component [yr]. Peak occurs at tau_main_yr.
+    age_main_yr : float
+        Age of the main stellar population / galaxy age [yr]. The delayed tau
+        model extends from 0 to age_main_yr.
+    age_bq_yr : float
+        Age at which burst/quench episode begins [yr].
+    r_sfr : float
+        Ratio of SFR after/before burst/quench [dimensionless].
+        r_sfr < 1 is quenching, r_sfr > 1 is bursting.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives.
+
+    **Gradient-safe**: yes — differentiable everywhere for positive tau_main_yr.
+
+    The SFR is defined as:
+
+    .. math::
+
+        \\mathrm{SFR}(t) = \\begin{cases}
+        \\frac{t}{\\tau^2} \\exp(-t/\\tau) & t < t_{\\rm bq} \\\\
+        r_{\\rm sfr} \\times \\mathrm{SFR}(t_{\\rm bq}) & t \\geq t_{\\rm bq}
+        \\end{cases}
+
+    where :math:`\\tau` is ``tau_main_yr`` [yr], :math:`t_{\\rm bq}` is
+    ``age_main_yr - age_bq_yr`` [yr], and :math:`r_{\\rm sfr}` is the
+    post-episode SFR ratio [dimensionless].
+
+    **Upstream**: Ported from CIGALE ``sfhdelayedbq.py`` (Boquien et al. 2019 [2]_).
+
+    References
+    ----------
+    .. [1] L. Ciesla et al., "The SFR-M* main sequence archetypal star-formation
+       history and analytical models," A&A, 608, A41 (2017). arXiv:1706.08531.
+       https://doi.org/10.1051/0004-6361/201731036
+    .. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy
+       Emission," A&A, 622, A103 (2019). arXiv:1811.03094.
+       https://doi.org/10.1051/0004-6361/201834156
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri.components.sfh.mean_sfh import delayed_bq
+    >>> t = jnp.logspace(7, 10.14, 100)
+    >>> sfr = delayed_bq(t, tau_main_yr=2e9, age_main_yr=5e9,
+    ...     age_bq_yr=500e6, r_sfr=0.1)
+    >>> sfr.shape
+    (100,)
+    """
+    t_bq = age_main_yr - age_bq_yr
+    t_tau = t_lookback / tau_main_yr
+    sfr_delayed = t_tau * jnp.exp(-t_tau) / tau_main_yr
+    sfr_at_bq = (t_bq / tau_main_yr) * jnp.exp(-t_bq / tau_main_yr) / tau_main_yr
+    sfr_post_bq = r_sfr * sfr_at_bq
+    sfr = jnp.where(t_lookback >= t_bq, sfr_post_bq, sfr_delayed)
+    return jnp.where((t_lookback >= 0) & (t_lookback <= age_main_yr), sfr, 0.0)
+
+
+def periodic(
+    t_lookback: jnp.ndarray,
+    delta_bursts_yr: float,
+    tau_bursts_yr: float,
+    burst_type: int,
+    age_yr: float,
+) -> jnp.ndarray:
+    """Periodic SFH with regularly-spaced star formation events.
+
+    Regularly-spaced SF events at intervals of delta_bursts_yr, each with
+    duration/e-folding timescale tau_bursts_yr. The shape of each event
+    depends on burst_type: 0=exponential, 1=delayed, 2=rectangular.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
+    delta_bursts_yr : float
+        Elapsed time between the beginning of each burst [yr].
+    tau_bursts_yr : float
+        Duration (for rectangular) or e-folding timescale [yr] of each event.
+    burst_type : int
+        Type of burst event [dimensionless]:
+        0 = exponential: exp(-t/tau),
+        1 = delayed: (t/tau^2) * exp(-t/tau),
+        2 = rectangular: constant 1 for t < tau, 0 otherwise.
+    age_yr : float
+        Age of the galaxy / maximum time [yr].
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jnp.mod``.
+
+    **Gradient-safe**: yes — differentiable everywhere except at event boundaries
+    (discontinuities for rectangular type).
+
+    The SFR is a superposition of multiple burst events spaced delta_bursts_yr
+    apart, each following one of three shapes. The burst at event i starts at
+    time i * delta_bursts_yr and ends (or decays) within tau_bursts_yr.
+
+    **Upstream**: Ported from CIGALE ``sfhperiodic.py`` (Boquien et al. 2019 [1]_).
+
+    References
+    ----------
+    .. [1] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy
+       Emission," A&A, 622, A103 (2019). arXiv:1811.03094.
+       https://doi.org/10.1051/0004-6361/201834156
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri.components.sfh.mean_sfh import periodic
+    >>> t = jnp.logspace(6, 10, 100)
+    >>> sfr = periodic(t, delta_bursts_yr=50e6, tau_bursts_yr=20e6, burst_type=0, age_yr=1000e6)
+    >>> sfr.shape
+    (100,)
+    """
+    t = t_lookback
+    tau = tau_bursts_yr
+    delta = delta_bursts_yr
+
+    def burst_shape(dt: jnp.ndarray) -> jnp.ndarray:
+        """Compute burst kernel for time offset dt from burst start."""
+        exp_decay = jnp.exp(-dt / tau)
+        delayed_exp = (dt / tau**2) * exp_decay
+        rectangular = jnp.where(dt <= tau, 1.0, 0.0)
+
+        btype_0 = jnp.where(burst_type == 0, exp_decay, 0.0)
+        btype_1 = jnp.where(burst_type == 1, delayed_exp, 0.0)
+        btype_2 = jnp.where(burst_type == 2, rectangular, 0.0)
+
+        return btype_0 + btype_1 + btype_2
+
+    n_bursts = 100
+
+    sfr = jnp.zeros_like(t)
+
+    for i in range(n_bursts):
+        burst_start = i * delta
+        dt = t - burst_start
+        mask = (dt >= 0) & (t <= age_yr)
+        burst = burst_shape(dt)
+        sfr = sfr + jnp.where(mask, burst, 0.0)
+
+    return jnp.maximum(sfr, 0.0)
+
+
+def buat08(
+    t_lookback: jnp.ndarray,
+    velocity_km_s: float,
+) -> jnp.ndarray:
+    """Chemically-motivated SFH parameterized by galaxy rotational velocity.
+
+    A physically-motivated SFH derived from chemical evolution models.
+    The SFR is given by a polynomial in log10-space:
+
+        log10(SFR(t)) = a + b*log10(t) + c*t^0.5
+
+    The coefficients a, b, c are interpolated from Buat+2008 Table 2
+    based on the galaxy's rotational velocity.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
+    velocity_km_s : float
+        Rotational velocity of the galaxy [km/s]. Must be between 40 and 360.
+        Will be clipped to this range if necessary.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jnp.interp``.
+
+    **Gradient-safe**: yes — differentiable with respect to velocity.
+
+    Coefficients from Buat et al. (2008) Table 2, extended with additional
+    data provided by S. Boissier for velocities down to 40 km/s.
+
+    The formula in log time is:
+
+    .. math::
+
+        \\log_{10}(\\mathrm{SFR}(t)) = a(v) + b(v) \\log_{10}(t/\\mathrm{Gyr}) +
+        c(v) (t/\\mathrm{Gyr})^{0.5} - 9
+
+    where :math:`v` is the rotational velocity [km/s], and the offset -9 converts
+    from galaxy-integrated SFR to local SFR normalization.
+
+    **Upstream**: Ported from CIGALE ``sfh_buat08.py`` (Boquien et al. 2019 [2]_).
+    Extended velocity coefficients (40–100 km/s) provided by S. Boissier
+    (private communication, referenced in CIGALE source).
+
+    References
+    ----------
+    .. [1] V. Buat et al., "Star formation history of galaxies from z = 0 to
+       z = 0.7. A backward approach to the evolution of star-forming galaxies,"
+       A&A, 483, 107 (2008). arXiv:0803.0414.
+       https://doi.org/10.1051/0004-6361:20078829
+    .. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy
+       Emission," A&A, 622, A103 (2019). arXiv:1811.03094.
+       https://doi.org/10.1051/0004-6361/201834156
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri.components.sfh.mean_sfh import buat08
+    >>> t = jnp.logspace(6, 10.14, 100)
+    >>> sfr = buat08(t, velocity_km_s=220.0)
+    >>> sfr.shape
+    (100,)
+    """
+    v = jnp.clip(velocity_km_s, 40.0, 360.0)
+
+    paper_velocities = jnp.array(
+        [40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 150.0, 220.0, 290.0, 360.0]
+    )
+    paper_as = jnp.array([4.73, 5.28, 5.77, 6.21, 6.62, 6.99, 7.34, 8.74, 10.01, 10.82, 11.35])
+    paper_bs = jnp.array([-0.11, 0.029, 0.16, 0.29, 0.41, 0.51, 0.61, 0.98, 1.25, 1.36, 1.37])
+    paper_cs = jnp.array([0.79, 0.68, 0.57, 0.46, 0.36, 0.27, 0.18, -0.20, -0.55, -0.74, -0.85])
+
+    a = jnp.interp(v, paper_velocities, paper_as)
+    b = jnp.interp(v, paper_velocities, paper_bs)
+    c = jnp.interp(v, paper_velocities, paper_cs)
+
+    t_gyr = jnp.maximum(t_lookback / 1e9, 1e-9)
+    log_sfr = a + b * jnp.log10(t_gyr) + c * jnp.sqrt(t_gyr) - 9.0
+    sfr = 10.0**log_sfr
+
+    return jnp.maximum(sfr, 0.0)
+
+
+# ── ProSpect spline SFH (Robotham+2020) ─────────────────────────
+
+
+def _pchip_slopes(y: jnp.ndarray, h: jnp.ndarray) -> jnp.ndarray:
+    """Fritsch-Carlson monotone slopes for PCHIP cubic spline.
+
+    Parameters
+    ----------
+    y : array_like, shape (n,)
+        Values at the n nodes (traced under JIT).
+    h : array_like, shape (n-1,)
+        Spacings between adjacent nodes (static — must be concrete).
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        Slope at each node satisfying the Fritsch-Carlson monotonicity condition.
+    """
+    delta = jnp.diff(y) / h  # secant slopes
+
+    # Interior slopes: Fritsch-Carlson weighted harmonic mean
+    h0 = h[:-1]
+    h1 = h[1:]
+    w0 = 2.0 * h1 + h0
+    w1 = h1 + 2.0 * h0
+
+    safe_d0 = jnp.where(jnp.abs(delta[:-1]) > 1e-30, delta[:-1], jnp.sign(delta[:-1]) * 1e-30)
+    safe_d1 = jnp.where(jnp.abs(delta[1:]) > 1e-30, delta[1:], jnp.sign(delta[1:]) * 1e-30)
+    denom = w0 / safe_d0 + w1 / safe_d1
+    d_int = jnp.where(delta[:-1] * delta[1:] > 0.0, (w0 + w1) / denom, 0.0)
+
+    # Endpoint slopes: one-sided extrapolation (Moler 2004)
+    d0 = ((2.0 * h[0] + h[1]) * delta[0] - h[0] * delta[1]) / (h[0] + h[1])
+    d0 = jnp.where(jnp.sign(d0) * jnp.sign(delta[0]) < 0.0, 0.0, d0)
+    d0 = jnp.where(jnp.abs(d0) > 3.0 * jnp.abs(delta[0]), 3.0 * delta[0], d0)
+
+    dn = ((2.0 * h[-1] + h[-2]) * delta[-1] - h[-1] * delta[-2]) / (h[-1] + h[-2])
+    dn = jnp.where(jnp.sign(dn) * jnp.sign(delta[-1]) < 0.0, 0.0, dn)
+    dn = jnp.where(jnp.abs(dn) > 3.0 * jnp.abs(delta[-1]), 3.0 * delta[-1], dn)
+
+    return jnp.concatenate([jnp.array([d0]), d_int, jnp.array([dn])])
+
+
+def _pchip_eval(
+    x_query: jnp.ndarray,
+    x_nodes: jnp.ndarray,
+    y_nodes: jnp.ndarray,
+    d: jnp.ndarray,
+    h: jnp.ndarray,
+) -> jnp.ndarray:
+    """Evaluate PCHIP cubic Hermite pieces at query points.
+
+    Parameters
+    ----------
+    x_query : array_like, shape (n_query,)
+        Query positions.
+    x_nodes : array_like, shape (n,)
+        Node positions (static).
+    y_nodes : array_like, shape (n,)
+        Node values (traced).
+    d : array_like, shape (n,)
+        Node slopes from :func:`_pchip_slopes` (traced).
+    h : array_like, shape (n-1,)
+        Node spacings (static).
+
+    Returns
+    -------
+    ndarray, shape (n_query,)
+        Interpolated values.
+    """
+    idx = jnp.searchsorted(x_nodes, x_query, side="right") - 1
+    idx = jnp.clip(idx, 0, x_nodes.shape[0] - 2)
+
+    x0 = x_nodes[idx]
+    hi = h[idx]
+    y0 = y_nodes[idx]
+    y1 = y_nodes[idx + 1]
+    d0 = d[idx]
+    d1 = d[idx + 1]
+
+    t = (x_query - x0) / hi
+    h00 = 2.0 * t**3 - 3.0 * t**2 + 1.0
+    h10 = t**3 - 2.0 * t**2 + t
+    h01 = -2.0 * t**3 + 3.0 * t**2
+    h11 = t**3 - t**2
+
+    return h00 * y0 + h10 * hi * d0 + h01 * y1 + h11 * hi * d1
+
+
+def spline_sfh(
+    t_lookback: jnp.ndarray,
+    sfr_nodes: jnp.ndarray,
+    node_ages_yr: jnp.ndarray,
+) -> jnp.ndarray:
+    """Monotone cubic spline SFH with free SFR control nodes (Robotham+2020).
+
+    A smooth, continuously varying SFH defined by N control nodes at fixed
+    lookback times. SFR values at the nodes are free parameters; PCHIP cubic
+    Hermite interpolation (Fritsch-Carlson monotone) in log10(age) space
+    ensures a smooth, non-negative SFH between nodes.
+
+    This is the JAX port of ProSpect's ``massfunc_p4`` / ``massfunc_p6``
+    (Robotham et al. 2020 [1]_), which use R's ``splinefun(..., method='monoH.FC')``.
+    The implementation uses the Fritsch-Carlson (1980) [2]_ algorithm.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time grid [yr].
+    sfr_nodes : array_like, shape (n_nodes,)
+        SFR at each control node [Msun/yr]. Free parameters. Must be non-negative.
+    node_ages_yr : array_like, shape (n_nodes,)
+        Lookback times of control nodes [yr]. Must be strictly increasing.
+        **Not JIT-traced** — pass as a concrete array constructed before JIT.
+        Typical 4-node default: ``[1e5, 2e9, 9e9, 13e9]`` yr.
+        Typical 6-node default: ``[1e5, 1e8, 1e9, 5e9, 9e9, 13e9]`` yr.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — ``sfr_nodes`` is fully traced. ``node_ages_yr``
+    must be a concrete (non-traced) array; pass it as a Python/NumPy array or
+    mark it as static in :func:`jax.jit`.
+
+    The spline evaluates in log10(age) space:
+
+    .. math::
+
+        \\mathrm{SFR}(t) = \\mathcal{S}_{\\mathrm{PCHIP}}
+            \\bigl(\\log_{10} t \\;\\big|\\; \\log_{10} t_i,\\; m_i \\bigr)
+
+    where :math:`t_i` are the fixed node ages [yr] and :math:`m_i = \\text{sfr\\_nodes}_i`
+    are the free SFR values [Msun/yr]. The PCHIP (Piecewise Cubic Hermite
+    Interpolating Polynomial) enforces monotonicity within each segment so
+    that the interpolant cannot overshoot between adjacent nodes.
+
+    Outside the range ``[node_ages_yr[0], node_ages_yr[-1]]``, ``jnp.searchsorted``
+    clamps to the nearest segment — equivalent to constant extrapolation beyond
+    the outermost nodes. Clamp ``node_ages_yr[0]`` to the youngest SSP age (typically
+    1e5 yr) to avoid extrapolation into the stellar library edge.
+
+    **Not in the SFH registry**: ``sfr_nodes`` is an array parameter, which does not
+    fit the scalar-kwarg registry architecture. Use this function directly with
+    ``jax.jit`` or ``jax.grad``, marking ``node_ages_yr`` as static.
+
+    Ported from ProSpect ``massfunc_p4`` / ``massfunc_p6`` (Robotham et al. 2020 [1]_).
+    The PCHIP algorithm follows Fritsch & Carlson (1980) [2]_ with endpoint slopes
+    from Moler (2004) [3]_.
+
+    References
+    ----------
+    .. [1] A. S. G. Robotham et al., "ProSpect: generating spectral energy
+       distributions with complex star formation and metallicity histories,"
+       MNRAS, 495, 905 (2020). arXiv:2002.06980.
+       https://doi.org/10.1093/mnras/staa1116
+    .. [2] F. N. Fritsch and R. E. Carlson, "Monotone Piecewise Cubic
+       Interpolation," SIAM J. Numer. Anal., 17(2), 238-246 (1980).
+       https://doi.org/10.1137/0717021
+    .. [3] C. B. Moler, "Numerical Computing with MATLAB," SIAM, Ch. 3 (2004).
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import numpy as np
+    >>> from tengri.components.sfh.mean_sfh import spline_sfh
+    >>> node_ages = np.array([1e5, 2e9, 9e9, 13e9])
+    >>> sfr_nodes = jnp.array([5.0, 10.0, 3.0, 0.5])
+    >>> t = jnp.logspace(5.0, 10.14, 100)
+    >>> sfr = spline_sfh(t, sfr_nodes, node_ages)
+    >>> sfr.shape
+    (100,)
+    """
+    x_nodes = jnp.log10(jnp.maximum(node_ages_yr, 1.0))
+    h = jnp.diff(x_nodes)  # static when node_ages_yr is concrete
+
+    x_query = jnp.log10(jnp.maximum(t_lookback, 1.0))
+    d = _pchip_slopes(sfr_nodes, h)
+    sfr = _pchip_eval(x_query, x_nodes, sfr_nodes, d, h)
+    return jnp.maximum(sfr, 0.0)
+
+
+def snorm_burst_sfh(
+    t_lookback: jnp.ndarray,
+    log_peak_sfr: float,
+    peak_lbt: float,
+    width: float,
+    skew: float,
+    burst_sfr: float,
+    burst_age: float,
+) -> jnp.ndarray:
+    """Skew-normal SFH with a flat recent burst component (Robotham+2020).
+
+    Adds a constant burst SFR to the skew-normal SFH at lookback times younger
+    than ``burst_age``. The burst represents recent (typically <100 Myr) star
+    formation activity superimposed on the smooth underlying SFH.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time grid [yr].
+    log_peak_sfr : float
+        log10 of peak SFR of the skew-normal component [Msun/yr].
+    peak_lbt : float
+        Peak lookback time of the skew-normal component [yr].
+    width : float
+        Gaussian width of the skew-normal component [yr].
+    skew : float
+        Skewness parameter [dimensionless]. 0 = symmetric, >0 skews toward older ages.
+    burst_sfr : float
+        Constant SFR amplitude of the recent burst [Msun/yr]. Set to 0 to disable.
+    burst_age : float
+        Lookback time below which the burst is active [yr]. Default 1e8 yr (100 Myr).
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        Total SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The total SFH is:
+
+    .. math::
+
+        \\mathrm{SFR}(t) = \\mathrm{snorm}(t) + m_{\\rm burst} \\cdot
+        \\mathbb{1}[t < t_{\\rm burst}]
+
+    where :math:`\\mathrm{snorm}(t)` is the skew-normal kernel (Robotham+2020 [1]_),
+    :math:`m_{\\rm burst}` is the burst amplitude [Msun/yr], and
+    :math:`t_{\\rm burst}` is the burst lookback time [yr].
+
+    Ported from ProSpect ``massfunc_snorm_burst`` (Robotham et al. 2020 [1]_).
+
+    References
+    ----------
+    .. [1] A. S. G. Robotham et al., "ProSpect: generating spectral energy
+       distributions with complex star formation and metallicity histories,"
+       MNRAS, 495, 905 (2020). arXiv:2002.06980.
+       https://doi.org/10.1093/mnras/staa1116
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri.components.sfh.mean_sfh import snorm_burst_sfh
+    >>> t = jnp.logspace(7, 10.14, 64)
+    >>> sfr = snorm_burst_sfh(
+    ...     t, log_peak_sfr=1.5, peak_lbt=5e9, width=2e9, skew=0.5, burst_sfr=2.0, burst_age=1e8
+    ... )
+    >>> sfr.shape
+    (64,)
+    """
+    sfr_snorm = skewnormal_sfh(t_lookback, log_peak_sfr, peak_lbt, width, skew)
+    burst = jnp.where(t_lookback < burst_age, burst_sfr, 0.0)
+    return jnp.maximum(sfr_snorm + burst, 0.0)
+
+
+def snorm_trunc_burst_sfh(
+    t_lookback: jnp.ndarray,
+    log_peak_sfr: float,
+    peak_lbt: float,
+    width: float,
+    skew: float,
+    trunc: float,
+    burst_sfr: float,
+    burst_age: float,
+) -> jnp.ndarray:
+    """Truncated skew-normal SFH with a flat recent burst component (Robotham+2020).
+
+    Adds a constant burst SFR to the truncated skew-normal SFH (tsnorm) at
+    lookback times younger than ``burst_age``. Combines the smooth quenching
+    truncation of ``truncated_skewnormal_sfh`` with a superimposed recent burst.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time grid [yr].
+    log_peak_sfr : float
+        log10 of peak SFR of the tsnorm component [Msun/yr].
+    peak_lbt : float
+        Peak lookback time [yr].
+    width : float
+        Gaussian width [yr].
+    skew : float
+        Skewness parameter [dimensionless].
+    trunc : float
+        Truncation sharpness [dimensionless]. Larger values = sharper truncation.
+    burst_sfr : float
+        Constant burst SFR amplitude [Msun/yr]. Set to 0 to disable.
+    burst_age : float
+        Lookback time below which the burst is active [yr].
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        Total SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The total SFH is:
+
+    .. math::
+
+        \\mathrm{SFR}(t) = \\mathrm{tsnorm}(t) + m_{\\rm burst} \\cdot
+        \\mathbb{1}[t < t_{\\rm burst}]
+
+    where :math:`\\mathrm{tsnorm}(t)` is the truncated skew-normal SFH
+    (Bellstedt+2020 [2]_) and :math:`m_{\\rm burst}` is the burst amplitude.
+
+    Ported from ProSpect ``massfunc_snorm_burst_trunc`` (Robotham et al. 2020 [1]_).
+
+    References
+    ----------
+    .. [1] A. S. G. Robotham et al., "ProSpect: generating spectral energy
+       distributions with complex star formation and metallicity histories,"
+       MNRAS, 495, 905 (2020). arXiv:2002.06980.
+       https://doi.org/10.1093/mnras/staa1116
+    .. [2] S. Bellstedt et al., "Galaxy And Mass Assembly (GAMA): a forensic
+       SED reconstruction of the cosmic star formation history and metallicity
+       evolution by galaxy type," MNRAS, 498, 5581 (2020). arXiv:2005.11917.
+       https://doi.org/10.1093/mnras/staa2620
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri.components.sfh.mean_sfh import snorm_trunc_burst_sfh
+    >>> t = jnp.logspace(7, 10.14, 64)
+    >>> sfr = snorm_trunc_burst_sfh(
+    ...     t,
+    ...     log_peak_sfr=1.5,
+    ...     peak_lbt=5e9,
+    ...     width=2e9,
+    ...     skew=0.5,
+    ...     trunc=2.0,
+    ...     burst_sfr=2.0,
+    ...     burst_age=1e8,
+    ... )
+    >>> sfr.shape
+    (64,)
+    """
+    sfr_tsnorm = truncated_skewnormal_sfh(t_lookback, log_peak_sfr, peak_lbt, width, skew, trunc)
+    burst = jnp.where(t_lookback < burst_age, burst_sfr, 0.0)
+    return jnp.maximum(sfr_tsnorm + burst, 0.0)
