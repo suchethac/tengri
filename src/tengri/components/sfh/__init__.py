@@ -29,12 +29,14 @@ from tengri.components.sfh.mean_sfh import (
     psb_wild2020,
     skewnormal_sfh,
     snorm,
+    snorm_burst,
     snorm_burst_sfh,
     snorm_trunc_burst_sfh,
     spline_sfh,
     triweight_burst,
     truncated_skewnormal_sfh,
     tsnorm,
+    tsnorm_burst,
 )
 from tengri.components.sfh.met_registry import MET_REGISTRY, resolve_met
 from tengri.components.sfh.metallicity_history import (
@@ -48,6 +50,8 @@ from tengri.components.sfh.nonparametric import (
     continuity_prior_logp,
     continuity_sfh,
     dirichlet_sfh,
+    make_agebins_from_zred,
+    psb_continuity_sfh,
 )
 from tengri.components.sfh.psd_models import (
     psd_drw as psd_drw,
@@ -77,6 +81,7 @@ __all__ = [
     "continuity_prior_logp",
     # Nonparametric
     "continuity_sfh",
+    "make_agebins_from_zred",
     "declining_exponential_sfh",
     "delayed_exponential_sfh",
     "delayed_tau",
@@ -84,6 +89,7 @@ __all__ = [
     # Dense basis
     "dense_basis_sfh",
     "dirichlet_sfh",
+    "psb_continuity_sfh",
     "double_powerlaw",
     # Mean SFH models
     "dpl",
@@ -111,9 +117,11 @@ __all__ = [
     "resolve_sfh",
     "skewnormal_sfh",
     "snorm",
+    "snorm_burst",
     "snorm_burst_sfh",
     "snorm_trunc_burst_sfh",
     "spline_sfh",
+    "tsnorm_burst",
     "tabulated_metallicity_on_ssp_grid",
     "triweight_burst",
     "truncated_skewnormal_sfh",

@@ -6,6 +6,7 @@ from tengri.components.igm.dla import (
 )
 from tengri.components.igm.igm import (
     igm_transmission,
+    igm_transmission_madau,
     igm_transmission_patchy,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "dla_transmission",
     "dla_transmission_obs",
     "igm_transmission",
+    "igm_transmission_madau",
     "igm_transmission_patchy",
 ]

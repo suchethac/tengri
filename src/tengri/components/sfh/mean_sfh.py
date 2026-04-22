@@ -1528,3 +1528,8 @@ def snorm_trunc_burst_sfh(
     sfr_tsnorm = truncated_skewnormal_sfh(t_lookback, log_peak_sfr, peak_lbt, width, skew, trunc)
     burst = jnp.where(t_lookback < burst_age, burst_sfr, 0.0)
     return jnp.maximum(sfr_tsnorm + burst, 0.0)
+
+
+# Short aliases registered in SFH_REGISTRY
+snorm_burst = snorm_burst_sfh
+tsnorm_burst = snorm_trunc_burst_sfh

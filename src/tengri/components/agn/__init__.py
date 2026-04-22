@@ -51,7 +51,7 @@ from tengri.components.agn.nlr import (
 # QSOgen must be imported after unified (needs register_agn_model)
 from tengri.components.agn.qsogen import compute_qsogen_sed, qsogen, qsogen_sed
 from tengri.components.agn.skirtor import create_skirtor_from_grid, skirtor_analytic
-from tengri.components.agn.torus import simple_torus, two_temperature_torus
+from tengri.components.agn.torus import nenkova_torus, simple_torus, two_temperature_torus
 from tengri.components.agn.unified import (
     AGN_MODELS,
     adaf_agn,
@@ -85,6 +85,7 @@ __all__ = [
     "qsogen_sed",
     "register_agn_model",
     "resolve_agn_model",
+    "nenkova_torus",
     "simple_torus",
     "two_temperature_torus",
     "unified_agn",
